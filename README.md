@@ -1,6 +1,6 @@
 # Rasputin
 
-Rasputin can convert a point set of (x,y,z) coordinates to a triangulatd irregular network. Specifically, it has been developed to convert raster dems (digital elevation models) into a simplified triangulated surface mesh. The `rasputin_triangulate` program can read `GeoTIFF` files and construct surface meshes in the `off` format.
+Rasputin can convert a point set of (x,y,z) coordinates to a triangulatd irregular network. Specifically, it has been developed to convert raster dems (digital elevation models) into simplified triangulated surface meshes. The `rasputin_triangulate` program can read `GeoTIFF` files and construct surface meshes in the `off` format.
 
 ## Implementation strategy
 
