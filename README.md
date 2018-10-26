@@ -21,3 +21,7 @@ Additionally, you need Python 3, a modern compiler supporting C++11, and CMake. 
 ```
 python3 setup.py install
 ```
+
+## Data
+
+The Rasputin `GeoTIFF` data reader has only been used on one file, and hence, should not be expected to work on a wide variety of files. However, this data set can be downloaded here: http://blog.mastermaps.com/2016/09/creating-tin-from-raster-dem.html
