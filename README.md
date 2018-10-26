@@ -4,7 +4,7 @@ Rasputin can convert a point set of (x,y,z) coordinates to a triangulatd irregul
 
 ## Implementation strategy
 
-All the heavy lifting in Rasputin is made by external software. The triangulation and simplification routines are done in `CGAL`, the processing of the GeoTIFF files in handled by `Pillow`. Finally, the wrapper code is built by `pybind11`.
+All the heavy lifting in Rasputin is done by external software. The triangulation and simplification routines are done in `CGAL` and the wrapper code is built by `pybind11`.  Finally, the processing of the GeoTIFF files is handled by the Python module `Pillow`.
 
 ## Installation
 
