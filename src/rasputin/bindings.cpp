@@ -24,28 +24,18 @@ PYBIND11_MODULE(triangulate_dem, m) {
     py::bind_vector<rasputin::FaceList>(m, "FaceVector");
     m.def("lindstrom_turk_by_size",
           [] (const rasputin::PointList& raster_coordinates, size_t result_mesh_size) {
-              rasputin::PointList tin_coordinates;
-              rasputin::FaceList tin_faces;
-              rasputin::make_tin(raster_coordinates,
-                                 SMS::Count_stop_predicate<CGAL::Mesh>(result_mesh_size),
-                                 SMS::LindstromTurk_placement<CGAL::Mesh>(),
-                                 SMS::LindstromTurk_cost<CGAL::Mesh>(),
-                                 tin_coordinates,
-                                 tin_faces);
-              return std::make_tuple(tin_coordinates, tin_faces);
+              return rasputin::make_tin(raster_coordinates,
+                                        SMS::Count_stop_predicate<CGAL::Mesh>(result_mesh_size),
+                                        SMS::LindstromTurk_placement<CGAL::Mesh>(),
+                                        SMS::LindstromTurk_cost<CGAL::Mesh>());
           },
           "Construct a TIN based on the points provided.\n\nThe LindstromTurk cost and placement strategy is used, and simplification process stops when the number of undirected edges drops below the size threshold."
     ).def("lindstrom_turk_by_ratio",
           [] (const rasputin::PointList& raster_coordinates, double ratio) {
-              rasputin::PointList tin_coordinates;
-              rasputin::FaceList tin_faces;
-              rasputin::make_tin(raster_coordinates,
-                                 SMS::Count_ratio_stop_predicate<CGAL::Mesh>(ratio),
-                                 SMS::LindstromTurk_placement<CGAL::Mesh>(),
-                                 SMS::LindstromTurk_cost<CGAL::Mesh>(),
-                                 tin_coordinates,
-                                 tin_faces);
-              return std::make_tuple(tin_coordinates, tin_faces);
+              return rasputin::make_tin(raster_coordinates,
+                                        SMS::Count_ratio_stop_predicate<CGAL::Mesh>(ratio),
+                                        SMS::LindstromTurk_placement<CGAL::Mesh>(),
+                                        SMS::LindstromTurk_cost<CGAL::Mesh>());
           },
           "Construct a TIN based on the points provided.\n\nThe LindstromTurk cost and placement strategy is used, and simplification process stops when the number of undirected edges drops below the ratio threshold."
     );
