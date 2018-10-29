@@ -24,8 +24,8 @@ under the `lib` directory using the names `pybind11` and `CGAL`, respectively:
 cd <rasputin_directory>/lib
 wget https://github.com/pybind/pybind11/archive/v2.2.3.tar.gz
 wget https://github.com/CGAL/cgal/releases/download/releases%2FCGAL-4.13/CGAL-4.13.tar.xz
-tar zxf v2.2.3.tar.gz && mv pybind11-2.2.3 pybind11
-tar xjf CGAL-4.13.tar.xz && mv CGAL-4.13 CGAL
+tar xf v2.2.3.tar.gz && mv pybind11-2.2.3 pybind11
+tar xf CGAL-4.13.tar.xz && mv CGAL-4.13 CGAL
 ```
 An alternative for `pybind11`, currently resulting in a lot fewer compiler
 warnings, is to clone the master branch from git:
