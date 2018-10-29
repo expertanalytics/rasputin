@@ -10,24 +10,31 @@ from . import triangulate_dem
 logger = logging.getLogger()
 
 
-def read_raster_file(fname, start=0, stop=-1):
-    logger.debug(f"Reading raster file {fname}")
-    image = Image.open(fname)
+def read_raster_file(*,
+                     filename: str,
+                     start_x: int=0,
+                     stop_x: int=-1,
+                     start_y: int=0,
+                     stop_y: int=-1) -> triangulate_dem.PointVector:
+    logger.debug(f"Reading raster file {filename}")
+    image = Image.open(filename)
     dx, dy, _ = image.tag.named().get("ModelPixelScaleTag", (1,1,0))
     model_tie_point = image.tag.named().get("ModelTiepointTag", None)
     x0 = y0 = 0.0
     if model_tie_point:
         x0 = model_tie_point[3]
         y0 = model_tie_point[4]
-    d = np.array(image.getdata()).reshape(image.size[0], image.size[1])[start:stop, start:stop]
+    d = np.array(image.getdata()).reshape(image.size[0], image.size[1])[start_x:stop_x, start_y:stop_y]
     raster_coordinates = triangulate_dem.PointVector()
     for (i, j), h in np.ndenumerate(d):
-        raster_coordinates.append([x0 + i*dx, y0 + j*dy, h])
+        raster_coordinates.append([x0 + (start_x + i)*dx, y0 + (start_y + j)*dy, h])
     logger.debug("Done")
     return raster_coordinates
 
 
-def save_to_ascii_off(pts, faces, name):
+def save_to_ascii_off(pts: triangulate_dem.PointVector,
+                      faces: triangulate_dem.FaceVector,
+                      name: str) -> None:
     with open(name, "w") as tf:
         tf.write("OFF\n")
         tf.write(f"{len(pts)} {len(faces)} 0\n")
@@ -39,16 +46,22 @@ def save_to_ascii_off(pts, faces, name):
 def geo_tiff_reader():
     arg_parser = argparse.ArgumentParser()
     arg_parser.add_argument("input", type=str, metavar="FILENAME")
-    arg_parser.add_argument("-output", type=str, default="output.off")
-    arg_parser.add_argument("-start", type=int, default=0)
-    arg_parser.add_argument("-stop", type=int, default=-1)
-    arg_parser.add_argument("-loglevel", type=int, default=1)
+    arg_parser.add_argument("-output", type=str, default="output.off", help="Surface mesh file name")
+    arg_parser.add_argument("-start_x", type=int, default=0, help="Start index in x-direction")
+    arg_parser.add_argument("-stop_x", type=int, default=-1, help="Stop index in x-direction")
+    arg_parser.add_argument("-start_y", type=int, default=0, help="Start index in y-direction")
+    arg_parser.add_argument("-stop_y", type=int, default=-1, help="Stop index in y-direction")
+    arg_parser.add_argument("-loglevel", type=int, default=1, help="Verbosity")
     group = arg_parser.add_mutually_exclusive_group(required=True)
-    group.add_argument("-ratio", type=float)
-    group.add_argument("-size", type=float)
+    group.add_argument("-ratio", type=float, help="Edge ratio between original meshed raster and result")
+    group.add_argument("-size", type=float, help="Number of edges in the generated surface mesh")
     res = arg_parser.parse_args(sys.argv[1:])
     logger.setLevel(res.loglevel)
-    raster_coords = read_raster_file(res.input, start=res.start, stop=res.stop)
+    raster_coords = read_raster_file(filename=res.input,
+                                     start_x=res.start_x,
+                                     stop_x=res.stop_x,
+                                     start_y=res.start_y,
+                                     stop_y=res.stop_y)
     logger.debug(f"Original: {len(raster_coords)}")
     if res.ratio:
         pts, faces = triangulate_dem.lindstrom_turk_by_ratio(raster_coords, res.ratio)
