@@ -1,1 +1,8 @@
+cmake-*
 .idea
+lib/CGAL*
+lib/pybind11
+src/rasputin/*so
+src/rasputin.egg-info
+build
+dist

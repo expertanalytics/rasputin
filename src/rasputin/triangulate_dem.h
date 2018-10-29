@@ -2,8 +2,8 @@
 // Created by Ola Skavhaug on 08/10/2018.
 //
 
-#ifndef RASPUTIN_TINIFY_H_H
-#define RASPUTIN_TINIFY_H_H
+#ifndef RASPUTIN_TRIANGULATE_DEM_H_H
+#define RASPUTIN_TRIANGULATE_DEM_H_H
 
 #include <CGAL/Exact_predicates_inexact_constructions_kernel.h>
 #include <CGAL/Delaunay_triangulation_2.h>
@@ -37,15 +37,13 @@ namespace rasputin {
     using FaceList = std::vector<Face>;
 
     template<typename S, typename P, typename C>
-    void make_tin(const PointList &pts,
-                  const S& stop,
-                  const P& placement,
-                  const C& cost,
-                  PointList &o_points,
-                  FaceList &faces) {
+    std::tuple<PointList, FaceList> make_tin(const PointList &pts,
+                                             const S& stop,
+                                             const P& placement,
+                                             const C& cost) {
 
-        o_points.clear();
-        faces.clear();
+        //o_points.clear();
+        //faces.clear();
 
         CGAL::Delaunay dtin;
         for (const auto p: pts)
@@ -69,18 +67,32 @@ namespace rasputin {
                                                                           .get_placement(placement)
         );
         std::map<CGAL::VertexIndex, int> reindex;
+        PointList o_points;
+        o_points.reserve(mesh.num_vertices());
         int n = 0;
         for (auto v: mesh.vertices()) {
             const auto pt = mesh.point(v);
             o_points.emplace_back(std::make_tuple(pt.x(), pt.y(), pt.z()));
             reindex.emplace(v, n++);
         }
+        FaceList faces;
+        faces.reserve(mesh.num_faces());
         for (auto f: mesh.faces()) {
             std::vector<int> fl;
             for (auto v: mesh.vertices_around_face(mesh.halfedge(f)))
                 fl.emplace_back(reindex[v]);
             faces.emplace_back(std::make_tuple(fl[0], fl[1], fl[2]));
         }
+        return std::make_pair(std::move(o_points), std::move(faces));
     }
+
+    template<typename S, typename P, typename C>
+    std::tuple<PointList, FaceList> make_tin_2(const PointList &pts, const S &stop, const P &placement, const C &cost) {
+        PointList o_points;
+        FaceList faces;
+        make_tin(pts, stop, placement, cost, o_points, faces);
+        return std::make_tuple(std::move(o_points), std::move(faces));
+    };
 }
-#endif //RASPUTIN_TINIFY_H_H
+
+#endif //RASPUTIN_TRIANGULATE_DEM_H_H

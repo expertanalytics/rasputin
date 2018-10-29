@@ -16,6 +16,11 @@ wget https://github.com/CGAL/cgal/releases/download/releases%2FCGAL-4.13/CGAL-4.
 tar zxf v2.2.3.tar.gz && mv pybind11-2.2.3 pybind11
 tar xjf CGAL-4.13.tar.xz && mv CGAL-4.13 CGAL
 ```
+An alternative for `pybind11`, currently resulting in a lot fewer compiler warnings, is to clone the master branch from git:
+```
+cd <rasputin_directory>/lib
+git clone git@github.com:pybind/pybind11.git
+```
 
 Additionally, you need Python 3, a modern compiler supporting C++11, and CMake. Then, to install Rasputin, change to the Rasputin root source directory and run
 ```
