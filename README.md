@@ -34,6 +34,16 @@ cd <rasputin_directory>/lib
 git clone git@github.com:pybind/pybind11.git
 ```
 
+CGAL requires the two libraries [GMP](http://gmplib.org/) and
+[MPFR](http://www.mpfr.org/) to be installed in order to work satisfactory. On
+Ubuntu, these libraries can be installed the usual way by typing
+
+```
+sudo apt-get install libgmp-dev libmpfr-dev
+```
+in a terminal window. Also, CGAL depends on [Boost](https://www.boost.org/),
+see [here](https://doc.cgal.org/latest/Manual/installation.html#title21).
+
 Additionally, you need Python 3, a modern compiler supporting C++17, and CMake.
 Then, to install Rasputin, change to the Rasputin root source directory and run
 ```
