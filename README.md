@@ -25,3 +25,7 @@ python3 setup.py install
 ## Data
 
 The Rasputin `GeoTIFF` data reader has only been used on one file, and hence, should not be expected to work on a wide variety of files. However, this data set can be downloaded here: http://blog.mastermaps.com/2016/09/creating-tin-from-raster-dem.html
+
+## Acknowledges
+
+The layout of this project follows the recommentation from an excellent blog post by Benjamin R. Jack: http://www.benjack.io/2018/02/02/python-cpp-revisited.html. Also, in `setup.py` both the `CMakeExtension` and the `CMakeBuild` are taken from this blog.
