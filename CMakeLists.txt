@@ -1,4 +1,4 @@
-cmake_minimum_required (VERSION 3.11.3)
+cmake_minimum_required (VERSION 3.9.1)
 project (Rasputin)
 
 set(CMAKE_PREFIX_PATH  lib/CGAL)
