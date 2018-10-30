@@ -75,6 +75,9 @@ setup(
     long_description='',
     # tell setuptools to look for any packages under 'src'
     packages=find_packages('src'),
+    install_requires=[
+          'Pillow',
+    ],
     # tell setuptools that all packages will be under the 'src' directory
     # and nowhere else
     package_dir={'':'src'},
