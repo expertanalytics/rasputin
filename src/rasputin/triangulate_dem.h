@@ -84,14 +84,6 @@ namespace rasputin {
             faces.emplace_back(std::make_tuple(fl[0], fl[1], fl[2]));
         }
         return std::make_pair(std::move(o_points), std::move(faces));
-    }
-
-    template<typename S, typename P, typename C>
-    std::tuple<PointList, FaceList> make_tin_2(const PointList &pts, const S &stop, const P &placement, const C &cost) {
-        PointList o_points;
-        FaceList faces;
-        make_tin(pts, stop, placement, cost, o_points, faces);
-        return std::make_tuple(std::move(o_points), std::move(faces));
     };
 }
 

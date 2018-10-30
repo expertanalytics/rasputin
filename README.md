@@ -24,8 +24,8 @@ under the `lib` directory using the names `pybind11` and `CGAL`, respectively:
 cd <rasputin_directory>/lib
 wget https://github.com/pybind/pybind11/archive/v2.2.3.tar.gz
 wget https://github.com/CGAL/cgal/releases/download/releases%2FCGAL-4.13/CGAL-4.13.tar.xz
-tar zxf v2.2.3.tar.gz && mv pybind11-2.2.3 pybind11
-tar xjf CGAL-4.13.tar.xz && mv CGAL-4.13 CGAL
+tar xf v2.2.3.tar.gz && mv pybind11-2.2.3 pybind11
+tar xf CGAL-4.13.tar.xz && mv CGAL-4.13 CGAL
 ```
 An alternative for `pybind11`, currently resulting in a lot fewer compiler
 warnings, is to clone the master branch from git:
@@ -33,6 +33,16 @@ warnings, is to clone the master branch from git:
 cd <rasputin_directory>/lib
 git clone git@github.com:pybind/pybind11.git
 ```
+
+CGAL requires the two libraries [GMP](http://gmplib.org/) and
+[MPFR](http://www.mpfr.org/) to be installed in order to work satisfactory. On
+Ubuntu, these libraries can be installed the usual way by typing
+
+```
+sudo apt-get install libgmp-dev libmpfr-dev
+```
+in a terminal window. Also, CGAL depends on [Boost](https://www.boost.org/),
+see [here](https://doc.cgal.org/latest/Manual/installation.html#title21).
 
 Additionally, you need Python 3, a modern compiler supporting C++17, and CMake.
 Then, to install Rasputin, change to the Rasputin root source directory and run
