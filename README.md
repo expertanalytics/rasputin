@@ -49,6 +49,10 @@ see [here](https://doc.cgal.org/latest/Manual/installation.html#title21).
 Additionally, you need Python 3, a modern compiler supporting C++17, and CMake.
 Then, to install Rasputin, change to the Rasputin root source directory and run
 ```
+pip3 install .
+```
+Or, if you prefer the old style:
+```
 python3 setup.py install
 ```
 
