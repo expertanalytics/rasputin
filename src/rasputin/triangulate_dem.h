@@ -78,12 +78,21 @@ namespace rasputin {
         FaceList faces;
         faces.reserve(mesh.num_faces());
         for (auto f: mesh.faces()) {
-            std::vector<int> fl;
+            std::array<int, 3> fl;
+            size_t idx = 0;
             for (auto v: mesh.vertices_around_face(mesh.halfedge(f)))
-                fl.emplace_back(reindex[v]);
+                fl[idx++] = reindex[v];
             faces.emplace_back(std::make_tuple(fl[0], fl[1], fl[2]));
         }
         return std::make_pair(std::move(o_points), std::move(faces));
+    };
+
+    std::vector<int> compute_shadow(const PointList &pts,
+                                    const faces & faces,
+                                    const std::tuple<double, double, double> sun_direction) {
+        std::vector<int> result;
+        CGAL::Mesh mesh;
+        return std::vector<int>(std::move(result));
     };
 }
 
