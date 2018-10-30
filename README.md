@@ -19,19 +19,21 @@ Python module [Pillow](https://python-pillow.org/).
 
 Installing Rasputin is easy, as the C++ dependencies are header only. Simply
 download and unpack the source code for `pybind11` and `CGAL` and place them
-under the `lib` directory using the names `pybind11` and `CGAL`, respectively:
+under the `lib` directory using the names `pybind11` and `CGAL`, respectively.
+
+As of November 2018, the latest release of `pybind11` generates quite a lot of deprecation warnings for Python3.7. In this case, pulling the source directly from the master branch at github is recommended:
+```
+cd <rasputin_directory>/lib
+git clone git@github.com:pybind/pybind11.git
+```
+
+Alternatively, use the latest released sources:
 ```
 cd <rasputin_directory>/lib
 wget https://github.com/pybind/pybind11/archive/v2.2.3.tar.gz
 wget https://github.com/CGAL/cgal/releases/download/releases%2FCGAL-4.13/CGAL-4.13.tar.xz
 tar xf v2.2.3.tar.gz && mv pybind11-2.2.3 pybind11
 tar xf CGAL-4.13.tar.xz && mv CGAL-4.13 CGAL
-```
-An alternative for `pybind11`, currently resulting in a lot fewer compiler
-warnings, is to clone the master branch from git:
-```
-cd <rasputin_directory>/lib
-git clone git@github.com:pybind/pybind11.git
 ```
 
 CGAL requires the two libraries [GMP](http://gmplib.org/) and
