@@ -10,6 +10,11 @@
 #include <CGAL/Polyhedron_3.h>
 #include <CGAL/Surface_mesh.h>
 #include <CGAL/Polyhedron_3.h>
+#include <CGAL/Polygon_mesh_processing/compute_normal.h>
+#include <CGAL/AABB_tree.h>
+#include <CGAL/AABB_traits.h>
+#include <CGAL/AABB_face_graph_triangle_primitive.h>
+
 
 #include <CGAL/Triangulation_face_base_2.h>
 #include <CGAL/Projection_traits_xy_3.h>
@@ -18,20 +23,30 @@
 #include <fstream>
 #include <map>
 #include <tuple>
+#include <numeric>
 
 namespace CGAL {
     using K = Exact_predicates_inexact_constructions_kernel;
     using Gt = Projection_traits_xy_3<K>;
     using Delaunay = Delaunay_triangulation_2<Gt>;
     using Point = K::Point_3;
+    using Vector = K::Vector_3;
     using PointList = std::map<Point, int>;
     using Mesh = Surface_mesh<Point>;
     using VertexIndex = Mesh::Vertex_index;
     using PointVertexMap = std::map<Point, VertexIndex>;
+    using Ray = K::Ray_3;
+    using Primitive = CGAL::AABB_face_graph_triangle_primitive<Mesh>;
+    using Traits = CGAL::AABB_traits<K, Primitive>;
+    using Tree = CGAL::AABB_tree<Traits>;
+    using Ray_intersection = boost::optional<Tree::Intersection_and_primitive_id<Ray>::Type>;
+    using face_descriptor = boost::graph_traits<Mesh>::face_descriptor;
+
 }
 
 namespace rasputin {
     using Point = std::tuple<double, double, double>;
+    using Vector = Point;
     using PointList = std::vector<Point>;
     using Face = std::tuple<int, int, int>;
     using FaceList = std::vector<Face>;
@@ -41,9 +56,6 @@ namespace rasputin {
                                              const S& stop,
                                              const P& placement,
                                              const C& cost) {
-
-        //o_points.clear();
-        //faces.clear();
 
         CGAL::Delaunay dtin;
         for (const auto p: pts)
@@ -88,12 +100,86 @@ namespace rasputin {
     };
 
     std::vector<int> compute_shadow(const PointList &pts,
-                                    const faces & faces,
-                                    const std::tuple<double, double, double> sun_direction) {
-        std::vector<int> result;
+                                    const FaceList &faces,
+                                    const Vector &sun_direction) {
+        std::vector<int> shade;
         CGAL::Mesh mesh;
-        return std::vector<int>(std::move(result));
+        std::map<int, CGAL::VertexIndex> index_map;
+        std::map<CGAL::face_descriptor, int> face_map;
+        size_t i = 0;
+        size_t j = 0;
+        const CGAL::Vector sun_vec(std::get<0>(sun_direction),
+                                   std::get<1>(sun_direction),
+                                   std::get<2>(sun_direction));
+        for (auto p: pts)
+            index_map[i++] = mesh.add_vertex(CGAL::Point(std::get<0>(p), std::get<1>(p), std::get<2>(p)));
+        for (auto f: faces)
+            face_map[mesh.add_face(index_map[std::get<0>(f)], index_map[std::get<1>(f)], index_map[std::get<2>(f)])] = j++;
+
+        CGAL::Tree tree(CGAL::faces(mesh).first, CGAL::faces(mesh).second, mesh);
+
+        for (auto fd: CGAL::faces(mesh)) {
+            auto hd = halfedge(fd, mesh);
+            auto p = CGAL::centroid(mesh.point(source(hd, mesh)),
+                                    mesh.point(target(hd, mesh)),
+                                    mesh.point(target(next(hd, mesh), mesh)));
+            auto v = CGAL::Polygon_mesh_processing::compute_face_normal(fd, mesh);
+            if ( v[0]*sun_vec[0] + v[1]*sun_vec[1] + v[2]*sun_vec[2] > 0.0 )
+                shade.emplace_back(face_map[fd]);
+            else {
+                CGAL::Ray sun_ray(p, -sun_vec);
+                auto intersection = tree.first_intersection(sun_ray,
+                                                            [fd] (const CGAL::face_descriptor &t) { return (t == fd); });
+                if (intersection)
+                    shade.emplace_back(face_map[fd]);
+            }
+        }
+        return shade;
     };
+
+    std::vector<std::vector<int>> compute_shadows(const PointList &pts,
+                                                  const FaceList &faces,
+                                                  const std::vector<std::pair<int, Vector>> & sun_rays) {
+        std::vector<std::vector<int>>  result;
+        result.reserve(sun_rays.size());
+        CGAL::Mesh mesh;
+        std::map<int, CGAL::VertexIndex> index_map;
+        std::map<CGAL::face_descriptor, int> face_map;
+        size_t i = 0;
+        size_t j = 0;
+        for (auto p: pts)
+            index_map[i++] = mesh.add_vertex(CGAL::Point(std::get<0>(p), std::get<1>(p), std::get<2>(p)));
+        for (auto f: faces)
+            face_map[mesh.add_face(index_map[std::get<0>(f)], index_map[std::get<1>(f)], index_map[std::get<2>(f)])] = j++;
+        CGAL::Tree tree(CGAL::faces(mesh).first, CGAL::faces(mesh).second, mesh);
+        for (auto item: sun_rays) {
+            std::vector<int> shade;
+            shade.reserve(mesh.num_faces());
+            auto utc_time = item.first;
+            const CGAL::Vector sun_ray(std::get<0>(item.second),
+                                       std::get<1>(item.second),
+                                       std::get<2>(item.second));
+
+            for (auto fd: CGAL::faces(mesh)) {
+                auto hd = halfedge(fd, mesh);
+                auto p = CGAL::centroid(mesh.point(source(hd, mesh)),
+                                        mesh.point(target(hd, mesh)),
+                                        mesh.point(target(next(hd, mesh), mesh)));
+                auto v = CGAL::Polygon_mesh_processing::compute_face_normal(fd, mesh);
+                if ( v[0]*sun_ray[0] + v[1]*sun_ray[1] + v[2]*sun_ray[2] > 0.0 )
+                    shade.emplace_back(face_map[fd]);
+                else {
+                    CGAL::Ray ray_towards_sun(p, -sun_ray);
+                    auto intersection = tree.first_intersection(ray_towards_sun,
+                                                                [fd] (const CGAL::face_descriptor &t) { return (t == fd); });
+                    if (intersection)
+                        shade.emplace_back(face_map[fd]);
+                }
+            }
+            result.emplace_back(std::move(shade));
+        }
+        return result;
+    }
 }
 
 #endif //RASPUTIN_TRIANGULATE_DEM_H_H
