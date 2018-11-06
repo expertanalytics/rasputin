@@ -22,6 +22,8 @@ PYBIND11_MAKE_OPAQUE(rasputin::FaceList);
 PYBIND11_MODULE(triangulate_dem, m) {
     py::bind_vector<rasputin::PointList>(m, "PointVector");
     py::bind_vector<rasputin::FaceList>(m, "FaceVector");
+    py::bind_vector<std::vector<int>>(m, "IntVector");
+    py::bind_vector<std::vector<std::vector<int>>>(m, "ShadowVector");
     m.def("lindstrom_turk_by_size",
           [] (const rasputin::PointList& raster_coordinates, size_t result_mesh_size) {
               return rasputin::make_tin(raster_coordinates,
@@ -38,5 +40,9 @@ PYBIND11_MODULE(triangulate_dem, m) {
                                         SMS::LindstromTurk_cost<CGAL::Mesh>());
           },
           "Construct a TIN based on the points provided.\n\nThe LindstromTurk cost and placement strategy is used, and simplification process stops when the number of undirected edges drops below the ratio threshold."
-    );
+    ).def("compute_shadow",
+          &rasputin::compute_shadow,
+          "Compute shadows for given sun ray direction."
+    ).def("compute_shados", &rasputin::compute_shadows,
+          "Compute shadoes for a series of times and ray directions.");
 }
