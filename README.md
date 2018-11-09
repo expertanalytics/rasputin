@@ -74,10 +74,6 @@ Hence, processing the whole file takes quite some time. See the manual for the
 `rasputin_triangulate` for help regarding only triangulating parts of this
 raster.
 
-The [meshio](https://github.com/nschloe/meshio) Python package can be used to convert
-the result files to other file formats for further analysis and visualization.
-
-
 ## Acknowledges
 
 The layout of this project follows the recommentation from an [excellent blog
