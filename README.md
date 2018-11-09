@@ -8,12 +8,11 @@ meshes in the [off](https://en.wikipedia.org/wiki/OFF_(file_format)) format.
 
 ## Implementation strategy
 
-All the heavy lifting in Rasputin is done by external software. The
-triangulation and simplification routines are done by
-[CGAL](https://www.cgal.org/) and the wrapper code is built by
-[pybind11](https://pybind11.readthedocs.io/en/stable/). Finally, the processing
-of the [GeoTIFF](https://en.wikipedia.org/wiki/GeoTIFF) files is handled by the
-Python module [Pillow](https://python-pillow.org/).
+The heavy lifting in Rasputin is done by external software:
+ * [CGAL](https://www.cgal.org/) is used for triangulation and simplification routines. 
+ * [pybind11](https://pybind11.readthedocs.io/en/stable/) is used to generate the Python wrappers.
+ * [Pillow](https://python-pillow.org/) is used to read [GeoTIFF](https://en.wikipedia.org/wiki/GeoTIFF) files.
+ * [Meshio](https://github.com/nschloe/meshio) is used to write results.
 
 ## Installation
 
