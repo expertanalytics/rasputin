@@ -77,6 +77,8 @@ setup(
     packages=find_packages('src'),
     install_requires=[
           'Pillow',
+          'h5py',
+          'lxml'
     ],
     # tell setuptools that all packages will be under the 'src' directory
     # and nowhere else
