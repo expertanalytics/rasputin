@@ -4,14 +4,21 @@ Rasputin can convert a point set of `(x, y, z)` coordinates to a triangulated
 irregular network. Specifically, it has been developed to convert raster dems
 (digital elevation models) into simplified triangulated surface meshes. The
 `rasputin_triangulate` program can read `GeoTIFF` files and construct surface
-meshes in the [off](https://en.wikipedia.org/wiki/OFF_(file_format)) format.
+meshes in various formats.
+
+It is also possible to compute the shade cast from a given, planar sun ray
+vector. This shade is computed based on the cell center of the simplified
+surface mesh.
 
 ## Implementation strategy
 
 The heavy lifting in Rasputin is done by external software:
- * [CGAL](https://www.cgal.org/) is used for triangulation and simplification routines. 
- * [pybind11](https://pybind11.readthedocs.io/en/stable/) is used to generate the Python wrappers.
- * [Pillow](https://python-pillow.org/) is used to read [GeoTIFF](https://en.wikipedia.org/wiki/GeoTIFF) files.
+ * [CGAL](https://www.cgal.org/) is used for triangulation and simplification 
+   routines. 
+ * [pybind11](https://pybind11.readthedocs.io/en/stable/) is used to generate 
+   the Python wrappers.
+ * [Pillow](https://python-pillow.org/) is used to read 
+   [GeoTIFF](https://en.wikipedia.org/wiki/GeoTIFF) files.
  * [Meshio](https://github.com/nschloe/meshio) is used to write results.
 
 ## Installation
