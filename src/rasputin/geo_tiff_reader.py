@@ -2,9 +2,11 @@ import sys
 from pathlib import Path
 import argparse
 from logging import getLogger
+from rasputin.writer import write_mesh
 from rasputin.reader import read_raster_file
 from rasputin.writer import write_ascii_off
-from rasputin.writer import write_vtk
+from rasputin.writer import write_legacy_vtk
+from rasputin.writer import write_binary_vtu
 from rasputin.calculate import compute_shade
 from rasputin.triangulate_dem import lindstrom_turk_by_ratio
 from rasputin.triangulate_dem import lindstrom_turk_by_size
@@ -43,13 +45,8 @@ def geo_tiff_reader():
         assert res.sun_x is not None
         assert res.sun_y is not None
         assert res.sun_z is not None
-        shade_field = compute_shade(pts, faces, [res.sun_x, res.sun_y, res.sun_z])
+        shade_field = compute_shade(pts=pts, faces=faces, sun_ray=[res.sun_x, res.sun_y, res.sun_z], time=0)
     else:
-        shade_field = None
+        shade_field = []
     output_path = Path(res.output)
-    if output_path.suffix == ".vtk":
-        write_vtk(pts, faces, shade_field, output_path)
-    elif output_path.suffix == ".off":
-        write_ascii_off(pts, faces, output_path)
-    else:
-        raise RuntimeError(f"Unknown output file format {output_path.suffix}")
+    write_mesh(pts=pts, faces=faces, shades=shade_field, filepath=output_path)

@@ -166,12 +166,14 @@ namespace rasputin {
                                         mesh.point(target(hd, mesh)),
                                         mesh.point(target(next(hd, mesh), mesh)));
                 auto v = CGAL::Polygon_mesh_processing::compute_face_normal(fd, mesh);
-                if ( v[0]*sun_ray[0] + v[1]*sun_ray[1] + v[2]*sun_ray[2] > 0.0 )
+                if ( v[0]*sun_ray[0] + v[1]*sun_ray[1] + v[2]*sun_ray[2] >= 0.0 )
                     shade.emplace_back(face_map[fd]);
                 else {
                     CGAL::Ray ray_towards_sun(p, -sun_ray);
                     auto intersection = tree.first_intersection(ray_towards_sun,
-                                                                [fd] (const CGAL::face_descriptor &t) { return (t == fd); });
+                                                                [fd] (const CGAL::face_descriptor &t) {
+                                                                    return (t == fd);
+                                                                });
                     if (intersection)
                         shade.emplace_back(face_map[fd]);
                 }
