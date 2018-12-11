@@ -1,6 +1,7 @@
 #include "triangulate_dem.h"
 #include <pybind11/pybind11.h>
 #include <pybind11/stl_bind.h>
+#include <pybind11/stl.h>
 
 // Surface mesh simplication policies
 #include <CGAL/Surface_mesh_simplification/Policies/Edge_collapse/Count_stop_predicate.h>
@@ -43,6 +44,8 @@ PYBIND11_MODULE(triangulate_dem, m) {
     ).def("compute_shadow",
           &rasputin::compute_shadow,
           "Compute shadows for given sun ray direction."
-    ).def("compute_shados", &rasputin::compute_shadows,
-          "Compute shadoes for a series of times and ray directions.");
+    ).def("compute_shadows", &rasputin::compute_shadows,
+          "Compute shadows for a series of times and ray directions."
+    ).def("surface_normals", &rasputin::surface_normals,
+            "Compute surface normals for all faces in the mesh.");
 }
