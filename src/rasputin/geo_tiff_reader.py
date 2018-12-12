@@ -43,6 +43,7 @@ def save_to_ascii_off(pts: triangulate_dem.PointVector,
         for fc in faces:
             tf.write(f"3 {fc[0]} {fc[1]} {fc[2]}\n")
 
+
 def geo_tiff_reader():
     arg_parser = argparse.ArgumentParser()
     arg_parser.add_argument("input", type=str, metavar="FILENAME")
