@@ -1,5 +1,6 @@
 cmake-*
 .idea
+.env
 lib/CGAL*
 lib/pybind11
 src/rasputin/*so
