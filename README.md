@@ -44,7 +44,7 @@ Ubuntu, these libraries can be installed the usual way by typing
 sudo apt-get install libgmp-dev libmpfr-dev
 ```
 
-for Arch Linux use
+or for Arch:
 ```
 sudo pacman -Syy gmp mpfr
 ```
@@ -64,7 +64,7 @@ python3 setup.py install
 
 
 ## Minimal Example
-To test the installation run this for example in ipython
+To test the installation run this for example in ipython:
 
 ```
 from rasputin import triangulate_dem
@@ -75,13 +75,13 @@ for f in faces:
    print(f)
 ```
 
-This should print out
+This should print out:
 ```
 >> (3, 1, 2)
 >> (0, 1, 3)
 >> (0, 3, 2)
 ```
-Congratulations you triangulated a small mountain
+Congratulations! You just triangulated a small mountain.
 
 ## Data
 
