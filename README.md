@@ -4,16 +4,22 @@ Rasputin can convert a point set of `(x, y, z)` coordinates to a triangulated
 irregular network. Specifically, it has been developed to convert raster dems
 (digital elevation models) into simplified triangulated surface meshes. The
 `rasputin_triangulate` program can read `GeoTIFF` files and construct surface
-meshes in the [off](https://en.wikipedia.org/wiki/OFF_(file_format)) format.
+meshes in various formats.
+
+It is also possible to compute the shade cast from a given, planar sun ray
+vector. This shade is computed based on the cell center of the simplified
+surface mesh.
 
 ## Implementation strategy
 
-All the heavy lifting in Rasputin is done by external software. The
-triangulation and simplification routines are done by
-[CGAL](https://www.cgal.org/) and the wrapper code is built by
-[pybind11](https://pybind11.readthedocs.io/en/stable/). Finally, the processing
-of the [GeoTIFF](https://en.wikipedia.org/wiki/GeoTIFF) files is handled by the
-Python module [Pillow](https://python-pillow.org/).
+The heavy lifting in Rasputin is done by external software:
+ * [CGAL](https://www.cgal.org/) is used for triangulation and simplification 
+   routines. 
+ * [pybind11](https://pybind11.readthedocs.io/en/stable/) is used to generate 
+   the Python wrappers.
+ * [Pillow](https://python-pillow.org/) is used to read 
+   [GeoTIFF](https://en.wikipedia.org/wiki/GeoTIFF) files.
+ * [Meshio](https://github.com/nschloe/meshio) is used to write results.
 
 ## Installation
 
@@ -94,10 +100,6 @@ Norwegian mountain range Jotunheimen using 6000 times 6000 raster points.
 Hence, processing the whole file takes quite some time. See the manual for the
 `rasputin_triangulate` for help regarding only triangulating parts of this
 raster.
-
-The [meshio](https://github.com/nschloe/meshio) Python package can be used to convert
-the result files to other file formats for further analysis and visualization.
-
 
 ## Acknowledges
 
