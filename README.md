@@ -49,6 +49,12 @@ Ubuntu, these libraries can be installed the usual way by typing
 ```
 sudo apt-get install libgmp-dev libmpfr-dev
 ```
+
+or for Arch:
+```
+sudo pacman -Syy gmp mpfr
+```
+
 in a terminal window. Also, CGAL depends on [Boost](https://www.boost.org/),
 see [here](https://doc.cgal.org/latest/Manual/installation.html#title21).
 
@@ -61,6 +67,27 @@ Or, if you prefer the old style:
 ```
 python3 setup.py install
 ```
+
+
+## Minimal Example
+To test the installation run this for example in ipython:
+
+```
+from rasputin import triangulate_dem
+
+vs = triangulate_dem.PointVector([(1,0,0), (0,1,0), (0,0,0), (0.25,0.25,1)])
+points, faces = triangulate_dem.lindstrom_turk_by_ratio(vs, 2.0)
+for f in faces:
+   print(f)
+```
+
+This should print out:
+```
+>> (3, 1, 2)
+>> (0, 1, 3)
+>> (0, 3, 2)
+```
+Congratulations! You just triangulated a small mountain.
 
 ## Data
 
