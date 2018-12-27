@@ -209,7 +209,7 @@ class GeoKeysParser(object):
     @staticmethod
     def _GeogInvFlatteningGeoKey(value):
         if np.isscalar(value):
-            return {"f": float(value)}
+            return {"rf": float(value)}
 
 
     @staticmethod
