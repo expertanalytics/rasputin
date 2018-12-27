@@ -3,6 +3,7 @@ from enum import Enum
 from PIL import Image
 from PIL.TiffImagePlugin import TiffImageFile
 import json
+import re
 from itertools import islice
 import numpy as np
 from pathlib import Path
@@ -70,6 +71,10 @@ class GeoKeys(Enum):
     ProjStraightVertPoleLongGeoKey = 3095
 
 
+def _isinteger(obj: Any) -> bool:
+    return np.issubdtype(type(obj), np.integer)
+
+
 def extract_geo_keys(*, image: TiffImageFile) -> Dict[str, Any]:
     """ Extract GeoKeys from image and return as Python dictionary. """
 
@@ -118,6 +123,157 @@ def extract_geo_keys(*, image: TiffImageFile) -> Dict[str, Any]:
         geo_keys[key_name] = key_value
 
     return geo_keys
+
+
+class GeoKeysParser(object):
+    """
+    This class provides functionality for converting a dict of GeoTIFF keys
+    into a useable PROJ.4 projection specification.
+
+    The string output can be used with pyproj to do coordinate transformations:
+
+        import pyproj
+        proj_str = GeoKeyParser(geokeys).to_proj4()
+        proj = pyproj.Proj(proj_str)
+
+
+    NOTE:
+    This class is incomplete and many GeoKeys are not handled. However, extending the class
+    with new handlers or expanding existing ones should be mostly straight forward, but some
+    care needs to be taken in order to support geographical systems not having degrees as unit.
+    """
+    def __init__(self, geokeys):
+        self.geokeys = geokeys
+        self.dict = dict()
+        self.parse()
+
+
+    def parse(self):
+        # Try to extract a proj4 keyword argument for each (key, value) pair in the geokeys
+        unhandled = []
+        for (geokey_name, geokey_value) in self.geokeys.items():
+            # Get handler
+            try:
+                handler = getattr(self, f"_{geokey_name}")
+            except AttributeError:
+                # Skip the GeoKey since no handler defined
+                unhandled.append(geokey_name)
+                continue
+
+            # Get a dict update from handler
+            update = handler(geokey_value)
+            if update is None:
+                continue
+
+            # Raise error on conflicts
+            for (name, val) in update.items():
+                if name in self.dict:
+                    old_val = self.dict[name]
+                    if old_val != val:
+                        raise ValueError(f"Conflicting values for {name}: {old_val} and {val}")
+
+                else:
+                    self.dict[name] = val
+
+
+    def to_proj4(self) -> str:
+        epsg = self.dict.get("EPSG")
+        if epsg is not None:
+            # The EPSG code completely specifies the projection. No more parameters needed
+            proj4_str = f"+init=EPSG:{epsg}"
+
+        else:
+            parts = [f"+{name}={value}" for (name, value) in self.dict.items()]
+            proj4_str = " ".join(parts)
+
+        # Add no_defs to proj4 string to avoid use of default values.
+        # Pyproj should raise an error for incomplete specification (e.g. missing ellps)
+        # Howerer, inconsistentencise ignored (e.g. when 'b' and 'f' are both provided)
+        proj4_str += " +no_defs"
+
+        return proj4_str
+
+
+    @staticmethod
+    def _ProjectedCSTypeGeoKey(value):
+        if _isinteger(value) and 20000 <= value <= 32760:
+            return {"EPSG": value}
+
+
+    @staticmethod
+    def _GeoGraphicTypeGeo(value):
+        if _isinteger(value) and 4000 <= value < 5000:
+            return {"EPSG": value}
+
+
+    @staticmethod
+    def _GeogInvFlatteningGeoKey(value):
+        if np.isscalar(value):
+            return {"f": float(value)}
+
+
+    @staticmethod
+    def _GeogPrimeMeridianLongGeoKey(value):
+        if np.isscalar(value):
+            return {"pm" : float(value)}
+
+
+    @staticmethod
+    def _GeogSemiMajorAxisGeoKey(value):
+        if np.isscalar(value):
+            return {"a" : float(value)}
+
+
+    @staticmethod
+    def _ProjectionGeoKey(value):
+        if _isinteger(value) and 16000 <= value < 16200:
+            # UTM projections are denoted
+            #    160zz (nothern hemisphere) or
+            #    161zz
+            # where zz in zone number
+
+            zone = value % 16000
+            south = bool(zone // 100)
+            if south:
+                zone %= 100
+
+            return dict(proj="utm", zone=zone, south=south)
+
+
+    @staticmethod
+    def _ProjLinearUnitsGeoKey(value):
+        # More units could be supported here
+        unit_name = {9001: "m"}[value]
+        return {"units" : unit_name}
+
+
+    @staticmethod
+    def _GeogCitationGeoKey(value):
+        update = {}
+
+        # Parse ellipsoid. GRS and WGS is probably enough
+        gcs_re = {"GRS":    ("GRS[ ,_]{0,1}(19|)\d\d", "\d\d$"),
+                  "WGS":    ("WGS[ ,_]{0,1}(19|)\d\d", "\d\d$"),
+                  "sphere": ("sphere", None)}
+
+        for (name, (pattern, postfix_pattern)) in gcs_re.items():
+            s = re.search(pattern, value, flags=2)
+            if s:
+                # Add postfix if applicable
+                if postfix_pattern:
+                    postfix = re.search(postfix_pattern, s.group()).group()
+                    name = name + postfix
+
+                update["ellps"] = name
+                break
+
+        # TODO: Could parse for datum and prime meridian here as well
+        return update
+
+
+def get_projection(image: TiffImageFile) -> str:
+    geokeys = extract_geokeys(image)
+    return GeoKeysParser(geokeys).to_proj4()
 
 
 def img_slice(img, start_i, stop_i, start_j, stop_j):
