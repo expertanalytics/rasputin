@@ -10,6 +10,10 @@ from pathlib import Path
 from logging import getLogger
 from rasputin import triangulate_dem
 
+class GeoTiffTags(Enum):
+    ModelTiePointTag = 33922
+    ModelPixelScaleTag = 33550
+    GeoKeyDirectoryTag = 34735
 
 class KeyValueTags(Enum):
     # Parameter value types:
@@ -80,8 +84,9 @@ def extract_geo_keys(*, image: TiffImageFile) -> Dict[str, Any]:
 
     # Using .tag_v2 instead of legacy .tag
     image_tags = image.tag_v2
+    geo_key_tag = GeoTiffTags.GeoKeyDirectoryTag.value
     try:
-        GeoKeyDirectory = np.asarray(image_tags[34735], dtype="ushort").reshape((-1,4))
+        GeoKeyDirectory = np.asarray(image_tags[geo_key_tag], dtype="ushort").reshape((-1,4))
     except KeyError:
         raise RuntimeError("Image is missing GeoKeyDirectory required by GeoTiff v1.0.")
 
@@ -305,7 +310,7 @@ def read_raster_file(*,
                      start_x: int,
                      stop_x: Optional[int],
                      start_y: int,
-                     stop_y: Optional[int]) -> Tuple[triangulate_dem.PointVector, Dict[str, str]]:
+                     stop_y: Optional[int]) -> Tuple[triangulate_dem.PointVector, Dict[str, Any]]:
     logger = getLogger()
     logger.debug(f"Reading raster file {filepath}")
     assert filepath.exists()
@@ -317,19 +322,26 @@ def read_raster_file(*,
             if stop_y is None:
                 stop_y = m
         count = (stop_x - start_x)*(stop_y - start_y)
-        named_tags = image.tag.named()
-        dx, dy, _ = named_tags.get("ModelPixelScaleTag", (1, 1, 0))
-        info = extract_geo_keys(named_tags=named_tags)
-        model_tie_point = named_tags.get("ModelTiepointTag", None)
+
+        model_pixel_scale = image.tag_v2.get(GeoTiffTags.ModelPixelScaleTag.value)
+        model_tie_point = image.tag_v2.get(GeoTiffTags.ModelTiePointTag.value)
+        info = extract_geo_keys(image=image)
+
         d = np.fromiter(img_slice(image, start_y, stop_y, start_x, stop_x), dtype="float", count=count).reshape(stop_y - start_y, -1)
         #d = np.array(image.getdata()).reshape(image.size[0], image.size[1])[start_x:stop_x, start_y:stop_y]
+
+    dx = dy = 1.0
+    if model_pixel_scale:
+        dx, dy, _ = model_pixel_scale
+
     x0 = y0 = 0.0
+    I = J = 0
     if model_tie_point:
-        x0 = model_tie_point[3]
-        y0 = model_tie_point[4]
+        J, I, _, x0, y0, _ = model_tie_point
+
     raster_coordinates = triangulate_dem.PointVector()
     for (i, j), h in np.ndenumerate(d):
-        raster_coordinates.append([x0 + (start_x + j)*dx, y0 - (start_y + i)*dy, h])
+        raster_coordinates.append([x0 + (start_x + j - J)*dx, y0 - (start_y + i - I)*dy, h])
     logger.debug("Done")
     return raster_coordinates, info
 
