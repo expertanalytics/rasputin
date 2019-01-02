@@ -2,6 +2,7 @@ from typing import Tuple, Dict, Any, Optional
 from enum import Enum
 from PIL import Image
 from PIL.TiffImagePlugin import TiffImageFile
+import pyproj
 import json
 import re
 from itertools import islice
@@ -307,41 +308,64 @@ def img_slice(img, start_i, stop_i, start_j, stop_j):
 
 def read_raster_file(*,
                      filepath: Path,
-                     start_x: int,
-                     stop_x: Optional[int],
-                     start_y: int,
-                     stop_y: Optional[int]) -> Tuple[triangulate_dem.PointVector, Dict[str, Any]]:
+                     x0: Optional[float] = None,
+                     x1: Optional[float] = None,
+                     y0: Optional[float] = None,
+                     y1: Optional[float] = None) -> Tuple[triangulate_dem.PointVector, Dict[str, Any]]:
     logger = getLogger()
     logger.debug(f"Reading raster file {filepath}")
     assert filepath.exists()
-    with Image.open(filepath) as image:
-        if None in [stop_x, stop_y]:
-            m, n = image.size
-            if stop_x is None:
-                stop_x = n
-            if stop_y is None:
-                stop_y = m
-        count = (stop_x - start_x)*(stop_y - start_y)
+    if x0 and x1: assert x0 < x1
+    if y0 and y1: assert y0 < y1
 
+    with Image.open(filepath) as image:
+        # Determine image extents
+        m, n = image.size
         model_pixel_scale = image.tag_v2.get(GeoTiffTags.ModelPixelScaleTag.value)
         model_tie_point = image.tag_v2.get(GeoTiffTags.ModelTiePointTag.value)
         info = extract_geo_keys(image=image)
 
-        d = np.fromiter(img_slice(image, start_y, stop_y, start_x, stop_x), dtype="float", count=count).reshape(stop_y - start_y, -1)
-        #d = np.array(image.getdata()).reshape(image.size[0], image.size[1])[start_x:stop_x, start_y:stop_y]
+        # Use pixel coordinates if image does not define an affine transformation
+        # This should only happen if the image is not a GeoTIFF
+        dx = dy = 1.0
+        if model_pixel_scale:
+            dx, dy, _ = model_pixel_scale
 
-    dx = dy = 1.0
-    if model_pixel_scale:
-        dx, dy, _ = model_pixel_scale
+        xt = yt = 0.0
+        it = jt = 0
+        if model_tie_point:
+            jt, it, _, xt, yt, _ = model_tie_point
 
-    x0 = y0 = 0.0
-    I = J = 0
-    if model_tie_point:
-        J, I, _, x0, y0, _ = model_tie_point
+        # Determine image coordinates, assuming here that the tie point is associated with pixel center.
+        # Otherwise, coordinates should be shiftet half pixel size in both directions
+        X0, X1 = xt - jt * dx, xt + (n -1 - jt) * dx
+        Y1, Y0 = yt + it * dy, yt - (m -1 - it) * dy
 
-    raster_coordinates = triangulate_dem.PointVector()
-    for (i, j), h in np.ndenumerate(d):
-        raster_coordinates.append([x0 + (start_x + j - J)*dx, y0 - (start_y + i - I)*dy, h])
+        if x0 is None: x0 = X0
+        if x1 is None: x1 = X1
+        if y0 is None: y0 = Y0
+        if y1 is None: y1 = Y1
+
+        # Identify pixel coordinates of view window extended to align with pixels
+        j0 = max(int(np.floor((x0 - X0) / dx)), 0)
+        j1 = min(int(np.ceil((x1 - X0) / dx)), m-1)
+        i0 = max(int(np.floor((Y1 - y1) / dy)), 0)
+        i1 = min(int(np.ceil((Y1 - y0) / dy)), n-1)
+
+        if j1 <= 0 or i1 <= 0 or i0 >= n or j0 >= m:
+            # Empty view window, raise an error since PIL does not
+            raise ValueError("Selected view window is outside of image bounds")
+
+        d = np.asarray(image.crop(box=(j0, i0, j1+1, i1+1)))
+
+
+    # Get the actual coordinates of returned view window
+    x0d, x1d = X0 + j0 * dx, X0 + j1 * dx
+    y0d, y1d = Y1 - i1 * dy, Y1 - i0 * dy
+
+    # Call c++ function to populate pointvector
+    raster_coordinates = triangulate_dem.rasterdata_to_pointvector(d, x0d, y0d, x1d, y1d)
+
     logger.debug("Done")
     return raster_coordinates, info
 
