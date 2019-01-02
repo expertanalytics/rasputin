@@ -2,6 +2,7 @@
 #include <pybind11/pybind11.h>
 #include <pybind11/stl_bind.h>
 #include <pybind11/stl.h>
+#include <pybind11/numpy.h>
 
 // Surface mesh simplication policies
 #include <CGAL/Surface_mesh_simplification/Policies/Edge_collapse/Count_stop_predicate.h>
@@ -47,5 +48,20 @@ PYBIND11_MODULE(triangulate_dem, m) {
     ).def("compute_shadows", &rasputin::compute_shadows,
           "Compute shadows for a series of times and ray directions."
     ).def("surface_normals", &rasputin::surface_normals,
-            "Compute surface normals for all faces in the mesh.");
+            "Compute surface normals for all faces in the mesh.")
+    .def("rasterdata_to_pointvector",
+        [] (py::array_t<double> array, double x0, double y0, double x1, double y1) {
+        auto buffer = array.request();
+        int m = buffer.shape[0], n = buffer.shape[1];
+        double* ptr = (double*) buffer.ptr;
+
+        double dx = (x1 -x0)/(n-1), dy = (y1-y0)/(m-1);
+
+        rasputin::PointList raster_coordinates;
+        raster_coordinates.reserve(m*n);
+        for (std::size_t i = 0; i< m; ++i)
+          for (std::size_t j = 0; j< n; ++j)
+            raster_coordinates.push_back(std::array<double, 3>{x0 + j*dx, y1 - i*dy, ptr[i*n +j]});
+        return raster_coordinates;
+        }, "Pointvector from raster data");
 }
