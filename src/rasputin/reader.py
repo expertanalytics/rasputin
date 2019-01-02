@@ -277,8 +277,8 @@ class GeoKeysParser(object):
         return update
 
 
-def get_projection(image: TiffImageFile) -> str:
-    geokeys = extract_geokeys(image)
+def identify_projection(image: TiffImageFile) -> str:
+    geokeys = extract_geo_keys(image)
     return GeoKeysParser(geokeys).to_proj4()
 
 
