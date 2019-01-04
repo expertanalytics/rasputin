@@ -362,7 +362,7 @@ def read_raster_file(*,
             # Empty view window, raise an error since PIL does not
             raise ValueError("Selected view window is outside of image bounds")
 
-        d = np.asarray(image.crop(box=(j0, i0, j1+1, i1+1)))
+        d = image.crop(box=(j0, i0, j1+1, i1+1))
 
 
     # Get the actual coordinates of returned view window
