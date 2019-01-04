@@ -66,7 +66,11 @@ PYBIND11_MODULE(triangulate_dem, m) {
     ).def("compute_shadows", &rasputin::compute_shadows,
           "Compute shadows for a series of times and ray directions."
     ).def("surface_normals", &rasputin::surface_normals,
-            "Compute surface normals for all faces in the mesh.")
+            "Compute surface normals for all faces in the mesh."
+    ).def("orient_tin", &rasputin::orient_tin,
+            "Orients all triangles in the TIN and returns their surface normals."
+    ).def("compute_slopes", &rasputin::compute_slopes,
+            "computes slopes (i.e. angles relative to xy plane) for the all the vectors in list.")
     .def("rasterdata_to_pointvector",
         [] (py::array_t<double> array, double x0, double y0, double x1, double y1) {
         auto buffer = array.request();
