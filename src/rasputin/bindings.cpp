@@ -19,11 +19,29 @@ namespace SMS = CGAL::Surface_mesh_simplification;
 
 PYBIND11_MAKE_OPAQUE(rasputin::PointList);
 PYBIND11_MAKE_OPAQUE(rasputin::FaceList);
+PYBIND11_MAKE_OPAQUE(rasputin::ScalarList);
 
+
+// templated buffer protocol definitions to reduce code duplication
+template<typename T, std::size_t n>
+py::buffer_info vecarray_buffer (std::vector<std::array<T, n>> &v) {
+        return py::buffer_info(
+            &v[0],                                        /* Pointer to buffer */
+            sizeof(T),                                    /* Size of one scalar */
+            py::format_descriptor<T>::format(),           /* Python struct-style format descriptor */
+            2,                                            /* Number of dimensions */
+            std::vector<std::size_t> { v.size(), n },     /* Buffer dimensions */
+            { sizeof(T) * n, sizeof(T) }                  /* Strides (in bytes) for each index */
+        );
+}
 
 PYBIND11_MODULE(triangulate_dem, m) {
-    py::bind_vector<rasputin::PointList>(m, "PointVector");
-    py::bind_vector<rasputin::FaceList>(m, "FaceVector");
+    py::bind_vector<rasputin::PointList>(m, "PointVector", py::buffer_protocol())
+      .def_buffer(&vecarray_buffer<double, 3>);
+    py::bind_vector<rasputin::FaceList>(m, "FaceVector", py::buffer_protocol())
+      .def_buffer(&vecarray_buffer<int, 3>);
+
+    py::bind_vector<rasputin::ScalarList>(m, "ScalarVector");
     py::bind_vector<std::vector<int>>(m, "IntVector");
     py::bind_vector<std::vector<std::vector<int>>>(m, "ShadowVector");
     m.def("lindstrom_turk_by_size",
@@ -55,13 +73,13 @@ PYBIND11_MODULE(triangulate_dem, m) {
         int m = buffer.shape[0], n = buffer.shape[1];
         double* ptr = (double*) buffer.ptr;
 
-        double dx = (x1 -x0)/(n-1), dy = (y1-y0)/(m-1);
+        double dx = (x1 - x0)/(n - 1), dy = (y1 - y0)/(m - 1);
 
         rasputin::PointList raster_coordinates;
         raster_coordinates.reserve(m*n);
-        for (std::size_t i = 0; i< m; ++i)
-          for (std::size_t j = 0; j< n; ++j)
-            raster_coordinates.push_back(std::array<double, 3>{x0 + j*dx, y1 - i*dy, ptr[i*n +j]});
+        for (std::size_t i = 0; i < m; ++i)
+          for (std::size_t j = 0; j < n; ++j)
+            raster_coordinates.push_back(std::array<double, 3>{x0 + j*dx, y1 - i*dy, ptr[i*n + j]});
         return raster_coordinates;
         }, "Pointvector from raster data");
 }
