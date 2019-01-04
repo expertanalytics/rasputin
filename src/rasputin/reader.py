@@ -144,9 +144,9 @@ class GeoKeysParser(object):
 
 
     NOTE:
-    This class is incomplete and many GeoKeys are not handled. However, extending the class
-    with new handlers or expanding existing ones should be mostly straight forward, but some
-    care needs to be taken in order to support geographical systems not having degrees as unit.
+    This class is incomplete and many GeoKeys are not handled. Extending the class with new handlers
+    or expanding existing ones should be mostly straight forward, but some care needs to be taken in
+    order to support angular units that are not degrees.
     """
     def __init__(self, geokeys):
         self.geokeys = geokeys
@@ -181,8 +181,14 @@ class GeoKeysParser(object):
                 else:
                     self.dict[name] = val
 
+        # Report unhandled GeoKeys
+        logger = getLogger()
+        logger.debug(f"Unhandled GeoKeys: {unhandled}")
 
     def to_proj4(self) -> str:
+        """
+        Returns a string to be used with pyproj.
+        """
         epsg = self.dict.get("EPSG")
         if epsg is not None:
             # The EPSG code completely specifies the projection. No more parameters needed
@@ -194,7 +200,7 @@ class GeoKeysParser(object):
 
         # Add no_defs to proj4 string to avoid use of default values.
         # Pyproj should raise an error for incomplete specification (e.g. missing ellps)
-        # Howerer, inconsistentencise ignored (e.g. when 'b' and 'f' are both provided)
+        # Howerer, inconsistentencise may be ignored (e.g. when 'b' and 'rf' are both provided)
         proj4_str += " +no_defs"
 
         return proj4_str
@@ -278,7 +284,7 @@ class GeoKeysParser(object):
 
 
 def identify_projection(image: TiffImageFile) -> str:
-    geokeys = extract_geo_keys(image)
+    geokeys = extract_geo_keys(image=image)
     return GeoKeysParser(geokeys).to_proj4()
 
 
