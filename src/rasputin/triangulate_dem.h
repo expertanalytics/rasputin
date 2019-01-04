@@ -46,6 +46,7 @@ namespace rasputin {
 using Point = std::array<double, 3>;
 using PointList = std::vector<Point>;
 using VectorList = PointList;
+using ScalarList = std::vector<double>;
 using Vector = Point;
 using Face = std::array<int, 3>;
 using FaceList = std::vector<Face>;
@@ -200,6 +201,16 @@ VectorList orient_tin(const PointList &pts, FaceList &faces) {
         // Store normalised normal vector
         result.push_back(Vector{n.at(0)/c, n.at(1)/c, n.at(2)/c});
     }
+    return result;
+}
+
+ScalarList compute_slopes(const VectorList &normals) {
+    ScalarList result;
+    result.reserve(normals.size());
+
+    for (const auto &n : normals)
+        result.push_back(std::atan2(pow(pow(n[0], 2) + pow(n[1], 2), 0.5), n[2]));
+
     return result;
 }
 
