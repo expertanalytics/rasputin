@@ -33,12 +33,19 @@ py::buffer_info vecarray_buffer(std::vector<std::array<T, n>> &v) {
     );
 }
 
+template<typename T>
+py::buffer_info vector_buffer(std::vector<T> &v) {
+    return py::buffer_info(&v[0], sizeof(T), py::format_descriptor<T>::format(), 1, { v.size() }, { sizeof(T) });
+}
+
+
 PYBIND11_MODULE(triangulate_dem, m) {
     py::bind_vector<rasputin::PointList>(m, "PointVector", py::buffer_protocol())
         .def_buffer(&vecarray_buffer<double, 3>);
     py::bind_vector<rasputin::FaceList>(m, "FaceVector", py::buffer_protocol())
         .def_buffer(&vecarray_buffer<int, 3>);
-    py::bind_vector<rasputin::ScalarList>(m, "ScalarVector");
+    py::bind_vector<rasputin::ScalarList>(m, "ScalarVector", py::buffer_protocol())
+        .def_buffer(&vector_buffer<double>);
 
     py::bind_vector<std::vector<int>>(m, "IntVector");
     py::bind_vector<std::vector<std::vector<int>>>(m, "ShadowVector");
