@@ -43,8 +43,8 @@ class Writer(object):
             raise FileError("No file open!")
 
     def set_tin(self, pts, faces):
-        self._pts = pts
-        self._faces = faces
+        self._pts = np.asarray(pts)
+        self._faces = np.asarray(faces)
 
     def add_point_data(self, data, name):
         self._point_data[name] = np.asarray(data)
@@ -53,7 +53,8 @@ class Writer(object):
         self._cell_data[name] = np.asarray(data)
 
     def write_tin(self):
-        self.xdmfwriter.write_points_self(self._pts, self._faces)
+        self.xdmfwriter.write_points_cells(self._pts,
+                                           {"triangle": self._faces})
 
     def write_all(self, t: float = 0.0):
         if not self.xdmfwriter.has_mesh:
