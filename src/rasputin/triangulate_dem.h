@@ -181,7 +181,7 @@ VectorList orient_tin(const PointList &pts, FaceList &faces) {
     VectorList result;
     result.reserve(faces.size());
     for (auto& face: faces) {
-        // Compute normal
+        // Compute ccw normal
         const auto p0 = pts[face[0]];
         const auto p1 = pts[face[1]];
         const auto p2 = pts[face[2]];
@@ -190,15 +190,13 @@ VectorList orient_tin(const PointList &pts, FaceList &faces) {
         const arma::vec::fixed<3> n = arma::cross(v0, v1);
         double c = arma::norm(n);
 
-        // Reverse orientation if triangle is negatively oriented relative to xy plane
-        if (n[2] < 0.0)
-        {
+        // Reverse triangle orientation if it is negatively oriented relative to xy plane
+        if (n[2] < 0.0) {
           c *= -1.0;
           std::reverse(face.begin(), face.end());
-
         }
 
-        // Store normalised normal vector
+        // Store normalised and correctly oriented normal vector
         result.push_back(Vector{n.at(0)/c, n.at(1)/c, n.at(2)/c});
     }
     return result;
