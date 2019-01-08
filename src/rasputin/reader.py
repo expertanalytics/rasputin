@@ -347,15 +347,15 @@ def read_raster_file(*,
 
         # Identify pixel coordinates of view window extended to align with pixels
         j0 = max(int(np.floor((x0 - X0) / dx)), 0)
-        j1 = min(int(np.ceil((x1 - X0) / dx)), m - 1)
+        j1 = min(int(np.ceil((x1 - X0) / dx)), m)
         i0 = max(int(np.floor((Y1 - y1) / dy)), 0)
-        i1 = min(int(np.ceil((Y1 - y0) / dy)), n - 1)
+        i1 = min(int(np.ceil((Y1 - y0) / dy)), n)
 
         if j1 <= 0 or i1 <= 0 or i0 >= n or j0 >= m:
             # Empty view window, raise an error since PIL does not
             raise ValueError("Selected view window is outside of image bounds")
 
-        d = image.crop(box=(j0, i0, j1 + 1, i1 + 1))
+        d = image.crop(box=(j0, i0, j1, i1))
 
     # Get the actual coordinates of returned view window
     x0d, x1d = X0 + j0 * dx, X0 + j1 * dx
