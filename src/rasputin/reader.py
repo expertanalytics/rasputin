@@ -134,7 +134,7 @@ def extract_geo_keys(*, image: TiffImageFile) -> Dict[str, Any]:
     return geo_keys
 
 
-class GeoKeysParser(object):
+class GeoKeysInterpreter(object):
     """
     This class provides functionality for converting a dict of GeoTIFF keys
     into a useable PROJ.4 projection specification.
@@ -142,7 +142,7 @@ class GeoKeysParser(object):
     The string output can be used with pyproj to do coordinate transformations:
 
         import pyproj
-        proj_str = GeoKeyParser(geokeys).to_proj4()
+        proj_str = GeoKeyInterpreter(geokeys).to_proj4()
         proj = pyproj.Proj(proj_str)
 
     NOTE:
@@ -153,9 +153,9 @@ class GeoKeysParser(object):
     def __init__(self, geokeys):
         self.geokeys = geokeys
         self.dict = dict()
-        self.parse()
+        self.interpret()
 
-    def parse(self):
+    def interpret(self):
         # Try to extract a proj4 keyword argument for each (key, value) pair in the geokeys
         ignored_keys = []
         for (geokey_name, geokey_value) in self.geokeys.items():
@@ -277,7 +277,7 @@ class GeoKeysParser(object):
 
 def identify_projection(*, image: TiffImageFile) -> str:
     geokeys = extract_geo_keys(image=image)
-    return GeoKeysParser(geokeys).to_proj4()
+    return GeoKeysInterpreter(geokeys).to_proj4()
 
 
 def img_slice(img, start_i, stop_i, start_j, stop_j):
