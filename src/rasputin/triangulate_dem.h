@@ -46,6 +46,7 @@ namespace rasputin {
 using Point = std::array<double, 3>;
 using PointList = std::vector<Point>;
 using VectorList = PointList;
+using ScalarList = std::vector<double>;
 using Vector = Point;
 using Face = std::array<int, 3>;
 using FaceList = std::vector<Face>;
@@ -173,6 +174,41 @@ std::vector<std::vector<int>> compute_shadows(const PointList &pts,
         }
         result.emplace_back(std::move(shade));
     }
+    return result;
+}
+
+VectorList orient_tin(const PointList &pts, FaceList &faces) {
+    VectorList result;
+    result.reserve(faces.size());
+    for (auto& face: faces) {
+        // Compute ccw normal
+        const auto p0 = pts[face[0]];
+        const auto p1 = pts[face[1]];
+        const auto p2 = pts[face[2]];
+        const arma::vec::fixed<3> v0 = {p1[0] - p0[0], p1[1] - p0[1], p1[2] - p0[2]};
+        const arma::vec::fixed<3> v1 = {p2[0] - p0[0], p2[1] - p0[1], p2[2] - p0[2]};
+        const arma::vec::fixed<3> n = arma::cross(v0, v1);
+        double c = arma::norm(n);
+
+        // Reverse triangle orientation if it is negatively oriented relative to xy plane
+        if (n[2] < 0.0) {
+          c *= -1.0;
+          std::reverse(face.begin(), face.end());
+        }
+
+        // Store normalised and correctly oriented normal vector
+        result.push_back(Vector{n.at(0)/c, n.at(1)/c, n.at(2)/c});
+    }
+    return result;
+}
+
+ScalarList compute_slopes(const VectorList &normals) {
+    ScalarList result;
+    result.reserve(normals.size());
+
+    for (const auto &n : normals)
+        result.push_back(std::atan2(pow(pow(n[0], 2) + pow(n[1], 2), 0.5), n[2]));
+
     return result;
 }
 
