@@ -20,7 +20,7 @@ The heavy lifting in Rasputin is done by external software:
  * [Pillow](https://python-pillow.org/) is used to read 
    [GeoTIFF](https://en.wikipedia.org/wiki/GeoTIFF) files.
  * [Meshio](https://github.com/nschloe/meshio) is used to write results.
- * [Armadillo] (http://arma.sourceforge.net/) for speedy arithmetics.
+ * [Armadillo](http://arma.sourceforge.net/) for speedy arithmetics.
 
 ## Installation
 
