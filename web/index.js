@@ -1,5 +1,5 @@
 
-function init({indices, vertices, colors}) {
+function init({indices, vertices, normals, colors}) {
     const scene = new THREE.Scene();
     scene.background = new THREE.Color( 0xdddddd );
 
@@ -17,7 +17,7 @@ function init({indices, vertices, colors}) {
     const geometry = new THREE.BufferGeometry();
     geometry.setIndex(indices);
     geometry.addAttribute( 'position', new THREE.Float32BufferAttribute( vertices, 3 ) );
-    // geometry.addAttribute( 'normal', new THREE.Float32BufferAttribute( normals, 3 ) );
+    geometry.addAttribute( 'normal', new THREE.Float32BufferAttribute( normals, 3 ) );
     geometry.addAttribute( 'color', new THREE.Float32BufferAttribute( colors, 3 ) );
 
     const material = new THREE.MeshPhongMaterial( {

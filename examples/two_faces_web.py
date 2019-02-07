@@ -13,5 +13,5 @@ points, faces = triangulate_dem.lindstrom_turk_by_ratio(vs, 2.0)
 normals = triangulate_dem.surface_normals(points, faces)
 
 
-output_dir = Path.cwd() / "two_face_web"
+output_dir = Path.cwd() / "two_faces_web"
 write_mesh(pts=points, faces=faces, normals=normals, output_dir=output_dir)

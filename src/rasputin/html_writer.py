@@ -5,21 +5,23 @@ from typing import List, Union, Optional
 from . import triangulate_dem
 
 
-def convert_variable_to_lines(*,
-                              name: str,
-                              variable: Union[triangulate_dem.PointVector, triangulate_dem.FaceVector],
-                              type: Optional[str]=None)-> List[str]:
-    if type:
-        lines = [f'const {name} = new {type}( [\n']
-    else:
-        lines = [f'const {name} = [\n']
-    for v in variable:
+def face_vector_to_lines(*,
+                         name: str,
+                         face_vector: triangulate_dem.FaceVector)-> List[str]:
+    lines = [f'const {name} = [\n']
+    for v in face_vector:
         lines.append(f"    {', '.join([str(s) for s in v])},\n")
+    lines.append('];\n\n')
+    return lines
 
-    lines.append(']')
-    if type:
-        lines.append(')')
-    lines.append(';\n\n')
+
+def point_vector_to_lines(*,
+                          name: str,
+                          point_vector: triangulate_dem.PointVector)-> List[str]:
+    lines = [f'const {name} = new Float32Array( [\n']
+    for v in point_vector:
+        lines.append(f"    {', '.join([str(s) for s in v])},\n")
+    lines.append(']);\n\n')
     return lines
 
 
@@ -42,15 +44,16 @@ def write_mesh(*,
     data_js = output_dir / "data.js"
 
     lines = []
-    lines.extend(convert_variable_to_lines(name='indices', variable=faces))
-    lines.extend(convert_variable_to_lines(name='vertices', type='Float32Array', variable=pts))
+    lines.extend(face_vector_to_lines(name='indices', face_vector=faces))
+    lines.extend(point_vector_to_lines(name='vertices', point_vector=pts))
+    lines.extend(point_vector_to_lines(name='normals', point_vector=normals))
 
     lines.append("const colors = new Float32Array( [\n")
     for p in pts:
         lines.append("0.0,  1.0,  0.0,\n")
     lines.append("\n] );\n\n")
 
-    lines.append("\nconst data = {indices, vertices, colors};\n")
+    lines.append("\nconst data = {indices, vertices, normals, colors};\n")
 
     with data_js.open(mode="w") as f:
         f.writelines(lines)
