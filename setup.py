@@ -9,6 +9,8 @@ from distutils.version import LooseVersion
 from setuptools import setup, find_packages, Extension
 from setuptools.command.build_ext import build_ext
 
+web_templates = "src/rasputin/web/*"
+
 
 class CMakeExtension(Extension):
     def __init__(self, name, sourcedir=''):
@@ -83,6 +85,9 @@ setup(
     # tell setuptools that all packages will be under the 'src' directory
     # and nowhere else
     package_dir={'':'src'},
+    data_files=[("rasputin/web", ["web/index.js", "web/index.html", "web/data.js"]),
+                ("rasputin/web/js", ["web/js/three.js"]),
+                ("rasputin/web/js/controls", ["web/js/controls/OrbitControls.js", "web/js/controls/PointerLockControls.js"])],
     # add an extension module named 'python_cpp_example' to the package 
     # 'python_cpp_example'
     ext_modules=[CMakeExtension('rasputin/rasputin')],

@@ -221,8 +221,10 @@ VectorList surface_normals(const PointList &pts, const FaceList &faces) {
         const auto p2 = pts[face[2]];
         const arma::vec::fixed<3> v0 = {p1[0] - p0[0], p1[1] - p0[1], p1[2] - p0[2]};
         const arma::vec::fixed<3> v1 = {p2[0] - p0[0], p2[1] - p0[1], p2[2] - p0[2]};
-        const arma::vec::fixed<3> n = arma::cross(v0/arma::norm(v0), v1/arma::norm(v1));
-        const double c = arma::norm(n);
+        arma::vec::fixed<3> n = arma::cross(v0, v1);
+        n /= arma::norm(n);
+        //const double c = arma::norm(n);
+        const double c = 1;
         result.emplace_back(n[2] >= 0.0 ? Vector{n[0]/c, n[1]/c, n[2]/c} : Vector{-n[0]/c, -n[1]/c, -n[2]/c});
     }
     return result;

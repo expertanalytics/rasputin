@@ -1,5 +1,5 @@
 
-function init({indices, vertices, normals, colors}) {
+function init({indices, vertices, normals, face_colors, vertex_colors}) {
     const scene = new THREE.Scene();
     scene.background = new THREE.Color( 0xdddddd );
 
@@ -18,22 +18,44 @@ function init({indices, vertices, normals, colors}) {
     geometry.setIndex(indices);
     geometry.addAttribute( 'position', new THREE.Float32BufferAttribute( vertices, 3 ) );
     //geometry.addAttribute( 'normal', new THREE.Float32BufferAttribute( normals, 3 ) );
-    geometry.addAttribute( 'color', new THREE.Float32BufferAttribute( colors, 3 ) );
+    geometry.addAttribute( 'color', new THREE.Float32BufferAttribute( vertex_colors, 3 ) );
 
     geometry.computeVertexNormals();
 
-    const material = new THREE.MeshPhongMaterial( {
+    //for ( var i = 0; i < geometry.faces.length; i ++ ) {
+
+    //    var face = geometry.faces[ i ];
+    //    face.color.setRGB( vertex_colors[3*i], vertex_colors[3*i + 1], vertex_colors[3*i] + 2);
+
+    //}
+
+    const phong_material = new THREE.MeshPhongMaterial( {
         specular: 0x111111,
         shininess: 250,
-        side: THREE.DoubleSide,
-        vertexColors: THREE.VertexColors,
+        //side: THREE.DoubleSide,
+        vertexColors: THREE.FaceColors
     } );
 
-    const mesh = new THREE.Mesh( geometry, material );
-    scene.add( mesh );
+    const phys_material = new THREE.MeshPhysicalMaterial( {
+        metalness: 0,
+        roughness: 0.9,
+        reflectivity: 0.5,
+        clearCoat: 0.0,
+        //side: THREE.DoubleSide,
+        vertexColors: THREE.FaceColors
+    } );
 
-    const camera = new THREE.PerspectiveCamera( 75, window.innerWidth / window.innerHeight, 0.1, 1000 );
-    camera.position.z = 5;
+    const mesh = new THREE.Mesh( geometry, phys_material );
+    scene.add(mesh);
+
+    const center = getCenterPoint(mesh);
+
+    var z_max = mesh.geometry.boundingBox.max.z;
+    var z_min = mesh.geometry.boundingBox.min.z;
+    var cam_z_pos = z_min + (z_max - z_min)*3;
+    const camera = new THREE.PerspectiveCamera( 75, window.innerWidth / window.innerHeight, 0.1, cam_z_pos*4);
+    camera.position.set(center.x, center.y, cam_z_pos);
+    camera.up.set(0, 0, 1);
 
     const renderer = new THREE.WebGLRenderer( { antialias: true } );
     renderer.setPixelRatio(window.devicePixelRatio);
@@ -42,10 +64,11 @@ function init({indices, vertices, normals, colors}) {
     const controls = new THREE.OrbitControls( camera, renderer.domElement );
     controls.enableDamping = true; // an animation loop is required when either damping or auto-rotation are enabled
     controls.dampingFactor = 0.25;
-    controls.screenSpacePanning = false;
-    controls.minDistance = 1;
-    controls.maxDistance = 5;
-    controls.maxPolarAngle = Math.PI / 2;
+    controls.target.set(center.x, center.y, z_min);
+    //controls.screenSpacePanning = false;
+    //controls.minDistance = 1;
+    //controls.maxDistance = 5;
+    //controls.maxPolarAngle = Math.PI / 2;
 
     const state = {mesh, scene, camera, renderer, controls}
     return state
@@ -59,6 +82,16 @@ function animate() {
 
 	renderer.render( scene, camera );
 }
+
+function getCenterPoint(mesh) {
+    var geometry = mesh.geometry;
+    geometry.computeBoundingBox();   
+    const center = new THREE.Vector3()
+    geometry.boundingBox.getCenter(center);
+    mesh.localToWorld(center);
+    return center;
+}
+
 
 function onWindowResize({renderer, camera}) {
     camera.aspect = window.innerWidth / window.innerHeight;

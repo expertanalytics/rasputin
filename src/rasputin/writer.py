@@ -10,6 +10,14 @@ def write_mesh(*,
                faces: triangulate_dem.FaceVector,
                shades: List[Tuple[int, np.ndarray]],
                filepath: Path) -> None:
+    """Write mesh to file...
+
+    :param pts:
+    :param faces:
+    :param shades:
+    :param filepath:
+    :return:
+    """
     pts = np.asarray(pts)
     cells = {"triangle": np.asarray(faces)}
     if not shades:
