@@ -1,5 +1,5 @@
 
-function init({indices, vertices, normals, face_colors, vertex_colors}) {
+function init({vertices, normals, face_colors, vertex_colors}) {
     const scene = new THREE.Scene();
     scene.background = new THREE.Color( 0xdddddd );
 
@@ -15,12 +15,13 @@ function init({indices, vertices, normals, face_colors, vertex_colors}) {
     scene.add( light2 );
 
     const geometry = new THREE.BufferGeometry();
-    geometry.setIndex(indices);
+    //geometry.setIndex(indices);
     geometry.addAttribute( 'position', new THREE.Float32BufferAttribute( vertices, 3 ) );
     //geometry.addAttribute( 'normal', new THREE.Float32BufferAttribute( normals, 3 ) );
-    geometry.addAttribute( 'color', new THREE.Float32BufferAttribute( vertex_colors, 3 ) );
+    geometry.addAttribute( 'color', new THREE.Float32BufferAttribute( face_colors, 3 ) );
 
     geometry.computeVertexNormals();
+    //geometry.normalizeNormals();
 
     //for ( var i = 0; i < geometry.faces.length; i ++ ) {
 
@@ -37,12 +38,12 @@ function init({indices, vertices, normals, face_colors, vertex_colors}) {
     } );
 
     const phys_material = new THREE.MeshPhysicalMaterial( {
-        metalness: 0,
-        roughness: 0.9,
-        reflectivity: 0.5,
+        metalness: 0.0,
+        roughness: 0.5,
+        reflectivity: 0.7,
         clearCoat: 0.0,
         //side: THREE.DoubleSide,
-        vertexColors: THREE.FaceColors
+        vertexColors: THREE.VertexColors
     } );
 
     const mesh = new THREE.Mesh( geometry, phys_material );

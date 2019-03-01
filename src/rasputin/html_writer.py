@@ -27,6 +27,18 @@ def point_vector_to_lines(*,
     return lines
 
 
+def face_and_point_vector_to_lines(*,
+                                   name: str,
+                                   face_vector: triangulate_dem.FaceVector,
+                                   point_vector: triangulate_dem.PointVector) -> List[str]:
+    lines = [f'const {name} = new Float32Array( [\n']
+    for f in face_vector:
+        for i in f:
+            lines.append(f"    {', '.join([str(s) for s in point_vector[i]])},\n")
+    lines.append(']);\n\n')
+    return lines
+
+
 def write_mesh(*,
                pts: triangulate_dem.PointVector,
                faces: triangulate_dem.FaceVector,
@@ -47,20 +59,25 @@ def write_mesh(*,
     data_js = output_dir / "data.js"
 
     lines = []
-    lines.extend(face_vector_to_lines(name='indices', face_vector=faces))
-    lines.extend(point_vector_to_lines(name='vertices', point_vector=pts))
+    lines.extend(face_and_point_vector_to_lines(name='vertices', face_vector=faces, point_vector=pts))
     lines.extend(point_vector_to_lines(name='normals', point_vector=normals))
 
-    lines.append("const face_colors = new Float32Array( [\n")
 
-    face_heights = np.zeros(len(faces))
+    face_scalar = np.zeros(3*len(faces))
     for i, face in enumerate(faces):
-        face_heights[i] = np.mean([pts[f][2] for f in face])
+        face_scalar[i*3:i*3 + 3] = [pts[f][2] for f in face]
+        if i == 100:
+            print([pts[f][2] for f in face])
 
-    face_heights -= min(face_heights)
-    face_heights /= 2*max(face_heights)
-    face_heights += 0.5
-    for h in face_heights:
+    factor = 4
+    face_scalar -= min(face_scalar)
+    face_scalar /= factor*max(face_scalar)
+    face_scalar += 1 - 1/factor
+    print(face_scalar[100*3:101*3])
+    lines.append("const face_colors = new Float32Array( [\n")
+    for h in face_scalar:
+        r, g, b = np.random.random(3)
+        #lines.append(f"{r}, {g}, {b},\n")
         lines.append(f"{h}, {h}, {h},\n")
     lines.append("\n] );\n\n")
 
@@ -73,7 +90,7 @@ def write_mesh(*,
     for h in heights:
         lines.append(f"{h}, {h}, {h},\n")
     lines.append("\n] );\n\n")
-    lines.append("\nconst data = {indices, vertices, normals, face_colors, vertex_colors};\n")
+    lines.append("\nconst data = {vertices, normals, face_colors, vertex_colors};\n")
 
     with data_js.open(mode="w") as f:
         f.writelines(lines)
