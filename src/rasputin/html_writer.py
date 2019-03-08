@@ -39,10 +39,58 @@ def face_and_point_vector_to_lines(*,
     return lines
 
 
+
+def face_field_to_vertex_values(*,
+                                face_field: np.ndarray,
+                                faces: triangulate_dem.FaceVector,
+                                points: triangulate_dem.PointVector) -> np.ndarray:
+    """
+
+    :param field: scalar field over faces
+    :param faces: face index vector
+    :param points: points
+    :return: field values for points
+    """
+    assert len(face_field) == len(faces)
+    vertex_field = np.empty(3*len(faces))
+    for i, face in enumerate(faces):
+        vertex_field[i*3:i*3 + 3] = face_field[i]
+    return vertex_field
+
+
+def vertex_field_to_vertex_values(*,
+                                  vertex_field: np.ndarray,
+                                  faces: triangulate_dem.FaceVector,
+                                  points: triangulate_dem.PointVector) -> np.ndarray:
+    """
+
+    :param field: scalar field over points
+    :param faces: face index vector
+    :param points: points
+    :return: field values for points
+    """
+    assert len(vertex_field) == len(points)
+    res = np.empty(3*len(faces))
+    for i, face in enumerate(faces):
+        res[i*3:i*3 + 3] = [vertex_field[f] for f in face]
+    return res
+
+
+def color_field_by_height(*, points: triangulate_dem.PointVector) -> np.ndarray:
+    vertex_heights = np.asarray(points)[:, 2].copy()
+    factor = 2
+    vertex_heights -= min(vertex_heights)
+    vertex_heights /= factor*max(vertex_heights)
+    vertex_heights += 1 - 1/factor
+    return vertex_heights
+
+
 def write_mesh(*,
                pts: triangulate_dem.PointVector,
                faces: triangulate_dem.FaceVector,
                normals: triangulate_dem.PointVector,
+               vertex_field: Optional[np.ndarray]=None,
+               face_field: Optional[np.ndarray]=None,
                output_dir: Path) -> None:
     """
     This function writes a output html web-site code for the give mesh to output dir.
@@ -51,7 +99,6 @@ def write_mesh(*,
         shutil.rmtree(str(output_dir))
 
     templates_path = Path(resource_filename(__name__, "web"))
-    #templates_path = Path(__file__).parent.parent.parent / "web"
 
     # copy all template files
     shutil.copytree(str(templates_path), str(output_dir))
@@ -62,35 +109,18 @@ def write_mesh(*,
     lines.extend(face_and_point_vector_to_lines(name='vertices', face_vector=faces, point_vector=pts))
     lines.extend(point_vector_to_lines(name='normals', point_vector=normals))
 
-
-    face_scalar = np.zeros(3*len(faces))
-    for i, face in enumerate(faces):
-        face_scalar[i*3:i*3 + 3] = [pts[f][2] for f in face]
-        if i == 100:
-            print([pts[f][2] for f in face])
-
-    factor = 4
-    face_scalar -= min(face_scalar)
-    face_scalar /= factor*max(face_scalar)
-    face_scalar += 1 - 1/factor
-    print(face_scalar[100*3:101*3])
-    lines.append("const face_colors = new Float32Array( [\n")
-    for h in face_scalar:
-        r, g, b = np.random.random(3)
-        #lines.append(f"{r}, {g}, {b},\n")
-        lines.append(f"{h}, {h}, {h},\n")
+    lines.append("const face_field = new Float32Array( [\n")
+    if face_field is not None:
+        for v in face_field_to_vertex_values(face_field=face_field, faces=faces, points=pts):
+            lines.append(f"{v}, {v}, {v},\n")
     lines.append("\n] );\n\n")
 
-    lines.append("const vertex_colors = new Float32Array( [\n")
-
-    heights = np.array([p[2] for p in pts])
-    heights -= min(heights)
-    heights /= 2*max(heights)
-    heights += 0.5
-    for h in heights:
-        lines.append(f"{h}, {h}, {h},\n")
+    lines.append("const vertex_field = new Float32Array( [\n")
+    if vertex_field is not None:
+        for v in vertex_field_to_vertex_values(vertex_field=vertex_field, faces=faces, points=pts):
+            lines.append(f"{v}, {v}, {v},\n")
     lines.append("\n] );\n\n")
-    lines.append("\nconst data = {vertices, normals, face_colors, vertex_colors};\n")
+    lines.append("\nconst data = {vertices, normals, face_field, vertex_field};\n")
 
     with data_js.open(mode="w") as f:
         f.writelines(lines)

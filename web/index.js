@@ -1,5 +1,5 @@
 
-function init({vertices, normals, face_colors, vertex_colors}) {
+function init({vertices, normals, face_field, vertex_field}) {
     const scene = new THREE.Scene();
     scene.background = new THREE.Color( 0xdddddd );
 
@@ -18,7 +18,7 @@ function init({vertices, normals, face_colors, vertex_colors}) {
     //geometry.setIndex(indices);
     geometry.addAttribute( 'position', new THREE.Float32BufferAttribute( vertices, 3 ) );
     //geometry.addAttribute( 'normal', new THREE.Float32BufferAttribute( normals, 3 ) );
-    geometry.addAttribute( 'color', new THREE.Float32BufferAttribute( face_colors, 3 ) );
+    geometry.addAttribute( 'color', new THREE.Float32BufferAttribute( vertex_field, 3 ) );
 
     geometry.computeVertexNormals();
     //geometry.normalizeNormals();
@@ -43,7 +43,7 @@ function init({vertices, normals, face_colors, vertex_colors}) {
         reflectivity: 0.7,
         clearCoat: 0.0,
         //side: THREE.DoubleSide,
-        vertexColors: THREE.VertexColors
+        vertexColors: THREE.FaceColors
     } );
 
     const mesh = new THREE.Mesh( geometry, phys_material );
@@ -66,12 +66,8 @@ function init({vertices, normals, face_colors, vertex_colors}) {
     controls.enableDamping = true; // an animation loop is required when either damping or auto-rotation are enabled
     controls.dampingFactor = 0.25;
     controls.target.set(center.x, center.y, z_min);
-    //controls.screenSpacePanning = false;
-    //controls.minDistance = 1;
-    //controls.maxDistance = 5;
-    //controls.maxPolarAngle = Math.PI / 2;
 
-    const state = {mesh, scene, camera, renderer, controls}
+    const state = { mesh, scene, camera, renderer, controls }
     return state
 }
 
