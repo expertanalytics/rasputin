@@ -212,6 +212,14 @@ ScalarList compute_slopes(const VectorList &normals) {
     return result;
 }
 
+ScalarList compute_aspect(const VectorList &normals) {
+    ScalarList result;
+    result.reserve(normals.size());
+    for (const auto &n: normals)
+        result.emplace_back(std::atan2(n[0], n[1]));
+    return result;
+}
+
 VectorList surface_normals(const PointList &pts, const FaceList &faces) {
     VectorList result;
     result.reserve(faces.size());
