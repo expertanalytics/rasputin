@@ -17,10 +17,10 @@ function init({vertices, normals, face_field, vertex_field}) {
     const geometry = new THREE.BufferGeometry();
     //geometry.setIndex(indices);
     geometry.addAttribute( 'position', new THREE.Float32BufferAttribute( vertices, 3 ) );
-    //geometry.addAttribute( 'normal', new THREE.Float32BufferAttribute( normals, 3 ) );
-    geometry.addAttribute( 'color', new THREE.Float32BufferAttribute( vertex_field, 3 ) );
+    geometry.addAttribute( 'normal', new THREE.Float32BufferAttribute( normals, 3 ) );
+    geometry.addAttribute( 'color', new THREE.Float32BufferAttribute( face_field, 3 ) );
 
-    geometry.computeVertexNormals();
+    //geometry.computeVertexNormals();
     //geometry.normalizeNormals();
 
     //for ( var i = 0; i < geometry.faces.length; i ++ ) {

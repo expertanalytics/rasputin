@@ -19,6 +19,7 @@
 #include <CGAL/Triangulation_face_base_2.h>
 
 #include <armadillo>
+#include <cmath>
 #include <fstream>
 #include <map>
 #include <tuple>
@@ -40,6 +41,7 @@ using Traits = CGAL::AABB_traits<K, Primitive>;
 using Tree = CGAL::AABB_tree<Traits>;
 using Ray_intersection = boost::optional<Tree::Intersection_and_primitive_id<Ray>::Type>;
 using face_descriptor = boost::graph_traits<Mesh>::face_descriptor;
+
 }
 
 namespace rasputin {
@@ -50,6 +52,25 @@ using ScalarList = std::vector<double>;
 using Vector = Point;
 using Face = std::array<int, 3>;
 using FaceList = std::vector<Face>;
+using VertexIndexMap = std::map<int, CGAL::VertexIndex>;
+using FaceDescrMap = std::map<CGAL::face_descriptor, int>;
+
+CGAL::Mesh construct_mesh(const PointList &pts,
+                          const FaceList &faces,
+                          VertexIndexMap& index_map,
+                          FaceDescrMap& face_map){
+    CGAL::Mesh mesh;
+    index_map.clear();
+    face_map.clear();
+    size_t i = 0;
+    size_t j = 0;
+    for (auto p: pts)
+        index_map[i++] = mesh.add_vertex(CGAL::Point(p[0], p[1], p[2]));
+    for (auto f: faces)
+        face_map[mesh.add_face(index_map[f[0]], index_map[f[1]], index_map[f[2]])] = j++;
+    return mesh;
+};
+
 
 template<typename S, typename P, typename C>
 std::tuple<PointList, FaceList> make_tin(const PointList &pts, const S &stop,
@@ -99,17 +120,17 @@ std::vector<int> compute_shadow(const PointList &pts,
                                 const FaceList &faces,
                                 const Vector &sun_direction) {
     std::vector<int> shade;
-    CGAL::Mesh mesh;
-    std::map<int, CGAL::VertexIndex> index_map;
-    std::map<CGAL::face_descriptor, int> face_map;
-    size_t i = 0;
-    size_t j = 0;
-    const CGAL::Vector sun_vec(sun_direction[0], sun_direction[1], sun_direction[2]);
-    for (auto p: pts)
-        index_map[i++] = mesh.add_vertex(CGAL::Point(p[0], p[1], p[2]));
-    for (auto f: faces)
-        face_map[mesh.add_face(index_map[f[0]], index_map[f[1]], index_map[f[2]])] = j++;
+    VertexIndexMap index_map;
+    FaceDescrMap face_map;
+    auto mesh = construct_mesh(pts, faces, index_map, face_map);
+    //size_t i = 0;
+    //size_t j = 0;
+    //for (auto p: pts)
+    //    index_map[i++] = mesh.add_vertex(CGAL::Point(p[0], p[1], p[2]));
+    //for (auto f: faces)
+    //    face_map[mesh.add_face(index_map[f[0]], index_map[f[1]], index_map[f[2]])] = j++;
 
+    const CGAL::Vector sun_vec(sun_direction[0], sun_direction[1], sun_direction[2]);
     CGAL::Tree tree(CGAL::faces(mesh).first, CGAL::faces(mesh).second, mesh);
 
     for (auto fd: CGAL::faces(mesh)) {
@@ -130,6 +151,8 @@ std::vector<int> compute_shadow(const PointList &pts,
     }
     return shade;
 };
+
+
 
 std::vector<std::vector<int>> compute_shadows(const PointList &pts,
                                               const FaceList &faces,
@@ -175,7 +198,7 @@ std::vector<std::vector<int>> compute_shadows(const PointList &pts,
         result.emplace_back(std::move(shade));
     }
     return result;
-}
+};
 
 VectorList orient_tin(const PointList &pts, FaceList &faces) {
     VectorList result;
@@ -200,7 +223,7 @@ VectorList orient_tin(const PointList &pts, FaceList &faces) {
         result.push_back(Vector{n[0]/c, n[1]/c, n[2]/c});
     }
     return result;
-}
+};
 
 ScalarList compute_slopes(const VectorList &normals) {
     ScalarList result;
@@ -210,7 +233,7 @@ ScalarList compute_slopes(const VectorList &normals) {
         result.push_back(std::atan2(pow(pow(n[0], 2) + pow(n[1], 2), 0.5), n[2]));
 
     return result;
-}
+};
 
 ScalarList compute_aspect(const VectorList &normals) {
     ScalarList result;
@@ -218,7 +241,7 @@ ScalarList compute_aspect(const VectorList &normals) {
     for (const auto &n: normals)
         result.emplace_back(std::atan2(n[0], n[1]));
     return result;
-}
+};
 
 VectorList surface_normals(const PointList &pts, const FaceList &faces) {
     VectorList result;
@@ -231,12 +254,41 @@ VectorList surface_normals(const PointList &pts, const FaceList &faces) {
         const arma::vec::fixed<3> v1 = {p2[0] - p0[0], p2[1] - p0[1], p2[2] - p0[2]};
         arma::vec::fixed<3> n = arma::cross(v0, v1);
         n /= arma::norm(n);
-        //const double c = arma::norm(n);
-        const double c = 1;
-        result.emplace_back(n[2] >= 0.0 ? Vector{n[0]/c, n[1]/c, n[2]/c} : Vector{-n[0]/c, -n[1]/c, -n[2]/c});
+        result.emplace_back(n[2] >= 0.0 ? Vector{n[0], n[1], n[2]} : Vector{-n[0], -n[1], -n[2]});
     }
     return result;
+};
+
+template <typename T> void iadd(T& v, const T& o) {
+    v[0] += o[0];
+    v[1] += o[1];
+    v[2] += o[2];
 }
+
+VectorList point_normals(const PointList& pts, const FaceList &faces) {
+    VectorList result(pts.size(), {0.0, 0.0, 0.0});
+    for (auto face: faces) {
+        const auto p0 = pts[face[0]];
+        const auto p1 = pts[face[1]];
+        const auto p2 = pts[face[2]];
+        const arma::vec::fixed<3> v0 = {p1[0] - p0[0], p1[1] - p0[1], p1[2] - p0[2]};
+        const arma::vec::fixed<3> v1 = {p2[0] - p0[0], p2[1] - p0[1], p2[2] - p0[2]};
+        arma::vec::fixed<3> n = arma::cross(v0, v1);
+        n /= arma::norm(n);
+        const auto v = (n[2] >= 0.0) ? Vector{n[0], n[1], n[2]} : Vector{-n[0], -n[1], -n[2]};
+        iadd(result[face[0]], v);
+        iadd(result[face[1]], v);
+        iadd(result[face[2]], v);
+    }
+    for (auto p: result) {
+        const double norm = std::sqrt(p[0]*p[0] + p[1]*p[1] + p[2]*p[2]);
+        p[0] /= norm;
+        p[1] /= norm;
+        p[2] /= norm;
+    }
+    return result;
+};
+
 }
 
 #endif //RASPUTIN_TRIANGULATE_DEM_H_H

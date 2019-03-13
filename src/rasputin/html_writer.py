@@ -96,6 +96,7 @@ def add_slope_colors(*,
     slopes = np.asanyarray(triangulate_dem.compute_slopes(normals))
     colors[slopes < 5.0e-2] = [0, 0, 1]
     #colors[np.logical_and(slopes < 55/180*np.pi, slopes > 30/180*np.pi)] = [0.5, 0, 0]
+    colors[slopes >= 55/180*np.pi] = [0.2, 0.2, 0.2]
     return colors
 
 
@@ -148,12 +149,9 @@ def color_field_by_avalanche_danger(*,
     return colors
 
 
-
-
 def color_field_by_aspect(*, normals: triangulate_dem.PointVector)->np.ndarray:
 
     palette = sns.color_palette("pastel", n_colors=len(varsom_angles))
-    print(palette)
     aspects = np.asanyarray(triangulate_dem.compute_aspect(normals))
     colors = np.empty((len(aspects), 3))
     for angle, col in zip(varsom_angles, palette):
@@ -184,7 +182,10 @@ def write_mesh(*,
 
     lines = []
     lines.extend(face_and_point_vector_to_lines(name='vertices', face_vector=faces, point_vector=pts))
-    lines.extend(point_vector_to_lines(name='normals', point_vector=normals))
+    lines.append("const normals = new Float32Array( [\n")
+    for x,y,z in vertex_field_to_vertex_values(vertex_field=np.asarray(normals), faces=faces, points=pts):
+        lines.append(f"{x}, {y}, {z},\n")
+    lines.append("\n] );\n\n")
 
     lines.append("const face_field = new Float32Array( [\n")
     if face_field is not None:

@@ -67,6 +67,7 @@ raster_coords, info = read_raster_file(filepath=raster_file,
 points, faces = lindstrom_turk_by_ratio(raster_coords, 0.5)
 
 normals = triangulate_dem.surface_normals(points, faces)
+point_normals = triangulate_dem.point_normals(points, faces)
 face_field = color_field_by_slope(normals=normals)
 
 face_field2 = color_field_by_aspect(normals=normals)
@@ -76,11 +77,12 @@ face_field3 = color_field_by_avalanche_danger(normals=normals,
                                               points=points,
                                               faces=faces,
                                               avalanche_problems=avalanche_problems)
+face_field3 = add_slope_colors(normals=normals, colors=face_field3)
 
 outputpath = Path.cwd() / "jotunheimen_web"
 write_mesh(pts=points,
            faces=faces,
-           normals=normals,
+           normals=point_normals,
            output_dir=outputpath,
            vertex_field=color_field_by_height(points=points),
            face_field=face_field3)
