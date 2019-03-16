@@ -1,5 +1,5 @@
 
-function init({vertices, normals, face_field, vertex_field}) {
+function init({vertices, normals, face_field, vertex_field, features}) {
     const scene = new THREE.Scene();
     scene.background = new THREE.Color( 0xdddddd );
 
@@ -20,21 +20,12 @@ function init({vertices, normals, face_field, vertex_field}) {
     geometry.addAttribute( 'normal', new THREE.Float32BufferAttribute( normals, 3 ) );
     geometry.addAttribute( 'color', new THREE.Float32BufferAttribute( face_field, 3 ) );
 
-    //geometry.computeVertexNormals();
-    //geometry.normalizeNormals();
-
-    //for ( var i = 0; i < geometry.faces.length; i ++ ) {
-
-    //    var face = geometry.faces[ i ];
-    //    face.color.setRGB( vertex_colors[3*i], vertex_colors[3*i + 1], vertex_colors[3*i] + 2);
-
-    //}
-
     const phong_material = new THREE.MeshPhongMaterial( {
-        specular: 0x111111,
+        //specular: 0x111111,
         shininess: 250,
         //side: THREE.DoubleSide,
-        vertexColors: THREE.FaceColors
+        color: 0xff0000,
+        //vertexColors: THREE.FaceColors
     } );
 
     const phys_material = new THREE.MeshPhysicalMaterial( {
@@ -45,6 +36,13 @@ function init({vertices, normals, face_field, vertex_field}) {
         //side: THREE.DoubleSide,
         vertexColors: THREE.FaceColors
     } );
+
+    for ( var i = 0; i < features.length; i ++ ) {
+        const geom = new THREE.BufferGeometry();
+        geom.addAttribute( 'position', new THREE.Float32BufferAttribute(features[i], 3));
+        geom.computeVertexNormals();
+        scene.add(new THREE.Mesh(geom, phong_material));
+    }
 
     const mesh = new THREE.Mesh( geometry, phys_material );
     scene.add(mesh);

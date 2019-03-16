@@ -3,7 +3,8 @@ import PIL
 
 from rasputin import triangulate_dem
 from rasputin.html_writer import (write_mesh, color_field_by_height, color_field_by_slope,
-                                  color_field_by_aspect, add_slope_colors, color_field_by_avalanche_danger)
+                                  color_field_by_aspect, add_slope_colors, color_field_by_avalanche_danger,
+                                  mesh_with_avalanche_danger)
 from rasputin.reader import read_raster_file, extract_geo_keys, GeoKeysInterpreter
 from rasputin.triangulate_dem import lindstrom_turk_by_ratio
 from rasputin import avalanche
@@ -73,6 +74,9 @@ face_field = color_field_by_slope(normals=normals)
 face_field2 = color_field_by_aspect(normals=normals)
 face_field2 = add_slope_colors(normals=normals, colors=face_field2)
 
+meshes = mesh_with_avalanche_danger(points=points, faces=faces, normals=normals,
+                                    avalanche_problems=avalanche_problems)
+
 face_field3 = color_field_by_avalanche_danger(normals=normals,
                                               points=points,
                                               faces=faces,
@@ -83,6 +87,7 @@ outputpath = Path.cwd() / "jotunheimen_web"
 write_mesh(pts=points,
            faces=faces,
            normals=point_normals,
+           features=meshes,
            output_dir=outputpath,
            vertex_field=color_field_by_height(points=points),
            face_field=face_field3)
