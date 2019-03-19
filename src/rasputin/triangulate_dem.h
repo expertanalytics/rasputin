@@ -37,7 +37,7 @@ using ConstrainedDelaunay = Constrained_Delaunay_triangulation_2<Gt>;
 using Point = K::Point_3;
 using Point2D = K::Point_2;
 using Vector = K::Vector_3;
-using PointList = std::map<Point, int>;
+using PointList = std::vector<Point>;
 using Mesh = Surface_mesh<Point>;
 using VertexIndex = Mesh::Vertex_index;
 using PointVertexMap = std::map<Point, VertexIndex>;
@@ -96,6 +96,121 @@ CGAL::Mesh construct_mesh(const PointList &pts,
 /*     RasterData(std::vector<double> x_coordinates, */
 /*                std::vector<double> y_coordinates,) */
 
+struct RasterData {
+    RasterData(double x_min, double y_max, double delta_x, double delta_y,
+               std::size_t num_points_x, std::size_t num_points_y,
+               double* data)
+        : x_min(x_min), delta_x(delta_x), num_points_x(num_points_x),
+          y_max(y_max), delta_y(delta_y), num_points_y(num_points_y),
+          x_max(x_min + (num_points_x - 1)*delta_x),
+          y_min(y_max - (num_points_y - 1)*delta_y),
+          data(data) {}
+
+    double x_min;
+    double x_max;
+    double delta_x;
+    std::size_t num_points_x;
+
+    double y_min;
+    double y_max;
+    double delta_y;
+    std::size_t num_points_y;
+
+    double* data;
+
+    CGAL::PointList raster_points() const {
+        CGAL::PointList points;
+        points.reserve(num_points_x * num_points_y);
+
+        for (std::size_t i = 0; i < num_points_y; ++i)
+            for (std::size_t j = 0; j < num_points_x; ++j)
+                points.emplace_back(x_min + j*delta_x, y_max - i*delta_y, data[i*num_points_x + j]);
+        return points;
+    }
+};
+
+
+CGAL::Polygon polygon_from_points(const PointList2D& points) {
+    CGAL::Polygon polygon;
+    for (const auto& point: points)
+        polygon.push_back(CGAL::Point(point[0], point[1], 0.0));
+
+    return polygon;
+}
+
+CGAL::PointList interpolate_boundary_points(const RasterData& coords,
+                                            const CGAL::Polygon& boundary_polygon) {
+    const double delta_x = coords.delta_x;
+    const double delta_y = coords.delta_y;
+    const double x_min = coords.x_min;
+    const double y_max = coords.y_max;
+    const double* data = coords.data;
+    std::size_t num_points_x = coords.num_points_x;
+    std::size_t num_points_y = coords.num_points_y;
+
+
+    // To every point inside the raster rectangle we identify indices (i, j) of the upper-left cell containing the point
+    auto get_index= [x_min, y_max, delta_x, delta_y](double x, double y) -> std::pair<int, int> {
+        int j = static_cast<int>((x-x_min) /delta_x);
+        int i = static_cast<int>((y_max-y) /delta_y);
+
+        return std::make_pair(i,j);
+    };
+
+    // Define an interpolation rule for each cell
+    auto get_interpolated_value_at_point = [x_min, y_max, delta_x, delta_y, data, get_index, num_points_x, num_points_y](double x, double y) -> double {
+        // Determine indices of the cell containing (x, y)
+        auto indices = get_index(x, y);
+        int i = indices.first, j = indices.second;
+
+        // Determine the cell corners
+        double x_0 = x_min + j * delta_x,
+               y_0 = y_max - i * delta_y,
+               x_1 = x_min + (j+1) * delta_x,
+               y_1 = y_max - (i+1) * delta_y;
+
+        // Using bilinear interpolation on the celll
+        double h = data[(i + 0)*num_points_x + j + 0] * (x_1 - x)/delta_x * (y - y_1)/delta_y
+                 + data[(i + 1)*num_points_x + j + 0] * (x_1 - x)/delta_x * (y_0 - y)/delta_y
+                 + data[(i + 0)*num_points_x + j + 1] * (x - x_0)/delta_x * (y - y_1)/delta_y
+                 + data[(i + 1)*num_points_x + j + 1] * (x - x_0)/delta_x * (y_0 - y)/delta_y;
+
+        return h;
+    };
+
+
+    // Iterate over edges and interpolate points
+    CGAL::PointList interpolated_points;
+    for (auto e = boundary_polygon.edges_begin(); e != boundary_polygon.edges_end(); ++e) {
+        CGAL::Point first_vertex = e->vertex(0);
+        CGAL::Point second_vertex = e->vertex(1);
+
+        // We will sample with the approximately the same resolution as the raster data along the boundary edges
+        double edge_len_x = second_vertex[0] - first_vertex[0];
+        double edge_len_y = second_vertex[1] - first_vertex[1];
+
+        // Maybe inf-norm would be better here
+        double edge_len = pow(pow(edge_len_x, 2) + pow(edge_len_y, 2), 0.5);
+        double delta = pow(pow(delta_x, 2) + pow(delta_y, 2), 0.5);
+
+        // We do not include the second vertex in the sample, since it will be in samples for the next edge
+        std::size_t num_samples = static_cast<int>(std::max<double>(std::fabs(edge_len_x/delta_x), std::fabs(edge_len_y/delta_y)));
+        double edge_dx = edge_len_x / num_samples;
+        double edge_dy = edge_len_y / num_samples;
+
+        // Iterate over edge samples
+        for (std::size_t k=0; k < num_samples; ++k) {
+            double x = first_vertex[0] + k * edge_dx;
+            double y = first_vertex[1] + k * edge_dy;
+            double z = get_interpolated_value_at_point(x, y);
+
+            interpolated_points.emplace_back(x, y, z);
+        }
+    }
+
+    return interpolated_points;
+}
+
 template<typename S, typename P, typename C>
 std::tuple<PointList, FaceList> make_tin(const PointList &pts, const S &stop,
                                          const P &placement, const C &cost) {
@@ -140,30 +255,18 @@ std::tuple<PointList, FaceList> make_tin(const PointList &pts, const S &stop,
     return std::make_pair(std::move(o_points), std::move(faces));
 };
 
-
 template<typename S, typename P, typename C>
-std::tuple<PointList, FaceList> constrained(const PointList &pts,
-                                            const PointList &boundary,
-                                            const PointList &boundary_pts,
-                                            const S &stop,
-                                            const P &placement,
-                                            const C &cost) {
+std::tuple<PointList, FaceList> make_tin(const CGAL::PointList &pts,
+                                         const CGAL::Polygon &boundary_polygon,
+                                         const CGAL::PointList &boundary_pts,
+                                         const S &stop,
+                                         const P &placement,
+                                         const C &cost) {
 
     CGAL::ConstrainedDelaunay dtin;
     for (const auto p: pts)
-        dtin.insert(CGAL::Point(p[0], p[1], p[2]));
-
-    CGAL::Polygon poly;
-    for (const auto p: boundary) {
-        poly.push_back(CGAL::Point(p[0], p[1], p[2]));
-    }
-
-    std::vector<CGAL::Point> constraints_vec;
-    for (const auto p: boundary_pts) {
-        constraints_vec.emplace_back(p[0], p[1], p[2]);
-    }
-
-    dtin.insert_constraint(constraints_vec.begin(), constraints_vec.end(), true);
+        dtin.insert(p);
+    dtin.insert_constraint(boundary_pts.begin(), boundary_pts.end(), true);
 
     CGAL::PointVertexMap pvm;
     CGAL::Mesh mesh;
@@ -179,11 +282,11 @@ std::tuple<PointList, FaceList> constrained(const PointList &pts,
         CGAL::Point u = f->vertex(0)->point();
         CGAL::Point v = f->vertex(1)->point();
         CGAL::Point w = f->vertex(2)->point();
-        CGAL::Point m(u.x()/3 + v.x()/3 + w.x()/3, u.y()/3+v.y()/3+w.y()/3, u.z()/3+v.z()/3+w.z()/3);
-        if (CGAL::point_inside_polygon(m, poly))
-            mesh.add_face(pvm[f->vertex(0)->point()],
-                          pvm[f->vertex(1)->point()],
-                          pvm[f->vertex(2)->point()]);
+        CGAL::Point face_midpoint(u.x()/3 + v.x()/3 + w.x()/3,
+                                  u.y()/3 + v.y()/3 + w.y()/3,
+                                  u.z()/3 + v.z()/3 + w.z()/3);
+        if (CGAL::point_inside_polygon(face_midpoint, boundary_polygon))
+            mesh.add_face(pvm[u], pvm[v], pvm[w]);
     }
     pvm.clear();
 
@@ -214,7 +317,30 @@ std::tuple<PointList, FaceList> constrained(const PointList &pts,
     return std::make_pair(std::move(o_points), std::move(faces));
 };
 
+template<typename S, typename P, typename C>
+std::tuple<PointList, FaceList> tin_from_raster(const RasterData& raster,
+                                                const PointList2D& boundary_vertices,
+                                                const S &stop,
+                                                const P &placement,
+                                                const C &cost) {
 
+
+    CGAL::PointList raster_points = raster.raster_points();
+    CGAL::Polygon boundary_polygon = polygon_from_points(boundary_vertices);
+    CGAL::PointList boundary_points = interpolate_boundary_points(raster, boundary_polygon);
+
+    return make_tin(raster_points, boundary_polygon, boundary_points, stop, placement, cost);
+}
+
+template<typename S, typename P, typename C>
+std::tuple<PointList, FaceList> tin_from_raster(const RasterData& raster,
+                                                const S &stop,
+                                                const P &placement,
+                                                const C &cost) {
+
+    CGAL::PointList raster_points = raster.raster_points();
+    return make_tin(raster_points, stop, placement, cost);
+}
 std::vector<int> compute_shadow(const PointList &pts,
                                 const FaceList &faces,
                                 const Vector &sun_direction) {
