@@ -9,6 +9,7 @@
 #include <CGAL/AABB_traits.h>
 #include <CGAL/AABB_tree.h>
 #include <CGAL/Delaunay_triangulation_2.h>
+#include <CGAL/Constrained_Delaunay_triangulation_2.h>
 #include <CGAL/Exact_predicates_inexact_constructions_kernel.h>
 #include <CGAL/Polygon_mesh_processing/compute_normal.h>
 #include <CGAL/Polyhedron_3.h>
@@ -17,6 +18,9 @@
 #include <CGAL/Surface_mesh.h>
 #include <CGAL/Surface_mesh_simplification/edge_collapse.h>
 #include <CGAL/Triangulation_face_base_2.h>
+
+#include <CGAL/Polygon_2.h>
+#include <CGAL/Polygon_2_algorithms.h>
 
 #include <armadillo>
 #include <cmath>
@@ -29,7 +33,9 @@ namespace CGAL {
 using K = Exact_predicates_inexact_constructions_kernel;
 using Gt = Projection_traits_xy_3<K>;
 using Delaunay = Delaunay_triangulation_2<Gt>;
+using ConstrainedDelaunay = Constrained_Delaunay_triangulation_2<Gt>;
 using Point = K::Point_3;
+using Point2D = K::Point_2;
 using Vector = K::Vector_3;
 using PointList = std::map<Point, int>;
 using Mesh = Surface_mesh<Point>;
@@ -41,6 +47,11 @@ using Traits = CGAL::AABB_traits<K, Primitive>;
 using Tree = CGAL::AABB_tree<Traits>;
 using Ray_intersection = boost::optional<Tree::Intersection_and_primitive_id<Ray>::Type>;
 using face_descriptor = boost::graph_traits<Mesh>::face_descriptor;
+
+using Polygon = Polygon_2<Gt>;
+auto point_inside_polygon = [](const Point& x, const Polygon& poly) -> bool {
+    return (bounded_side_2(poly.vertices_begin(), poly.vertices_end(), x, Gt()) != CGAL::ON_UNBOUNDED_SIDE);
+};
 }
 
 namespace rasputin {
@@ -53,7 +64,9 @@ using face_vector = std::vector<face>;
 
 // Clean up below
 using Point = std::array<double, 3>;
+using Point2D = std::array<double, 2>;
 using PointList = std::vector<Point>;
+using PointList2D = std::vector<Point2D>;
 using VectorList = PointList;
 using ScalarList = std::vector<double>;
 using Vector = Point;
@@ -78,6 +91,10 @@ CGAL::Mesh construct_mesh(const PointList &pts,
     return mesh;
 };
 
+
+/* struct RasterData { */
+/*     RasterData(std::vector<double> x_coordinates, */
+/*                std::vector<double> y_coordinates,) */
 
 template<typename S, typename P, typename C>
 std::tuple<PointList, FaceList> make_tin(const PointList &pts, const S &stop,
@@ -122,6 +139,81 @@ std::tuple<PointList, FaceList> make_tin(const PointList &pts, const S &stop,
     }
     return std::make_pair(std::move(o_points), std::move(faces));
 };
+
+
+template<typename S, typename P, typename C>
+std::tuple<PointList, FaceList> constrained(const PointList &pts,
+                                            const PointList &boundary,
+                                            const PointList &boundary_pts,
+                                            const S &stop,
+                                            const P &placement,
+                                            const C &cost) {
+
+    CGAL::ConstrainedDelaunay dtin;
+    for (const auto p: pts)
+        dtin.insert(CGAL::Point(p[0], p[1], p[2]));
+
+    CGAL::Polygon poly;
+    for (const auto p: boundary) {
+        poly.push_back(CGAL::Point(p[0], p[1], p[2]));
+    }
+
+    std::vector<CGAL::Point> constraints_vec;
+    for (const auto p: boundary_pts) {
+        constraints_vec.emplace_back(p[0], p[1], p[2]);
+    }
+
+    dtin.insert_constraint(constraints_vec.begin(), constraints_vec.end(), true);
+
+    CGAL::PointVertexMap pvm;
+    CGAL::Mesh mesh;
+    for (auto v = dtin.finite_vertices_begin(); v != dtin.finite_vertices_end(); ++v) {
+        /* if (CGAL::point_inside_polygon(v->point(), poly)) */
+            pvm.emplace(std::make_pair(v->point(), mesh.add_vertex(v->point())));
+    }
+
+    for (auto f = dtin.finite_faces_begin(); f != dtin.finite_faces_end(); ++f) {
+        /* if (CGAL::point_inside_polygon(f->vertex(0)->point(), poly) */
+        /*         &&CGAL::point_inside_polygon(f->vertex(1)->point(), poly) */
+        /*         &&CGAL::point_inside_polygon(f->vertex(2)->point(), poly)) */
+        CGAL::Point u = f->vertex(0)->point();
+        CGAL::Point v = f->vertex(1)->point();
+        CGAL::Point w = f->vertex(2)->point();
+        CGAL::Point m(u.x()/3 + v.x()/3 + w.x()/3, u.y()/3+v.y()/3+w.y()/3, u.z()/3+v.z()/3+w.z()/3);
+        if (CGAL::point_inside_polygon(m, poly))
+            mesh.add_face(pvm[f->vertex(0)->point()],
+                          pvm[f->vertex(1)->point()],
+                          pvm[f->vertex(2)->point()]);
+    }
+    pvm.clear();
+
+    CGAL::Surface_mesh_simplification::edge_collapse(mesh,
+                                                     stop,
+                                                     CGAL::parameters::get_cost(cost)
+                                                                      .get_placement(placement)
+    );
+
+    std::map<CGAL::VertexIndex, int> reindex;
+    PointList o_points;
+    o_points.reserve(mesh.num_vertices());
+    int n = 0;
+    for (auto v: mesh.vertices()) {
+        const auto pt = mesh.point(v);
+        o_points.emplace_back(Vector{pt.x(), pt.y(), pt.z()});
+        reindex.emplace(v, n++);
+    }
+    FaceList faces;
+    faces.reserve(mesh.num_faces());
+    for (auto f: mesh.faces()) {
+        std::array<int, 3> fl;
+        size_t idx = 0;
+        for (auto v: mesh.vertices_around_face(mesh.halfedge(f)))
+            fl[idx++] = reindex[v];
+        faces.emplace_back(Face{fl[0], fl[1], fl[2]});
+    }
+    return std::make_pair(std::move(o_points), std::move(faces));
+};
+
 
 std::vector<int> compute_shadow(const PointList &pts,
                                 const FaceList &faces,
