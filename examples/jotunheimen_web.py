@@ -1,4 +1,5 @@
 from pathlib import Path
+import numpy as np
 import PIL
 
 from rasputin import triangulate_dem
@@ -77,17 +78,22 @@ face_field2 = add_slope_colors(normals=normals, colors=face_field2)
 meshes = mesh_with_avalanche_danger(points=points, faces=faces, normals=normals,
                                     avalanche_problems=avalanche_problems)
 
-face_field3 = color_field_by_avalanche_danger(normals=normals,
+colors = np.ones(np.asarray(faces).shape)
+
+colors = add_slope_colors(normals=normals, colors=colors)
+colors = color_field_by_avalanche_danger(normals=normals,
                                               points=points,
                                               faces=faces,
-                                              avalanche_problems=avalanche_problems)
-face_field3 = add_slope_colors(normals=normals, colors=face_field3)
+                                              avalanche_problems=avalanche_problems,
+                                              colors=colors)
 
 outputpath = Path.cwd() / "jotunheimen_web"
 write_mesh(pts=points,
            faces=faces,
            normals=point_normals,
-           features=meshes,
+           features=[],
+           #features=meshes,
            output_dir=outputpath,
-           vertex_field=color_field_by_height(points=points),
-           face_field=face_field3)
+           #vertex_field=color_field_by_height(points=points),
+           #vertex_field=color_field_by_height(points=points),
+           face_field=colors)
