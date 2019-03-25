@@ -3,14 +3,20 @@
 	<head>
 		<meta charset=utf-8>
 		<title>Rasputin</title>
+		<link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/3.4.1/css/bootstrap.min.css" integrity="sha384-HSMxcRTRxnN+Bdg0JdbxYKrThecOKuH5zCYotlSAcp1+c8xmyTe9GYg1l9a69psu" crossorigin="anonymous">
 		<style>
 			body { margin: 0; }
 			canvas { width: 100%; height: 100% }
 		</style>
 	</head>
 	<body>
-        <h1>Rasputin</h1>
-        <div id="thecanvas"></div>
+        <h1>Rasputin Avalanche Forecast Visualizer</h1>
+        <p>Based on a detailed DEM raster file, a TIN is constructed. Then heights, aspects and slopes are used to compute the location of various avalanche risks as forecasted
+			by <a href="http://varsom.no">varsom.no</a>.</p>
+		<p>Rasputin is developed by <a href="http://xal.no">Expert Analytics AS</a> and is open source (GPL-3.0 due to some dependencies). This tool is in early beta stage,
+		   but the source code can be found on <a href="https://github.com/expertanalytics/rasputin">Github</a>.</p>
+
+		<div id="thecanvas"></div>
         <script src="js/three.js"></script>
         <script src="js/controls/OrbitControls.js"></script>
         <script src="data.js"></script>

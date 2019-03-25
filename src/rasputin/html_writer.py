@@ -171,16 +171,20 @@ def color_field_by_avalanche_danger(*,
                                     normals: triangulate_dem.PointVector,
                                     points: triangulate_dem.PointVector,
                                     faces: triangulate_dem.FaceVector,
-                                    avalanche_problems: list) -> np.ndarray:
+                                    avalanche_problems: list,
+                                    colors: Optional[np.ndarray]) -> np.ndarray:
     aspects = np.asarray(triangulate_dem.compute_aspect(normals))
     slopes = np.asarray(triangulate_dem.compute_slopes(normals))
-    return np.ones((len(aspects), 3))
-    colors = np.ones((len(aspects), 3))
+    if colors is None:
+        colors = np.ones((len(aspects), 3))
+    else:
+        colors = colors.copy()
     angles = np.asarray(varsom_angles)/180*np.pi
     for problem in avalanche_problems:
-        expositions = [int(s) for s in problem["expositions"]]
+        expositions = [bool(int(s)) for s in problem["expositions"]]
         exposed_angles = angles[expositions]
         level = problem["level"]
+        print(level)
         heights = problem["heights"]
         for i, face in enumerate(faces):
             avg_h = np.mean([points[f][2] for f in face])
@@ -193,6 +197,11 @@ def color_field_by_avalanche_danger(*,
                             if slopes[i] > 30/180*np.pi:
                                 risk = True
                                 break
+                        elif a_min > a_max:
+                            if a_min < aspect or aspect < a_max:
+                                if slopes[i] > 30/180*np.pi:
+                                    risk = True
+                                    break
                 if risk:
                     break
             if risk:
@@ -368,7 +377,8 @@ def write_mesh(*,
     for vertices, faces in features:
         lines.extend(face_and_point_vector_to_lines(name=None, face_vector=faces, point_vector=vertices))
         lines.append(",\n")
-    del lines[-1]
+    if features:
+        del lines[-1]
 
     lines.append("];")
 
