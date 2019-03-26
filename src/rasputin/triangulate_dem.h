@@ -225,12 +225,16 @@ VectorList orient_tin(const PointList &pts, FaceList &faces) {
     return result;
 };
 
+Scalar compute_slope(const Point & normal) {
+    return std::atan2(pow(pow(normal[0], 2) + pow(normal[1], 2), 0.5), normal[2])
+}
+
 ScalarList compute_slopes(const VectorList &normals) {
     ScalarList result;
     result.reserve(normals.size());
 
     for (const auto &n : normals)
-        result.push_back(std::atan2(pow(pow(n[0], 2) + pow(n[1], 2), 0.5), n[2]));
+        result.push_back(compute_slope);
 
     return result;
 };
@@ -243,19 +247,19 @@ ScalarList compute_aspect(const VectorList &normals) {
     return result;
 };
 
-VectorList surface_normals(const PointList &pts, const FaceList &faces) {
-    VectorList result;
-    result.reserve(faces.size());
-    for (const auto face: faces) {
-        const auto p0 = pts[face[0]];
-        const auto p1 = pts[face[1]];
-        const auto p2 = pts[face[2]];
+Vector normal(const Point p0, const Point p1, const Point p2) {
         const arma::vec::fixed<3> v0 = {p1[0] - p0[0], p1[1] - p0[1], p1[2] - p0[2]};
         const arma::vec::fixed<3> v1 = {p2[0] - p0[0], p2[1] - p0[1], p2[2] - p0[2]};
         arma::vec::fixed<3> n = arma::cross(v0, v1);
         n /= arma::norm(n);
-        result.emplace_back(n[2] >= 0.0 ? Vector{n[0], n[1], n[2]} : Vector{-n[0], -n[1], -n[2]});
-    }
+        return n[2] >= 0.0 ? Vector{n[0], n[1], n[2]} : Vector{-n[0], -n[1], -n[2]};
+}
+
+VectorList surface_normals(const PointList &pts, const FaceList &faces) {
+    VectorList result;
+    result.reserve(faces.size());
+    for (const auto face: faces)
+        result.emplace_back(normal(pts[face[0]], pts[face[1]], pts[face[2]]));
     return result;
 };
 
@@ -265,7 +269,7 @@ template <typename T> void iadd(T& v, const T& o) {
     v[2] += o[2];
 }
 
-VectorList point_normals(const PointList& pts, const FaceList &faces) {
+VectorList point_normals(const PointList &pts, const FaceList &faces) {
     VectorList result(pts.size(), {0.0, 0.0, 0.0});
     for (auto face: faces) {
         const auto p0 = pts[face[0]];
@@ -287,7 +291,25 @@ VectorList point_normals(const PointList& pts, const FaceList &faces) {
         p[2] /= norm;
     }
     return result;
-};
+}
+
+templace <typename CB>
+std::tuple<FaceList, FaceList> partition(const PointList &pts, const FaceList &faces, CB criterion) {
+    std::tuple<FaceList, FaceList> result;
+    for (auto face: faces) {
+        if criterion(pts[face[0]], pts[face[1]], pts[face[2]])
+            std::get<0>(result).append(face);
+        else
+            std::get<1>(result).append(face);
+    }
+    return result;
+}
+
+std::tuple<FaceList, FaceList> extract_lakes(const PointList &pts, const FaceList &faces) {
+   return partition(pts, faces, [] (const Point &p0, const Point &p1, const Point &p2){
+       return compute_slope(normal(p0, p1, p2)) < 5.0e-2;
+   })
+}
 
 }
 
