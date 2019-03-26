@@ -109,5 +109,5 @@ raster.
 The layout of this project follows the recommentation from an [excellent blog
 post by Benjamin R.
 Jack](http://www.benjack.io/2018/02/02/python-cpp-revisited.html). Both the
-`CMakeExtension` and the `CMakeBuild` classes in `setup.py' are are taken from
+`CMakeExtension` and the `CMakeBuild` classes in `setup.py` are are taken from
 his blog as well. Thanks!
