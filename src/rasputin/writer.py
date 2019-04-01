@@ -48,7 +48,7 @@ class Writer(object):
         if self._xdmfwriter is not None:
             return self._xdmfwriter
         else:
-            raise FileError("No file open!")
+            raise RuntimeError("No file open!")
 
     def set_tin(self, pts, faces):
         self._pts = np.asarray(pts)
