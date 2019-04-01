@@ -225,8 +225,8 @@ VectorList orient_tin(const PointList &pts, FaceList &faces) {
     return result;
 };
 
-Scalar compute_slope(const Point & normal) {
-    return std::atan2(pow(pow(normal[0], 2) + pow(normal[1], 2), 0.5), normal[2])
+double compute_slope(const Point & normal) {
+    return std::atan2(pow(pow(normal[0], 2) + pow(normal[1], 2), 0.5), normal[2]);
 }
 
 ScalarList compute_slopes(const VectorList &normals) {
@@ -234,7 +234,7 @@ ScalarList compute_slopes(const VectorList &normals) {
     result.reserve(normals.size());
 
     for (const auto &n : normals)
-        result.push_back(compute_slope);
+        result.push_back(compute_slope(n));
 
     return result;
 };
@@ -293,22 +293,22 @@ VectorList point_normals(const PointList &pts, const FaceList &faces) {
     return result;
 }
 
-templace <typename CB>
+template <typename CB>
 std::tuple<FaceList, FaceList> partition(const PointList &pts, const FaceList &faces, CB criterion) {
-    std::tuple<FaceList, FaceList> result;
+    FaceList part1, part2;
     for (auto face: faces) {
-        if criterion(pts[face[0]], pts[face[1]], pts[face[2]])
-            std::get<0>(result).append(face);
+        if (criterion(pts[face[0]], pts[face[1]], pts[face[2]]))
+            part1.emplace_back(face);
         else
-            std::get<1>(result).append(face);
+            part2.emplace_back(face);
     }
-    return result;
+    return std::make_pair(std::move(part1), std::move(part2));
 }
 
 std::tuple<FaceList, FaceList> extract_lakes(const PointList &pts, const FaceList &faces) {
    return partition(pts, faces, [] (const Point &p0, const Point &p1, const Point &p2){
        return compute_slope(normal(p0, p1, p2)) < 5.0e-2;
-   })
+   });
 }
 
 }

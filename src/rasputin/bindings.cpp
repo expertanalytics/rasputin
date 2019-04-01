@@ -71,6 +71,7 @@ PYBIND11_MODULE(triangulate_dem, m) {
         .def("surface_normals", &rasputin::surface_normals, "Compute surface normals for all faces in the mesh.")
         .def("point_normals", &rasputin::point_normals, "Compute surface normals for all vertices in the mesh.")
         .def("orient_tin", &rasputin::orient_tin, "Orients all triangles in the TIN and returns their surface normals.")
+        .def("extract_lakes", &rasputin::extract_lakes, "Extract lakes as separate face list.")
         .def("compute_slopes", &rasputin::compute_slopes,"computes slopes (i.e. angles relative to xy plane) for the all the vectors in list.")
         .def("compute_aspect", &rasputin::compute_aspect,"computes aspects for the all the vectors in list.")
         .def("rasterdata_to_pointvector",

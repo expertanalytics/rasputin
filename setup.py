@@ -87,7 +87,8 @@ setup(
     package_dir={'':'src'},
     data_files=[("rasputin/web", ["web/index.js", "web/index.html", "web/data.js"]),
                 ("rasputin/web/js", ["web/js/three.js"]),
-                ("rasputin/web/js/controls", ["web/js/controls/OrbitControls.js", "web/js/controls/PointerLockControls.js"])],
+                ("rasputin/web/js/controls", ["web/js/controls/OrbitControls.js", "web/js/controls/PointerLockControls.js"]),
+                ("rasputin/web/textures", ["web/textures/sea.jpg"])],
     # add an extension module named 'python_cpp_example' to the package 
     # 'python_cpp_example'
     ext_modules=[CMakeExtension('rasputin/rasputin')],

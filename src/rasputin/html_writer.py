@@ -184,8 +184,8 @@ def color_field_by_avalanche_danger(*,
         expositions = [bool(int(s)) for s in problem["expositions"]]
         exposed_angles = angles[expositions]
         level = problem["level"]
-        print(level)
         heights = problem["heights"]
+        print(level, heights)
         for i, face in enumerate(faces):
             avg_h = np.mean([points[f][2] for f in face])
             risk = False
@@ -374,8 +374,8 @@ def write_mesh(*,
             lines.append(f"{r}, {g}, {b},\n")
     lines.append("\n] );\n\n")
     lines.append("const features = [ \n")
-    for vertices, faces in features:
-        lines.extend(face_and_point_vector_to_lines(name=None, face_vector=faces, point_vector=vertices))
+    for faces in features:
+        lines.extend(face_and_point_vector_to_lines(name=None, face_vector=faces, point_vector=pts))
         lines.append(",\n")
     if features:
         del lines[-1]
