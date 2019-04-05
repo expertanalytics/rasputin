@@ -80,7 +80,8 @@ setup(
     install_requires=[
           'Pillow',
           'h5py',
-          'lxml'
+          'lxml',
+          'shapely'
     ],
     # tell setuptools that all packages will be under the 'src' directory
     # and nowhere else

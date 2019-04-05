@@ -7,6 +7,7 @@ from pkg_resources import resource_filename
 
 from rasputin import triangulate_dem
 from rasputin.avalanche import varsom_angles
+from rasputin.geometry import Geometry
 
 
 def face_vector_to_lines(*,
@@ -105,7 +106,7 @@ def add_slope_colors(*,
                      normals: triangulate_dem.PointVector,
                      colors: np.ndarray) -> np.ndarray:
     slopes = np.asanyarray(triangulate_dem.compute_slopes(normals))
-    colors[slopes < 5.0e-2] = [0, 0, 1]
+    #colors[slopes < 5.0e-2] = [0, 0, 1]
     #colors[np.logical_and(slopes < 55/180*np.pi, slopes > 30/180*np.pi)] = [0.5, 0, 0]
     colors[slopes >= 55/180*np.pi] = [0.2, 0.2, 0.2]
     return colors
@@ -226,91 +227,6 @@ def color_field_by_aspect(*, normals: triangulate_dem.PointVector)->np.ndarray:
         colors[range] = col
     return colors
 
-
-class Geometry:
-
-    def __init__(self, *,
-                 points: triangulate_dem.PointVector,
-                 faces: triangulate_dem.FaceVector,
-                 base_color: Tuple[float, float, float]):
-        self.points = points
-        self.faces = faces
-        self._base_color = base_color
-        self._surface_normals = None
-        self._point_normals = None
-        self._aspects = None
-        self._slopes = None
-        self._colors = None
-
-    @property
-    def point_normals(self) -> triangulate_dem.PointVector:
-        if self._point_normals is None:
-            self._point_normals = triangulate_dem.point_normals(self.points, self.faces)
-        return self._point_normals
-
-    @property
-    def surface_normals(self) -> triangulate_dem.PointVector:
-        if self._surface_normals is None:
-            self._surface_normals = triangulate_dem.surface_normals(self.points, self.faces)
-        return self._surface_normals
-
-    @property
-    def aspects(self) -> np.ndarray:
-        if self._aspects is None:
-            self._aspects = np.asarray(triangulate_dem.compute_aspect(self.surface_normals))
-        return self._aspects
-
-    @property
-    def slopes(self) -> np.ndarray:
-        if self._slopes is None:
-            self._slopes = np.asarray(triangulate_dem.compute_slopes(self.surface_normals))
-        return self._slopes
-
-    @property
-    def colors(self) -> np.ndarray:
-        if self._colors is None:
-            self._colors = np.empty((len(self.points), len(self._base_color)))
-            self.colors[:, 0] = self._base_color[0]
-            self.colors[:, 1] = self._base_color[1]
-            self.colors[:, 2] = self._base_color[2]
-        return self.colors
-
-    @property
-    def material(self) -> str:
-        """TODO: Make a system for generating different materials """
-        return """\
-new THREE.MeshPhysicalMaterial( {
-        metalness: 0.0,
-        roughness: 0.5,
-        reflectivity: 0.7,
-        clearCoat: 0.0,
-        vertexColors: THREE.FaceColors
-    }  
-"""
-
-    def as_javascript(self) -> str:
-        res = "{"
-        # write vertices
-        vertices = "\n".join(face_and_point_vector_to_lines(name=None,
-                                                            face_vector=self.faces,
-                                                            point_vector=self.points))
-        res += f"vertices: {vertices},\n"
-
-        #write normals
-        normals = vertex_field_to_vertex_values(vertex_field=np.asarray(self.point_normals),
-                                                faces=self.faces, points=self.points)
-        normals = "\n".join(point_vector_to_lines(name=None, point_vector=normals))
-        res += f"normals: {normals},\n"
-
-        # write colors
-        colors = "\n".join(point_vector_to_lines(name=None, point_vector=self.colors))
-        res += f"colors: {colors},\n"
-
-        # write material
-
-        res += f"material: {self.material}"
-
-        res += "}"
 
 
 def write_geometries(*,

@@ -307,7 +307,7 @@ std::tuple<FaceList, FaceList> partition(const PointList &pts, const FaceList &f
 
 std::tuple<FaceList, FaceList> extract_lakes(const PointList &pts, const FaceList &faces) {
    return partition(pts, faces, [] (const Point &p0, const Point &p1, const Point &p2){
-       return compute_slope(normal(p0, p1, p2)) < 5.0e-2;
+       return compute_slope(normal(p0, p1, p2)) < 1.0e-2;
    });
 }
 
