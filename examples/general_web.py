@@ -43,13 +43,13 @@ dy = 5000.0
 dangers = []
 expositions = "00000000"
 
-tmp = avalanche.get_forecasts(x=x0, y=y0, proj=input_coordinate_system)[0]
+avalanche_details, avalanche_meta = avalanche.get_forecasts(x=x0, y=y0, proj=input_coordinate_system)
 avalanche_problems = []
-if tmp:
-    if "AvalancheProblems" in tmp:
-        for p in tmp["AvalancheProblems"]:
+if avalanche_details:
+    if "AvalancheProblems" in avalanche_details:
+        level = int(avalanche_details["DangerLevel"])
+        for p in avalanche_details["AvalancheProblems"]:
             expositions = p["ValidExpositions"]
-            level = p["AvalProbabilityId"]
             hf = p["ExposedHeightFill"]
             if hf == 1:
                 min_h = p["ExposedHeight1"]
