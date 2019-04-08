@@ -1,5 +1,7 @@
 
 function init({vertices, normals, face_field, vertex_field, features}) {
+
+    THREE.ImageUtils.crossOrigin = "";
     const scene = new THREE.Scene();
     scene.background = new THREE.Color( 0xdddddd );
 
@@ -20,11 +22,25 @@ function init({vertices, normals, face_field, vertex_field, features}) {
     geometry.addAttribute( 'normal', new THREE.Float32BufferAttribute( normals, 3 ) );
     geometry.addAttribute( 'color', new THREE.Float32BufferAttribute( face_field, 3 ) );
 
-    const phong_material = new THREE.MeshPhongMaterial( {
-        //specular: 0x111111,
-        shininess: 250,
+    var sea_texture = new THREE.TextureLoader().load("textures/sea.jpg");
+    sea_texture.encoding = THREE.sRGBEncoding;
+    sea_texture.anisotropy = 16;
+    //sea_texture.magFilter = THREE.LinearFilter;
+    //sea_texture.minFilter = THREE.LinearFilter;
+    //sea_texture.mapping = THREE.CubeReflectionMapping;
+    sea_texture.repeat.set(4096, 4096);
+    sea_texture.wrapS = THREE.RepeatWrapping;
+    sea_texture.wrapT = THREE.RepeatWrapping;
+
+    const feature_material = new THREE.MeshPhongMaterial( {
+    //const feature_material = new THREE.MeshBasicMaterial( {
+        map: sea_texture,
+        //bumpScale: 50,
+        specular: 0xffffff,
+        shininess: 25,
         //side: THREE.DoubleSide,
-        color: 0xff0000,
+        color: 0x006994,
+        reflectivity: 0.3,
         //vertexColors: THREE.FaceColors
     } );
 
@@ -37,11 +53,16 @@ function init({vertices, normals, face_field, vertex_field, features}) {
         vertexColors: THREE.FaceColors
     } );
 
+    fs = [];
+
     for ( var i = 0; i < features.length; i ++ ) {
         const geom = new THREE.BufferGeometry();
         geom.addAttribute( 'position', new THREE.Float32BufferAttribute(features[i], 3));
         geom.computeVertexNormals();
-        scene.add(new THREE.Mesh(geom, phong_material));
+        var uv_geom = assign_uvs(geom);
+        var f = new THREE.Mesh(uv_geom, feature_material);
+        scene.add(f);
+        fs.push(f);
     }
 
     const mesh = new THREE.Mesh( geometry, phys_material );
@@ -65,8 +86,39 @@ function init({vertices, normals, face_field, vertex_field, features}) {
     controls.dampingFactor = 0.25;
     controls.target.set(center.x, center.y, z_min);
 
-    const state = { mesh, scene, camera, renderer, controls }
+    const state = { mesh, scene, camera, renderer, controls, fs};
     return state
+}
+
+function assign_uvs(geometry) {
+    geometry.computeBoundingBox();
+
+    var max = geometry.boundingBox.max,
+        min = geometry.boundingBox.min;
+    var offset = new THREE.Vector2(0 - min.x, 0 - min.y);
+    var range = new THREE.Vector2(max.x - min.x, max.y - min.y);
+    //var vertices = geometry.attributes.position.array;
+    var vertices = geometry.getAttribute("position").array;
+    console.log(vertices.length);
+
+    var uvs = new Float32Array(2*vertices.length);
+
+    for (var i = 0; i < vertices.count/3 ; i++) {
+
+        var v1 = new THREE.Vector2(vertices[3*i], vertices[3*i + 1]);
+        var v2 = new THREE.Vector2(vertices[3*i + 3], vertices[3*i + 4]);
+        var v3 = new THREE.Vector2(vertices[3*i + 6], vertices[3*i + 7]);
+
+        uvs[3*i    ] = (v1.x + offset.x)/range.x;
+        uvs[3*i + 1] = (v1.y + offset.y)/range.y;
+        uvs[3*i + 2] = (v2.x + offset.x)/range.x;
+        uvs[3*i + 3] = (v2.y + offset.y)/range.y;
+        uvs[3*i + 4] = (v3.x + offset.x)/range.x;
+        uvs[3*i + 5] = (v3.y + offset.y)/range.y;
+    }
+    geometry.addAttribute("uv", new THREE.BufferAttribute(uvs, 2));
+    geometry.attributes.uv.needsUpdate = true;
+    return geometry;
 }
 
 function animate() {

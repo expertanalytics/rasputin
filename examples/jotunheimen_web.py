@@ -77,27 +77,31 @@ raster_coords, info = read_raster_file(filepath=raster_file,
                                        x1=x1,
                                        y1=y1)
 points, faces = lindstrom_turk_by_ratio(raster_coords, 0.5)
+lakes, terrain = triangulate_dem.extract_lakes(points, faces)
 
-normals = triangulate_dem.surface_normals(points, faces)
-point_normals = triangulate_dem.point_normals(points, faces)
+normals = triangulate_dem.surface_normals(points, terrain)
+point_normals = triangulate_dem.point_normals(points, terrain)
 
-# Commenting these out for now, as we need to partition the mesh into disjoint topologies for it to work.
+#face_field2 = color_field_by_aspect(normals=normals)
+#face_field2 = add_slope_colors(normals=normals, colors=face_field2)
+
+
 #meshes = mesh_with_avalanche_danger(points=points, faces=faces, normals=normals,
 #                                    avalanche_problems=avalanche_problems)
 
-colors = np.ones(np.asarray(faces).shape)
+colors = np.ones(np.asarray(terrain).shape)
 colors = add_slope_colors(normals=normals, colors=colors)
 colors = color_field_by_avalanche_danger(normals=normals,
                                               points=points,
-                                              faces=faces,
+                                              faces=terrain,
                                               avalanche_problems=avalanche_problems,
                                               colors=colors)
 
 outputpath = Path.cwd() / "jotunheimen_web"
 write_mesh(pts=points,
-           faces=faces,
+           faces=terrain,
            normals=point_normals,
-           features=[],
+           features=[lakes],
            #features=meshes,
            output_dir=outputpath,
            #vertex_field=color_field_by_height(points=points),

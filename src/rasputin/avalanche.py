@@ -29,5 +29,6 @@ def get_forecasts(*, x: float, y: float, proj: str) -> Dict[str, Any]:
     full = base_avalanche_url + query
     response = requests.get(full)
     if response.ok:
-        return json.loads(response.text)
+        res = json.loads(response.text)
+        return res
     return {}

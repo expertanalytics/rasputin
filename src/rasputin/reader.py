@@ -1,7 +1,8 @@
-from typing import Tuple, Dict, Any, Optional
+from typing import Tuple, Dict, Any, Optional, List
 from enum import Enum
-from PIL import Image
+from PIL import Image, TiffImagePlugin
 from PIL.TiffImagePlugin import TiffImageFile
+from shapely import geometry
 import pyproj
 import json
 import re
@@ -366,6 +367,115 @@ def read_raster_file(*,
 
     logger.debug("Done")
     return raster_coordinates, info
+
+
+class GeoPolygon:
+
+    def __init__(self, *, polygon: geometry.Polygon, proj: pyproj.Proj):
+        self.polygon = polygon
+        self.proj = proj
+
+
+class RasterRepository:
+
+    def __init__(self, *, directory: Path):
+        self.directory = directory
+
+    def read(self, *,
+             x: float,
+             y: float,
+             dx: float,
+             dy: float,
+             input_coordinate_system: str,
+             target_coordinate_system: str) -> triangulate_dem.PointVector:
+        input_proj = pyproj.Proj(input_coordinate_system)
+        target_proj = pyproj.Proj(target_coordinate_system)
+
+        target_x, target_y = pyproj.transform(input_proj, target_proj, x, y)
+        target_bbox = geometry.Polygon.from_bounds(target_x - dx,
+                                                   target_y - dy,
+                                                   target_x + dx,
+                                                   target_y + dy)
+        remainding_bbox = geometry.Polygon(target_bbox)
+
+        files = self._extract_files(x=x, y=y, dx=dx, dy=dy, coordinate_system=input_proj)
+        pts = triangulate_dem.PointVector()
+        for file in files:
+            with Image.open(file) as img:
+                img_geo_bbox = self._get_bounding_box(image=img)
+                if target_proj == img_geo_bbox.proj:
+                    mapped_remainder = remainding_bbox
+                else:
+                    mapped_remainder = geometry.Polygon(zip(*pyproj.transform(target_proj,
+                                                                              img_geo_bbox.proj,
+                                                                              *remainding_bbox.boundary.coords.xy)))
+                if not mapped_remainder.intersects(img_geo_bbox.polygon):
+                    continue
+                mapped_intersection = mapped_remainder.intersection(img_geo_bbox.polygon)
+                pts.extend(self._extract_coords(image=img, bounds=mapped_intersection.bounds))
+                x0, y0, x1, y1 = mapped_intersection.bounds
+                x_m, y_m = pyproj.transform(img_geo_bbox.proj, target_proj, [x0, x1], [y0, y1])
+                intersection = geometry.Polygon.from_bounds(x_m[0], y_m[0], x_m[1], y_m[1])
+                remainding_bbox = remainding_bbox.difference(intersection)
+                if not remainding_bbox:
+                    break
+        return pts
+
+    def _extract_coords(self, *,
+                        image: TiffImagePlugin.TiffImageFile,
+                        bounds: Tuple[float, float, float, float]) -> triangulate_dem.PointVector:
+        m, n = image.size
+        x_min, y_min, x_max, y_max = bounds
+        dx, dy, _ = image.tag_v2.get(GeoTiffTags.ModelPixelScaleTag.value)
+        X0, _, _, Y1 = self._get_bounding_box(image=image).polygon.bounds
+
+        j0 = int(np.floor((x_min - X0)/dx))
+        j1 = int(np.ceil((x_max - X0)/dx))
+        i0 = int(np.floor((Y1 - y_max)/dy))
+        i1 = int(np.ceil((Y1 - y_min)/dy))
+
+        if j1 <= 0 or i1 <= 0 or i0 >= n or j0 >= m:
+            # Empty view window, raise an error since PIL does not
+            raise ValueError("Selected view window is outside of image bounds")
+
+        d = image.crop(box=(j0, i0, j1, i1))
+        x0d, x1d = X0 + j0*dx, X0 + j1*dx
+        y0d, y1d = Y1 - i1*dy, Y1 - i0*dy
+        return triangulate_dem.rasterdata_to_pointvector(d, x0d, y0d, x1d, y1d)
+
+    def _extract_files(self, *,
+                       x: float, y: float, dx: float, dy: float,
+                       coordinate_system: pyproj.Proj) -> List[Path]:
+
+        files = self.directory.glob("*.tif")
+        path_list = []
+        for file in files:
+            with Image.open(file) as img:
+                file_coordinate_system = GeoKeysInterpreter(extract_geo_keys(image=img)).to_proj4()
+                l_proj = pyproj.Proj(file_coordinate_system)
+                loc_x, loc_y = pyproj.transform(coordinate_system, l_proj, x, y)
+                total_raster_bbox = geometry.Polygon.from_bounds(loc_x - dx,
+                                                                 loc_y - dy,
+                                                                 loc_x + dx,
+                                                                 loc_y + dy)
+
+                bounding_box = self._get_bounding_box(image=img)
+                if bounding_box.polygon.intersects(total_raster_bbox):
+                    path_list.append(file)
+        return path_list
+
+    def _get_bounding_box(self, *, image: TiffImagePlugin.TiffImageFile) -> GeoPolygon:
+        m, n = image.size
+        model_pixel_scale = image.tag_v2.get(GeoTiffTags.ModelPixelScaleTag.value)
+        model_tie_point = image.tag_v2.get(GeoTiffTags.ModelTiePointTag.value)
+        dx, dy, _ = model_pixel_scale
+        jt, it, _, xt, yt, _ = model_tie_point
+        # Determine image coordinates, assuming here that the tie point is associated with pixel center.
+        # Otherwise, coordinates should be shiftet half pixel size in both directions
+        X0, X1 = xt - jt * dx, xt + (n - 1 - jt) * dx
+        Y1, Y0 = yt + it * dy, yt - (m - 1 - it) * dy
+        return GeoPolygon(polygon=geometry.Polygon([(X0, Y0), (X1, Y0), (X1, Y1), (X0, Y1)]),
+                          proj=pyproj.Proj(GeoKeysInterpreter(extract_geo_keys(image=image)).to_proj4()))
 
 
 def read_sun_posisions(*, filepath: Path) -> triangulate_dem.ShadowVector:

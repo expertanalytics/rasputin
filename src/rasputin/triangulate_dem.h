@@ -41,7 +41,6 @@ using Traits = CGAL::AABB_traits<K, Primitive>;
 using Tree = CGAL::AABB_tree<Traits>;
 using Ray_intersection = boost::optional<Tree::Intersection_and_primitive_id<Ray>::Type>;
 using face_descriptor = boost::graph_traits<Mesh>::face_descriptor;
-
 }
 
 namespace rasputin {
@@ -123,13 +122,6 @@ std::vector<int> compute_shadow(const PointList &pts,
     VertexIndexMap index_map;
     FaceDescrMap face_map;
     auto mesh = construct_mesh(pts, faces, index_map, face_map);
-    //size_t i = 0;
-    //size_t j = 0;
-    //for (auto p: pts)
-    //    index_map[i++] = mesh.add_vertex(CGAL::Point(p[0], p[1], p[2]));
-    //for (auto f: faces)
-    //    face_map[mesh.add_face(index_map[f[0]], index_map[f[1]], index_map[f[2]])] = j++;
-
     const CGAL::Vector sun_vec(sun_direction[0], sun_direction[1], sun_direction[2]);
     CGAL::Tree tree(CGAL::faces(mesh).first, CGAL::faces(mesh).second, mesh);
 
@@ -151,8 +143,6 @@ std::vector<int> compute_shadow(const PointList &pts,
     }
     return shade;
 };
-
-
 
 std::vector<std::vector<int>> compute_shadows(const PointList &pts,
                                               const FaceList &faces,
@@ -225,12 +215,16 @@ VectorList orient_tin(const PointList &pts, FaceList &faces) {
     return result;
 };
 
+double compute_slope(const Point & normal) {
+    return std::atan2(pow(pow(normal[0], 2) + pow(normal[1], 2), 0.5), normal[2]);
+}
+
 ScalarList compute_slopes(const VectorList &normals) {
     ScalarList result;
     result.reserve(normals.size());
 
     for (const auto &n : normals)
-        result.push_back(std::atan2(pow(pow(n[0], 2) + pow(n[1], 2), 0.5), n[2]));
+        result.push_back(compute_slope(n));
 
     return result;
 };
@@ -243,19 +237,19 @@ ScalarList compute_aspect(const VectorList &normals) {
     return result;
 };
 
-VectorList surface_normals(const PointList &pts, const FaceList &faces) {
-    VectorList result;
-    result.reserve(faces.size());
-    for (const auto face: faces) {
-        const auto p0 = pts[face[0]];
-        const auto p1 = pts[face[1]];
-        const auto p2 = pts[face[2]];
+Vector normal(const Point p0, const Point p1, const Point p2) {
         const arma::vec::fixed<3> v0 = {p1[0] - p0[0], p1[1] - p0[1], p1[2] - p0[2]};
         const arma::vec::fixed<3> v1 = {p2[0] - p0[0], p2[1] - p0[1], p2[2] - p0[2]};
         arma::vec::fixed<3> n = arma::cross(v0, v1);
         n /= arma::norm(n);
-        result.emplace_back(n[2] >= 0.0 ? Vector{n[0], n[1], n[2]} : Vector{-n[0], -n[1], -n[2]});
-    }
+        return n[2] >= 0.0 ? Vector{n[0], n[1], n[2]} : Vector{-n[0], -n[1], -n[2]};
+}
+
+VectorList surface_normals(const PointList &pts, const FaceList &faces) {
+    VectorList result;
+    result.reserve(faces.size());
+    for (const auto face: faces)
+        result.emplace_back(normal(pts[face[0]], pts[face[1]], pts[face[2]]));
     return result;
 };
 
@@ -265,7 +259,7 @@ template <typename T> void iadd(T& v, const T& o) {
     v[2] += o[2];
 }
 
-VectorList point_normals(const PointList& pts, const FaceList &faces) {
+VectorList point_normals(const PointList &pts, const FaceList &faces) {
     VectorList result(pts.size(), {0.0, 0.0, 0.0});
     for (auto face: faces) {
         const auto p0 = pts[face[0]];
@@ -287,7 +281,25 @@ VectorList point_normals(const PointList& pts, const FaceList &faces) {
         p[2] /= norm;
     }
     return result;
-};
+}
+
+template <typename CB>
+std::tuple<FaceList, FaceList> partition(const PointList &pts, const FaceList &faces, CB criterion) {
+    FaceList part1, part2;
+    for (auto face: faces) {
+        if (criterion(pts[face[0]], pts[face[1]], pts[face[2]]))
+            part1.emplace_back(face);
+        else
+            part2.emplace_back(face);
+    }
+    return std::make_pair(std::move(part1), std::move(part2));
+}
+
+std::tuple<FaceList, FaceList> extract_lakes(const PointList &pts, const FaceList &faces) {
+   return partition(pts, faces, [] (const Point &p0, const Point &p1, const Point &p2){
+       return compute_slope(normal(p0, p1, p2)) < 1.0e-2;
+   });
+}
 
 }
 
