@@ -94,15 +94,10 @@ Congratulations! You just triangulated a small mountain.
 
 ## Data
 
-The Rasputin `GeoTIFF` data reader has only been used on one file, and hence,
-should not be expected to work on a wide variety of files. However, this data
-set can be downloaded
-[here](http://blog.mastermaps.com/2016/09/creating-tin-from-raster-dem.html).
-This data file is quite large, covering a 60km by 60km raster of the largest
-Norwegian mountain range Jotunheimen using 6000 times 6000 raster points.
-Hence, processing the whole file takes quite some time. See the manual for the
-`rasputin_triangulate` for help regarding only triangulating parts of this
-raster.
+High quality DTM data for Norway can be downloaded from free [here](https://hoydedata.no/LaserInnsyn/).
+Choose "Nedlasting" from the left hand side of the map, and choose "Landsdekkende", check "UTM-sone 33"
+and finally click DTM10. Download and unpack in, for instance, `$HOME/rasputin_data`, and
+`export RASPUTIN_DATA=$HOME/rasputin_data`.
 
 ## Acknowledges
 

@@ -81,7 +81,8 @@ setup(
           'Pillow',
           'h5py',
           'lxml',
-          'shapely'
+          'shapely',
+          'descartes'
     ],
     # tell setuptools that all packages will be under the 'src' directory
     # and nowhere else
@@ -97,6 +98,7 @@ setup(
     cmdclass=dict(build_ext=CMakeBuild),
     zip_safe=False,
     entry_points={
-        'console_scripts':['rasputin_triangulate = rasputin.geo_tiff_reader:geo_tiff_reader']}
+        'console_scripts':['rasputin_triangulate = rasputin.geo_tiff_reader:geo_tiff_reader',
+                           'rasputin_web = rasputin.web_visualize:web_visualize']}
 )
 

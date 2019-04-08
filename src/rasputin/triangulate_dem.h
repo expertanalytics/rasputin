@@ -41,7 +41,6 @@ using Traits = CGAL::AABB_traits<K, Primitive>;
 using Tree = CGAL::AABB_tree<Traits>;
 using Ray_intersection = boost::optional<Tree::Intersection_and_primitive_id<Ray>::Type>;
 using face_descriptor = boost::graph_traits<Mesh>::face_descriptor;
-
 }
 
 namespace rasputin {
@@ -123,13 +122,6 @@ std::vector<int> compute_shadow(const PointList &pts,
     VertexIndexMap index_map;
     FaceDescrMap face_map;
     auto mesh = construct_mesh(pts, faces, index_map, face_map);
-    //size_t i = 0;
-    //size_t j = 0;
-    //for (auto p: pts)
-    //    index_map[i++] = mesh.add_vertex(CGAL::Point(p[0], p[1], p[2]));
-    //for (auto f: faces)
-    //    face_map[mesh.add_face(index_map[f[0]], index_map[f[1]], index_map[f[2]])] = j++;
-
     const CGAL::Vector sun_vec(sun_direction[0], sun_direction[1], sun_direction[2]);
     CGAL::Tree tree(CGAL::faces(mesh).first, CGAL::faces(mesh).second, mesh);
 
@@ -151,8 +143,6 @@ std::vector<int> compute_shadow(const PointList &pts,
     }
     return shade;
 };
-
-
 
 std::vector<std::vector<int>> compute_shadows(const PointList &pts,
                                               const FaceList &faces,
