@@ -41,7 +41,7 @@ def web_visualize():
     arg_parser.add_argument("-dx", type=float, default=5000, help="Distance in meters")
     arg_parser.add_argument("-dy", type=float, default=5000, help="Distance in meters")
     arg_parser.add_argument("-ratio", type=float, default=0.4, help="Mesh coarsening factor in [0, 1]")
-    arg_parser.add_argument("-a", type=bool, default=False, help="Add avalanche forecast")
+    arg_parser.add_argument("-a", default=False, action="store_true", help="Add avalanche forecast")
     arg_parser.add_argument("-output", type=str, default="web", help="Output directory")
     res = arg_parser.parse_args(sys.argv[1:])
 
