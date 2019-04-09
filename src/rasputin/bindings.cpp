@@ -20,6 +20,7 @@ namespace SMS = CGAL::Surface_mesh_simplification;
 PYBIND11_MAKE_OPAQUE(rasputin::PointList);
 PYBIND11_MAKE_OPAQUE(rasputin::FaceList);
 PYBIND11_MAKE_OPAQUE(rasputin::ScalarList);
+PYBIND11_MAKE_OPAQUE(rasputin::point2_vector);
 
 template<typename T, std::size_t n>
 py::buffer_info vecarray_buffer(std::vector<std::array<T, n>> &v) {
@@ -42,6 +43,8 @@ py::buffer_info vector_buffer(std::vector<T> &v) {
 PYBIND11_MODULE(triangulate_dem, m) {
     py::bind_vector<rasputin::PointList>(m, "PointVector", py::buffer_protocol())
         .def_buffer(&vecarray_buffer<double, 3>);
+    py::bind_vector<rasputin::point2_vector>(m, "point2_vector", py::buffer_protocol())
+        .def_buffer(&vecarray_buffer<double, 2>);
     py::bind_vector<rasputin::FaceList>(m, "FaceVector", py::buffer_protocol())
         .def_buffer(&vecarray_buffer<int, 3>);
     py::bind_vector<rasputin::ScalarList>(m, "ScalarVector", py::buffer_protocol())

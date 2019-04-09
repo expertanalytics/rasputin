@@ -44,6 +44,14 @@ using face_descriptor = boost::graph_traits<Mesh>::face_descriptor;
 }
 
 namespace rasputin {
+using point3 = std::array<double, 3>;
+using point3_vector = std::vector<std::array<double, 3>>;
+using point2 = std::array<double, 2>;
+using point2_vector= std::vector<point2>;
+using face = std::array<int, 3>;
+using face_vector = std::vector<face>;
+
+// Clean up below
 using Point = std::array<double, 3>;
 using PointList = std::vector<Point>;
 using VectorList = PointList;
@@ -278,11 +286,14 @@ VectorList point_normals(const PointList &pts, const FaceList &faces) {
         iadd(result[face[1]], v);
         iadd(result[face[2]], v);
     }
-    for (auto p: result) {
+    for (int i = 0; i < result.size(); ++i) {
+        Point& p = result[i];
         const double norm = std::sqrt(p[0]*p[0] + p[1]*p[1] + p[2]*p[2]);
-        p[0] /= norm;
-        p[1] /= norm;
-        p[2] /= norm;
+        if (norm > 1.0e-16) {
+            p[0] /= norm;
+            p[1] /= norm;
+            p[2] /= norm;
+        }
     }
     return result;
 }
@@ -307,8 +318,8 @@ std::tuple<FaceList, FaceList> extract_lakes(const PointList &pts, const FaceLis
 
 std::tuple<FaceList, FaceList> extract_avalanche_expositions(const PointList &pts,
         const FaceList &faces,
-        const std::vector<std::array<double, 2>> &exposed_intervals,
-        const std::vector<std::array<double, 2>> &height_intervals){
+        const point2_vector &exposed_intervals,
+        const point2_vector &height_intervals){
     return partition(pts, faces, [exposed_intervals, height_intervals](const Point &p0, const Point &p1, const Point &p2){
         const auto max_height = std::max(p0[2], std::max(p1[2], p2[2]));
         const auto min_height = std::min(p0[2], std::min(p1[2], p2[2]));

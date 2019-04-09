@@ -2,7 +2,7 @@ from pathlib import Path
 import shutil
 import numpy as np
 import seaborn as sns
-from typing import List, Union, Optional, Tuple
+from typing import List, Union, Optional, Tuple, Generator
 from pkg_resources import resource_filename
 
 from rasputin import triangulate_dem
@@ -12,46 +12,43 @@ from rasputin.geometry import Geometry
 
 def face_vector_to_lines(*,
                          name: str,
-                         face_vector: triangulate_dem.FaceVector)-> List[str]:
-    lines = [f'const {name} = [\n']
+                         face_vector: triangulate_dem.FaceVector)-> Generator[str, None, None]:
+    yield f'const {name} = ['
     for v in face_vector:
-        lines.append(f"    {', '.join([str(s) for s in v])},\n")
-    lines.append('];\n\n')
-    return lines
+        yield f"    {', '.join([str(s) for s in v])},"
+    yield "];\n"
 
 
 def point_vector_to_lines(*,
                           name: Optional[str],
-                          point_vector: Union[np.ndarray, triangulate_dem.PointVector])-> List[str]:
+                          point_vector: Union[np.ndarray, triangulate_dem.PointVector])-> Generator[str, None, None]:
     if name is not None:
-        lines = [f'const {name} = new Float32Array( [\n']
+        yield f'const {name} = new Float32Array( ['
     else:
-        lines = ["new Float32Array( [\n"]
+        yield "new Float32Array( ["
     for v in point_vector:
-        lines.append(f"    {', '.join([str(s) for s in v])},\n")
+        yield f"    {', '.join([str(s) for s in v])},"
     if name is not None:
-        lines.append(']);\n\n')
+        yield '] );'
     else:
-        lines.append("])\n")
-    return lines
+        yield "] )"
 
 
 def face_and_point_vector_to_lines(*,
                                    name: Optional[str],
                                    face_vector: triangulate_dem.FaceVector,
-                                   point_vector: triangulate_dem.PointVector) -> List[str]:
+                                   point_vector: triangulate_dem.PointVector) -> Generator[str, None, None]:
     if name is not None:
-        lines = [f'const {name} = new Float32Array( [\n']
+        yield f'const {name} = new Float32Array( ['
     else:
-        lines = [f"new Float32Array([\n"]
+        yield f"new Float32Array( ["
     for f in face_vector:
         for i in f:
-            lines.append(f"    {', '.join([str(s) for s in point_vector[i]])},\n")
+            yield f"    {', '.join([str(s) for s in point_vector[i]])},"
     if name is not None:
-        lines.append(']);\n\n')
+        yield "] );"
     else:
-        lines.append("])")
-    return lines
+        yield "] )"
 
 
 def face_field_to_vertex_values(*,
@@ -250,6 +247,7 @@ def write_geometries(*,
         tf.write("const data = {geometries};\n")
 
 
+
 def write_mesh(*,
                pts: triangulate_dem.PointVector,
                faces: triangulate_dem.FaceVector,
@@ -262,7 +260,7 @@ def write_mesh(*,
     This function writes a output html web-site code for the give mesh to output dir.
     """
     if output_dir.exists():
-        shutil.rmtree(str(output_dir))
+        shutil.rmtree(output_dir)
 
     templates_path = Path(resource_filename(__name__, "web"))
 

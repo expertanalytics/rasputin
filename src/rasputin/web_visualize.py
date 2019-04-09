@@ -9,7 +9,7 @@ from rasputin import triangulate_dem
 from rasputin.html_writer import (write_mesh, add_slope_colors, color_field_by_avalanche_danger)
 from rasputin.reader import RasterRepository
 from rasputin.triangulate_dem import lindstrom_turk_by_ratio
-from rasputin.geometry import Geometry
+from rasputin.geometry import Geometry, write_scene, avalanche_material, lake_material, terrain_material
 from rasputin import avalanche
 from rasputin.avalanche import varsom_angles
 
@@ -67,21 +67,21 @@ def web_visualize():
                     if hf == 1:
                         min_h = p["ExposedHeight1"]
                         max_h = 20000
-                        danger_interval = [(min_h, max_h)]
+                        danger_interval = [[min_h, max_h]]
                     elif hf == 2:
                         min_h = 0
                         max_h = p["ExposedHeight1"]
-                        danger_interval = [(min_h, max_h)]
+                        danger_interval = [[min_h, max_h]]
                     elif hf == 3:
                         min_h1 = 0
                         max_h1 = p["ExposedHeight1"]
                         min_h2 = p["ExposedHeight2"]
                         max_h2 = 20000
-                        danger_interval = [(min_h1, max_h1), (min_h2, max_h2)]
+                        danger_interval = [[min_h1, max_h1], [min_h2, max_h2]]
                     elif hf == 4:
                         min_h = p["ExposedHeight1"]
                         max_h = p["ExposedHeight2"]
-                        danger_interval = [(min_h, max_h)]
+                        danger_interval = [[min_h, max_h]]
                     avalanche_problems.append({"expositions": expositions,
                                                "level": level,
                                                "heights": danger_interval})
@@ -95,29 +95,36 @@ def web_visualize():
     points, faces = lindstrom_turk_by_ratio(raster_coords, res.ratio)
     lakes, terrain = triangulate_dem.extract_lakes(points, faces)
     geometries = []
-    lake_geometry = Geometry(points=points, faces=lakes, base_color=(0, 0, 1))
-    terrain_geometry = Geometry(points=points, faces=terrain, base_color=(1, 1, 1))
+    lake_geometry = Geometry(points=points, faces=lakes, base_color=(0, 0, 1), material=lake_material)
+    terrain_geometry = Geometry(points=points, faces=terrain, base_color=(1, 1, 1), material=terrain_material)
     geometries.append(lake_geometry)
 
     if res.a:
         problem = avalanche_problems[0]
         expositions = [bool(int(s)) for s in problem["expositions"]]
         angles = np.asarray(varsom_angles)/180*np.pi
-        exposed_angles = angles[expositions]
+        exposed_angles = triangulate_dem.point2_vector(angles[expositions].tolist())
+        print(problem["heights"])
+        heights = triangulate_dem.point2_vector(problem["heights"])
+
         avalanche_risk, safe_terrain = triangulate_dem.extract_avalanche_expositions(terrain_geometry.points,
                                                                                      terrain_geometry.faces,
                                                                                      exposed_angles,
-                                                                                     np.asarray(problem["heights"]))
-        geometries.append(Geometry(points=points, faces=avalanche_risk, base_color=(1, 0, 0)))
-        geometries.append(Geometry(points=points, faces=safe_terrain, base_color=(1, 1, 1)))
+                                                                                     heights)
+        geometries.append(Geometry(points=points,
+                                   faces=avalanche_risk,
+                                   base_color=(1, 0, 0),
+                                   material=avalanche_material))
+        geometries.append(Geometry(points=points,
+                                   faces=safe_terrain,
+                                   base_color=(1, 1, 1),
+                                   material=terrain_material))
 
-        #colors = color_field_by_avalanche_danger(normals=normals,
-        #                                        points=points,
-        #                                         faces=terrain,
-        #                                         avalanche_problems=avalanche_problems,
-        #                                         colors=colors)
+    else:
+        geometries.append(terrain_geometry)
+
     output = Path(res.output).absolute()
-    #write_geometries(geometries=(lakes_geometry, terrain_geometry))
+    write_scene(geometries=geometries, output=output)
     #write_mesh(pts=points,
     #           faces=terrain,
     #           normals=point_normals,
