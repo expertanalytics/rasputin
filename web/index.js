@@ -22,17 +22,10 @@ function init({geometries}) {
         geom.addAttribute( 'normal', new THREE.Float32BufferAttribute( geometries[i].normals, 3 ) );
         geom.addAttribute( 'color', new THREE.Float32BufferAttribute( geometries[i].colors, 3 ) );
         geom.computeVertexNormals();
-        var mesh = new THREE.Mesh(geom, geometries[i].material);
+        const mesh = new THREE.Mesh(geom, geometries[i].material);
         scene.add(mesh);
         meshes.push(mesh);
     }
-    const test_geom = new THREE.BufferGeometry();
-    test_geom.addAttribute( 'position', new THREE.Float32BufferAttribute( geometries[2].vertices, 3) );
-    test_geom.addAttribute( 'normal', new THREE.Float32BufferAttribute( geometries[2].normals, 3 ) );
-    test_geom.addAttribute( 'color', new THREE.Float32BufferAttribute( geometries[2].colors, 3 ) );
-
-    var test_mesh = new THREE.Mesh(test_geom, geometries[2].material);
-    scene.add(test_mesh);
 
     const center = getCenterPoint(meshes);
     const {z_min, z_max} = getMinMaxZ(meshes);
@@ -50,7 +43,7 @@ function init({geometries}) {
     controls.dampingFactor = 0.25;
     controls.target.set(center.x, center.y, z_min);
 
-    const state = { meshes, scene, camera, renderer, controls, test_mesh};
+    const state = { meshes, scene, camera, renderer, controls };
     return state
 }
 
@@ -62,7 +55,6 @@ function assign_uvs(geometry) {
     var offset = new THREE.Vector2(0 - min.x, 0 - min.y);
     var range = new THREE.Vector2(max.x - min.x, max.y - min.y);
     var vertices = geometry.getAttribute("position").array;
-    console.log(vertices.length);
 
     var uvs = new Float32Array(2*vertices.length);
 
@@ -111,19 +103,19 @@ function getCenterPoint(meshes) {
 }
 
 function getMinMaxZ(meshes) {
-    var min_z = 10000;
-    var max_z = -10000;
+    var z_min = 10000;
+    var z_max = -10000;
     for (var i = 0; i < meshes.length; i ++ ) {
         var geometry = meshes[i].geometry;
         geometry.computeBoundingBox();
-        if (geometry.boundingBox.min.z < min_z) {
-            min_z = geometry.boundingBox.min.z;
+        if (geometry.boundingBox.min.z < z_min) {
+            z_min = geometry.boundingBox.min.z;
         }
-        if (geometry.boundingBox.max.z > max_z) {
-            max_z = geometry.boundingBox.max.z;
+        if (geometry.boundingBox.max.z > z_max) {
+            z_max = geometry.boundingBox.max.z;
         }
     }
-    return  {min_z, max_z};
+    return {z_min, z_max};
 }
 
 
