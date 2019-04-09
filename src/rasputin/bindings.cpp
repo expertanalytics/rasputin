@@ -70,10 +70,11 @@ PYBIND11_MODULE(triangulate_dem, m) {
         .def("compute_shadows", &rasputin::compute_shadows, "Compute shadows for a series of times and ray directions.")
         .def("surface_normals", &rasputin::surface_normals, "Compute surface normals for all faces in the mesh.")
         .def("point_normals", &rasputin::point_normals, "Compute surface normals for all vertices in the mesh.")
-        .def("orient_tin", &rasputin::orient_tin, "Orients all triangles in the TIN and returns their surface normals.")
+        .def("orient_tin", &rasputin::orient_tin, "Orient all triangles in the TIN and returns their surface normals.")
         .def("extract_lakes", &rasputin::extract_lakes, "Extract lakes as separate face list.")
-        .def("compute_slopes", &rasputin::compute_slopes,"computes slopes (i.e. angles relative to xy plane) for the all the vectors in list.")
-        .def("compute_aspect", &rasputin::compute_aspect,"computes aspects for the all the vectors in list.")
+        .def("compute_slopes", &rasputin::compute_slopes,"Compute slopes (i.e. angles relative to xy plane) for the all the vectors in list.")
+        .def("compute_aspects", &rasputin::compute_aspects, "Compute aspects for the all the vectors in list.")
+        .def("extract_avalanche_expositions", &rasputin::extract_avalanche_expositions, "Extract avalanche exposed cells.")
         .def("rasterdata_to_pointvector",
              [] (py::array_t<double> array, double x0, double y0, double x1, double y1) {
                  auto buffer = array.request();

@@ -9,7 +9,9 @@ from rasputin import triangulate_dem
 from rasputin.html_writer import (write_mesh, add_slope_colors, color_field_by_avalanche_danger)
 from rasputin.reader import RasterRepository
 from rasputin.triangulate_dem import lindstrom_turk_by_ratio
+from rasputin.geometry import Geometry
 from rasputin import avalanche
+from rasputin.avalanche import varsom_angles
 
 
 def web_visualize():
@@ -92,25 +94,36 @@ def web_visualize():
 
     points, faces = lindstrom_turk_by_ratio(raster_coords, res.ratio)
     lakes, terrain = triangulate_dem.extract_lakes(points, faces)
+    geometries = []
+    lake_geometry = Geometry(points=points, faces=lakes, base_color=(0, 0, 1))
+    terrain_geometry = Geometry(points=points, faces=terrain, base_color=(1, 1, 1))
+    geometries.append(lake_geometry)
 
-    normals = triangulate_dem.surface_normals(points, terrain)
-    point_normals = triangulate_dem.point_normals(points, terrain)
-
-    colors = np.ones(np.asarray(terrain).shape)
-    colors = add_slope_colors(normals=normals, colors=colors)
     if res.a:
-        colors = color_field_by_avalanche_danger(normals=normals,
-                                                 points=points,
-                                                 faces=terrain,
-                                                 avalanche_problems=avalanche_problems,
-                                                 colors=colors)
+        problem = avalanche_problems[0]
+        expositions = [bool(int(s)) for s in problem["expositions"]]
+        angles = np.asarray(varsom_angles)/180*np.pi
+        exposed_angles = angles[expositions]
+        avalanche_risk, safe_terrain = triangulate_dem.extract_avalanche_expositions(terrain_geometry.points,
+                                                                                     terrain_geometry.faces,
+                                                                                     exposed_angles,
+                                                                                     np.asarray(problem["heights"]))
+        geometries.append(Geometry(points=points, faces=avalanche_risk, base_color=(1, 0, 0)))
+        geometries.append(Geometry(points=points, faces=safe_terrain, base_color=(1, 1, 1)))
+
+        #colors = color_field_by_avalanche_danger(normals=normals,
+        #                                        points=points,
+        #                                         faces=terrain,
+        #                                         avalanche_problems=avalanche_problems,
+        #                                         colors=colors)
     output = Path(res.output).absolute()
-    write_mesh(pts=points,
-               faces=terrain,
-               normals=point_normals,
-               features=[lakes],
-               output_dir=output,
-               face_field=colors)
+    #write_geometries(geometries=(lakes_geometry, terrain_geometry))
+    #write_mesh(pts=points,
+    #           faces=terrain,
+    #           normals=point_normals,
+    #           features=[lakes],
+    #           output_dir=output,
+    #           face_field=colors)
     print(f"""Successfully generated a web_gl based TIN visualizer in {output}.
 To see it, please run:
 cd {output}

@@ -127,7 +127,7 @@ def mesh_with_avalanche_danger(*,
                                points: triangulate_dem.PointVector,
                                faces: triangulate_dem.FaceVector,
                                avalanche_problems: list) -> List[Tuple[triangulate_dem.PointVector, triangulate_dem.FaceVector]]:
-    aspects = np.asarray(triangulate_dem.compute_aspect(normals))
+    aspects = np.asarray(triangulate_dem.compute_aspects(normals))
     slopes = np.asarray(triangulate_dem.compute_slopes(normals))
     colors = np.ones((len(aspects), 3))
     angles = np.asarray(varsom_angles)/180*np.pi
@@ -174,7 +174,7 @@ def color_field_by_avalanche_danger(*,
                                     faces: triangulate_dem.FaceVector,
                                     avalanche_problems: list,
                                     colors: Optional[np.ndarray]) -> np.ndarray:
-    aspects = np.asarray(triangulate_dem.compute_aspect(normals))
+    aspects = np.asarray(triangulate_dem.compute_aspects(normals))
     slopes = np.asarray(triangulate_dem.compute_slopes(normals))
     if colors is None:
         colors = np.ones((len(aspects), 3))
@@ -220,7 +220,7 @@ def color_field_by_avalanche_danger(*,
 def color_field_by_aspect(*, normals: triangulate_dem.PointVector)->np.ndarray:
 
     palette = sns.color_palette("pastel", n_colors=len(varsom_angles))
-    aspects = np.asanyarray(triangulate_dem.compute_aspect(normals))
+    aspects = np.asanyarray(triangulate_dem.compute_aspects(normals))
     colors = np.empty((len(aspects), 3))
     for angle, col in zip(varsom_angles, palette):
         range = np.logical_and(aspects >= angle[0]/180*np.pi, aspects < angle[1]/180*np.pi)
