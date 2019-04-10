@@ -154,6 +154,7 @@ class GeoKeysInterpreter(object):
     def __init__(self, geokeys):
         self.geokeys = geokeys
         self.dict = dict()
+        self.flags = set()
         self.interpret()
 
     def interpret(self):
@@ -183,6 +184,10 @@ class GeoKeysInterpreter(object):
                 else:
                     self.dict[name] = val
 
+        if "south" in self.dict:
+            if self.dict["south"]:
+                self.flags.add("south")
+            del self.dict["south"]
         logger = getLogger()
         logger.debug(f"Ignored GeoKeys: {ignored_keys}")
 
@@ -197,6 +202,7 @@ class GeoKeysInterpreter(object):
 
         else:
             parts = [f"+{name}={value}" for (name, value) in self.dict.items()]
+            parts.extend([f"+{name}" for name in self.flags])
             proj4_str = " ".join(parts)
 
         # Add no_defs to proj4 string to avoid use of default values.
