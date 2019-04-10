@@ -186,7 +186,6 @@ def color_field_by_avalanche_danger(*,
         exposed_angles = angles[expositions]
         level = problem["level"]
         heights = problem["heights"]
-        print(level, heights)
         for i, face in enumerate(faces):
             avg_h = np.mean([points[f][2] for f in face])
             risk = False
