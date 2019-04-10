@@ -399,6 +399,8 @@ class RasterRepository:
         remainding_bbox = geometry.Polygon(target_bbox)
 
         files = self._extract_files(x=x, y=y, dx=dx, dy=dy, coordinate_system=input_proj)
+        if not files:
+            raise RuntimeError("No raster files found for given center point.")
         pts = triangulate_dem.PointVector()
         for file in files:
             with Image.open(file) as img:

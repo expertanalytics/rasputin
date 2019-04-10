@@ -125,12 +125,6 @@ def web_visualize():
 
     output = Path(res.output).absolute()
     write_scene(geometries=geometries, output=output)
-    #write_mesh(pts=points,
-    #           faces=terrain,
-    #           normals=point_normals,
-    #           features=[lakes],
-    #           output_dir=output,
-    #           face_field=colors)
     print(f"""Successfully generated a web_gl based TIN visualizer in {output}.
 To see it, please run:
 cd {output}

@@ -333,7 +333,7 @@ std::tuple<FaceList, FaceList> extract_avalanche_expositions(const PointList &pt
             return false;
         const auto cell_normal = normal(p0, p1, p2);
         const auto cell_slope = compute_slope(cell_normal);
-        if (cell_slope < 30/180*M_PI)
+        if (cell_slope < 30./180.*M_PI)
             return false;
         const auto aspect = compute_aspect(cell_normal);
         for (auto exposition: exposed_intervals) {
