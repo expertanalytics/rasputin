@@ -22,19 +22,19 @@ function init({vertices, normals, face_field, vertex_field, features}) {
     geometry.addAttribute( 'normal', new THREE.Float32BufferAttribute( normals, 3 ) );
     geometry.addAttribute( 'color', new THREE.Float32BufferAttribute( face_field, 3 ) );
 
-    var sea_texture = new THREE.TextureLoader().load("textures/sea.jpg");
-    sea_texture.encoding = THREE.sRGBEncoding;
-    sea_texture.anisotropy = 16;
+    //var sea_texture = new THREE.TextureLoader().load("textures/sea.jpg");
+    //sea_texture.encoding = THREE.sRGBEncoding;
+    //sea_texture.anisotropy = 16;
     //sea_texture.magFilter = THREE.LinearFilter;
     //sea_texture.minFilter = THREE.LinearFilter;
     //sea_texture.mapping = THREE.CubeReflectionMapping;
-    sea_texture.repeat.set(4096, 4096);
-    sea_texture.wrapS = THREE.RepeatWrapping;
-    sea_texture.wrapT = THREE.RepeatWrapping;
+    //sea_texture.repeat.set(4096, 4096);
+    //sea_texture.wrapS = THREE.RepeatWrapping;
+    //sea_texture.wrapT = THREE.RepeatWrapping;
 
     const feature_material = new THREE.MeshPhongMaterial( {
     //const feature_material = new THREE.MeshBasicMaterial( {
-        map: sea_texture,
+        //map: sea_texture,
         //bumpScale: 50,
         specular: 0xffffff,
         shininess: 25,
