@@ -5,6 +5,7 @@ from pathlib import Path
 import numpy as np
 from pkg_resources import resource_filename
 from rasputin import triangulate_dem as td
+from rasputin.py2js import vertex_field_to_vertex_values, point_vector_to_lines, face_and_point_vector_to_lines
 
 
 lake_material = """\
@@ -94,11 +95,9 @@ class Geometry:
     def material(self, material: str):
         self._material = material
 
-
     def as_javascript(self, *, file_handle: io.TextIOWrapper) -> True:
         if not self.faces:
             return False
-        from rasputin.html_writer import vertex_field_to_vertex_values, point_vector_to_lines, face_and_point_vector_to_lines
         file_handle.write("{")
         # write vertices
         file_handle.write(f"vertices: ")
@@ -111,7 +110,8 @@ class Geometry:
         #write normals
         file_handle.write("normals: ")
         point_normals = vertex_field_to_vertex_values(vertex_field=np.asarray(self.point_normals),
-                                                faces=self.faces, points=self.points)
+                                                      faces=self.faces,
+                                                      points=self.points)
         for line in point_vector_to_lines(name=None, point_vector=point_normals):
             file_handle.write(f"{line}\n")
         file_handle.write(",\n")
