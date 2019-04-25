@@ -1,45 +1,9 @@
 import numpy as np
 import seaborn as sns
-from typing import List, Optional, Tuple
+from typing import Optional
 
 from rasputin import triangulate_dem
 from rasputin.avalanche import varsom_angles
-
-
-def face_field_to_vertex_values(*,
-                                face_field: np.ndarray,
-                                faces: triangulate_dem.FaceVector,
-                                points: triangulate_dem.PointVector) -> np.ndarray:
-    """
-
-    :param field: scalar field over faces
-    :param faces: face index vector
-    :param points: points
-    :return: field values for points
-    """
-    assert len(face_field) == len(faces)
-    vertex_field = np.empty((3*len(faces), face_field.shape[1]))
-    for i, face in enumerate(faces):
-        vertex_field[i*3:i*3 + 3] = face_field[i]
-    return vertex_field
-
-
-def vertex_field_to_vertex_values(*,
-                                  vertex_field: np.ndarray,
-                                  faces: triangulate_dem.FaceVector,
-                                  points: triangulate_dem.PointVector) -> np.ndarray:
-    """
-
-    :param field: color (vector) field over points
-    :param faces: face index vector
-    :param points: points
-    :return: field values for points
-    """
-    assert len(vertex_field) == len(points)
-    res = np.empty((3*len(faces), vertex_field.shape[1]))
-    for i, face in enumerate(faces):
-        res[i*3:i*3 + 3] = [vertex_field[f] for f in face]
-    return res
 
 
 def color_field_by_height(*, points: triangulate_dem.PointVector) -> np.ndarray:
@@ -59,8 +23,6 @@ def add_slope_colors(*,
                      normals: triangulate_dem.PointVector,
                      colors: np.ndarray) -> np.ndarray:
     slopes = np.asanyarray(triangulate_dem.compute_slopes(normals))
-    #colors[slopes < 5.0e-2] = [0, 0, 1]
-    #colors[np.logical_and(slopes < 55/180*np.pi, slopes > 30/180*np.pi)] = [0.5, 0, 0]
     colors[slopes >= 55/180*np.pi] = [0.2, 0.2, 0.2]
     return colors
 
@@ -132,4 +94,3 @@ def color_field_by_aspect(*, normals: triangulate_dem.PointVector)->np.ndarray:
         range = np.logical_and(aspects >= angle[0]/180*np.pi, aspects < angle[1]/180*np.pi)
         colors[range] = col
     return colors
-

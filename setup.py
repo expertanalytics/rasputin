@@ -78,6 +78,8 @@ setup(
     # tell setuptools to look for any packages under 'src'
     packages=find_packages('src'),
     install_requires=[
+          'numpy',
+          'pyproj',
           'Pillow',
           'h5py',
           'lxml',

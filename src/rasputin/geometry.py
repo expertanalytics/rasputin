@@ -5,7 +5,8 @@ from pathlib import Path
 import numpy as np
 from pkg_resources import resource_filename
 from rasputin import triangulate_dem as td
-from rasputin.py2js import vertex_field_to_vertex_values, point_vector_to_lines, face_and_point_vector_to_lines
+from rasputin.py2js import point_vector_to_lines, face_and_point_vector_to_lines
+from rasputin.mesh_utils import vertex_field_to_vertex_values
 
 
 lake_material = """\
@@ -57,7 +58,6 @@ class Geometry:
     def point_normals(self) -> td.PointVector:
         if self._point_normals is None:
             self._point_normals = td.point_normals(self.points, self.faces)
-            print(np.asarray(self._point_normals).flatten().max())
         return self._point_normals
 
     @property

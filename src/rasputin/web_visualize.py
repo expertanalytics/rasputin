@@ -6,7 +6,6 @@ import pyproj
 import argparse
 
 from rasputin import triangulate_dem
-from rasputin.html_writer import (write_mesh, add_slope_colors, color_field_by_avalanche_danger)
 from rasputin.reader import RasterRepository
 from rasputin.triangulate_dem import lindstrom_turk_by_ratio
 from rasputin.geometry import Geometry, write_scene, avalanche_material, lake_material, terrain_material
@@ -104,7 +103,6 @@ def web_visualize():
         expositions = [bool(int(s)) for s in problem["expositions"]]
         angles = np.asarray(varsom_angles)/180*np.pi
         exposed_angles = triangulate_dem.point2_vector(angles[expositions].tolist())
-        print(problem["heights"])
         heights = triangulate_dem.point2_vector(problem["heights"])
 
         avalanche_risk, safe_terrain = triangulate_dem.extract_avalanche_expositions(terrain_geometry.points,
@@ -128,7 +126,7 @@ def web_visualize():
     print(f"""Successfully generated a web_gl based TIN visualizer in {output}.
 To see it, please run:
 cd {output}
-python -m http.server 8080
+{Path(sys.executable).name} -m http.server 8080
 Then visit http://localhost:8080
 """)
 

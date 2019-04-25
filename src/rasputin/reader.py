@@ -3,9 +3,10 @@ from enum import Enum
 from PIL import Image, TiffImagePlugin
 from PIL.TiffImagePlugin import TiffImageFile
 from shapely import geometry
+from shapely.ops import snap
 import pyproj
-import json
 import re
+
 from itertools import islice
 import numpy as np
 from pathlib import Path
@@ -386,6 +387,7 @@ class RasterRepository:
 
     def __init__(self, *, directory: Path):
         self.directory = directory
+        self.shapes = {}  # Used for debugging
 
     def read(self, *,
              x: float,
@@ -398,35 +400,50 @@ class RasterRepository:
         target_proj = pyproj.Proj(target_coordinate_system)
 
         target_x, target_y = pyproj.transform(input_proj, target_proj, x, y)
-        target_bbox = geometry.Polygon.from_bounds(target_x - dx,
-                                                   target_y - dy,
-                                                   target_x + dx,
-                                                   target_y + dy)
+        target_bbox = geometry.Polygon.from_bounds(round(target_x - dx),
+                                                   round(target_y - dy),
+                                                   round(target_x + dx),
+                                                   round(target_y + dy))
         remainding_bbox = geometry.Polygon(target_bbox)
+        self.shapes["target_bbox"] = target_bbox
 
         files = self._extract_files(x=x, y=y, dx=dx, dy=dy, coordinate_system=input_proj)
         if not files:
             raise RuntimeError("No raster files found for given center point.")
         pts = triangulate_dem.PointVector()
-        for file in files:
+        for i, file in enumerate(files):
             with Image.open(file) as img:
                 img_geo_bbox = self._get_bounding_box(image=img)
+                self.shapes[f"{file}_bbox"] = img_geo_bbox
                 if target_proj == img_geo_bbox.proj:
                     mapped_remainder = remainding_bbox
                 else:
-                    mapped_remainder = geometry.Polygon(zip(*pyproj.transform(target_proj,
-                                                                              img_geo_bbox.proj,
-                                                                              *remainding_bbox.boundary.coords.xy)))
+                    x = np.round(remainding_bbox.bounds[0::2])
+                    y = np.round(remainding_bbox.bounds[1::2])
+                    xm, ym = pyproj.transform(target_proj, img_geo_bbox.proj, x, y)
+                    xm = np.round(xm)
+                    ym = np.round(ym)
+                    mapped_remainder = geometry.Polygon.from_bounds(xm[0], ym[0], xm[1], ym[1])
                 if not mapped_remainder.intersects(img_geo_bbox.polygon):
                     continue
-                mapped_intersection = mapped_remainder.intersection(img_geo_bbox.polygon)
+                img_bbox = snap(img_geo_bbox.polygon, mapped_remainder, 2)
+                self.shapes[f"{file}_mapped_remainder"] = mapped_remainder
+                mapped_intersection = mapped_remainder.intersection(img_bbox)
+                self.shapes[f"{file}_mapped_intersection"] = mapped_intersection
                 pts.extend(self._extract_coords(image=img, bounds=mapped_intersection.bounds))
-                x0, y0, x1, y1 = mapped_intersection.bounds
+                x0, y0, x1, y1 = np.round(mapped_intersection.bounds)
                 x_m, y_m = pyproj.transform(img_geo_bbox.proj, target_proj, [x0, x1], [y0, y1])
-                intersection = geometry.Polygon.from_bounds(x_m[0], y_m[0], x_m[1], y_m[1])
+                x_m = np.round(x_m)
+                y_m = np.round(y_m)
+                intersection = snap(geometry.Polygon.from_bounds(x_m[0],
+                                                                 y_m[0],
+                                                                 x_m[1],
+                                                                 y_m[1]), remainding_bbox, 2)
+                self.shapes[f"{file}_intersection"] = intersection
                 remainding_bbox = remainding_bbox.difference(intersection)
                 if not remainding_bbox:
                     break
+                self.shapes[f"{file}_remainding_bbox"] = remainding_bbox
         return pts
 
     def _extract_coords(self, *,
@@ -437,6 +454,7 @@ class RasterRepository:
         dx, dy, _ = image.tag_v2.get(GeoTiffTags.ModelPixelScaleTag.value)
         X0, _, _, Y1 = self._get_bounding_box(image=image).polygon.bounds
 
+        # Here we actually need to snap coordinates back to bounds...
         j0 = int(np.floor((x_min - X0)/dx))
         j1 = int(np.ceil((x_max - X0)/dx))
         i0 = int(np.floor((Y1 - y_max)/dy))
@@ -445,11 +463,11 @@ class RasterRepository:
         if j1 <= 0 or i1 <= 0 or i0 >= n or j0 >= m:
             # Empty view window, raise an error since PIL does not
             raise ValueError("Selected view window is outside of image bounds")
-
         d = image.crop(box=(j0, i0, j1, i1))
         x0d, x1d = X0 + j0*dx, X0 + j1*dx
         y0d, y1d = Y1 - i1*dy, Y1 - i0*dy
-        return triangulate_dem.rasterdata_to_pointvector(d, x0d, y0d, x1d, y1d)
+        pv = triangulate_dem.rasterdata_to_pointvector(d, x0d, y0d, x1d, y1d, dx, dy)
+        return pv
 
     def _extract_files(self, *,
                        x: float, y: float, dx: float, dy: float,
@@ -482,8 +500,9 @@ class RasterRepository:
         # Otherwise, coordinates should be shiftet half pixel size in both directions
         X0, X1 = xt - jt * dx, xt + (n - 1 - jt) * dx
         Y1, Y0 = yt + it * dy, yt - (m - 1 - it) * dy
-        return GeoPolygon(polygon=geometry.Polygon([(X0, Y0), (X1, Y0), (X1, Y1), (X0, Y1)]),
-                          proj=pyproj.Proj(GeoKeysInterpreter(extract_geo_keys(image=image)).to_proj4()))
+        polygon = geometry.Polygon.from_bounds(X0, Y0, X1, Y1)
+        proj = pyproj.Proj(GeoKeysInterpreter(extract_geo_keys(image=image)).to_proj4())
+        return GeoPolygon(polygon=polygon, proj=proj)
 
 
 def read_sun_posisions(*, filepath: Path) -> triangulate_dem.ShadowVector:
