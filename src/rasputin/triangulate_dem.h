@@ -44,6 +44,14 @@ using face_descriptor = boost::graph_traits<Mesh>::face_descriptor;
 }
 
 namespace rasputin {
+using point3 = std::array<double, 3>;
+using point3_vector = std::vector<std::array<double, 3>>;
+using point2 = std::array<double, 2>;
+using point2_vector= std::vector<point2>;
+using face = std::array<int, 3>;
+using face_vector = std::vector<face>;
+
+// Clean up below
 using Point = std::array<double, 3>;
 using PointList = std::vector<Point>;
 using VectorList = PointList;
@@ -229,11 +237,15 @@ ScalarList compute_slopes(const VectorList &normals) {
     return result;
 };
 
-ScalarList compute_aspect(const VectorList &normals) {
+double compute_aspect(const Point &normal) {
+    return std::atan2(normal[0], normal[1]);
+}
+
+ScalarList compute_aspects(const VectorList &normals) {
     ScalarList result;
     result.reserve(normals.size());
     for (const auto &n: normals)
-        result.emplace_back(std::atan2(n[0], n[1]));
+        result.emplace_back(compute_aspect(n));
     return result;
 };
 
@@ -274,11 +286,14 @@ VectorList point_normals(const PointList &pts, const FaceList &faces) {
         iadd(result[face[1]], v);
         iadd(result[face[2]], v);
     }
-    for (auto p: result) {
+    for (int i = 0; i < result.size(); ++i) {
+        Point& p = result[i];
         const double norm = std::sqrt(p[0]*p[0] + p[1]*p[1] + p[2]*p[2]);
-        p[0] /= norm;
-        p[1] /= norm;
-        p[2] /= norm;
+        if (norm > 1.0e-16) {
+            p[0] /= norm;
+            p[1] /= norm;
+            p[2] /= norm;
+        }
     }
     return result;
 }
@@ -301,6 +316,35 @@ std::tuple<FaceList, FaceList> extract_lakes(const PointList &pts, const FaceLis
    });
 }
 
+std::tuple<FaceList, FaceList> extract_avalanche_expositions(const PointList &pts,
+        const FaceList &faces,
+        const point2_vector &exposed_intervals,
+        const point2_vector &height_intervals){
+    return partition(pts, faces, [exposed_intervals, height_intervals](const Point &p0, const Point &p1, const Point &p2){
+        const auto max_height = std::max(p0[2], std::max(p1[2], p2[2]));
+        const auto min_height = std::min(p0[2], std::min(p1[2], p2[2]));
+        bool inside = false;
+        for (auto height_interval: height_intervals) {
+            if ((max_height <= height_interval[1] && max_height >= height_interval[0]) ||
+                (min_height <= height_interval[1] && min_height >= height_interval[0]))
+                inside = true;
+        }
+        if (not inside)
+            return false;
+        const auto cell_normal = normal(p0, p1, p2);
+        const auto cell_slope = compute_slope(cell_normal);
+        if (cell_slope < 30./180.*M_PI)
+            return false;
+        const auto aspect = compute_aspect(cell_normal);
+        for (auto exposition: exposed_intervals) {
+            if ((exposition[0] < aspect) && (aspect < exposition[1]))
+                return true;
+            else if ((exposition[0] > exposition[1]) && ((exposition[0] < aspect) || (aspect < exposition[1])))
+                return true;
+        }
+        return false;
+    });
+}
 }
 
 #endif //RASPUTIN_TRIANGULATE_DEM_H_H

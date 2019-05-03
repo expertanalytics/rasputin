@@ -20,6 +20,7 @@ namespace SMS = CGAL::Surface_mesh_simplification;
 PYBIND11_MAKE_OPAQUE(rasputin::PointList);
 PYBIND11_MAKE_OPAQUE(rasputin::FaceList);
 PYBIND11_MAKE_OPAQUE(rasputin::ScalarList);
+PYBIND11_MAKE_OPAQUE(rasputin::point2_vector);
 
 template<typename T, std::size_t n>
 py::buffer_info vecarray_buffer(std::vector<std::array<T, n>> &v) {
@@ -42,6 +43,8 @@ py::buffer_info vector_buffer(std::vector<T> &v) {
 PYBIND11_MODULE(triangulate_dem, m) {
     py::bind_vector<rasputin::PointList>(m, "PointVector", py::buffer_protocol())
         .def_buffer(&vecarray_buffer<double, 3>);
+    py::bind_vector<rasputin::point2_vector>(m, "point2_vector", py::buffer_protocol())
+        .def_buffer(&vecarray_buffer<double, 2>);
     py::bind_vector<rasputin::FaceList>(m, "FaceVector", py::buffer_protocol())
         .def_buffer(&vecarray_buffer<int, 3>);
     py::bind_vector<rasputin::ScalarList>(m, "ScalarVector", py::buffer_protocol())
@@ -70,23 +73,25 @@ PYBIND11_MODULE(triangulate_dem, m) {
         .def("compute_shadows", &rasputin::compute_shadows, "Compute shadows for a series of times and ray directions.")
         .def("surface_normals", &rasputin::surface_normals, "Compute surface normals for all faces in the mesh.")
         .def("point_normals", &rasputin::point_normals, "Compute surface normals for all vertices in the mesh.")
-        .def("orient_tin", &rasputin::orient_tin, "Orients all triangles in the TIN and returns their surface normals.")
+        .def("orient_tin", &rasputin::orient_tin, "Orient all triangles in the TIN and returns their surface normals.")
         .def("extract_lakes", &rasputin::extract_lakes, "Extract lakes as separate face list.")
-        .def("compute_slopes", &rasputin::compute_slopes,"computes slopes (i.e. angles relative to xy plane) for the all the vectors in list.")
-        .def("compute_aspect", &rasputin::compute_aspect,"computes aspects for the all the vectors in list.")
+        .def("compute_slopes", &rasputin::compute_slopes,"Compute slopes (i.e. angles relative to xy plane) for the all the vectors in list.")
+        .def("compute_aspects", &rasputin::compute_aspects, "Compute aspects for the all the vectors in list.")
+        .def("extract_avalanche_expositions", &rasputin::extract_avalanche_expositions, "Extract avalanche exposed cells.")
         .def("rasterdata_to_pointvector",
-             [] (py::array_t<double> array, double x0, double y0, double x1, double y1) {
+             [] (py::array_t<double> array, double x0, double y0, double x1, double y1, double dx, double dy) {
                  auto buffer = array.request();
-                 int m = buffer.shape[0], n = buffer.shape[1];
+                 unsigned long M = (unsigned long)buffer.shape[0];
+                 unsigned long N = (unsigned long)buffer.shape[1];
                  double* ptr = (double*) buffer.ptr;
 
-                 double dx = (x1 - x0)/(n - 1), dy = (y1 - y0)/(m - 1);
+                 //double dx = (x1 - x0)/(n - 1), dy = (y1 - y0)/(m - 1);
 
                  rasputin::PointList raster_coordinates;
-                 raster_coordinates.reserve(m*n);
-                 for (std::size_t i = 0; i < m; ++i)
-                     for (std::size_t j = 0; j < n; ++j)
-                         raster_coordinates.push_back(std::array<double, 3>{x0 + j*dx, y1 - i*dy, ptr[i*n + j]});
+                 raster_coordinates.reserve(M*N);
+                 for (std::size_t i = 0; i < M; ++i)
+                     for (std::size_t j = 0; j < N; ++j)
+                         raster_coordinates.emplace_back(std::array<double, 3>{x0 + j*dx, y1 - i*dy, ptr[i*N + j]});
                  return raster_coordinates;
             }, "Pointvector from raster data");
 }

@@ -1,7 +1,6 @@
 
-function init({vertices, normals, face_field, vertex_field, features}) {
+function init({geometries}) {
 
-    THREE.ImageUtils.crossOrigin = "";
     const scene = new THREE.Scene();
     scene.background = new THREE.Color( 0xdddddd );
 
@@ -16,62 +15,20 @@ function init({vertices, normals, face_field, vertex_field, features}) {
     light2.position.set( 0, - 1, 0 );
     scene.add( light2 );
 
-    const geometry = new THREE.BufferGeometry();
-    //geometry.setIndex(indices);
-    geometry.addAttribute( 'position', new THREE.Float32BufferAttribute( vertices, 3 ) );
-    geometry.addAttribute( 'normal', new THREE.Float32BufferAttribute( normals, 3 ) );
-    geometry.addAttribute( 'color', new THREE.Float32BufferAttribute( face_field, 3 ) );
-
-    //var sea_texture = new THREE.TextureLoader().load("textures/sea.jpg");
-    //sea_texture.encoding = THREE.sRGBEncoding;
-    //sea_texture.anisotropy = 16;
-    //sea_texture.magFilter = THREE.LinearFilter;
-    //sea_texture.minFilter = THREE.LinearFilter;
-    //sea_texture.mapping = THREE.CubeReflectionMapping;
-    //sea_texture.repeat.set(4096, 4096);
-    //sea_texture.wrapS = THREE.RepeatWrapping;
-    //sea_texture.wrapT = THREE.RepeatWrapping;
-
-    const feature_material = new THREE.MeshPhongMaterial( {
-    //const feature_material = new THREE.MeshBasicMaterial( {
-        //map: sea_texture,
-        //bumpScale: 50,
-        specular: 0xffffff,
-        shininess: 25,
-        //side: THREE.DoubleSide,
-        color: 0x006994,
-        reflectivity: 0.3,
-        //vertexColors: THREE.FaceColors
-    } );
-
-    const phys_material = new THREE.MeshPhysicalMaterial( {
-        metalness: 0.0,
-        roughness: 0.5,
-        reflectivity: 0.7,
-        clearCoat: 0.0,
-        //side: THREE.DoubleSide,
-        vertexColors: THREE.FaceColors
-    } );
-
-    fs = [];
-
-    for ( var i = 0; i < features.length; i ++ ) {
+    const meshes = [];
+    for ( var i = 0; i < geometries.length; i ++ ) {
         const geom = new THREE.BufferGeometry();
-        geom.addAttribute( 'position', new THREE.Float32BufferAttribute(features[i], 3));
+        geom.addAttribute( 'position', new THREE.Float32BufferAttribute( geometries[i].vertices, 3) );
+        geom.addAttribute( 'normal', new THREE.Float32BufferAttribute( geometries[i].normals, 3 ) );
+        geom.addAttribute( 'color', new THREE.Float32BufferAttribute( geometries[i].colors, 3 ) );
         geom.computeVertexNormals();
-        var uv_geom = assign_uvs(geom);
-        var f = new THREE.Mesh(uv_geom, feature_material);
-        scene.add(f);
-        fs.push(f);
+        const mesh = new THREE.Mesh(geom, geometries[i].material);
+        scene.add(mesh);
+        meshes.push(mesh);
     }
 
-    const mesh = new THREE.Mesh( geometry, phys_material );
-    scene.add(mesh);
-
-    const center = getCenterPoint(mesh);
-
-    var z_max = mesh.geometry.boundingBox.max.z;
-    var z_min = mesh.geometry.boundingBox.min.z;
+    const center = getCenterPoint(meshes);
+    const {z_min, z_max} = getMinMaxZ(meshes);
     var cam_z_pos = z_min + (z_max - z_min)*3;
     const camera = new THREE.PerspectiveCamera( 75, window.innerWidth / window.innerHeight, 0.1, cam_z_pos*4);
     camera.position.set(center.x, center.y, cam_z_pos);
@@ -86,7 +43,7 @@ function init({vertices, normals, face_field, vertex_field, features}) {
     controls.dampingFactor = 0.25;
     controls.target.set(center.x, center.y, z_min);
 
-    const state = { mesh, scene, camera, renderer, controls, fs};
+    const state = { meshes, scene, camera, renderer, controls };
     return state
 }
 
@@ -97,9 +54,7 @@ function assign_uvs(geometry) {
         min = geometry.boundingBox.min;
     var offset = new THREE.Vector2(0 - min.x, 0 - min.y);
     var range = new THREE.Vector2(max.x - min.x, max.y - min.y);
-    //var vertices = geometry.attributes.position.array;
     var vertices = geometry.getAttribute("position").array;
-    console.log(vertices.length);
 
     var uvs = new Float32Array(2*vertices.length);
 
@@ -126,17 +81,41 @@ function animate() {
     requestAnimationFrame( animate );
 
     controls.update();
-
 	renderer.render( scene, camera );
 }
 
-function getCenterPoint(mesh) {
-    var geometry = mesh.geometry;
-    geometry.computeBoundingBox();   
-    const center = new THREE.Vector3()
-    geometry.boundingBox.getCenter(center);
-    mesh.localToWorld(center);
+function getCenterPoint(meshes) {
+    var max_area = 0;
+    var center = new THREE.Vector3();
+    for (var i = 0; i < meshes.length; i ++ ) {
+        var geometry = meshes[i].geometry;
+        geometry.computeBoundingBox();
+        var size = new THREE.Vector3();
+        geometry.boundingBox.getSize(size);
+        var area = size.x*size.y;
+        if (area > max_area) {
+            max_area = area;
+            geometry.boundingBox.getCenter(center);
+            meshes[i].localToWorld(center);
+        }
+    }
     return center;
+}
+
+function getMinMaxZ(meshes) {
+    var z_min = 10000;
+    var z_max = -10000;
+    for (var i = 0; i < meshes.length; i ++ ) {
+        var geometry = meshes[i].geometry;
+        geometry.computeBoundingBox();
+        if (geometry.boundingBox.min.z < z_min) {
+            z_min = geometry.boundingBox.min.z;
+        }
+        if (geometry.boundingBox.max.z > z_max) {
+            z_max = geometry.boundingBox.max.z;
+        }
+    }
+    return {z_min, z_max};
 }
 
 

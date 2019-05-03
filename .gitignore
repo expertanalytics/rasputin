@@ -3,7 +3,9 @@ cmake-*
 .env
 lib/CGAL*
 lib/pybind11
+lib/armadillo*
 src/rasputin/*so
 src/rasputin.egg-info
+__pycache__
 build
 dist
