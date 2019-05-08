@@ -100,7 +100,9 @@ setup(
     cmdclass=dict(build_ext=CMakeBuild),
     zip_safe=False,
     entry_points={
-        'console_scripts':['rasputin_triangulate = rasputin.geo_tiff_reader:geo_tiff_reader',
-                           'rasputin_web = rasputin.web_visualize:web_visualize']}
+        'console_scripts': ['rasputin_triangulate = rasputin.geo_tiff_reader:geo_tiff_reader',
+                            'rasputin_web = rasputin.web_visualize:web_visualize',
+                            'rasputin_tin_web = rasputin.web_visualize:visualize_tin',
+                            'rasputin_store_tin = rasputin.application:store_tin']}
 )
 
