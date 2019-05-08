@@ -84,7 +84,8 @@ setup(
           'h5py',
           'lxml',
           'shapely',
-          'descartes'
+          'descartes',
+          'meshio'
     ],
     # tell setuptools that all packages will be under the 'src' directory
     # and nowhere else
