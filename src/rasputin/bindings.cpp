@@ -55,6 +55,58 @@ rasputin::PointList rasterdata_to_pointvector(py::array_t<double> array, double 
                  return raster_coordinates;
             }
 
+template<typename FT>
+void bind_rasterdata(py::module &m, const std::string& pyname) {
+    py::class_<rasputin::RasterData<FT>, std::shared_ptr<rasputin::RasterData<FT>>>(m, pyname.c_str(), py::buffer_protocol())
+    .def(py::init([] (py::array_t<FT>& data_array, double x_min, double y_max, double delta_x, double delta_y) {
+            auto buffer = data_array.request();
+            int m = buffer.shape[0], n = buffer.shape[1];
+
+            return rasputin::RasterData<FT>(x_min, y_max, delta_x, delta_y, n, m, (FT*) buffer.ptr );
+        }))
+    /* .def(py::init([] (py::array_t<FT>& data_array, int m, int n, double x_min, double y_max, double delta_x, double delta_y) { */
+    /*         auto buffer = data_array.request(); */
+    /*         return rasputin::RasterData<FT>(x_min, y_max, delta_x, delta_y, n, m, (FT*) buffer.ptr ); */
+    /*     })) */
+    .def_buffer([] (rasputin::RasterData<FT>& self) {
+            return py::buffer_info(
+                self.data,
+                sizeof(FT),
+                py::format_descriptor<FT>::format(),
+                2,
+                std::vector<std::size_t> { self.num_points_y, self.num_points_x },
+                { sizeof(FT) * self.num_points_x, sizeof(FT) }
+            );
+            })
+    .def_readwrite("x_min", &rasputin::RasterData<FT>::x_min)
+    .def_readwrite("y_max", &rasputin::RasterData<FT>::y_max)
+    .def_readwrite("delta_x", &rasputin::RasterData<FT>::delta_x)
+    .def_readwrite("delta_y", &rasputin::RasterData<FT>::delta_y)
+    .def_readonly("num_points_x", &rasputin::RasterData<FT>::num_points_x)
+    .def_readonly("num_points_y", &rasputin::RasterData<FT>::num_points_y)
+    .def_property_readonly("x_max", &rasputin::RasterData<FT>::get_x_max)
+    .def_property_readonly("y_min", &rasputin::RasterData<FT>::get_y_min)
+    .def("__getitem__", [](rasputin::RasterData<FT>& self, std::pair<int, int> idx) {
+                auto [i, j] = idx;
+                return self.data[self.num_points_x * i, j]; })
+    .def("get_indices", &rasputin::RasterData<FT>::get_indices)
+    .def("get_interpolated_value_at_point", &rasputin::RasterData<FT>::get_interpolated_value_at_point);
+
+    m.def("tin_from_raster",
+             [] (rasputin::RasterData<FT>& raster, rasputin::PointList2D& boundary_vertices, double ratio) {
+             return rasputin::tin_from_raster(raster, boundary_vertices,
+                                              SMS::Count_ratio_stop_predicate<CGAL::Mesh>(ratio),
+                                              SMS::LindstromTurk_placement<CGAL::Mesh>(),
+                                              SMS::LindstromTurk_cost<CGAL::Mesh>());
+             })
+    .def("tin_from_raster",
+             [] (rasputin::RasterData<FT>& raster, double ratio) {
+             return rasputin::tin_from_raster(raster,
+                                              SMS::Count_ratio_stop_predicate<CGAL::Mesh>(ratio),
+                                              SMS::LindstromTurk_placement<CGAL::Mesh>(),
+                                              SMS::LindstromTurk_cost<CGAL::Mesh>());
+             });
+}
 
 PYBIND11_MODULE(triangulate_dem, m) {
     py::bind_vector<rasputin::PointList>(m, "PointVector", py::buffer_protocol())
@@ -68,8 +120,17 @@ PYBIND11_MODULE(triangulate_dem, m) {
     py::bind_vector<rasputin::ScalarList>(m, "ScalarVector", py::buffer_protocol())
         .def_buffer(&vector_buffer<double>);
 
+    bind_rasterdata<float>(m, "RasterData_float");
+    bind_rasterdata<double>(m, "RasterData_double");
+
     py::bind_vector<std::vector<int>>(m, "IntVector");
     py::bind_vector<std::vector<std::vector<int>>>(m, "ShadowVector");
+
+
+      /* .def("dim", &dolfin::MeshGeometry::dim, "Geometrical dimension") */
+      /* .def("degree", &dolfin::MeshGeometry::degree, "Degree") */
+      /* .def("get_entity_index", &dolfin::MeshGeometry::get_entity_index) */
+      /* .def("num_entity_coordinates", &dolfin::MeshGeometry::num_entity_coordinates); */
 
     m.def("lindstrom_turk_by_size",
           [] (const rasputin::PointList& raster_coordinates, size_t result_mesh_size) {
