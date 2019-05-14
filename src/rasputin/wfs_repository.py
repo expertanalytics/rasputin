@@ -1,4 +1,5 @@
 from typing import Optional, Dict, List
+from enum import Enum
 from owslib.wfs import WebFeatureService
 from owslib.fes import PropertyIsLike
 from owslib.etree import etree
@@ -17,7 +18,6 @@ class InspireLandtypeRepository:
     def __init__(self):
         pass
 
-    @property
     def land_cover_types(self, *, constraint: Optional[GeoPolygon] = None) -> List[LandCoverType]:
         pass
 
@@ -33,7 +33,7 @@ class InspireLandtypeRepository:
 # * https://geopython.github.io/OWSLib/
 # * https://kartkatalog.geonorge.no/metadata/kartverket/inspire-landcovervector-wfs/c1f5f3de-ce2d-4104-bee3-2560c5a5a948
 
-def test()
+def test():
     wfs = WebFeatureService("https://wfs.geonorge.no/skwms1/wfs.inspire-lcv", version="2.0.0")
     filter = PropertyIsLike(propertyname="lcv:LandCoverObservation", literal="21")
     filterxml = etree.tostring(filter.toXML()).decode("utf-8")
