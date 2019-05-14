@@ -4,6 +4,8 @@
 #include <pybind11/stl.h>
 #include <pybind11/numpy.h>
 
+#include <memory.h>
+
 // Surface mesh simplication policies
 #include <CGAL/Surface_mesh_simplification/Policies/Edge_collapse/Count_stop_predicate.h>
 #include <CGAL/Surface_mesh_simplification/Policies/Edge_collapse/Count_ratio_stop_predicate.h>
@@ -21,7 +23,6 @@ PYBIND11_MAKE_OPAQUE(rasputin::PointList);
 PYBIND11_MAKE_OPAQUE(rasputin::PointList2D);
 PYBIND11_MAKE_OPAQUE(rasputin::FaceList);
 PYBIND11_MAKE_OPAQUE(rasputin::ScalarList);
-PYBIND11_MAKE_OPAQUE(rasputin::point2_vector);
 
 template<typename T, std::size_t n>
 py::buffer_info vecarray_buffer(std::vector<std::array<T, n>> &v) {
@@ -35,25 +36,44 @@ py::buffer_info vecarray_buffer(std::vector<std::array<T, n>> &v) {
     );
 }
 
+template<typename T, std::size_t n>
+std::vector<std::array<T, n>>* vecarray_from_numpy(py::array_t<T> buf) {
+    auto info = buf.request();
+    if (info.ndim < 1 or info.ndim > 2)
+        throw py::type_error("Can only convert one- and two-dimensional arrays.");
+
+    // Make sure total size can be preserved
+    auto size = info.shape[0];
+    if (info.ndim == 1 and size % n)
+        throw py::type_error("Size of one-dimensional array must be divisible by!" + std::to_string(n) + ".");
+
+    if (info.ndim == 2 and info.shape[1] != n)
+        throw py::type_error("Second dimension does not have size equal to " + std::to_string(n) + ".");
+
+    if (info.ndim == 2)
+        size *= n;
+
+    auto vec = std::unique_ptr<std::vector<std::array<T, n>>> (new std::vector<std::array<T, n>> ());
+    vec->reserve(size / n);
+
+    // Copy values
+    double* p = static_cast<double*>(info.ptr);
+    double* end = p + size;
+    for (; p < end; p += n) {
+        auto a = std::array<T, n> {};
+        for (auto k = 0; k < n; k++)
+            a[k] = *(p + k);
+        vec->push_back(a);
+    }
+
+    return vec.release();
+}
+
 template<typename T>
 py::buffer_info vector_buffer(std::vector<T> &v) {
     return py::buffer_info(&v[0], sizeof(T), py::format_descriptor<T>::format(), 1, { v.size() }, { sizeof(T) });
 }
 
-rasputin::PointList rasterdata_to_pointvector(py::array_t<double> array, double x0, double y0, double x1, double y1) {
-                 auto buffer = array.request();
-                 int m = buffer.shape[0], n = buffer.shape[1];
-                 double* ptr = (double*) buffer.ptr;
-
-                 double dx = (x1 - x0)/(n - 0), dy = (y1 - y0)/(m - 0);
-
-                 rasputin::PointList raster_coordinates;
-                 raster_coordinates.reserve(m*n);
-                 for (std::size_t i = 0; i < m; ++i)
-                     for (std::size_t j = 0; j < n; ++j)
-                         raster_coordinates.push_back(std::array<double, 3>{x0 + j*dx, y1 - i*dy, ptr[i*n + j]});
-                 return raster_coordinates;
-            }
 
 template<typename FT>
 void bind_rasterdata(py::module &m, const std::string& pyname) {
@@ -64,10 +84,6 @@ void bind_rasterdata(py::module &m, const std::string& pyname) {
 
             return rasputin::RasterData<FT>(x_min, y_max, delta_x, delta_y, n, m, (FT*) buffer.ptr );
         }))
-    /* .def(py::init([] (py::array_t<FT>& data_array, int m, int n, double x_min, double y_max, double delta_x, double delta_y) { */
-    /*         auto buffer = data_array.request(); */
-    /*         return rasputin::RasterData<FT>(x_min, y_max, delta_x, delta_y, n, m, (FT*) buffer.ptr ); */
-    /*     })) */
     .def_buffer([] (rasputin::RasterData<FT>& self) {
             return py::buffer_info(
                 self.data,
@@ -128,15 +144,16 @@ void bind_rasterdata(py::module &m, const std::string& pyname) {
 
 PYBIND11_MODULE(triangulate_dem, m) {
     py::bind_vector<rasputin::PointList>(m, "PointVector", py::buffer_protocol())
-        .def_buffer(&vecarray_buffer<double, 3>);
-    py::bind_vector<rasputin::point2_vector>(m, "point2_vector", py::buffer_protocol())
-        .def_buffer(&vecarray_buffer<double, 2>);
+      .def_buffer(&vecarray_buffer<double, 3>)
+      .def("from_numpy", &vecarray_from_numpy<double, 3>);
     py::bind_vector<rasputin::PointList2D>(m, "PointVector2D", py::buffer_protocol())
-        .def_buffer(&vecarray_buffer<double, 2>);
+      .def_buffer(&vecarray_buffer<double, 2>)
+      .def("from_numpy", &vecarray_from_numpy<double, 2>);
     py::bind_vector<rasputin::FaceList>(m, "FaceVector", py::buffer_protocol())
-        .def_buffer(&vecarray_buffer<int, 3>);
+      .def_buffer(&vecarray_buffer<int, 3>)
+      .def("from_numpy", &vecarray_from_numpy<int, 3>);
     py::bind_vector<rasputin::ScalarList>(m, "ScalarVector", py::buffer_protocol())
-        .def_buffer(&vector_buffer<double>);
+      .def_buffer(&vector_buffer<double>);
 
     bind_rasterdata<float>(m, "RasterData_float");
     bind_rasterdata<double>(m, "RasterData_double");
@@ -144,27 +161,13 @@ PYBIND11_MODULE(triangulate_dem, m) {
     py::bind_vector<std::vector<int>>(m, "IntVector");
     py::bind_vector<std::vector<std::vector<int>>>(m, "ShadowVector");
 
-
-      /* .def("dim", &dolfin::MeshGeometry::dim, "Geometrical dimension") */
-      /* .def("degree", &dolfin::MeshGeometry::degree, "Degree") */
-      /* .def("get_entity_index", &dolfin::MeshGeometry::get_entity_index) */
-      /* .def("num_entity_coordinates", &dolfin::MeshGeometry::num_entity_coordinates); */
-
-       m.def("compute_shadow", &rasputin::compute_shadow, "Compute shadows for given sun ray direction.")
-        .def("compute_shadows", &rasputin::compute_shadows, "Compute shadows for a series of times and ray directions.")
-        .def("surface_normals", &rasputin::surface_normals, "Compute surface normals for all faces in the mesh.")
-        .def("point_normals", &rasputin::point_normals, "Compute surface normals for all vertices in the mesh.")
-        .def("orient_tin", &rasputin::orient_tin, "Orient all triangles in the TIN and returns their surface normals.")
-        .def("extract_lakes", &rasputin::extract_lakes, "Extract lakes as separate face list.")
-        .def("compute_slopes", &rasputin::compute_slopes,"Compute slopes (i.e. angles relative to xy plane) for the all the vectors in list.")
-        .def("compute_aspects", &rasputin::compute_aspects, "Compute aspects for the all the vectors in list.")
-        .def("extract_avalanche_expositions", &rasputin::extract_avalanche_expositions, "Extract avalanche exposed cells.")
-        .def("tin_from_raster",
-             [] (rasputin::RasterData raster, rasputin::PointList2D boundary_vertices, double ratio) {
-             return rasputin::tin_from_raster(raster, boundary_vertices,
-                                              SMS::Count_ratio_stop_predicate<CGAL::Mesh>(ratio),
-                                              SMS::LindstromTurk_placement<CGAL::Mesh>(),
-                                              SMS::LindstromTurk_cost<CGAL::Mesh>());
-             })
-        .def("rasterdata_to_pointvector", &rasterdata_to_pointvector, "Pointvector from raster data");
+    m.def("compute_shadow", &rasputin::compute_shadow, "Compute shadows for given sun ray direction.")
+     .def("compute_shadows", &rasputin::compute_shadows, "Compute shadows for a series of times and ray directions.")
+     .def("surface_normals", &rasputin::surface_normals, "Compute surface normals for all faces in the mesh.")
+     .def("point_normals", &rasputin::point_normals, "Compute surface normals for all vertices in the mesh.")
+     .def("orient_tin", &rasputin::orient_tin, "Orient all triangles in the TIN and returns their surface normals.")
+     .def("extract_lakes", &rasputin::extract_lakes, "Extract lakes as separate face list.")
+     .def("compute_slopes", &rasputin::compute_slopes,"Compute slopes (i.e. angles relative to xy plane) for the all the vectors in list.")
+     .def("compute_aspects", &rasputin::compute_aspects, "Compute aspects for the all the vectors in list.")
+     .def("extract_avalanche_expositions", &rasputin::extract_avalanche_expositions, "Extract avalanche exposed cells.");
 }
