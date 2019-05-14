@@ -26,7 +26,7 @@ def web_visualize():
 
     """
     if "RASPUTIN_DATA_DIR" in os.environ:
-        data_dir = Path(os.environ["RASPUTIN_DATA_DIR"])
+        data_dir = Path(os.environ["RASPUTIN_DATA_DIR"]) / "dem_archive"
     else:
         #  data_dir = Path(os.environ["HOME"]) /"projects" / "rasputin_data" / "dem_archive"
         data_dir = Path(".") / "dem_archive"
