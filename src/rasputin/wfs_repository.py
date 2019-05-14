@@ -24,7 +24,7 @@ class InspireLandtypeRepository:
     def read(self, *, land_type: LandCoverType, constraint: GeoPolygon) -> List[GeoPolygon]:
         return self.read_all(land_types=[land_type], constraint=constraint)[land_type]
 
-    def read_all(self, *, land_types: List[LandCoverType], constraint: GeoPolygon) -> Dict[LandCoverType, List[GeoPolygon]:
+    def read_all(self, *, land_types: List[LandCoverType], constraint: GeoPolygon) -> Dict[LandCoverType, List[GeoPolygon]]:
         pass
 
 # Some test code using owslib. Have not yet figured out how to use the WebFeatureService to extract a subset of land surface types as
