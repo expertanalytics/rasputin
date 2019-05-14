@@ -370,7 +370,7 @@ def read_raster_file(*,
     y0d, y1d = Y1 - i1 * dy, Y1 - i0 * dy
 
     # Call c++ function to populate pointvector
-    raster_coordinates = triangulate_dem.rasterdata_to_pointvector(d, x0d, y0d, x1d, y1d)
+    raster_coordinates = triangulate_dem.rasterdata_to_pointvector(d, x0d, y0d, x1d, y1d, dx, dy)
 
     logger.debug("Done")
     return raster_coordinates, info
