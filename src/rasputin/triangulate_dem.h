@@ -92,9 +92,6 @@ CGAL::Mesh construct_mesh(const PointList &pts,
 };
 
 
-/* struct RasterData { */
-/*     RasterData(std::vector<double> x_coordinates, */
-/*                std::vector<double> y_coordinates,) */
 
 template<typename FT>
 struct RasterData {
@@ -197,50 +194,6 @@ CGAL::PointList interpolate_boundary_points(const RasterData<T>& raster,
 
     return interpolated_points;
 }
-
-template<typename S, typename P, typename C>
-std::tuple<PointList, FaceList> make_tin(const PointList &pts, const S &stop,
-                                         const P &placement, const C &cost) {
-
-    CGAL::Delaunay dtin;
-    for (const auto p: pts)
-        dtin.insert(CGAL::Point(p[0], p[1], p[2]));
-
-    CGAL::PointVertexMap pvm;
-    CGAL::Mesh mesh;
-    for (auto v = dtin.finite_vertices_begin(); v != dtin.finite_vertices_end(); ++v)
-        pvm.emplace(std::make_pair(v->point(), mesh.add_vertex(v->point())));
-
-    for (auto f = dtin.finite_faces_begin(); f != dtin.finite_faces_end(); ++f)
-        mesh.add_face(pvm[f->vertex(0)->point()],
-                      pvm[f->vertex(1)->point()],
-                      pvm[f->vertex(2)->point()]);
-    pvm.clear();
-    CGAL::Surface_mesh_simplification::edge_collapse(mesh,
-                                                     stop,
-                                                     CGAL::parameters::get_cost(cost)
-                                                                      .get_placement(placement)
-    );
-    std::map<CGAL::VertexIndex, int> reindex;
-    PointList o_points;
-    o_points.reserve(mesh.num_vertices());
-    int n = 0;
-    for (auto v: mesh.vertices()) {
-        const auto pt = mesh.point(v);
-        o_points.emplace_back(Vector{pt.x(), pt.y(), pt.z()});
-        reindex.emplace(v, n++);
-    }
-    FaceList faces;
-    faces.reserve(mesh.num_faces());
-    for (auto f: mesh.faces()) {
-        std::array<int, 3> fl;
-        size_t idx = 0;
-        for (auto v: mesh.vertices_around_face(mesh.halfedge(f)))
-            fl[idx++] = reindex[v];
-        faces.emplace_back(Face{fl[0], fl[1], fl[2]});
-    }
-    return std::make_pair(std::move(o_points), std::move(faces));
-};
 
 
 template<typename S, typename P, typename C>
