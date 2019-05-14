@@ -109,6 +109,14 @@ void bind_rasterdata(py::module &m, const std::string& pyname) {
     .def("get_interpolated_value_at_point", &rasputin::RasterData<FT>::get_interpolated_value_at_point);
 
     m.def("lindstrom_turk_by_size",
+          [] (const rasputin::RasterData<FT>& raster_data, const rasputin::PointList2D& boundary_vertices, size_t result_mesh_size) {
+              return rasputin::tin_from_raster(raster_data, boundary_vertices,
+                                        SMS::Count_stop_predicate<CGAL::Mesh>(result_mesh_size),
+                                        SMS::LindstromTurk_placement<CGAL::Mesh>(),
+                                        SMS::LindstromTurk_cost<CGAL::Mesh>());
+          },
+          "Construct a TIN based on the points provided.\n\nThe LindstromTurk cost and placement strategy is used, and simplification process stops when the number of undirected edges drops below the size threshold.")
+     .def("lindstrom_turk_by_size",
           [] (const rasputin::RasterData<FT>& raster_data, size_t result_mesh_size) {
               return rasputin::tin_from_raster(raster_data,
                                         SMS::Count_stop_predicate<CGAL::Mesh>(result_mesh_size),
@@ -117,29 +125,21 @@ void bind_rasterdata(py::module &m, const std::string& pyname) {
           },
           "Construct a TIN based on the points provided.\n\nThe LindstromTurk cost and placement strategy is used, and simplification process stops when the number of undirected edges drops below the size threshold.")
         .def("lindstrom_turk_by_ratio",
+             [] (const rasputin::RasterData<FT>& raster_data, const rasputin::PointList2D& boundary_vertices, double ratio) {
+                 return rasputin::tin_from_raster(raster_data, boundary_vertices,
+                                           SMS::Count_ratio_stop_predicate<CGAL::Mesh>(ratio),
+                                           SMS::LindstromTurk_placement<CGAL::Mesh>(),
+                                           SMS::LindstromTurk_cost<CGAL::Mesh>());
+             },
+            "Construct a TIN based on the points provided.\n\nThe LindstromTurk cost and placement strategy is used, and simplification process stops when the number of undirected edges drops below the ratio threshold.")
+        .def("lindstrom_turk_by_ratio",
              [] (const rasputin::RasterData<FT>& raster_data, double ratio) {
                  return rasputin::tin_from_raster(raster_data,
                                            SMS::Count_ratio_stop_predicate<CGAL::Mesh>(ratio),
                                            SMS::LindstromTurk_placement<CGAL::Mesh>(),
                                            SMS::LindstromTurk_cost<CGAL::Mesh>());
              },
-            "Construct a TIN based on the points provided.\n\nThe LindstromTurk cost and placement strategy is used, and simplification process stops when the number of undirected edges drops below the ratio threshold.")
-    .def("tin_from_raster",
-            [] (const rasputin::RasterData<FT>& raster, rasputin::PointList2D& boundary_vertices, const double ratio) {
-            return rasputin::tin_from_raster(raster, boundary_vertices,
-                                             SMS::Count_ratio_stop_predicate<CGAL::Mesh>(ratio),
-                                             SMS::LindstromTurk_placement<CGAL::Mesh>(),
-                                             SMS::LindstromTurk_cost<CGAL::Mesh>());
-        }
-    )
-    .def("tin_from_raster",
-            [] (const rasputin::RasterData<FT>& raster, const double ratio) {
-            return rasputin::tin_from_raster(raster,
-                                             SMS::Count_ratio_stop_predicate<CGAL::Mesh>(ratio),
-                                             SMS::LindstromTurk_placement<CGAL::Mesh>(),
-                                             SMS::LindstromTurk_cost<CGAL::Mesh>());
-            }
-    );
+            "Construct a TIN based on the points provided.\n\nThe LindstromTurk cost and placement strategy is used, and simplification process stops when the number of undirected edges drops below the ratio threshold.");
 }
 
 PYBIND11_MODULE(triangulate_dem, m) {

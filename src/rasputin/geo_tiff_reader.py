@@ -11,6 +11,7 @@ from rasputin.calculate import compute_shade
 from rasputin.triangulate_dem import lindstrom_turk_by_ratio
 from rasputin.triangulate_dem import lindstrom_turk_by_size
 from rasputin.triangulate_dem import surface_normals, orient_tin, compute_slopes
+from rasputin.triangulate_dem import PointVector2D
 
 
 def geo_tiff_reader():
@@ -18,14 +19,8 @@ def geo_tiff_reader():
     arg_parser = argparse.ArgumentParser()
     arg_parser.add_argument("input", type=str, metavar="FILENAME")
     arg_parser.add_argument("-output", type=str, default="output.off", help="Surface mesh file name")
-
-    coords = arg_parser.add_argument_group("Window coordinates",
-                                           "Coordinates of axially aligned view-window to the raster data")
-    coords.add_argument("-x0", type=float, default=None, help="Start coordinate in x-direction")
-    coords.add_argument("-x1", type=float, default=None, help="Stop coordinate in x-direction")
-    coords.add_argument("-y0", type=float, default=None, help="Start coordinate in y-direction")
-    coords.add_argument("-y1", type=float, default=None, help="Stop coordinate in y-direction")
-
+    arg_parser.add_argument("-x", nargs="+", type=float, help="x-coordinates of polygon", default=None)
+    arg_parser.add_argument("-y", nargs="+", type=float, help="y-coordinates of polygon", default=None)
     arg_parser.add_argument("-sun_x", type=float, help="Sun ray x component")
     arg_parser.add_argument("-sun_y", type=float, help="Sun ray y component")
     arg_parser.add_argument("-sun_z", type=float, help="Sun ray z component")
@@ -40,18 +35,17 @@ def geo_tiff_reader():
     logger.setLevel(res.loglevel)
 
     # Determine region of interest
-    coordinates = (res.x0, res.y0, res.x1, res.y1)
-    if all(coord is None for coord in coordinates):
+    x_coords = res.x if res.x else []
+    y_coords = res.y if res.y else []
+
+    if len(x_coords) == len(y_coords) == 0:
         polygon = None
 
-    elif all(coord is not None for coord in coordinates):
-        polygon = Polygon([(res.x0, res.y0),
-                           (res.x1, res.y0),
-                           (res.x1, res.y1),
-                           (res.x0, res.y1)])
+    elif 3 <= len(x_coords) == len(y_coords):
+        polygon = Polygon((x, y) for (x,y) in zip(x_coords, y_coords))
 
     else:
-        raise ValueError("Either all or none of the window coordinates must be provided")
+        raise ValueError("x and y coordinates must have equal length greater or equal to 3")
 
     # Read from raster
     rasterdata = read_raster_file(filepath=Path(res.input),
@@ -60,9 +54,19 @@ def geo_tiff_reader():
     logger.debug(f"Original: {m * n}")
     logger.critical(rasterdata.info)
     if res.ratio:
-        pts, faces = lindstrom_turk_by_ratio(rasterdata._cpp, res.ratio)
+        if polygon:
+            pts, faces = lindstrom_turk_by_ratio(rasterdata._cpp,
+                                                 PointVector2D.from_numpy(polygon.exterior),
+                                                 res.ratio)
+        else:
+            pts, faces = lindstrom_turk_by_ratio(rasterdata._cpp, res.ratio)
     else:
-        pts, faces = lindstrom_turk_by_size(rasterdata._cpp, res.size)
+        if polygon:
+            pts, faces = lindstrom_turk_by_size(rasterdata._cpp,
+                                                PointVector2D.from_numpy(polygon.exterior),
+                                                res.size)
+        else:
+            pts, faces = lindstrom_turk_by_size(rasterdata._cpp, res.size)
     logger.debug(f"Result: {len(pts)}")
 
     # Compute normals and re-orient before shadow computation
