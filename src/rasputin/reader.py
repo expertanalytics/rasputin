@@ -290,72 +290,6 @@ def identify_projection(*, image: TiffImageFile) -> str:
     return GeoKeysInterpreter(geokeys).to_proj4()
 
 
-def img_slice(img, start_i, stop_i, start_j, stop_j):
-    myiter = iter(img.getdata())
-    m, n = img.size
-    if start_i > 0:
-        try:
-            next(islice(myiter, start_i * n, start_i * n))
-        except StopIteration:
-            pass
-    for i in range(stop_i - start_i):
-        if stop_i <= i < start_i:
-            try:
-                next(islice(myiter, n, n))
-            except StopIteration:
-                pass
-        else:
-            for v in islice(myiter, start_j, stop_j):
-                yield v
-            try:
-                next(islice(myiter, n - stop_j, n - stop_j))
-            except StopIteration:
-                pass
-
-class RasterData:
-    def __init__(self, image: Image.Image,
-                 *,
-                 x_min: float,
-                 y_max: float,
-                 delta_x: float,
-                 delta_y: float,
-                 info):
-
-        self.image = image
-        self.x_min = x_min
-        self.y_max = y_max
-        self.delta_x = delta_x
-        self.delta_y = delta_y
-        self.info = info
-
-    def _cpp_data(self):
-        return triangulate_dem.RasterData_float(np.asarray(self.image),
-                                                self.x_min, self.y_max,
-                                                self.delta_x, self.delta_y)
-
-    def crop(self, box: Tuple[int, int, int, int]):
-        return self.__class__(self.image.crop(box),
-                              x_min=self.x_min + box[0] * self.delta_x,
-                              y_max=self.y_max - box[1] * self.delta_y,
-                              delta_x=self.delta_x,
-                              delta_y=self.delta_y,
-                              info=self.info)
-
-    def crop_to_polygon(self, polygon):
-        # Get maximal extents of the polygon
-        x_min, y_min, x_max, y_max = polygon.bounds
-
-        # Find indices for the box
-        box = (*self.get_indices(x_min, y_max),
-               *self.get_indices(x_max + self.delta_x, y_min - self.delta_y))
-
-        return self.crop(box)
-
-
-Rasterdata = make_dataclass("Rasterdata",
-                            [("image"), ("x_min", float), ("x_max", float),
-                             ("delta_x", float), ("delta_y", float)])
-
 @dataclass
 class Rasterdata:
 
@@ -377,7 +311,7 @@ class Rasterdata:
 
 def read_raster_file(*,
                      filepath: Path,
-                     polygon: Optional[Polygon] = None) -> RasterData:
+                     polygon: Optional[Polygon] = None) -> Rasterdata:
 
     logger = getLogger()
     logger.debug(f"Reading raster file {filepath}")
@@ -413,13 +347,15 @@ def read_raster_file(*,
                    min(max(1, int((x_max_p - x_min)/delta_x) + 2), n),
                    min(max(1, int((y_max - y_min_p)/delta_y) + 2), m))
 
+
+            # NOTE: Cropping does not include last indices
             image = image.crop(box=box)
 
             # Find extents of the cropped image
             x_min = x_tag + (box[0] - j_tag) * delta_x
             y_max = y_tag - (box[1] - i_tag) * delta_y
 
-        # NOTE: Storing the array keeps the pointer alive
+        # NOTE: Storing the array ensures the pointer to the data stays alive
         image_array = np.asarray(image)
 
     logger.debug("Done")
