@@ -72,6 +72,12 @@ python3 setup.py install
 ```
 
 
+## Docker build
+Take a look at the [Dockerfile](Dockerfile) to see how to setup required dependencies for a Debian system.
+
+You can build rasputin and run tests by building the Docker image: `docker build . -t rasputin-test`
+
+
 ## Minimal Example
 To test the installation run this for example in ipython:
 
