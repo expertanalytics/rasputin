@@ -97,7 +97,13 @@ Congratulations! You just triangulated a small mountain.
 High quality DTM data for Norway can be downloaded from free [here](https://hoydedata.no/LaserInnsyn/).
 Choose "Nedlasting" from the left hand side of the map, and choose "Landsdekkende", check "UTM-sone 33"
 and finally click DTM10. Download and unpack in, for instance, `$HOME/rasputin_data/dem_archive`, and
-`export RASPUTIN_DATA=$HOME/rasputin_data`.
+`export RASPUTIN_DATA_DIR=$HOME/rasputin_data`.
+
+It is possible to include land cover types in your triangulation, through the 
+[GlobCover dataset](http://due.esrin.esa.int/page_globcover.php) from ESA. It is a raster based 
+300m (approx) resolution data set that contains 23 different land cover types. 
+Download the data set and unpack it in `$RASPUTIN_DATA_DIR/globcov` to access the land types using
+the `rasputin.globcov_repository.GlobCovRepository` class.
 
 ## Acknowledges
 
