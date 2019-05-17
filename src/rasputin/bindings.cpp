@@ -17,10 +17,11 @@
 namespace py = pybind11;
 namespace SMS = CGAL::Surface_mesh_simplification;
 
-PYBIND11_MAKE_OPAQUE(rasputin::PointList);
-PYBIND11_MAKE_OPAQUE(rasputin::FaceList);
-PYBIND11_MAKE_OPAQUE(rasputin::ScalarList);
+PYBIND11_MAKE_OPAQUE(rasputin::point3_vector);
+PYBIND11_MAKE_OPAQUE(rasputin::face_vector);
+PYBIND11_MAKE_OPAQUE(rasputin::double_vector);
 PYBIND11_MAKE_OPAQUE(rasputin::point2_vector);
+PYBIND11_MAKE_OPAQUE(rasputin::index_vector);
 
 template<typename T, std::size_t n>
 py::buffer_info vecarray_buffer(std::vector<std::array<T, n>> &v) {
@@ -41,20 +42,22 @@ py::buffer_info vector_buffer(std::vector<T> &v) {
 
 
 PYBIND11_MODULE(triangulate_dem, m) {
-    py::bind_vector<rasputin::PointList>(m, "PointVector", py::buffer_protocol())
+    py::bind_vector<rasputin::point3_vector>(m, "point3_vector", py::buffer_protocol())
         .def_buffer(&vecarray_buffer<double, 3>);
     py::bind_vector<rasputin::point2_vector>(m, "point2_vector", py::buffer_protocol())
         .def_buffer(&vecarray_buffer<double, 2>);
-    py::bind_vector<rasputin::FaceList>(m, "FaceVector", py::buffer_protocol())
+    py::bind_vector<rasputin::face_vector>(m, "face_vector", py::buffer_protocol())
         .def_buffer(&vecarray_buffer<int, 3>);
-    py::bind_vector<rasputin::ScalarList>(m, "ScalarVector", py::buffer_protocol())
+    py::bind_vector<rasputin::index_vector>(m, "index_vector", py::buffer_protocol())
+        .def_buffer(&vecarray_buffer<unsigned int, 2>);
+    py::bind_vector<rasputin::double_vector>(m, "double_vector", py::buffer_protocol())
         .def_buffer(&vector_buffer<double>);
 
-    py::bind_vector<std::vector<int>>(m, "IntVector");
-    py::bind_vector<std::vector<std::vector<int>>>(m, "ShadowVector");
+    py::bind_vector<std::vector<int>>(m, "int_vector");
+    py::bind_vector<std::vector<std::vector<int>>>(m, "shadow_vector");
 
     m.def("lindstrom_turk_by_size",
-          [] (const rasputin::PointList& raster_coordinates, size_t result_mesh_size) {
+          [] (const rasputin::point3_vector& raster_coordinates, size_t result_mesh_size) {
               return rasputin::make_tin(raster_coordinates,
                                         SMS::Count_stop_predicate<CGAL::Mesh>(result_mesh_size),
                                         SMS::LindstromTurk_placement<CGAL::Mesh>(),
@@ -62,7 +65,7 @@ PYBIND11_MODULE(triangulate_dem, m) {
           },
           "Construct a TIN based on the points provided.\n\nThe LindstromTurk cost and placement strategy is used, and simplification process stops when the number of undirected edges drops below the size threshold.")
         .def("lindstrom_turk_by_ratio",
-             [] (const rasputin::PointList& raster_coordinates, double ratio) {
+             [] (const rasputin::point3_vector& raster_coordinates, double ratio) {
                  return rasputin::make_tin(raster_coordinates,
                                            SMS::Count_ratio_stop_predicate<CGAL::Mesh>(ratio),
                                            SMS::LindstromTurk_placement<CGAL::Mesh>(),
@@ -77,9 +80,13 @@ PYBIND11_MODULE(triangulate_dem, m) {
         .def("extract_lakes", &rasputin::extract_lakes, "Extract lakes as separate face list.")
         .def("compute_slopes", &rasputin::compute_slopes,"Compute slopes (i.e. angles relative to xy plane) for the all the vectors in list.")
         .def("compute_aspects", &rasputin::compute_aspects, "Compute aspects for the all the vectors in list.")
+        .def("cell_centers", &rasputin::cell_centers, "Compute cell centers for triangulation.")
         .def("extract_avalanche_expositions", &rasputin::extract_avalanche_expositions, "Extract avalanche exposed cells.")
+        .def("coordinates_to_indices", &rasputin::coordinates_to_indices, "Transform from coordinate space to index space.")
+        .def("extract_uint8_buffer_values", &rasputin::extract_buffer_values<std::uint8_t>, "Extract raster data for given indices.")
         .def("rasterdata_to_pointvector",
-             [] (py::array_t<double> array, double x0, double y0, double x1, double y1, double dx, double dy) {
+             [] (py::array_t<double> array, double x0, double y1, double dx, double dy) {
+                 rasputin::point3_vector raster_coordinates;
                  auto buffer = array.request();
                  unsigned long M = (unsigned long)buffer.shape[0];
                  unsigned long N = (unsigned long)buffer.shape[1];
@@ -87,11 +94,10 @@ PYBIND11_MODULE(triangulate_dem, m) {
 
                  //double dx = (x1 - x0)/(n - 1), dy = (y1 - y0)/(m - 1);
 
-                 rasputin::PointList raster_coordinates;
                  raster_coordinates.reserve(M*N);
                  for (std::size_t i = 0; i < M; ++i)
                      for (std::size_t j = 0; j < N; ++j)
                          raster_coordinates.emplace_back(std::array<double, 3>{x0 + j*dx, y1 - i*dy, ptr[i*N + j]});
                  return raster_coordinates;
-            }, "Pointvector from raster data");
+            }, "point3_vector from raster data");
 }

@@ -316,7 +316,7 @@ def read_raster_file(*,
                      x0: Optional[float] = None,
                      x1: Optional[float] = None,
                      y0: Optional[float] = None,
-                     y1: Optional[float] = None) -> Tuple[triangulate_dem.PointVector, Dict[str, Any]]:
+                     y1: Optional[float] = None) -> Tuple[triangulate_dem.point3_vector, Dict[str, Any]]:
     logger = getLogger()
     logger.debug(f"Reading raster file {filepath}")
     assert filepath.exists()
@@ -366,11 +366,11 @@ def read_raster_file(*,
         d = image.crop(box=(j0, i0, j1, i1))
 
     # Get the actual coordinates of returned view window
-    x0d, x1d = X0 + j0 * dx, X0 + j1 * dx
-    y0d, y1d = Y1 - i1 * dy, Y1 - i0 * dy
+    x0d = X0 + j0*dx
+    y1d = Y1 - i0*dy
 
     # Call c++ function to populate pointvector
-    raster_coordinates = triangulate_dem.rasterdata_to_pointvector(d, x0d, y0d, x1d, y1d)
+    raster_coordinates = triangulate_dem.rasterdata_to_pointvector(d, x0d, y1d, dx, dy)
 
     logger.debug("Done")
     return raster_coordinates, info
@@ -395,7 +395,7 @@ class RasterRepository:
              dx: float,
              dy: float,
              input_coordinate_system: str,
-             target_coordinate_system: str) -> triangulate_dem.PointVector:
+             target_coordinate_system: str) -> triangulate_dem.point3_vector:
         input_proj = pyproj.Proj(input_coordinate_system)
         target_proj = pyproj.Proj(target_coordinate_system)
 
@@ -410,7 +410,7 @@ class RasterRepository:
         files = self._extract_files(x=x, y=y, dx=dx, dy=dy, coordinate_system=input_proj)
         if not files:
             raise RuntimeError("No raster files found for given center point.")
-        pts = triangulate_dem.PointVector()
+        pts = triangulate_dem.point3_vector()
         for i, file in enumerate(files):
             with Image.open(file) as img:
                 img_geo_bbox = self._get_bounding_box(image=img)
@@ -448,7 +448,7 @@ class RasterRepository:
 
     def _extract_coords(self, *,
                         image: TiffImagePlugin.TiffImageFile,
-                        bounds: Tuple[float, float, float, float]) -> triangulate_dem.PointVector:
+                        bounds: Tuple[float, float, float, float]) -> triangulate_dem.point3_vector:
         m, n = image.size
         x_min, y_min, x_max, y_max = bounds
         dx, dy, _ = image.tag_v2.get(GeoTiffTags.ModelPixelScaleTag.value)
@@ -464,9 +464,9 @@ class RasterRepository:
             # Empty view window, raise an error since PIL does not
             raise ValueError("Selected view window is outside of image bounds")
         d = image.crop(box=(j0, i0, j1, i1))
-        x0d, x1d = X0 + j0*dx, X0 + j1*dx
-        y0d, y1d = Y1 - i1*dy, Y1 - i0*dy
-        pv = triangulate_dem.rasterdata_to_pointvector(d, x0d, y0d, x1d, y1d, dx, dy)
+        x0d = X0 + j0*dx
+        y1d = Y1 - i0*dy
+        pv = triangulate_dem.rasterdata_to_pointvector(d, x0d, y1d, dx, dy)
         return pv
 
     def _extract_files(self, *,
@@ -505,7 +505,7 @@ class RasterRepository:
         return GeoPolygon(polygon=polygon, proj=proj)
 
 
-def read_sun_posisions(*, filepath: Path) -> triangulate_dem.ShadowVector:
+def read_sun_posisions(*, filepath: Path) -> triangulate_dem.shadow_vector:
     assert filepath.exists()
     with filepath.open("r") as ff:
         pass

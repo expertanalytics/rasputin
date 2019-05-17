@@ -3,7 +3,7 @@ import numpy as np
 from datetime import datetime
 from pathlib import Path
 from json import loads, dumps
-from rasputin.triangulate_dem import PointVector, FaceVector
+from rasputin.triangulate_dem import point3_vector, face_vector
 
 
 class TinRepository:
@@ -11,11 +11,11 @@ class TinRepository:
     def __init__(self, *, path: Path) -> None:
         self.path = path
 
-    def read(self, *, uid: str) -> Tuple[PointVector, FaceVector]:
+    def read(self, *, uid: str) -> Tuple[point3_vector, face_vector]:
         data = np.load(self.path / f"{uid}.npz")
         pts = data["points"]
         faces = data["faces"]
-        return PointVector(pts.tolist()), FaceVector(faces.tolist())
+        return point3_vector(pts.tolist()), face_vector(faces.tolist())
 
     @property
     def content(self) -> Dict[str, Dict[str, Any]]:
@@ -26,7 +26,7 @@ class TinRepository:
                 meta_info[f.stem] = loads(meta.read())
         return meta_info
 
-    def save(self, *, uid: str, points: PointVector, faces: FaceVector):
+    def save(self, *, uid: str, points: point3_vector, faces: face_vector):
         if (self.path / f"{uid}.npz").exists():
             raise RuntimeError(f"Archive already has a data set with uid {uid}.")
         if (self.path / f"{uid}.meta").exists():

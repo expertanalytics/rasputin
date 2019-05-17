@@ -6,8 +6,8 @@ from rasputin import triangulate_dem
 
 
 def write_mesh(*,
-               pts: triangulate_dem.PointVector,
-               faces: triangulate_dem.FaceVector,
+               pts: triangulate_dem.point3_vector,
+               faces: triangulate_dem.face_vector,
                shades: List[Tuple[int, np.ndarray]],
                filepath: Path) -> None:
     """Write mesh to file...
@@ -74,8 +74,8 @@ class Writer(object):
 
 def write(*,
           filepath: Path,
-          pts: triangulate_dem.PointVector,
-          faces: triangulate_dem.FaceVector,
+          pts: triangulate_dem.point3_vector,
+          faces: triangulate_dem.face_vector,
           t: float = 0.0,
           fields: Dict["str", Any] = {}):
     """

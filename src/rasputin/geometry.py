@@ -40,8 +40,8 @@ THREE.MeshPhysicalMaterial( {
 class Geometry:
 
     def __init__(self, *,
-                 points: td.PointVector,
-                 faces: td.FaceVector,
+                 points: td.point3_vector,
+                 faces: td.face_vector,
                  base_color: Tuple[float, float, float],
                  material: str):
         self.points = points
@@ -55,13 +55,13 @@ class Geometry:
         self._material = material
 
     @property
-    def point_normals(self) -> td.PointVector:
+    def point_normals(self) -> td.point3_vector:
         if self._point_normals is None:
             self._point_normals = td.point_normals(self.points, self.faces)
         return self._point_normals
 
     @property
-    def surface_normals(self) -> td.PointVector:
+    def surface_normals(self) -> td.point3_vector:
         if self._surface_normals is None:
             self._surface_normals = td.surface_normals(self.points, self.faces)
         return self._surface_normals

@@ -5,7 +5,7 @@ from rasputin import triangulate_dem as td
 
 def face_vector_to_lines(*,
                          name: str,
-                         face_vector: td.FaceVector)-> Generator[str, None, None]:
+                         face_vector: td.face_vector)-> Generator[str, None, None]:
     yield f'const {name} = ['
     for v in face_vector:
         yield f"    {', '.join([str(s) for s in v])},"
@@ -14,7 +14,7 @@ def face_vector_to_lines(*,
 
 def point_vector_to_lines(*,
                           name: Optional[str],
-                          point_vector: Union[np.ndarray, td.PointVector])-> Generator[str, None, None]:
+                          point_vector: Union[np.ndarray, td.point3_vector])-> Generator[str, None, None]:
     if name is not None:
         yield f'const {name} = new Float32Array( ['
     else:
@@ -29,8 +29,8 @@ def point_vector_to_lines(*,
 
 def face_and_point_vector_to_lines(*,
                                    name: Optional[str],
-                                   face_vector: td.FaceVector,
-                                   point_vector: td.PointVector) -> Generator[str, None, None]:
+                                   face_vector: td.face_vector,
+                                   point_vector: td.point3_vector) -> Generator[str, None, None]:
     if name is not None:
         yield f'const {name} = new Float32Array( ['
     else:

@@ -6,7 +6,7 @@ from rasputin import triangulate_dem
 from rasputin.avalanche import varsom_angles
 
 
-def color_field_by_height(*, points: triangulate_dem.PointVector) -> np.ndarray:
+def color_field_by_height(*, points: triangulate_dem.point3_vector) -> np.ndarray:
     vertex_heights = np.asarray(points)[:, 2].copy()
     factor = 2
     vertex_heights -= min(vertex_heights)
@@ -20,7 +20,7 @@ def color_field_by_height(*, points: triangulate_dem.PointVector) -> np.ndarray:
 
 
 def add_slope_colors(*,
-                     normals: triangulate_dem.PointVector,
+                     normals: triangulate_dem.point3_vector,
                      colors: np.ndarray) -> np.ndarray:
     slopes = np.asanyarray(triangulate_dem.compute_slopes(normals))
     colors[slopes >= 55/180*np.pi] = [0.2, 0.2, 0.2]
@@ -28,7 +28,7 @@ def add_slope_colors(*,
 
 
 def color_field_by_slope(*,
-                         normals: triangulate_dem.PointVector) -> np.ndarray:
+                         normals: triangulate_dem.point3_vector) -> np.ndarray:
     slopes = np.asanyarray(triangulate_dem.compute_slopes(normals))
     colors = np.empty((len(slopes), 3))
     colors[slopes < 5.0e-2] = [0, 0, 1]
@@ -38,9 +38,9 @@ def color_field_by_slope(*,
 
 
 def color_field_by_avalanche_danger(*,
-                                    normals: triangulate_dem.PointVector,
-                                    points: triangulate_dem.PointVector,
-                                    faces: triangulate_dem.FaceVector,
+                                    normals: triangulate_dem.point3_vector,
+                                    points: triangulate_dem.point3_vector,
+                                    faces: triangulate_dem.face_vector,
                                     avalanche_problems: list,
                                     colors: Optional[np.ndarray]) -> np.ndarray:
     aspects = np.asarray(triangulate_dem.compute_aspects(normals))
@@ -85,7 +85,7 @@ def color_field_by_avalanche_danger(*,
     return colors
 
 
-def color_field_by_aspect(*, normals: triangulate_dem.PointVector)->np.ndarray:
+def color_field_by_aspect(*, normals: triangulate_dem.point3_vector)->np.ndarray:
 
     palette = sns.color_palette("pastel", n_colors=len(varsom_angles))
     aspects = np.asanyarray(triangulate_dem.compute_aspects(normals))
