@@ -8,6 +8,7 @@ import argparse
 from rasputin.tin_repository import TinRepository
 from rasputin import triangulate_dem
 from rasputin.reader import RasterRepository
+from rasputin.globcov_repository import GlobCovRepository, GeoPoints, LandCoverType
 from rasputin.triangulate_dem import lindstrom_turk_by_ratio
 from rasputin.geometry import Geometry, write_scene, avalanche_material, lake_material, terrain_material
 from rasputin import avalanche
@@ -134,22 +135,42 @@ Then visit http://localhost:8080
 
 def visualize_tin():
     arg_parser = argparse.ArgumentParser()
-    arg_parser.add_argument("uid", type=str, help="Tin repository uid for mesh to visualize")
+    arg_parser.add_argument("uid", type=str, help="Tin repository uid for mesh to visualize.")
+    arg_parser.add_argument("-land_types", action="store_true", help="Add terrain types to triangulation.")
     arg_parser.add_argument("-output", type=str, default="web_viz", help="Directory for web content.")
     if "RASPUTIN_DATA_DIR" in os.environ:
         tin_archive = Path(os.environ["RASPUTIN_DATA_DIR"]) / "tin_archive"
+        lt_archive = Path(os.environ["RASPUTIN_DATA_DIR"]) / "globcov"
     else:
         tin_archive = Path(".") / "tin_archive"
+        lt_archive = Path(".") / "globcov"
         print(f"WARNING: No data directory specified, assuming tin_archive {tin_archive.absolute()}")
     res = arg_parser.parse_args(sys.argv[1:])
-    points, faces = TinRepository(path=tin_archive).read(uid=res.uid)
+    tin_repo = TinRepository(path=tin_archive)
+    info = tin_repo.info(uid=res.uid)
+    points, faces = tin_repo.read(uid=res.uid)
     lakes, terrain = triangulate_dem.extract_lakes(points, faces)
     geometries = []
     lake_geometry = Geometry(points=points, faces=lakes, base_color=(0, 0, 1), material=lake_material)
-    terrain_geometry = Geometry(points=points, faces=terrain, base_color=(1, 1, 1), material=terrain_material)
+    if res.land_types:
+        lc_repo = GlobCovRepository(path=lt_archive)
+        cell_centers = triangulate_dem.cell_centers(points, terrain)
+        geo_cell_centers = GeoPoints(xy=np.asarray(cell_centers)[:, :2], projection=pyproj.Proj(info["projection"]))
+        terrain_cover = lc_repo.read_types(land_types=None, geo_points=geo_cell_centers)
+        terrains = {lt.value: triangulate_dem.face_vector() for lt in LandCoverType}
+        for i, cell in enumerate(terrain_cover):
+            terrains[cell].append(terrain[i])
+        for t in terrains:
+            if not terrains[t]:
+                continue
+            geometries.append(Geometry(points=points,
+                                       faces=terrains[t],
+                                       base_color=[c/255 for c in LandCoverType.color(land_cover_type=LandCoverType(t))],
+                                       material=terrain_material))
+    else:
+        terrain_geometry = Geometry(points=points, faces=terrain, base_color=(1, 1, 1), material=terrain_material)
+        geometries.append(terrain_geometry)
     geometries.append(lake_geometry)
-
-    geometries.append(terrain_geometry)
 
     output = Path(res.output).absolute()
     write_scene(geometries=geometries, output=output)

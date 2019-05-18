@@ -1,4 +1,4 @@
-from typing import Dict, List, Optional
+from typing import List, Optional, Tuple
 from pathlib import Path
 from enum import Enum
 import numpy as np
@@ -43,7 +43,7 @@ class LandCoverType(Enum):
     no_data = 230
 
     @staticmethod
-    def describe(*, type="LandCoverType") -> str:
+    def describe(*, land_cover_type="LandCoverType") -> str:
         description = {
             LandCoverType.crop_type_1: "Post-flooding or irrigated croplands (or aquatic)",
             LandCoverType.crop_type_2: "Rainfed croplands",
@@ -68,7 +68,37 @@ class LandCoverType(Enum):
             LandCoverType.water: "Water bodies",
             LandCoverType.snow_and_ice: "Permanent snow and ice",
             LandCoverType.no_data: "No data (burnt areas, clouds,…)"}
-        return description[type]
+        return description[land_cover_type]
+
+    @staticmethod
+    def color(*, land_cover_type: "LandCoverType") -> Tuple[int, int, int]:
+        """Default colors for types in dataset."""
+        colors = {
+            LandCoverType.crop_type_1: (170, 240, 240),
+            LandCoverType.crop_type_2: (255, 255, 100),
+            LandCoverType.crop_type_3: (220, 240, 100),
+            LandCoverType.crop_type_4: (205, 205, 102),
+            LandCoverType.forest_type_1: (0, 100, 0),
+            LandCoverType.forest_type_2: (0, 160, 0),
+            LandCoverType.forest_type_3: (170, 200, 0),
+            LandCoverType.forest_type_4: (0, 60, 0),
+            LandCoverType.forest_type_5: (40, 100, 0),
+            LandCoverType.forest_type_6: (120, 130, 0),
+            LandCoverType.shrub_type_1: (140, 160, 0),
+            LandCoverType.shrub_type_2: (190, 150, 0),
+            LandCoverType.shrub_type_3: (150, 100, 0),
+            LandCoverType.vegetation_type_1: (255, 180, 50),
+            LandCoverType.vegetation_type_2: (255, 235, 175),
+            LandCoverType.flood_type_1: (0, 120, 90),
+            LandCoverType.flood_type_2: (0, 150, 120),
+            LandCoverType.flood_type_3: (0, 220, 130),
+            LandCoverType.artificial: (195, 20, 0),
+            LandCoverType.bare: (255, 245, 215),
+            LandCoverType.water: (0, 70, 200),
+            LandCoverType.snow_and_ice: (255, 255, 255),
+            LandCoverType.no_data: (0, 0, 0)
+        }
+        return colors[land_cover_type]
 
 
 class GlobCovRepository:

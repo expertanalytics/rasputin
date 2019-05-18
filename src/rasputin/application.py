@@ -70,7 +70,7 @@ def store_tin():
                                                                  input_coordinate_system=input_coordinate_system,
                                                                  target_coordinate_system=target_coordinate_system)
     points, faces = lindstrom_turk_by_ratio(raster_coords, res.ratio)
-    tr.save(uid=res.uid, points=points, faces=faces)
+    tr.save(uid=res.uid, points=points, faces=faces, projection=target_coordinate_system)
     meta = tr.content[res.uid]
     print(f"Successfully added uid='{res.uid}' to the tin archive {tin_archive.absolute()}, with meta info:")
     pprint.PrettyPrinter(indent=4).pprint(meta)

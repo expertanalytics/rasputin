@@ -17,16 +17,24 @@ class TinRepository:
         faces = data["faces"]
         return point3_vector(pts.tolist()), face_vector(faces.tolist())
 
+    def info(self, *, uid: str) -> Dict[str, Any]:
+        with (self.path / f"{uid}.meta").open("r") as meta:
+            return loads(meta.read())
+
     @property
     def content(self) -> Dict[str, Dict[str, Any]]:
         files = self.path.glob("*.npz")
         meta_info = dict()
         for f in files:
-            with f.with_suffix(".meta").open("r") as meta:
-                meta_info[f.stem] = loads(meta.read())
+            meta_info[f.stem] = self.info(uid=f.stem)
         return meta_info
 
-    def save(self, *, uid: str, points: point3_vector, faces: face_vector):
+    def save(self,
+             *,
+             uid: str,
+             points: point3_vector,
+             faces: face_vector,
+             projection: str) -> None:
         if (self.path / f"{uid}.npz").exists():
             raise RuntimeError(f"Archive already has a data set with uid {uid}.")
         if (self.path / f"{uid}.meta").exists():
@@ -35,7 +43,8 @@ class TinRepository:
         with (self.path / f"{uid}.meta").open("w") as meta:
             meta.write(dumps(dict(num_points=len(points),
                                   num_faces=len(faces),
-                                  timestamp=datetime.utcnow().timestamp())))
+                                  timestamp=datetime.utcnow().timestamp(),
+                                  projection=projection)))
 
     def delete(self, uid: str) -> None:
         if uid in self.content:
