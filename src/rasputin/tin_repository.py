@@ -3,8 +3,6 @@ import numpy as np
 from datetime import datetime
 from h5py import File
 from pathlib import Path
-<<<<<<< HEAD
-from json import loads, dumps
 from rasputin.triangulate_dem import point3_vector, face_vector
 
 
