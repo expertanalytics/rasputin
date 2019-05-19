@@ -21,6 +21,8 @@ def test_store_tin(tin):
         assert uid in tr.content
         assert tr.content[uid]["num_points"] == len(pts)
         assert tr.content[uid]["num_faces"] == len(faces)
+        assert "timestamp" in tr.content[uid]
+        assert "projection" in tr.content[uid]
 
 
 def test_store_and_load_tin(tin):
@@ -43,6 +45,5 @@ def test_store_and_delete_tin(tin):
         tr.save(points=pts, faces=faces, uid=uid)
         tr.delete(uid=uid)
         assert uid not in tr.content
-        assert not (archive / f"{uid}.npz").exists()
-        assert not (archive / f"{uid}.meta").exists()
+        assert not (archive / f"{uid}.h5").exists()
 
