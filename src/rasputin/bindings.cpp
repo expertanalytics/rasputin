@@ -81,6 +81,7 @@ PYBIND11_MODULE(triangulate_dem, m) {
         .def("compute_slopes", &rasputin::compute_slopes,"Compute slopes (i.e. angles relative to xy plane) for the all the vectors in list.")
         .def("compute_aspects", &rasputin::compute_aspects, "Compute aspects for the all the vectors in list.")
         .def("cell_centers", &rasputin::cell_centers, "Compute cell centers for triangulation.")
+        .def("consolidate", &rasputin::consolidate, "Make a stand alone consolidated tin.")
         .def("extract_avalanche_expositions", &rasputin::extract_avalanche_expositions, "Extract avalanche exposed cells.")
         .def("coordinates_to_indices", &rasputin::coordinates_to_indices, "Transform from coordinate space to index space.")
         .def("extract_uint8_buffer_values", &rasputin::extract_buffer_values<std::uint8_t>, "Extract raster data for given indices.")

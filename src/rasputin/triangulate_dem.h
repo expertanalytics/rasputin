@@ -300,7 +300,9 @@ point3_vector point_normals(const point3_vector &pts, const face_vector &faces) 
 }
 
 template <typename CB>
-std::tuple<face_vector, face_vector> partition(const point3_vector &pts, const face_vector &faces, CB criterion) {
+std::tuple<face_vector, face_vector> partition(const point3_vector &pts,
+                                               const face_vector &faces,
+                                               CB criterion) {
     face_vector part1, part2;
     for (auto face: faces) {
         if (criterion(pts[face[0]], pts[face[1]], pts[face[2]]))
@@ -388,6 +390,27 @@ std::vector<T> extract_buffer_values(const index_vector& indices, pybind11::arra
     for (auto idx: indices)
         result.emplace_back(ptr[idx[0]*N + idx[1]]);  // TODO: Implement range check?
     return result;
+}
+
+std::tuple<point3_vector, face_vector> consolidate(const point3_vector &points, const face_vector &faces){
+    face_vector new_faces;
+    point3_vector new_points;
+    new_faces.reserve(faces.size());
+    std::map<int, int> point_map;
+    int n = 0;
+    for (const auto _face: faces) {
+        face new_face;
+        int i = 0;
+        for (const auto f: _face) {
+            if (not point_map.count(f)) {
+                point_map.insert(std::make_pair(f, n++));
+                new_points.emplace_back(points[f]);
+            }
+            new_face[i++] = point_map[f];
+        }
+        new_faces.emplace_back(new_face);
+    }
+    return std::make_pair(std::move(new_points), std::move(new_faces));
 }
 }
 

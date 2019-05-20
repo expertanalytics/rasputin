@@ -136,44 +136,22 @@ Then visit http://localhost:8080
 def visualize_tin():
     arg_parser = argparse.ArgumentParser()
     arg_parser.add_argument("uid", type=str, help="Tin repository uid for mesh to visualize.")
-    arg_parser.add_argument("-land_types", action="store_true", help="Add terrain types to triangulation.")
     arg_parser.add_argument("-output", type=str, default="web_viz", help="Directory for web content.")
     if "RASPUTIN_DATA_DIR" in os.environ:
         tin_archive = Path(os.environ["RASPUTIN_DATA_DIR"]) / "tin_archive"
-        lt_archive = Path(os.environ["RASPUTIN_DATA_DIR"]) / "globcov"
     else:
         tin_archive = Path(".") / "tin_archive"
-        lt_archive = Path(".") / "globcov"
         print(f"WARNING: No data directory specified, assuming tin_archive {tin_archive.absolute()}")
     res = arg_parser.parse_args(sys.argv[1:])
     tin_repo = TinRepository(path=tin_archive)
-    info = tin_repo.info(uid=res.uid)
-    points, faces = tin_repo.read(uid=res.uid)
-    lakes, terrain = triangulate_dem.extract_lakes(points, faces)
-    geometries = []
-    lake_geometry = Geometry(points=points, faces=lakes, base_color=(0, 0, 1), material=lake_material)
-    if res.land_types:
-        lc_repo = GlobCovRepository(path=lt_archive)
-        cell_centers = triangulate_dem.cell_centers(points, terrain)
-        geo_cell_centers = GeoPoints(xy=np.asarray(cell_centers)[:, :2], projection=pyproj.Proj(info["projection"]))
-        terrain_cover = lc_repo.read_types(land_types=None, geo_points=geo_cell_centers)
-        terrains = {lt.value: triangulate_dem.face_vector() for lt in LandCoverType}
-        for i, cell in enumerate(terrain_cover):
-            terrains[cell].append(terrain[i])
-        for t in terrains:
-            if not terrains[t]:
-                continue
-            geometries.append(Geometry(points=points,
-                                       faces=terrains[t],
-                                       base_color=[c/255 for c in LandCoverType.color(land_cover_type=LandCoverType(t))],
-                                       material=terrain_material))
-    else:
-        terrain_geometry = Geometry(points=points, faces=terrain, base_color=(1, 1, 1), material=terrain_material)
-        geometries.append(terrain_geometry)
-    geometries.append(lake_geometry)
-
+    geometries = tin_repo.read(uid=res.uid)
+    for name, geom in geometries.items():
+        if name == "lake":
+            geom.material = lake_material
+        else:
+            geom.material = terrain_material
     output = Path(res.output).absolute()
-    write_scene(geometries=geometries, output=output)
+    write_scene(geometries=list(geometries.values()), output=output)
     print(f"""Successfully generated a web_gl based TIN visualizer in {output}.
 To see it, please run:
 cd {output}

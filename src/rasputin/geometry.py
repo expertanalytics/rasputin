@@ -1,4 +1,4 @@
-from typing import Tuple, List
+from typing import Tuple, List, Optional
 import io
 import shutil
 from pathlib import Path
@@ -37,22 +37,36 @@ THREE.MeshPhysicalMaterial( {
 } )
 """
 
+
 class Geometry:
 
     def __init__(self, *,
                  points: td.point3_vector,
                  faces: td.face_vector,
-                 base_color: Tuple[float, float, float],
-                 material: str):
+                 projection: str,
+                 base_color: Optional[Tuple[float, float, float]],
+                 material: Optional[str]):
         self.points = points
         self.faces = faces
-        self._base_color = base_color
+        self.projection = projection
+        if base_color is None:
+            self.base_color = (1.0, 1.0, 1.0)
+        else:
+            self.base_color = base_color
         self._surface_normals = None
         self._point_normals = None
         self._aspects = None
         self._slopes = None
         self._colors = None
-        self._material = material
+        self._material = material or terrain_material
+
+    def consolidate(self) -> "Geometry":
+        consolidated_points, consolidated_faces = td.consolidate(self.points, self.faces)
+        return Geometry(points=consolidated_points,
+                        faces=consolidated_faces,
+                        projection=self.projection,
+                        base_color=self.base_color,
+                        material=self.material)
 
     @property
     def point_normals(self) -> td.point3_vector:
@@ -81,10 +95,10 @@ class Geometry:
     @property
     def colors(self) -> np.ndarray:
         if self._colors is None:
-            self._colors = np.empty((3*len(self.faces), len(self._base_color)))
-            self._colors[:, 0] = self._base_color[0]
-            self._colors[:, 1] = self._base_color[1]
-            self._colors[:, 2] = self._base_color[2]
+            self._colors = np.empty((3*len(self.faces), len(self.base_color)))
+            self._colors[:, 0] = self.base_color[0]
+            self._colors[:, 1] = self.base_color[1]
+            self._colors[:, 2] = self.base_color[2]
         return self._colors
 
     @property
