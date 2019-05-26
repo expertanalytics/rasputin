@@ -144,13 +144,14 @@ CGAL::SimplePolygon polygon_from_numpy(py::array_t<double>& buf) {
 
 template<typename FT>
 void bind_rasterdata(py::module &m, const std::string& pyname) {
-    py::class_<rasputin::RasterData<FT>, std::shared_ptr<rasputin::RasterData<FT>>>(m, pyname.c_str(), py::buffer_protocol())
+    py::class_<rasputin::RasterData<FT>, std::unique_ptr<rasputin::RasterData<FT>>>(m, pyname.c_str(), py::buffer_protocol())
     .def(py::init([] (py::array_t<FT>& data_array, double x_min, double y_max, double delta_x, double delta_y) {
             auto buffer = data_array.request();
             int m = buffer.shape[0], n = buffer.shape[1];
 
-            return rasputin::RasterData<FT>(x_min, y_max, delta_x, delta_y, n, m, (FT*) buffer.ptr );
-        }))
+            return rasputin::RasterData<FT>(x_min, y_max, delta_x, delta_y, n, m, static_cast<FT*>(buffer.ptr) );
+        }), py::return_value_policy::take_ownership,  py::keep_alive<1, 2>(),
+            py::arg("data_array").noconvert(), py::arg("x_min"), py::arg("y_max"), py::arg("delta_x"), py::arg("delta_y"))
     .def_buffer([] (rasputin::RasterData<FT>& self) {
             return py::buffer_info(
                 self.data,
@@ -171,7 +172,7 @@ void bind_rasterdata(py::module &m, const std::string& pyname) {
     .def_property_readonly("y_min", &rasputin::RasterData<FT>::get_y_min)
     .def("__getitem__", [](rasputin::RasterData<FT>& self, std::pair<int, int> idx) {
                 auto [i, j] = idx;
-                return self.data[self.num_points_x * i, j]; })
+                return self.data[self.num_points_x * i + j]; })
     .def("get_indices", &rasputin::RasterData<FT>::get_indices)
     .def("get_interpolated_value_at_point", &rasputin::RasterData<FT>::get_interpolated_value_at_point);
 
@@ -301,6 +302,8 @@ PYBIND11_MODULE(triangulate_dem, m) {
 
     bind_rasterdata<float>(m, "RasterData_float");
     bind_rasterdata<double>(m, "RasterData_double");
+
+    py::bind_vector<std::vector<rasputin::RasterData<float>>>(m, "Rasterlist");
 
     py::bind_vector<std::vector<int>>(m, "IntVector");
     py::bind_vector<std::vector<std::vector<int>>>(m, "ShadowVector");
