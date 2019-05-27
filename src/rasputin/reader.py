@@ -1,14 +1,12 @@
-from typing import Tuple, Dict, Any, Optional, List
-from dataclasses import make_dataclass, dataclass
+from typing import Dict, Any, Optional,  Tuple
+from dataclasses import dataclass
 from enum import Enum
-from PIL import Image, TiffImagePlugin
+from PIL import Image
 from PIL.TiffImagePlugin import TiffImageFile
 from shapely import geometry
-from shapely.ops import snap
 import pyproj
 import re
 
-from itertools import islice
 import numpy as np
 from pathlib import Path
 from logging import getLogger
@@ -332,7 +330,6 @@ class Rasterdata:
 def read_raster_file(*,
                      filepath: Path,
                      polygon: Optional[Polygon] = None) -> Rasterdata:
-
     logger = getLogger()
     logger.debug(f"Reading raster file {filepath}")
     assert filepath.exists()
@@ -394,12 +391,12 @@ def read_raster_file(*,
 
 class GeoPolygon:
 
-    def __init__(self, *, polygon: geometry.Polygon, proj: pyproj.Proj):
+    def __init__(self, *, polygon: geometry.Polygon, proj: pyproj.Proj) -> None:
         self.polygon = polygon
         self.proj = proj
 
     @classmethod
-    def from_raster_file(cls, *, filepath: Path):
+    def from_raster_file(cls, *, filepath: Path) -> "GeoPolygon":
         with Image.open(filepath) as image:
             projection_str = identify_projection(image=image)
             image_bounds = get_image_bounds(image=image)
@@ -407,7 +404,7 @@ class GeoPolygon:
         return GeoPolygon(polygon=Polygon.from_bounds(*image_bounds),
                           proj=pyproj.Proj(projection_str))
 
-    def transform(self, *, target_projection: pyproj.Proj):
+    def transform(self, *, target_projection: pyproj.Proj) -> "GeoPolygon":
         old_pts = np.array(self.polygon.exterior)
         new_pts = np.array(pyproj.transform(self.proj, target_projection, *old_pts.T)).T
         return GeoPolygon(polygon=Polygon(new_pts),
@@ -416,39 +413,37 @@ class GeoPolygon:
     def intersects(self, other) -> bool:
         return self.polygon.intersection(other.polygon).area > 0
 
-    def difference(self, other):
+    def difference(self, other) -> "GeoPolygon":
         return GeoPolygon(polygon=self.polygon.difference(other.polygon),
                           proj=self.proj)
 
-    def buffer(self, value: float):
+    def buffer(self, value: float) -> "GeoPolygon":
         return GeoPolygon(polygon=self.polygon.buffer(value), proj=self.proj)
 
     @property
-    def _cpp(self):
+    def _cpp(self) -> triangulate_dem.simple_polygon:
         # Note: Shapely polygons have one vertex repeated and orientation dos not matter
         #       CGAL polygons have no vertex repeated and orientation mattters
-        from rasputin.triangulate_dem import SimplePolygon
         from shapely.geometry.polygon import orient
 
         exterior = np.asarray(orient(self.polygon).exterior)[:-1]
         interiors = [np.asarray(hole)[:-1]
                     for hole in orient(self.polygon,-1).interiors]
 
-        cgal_polygon = SimplePolygon(exterior)
+        cgal_polygon = triangulate_dem.simple_polygon(exterior)
         for interior in interiors:
             cgal_polygon = cgal_polygon.difference(interior)
-
         return cgal_polygon
 
 
-
 class RasterRepository:
-    def __init__(self, *, directory: Path):
+
+    def __init__(self, *, directory: Path) -> None:
         self.directory = directory
 
     def get_intersections(self,
-             *,
-             target_polygon: GeoPolygon):
+                          *,
+                          target_polygon: GeoPolygon):
 
         parts = []
 
@@ -465,22 +460,20 @@ class RasterRepository:
 
                 if target_polygon.polygon.area < 1e-10:
                     break
-
         return parts
 
     def read(self,
              *,
-             target_polygon: GeoPolygon):
+             target_polygon: GeoPolygon) -> Tuple[triangulate_dem.raster_list, triangulate_dem.simple_polygon]:
 
-        data = triangulate_dem.RasterList();
+        data = triangulate_dem.raster_list()
         for part in self.get_intersections(target_polygon=target_polygon):
             data.add_raster(part._cpp)
-
         cgal_polygon = target_polygon._cpp
-
         return data, cgal_polygon
 
-def read_sun_posisions(*, filepath: Path) -> triangulate_dem.ShadowVector:
+
+def read_sun_posisions(*, filepath: Path) -> triangulate_dem.shadow_vector:
     assert filepath.exists()
     with filepath.open("r") as ff:
         pass

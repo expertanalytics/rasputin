@@ -8,6 +8,7 @@ import argparse
 from rasputin.tin_repository import TinRepository
 from rasputin import triangulate_dem
 from rasputin.reader import RasterRepository
+from rasputin.globcov_repository import GlobCovRepository, GeoPoints, LandCoverType
 from rasputin.triangulate_dem import lindstrom_turk_by_ratio
 from rasputin.geometry import Geometry, write_scene, avalanche_material, lake_material, terrain_material
 from rasputin import avalanche
@@ -26,7 +27,7 @@ def web_visualize():
 
     """
     if "RASPUTIN_DATA_DIR" in os.environ:
-        data_dir = Path(os.environ["RASPUTIN_DATA_DIR"])
+        data_dir = Path(os.environ["RASPUTIN_DATA_DIR"]) / "dem_archive"
     else:
         #  data_dir = Path(os.environ["HOME"]) /"projects" / "rasputin_data" / "dem_archive"
         data_dir = Path(".") / "dem_archive"
@@ -134,7 +135,7 @@ Then visit http://localhost:8080
 
 def visualize_tin():
     arg_parser = argparse.ArgumentParser()
-    arg_parser.add_argument("uid", type=str, help="Tin repository uid for mesh to visualize")
+    arg_parser.add_argument("uid", type=str, help="Tin repository uid for mesh to visualize.")
     arg_parser.add_argument("-output", type=str, default="web_viz", help="Directory for web content.")
     if "RASPUTIN_DATA_DIR" in os.environ:
         tin_archive = Path(os.environ["RASPUTIN_DATA_DIR"]) / "tin_archive"
@@ -142,17 +143,15 @@ def visualize_tin():
         tin_archive = Path(".") / "tin_archive"
         print(f"WARNING: No data directory specified, assuming tin_archive {tin_archive.absolute()}")
     res = arg_parser.parse_args(sys.argv[1:])
-    points, faces = TinRepository(path=tin_archive).read(uid=res.uid)
-    lakes, terrain = triangulate_dem.extract_lakes(points, faces)
-    geometries = []
-    lake_geometry = Geometry(points=points, faces=lakes, base_color=(0, 0, 1), material=lake_material)
-    terrain_geometry = Geometry(points=points, faces=terrain, base_color=(1, 1, 1), material=terrain_material)
-    geometries.append(lake_geometry)
-
-    geometries.append(terrain_geometry)
-
+    tin_repo = TinRepository(path=tin_archive)
+    geometries = tin_repo.read(uid=res.uid)
+    for name, geom in geometries.items():
+        if name == "lake":
+            geom.material = lake_material
+        else:
+            geom.material = terrain_material
     output = Path(res.output).absolute()
-    write_scene(geometries=geometries, output=output)
+    write_scene(geometries=list(geometries.values()), output=output)
     print(f"""Successfully generated a web_gl based TIN visualizer in {output}.
 To see it, please run:
 cd {output}

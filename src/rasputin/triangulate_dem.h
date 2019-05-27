@@ -30,6 +30,8 @@
 #include <map>
 #include <tuple>
 #include <numeric>
+#include <pybind11/numpy.h>
+#include <cstdint>
 
 namespace CGAL {
 using K = Exact_predicates_inexact_constructions_kernel;
@@ -73,23 +75,18 @@ using point3_vector = std::vector<std::array<double, 3>>;
 using point2 = std::array<double, 2>;
 using point2_vector= std::vector<point2>;
 using face = std::array<int, 3>;
+using index = std::array<unsigned int, 2>;
 using face_vector = std::vector<face>;
+using index_vector = std::vector<index>;
+using double_vector = std::vector<double>;
+using uint8_vector = std::vector<std::uint8_t>;
 
 // Clean up below
-using Point = std::array<double, 3>;
-using Point2D = std::array<double, 2>;
-using PointList = std::vector<Point>;
-using PointList2D = std::vector<Point2D>;
-using VectorList = PointList;
-using ScalarList = std::vector<double>;
-using Vector = Point;
-using Face = std::array<int, 3>;
-using FaceList = std::vector<Face>;
 using VertexIndexMap = std::map<int, CGAL::VertexIndex>;
 using FaceDescrMap = std::map<CGAL::face_descriptor, int>;
 
-CGAL::Mesh construct_mesh(const PointList &pts,
-                          const FaceList &faces,
+CGAL::Mesh construct_mesh(const point3_vector &pts,
+                          const face_vector &faces,
                           VertexIndexMap& index_map,
                           FaceDescrMap& face_map){
     CGAL::Mesh mesh;
@@ -241,8 +238,12 @@ CGAL::DelaunayConstraints interpolate_boundary_points(const RasterData<T>& raste
 
 
 template<typename S, typename P, typename C>
-std::tuple<PointList, FaceList> make_tin(const CGAL::PointList &pts, const S &stop,
-                                         const P &placement, const C &cost) {
+std::tuple<point3_vector, face_vector> make_tin(
+        const CGAL::PointList &pts,
+        const S &stop,
+        const P &placement,
+        const C &cost) {
+
 
     CGAL::Delaunay dtin;
     for (const auto p: pts)
@@ -264,34 +265,34 @@ std::tuple<PointList, FaceList> make_tin(const CGAL::PointList &pts, const S &st
                                                                       .get_placement(placement)
     );
     std::map<CGAL::VertexIndex, int> reindex;
-    PointList o_points;
+    point3_vector o_points;
     o_points.reserve(mesh.num_vertices());
     int n = 0;
     for (auto v: mesh.vertices()) {
         const auto pt = mesh.point(v);
-        o_points.emplace_back(Vector{pt.x(), pt.y(), pt.z()});
+        o_points.emplace_back(point3{pt.x(), pt.y(), pt.z()});
         reindex.emplace(v, n++);
     }
-    FaceList faces;
+    face_vector faces;
     faces.reserve(mesh.num_faces());
     for (auto f: mesh.faces()) {
         std::array<int, 3> fl;
         size_t idx = 0;
         for (auto v: mesh.vertices_around_face(mesh.halfedge(f)))
             fl[idx++] = reindex[v];
-        faces.emplace_back(Face{fl[0], fl[1], fl[2]});
+        faces.emplace_back(face{fl[0], fl[1], fl[2]});
     }
     return std::make_pair(std::move(o_points), std::move(faces));
 };
 
-
 template<typename Pgn, typename S, typename P, typename C>
-std::tuple<PointList, FaceList> make_tin(const CGAL::PointList &pts,
-                                         const Pgn& inclusion_polygon,
-                                         const CGAL::DelaunayConstraints &constraints,
-                                         const S &stop,
-                                         const P &placement,
-                                         const C &cost) {
+std::tuple<point3_vector, face_vector> make_tin(
+        const CGAL::PointList &pts,
+        const Pgn& inclusion_polygon,
+        const CGAL::DelaunayConstraints &constraints,
+        const S &stop,
+        const P &placement,
+        const C &cost) {
 
     CGAL::ConstrainedDelaunay dtin;
     for (const auto p: pts)
@@ -328,34 +329,34 @@ std::tuple<PointList, FaceList> make_tin(const CGAL::PointList &pts,
     );
 
     std::map<CGAL::VertexIndex, int> reindex;
-    PointList o_points;
+    point3_vector o_points;
     o_points.reserve(mesh.num_vertices());
     int n = 0;
     for (auto v: mesh.vertices()) {
         const auto pt = mesh.point(v);
-        o_points.emplace_back(Vector{pt.x(), pt.y(), pt.z()});
+        o_points.emplace_back(point3{pt.x(), pt.y(), pt.z()});
         reindex.emplace(v, n++);
     }
-    FaceList faces;
+    face_vector faces;
     faces.reserve(mesh.num_faces());
     for (auto f: mesh.faces()) {
         std::array<int, 3> fl;
         size_t idx = 0;
         for (auto v: mesh.vertices_around_face(mesh.halfedge(f)))
             fl[idx++] = reindex[v];
-        faces.emplace_back(Face{fl[0], fl[1], fl[2]});
+        faces.emplace_back(face{fl[0], fl[1], fl[2]});
     }
     return std::make_pair(std::move(o_points), std::move(faces));
 };
 
 
 template<typename T, typename Pgn, typename S, typename P, typename C>
-std::tuple<PointList, FaceList> tin_from_raster(const RasterData<T>& raster,
-                                                const Pgn& boundary_polygon,
-                                                const S &stop,
-                                                const P &placement,
-                                                const C &cost) {
-
+std::tuple<point3_vector, face_vector> tin_from_raster(
+        const RasterData<T>& raster,
+        const Pgn& boundary_polygon,
+        const S &stop,
+        const P &placement,
+        const C &cost) {
 
     CGAL::PointList raster_points = raster.raster_points();
     CGAL::DelaunayConstraints boundary_points = interpolate_boundary_points(raster, boundary_polygon);
@@ -364,12 +365,12 @@ std::tuple<PointList, FaceList> tin_from_raster(const RasterData<T>& raster,
 
 
 template<typename T, typename Pgn, typename S, typename P, typename C>
-std::tuple<PointList, FaceList> tin_from_raster(const std::vector<RasterData<T>>& raster_list,
-                                                const Pgn& boundary_polygon,
-                                                const S &stop,
-                                                const P &placement,
-                                                const C &cost) {
-
+std::tuple<point3_vector, face_vector> tin_from_raster(
+        const std::vector<RasterData<T>>& raster_list,
+        const Pgn& boundary_polygon,
+        const S &stop,
+        const P &placement,
+        const C &cost) {
 
     CGAL::PointList raster_points;
     CGAL::DelaunayConstraints boundary_points;
@@ -388,19 +389,20 @@ std::tuple<PointList, FaceList> tin_from_raster(const std::vector<RasterData<T>>
 
 
 template<typename FT, typename S, typename P, typename C>
-std::tuple<PointList, FaceList> tin_from_raster(const RasterData<FT>& raster,
-                                                const S &stop,
-                                                const P &placement,
-                                                const C &cost) {
+std::tuple<point3_vector, face_vector> tin_from_raster(
+        const RasterData<FT>& raster,
+        const S &stop,
+        const P &placement,
+        const C &cost) {
 
     CGAL::PointList raster_points = raster.raster_points();
     return make_tin(raster_points, stop, placement, cost);
 }
 
 
-std::vector<int> compute_shadow(const PointList &pts,
-                                const FaceList &faces,
-                                const Vector &sun_direction) {
+std::vector<int> compute_shadow(const point3_vector &pts,
+                                const face_vector &faces,
+                                const point3 &sun_direction) {
     std::vector<int> shade;
     VertexIndexMap index_map;
     FaceDescrMap face_map;
@@ -427,9 +429,9 @@ std::vector<int> compute_shadow(const PointList &pts,
     return shade;
 };
 
-std::vector<std::vector<int>> compute_shadows(const PointList &pts,
-                                              const FaceList &faces,
-                                              const std::vector<std::pair<int, Vector>> & sun_rays) {
+std::vector<std::vector<int>> compute_shadows(const point3_vector &pts,
+                                              const face_vector &faces,
+                                              const std::vector<std::pair<int, point3>> & sun_rays) {
     std::vector<std::vector<int>>  result;
     result.reserve(sun_rays.size());
     CGAL::Mesh mesh;
@@ -473,8 +475,8 @@ std::vector<std::vector<int>> compute_shadows(const PointList &pts,
     return result;
 };
 
-VectorList orient_tin(const PointList &pts, FaceList &faces) {
-    VectorList result;
+point3_vector orient_tin(const point3_vector &pts, face_vector &faces) {
+    point3_vector result;
     result.reserve(faces.size());
     for (auto& face: faces) {
         // Compute ccw normal
@@ -493,17 +495,17 @@ VectorList orient_tin(const PointList &pts, FaceList &faces) {
         }
 
         // Store normalised and correctly oriented normal vector
-        result.push_back(Vector{n[0]/c, n[1]/c, n[2]/c});
+        result.push_back(point3{n[0]/c, n[1]/c, n[2]/c});
     }
     return result;
 };
 
-double compute_slope(const Point & normal) {
+double compute_slope(const point3 &normal) {
     return std::atan2(pow(pow(normal[0], 2) + pow(normal[1], 2), 0.5), normal[2]);
 }
 
-ScalarList compute_slopes(const VectorList &normals) {
-    ScalarList result;
+double_vector compute_slopes(const point3_vector &normals) {
+    double_vector result;
     result.reserve(normals.size());
 
     for (const auto &n : normals)
@@ -512,28 +514,28 @@ ScalarList compute_slopes(const VectorList &normals) {
     return result;
 };
 
-double compute_aspect(const Point &normal) {
+double compute_aspect(const point3 &normal) {
     return std::atan2(normal[0], normal[1]);
 }
 
-ScalarList compute_aspects(const VectorList &normals) {
-    ScalarList result;
+double_vector compute_aspects(const point3_vector &normals) {
+    double_vector result;
     result.reserve(normals.size());
     for (const auto &n: normals)
         result.emplace_back(compute_aspect(n));
     return result;
 };
 
-Vector normal(const Point p0, const Point p1, const Point p2) {
+point3 normal(const point3 &p0, const point3 &p1, const point3 &p2) {
         const arma::vec::fixed<3> v0 = {p1[0] - p0[0], p1[1] - p0[1], p1[2] - p0[2]};
         const arma::vec::fixed<3> v1 = {p2[0] - p0[0], p2[1] - p0[1], p2[2] - p0[2]};
         arma::vec::fixed<3> n = arma::cross(v0, v1);
         n /= arma::norm(n);
-        return n[2] >= 0.0 ? Vector{n[0], n[1], n[2]} : Vector{-n[0], -n[1], -n[2]};
+        return n[2] >= 0.0 ? point3{n[0], n[1], n[2]} : point3{-n[0], -n[1], -n[2]};
 }
 
-VectorList surface_normals(const PointList &pts, const FaceList &faces) {
-    VectorList result;
+point3_vector surface_normals(const point3_vector &pts, const face_vector &faces) {
+    point3_vector result;
     result.reserve(faces.size());
     for (const auto face: faces)
         result.emplace_back(normal(pts[face[0]], pts[face[1]], pts[face[2]]));
@@ -546,8 +548,8 @@ template <typename T> void iadd(T& v, const T& o) {
     v[2] += o[2];
 }
 
-VectorList point_normals(const PointList &pts, const FaceList &faces) {
-    VectorList result(pts.size(), {0.0, 0.0, 0.0});
+point3_vector point_normals(const point3_vector &pts, const face_vector &faces) {
+    point3_vector result(pts.size(), {0.0, 0.0, 0.0});
     for (auto face: faces) {
         const auto p0 = pts[face[0]];
         const auto p1 = pts[face[1]];
@@ -556,13 +558,13 @@ VectorList point_normals(const PointList &pts, const FaceList &faces) {
         const arma::vec::fixed<3> v1 = {p2[0] - p0[0], p2[1] - p0[1], p2[2] - p0[2]};
         arma::vec::fixed<3> n = arma::cross(v0, v1);
         n /= arma::norm(n);
-        const auto v = (n[2] >= 0.0) ? Vector{n[0], n[1], n[2]} : Vector{-n[0], -n[1], -n[2]};
+        const auto v = (n[2] >= 0.0) ? point3{n[0], n[1], n[2]} : point3{-n[0], -n[1], -n[2]};
         iadd(result[face[0]], v);
         iadd(result[face[1]], v);
         iadd(result[face[2]], v);
     }
     for (int i = 0; i < result.size(); ++i) {
-        Point& p = result[i];
+        point3 &p = result[i];
         const double norm = std::sqrt(p[0]*p[0] + p[1]*p[1] + p[2]*p[2]);
         if (norm > 1.0e-16) {
             p[0] /= norm;
@@ -574,8 +576,10 @@ VectorList point_normals(const PointList &pts, const FaceList &faces) {
 }
 
 template <typename CB>
-std::tuple<FaceList, FaceList> partition(const PointList &pts, const FaceList &faces, CB criterion) {
-    FaceList part1, part2;
+std::tuple<face_vector, face_vector> partition(const point3_vector &pts,
+                                               const face_vector &faces,
+                                               CB criterion) {
+    face_vector part1, part2;
     for (auto face: faces) {
         if (criterion(pts[face[0]], pts[face[1]], pts[face[2]]))
             part1.emplace_back(face);
@@ -585,17 +589,17 @@ std::tuple<FaceList, FaceList> partition(const PointList &pts, const FaceList &f
     return std::make_pair(std::move(part1), std::move(part2));
 }
 
-std::tuple<FaceList, FaceList> extract_lakes(const PointList &pts, const FaceList &faces) {
-   return partition(pts, faces, [] (const Point &p0, const Point &p1, const Point &p2){
+std::tuple<face_vector, face_vector> extract_lakes(const point3_vector&pts, const face_vector &faces) {
+   return partition(pts, faces, [] (const point3 &p0, const point3 &p1, const point3 &p2){
        return compute_slope(normal(p0, p1, p2)) < 1.0e-2;
    });
 }
 
-std::tuple<FaceList, FaceList> extract_avalanche_expositions(const PointList &pts,
-        const FaceList &faces,
+std::tuple<face_vector, face_vector> extract_avalanche_expositions(const point3_vector &pts,
+        const face_vector &faces,
         const point2_vector &exposed_intervals,
         const point2_vector &height_intervals){
-    return partition(pts, faces, [exposed_intervals, height_intervals](const Point &p0, const Point &p1, const Point &p2){
+    return partition(pts, faces, [exposed_intervals, height_intervals](const point3 &p0, const point3 &p1, const point3 &p2){
         const auto max_height = std::max(p0[2], std::max(p1[2], p2[2]));
         const auto min_height = std::min(p0[2], std::min(p1[2], p2[2]));
         bool inside = false;
@@ -619,6 +623,70 @@ std::tuple<FaceList, FaceList> extract_avalanche_expositions(const PointList &pt
         }
         return false;
     });
+}
+
+point3_vector cell_centers(const point3_vector& points, const face_vector & faces) {
+    point3_vector result;
+    result.reserve(faces.size());
+    for (auto f: faces) {
+        auto p0 = points[f[0]];
+        auto p1 = points[f[1]];
+        auto p2 = points[f[2]];
+        auto x = (p0[0] + p1[0] + p2[0])/3.0;
+        auto y = (p0[1] + p1[1] + p2[1])/3.0;
+        auto z = (p0[2] + p1[2] + p2[2])/3.0;
+        result.emplace_back(point3{x, y, z});
+    }
+    return result;
+}
+
+index_vector coordinates_to_indices(double x0,
+        double y1,
+        double dx,
+        double dy,
+        unsigned int M,
+        unsigned int N,
+        point2_vector pts) {
+
+    index_vector indices;
+    indices.reserve(pts.size());
+    for (auto pt: pts)
+        indices.emplace_back(std::array<unsigned int, 2>{(unsigned int)((pt[0]-x0)/dx), (unsigned int)((y1 - pt[1])/dy)});
+    return indices;
+}
+
+template <typename T>
+std::vector<T> extract_buffer_values(const index_vector& indices, pybind11::array_t<T>& array) {
+    std::vector<T> result;
+    result.reserve(indices.size());
+    auto buffer = array.request();
+    unsigned long M = (unsigned long)buffer.shape[0];
+    unsigned long N = (unsigned long)buffer.shape[1];
+    T* ptr = (T *)buffer.ptr;
+    for (auto idx: indices)
+        result.emplace_back(ptr[idx[0]*N + idx[1]]);  // TODO: Implement range check?
+    return result;
+}
+
+std::tuple<point3_vector, face_vector> consolidate(const point3_vector &points, const face_vector &faces){
+    face_vector new_faces;
+    point3_vector new_points;
+    new_faces.reserve(faces.size());
+    std::map<int, int> point_map;
+    int n = 0;
+    for (const auto _face: faces) {
+        face new_face;
+        int i = 0;
+        for (const auto f: _face) {
+            if (not point_map.count(f)) {
+                point_map.insert(std::make_pair(f, n++));
+                new_points.emplace_back(points[f]);
+            }
+            new_face[i++] = point_map[f];
+        }
+        new_faces.emplace_back(new_face);
+    }
+    return std::make_pair(std::move(new_points), std::move(new_faces));
 }
 }
 

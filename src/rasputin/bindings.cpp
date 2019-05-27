@@ -19,10 +19,11 @@
 namespace py = pybind11;
 namespace SMS = CGAL::Surface_mesh_simplification;
 
-PYBIND11_MAKE_OPAQUE(rasputin::PointList);
-PYBIND11_MAKE_OPAQUE(rasputin::PointList2D);
-PYBIND11_MAKE_OPAQUE(rasputin::FaceList);
-PYBIND11_MAKE_OPAQUE(rasputin::ScalarList);
+PYBIND11_MAKE_OPAQUE(rasputin::point3_vector);
+PYBIND11_MAKE_OPAQUE(rasputin::point2_vector);
+PYBIND11_MAKE_OPAQUE(rasputin::face_vector);
+PYBIND11_MAKE_OPAQUE(rasputin::double_vector);
+PYBIND11_MAKE_OPAQUE(rasputin::index_vector);
 PYBIND11_MAKE_OPAQUE(CGAL::MultiPolygon);
 PYBIND11_MAKE_OPAQUE(std::vector<rasputin::RasterData<float>>);
 PYBIND11_MAKE_OPAQUE(std::vector<rasputin::RasterData<double>>);
@@ -138,7 +139,6 @@ CGAL::SimplePolygon polygon_from_numpy(py::array_t<double>& buf) {
         // Copy values
         double* p = static_cast<double*>(info.ptr);
         double* end = p + size;
-
         for (; p < end; p += 2)
             exterior.push_back(CGAL::Point2(*p, *(p+1)));
         return exterior;
@@ -220,19 +220,19 @@ void bind_tin_from_raster(py::module &m) {
 }
 
 PYBIND11_MODULE(triangulate_dem, m) {
-    py::bind_vector<rasputin::PointList>(m, "PointVector", py::buffer_protocol())
+    py::bind_vector<rasputin::point3_vector>(m, "point3_vector", py::buffer_protocol())
       .def_buffer(&vecarray_buffer<double, 3>)
       .def("from_numpy", &vecarray_from_numpy<double, 3>);
-    py::bind_vector<rasputin::PointList2D>(m, "PointVector2D", py::buffer_protocol())
+    py::bind_vector<rasputin::point2_vector>(m, "point2_vector", py::buffer_protocol())
       .def_buffer(&vecarray_buffer<double, 2>)
       .def("from_numpy", &vecarray_from_numpy<double, 2>);
-    py::bind_vector<rasputin::FaceList>(m, "FaceVector", py::buffer_protocol())
+    py::bind_vector<rasputin::face_vector>(m, "face_vector", py::buffer_protocol())
       .def_buffer(&vecarray_buffer<int, 3>)
       .def("from_numpy", &vecarray_from_numpy<int, 3>);
-    py::bind_vector<rasputin::ScalarList>(m, "ScalarVector", py::buffer_protocol())
+    py::bind_vector<rasputin::double_vector >(m, "double_vector", py::buffer_protocol())
       .def_buffer(&vector_buffer<double>);
 
-    py::class_<CGAL::SimplePolygon, std::unique_ptr<CGAL::SimplePolygon>>(m, "SimplePolygon")
+    py::class_<CGAL::SimplePolygon, std::unique_ptr<CGAL::SimplePolygon>>(m, "simple_polygon")
         .def(py::init(&polygon_from_numpy))
         .def("num_vertices", &CGAL::SimplePolygon::size)
         .def("array", [] (const CGAL::SimplePolygon& self) {
@@ -309,8 +309,8 @@ PYBIND11_MODULE(triangulate_dem, m) {
                     return self.at(idx);
                     }, py::return_value_policy::reference_internal);
 
-    bind_rasterdata<float>(m, "RasterData_float");
-    bind_rasterdata<double>(m, "RasterData_double");
+    bind_rasterdata<float>(m, "raster_data_float");
+    bind_rasterdata<double>(m, "raster_data_double");
 
     bind_tin_from_raster<rasputin::RasterData<float>>(m);
     bind_tin_from_raster<rasputin::RasterData<double>>(m);
@@ -325,7 +325,7 @@ PYBIND11_MODULE(triangulate_dem, m) {
     bind_tin_from_raster<std::vector<rasputin::RasterData<double>>, CGAL::SimplePolygon>(m);
     // bind_tin_from_raster<std::vector<rasputin::RasterData<double>>, CGAL::Polygon>(m);
 
-    py::class_<std::vector<rasputin::RasterData<float>>, std::unique_ptr<std::vector<rasputin::RasterData<float>>>> (m, "RasterList")
+    py::class_<std::vector<rasputin::RasterData<float>>, std::unique_ptr<std::vector<rasputin::RasterData<float>>>> (m, "raster_list")
         .def(py::init( [] () {std::vector<rasputin::RasterData<float>> self; return self;}))
         .def("add_raster",
             [] (std::vector<rasputin::RasterData<float>>& self, rasputin::RasterData<float> raster_data) {
@@ -336,8 +336,8 @@ PYBIND11_MODULE(triangulate_dem, m) {
                 return self.at(index);
             }, py::return_value_policy::reference_internal);
 
-    py::bind_vector<std::vector<int>>(m, "IntVector");
-    py::bind_vector<std::vector<std::vector<int>>>(m, "ShadowVector");
+    py::bind_vector<std::vector<int>>(m, "int_vector");
+    py::bind_vector<std::vector<std::vector<int>>>(m, "shadow_vector");
 
     m.def("compute_shadow", &rasputin::compute_shadow, "Compute shadows for given sun ray direction.")
      .def("compute_shadows", &rasputin::compute_shadows, "Compute shadows for a series of times and ray directions.")
@@ -347,5 +347,9 @@ PYBIND11_MODULE(triangulate_dem, m) {
      .def("extract_lakes", &rasputin::extract_lakes, "Extract lakes as separate face list.")
      .def("compute_slopes", &rasputin::compute_slopes,"Compute slopes (i.e. angles relative to xy plane) for the all the vectors in list.")
      .def("compute_aspects", &rasputin::compute_aspects, "Compute aspects for the all the vectors in list.")
-     .def("extract_avalanche_expositions", &rasputin::extract_avalanche_expositions, "Extract avalanche exposed cells.");
+     .def("extract_avalanche_expositions", &rasputin::extract_avalanche_expositions, "Extract avalanche exposed cells.")
+     .def("consolidate", &rasputin::consolidate, "Make a stand alone consolidated tin.")
+     .def("cell_centers", &rasputin::cell_centers, "Compute cell centers for triangulation.")
+     .def("coordinates_to_indices", &rasputin::coordinates_to_indices, "Transform from coordinate space to index space.")
+     .def("extract_uint8_buffer_values", &rasputin::extract_buffer_values<std::uint8_t>, "Extract raster data for given indices.");
 }
