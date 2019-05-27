@@ -2,11 +2,12 @@ import sys
 from pathlib import Path
 import argparse
 from logging import getLogger
+import numpy as np
 
 from shapely.geometry import Polygon
 
 from rasputin.writer import write
-from rasputin.reader import read_raster_file
+from rasputin.reader import read_raster_file, GeoPolygon
 from rasputin.calculate import compute_shade
 from rasputin.triangulate_dem import lindstrom_turk_by_ratio
 from rasputin.triangulate_dem import lindstrom_turk_by_size
@@ -53,17 +54,20 @@ def geo_tiff_reader():
     m, n = rasterdata.array.shape
     logger.debug(f"Original: {m * n}")
     logger.critical(rasterdata.info)
+
+    geo_polygon = GeoPolygon(polygon=polygon, proj=None)
+
     if res.ratio:
         if polygon:
             pts, faces = lindstrom_turk_by_ratio(rasterdata._cpp,
-                                                 PointVector2D.from_numpy(polygon.exterior),
+                                                 geo_polygon._cpp,
                                                  res.ratio)
         else:
             pts, faces = lindstrom_turk_by_ratio(rasterdata._cpp, res.ratio)
     else:
         if polygon:
             pts, faces = lindstrom_turk_by_size(rasterdata._cpp,
-                                                PointVector2D.from_numpy(polygon.exterior),
+                                                geo_polygon._cpp,
                                                 res.size)
         else:
             pts, faces = lindstrom_turk_by_size(rasterdata._cpp, res.size)
