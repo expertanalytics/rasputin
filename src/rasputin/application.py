@@ -4,8 +4,9 @@ from pathlib import Path
 import numpy as np
 import pprint
 import pyproj
+from shapely.geometry import Polygon
 import argparse
-from rasputin.reader import RasterRepository
+from rasputin.reader import RasterRepository, GeoPolygon
 from rasputin.tin_repository import TinRepository
 from rasputin.triangulate_dem import lindstrom_turk_by_ratio, extract_lakes, cell_centers, face_vector
 from rasputin.geometry import Geometry, write_scene, lake_material, terrain_material
@@ -45,10 +46,12 @@ def store_tin():
         raise RuntimeError(f"{tin_archive} exists and is not a directory, giving up.")
 
     arg_parser = argparse.ArgumentParser()
-    arg_parser.add_argument("-lat", type=float, default=60.898468, help="Latitude of center coordinate")
-    arg_parser.add_argument("-lon", type=float, default=8.530918, help="Longitude of center coordinate")
-    arg_parser.add_argument("-dx", type=float, default=5000, help="Distance in meters")
-    arg_parser.add_argument("-dy", type=float, default=5000, help="Distance in meters")
+    #arg_parser.add_argument("-lat", type=float, default=60.898468, help="Latitude of center coordinate")
+    #arg_parser.add_argument("-lon", type=float, default=8.530918, help="Longitude of center coordinate")
+    arg_parser.add_argument("-x", nargs="+", type=float, help="x-coordinates of polygon", default=None)
+    arg_parser.add_argument("-y", nargs="+", type=float, help="y-coordinates of polygon", default=None)
+    #arg_parser.add_argument("-dx", type=float, default=5000, help="Distance in meters")
+    #arg_parser.add_argument("-dy", type=float, default=5000, help="Distance in meters")
     arg_parser.add_argument("-ratio", type=float, default=0.4, help="Mesh coarsening factor in [0, 1]")
     arg_parser.add_argument("-override", action="store_true", help="Replace existing archive entry")
     arg_parser.add_argument("-land-type-partition", action="store_true", help="Partition mesh my land type")
@@ -61,22 +64,32 @@ def store_tin():
             raise RuntimeError(f"Tin archive {tin_archive.absolute()} already contains uid {res.uid}.")
         else:
             tr.delete(res.uid)
-    # Define area of interest
-    x0 = res.lon
-    y0 = res.lat
-    dx = res.dx
-    dy = res.dy
 
+    # Determine region of interest
+    if not res.x or not res.y:
+        raise RuntimeError("A constraining polygon is needed")
+
+    # Define area of interest
+    x_coords = res.x
+    y_coords = res.y
+
+    # TODO: Fix!
     input_coordinate_system = pyproj.Proj(init="EPSG:4326").definition_string()
     target_coordinate_system = pyproj.Proj(init="EPSG:32633").definition_string()
 
-    raster_coords = RasterRepository(directory=dem_archive).read(x=x0,
-                                                                 y=y0,
-                                                                 dx=dx,
-                                                                 dy=dy,
-                                                                 input_coordinate_system=input_coordinate_system,
-                                                                 target_coordinate_system=target_coordinate_system)
-    points, faces = lindstrom_turk_by_ratio(raster_coords, res.ratio)
+    if 3 <= len(x_coords) == len(y_coords):
+        x_coords, y_coords = pyproj.transform(input_coordinate_system, target_coordinate_system, x_coords, y_coords)
+        polygon = Polygon((x, y) for (x, y) in zip(x_coords, y_coords))
+    else:
+        raise ValueError("x and y coordinates must have equal length greater or equal to 3")
+
+
+    geo_polygon = GeoPolygon(polygon=polygon, proj=target_coordinate_system)
+
+    raster_data_list, cpp_polygon = RasterRepository(directory=dem_archive).read(domain=geo_polygon)
+    points, faces = lindstrom_turk_by_ratio(raster_data_list,
+                                            cpp_polygon,
+                                            res.ratio)
     if not res.land_type_partition:
         tr.save(uid=res.uid, geometries={"terrain": Geometry(points=points,
                                                              faces=faces, projection=target_coordinate_system,

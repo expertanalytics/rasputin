@@ -2,7 +2,6 @@ import sys
 from pathlib import Path
 import argparse
 from logging import getLogger
-import numpy as np
 
 from shapely.geometry import Polygon
 
@@ -11,8 +10,7 @@ from rasputin.reader import read_raster_file, GeoPolygon
 from rasputin.calculate import compute_shade
 from rasputin.triangulate_dem import lindstrom_turk_by_ratio
 from rasputin.triangulate_dem import lindstrom_turk_by_size
-from rasputin.triangulate_dem import surface_normals, orient_tin, compute_slopes
-from rasputin.triangulate_dem import PointVector2D
+from rasputin.triangulate_dem import orient_tin, compute_slopes
 
 
 def geo_tiff_reader():

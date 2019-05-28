@@ -322,7 +322,7 @@ class Rasterdata:
 
     @property
     def _cpp(self):
-        return triangulate_dem.RasterData_float(self.array,
+        return triangulate_dem.raster_data_float(self.array,
                                                 self.x_min, self.y_max,
                                                 self.delta_x, self.delta_y)
 
@@ -464,12 +464,12 @@ class RasterRepository:
 
     def read(self,
              *,
-             target_polygon: GeoPolygon) -> Tuple[triangulate_dem.raster_list, triangulate_dem.simple_polygon]:
+             domain: GeoPolygon) -> Tuple[triangulate_dem.raster_list, triangulate_dem.simple_polygon]:
 
         data = triangulate_dem.raster_list()
-        for part in self.get_intersections(target_polygon=target_polygon):
+        for part in self.get_intersections(target_polygon=domain):
             data.add_raster(part._cpp)
-        cgal_polygon = target_polygon._cpp
+        cgal_polygon = domain._cpp
         return data, cgal_polygon
 
 

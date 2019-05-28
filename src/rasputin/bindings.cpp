@@ -229,6 +229,9 @@ PYBIND11_MODULE(triangulate_dem, m) {
     py::bind_vector<rasputin::face_vector>(m, "face_vector", py::buffer_protocol())
       .def_buffer(&vecarray_buffer<int, 3>)
       .def("from_numpy", &vecarray_from_numpy<int, 3>);
+    py::bind_vector<rasputin::index_vector>(m, "index_vector", py::buffer_protocol())
+      .def_buffer(&vecarray_buffer<unsigned int, 2>)
+      .def("from_numpy", &vecarray_from_numpy<unsigned int, 2>);
     py::bind_vector<rasputin::double_vector >(m, "double_vector", py::buffer_protocol())
       .def_buffer(&vector_buffer<double>);
 
