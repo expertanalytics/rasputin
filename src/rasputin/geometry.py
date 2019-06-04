@@ -2,6 +2,7 @@ from typing import Tuple, List, Optional
 import io
 import shutil
 from pathlib import Path
+from pyproj import Proj
 import numpy as np
 from pkg_resources import resource_filename
 from rasputin import triangulate_dem as td
@@ -157,4 +158,11 @@ def write_scene(*, geometries: List[Geometry], output: Path):
         tf.write("const data = {geometries};\n")
 
 
-    pass
+class GeoPoints:
+
+    def __init__(self, *, xy: np.ndarray, projection: Proj) -> None:
+        self.xy = xy
+        assert len(self.xy.shape) == 2 and self.xy.shape[-1] == 2
+        self.projection = projection
+
+

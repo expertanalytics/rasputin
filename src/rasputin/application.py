@@ -9,9 +9,13 @@ import argparse
 from rasputin.reader import RasterRepository, GeoPolygon
 from rasputin.tin_repository import TinRepository
 from rasputin.triangulate_dem import lindstrom_turk_by_ratio, extract_lakes, cell_centers, face_vector
-from rasputin.geometry import Geometry, write_scene, lake_material, terrain_material
-from rasputin.globcov_repository import GlobCovRepository, GeoPoints, LandCoverType
+from rasputin.geometry import Geometry, write_scene, lake_material, terrain_material, GeoPoints
 
+#from rasputin.globcov_repository import GlobCovRepository, LandCoverType
+from rasputin import gml_repository
+
+# TODO: Fix hack
+LandCoverType = gml_repository.LandCoverType
 
 def store_tin():
     """
@@ -28,11 +32,13 @@ def store_tin():
         dem_archive = Path(os.environ["RASPUTIN_DATA_DIR"]) / "dem_archive"
         tin_archive = Path(os.environ["RASPUTIN_DATA_DIR"]) / "tin_archive"
         lt_archive = Path(os.environ["RASPUTIN_DATA_DIR"]) / "globcov"
+        corine_archive = Path(os.environ["RASPUTIN_DATA_DIR"]) / "corine"
     else:
         #  data_dir = Path(os.environ["HOME"]) /"projects" / "rasputin_data" / "dem_archive"
         dem_archive = Path(".") / "dem_archive"
         tin_archive = Path(".") / "tin_archive"
         lt_archive = Path(".") / "globcov"
+        corine_archive = Path(".") / "corine"
         print(f"WARNING: No data directory specified, assuming dem_archive {dem_archive.absolute()}")
         print(f"WARNING: No data directory specified, assuming tin_archive {tin_archive.absolute()}")
         print(f"WARNING: No data directory specified, assuming land_type_archive {lt_archive.absolute()}")
@@ -97,19 +103,28 @@ def store_tin():
                                                              material=None)})
     else:
         geometries = {}
-        lakes, terrain = extract_lakes(points, faces)
-        geometries["lake"] = Geometry(points=points,
-                                      faces=lakes,
-                                      base_color=(0, 0, 1),
-                                      material=lake_material,
-                                      projection=target_coordinate_system).consolidate()
-        lc_repo = GlobCovRepository(path=lt_archive)
+        #lakes, terrain = extract_lakes(points, faces)
+        terrain = faces
+        #geometries["lake"] = Geometry(points=points,
+        #                              faces=lakes,
+        #                              base_color=(0, 0, 1),
+        #                              material=lake_material,
+        #                              projection=target_coordinate_system).consolidate()
+        #lc_repo = GlobCovRepository(path=lt_archive)
+        corine_repo = gml_repository.GMLRepository(path=corine_archive)
         tin_cell_centers = cell_centers(points, terrain)
         geo_cell_centers = GeoPoints(xy=np.asarray(tin_cell_centers)[:, :2],
                                      projection=pyproj.Proj(target_coordinate_system))
-        terrain_cover = lc_repo.read_types(land_types=None, geo_points=geo_cell_centers)
+        #terrain_cover = lc_repo.read_types(land_types=None, geo_points=geo_cell_centers)
+        terrain_cover = corine_repo.read_types(land_types=None,
+                                               geo_points=geo_cell_centers,
+                                               domain=geo_polygon.polygon)
         terrains = {lt.value: face_vector() for lt in LandCoverType}
+        print(len(terrain_cover))
+
         for i, cell in enumerate(terrain_cover):
+            if cell not in terrains:
+                print(i, cell)
             terrains[cell].append(terrain[i])
         for t in terrains:
             if not terrains[t]:

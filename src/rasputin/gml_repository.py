@@ -1,9 +1,12 @@
-from typing import Dict, List, Tuple
+from typing import Dict, List, Tuple, Optional
 from enum import Enum
 from pathlib import Path
+from pyproj import transform
 import numpy as np
 from lxml import etree
-from shapely.geometry import Polygon
+from shapely.geometry import Polygon, Point
+from rasputin.geometry import GeoPoints
+from pyproj import Proj
 
 class LandCoverType(Enum):
     # Artificial
@@ -116,6 +119,7 @@ class GMLRepository:
         assert len(files) == 1
         self.fn = files[0]
         self.parser = etree.XMLParser(encoding="utf-8", recover=True, huge_tree=True)
+        self.source_proj = None
 
     def _parse_polygon(self, polygon: etree._Element, nsmap: Dict[str, str]) -> Polygon:
         gml = f"{{{nsmap['gml']}}}"
@@ -129,9 +133,15 @@ class GMLRepository:
             holes.append(np.fromiter(citer, dtype='d').reshape(-1, 2))
         return Polygon(shell=shell, holes=holes)
 
+    def _assign_source_proj(self, root: etree._Element) -> str:
+        gml = f"{{{root.nsmap['gml']}}}"
+        elm = next(root.iter(f"{gml}featureMember"))
+        self.source_proj = Proj(next(elm.iter(f"{gml}Polygon")).attrib["srsName"])
+
     def read(self, domain: Polygon) -> Dict[LandCoverType, List[Polygon]]:
         tree = etree.parse(str(self.fn), self.parser)
         root = tree.getroot()
+        self._assign_source_proj(root)
         assert "gml" in root.nsmap, "Not a GML file!"
         assert "ogr" in root.nsmap, "Can not find land cover types!"
         gml = f"{{{root.nsmap['gml']}}}"
@@ -146,4 +156,33 @@ class GMLRepository:
                 result[code].append(polygon.intersection(domain))
         return result
 
+    def read_types(self,
+                   *,
+                   land_types: Optional[List[LandCoverType]],
+                   geo_points: GeoPoints,
+                   domain: Polygon) -> np.ndarray:
+        tree = etree.parse(str(self.fn), self.parser)
+        root = tree.getroot()
+        self._assign_source_proj(root)
+        target_proj = geo_points.projection
+        if target_proj != self.source_proj:
+            xy = np.dstack(transform(target_proj, self.source_proj, geo_points.xy[:, 0], geo_points.xy[:, 1]))[0]
+        else:
+            xy = geo_points.xy
+
+        land_cover_types = self.read(domain.buffer(10).convex_hull)
+
+        # TODO: Move to C++ for speed!
+        faces = np.zeros(len(xy), dtype="int")
+        for i, pt in enumerate(xy):
+            found = False
+            for key, p_list in land_cover_types.items():
+                for p in p_list:
+                    if p.intersects(Point(pt)):
+                        faces[i] = key.value
+                        found = True
+                        break
+                if found:
+                    break
+        return faces
 

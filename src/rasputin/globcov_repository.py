@@ -6,15 +6,9 @@ from pyproj import Proj, transform
 from PIL import Image
 from rasputin.reader import extract_geo_keys, GeoKeysInterpreter, GeoTiffTags
 import rasputin.triangulate_dem as td
+from rasputin.geometry import GeoPoints
 
 Image.MAX_IMAGE_PIXELS = None
-
-class GeoPoints:
-
-    def __init__(self, *, xy: np.ndarray, projection: Proj) -> None:
-        self.xy = xy
-        assert self.xy.shape[-1] == 2
-        self.projection = projection
 
 
 class LandCoverType(Enum):
@@ -157,6 +151,4 @@ class GlobCovRepository:
         func = np.vectorize(lambda t: t not in lcts)
         all_land_types[func(all_land_types)] = 0
         return all_land_types
-
-
 
