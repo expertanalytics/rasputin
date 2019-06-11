@@ -418,8 +418,8 @@ std::tuple<point3_vector, face_vector> make_tin(
 
 template<typename Pgn>
 Mesh make_mesh(const CGAL::PointList &pts,
-                                          const Pgn& inclusion_polygon,
-                                          const CGAL::DelaunayConstraints &constraints) {
+               const Pgn& inclusion_polygon,
+               const CGAL::DelaunayConstraints &constraints) {
 
     CGAL::ConstrainedDelaunay dtin;
     for (const auto p: pts)
@@ -468,6 +468,31 @@ Mesh make_mesh(const CGAL::PointList &pts,
 };
 
 
+Mesh make_mesh(const CGAL::PointList &pts) {
+
+    CGAL::ConstrainedDelaunay dtin;
+    for (const auto p: pts)
+        dtin.insert(p);
+
+    CGAL::PointVertexMap pvm;
+    CGAL::Mesh mesh;
+
+    for (auto v = dtin.finite_vertices_begin(); v != dtin.finite_vertices_end(); ++v) {
+        CGAL::Point2 pt(v->point().x(), v->point().y());
+        pvm.emplace(std::make_pair(v->point(), mesh.add_vertex(v->point())));
+    }
+
+    for (auto f = dtin.finite_faces_begin(); f != dtin.finite_faces_end(); ++f) {
+        CGAL::Point u = f->vertex(0)->point();
+        CGAL::Point v = f->vertex(1)->point();
+        CGAL::Point w = f->vertex(2)->point();
+        mesh.add_face(pvm[u], pvm[v], pvm[w]);
+    }
+    pvm.clear();
+
+    return Mesh(mesh);
+};
+
 template<typename T, typename Pgn, typename S, typename P, typename C>
 std::tuple<point3_vector, face_vector> tin_from_raster(
         const RasterData<T>& raster,
@@ -508,7 +533,7 @@ std::tuple<point3_vector, face_vector> tin_from_raster(
 
 template<typename T, typename Pgn>
 Mesh mesh_from_raster(const std::vector<RasterData<T>>& raster_list,
-                                                const Pgn& boundary_polygon) {
+                      const Pgn& boundary_polygon) {
     CGAL::PointList raster_points;
     CGAL::DelaunayConstraints boundary_points;
     for (auto raster : raster_list) {
@@ -523,6 +548,36 @@ Mesh mesh_from_raster(const std::vector<RasterData<T>>& raster_list,
     }
     return make_mesh(raster_points, boundary_polygon, boundary_points);
 }
+
+
+template<typename T>
+Mesh mesh_from_raster(const std::vector<RasterData<T>>& raster_list) {
+    CGAL::PointList raster_points;
+    for (auto raster : raster_list) {
+        CGAL::PointList new_points = raster.raster_points();
+        raster_points.insert(raster_points.end(),
+                             std::make_move_iterator(new_points.begin()),
+                             std::make_move_iterator(new_points.end()));
+    }
+    return make_mesh(raster_points);
+}
+
+
+template<typename T, typename Pgn>
+Mesh mesh_from_raster(const RasterData<T>& raster,
+                      const Pgn& boundary_polygon) {
+    CGAL::PointList raster_points = raster.raster_points();
+    CGAL::DelaunayConstraints boundary_points = interpolate_boundary_points(raster, boundary_polygon);
+
+    return make_mesh(raster_points, boundary_polygon, boundary_points);
+}
+
+
+template<typename T>
+Mesh mesh_from_raster(const RasterData<T>& raster) {
+    return make_mesh(raster.raster_points());
+}
+
 
 template<typename FT, typename S, typename P, typename C>
 std::tuple<point3_vector, face_vector> tin_from_raster(

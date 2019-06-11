@@ -219,6 +219,18 @@ void bind_tin_from_raster(py::module &m) {
             "Construct a TIN based on the points provided.\n\nThe LindstromTurk cost and placement strategy is used, and simplification process stops when the number of undirected edges drops below the ratio threshold.");
 }
 
+template<typename R, typename P>
+void bind_make_mesh(py::module &m) {
+        m.def("make_mesh",
+            [] (const R& raster_data, const P polygon) {
+                return rasputin::mesh_from_raster(raster_data, polygon);
+            })
+        .def("make_mesh",
+            [] (const R& raster_data) {
+                return rasputin::mesh_from_raster(raster_data);
+            });
+}
+
 PYBIND11_MODULE(triangulate_dem, m) {
     py::bind_vector<rasputin::point3_vector>(m, "point3_vector", py::buffer_protocol())
       .def_buffer(&vecarray_buffer<double, 3>)
@@ -319,6 +331,11 @@ PYBIND11_MODULE(triangulate_dem, m) {
     bind_tin_from_raster<rasputin::RasterData<double>>(m);
     bind_tin_from_raster<rasputin::RasterData<float>, CGAL::SimplePolygon>(m);
 
+    bind_make_mesh<std::vector<rasputin::RasterData<float>>, CGAL::SimplePolygon>(m);
+    bind_make_mesh<std::vector<rasputin::RasterData<double>>, CGAL::SimplePolygon>(m);
+    bind_make_mesh<rasputin::RasterData<float>, CGAL::SimplePolygon>(m);
+    bind_make_mesh<rasputin::RasterData<double>, CGAL::SimplePolygon>(m);
+
     // Polygons with hole not yet supported
     // bind_tin_from_raster<rasputin::RasterData<float>, CGAL::Polygon>(m);
     bind_tin_from_raster<rasputin::RasterData<double>, CGAL::SimplePolygon>(m);
@@ -349,16 +366,6 @@ PYBIND11_MODULE(triangulate_dem, m) {
 
         .def_property_readonly("points", &rasputin::Mesh::get_points, py::return_value_policy::reference_internal)
         .def_property_readonly("faces", &rasputin::Mesh::get_faces, py::return_value_policy::reference_internal);
-
-        /* m.def("make_mesh", &rasputin::mesh_from_raster<std::vector<rasputin::RasterData<float>>>); */
-        /* m.def("make_mesh", */
-        /*     [] (rasputin::RasterData<float> raster_data, CGAL::SimplePolygon polygon) { */
-        /*         return rasputin::mesh_from_raster(raster_data, polygon); */
-        /*     }) */
-        m.def("make_mesh",
-            [] (std::vector<rasputin::RasterData<float>> raster_data, CGAL::SimplePolygon polygon) {
-                return rasputin::mesh_from_raster(raster_data, polygon);
-            });
 
     py::class_<std::vector<rasputin::RasterData<float>>, std::unique_ptr<std::vector<rasputin::RasterData<float>>>> (m, "raster_list")
         .def(py::init( [] () {std::vector<rasputin::RasterData<float>> self; return self;}))
