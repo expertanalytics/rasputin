@@ -303,119 +303,6 @@ CGAL::DelaunayConstraints interpolate_boundary_points(const RasterData<T>& raste
 }
 
 
-template<typename S, typename P, typename C>
-std::tuple<point3_vector, face_vector> make_tin(
-        const CGAL::PointList &pts,
-        const S &stop,
-        const P &placement,
-        const C &cost) {
-
-
-    CGAL::Delaunay dtin;
-    for (const auto p: pts)
-        dtin.insert(p);
-
-    CGAL::PointVertexMap pvm;
-    CGAL::Mesh mesh;
-    for (auto v = dtin.finite_vertices_begin(); v != dtin.finite_vertices_end(); ++v)
-        pvm.emplace(std::make_pair(v->point(), mesh.add_vertex(v->point())));
-
-    for (auto f = dtin.finite_faces_begin(); f != dtin.finite_faces_end(); ++f)
-        mesh.add_face(pvm[f->vertex(0)->point()],
-                      pvm[f->vertex(1)->point()],
-                      pvm[f->vertex(2)->point()]);
-    pvm.clear();
-    CGAL::Surface_mesh_simplification::edge_collapse(mesh,
-                                                     stop,
-                                                     CGAL::parameters::get_cost(cost)
-                                                                      .get_placement(placement)
-    );
-    std::map<CGAL::VertexIndex, int> reindex;
-    point3_vector o_points;
-    o_points.reserve(mesh.num_vertices());
-    int n = 0;
-    for (auto v: mesh.vertices()) {
-        const auto pt = mesh.point(v);
-        o_points.emplace_back(point3{pt.x(), pt.y(), pt.z()});
-        reindex.emplace(v, n++);
-    }
-    face_vector faces;
-    faces.reserve(mesh.num_faces());
-    for (auto f: mesh.faces()) {
-        std::array<int, 3> fl;
-        size_t idx = 0;
-        for (auto v: mesh.vertices_around_face(mesh.halfedge(f)))
-            fl[idx++] = reindex[v];
-        faces.emplace_back(face{fl[0], fl[1], fl[2]});
-    }
-    return std::make_pair(std::move(o_points), std::move(faces));
-};
-
-template<typename Pgn, typename S, typename P, typename C>
-std::tuple<point3_vector, face_vector> make_tin(
-        const CGAL::PointList &pts,
-        const Pgn& inclusion_polygon,
-        const CGAL::DelaunayConstraints &constraints,
-        const S &stop,
-        const P &placement,
-        const C &cost) {
-
-    CGAL::ConstrainedDelaunay dtin;
-    for (const auto p: pts)
-        dtin.insert(p);
-
-    for (auto point_sequence: constraints)
-        dtin.insert_constraint(point_sequence.begin(), point_sequence.end(), false);
-
-    CGAL::PointVertexMap pvm;
-    CGAL::Mesh mesh;
-
-    for (auto v = dtin.finite_vertices_begin(); v != dtin.finite_vertices_end(); ++v) {
-        // Include the point, even if outside polygon
-        pvm.emplace(std::make_pair(v->point(), mesh.add_vertex(v->point())));
-    }
-
-    for (auto f = dtin.finite_faces_begin(); f != dtin.finite_faces_end(); ++f) {
-        CGAL::Point u = f->vertex(0)->point();
-        CGAL::Point v = f->vertex(1)->point();
-        CGAL::Point w = f->vertex(2)->point();
-
-        // At this point we have to determine if the simplex (u, v, w) is inside polygon.
-        CGAL::Point2 face_midpoint(u.x()/3 + v.x()/3 + w.x()/3,
-                                   u.y()/3 + v.y()/3 + w.y()/3);
-        if (inclusion_polygon.has_on_bounded_side(face_midpoint))
-            mesh.add_face(pvm[u], pvm[v], pvm[w]);
-    }
-    pvm.clear();
-
-    CGAL::Surface_mesh_simplification::edge_collapse(mesh,
-                                                     stop,
-                                                     CGAL::parameters::get_cost(cost)
-                                                                      .get_placement(placement)
-    );
-
-    std::map<CGAL::VertexIndex, int> reindex;
-    point3_vector o_points;
-    o_points.reserve(mesh.num_vertices());
-    int n = 0;
-    for (auto v: mesh.vertices()) {
-        const auto pt = mesh.point(v);
-        o_points.emplace_back(point3{pt.x(), pt.y(), pt.z()});
-        reindex.emplace(v, n++);
-    }
-    face_vector faces;
-    faces.reserve(mesh.num_faces());
-    for (auto f: mesh.faces()) {
-        std::array<int, 3> fl;
-        size_t idx = 0;
-        for (auto v: mesh.vertices_around_face(mesh.halfedge(f)))
-            fl[idx++] = reindex[v];
-        faces.emplace_back(face{fl[0], fl[1], fl[2]});
-    }
-    return std::make_pair(std::move(o_points), std::move(faces));
-};
-
-
 template<typename Pgn>
 Mesh make_mesh(const CGAL::PointList &pts,
                const Pgn& inclusion_polygon,
@@ -493,43 +380,6 @@ Mesh make_mesh(const CGAL::PointList &pts) {
     return Mesh(mesh);
 };
 
-template<typename T, typename Pgn, typename S, typename P, typename C>
-std::tuple<point3_vector, face_vector> tin_from_raster(
-        const RasterData<T>& raster,
-        const Pgn& boundary_polygon,
-        const S &stop,
-        const P &placement,
-        const C &cost) {
-
-    CGAL::PointList raster_points = raster.raster_points();
-    CGAL::DelaunayConstraints boundary_points = interpolate_boundary_points(raster, boundary_polygon);
-    return make_tin(raster_points, boundary_polygon, boundary_points, stop, placement, cost);
-}
-
-
-template<typename T, typename Pgn, typename S, typename P, typename C>
-std::tuple<point3_vector, face_vector> tin_from_raster(
-        const std::vector<RasterData<T>>& raster_list,
-        const Pgn& boundary_polygon,
-        const S &stop,
-        const P &placement,
-        const C &cost) {
-
-    CGAL::PointList raster_points;
-    CGAL::DelaunayConstraints boundary_points;
-    for (auto raster : raster_list) {
-        CGAL::PointList new_points = raster.raster_points();
-        raster_points.insert(raster_points.end(),
-                             std::make_move_iterator(new_points.begin()),
-                             std::make_move_iterator(new_points.end()));
-        CGAL::DelaunayConstraints new_constraints = interpolate_boundary_points(raster, boundary_polygon);
-        boundary_points.insert(boundary_points.end(),
-                               std::make_move_iterator(new_constraints.begin()),
-                               std::make_move_iterator(new_constraints.end()));
-    }
-    return make_tin(raster_points, boundary_polygon, boundary_points, stop, placement, cost);
-}
-
 
 template<typename T, typename Pgn>
 Mesh mesh_from_raster(const std::vector<RasterData<T>>& raster_list,
@@ -576,18 +426,6 @@ Mesh mesh_from_raster(const RasterData<T>& raster,
 template<typename T>
 Mesh mesh_from_raster(const RasterData<T>& raster) {
     return make_mesh(raster.raster_points());
-}
-
-
-template<typename FT, typename S, typename P, typename C>
-std::tuple<point3_vector, face_vector> tin_from_raster(
-        const RasterData<FT>& raster,
-        const S &stop,
-        const P &placement,
-        const C &cost) {
-
-    CGAL::PointList raster_points = raster.raster_points();
-    return make_tin(raster_points, stop, placement, cost);
 }
 
 

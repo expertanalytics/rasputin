@@ -179,56 +179,16 @@ void bind_rasterdata(py::module &m, const std::string& pyname) {
     .def("get_interpolated_value_at_point", &rasputin::RasterData<FT>::get_interpolated_value_at_point);
 }
 
-template<typename R>
-void bind_tin_from_raster(py::module &m) {
-    m.def("lindstrom_turk_by_size",
-          [] (const R& raster_data, size_t result_mesh_size) {
-              return rasputin::tin_from_raster(raster_data,
-                                        SMS::Count_stop_predicate<CGAL::Mesh>(result_mesh_size),
-                                        SMS::LindstromTurk_placement<CGAL::Mesh>(),
-                                        SMS::LindstromTurk_cost<CGAL::Mesh>());
-          },
-          "Construct a TIN based on the points provided.\n\nThe LindstromTurk cost and placement strategy is used, and simplification process stops when the number of undirected edges drops below the size threshold.")
-     .def("lindstrom_turk_by_ratio",
-        [] (const R& raster_data, double ratio) {
-            return rasputin::tin_from_raster(raster_data,
-                                           SMS::Count_ratio_stop_predicate<CGAL::Mesh>(ratio),
-                                           SMS::LindstromTurk_placement<CGAL::Mesh>(),
-                                           SMS::LindstromTurk_cost<CGAL::Mesh>());
-             },
-            "Construct a TIN based on the points provided.\n\nThe LindstromTurk cost and placement strategy is used, and simplification process stops when the number of undirected edges drops below the ratio threshold.");
-}
-
-template<typename R, typename P>
-void bind_tin_from_raster(py::module &m) {
-    m.def("lindstrom_turk_by_size",
-          [] (const R& raster_data, const P& boundary_polygon, size_t result_mesh_size) {
-              return rasputin::tin_from_raster(raster_data, boundary_polygon,
-                                        SMS::Count_stop_predicate<CGAL::Mesh>(result_mesh_size),
-                                        SMS::LindstromTurk_placement<CGAL::Mesh>(),
-                                        SMS::LindstromTurk_cost<CGAL::Mesh>());
-          },
-          "Construct a TIN based on the points provided.\n\nThe LindstromTurk cost and placement strategy is used, and simplification process stops when the number of undirected edges drops below the size threshold.")
-        .def("lindstrom_turk_by_ratio",
-             [] (const R& raster_data, const P& boundary_polygon, double ratio) {
-                 return rasputin::tin_from_raster(raster_data, boundary_polygon,
-                                           SMS::Count_ratio_stop_predicate<CGAL::Mesh>(ratio),
-                                           SMS::LindstromTurk_placement<CGAL::Mesh>(),
-                                           SMS::LindstromTurk_cost<CGAL::Mesh>());
-             },
-            "Construct a TIN based on the points provided.\n\nThe LindstromTurk cost and placement strategy is used, and simplification process stops when the number of undirected edges drops below the ratio threshold.");
-}
-
 template<typename R, typename P>
 void bind_make_mesh(py::module &m) {
         m.def("make_mesh",
             [] (const R& raster_data, const P polygon) {
                 return rasputin::mesh_from_raster(raster_data, polygon);
-            })
+            }, py::return_value_policy::take_ownership)
         .def("make_mesh",
             [] (const R& raster_data) {
                 return rasputin::mesh_from_raster(raster_data);
-            });
+            }, py::return_value_policy::take_ownership);
 }
 
 PYBIND11_MODULE(triangulate_dem, m) {
@@ -246,6 +206,18 @@ PYBIND11_MODULE(triangulate_dem, m) {
       .def("from_numpy", &vecarray_from_numpy<unsigned int, 2>);
     py::bind_vector<rasputin::double_vector >(m, "double_vector", py::buffer_protocol())
       .def_buffer(&vector_buffer<double>);
+
+    py::bind_vector<std::vector<int>>(m, "int_vector");
+    py::bind_vector<std::vector<std::vector<int>>>(m, "shadow_vector");
+
+
+    bind_rasterdata<float>(m, "raster_data_float");
+    bind_rasterdata<double>(m, "raster_data_double");
+
+    bind_make_mesh<std::vector<rasputin::RasterData<float>>, CGAL::SimplePolygon>(m);
+    bind_make_mesh<std::vector<rasputin::RasterData<double>>, CGAL::SimplePolygon>(m);
+    bind_make_mesh<rasputin::RasterData<float>, CGAL::SimplePolygon>(m);
+    bind_make_mesh<rasputin::RasterData<double>, CGAL::SimplePolygon>(m);
 
     py::class_<CGAL::SimplePolygon, std::unique_ptr<CGAL::SimplePolygon>>(m, "simple_polygon")
         .def(py::init(&polygon_from_numpy))
@@ -324,40 +296,21 @@ PYBIND11_MODULE(triangulate_dem, m) {
                     return self.at(idx);
                     }, py::return_value_policy::reference_internal);
 
-    bind_rasterdata<float>(m, "raster_data_float");
-    bind_rasterdata<double>(m, "raster_data_double");
-
-    bind_tin_from_raster<rasputin::RasterData<float>>(m);
-    bind_tin_from_raster<rasputin::RasterData<double>>(m);
-    bind_tin_from_raster<rasputin::RasterData<float>, CGAL::SimplePolygon>(m);
-
-    bind_make_mesh<std::vector<rasputin::RasterData<float>>, CGAL::SimplePolygon>(m);
-    bind_make_mesh<std::vector<rasputin::RasterData<double>>, CGAL::SimplePolygon>(m);
-    bind_make_mesh<rasputin::RasterData<float>, CGAL::SimplePolygon>(m);
-    bind_make_mesh<rasputin::RasterData<double>, CGAL::SimplePolygon>(m);
-
-    // Polygons with hole not yet supported
-    // bind_tin_from_raster<rasputin::RasterData<float>, CGAL::Polygon>(m);
-    bind_tin_from_raster<rasputin::RasterData<double>, CGAL::SimplePolygon>(m);
-    // bind_tin_from_raster<rasputin::RasterData<double>, CGAL::Polygon>(m);
-    bind_tin_from_raster<std::vector<rasputin::RasterData<float>>, CGAL::SimplePolygon>(m);
-    // bind_tin_from_raster<std::vector<rasputin::RasterData<float>>, CGAL::Polygon>(m);
-    bind_tin_from_raster<std::vector<rasputin::RasterData<double>>, CGAL::SimplePolygon>(m);
-    // bind_tin_from_raster<std::vector<rasputin::RasterData<double>>, CGAL::Polygon>(m);
-
     py::class_<rasputin::Mesh, std::unique_ptr<rasputin::Mesh>>(m, "Mesh")
         .def("lindstrom_turk_by_ratio",
             [] (const rasputin::Mesh& self, double ratio) {
                 return self.coarsen(SMS::Count_ratio_stop_predicate<CGAL::Mesh>(ratio),
                                     SMS::LindstromTurk_placement<CGAL::Mesh>(),
                                     SMS::LindstromTurk_cost<CGAL::Mesh>());
-            }, py::return_value_policy::take_ownership)
+            }, py::return_value_policy::take_ownership,
+            "Simplify the mesh.\n\nThe LindstromTurk cost and placement strategy is used, and simplification process stops when the number of undirected edges drops below the size threshold.")
         .def("lindstrom_turk_by_size",
             [] (const rasputin::Mesh& self, int max_size) {
                 return self.coarsen(SMS::Count_stop_predicate<CGAL::Mesh>(max_size),
                                     SMS::LindstromTurk_placement<CGAL::Mesh>(),
                                     SMS::LindstromTurk_cost<CGAL::Mesh>());
-            }, py::return_value_policy::take_ownership)
+            }, py::return_value_policy::take_ownership,
+            "Simplify the mesh.\n\nThe LindstromTurk cost and placement strategy is used, and simplification process stops when the number of undirected edges drops below the ratio threshold.")
         .def("copy", &rasputin::Mesh::copy, py::return_value_policy::take_ownership)
 
         .def_property_readonly("num_vertices", &rasputin::Mesh::num_vertices)
@@ -377,9 +330,6 @@ PYBIND11_MODULE(triangulate_dem, m) {
             [] (std::vector<rasputin::RasterData<float>>& self, int index) {
                 return self.at(index);
             }, py::return_value_policy::reference_internal);
-
-    py::bind_vector<std::vector<int>>(m, "int_vector");
-    py::bind_vector<std::vector<std::vector<int>>>(m, "shadow_vector");
 
     m.def("compute_shadow", &rasputin::compute_shadow, "Compute shadows for given sun ray direction.")
      .def("compute_shadows", &rasputin::compute_shadows, "Compute shadows for a series of times and ray directions.")
