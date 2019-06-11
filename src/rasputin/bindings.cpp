@@ -328,6 +328,38 @@ PYBIND11_MODULE(triangulate_dem, m) {
     bind_tin_from_raster<std::vector<rasputin::RasterData<double>>, CGAL::SimplePolygon>(m);
     // bind_tin_from_raster<std::vector<rasputin::RasterData<double>>, CGAL::Polygon>(m);
 
+    py::class_<rasputin::Mesh, std::unique_ptr<rasputin::Mesh>>(m, "Mesh")
+        .def("lindstrom_turk_by_ratio",
+            [] (const rasputin::Mesh& self, double ratio) {
+                return self.coarsen(SMS::Count_ratio_stop_predicate<CGAL::Mesh>(ratio),
+                                    SMS::LindstromTurk_placement<CGAL::Mesh>(),
+                                    SMS::LindstromTurk_cost<CGAL::Mesh>());
+            }, py::return_value_policy::take_ownership)
+        .def("lindstrom_turk_by_size",
+            [] (const rasputin::Mesh& self, int max_size) {
+                return self.coarsen(SMS::Count_stop_predicate<CGAL::Mesh>(max_size),
+                                    SMS::LindstromTurk_placement<CGAL::Mesh>(),
+                                    SMS::LindstromTurk_cost<CGAL::Mesh>());
+            }, py::return_value_policy::take_ownership)
+        .def("copy", &rasputin::Mesh::copy, py::return_value_policy::take_ownership)
+
+        .def_property_readonly("num_vertices", &rasputin::Mesh::num_vertices)
+        .def_property_readonly("num_edges", &rasputin::Mesh::num_edges)
+        .def_property_readonly("num_faces", &rasputin::Mesh::num_faces)
+
+        .def_property_readonly("points", &rasputin::Mesh::get_points, py::return_value_policy::reference_internal)
+        .def_property_readonly("faces", &rasputin::Mesh::get_faces, py::return_value_policy::reference_internal);
+
+        /* m.def("make_mesh", &rasputin::mesh_from_raster<std::vector<rasputin::RasterData<float>>>); */
+        /* m.def("make_mesh", */
+        /*     [] (rasputin::RasterData<float> raster_data, CGAL::SimplePolygon polygon) { */
+        /*         return rasputin::mesh_from_raster(raster_data, polygon); */
+        /*     }) */
+        m.def("make_mesh",
+            [] (std::vector<rasputin::RasterData<float>> raster_data, CGAL::SimplePolygon polygon) {
+                return rasputin::mesh_from_raster(raster_data, polygon);
+            });
+
     py::class_<std::vector<rasputin::RasterData<float>>, std::unique_ptr<std::vector<rasputin::RasterData<float>>>> (m, "raster_list")
         .def(py::init( [] () {std::vector<rasputin::RasterData<float>> self; return self;}))
         .def("add_raster",
@@ -344,7 +376,9 @@ PYBIND11_MODULE(triangulate_dem, m) {
 
     m.def("compute_shadow", &rasputin::compute_shadow, "Compute shadows for given sun ray direction.")
      .def("compute_shadows", &rasputin::compute_shadows, "Compute shadows for a series of times and ray directions.")
-     .def("surface_normals", &rasputin::surface_normals, "Compute surface normals for all faces in the mesh.")
+     .def("surface_normals", &rasputin::surface_normals,
+          "Compute surface normals for all faces in the mesh.",
+          py::return_value_policy::take_ownership)
      .def("point_normals", &rasputin::point_normals, "Compute surface normals for all vertices in the mesh.")
      .def("orient_tin", &rasputin::orient_tin, "Orient all triangles in the TIN and returns their surface normals.")
      .def("extract_lakes", &rasputin::extract_lakes, "Extract lakes as separate face list.")
