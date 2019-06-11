@@ -2,12 +2,15 @@ import sys
 from pathlib import Path
 import argparse
 from logging import getLogger
+
+from shapely.geometry import Polygon
+
 from rasputin.writer import write
-from rasputin.reader import read_raster_file
+from rasputin.reader import read_raster_file, GeoPolygon
 from rasputin.calculate import compute_shade
 from rasputin.triangulate_dem import lindstrom_turk_by_ratio
 from rasputin.triangulate_dem import lindstrom_turk_by_size
-from rasputin.triangulate_dem import surface_normals, orient_tin, compute_slopes
+from rasputin.triangulate_dem import orient_tin, compute_slopes
 
 
 def geo_tiff_reader():
@@ -15,10 +18,8 @@ def geo_tiff_reader():
     arg_parser = argparse.ArgumentParser()
     arg_parser.add_argument("input", type=str, metavar="FILENAME")
     arg_parser.add_argument("-output", type=str, default="output.off", help="Surface mesh file name")
-    arg_parser.add_argument("-x0", type=float, default=None, help="Start coordinate in x-direction")
-    arg_parser.add_argument("-x1", type=float, default=None, help="Stop coordinate in x-direction")
-    arg_parser.add_argument("-y0", type=float, default=None, help="Start coordinate in y-direction")
-    arg_parser.add_argument("-y1", type=float, default=None, help="Stop coordinate in y-direction")
+    arg_parser.add_argument("-x", nargs="+", type=float, help="x-coordinates of polygon", default=None)
+    arg_parser.add_argument("-y", nargs="+", type=float, help="y-coordinates of polygon", default=None)
     arg_parser.add_argument("-sun_x", type=float, help="Sun ray x component")
     arg_parser.add_argument("-sun_y", type=float, help="Sun ray y component")
     arg_parser.add_argument("-sun_z", type=float, help="Sun ray z component")
@@ -32,18 +33,42 @@ def geo_tiff_reader():
     res = arg_parser.parse_args(sys.argv[1:])
     logger.setLevel(res.loglevel)
 
-    # Read from raster
-    raster_coords, info = read_raster_file(filepath=Path(res.input),
-                                           x0=res.x0,
-                                           y0=res.y0,
-                                           x1=res.x1,
-                                           y1=res.y1)
-    logger.debug(f"Original: {len(raster_coords)}")
-    logger.critical(info)
-    if res.ratio:
-        pts, faces = lindstrom_turk_by_ratio(raster_coords, res.ratio)
+    # Determine region of interest
+    x_coords = res.x if res.x else []
+    y_coords = res.y if res.y else []
+
+    if len(x_coords) == len(y_coords) == 0:
+        polygon = None
+
+    elif 3 <= len(x_coords) == len(y_coords):
+        polygon = Polygon((x, y) for (x,y) in zip(x_coords, y_coords))
+
     else:
-        pts, faces = lindstrom_turk_by_size(raster_coords, res.size)
+        raise ValueError("x and y coordinates must have equal length greater or equal to 3")
+
+    # Read from raster
+    rasterdata = read_raster_file(filepath=Path(res.input),
+                                   polygon=polygon)
+    m, n = rasterdata.array.shape
+    logger.debug(f"Original: {m * n}")
+    logger.critical(rasterdata.info)
+
+    geo_polygon = GeoPolygon(polygon=polygon, proj=None)
+
+    if res.ratio:
+        if polygon:
+            pts, faces = lindstrom_turk_by_ratio(rasterdata._cpp,
+                                                 geo_polygon._cpp,
+                                                 res.ratio)
+        else:
+            pts, faces = lindstrom_turk_by_ratio(rasterdata._cpp, res.ratio)
+    else:
+        if polygon:
+            pts, faces = lindstrom_turk_by_size(rasterdata._cpp,
+                                                geo_polygon._cpp,
+                                                res.size)
+        else:
+            pts, faces = lindstrom_turk_by_size(rasterdata._cpp, res.size)
     logger.debug(f"Result: {len(pts)}")
 
     # Compute normals and re-orient before shadow computation

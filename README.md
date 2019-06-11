@@ -72,13 +72,19 @@ python3 setup.py install
 ```
 
 
+## Docker build
+Take a look at the [Dockerfile](Dockerfile) to see how to setup required dependencies for a Debian system.
+
+You can build rasputin and run tests by building the Docker image: `docker build . -t rasputin-test`
+
+
 ## Minimal Example
 To test the installation run this for example in ipython:
 
 ```
 from rasputin import triangulate_dem
 
-vs = triangulate_dem.PointVector([(1,0,0), (0,1,0), (0,0,0), (0.25,0.25,1)])
+vs = triangulate_dem.point3_vector([[1,0,0], [0,1,0], [0,0,0], [0.25,0.25,1]])
 points, faces = triangulate_dem.lindstrom_turk_by_ratio(vs, 2.0)
 for f in faces:
    print(f)
@@ -96,8 +102,14 @@ Congratulations! You just triangulated a small mountain.
 
 High quality DTM data for Norway can be downloaded from free [here](https://hoydedata.no/LaserInnsyn/).
 Choose "Nedlasting" from the left hand side of the map, and choose "Landsdekkende", check "UTM-sone 33"
-and finally click DTM10. Download and unpack in, for instance, `$HOME/rasputin_data`, and
-`export RASPUTIN_DATA=$HOME/rasputin_data`.
+and finally click DTM10. Download and unpack in, for instance, `$HOME/rasputin_data/dem_archive`, and
+`export RASPUTIN_DATA_DIR=$HOME/rasputin_data`.
+
+It is possible to include land cover types in your triangulation, through the 
+[GlobCover dataset](http://due.esrin.esa.int/page_globcover.php) from ESA. It is a raster based 
+300m (approx) resolution data set that contains 23 different land cover types. 
+Download the data set and unpack it in `$RASPUTIN_DATA_DIR/globcov` to access the land types using
+the `rasputin.globcov_repository.GlobCovRepository` class.
 
 ## Acknowledges
 
