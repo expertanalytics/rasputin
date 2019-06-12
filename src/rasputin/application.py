@@ -1,10 +1,13 @@
+from typing import Tuple
 import os
 import sys
+from functools import partial
 from pathlib import Path
 import numpy as np
 import pprint
 import pyproj
 from shapely.geometry import Polygon
+from shapely import wkt, wkb, ops
 import argparse
 from rasputin.reader import RasterRepository, GeoPolygon
 from rasputin.tin_repository import TinRepository
@@ -16,6 +19,17 @@ from rasputin import gml_repository
 
 # TODO: Fix hack
 LandCoverType = gml_repository.LandCoverType
+
+
+def read_poly_file(*, path: Path) -> Polygon:
+    if path.suffix.lower() == ".wkb":
+        with path.open("rb") as pfile:
+            polygon = wkb.loads(pfile.read())
+    elif path.suffix.lower() == ".wkt":
+        with path.open("r") as pfile:
+            polygon = wkt.loads(pfile.read())
+    return polygon
+
 
 def store_tin():
     """
@@ -52,12 +66,9 @@ def store_tin():
         raise RuntimeError(f"{tin_archive} exists and is not a directory, giving up.")
 
     arg_parser = argparse.ArgumentParser()
-    #arg_parser.add_argument("-lat", type=float, default=60.898468, help="Latitude of center coordinate")
-    #arg_parser.add_argument("-lon", type=float, default=8.530918, help="Longitude of center coordinate")
     arg_parser.add_argument("-x", nargs="+", type=float, help="x-coordinates of polygon", default=None)
     arg_parser.add_argument("-y", nargs="+", type=float, help="y-coordinates of polygon", default=None)
-    #arg_parser.add_argument("-dx", type=float, default=5000, help="Distance in meters")
-    #arg_parser.add_argument("-dy", type=float, default=5000, help="Distance in meters")
+    arg_parser.add_argument("-polyfile", type=str, help="Polygon definition in WKT or WKB format", default="")
     arg_parser.add_argument("-ratio", type=float, default=0.4, help="Mesh coarsening factor in [0, 1]")
     arg_parser.add_argument("-override", action="store_true", help="Replace existing archive entry")
     arg_parser.add_argument("-land-type-partition", action="store_true", help="Partition mesh my land type")
@@ -73,32 +84,33 @@ def store_tin():
 
     # Determine region of interest
     if not res.x or not res.y:
-        raise RuntimeError("A constraining polygon is needed")
-
-    # Define area of interest
-    x_coords = res.x
-    y_coords = res.y
+        if not res.polyfile:
+            raise RuntimeError("A constraining polygon is needed")
+        else:
+            source_polygon = read_poly_file(path=Path(res.polyfile))
+    else:
+        assert 3 <= len(res.x) == len(res.y), "x and y coordinates must have equal length greater or equal to 3"
+        source_polygon = Polygon((x, y) for (x, y) in zip(res.x, res.y))
 
     # TODO: Fix!
-    input_coordinate_system = pyproj.Proj(init="EPSG:4326").definition_string()
-    target_coordinate_system = pyproj.Proj(init="EPSG:32633").definition_string()
+    target_coordinate_system = pyproj.Proj(init="EPSG:32633")
+    project = partial(pyproj.transform,
+                      pyproj.Proj(init="EPSG:4326"),
+                      target_coordinate_system)
 
-    if 3 <= len(x_coords) == len(y_coords):
-        x_coords, y_coords = pyproj.transform(input_coordinate_system, target_coordinate_system, x_coords, y_coords)
-        polygon = Polygon((x, y) for (x, y) in zip(x_coords, y_coords))
-    else:
-        raise ValueError("x and y coordinates must have equal length greater or equal to 3")
-
-
+    polygon = ops.transform(project, source_polygon)
+    print(polygon.boundary.coords.xy)
     geo_polygon = GeoPolygon(polygon=polygon, proj=target_coordinate_system)
 
     raster_data_list, cpp_polygon = RasterRepository(directory=dem_archive).read(domain=geo_polygon)
     points, faces = lindstrom_turk_by_ratio(raster_data_list,
                                             cpp_polygon,
                                             res.ratio)
+    print(len(points), len(faces))
     if not res.land_type_partition:
         tr.save(uid=res.uid, geometries={"terrain": Geometry(points=points,
-                                                             faces=faces, projection=target_coordinate_system,
+                                                             faces=faces,
+                                                             projection=target_coordinate_system,
                                                              base_color=(1.0, 1.0, 1.0),
                                                              material=None)})
     else:
@@ -114,7 +126,7 @@ def store_tin():
         corine_repo = gml_repository.GMLRepository(path=corine_archive)
         tin_cell_centers = cell_centers(points, terrain)
         geo_cell_centers = GeoPoints(xy=np.asarray(tin_cell_centers)[:, :2],
-                                     projection=pyproj.Proj(target_coordinate_system))
+                                     projection=target_coordinate_system)
         #terrain_cover = lc_repo.read_types(land_types=None, geo_points=geo_cell_centers)
         terrain_cover = corine_repo.read_types(land_types=None,
                                                geo_points=geo_cell_centers,

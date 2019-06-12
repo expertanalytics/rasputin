@@ -5,6 +5,7 @@ from pathlib import Path
 from pyproj import Proj
 import numpy as np
 from pkg_resources import resource_filename
+import pyproj
 from rasputin import triangulate_dem as td
 from rasputin.py2js import point_vector_to_lines, face_and_point_vector_to_lines
 from rasputin.mesh_utils import vertex_field_to_vertex_values
@@ -44,7 +45,7 @@ class Geometry:
     def __init__(self, *,
                  points: td.point3_vector,
                  faces: td.face_vector,
-                 projection: str,
+                 projection: pyproj.Proj,
                  base_color: Optional[Tuple[float, float, float]],
                  material: Optional[str]):
         self.points = points
