@@ -1,14 +1,16 @@
 from typing import Dict, List, Tuple, Optional
-from enum import Enum
 from pathlib import Path
-from pyproj import transform
-import numpy as np
 from lxml import etree
+import numpy as np
+from pyproj import transform
+from pyproj import Proj
 from shapely.geometry import Polygon, Point
 from rasputin.geometry import GeoPoints
-from pyproj import Proj
+from rasputin.land_cover_repository import LandCoverBaseType, LandCoverRepository, LandCoverMetaInfoBase
+from rasputin.reader import GeoPolygon
 
-class LandCoverType(Enum):
+
+class LandCoverType(LandCoverBaseType):
     # Artificial
     urban_fabric_cont = 111
     urban_fabrid_discont = 112
@@ -63,8 +65,10 @@ class LandCoverType(Enum):
     estuary = 522
     sea_and_ocean = 523
 
+class LandCoverMetaInfo(LandCoverMetaInfoBase):
+
     @classmethod
-    def color(cls, *, land_cover_type: "LandCoverType") -> Tuple[int, int, int]:
+    def color(cls, *, land_cover_type: LandCoverType) -> Tuple[int, int, int]:
 
         return {111: (230,   0,  77),
                 112: (255,   0,   0),
@@ -111,7 +115,12 @@ class LandCoverType(Enum):
                 522: (166, 255, 230),
                 523: (230, 242, 255)}[land_cover_type.value]
 
-class GMLRepository:
+    @staticmethod
+    def describe(*, land_cover_type=LandCoverType) -> str:
+        return ""
+
+
+class GMLRepository(LandCoverRepository):
 
     def __init__(self, path: Path) -> None:
         self.path = path
@@ -133,7 +142,7 @@ class GMLRepository:
             holes.append(np.fromiter(citer, dtype='d').reshape(-1, 2))
         return Polygon(shell=shell, holes=holes)
 
-    def _assign_source_proj(self, root: etree._Element) -> str:
+    def _assign_source_proj(self, root: etree._Element) -> None:
         gml = f"{{{root.nsmap['gml']}}}"
         elm = next(root.iter(f"{gml}featureMember"))
         self.source_proj = Proj(next(elm.iter(f"{gml}Polygon")).attrib["srsName"])
@@ -156,7 +165,10 @@ class GMLRepository:
                 result[code].append(polygon.intersection(domain))
         return result
 
-    def read_types(self,
+    def constraints(self, *, domain: GeoPolygon) -> List[GeoPolygon]:
+        return []
+
+    def land_cover(self,
                    *,
                    land_types: Optional[List[LandCoverType]],
                    geo_points: GeoPoints,

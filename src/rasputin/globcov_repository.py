@@ -1,17 +1,17 @@
 from typing import List, Optional, Tuple
 from pathlib import Path
-from enum import Enum
 import numpy as np
 from pyproj import Proj, transform
 from PIL import Image
-from rasputin.reader import extract_geo_keys, GeoKeysInterpreter, GeoTiffTags
+from rasputin.reader import extract_geo_keys, GeoKeysInterpreter, GeoTiffTags, GeoPolygon
+from rasputin.land_cover_repository import LandCoverBaseType, LandCoverMetaInfoBase, LandCoverRepository
 import rasputin.triangulate_dem as td
 from rasputin.geometry import GeoPoints
 
 Image.MAX_IMAGE_PIXELS = None
 
 
-class LandCoverType(Enum):
+class LandCoverType(LandCoverBaseType):
     crop_type_1 = 11
     crop_type_2 = 14
     crop_type_3 = 20
@@ -36,8 +36,11 @@ class LandCoverType(Enum):
     snow_and_ice = 220
     no_data = 230
 
+
+class LandCoverMetaInfo(LandCoverMetaInfoBase):
+
     @staticmethod
-    def describe(*, land_cover_type="LandCoverType") -> str:
+    def describe(*, land_cover_type=LandCoverType) -> str:
         description = {
             LandCoverType.crop_type_1: "Post-flooding or irrigated croplands (or aquatic)",
             LandCoverType.crop_type_2: "Rainfed croplands",
@@ -64,8 +67,8 @@ class LandCoverType(Enum):
             LandCoverType.no_data: "No data (burnt areas, clouds,…)"}
         return description[land_cover_type]
 
-    @staticmethod
-    def color(*, land_cover_type: "LandCoverType") -> Tuple[int, int, int]:
+    @classmethod
+    def color(cls, *, land_cover_type: LandCoverType) -> Tuple[int, int, int]:
         """Default colors for types in dataset."""
         colors = {
             LandCoverType.crop_type_1: (170, 240, 240),
@@ -95,9 +98,10 @@ class LandCoverType(Enum):
         return colors[land_cover_type]
 
 
-class GlobCovRepository:
+class GlobCovRepository(LandCoverRepository):
 
     def __init__(self, *, path: Path) -> None:
+        super().__init__()
         self.path = path / "GLOBCOVER_L4_200901_200912_V2.3.tif"
         assert self.path.is_file()
         with Image.open(self.path) as image:
@@ -112,13 +116,18 @@ class GlobCovRepository:
     def read(self,
              *,
              land_type: LandCoverType,
-             geo_points: GeoPoints):
-        return self.read_types(land_types=[land_type], geo_points=geo_points)
+             geo_points: GeoPoints,
+             domain: GeoPolygon):
+        return self.land_cover(land_types=[land_type], geo_points=geo_points, domain=domain)
 
-    def read_types(self,
+    def constraints(self, *, domain: GeoPolygon) -> List[GeoPolygon]:
+        return []
+
+    def land_cover(self,
                    *,
                    land_types: Optional[List[LandCoverType]],
-                   geo_points: GeoPoints) -> np.ndarray:
+                   geo_points: GeoPoints,
+                   domain: GeoPolygon) -> np.ndarray:
         target_proj = geo_points.projection
         if target_proj != self.source_proj:
             xy = np.dstack(transform(target_proj, self.source_proj, geo_points.xy[:, 0], geo_points.xy[:, 1]))[0]

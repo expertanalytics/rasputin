@@ -1,6 +1,8 @@
 from pathlib import Path
 import numpy as np
 from pyproj import Proj
+from shapely.geometry import Polygon
+from rasputin.reader import GeoPolygon
 from rasputin import triangulate_dem as td
 from rasputin.globcov_repository import GlobCovRepository, GeoPoints, LandCoverType
 from rasputin.reader import RasterRepository
@@ -22,9 +24,11 @@ def test_extract_land_types():
     path = Path('/Users/skavhaug/projects/rasputin_data/globcov')
     xy = np.array([[8, 60], [8.1, 61]], dtype='d')
     proj = Proj(init="EPSG:4326")
+    domain = GeoPolygon(proj=proj, polygon=Polygon())
     geo_points = GeoPoints(xy=xy, projection=proj)
     gcr = GlobCovRepository(path=path)
-    gcr.read(land_type=LandCoverType.crop_type_2, geo_points=geo_points)
+    gcr.read(land_type=LandCoverType.crop_type_2, geo_points=geo_points, domain=domain)
+
 
 def test_construct_triangulation_with_land_types():
     assert "RASPUTIN_DATA_DIR" in os.environ
@@ -35,15 +39,20 @@ def test_construct_triangulation_with_land_types():
     y0 = 60.898468
     input_coordinate_system = Proj(init="EPSG:4326")
     target_coordinate_system = Proj(init="EPSG:32633")
-    raster_coords = dem_repo.read(x=x0,
-                                  y=y0,
-                                  dx=600,
-                                  dy=600,
-                                  input_coordinate_system=input_coordinate_system.definition_string(),
-                                  target_coordinate_system=target_coordinate_system.definition_string())
-    points, faces = td.lindstrom_turk_by_ratio(raster_coords, 0.1)
+    polygon = Polygon.from_bounds(xmin=x0 - 0.01,
+                                  xmax=x0 + 0.01,
+                                  ymin=y0 - 0.01,
+                                  ymax=y0 + 0.01)
+    domain = GeoPolygon(polygon=polygon, proj=input_coordinate_system)
+    target_domain = GeoPolygon(polygon=Polygon(), proj=target_coordinate_system)
+    domain = target_domain._to_my_proj(domain)
+    raster_data_list, cpp_polygon = dem_repo.read(domain=domain)
+    points, faces = td.lindstrom_turk_by_ratio(raster_data_list,
+                                               cpp_polygon,
+                                               1.1)
     centers = np.asarray(td.cell_centers(points, faces))[:, :2]
-    land_types = lt_repo.read_types(land_types=None,
+    land_types = lt_repo.land_cover(land_types=None,
                                     geo_points=GeoPoints(xy=centers,
-                                                         projection=target_coordinate_system))
+                                                         projection=target_coordinate_system),
+                                    domain=domain)
     assert len(land_types) == len(faces)

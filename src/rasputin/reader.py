@@ -4,6 +4,8 @@ from enum import Enum
 from PIL import Image
 from PIL.TiffImagePlugin import TiffImageFile
 from shapely import geometry
+from shapely import ops
+from functools import partial
 import pyproj
 import re
 
@@ -404,16 +406,26 @@ class GeoPolygon:
         return GeoPolygon(polygon=Polygon.from_bounds(*image_bounds),
                           proj=pyproj.Proj(projection_str))
 
+    def _to_my_proj(self, other: "GeoPolygon") -> "GeoPolygon":
+        if other.proj != self.proj:
+            polygon = ops.transform(partial(pyproj.transform, other.proj, self.proj), other.polygon)
+            return GeoPolygon(polygon=polygon, proj=self.proj)
+        else:
+            return other
+
+
     def transform(self, *, target_projection: pyproj.Proj) -> "GeoPolygon":
         old_pts = np.array(self.polygon.exterior)
         new_pts = np.array(pyproj.transform(self.proj, target_projection, *old_pts.T)).T
         return GeoPolygon(polygon=Polygon(new_pts),
                           proj=target_projection)
 
-    def intersects(self, other) -> bool:
+    def intersects(self, other: "GeoPolygon") -> bool:
+        other = self._to_my_proj(other)
         return self.polygon.intersection(other.polygon).area > 0
 
-    def difference(self, other) -> "GeoPolygon":
+    def difference(self, other: "GeoPolygon") -> "GeoPolygon":
+        other = self._to_my_proj(other)
         return GeoPolygon(polygon=self.polygon.difference(other.polygon),
                           proj=self.proj)
 
@@ -452,8 +464,9 @@ class RasterRepository:
             geo_polygon = GeoPolygon.from_raster_file(filepath=filepath)
 
             if target_polygon.intersects(geo_polygon):
+                polygon = geo_polygon._to_my_proj(target_polygon).polygon
                 part = read_raster_file(filepath=filepath,
-                                        polygon=target_polygon.polygon)
+                                        polygon=polygon)
                 parts.append(part)
 
                 target_polygon = target_polygon.difference(geo_polygon)

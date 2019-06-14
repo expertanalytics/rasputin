@@ -18,8 +18,8 @@ def test_gml_repository():
     input_coordinate_system = pyproj.Proj(init="EPSG:4326")
     target_coordinate_system = pyproj.Proj(init="EPSG:32633")
 
-    x = np.array([8.5, 8.6, 8.6, 8.5])
-    y = np.array([60.55, 60.55, 60.35, 60.35])
+    x = np.array([8.5, 8.52, 8.52, 8.5])
+    y = np.array([60.55, 60.55, 60.50, 60.50])
 
     x, y = pyproj.transform(input_coordinate_system, target_coordinate_system, x, y)
     domain = Polygon(shell=list(zip(x, y)))
@@ -43,10 +43,9 @@ def test_gml_repository():
     raster_data_list, cpp_polygon = RasterRepository(directory=dem_archive).read(domain=geo_polygon)
     points, faces = lindstrom_turk_by_ratio(raster_data_list,
                                             cpp_polygon,
-                                            1.1)
+                                            0.1)
     tin_cell_centers = cell_centers(points, faces)
     geo_cell_centers = GeoPoints(xy=np.asarray(tin_cell_centers)[:, :2],
                                  projection=target_coordinate_system)
-    terrain_cover = repos.read_types(land_types=None, geo_points=geo_cell_centers, domain=domain)
+    terrain_cover = repos.land_cover(land_types=None, geo_points=geo_cell_centers, domain=domain)
     assert terrain_cover is not None
-    #tr = TinRepository(path=tin_archive)

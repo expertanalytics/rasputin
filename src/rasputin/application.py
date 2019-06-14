@@ -128,7 +128,7 @@ def store_tin():
         geo_cell_centers = GeoPoints(xy=np.asarray(tin_cell_centers)[:, :2],
                                      projection=target_coordinate_system)
         #terrain_cover = lc_repo.read_types(land_types=None, geo_points=geo_cell_centers)
-        terrain_cover = corine_repo.read_types(land_types=None,
+        terrain_cover = corine_repo.land_cover(land_types=None,
                                                geo_points=geo_cell_centers,
                                                domain=geo_polygon.polygon)
         terrains = {lt.value: face_vector() for lt in LandCoverType}
