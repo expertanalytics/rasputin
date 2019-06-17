@@ -8,6 +8,7 @@ from shapely.geometry import Polygon, Point
 from rasputin.geometry import GeoPoints
 from rasputin.land_cover_repository import LandCoverBaseType, LandCoverRepository, LandCoverMetaInfoBase
 from rasputin.reader import GeoPolygon
+from rasputin.material import lake_material, terrain_material
 
 
 class LandCoverType(LandCoverBaseType):
@@ -115,9 +116,15 @@ class LandCoverMetaInfo(LandCoverMetaInfoBase):
                 522: (166, 255, 230),
                 523: (230, 242, 255)}[land_cover_type.value]
 
-    @staticmethod
-    def describe(*, land_cover_type=LandCoverType) -> str:
+    @classmethod
+    def describe(cls, *, land_cover_type=LandCoverType) -> str:
         return ""
+
+    @classmethod
+    def material(cls, *, land_cover_type=LandCoverType) -> str:
+        if land_cover_type.value > 500:
+            return lake_material
+        return terrain_material
 
 
 class GMLRepository(LandCoverRepository):
@@ -182,7 +189,7 @@ class GMLRepository(LandCoverRepository):
         else:
             xy = geo_points.xy
 
-        land_cover_types = self.read(domain.buffer(10).convex_hull)
+        land_cover_types = self.read(domain.buffer(50))
 
         # TODO: Move to C++ for speed!
         faces = np.zeros(len(xy), dtype="int")

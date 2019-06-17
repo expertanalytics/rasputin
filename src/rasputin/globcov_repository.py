@@ -7,6 +7,7 @@ from rasputin.reader import extract_geo_keys, GeoKeysInterpreter, GeoTiffTags, G
 from rasputin.land_cover_repository import LandCoverBaseType, LandCoverMetaInfoBase, LandCoverRepository
 import rasputin.triangulate_dem as td
 from rasputin.geometry import GeoPoints
+from rasputin.material import lake_material, terrain_material
 
 Image.MAX_IMAGE_PIXELS = None
 
@@ -39,8 +40,8 @@ class LandCoverType(LandCoverBaseType):
 
 class LandCoverMetaInfo(LandCoverMetaInfoBase):
 
-    @staticmethod
-    def describe(*, land_cover_type=LandCoverType) -> str:
+    @classmethod
+    def describe(cls, *, land_cover_type=LandCoverType) -> str:
         description = {
             LandCoverType.crop_type_1: "Post-flooding or irrigated croplands (or aquatic)",
             LandCoverType.crop_type_2: "Rainfed croplands",
@@ -66,6 +67,12 @@ class LandCoverMetaInfo(LandCoverMetaInfoBase):
             LandCoverType.snow_and_ice: "Permanent snow and ice",
             LandCoverType.no_data: "No data (burnt areas, clouds,…)"}
         return description[land_cover_type]
+
+    @classmethod
+    def material(cls, *, land_cover_type: LandCoverBaseType) -> str:
+        if land_cover_type == LandCoverType.water:
+            return lake_material
+        return terrain_material
 
     @classmethod
     def color(cls, *, land_cover_type: LandCoverType) -> Tuple[int, int, int]:

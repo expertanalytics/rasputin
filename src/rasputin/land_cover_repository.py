@@ -22,6 +22,10 @@ class LandCoverMetaInfoBase(ABC):
     def describe(cls, *, land_cover_type: LandCoverBaseType) -> str:
         pass
 
+    @classmethod
+    @abstractmethod
+    def material(cls, *, land_cover_type: LandCoverBaseType) -> str:
+        pass
 
 class LandCoverRepository(ABC):
 

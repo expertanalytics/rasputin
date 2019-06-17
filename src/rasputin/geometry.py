@@ -9,35 +9,7 @@ import pyproj
 from rasputin import triangulate_dem as td
 from rasputin.py2js import point_vector_to_lines, face_and_point_vector_to_lines
 from rasputin.mesh_utils import vertex_field_to_vertex_values
-
-
-lake_material = """\
-THREE.MeshPhongMaterial( {
-    specular: 0xffffff,
-    shininess: 25,
-    color: 0x006994,
-    reflectivity: 0.3,
-} )
-"""
-
-avalanche_material = """\
-THREE.MeshPhongMaterial( {
-    specular: 0xffffff,
-    shininess: 75,
-    reflectivity: 0.3,
-    vertexColors: THREE.FaceColors
-} )
-"""
-
-terrain_material = """\
-THREE.MeshPhysicalMaterial( {
-    metalness: 0.0,
-    roughness: 0.5,
-    reflectivity: 0.7,
-    clearCoat: 0.0,
-    vertexColors: THREE.FaceColors
-} )
-"""
+from rasputin.material import terrain_material
 
 
 class Geometry:

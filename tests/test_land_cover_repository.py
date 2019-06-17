@@ -33,7 +33,7 @@ def test_extract_land_types():
 def test_construct_triangulation_with_land_types():
     assert "RASPUTIN_DATA_DIR" in os.environ
     data_dir = Path(os.environ["RASPUTIN_DATA_DIR"])
-    lt_repo = GlobCovRepository(path=data_dir/ "globcov")
+    lt_repo = GlobCovRepository(path=data_dir / "globcov")
     dem_repo = RasterRepository(directory=data_dir / "dem_archive")
     x0 = 8.54758671814368
     y0 = 60.898468
@@ -50,6 +50,8 @@ def test_construct_triangulation_with_land_types():
     points, faces = td.lindstrom_turk_by_ratio(raster_data_list,
                                                cpp_polygon,
                                                1.1)
+    assert len(faces)
+    assert len(points)
     centers = np.asarray(td.cell_centers(points, faces))[:, :2]
     land_types = lt_repo.land_cover(land_types=None,
                                     geo_points=GeoPoints(xy=centers,

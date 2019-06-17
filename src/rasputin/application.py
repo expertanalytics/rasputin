@@ -19,6 +19,7 @@ from rasputin import gml_repository
 
 # TODO: Fix hack
 LandCoverType = gml_repository.LandCoverType
+LandCoverMetaInfo = gml_repository.LandCoverMetaInfo
 
 
 def read_poly_file(*, path: Path) -> Polygon:
@@ -56,14 +57,6 @@ def store_tin():
         print(f"WARNING: No data directory specified, assuming dem_archive {dem_archive.absolute()}")
         print(f"WARNING: No data directory specified, assuming tin_archive {tin_archive.absolute()}")
         print(f"WARNING: No data directory specified, assuming land_type_archive {lt_archive.absolute()}")
-    try:
-        next(dem_archive.glob("*.tif"))
-    except StopIteration as si:
-        raise RuntimeError(f"No GeoTIFF files found in {dem_archive.absolute()}, giving up.")
-    if not tin_archive.exists():
-        tin_archive.mkdir(parents=True)
-    elif tin_archive.exists() and not tin_archive.is_dir():
-        raise RuntimeError(f"{tin_archive} exists and is not a directory, giving up.")
 
     arg_parser = argparse.ArgumentParser()
     arg_parser.add_argument("-x", nargs="+", type=float, help="x-coordinates of polygon", default=None)
@@ -74,6 +67,16 @@ def store_tin():
     arg_parser.add_argument("-land-type-partition", action="store_true", help="Partition mesh my land type")
     arg_parser.add_argument("uid", type=str, help="Unique ID for the result TIN")
     res = arg_parser.parse_args(sys.argv[1:])
+
+    # Some sanity checks
+    try:
+        next(dem_archive.glob("*.tif"))
+    except StopIteration as si:
+        raise RuntimeError(f"No GeoTIFF files found in {dem_archive.absolute()}, giving up.")
+    if not tin_archive.exists():
+        tin_archive.mkdir(parents=True)
+    elif tin_archive.exists() and not tin_archive.is_dir():
+        raise RuntimeError(f"{tin_archive} exists and is not a directory, giving up.")
 
     tr = TinRepository(path=tin_archive)
     if res.uid in tr.content:
@@ -94,19 +97,14 @@ def store_tin():
 
     # TODO: Fix!
     target_coordinate_system = pyproj.Proj(init="EPSG:32633")
-    project = partial(pyproj.transform,
-                      pyproj.Proj(init="EPSG:4326"),
-                      target_coordinate_system)
+    domain = GeoPolygon(polygon=source_polygon, proj=pyproj.Proj(init="EPSG:4326"))
+    target_domain = GeoPolygon(polygon=Polygon(), proj=target_coordinate_system)
+    domain = target_domain._to_my_proj(domain)
 
-    polygon = ops.transform(project, source_polygon)
-    print(polygon.boundary.coords.xy)
-    geo_polygon = GeoPolygon(polygon=polygon, proj=target_coordinate_system)
-
-    raster_data_list, cpp_polygon = RasterRepository(directory=dem_archive).read(domain=geo_polygon)
+    raster_data_list, cpp_polygon = RasterRepository(directory=dem_archive).read(domain=domain)
     points, faces = lindstrom_turk_by_ratio(raster_data_list,
                                             cpp_polygon,
                                             res.ratio)
-    print(len(points), len(faces))
     if not res.land_type_partition:
         tr.save(uid=res.uid, geometries={"terrain": Geometry(points=points,
                                                              faces=faces,
@@ -127,25 +125,22 @@ def store_tin():
         tin_cell_centers = cell_centers(points, terrain)
         geo_cell_centers = GeoPoints(xy=np.asarray(tin_cell_centers)[:, :2],
                                      projection=target_coordinate_system)
-        #terrain_cover = lc_repo.read_types(land_types=None, geo_points=geo_cell_centers)
         terrain_cover = corine_repo.land_cover(land_types=None,
                                                geo_points=geo_cell_centers,
-                                               domain=geo_polygon.polygon)
+                                               domain=domain.polygon)
         terrains = {lt.value: face_vector() for lt in LandCoverType}
-        print(len(terrain_cover))
 
         for i, cell in enumerate(terrain_cover):
-            if cell not in terrains:
-                print(i, cell)
             terrains[cell].append(terrain[i])
         for t in terrains:
             if not terrains[t]:
                 continue
-            geometries[LandCoverType(t).name] = Geometry(points=points,
-                                                         faces=terrains[t],
-                                                         base_color=[c/255 for c in LandCoverType.color(land_cover_type=LandCoverType(t))],
-                                                         material=terrain_material,
-                                                         projection=target_coordinate_system).consolidate()
+            cover = LandCoverType(t)
+            geometries[cover.name] = Geometry(points=points,
+                                              faces=terrains[t],
+                                              base_color=[c/255 for c in LandCoverMetaInfo.color(land_cover_type=cover)],
+                                              material=LandCoverMetaInfo.material(land_cover_type=cover),
+                                              projection=target_coordinate_system).consolidate()
         tr.save(uid=res.uid, geometries=geometries)
     meta = tr.content[res.uid]
     print(f"Successfully added uid='{res.uid}' to the tin archive {tin_archive.absolute()}, with meta info:")
