@@ -5,7 +5,7 @@ import numpy as np
 from pyproj import transform
 from pyproj import Proj
 from shapely.geometry import Polygon, Point
-from rasputin.geometry import GeoPoints
+from rasputin.geometry import GeoPoints, GeoPoint
 from rasputin.land_cover_repository import LandCoverBaseType, LandCoverRepository, LandCoverMetaInfoBase
 from rasputin.reader import GeoPolygon
 from rasputin.material import lake_material, terrain_material
@@ -129,6 +129,9 @@ class LandCoverMetaInfo(LandCoverMetaInfoBase):
 
 class GMLRepository(LandCoverRepository):
 
+    land_cover_type = LandCoverType
+    land_cover_meta_info_type = LandCoverMetaInfo
+
     def __init__(self, path: Path) -> None:
         self.path = path
         files = list(path.glob("*.gml"))
@@ -154,7 +157,7 @@ class GMLRepository(LandCoverRepository):
         elm = next(root.iter(f"{gml}featureMember"))
         self.source_proj = Proj(next(elm.iter(f"{gml}Polygon")).attrib["srsName"])
 
-    def read(self, domain: Polygon) -> Dict[LandCoverType, List[Polygon]]:
+    def read(self, domain: GeoPolygon) -> Dict[LandCoverType, List[Polygon]]:
         tree = etree.parse(str(self.fn), self.parser)
         root = tree.getroot()
         self._assign_source_proj(root)
@@ -166,10 +169,10 @@ class GMLRepository(LandCoverRepository):
         for elm in root.iter(f"{gml}featureMember"):
             code = LandCoverType(int(next(elm.iter(f"{ogr}clc18_kode")).text))
             polygon = self._parse_polygon(next(elm.iter(f"{gml}Polygon")), root.nsmap)
-            if polygon.intersects(domain):
+            if polygon.intersects(domain.polygon):
                 if code not in result:
                     result[code] = []
-                result[code].append(polygon.intersection(domain))
+                result[code].append(polygon.intersection(domain.polygon))
         return result
 
     def constraints(self, *, domain: GeoPolygon) -> List[GeoPolygon]:
@@ -179,7 +182,7 @@ class GMLRepository(LandCoverRepository):
                    *,
                    land_types: Optional[List[LandCoverType]],
                    geo_points: GeoPoints,
-                   domain: Polygon) -> np.ndarray:
+                   domain: GeoPolygon) -> np.ndarray:
         tree = etree.parse(str(self.fn), self.parser)
         root = tree.getroot()
         self._assign_source_proj(root)
@@ -188,16 +191,26 @@ class GMLRepository(LandCoverRepository):
             xy = np.dstack(transform(target_proj, self.source_proj, geo_points.xy[:, 0], geo_points.xy[:, 1]))[0]
         else:
             xy = geo_points.xy
+        if domain.projection != self.source_proj:
+            tmp = GeoPolygon(polygon=Polygon(), projection=self.source_proj)
+            domain = tmp.project(domain)
+        else:
+            domain = GeoPolygon(polygon=domain.polygon, projection=domain.projection)
+        domain.polygon = domain.polygon.buffer(50)
 
-        land_cover_types = self.read(domain.buffer(50))
+        # At this point, we have a consistent coordinate system for domain and xy all in the self.source_proj, so
+        # omit checks for speed.
+
+        land_cover_types = self.read(domain)
 
         # TODO: Move to C++ for speed!
         faces = np.zeros(len(xy), dtype="int")
         for i, pt in enumerate(xy):
+            pt = Point(pt)
             found = False
             for key, p_list in land_cover_types.items():
                 for p in p_list:
-                    if p.intersects(Point(pt)):
+                    if p.intersects(pt):
                         faces[i] = key.value
                         found = True
                         break

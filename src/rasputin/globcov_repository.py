@@ -107,6 +107,9 @@ class LandCoverMetaInfo(LandCoverMetaInfoBase):
 
 class GlobCovRepository(LandCoverRepository):
 
+    land_cover_type = LandCoverType
+    land_cover_meta_info_type = LandCoverMetaInfo
+
     def __init__(self, *, path: Path) -> None:
         super().__init__()
         self.path = path / "GLOBCOVER_L4_200901_200912_V2.3.tif"

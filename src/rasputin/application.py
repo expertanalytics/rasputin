@@ -1,25 +1,19 @@
-from typing import Tuple
 import os
 import sys
-from functools import partial
 from pathlib import Path
 import numpy as np
 import pprint
 import pyproj
 from shapely.geometry import Polygon
-from shapely import wkt, wkb, ops
+from shapely import wkt, wkb
 import argparse
 from rasputin.reader import RasterRepository, GeoPolygon
 from rasputin.tin_repository import TinRepository
-from rasputin.triangulate_dem import lindstrom_turk_by_ratio, extract_lakes, cell_centers, face_vector
-from rasputin.geometry import Geometry, write_scene, lake_material, terrain_material, GeoPoints
+from rasputin.triangulate_dem import lindstrom_turk_by_ratio, cell_centers, face_vector, point3_vector
+from rasputin.geometry import Geometry, GeoPoints
 
-#from rasputin.globcov_repository import GlobCovRepository, LandCoverType
 from rasputin import gml_repository
-
-# TODO: Fix hack
-LandCoverType = gml_repository.LandCoverType
-LandCoverMetaInfo = gml_repository.LandCoverMetaInfo
+from rasputin import globcov_repository
 
 
 def read_poly_file(*, path: Path) -> Polygon:
@@ -46,25 +40,31 @@ def store_tin():
     if "RASPUTIN_DATA_DIR" in os.environ:
         dem_archive = Path(os.environ["RASPUTIN_DATA_DIR"]) / "dem_archive"
         tin_archive = Path(os.environ["RASPUTIN_DATA_DIR"]) / "tin_archive"
-        lt_archive = Path(os.environ["RASPUTIN_DATA_DIR"]) / "globcov"
+        gc_archive = Path(os.environ["RASPUTIN_DATA_DIR"]) / "globcov"
         corine_archive = Path(os.environ["RASPUTIN_DATA_DIR"]) / "corine"
     else:
         #  data_dir = Path(os.environ["HOME"]) /"projects" / "rasputin_data" / "dem_archive"
         dem_archive = Path(".") / "dem_archive"
         tin_archive = Path(".") / "tin_archive"
-        lt_archive = Path(".") / "globcov"
+        gc_archive = Path(".") / "globcov"
         corine_archive = Path(".") / "corine"
         print(f"WARNING: No data directory specified, assuming dem_archive {dem_archive.absolute()}")
         print(f"WARNING: No data directory specified, assuming tin_archive {tin_archive.absolute()}")
-        print(f"WARNING: No data directory specified, assuming land_type_archive {lt_archive.absolute()}")
+        print(f"WARNING: No data directory specified, assuming globcov_archive {gc_archive.absolute()}")
+        print(f"WARNING: No data directory specified, assuming corine_archive {corine_archive.absolute()}")
 
     arg_parser = argparse.ArgumentParser()
     arg_parser.add_argument("-x", nargs="+", type=float, help="x-coordinates of polygon", default=None)
     arg_parser.add_argument("-y", nargs="+", type=float, help="y-coordinates of polygon", default=None)
     arg_parser.add_argument("-polyfile", type=str, help="Polygon definition in WKT or WKB format", default="")
+    arg_parser.add_argument("-target-coordinate-system", type=str, default="EPSG:32633", help="Target coordinate system")
     arg_parser.add_argument("-ratio", type=float, default=0.4, help="Mesh coarsening factor in [0, 1]")
     arg_parser.add_argument("-override", action="store_true", help="Replace existing archive entry")
-    arg_parser.add_argument("-land-type-partition", action="store_true", help="Partition mesh my land type")
+    arg_parser.add_argument("-land-type-partition",
+                            type=str,
+                            default="",
+                            choices=["corine", "globcov"],
+                            help="Partition mesh by land type")
     arg_parser.add_argument("uid", type=str, help="Unique ID for the result TIN")
     res = arg_parser.parse_args(sys.argv[1:])
 
@@ -96,15 +96,30 @@ def store_tin():
         source_polygon = Polygon((x, y) for (x, y) in zip(res.x, res.y))
 
     # TODO: Fix!
-    target_coordinate_system = pyproj.Proj(init="EPSG:32633")
-    domain = GeoPolygon(polygon=source_polygon, proj=pyproj.Proj(init="EPSG:4326"))
-    target_domain = GeoPolygon(polygon=Polygon(), proj=target_coordinate_system)
-    domain = target_domain._to_my_proj(domain)
+    raster_repo = RasterRepository(directory=dem_archive)
+    raster_coordinate_system = pyproj.Proj(raster_repo.coordinate_system())
+    target_coordinate_system = pyproj.Proj(init=res.target_coordinate_system)
+    domain = GeoPolygon(polygon=source_polygon, projection=pyproj.Proj(init="EPSG:4326"))
+    target_domain = GeoPolygon(polygon=Polygon(), projection=target_coordinate_system)
+    domain = target_domain.project(domain)
+    target_raster_domain = GeoPolygon(polygon=Polygon(), projection=raster_coordinate_system)
+    raster_domain = target_raster_domain.project(domain)
 
-    raster_data_list, cpp_polygon = RasterRepository(directory=dem_archive).read(domain=domain)
+
+    raster_data_list, cpp_polygon = raster_repo.read(domain=raster_domain)
     points, faces = lindstrom_turk_by_ratio(raster_data_list,
                                             cpp_polygon,
                                             res.ratio)
+    assert len(points), "No tin extracted, something went wrong..."
+    print(len(points), len(faces))
+    p = np.asarray(points)
+    x, y, z = pyproj.transform(raster_coordinate_system,
+                               target_coordinate_system,
+                               p[:, 0],
+                               p[:, 1],
+                               p[:, 2])
+    points = point3_vector.from_numpy(np.dstack([x, y, z])[0])
+
     if not res.land_type_partition:
         tr.save(uid=res.uid, geometries={"terrain": Geometry(points=points,
                                                              faces=faces,
@@ -112,34 +127,31 @@ def store_tin():
                                                              base_color=(1.0, 1.0, 1.0),
                                                              material=None)})
     else:
+        if res.land_type_partition == "corine":
+            lt_repo = gml_repository.GMLRepository(path=corine_archive)
+        else:
+            lt_repo = globcov_repository.GlobCovRepository(path=gc_archive)
         geometries = {}
-        #lakes, terrain = extract_lakes(points, faces)
-        terrain = faces
-        #geometries["lake"] = Geometry(points=points,
-        #                              faces=lakes,
-        #                              base_color=(0, 0, 1),
-        #                              material=lake_material,
-        #                              projection=target_coordinate_system).consolidate()
-        #lc_repo = GlobCovRepository(path=lt_archive)
-        corine_repo = gml_repository.GMLRepository(path=corine_archive)
-        tin_cell_centers = cell_centers(points, terrain)
+        tin_cell_centers = cell_centers(points, faces)
         geo_cell_centers = GeoPoints(xy=np.asarray(tin_cell_centers)[:, :2],
                                      projection=target_coordinate_system)
-        terrain_cover = corine_repo.land_cover(land_types=None,
-                                               geo_points=geo_cell_centers,
-                                               domain=domain.polygon)
-        terrains = {lt.value: face_vector() for lt in LandCoverType}
+        terrain_cover = lt_repo.land_cover(land_types=None,
+                                           geo_points=geo_cell_centers,
+                                           domain=domain)
+        terrains = {lt.value: face_vector() for lt in lt_repo.land_cover_type}
 
         for i, cell in enumerate(terrain_cover):
-            terrains[cell].append(terrain[i])
+            terrains[cell].append(faces[i])
         for t in terrains:
             if not terrains[t]:
                 continue
-            cover = LandCoverType(t)
+            cover = lt_repo.land_cover_type(t)
+            colors = [c/255 for c in lt_repo.land_cover_meta_info_type.color(land_cover_type=cover)]
+            material = lt_repo.land_cover_meta_info_type.material(land_cover_type=cover)
             geometries[cover.name] = Geometry(points=points,
                                               faces=terrains[t],
-                                              base_color=[c/255 for c in LandCoverMetaInfo.color(land_cover_type=cover)],
-                                              material=LandCoverMetaInfo.material(land_cover_type=cover),
+                                              base_color=colors,
+                                              material=material,
                                               projection=target_coordinate_system).consolidate()
         tr.save(uid=res.uid, geometries=geometries)
     meta = tr.content[res.uid]

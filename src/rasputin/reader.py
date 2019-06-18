@@ -1,4 +1,4 @@
-from typing import Dict, Any, Optional,  Tuple
+from typing import Dict, Any, Optional,  Tuple, List, Union
 from dataclasses import dataclass
 from enum import Enum
 from PIL import Image
@@ -13,6 +13,7 @@ import numpy as np
 from pathlib import Path
 from logging import getLogger
 from rasputin import triangulate_dem
+from rasputin.geometry import GeoPoint
 from shapely.geometry import Polygon
 
 
@@ -393,9 +394,9 @@ def read_raster_file(*,
 
 class GeoPolygon:
 
-    def __init__(self, *, polygon: geometry.Polygon, proj: pyproj.Proj) -> None:
+    def __init__(self, *, polygon: geometry.Polygon, projection: pyproj.Proj) -> None:
         self.polygon = polygon
-        self.proj = proj
+        self.projection = projection
 
     @classmethod
     def from_raster_file(cls, *, filepath: Path) -> "GeoPolygon":
@@ -404,33 +405,44 @@ class GeoPolygon:
             image_bounds = get_image_bounds(image=image)
 
         return GeoPolygon(polygon=Polygon.from_bounds(*image_bounds),
-                          proj=pyproj.Proj(projection_str))
+                          projection=pyproj.Proj(projection_str))
 
-    def _to_my_proj(self, other: "GeoPolygon") -> "GeoPolygon":
-        if other.proj != self.proj:
-            polygon = ops.transform(partial(pyproj.transform, other.proj, self.proj), other.polygon)
-            return GeoPolygon(polygon=polygon, proj=self.proj)
+    def project(self, other: Union["GeoPolygon", "GeoPoint"]) -> Union["GeoPolygon", GeoPoint]:
+        if other.projection != self.projection:
+            if isinstance(other, GeoPolygon):
+                polygon = ops.transform(partial(pyproj.transform, other.projection, self.projection), other.polygon)
+                res = GeoPolygon(polygon=polygon, projection=self.projection)
+            elif isinstance(other, GeoPoint):
+                point = ops.transform(partial(pyproj.transform, other.projection, self.projection), other.point)
+                res = GeoPoint(point=point, projection=self.projection)
+            else:
+                raise RuntimeError(f"Unknown type {type(other)}")
+            return res
         else:
             return other
 
-
     def transform(self, *, target_projection: pyproj.Proj) -> "GeoPolygon":
         old_pts = np.array(self.polygon.exterior)
-        new_pts = np.array(pyproj.transform(self.proj, target_projection, *old_pts.T)).T
+        new_pts = np.array(pyproj.transform(self.projection, target_projection, *old_pts.T)).T
         return GeoPolygon(polygon=Polygon(new_pts),
-                          proj=target_projection)
+                          projection=target_projection)
 
-    def intersects(self, other: "GeoPolygon") -> bool:
-        other = self._to_my_proj(other)
+    def intersection(self, other: "GeoPolygon") -> "GeoPolygon":
+        other = self.project(other)
+        return GeoPolygon(polygon=self.polygon.intersection(other.polygon),
+                          projection=self.projection)
+
+    def intersects(self, other: Union["GeoPolygon", GeoPoint]) -> bool:
+        other = self.project(other)
         return self.polygon.intersection(other.polygon).area > 0
 
     def difference(self, other: "GeoPolygon") -> "GeoPolygon":
-        other = self._to_my_proj(other)
+        other = self.project(other)
         return GeoPolygon(polygon=self.polygon.difference(other.polygon),
-                          proj=self.proj)
+                          projection=self.projection)
 
     def buffer(self, value: float) -> "GeoPolygon":
-        return GeoPolygon(polygon=self.polygon.buffer(value), proj=self.proj)
+        return GeoPolygon(polygon=self.polygon.buffer(value), projection=self.projection)
 
     @property
     def _cpp(self) -> triangulate_dem.simple_polygon:
@@ -455,7 +467,7 @@ class RasterRepository:
 
     def get_intersections(self,
                           *,
-                          target_polygon: GeoPolygon):
+                          target_polygon: GeoPolygon) -> List[Rasterdata]:
 
         parts = []
 
@@ -464,7 +476,7 @@ class RasterRepository:
             geo_polygon = GeoPolygon.from_raster_file(filepath=filepath)
 
             if target_polygon.intersects(geo_polygon):
-                polygon = geo_polygon._to_my_proj(target_polygon).polygon
+                polygon = geo_polygon.project(target_polygon).polygon
                 part = read_raster_file(filepath=filepath,
                                         polygon=polygon)
                 parts.append(part)
@@ -474,6 +486,10 @@ class RasterRepository:
                 if target_polygon.polygon.area < 1e-10:
                     break
         return parts
+
+    def coordinate_system(self) -> str:
+        filepath = next(self.directory.glob("*.tif"))
+        return GeoPolygon.from_raster_file(filepath=filepath).projection.definition_string()
 
     def read(self,
              *,

@@ -2,7 +2,9 @@ from typing import Tuple, List, Optional
 import io
 import shutil
 from pathlib import Path
+from dataclasses import dataclass
 from pyproj import Proj
+from shapely.geometry import Point
 import numpy as np
 from pkg_resources import resource_filename
 import pyproj
@@ -139,3 +141,8 @@ class GeoPoints:
         self.projection = projection
 
 
+@dataclass
+class GeoPoint:
+
+    point: Point
+    projection: pyproj.Proj

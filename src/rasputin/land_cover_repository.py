@@ -29,6 +29,16 @@ class LandCoverMetaInfoBase(ABC):
 
 class LandCoverRepository(ABC):
 
+    @property
+    @abstractmethod
+    def land_cover_type(self) -> LandCoverBaseType:
+        pass
+
+    @property
+    @abstractmethod
+    def land_cover_meta_info_type(self) -> LandCoverMetaInfoBase:
+        pass
+
     @abstractmethod
     def constraints(self, *, domain: GeoPolygon) -> List[GeoPolygon]:
         pass
