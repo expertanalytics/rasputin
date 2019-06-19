@@ -1,41 +1,19 @@
-from typing import Tuple, List, Optional
+from typing import Tuple, List, Optional, Union
 import io
 import shutil
+from functools import partial
+from shapely import ops
 from pathlib import Path
+from dataclasses import dataclass
+from pyproj import Proj
+from shapely import geometry
 import numpy as np
 from pkg_resources import resource_filename
+import pyproj
 from rasputin import triangulate_dem as td
 from rasputin.py2js import point_vector_to_lines, face_and_point_vector_to_lines
 from rasputin.mesh_utils import vertex_field_to_vertex_values
-
-
-lake_material = """\
-THREE.MeshPhongMaterial( {
-    specular: 0xffffff,
-    shininess: 25,
-    color: 0x006994,
-    reflectivity: 0.3,
-} )
-"""
-
-avalanche_material = """\
-THREE.MeshPhongMaterial( {
-    specular: 0xffffff,
-    shininess: 75,
-    reflectivity: 0.3,
-    vertexColors: THREE.FaceColors
-} )
-"""
-
-terrain_material = """\
-THREE.MeshPhysicalMaterial( {
-    metalness: 0.0,
-    roughness: 0.5,
-    reflectivity: 0.7,
-    clearCoat: 0.0,
-    vertexColors: THREE.FaceColors
-} )
-"""
+from rasputin.material import terrain_material
 
 
 class Geometry:
@@ -43,7 +21,7 @@ class Geometry:
     def __init__(self, *,
                  points: td.point3_vector,
                  faces: td.face_vector,
-                 projection: str,
+                 projection: pyproj.Proj,
                  base_color: Optional[Tuple[float, float, float]],
                  material: Optional[str]):
         self.points = points
@@ -157,4 +135,79 @@ def write_scene(*, geometries: List[Geometry], output: Path):
         tf.write("const data = {geometries};\n")
 
 
-    pass
+class GeoPoints:
+
+    def __init__(self, *, xy: np.ndarray, projection: Proj) -> None:
+        self.xy = xy
+        assert len(self.xy.shape) == 2 and self.xy.shape[-1] == 2
+        self.projection = projection
+
+
+@dataclass
+class GeoPoint:
+
+    point: geometry.Point
+    projection: pyproj.Proj
+
+
+class GeoPolygon:
+
+    def __init__(self, *, polygon: geometry.Polygon, projection: pyproj.Proj) -> None:
+        self.polygon = polygon
+        self.projection = projection
+
+    @classmethod
+    def from_raster_file(cls, *, filepath: Path) -> "GeoPolygon":
+        from rasputin.reader import identify_projection, get_image_bounds
+        from PIL import Image
+        with Image.open(filepath) as image:
+            projection_str = identify_projection(image=image)
+            image_bounds = get_image_bounds(image=image)
+
+        return GeoPolygon(polygon=geometry.Polygon.from_bounds(*image_bounds),
+                          projection=pyproj.Proj(projection_str))
+
+    def transform(self, *, target_projection: pyproj.Proj) -> "GeoPolygon":
+        if target_projection.definition_string() != self.projection.definition_string():
+            polygon = ops.transform(partial(pyproj.transform, self.projection, target_projection), self.polygon)
+        else:
+            polygon = self.polygon
+        return GeoPolygon(polygon=polygon, projection=target_projection)
+
+    def intersection(self, other: "GeoPolygon") -> "GeoPolygon":
+        other = other.transform(target_projection=self.projection)
+        return GeoPolygon(polygon=self.polygon.intersection(other.polygon),
+                          projection=self.projection)
+
+    def depr_intersects(self, other: Union["GeoPolygon", GeoPoint]) -> bool:
+        return self.polygon.intersection(other.transform(target_projection=self.projection).polygon).area > 0
+
+    def intersects(self, other: "GeoPolygon") -> bool:
+        op = other.transform(target_projection=self.projection).polygon
+        sp = self.polygon
+        return sp.intersects(op) and not sp.touches(op)
+
+    def difference(self, other: "GeoPolygon") -> "GeoPolygon":
+        other = other.transform(target_projection=self.projection)
+        return GeoPolygon(polygon=self.polygon.difference(other.polygon),
+                          projection=self.projection)
+
+    def buffer(self, value: float) -> "GeoPolygon":
+        return GeoPolygon(polygon=self.polygon.buffer(value), projection=self.projection)
+
+    @property
+    def to_cpp(self) -> td.simple_polygon:
+        # Note: Shapely polygons have one vertex repeated and orientation dos not matter
+        #       CGAL polygons have no vertex repeated and orientation mattters
+        from shapely.geometry.polygon import orient
+
+        exterior = np.asarray(orient(self.polygon).exterior)[:-1]
+        interiors = [np.asarray(hole)[:-1]
+                    for hole in orient(self.polygon,-1).interiors]
+
+        cgal_polygon = td.simple_polygon(exterior)
+        for interior in interiors:
+            cgal_polygon = cgal_polygon.difference(interior)
+        return cgal_polygon
+
+

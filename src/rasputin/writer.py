@@ -1,4 +1,4 @@
-from typing import List, Tuple, Union, Dict, Any
+from typing import List, Tuple, Dict, Any
 from pathlib import Path
 import numpy as np
 from meshio import XdmfTimeSeriesWriter, write_points_cells

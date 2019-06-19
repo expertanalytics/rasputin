@@ -66,7 +66,7 @@ class TinRepository:
                 else:
                     points, faces = geom.points, geom.faces
                 h5_points = grp.create_dataset(name="points", data=np.asarray(points), dtype="d")
-                h5_points.attrs["projection"] = geom.projection
+                h5_points.attrs["projection"] = geom.projection.definition_string()
                 h5_faces = grp.create_dataset(name="faces", data=np.asarray(faces), dtype="i")
                 h5_faces.attrs["color"] = geom.base_color
 
