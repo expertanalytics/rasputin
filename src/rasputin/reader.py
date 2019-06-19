@@ -1,19 +1,15 @@
-from typing import Dict, Any, Optional,  Tuple, List, Union
+from typing import Dict, Any, Optional,  Tuple, List
 from dataclasses import dataclass
 from enum import Enum
 from PIL import Image
 from PIL.TiffImagePlugin import TiffImageFile
-from shapely import geometry
-from shapely import ops
-from functools import partial
-import pyproj
+from rasputin.geometry import GeoPolygon
 import re
 
 import numpy as np
 from pathlib import Path
 from logging import getLogger
 from rasputin import triangulate_dem
-from rasputin.geometry import GeoPoint
 from shapely.geometry import Polygon
 
 
@@ -324,10 +320,12 @@ class Rasterdata:
         return (self.x_min, y_min, x_max, self.y_max)
 
     @property
-    def _cpp(self):
+    def to_cpp(self) -> triangulate_dem.raster_data_float:
         return triangulate_dem.raster_data_float(self.array,
-                                                self.x_min, self.y_max,
-                                                self.delta_x, self.delta_y)
+                                                 self.x_min,
+                                                 self.y_max,
+                                                 self.delta_x,
+                                                 self.delta_y)
 
 
 def read_raster_file(*,
@@ -392,74 +390,6 @@ def read_raster_file(*,
                       coordinate_system=coordinate_system)
 
 
-class GeoPolygon:
-
-    def __init__(self, *, polygon: geometry.Polygon, projection: pyproj.Proj) -> None:
-        self.polygon = polygon
-        self.projection = projection
-
-    @classmethod
-    def from_raster_file(cls, *, filepath: Path) -> "GeoPolygon":
-        with Image.open(filepath) as image:
-            projection_str = identify_projection(image=image)
-            image_bounds = get_image_bounds(image=image)
-
-        return GeoPolygon(polygon=Polygon.from_bounds(*image_bounds),
-                          projection=pyproj.Proj(projection_str))
-
-    def project(self, other: Union["GeoPolygon", "GeoPoint"]) -> Union["GeoPolygon", GeoPoint]:
-        if other.projection != self.projection:
-            if isinstance(other, GeoPolygon):
-                polygon = ops.transform(partial(pyproj.transform, other.projection, self.projection), other.polygon)
-                res = GeoPolygon(polygon=polygon, projection=self.projection)
-            elif isinstance(other, GeoPoint):
-                point = ops.transform(partial(pyproj.transform, other.projection, self.projection), other.point)
-                res = GeoPoint(point=point, projection=self.projection)
-            else:
-                raise RuntimeError(f"Unknown type {type(other)}")
-            return res
-        else:
-            return other
-
-    def transform(self, *, target_projection: pyproj.Proj) -> "GeoPolygon":
-        old_pts = np.array(self.polygon.exterior)
-        new_pts = np.array(pyproj.transform(self.projection, target_projection, *old_pts.T)).T
-        return GeoPolygon(polygon=Polygon(new_pts),
-                          projection=target_projection)
-
-    def intersection(self, other: "GeoPolygon") -> "GeoPolygon":
-        other = self.project(other)
-        return GeoPolygon(polygon=self.polygon.intersection(other.polygon),
-                          projection=self.projection)
-
-    def intersects(self, other: Union["GeoPolygon", GeoPoint]) -> bool:
-        other = self.project(other)
-        return self.polygon.intersection(other.polygon).area > 0
-
-    def difference(self, other: "GeoPolygon") -> "GeoPolygon":
-        other = self.project(other)
-        return GeoPolygon(polygon=self.polygon.difference(other.polygon),
-                          projection=self.projection)
-
-    def buffer(self, value: float) -> "GeoPolygon":
-        return GeoPolygon(polygon=self.polygon.buffer(value), projection=self.projection)
-
-    @property
-    def _cpp(self) -> triangulate_dem.simple_polygon:
-        # Note: Shapely polygons have one vertex repeated and orientation dos not matter
-        #       CGAL polygons have no vertex repeated and orientation mattters
-        from shapely.geometry.polygon import orient
-
-        exterior = np.asarray(orient(self.polygon).exterior)[:-1]
-        interiors = [np.asarray(hole)[:-1]
-                    for hole in orient(self.polygon,-1).interiors]
-
-        cgal_polygon = triangulate_dem.simple_polygon(exterior)
-        for interior in interiors:
-            cgal_polygon = cgal_polygon.difference(interior)
-        return cgal_polygon
-
-
 class RasterRepository:
 
     def __init__(self, *, directory: Path) -> None:
@@ -476,7 +406,7 @@ class RasterRepository:
             geo_polygon = GeoPolygon.from_raster_file(filepath=filepath)
 
             if target_polygon.intersects(geo_polygon):
-                polygon = geo_polygon.project(target_polygon).polygon
+                polygon = target_polygon.transform(target_projection=geo_polygon.projection).polygon
                 part = read_raster_file(filepath=filepath,
                                         polygon=polygon)
                 parts.append(part)
@@ -497,8 +427,8 @@ class RasterRepository:
 
         data = triangulate_dem.raster_list()
         for part in self.get_intersections(target_polygon=domain):
-            data.add_raster(part._cpp)
-        cgal_polygon = domain._cpp
+            data.add_raster(part.to_cpp)
+        cgal_polygon = domain.to_cpp
         return data, cgal_polygon
 
 

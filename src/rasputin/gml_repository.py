@@ -5,9 +5,8 @@ import numpy as np
 from pyproj import transform
 from pyproj import Proj
 from shapely.geometry import Polygon, Point
-from rasputin.geometry import GeoPoints, GeoPoint
+from rasputin.geometry import GeoPoints, GeoPolygon
 from rasputin.land_cover_repository import LandCoverBaseType, LandCoverRepository, LandCoverMetaInfoBase
-from rasputin.reader import GeoPolygon
 from rasputin.material import lake_material, terrain_material
 
 
@@ -65,6 +64,7 @@ class LandCoverType(LandCoverBaseType):
     coastal_lagoon = 521
     estuary = 522
     sea_and_ocean = 523
+
 
 class LandCoverMetaInfo(LandCoverMetaInfoBase):
 
@@ -187,16 +187,11 @@ class GMLRepository(LandCoverRepository):
         root = tree.getroot()
         self._assign_source_proj(root)
         target_proj = geo_points.projection
-        if target_proj != self.source_proj:
+        if target_proj.definition_string() != self.source_proj.definition_string():
             xy = np.dstack(transform(target_proj, self.source_proj, geo_points.xy[:, 0], geo_points.xy[:, 1]))[0]
         else:
             xy = geo_points.xy
-        if domain.projection != self.source_proj:
-            tmp = GeoPolygon(polygon=Polygon(), projection=self.source_proj)
-            domain = tmp.project(domain)
-        else:
-            domain = GeoPolygon(polygon=domain.polygon, projection=domain.projection)
-        domain.polygon = domain.polygon.buffer(50)
+        domain = domain.transform(target_projection=self.source_proj).buffer(50)
 
         # At this point, we have a consistent coordinate system for domain and xy all in the self.source_proj, so
         # omit checks for speed.

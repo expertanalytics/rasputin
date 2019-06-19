@@ -24,7 +24,7 @@ def test_extract_land_types():
     path = Path('/Users/skavhaug/projects/rasputin_data/globcov')
     xy = np.array([[8, 60], [8.1, 61]], dtype='d')
     proj = Proj(init="EPSG:4326")
-    domain = GeoPolygon(proj=proj, polygon=Polygon())
+    domain = GeoPolygon(projection=proj, polygon=Polygon())
     geo_points = GeoPoints(xy=xy, projection=proj)
     gcr = GlobCovRepository(path=path)
     gcr.read(land_type=LandCoverType.crop_type_2, geo_points=geo_points, domain=domain)
@@ -43,9 +43,8 @@ def test_construct_triangulation_with_land_types():
                                   xmax=x0 + 0.01,
                                   ymin=y0 - 0.01,
                                   ymax=y0 + 0.01)
-    domain = GeoPolygon(polygon=polygon, proj=input_coordinate_system)
-    target_domain = GeoPolygon(polygon=Polygon(), proj=target_coordinate_system)
-    domain = target_domain._to_my_proj(domain)
+    domain = GeoPolygon(polygon=polygon,
+                        projection=input_coordinate_system).transform(target_projection=target_coordinate_system)
     raster_data_list, cpp_polygon = dem_repo.read(domain=domain)
     points, faces = td.lindstrom_turk_by_ratio(raster_data_list,
                                                cpp_polygon,

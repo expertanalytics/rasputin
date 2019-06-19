@@ -6,7 +6,8 @@ from logging import getLogger
 from shapely.geometry import Polygon
 
 from rasputin.writer import write
-from rasputin.reader import read_raster_file, GeoPolygon
+from rasputin.reader import read_raster_file
+from rasputin.geometry import GeoPolygon
 from rasputin.calculate import compute_shade
 from rasputin.triangulate_dem import lindstrom_turk_by_ratio
 from rasputin.triangulate_dem import lindstrom_turk_by_size

@@ -3,10 +3,10 @@ from pathlib import Path
 import numpy as np
 from pyproj import Proj, transform
 from PIL import Image
-from rasputin.reader import extract_geo_keys, GeoKeysInterpreter, GeoTiffTags, GeoPolygon
+from rasputin.reader import extract_geo_keys, GeoKeysInterpreter, GeoTiffTags
 from rasputin.land_cover_repository import LandCoverBaseType, LandCoverMetaInfoBase, LandCoverRepository
 import rasputin.triangulate_dem as td
-from rasputin.geometry import GeoPoints
+from rasputin.geometry import GeoPoints, GeoPolygon
 from rasputin.material import lake_material, terrain_material
 
 Image.MAX_IMAGE_PIXELS = None

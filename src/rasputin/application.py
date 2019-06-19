@@ -7,10 +7,10 @@ import pyproj
 from shapely.geometry import Polygon
 from shapely import wkt, wkb
 import argparse
-from rasputin.reader import RasterRepository, GeoPolygon
+from rasputin.reader import RasterRepository
 from rasputin.tin_repository import TinRepository
 from rasputin.triangulate_dem import lindstrom_turk_by_ratio, cell_centers, face_vector, point3_vector
-from rasputin.geometry import Geometry, GeoPoints
+from rasputin.geometry import Geometry, GeoPoints, GeoPolygon
 
 from rasputin import gml_repository
 from rasputin import globcov_repository
@@ -95,16 +95,12 @@ def store_tin():
         assert 3 <= len(res.x) == len(res.y), "x and y coordinates must have equal length greater or equal to 3"
         source_polygon = Polygon((x, y) for (x, y) in zip(res.x, res.y))
 
-    # TODO: Fix!
     raster_repo = RasterRepository(directory=dem_archive)
     raster_coordinate_system = pyproj.Proj(raster_repo.coordinate_system())
     target_coordinate_system = pyproj.Proj(init=res.target_coordinate_system)
-    domain = GeoPolygon(polygon=source_polygon, projection=pyproj.Proj(init="EPSG:4326"))
-    target_domain = GeoPolygon(polygon=Polygon(), projection=target_coordinate_system)
-    domain = target_domain.project(domain)
-    target_raster_domain = GeoPolygon(polygon=Polygon(), projection=raster_coordinate_system)
-    raster_domain = target_raster_domain.project(domain)
-
+    input_domain = GeoPolygon(polygon=source_polygon, projection=pyproj.Proj(init="EPSG:4326"))
+    target_domain = input_domain.transform(target_projection=target_coordinate_system)
+    raster_domain = input_domain.transform(target_projection=raster_coordinate_system)
 
     raster_data_list, cpp_polygon = raster_repo.read(domain=raster_domain)
     points, faces = lindstrom_turk_by_ratio(raster_data_list,
@@ -137,7 +133,7 @@ def store_tin():
                                      projection=target_coordinate_system)
         terrain_cover = lt_repo.land_cover(land_types=None,
                                            geo_points=geo_cell_centers,
-                                           domain=domain)
+                                           domain=target_domain)
         terrains = {lt.value: face_vector() for lt in lt_repo.land_cover_type}
 
         for i, cell in enumerate(terrain_cover):

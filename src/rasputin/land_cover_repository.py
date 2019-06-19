@@ -2,8 +2,7 @@ from typing import List, Optional, Tuple
 from abc import ABC, abstractmethod
 from enum import Enum
 import numpy as np
-from rasputin.reader import GeoPolygon
-from rasputin.geometry import GeoPoints
+from rasputin.geometry import GeoPoints, GeoPolygon
 
 
 class LandCoverBaseType(Enum):

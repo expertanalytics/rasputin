@@ -1,10 +1,12 @@
-from typing import Tuple, List, Optional
+from typing import Tuple, List, Optional, Union
 import io
 import shutil
+from functools import partial
+from shapely import ops
 from pathlib import Path
 from dataclasses import dataclass
 from pyproj import Proj
-from shapely.geometry import Point
+from shapely import geometry
 import numpy as np
 from pkg_resources import resource_filename
 import pyproj
@@ -144,5 +146,68 @@ class GeoPoints:
 @dataclass
 class GeoPoint:
 
-    point: Point
+    point: geometry.Point
     projection: pyproj.Proj
+
+
+class GeoPolygon:
+
+    def __init__(self, *, polygon: geometry.Polygon, projection: pyproj.Proj) -> None:
+        self.polygon = polygon
+        self.projection = projection
+
+    @classmethod
+    def from_raster_file(cls, *, filepath: Path) -> "GeoPolygon":
+        from rasputin.reader import identify_projection, get_image_bounds
+        from PIL import Image
+        with Image.open(filepath) as image:
+            projection_str = identify_projection(image=image)
+            image_bounds = get_image_bounds(image=image)
+
+        return GeoPolygon(polygon=geometry.Polygon.from_bounds(*image_bounds),
+                          projection=pyproj.Proj(projection_str))
+
+    def transform(self, *, target_projection: pyproj.Proj) -> "GeoPolygon":
+        if target_projection.definition_string() != self.projection.definition_string():
+            polygon = ops.transform(partial(pyproj.transform, self.projection, target_projection), self.polygon)
+        else:
+            polygon = self.polygon
+        return GeoPolygon(polygon=polygon, projection=target_projection)
+
+    def intersection(self, other: "GeoPolygon") -> "GeoPolygon":
+        other = other.transform(target_projection=self.projection)
+        return GeoPolygon(polygon=self.polygon.intersection(other.polygon),
+                          projection=self.projection)
+
+    def depr_intersects(self, other: Union["GeoPolygon", GeoPoint]) -> bool:
+        return self.polygon.intersection(other.transform(target_projection=self.projection).polygon).area > 0
+
+    def intersects(self, other: "GeoPolygon") -> bool:
+        op = other.transform(target_projection=self.projection).polygon
+        sp = self.polygon
+        return sp.intersects(op) and not sp.touches(op)
+
+    def difference(self, other: "GeoPolygon") -> "GeoPolygon":
+        other = other.transform(target_projection=self.projection)
+        return GeoPolygon(polygon=self.polygon.difference(other.polygon),
+                          projection=self.projection)
+
+    def buffer(self, value: float) -> "GeoPolygon":
+        return GeoPolygon(polygon=self.polygon.buffer(value), projection=self.projection)
+
+    @property
+    def to_cpp(self) -> td.simple_polygon:
+        # Note: Shapely polygons have one vertex repeated and orientation dos not matter
+        #       CGAL polygons have no vertex repeated and orientation mattters
+        from shapely.geometry.polygon import orient
+
+        exterior = np.asarray(orient(self.polygon).exterior)[:-1]
+        interiors = [np.asarray(hole)[:-1]
+                    for hole in orient(self.polygon,-1).interiors]
+
+        cgal_polygon = td.simple_polygon(exterior)
+        for interior in interiors:
+            cgal_polygon = cgal_polygon.difference(interior)
+        return cgal_polygon
+
+
