@@ -53,6 +53,7 @@ def test_store_and_load_tin(tin):
         assert geom.points == pts
         assert geom.faces == faces
 
+
 def test_store_and_delete_tin(tin):
     pts, faces = tin
     uid = "test_tin"

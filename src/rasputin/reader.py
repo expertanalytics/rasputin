@@ -417,9 +417,13 @@ class RasterRepository:
                     break
         return parts
 
-    def coordinate_system(self) -> str:
-        filepath = next(self.directory.glob("*.tif"))
-        return GeoPolygon.from_raster_file(filepath=filepath).projection.definition_string()
+    def coordinate_system(self, domain: GeoPolygon) -> str:
+        raster_files = self.directory.glob("*.tif")
+        for filepath in raster_files:
+            geo_polygon = GeoPolygon.from_raster_file(filepath=filepath)
+            if domain.intersects(geo_polygon):
+                return geo_polygon.projection.definition_string()
+        return ""
 
     def read(self,
              *,
