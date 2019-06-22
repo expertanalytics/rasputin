@@ -101,13 +101,19 @@ def store_tin():
     input_domain = GeoPolygon(polygon=source_polygon, projection=pyproj.Proj(init="EPSG:4326"))
     target_domain = input_domain.transform(target_projection=target_coordinate_system)
     raster_domain = input_domain.transform(target_projection=raster_coordinate_system)
-
+    if res.land_type_partition:
+        if res.land_type_partition == "corine":
+            lt_repo = gml_repository.GMLRepository(path=corine_archive)
+        else:
+            lt_repo = globcov_repository.GlobCovRepository(path=gc_archive)
+        constraints = lt_repo.constraints(domain=target_domain)
+    else:
+        constraints = []
     raster_data_list, cpp_polygon = raster_repo.read(domain=raster_domain)
     points, faces = lindstrom_turk_by_ratio(raster_data_list,
                                             cpp_polygon,
                                             res.ratio)
     assert len(points), "No tin extracted, something went wrong..."
-    print(len(points), len(faces))
     p = np.asarray(points)
     x, y, z = pyproj.transform(raster_coordinate_system,
                                target_coordinate_system,
@@ -123,11 +129,9 @@ def store_tin():
                                                              base_color=(1.0, 1.0, 1.0),
                                                              material=None)})
     else:
-        if res.land_type_partition == "corine":
-            lt_repo = gml_repository.GMLRepository(path=corine_archive)
-        else:
-            lt_repo = globcov_repository.GlobCovRepository(path=gc_archive)
+
         geometries = {}
+        constraints = lt_repo.constraints(domain=target_domain)
         tin_cell_centers = cell_centers(points, faces)
         geo_cell_centers = GeoPoints(xy=np.asarray(tin_cell_centers)[:, :2],
                                      projection=target_coordinate_system)

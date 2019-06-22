@@ -4,7 +4,7 @@ from lxml import etree
 import numpy as np
 from pyproj import transform
 from pyproj import Proj
-from shapely.geometry import Polygon, Point
+from shapely.geometry import Polygon, Point, LineString, MultiLineString
 from rasputin.geometry import GeoPoints, GeoPolygon
 from rasputin.land_cover_repository import LandCoverBaseType, LandCoverRepository, LandCoverMetaInfoBase
 from rasputin.material import lake_material, terrain_material
@@ -139,6 +139,7 @@ class GMLRepository(LandCoverRepository):
         self.fn = files[0]
         self.parser = etree.XMLParser(encoding="utf-8", recover=True, huge_tree=True)
         self.source_proj = None
+        self._cache = {}
 
     def _parse_polygon(self, polygon: etree._Element, nsmap: Dict[str, str]) -> Polygon:
         gml = f"{{{nsmap['gml']}}}"
@@ -157,7 +158,13 @@ class GMLRepository(LandCoverRepository):
         elm = next(root.iter(f"{gml}featureMember"))
         self.source_proj = Proj(next(elm.iter(f"{gml}Polygon")).attrib["srsName"])
 
+    def _to_key(self, domain: GeoPolygon) -> str:
+        return domain.projection.definition_string() + domain.polygon.to_wkt()
+
     def read(self, domain: GeoPolygon) -> Dict[LandCoverType, List[Polygon]]:
+        key = self._to_key(domain)
+        if key in self._cache:
+            return self._cache[key]
         tree = etree.parse(str(self.fn), self.parser)
         root = tree.getroot()
         self._assign_source_proj(root)
@@ -173,10 +180,37 @@ class GMLRepository(LandCoverRepository):
                 if code not in result:
                     result[code] = []
                 result[code].append(polygon.intersection(domain.polygon))
+        self._cache[key] = result
         return result
 
     def constraints(self, *, domain: GeoPolygon) -> List[GeoPolygon]:
-        return []
+        tree = etree.parse(str(self.fn), self.parser)
+        root = tree.getroot()
+        if not self.source_proj:
+            self._assign_source_proj(root)
+        target_proj = domain.projection
+        domain = domain.transform(target_projection=self.source_proj).buffer(50)
+        land_cover_types = self.read(domain)
+
+        needs_projection = target_proj.definition_string() != self.source_proj.definition_string()
+
+        constraints = []
+        for lc_list in land_cover_types.values():
+            for lc in lc_list:
+                if isinstance(lc.boundary, LineString):
+                    if needs_projection:
+                        lc = GeoPolygon(polygon=lc,
+                                        projection=self.source_proj).transform(
+                            target_projection=target_proj).polygon
+                    constraints.append(lc)
+                elif isinstance(lc.boundary, MultiLineString):
+                    for ls in lc.boundary:
+                        if needs_projection:
+                            ls = GeoPolygon(polygon=ls,
+                                            projection=self.source_proj).transform(
+                                target_projection=target_proj).polygon
+                        constraints.append(Polygon(ls))
+        return constraints
 
     def land_cover(self,
                    *,
