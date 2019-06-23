@@ -145,8 +145,8 @@ def get_image_bounds(image: TiffImageFile) -> tuple:
 
     x_min = x_tag - delta_x * j_tag
     y_max = y_tag + delta_y * i_tag
-    x_max = x_tag + delta_x * (n - 1 - j_tag)
-    y_min = y_tag - delta_y * (m - 1 - i_tag)
+    x_max = x_tag + delta_x * (m - 1 - j_tag)
+    y_min = y_tag - delta_y * (n - 1 - i_tag)
 
     return (x_min, y_min, x_max, y_max)
 
@@ -423,7 +423,7 @@ class RasterRepository:
             geo_polygon = GeoPolygon.from_raster_file(filepath=filepath)
             if domain.intersects(geo_polygon):
                 return geo_polygon.projection.definition_string()
-        return ""
+        raise RuntimeError("Defining polygon does not intersect with dem raster data.")
 
     def read(self,
              *,

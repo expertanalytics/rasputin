@@ -106,7 +106,6 @@ def store_tin():
                                             cpp_polygon,
                                             res.ratio)
     assert len(points), "No tin extracted, something went wrong..."
-    print(len(points), len(faces))
     p = np.asarray(points)
     x, y, z = pyproj.transform(raster_coordinate_system,
                                target_coordinate_system,
