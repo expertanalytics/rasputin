@@ -211,3 +211,24 @@ class GeoPolygon:
         return cgal_polygon
 
 
+def process_constraints(*, constraints: List[geometry.Polygon], domain: geometry.Polygon) -> List[geometry.LineString]:
+    domain_boundary = domain.boundary
+    domain_boundary = domain_boundary.intersection(domain_boundary).buffer(0.01)
+
+    inner_constraints = []
+    for c in constraints:
+        boundary = c.intersection(domain).boundary
+        inner_boundary = boundary.difference(domain_boundary)
+        inner_constraints.append(inner_boundary)
+
+    def flatten(obj):
+        if isinstance(obj, geometry.MultiLineString):
+            return [o for o in obj]
+        return [obj]
+
+    line_strings = []
+    for ic in inner_constraints:
+        line_strings.extend(flatten(ic))
+
+    return line_strings
+

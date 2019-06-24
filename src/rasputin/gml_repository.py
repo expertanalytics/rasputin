@@ -189,7 +189,7 @@ class GMLRepository(LandCoverRepository):
         if not self.source_proj:
             self._assign_source_proj(root)
         target_proj = domain.projection
-        domain = domain.transform(target_projection=self.source_proj).buffer(50)
+        domain = domain.transform(target_projection=self.source_proj)
         land_cover_types = self.read(domain)
 
         needs_projection = target_proj.definition_string() != self.source_proj.definition_string()
@@ -198,18 +198,16 @@ class GMLRepository(LandCoverRepository):
         for lc_list in land_cover_types.values():
             for lc in lc_list:
                 if isinstance(lc.boundary, LineString):
+                    polygon = GeoPolygon(polygon=lc, projection=self.source_proj)
                     if needs_projection:
-                        lc = GeoPolygon(polygon=lc,
-                                        projection=self.source_proj).transform(
-                            target_projection=target_proj).polygon
-                    constraints.append(lc)
+                        polygon = polygon.transform(target_projection=target_proj)
+                    constraints.append(polygon)
                 elif isinstance(lc.boundary, MultiLineString):
                     for ls in lc.boundary:
+                        polygon = GeoPolygon(polygon=Polygon(ls), projection=self.source_proj)
                         if needs_projection:
-                            ls = GeoPolygon(polygon=ls,
-                                            projection=self.source_proj).transform(
-                                target_projection=target_proj).polygon
-                        constraints.append(Polygon(ls))
+                            polygon = polygon.transform(target_projection=target_proj)
+                        constraints.append(polygon)
         return constraints
 
     def land_cover(self,
