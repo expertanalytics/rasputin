@@ -62,10 +62,53 @@ using SimplePolygon = Polygon_2<K>;
 using Polygon = Polygon_with_holes_2<K>;
 using MultiPolygon = std::vector<Polygon>;
 
-auto point_inside_polygon = [](const Point2& x, const SimplePolygon& poly) -> bool {
-    return (bounded_side_2(poly.vertices_begin(), poly.vertices_end(), x, K()) != CGAL::ON_UNBOUNDED_SIDE);
-};
+bool point_inside_polygon(const Point2& x,const SimplePolygon& polygon) {
+        return polygon.has_on_bounded_side(x);
+}
 
+bool point_inside_polygon(const Point2& x,const Polygon& polygon) {
+    if (not polygon.outer_boundary().has_on_bounded_side(x))
+        return false;
+    if (not polygon.has_holes())
+        return true;
+    for (auto it = polygon.holes_begin(); it != polygon.holes_end(); ++it)
+        if (it->has_on_bounded_side(x))
+            return false;
+    return true;
+}
+
+bool point_inside_polygon(const Point2& x,const MultiPolygon& polygon) {
+    for (const auto& part: polygon)
+        if (point_inside_polygon(x, part))
+            return true;
+    return false;
+}
+
+std::vector<SimplePolygon> extract_boundaries(const SimplePolygon& polygon) {
+    std::vector<SimplePolygon> ret;
+    ret.emplace_back(polygon);
+
+    return ret;
+}
+std::vector<SimplePolygon> extract_boundaries(const Polygon& polygon) {
+    std::vector<SimplePolygon> ret;
+    ret.emplace_back(polygon.outer_boundary());
+    for (auto it = polygon.holes_begin(); it != polygon.holes_end(); ++it)
+        ret.emplace_back(*it);
+
+    return ret;
+}
+
+std::vector<SimplePolygon> extract_boundaries(const MultiPolygon& polygon) {
+    std::vector<SimplePolygon> ret;
+    for (const auto& part: polygon) {
+        ret.emplace_back(part.outer_boundary());
+        for (auto it = part.holes_begin(); it != part.holes_end(); ++it)
+            ret.emplace_back(*it);
+    }
+
+    return ret;
+}
 }
 
 namespace rasputin {
@@ -335,7 +378,7 @@ Mesh make_mesh(const CGAL::PointList &pts,
         // Add face if midpoint is contained
         CGAL::Point2 face_midpoint(u.x()/3 + v.x()/3 + w.x()/3,
                                    u.y()/3 + v.y()/3 + w.y()/3);
-        if (inclusion_polygon.has_on_bounded_side(face_midpoint)) {
+        if (CGAL::point_inside_polygon(face_midpoint, inclusion_polygon)) {
             mesh.add_face(index(u), index(v), index(w));
         }
     }

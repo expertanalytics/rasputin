@@ -236,8 +236,16 @@ PYBIND11_MODULE(triangulate_dem, m) {
 
     bind_make_mesh<std::vector<rasputin::RasterData<float>>, CGAL::SimplePolygon>(m);
     bind_make_mesh<std::vector<rasputin::RasterData<double>>, CGAL::SimplePolygon>(m);
+    bind_make_mesh<std::vector<rasputin::RasterData<float>>, CGAL::Polygon>(m);
+    bind_make_mesh<std::vector<rasputin::RasterData<double>>, CGAL::Polygon>(m);
+    // bind_make_mesh<std::vector<rasputin::RasterData<float>>, CGAL::MultiPolygon>(m);
+    // bind_make_mesh<std::vector<rasputin::RasterData<double>>, CGAL::MultiPolygon>(m);
     bind_make_mesh<rasputin::RasterData<float>, CGAL::SimplePolygon>(m);
     bind_make_mesh<rasputin::RasterData<double>, CGAL::SimplePolygon>(m);
+    bind_make_mesh<rasputin::RasterData<float>, CGAL::Polygon>(m);
+    bind_make_mesh<rasputin::RasterData<double>, CGAL::Polygon>(m);
+    // bind_make_mesh<rasputin::RasterData<float>, CGAL::MultiPolygon>(m);
+    // bind_make_mesh<rasputin::RasterData<double>, CGAL::MultiPolygon>(m);
 
     py::class_<CGAL::SimplePolygon, std::unique_ptr<CGAL::SimplePolygon>>(m, "simple_polygon")
         .def(py::init(&polygon_from_numpy))
@@ -271,6 +279,8 @@ PYBIND11_MODULE(triangulate_dem, m) {
                         result.append(*h);
                     return result;
                     })
+        .def("extract_boundaries", [] (const CGAL::Polygon& self) {return CGAL::extract_boundaries(self);},
+                py::return_value_policy::take_ownership)
         .def("exterior", [] (const CGAL::Polygon& self) {return self.outer_boundary();})
         .def("join", &join_polygons<CGAL::Polygon, CGAL::SimplePolygon>)
         .def("join", &join_polygons<CGAL::Polygon, CGAL::Polygon>)
@@ -300,6 +310,8 @@ PYBIND11_MODULE(triangulate_dem, m) {
                     result.append(*p);
                 return result;
             })
+        .def("extract_boundaries", [] (const CGAL::MultiPolygon& self) {return CGAL::extract_boundaries(self);},
+                py::return_value_policy::take_ownership)
         .def("join",
             [] (const CGAL::MultiPolygon a, CGAL::SimplePolygon b) {
                 return join_multipolygons(a, CGAL::MultiPolygon({static_cast<CGAL::Polygon>(b)}));
