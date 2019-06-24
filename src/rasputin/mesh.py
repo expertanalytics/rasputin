@@ -3,6 +3,7 @@ import typing as tp
 
 from . import triangulate_dem
 from .reader import GeoPolygon, Rasterdata
+import meshio
 
 class Mesh(object):
     def __init__(self, cpp_mesh: triangulate_dem.Mesh):
