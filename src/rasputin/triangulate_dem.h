@@ -66,7 +66,6 @@ auto point_inside_polygon = [](const Point2& x, const SimplePolygon& poly) -> bo
     return (bounded_side_2(poly.vertices_begin(), poly.vertices_end(), x, K()) != CGAL::ON_UNBOUNDED_SIDE);
 };
 
-
 }
 
 namespace rasputin {
@@ -252,7 +251,7 @@ struct RasterData {
 
     // Determine if a point (x, y) is is strictly inside the raster domain
     bool contains(double x, double y) const {
-        bool eps = pow(pow(delta_x, 2) + pow(delta_y, 2), 0.5) * 1e-10;
+        double eps = pow(pow(delta_x, 2) + pow(delta_y, 2), 0.5) * 1e-10;
         return ((x > x_min + eps) and (x < get_x_max() - eps)
                 and (y > get_y_min() + eps) and (y < y_max - eps));
     }
@@ -267,21 +266,22 @@ CGAL::DelaunayConstraints interpolate_boundary_points(const RasterData<T>& raste
     // Iterate over edges of the intersection polygon and interpolate points
     // TODO: Handle holes. Only needed if the intersecting polygon has holes.
     CGAL::DelaunayConstraints interpolated_points;
-    for (const auto& part : intersection_polygon)
-        for (auto e = part.outer_boundary().edges_begin(); e != part.outer_boundary().edges_end(); ++e) {
+    for (const auto& part : CGAL::extract_boundaries(intersection_polygon)) {
+        for (auto e = part.edges_begin(); e != part.edges_end(); ++e) {
             CGAL::Point2 first_vertex = e->vertex(0);
             CGAL::Point2 second_vertex = e->vertex(1);
 
             // We can skip edges that are aligend with the raster boundary
             // TODO: Consider checking using CGAL and exact arithmentic
-            bool edge_is_aligned = not raster.contains((first_vertex.x() + second_vertex.x())/2,
+            bool edge_is_aligned = not raster.contains((first_vertex.x() + second_vertex.x())/3,
                                                        (first_vertex.y() + second_vertex.y())/2);
-            if (edge_is_aligned)
+            if (edge_is_aligned) {
                 continue;
+            }
 
             // Sample with the approximately the same resolution as the raster data along the boundary edges
-            double edge_len_x = second_vertex[0] - first_vertex[0];
-            double edge_len_y = second_vertex[1] - first_vertex[1];
+            double edge_len_x = second_vertex.x() - first_vertex.x();
+            double edge_len_y = second_vertex.y() - first_vertex.y();
             std::size_t num_subedges = static_cast<int>(std::max<double>(std::fabs(edge_len_x/raster.delta_x),
                                                                          std::fabs(edge_len_y/raster.delta_y)));
             num_subedges = std::max<int>(1, num_subedges);
@@ -292,13 +292,14 @@ CGAL::DelaunayConstraints interpolate_boundary_points(const RasterData<T>& raste
             // Iterate over edge samples
             std::vector<CGAL::Point> interpolated_points_on_edge;
             for (std::size_t k=0; k < num_subedges + 1; ++k) {
-                double x = first_vertex[0] + k * edge_dx;
-                double y = first_vertex[1] + k * edge_dy;
+                double x = first_vertex.x() + k * edge_dx;
+                double y = first_vertex.y() + k * edge_dy;
                 double z = raster.get_interpolated_value_at_point(x, y);
                 interpolated_points_on_edge.emplace_back(x, y, z);
             }
             interpolated_points.push_back(std::move(interpolated_points_on_edge));
         }
+    }
     return interpolated_points;
 }
 
@@ -315,42 +316,30 @@ Mesh make_mesh(const CGAL::PointList &pts,
     for (auto point_sequence: constraints)
         dtin.insert_constraint(point_sequence.begin(), point_sequence.end(), false);
 
-    CGAL::PointVertexMap pvm;
     CGAL::Mesh mesh;
+    CGAL::PointVertexMap pvm;
 
-    // Option 1: Add points that are not outside the polygon.
-    //           Add faces if all three vertices are in the mesh
-    //
-    // Option 2: Add all points
-    //           Add faces if midpoint is inside polygon
-    //           Remove hanging points
-    //
-    // Option3: Add points that not outside polygon
-    //          Add faces if midpoint is inside polygon
-    //
-    // All options are equivalent in terms of output with exact predicates and
-    // if the mesh does not contain degenerate triangles.
-
-
-    for (auto v = dtin.finite_vertices_begin(); v != dtin.finite_vertices_end(); ++v) {
-        CGAL::Point2 pt(v->point().x(), v->point().y());
-        if (not inclusion_polygon.has_on_unbounded_side(pt))
-            pvm.emplace(std::make_pair(v->point(), mesh.add_vertex(v->point())));
-    }
+    auto index = [&pvm, &mesh] (CGAL::Point v) -> CGAL::VertexIndex {
+        // Find index of point in mesh, adding it if needed
+        auto iter = pvm.find(v);
+        if (iter == pvm.end())
+            iter = pvm.emplace(std::make_pair(v, mesh.add_vertex(v))).first;
+        return iter->second;
+    };
 
     for (auto f = dtin.finite_faces_begin(); f != dtin.finite_faces_end(); ++f) {
         CGAL::Point u = f->vertex(0)->point();
         CGAL::Point v = f->vertex(1)->point();
         CGAL::Point w = f->vertex(2)->point();
 
-        // At this point we have to determine if the simplex (u, v, w) is inside polygon.
+        // Add face if midpoint is contained
         CGAL::Point2 face_midpoint(u.x()/3 + v.x()/3 + w.x()/3,
                                    u.y()/3 + v.y()/3 + w.y()/3);
-        if (inclusion_polygon.has_on_bounded_side(face_midpoint))
-            mesh.add_face(pvm[u], pvm[v], pvm[w]);
+        if (inclusion_polygon.has_on_bounded_side(face_midpoint)) {
+            mesh.add_face(index(u), index(v), index(w));
+        }
     }
     pvm.clear();
-
     return Mesh(mesh);
 };
 
