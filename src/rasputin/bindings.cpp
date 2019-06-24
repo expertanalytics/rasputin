@@ -176,6 +176,8 @@ void bind_rasterdata(py::module &m, const std::string& pyname) {
                 auto [i, j] = idx;
                 return self.data[self.num_points_x * i + j]; })
     .def("get_indices", &rasputin::RasterData<FT>::get_indices)
+    .def("exterior", &rasputin::RasterData<FT>::exterior, py::return_value_policy::take_ownership)
+    .def("contains", &rasputin::RasterData<FT>::contains)
     .def("get_interpolated_value_at_point", &rasputin::RasterData<FT>::get_interpolated_value_at_point);
 }
 
@@ -190,6 +192,21 @@ void bind_make_mesh(py::module &m) {
                 return rasputin::mesh_from_raster(raster_data);
             }, py::return_value_policy::take_ownership);
 }
+
+template<typename T>
+void bind_raster_list(py::module &m, const std::string& pyname) {
+    py::class_<std::vector<rasputin::RasterData<T>>, std::unique_ptr<std::vector<rasputin::RasterData<T>>>> (m, pyname.c_str())
+        .def(py::init( [] () {std::vector<rasputin::RasterData<T>> self; return self;}))
+        .def("add_raster",
+            [] (std::vector<rasputin::RasterData<T>>& self, rasputin::RasterData<T> raster_data) {
+                self.push_back(raster_data);
+            }, py::keep_alive<1,2>())
+        .def("__getitem__",
+            [] (std::vector<rasputin::RasterData<T>>& self, int index) {
+                return self.at(index);
+            }, py::return_value_policy::reference_internal);
+}
+
 
 PYBIND11_MODULE(triangulate_dem, m) {
     py::bind_vector<rasputin::point3_vector>(m, "point3_vector", py::buffer_protocol())
@@ -213,6 +230,9 @@ PYBIND11_MODULE(triangulate_dem, m) {
 
     bind_rasterdata<float>(m, "raster_data_float");
     bind_rasterdata<double>(m, "raster_data_double");
+
+    bind_raster_list<float>(m, "raster_list_float");
+    bind_raster_list<double>(m, "raster_list_double");
 
     bind_make_mesh<std::vector<rasputin::RasterData<float>>, CGAL::SimplePolygon>(m);
     bind_make_mesh<std::vector<rasputin::RasterData<double>>, CGAL::SimplePolygon>(m);
@@ -319,17 +339,6 @@ PYBIND11_MODULE(triangulate_dem, m) {
 
         .def_property_readonly("points", &rasputin::Mesh::get_points, py::return_value_policy::reference_internal)
         .def_property_readonly("faces", &rasputin::Mesh::get_faces, py::return_value_policy::reference_internal);
-
-    py::class_<std::vector<rasputin::RasterData<float>>, std::unique_ptr<std::vector<rasputin::RasterData<float>>>> (m, "raster_list")
-        .def(py::init( [] () {std::vector<rasputin::RasterData<float>> self; return self;}))
-        .def("add_raster",
-            [] (std::vector<rasputin::RasterData<float>>& self, rasputin::RasterData<float> raster_data) {
-                self.push_back(raster_data);
-            }, py::keep_alive<1,2>())
-        .def("__getitem__",
-            [] (std::vector<rasputin::RasterData<float>>& self, int index) {
-                return self.at(index);
-            }, py::return_value_policy::reference_internal);
 
     m.def("compute_shadow", &rasputin::compute_shadow, "Compute shadows for given sun ray direction.")
      .def("compute_shadows", &rasputin::compute_shadows, "Compute shadows for a series of times and ray directions.")
