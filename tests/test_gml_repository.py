@@ -41,7 +41,7 @@ def test_gml_repository():
 
     dem_archive = Path(os.environ["RASPUTIN_DATA_DIR"]) / "dem_archive"
     rr = RasterRepository(directory=dem_archive)
-    raster_domain = domain.transform(target_projection=pyproj.Proj(rr.coordinate_system()))
+    raster_domain = domain.transform(target_projection=pyproj.Proj(rr.coordinate_system(domain=domain)))
     raster_data_list, cpp_polygon = rr.read(domain=raster_domain)
     points, faces = lindstrom_turk_by_ratio(raster_data_list,
                                             cpp_polygon,

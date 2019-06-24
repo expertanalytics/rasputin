@@ -96,18 +96,16 @@ def store_tin():
         source_polygon = Polygon((x, y) for (x, y) in zip(res.x, res.y))
 
     raster_repo = RasterRepository(directory=dem_archive)
-    raster_coordinate_system = pyproj.Proj(raster_repo.coordinate_system())
     target_coordinate_system = pyproj.Proj(init=res.target_coordinate_system)
     input_domain = GeoPolygon(polygon=source_polygon, projection=pyproj.Proj(init="EPSG:4326"))
     target_domain = input_domain.transform(target_projection=target_coordinate_system)
+    raster_coordinate_system = pyproj.Proj(raster_repo.coordinate_system(domain=target_domain))
     raster_domain = input_domain.transform(target_projection=raster_coordinate_system)
-
     raster_data_list, cpp_polygon = raster_repo.read(domain=raster_domain)
     points, faces = lindstrom_turk_by_ratio(raster_data_list,
                                             cpp_polygon,
                                             res.ratio)
     assert len(points), "No tin extracted, something went wrong..."
-    print(len(points), len(faces))
     p = np.asarray(points)
     x, y, z = pyproj.transform(raster_coordinate_system,
                                target_coordinate_system,
