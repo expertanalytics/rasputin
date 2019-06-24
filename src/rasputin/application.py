@@ -96,10 +96,10 @@ def store_tin():
         source_polygon = Polygon((x, y) for (x, y) in zip(res.x, res.y))
 
     raster_repo = RasterRepository(directory=dem_archive)
-    raster_coordinate_system = pyproj.Proj(raster_repo.coordinate_system())
     target_coordinate_system = pyproj.Proj(init=res.target_coordinate_system)
     input_domain = GeoPolygon(polygon=source_polygon, projection=pyproj.Proj(init="EPSG:4326"))
     target_domain = input_domain.transform(target_projection=target_coordinate_system)
+    raster_coordinate_system = pyproj.Proj(raster_repo.coordinate_system(domain=target_domain))
     raster_domain = input_domain.transform(target_projection=raster_coordinate_system)
     if res.land_type_partition:
         if res.land_type_partition == "corine":
@@ -109,6 +109,7 @@ def store_tin():
         constraints = lt_repo.constraints(domain=target_domain)
     else:
         constraints = []
+        lt_repo = None
     raster_data_list, cpp_polygon = raster_repo.read(domain=raster_domain)
     points, faces = lindstrom_turk_by_ratio(raster_data_list,
                                             cpp_polygon,
@@ -129,9 +130,7 @@ def store_tin():
                                                              base_color=(1.0, 1.0, 1.0),
                                                              material=None)})
     else:
-
         geometries = {}
-        constraints = lt_repo.constraints(domain=target_domain)
         tin_cell_centers = cell_centers(points, faces)
         geo_cell_centers = GeoPoints(xy=np.asarray(tin_cell_centers)[:, :2],
                                      projection=target_coordinate_system)
