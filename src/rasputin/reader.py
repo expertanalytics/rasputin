@@ -354,8 +354,8 @@ def read_raster_file(*,
         x_min = x_tag - delta_x * j_tag
         y_max = y_tag + delta_y * i_tag
 
-        x_max = x_tag + delta_x * (n - 1 - j_tag)
-        y_min = y_tag - delta_y * (m - 1 - i_tag)
+        x_max = x_tag + delta_x * (m - 1 - j_tag)
+        y_min = y_tag - delta_y * (n - 1 - i_tag)
 
         # If polygon is provided we crop the raster image to the polygon
         if polygon:
@@ -368,9 +368,9 @@ def read_raster_file(*,
 
             # Find indices for the box
             x_min_p, y_min_p, x_max_p, y_max_p = polygon.bounds
-            box = (np.clip(np.floor((x_min_p - x_min)/delta_x), 0, n-1),
+            box = (np.clip(np.floor((x_min_p - x_min)/delta_x), 0, m-1),
                    np.clip(np.floor((y_max - y_max_p)/delta_y), 0, n-1),
-                   np.clip(np.ceil((x_max_p - x_min)/delta_x) + 1, 1, n),
+                   np.clip(np.ceil((x_max_p - x_min)/delta_x) + 1, 1, m),
                    np.clip(np.ceil((y_max - y_min_p)/delta_y) + 1, 1, n))
 
             # NOTE: Cropping does not include last indices
@@ -423,6 +423,7 @@ class RasterRepository:
             geo_polygon = GeoPolygon.from_raster_file(filepath=filepath)
             if domain.intersects(geo_polygon):
                 return geo_polygon.projection.definition_string()
+
         raise RuntimeError("Defining polygon does not intersect with dem raster data.")
 
     def read(self,
@@ -440,4 +441,4 @@ def read_sun_posisions(*, filepath: Path) -> triangulate_dem.shadow_vector:
     assert filepath.exists()
     with filepath.open("r") as ff:
         pass
-    return triangulate_dem.ShadowVector()
+    return triangulate_dem.shadow_vector()
