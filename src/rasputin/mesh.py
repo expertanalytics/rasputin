@@ -1,12 +1,36 @@
 import numpy as np
 import typing as tp
 
-import shapely as sl
 from . import triangulate_dem
+from .reader import GeoPolygon, Rasterdata
 
 class Mesh(object):
     def __init__(self, cpp_mesh: triangulate_dem.Mesh):
         self._cpp = cpp_mesh
+
+    @classmethod
+    def from_raster(cls,
+                    data: tp.Union[tp.List[Rasterdata], Rasterdata],
+                    domain: GeoPolygon) -> "Mesh":
+        # Extract cpp objects
+        if isinstance(data, list):
+            if data[0].array.dtype == np.float64:
+                rasterdata_cpp = triangulate_dem.raster_list_double()
+            else:
+                rasterdata_cpp = triangulate_dem.raster_list_float()
+
+            for raster in data:
+                rasterdata_cpp.add_raster(raster._cpp)
+
+        else:
+            rasterdata_cpp = data._cpp
+
+        if domain:
+            mesh = cls(triangulate_dem.make_mesh(rasterdata_cpp, domain._cpp))
+        else:
+            mesh = cls(triangulate_dem.make_mesh(rasterdata_cpp))
+
+        return mesh
 
     @property
     def num_points(self) -> int:
@@ -47,10 +71,10 @@ class Mesh(object):
         array.flags.writeable = False
         return array
 
-    def coarsen(self,
-                *,
-                ratio: tp.Optional[float] = None,
-                max_size: tp.Optional[int] = None) -> "Mesh":
+    def simplify(self,
+                 *,
+                 ratio: tp.Optional[float] = None,
+                 max_size: tp.Optional[int] = None) -> "Mesh":
 
         """
         Simplify mesh by edge collapse, using the Lindstrom-Turk cost functional
