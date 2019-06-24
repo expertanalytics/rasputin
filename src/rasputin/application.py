@@ -7,6 +7,7 @@ import pyproj
 from shapely.geometry import Polygon
 from shapely import wkt, wkb
 import argparse
+<<<<<<< HEAD
 from rasputin.reader import RasterRepository
 from rasputin.tin_repository import TinRepository
 from rasputin.triangulate_dem import lindstrom_turk_by_ratio, cell_centers, face_vector, point3_vector
@@ -24,6 +25,14 @@ def read_poly_file(*, path: Path) -> Polygon:
         with path.open("r") as pfile:
             polygon = wkt.loads(pfile.read())
     return polygon
+=======
+from rasputin.reader import RasterRepository, GeoPolygon
+from rasputin.mesh import Mesh
+from rasputin.tin_repository import TinRepository
+from rasputin.triangulate_dem import extract_lakes, cell_centers, face_vector
+from rasputin.geometry import Geometry, write_scene, lake_material, terrain_material
+from rasputin.globcov_repository import GlobCovRepository, GeoPoints, LandCoverType
+>>>>>>> Update python interface for new functionality
 
 
 def store_tin():
@@ -95,16 +104,24 @@ def store_tin():
         assert 3 <= len(res.x) == len(res.y), "x and y coordinates must have equal length greater or equal to 3"
         source_polygon = Polygon((x, y) for (x, y) in zip(res.x, res.y))
 
-    raster_repo = RasterRepository(directory=dem_archive)
-    target_coordinate_system = pyproj.Proj(init=res.target_coordinate_system)
+
+
     input_domain = GeoPolygon(polygon=source_polygon, projection=pyproj.Proj(init="EPSG:4326"))
+
+    target_coordinate_system = pyproj.Proj(init=res.target_coordinate_system)
     target_domain = input_domain.transform(target_projection=target_coordinate_system)
+
     raster_coordinate_system = pyproj.Proj(raster_repo.coordinate_system(domain=target_domain))
     raster_domain = input_domain.transform(target_projection=raster_coordinate_system)
-    raster_data_list, cpp_polygon = raster_repo.read(domain=raster_domain)
-    points, faces = lindstrom_turk_by_ratio(raster_data_list,
-                                            cpp_polygon,
-                                            res.ratio)
+
+    raster_data_list = RasterRepository(directory=dem_archive).read(domain=geo_polygon)
+
+    mesh = (Mesh.from_raster(data=raster_data_list,
+                             domain=geo_polygon)
+            .simplify(ratio=res.ratio))
+
+    points, faces = mesh.points, mesh.faces
+
     assert len(points), "No tin extracted, something went wrong..."
     p = np.asarray(points)
     x, y, z = pyproj.transform(raster_coordinate_system,

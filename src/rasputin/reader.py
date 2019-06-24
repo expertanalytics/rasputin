@@ -314,10 +314,16 @@ class Rasterdata:
     info: Dict[str, Any]
 
     @property
+    def x_max(self):
+        return self.x_min + (self.array.shape[1] - 1) * self.delta_x
+
+    @property
+    def y_min(self):
+        return self.y_max - (self.array.shape[0] - 1) * self.delta_y
+
+    @property
     def box(self):
-        x_max = self.x_min + (self.array.shape[1] - 1) * self.delta_x
-        y_min = self.y_max - (self.array.shape[0] - 1) * self.delta_y
-        return (self.x_min, y_min, x_max, self.y_max)
+        return (self.x_min, self.y_min, self.x_max, self.y_max)
 
     @property
     def to_cpp(self) -> triangulate_dem.raster_data_float:
@@ -389,7 +395,6 @@ def read_raster_file(*,
                       delta_x=delta_x, delta_y=delta_y, info=info,
                       coordinate_system=coordinate_system)
 
-
 class RasterRepository:
 
     def __init__(self, *, directory: Path) -> None:
@@ -426,16 +431,8 @@ class RasterRepository:
 
         raise RuntimeError("Defining polygon does not intersect with dem raster data.")
 
-    def read(self,
-             *,
-             domain: GeoPolygon) -> Tuple[triangulate_dem.raster_list, triangulate_dem.simple_polygon]:
-
-        data = triangulate_dem.raster_list()
-        for part in self.get_intersections(target_polygon=domain):
-            data.add_raster(part.to_cpp)
-        cgal_polygon = domain.to_cpp
-        return data, cgal_polygon
-
+    def read(self, *, domain: GeoPolygon) -> List[Rasterdata]:
+        return self.get_intersections(target_polygon=domain)
 
 def read_sun_posisions(*, filepath: Path) -> triangulate_dem.shadow_vector:
     assert filepath.exists()

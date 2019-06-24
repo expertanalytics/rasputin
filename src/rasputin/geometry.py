@@ -209,5 +209,3 @@ class GeoPolygon:
         for interior in interiors:
             cgal_polygon = cgal_polygon.difference(interior)
         return cgal_polygon
-
-
