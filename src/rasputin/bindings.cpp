@@ -269,7 +269,7 @@ PYBIND11_MODULE(triangulate_dem, m) {
         .def("intersection", &intersect_polygons<CGAL::SimplePolygon, CGAL::SimplePolygon>)
         .def("intersection", &intersect_polygons<CGAL::SimplePolygon, CGAL::Polygon>);
 
-    py::class_<CGAL::Polygon, std::unique_ptr<CGAL::Polygon>>(m, "Polygon")
+    py::class_<CGAL::Polygon, std::unique_ptr<CGAL::Polygon>>(m, "polygon")
         .def(py::init([] (py::array_t<double>& buf) {
             const CGAL::SimplePolygon exterior = polygon_from_numpy(buf);
             return CGAL::Polygon(exterior);}))
@@ -289,7 +289,7 @@ PYBIND11_MODULE(triangulate_dem, m) {
         .def("intersection", &intersect_polygons<CGAL::Polygon, CGAL::SimplePolygon>)
         .def("intersection", &intersect_polygons<CGAL::Polygon, CGAL::Polygon>);
 
-    py::class_<CGAL::MultiPolygon, std::unique_ptr<CGAL::MultiPolygon>>(m, "MultiPolygon")
+    py::class_<CGAL::MultiPolygon, std::unique_ptr<CGAL::MultiPolygon>>(m, "multi_polygon")
         .def(py::init(
             [] (const CGAL::Polygon& polygon) {
                 CGAL::MultiPolygon self;
