@@ -200,13 +200,14 @@ class GeoPolygon:
         #       CGAL polygons have no vertex repeated and orientation mattters
         from shapely.geometry.polygon import orient
 
+        # Get point sequences as arrays
         exterior = np.asarray(orient(self.polygon).exterior)[:-1]
         interiors = [np.asarray(hole)[:-1]
                     for hole in orient(self.polygon,-1).interiors]
 
         cgal_polygon = td.simple_polygon(exterior)
         for interior in interiors:
-            cgal_polygon = cgal_polygon.difference(interior)
+            cgal_polygon = cgal_polygon.difference(td.simple_polygon(interior))
             # Intersection result is MultiPolygon
             if cgal_polygon.num_parts() == 1:
                 cgal_polygon = cgal_polygon[0]
