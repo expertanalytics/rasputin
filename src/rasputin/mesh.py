@@ -12,7 +12,7 @@ class Mesh(object):
     @classmethod
     def from_raster(cls,
                     data: tp.Union[tp.List[Rasterdata], Rasterdata],
-                    domain: GeoPolygon) -> "Mesh":
+                    domain: tp.Optional[GeoPolygon] = None) -> "Mesh":
         # Extract cpp objects
         if isinstance(data, list):
             if data[0].array.dtype == np.float64:
