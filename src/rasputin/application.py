@@ -32,7 +32,6 @@ from rasputin.tin_repository import TinRepository
 from rasputin.triangulate_dem import extract_lakes, cell_centers, face_vector
 from rasputin.geometry import Geometry, write_scene, lake_material, terrain_material
 from rasputin.globcov_repository import GlobCovRepository, GeoPoints, LandCoverType
->>>>>>> Update python interface for new functionality
 
 
 def store_tin():
