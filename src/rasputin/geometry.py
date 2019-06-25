@@ -195,8 +195,7 @@ class GeoPolygon:
     def buffer(self, value: float) -> "GeoPolygon":
         return GeoPolygon(polygon=self.polygon.buffer(value), projection=self.projection)
 
-    @property
-    def to_cpp(self) -> td.simple_polygon:
+    def to_cpp(self) -> Union[td.simple_polygon, td.polygon]:
         # Note: Shapely polygons have one vertex repeated and orientation dos not matter
         #       CGAL polygons have no vertex repeated and orientation mattters
         from shapely.geometry.polygon import orient
@@ -208,4 +207,7 @@ class GeoPolygon:
         cgal_polygon = td.simple_polygon(exterior)
         for interior in interiors:
             cgal_polygon = cgal_polygon.difference(interior)
+            # Intersection result is MultiPolygon
+            if cgal_polygon.num_parts() == 1:
+                cgal_polygon = cgal_polygon[0]
         return cgal_polygon

@@ -21,13 +21,13 @@ class Mesh(object):
                 rasterdata_cpp = triangulate_dem.raster_list_float()
 
             for raster in data:
-                rasterdata_cpp.add_raster(raster._cpp)
+                rasterdata_cpp.add_raster(raster.to_cpp())
 
         else:
-            rasterdata_cpp = data._cpp
+            rasterdata_cpp = data.to_cpp()
 
         if domain:
-            mesh = cls(triangulate_dem.make_mesh(rasterdata_cpp, domain._cpp))
+            mesh = cls(triangulate_dem.make_mesh(rasterdata_cpp, domain.to_cpp()))
         else:
             mesh = cls(triangulate_dem.make_mesh(rasterdata_cpp))
 
