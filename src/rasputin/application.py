@@ -7,7 +7,7 @@ import pyproj
 from shapely.geometry import Polygon
 from shapely import wkt, wkb
 import argparse
-<<<<<<< HEAD
+
 from rasputin.reader import RasterRepository
 from rasputin.tin_repository import TinRepository
 from rasputin.triangulate_dem import lindstrom_turk_by_ratio, cell_centers, face_vector, point3_vector
@@ -25,13 +25,6 @@ def read_poly_file(*, path: Path) -> Polygon:
         with path.open("r") as pfile:
             polygon = wkt.loads(pfile.read())
     return polygon
-=======
-from rasputin.reader import RasterRepository, GeoPolygon
-from rasputin.mesh import Mesh
-from rasputin.tin_repository import TinRepository
-from rasputin.triangulate_dem import extract_lakes, cell_centers, face_vector
-from rasputin.geometry import Geometry, write_scene, lake_material, terrain_material
-from rasputin.globcov_repository import GlobCovRepository, GeoPoints, LandCoverType
 
 
 def store_tin():
