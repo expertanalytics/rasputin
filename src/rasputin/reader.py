@@ -315,11 +315,11 @@ class Rasterdata:
 
     @property
     def x_max(self):
-        return self.x_min + (self.array.shape[1] - 1) * self.delta_x
+        return self.x_min + (self.array.shape[0] - 1) * self.delta_x
 
     @property
     def y_min(self):
-        return self.y_max - (self.array.shape[0] - 1) * self.delta_y
+        return self.y_max - (self.array.shape[1] - 1) * self.delta_y
 
     @property
     def box(self):
@@ -354,13 +354,13 @@ def read_raster_file(*,
         coordinate_system = identify_projection(image=image)
 
         delta_x, delta_y, _ = model_pixel_scale
-        j_tag, i_tag, _, x_tag, y_tag, _ = model_tie_point
+        i_tag, j_tag, _, x_tag, y_tag, _ = model_tie_point
 
-        x_min = x_tag - delta_x * j_tag
-        y_max = y_tag + delta_y * i_tag
+        x_min = x_tag - delta_x * i_tag
+        y_max = y_tag + delta_y * j_tag
 
-        x_max = x_tag + delta_x * (m - 1 - j_tag)
-        y_min = y_tag - delta_y * (n - 1 - i_tag)
+        x_max = x_tag + delta_x * (m - 1 - i_tag)
+        y_min = y_tag - delta_y * (n - 1 - j_tag)
 
         # If polygon is provided we crop the raster image to the polygon
         if polygon:
