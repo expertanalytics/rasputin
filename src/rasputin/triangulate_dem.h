@@ -316,7 +316,7 @@ CGAL::DelaunayConstraints interpolate_boundary_points(const RasterData<T>& raste
 
             // We can skip edges that are aligend with the raster boundary
             // TODO: Consider checking using CGAL and exact arithmentic
-            bool edge_is_aligned = not raster.contains((first_vertex.x() + second_vertex.x())/3,
+            bool edge_is_aligned = not raster.contains((first_vertex.x() + second_vertex.x())/2,
                                                        (first_vertex.y() + second_vertex.y())/2);
             if (edge_is_aligned) {
                 continue;
