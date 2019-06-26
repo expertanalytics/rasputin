@@ -10,8 +10,9 @@ import argparse
 
 from rasputin.reader import RasterRepository
 from rasputin.tin_repository import TinRepository
-from rasputin.triangulate_dem import lindstrom_turk_by_ratio, cell_centers, face_vector, point3_vector
+from rasputin.triangulate_dem import cell_centers, face_vector, point3_vector
 from rasputin.geometry import Geometry, GeoPoints, GeoPolygon
+from rasputin.mesh import Mesh
 
 from rasputin import gml_repository
 from rasputin import globcov_repository
@@ -103,13 +104,14 @@ def store_tin():
     target_coordinate_system = pyproj.Proj(init=res.target_coordinate_system)
     target_domain = input_domain.transform(target_projection=target_coordinate_system)
 
+    raster_repo = RasterRepository(directory=dem_archive)
     raster_coordinate_system = pyproj.Proj(raster_repo.coordinate_system(domain=target_domain))
     raster_domain = input_domain.transform(target_projection=raster_coordinate_system)
 
-    raster_data_list = RasterRepository(directory=dem_archive).read(domain=geo_polygon)
+    raster_data_list = raster_repo.read(domain=raster_domain)
 
     mesh = (Mesh.from_raster(data=raster_data_list,
-                             domain=geo_polygon)
+                             domain=raster_domain)
             .simplify(ratio=res.ratio))
 
     points, faces = mesh.points, mesh.faces
