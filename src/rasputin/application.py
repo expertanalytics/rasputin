@@ -1,5 +1,6 @@
 import os
 import sys
+import logging
 from pathlib import Path
 import numpy as np
 import pprint
@@ -37,6 +38,40 @@ def store_tin():
      * Use more of the information from varsom.no (and perhaps alpha blending) to better display avalanche dangers
 
     """
+
+    arg_parser = argparse.ArgumentParser()
+    arg_parser.add_argument("-x", nargs="+", type=float,
+                            help="x-coordinates of constraining polygon", default=None)
+    arg_parser.add_argument("-y", nargs="+", type=float,
+                            help="y-coordinates of constraining polygon", default=None)
+    arg_parser.add_argument("-polyfile", type=str,
+                            help="Constraining polygon definition in WKT or WKB format", default="")
+    arg_parser.add_argument("-input-coordinate-system", type=str, default="EPSG:4326",
+                            help="Coordinate system for constraining polygon (default: %(default)s)")
+    arg_parser.add_argument("-target-coordinate-system", type=str, default="EPSG:32633",
+                            help="Target coordinate system for generated tin (default: %(default)s)")
+    arg_parser.add_argument("-ratio", type=float, default=0.4,
+                            help="Mesh coarsening factor in (0, 1] (default: %(default)s)")
+    arg_parser.add_argument("-override", action="store_true",
+                            help="Replace existing archive entry")
+    arg_parser.add_argument("-d", action="store_true",
+                            help="Run in DEBUG mode")
+    arg_parser.add_argument("-land-type-partition", type=str, default="", choices=["corine", "globcov"],
+                            help="Partition mesh by land type. Requires additional downloaded data.")
+    arg_parser.add_argument("uid", type=str,
+                            help="Unique ID for the result TIN")
+
+    res = arg_parser.parse_args(sys.argv[1:])
+    logger = logging.getLogger("rasputin_store")
+    if res.d:
+        logger.setLevel(logging.DEBUG)
+
+    if not (res.x and res.y or res.polyfile):
+        logger.critical("\nEither both -x and -y, or -polyfile must be given to define constraining boundary.\n\n")
+        arg_parser.print_help()
+        sys.exit()
+
+    # Set the data paths
     if "RASPUTIN_DATA_DIR" in os.environ:
         dem_archive = Path(os.environ["RASPUTIN_DATA_DIR"]) / "dem_archive"
         tin_archive = Path(os.environ["RASPUTIN_DATA_DIR"]) / "tin_archive"
@@ -48,25 +83,10 @@ def store_tin():
         tin_archive = Path(".") / "tin_archive"
         gc_archive = Path(".") / "globcov"
         corine_archive = Path(".") / "corine"
-        print(f"WARNING: No data directory specified, assuming dem_archive {dem_archive.absolute()}")
-        print(f"WARNING: No data directory specified, assuming tin_archive {tin_archive.absolute()}")
-        print(f"WARNING: No data directory specified, assuming globcov_archive {gc_archive.absolute()}")
-        print(f"WARNING: No data directory specified, assuming corine_archive {corine_archive.absolute()}")
-
-    arg_parser = argparse.ArgumentParser()
-    arg_parser.add_argument("-x", nargs="+", type=float, help="x-coordinates of polygon", default=None)
-    arg_parser.add_argument("-y", nargs="+", type=float, help="y-coordinates of polygon", default=None)
-    arg_parser.add_argument("-polyfile", type=str, help="Polygon definition in WKT or WKB format", default="")
-    arg_parser.add_argument("-target-coordinate-system", type=str, default="EPSG:32633", help="Target coordinate system")
-    arg_parser.add_argument("-ratio", type=float, default=0.4, help="Mesh coarsening factor in [0, 1]")
-    arg_parser.add_argument("-override", action="store_true", help="Replace existing archive entry")
-    arg_parser.add_argument("-land-type-partition",
-                            type=str,
-                            default="",
-                            choices=["corine", "globcov"],
-                            help="Partition mesh by land type")
-    arg_parser.add_argument("uid", type=str, help="Unique ID for the result TIN")
-    res = arg_parser.parse_args(sys.argv[1:])
+        logger.warning(f"WARNING: No data directory specified, assuming dem_archive {dem_archive.absolute()}")
+        logger.warning(f"WARNING: No data directory specified, assuming tin_archive {tin_archive.absolute()}")
+        logger.warning(f"WARNING: No data directory specified, assuming globcov_archive {gc_archive.absolute()}")
+        logger.warning(f"WARNING: No data directory specified, assuming corine_archive {corine_archive.absolute()}")
 
     # Some sanity checks
     try:
@@ -97,24 +117,32 @@ def store_tin():
 
     raster_repo = RasterRepository(directory=dem_archive)
     target_coordinate_system = pyproj.Proj(init=res.target_coordinate_system)
-    input_domain = GeoPolygon(polygon=source_polygon, projection=pyproj.Proj(init="EPSG:4326"))
+    input_domain = GeoPolygon(polygon=source_polygon, projection=pyproj.Proj(init=res.input_coordinate_system))
     target_domain = input_domain.transform(target_projection=target_coordinate_system)
     raster_coordinate_system = pyproj.Proj(raster_repo.coordinate_system(domain=target_domain))
     raster_domain = input_domain.transform(target_projection=raster_coordinate_system)
+
+    constraints = []
     if res.land_type_partition:
         if res.land_type_partition == "corine":
             lt_repo = gml_repository.GMLRepository(path=corine_archive)
         else:
             lt_repo = globcov_repository.GlobCovRepository(path=gc_archive)
         constraints = lt_repo.constraints(domain=target_domain)
-    else:
-        constraints = []
+        if res.d:
+            # Check stuff out.
+            with open(f"domain.wkt", "w") as tf:
+                tf.write(wkt.dumps(target_domain.polygon))
+            for i, c in enumerate(constraints):
+                with open(f"constr_{i}.wkt", "w") as tf:
+                    tf.write(wkt.dumps(c.polygon))
         lt_repo = None
     raster_data_list, cpp_polygon = raster_repo.read(domain=raster_domain)
     points, faces = lindstrom_turk_by_ratio(raster_data_list,
                                             cpp_polygon,
                                             res.ratio)
     assert len(points), "No tin extracted, something went wrong..."
+    assert len(faces), "No tin extracted, something went wrong..."
     p = np.asarray(points)
     x, y, z = pyproj.transform(raster_coordinate_system,
                                target_coordinate_system,
