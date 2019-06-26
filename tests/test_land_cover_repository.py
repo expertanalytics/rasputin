@@ -3,9 +3,10 @@ import numpy as np
 from pyproj import Proj
 from shapely.geometry import Polygon
 from rasputin.reader import GeoPolygon
-from rasputin import triangulate_dem as td
 from rasputin.globcov_repository import GlobCovRepository, GeoPoints, LandCoverType
 from rasputin.reader import RasterRepository
+import rasputin.triangulate_dem as td
+from rasputin.mesh import Mesh
 import os
 
 
@@ -21,18 +22,21 @@ def test_coordinates_to_indices():
 
 
 def test_extract_land_types():
-    path = Path('/Users/skavhaug/projects/rasputin_data/globcov')
+    assert "RASPUTIN_DATA_DIR" in os.environ
+    data_dir = Path(os.environ["RASPUTIN_DATA_DIR"])
+
     xy = np.array([[8, 60], [8.1, 61]], dtype='d')
     proj = Proj(init="EPSG:4326")
     domain = GeoPolygon(projection=proj, polygon=Polygon())
     geo_points = GeoPoints(xy=xy, projection=proj)
-    gcr = GlobCovRepository(path=path)
+    gcr = GlobCovRepository(path=data_dir / "globcov")
     gcr.read(land_type=LandCoverType.crop_type_2, geo_points=geo_points, domain=domain)
 
 
 def test_construct_triangulation_with_land_types():
     assert "RASPUTIN_DATA_DIR" in os.environ
     data_dir = Path(os.environ["RASPUTIN_DATA_DIR"])
+
     lt_repo = GlobCovRepository(path=data_dir / "globcov")
     dem_repo = RasterRepository(directory=data_dir / "dem_archive")
     x0 = 8.54758671814368
@@ -45,15 +49,16 @@ def test_construct_triangulation_with_land_types():
                                   ymax=y0 + 0.01)
     domain = GeoPolygon(polygon=polygon,
                         projection=input_coordinate_system).transform(target_projection=target_coordinate_system)
-    raster_data_list, cpp_polygon = dem_repo.read(domain=domain)
-    points, faces = td.lindstrom_turk_by_ratio(raster_data_list,
-                                               cpp_polygon,
-                                               1.1)
-    assert len(faces)
-    assert len(points)
-    centers = np.asarray(td.cell_centers(points, faces))[:, :2]
+
+    rasterdata_list = dem_repo.read(domain=domain)
+    mesh = Mesh.from_raster(rasterdata_list, domain=domain)
+
+    assert len(mesh.faces) > 0
+    assert len(mesh.points) > 0
+
+    centers = mesh.points[mesh.faces].mean(axis=1)
     land_types = lt_repo.land_cover(land_types=None,
-                                    geo_points=GeoPoints(xy=centers,
+                                    geo_points=GeoPoints(xy=centers[:,:2],
                                                          projection=target_coordinate_system),
                                     domain=domain)
-    assert len(land_types) == len(faces)
+    assert len(land_types) == len(mesh.faces)
