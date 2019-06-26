@@ -5,6 +5,7 @@ from PIL import Image
 from PIL.TiffImagePlugin import TiffImageFile
 from rasputin.geometry import GeoPolygon
 import re
+import pyproj
 
 import numpy as np
 from pathlib import Path
@@ -324,6 +325,11 @@ class Rasterdata:
     @property
     def box(self):
         return (self.x_min, self.y_min, self.x_max, self.y_max)
+
+    @property
+    def polygon(self):
+        return GeoPolygon(polygon=Polygon.from_bounds(*self.box),
+                          projection=pyproj.Proj(self.coordinate_system))
 
     def to_cpp(self) -> triangulate_dem.raster_data_float:
         return triangulate_dem.raster_data_float(self.array,
