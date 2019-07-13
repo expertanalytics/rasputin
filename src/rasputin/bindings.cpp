@@ -344,6 +344,7 @@ PYBIND11_MODULE(triangulate_dem, m) {
             }, py::return_value_policy::take_ownership,
             "Simplify the mesh.\n\nThe LindstromTurk cost and placement strategy is used, and simplification process stops when the number of undirected edges drops below the ratio threshold.")
         .def("copy", &rasputin::Mesh::copy, py::return_value_policy::take_ownership)
+        .def("extract_sub_mesh", &rasputin::Mesh::extract_sub_mesh, py::return_value_policy::take_ownership)
 
         .def_property_readonly("num_vertices", &rasputin::Mesh::num_vertices)
         .def_property_readonly("num_edges", &rasputin::Mesh::num_edges)
@@ -354,6 +355,12 @@ PYBIND11_MODULE(triangulate_dem, m) {
 
     m.def("compute_shadow", &rasputin::compute_shadow, "Compute shadows for given sun ray direction.")
      .def("compute_shadows", &rasputin::compute_shadows, "Compute shadows for a series of times and ray directions.")
+     .def("construct_mesh",
+            [] (const rasputin::point3_vector& points, const rasputin::face_vector & faces) {
+                rasputin::VertexIndexMap index_map;
+                rasputin::FaceDescrMap face_map;
+                return rasputin::Mesh(rasputin::construct_mesh(points, faces, index_map, face_map));
+         }, py::return_value_policy::take_ownership)
      .def("surface_normals", &rasputin::surface_normals,
           "Compute surface normals for all faces in the mesh.",
           py::return_value_policy::take_ownership)

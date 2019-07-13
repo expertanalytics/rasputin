@@ -51,14 +51,15 @@ def test_construct_triangulation_with_land_types():
                         projection=input_coordinate_system).transform(target_projection=target_coordinate_system)
 
     rasterdata_list = dem_repo.read(domain=domain)
-    mesh = Mesh.from_raster(rasterdata_list, domain=domain)
+    mesh = Mesh.from_raster(data=rasterdata_list, domain=domain)
 
     assert len(mesh.faces) > 0
     assert len(mesh.points) > 0
 
     centers = mesh.points[mesh.faces].mean(axis=1)
     land_types = lt_repo.land_cover(land_types=None,
-                                    geo_points=GeoPoints(xy=centers[:,:2],
+                                    geo_points=GeoPoints(xy=centers[:, :2],
                                                          projection=target_coordinate_system),
                                     domain=domain)
+    assert 0 not in land_types
     assert len(land_types) == len(mesh.faces)

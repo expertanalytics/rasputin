@@ -5,12 +5,22 @@ from . import triangulate_dem
 from .reader import GeoPolygon, Rasterdata
 import meshio
 
-class Mesh(object):
+
+class Mesh:
+
     def __init__(self, cpp_mesh: triangulate_dem.Mesh):
         self._cpp = cpp_mesh
+        self._face_normals: tp.Optional[np.ndarray] = None
+        self._point_normals: tp.Optional[np.ndarray] = None
 
     @classmethod
-    def from_raster(cls,
+    def from_points_and_faces(cls, *, points: np.ndarray, faces: np.ndarray) -> "Mesh":
+        points = triangulate_dem.point3_vector(points.tolist())
+        faces = triangulate_dem.face_vector(faces.tolist())
+        return Mesh(triangulate_dem.construct_mesh(points, faces))
+
+    @classmethod
+    def from_raster(cls, *,
                     data: tp.Union[tp.List[Rasterdata], Rasterdata],
                     domain: tp.Optional[GeoPolygon] = None) -> "Mesh":
         # Extract cpp objects
@@ -50,27 +60,40 @@ class Mesh(object):
         return self.num_points - self.num_edges + self.num_faces
 
     @property
-    def points(self) -> triangulate_dem.point3_vector:
+    def points(self) -> np.ndarray:
         array = np.asarray(self._cpp.points)
         array.flags.writeable = False
         return array
 
     @property
-    def faces(self) -> triangulate_dem.face_vector:
+    def cell_centers(self) -> np.ndarray:
+        return self.points[self.faces].mean(axis=1)
+
+    @property
+    def faces(self) -> np.ndarray:
         array = np.asarray(self._cpp.faces)
         array.flags.writeable = False
         return array
 
     @property
-    def face_normals(self) -> triangulate_dem.point3_vector:
+    def face_normals(self) -> np.ndarray:
         # Only compute normals when needed, and only once
-        if not hasattr(self, "_face_normals"):
+        if self._face_normals is None:
             self._face_normals = triangulate_dem.surface_normals(self._cpp.points,
                                                                  self._cpp.faces)
 
         array = np.asarray(self._face_normals)
         array.flags.writeable = False
         return array
+
+    @property
+    def point_normals(self) -> np.ndarray:
+        if self._point_normals is None:
+            self._point_normals = triangulate_dem.point_normals(self._cpp.points,
+                                                                self._cpp.faces)
+            array = np.asarray(self._point_normals)
+            array.flags.writeable = False
+            return array
 
     def simplify(self,
                  *,
@@ -88,19 +111,21 @@ class Mesh(object):
         """
         result = self
         if ratio is not None:
-            result = self.__class__(self._cpp.lindstrom_turk_by_ratio(ratio))
+            if ratio < 1:
+                result = self.__class__(self._cpp.lindstrom_turk_by_ratio(ratio))
 
         if max_size is not None:
-            result = self.__class__(self._cpp.lindstrom_turk_by_size(max_size))
+            if max_size < result.num_edges:
+                result = self.__class__(result._cpp.lindstrom_turk_by_size(max_size))
 
         # If no valid criteria return a copy (consistent with e.g. ratio > 1)
-        if ratio is None and max_size is None:
-            result = self.copy()
-
-        return result
+        return self.copy() if result is self else result
 
     def copy(self) -> "Mesh":
         return self.__class__(self._cpp.copy())
+
+    def extract_sub_mesh(self, faces: np.ndarray) -> "Mesh":
+        return self.__class__(self._cpp.extract_sub_mesh(faces))
 
     def write(self, filename: str):
         """

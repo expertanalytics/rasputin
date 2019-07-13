@@ -6,7 +6,8 @@ from numpy.linalg import norm
 from pyproj import Proj
 from shapely.geometry import Polygon, Point
 
-from rasputin.reader import GeoPolygon, Rasterdata
+from rasputin.geometry import GeoPolygon
+from rasputin.reader import Rasterdata
 from rasputin.mesh import Mesh
 
 
@@ -84,7 +85,7 @@ def polygon_w_hole():
                       projection=Proj(cs))
 
 def test_mesh(raster, polygon):
-    mesh = Mesh.from_raster(raster, polygon)
+    mesh = Mesh.from_raster(data=raster, domain=polygon)
 
     # Check mesh consistency
     assert len(mesh.points) == mesh.num_points
@@ -115,8 +116,13 @@ def test_mesh(raster, polygon):
     assert raster.array.max() >= z.max()
 
 
+def test_mesh_sub_mesh(raster, polygon):
+    mesh = Mesh.from_raster(data=raster, domain=polygon)
+    sub_mesh = mesh.extract_sub_mesh(array([0, 1]))
+    assert len(sub_mesh.faces) == 2
+
 def test_mesh_w_hole(raster, polygon_w_hole):
-    mesh = Mesh.from_raster(raster, polygon_w_hole)
+    mesh = Mesh.from_raster(data=raster, domain=polygon_w_hole)
 
     # Check mesh consistency
     assert len(mesh.points) == mesh.num_points
@@ -124,7 +130,7 @@ def test_mesh_w_hole(raster, polygon_w_hole):
     assert mesh.characteristic == 0
 
     # Check that all points in mesh are inside the polygon
-    test_poly = polygon_w_hole.polygon.buffer(1e-10) # Account for fixed float precision
+    test_poly = polygon_w_hole.polygon.buffer(1e-10)  # Account for fixed float precision
     for (x, y, _) in mesh.points:
         assert test_poly.contains(Point(x, y))
 

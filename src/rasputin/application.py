@@ -97,8 +97,6 @@ def store_tin():
         assert 3 <= len(res.x) == len(res.y), "x and y coordinates must have equal length greater or equal to 3"
         source_polygon = Polygon((x, y) for (x, y) in zip(res.x, res.y))
 
-
-
     input_domain = GeoPolygon(polygon=source_polygon, projection=pyproj.Proj(init="EPSG:4326"))
 
     target_coordinate_system = pyproj.Proj(init=res.target_coordinate_system)
@@ -117,17 +115,16 @@ def store_tin():
     points, faces = mesh.points, mesh.faces
 
     assert len(points), "No tin extracted, something went wrong..."
-    p = np.asarray(points)
     x, y, z = pyproj.transform(raster_coordinate_system,
                                target_coordinate_system,
-                               p[:, 0],
-                               p[:, 1],
-                               p[:, 2])
-    points = point3_vector.from_numpy(np.dstack([x, y, z])[0])
+                               points[:, 0],
+                               points[:, 1],
+                               points[:, 2])
+    points = np.dstack([x, y, z])[0]
+    mesh = Mesh.from_points_and_faces(points=points, faces=faces)
 
     if not res.land_type_partition:
-        tr.save(uid=res.uid, geometries={"terrain": Geometry(points=points,
-                                                             faces=faces,
+        tr.save(uid=res.uid, geometries={"terrain": Geometry(mesh=mesh,
                                                              projection=target_coordinate_system,
                                                              base_color=(1.0, 1.0, 1.0),
                                                              material=None)})
@@ -137,27 +134,29 @@ def store_tin():
         else:
             lt_repo = globcov_repository.GlobCovRepository(path=gc_archive)
         geometries = {}
-        tin_cell_centers = cell_centers(points, faces)
-        geo_cell_centers = GeoPoints(xy=np.asarray(tin_cell_centers)[:, :2],
+        tin_cell_centers = points[mesh.faces].mean(axis=1)
+        geo_cell_centers = GeoPoints(xy=tin_cell_centers[:, :2],
                                      projection=target_coordinate_system)
         terrain_cover = lt_repo.land_cover(land_types=None,
                                            geo_points=geo_cell_centers,
                                            domain=target_domain)
-        terrains = {lt.value: face_vector() for lt in lt_repo.land_cover_type}
+        terrains = {lt.value: [] for lt in lt_repo.land_cover_type}
 
         for i, cell in enumerate(terrain_cover):
-            terrains[cell].append(faces[i])
+            terrains[cell].append(i)
+        n_faces = 0
         for t in terrains:
             if not terrains[t]:
                 continue
             cover = lt_repo.land_cover_type(t)
             colors = [c/255 for c in lt_repo.land_cover_meta_info_type.color(land_cover_type=cover)]
             material = lt_repo.land_cover_meta_info_type.material(land_cover_type=cover)
-            geometries[cover.name] = Geometry(points=points,
-                                              faces=terrains[t],
+            sub_mesh = mesh.extract_sub_mesh(np.array(terrains[t]))
+            n_faces += sub_mesh.num_faces
+            geometries[cover.name] = Geometry(mesh=sub_mesh,
                                               base_color=colors,
                                               material=material,
-                                              projection=target_coordinate_system).consolidate()
+                                              projection=target_coordinate_system)
         tr.save(uid=res.uid, geometries=geometries)
     meta = tr.content[res.uid]
     print(f"Successfully added uid='{res.uid}' to the tin archive {tin_archive.absolute()}, with meta info:")

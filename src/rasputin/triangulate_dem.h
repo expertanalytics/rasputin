@@ -24,6 +24,7 @@
 #include <CGAL/Polygon_with_holes_2.h>
 #include <CGAL/Polygon_2_algorithms.h>
 
+#include <sstream>
 #include <armadillo>
 #include <cmath>
 #include <fstream>
@@ -47,6 +48,7 @@ using Vector = K::Vector_3;
 using PointList = std::vector<Point>;
 using Mesh = Surface_mesh<Point>;
 using VertexIndex = Mesh::Vertex_index;
+using FaceIndex = Mesh::Face_index;
 using PointVertexMap = std::map<Point, VertexIndex>;
 using Ray = K::Ray_3;
 using Primitive = CGAL::AABB_face_graph_triangle_primitive<Mesh>;
@@ -163,6 +165,78 @@ struct Mesh {
     size_t num_edges() const {return cgal_mesh.number_of_edges();}
     size_t num_vertices() const {return cgal_mesh.number_of_vertices();}
     size_t num_faces() const {return cgal_mesh.number_of_faces();}
+
+    Mesh extract_sub_mesh(const std::vector<int> &face_indices) const {
+        CGAL::Mesh mesh;
+        std::vector<int> sorted_face_inds(face_indices);
+        std::sort(sorted_face_inds.begin(), sorted_face_inds.end());
+        //int n = 0;
+        std::map<CGAL::VertexIndex, CGAL::VertexIndex> o2n;
+        std::vector<CGAL::FaceIndex> cgal_face_indices;
+        auto idx = sorted_face_inds.begin();
+        int face_idx = 0;
+        for (auto f: cgal_mesh.faces()) {
+            while (face_idx < *idx) {
+                ++face_idx;
+            }
+            if (face_idx > *idx)
+                throw std::runtime_error("Illegal face_index encountered.");
+            cgal_face_indices.push_back(f);
+            if (++idx == sorted_face_inds.end())
+                break;
+        }
+        if (cgal_face_indices.size() != face_indices.size()) {
+            std::ostringstream msg;
+            msg << "Implementation bug: " << std::endl;
+            msg << "cgal_face_indices.size() = " << cgal_face_indices.size() << " != ";
+            msg << "face_indices.size() = " << face_indices.size();
+            throw std::runtime_error(msg.str());
+        }
+        for (auto f: cgal_face_indices){
+            std::vector<CGAL::VertexIndex> face;
+            for (auto v: cgal_mesh.vertices_around_face(cgal_mesh.halfedge(f))) {
+                if (o2n.count(v) == 0) {
+                    const auto pt = cgal_mesh.point(v);
+                    o2n[v] = mesh.add_vertex(pt);
+                }
+                face.push_back(o2n[v]);
+            }
+            mesh.add_face(face[0], face[1], face[2]);
+        }
+        return Mesh(mesh);
+    }
+
+
+    Mesh depr_extract_sub_mesh(const std::vector<int> &face_indices) const {
+        CGAL::Mesh mesh;
+        std::vector<int> sorted_face_inds(face_indices);
+        std::sort(sorted_face_inds.begin(), sorted_face_inds.end());
+        int n = 0;
+        std::map<CGAL::VertexIndex, CGAL::VertexIndex> o2n;
+        auto idx = sorted_face_inds.begin();
+        int face_idx = 0;
+        for (auto f: cgal_mesh.faces()) {
+            if (face_idx < *idx) {
+                ++face_idx;
+                continue;
+            } else if (face_idx > *idx)
+                throw std::runtime_error("Illegal face_index encountered.");
+            std::vector<CGAL::VertexIndex> face;
+            for (auto v: cgal_mesh.vertices_around_face(cgal_mesh.halfedge(f))) {
+                if (o2n.count(v) == 0) {
+                    const auto pt = cgal_mesh.point(v);
+                    o2n[v] = mesh.add_vertex(pt);
+                }
+                face.push_back(o2n[v]);
+            }
+            mesh.add_face(face[0], face[1], face[2]);
+            idx++;
+            if (idx == sorted_face_inds.end())
+                break;
+        }
+        return Mesh(mesh);
+    }
+
 
     private:
     point3_vector points;
