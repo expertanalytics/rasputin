@@ -346,10 +346,10 @@ def read_raster_file(*,
     logger.debug(f"Reading raster file {filepath}")
     assert filepath.exists()
 
-
     with Image.open(filepath) as image:
-    # Determine image extents
-        m, n = image.size
+        # Determine image extents
+        # NOTE: image coordinate tranposed relative to array: array(image).shape == m, n
+        n, m = image.size
 
         # Use pixel coordinates if image does not define an affine transformation
         # This should only happen if the image is not a GeoTIFF
@@ -377,22 +377,23 @@ def read_raster_file(*,
                              .buffer(0.1 * max(delta_x, delta_y)))
             #polygon = polygon.intersection(raster_domain)
 
-            # Find indices for the box
+            # Find indices for the box in array coordinates
             x_min_p, y_min_p, x_max_p, y_max_p = polygon.bounds
-            box = (np.clip(np.floor((x_min_p - x_min)/delta_x), 0, m-1),
-                   np.clip(np.floor((y_max - y_max_p)/delta_y), 0, n-1),
-                   np.clip(np.ceil((x_max_p - x_min)/delta_x) + 1, 1, m),
-                   np.clip(np.ceil((y_max - y_min_p)/delta_y) + 1, 1, n))
+            i_min = np.clip(np.floor((x_min_p - x_min)/delta_x), 0, m-1)
+            j_min = np.clip(np.floor((y_max - y_max_p)/delta_y), 0, n-1)
+            i_max = np.clip(np.ceil((x_max_p - x_min)/delta_x) + 1, 1, m)
+            j_max = np.clip(np.ceil((y_max - y_min_p)/delta_y) + 1, 1, n)
 
             # NOTE: Cropping does not include last indices
-            image = image.crop(box=box)
+            # NOTE: Cropping in image coordinates (transpose of array coordinates)
+            image = image.crop(box=(j_min, i_min, j_max, i_max))
 
             # Find extents of the cropped image
-            x_min = x_tag + (box[0] - j_tag) * delta_x
-            y_max = y_tag - (box[1] - i_tag) * delta_y
+            x_min = x_tag + (i_min - i_tag) * delta_x
+            y_max = y_tag - (j_min - j_tag) * delta_y
 
         # NOTE: Storing the array ensures the pointer to the data stays alive
-        image_array = np.asarray(image)
+        image_array = np.array(image)
 
     logger.debug("Done")
 
