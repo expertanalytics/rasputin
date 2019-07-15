@@ -101,6 +101,8 @@ def store_tin():
 
     target_coordinate_system = pyproj.Proj(init=res.target_coordinate_system)
     target_domain = input_domain.transform(target_projection=target_coordinate_system)
+    print(target_domain.projection.definition_string())
+    print(target_domain.polygon.bounds)
 
     raster_repo = RasterRepository(directory=dem_archive)
     raster_coordinate_system = pyproj.Proj(raster_repo.coordinate_system(domain=target_domain))
@@ -113,6 +115,12 @@ def store_tin():
             .simplify(ratio=res.ratio))
 
     points, faces = mesh.points, mesh.faces
+    print(points[:,0].min())
+    print(points[:,0].max())
+    print(points[:,1].min())
+    print(points[:,1].max())
+    print(points[:,2].min())
+    print(points[:,2].max())
 
     assert len(points), "No tin extracted, something went wrong..."
     x, y, z = pyproj.transform(raster_coordinate_system,
