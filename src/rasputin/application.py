@@ -18,16 +18,6 @@ from rasputin import gml_repository
 from rasputin import globcov_repository
 
 
-def read_poly_file(*, path: Path) -> Polygon:
-    if path.suffix.lower() == ".wkb":
-        with path.open("rb") as pfile:
-            polygon = wkb.loads(pfile.read())
-    elif path.suffix.lower() == ".wkt":
-        with path.open("r") as pfile:
-            polygon = wkt.loads(pfile.read())
-    return polygon
-
-
 def store_tin():
     """
     Avalance Forecast Visualization Example.
@@ -88,16 +78,18 @@ def store_tin():
             tr.delete(res.uid)
 
     # Determine region of interest
-    if not res.x or not res.y:
-        if not res.polyfile:
-            raise RuntimeError("A constraining polygon is needed")
-        else:
-            source_polygon = read_poly_file(path=Path(res.polyfile))
-    else:
+    if res.polyfile:
+        input_domain = GeoPolygon.from_polygon_file(filepath=Path(res.polyfile),
+                                                    projection=pyproj.Proj(init="EPSG:4326"))
+
+    elif (res.x and res.y):
         assert 3 <= len(res.x) == len(res.y), "x and y coordinates must have equal length greater or equal to 3"
         source_polygon = Polygon((x, y) for (x, y) in zip(res.x, res.y))
+        input_domain = GeoPolygon(polygon=source_polygon,
+                                  projection=pyproj.Proj(init="EPSG:4326"))
 
-    input_domain = GeoPolygon(polygon=source_polygon, projection=pyproj.Proj(init="EPSG:4326"))
+    else:
+        raise RuntimeError("A constraining polygon is needed")
 
     target_coordinate_system = pyproj.Proj(init=res.target_coordinate_system)
     target_domain = input_domain.transform(target_projection=target_coordinate_system)

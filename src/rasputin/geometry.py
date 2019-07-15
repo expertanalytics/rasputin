@@ -2,7 +2,7 @@ from typing import Tuple, List, Optional, Union
 import io
 import shutil
 from functools import partial
-from shapely import ops
+from shapely import ops, wkt
 from pathlib import Path
 from dataclasses import dataclass
 from pyproj import Proj
@@ -173,6 +173,19 @@ class GeoPolygon:
 
         return GeoPolygon(polygon=geometry.Polygon.from_bounds(*image_bounds),
                           projection=pyproj.Proj(projection_str))
+
+    @classmethod
+    def from_polygon_file(cls, *, filepath: Path, projection: pyproj.Proj) -> "GeoPolygon":
+        if filepath.suffix.lower() == ".wkb":
+            with filepath.open("rb") as pfile:
+                polygon = wkb.loads(pfile.read())
+        elif filepath.suffix.lower() == ".wkt":
+            with filepath.open("r") as pfile:
+                polygon = wkt.loads(pfile.read())
+        else:
+            raise ValueError("Cannot determine file type.")
+
+        return GeoPolygon(polygon=polygon, projection=projection)
 
     def transform(self, *, target_projection: pyproj.Proj) -> "GeoPolygon":
         if target_projection.definition_string() != self.projection.definition_string():
