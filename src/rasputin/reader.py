@@ -337,8 +337,9 @@ class Rasterdata(ImageExtents):
 
 def crop_image_to_polygon(*,
                           image: Image.Image,
-                          polygon: Polygon) -> Tuple[Image.Image, ImageExtents]:
-    extents = get_image_extents(image)
+                          polygon: Polygon, extents=None) -> Tuple[Image.Image, ImageExtents]:
+    if not extents:
+        extents = get_image_extents(image)
 
     (m, n) = extents.shape
     delta_x, delta_y = extents.delta_x, extents.delta_y
@@ -373,13 +374,14 @@ def crop_image_to_polygon(*,
     return sub_image, sub_extents
 
 def get_image_extents(image: Image.Image) -> Tuple[float, float, float, float]:
-    n, m = image.size
-
     tiepoint_idx = GeoTiffTags.ModelTiePointTag.value
     i_tag, j_tag, _, x_tag, y_tag, _ = image.tag_v2.get(tiepoint_idx, (0, 0, 0, 0, 0, 0))
 
     scale_idx = GeoTiffTags.ModelPixelScaleTag.value
     delta_x, delta_y, _ = image.tag_v2.get(scale_idx, (1.0, 1.0, 0.0))
+
+    n, m = image.size
+
 
     x_min = x_tag - delta_x * i_tag
     y_max = y_tag + delta_y * j_tag
@@ -393,7 +395,7 @@ def get_image_extents(image: Image.Image) -> Tuple[float, float, float, float]:
 
 def read_raster_file(*,
                      filepath: Path,
-                     polygon: Optional[Polygon] = None) -> Rasterdata:
+                     polygon: Optional[Polygon] = None, transpose: bool=False) -> Rasterdata:
     logger = getLogger()
     logger.debug(f"Reading raster file {filepath}")
     assert filepath.exists()
@@ -403,10 +405,13 @@ def read_raster_file(*,
         info = extract_geo_keys(image=image)
         coordinate_system = identify_projection(image=image)
 
+        extents = get_image_extents(image)
+        if transpose:
+            image = image.transpose(Image.TRANSPOSE)
+            extents.shape = (extents.shape[1], extents.shape[0])
+
         if polygon:
-            image, extents = crop_image_to_polygon(image=image, polygon=polygon)
-        else:
-            extents = get_image_extents(image)
+            image, extents = crop_image_to_polygon(image=image, polygon=polygon, extents=extents)
 
         # Store the array to ensure the pointer to the data stays alive
         image_array = np.array(image)
@@ -420,8 +425,9 @@ def read_raster_file(*,
 
 class RasterRepository:
 
-    def __init__(self, *, directory: Path) -> None:
+    def __init__(self, *, directory: Path, transpose: bool=False) -> None:
         self.directory = directory
+        self.transpose = transpose
 
     def get_intersections(self,
                           *,
@@ -434,9 +440,10 @@ class RasterRepository:
             geo_polygon = GeoPolygon.from_raster_file(filepath=filepath)
 
             if target_polygon.intersects(geo_polygon):
+                print(f"Using file: {filepath}")
                 polygon = target_polygon.transform(target_projection=geo_polygon.projection).polygon
                 part = read_raster_file(filepath=filepath,
-                                        polygon=polygon)
+                                        polygon=polygon, transpose=self.transpose)
                 parts.append(part)
 
                 target_polygon = target_polygon.difference(geo_polygon)

@@ -51,12 +51,14 @@ def store_tin():
     arg_parser.add_argument("-polyfile", type=str, help="Polygon definition in WKT or WKB format", default="")
     arg_parser.add_argument("-target-coordinate-system", type=str, default="EPSG:32633", help="Target coordinate system")
     arg_parser.add_argument("-ratio", type=float, default=0.4, help="Mesh coarsening factor in [0, 1]")
+
     arg_parser.add_argument("-override", action="store_true", help="Replace existing archive entry")
     arg_parser.add_argument("-land-type-partition",
                             type=str,
                             default="",
                             choices=["corine", "globcov"],
                             help="Partition mesh by land type")
+    arg_parser.add_argument("--transpose", action="store_true", help="Use the transpose of the raster image")
     arg_parser.add_argument("uid", type=str, help="Unique ID for the result TIN")
     res = arg_parser.parse_args(sys.argv[1:])
 
@@ -96,7 +98,7 @@ def store_tin():
     print(target_domain.projection.definition_string())
     print(target_domain.polygon.bounds)
 
-    raster_repo = RasterRepository(directory=dem_archive)
+    raster_repo = RasterRepository(directory=dem_archive, transpose=res.transpose)
     raster_coordinate_system = pyproj.Proj(raster_repo.coordinate_system(domain=target_domain))
     raster_domain = input_domain.transform(target_projection=raster_coordinate_system)
 
