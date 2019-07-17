@@ -10,7 +10,6 @@ import argparse
 
 from rasputin.reader import RasterRepository
 from rasputin.tin_repository import TinRepository
-from rasputin.triangulate_dem import cell_centers, face_vector, point3_vector
 from rasputin.geometry import Geometry, GeoPoints, GeoPolygon
 from rasputin.mesh import Mesh
 
@@ -101,8 +100,6 @@ def store_tin():
 
     target_coordinate_system = pyproj.Proj(init=res.target_coordinate_system)
     target_domain = input_domain.transform(target_projection=target_coordinate_system)
-    print(target_domain.projection.definition_string())
-    print(target_domain.polygon.bounds)
 
     raster_repo = RasterRepository(directory=dem_archive)
     raster_coordinate_system = pyproj.Proj(raster_repo.coordinate_system(domain=target_domain))
@@ -114,22 +111,17 @@ def store_tin():
                              domain=raster_domain)
             .simplify(ratio=res.ratio))
 
-    points, faces = mesh.points, mesh.faces
-    print(points[:,0].min())
-    print(points[:,0].max())
-    print(points[:,1].min())
-    print(points[:,1].max())
-    print(points[:,2].min())
-    print(points[:,2].max())
 
-    assert len(points), "No tin extracted, something went wrong..."
-    x, y, z = pyproj.transform(raster_coordinate_system,
-                               target_coordinate_system,
-                               points[:, 0],
-                               points[:, 1],
-                               points[:, 2])
-    points = np.dstack([x, y, z])[0]
-    mesh = Mesh.from_points_and_faces(points=points, faces=faces)
+    assert len(mesh.points), "No tin extracted, something went wrong..."
+    if raster_coordinate_system.definition_string() != target_coordinate_system.definition_string():
+        points, faces = mesh.points, mesh.faces
+        x, y, z = pyproj.transform(raster_coordinate_system,
+                                   target_coordinate_system,
+                                   points[:, 0],
+                                   points[:, 1],
+                                   points[:, 2])
+        points = np.dstack([x, y, z])[0]
+        mesh = Mesh.from_points_and_faces(points=points, faces=faces)
 
     if not res.land_type_partition:
         tr.save(uid=res.uid, geometries={"terrain": Geometry(mesh=mesh,
@@ -142,8 +134,7 @@ def store_tin():
         else:
             lt_repo = globcov_repository.GlobCovRepository(path=gc_archive)
         geometries = {}
-        tin_cell_centers = points[mesh.faces].mean(axis=1)
-        geo_cell_centers = GeoPoints(xy=tin_cell_centers[:, :2],
+        geo_cell_centers = GeoPoints(xy=mesh.cell_centers[:, :2],
                                      projection=target_coordinate_system)
         terrain_cover = lt_repo.land_cover(land_types=None,
                                            geo_points=geo_cell_centers,
@@ -152,7 +143,6 @@ def store_tin():
 
         for i, cell in enumerate(terrain_cover):
             terrains[cell].append(i)
-        n_faces = 0
         for t in terrains:
             if not terrains[t]:
                 continue
@@ -160,12 +150,12 @@ def store_tin():
             colors = [c/255 for c in lt_repo.land_cover_meta_info_type.color(land_cover_type=cover)]
             material = lt_repo.land_cover_meta_info_type.material(land_cover_type=cover)
             sub_mesh = mesh.extract_sub_mesh(np.array(terrains[t]))
-            n_faces += sub_mesh.num_faces
             geometries[cover.name] = Geometry(mesh=sub_mesh,
                                               base_color=colors,
                                               material=material,
                                               projection=target_coordinate_system)
         tr.save(uid=res.uid, geometries=geometries)
+
     meta = tr.content[res.uid]
     print(f"Successfully added uid='{res.uid}' to the tin archive {tin_archive.absolute()}, with meta info:")
     pprint.PrettyPrinter(indent=4).pprint(meta)

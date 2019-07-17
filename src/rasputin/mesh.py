@@ -124,8 +124,8 @@ class Mesh:
     def copy(self) -> "Mesh":
         return self.__class__(self._cpp.copy())
 
-    def extract_sub_mesh(self, faces: np.ndarray) -> "Mesh":
-        return self.__class__(self._cpp.extract_sub_mesh(faces))
+    def extract_sub_mesh(self, faces: np.ndarray):
+        return self.__class__(self._cpp.extract_sub_mesh(faces));
 
     def write(self, filename: str):
         """
