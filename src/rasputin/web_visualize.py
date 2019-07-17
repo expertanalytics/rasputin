@@ -8,14 +8,15 @@ import argparse
 from rasputin.tin_repository import TinRepository
 from rasputin import triangulate_dem
 from rasputin.reader import RasterRepository
-from rasputin.triangulate_dem import lindstrom_turk_by_ratio
 from rasputin.geometry import Geometry, write_scene
 from rasputin.material import avalanche_material, lake_material, terrain_material
 from rasputin import avalanche
 from rasputin.avalanche import varsom_angles
 
 
-def web_visualize():
+def depr_web_visualize():
+    return
+
     """
     Avalance Forecast Visualization Example.
 

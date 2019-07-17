@@ -3,7 +3,7 @@ import numpy as np
 from datetime import datetime
 from h5py import File
 from pathlib import Path
-from rasputin.triangulate_dem import point3_vector, face_vector, consolidate
+from rasputin.mesh import Mesh
 from rasputin.geometry import Geometry
 
 
@@ -37,8 +37,8 @@ class TinRepository:
                 projection = group["points"].attrs["projection"]
                 faces = group["faces"][:]
                 color = group["faces"].attrs["color"]
-                geometries[name] = Geometry(points=point3_vector(pts.tolist()),
-                                            faces=face_vector(faces.tolist()),
+                mesh = Mesh.from_points_and_faces(points=pts, faces=faces)
+                geometries[name] = Geometry(mesh=mesh,
                                             projection=projection,
                                             base_color=color,
                                             material=None)
