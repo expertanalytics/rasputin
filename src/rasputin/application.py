@@ -17,16 +17,6 @@ from rasputin import gml_repository
 from rasputin import globcov_repository
 
 
-def read_poly_file(*, path: Path) -> Polygon:
-    if path.suffix.lower() == ".wkb":
-        with path.open("rb") as pfile:
-            polygon = wkb.loads(pfile.read())
-    elif path.suffix.lower() == ".wkt":
-        with path.open("r") as pfile:
-            polygon = wkt.loads(pfile.read())
-    return polygon
-
-
 def store_tin():
     """
     Avalance Forecast Visualization Example.
@@ -60,12 +50,14 @@ def store_tin():
     arg_parser.add_argument("-polyfile", type=str, help="Polygon definition in WKT or WKB format", default="")
     arg_parser.add_argument("-target-coordinate-system", type=str, default="EPSG:32633", help="Target coordinate system")
     arg_parser.add_argument("-ratio", type=float, default=0.4, help="Mesh coarsening factor in [0, 1]")
+
     arg_parser.add_argument("-override", action="store_true", help="Replace existing archive entry")
     arg_parser.add_argument("-land-type-partition",
                             type=str,
                             default="",
                             choices=["corine", "globcov"],
                             help="Partition mesh by land type")
+    arg_parser.add_argument("--transpose", action="store_true", help="Use the transpose of the raster image")
     arg_parser.add_argument("uid", type=str, help="Unique ID for the result TIN")
     res = arg_parser.parse_args(sys.argv[1:])
 
@@ -87,21 +79,23 @@ def store_tin():
             tr.delete(res.uid)
 
     # Determine region of interest
-    if not res.x or not res.y:
-        if not res.polyfile:
-            raise RuntimeError("A constraining polygon is needed")
-        else:
-            source_polygon = read_poly_file(path=Path(res.polyfile))
-    else:
+    if res.polyfile:
+        input_domain = GeoPolygon.from_polygon_file(filepath=Path(res.polyfile),
+                                                    projection=pyproj.Proj(init="EPSG:4326"))
+
+    elif (res.x and res.y):
         assert 3 <= len(res.x) == len(res.y), "x and y coordinates must have equal length greater or equal to 3"
         source_polygon = Polygon((x, y) for (x, y) in zip(res.x, res.y))
+        input_domain = GeoPolygon(polygon=source_polygon,
+                                  projection=pyproj.Proj(init="EPSG:4326"))
 
-    input_domain = GeoPolygon(polygon=source_polygon, projection=pyproj.Proj(init="EPSG:4326"))
+    else:
+        raise RuntimeError("A constraining polygon is needed")
 
     target_coordinate_system = pyproj.Proj(init=res.target_coordinate_system)
     target_domain = input_domain.transform(target_projection=target_coordinate_system)
 
-    raster_repo = RasterRepository(directory=dem_archive)
+    raster_repo = RasterRepository(directory=dem_archive, transpose=res.transpose)
     raster_coordinate_system = pyproj.Proj(raster_repo.coordinate_system(domain=target_domain))
     raster_domain = input_domain.transform(target_projection=raster_coordinate_system)
 

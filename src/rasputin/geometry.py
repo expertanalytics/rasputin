@@ -2,7 +2,7 @@ from typing import Tuple, List, Optional, Union
 import io
 import shutil
 from functools import partial
-from shapely import ops
+from shapely import ops, wkt
 from pathlib import Path
 from dataclasses import dataclass
 from pyproj import Proj
@@ -165,14 +165,27 @@ class GeoPolygon:
 
     @classmethod
     def from_raster_file(cls, *, filepath: Path) -> "GeoPolygon":
-        from rasputin.reader import identify_projection, get_image_bounds
+        from rasputin.reader import identify_projection, get_image_extents
         from PIL import Image
         with Image.open(filepath) as image:
             projection_str = identify_projection(image=image)
-            image_bounds = get_image_bounds(image=image)
+            image_extents = get_image_extents(image=image)
 
-        return GeoPolygon(polygon=geometry.Polygon.from_bounds(*image_bounds),
+        return GeoPolygon(polygon=geometry.Polygon.from_bounds(*image_extents.box),
                           projection=pyproj.Proj(projection_str))
+
+    @classmethod
+    def from_polygon_file(cls, *, filepath: Path, projection: pyproj.Proj) -> "GeoPolygon":
+        if filepath.suffix.lower() == ".wkb":
+            with filepath.open("rb") as pfile:
+                polygon = wkb.loads(pfile.read())
+        elif filepath.suffix.lower() == ".wkt":
+            with filepath.open("r") as pfile:
+                polygon = wkt.loads(pfile.read())
+        else:
+            raise ValueError("Cannot determine file type.")
+
+        return GeoPolygon(polygon=polygon, projection=projection)
 
     def transform(self, *, target_projection: pyproj.Proj) -> "GeoPolygon":
         if target_projection.definition_string() != self.projection.definition_string():
