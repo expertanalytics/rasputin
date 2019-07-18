@@ -3,11 +3,11 @@ import os
 import numpy as np
 import pyproj
 from shapely.geometry import Polygon
+from rasputin.mesh import Mesh
 from rasputin.geometry import GeoPoints
 from rasputin.gml_repository import GMLRepository, LandCoverType
 from rasputin.geometry import GeoPolygon
 from rasputin.reader import RasterRepository
-from rasputin.triangulate_dem import lindstrom_turk_by_ratio, cell_centers
 from descartes import PolygonPatch
 import matplotlib.pyplot as plt
 
@@ -42,12 +42,11 @@ def test_gml_repository():
     dem_archive = Path(os.environ["RASPUTIN_DATA_DIR"]) / "dem_archive"
     rr = RasterRepository(directory=dem_archive)
     raster_domain = domain.transform(target_projection=pyproj.Proj(rr.coordinate_system(domain=domain)))
-    raster_data_list, cpp_polygon = rr.read(domain=raster_domain)
-    points, faces = lindstrom_turk_by_ratio(raster_data_list,
-                                            cpp_polygon,
-                                            0.1)
-    tin_cell_centers = cell_centers(points, faces)
-    geo_cell_centers = GeoPoints(xy=np.asarray(tin_cell_centers)[:, :2],
+    raster_data_list = rr.read(domain=raster_domain)
+    mesh = Mesh.from_raster(data=raster_data_list, domain=raster_domain)
+
+    cmesh = mesh.simplify(ratio=0.1)
+    geo_cell_centers = GeoPoints(xy=cmesh.cell_centers[:, :2],
                                  projection=target_coordinate_system)
     terrain_cover = repos.land_cover(land_types=None, geo_points=geo_cell_centers, domain=domain)
     assert terrain_cover is not None

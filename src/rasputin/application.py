@@ -8,23 +8,14 @@ import pyproj
 from shapely.geometry import Polygon
 from shapely import wkt, wkb
 import argparse
+
 from rasputin.reader import RasterRepository
 from rasputin.tin_repository import TinRepository
-from rasputin.triangulate_dem import lindstrom_turk_by_ratio, cell_centers, face_vector, point3_vector
 from rasputin.geometry import Geometry, GeoPoints, GeoPolygon
+from rasputin.mesh import Mesh
 
 from rasputin import gml_repository
 from rasputin import globcov_repository
-
-
-def read_poly_file(*, path: Path) -> Polygon:
-    if path.suffix.lower() == ".wkb":
-        with path.open("rb") as pfile:
-            polygon = wkb.loads(pfile.read())
-    elif path.suffix.lower() == ".wkt":
-        with path.open("r") as pfile:
-            polygon = wkt.loads(pfile.read())
-    return polygon
 
 
 def store_tin():
@@ -58,6 +49,8 @@ def store_tin():
                             help="Run in DEBUG mode")
     arg_parser.add_argument("-land-type-partition", type=str, default="", choices=["corine", "globcov"],
                             help="Partition mesh by land type. Requires additional downloaded data.")
+    arg_parser.add_argument("-transpose", action="store_true",
+                            help="Use the transpose of the raster image")
     arg_parser.add_argument("uid", type=str,
                             help="Unique ID for the result TIN")
 
@@ -106,23 +99,30 @@ def store_tin():
             tr.delete(res.uid)
 
     # Determine region of interest
-    if not res.x or not res.y:
-        if not res.polyfile:
-            raise RuntimeError("A constraining polygon is needed")
-        else:
-            source_polygon = read_poly_file(path=Path(res.polyfile))
-    else:
+    if res.polyfile:
+        input_domain = GeoPolygon.from_polygon_file(filepath=Path(res.polyfile),
+                                                    projection=pyproj.Proj(init="EPSG:4326"))
+
+    elif (res.x and res.y):
         assert 3 <= len(res.x) == len(res.y), "x and y coordinates must have equal length greater or equal to 3"
         source_polygon = Polygon((x, y) for (x, y) in zip(res.x, res.y))
+        input_domain = GeoPolygon(polygon=source_polygon,
+                                  projection=pyproj.Proj(init="EPSG:4326"))
 
-    raster_repo = RasterRepository(directory=dem_archive)
+    else:
+        raise RuntimeError("A constraining polygon is needed")
+
     target_coordinate_system = pyproj.Proj(init=res.target_coordinate_system)
     input_domain = GeoPolygon(polygon=source_polygon, projection=pyproj.Proj(init=res.input_coordinate_system))
     target_domain = input_domain.transform(target_projection=target_coordinate_system)
+
+    # The transpose is probably flipped in the logic, so negating it should give correct behaviour.
+    raster_repo = RasterRepository(directory=dem_archive, transpose=not res.transpose)
     raster_coordinate_system = pyproj.Proj(raster_repo.coordinate_system(domain=target_domain))
     raster_domain = input_domain.transform(target_projection=raster_coordinate_system)
 
     constraints = []
+    lt_repo = None
     if res.land_type_partition:
         if res.land_type_partition == "corine":
             lt_repo = gml_repository.GMLRepository(path=corine_archive)
@@ -136,51 +136,54 @@ def store_tin():
             for i, c in enumerate(constraints):
                 with open(f"constr_{i}.wkt", "w") as tf:
                     tf.write(wkt.dumps(c.polygon))
-        lt_repo = None
-    raster_data_list, cpp_polygon = raster_repo.read(domain=raster_domain)
-    points, faces = lindstrom_turk_by_ratio(raster_data_list,
-                                            cpp_polygon,
-                                            res.ratio)
-    assert len(points), "No tin extracted, something went wrong..."
-    assert len(faces), "No tin extracted, something went wrong..."
-    p = np.asarray(points)
-    x, y, z = pyproj.transform(raster_coordinate_system,
-                               target_coordinate_system,
-                               p[:, 0],
-                               p[:, 1],
-                               p[:, 2])
-    points = point3_vector.from_numpy(np.dstack([x, y, z])[0])
 
-    if not res.land_type_partition:
-        tr.save(uid=res.uid, geometries={"terrain": Geometry(points=points,
-                                                             faces=faces,
+    raster_data_list = raster_repo.read(domain=raster_domain)
+
+    mesh = (Mesh.from_raster(data=raster_data_list,
+                             domain=raster_domain)
+            .simplify(ratio=res.ratio))
+
+    assert len(mesh.points), "No tin extracted, something went wrong..."
+    if raster_coordinate_system.definition_string() != target_coordinate_system.definition_string():
+        points, faces = mesh.points, mesh.faces
+        x, y, z = pyproj.transform(raster_coordinate_system,
+                                   target_coordinate_system,
+                                   points[:, 0],
+                                   points[:, 1],
+                                   points[:, 2])
+        points = np.dstack([x, y, z])[0]
+        mesh = Mesh.from_points_and_faces(points=points, faces=faces)
+
+    if lt_repo is None:
+        tr.save(uid=res.uid, geometries={"terrain": Geometry(mesh=mesh,
                                                              projection=target_coordinate_system,
                                                              base_color=(1.0, 1.0, 1.0),
                                                              material=None)})
     else:
         geometries = {}
-        tin_cell_centers = cell_centers(points, faces)
-        geo_cell_centers = GeoPoints(xy=np.asarray(tin_cell_centers)[:, :2],
+        geo_cell_centers = GeoPoints(xy=mesh.cell_centers[:, :2],
                                      projection=target_coordinate_system)
         terrain_cover = lt_repo.land_cover(land_types=None,
                                            geo_points=geo_cell_centers,
                                            domain=target_domain)
-        terrains = {lt.value: face_vector() for lt in lt_repo.land_cover_type}
+        terrains = {lt.value: [] for lt in lt_repo.land_cover_type}
 
         for i, cell in enumerate(terrain_cover):
-            terrains[cell].append(faces[i])
+            terrains[cell].append(i)
         for t in terrains:
             if not terrains[t]:
                 continue
             cover = lt_repo.land_cover_type(t)
             colors = [c/255 for c in lt_repo.land_cover_meta_info_type.color(land_cover_type=cover)]
             material = lt_repo.land_cover_meta_info_type.material(land_cover_type=cover)
-            geometries[cover.name] = Geometry(points=points,
-                                              faces=terrains[t],
+            sub_mesh = mesh.extract_sub_mesh(np.array(terrains[t]))
+            geometries[cover.name] = Geometry(mesh=sub_mesh,
                                               base_color=colors,
                                               material=material,
-                                              projection=target_coordinate_system).consolidate()
+                                              projection=target_coordinate_system)
         tr.save(uid=res.uid, geometries=geometries)
+
     meta = tr.content[res.uid]
-    print(f"Successfully added uid='{res.uid}' to the tin archive {tin_archive.absolute()}, with meta info:")
-    pprint.PrettyPrinter(indent=4).pprint(meta)
+    logging.info(f"Successfully added uid='{res.uid}' to the tin archive {tin_archive.absolute()}, with meta info:")
+    logging.info(pprint.pformat(meta, indent=4))
+    #pprint.PrettyPrinter(indent=4).pprint(meta)
