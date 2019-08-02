@@ -4,7 +4,6 @@ import shutil
 from functools import partial
 from shapely import ops, wkt
 from pathlib import Path
-from dataclasses import dataclass
 from pyproj import Proj
 from shapely import geometry
 import numpy as np
@@ -150,11 +149,11 @@ class GeoPoints:
         self.projection = projection
 
 
-@dataclass
 class GeoPoint:
 
-    point: geometry.Point
-    projection: pyproj.Proj
+    def __init__(self, *, point: geometry.Point, projection: pyproj.Proj) -> None:
+        self.point = point
+        self.projection = projection
 
 
 class GeoPolygon:

@@ -1,5 +1,4 @@
 from typing import Dict, Any, Optional,  Tuple, List
-from dataclasses import dataclass
 from enum import Enum
 from PIL import Image
 from PIL.TiffImagePlugin import TiffImageFile
@@ -288,13 +287,21 @@ def identify_projection(*, image: TiffImageFile) -> str:
     return GeoKeysInterpreter(geokeys).to_proj4()
 
 
-@dataclass
 class ImageExtents:
-    shape: Tuple[int, int]
-    delta_x: float
-    delta_y: float
-    x_min: float
-    y_max: float
+
+    def __init__(self, *,
+                 shape: Tuple[int, int], 
+                 delta_x: float,
+                 delta_y: float,
+                 x_min: float,
+                 y_max: float) -> None:
+        self.shape = shape
+        self.delta_x = delta_x
+        self.delta_y = delta_y
+        self.x_min = x_min
+        self.y_max = y_max
+        assert len(self.shape) == 2 and min(*self.shape) > 0, "Shape is not two-dimensional."
+        assert min(self.delta_x, self.delta_y) > 0, "Step sizes must be strictly positive."
 
     @property
     def x_max(self):
@@ -308,20 +315,25 @@ class ImageExtents:
     def box(self):
         return (self.x_min, self.y_min, self.x_max, self.y_max)
 
-    def __post_init__(self):
-        assert len(self.shape) == 2 and min(*self.shape) > 0, "Shape is not two-dimensional."
-        assert min(self.delta_x, self.delta_y) > 0, "Step sizes must be strictly positive."
 
-@dataclass
+
 class Rasterdata(ImageExtents):
-    array: np.ndarray
-    coordinate_system: str
-    info: Dict[str, Any]
 
-    def __post_init__(self):
+    def __init__(self,
+                 shape: Tuple[int, int], 
+                 delta_x: float,
+                 delta_y: float,
+                 x_min: float,
+                 y_max: float,
+                 array: np.ndarray,
+                 coordinate_system: str,
+                 info: Dict[str, Any]) -> None:
+        super().__init__(shape=shape, delta_x=delta_x, delta_y=delta_y, x_min=x_min, y_max=y_max)
+        self.array = array
+        self.coordinate_system = coordinate_system
+        self.info = info
         shapes = self.shape, self.array.shape
         assert shapes[0] == shapes[1], f"Unexpected array shape: expected {shapes[0]} but got {shapes[1]}"
-        super().__post_init__()
 
     @property
     def polygon(self):
