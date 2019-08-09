@@ -17,11 +17,12 @@ def raster():
     array = (zeros((m,n))
              + linspace(0, 1, m).reshape(-1,1)**2
              + linspace(0, 1, n).reshape(1,-1))
-    return Rasterdata(array=array.astype(float32),
+    return Rasterdata(shape=(m, n),
                       x_min=0,
                       y_max=1,
                       delta_x=1 / (m-1),
                       delta_y=1 / (n-1),
+                      array=array.astype(float32),
                       coordinate_system="+init=epsg:32633",
                       info={})
 
@@ -36,18 +37,20 @@ def raster_list():
     array1 = (zeros((m1,n1))
               + linspace(d1, 1, m1).reshape(-1,1)**2
               + linspace(0, 1, n1).reshape(1,-1))
-    return [Rasterdata(array=array0.astype(float32),
+    return [Rasterdata(shape=(m0, n0),
                        x_min=0,
                        y_max=1,
                        delta_x=d0 / (m0-1),
                        delta_y=1 / (n0-1),
+                       array=array0.astype(float32),
                        coordinate_system="+init=epsg:32633",
                        info={}),
-            Rasterdata(array=array1.astype(float32),
+            Rasterdata(shape=(m0, n0),
                        x_min=d1,
                        y_max=1,
                        delta_x=(1-d1) / (m1-1),
                        delta_y=1 / (n1-1),
+                       array=array1.astype(float32),
                        coordinate_system="+init=epsg:32633",
                        info={})]
 
@@ -99,7 +102,7 @@ def test_mesh(raster, polygon):
 
     # Check that all points in raster not inside polygon are not mesh
     def dist(mesh, pt):
-        return  norm(mesh.points[:,:2] - pt, axis=0).min()
+        return norm(mesh.points[:,:2] - pt, axis=0).min()
 
     for i, j in ndindex(raster.array.shape):
         x = raster.x_min + i * raster.delta_x
@@ -136,7 +139,7 @@ def test_mesh_w_hole(raster, polygon_w_hole):
 
     # Check that all points in raster not inside polygon are not mesh
     def dist(mesh, pt):
-        return  norm(mesh.points[:,:2] -pt, axis=0).min()
+        return norm(mesh.points[:,:2] -pt, axis=0).min()
 
     for i, j in ndindex(raster.array.shape):
         x = raster.x_min + i * raster.delta_x
