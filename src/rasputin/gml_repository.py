@@ -155,7 +155,8 @@ class GMLRepository(LandCoverRepository):
     def _assign_source_proj(self, root: etree._Element) -> None:
         gml = f"{{{root.nsmap['gml']}}}"
         elm = next(root.iter(f"{gml}featureMember"))
-        self.source_proj = Proj(next(elm.iter(f"{gml}Polygon")).attrib["srsName"])
+        pstr = next(elm.iter(f"{gml}Polygon")).attrib["srsName"]
+        self.source_proj = Proj(init=pstr)
 
     def read(self, domain: GeoPolygon) -> Dict[LandCoverType, List[Polygon]]:
         tree = etree.parse(str(self.fn), self.parser)
@@ -188,7 +189,10 @@ class GMLRepository(LandCoverRepository):
         self._assign_source_proj(root)
         target_proj = geo_points.projection
         if target_proj.definition_string() != self.source_proj.definition_string():
-            xy = np.dstack(transform(target_proj, self.source_proj, geo_points.xy[:, 0], geo_points.xy[:, 1]))[0]
+            xy = np.dstack(transform(target_proj,
+                                     self.source_proj,
+                                     geo_points.xy[:, 0],
+                                     geo_points.xy[:, 1])).reshape((-1, 2))
         else:
             xy = geo_points.xy
         domain = domain.transform(target_projection=self.source_proj).buffer(50)
@@ -200,8 +204,8 @@ class GMLRepository(LandCoverRepository):
 
         # TODO: Move to C++ for speed!
         faces = np.zeros(len(xy), dtype="int")
-        for i, pt in enumerate(xy):
-            pt = Point(pt)
+        for i, _pt in enumerate(xy):
+            pt = Point(_pt)
             found = False
             for key, p_list in land_cover_types.items():
                 for p in p_list:
@@ -211,5 +215,7 @@ class GMLRepository(LandCoverRepository):
                         break
                 if found:
                     break
+            if not found:
+                raise RuntimeError(f"Illegal point {pt}")
         return faces
 
