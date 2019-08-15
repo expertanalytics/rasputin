@@ -1,15 +1,16 @@
 import pytest
 from tempfile import TemporaryDirectory
 from pathlib import Path
-from rasputin.triangulate_dem import point3_vector, face_vector
+import numpy as np
 from rasputin.tin_repository import TinRepository
+from rasputin.mesh import Mesh
 from rasputin.geometry import Geometry
 from pyproj import Proj
 
 @pytest.fixture
 def tin():
-    pts = point3_vector([[0, 0, 0], [1, 0, 0], [0, 1, 0]])
-    faces = face_vector([[0, 1, 2]])
+    pts = np.array([[0, 0, 0], [1, 0, 0], [0, 1, 0]], dtype='d')
+    faces = np.array([[0, 1, 2]], dtype='i')
     return pts, faces
 
 
@@ -18,11 +19,11 @@ def test_store_tin(tin):
     uid = "test_tin"
     proj = Proj(init="EPSG:32633")
     geom_tag = "test_geom"
-    geom = {geom_tag: Geometry(points=pts,
-                                  faces=faces,
-                                  projection=proj,
-                                  base_color=(0, 0, 0),
-                                  material="dummy2")}
+    mesh = Mesh.from_points_and_faces(points=pts, faces=faces)
+    geom = {geom_tag: Geometry(mesh=mesh,
+                               projection=proj,
+                               base_color=(0, 0, 0),
+                               material="dummy2")}
     with TemporaryDirectory() as directory:
         archive = Path(directory)
         tr = TinRepository(path=archive)
@@ -40,8 +41,8 @@ def test_store_and_load_tin(tin):
     pts, faces = tin
     uid = "test_tin"
     proj = Proj(init="EPSG:32633")
-    geom = {"test_geom": Geometry(points=pts,
-                                  faces=faces,
+    mesh = Mesh.from_points_and_faces(points=pts, faces=faces)
+    geom = {"test_geom": Geometry(mesh=mesh,
                                   projection=proj,
                                   base_color=(0,0,0),
                                   material="dummy2")}
@@ -50,16 +51,16 @@ def test_store_and_load_tin(tin):
         tr = TinRepository(path=archive)
         tr.save(uid=uid, geometries=geom)
         geom = tr.read(uid=uid)["test_geom"]
-        assert geom.points == pts
-        assert geom.faces == faces
+        assert np.allclose(geom.points, pts)
+        assert np.allclose(geom.faces, faces)
 
 
 def test_store_and_delete_tin(tin):
     pts, faces = tin
     uid = "test_tin"
     proj = Proj(init="EPSG:32633")
-    geom = {"test_geom": Geometry(points=pts,
-                                  faces=faces,
+    mesh = Mesh.from_points_and_faces(points=pts, faces=faces)
+    geom = {"test_geom": Geometry(mesh=mesh,
                                   projection=proj,
                                   base_color=(0,0,0),
                                   material="dummy2")}
