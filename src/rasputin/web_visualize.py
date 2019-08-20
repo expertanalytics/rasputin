@@ -53,12 +53,12 @@ def depr_web_visualize():
     dx = res.dx
     dy = res.dy
 
-    input_coordinate_system = pyproj.Proj(init="EPSG:4326").definition_string()
-    target_coordinate_system = pyproj.Proj(init="EPSG:32633").definition_string()
+    input_crs = pyproj.CRS.from_string("+init=EPSG:4326")
+    target_crs = pyproj.CRS.from_epsg(32633)
 
     avalanche_problems = []
     if res.a:
-        avalanche_details, avalanche_meta = avalanche.get_forecasts(x=x0, y=y0, proj=input_coordinate_system)
+        avalanche_details, avalanche_meta = avalanche.get_forecasts(x=x0, y=y0, crs=input_crs)
         if avalanche_details:
             if "AvalancheProblems" in avalanche_details:
                 level = int(avalanche_details["DangerLevel"])
@@ -87,6 +87,7 @@ def depr_web_visualize():
                     avalanche_problems.append({"expositions": expositions,
                                                "level": level,
                                                "heights": danger_interval})
+    raise DeprecationWarning("This code is deprecated!")
     raster_coords = RasterRepository(directory=data_dir).read(x=x0,
                                                               y=y0,
                                                               dx=dx,
@@ -159,8 +160,4 @@ cd {output}
 {Path(sys.executable).name} -m http.server 8080
 Then visit http://localhost:8080
 """)
-
-
-if __name__ == "__main__":
-    web_visualize()
 

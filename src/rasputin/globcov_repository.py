@@ -1,7 +1,7 @@
 from typing import List, Optional, Tuple
 from pathlib import Path
 import numpy as np
-from pyproj import Proj, transform
+from pyproj import CRS, Transformer
 from PIL import Image
 from rasputin.reader import extract_geo_keys, GeoKeysInterpreter, GeoTiffTags
 from rasputin.land_cover_repository import LandCoverBaseType, LandCoverMetaInfoBase, LandCoverRepository
@@ -117,8 +117,7 @@ class GlobCovRepository(LandCoverRepository):
         with Image.open(self.path) as image:
             self.geo_keys = extract_geo_keys(image=image)
             self.gk_interpreter = GeoKeysInterpreter(self.geo_keys)
-            #self.source_proj = Proj(init="EPSG:32662") #self.gk_interpreter.to_proj4())
-            self.source_proj = Proj(init="EPSG:4326") #self.gk_interpreter.to_proj4())
+            self.data_crs = CRS.from_string("+init=EPSG:4326")
             self.model_tie_point = image.tag_v2.get(GeoTiffTags.ModelTiePointTag.value)
             self.model_pixel_scale = image.tag_v2.get(GeoTiffTags.ModelPixelScaleTag.value)
             self.M, self.N = image.size
@@ -138,9 +137,10 @@ class GlobCovRepository(LandCoverRepository):
                    land_types: Optional[List[LandCoverType]],
                    geo_points: GeoPoints,
                    domain: GeoPolygon) -> np.ndarray:
-        target_proj = geo_points.projection
-        if target_proj != self.source_proj:
-            xy = np.dstack(transform(target_proj, self.source_proj, geo_points.xy[:, 0], geo_points.xy[:, 1]))[0]
+        pts_crs = geo_points.crs
+        if pts_crs != self.data_crs:
+            proj = Transformer.from_crs(pts_crs, self.data_crs)
+            xy = np.dstack(proj.transform(geo_points.xy[:, 0], geo_points.xy[:, 1])).reshape(-1, 2)
         else:
             xy = geo_points.xy
         with Image.open(self.path) as image:

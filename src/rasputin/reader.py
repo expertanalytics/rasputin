@@ -145,7 +145,7 @@ class GeoKeysInterpreter(object):
 
         import pyproj
         proj_str = GeoKeyInterpreter(geokeys).to_proj4()
-        proj = pyproj.Proj(proj_str)
+        proj = pyproj.CRS.from_proj4(proj_str)
 
     NOTE:
     This class is incomplete and many GeoKeys are not handled. Extending the class with new handlers
@@ -312,6 +312,7 @@ class ImageExtents:
         assert len(self.shape) == 2 and min(*self.shape) > 0, "Shape is not two-dimensional."
         assert min(self.delta_x, self.delta_y) > 0, "Step sizes must be strictly positive."
 
+
 @dataclass
 class Rasterdata(ImageExtents):
     array: np.ndarray
@@ -326,7 +327,7 @@ class Rasterdata(ImageExtents):
     @property
     def polygon(self):
         return GeoPolygon(polygon=Polygon.from_bounds(*self.box),
-                          crs=pyproj.CRS.from_string(self.coordinate_system))
+                          crs=pyproj.CRS.from_proj4(self.coordinate_system))
 
     def to_cpp(self) -> triangulate_dem.raster_data_float:
         return triangulate_dem.raster_data_float(self.array,
