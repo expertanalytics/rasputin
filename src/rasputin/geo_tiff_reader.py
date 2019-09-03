@@ -6,10 +6,9 @@ from logging import getLogger
 from shapely.geometry import Polygon
 
 from rasputin.writer import write
-from rasputin.reader import read_raster_file, GeoPolygon
+from rasputin.reader import read_raster_file
+from rasputin.geometry import GeoPolygon
 from rasputin.calculate import compute_shade
-from rasputin.triangulate_dem import lindstrom_turk_by_ratio
-from rasputin.triangulate_dem import lindstrom_turk_by_size
 from rasputin.triangulate_dem import orient_tin, compute_slopes
 
 
@@ -53,26 +52,14 @@ def geo_tiff_reader():
     logger.debug(f"Original: {m * n}")
     logger.critical(rasterdata.info)
 
-    geo_polygon = GeoPolygon(polygon=polygon, proj=None)
+    domain = GeoPolygon(polygon=polygon, proj=None)
 
-    if res.ratio:
-        if polygon:
-            pts, faces = lindstrom_turk_by_ratio(rasterdata._cpp,
-                                                 geo_polygon._cpp,
-                                                 res.ratio)
-        else:
-            pts, faces = lindstrom_turk_by_ratio(rasterdata._cpp, res.ratio)
-    else:
-        if polygon:
-            pts, faces = lindstrom_turk_by_size(rasterdata._cpp,
-                                                geo_polygon._cpp,
-                                                res.size)
-        else:
-            pts, faces = lindstrom_turk_by_size(rasterdata._cpp, res.size)
+    mesh = (Mesh.from_raster(rasterda=rasterdata, domain=domain)
+            .simplify(ratio=res.ratio, max_size=res.max_size))
+
+    pts, faces, normals = mesh.points, mesh.faces, mesh.face_normals
+
     logger.debug(f"Result: {len(pts)}")
-
-    # Compute normals and re-orient before shadow computation
-    normals = orient_tin(pts, faces)
 
     # Compute additional fields
     fields = {}

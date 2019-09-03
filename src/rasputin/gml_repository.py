@@ -1,11 +1,16 @@
-from typing import Dict, List, Tuple
-from enum import Enum
+from typing import Dict, List, Tuple, Optional
 from pathlib import Path
-import numpy as np
 from lxml import etree
-from shapely.geometry import Polygon
+import numpy as np
+from pyproj import transform
+from pyproj import Proj
+from shapely.geometry import Polygon, Point
+from rasputin.geometry import GeoPoints, GeoPolygon
+from rasputin.land_cover_repository import LandCoverBaseType, LandCoverRepository, LandCoverMetaInfoBase
+from rasputin.material import lake_material, terrain_material
 
-class LandCoverType(Enum):
+
+class LandCoverType(LandCoverBaseType):
     # Artificial
     urban_fabric_cont = 111
     urban_fabrid_discont = 112
@@ -60,8 +65,11 @@ class LandCoverType(Enum):
     estuary = 522
     sea_and_ocean = 523
 
+
+class LandCoverMetaInfo(LandCoverMetaInfoBase):
+
     @classmethod
-    def color(cls, *, land_cover_type: "LandCoverType") -> Tuple[int, int, int]:
+    def color(cls, *, land_cover_type: LandCoverType) -> Tuple[int, int, int]:
 
         return {111: (230,   0,  77),
                 112: (255,   0,   0),
@@ -108,7 +116,21 @@ class LandCoverType(Enum):
                 522: (166, 255, 230),
                 523: (230, 242, 255)}[land_cover_type.value]
 
-class GMLRepository:
+    @classmethod
+    def describe(cls, *, land_cover_type=LandCoverType) -> str:
+        return ""
+
+    @classmethod
+    def material(cls, *, land_cover_type=LandCoverType) -> str:
+        if land_cover_type.value > 500:
+            return lake_material
+        return terrain_material
+
+
+class GMLRepository(LandCoverRepository):
+
+    land_cover_type = LandCoverType
+    land_cover_meta_info_type = LandCoverMetaInfo
 
     def __init__(self, path: Path) -> None:
         self.path = path
@@ -116,6 +138,7 @@ class GMLRepository:
         assert len(files) == 1
         self.fn = files[0]
         self.parser = etree.XMLParser(encoding="utf-8", recover=True, huge_tree=True)
+        self.source_proj = None
 
     def _parse_polygon(self, polygon: etree._Element, nsmap: Dict[str, str]) -> Polygon:
         gml = f"{{{nsmap['gml']}}}"
@@ -129,9 +152,16 @@ class GMLRepository:
             holes.append(np.fromiter(citer, dtype='d').reshape(-1, 2))
         return Polygon(shell=shell, holes=holes)
 
-    def read(self, domain: Polygon) -> Dict[LandCoverType, List[Polygon]]:
+    def _assign_source_proj(self, root: etree._Element) -> None:
+        gml = f"{{{root.nsmap['gml']}}}"
+        elm = next(root.iter(f"{gml}featureMember"))
+        pstr = next(elm.iter(f"{gml}Polygon")).attrib["srsName"]
+        self.source_proj = Proj(init=pstr)
+
+    def read(self, domain: GeoPolygon) -> Dict[LandCoverType, List[Polygon]]:
         tree = etree.parse(str(self.fn), self.parser)
         root = tree.getroot()
+        self._assign_source_proj(root)
         assert "gml" in root.nsmap, "Not a GML file!"
         assert "ogr" in root.nsmap, "Can not find land cover types!"
         gml = f"{{{root.nsmap['gml']}}}"
@@ -140,10 +170,52 @@ class GMLRepository:
         for elm in root.iter(f"{gml}featureMember"):
             code = LandCoverType(int(next(elm.iter(f"{ogr}clc18_kode")).text))
             polygon = self._parse_polygon(next(elm.iter(f"{gml}Polygon")), root.nsmap)
-            if polygon.intersects(domain):
+            if polygon.intersects(domain.polygon):
                 if code not in result:
                     result[code] = []
-                result[code].append(polygon.intersection(domain))
+                result[code].append(polygon.intersection(domain.polygon))
         return result
 
+    def constraints(self, *, domain: GeoPolygon) -> List[GeoPolygon]:
+        return []
+
+    def land_cover(self,
+                   *,
+                   land_types: Optional[List[LandCoverType]],
+                   geo_points: GeoPoints,
+                   domain: GeoPolygon) -> np.ndarray:
+        tree = etree.parse(str(self.fn), self.parser)
+        root = tree.getroot()
+        self._assign_source_proj(root)
+        target_proj = geo_points.projection
+        if target_proj.definition_string() != self.source_proj.definition_string():
+            xy = np.dstack(transform(target_proj,
+                                     self.source_proj,
+                                     geo_points.xy[:, 0],
+                                     geo_points.xy[:, 1])).reshape((-1, 2))
+        else:
+            xy = geo_points.xy
+        domain = domain.transform(target_projection=self.source_proj).buffer(50)
+
+        # At this point, we have a consistent coordinate system for domain and xy all in the self.source_proj, so
+        # omit checks for speed.
+
+        land_cover_types = self.read(domain)
+
+        # TODO: Move to C++ for speed!
+        faces = np.zeros(len(xy), dtype="int")
+        for i, _pt in enumerate(xy):
+            pt = Point(_pt)
+            found = False
+            for key, p_list in land_cover_types.items():
+                for p in p_list:
+                    if p.intersects(pt):
+                        faces[i] = key.value
+                        found = True
+                        break
+                if found:
+                    break
+            if not found:
+                raise RuntimeError(f"Illegal point {pt}")
+        return faces
 

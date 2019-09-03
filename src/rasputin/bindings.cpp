@@ -151,7 +151,7 @@ void bind_rasterdata(py::module &m, const std::string& pyname) {
             auto buffer = data_array.request();
             int m = buffer.shape[0], n = buffer.shape[1];
 
-            return rasputin::RasterData<FT>(x_min, y_max, delta_x, delta_y, n, m, static_cast<FT*>(buffer.ptr) );
+            return rasputin::RasterData<FT>(x_min, y_max, delta_x, delta_y, m, n, static_cast<FT*>(buffer.ptr) );
         }), py::return_value_policy::take_ownership,  py::keep_alive<1, 2>(),
             py::arg("data_array").noconvert(), py::arg("x_min"), py::arg("y_max"), py::arg("delta_x"), py::arg("delta_y"))
     .def_buffer([] (rasputin::RasterData<FT>& self) {
@@ -174,50 +174,39 @@ void bind_rasterdata(py::module &m, const std::string& pyname) {
     .def_property_readonly("y_min", &rasputin::RasterData<FT>::get_y_min)
     .def("__getitem__", [](rasputin::RasterData<FT>& self, std::pair<int, int> idx) {
                 auto [i, j] = idx;
-                return self.data[self.num_points_x * i + j]; })
+                return self.data[self.num_points_y * i + j]; })
     .def("get_indices", &rasputin::RasterData<FT>::get_indices)
+    .def("exterior", &rasputin::RasterData<FT>::exterior, py::return_value_policy::take_ownership)
+    .def("contains", &rasputin::RasterData<FT>::contains)
     .def("get_interpolated_value_at_point", &rasputin::RasterData<FT>::get_interpolated_value_at_point);
 }
 
-template<typename R>
-void bind_tin_from_raster(py::module &m) {
-    m.def("lindstrom_turk_by_size",
-          [] (const R& raster_data, size_t result_mesh_size) {
-              return rasputin::tin_from_raster(raster_data,
-                                        SMS::Count_stop_predicate<CGAL::Mesh>(result_mesh_size),
-                                        SMS::LindstromTurk_placement<CGAL::Mesh>(),
-                                        SMS::LindstromTurk_cost<CGAL::Mesh>());
-          },
-          "Construct a TIN based on the points provided.\n\nThe LindstromTurk cost and placement strategy is used, and simplification process stops when the number of undirected edges drops below the size threshold.")
-     .def("lindstrom_turk_by_ratio",
-        [] (const R& raster_data, double ratio) {
-            return rasputin::tin_from_raster(raster_data,
-                                           SMS::Count_ratio_stop_predicate<CGAL::Mesh>(ratio),
-                                           SMS::LindstromTurk_placement<CGAL::Mesh>(),
-                                           SMS::LindstromTurk_cost<CGAL::Mesh>());
-             },
-            "Construct a TIN based on the points provided.\n\nThe LindstromTurk cost and placement strategy is used, and simplification process stops when the number of undirected edges drops below the ratio threshold.");
+template<typename R, typename P>
+void bind_make_mesh(py::module &m) {
+        m.def("make_mesh",
+            [] (const R& raster_data, const P polygon) {
+                return rasputin::mesh_from_raster(raster_data, polygon);
+            }, py::return_value_policy::take_ownership)
+        .def("make_mesh",
+            [] (const R& raster_data) {
+                return rasputin::mesh_from_raster(raster_data);
+            }, py::return_value_policy::take_ownership);
 }
 
-template<typename R, typename P>
-void bind_tin_from_raster(py::module &m) {
-    m.def("lindstrom_turk_by_size",
-          [] (const R& raster_data, const P& boundary_polygon, size_t result_mesh_size) {
-              return rasputin::tin_from_raster(raster_data, boundary_polygon,
-                                        SMS::Count_stop_predicate<CGAL::Mesh>(result_mesh_size),
-                                        SMS::LindstromTurk_placement<CGAL::Mesh>(),
-                                        SMS::LindstromTurk_cost<CGAL::Mesh>());
-          },
-          "Construct a TIN based on the points provided.\n\nThe LindstromTurk cost and placement strategy is used, and simplification process stops when the number of undirected edges drops below the size threshold.")
-        .def("lindstrom_turk_by_ratio",
-             [] (const R& raster_data, const P& boundary_polygon, double ratio) {
-                 return rasputin::tin_from_raster(raster_data, boundary_polygon,
-                                           SMS::Count_ratio_stop_predicate<CGAL::Mesh>(ratio),
-                                           SMS::LindstromTurk_placement<CGAL::Mesh>(),
-                                           SMS::LindstromTurk_cost<CGAL::Mesh>());
-             },
-            "Construct a TIN based on the points provided.\n\nThe LindstromTurk cost and placement strategy is used, and simplification process stops when the number of undirected edges drops below the ratio threshold.");
+template<typename T>
+void bind_raster_list(py::module &m, const std::string& pyname) {
+    py::class_<std::vector<rasputin::RasterData<T>>, std::unique_ptr<std::vector<rasputin::RasterData<T>>>> (m, pyname.c_str())
+        .def(py::init( [] () {std::vector<rasputin::RasterData<T>> self; return self;}))
+        .def("add_raster",
+            [] (std::vector<rasputin::RasterData<T>>& self, rasputin::RasterData<T> raster_data) {
+                self.push_back(raster_data);
+            }, py::keep_alive<1,2>())
+        .def("__getitem__",
+            [] (std::vector<rasputin::RasterData<T>>& self, int index) {
+                return self.at(index);
+            }, py::return_value_policy::reference_internal);
 }
+
 
 PYBIND11_MODULE(triangulate_dem, m) {
     py::bind_vector<rasputin::point3_vector>(m, "point3_vector", py::buffer_protocol())
@@ -234,6 +223,29 @@ PYBIND11_MODULE(triangulate_dem, m) {
       .def("from_numpy", &vecarray_from_numpy<unsigned int, 2>);
     py::bind_vector<rasputin::double_vector >(m, "double_vector", py::buffer_protocol())
       .def_buffer(&vector_buffer<double>);
+
+    py::bind_vector<std::vector<int>>(m, "int_vector");
+    py::bind_vector<std::vector<std::vector<int>>>(m, "shadow_vector");
+
+
+    bind_rasterdata<float>(m, "raster_data_float");
+    bind_rasterdata<double>(m, "raster_data_double");
+
+    bind_raster_list<float>(m, "raster_list_float");
+    bind_raster_list<double>(m, "raster_list_double");
+
+    bind_make_mesh<std::vector<rasputin::RasterData<float>>, CGAL::SimplePolygon>(m);
+    bind_make_mesh<std::vector<rasputin::RasterData<double>>, CGAL::SimplePolygon>(m);
+    bind_make_mesh<std::vector<rasputin::RasterData<float>>, CGAL::Polygon>(m);
+    bind_make_mesh<std::vector<rasputin::RasterData<double>>, CGAL::Polygon>(m);
+    // bind_make_mesh<std::vector<rasputin::RasterData<float>>, CGAL::MultiPolygon>(m);
+    // bind_make_mesh<std::vector<rasputin::RasterData<double>>, CGAL::MultiPolygon>(m);
+    bind_make_mesh<rasputin::RasterData<float>, CGAL::SimplePolygon>(m);
+    bind_make_mesh<rasputin::RasterData<double>, CGAL::SimplePolygon>(m);
+    bind_make_mesh<rasputin::RasterData<float>, CGAL::Polygon>(m);
+    bind_make_mesh<rasputin::RasterData<double>, CGAL::Polygon>(m);
+    // bind_make_mesh<rasputin::RasterData<float>, CGAL::MultiPolygon>(m);
+    // bind_make_mesh<rasputin::RasterData<double>, CGAL::MultiPolygon>(m);
 
     py::class_<CGAL::SimplePolygon, std::unique_ptr<CGAL::SimplePolygon>>(m, "simple_polygon")
         .def(py::init(&polygon_from_numpy))
@@ -257,7 +269,7 @@ PYBIND11_MODULE(triangulate_dem, m) {
         .def("intersection", &intersect_polygons<CGAL::SimplePolygon, CGAL::SimplePolygon>)
         .def("intersection", &intersect_polygons<CGAL::SimplePolygon, CGAL::Polygon>);
 
-    py::class_<CGAL::Polygon, std::unique_ptr<CGAL::Polygon>>(m, "Polygon")
+    py::class_<CGAL::Polygon, std::unique_ptr<CGAL::Polygon>>(m, "polygon")
         .def(py::init([] (py::array_t<double>& buf) {
             const CGAL::SimplePolygon exterior = polygon_from_numpy(buf);
             return CGAL::Polygon(exterior);}))
@@ -267,6 +279,8 @@ PYBIND11_MODULE(triangulate_dem, m) {
                         result.append(*h);
                     return result;
                     })
+        .def("extract_boundaries", [] (const CGAL::Polygon& self) {return CGAL::extract_boundaries(self);},
+                py::return_value_policy::take_ownership)
         .def("exterior", [] (const CGAL::Polygon& self) {return self.outer_boundary();})
         .def("join", &join_polygons<CGAL::Polygon, CGAL::SimplePolygon>)
         .def("join", &join_polygons<CGAL::Polygon, CGAL::Polygon>)
@@ -275,7 +289,7 @@ PYBIND11_MODULE(triangulate_dem, m) {
         .def("intersection", &intersect_polygons<CGAL::Polygon, CGAL::SimplePolygon>)
         .def("intersection", &intersect_polygons<CGAL::Polygon, CGAL::Polygon>);
 
-    py::class_<CGAL::MultiPolygon, std::unique_ptr<CGAL::MultiPolygon>>(m, "MultiPolygon")
+    py::class_<CGAL::MultiPolygon, std::unique_ptr<CGAL::MultiPolygon>>(m, "multi_polygon")
         .def(py::init(
             [] (const CGAL::Polygon& polygon) {
                 CGAL::MultiPolygon self;
@@ -296,6 +310,8 @@ PYBIND11_MODULE(triangulate_dem, m) {
                     result.append(*p);
                 return result;
             })
+        .def("extract_boundaries", [] (const CGAL::MultiPolygon& self) {return CGAL::extract_boundaries(self);},
+                py::return_value_policy::take_ownership)
         .def("join",
             [] (const CGAL::MultiPolygon a, CGAL::SimplePolygon b) {
                 return join_multipolygons(a, CGAL::MultiPolygon({static_cast<CGAL::Polygon>(b)}));
@@ -312,39 +328,42 @@ PYBIND11_MODULE(triangulate_dem, m) {
                     return self.at(idx);
                     }, py::return_value_policy::reference_internal);
 
-    bind_rasterdata<float>(m, "raster_data_float");
-    bind_rasterdata<double>(m, "raster_data_double");
+    py::class_<rasputin::Mesh, std::unique_ptr<rasputin::Mesh>>(m, "Mesh")
+        .def("lindstrom_turk_by_ratio",
+            [] (const rasputin::Mesh& self, double ratio) {
+                return self.coarsen(SMS::Count_ratio_stop_predicate<CGAL::Mesh>(ratio),
+                                    SMS::LindstromTurk_placement<CGAL::Mesh>(),
+                                    SMS::LindstromTurk_cost<CGAL::Mesh>());
+            }, py::return_value_policy::take_ownership,
+            "Simplify the mesh.\n\nThe LindstromTurk cost and placement strategy is used, and simplification process stops when the number of undirected edges drops below the size threshold.")
+        .def("lindstrom_turk_by_size",
+            [] (const rasputin::Mesh& self, int max_size) {
+                return self.coarsen(SMS::Count_stop_predicate<CGAL::Mesh>(max_size),
+                                    SMS::LindstromTurk_placement<CGAL::Mesh>(),
+                                    SMS::LindstromTurk_cost<CGAL::Mesh>());
+            }, py::return_value_policy::take_ownership,
+            "Simplify the mesh.\n\nThe LindstromTurk cost and placement strategy is used, and simplification process stops when the number of undirected edges drops below the ratio threshold.")
+        .def("copy", &rasputin::Mesh::copy, py::return_value_policy::take_ownership)
+        .def("extract_sub_mesh", &rasputin::Mesh::extract_sub_mesh, py::return_value_policy::take_ownership)
 
-    bind_tin_from_raster<rasputin::RasterData<float>>(m);
-    bind_tin_from_raster<rasputin::RasterData<double>>(m);
-    bind_tin_from_raster<rasputin::RasterData<float>, CGAL::SimplePolygon>(m);
+        .def_property_readonly("num_vertices", &rasputin::Mesh::num_vertices)
+        .def_property_readonly("num_edges", &rasputin::Mesh::num_edges)
+        .def_property_readonly("num_faces", &rasputin::Mesh::num_faces)
 
-    // Polygons with hole not yet supported
-    // bind_tin_from_raster<rasputin::RasterData<float>, CGAL::Polygon>(m);
-    bind_tin_from_raster<rasputin::RasterData<double>, CGAL::SimplePolygon>(m);
-    // bind_tin_from_raster<rasputin::RasterData<double>, CGAL::Polygon>(m);
-    bind_tin_from_raster<std::vector<rasputin::RasterData<float>>, CGAL::SimplePolygon>(m);
-    // bind_tin_from_raster<std::vector<rasputin::RasterData<float>>, CGAL::Polygon>(m);
-    bind_tin_from_raster<std::vector<rasputin::RasterData<double>>, CGAL::SimplePolygon>(m);
-    // bind_tin_from_raster<std::vector<rasputin::RasterData<double>>, CGAL::Polygon>(m);
-
-    py::class_<std::vector<rasputin::RasterData<float>>, std::unique_ptr<std::vector<rasputin::RasterData<float>>>> (m, "raster_list")
-        .def(py::init( [] () {std::vector<rasputin::RasterData<float>> self; return self;}))
-        .def("add_raster",
-            [] (std::vector<rasputin::RasterData<float>>& self, rasputin::RasterData<float> raster_data) {
-                self.push_back(raster_data);
-            }, py::keep_alive<1,2>())
-        .def("__getitem__",
-            [] (std::vector<rasputin::RasterData<float>>& self, int index) {
-                return self.at(index);
-            }, py::return_value_policy::reference_internal);
-
-    py::bind_vector<std::vector<int>>(m, "int_vector");
-    py::bind_vector<std::vector<std::vector<int>>>(m, "shadow_vector");
+        .def_property_readonly("points", &rasputin::Mesh::get_points, py::return_value_policy::reference_internal)
+        .def_property_readonly("faces", &rasputin::Mesh::get_faces, py::return_value_policy::reference_internal);
 
     m.def("compute_shadow", &rasputin::compute_shadow, "Compute shadows for given sun ray direction.")
      .def("compute_shadows", &rasputin::compute_shadows, "Compute shadows for a series of times and ray directions.")
-     .def("surface_normals", &rasputin::surface_normals, "Compute surface normals for all faces in the mesh.")
+     .def("construct_mesh",
+            [] (const rasputin::point3_vector& points, const rasputin::face_vector & faces) {
+                rasputin::VertexIndexMap index_map;
+                rasputin::FaceDescrMap face_map;
+                return rasputin::Mesh(rasputin::construct_mesh(points, faces, index_map, face_map));
+         }, py::return_value_policy::take_ownership)
+     .def("surface_normals", &rasputin::surface_normals,
+          "Compute surface normals for all faces in the mesh.",
+          py::return_value_policy::take_ownership)
      .def("point_normals", &rasputin::point_normals, "Compute surface normals for all vertices in the mesh.")
      .def("orient_tin", &rasputin::orient_tin, "Orient all triangles in the TIN and returns their surface normals.")
      .def("extract_lakes", &rasputin::extract_lakes, "Extract lakes as separate face list.")
