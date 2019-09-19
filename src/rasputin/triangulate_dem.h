@@ -543,7 +543,7 @@ std::vector<int> compute_shadow(const point3_vector &pts,
     VertexIndexMap index_map;
     FaceDescrMap face_map;
     auto mesh = construct_mesh(pts, faces, index_map, face_map);
-    const CGAL::Vector sun_vec(sun_direction[0], sun_direction[1], sun_direction[2]);
+    const CGAL::Vector sun_vec(-sun_direction[0], -sun_direction[1], -sun_direction[2]);
     CGAL::Tree tree(CGAL::faces(mesh).first, CGAL::faces(mesh).second, mesh);
 
     for (auto fd: CGAL::faces(mesh)) {
@@ -563,6 +563,17 @@ std::vector<int> compute_shadow(const point3_vector &pts,
         }
     }
     return shade;
+};
+
+std::vector<int> compute_shadow(const point3_vector &pts,
+                    const face_vector &faces,
+                    const double azimuth,
+                    const double elevation) {
+    // Topocentric azimuth and elevation
+    const arma::vec::fixed<3> sd = arma::normalise(arma::vec::fixed<3>{sin(azimuth*M_PI/180.0), 
+                                                                       cos(azimuth*M_PI/180.0),
+                                                                       tan(elevation*M_PI/180.0)});
+    return compute_shadow(pts, faces, point3{sd[0], sd[1], sd[2]}); 
 };
 
 std::vector<std::vector<int>> compute_shadows(const point3_vector &pts,
@@ -619,8 +630,8 @@ point3_vector orient_tin(const point3_vector &pts, face_vector &faces) {
         const auto p0 = pts[face[0]];
         const auto p1 = pts[face[1]];
         const auto p2 = pts[face[2]];
-        const arma::vec::fixed<3> v0 = {p1[0] - p0[0], p1[1] - p0[1], p1[2] - p0[2]};
-        const arma::vec::fixed<3> v1 = {p2[0] - p0[0], p2[1] - p0[1], p2[2] - p0[2]};
+        const arma::vec::fixed<3> v0{p1[0] - p0[0], p1[1] - p0[1], p1[2] - p0[2]};
+        const arma::vec::fixed<3> v1{p2[0] - p0[0], p2[1] - p0[1], p2[2] - p0[2]};
         const arma::vec::fixed<3> n = arma::cross(v0, v1);
         double c = arma::norm(n);
 
@@ -663,8 +674,8 @@ double_vector compute_aspects(const point3_vector &normals) {
 };
 
 point3 normal(const point3 &p0, const point3 &p1, const point3 &p2) {
-        const arma::vec::fixed<3> v0 = {p1[0] - p0[0], p1[1] - p0[1], p1[2] - p0[2]};
-        const arma::vec::fixed<3> v1 = {p2[0] - p0[0], p2[1] - p0[1], p2[2] - p0[2]};
+        const arma::vec::fixed<3> v0{p1[0] - p0[0], p1[1] - p0[1], p1[2] - p0[2]};
+        const arma::vec::fixed<3> v1{p2[0] - p0[0], p2[1] - p0[1], p2[2] - p0[2]};
         arma::vec::fixed<3> n = arma::cross(v0, v1);
         n /= arma::norm(n);
         return n[2] >= 0.0 ? point3{n[0], n[1], n[2]} : point3{-n[0], -n[1], -n[2]};
@@ -690,8 +701,8 @@ point3_vector point_normals(const point3_vector &pts, const face_vector &faces) 
         const auto p0 = pts[face[0]];
         const auto p1 = pts[face[1]];
         const auto p2 = pts[face[2]];
-        const arma::vec::fixed<3> v0 = {p1[0] - p0[0], p1[1] - p0[1], p1[2] - p0[2]};
-        const arma::vec::fixed<3> v1 = {p2[0] - p0[0], p2[1] - p0[1], p2[2] - p0[2]};
+        const arma::vec::fixed<3> v0{p1[0] - p0[0], p1[1] - p0[1], p1[2] - p0[2]};
+        const arma::vec::fixed<3> v1{p2[0] - p0[0], p2[1] - p0[1], p2[2] - p0[2]};
         arma::vec::fixed<3> n = arma::cross(v0, v1);
         n /= arma::norm(n);
         const auto v = (n[2] >= 0.0) ? point3{n[0], n[1], n[2]} : point3{-n[0], -n[1], -n[2]};

@@ -3,7 +3,7 @@ project (Rasputin)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
-
+set(CMAKE_CXX_FLAGS "-std=c++2a ${CMAKE_CXX_FLAGS}")
 # Make cmake search for installations in 'lib' before looking elsewhere
 set(CMAKE_PREFIX_PATH  lib/CGAL ${CMAKE_PREFIX_PATH})
 
@@ -19,6 +19,11 @@ find_package(CGAL REQUIRED)
 if (CGAL_FOUND)
     include(${CGAL_USE_FILE})
 endif()
+
+find_package(date REQUIRED)
+
+add_subdirectory(cpp_test)
+
 
 # Include Armadillo source in 'lib/armadillo' if it exists
 if (EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/lib/armadillo")
