@@ -185,12 +185,12 @@ void bind_rasterdata(py::module &m, const std::string& pyname) {
 template<typename R, typename P>
 void bind_make_mesh(py::module &m) {
         m.def("make_mesh",
-            [] (const R& raster_data, const P polygon) {
-                return rasputin::mesh_from_raster(raster_data, polygon);
+            [] (const R& raster_data, const P polygon, const unsigned int epsg_id) {
+                return rasputin::mesh_from_raster(raster_data, polygon, epsg_id);
             }, py::return_value_policy::take_ownership)
         .def("make_mesh",
-            [] (const R& raster_data) {
-                return rasputin::mesh_from_raster(raster_data);
+            [] (const R& raster_data, const unsigned int epsg_id) {
+                return rasputin::mesh_from_raster(raster_data, epsg_id);
             }, py::return_value_policy::take_ownership);
 }
 
@@ -354,14 +354,14 @@ PYBIND11_MODULE(triangulate_dem, m) {
         .def_property_readonly("points", &rasputin::Mesh::get_points, py::return_value_policy::reference_internal)
         .def_property_readonly("faces", &rasputin::Mesh::get_faces, py::return_value_policy::reference_internal);
 
-    m.def("compute_shadow", (std::vector<int> (*)(const rasputin::point3_vector &, const rasputin::face_vector &, const rasputin::point3 &))&rasputin::compute_shadow, "Compute shadows for given topocentric sun position.")
-     .def("compute_shadow", (std::vector<int> (*)(const rasputin::point3_vector &, const rasputin::face_vector &, const double, const double))&rasputin::compute_shadow, "Compute shadows for given azimuth and elevation.")
+    m.def("compute_shadow", (std::vector<int> (*)(const rasputin::Mesh &, const rasputin::point3 &))&rasputin::compute_shadow, "Compute shadows for given topocentric sun position.")
+     .def("compute_shadow", (std::vector<int> (*)(const rasputin::Mesh &, const double, const double))&rasputin::compute_shadow, "Compute shadows for given azimuth and elevation.")
      .def("compute_shadows", &rasputin::compute_shadows, "Compute shadows for a series of times and ray directions.")
      .def("construct_mesh",
-            [] (const rasputin::point3_vector& points, const rasputin::face_vector & faces) {
+            [] (const rasputin::point3_vector& points, const rasputin::face_vector & faces, const unsigned int epsg_id) {
                 rasputin::VertexIndexMap index_map;
                 rasputin::FaceDescrMap face_map;
-                return rasputin::Mesh(rasputin::construct_mesh(points, faces, index_map, face_map));
+                return rasputin::Mesh(rasputin::construct_mesh(points, faces, index_map, face_map), epsg_id);
          }, py::return_value_policy::take_ownership)
      .def("surface_normals", &rasputin::surface_normals,
           "Compute surface normals for all faces in the mesh.",
@@ -390,5 +390,13 @@ PYBIND11_MODULE(triangulate_dem, m) {
                                                                      rasputin::solar_position::collectors::azimuth_and_elevation(), 
                                                                      rasputin::solar_position::delta_t_calculator::coarse_date_calc());
          }, "Compute azimuth and elevation of sun for given UT calendar coordinate.")
-     .def("solar_elevation_correction", &rasputin::solar_position::corrected_solar_elevation, "Correct elevation based on pressure and temperature.");
+     .def("solar_elevation_correction", &rasputin::solar_position::corrected_solar_elevation, "Correct elevation based on pressure and temperature.")
+     .def("shade", [] (const rasputin::Mesh& mesh, const double timestamp) {
+         using namespace std::chrono;
+         using namespace date;
+         const auto tp = sys_days{January / 1 / 1970} + seconds(int(std::round(timestamp)));
+         return rasputin::shade(mesh, tp);
+
+     })
+     ;
 }

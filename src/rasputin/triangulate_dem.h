@@ -2,8 +2,7 @@
 // Created by Ola Skavhaug on 08/10/2018.
 //
 
-#ifndef RASPUTIN_TRIANGULATE_DEM_H_H
-#define RASPUTIN_TRIANGULATE_DEM_H_H
+#pragma once
 
 #include <CGAL/AABB_face_graph_triangle_primitive.h>
 #include <CGAL/AABB_traits.h>
@@ -24,6 +23,12 @@
 #include <CGAL/Polygon_with_holes_2.h>
 #include <CGAL/Polygon_2_algorithms.h>
 
+#include <boost/geometry.hpp>
+#include <boost/geometry/srs/epsg.hpp>
+#include <boost/geometry/srs/projection.hpp>
+#include <boost/geometry/geometries/geometries.hpp>
+#include <boost/geometry/srs/transformation.hpp>
+
 #include <sstream>
 #include <armadillo>
 #include <cmath>
@@ -33,6 +38,7 @@
 #include <numeric>
 #include <pybind11/numpy.h>
 #include <cstdint>
+#include "solar_position.h"
 
 namespace CGAL {
 using K = Exact_predicates_inexact_constructions_kernel;
@@ -64,11 +70,11 @@ using SimplePolygon = Polygon_2<K>;
 using Polygon = Polygon_with_holes_2<K>;
 using MultiPolygon = std::vector<Polygon>;
 
-bool point_inside_polygon(const Point2& x,const SimplePolygon& polygon) {
+bool point_inside_polygon(const Point2 &x, const SimplePolygon &polygon) {
         return polygon.has_on_bounded_side(x);
 }
 
-bool point_inside_polygon(const Point2& x,const Polygon& polygon) {
+bool point_inside_polygon(const Point2 &x, const Polygon &polygon) {
     if (not polygon.outer_boundary().has_on_bounded_side(x))
         return false;
     if (not polygon.has_holes())
@@ -79,20 +85,20 @@ bool point_inside_polygon(const Point2& x,const Polygon& polygon) {
     return true;
 }
 
-bool point_inside_polygon(const Point2& x,const MultiPolygon& polygon) {
+bool point_inside_polygon(const Point2 &x, const MultiPolygon &polygon) {
     for (const auto& part: polygon)
         if (point_inside_polygon(x, part))
             return true;
     return false;
 }
 
-std::vector<SimplePolygon> extract_boundaries(const SimplePolygon& polygon) {
+std::vector<SimplePolygon> extract_boundaries(const SimplePolygon &polygon) {
     std::vector<SimplePolygon> ret;
     ret.emplace_back(polygon);
 
     return ret;
 }
-std::vector<SimplePolygon> extract_boundaries(const Polygon& polygon) {
+std::vector<SimplePolygon> extract_boundaries(const Polygon &polygon) {
     std::vector<SimplePolygon> ret;
     ret.emplace_back(polygon.outer_boundary());
     for (auto it = polygon.holes_begin(); it != polygon.holes_end(); ++it)
@@ -101,7 +107,7 @@ std::vector<SimplePolygon> extract_boundaries(const Polygon& polygon) {
     return ret;
 }
 
-std::vector<SimplePolygon> extract_boundaries(const MultiPolygon& polygon) {
+std::vector<SimplePolygon> extract_boundaries(const MultiPolygon &polygon) {
     std::vector<SimplePolygon> ret;
     for (const auto& part: polygon) {
         ret.emplace_back(part.outer_boundary());
@@ -112,6 +118,67 @@ std::vector<SimplePolygon> extract_boundaries(const MultiPolygon& polygon) {
     return ret;
 }
 }
+
+namespace boost::geometry::traits {
+
+    template<> struct tag<CGAL::Point2>
+    { typedef point_tag type; };
+
+    template<> struct coordinate_type<CGAL::Point2>
+    { typedef double type; };
+
+    template<> struct coordinate_system<CGAL::Point2>
+    {typedef cs::cartesian type; };
+
+    template<> struct dimension<CGAL::Point2> : boost::mpl::int_<2> {};
+
+    template <>
+    struct access<CGAL::Point2, 0>
+    {
+        static double get(CGAL::Point2 const& p) { return p.x(); }
+        static void set(CGAL::Point2& p, double const& value) { p = CGAL::Point2{value, p.y()}; }
+    };
+
+    template <>
+    struct access<CGAL::Point2, 1>
+    {
+        static double get(CGAL::Point2 const& p) { return p.y(); }
+        static void set(CGAL::Point2& p, double const& value) { p = CGAL::Point2{p.x(), value}; }
+    };
+
+    template<> struct tag<CGAL::Point3>
+    { typedef point_tag type; };
+
+    template<> struct coordinate_type<CGAL::Point3>
+    { typedef double type; };
+
+    template<> struct coordinate_system<CGAL::Point3>
+    {typedef cs::cartesian type; };
+
+    template<> struct dimension<CGAL::Point3> : boost::mpl::int_<3> {};
+
+    template <>
+    struct access<CGAL::Point3, 0>
+    {
+        static double get(CGAL::Point3 const& p) { return p.x(); }
+        static void set(CGAL::Point3& p, double const& value) { p = CGAL::Point3{value, p.y(), p.z()}; }
+    };
+
+    template <>
+    struct access<CGAL::Point3, 1>
+    {
+        static double get(CGAL::Point3 const& p) { return p.y(); }
+        static void set(CGAL::Point3& p, double const& value) { p = CGAL::Point3{p.x(), value, p.z()}; }
+    };
+
+    template <>
+    struct access<CGAL::Point3, 2>
+    {
+        static double get(CGAL::Point3 const& p) { return p.z(); }
+        static void set(CGAL::Point3& p, double const& value) { p = CGAL::Point3{p.x(), p.y(), value}; }
+    };
+}
+
 
 namespace rasputin {
 using point3 = std::array<double, 3>;
@@ -135,7 +202,8 @@ CGAL::Mesh construct_mesh(const point3_vector &pts,
                           FaceDescrMap& face_map);
 struct Mesh {
     const CGAL::Mesh cgal_mesh;
-    Mesh(CGAL::Mesh cgal_mesh) : cgal_mesh(cgal_mesh) {set_points_faces();}
+    const unsigned int epsg_id;
+    Mesh(CGAL::Mesh cgal_mesh, const unsigned int epsg_id) : cgal_mesh(cgal_mesh), epsg_id(epsg_id) {set_points_faces();}
 
     template<typename S, typename P, typename C>
     Mesh coarsen(const S& stop, const P& placement, const C& cost) const {
@@ -144,78 +212,25 @@ struct Mesh {
                                                          stop,
                                                          CGAL::parameters::get_cost(cost)
                                                                           .get_placement(placement));
-        return Mesh(new_cgal_mesh);
+        return Mesh(new_cgal_mesh, epsg_id);
     }
 
     Mesh copy() const {
         // Call CGAL::Mesh copy constructor to do a deep copy
-        return Mesh(CGAL::Mesh(cgal_mesh));
+        return Mesh(CGAL::Mesh(cgal_mesh), epsg_id);
     }
 
-    const point3_vector& get_points () {
-        if (points.size() == 0)
-            set_points_faces();
-
+    const point3_vector& get_points() const {
         return points;
     }
 
-    const face_vector& get_faces () {
-        if (faces.size() == 0)
-            set_points_faces();
-
+    const face_vector& get_faces() const {
         return faces;
     }
 
     size_t num_edges() const {return cgal_mesh.number_of_edges();}
     size_t num_vertices() const {return cgal_mesh.number_of_vertices();}
     size_t num_faces() const {return cgal_mesh.number_of_faces();}
-
-    Mesh not_working_extract_sub_mesh(const std::vector<int> &face_indices) const {
-        CGAL::Mesh mesh;
-        std::vector<int> sorted_face_inds(face_indices);
-        std::sort(sorted_face_inds.begin(), sorted_face_inds.end());
-        std::map<CGAL::VertexIndex, CGAL::VertexIndex> o2n;
-        std::vector<CGAL::FaceIndex> cgal_face_indices;
-        auto idx = sorted_face_inds.begin();
-        int face_idx = 0;
-        for (auto f: cgal_mesh.faces()) {
-            while (face_idx < *idx) {
-                ++face_idx;
-            }
-            if (face_idx > *idx)
-                throw std::runtime_error("Illegal face_index encountered.");
-            cgal_face_indices.push_back(f);
-            if (++idx == sorted_face_inds.end())
-                break;
-        }
-        if (cgal_face_indices.size() != face_indices.size()) {
-            std::ostringstream msg;
-            msg << "Implementation bug: " << std::endl;
-            msg << "cgal_face_indices.size() = " << cgal_face_indices.size() << " != ";
-            msg << "face_indices.size() = " << face_indices.size();
-            throw std::runtime_error(msg.str());
-        }
-        for (auto f: cgal_face_indices){
-            std::vector<CGAL::VertexIndex> face;
-            int counter = 0;
-            for (auto v: cgal_mesh.vertices_around_face(cgal_mesh.halfedge(f))) {
-                if (o2n.count(v) == 0) {
-                    const auto pt = cgal_mesh.point(v);
-                    o2n[v] = mesh.add_vertex(pt);
-                }
-                ++counter;
-                face.push_back(o2n[v]);
-            }
-            if (counter != 3) {
-                std::ostringstream msg;
-                msg << "Implementation bug: Counter = "<< counter << std::endl;
-                throw std::runtime_error(msg.str());
-            }
-            mesh.add_face(face[0], face[1], face[2]);
-        }
-        return Mesh(mesh);
-    }
-
 
     Mesh extract_sub_mesh(const std::vector<int> &face_indices) const {
         std::map<int, int> remap;
@@ -236,7 +251,7 @@ struct Mesh {
         }
         VertexIndexMap index_map;
         FaceDescrMap face_map;
-        return Mesh(construct_mesh(new_points, new_faces, index_map, face_map));
+        return Mesh(construct_mesh(new_points, new_faces, index_map, face_map), epsg_id);
     }
 
     private:
@@ -425,7 +440,8 @@ CGAL::DelaunayConstraints interpolate_boundary_points(const RasterData<T>& raste
 template<typename Pgn>
 Mesh make_mesh(const CGAL::PointList &pts,
                const Pgn& inclusion_polygon,
-               const CGAL::DelaunayConstraints &constraints) {
+               const CGAL::DelaunayConstraints &constraints,
+               const unsigned int epsg_id) {
 
     CGAL::ConstrainedDelaunay dtin;
     for (const auto p: pts)
@@ -458,11 +474,11 @@ Mesh make_mesh(const CGAL::PointList &pts,
         }
     }
     pvm.clear();
-    return Mesh(mesh);
+    return Mesh(mesh, epsg_id);
 };
 
 
-Mesh make_mesh(const CGAL::PointList &pts) {
+Mesh make_mesh(const CGAL::PointList &pts,  const unsigned int epsg_id) {
 
     CGAL::ConstrainedDelaunay dtin;
     for (const auto p: pts)
@@ -484,13 +500,14 @@ Mesh make_mesh(const CGAL::PointList &pts) {
     }
     pvm.clear();
 
-    return Mesh(mesh);
+    return Mesh(mesh, epsg_id);
 };
 
 
 template<typename T, typename Pgn>
 Mesh mesh_from_raster(const std::vector<RasterData<T>>& raster_list,
-                      const Pgn& boundary_polygon) {
+                      const Pgn& boundary_polygon,
+                      const unsigned int epsg_id) {
     CGAL::PointList raster_points;
     CGAL::DelaunayConstraints boundary_points;
     for (auto raster : raster_list) {
@@ -503,12 +520,12 @@ Mesh mesh_from_raster(const std::vector<RasterData<T>>& raster_list,
                                std::make_move_iterator(new_constraints.begin()),
                                std::make_move_iterator(new_constraints.end()));
     }
-    return make_mesh(raster_points, boundary_polygon, boundary_points);
+    return make_mesh(raster_points, boundary_polygon, boundary_points, epsg_id);
 }
 
 
 template<typename T>
-Mesh mesh_from_raster(const std::vector<RasterData<T>>& raster_list) {
+Mesh mesh_from_raster(const std::vector<RasterData<T>>& raster_list, const unsigned int epsg_id) {
     CGAL::PointList raster_points;
     for (auto raster : raster_list) {
         CGAL::PointList new_points = raster.raster_points();
@@ -516,95 +533,146 @@ Mesh mesh_from_raster(const std::vector<RasterData<T>>& raster_list) {
                              std::make_move_iterator(new_points.begin()),
                              std::make_move_iterator(new_points.end()));
     }
-    return make_mesh(raster_points);
+    return make_mesh(raster_points, epsg_id);
 }
 
 
 template<typename T, typename Pgn>
 Mesh mesh_from_raster(const RasterData<T>& raster,
-                      const Pgn& boundary_polygon) {
+                      const Pgn& boundary_polygon,
+                      const unsigned int epsg_id) {
     CGAL::PointList raster_points = raster.raster_points();
     CGAL::DelaunayConstraints boundary_points = interpolate_boundary_points(raster, boundary_polygon);
 
-    return make_mesh(raster_points, boundary_polygon, boundary_points);
+    return make_mesh(raster_points, boundary_polygon, boundary_points, epsg_id);
 }
 
 
 template<typename T>
-Mesh mesh_from_raster(const RasterData<T>& raster) {
-    return make_mesh(raster.raster_points());
+Mesh mesh_from_raster(const RasterData<T>& raster, const unsigned int epsg_id) {
+    return make_mesh(raster.raster_points(), epsg_id);
 }
 
+CGAL::Point3 centroid(const Mesh& mesh, const CGAL::face_descriptor &face) {
+    CGAL::Point3 c{0, 0, 0};
+    for (auto v: mesh.cgal_mesh.vertices_around_face(mesh.cgal_mesh.halfedge(face))) {
+        const auto pt = mesh.cgal_mesh.point(v);
+        c = CGAL::Point3{c.x() + pt.x(), c.y() + pt.y(), c.z() + pt.z()};
+    }
+    return CGAL::Point3{c.x()/3.0, c.y()/3.0, c.z()/3.0};
+}
 
-std::vector<int> compute_shadow(const point3_vector &pts,
-                                const face_vector &faces,
+std::vector<int> compute_shadow(const Mesh & mesh,
                                 const point3 &sun_direction) {
     std::vector<int> shade;
-    VertexIndexMap index_map;
-    FaceDescrMap face_map;
-    auto mesh = construct_mesh(pts, faces, index_map, face_map);
+    auto cgal_mesh = mesh.cgal_mesh;
     const CGAL::Vector sun_vec(-sun_direction[0], -sun_direction[1], -sun_direction[2]);
-    CGAL::Tree tree(CGAL::faces(mesh).first, CGAL::faces(mesh).second, mesh);
 
-    for (auto fd: CGAL::faces(mesh)) {
-        auto hd = halfedge(fd, mesh);
-        auto p = CGAL::centroid(mesh.point(source(hd, mesh)),
-                                mesh.point(target(hd, mesh)),
-                                mesh.point(target(next(hd, mesh), mesh)));
-        auto v = CGAL::Polygon_mesh_processing::compute_face_normal(fd, mesh);
+    int i = 0;
+    for (auto fd: cgal_mesh.faces()) {
+        auto v = CGAL::Polygon_mesh_processing::compute_face_normal(fd, cgal_mesh);
         if ( v[0]*sun_vec[0] + v[1]*sun_vec[1] + v[2]*sun_vec[2] > 0.0 )
-            shade.emplace_back(face_map[fd]);
+            shade.emplace_back(i);
         else {
-            CGAL::Ray sun_ray(p, -sun_vec);
-            auto intersection = tree.first_intersection(sun_ray,
-                                                        [fd] (const CGAL::face_descriptor &t) { return (t == fd); });
-            if (intersection)
-                shade.emplace_back(face_map[fd]);
+            CGAL::Tree tree(CGAL::faces(cgal_mesh).first, CGAL::faces(cgal_mesh).second, cgal_mesh);
+            const auto c = centroid(mesh, fd);
+                CGAL::Ray sun_ray(c, -sun_vec);
+                auto intersection = tree.first_intersection(sun_ray,
+                                                            [fd] (const CGAL::face_descriptor &t) { return (t == fd); });
+                if (intersection)
+                    shade.emplace_back(i);
         }
+        ++i;
     }
     return shade;
 };
 
-std::vector<int> compute_shadow(const point3_vector &pts,
-                    const face_vector &faces,
-                    const double azimuth,
-                    const double elevation) {
+bool is_shaded(const CGAL::Tree &tree,
+        const CGAL::face_descriptor &fd,
+        const CGAL::Vector &face_normal,
+        const CGAL::Point3 &face_center,
+        const double azimuth,
+        const double elevation) {
+    const arma::vec::fixed<3> sd = arma::normalise(arma::vec::fixed<3>{sin(azimuth*M_PI/180.0),
+                                                                       cos(azimuth*M_PI/180.0),
+                                                                       tan(elevation*M_PI/180.0)});
+    const CGAL::Vector sun_vec(-sd[0], -sd[1], -sd[2]);
+    if ( face_normal[0]*sun_vec[0] + face_normal[1]*sun_vec[1] + face_normal[2]*sun_vec[2] > 0.0 )
+        return true;
+    CGAL::Ray sun_ray(face_center, -sun_vec);
+    if (tree.first_intersection(sun_ray, [fd] (const CGAL::face_descriptor &t) { return (t == fd); }))
+        return true;
+    return false;
+}
+
+auto shade(const Mesh &mesh,
+           const std::chrono::system_clock::time_point tp) {
+    std::vector<bool> shade_vec;
+    shade_vec.reserve(mesh.num_faces());
+    namespace bg = boost::geometry;
+    using point_car = bg::model::point<double, 2, bg::cs::cartesian>;
+    using point_geo = bg::model::point<double, 2, bg::cs::geographic<bg::degree>>;
+    bg::srs::transformation<> tr{
+        bg::srs::epsg(mesh.epsg_id),
+        bg::srs::epsg(4326)
+    };
+    CGAL::Tree tree(CGAL::faces(mesh.cgal_mesh).first, CGAL::faces(mesh.cgal_mesh).second, mesh.cgal_mesh);
+    for (auto fd: mesh.cgal_mesh.faces()) {
+        const auto c = centroid(mesh, fd);
+        const point_car x_car{c.x(), c.y()};
+        point_geo x_geo;
+        tr.forward(x_car, x_geo);
+        const auto [azimuth, elevation] = solar_position::time_point_solar_position(
+                tp,
+                bg::get<1>(x_geo),
+                bg::get<0>(x_geo),
+                c.z(),
+                rasputin::solar_position::collectors::azimuth_and_elevation(),
+                rasputin::solar_position::delta_t_calculator::coarse_timestamp_calc()
+        );
+        auto face_normal = CGAL::Polygon_mesh_processing::compute_face_normal(fd, mesh.cgal_mesh);
+        shade_vec.emplace_back(is_shaded(tree, fd, face_normal, c, azimuth, elevation));
+    }
+    return shade_vec;
+}
+
+std::vector<int> compute_shadow(const Mesh &mesh,
+                                const double azimuth,
+                                const double elevation) {
     // Topocentric azimuth and elevation
     const arma::vec::fixed<3> sd = arma::normalise(arma::vec::fixed<3>{sin(azimuth*M_PI/180.0), 
                                                                        cos(azimuth*M_PI/180.0),
                                                                        tan(elevation*M_PI/180.0)});
-    return compute_shadow(pts, faces, point3{sd[0], sd[1], sd[2]}); 
+    return compute_shadow(mesh, point3{sd[0], sd[1], sd[2]});
 };
 
-std::vector<std::vector<int>> compute_shadows(const point3_vector &pts,
-                                              const face_vector &faces,
+std::vector<std::vector<int>> compute_shadows(const Mesh &mesh,
                                               const std::vector<std::pair<int, point3>> & sun_rays) {
+    // TODO: Rewrite totally!
     std::vector<std::vector<int>>  result;
+    return result;
+    /*
     result.reserve(sun_rays.size());
-    CGAL::Mesh mesh;
+    CGAL::Mesh cgal_mesh = mesh.cgal_mesh;
     std::map<size_t, CGAL::VertexIndex> index_map;
     std::map<CGAL::face_descriptor, size_t> face_map;
     size_t i = 0;
     size_t j = 0;
-    for (auto p: pts)
-        index_map[i++] = mesh.add_vertex(CGAL::Point(p[0], p[1], p[2]));
-    for (auto f: faces)
-        face_map[mesh.add_face(index_map[f[0]], index_map[f[1]], index_map[f[2]])] = j++;
-    CGAL::Tree tree(CGAL::faces(mesh).first, CGAL::faces(mesh).second, mesh);
+    CGAL::Tree tree(CGAL::faces(cgal_mesh).first, CGAL::faces(cgal_mesh).second, cgal_mesh);
     for (auto item: sun_rays) {
         std::vector<int> shade;
-        shade.reserve(mesh.num_faces());
+        shade.reserve(cgal_mesh.num_faces());
         auto utc_time = item.first;
         const CGAL::Vector sun_ray(item.second[0],
                                    item.second[1],
                                    item.second[2]);
 
-        for (auto fd: CGAL::faces(mesh)) {
-            auto hd = halfedge(fd, mesh);
-            auto p = CGAL::centroid(mesh.point(source(hd, mesh)),
-                                    mesh.point(target(hd, mesh)),
-                                    mesh.point(target(next(hd, mesh), mesh)));
-            auto v = CGAL::Polygon_mesh_processing::compute_face_normal(fd, mesh);
+        for (auto fd: CGAL::faces(cgal_mesh)) {
+            auto hd = halfedge(fd, cgal_mesh);
+            auto p = CGAL::centroid(cgal_mesh.point(source(hd, cgal_mesh)),
+                                    cgal_mesh.point(target(hd, cgal_mesh)),
+                                    cgal_mesh.point(target(next(hd, cgal_mesh), cgal_mesh)));
+            auto v = CGAL::Polygon_mesh_processing::compute_face_normal(fd, cgal_mesh);
             if ( v[0]*sun_ray[0] + v[1]*sun_ray[1] + v[2]*sun_ray[2] >= 0.0 )
                 shade.emplace_back(face_map[fd]);
             else {
@@ -620,6 +688,7 @@ std::vector<std::vector<int>> compute_shadows(const point3_vector &pts,
         result.emplace_back(std::move(shade));
     }
     return result;
+    */
 };
 
 point3_vector orient_tin(const point3_vector &pts, face_vector &faces) {
@@ -836,5 +905,3 @@ std::tuple<point3_vector, face_vector> consolidate(const point3_vector &points, 
     return std::make_pair(std::move(new_points), std::move(new_faces));
 }
 }
-
-#endif //RASPUTIN_TRIANGULATE_DEM_H_H

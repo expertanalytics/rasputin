@@ -32,7 +32,7 @@ TEST_CASE("Reference example test", "[reference]") {
     const double T = 11;
     using namespace rasputin::test_utils;
     using namespace rasputin::solar_position;
-    const auto [Phi, e0] = calendar_solar_position(year, month, day, lat, lon, masl, 
+    const auto [Phi, e0] = calendar_solar_position(year, month, day, lat, lon, masl,
                                                    collectors::azimuth_and_elevation(),
                                                    fixed_cal_delta_t_calc());
     REQUIRE(abs(Phi - 194.34024) < 1.0e-4);
