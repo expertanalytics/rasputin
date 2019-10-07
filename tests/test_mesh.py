@@ -1,9 +1,8 @@
 import pytest
 from numpy import array, cos, sin, linspace, pi, float32, zeros, ndindex
-from numpy.random import rand, randn
 from numpy.linalg import norm
 
-from pyproj import Proj
+import pyproj
 from shapely.geometry import Polygon, Point
 
 from rasputin.geometry import GeoPolygon
@@ -61,13 +60,13 @@ def polygon():
     x, y = array([0.51, 0.5])
     r = 0.4
 
-    cs = "+init=epsg:32633"
+    epsg_id = 32633
 
     polygon = Polygon([(x + r*cos(t), y + r*sin(t))
                       for t in linspace(0, 2*pi, N+1)[:-1]])
 
     return GeoPolygon(polygon=polygon,
-                      projection=Proj(cs))
+                      crs=pyproj.CRS.from_epsg(epsg_id))
 
 @pytest.fixture
 def polygon_w_hole():
@@ -76,7 +75,7 @@ def polygon_w_hole():
     x, y = array([0.51, 0.5])
     r1, r2 = 0.4, 0.25
 
-    cs = "+init=epsg:32633"
+    epsg_id = 32633
 
     polygon_1 = Polygon((x + r1*cos(t), y + r1*sin(t))
                         for t in linspace(0, 2*pi, N1+1)[:-1])
@@ -85,7 +84,7 @@ def polygon_w_hole():
                         for t in linspace(0, 2*pi, N2+1)[:-1])
 
     return GeoPolygon(polygon=polygon_1.difference(polygon_2),
-                      projection=Proj(cs))
+                      crs=pyproj.CRS.from_epsg(epsg_id))
 
 def test_mesh(raster, polygon):
     mesh = Mesh.from_raster(data=raster, domain=polygon)

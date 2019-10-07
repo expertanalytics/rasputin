@@ -21,8 +21,8 @@ def face_field_to_vertex_values(*,
 
 def vertex_field_to_vertex_values(*,
                                   vertex_field: np.ndarray,
-                                  faces: td.face_vector,
-                                  points: td.point3_vector) -> np.ndarray:
+                                  faces: np.ndarray,
+                                  points: np.ndarray) -> np.ndarray:
     """
 
     :param field: color (vector) field over points

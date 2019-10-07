@@ -5,7 +5,6 @@ import numpy as np
 import pprint
 import pyproj
 from shapely.geometry import Polygon
-from shapely import wkt, wkb
 import argparse
 
 from rasputin.reader import RasterRepository
@@ -81,24 +80,24 @@ def store_tin():
     # Determine region of interest
     if res.polyfile:
         input_domain = GeoPolygon.from_polygon_file(filepath=Path(res.polyfile),
-                                                    projection=pyproj.Proj(init="EPSG:4326"))
+                                                    crs=pyproj.CRS.from_string("+init=EPSG:4326"))
 
     elif (res.x and res.y):
         assert 3 <= len(res.x) == len(res.y), "x and y coordinates must have equal length greater or equal to 3"
         source_polygon = Polygon((x, y) for (x, y) in zip(res.x, res.y))
         input_domain = GeoPolygon(polygon=source_polygon,
-                                  projection=pyproj.Proj(init="EPSG:4326"))
+                                  crs=pyproj.CRS.from_string("+init=EPSG:4326"))
 
     else:
         raise RuntimeError("A constraining polygon is needed")
 
-    target_coordinate_system = pyproj.Proj(init=res.target_coordinate_system)
-    target_domain = input_domain.transform(target_projection=target_coordinate_system)
+    target_crs = pyproj.CRS.from_string(f"+init={res.target_coordinate_system}")
+    target_domain = input_domain.transform(target_crs=target_crs)
 
     # The transpose is probably flipped in the logic, so negating it should give correct behaviour.
     raster_repo = RasterRepository(directory=dem_archive, transpose=not res.transpose)
-    raster_coordinate_system = pyproj.Proj(raster_repo.coordinate_system(domain=target_domain))
-    raster_domain = input_domain.transform(target_projection=raster_coordinate_system)
+    raster_crs = pyproj.CRS.from_string(raster_repo.coordinate_system(domain=target_domain))
+    raster_domain = input_domain.transform(target_crs=raster_crs)
 
     raster_data_list = raster_repo.read(domain=raster_domain)
 
@@ -108,19 +107,18 @@ def store_tin():
 
 
     assert len(mesh.points), "No tin extracted, something went wrong..."
-    if raster_coordinate_system.definition_string() != target_coordinate_system.definition_string():
+    if raster_crs.to_authority() != target_crs.to_authority():
         points, faces = mesh.points, mesh.faces
-        x, y, z = pyproj.transform(raster_coordinate_system,
-                                   target_coordinate_system,
-                                   points[:, 0],
-                                   points[:, 1],
-                                   points[:, 2])
-        points = np.dstack([x, y, z])[0]
+        proj = pyproj.Transformer.from_crs(raster_crs, target_crs)
+        x, y, z = proj.transform(points[:, 0],
+                                 points[:, 1],
+                                 points[:, 2])
+        points = np.dstack([x, y, z]).reshape(-1, 3)
         mesh = Mesh.from_points_and_faces(points=points, faces=faces)
 
     if not res.land_type_partition:
         tr.save(uid=res.uid, geometries={"terrain": Geometry(mesh=mesh,
-                                                             projection=target_coordinate_system,
+                                                             crs=target_crs,
                                                              base_color=(1.0, 1.0, 1.0),
                                                              material=None)})
     else:
@@ -130,7 +128,7 @@ def store_tin():
             lt_repo = globcov_repository.GlobCovRepository(path=gc_archive)
         geometries = {}
         geo_cell_centers = GeoPoints(xy=mesh.cell_centers[:, :2],
-                                     projection=target_coordinate_system)
+                                     crs=target_crs)
         terrain_cover = lt_repo.land_cover(land_types=None,
                                            geo_points=geo_cell_centers,
                                            domain=target_domain)
@@ -148,7 +146,7 @@ def store_tin():
             geometries[cover.name] = Geometry(mesh=sub_mesh,
                                               base_color=colors,
                                               material=material,
-                                              projection=target_coordinate_system)
+                                              crs=target_crs)
         tr.save(uid=res.uid, geometries=geometries)
 
     meta = tr.content[res.uid]

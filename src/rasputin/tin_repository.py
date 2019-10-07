@@ -4,6 +4,7 @@ from datetime import datetime
 from h5py import File
 from lxml import etree
 from pathlib import Path
+from pyproj import CRS
 from rasputin.mesh import Mesh
 from rasputin.geometry import Geometry
 
@@ -40,7 +41,7 @@ class TinRepository:
                 color = group["faces"].attrs["color"]
                 mesh = Mesh.from_points_and_faces(points=pts, faces=faces)
                 geometries[name] = Geometry(mesh=mesh,
-                                            projection=projection,
+                                            crs=CRS.from_proj4(projection),
                                             base_color=color,
                                             material=None)
         return geometries
@@ -114,10 +115,10 @@ class TinRepository:
                 etree.SubElement(pts_elm,
                                  "Information",
                                  Name="projection",
-                                 Value=geom.projection.definition_string())
+                                 Value=geom.crs.to_proj4())
                 f_elm.text = f"{h5_base}:/tins/{name}/faces"
                 h5_points = grp.create_dataset(name="points", data=points, dtype="d")
-                h5_points.attrs["projection"] = geom.projection.definition_string()
+                h5_points.attrs["projection"] = geom.crs.to_proj4()
                 h5_faces = grp.create_dataset(name="faces", data=faces, dtype="i")
                 h5_faces.attrs["color"] = geom.base_color
                 color_arr = np.empty((len(faces), 3), dtype="float")

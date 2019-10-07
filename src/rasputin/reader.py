@@ -145,7 +145,7 @@ class GeoKeysInterpreter(object):
 
         import pyproj
         proj_str = GeoKeyInterpreter(geokeys).to_proj4()
-        proj = pyproj.Proj(proj_str)
+        proj = pyproj.CRS.from_proj4(proj_str)
 
     NOTE:
     This class is incomplete and many GeoKeys are not handled. Extending the class with new handlers
@@ -312,6 +312,7 @@ class ImageExtents:
         assert len(self.shape) == 2 and min(*self.shape) > 0, "Shape is not two-dimensional."
         assert min(self.delta_x, self.delta_y) > 0, "Step sizes must be strictly positive."
 
+
 @dataclass
 class Rasterdata(ImageExtents):
     array: np.ndarray
@@ -326,7 +327,7 @@ class Rasterdata(ImageExtents):
     @property
     def polygon(self):
         return GeoPolygon(polygon=Polygon.from_bounds(*self.box),
-                          projection=pyproj.Proj(self.coordinate_system))
+                          crs=pyproj.CRS.from_proj4(self.coordinate_system))
 
     def to_cpp(self) -> triangulate_dem.raster_data_float:
         return triangulate_dem.raster_data_float(self.array,
@@ -346,9 +347,6 @@ def crop_image_to_polygon(*,
 
     # Image box
     x_min, y_min, x_max, y_max = extents.box
-
-    # Polygon bounding box
-    x_min_p, y_min_p, x_max_p, y_max_p = polygon.bounds
 
     # We need polygon bounds in image coordinates
     x_min_p, y_min_p, x_max_p, y_max_p = polygon.bounds
@@ -441,7 +439,7 @@ class RasterRepository:
 
             if target_polygon.intersects(geo_polygon):
                 print(f"Using file: {filepath}")
-                polygon = target_polygon.transform(target_projection=geo_polygon.projection).polygon
+                polygon = target_polygon.transform(target_crs=geo_polygon.crs).polygon
                 part = read_raster_file(filepath=filepath,
                                         polygon=polygon, transpose=self.transpose)
                 parts.append(part)
@@ -457,12 +455,13 @@ class RasterRepository:
         for filepath in raster_files:
             geo_polygon = GeoPolygon.from_raster_file(filepath=filepath)
             if domain.intersects(geo_polygon):
-                return geo_polygon.projection.definition_string()
+                return geo_polygon.crs.to_proj4()
 
         raise RuntimeError("Defining polygon does not intersect with dem raster data.")
 
     def read(self, *, domain: GeoPolygon) -> List[Rasterdata]:
         return self.get_intersections(target_polygon=domain)
+
 
 def read_sun_posisions(*, filepath: Path) -> triangulate_dem.shadow_vector:
     assert filepath.exists()
