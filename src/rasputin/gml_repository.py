@@ -2,8 +2,8 @@ from typing import Dict, List, Tuple, Optional
 from pathlib import Path
 from lxml import etree
 import numpy as np
-from pyproj import transform
-from pyproj import Proj
+from pyproj import Transformer
+from pyproj import CRS
 from shapely.geometry import Polygon, Point
 from rasputin.geometry import GeoPoints, GeoPolygon
 from rasputin.land_cover_repository import LandCoverBaseType, LandCoverRepository, LandCoverMetaInfoBase
@@ -138,7 +138,7 @@ class GMLRepository(LandCoverRepository):
         assert len(files) == 1
         self.fn = files[0]
         self.parser = etree.XMLParser(encoding="utf-8", recover=True, huge_tree=True)
-        self.source_proj = None
+        self.data_crs: Optional[CRS] = None
 
     def _parse_polygon(self, polygon: etree._Element, nsmap: Dict[str, str]) -> Polygon:
         gml = f"{{{nsmap['gml']}}}"
@@ -152,16 +152,18 @@ class GMLRepository(LandCoverRepository):
             holes.append(np.fromiter(citer, dtype='d').reshape(-1, 2))
         return Polygon(shell=shell, holes=holes)
 
-    def _assign_source_proj(self, root: etree._Element) -> None:
+    def _assign_data_crs(self, root: etree._Element) -> None:
         gml = f"{{{root.nsmap['gml']}}}"
         elm = next(root.iter(f"{gml}featureMember"))
         pstr = next(elm.iter(f"{gml}Polygon")).attrib["srsName"]
-        self.source_proj = Proj(init=pstr)
+        self.data_crs = CRS.from_string(f"+init={pstr}")
 
     def read(self, domain: GeoPolygon) -> Dict[LandCoverType, List[Polygon]]:
         tree = etree.parse(str(self.fn), self.parser)
         root = tree.getroot()
-        self._assign_source_proj(root)
+        self._assign_data_crs(root)
+        if domain.crs.to_authority() != self.data_crs.to_authority():
+            domain = domain.transform(target_crs=self.data_crs)
         assert "gml" in root.nsmap, "Not a GML file!"
         assert "ogr" in root.nsmap, "Can not find land cover types!"
         gml = f"{{{root.nsmap['gml']}}}"
@@ -186,18 +188,22 @@ class GMLRepository(LandCoverRepository):
                    domain: GeoPolygon) -> np.ndarray:
         tree = etree.parse(str(self.fn), self.parser)
         root = tree.getroot()
-        self._assign_source_proj(root)
-        target_proj = geo_points.projection
-        if target_proj.definition_string() != self.source_proj.definition_string():
-            xy = np.dstack(transform(target_proj,
-                                     self.source_proj,
-                                     geo_points.xy[:, 0],
-                                     geo_points.xy[:, 1])).reshape((-1, 2))
+        self._assign_data_crs(root)
+        pts_crs = geo_points.crs
+        if pts_crs.to_authority() != self.data_crs.to_authority():
+            xy = np.dstack(Transformer.from_crs(pts_crs, self.data_crs).transform(
+                geo_points.xy[:, 0],
+                geo_points.xy[:, 1])).reshape((-1, 2))
         else:
             xy = geo_points.xy
-        domain = domain.transform(target_projection=self.source_proj).buffer(50)
+        # Add rel_buffer_size buffer on domain to make sure we hit all geo_points in data projection
+        rel_buffer_size = 0.02
+        domain = domain.transform(target_crs=self.data_crs)
+        bbox = domain.polygon.bounds
+        buffer_size = (bbox[2] - bbox[0])*rel_buffer_size
+        domain = domain.buffer(buffer_size)
 
-        # At this point, we have a consistent coordinate system for domain and xy all in the self.source_proj, so
+        # At this point, we have a consistent coordinate system for domain and xy all in the self.data_crs, so
         # omit checks for speed.
 
         land_cover_types = self.read(domain)

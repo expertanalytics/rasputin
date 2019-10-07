@@ -5,7 +5,7 @@ import numpy as np
 from rasputin.tin_repository import TinRepository
 from rasputin.mesh import Mesh
 from rasputin.geometry import Geometry
-from pyproj import Proj
+from pyproj import CRS
 
 @pytest.fixture
 def tin():
@@ -17,11 +17,11 @@ def tin():
 def test_store_tin(tin):
     pts, faces = tin
     uid = "test_tin"
-    proj = Proj(init="EPSG:32633")
+    crs = CRS.from_epsg(32633)
     geom_tag = "test_geom"
     mesh = Mesh.from_points_and_faces(points=pts, faces=faces)
     geom = {geom_tag: Geometry(mesh=mesh,
-                               projection=proj,
+                               crs=crs,
                                base_color=(0, 0, 0),
                                material="dummy2")}
     with TemporaryDirectory() as directory:
@@ -40,10 +40,10 @@ def test_store_tin(tin):
 def test_store_and_load_tin(tin):
     pts, faces = tin
     uid = "test_tin"
-    proj = Proj(init="EPSG:32633")
+    crs = CRS(32633)
     mesh = Mesh.from_points_and_faces(points=pts, faces=faces)
     geom = {"test_geom": Geometry(mesh=mesh,
-                                  projection=proj,
+                                  crs=crs,
                                   base_color=(0,0,0),
                                   material="dummy2")}
     with TemporaryDirectory() as directory:
@@ -58,10 +58,10 @@ def test_store_and_load_tin(tin):
 def test_store_and_delete_tin(tin):
     pts, faces = tin
     uid = "test_tin"
-    proj = Proj(init="EPSG:32633")
+    crs = CRS.from_epsg(32633)
     mesh = Mesh.from_points_and_faces(points=pts, faces=faces)
     geom = {"test_geom": Geometry(mesh=mesh,
-                                  projection=proj,
+                                  crs=crs,
                                   base_color=(0,0,0),
                                   material="dummy2")}
     with TemporaryDirectory() as directory:

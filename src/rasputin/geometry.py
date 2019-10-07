@@ -1,11 +1,9 @@
 from typing import Tuple, List, Optional, Union
 import io
 import shutil
-from functools import partial
-from shapely import ops, wkt
+from shapely import ops, wkt, wkb
 from pathlib import Path
 from dataclasses import dataclass
-from pyproj import Proj
 from shapely import geometry
 import numpy as np
 from pkg_resources import resource_filename
@@ -13,7 +11,6 @@ import pyproj
 from rasputin import triangulate_dem as td
 from rasputin.py2js import point_vector_to_lines, face_and_point_vector_to_lines
 from rasputin.mesh_utils import vertex_field_to_vertex_values
-#from rasputin.mesh import Mesh
 from rasputin.material import terrain_material
 
 
@@ -21,11 +18,11 @@ class Geometry:
 
     def __init__(self, *,
                  mesh: "Mesh",
-                 projection: pyproj.Proj,
+                 crs: pyproj.CRS,
                  base_color: Optional[Tuple[float, float, float]],
                  material: Optional[str]):
         self.mesh = mesh
-        self.projection = projection
+        self.crs = crs
         if base_color is None:
             self.base_color = (1.0, 1.0, 1.0)
         else:
@@ -39,7 +36,7 @@ class Geometry:
 
     def extract_faces(self, faces: np.ndarray) -> "Geometry":
         return self.__class__(mesh=self.mesh.copy(),
-                              projection=self.projection,
+                              crs=self.crs,
                               base_color=self.base_color,
                               material=self.material)
 
@@ -54,16 +51,10 @@ class Geometry:
     @property
     def point_normals(self) -> np.ndarray:
         return self.mesh.point_normals
-        #if self._point_normals is None:
-        #    self._point_normals = td.point_normals(self.points, self.faces)
-        #return self._point_normals
 
     @property
     def face_normals(self) -> np.ndarray:
         return self.mesh.face_normals
-        #if self._surface_normals is None:
-        #    self._surface_normals = td.surface_normals(self.points, self.faces)
-        #return self._surface_normals
 
     @property
     def aspects(self) -> np.ndarray:
@@ -106,7 +97,6 @@ class Geometry:
             file_handle.write(f"{line}\n")
         file_handle.write(",\n")
 
-        #write normals
         file_handle.write("normals: ")
         point_normals = vertex_field_to_vertex_values(vertex_field=np.asarray(self.point_normals),
                                                       faces=self.faces,
@@ -144,24 +134,24 @@ def write_scene(*, geometries: List[Geometry], output: Path):
 
 class GeoPoints:
 
-    def __init__(self, *, xy: np.ndarray, projection: Proj) -> None:
+    def __init__(self, *, xy: np.ndarray, crs: pyproj.CRS) -> None:
         self.xy = xy
         assert len(self.xy.shape) == 2 and self.xy.shape[-1] == 2
-        self.projection = projection
+        self.crs = crs
 
 
 @dataclass
 class GeoPoint:
 
     point: geometry.Point
-    projection: pyproj.Proj
+    crs: pyproj.CRS
 
 
 class GeoPolygon:
 
-    def __init__(self, *, polygon: geometry.Polygon, projection: pyproj.Proj) -> None:
+    def __init__(self, *, polygon: geometry.Polygon, crs: pyproj.CRS) -> None:
         self.polygon = polygon
-        self.projection = projection
+        self.crs = crs
 
     @classmethod
     def from_raster_file(cls, *, filepath: Path) -> "GeoPolygon":
@@ -172,10 +162,10 @@ class GeoPolygon:
             image_extents = get_image_extents(image=image)
 
         return GeoPolygon(polygon=geometry.Polygon.from_bounds(*image_extents.box),
-                          projection=pyproj.Proj(projection_str))
+                          crs=pyproj.CRS.from_proj4(projection_str))
 
     @classmethod
-    def from_polygon_file(cls, *, filepath: Path, projection: pyproj.Proj) -> "GeoPolygon":
+    def from_polygon_file(cls, *, filepath: Path, crs: pyproj.CRS) -> "GeoPolygon":
         if filepath.suffix.lower() == ".wkb":
             with filepath.open("rb") as pfile:
                 polygon = wkb.loads(pfile.read())
@@ -185,35 +175,33 @@ class GeoPolygon:
         else:
             raise ValueError("Cannot determine file type.")
 
-        return GeoPolygon(polygon=polygon, projection=projection)
+        return GeoPolygon(polygon=polygon, crs=crs)
 
-    def transform(self, *, target_projection: pyproj.Proj) -> "GeoPolygon":
-        if target_projection.definition_string() != self.projection.definition_string():
-            polygon = ops.transform(partial(pyproj.transform, self.projection, target_projection), self.polygon)
+    def transform(self, *, target_crs: pyproj.CRS) -> "GeoPolygon":
+        if target_crs.to_authority() != self.crs.to_authority():
+            proj = pyproj.Transformer.from_crs(self.crs, target_crs)
+            polygon = ops.transform(proj.transform, self.polygon)
         else:
             polygon = self.polygon
-        return GeoPolygon(polygon=polygon, projection=target_projection)
+        return GeoPolygon(polygon=polygon, crs=target_crs)
 
     def intersection(self, other: "GeoPolygon") -> "GeoPolygon":
-        other = other.transform(target_projection=self.projection)
+        other = other.transform(target_crs=self.crs)
         return GeoPolygon(polygon=self.polygon.intersection(other.polygon),
-                          projection=self.projection)
-
-    def depr_intersects(self, other: Union["GeoPolygon", GeoPoint]) -> bool:
-        return self.polygon.intersection(other.transform(target_projection=self.projection).polygon).area > 0
+                          crs=self.crs)
 
     def intersects(self, other: "GeoPolygon") -> bool:
-        op = other.transform(target_projection=self.projection).polygon
+        op = other.transform(target_crs=self.crs).polygon
         sp = self.polygon
         return sp.intersects(op) and not sp.touches(op)
 
     def difference(self, other: "GeoPolygon") -> "GeoPolygon":
-        other = other.transform(target_projection=self.projection)
+        other = other.transform(target_crs=self.crs)
         return GeoPolygon(polygon=self.polygon.difference(other.polygon),
-                          projection=self.projection)
+                          crs=self.crs)
 
     def buffer(self, value: float) -> "GeoPolygon":
-        return GeoPolygon(polygon=self.polygon.buffer(value), projection=self.projection)
+        return GeoPolygon(polygon=self.polygon.buffer(value), crs=self.crs)
 
     def to_cpp(self) -> Union[td.simple_polygon, td.polygon]:
         # Note: Shapely polygons have one vertex repeated and orientation dos not matter
@@ -223,7 +211,7 @@ class GeoPolygon:
         # Get point sequences as arrays
         exterior = np.asarray(orient(self.polygon).exterior)[:-1]
         interiors = [np.asarray(hole)[:-1]
-                    for hole in orient(self.polygon,-1).interiors]
+                     for hole in orient(self.polygon, -1).interiors]
 
         cgal_polygon = td.simple_polygon(exterior)
         for interior in interiors:

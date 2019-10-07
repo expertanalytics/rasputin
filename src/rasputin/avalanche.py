@@ -16,10 +16,10 @@ varsom_angles = [( -22.5,  22.5),
                  ( -67.5, -22.5)]
 
 
-def get_forecasts(*, x: float, y: float, proj: str) -> Dict[str, Any]:
-    p_source = pyproj.Proj(proj)
-    p_target = pyproj.Proj("+init=epsg:4326")
-    lon, lat = pyproj.transform(p_source, p_target, x, y)
+def get_forecasts(*, x: float, y: float, crs: pyproj.CRS) -> Dict[str, Any]:
+    target_crs = pyproj.CRS.from_epsg(4326)
+    proj = pyproj.Transformer.from_crs(crs, target_crs)
+    lat, lon = proj.transform(x, y)
     lang = 1
     now = datetime.datetime.now()
     start = now.strftime("%Y-%m-%d")
