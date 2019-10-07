@@ -1,14 +1,15 @@
 import pytest
 from numpy import array, cos, sin, linspace, pi, float32, zeros, ndindex
-from numpy.random import rand, randn
 from numpy.linalg import norm
+from datetime import datetime
 
-from pyproj import Proj
+from pyproj import CRS
 from shapely.geometry import Polygon, Point
 
 from rasputin.geometry import GeoPolygon
 from rasputin.reader import Rasterdata
 from rasputin.mesh import Mesh
+from rasputin import triangulate_dem
 
 
 @pytest.fixture
@@ -30,18 +31,18 @@ def raster():
 def raster_list():
     m0, n0, m1, n1 = 31, 20, 53, 10
     d0, d1 = 0.57, 0.48
-    array0 = (zeros((m0,n0))
-              + linspace(0, d0, m0).reshape(-1,1)**2
-              + linspace(0, 1, n0).reshape(1,-1))
+    array0 = (zeros((m0, n0))
+              + linspace(0, d0, m0).reshape(-1,  1)**2
+              + linspace(0,  1, n0).reshape( 1, -1))
 
-    array1 = (zeros((m1,n1))
-              + linspace(d1, 1, m1).reshape(-1,1)**2
-              + linspace(0, 1, n1).reshape(1,-1))
+    array1 = (zeros((m1, n1))
+              + linspace(d1, 1, m1).reshape(-1, 1)**2
+              + linspace(0,  1, n1).reshape(1, -1))
     return [Rasterdata(shape=(m0, n0),
                        x_min=0,
                        y_max=1,
-                       delta_x=d0 / (m0-1),
-                       delta_y=1 / (n0-1),
+                       delta_x=d0 / (m0 - 1),
+                       delta_y=1 / (n0 - 1),
                        array=array0.astype(float32),
                        coordinate_system="+init=epsg:32633",
                        info={}),
@@ -67,7 +68,7 @@ def polygon():
                       for t in linspace(0, 2*pi, N+1)[:-1]])
 
     return GeoPolygon(polygon=polygon,
-                      projection=Proj(cs))
+                      projection=CRS.from_proj4(cs))
 
 @pytest.fixture
 def polygon_w_hole():
@@ -155,3 +156,9 @@ def test_mesh_w_hole(raster, polygon_w_hole):
     assert raster.array.min() <= z.min()
     assert raster.array.max() >= z.max()
 
+
+def test_mesh_shade(raster, polygon):
+    mesh = Mesh.from_raster(data=raster, domain=polygon)
+    tp = datetime(2000, 1, 1)
+    shades = triangulate_dem.shade(mesh._cpp, tp.timestamp())
+    assert len(shades) == len.mesh.num_faces()

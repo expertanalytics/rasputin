@@ -185,12 +185,12 @@ void bind_rasterdata(py::module &m, const std::string& pyname) {
 template<typename R, typename P>
 void bind_make_mesh(py::module &m) {
         m.def("make_mesh",
-            [] (const R& raster_data, const P polygon, const unsigned int epsg_id) {
-                return rasputin::mesh_from_raster(raster_data, polygon, epsg_id);
+            [] (const R& raster_data, const P polygon, const std::string proj4_str) {
+                return rasputin::mesh_from_raster(raster_data, polygon, proj4_str);
             }, py::return_value_policy::take_ownership)
         .def("make_mesh",
-            [] (const R& raster_data, const unsigned int epsg_id) {
-                return rasputin::mesh_from_raster(raster_data, epsg_id);
+            [] (const R& raster_data, const std::string proj4_str) {
+                return rasputin::mesh_from_raster(raster_data, proj4_str);
             }, py::return_value_policy::take_ownership);
 }
 
@@ -358,10 +358,10 @@ PYBIND11_MODULE(triangulate_dem, m) {
      .def("compute_shadow", (std::vector<int> (*)(const rasputin::Mesh &, const double, const double))&rasputin::compute_shadow, "Compute shadows for given azimuth and elevation.")
      .def("compute_shadows", &rasputin::compute_shadows, "Compute shadows for a series of times and ray directions.")
      .def("construct_mesh",
-            [] (const rasputin::point3_vector& points, const rasputin::face_vector & faces, const unsigned int epsg_id) {
+            [] (const rasputin::point3_vector& points, const rasputin::face_vector & faces, const std::string proj4_str) {
                 rasputin::VertexIndexMap index_map;
                 rasputin::FaceDescrMap face_map;
-                return rasputin::Mesh(rasputin::construct_mesh(points, faces, index_map, face_map), epsg_id);
+                return rasputin::Mesh(rasputin::construct_mesh(points, faces, index_map, face_map), proj4_str);
          }, py::return_value_policy::take_ownership)
      .def("surface_normals", &rasputin::surface_normals,
           "Compute surface normals for all faces in the mesh.",
@@ -394,7 +394,7 @@ PYBIND11_MODULE(triangulate_dem, m) {
      .def("shade", [] (const rasputin::Mesh& mesh, const double timestamp) {
          using namespace std::chrono;
          using namespace date;
-         const auto tp = sys_days{January / 1 / 1970} + seconds(int(std::round(timestamp)));
+         const auto tp = sys_days{January / 1 / 1970} + milliseconds(int(std::round(timestamp*1000)));
          return rasputin::shade(mesh, tp);
 
      })

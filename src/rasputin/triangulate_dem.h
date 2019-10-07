@@ -202,8 +202,9 @@ CGAL::Mesh construct_mesh(const point3_vector &pts,
                           FaceDescrMap& face_map);
 struct Mesh {
     const CGAL::Mesh cgal_mesh;
-    const unsigned int epsg_id;
-    Mesh(CGAL::Mesh cgal_mesh, const unsigned int epsg_id) : cgal_mesh(cgal_mesh), epsg_id(epsg_id) {set_points_faces();}
+    const std::string proj4_str;
+    Mesh(CGAL::Mesh cgal_mesh, const std::string proj4_str)
+    : cgal_mesh(cgal_mesh), proj4_str(proj4_str) {set_points_faces();}
 
     template<typename S, typename P, typename C>
     Mesh coarsen(const S& stop, const P& placement, const C& cost) const {
@@ -212,12 +213,12 @@ struct Mesh {
                                                          stop,
                                                          CGAL::parameters::get_cost(cost)
                                                                           .get_placement(placement));
-        return Mesh(new_cgal_mesh, epsg_id);
+        return Mesh(new_cgal_mesh, proj4_str);
     }
 
     Mesh copy() const {
         // Call CGAL::Mesh copy constructor to do a deep copy
-        return Mesh(CGAL::Mesh(cgal_mesh), epsg_id);
+        return Mesh(CGAL::Mesh(cgal_mesh), proj4_str);
     }
 
     const point3_vector& get_points() const {
@@ -251,7 +252,7 @@ struct Mesh {
         }
         VertexIndexMap index_map;
         FaceDescrMap face_map;
-        return Mesh(construct_mesh(new_points, new_faces, index_map, face_map), epsg_id);
+        return Mesh(construct_mesh(new_points, new_faces, index_map, face_map), proj4_str);
     }
 
     private:
@@ -441,7 +442,7 @@ template<typename Pgn>
 Mesh make_mesh(const CGAL::PointList &pts,
                const Pgn& inclusion_polygon,
                const CGAL::DelaunayConstraints &constraints,
-               const unsigned int epsg_id) {
+               const std::string proj4_str) {
 
     CGAL::ConstrainedDelaunay dtin;
     for (const auto p: pts)
@@ -474,11 +475,11 @@ Mesh make_mesh(const CGAL::PointList &pts,
         }
     }
     pvm.clear();
-    return Mesh(mesh, epsg_id);
+    return Mesh(mesh, proj4_str);
 };
 
 
-Mesh make_mesh(const CGAL::PointList &pts,  const unsigned int epsg_id) {
+Mesh make_mesh(const CGAL::PointList &pts,  const std::string proj4_str) {
 
     CGAL::ConstrainedDelaunay dtin;
     for (const auto p: pts)
@@ -500,14 +501,14 @@ Mesh make_mesh(const CGAL::PointList &pts,  const unsigned int epsg_id) {
     }
     pvm.clear();
 
-    return Mesh(mesh, epsg_id);
+    return Mesh(mesh, proj4_str);
 };
 
 
 template<typename T, typename Pgn>
 Mesh mesh_from_raster(const std::vector<RasterData<T>>& raster_list,
                       const Pgn& boundary_polygon,
-                      const unsigned int epsg_id) {
+                      const std::string proj4_str) {
     CGAL::PointList raster_points;
     CGAL::DelaunayConstraints boundary_points;
     for (auto raster : raster_list) {
@@ -520,12 +521,12 @@ Mesh mesh_from_raster(const std::vector<RasterData<T>>& raster_list,
                                std::make_move_iterator(new_constraints.begin()),
                                std::make_move_iterator(new_constraints.end()));
     }
-    return make_mesh(raster_points, boundary_polygon, boundary_points, epsg_id);
+    return make_mesh(raster_points, boundary_polygon, boundary_points, proj4_str);
 }
 
 
 template<typename T>
-Mesh mesh_from_raster(const std::vector<RasterData<T>>& raster_list, const unsigned int epsg_id) {
+Mesh mesh_from_raster(const std::vector<RasterData<T>>& raster_list, const std::string proj4_str) {
     CGAL::PointList raster_points;
     for (auto raster : raster_list) {
         CGAL::PointList new_points = raster.raster_points();
@@ -533,24 +534,24 @@ Mesh mesh_from_raster(const std::vector<RasterData<T>>& raster_list, const unsig
                              std::make_move_iterator(new_points.begin()),
                              std::make_move_iterator(new_points.end()));
     }
-    return make_mesh(raster_points, epsg_id);
+    return make_mesh(raster_points, proj4_str);
 }
 
 
 template<typename T, typename Pgn>
 Mesh mesh_from_raster(const RasterData<T>& raster,
                       const Pgn& boundary_polygon,
-                      const unsigned int epsg_id) {
+                      const std::string proj4_str) {
     CGAL::PointList raster_points = raster.raster_points();
     CGAL::DelaunayConstraints boundary_points = interpolate_boundary_points(raster, boundary_polygon);
 
-    return make_mesh(raster_points, boundary_polygon, boundary_points, epsg_id);
+    return make_mesh(raster_points, boundary_polygon, boundary_points, proj4_str);
 }
 
 
 template<typename T>
-Mesh mesh_from_raster(const RasterData<T>& raster, const unsigned int epsg_id) {
-    return make_mesh(raster.raster_points(), epsg_id);
+Mesh mesh_from_raster(const RasterData<T>& raster, const std::string proj4_str) {
+    return make_mesh(raster.raster_points(), proj4_str);
 }
 
 CGAL::Point3 centroid(const Mesh& mesh, const CGAL::face_descriptor &face) {
@@ -612,8 +613,9 @@ auto shade(const Mesh &mesh,
     namespace bg = boost::geometry;
     using point_car = bg::model::point<double, 2, bg::cs::cartesian>;
     using point_geo = bg::model::point<double, 2, bg::cs::geographic<bg::degree>>;
+    std::cout << mesh.proj4_str << std::endl;
     bg::srs::transformation<> tr{
-        bg::srs::epsg(mesh.epsg_id),
+        bg::srs::proj4(mesh.proj4_str),
         bg::srs::epsg(4326)
     };
     CGAL::Tree tree(CGAL::faces(mesh.cgal_mesh).first, CGAL::faces(mesh.cgal_mesh).second, mesh.cgal_mesh);
