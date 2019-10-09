@@ -39,7 +39,7 @@ class TinRepository:
                 projection = group["points"].attrs["projection"]
                 faces = group["faces"][:]
                 color = group["faces"].attrs["color"]
-                mesh = Mesh.from_points_and_faces(points=pts, faces=faces)
+                mesh = Mesh.from_points_and_faces(points=pts, faces=faces, proj4_str=projection)
                 geometries[name] = Geometry(mesh=mesh,
                                             crs=CRS.from_proj4(projection),
                                             base_color=color,
