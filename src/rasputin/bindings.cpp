@@ -380,7 +380,7 @@ PYBIND11_MODULE(triangulate_dem, m) {
      .def("timestamp_solar_position", [] (const double timestamp, const double geographic_latitude, const double geographic_longitude, const double masl) {
             using namespace std::chrono;
             using namespace date;
-            const auto tp = sys_days{January/1/1970} + seconds(int(std::round(timestamp)));
+            const auto tp = sys_days{January/1/1970} + seconds(long(std::round(timestamp)));
             return rasputin::solar_position::time_point_solar_position(tp, geographic_latitude, geographic_longitude, masl, 
                                                                      rasputin::solar_position::collectors::azimuth_and_elevation(), 
                                                                      rasputin::solar_position::delta_t_calculator::coarse_timestamp_calc());
@@ -394,7 +394,9 @@ PYBIND11_MODULE(triangulate_dem, m) {
      .def("shade", [] (const rasputin::Mesh& mesh, const double timestamp) {
          using namespace std::chrono;
          using namespace date;
-         const auto tp = sys_days{January / 1 / 1970} + milliseconds(int(std::round(timestamp*1000)));
+         const auto secs = seconds(int(std::round(timestamp)));
+         const auto millisecs = milliseconds(int(round(1000*fmod(timestamp, 1))));
+         const auto tp = sys_days{January / 1 / 1970} + secs + millisecs;
          return rasputin::shade(mesh, tp);
 
      })

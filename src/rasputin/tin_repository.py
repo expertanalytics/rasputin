@@ -1,4 +1,4 @@
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 import numpy as np
 from datetime import datetime
 from h5py import File
@@ -54,7 +54,9 @@ class TinRepository:
             meta_info[f.stem] = self.info(uid=f.stem)
         return meta_info
 
-    def save(self, *, uid: str, geometries: Dict[str, Geometry]) -> None:
+    def save(self, *,
+             uid: str,
+             geometries: Dict[str, Geometry]) -> None:
         xdmf_filename = self.path / f"{uid}.xdmf"
         h5_base = f"{uid}.h5"
         h5_filename = self.path / h5_base

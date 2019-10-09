@@ -3,6 +3,7 @@ import typing as tp
 
 from . import triangulate_dem
 from .reader import GeoPolygon, Rasterdata
+from pyproj import CRS
 import meshio
 
 
@@ -40,10 +41,10 @@ class Mesh:
             proj4_str = data.coordinate_system
 
         if domain:
-            tmp = triangulate_dem.make_mesh(rasterdata_cpp, domain.to_cpp(), proj4_str)
+            tmp = triangulate_dem.make_mesh(rasterdata_cpp, domain.to_cpp(), CRS.from_proj4(proj4_str).to_proj4())
             mesh = cls(tmp)
         else:
-            mesh = cls(triangulate_dem.make_mesh(rasterdata_cpp, proj4_str))
+            mesh = cls(triangulate_dem.make_mesh(rasterdata_cpp, CRS.from_proj4(proj4_str).to_proj4()))
 
         return mesh
 

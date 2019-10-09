@@ -594,6 +594,7 @@ bool is_shaded(const CGAL::Tree &tree,
         const CGAL::Point3 &face_center,
         const double azimuth,
         const double elevation) {
+
     const arma::vec::fixed<3> sd = arma::normalise(arma::vec::fixed<3>{sin(azimuth*M_PI/180.0),
                                                                        cos(azimuth*M_PI/180.0),
                                                                        tan(elevation*M_PI/180.0)});
@@ -613,7 +614,6 @@ auto shade(const Mesh &mesh,
     namespace bg = boost::geometry;
     using point_car = bg::model::point<double, 2, bg::cs::cartesian>;
     using point_geo = bg::model::point<double, 2, bg::cs::geographic<bg::degree>>;
-    std::cout << mesh.proj4_str << std::endl;
     bg::srs::transformation<> tr{
         bg::srs::proj4(mesh.proj4_str),
         bg::srs::epsg(4326)
@@ -624,10 +624,12 @@ auto shade(const Mesh &mesh,
         const point_car x_car{c.x(), c.y()};
         point_geo x_geo;
         tr.forward(x_car, x_geo);
+        const auto lat = bg::get<1>(x_geo);
+        const auto lon = bg::get<0>(x_geo);
         const auto [azimuth, elevation] = solar_position::time_point_solar_position(
                 tp,
-                bg::get<1>(x_geo),
-                bg::get<0>(x_geo),
+                lat,
+                lon,
                 c.z(),
                 rasputin::solar_position::collectors::azimuth_and_elevation(),
                 rasputin::solar_position::delta_t_calculator::coarse_timestamp_calc()
