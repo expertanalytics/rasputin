@@ -29,8 +29,8 @@ auto parabolic_dt_calc() {
 }
 
 auto coarse_date_calc() {
-    return [] (const unsigned int year, 
-               const unsigned int month, 
+    return [] (const unsigned int year,
+               const unsigned int month,
                const unsigned int day) {
         if (year < 1955 || year > 2009)
             return parabolic_dt_calc()(year);
@@ -45,7 +45,7 @@ auto coarse_timestamp_calc() {
     auto ep = sys_days{January/1/1970};
 
     return [ep] (system_clock::time_point tp) {
-        const auto year = round(duration_cast<seconds>(tp - ep).count()*1.0/duration_cast<seconds>(years(1)).count()) + 1970; 
+        const auto year = round(duration_cast<seconds>(tp - ep).count()*1.0/duration_cast<seconds>(years(1)).count()) + 1970;
         if (year < 1955 || year > 2009)
             return parabolic_dt_calc()(year);
         const auto idx = (year - 1955) / 5;
@@ -688,25 +688,25 @@ auto solar_position(const double julian_day,
     const auto epsilon = true_ecliptic_obliquity(julian_ephemeris_millennium, obliquity_nutation);
     const auto delta_tau = aberration_correction(R);
     const auto lambda = apparent_sun_longitude(Theta, longitude_nutation, delta_tau);
-    const auto nu = apparent_Greenwich_sidereal_time(julian_day, 
-                                                     julian_ephemeris_centry, 
-                                                     longitude_nutation, 
+    const auto nu = apparent_Greenwich_sidereal_time(julian_day,
+                                                     julian_ephemeris_centry,
+                                                     longitude_nutation,
                                                      epsilon);
     const auto alpha = geocentric_sun_right_ascension(lambda, epsilon, beta);
     const auto delta = geocentric_sun_declination(lambda, epsilon, beta);
     const auto H = observer_local_hour_angle(nu, alpha, geographic_longitude);
-    const auto [alpha_mark, delta_mark, H_mark]  = topocentric_values(R, 
-                                                                      geographic_latitude, 
-                                                                      masl, 
-                                                                      alpha, 
-                                                                      delta, 
+    const auto [alpha_mark, delta_mark, H_mark]  = topocentric_values(R,
+                                                                      geographic_latitude,
+                                                                      masl,
+                                                                      alpha,
+                                                                      delta,
                                                                       H);
     const double e0 = uncorrected_topocentric_elevation_angle(geographic_latitude,
                                                               delta_mark,
                                                               H_mark);
-    const auto [Gamma, Phi] = topocentric_astronomers_and_azimuth_angle(H_mark, 
-                                                                        geographic_latitude, 
-                                                                        delta_mark); 
+    const auto [Gamma, Phi] = topocentric_astronomers_and_azimuth_angle(H_mark,
+                                                                        geographic_latitude,
+                                                                        delta_mark);
     return collector(e0, Gamma, Phi, alpha_mark, delta_mark, H_mark);
 }
 
@@ -715,8 +715,8 @@ auto corrected_solar_elevation(const double e0, const double P, const double T) 
 }
 
 template<typename collector_t, typename dt_calc_t>
-auto calendar_solar_position(unsigned int year, 
-                             unsigned int month, 
+auto calendar_solar_position(unsigned int year,
+                             unsigned int month,
                              double day,
                              const double geographic_latitude,
                              const double geographic_longitude,
@@ -739,7 +739,7 @@ auto time_point_solar_position(const std::chrono::system_clock::time_point time_
                                    const double masl,
                                    collector_t collector,
                                    dt_calc_t time_point_calc) {
-    
+
     const auto DT = time_point_calc(time_point);
     const auto julian_day = jd_from_clock(time_point);
     return solar_position(julian_day,
