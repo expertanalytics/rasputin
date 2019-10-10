@@ -24,6 +24,14 @@ The heavy lifting in Rasputin is done by external software:
  * [date](https://github.com/HowardHinnant/date) for date and time on top of `chrono`.
  * [Catch2](https://github.com/catchorg/Catch2) for unit testing of the c++ code.
 
+Rasputin does not aim at being backwards compatible with older compilers.
+Hence, you will need something quite new. The following compilers are known to
+work:
+ * g++ 8.3 
+ * clang 11.0.0
+
+Note that g++ 7 no longer works, due to the use of `<chrono>` from `stl`.
+
 ## Installation
 
 Installing Rasputin is easy, as the C++ dependencies are header only. Simply
