@@ -2,7 +2,9 @@
 #include <catch2/catch.hpp>
 #include <solar_position.h>
 #include <cmath>
-//#include "date/date.h"
+#ifndef __clang__
+#include "date/date.h"
+#endif
 #include <chrono>
 #include <ctime>
 
@@ -63,7 +65,10 @@ TEST_CASE("UTC cal test 1", "[utccalc]") {
     const unsigned int h = 19;
 
     using namespace std::chrono;
+
+#ifndef __clang__
     //using namespace date;
+#endif
     const auto [Phi0, elevation0] = calendar_solar_position(year, mon, dom + h/24.0, lat, lon, masl, 
                                                             collectors::azimuth_and_elevation(), 
                                                             fixed_cal_delta_t_calc());
@@ -89,7 +94,9 @@ TEST_CASE("DeltaT test", "[DT]") {
     const unsigned int h = 19;
 
     using namespace std::chrono;
-    //using namespace date;
+#ifndef __clang__
+    using namespace date;
+#endif
     using namespace rasputin::solar_position;
     auto tp = sys_days{month(mon)/dom/year};
     const auto result = time_point_solar_position(tp, lat, lon, masl, 

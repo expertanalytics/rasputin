@@ -6,7 +6,9 @@
 
 #include <cmath>
 #include <chrono>
-//#include "date/date.h"
+#ifndef __clang__
+#include "date/date.h"
+#endif
 #include <ctime>
 
 namespace rasputin::solar_position::collectors {
@@ -41,7 +43,10 @@ auto coarse_date_calc() {
 
 auto coarse_timestamp_calc() {
     using namespace std::chrono;
-    //using namespace date;
+#ifndef __clang__
+    using namespace date;
+#endif
+
     auto ep = sys_days{January/1/1970};
 
     return [ep] (system_clock::time_point tp) {
@@ -86,7 +91,9 @@ auto jd_from_cal(unsigned int year, unsigned int month, const double day){
 
 double jd_from_clock(const std::chrono::system_clock::time_point tp) {
     using namespace std::chrono;
-    //using namespace date;
+#ifndef __clang__
+    using namespace date;
+#endif
     const auto dt = tp - sys_days{January/1/1970};
     const auto t = duration_cast<seconds>(dt).count();
     return t/86400.0 + 2440587.5;
