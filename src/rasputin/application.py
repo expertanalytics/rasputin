@@ -56,7 +56,6 @@ def store_tin():
                             default="",
                             choices=["corine", "globcov"],
                             help="Partition mesh by land type")
-    arg_parser.add_argument("-transpose", action="store_true", help="Use the transpose of the raster image")
     arg_parser.add_argument("uid", type=str, help="Unique ID for the result TIN")
     res = arg_parser.parse_args(sys.argv[1:])
 
@@ -94,8 +93,7 @@ def store_tin():
     target_crs = pyproj.CRS.from_string(f"+init={res.target_coordinate_system}")
     target_domain = input_domain.transform(target_crs=target_crs)
 
-    # The transpose is probably flipped in the logic, so negating it should give correct behaviour.
-    raster_repo = RasterRepository(directory=dem_archive, transpose=not res.transpose)
+    raster_repo = RasterRepository(directory=dem_archive)
     raster_crs = pyproj.CRS.from_string(raster_repo.coordinate_system(domain=target_domain))
     raster_domain = input_domain.transform(target_crs=raster_crs)
 
@@ -113,6 +111,7 @@ def store_tin():
         x, y, z = proj.transform(points[:, 0],
                                  points[:, 1],
                                  points[:, 2])
+        print("After transform: ", max(z))
         points = np.dstack([x, y, z]).reshape(-1, 3)
         mesh = Mesh.from_points_and_faces(points=points, faces=faces)
 

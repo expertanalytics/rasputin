@@ -298,11 +298,11 @@ class ImageExtents:
 
     @property
     def x_max(self):
-        return self.x_min + self.delta_x * (self.shape[0] - 1)
+        return self.x_min + self.delta_x*self.shape[0]
 
     @property
     def y_min(self):
-        return self.y_max - self.delta_y * (self.shape[1] - 1)
+        return self.y_max - self.delta_y*self.shape[1]
 
     @property
     def box(self):
@@ -351,16 +351,17 @@ def crop_image_to_polygon(*,
     # We need polygon bounds in image coordinates
     x_min_p, y_min_p, x_max_p, y_max_p = polygon.bounds
 
-    i_min = np.clip(np.floor((x_min_p - x_min)/delta_x), 0, m-1)
-    j_min = np.clip(np.floor((y_max - y_max_p)/delta_y), 0, n-1)
-    i_max = np.clip(np.ceil((x_max_p - x_min)/delta_x) + 1, 1, m)
-    j_max = np.clip(np.ceil((y_max - y_min_p)/delta_y) + 1, 1, n)
+    j_min = np.clip(np.floor((x_min_p - x_min)/delta_x), 0, m-1)
+    i_min = np.clip(np.floor((y_max - y_max_p)/delta_y), 0, n-1)
+    j_max = np.clip(np.ceil((x_max_p - x_min)/delta_x) + 1, 1, m)
+    i_max = np.clip(np.ceil((y_max - y_min_p)/delta_y) + 1, 1, n)
 
     # NOTE: Issues with Pillows Image.crop
-    #     - Cropping is sepcified in image coordinates (transpose of array coordinates)
+    #     - Cropping is sepcified in image coordinates
     #     - Cropping does not include last indices of the cropping box
     #     - Cropping discards tiff tags
 
+    print((j_min, i_min, j_max, i_max))
     sub_image = image.crop(box=(j_min, i_min, j_max, i_max))
 
     # Find extents of the cropped image
@@ -373,19 +374,19 @@ def crop_image_to_polygon(*,
 
 def get_image_extents(image: Image.Image) -> Tuple[float, float, float, float]:
     tiepoint_idx = GeoTiffTags.ModelTiePointTag.value
-    i_tag, j_tag, _, x_tag, y_tag, _ = image.tag_v2.get(tiepoint_idx, (0, 0, 0, 0, 0, 0))
+    j_tag, i_tag, _, x_tag, y_tag, _ = image.tag_v2.get(tiepoint_idx, (0, 0, 0, 0, 0, 0))
 
     scale_idx = GeoTiffTags.ModelPixelScaleTag.value
     delta_x, delta_y, _ = image.tag_v2.get(scale_idx, (1.0, 1.0, 0.0))
 
-    n, m = image.size
+    m, n = image.size
 
 
-    x_min = x_tag - delta_x * i_tag
-    y_max = y_tag + delta_y * j_tag
+    x_min = x_tag - delta_x * j_tag
+    y_max = y_tag + delta_y * i_tag
 
-    x_max = x_tag + delta_x * (m - 1 - i_tag)
-    y_min = y_tag - delta_y * (n - 1 - j_tag)
+    x_max = x_tag + delta_x * (n - 1 - j_tag)
+    y_min = y_tag - delta_y * (m - 1 - i_tag)
 
     return ImageExtents(shape=(m, n),
                         delta_x=delta_x, delta_y=delta_y,
@@ -393,7 +394,7 @@ def get_image_extents(image: Image.Image) -> Tuple[float, float, float, float]:
 
 def read_raster_file(*,
                      filepath: Path,
-                     polygon: Optional[Polygon] = None, transpose: bool=False) -> Rasterdata:
+                     polygon: Optional[Polygon] = None) -> Rasterdata:
     logger = getLogger()
     logger.debug(f"Reading raster file {filepath}")
     assert filepath.exists()
@@ -403,16 +404,18 @@ def read_raster_file(*,
         info = extract_geo_keys(image=image)
         coordinate_system = identify_projection(image=image)
 
+        print(np.array(image).max())
+
         extents = get_image_extents(image)
-        if transpose:
-            image = image.transpose(Image.TRANSPOSE)
-            extents.shape = (extents.shape[1], extents.shape[0])
+        print(extents)
 
         if polygon:
             image, extents = crop_image_to_polygon(image=image, polygon=polygon, extents=extents)
 
         # Store the array to ensure the pointer to the data stays alive
         image_array = np.array(image)
+        print(image_array.max())
+        print(image_array.shape)
 
     logger.debug("Done")
 
@@ -423,9 +426,8 @@ def read_raster_file(*,
 
 class RasterRepository:
 
-    def __init__(self, *, directory: Path, transpose: bool=False) -> None:
+    def __init__(self, *, directory: Path) -> None:
         self.directory = directory
-        self.transpose = transpose
 
     def get_intersections(self,
                           *,
@@ -441,7 +443,7 @@ class RasterRepository:
                 print(f"Using file: {filepath}")
                 polygon = target_polygon.transform(target_crs=geo_polygon.crs).polygon
                 part = read_raster_file(filepath=filepath,
-                                        polygon=polygon, transpose=self.transpose)
+                                        polygon=polygon)
                 parts.append(part)
 
                 target_polygon = target_polygon.difference(geo_polygon)
