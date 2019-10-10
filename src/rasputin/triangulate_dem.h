@@ -327,16 +327,16 @@ struct RasterData {
         CGAL::PointList points;
         points.reserve(num_points_x * num_points_y);
 
-        for (std::size_t i = 0; i < num_points_x; ++i)
-            for (std::size_t j = 0; j < num_points_y; ++j)
-                points.emplace_back(x_min + i*delta_x, y_max - j*delta_y, data[i*num_points_y + j]);
+        for (std::size_t i = 0; i < num_points_y; ++i)
+            for (std::size_t j = 0; j < num_points_x; ++j)
+                points.emplace_back(x_min + j*delta_x, y_max - i*delta_y, data[i*num_points_x + j]);
         return points;
     }
 
     // For every point inside the raster rectangle we identify indices (i, j) of the upper-left vertex of the cell containing the point
     std::pair<int, int> get_indices(double x, double y) const {
-        int i = std::min<int>(std::max<int>(static_cast<int>((x-x_min) /delta_x), 0), num_points_x - 1);
-        int j = std::min<int>(std::max<int>(static_cast<int>((y_max-y) /delta_y), 0), num_points_y - 1);
+        int i = std::min<int>(std::max<int>(static_cast<int>((y_max-y) /delta_y), 0), num_points_y - 1);
+        int j = std::min<int>(std::max<int>(static_cast<int>((x-x_min) /delta_x), 0), num_points_x - 1);
 
         return std::make_pair(i,j);
     }
@@ -347,16 +347,18 @@ struct RasterData {
         auto [i, j] = get_indices(x, y);
 
         // Determine the cell corners
-        double x_0 = x_min + i * delta_x,
-               y_0 = y_max - j * delta_y,
-               x_1 = x_min + (i+1) * delta_x,
-               y_1 = y_max - (j+1) * delta_y;
+        //     (x0, y0) -- upper left
+        //     (x1, y1) -- lower right
+        double x_0 = x_min + j * delta_x,
+               y_0 = y_max - i * delta_y,
+               x_1 = x_min + (j+1) * delta_x,
+               y_1 = y_max - (i+1) * delta_y;
 
         // Using bilinear interpolation on the celll
-        double h = data[(i + 0)*num_points_y + j + 0] * (x_1 - x)/delta_x * (y - y_1)/delta_y
-                 + data[(i + 1)*num_points_y + j + 0] * (x - x_0)/delta_x * (y - y_1)/delta_y
-                 + data[(i + 0)*num_points_y + j + 1] * (x_1 - x)/delta_x * (y_0 - y)/delta_y
-                 + data[(i + 1)*num_points_y + j + 1] * (x - x_0)/delta_x * (y_0 - y)/delta_y;
+        double h = data[(i + 0)*num_points_x + j + 0] * (x_1 - x)/delta_x * (y - y_1)/delta_y   // (x0, y0)
+                 + data[(i + 0)*num_points_x + j + 1] * (x - x_0)/delta_x * (y - y_1)/delta_y   // (x1, y0)
+                 + data[(i + 1)*num_points_x + j + 0] * (x_1 - x)/delta_x * (y_0 - y)/delta_y   // (x0, y1)
+                 + data[(i + 1)*num_points_x + j + 1] * (x - x_0)/delta_x * (y_0 - y)/delta_y;  // (x1, y1)
 
         return h;
     }
