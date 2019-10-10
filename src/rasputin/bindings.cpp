@@ -1,4 +1,5 @@
 #include "triangulate_dem.h"
+#include "solar_position.h"
 #include <pybind11/pybind11.h>
 #include <pybind11/stl_bind.h>
 #include <pybind11/stl.h>
@@ -151,7 +152,7 @@ void bind_rasterdata(py::module &m, const std::string& pyname) {
             auto buffer = data_array.request();
             int m = buffer.shape[0], n = buffer.shape[1];
 
-            return rasputin::RasterData<FT>(x_min, y_max, delta_x, delta_y, m, n, static_cast<FT*>(buffer.ptr) );
+            return rasputin::RasterData<FT>(x_min, y_max, delta_x, delta_y, n, m, static_cast<FT*>(buffer.ptr) );
         }), py::return_value_policy::take_ownership,  py::keep_alive<1, 2>(),
             py::arg("data_array").noconvert(), py::arg("x_min"), py::arg("y_max"), py::arg("delta_x"), py::arg("delta_y"))
     .def_buffer([] (rasputin::RasterData<FT>& self) {
@@ -174,7 +175,7 @@ void bind_rasterdata(py::module &m, const std::string& pyname) {
     .def_property_readonly("y_min", &rasputin::RasterData<FT>::get_y_min)
     .def("__getitem__", [](rasputin::RasterData<FT>& self, std::pair<int, int> idx) {
                 auto [i, j] = idx;
-                return self.data[self.num_points_y * i + j]; })
+                return self.data[self.num_points_x * i + j]; })
     .def("get_indices", &rasputin::RasterData<FT>::get_indices)
     .def("exterior", &rasputin::RasterData<FT>::exterior, py::return_value_policy::take_ownership)
     .def("contains", &rasputin::RasterData<FT>::contains)
@@ -184,12 +185,12 @@ void bind_rasterdata(py::module &m, const std::string& pyname) {
 template<typename R, typename P>
 void bind_make_mesh(py::module &m) {
         m.def("make_mesh",
-            [] (const R& raster_data, const P polygon) {
-                return rasputin::mesh_from_raster(raster_data, polygon);
+            [] (const R& raster_data, const P polygon, const std::string proj4_str) {
+                return rasputin::mesh_from_raster(raster_data, polygon, proj4_str);
             }, py::return_value_policy::take_ownership)
         .def("make_mesh",
-            [] (const R& raster_data) {
-                return rasputin::mesh_from_raster(raster_data);
+            [] (const R& raster_data, const std::string proj4_str) {
+                return rasputin::mesh_from_raster(raster_data, proj4_str);
             }, py::return_value_policy::take_ownership);
 }
 
@@ -353,13 +354,14 @@ PYBIND11_MODULE(triangulate_dem, m) {
         .def_property_readonly("points", &rasputin::Mesh::get_points, py::return_value_policy::reference_internal)
         .def_property_readonly("faces", &rasputin::Mesh::get_faces, py::return_value_policy::reference_internal);
 
-    m.def("compute_shadow", &rasputin::compute_shadow, "Compute shadows for given sun ray direction.")
+    m.def("compute_shadow", (std::vector<int> (*)(const rasputin::Mesh &, const rasputin::point3 &))&rasputin::compute_shadow, "Compute shadows for given topocentric sun position.")
+     .def("compute_shadow", (std::vector<int> (*)(const rasputin::Mesh &, const double, const double))&rasputin::compute_shadow, "Compute shadows for given azimuth and elevation.")
      .def("compute_shadows", &rasputin::compute_shadows, "Compute shadows for a series of times and ray directions.")
      .def("construct_mesh",
-            [] (const rasputin::point3_vector& points, const rasputin::face_vector & faces) {
+            [] (const rasputin::point3_vector& points, const rasputin::face_vector & faces, const std::string proj4_str) {
                 rasputin::VertexIndexMap index_map;
                 rasputin::FaceDescrMap face_map;
-                return rasputin::Mesh(rasputin::construct_mesh(points, faces, index_map, face_map));
+                return rasputin::Mesh(rasputin::construct_mesh(points, faces, index_map, face_map), proj4_str);
          }, py::return_value_policy::take_ownership)
      .def("surface_normals", &rasputin::surface_normals,
           "Compute surface normals for all faces in the mesh.",
@@ -373,5 +375,34 @@ PYBIND11_MODULE(triangulate_dem, m) {
      .def("consolidate", &rasputin::consolidate, "Make a stand alone consolidated tin.")
      .def("cell_centers", &rasputin::cell_centers, "Compute cell centers for triangulation.")
      .def("coordinates_to_indices", &rasputin::coordinates_to_indices, "Transform from coordinate space to index space.")
-     .def("extract_uint8_buffer_values", &rasputin::extract_buffer_values<std::uint8_t>, "Extract raster data for given indices.");
+     .def("extract_uint8_buffer_values", &rasputin::extract_buffer_values<std::uint8_t>, "Extract raster data for given indices.")
+     // From solar_position.h
+     .def("timestamp_solar_position", [] (const double timestamp, const double geographic_latitude, const double geographic_longitude, const double masl) {
+            using namespace std::chrono;
+#ifndef __clang__
+            using namespace date;
+#endif
+            const auto tp = sys_days{January/1/1970} + seconds(long(std::round(timestamp)));
+            return rasputin::solar_position::time_point_solar_position(tp, geographic_latitude, geographic_longitude, masl, 
+                                                                     rasputin::solar_position::collectors::azimuth_and_elevation(), 
+                                                                     rasputin::solar_position::delta_t_calculator::coarse_timestamp_calc());
+         }, "Compute azimuth and elevation of sun for given UTC timestamp.")
+     .def("calendar_solar_position", [] (unsigned int year,unsigned int month, double day, const double geographic_latitude, const double geographic_longitude, const double masl) {
+            return rasputin::solar_position::calendar_solar_position(year, month, day, geographic_latitude, geographic_longitude, masl, 
+                                                                     rasputin::solar_position::collectors::azimuth_and_elevation(), 
+                                                                     rasputin::solar_position::delta_t_calculator::coarse_date_calc());
+         }, "Compute azimuth and elevation of sun for given UT calendar coordinate.")
+     .def("solar_elevation_correction", &rasputin::solar_position::corrected_solar_elevation, "Correct elevation based on pressure and temperature.")
+     .def("shade", [] (const rasputin::Mesh& mesh, const double timestamp) {
+         using namespace std::chrono;
+#ifndef __clang__
+         using namespace date;
+#endif
+         const auto secs = seconds(int(std::round(timestamp)));
+         const auto millisecs = milliseconds(int(round(1000*fmod(timestamp, 1))));
+         const auto tp = sys_days{January / 1 / 1970} + secs + millisecs;
+         return rasputin::shade(mesh, tp);
+
+     })
+     ;
 }

@@ -19,7 +19,7 @@ def test_store_tin(tin):
     uid = "test_tin"
     crs = CRS.from_epsg(32633)
     geom_tag = "test_geom"
-    mesh = Mesh.from_points_and_faces(points=pts, faces=faces)
+    mesh = Mesh.from_points_and_faces(points=pts, faces=faces, proj4_str=crs.to_proj4())
     geom = {geom_tag: Geometry(mesh=mesh,
                                crs=crs,
                                base_color=(0, 0, 0),
@@ -41,7 +41,7 @@ def test_store_and_load_tin(tin):
     pts, faces = tin
     uid = "test_tin"
     crs = CRS(32633)
-    mesh = Mesh.from_points_and_faces(points=pts, faces=faces)
+    mesh = Mesh.from_points_and_faces(points=pts, faces=faces, proj4_str=crs.to_proj4())
     geom = {"test_geom": Geometry(mesh=mesh,
                                   crs=crs,
                                   base_color=(0,0,0),
@@ -59,7 +59,7 @@ def test_store_and_delete_tin(tin):
     pts, faces = tin
     uid = "test_tin"
     crs = CRS.from_epsg(32633)
-    mesh = Mesh.from_points_and_faces(points=pts, faces=faces)
+    mesh = Mesh.from_points_and_faces(points=pts, faces=faces, proj4_str=crs.to_proj4())
     geom = {"test_geom": Geometry(mesh=mesh,
                                   crs=crs,
                                   base_color=(0,0,0),

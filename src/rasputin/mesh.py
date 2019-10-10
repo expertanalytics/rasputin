@@ -3,6 +3,7 @@ import typing as tp
 
 from . import triangulate_dem
 from .reader import GeoPolygon, Rasterdata
+from pyproj import CRS
 import meshio
 
 
@@ -14,32 +15,36 @@ class Mesh:
         self._point_normals: tp.Optional[np.ndarray] = None
 
     @classmethod
-    def from_points_and_faces(cls, *, points: np.ndarray, faces: np.ndarray) -> "Mesh":
+    def from_points_and_faces(cls, *, points: np.ndarray, faces: np.ndarray, proj4_str: str) -> "Mesh":
         points = triangulate_dem.point3_vector(points.tolist())
         faces = triangulate_dem.face_vector(faces.tolist())
-        return Mesh(triangulate_dem.construct_mesh(points, faces))
+        return cls(triangulate_dem.construct_mesh(points, faces, proj4_str))
 
     @classmethod
     def from_raster(cls, *,
                     data: tp.Union[tp.List[Rasterdata], Rasterdata],
                     domain: tp.Optional[GeoPolygon] = None) -> "Mesh":
         # Extract cpp objects
+        proj4_str = ""
         if isinstance(data, list):
             if data[0].array.dtype == np.float64:
                 rasterdata_cpp = triangulate_dem.raster_list_double()
             else:
                 rasterdata_cpp = triangulate_dem.raster_list_float()
 
+            proj4_str = data[0].coordinate_system
             for raster in data:
                 rasterdata_cpp.add_raster(raster.to_cpp())
 
         else:
             rasterdata_cpp = data.to_cpp()
+            proj4_str = data.coordinate_system
 
         if domain:
-            mesh = cls(triangulate_dem.make_mesh(rasterdata_cpp, domain.to_cpp()))
+            tmp = triangulate_dem.make_mesh(rasterdata_cpp, domain.to_cpp(), CRS.from_proj4(proj4_str).to_proj4())
+            mesh = cls(tmp)
         else:
-            mesh = cls(triangulate_dem.make_mesh(rasterdata_cpp))
+            mesh = cls(triangulate_dem.make_mesh(rasterdata_cpp, CRS.from_proj4(proj4_str).to_proj4()))
 
         return mesh
 

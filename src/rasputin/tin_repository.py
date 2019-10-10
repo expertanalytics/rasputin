@@ -1,4 +1,4 @@
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 import numpy as np
 from datetime import datetime
 from h5py import File
@@ -39,7 +39,7 @@ class TinRepository:
                 projection = group["points"].attrs["projection"]
                 faces = group["faces"][:]
                 color = group["faces"].attrs["color"]
-                mesh = Mesh.from_points_and_faces(points=pts, faces=faces)
+                mesh = Mesh.from_points_and_faces(points=pts, faces=faces, proj4_str=projection)
                 geometries[name] = Geometry(mesh=mesh,
                                             crs=CRS.from_proj4(projection),
                                             base_color=color,
@@ -54,7 +54,9 @@ class TinRepository:
             meta_info[f.stem] = self.info(uid=f.stem)
         return meta_info
 
-    def save(self, *, uid: str, geometries: Dict[str, Geometry]) -> None:
+    def save(self, *,
+             uid: str,
+             geometries: Dict[str, Geometry]) -> None:
         xdmf_filename = self.path / f"{uid}.xdmf"
         h5_base = f"{uid}.h5"
         h5_filename = self.path / h5_base

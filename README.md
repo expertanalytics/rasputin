@@ -21,6 +21,16 @@ The heavy lifting in Rasputin is done by external software:
    [GeoTIFF](https://en.wikipedia.org/wiki/GeoTIFF) files.
  * [Meshio](https://github.com/nschloe/meshio) is used to write results.
  * [Armadillo](http://arma.sourceforge.net/) for speedy arithmetics.
+ * [date](https://github.com/HowardHinnant/date) for date and time on top of `chrono`.
+ * [Catch2](https://github.com/catchorg/Catch2) for unit testing of the c++ code.
+
+Rasputin does not aim at being backwards compatible with older compilers.
+Hence, you will need something quite new. The following compilers are known to
+work:
+ * g++ 8.3 
+ * clang 11.0.0
+
+Note that g++ 7 no longer works, due to the use of `<chrono>` from `stl`.
 
 ## Installation
 
@@ -40,6 +50,8 @@ cd <rasputin_directory>/lib
 wget https://github.com/pybind/pybind11/archive/v2.2.3.tar.gz
 wget https://github.com/CGAL/cgal/releases/download/releases%2FCGAL-4.13/CGAL-4.13.tar.xz
 wget http://sourceforge.net/projects/arma/files/armadillo-9.200.7.tar.xz
+git clone git@github.com:HowardHinnant/date.git
+git clone git@github.com:catchorg/Catch2.git
 tar xf v2.2.3.tar.gz && mv pybind11-2.2.3 pybind11
 tar xf CGAL-4.13.tar.xz && mv CGAL-4.13 CGAL
 tar xf armadillo-9.200.7.tar.xz && mv mv armadullo-9.200.7 armadillo
