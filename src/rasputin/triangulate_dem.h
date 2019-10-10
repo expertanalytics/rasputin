@@ -644,7 +644,7 @@ std::vector<int> compute_shadow(const Mesh &mesh,
                                 const double azimuth,
                                 const double elevation) {
     // Topocentric azimuth and elevation
-    const arma::vec::fixed<3> sd = arma::normalise(arma::vec::fixed<3>{sin(azimuth*M_PI/180.0), 
+    const arma::vec::fixed<3> sd = arma::normalise(arma::vec::fixed<3>{sin(azimuth*M_PI/180.0),
                                                                        cos(azimuth*M_PI/180.0),
                                                                        tan(elevation*M_PI/180.0)});
     return compute_shadow(mesh, point3{sd[0], sd[1], sd[2]});

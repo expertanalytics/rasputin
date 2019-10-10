@@ -1,9 +1,9 @@
 cmake_minimum_required (VERSION 3.9.1)
 project (Rasputin)
 
-set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
-set(CMAKE_CXX_FLAGS "-std=c++2a ${CMAKE_CXX_FLAGS}")
+
 # Make cmake search for installations in 'lib' before looking elsewhere
 set(CMAKE_PREFIX_PATH  lib/CGAL ${CMAKE_PREFIX_PATH})
 
@@ -20,10 +20,15 @@ if (CGAL_FOUND)
     include(${CGAL_USE_FILE})
 endif()
 
-find_package(date REQUIRED)
+# Check if date library is installed in 'lib/date'
+if (EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/lib/date")
+    set(DATE_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/lib/date/include")
+else()
+    find_package(date REQUIRED)
+    get_target_property(DATE_INCLUDE_DIR date::date INTERFACE_INCLUDE_DIRECTORIES)
+endif()
 
 add_subdirectory(cpp_test)
-
 
 # Include Armadillo source in 'lib/armadillo' if it exists
 if (EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/lib/armadillo")
@@ -41,6 +46,8 @@ find_package(LAPACK)
 
 set(SOURCE_DIR "src/rasputin")
 
-include_directories(${SOURCE_DIR} ${ARMADILLO_INCLUDE_DIRS})
 pybind11_add_module(triangulate_dem "${SOURCE_DIR}/bindings.cpp")
-target_link_libraries(triangulate_dem PRIVATE ${BLAS_LIBRARIES} ${LAPACK_LIBRARIES})
+target_include_directories(triangulate_dem PRIVATE
+    ${SOURCE_DIR} ${ARMADILLO_INCLUDE_DIRS} ${DATE_INCLUDE_DIR})
+target_link_libraries(triangulate_dem PRIVATE
+    ${BLAS_LIBRARIES} ${LAPACK_LIBRARIES})

@@ -29,8 +29,8 @@ auto parabolic_dt_calc() {
 }
 
 auto coarse_date_calc() {
-    return [] (const unsigned int year, 
-               const unsigned int month, 
+    return [] (const unsigned int year,
+               const unsigned int month,
                const unsigned int day) {
         if (year < 1955 || year > 2009)
             return parabolic_dt_calc()(year);
@@ -45,7 +45,7 @@ auto coarse_timestamp_calc() {
     auto ep = sys_days{January/1/1970};
 
     return [ep] (system_clock::time_point tp) {
-        const auto year = round(duration_cast<seconds>(tp - ep).count()*1.0/duration_cast<seconds>(years(1)).count()) + 1970; 
+        const auto year = round(duration_cast<seconds>(tp - ep).count()*1.0/duration_cast<seconds>(years(1)).count()) + 1970;
         if (year < 1955 || year > 2009)
             return parabolic_dt_calc()(year);
         const auto idx = (year - 1955) / 5;
@@ -388,22 +388,22 @@ auto nutation(const double julian_ephemeris_centry) {
     const auto X3 = 93.27191  + 483202.017538*jce - 0.0036825*jce2 + jce3/327270;
     const auto X4 = 125.04452 -   1934.136261*jce + 0.0020708*jce2 + jce3/450000;
 
-    const auto dksi_00 = (-171996 - 174.2*jce)*sin(d2r(                        X4  )); 
-    const auto dksi_01 = ( -13187 -   1.6*jce)*sin(d2r(-X0*2            +X3*2 +X4*2)); 
-    const auto dksi_02 = (  -2274 -   0.2*jce)*sin(d2r(                  X3*2 +X4*2)); 
-    const auto dksi_03 = (   2062 +   0.2*jce)*sin(d2r(                        X4*2)); 
-    const auto dksi_04 = (   1426 -   3.4*jce)*sin(d2r(       X1                   )); 
-    const auto dksi_05 = (    712 +   0.1*jce)*sin(d2r(            X2              )); 
-    const auto dksi_06 = (   -517 +   1.2*jce)*sin(d2r(-X0*2 +X1        +X3*2 +X4*2)); 
-    const auto dksi_07 = (   -386 -   0.4*jce)*sin(d2r(                  X3*2 +X4  )); 
-    const auto dksi_08 =     -301             *sin(d2r(            X2   +X3*2 +X4*2)); 
-    const auto dksi_09 = (    217 -   0.5*jce)*sin(d2r(-X0*2 -X1        +X3*2 +X4*2)); 
-    const auto dksi_10 =     -158             *sin(d2r(-X0*2      +X2              )); 
-    const auto dksi_11 = (    129 +   0.1*jce)*sin(d2r(-X0*2            +X3*2 +X4  )); 
-    const auto dksi_12 =      123             *sin(d2r(           -X2   +X3*2 +X4*2)); 
-    const auto dksi_13 =       63             *sin(d2r( X0*2                       )); 
-    const auto dksi_14 = (     63 +   0.1*jce)*sin(d2r(            X2         +X4  )); 
-    const auto dksi_15 =      -59             *sin(d2r( X0*2      -X2   +X3*2 +X4*2)); 
+    const auto dksi_00 = (-171996 - 174.2*jce)*sin(d2r(                        X4  ));
+    const auto dksi_01 = ( -13187 -   1.6*jce)*sin(d2r(-X0*2            +X3*2 +X4*2));
+    const auto dksi_02 = (  -2274 -   0.2*jce)*sin(d2r(                  X3*2 +X4*2));
+    const auto dksi_03 = (   2062 +   0.2*jce)*sin(d2r(                        X4*2));
+    const auto dksi_04 = (   1426 -   3.4*jce)*sin(d2r(       X1                   ));
+    const auto dksi_05 = (    712 +   0.1*jce)*sin(d2r(            X2              ));
+    const auto dksi_06 = (   -517 +   1.2*jce)*sin(d2r(-X0*2 +X1        +X3*2 +X4*2));
+    const auto dksi_07 = (   -386 -   0.4*jce)*sin(d2r(                  X3*2 +X4  ));
+    const auto dksi_08 =     -301             *sin(d2r(            X2   +X3*2 +X4*2));
+    const auto dksi_09 = (    217 -   0.5*jce)*sin(d2r(-X0*2 -X1        +X3*2 +X4*2));
+    const auto dksi_10 =     -158             *sin(d2r(-X0*2      +X2              ));
+    const auto dksi_11 = (    129 +   0.1*jce)*sin(d2r(-X0*2            +X3*2 +X4  ));
+    const auto dksi_12 =      123             *sin(d2r(           -X2   +X3*2 +X4*2));
+    const auto dksi_13 =       63             *sin(d2r( X0*2                       ));
+    const auto dksi_14 = (     63 +   0.1*jce)*sin(d2r(            X2         +X4  ));
+    const auto dksi_15 =      -59             *sin(d2r( X0*2      -X2   +X3*2 +X4*2));
     const auto dksi_16 = (    -58 -   0.1*jce)*sin(d2r(           -X2         +X4  ));
     const auto dksi_17 =      -51             *sin(d2r(            X2   +X3*2 +X4  ));
     const auto dksi_18 =       48             *sin(d2r(-X0*2      +X2*2            ));
@@ -438,19 +438,19 @@ auto nutation(const double julian_ephemeris_centry) {
     const auto dksi_47 =       -5             *sin(d2r(-X0*2                  +X4  ));
     const auto dksi_48 =       -5             *sin(d2r(            X2*2 +X3*2 +X4  ));
     const auto dksi_49 =        4             *sin(d2r(-X0*2      +X2*2       +X4  ));
-    const auto dksi_50 =        4             *sin(d2r(-X0*2 +X1        +X3*2 +X4  )); 
-    const auto dksi_51 =        4             *sin(d2r(            X2   -X3*2      )); 
-    const auto dksi_52 =       -4             *sin(d2r(-X0        +X2              )); 
-    const auto dksi_53 =       -4             *sin(d2r(-X0*2 +X1                   )); 
-    const auto dksi_54 =       -4             *sin(d2r( X0                         )); 
-    const auto dksi_55 =        3             *sin(d2r(            X2   +X3*2      )); 
-    const auto dksi_56 =       -3             *sin(d2r(           -X2*2 +X3*2 +X4*2)); 
-    const auto dksi_57 =       -3             *sin(d2r(-X0   -X1  +X2              )); 
-    const auto dksi_58 =       -3             *sin(d2r(       X1  +X2              )); 
-    const auto dksi_59 =       -3             *sin(d2r(      -X1  +X2   +X3*2 +X4*2)); 
-    const auto dksi_60 =       -3             *sin(d2r( X0*2 -X1  -X2   +X3*2 +X4*2)); 
-    const auto dksi_61 =       -3             *sin(d2r(            X2*3 +X3*2 +X4*2)); 
-    const auto dksi_62 =       -3             *sin(d2r( X0*2 -X1        +X3*2 +X4*2)); 
+    const auto dksi_50 =        4             *sin(d2r(-X0*2 +X1        +X3*2 +X4  ));
+    const auto dksi_51 =        4             *sin(d2r(            X2   -X3*2      ));
+    const auto dksi_52 =       -4             *sin(d2r(-X0        +X2              ));
+    const auto dksi_53 =       -4             *sin(d2r(-X0*2 +X1                   ));
+    const auto dksi_54 =       -4             *sin(d2r( X0                         ));
+    const auto dksi_55 =        3             *sin(d2r(            X2   +X3*2      ));
+    const auto dksi_56 =       -3             *sin(d2r(           -X2*2 +X3*2 +X4*2));
+    const auto dksi_57 =       -3             *sin(d2r(-X0   -X1  +X2              ));
+    const auto dksi_58 =       -3             *sin(d2r(       X1  +X2              ));
+    const auto dksi_59 =       -3             *sin(d2r(      -X1  +X2   +X3*2 +X4*2));
+    const auto dksi_60 =       -3             *sin(d2r( X0*2 -X1  -X2   +X3*2 +X4*2));
+    const auto dksi_61 =       -3             *sin(d2r(            X2*3 +X3*2 +X4*2));
+    const auto dksi_62 =       -3             *sin(d2r( X0*2 -X1        +X3*2 +X4*2));
 
     const auto deps_00 = (92025 + 8.9*jce)*cos(d2r(                          X4  ));
     const auto deps_01 = ( 5736 - 3.1*jce)*cos(d2r(-X0*2              +X3*2 +X4*2));
@@ -491,23 +491,23 @@ auto nutation(const double julian_ephemeris_centry) {
     const auto deps_36 =      3           *cos(d2r(-X0*2                    +X4  ));
     const auto deps_37 =      3           *cos(d2r(              X2*2 +X3*2 +X4  ));
 
-    const auto dksi = (dksi_00 + dksi_01 + dksi_02 + dksi_03 + dksi_04 + dksi_05 + dksi_06 + dksi_07 + dksi_08 + dksi_09  
-                     + dksi_10 + dksi_11 + dksi_12 + dksi_13 + dksi_14 + dksi_15 + dksi_16 + dksi_17 + dksi_18 + dksi_19  
-                     + dksi_20 + dksi_21 + dksi_22 + dksi_23 + dksi_24 + dksi_25 + dksi_26 + dksi_27 + dksi_28 + dksi_29  
-                     + dksi_30 + dksi_31 + dksi_32 + dksi_33 + dksi_34 + dksi_35 + dksi_36 + dksi_37 + dksi_38 + dksi_39  
-                     + dksi_40 + dksi_41 + dksi_42 + dksi_43 + dksi_44 + dksi_45 + dksi_46 + dksi_47 + dksi_48 + dksi_49  
-                     + dksi_50 + dksi_51 + dksi_52 + dksi_53 + dksi_54 + dksi_55 + dksi_56 + dksi_57 + dksi_58 + dksi_59  
+    const auto dksi = (dksi_00 + dksi_01 + dksi_02 + dksi_03 + dksi_04 + dksi_05 + dksi_06 + dksi_07 + dksi_08 + dksi_09
+                     + dksi_10 + dksi_11 + dksi_12 + dksi_13 + dksi_14 + dksi_15 + dksi_16 + dksi_17 + dksi_18 + dksi_19
+                     + dksi_20 + dksi_21 + dksi_22 + dksi_23 + dksi_24 + dksi_25 + dksi_26 + dksi_27 + dksi_28 + dksi_29
+                     + dksi_30 + dksi_31 + dksi_32 + dksi_33 + dksi_34 + dksi_35 + dksi_36 + dksi_37 + dksi_38 + dksi_39
+                     + dksi_40 + dksi_41 + dksi_42 + dksi_43 + dksi_44 + dksi_45 + dksi_46 + dksi_47 + dksi_48 + dksi_49
+                     + dksi_50 + dksi_51 + dksi_52 + dksi_53 + dksi_54 + dksi_55 + dksi_56 + dksi_57 + dksi_58 + dksi_59
                      + dksi_60 + dksi_61 + dksi_62)/36000000.0;
 
-    const auto deps = (deps_00 + deps_01 + deps_02 + deps_03 + deps_04 + deps_05 + deps_06 + deps_07 + deps_08 + deps_09  
-                     + deps_10 + deps_11 + deps_12 + deps_13 + deps_14 + deps_15 + deps_16 + deps_17 + deps_18 + deps_19  
-                     + deps_20 + deps_21 + deps_22 + deps_23 + deps_24 + deps_25 + deps_26 + deps_27 + deps_28 + deps_29  
+    const auto deps = (deps_00 + deps_01 + deps_02 + deps_03 + deps_04 + deps_05 + deps_06 + deps_07 + deps_08 + deps_09
+                     + deps_10 + deps_11 + deps_12 + deps_13 + deps_14 + deps_15 + deps_16 + deps_17 + deps_18 + deps_19
+                     + deps_20 + deps_21 + deps_22 + deps_23 + deps_24 + deps_25 + deps_26 + deps_27 + deps_28 + deps_29
                      + deps_30 + deps_31 + deps_32 + deps_33 + deps_34 + deps_35 + deps_36 + deps_37)/36000000.0;
 
     return std::make_pair(dksi, deps);
 }
 
-double true_ecliptic_obliquity(const double julian_ephemeris_millennium, 
+double true_ecliptic_obliquity(const double julian_ephemeris_millennium,
                                const double obliquity_nutation) {
     const double U = julian_ephemeris_millennium/10;
     const double U2 = U*U;
@@ -520,7 +520,7 @@ double true_ecliptic_obliquity(const double julian_ephemeris_millennium,
     const double U9 = U8*U;
     const double U10 = U9*U;
     // Equation (24)
-    const auto eps_0 = 84381.448 - 4680.93*U   - 1.55*U2 + 1999.25*U3 
+    const auto eps_0 = 84381.448 - 4680.93*U   - 1.55*U2 + 1999.25*U3
                         - 51.38*U4 -249.67*U5 - 39.05*U6 + 7.12*U7
                         + 27.87*U8 +  5.79*U9 + 2.45*U10;
     // Equation (25)
@@ -537,8 +537,8 @@ double apparent_sun_longitude(const double geoc_long, const double nut_long,  co
     return geoc_long + nut_long + ab_corr;
 }
 double apparent_Greenwich_sidereal_time(const double julian_day,
-                                              const double julian_ephemeris_centry, 
-                                              const double nut_long, 
+                                              const double julian_ephemeris_centry,
+                                              const double nut_long,
                                               const double true_ecliptic_obliquity) {
     // Equation (28)
     const double nu0 = 280.46061837 + 360.98564736629*(julian_day - 2451545) + 0.000387933*pow(julian_ephemeris_centry, 2) -
@@ -548,8 +548,8 @@ double apparent_Greenwich_sidereal_time(const double julian_day,
     return limit_degrees(nu0) + nut_long*cos(d2r(true_ecliptic_obliquity));
 }
 
-double geocentric_sun_right_ascension(const double app_sun_longitude, 
-                           const double true_ecliptic_obliq, 
+double geocentric_sun_right_ascension(const double app_sun_longitude,
+                           const double true_ecliptic_obliq,
                            const double geocentric_lat) {
     // Equation (30)
     const auto lambda_rad = d2r(app_sun_longitude);
@@ -559,11 +559,11 @@ double geocentric_sun_right_ascension(const double app_sun_longitude,
     return limit_degrees(r2d(alpha));
 }
 
-double geocentric_sun_declination(const double app_sun_longitude, 
-                                  const double true_ecliptic_obliq, 
+double geocentric_sun_declination(const double app_sun_longitude,
+                                  const double true_ecliptic_obliq,
                                   const double geocentric_lat) {
     // Equation (31)
-    const auto lambda_rad = d2r(app_sun_longitude); 
+    const auto lambda_rad = d2r(app_sun_longitude);
     const auto eps_rad = d2r(true_ecliptic_obliq);
     const auto beta_rad = d2r(geocentric_lat);
     const auto delta = asin(sin(beta_rad)*cos(eps_rad) + cos(beta_rad)*sin(eps_rad)*sin(lambda_rad));
@@ -593,7 +593,7 @@ auto topocentric_values(const double R,
     // Equation (33)
     const double xi = 8.794/(3600.0*R);
     const double xi_rad = d2r(xi);
-    
+
     // Equation (34)
     const double u = atan(0.99664719*tan(lat_rad));
     // Equation (35)
@@ -601,13 +601,13 @@ auto topocentric_values(const double R,
     // Equation (36)
     const double y = 0.99664719*sin(u) + masl*sin(lat_rad)/6378140.0;
     // Equation (37)
-    const double dalpha_rad = atan2(                     - x*sin(xi_rad)*sin(hour_angle_rad), 
+    const double dalpha_rad = atan2(                     - x*sin(xi_rad)*sin(hour_angle_rad),
                                        cos(sun_decl_rad) - x*sin(xi_rad)*cos(hour_angle_rad));
     const double dalpha = r2d(dalpha_rad);
     // Equation (38)
     const double topo_sun_right_asc = geocentric_sun_right_asc + dalpha;
     // Equation (39)
-    const double topo_sun_declination = r2d(atan2(sin(sun_decl_rad) - y*sin(xi_rad)*cos(dalpha_rad), 
+    const double topo_sun_declination = r2d(atan2(sin(sun_decl_rad) - y*sin(xi_rad)*cos(dalpha_rad),
                                               cos(sun_decl_rad) - x*sin(xi_rad)*cos(hour_angle_rad)));
     // Equation (40)
     const double topo_local_hour_angle = obs_local_hour_angle - dalpha;
@@ -622,7 +622,7 @@ auto uncorrected_topocentric_elevation_angle(const double geographical_latitude,
     const double lat_rad = d2r(geographical_latitude);
     const double sun_decl_rad = d2r(topo_sun_declination);
     const double hour_angle_rad = d2r(topo_local_hour_angle);
-    const double eps_0 = r2d(asin(sin(lat_rad)*sin(sun_decl_rad) + 
+    const double eps_0 = r2d(asin(sin(lat_rad)*sin(sun_decl_rad) +
                                   cos(lat_rad)*cos(sun_decl_rad)*cos(hour_angle_rad)));
     return eps_0;
 }
@@ -639,14 +639,14 @@ auto topocentric_zenith_angle(const double eps_0,
     return std::make_pair(topocentric_elevation_angle, topocentric_zenith_angle);
 }
 
-auto topocentric_astronomers_and_azimuth_angle(const double topo_local_hour_angle, 
-                                               const double geographical_latitude, 
+auto topocentric_astronomers_and_azimuth_angle(const double topo_local_hour_angle,
+                                               const double geographical_latitude,
                                                const double topo_sun_declination) {
     // Equation (45)
     const double h_rad = d2r(topo_local_hour_angle);
     const double lat_rad = d2r(geographical_latitude);
     const double sun_decl_rad = d2r(topo_sun_declination);
-    const double Gamma = limit_degrees(r2d(atan2(sin(h_rad), 
+    const double Gamma = limit_degrees(r2d(atan2(sin(h_rad),
                                     cos(h_rad)*sin(lat_rad) - tan(sun_decl_rad)*cos(lat_rad))));
     // Equation (46)
     const double Phi = limit_degrees(Gamma + 180);
@@ -659,7 +659,7 @@ double indicence_angle(const double topo_zenith_angle, const double surface_slop
     const double slope_rad = d2r(surface_slope);
     const double astro_azimuth_rad = d2r(astronomers_azimuth_angle);
     const double surf_azimuth_rad = d2r(surface_azimuth);
-    const double I = r2d(acos(cos(zenit_rad)*cos(slope_rad) 
+    const double I = r2d(acos(cos(zenit_rad)*cos(slope_rad)
                             + sin(slope_rad)*sin(zenit_rad)*cos(astro_azimuth_rad - surf_azimuth_rad)));
     return I;
 }
@@ -688,25 +688,25 @@ auto solar_position(const double julian_day,
     const auto epsilon = true_ecliptic_obliquity(julian_ephemeris_millennium, obliquity_nutation);
     const auto delta_tau = aberration_correction(R);
     const auto lambda = apparent_sun_longitude(Theta, longitude_nutation, delta_tau);
-    const auto nu = apparent_Greenwich_sidereal_time(julian_day, 
-                                                     julian_ephemeris_centry, 
-                                                     longitude_nutation, 
+    const auto nu = apparent_Greenwich_sidereal_time(julian_day,
+                                                     julian_ephemeris_centry,
+                                                     longitude_nutation,
                                                      epsilon);
     const auto alpha = geocentric_sun_right_ascension(lambda, epsilon, beta);
     const auto delta = geocentric_sun_declination(lambda, epsilon, beta);
     const auto H = observer_local_hour_angle(nu, alpha, geographic_longitude);
-    const auto [alpha_mark, delta_mark, H_mark]  = topocentric_values(R, 
-                                                                      geographic_latitude, 
-                                                                      masl, 
-                                                                      alpha, 
-                                                                      delta, 
+    const auto [alpha_mark, delta_mark, H_mark]  = topocentric_values(R,
+                                                                      geographic_latitude,
+                                                                      masl,
+                                                                      alpha,
+                                                                      delta,
                                                                       H);
     const double e0 = uncorrected_topocentric_elevation_angle(geographic_latitude,
                                                               delta_mark,
                                                               H_mark);
-    const auto [Gamma, Phi] = topocentric_astronomers_and_azimuth_angle(H_mark, 
-                                                                        geographic_latitude, 
-                                                                        delta_mark); 
+    const auto [Gamma, Phi] = topocentric_astronomers_and_azimuth_angle(H_mark,
+                                                                        geographic_latitude,
+                                                                        delta_mark);
     return collector(e0, Gamma, Phi, alpha_mark, delta_mark, H_mark);
 }
 
@@ -715,8 +715,8 @@ auto corrected_solar_elevation(const double e0, const double P, const double T) 
 }
 
 template<typename collector_t, typename dt_calc_t>
-auto calendar_solar_position(unsigned int year, 
-                             unsigned int month, 
+auto calendar_solar_position(unsigned int year,
+                             unsigned int month,
                              double day,
                              const double geographic_latitude,
                              const double geographic_longitude,
@@ -739,7 +739,7 @@ auto time_point_solar_position(const std::chrono::system_clock::time_point time_
                                    const double masl,
                                    collector_t collector,
                                    dt_calc_t time_point_calc) {
-    
+
     const auto DT = time_point_calc(time_point);
     const auto julian_day = jd_from_clock(time_point);
     return solar_position(julian_day,
