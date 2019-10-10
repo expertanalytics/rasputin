@@ -1,5 +1,6 @@
 import os
 import sys
+import logging
 from pathlib import Path
 import numpy as np
 import pprint
@@ -27,21 +28,9 @@ def store_tin():
      * Use more of the information from varsom.no (and perhaps alpha blending) to better display avalanche dangers
 
     """
-    if "RASPUTIN_DATA_DIR" in os.environ:
-        dem_archive = Path(os.environ["RASPUTIN_DATA_DIR"]) / "dem_archive"
-        tin_archive = Path(os.environ["RASPUTIN_DATA_DIR"]) / "tin_archive"
-        gc_archive = Path(os.environ["RASPUTIN_DATA_DIR"]) / "globcov"
-        corine_archive = Path(os.environ["RASPUTIN_DATA_DIR"]) / "corine"
-    else:
-        #  data_dir = Path(os.environ["HOME"]) /"projects" / "rasputin_data" / "dem_archive"
-        dem_archive = Path(".") / "dem_archive"
-        tin_archive = Path(".") / "tin_archive"
-        gc_archive = Path(".") / "globcov"
-        corine_archive = Path(".") / "corine"
-        print(f"WARNING: No data directory specified, assuming dem_archive {dem_archive.absolute()}")
-        print(f"WARNING: No data directory specified, assuming tin_archive {tin_archive.absolute()}")
-        print(f"WARNING: No data directory specified, assuming globcov_archive {gc_archive.absolute()}")
-        print(f"WARNING: No data directory specified, assuming corine_archive {corine_archive.absolute()}")
+    logging.basicConfig(level=logging.CRITICAL, format='Rasputin[%(levelname)s]: %(message)s')
+    logger = logging.getLogger()
+
 
     arg_parser = argparse.ArgumentParser()
     arg_parser.add_argument("-x", nargs="+", type=float, help="x-coordinates of polygon", default=None)
@@ -57,8 +46,26 @@ def store_tin():
                             choices=["corine", "globcov"],
                             help="Partition mesh by land type")
     arg_parser.add_argument("uid", type=str, help="Unique ID for the result TIN")
+    arg_parser.add_argument("-silent", action="store_true", help="Run in silent mode")
     res = arg_parser.parse_args(sys.argv[1:])
+    if not res.silent:
+        logger.setLevel(logging.INFO)
 
+    if "RASPUTIN_DATA_DIR" in os.environ:
+        dem_archive = Path(os.environ["RASPUTIN_DATA_DIR"]) / "dem_archive"
+        tin_archive = Path(os.environ["RASPUTIN_DATA_DIR"]) / "tin_archive"
+        gc_archive = Path(os.environ["RASPUTIN_DATA_DIR"]) / "globcov"
+        corine_archive = Path(os.environ["RASPUTIN_DATA_DIR"]) / "corine"
+    else:
+        #  data_dir = Path(os.environ["HOME"]) /"projects" / "rasputin_data" / "dem_archive"
+        dem_archive = Path(".") / "dem_archive"
+        tin_archive = Path(".") / "tin_archive"
+        gc_archive = Path(".") / "globcov"
+        corine_archive = Path(".") / "corine"
+        logger.critical(f"WARNING: No data directory specified, assuming dem_archive {dem_archive.absolute()}")
+        logger.critical(f"WARNING: No data directory specified, assuming tin_archive {tin_archive.absolute()}")
+        logger.critical(f"WARNING: No data directory specified, assuming globcov_archive {gc_archive.absolute()}")
+        logger.critical(f"WARNING: No data directory specified, assuming corine_archive {corine_archive.absolute()}")
     # Some sanity checks
     try:
         next(dem_archive.glob("*.tif"))
@@ -111,7 +118,6 @@ def store_tin():
         x, y, z = proj.transform(points[:, 0],
                                  points[:, 1],
                                  points[:, 2])
-        print("After transform: ", max(z))
         points = np.dstack([x, y, z]).reshape(-1, 3)
         mesh = Mesh.from_points_and_faces(points=points, faces=faces)
 
@@ -149,5 +155,5 @@ def store_tin():
         tr.save(uid=res.uid, geometries=geometries)
 
     meta = tr.content[res.uid]
-    print(f"Successfully added uid='{res.uid}' to the tin archive {tin_archive.absolute()}, with meta info:")
+    logger.info(f"Successfully added uid='{res.uid}' to the tin archive {tin_archive.absolute()}, with meta info:")
     pprint.PrettyPrinter(indent=4).pprint(meta)

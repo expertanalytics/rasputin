@@ -351,17 +351,16 @@ def crop_image_to_polygon(*,
     # We need polygon bounds in image coordinates
     x_min_p, y_min_p, x_max_p, y_max_p = polygon.bounds
 
-    j_min = np.clip(np.floor((x_min_p - x_min)/delta_x), 0, m-1)
-    i_min = np.clip(np.floor((y_max - y_max_p)/delta_y), 0, n-1)
-    j_max = np.clip(np.ceil((x_max_p - x_min)/delta_x) + 1, 1, m)
-    i_max = np.clip(np.ceil((y_max - y_min_p)/delta_y) + 1, 1, n)
+    j_min = np.clip(np.floor((x_min_p - x_min)/delta_x), 0, n - 1)
+    i_min = np.clip(np.floor((y_max - y_max_p)/delta_y), 0, m - 1)
+    j_max = np.clip(np.ceil((x_max_p - x_min)/delta_x) + 1, 1, n)
+    i_max = np.clip(np.ceil((y_max - y_min_p)/delta_y) + 1, 1, m)
 
     # NOTE: Issues with Pillows Image.crop
     #     - Cropping is sepcified in image coordinates
     #     - Cropping does not include last indices of the cropping box
     #     - Cropping discards tiff tags
 
-    print((j_min, i_min, j_max, i_max))
     sub_image = image.crop(box=(j_min, i_min, j_max, i_max))
 
     # Find extents of the cropped image
@@ -379,7 +378,7 @@ def get_image_extents(image: Image.Image) -> Tuple[float, float, float, float]:
     scale_idx = GeoTiffTags.ModelPixelScaleTag.value
     delta_x, delta_y, _ = image.tag_v2.get(scale_idx, (1.0, 1.0, 0.0))
 
-    m, n = image.size
+    n, m = image.size
 
 
     x_min = x_tag - delta_x * j_tag
@@ -404,18 +403,13 @@ def read_raster_file(*,
         info = extract_geo_keys(image=image)
         coordinate_system = identify_projection(image=image)
 
-        print(np.array(image).max())
-
         extents = get_image_extents(image)
-        print(extents)
 
         if polygon:
             image, extents = crop_image_to_polygon(image=image, polygon=polygon, extents=extents)
 
         # Store the array to ensure the pointer to the data stays alive
         image_array = np.array(image)
-        print(image_array.max())
-        print(image_array.shape)
 
     logger.debug("Done")
 
@@ -436,11 +430,12 @@ class RasterRepository:
         parts = []
 
         raster_files = self.directory.glob("*.tif")
+        logger = getLogger()
         for filepath in raster_files:
             geo_polygon = GeoPolygon.from_raster_file(filepath=filepath)
 
             if target_polygon.intersects(geo_polygon):
-                print(f"Using file: {filepath}")
+                logger.info(f"Using file: {filepath}")
                 polygon = target_polygon.transform(target_crs=geo_polygon.crs).polygon
                 part = read_raster_file(filepath=filepath,
                                         polygon=polygon)

@@ -4,6 +4,7 @@ from pathlib import Path
 import numpy as np
 import pyproj
 import argparse
+import logging
 
 from rasputin.tin_repository import TinRepository
 from rasputin import triangulate_dem
@@ -136,15 +137,21 @@ Then visit http://localhost:8080
 
 
 def visualize_tin():
+    logging.basicConfig(level=logging.CRITICAL, format='Rasputin[%(levelname)s]: %(message)s')
+    logger = logging.getLogger()
+
     arg_parser = argparse.ArgumentParser()
     arg_parser.add_argument("uid", type=str, help="Tin repository uid for mesh to visualize.")
     arg_parser.add_argument("-output", type=str, default="web_viz", help="Directory for web content.")
+    arg_parser.add_argument("-silent", action="store_true", help="Run in silent mode")
+    res = arg_parser.parse_args(sys.argv[1:])
+    if not res.silent:
+        logger.setLevel(logging.INFO)
     if "RASPUTIN_DATA_DIR" in os.environ:
         tin_archive = Path(os.environ["RASPUTIN_DATA_DIR"]) / "tin_archive"
     else:
         tin_archive = Path(".") / "tin_archive"
         print(f"WARNING: No data directory specified, assuming tin_archive {tin_archive.absolute()}")
-    res = arg_parser.parse_args(sys.argv[1:])
     tin_repo = TinRepository(path=tin_archive)
     geometries = tin_repo.read(uid=res.uid)
     for name, geom in geometries.items():
