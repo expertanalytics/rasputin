@@ -152,7 +152,7 @@ void bind_rasterdata(py::module &m, const std::string& pyname) {
             auto buffer = data_array.request();
             int m = buffer.shape[0], n = buffer.shape[1];
 
-            return rasputin::RasterData<FT>(x_min, y_max, delta_x, delta_y, m, n, static_cast<FT*>(buffer.ptr) );
+            return rasputin::RasterData<FT>(x_min, y_max, delta_x, delta_y, n, m, static_cast<FT*>(buffer.ptr) );
         }), py::return_value_policy::take_ownership,  py::keep_alive<1, 2>(),
             py::arg("data_array").noconvert(), py::arg("x_min"), py::arg("y_max"), py::arg("delta_x"), py::arg("delta_y"))
     .def_buffer([] (rasputin::RasterData<FT>& self) {

@@ -298,11 +298,11 @@ class ImageExtents:
 
     @property
     def x_max(self):
-        return self.x_min + self.delta_x*self.shape[0]
+        return self.x_min + self.delta_x*self.shape[1]
 
     @property
     def y_min(self):
-        return self.y_max - self.delta_y*self.shape[1]
+        return self.y_max - self.delta_y*self.shape[0]
 
     @property
     def box(self):
@@ -367,8 +367,8 @@ def crop_image_to_polygon(*,
     # Find extents of the cropped image
     sub_extents = ImageExtents(shape=(i_max - i_min, j_max - j_min),
                                delta_x=delta_x, delta_y=delta_y,
-                               x_min=x_min + i_min * delta_x,
-                               y_max=y_max - j_min * delta_y)
+                               x_min=x_min + j_min * delta_x,
+                               y_max=y_max - i_min * delta_y)
 
     return sub_image, sub_extents
 
