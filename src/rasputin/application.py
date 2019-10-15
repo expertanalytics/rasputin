@@ -11,7 +11,7 @@ import argparse
 from rasputin.reader import RasterRepository
 from rasputin.tin_repository import TinRepository
 from rasputin.geometry import Geometry, GeoPoints, GeoPolygon
-from rasputin.mesh import Mesh
+from rasputin.mesh import Mesh, FaceField
 
 from rasputin import gml_repository
 from rasputin import globcov_repository
@@ -121,38 +121,33 @@ def store_tin():
         points = np.dstack([x, y, z]).reshape(-1, 3)
         mesh = Mesh.from_points_and_faces(points=points, faces=faces)
 
-    if not res.land_type_partition:
-        tr.save(uid=res.uid, geometries={"terrain": Geometry(mesh=mesh,
-                                                             crs=target_crs,
-                                                             base_color=(1.0, 1.0, 1.0),
-                                                             material=None)})
-    else:
+    if res.land_type_partition:
         if res.land_type_partition == "corine":
             lt_repo = gml_repository.GMLRepository(path=corine_archive)
         else:
             lt_repo = globcov_repository.GlobCovRepository(path=gc_archive)
-        geometries = {}
         geo_cell_centers = GeoPoints(xy=mesh.cell_centers[:, :2],
                                      crs=target_crs)
         terrain_cover = lt_repo.land_cover(land_types=None,
                                            geo_points=geo_cell_centers,
                                            domain=target_domain)
-        terrains = {lt.value: [] for lt in lt_repo.land_cover_type}
-
+        terrain_colors = np.empty((terrain_cover.shape[0], 3), dtype='d')
+        extracted_terrain_types = set()
         for i, cell in enumerate(terrain_cover):
-            terrains[cell].append(i)
-        for t in terrains:
-            if not terrains[t]:
-                continue
-            cover = lt_repo.land_cover_type(t)
-            colors = [c/255 for c in lt_repo.land_cover_meta_info_type.color(land_cover_type=cover)]
-            material = lt_repo.land_cover_meta_info_type.material(land_cover_type=cover)
-            sub_mesh = mesh.extract_sub_mesh(np.array(terrains[t]))
-            geometries[cover.name] = Geometry(mesh=sub_mesh,
-                                              base_color=colors,
-                                              material=material,
-                                              crs=target_crs)
-        tr.save(uid=res.uid, geometries=geometries)
+            if cell not in extracted_terrain_types:
+                extracted_terrain_types.add(cell)
+        meta_info = lt_repo.land_cover_meta_info_type
+        for tt in extracted_terrain_types:
+            tt_info = {}
+            cover = lt_repo.land_cover_type(tt)
+            tt_info["name"] = cover.name
+            tt_info["color"] = [c/255 for c in meta_info.color(land_cover_type=cover)]
+
+            terrain_colors[terrain_cover == tt] = tt_info["color"]
+            tt_info["material"] = meta_info.material(land_cover_type=cover)
+        tr.save(uid=res.uid,
+                geometry=Geometry(mesh=mesh, crs=target_crs),
+                face_fields={"cover_type": terrain_cover, "cover_color": terrain_colors))
 
     meta = tr.content[res.uid]
     logger.info(f"Successfully added uid='{res.uid}' to the tin archive {tin_archive.absolute()}, with meta info:")

@@ -1,11 +1,11 @@
-from typing import Dict, Any, Optional
+from typing import Dict, Any, List, Optional
 import numpy as np
 from datetime import datetime
 from h5py import File
 from lxml import etree
 from pathlib import Path
 from pyproj import CRS
-from rasputin.mesh import Mesh
+from rasputin.mesh import Mesh, FaceField
 from rasputin.geometry import Geometry
 
 
@@ -56,7 +56,8 @@ class TinRepository:
 
     def save(self, *,
              uid: str,
-             geometries: Dict[str, Geometry]) -> None:
+             geometry: Geometry,
+             face_fields: Optional[List[FaceField]] = None) -> None:
         xdmf_filename = self.path / f"{uid}.xdmf"
         h5_base = f"{uid}.h5"
         h5_filename = self.path / h5_base
@@ -78,56 +79,56 @@ class TinRepository:
                              Name="timestamp",
                              Value=str(timestamp))
             root_grp = archive.create_group("tins")
-            for name, geom in geometries.items():
-                grp = root_grp.create_group(name)
-                points, faces = geom.points, geom.faces
-                grid = etree.SubElement(domain, "Grid", Name=name)
-                x_geom = etree.SubElement(grid,
-                                        "Geometry",
-                                        GeometryType="XYZ")
-                pts_elm = etree.SubElement(x_geom,
-                                           "DataItem",
-                                           Format="HDF",
-                                           DataType="Float",
-                                           Precision="8",
-                                           Dimensions=f"{points.shape[0]} {points.shape[1]}")
-                pts_elm.text = f"{h5_base}:/tins/{name}/points"
-                topo = etree.SubElement(grid,
-                                        "Topology",
-                                        NumberOfElements=str(faces.shape[0]),
-                                        TopologyType="Triangle")
-                f_elm = etree.SubElement(topo,
-                                         "DataItem",
-                                         Format="HDF",
-                                         Precision="4",
-                                         DataType="Int",
-                                         Dimensions=f"{faces.shape[0]} {faces.shape[1]}")
-                attr = etree.SubElement(grid,
-                                        "Attribute",
-                                        Name="Color",
-                                        Center="Cell",
-                                        AttributeType="Vector")
-                attr_elm = etree.SubElement(attr,
-                                            "DataItem",
-                                            Format="HDF",
-                                            Precision="8",
-                                            DataType="Float",
-                                            Dimensions=f"{faces.shape[0]} 3")
-                attr_elm.text = f"{h5_base}:/tins/{name}/face_color"
-                etree.SubElement(pts_elm,
-                                 "Information",
-                                 Name="projection",
-                                 Value=geom.crs.to_proj4())
-                f_elm.text = f"{h5_base}:/tins/{name}/faces"
-                h5_points = grp.create_dataset(name="points", data=points, dtype="d")
-                h5_points.attrs["projection"] = geom.crs.to_proj4()
-                h5_faces = grp.create_dataset(name="faces", data=faces, dtype="i")
-                h5_faces.attrs["color"] = geom.base_color
-                color_arr = np.empty((len(faces), 3), dtype="float")
-                color_arr[:, 0] = geom.base_color[0]
-                color_arr[:, 1] = geom.base_color[1]
-                color_arr[:, 2] = geom.base_color[2]
-                grp.create_dataset(name="face_color", data=color_arr)
+            name = "terrain"
+            geom = geometry
+            grp = root_grp.create_group(name)
+            points, faces = geom.points, geom.faces
+            grid = etree.SubElement(domain, "Grid", Name=name)
+            x_geom = etree.SubElement(grid,
+                                    "Geometry",
+                                    GeometryType="XYZ")
+            pts_elm = etree.SubElement(x_geom,
+                                       "DataItem",
+                                       Format="HDF",
+                                       DataType="Float",
+                                       Precision="8",
+                                       Dimensions=f"{points.shape[0]} {points.shape[1]}")
+            pts_elm.text = f"{h5_base}:/tins/{name}/points"
+            topo = etree.SubElement(grid,
+                                    "Topology",
+                                    NumberOfElements=str(faces.shape[0]),
+                                    TopologyType="Triangle")
+            f_elm = etree.SubElement(topo,
+                                     "DataItem",
+                                     Format="HDF",
+                                     Precision="4",
+                                     DataType="Int",
+                                     Dimensions=f"{faces.shape[0]} {faces.shape[1]}")
+            attr = etree.SubElement(grid,
+                                    "Attribute",
+                                    Name="Color",
+                                    Center="Cell",
+                                    AttributeType="Vector")
+            attr_elm = etree.SubElement(attr,
+                                        "DataItem",
+                                        Format="HDF",
+                                        Precision="8",
+                                        DataType="Float",
+                                        Dimensions=f"{faces.shape[0]} 3")
+            attr_elm.text = f"{h5_base}:/tins/{name}/face_color"
+            etree.SubElement(pts_elm,
+                             "Information",
+                             Name="projection",
+                             Value=geom.crs.to_proj4())
+            f_elm.text = f"{h5_base}:/tins/{name}/faces"
+            h5_points = grp.create_dataset(name="points", data=points, dtype="d")
+            h5_points.attrs["projection"] = geom.crs.to_proj4()
+            grp.create_dataset(name="faces", data=faces, dtype="i")
+            if face_fields:
+                face_grp = grp.create_group("face_fields")
+                for field_name, field in face_fields:
+                    g = face_grp.create_group(field_name)
+                    g.create_dataset(name="field", data=field.data, dtype=field.data.dtype)
         tree.write(str(xdmf_filename), encoding="utf-8")
 
 

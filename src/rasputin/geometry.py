@@ -19,8 +19,8 @@ class Geometry:
     def __init__(self, *,
                  mesh: "Mesh",
                  crs: pyproj.CRS,
-                 base_color: Optional[Tuple[float, float, float]],
-                 material: Optional[str]):
+                 base_color: Optional[Tuple[float, float, float]] = None,
+                 material: Optional[str] = None):
         self.mesh = mesh
         self.crs = crs
         if base_color is None:
