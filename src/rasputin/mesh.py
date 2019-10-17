@@ -26,7 +26,6 @@ class Mesh:
                     data: tp.Union[tp.List[Rasterdata], Rasterdata],
                     domain: tp.Optional[GeoPolygon] = None) -> "Mesh":
         # Extract cpp objects
-        proj4_str = ""
         if isinstance(data, list):
             if data[0].array.dtype == np.float64:
                 rasterdata_cpp = triangulate_dem.raster_list_double()

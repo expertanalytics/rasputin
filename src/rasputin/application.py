@@ -119,7 +119,7 @@ def store_tin():
                                  points[:, 1],
                                  points[:, 2])
         points = np.dstack([x, y, z]).reshape(-1, 3)
-        mesh = Mesh.from_points_and_faces(points=points, faces=faces)
+        mesh = Mesh.from_points_and_faces(points=points, faces=faces, proj4_str=target_crs.to_proj4())
 
     if res.land_type_partition:
         if res.land_type_partition == "corine":
@@ -138,16 +138,13 @@ def store_tin():
                 extracted_terrain_types.add(cell)
         meta_info = lt_repo.land_cover_meta_info_type
         for tt in extracted_terrain_types:
-            tt_info = {}
             cover = lt_repo.land_cover_type(tt)
-            tt_info["name"] = cover.name
-            tt_info["color"] = [c/255 for c in meta_info.color(land_cover_type=cover)]
-
-            terrain_colors[terrain_cover == tt] = tt_info["color"]
-            tt_info["material"] = meta_info.material(land_cover_type=cover)
+            color = [c/255 for c in meta_info.color(land_cover_type=cover)]
+            terrain_colors[terrain_cover == tt] = color
         tr.save(uid=res.uid,
                 geometry=Geometry(mesh=mesh, crs=target_crs),
-                face_fields={"cover_type": terrain_cover, "cover_color": terrain_colors))
+                land_cover_repository=lt_repo,
+                face_fields={"cover_type": terrain_cover, "cover_color": terrain_colors})
 
     meta = tr.content[res.uid]
     logger.info(f"Successfully added uid='{res.uid}' to the tin archive {tin_archive.absolute()}, with meta info:")
