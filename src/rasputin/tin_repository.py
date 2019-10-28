@@ -112,7 +112,7 @@ class TinRepository:
     def save(self, *,
              uid: str,
              geometry: Geometry,
-             land_cover_repository: LandCoverRepository,
+             land_cover_repository: Optional[LandCoverRepository] = None,
              face_fields: Optional[Dict[str, np.ndarray]] = None) -> None:
         xdmf_filename = self.path / f"{uid}{self.xdmf_ext}"
         h5_base = f"{uid}{self.h5_ext}"
@@ -168,35 +168,36 @@ class TinRepository:
             h5_points = tin_grp.create_dataset(name="points", data=points, dtype="d")
             h5_points.attrs["projection"] = geometry.crs.to_proj4()
             tin_grp.create_dataset(name="faces", data=faces, dtype="i")
-            info_grp = archive.create_group(info_grp_name)
-            info_grp.attrs["land_cover_type"] = land_cover_repository.__class__.__name__
-            land_covers = [(v.value, v.name.encode("utf-8")) for v in land_cover_repository.land_cover_type]
-            if face_fields:
-                face_grp = tin_grp.create_group("face_fields")
-                for field_name, field in face_fields.items():
-                    face_grp.create_dataset(name=field_name, data=field)
-                    # Filter land cover fields by the ones found in dataset
-                    if field_name == "cover_type":
-                        used_fields = set(field)
-                        land_covers = [(v, n) for (v, n) in land_covers if v in used_fields]
-                    atype = "Vector" if len(field.shape) == 2 and field.shape[1] == 3 else "Scalar"
-                    dtype = "Int" if np.issubdtype(field.dtype, np.integer) else "Float"
-                    precision = "4" if dtype == "Int" else "8"
-                    dims = f"{' '.join([str(d) for d in field.shape])}"
-                    attr = etree.SubElement(grid,
-                                            "Attribute",
-                                            Name=field_name,
-                                            Center="Cell",
-                                            AttributeType=atype)
-                    attr_elm = etree.SubElement(attr,
-                                                "DataItem",
-                                                Format="HDF",
-                                                Precision=precision,
-                                                DataType=dtype,
-                                                Dimensions=dims)
-                    attr_elm.text = f"{h5_base}:/{tin_grp_name}/face_fields/{field_name}"
-            info_grp.create_dataset(name="land_covers",
-                                    data=np.array(land_covers, dtype=[("value", "i4"), ("name", "S100")]))
+            if land_cover_repository is not None:
+                info_grp = archive.create_group(info_grp_name)
+                info_grp.attrs["land_cover_type"] = land_cover_repository.__class__.__name__
+                land_covers = [(v.value, v.name.encode("utf-8")) for v in land_cover_repository.land_cover_type]
+                if face_fields:
+                    face_grp = tin_grp.create_group("face_fields")
+                    for field_name, field in face_fields.items():
+                        face_grp.create_dataset(name=field_name, data=field)
+                        # Filter land cover fields by the ones found in dataset
+                        if field_name == "cover_type":
+                            used_fields = set(field)
+                            land_covers = [(v, n) for (v, n) in land_covers if v in used_fields]
+                        atype = "Vector" if len(field.shape) == 2 and field.shape[1] == 3 else "Scalar"
+                        dtype = "Int" if np.issubdtype(field.dtype, np.integer) else "Float"
+                        precision = "4" if dtype == "Int" else "8"
+                        dims = f"{' '.join([str(d) for d in field.shape])}"
+                        attr = etree.SubElement(grid,
+                                                "Attribute",
+                                                Name=field_name,
+                                                Center="Cell",
+                                                AttributeType=atype)
+                        attr_elm = etree.SubElement(attr,
+                                                    "DataItem",
+                                                    Format="HDF",
+                                                    Precision=precision,
+                                                    DataType=dtype,
+                                                    Dimensions=dims)
+                        attr_elm.text = f"{h5_base}:/{tin_grp_name}/face_fields/{field_name}"
+                info_grp.create_dataset(name="land_covers",
+                                        data=np.array(land_covers, dtype=[("value", "i4"), ("name", "S100")]))
         _indent(domain, level=1)
         tree.write(str(xdmf_filename), pretty_print=True, encoding="utf-8")
 
