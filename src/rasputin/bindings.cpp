@@ -401,8 +401,12 @@ PYBIND11_MODULE(triangulate_dem, m) {
          const auto secs = seconds(int(std::round(timestamp)));
          const auto millisecs = milliseconds(int(round(1000*fmod(timestamp, 1))));
          const auto tp = sys_days{January / 1 / 1970} + secs + millisecs;
-         return rasputin::shade(mesh, tp);
-
+         const auto shade_vec = rasputin::shade(mesh, tp);
+         py::array_t<bool> result(shade_vec.size());
+         auto info = result.request();
+         auto *data = static_cast<bool*>(info.ptr);
+         std::copy(std::begin(shade_vec), std::end(shade_vec), data);
+         return result;
      })
      ;
 }

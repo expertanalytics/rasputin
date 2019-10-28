@@ -101,6 +101,7 @@ setup(
     zip_safe=False,
     entry_points={
         'console_scripts': ['rasputin_web = rasputin.web_visualize:visualize_tin',
-                            'rasputin_store = rasputin.application:store_tin']}
+                            'rasputin_store = rasputin.application:store_tin',
+                            'rasputin_shade = rasputin.application:compute_shades']}
 )
 

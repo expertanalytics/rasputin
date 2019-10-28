@@ -596,7 +596,8 @@ bool is_shaded(const CGAL::Tree &tree,
         const CGAL::Point3 &face_center,
         const double azimuth,
         const double elevation) {
-
+    if (elevation < 0.0)
+        return true;
     const arma::vec::fixed<3> sd = arma::normalise(arma::vec::fixed<3>{sin(azimuth*M_PI/180.0),
                                                                        cos(azimuth*M_PI/180.0),
                                                                        tan(elevation*M_PI/180.0)});

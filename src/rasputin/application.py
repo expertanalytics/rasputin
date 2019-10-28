@@ -7,11 +7,12 @@ import pprint
 import pyproj
 from shapely.geometry import Polygon
 import argparse
+from datetime import datetime, timedelta
 
 from rasputin.reader import RasterRepository
-from rasputin.tin_repository import TinRepository
+from rasputin.tin_repository import TinRepository, ShadeRepository
 from rasputin.geometry import Geometry, GeoPoints, GeoPolygon
-from rasputin.mesh import Mesh, FaceField
+from rasputin.mesh import Mesh
 
 from rasputin import gml_repository
 from rasputin import globcov_repository
@@ -149,3 +150,48 @@ def store_tin():
     meta = tr.content[res.uid]
     logger.info(f"Successfully added uid='{res.uid}' to the tin archive {tin_archive.absolute()}, with meta info:")
     pprint.PrettyPrinter(indent=4).pprint(meta)
+
+
+def compute_shades():
+    """Compute shades for each cell in a given interval and with given frequency"""
+
+    logging.basicConfig(level=logging.CRITICAL, format='Rasputin[%(levelname)s]: %(message)s')
+    logger = logging.getLogger()
+    arg_parser = argparse.ArgumentParser()
+    arg_parser.add_argument("-uid", type=str, help="uid of mesh")
+    arg_parser.add_argument("-start-year", type=int, help="Start year")
+    arg_parser.add_argument("-start-month", type=int, help="Start month")
+    arg_parser.add_argument("-start-day", type=int, help="Start day")
+    arg_parser.add_argument("-end-year", type=int, help="Start year")
+    arg_parser.add_argument("-end-month", type=int, help="Start month")
+    arg_parser.add_argument("-end-day", type=int, help="Start day")
+    arg_parser.add_argument("-frequency", type=int, help="Frequency in seconds")
+    arg_parser.add_argument("-silent", action="store_true", help="Run in silent mode")
+    arg_parser.add_argument("-overwrite", action="store_true", help="Overwrite shade_uid")
+    arg_parser.add_argument("shade_uid", type=str, help="Uid of saved shade")
+    res = arg_parser.parse_args(sys.argv[1:])
+    if not res.silent:
+        logger.setLevel(logging.INFO)
+    if "RASPUTIN_DATA_DIR" in os.environ:
+        tin_archive = Path(os.environ["RASPUTIN_DATA_DIR"]) / "tin_archive"
+        shade_repo_archive = Path(os.environ["RASPUTIN_DATA_DIR"]) / "shade_archive"
+    else:
+        tin_archive = Path(".") / "tin_archive"
+        shade_repo_archive = Path(".") / "shade_archive"
+        logger.critical(f"WARNING: No data directory specified, assuming tin_archive {tin_archive.absolute()}")
+    tin_repo = TinRepository(path=tin_archive)
+    mesh = tin_repo.read(uid=res.uid).mesh
+    start_time = datetime(res.start_year, res.start_month, res.start_day)
+    end_time = datetime(res.end_year, res.end_month, res.end_day)
+    dt = timedelta(seconds=res.frequency)
+    t = start_time
+    with ShadeRepository(path=shade_repo_archive,
+                         tin_repo=tin_repo,
+                         tin_uid=res.uid,
+                         shade_uid=res.shade_uid,
+                         overwrite=res.overwrite) as shade_archive:
+        while t <= end_time:
+            shade = mesh.shade(t.timestamp())
+            shade_archive.save(t.timestamp(), shade)
+            t += dt
+

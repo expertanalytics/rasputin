@@ -1,3 +1,4 @@
+from copy import deepcopy
 from typing import Dict, Any, Optional
 import numpy as np
 from datetime import datetime
@@ -10,14 +11,32 @@ from rasputin.land_cover_repository import LandCoverRepository
 from rasputin.mesh import Mesh
 
 
+def _indent(elem, level=0):
+    i = "\n" + level*"  "
+    if len(elem):
+        if not elem.text or not elem.text.strip():
+            elem.text = i + "  "
+        if not elem.tail or not elem.tail.strip():
+            elem.tail = i
+        for elem in elem:
+            _indent(elem, level+1)
+        if not elem.tail or not elem.tail.strip():
+            elem.tail = i
+    else:
+        if level and (not elem.tail or not elem.tail.strip()):
+            elem.tail = i
+
+
 class TinRepository:
 
     def __init__(self, *, path: Path) -> None:
         self.path = path
+        self.xdmf_ext = ".xdmf"
+        self.h5_ext = ".h5"
 
     def info(self, *, uid: str) -> Dict[str, Any]:
         info = dict()
-        with File(self.path / f"{uid}.h5", "r") as archive:
+        with File(self.path / f"{uid}{self.h5_ext}", "r") as archive:
             info["timestamp"] = archive.attrs["timestamp"]
             terrain_grp = archive["tin"]
             info_grp = archive.get("information", None)
@@ -33,13 +52,14 @@ class TinRepository:
             if info_grp:
                 info["info"] = dict()
                 info["info"]["land_cover_type"] = info_grp.attrs["land_cover_type"]
-                info["info"]["land_covers"] = info_grp["land_covers"].shape
+                land_covers = info_grp["land_covers"][:]
+                info["info"]["land_covers"] = [(v, n.decode("utf-8")) for (v, n) in land_covers]
             return info
 
     def read(self, *, uid: str) -> Geometry:
         filename = self.path / f"{uid}.h5"
         if not filename.exists():
-            raise FileNotFoundError(f"File {filename.absolute()} not found.")
+            raise FileNotFoundError(f"Mesh with uid '{uid}' not found in tin archive {self.path}.")
         with File(filename, "r") as archive:
             tin_grp_name = "tin"
             tin_group = archive[tin_grp_name]
@@ -83,7 +103,7 @@ class TinRepository:
 
     @property
     def content(self) -> Dict[str, Dict[str, Any]]:
-        files = self.path.glob("*.h5")
+        files = self.path.glob(f"*{self.h5_ext}")
         meta_info = dict()
         for f in files:
             meta_info[f.stem] = self.info(uid=f.stem)
@@ -92,10 +112,10 @@ class TinRepository:
     def save(self, *,
              uid: str,
              geometry: Geometry,
-             land_cover_repository: Optional[LandCoverRepository] = None,
+             land_cover_repository: LandCoverRepository,
              face_fields: Optional[Dict[str, np.ndarray]] = None) -> None:
-        xdmf_filename = self.path / f"{uid}.xdmf"
-        h5_base = f"{uid}.h5"
+        xdmf_filename = self.path / f"{uid}{self.xdmf_ext}"
+        h5_base = f"{uid}{self.h5_ext}"
         h5_filename = self.path / h5_base
         if h5_filename.exists():
             raise FileExistsError(f"Archive already has a data set with uid {uid}.")
@@ -139,18 +159,7 @@ class TinRepository:
                                      Precision="4",
                                      DataType="Int",
                                      Dimensions=f"{faces.shape[0]} {faces.shape[1]}")
-            attr = etree.SubElement(grid,
-                                    "Attribute",
-                                    Name="Color",
-                                    Center="Cell",
-                                    AttributeType="Vector")
-            attr_elm = etree.SubElement(attr,
-                                        "DataItem",
-                                        Format="HDF",
-                                        Precision="8",
-                                        DataType="Float",
-                                        Dimensions=f"{faces.shape[0]} 3")
-            attr_elm.text = f"{h5_base}:/{tin_grp_name}/face_color"
+
             etree.SubElement(pts_elm,
                              "Information",
                              Name="projection",
@@ -159,20 +168,132 @@ class TinRepository:
             h5_points = tin_grp.create_dataset(name="points", data=points, dtype="d")
             h5_points.attrs["projection"] = geometry.crs.to_proj4()
             tin_grp.create_dataset(name="faces", data=faces, dtype="i")
+            info_grp = archive.create_group(info_grp_name)
+            info_grp.attrs["land_cover_type"] = land_cover_repository.__class__.__name__
+            land_covers = [(v.value, v.name.encode("utf-8")) for v in land_cover_repository.land_cover_type]
             if face_fields:
                 face_grp = tin_grp.create_group("face_fields")
                 for field_name, field in face_fields.items():
                     face_grp.create_dataset(name=field_name, data=field)
-            if land_cover_repository is not None:
-                info_grp = archive.create_group(info_grp_name)
-                info_grp.attrs["land_cover_type"] = land_cover_repository.__class__.__name__
-                land_covers = [(v.value, v.name.encode("utf-8")) for v in land_cover_repository.land_cover_type]
-                land_covers = np.array(land_covers, dtype=[("value", "i4"), ("name", "S100")])
-                info_grp.create_dataset(name="land_covers", data=land_covers)
-        tree.write(str(xdmf_filename), encoding="utf-8")
+                    # Filter land cover fields by the ones found in dataset
+                    if field_name == "cover_type":
+                        used_fields = set(field)
+                        land_covers = [(v, n) for (v, n) in land_covers if v in used_fields]
+                    atype = "Vector" if len(field.shape) == 2 and field.shape[1] == 3 else "Scalar"
+                    dtype = "Int" if np.issubdtype(field.dtype, np.integer) else "Float"
+                    precision = "4" if dtype == "Int" else "8"
+                    dims = f"{' '.join([str(d) for d in field.shape])}"
+                    attr = etree.SubElement(grid,
+                                            "Attribute",
+                                            Name=field_name,
+                                            Center="Cell",
+                                            AttributeType=atype)
+                    attr_elm = etree.SubElement(attr,
+                                                "DataItem",
+                                                Format="HDF",
+                                                Precision=precision,
+                                                DataType=dtype,
+                                                Dimensions=dims)
+                    attr_elm.text = f"{h5_base}:/{tin_grp_name}/face_fields/{field_name}"
+            info_grp.create_dataset(name="land_covers",
+                                    data=np.array(land_covers, dtype=[("value", "i4"), ("name", "S100")]))
+        _indent(domain, level=1)
+        tree.write(str(xdmf_filename), pretty_print=True, encoding="utf-8")
 
 
     def delete(self, uid: str) -> None:
         if uid in self.content:
             (self.path / f"{uid}.h5").unlink()
             (self.path / f"{uid}.xdmf").unlink()
+
+
+class ShadeRepository:
+
+    def __init__(self, *,
+                 tin_repo: TinRepository,
+                 tin_uid: str,
+                 path: Path,
+                 shade_uid: str,
+                 overwrite: bool) -> None:
+        self.tin_repo = tin_repo
+        self.tin_uid = tin_uid
+        self.path = path
+        self.shade_uid = shade_uid
+        self.h5_fh: Optional[File] = None
+        self.tree = None
+        self.tgrid = None
+        self.ncells = ""
+        self.overwrite = overwrite
+
+    def __enter__(self):
+        assert self.path.is_dir()
+        assert self.h5_fh is None
+        xdmf_fullpath = (self.path / f"{self.shade_uid}.xdmf")
+        hdf5_fullpath = (self.path / f"{self.shade_uid}.h5")
+        if not self.overwrite:
+            assert not xdmf_fullpath.exists()
+            assert not hdf5_fullpath.exists()
+        else:
+            if xdmf_fullpath.exists():
+                xdmf_fullpath.unlink()
+            if hdf5_fullpath.exists():
+                hdf5_fullpath.unlink()
+        self.h5_fh = File(hdf5_fullpath, "w")
+        self.h5_fh.create_group(name=self.tin_uid)
+        self.tree = etree.parse(str(self.tin_repo.path / f"{self.tin_uid}{self.tin_repo.xdmf_ext}"))
+        domain = self.tree.find("Domain")
+        grid = domain.find("Grid")
+        elm = grid.find("Geometry").find("DataItem")
+        elm.text = str(self.tin_repo.path / elm.text)
+        elm = grid.find("Topology").find("DataItem")
+        elm.text = str(self.tin_repo.path / elm.text)
+        self.ncells = [c for c in grid if c.tag == "Topology"][0].get("NumberOfElements")
+        template_grid = deepcopy(grid)
+        domain.remove(grid)
+        collection = etree.SubElement(domain,
+                                      "Grid",
+                                      Name="shadow_times",
+                                      GridType="Collection",
+                                      CollectionType="Temporal")
+        for child in template_grid.iterchildren():
+            if child.tag == "Attribute":
+                template_grid.remove(child)
+
+        self.tgrid = template_grid
+        return self
+
+    def __exit__(self, type, value, traceback):
+        domain = self.tree.find("Domain")
+        _indent(domain, level=1)
+        xdmf_fullpath = (self.path / f"{self.shade_uid}.xdmf")
+        self.tree.write(str(xdmf_fullpath), pretty_print=True, encoding="utf-8")
+        self.h5_fh.close()
+        self.xdmf_fh = None
+        self.h5_fh = None
+        self.tree = self.domain = None
+
+    def save(self, timestamp: float, data: np.ndarray) -> None:
+        assert self.h5_fh is not None
+        grid = deepcopy(self.tgrid)
+        h5_base = (self.path / f"{self.shade_uid}.h5")
+        etree.SubElement(grid,
+                         "Time",
+                         Value=f"{timestamp:.3f}")
+        attr = etree.SubElement(grid,
+                                "Attribute",
+                                Name="shade",
+                                Center="Cell",
+                                AttributeType="Scalar")
+        attr_elm = etree.SubElement(attr,
+                                    "DataItem",
+                                    Format="HDF",
+                                    Precision="4",
+                                    DataType="Int",
+                                    Dimensions=self.ncells)
+        shade_name = f"{timestamp:.4f}"
+        attr_elm.text = f"{h5_base}:/{self.tin_uid}/{shade_name}/"
+        collection = self.tree.find("Domain").find("Grid")
+        collection.append(grid)
+        self.h5_fh[self.tin_uid].create_dataset(name=f"{timestamp:.4f}", data=data, dtype='i')
+
+

@@ -140,17 +140,5 @@ class Mesh:
                                   self.points,
                                   dict(triangle=self.faces))
 
-class FaceField:
-
-    def __init__(self, *, mesh: Mesh, field: np.ndarray) -> None:
-        assert len(field) == mesh.num_faces
-        self.mesh = mesh
-        self.data = field
-        self.meta_info = {}
-
-    @property
-    def shape(self) -> tp.Tuple[int, int]:
-        return self.data.shape
-
-    def get_meta_str(self) -> str:
-        return json.dumps(self.meta_info)
+    def shade(self, timestamp: float) -> np.ndarray:
+        return triangulate_dem.shade(self._cpp, timestamp)
