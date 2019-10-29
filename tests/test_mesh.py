@@ -43,15 +43,18 @@ def raster_xm():
 
 @pytest.fixture
 def raster():
-    m, n = 53, 10
+    m, n = 21, 11
     array = (zeros((m, n))
              + linspace(0, 1, m).reshape(-1,  1)**2
              + linspace(0, 1, n).reshape( 1, -1))
+    print(array.shape)
+    print(f"delta_x={1/(n - 1)}")
+    print(f"delta_y={1/(m - 1)}")
     return Rasterdata(shape=(m, n),
                       x_min=0,
                       y_max=1,
-                      delta_x=1/(m - 1),
-                      delta_y=1/(n - 1),
+                      delta_x=1/(n - 1),
+                      delta_y=1/(m - 1),
                       array=array.astype(float32),
                       coordinate_system="+init=epsg:32633",
                       info={})
@@ -141,6 +144,7 @@ def test_mesh(raster, polygon):
 
     # Some sanity tests
     x, y, z = mesh.points.T
+    print(raster.x_max)
     assert raster.x_min <= x.min()
     assert raster.x_max >= x.max()
     assert raster.y_min <= y.min()
