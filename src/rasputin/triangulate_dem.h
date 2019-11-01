@@ -40,6 +40,8 @@
 #include <cstdint>
 #include "solar_position.h"
 
+
+
 namespace CGAL {
 using K = Exact_predicates_inexact_constructions_kernel;
 using Gt = Projection_traits_xy_3<K>;
@@ -621,7 +623,7 @@ auto shade(const Mesh &mesh,
         bg::srs::proj4(mesh.proj4_str),
         bg::srs::epsg(4326)
     };
-    CGAL::Tree tree(CGAL::faces(mesh.cgal_mesh).first, CGAL::faces(mesh.cgal_mesh).second, mesh.cgal_mesh);
+    const CGAL::Tree tree(CGAL::faces(mesh.cgal_mesh).first, CGAL::faces(mesh.cgal_mesh).second, mesh.cgal_mesh);
     for (auto fd: mesh.cgal_mesh.faces()) {
         const auto c = centroid(mesh, fd);
         const point_car x_car{c.x(), c.y()};
