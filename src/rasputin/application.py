@@ -185,13 +185,12 @@ def compute_shades():
     end_time = datetime(res.end_year, res.end_month, res.end_day)
     dt = timedelta(seconds=res.frequency)
     t = start_time
-    with ShadeRepository(path=shade_repo_archive,
-                         tin_repo=tin_repo,
-                         tin_uid=res.uid,
-                         shade_uid=res.shade_uid,
-                         overwrite=res.overwrite) as shade_archive:
+    with ShadeRepository(path=shade_repo_archive).open(tin_repo=tin_repo,
+                                                       tin_uid=res.uid,
+                                                       shade_uid=res.shade_uid,
+                                                       overwrite=res.overwrite) as shade_writer:
         while t <= end_time:
             shade = mesh.shade(t.timestamp())
-            shade_archive.save(t.timestamp(), shade)
+            shade_writer.save(t.timestamp(), shade)
             t += dt
 

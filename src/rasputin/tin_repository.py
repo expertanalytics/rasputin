@@ -210,91 +210,100 @@ class TinRepository:
 
 class ShadeRepository:
 
-    def __init__(self, *,
-                 tin_repo: TinRepository,
-                 tin_uid: str,
-                 path: Path,
-                 shade_uid: str,
-                 overwrite: bool) -> None:
-        self.tin_repo = tin_repo
-        self.tin_uid = tin_uid
+    def __init__(self, *, path: Path) -> None:
         self.path = path
-        self.shade_uid = shade_uid
-        self.h5_fh: Optional[File] = None
-        self.tree = None
-        self.tgrid = None
-        self.ncells = ""
-        self.overwrite = overwrite
-
-    def __enter__(self):
         assert self.path.is_dir()
-        assert self.h5_fh is None
-        xdmf_fullpath = (self.path / f"{self.shade_uid}.xdmf")
-        hdf5_fullpath = (self.path / f"{self.shade_uid}.h5")
-        if not self.overwrite:
-            assert not xdmf_fullpath.exists()
-            assert not hdf5_fullpath.exists()
-        else:
-            if xdmf_fullpath.exists():
-                xdmf_fullpath.unlink()
-            if hdf5_fullpath.exists():
-                hdf5_fullpath.unlink()
-        self.h5_fh = File(hdf5_fullpath, "w")
-        self.h5_fh.create_group(name=self.tin_uid)
-        self.tree = etree.parse(str(self.tin_repo.path / f"{self.tin_uid}{self.tin_repo.xdmf_ext}"))
-        domain = self.tree.find("Domain")
-        grid = domain.find("Grid")
-        elm = grid.find("Geometry").find("DataItem")
-        elm.text = str(self.tin_repo.path / elm.text)
-        elm = grid.find("Topology").find("DataItem")
-        elm.text = str(self.tin_repo.path / elm.text)
-        self.ncells = [c for c in grid if c.tag == "Topology"][0].get("NumberOfElements")
-        template_grid = deepcopy(grid)
-        domain.remove(grid)
-        collection = etree.SubElement(domain,
-                                      "Grid",
-                                      Name="shadow_times",
-                                      GridType="Collection",
-                                      CollectionType="Temporal")
-        for child in template_grid.iterchildren():
-            if child.tag == "Attribute":
-                template_grid.remove(child)
 
-        self.tgrid = template_grid
-        return self
+    def open(self, shade_uid: str, tin_repo: TinRepository, tin_uid: str, overwrite: bool=False):
 
-    def __exit__(self, type, value, traceback):
-        domain = self.tree.find("Domain")
-        _indent(domain, level=1)
-        xdmf_fullpath = (self.path / f"{self.shade_uid}.xdmf")
-        self.tree.write(str(xdmf_fullpath), pretty_print=True, encoding="utf-8")
-        self.h5_fh.close()
-        self.xdmf_fh = None
-        self.h5_fh = None
-        self.tree = self.domain = None
+        class writer:
 
-    def save(self, timestamp: float, data: np.ndarray) -> None:
-        assert self.h5_fh is not None
-        grid = deepcopy(self.tgrid)
-        h5_base = (self.path / f"{self.shade_uid}.h5")
-        etree.SubElement(grid,
-                         "Time",
-                         Value=f"{timestamp:.3f}")
-        attr = etree.SubElement(grid,
-                                "Attribute",
-                                Name="shade",
-                                Center="Cell",
-                                AttributeType="Scalar")
-        attr_elm = etree.SubElement(attr,
-                                    "DataItem",
-                                    Format="HDF",
-                                    Precision="4",
-                                    DataType="Int",
-                                    Dimensions=self.ncells)
-        shade_name = f"{timestamp:.4f}"
-        attr_elm.text = f"{h5_base}:/{self.tin_uid}/{shade_name}/"
-        collection = self.tree.find("Domain").find("Grid")
-        collection.append(grid)
-        self.h5_fh[self.tin_uid].create_dataset(name=f"{timestamp:.4f}", data=data, dtype='i')
+            def __init__(s, *, 
+                         shade_uid: str, 
+                         tin_repo: TinRepository,
+                         tin_uid: str,
+                         overwrite: bool) -> None:
+                s.shade_uid = shade_uid
+                s.tin_uid = tin_uid
+                s.tin_repo = tin_repo 
+                xdmf_fullpath = (self.path / f"{s.shade_uid}.xdmf")
+                hdf5_fullpath = (self.path / f"{s.shade_uid}.h5")
+                if not overwrite:
+                    assert not xdmf_fullpath.exists()
+                    assert not hdf5_fullpath.exists()
+                else:
+                    if xdmf_fullpath.exists():
+                        xdmf_fullpath.unlink()
+                    if hdf5_fullpath.exists():
+                        hdf5_fullpath.unlink()
+                s.h5_fh = File(hdf5_fullpath, "w")
+                s.h5_fh.create_group(name=s.tin_uid)
+                s.tree = etree.parse(str(s.tin_repo.path / f"{s.tin_uid}{s.tin_repo.xdmf_ext}"))
+                domain = s.tree.find("Domain")
+                grid = domain.find("Grid")
+                elm = grid.find("Geometry").find("DataItem")
+                elm.text = str(s.tin_repo.path / elm.text)
+                elm = grid.find("Topology").find("DataItem")
+                elm.text = str(s.tin_repo.path / elm.text)
+                s.ncells = [c for c in grid if c.tag == "Topology"][0].get("NumberOfElements")
+                template_grid = deepcopy(grid)
+                domain.remove(grid)
+                collection = etree.SubElement(domain,
+                                              "Grid",
+                                              Name="shadow_times",
+                                              GridType="Collection",
+                                              CollectionType="Temporal")
+                for child in template_grid.iterchildren():
+                    if child.tag == "Attribute":
+                        template_grid.remove(child)
+                s.tgrid = template_grid
 
+            def __enter__(s):
+                return s
+
+            def __exit__(s, type, value, traceback):
+                domain = s.tree.find("Domain")
+                _indent(domain, level=1)
+                xdmf_fullpath = (self.path / f"{s.shade_uid}.xdmf")
+                s.tree.write(str(xdmf_fullpath), pretty_print=True, encoding="utf-8")
+                s.h5_fh.close()
+                s.xdmf_fh = None
+                s.h5_fh = None
+                s.tree = None
+
+            def save(s, timestamp: float, data: np.ndarray) -> None:
+                assert s.h5_fh is not None
+                grid = deepcopy(s.tgrid)
+                h5_base = (self.path / f"{s.shade_uid}.h5")
+                etree.SubElement(grid,
+                                 "Time",
+                                 Value=f"{timestamp:.3f}")
+                attr = etree.SubElement(grid,
+                                        "Attribute",
+                                        Name="shade",
+                                        Center="Cell",
+                                        AttributeType="Scalar")
+                attr_elm = etree.SubElement(attr,
+                                            "DataItem",
+                                            Format="HDF",
+                                            Precision="4",
+                                            DataType="Int",
+                                            Dimensions=s.ncells)
+                shade_name = f"{timestamp:.4f}"
+                attr_elm.text = f"{h5_base}:/{s.tin_uid}/{shade_name}/"
+                collection = s.tree.find("Domain").find("Grid")
+                collection.append(grid)
+                s.h5_fh[s.tin_uid].create_dataset(name=f"{timestamp:.4f}", data=data, dtype='i')
+
+        return writer(shade_uid=shade_uid, tin_repo=tin_repo, tin_uid=tin_uid, overwrite=overwrite)
+
+    def info(self, *, uid: str) -> Dict[str, Any]:
+        if not (self.path / f"{uid}.h5").exists() or not (self.path / f"{uid}.xdmf").exists():
+            return {}
+        res = {}
+        with File(str(self.path / f"{uid}.h5"), "r") as archive:
+            tin_uid = list(archive.keys())[0]
+            res["tin_uid"] = tin_uid
+            res["timestamps"] = sorted(archive[tin_uid].keys())
+        return res
 
