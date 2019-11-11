@@ -22,7 +22,7 @@ endif()
 
 # Build tests
 # -----------
-add_executable(foo test_sun_position.cpp)
-target_link_libraries(foo rasputin ${catchlib} ${RASPUTIN_DEPENDENCIES})
+add_executable(rasputin_test test_sun_position.cpp)
+target_link_libraries(rasputin_test rasputin ${catchlib} ${RASPUTIN_DEPENDENCIES})
 
-catch_discover_tests(foo)
+catch_discover_tests(rasputin_test)
