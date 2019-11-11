@@ -10,12 +10,12 @@ if (EXISTS "${RASPUTIN_LIB_DIR}/catch2")
     add_library(Catch2 INTERFACE)
     target_include_directories(Catch2 INTERFACE
         "${RASPUTIN_LIB_DIR}/catch2/single_include")
+    set(catchlib Catch2)
 
 # Otherwise look for catch2 installed on system
 else()
     find_package(Catch2 REQUIRED)
-    # Import into scope
-    add_library(Catch2 INTERFACE IMPORTED)
+    set(catchlib Catch2::Catch2)
     include(Catch)
     include(CTest)
 endif()
@@ -23,6 +23,6 @@ endif()
 # Build tests
 # -----------
 add_executable(foo test_sun_position.cpp)
-target_link_libraries(foo rasputin ${Catch2} ${RASPUTIN_DEPENDENCIES})
+target_link_libraries(foo rasputin ${catchlib} ${RASPUTIN_DEPENDENCIES})
 
 catch_discover_tests(foo)
