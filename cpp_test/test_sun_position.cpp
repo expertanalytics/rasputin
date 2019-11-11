@@ -3,7 +3,7 @@
 #include <solar_position.h>
 #include <cmath>
 #ifndef __clang__
-#include "date/date.h"
+#include <date/date.h>
 #endif
 #include <chrono>
 #include <ctime>
@@ -67,13 +67,13 @@ TEST_CASE("UTC cal test 1", "[utccalc]") {
     using namespace std::chrono;
 
 #ifndef __clang__
-    //using namespace date;
+    using namespace date;
 #endif
-    const auto [Phi0, elevation0] = calendar_solar_position(year, mon, dom + h/24.0, lat, lon, masl, 
-                                                            collectors::azimuth_and_elevation(), 
+    const auto [Phi0, elevation0] = calendar_solar_position(year, mon, dom + h/24.0, lat, lon, masl,
+                                                            collectors::azimuth_and_elevation(),
                                                             fixed_cal_delta_t_calc());
     const auto tp = sys_days{month(mon)/dom/year} + hours(h);
-    const auto [Phi1, elevation1] = time_point_solar_position(tp, lat, lon, masl, 
+    const auto [Phi1, elevation1] = time_point_solar_position(tp, lat, lon, masl,
                                                               collectors::azimuth_and_elevation(),
                                                               fixed_time_point_delta_t_calc());
     REQUIRE(elevation0 == elevation1);
@@ -99,7 +99,7 @@ TEST_CASE("DeltaT test", "[DT]") {
 #endif
     using namespace rasputin::solar_position;
     auto tp = sys_days{month(mon)/dom/year};
-    const auto result = time_point_solar_position(tp, lat, lon, masl, 
+    const auto result = time_point_solar_position(tp, lat, lon, masl,
                                                   collectors::azimuth_and_elevation(),
                                                   delta_t_calculator::coarse_timestamp_calc());
 }
