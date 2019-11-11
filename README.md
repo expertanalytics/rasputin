@@ -24,14 +24,6 @@ The heavy lifting in Rasputin is done by external software:
  * [date](https://github.com/HowardHinnant/date) for date and time on top of `chrono`.
  * [Catch2](https://github.com/catchorg/Catch2) for unit testing of the c++ code.
 
-Rasputin does not aim at being backwards compatible with older compilers.
-Hence, you will need something quite new. The following compilers are known to
-work:
- * g++ 8.3
- * clang 11.0.0
-
-Note that g++ 7 no longer works, due to the use of `<chrono>` from `stl`.
-
 
 ## Installation
 
@@ -42,7 +34,7 @@ For examaple, from the Rasputin respotory root, run the following commands:
 cd lib
 git clone https://github.com/pybind/pybind11.git --branch=v2.4.3
 git clone https://gitlab.com/conradsnicta/armadillo-code.git --branch=9.800.x armadillo
-git clone https://github.com/boostorg/geometry.ait --branch=boost-1.71.0
+git clone https://github.com/boostorg/geometry.git --branch=boost-1.71.0
 git clone https://github.com/HowardHinnant/date.git --branch=v2.4.1
 git clone https://github.com/catchorg/Catch2.git --branch=v2.10.2 catch2
 git clone https://github.com/CGAL/cgal.git --branch=releases/CGAL-5.0 cgal
@@ -56,15 +48,21 @@ work:
 
 Note that g++ 7 no longer works, due to the use of `<chrono>` from `stl`.
 You can ensure that the right compiler is used for building Rasputin by setting the `CXX` environment variable.
-This is done in a terminal by typing
+For example, to use `g++` 8.x write the following in the terminal window:
 ```
 export CXX=/usr/bin/g++-8
 ```
+If you are using gcc, make sure that `CXX` points to `g++` and not `gcc`.
 
 Rasputin is build using [CMake](https://cmake.org). On Ubuntu, CMake can be installed with the command
 ```
 sudu apt-get install cmake
 ```
+or on Arch,
+```
+sudo pacman -S cmake
+```
+A relatively recent version of CMake may be needed.
 
 CGAL requires the two libraries [GMP](http://gmplib.org/) and
 [MPFR](http://www.mpfr.org/) to be installed in order to work satisfactory. On
