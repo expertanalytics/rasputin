@@ -25,7 +25,6 @@ class Mesh:
                     data: tp.Union[tp.List[Rasterdata], Rasterdata],
                     domain: tp.Optional[GeoPolygon] = None) -> "Mesh":
         # Extract cpp objects
-        proj4_str = ""
         if isinstance(data, list):
             if data[0].array.dtype == np.float64:
                 rasterdata_cpp = triangulate_dem.raster_list_double()
@@ -139,3 +138,6 @@ class Mesh:
         meshio.write_points_cells(filename,
                                   self.points,
                                   dict(triangle=self.faces))
+
+    def shade(self, timestamp: float) -> np.ndarray:
+        return triangulate_dem.shade(self._cpp, timestamp)

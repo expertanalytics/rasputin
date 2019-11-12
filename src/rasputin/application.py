@@ -7,9 +7,10 @@ import pprint
 import pyproj
 from shapely.geometry import Polygon
 import argparse
+from datetime import datetime, timedelta
 
 from rasputin.reader import RasterRepository
-from rasputin.tin_repository import TinRepository
+from rasputin.tin_repository import TinRepository, ShadeRepository
 from rasputin.geometry import Geometry, GeoPoints, GeoPolygon
 from rasputin.mesh import Mesh
 
@@ -119,41 +120,77 @@ def store_tin():
                                  points[:, 1],
                                  points[:, 2])
         points = np.dstack([x, y, z]).reshape(-1, 3)
-        mesh = Mesh.from_points_and_faces(points=points, faces=faces)
+        mesh = Mesh.from_points_and_faces(points=points, faces=faces, proj4_str=target_crs.to_proj4())
 
-    if not res.land_type_partition:
-        tr.save(uid=res.uid, geometries={"terrain": Geometry(mesh=mesh,
-                                                             crs=target_crs,
-                                                             base_color=(1.0, 1.0, 1.0),
-                                                             material=None)})
-    else:
+    if res.land_type_partition:
         if res.land_type_partition == "corine":
             lt_repo = gml_repository.GMLRepository(path=corine_archive)
         else:
             lt_repo = globcov_repository.GlobCovRepository(path=gc_archive)
-        geometries = {}
         geo_cell_centers = GeoPoints(xy=mesh.cell_centers[:, :2],
                                      crs=target_crs)
         terrain_cover = lt_repo.land_cover(land_types=None,
                                            geo_points=geo_cell_centers,
                                            domain=target_domain)
-        terrains = {lt.value: [] for lt in lt_repo.land_cover_type}
-
+        terrain_colors = np.empty((terrain_cover.shape[0], 3), dtype='d')
+        extracted_terrain_types = set()
         for i, cell in enumerate(terrain_cover):
-            terrains[cell].append(i)
-        for t in terrains:
-            if not terrains[t]:
-                continue
-            cover = lt_repo.land_cover_type(t)
-            colors = [c/255 for c in lt_repo.land_cover_meta_info_type.color(land_cover_type=cover)]
-            material = lt_repo.land_cover_meta_info_type.material(land_cover_type=cover)
-            sub_mesh = mesh.extract_sub_mesh(np.array(terrains[t]))
-            geometries[cover.name] = Geometry(mesh=sub_mesh,
-                                              base_color=colors,
-                                              material=material,
-                                              crs=target_crs)
-        tr.save(uid=res.uid, geometries=geometries)
+            if cell not in extracted_terrain_types:
+                extracted_terrain_types.add(cell)
+        meta_info = lt_repo.land_cover_meta_info_type
+        for tt in extracted_terrain_types:
+            cover = lt_repo.land_cover_type(tt)
+            color = [c/255 for c in meta_info.color(land_cover_type=cover)]
+            terrain_colors[terrain_cover == tt] = color
+        tr.save(uid=res.uid,
+                geometry=Geometry(mesh=mesh, crs=target_crs),
+                land_cover_repository=lt_repo,
+                face_fields={"cover_type": terrain_cover, "cover_color": terrain_colors})
 
     meta = tr.content[res.uid]
     logger.info(f"Successfully added uid='{res.uid}' to the tin archive {tin_archive.absolute()}, with meta info:")
     pprint.PrettyPrinter(indent=4).pprint(meta)
+
+
+def compute_shades():
+    """Compute shades for each cell in a given interval and with given frequency"""
+
+    logging.basicConfig(level=logging.CRITICAL, format='Rasputin[%(levelname)s]: %(message)s')
+    logger = logging.getLogger()
+    arg_parser = argparse.ArgumentParser()
+    arg_parser.add_argument("-uid", type=str, help="uid of mesh")
+    arg_parser.add_argument("-start-year", type=int, help="Start year")
+    arg_parser.add_argument("-start-month", type=int, help="Start month")
+    arg_parser.add_argument("-start-day", type=int, help="Start day")
+    arg_parser.add_argument("-end-year", type=int, help="Start year")
+    arg_parser.add_argument("-end-month", type=int, help="Start month")
+    arg_parser.add_argument("-end-day", type=int, help="Start day")
+    arg_parser.add_argument("-frequency", type=int, help="Frequency in seconds")
+    arg_parser.add_argument("-silent", action="store_true", help="Run in silent mode")
+    arg_parser.add_argument("-overwrite", action="store_true", help="Overwrite shade_uid")
+    arg_parser.add_argument("shade_uid", type=str, help="Uid of saved shade")
+    res = arg_parser.parse_args(sys.argv[1:])
+    if not res.silent:
+        logger.setLevel(logging.INFO)
+    if "RASPUTIN_DATA_DIR" in os.environ:
+        tin_archive = Path(os.environ["RASPUTIN_DATA_DIR"]) / "tin_archive"
+        shade_repo_archive = Path(os.environ["RASPUTIN_DATA_DIR"]) / "shade_archive"
+    else:
+        tin_archive = Path(".") / "tin_archive"
+        shade_repo_archive = Path(".") / "shade_archive"
+        logger.critical(f"WARNING: No data directory specified, assuming tin_archive {tin_archive.absolute()}")
+    tin_repo = TinRepository(path=tin_archive)
+    mesh = tin_repo.read(uid=res.uid).mesh
+    start_time = datetime(res.start_year, res.start_month, res.start_day)
+    end_time = datetime(res.end_year, res.end_month, res.end_day)
+    dt = timedelta(seconds=res.frequency)
+    t = start_time
+    with ShadeRepository(path=shade_repo_archive).open(tin_repo=tin_repo,
+                                                       tin_uid=res.uid,
+                                                       shade_uid=res.shade_uid,
+                                                       overwrite=res.overwrite) as shade_writer:
+        while t <= end_time:
+            shade = mesh.shade(t.timestamp())
+            shade_writer.save(t.timestamp(), shade)
+            t += dt
+

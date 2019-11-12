@@ -298,11 +298,11 @@ class ImageExtents:
 
     @property
     def x_max(self):
-        return self.x_min + self.delta_x*self.shape[1]
+        return self.x_min + self.delta_x*(self.shape[1] - 1)
 
     @property
     def y_min(self):
-        return self.y_max - self.delta_y*self.shape[0]
+        return self.y_max - self.delta_y*(self.shape[0] - 1)
 
     @property
     def box(self):

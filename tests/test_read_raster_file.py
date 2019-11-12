@@ -22,7 +22,7 @@ def image_from_array(array: np.ndarray):
     tiept_tag = GeoTiffTags.ModelTiePointTag.value
 
     tags[scale_tag] = (1, 1, 0)
-    tags[tiept_tag] = (0, 0, 0, 0, n-1, 0)
+    tags[tiept_tag] = (0, 0, 0, 0, m - 1, 0)
 
     # Store to temporary file
     _, temp_name = tempfile.mkstemp(suffix=".tif")
@@ -31,8 +31,8 @@ def image_from_array(array: np.ndarray):
         fp = temp_path.open(mode="w+b")
         image.save(fp, format="tiff", tiffinfo=tags)
 
-        yield Image.open(fp)
-
+        tmp = Image.open(fp)
+        yield tmp
         fp.close()
     finally:
         # Delete temporary file
@@ -43,26 +43,28 @@ def image_from_array(array: np.ndarray):
 def two_level_array():
     M, N = 24, 16
 
-    x = np.linspace(0, M-1, M)
-    y = np.linspace(N-1, 0, N)
+    x = np.linspace(0, N - 1, N)
+    y = np.linspace(M - 1, 0, M)
 
     A = np.zeros((M, N))
-    for (i,j) in np.ndindex((M, N)):
-        A[i,j] = 2.0 if (y[j] > max(y)/2)  else  1.0
+    for (i, j) in np.ndindex((M, N)):
+        A[i, j] = 2.0 if (y[i] > max(y)/2) else 1.0
 
+    for l in A:
+        print(l)
     return A
 
 
 @pytest.fixture
-def random_array():
+def random_array() -> np.ndarray:
     M, N = 24, 16
 
     return np.random.randn(M, N)
 
 
 @pytest.fixture
-def upper_half_rectangle():
-    return Polygon.from_bounds(0, 8, 23, 15)
+def upper_half_rectangle() -> Polygon:
+    return Polygon.from_bounds(0, 12, 16, 23)
 
 
 def test_image_extents(two_level_array):
@@ -72,7 +74,7 @@ def test_image_extents(two_level_array):
 
         assert np.array(image).shape == (m, n)
         assert (extents.x_min, extents.y_min) == (0, 0)
-        assert (extents.x_max, extents.y_max) == (m-1, n-1)
+        assert (extents.x_max, extents.y_max) == (n - 1, m - 1)
 
 
 def test_image_crop(two_level_array, upper_half_rectangle):
@@ -82,12 +84,12 @@ def test_image_crop(two_level_array, upper_half_rectangle):
         sub_array = np.array(sub_image)
 
         # Check extents
-        assert extents.shape == (M, np.ceil(N/2))
+        assert extents.shape == (12, 16)
         assert extents.delta_x == extents.delta_y == 1
         assert extents.x_min == 0
-        assert extents.x_max == M - 1
-        assert extents.y_min == np.floor(N / 2)
-        assert extents.y_max == N - 1
+        assert extents.x_max == N - 1
+        assert extents.y_min == 12
+        assert extents.y_max == 23
 
         # Check contents
         assert not (sub_array - 2.0).any()

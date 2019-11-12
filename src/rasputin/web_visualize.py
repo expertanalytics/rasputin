@@ -153,14 +153,10 @@ def visualize_tin():
         tin_archive = Path(".") / "tin_archive"
         print(f"WARNING: No data directory specified, assuming tin_archive {tin_archive.absolute()}")
     tin_repo = TinRepository(path=tin_archive)
-    geometries = tin_repo.read(uid=res.uid)
-    for name, geom in geometries.items():
-        if name == "lake":
-            geom.material = lake_material
-        else:
-            geom.material = terrain_material
+    geometry = tin_repo.read(uid=res.uid)
+    geometry.material = terrain_material
     output = Path(res.output).absolute()
-    write_scene(geometries=list(geometries.values()), output=output)
+    write_scene(geometries=[geometry], output=output)
     print(f"""Successfully generated a web_gl based TIN visualizer in {output}.
 To see it, please run:
 cd {output}

@@ -10,7 +10,7 @@ from pkg_resources import resource_filename
 import pyproj
 from rasputin import triangulate_dem as td
 from rasputin.py2js import point_vector_to_lines, face_and_point_vector_to_lines
-from rasputin.mesh_utils import vertex_field_to_vertex_values
+from rasputin.mesh_utils import vertex_field_to_vertex_values, face_field_to_vertex_values
 from rasputin.material import terrain_material
 
 
@@ -19,8 +19,8 @@ class Geometry:
     def __init__(self, *,
                  mesh: "Mesh",
                  crs: pyproj.CRS,
-                 base_color: Optional[Tuple[float, float, float]],
-                 material: Optional[str]):
+                 base_color: Optional[Tuple[float, float, float]] = None,
+                 material: Optional[str] = None):
         self.mesh = mesh
         self.crs = crs
         if base_color is None:
@@ -76,6 +76,11 @@ class Geometry:
             self._colors[:, 1] = self.base_color[1]
             self._colors[:, 2] = self.base_color[2]
         return self._colors
+
+    @colors.setter
+    def colors(self, colors: np.ndarray) -> None:
+        assert colors.shape == (len(self.mesh.faces), 3)
+        self._colors = face_field_to_vertex_values(face_field=colors, faces=self.faces)
 
     @property
     def material(self) -> str:
