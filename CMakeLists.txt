@@ -90,6 +90,7 @@ add_library(Armadillo INTERFACE)
 target_include_directories(Armadillo PRIVATE INTERFACE
     ${ARMADILLO_INCLUDE_DIRS})
 add_definitions(-DARMA_DONT_USE_WRAPPER) # Header-only usage
+list(APPEND RASPUTIN_DEPENDENCIES Armadillo)
 
 
 # BLAS
