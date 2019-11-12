@@ -1,6 +1,5 @@
 import numpy as np
 import typing as tp
-import json
 
 from . import triangulate_dem
 from .reader import GeoPolygon, Rasterdata
