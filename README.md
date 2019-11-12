@@ -13,67 +13,71 @@ surface mesh.
 ## Implementation strategy
 
 The heavy lifting in Rasputin is done by external software:
- * [CGAL](https://www.cgal.org/) is used for triangulation and simplification 
-   routines. 
- * [pybind11](https://pybind11.readthedocs.io/en/stable/) is used to generate 
+ * [CGAL](https://www.cgal.org/) is used for triangulation and simplification
+   routines.
+ * [pybind11](https://pybind11.readthedocs.io/en/stable/) is used to generate
    the Python wrappers.
- * [Pillow](https://python-pillow.org/) is used to read 
+ * [Pillow](https://python-pillow.org/) is used to read
    [GeoTIFF](https://en.wikipedia.org/wiki/GeoTIFF) files.
  * [Meshio](https://github.com/nschloe/meshio) is used to write results.
  * [Armadillo](http://arma.sourceforge.net/) for speedy arithmetics.
  * [date](https://github.com/HowardHinnant/date) for date and time on top of `chrono`.
  * [Catch2](https://github.com/catchorg/Catch2) for unit testing of the c++ code.
 
-Rasputin does not aim at being backwards compatible with older compilers.
-Hence, you will need something quite new. The following compilers are known to
-work:
- * g++ 8.3 
- * clang 11.0.0
-
-Note that g++ 7 no longer works, due to the use of `<chrono>` from `stl`.
 
 ## Installation
 
-Installing Rasputin is easy, as the C++ dependencies are header only. Simply
-download and unpack the source code for `pybind11` and `CGAL` and place them
-under the `lib` directory using the names `pybind11` and `CGAL`, respectively.
+Installing Rasputin is easy, as the C++ dependencies are header only. Simply clone the source repository for each dependency into the `lib` directory.
+For examaple, from the Rasputin respotory root, run the following commands:
 
-As of November 2018, the latest release of `pybind11` generates quite a lot of deprecation warnings for Python3.7. In this case, pulling the source directly from the master branch at github is recommended:
 ```
-cd <rasputin_directory>/lib
-git clone git@github.com:pybind/pybind11.git
+cd lib
+git clone https://github.com/pybind/pybind11.git --branch=v2.4.3
+git clone https://gitlab.com/conradsnicta/armadillo-code.git --branch=9.800.x armadillo
+git clone https://github.com/boostorg/geometry.git --branch=boost-1.71.0
+git clone https://github.com/HowardHinnant/date.git --branch=v2.4.1
+git clone https://github.com/catchorg/Catch2.git --branch=v2.10.2 catch2
+git clone https://github.com/CGAL/cgal.git --branch=releases/CGAL-5.0 cgal
 ```
 
-Alternatively, use the latest released sources:
+Rasputin does not aim at being backwards compatible with older compilers.
+Hence, you will need something quite new. The following compilers are known to
+work:
+ * g++ 8.3
+ * clang 11.0.0
+
+Note that g++ 7 no longer works, due to the use of `<chrono>` from `stl`.
+You can ensure that the right compiler is used for building Rasputin by setting the `CXX` environment variable.
+For example, to use `g++` 8.x write the following in the terminal window:
 ```
-cd <rasputin_directory>/lib
-wget https://github.com/pybind/pybind11/archive/v2.2.3.tar.gz
-wget https://github.com/CGAL/cgal/releases/download/releases%2FCGAL-4.13/CGAL-4.13.tar.xz
-wget http://sourceforge.net/projects/arma/files/armadillo-9.200.7.tar.xz
-git clone git@github.com:HowardHinnant/date.git
-git clone git@github.com:catchorg/Catch2.git
-tar xf v2.2.3.tar.gz && mv pybind11-2.2.3 pybind11
-tar xf CGAL-4.13.tar.xz && mv CGAL-4.13 CGAL
-tar xf armadillo-9.200.7.tar.xz && mv mv armadullo-9.200.7 armadillo
+export CXX=/usr/bin/g++-8
 ```
+If you are using gcc, make sure that `CXX` points to `g++` and not `gcc`.
+
+Rasputin is build using [CMake](https://cmake.org). On Ubuntu, CMake can be installed with the command
+```
+sudu apt-get install cmake
+```
+or on Arch,
+```
+sudo pacman -S cmake
+```
+A relatively recent version of CMake may be needed.
 
 CGAL requires the two libraries [GMP](http://gmplib.org/) and
 [MPFR](http://www.mpfr.org/) to be installed in order to work satisfactory. On
 Ubuntu, these libraries can be installed the usual way by typing
-
 ```
 sudo apt-get install libgmp-dev libmpfr-dev
 ```
-
 or for Arch:
 ```
 sudo pacman -Syy gmp mpfr
 ```
-
 in a terminal window. Also, CGAL depends on [Boost](https://www.boost.org/),
 see [here](https://doc.cgal.org/latest/Manual/installation.html#title21).
 
-Additionally, you need Python 3, a modern compiler supporting C++17, and CMake.
+Additionally, you need Python 3.
 Then, to install Rasputin, change to the Rasputin root source directory and run
 ```
 pip3 install .
