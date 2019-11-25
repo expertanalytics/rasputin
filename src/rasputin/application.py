@@ -37,6 +37,8 @@ def store_tin():
     arg_parser.add_argument("-x", nargs="+", type=float, help="x-coordinates of polygon", default=None)
     arg_parser.add_argument("-y", nargs="+", type=float, help="y-coordinates of polygon", default=None)
     arg_parser.add_argument("-polyfile", type=str, help="Polygon definition in WKT or WKB format", default="")
+    arg_parser.add_argument("-poly-auth", type=str, help="Polygon definition in WKT or WKB format", default="OGC")
+    arg_parser.add_argument("-poly-cs-id", type=str, help="Polygon definition in WKT or WKB format", default="CRS84")
     arg_parser.add_argument("-target-coordinate-system", type=str, default="EPSG:32633", help="Target coordinate system")
     arg_parser.add_argument("-ratio", type=float, default=0.4, help="Mesh coarsening factor in [0, 1]")
 
@@ -87,13 +89,13 @@ def store_tin():
     # Determine region of interest
     if res.polyfile:
         input_domain = GeoPolygon.from_polygon_file(filepath=Path(res.polyfile),
-                                                    crs=pyproj.CRS.from_string("+init=EPSG:4326"))
+                                                    crs=pyproj.CRS.from_authority(res.poly_auth, res.poly_cs_id))
 
     elif (res.x and res.y):
         assert 3 <= len(res.x) == len(res.y), "x and y coordinates must have equal length greater or equal to 3"
         source_polygon = Polygon((x, y) for (x, y) in zip(res.x, res.y))
         input_domain = GeoPolygon(polygon=source_polygon,
-                                  crs=pyproj.CRS.from_string("+init=EPSG:4326"))
+                                  crs=pyproj.CRS.from_authority(res.poly_auth, res.poly_cs_id))
 
     else:
         raise RuntimeError("A constraining polygon is needed")
