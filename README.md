@@ -109,26 +109,62 @@ def construct_rasterdata():
                        0, 0, 0], dtype=np.float32).reshape(3,3)
     cs = pyproj.CRS.from_epsg(32633)
     return Rasterdata(shape=(raster.shape[1], raster.shape[0]), x_min=0, 
-                      y_max=30, delta_x=10, delta_y=10, array=raster,
+                      y_max=20, delta_x=10, delta_y=10, array=raster,
                       coordinate_system=cs.to_proj4(), info={})
 
 if __name__ == "__main__":
     rd = construct_rasterdata()
     mesh = Mesh.from_raster(data=rd)
+    pts = mesh.points
     for face in mesh.faces:
-        print(face)
+        print("Face:", *[f'{fc:2d}' for fc in face])
+        print(f"pts[{face[0]}]:", *[f'{pt:4.1f}' for pt in pts[face[0]]])
+        print(f"pts[{face[1]}]:", *[f'{pt:4.1f}' for pt in pts[face[1]]])
+        print(f"pts[{face[2]}]:", *[f'{pt:4.1f}' for pt in pts[face[2]]])
+        print()
 ```
 
 This should print out:
 ```
-[0 1 2]
-[0 2 3]
-[0 4 1]
-[4 5 1]
-[3 6 0]
-[3 7 6]
-[6 8 0]
-[8 4 0]
+Face:  0  1  2
+pts[0]: 10.0 10.0  1.0
+pts[1]: 10.0 20.0  0.0
+pts[2]:  0.0 20.0  0.0
+
+Face:  0  2  3
+pts[0]: 10.0 10.0  1.0
+pts[2]:  0.0 20.0  0.0
+pts[3]:  0.0 10.0  0.0
+
+Face:  0  4  1
+pts[0]: 10.0 10.0  1.0
+pts[4]: 20.0 10.0  0.0
+pts[1]: 10.0 20.0  0.0
+
+Face:  4  5  1
+pts[4]: 20.0 10.0  0.0
+pts[5]: 20.0 20.0  0.0
+pts[1]: 10.0 20.0  0.0
+
+Face:  3  6  0
+pts[3]:  0.0 10.0  0.0
+pts[6]: 10.0  0.0  0.0
+pts[0]: 10.0 10.0  1.0
+
+Face:  3  7  6
+pts[3]:  0.0 10.0  0.0
+pts[7]:  0.0  0.0  0.0
+pts[6]: 10.0  0.0  0.0
+
+Face:  6  8  0
+pts[6]: 10.0  0.0  0.0
+pts[8]: 20.0  0.0  0.0
+pts[0]: 10.0 10.0  1.0
+
+Face:  8  4  0
+pts[8]: 20.0  0.0  0.0
+pts[4]: 20.0 10.0  0.0
+pts[0]: 10.0 10.0  1.0
 ```
 Congratulations! You just triangulated a small mountain.
 
