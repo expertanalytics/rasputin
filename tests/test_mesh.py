@@ -29,9 +29,6 @@ def raster_xm():
     x, y = meshgrid(x, y)
     r = sqrt(x**2 + y**2)
     arr = -sin(2*pi*r/n)
-    #arr = (zeros((m, n))
-    #       + linspace(0, m*dx, m).reshape(-1,  1)**2
-    #       + linspace(0, n*dy, n).reshape( 1, -1))
     return Rasterdata(shape=(m, n),
                       x_min=x_0,
                       y_max=y_0,

@@ -98,19 +98,37 @@ You can build rasputin and run tests by building the Docker image: `docker build
 To test the installation run this for example in ipython:
 
 ```
-from rasputin import triangulate_dem
+import numpy as np
+import pyproj
+from rasputin.reader import Rasterdata
+from rasputin.mesh import Mesh
 
-vs = triangulate_dem.point3_vector([[1,0,0], [0,1,0], [0,0,0], [0.25,0.25,1]])
-points, faces = triangulate_dem.lindstrom_turk_by_ratio(vs, 2.0)
-for f in faces:
-   print(f)
+def construct_rasterdata():
+    raster = np.array([0, 0, 0, 
+                       0, 1, 0, 
+                       0, 0, 0], dtype=np.float32).reshape(3,3)
+    cs = pyproj.CRS.from_epsg(32633)
+    return Rasterdata(shape=(raster.shape[1], raster.shape[0]), x_min=0, 
+                      y_max=30, delta_x=10, delta_y=10, array=raster,
+                      coordinate_system=cs.to_proj4(), info={})
+
+if __name__ == "__main__":
+    rd = construct_rasterdata()
+    mesh = Mesh.from_raster(data=rd)
+    for face in mesh.faces:
+        print(face)
 ```
 
 This should print out:
 ```
->> (3, 1, 2)
->> (0, 1, 3)
->> (0, 3, 2)
+[0 1 2]
+[0 2 3]
+[0 4 1]
+[4 5 1]
+[3 6 0]
+[3 7 6]
+[6 8 0]
+[8 4 0]
 ```
 Congratulations! You just triangulated a small mountain.
 
