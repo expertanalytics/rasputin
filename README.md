@@ -98,19 +98,73 @@ You can build rasputin and run tests by building the Docker image: `docker build
 To test the installation run this for example in ipython:
 
 ```
-from rasputin import triangulate_dem
+import numpy as np
+import pyproj
+from rasputin.reader import Rasterdata
+from rasputin.mesh import Mesh
 
-vs = triangulate_dem.point3_vector([[1,0,0], [0,1,0], [0,0,0], [0.25,0.25,1]])
-points, faces = triangulate_dem.lindstrom_turk_by_ratio(vs, 2.0)
-for f in faces:
-   print(f)
+def construct_rasterdata():
+    raster = np.array([0, 0, 0, 
+                       0, 1, 0, 
+                       0, 0, 0], dtype=np.float32).reshape(3,3)
+    cs = pyproj.CRS.from_epsg(32633)
+    return Rasterdata(shape=(raster.shape[1], raster.shape[0]), x_min=0, 
+                      y_max=20, delta_x=10, delta_y=10, array=raster,
+                      coordinate_system=cs.to_proj4(), info={})
+
+if __name__ == "__main__":
+    rd = construct_rasterdata()
+    mesh = Mesh.from_raster(data=rd)
+    pts = mesh.points
+    for face in mesh.faces:
+        print("Face:", *[f'{fc:2d}' for fc in face])
+        print(f"pts[{face[0]}]:", *[f'{pt:4.1f}' for pt in pts[face[0]]])
+        print(f"pts[{face[1]}]:", *[f'{pt:4.1f}' for pt in pts[face[1]]])
+        print(f"pts[{face[2]}]:", *[f'{pt:4.1f}' for pt in pts[face[2]]])
+        print()
 ```
 
 This should print out:
 ```
->> (3, 1, 2)
->> (0, 1, 3)
->> (0, 3, 2)
+Face:  0  1  2
+pts[0]: 10.0 10.0  1.0
+pts[1]: 10.0 20.0  0.0
+pts[2]:  0.0 20.0  0.0
+
+Face:  0  2  3
+pts[0]: 10.0 10.0  1.0
+pts[2]:  0.0 20.0  0.0
+pts[3]:  0.0 10.0  0.0
+
+Face:  0  4  1
+pts[0]: 10.0 10.0  1.0
+pts[4]: 20.0 10.0  0.0
+pts[1]: 10.0 20.0  0.0
+
+Face:  4  5  1
+pts[4]: 20.0 10.0  0.0
+pts[5]: 20.0 20.0  0.0
+pts[1]: 10.0 20.0  0.0
+
+Face:  3  6  0
+pts[3]:  0.0 10.0  0.0
+pts[6]: 10.0  0.0  0.0
+pts[0]: 10.0 10.0  1.0
+
+Face:  3  7  6
+pts[3]:  0.0 10.0  0.0
+pts[7]:  0.0  0.0  0.0
+pts[6]: 10.0  0.0  0.0
+
+Face:  6  8  0
+pts[6]: 10.0  0.0  0.0
+pts[8]: 20.0  0.0  0.0
+pts[0]: 10.0 10.0  1.0
+
+Face:  8  4  0
+pts[8]: 20.0  0.0  0.0
+pts[4]: 20.0 10.0  0.0
+pts[0]: 10.0 10.0  1.0
 ```
 Congratulations! You just triangulated a small mountain.
 
