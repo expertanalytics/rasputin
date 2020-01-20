@@ -62,7 +62,8 @@ or on Arch,
 ```
 sudo pacman -S cmake
 ```
-A relatively recent version of CMake may be needed.
+A relatively recent version of CMake will be needed, and `3.15.6` or newer is
+known to work.
 
 CGAL requires the two libraries [GMP](http://gmplib.org/) and
 [MPFR](http://www.mpfr.org/) to be installed in order to work satisfactory. On
