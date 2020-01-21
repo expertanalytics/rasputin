@@ -5,7 +5,7 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 # Make cmake search for installations in 'lib' before looking elsewhere
-set(CMAKE_PREFIX_PATH  lib/CGAL ${CMAKE_PREFIX_PATH})
+set(CMAKE_PREFIX_PATH  lib/cgal ${CMAKE_PREFIX_PATH})
 
 # Include pybind11 CMakeLists.txt in 'lib/pybind11' if it exists
 if (EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/lib/pybind11")
