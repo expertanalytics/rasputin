@@ -41,15 +41,15 @@ class GeoKeys(Enum):
     GeogCitationGeoKey = 2049
     GeogGeodeticDatumGeoKey = 2050
     GeogPrimeMeridianGeoKey = 2051
-    GeogPrimeMeridianLongGeoKey = 2061
     GeogLinearUnitSizeGeoKey = 2053
-    GeogAngularUnitsGeoKey = 2054
+    GeogAngularUnitsGeoKey  = 2054
     GeogAngularUnitSizeGeoKey = 2055
     GeogEllipsoidGeoKey = 2056
     GeogSemiMajorAxisGeoKey = 2057
     GeogSemiMinorAxisGeoKey = 2058
     GeogInvFlatteningGeoKey = 2059
     GeogAzimuthUnitsGeoKey = 2060
+    GeogPrimeMeridianLongGeoKey = 2061
 
     # Projected CS parameters keys
     ProjectedCSTypeGeoKey = 3072
@@ -79,6 +79,12 @@ class GeoKeys(Enum):
     ProjAzimuthAngleGeoKey = 3094
     ProjStraightVertPoleLongGeoKey = 3095
 
+    # Vertical CRS Parameter Keys (4096-5119)
+    VerticalCSTypeGeoKey = 4096
+    VerticalCitationGeoKey = 4097
+    VerticalDatumGeoKey = 4098
+    VerticalUnitsGeoKey = 4099
+
 
 def _isinteger(obj: Any) -> bool:
     return np.issubdtype(type(obj), np.integer)
@@ -102,11 +108,12 @@ def extract_geo_keys(*, image: TiffImageFile) -> Dict[str, Any]:
     NumberOfKeys = Header[3]
 
     assert KeyDirectoryVersion == 1  # Only existing version
-    assert len(GeoKeyDirectory) == NumberOfKeys + 1
 
     # Read all the geokey fields
     geo_keys = {}
     for (key_id, location, count, value_offset) in GeoKeyDirectory[1:]:
+        if key_id == 0:
+            continue
         key_name = GeoKeys(key_id).name
 
         if KeyValueTags(location) == KeyValueTags.GeoShortParamsTag:
@@ -132,6 +139,7 @@ def extract_geo_keys(*, image: TiffImageFile) -> Dict[str, Any]:
             key_value = ascii_val.replace("|", "\n").strip()
 
         geo_keys[key_name] = key_value
+    assert len(geo_keys) == NumberOfKeys
 
     return geo_keys
 
