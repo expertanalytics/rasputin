@@ -41,15 +41,8 @@ class GeoKeys(Enum):
     GeogCitationGeoKey = 2049
     GeogGeodeticDatumGeoKey = 2050
     GeogPrimeMeridianGeoKey = 2051
-    GeogAngularUnitsGeoKey  = 2054
-    GeogAngularUnitSizeGeoKey = 2055
-    GeogEllipsoidGeoKey = 2056
-    GeogSemiMajorAxisGeoKey = 2057
-    GeogSemiMinorAxisGeoKey = 2058
-    GeogInvFlatteningGeoKey = 2059
-    GeogPrimeMeridianLongGeoKey = 2061
     GeogLinearUnitSizeGeoKey = 2053
-    GeogAngularUnitsGeoKey = 2054
+    GeogAngularUnitsGeoKey  = 2054
     GeogAngularUnitSizeGeoKey = 2055
     GeogEllipsoidGeoKey = 2056
     GeogSemiMajorAxisGeoKey = 2057
