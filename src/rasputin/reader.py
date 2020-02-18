@@ -145,7 +145,7 @@ class GeoKeysInterpreter(object):
 
         import pyproj
         proj_str = GeoKeyInterpreter(geokeys).to_proj4()
-        proj = pyproj.Proj(proj_str)
+        proj = pyproj.CRS.from_proj4(proj_str)
 
     NOTE:
     This class is incomplete and many GeoKeys are not handled. Extending the class with new handlers
@@ -298,11 +298,11 @@ class ImageExtents:
 
     @property
     def x_max(self):
-        return self.x_min + self.delta_x * (self.shape[0] - 1)
+        return self.x_min + self.delta_x*(self.shape[1] - 1)
 
     @property
     def y_min(self):
-        return self.y_max - self.delta_y * (self.shape[1] - 1)
+        return self.y_max - self.delta_y*(self.shape[0] - 1)
 
     @property
     def box(self):
@@ -311,6 +311,7 @@ class ImageExtents:
     def __post_init__(self):
         assert len(self.shape) == 2 and min(*self.shape) > 0, "Shape is not two-dimensional."
         assert min(self.delta_x, self.delta_y) > 0, "Step sizes must be strictly positive."
+
 
 @dataclass
 class Rasterdata(ImageExtents):
@@ -326,7 +327,7 @@ class Rasterdata(ImageExtents):
     @property
     def polygon(self):
         return GeoPolygon(polygon=Polygon.from_bounds(*self.box),
-                          projection=pyproj.Proj(self.coordinate_system))
+                          crs=pyproj.CRS.from_proj4(self.coordinate_system))
 
     def to_cpp(self) -> triangulate_dem.raster_data_float:
         return triangulate_dem.raster_data_float(self.array,
@@ -347,19 +348,16 @@ def crop_image_to_polygon(*,
     # Image box
     x_min, y_min, x_max, y_max = extents.box
 
-    # Polygon bounding box
-    x_min_p, y_min_p, x_max_p, y_max_p = polygon.bounds
-
     # We need polygon bounds in image coordinates
     x_min_p, y_min_p, x_max_p, y_max_p = polygon.bounds
 
-    i_min = np.clip(np.floor((x_min_p - x_min)/delta_x), 0, m-1)
-    j_min = np.clip(np.floor((y_max - y_max_p)/delta_y), 0, n-1)
-    i_max = np.clip(np.ceil((x_max_p - x_min)/delta_x) + 1, 1, m)
-    j_max = np.clip(np.ceil((y_max - y_min_p)/delta_y) + 1, 1, n)
+    j_min = np.clip(np.floor((x_min_p - x_min)/delta_x), 0, n - 1)
+    i_min = np.clip(np.floor((y_max - y_max_p)/delta_y), 0, m - 1)
+    j_max = np.clip(np.ceil((x_max_p - x_min)/delta_x) + 1, 1, n)
+    i_max = np.clip(np.ceil((y_max - y_min_p)/delta_y) + 1, 1, m)
 
     # NOTE: Issues with Pillows Image.crop
-    #     - Cropping is sepcified in image coordinates (transpose of array coordinates)
+    #     - Cropping is sepcified in image coordinates
     #     - Cropping does not include last indices of the cropping box
     #     - Cropping discards tiff tags
 
@@ -368,14 +366,14 @@ def crop_image_to_polygon(*,
     # Find extents of the cropped image
     sub_extents = ImageExtents(shape=(i_max - i_min, j_max - j_min),
                                delta_x=delta_x, delta_y=delta_y,
-                               x_min=x_min + i_min * delta_x,
-                               y_max=y_max - j_min * delta_y)
+                               x_min=x_min + j_min * delta_x,
+                               y_max=y_max - i_min * delta_y)
 
     return sub_image, sub_extents
 
 def get_image_extents(image: Image.Image) -> Tuple[float, float, float, float]:
     tiepoint_idx = GeoTiffTags.ModelTiePointTag.value
-    i_tag, j_tag, _, x_tag, y_tag, _ = image.tag_v2.get(tiepoint_idx, (0, 0, 0, 0, 0, 0))
+    j_tag, i_tag, _, x_tag, y_tag, _ = image.tag_v2.get(tiepoint_idx, (0, 0, 0, 0, 0, 0))
 
     scale_idx = GeoTiffTags.ModelPixelScaleTag.value
     delta_x, delta_y, _ = image.tag_v2.get(scale_idx, (1.0, 1.0, 0.0))
@@ -383,11 +381,11 @@ def get_image_extents(image: Image.Image) -> Tuple[float, float, float, float]:
     n, m = image.size
 
 
-    x_min = x_tag - delta_x * i_tag
-    y_max = y_tag + delta_y * j_tag
+    x_min = x_tag - delta_x * j_tag
+    y_max = y_tag + delta_y * i_tag
 
-    x_max = x_tag + delta_x * (m - 1 - i_tag)
-    y_min = y_tag - delta_y * (n - 1 - j_tag)
+    x_max = x_tag + delta_x * (n - 1 - j_tag)
+    y_min = y_tag - delta_y * (m - 1 - i_tag)
 
     return ImageExtents(shape=(m, n),
                         delta_x=delta_x, delta_y=delta_y,
@@ -395,7 +393,7 @@ def get_image_extents(image: Image.Image) -> Tuple[float, float, float, float]:
 
 def read_raster_file(*,
                      filepath: Path,
-                     polygon: Optional[Polygon] = None, transpose: bool=False) -> Rasterdata:
+                     polygon: Optional[Polygon] = None) -> Rasterdata:
     logger = getLogger()
     logger.debug(f"Reading raster file {filepath}")
     assert filepath.exists()
@@ -406,9 +404,6 @@ def read_raster_file(*,
         coordinate_system = identify_projection(image=image)
 
         extents = get_image_extents(image)
-        if transpose:
-            image = image.transpose(Image.TRANSPOSE)
-            extents.shape = (extents.shape[1], extents.shape[0])
 
         if polygon:
             image, extents = crop_image_to_polygon(image=image, polygon=polygon, extents=extents)
@@ -425,9 +420,8 @@ def read_raster_file(*,
 
 class RasterRepository:
 
-    def __init__(self, *, directory: Path, transpose: bool=False) -> None:
+    def __init__(self, *, directory: Path) -> None:
         self.directory = directory
-        self.transpose = transpose
 
     def get_intersections(self,
                           *,
@@ -436,14 +430,15 @@ class RasterRepository:
         parts = []
 
         raster_files = self.directory.glob("*.tif")
+        logger = getLogger()
         for filepath in raster_files:
             geo_polygon = GeoPolygon.from_raster_file(filepath=filepath)
 
             if target_polygon.intersects(geo_polygon):
-                print(f"Using file: {filepath}")
-                polygon = target_polygon.transform(target_projection=geo_polygon.projection).polygon
+                logger.info(f"Using file: {filepath}")
+                polygon = target_polygon.transform(target_crs=geo_polygon.crs).polygon
                 part = read_raster_file(filepath=filepath,
-                                        polygon=polygon, transpose=self.transpose)
+                                        polygon=polygon)
                 parts.append(part)
 
                 target_polygon = target_polygon.difference(geo_polygon)
@@ -457,12 +452,13 @@ class RasterRepository:
         for filepath in raster_files:
             geo_polygon = GeoPolygon.from_raster_file(filepath=filepath)
             if domain.intersects(geo_polygon):
-                return geo_polygon.projection.definition_string()
+                return geo_polygon.crs.to_proj4()
 
         raise RuntimeError("Defining polygon does not intersect with dem raster data.")
 
     def read(self, *, domain: GeoPolygon) -> List[Rasterdata]:
         return self.get_intersections(target_polygon=domain)
+
 
 def read_sun_posisions(*, filepath: Path) -> triangulate_dem.shadow_vector:
     assert filepath.exists()

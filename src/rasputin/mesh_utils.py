@@ -3,8 +3,7 @@ from rasputin import triangulate_dem as td
 
 def face_field_to_vertex_values(*,
                                 face_field: np.ndarray,
-                                faces: td.face_vector,
-                                points: td.point3_vector) -> np.ndarray:
+                                faces: np.ndarray) -> np.ndarray:
     """
 
     :param field: scalar field over faces
@@ -21,8 +20,8 @@ def face_field_to_vertex_values(*,
 
 def vertex_field_to_vertex_values(*,
                                   vertex_field: np.ndarray,
-                                  faces: td.face_vector,
-                                  points: td.point3_vector) -> np.ndarray:
+                                  faces: np.ndarray,
+                                  points: np.ndarray) -> np.ndarray:
     """
 
     :param field: color (vector) field over points

@@ -4,6 +4,7 @@ from pathlib import Path
 import numpy as np
 import pyproj
 import argparse
+import logging
 
 from rasputin.tin_repository import TinRepository
 from rasputin import triangulate_dem
@@ -53,12 +54,12 @@ def depr_web_visualize():
     dx = res.dx
     dy = res.dy
 
-    input_coordinate_system = pyproj.Proj(init="EPSG:4326").definition_string()
-    target_coordinate_system = pyproj.Proj(init="EPSG:32633").definition_string()
+    input_crs = pyproj.CRS.from_string("+init=EPSG:4326")
+    target_crs = pyproj.CRS.from_epsg(32633)
 
     avalanche_problems = []
     if res.a:
-        avalanche_details, avalanche_meta = avalanche.get_forecasts(x=x0, y=y0, proj=input_coordinate_system)
+        avalanche_details, avalanche_meta = avalanche.get_forecasts(x=x0, y=y0, crs=input_crs)
         if avalanche_details:
             if "AvalancheProblems" in avalanche_details:
                 level = int(avalanche_details["DangerLevel"])
@@ -87,6 +88,7 @@ def depr_web_visualize():
                     avalanche_problems.append({"expositions": expositions,
                                                "level": level,
                                                "heights": danger_interval})
+    raise DeprecationWarning("This code is deprecated!")
     raster_coords = RasterRepository(directory=data_dir).read(x=x0,
                                                               y=y0,
                                                               dx=dx,
@@ -135,32 +137,30 @@ Then visit http://localhost:8080
 
 
 def visualize_tin():
+    logging.basicConfig(level=logging.CRITICAL, format='Rasputin[%(levelname)s]: %(message)s')
+    logger = logging.getLogger()
+
     arg_parser = argparse.ArgumentParser()
     arg_parser.add_argument("uid", type=str, help="Tin repository uid for mesh to visualize.")
     arg_parser.add_argument("-output", type=str, default="web_viz", help="Directory for web content.")
+    arg_parser.add_argument("-silent", action="store_true", help="Run in silent mode")
+    res = arg_parser.parse_args(sys.argv[1:])
+    if not res.silent:
+        logger.setLevel(logging.INFO)
     if "RASPUTIN_DATA_DIR" in os.environ:
         tin_archive = Path(os.environ["RASPUTIN_DATA_DIR"]) / "tin_archive"
     else:
         tin_archive = Path(".") / "tin_archive"
         print(f"WARNING: No data directory specified, assuming tin_archive {tin_archive.absolute()}")
-    res = arg_parser.parse_args(sys.argv[1:])
     tin_repo = TinRepository(path=tin_archive)
-    geometries = tin_repo.read(uid=res.uid)
-    for name, geom in geometries.items():
-        if name == "lake":
-            geom.material = lake_material
-        else:
-            geom.material = terrain_material
+    geometry = tin_repo.read(uid=res.uid)
+    geometry.material = terrain_material
     output = Path(res.output).absolute()
-    write_scene(geometries=list(geometries.values()), output=output)
+    write_scene(geometries=[geometry], output=output)
     print(f"""Successfully generated a web_gl based TIN visualizer in {output}.
 To see it, please run:
 cd {output}
 {Path(sys.executable).name} -m http.server 8080
 Then visit http://localhost:8080
 """)
-
-
-if __name__ == "__main__":
-    web_visualize()
 

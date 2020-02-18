@@ -13,55 +13,72 @@ surface mesh.
 ## Implementation strategy
 
 The heavy lifting in Rasputin is done by external software:
- * [CGAL](https://www.cgal.org/) is used for triangulation and simplification 
-   routines. 
- * [pybind11](https://pybind11.readthedocs.io/en/stable/) is used to generate 
+ * [CGAL](https://www.cgal.org/) is used for triangulation and simplification
+   routines.
+ * [pybind11](https://pybind11.readthedocs.io/en/stable/) is used to generate
    the Python wrappers.
- * [Pillow](https://python-pillow.org/) is used to read 
+ * [Pillow](https://python-pillow.org/) is used to read
    [GeoTIFF](https://en.wikipedia.org/wiki/GeoTIFF) files.
  * [Meshio](https://github.com/nschloe/meshio) is used to write results.
  * [Armadillo](http://arma.sourceforge.net/) for speedy arithmetics.
+ * [date](https://github.com/HowardHinnant/date) for date and time on top of `chrono`.
+ * [Catch2](https://github.com/catchorg/Catch2) for unit testing of the c++ code.
+
 
 ## Installation
 
-Installing Rasputin is easy, as the C++ dependencies are header only. Simply
-download and unpack the source code for `pybind11` and `CGAL` and place them
-under the `lib` directory using the names `pybind11` and `CGAL`, respectively.
+Installing Rasputin is easy, as the C++ dependencies are header only. Simply clone the source repository for each dependency into the `lib` directory.
+For examaple, from the Rasputin respotory root, run the following commands:
 
-As of November 2018, the latest release of `pybind11` generates quite a lot of deprecation warnings for Python3.7. In this case, pulling the source directly from the master branch at github is recommended:
 ```
-cd <rasputin_directory>/lib
-git clone git@github.com:pybind/pybind11.git
+cd lib
+git clone https://github.com/pybind/pybind11.git --branch=v2.4.3
+git clone https://gitlab.com/conradsnicta/armadillo-code.git --branch=9.800.x armadillo
+git clone https://github.com/boostorg/geometry.git --branch=boost-1.71.0
+git clone https://github.com/HowardHinnant/date.git --branch=v2.4.1
+git clone https://github.com/catchorg/Catch2.git --branch=v2.10.2 catch2
+git clone https://github.com/CGAL/cgal.git --branch=releases/CGAL-5.0 cgal
 ```
 
-Alternatively, use the latest released sources:
+Rasputin does not aim at being backwards compatible with older compilers.
+Hence, you will need something quite new. The following compilers are known to
+work:
+ * g++ 8.3
+ * clang 11.0.0
+
+Note that g++ 7 no longer works, due to the use of `<chrono>` from `stl`.
+You can ensure that the right compiler is used for building Rasputin by setting the `CXX` environment variable.
+For example, to use `g++` 8.x write the following in the terminal window:
 ```
-cd <rasputin_directory>/lib
-wget https://github.com/pybind/pybind11/archive/v2.2.3.tar.gz
-wget https://github.com/CGAL/cgal/releases/download/releases%2FCGAL-4.13/CGAL-4.13.tar.xz
-wget http://sourceforge.net/projects/arma/files/armadillo-9.200.7.tar.xz
-tar xf v2.2.3.tar.gz && mv pybind11-2.2.3 pybind11
-tar xf CGAL-4.13.tar.xz && mv CGAL-4.13 CGAL
-tar xf armadillo-9.200.7.tar.xz && mv mv armadullo-9.200.7 armadillo
+export CXX=/usr/bin/g++-8
 ```
+If you are using gcc, make sure that `CXX` points to `g++` and not `gcc`.
+
+Rasputin is build using [CMake](https://cmake.org). On Ubuntu, CMake can be installed with the command
+```
+sudu apt-get install cmake
+```
+or on Arch,
+```
+sudo pacman -S cmake
+```
+A relatively recent version of CMake will be needed, and `3.15.6` or newer is
+known to work.
 
 CGAL requires the two libraries [GMP](http://gmplib.org/) and
 [MPFR](http://www.mpfr.org/) to be installed in order to work satisfactory. On
 Ubuntu, these libraries can be installed the usual way by typing
-
 ```
 sudo apt-get install libgmp-dev libmpfr-dev
 ```
-
 or for Arch:
 ```
 sudo pacman -Syy gmp mpfr
 ```
-
 in a terminal window. Also, CGAL depends on [Boost](https://www.boost.org/),
 see [here](https://doc.cgal.org/latest/Manual/installation.html#title21).
 
-Additionally, you need Python 3, a modern compiler supporting C++17, and CMake.
+Additionally, you need Python 3.
 Then, to install Rasputin, change to the Rasputin root source directory and run
 ```
 pip3 install .
@@ -82,19 +99,73 @@ You can build rasputin and run tests by building the Docker image: `docker build
 To test the installation run this for example in ipython:
 
 ```
-from rasputin import triangulate_dem
+import numpy as np
+import pyproj
+from rasputin.reader import Rasterdata
+from rasputin.mesh import Mesh
 
-vs = triangulate_dem.point3_vector([[1,0,0], [0,1,0], [0,0,0], [0.25,0.25,1]])
-points, faces = triangulate_dem.lindstrom_turk_by_ratio(vs, 2.0)
-for f in faces:
-   print(f)
+def construct_rasterdata():
+    raster = np.array([0, 0, 0, 
+                       0, 1, 0, 
+                       0, 0, 0], dtype=np.float32).reshape(3,3)
+    cs = pyproj.CRS.from_epsg(32633)
+    return Rasterdata(shape=(raster.shape[1], raster.shape[0]), x_min=0, 
+                      y_max=20, delta_x=10, delta_y=10, array=raster,
+                      coordinate_system=cs.to_proj4(), info={})
+
+if __name__ == "__main__":
+    rd = construct_rasterdata()
+    mesh = Mesh.from_raster(data=rd)
+    pts = mesh.points
+    for face in mesh.faces:
+        print("Face:", *[f'{fc:2d}' for fc in face])
+        print(f"pts[{face[0]}]:", *[f'{pt:4.1f}' for pt in pts[face[0]]])
+        print(f"pts[{face[1]}]:", *[f'{pt:4.1f}' for pt in pts[face[1]]])
+        print(f"pts[{face[2]}]:", *[f'{pt:4.1f}' for pt in pts[face[2]]])
+        print()
 ```
 
 This should print out:
 ```
->> (3, 1, 2)
->> (0, 1, 3)
->> (0, 3, 2)
+Face:  0  1  2
+pts[0]: 10.0 10.0  1.0
+pts[1]: 10.0 20.0  0.0
+pts[2]:  0.0 20.0  0.0
+
+Face:  0  2  3
+pts[0]: 10.0 10.0  1.0
+pts[2]:  0.0 20.0  0.0
+pts[3]:  0.0 10.0  0.0
+
+Face:  0  4  1
+pts[0]: 10.0 10.0  1.0
+pts[4]: 20.0 10.0  0.0
+pts[1]: 10.0 20.0  0.0
+
+Face:  4  5  1
+pts[4]: 20.0 10.0  0.0
+pts[5]: 20.0 20.0  0.0
+pts[1]: 10.0 20.0  0.0
+
+Face:  3  6  0
+pts[3]:  0.0 10.0  0.0
+pts[6]: 10.0  0.0  0.0
+pts[0]: 10.0 10.0  1.0
+
+Face:  3  7  6
+pts[3]:  0.0 10.0  0.0
+pts[7]:  0.0  0.0  0.0
+pts[6]: 10.0  0.0  0.0
+
+Face:  6  8  0
+pts[6]: 10.0  0.0  0.0
+pts[8]: 20.0  0.0  0.0
+pts[0]: 10.0 10.0  1.0
+
+Face:  8  4  0
+pts[8]: 20.0  0.0  0.0
+pts[4]: 20.0 10.0  0.0
+pts[0]: 10.0 10.0  1.0
 ```
 Congratulations! You just triangulated a small mountain.
 

@@ -1,6 +1,6 @@
 from pathlib import Path
 import numpy as np
-from pyproj import Proj
+import pyproj
 from shapely.geometry import Polygon
 from rasputin.reader import GeoPolygon
 from rasputin.globcov_repository import GlobCovRepository, GeoPoints, LandCoverType
@@ -26,9 +26,9 @@ def test_extract_land_types():
     data_dir = Path(os.environ["RASPUTIN_DATA_DIR"])
 
     xy = np.array([[8, 60], [8.1, 61]], dtype='d')
-    proj = Proj(init="EPSG:4326")
-    domain = GeoPolygon(projection=proj, polygon=Polygon())
-    geo_points = GeoPoints(xy=xy, projection=proj)
+    crs = pyproj.CRS.from_string("+init=EPSG:4326")
+    domain = GeoPolygon(crs=crs, polygon=Polygon())
+    geo_points = GeoPoints(xy=xy, crs=crs)
     gcr = GlobCovRepository(path=data_dir / "globcov")
     gcr.read(land_type=LandCoverType.crop_type_2, geo_points=geo_points, domain=domain)
 
@@ -41,14 +41,13 @@ def test_construct_triangulation_with_land_types():
     dem_repo = RasterRepository(directory=data_dir / "dem_archive")
     x0 = 8.54758671814368
     y0 = 60.898468
-    input_coordinate_system = Proj(init="EPSG:4326")
-    target_coordinate_system = Proj(init="EPSG:32633")
+    input_crs = pyproj.CRS.from_string("+init=EPSG:4326")
+    target_crs = pyproj.CRS.from_epsg(32633)
     polygon = Polygon.from_bounds(xmin=x0 - 0.01,
                                   xmax=x0 + 0.01,
                                   ymin=y0 - 0.01,
                                   ymax=y0 + 0.01)
-    domain = GeoPolygon(polygon=polygon,
-                        projection=input_coordinate_system).transform(target_projection=target_coordinate_system)
+    domain = GeoPolygon(polygon=polygon, crs=input_crs).transform(target_crs=target_crs)
 
     rasterdata_list = dem_repo.read(domain=domain)
     mesh = Mesh.from_raster(data=rasterdata_list, domain=domain)
@@ -58,8 +57,7 @@ def test_construct_triangulation_with_land_types():
 
     centers = mesh.points[mesh.faces].mean(axis=1)
     land_types = lt_repo.land_cover(land_types=None,
-                                    geo_points=GeoPoints(xy=centers[:, :2],
-                                                         projection=target_coordinate_system),
+                                    geo_points=GeoPoints(xy=centers[:, :2], crs=target_crs),
                                     domain=domain)
     assert 0 not in land_types
     assert len(land_types) == len(mesh.faces)
