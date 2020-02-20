@@ -3,7 +3,7 @@ import numpy as np
 import PIL
 
 from rasputin import triangulate_dem
-from rasputin.html_writer import (write_mesh, add_slope_colors, color_field_by_avalanche_danger)
+from rasputin.writer import (write_mesh, add_slope_colors, color_field_by_avalanche_danger)
 from rasputin.reader import read_raster_file, extract_geo_keys, GeoKeysInterpreter
 from rasputin.triangulate_dem import lindstrom_turk_by_ratio
 from rasputin import avalanche

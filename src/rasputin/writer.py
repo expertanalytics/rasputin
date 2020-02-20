@@ -1,7 +1,7 @@
 from typing import List, Tuple, Dict, Any
 from pathlib import Path
 import numpy as np
-from meshio import XdmfTimeSeriesWriter, write_points_cells
+from meshio import TimeSeriesWriter, write_points_cells
 from rasputin import triangulate_dem
 
 
@@ -37,7 +37,7 @@ class Writer(object):
         self._xdmfwriter = None
 
     def __enter__(self):
-        self._xdmfwriter = XdmfTimeSeriesWriter(str(self._filepath))
+        self._xdmfwriter = TimeSeriesWriter(str(self._filepath))
         return self
 
     def __exit__(self, *args):

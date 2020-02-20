@@ -9,3 +9,7 @@ src/rasputin.egg-info
 __pycache__
 build
 dist
+.DS_Store
+lib/boo*
+lib/geometry
+lib/build_*
