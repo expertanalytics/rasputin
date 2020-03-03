@@ -194,3 +194,25 @@ def compute_shades():
             shade_writer.save(t.timestamp(), shade)
             t += dt
 
+
+def compute_avalanche_terrain():
+    return
+    logging.basicConfig(level=logging.CRITICAL, format='Rasputin[%(levelname)s]: %(message)s')
+    logger = logging.getLogger()
+    arg_parser = argparse.ArgumentParser()
+    arg_parser.add_argument("-uid", type=str, help="uid of mesh")
+    arg_parser.add_argument("-days", type=int, help="number of days to cover")
+    arg_parser.add_argument("-silent", action="store_true", help="Run in silent mode")
+    arg_parser.add_argument("avalanche_uid", type=str, help="Uid of saved avalanche forcast")
+    res = arg_parser.parse_args(sys.argv[1:])
+    if not res.silent:
+        logger.setLevel(logging.INFO)
+    if "RASPUTIN_DATA_DIR" in os.environ:
+        tin_archive = Path(os.environ["RASPUTIN_DATA_DIR"]) / "tin_archive"
+        avy_repo_archive = Path(os.environ["RASPUTIN_DATA_DIR"]) / "avalanche_archive"
+    else:
+        tin_archive = Path(".") / "tin_archive"
+        shade_repo_archive = Path(".") / "avalanche_archive"
+        logger.critical(f"WARNING: No data directory specified, assuming tin_archive {tin_archive.absolute()}")
+    tin_repo = TinRepository(path=tin_archive)
+    mesh = tin_repo.read(uid=res.uid).mesh

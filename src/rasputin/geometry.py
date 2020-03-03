@@ -225,3 +225,15 @@ class GeoPolygon:
             if cgal_polygon.num_parts() == 1:
                 cgal_polygon = cgal_polygon[0]
         return cgal_polygon
+
+    def __hash__(self) -> int:
+        return hash((self.crs, self.polygon.wkb))
+
+    def __eq__(self, other) -> bool:
+        if not isinstance(other, self.__class__):
+            return False
+        if self.crs != other.crs:
+            return False
+        if self.polygon.wkb != other.polygon.wkb:
+            return False
+        return True
