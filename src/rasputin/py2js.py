@@ -42,3 +42,28 @@ def face_and_point_vector_to_lines(*,
     else:
         yield "] )"
 
+
+
+def construct_material(spec: dict) -> str:
+    params = spec['material_params']
+    params_str = ",\n".join([ f"        {k}: {v}" for k,v in params.items()])
+    constructor = f"""function (geometry){{
+"""
+    if "texture_file_name" in spec:
+        constructor += f"""\
+    const texture_loader = new THREE.TextureLoader();
+    var texture = texture_loader.load({spec["texture_file_name"]});
+"""
+    constructor += f"""    var material = new {spec['material_type']}({{
+{params_str} 
+    }});
+"""
+    if "texture_file_name" in spec:
+        constructor += "    return [new THREE.Mesh(geometry, material), texture];"
+    else:
+        constructor += "    return [new THREE.Mesh(geometry, material), null];"
+    constructor += """
+}
+"""
+    return constructor
+

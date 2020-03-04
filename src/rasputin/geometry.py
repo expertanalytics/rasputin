@@ -103,7 +103,7 @@ class Geometry:
 
     @property
     def material(self) -> str:
-        return f"new {self._material}"
+        return self._material
 
     @material.setter
     def material(self, material: str):
@@ -136,7 +136,7 @@ class Geometry:
         file_handle.write(",\n")
 
         # write material
-        file_handle.write(f"material: {self.material}\n")
+        file_handle.write(f"material_constructor: {self.material}")
         file_handle.write("}")
         return True
 
