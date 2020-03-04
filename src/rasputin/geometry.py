@@ -32,6 +32,10 @@ class Geometry:
         self._aspects = None
         self._slopes = None
         self._colors = None
+        self._uvs = None
+        self.texture = np.empty((1024,1024))
+        self.scale_x = 1
+        self.scale_y = 1
         self._material = material or terrain_material
 
     def extract_faces(self, faces: np.ndarray) -> "Geometry":
@@ -116,11 +120,27 @@ class Geometry:
             file_handle.write(f"{line}\n")
         file_handle.write(",\n")
 
+        file_handle.write(f"uvs: ")
+        for line in face_and_point_vector_to_lines(name=None,
+                                                   face_vector=self.mesh.faces,
+                                                   point_vector=self.uvs):
+            file_handle.write(f"{line}\n")
+        file_handle.write(",\n")
+
         # write material
         file_handle.write(f"material: {self.material}\n")
         file_handle.write("}")
         return True
-
+    
+    @property
+    def uvs(self) -> np.ndarray:
+        w, h = self.texture.shape
+        x = self.points[:, 0]
+        y = self.points[:, 1]
+        
+        u = (x*self.scale_x)/float(w)
+        v = (y*self.scale_y)/float(h)
+        return np.array([u, v]).T
 
 def write_scene(*, geometries: List[Geometry], output: Path):
     if output.exists():

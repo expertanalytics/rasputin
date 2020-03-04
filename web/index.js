@@ -1,6 +1,12 @@
+import {GUI} from 'https://threejsfundamentals.org/threejs/../3rdparty/dat.gui.module.js';
 
 function init({geometries}) {
 
+    const wrapModes = {
+    'RepeatWrapping': THREE.RepeatWrapping,
+    'ClampToEdgeWrapping': THREE.ClampToEdgeWrapping,
+    'MirroredRepeatWrapping': THREE.MirroredRepeatWrapping,
+    }
     const scene = new THREE.Scene();
     scene.background = new THREE.Color( 0xdddddd );
 
@@ -15,17 +21,33 @@ function init({geometries}) {
     light2.position.set( 0, - 1, 0 );
     scene.add( light2 );
 
+    const textureLoader = new THREE.TextureLoader();
+    var texture = textureLoader.load("textures/sea.jpg");
+    texture.wrapS = THREE.RepeatWrapping;
+    texture.wrapT = THREE.RepeatWrapping;
+
     const meshes = [];
     for ( var i = 0; i < geometries.length; i ++ ) {
         const geom = new THREE.BufferGeometry();
         geom.addAttribute( 'position', new THREE.Float32BufferAttribute( geometries[i].vertices, 3) );
-        geom.addAttribute( 'normal', new THREE.Float32BufferAttribute( geometries[i].normals, 3 ) );
-        geom.addAttribute( 'color', new THREE.Float32BufferAttribute( geometries[i].colors, 3 ) );
+        geom.addAttribute( 'normal'  , new THREE.Float32BufferAttribute( geometries[i].normals, 3 ) );
+        geom.addAttribute( 'color'   , new THREE.Float32BufferAttribute( geometries[i].colors, 3 ) );
+        geom.addAttribute( 'uv'      , new THREE.Float32BufferAttribute( geometries[i].uvs, 2));
         geom.computeVertexNormals();
-        const mesh = new THREE.Mesh(geom, geometries[i].material);
+        const mesh = create_material(geom, texture)
         scene.add(mesh);
         meshes.push(mesh);
     }
+
+    const gui = new GUI({width: 280});
+    gui.add(new StringToNumberHelper(texture, 'wrapS'), 'value', wrapModes).name('Wrap Horizontal').onChange(updateTexture);
+    gui.add(new StringToNumberHelper(texture, 'wrapT'), 'value', wrapModes).name('Wrap Vertical').onChange(updateTexture);
+    gui.add(texture.repeat, 'x', 0, 5, .01).name('Repeat X');
+    gui.add(texture.repeat, 'y', 0, 5, .01).name('Repeat Y');
+    gui.add(texture.offset, 'x', -2, 2, .01).name('Offset X');
+    gui.add(texture.offset, 'y', -2, 2, .01).name('Offset Y');
+    gui.add(texture.center, 'x', -.5, 1.5, .01).name('Center X');
+    gui.add(texture.center, 'y', -.5, 1.5, .01).name('Center Y');
 
     const center = getCenterPoint(meshes);
     const {z_min, z_max} = getMinMaxZ(meshes);
@@ -47,33 +69,9 @@ function init({geometries}) {
     return state
 }
 
-function assign_uvs(geometry) {
-    geometry.computeBoundingBox();
-
-    var max = geometry.boundingBox.max,
-        min = geometry.boundingBox.min;
-    var offset = new THREE.Vector2(0 - min.x, 0 - min.y);
-    var range = new THREE.Vector2(max.x - min.x, max.y - min.y);
-    var vertices = geometry.getAttribute("position").array;
-
-    var uvs = new Float32Array(2*vertices.length);
-
-    for (var i = 0; i < vertices.count/3 ; i++) {
-
-        var v1 = new THREE.Vector2(vertices[3*i], vertices[3*i + 1]);
-        var v2 = new THREE.Vector2(vertices[3*i + 3], vertices[3*i + 4]);
-        var v3 = new THREE.Vector2(vertices[3*i + 6], vertices[3*i + 7]);
-
-        uvs[3*i    ] = (v1.x + offset.x)/range.x;
-        uvs[3*i + 1] = (v1.y + offset.y)/range.y;
-        uvs[3*i + 2] = (v2.x + offset.x)/range.x;
-        uvs[3*i + 3] = (v2.y + offset.y)/range.y;
-        uvs[3*i + 4] = (v3.x + offset.x)/range.x;
-        uvs[3*i + 5] = (v3.y + offset.y)/range.y;
-    }
-    geometry.addAttribute("uv", new THREE.BufferAttribute(uvs, 2));
-    geometry.attributes.uv.needsUpdate = true;
-    return geometry;
+function create_material(geom, texture) {
+    var geomMaterial = new THREE.MeshPhysicalMaterial({map: texture, bumpMap: texture, vertexColors: THREE.FaceColors});
+    return new THREE.Mesh(geom, geomMaterial);
 }
 
 function animate() {
@@ -81,7 +79,7 @@ function animate() {
     requestAnimationFrame( animate );
 
     controls.update();
-	renderer.render( scene, camera );
+    renderer.render( scene, camera );
 }
 
 function getCenterPoint(meshes) {
@@ -118,6 +116,22 @@ function getMinMaxZ(meshes) {
     return {z_min, z_max};
 }
 
+function updateTexture() {
+    texture.needsUpdate = true;
+}
+
+class StringToNumberHelper {
+    constructor(obj, prop) {
+        this.obj = obj;
+        this.prop = prop;
+    }
+    get value() {
+        return this.obj[this.prop];
+    }
+    set value(v) {
+        this.obj[this.prop] = parseFloat(v);
+    }
+}
 
 function onWindowResize({renderer, camera}) {
     camera.aspect = window.innerWidth / window.innerHeight;
