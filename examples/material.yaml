@@ -1,7 +1,7 @@
 ---
 - land_type_ids: [511, 512, 521, 522, 523]
   material_type: THREE.MeshPhysicalMaterial
-  texture_file_name: water.jpg
+  texture_file_name: textures/water.jpg
   material_params:
         metalness: 0.0
         roughness: 0.5
@@ -12,7 +12,7 @@
         bumpMap: texture
 - land_type_ids: [311, 312, 313]
   material_type: THREE.MeshPhysicalMaterial
-  texture_file_name: forest.jpg
+  texture_file_name: textures/pine_forest.jpg
   material_params:
         metalness: 0.0
         roughness: 0.5
