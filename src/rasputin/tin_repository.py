@@ -53,7 +53,7 @@ class TinRepository:
                 info["info"] = dict()
                 info["info"]["land_cover_type"] = info_grp.attrs["land_cover_type"]
                 land_covers = info_grp["land_covers"][:]
-                info["info"]["land_covers"] = [(v, n.decode("utf-8")) for (v, n) in land_covers]
+                info["info"]["land_covers"] = [(v, n.decode("utf-8"), r, g, b) for (v, n, r, g, b) in land_covers]
             return info
 
     def read(self, *, uid: str) -> Geometry:
@@ -73,7 +73,7 @@ class TinRepository:
                 geometry.colors = tin_group["face_fields"]["cover_color"][:]
             return geometry
 
-    def extract(self, * uid: str, face_id: int) -> Geometry:
+    def extract(self, *, uid: str, face_id: int) -> Geometry:
         filename = self.path / f"{uid}.h5"
         if not filename.exists():
             raise FileNotFoundError(f"File {filename.absolute()} not found.")
@@ -179,7 +179,7 @@ class TinRepository:
                         # Filter land cover fields by the ones found in dataset
                         if field_name == "cover_type":
                             used_fields = set(field)
-                            land_covers = [(v, n) for (v, n) in land_covers if v in used_fields]
+                            land_covers = [(v, n, *land_cover_repository.land_cover_meta_info_type.color(land_cover_type=land_cover_repository.land_cover_type(v))) for (v, n) in land_covers if v in used_fields]
                         atype = "Vector" if len(field.shape) == 2 and field.shape[1] == 3 else "Scalar"
                         dtype = "Int" if np.issubdtype(field.dtype, np.integer) else "Float"
                         precision = "4" if dtype == "Int" else "8"
@@ -197,7 +197,11 @@ class TinRepository:
                                                     Dimensions=dims)
                         attr_elm.text = f"{h5_base}:/{tin_grp_name}/face_fields/{field_name}"
                 info_grp.create_dataset(name="land_covers",
-                                        data=np.array(land_covers, dtype=[("value", "i4"), ("name", "S100")]))
+                                        data=np.array(land_covers, dtype=[("value", "i4"),
+                                                                          ("name", "S100"),
+                                                                          ("red", "i4"),
+                                                                          ("green", "i4"),
+                                                                          ("blue", "i4")]))
         _indent(domain, level=1)
         tree.write(str(xdmf_filename), pretty_print=True, encoding="utf-8")
 
