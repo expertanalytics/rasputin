@@ -21,10 +21,10 @@ function init({geometries}) {
     light2.position.set( 0, - 1, 0 );
     scene.add( light2 );
 
-    const textureLoader = new THREE.TextureLoader();
-    var texture = textureLoader.load("textures/sea.jpg");
-    texture.wrapS = THREE.RepeatWrapping;
-    texture.wrapT = THREE.RepeatWrapping;
+    //const textureLoader = new THREE.TextureLoader();
+    //var texture = textureLoader.load("textures/sea.jpg");
+    //texture.wrapS = THREE.RepeatWrapping;
+    //texture.wrapT = THREE.RepeatWrapping;
 
     const meshes = [];
     for ( var i = 0; i < geometries.length; i ++ ) {
@@ -39,15 +39,15 @@ function init({geometries}) {
         meshes.push(result[0]);
     }
 
-    const gui = new GUI({width: 280});
-    gui.add(new StringToNumberHelper(texture, 'wrapS'), 'value', wrapModes).name('Wrap Horizontal').onChange(updateTexture);
-    gui.add(new StringToNumberHelper(texture, 'wrapT'), 'value', wrapModes).name('Wrap Vertical').onChange(updateTexture);
-    gui.add(texture.repeat, 'x', 0, 5, .01).name('Repeat X');
-    gui.add(texture.repeat, 'y', 0, 5, .01).name('Repeat Y');
-    gui.add(texture.offset, 'x', -2, 2, .01).name('Offset X');
-    gui.add(texture.offset, 'y', -2, 2, .01).name('Offset Y');
-    gui.add(texture.center, 'x', -.5, 1.5, .01).name('Center X');
-    gui.add(texture.center, 'y', -.5, 1.5, .01).name('Center Y');
+    //const gui = new GUI({width: 280});
+    //gui.add(new StringToNumberHelper(texture, 'wrapS'), 'value', wrapModes).name('Wrap Horizontal').onChange(updateTexture);
+    //gui.add(new StringToNumberHelper(texture, 'wrapT'), 'value', wrapModes).name('Wrap Vertical').onChange(updateTexture);
+    //gui.add(texture.repeat, 'x', 0, 5, .01).name('Repeat X');
+    //gui.add(texture.repeat, 'y', 0, 5, .01).name('Repeat Y');
+    //gui.add(texture.offset, 'x', -2, 2, .01).name('Offset X');
+    //gui.add(texture.offset, 'y', -2, 2, .01).name('Offset Y');
+    //gui.add(texture.center, 'x', -.5, 1.5, .01).name('Center X');
+    //gui.add(texture.center, 'y', -.5, 1.5, .01).name('Center Y');
 
     const center = getCenterPoint(meshes);
     const {z_min, z_max} = getMinMaxZ(meshes);
