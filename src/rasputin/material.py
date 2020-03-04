@@ -1,5 +1,5 @@
 lake_material = """\
-function create_material(geometry){
+function (geometry){
     var material = new THREE.MeshPhongMaterial( {
         specular: 0xffffff,
         shininess: 25,
@@ -11,7 +11,7 @@ function create_material(geometry){
 """
 
 avalanche_material = """\
-function create_material(geometry){
+function (geometry){
     var material = new THREE.MeshPhongMaterial( {
         specular: 0xffffff,
         shininess: 75,
@@ -23,7 +23,7 @@ function create_material(geometry){
 """
 
 terrain_material = """\
-function create_material(geometry){
+function (geometry){
     var material = new THREE.MeshPhysicalMaterial({
         metalness: 0.0, 
         roughness: 0.5, 
