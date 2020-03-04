@@ -13,7 +13,7 @@ from rasputin.material import lake_material, terrain_material
 class LandCoverType(LandCoverBaseType):
     # Artificial
     urban_fabric_cont = 111
-    urban_fabrid_discont = 112
+    urban_fabric_discont = 112
     industrial_unit = 121
     road_and_rail = 122
     port = 123

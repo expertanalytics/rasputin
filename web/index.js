@@ -22,9 +22,9 @@ function init({geometries}) {
         geom.addAttribute( 'normal', new THREE.Float32BufferAttribute( geometries[i].normals, 3 ) );
         geom.addAttribute( 'color', new THREE.Float32BufferAttribute( geometries[i].colors, 3 ) );
         geom.computeVertexNormals();
-        const mesh = new THREE.Mesh(geom, geometries[i].material);
-        scene.add(mesh);
-        meshes.push(mesh);
+        const result = geometries[i].material_constructor(geom);
+        scene.add(result[0]);
+        meshes.push(result[0]);
     }
 
     const center = getCenterPoint(meshes);
