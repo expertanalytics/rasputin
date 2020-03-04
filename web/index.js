@@ -34,9 +34,9 @@ function init({geometries}) {
         geom.addAttribute( 'color'   , new THREE.Float32BufferAttribute( geometries[i].colors, 3 ) );
         geom.addAttribute( 'uv'      , new THREE.Float32BufferAttribute( geometries[i].uvs, 2));
         geom.computeVertexNormals();
-        const mesh = create_material(geom, texture)
-        scene.add(mesh);
-        meshes.push(mesh);
+        const result = geometries[i].material_constructor(geom);
+        scene.add(result[0]);
+        meshes.push(result[0]);
     }
 
     const gui = new GUI({width: 280});

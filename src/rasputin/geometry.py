@@ -44,6 +44,21 @@ class Geometry:
                               base_color=self.base_color,
                               material=self.material)
 
+    def split_by_colors(self) -> List["Geometry"]:
+        print(len(self.colors))
+        print(len(self._colors))
+        print(len(self.faces))
+        sub_geometries = []
+        if self._colors is None:
+            raise RuntimeError("No colors to split by")
+        for color in set([tuple(c) for c in self._colors]):
+            color = np.array(color)
+            sub_geom = self.extract_faces(faces=self.faces[np.all(self._colors==color, axis=1)])
+            sub_geom.base_color = color
+            sub_geometries.append(sub_geom)
+        return sub_geometries
+
+
     @property
     def points(self) -> np.ndarray:
         return self.mesh.points
@@ -75,7 +90,7 @@ class Geometry:
     @property
     def colors(self) -> np.ndarray:
         if self._colors is None:
-            self._colors = np.empty((3*len(self.mesh.faces), len(self.base_color)))
+            self._colors = np.empty((len(self.mesh.faces), len(self.base_color)))
             self._colors[:, 0] = self.base_color[0]
             self._colors[:, 1] = self.base_color[1]
             self._colors[:, 2] = self.base_color[2]
@@ -84,11 +99,15 @@ class Geometry:
     @colors.setter
     def colors(self, colors: np.ndarray) -> None:
         assert colors.shape == (len(self.mesh.faces), 3)
-        self._colors = face_field_to_vertex_values(face_field=colors, faces=self.faces)
+        self._colors = colors
+
+    @property
+    def color_lines(self):
+        return face_field_to_vertex_values(face_field=self.colors, faces=self.faces)
 
     @property
     def material(self) -> str:
-        return f"new {self._material}"
+        return self._material
 
     @material.setter
     def material(self, material: str):
@@ -116,7 +135,7 @@ class Geometry:
 
         # write colors
         file_handle.write("colors: ")
-        for line in point_vector_to_lines(name=None, point_vector=self.colors):
+        for line in point_vector_to_lines(name=None, point_vector=self.color_lines):
             file_handle.write(f"{line}\n")
         file_handle.write(",\n")
 
@@ -128,7 +147,7 @@ class Geometry:
         file_handle.write(",\n")
 
         # write material
-        file_handle.write(f"material: {self.material}\n")
+        file_handle.write(f"material_constructor: {self.material}")
         file_handle.write("}")
         return True
     

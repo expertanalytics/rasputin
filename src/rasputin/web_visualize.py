@@ -5,6 +5,7 @@ import numpy as np
 import pyproj
 import argparse
 import logging
+import yaml
 
 from rasputin.tin_repository import TinRepository
 from rasputin import triangulate_dem
@@ -13,6 +14,7 @@ from rasputin.geometry import Geometry, write_scene
 from rasputin.material import avalanche_material, lake_material, terrain_material
 from rasputin import avalanche
 from rasputin.avalanche import varsom_angles
+from rasputin.py2js import construct_material
 
 
 def depr_web_visualize():
@@ -143,6 +145,7 @@ def visualize_tin():
     arg_parser = argparse.ArgumentParser()
     arg_parser.add_argument("uid", type=str, help="Tin repository uid for mesh to visualize.")
     arg_parser.add_argument("-output", type=str, default="web_viz", help="Directory for web content.")
+    arg_parser.add_argument("-material", type=str, default="", help="Optional texture/material spec in yaml")
     arg_parser.add_argument("-silent", action="store_true", help="Run in silent mode")
     res = arg_parser.parse_args(sys.argv[1:])
     if not res.silent:
@@ -153,10 +156,25 @@ def visualize_tin():
         tin_archive = Path(".") / "tin_archive"
         print(f"WARNING: No data directory specified, assuming tin_archive {tin_archive.absolute()}")
     tin_repo = TinRepository(path=tin_archive)
-    geometry = tin_repo.read(uid=res.uid)
-    geometry.material = terrain_material
+    info = tin_repo.info(uid=res.uid)
+
+    material_by_id = {}
+    if res.material:
+        materials = yaml.load(open(res.material))
+        for material in materials:
+            material_ids = material.pop("land_type_ids")
+            for material_id in material_ids:
+                material_by_id[material_id] = material
+
+    geometries = []
+    for land_cover in info["info"]["land_covers"]:
+        id = land_cover[0]
+        geometry = tin_repo.extract(uid=res.uid, face_id=id)
+        if id in material_by_id:
+            geometry.material = construct_material(material_by_id[id])
+        geometries.append(geometry)
     output = Path(res.output).absolute()
-    write_scene(geometries=[geometry], output=output)
+    write_scene(geometries=geometries, output=output)
     print(f"""Successfully generated a web_gl based TIN visualizer in {output}.
 To see it, please run:
 cd {output}
