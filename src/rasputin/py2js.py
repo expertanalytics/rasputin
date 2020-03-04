@@ -52,7 +52,7 @@ def construct_material(spec: dict) -> str:
     if "texture_file_name" in spec:
         constructor += f"""\
     const texture_loader = new THREE.TextureLoader();
-    var texture = texture_loader.load({spec["texture_file_name"]});
+    var texture = texture_loader.load("{spec["texture_file_name"]}");
 """
     constructor += f"""    var material = new {spec['material_type']}({{
 {params_str} 
