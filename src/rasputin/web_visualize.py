@@ -7,6 +7,7 @@ import argparse
 import logging
 import yaml
 
+from rasputin import rasputin_data_dir
 from rasputin.tin_repository import TinRepository
 from rasputin import triangulate_dem
 from rasputin.reader import RasterRepository
@@ -30,12 +31,7 @@ def depr_web_visualize():
      * Use more of the information from varsom.no (and perhaps alpha blending) to better display avalanche dangers
 
     """
-    if "RASPUTIN_DATA_DIR" in os.environ:
-        data_dir = Path(os.environ["RASPUTIN_DATA_DIR"]) / "dem_archive"
-    else:
-        #  data_dir = Path(os.environ["HOME"]) /"projects" / "rasputin_data" / "dem_archive"
-        data_dir = Path(".") / "dem_archive"
-        print(f"WARNING: No raster archive directory specified, assuming {data_dir.absolute()}")
+    data_dir = rasputin_data_dir / "dem_archive"
     files = data_dir.glob("*.tif")
     if not files:
         raise RuntimeError(f"No GeoTIFF files found in {data_dir.absolute()}, giving up.")
@@ -150,11 +146,8 @@ def visualize_tin():
     res = arg_parser.parse_args(sys.argv[1:])
     if not res.silent:
         logger.setLevel(logging.INFO)
-    if "RASPUTIN_DATA_DIR" in os.environ:
-        tin_archive = Path(os.environ["RASPUTIN_DATA_DIR"]) / "tin_archive"
-    else:
-        tin_archive = Path(".") / "tin_archive"
-        print(f"WARNING: No data directory specified, assuming tin_archive {tin_archive.absolute()}")
+
+    tin_archive = rasputin_data_dir / "tin_archive"
     tin_repo = TinRepository(path=tin_archive)
     info = tin_repo.info(uid=res.uid)
 
