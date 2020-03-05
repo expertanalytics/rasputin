@@ -1,6 +1,7 @@
 cmake-*
 .idea
 .env
+*.swp
 lib/CGAL*
 lib/pybind11
 lib/armadillo*

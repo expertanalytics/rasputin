@@ -35,9 +35,6 @@ class Geometry:
         self._slopes = None
         self._colors = None
         self._uvs = None
-        self.texture = np.empty((1024,1024))
-        self.scale_x = 1
-        self.scale_y = 1
         self.material_spec = material_spec or terrain_material
 
     def extract_faces(self, faces: np.ndarray) -> "Geometry":
