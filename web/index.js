@@ -32,7 +32,9 @@ function init({geometries}) {
         geom.addAttribute( 'position', new THREE.Float32BufferAttribute( geometries[i].vertices, 3) );
         geom.addAttribute( 'normal'  , new THREE.Float32BufferAttribute( geometries[i].normals, 3 ) );
         geom.addAttribute( 'color'   , new THREE.Float32BufferAttribute( geometries[i].colors, 3 ) );
-        geom.addAttribute( 'uv'      , new THREE.Float32BufferAttribute( geometries[i].uvs, 2));
+        if (geometries[i].uvs != null) {
+            geom.addAttribute( 'uv'      , new THREE.Float32BufferAttribute( geometries[i].uvs, 2));
+        }
         geom.computeVertexNormals();
         const result = geometries[i].material_constructor(geom);
         scene.add(result[0]);
