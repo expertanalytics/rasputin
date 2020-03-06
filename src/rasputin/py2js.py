@@ -53,6 +53,8 @@ def construct_material(spec: dict) -> str:
         constructor += f"""\
     const texture_loader = new THREE.TextureLoader();
     var texture = texture_loader.load("{spec["texture_file_name"]}");
+    texture.wrapS = THREE.RepeatWrapping;
+    texture.wrapT = THREE.RepeatWrapping;
 """
     constructor += f"""    var material = new {spec['material_type']}({{
 {params_str} 

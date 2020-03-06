@@ -1,3 +1,4 @@
+import {GUI} from 'https://threejsfundamentals.org/threejs/../3rdparty/dat.gui.module.js';
 
 function init({geometries}) {
 
@@ -15,17 +16,39 @@ function init({geometries}) {
     light2.position.set( 0, - 1, 0 );
     scene.add( light2 );
 
+    const textures = [];
     const meshes = [];
+    let inder = {
+        index: 0
+    };
     for ( var i = 0; i < geometries.length; i ++ ) {
         const geom = new THREE.BufferGeometry();
         geom.addAttribute( 'position', new THREE.Float32BufferAttribute( geometries[i].vertices, 3) );
-        geom.addAttribute( 'normal', new THREE.Float32BufferAttribute( geometries[i].normals, 3 ) );
-        geom.addAttribute( 'color', new THREE.Float32BufferAttribute( geometries[i].colors, 3 ) );
+        geom.addAttribute( 'normal'  , new THREE.Float32BufferAttribute( geometries[i].normals, 3 ) );
+        // TODO: Add if test checking if alpha in colors
+        geom.addAttribute( 'color'   , new THREE.Float32BufferAttribute( geometries[i].colors, 3 ) );
+        if (geometries[i].uvs != null) {
+            geom.addAttribute( 'uv'      , new THREE.Float32BufferAttribute( geometries[i].uvs, 2));
+        }
         geom.computeVertexNormals();
         const result = geometries[i].material_constructor(geom);
         scene.add(result[0]);
         meshes.push(result[0]);
+        if (result[1] != null){
+            textures.push(result[1]);
+        }
     }
+
+    const ind = {};
+
+    for (var x in [...Array(textures.length).keys()]) {
+        ind[textures[x].name] = x;
+    }
+
+    const gui = new GUI({width: 280});
+    const texture_folder = gui.addFolder("Textures");
+    texture_folder.add(inder, 'index', ind).onChange(function(value){updateTexture(texture_folder, textures[value])});
+    updateTexture(texture_folder, textures[0], true);
 
     const center = getCenterPoint(meshes);
     const {z_min, z_max} = getMinMaxZ(meshes);
@@ -43,37 +66,19 @@ function init({geometries}) {
     controls.dampingFactor = 0.25;
     controls.target.set(center.x, center.y, z_min);
 
-    const state = { meshes, scene, camera, renderer, controls };
+    const state = { meshes, scene, camera, renderer, controls};
     return state
 }
 
-function assign_uvs(geometry) {
-    geometry.computeBoundingBox();
-
-    var max = geometry.boundingBox.max,
-        min = geometry.boundingBox.min;
-    var offset = new THREE.Vector2(0 - min.x, 0 - min.y);
-    var range = new THREE.Vector2(max.x - min.x, max.y - min.y);
-    var vertices = geometry.getAttribute("position").array;
-
-    var uvs = new Float32Array(2*vertices.length);
-
-    for (var i = 0; i < vertices.count/3 ; i++) {
-
-        var v1 = new THREE.Vector2(vertices[3*i], vertices[3*i + 1]);
-        var v2 = new THREE.Vector2(vertices[3*i + 3], vertices[3*i + 4]);
-        var v3 = new THREE.Vector2(vertices[3*i + 6], vertices[3*i + 7]);
-
-        uvs[3*i    ] = (v1.x + offset.x)/range.x;
-        uvs[3*i + 1] = (v1.y + offset.y)/range.y;
-        uvs[3*i + 2] = (v2.x + offset.x)/range.x;
-        uvs[3*i + 3] = (v2.y + offset.y)/range.y;
-        uvs[3*i + 4] = (v3.x + offset.x)/range.x;
-        uvs[3*i + 5] = (v3.y + offset.y)/range.y;
+function updateTexture(gui, value, init=false) {
+    if (!init){
+        const controllers = gui.__controllers.filter(c => c.constructor.name !=='OptionController')
+        controllers.forEach(c => c.remove())
     }
-    geometry.addAttribute("uv", new THREE.BufferAttribute(uvs, 2));
-    geometry.attributes.uv.needsUpdate = true;
-    return geometry;
+    var repeat_x = gui.add(value.repeat, 'x', 0, 5, .01).name('Repeat X');
+    var repeat_y = gui.add(value.repeat, 'y', 0, 5, .01).name('Repeat Y');
+    var offset_x = gui.add(value.offset, 'x', -2, 2, .01).name('Offset X');
+    var offset_y = gui.add(value.offset, 'y', -2, 2, .01).name('Offset Y');
 }
 
 function animate() {
@@ -81,7 +86,7 @@ function animate() {
     requestAnimationFrame( animate );
 
     controls.update();
-	renderer.render( scene, camera );
+    renderer.render( scene, camera );
 }
 
 function getCenterPoint(meshes) {
@@ -117,7 +122,6 @@ function getMinMaxZ(meshes) {
     }
     return {z_min, z_max};
 }
-
 
 function onWindowResize({renderer, camera}) {
     camera.aspect = window.innerWidth / window.innerHeight;
