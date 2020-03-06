@@ -1,17 +1,19 @@
-from typing import Tuple, List, Optional, Union
+from typing import Tuple, List, Optional, Union, Dict, Any
 import io
 import shutil
 from shapely import ops, wkt, wkb
 from pathlib import Path
+from PIL import Image
 from dataclasses import dataclass
 from shapely import geometry
 import numpy as np
 from pkg_resources import resource_filename
 import pyproj
+from rasputin import rasputin_data_dir
 from rasputin import triangulate_dem as td
-from rasputin.py2js import point_vector_to_lines, face_and_point_vector_to_lines
+from rasputin.py2js import point_vector_to_lines, face_and_point_vector_to_lines, construct_material
 from rasputin.mesh_utils import vertex_field_to_vertex_values, face_field_to_vertex_values
-from rasputin.material import terrain_material
+from rasputin.material_specification import terrain_material
 
 
 class Geometry:
@@ -20,7 +22,7 @@ class Geometry:
                  mesh: "Mesh",
                  crs: pyproj.CRS,
                  base_color: Optional[Tuple[float, float, float]] = None,
-                 material: Optional[str] = None):
+                 material_spec: Optional[Dict[str, Any]] = None):
         self.mesh = mesh
         self.crs = crs
         if base_color is None:
@@ -33,10 +35,7 @@ class Geometry:
         self._slopes = None
         self._colors = None
         self._uvs = None
-        self.texture = np.empty((1024,1024))
-        self.scale_x = 1
-        self.scale_y = 1
-        self._material = material or terrain_material
+        self.material_spec = material_spec or terrain_material
 
     def extract_faces(self, faces: np.ndarray) -> "Geometry":
         return self.__class__(mesh=self.mesh.copy(),
@@ -107,11 +106,11 @@ class Geometry:
 
     @property
     def material(self) -> str:
-        return self._material
+        return construct_material(self.material_spec)
 
     @material.setter
-    def material(self, material: str):
-        self._material = material
+    def material(self, material: Dict[str, Any]):
+        self.material_spec = material
 
     def as_javascript(self, *, file_handle: io.TextIOWrapper) -> True:
         if not len(self.faces):
@@ -140,10 +139,14 @@ class Geometry:
         file_handle.write(",\n")
 
         file_handle.write(f"uvs: ")
-        for line in face_and_point_vector_to_lines(name=None,
-                                                   face_vector=self.mesh.faces,
-                                                   point_vector=self.uvs):
-            file_handle.write(f"{line}\n")
+        uvs = self.uvs
+        if uvs.size > 0:
+            for line in face_and_point_vector_to_lines(name=None,
+                                                       face_vector=self.mesh.faces,
+                                                       point_vector=self.uvs):
+                file_handle.write(f"{line}\n")
+        else:
+            file_handle.write("null")
         file_handle.write(",\n")
 
         # write material
@@ -153,12 +156,18 @@ class Geometry:
     
     @property
     def uvs(self) -> np.ndarray:
-        w, h = self.texture.shape
+        if "texture_file_name" not in self.material_spec:
+            return np.empty((0, 2))
+        img = Image.open(rasputin_data_dir / self.material_spec["texture_file_name"])
+        w, h = img.size 
         x = self.points[:, 0]
         y = self.points[:, 1]
+
+        scale_x = self.material_spec.get("default_x_scale", 1.0)
+        scale_y = self.material_spec.get("default_y_scale", 1.0)
         
-        u = (x*self.scale_x)/float(w)
-        v = (y*self.scale_y)/float(h)
+        u = x*scale_x/w
+        v = y*scale_y/h
         return np.array([u, v]).T
 
 def write_scene(*, geometries: List[Geometry], output: Path):
@@ -172,6 +181,12 @@ def write_scene(*, geometries: List[Geometry], output: Path):
         for geometry in geometries:
             if geometry.as_javascript(file_handle=tf):
                 tf.write(",\n")
+                if "texture_file_name" in geometry.material_spec:
+                    (output / "textures").mkdir(exist_ok=True)
+                    shutil.copy(
+                            rasputin_data_dir / geometry.material_spec["texture_file_name"],
+                            output / "textures"
+                            )
         tf.write("];\n")
         tf.write("const data = {geometries};\n")
 
