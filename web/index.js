@@ -1,5 +1,3 @@
-import {GUI} from 'https://threejsfundamentals.org/threejs/../3rdparty/dat.gui.module.js';
-
 function init({geometries}) {
 
     const scene = new THREE.Scene();
@@ -12,7 +10,8 @@ function init({geometries}) {
     light1.position.set( 1, 1, 1 );
     scene.add( light1 );
 
-    const light2 = new THREE.DirectionalLight( 0xffffff, 1 );
+    const light2 = new THREE.Directional
+    ight( 0xffffff, 1 );
     light2.position.set( 0, - 1, 0 );
     scene.add( light2 );
 
@@ -23,13 +22,11 @@ function init({geometries}) {
     };
     for ( var i = 0; i < geometries.length; i ++ ) {
         const geom = new THREE.BufferGeometry();
-        geom.addAttribute( 'position', new THREE.Float32BufferAttribute( geometries[i].vertices, 3) );
-        geom.addAttribute( 'normal'  , new THREE.Float32BufferAttribute( geometries[i].normals, 3 ) );
+        geom.setAttribute( 'position', new THREE.Float32BufferAttribute( geometries[i].vertices, 3) );
+        geom.setAttribute( 'normal'  , new THREE.Float32BufferAttribute( geometries[i].normals, 3 ) );
         // TODO: Add if test checking if alpha in colors
-        geom.addAttribute( 'color'   , new THREE.Float32BufferAttribute( geometries[i].colors, 3 ) );
-        if (geometries[i].uvs != null) {
-            geom.addAttribute( 'uv'      , new THREE.Float32BufferAttribute( geometries[i].uvs, 2));
-        }
+        geom.setAttribute( 'color'   , new THREE.Float32BufferAttribute( geometries[i].colors, 3 ) );
+        geom.setAttribute( 'uv'      , new THREE.Float32BufferAttribute( geometries[i].uvs, 2));
         geom.computeVertexNormals();
         const result = geometries[i].material_constructor(geom);
         scene.add(result[0]);
@@ -45,7 +42,7 @@ function init({geometries}) {
         ind[textures[x].name] = x;
     }
 
-    const gui = new GUI({width: 280});
+    const gui = new dat.GUI({width: 280});
     const texture_folder = gui.addFolder("Textures");
     texture_folder.add(inder, 'index', ind).onChange(function(value){updateTexture(texture_folder, textures[value])});
     updateTexture(texture_folder, textures[0], true);
