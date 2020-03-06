@@ -10,8 +10,7 @@ function init({geometries}) {
     light1.position.set( 1, 1, 1 );
     scene.add( light1 );
 
-    const light2 = new THREE.Directional
-    ight( 0xffffff, 1 );
+    const light2 = new THREE.DirectionalLight( 0xffffff, 1 );
     light2.position.set( 0, - 1, 0 );
     scene.add( light2 );
 
