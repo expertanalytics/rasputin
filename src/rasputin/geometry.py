@@ -108,10 +108,6 @@ class Geometry:
     def material(self) -> str:
         return construct_material(self.material_spec)
 
-    @material.setter
-    def material(self, material: Dict[str, Any]):
-        self.material_spec = material
-
     def as_javascript(self, *, file_handle: io.TextIOWrapper) -> True:
         if not len(self.faces):
             return False
