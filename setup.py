@@ -90,8 +90,8 @@ setup(
     # tell setuptools that all packages will be under the 'src' directory
     # and nowhere else
     package_dir={'':'src'},
-    data_files=[("rasputin/web", ["web/index.js", "web/index.html", "web/data.js"]),
-                ("rasputin/web/js", ["web/js/three.js"]),
+    data_files=[("rasputin/web", ["web/index.js", "web/index.html", "web/data.js", "web/favicon.ico"]),
+                ("rasputin/web/js", ["web/js/three.min.js", "web/js/dat.min.js"]),
                 ("rasputin/web/js/controls", ["web/js/controls/OrbitControls.js", "web/js/controls/PointerLockControls.js"])],
     # add an extension module named 'python_cpp_example' to the package 
     # 'python_cpp_example'

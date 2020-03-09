@@ -28,7 +28,7 @@ terrain_material = {
         "metalness": 0.0, 
         "roughness": 0.5, 
         "reflectivity": 0.5,
-        "clearCoat": 0.0, 
+        "clearcoat": 0.0, 
         "vertexColors": "THREE.FaceColors",
         }
     }
