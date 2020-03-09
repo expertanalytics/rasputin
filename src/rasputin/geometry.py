@@ -108,10 +108,6 @@ class Geometry:
     def material(self) -> str:
         return construct_material(self.material_spec)
 
-    @material.setter
-    def material(self, material: Dict[str, Any]):
-        self.material_spec = material
-
     def as_javascript(self, *, file_handle: io.TextIOWrapper) -> True:
         if not len(self.faces):
             return False
@@ -153,7 +149,7 @@ class Geometry:
         file_handle.write(f"material_constructor: {self.material}")
         file_handle.write("}")
         return True
-
+    
     @property
     def uvs(self) -> np.ndarray:
         if "texture_file_name" not in self.material_spec:
@@ -165,7 +161,7 @@ class Geometry:
 
         scale_x = self.material_spec.get("default_x_scale", 1.0)
         scale_y = self.material_spec.get("default_y_scale", 1.0)
-
+        
         u = x*scale_x/w
         v = y*scale_y/h
         return np.array([u, v]).T
