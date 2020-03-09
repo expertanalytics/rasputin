@@ -37,13 +37,13 @@ function init({geometries}) {
 
     const ind = {};
 
-    for (var x in [...Array(textures.length).keys()]) {
+    for (var x in [...Array(textures.length).keys()]){
         ind[textures[x].name] = x;
     }
 
     const gui = new dat.GUI({width: 280});
     const texture_folder = gui.addFolder("Textures");
-    texture_folder.add(inder, 'index', ind).onChange(function(value){updateTexture(texture_folder, textures[value])});
+    texture_folder.add(inder, 'index', ind).name("Land Covers").onChange(function(value){updateTexture(texture_folder, textures[value])});
     updateTexture(texture_folder, textures[0], true);
 
     const center = getCenterPoint(meshes);
@@ -68,8 +68,8 @@ function init({geometries}) {
 
 function updateTexture(gui, value, init=false) {
     if (!init){
-        const controllers = gui.__controllers.filter(c => c.constructor.name !=='OptionController')
-        controllers.forEach(c => c.remove())
+        const [first, ...rest] = gui.__controllers
+        rest.forEach(c => c.remove())
     }
     var repeat_x = gui.add(value.repeat, 'x', 0, 5, .01).name('Repeat X');
     var repeat_y = gui.add(value.repeat, 'y', 0, 5, .01).name('Repeat Y');
