@@ -150,6 +150,7 @@ def visualize_tin():
     tin_archive = rasputin_data_dir / "tin_archive"
     tin_repo = TinRepository(path=tin_archive)
     info = tin_repo.info(uid=res.uid)
+    land_cover_names = {k: v for (k, v, *rest) in info["info"]["land_covers"]}
 
     material_by_id = {}
     if res.material:
@@ -157,7 +158,11 @@ def visualize_tin():
         for material in materials:
             material_ids = material.pop("land_type_ids")
             for material_id in material_ids:
+                if material_id not in land_cover_names:
+                    continue
                 material_by_id[material_id] = material
+                material_by_id[material_id]["material_id"] = material_id
+                material_by_id[material_id]["material_name"] = land_cover_names[material_id]
 
     geometries = []
     for land_cover in info["info"]["land_covers"]:
