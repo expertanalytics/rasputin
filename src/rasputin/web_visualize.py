@@ -165,7 +165,7 @@ def visualize_tin():
         geometry = tin_repo.extract(uid=res.uid, face_id=id)
         if id in material_by_id:
             geometry.material_spec = material_by_id[id]
-        geometry.material_spec["land_cover"] = land_cover[1].replace('_', ' ')
+        geometry.material_spec["land_cover"] = str(id) + ': ' + land_cover[1].replace('_', ' ')
         geometries.append(geometry)
     output = Path(res.output).absolute()
     write_scene(geometries=geometries, output=output)
