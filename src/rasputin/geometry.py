@@ -153,7 +153,7 @@ class Geometry:
         file_handle.write(f"material_constructor: {self.material}")
         file_handle.write("}")
         return True
-    
+
     @property
     def uvs(self) -> np.ndarray:
         if "texture_file_name" not in self.material_spec:
@@ -165,7 +165,7 @@ class Geometry:
 
         scale_x = self.material_spec.get("default_x_scale", 1.0)
         scale_y = self.material_spec.get("default_y_scale", 1.0)
-        
+
         u = x*scale_x/w
         v = y*scale_y/h
         return np.array([u, v]).T
