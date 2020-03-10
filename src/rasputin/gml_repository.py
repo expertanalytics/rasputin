@@ -1,4 +1,4 @@
-from typing import Dict, List, Tuple, Optional
+from typing import Dict, List, Tuple, Optional, Any
 from pathlib import Path
 from lxml import etree
 import numpy as np
@@ -7,13 +7,13 @@ from pyproj import CRS
 from shapely.geometry import Polygon, Point
 from rasputin.geometry import GeoPoints, GeoPolygon
 from rasputin.land_cover_repository import LandCoverBaseType, LandCoverRepository, LandCoverMetaInfoBase
-from rasputin.material import lake_material, terrain_material
+from rasputin.material_specification import lake_material, terrain_material
 
 
 class LandCoverType(LandCoverBaseType):
     # Artificial
     urban_fabric_cont = 111
-    urban_fabrid_discont = 112
+    urban_fabric_discont = 112
     industrial_unit = 121
     road_and_rail = 122
     port = 123
@@ -121,7 +121,7 @@ class LandCoverMetaInfo(LandCoverMetaInfoBase):
         return ""
 
     @classmethod
-    def material(cls, *, land_cover_type=LandCoverType) -> str:
+    def material(cls, *, land_cover_type=LandCoverType) -> Dict[str, Any]:
         if land_cover_type.value > 500:
             return lake_material
         return terrain_material

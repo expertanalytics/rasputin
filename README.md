@@ -3,8 +3,8 @@
 Rasputin can convert a point set of `(x, y, z)` coordinates to a triangulated
 irregular network. Specifically, it has been developed to convert raster dems
 (digital elevation models) into simplified triangulated surface meshes. The
-`rasputin_triangulate` program can read `GeoTIFF` files and construct surface
-meshes in various formats.
+`rasputin_store` program can read `GeoTIFF` files and construct surface
+meshes in various formats. Run `rasputin_store --help` for more info.
 
 It is also possible to compute the shade cast from a given, planar sun ray
 vector. This shade is computed based on the cell center of the simplified

@@ -1,17 +1,19 @@
-from typing import Tuple, List, Optional, Union
+from typing import Tuple, List, Optional, Union, Dict, Any
 import io
 import shutil
 from shapely import ops, wkt, wkb
 from pathlib import Path
+from PIL import Image
 from dataclasses import dataclass
 from shapely import geometry
 import numpy as np
 from pkg_resources import resource_filename
 import pyproj
+from rasputin import rasputin_data_dir
 from rasputin import triangulate_dem as td
-from rasputin.py2js import point_vector_to_lines, face_and_point_vector_to_lines
+from rasputin.py2js import point_vector_to_lines, face_and_point_vector_to_lines, construct_material
 from rasputin.mesh_utils import vertex_field_to_vertex_values, face_field_to_vertex_values
-from rasputin.material import terrain_material
+from rasputin.material_specification import terrain_material
 
 
 class Geometry:
@@ -20,7 +22,7 @@ class Geometry:
                  mesh: "Mesh",
                  crs: pyproj.CRS,
                  base_color: Optional[Tuple[float, float, float]] = None,
-                 material: Optional[str] = None):
+                 material_spec: Optional[Dict[str, Any]] = None):
         self.mesh = mesh
         self.crs = crs
         if base_color is None:
@@ -32,13 +34,29 @@ class Geometry:
         self._aspects = None
         self._slopes = None
         self._colors = None
-        self._material = material or terrain_material
+        self._uvs = None
+        self.material_spec = material_spec or terrain_material
 
     def extract_faces(self, faces: np.ndarray) -> "Geometry":
         return self.__class__(mesh=self.mesh.copy(),
                               crs=self.crs,
                               base_color=self.base_color,
                               material=self.material)
+
+    def split_by_colors(self) -> List["Geometry"]:
+        print(len(self.colors))
+        print(len(self._colors))
+        print(len(self.faces))
+        sub_geometries = []
+        if self._colors is None:
+            raise RuntimeError("No colors to split by")
+        for color in set([tuple(c) for c in self._colors]):
+            color = np.array(color)
+            sub_geom = self.extract_faces(faces=self.faces[np.all(self._colors==color, axis=1)])
+            sub_geom.base_color = color
+            sub_geometries.append(sub_geom)
+        return sub_geometries
+
 
     @property
     def points(self) -> np.ndarray:
@@ -71,7 +89,7 @@ class Geometry:
     @property
     def colors(self) -> np.ndarray:
         if self._colors is None:
-            self._colors = np.empty((3*len(self.mesh.faces), len(self.base_color)))
+            self._colors = np.empty((len(self.mesh.faces), len(self.base_color)))
             self._colors[:, 0] = self.base_color[0]
             self._colors[:, 1] = self.base_color[1]
             self._colors[:, 2] = self.base_color[2]
@@ -80,15 +98,15 @@ class Geometry:
     @colors.setter
     def colors(self, colors: np.ndarray) -> None:
         assert colors.shape == (len(self.mesh.faces), 3)
-        self._colors = face_field_to_vertex_values(face_field=colors, faces=self.faces)
+        self._colors = colors
+
+    @property
+    def color_lines(self):
+        return face_field_to_vertex_values(face_field=self.colors, faces=self.faces)
 
     @property
     def material(self) -> str:
-        return f"new {self._material}"
-
-    @material.setter
-    def material(self, material: str):
-        self._material = material
+        return construct_material(self.material_spec)
 
     def as_javascript(self, *, file_handle: io.TextIOWrapper) -> True:
         if not len(self.faces):
@@ -112,15 +130,41 @@ class Geometry:
 
         # write colors
         file_handle.write("colors: ")
-        for line in point_vector_to_lines(name=None, point_vector=self.colors):
+        for line in point_vector_to_lines(name=None, point_vector=self.color_lines):
             file_handle.write(f"{line}\n")
         file_handle.write(",\n")
 
+        file_handle.write(f"uvs: ")
+        uvs = self.uvs
+        if uvs.size > 0:
+            for line in face_and_point_vector_to_lines(name=None,
+                                                       face_vector=self.mesh.faces,
+                                                       point_vector=self.uvs):
+                file_handle.write(f"{line}\n")
+        else:
+            file_handle.write("null")
+        file_handle.write(",\n")
+
         # write material
-        file_handle.write(f"material: {self.material}\n")
+        file_handle.write(f"material_constructor: {self.material}")
         file_handle.write("}")
         return True
+    
+    @property
+    def uvs(self) -> np.ndarray:
+        if "texture_file_name" not in self.material_spec:
+            return np.empty((0, 2))
+        img = Image.open(rasputin_data_dir / self.material_spec["texture_file_name"])
+        w, h = img.size 
+        x = self.points[:, 0]
+        y = self.points[:, 1]
 
+        scale_x = self.material_spec.get("default_x_scale", 1.0)
+        scale_y = self.material_spec.get("default_y_scale", 1.0)
+        
+        u = x*scale_x/w
+        v = y*scale_y/h
+        return np.array([u, v]).T
 
 def write_scene(*, geometries: List[Geometry], output: Path):
     if output.exists():
@@ -133,6 +177,12 @@ def write_scene(*, geometries: List[Geometry], output: Path):
         for geometry in geometries:
             if geometry.as_javascript(file_handle=tf):
                 tf.write(",\n")
+                if "texture_file_name" in geometry.material_spec:
+                    (output / "textures").mkdir(exist_ok=True)
+                    shutil.copy(
+                            rasputin_data_dir / geometry.material_spec["texture_file_name"],
+                            output / "textures"
+                            )
         tf.write("];\n")
         tf.write("const data = {geometries};\n")
 

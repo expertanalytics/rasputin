@@ -5,14 +5,16 @@ import numpy as np
 import pyproj
 import argparse
 import logging
+import yaml
 
+from rasputin import rasputin_data_dir
 from rasputin.tin_repository import TinRepository
 from rasputin import triangulate_dem
 from rasputin.reader import RasterRepository
 from rasputin.geometry import Geometry, write_scene
-from rasputin.material import avalanche_material, lake_material, terrain_material
 from rasputin import avalanche
 from rasputin.avalanche import varsom_angles
+from rasputin.py2js import construct_material
 
 
 def depr_web_visualize():
@@ -28,12 +30,7 @@ def depr_web_visualize():
      * Use more of the information from varsom.no (and perhaps alpha blending) to better display avalanche dangers
 
     """
-    if "RASPUTIN_DATA_DIR" in os.environ:
-        data_dir = Path(os.environ["RASPUTIN_DATA_DIR"]) / "dem_archive"
-    else:
-        #  data_dir = Path(os.environ["HOME"]) /"projects" / "rasputin_data" / "dem_archive"
-        data_dir = Path(".") / "dem_archive"
-        print(f"WARNING: No raster archive directory specified, assuming {data_dir.absolute()}")
+    data_dir = rasputin_data_dir / "dem_archive"
     files = data_dir.glob("*.tif")
     if not files:
         raise RuntimeError(f"No GeoTIFF files found in {data_dir.absolute()}, giving up.")
@@ -143,20 +140,38 @@ def visualize_tin():
     arg_parser = argparse.ArgumentParser()
     arg_parser.add_argument("uid", type=str, help="Tin repository uid for mesh to visualize.")
     arg_parser.add_argument("-output", type=str, default="web_viz", help="Directory for web content.")
+    arg_parser.add_argument("-material", type=str, default="", help="Optional texture/material spec in yaml")
     arg_parser.add_argument("-silent", action="store_true", help="Run in silent mode")
     res = arg_parser.parse_args(sys.argv[1:])
     if not res.silent:
         logger.setLevel(logging.INFO)
-    if "RASPUTIN_DATA_DIR" in os.environ:
-        tin_archive = Path(os.environ["RASPUTIN_DATA_DIR"]) / "tin_archive"
-    else:
-        tin_archive = Path(".") / "tin_archive"
-        print(f"WARNING: No data directory specified, assuming tin_archive {tin_archive.absolute()}")
+
+    tin_archive = rasputin_data_dir / "tin_archive"
     tin_repo = TinRepository(path=tin_archive)
-    geometry = tin_repo.read(uid=res.uid)
-    geometry.material = terrain_material
+    info = tin_repo.info(uid=res.uid)
+    land_cover_names = {k: v for (k, v, *rest) in info["info"]["land_covers"]}
+
+    material_by_id = {}
+    if res.material:
+        materials = yaml.load(open(res.material))
+        for material in materials:
+            material_ids = material.pop("land_type_ids")
+            for material_id in material_ids:
+                if material_id not in land_cover_names:
+                    continue
+                material_by_id[material_id] = material.copy()
+                material_by_id[material_id]["material_id"] = material_id
+                material_by_id[material_id]["material_name"] = land_cover_names[material_id]
+    
+    geometries = []
+    for land_cover in info["info"]["land_covers"]:
+        material_id, name, *rest = land_cover
+        geometry = tin_repo.extract(uid=res.uid, face_id=material_id)
+        if material_id in material_by_id:
+            geometry.material_spec = material_by_id[material_id]
+        geometries.append(geometry)
     output = Path(res.output).absolute()
-    write_scene(geometries=[geometry], output=output)
+    write_scene(geometries=geometries, output=output)
     print(f"""Successfully generated a web_gl based TIN visualizer in {output}.
 To see it, please run:
 cd {output}

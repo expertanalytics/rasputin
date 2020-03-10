@@ -1,4 +1,4 @@
-from typing import List, Optional, Tuple
+from typing import List, Optional, Tuple, Dict, Any
 from abc import ABC, abstractmethod
 from enum import Enum
 import numpy as np
@@ -23,7 +23,7 @@ class LandCoverMetaInfoBase(ABC):
 
     @classmethod
     @abstractmethod
-    def material(cls, *, land_cover_type: LandCoverBaseType) -> str:
+    def material(cls, *, land_cover_type: LandCoverBaseType) -> Dict[str, Any]:
         pass
 
 class LandCoverRepository(ABC):
