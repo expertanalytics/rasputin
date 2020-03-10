@@ -12,7 +12,6 @@ from rasputin.tin_repository import TinRepository
 from rasputin import triangulate_dem
 from rasputin.reader import RasterRepository
 from rasputin.geometry import Geometry, write_scene
-from rasputin.material import avalanche_material, lake_material, terrain_material
 from rasputin import avalanche
 from rasputin.avalanche import varsom_angles
 from rasputin.py2js import construct_material
@@ -160,16 +159,16 @@ def visualize_tin():
             for material_id in material_ids:
                 if material_id not in land_cover_names:
                     continue
-                material_by_id[material_id] = material
+                material_by_id[material_id] = material.copy()
                 material_by_id[material_id]["material_id"] = material_id
                 material_by_id[material_id]["material_name"] = land_cover_names[material_id]
-
+    
     geometries = []
     for land_cover in info["info"]["land_covers"]:
-        id = land_cover[0]
-        geometry = tin_repo.extract(uid=res.uid, face_id=id)
-        if id in material_by_id:
-            geometry.material_spec = material_by_id[id]
+        material_id, name, *rest = land_cover
+        geometry = tin_repo.extract(uid=res.uid, face_id=material_id)
+        if material_id in material_by_id:
+            geometry.material_spec = material_by_id[material_id]
         geometries.append(geometry)
     output = Path(res.output).absolute()
     write_scene(geometries=geometries, output=output)

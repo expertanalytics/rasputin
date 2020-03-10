@@ -1,4 +1,4 @@
-from typing import List, Optional, Tuple
+from typing import List, Optional, Tuple, Dict, Any
 from pathlib import Path
 import numpy as np
 from pyproj import CRS, Transformer
@@ -7,7 +7,7 @@ from rasputin.reader import extract_geo_keys, GeoKeysInterpreter, GeoTiffTags
 from rasputin.land_cover_repository import LandCoverBaseType, LandCoverMetaInfoBase, LandCoverRepository
 import rasputin.triangulate_dem as td
 from rasputin.geometry import GeoPoints, GeoPolygon
-from rasputin.material import lake_material, terrain_material
+from rasputin.material_specification import lake_material, terrain_material
 
 Image.MAX_IMAGE_PIXELS = None
 
@@ -69,7 +69,7 @@ class LandCoverMetaInfo(LandCoverMetaInfoBase):
         return description[land_cover_type]
 
     @classmethod
-    def material(cls, *, land_cover_type: LandCoverBaseType) -> str:
+    def material(cls, *, land_cover_type: LandCoverBaseType) -> Dict[str, Any]:
         if land_cover_type == LandCoverType.water:
             return lake_material
         return terrain_material
