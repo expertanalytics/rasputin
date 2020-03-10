@@ -1,0 +1,6 @@
+version: 2
+jobs:
+  hello/hello-build:
+    docker:
+        - image: circleci/python:3.6
+    steps:
