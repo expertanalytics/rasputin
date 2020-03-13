@@ -4,3 +4,10 @@ jobs:
     docker:
         - image: circleci/python:3.6
     steps:
+
+
+    rasputin_store -x 24.015 24.035 24.035 24.015 -y 71.085 71.085 71.07 71.07 -ratio 1.0 -land-type-partition corine ingoya_test
+
+    rasputin_web -output rasputin_data/web/ingoya_test -material rasputin_data/materials/material.yaml  ingoya_test
+
+

@@ -19,12 +19,13 @@ RUN apt-get update && apt-get install -y\
     pybind11-dev \
     libarmadillo-dev \
     libcgal-dev \
-    python3-pip && \
+    python3-pip \
+    vim && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
 # Python Depndancies
-RUN pip3 install numpy pyproj Pillow h5py lxml shapely descartes meshio pytest setuptools pipenv
+RUN pip3 install numpy pyproj Pillow h5py lxml shapely descartes meshio pytest setuptools pipenv pyyaml requests
 
 # Cmake
 RUN wget https://github.com/Kitware/CMake/releases/download/v3.16.5/cmake-3.16.5-Linux-x86_64.tar.gz \
@@ -45,6 +46,9 @@ ADD cpp_test cpp_test
 ADD web web
 ADD CMakeLists.txt .
 ADD setup.py .
+ADD .circleci/rasputin_data rasputin_data
+
+ENV RASPUTIN_DATA_DIR="/rasputin/rasputin_data"
 
 #
 ## Install package
