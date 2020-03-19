@@ -2,7 +2,7 @@ version: 2
 jobs:
     build:
         docker:
-            - image: rasputin:latest
+            - image: dnumgis/rasputin:latest
         steps:
             - checkout
             - run:
