@@ -1,0 +1,20 @@
+<!DOCTYPE Xdmf SYSTEM "Xdmf.dtd">
+<Xdmf Version="3.0"> 
+<Domain>
+    <Grid Name="tin">
+      <Geometry GeometryType="XYZ">
+        <DataItem Format="HDF" DataType="Float" Precision="8" Dimensions="12612 3">ingoya.h5:/tin/points<Information Name="projection" Value="+proj=utm +zone=33 +datum=WGS84 +units=m +no_defs +type=crs"/>
+        </DataItem>
+      </Geometry>
+      <Topology NumberOfElements="24750" TopologyType="Triangle">
+        <DataItem Format="HDF" Precision="4" DataType="Int" Dimensions="24750 3">ingoya.h5:/tin/faces</DataItem>
+      </Topology>
+      <Attribute Name="cover_type" Center="Cell" AttributeType="Scalar">
+        <DataItem Format="HDF" Precision="4" DataType="Int" Dimensions="24750">ingoya.h5:/tin/face_fields/cover_type</DataItem>
+      </Attribute>
+      <Attribute Name="cover_color" Center="Cell" AttributeType="Vector">
+        <DataItem Format="HDF" Precision="8" DataType="Float" Dimensions="24750 3">ingoya.h5:/tin/face_fields/cover_color</DataItem>
+      </Attribute>
+    </Grid>
+  </Domain>
+  <Information Name="timestamp" Value="1584090911.296012"/></Xdmf>

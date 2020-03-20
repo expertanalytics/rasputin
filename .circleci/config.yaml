@@ -1,0 +1,22 @@
+version: 2
+jobs:
+    build:
+        docker:
+            - image: dnumgis/rasputin:latest
+        steps:
+            - checkout
+            - run:
+                name: "Installation"
+                command: |
+                    cp -rf /root/lib/* lib/
+                    python3 setup.py install
+            - run:
+                name: "Run Rasputin Store"
+                command: |
+                    export RASPUTIN_DATA_DIR=/root/project/examples/example_data
+                    rasputin_store -x 24.015 24.035 24.035 24.015 -y 71.085 71.085 71.07 71.07 -ratio 1.0 -land-type-partition corine ingoya_test
+            - run:
+                name: "Run Rasputin Web"
+                command: |
+                    export RASPUTIN_DATA_DIR=/root/project/examples/example_data
+                    rasputin_web -output examples/example_data/web/ingoya_test -material examples/example_data/materials/material.yaml  ingoya_test

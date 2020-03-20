@@ -1,49 +1,48 @@
-FROM python:3.6
+FROM ubuntu:20.04
 
-WORKDIR /rasputin
+WORKDIR /root
 
-# System dependencies
-RUN apt update && apt install -y \
-  build-essential \
-  cmake \
-  libgmp-dev \
-  libmpfr-dev \
-  libblas3 \
-  libblas-dev \
-  liblapack3 \
-  liblapack-dev \
-  libatlas3-base \
-  libatlas-dev \
-  python3-tk && \
-  apt-get clean && \
-  rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
-## cmake
-RUN wget https://cmake.org/files/v3.12/cmake-3.12.4-Linux-x86_64.tar.gz \
-    && tar xvf cmake-3.12.4-Linux-x86_64.tar.gz \
-    && rm cmake-3.12.4-Linux-x86_64.tar.gz
-ENV PATH="/rasputin/cmake-3.12.4-Linux-x86_64/bin:${PATH}"
-## boost
-RUN wget https://dl.bintray.com/boostorg/release/1.69.0/source/boost_1_69_0.tar.bz2 && \
-  tar xvf boost_1_69_0.tar.bz2 && \
-  rm boost_1_69_0.tar.bz2
-ENV BOOST_ROOT /rasputin/boost_1_69_0
+# Fetch packages Dependancies
+RUN apt-get update &&\
+    apt-get upgrade -y &&\
+    apt-get install -y\
+    build-essential \
+    wget \
+    apt-utils \
+    libgmp-dev \
+    libmpfr-dev \
+    libblas3 \
+    libboost-all-dev \
+    liblapack3 \
+    liblapack-dev \
+    libatlas3-base \
+    libatlas-base-dev \
+    python3.6 \
+    git \
+    pybind11-dev \
+    libarmadillo-dev \
+    libcgal-dev \
+    python3-pip \
+    libcurl4 \
+    libssl-dev \
+    libcurl4-openssl-dev &&\
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
-# Python dependencies
-ADD Pipfile .
-ADD Pipfile.lock .
-RUN pip install pipenv
-RUN pipenv install -d --system
+# Python Depndancies
+RUN pip3 install numpy pyproj Pillow h5py lxml shapely descartes meshio pytest setuptools pipenv pyyaml requests
 
-# Copy source code
-ADD lib lib
-ADD src src
-ADD tests tests
-ADD web web
-ADD CMakeLists.txt .
-ADD setup.py .
+# Cmake
+RUN wget https://github.com/Kitware/CMake/releases/download/v3.16.5/cmake-3.16.5.tar.gz \
+    && tar -zxvf cmake-3.16.5.tar.gz \
+    && rm cmake-3.16.5.tar.gz \
+    && cd cmake-3.16.5 \
+    && ./bootstrap \
+    && make \
+    && make install
 
-# Install package
-RUN python setup.py install
-
-# Run tests
-RUN pytest tests/
+# Github resources
+RUN mkdir lib && cd lib && \
+    git clone https://github.com/boostorg/geometry.git --branch=boost-1.71.0 &&\
+    git clone https://github.com/HowardHinnant/date.git &&\
+    git clone https://github.com/catchorg/Catch2.git --branch=v2.10.2 catch2
