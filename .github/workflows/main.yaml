@@ -1,0 +1,37 @@
+# This is a basic workflow to help you get started with Actions
+
+name: CI
+
+# Controls when the action will run. Triggers the workflow on push or pull request 
+# events but only for the master branch
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+
+# A workflow run is made up of one or more jobs that can run sequentially or in parallel
+jobs:
+  # This workflow contains a single job called "build"
+  build:
+    # The type of runner that the job will run on
+    runs-on: ubuntu-latest
+    container:
+      image: dnumgis/rasputin:latest
+
+    # Steps represent a sequence of tasks that will be executed as part of the job
+    steps:
+    # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
+    - uses: actions/checkout@v2
+
+    - name: Copy dependencies
+      run: cp -rf /root/lib/* lib/
+
+    - name: Install
+      run: python3 setup.py install
+
+    - name: Rasputin Store
+      run: export RASPUTIN_DATA_DIR=/__w/rasputin/rasputin/examples/example_data && rasputin_store -x 24.015 24.035 24.035 24.015 -y 71.085 71.085 71.07 71.07 -ratio 1.0 -land-type-partition corine ingoya_test
+
+    - name: Rasputin Web
+      run: export RASPUTIN_DATA_DIR=/__w/rasputin/rasputin/examples/example_data && rasputin_web -output examples/example_data/web/ingoya_test -material examples/example_data/materials/material.yaml  ingoya_test
