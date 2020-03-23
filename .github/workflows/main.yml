@@ -25,7 +25,10 @@ jobs:
     - uses: actions/checkout@v2
    
     - name: print all
-      run: ls && cd .. && ls && cd .. && ls && cd .. && ls && pwd
+      run: pwd
+      
+    - name: print
+      run: cd examples/example_data && pwd
    
     #- name: Copy dependancies
     #  run: cp -rf /root/lib/* lib/
