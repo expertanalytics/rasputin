@@ -34,4 +34,4 @@ jobs:
       run: export RASPUTIN_DATA_DIR=/__w/rasputin/rasputin/examples/example_data && rasputin_store -x 24.015 24.035 24.035 24.015 -y 71.085 71.085 71.07 71.07 -ratio 1.0 -land-type-partition corine ingoya_test
 
     - name: Rasputin Web
-      run: export RASPUTIN_DATA_DIR=/__w/rasputin/rasputin/examples/example_data && rasputin_web -output examples/example_data/web/ingoya_test -material examples/example_data/materials/material.yaml  ingoya_testr
+      run: export RASPUTIN_DATA_DIR=/__w/rasputin/rasputin/examples/example_data && rasputin_web -output examples/example_data/web/ingoya_test -material examples/example_data/materials/material.yaml  ingoya_test
