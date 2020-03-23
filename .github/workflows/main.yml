@@ -33,9 +33,11 @@ jobs:
     - name: Install
       run: python3 setup.py install
       
-    - name: Run Rasputin Store
+    - name: Export Rasputin Data
       run: export RASPUTIN_DATA_DIR=/root/project/examples/example_data
-           rasputin_store -x 24.015 24.035 24.035 24.015 -y 71.085 71.085 71.07 71.07 -ratio 1.0 -land-type-partition corine ingoya_test
+      
+    - name: Run Rasputin Store
+      run: rasputin_store -x 24.015 24.035 24.035 24.015 -y 71.085 71.085 71.07 71.07 -ratio 1.0 -land-type-partition corine ingoya_test
 
     # Runs a single command using the runners shell
     #- name: Install
