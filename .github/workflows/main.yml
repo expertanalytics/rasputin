@@ -27,6 +27,9 @@ jobs:
     - name: Copy dependancies
       run: cp -rf /root/lib/* lib/
       
+    - name: Print dependancies
+      run: ls /lib
+      
     - name: Install
       run: python3 setup.py install
       
