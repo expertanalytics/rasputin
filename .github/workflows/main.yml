@@ -25,7 +25,7 @@ jobs:
     - uses: actions/checkout@v2
       
     - name: Copy dependancies
-      run: cp -r /root/lib/* /lib/
+      run: cp -rf /root/lib/* lib/
       
     - name: Install
       run: python3 setup.py install
