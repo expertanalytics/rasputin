@@ -38,4 +38,7 @@ jobs:
 
     - name: Run tests
       run: |
-          pytest tests/*
+          pytest tests/test_mesh.py
+          pytest tests/test_polygons.py
+          pytest tests/test_read_raster.py
+          pytest tests/test_tin_repository.py
