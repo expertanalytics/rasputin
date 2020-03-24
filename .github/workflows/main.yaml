@@ -35,3 +35,6 @@ jobs:
 
     - name: Rasputin Web
       run: export RASPUTIN_DATA_DIR=/__w/rasputin/rasputin/examples/example_data && rasputin_web -output examples/example_data/web/ingoya_test -material examples/example_data/materials/material.yaml  ingoya_test
+
+    - name: Run tests
+      run: pytest tests/*

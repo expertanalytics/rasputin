@@ -23,7 +23,7 @@ def test_store_tin(tin):
     geom = Geometry(mesh=mesh,
                     crs=crs,
                     base_color=(0, 0, 0),
-                    material="dummy2")
+                    material_spec="dummy2")
     with TemporaryDirectory() as directory:
         archive = Path(directory)
         tr = TinRepository(path=archive)
@@ -44,7 +44,7 @@ def test_store_and_load_tin(tin):
     geom = Geometry(mesh=mesh,
                     crs=crs,
                     base_color=(0,0,0),
-                    material="dummy2")
+                    material_spec="dummy2")
     with TemporaryDirectory() as directory:
         archive = Path(directory)
         tr = TinRepository(path=archive)
@@ -62,7 +62,7 @@ def test_store_and_delete_tin(tin):
     geom = Geometry(mesh=mesh,
                     crs=crs,
                     base_color=(0,0,0),
-                    material="dummy2")
+                    material_spec="dummy2")
     with TemporaryDirectory() as directory:
         archive = Path(directory)
         tr = TinRepository(path=archive)
@@ -81,7 +81,7 @@ def test_store_shade(tin):
     geom = Geometry(mesh=mesh,
                     crs=crs,
                     base_color=(0,0,0),
-                    material="dummy2")
+                    material_spec="dummy2")
 
     with TemporaryDirectory() as directory:
         tin_archive = Path(directory) / "tin_archive"
