@@ -146,6 +146,10 @@ def store_tin():
                 geometry=Geometry(mesh=mesh, crs=target_crs),
                 land_cover_repository=lt_repo,
                 face_fields={"cover_type": terrain_cover, "cover_color": terrain_colors})
+    else:
+        tr.save(uid=res.uid,
+                geometry=Geometry(mesh=mesh, crs=target_crs)
+                )
 
     meta = tr.content[res.uid]
     logger.info(f"Successfully added uid='{res.uid}' to the tin archive {tin_archive.absolute()}, with meta info:")
