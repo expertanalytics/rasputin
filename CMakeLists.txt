@@ -32,7 +32,6 @@ else()
     find_package(pybind11 REQUIRED)
 endif()
 
-
 # Boost::geometry
 # ---------------
 if (EXISTS "${RASPUTIN_LIB_DIR}/geometry")
