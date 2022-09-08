@@ -27,17 +27,20 @@ The heavy lifting in Rasputin is done by external software:
 
 ## Installation
 
-Installing Rasputin is easy, as the C++ dependencies are header only. Simply clone the source repository for each dependency into the `lib` directory.
-For examaple, from the Rasputin respotory root, run the following commands:
+Installing Rasputin is easy, as the C++ dependencies are header only. Simply, either install the dependencies using your system's package manager, or clone the source repository for each dependency locally on your computer and install them in such a way that CMake will find them.
+For examaple, in some location where you have your source code, type:
 
 ```
+git clone https://github.com/pybind/pybind11.git 
+git clone https://gitlab.com/conradsnicta/armadillo-code.git 
+git clone https://github.com/boostorg/geometry.git 
+git clone https://github.com/catchorg/Catch2.git 
+git clone https://github.com/CGAL/cgal.git 
+```
+For Howard Hinnant's `date` library to work, enter the rasputin source root directory and checkout the source under the `lib` folder:
+```
 cd lib
-git clone https://github.com/pybind/pybind11.git --branch=v2.4.3
-git clone https://gitlab.com/conradsnicta/armadillo-code.git --branch=9.800.x armadillo
-git clone https://github.com/boostorg/geometry.git --branch=boost-1.71.0
-git clone https://github.com/HowardHinnant/date.git --branch=v2.4.1
-git clone https://github.com/catchorg/Catch2.git --branch=v2.10.2 catch2
-git clone https://github.com/CGAL/cgal.git --branch=releases/CGAL-5.0 cgal
+git clone https://github.com/HowardHinnant/date.git 
 ```
 
 Rasputin does not aim at being backwards compatible with older compilers.

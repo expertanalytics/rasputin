@@ -26,28 +26,15 @@ set(RASPUTIN_DEPENDENCIES) # Append to list as they are found
 
 # Pybind11
 # --------
-if (EXISTS "${RASPUTIN_LIB_DIR}/pybind11")
-    add_subdirectory("${RASPUTIN_LIB_DIR}/pybind11")
-else()
-    find_package(pybind11 REQUIRED)
-endif()
-
+find_package(pybind11 REQUIRED)
 
 # Boost::geometry
 # ---------------
-if (EXISTS "${RASPUTIN_LIB_DIR}/geometry")
-    add_library(geometry INTERFACE)
-    target_include_directories(geometry PRIVATE INTERFACE
-        "${RASPUTIN_LIB_DIR}/geometry/include")
-    list(APPEND RASPUTIN_DEPENDENCIES geometry)
-    add_definitions(-DHAS_BOOST)
-else()
-    find_package(Boost REQUIRED)
-    # Import into scope
-    add_library(Boost::geometry INTERFACE IMPORTED)
-    list(APPEND RASPUTIN_DEPENDENCIES Boost::geometry)
-    add_definitions(-DHAS_BOOST)
-endif()
+find_package(Boost REQUIRED)
+# Import into scope
+add_library(Boost::geometry INTERFACE IMPORTED)
+list(APPEND RASPUTIN_DEPENDENCIES Boost::geometry)
+add_definitions(-DHAS_BOOST)
 
 
 # date
@@ -67,7 +54,6 @@ list(APPEND RASPUTIN_DEPENDENCIES date)
 # CGAL
 # ----
 # Required for now but should be optional in the future
-set(CMAKE_PREFIX_PATH  "${RASPUTIN_LIB_DIR}/cgal" ${CMAKE_PREFIX_PATH})
 find_package(CGAL REQUIRED)
 if (CGAL_FOUND)
     add_definitions(-DHAS_CGAL) # For future use when CGAL is optional
@@ -80,12 +66,7 @@ endif()
 
 # Armadillo
 # ---------
-if (EXISTS "${RASPUTIN_LIB_DIR}/armadillo")
-    set(ARMADILLO_INCLUDE_DIRS "${RASPUTIN_LIB_DIR}/armadillo/include")
-else()
-    # NOTE: This fails if the wrapper library is not found
-    find_package(Armadillo REQUIRED)
-endif()
+find_package(Armadillo REQUIRED)
 add_library(Armadillo INTERFACE)
 target_include_directories(Armadillo PRIVATE INTERFACE
     ${ARMADILLO_INCLUDE_DIRS})
