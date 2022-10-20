@@ -46,7 +46,13 @@ class CMakeBuild(build_ext):
             '-DCMAKE_EXPORT_COMPILE_COMMANDS=ON'
         ]
 
-        cfg = 'Debug' if self.debug else 'Release'
+        if self.debug:
+            cfg = 'Debug'
+            build_path = "build/debug"
+        else:
+            cfg = 'Release'
+            build_path = "build/release"
+
         build_args = ['--config', cfg]
 
         if platform.system() == "Windows":
@@ -69,9 +75,9 @@ class CMakeBuild(build_ext):
         if not os.path.exists(self.build_temp):
             os.makedirs(self.build_temp)
 
-        cmake_build_command = ['cmake', "-S", ".", "-B", "build"] + cmake_args
+        cmake_build_command = ['cmake', "-S", ".", "-B", build_path] + cmake_args
         _compile_and_check(cmake_build_command, env=env)
-        _compile_and_check(["cmake", "--build", "build"])
+        _compile_and_check(["cmake", "--build", build_path])
 
         print()  # Add an empty line for cleaner output
 
