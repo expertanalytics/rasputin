@@ -18,7 +18,7 @@ from rasputin import gml_repository
 from rasputin import globcov_repository
 
 
-def store_tin():
+def store_tin(args=None):
     """
     Avalance Forecast Visualization Example.
 
@@ -29,9 +29,11 @@ def store_tin():
      * Use more of the information from varsom.no (and perhaps alpha blending) to better display avalanche dangers
 
     """
+    if args is None:
+        args = sys.argv[:1]
+
     logging.basicConfig(level=logging.CRITICAL, format='Rasputin[%(levelname)s]: %(message)s')
     logger = logging.getLogger()
-
 
     arg_parser = argparse.ArgumentParser()
     arg_parser.add_argument("-x", nargs="+", type=float, help="x-coordinates of polygon", default=None)
@@ -46,9 +48,13 @@ def store_tin():
                             default="",
                             choices=["corine", "globcov"],
                             help="Partition mesh by land type")
+    arg_parser.add_argument(
+        "--land-cover-code", type=str, default="clc18_kode",
+        help="Corine LandCover type code (in ogr iteration). Default to clc18_kode"
+    )
     arg_parser.add_argument("uid", type=str, help="Unique ID for the result TIN")
     arg_parser.add_argument("-silent", action="store_true", help="Run in silent mode")
-    res = arg_parser.parse_args(sys.argv[1:])
+    res = arg_parser.parse_args(args)
     if not res.silent:
         logger.setLevel(logging.INFO)
 
@@ -124,14 +130,12 @@ def store_tin():
 
     if res.land_type_partition:
         if res.land_type_partition == "corine":
-            lt_repo = gml_repository.GMLRepository(path=corine_archive)
+            lt_repo = gml_repository.GMLRepository(path=corine_archive, land_cover_code=res.land_cover_code)
         else:
             lt_repo = globcov_repository.GlobCovRepository(path=gc_archive)
         geo_cell_centers = GeoPoints(xy=mesh.cell_centers[:, :2],
                                      crs=target_crs)
-        terrain_cover = lt_repo.land_cover(land_types=None,
-                                           geo_points=geo_cell_centers,
-                                           domain=target_domain)
+        terrain_cover = lt_repo.land_cover(land_types=None, geo_points=geo_cell_centers, domain=target_domain)
         terrain_colors = np.empty((terrain_cover.shape[0], 3), dtype='d')
         extracted_terrain_types = set()
         for i, cell in enumerate(terrain_cover):

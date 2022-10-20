@@ -132,13 +132,15 @@ class GMLRepository(LandCoverRepository):
     land_cover_type = LandCoverType
     land_cover_meta_info_type = LandCoverMetaInfo
 
-    def __init__(self, path: Path) -> None:
+
+    def __init__(self, path: Path, land_cover_code: str="clc18_kode") -> None:
         self.path = path
         files = list(path.glob("*.gml"))
         assert len(files) == 1
         self.fn = files[0]
         self.parser = etree.XMLParser(encoding="utf-8", recover=True, huge_tree=True)
         self.data_crs: Optional[CRS] = None
+        self.land_cover_code = land_cover_code
 
     def _parse_polygon(self, polygon: etree._Element, nsmap: Dict[str, str]) -> Polygon:
         gml = f"{{{nsmap['gml']}}}"
@@ -170,7 +172,15 @@ class GMLRepository(LandCoverRepository):
         ogr = f"{{{root.nsmap['ogr']}}}"
         result = {}
         for elm in root.iter(f"{gml}featureMember"):
-            code = LandCoverType(int(next(elm.iter(f"{ogr}clc18_kode")).text))
+            try:
+                code = LandCoverType(int(next(elm.iter(f"{ogr}{self.land_cover_code}")).text))
+            except ValueError as err:
+                if len(err.args) == 1 and err.args[0].endswith("is not a valid LandCoverType"):
+                    continue
+                else:
+                    raise ValueError from err
+            except StopIteration as err:
+                raise StopIteration(f"LandCoverCode {self.land_cover_code} invalid") from err
             polygon = self._parse_polygon(next(elm.iter(f"{gml}Polygon")), root.nsmap)
             if polygon.intersects(domain.polygon):
                 if code not in result:
@@ -182,10 +192,11 @@ class GMLRepository(LandCoverRepository):
         return []
 
     def land_cover(self,
-                   *,
-                   land_types: Optional[List[LandCoverType]],
-                   geo_points: GeoPoints,
-                   domain: GeoPolygon) -> np.ndarray:
+        *,
+        land_types: Optional[List[LandCoverType]],
+        geo_points: GeoPoints,
+        domain: GeoPolygon,
+    ) -> np.ndarray:
         tree = etree.parse(str(self.fn), self.parser)
         root = tree.getroot()
         self._assign_data_crs(root)
