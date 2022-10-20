@@ -264,8 +264,8 @@ class GeoPolygon:
         from shapely.geometry.polygon import orient
 
         # Get point sequences as arrays
-        exterior = np.asarray(orient(self.polygon).exterior)[:-1]
-        interiors = [np.asarray(hole)[:-1]
+        exterior = np.asarray(orient(self.polygon).exterior.coords)[:-1]
+        interiors = [np.asarray(hole.coords)[:-1]
                      for hole in orient(self.polygon, -1).interiors]
 
         cgal_polygon = td.simple_polygon(exterior)

@@ -38,9 +38,9 @@ TEST_CASE("Reference example test", "[reference]") {
     const auto [Phi, e0] = calendar_solar_position(year, month, day, lat, lon, masl,
                                                    collectors::azimuth_and_elevation(),
                                                    fixed_cal_delta_t_calc());
-    REQUIRE(abs(Phi - 194.34024) < 1.0e-4);
+    REQUIRE(std::abs(Phi - 194.34024) < 1.0e-4);
     const auto [e, Theta] = corrected_solar_elevation(e0, P, T);
-    REQUIRE(abs(Theta - 50.11162) < 1.0e-4);
+    REQUIRE(std::abs(Theta - 50.11162) < 1.0e-4);
 }
 
 TEST_CASE("JD test 1", "[jd1]") {

@@ -170,7 +170,14 @@ class GMLRepository(LandCoverRepository):
         ogr = f"{{{root.nsmap['ogr']}}}"
         result = {}
         for elm in root.iter(f"{gml}featureMember"):
-            code = LandCoverType(int(next(elm.iter(f"{ogr}clc18_kode")).text))
+            # code = LandCoverType(int(next(elm.iter(f"{ogr}clc18_kode")).text))
+            try:
+                code = LandCoverType(int(next(elm.iter(f"{ogr}clc00_kode")).text))
+            except ValueError as err:
+                if len(err.args) == 1 and err.args[0].endswith("is not a valid LandCoverType"):
+                    continue
+                else:
+                    raise ValueError from err
             polygon = self._parse_polygon(next(elm.iter(f"{gml}Polygon")), root.nsmap)
             if polygon.intersects(domain.polygon):
                 if code not in result:
