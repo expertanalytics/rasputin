@@ -383,13 +383,13 @@ PYBIND11_MODULE(triangulate_dem, m) {
             using namespace date;
 #endif
             const auto tp = sys_days{January/1/1970} + seconds(long(std::round(timestamp)));
-            return rasputin::solar_position::time_point_solar_position(tp, geographic_latitude, geographic_longitude, masl, 
-                                                                     rasputin::solar_position::collectors::azimuth_and_elevation(), 
+            return rasputin::solar_position::time_point_solar_position(tp, geographic_latitude, geographic_longitude, masl,
+                                                                     rasputin::solar_position::collectors::azimuth_and_elevation(),
                                                                      rasputin::solar_position::delta_t_calculator::coarse_timestamp_calc());
          }, "Compute azimuth and elevation of sun for given UTC timestamp.")
      .def("calendar_solar_position", [] (unsigned int year,unsigned int month, double day, const double geographic_latitude, const double geographic_longitude, const double masl) {
-            return rasputin::solar_position::calendar_solar_position(year, month, day, geographic_latitude, geographic_longitude, masl, 
-                                                                     rasputin::solar_position::collectors::azimuth_and_elevation(), 
+            return rasputin::solar_position::calendar_solar_position(year, month, day, geographic_latitude, geographic_longitude, masl,
+                                                                     rasputin::solar_position::collectors::azimuth_and_elevation(),
                                                                      rasputin::solar_position::delta_t_calculator::coarse_date_calc());
          }, "Compute azimuth and elevation of sun for given UT calendar coordinate.")
      .def("solar_elevation_correction", &rasputin::solar_position::corrected_solar_elevation, "Correct elevation based on pressure and temperature.")

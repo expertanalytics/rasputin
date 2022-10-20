@@ -10,6 +10,8 @@
 #include <date/date.h>
 #endif
 #include <ctime>
+#include <tuple>
+#include <vector>
 
 namespace rasputin::solar_position::collectors {
 
@@ -47,7 +49,7 @@ auto coarse_timestamp_calc() {
     using namespace date;
 #endif
 
-    auto ep = sys_days{January/1/1970};
+    auto ep = sys_days(January/1/1970);
 
     return [ep] (system_clock::time_point tp) {
         const auto year = round(duration_cast<seconds>(tp - ep).count()*1.0/duration_cast<seconds>(years(1)).count()) + 1970;

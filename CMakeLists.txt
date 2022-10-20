@@ -4,9 +4,16 @@ project (Rasputin)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-# set(CMAKE_VERBOSE_MAKEFILE ON)
+set(CMAKE_CXX_FLAGS_DEBUG_INIT "-Wall")
 
 set(ENABLE_TESTS ON)
+if (DEFINED ENV{ENABLE_TESTS})
+    if ($ENV{ENABLE_TESTS} STREQUAL "ON")
+        set(ENABLE_TESTS ON)
+    else()
+        set(ENABLE_TESTS OFF)
+    endif()
+endif()
 
 # Default location for dependencies
 set(RASPUTIN_LIB_DIR "${CMAKE_CURRENT_SOURCE_DIR}/lib")
@@ -100,4 +107,4 @@ pybind11_add_module(triangulate_dem MODULE SYSTEM
 # Need to link BLAS for header-only Aramdillo
 target_link_libraries(triangulate_dem PRIVATE
     ${RASPUTIN_DEPENDENCIES}
-    ${BLAS_LIBRARIES} ${LAPACK_LIBRARIES})
+    ${LAPACK_LIBRARIES} ${BLAS_LIBRARIES})
