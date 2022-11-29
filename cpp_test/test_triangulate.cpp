@@ -175,16 +175,57 @@ namespace rasputin::test_utils {
     }
 
     TEST_CASE("[Test unconstrained Delaunay triangulation]", "[Triangulation]") {
-        std::vector<double> raw_data = {0, 0, 0, 0, 0, 0, 0, 0};
-        RasterData<Point, double> data = {0.0, 1.0, 1.0, 1.0, 2, 2, raw_data.data()};
+        SECTION("square") {
+            std::vector<double> raw_data = {0, 0, 0, 0, 0, 0, 0, 0};
+            RasterData<Point, double> data = {0.0, 1.0, 1.0, 1.0, 2, 2, raw_data.data()};
 
-        auto mesh = Triangulation::delaunay(data, "");
+            auto mesh = Triangulation::delaunay(data, "");
 
-        check_points_exists(mesh.triangles, data.get_points());
-        check_points_inside_ccirc(mesh.triangles, data.get_points());
-        check_triangles_unique(mesh.triangles);
+            check_points_exists(mesh.triangles, data.get_points());
+            check_points_inside_ccirc(mesh.triangles, data.get_points());
+            check_triangles_unique(mesh.triangles);
 
-        REQUIRE(mesh.num_faces() == 2);
+            REQUIRE(mesh.num_faces() == 2);
+        }
+
+        SECTION("rectangle 1") {
+            std::vector<double> raw_data = {0, 0, 0, 0, 0, 0, 0, 0};
+            RasterData<Point, double> data = {0.0, 1.0, 2.0, 1.0, 2, 2, raw_data.data()};
+
+            auto mesh = Triangulation::delaunay(data, "");
+
+            check_points_exists(mesh.triangles, data.get_points());
+            check_points_inside_ccirc(mesh.triangles, data.get_points());
+            check_triangles_unique(mesh.triangles);
+
+            REQUIRE(mesh.num_faces() == 2);
+        }
+
+        SECTION("rectangle 2") {
+            std::vector<double> raw_data = {0, 0, 0, 0, 0, 0, 0, 0};
+            RasterData<Point, double> data = {0.0, 2.0, 1.0, 2.0, 2, 2, raw_data.data()};
+
+            auto mesh = Triangulation::delaunay(data, "");
+
+            check_points_exists(mesh.triangles, data.get_points());
+            check_points_inside_ccirc(mesh.triangles, data.get_points());
+            check_triangles_unique(mesh.triangles);
+
+            REQUIRE(mesh.num_faces() == 2);
+        }
+
+        SECTION("trapezoid 1") {
+            std::vector<double> raw_data = {0, 0, 0, 0, 0, 0, 0, 0};
+            RasterData<Point, double> data = {0.0, 3.0, 1.0, 3.0, 2, 2, raw_data.data()};
+
+            auto mesh = Triangulation::delaunay(data, "");
+
+            check_points_exists(mesh.triangles, data.get_points());
+            check_points_inside_ccirc(mesh.triangles, data.get_points());
+            check_triangles_unique(mesh.triangles);
+
+            REQUIRE(mesh.num_faces() == 2);
+        }
     }
 
     // TEST_CASE("[Test random unconstrained Delaunay triangulation]", "[Triangulation]") {

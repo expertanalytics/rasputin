@@ -14,7 +14,6 @@
 
 namespace rasputin {
 namespace bg = boost::geometry;
-// namespace bgi = boost::geometry::index;
 
 template<typename Polygon>
 constexpr bool CLOCKWISE = std::same_as<
@@ -31,101 +30,131 @@ requires
     && std::floating_point<FT>
     && std::same_as<typename bg::coordinate_type<Point>::type, FT>
 struct RasterData {
-    using MultiPoint = bg::model::multi_point<Point>;
-    using LineString = bg::model::linestring<Point &>;
-    using Box = bg::model::box<Point &>;
-    using Polygon = bg::model::polygon<Point &>;
+    public:
+        using MultiPoint = bg::model::multi_point<Point>;
+        using LineString = bg::model::linestring<Point>;
+        using Box = bg::model::box<Point>;
+        using Polygon = bg::model::polygon<Point>;
 
-    FT x_min;
-    FT x_max;
-    FT delta_x;
-    std::size_t num_points_x;
+    private:
 
-    FT y_min;
-    FT y_max;
-    FT delta_y;
-    std::size_t num_points_y;
+        FT x_min;
+        FT x_max;
+        FT delta_x;
+        std::size_t num_points_x;
 
-    MultiPoint points;
+        FT y_min;
+        FT y_max;
+        FT delta_y;
+        std::size_t num_points_y;
 
-    RasterData(
-        FT x_min, FT y_max, FT delta_x, FT delta_y, std::size_t num_points_x, std::size_t num_points_y, FT* data
-    ) :
-        x_min(x_min),
-        x_max(x_min + (num_points_x - 1) * delta_x),
-        y_min(y_max - (num_points_y - 1) * delta_y),
-        y_max(y_max),
-        delta_x(delta_x),
-        delta_y(delta_y),
-        num_points_x(num_points_x),
-        num_points_y(num_points_y)
-    {
-        for (std::size_t i = 0; i < num_points_x; ++i) {
-            for (std::size_t j = 0; j < num_points_y; ++j) {
-                bg::append(
-                    this->points,
-                    Point(x_min + i * delta_x, y_max - j * delta_y, data[j * num_points_x + i])
-                );
+        FT* data;
+        MultiPoint points;
+
+    public:
+        RasterData(
+            FT x_min, FT y_max, FT delta_x, FT delta_y, std::size_t num_points_x, std::size_t num_points_y, FT* data
+        ) :
+            x_min(x_min),
+            x_max(x_min + (num_points_x - 1) * delta_x),
+            y_min(y_max - (num_points_y - 1) * delta_y),
+            y_max(y_max),
+            delta_x(delta_x),
+            delta_y(delta_y),
+            num_points_x(num_points_x),
+            num_points_y(num_points_y),
+            data(data)
+        {
+            for (std::size_t i = 0; i < num_points_x; ++i) {
+                for (std::size_t j = 0; j < num_points_y; ++j) {
+                    bg::append(
+                        this->points,
+                        Point(x_min + i * delta_x, y_max - j * delta_y, data[j * num_points_x + i])
+                    );
+                }
             }
         }
-    }
 
-    const MultiPoint& get_points() const {
-        return points;
-    }
+        const MultiPoint& get_points() const {
+            return points;
+        }
 
-    // For every point inside the raster rectangle we identify indices (i, j) of
-    // the upper-left vertex of the cell containing the point
-    std::pair<int, int> get_indices(FT x, FT y) const {
-        int i = std::min<int>(std::max<int>(static_cast<int>((y_max - y) / delta_y), 0), num_points_y - 1);
-        int j = std::min<int>(std::max<int>(static_cast<int>((x - x_min) / delta_x), 0), num_points_x - 1);
+        const std::size_t& get_num_x() const {
+            return this->num_points_x;
+        }
 
-        return std::make_pair(i, j);
-    }
+        const std::size_t& get_num_y() const {
+            return this->num_points_y;
+        }
 
-    // Interpolate data using using a bilinear interpolation rule on each cell
-    FT get_interpolated_value_at_point(FT x, FT y) const {
-        // Determine indices of the cell containing (x, y)
-        auto [i, j] = get_indices(x, y);
+        const FT& get_xmin() const {
+            return this->x_min;
+        }
 
-        // Determine the cell corners
-        //     (x0, y0) -- upper left
-        //     (x1, y1) -- lower right
-        FT x_0 = x_min + j * delta_x, y_0 = y_max - i * delta_y;
-        FT x_1 = x_min + (j + 1) * delta_x, y_1 = y_max - (i + 1) * delta_y;
+        const FT& get_ymin() const {
+            return this->y_min;
+        }
 
-        // Using bilinear interpolation on the cell
-        FT h = points[(i + 0) * num_points_x + j + 0] * (x_1 - x) / delta_x * (y - y_1) / delta_y // (x0, y0)
-             + points[(i + 0) * num_points_x + j + 1] * (x - x_0) / delta_x * (y - y_1) / delta_y // (x1, y0)
-             + points[(i + 1) * num_points_x + j + 0] * (x_1 - x) / delta_x * (y_0 - y) / delta_y // (x0, y1)
-             + points[(i + 1) * num_points_x + j + 1] * (x - x_0) / delta_x * (y_0 - y) / delta_y; // (x1, y1)
+        const FT& get_xmax() const {
+            return this->x_max;
+        }
 
-        return h;
-    }
+        const FT& get_ymax() const {
+            return this->y_max;
+        }
 
-    // Boundary of the raster domain as a boost geometry polygon
-    Polygon exterior() const {
-        Polygon rectangle{{x_min, y_min}, {x_max, y_min}, {x_max, y_max}, {x_min, y_max}};
-        return rectangle;
-    }
+        // For every point inside the raster rectangle we identify indices (i, j) of
+        // the upper-left vertex of the cell containing the point
+        std::pair<int, int> get_indices(FT x, FT y) const {
+            int i = std::min<int>(std::max<int>(static_cast<int>((y_max - y) / delta_y), 0), num_points_y - 1);
+            int j = std::min<int>(std::max<int>(static_cast<int>((x - x_min) / delta_x), 0), num_points_x - 1);
 
-    // Compute intersection of raster rectangle with polygon
-    template <typename P>
-    requires std::same_as<P, Polygon>
-    Polygon compute_intersection(const P &polygon) const {
-        Box rectangle = exterior();
+            return std::make_pair(i, j);
+        }
 
-        Polygon intersection_polygon;
-        bg::intersection(rectangle, polygon, intersection_polygon);
+        // Interpolate data using using a bilinear interpolation rule on each cell
+        FT get_interpolated_value_at_point(FT x, FT y) const {
+            // Determine indices of the cell containing (x, y)
+            auto [i, j] = get_indices(x, y);
 
-        return intersection_polygon;
-    }
+            // Determine the cell corners
+            //     (x0, y0) -- upper left
+            //     (x1, y1) -- lower right
+            const FT x_0 = x_min + j * delta_x, y_0 = y_max - i * delta_y;
+            const FT x_1 = x_min + (j + 1) * delta_x, y_1 = y_max - (i + 1) * delta_y;
 
-    // Determine if a point (x, y) is strictly inside the raster domain
-    bool contains(FT x, FT y) const {
-        FT eps = pow(pow(delta_x, 2) + pow(delta_y, 2), 0.5) * 1e-10;
-        return ((x > x_min + eps) and (x < x_max - eps) and (y > y_min + eps) and (y < y_max - eps));
-    }
+            // Using bilinear interpolation on the cell
+            const FT h = data[(i + 0) * num_points_x + j + 0] * (x_1 - x) / delta_x * (y - y_1) / delta_y // (x0, y0)
+                       + data[(i + 0) * num_points_x + j + 1] * (x - x_0) / delta_x * (y - y_1) / delta_y // (x1, y0)
+                       + data[(i + 1) * num_points_x + j + 0] * (x_1 - x) / delta_x * (y_0 - y) / delta_y // (x0, y1)
+                       + data[(i + 1) * num_points_x + j + 1] * (x - x_0) / delta_x * (y_0 - y) / delta_y; // (x1, y1)
+
+            return h;
+        }
+
+        // Boundary of the raster domain as a boost geometry polygon
+        Polygon exterior() const {
+            Polygon rectangle{{{x_min, y_min}, {x_max, y_min}, {x_max, y_max}, {x_min, y_max}}};
+            return rectangle;
+        }
+
+        // Compute intersection of raster rectangle with polygon
+        template <typename P>
+        requires std::same_as<P, Polygon>
+        Polygon compute_intersection(const P &polygon) const {
+            Box rectangle = exterior();
+
+            Polygon intersection_polygon;
+            bg::intersection(rectangle, polygon, intersection_polygon);
+
+            return intersection_polygon;
+        }
+
+        // Determine if a point (x, y) is strictly inside the raster domain
+        bool contains(FT x, FT y) const {
+            FT eps = pow(pow(delta_x, 2) + pow(delta_y, 2), 0.5) * 1e-10;
+            return ((x > x_min + eps) and (x < x_max - eps) and (y > y_min + eps) and (y < y_max - eps));
+        }
 };
 
 template <
@@ -160,15 +189,6 @@ public:
             {
             }
 
-            // TODO: fix iterators?
-            size_t num_vertices() const {
-                return this->triangles.size();
-            }
-
-            size_t num_edges() const {
-                return this->triangles.size();
-            }
-
             size_t num_faces() const {
                 return this->triangles.size();
             }
@@ -188,7 +208,6 @@ public:
         // |pxa  pya  a2  pxa*pxa + pya*pya|
         // |pxb  pyb  b2  pxb*pxb + pyb*pyb|
         // |pxc  pyc  c2  pxc*pxc + pyc*pyc|
-        // const FT det = pxa*pyb*c2 - pxa*b2*pyc - pya*pxb*c2 + pya*b2*pxc + a2*pxb*pyc - a2*pyb*pxc;
         const FT det =
             (pxa*pxa + pya*pya)*(pxb*pyc - pxc*pyb)
             - (pxb*pxb + pyb*pyb)*(pxa*pyc - pxc*pya)
@@ -231,10 +250,10 @@ public:
         };
 
         // add super triangle
-        const FT lower_x = raster.x_min;
-        const FT lower_y = raster.y_min;
-        const FT upper_x = raster.x_max;
-        const FT upper_y = raster.y_max;
+        const FT& lower_x = raster.get_xmin();
+        const FT& lower_y = raster.get_ymin();
+        const FT& upper_x = raster.get_xmax();
+        const FT& upper_y = raster.get_ymax();
 
         const FT diff_max = std::max(upper_x - lower_x, upper_y - lower_y);
         const FT mid_x = 0.5 * (upper_x + lower_x);
