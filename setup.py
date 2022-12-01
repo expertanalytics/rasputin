@@ -6,10 +6,8 @@ import subprocess
 from pathlib import Path
 
 from distutils.version import LooseVersion
-from setuptools import setup, find_packages, Extension
+from setuptools import setup, Extension
 from setuptools.command.build_ext import build_ext
-
-web_templates = "src/rasputin/web/*"
 
 
 class CMakeExtension(Extension):
@@ -28,10 +26,13 @@ class CMakeBuild(build_ext):
                 ", ".join(e.name for e in self.extensions))
 
         if platform.system() == "Windows":
-            cmake_version = LooseVersion(re.search(r'version\s*([\d.]+)',
-                                         out.decode()).group(1))
-            if cmake_version < '3.1.0':
-                raise RuntimeError("CMake >= 3.1.0 is required on Windows")
+            cmake_version = re.search(r'version\s*([\d.]+)', out.decode())
+            if cmake_version is not None:
+                cmake_version = LooseVersion(cmake_version.group(1))
+                if cmake_version < '3.1.0':
+                    raise RuntimeError("CMake >= 3.1.0 is required on Windows")
+            else:
+                raise ValueError("cmake version not found")
 
         for ext in self.extensions:
             self.build_extension(ext)
@@ -62,7 +63,8 @@ class CMakeBuild(build_ext):
         env = os.environ.copy()
         env['CXXFLAGS'] = '{} -DVERSION_INFO=\\"{}\\"'.format(
             env.get('CXXFLAGS', ''),
-            self.distribution.get_version())
+            self.distribution.get_version()
+        )
 
         if not os.path.exists(self.build_temp):
             os.makedirs(self.build_temp)
@@ -81,41 +83,9 @@ def _compile_and_check(cmd, *args, **kwargs):
             raise RuntimeError(f"{cmd} exited with {proc.returncode}\n{proc.stderr}") from err
 
 setup(
-    name='rasputin',
-    version='0.1',
-    author='Ola Skavhaug',
-    author_email='ola@xal.no',
-    description='A simple tool for constructing TINs from DEMs',
-    long_description='',
-    # tell setuptools to look for any packages under 'src'
-    packages=find_packages('src'),
-    requires=[
-          'Cython',
-          'numpy',
-          'pyproj',
-          'Pillow',
-          'h5py',
-          'lxml',
-          'shapely',
-          'descartes',
-          'meshio',
-    ],
-    extras_require={'all': ['pytest']},
-    # tell setuptools that all packages will be under the 'src' directory
-    # and nowhere else
-    package_dir={'':'src'},
-    data_files=[("rasputin/web", ["web/index.js", "web/index.html", "web/data.js", "web/favicon.ico"]),
-                ("rasputin/web/js", ["web/js/three.min.js", "web/js/dat.min.js"]),
-                ("rasputin/web/js/controls", ["web/js/controls/OrbitControls.js", "web/js/controls/PointerLockControls.js"])],
     # add an extension module named 'python_cpp_example' to the package
     # 'python_cpp_example'
-    ext_modules=[CMakeExtension('rasputin/rasputin')],
+    ext_modules=[CMakeExtension('src/rasputin')],
     # add custom build_ext command
     cmdclass=dict(build_ext=CMakeBuild),
-    zip_safe=False,
-    entry_points={
-        'console_scripts': ['rasputin_web = rasputin.web_visualize:visualize_tin',
-                            'rasputin_store = rasputin.application:store_tin',
-                            'rasputin_shade = rasputin.application:compute_shades']}
 )
-

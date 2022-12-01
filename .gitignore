@@ -3,8 +3,8 @@ cmake-*
 .env
 *.swp
 lib/**/*
-src/rasputin/*so
-src/rasputin.egg-info
+**/*.egg-info
+**/*.so
 __pycache__
 build
 dist
@@ -13,3 +13,4 @@ dist
 compile_commands.json
 .cache/
 .python-version
+*.eggs
