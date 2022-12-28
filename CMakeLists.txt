@@ -47,15 +47,15 @@ add_definitions(-DHAS_BOOST)
 # date
 # ----
 # TODO: Check CXX version if this is really needed?
-if (EXISTS "${RASPUTIN_LIB_DIR}/date")
-    add_library(date INTERFACE)
-    target_include_directories(date INTERFACE
-        "${RASPUTIN_LIB_DIR}/date/include")
-else()
-    find_package(date REQUIRED)
-    add_library(date INTERFACE IMPORTED)
-endif()
-list(APPEND RASPUTIN_DEPENDENCIES date)
+# if (EXISTS "${RASPUTIN_LIB_DIR}/date")
+#     add_library(date INTERFACE)
+#     target_include_directories(date INTERFACE
+#         "${RASPUTIN_LIB_DIR}/date/include")
+# else()
+#     find_package(date REQUIRED)
+#     add_library(date INTERFACE IMPORTED)
+# endif()
+# list(APPEND RASPUTIN_DEPENDENCIES date)
 
 
 # CGAL
@@ -102,8 +102,8 @@ endif()
 # Python bindnigs
 # ---------------
 # Use pybind11 as a system library to avoid problems with include order
-pybind11_add_module(triangulate_dem MODULE SYSTEM
-    "${RASPUTIN_SOURCE}/bindings.cpp")
+file(GLOB RASPUTIN_SOURCES ${RASPUTIN_SOURCE}/*.cpp)
+pybind11_add_module(triangulate_dem MODULE SYSTEM ${RASPUTIN_SOURCES})
 # Need to link BLAS for header-only Aramdillo
 target_link_libraries(triangulate_dem PRIVATE
     ${RASPUTIN_DEPENDENCIES}
