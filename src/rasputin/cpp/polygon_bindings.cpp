@@ -9,6 +9,8 @@
 
 namespace py = pybind11;
 
+PYBIND11_MAKE_OPAQUE(CGAL::MultiPolygon);
+
 template<typename P0, typename P1>
 CGAL::MultiPolygon difference_polygons(const P0& polygon0, const P1& polygon1) {
     CGAL::MultiPolygon difference_result;
