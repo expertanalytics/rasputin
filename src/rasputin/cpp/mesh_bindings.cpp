@@ -10,7 +10,8 @@
 #include <CGAL/Surface_mesh_simplification/Policies/Edge_collapse/LindstromTurk_cost.h>
 #include <CGAL/Surface_mesh_simplification/Policies/Edge_collapse/LindstromTurk_placement.h>
 
-#include "raster_data.h"
+// #include "cgal_raster_data.h"
+// #include "raster_data.h"
 #include "mesh.h"
 
 namespace py = pybind11;

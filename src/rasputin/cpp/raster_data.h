@@ -1,13 +1,37 @@
 #pragma once
 
-#include <CGAL/Boolean_set_operations_2.h>
+#include <concepts>
+
+#include <pybind11/pybind11.h>
+#include <pybind11/stl.h>
+#include <pybind11/numpy.h>
 
 #include "types.h"
 
+namespace py = pybind11;
+
 namespace rasputin {
-template<typename FT>
-struct RasterData {
-    RasterData(
+namespace traits {
+template<
+    typename FT,
+    typename PointList,
+    typename SimplePolygon,
+    typename MultiPolygon
+>
+requires std::same_as<FT, double> || std::same_as<FT, float>
+class RasterBase {
+    public:
+    double x_min;
+    double delta_x;
+    std::size_t num_points_x;
+
+    double y_max;
+    double delta_y;
+    std::size_t num_points_y;
+
+    FT* data;
+
+    RasterBase(
         double x_min,
         double y_max,
         double delta_x,
@@ -25,27 +49,11 @@ struct RasterData {
         data(data) {
     }
 
-    double x_min;
-    double delta_x;
-    std::size_t num_points_x;
-
-    double y_max;
-    double delta_y;
-    std::size_t num_points_y;
-
-    FT* data;
-
-    double get_x_max() const {return x_min + (num_points_x - 1)*delta_x; }
-    double get_y_min() const {return y_max - (num_points_y - 1)*delta_y; }
-
-    CGAL::PointList raster_points() const {
-        CGAL::PointList points;
-        points.reserve(num_points_x * num_points_y);
-
-        for (std::size_t i = 0; i < num_points_y; ++i)
-            for (std::size_t j = 0; j < num_points_x; ++j)
-                points.emplace_back(x_min + j*delta_x, y_max - i*delta_y, data[i*num_points_x + j]);
-        return points;
+    double get_x_max() const {
+        return x_min + (num_points_x - 1)*delta_x;
+    }
+    double get_y_min() const {
+        return y_max - (num_points_y - 1)*delta_y;
     }
 
     // For every point inside the raster rectangle we identify indices (i, j) of the upper-left vertex of the cell containing the point
@@ -78,33 +86,73 @@ struct RasterData {
         return h;
     }
 
-    // Boundary of the raster domain as a CGAL polygon
-    CGAL::SimplePolygon exterior() const {
-        CGAL::SimplePolygon rectangle;
-        rectangle.push_back(CGAL::Point2(x_min, get_y_min()));
-        rectangle.push_back(CGAL::Point2(get_x_max(), get_y_min()));
-        rectangle.push_back(CGAL::Point2(get_x_max(), y_max));
-        rectangle.push_back(CGAL::Point2(x_min, y_max));
+    PointList raster_points() const;
+    SimplePolygon exterior() const;
 
-        return rectangle;
-    }
-
-    // Compute intersection of raster rectangle with polygon
     template<typename P>
-    CGAL::MultiPolygon compute_intersection(const P& polygon) const {
-        CGAL::SimplePolygon rectangle = exterior();
+    MultiPolygon compute_intersection(const P& polygon) const;
 
-        CGAL::MultiPolygon intersection_polygon;
-        CGAL::intersection(rectangle, polygon, std::back_inserter(intersection_polygon));
-
-        return intersection_polygon;
-    }
-
-    // Determine if a point (x, y) is is strictly inside the raster domain
-    bool contains(double x, double y) const {
-        double eps = pow(pow(delta_x, 2) + pow(delta_y, 2), 0.5) * 1e-10;
-        return ((x > x_min + eps) and (x < get_x_max() - eps)
-                and (y > get_y_min() + eps) and (y < y_max - eps));
-    }
+    bool contains(double x, double y) const;
 };
+} // namespace traits
+
+template<template<typename> class RasterData, typename FT>
+void bind_raster_list(py::module &m, const std::string& pyname) {
+    py::class_<std::vector<RasterData<FT>>, std::unique_ptr<std::vector<RasterData<FT>>>> (m, pyname.c_str())
+        .def(py::init( [] () {std::vector<RasterData<FT>> self; return self;}))
+        .def("add_raster",
+            [] (std::vector<RasterData<FT>>& self, RasterData<FT> raster_data) {
+                self.push_back(raster_data);
+            }, py::keep_alive<1,2>())
+        .def("__getitem__",
+            [] (std::vector<RasterData<FT>>& self, int index) {
+                return self.at(index);
+            }, py::return_value_policy::reference_internal);
 }
+
+template<template<typename> class RasterData, typename FT>
+void bind_rasterdata(py::module &m, const std::string& pyname) {
+    py::class_<RasterData<FT>, std::unique_ptr<RasterData<FT>>>(m, pyname.c_str(), py::buffer_protocol())
+    .def(py::init([] (py::array_t<FT>& data_array, double x_min, double y_max, double delta_x, double delta_y) {
+            auto buffer = data_array.request();
+            int m = buffer.shape[0], n = buffer.shape[1];
+
+            return RasterData<FT>(x_min, y_max, delta_x, delta_y, n, m, static_cast<FT*>(buffer.ptr) );
+        }), py::return_value_policy::take_ownership,  py::keep_alive<1, 2>(),
+            py::arg("data_array").noconvert(), py::arg("x_min"), py::arg("y_max"), py::arg("delta_x"), py::arg("delta_y"))
+    .def_buffer([] (RasterData<FT>& self) {
+            return py::buffer_info(
+                self.data,
+                sizeof(FT),
+                py::format_descriptor<FT>::format(),
+                2,
+                std::vector<std::size_t> { self.num_points_y, self.num_points_x },
+                { sizeof(FT) * self.num_points_x, sizeof(FT) }
+            );
+            })
+    .def_readwrite("x_min", &RasterData<FT>::x_min)
+    .def_readwrite("y_max", &RasterData<FT>::y_max)
+    .def_readwrite("delta_x", &RasterData<FT>::delta_x)
+    .def_readwrite("delta_y", &RasterData<FT>::delta_y)
+    .def_readonly("num_points_x", &RasterData<FT>::num_points_x)
+    .def_readonly("num_points_y", &RasterData<FT>::num_points_y)
+    .def_property_readonly("x_max", &RasterData<FT>::get_x_max)
+    .def_property_readonly("y_min", &RasterData<FT>::get_y_min)
+    .def("__getitem__", [](RasterData<FT>& self, std::pair<int, int> idx) {
+                auto [i, j] = idx;
+                return self.data[self.num_points_x * i + j]; })
+    .def("get_indices", &RasterData<FT>::get_indices)
+    .def("exterior", &RasterData<FT>::exterior, py::return_value_policy::take_ownership)
+    .def("contains", &RasterData<FT>::contains)
+    .def("get_interpolated_value_at_point", &RasterData<FT>::get_interpolated_value_at_point);
+}
+
+template<template<typename> class RasterData>
+void bind_raster(py::module& m) {
+    bind_rasterdata<RasterData, float>(m, "raster_data_float");
+    bind_rasterdata<RasterData, double>(m, "raster_data_double");
+
+    bind_raster_list<RasterData, float>(m, "raster_list_float");
+    bind_raster_list<RasterData, double>(m, "raster_list_double");
+}
+} // namespace rasputin

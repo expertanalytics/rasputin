@@ -2,7 +2,8 @@
 #include <CGAL/Surface_mesh_simplification/edge_collapse.h>
 
 #include "types.h"
-#include "raster_data.h"
+// #include "raster_data.h"
+#include "cgal_raster_data.h"
 #include "polygon.h"
 
 namespace rasputin {
@@ -106,7 +107,7 @@ struct Mesh {
 };
 
 template<typename T, typename P>
-CGAL::DelaunayConstraints interpolate_boundary_points(const RasterData<T>& raster,
+CGAL::DelaunayConstraints interpolate_boundary_points(const rasputin::RasterData<T>& raster,
                                                       const P& boundary_polygon) {
     // First we need to determine intersection points between the raster domain and the polygon
     CGAL::MultiPolygon intersection_polygon = raster.compute_intersection(boundary_polygon);
@@ -218,7 +219,7 @@ inline Mesh make_mesh(const CGAL::PointList &pts,  const std::string proj4_str) 
 };
 
 template<typename T, typename Pgn>
-Mesh mesh_from_raster(const std::vector<RasterData<T>>& raster_list,
+Mesh mesh_from_raster(const std::vector<rasputin::RasterData<T>>& raster_list,
                       const Pgn& boundary_polygon,
                       const std::string proj4_str) {
     CGAL::PointList raster_points;
@@ -238,7 +239,7 @@ Mesh mesh_from_raster(const std::vector<RasterData<T>>& raster_list,
 
 
 template<typename T>
-Mesh mesh_from_raster(const std::vector<RasterData<T>>& raster_list, const std::string proj4_str) {
+Mesh mesh_from_raster(const std::vector<rasputin::RasterData<T>>& raster_list, const std::string proj4_str) {
     CGAL::PointList raster_points;
     for (auto raster : raster_list) {
         CGAL::PointList new_points = raster.raster_points();
@@ -251,7 +252,7 @@ Mesh mesh_from_raster(const std::vector<RasterData<T>>& raster_list, const std::
 
 
 template<typename T, typename Pgn>
-Mesh mesh_from_raster(const RasterData<T>& raster,
+Mesh mesh_from_raster(const rasputin::RasterData<T>& raster,
                       const Pgn& boundary_polygon,
                       const std::string proj4_str) {
     CGAL::PointList raster_points = raster.raster_points();
@@ -262,7 +263,7 @@ Mesh mesh_from_raster(const RasterData<T>& raster,
 
 
 template<typename T>
-Mesh mesh_from_raster(const RasterData<T>& raster, const std::string proj4_str) {
+Mesh mesh_from_raster(const rasputin::RasterData<T>& raster, const std::string proj4_str) {
     return make_mesh(raster.raster_points(), proj4_str);
 }
 
