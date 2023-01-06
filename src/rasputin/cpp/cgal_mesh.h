@@ -1,4 +1,7 @@
+#include <CGAL/Surface_mesh_simplification/edge_collapse.h>
+
 #include "mesh.h"
+#include "cgal_raster_data.h"
 
 namespace rasputin {
 struct Mesh: public traits::MeshBase<CGAL::Mesh> {
@@ -7,10 +10,9 @@ struct Mesh: public traits::MeshBase<CGAL::Mesh> {
     template<typename S, typename P, typename C>
     Mesh coarsen(const S& stop, const P& placement, const C& cost) const {
         CGAL::Mesh new_cgal_mesh = CGAL::Mesh(this->mesh);
-        CGAL::Surface_mesh_simplification::edge_collapse(new_cgal_mesh,
-                                                         stop,
-                                                         CGAL::parameters::get_cost(cost)
-                                                                          .get_placement(placement));
+        CGAL::Surface_mesh_simplification::edge_collapse(
+            new_cgal_mesh, stop, CGAL::parameters::get_cost(cost).get_placement(placement)
+        );
         return Mesh(new_cgal_mesh, proj4_str);
     }
 
@@ -24,7 +26,7 @@ struct Mesh: public traits::MeshBase<CGAL::Mesh> {
         return mesh.number_of_faces();
     }
 
-    CGAL::Mesh construct_mesh(
+    static CGAL::Mesh construct_mesh(
         const point3_vector &pts, const face_vector &faces, VertexIndexMap& index_map, FaceDescrMap& face_map
     ) {
         CGAL::Mesh mesh;
@@ -70,9 +72,9 @@ struct Mesh: public traits::MeshBase<CGAL::Mesh> {
 
 namespace traits {
 template<>
-struct Delaunay<RasterData, CGAL::DelaunayConstraints> {
+struct Triangulation<RasterData, CGAL::PointList, Mesh, CGAL::DelaunayConstraints> {
     template<typename T, typename P>
-    CGAL::DelaunayConstraints interpolate_boundary_points(const RasterData<T>& raster, const P& boundary_polygon) {
+    static CGAL::DelaunayConstraints interpolate_boundary_points(const RasterData<T>& raster, const P& boundary_polygon) {
         // First we need to determine intersection points between the raster domain and the polygon
         CGAL::MultiPolygon intersection_polygon = raster.compute_intersection(boundary_polygon);
 
@@ -115,7 +117,124 @@ struct Delaunay<RasterData, CGAL::DelaunayConstraints> {
         }
         return interpolated_points;
     }
+
+    template<typename Pgn>
+    static Mesh make_mesh(
+        const CGAL::PointList &pts,
+        const Pgn& inclusion_polygon,
+        const CGAL::DelaunayConstraints &constraints,
+        const std::string proj4_str
+    ) {
+
+        CGAL::ConstrainedDelaunay dtin;
+        for (const auto p: pts)
+            dtin.insert(p);
+
+        for (auto point_sequence: constraints)
+            dtin.insert_constraint(point_sequence.begin(), point_sequence.end(), false);
+
+        CGAL::Mesh mesh;
+        CGAL::PointVertexMap pvm;
+
+        auto index = [&pvm, &mesh] (CGAL::Point v) -> CGAL::VertexIndex {
+            // Find index of point in mesh, adding it if needed
+            auto iter = pvm.find(v);
+            if (iter == pvm.end())
+                iter = pvm.emplace(std::make_pair(v, mesh.add_vertex(v))).first;
+            return iter->second;
+        };
+
+        for (auto f = dtin.finite_faces_begin(); f != dtin.finite_faces_end(); ++f) {
+            CGAL::Point u = f->vertex(0)->point();
+            CGAL::Point v = f->vertex(1)->point();
+            CGAL::Point w = f->vertex(2)->point();
+
+            // Add face if midpoint is contained
+            CGAL::Point2 face_midpoint(u.x()/3 + v.x()/3 + w.x()/3,
+                                       u.y()/3 + v.y()/3 + w.y()/3);
+            if (CGAL::point_inside_polygon(face_midpoint, inclusion_polygon)) {
+                mesh.add_face(index(u), index(v), index(w));
+            }
+        }
+        pvm.clear();
+        return Mesh(mesh, proj4_str);
+    };
+
+    static Mesh make_mesh(const CGAL::PointList &pts,  const std::string proj4_str) {
+        CGAL::ConstrainedDelaunay dtin;
+        for (const auto p: pts)
+            dtin.insert(p);
+
+        CGAL::PointVertexMap pvm;
+        CGAL::Mesh mesh;
+
+        for (auto v = dtin.finite_vertices_begin(); v != dtin.finite_vertices_end(); ++v) {
+            CGAL::Point2 pt(v->point().x(), v->point().y());
+            pvm.emplace(std::make_pair(v->point(), mesh.add_vertex(v->point())));
+        }
+
+        for (auto f = dtin.finite_faces_begin(); f != dtin.finite_faces_end(); ++f) {
+            CGAL::Point u = f->vertex(0)->point();
+            CGAL::Point v = f->vertex(1)->point();
+            CGAL::Point w = f->vertex(2)->point();
+            mesh.add_face(pvm[u], pvm[v], pvm[w]);
+        }
+        pvm.clear();
+
+        return Mesh(mesh, proj4_str);
+    };
+
+    template<typename T, typename Pgn>
+    static Mesh mesh_from_raster(
+        const std::vector<RasterData<T>>& raster_list, const Pgn& boundary_polygon, const std::string proj4_str
+    ) {
+        CGAL::PointList raster_points;
+        CGAL::DelaunayConstraints boundary_points;
+        for (auto raster : raster_list) {
+            CGAL::PointList new_points = raster.raster_points();
+            raster_points.insert(
+                raster_points.end(),
+                std::make_move_iterator(new_points.begin()),
+                std::make_move_iterator(new_points.end())
+            );
+            CGAL::DelaunayConstraints new_constraints = interpolate_boundary_points(raster, boundary_polygon);
+            boundary_points.insert(
+                boundary_points.end(),
+                std::make_move_iterator(new_constraints.begin()),
+                std::make_move_iterator(new_constraints.end())
+            );
+        }
+        return make_mesh(raster_points, boundary_polygon, boundary_points, proj4_str);
+    }
+
+    template<typename T>
+    static Mesh mesh_from_raster(const std::vector<RasterData<T>>& raster_list, const std::string proj4_str) {
+        CGAL::PointList raster_points;
+        for (auto raster : raster_list) {
+            CGAL::PointList new_points = raster.raster_points();
+            raster_points.insert(
+                raster_points.end(),
+                std::make_move_iterator(new_points.begin()),
+                std::make_move_iterator(new_points.end())
+            );
+        }
+        return make_mesh(raster_points, proj4_str);
+    }
+
+    template<typename T, typename Pgn>
+    static Mesh mesh_from_raster(
+        const RasterData<T>& raster, const Pgn& boundary_polygon, const std::string proj4_str
+    ) {
+        CGAL::PointList raster_points = raster.raster_points();
+        CGAL::DelaunayConstraints boundary_points = interpolate_boundary_points(raster, boundary_polygon);
+
+        return make_mesh(raster_points, boundary_polygon, boundary_points, proj4_str);
+    }
+
+    template<typename T>
+    static Mesh mesh_from_raster(const RasterData<T>& raster, const std::string proj4_str) {
+        return make_mesh(raster.raster_points(), proj4_str);
+    }
 };
 } // namespace traits
-
 } // namespace rasputin

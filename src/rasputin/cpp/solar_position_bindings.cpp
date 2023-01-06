@@ -3,6 +3,7 @@
 
 #include "solar_position.h"
 #include "shade.h"
+#include "cgal_mesh.h"
 
 namespace py = pybind11;
 
@@ -24,14 +25,14 @@ void bind_solars(py::module& m) {
 }
 
 void bind_shades(py::module& m) {
-    m.def("compute_shadow", (std::vector<int> (*)(const rasputin::Mesh &, const rasputin::point3 &))&rasputin::compute_shadow, "Compute shadows for given topocentric sun position.")
-     .def("compute_shadow", (std::vector<int> (*)(const rasputin::Mesh &, const double, const double))&rasputin::compute_shadow, "Compute shadows for given azimuth and elevation.")
-     .def("compute_shadows", &rasputin::compute_shadows, "Compute shadows for a series of times and ray directions.")
+    m.def("compute_shadow", (std::vector<int> (*)(const rasputin::Mesh &, const rasputin::point3 &))&rasputin::compute_shadow<rasputin::Mesh, CGAL::Mesh>, "Compute shadows for given topocentric sun position.")
+     .def("compute_shadow", (std::vector<int> (*)(const rasputin::Mesh &, const double, const double))&rasputin::compute_shadow<rasputin::Mesh, CGAL::Mesh>, "Compute shadows for given azimuth and elevation.")
+     .def("compute_shadows", &rasputin::compute_shadows<rasputin::Mesh, CGAL::Mesh>, "Compute shadows for a series of times and ray directions.")
      .def("shade", [] (const rasputin::Mesh& mesh, const double timestamp) {
          const auto secs = seconds(int(std::round(timestamp)));
          const auto millisecs = milliseconds(int(round(1000*fmod(timestamp, 1))));
          const auto tp = sys_days{1970y / January / 1} + secs + millisecs;
-         const auto shade_vec = rasputin::shade(mesh, tp);
+         const auto shade_vec = rasputin::shade<rasputin::Mesh, CGAL::Mesh>(mesh, tp);
          py::array_t<bool> result(shade_vec.size());
          auto info = result.request();
          auto *data = static_cast<bool*>(info.ptr);

@@ -1,3 +1,5 @@
+#include <concepts>
+
 #include <boost/geometry.hpp>
 #include <boost/geometry/srs/epsg.hpp>
 #include <boost/geometry/srs/projection.hpp>
@@ -13,18 +15,22 @@
 #include "solar_position.h"
 
 namespace rasputin {
-inline CGAL::Point3 centroid(const Mesh& mesh, const CGAL::face_descriptor &face) {
+template<typename Mesh, typename M>
+requires traits::DerivedFromMesh<Mesh, M>
+CGAL::Point3 centroid(const Mesh& mesh, const CGAL::face_descriptor &face) {
     CGAL::Point3 c{0, 0, 0};
-    for (auto v: mesh.cgal_mesh.vertices_around_face(mesh.cgal_mesh.halfedge(face))) {
-        const auto pt = mesh.cgal_mesh.point(v);
+    for (auto v: mesh.mesh.vertices_around_face(mesh.mesh.halfedge(face))) {
+        const auto pt = mesh.mesh.point(v);
         c = CGAL::Point3{c.x() + pt.x(), c.y() + pt.y(), c.z() + pt.z()};
     }
     return CGAL::Point3{c.x()/3.0, c.y()/3.0, c.z()/3.0};
 }
 
-inline std::vector<int> compute_shadow(const Mesh & mesh, const point3 &sun_direction) {
+template<typename Mesh, typename M>
+requires traits::DerivedFromMesh<Mesh, M>
+std::vector<int> compute_shadow(const Mesh & mesh, const point3 &sun_direction) {
     std::vector<int> shade;
-    auto cgal_mesh = mesh.cgal_mesh;
+    auto cgal_mesh = mesh.mesh;
     const CGAL::Vector sun_vec(-sun_direction[0], -sun_direction[1], -sun_direction[2]);
 
     int i = 0;
@@ -34,7 +40,7 @@ inline std::vector<int> compute_shadow(const Mesh & mesh, const point3 &sun_dire
             shade.emplace_back(i);
         else {
             CGAL::Tree tree(CGAL::faces(cgal_mesh).first, CGAL::faces(cgal_mesh).second, cgal_mesh);
-            const auto c = centroid(mesh, fd);
+            const CGAL::Point3 c = centroid<Mesh, M>(mesh, fd);
                 CGAL::Ray sun_ray(c, -sun_vec);
                 auto intersection = tree.first_intersection(sun_ray,
                                                             [fd] (const CGAL::face_descriptor &t) { return (t == fd); });
@@ -68,7 +74,9 @@ inline bool is_shaded(
     return false;
 }
 
-inline std::vector<bool> shade(const Mesh &mesh, const std::chrono::system_clock::time_point tp) {
+template<typename Mesh, typename M>
+requires traits::DerivedFromMesh<Mesh, M>
+std::vector<bool> shade(const Mesh &mesh, const std::chrono::system_clock::time_point tp) {
     std::vector<bool> shade_vec;
     shade_vec.reserve(mesh.num_faces());
     namespace bg = boost::geometry;
@@ -78,9 +86,9 @@ inline std::vector<bool> shade(const Mesh &mesh, const std::chrono::system_clock
         bg::srs::proj4(mesh.proj4_str),
         bg::srs::epsg(4326)
     };
-    const CGAL::Tree tree(CGAL::faces(mesh.cgal_mesh).first, CGAL::faces(mesh.cgal_mesh).second, mesh.cgal_mesh);
-    for (auto fd: mesh.cgal_mesh.faces()) {
-        const auto c = centroid(mesh, fd);
+    const CGAL::Tree tree(CGAL::faces(mesh.mesh).first, CGAL::faces(mesh.mesh).second, mesh.mesh);
+    for (auto fd: mesh.mesh.faces()) {
+        const CGAL::Point3 c = centroid<Mesh, M>(mesh, fd);
         const point_car x_car{c.x(), c.y()};
         point_geo x_geo;
         tr.forward(x_car, x_geo);
@@ -94,29 +102,31 @@ inline std::vector<bool> shade(const Mesh &mesh, const std::chrono::system_clock
                 rasputin::solar_position::collectors::azimuth_and_elevation(),
                 rasputin::solar_position::delta_t_calculator::coarse_timestamp_calc()
         );
-        auto face_normal = CGAL::Polygon_mesh_processing::compute_face_normal(fd, mesh.cgal_mesh);
+        auto face_normal = CGAL::Polygon_mesh_processing::compute_face_normal(fd, mesh.mesh);
         shade_vec.emplace_back(is_shaded(tree, fd, face_normal, c, azimuth, elevation));
     }
     return shade_vec;
 }
 
-inline std::vector<int> compute_shadow(const Mesh &mesh, const double azimuth, const double elevation) {
+template<typename Mesh, typename M>
+requires traits::DerivedFromMesh<Mesh, M>
+std::vector<int> compute_shadow(const Mesh &mesh, const double azimuth, const double elevation) {
     // Topocentric azimuth and elevation
     const arma::vec::fixed<3> sd = arma::normalise(arma::vec::fixed<3>{sin(azimuth*M_PI/180.0),
                                                                        cos(azimuth*M_PI/180.0),
                                                                        tan(elevation*M_PI/180.0)});
-    return compute_shadow(mesh, point3{sd[0], sd[1], sd[2]});
+    return compute_shadow<Mesh, M>(mesh, point3{sd[0], sd[1], sd[2]});
 };
 
-inline std::vector<std::vector<int>> compute_shadows(
-    const Mesh &mesh, const std::vector<std::pair<int, point3>> & sun_rays
-) {
+template<typename Mesh, typename M>
+requires traits::DerivedFromMesh<Mesh, M>
+std::vector<std::vector<int>> compute_shadows(const Mesh &mesh, const std::vector<std::pair<int, point3>> & sun_rays) {
     // TODO: Rewrite totally!
     std::vector<std::vector<int>>  result;
     return result;
     /*
     result.reserve(sun_rays.size());
-    CGAL::Mesh cgal_mesh = mesh.cgal_mesh;
+    CGAL::Mesh cgal_mesh = mesh.mesh;
     std::map<size_t, CGAL::VertexIndex> index_map;
     std::map<CGAL::face_descriptor, size_t> face_map;
     size_t i = 0;

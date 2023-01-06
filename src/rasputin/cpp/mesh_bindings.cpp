@@ -10,9 +10,8 @@
 #include <CGAL/Surface_mesh_simplification/Policies/Edge_collapse/LindstromTurk_cost.h>
 #include <CGAL/Surface_mesh_simplification/Policies/Edge_collapse/LindstromTurk_placement.h>
 
-// #include "cgal_raster_data.h"
-// #include "raster_data.h"
-#include "mesh.h"
+#include "cgal_mesh.h"
+#include "cgal_raster_data.h"
 
 namespace py = pybind11;
 namespace SMS = CGAL::Surface_mesh_simplification;
@@ -23,18 +22,6 @@ PYBIND11_MAKE_OPAQUE(rasputin::face_vector);
 // PYBIND11_MAKE_OPAQUE(CGAL::MultiPolygon);
 PYBIND11_MAKE_OPAQUE(std::vector<rasputin::RasterData<float>>);
 PYBIND11_MAKE_OPAQUE(std::vector<rasputin::RasterData<double>>);
-
-template<typename R, typename P>
-void bind_make_mesh(py::module &m) {
-    m.def("make_mesh",
-        [] (const R& raster_data, const P polygon, const std::string proj4_str) {
-            return rasputin::mesh_from_raster(raster_data, polygon, proj4_str);
-        }, py::return_value_policy::take_ownership)
-    .def("make_mesh",
-        [] (const R& raster_data, const std::string proj4_str) {
-            return rasputin::mesh_from_raster(raster_data, proj4_str);
-        }, py::return_value_policy::take_ownership);
-}
 
 void bind_mesh(py::module& m) {
     py::class_<rasputin::Mesh, std::unique_ptr<rasputin::Mesh>>(m, "Mesh")
@@ -60,23 +47,52 @@ void bind_mesh(py::module& m) {
         .def_property_readonly("points", &rasputin::Mesh::get_points, py::return_value_policy::reference_internal)
         .def_property_readonly("faces", &rasputin::Mesh::get_faces, py::return_value_policy::reference_internal);
 
-    bind_make_mesh<std::vector<rasputin::RasterData<float>>, CGAL::SimplePolygon>(m);
-    bind_make_mesh<std::vector<rasputin::RasterData<double>>, CGAL::SimplePolygon>(m);
-    bind_make_mesh<std::vector<rasputin::RasterData<float>>, CGAL::Polygon>(m);
-    bind_make_mesh<std::vector<rasputin::RasterData<double>>, CGAL::Polygon>(m);
+    rasputin::bind_make_mesh<
+        rasputin::RasterData,
+        float,
+        CGAL::SimplePolygon,
+        CGAL::PointList,
+        rasputin::Mesh,
+        CGAL::Mesh,
+        CGAL::DelaunayConstraints
+    >(m);
+    rasputin::bind_make_mesh<
+        rasputin::RasterData,
+        double,
+        CGAL::SimplePolygon,
+        CGAL::PointList,
+        rasputin::Mesh,
+        CGAL::Mesh,
+        CGAL::DelaunayConstraints
+    >(m);
+    rasputin::bind_make_mesh<
+        rasputin::RasterData,
+        float,
+        CGAL::Polygon,
+        CGAL::PointList,
+        rasputin::Mesh,
+        CGAL::Mesh,
+        CGAL::DelaunayConstraints
+    >(m);
+    rasputin::bind_make_mesh<
+        rasputin::RasterData,
+        double,
+        CGAL::Polygon,
+        CGAL::PointList,
+        rasputin::Mesh,
+        CGAL::Mesh,
+        CGAL::DelaunayConstraints
+    >(m);
+
     // bind_make_mesh<std::vector<rasputin::RasterData<float>>, CGAL::MultiPolygon>(m);
     // bind_make_mesh<std::vector<rasputin::RasterData<double>>, CGAL::MultiPolygon>(m);
-    bind_make_mesh<rasputin::RasterData<float>, CGAL::SimplePolygon>(m);
-    bind_make_mesh<rasputin::RasterData<double>, CGAL::SimplePolygon>(m);
-    bind_make_mesh<rasputin::RasterData<float>, CGAL::Polygon>(m);
-    bind_make_mesh<rasputin::RasterData<double>, CGAL::Polygon>(m);
     // bind_make_mesh<rasputin::RasterData<float>, CGAL::MultiPolygon>(m);
     // bind_make_mesh<rasputin::RasterData<double>, CGAL::MultiPolygon>(m);
 
      m.def("construct_mesh",
-            [] (const rasputin::point3_vector& points, const rasputin::face_vector & faces, const std::string proj4_str) {
-                rasputin::VertexIndexMap index_map;
-                rasputin::FaceDescrMap face_map;
-                return rasputin::Mesh(rasputin::construct_mesh(points, faces, index_map, face_map), proj4_str);
-         }, py::return_value_policy::take_ownership);
+        [] (const rasputin::point3_vector& points, const rasputin::face_vector & faces, const std::string proj4_str) {
+            rasputin::VertexIndexMap index_map;
+            rasputin::FaceDescrMap face_map;
+            return rasputin::Mesh(rasputin::Mesh::construct_mesh(points, faces, index_map, face_map), proj4_str);
+        }, py::return_value_policy::take_ownership);
 }
