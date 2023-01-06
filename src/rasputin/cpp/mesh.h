@@ -7,53 +7,35 @@
 #include "polygon.h"
 
 namespace rasputin {
-inline CGAL::Mesh construct_mesh(
-    const point3_vector &pts, const face_vector &faces, VertexIndexMap& index_map, FaceDescrMap& face_map
-) {
-    CGAL::Mesh mesh;
-    index_map.clear();
-    face_map.clear();
-    size_t i = 0;
-    size_t j = 0;
-    for (auto p: pts)
-        index_map[i++] = mesh.add_vertex(CGAL::Point(p[0], p[1], p[2]));
-    for (auto f: faces)
-        face_map[mesh.add_face(index_map[f[0]], index_map[f[1]], index_map[f[2]])] = j++;
-    return mesh;
-};
+namespace traits {
+template<typename Mesh>
+struct MeshBase {
+    private:
+    point3_vector points;
+    face_vector faces;
 
-struct Mesh {
-    const CGAL::Mesh cgal_mesh;
+    void set_points_faces();
+
+    public:
+    const Mesh mesh;
     const std::string proj4_str;
-    Mesh(CGAL::Mesh cgal_mesh, const std::string proj4_str)
-    : cgal_mesh(cgal_mesh), proj4_str(proj4_str) {set_points_faces();}
 
-    template<typename S, typename P, typename C>
-    Mesh coarsen(const S& stop, const P& placement, const C& cost) const {
-        CGAL::Mesh new_cgal_mesh = CGAL::Mesh(this->cgal_mesh);
-        CGAL::Surface_mesh_simplification::edge_collapse(new_cgal_mesh,
-                                                         stop,
-                                                         CGAL::parameters::get_cost(cost)
-                                                                          .get_placement(placement));
-        return Mesh(new_cgal_mesh, proj4_str);
+    MeshBase(Mesh mesh, const std::string proj4_str) : mesh(mesh), proj4_str(proj4_str) {
+        this->set_points_faces();
     }
 
-    Mesh copy() const {
-        // Call CGAL::Mesh copy constructor to do a deep copy
-        return Mesh(CGAL::Mesh(cgal_mesh), proj4_str);
+    MeshBase copy() const {
+        // deep copy
+        return MeshBase(Mesh(this->mesh), this->proj4_str);
     }
 
     const point3_vector& get_points() const {
-        return points;
+        return this->points;
     }
 
     const face_vector& get_faces() const {
-        return faces;
+        return this->faces;
     }
-
-    size_t num_edges() const {return cgal_mesh.number_of_edges();}
-    size_t num_vertices() const {return cgal_mesh.number_of_vertices();}
-    size_t num_faces() const {return cgal_mesh.number_of_faces();}
 
     Mesh extract_sub_mesh(const std::vector<int> &face_indices) const {
         std::map<int, int> remap;
@@ -63,7 +45,7 @@ struct Mesh {
         for (auto face_idx: face_indices) {
             std::array<int, 3> new_face;
             int i = 0;
-            for (auto idx: faces[face_idx]) {
+            for (auto idx: this->faces[face_idx]) {
                 if (remap.count(idx) == 0) {
                     remap[idx] = counter++;
                     new_points.emplace_back(points[idx]);
@@ -74,83 +56,32 @@ struct Mesh {
         }
         VertexIndexMap index_map;
         FaceDescrMap face_map;
-        return Mesh(construct_mesh(new_points, new_faces, index_map, face_map), proj4_str);
+        return Mesh(this->construct_mesh(new_points, new_faces, index_map, face_map), proj4_str);
     }
 
-    private:
-    point3_vector points;
-    face_vector faces;
+    Mesh construct_mesh(const point3_vector&, const face_vector&, VertexIndexMap&, FaceDescrMap&);
 
-    void set_points_faces() {
-        points.clear();
-        faces.clear();
+    size_t num_edges() const;
+    size_t num_vertices() const;
+    size_t num_faces() const;
 
-        points.reserve(cgal_mesh.num_vertices());
-        faces.reserve(cgal_mesh.num_faces());
+    template<typename S, typename P, typename C>
+    Mesh coarsen(const S& stop, const P& placement, const C& cost) const;
+};
 
-        int n = 0;
-        std::map<CGAL::VertexIndex, int> reindex;
-        for (auto f: cgal_mesh.faces()) {
-            std::array<int, 3> fl;
-            size_t idx = 0;
-            for (auto v: cgal_mesh.vertices_around_face(cgal_mesh.halfedge(f))) {
-                if (reindex.count(v) == 0) {
-                    reindex.emplace(v, n++);
-                    const auto pt = cgal_mesh.point(v);
-                    points.emplace_back(point3{pt.x(), pt.y(), pt.z()});
-                }
-                fl[idx++] = reindex[v];
-            }
-            faces.emplace_back(face{fl[0], fl[1], fl[2]});
-        }
+template<template<typename> class RasterData, typename Constraints>
+struct Delaunay { };
+} // namespace traits
+
+namespace rasputin {
+template<template<typename> class RasterData, typename Constraints>
+struct Delaunay {
+    template<typename T, typename P>
+    static Constraints interpolate_boundary_points(const RasterData<T>& raster, const P& boundary_polygon) {
+        traits::Delaunay<RasterData, Constraints>::interpolate_boundary_points(raster, boundary_polygon);
     }
 };
 
-template<typename T, typename P>
-CGAL::DelaunayConstraints interpolate_boundary_points(const rasputin::RasterData<T>& raster,
-                                                      const P& boundary_polygon) {
-    // First we need to determine intersection points between the raster domain and the polygon
-    CGAL::MultiPolygon intersection_polygon = raster.compute_intersection(boundary_polygon);
-
-    // Iterate over edges of the intersection polygon and interpolate points
-    // TODO: Handle holes. Only needed if the intersecting polygon has holes.
-    CGAL::DelaunayConstraints interpolated_points;
-    for (const auto& part : CGAL::extract_boundaries(intersection_polygon)) {
-        for (auto e = part.edges_begin(); e != part.edges_end(); ++e) {
-            CGAL::Point2 first_vertex = e->vertex(0);
-            CGAL::Point2 second_vertex = e->vertex(1);
-
-            // We can skip edges that are aligend with the raster boundary
-            // TODO: Consider checking using CGAL and exact arithmentic
-            bool edge_is_aligned = not raster.contains((first_vertex.x() + second_vertex.x())/2,
-                                                       (first_vertex.y() + second_vertex.y())/2);
-            if (edge_is_aligned) {
-                continue;
-            }
-
-            // Sample with the approximately the same resolution as the raster data along the boundary edges
-            double edge_len_x = second_vertex.x() - first_vertex.x();
-            double edge_len_y = second_vertex.y() - first_vertex.y();
-            std::size_t num_subedges = static_cast<int>(std::max<double>(std::fabs(edge_len_x/raster.delta_x),
-                                                                         std::fabs(edge_len_y/raster.delta_y)));
-            num_subedges = std::max<int>(1, num_subedges);
-
-            double edge_dx = edge_len_x / num_subedges; // signed distance
-            double edge_dy = edge_len_y / num_subedges;
-
-            // Iterate over edge samples
-            std::vector<CGAL::Point> interpolated_points_on_edge;
-            for (std::size_t k=0; k < num_subedges + 1; ++k) {
-                double x = first_vertex.x() + k * edge_dx;
-                double y = first_vertex.y() + k * edge_dy;
-                double z = raster.get_interpolated_value_at_point(x, y);
-                interpolated_points_on_edge.emplace_back(x, y, z);
-            }
-            interpolated_points.push_back(std::move(interpolated_points_on_edge));
-        }
-    }
-    return interpolated_points;
-}
 
 template<typename Pgn>
 Mesh make_mesh(const CGAL::PointList &pts,
@@ -267,4 +198,4 @@ Mesh mesh_from_raster(const rasputin::RasterData<T>& raster, const std::string p
     return make_mesh(raster.raster_points(), proj4_str);
 }
 
-}
+} // namespace rasputin
