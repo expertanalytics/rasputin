@@ -192,3 +192,11 @@ post by Benjamin R.
 Jack](http://www.benjack.io/2018/02/02/python-cpp-revisited.html). Both the
 `CMakeExtension` and the `CMakeBuild` classes in `setup.py` are are taken from
 his blog as well. Thanks!
+
+## Use cases
+
+Bhattarai, B. C., Silantyeva, O., Teweldebrhan, A. T., Helset, S., Skavhaug, O., and Burkhart, J. F.: Impact of Catchment Discretization and
+Imputed Radiation on Model Response: A Case Study from Central Himalayan Catchment, Water, 12, 2020b; https://doi.org/10.3390/w12092339
+
+
+Silantyeva, O.,  Skavhaug, O., Bhattarai, B.C., Helset, S., Tallaksen, L.M.,  Nordaas, M.,  and Burkhart, J.F.: Shyft and Rasputin: a toolbox for hydrologic simulations on triangular irregular networks. https://doi.org/10.31223/X5CS95
