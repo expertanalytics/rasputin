@@ -10,6 +10,8 @@
 #include <date/date.h>
 #endif
 #include <ctime>
+#include <tuple>
+#include <vector>
 
 namespace rasputin::solar_position::collectors {
 

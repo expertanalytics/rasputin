@@ -4,9 +4,17 @@ project (Rasputin)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-# set(CMAKE_VERBOSE_MAKEFILE ON)
+set(CMAKE_CXX_FLAGS_DEBUG_INIT "-Wall")
+set(CMAKE_CXX_FLAGS_RELEASE_INIT "-Wall")
 
 set(ENABLE_TESTS ON)
+if (DEFINED ENV{ENABLE_TESTS})
+    if ($ENV{ENABLE_TESTS} STREQUAL "ON")
+        set(ENABLE_TESTS ON)
+    else()
+        set(ENABLE_TESTS OFF)
+    endif()
+endif()
 
 # Default location for dependencies
 set(RASPUTIN_LIB_DIR "${CMAKE_CURRENT_SOURCE_DIR}/lib")
@@ -54,11 +62,11 @@ list(APPEND RASPUTIN_DEPENDENCIES date)
 # CGAL
 # ----
 # Required for now but should be optional in the future
-find_package(CGAL REQUIRED)
-if (CGAL_FOUND)
-    add_definitions(-DHAS_CGAL) # For future use when CGAL is optional
-    list(APPEND RASPUTIN_DEPENDENCIES CGAL::CGAL)
-endif()
+# find_package(CGAL REQUIRED)
+# if (CGAL_FOUND)
+#     add_definitions(-DHAS_CGAL) # For future use when CGAL is optional
+#     list(APPEND RASPUTIN_DEPENDENCIES CGAL::CGAL)
+# endif()
 # NOTE: Calling`include(${CGAL_USE_FILE})` will modify INCLUDE_DIRECTORIES,
 # with the consquence that directories added by CGAL will be searched before
 # anything else, potentiall messing up the include order.
@@ -77,8 +85,8 @@ list(APPEND RASPUTIN_DEPENDENCIES Armadillo)
 # BLAS
 # ----
 # Need to link to BLAS libraries when not using armadillo wrappers
-find_package(BLAS REQUIRED)
 find_package(LAPACK)
+find_package(BLAS REQUIRED)
 
 
 # Header-only Rasputin library
@@ -100,4 +108,4 @@ pybind11_add_module(triangulate_dem MODULE SYSTEM
 # Need to link BLAS for header-only Aramdillo
 target_link_libraries(triangulate_dem PRIVATE
     ${RASPUTIN_DEPENDENCIES}
-    ${BLAS_LIBRARIES} ${LAPACK_LIBRARIES})
+    ${LAPACK_LIBRARIES} ${BLAS_LIBRARIES})
