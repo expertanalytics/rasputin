@@ -1,11 +1,8 @@
 #define CATCH_CONFIG_MAIN  // This tells Catch to provide a main() - only do this in one cpp file
-//#include <catch2/catch.hpp>
+// #include <catch2/catch.hpp>
 #include <catch2/catch_test_macros.hpp>
 #include <solar_position.h>
 #include <cmath>
-#ifndef __clang__
-#include <date/date.h>
-#endif
 #include <chrono>
 #include <ctime>
 
@@ -35,12 +32,12 @@ TEST_CASE("Reference example test", "[reference]") {
     const double T = 11;
     using namespace rasputin::test_utils;
     using namespace rasputin::solar_position;
-    const auto [Phi, e0] = calendar_solar_position(year, month, day, lat, lon, masl,
-                                                   collectors::azimuth_and_elevation(),
-                                                   fixed_cal_delta_t_calc());
-    REQUIRE(abs(Phi - 194.34024) < 1.0e-4);
+    const auto [Phi, e0] = calendar_solar_position(
+        year, month, day, lat, lon, masl, collectors::azimuth_and_elevation(), fixed_cal_delta_t_calc()
+    );
+    REQUIRE(std::abs(Phi - 194.34024) < 1.0e-4);
     const auto [e, Theta] = corrected_solar_elevation(e0, P, T);
-    REQUIRE(abs(Theta - 50.11162) < 1.0e-4);
+    REQUIRE(std::abs(Theta - 50.11162) < 1.0e-4);
 }
 
 TEST_CASE("JD test 1", "[jd1]") {
@@ -67,16 +64,13 @@ TEST_CASE("UTC cal test 1", "[utccalc]") {
 
     using namespace std::chrono;
 
-#ifndef __clang__
-    using namespace date;
-#endif
-    const auto [Phi0, elevation0] = calendar_solar_position(year, mon, dom + h/24.0, lat, lon, masl,
-                                                            collectors::azimuth_and_elevation(),
-                                                            fixed_cal_delta_t_calc());
-    const auto tp = sys_days{month(mon)/dom/year} + hours(h);
-    const auto [Phi1, elevation1] = time_point_solar_position(tp, lat, lon, masl,
-                                                              collectors::azimuth_and_elevation(),
-                                                              fixed_time_point_delta_t_calc());
+    const auto [Phi0, elevation0] = calendar_solar_position(
+        year, mon, dom + h/24.0, lat, lon, masl, collectors::azimuth_and_elevation(), fixed_cal_delta_t_calc()
+    );
+    const auto tp = sys_days{std::chrono::year(year)/month(mon)/dom} + hours(h);
+    const auto [Phi1, elevation1] = time_point_solar_position(
+        tp, lat, lon, masl, collectors::azimuth_and_elevation(), fixed_time_point_delta_t_calc()
+    );
     REQUIRE(elevation0 == elevation1);
     REQUIRE(Phi0 == Phi1);
 }
@@ -95,13 +89,10 @@ TEST_CASE("DeltaT test", "[DT]") {
     const unsigned int h = 19;
 
     using namespace std::chrono;
-#ifndef __clang__
-    using namespace date;
-#endif
     using namespace rasputin::solar_position;
-    auto tp = sys_days{month(mon)/dom/year};
-    const auto result = time_point_solar_position(tp, lat, lon, masl,
-                                                  collectors::azimuth_and_elevation(),
-                                                  delta_t_calculator::coarse_timestamp_calc());
+    auto tp = sys_days{std::chrono::year(year)/month(mon)/dom};
+    const auto result = time_point_solar_position(
+        tp, lat, lon, masl, collectors::azimuth_and_elevation(), delta_t_calculator::coarse_timestamp_calc()
+    );
 }
 

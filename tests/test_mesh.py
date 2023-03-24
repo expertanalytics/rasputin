@@ -1,9 +1,9 @@
 import pytest
-from numpy import array, cos, sin, linspace, pi, float32, zeros, ndindex, sqrt, meshgrid
+from numpy import array, cos, sin, linspace, pi, float32, zeros, ndindex, sqrt, meshgrid, int64
 from numpy.linalg import norm
 from datetime import datetime, timedelta
 
-import pyproj 
+import pyproj
 from shapely.geometry import Polygon, Point
 
 from rasputin.geometry import GeoPolygon
@@ -152,7 +152,7 @@ def test_mesh(raster, polygon):
 
 def test_mesh_sub_mesh(raster, polygon):
     mesh = Mesh.from_raster(data=raster, domain=polygon)
-    sub_mesh = mesh.extract_sub_mesh(array([0, 1]))
+    sub_mesh = mesh.extract_sub_mesh(array([0, 1], dtype=int64))
     assert len(sub_mesh.faces) == 2
 
 def test_mesh_w_hole(raster, polygon_w_hole):
