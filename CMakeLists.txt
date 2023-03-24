@@ -4,9 +4,16 @@ project (Rasputin)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-# set(CMAKE_VERBOSE_MAKEFILE ON)
+set(CMAKE_CXX_FLAGS_DEBUG_INIT "-Wall")
 
 set(ENABLE_TESTS ON)
+if (DEFINED ENV{ENABLE_TESTS})
+    if ($ENV{ENABLE_TESTS} STREQUAL "ON")
+        set(ENABLE_TESTS ON)
+    else()
+        set(ENABLE_TESTS OFF)
+    endif()
+endif()
 
 # Default location for dependencies
 set(RASPUTIN_LIB_DIR "${CMAKE_CURRENT_SOURCE_DIR}/lib")
@@ -40,15 +47,15 @@ add_definitions(-DHAS_BOOST)
 # date
 # ----
 # TODO: Check CXX version if this is really needed?
-if (EXISTS "${RASPUTIN_LIB_DIR}/date")
-    add_library(date INTERFACE)
-    target_include_directories(date INTERFACE
-        "${RASPUTIN_LIB_DIR}/date/include")
-else()
-    find_package(date REQUIRED)
-    add_library(date INTERFACE IMPORTED)
-endif()
-list(APPEND RASPUTIN_DEPENDENCIES date)
+# if (EXISTS "${RASPUTIN_LIB_DIR}/date")
+#     add_library(date INTERFACE)
+#     target_include_directories(date INTERFACE
+#         "${RASPUTIN_LIB_DIR}/date/include")
+# else()
+#     find_package(date REQUIRED)
+#     add_library(date INTERFACE IMPORTED)
+# endif()
+# list(APPEND RASPUTIN_DEPENDENCIES date)
 
 
 # CGAL
@@ -83,21 +90,24 @@ find_package(LAPACK)
 
 # Header-only Rasputin library
 # ----------------------------
-set(RASPUTIN_SOURCE "${CMAKE_CURRENT_SOURCE_DIR}/src/rasputin")
+set(RASPUTIN_SOURCE "${CMAKE_CURRENT_SOURCE_DIR}/src/rasputin/cpp")
 add_library(rasputin INTERFACE)
 target_include_directories(rasputin PRIVATE INTERFACE ${RASPUTIN_SOURCE})
-
-if (ENABLE_TESTS)
-    add_subdirectory(cpp_test)
-endif()
 
 
 # Python bindnigs
 # ---------------
 # Use pybind11 as a system library to avoid problems with include order
-pybind11_add_module(triangulate_dem MODULE SYSTEM
-    "${RASPUTIN_SOURCE}/bindings.cpp")
+file(GLOB RASPUTIN_SOURCES ${RASPUTIN_SOURCE}/*.cpp)
+pybind11_add_module(triangulate_dem MODULE SYSTEM ${RASPUTIN_SOURCES})
 # Need to link BLAS for header-only Aramdillo
 target_link_libraries(triangulate_dem PRIVATE
     ${RASPUTIN_DEPENDENCIES}
-    ${BLAS_LIBRARIES} ${LAPACK_LIBRARIES})
+    ${LAPACK_LIBRARIES} ${BLAS_LIBRARIES})
+
+if (ENABLE_TESTS)
+    enable_testing()
+    add_subdirectory(lib/Catch2)
+    add_executable(test_sun_position cpp_test/test_sun_position.cpp)
+    target_link_libraries(test_sun_position PRIVATE rasputin Catch2::Catch2WithMain ${RASPUTIN_DEPENDENCIES})
+endif()

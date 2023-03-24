@@ -31,16 +31,16 @@ Installing Rasputin is easy, as the C++ dependencies are header only. Simply, ei
 For examaple, in some location where you have your source code, type:
 
 ```
-git clone https://github.com/pybind/pybind11.git 
-git clone https://gitlab.com/conradsnicta/armadillo-code.git 
-git clone https://github.com/boostorg/geometry.git 
-git clone https://github.com/catchorg/Catch2.git 
-git clone https://github.com/CGAL/cgal.git 
+git clone https://github.com/pybind/pybind11.git
+git clone https://gitlab.com/conradsnicta/armadillo-code.git
+git clone https://github.com/boostorg/geometry.git
+git clone https://github.com/catchorg/Catch2.git
+git clone https://github.com/CGAL/cgal.git
 ```
 For Howard Hinnant's `date` library to work, enter the rasputin source root directory and checkout the source under the `lib` folder:
 ```
 cd lib
-git clone https://github.com/HowardHinnant/date.git 
+git clone https://github.com/HowardHinnant/date.git
 ```
 
 Rasputin does not aim at being backwards compatible with older compilers.
@@ -108,11 +108,11 @@ from rasputin.reader import Rasterdata
 from rasputin.mesh import Mesh
 
 def construct_rasterdata():
-    raster = np.array([0, 0, 0, 
-                       0, 1, 0, 
+    raster = np.array([0, 0, 0,
+                       0, 1, 0,
                        0, 0, 0], dtype=np.float32).reshape(3,3)
     cs = pyproj.CRS.from_epsg(32633)
-    return Rasterdata(shape=(raster.shape[1], raster.shape[0]), x_min=0, 
+    return Rasterdata(shape=(raster.shape[1], raster.shape[0]), x_min=0,
                       y_max=20, delta_x=10, delta_y=10, array=raster,
                       coordinate_system=cs.to_proj4(), info={})
 
@@ -179,9 +179,9 @@ Choose "Nedlasting" from the left hand side of the map, and choose "Landsdekkend
 and finally click DTM10. Download and unpack in, for instance, `$HOME/rasputin_data/dem_archive`, and
 `export RASPUTIN_DATA_DIR=$HOME/rasputin_data`.
 
-It is possible to include land cover types in your triangulation, through the 
-[GlobCover dataset](http://due.esrin.esa.int/page_globcover.php) from ESA. It is a raster based 
-300m (approx) resolution data set that contains 23 different land cover types. 
+It is possible to include land cover types in your triangulation, through the
+[GlobCover dataset](http://due.esrin.esa.int/page_globcover.php) from ESA. It is a raster based
+300m (approx) resolution data set that contains 23 different land cover types.
 Download the data set and unpack it in `$RASPUTIN_DATA_DIR/globcov` to access the land types using
 the `rasputin.globcov_repository.GlobCovRepository` class.
 
