@@ -14,6 +14,10 @@ include/terrain/           # public C++ headers, header-only where possible
     geometry.hpp           # RasterGeometry, CellIndex: grid <-> world mapping
     raster.hpp             # RasterSource concept, owning Raster<T>, NoData
     sample.hpp             # bilinear interpolation over a RasterSource
+    view.hpp               # RasterView<T>: non-owning view over a contiguous
+                           #   caller-supplied buffer (planned)
+    window.hpp             # window_for: bbox -> index window (planned, awaits
+                           #   a caller in refinement)
 
 src/                       # C++ implementation, one directory per module (planned)
   geometry_predicates/     # Shewchuk-style robust 2D predicates
@@ -32,7 +36,12 @@ bindings/
 
 src_python/tin_engine/     # public Python API (distribution name: rasputin)
   __init__.py              # re-exports from tin_engine._core
-  cli.py                   # Typer entry point declared in pyproject (planned)
+  cli.py                   # Typer entry point declared in pyproject
+  raster.py                # the ONLY adapter from decoded data into _core (planned)
+  io/                      # all file decoding lives here (planned)
+    __init__.py
+    geotiff.py             # TIFF container + GeoKey decoding -> DemTile
+    models.py              # Pydantic RasterMeta / DemTile
 
 tests/
   cpp/                     # C++ tests (Catch2; rapidcheck planned)
@@ -88,14 +97,83 @@ fixed two legacy defects — an out-of-bounds bilinear read and a transposed
 row/column index.
 
 Still to come here: `window_for` (bbox to index window), deferred until
-`refinement` gives it a caller, and `RasterView` over a numpy buffer, which
-belongs with the reader.
+`refinement` gives it a caller, and `RasterView<T>` — a non-owning view over a
+contiguous caller-supplied buffer. `RasterView` belongs in this module
+(`view.hpp`), not in `bindings/`: it is pure C++, and every other zero-copy
+source (an mmap'd tile, an HDF5 window, a sub-window of a parent raster)
+produces the same type. Only the lifetime anchor sits with the bindings.
 
-**Open decision:** GeoTIFF *decoding* is not sited yet. `pyproject.toml` and
-`.claude/skills/geospatial-data-formats/SKILL.md` put a pure-Python reader
-under `src_python/tin_engine/io/`; this section previously assigned read/write
-to C++. Decoding in Python keeps the C++ core testable with no I/O, but the
-call belongs to `@architect`.
+When `RasterView` lands it must bring contiguous row access into the
+`RasterSource` concept in the same change, not afterwards. A scalar-only
+concept forces a row-major scan to recompute `linear_index` per sample and
+never to walk a row pointer, which forfeits the entire reason the view exists;
+and adding a concept requirement later forces a revisit of every model and
+every test double.
+
+**Decided (@architect): GeoTIFF decoding lives in Python**, under
+`src_python/tin_engine/io/`. The C++ core never opens a file, never sees a
+path, and never links a codec.
+
+The deciding argument is dependency gravity, not testability. GeoTIFF is not
+an array format: it is a container plus a GeoKey directory plus a CRS.
+Decoding it in C++ pulls CRS interpretation across the firewall, and CRS
+interpretation means PROJ — GDAL's own dependency. That is the neighbourhood
+this migration exists to leave. Keeping decode in Python also preserves
+Tier-1 C++ tests that need no fixtures at all.
+
+`README.md` and `testing.md` already assumed this; only the prose in this
+section dissented.
+
+**Boundary contract.** Exactly one Python module, `tin_engine/raster.py`,
+constructs a core raster, so dtype, contiguity, writeability and
+projected-CRS checks have one place to audit. `io/` produces pure Pydantic
+data and never touches `_core`. Across the boundary go one C-contiguous 2-D
+`float32` or `float64` array, four keyword-named affine scalars, and an
+optional NoData sentinel — nothing else.
+
+- Raster dimensions are derived from `array.shape`, never passed alongside it,
+  so a shape/geometry disagreement is unrepresentable rather than validated.
+  The legacy passed `(array, x_min, y_max, delta_x, delta_y)` positionally
+  (`legacy/rasputin/reader.py:340-345`), which is the shape that let the
+  transposed row/column defect live.
+- numpy owns the buffer. The bound class holds a `py::object` reference as the
+  primary lifetime anchor, with `keep_alive<1,2>` backing it; `.noconvert()`
+  forbids a conversion copy that would leave the view pointing at a temporary.
+- Integer DEMs are promoted in Python at decode time: 16-bit to `float32`,
+  32-bit to `float64`. `int32` does not fit float32's mantissa, and promoting
+  it there would silently quantise elevations.
+- **CRS never crosses into C++**, now or later. The legacy violated this by
+  pushing a proj4 string into the mesh; do not reintroduce it. Python
+  reprojects every input into one projected CRS first, and rejects a
+  geographic CRS outright — a degrees-based raster interpolates perfectly
+  happily and yields a silently distorted mesh.
+- NoData discovery is Python's (a container tag); NoData semantics are C++'s
+  (already implemented in `raster.hpp` and `sample.hpp`). The sentinel is
+  compared with `==`, so it must be passed exactly as decoded, never re-typed
+  or rounded.
+- Every C++ scan releases the GIL and the adapter sets the array read-only
+  first. Refinement runs parallel-for with every thread sampling the same
+  raster, so concurrent const access is a requirement, not an aspiration — a
+  concept cannot express it, so it is stated here and in `raster.hpp`.
+
+**Obligations this puts on the reader.** `geometry.hpp` declares two
+load-bearing conventions — north-up, and grid-registered (pixel-is-point) —
+which C++ can no longer verify, so the reader must enforce them. All three of
+these are gaps in the legacy, verified:
+
+- `GTRasterTypeGeoKey` (1025) is defined at `legacy/rasputin/reader.py:36` and
+  read nowhere. An area-registered TIFF therefore lands half a cell off.
+- `ModelTransformationTag` (34264) appears nowhere in the legacy reader, so a
+  rotated or sheared transform is silently misread instead of rejected.
+  `RasterGeometry` cannot represent one; it must raise.
+- Missing georeferencing defaults rather than failing — tie point to zeros,
+  pixel scale to `(1.0, 1.0)` — so an un-georeferenced TIFF silently becomes a
+  unit-spaced raster at the origin.
+
+**Two unrelated meanings of "window"**, which must not be merged: Python
+windows are an I/O concern (which strips or tiles to decode); `window_for` is
+an index concern (which cells a triangle's bbox covers). Same word, different
+layers, no shared code.
 
 ### `geometry_predicates`
 
@@ -172,6 +250,6 @@ The repo already has:
 
 - `legacy/rasputin/triangulate_dem.h` (CGAL-based, to be replaced)
 - `legacy/rasputin/*.py` (the pre-migration Python layer, pending per-module classification)
-- `lib/date/` — **removed**. The C++20 `<chrono>` calendar types replaced it; see the `lib/date` note in `CLAUDE.md` section 2.
+- `lib/date/` — **removed**. The C++20 `<chrono>` calendar types replaced it; `CLAUDE.md` section 2 prohibits external `date` libraries.
 
 The new `_core/` tree is added alongside the existing C++ files; the old files stay buildable until the new pipeline reaches parity, then are removed in a single cleanup commit.

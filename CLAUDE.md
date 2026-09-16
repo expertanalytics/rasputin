@@ -14,7 +14,8 @@ This project is governed by specialized sub-agents. Always defer tasks to the co
 ## 2. Core Constraints & Technical Mandates
 * **Strict Size Limit:** Production code changes must be strictly under **700 LOC** per interaction.
 * **Prohibited Dependencies:** Never introduce `CGAL`, `GDAL`, `OGR`, `Fiona`, `Rasterio` (it wraps GDAL), or external `date` libraries.
-* **Core Stack:** Modern C++ (C++20 Concepts, Pybind11, `std::chrono`) + Async Python 3.11+ (Pydantic V2, Typer, Shapely, PyProj, NumPy).
+* **Core Stack:** Modern C++ (C++20 Concepts, Pybind11, `std::chrono`) + Async Python 3.11+ (Pydantic V2, Typer, Shapely, PyProj, NumPy, tifffile).
+* **I/O Boundary:** File decoding is Python's. The C++ core never opens a file, sees a path, or links a codec, and CRS never crosses into it. See the `raster` section of `project_structure.md`.
 
 ## 3. Test-Driven Development (TDD) Protocol
 Every code alteration or legacy migration step must execute this strict pipeline via `@orchestrator`:

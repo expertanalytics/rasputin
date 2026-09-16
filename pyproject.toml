@@ -27,18 +27,29 @@ classifiers = [
 ]
 
 # Runtime deps — strict zero-GDAL / zero-CGAL policy.
-# Rasterio deliberately omitted: it wraps GDAL. A pure-Python raster reader
-# (e.g. tifffile-based) will be introduced under src_python/tin_engine/io/
-# as part of a dedicated design task.
+# Rasterio is deliberately omitted: it wraps GDAL. GeoTIFF decoding is Python's
+# and uses tifffile (pure Python, BSD-3, numpy-only, no GDAL adjacency); see the
+# `raster` section of project_structure.md for the ruling and the boundary
+# contract. tifffile is a hard dependency, not an extra: GeoTIFF is the
+# pipeline's primary input, and a CLI that installs and then fails on its main
+# input format is a packaging defect.
 dependencies = [
     "pydantic>=2.6",
     "shapely>=2.0",
     "pyproj>=3.6",
     "typer>=0.12",
     "numpy>=1.26",
+    "tifffile>=2024.1",
 ]
 
 [project.optional-dependencies]
+# tifffile covers uncompressed, Deflate, PackBits and LZW with no extra
+# dependency, which spans the Kartverket and SRTM cases. JPEG, ZSTD, LERC and
+# WebP tiles need imagecodecs (BSD-3, prebuilt wheels, also not GDAL). The
+# reader must catch the missing-codec failure and name both the compression
+# scheme and this extra -- a bare ImportError from inside tifffile is not an
+# acceptable diagnostic for a pipeline input.
+codecs = ["imagecodecs>=2024.1"]
 dev = [
     "pytest>=8.0",
     "pytest-asyncio>=0.23",
