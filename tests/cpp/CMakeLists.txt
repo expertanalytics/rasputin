@@ -78,6 +78,20 @@ add_terrain_backend_test(prop_predicates_detria_agreement property/prop_predicat
 # compiled out elsewhere.
 target_link_libraries(test_predicates_detria_exact PRIVATE Threads::Threads)
 
+# Core, increment 2: the 2D geometry value types.
+#
+# These do not build yet -- terrain/core/bbox.hpp, terrain/core/segment.hpp and
+# terrain/core/ring.hpp do not exist. That is the intended red step of the TDD
+# protocol, not a broken checkout.
+#
+# test_bbox names no kernel, so it registers with add_terrain_test. Everything
+# else names DefaultKernel, which pulls in detria_exact.hpp and therefore needs
+# the compiled terrain_predicates target linked -- add_terrain_backend_test.
+add_terrain_test(test_bbox unit/test_bbox.cpp)
+add_terrain_backend_test(test_segment unit/test_segment.cpp)
+add_terrain_backend_test(test_ring unit/test_ring.cpp)
+add_terrain_backend_test(prop_ring_invariants property/prop_ring_invariants.cpp)
+
 # Characterisation tests for the legacy solar-position header. These pin the
 # UTC/Julian-day behaviour the post-CGAL port must reproduce, and guard removal
 # of the lib/date fallback. The legacy header carries pre-existing
