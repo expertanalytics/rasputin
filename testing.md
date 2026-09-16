@@ -4,7 +4,20 @@ How the rasputin backend stays correct under refactors, across compilers, and at
 
 The goal is "water tight": no module ships without invariant tests, every algorithm has a baseline of synthetic + procedural + real inputs, and CI exercises the suite serial and in parallel under sanitizers.
 
-## Three data tiers
+> **Status.** This document is mostly a target, not a description. Most of the
+> modules it specifies (`noding`, `cdt`, `refinement`, `flip`, `vector_simplify`,
+> `hydrology`) do not exist yet; the post-CGAL core currently ships geometry
+> primitives and raster sampling. Sections below are marked **[live]** where CI
+> enforces them today and **[planned]** where they do not. Read a planned
+> section as a commitment about what the gate must become before the module it
+> governs lands — not as a claim about what runs now. A testing doc that
+> overstates its own coverage is worse than none, because it is trusted.
+>
+> Live today (`.github/workflows/main.yaml`): Catch2 C++ suites via ctest on
+> ubuntu and macos, pytest across Python 3.11-3.13 with an enforced 85% line
+> coverage floor, mypy strict, ruff, and the governance gates in `tools/`.
+
+## Three data tiers [planned]
 
 ### Tier 1 — Synthetic primitives (in-code)
 
@@ -49,7 +62,7 @@ Parameterized by seed, size, and amplitude. Tiny by default (32×32, 128×128) s
 
 Used for: integration tests, performance baselines, visual-regression spot-checks (render the output mesh and diff against a stored PNG within a perceptual tolerance).
 
-## Invariant catalog
+## Invariant catalog [planned]
 
 These are the "water tight" properties — they must hold on every input regardless of tier. Property tests run them against generators that produce random inputs in each module's domain.
 
@@ -113,7 +126,7 @@ These are the "water tight" properties — they must hold on every input regardl
 - Strahler order is monotonic non-decreasing from headwater to outlet.
 - A confluence of two order-`k` streams produces an order-`k+1` segment downstream.
 
-## Frameworks
+## Frameworks [partly live]
 
 - **Catch2 v3** for C++ unit and integration tests (in `tests/cpp/`, fetched via `FetchContent`).
 - **rapidcheck** for C++ property-based tests, integrated as a Catch2 extension.
@@ -123,7 +136,7 @@ These are the "water tight" properties — they must hold on every input regardl
 
 Property test generators live alongside the modules they test (e.g. `tests/cpp/property/noding_generators.h` produces random sets of polylines with controllable density of intersections).
 
-## Parallelism testing
+## Parallelism testing [planned]
 
 **Run the entire suite at thread counts 1, 2, 8, and a CI-runner-max value.** For deterministic algorithms, results must be bit-identical across thread counts; for non-deterministic ones (e.g. order of insertions affects which equally-valid Delaunay flip is chosen), assert equivalence under a defined norm.
 
@@ -135,9 +148,15 @@ Property test generators live alongside the modules they test (e.g. `tests/cpp/p
 
 **Stress tests:** random thread interleavings via `std::this_thread::yield()` insertions in debug builds, run nightly on tier-2 procedural DEMs. Useful for surfacing races that TSan misses.
 
-## CI matrix
+## CI matrix [planned]
 
-Per PR:
+None of this matrix is configured. What runs today is two Release C++ builds
+(ubuntu, macos) and three Python versions; no sanitizer, no compiler matrix, no
+thread-count sweep, no nightly. The asan+ubsan Debug row is the one worth adding
+first -- it is cheap, and a geometry kernel doing pointer arithmetic over raster
+buffers is exactly the code that rewards it.
+
+Target, per PR:
 
 | Compiler | Build type       | Sanitizer       | Thread count |
 |----------|------------------|-----------------|--------------|
@@ -152,15 +171,20 @@ Nightly adds:
 - Coverage build (gcov) and report
 - Performance benchmark against tier-3 fixtures with regression detection (>5% slowdown fails)
 
-## Coverage targets
+## Coverage targets [partly live]
 
 - **Line coverage ≥ 85%** per module. Anything lower needs a justification comment in the PR.
 - **Invariant coverage**: every documented invariant has at least one test naming it.
 - **Edge-case coverage**: every condition handled specially in code (NaN, NoData, empty input, single-element input, boundary intersection, etc.) has a named test.
 
-`gcovr` produces HTML reports; failed coverage thresholds fail CI.
+Python line coverage is enforced today: `--cov-fail-under=85` in pyproject's
+`addopts`, so a drop below the floor fails the run rather than being noticed in
+review. **C++ coverage is not yet measured** -- `gcovr` is not configured and no
+nightly coverage build exists, so the per-module figure above is currently a
+Python-only guarantee. Invariant and edge-case coverage are review obligations,
+not machine-checked ones.
 
-## Test layout conventions
+## Test layout conventions [partly live]
 
 ```
 tests/cpp/
@@ -194,7 +218,7 @@ tests/
 
 Test names start with `test_` for example-based and `prop_` for property-based, so a grep for the prefix lists the suite.
 
-## Regression handling
+## Regression handling [planned]
 
 When a bug is fixed:
 
