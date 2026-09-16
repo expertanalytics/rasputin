@@ -14,8 +14,9 @@ The goal is "water tight": no module ships without invariant tests, every algori
 > overstates its own coverage is worse than none, because it is trusted.
 >
 > Live today (`.github/workflows/main.yaml`): Catch2 C++ suites via ctest on
-> ubuntu and macos, pytest across Python 3.11-3.13 with an enforced 85% line
-> coverage floor, mypy strict, ruff, and the governance gates in `tools/`.
+> ubuntu and macos, an asan+ubsan Debug build of the same suites, pytest
+> across Python 3.11-3.13 with an enforced 85% line coverage floor, mypy
+> strict, ruff, and the governance gates in `tools/`.
 
 ## Three data tiers [planned]
 
@@ -142,28 +143,34 @@ Property test generators live alongside the modules they test (e.g. `tests/cpp/p
 
 **Sanitizers in CI:**
 
-- `RASPUTIN_SANITIZER=asan,ubsan` build run on every PR.
-- `RASPUTIN_SANITIZER=tsan` build run on every PR — catches races in parallel code paths.
-- `RASPUTIN_SANITIZER=msan` (MemorySanitizer, clang-only) run nightly — catches uninitialized reads.
+- **[live]** asan + ubsan Debug build run on every PR (`sanitizers` job in
+  `.github/workflows/main.yaml`). Built with `-fno-sanitize-recover=all`,
+  which is load-bearing: UBSan's default is to print the diagnostic and
+  continue, so the process exits 0 and the job passes green on undefined
+  behaviour.
+- **[planned]** tsan build on every PR — catches races in parallel code
+  paths. Nothing to race yet; due when the parallel refinement lands.
+- **[planned]** msan (MemorySanitizer, clang-only) nightly — catches
+  uninitialized reads. Needs an instrumented libc++ to avoid false
+  positives, so it is the most expensive of the three to stand up.
 
 **Stress tests:** random thread interleavings via `std::this_thread::yield()` insertions in debug builds, run nightly on tier-2 procedural DEMs. Useful for surfacing races that TSan misses.
 
-## CI matrix [planned]
+## CI matrix [partly live]
 
-None of this matrix is configured. What runs today is two Release C++ builds
-(ubuntu, macos) and three Python versions; no sanitizer, no compiler matrix, no
-thread-count sweep, no nightly. The asan+ubsan Debug row is the one worth adding
-first -- it is cheap, and a geometry kernel doing pointer arithmetic over raster
-buffers is exactly the code that rewards it.
+One row of this matrix is configured. What runs today is two Release C++
+builds (ubuntu, macos), the asan+ubsan Debug job, and three Python versions.
+Still absent: the compiler matrix, tsan, the thread-count sweep and everything
+nightly.
 
-Target, per PR:
+Target, per PR (marked against what exists):
 
-| Compiler | Build type       | Sanitizer       | Thread count |
-|----------|------------------|-----------------|--------------|
-| gcc      | Release          | none            | max          |
-| gcc      | Debug            | asan + ubsan    | 1            |
-| clang    | Debug            | tsan            | 8            |
-| clang    | RelWithDebInfo   | none            | 1            |
+| Compiler | Build type       | Sanitizer       | Thread count | Status |
+|----------|------------------|-----------------|--------------|--------|
+| gcc      | Release          | none            | max          | **live** (plus macos/clang Release) |
+| gcc      | Debug            | asan + ubsan    | 1            | **live** |
+| clang    | Debug            | tsan            | 8            | planned |
+| clang    | RelWithDebInfo   | none            | 1            | planned |
 
 Nightly adds:
 
