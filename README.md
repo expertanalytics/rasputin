@@ -103,85 +103,39 @@ or, for a development install with the test and lint tooling, use the
 virtualenv shown above.
 
 
-## Docker build
-Take a look at the [Dockerfile](Dockerfile) to see how to setup required dependencies for a Debian system.
-
-You can build rasputin and run tests by building the Docker image: `docker build . -t rasputin-test`
-
-
 ## Minimal Example
-To test the installation run this for example in ipython:
+
+The post-CGAL core is under construction: the meshing pipeline is not wired up
+yet, so the installable surface is currently the geometry primitives and the
+CLI. To check that the compiled extension imported correctly, run this in
+ipython:
 
 ```
-import numpy as np
-import pyproj
-from rasputin.reader import Rasterdata
-from rasputin.mesh import Mesh
+from tin_engine import Point2, Point3, dot, cross
 
-def construct_rasterdata():
-    raster = np.array([0, 0, 0, 
-                       0, 1, 0, 
-                       0, 0, 0], dtype=np.float32).reshape(3,3)
-    cs = pyproj.CRS.from_epsg(32633)
-    return Rasterdata(shape=(raster.shape[1], raster.shape[0]), x_min=0, 
-                      y_max=20, delta_x=10, delta_y=10, array=raster,
-                      coordinate_system=cs.to_proj4(), info={})
+a = Point2(3.0, 4.0)
+b = Point2(1.0, 2.0)
 
-if __name__ == "__main__":
-    rd = construct_rasterdata()
-    mesh = Mesh.from_raster(data=rd)
-    pts = mesh.points
-    for face in mesh.faces:
-        print("Face:", *[f'{fc:2d}' for fc in face])
-        print(f"pts[{face[0]}]:", *[f'{pt:4.1f}' for pt in pts[face[0]]])
-        print(f"pts[{face[1]}]:", *[f'{pt:4.1f}' for pt in pts[face[1]]])
-        print(f"pts[{face[2]}]:", *[f'{pt:4.1f}' for pt in pts[face[2]]])
-        print()
+print("dot(a, b)  =", dot(a, b))
+print("cross(a, b) =", cross(a, b))
+print("cross(x, y) =", cross(Point3(1.0, 0.0, 0.0), Point3(0.0, 1.0, 0.0)))
 ```
 
 This should print out:
 ```
-Face:  0  1  2
-pts[0]: 10.0 10.0  1.0
-pts[1]: 10.0 20.0  0.0
-pts[2]:  0.0 20.0  0.0
-
-Face:  0  2  3
-pts[0]: 10.0 10.0  1.0
-pts[2]:  0.0 20.0  0.0
-pts[3]:  0.0 10.0  0.0
-
-Face:  0  4  1
-pts[0]: 10.0 10.0  1.0
-pts[4]: 20.0 10.0  0.0
-pts[1]: 10.0 20.0  0.0
-
-Face:  4  5  1
-pts[4]: 20.0 10.0  0.0
-pts[5]: 20.0 20.0  0.0
-pts[1]: 10.0 20.0  0.0
-
-Face:  3  6  0
-pts[3]:  0.0 10.0  0.0
-pts[6]: 10.0  0.0  0.0
-pts[0]: 10.0 10.0  1.0
-
-Face:  3  7  6
-pts[3]:  0.0 10.0  0.0
-pts[7]:  0.0  0.0  0.0
-pts[6]: 10.0  0.0  0.0
-
-Face:  6  8  0
-pts[6]: 10.0  0.0  0.0
-pts[8]: 20.0  0.0  0.0
-pts[0]: 10.0 10.0  1.0
-
-Face:  8  4  0
-pts[8]: 20.0  0.0  0.0
-pts[4]: 20.0 10.0  0.0
-pts[0]: 10.0 10.0  1.0
+dot(a, b)  = 11.0
+cross(a, b) = 2.0
+cross(x, y) = Point3(0, 0, 1)
 ```
-Congratulations! You just triangulated a small mountain.
+
+The CLI is installed as `rasputin`:
+```
+rasputin version
+```
+
+The legacy CGAL-based pipeline that used to be demonstrated here is archived
+under `legacy/` for reference during the port. It is not packaged and not
+importable from an installed rasputin.
 
 ## Data
 
