@@ -1,3 +1,8 @@
+---
+name: computational-geometry
+description: Constrained Delaunay triangulation, terrain meshing and refinement design for the C++ core. Use when working on CDT construction, mesh topology, refinement policies, geometric predicates, breaklines and holes, elevation sampling interfaces, or adversarial geometry (collinearity, cocircularity, extreme scales).
+---
+
 # Agent Skill: Computational Geometry & Terrain Meshing
 
 Core domain constraints and architecture for the C++ terrain-meshing engine (CDT and local refinement).

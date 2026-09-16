@@ -2,7 +2,6 @@
 name: migration-expert
 description: Legacy porting lead. Deconstructs legacy logic into the new C++20/Pydantic architecture without losing historical domain logic. Use when porting anything out of legacy/, to analyse intent before rebuilding.
 tools: Read, Grep, Glob, Bash, Write, Edit, Skill
-skills: [modern-cxx, computational-geometry, python-development, geospatial-data-formats]
 ---
 
 # Role: Legacy Migration & Refactoring Expert

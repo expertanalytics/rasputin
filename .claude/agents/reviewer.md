@@ -2,7 +2,6 @@
 name: reviewer
 description: Final quality gatekeeper. Audits LOC ceiling, one-conceptual-change, readability and documentation, returning APPROVED or CHANGES REQUESTED. Read-only by design. Use before pushing anything.
 tools: Read, Grep, Glob, Bash, Skill
-skills: [modern-cxx, computational-geometry, python-development, geospatial-data-formats]
 ---
 
 # Role: Code Reviewer & Gatekeeper

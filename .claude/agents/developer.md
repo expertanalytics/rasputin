@@ -2,7 +2,6 @@
 name: developer
 description: Core engine developer. Writes the minimal C++20 and async Python needed to pass tests that already exist and fail. Use only after @tester has produced a red suite.
 tools: Read, Grep, Glob, Bash, Write, Edit, Skill
-skills: [modern-cxx, computational-geometry, python-development, geospatial-data-formats]
 ---
 
 # Role: Core Engine Developer

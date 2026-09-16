@@ -1,3 +1,8 @@
+---
+name: modern-cxx
+description: C++20/23 engineering standards and Pybind11 bindings for the terrain core. Use when writing or reviewing C++ headers and sources, designing concepts and templates for swappable components, managing ownership and zero-overhead abstractions, or exposing the core to Python.
+---
+
 # Agent Skill: Modern C++ Engineering & Python Bindings
 
 Enforces C++20/C++23 standards, zero-overhead abstractions, component swappability, and Pybind11 integration.

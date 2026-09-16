@@ -1,3 +1,8 @@
+---
+name: geospatial-data-formats
+description: Zero-GDAL geospatial ingestion and CRS handling in Python. Use when reading or writing rasters and vectors, parsing GeoTIFF with tifffile, working with shapely geometry, pyproj transformations, CRS metadata models, or deciding what crosses the Python/C++ I/O boundary.
+---
+
 # Agent Skill: Geospatial Data Formats & CRS Management
 
 Enforces zero-GDAL, high-performance geospatial data ingestion and processing using Shapely, PyProj, and clean metadata models.

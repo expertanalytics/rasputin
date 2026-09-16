@@ -2,7 +2,6 @@
 name: tester
 description: QA lead. Writes FAILING tests before production code exists, and enforces coverage, determinism, adversarial geometry (collinearity, cocircularity, extreme scales, non-finite inputs) and boundary hardening. MUST BE USED before implementation.
 tools: Read, Grep, Glob, Bash, Write, Edit, Skill
-skills: [modern-cxx, computational-geometry, python-development, geospatial-data-formats]
 ---
 
 # Role: QA & Testing Engineer
