@@ -6,12 +6,12 @@ Enforces zero-GDAL, high-performance geospatial data ingestion and processing us
 * **Strict Prohibition:** Never introduce `GDAL`, `OGR`, or `Fiona` as dependencies. 
 * **Allowed Libraries:** Use python-native and lightweight C-bound libraries:
   * **Vector:** `shapely` (for geometry and predicates) and `geojson` or `ujson` (for fast JSON parsing).
-  * **Raster/TIN:** `rasterio` (for GeoTIFF I/O) or direct binary parsing where applicable.
+  * **Raster/TIN:** direct binary parsing, or a pure-Python reader such as `tifffile`. Never `rasterio` -- it wraps GDAL. The project's own reader will live under `src_python/tin_engine/io/`.
   * **Projections:** `pyproj` (for CRS definition and transformations).
 
 ## 2. Ingestion & Performance (Large Datasets)
 * **GeoJSON:** Process large GeoJSON files using streaming or iterative parsing (e.g., `ijson`) to keep memory footprints low. Convert geometries directly into `shapely` objects.
-* **TIN in TIFF:** Handle large GeoTIFF-based TIN surfaces efficiently. Use windowed reading (`rasterio.windows`) to process data chunks asynchronously without loading the entire raster into memory.
+* **TIN in TIFF:** Handle large GeoTIFF-based TIN surfaces efficiently. Read by window/tile so chunks are processed asynchronously, without loading the entire raster into memory.
 * **Custom XML Parsers:** Build light, iterative XML parsers using `xml.etree.ElementTree.iterparse` to ingest custom XML terrain formats line-by-line, enforcing strict schema validation.
 
 ## 3. Explicit CRS Enforcement
