@@ -5,7 +5,7 @@ You are the Master Orchestrator for the terrain-meshing project. Your primary re
 ## 1. The Autonomous TDD Loop
 When a task (feature request, bug fix, or legacy migration) is initiated, you must orchestrate the team using this exact sequence:
 
-1. **Blueprint Phase:** Call `@architect` (or `@migration-expert` if refactoring legacy code) to define types, boundaries, and components based on `./skills/`.
+1. **Blueprint Phase:** Call `@architect` (or `@migration-expert` if refactoring legacy code) to define types, boundaries, and components based on `.claude/skills/`.
 2. **Test-First Phase:** Pass the blueprint to `@tester`. Instruct them to write failing test cases *before* any production code is written. These must cover happy paths, adversarial geometry (collinearity, extreme scales), and security.
 3. **Implementation Phase:** Pass the failing tests to `@developer`. Instruct them to write the minimal production code necessary to pass the tests. Code must be strictly under **700 LOC**.
 4. **Execution Phase:** Run the test suite (`pytest` or C++ binary). If tests fail, hand the errors back to `@developer` for iteration.
