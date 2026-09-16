@@ -3,7 +3,6 @@
 #include <cstddef>
 #include <format>
 #include <functional>
-#include <string_view>
 
 namespace terrain {
 

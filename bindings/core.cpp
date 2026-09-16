@@ -12,6 +12,12 @@ using terrain::Point2;
 using terrain::Point3;
 
 PYBIND11_MODULE(_core, m) {
+    // Nothing here releases the GIL, which is correct while everything
+    // exposed is O(1) arithmetic: acquiring and releasing would cost more
+    // than the call itself. That stops being true the moment the
+    // triangulation kernel is exposed -- a parallel refinement pass holding
+    // the GIL would serialise every worker. Wrap those calls in
+    // py::gil_scoped_release when they land.
     m.doc() = "C++20 geometry primitives for the rasputin terrain engine.";
 
     py::class_<Point2>(m, "Point2", R"doc(

@@ -32,7 +32,6 @@ src/                       # C++ implementation, one directory per module (plann
 
 bindings/
   core.cpp                 # pybind11 module definition -> tin_engine._core
-  legacy_bindings.cpp      # CGAL-based original; not built, kept for reference
 
 src_python/tin_engine/     # public Python API (distribution name: rasputin)
   __init__.py              # re-exports from tin_engine._core
@@ -50,6 +49,7 @@ tests/
 
 legacy/                    # archived pre-migration tree, not built
   rasputin/
+  bindings.cpp             # CGAL-based original; not built, kept for reference
 
 lib/                       # bundled header-only third-party (Detria, etc.) (planned)
 
@@ -238,7 +238,7 @@ The public API is the `tin_engine` package, calling into `tin_engine._core`. The
 
 After the new backend ships and the Python API is rewired:
 
-- `legacy/rasputin/triangulate_dem.h` and `bindings/legacy_bindings.cpp` (the CGAL-based originals)
+- `legacy/rasputin/triangulate_dem.h` and `legacy/bindings.cpp` (the CGAL-based originals)
 - CGAL, GMP, MPFR from the CMake dependency list — already absent from the new `CMakeLists.txt`
 - Boost.Geometry, if no longer used after vector_simplify is in-tree
 

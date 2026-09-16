@@ -106,8 +106,8 @@ public:
         auto c = cell_of(p);
         if (!c)
             return std::nullopt;
-        c->row = c->row > rows_ - 2 ? rows_ - 2 : c->row;
-        c->col = c->col > cols_ - 2 ? cols_ - 2 : c->col;
+        c->row = std::min(c->row, rows_ - 2);
+        c->col = std::min(c->col, cols_ - 2);
         return c;
     }
 
