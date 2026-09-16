@@ -37,6 +37,32 @@ jobs:
       - name: Test
         run: ctest --test-dir build --output-on-failure
 
+  # Rules that previously existed only as prose in CLAUDE.md and were enforced
+  # by nothing. Both scripts are dependency-free and parse rather than execute,
+  # so this job needs no install step.
+  governance:
+    name: Governance gates
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      # CLAUDE.md section 2. The constraint the whole project is organised
+      # around, checked against imports and declared dependencies rather than
+      # prose -- the docs name GDAL precisely to explain its exclusion.
+      - name: No prohibited dependencies
+        run: python tools/check_prohibited_deps.py
+
+      # legacy/ is the porting reference but is excluded from ruff, mypy and
+      # pytest, so nothing else reads it. An archive that silently rots is
+      # worse than no archive.
+      - name: Archive integrity
+        run: python tools/check_legacy_imports.py
+
   python:
     name: Python ${{ matrix.python-version }}
     runs-on: ubuntu-latest
