@@ -85,6 +85,12 @@ addopts = [
     "-ra",
     "--strict-markers",
     "--strict-config",
+    # testing.md is the authority on the number: line coverage >= 85% per
+    # module, anything lower needs a justification in the PR. Enforced here
+    # rather than asserted in prose, so the CI run is what decides.
+    "--cov=tin_engine",
+    "--cov-report=term-missing",
+    "--cov-fail-under=85",
 ]
 
 [tool.ruff]

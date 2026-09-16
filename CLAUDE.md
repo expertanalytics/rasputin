@@ -7,7 +7,7 @@ This project is governed by specialized sub-agents. Always defer tasks to the co
 * `@orchestrator`: Master project driver. Handles human input and chains the TDD loop.
 * `@architect`: Enforces declarative structures, component boundaries, and interface decoupling.
 * `@migration-expert`: Porting lead. Deconstructs legacy logic into the new target architecture.
-* `@tester`: Owns the test suites. Enforces 100% coverage and adversarial geometry fuzzing.
+* `@tester`: Owns the test suites. Enforces the 85% coverage floor (see `testing.md`) and adversarial geometry fuzzing.
 * `@developer`: Writes clean, high-performance C++20 and async Python code.
 * `@reviewer`: Final gatekeeper. Audits LOC, code quality, readability, and documentation.
 

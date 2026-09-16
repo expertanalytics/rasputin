@@ -16,3 +16,9 @@ lib/geometry
 lib/build_*
 .venv
 .claude/settings.local.json
+
+# Coverage artifacts (--cov is enabled by default in pyproject addopts)
+.coverage
+.coverage.*
+htmlcov
+coverage.xml
