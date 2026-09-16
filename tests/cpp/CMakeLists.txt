@@ -38,18 +38,45 @@ endfunction()
 add_terrain_test(test_point unit/test_point.cpp)
 add_terrain_test(test_raster unit/test_raster.cpp)
 
-# Predicates, increment 1. These do not build yet: the headers under test do
-# not exist. That is the intended red step of the TDD protocol, not a broken
-# checkout -- see the commit that added them.
+# Predicates, increment 1a: the orientation vocabulary and the two kernels.
 add_terrain_test(test_predicates_orientation unit/test_predicates_orientation.cpp)
 add_terrain_test(test_predicates_fast_kernel unit/test_predicates_fast_kernel.cpp)
 add_terrain_test(test_predicates_filtered_kernel unit/test_predicates_filtered_kernel.cpp)
 add_terrain_test(prop_predicates_symmetry property/prop_predicates_symmetry.cpp)
 
-# The concurrency test in the filtered-kernel suite is the only thing in the
-# tree that starts a thread.
+# The concurrency tests in the filtered-kernel and detria-exact suites are the
+# only things in the tree that start threads.
 find_package(Threads REQUIRED)
 target_link_libraries(test_predicates_filtered_kernel PRIVATE Threads::Threads)
+
+# Predicates, increment 1b: the detria-backed exact backend.
+#
+# These do not build yet -- terrain/predicates/detria_exact.hpp,
+# terrain/predicates/default_kernel.hpp and the terrain_predicates library that
+# compiles src/predicates/detria_exact.cpp do not exist. That is the intended
+# red step of the TDD protocol, not a broken checkout.
+#
+# `terrain_predicates` is the compiled target these suites expect: a small
+# static library whose only translation unit is src/predicates/detria_exact.cpp,
+# with lib/detria on its include path PRIVATE. Keeping detria's include
+# directory off this target's INTERFACE is what makes the "detria.hpp must not
+# escape one translation unit" rule enforceable rather than aspirational -- if
+# detria_exact.hpp ever includes it, these suites fail to resolve the include.
+# The preprocessor guard at the top of test_predicates_detria_exact.cpp covers
+# the case where a future build change does put it on the path anyway.
+function(add_terrain_backend_test name)
+    add_terrain_test(${name} ${ARGN})
+    target_link_libraries(${name} PRIVATE terrain_predicates)
+endfunction()
+
+add_terrain_backend_test(test_predicates_detria_exact unit/test_predicates_detria_exact.cpp)
+add_terrain_backend_test(test_predicates_default_kernel unit/test_predicates_default_kernel.cpp)
+add_terrain_backend_test(prop_predicates_detria_agreement property/prop_predicates_detria_agreement.cpp)
+
+# The concurrency test in the detria-exact suite starts threads, and the forked
+# probe in the default-kernel suite needs no extra linkage on POSIX but is
+# compiled out elsewhere.
+target_link_libraries(test_predicates_detria_exact PRIVATE Threads::Threads)
 
 # Characterisation tests for the legacy solar-position header. These pin the
 # UTC/Julian-day behaviour the post-CGAL port must reproduce, and guard removal
