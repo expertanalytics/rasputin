@@ -1,0 +1,106 @@
+[build-system]
+requires = ["scikit-build-core>=0.9", "pybind11>=2.12"]
+build-backend = "scikit_build_core.build"
+
+[project]
+name = "rasputin"
+version = "0.2.0.dev0"
+description = "Parallel TIN engine for terrain meshing — CGAL-free, GDAL-free, pure C++20 core with async Python bindings."
+readme = "README.md"
+license = { file = "LICENSE" }
+requires-python = ">=3.11"
+authors = [{ name = "Ola Skavhaug", email = "ola@xal.no" }]
+keywords = ["tin", "terrain", "mesh", "cdt", "geospatial", "computational-geometry"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: POSIX :: Linux",
+    "Operating System :: MacOS :: MacOS X",
+    "Programming Language :: C++",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Scientific/Engineering :: GIS",
+    "Topic :: Scientific/Engineering :: Mathematics",
+]
+
+# Runtime deps — strict zero-GDAL / zero-CGAL policy.
+# Rasterio is deliberately omitted: it wraps GDAL. GeoTIFF decoding is Python's
+# and uses tifffile (pure Python, BSD-3, numpy-only, no GDAL adjacency); see the
+# `raster` section of project_structure.md for the ruling and the boundary
+# contract. tifffile is a hard dependency, not an extra: GeoTIFF is the
+# pipeline's primary input, and a CLI that installs and then fails on its main
+# input format is a packaging defect.
+dependencies = [
+    "pydantic>=2.6",
+    "shapely>=2.0",
+    "pyproj>=3.6",
+    "typer>=0.12",
+    "numpy>=1.26",
+    "tifffile>=2024.1",
+]
+
+[project.optional-dependencies]
+# tifffile covers uncompressed, Deflate, PackBits and LZW with no extra
+# dependency, which spans the Kartverket and SRTM cases. JPEG, ZSTD, LERC and
+# WebP tiles need imagecodecs (BSD-3, prebuilt wheels, also not GDAL). The
+# reader must catch the missing-codec failure and name both the compression
+# scheme and this extra -- a bare ImportError from inside tifffile is not an
+# acceptable diagnostic for a pipeline input.
+codecs = ["imagecodecs>=2024.1"]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.23",
+    "pytest-cov>=4.1",
+    "hypothesis>=6.100",
+    "mypy>=1.10",
+    "ruff>=0.5",
+]
+
+[project.scripts]
+rasputin = "tin_engine.cli:app"
+
+[project.urls]
+Homepage = "https://github.com/expertanalytics/rasputin"
+Issues = "https://github.com/expertanalytics/rasputin/issues"
+
+# scikit-build-core drives the existing CMakeLists.txt. Hatchling cannot build
+# C extensions, and the C++ core is already CMake-based, so the build backend
+# follows the C++ rather than the other way round.
+[tool.scikit-build]
+minimum-version = "0.9"
+build-dir = "build/{wheel_tag}"
+# Tests are off for the wheel build: they pull Catch2 via FetchContent, which
+# has no business running during `pip install`.
+cmake.args = ["-DRASPUTIN_BUILD_PYTHON=ON", "-DRASPUTIN_BUILD_TESTS=OFF"]
+wheel.packages = ["src_python/tin_engine"]
+
+[tool.pytest.ini_options]
+minversion = "8.0"
+testpaths = ["tests/python"]
+asyncio_mode = "auto"
+addopts = [
+    "-ra",
+    "--strict-markers",
+    "--strict-config",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+src = ["src_python", "tests/python"]
+# The archived pre-migration tree is not maintained and not linted. Its 242
+# findings would otherwise drown out real ones in the new code.
+exclude = ["legacy"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "UP", "B", "SIM", "RUF", "ASYNC"]
+ignore = []
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+files = ["src_python/tin_engine"]
+plugins = ["pydantic.mypy"]

@@ -14,3 +14,5 @@ dist
 lib/boo*
 lib/geometry
 lib/build_*
+.venv
+.claude/settings.local.json
