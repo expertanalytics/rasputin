@@ -72,10 +72,16 @@ using SimplePolygon = Polygon_2<K>;
 using Polygon = Polygon_with_holes_2<K>;
 using MultiPolygon = std::vector<Polygon>;
 
+/**
+ * Determine if a point lies inside a simple polygon without holes.
+ */
 bool point_inside_polygon(const Point2 &x, const SimplePolygon &polygon) {
         return polygon.has_on_bounded_side(x);
 }
 
+/**
+ * Determine if a point lies inside a general polygon possibly with holes.
+ */
 bool point_inside_polygon(const Point2 &x, const Polygon &polygon) {
     if (not polygon.outer_boundary().has_on_bounded_side(x))
         return false;
@@ -87,6 +93,9 @@ bool point_inside_polygon(const Point2 &x, const Polygon &polygon) {
     return true;
 }
 
+/**
+ * Determine if a point lies inside a compound polygon possibly with holes.
+ */
 bool point_inside_polygon(const Point2 &x, const MultiPolygon &polygon) {
     for (const auto& part: polygon)
         if (point_inside_polygon(x, part))
@@ -94,12 +103,23 @@ bool point_inside_polygon(const Point2 &x, const MultiPolygon &polygon) {
     return false;
 }
 
+/**
+ * Extract the boundary of given polygon.
+ *
+ * This is the trivial case, return a vector containing a copy of the simple polygon.
+ */
 std::vector<SimplePolygon> extract_boundaries(const SimplePolygon &polygon) {
     std::vector<SimplePolygon> ret;
     ret.emplace_back(polygon);
-
     return ret;
 }
+
+/**
+ * Extract the boundary of given polygon.
+ *
+ * Returns a flat vector holding the outer boundary first, followed by the
+ * boundary of each interior hole.
+ */
 std::vector<SimplePolygon> extract_boundaries(const Polygon &polygon) {
     std::vector<SimplePolygon> ret;
     ret.emplace_back(polygon.outer_boundary());
@@ -109,6 +129,9 @@ std::vector<SimplePolygon> extract_boundaries(const Polygon &polygon) {
     return ret;
 }
 
+/**
+ * Extract a vector of the boundaries of given multi-polygon.
+ */
 std::vector<SimplePolygon> extract_boundaries(const MultiPolygon &polygon) {
     std::vector<SimplePolygon> ret;
     for (const auto& part: polygon) {
@@ -121,6 +144,12 @@ std::vector<SimplePolygon> extract_boundaries(const MultiPolygon &polygon) {
 }
 }
 
+/**
+ * Adapt the CGAL point types to the Boost.Geometry point concept.
+ *
+ * These trait specialisations let CGAL::Point2 and CGAL::Point3 be passed
+ * directly to Boost.Geometry algorithms, without an intermediate copy.
+ */
 namespace boost::geometry::traits {
 
     template<> struct tag<CGAL::Point2>
