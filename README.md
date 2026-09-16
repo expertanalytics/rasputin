@@ -199,11 +199,13 @@ the `rasputin.globcov_repository.GlobCovRepository` class.
 
 ## Acknowledges
 
-The layout of this project follows the recommentation from an [excellent blog
-post by Benjamin R.
-Jack](http://www.benjack.io/2018/02/02/python-cpp-revisited.html). Both the
-`CMakeExtension` and the `CMakeBuild` classes in `setup.py` are are taken from
-his blog as well. Thanks!
+The original layout of this project followed the recommendation from an
+[excellent blog post by Benjamin R.
+Jack](http://www.benjack.io/2018/02/02/python-cpp-revisited.html), and both the
+`CMakeExtension` and the `CMakeBuild` classes were taken from his blog as well.
+They lived in the `setup.py` that the post-CGAL migration replaced with
+`pyproject.toml`, so they are no longer in the tree -- but the debt stands.
+Thanks!
 
 ## Use cases
 
