@@ -2,6 +2,7 @@
 
 #include <terrain/core/point.hpp>
 
+#include <algorithm>
 #include <cmath>
 #include <cstddef>
 #include <optional>
@@ -115,9 +116,28 @@ public:
     // recognised and skipped, or it is re-emitted as a duplicate constraint
     // along the whole DEM boundary.
     [[nodiscard]] bool contains_strict(const Point2& p) const noexcept {
-        const double eps = std::sqrt(delta_x_ * delta_x_ + delta_y_ * delta_y_) * 1e-10;
+        if (!std::isfinite(p.x) || !std::isfinite(p.y))
+            return false;
+        const double eps = boundary_epsilon();
         return p.x > x_min_ + eps && p.x < x_max() - eps
             && p.y > y_min() + eps && p.y < y_max_ - eps;
+    }
+
+    // Tolerance for "lies on the boundary", scaled to coordinate magnitude
+    // rather than to cell size alone.
+    //
+    // The legacy used sqrt(dx^2 + dy^2) * 1e-10. At UTM33 northings around
+    // 7.9e6 with 10 m cells that is ~1.4e-9, while one ulp at that magnitude
+    // is ~9.3e-10 -- so the tolerance was roughly 1.5 ulp, indistinguishable
+    // from rounding noise at exactly the coordinates this project targets.
+    // Boundary points arrive from clipping against this rectangle, so they
+    // land within a few ulp of it; the tolerance has to sit well above that
+    // and still far below one cell.
+    [[nodiscard]] double boundary_epsilon() const noexcept {
+        const double extent = std::max({std::abs(x_min_), std::abs(x_max()),
+                                        std::abs(y_min()), std::abs(y_max_)});
+        const double cell = std::sqrt(delta_x_ * delta_x_ + delta_y_ * delta_y_);
+        return std::max(extent, cell) * 1e-12;
     }
 
 private:

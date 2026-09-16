@@ -46,7 +46,7 @@ public:
     using value_type = double;
     ConstantRaster(RasterGeometry g, double v) : geometry_{g}, value_{v} {}
     [[nodiscard]] const RasterGeometry& geometry() const noexcept { return geometry_; }
-    [[nodiscard]] double at(const CellIndex&) const noexcept { return value_; }
+    [[nodiscard]] double value_at(const CellIndex&) const noexcept { return value_; }
     [[nodiscard]] bool is_nodata(const CellIndex&) const noexcept { return false; }
 
 private:
@@ -186,8 +186,7 @@ TEST_CASE("bilinear propagates NoData as nullopt, never as a silent value",
     const auto g = grid_3x5();
     std::vector<double> v(g.size(), 1.0);
     v[g.linear_index(CellIndex{1, 2})] = -9999.0;
-    Raster<double> r{g, std::move(v)};
-    r.set_nodata(-9999.0);
+    const Raster<double> r{g, std::move(v), -9999.0};
 
     REQUIRE_FALSE(bilinear(r, Point2{2.5, 7.5}).has_value());  // touches the hole
     REQUIRE(bilinear(r, Point2{0.5, 9.5}).has_value());        // clear of it
@@ -258,4 +257,43 @@ TEST_CASE("RasterSource is satisfiable by more than the class it was written aro
     const auto z = bilinear(c, Point2{2.5, 7.5});
     REQUIRE(z.has_value());
     REQUIRE_THAT(*z, WithinAbs(7.0, 1e-12));
+}
+
+TEST_CASE("boundary tolerance stays above rounding noise at UTM scale",
+          "[raster][geometry][edge]") {
+    // The legacy tolerance scaled only with cell size, which at UTM33
+    // northings is about 1.5 ulp -- noise. It must scale with coordinate
+    // magnitude too.
+    const RasterGeometry g{500000.0, 7900000.0, 10.0, 10.0, 100, 100};
+
+    const double one_ulp = std::nextafter(7900000.0, 1e9) - 7900000.0;
+    REQUIRE(g.boundary_epsilon() > one_ulp * 100.0);   // well clear of noise
+    REQUIRE(g.boundary_epsilon() < g.delta_x() * 1e-3); // still far below a cell
+
+    // A point one ulp inside the border still reads as on the border.
+    REQUIRE_FALSE(g.contains_strict(Point2{std::nextafter(g.x_min(), g.x_max()), 7899500.0}));
+    REQUIRE_FALSE(g.contains_strict(Point2{500500.0, std::nextafter(g.y_max(), g.y_min())}));
+
+    // A metre inside is unambiguously interior.
+    REQUIRE(g.contains_strict(Point2{500001.0, 7899999.0}));
+}
+
+TEST_CASE("nodata is fixed at construction and readable", "[raster][edge]") {
+    const auto g = grid_3x5();
+    const Raster<double> plain{g, std::vector<double>(g.size(), 1.0)};
+    REQUIRE_FALSE(plain.nodata().has_value());
+
+    const Raster<double> sentinel{g, std::vector<double>(g.size(), 1.0), -9999.0};
+    REQUIRE(sentinel.nodata().has_value());
+    REQUIRE_THAT(*sentinel.nodata(), WithinAbs(-9999.0, 1e-12));
+}
+
+TEST_CASE("clamped_cell_of agrees with cell_of for interior points", "[raster][geometry]") {
+    const auto g = grid_3x5();
+    for (double x = 0.0; x <= 4.0; x += 0.5)
+        for (double y = 6.0; y <= 10.0; y += 0.5) {
+            const auto c = g.cell_of(Point2{x, y});
+            REQUIRE(c.has_value());
+            REQUIRE(*c == g.clamped_cell_of(Point2{x, y}));
+        }
 }

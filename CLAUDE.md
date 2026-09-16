@@ -33,7 +33,13 @@ pytest tests/python/   # Run target Python testing suite
 
 ### C++ Core Layer (C++20 Concepts)
 ```bash
-cd build && cmake .. && make -j\$(nproc)
-./tests/cpp/run_core_tests
+cmake -S . -B build && cmake --build build -j   # -j alone: nproc is Linux-only
+ctest --test-dir build                          # runs test_point, test_raster, test_solar_position
+```
+
+### Static gates (Python)
+```bash
+mypy                   # strict, over src_python/tin_engine
+ruff check .           # legacy/ is excluded
 ```
 

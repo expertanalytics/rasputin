@@ -10,9 +10,12 @@ Entries marked *(planned)* do not exist yet; the rest are in the tree today.
 include/terrain/           # public C++ headers, header-only where possible
   core/
     point.hpp              # Point2 / Point3 value types
+  raster/
+    geometry.hpp           # RasterGeometry, CellIndex: grid <-> world mapping
+    raster.hpp             # RasterSource concept, owning Raster<T>, NoData
+    sample.hpp             # bilinear interpolation over a RasterSource
 
 src/                       # C++ implementation, one directory per module (planned)
-  raster_io/               # GeoTIFF read/write, raster<T> container, NoData
   geometry_predicates/     # Shewchuk-style robust 2D predicates
   parallel_util/           # work distribution, atomics, thread pool
   vector_simplify/         # Visvalingam-Whyatt, Douglas-Peucker, topology checks
@@ -51,9 +54,9 @@ testing.md
 ## Module responsibilities and dependencies
 
 ```
-                    raster_io ──────────────┐
+                    raster ────────────────┐
                                             ▼
-geometry_predicates ──┬─→ vector_simplify   hydrology  (depends on raster_io,
+geometry_predicates ──┬─→ vector_simplify   hydrology  (depends on raster,
                       │                     │           parallel_util)
                       └─→ noding ←──────────┘   (catchment outline, river polylines)
                               │
@@ -63,7 +66,7 @@ geometry_predicates ──┬─→ vector_simplify   hydrology  (depends on ras
                               ▼
                             mesh   (triangle/vertex data; ternary tree; edge tags)
                               │
-                              ├──→ refinement   (raster_io for sampling, parallel_util)
+                              ├──→ refinement   (raster for sampling, parallel_util)
                               │
                               └──→ flip         (geometry_predicates, parallel_util)
                                       │
@@ -73,9 +76,26 @@ geometry_predicates ──┬─→ vector_simplify   hydrology  (depends on ras
 
 Cardinal rule: dependencies flow downward in this diagram; no upward dependencies (e.g. `mesh` does not depend on `refinement` even though `refinement` produces meshes — the refinement code is built on top of the mesh data structures).
 
-### `raster_io`
+### `raster`
 
-GeoTIFF read/write, `Raster<T>` container with projection and NoData, sample-point iteration, raster-cell bbox queries. Foundational; everything that touches DEMs goes through here.
+`RasterGeometry` (north-up, grid-registered index/world mapping), the
+`RasterSource` concept, an owning `Raster<T>` with NoData, and bilinear
+sampling. Foundational; everything that touches DEMs goes through here.
+
+Named `raster`, not `raster_io`: it performs no I/O. Header-only and
+templated, so `src/` holds nothing for it. Landed in `7785fea`, which also
+fixed two legacy defects — an out-of-bounds bilinear read and a transposed
+row/column index.
+
+Still to come here: `window_for` (bbox to index window), deferred until
+`refinement` gives it a caller, and `RasterView` over a numpy buffer, which
+belongs with the reader.
+
+**Open decision:** GeoTIFF *decoding* is not sited yet. `pyproject.toml` and
+`.claude/skills/geospatial-data-formats/SKILL.md` put a pure-Python reader
+under `src_python/tin_engine/io/`; this section previously assigned read/write
+to C++. Decoding in Python keeps the C++ core testable with no I/O, but the
+call belongs to `@architect`.
 
 ### `geometry_predicates`
 

@@ -115,13 +115,13 @@ These are the "water tight" properties — they must hold on every input regardl
 
 ## Frameworks
 
-- **Catch2 v3** for C++ unit and integration tests (matches existing `cpp_test/` setup).
+- **Catch2 v3** for C++ unit and integration tests (in `tests/cpp/`, fetched via `FetchContent`).
 - **rapidcheck** for C++ property-based tests, integrated as a Catch2 extension.
 - **pytest** for Python tests (existing).
 - **hypothesis** for Python property-based tests.
 - **pytest-benchmark** for performance regression tracking on tier-3 fixtures.
 
-Property test generators live alongside the modules they test (e.g. `cpp_test/property/noding_generators.h` produces random sets of polylines with controllable density of intersections).
+Property test generators live alongside the modules they test (e.g. `tests/cpp/property/noding_generators.h` produces random sets of polylines with controllable density of intersections).
 
 ## Parallelism testing
 
@@ -163,7 +163,7 @@ Nightly adds:
 ## Test layout conventions
 
 ```
-cpp_test/
+tests/cpp/
   unit/
     test_noding_snap_rounding.cpp        # one file per logical concept
     test_noding_pairwise_intersection.cpp
@@ -207,7 +207,11 @@ The point is to never lose a bug twice. Tier-1 tests are cheap and stay in the s
 ## What we do not test
 
 - **Performance correctness of third-party libraries** (Detria, RichDEM if used) — we trust their own test suites and only test our wrappers.
-- **GeoTIFF parsing edge cases** beyond what GDAL handles for us — same reasoning.
+- **Third-party TIFF container decoding** — we trust the chosen pure-Python
+  reader's own test suite. GeoTIFF *georeferencing* is emphatically ours to
+  test: GDAL is prohibited (see `CLAUDE.md` section 2), so tie-point and
+  pixel-scale interpretation, GeoKey decoding and CRS construction all have to
+  be covered here.
 - **Visual aesthetics** of the output mesh beyond the perceptual-diff regression on tier-3 fixtures.
 
 These are out of scope and would inflate the suite without buying confidence in rasputin's own code.

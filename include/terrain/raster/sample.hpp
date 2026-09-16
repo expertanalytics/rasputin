@@ -35,10 +35,10 @@ template <RasterSource R>
     const double tx = (p.x - upper_left.x) / g.delta_x();
     const double ty = (upper_left.y - p.y) / g.delta_y();
 
-    const double z00 = static_cast<double>(raster.at(c00));
-    const double z01 = static_cast<double>(raster.at(c01));
-    const double z10 = static_cast<double>(raster.at(c10));
-    const double z11 = static_cast<double>(raster.at(c11));
+    const double z00 = static_cast<double>(raster.value_at(c00));
+    const double z01 = static_cast<double>(raster.value_at(c01));
+    const double z10 = static_cast<double>(raster.value_at(c10));
+    const double z11 = static_cast<double>(raster.value_at(c11));
 
     return z00 * (1.0 - tx) * (1.0 - ty)
          + z01 * tx * (1.0 - ty)

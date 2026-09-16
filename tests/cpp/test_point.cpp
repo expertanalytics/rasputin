@@ -116,3 +116,27 @@ TEST_CASE("Point types are trivially copyable, standard-layout aggregates", "[po
     STATIC_REQUIRE(std::is_aggregate_v<Point3>);
     STATIC_REQUIRE(sizeof(Point3) == 3 * sizeof(double));
 }
+
+TEST_CASE("Point hashing is consistent with equality for signed zero", "[point][hash]") {
+    // Both libc++ and libstdc++ normalize -0.0 in std::hash<double>. That is
+    // required here, not incidental: operator== is defaulted, so +0.0 and -0.0
+    // compare equal, and equal keys hashing differently would corrupt any
+    // unordered container.
+    const Point2 pos{0.0, 0.0};
+    const Point2 neg{-0.0, 0.0};
+    REQUIRE(pos == neg);
+    REQUIRE(std::hash<Point2>{}(pos) == std::hash<Point2>{}(neg));
+    REQUIRE(std::unordered_set<Point2>{pos, neg}.size() == 1);
+}
+
+TEST_CASE("Point formatters reject a spec they do not honour", "[point][format]") {
+    const Point2 p{1.0, 2.0};
+    const Point3 q{1.0, 2.0, 3.0};
+    REQUIRE(std::format("{}", p) == "Point2(1, 2)");
+    REQUIRE(std::format("{}", q) == "Point3(1, 2, 3)");
+
+    // A width spec used to parse successfully and then be silently dropped,
+    // so "{:>24}" produced unpadded output with no diagnostic.
+    REQUIRE_THROWS_AS(std::vformat("{:>24}", std::make_format_args(p)), std::format_error);
+    REQUIRE_THROWS_AS(std::vformat("{:>24}", std::make_format_args(q)), std::format_error);
+}

@@ -16,8 +16,12 @@ namespace terrain::raster {
 template <typename R>
 concept RasterSource = requires(const R& r, CellIndex c) {
     typename R::value_type;
-    { r.geometry() } -> std::convertible_to<const RasterGeometry&>;
-    { r.at(c) } -> std::convertible_to<double>;
+    // same_as, not convertible_to: an implementation returning by value
+    // satisfies convertible_to, and sample.hpp binds the result to a
+    // reference. Lifetime extension saves that today, but the concept should
+    // state the requirement rather than rely on the call site's shape.
+    { r.geometry() } -> std::same_as<const RasterGeometry&>;
+    { r.value_at(c) } -> std::convertible_to<double>;
     { r.is_nodata(c) } -> std::same_as<bool>;
 };
 
@@ -28,25 +32,30 @@ class Raster {
 public:
     using value_type = T;
 
-    Raster(RasterGeometry geometry, std::vector<T> data)
-        : geometry_{geometry}, data_{std::move(data)} {
+    Raster(RasterGeometry geometry, std::vector<T> data,
+           std::optional<T> nodata = std::nullopt)
+        : geometry_{geometry}, data_{std::move(data)}, nodata_{nodata} {
         if (data_.size() != geometry_.size())
             throw std::invalid_argument("Raster: data size does not match geometry");
     }
 
     [[nodiscard]] const RasterGeometry& geometry() const noexcept { return geometry_; }
 
-    [[nodiscard]] T at(const CellIndex& c) const noexcept {
+    // Deliberately not named `at`: in C++ that means bounds-checked and
+    // throwing, and this is neither. Unchecked is the right default on a
+    // sampling hot path, but the name has to say so -- especially in a module
+    // whose reason for existing is an out-of-bounds read.
+    [[nodiscard]] T value_at(const CellIndex& c) const noexcept {
         return data_[geometry_.linear_index(c)];
     }
 
     // NoData is new: the legacy had no sentinel handling anywhere, so a void
-    // in the DEM silently interpolated as terrain.
-    void set_nodata(T value) noexcept { nodata_ = value; }
+    // in the DEM silently interpolated as terrain. It is a constructor
+    // argument rather than a setter so a Raster is never half-configured.
     [[nodiscard]] const std::optional<T>& nodata() const noexcept { return nodata_; }
 
     [[nodiscard]] bool is_nodata(const CellIndex& c) const noexcept {
-        const T v = at(c);
+        const T v = value_at(c);
         // v != v catches NaN, which must never propagate silently into a mesh.
         return v != v || (nodata_.has_value() && v == *nodata_);
     }
@@ -54,7 +63,7 @@ public:
 private:
     RasterGeometry geometry_;
     std::vector<T> data_;
-    std::optional<T> nodata_{};
+    std::optional<T> nodata_;
 };
 
 } // namespace terrain::raster

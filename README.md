@@ -59,9 +59,8 @@ python3 -m venv .venv
 .venv/bin/pip install -e ".[dev]"
 ```
 
-Building the Python extension additionally needs pybind11
-(`.venv/bin/pip install pybind11`). It is not yet declared in
-`pyproject.toml`, because the extension build is still being wired up.
+Building the Python extension needs no extra step: `pybind11` is declared in
+`[build-system].requires`, and scikit-build-core invokes CMake for you.
 Rasputin does not aim at being backwards compatible with older compilers.
 The build requires C++20. Date and time handling uses the C++20 `<chrono>`
 calendar types (`sys_days`, `year`/`month`/`day`) directly, so the compiler must

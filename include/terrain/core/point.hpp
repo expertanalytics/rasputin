@@ -72,9 +72,12 @@ struct Point3 {
 
 namespace std {
 
-// Hashes exact bit-patterns of doubles: +0.0 and -0.0 hash to different
-// buckets, and NaNs never compare equal. Coordinate dedup that must be
-// robust to floating drift should snap-round upstream, not lean on this.
+// Consistent with the defaulted operator==: equal points hash equally.
+// Both libc++ and libstdc++ normalize -0.0 in std::hash<double>, so +0.0 and
+// -0.0 hash alike -- which is required here, since they also compare equal.
+// NaN coordinates never compare equal, so a point containing one is never
+// findable in a hashed container. Coordinate dedup that must be robust to
+// floating drift should snap-round upstream, not lean on this.
 template <>
 struct hash<terrain::Point2> {
     [[nodiscard]] size_t operator()(const terrain::Point2& p) const noexcept {
@@ -98,7 +101,18 @@ struct hash<terrain::Point3> {
 };
 
 template <>
-struct formatter<terrain::Point2> : formatter<string_view> {
+struct formatter<terrain::Point2> {
+    // Inheriting formatter<string_view> also inherited its parse(), so a width
+    // or align spec parsed successfully and was then discarded by a format()
+    // that ignores it -- "{:>24}" silently produced unpadded output. Reject
+    // what we do not honour rather than accept it and lie.
+    constexpr auto parse(format_parse_context& ctx) {
+        auto it = ctx.begin();
+        if (it != ctx.end() && *it != '}')
+            throw format_error("terrain::Point2 does not accept a format spec");
+        return it;
+    }
+
     template <typename FormatContext>
     auto format(const terrain::Point2& p, FormatContext& ctx) const {
         return std::format_to(ctx.out(), "Point2({}, {})", p.x, p.y);
@@ -106,7 +120,18 @@ struct formatter<terrain::Point2> : formatter<string_view> {
 };
 
 template <>
-struct formatter<terrain::Point3> : formatter<string_view> {
+struct formatter<terrain::Point3> {
+    // Inheriting formatter<string_view> also inherited its parse(), so a width
+    // or align spec parsed successfully and was then discarded by a format()
+    // that ignores it -- "{:>24}" silently produced unpadded output. Reject
+    // what we do not honour rather than accept it and lie.
+    constexpr auto parse(format_parse_context& ctx) {
+        auto it = ctx.begin();
+        if (it != ctx.end() && *it != '}')
+            throw format_error("terrain::Point3 does not accept a format spec");
+        return it;
+    }
+
     template <typename FormatContext>
     auto format(const terrain::Point3& p, FormatContext& ctx) const {
         return std::format_to(ctx.out(), "Point3({}, {}, {})", p.x, p.y, p.z);
