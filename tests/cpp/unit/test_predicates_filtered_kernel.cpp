@@ -228,12 +228,24 @@ TEST_CASE("Well-separated input never reaches the exact backend", "[predicates][
             Orientation::Clockwise);
     REQUIRE(CountingExact<RefExact>::orient2d_calls == 0);
 
+    // Reset before the incircle block so its two counters are read against a
+    // known zero rather than against whatever the orient2d block left behind.
+    // `orient2d_calls` is the load-bearing one here: `incircle` normalizes by
+    // calling `FilteredKernel::orient2d`, never `E::orient2d`, so on
+    // well-separated input the filter answers the orientation too and the
+    // backend is not touched by either predicate. Asserting only
+    // `incircle_calls` would leave that silent -- and would make the test's
+    // meaning depend on the fact that it happened to assert before the
+    // incircle calls were made.
+    CountingExact<RefExact>::reset();
+
     const Point2 a{5, 0};
     const Point2 b{0, 5};
     const Point2 c{-5, 0};
     REQUIRE(Counted::incircle(a, b, c, Point2{0, 0}) == Incircle::Inside);
     REQUIRE(Counted::incircle(a, b, c, Point2{400, 400}) == Incircle::Outside);
     REQUIRE(CountingExact<RefExact>::incircle_calls == 0);
+    REQUIRE(CountingExact<RefExact>::orient2d_calls == 0);
 }
 
 TEST_CASE("A collinear triple reaches the exact backend", "[predicates][filtered_kernel][filter]") {
@@ -286,9 +298,17 @@ TEST_CASE("incircle never passes a non-counterclockwise triple to the backend", 
     REQUIRE(CcwChecked::incircle(a, c, b, outside) == Incircle::Outside);
     REQUIRE(CcwChecked::incircle(a, c, b, on) == Incircle::Cocircular);
 
+    REQUIRE(CcwCheckingExact<RefExact>::violations == 0);
+
     // Collinear first three points: a degenerate circle, by definition, so
-    // every fourth point is Cocircular and the backend need not be consulted at
-    // all. Whether it is consulted or not, it must not be handed the triple.
+    // every fourth point is Cocircular. This is not merely permission to skip
+    // the backend, it is the specified behaviour -- `incircle` returns
+    // Cocircular from the orientation alone and never calls `incircle_ccw`,
+    // because there is no counterclockwise triple it could legally pass. The
+    // call count is the only way to observe that from outside, so it is
+    // asserted rather than described; a reset here puts it on a known zero.
+    CcwCheckingExact<RefExact>::reset();
+
     REQUIRE(CcwChecked::incircle(Point2{0, 0}, Point2{1, 1}, Point2{2, 2}, Point2{99, -7}) ==
             Incircle::Cocircular);
     REQUIRE(CcwChecked::incircle(Point2{0, 0}, Point2{2, 2}, Point2{1, 1}, Point2{0, 0}) ==
@@ -299,6 +319,7 @@ TEST_CASE("incircle never passes a non-counterclockwise triple to the backend", 
     REQUIRE(CcwChecked::incircle(Point2{7, 7}, Point2{7, 7}, Point2{7, 7}, Point2{1, 2}) ==
             Incircle::Cocircular);
 
+    REQUIRE(CcwCheckingExact<RefExact>::incircle_calls == 0);
     REQUIRE(CcwCheckingExact<RefExact>::violations == 0);
 }
 
@@ -333,6 +354,13 @@ TEST_CASE("incircle is insensitive to the order of the first three points", "[pr
 // construct. Checked structurally rather than by comment: taking the address of
 // a non-static member function yields a pointer-to-member, which is not a
 // pointer to function, so this fails to compile if the signatures drift.
+//
+// `GeometryKernel` and `ExactPredicates` are spelled with qualified static
+// calls -- `{ K::orient2d(a, b, c) }`, not `{ k.orient2d(a, b, c) }` -- so the
+// static form is required of every model, not just of this one. This test
+// stays because the concept does not pin emptiness: a model could be
+// static-callable and still carry mutable static state, which is what would
+// make the concurrency test below start failing.
 TEST_CASE("FilteredKernel is stateless and its predicates are static", "[predicates][filtered_kernel][purity]") {
     STATIC_REQUIRE(std::is_empty_v<Filtered>);
     STATIC_REQUIRE(std::is_function_v<std::remove_pointer_t<decltype(&Filtered::orient2d)>>);

@@ -175,9 +175,14 @@ TEST_CASE("prop: incircle never hands a non-counterclockwise triple to the backe
         const Point2 d = lattice_point(rng);
 
         INFO(describe(a, b, c, d));
+        const int calls_before = CcwCheckingExact<RefExact>::incircle_calls;
         const Incircle result = CcwChecked::incircle(a, b, c, d);
         if (Filtered::orient2d(a, b, c) == Orientation::Collinear) {
+            // The generated counterpart of the short-circuit assertion in the
+            // unit suite: a degenerate circle is answered from the orientation
+            // alone, so the backend is not consulted at all.
             REQUIRE(result == Incircle::Cocircular);
+            REQUIRE(CcwCheckingExact<RefExact>::incircle_calls == calls_before);
         }
         REQUIRE(CcwCheckingExact<RefExact>::violations == 0);
     }
