@@ -405,17 +405,39 @@ TEMPLATE_LIST_TEST_CASE("signed_area of a bowtie cancels to zero", "[ring][area]
 }
 
 // Second, and the reason the header says so in as many words: signed_area is
-// plain double. On a sliver whose vertex coordinates are exactly representable
-// but whose products are not, the shoelace sum has no correct digits left and
-// its sign is simply wrong, while the exact orientation is right. The
-// constants come from the near-degenerate family in point_families.hpp and are
-// hard-coded so this is a fact rather than a flaky search.
+// plain double. On a sliver at these magnitudes the shoelace sum has no correct
+// digits left and its sign is simply wrong, while the exact orientation is
+// right.
+//
+// Construction, from the near-degenerate family in point_families.hpp pushed up
+// to where the *subtractions* round: the three vertices are -m*d, n*d and
+// q*d + e for an integer direction d, integers m, n, q and a tiny integer
+// displacement e. The true determinant is -12203296020284304 -- clockwise --
+// but v1 - v0 is (m + n)*d, which needs 54 bits and rounds, and after that
+// rounding the determinant of the vectors signed_area actually multiplies is
+// +6896697388551744. The sum returns a positive number for a clockwise ring.
+//
+//     d = (53936722, 62051089), m = 83833290, n = 90088419, q = 96363544
+//     e = (2, 1)
+//     exact determinant       = -12203296020284304
+//     determinant after the rounded subtractions = +6896697388551744
+//
+// The constants are hard-coded so this is a fact rather than a flaky search,
+// and they are chosen to be independent of floating-point contraction. Rounding
+// is monotone, so as long as the subtractions are exact the naive determinant
+// can only lose the sign (returning 0.0), never invert it -- a sliver small
+// enough to keep v1 - v0 exact cannot demonstrate this at all under
+// -ffp-contract=off, which is how the previous constants here failed the
+// ubuntu CI leg while passing on arm64. Verified positive under all three
+// forms a compiler may emit for `a.x*b.y - a.y*b.x`: the contraction-free
+// fl(fl(a.x*b.y) - fl(a.y*b.x)), fma(a.x, b.y, -fl(a.y*b.x)), and
+// fma(-a.y, b.x, fl(a.x*b.y)).
 TEST_CASE("sign(signed_area) disagrees with the exact orientation on a sliver",
           "[ring][area][sliver][wrong]") {
     const std::vector<Point2> pts{
-        Point2{0.0, 0.0},
-        Point2{25304364.0, 25254615.0},
-        Point2{715637399591338.0, 714230438918773.0},
+        Point2{-4521692857075380.0, -5201946938952810.0},
+        Point2{4859074011022518.0, 5590084505238291.0},
+        Point2{5197533683662770.0, 5979462845099417.0},
     };
     const PointRing r{as_span(pts)};
 
@@ -737,21 +759,29 @@ TEST_CASE("the algorithms work through the concept, not the shipped models", "[r
 }
 
 // The existence proof that the kernel parameter on point_in_ring is
-// load-bearing. The query point lies exactly on the edge from (0,0) to
-// (424845863969746, 748848292265877) -- it is that vertex divided by the
-// integer 22350077 -- so the true answer is Boundary. FastKernel's cross
-// product is a difference of two independently rounded 75-bit products, misses
-// the collinearity, and reports the point as interior. Single instantiation on
+// load-bearing, and the same construction as the on_segment case in
+// test_segment.cpp. The hypotenuse runs from -m*d to n*d for an integer
+// direction d and integers m, n, so the query point -- the origin -- lies
+// exactly on that edge and the true answer is Boundary. Every coordinate is an
+// exactly representable integer; the loss is in orient2d's subtraction, where
+// the edge vector (m + n)*d needs 54 bits and rounds. FastKernel's two vectors
+// are then no longer parallel, its on_segment misses the collinearity, and the
+// crossing parity reports the point as interior. Single instantiation on
 // purpose: the point is that the two kernels differ.
+//
+// Contraction-independent, and deliberately so -- see the long note on the
+// on_segment case for why a version of this that lets the subtractions stay
+// exact demonstrates nothing under -ffp-contract=off. Inside was confirmed for
+// all three forms of `cross` a compiler may emit, on every edge of this ring.
 TEST_CASE("FastKernel misclassifies a boundary point that DefaultKernel gets right",
           "[ring][point_in_ring][fast_kernel][wrong]") {
     const std::vector<Point2> pts{
-        Point2{0.0, 0.0},
-        Point2{424845863969746.0, 748848292265877.0},
-        Point2{0.0, 748848292265877.0},
+        Point2{-3967798950559065.0, -5056010985606205.0},
+        Point2{3764634203913222.0, 4797126096596254.0},
+        Point2{3764634203913222.0, -5056010985606205.0},
     };
     const PointRing r{as_span(pts)};
-    const Point2 p{19008698.0, 33505401.0};
+    const Point2 p{0.0, 0.0};
 
     REQUIRE(point_in_ring<DefaultKernel>(r, p) == PointInRing::Boundary);
     REQUIRE(point_in_ring<FastKernel>(r, p) == PointInRing::Inside);

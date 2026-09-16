@@ -216,18 +216,38 @@ TEMPLATE_TEST_CASE("on_segment is exact one ulp beyond an endpoint at UTM33 magn
 // The existence proof. Single-instantiation on purpose: the whole point is
 // that the two kernels differ.
 //
-// a = (0, 0), b = (k*bx, k*by) and p = (bx, by) with bx, by, k integers in
-// [2^24, 2^25). Then p lies exactly on the segment -- it is b scaled by 1/k --
-// and every coordinate is an exactly representable integer, so nothing is lost
-// before the predicate is called. Inside FastKernel::orient2d the cross
-// product is (k*bx)*by - (k*by)*bx, two 75-bit products rounded independently,
-// and the difference of the roundings is not zero. The constants were found by
-// scanning the near-degenerate family; they are hard-coded so the test is
-// deterministic rather than "usually reproducible".
+// Construction: the segment runs from a = -m*d to b = n*d for an integer
+// direction d = (dx, dy) and integers m, n, so the origin lies exactly on it
+// and every coordinate is an exactly representable integer -- nothing is lost
+// before the predicate is called. The loss is in orient2d's *subtraction*, not
+// in its products: b - a is (m + n)*d, which needs 54 bits, so it rounds, and
+// FastKernel's two edge vectors are no longer parallel. Its cross product comes
+// out around -4e15 instead of zero and it reports the origin as off the segment.
+//
+//     d = (33863043, 43150351), m = 117171955, n = 111172354
+//     cross of the rounded edge vectors = -3967798950559065, exactly
+//
+// Siting the error in the subtraction is the load-bearing part, and the reason
+// the constants are frozen here rather than searched for. If the edge vectors
+// come out exactly parallel -- which is what happens whenever the coordinates
+// are small enough for b - a and p - a to be exact -- then a.x*b.y and a.y*b.x
+// are the *same real number*, `cross` rounds them identically, and a
+// contraction-free build subtracts them to exactly 0.0: FastKernel is
+// accidentally right and this REQUIRE_FALSE fails. Such a case only
+// demonstrates anything where the compiler contracts `cross` into a single fma,
+// and clang on arm64 does while gcc on baseline x86-64 does not. The earlier
+// constants here had that defect and failed the ubuntu CI leg.
+//
+// These are contraction-independent. Each was checked to give a nonzero cross
+// under all three forms a compiler may emit for `a.x*b.y - a.y*b.x`:
+// fl(fl(a.x*b.y) - fl(a.y*b.x)), fma(a.x, b.y, -fl(a.y*b.x)) and
+// fma(-a.y, b.x, fl(a.x*b.y)). Anyone re-tuning a near-degenerate constant in
+// this suite has to clear all three; two of them are invisible on any one host.
 TEST_CASE("FastKernel misses an exactly-on-segment point that DefaultKernel finds",
           "[segment][on_segment][fast_kernel][wrong]") {
-    const Segment2 s{Point2{0.0, 0.0}, Point2{424845863969746.0, 748848292265877.0}};
-    const Point2 p{19008698.0, 33505401.0};  // = b / 22350077, exactly
+    const Segment2 s{Point2{-3967798950559065.0, -5056010985606205.0},
+                     Point2{3764634203913222.0, 4797126096596254.0}};
+    const Point2 p{0.0, 0.0};  // the origin: a + m*d, exactly on s
 
     REQUIRE(on_segment<terrain::pred::DefaultKernel>(s, p));
     REQUIRE_FALSE(on_segment<terrain::pred::FastKernel>(s, p));
