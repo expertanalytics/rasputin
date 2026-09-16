@@ -12,30 +12,56 @@ surface mesh.
 
 ## Implementation strategy
 
-The heavy lifting in Rasputin is done by external software:
- * [CGAL](https://www.cgal.org/) is used for triangulation and simplification
-   routines.
- * [pybind11](https://pybind11.readthedocs.io/en/stable/) is used to generate
-   the Python wrappers.
- * [Pillow](https://python-pillow.org/) is used to read
-   [GeoTIFF](https://en.wikipedia.org/wiki/GeoTIFF) files.
- * [Meshio](https://github.com/nschloe/meshio) is used to write results.
- * [Armadillo](http://arma.sourceforge.net/) for speedy arithmetics.
- * [Catch2](https://github.com/catchorg/Catch2) for unit testing of the c++ code.
+Rasputin is being rebuilt on a CGAL-free and GDAL-free stack: a C++20 core
+with async Python bindings. The C++ dependencies are header-only.
+
+### C++ core
+ * [pybind11](https://pybind11.readthedocs.io/en/stable/) generates the Python
+   wrappers.
+ * A constrained Delaunay triangulation library, used exactly once to build the
+   initial triangulation — everything downstream of it is owned in-tree.
+   Detria (MIT, header-only, C++20) is the intended choice, with poly2tri
+   (BSD-2) as fallback; see `parallel_refinement.md` for the comparison.
+ * Shewchuk-style adaptive `orient2d` and `incircle` predicates (public domain,
+   header-only) for robust geometry.
+ * [Catch2 v3](https://github.com/catchorg/Catch2) for unit tests, with
+   rapidcheck for property-based tests.
+
+Parallelism uses the standard library by default (`<thread>`, `<atomic>`,
+`std::execution`); TBB or OpenMP can be opted in via a CMake flag.
+
+### Python layer
+ * [Pydantic V2](https://docs.pydantic.dev/) for models and validation.
+ * [Typer](https://typer.tiangolo.com/) for the CLI.
+ * [Shapely](https://shapely.readthedocs.io/) and
+   [PyProj](https://pyproj4.github.io/pyproj/) for geometry and CRS handling.
+ * [NumPy](https://numpy.org/) for array interchange across the binding layer.
+
+Raster reading deliberately avoids Rasterio, which wraps GDAL. A pure-Python
+reader will be introduced under `src_python/tin_engine/io/`.
+
+### Removed
+CGAL, GMP and MPFR (triangulation and simplification move to the CDT wrapper
+plus in-tree refinement), Armadillo, Pillow, Meshio, and Howard Hinnant's
+`date` library (superseded by C++20 `<chrono>`). The pre-migration tree is
+preserved under `legacy/` and still references several of these.
 
 
 ## Installation
 
-Installing Rasputin is easy, as the C++ dependencies are header only. Simply, either install the dependencies using your system's package manager, or clone the source repository for each dependency locally on your computer and install them in such a way that CMake will find them.
-For examaple, in some location where you have your source code, type:
+The C++ dependencies are header-only, and Catch2 is fetched automatically by
+CMake via `FetchContent`, so no manual checkout is needed.
+
+Create the Python environment:
 
 ```
-git clone https://github.com/pybind/pybind11.git 
-git clone https://gitlab.com/conradsnicta/armadillo-code.git 
-git clone https://github.com/boostorg/geometry.git 
-git clone https://github.com/catchorg/Catch2.git 
-git clone https://github.com/CGAL/cgal.git 
+python3 -m venv .venv
+.venv/bin/pip install -e ".[dev]"
 ```
+
+Building the Python extension additionally needs pybind11
+(`.venv/bin/pip install pybind11`). It is not yet declared in
+`pyproject.toml`, because the extension build is still being wired up.
 Rasputin does not aim at being backwards compatible with older compilers.
 The build requires C++20. Date and time handling uses the C++20 `<chrono>`
 calendar types (`sys_days`, `year`/`month`/`day`) directly, so the compiler must
@@ -51,10 +77,10 @@ resolves to an old toolchain, point it at the Command Line Tools:
 ```
 sudo xcode-select --switch /Library/Developer/CommandLineTools
 ```
-You can ensure that the right compiler is used for building Rasputin by setting the `CXX` environment variable.
-For example, to use `g++` 8.x write the following in the terminal window:
+You can ensure that the right compiler is used for building Rasputin by setting
+the `CXX` environment variable, for example:
 ```
-export CXX=/usr/bin/g++-8
+export CXX=/opt/homebrew/bin/g++-16
 ```
 If you are using gcc, make sure that `CXX` points to `g++` and not `gcc`.
 
@@ -66,31 +92,16 @@ or on Arch,
 ```
 sudo pacman -S cmake
 ```
-A relatively recent version of CMake will be needed, and `3.15.6` or newer is
-known to work.
+A relatively recent version of CMake is needed; the build declares a minimum of
+`3.24`.
 
-CGAL requires the two libraries [GMP](http://gmplib.org/) and
-[MPFR](http://www.mpfr.org/) to be installed in order to work satisfactory. On
-Ubuntu, these libraries can be installed the usual way by typing
-```
-sudo apt-get install libgmp-dev libmpfr-dev
-```
-or for Arch:
-```
-sudo pacman -Syy gmp mpfr
-```
-in a terminal window. Also, CGAL depends on [Boost](https://www.boost.org/),
-see [here](https://doc.cgal.org/latest/Manual/installation.html#title21).
-
-Additionally, you need Python 3.
+Additionally, you need Python 3.11 or newer.
 Then, to install Rasputin, change to the Rasputin root source directory and run
 ```
-pip3 install .
+pip install .
 ```
-Or, if you prefer the old style:
-```
-python3 setup.py install
-```
+or, for a development install with the test and lint tooling, use the
+virtualenv shown above.
 
 
 ## Docker build
