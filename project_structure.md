@@ -1,51 +1,45 @@
 # Project Structure
 
-Layout for the post-CGAL rasputin backend. Each module corresponds to one design doc and one test directory. C++ implementation lives under `src/rasputin/_core/` (the underscore signals "private — go through the Python API"); the existing Python layer stays at `src/rasputin/*.py` and continues to expose the public API.
+Layout for the post-CGAL rasputin backend. Each module corresponds to one design doc and one test directory. Public C++ headers live under `include/terrain/`, implementation under `src/`, and the pybind11 module under `bindings/`. The Python layer is the `tin_engine` package under `src_python/` (the distribution is still named `rasputin`); the extension is imported as `tin_engine._core`, the underscore signalling "private — go through the Python API".
 
 ## Directory layout
 
+Entries marked *(planned)* do not exist yet; the rest are in the tree today.
+
 ```
-src/rasputin/
-  __init__.py
-  mesh.py                  # public API (existing, will be rewired to new backend)
-  geometry.py
-  reader.py
-  tin_repository.py
-  ...                      # other existing Python modules stay put
+include/terrain/           # public C++ headers, header-only where possible
+  core/
+    point.hpp              # Point2 / Point3 value types
 
-  _core/                   # C++ implementation, exposed via pybind11
-    CMakeLists.txt
-    bindings.cpp           # pybind11 module definition (entry point)
+src/                       # C++ implementation, one directory per module (planned)
+  raster_io/               # GeoTIFF read/write, raster<T> container, NoData
+  geometry_predicates/     # Shewchuk-style robust 2D predicates
+  parallel_util/           # work distribution, atomics, thread pool
+  vector_simplify/         # Visvalingam-Whyatt, Douglas-Peucker, topology checks
+  hydrology/               # pit fill, flow direction, accumulation, catchments, streams
+  noding/                  # snap rounding, PSLG construction
+  cdt/                     # thin wrapper over Detria (or poly2tri)
+  mesh/                    # triangle/vertex data structures, ternary tree, edge tags
+  refinement/              # adaptive ternary-tree refinement
+  flip/                    # final Lawson edge-flip pass, constraint-respecting
 
-    raster_io/             # GeoTIFF read/write, raster<T> container, NoData
-    geometry_predicates/   # Shewchuk-style robust 2D predicates
-    parallel_util/         # work distribution, atomics, thread pool
+bindings/
+  core.cpp                 # pybind11 module definition -> tin_engine._core
+  legacy_bindings.cpp      # CGAL-based original; not built, kept for reference
 
-    vector_simplify/       # Visvalingam-Whyatt, Douglas-Peucker, topology checks
-    hydrology/             # pit fill, flow direction, accumulation, catchments, streams
-    noding/                # snap rounding, PSLG construction
-    cdt/                   # thin wrapper over Detria (or poly2tri)
-    mesh/                  # triangle/vertex data structures, ternary tree, edge tags
-    refinement/            # adaptive ternary-tree refinement
-    flip/                  # final Lawson edge-flip pass, constraint-respecting
+src_python/tin_engine/     # public Python API (distribution name: rasputin)
+  __init__.py              # re-exports from tin_engine._core
+  cli.py                   # Typer entry point declared in pyproject (planned)
 
-cpp_test/                  # C++ tests (Catch2 + rapidcheck)
-  unit/                    # per-module unit tests
-  property/                # invariant / property-based tests
-  integration/             # cross-module pipeline tests
-  data/                    # tiny in-repo fixtures used by C++ tests
+tests/
+  cpp/                     # C++ tests (Catch2; rapidcheck planned)
+  python/                  # Python tests (pytest; hypothesis planned)
+  fixtures/                # in-repo test data (DEM, GML, textures, TIN archives)
 
-tests/                     # Python tests (pytest + hypothesis)
-  unit/
-  integration/
-  fixtures/                # tiny synthetic DEMs, expected outputs
-  conftest.py
+legacy/                    # archived pre-migration tree, not built
+  rasputin/
 
-test_data/                 # larger real-world fixtures
-  README.md                # explains LFS / download script
-  download.py              # fetches and caches DEM fixtures
-
-lib/                       # bundled header-only third-party (Detria, etc.) if not system-installed
+lib/                       # bundled header-only third-party (Detria, etc.) (planned)
 
 # Existing top-level docs
 parallel_refinement.md
@@ -119,32 +113,35 @@ Implements the refinement loop in `parallel_refinement.md`. Active-list manageme
 
 Final Lawson edge-flip pass. Skips constraint-tagged edges. Parallel with edge-conflict resolution.
 
-### `bindings.cpp`
+### `bindings/core.cpp`
 
-Single pybind11 module that exposes the C++ API to Python. Built as `rasputin/_core.so` (or similar) and imported by the Python layer.
+Single pybind11 module that exposes the C++ API to Python. Built as the `_core` extension, installed into the `tin_engine` package, and re-exported by `src_python/tin_engine/__init__.py`. Currently binds the `Point2`/`Point3` value types; `__repr__` routes through the `std::formatter` specializations in `point.hpp` so the C++ and Python renderings cannot drift.
 
 ## Build system
 
-CMake-based, building one shared library + one Python extension. C++20 required (matches existing project). Highlights:
+CMake-based, building the header-only core plus one Python extension. C++20 required. Highlights:
 
-- **Top-level `CMakeLists.txt`** orchestrates the build, finds dependencies, configures sanitizer flags via `RASPUTIN_SANITIZER=asan|ubsan|tsan|none`.
-- **`src/rasputin/_core/CMakeLists.txt`** builds each module as an `OBJECT` library, links them into the final pybind11 extension.
+- **Top-level `CMakeLists.txt`** orchestrates the build. `terrain_headers` is an `INTERFACE` target carrying `include/`. Two options gate the rest: `RASPUTIN_BUILD_PYTHON` (default `OFF`) adds the pybind11 extension, `RASPUTIN_BUILD_TESTS` (default `ON`) adds the C++ suite.
+- **`tests/cpp/CMakeLists.txt`** fetches Catch2 v3 via `FetchContent`, so it needs no manual checkout.
 - **Detria** (header-only) lives in `lib/detria/` if not system-installed; CMake searches both.
-- **External deps under consideration:** RichDEM (optional, MIT), GDAL (for GeoTIFF — already in use indirectly), Eigen (if linear algebra needs grow beyond what we want to hand-roll).
-- **No CGAL, no Boost.Geometry** in the new core. Existing Python-layer uses of these are migrated incrementally.
+- **External deps under consideration:** RichDEM (optional, MIT), Eigen (if linear algebra needs grow beyond what we want to hand-roll).
+- **No CGAL, no Boost.Geometry, no GDAL** in the new core. Existing Python-layer uses are migrated incrementally.
+- **Planned:** per-module `OBJECT` libraries linked into the extension once `src/` is populated, and sanitizer flags via `RASPUTIN_SANITIZER=asan|ubsan|tsan|none`.
 
-`setup.py` continues to drive the build via the existing `CMakeBuild` class (per `CLAUDE.md`).
+Packaging is driven by **scikit-build-core**, declared in `[build-system]` in `pyproject.toml`, which invokes this same CMake build. `pip install .` configures with `RASPUTIN_BUILD_PYTHON=ON` and `RASPUTIN_BUILD_TESTS=OFF` — the C++ tests pull Catch2 over the network and have no business running during an install — and installs `_core` into the `tin_engine` package.
+
+There is no `setup.py`. It was removed with the foundation reset, along with the `CMakeBuild` class it carried.
 
 ## Python API surface
 
-The public Python API (`rasputin.mesh.Mesh`, `rasputin.geometry.Geometry`, etc.) stays stable. Underneath, `Mesh.from_raster()` and friends are rewired to call into `rasputin._core` instead of the old `triangulate_dem` module. Migration can be done one entry point at a time; the old CGAL-backed module can coexist behind a feature flag during the cutover.
+The public API is the `tin_engine` package, calling into `tin_engine._core`. The pre-migration `rasputin.*` modules (`mesh.py`, `geometry.py`, `reader.py`, `tin_repository.py` and friends) are archived under `legacy/rasputin/` rather than kept in place, so this is a re-implementation against the new backend rather than a rewiring of stable modules. Porting proceeds one entry point at a time; shapes worth preserving should be read out of `legacy/` before being reintroduced.
 
 ## What gets deleted, eventually
 
 After the new backend ships and the Python API is rewired:
 
-- `src/rasputin/triangulate_dem.h` / `bindings.cpp` (the CGAL-based originals)
-- CGAL, GMP, MPFR from the CMake dependency list
+- `legacy/rasputin/triangulate_dem.h` and `bindings/legacy_bindings.cpp` (the CGAL-based originals)
+- CGAL, GMP, MPFR from the CMake dependency list — already absent from the new `CMakeLists.txt`
 - Boost.Geometry, if no longer used after vector_simplify is in-tree
 
 These removals are not part of the initial build-out; they're a follow-up once feature parity is reached and tests pass on the new backend.
@@ -153,9 +150,8 @@ These removals are not part of the initial build-out; they're a follow-up once f
 
 The repo already has:
 
-- `src/rasputin/triangulate_dem.h` (CGAL-based, to be replaced)
-- `src/rasputin/xml_reader.py`, `xml_reader_new.py` (untracked — pending classification)
-- `lib/date/` (existing third-party — stays)
-- `src/rasputin/smiley.svg` (presumably for web visualization — stays)
+- `legacy/rasputin/triangulate_dem.h` (CGAL-based, to be replaced)
+- `legacy/rasputin/*.py` (the pre-migration Python layer, pending per-module classification)
+- `lib/date/` — **removed**. The C++20 `<chrono>` calendar types replaced it; see the `lib/date` note in `CLAUDE.md` section 2.
 
 The new `_core/` tree is added alongside the existing C++ files; the old files stay buildable until the new pipeline reaches parity, then are removed in a single cleanup commit.
