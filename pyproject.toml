@@ -1,0 +1,84 @@
+[build-system]
+requires = ["hatchling>=1.24"]
+build-backend = "hatchling.build"
+
+[project]
+name = "rasputin"
+version = "0.2.0.dev0"
+description = "Parallel TIN engine for terrain meshing — CGAL-free, GDAL-free, pure C++20 core with async Python bindings."
+readme = "README.md"
+license = { file = "LICENSE" }
+requires-python = ">=3.11"
+authors = [{ name = "Ola Skavhaug", email = "ola@xal.no" }]
+keywords = ["tin", "terrain", "mesh", "cdt", "geospatial", "computational-geometry"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: POSIX :: Linux",
+    "Operating System :: MacOS :: MacOS X",
+    "Programming Language :: C++",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Scientific/Engineering :: GIS",
+    "Topic :: Scientific/Engineering :: Mathematics",
+]
+
+# Runtime deps — strict zero-GDAL / zero-CGAL policy.
+# Rasterio deliberately omitted: it wraps GDAL. A pure-Python raster reader
+# (e.g. tifffile-based) will be introduced under src_python/tin_engine/io/
+# as part of a dedicated design task.
+dependencies = [
+    "pydantic>=2.6",
+    "shapely>=2.0",
+    "pyproj>=3.6",
+    "typer>=0.12",
+    "numpy>=1.26",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.23",
+    "pytest-cov>=4.1",
+    "hypothesis>=6.100",
+    "mypy>=1.10",
+    "ruff>=0.5",
+]
+
+[project.scripts]
+rasputin = "tin_engine.cli:app"
+
+[project.urls]
+Homepage = "https://github.com/expertanalytics/rasputin"
+Issues = "https://github.com/expertanalytics/rasputin/issues"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src_python/tin_engine"]
+
+[tool.pytest.ini_options]
+minversion = "8.0"
+testpaths = ["tests/python"]
+asyncio_mode = "auto"
+addopts = [
+    "-ra",
+    "--strict-markers",
+    "--strict-config",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+src = ["src_python", "tests/python"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "UP", "B", "SIM", "RUF", "ASYNC"]
+ignore = []
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+files = ["src_python/tin_engine"]
+plugins = ["pydantic.mypy"]
