@@ -44,3 +44,18 @@ mypy                   # strict, over src_python/tin_engine
 ruff check .           # legacy/ is excluded
 ```
 
+### Governance gates
+```bash
+python tools/check_prohibited_deps.py   # section 2, checked against real imports
+python tools/check_legacy_imports.py    # legacy/ must stay self-consistent
+```
+
+### CI
+The gates above also run in GitHub Actions (`.github/workflows/main.yaml`), and
+CI is authoritative: local green does not mean the branch is green. A whole
+branch once merged with CI red on every commit because the workflow was never
+checked, so **verify check status before declaring anything merge-ready**:
+```bash
+gh pr checks <pr>      # must be green; required for merge on master
+```
+
