@@ -1,6 +1,6 @@
 [build-system]
-requires = ["hatchling>=1.24"]
-build-backend = "hatchling.build"
+requires = ["scikit-build-core>=0.9", "pybind11>=2.12"]
+build-backend = "scikit_build_core.build"
 
 [project]
 name = "rasputin"
@@ -55,8 +55,16 @@ rasputin = "tin_engine.cli:app"
 Homepage = "https://github.com/expertanalytics/rasputin"
 Issues = "https://github.com/expertanalytics/rasputin/issues"
 
-[tool.hatch.build.targets.wheel]
-packages = ["src_python/tin_engine"]
+# scikit-build-core drives the existing CMakeLists.txt. Hatchling cannot build
+# C extensions, and the C++ core is already CMake-based, so the build backend
+# follows the C++ rather than the other way round.
+[tool.scikit-build]
+minimum-version = "0.9"
+build-dir = "build/{wheel_tag}"
+# Tests are off for the wheel build: they pull Catch2 via FetchContent, which
+# has no business running during `pip install`.
+cmake.args = ["-DRASPUTIN_BUILD_PYTHON=ON", "-DRASPUTIN_BUILD_TESTS=OFF"]
+wheel.packages = ["src_python/tin_engine"]
 
 [tool.pytest.ini_options]
 minversion = "8.0"
