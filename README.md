@@ -21,7 +21,6 @@ The heavy lifting in Rasputin is done by external software:
    [GeoTIFF](https://en.wikipedia.org/wiki/GeoTIFF) files.
  * [Meshio](https://github.com/nschloe/meshio) is used to write results.
  * [Armadillo](http://arma.sourceforge.net/) for speedy arithmetics.
- * [date](https://github.com/HowardHinnant/date) for date and time on top of `chrono`.
  * [Catch2](https://github.com/catchorg/Catch2) for unit testing of the c++ code.
 
 
@@ -37,19 +36,21 @@ git clone https://github.com/boostorg/geometry.git
 git clone https://github.com/catchorg/Catch2.git 
 git clone https://github.com/CGAL/cgal.git 
 ```
-For Howard Hinnant's `date` library to work, enter the rasputin source root directory and checkout the source under the `lib` folder:
-```
-cd lib
-git clone https://github.com/HowardHinnant/date.git 
-```
-
 Rasputin does not aim at being backwards compatible with older compilers.
-Hence, you will need something quite new. The following compilers are known to
-work:
- * g++ 8.3
- * clang 11.0.0
+The build requires C++20. Date and time handling uses the C++20 `<chrono>`
+calendar types (`sys_days`, `year`/`month`/`day`) directly, so the compiler must
+provide them. The following are verified to build and pass the test suite:
+ * AppleClang 21.0.0
+ * g++ 16.2.0
 
-Note that g++ 7 no longer works, due to the use of `<chrono>` from `stl`.
+All date handling is UTC; no timezone database is required, so libc++ is fine
+despite not yet shipping `std::chrono::zoned_time`.
+
+On macOS, note that `/usr/bin/c++` dispatches through `xcode-select`. If it
+resolves to an old toolchain, point it at the Command Line Tools:
+```
+sudo xcode-select --switch /Library/Developer/CommandLineTools
+```
 You can ensure that the right compiler is used for building Rasputin by setting the `CXX` environment variable.
 For example, to use `g++` 8.x write the following in the terminal window:
 ```
