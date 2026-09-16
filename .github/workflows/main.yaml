@@ -37,6 +37,38 @@ jobs:
       - name: Test
         run: ctest --test-dir build --output-on-failure
 
+  # The Release jobs above prove the suite passes; this one proves it passes for
+  # the right reasons. A read one element past a raster buffer returns whatever
+  # is adjacent and the assertion still succeeds -- that is precisely the legacy
+  # defect pinned by the far-corner regression in tests/cpp/test_raster.cpp, and
+  # an uninstrumented build cannot see it. The sampling path computes indices
+  # from floating-point coordinates and then reads index, index+1, index+cols
+  # and index+cols+1, which is the shape ASan exists for. Worth having in place
+  # before the CDT lands, since predicate and flip code does far more pointer
+  # arithmetic over vertex and edge arrays than anything here today.
+  sanitizers:
+    name: C++ sanitizers (asan+ubsan)
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # -fno-sanitize-recover=all is load-bearing, not belt-and-braces: UBSan's
+      # default is to print the diagnostic and keep going, so the process exits
+      # 0 and the job passes green on undefined behaviour. Without this flag the
+      # ubsan half of this job reports findings nobody is forced to read.
+      - name: Configure
+        run: >
+          cmake -S . -B build-san
+          -DCMAKE_BUILD_TYPE=Debug
+          -DCMAKE_CXX_FLAGS="-fsanitize=address,undefined -fno-sanitize-recover=all -fno-omit-frame-pointer -g"
+
+      - name: Build
+        run: cmake --build build-san --parallel
+
+      - name: Test
+        run: ctest --test-dir build-san --output-on-failure
+
   # Rules that previously existed only as prose in CLAUDE.md and were enforced
   # by nothing. Both scripts are dependency-free and parse rather than execute,
   # so this job needs no install step.
