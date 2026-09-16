@@ -148,6 +148,20 @@ Property test generators live alongside the modules they test (e.g. `tests/cpp/p
   which is load-bearing: UBSan's default is to print the diagnostic and
   continue, so the process exits 0 and the job passes green on undefined
   behaviour.
+- **[live]** `DefaultKernel::incircle` is exercised against non-counterclockwise
+  input in the Debug job, unguarded and in process
+  (`tests/cpp/unit/test_predicates_default_kernel.cpp`, plus the property sweep
+  in `tests/cpp/property/prop_predicates_detria_agreement.cpp`). This is a
+  blocking gate for the predicates module, and it is the one test here that
+  passes by *not crashing*. The vendored detria backend asserts its
+  counterclockwise precondition under `#ifndef NDEBUG` and its assert handler
+  calls `std::raise(SIGTRAP)`, which is not a signal Catch2 installs a handler
+  for -- so if `FilteredKernel::incircle`'s normalization ever regresses, the
+  asan+ubsan Debug job dies on a signal with no assertion text rather than
+  reporting a failure. A forked probe in the same file exists to turn that death
+  into a readable report; the unguarded test exists to make sure the real,
+  unmediated call path is what is being exercised. Release builds define NDEBUG
+  and cannot see this at all, which is why it is listed with the sanitizers.
 - **[planned]** tsan build on every PR — catches races in parallel code
   paths. Nothing to race yet; due when the parallel refinement lands.
 - **[planned]** msan (MemorySanitizer, clang-only) nightly — catches

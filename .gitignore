@@ -9,6 +9,7 @@ src/rasputin/*so
 src/rasputin.egg-info
 __pycache__
 build
+build-*/
 dist
 .DS_Store
 lib/boo*

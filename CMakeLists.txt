@@ -22,6 +22,36 @@ target_compile_features(terrain_headers INTERFACE cxx_std_20)
 # The Python extension is built by scikit-build-core when installing the
 # wheel; it is off by default so a plain `cmake ..` still configures only the
 # header library and the C++ tests.
+# The vendored detria predicates (lib/detria, MIT by election -- see its
+# README). SYSTEM is load-bearing rather than tidy: the tree builds at
+# -Wall -Wextra -Wpedantic -Werror and detria is unmodified C++17-era
+# third-party code we have a written policy against patching, so its diagnostics
+# must not become pressure to either patch it or weaken our own flags.
+add_library(detria INTERFACE)
+target_include_directories(detria SYSTEM INTERFACE
+    "${CMAKE_CURRENT_SOURCE_DIR}/lib/detria"
+)
+
+# The predicates backend: the only compiled target in the core, and the only
+# place detria.hpp is ever included.
+#
+# `detria` is linked PRIVATE on purpose. That keeps lib/detria off this
+# library's INTERFACE include path, so no consumer -- test target or future
+# triangulation -- can resolve `#include <detria.hpp>` even by accident. The
+# "detria.hpp lives in one translation unit" rule is therefore structural here,
+# with tools/check_detria_boundary.py and the suite's preprocessor guard as the
+# second and third lines of defence.
+add_library(terrain_predicates STATIC
+    src/predicates/detria_exact.cpp
+)
+target_link_libraries(terrain_predicates
+    PUBLIC terrain_headers
+    PRIVATE detria
+)
+target_compile_options(terrain_predicates PRIVATE
+    -Wall -Wextra -Wpedantic -Werror
+)
+
 option(RASPUTIN_BUILD_PYTHON "Build the Python extension module" OFF)
 if(RASPUTIN_BUILD_PYTHON)
     find_package(pybind11 CONFIG REQUIRED)

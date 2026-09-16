@@ -48,6 +48,7 @@ ruff check .           # legacy/ is excluded
 ```bash
 python tools/check_prohibited_deps.py   # section 2, checked against real imports
 python tools/check_legacy_imports.py    # legacy/ must stay self-consistent
+python tools/check_detria_boundary.py   # detria.hpp stays in one TU, zero headers
 ```
 
 ### CI

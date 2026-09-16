@@ -70,7 +70,7 @@ jobs:
         run: ctest --test-dir build-san --output-on-failure
 
   # Rules that previously existed only as prose in CLAUDE.md and were enforced
-  # by nothing. Both scripts are dependency-free and parse rather than execute,
+  # by nothing. All three scripts are dependency-free and parse rather than execute,
   # so this job needs no install step.
   governance:
     name: Governance gates
@@ -94,6 +94,13 @@ jobs:
       # worse than no archive.
       - name: Archive integrity
         run: python tools/check_legacy_imports.py
+
+      # The vendored detria header must stay inside one translation unit. CMake
+      # already makes that structural (lib/detria is PRIVATE on
+      # terrain_predicates), but a build edit can dissolve a structural guard,
+      # and the swappability of the exact backend rests on this rule.
+      - name: detria boundary
+        run: python tools/check_detria_boundary.py
 
   python:
     name: Python ${{ matrix.python-version }}
