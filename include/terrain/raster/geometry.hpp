@@ -70,7 +70,16 @@ public:
     // Index of the node at or before p. Returns nullopt outside the domain --
     // the legacy clamped silently, turning every out-of-domain query into a
     // plausible-looking edge sample.
+    //
+    // The finiteness test must come first and must be explicit. Every
+    // comparison against NaN is false, so a range check alone does not reject
+    // it: control reaches the saturating path, which answers NaN with a
+    // confident CellIndex{0,0}, and bilinear then returns an engaged optional
+    // carrying NaN. Infinity happens to fall out of the range check correctly,
+    // but relying on that is what hid the NaN hole.
     [[nodiscard]] std::optional<CellIndex> cell_of(const Point2& p) const noexcept {
+        if (!std::isfinite(p.x) || !std::isfinite(p.y))
+            return std::nullopt;
         if (p.x < x_min_ || p.x > x_max() || p.y > y_max_ || p.y < y_min())
             return std::nullopt;
         return clamped_cell_of(p);
@@ -78,6 +87,10 @@ public:
 
     // The legacy clamping behaviour, kept for callers that genuinely want a
     // saturating lookup -- but they now have to ask for it by name.
+    //
+    // Precondition: p is finite. This function has no failure channel, so a
+    // non-finite coordinate yields an arbitrary in-range index. Callers that
+    // cannot guarantee finiteness must use cell_of.
     [[nodiscard]] CellIndex clamped_cell_of(const Point2& p) const noexcept {
         return CellIndex{axis_index((y_max_ - p.y) / delta_y_, rows_),
                          axis_index((p.x - x_min_) / delta_x_, cols_)};

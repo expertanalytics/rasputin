@@ -86,3 +86,46 @@ def test_nan_never_compares_equal() -> None:
     nan = float("nan")
     assert Point2(nan, 0.0) != Point2(nan, 0.0)
     assert math.isnan(Point2(nan, 0.0).x)
+
+
+class TestDocumentation:
+    """CLAUDE.md section 4 requires every pybind11-exposed surface to be documented."""
+
+    def test_types_and_functions_carry_docstrings(self) -> None:
+        for obj in (Point2, Point3, dot, cross):
+            assert obj.__doc__, f"{obj!r} has no docstring"
+
+    def test_properties_carry_docstrings(self) -> None:
+        for cls, names in ((Point2, "xy"), (Point3, "xyz")):
+            for name in names:
+                assert getattr(cls, name).__doc__, f"{cls.__name__}.{name} undocumented"
+
+    def test_cross_documents_its_dimensional_asymmetry(self) -> None:
+        # 2D cross returns a scalar, 3D returns a vector. That asymmetry was
+        # only ever explained in a C++ comment, invisible from help(cross).
+        assert "scalar" in cross.__doc__
+
+
+class TestImmutability:
+    """Point types are hashable, so they must not be mutable.
+
+    Exposing def_readwrite alongside __hash__ lets a caller insert a point into
+    a set, mutate a coordinate, and silently corrupt the set -- the element
+    becomes unreachable. C++ aggregates get away with this; Python sets do not.
+    """
+
+    def test_coordinates_are_read_only(self) -> None:
+        p = Point2(1.0, 2.0)
+        with pytest.raises(AttributeError):
+            p.x = 5.0  # type: ignore[misc]
+
+        q = Point3(1.0, 2.0, 3.0)
+        with pytest.raises(AttributeError):
+            q.z = 5.0  # type: ignore[misc]
+
+    def test_set_membership_survives_attempted_mutation(self) -> None:
+        p = Point2(1.0, 2.0)
+        s = {p}
+        with pytest.raises(AttributeError):
+            p.x = 99.0  # type: ignore[misc]
+        assert p in s

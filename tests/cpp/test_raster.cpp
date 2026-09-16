@@ -6,6 +6,7 @@
 #include <terrain/raster/raster.hpp>
 #include <terrain/raster/sample.hpp>
 
+#include <limits>
 #include <stdexcept>
 #include <vector>
 
@@ -36,6 +37,22 @@ Raster<double> plane_raster(const RasterGeometry& g, double a, double b, double 
         }
     return Raster<double>{g, std::move(v)};
 }
+
+// An independent RasterSource model: proves the concept is satisfiable by
+// something other than the one class it was written around, and that
+// sample.hpp binds to it unchanged.
+class ConstantRaster {
+public:
+    using value_type = double;
+    ConstantRaster(RasterGeometry g, double v) : geometry_{g}, value_{v} {}
+    [[nodiscard]] const RasterGeometry& geometry() const noexcept { return geometry_; }
+    [[nodiscard]] double at(const CellIndex&) const noexcept { return value_; }
+    [[nodiscard]] bool is_nodata(const CellIndex&) const noexcept { return false; }
+
+private:
+    RasterGeometry geometry_;
+    double value_;
+};
 
 } // namespace
 
@@ -186,4 +203,59 @@ TEST_CASE("bilinear survives UTM-scale coordinates with sub-metre spacing",
     const auto z = bilinear(r, p);
     REQUIRE(z.has_value());
     REQUIRE_THAT(*z, WithinRel(p.x + p.y, 1e-9));
+}
+
+TEST_CASE("non-finite query points are rejected, never answered plausibly",
+          "[raster][geometry][sample][edge][regression]") {
+    // Regression: the domain guard compared against NaN, and every comparison
+    // against NaN is false, so the guard fell through to the saturating path
+    // and returned a confident CellIndex{0,0}. bilinear then handed back an
+    // engaged optional carrying NaN -- exactly the "plausible-looking edge
+    // sample" this API exists to prevent.
+    const auto g = grid_3x5();
+    const auto r = plane_raster(g, 1.0, 1.0, 1.0);
+
+    const double nan = std::numeric_limits<double>::quiet_NaN();
+    const double inf = std::numeric_limits<double>::infinity();
+
+    for (const Point2 p : {Point2{nan, nan}, Point2{nan, 8.0}, Point2{2.0, nan},
+                           Point2{inf, 8.0}, Point2{2.0, inf},
+                           Point2{-inf, 8.0}, Point2{2.0, -inf}}) {
+        REQUIRE_FALSE(g.cell_of(p).has_value());
+        REQUIRE_FALSE(g.bilinear_cell_of(p).has_value());
+        REQUIRE_FALSE(bilinear(r, p).has_value());
+        // A non-finite point is not strictly inside anything.
+        REQUIRE_FALSE(g.contains_strict(p));
+    }
+}
+
+TEST_CASE("NaN in the raster data is treated as NoData", "[raster][sample][edge]") {
+    // raster.hpp claims NaN "must never propagate silently into a mesh". That
+    // invariant was asserted in a comment and covered by nothing.
+    const auto g = grid_3x5();
+    std::vector<double> v(g.size(), 1.0);
+    v[g.linear_index(CellIndex{1, 2})] = std::numeric_limits<double>::quiet_NaN();
+    const Raster<double> r{g, std::move(v)};
+
+    REQUIRE(r.is_nodata(CellIndex{1, 2}));
+    REQUIRE_FALSE(bilinear(r, Point2{2.5, 7.5}).has_value());  // touches the NaN
+    REQUIRE(bilinear(r, Point2{0.5, 9.5}).has_value());        // clear of it
+}
+
+TEST_CASE("Raster rejects data that does not match its geometry", "[raster][edge]") {
+    REQUIRE_THROWS_AS((Raster<double>{grid_3x5(), std::vector<double>(14, 0.0)}),
+                      std::invalid_argument);
+}
+
+TEST_CASE("RasterSource is satisfiable by more than the class it was written around",
+          "[raster][concept]") {
+    STATIC_REQUIRE(terrain::raster::RasterSource<Raster<double>>);
+    STATIC_REQUIRE(terrain::raster::RasterSource<Raster<float>>);
+    STATIC_REQUIRE(terrain::raster::RasterSource<ConstantRaster>);
+
+    // A second, independent model must interoperate with sample.hpp unchanged.
+    const ConstantRaster c{grid_3x5(), 7.0};
+    const auto z = bilinear(c, Point2{2.5, 7.5});
+    REQUIRE(z.has_value());
+    REQUIRE_THAT(*z, WithinAbs(7.0, 1e-12));
 }
