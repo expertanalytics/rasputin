@@ -92,6 +92,23 @@ add_terrain_backend_test(test_segment unit/test_segment.cpp)
 add_terrain_backend_test(test_ring unit/test_ring.cpp)
 add_terrain_backend_test(prop_ring_invariants property/prop_ring_invariants.cpp)
 
+# Core, increment 3: the PSLG.
+#
+# These do not build yet -- terrain/core/pslg.hpp and
+# terrain/core/pslg_builder.hpp do not exist. That is the intended red step of
+# the TDD protocol, not a broken checkout.
+#
+# All three name a kernel -- the builder suite instantiates build<K>() and both
+# others build under DefaultKernel -- so none of them uses the plain helper.
+add_terrain_backend_test(test_pslg unit/test_pslg.cpp)
+add_terrain_backend_test(test_pslg_builder unit/test_pslg_builder.cpp)
+add_terrain_backend_test(prop_pslg_invariants property/prop_pslg_invariants.cpp)
+
+# The concurrent-read property asserts guarantee 10 -- that a const Pslg needs
+# no synchronisation -- by having eight threads reduce over the same one and
+# requiring they agree.
+target_link_libraries(prop_pslg_invariants PRIVATE Threads::Threads)
+
 # Characterisation tests for the legacy solar-position header. These pin the
 # UTC/Julian-day behaviour the post-CGAL port must reproduce, and guard removal
 # of the lib/date fallback. The legacy header carries pre-existing
