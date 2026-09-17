@@ -3,8 +3,9 @@
 Rasputin can convert a point set of `(x, y, z)` coordinates to a triangulated
 irregular network. Specifically, it has been developed to convert raster dems
 (digital elevation models) into simplified triangulated surface meshes. The
-`rasputin_store` program can read `GeoTIFF` files and construct surface
-meshes in various formats. Run `rasputin_store --help` for more info.
+`rasputin_store` program did this in the CGAL era and does not exist in the
+post-CGAL tree; the installed CLI is `rasputin`, which currently exposes only
+`version` while the core is rebuilt. See `docs/increments/` for what has landed.
 
 It is also possible to compute the shade cast from a given, planar sun ray
 vector. This shade is computed based on the cell center of the simplified
@@ -22,10 +23,12 @@ with async Python bindings. The C++ dependencies are header-only.
    initial triangulation — everything downstream of it is owned in-tree.
    Detria (MIT, header-only, C++20) is the intended choice, with poly2tri
    (BSD-2) as fallback; see `parallel_refinement.md` for the comparison.
- * Shewchuk-style adaptive `orient2d` and `incircle` predicates (public domain,
-   header-only) for robust geometry.
- * [Catch2 v3](https://github.com/catchorg/Catch2) for unit tests, with
-   rapidcheck for property-based tests.
+ * Exact `orient2d` and `incircle` predicates via a filtered kernel over a
+   vendored backend (`lib/detria/`, MIT, pinned). Not header-only: the backend
+   is confined to one translation unit, `src/predicates/detria_exact.cpp`.
+ * [Catch2 v3](https://github.com/catchorg/Catch2) for unit tests. Property
+   tests use Catch2 `GENERATE` over a seeded range rather than rapidcheck —
+   each property suite records why at the top of the file.
 
 Parallelism uses the standard library by default (`<thread>`, `<atomic>`,
 `std::execution`); TBB or OpenMP can be opted in via a CMake flag.

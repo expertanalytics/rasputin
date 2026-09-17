@@ -26,8 +26,18 @@ Per `CLAUDE.md` §3, with the artifact each step produces:
    invariants, exclusions, degeneracy policy, LOC estimate. No production code.
 2. `@tester` reads it and writes a failing suite. No production code. The
    suite is committed **red**, before the implementation exists.
-3. `@developer` reads both and makes it green, touching no test.
+3. `@developer` reads both and makes it green. The green commit touches **no
+   test file** — that is what makes the trace mean anything.
 4. `@reviewer` audits before merge. CI is authoritative.
+
+Steps 2 and 3 are not strictly once each. A ruling can land after the red
+commit, and the suite that encodes it is still `@tester`'s to write — increment
+3 pinned three behaviours that way, and increment 2 retuned three constants
+*after* implementation when they turned out to depend on FMA contraction. Such
+amendments land as their own commit with the reason in the message, never
+folded into the green one. The rule is not "tests are frozen after red"; it is
+"`@developer` does not edit tests, and no test change hides inside an
+implementation commit".
 
 The red commit stays ahead of the green one in history. That trace is the only
 thing that makes the test-first claim verifiable after the fact; a governance
@@ -57,8 +67,23 @@ compile in the edit-validate loop. Use the full cross product only where an
 instantiation proves something a later increment depends on — the increment
 file says which.
 
-**Match the model to the work.** Exact-predicate and topology reasoning earns
-the larger model. Mechanical value types and their tests do not.
+**Match the model to the work — but the applicable surface is small.** Of
+~1,160 non-comment lines of core to date, the only genuinely mechanical work was
+`bbox.hpp` and `segment.hpp`, at 129 lines. Predicate, kernel and topology work
+is not delegable downward, and the one attempt at tiering stalled for 600s and
+produced nothing. Use a smaller model only for a value-type header with no
+kernel parameter and no exactness claim; otherwise do not spend the round
+setting it up.
 
 **Independent suites run as parallel agents.** Two suites that do not share a
-header do not need to share a round.
+header do not need to share a round. Note that most are not independent —
+increment 2's `ring.hpp` returns `Box2` and `Segment2`, so its suite could not
+start before theirs.
+
+**A documentation defect found during an increment is fixed in that increment's
+PR, or it is not recorded.** Increments 2 and 3 each carried a "documentation
+debt this increment should clear" section. Between them they cleared nothing,
+grew from three entries to five, and listed 5 of the 11 defects an audit later
+found — reading as exhaustive while being less than half. A ledger nobody
+settles converts a one-line fix into a permanent entry and gives false
+assurance that the rest is clean. Fix it, or leave it to be found.

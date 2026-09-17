@@ -51,11 +51,6 @@ target_link_libraries(test_predicates_filtered_kernel PRIVATE Threads::Threads)
 
 # Predicates, increment 1b: the detria-backed exact backend.
 #
-# These do not build yet -- terrain/predicates/detria_exact.hpp,
-# terrain/predicates/default_kernel.hpp and the terrain_predicates library that
-# compiles src/predicates/detria_exact.cpp do not exist. That is the intended
-# red step of the TDD protocol, not a broken checkout.
-#
 # `terrain_predicates` is the compiled target these suites expect: a small
 # static library whose only translation unit is src/predicates/detria_exact.cpp,
 # with lib/detria on its include path PRIVATE. Keeping detria's include
@@ -80,10 +75,6 @@ target_link_libraries(test_predicates_detria_exact PRIVATE Threads::Threads)
 
 # Core, increment 2: the 2D geometry value types.
 #
-# These do not build yet -- terrain/core/bbox.hpp, terrain/core/segment.hpp and
-# terrain/core/ring.hpp do not exist. That is the intended red step of the TDD
-# protocol, not a broken checkout.
-#
 # test_bbox names no kernel, so it registers with add_terrain_test. Everything
 # else names DefaultKernel, which pulls in detria_exact.hpp and therefore needs
 # the compiled terrain_predicates target linked -- add_terrain_backend_test.
@@ -93,10 +84,6 @@ add_terrain_backend_test(test_ring unit/test_ring.cpp)
 add_terrain_backend_test(prop_ring_invariants property/prop_ring_invariants.cpp)
 
 # Core, increment 3: the PSLG.
-#
-# These do not build yet -- terrain/core/pslg.hpp and
-# terrain/core/pslg_builder.hpp do not exist. That is the intended red step of
-# the TDD protocol, not a broken checkout.
 #
 # All three name a kernel -- the builder suite instantiates build<K>() and both
 # others build under DefaultKernel -- so none of them uses the plain helper.

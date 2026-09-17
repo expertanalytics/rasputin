@@ -385,23 +385,9 @@ No production header needs to change. `point.hpp`, `raster/*` and `predicates/*`
 are untouched. `std::hash<Point2>` is used nowhere here — nothing in this
 increment is dedup-shaped.
 
-## Documentation debt this increment should clear
+## Documentation debt
 
-`project_structure.md` is wrong in three places now that predicates are real:
-
-- The module is `include/terrain/predicates/` in namespace `terrain::pred`, not
-  `src/geometry_predicates/`.
-- The prose "Shewchuk's adaptive orient2d and incircle (public domain —
-  drop-in) ... Header-only" is false in all three clauses: the backend is
-  vendored detria at a pinned SHA, and the module is not header-only —
-  `src/predicates/detria_exact.cpp` is a TU and `terrain_predicates` a compiled
-  target.
-- The directory listing lacks `include/terrain/predicates/` and
-  `core/{segment,bbox,ring}.hpp`, and marks `lib/` as *(planned)* when
-  `lib/detria` is in the tree. The dependency diagram needs a `core` node below
-  `predicates`, with `noding` above both.
-
-`testing.md`'s invariant catalog starts at `noding` and has no entry for
-anything that currently exists. It should gain a retroactive `predicates`
-section and a `core geometry` section; the invariant list is in the tester's
-brief and in `prop_ring_invariants.cpp`.
+Cleared in the governance-cleanup pass, not carried forward. `project_structure.md`,
+`README.md`, `testing.md`, `CLAUDE.md` and the workflow were corrected there, and
+`docs/increments/README.md` now requires a doc defect found during an increment to be
+fixed in that increment's PR or not recorded — this section is the evidence for why.

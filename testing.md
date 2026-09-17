@@ -63,11 +63,45 @@ Parameterized by seed, size, and amplitude. Tiny by default (32×32, 128×128) s
 
 Used for: integration tests, performance baselines, visual-regression spot-checks (render the output mesh and diff against a stored PNG within a perceptual tolerance).
 
-## Invariant catalog [planned]
+## Invariant catalog [partly live]
 
-These are the "water tight" properties — they must hold on every input regardless of tier. Property tests run them against generators that produce random inputs in each module's domain.
+These are the "water tight" properties — they must hold on every input regardless of tier. Sections marked **[live]** describe modules that exist and are enforced by the suites under `tests/cpp/`; **[planned]** sections describe modules that do not exist yet. Property tests run them against generators that produce random inputs in each module's domain.
 
-### `noding`
+### `predicates` [live]
+
+- `orient2d(a,b,c) == reversed(orient2d(a,c,b))` and `orient2d(a,b,c) == orient2d(b,c,a)`, for every triple, unconditionally — including collinear and cocircular input. Two callers asking about the same triple in different vertex orders must not disagree.
+- `FilteredKernel<E>` returns exactly what `E` returns, on every finite input. The filter is a performance device and may never change an answer.
+- The exact backend is consulted iff the float determinant is inside the error bound: zero fallbacks on well-separated input, at least one on a collinear triple.
+- `incircle` is total, precondition-free, and independent of the order of its first three arguments. Collinear input returns `Cocircular` without consulting the backend.
+- Degeneracy is exact: three points on an exactly representable line are `Collinear`, four on an exactly representable circle are `Cocircular`.
+- Correct at UTM33 magnitudes, where naive determinants have no correct digits.
+
+### `core geometry` [live]
+
+- `point_in_ring` is invariant under cyclic rotation of the vertices and under reversal of the ring.
+- Every ring vertex classifies `Boundary`.
+- `orientation` negates exactly when the ring is reversed, and is invariant under cyclic rotation.
+- `orientation` agrees with `sign(signed_area)` for every ring whose area is well separated from zero — and there exists a sliver where it does not, which is why `signed_area`'s sign may never drive a topology decision.
+- `|signed_area|` is invariant under rotation and reversal.
+- `bounding_box(ring)` contains every vertex, and no point outside it classifies `Inside` or `Boundary`.
+- `Box2::expand` as a fold is order-independent; the empty box is its identity.
+- `FastKernel` and `DefaultKernel` agree on `point_in_ring` for well-separated input, and there exists a near-degenerate ring where `FastKernel` is demonstrably wrong under every FMA-contraction mode.
+- On a ring built from `RasterGeometry` corner nodes, `contains_strict(p)` implies `point_in_ring(p) == Inside`.
+
+### `core geometry — PSLG` [live]
+
+- A `Pslg` exists only if its build produced an empty diagnostics list; there is no partially valid `Pslg`.
+- Every index in `chain_indices()` is `< vertices().size()`; every coordinate in `vertices()` is finite, including unreferenced ones.
+- Every `Outer` ring is counterclockwise and every `Hole` ring is clockwise under the validating kernel; neither is collinear.
+- No closed chain stores its closure; breaklines are exempt and may be closed polylines.
+- `indices_of(i)` sub-spans partition `chain_indices()` contiguously in chain order, with no gap and no overlap.
+- The vertex buffer is element-wise equal to the builder's input: no dedup, no reordering, no reversal.
+- `ring(c)` never throws for a closed chain.
+- Validation is exhaustive: N independently broken chains produce at least N diagnostics. Stage 0 is the one exception and returns early, because past truncation every later diagnostic is noise.
+- A `const Pslg` is safe for concurrent read; no accessor mutates or caches.
+- Negative, and equally load-bearing: a valid `Pslg` promises **no** simplicity, **no** pairwise disjointness and **no** nesting. Any test asserting one of those is testing the noder and belongs in its catalog.
+
+### `noding` [planned]
 
 - No two output segments intersect in their interior.
 - Every input vertex appears in the output vertex set (post-snap).
@@ -130,7 +164,10 @@ These are the "water tight" properties — they must hold on every input regardl
 ## Frameworks [partly live]
 
 - **Catch2 v3** for C++ unit and integration tests (in `tests/cpp/`, fetched via `FetchContent`).
-- **rapidcheck** for C++ property-based tests, integrated as a Catch2 extension.
+- **Catch2 `GENERATE` over a seeded range** for C++ property-based tests.
+  rapidcheck was considered and declined; each property suite records why at the
+  top of the file, the operative reason being that standing up a second
+  framework inside the PR that introduces a module is how neither gets done.
 - **pytest** for Python tests (existing).
 - **hypothesis** for Python property-based tests.
 - **pytest-benchmark** for performance regression tracking on tier-3 fixtures.

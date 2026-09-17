@@ -20,7 +20,7 @@ include/terrain/           # public C++ headers, header-only where possible
                            #   a caller in refinement)
 
 src/                       # C++ implementation, one directory per module (planned)
-  geometry_predicates/     # Shewchuk-style robust 2D predicates
+  predicates/              # exact orient2d/incircle; namespace terrain::pred
   parallel_util/           # work distribution, atomics, thread pool
   vector_simplify/         # Visvalingam-Whyatt, Douglas-Peucker, topology checks
   hydrology/               # pit fill, flow direction, accumulation, catchments, streams
@@ -43,7 +43,7 @@ src_python/tin_engine/     # public Python API (distribution name: rasputin)
     models.py              # Pydantic RasterMeta / DemTile
 
 tests/
-  cpp/                     # C++ tests (Catch2; rapidcheck planned)
+  cpp/                     # C++ tests (Catch2; unit/ and property/)
   python/                  # Python tests (pytest; hypothesis planned)
   fixtures/                # in-repo test data (DEM, GML, textures, TIN archives)
 
@@ -51,13 +51,15 @@ legacy/                    # archived pre-migration tree, not built
   rasputin/
   bindings.cpp             # CGAL-based original; not built, kept for reference
 
-lib/                       # bundled header-only third-party (Detria, etc.) (planned)
+lib/                       # vendored third-party
+  detria/                  # detria.hpp at a pinned SHA, MIT; see its README
 
 # Existing top-level docs
 parallel_refinement.md
 auto_catchments.md
 project_structure.md       # this file
 testing.md
+docs/increments/           # per-increment design records; see its README
 ```
 
 ## Module responsibilities and dependencies
@@ -65,7 +67,7 @@ testing.md
 ```
                     raster ────────────────┐
                                             ▼
-geometry_predicates ──┬─→ vector_simplify   hydrology  (depends on raster,
+predicates ───────────┬─→ vector_simplify   hydrology  (depends on raster,
                       │                     │           parallel_util)
                       └─→ noding ←──────────┘   (catchment outline, river polylines)
                               │
@@ -77,7 +79,7 @@ geometry_predicates ──┬─→ vector_simplify   hydrology  (depends on ras
                               │
                               ├──→ refinement   (raster for sampling, parallel_util)
                               │
-                              └──→ flip         (geometry_predicates, parallel_util)
+                              └──→ flip         (predicates, parallel_util)
                                       │
                                       ▼
                                    bindings.cpp ──→ Python API
@@ -175,9 +177,14 @@ windows are an I/O concern (which strips or tiles to decode); `window_for` is
 an index concern (which cells a triangle's bbox covers). Same word, different
 layers, no shared code.
 
-### `geometry_predicates`
+### `predicates`
 
-Shewchuk's adaptive `orient2d` and `incircle` and friends (public domain — drop-in). Used by `noding`, `cdt`, and `flip`. Header-only.
+Exact `orient2d` and `incircle` behind `GeometryKernel`, as `FilteredKernel<E>`: an
+inline static filter with an exact fallback. `DefaultKernel` binds it to vendored
+detria at a pinned SHA. **Not header-only** — `src/predicates/detria_exact.cpp` is the
+only TU that includes `detria.hpp`, enforced by CMake privacy, an `#error` guard and
+`tools/check_detria_boundary.py`. Used by `core`, `noding`, `cdt` and `flip`. See
+`docs/increments/01-predicates.md`.
 
 ### `parallel_util`
 
@@ -193,7 +200,9 @@ Implements `auto_catchments.md`: pit filling (priority-flood with epsilon, plus 
 
 ### `noding`
 
-Implements the constraint-noding section of `parallel_refinement.md`. Raster-grid broad phase, robust pairwise intersection, snap rounding, segment splitting, deduplication. Outputs a clean PSLG with one bit per edge (`is_river`).
+Implements the constraint-noding section of `parallel_refinement.md`. Raster-grid broad phase, robust pairwise intersection, snap rounding, segment splitting, deduplication. Outputs a clean PSLG. `is_river` is one bit per **chain**, not per edge — only the
+noder can produce an edge whose bit disagrees with its source chain, and it
+contributes a sparse per-edge override set then. See `docs/increments/03-pslg.md`.
 
 ### `cdt`
 
@@ -221,7 +230,9 @@ CMake-based, building the header-only core plus one Python extension. C++20 requ
 
 - **Top-level `CMakeLists.txt`** orchestrates the build. `terrain_headers` is an `INTERFACE` target carrying `include/`. Two options gate the rest: `RASPUTIN_BUILD_PYTHON` (default `OFF`) adds the pybind11 extension, `RASPUTIN_BUILD_TESTS` (default `ON`) adds the C++ suite.
 - **`tests/cpp/CMakeLists.txt`** fetches Catch2 v3 via `FetchContent`, so it needs no manual checkout.
-- **Detria** (header-only) lives in `lib/detria/` if not system-installed; CMake searches both.
+- **Detria** (header-only) is vendored at a pinned SHA in `lib/detria/`. CMake does
+  **not** search for a system copy: version skew in a geometry kernel across machines
+  is a reproducibility hazard and vendoring a header costs nothing.
 - **External deps under consideration:** RichDEM (optional, MIT), Eigen (if linear algebra needs grow beyond what we want to hand-roll).
 - **No CGAL, no Boost.Geometry, no GDAL** in the new core. Existing Python-layer uses are migrated incrementally.
 - **Planned:** per-module `OBJECT` libraries linked into the extension once `src/` is populated, and sanitizer flags via `RASPUTIN_SANITIZER=asan|ubsan|tsan|none`.
@@ -240,7 +251,8 @@ After the new backend ships and the Python API is rewired:
 
 - `legacy/rasputin/triangulate_dem.h` and `legacy/bindings.cpp` (the CGAL-based originals)
 - CGAL, GMP, MPFR from the CMake dependency list — already absent from the new `CMakeLists.txt`
-- Boost.Geometry, if no longer used after vector_simplify is in-tree
+- Boost.Geometry — prohibited in the new core (`CLAUDE.md` §2) and machine-checked;
+  the remaining uses are in `legacy/`, which is exempt
 
 These removals are not part of the initial build-out; they're a follow-up once feature parity is reached and tests pass on the new backend.
 
