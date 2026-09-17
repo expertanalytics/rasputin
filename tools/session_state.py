@@ -8,6 +8,11 @@ transcript under ~/.claude/projects/, including prompts the user queued and the
 harness absorbed mid-turn -- which is where a lost instruction hides, because
 such a prompt never appears as a normal user turn.
 
+Known gap: only user entries whose content is a plain string are captured, so a
+prompt carrying an attachment or image arrives as a list and is dropped. No turn
+in this project is currently lost that way, but the failure is silent, which is
+the worst mode for a tool whose job is to surface a dropped turn.
+
 Usage: python tools/session_state.py [--turns N]
 """
 
@@ -69,7 +74,11 @@ def main() -> int:
     else:
         print("(absent -- no ask was recorded in flight)")
 
-    here = os.environ.get("CLAUDE_SESSION_ID", "")
+    # Claude Code exports CLAUDE_CODE_SESSION_ID; the older spelling is kept as a
+    # fallback so the script still excludes the current session if that changes.
+    here = os.environ.get("CLAUDE_CODE_SESSION_ID") or os.environ.get(
+        "CLAUDE_SESSION_ID", ""
+    )
     others = sorted(
         (p for p in TRANSCRIPTS.glob("*.jsonl") if p.stem != here),
         key=lambda p: p.stat().st_mtime,
@@ -79,11 +88,14 @@ def main() -> int:
         print(f"\n(no predecessor transcript under {TRANSCRIPTS})")
         return 0
 
-    turns = [t for path in others[:3] for t in human_turns(path)]
+    # Enough transcripts that --turns can always be satisfied, since a cold
+    # session's own predecessor may itself be short.
+    turns = [t for path in others[: max(3, args.turns)] for t in human_turns(path)]
     turns.sort(key=lambda t: t[0])
     print(f"\n== last {args.turns} human turns before this session ==")
     for stamp, session, text in turns[-args.turns :]:
-        print(f"- [{stamp[:19]} {session}] {text[:600]}")
+        shown = text if len(text) <= 600 else text[:600] + " [...truncated]"
+        print(f"- [{stamp[:19]} {session}] {shown}")
     print("\nA turn above with no answering commit or file is still pending. Ask before acting.")
     return 0
 

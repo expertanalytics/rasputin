@@ -153,7 +153,7 @@ own triangulator behind increment 4's wrapper; `04-cdt.md:816` uses our
 is today called only by tests.
 
 An interface addition justified by "profiling demands it"
-(`01-predicates.md:212`) cannot be brought forward before there is a profile,
+(`01-predicates.md:179`) cannot be brought forward before there is a profile,
 and there cannot be a profile before the first caller that maintains a known
 winding — the Lawson flip pass, step 6 of `parallel_refinement.md`. That is the
 increment in which the question becomes answerable.
@@ -213,7 +213,7 @@ from Shewchuk's paper.
 `lib/detria/detria.hpp:136-178` is a line-for-line port of Shewchuk's
 `exactinit`, computing the same constants at `constexpr` time:
 `ccwerrboundA = (3 + 16ε)ε`, `iccerrboundA = (10 + 96ε)ε` — the two our
-`exact.hpp:56-57` transcribes — plus the B and C bounds that the *adaptive*
+`exact.hpp:54-55` transcribes — plus the B and C bounds that the *adaptive*
 stages use internally (`orient2dadapt` at line 391, `incircleadapt` at 521).
 
 Two properties matter for the question and both are visible in that code:
@@ -389,7 +389,7 @@ None of this changes the kernel. It changes what 5a's suite must fixture.
 
 ### 5.3 The dyadic-spacing lever is worth more than `parallel_refinement.md` gives it
 
-The document (lines 48-52) offers dyadic spacing "together with local
+The document (lines 53-74) offers dyadic spacing "together with local
 coordinates" as the way to get "the exactness property" back. Those are two
 different properties and only one of them needs the local coordinates:
 
