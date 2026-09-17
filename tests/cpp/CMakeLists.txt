@@ -113,3 +113,33 @@ target_compile_options(test_solar_position PRIVATE
 )
 
 catch_discover_tests(test_solar_position)
+
+# CDT, increment 4: the constrained Delaunay triangulation.
+#
+# `terrain_cdt` is the compiled target these suites expect: a static library
+# whose only translation unit is src/cdt/detria_backend.cpp, with lib/detria on
+# its include path PRIVATE -- the same shape, for the same reason, as
+# terrain_predicates. terrain_predicates is linked too because every suite here
+# builds its Pslg under DefaultKernel.
+function(add_terrain_cdt_test name)
+    add_terrain_test(${name} ${ARGN})
+    target_link_libraries(${name} PRIVATE terrain_cdt terrain_predicates)
+endfunction()
+
+add_terrain_cdt_test(test_cdt_detria_backend unit/test_cdt_detria_backend.cpp)
+add_terrain_cdt_test(test_cdt_constrained_edges unit/test_cdt_constrained_edges.cpp)
+add_terrain_cdt_test(prop_cdt_invariants property/prop_cdt_invariants.cpp)
+
+# test_cdt_indexed_mesh names no kernel and no backend: IndexedMesh2 is a value
+# type in core/, so the plain helper is right for it.
+add_terrain_test(test_cdt_indexed_mesh unit/test_cdt_indexed_mesh.cpp)
+
+# THE SEAM SUITE USES THE PLAIN HELPER DELIBERATELY. THAT IS THE TEST, NOT AN
+# OVERSIGHT. It links terrain_headers and Catch2 and nothing else, so the one
+# symbol terrain_cdt contributes -- DetriaBackend::triangulate -- is absent from
+# this link line, and a generic entry point that ever calls the shipped backend
+# fails to LINK here. Registering it with add_terrain_cdt_test would leave every
+# assertion passing and the proof gone. It builds its Pslg under the
+# header-only FastKernel so it needs terrain_predicates no more than it needs
+# terrain_cdt; see the comment at the top of the file.
+add_terrain_test(test_cdt_backend_seam unit/test_cdt_backend_seam.cpp)

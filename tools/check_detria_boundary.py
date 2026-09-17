@@ -33,7 +33,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 
 # The only translation units permitted to include detria.hpp, relative to ROOT.
-PERMITTED = {"src/predicates/detria_exact.cpp"}
+# One per backend: the exact predicates, and the CDT wrapper.
+PERMITTED = {"src/predicates/detria_exact.cpp", "src/cdt/detria_backend.cpp"}
 
 # Trees that must stay clean apart from PERMITTED. include/ is called out
 # separately below because zero is the required count there, not "at most the

@@ -115,12 +115,14 @@ Final mesh: flatten leaves to a triangle/vertex array.
 
 ## Library choices
 
-The CDT library is used exactly once, at step 3. Everything after is owned in-tree.
+The CDT library is used exactly once, at step 4 — noding is step 3. Everything after is owned in-tree.
 
 Candidates (MIT / BSD only):
 
 - **Detria** (MIT, header-only, C++20) — top pick. Minimal dependency, modern API.
-- **poly2tri** (BSD-2) — even smaller, polygon-with-holes CDT only. Viable if Detria's surface area feels like too much.
+- **poly2tri** (BSD-2) — polygon-with-holes CDT only, with no per-edge constraint
+  entry point, so breaklines and therefore rivers cannot be expressed. Not viable
+  under this design; see `docs/increments/04-cdt.md`.
 - **Geogram** (BSD-3) — overkill under this design since we don't need its remeshing or spatial-search infrastructure.
 
 CGAL is replaced. Boost.Geometry remains useful for the upstream vector simplification step.

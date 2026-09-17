@@ -52,6 +52,24 @@ target_compile_options(terrain_predicates PRIVATE
     -Wall -Wextra -Wpedantic -Werror
 )
 
+# The CDT backend: the second compiled target in the core, and the second and
+# last place detria.hpp is ever included.
+#
+# `detria` is linked PRIVATE for the same reason it is on terrain_predicates:
+# that keeps lib/detria off this library's INTERFACE include path, so no
+# consumer can resolve `#include <detria.hpp>` even by accident, and the
+# "detria.hpp lives in one translation unit per backend" rule stays structural.
+add_library(terrain_cdt STATIC
+    src/cdt/detria_backend.cpp
+)
+target_link_libraries(terrain_cdt
+    PUBLIC terrain_headers
+    PRIVATE detria
+)
+target_compile_options(terrain_cdt PRIVATE
+    -Wall -Wextra -Wpedantic -Werror
+)
+
 option(RASPUTIN_BUILD_PYTHON "Build the Python extension module" OFF)
 if(RASPUTIN_BUILD_PYTHON)
     find_package(pybind11 CONFIG REQUIRED)

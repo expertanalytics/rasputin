@@ -109,12 +109,14 @@ These are the "water tight" properties — they must hold on every input regardl
 - Sum of output segment lengths equals sum of input segment lengths, modulo snap perturbation bounded by the snap-grid spacing.
 - `is_river` bit on any output segment is the OR of the bits on the input segments that contributed.
 
-### `cdt`
+### `cdt` [live]
 
-- Every constraint segment from the noded PSLG appears in the output as a connected chain of triangulation edges.
-- The unconstrained sub-triangulation is Delaunay (incircle test passes for every interior edge).
-- No degenerate triangle (zero or near-zero area below epsilon).
-- Triangle count matches Euler's formula given vertex count and boundary.
+- Every **in-domain** constraint edge appears as an edge of one or two output triangles, and is flagged in the constrained-edge mask of each. A breakline outside the outer ring or inside a hole is legal in a `Pslg` and appears in no interior triangle — measured, and pinned by its own fixture.
+- **Delaunay with respect to visibility**, which is the only form true of a CDT: for every interior non-constrained edge `(a,b)` with apexes `c,d`, either `incircle(a,b,c,d) != Inside` **or** the open segment `cd` crosses at least one constraint edge. The plain incircle form this catalog previously stated is false for a constrained triangulation and would fail on correct output.
+- Every output triangle is counterclockwise under `DefaultKernel` — which is the strongest true statement, and what the property suite asserts. It implies no zero-area triangle, stated exactly rather than "below epsilon": this project has no epsilon.
+- Bit `e` of a triangle's constrained-edge mask is set iff edge `(v[e], v[(e+1)%3])` is a constraint. CGAL's opposite-vertex convention is a rotation of this one and agrees on triangles with zero or three constrained edges, so only a triangle with **exactly one** distinguishes them.
+- No outcome carries a mesh with a non-`Ok` status, and none carries an empty mesh with `Ok`. The second is the silent mode: "forgot to add the outline" triangulates successfully to zero interior triangles.
+- `triangles == 2n - b - 2 + 2h` for `n` referenced vertices, `b` on any boundary ring and `h` disjoint holes — meaningful only because the wrapper returns in-domain triangles (`forEachTriangle`, not the hole or convex-hull variants). Rings that touch break the formula: a corner-touching hole predicts 6 against a measured 5, so that fixture carries an explicit count.
 
 ### `refinement`
 
@@ -287,6 +289,17 @@ When a bug is fixed:
 The point is to never lose a bug twice. Tier-1 tests are cheap and stay in the suite forever.
 
 ## What we do not test
+
+**Exception, and it is load-bearing: a characterisation test of third-party
+behaviour we depend on but that is not part of its documented API.** The rule
+below says we trust a library's own suite and test only our wrappers. That is
+right for behaviour the library promises. It is wrong for behaviour we have
+merely observed and built on — detria auto-closing an open polyline is not in
+its API docs, was found by reading `createConstrainedEdges`, and lets the CDT
+wrapper hand `Pslg::indices_of(c)` straight to `addOutline` with no buffer. A
+version bump could take it away silently. The L-shaped-ring test in
+`test_cdt_detria_backend.cpp` exists to fail loudly if it does, and must not be
+deleted as out of scope.
 
 - **Performance correctness of third-party libraries** (Detria, RichDEM if used) — we trust their own test suites and only test our wrappers.
 - **Third-party TIFF container decoding** — we trust the chosen pure-Python

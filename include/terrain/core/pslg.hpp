@@ -168,29 +168,21 @@ private:
     std::vector<Chain> chains_;
 };
 
-// The exact element count of the one scratch index buffer the CDT wrapper
-// builds per triangulation: the sum of (count + 1) over CLOSED chains only,
-// open chains contributing nothing.
+// What deliberately does not exist here: there is NO closed_indices_of(c).
 //
-// detria's addOutline and addHole want a CLOSED contiguous span and
-// indices_of(c) is not closed, so the wrapper allocates once, up front, and
-// hands detria sub-spans of it. This function exists so that shape is "reserve
-// exactly this, then fill", under which a per-ring std::vector inside the loop
-// is visibly wrong rather than merely wrong -- it dangles at triangulate(),
-// because addOutline stores a span and does not copy.
+// A closed span -- a ring's indices with its first index repeated at the end --
+// has no producer in this project and no consumer either. The CDT wrapper was
+// expected to need one, because detria's addOutline and addHole take a span
+// that bounds a region; measured against the vendored header, an OPEN span is
+// closed by detria itself, so indices_of(c) goes straight in. Increment 4
+// deleted the closed_index_buffer_size that existed to size the scratch buffer
+// for the caller that is now never going to be written.
 //
-// Note what deliberately does not exist: there is no closed_indices_of(c). The
-// only way to get a closed span is to allocate, and the only correct place to
-// allocate is once. This is the only concession core/ makes to a detria-shaped
-// need; the closed-span type itself belongs to terrain::cdt.
-[[nodiscard]] inline std::size_t closed_index_buffer_size(const Pslg& p) noexcept {
-    std::size_t total = 0;
-    for (const Chain& c : p.chains()) {
-        if (is_closed(c.role)) {
-            total += static_cast<std::size_t>(c.count) + 1;
-        }
-    }
-    return total;
-}
+// So the rule survives in its stronger form: no closing index is materialised
+// anywhere in the project, and there is therefore no accessor whose result
+// would have to be allocated. If a re-pinned backend ever stops auto-closing --
+// the backend suite's characterisation test is what would say so -- the fix is
+// one scratch buffer inside the wrapper, sub-spans handed out from it, and
+// still nothing here.
 
 }  // namespace terrain
