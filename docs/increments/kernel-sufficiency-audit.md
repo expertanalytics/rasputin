@@ -108,7 +108,7 @@ different predicates, and §5 shows they differ on the great majority of snapped
 input: at `s = 0.1` only 207 of 2976 grid-collinear general-direction triples
 come back `Collinear`.
 
-The consequence for `parallel_refinement.md:139`'s watch-list item — "T-junctions
+The consequence for `parallel_refinement.md:163`'s watch-list item — "T-junctions
 where a polyline endpoint lands on another segment's interior" — is that
 `classify` will report `Disjoint` for most of them, the host segment is never
 split, and the T-junction survives into the CDT. The verification pass of
@@ -328,9 +328,12 @@ being questioned.
 
 ### 5.1 "Collinear-but-unresolvable triples are the common case" is false at the recommended spacings
 
-This sentence is now load-bearing in four places — `01-predicates.md:151`,
-`parallel_refinement.md:41-46`, `kernel.hpp`'s prose, and `05-noder.md`'s
-ruling 4 — and it is measurably wrong in its most important half.
+This sentence is now load-bearing in three places — `01-predicates.md:151`,
+`parallel_refinement.md:41-51` and `05-noder.md`'s ruling 4 — and it is
+measurably wrong in its most important half. (An earlier draft of this audit
+counted four, adding `kernel.hpp`'s prose;
+`grep -rnE 'unresolvable|breakline' include/terrain/predicates/` is empty, so
+the claim never spread into the kernel headers at all.)
 
 Take grid-collinear triples: `a`, `a + k₁·d`, `a + k₂·d` in **index** space,
 mapped to world coordinates by `world(g) = g·s`, exactly as `SnapGrid` specifies.
@@ -366,7 +369,7 @@ Taking 5.1 as given, these claims in the provisional `05-noder.md` do not hold:
 
 - **`classify`'s collinear arm is nearly dead code on real input.** "If all four
   are `Collinear`" fires for axis-aligned pairs and for ~7 % of others. The
-  `Overlapping` relation, and with it `parallel_refinement.md:132`'s rule that a
+  `Overlapping` relation, and with it `parallel_refinement.md:156`'s rule that a
   road snapped onto a river merges and keeps `is_river = true`, will essentially
   never trigger for a diagonal river. The document names the *opposite* defect —
   reporting `Overlapping` where `Touching` is right — as "the single most likely
