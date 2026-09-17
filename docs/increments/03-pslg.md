@@ -1,6 +1,8 @@
 # Increment 3 — the PSLG
 
-Status: design settled. Suite not yet written.
+Status: design settled; the red suite is written (2133 test lines). Two open
+questions ruled below — stage 0's early return and `edge()`'s spelling — and
+four corrections from the suite's construction folded in.
 
 Ships `include/terrain/core/{pslg,pslg_builder}.hpp`. Header-only, namespace
 `terrain`. Nothing goes in `src/`. Depends on increment 2 (`Ring`,
@@ -121,14 +123,31 @@ validator, but the compiler cannot know that. A comment says so. That
 constructor's checks being provably unreachable here is the cleanest evidence
 that the validation order below is right.
 
-`edge(c, k)` wraps for closed chains and does not for open ones, so
-`edge(c, edge_count(c) - 1)` is the closing edge of a ring and the last segment
-of a breakline. This is the accessor the noder's broad phase and the CDT
-wrapper's `setConstrainedEdge` loop both consume, and it exists so neither of
-them writes `(k + 1) % count` and gets the open case wrong.
+`edge(c, k)` is `Segment2{v[idx[k]], v[idx[(k + 1) % idx.size()]]}` — the
+modulus **unconditionally, with no role branch**. `edge_count(c)` is where the
+roles differ (`count` closed, `count - 1` open), and that is the only place they
+may differ. So `edge(c, edge_count(c) - 1)` is the closing edge of a ring and
+the last segment of a breakline, which is the whole reason the accessor exists:
+neither the noder's broad phase nor the CDT wrapper's `setConstrainedEdge` loop
+should write `(k + 1) % count` itself and get the open case wrong.
+
+**Spell it `% n`, not `k + 1` on the open arm, and this is a ruling rather than
+a preference.** Within the stated contract the two are indistinguishable: on an
+open chain `k` only reaches `count - 2`, so no in-contract call ever sees the
+difference, and no test can be written that separates them. They differ at
+exactly one out-of-contract call, `edge(c, count - 1)` on an open chain, where
+`k + 1` is an **out-of-bounds read** of the flat index buffer and `% n` is a
+harmless wrap to a segment that is in bounds and meaningless. A distinction no
+test can enforce is not a design freedom, it is a latent hazard, and it sits in
+the one accessor whose reason for existing is that consumers get the open case
+wrong. `pslg.hpp` therefore states the precondition **`k < edge_count(c)`**
+above `edge`, asserts it in debug, and notes that the modulus is not there to
+service out-of-range `k` — it is there so that a caller who violates the
+precondition gets a wrong answer instead of undefined behaviour.
 
 ```cpp
-[[nodiscard]] std::size_t closed_index_buffer_size(const Pslg&) noexcept;  // sum(count + 1)
+[[nodiscard]] std::size_t closed_index_buffer_size(const Pslg&) noexcept;
+// == sum of (count + 1) over CLOSED chains only; open chains contribute nothing.
 ```
 
 Discussed under "The seam to increment 4".
@@ -196,7 +215,9 @@ inline constexpr std::uint32_t kNoVertex = std::numeric_limits<std::uint32_t>::m
 struct PslgDiagnostic {
     PslgError error;
     std::uint32_t chain{kNoChain};    // index into chains(), or kNoChain
-    std::uint32_t vertex{kNoVertex};  // index into vertices(), or kNoVertex
+    std::uint32_t vertex{kNoVertex};  // a VALID index into vertices(), or kNoVertex
+                                      // -- never an offending out-of-range value;
+                                      // see stage 2. Safe to dereference when set.
     std::string message;              // human-readable; NOT machine-parsed
 };
 
@@ -219,10 +240,27 @@ the same underlying reason (a whole layer digitised clockwise, a whole file with
 a shifted index base). A channel that reports the first failure turns one fix
 into N round trips through a pipeline whose cheapest stage is a DEM decode.
 
-**So the validator is exhaustive: it never early-returns.** Every check runs on
-every chain and every diagnostic is collected. "N independently broken chains
-produce at least N diagnostics" is a named property test, and an early-return
-mutant is one of the mutants the suite must kill.
+**So the validator is exhaustive: stages 1 through 6 never early-return.**
+Every check runs on every chain and every diagnostic is collected. "N
+independently broken chains produce at least N diagnostics" is a named property
+test, and an early-return mutant is one of the mutants the suite must kill.
+
+**Stage 0 is the one exception, and it is an exception with a reason rather than
+a lapse.** Stages 1–6 diagnose *chains*: each is independent of the others, so
+running them all is strictly more informative. Stage 0 does not diagnose a
+chain — it asks whether the representation can hold the input at all. If
+`vertices.size()` or the flat index buffer's size does not fit in
+`std::uint32_t`, then `Chain::begin` and `Chain::count` have **already been
+truncated by the builder**, and every later stage would read, report and blame
+garbage. There is no more information to collect past that point; there is only
+noise attributed to chains that may be perfectly well-formed. So stage 0
+early-returns with exactly one diagnostic and no `Pslg`.
+
+The rule that survives both, and the one to write in the header, is:
+**exhaustiveness is a property of diagnosis, not of execution.** The validator
+never stops because it has found *enough* errors; it stops only when continuing
+would fabricate them. That is true of stage 0 and of nothing else in this
+increment. Mutant 8 below is scoped accordingly.
 
 **No exceptions of our own cross this boundary.** `std::vector` and
 `std::string` may still throw `bad_alloc`; nothing else does.
@@ -250,10 +288,48 @@ and the last two stages evaluate geometry that is meaningless if an earlier one
 failed. A chain that fails a stage is **excluded from the later stages** but does
 not stop them running on other chains.
 
-**0. Overflow.** `vertices.size()` and the flat index buffer's size must each fit
-in `std::uint32_t`. `Chain::begin`/`count` are 32-bit; a 2^32-vertex DEM border
-is not a use case, but a silent truncation is not an acceptable way to say so.
-`VertexCountOverflow`, `chain = kNoChain`.
+**0. Overflow — the one stage that early-returns.** `vertices.size()` and the
+flat index buffer's size must each fit in `std::uint32_t`. `Chain::begin`/`count`
+are 32-bit; a 2^32-vertex DEM border is not a use case, but a silent truncation
+is not an acceptable way to say so. `VertexCountOverflow`,
+`chain = kNoChain`, `vertex = kNoVertex`, and **`build()` returns immediately**
+for the reason given above: the `begin`/`count` the later stages read have
+already been truncated.
+
+The decision itself is a free function, not an expression buried in the member
+template:
+
+```cpp
+namespace detail {
+// True iff a vertex buffer of `vertex_count` points and a flat index buffer of
+// `index_count` indices are both representable in the uint32_t fields of Chain.
+// Stage 0 is exactly `!sizes_fit_u32(...)`; it computes nothing else.
+[[nodiscard]] constexpr bool sizes_fit_u32(std::size_t vertex_count,
+                                           std::size_t index_count) noexcept;
+}  // namespace detail
+```
+
+True iff both arguments are `<= std::numeric_limits<std::uint32_t>::max()`.
+`<=`, not `<`: a buffer of exactly `max()` elements has largest index
+`max() - 1`, so no valid index can ever collide with the `kNoVertex` sentinel.
+
+**This exists because `VertexCountOverflow` is otherwise the one enumerator with
+no honest test.** Firing it through `build()` needs 64 GiB of `Point2` or 16 GiB
+of `std::uint32_t`; that is not a test, and a check that cannot be exercised is a
+check that silently rots. `sizes_fit_u32` is `constexpr`, takes plain sizes and
+allocates nothing, so the suite pins the boundary — `max() - 1`, `max()`,
+`max() + 1` on each argument independently, all four corners — as
+`static_assert`s that cost nothing at runtime. It is `detail::` because it is not
+part of the type's contract; it is the testable half of one stage.
+
+What the suite still owes on top of it: that `build()` on ordinary input does not
+raise `VertexCountOverflow`, and that `describe` renders a diagnostic carrying
+the enumerator rather than indexing a table out of bounds. @tester's existing
+test does both and says why; it should keep both and gain the `static_assert`
+block, not be replaced by it. The residual gap — that nothing proves stage 0
+*calls* `sizes_fit_u32` — is real, is unclosable at reasonable cost, and is
+narrowed to a single one-line call site by pulling the predicate out. Say so in
+the test comment.
 
 **1. Structure, per chain, O(1).** `count >= 3` for `Outer` and `Hole`;
 `count >= 2` for `Breakline` — a one-vertex breakline is a point constraint, and
@@ -264,9 +340,23 @@ not re-derived at runtime.)
 
 **2. Index range, O(total indices), once.** Every index in the flat buffer is
 `< vertices.size()`. `IndexOutOfRange`, naming the chain, with the offending
-value and its position in the message. **This is the check that makes
-`IndexedRing::vertex(i)`'s unchecked read safe**, and increment 2 explicitly
-deferred it here. It is done once over the whole buffer, never per query.
+value and its position within the chain in the message. **This is the check that
+makes `IndexedRing::vertex(i)`'s unchecked read safe**, and increment 2
+explicitly deferred it here. It is done once over the whole buffer, never per
+query. One diagnostic per occurrence, not one per chain.
+
+**`vertex` is `kNoVertex`, and that is a choice, not an omission.** The obvious
+alternative is to put the offending value there, and it is defensible — it is the
+number the caller wants. It is rejected because `PslgDiagnostic::vertex` is
+documented as *an index into `vertices()`*, and the defining property of this
+diagnostic is that the offending value is not one. A consumer that does the
+natural thing with a populated field — `p.vertices()[d.vertex]` in a reporting
+tool, a Python binding mapping it back to a source feature — would perform
+exactly the out-of-bounds read this stage exists to prevent, on the one
+diagnostic where it is guaranteed to be out of bounds. So the field keeps its
+type's meaning, the value goes in the message with its position, and
+`pslg_builder.hpp` carries that sentence next to the field so it is not
+"fixed" later.
 
 **3. Finiteness, O(vertices), once over the vertex buffer.** Not `all_finite(ring)`
 per ring: a vertex shared by k chains would be scanned k times, and — decisively —
@@ -274,15 +364,55 @@ per ring: a vertex shared by k chains would be scanned k times, and — decisive
 detria's `setPoints` the *entire* point array, so an unreferenced NaN reaches the
 backend. `NonFiniteVertex`, `chain = kNoChain`, `vertex` = the buffer index.
 
-Finiteness must precede every predicate call. `orient2d` on a NaN coordinate
-returns `Collinear` by `orientation.hpp`'s documented total behaviour, so a
-non-finite ring validated in the other order reports `DegenerateRing` — a
-diagnostic that sends the reader to look for collinear geometry that is not
-there.
+Finiteness must precede every predicate call, **and a chain carrying a
+non-finite vertex must then be excluded from stage 5.** Those are two
+requirements, not one, and the second is the load-bearing one. Ordering alone is
+not enough: an implementation that diagnoses finiteness first and then winds the
+chain anyway produces the same spurious geometric diagnostic that reordering
+would, and it is the more realistic bug of the two — nobody moves a stage, but
+everybody forgets to filter.
+
+The mechanism this document originally gave for *why* the wrong order is visible
+was incomplete, and the incompleteness is worth recording because it is a
+**decision taken in increment 2 that invalidates an argument made in increment
+3** — which is precisely the class of interaction these files exist to surface.
+The argument was: `orient2d` on a NaN coordinate returns `Collinear` by
+`orientation.hpp`'s documented total behaviour, so a non-finite ring wound first
+reports `DegenerateRing` — a diagnostic that sends the reader to look for
+collinear geometry that is not there. That holds for a **triangle**. It does not
+hold in general, because increment 2 specified that `orientation<K>` advances
+`prev` and `next` **independently** when a triple comes back collinear: on a ring
+of four or more vertices the walk routes *around* a single NaN vertex and returns
+the correct winding, so the faulty implementation passes and the test proves
+nothing. Worse, when the spurious diagnostic does appear its *kind* is not
+determined — `DegenerateRing` and `WrongWinding` were both observed, depending on
+which vertex carried the NaN.
+
+Two consequences, both binding:
+
+- **The stage-3 test must use a triangle**, where every triple through the
+  extreme vertex involves the NaN and the walk exhausts. A four-vertex version
+  is worth keeping alongside it as the documented *weaker* case — it is what an
+  implementation that skips the exclusion gets away with — but it must not be
+  the only one.
+- **The assertion is the absence of any geometric diagnostic for that chain**,
+  `DegenerateRing` *and* `WrongWinding` both at count zero, not the presence of
+  `NonFiniteVertex`. Both orders report `NonFiniteVertex` somewhere; only the
+  correct one declines to also report geometry about a chain it cannot evaluate.
 
 **4. Stored closure, per closed chain, O(1).**
 `vertices[idx[begin]] == vertices[idx[begin + count - 1]]` is rejected:
-`StoredClosure`, naming the chain and the repeated vertex. Same rule and same
+`StoredClosure`, naming the chain, with **`vertex = idx[begin]` — the chain's
+first index, always.**
+
+"The repeated vertex" was ambiguous and needed deciding: when one index is used
+twice there is one vertex index to report, but when two *distinct* indices name
+coincident points there are two, and the diagnostic has one field. Reporting the
+first index is the rule because it is the one spelling that is correct in both
+cases and needs no branch: in the one-index case `idx[begin] == idx[begin+count-1]`
+and the choice is vacuous, and in the two-index case the first index is the one
+the caller should keep — the fix is to drop the trailing index, never the
+leading one. The message carries both indices so nothing is lost. Same rule and same
 reason as increment 2 — closure is implied everywhere in this project, and
 accepting a stored one gives every ring two encodings with every off-by-one bug
 living in the gap. The comparison is on *points*, not indices: two distinct
@@ -483,9 +613,9 @@ guarantees the next reader uses it for something else.
 | File | Contents | Est. LOC |
 |---|---|---|
 | `include/terrain/core/pslg.hpp` | `ChainRole`, `is_closed`, `Chain`, `Pslg`, `closed_index_buffer_size` | ~190 |
-| `include/terrain/core/pslg_builder.hpp` | `PslgError`, `PslgDiagnostic`, `PslgBuildResult`, `describe`, `PslgBuilder`, `detail::validate` | ~250 |
+| `include/terrain/core/pslg_builder.hpp` | `PslgError`, `PslgDiagnostic`, `PslgBuildResult`, `describe`, `PslgBuilder`, `detail::sizes_fit_u32`, `detail::validate` | ~255 |
 
-**~440 production LOC. No split.** Under the 700-LOC gate with room, and there
+**~445 production LOC. No split.** Under the 700-LOC gate with room, and there
 is no dependency-ordered seam worth cutting: every check in the validator is
 cheap and they only make sense as one ordered pass.
 
@@ -516,8 +646,16 @@ chain index, and the vertex index where the error sets one. Plus:
 - A `Breakline` with coincident first and last points **builds successfully**,
   and the same index sequence declared `Outer` is rejected `StoredClosure`.
 - A non-finite *unreferenced* vertex is rejected.
-- A ring whose winding is correct but which contains a NaN is reported
-  `NonFiniteVertex`, not `DegenerateRing` — the stage-ordering test.
+- A **triangular** ring whose finite vertices wind correctly but which contains
+  a NaN yields `NonFiniteVertex` and **zero** `DegenerateRing` and **zero**
+  `WrongWinding` — the stage-3-exclusion test. The triangle is mandatory; see
+  stage 3. A four-vertex companion may sit beside it, labelled as the weaker
+  case.
+- `detail::sizes_fit_u32` pinned by `static_assert` at all four boundary
+  corners, plus the two runtime checks `VertexCountOverflow` can still support:
+  it does not misfire on ordinary input, and `describe` renders it.
+- `IndexOutOfRange` carries `vertex == kNoVertex`; `StoredClosure` carries the
+  chain's first index in both the one-index and the two-coincident-index form.
 - `ok()` and `pslg` agree in both directions; a failed build yields no `Pslg`.
 
 Mutants this suite must kill, named so the round is not improvised:
@@ -530,8 +668,12 @@ Mutants this suite must kill, named so the round is not improvised:
 5. Finiteness restricted to referenced vertices.
 6. `count >= 3` weakened to `>= 2` for closed chains, or `>= 2` to `>= 1` for
    breaklines.
-7. Stage 5 moved before stage 3 (winding before finiteness).
-8. The validator early-returning on the first diagnostic.
+7. Stage 5 moved before stage 3 (winding before finiteness), **and, separately,
+   a non-finite chain diagnosed at stage 3 but not excluded from stage 5** —
+   the likelier of the two and the one the triangle fixture exists for.
+8. The validator early-returning on the first diagnostic **in stages 1–6**.
+   Stage 0's early return is specified behaviour, not a mutant; no test may
+   pin stages 1–6 exhaustiveness in a way that also forbids it.
 9. `NoOuterChain` dropped, or satisfied by a `Hole`.
 
 **`tests/cpp/property/prop_pslg_invariants.cpp` — invariant-critical.**
