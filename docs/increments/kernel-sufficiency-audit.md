@@ -326,6 +326,12 @@ being questioned.
 
 ## 5. What the corrected snap doctrine invalidates that increment 1 did not catch
 
+**Citations in this section are to the text as it stood at `760dbd9`.** `41054aa`
+corrects both sites — `01-predicates.md:151` and `parallel_refinement.md:41-51`
+— which is what §5.1 asked for, so the quoted wording is no longer there to find
+and the present tense below reads as of that commit. This document is dated
+evidence, not a live description of the tree.
+
 ### 5.1 "Collinear-but-unresolvable triples are the common case" is false at the recommended spacings
 
 This sentence is now load-bearing in three places — `01-predicates.md:151`,
@@ -368,7 +374,9 @@ the description is what two increments are reasoning from.
 Taking 5.1 as given, these claims in the provisional `05-noder.md` do not hold:
 
 - **`classify`'s collinear arm is nearly dead code on real input.** "If all four
-  are `Collinear`" fires for axis-aligned pairs and for ~7 % of others. The
+  are `Collinear`" fires for axis-aligned pairs and for **at most** ~7 % of
+  others — 7 % is the per-*triple* rate measured in §5.1, and the arm needs all
+  four of a pair's triples, so the pair rate is lower and was never measured. The
   `Overlapping` relation, and with it `parallel_refinement.md:156`'s rule that a
   road snapped onto a river merges and keeps `is_river = true`, will essentially
   never trigger for a diagonal river. The document names the *opposite* defect —
@@ -679,11 +687,29 @@ for sname,s in [("0.1 m",0.1),("0.01 m",0.01),("2^-4 m",2.0**-4)]:
 ```
 
 ### g.py + h.py — §1, snap(double) vs snap(exact)
+
+Two notes for anyone re-running these, both found by `@reviewer` and settled
+by running them rather than by reading:
+
+- **`llround` here is not `std::llround`.** `floor(x+0.5)` differs from
+  half-away-from-zero exactly at the ties — e.g. at `0.49999999999999994` — and
+  the ties are what the `exact-tie` column counts. The headline (zero non-tie
+  mismatches) does not depend on it, and ruling 1 of `05-noder.md` forbids
+  `rint`/`nearbyint` in the product for a related reason, but a probe published
+  so its tables can be re-run should not round differently from the thing under
+  test. Treat the tie counts as indicative and the mismatch counts as exact.
+- **`crossings = 20000` for the two generic families is `kept`, not `n`.** It
+  was queried as a suspected transcription of the loop bound; re-running `h.py`
+  reproduces `crossings=20000, non-tie cell mismatch=0` for both. The generic
+  construction places `c` and `d` either side of the midpoint of `ab`, so every
+  sample passes the exact crossing test and `kept == n` legitimately. The
+  near-parallel families, where `den == 0` and near-misses do occur, are the
+  ones that come in under `n`.
 ```python
 from fractions import Fraction as F
 import random, math
 random.seed(23)
-def llround(x):
+def llround(x):                      # NOT std::llround -- see the note below
     return int(math.floor(x+0.5)) if x>=0 else -int(math.floor(-x+0.5))
 def exact_snap(fx, s):
     # round half away from zero on exact rational fx/s

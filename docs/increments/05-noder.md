@@ -80,6 +80,18 @@ subject; and arc order is no longer described as construction-free, because it i
 unfiltered `double` arithmetic and is now risk 10. The claim that 5a does not
 depend on `on_segment<K>` was overstated and is corrected wherever it appeared.
 
+Revised a third time against the same reviewer's second pass, in the same
+direction. Guarantee 15's check had reproduced the self-confirming shape the
+second revision removed from 14 — re-deriving `edge_is_river()` from the
+provenance map the dedup built in the same traversal — and now has an oracle
+computed from the input, in `prop_noding_no_crossings.cpp` beside 14's; risk 12
+follows it. A citation of `parallel_refinement.md:41-51` still quoted the
+unresolvable-triple claim that this document's ruling 4 corrected, and now
+quotes the measured fall-through rate. Three smaller things: the endpoint-arm
+analysis names where the zero-length-`s` case is handled, the endpoint arm's
+unkilled `Touching` branch is listed as mutant 18, and `for_each_candidate` is
+fixed as a declaration rather than described in prose.
+
 What the audit found *survives* is not churned here: totality of `classify`,
 `crossing_point` as the only constructive function in the project, the mandatory
 clamp, and risk 4 as bounded-and-accepted are unchanged. The audit measured zero
@@ -478,11 +490,13 @@ written down or it gets deleted.** Under an *exact* `K` the arm never returns
 already decided. If `o1 == o2 != Collinear`, `t` lies strictly to one side of the
 line through `s`, so the two closed segments share no point at all and
 `Disjoint` is right; symmetrically for `o3 == o4 != Collinear`. If `o1 == o2 ==
-Collinear` then both endpoints of `t` lie on the line through `s`, which forces
-all four to be `Collinear` — the collinear arm — unless `t` is zero-length, in
-which case all four are `Collinear` again. So under `DefaultKernel` every
-`Touching` is decided by the collinear arm or the four-orientation arm, and this
-arm returns `Disjoint`.
+Collinear` then both endpoints of `t` lie on the line through `s` — provided
+`s` is non-degenerate; the zero-length `s` is not covered by this sentence and
+is taken separately below, to the same verdict — which forces all four to be
+`Collinear` — the collinear arm — unless `t` is zero-length, in which case all
+four are `Collinear` again. So under `DefaultKernel` every `Touching` is decided
+by the collinear arm or the four-orientation arm, and this arm returns
+`Disjoint`.
 
 It stays, for two reasons that are not style. First, `classify` is a template on
 `pred::GeometryKernel` and must be total and defensible for **any** conforming
@@ -815,12 +829,25 @@ let un-noded input reach the CDT through a signature that says it cannot.
     verification of 14 itself on small inputs.
 15. `edge_is_river()` is index-aligned with the flat edge enumeration
     `(c, k), k < edge_count(c)`, and each bit is the OR over every input chain
-    that contributed geometry to that edge. **Verified, like 14, rather than
-    assumed**: the edge-key dedup of step 5 is the only place bits merge, so 5b
-    carries the provenance map it built there and re-derives `edge_is_river()`
-    from it in the same pass that checks 14. Stated because 15 was the one
-    guarantee in this list with no named check, which is how a guarantee becomes
-    a comment.
+    that contributed geometry to that edge. **Verified, like 14, against an
+    oracle built from the input rather than from the bookkeeping it checks.**
+
+    The obvious check is the wrong one and must not be built: having 5b carry
+    step 5's provenance map into the verification pass and re-derive
+    `edge_is_river()` from it is the self-confirming shape of clause 14, one
+    layer further up and with no oracle at all. The dedup produces the bit *and*
+    the map in a single traversal, so re-deriving one from the other shows only
+    that the OR was applied consistently to the contributors the dedup
+    **recorded**. A dropped contributing chain — the defect this guarantee
+    exists to exclude, and the road-along-a-river case at
+    `parallel_refinement.md:156` that `is_river` turns on — is absent from both,
+    and a mesh that has silently lost a river bit verifies clean. Naming a check
+    that cannot fail is worse than naming none, because it converts "unchecked"
+    into "apparently checked".
+
+    The check is therefore `prop_noding_no_crossings.cpp`'s, same file, same
+    round and same pattern as 14's all-pairs check — see "the seam" below for
+    the assertion.
 
 **Guarantee 14 is checked, not assumed, because snap rounding can create
 crossings that were not in the input.** Two segments that pass within less than
@@ -882,17 +909,29 @@ here because it is the seam's most load-bearing consequence of the audit:
    Verification passes → done; otherwise iterate from 2, up to the cap.
 
 **The seam fixes how step 6 is allowed to be trusted, because steps 1/4 and step
-6 share a candidate generator.** Two requirements, and 5b may not weaken either:
+6 share a candidate generator.** Three requirements, and 5b may not weaken any
+of them:
 
 - **`broad_phase.hpp` carries a conservativeness postcondition, and it is stated
   on the query rather than on the noder.** The index exposes exactly one
-  primitive, `for_each_candidate(Box2 q, F&&)`, whose contract is: *the visited
-  set contains every segment whose closed bounding box intersects `q`*. False
-  positives are free; a false negative is a bug in a function whose entire job
-  is not to have them. Both passes go through that one call, with the caller
-  computing `q` — an edge's bbox at step 2, a node's `cell_min`/`cell_max` box at
-  step 4 and at 14(b). The contract mentions no segment pair, no node and no snap
-  grid, so it has a **brute-force oracle that does not use the index**: for
+  primitive, fixed here beside `NodedPslg` and for the same reason — guarantee
+  14 rests on it, so it is the same category of binding commitment as the type
+  it produces:
+
+  ```cpp
+  // include/terrain/core/broad_phase.hpp, namespace terrain
+  // Visits every indexed segment whose closed bbox intersects q, and may visit
+  // others. F is invoked as f(std::uint32_t segment_index).
+  template <class F> void for_each_candidate(Box2 q, F&& f) const;
+  ```
+
+  Its contract is: *the visited set contains every segment whose closed bounding
+  box intersects `q`*. False positives are free; a false negative is a bug in a
+  function whose entire job is not to have them. Both passes go through that one
+  call, with the caller computing `q` — an edge's bbox at step 2, a node's
+  `cell_min`/`cell_max` box at step 4 and at 14(b). The contract mentions no
+  segment pair, no node and no snap grid, so it has a **brute-force oracle that
+  does not use the index**: for
   generated segment sets and generated query boxes, compare the visited set
   against all-pairs bbox intersection. `prop_noding_broad_phase.cpp`, 5b,
   invariant-critical. This is the part that is closed by construction — there is
@@ -908,10 +947,23 @@ here because it is the seam's most load-bearing consequence of the audit:
   that is why it is small-input and a property rather than the production path:
   production keeps the indexed verification, and this property is what says the
   indexed verification agrees with the truth.
+- **Guarantee 15 is verified in the same property, from the input, and never
+  from the noder's provenance map.** For every output edge `e` with node-id pair
+  `(u, v)`, assert `edge_is_river()[e]` is true **iff** some segment of some
+  input chain with `is_river` has a snapped image `(snap(a), snap(b))`
+  containing both `vertices()[u]` and `vertices()[v]` — collinearity and
+  interval containment on the caller's coordinates, the collinear arm's own
+  arithmetic, with no edge keys and no bookkeeping from step 5 anywhere in the
+  check. Containment *is* the contribution relation, and exactly because clause
+  14(b) holds: an output edge lying on a snapped input segment that segment was
+  not split at would put a node strictly inside that segment. The same property
+  checks 14 first and by brute force, so the implication the oracle rests on is
+  checked rather than assumed. Invariant-critical, 5b.
 
 Between them the answer to "who checks the checker" is a function with an
-independent oracle plus an end-to-end check with an independent oracle. What is
-*not* claimed: that the production verification is correct by construction. It is
+independent oracle plus end-to-end checks whose oracles are built from the input
+rather than from the noder's own records. What is *not* claimed: that the
+production verification is correct by construction. It is
 correct conditional on a contract that is separately falsifiable, which is the
 strongest available statement short of making the production path quadratic.
 
@@ -1366,6 +1418,14 @@ nodes — because that is the case where a reader expects collapse.
 17. Cell corners computed as `world(g) ± spacing/2` — two roundings. Killed by
     the seeded last-bit fixture; note this mutant is *behaviourally invisible*
     at a dyadic spacing, so it must be hunted at 0.1 m.
+18. The `on_segment<K>` call in `classify`'s endpoint arm replaced by
+    `return Disjoint`. **Killed by nothing in the suite, and that is accepted,
+    not an oversight.** Under `DefaultKernel` the arm never returns `Touching`
+    (see "the endpoint arm is a totality fallback"), so no fixture can kill it
+    there without asserting a coin flip, and the single `TEMPLATE_TEST_CASE`
+    buys only near-parallel `Disjoint`-vs-`Crossing` under `FastKernel` and does
+    not reach it. The arm is defended by the case analysis, not by a test.
+    Listed, like 11, so nobody spends the round hunting the fixture.
 
 ### Template spend
 
@@ -1386,8 +1446,11 @@ in the property suite.** Same ruling and same reason as increment 4: the propert
 suite's oracle is built from the kernel, and an oracle less exact than the
 subject reports false failures on precisely the degenerate inputs the property is
 about. `parallel_refinement.md:41-51` adds a second reason specific to this
-module — snapped data is *where* the unresolvable triples live, so `FastKernel`
-is at its worst on exactly this increment's inputs.
+module — snapped data is *where* the filter fall-throughs live, 38 % of
+grid-collinear triples at 0.1 m, so `FastKernel` is at its worst on exactly this
+increment's inputs. What snapping manufactures is fall-through with a definite
+sign, not an unresolvable triple; ruling 4 of this document is what corrected
+that paragraph, and this citation follows it.
 
 `crossing_point<K>` is instantiated once, under `DefaultKernel`. Its arithmetic
 does not depend on `K`.
@@ -1476,13 +1539,17 @@ something a later increment depends on; this one would not.
     that step 4 of the split pass is quadratic in (segments × nodes) per bucket,
     which is risk 7 with a second multiplicand. 5b owns the bucket sizing for
     both.
-12. **The broad phase is the last shared-oracle surface in the design.** Split
-    and verify both draw candidates from it, so one dropped candidate hides
-    itself. Mitigated at the seam by a conservativeness postcondition with a
+12. **The broad phase is the design's one remaining shared-oracle surface.**
+    Split and verify both draw candidates from it, so one dropped candidate
+    hides itself. It is the one remaining because guarantee 15 nearly added a
+    second — re-deriving `edge_is_river()` from the dedup's own provenance
+    map — and that is ruled out above for an input-side oracle in the same
+    property. Mitigated at the seam by a conservativeness postcondition with a
     brute-force oracle and by an all-pairs verification of guarantee 14 on small
-    inputs ("the split pass"); the residual is that both mitigations live in 5b's
-    suite, so 5a ships the rule and 5b is where it is enforced. If 5b lands
-    without either, this document's guarantee 14 is worth less than it reads.
+    inputs ("the split pass"); the residual is that every one of these
+    mitigations lives in 5b's suite, so 5a ships the rule and 5b is where it is
+    enforced. If 5b lands without them, this document's guarantees 14 and 15 are
+    worth less than they read.
 
 ## Documentation this PR fixes
 
@@ -1577,9 +1644,9 @@ There is no ledger.
      segments that contributed" (line 110) — **true, and it is guarantee 15.**
      Keep it, and add what it is missing: the OR is over contributing *chains*
      and the merge happens at the node-id edge-key dedup, not at a collinear
-     overlap classification. Add also that it is verified from the dedup's
-     provenance map rather than assumed, which is the clause guarantee 15
-     acquired for the same reason 14 has one.
+     overlap classification. Add also that it is verified rather than assumed,
+     and verified against the input — not against the dedup's own provenance
+     map, which would only restate the dedup — for the same reason 14 is.
    Add the bullets the list lacks: no two output vertices are equal; no output
    edge is zero-length; every output coordinate satisfies
    `grid.snapped(v) == v` bitwise; node ids are independent of input order and
