@@ -17,13 +17,62 @@ Input constraints (polygons and polylines) can intersect each other — a road t
 
 ### Snap rounding
 
-Floating-point segment-segment intersection is numerically fragile, so all intersection points and any near-coincident input vertices are snapped to a precision grid. The natural choice for terrain is the raster pixel resolution (or a sub-pixel multiple of it): the downstream sampling can't resolve finer features, and integer coordinates on the snap grid make robust predicates trivial.
+A fixed-spacing integer lattice in the projected CRS. Every input vertex and,
+more importantly, every *constructed* intersection point is rounded to the
+nearest lattice point.
+
+**Why it exists.** Exact predicates are cheap; exact *constructions* are not.
+`orient2d` decides a sign exactly, but the intersection of two segments is
+generally irrational and has to be rounded to land in a `double`. The predicates
+module settled this deliberately — signs only, no exact constructions — so the
+snap grid is what makes that rounding a single deliberate target rather than
+whatever the FPU produced. Post-snap the coordinates are integers, and below
+2^53 the products in `orient2d` are exact in plain doubles, so the filter almost
+never falls through.
+
+**Spacing is not the pixel resolution.** An earlier version of this section said
+the natural choice is the raster pixel resolution, on the grounds that
+downstream sampling cannot resolve finer features. That conflates two different
+resolutions. Sampling resolution is a fact about **elevation**: a 10 m DEM
+genuinely cannot tell you z at finer than 10 m. The snap grid is a
+**planimetric** decision, and a 10 m DEM says nothing about whether a lake shore
+or catchment outline is known to 1 m or to 10 m — that is a property of the
+vector input.
+
+Size it for what it is for: fine enough that snapping does not visibly move
+input geometry, coarse enough to collapse genuine near-coincidences and keep
+coordinates integral. That is a function of input precision and the tolerance
+acceptable on a domain boundary — decimetres or centimetres for typical terrain
+work — and is not tied to cell size.
+
+**The grid is not raster-aligned, and must not be.** The bounding polygon is
+arbitrary; it has no relationship to the DEM lattice. Anchoring the snap grid to
+the raster origin would move every domain vertex onto a DEM-aligned point,
+displacing a catchment outline by up to half a cell diagonal — about 7 m on a
+10 m DEM, silently. Nothing downstream wants that alignment either: the mesh is
+2D throughout, and elevation is attached afterwards by bilinear sampling at
+whatever (x, y) the vertices actually have, in the `elevation` module alone.
+Vertices landing off-node is the expected path, not a fallback.
+
+**Anchor at the origin of the projected CRS.** Not for simplicity — for
+stability under input changes. Anchor the lattice to the domain bounding box
+instead and adding one vertex that extends the bbox shifts the whole lattice,
+re-snapping every other vertex and potentially changing the topology of a mesh
+already built. Anchoring at zero makes snapping a pure function of the
+coordinate, which is also what makes it reproducible across runs and consistent
+across adjacent tiles that share a border.
+
+**Index type.** Any projected CRS in metres keeps coordinates under ~1e7, so a
+1 mm grid reaches ~1e10 — past `int32`, comfortable in `int64`. Dedup keys on
+`GridPoint{std::int64_t ix, iy}` with exact equality, never on
+`std::hash<Point2>`, which cannot find a NaN and hashes near-coincident points
+apart.
 
 Reference: Goodrich-Guibas-Hershberger-Tanenbaum for classical snap rounding; Halperin & Packer's iterated snap rounding handles the cascading-near-intersection case.
 
 ### Algorithm
 
-1. **Broad phase via the raster grid.** Bucket each input segment into the raster cells it touches; only test segment pairs that share a cell.
+1. **Broad phase via the raster grid.** Bucket each input segment into the raster cells it touches; only test segment pairs that share a cell. This is a spatial index for candidate pairs and nothing more — it is not the snap grid, and the two are independent. Any uniform bucketing works; the raster's is convenient because its extent and spacing are already to hand.
 2. **Pairwise robust intersection** with Shewchuk-style adaptive predicates.
 3. **Snap intersection points and near-vertices** to the precision grid.
 4. **Split each input segment** at all intersections lying on it, in arc-order along the segment.

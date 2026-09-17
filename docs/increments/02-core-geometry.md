@@ -278,8 +278,10 @@ substituted for each other:
 - `RasterGeometry::boundary_epsilon()` — relative 1e-12, ~8e-6 m at UTM33
   northings. Absorbs a few ulp of clipping noise against the DEM rectangle.
   `contains_strict(p)` is the authority for *"may I bilinear-sample here"*.
-- The future snap grid — pixel resolution or a sub-multiple, metres to
-  decimetres. Orders of magnitude coarser.
+- The future snap grid — sized for planimetric fidelity and noding robustness,
+  not tied to cell size; decimetres or centimetres for typical terrain work.
+  See the snap rounding section of `parallel_refinement.md`. Orders of magnitude
+  coarser than `boundary_epsilon` either way.
 
 `point_in_ring(border_ring, p)` is the authority for *"is p in the meshing
 domain"*, and has no epsilon. On a ring built from `RasterGeometry` corner nodes
