@@ -62,7 +62,6 @@ using terrain::PslgBuilder;
 using terrain::PslgBuildResult;
 using terrain::PslgError;
 using terrain::Segment2;
-using terrain::closed_index_buffer_size;
 using terrain::is_closed;
 using terrain::orientation;
 using terrain::pred::DefaultKernel;
@@ -250,19 +249,6 @@ TEST_CASE("guarantee 9: the vertex buffer is the builder's input verbatim",
 // ---------------------------------------------------------------------------
 // The derived accessors
 // ---------------------------------------------------------------------------
-
-TEST_CASE("closed_index_buffer_size is the sum of count+1 over closed chains",
-          "[pslg][property][cdt_seam]") {
-    const int seed = GENERATE(range(0, seed_count));
-    std::mt19937_64 rng = seeded(seed);
-    const Pslg p = built(generated_specs(rng));
-
-    std::size_t expected = 0;
-    for (const std::size_t c : closed_chains(p)) {
-        expected += static_cast<std::size_t>(p.chains()[c].count) + 1;
-    }
-    REQUIRE(closed_index_buffer_size(p) == expected);
-}
 
 // edge(c, edge_count(c) - 1) closes a ring and does not close a breakline.
 // The whole reason this accessor exists is so that neither the noder's broad

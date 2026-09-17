@@ -4,7 +4,7 @@
 // NOT invariant-critical. No mutation round is spent here and there is a single
 // kernel instantiation: this file's failure mode is a typo, not a topology
 // decision. What lives here is everything a downstream module reads --
-// indices_of, ring, edge, edge_count, closed_index_buffer_size -- plus the
+// indices_of, ring, edge and edge_count -- plus the
 // value semantics that make `const Pslg&` shareable across refinement threads.
 //
 // The only way to hold a Pslg is to have passed validation, so every fixture
@@ -39,7 +39,6 @@ using terrain::Pslg;
 using terrain::PslgBuilder;
 using terrain::PslgBuildResult;
 using terrain::Segment2;
-using terrain::closed_index_buffer_size;
 using terrain::is_closed;
 using terrain::pred::DefaultKernel;
 using terrain::test::ccw_square;
@@ -48,7 +47,6 @@ using terrain::test::indices;
 using terrain::test::open_breakline;
 using terrain::test::points;
 using terrain::test::render;
-using terrain::test::translated;
 
 namespace {
 
@@ -268,47 +266,6 @@ TEST_CASE("edge agrees with the ring's own edge for closed chains",
     for (std::size_t k = 0; k < p.edge_count(1); ++k) {
         CHECK(p.edge(1, k) == terrain::edge(r, k));
     }
-}
-
-// ---------------------------------------------------------------------------
-// closed_index_buffer_size
-// ---------------------------------------------------------------------------
-//
-// The only concession core/ makes to a detria-shaped need. detria wants a
-// CLOSED contiguous span and indices_of(c) is not closed, so the wrapper builds
-// ONE scratch index buffer per triangulation and hands detria sub-spans of it.
-// This function returns the exact element count so the wrapper's shape is
-// "reserve exactly this, then fill", under which a per-ring std::vector inside
-// the loop is visibly wrong rather than merely wrong.
-//
-// Note what does not exist: there is deliberately no closed_indices_of(c). The
-// only way to get a closed span is to allocate, and the only correct place to
-// allocate is once, up front.
-
-TEST_CASE("closed_index_buffer_size counts closed chains only", "[pslg][accessors][cdt_seam]") {
-    const Pslg p = three_chain_pslg();
-
-    std::size_t expected = 0;
-    for (const Chain& c : p.chains()) {
-        if (is_closed(c.role)) expected += static_cast<std::size_t>(c.count) + 1;
-    }
-    CHECK(closed_index_buffer_size(p) == expected);
-    CHECK(expected == (4 + 1) + (4 + 1));  // the breakline contributes nothing
-}
-
-TEST_CASE("closed_index_buffer_size is zero when no chain is closed",
-          "[pslg][accessors][cdt_seam]") {
-    // Not reachable through a valid build -- a Pslg has an Outer chain by
-    // guarantee 3 -- so the degenerate arm is asserted by construction instead:
-    // an outer-only set contributes exactly its own count plus one.
-    PslgBuilder b;
-    b.add_chain(points(ccw_square()), ChainRole::Outer);
-    b.add_chain(points(open_breakline()), ChainRole::Breakline);
-    b.add_chain(points(translated(points(open_breakline()), Point2{1.0, 1.0})),
-                ChainRole::Breakline);
-    const PslgBuildResult r = std::move(b).build<DefaultKernel>();
-    REQUIRE(r.ok());
-    CHECK(closed_index_buffer_size(*r.pslg) == 5);
 }
 
 // ---------------------------------------------------------------------------
