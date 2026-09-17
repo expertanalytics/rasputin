@@ -919,7 +919,7 @@ of them:
   it produces:
 
   ```cpp
-  // include/terrain/core/broad_phase.hpp, namespace terrain
+  // include/terrain/noding/broad_phase.hpp, namespace terrain::noding
   // Visits every indexed segment whose closed bbox intersects q, and may visit
   // others. F is invoked as f(std::uint32_t segment_index).
   template <class F> void for_each_candidate(Box2 q, F&& f) const;
@@ -948,17 +948,42 @@ of them:
   production keeps the indexed verification, and this property is what says the
   indexed verification agrees with the truth.
 - **Guarantee 15 is verified in the same property, from the input, and never
-  from the noder's provenance map.** For every output edge `e` with node-id pair
-  `(u, v)`, assert `edge_is_river()[e]` is true **iff** some segment of some
-  input chain with `is_river` has a snapped image `(snap(a), snap(b))`
-  containing both `vertices()[u]` and `vertices()[v]` — collinearity and
-  interval containment on the caller's coordinates, the collinear arm's own
-  arithmetic, with no edge keys and no bookkeeping from step 5 anywhere in the
-  check. Containment *is* the contribution relation, and exactly because clause
-  14(b) holds: an output edge lying on a snapped input segment that segment was
-  not split at would put a node strictly inside that segment. The same property
-  checks 14 first and by brute force, so the implication the oracle rests on is
-  checked rather than assumed. Invariant-critical, 5b.
+  from the noder's provenance map — in the relation the producer used.** For
+  every output edge `e` with node-id pair `(u, v)`: if some segment `(a, b)` of
+  some input chain with `is_river` satisfies
+  `segment_meets_cell<K>(grid, {snap(a), snap(b)}, u)` **and** the same against
+  `v`, **and** `u` and `v` both lie between that segment's own snapped endpoints
+  in the arc order of step 4 — the dot-product ordering, excluding a chain that
+  passes near both nodes without spanning them — then `edge_is_river()[e]` must
+  be true. No edge keys and no bookkeeping from step 5 anywhere in the check; the
+  oracle borrows a *predicate*, the same standing as 14(b)'s all-pairs check,
+  which already brute-forces `segment_meets_cell`. Spanning-plus-proximity *is*
+  the contribution relation, and exactly because clause 14(b) holds: an output
+  edge that a contributing segment was not split at would put a node strictly
+  inside that segment. The same property checks 14 first and by brute force, so
+  the implication the oracle rests on is checked rather than assumed.
+  Invariant-critical, 5b.
+
+  **Stated as collinearity plus interval containment this oracle would be red on
+  correct output**, and the dual of the self-confirming invariant is worth naming
+  once: a check that cannot *pass*. The split pass does not place nodes on
+  segments, it places them where `segment_meets_cell` holds — hot-pixel
+  proximity, up to the `h/√2` risk 9 accepts. Exact incidence would demand
+  `Collinear` at **both** endpoints of a split edge and, by ruling 4's
+  measurement, get it in ~7 % of cases; unsplit edges would verify trivially
+  (`u = snap(a)`, `v = snap(b)`) while split edges failed — and split edges are
+  the merged road-along-a-river case that is the only work guarantee 15 does.
+
+  **Only that direction is asserted, not `iff`.** The hot-pixel relation is a
+  proximity test, so a river running near `u` and near `v` and spanning them in
+  arc order satisfies it without having contributed to `e`; betweenness narrows
+  that window and does not close it, because the river need only run *near* the
+  edge, not along it. Asserting the converse would fire on correct output, which
+  is the same gap **hot-pixel dominance** records below and for the same reason:
+  the converse does not hold and the property must not assert it. A spuriously
+  set `is_river` bit is therefore not caught here, and 5b owes a mutant for the
+  dedup's OR rather than a stronger oracle: strengthening this one back to exact
+  incidence is the failure mode above.
 
 Between them the answer to "who checks the checker" is a function with an
 independent oracle plus end-to-end checks whose oracles are built from the input

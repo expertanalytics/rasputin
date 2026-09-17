@@ -38,6 +38,10 @@ Every code alteration or legacy migration step must execute this strict pipeline
 3. `@developer` writes the minimal code needed to pass the active tests.
 4. `@tester` and `@reviewer` validate results and type consistency before merge readiness.
 
+Step 4 is not conditional on the branch containing code, and the push that
+would publish it is not yours to make unasked. `.claude/REQUIRED-READING.md`
+rules on both — the approval boundary and when the assessment fires.
+
 ## 4. Operational Commands
 
 ### Python Layer (Async & CLI)
@@ -63,6 +67,7 @@ ruff check .           # legacy/ is excluded
 python tools/check_prohibited_deps.py   # section 2, checked against real imports
 python tools/check_legacy_imports.py    # legacy/ must stay self-consistent
 python tools/check_detria_boundary.py   # detria.hpp stays in one TU, zero headers
+python3 tools/check_citations.py        # cited lines resolve; lists the at-risk ones
 ```
 
 ### CI

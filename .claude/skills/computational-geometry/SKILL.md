@@ -27,6 +27,16 @@ Core domain constraints and architecture for the C++ terrain-meshing engine (CDT
   2. Determine numerical ambiguity.
   3. Fall back to exact/arbitrary-precision filtering *only* when the float sign/ordering is unsafe.
 * **Degeneracy Handling:** Actively handle non-general positions (duplicate/coincident vertices, long collinear sequences, cocircular points, and acute angles) through explicit test cases.
+* **Test in the producer's relation, not the prose one:** an oracle must be
+  written in the relation the code under test actually used. The operative test:
+  *does this check use the relation the producer used, or the one that reads more
+  naturally in prose?* In a snapping module those differ on ~93 % of the input —
+  a snapped node is *near* a segment, not *on* it — so an exact-incidence oracle
+  over snapped output is red on correct output, and an oracle re-derived from the
+  producer's own bookkeeping is a self-confirming invariant that cannot fail when
+  the thing it checks is broken. Borrow the producer's *predicate*, never its
+  records. Worked example, four occurrences and each one introduced by the fix to
+  the previous: `docs/increments/05-noder.md`, guarantees 14 and 15.
 
 ## 4. Change & Review Boundaries
 * **Change Limit:** see the ceiling in `CLAUDE.md` §2.
