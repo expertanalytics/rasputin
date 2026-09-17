@@ -288,6 +288,15 @@ domain"*, and has no epsilon. On a ring built from `RasterGeometry` corner nodes
 its vertices are bit-identical to what `contains_strict` compares against, so
 the border classifies as exactly `Boundary`.
 
+**That bit-identity holds pre-snap only.** The snap grid is anchored at the CRS
+origin and is not raster-aligned, so once the border ring is snapped its corners
+move by up to half a snap-cell diagonal and can land marginally outside the
+raster rectangle. The clamped fallback in the rule below is therefore the
+*routine* path for the DEM border ring after noding, not a corner case. Nothing
+here is contradicted — this document already ruled that the snap grid wins — but
+the frequency changes, and a reader who takes the bit-identity as permanent will
+be surprised. See the snap rounding section of `parallel_refinement.md`.
+
 Rule downstream must obey: a point classified `Boundary` on the DEM border ring
 is not in the strict interior and must not be bilinear-sampled without a clamped
 fallback. Where the snap grid and `boundary_epsilon` disagree — a vertex the

@@ -26,9 +26,28 @@ nearest lattice point.
 generally irrational and has to be rounded to land in a `double`. The predicates
 module settled this deliberately — signs only, no exact constructions — so the
 snap grid is what makes that rounding a single deliberate target rather than
-whatever the FPU produced. Post-snap the coordinates are integers, and below
-2^53 the products in `orient2d` are exact in plain doubles, so the filter almost
-never falls through.
+whatever the FPU produced.
+
+What snapping buys is a deterministic rounding target and **exact equality for
+coincidence**: two vertices that snap to the same index pair are bit-identical
+doubles, so dedup has a legal key. It does **not** buy exact arithmetic in the
+predicates, and it is worth being precise about that, because the opposite is
+easy to assume. Snapped world coordinates are `index * spacing`, and at the
+spacings recommended below neither factor is a dyadic rational, so the products
+are not integral. Even if they were, `orient2d` forms differences and then
+products: exactness needs coordinate magnitudes under roughly 2^26, not 2^53,
+and a large projected CRS is far past that.
+
+Snapping in fact *manufactures* the hard cases. `docs/increments/01-predicates.md`
+records that collinear-but-unresolvable triples are the common case in snapped
+breakline data, and that is the expensive path — the filter falls through and the
+exact backend decides. The design absorbs this because `DefaultKernel` is total
+and decisive, not because the fallback is rare.
+
+If the exactness property is wanted back, the lever is a spacing that is a
+negative power of two (2^-4 m = 6.25 cm sits inside the range below) together
+with local coordinates. That is a real option, and it is in tension with
+anchoring at the CRS origin, which is what makes the magnitudes large.
 
 **Spacing is not the pixel resolution.** An earlier version of this section said
 the natural choice is the raster pixel resolution, on the grounds that
@@ -45,28 +64,53 @@ coordinates integral. That is a function of input precision and the tolerance
 acceptable on a domain boundary — decimetres or centimetres for typical terrain
 work — and is not tied to cell size.
 
-**The grid is not raster-aligned, and must not be.** The bounding polygon is
-arbitrary; it has no relationship to the DEM lattice. Anchoring the snap grid to
-the raster origin would move every domain vertex onto a DEM-aligned point,
-displacing a catchment outline by up to half a cell diagonal — about 7 m on a
-10 m DEM, silently. Nothing downstream wants that alignment either: the mesh is
-2D throughout, and elevation is attached afterwards by bilinear sampling at
-whatever (x, y) the vertices actually have, in the `elevation` module alone.
-Vertices landing off-node is the expected path, not a fallback.
+**The grid is not raster-aligned.** The bounding polygon is arbitrary and has no
+relationship to the DEM lattice, and nothing downstream wants one. Vertex
+planimetric positions are arbitrary, and z is obtained by sampling the raster at
+whatever position a vertex has (`include/terrain/raster/sample.hpp`) — never by
+moving a vertex to where a sample is. That is the whole requirement, and
+off-node vertices are the expected path rather than a fallback.
 
-**Anchor at the origin of the projected CRS.** Not for simplicity — for
-stability under input changes. Anchor the lattice to the domain bounding box
-instead and adding one vertex that extends the bbox shifts the whole lattice,
-re-snapping every other vertex and potentially changing the topology of a mesh
-already built. Anchoring at zero makes snapping a pure function of the
-coordinate, which is also what makes it reproducible across runs and consistent
-across adjacent tiles that share a border.
+Note the displacement argument belongs to *spacing*, not to the anchor: at
+spacing equal to the cell size, snapping moves a domain vertex by up to half a
+cell diagonal — about 7 m on a 10 m DEM — whatever the anchor is. Once spacing
+is decoupled from cell size, the anchor on its own costs nothing extra; it
+shifts the lattice by a sub-spacing offset and the worst case is half a
+*snap*-cell diagonal either way.
 
-**Index type.** Any projected CRS in metres keeps coordinates under ~1e7, so a
-1 mm grid reaches ~1e10 — past `int32`, comfortable in `int64`. Dedup keys on
+**Anchor at the origin of the projected CRS.** Not for simplicity — because it
+is the only anchor that makes snapping a *pure function of one coordinate*.
+
+Anchor to the domain bounding box and snapping becomes a function of the whole
+input: adding one vertex that extends the bbox shifts the lattice and re-snaps
+every other vertex, which can change the topology of a mesh already built. It
+also forces a global bbox reduction before any vertex can be snapped, which
+serialises the front of a module whose design is four parallel-fors. The raster
+origin fails the same way for a different reason — it is an input-dependent
+quantity, so re-windowing the DEM re-snaps everything.
+
+Anchored at zero, `snap(p)` depends on `p` and the spacing alone. That is what
+makes it reproducible across runs and safe to run concurrently.
+
+**Index type: `int64`.** At the spacings above, indices over a large projected
+CRS reach 1e8–1e9, which does fit `int32` — but with under 2× headroom, and
+intermediate arithmetic during snapping and comparison overflows it immediately.
+A finer grid must not force a type change. Note also that "coordinates under
+1e7 m" is an order of magnitude and not a bound: Web Mercator reaches
+±2.0037e7, and `project_structure.md` admits any projected CRS, including
+foot-based ones. Dedup keys on
 `GridPoint{std::int64_t ix, iy}` with exact equality, never on
 `std::hash<Point2>`, which cannot find a NaN and hashes near-coincident points
 apart.
+
+**Where the spacing lives.** Under the old framing it was derivable from
+`RasterGeometry::delta_x`. It is now a declared parameter — of input precision
+and boundary tolerance — so it enters at the Python boundary as configuration
+and must travel with the data. `docs/increments/03-pslg.md` has `NodedPslg`
+promising that "coordinates lie on the snap grid", which is uncheckable unless
+the type carries the grid. Increment 5 should give it a `SnapGrid{double
+spacing}`: one scalar, because anchoring at zero means there is no offset to
+carry. That is the concrete payoff of the anchoring decision.
 
 Reference: Goodrich-Guibas-Hershberger-Tanenbaum for classical snap rounding; Halperin & Packer's iterated snap rounding handles the cascading-near-intersection case.
 

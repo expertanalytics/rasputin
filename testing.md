@@ -41,7 +41,7 @@ Analytical surfaces sampled to raster:
 | Paraboloid bowl      | Pit fill removes the single pit; accumulation peaks at center. |
 | Gaussian peak        | Catchment delineation around the peak; stream extraction below threshold. |
 | Sinusoidal ripple    | Refinement converges with predictable triangle count vs tolerance. |
-| Step function (ridge)| Snap-rounding behavior on near-coincident features. |
+| Step function (ridge)| Refinement behaviour across a sharp elevation discontinuity. |
 | Y-shaped valley      | Stream network with known Strahler structure.      |
 
 Parameterized by seed, size, and amplitude. Tiny by default (32×32, 128×128) so tests stay sub-second. The bridge between "I constructed this" and "this resembles a raster."
@@ -106,7 +106,7 @@ These are the "water tight" properties — they must hold on every input regardl
 - No two output segments intersect in their interior.
 - Every input vertex appears in the output vertex set (post-snap).
 - Every output vertex is either an input vertex (snapped) or lies on at least two input segments.
-- Sum of output segment lengths equals sum of input segment lengths, modulo snap perturbation bounded by the snap-grid spacing.
+- Sum of output segment lengths equals sum of input segment lengths, modulo snap perturbation. The bound is `√2·h` per segment for grid spacing `h`, not `h`: a vertex moves by at most half a cell diagonal, `h/√2`, and a segment moves at both ends.
 - `is_river` bit on any output segment is the OR of the bits on the input segments that contributed.
 
 ### `cdt` [live]
