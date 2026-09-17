@@ -10,6 +10,22 @@ Entries marked *(planned)* do not exist yet; the rest are in the tree today.
 include/terrain/           # public C++ headers, header-only where possible
   core/
     point.hpp              # Point2 / Point3 value types
+    bbox.hpp               # Box2; empty-box identity, exact closed containment
+    segment.hpp            # Segment2 and on_segment<K>
+    ring.hpp               # Ring concept, PointRing / IndexedRing, point_in_ring<K>
+    pslg.hpp               # Pslg, Chain, ChainRole — validated planar input
+    pslg_builder.hpp       # PslgBuilder, PslgDiagnostic, the validator
+    indexed_mesh.hpp       # IndexedMesh2: SoA mesh + per-triangle constrained mask
+  predicates/
+    orientation.hpp        # Orientation / Incircle vocabulary; no includes at all
+    exact.hpp              # ExactPredicates concept, filter bounds
+    kernel.hpp             # GeometryKernel, FastKernel, FilteredKernel<E>
+    detria_exact.hpp       # DetriaExact declaration; does NOT include detria
+    default_kernel.hpp     # DefaultKernel = FilteredKernel<DetriaExact>
+  cdt/
+    result.hpp             # CdtStatus, CdtOptions, CdtOutcome
+    triangulate.hpp        # CdtBackend concept and the generic entry point
+    detria_backend.hpp     # DetriaBackend declaration; does NOT include detria
   raster/
     geometry.hpp           # RasterGeometry, CellIndex: grid <-> world mapping
     raster.hpp             # RasterSource concept, owning Raster<T>, NoData
@@ -19,13 +35,14 @@ include/terrain/           # public C++ headers, header-only where possible
     window.hpp             # window_for: bbox -> index window (planned, awaits
                            #   a caller in refinement)
 
-src/                       # C++ implementation, one directory per module (planned)
+src/                       # C++ implementation, one directory per module
+                           #   (only predicates/ and cdt/ exist; rest planned)
   predicates/              # exact orient2d/incircle; namespace terrain::pred
   parallel_util/           # work distribution, atomics, thread pool
   vector_simplify/         # Visvalingam-Whyatt, Douglas-Peucker, topology checks
   hydrology/               # pit fill, flow direction, accumulation, catchments, streams
   noding/                  # snap rounding, PSLG construction
-  cdt/                     # thin wrapper over Detria (or poly2tri)
+  cdt/                     # thin wrapper over vendored Detria
   mesh/                    # triangle/vertex data structures, ternary tree, edge tags
   refinement/              # adaptive ternary-tree refinement
   flip/                    # final Lawson edge-flip pass, constraint-respecting
@@ -72,10 +89,12 @@ predicates ───────────┬─→ vector_simplify   hydrolog
                       └─→ noding ←──────────┘   (catchment outline, river polylines)
                               │
                               ▼
-                            cdt   (thin wrapper over Detria or poly2tri,
-                              │    consumes noded PSLG, produces initial mesh)
-                              ▼
-                            mesh   (triangle/vertex data; ternary tree; edge tags)
+                            cdt   (thin wrapper over vendored Detria,
+                                   consumes a PSLG, produces core::IndexedMesh2)
+
+                            mesh   (ternary tree; edge tags — built FROM an
+                              │     IndexedMesh2, so cdt and mesh both depend
+                              │     downward on core and neither on the other)
                               │
                               ├──→ refinement   (raster for sampling, parallel_util)
                               │
@@ -206,7 +225,18 @@ contributes a sparse per-edge override set then. See `docs/increments/03-pslg.md
 
 ### `cdt`
 
-Thin wrapper around the chosen MIT/BSD CDT library (Detria preferred, poly2tri fallback). Translates between rasputin's PSLG representation and the library's API. Used exactly once per mesh build.
+Thin wrapper around vendored Detria (`lib/detria/`, pinned SHA, MIT). Translates
+between rasputin's `Pslg` and the library's API, and returns `IndexedMesh2` from
+`core/`. Used exactly once per mesh build.
+
+**poly2tri is not a fallback.** It has no per-edge constraint entry point — only an
+outer polyline plus holes plus Steiner points — so breaklines cannot be expressed,
+which is to say rivers cannot be. A Steiner point is not a constraint: the mesh may
+triangulate around it however it likes, so a river would become vertices the mesh
+happens to contain rather than edges it is required to contain. It also inserts
+points, which breaks the per-triangle constrained-edge mask. If Detria is ever
+dropped the honest options are a different library or our own CDT over the
+`predicates` module, not poly2tri. See `docs/increments/04-cdt.md`.
 
 ### `mesh`
 

@@ -109,12 +109,12 @@ These are the "water tight" properties — they must hold on every input regardl
 - Sum of output segment lengths equals sum of input segment lengths, modulo snap perturbation bounded by the snap-grid spacing.
 - `is_river` bit on any output segment is the OR of the bits on the input segments that contributed.
 
-### `cdt`
+### `cdt` [live]
 
-- Every constraint segment from the noded PSLG appears in the output as a connected chain of triangulation edges.
-- The unconstrained sub-triangulation is Delaunay (incircle test passes for every interior edge).
-- No degenerate triangle (zero or near-zero area below epsilon).
-- Triangle count matches Euler's formula given vertex count and boundary.
+- Every **in-domain** constraint edge appears as an edge of one or two output triangles, and is flagged in the constrained-edge mask of each. A breakline outside the outer ring or inside a hole is legal in a `Pslg` and appears in no interior triangle — measured, and pinned by its own fixture.
+- **Delaunay with respect to visibility**, which is the only form true of a CDT: for every interior non-constrained edge `(a,b)` with apexes `c,d`, either `incircle(a,b,c,d) != Inside` **or** the open segment `cd` crosses at least one constraint edge. The plain incircle form this catalog previously stated is false for a constrained triangulation and would fail on correct output.
+- No zero-area triangle. Stated exactly, not "below epsilon": this project has no epsilon, and `orient2d` decides degeneracy exactly.
+- `triangles == 2n - b - 2 + 2h` for `n` referenced vertices, `b` on any boundary ring and `h` disjoint holes — meaningful only because the wrapper returns in-domain triangles (`forEachTriangle`, not the hole or convex-hull variants). Rings that touch break the formula: a corner-touching hole predicts 6 against a measured 5, so that fixture carries an explicit count.
 
 ### `refinement`
 

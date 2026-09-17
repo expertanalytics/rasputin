@@ -343,8 +343,11 @@ postconditions, in debug, for every backend including ones not written yet:
   points but **no** `addOutline` call triangulates successfully and yields
   **zero** interior triangles, so "forgot to add the outline" is a silent
   success without this assert.
-- `out.ok() != out.message.empty()` — success says nothing, failure says
-  something.
+- `out.ok() == out.message.empty()` — success says nothing, failure says
+  something. Note the operator: an earlier draft wrote `!=`, which is false in
+  *both* cases (on success both sides are true, on failure both are false), so
+  the assert fired on every call. @tester transcribed it literally and three
+  suites aborted before running.
 
 Checking a contract at the seam once is the difference between a concept that
 names a signature and a concept that means something. A backend's own suite can
@@ -815,6 +818,56 @@ its own robust predicates; an oracle less exact than the thing it judges reports
 false failures on precisely the cocircular inputs the property is about. The
 suite carries that sentence at the top, because `FastKernel` is header-only and
 therefore the tempting choice for a suite that is slow to link.
+
+## Corrections from the red suite
+
+Four things the suite found, all measured against the pinned header rather than
+argued. They are folded in above; recorded here because the reasoning is the
+part that does not survive a diff.
+
+1. **The entry point's second postcondition had `!=` where it needs `==`.** See
+   above. It aborts on every call, success or failure.
+2. **The auto-close characterisation test cannot be written as originally
+   specified.** "The same square, given open and as an explicitly closed span,
+   produces identical meshes" has no route: a `Pslg` cannot carry a closed ring
+   (guarantee 5 — the validator rejects a stored closure), and no test target may
+   include `detria.hpp`. What is written instead asserts the observable
+   consequence on an L-shaped ring, chosen because its closing edge is a wall of
+   the domain rather than a hull edge: status `Ok`, exactly 4 interior triangles
+   (the closed hexagon's Euler value; every-location gives 5), and the closing
+   edge present as a boundary edge used by exactly one triangle and flagged
+   constrained. A detria that stopped auto-closing cannot produce that by
+   accident.
+3. **"Every constraint edge appears in the output" is false for legal input.** A
+   breakline lying outside the outer ring, or inside a hole, is legal in a
+   `Pslg` — which promises no disjointness and no nesting — triangulates `Ok`,
+   and appears in **no** interior triangle. Measured. The property is therefore
+   stated over in-domain constraints only, with the exception pinned by its own
+   fixture. Unscoped it would be a coin toss on real data.
+4. **Increment 3's generator cannot be reused.** `valid_chain_specs` scatters
+   breaklines and holes over one disc independently, so generated breaklines
+   routinely cross generated hole rings — `NotNoded`, no mesh. The CDT suite
+   carries its own grid-cell generator with margins.
+
+Two rows the degeneracy table was missing, both reachable from a valid `Pslg`:
+
+- **`HoleNotInsideOutline` has two arms and the table had one.** A hole outside
+  every outline gives `StackedPolylines`; `HoleNotInsideOutline` fires when a
+  hole *contains* the outer ring, so the outermost polyline is a hole
+  (`detria.hpp:4114`). Both map to `InvalidTopology`, so the mapping was right
+  and only the table was short.
+- **A closed-loop breakline must close on a shared index.** Spelled with a
+  coincident closing vertex — which is what `pslg_cases.hpp`'s
+  `closed_polyline()` produces — it is `DuplicatePointsFound`, not `Ok`. This is
+  the corner-touching-hole lesson in a second place, and a fixture that gets it
+  wrong silently stops testing what it was written for.
+
+One correction to this document's own rationale for the multi-ring ASan test:
+under ASan's quarantine a *single* ring also trips a per-ring temporary buffer,
+and unsanitized the corrupted indices fail ordinary assertions too. The
+multi-ring fixture is still right — a wrapper that reuses one buffer rather than
+freeing per ring needs several rings to be caught — but "with a single ring the
+bug passes" is not what was measured.
 
 ## Risks
 
