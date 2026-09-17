@@ -278,13 +278,24 @@ substituted for each other:
 - `RasterGeometry::boundary_epsilon()` — relative 1e-12, ~8e-6 m at UTM33
   northings. Absorbs a few ulp of clipping noise against the DEM rectangle.
   `contains_strict(p)` is the authority for *"may I bilinear-sample here"*.
-- The future snap grid — pixel resolution or a sub-multiple, metres to
-  decimetres. Orders of magnitude coarser.
+- The future snap grid — sized for planimetric fidelity and noding robustness,
+  not tied to cell size; decimetres or centimetres for typical terrain work.
+  See the snap rounding section of `parallel_refinement.md`. Orders of magnitude
+  coarser than `boundary_epsilon` either way.
 
 `point_in_ring(border_ring, p)` is the authority for *"is p in the meshing
 domain"*, and has no epsilon. On a ring built from `RasterGeometry` corner nodes
 its vertices are bit-identical to what `contains_strict` compares against, so
 the border classifies as exactly `Boundary`.
+
+**That bit-identity holds pre-snap only.** The snap grid is anchored at the CRS
+origin and is not raster-aligned, so once the border ring is snapped its corners
+move by up to half a snap-cell diagonal and can land marginally outside the
+raster rectangle. The clamped fallback in the rule below is therefore the
+*routine* path for the DEM border ring after noding, not a corner case. Nothing
+here is contradicted — this document already ruled that the snap grid wins — but
+the frequency changes, and a reader who takes the bit-identity as permanent will
+be surprised. See the snap rounding section of `parallel_refinement.md`.
 
 Rule downstream must obey: a point classified `Boundary` on the DEM border ring
 is not in the strict interior and must not be bilinear-sampled without a clamped

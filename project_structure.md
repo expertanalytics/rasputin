@@ -220,7 +220,7 @@ Implements `auto_catchments.md`: pit filling (priority-flood with epsilon, plus 
 
 ### `noding`
 
-Implements the constraint-noding section of `parallel_refinement.md`. Raster-grid broad phase, robust pairwise intersection, snap rounding, segment splitting, deduplication. Outputs a clean PSLG. `is_river` is one bit per **chain**, not per edge — only the
+Implements the constraint-noding section of `parallel_refinement.md`. Uniform-grid broad phase (the raster's grid is convenient, not required — it is a spatial index, not the snap grid), robust pairwise intersection, snap rounding, segment splitting, deduplication. Outputs a clean PSLG. `is_river` is one bit per **chain**, not per edge — only the
 noder can produce an edge whose bit disagrees with its source chain, and it
 contributes a sparse per-edge override set then. See `docs/increments/03-pslg.md`.
 
