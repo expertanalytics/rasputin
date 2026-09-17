@@ -26,6 +26,9 @@ This project is governed by specialized sub-agents. Always defer tasks to the co
 * **I/O Boundary:** File decoding is Python's. The C++ core never opens a file, sees a path, or links a codec, and CRS never crosses into it. See the `raster` section of `project_structure.md`.
 
 ## 3. Test-Driven Development (TDD) Protocol
+
+Before acting on this repository — in the main session as well as in any persona
+— read `.claude/REQUIRED-READING.md` and `docs/increments/README.md`.
 Every code alteration or legacy migration step must execute this strict pipeline via `@orchestrator`:
 1. `@architect` or `@migration-expert` defines interfaces and types.
 2. `@tester` writes failing unit/async test cases *first* (including happy path and edge cases).

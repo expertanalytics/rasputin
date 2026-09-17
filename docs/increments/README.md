@@ -39,6 +39,10 @@ folded into the green one. The rule is not "tests are frozen after red"; it is
 "`@developer` does not edit tests, and no test change hides inside an
 implementation commit".
 
+**Increment PRs merge with a merge commit, never a squash.** The whole protocol
+rests on the red commit staying ahead of the green one in history, and one
+squash destroys that evidence silently and irreversibly.
+
 The red commit stays ahead of the green one in history. That trace is the only
 thing that makes the test-first claim verifiable after the fact; a governance
 audit found every production file in this repo had previously landed in the
@@ -67,13 +71,11 @@ compile in the edit-validate loop. Use the full cross product only where an
 instantiation proves something a later increment depends on — the increment
 file says which.
 
-**Match the model to the work — but the applicable surface is small.** Of
-~1,160 non-comment lines of core to date, the only genuinely mechanical work was
-`bbox.hpp` and `segment.hpp`, at 129 lines. Predicate, kernel and topology work
-is not delegable downward, and the one attempt at tiering stalled for 600s and
-produced nothing. Use a smaller model only for a value-type header with no
-kernel parameter and no exactness claim; otherwise do not spend the round
-setting it up.
+**Match the model to the work — but the applicable surface is small.** Use a
+smaller model only for a value-type header with no kernel parameter and no
+exactness claim; otherwise do not spend the round setting it up. Predicate,
+kernel and topology work is not delegable downward, and the one attempt at
+tiering stalled for 600s and produced nothing.
 
 **Independent suites run as parallel agents.** Two suites that do not share a
 header do not need to share a round. Note that most are not independent —

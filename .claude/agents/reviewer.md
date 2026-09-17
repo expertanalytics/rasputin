@@ -51,7 +51,7 @@ and no review pass had looked at `.github/` at all. Local green is not green.
 
 ### The three checks the gates cannot make
 
-mypy, ruff, `-Werror`, the LOC gate and the governance scripts now cover most of
+mypy, ruff, `-Werror` and the governance scripts now cover most of
 sections 1 and 3. What no gate can see, and what went unchecked across four merged
 PRs before this was written:
 

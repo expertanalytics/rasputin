@@ -85,17 +85,42 @@ def check_cxx(path: Path) -> list[str]:
 # an #include only compiles because something put the library on the include path.
 # Scanning headers alone would pass a find_package(CGAL) or an apt install
 # libgdal-dev, which is the gate's whole purpose defeated one layer down.
-BUILD_FILES = [
-    "CMakeLists.txt",
-    "tests/cpp/CMakeLists.txt",
-    ".github/workflows/main.yaml",
-]
+def build_files() -> list[Path]:
+    """Every CMakeLists and workflow in the tree, excluding the exempt archive.
+
+    Globbed rather than listed: project_structure.md already plans per-module
+    CMakeLists under src/, and a hardcoded list reports OK on the file it does
+    not know about.
+    """
+    found = [p for p in ROOT.rglob("CMakeLists.txt")]
+    found += [p for p in (ROOT / ".github" / "workflows").glob("*.y*ml")]
+    skip = ("legacy", "build", "lib", ".venv")
+    return sorted(
+        p for p in found
+        if not any(part.startswith(skip) or part in skip for part in p.relative_to(ROOT).parts)
+    )
 
 BUILD_RE = re.compile(
     r"(find_package|target_link_libraries|link_libraries|find_library|FetchContent_Declare"
     r"|apt-get install|apt install|brew install|vcpkg install|conan install)\b(?P<rest>[^\n]*)",
     re.IGNORECASE,
 )
+
+
+# Build directives name a package, not a header path, so the include-layer keys
+# (which are path-shaped: "boost/geometry", "date/date.h") never match a bare
+# CMake token. These are the build-layer spellings.
+BUILD_PROHIBITED = {
+    "boost": "Boost: the post-CGAL core carries its own predicates (Boost.Geometry is prohibited)",
+    "date": "external date library: superseded by C++20 <chrono>",
+}
+
+
+def build_offence(token: str) -> str | None:
+    """Reason this build-directive token is prohibited, or None."""
+    if reason := offence(token):
+        return reason
+    return BUILD_PROHIBITED.get(token.lower())
 
 
 def check_build_file(path: Path) -> list[str]:
@@ -113,7 +138,7 @@ def check_build_file(path: Path) -> list[str]:
             bare = word.split("::")[0].split("-")[0].removesuffix("_ROOT")
             if bare.lower().startswith("lib"):
                 bare = bare[3:]
-            if bare and (reason := offence(bare)):
+            if bare and (reason := build_offence(bare)):
                 findings.append(
                     f"{path.relative_to(ROOT)}:{lineno}: build directive names {word} -- {reason}"
                 )
@@ -156,11 +181,9 @@ def main() -> int:
                 scanned += 1
                 findings += check_cxx(path)
 
-    for rel in BUILD_FILES:
-        path = ROOT / rel
-        if path.is_file():
-            scanned += 1
-            findings += check_build_file(path)
+    for path in build_files():
+        scanned += 1
+        findings += check_build_file(path)
 
     findings += check_pyproject()
 

@@ -231,7 +231,7 @@ Nightly adds:
 
 ## Coverage targets [partly live]
 
-- **Line coverage ≥ 85%** per module. Anything lower needs a justification comment in the PR.
+- **Line coverage ≥ 85%**, enforced project-wide by `--cov-fail-under=85`. Per-module is a review obligation, not machine-checked. Anything lower needs a justification comment in the PR.
 - **Invariant coverage**: every documented invariant has at least one test naming it.
 - **Edge-case coverage**: every condition handled specially in code (NaN, NoData, empty input, single-element input, boundary intersection, etc.) has a named test.
 

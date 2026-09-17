@@ -615,7 +615,7 @@ guarantees the next reader uses it for something else.
 | `include/terrain/core/pslg.hpp` | `ChainRole`, `is_closed`, `Chain`, `Pslg`, `closed_index_buffer_size` | ~190 |
 | `include/terrain/core/pslg_builder.hpp` | `PslgError`, `PslgDiagnostic`, `PslgBuildResult`, `describe`, `PslgBuilder`, `detail::sizes_fit_u32`, `detail::validate` | ~255 |
 
-**~445 production LOC. No split.** Under the 700-LOC gate with room, and there
+**~445 production LOC. No split.** Under the ceiling with room, and there
 is no dependency-ordered seam worth cutting: every check in the validator is
 cheap and they only make sense as one ordered pass.
 
