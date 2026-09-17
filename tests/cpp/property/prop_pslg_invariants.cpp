@@ -375,10 +375,16 @@ TEST_CASE("guarantee 10: concurrent readers of a const Pslg agree",
 // ---------------------------------------------------------------------------
 
 // The named property behind mutant 8: N INDEPENDENTLY BROKEN CHAINS PRODUCE AT
-// LEAST N DIAGNOSTICS. The unit suite pins three hand-written cases; this one
-// varies which chains are broken, how many, and by which corruption, so an
-// early return that happens to survive the hand-written arrangement does not
-// survive this.
+// LEAST N DIAGNOSTICS, IN STAGES 1-6. The unit suite pins three hand-written
+// cases; this one varies which chains are broken, how many, and by which
+// corruption, so an early return that happens to survive the hand-written
+// arrangement does not survive this.
+//
+// Stages 1-6, not stage 0: the size-overflow check early-returns by
+// specification, because once begin/count have been truncated every later
+// diagnostic is noise attributed to chains that may be well-formed. Nothing
+// here reaches it -- every generated constraint set is orders of magnitude
+// inside uint32 -- so this property neither pins nor forbids that behaviour.
 //
 // "At least" rather than "exactly": one corruption may legitimately raise more
 // than one diagnostic -- a chain with two out-of-range indices raises two -- and

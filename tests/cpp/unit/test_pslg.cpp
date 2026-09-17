@@ -216,6 +216,19 @@ TEST_CASE("ring(c) never throws for a closed chain", "[pslg][accessors][ring]") 
 // This is the accessor the noder's broad phase and the CDT wrapper's
 // setConstrainedEdge loop both consume, and it exists so neither of them writes
 // (k + 1) % count and gets the open case wrong.
+//
+// edge(c, k) is specified as (k + 1) % n UNCONDITIONALLY, with no role branch;
+// edge_count(c) is the only place the roles differ. The precondition is
+// k < edge_count(c), and WITHIN THAT PRECONDITION NO TEST CAN SEPARATE THE TWO
+// SPELLINGS: on an open chain k only reaches count - 2, so `% n` and a bare
+// k + 1 agree at every in-contract call. They differ at exactly one
+// out-of-contract call, edge(c, count - 1) on an open chain, where k + 1 reads
+// the flat index buffer out of bounds and `% n` wraps harmlessly -- and a test
+// that made that call would be asserting on undefined behaviour under the
+// mutant it is meant to kill, which is not a test. So the spelling is pinned by
+// the design doc and the debug assert, not from here, and this section pins
+// what is observable: every in-contract edge, both roles, and agreement with
+// the ring's own edge(). Nothing further is addable; do not manufacture it.
 
 TEST_CASE("edge_count is count for a closed chain and count-1 for an open one",
           "[pslg][accessors][edge]") {
@@ -225,7 +238,7 @@ TEST_CASE("edge_count is count for a closed chain and count-1 for an open one",
     CHECK(p.edge_count(2) == static_cast<std::size_t>(p.chains()[2].count) - 1);
 }
 
-TEST_CASE("edge(c, k) walks the chain and wraps only when it is closed",
+TEST_CASE("edge(c, k) walks the chain, and the last edge of a closed chain closes it",
           "[pslg][accessors][edge]") {
     const Pslg p = three_chain_pslg();
 

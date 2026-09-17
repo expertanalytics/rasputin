@@ -17,12 +17,25 @@
 // name a first and last vertex. Each of those orderings has its own test, and
 // each asserts the ABSENCE of the diagnostic the wrong order would produce.
 //
-// THE VALIDATOR NEVER EARLY-RETURNS. Inputs at this boundary are wrong in bulk
-// -- a whole layer digitised clockwise, a whole file with a shifted index base
-// -- and a channel that reports the first failure turns one fix into N round
-// trips through a pipeline whose cheapest stage is a DEM decode. So "N
-// independently broken chains produce at least N diagnostics" is asserted
-// directly, and so is "one diagnostic from every stage in a single build".
+// STAGES 1-6 NEVER EARLY-RETURN -- AND STAGE 0 DOES. Inputs at this boundary
+// are wrong in bulk -- a whole layer digitised clockwise, a whole file with a
+// shifted index base -- and a channel that reports the first failure turns one
+// fix into N round trips through a pipeline whose cheapest stage is a DEM
+// decode. So "N independently broken chains produce at least N diagnostics" is
+// asserted directly, and so is "one diagnostic from every stage in a single
+// build".
+//
+// Stage 0, the size-overflow check, is the one specified exception, and it is
+// written down here so the next reader does not "fix" the implementation
+// toward the rule. Once vertices.size() or the flat index buffer's size
+// exceeds uint32, Chain::begin and Chain::count have ALREADY been truncated by
+// the builder, so every later diagnostic is noise attributed to chains that
+// may be perfectly well-formed. The rule that covers both cases, and the one
+// to carry forward, is that EXHAUSTIVENESS IS A PROPERTY OF DIAGNOSIS, NOT OF
+// EXECUTION: the validator never stops because it has found enough errors,
+// only when continuing would fabricate them. Every exhaustiveness assertion
+// below is scoped to stages 1-6 accordingly, and none of them forbids stage
+// 0's early return.
 //
 // NO TEST ASSERTS MESSAGE TEXT. The message is std::formatted at diagnosis time
 // and carries the offending values -- the out-of-range index and its position,
@@ -44,6 +57,7 @@
 #include <terrain/predicates/default_kernel.hpp>
 #include <terrain/predicates/kernel.hpp>
 
+#include <cstddef>
 #include <cstdint>
 #include <limits>
 #include <type_traits>
@@ -84,6 +98,13 @@ namespace {
 
 const double quiet_nan = std::numeric_limits<double>::quiet_NaN();
 constexpr double inf = std::numeric_limits<double>::infinity();
+
+// std::size_t, deliberately: sizes_fit_u32 takes sizes, and the interesting
+// corners are one past what uint32_t can hold.
+constexpr std::size_t kU32Max = std::numeric_limits<std::uint32_t>::max();
+static_assert(sizeof(std::size_t) > sizeof(std::uint32_t),
+              "kU32Max + 1 must not wrap: the overflow corners below would silently "
+              "become the in-range corners on a 32-bit size_t.");
 
 // A builder carrying one valid counterclockwise outer square, so that a test
 // about some other chain does not also trip NoOuterChain and have to reason
@@ -273,6 +294,15 @@ TEST_CASE("IndexOutOfRange: every index is < vertices().size()",
         const auto* d = find_error(r, PslgError::IndexOutOfRange);
         REQUIRE(d != nullptr);
         CHECK(d->chain == 0u);
+        // The offending value goes in the message; the `vertex` field stays
+        // kNoVertex. PslgDiagnostic::vertex is documented as a VALID index into
+        // vertices(), and the defining property of this diagnostic is that the
+        // offending value is not one -- so a consumer doing the natural thing
+        // with a populated field (p.vertices()[d.vertex] in a reporting tool, a
+        // binding mapping it back to a source feature) would perform exactly
+        // the out-of-bounds read this stage exists to prevent, on the one
+        // diagnostic guaranteed to be out of bounds.
+        CHECK(d->vertex == kNoVertex);
     }
 
     SECTION("an index far out of range is reported once per occurrence") {
@@ -282,6 +312,14 @@ TEST_CASE("IndexOutOfRange: every index is < vertices().size()",
         const PslgBuildResult r = build(std::move(b));
         INFO(render(r));
         REQUIRE(count_errors(r, PslgError::IndexOutOfRange) >= 2);
+
+        // Not one of them carries the offending value in `vertex`, not just the
+        // first: 77 and 99 are both out of range and neither may be handed to a
+        // consumer as an index.
+        for (const terrain::PslgDiagnostic& d : r.diagnostics) {
+            if (d.error != PslgError::IndexOutOfRange) continue;
+            CHECK(d.vertex == kNoVertex);
+        }
     }
 
     SECTION("the last valid index is accepted") {
@@ -367,7 +405,11 @@ TEST_CASE("StoredClosure: closure is implied, never stored", "[pslg][builder][cl
         const auto* d = find_error(r, PslgError::StoredClosure);
         REQUIRE(d != nullptr);
         CHECK(d->chain == 0u);
-        CHECK(d->vertex == 0u);  // the repeated vertex, named by one index twice
+        // vertex is idx[begin] -- the chain's FIRST index, always, with no
+        // branch on which form of stored closure this is. Here the two forms
+        // coincide (index 0 is used twice) so the choice is vacuous; the
+        // section below is where the rule does work.
+        CHECK(d->vertex == 0u);
     }
 
     SECTION("a Hole is checked too -- the rule is per closed role, not per Outer") {
@@ -377,7 +419,11 @@ TEST_CASE("StoredClosure: closure is implied, never stored", "[pslg][builder][cl
         b.add_chain(points(hole), ChainRole::Hole);
         const PslgBuildResult r = build(std::move(b));
         INFO(render(r));
-        REQUIRE(has_error(r, PslgError::StoredClosure, 1u));
+        const auto* d = find_error(r, PslgError::StoredClosure, 1u);
+        REQUIRE(d != nullptr);
+        // idx[begin] again: the outer square took indices 0..3, so the hole's
+        // first index is 4.
+        CHECK(d->vertex == 4u);
     }
 
     SECTION("the comparison is on POINTS, not on indices") {
@@ -394,7 +440,13 @@ TEST_CASE("StoredClosure: closure is implied, never stored", "[pslg][builder][cl
         const auto* d = find_error(r, PslgError::StoredClosure);
         REQUIRE(d != nullptr);
         CHECK(d->chain == 0u);
-        CHECK((d->vertex == 0u || d->vertex == 4u));
+        // Two DISTINCT indices, 0 and 4, name coincident points, and the
+        // diagnostic has one field -- so which one is reported had to be
+        // decided rather than left to the implementation. It is the first,
+        // exactly, because that is the index the caller keeps: the fix for a
+        // stored closure is to drop the trailing index, never the leading one.
+        // The message carries both, so nothing is lost by pinning this.
+        CHECK(d->vertex == 0u);
     }
 
     SECTION("a Breakline is EXEMPT: coincident endpoints make a closed polyline") {
@@ -507,16 +559,52 @@ TEST_CASE("DegenerateRing: a collinear ring is rejected under both closed roles"
     }
 }
 
-// VertexCountOverflow is the one enumerator this suite cannot exercise: making
-// it fire needs a vertex buffer of 2^32 Point2, which is 64 GiB, or a flat
-// index buffer of 2^32 uint32_t, which is 16 GiB. Neither is a test. What is
-// asserted here is that the check does not misfire on ordinary input and that
-// the enumerator is reachable through the formatter, so at least a diagnostic
-// carrying it renders rather than indexing a table out of bounds.
+// Stage 0, the size-overflow check: the compile-time half, then the two
+// runtime checks the enumerator can still support.
 //
-// The gap is structural: the limit lives inside a member template that needs a
-// real buffer to reach. If the implementation exposes the comparison as a
-// testable predicate, this test should be replaced by one that calls it.
+// Firing VertexCountOverflow through build() needs a vertex buffer of 2^32
+// Point2 -- 64 GiB -- or a flat index buffer of 2^32 uint32_t, 16 GiB. Neither
+// is a test, and PslgBuilder owns its vertex vector by value, so there is no
+// forged-span shortcut either. The check is instead pinned through
+// detail::sizes_fit_u32, the free function the stage is specified to consist
+// of: constexpr, allocation-free, taking plain sizes, so all four boundary
+// corners cost nothing at runtime.
+//
+// WHAT THIS DOES NOT PROVE, stated plainly rather than implied away: nothing
+// here shows that stage 0 actually CALLS sizes_fit_u32, nor that its early
+// return happens. That residual gap is acknowledged in the design as unclosable
+// at reasonable cost; pulling the predicate out narrows it from "a comparison
+// buried in a member template" to a single one-line call site, which is the
+// most the suite can buy. The stage-0 early return itself -- exactly one
+// VertexCountOverflow diagnostic and no others, because begin/count are already
+// truncated and every later diagnostic would be noise -- is therefore specified
+// behaviour that no test in this file pins or forbids. See the exhaustiveness
+// section, which is scoped to stages 1-6 for this reason.
+
+// `<=`, not `<`, on both arguments, and the difference is load-bearing: a
+// buffer of exactly max() elements has largest index max() - 1, so no valid
+// index can collide with the kNoVertex sentinel and the buffer is
+// representable. A `<` spelling rejects a buffer that fits.
+static_assert(terrain::detail::sizes_fit_u32(kU32Max - 1, kU32Max - 1));
+static_assert(terrain::detail::sizes_fit_u32(kU32Max, kU32Max));
+static_assert(!terrain::detail::sizes_fit_u32(kU32Max + 1, kU32Max));
+static_assert(!terrain::detail::sizes_fit_u32(kU32Max, kU32Max + 1));
+
+// Each argument independently, so a predicate that tests one and ignores the
+// other -- the likelier slip of the two, since the index buffer is the one
+// nobody thinks about -- fails to compile this block.
+static_assert(terrain::detail::sizes_fit_u32(0, kU32Max));
+static_assert(terrain::detail::sizes_fit_u32(kU32Max, 0));
+static_assert(!terrain::detail::sizes_fit_u32(kU32Max + 1, 0));
+static_assert(!terrain::detail::sizes_fit_u32(0, kU32Max + 1));
+static_assert(!terrain::detail::sizes_fit_u32(kU32Max + 1, kU32Max + 1));
+
+static_assert(noexcept(terrain::detail::sizes_fit_u32(0, 0)));
+static_assert(std::is_same_v<decltype(terrain::detail::sizes_fit_u32(0, 0)), bool>);
+
+// The two runtime checks the enumerator can still support, kept alongside the
+// static_asserts rather than replaced by them: they are the only things that
+// touch build() and describe() at all on this stage.
 TEST_CASE("VertexCountOverflow: not raised for buffers that fit in uint32",
           "[pslg][builder][overflow]") {
     PslgBuilder b = with_outer_square();
@@ -525,6 +613,8 @@ TEST_CASE("VertexCountOverflow: not raised for buffers that fit in uint32",
     INFO(render(r));
     CHECK(count_errors(r, PslgError::VertexCountOverflow) == 0);
 
+    // And the enumerator is reachable through the formatter, so a diagnostic
+    // carrying it renders rather than indexing a table out of bounds.
     const terrain::PslgDiagnostic d{PslgError::VertexCountOverflow, kNoChain, kNoVertex, "x"};
     CHECK_FALSE(terrain::describe(d).empty());
 }
@@ -654,9 +744,12 @@ TEST_CASE("structure precedes winding: a too-short ring never reaches the kernel
 // Exhaustiveness
 // ---------------------------------------------------------------------------
 
-// Mutant 8: the validator early-returning on the first diagnostic. Inputs at
-// this boundary are wrong in bulk, so the first broken chain is never the only
-// one.
+// Mutant 8: the validator early-returning on the first diagnostic IN STAGES
+// 1-6. Inputs at this boundary are wrong in bulk, so the first broken chain is
+// never the only one. Stage 0's early return is specified behaviour rather
+// than a mutant, and nothing in this section constrains it: every chain here is
+// well within uint32, so stage 0 passes and hands control to stage 1 in each
+// case below.
 TEST_CASE("three independently broken chains yield at least three diagnostics",
           "[pslg][builder][exhaustive]") {
     SECTION("three chains broken at the same stage") {
@@ -691,10 +784,12 @@ TEST_CASE("three independently broken chains yield at least three diagnostics",
     }
 }
 
-// Every stage reports in the same build. Seven of the eight enumerators appear
-// here at once; the eighth needs 64 GiB. An early return at ANY stage loses at
-// least one of these, so this single case constrains the whole pass rather than
-// one boundary within it.
+// Every stage that diagnoses a chain reports in the same build. Seven of the
+// eight enumerators appear here at once; the eighth is VertexCountOverflow,
+// which needs 64 GiB and is stage 0's, whose early return is specified. An
+// early return at any of stages 1-6 loses at least one of these, so this single
+// case constrains the whole chain-diagnosing pass rather than one boundary
+// within it.
 TEST_CASE("one diagnostic from every stage in a single build", "[pslg][builder][exhaustive]") {
     std::vector<Point2> verts = ccw_square();          // 0..3
     verts.push_back(Point2{quiet_nan, quiet_nan});     // 4, referenced by nothing
