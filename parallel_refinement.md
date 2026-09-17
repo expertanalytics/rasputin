@@ -38,16 +38,40 @@ are not integral. Even if they were, `orient2d` forms differences and then
 products: exactness needs coordinate magnitudes under roughly 2^26, not 2^53,
 and a large projected CRS is far past that.
 
-Snapping in fact *manufactures* the hard cases. `docs/increments/01-predicates.md`
-records that collinear-but-unresolvable triples are the common case in snapped
-breakline data, and that is the expensive path — the filter falls through and the
-exact backend decides. The design absorbs this because `DefaultKernel` is total
-and decisive, not because the fallback is rare.
+Snapping in fact *manufactures* the hard cases: the filter falls through and the
+exact backend decides on a large fraction of snapped breakline data — 38 % of
+grid-collinear triples at 0.1 m. **What it manufactures is fall-through with a
+definite sign, not an unresolvable collinear triple.** An earlier version of
+this paragraph said the latter, quoting `docs/increments/01-predicates.md`,
+which said it too; both are corrected. Because `world(g) = g·spacing` is not
+affine at a non-dyadic spacing, three points exactly collinear on the grid are
+usually *not* collinear in world coordinates — at 0.1 m only 207 of 2976
+general-direction triples come back `Collinear`. The design absorbs this because
+`DefaultKernel` is total and decisive, not because the fallback is rare.
+Measured in `docs/increments/kernel-sufficiency-audit.md` §5.1.
 
-If the exactness property is wanted back, the lever is a spacing that is a
-negative power of two (2^-4 m = 6.25 cm sits inside the range below) together
-with local coordinates. That is a real option, and it is in tension with
-anchoring at the CRS origin, which is what makes the magnitudes large.
+**A dyadic spacing buys two different properties and only one of them needs
+local coordinates.** An earlier version bundled them and dismissed both.
+
+1. **`world` is an exact affine scaling, so grid-collinearity survives into
+   world coordinates.** Needs a **negative power of two alone** — 2^-4 m =
+   6.25 cm sits inside the range below. `ix · 2^-4` is exact for `|ix| < 2^53`,
+   and Web Mercator at that spacing needs only `|ix| ≈ 3.2e8 ≈ 2^28`. Measured
+   at CRS-origin anchoring with no local coordinates anywhere: 3007/3007 and
+   3016/3016 grid-collinear triples report `Collinear`. **This one is free, and
+   it is the property the noder's topology depends on** — `on_segment`, the
+   collinear arm of `classify`, the cell corners of the hot-pixel predicate, and
+   collinear overlap being detectable at all. Prefer a dyadic spacing.
+2. **The determinants are exact in plain double, so the filter passes.** Needs
+   coordinate magnitudes under roughly 2^26, hence local coordinates, and that
+   *is* in tension with anchoring at the CRS origin. It stays dismissed: it is a
+   performance property only, and its absence costs nothing in correctness — at
+   2^-4 m the filter falls through 100 % of the time and answers `Collinear`
+   100 % of the time.
+
+Property 1 is guidance on choosing the spacing, not a default. Spacing remains a
+declared parameter entering at the Python boundary, and no value is safe for all
+input (`docs/increments/05-noder.md` risk 2).
 
 **Spacing is not the pixel resolution.** An earlier version of this section said
 the natural choice is the raster pixel resolution, on the grounds that
