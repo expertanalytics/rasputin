@@ -2,7 +2,10 @@
 
 One file per increment of the post-CGAL core, written by `@architect` before
 `@tester` writes anything, and read by every persona that works on that
-increment.
+increment. The directory also holds the occasional audit — a question about
+work already shipped, answered with evidence and dated to the commit that
+answered it, rather than a design for work not yet done. Such a file says so
+in its own status line; `kernel-sufficiency-audit.md` is the first.
 
 ## Why these exist on disk rather than in a conversation
 
@@ -17,6 +20,10 @@ A design that lives only in a prompt is a design that gets re-derived, and
 re-derivation is where the errors enter. These files are the source of truth.
 A prompt should say "read `docs/increments/02-core-geometry.md`", not contain
 it.
+
+The same argument applies to *what is currently being asked*, one level up from
+what was designed; `.claude/REQUIRED-READING.md` rules on that, and on what a
+cold session must do before it acts.
 
 ## The loop
 

@@ -28,12 +28,19 @@ This project is governed by specialized sub-agents. Always defer tasks to the co
 ## 3. Test-Driven Development (TDD) Protocol
 
 Before acting on this repository — in the main session as well as in any persona
-— read `.claude/REQUIRED-READING.md` and `docs/increments/README.md`.
+— read `.claude/REQUIRED-READING.md` and `docs/increments/README.md`. A session
+that starts cold or resumes after a context loss runs the recovery steps at the
+top of `.claude/REQUIRED-READING.md` **before** its first spawn, commit or edit;
+that is the only statement of the rule and of where in-flight state lives.
 Every code alteration or legacy migration step must execute this strict pipeline via `@orchestrator`:
 1. `@architect` or `@migration-expert` defines interfaces and types.
 2. `@tester` writes failing unit/async test cases *first* (including happy path and edge cases).
 3. `@developer` writes the minimal code needed to pass the active tests.
 4. `@tester` and `@reviewer` validate results and type consistency before merge readiness.
+
+Step 4 is not conditional on the branch containing code, and the push that
+would publish it is not yours to make unasked. `.claude/REQUIRED-READING.md`
+rules on both — the approval boundary and when the assessment fires.
 
 ## 4. Operational Commands
 
@@ -60,6 +67,7 @@ ruff check .           # legacy/ is excluded
 python tools/check_prohibited_deps.py   # section 2, checked against real imports
 python tools/check_legacy_imports.py    # legacy/ must stay self-consistent
 python tools/check_detria_boundary.py   # detria.hpp stays in one TU, zero headers
+python3 tools/check_citations.py        # cited lines resolve; lists the at-risk ones
 ```
 
 ### CI

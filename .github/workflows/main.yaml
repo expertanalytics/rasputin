@@ -102,6 +102,14 @@ jobs:
       - name: detria boundary
         run: python tools/check_detria_boundary.py
 
+      # Only the decidable half: a cited file exists and is long enough. The
+      # half that matters -- whether the quotation at that line still says what
+      # the citing prose claims -- is @reviewer's, per
+      # .claude/REQUIRED-READING.md. CI's shallow checkout has no master to diff
+      # against, so the at-risk worklist is empty here by design; run it locally.
+      - name: Citations resolve
+        run: python tools/check_citations.py
+
   python:
     name: Python ${{ matrix.python-version }}
     runs-on: ubuntu-latest

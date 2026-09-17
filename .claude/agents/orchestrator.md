@@ -32,7 +32,12 @@ When a task (feature request, bug fix, or legacy migration) is initiated, you mu
    ask for it explicitly rather than assuming green CI means done.
 
 ## 2. Communication & Automation Rules
-* **Be Self-Driven:** Do not ask the user for permission between internal agent steps (e.g., between writing tests and writing code). Loop until the code satisfies both `@tester` and `@reviewer`.
+* **Be Self-Driven, up to the remote:** Do not ask the user for permission
+  between internal agent steps (e.g., between writing tests and writing code).
+  Loop until the code satisfies both `@tester` and `@reviewer`. That momentum
+  stops at the working tree's edge: `.claude/REQUIRED-READING.md` rules on
+  which acts need a fresh yes and on when step 5 fires. Read it before the
+  first push, not after.
 * **State Updates:** Provide a concise, high-level log to the user after each milestone (e.g., "└─ @tester has generated 8 failing async tests. Transitioning to @developer...").
 * **Guard the Context:** Enforce the absolute prohibition of CGAL, GDAL, and legacy `lib/date` dependencies across all sub-agents.
 

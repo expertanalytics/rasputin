@@ -148,8 +148,24 @@ strictly worse numerically, and still degenerate on collinear input.
 Cost is roughly 1.2–1.3× on the filter-passing path, accepted for a total,
 precondition-free predicate. It is worse on the *fallback* path: when the
 orientation filter fails, the backend runs for orientation and possibly again
-for incircle, and collinear-but-unresolvable triples are the common case in
-snapped breakline data.
+for incircle, and that path is common in snapped breakline data.
+
+**What is common there is a definite sign the filter cannot certify, not an
+unresolvable collinear triple** — an earlier version of this paragraph said the
+opposite and it is measurably wrong. Snapping to a non-dyadic spacing makes
+`world(g) = g·spacing` a non-affine map, because `fl(ix·s)` perturbs each
+coordinate independently, so points that are exactly collinear *on the grid* are
+usually not collinear in world coordinates: at 0.1 m only 207 of 2976
+general-direction grid-collinear triples come back `Collinear`, while 38 % of
+triples fall through the filter to a **definite** sign. An *exactly* collinear
+triple is in fact the cheapest input measured — 4.3 ns against 7.3 ns for
+well-separated points — because `FilteredKernel::incircle` returns `Cocircular`
+without a lifted determinant and detria settles an exactly-zero determinant
+without entering `orient2dadapt`. The expensive family is the near-degenerate
+one with a definite sign. The cost ruling above is unaffected; the description
+of which inputs pay it was not. Measured in
+`docs/increments/kernel-sufficiency-audit.md` §2 and §5.1, whose appendix
+carries the probes.
 
 **`FastKernel::incircle` normalizes too**, using its own unfiltered `orient2d` —
 never an exact one, since being unfiltered end to end is its defining property.
