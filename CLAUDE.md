@@ -28,7 +28,10 @@ This project is governed by specialized sub-agents. Always defer tasks to the co
 ## 3. Test-Driven Development (TDD) Protocol
 
 Before acting on this repository — in the main session as well as in any persona
-— read `.claude/REQUIRED-READING.md` and `docs/increments/README.md`.
+— read `.claude/REQUIRED-READING.md` and `docs/increments/README.md`. A session
+that starts cold or resumes after a context loss runs the recovery steps at the
+top of `.claude/REQUIRED-READING.md` **before** its first spawn, commit or edit;
+that is the only statement of the rule and of where in-flight state lives.
 Every code alteration or legacy migration step must execute this strict pipeline via `@orchestrator`:
 1. `@architect` or `@migration-expert` defines interfaces and types.
 2. `@tester` writes failing unit/async test cases *first* (including happy path and edge cases).

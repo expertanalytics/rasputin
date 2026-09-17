@@ -18,6 +18,10 @@ re-derivation is where the errors enter. These files are the source of truth.
 A prompt should say "read `docs/increments/02-core-geometry.md`", not contain
 it.
 
+The same argument applies to *what is currently being asked*, one level up from
+what was designed; `.claude/REQUIRED-READING.md` rules on that, and on what a
+cold session must do before it acts.
+
 ## The loop
 
 Per `CLAUDE.md` §3, with the artifact each step produces:
