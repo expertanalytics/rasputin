@@ -32,4 +32,4 @@ Enforces cutting-edge, safe, and testable Python 3.11+ architecture for orchestr
 
 ## 5. Pragmatic Code Design
 * **Pragmatic Polymorphism:** Prefer composition over inheritance. Use structural subtyping (`typing.Protocol`) or simple functional abstractions instead of heavy object-oriented hierarchies.
-* **Change Limit:** Strict maximum of **700 LOC** per pull request (excluding tests). Keep code blocks punchy, clean, and documentation-driven.
+* **Change Limit:** see the ceiling in `CLAUDE.md` §2.

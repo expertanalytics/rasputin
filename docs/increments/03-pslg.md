@@ -615,7 +615,7 @@ guarantees the next reader uses it for something else.
 | `include/terrain/core/pslg.hpp` | `ChainRole`, `is_closed`, `Chain`, `Pslg`, `closed_index_buffer_size` | ~190 |
 | `include/terrain/core/pslg_builder.hpp` | `PslgError`, `PslgDiagnostic`, `PslgBuildResult`, `describe`, `PslgBuilder`, `detail::sizes_fit_u32`, `detail::validate` | ~255 |
 
-**~445 production LOC. No split.** Under the 700-LOC gate with room, and there
+**~445 production LOC. No split.** Under the ceiling with room, and there
 is no dependency-ordered seam worth cutting: every check in the validator is
 cheap and they only make sense as one ordered pass.
 
@@ -737,51 +737,7 @@ test a code path production does not have.
 
 ## Documentation debt
 
-**All three `project_structure.md` errors listed in increment 2 are still
-present and still uncleared** (predicates under `src/geometry_predicates/`; the
-"Shewchuk … header-only" prose, false in all three clauses; the directory
-listing missing `include/terrain/predicates/` and `core/{segment,bbox,ring}.hpp`
-and marking `lib/` as *(planned)*). They are not restated here — fix them there.
-
-Increment 3 adds to that list:
-
-- The directory listing needs `core/{pslg,pslg_builder}.hpp`, and the dependency
-  diagram still needs the `core` node below `predicates` that increment 2 asked
-  for. `core` is now the node both `noding` and `cdt` point at.
-- **The `noding` section is wrong about the `is_river` bit.** It says the module
-  "outputs a clean PSLG with one bit per edge (`is_river`)". The bit is **one per
-  chain**, carried on `Chain`, and the noder contributes a *sparse override set*
-  for the few edges whose bit disagrees with their source chain. Per-edge storage
-  for a bit that is uniform over a chain is a per-edge allocation to represent
-  nothing.
-- The `noding` section should say the module *transforms* a `Pslg` into a
-  `NodedPslg`, rather than reading as though it constructs the representation
-  from nothing. `cdt`'s description — "translates between rasputin's PSLG
-  representation and the library's API" — is now concrete and should name the
-  type and the one-scratch-buffer rule.
-
-**`testing.md`'s invariant catalog still starts at `noding` and still has no
-entry for anything that exists.** It owes the retroactive `predicates` and
-`core geometry` sections increment 2 identified, and it should gain a
-`core geometry — PSLG` section carrying these, which are the guarantees above
-stated as testable properties:
-
-- A `Pslg` exists only if its build produced an empty diagnostics list; there is
-  no partially valid `Pslg`.
-- Every index in `chain_indices()` is `< vertices().size()`; every coordinate in
-  `vertices()` is finite, including unreferenced ones.
-- Every `Outer` ring is counterclockwise and every `Hole` ring is clockwise under
-  the validating kernel; neither is collinear.
-- No closed chain stores its closure; breaklines are exempt and may be closed
-  polylines.
-- `indices_of(i)` sub-spans partition `chain_indices()` contiguously in chain
-  order, with no gap and no overlap.
-- The vertex buffer is element-wise equal to the builder's input: no dedup, no
-  reordering, no reversal.
-- `ring(c)` never throws for a closed chain.
-- Validation is exhaustive: N independently broken chains produce at least N
-  diagnostics.
-- A `const Pslg` is safe for concurrent read; no accessor mutates or caches.
-- Negative, and equally load-bearing: a valid `Pslg` promises **no** simplicity,
-  **no** pairwise disjointness and **no** nesting. Any test asserting one of
-  those is testing the noder and belongs in its catalog.
+Cleared in the governance-cleanup pass, not carried forward. `project_structure.md`,
+`README.md`, `testing.md`, `CLAUDE.md` and the workflow were corrected there, and
+`docs/increments/README.md` now requires a doc defect found during an increment to be
+fixed in that increment's PR or not recorded — this section is the evidence for why.

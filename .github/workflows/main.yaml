@@ -33,7 +33,6 @@ jobs:
       - name: Build
         run: cmake --build build --parallel
 
-      # test_point, test_raster, test_solar_position.
       - name: Test
         run: ctest --test-dir build --output-on-failure
 

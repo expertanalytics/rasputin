@@ -29,6 +29,6 @@ Core domain constraints and architecture for the C++ terrain-meshing engine (CDT
 * **Degeneracy Handling:** Actively handle non-general positions (duplicate/coincident vertices, long collinear sequences, cocircular points, and acute angles) through explicit test cases.
 
 ## 4. Change & Review Boundaries
-* Maximum **700 LOC** per pull request (excluding tests).
+* **Change Limit:** see the ceiling in `CLAUDE.md` §2.
 * Every major algorithmic change must explicitly document its impact on locality, parallelization, and numerical robustness.
 

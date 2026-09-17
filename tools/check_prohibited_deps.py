@@ -36,6 +36,8 @@ PROHIBITED = {
     "fiona": "Fiona: wraps GDAL",
     "rasterio": "Rasterio: wraps GDAL",
     "osgeo": "osgeo: the GDAL Python bindings",
+    "boost/geometry": "Boost.Geometry: the post-CGAL core carries its own predicates",
+    "boost/geometry.hpp": "Boost.Geometry: the post-CGAL core carries its own predicates",
     "date/date.h": "external date library: superseded by C++20 <chrono>",
     "date/tz.h": "external date library: superseded by C++20 <chrono>",
 }
@@ -79,6 +81,70 @@ def check_cxx(path: Path) -> list[str]:
     return findings
 
 
+# The build system is where a prohibited dependency actually enters a C++ project:
+# an #include only compiles because something put the library on the include path.
+# Scanning headers alone would pass a find_package(CGAL) or an apt install
+# libgdal-dev, which is the gate's whole purpose defeated one layer down.
+def build_files() -> list[Path]:
+    """Every CMakeLists and workflow in the tree, excluding the exempt archive.
+
+    Globbed rather than listed: project_structure.md already plans per-module
+    CMakeLists under src/, and a hardcoded list reports OK on the file it does
+    not know about.
+    """
+    found = [p for p in ROOT.rglob("CMakeLists.txt")]
+    found += [p for p in (ROOT / ".github" / "workflows").glob("*.y*ml")]
+    skip = ("legacy", "build", "lib", ".venv")
+    return sorted(
+        p for p in found
+        if not any(part.startswith(skip) or part in skip for part in p.relative_to(ROOT).parts)
+    )
+
+BUILD_RE = re.compile(
+    r"(find_package|target_link_libraries|link_libraries|find_library|FetchContent_Declare"
+    r"|apt-get install|apt install|brew install|vcpkg install|conan install)\b(?P<rest>[^\n]*)",
+    re.IGNORECASE,
+)
+
+
+# Build directives name a package, not a header path, so the include-layer keys
+# (which are path-shaped: "boost/geometry", "date/date.h") never match a bare
+# CMake token. These are the build-layer spellings.
+BUILD_PROHIBITED = {
+    "boost": "Boost: the post-CGAL core carries its own predicates (Boost.Geometry is prohibited)",
+    "date": "external date library: superseded by C++20 <chrono>",
+}
+
+
+def build_offence(token: str) -> str | None:
+    """Reason this build-directive token is prohibited, or None."""
+    if reason := offence(token):
+        return reason
+    return BUILD_PROHIBITED.get(token.lower())
+
+
+def check_build_file(path: Path) -> list[str]:
+    """Prohibited names appearing in dependency-acquiring build directives."""
+    findings = []
+    for lineno, line in enumerate(path.read_text().splitlines(), start=1):
+        m = BUILD_RE.search(line)
+        if not m:
+            continue
+        for word in re.split(r"[^A-Za-z0-9_.:+-]+", m.group("rest")):
+            # Normalise the spellings a package or CMake target actually takes:
+            # GDAL::GDAL, libgdal-dev, gdal-devel, CGAL_ROOT. A gate that only
+            # matched the bare name would pass `apt install libgdal-dev`, which
+            # is precisely how the dependency would arrive.
+            bare = word.split("::")[0].split("-")[0].removesuffix("_ROOT")
+            if bare.lower().startswith("lib"):
+                bare = bare[3:]
+            if bare and (reason := build_offence(bare)):
+                findings.append(
+                    f"{path.relative_to(ROOT)}:{lineno}: build directive names {word} -- {reason}"
+                )
+    return findings
+
+
 def check_pyproject() -> list[str]:
     """Declared dependencies only -- the prose around them is allowed to say 'GDAL'."""
     path = ROOT / "pyproject.toml"
@@ -115,6 +181,10 @@ def main() -> int:
                 scanned += 1
                 findings += check_cxx(path)
 
+    for path in build_files():
+        scanned += 1
+        findings += check_build_file(path)
+
     findings += check_pyproject()
 
     if findings:
@@ -128,7 +198,8 @@ def main() -> int:
         )
         return 1
 
-    print(f"Prohibited dependency check OK: {scanned} source files and pyproject.toml are clean.")
+    print(f"Prohibited dependency check OK: {scanned} source and build files "
+          "plus pyproject.toml are clean.")
     return 0
 
 

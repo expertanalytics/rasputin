@@ -33,5 +33,5 @@ Enforces zero-GDAL, high-performance geospatial data ingestion and processing us
 
 ## 5. Testing & Change Limits
 * **Mocking I/O:** Test geospatial ingestion using small, hand-crafted GeoJSON snippets, micro-TIFFs, and minimal XML strings.
-* **PR Constraint:** Maximum **700 LOC** per pull request (excluding test data).
+* **Change Limit:** see the ceiling in `CLAUDE.md` §2.
 

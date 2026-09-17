@@ -12,12 +12,23 @@ This project is governed by specialized sub-agents. Always defer tasks to the co
 * `@reviewer`: Final gatekeeper. Audits LOC, code quality, readability, and documentation.
 
 ## 2. Core Constraints & Technical Mandates
-* **Strict Size Limit:** Production code changes must be strictly under **700 LOC** per interaction.
-* **Prohibited Dependencies:** Never introduce `CGAL`, `GDAL`, `OGR`, `Fiona`, `Rasterio` (it wraps GDAL), or external `date` libraries.
+* **Strict Size Limit:** Under **700 non-comment lines of production code per pull
+  request**, tests excluded. This is the only statement of the rule; everywhere else
+  points here. The unit is non-comment lines because that is what the increment
+  designs have always estimated in (increment 3 estimated 255 for `pslg_builder.hpp`
+  against an actual 249 non-comment, and 457 raw), and because a ceiling counted in
+  raw lines penalises the comment density this project otherwise asks for.
+* **Prohibited Dependencies:** Never introduce `CGAL`, `GDAL`, `OGR`, `Fiona`,
+  `Rasterio` (it wraps GDAL), `Boost.Geometry`, or external `date` libraries.
+  Enforced by `tools/check_prohibited_deps.py` over imports, includes, declared
+  dependencies and build directives. `legacy/` is exempt.
 * **Core Stack:** Modern C++ (C++20 Concepts, Pybind11, `std::chrono`) + Async Python 3.11+ (Pydantic V2, Typer, Shapely, PyProj, NumPy, tifffile).
 * **I/O Boundary:** File decoding is Python's. The C++ core never opens a file, sees a path, or links a codec, and CRS never crosses into it. See the `raster` section of `project_structure.md`.
 
 ## 3. Test-Driven Development (TDD) Protocol
+
+Before acting on this repository — in the main session as well as in any persona
+— read `.claude/REQUIRED-READING.md` and `docs/increments/README.md`.
 Every code alteration or legacy migration step must execute this strict pipeline via `@orchestrator`:
 1. `@architect` or `@migration-expert` defines interfaces and types.
 2. `@tester` writes failing unit/async test cases *first* (including happy path and edge cases).
@@ -35,7 +46,7 @@ pytest tests/python/   # Run target Python testing suite
 ### C++ Core Layer (C++20 Concepts)
 ```bash
 cmake -S . -B build && cmake --build build -j   # -j alone: nproc is Linux-only
-ctest --test-dir build                          # runs test_point, test_raster, test_solar_position
+ctest --test-dir build                          # all registered suites; see tests/cpp/CMakeLists.txt
 ```
 
 ### Static gates (Python)
