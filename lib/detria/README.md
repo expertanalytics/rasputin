@@ -42,12 +42,19 @@ If a defect needs fixing, fix it upstream or work around it in
 ## One translation unit
 
 `detria.hpp` is 4500 lines, pulls in `<iostream>`, `<sstream>` and `<csignal>`,
-and its Debug assertions raise `SIGTRAP`. It is therefore included by exactly
-one translation unit in the repository, `src/predicates/detria_exact.cpp`, and
-by no header under `include/`. That rule is enforced three ways:
+and its Debug assertions raise `SIGTRAP`. The rule is therefore **one
+translation unit per backend, and no header under `include/` at all**. Two TUs
+include it today:
 
-1. `lib/detria` is on the `terrain_predicates` target's include path `PRIVATE`,
-   so it never reaches any consumer's interface;
+- `src/predicates/detria_exact.cpp` — the exact predicate backend (increment 1b);
+- `src/cdt/detria_backend.cpp` — the CDT backend (increment 4).
+
+A third would need a reason; the point of the rule is that the library is
+swappable per backend, not that the count stays at one. That rule is enforced
+three ways:
+
+1. `lib/detria` is on the `terrain_predicates` and `terrain_cdt` targets'
+   include paths `PRIVATE`, so it never reaches any consumer's interface;
 2. `tools/check_detria_boundary.py` parses includes and fails the build if the
    rule is broken (wired into the `governance` CI job);
 3. `tests/cpp/unit/test_predicates_detria_exact.cpp` carries an

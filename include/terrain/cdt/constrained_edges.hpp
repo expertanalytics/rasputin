@@ -50,6 +50,9 @@ public:
         for (std::size_t c = 0; c < pslg.chains().size(); ++c) {
             total += pslg.edge_count(c);
         }
+        // The pre-pass above is what makes the "one allocation of known size"
+        // rationale at the top of this header true, rather than redundant work:
+        // without it the sorted vector would grow and reallocate while filling.
         keys_.reserve(total);
 
         for (std::size_t c = 0; c < pslg.chains().size(); ++c) {

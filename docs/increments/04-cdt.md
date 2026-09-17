@@ -955,6 +955,6 @@ There is no ledger.
 
 **`CLAUDE.md`**
 
-8. §4 says `ctest` "runs test_point, test_raster, test_solar_position". That has
-   been stale since increment 1 and this increment adds five more suites. Drop
-   the enumeration rather than extending it every increment.
+8. ~~§4's `ctest` enumeration~~ — already fixed in `1807e73`, before this branch
+   existed. This item was written without checking and is struck rather than left
+   reading as owed.

@@ -25,6 +25,7 @@ include/terrain/           # public C++ headers, header-only where possible
   cdt/
     result.hpp             # CdtStatus, CdtOptions, CdtOutcome
     triangulate.hpp        # CdtBackend concept and the generic entry point
+    constrained_edges.hpp  # ConstraintEdgeSet: sorted keys -> per-triangle mask
     detria_backend.hpp     # DetriaBackend declaration; does NOT include detria
   raster/
     geometry.hpp           # RasterGeometry, CellIndex: grid <-> world mapping

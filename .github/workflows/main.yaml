@@ -94,10 +94,11 @@ jobs:
       - name: Archive integrity
         run: python tools/check_legacy_imports.py
 
-      # The vendored detria header must stay inside one translation unit. CMake
-      # already makes that structural (lib/detria is PRIVATE on
-      # terrain_predicates), but a build edit can dissolve a structural guard,
-      # and the swappability of the exact backend rests on this rule.
+      # The vendored detria header must stay inside its backend TUs -- one per
+      # backend, none in any header. CMake already makes that structural
+      # (lib/detria is PRIVATE on terrain_predicates and terrain_cdt), but a
+      # build edit can dissolve a structural guard, and the swappability of both
+      # backends rests on this rule.
       - name: detria boundary
         run: python tools/check_detria_boundary.py
 
