@@ -187,7 +187,7 @@ Invariants over `build_scene` — all `[live]`:
 - No drawable mesh means no findings, and the roles are kept regardless: the PSLG-only picture is drawn in role colours, and there is no mask for the chains to disagree with.
 - The bbox contains every vertex, pads a zero-extent axis about its own centre while leaving a healthy axis alone, and reports that it padded. Non-finite coordinates are refused with `ValueError` rather than poisoning the bounds silently.
 - The vertices and bbox are the **mesh's** when a mesh is drawn, so a backend-introduced vertex is inside the picture; they fall back to the input PSLG's only when there is no mesh.
-- `viz` imports no compiled extension and no first-party module but `viz.protocols` — pinned by a test, because it is what keeps the suite runnable without a build.
+- `viz.scene` imports no compiled extension and no first-party module but `viz.protocols` — pinned by a test that parses that module, because it is what keeps the suite runnable without a build.
 
 ## Frameworks [partly live]
 

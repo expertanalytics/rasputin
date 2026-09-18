@@ -616,7 +616,12 @@ class TestRoleJoin:
         # a one-vertex chain closed emits `_key(a, a)`, a self-loop that
         # violates `SceneEdge`'s `a < b` invariant and that no viewport
         # transform can draw. A two-vertex chain closed is harmless -- see
-        # above -- so the guard may not be relaxed below two.
+        # above -- so nothing here can tell `> 2` from `> 1`. Do not narrow the
+        # guard to match: `> 2` encodes the domain fact that a ring has three
+        # vertices, and `> 1` would say a two-vertex chain is a ring that we
+        # merely happen not to be harmed by closing -- true only because
+        # `joined` is a dict, which is an implementation detail carrying a
+        # semantic boundary.
         pslg = make_pslg(
             [
                 ([0, 1, 2, 3], Role.Outer, False),
