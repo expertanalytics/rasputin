@@ -813,8 +813,16 @@ let un-noded input reach the CDT through a signature that says it cannot.
 12. No two vertices are equal — dedup, and injectivity above.
 13. No edge is zero-length; no chain has a repeated consecutive index.
 14. **Two clauses, and they need two different checks.** (a) No two edges cross
-    in their interiors — `classify<K>` returns `Disjoint` or `Touching` for
-    every candidate pair. (b) No node's **cell** meets an edge it is not an
+    in their interiors — for every pair of distinct output edges `classify<K>`
+    returns `Disjoint` or `Touching`, **or** returns `Overlapping` and the two
+    edges have equal node-id pairs `(min(u,v), max(u,v))`. *(Amended by
+    `docs/increments/05b-noder-driver.md`. The clause as first written —
+    `Disjoint` or `Touching`, full stop — is false on the one input guarantee 15
+    exists for: a road noded along a river leaves two chains carrying the same
+    edge, and `classify` on two identical segments returns `Overlapping`. A
+    partial overlap is still a violation, and after the split pass there is no
+    third case, since each of two overlapping collinear edges is split at the
+    other's nodes.)* (b) No node's **cell** meets an edge it is not an
     endpoint of — `segment_meets_cell<K>` is false for every (node, edge)
     candidate pair with that node not an endpoint. This is the promise the
     type's name makes, and 5b establishes it by **verification** — a second
@@ -882,6 +890,15 @@ produces no new node" can report converged in a state that violates 14(b). That
 is the surviving-T-junction failure arriving through the loop condition instead
 of through the predicate. The verification is the condition; node counts are a
 progress metric and nothing more.
+
+**Superseded in its representation, not in its reasoning:** an edge carries a
+**property set** merged by **union**, not one bit merged by OR — at a coarse
+resolution the same segment can be both a road and a river, and the face-based
+fallback that excused dropping non-river semantics works only for area features.
+Everything below about *density*, about the merge being keyed on node ids and
+about there being no single source bit to override survives verbatim and is
+strengthened; only the width changes. `docs/increments/05b-noder-driver.md`,
+"Edge properties", carries the ruling and the scope.
 
 **The `is_river` representation is dense, one `std::uint8_t` per edge**, which
 overturns `03-pslg.md:65-70`'s "sparse override set" on the terms that document set
@@ -953,7 +970,7 @@ of them:
   one function to get right, and its correctness is checkable without noding
   anything.
 - **Guarantee 14 is additionally verified all-pairs, on small inputs, in the
-  property suite.** `prop_noding_no_crossings.cpp` (the name `testing.md:289`
+  property suite.** `prop_noding_no_crossings.cpp` (the name `testing.md:301`
   already reserves) runs the full noder on generated constraint sets of a few
   dozen segments and then checks both clauses of 14 by **brute force over every
   (edge, edge) and (node, edge) pair**, with no broad phase anywhere in the
@@ -1241,6 +1258,16 @@ production code:
 | `include/terrain/noding/node.hpp` | `NodeStatus`, `describe`, `NodeOptions`, `NodeOutcome`, `node<K>`, the hot-pixel split pass and edge-key dedup | ~250 |
 | `include/terrain/cdt/*`, `src/cdt/detria_backend.cpp` | `const Pslg&` → `const NodedPslg&` | ~10 |
 
+**That last row is wrong and the whole 5b estimate with it.** `bindings/core.cpp:466`
+calls `terrain::cdt::triangulate<DetriaBackend>(pslg, options)` on a
+`const Pslg&`, so retyping the entry point breaks the Python extension, and the
+only repair is to bind a producer of `NodedPslg` — which drags
+`src_python/tin_engine/_core.pyi`, `src_python/tin_engine/cli.py`, the Python
+suites and the renderer's scene join with it. No Python file appears in the
+table above. `docs/increments/05b-noder-driver.md` re-estimates the whole of 5b
+at ~786 non-comment production lines and splits it; the C++ figures below stand,
+what was missing is everything on the other side of the binding.
+
 **~480 production LOC**, header-only (the driver is a template on `K`, as
 increment 3's validator is, so nothing goes in `src/noding/`). Under the
 ceiling, without the margin 5a has. The ~20 over the draft is step 4 of the
@@ -1256,9 +1283,14 @@ also that 5b's estimate contains a header nobody has designed in full yet
 (`noded_pslg.hpp` at ~120), so the honest direction of travel for that number is
 up. Nobody should relitigate the seam on a line count in either direction.
 
-**Contingency split of 5b, dependency-ordered**, if it overruns — the likely
-cause being `describe` growing one `std::format` call per status enumerator,
-which is exactly what nearly split increment 3 and increment 4:
+**Contingency split of 5b, dependency-ordered**, if it overruns. **Superseded:
+`docs/increments/05b-noder-driver.md` splits 5b at a different seam — all of the
+C++ in 5b, the signature change and the Python crossing in 5c — on the measured
+grounds that C++ estimates here have come in at or under and binding estimates at
+twice. The two below are recorded as what was proposed, not as a live
+alternative.** The overrun cause anticipated was `describe` growing one
+`std::format` call per status enumerator, which is exactly what nearly split
+increment 3 and increment 4:
 
 - **5b** — `core/noded_pslg.hpp` and `noding/broad_phase.hpp`, plus their suites.
   `NodedPslg` would then need a producer to exist at all, so the split point is a
@@ -1631,6 +1663,19 @@ something a later increment depends on; this one would not.
 
 Per `docs/increments/README.md`, these are fixed in this PR or not recorded.
 There is no ledger.
+
+**Six of the eleven did not land, and that is recorded here because the section
+asserts otherwise.** `git diff --stat 41054aa~1 e090909 -- testing.md
+parallel_refinement.md project_structure.md docs/increments/03-pslg.md
+docs/increments/01-predicates.md` prints two files, and checking those two line
+by line rather than by filename: **2a, 2b and 11 shipped; 1, 2, 2c, 3, 4, 5, 6, 7
+and 8 did not** — nine of eleven. Step 6 of the algorithm still emitted a flat
+segment list and step 4 still said "lying on it". They were re-found while
+designing 5b and are fixed in **5b's** PR instead; item 9, the `[planned]`
+marker, is 5c's, since it describes what CI enforces over a module that ships.
+Line numbers quoted below are the pre-fix ones and are stale by design: the text
+they pointed at no longer exists. See `docs/increments/05b-noder-driver.md`,
+"Documentation this PR fixes".
 
 **`parallel_refinement.md`**
 

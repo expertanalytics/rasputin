@@ -67,7 +67,7 @@ open polyline.
 wide river or a lake is legitimately an area feature, and so is a walled
 enclosure — and it is never validated, because it is data, not structure. Only
 the noder (increment 5) can produce an edge whose set disagrees with its source
-chain, and it contributes a sparse override set then, on `NodedPslg`, not here.
+chain, and it carries that on `NodedPslg`, not here.
 
 **Increment 3 shipped this as one bit, `bool is_river{false}`, and increment 7
 replaced it.** The field was widened in place rather than added alongside, and
@@ -79,6 +79,14 @@ conversion to or from `bool` or an integer in either direction, so
 meaning. This file remains the record of what was true at increment 3 and says
 so here; `docs/increments/07-edge-properties.md` is the ruling and owns the
 type.
+
+**The shape on `NodedPslg` is dense**, ruled in
+`docs/increments/05b-noder-driver.md`: one entry per output edge,
+index-aligned with that type's flat edge enumeration, merged by union — not the
+sparse override set an earlier draft of this paragraph assumed. There is nothing
+left to override. After noding an edge can descend from two chains at once, so
+it has no single source value to be an exception to, and that is the same fact
+the property *set* exists for.
 
 ```cpp
 class Pslg {
@@ -499,11 +507,20 @@ And it explicitly does **not** promise, and downstream must not assume:
 **Therefore a valid `Pslg` is not a valid CDT input.** It is a valid *noder*
 input. The type asserts everything that can be decided without constructing a
 point, and nothing that cannot. Increment 5 introduces `NodedPslg` — a distinct
-type whose only producer is the noder, carrying the additional promise that no
-two edges cross in their interiors and that coordinates lie on the snap grid.
+type whose only producer is the noder. It promises more than the two guarantees
+this paragraph used to list, and one thing it does **not** promise is worth as
+much as the rest: no two edges cross in their interiors; **no node's cell meets
+an edge it is not an endpoint of**, which is the hot-pixel form and does not
+follow from the first; coordinates lie on the snap grid; **no two vertices are
+equal**; **no edge is zero-length**; and **guarantee 9 does not survive** —
+vertex indices are not the input's, and `node_of_input_vertex` maps around it.
 Increment 4's wrapper signature should be written against `const Pslg&` today
-and changed to `const NodedPslg&` then; that change is mechanical, and knowing it
-is coming is cheaper than discovering it. It is listed under Risks.
+and changed to `const NodedPslg&` then. **That change is not mechanical**, as an
+earlier revision of this paragraph and `docs/increments/04-cdt.md` both said it
+was: `bindings/core.cpp:466` calls the entry point on a `const Pslg&`, so
+retyping it breaks the Python extension and drags `_core.pyi`, `cli.py` and the
+renderer's scene join with it. `docs/increments/05b-noder-driver.md` gives the
+cost and makes it a PR of its own. It is listed under Risks.
 
 ## Grouping: neither declared nor computed, and not in this increment
 
