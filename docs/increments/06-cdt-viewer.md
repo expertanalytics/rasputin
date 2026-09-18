@@ -447,10 +447,11 @@ than discovered mid-PR, because the seam is already natural:
   CLI command. ~375 LOC. Buildable and fully testable against the protocols
   without 6a, which is the point of `protocols.py` being in 6a's half.
 
-**6a as shipped: 437 non-comment production lines against the ~235 estimated**
--- `bindings/core.cpp` +260 (est. ~150), `_core.pyi` +118 (est. ~60),
+**6a as shipped: 467 non-comment production lines against the ~235 estimated**
+-- `bindings/core.cpp` +283 (est. ~150), `_core.pyi` +125 (est. ~60),
 `viz/protocols.py` 52 (est. ~25), `viz/__init__.py` 7 (not estimated). Measured
-at `bc53100` by counting added, non-comment, non-blank lines:
+on the tree this paragraph ships in, by counting added, non-comment, non-blank
+lines:
 
 ```sh
 for f in bindings/core.cpp src_python/tin_engine/_core.pyi \
@@ -461,9 +462,13 @@ for f in bindings/core.cpp src_python/tin_engine/_core.pyi \
 done
 ```
 
-An earlier revision of this paragraph recorded 441 and `core.cpp` at 264; the
-command above returns 437 and 260, and the command is the definition. Under
-`CLAUDE.md` §2's 700 either way.
+Record the figure against the tree it ships in, not against an earlier commit.
+Three revisions failed that and went stale within one commit each: 441/264, then
+437/260 at `bc53100`, then 457/278 at `1424300` once the `PslgError` value
+strings and the shape formatter landed -- and this revision's own +10 is the
+`chains`/`diagnostics` copy documentation. The command is the definition, so a
+figure citing a commit older than the paragraph is a claim the reader's own run
+will contradict. Under `CLAUDE.md` §2's 700 at all four.
 
 The overrun is entirely docstring and stub body: risk 6 named pybind docstrings
 as the pressure and named the right one, but the estimate was made against a
@@ -533,6 +538,17 @@ split is still cheap: `scene.py` is the only 6b module whose realised density
 can be known before the largest module is written, and a split decided at 690
 is a split decided too late. If `scene.py` lands at or under 150, the seam
 stands down and 6b ships as one PR.
+
+**A second gate, because the first samples the wrong file.** The trigger above
+measures `scene.py`, which this document argues is *algorithm* and therefore
+the 6b module least likely to inflate -- while naming `fixtures.py` as the one
+most likely to behave like 6a, and `fixtures.py` sits in 6b-ii, the half the
+first gate does not cover. A gate that samples the low-risk file and stands
+down on its behalf can pass and still overrun for exactly the reason predicted.
+So: **after `fixtures.py` is green, re-run the count over `viz/`. If the 6b
+total exceeds 500 non-comment lines, 6b-ii splits again** -- at 500 rather than
+700 because `cli.py` and the two ordinary suites still follow, and the point of
+a pre-declared seam is that it fires before the ceiling, not at it.
 
 ## What is worth testing
 
@@ -607,8 +623,12 @@ it.
    owning `py::object` as the array's base -- six surfaces in total
    (`Pslg.vertices`, `Pslg.chain_indices`, `Pslg.indices_of`,
    `IndexedMesh2.vertices`, `.triangles`, `.constrained_edges`). `@reviewer`
-   read the mechanism on all six; `@developer` falsified three of them by
-   substituting a decoy capsule for the owner and confirming the suite goes red.
+   read the mechanism on all six, and all six have now been falsified by
+   substituting a decoy owner and confirming the suite goes red: the three
+   `IndexedMesh2` arrays in `94f94e2`, the three `Pslg` arrays in `16826a4`.
+   The second round also measured the gap rather than asserting it -- with the
+   `Pslg` keep-alive removed, the new test failed and **all 77 others passed**,
+   so the first round could not have caught it.
    The assertions are `TestZeroCopyLifetime` in `tests/python/test_core_cdt.py`:
    one test drops every reference to the mesh and the outcome, churns the
    allocator, and re-reads; a second asserts the base object and its refcount

@@ -167,7 +167,13 @@ class Pslg:
         """Read-only ``(N, 2)`` view of the vertex buffer."""
 
     @property
-    def chains(self) -> list[Chain]: ...
+    def chains(self) -> list[Chain]:
+        """The chains, in order, as frozen ``Chain`` records.
+
+        Unlike :attr:`vertices`, :attr:`chain_indices` and :attr:`indices_of`,
+        which are zero-copy views, this **copies**: a fresh list is built on
+        every read. Bind it once rather than re-reading it inside a loop.
+        """
     @property
     def chain_indices(self) -> npt.NDArray[np.uint32]:
         """Read-only ``(M,)`` view of the flat index buffer."""

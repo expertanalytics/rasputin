@@ -317,7 +317,9 @@ diagnostic per call turns one fix into N round trips.
             "pslg", [](const PslgBuildResult& r) { return r.ok() ? &*r.pslg : nullptr; },
             py::return_value_policy::reference_internal, "The Pslg, or None if ok is False.")
         .def_readonly("diagnostics", &PslgBuildResult::diagnostics,
-                      "Every PslgDiagnostic the validator found, not just the first.");
+                      "Every PslgDiagnostic the validator found, not just the first.\n"
+                      "Rebuilt on every read, like Pslg.chains and unlike the array\n"
+                      "accessors; bind it once if you read it more than once.");
 
     py::class_<Pslg>(m, "Pslg", R"doc(
 A validated planar straight-line graph: the constraint set, checked once.
@@ -337,7 +339,10 @@ constructor would void that proof. Every accessor is a read-only view.
             [](const Pslg& self) {
                 return std::vector<Chain>{self.chains().begin(), self.chains().end()};
             },
-            "The chains, in order, as frozen Chain records.")
+            "The chains, in order, as frozen Chain records. Unlike the array\n"
+            "accessors on this type, this COPIES: a fresh list of C chains is\n"
+            "built on every read, so bind it once rather than re-reading it\n"
+            "inside a per-edge loop.")
         .def_property_readonly(
             "chain_indices",
             [](const py::object& self) {

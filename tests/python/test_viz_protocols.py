@@ -54,18 +54,20 @@ def protocols() -> ModuleType:
 def protocol_members(proto: type) -> set[str]:
     """The declared members of a Protocol, across the versions CI runs.
 
-    `typing.get_protocol_members` is 3.13+; `__protocol_attrs__` is 3.12+;
-    `typing._get_protocol_attrs` is what 3.11 has. Written out rather than
-    hand-listing the annotations, so that a member added to the protocol
-    without a matching accessor on the bound type is caught here.
+    `typing.get_protocol_members` is 3.13+; `__protocol_attrs__` is 3.12+ and
+    covers the floor. A third branch on `typing._get_protocol_attrs` was
+    carried for 3.11 and is gone with it -- private API kept for an
+    interpreter the project no longer supports, which nothing would have
+    flagged, since --cov does not measure the test tree.
+
+    Written out rather than hand-listing the annotations, so that a member
+    added to the protocol without a matching accessor on the bound type is
+    caught here.
     """
     getter = getattr(typing, "get_protocol_members", None)
     if getter is not None:
         return set(getter(proto))  # type: ignore[arg-type]
-    attrs = getattr(proto, "__protocol_attrs__", None)
-    if attrs is not None:
-        return set(attrs)
-    return set(typing._get_protocol_attrs(proto))  # type: ignore[attr-defined]
+    return set(proto.__protocol_attrs__)  # type: ignore[attr-defined]
 
 
 @pytest.fixture

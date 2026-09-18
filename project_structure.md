@@ -261,7 +261,7 @@ Final Lawson edge-flip pass. Skips constraint-tagged edges. Parallel with edge-c
 
 ### `bindings/core.cpp`
 
-Single pybind11 module that exposes the C++ API to Python. Built as the `_core` extension, installed into the `tin_engine` package, and re-exported by `src_python/tin_engine/__init__.py`. Typed from `src_python/tin_engine/_core.pyi`, which is what `mypy --strict` sees.
+Single pybind11 module that exposes the C++ API to Python. Built as the `_core` extension, installed into the `tin_engine` package. The **value types only** are re-exported by `src_python/tin_engine/__init__.py` (`__all__` is `Point2`, `Point3`, `cross`, `dot`); the CDT surface below is reached as `tin_engine._core` and is deliberately not re-exported, because `cli.py` is the sole composition root and `viz/` never imports the extension. Typed from `src_python/tin_engine/_core.pyi`, which is what `mypy --strict` sees.
 
 As of increment 6a (`94f94e2`, `docs/increments/06-cdt-viewer.md`) it binds:
 
@@ -270,9 +270,9 @@ As of increment 6a (`94f94e2`, `docs/increments/06-cdt-viewer.md`) it binds:
 - `Pslg`, `Chain`, `PslgDiagnostic`, `PslgBuildResult`, `IndexedMesh2` and `CdtOutcome`, plus the `ChainRole`, `PslgError` and `CdtStatus` enums and a `describe(CdtStatus)` helper;
 - two more free functions: `build_pslg`, which validates and returns a `PslgBuildResult` carrying a diagnostics list rather than raising, and `triangulate`, which wraps the kernel call in `py::gil_scoped_release` -- the only call in the module long enough to be worth the release.
 
-Every array-shaped accessor -- `Pslg.vertices`, `Pslg.chain_indices`, `Pslg.indices_of`, `IndexedMesh2.vertices`, `.triangles`, `.constrained_edges` -- returns a **read-only, zero-copy `py::array_t` whose base object is the owner**, built through the single `readonly_view` helper. Nothing is copied and nothing outlives its buffer.
+Every array-shaped accessor -- `Pslg.vertices`, `Pslg.chain_indices`, `Pslg.indices_of`, `IndexedMesh2.vertices`, `.triangles`, `.constrained_edges` -- returns a **read-only, zero-copy `py::array_t` whose base object is the owner**, built through the single `readonly_view` helper. Nothing in these six is copied and none outlives its buffer. Scoped deliberately: `build_pslg` *does* copy the coordinates handed to it, and `Pslg.chains` and `PslgBuildResult.diagnostics` rebuild per attribute read.
 
-**`PslgBuilder` is deliberately not exposed, and neither is any kernel template parameter.** The builder is a mutable accumulator; binding it would put half-built, validation-pending state on the Python side and make `Pslg`'s "validated on construction" guarantee unenforceable from there. Python hands `build_pslg` a finished array of vertices and chains and gets back either a `Pslg` or the reasons it is not one. A new accessor on this surface is a design change that needs a reason in an increment file, not a line in a PR.
+**`PslgBuilder` is deliberately not exposed, and neither is any kernel template parameter.** The decisive reason is that `PslgBuildResult build() &&` is rvalue-ref-qualified: binding it means either a consuming method on a Python object that remains reachable afterwards, or a lambda that copies. Beyond that, the builder is a mutable accumulator; binding it would put half-built, validation-pending state on the Python side and make `Pslg`'s "validated on construction" guarantee unenforceable from there. Python hands `build_pslg` a finished array of vertices and chains and gets back either a `Pslg` or the reasons it is not one. A new accessor on this surface is a design change that needs a reason in an increment file, not a line in a PR.
 
 ## Build system
 
