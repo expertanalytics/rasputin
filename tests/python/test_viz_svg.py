@@ -23,9 +23,16 @@ array or the stylesheet. What is asserted is structure and arithmetic:
 
 The `class` attribute *is* asserted, and the distinction matters. A class token
 names **which stroke class an edge belongs to** -- `constrained`, `role-hole`,
-`river`, `finding` -- which is structure, and it is the only way to check that
-role colouring reaches the right edges without naming a colour. The stylesheet
-that turns each token into a colour gets no test at all, per the design.
+`finding`, and at most one property token such as `river` -- which is
+structure, and it is the only way to check that role colouring reaches the
+right edges without naming a colour. The stylesheet that turns each token into
+a colour gets no test at all, per the design.
+
+**At most one property token**, chosen by `SvgStyle.property_strokes` in
+descending priority: an edge carries a SET of properties and a polyline carries
+one stroke, because two overlaid strokes on one line read as a rendering defect
+rather than as two features. `TestPropertyStrokes` and
+`TestStrokeClasses` hold both halves of that.
 
 ## Tolerances are absolute, everywhere a coordinate is compared
 
@@ -108,6 +115,27 @@ GALLERY_NAMES = (
 
 ROLE_NAMES = frozenset({"outer", "hole", "breakline"})
 
+# Bare masks, as `cli.py` hands them down. `viz/` may not name a vocabulary --
+# `fixtures.py` and `style.py` import nothing first-party at all, which
+# `TestModuleIsolation` pins -- so the renderer knows bit positions, the
+# stylesheet knows tokens, and only the composition root knows that bit 0 means
+# "river".
+#
+# Two disjoint properties, because an edge that is both a road and a river is
+# the case this whole widening exists for and the one a single bit cannot state.
+RIVER_BIT = 0
+ROAD_BIT = 1
+NO_PROPERTIES = 0
+RIVER = 1 << RIVER_BIT
+ROAD = 1 << ROAD_BIT
+
+#: The precedence the gallery draws under, in DESCENDING priority: first match
+#: wins. Water over infrastructure, and deliberately NOT in bit order --
+#: priority belongs to the stylesheet, not to how a vocabulary chose to number
+#: its features, and a renderer that sorted by bit would pass a list that
+#: happened to agree with the numbering.
+GALLERY_STROKES = ((ROAD_BIT, "road"), (RIVER_BIT, "river"))
+
 
 class Role(enum.Enum):
     """A stand-in for `_core.ChainRole`, which this suite may not import.
@@ -131,7 +159,7 @@ class FakeChain:
     begin: int
     count: int
     role: object
-    is_river: bool
+    properties: int
 
 
 @dataclass(frozen=True)
@@ -171,7 +199,7 @@ class FakeMesh:
 #
 #   3 +-------------------+ 2
 #     | \               / |
-#     |   4 ==========5   |        4=5 is the breakline (is_river)
+#     |   4 ==========5   |        4=5 is the breakline (properties: RIVER)
 #     | /      x6       \ |
 #   0 +-------------------+ 1
 #
@@ -249,14 +277,24 @@ def make_style(**overrides: Any) -> Any:
     return viz_module("style").SvgStyle(**kwargs)
 
 
+def strokes(*pairs: tuple[int, str]) -> tuple[Any, ...]:
+    """`PropertyStroke`s from `(bit, token)` pairs, in the order given.
+
+    The order IS the draw priority -- first match wins -- so a helper that
+    sorted would destroy the one thing these tests are about.
+    """
+    stroke = viz_module("style").PropertyStroke
+    return tuple(stroke(bit=bit, token=token) for bit, token in pairs)
+
+
 def make_pslg(
-    chains: Sequence[tuple[Sequence[int], object, bool]],
+    chains: Sequence[tuple[Sequence[int], object, int]],
     vertices: npt.NDArray[np.float64] | None = None,
 ) -> FakePslg:
     flat: list[int] = []
     records: list[FakeChain] = []
-    for indices, role, is_river in chains:
-        records.append(FakeChain(len(flat), len(indices), role, is_river))
+    for indices, role, properties in chains:
+        records.append(FakeChain(len(flat), len(indices), role, properties))
         flat.extend(int(i) for i in indices)
     return FakePslg(
         vertices=MESH_VERTICES if vertices is None else vertices,
@@ -302,6 +340,22 @@ def text_of(element: ET.Element) -> str:
 
 def classes(element: ET.Element) -> frozenset[str]:
     return frozenset((element.get("class") or "").split())
+
+
+def property_tokens(element: ET.Element, vocabulary: Sequence[str]) -> list[str]:
+    """Which of `vocabulary`'s tokens the element carries.
+
+    A list rather than a set, because the assertion the property strokes need
+    is a COUNT -- "at most one" -- and `frozenset` silently answers a different
+    question about a duplicate.
+    """
+    return [t for t in (element.get("class") or "").split() if t in set(vocabulary)]
+
+
+def edge_at(scene: Any, a: int, b: int) -> Any:
+    matches = [e for e in scene.edges if (int(e.a), int(e.b)) == (a, b)]
+    assert len(matches) == 1, f"edge {(a, b)} appears {len(matches)} times"
+    return matches[0]
 
 
 def header_line(document: ET.Element, needle: str) -> ET.Element:
@@ -354,7 +408,7 @@ def edge_element(root: ET.Element, a: int, b: int, scene: Any) -> ET.Element:
 @pytest.fixture
 def pslg() -> FakePslg:
     """A closed outer ring and an open river breakline, as 6b-i's suite uses."""
-    return make_pslg([([0, 1, 2, 3], Role.Outer, False), ([4, 5], Role.Breakline, True)])
+    return make_pslg([([0, 1, 2, 3], Role.Outer, NO_PROPERTIES), ([4, 5], Role.Breakline, RIVER)])
 
 
 @pytest.fixture
@@ -392,7 +446,15 @@ def finding_scene(pslg: FakePslg) -> Any:
 
 @pytest.fixture
 def document(scene: Any) -> ET.Element:
-    return parse(viz_module("svg").render_svg(scene, style=make_style()))
+    # The gallery's precedence list, supplied here because `SvgStyle`'s default
+    # is `()` and must stay `()`: a default naming `river` would be policy in
+    # the one module that declares it holds none, exactly as `closed_roles`
+    # is the composition root's in 6b-i.
+    return parse(
+        viz_module("svg").render_svg(
+            scene, style=make_style(property_strokes=strokes(*GALLERY_STROKES))
+        )
+    )
 
 
 class TestFixtureSanity:
@@ -554,6 +616,90 @@ class TestSvgStyle:
         assert viz_module("style").SvgStyle().show_vertices is False
 
 
+class TestPropertyStrokes:
+    """`SvgStyle.property_strokes`: which property is drawn, and in what order.
+
+    Structure, not taste, which is why it lives in `style.py` and not in the
+    stylesheet: WHICH of an edge's properties gets a token is a decision about
+    the document, and the colour that token resolves to is the CSS's. The list
+    is in descending draw priority and the first match wins.
+
+    `PropertyStroke.token` is validated against `^[a-z][a-z0-9_-]*$` for the
+    same reason `EdgeProperty.name` is, and it is not style: `_edge_classes`
+    interpolates its tokens into a `class="..."` attribute UNESCAPED -- only
+    `_text` escapes -- so a token containing a quote ends the attribute. A
+    stylesheet read from a configuration file is untrusted input.
+    """
+
+    def test_the_default_is_empty(self) -> None:
+        # A default naming `river` would be policy in the module whose own
+        # docstring says colours and vocabulary are somebody else's.
+        assert viz_module("style").SvgStyle().property_strokes == ()
+
+    def test_a_stroke_carries_a_bit_and_a_token(self) -> None:
+        stroke = viz_module("style").PropertyStroke(bit=RIVER_BIT, token="river")
+        assert stroke.bit == RIVER_BIT
+        assert stroke.token == "river"
+
+    def test_the_declared_order_is_preserved(self) -> None:
+        # The order IS the priority. A model that sorted -- by bit, by token --
+        # would silently replace the stylesheet's ruling with the vocabulary's
+        # numbering, which is the thing the ruling exists to decouple from.
+        style = make_style(property_strokes=strokes(*GALLERY_STROKES))
+        assert [(s.bit, s.token) for s in style.property_strokes] == list(GALLERY_STROKES)
+
+    @pytest.mark.parametrize("bit", [-1, 32, 33, 64])
+    def test_a_bit_outside_the_ceiling_is_refused(self, bit: int) -> None:
+        import pydantic
+
+        # 32 is the C++ ceiling (`EdgeProperties::kMaxProperties`), restated at
+        # the layer that meets untrusted input. A stroke on bit 32 is a stroke
+        # no edge can ever carry, so it is a typo, caught at construction.
+        with pytest.raises(pydantic.ValidationError):
+            viz_module("style").PropertyStroke(bit=bit, token="river")
+
+    @pytest.mark.parametrize("bit", [0, 31])
+    def test_the_boundary_bits_are_accepted(self, bit: int) -> None:
+        # Able to fail on its own: a range check written with the wrong
+        # comparison refuses 31, and the refusals above would still pass.
+        assert viz_module("style").PropertyStroke(bit=bit, token="river").bit == bit
+
+    @pytest.mark.parametrize(
+        "token",
+        ['ri"ver', "ri ver", "River", "1river", "_river", "river>", "", "riv<er"],
+        ids=["quote", "space", "capital", "leading-digit", "leading-underscore",
+             "gt", "empty", "lt"],
+    )
+    def test_a_token_that_would_escape_the_class_attribute_is_refused(
+        self, token: str
+    ) -> None:
+        import pydantic
+
+        with pytest.raises(pydantic.ValidationError):
+            viz_module("style").PropertyStroke(bit=RIVER_BIT, token=token)
+
+    @pytest.mark.parametrize("token", ["river", "road-bridge", "river_bank", "r2"])
+    def test_a_css_shaped_token_is_accepted(self, token: str) -> None:
+        # The other half: a pattern that refused everything would pass every
+        # refusal above. A hyphen is legal here and is NOT in
+        # `EdgeProperty.name`'s pattern -- a CSS class may contain one and a
+        # Python-side feature name may not.
+        assert viz_module("style").PropertyStroke(bit=RIVER_BIT, token=token).token == token
+
+    def test_a_stroke_is_frozen(self) -> None:
+        import pydantic
+
+        stroke = viz_module("style").PropertyStroke(bit=RIVER_BIT, token="river")
+        with pytest.raises(pydantic.ValidationError):
+            stroke.token = "road"
+
+    def test_an_unknown_field_on_a_stroke_is_refused(self) -> None:
+        import pydantic
+
+        with pytest.raises(pydantic.ValidationError):
+            viz_module("style").PropertyStroke(bit=RIVER_BIT, token="river", colour="blue")
+
+
 class TestViewport:
     """World metres to SVG user units: one uniform scale, and a y flip.
 
@@ -634,7 +780,7 @@ class TestViewport:
         column = np.array(
             [[EAST, NORTH], [EAST, NORTH + 40.0], [EAST, NORTH + 80.0]], dtype=np.float64
         )
-        pslg = make_pslg([([0, 1, 2], Role.Breakline, False)], vertices=column)
+        pslg = make_pslg([([0, 1, 2], Role.Breakline, NO_PROPERTIES)], vertices=column)
         degenerate = build_scene(pslg, None, ok=False)
         assert degenerate.bbox.padded is True
         view = viz_module("svg").viewport(degenerate.bbox, make_style())
@@ -777,17 +923,106 @@ class TestStrokeClasses:
     ) -> None:
         assert "role-breakline" in classes(edge_element(document, 4, 5, scene))
 
-    def test_the_river_bit_is_a_class_of_its_own(
+    def test_a_property_is_a_class_of_its_own(
         self, document: ET.Element, scene: Any
     ) -> None:
-        # A river is a breakline plus a bit, so it is a fourth stroke rather
-        # than a fourth role; 5b depends on it being visible before 5b exists.
+        # A river is a breakline plus a property, so it is a fourth stroke
+        # rather than a fourth role.
         assert "river" in classes(edge_element(document, 4, 5, scene))
 
-    def test_an_ordinary_constrained_edge_is_not_a_river(
+    def test_an_edge_with_no_properties_carries_no_property_token(
         self, document: ET.Element, scene: Any
     ) -> None:
-        assert "river" not in classes(edge_element(document, 0, 1, scene))
+        tokens = classes(edge_element(document, 0, 1, scene))
+        assert "river" not in tokens
+        assert "road" not in tokens
+
+    def test_an_edge_with_two_properties_draws_exactly_one_stroke(
+        self, mesh: FakeMesh
+    ) -> None:
+        # The finding this ruling rests on: at gallery scale two overlaid
+        # strokes on one polyline read as a rendering defect, not as two
+        # features. So the SET is carried on the edge, in full, and the
+        # DOCUMENT names one token -- precedence is a drawing question, which
+        # is why it is answered at the one layer a human is looking at.
+        pslg = make_pslg(
+            [
+                ([0, 1, 2, 3], Role.Outer, NO_PROPERTIES),
+                ([4, 5], Role.Breakline, RIVER | ROAD),
+            ]
+        )
+        scene = build_scene(pslg, mesh, closed_roles=CLOSED)
+        assert edge_at(scene, 4, 5).properties == RIVER | ROAD
+
+        document = parse(
+            viz_module("svg").render_svg(
+                scene, style=make_style(property_strokes=strokes(*GALLERY_STROKES))
+            )
+        )
+        line = edge_element(document, 4, 5, scene)
+        assert property_tokens(line, ("river", "road")) == ["river"]
+
+    def test_the_stroke_drawn_is_the_styles_first_match_not_the_lowest_bit(
+        self, mesh: FakeMesh
+    ) -> None:
+        # Priority is explicit and independent of bit numbering: the same edge,
+        # the same two properties, the two precedence lists. A renderer that
+        # took the lowest set bit, or the vocabulary's order, draws `river`
+        # under both and fails the second.
+        pslg = make_pslg(
+            [
+                ([0, 1, 2, 3], Role.Outer, NO_PROPERTIES),
+                ([4, 5], Role.Breakline, RIVER | ROAD),
+            ]
+        )
+        scene = build_scene(pslg, mesh, closed_roles=CLOSED)
+
+        def token_for(*pairs: tuple[int, str]) -> list[str]:
+            document = parse(
+                viz_module("svg").render_svg(
+                    scene, style=make_style(property_strokes=strokes(*pairs))
+                )
+            )
+            return property_tokens(edge_element(document, 4, 5, scene), ("river", "road"))
+
+        assert token_for((RIVER_BIT, "river"), (ROAD_BIT, "road")) == ["river"]
+        assert token_for((ROAD_BIT, "road"), (RIVER_BIT, "river")) == ["road"]
+
+    def test_a_property_with_no_stroke_draws_no_token_and_loses_no_edge(
+        self, mesh: FakeMesh
+    ) -> None:
+        # The one asymmetry, and it is deliberate. The DATA path may not lose a
+        # property -- `EdgeVocabulary.names` raises on a bit nobody names --
+        # while the DRAWING path may decline to draw one: the edge is still
+        # drawn as the constrained breakline it is, in its role colour. A lost
+        # property is a wrong answer; an undrawn one is a picture with less in
+        # it, and those are different failures.
+        pslg = make_pslg(
+            [
+                ([0, 1, 2, 3], Role.Outer, NO_PROPERTIES),
+                ([4, 5], Role.Breakline, RIVER),
+            ]
+        )
+        scene = build_scene(pslg, mesh, closed_roles=CLOSED)
+        document = parse(
+            viz_module("svg").render_svg(
+                scene, style=make_style(property_strokes=strokes((ROAD_BIT, "road")))
+            )
+        )
+        line = edge_element(document, 4, 5, scene)
+        assert property_tokens(line, ("river", "road")) == []
+        assert "role-breakline" in classes(line)
+        assert "constrained" in classes(line)
+
+    def test_the_default_style_names_no_property(self, scene: Any) -> None:
+        # `SvgStyle.property_strokes` defaults to `()`, so a caller that
+        # supplies no precedence gets no property stroke anywhere -- able to
+        # fail on its own, and the assertion that keeps a vocabulary out of the
+        # module whose docstring says it holds none.
+        document = parse(viz_module("svg").render_svg(scene, style=make_style()))
+        for line in children(document, "edges", "line"):
+            assert "river" not in classes(line)
+            assert "road" not in classes(line)
 
     def test_an_unconstrained_edge_carries_no_role(
         self, document: ET.Element, scene: Any
@@ -801,7 +1036,7 @@ class TestStrokeClasses:
         # stroke class from a role it cannot introspect:
         # `getattr(role, "name", str(role))` serves the enum and the string
         # alike, and this is the half that only the string exercises.
-        pslg = make_pslg([([0, 1, 2, 3], "outer", False), ([4, 5], "breakline", True)])
+        pslg = make_pslg([([0, 1, 2, 3], "outer", NO_PROPERTIES), ([4, 5], "breakline", RIVER)])
         scene = build_scene(pslg, mesh, closed_roles=("outer", "hole"))
         document = parse(viz_module("svg").render_svg(scene, style=make_style()))
         assert "role-outer" in classes(edge_element(document, 0, 1, scene))
@@ -810,7 +1045,7 @@ class TestStrokeClasses:
         # Drawn PSLG-only so the hole chain, which no mask agrees with, is not
         # also a finding -- what is under test here is the role, not the join.
         pslg = make_pslg(
-            [([0, 1, 2, 3], Role.Outer, False), ([4, 5, 6], Role.Hole, False)],
+            [([0, 1, 2, 3], Role.Outer, NO_PROPERTIES), ([4, 5, 6], Role.Hole, NO_PROPERTIES)],
         )
         scene = build_scene(pslg, None, ok=False, closed_roles=CLOSED)
         document = parse(viz_module("svg").render_svg(scene, style=make_style()))
@@ -888,10 +1123,33 @@ class TestHeaderBand:
 
 
 class TestLegendAndScaleBar:
-    def test_the_legend_names_every_stroke_class(self, document: ET.Element) -> None:
+    def test_the_legend_names_every_role_stroke(self, document: ET.Element) -> None:
         legend = text_of(group(document, "legend")).lower()
-        for stroke in ("outer", "hole", "breakline", "river", "unconstrained"):
+        for stroke in ("outer", "hole", "breakline", "unconstrained"):
             assert stroke in legend, f"the legend does not name {stroke!r}"
+
+    def test_the_legend_names_every_property_stroke_the_style_declares(
+        self, document: ET.Element
+    ) -> None:
+        # The legend is derived from `style.property_strokes`, not written into
+        # `svg.py`: a hard-coded "river breakline" row is a vocabulary in the
+        # module that may not hold one, and it names a stroke the default style
+        # can never emit. Both tokens, because a legend that named only the
+        # first would pass a one-property gallery.
+        legend = text_of(group(document, "legend")).lower()
+        for _bit, token in GALLERY_STROKES:
+            assert token in legend, f"the legend does not name {token!r}"
+
+    def test_the_legend_names_no_property_the_style_does_not_declare(
+        self, scene: Any
+    ) -> None:
+        # Able to fail on its own, and the assertion that catches the
+        # hard-coded row: under the default style there is no property stroke,
+        # so there is nothing to put a legend row next to.
+        document = parse(viz_module("svg").render_svg(scene, style=make_style()))
+        legend = text_of(group(document, "legend")).lower()
+        assert "river" not in legend
+        assert "road" not in legend
 
     def test_the_scale_bar_is_labelled_in_world_units(self, document: ET.Element) -> None:
         assert re.search(r"\d+\s*m\b", text_of(group(document, "scale-bar")))
@@ -979,7 +1237,7 @@ class TestFailurePresentation:
         # point": a padded box means the extent on screen is not the extent of
         # the data, and only the header can say that.
         column = np.array([[EAST, NORTH], [EAST, NORTH + 80.0]], dtype=np.float64)
-        pslg = make_pslg([([0, 1], Role.Breakline, False)], vertices=column)
+        pslg = make_pslg([([0, 1], Role.Breakline, NO_PROPERTIES)], vertices=column)
         scene = build_scene(pslg, None, ok=False)
         assert scene.bbox.padded is True
         document = parse(viz_module("svg").render_svg(scene, style=make_style()))
@@ -1104,7 +1362,7 @@ class TestGallery:
         for member in ("vertices", "chains", "chain_indices", "indices_of"):
             assert hasattr(fixture, member), f"{name} has no {member}"
         for chain in fixture.chains:
-            for member in ("begin", "count", "role", "is_river"):
+            for member in ("begin", "count", "role", "properties"):
                 assert hasattr(chain, member), f"{name}'s chain has no {member}"
 
     @pytest.mark.parametrize("name", GALLERY_NAMES)
@@ -1218,21 +1476,28 @@ class TestGallery:
         assert len(points) >= 3
         assert points[0] != points[-1]
 
-    def test_the_river_sets_the_river_bit(self) -> None:
-        # The `is_river` stroke is exercised here so that it is known to work
+    def test_the_river_fixture_sets_the_river_bit_and_only_that_bit(self) -> None:
+        # The property stroke is exercised here so that it is known to work
         # before 5b depends on it.
-        assert any(chain.is_river for chain in gallery()["river"].chains)
+        #
+        # `== RIVER`, not "is non-empty": the gallery holds a BARE mask --
+        # `fixtures.py` imports nothing first-party, so it cannot ask a
+        # vocabulary -- and the number it writes down has to be the number
+        # `DEFAULT_VOCABULARY` gives bit 0 to `river`. That agreement is risk
+        # 20 in its smallest form, and this is the only place it is checkable.
+        masks = [int(chain.properties) for chain in gallery()["river"].chains]
+        assert RIVER in masks
+        assert set(masks) <= {NO_PROPERTIES, RIVER}
 
-    def test_only_the_river_fixture_is_a_river(self) -> None:
-        # Able to fail on its own: if every fixture set the bit, the test above
+    def test_only_the_river_fixture_carries_a_property(self) -> None:
+        # Able to fail on its own: if every fixture set a bit, the test above
         # would pass without the `river` fixture existing at all.
-        rivers = {
+        classified = {
             name
             for name in GALLERY_NAMES
-            if any(chain.is_river for chain in gallery()[name].chains)
+            if any(chain.properties for chain in gallery()[name].chains)
         }
-        assert "river" in rivers
-        assert "catchment" not in rivers
+        assert classified == {"river"}
 
     def test_the_sliver_fan_is_near_collinear_without_being_collinear(self) -> None:
         # The aspect-ratio question: near-collinear is the hard case for the

@@ -18,6 +18,7 @@
 // Every generator takes an explicit std::mt19937_64, matching point_families
 // and ring_cases: a test seeds once and the whole sequence is reproducible.
 
+#include <terrain/core/edge_properties.hpp>
 #include <terrain/core/point.hpp>
 #include <terrain/core/pslg.hpp>
 #include <terrain/core/pslg_builder.hpp>
@@ -213,8 +214,18 @@ namespace terrain::test {
 struct ChainSpec {
     std::vector<Point2> pts;
     ChainRole role{ChainRole::Breakline};
-    bool is_river{false};
+    EdgeProperties properties{};
 };
+
+// The test tree's stand-in for a vocabulary. There is no vocabulary in
+// terrain:: and there must never be one -- the mapping from bit position to
+// feature name is src_python/tin_engine/features.py's -- so a C++ suite that
+// wants to say "this chain is a river" has to name its own bits, exactly as a
+// refinement policy handed a mask will. Two of them, and DISJOINT, because a
+// one-member vocabulary cannot tell a union from an overwrite: kRiver | kRiver
+// is kRiver, while kRiver | kRoad is neither operand.
+inline constexpr EdgeProperties kRiver = EdgeProperties::bit(0);
+inline constexpr EdgeProperties kRoad = EdgeProperties::bit(1);
 
 // A valid constraint set: one counterclockwise outer star, `holes` clockwise
 // stars at disjoint centres, and `breaklines` open polylines. Star-shaped rings
@@ -229,18 +240,19 @@ struct ChainSpec {
 
     std::vector<ChainSpec> specs;
     specs.push_back(ChainSpec{star_ring(rng, 12, Point2{0.0, 0.0}, 80.0, 100.0),
-                              ChainRole::Outer, false});
+                              ChainRole::Outer, EdgeProperties{}});
 
     for (std::size_t h = 0; h < holes; ++h) {
         const Point2 centre{coord(rng), coord(rng)};
         std::vector<Point2> ccw = star_ring(rng, n_verts(rng), centre, 1.0, 3.0);
-        specs.push_back(ChainSpec{flipped(points(ccw)), ChainRole::Hole, false});
+        specs.push_back(ChainSpec{flipped(points(ccw)), ChainRole::Hole, EdgeProperties{}});
     }
     for (std::size_t b = 0; b < breaklines; ++b) {
         std::vector<Point2> line;
         const std::size_t n = n_verts(rng);
         for (std::size_t i = 0; i < n; ++i) line.push_back(Point2{coord(rng), coord(rng)});
-        specs.push_back(ChainSpec{std::move(line), ChainRole::Breakline, b % 2 == 0});
+        specs.push_back(ChainSpec{std::move(line), ChainRole::Breakline,
+                                  b % 2 == 0 ? kRiver : EdgeProperties{}});
     }
     return specs;
 }
@@ -249,7 +261,7 @@ struct ChainSpec {
 // verbatim: chain i owns vertices [sum of earlier counts, +count).
 [[nodiscard]] inline PslgBuilder builder_from(const std::vector<ChainSpec>& specs) {
     PslgBuilder b;
-    for (const ChainSpec& s : specs) b.add_chain(points(s.pts), s.role, s.is_river);
+    for (const ChainSpec& s : specs) b.add_chain(points(s.pts), s.role, s.properties);
     return b;
 }
 

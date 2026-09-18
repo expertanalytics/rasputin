@@ -44,7 +44,7 @@ NORTH = 6_900_000.0
 
 MESH_MEMBERS = {"vertices", "triangles", "constrained_edges", "triangle_count", "empty"}
 PSLG_MEMBERS = {"vertices", "chains", "chain_indices", "indices_of"}
-CHAIN_MEMBERS = {"begin", "count", "role", "is_river"}
+CHAIN_MEMBERS = {"begin", "count", "role", "properties"}
 
 
 def protocols() -> ModuleType:

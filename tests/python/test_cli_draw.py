@@ -133,7 +133,7 @@ def core_verdict(name: str) -> tuple[bool, list[str]]:
         "breakline": core.ChainRole.Breakline,
     }
     chains = [
-        ([int(i) for i in fixture.indices_of(c)], roles[chain.role], chain.is_river)
+        ([int(i) for i in fixture.indices_of(c)], roles[chain.role], int(chain.properties))
         for c, chain in enumerate(fixture.chains)
     ]
     result = core.build_pslg(np.asarray(fixture.vertices), chains)
@@ -234,6 +234,39 @@ class TestOutput:
         ]
         assert alarms == []
         assert re.search(r"(?i)\bfindings\b\D{0,3}0\b", group_text(document, "header"))
+
+    def test_the_river_fixture_draws_its_property_stroke(self, tmp_path: Path) -> None:
+        # `SvgStyle.property_strokes` defaults to `()` and must stay `()` --
+        # a default naming `river` would be policy in the module that declares
+        # it holds none -- so the precedence list is the composition root's to
+        # supply, exactly as `closed_roles` is. Forget it and the river fixture
+        # renders as a plain breakline: a picture that looks entirely correct
+        # and has lost the one thing the fixture exists to show.
+        target = tmp_path / "river.svg"
+        result = invoke("river", "--out", str(target))
+        assert result.exit_code == 0, plain(result.output)
+        tokens = {
+            token
+            for line in elements(written(target), "edges", "line")
+            for token in (line.get("class") or "").split()
+        }
+        assert "river" in tokens
+
+    def test_a_fixture_with_no_properties_draws_no_property_stroke(
+        self, tmp_path: Path
+    ) -> None:
+        # Able to fail on its own: a renderer that put the token on every
+        # constrained edge would pass the test above. `breakline-chain` is the
+        # same picture as `river` with the mask cleared, which is what makes
+        # the pair a controlled comparison rather than two unrelated fixtures.
+        target = tmp_path / "breakline-chain.svg"
+        assert invoke("breakline-chain", "--out", str(target)).exit_code == 0
+        tokens = {
+            token
+            for line in elements(written(target), "edges", "line")
+            for token in (line.get("class") or "").split()
+        }
+        assert "river" not in tokens
 
     def test_with_no_out_it_prints_the_path_it_wrote(self, tmp_path: Path) -> None:
         # "The common case is show me this now": a temp file and a path on

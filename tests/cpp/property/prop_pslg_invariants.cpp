@@ -33,6 +33,7 @@
 #include <pslg_cases.hpp>
 #include <ring_cases.hpp>
 
+#include <terrain/core/edge_properties.hpp>
 #include <terrain/core/point.hpp>
 #include <terrain/core/pslg.hpp>
 #include <terrain/core/pslg_builder.hpp>
@@ -55,6 +56,7 @@
 
 using terrain::Chain;
 using terrain::ChainRole;
+using terrain::EdgeProperties;
 using terrain::IndexedRing;
 using terrain::Point2;
 using terrain::Pslg;
@@ -453,7 +455,7 @@ TEST_CASE("a non-finite vertex anywhere rejects the build", "[pslg][property][ex
     for (const ChainSpec& s : specs) {
         std::vector<std::uint32_t> idx;
         for (std::size_t i = 0; i < s.pts.size(); ++i) idx.push_back(cursor++);
-        b.add_chain(std::span<const std::uint32_t>{idx}, s.role, s.is_river);
+        b.add_chain(std::span<const std::uint32_t>{idx}, s.role, s.properties);
     }
     REQUIRE(cursor == n);
 
@@ -497,18 +499,18 @@ TEST_CASE("crossing, touching and un-nested geometry does not change the outcome
     specs.push_back(ChainSpec{
         std::vector<Point2>{Point2{10000.0, 10000.0}, Point2{10000.0, 10010.0},
                             Point2{10010.0, 10010.0}},
-        ChainRole::Hole, false});
+        ChainRole::Hole, EdgeProperties{}});
     // A second outer ring overlapping the first, so the hole added next lies
     // inside two of them.
     specs.push_back(ChainSpec{
         std::vector<Point2>{Point2{-50.0, -50.0}, Point2{50.0, -50.0}, Point2{50.0, 50.0},
                             Point2{-50.0, 50.0}},
-        ChainRole::Outer, false});
+        ChainRole::Outer, EdgeProperties{}});
     // A breakline that crosses everything, including itself.
     specs.push_back(ChainSpec{
         std::vector<Point2>{Point2{-200.0, -200.0}, Point2{200.0, 200.0},
                             Point2{200.0, -200.0}, Point2{-200.0, 200.0}},
-        ChainRole::Breakline, false});
+        ChainRole::Breakline, EdgeProperties{}});
 
     const PslgBuildResult r = builder_from(specs).build<DefaultKernel>();
     INFO(render(r));

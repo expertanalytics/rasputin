@@ -123,6 +123,15 @@ static_assert(!std::is_convertible_v<std::uint32_t, EdgeProperties>);
 static_assert(!std::is_convertible_v<EdgeProperties, bool>);
 static_assert(!std::is_convertible_v<EdgeProperties, std::uint32_t>);
 
+// is_convertible_v<EdgeProperties, bool> is about IMPLICIT conversion, and
+// `if (x)` uses CONTEXTUAL conversion, which an `explicit operator bool`
+// satisfies while leaving the line above true. So the two asserts are claims
+// about different objects, and only this one is a claim about `if (x)`.
+// Measured rather than reasoned: `if (EdgeProperties{})` is rejected with
+// "not contextually convertible to 'bool'", and the probe that says so fails
+// when the assertion is inverted.
+static_assert(!std::is_constructible_v<bool, EdgeProperties>);
+
 // ---------------------------------------------------------------------------
 // The empty set.
 // ---------------------------------------------------------------------------
