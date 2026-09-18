@@ -8,7 +8,7 @@ version = "0.2.0.dev0"
 description = "Parallel TIN engine for terrain meshing — CGAL-free, GDAL-free, pure C++20 core with async Python bindings."
 readme = "README.md"
 license = { file = "LICENSE" }
-requires-python = ">=3.11"
+requires-python = ">=3.12"
 authors = [{ name = "Ola Skavhaug", email = "ola@xal.no" }]
 keywords = ["tin", "terrain", "mesh", "cdt", "geospatial", "computational-geometry"]
 classifiers = [
@@ -19,7 +19,6 @@ classifiers = [
     "Operating System :: MacOS :: MacOS X",
     "Programming Language :: C++",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
     "Programming Language :: Python :: 3.14",
@@ -96,7 +95,7 @@ addopts = [
 
 [tool.ruff]
 line-length = 100
-target-version = "py311"
+target-version = "py312"
 src = ["src_python", "tests/python"]
 # The archived pre-migration tree is not maintained and not linted. Its 242
 # findings would otherwise drown out real ones in the new code.
@@ -107,7 +106,7 @@ select = ["E", "F", "I", "N", "UP", "B", "SIM", "RUF", "ASYNC"]
 ignore = []
 
 [tool.mypy]
-python_version = "3.11"
+python_version = "3.12"
 strict = true
 files = ["src_python/tin_engine"]
 plugins = ["pydantic.mypy"]

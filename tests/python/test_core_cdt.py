@@ -32,14 +32,12 @@ import threading
 import time
 from collections.abc import Callable
 from pathlib import Path
-from typing import Any, TypeVar
+from typing import Any
 
 import numpy as np
 import pytest
 
 from tin_engine import _core
-
-T = TypeVar("T")
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 STUB = REPO_ROOT / "src_python" / "tin_engine" / "_core.pyi"
@@ -550,7 +548,7 @@ class _Ticker:
         self._thread.join(timeout=10.0)
 
 
-def ticks_during(call: Callable[[], T]) -> tuple[T, int, float]:
+def ticks_during[T](call: Callable[[], T]) -> tuple[T, int, float]:
     """Return the call's result, the ticks observed during it, and its duration."""
     with _Ticker() as ticker:
         time.sleep(0.02)  # let the ticker reach steady state

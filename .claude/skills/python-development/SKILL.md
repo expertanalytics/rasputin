@@ -1,11 +1,11 @@
 ---
 name: python-development
-description: Idiomatic Python 3.11+ for the orchestration layer. Use when writing Pydantic V2 models, Typer CLIs, asyncio pipelines, pytest/pytest-asyncio suites, or satisfying the strict mypy and ruff gates over src_python/tin_engine.
+description: Idiomatic Python 3.12+ for the orchestration layer. Use when writing Pydantic V2 models, Typer CLIs, asyncio pipelines, pytest/pytest-asyncio suites, or satisfying the strict mypy and ruff gates over src_python/tin_engine.
 ---
 
 # Agent Skill: Idiomatic Python & Async CLI Generation
 
-Enforces cutting-edge, safe, and testable Python 3.11+ architecture for orchestration, DTM generation pipelines, and CLI tools.
+Enforces cutting-edge, safe, and testable Python 3.12+ architecture for orchestration, DTM generation pipelines, and CLI tools.
 
 ## 1. Data Integrity & Validation (Pydantic V2)
 * **Strict Modeling:** Every external data input, configuration option, and API boundary must use **Pydantic models** (`pydantic.BaseModel`).

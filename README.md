@@ -97,7 +97,7 @@ sudo pacman -S cmake
 A relatively recent version of CMake is needed; the build declares a minimum of
 `3.24`.
 
-Additionally, you need Python 3.11 or newer.
+Additionally, you need Python 3.12 or newer.
 Then, to install Rasputin, change to the Rasputin root source directory and run
 ```
 pip install .

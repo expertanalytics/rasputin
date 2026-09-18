@@ -15,7 +15,7 @@ The goal is "water tight": no module ships without invariant tests, every algori
 >
 > Live today (`.github/workflows/main.yaml`): Catch2 C++ suites via ctest on
 > ubuntu and macos, an asan+ubsan Debug build of the same suites, pytest
-> across Python 3.11-3.13 with an enforced 85% line coverage floor, mypy
+> across Python 3.12-3.14 with an enforced 85% line coverage floor, mypy
 > strict, ruff, and the governance gates in `tools/`.
 
 ## Three data tiers [planned]
