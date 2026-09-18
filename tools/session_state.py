@@ -2,11 +2,11 @@
 """Print what the previous session was in the middle of.
 
 Answers one question: when a session starts cold or resumes after a context
-loss, what was actually being asked? Reads `.claude/current-task.md` (the
-in-flight ask, if the previous session wrote one) and the predecessor session
-transcript under ~/.claude/projects/, including prompts the user queued and the
-harness absorbed mid-turn -- which is where a lost instruction hides, because
-such a prompt never appears as a normal user turn.
+loss, what was actually being asked? Reads `.claude/current-task/` (the in-flight
+asks -- `session.md` first, each subagent's file after it as context) and the
+predecessor session transcript under ~/.claude/projects/, including prompts the
+user queued and the harness absorbed mid-turn -- which is where a lost
+instruction hides, because such a prompt never appears as a normal user turn.
 
 Known gap: only user entries whose content is a plain string are captured, so a
 prompt carrying an attachment or image arrives as a list and is dropped. No turn
@@ -22,6 +22,7 @@ import argparse
 import json
 import os
 import re
+from datetime import datetime
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
@@ -62,17 +63,50 @@ def human_turns(path: Path) -> list[tuple[str, str, str]]:
     return found
 
 
+def print_current_task() -> None:
+    """Print the session's ask first, then each subagent's as context.
+
+    A cold session needs one of these promoted, not a flat dump: `session.md` is
+    the record of what the round is for, and a subagent file is a fragment of it
+    delegated. Both are printed because a subagent file may be the only trace of
+    a step that died, but the order says which one to believe about the round.
+
+    Ordering by mtime would be wrong here -- the newest file is whichever
+    subagent wrote last, which is precisely not the thing to read first.
+    """
+    tasks = REPO / ".claude" / "current-task"
+    session = tasks / "session.md"
+    print("== .claude/current-task/session.md ==")
+    if session.exists():
+        print(session.read_text().rstrip())
+    else:
+        print("(absent -- no session-level ask was recorded in flight)")
+
+    others = sorted(p for p in tasks.glob("*.md") if p.name != "session.md")
+    if not others:
+        return
+    # Anything predating the session's own ask belongs to a round that has moved
+    # on; its owner should have deleted it and evidently did not. Flagged rather
+    # than hidden, because the file may still hold the only note of a dead step.
+    cutoff = session.stat().st_mtime if session.exists() else 0.0
+    print(f"\n== {len(others)} subagent ask(s), as context ==")
+    for path in others:
+        stale = " [STALE -- predates session.md; sweep it]" if path.stat().st_mtime < cutoff else ""
+        stamp = datetime.fromtimestamp(path.stat().st_mtime).strftime("%Y-%m-%d %H:%M")
+        print(f"\n-- {path.name} ({stamp}){stale}")
+        print(path.read_text().rstrip())
+    print(
+        "\nDelete a subagent file once its handback is read; sweep any you did not"
+        " spawn before starting a round."
+    )
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--turns", type=int, default=5)
     args = parser.parse_args()
 
-    current = REPO / ".claude" / "current-task.md"
-    print("== .claude/current-task.md ==")
-    if current.exists():
-        print(current.read_text().rstrip())
-    else:
-        print("(absent -- no ask was recorded in flight)")
+    print_current_task()
 
     # Claude Code exports CLAUDE_CODE_SESSION_ID; the older spelling is kept as a
     # fallback so the script still excludes the current session if that changes.

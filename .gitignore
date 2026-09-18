@@ -18,6 +18,7 @@ lib/build_*
 .venv
 .claude/settings.local.json
 .claude/current-task.md
+.claude/current-task/
 
 # Coverage artifacts (--cov is enabled by default in pyproject addopts)
 .coverage
