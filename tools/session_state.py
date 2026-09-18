@@ -13,7 +13,15 @@ prompt carrying an attachment or image arrives as a list and is dropped. No turn
 in this project is currently lost that way, but the failure is silent, which is
 the worst mode for a tool whose job is to surface a dropped turn.
 
-Usage: python tools/session_state.py [--turns N]
+Untested: nothing under tests/ exercises this file and no CI job runs it, so
+every defect in it so far was found by hand. When a gate suite is written, take
+this file first -- it is what the project's own recovery depends on and the only
+one with a demonstrated hang -- and cover the input classes that actually bit,
+since two of them nobody guessed: FIFO (open() blocks with no writer, and an
+in-process timeout cannot see it), symlink loop, dangling symlink, directory,
+non-UTF-8, chmod 000, no extension, missing directory.
+
+Usage: python3 tools/session_state.py [--turns N]
 """
 
 from __future__ import annotations
