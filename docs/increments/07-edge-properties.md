@@ -673,10 +673,36 @@ bits and a mis-mapped vocabulary produces a wrong mesh no C++ suite can see
    containing `"` and a name containing a space — both of which
    `src_python/tin_engine/viz/svg.py:_edge_classes` would interpolate into a `class` attribute
    unescaped.
-6. **`fingerprint()` hashing names only, or bits only.** Killed by two
-   vocabularies over the same names with two bits swapped, which must
-   fingerprint differently. A digest that cannot see a permutation is a digest
-   that blesses exactly risk 20's failure.
+6. **`fingerprint()` hashing names only, or bits only.** A digest that cannot
+   see which bit a name occupies is a digest that blesses exactly risk 20's
+   failure, so this is the mutation round's reason for existing. Two cases are
+   needed, and **the swap this entry originally named is not one of them**:
+
+   - *Bits only* is killed by a rename on unchanged bits — `{river: 0}` against
+     `{creek: 0}`.
+   - *Names only* is **not** killed by "two vocabularies over the same names
+     with two bits swapped", which is what this entry claimed when the design
+     was written. Measured in the red step: a names-only digest emitted in
+     sorted-`(bit, name)` order prints `river;road` for `{river: 0, road: 1}`
+     and `road;river` for `{river: 1, road: 0}`, so the swap already
+     fingerprints differently and the mutant survived all 72 cases of the
+     suite's first draft. The case that separates them is two vocabularies
+     agreeing on **every name and its order** while disagreeing about which bit
+     one of them occupies — `{river: 0, road: 1}` against `{river: 0, road: 2}`,
+     whose names-only digest is `river;road` both times. That is risk 20
+     exactly: an artifact written by one is read by the other with a property
+     shifted.
+
+   Both cases are in `tests/python/test_features.py`
+   (`test_fingerprint_sees_a_permutation_of_the_bits`, kept because it is a real
+   property, and `test_fingerprint_sees_a_bit_moved_without_reordering_the_names`,
+   which is the one that kills the mutant).
+
+   Related, and not in the original entry: a `hash()`-based digest is killed
+   only by a cross-process check. `PYTHONHASHSEED` salting makes an in-process
+   digest look perfectly stable while refusing every artifact ever written, so
+   the round needs `test_fingerprint_is_stable_across_processes`, which compares
+   two children run under different seeds.
 7. **`mask()` accepting an unknown name and returning 0.** Killed by asserting
    the raise. Silent zero is a constraint that quietly loses every property.
 
