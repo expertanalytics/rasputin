@@ -1,12 +1,14 @@
 # Increment 6 — the CDT viewer
 
-Status: design settled; **6a has landed, 6b has not.** The contingency split
-under "Files and LOC" fired: `6a` (the binding surface) is on this branch as
-`11d2acc` red and `94f94e2` green, and `6b` (the renderer) is unwritten -- no
-`viz/scene.py`, `viz/style.py`, `viz/svg.py`, `viz/fixtures.py`, no `draw`
-command, and no `tests/python/test_viz_scene.py`. What exists in
-`src_python/tin_engine/viz/` is `__init__.py` and `protocols.py`, both 6a's.
-Re-runnable: `git log --oneline master..HEAD` and `ls src_python/tin_engine/viz/`.
+Status: design settled; **6a has landed, 6b-i is on this branch, 6b-ii has not
+been started.** The contingency split under "Files and LOC" fired for 6a (the
+binding surface, merged as `311459b`), and the 6b seam under "The firing
+condition" has now fired too -- see the measurement there. `6b-i` is
+`viz/scene.py` plus `tests/python/test_viz_scene.py`; `6b-ii` -- `viz/style.py`,
+`viz/svg.py`, `viz/fixtures.py` and the `draw` command -- is unwritten and ships
+as its own PR. What exists in `src_python/tin_engine/viz/` is `__init__.py`,
+`protocols.py` (6a's) and `scene.py` (6b-i's). Re-runnable:
+`git log --oneline master..HEAD` and `ls src_python/tin_engine/viz/`.
 
 **The number is authoring order, not ship order.** This increment is designed
 sixth and **ships before `05b`** (`docs/increments/05b-noder-driver.md`, not yet
@@ -224,7 +226,7 @@ src_python/tin_engine/
   viz/
     __init__.py                         # re-exports render_svg, Scene, SvgStyle
     protocols.py                        # MeshLike, PslgLike -- typing.Protocol
-    scene.py                            # (mesh, pslg) -> Scene   [the real logic]
+    scene.py                            # build_scene(pslg, mesh) -> Scene  [the real logic]
     style.py                            # SvgStyle: Pydantic V2, frozen
     svg.py                              # (Scene, SvgStyle) -> str
     fixtures.py                         # the synthetic gallery, declarative
@@ -309,6 +311,36 @@ means the same point on both sides; and because `04-cdt.md`'s central finding is
 that detria splits nothing, so each input constraint edge is exactly one output
 edge and the join is 1:1.
 
+#### Ring closure is the caller's policy, not the scene's — `closed_roles`
+
+**Defect found and closed during 6b-i.** The paragraph above asks the scene to
+colour ring edges *including their closure* — a `Pslg` never stores a ring's
+closing edge — while `viz/protocols.py` types `ChainLike.role` as `object`
+precisely so that `viz/` cannot name `_core.ChainRole`. Those two requirements
+are jointly unsatisfiable inside `scene.py`: it cannot tell a ring from a
+breakline, so it either closes every chain (inventing a constraint on every
+breakline) or closes none (making every ring's closing edge a false
+`MASKED_EDGE_WITHOUT_CHAIN`).
+
+Resolved by moving the policy out rather than the type in:
+`build_scene(..., closed_roles=())` takes the roles whose chains are rings, and
+`cli.py` — the single composition root, which already imports `_core` and knows
+the enum — supplies `(ChainRole.Outer, ChainRole.Hole)`. Membership is tested
+with `==` only, which `object` provides, so the opacity survives intact. A chain
+of two or fewer vertices is never closed, because fewer than three vertices is
+not a ring — and, for the one-vertex case, because the closure would be
+`_key(a, a)`, a self-loop violating `SceneEdge`'s `a < b` ordering. Not because
+of double emission: an earlier revision of this line said "closing one would
+emit its single edge twice", which the implementation contradicts — the join
+accumulates into a dict keyed on `_key(a, b)`, so a repeated key only ORs
+`is_river`.
+`tests/python/test_viz_scene.py::TestRoleJoin::test_a_single_vertex_ring_is_never_closed_into_a_self_loop`
+is what defends the guard.
+
+`tests/python/test_viz_scene.py::TestRoleJoin::test_closure_policy_is_the_callers`
+pins the defaulted behaviour: with no `closed_roles`, the closing edge is
+reported as a disagreement rather than guessed at.
+
 Both halves of that join can therefore disagree, and **the renderer draws the
 disagreement instead of reconciling it**:
 
@@ -346,7 +378,9 @@ So the renderer **never** emits a blank page:
   role colours, over a tinted background, with the status name and
   `describe(status)` set large in the header band and the backend's `message`
   beneath it. The user sees exactly the geometry they submitted and exactly what
-  the engine said about it.
+  the engine said about it — and if a non-`Ok` run arrives carrying a full mesh,
+  which `testing.md`'s `cdt` catalog says no outcome ever does, the status still
+  wins over a mesh that cannot exist.
 - **`Ok` with zero triangles** — same treatment, plus the header band reading
   `Ok BUT EMPTY` in the alarm colour. This is the specific silent failure risk 5
   names, and after this increment it is the most visually obvious state the tool
@@ -356,9 +390,31 @@ So the renderer **never** emits a blank page:
   extent and the header band says so, rather than the picture being an
   accidental point.
 - **Non-finite coordinates** cannot reach here — the PSLG validator's stage 3
-  rejects them — but the viewport transform asserts finiteness anyway, because
-  the cost is one line and the failure mode without it is an SVG that renders as
-  nothing in silence.
+  rejects them — but finiteness is checked anyway, because the cost is one line
+  and the failure mode without it is an SVG that renders as nothing in silence.
+
+  **The check moved from the viewport transform (6b-ii) to `build_scene`
+  (6b-i), during 6b-i.** The reason is that the bbox is computed before the
+  transform ever runs, and a single NaN vertex makes `min`/`max` NaN, which
+  makes the whole box NaN: by the time the transform could assert, the scene
+  it would assert about is already meaningless, and every downstream comparison
+  against a NaN bound is silently false. `build_scene` raises `ValueError` on
+  any non-finite coordinate of the array it is about to bound — the mesh's
+  vertices when a mesh is drawn, the PSLG's otherwise. On *any*, not on the
+  first: `np.isfinite(vertices).all()` inspects the whole array and the message
+  names no coordinate.
+  `TestBoundingBox::test_a_non_finite_coordinate_is_refused` pins it over
+  `nan`, `inf` and `-inf`. 6b-ii's transform therefore inherits a finite bbox as
+  a precondition and does not re-check it.
+
+**No drawable mesh means no findings.** Whenever the scene draws the input PSLG
+alone — non-`Ok`, or `Ok` with zero triangles, or no mesh at all — there is no
+constrained-edge mask for the chains to disagree with, so `findings` is empty
+and every chain edge keeps its role. The alternative would be an alarm per chain
+edge on a picture whose real alarm is already the status; it is also what makes
+"Either count being non-zero is a finding about the backend's mask" true, since
+a run with no mask contributes no counts.
+`TestClassification::test_a_scene_without_a_mesh_reports_no_findings` pins it.
 
 ### Y-axis flip
 
@@ -533,6 +589,50 @@ threshold:
 > **If `scene.py` alone exceeds 150 non-comment lines** (est. 90; factor 1.67),
 > 6b-ii is split into its own PR without further argument.
 
+**Measured on the tree this paragraph ships in: `scene.py` is 193 non-comment
+lines by the command, 194 in truth. The gate fires; 6b-ii is its own PR.**
+Re-runnable:
+`grep -vcE '^\s*(//|#|\*|/\*|\*/|$)' src_python/tin_engine/viz/scene.py`.
+The one-line gap is the command's `\*` alternative — meant for a C block-comment
+continuation — swallowing `build_scene`'s keyword-only marker, a bare `    *,`.
+Noted rather than corrected. The command is not the definition of the unit —
+`CLAUDE.md` §2 is, exclusively, and the unit is non-comment lines. The grep is
+the **instrument** every figure in this document was taken with, and it
+approximates that unit imperfectly, as this one line demonstrates. It is kept
+because a Python-only variant would make the numbers incomparable to 6a's, and
+because a one-line undercount at this size cannot flip a gate on its own. The
+blind spot is exactly one line in `scene.py` and zero lines in all three 6a
+Python files, so no published figure is affected. Re-runnable:
+`grep -nE '^\s*\*' src_python/tin_engine/viz/*.py src_python/tin_engine/_core.pyi`
+prints exactly `scene.py:203:    *,`.
+Factor 2.16 on the ~90 estimate. The composition is the interesting part, and it
+contradicts the "algorithm behaves like increment 3" prediction only in the
+accounting: **68 of the 194 true lines are docstrings** and 126 are
+executable — against `@tester`'s undocumented throwaway prototype at 130. The
+algorithm came in *at* the prototype's size; what the count command sees on top
+of it is documentation, since `grep -v '#'` excludes `#` comments and counts
+docstring lines. So the gate fired on declaration-and-documentation surface
+again, exactly as 6a did, and the split it forces is still the right call —
+`svg.py`, `style.py` and `fixtures.py` would be documented to the same standard
+and 500 is not a generous remaining budget. Re-runnable for the 68/126 split:
+```sh
+python3 - <<'PY'
+import ast, pathlib, re
+src = pathlib.Path("src_python/tin_engine/viz/scene.py").read_text()
+doc = {n for e in ast.walk(ast.parse(src))
+       if isinstance(e, ast.Expr) and isinstance(e.value, ast.Constant)
+       and isinstance(e.value.value, str)
+       for n in range(e.value.lineno, e.value.end_lineno + 1)}
+counted = [i for i, l in enumerate(src.splitlines(), 1) if not re.match(r"^\s*(#|$)", l)]
+print(len(counted), len([i for i in counted if i in doc]))
+PY
+```
+(prints `194 68`; the 194 is the true count, per the note above, and
+126 = 194 - 68 is the executable remainder.)
+This is the measured evidence for the open question of whether `CLAUDE.md` §2's
+unit should exclude docstrings; it is not settled here, and the gate is applied
+as written.
+
 150 rather than a number near 700 because the measurement has to happen while a
 split is still cheap: `scene.py` is the only 6b module whose realised density
 can be known before the largest module is written, and a split decided at 690
@@ -685,10 +785,20 @@ untrue, and a deferred entry of that kind reads as work 6a skipped. So:
 - **Owed by 6a**, and fixed in this PR: the two `project_structure.md`
   statements that `94f94e2` falsified.
 - **Owed by 6b**: the `ROADMAP.md` rewrite and the `testing.md` `viz` section.
-  Both name 6b's modules and `tests/python/test_viz_scene.py`, none of which
-  exist yet; writing them at 6a would mean a `[live]` catalog entry for an
-  absent suite, which is the same class of defect as the risk-4 line above.
-  Genuinely 6b's, and deferring them is what the README licenses.
+  Both name 6b's modules and `tests/python/test_viz_scene.py`, which did not
+  exist when this was written; writing them at 6a would have meant a `[live]`
+  catalog entry for an absent suite, which is the same class of defect as the
+  risk-4 line above. Genuinely 6b's, and deferring them is what the README
+  licenses.
+
+  **The `viz` section is written in 6b-i, not deferred again**, because the
+  reason for deferring it was that the suite it names did not exist and 6b-i is
+  the branch that creates it — the deferral would otherwise be false about its
+  own tree. The seam split is precisely why this obligation moved earlier. It
+  lands with `test_viz_scene.py` marked `[live]` and `test_viz_svg.py` /
+  `test_cli_draw.py` marked `[planned]`; the "What we do not test" entry for the
+  stylesheet and the rejected golden-file comparison stays with 6b-ii, which is
+  the half that writes the stylesheet.
 
 ### Owed by 6a
 
@@ -736,14 +846,21 @@ number-versus-ship-order gap is not a puzzle for the next reader.
 describes 6b's files.
 
 1. The directory listing's `viz/` entry gains `scene.py`, `style.py`, `svg.py`
-   and `fixtures.py` as they land, and loses the "(6b)" marker.
+   and `fixtures.py` as they land, and loses the "(6b)" marker. **Done for
+   `scene.py` in 6b-i**, which also corrected that line's signature: shipped is
+   `build_scene(pslg, mesh=None, ...)`, not `(mesh, pslg)`. `style.py`, `svg.py`
+   and `fixtures.py` remain 6b-ii's.
 2. The Python API surface section's `tin_engine.viz` line gains the `draw`
-   command once `cli.py` carries it.
+   command once `cli.py` carries it. 6b-ii's.
 
 **`testing.md`**
 
-3. Add a `viz` section to the invariant catalog, marked `[planned]` until this
-   merges and `[live]` after, naming `test_viz_scene.py` as the
-   invariant-critical suite and stating explicitly that the stylesheet is not
-   tested and that a golden-file SVG comparison is rejected — otherwise
-   "What we do not test" leaves the gap open for someone to fill.
+3. Add a `viz` section to the invariant catalog naming `test_viz_scene.py` as
+   the invariant-critical suite. **Done in 6b-i**, with `test_viz_scene.py`
+   `[live]` and the two ordinary suites `[planned]`; the split-by-owing-PR note
+   at the top of this section says why it moved earlier.
+4. State explicitly in "What we do not test" that the stylesheet is not tested
+   and that a golden-file SVG comparison is rejected — otherwise that section
+   leaves the gap open for someone to fill. **6b-ii's**, because that is the
+   half that writes the stylesheet; asserting now that an unwritten stylesheet
+   is untested is the same defect in the other direction.
