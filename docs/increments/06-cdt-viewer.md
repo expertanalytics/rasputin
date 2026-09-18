@@ -1,12 +1,14 @@
 # Increment 6 — the CDT viewer
 
-Status: design settled; **6a has landed, 6b has not.** The contingency split
-under "Files and LOC" fired: `6a` (the binding surface) is on this branch as
-`11d2acc` red and `94f94e2` green, and `6b` (the renderer) is unwritten -- no
-`viz/scene.py`, `viz/style.py`, `viz/svg.py`, `viz/fixtures.py`, no `draw`
-command, and no `tests/python/test_viz_scene.py`. What exists in
-`src_python/tin_engine/viz/` is `__init__.py` and `protocols.py`, both 6a's.
-Re-runnable: `git log --oneline master..HEAD` and `ls src_python/tin_engine/viz/`.
+Status: design settled; **6a has landed, 6b-i is on this branch, 6b-ii has not
+been started.** The contingency split under "Files and LOC" fired for 6a (the
+binding surface, merged as `311459b`), and the 6b seam under "The firing
+condition" has now fired too -- see the measurement there. `6b-i` is
+`viz/scene.py` plus `tests/python/test_viz_scene.py`; `6b-ii` -- `viz/style.py`,
+`viz/svg.py`, `viz/fixtures.py` and the `draw` command -- is unwritten and ships
+as its own PR. What exists in `src_python/tin_engine/viz/` is `__init__.py`,
+`protocols.py` (6a's) and `scene.py` (6b-i's). Re-runnable:
+`git log --oneline master..HEAD` and `ls src_python/tin_engine/viz/`.
 
 **The number is authoring order, not ship order.** This increment is designed
 sixth and **ships before `05b`** (`docs/increments/05b-noder-driver.md`, not yet
@@ -309,6 +311,29 @@ means the same point on both sides; and because `04-cdt.md`'s central finding is
 that detria splits nothing, so each input constraint edge is exactly one output
 edge and the join is 1:1.
 
+#### Ring closure is the caller's policy, not the scene's — `closed_roles`
+
+**Defect found and closed during 6b-i.** The paragraph above asks the scene to
+colour ring edges *including their closure* — a `Pslg` never stores a ring's
+closing edge — while `viz/protocols.py` types `ChainLike.role` as `object`
+precisely so that `viz/` cannot name `_core.ChainRole`. Those two requirements
+are jointly unsatisfiable inside `scene.py`: it cannot tell a ring from a
+breakline, so it either closes every chain (inventing a constraint on every
+breakline) or closes none (making every ring's closing edge a false
+`MASKED_EDGE_WITHOUT_CHAIN`).
+
+Resolved by moving the policy out rather than the type in:
+`build_scene(..., closed_roles=())` takes the roles whose chains are rings, and
+`cli.py` — the single composition root, which already imports `_core` and knows
+the enum — supplies `(ChainRole.Outer, ChainRole.Hole)`. Membership is tested
+with `==` only, which `object` provides, so the opacity survives intact. A chain
+of two or fewer vertices is never closed, because closing one would emit its
+single edge twice.
+
+`tests/python/test_viz_scene.py::TestRoleJoin::test_closure_policy_is_the_callers`
+pins the defaulted behaviour: with no `closed_roles`, the closing edge is
+reported as a disagreement rather than guessed at.
+
 Both halves of that join can therefore disagree, and **the renderer draws the
 disagreement instead of reconciling it**:
 
@@ -356,9 +381,20 @@ So the renderer **never** emits a blank page:
   extent and the header band says so, rather than the picture being an
   accidental point.
 - **Non-finite coordinates** cannot reach here — the PSLG validator's stage 3
-  rejects them — but the viewport transform asserts finiteness anyway, because
-  the cost is one line and the failure mode without it is an SVG that renders as
-  nothing in silence.
+  rejects them — but finiteness is checked anyway, because the cost is one line
+  and the failure mode without it is an SVG that renders as nothing in silence.
+
+  **The check moved from the viewport transform (6b-ii) to `build_scene`
+  (6b-i), during 6b-i.** The reason is that the bbox is computed before the
+  transform ever runs, and a single NaN vertex makes `min`/`max` NaN, which
+  makes the whole box NaN: by the time the transform could assert, the scene
+  it would assert about is already meaningless, and every downstream comparison
+  against a NaN bound is silently false. `build_scene` raises `ValueError` on
+  the first non-finite coordinate of the array it is about to bound — the mesh's
+  vertices when a mesh is drawn, the PSLG's otherwise.
+  `TestBoundingBox::test_a_non_finite_coordinate_is_refused` pins it over
+  `nan`, `inf` and `-inf`. 6b-ii's transform therefore inherits a finite bbox as
+  a precondition and does not re-check it.
 
 ### Y-axis flip
 
@@ -532,6 +568,43 @@ threshold:
 > `@developer` runs the count command above over `src_python/tin_engine/viz/`.
 > **If `scene.py` alone exceeds 150 non-comment lines** (est. 90; factor 1.67),
 > 6b-ii is split into its own PR without further argument.
+
+**Measured on the tree this paragraph ships in: `scene.py` is 185 non-comment
+lines by the command, 186 in truth. The gate fires; 6b-ii is its own PR.**
+Re-runnable:
+`grep -vcE '^\s*(//|#|\*|/\*|\*/|$)' src_python/tin_engine/viz/scene.py`.
+The one-line gap is the command's `\*` alternative — meant for a C block-comment
+continuation — swallowing `build_scene`'s keyword-only marker, a bare `    *,`.
+Noted rather than corrected, because the command *is* the definition of the unit
+and every figure in this document was taken with it; a Python-only variant would
+make the numbers incomparable to 6a's. It is a one-line undercount at this size
+and it cannot flip a gate on its own.
+Factor 2.06 on the ~90 estimate. The composition is the interesting part, and it
+contradicts the "algorithm behaves like increment 3" prediction only in the
+accounting: **60 of the 185 counted lines are docstrings** and 125 are
+executable — against `@tester`'s undocumented throwaway prototype at 130. The
+algorithm came in *at* the prototype's size; what the count command sees on top
+of it is documentation, since `grep -v '#'` excludes `#` comments and counts
+docstring lines. So the gate fired on declaration-and-documentation surface
+again, exactly as 6a did, and the split it forces is still the right call —
+`svg.py`, `style.py` and `fixtures.py` would be documented to the same standard
+and 500 is not a generous remaining budget. Re-runnable for the 60/125 split:
+```sh
+python3 - <<'PY'
+import ast, pathlib, re
+src = pathlib.Path("src_python/tin_engine/viz/scene.py").read_text()
+doc = {n for e in ast.walk(ast.parse(src))
+       if isinstance(e, ast.Expr) and isinstance(e.value, ast.Constant)
+       and isinstance(e.value.value, str)
+       for n in range(e.value.lineno, e.value.end_lineno + 1)}
+counted = [i for i, l in enumerate(src.splitlines(), 1) if not re.match(r"^\s*(#|$)", l)]
+print(len(counted), len([i for i in counted if i in doc]))
+PY
+```
+(prints `186 60`; the 186 is the true count, per the note above.)
+This is the measured evidence for the open question of whether `CLAUDE.md` §2's
+unit should exclude docstrings; it is not settled here, and the gate is applied
+as written.
 
 150 rather than a number near 700 because the measurement has to happen while a
 split is still cheap: `scene.py` is the only 6b module whose realised density
