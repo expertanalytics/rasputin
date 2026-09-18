@@ -5,8 +5,8 @@
 "Ok, let's continue" is not an instruction. Neither is `git log`. Before the
 first subagent spawn, the first commit, or the first edit, in this order:
 
-1. `python tools/session_state.py` — prints `.claude/current-task/` (the
-   session's ask first, each live subagent's after it, stale files flagged) and the
+1. `python3 tools/session_state.py` — prints `.claude/current-task/` (the
+   session's ask first, each subagent's after it, as context) and the
    last human turns of the predecessor session, **including prompts the user
    queued and the harness absorbed mid-turn**. An absorbed prompt never appears
    as a normal turn, which is how a session on 2026-09-17 lost the instruction
@@ -50,11 +50,28 @@ survive. The same applies one level up, to *what is currently being asked*:
   so the deletions are assigned rather than left to good intentions:
   `session.md` is overwritten in place and deleted when the round lands; a
   subagent's file is deleted by **its spawner**, on reading the handback — never
-  by the subagent, which may be exactly the thing that died; and a session
-  **sweeps `.claude/current-task/` of every file it did not itself just spawn
-  before starting a round.** A file from a dead agent therefore survives at most
-  one round. That last sweep is the backstop, because it is the only deletion
-  that still happens when the agent owing one is gone.
+  by the subagent, which may be exactly the thing that died, and the rule
+  recurses, so a nested subagent's file is its own spawner's and never the
+  session's; and a session **sweeps `.claude/current-task/` of every file
+  belonging to an agent it is no longer waiting on, after step 1 above and never
+  before it.** A file from a dead agent therefore survives at most one round.
+  That last sweep is the backstop, because it is the only deletion that still
+  happens when the agent owing one is gone.
+
+  The sweep test is liveness, not provenance. "Every file I did not just spawn"
+  was the first spelling and it was wrong: a session already mid-round with two
+  live subagents has, at the instant it starts a parallel round, *just* spawned
+  none of them, so that criterion deletes its own live agents' files and every
+  nested one. Ordering matters for the same reason — sweep before reading and
+  the file destroyed is precisely the dead step's, which is the case the
+  backstop exists for.
+
+  **One session per working tree.** `session.md` is a reserved singular name and
+  nothing assigns it, so two sessions in one tree collide on it exactly as
+  subagents once did. The subagent fix does not apply, because the thing that
+  hands out a subagent's path is its spawner and no one hands out a session's.
+  Concurrent sessions need separate worktrees; `git worktree add` is the cheap
+  answer and `.claude/current-task/` is per-tree by construction.
 
   Nothing mechanically stops a persona writing `session.md`; the control is that
   it is handed a different path and never has cause to guess one. A `PreToolUse`
@@ -92,16 +109,19 @@ execution refutes it. `0fa05e3` is the correction.
 When there is nothing to run — a comment, a design invariant, a claim of the
 form "X is verified by Y" — one question catches the same defect by inspection,
 in a line, with no build: **is the claim about the same object the code
-evaluates?** In all five occurrences on this project it was not. A §2 gate
+evaluates?** In every occurrence recorded below it was not. A §2 gate
 matched path-shaped keys (`boost/geometry`, `date/date.h`) against bare CMake
 tokens, so `find_package(Boost COMPONENTS geometry)` and `date::date` passed
 until `1807e73`. Three increment-2 tests bounded the compiler's FMA choice
 rather than `FastKernel`'s error (`dd67a68`). Increment 5's oracles used exact
 incidence where the producer used hot-pixel proximity, a "second" candidate
 generator that was the same broad phase, and the dedup's own records in place of
-the input (`docs/increments/05-noder.md`, guarantees 14 and 15). A comment
-credited a fixture whose clause is `!= 0.0` for killing a mutant of a function
-guarded by `!= 0.0 && <= max()` (`7ece838`). Each repair was made in the same
+the input (`docs/increments/05-noder.md`, guarantees 14 and 15). A comment credited the
+NaN fixture with killing the `!= 0.0` mutant of a function guarded by
+`> 0.0 && <= max()`, where the second conjunct rejects NaN under either
+spelling, so that fixture kills nothing (`7ece838`). That sentence itself
+shipped with the two objects swapped and was caught in review — the check
+applied to the paragraph that defines it. Each repair was made in the same
 mode as the defect — reasoning about the claim instead of running it — which is
 how the repairs kept seeding the next occurrence.
 
@@ -190,7 +210,7 @@ On a prose or tooling branch the pass has a different scope from a code one:
 
 One pass per branch is affordable on `docs/increments/README.md`'s cost terms —
 it is the same pass the code path already pays — and it is the only step here
-that has repeatedly found real defects. On this branch alone `@reviewer` caught
+that has repeatedly found real defects. On PR #68 alone `@reviewer` caught
 the false limitation in `debd8d1`, the unswept citations in `760dbd9`, and two
 of the three self-confirming invariants in increment 5. The session driving
 those rounds produced every one of them and saw none.

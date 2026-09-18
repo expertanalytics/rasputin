@@ -63,6 +63,22 @@ def human_turns(path: Path) -> list[tuple[str, str, str]]:
     return found
 
 
+def _read(path: Path, absent: str) -> str:
+    """Contents, or a named placeholder. Never raises.
+
+    A recovery tool that dies on one unreadable file takes the human-turn
+    half -- the reason it exists -- down with it. Measured: a chmod 000 file
+    raised PermissionError out of read_text() and main() never reached the
+    transcript scan.
+    """
+    try:
+        return path.read_text().rstrip()
+    except FileNotFoundError:
+        return absent
+    except OSError:
+        return "(unreadable)"
+
+
 def print_current_task() -> None:
     """Print the session's ask first, then each subagent's as context.
 
@@ -77,27 +93,31 @@ def print_current_task() -> None:
     tasks = REPO / ".claude" / "current-task"
     session = tasks / "session.md"
     print("== .claude/current-task/session.md ==")
-    if session.exists():
-        print(session.read_text().rstrip())
-    else:
-        print("(absent -- no session-level ask was recorded in flight)")
+    print(_read(session, "(absent -- no session-level ask was recorded in flight)"))
 
-    others = sorted(p for p in tasks.glob("*.md") if p.name != "session.md")
+    # Every entry, not just *.md: a subagent that names its file without an
+    # extension must not become invisible to the tool whose job is surfacing
+    # what would otherwise be lost.
+    others = sorted(p for p in tasks.glob("*") if p.is_file() and p.name != "session.md")
     if not others:
         return
-    # Anything predating the session's own ask belongs to a round that has moved
-    # on; its owner should have deleted it and evidently did not. Flagged rather
-    # than hidden, because the file may still hold the only note of a dead step.
-    cutoff = session.stat().st_mtime if session.exists() else 0.0
+    # No staleness flag here. It was computed from session.md's mtime, but
+    # session.md is overwritten as a round progresses, so an ordinary
+    # write-spawn-update sequence made every LIVE subagent file predate it and
+    # get marked for sweeping -- the one file a cold session must not lose.
+    # Liveness is not visible from a directory listing, so the sweep rule in
+    # .claude/REQUIRED-READING.md owns it and this prints what is there.
     print(f"\n== {len(others)} subagent ask(s), as context ==")
     for path in others:
-        stale = " [STALE -- predates session.md; sweep it]" if path.stat().st_mtime < cutoff else ""
-        stamp = datetime.fromtimestamp(path.stat().st_mtime).strftime("%Y-%m-%d %H:%M")
-        print(f"\n-- {path.name} ({stamp}){stale}")
-        print(path.read_text().rstrip())
+        try:
+            stamp = datetime.fromtimestamp(path.stat().st_mtime).strftime("%Y-%m-%d %H:%M")
+        except OSError:
+            stamp = "unknown time"
+        print(f"\n-- {path.name} ({stamp})")
+        print(_read(path, "(unreadable)"))
     print(
-        "\nDelete a subagent file once its handback is read; sweep any you did not"
-        " spawn before starting a round."
+        "\nDelete a subagent file once its handback is read; sweep any belonging"
+        " to an agent you are no longer waiting on, after reading the turns below."
     )
 
 
