@@ -57,12 +57,12 @@ src_python/tin_engine/     # public Python API (distribution name: rasputin)
   raster.py                # the ONLY adapter from decoded data into _core (planned)
   _core.pyi                # type stubs for the compiled extension
   viz/                     # CDT -> SVG renderer; never imports _core
-    __init__.py            # package docstring; re-exports arrive with 6b
+    __init__.py            # re-exports Scene, SvgStyle, build_scene, render_svg
     protocols.py           # MeshLike / PslgLike / ChainLike -- typing.Protocol
-    scene.py               # build_scene(pslg, mesh) -> Scene
-    style.py               # SvgStyle: frozen Pydantic V2 (6b)
-    svg.py                 # (Scene, SvgStyle) -> str (6b)
-    fixtures.py            # the synthetic gallery (6b)
+    scene.py               # build_scene(pslg, mesh=None, ...) -> Scene
+    style.py               # SvgStyle: frozen Pydantic V2, canvas geometry only
+    svg.py                 # (Scene, SvgStyle) -> str; the stylesheet lives here
+    fixtures.py            # the eight-fixture synthetic gallery, declarative
   io/                      # all file decoding lives here (planned)
     __init__.py
     geotiff.py             # TIFF container + GeoKey decoding -> DemTile
@@ -293,7 +293,7 @@ There is no `setup.py`. It was removed with the foundation reset, along with the
 
 ## Python API surface
 
-The public API is the `tin_engine` package, calling into `tin_engine._core`. `tin_engine.viz` is the renderer that turns a triangulation into an SVG a person can look at; it consumes the `typing.Protocol`s in `viz/protocols.py` and **never imports `_core`**, so it is testable with no compiled extension in the process. `cli.py` is the single composition root that joins the two -- the same shape as the rule below that exactly one module adapts decoded raster data into `_core`. The `rasputin draw` command that drives it is increment 6b's and does not exist yet.
+The public API is the `tin_engine` package, calling into `tin_engine._core`. `tin_engine.viz` is the renderer that turns a triangulation into an SVG a person can look at; it consumes the `typing.Protocol`s in `viz/protocols.py` and **never imports `_core`**, so it is testable with no compiled extension in the process. `cli.py` is the single composition root that joins the two -- the same shape as the rule below that exactly one module adapts decoded raster data into `_core`. The `rasputin draw` command drives it: it looks a fixture up in `viz.fixtures.GALLERY`, maps that fixture's **string** chain roles onto `_core.ChainRole` -- `viz/` may not name the enum, so the mapping is the composition root's -- runs `build_pslg` and `triangulate`, and hands the fixture itself to `build_scene` as the `PslgLike`, which is what lets a fixture the validator rejects still be drawn. It is also the only place a path exists, and it resolves and refuses one before writing.
 
 The pre-migration `rasputin.*` modules (`mesh.py`, `geometry.py`, `reader.py`, `tin_repository.py` and friends) are archived under `legacy/rasputin/` rather than kept in place, so this is a re-implementation against the new backend rather than a rewiring of stable modules. Porting proceeds one entry point at a time; shapes worth preserving should be read out of `legacy/` before being reintroduced.
 

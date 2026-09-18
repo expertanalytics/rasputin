@@ -163,7 +163,7 @@ These are the "water tight" properties — they must hold on every input regardl
 - Strahler order is monotonic non-decreasing from headwater to outlet.
 - A confluence of two order-`k` streams produces an order-`k+1` segment downstream.
 
-### `viz` [partly live]
+### `viz` [live]
 
 The only Python section of this catalog, and the only one whose module is pure
 computation over data handed across the pybind11 boundary rather than C++.
@@ -172,9 +172,15 @@ invariant-critical suite (`docs/increments/06-cdt-viewer.md`, "What is worth
 testing"); it runs against hand-built fakes of `MeshLike`/`PslgLike` with no
 compiled extension in the process, which is what `viz/`'s protocol boundary
 buys. `tests/python/test_viz_svg.py` and `tests/python/test_cli_draw.py` are
-**[planned]** — 6b-ii's, ordinary rather than invariant-critical, because a
+6b-ii's and now **[live]** — ordinary rather than invariant-critical, because a
 renderer's failure mode is a wrong-looking picture and a person catches that
-instantly.
+instantly. What they pin is structure and arithmetic: that the document parses
+as XML, that element counts equal the scene's primitive counts, that the
+viewport flips y and preserves one scale, that a `class` token puts each edge in
+the right stroke class, that no failure presentation is a blank page, and that
+every gallery fixture is the shape its design row claims. `test_cli_draw.py`
+adds the composition root's own obligations — the role mapping, `closed_roles`,
+passthrough of the engine's words, the `--labels` refusal and path validation.
 
 Invariants over `build_scene` — all `[live]`:
 
@@ -334,5 +340,14 @@ deleted as out of scope.
   pixel-scale interpretation, GeoKey decoding and CRS construction all have to
   be covered here.
 - **Visual aesthetics** of the output mesh beyond the perceptual-diff regression on tier-3 fixtures.
+- **`viz/svg.py`'s stylesheet.** No colour, stroke width or dash array is
+  asserted anywhere, and a **golden-file SVG comparison is rejected outright**
+  (`docs/increments/06-cdt-viewer.md`, "What is worth testing"): it would pin the
+  stylesheet, fail on every cosmetic improvement, and detect only the class of
+  defect a person sees instantly. What *is* asserted is the `class` token on each
+  element — which stroke class an edge belongs to is structure, and it is the
+  only way to check that role colouring reaches the right edges without naming a
+  colour. Written down because filling this gap is the first thing someone will
+  propose.
 
 These are out of scope and would inflate the suite without buying confidence in rasputin's own code.

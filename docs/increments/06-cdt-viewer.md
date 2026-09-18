@@ -1,14 +1,19 @@
 # Increment 6 — the CDT viewer
 
-Status: design settled; **6a has landed, 6b-i is on this branch, 6b-ii has not
-been started.** The contingency split under "Files and LOC" fired for 6a (the
-binding surface, merged as `311459b`), and the 6b seam under "The firing
-condition" has now fired too -- see the measurement there. `6b-i` is
-`viz/scene.py` plus `tests/python/test_viz_scene.py`; `6b-ii` -- `viz/style.py`,
-`viz/svg.py`, `viz/fixtures.py` and the `draw` command -- is unwritten and ships
-as its own PR. What exists in `src_python/tin_engine/viz/` is `__init__.py`,
-`protocols.py` (6a's) and `scene.py` (6b-i's). Re-runnable:
-`git log --oneline master..HEAD` and `ls src_python/tin_engine/viz/`.
+Status: design settled; **6a and 6b-i have landed, and 6b-ii is on this
+branch.** The contingency split under "Files and LOC" fired for 6a (the binding
+surface, merged as `311459b`) and the 6b seam under "The firing condition" fired
+too (6b-i, merged as `ab4681c`). This branch is `6b-ii`: `viz/style.py`,
+`viz/svg.py`, `viz/fixtures.py`, `viz/__init__.py`'s re-exports and `cli.py`'s
+`draw` command, against the two suites committed red in `5c9b13c`. With it, the
+increment's stated requirement is met -- `rasputin draw catchment --out x.svg`
+puts a picture in front of a person. Re-runnable:
+`git log --oneline master..HEAD`, `ls src_python/tin_engine/viz/` and
+`rasputin draw --list`.
+
+**The second LOC gate fired as well, after the fact rather than in time to act
+on it** -- see "A second gate" below for the measurement and for why the seam it
+names could not be cut once the red suite existed.
 
 **The number is authoring order, not ship order.** This increment is designed
 sixth and **ships before `05b`** (`docs/increments/05b-noder-driver.md`, not yet
@@ -264,6 +269,11 @@ rasputin draw sliver-fan --out /tmp/sliver.svg
 - `--labels` draws vertex indices; refused above `--label-limit` (default 500
   vertices) with a message naming the count, rather than emitting an
   unreadable file.
+- `--vertices` draws one dot per vertex. Off by default, per "What the picture
+  shows" item 5, and this flag is the only way to turn it on: `SvgStyle` carries
+  a `show_vertices` field, and a style field with no CLI route to it is dead
+  weight. Independent of `--labels`, which draws the index rather than the dot
+  and is the option with a limit on it.
 - `--no-delaunay` forwards `CdtOptions::delaunay = false`, so the user can see
   *both* triangulations of the same input and form an opinion about what the
   Delaunay property is buying. This is one bound bool and it is the cheapest
@@ -279,7 +289,14 @@ scope".
 
 ## What the picture shows
 
-Drawn in this order, because later strokes must win where they overlap:
+Drawn in this order — **with one exception, items 3 and 4** — because later
+strokes must win where they overlap. The exception is recorded in `svg.py`'s
+module docstring as built: the two edge classes share a single `<g id="edges">`
+emitted in sorted `Scene.edges` order, so constrained and unconstrained strokes
+interleave and are separated by **width and opacity in the stylesheet** rather
+than by paint order. That is a deliberate simplification of this list, not a
+defect: one sorted pass is what makes the emitted order a function of the scene
+alone, and the class token each edge carries is what the suite asserts.
 
 1. **Page background**, a light neutral that is *not* white. A hole in the mesh
    is simply the absence of triangles, so it reads as a hole only if the page
@@ -291,9 +308,10 @@ Drawn in this order, because later strokes must win where they overlap:
 3. **Unconstrained edges**, thin, light. Deduplicated: each interior edge is
    shared by two triangles and must be emitted once, or every interior edge is
    drawn at double weight and the picture lies about density.
-4. **Constrained edges**, thicker and saturated, drawn on top, **coloured by the
-   role of the input chain they came from** — outer boundary, hole boundary,
-   breakline, river breakline. Four visually distinct strokes.
+4. **Constrained edges**, thicker and saturated — and so legible over an
+   unconstrained edge without being painted after it — **coloured by the role of
+   the input chain they came from**: outer boundary, hole boundary, breakline,
+   river breakline. Four visually distinct strokes.
 5. **Vertices**, small dots, off by default; **indices**, off by default.
 6. **Legend** (the five stroke classes), **scale bar** in world units, and a
    **header band** carrying status, triangle count, vertex count,
@@ -452,14 +470,78 @@ Each exists to answer one question a person can ask of the picture:
 | `catchment` | outer ring with two lake holes and a braided breakline — the shape the project is actually for |
 | `sliver-fan` | a fan of near-collinear constraints; what the triangulator does with extreme aspect ratios |
 | `corner-hole` | a hole touching the outer ring at exactly one vertex — `InvalidTopology`'s neighbour, and a topology a person should look at |
-| `hole-in-hole` | a hole nested inside a second outline; what "in-domain" means, drawn |
+| `hole-in-hole` | a hole nested directly inside a second hole. **Drawn as a third failure presentation, not as a mesh** -- the backend answers `InvalidTopology`, "A hole was directly inside another hole", which is precisely "what in-domain means" made visible. The row as first written expected a mesh, and **the narrowing that made it a refusal was the red step's, not an unsatisfiability of the design** — see "`hole-in-hole`: what the suite requires and what the design meant" below |
 | `breakline-chain` | an open breakline crossing the interior; where the Delaunay property visibly stops |
 | `river` | the same, with `is_river` set, so the `is_river` stroke is exercised before 5b depends on it |
 | `not-noded` | two crossing constraints — a **deliberate failure fixture**, rendering the non-`Ok` presentation, so that presentation is seen rather than assumed |
-| `degenerate` | an all-collinear point set — the `DegenerateGeometry` presentation |
+| `degenerate` | an all-collinear point set. **Refused before `triangulate` is ever reached, so this is *not* the `DegenerateGeometry` presentation** -- `build_pslg` rejects the ring with `PslgError.DegenerateRing`, "chain 0 is declared Outer but every vertex is collinear", and returns no `Pslg` at all. The design's intent survives: the input is drawn alone with the engine's own words in the header band. The words are a `PslgDiagnostic`'s. Found in 6b-ii's red step; see "The `PslgLike` is the fixture itself" below, which is the decision this forced |
 
-The last two matter as much as the first six: a failure presentation nobody has
-looked at is a failure presentation that is wrong.
+**Three of the eight are failure presentations, and they are rows 4, 7 and 8
+rather than the last two**: `hole-in-hole` and `not-noded` are backend refusals
+(`InvalidTopology`, `NotNoded`) of a PSLG the validator accepted, and
+`degenerate` never reaches `triangulate` because the validator refuses it first.
+They matter as much as the five that mesh: a failure presentation nobody has
+looked at is a failure presentation that is wrong. That said, three refusal
+pages out of eight is more than this gallery set out to have — see the next
+section.
+
+### `hole-in-hole`: what the suite requires and what the design meant
+
+Worth stating plainly, because the row above was rewritten after the fact and
+the first rewrite justified itself in a circle.
+
+- **What the suite requires.** `test_viz_svg.py::TestGallery::test_hole_in_hole_really_nests_twice`
+  asserts two chains **of role `hole`**, one strictly inside the other. Under
+  that reading every satisfying fixture is one the backend refuses, because a
+  hole directly inside a hole is exactly `InvalidTopology`.
+- **What the design meant.** This row originally said "a hole nested inside a
+  second *outline*" — outer ring, hole, and inside that hole a second outer ring
+  carrying its own hole: an island in a lake with a pond on it.
+- **The design's reading is reachable.** Four nested rings in that order, at
+  gallery magnitudes, pass `build_pslg` and triangulate `Ok` with 16 triangles.
+  Reproduce it by handing `build_pslg` the chains
+  `(Outer, Hole, Outer, Hole)` on four concentric squares with the outer ones
+  wound CCW and the holes CW, then calling `triangulate`.
+
+So the design was satisfiable as a **mesh**; the red step narrowed it to two
+holes, and the row was then rewritten to match the test. The refusal row is not
+wrong — it accurately describes the fixture that exists — but it must not be
+read as saying the design's picture is impossible.
+
+**Follow-up, not this increment's.** Changing the fixture now costs a test
+amendment and a re-render, and 6b-ii's red-before-green trace is worth more than
+the picture. But the design's reading is the only entry that would show *nested
+in-domain regions* — a region inside a hole, which is the thing "in-domain"
+actually means — and three of eight fixtures are now refusal pages. A ninth
+fixture on the design's reading, or a widening of the test to accept it, belongs
+on the next viewer increment.
+
+### The `PslgLike` is the fixture itself -- and why the roles are strings
+
+**Defect found and closed during 6b-ii**, in the same shape as 6b-i's
+`closed_roles` finding: the design named a presentation without checking which
+object would still exist when it fired.
+
+`build_scene` takes a `PslgLike`. For a fixture the validator *rejects* there is
+no `Pslg` -- `build_pslg` returns `ok == False` and `pslg is None` -- so on the
+`degenerate` fixture there is nothing to hand it, and "the input PSLG is drawn
+alone" has no input PSLG. Two ways out: give `build_scene` a nullable `Pslg` and
+a separate copy of the vertices and chains, or make the fixture itself satisfy
+`PslgLike`. **Ruled: the fixture is the `PslgLike`**, because the protocol exists
+precisely so that anything with those four members can be drawn, and because the
+alternative re-derives the chain structure at the composition root, which is one
+more place for the role join to go wrong.
+
+That forces the roles. `viz/` never imports `_core`, so `fixtures.py` cannot name
+`ChainRole`; it authors roles as the strings `"outer"`, `"hole"` and
+`"breakline"`, and `cli.py` -- which already knows the enum -- maps them for
+`build_pslg` and passes `closed_roles=("outer", "hole")`. `ChainLike.role` is
+typed `object` and the scene compares roles with `==` only, so both spellings
+work unchanged; the renderer names a stroke class from either with
+`getattr(role, "name", role)`. `test_viz_svg.py::TestStrokeClasses::test_a_string_role_names_its_own_stroke_class`
+is the half of that only the string exercises, and
+`test_cli_draw.py::TestFailurePresentation` is what makes the whole arrangement
+necessary rather than merely possible.
 
 ## Files and LOC
 
@@ -473,12 +555,12 @@ binding estimate is larger than its apparent complexity; the existing
 | `bindings/core.cpp` (additions) | two enums, `Pslg`, `IndexedMesh2`, `CdtOutcome`, `PslgBuildResult`, `build_pslg`, `triangulate`, array views + keep-alive | ~150 |
 | `src_python/tin_engine/_core.pyi` (additions) | stubs for all of the above | ~60 |
 | `src_python/tin_engine/viz/protocols.py` | `MeshLike`, `PslgLike`, `ChainLike` | ~25 |
-| `src_python/tin_engine/viz/style.py` | `SvgStyle`, frozen Pydantic V2 | ~45 |
+| `src_python/tin_engine/viz/style.py` | `SvgStyle`, frozen Pydantic V2 | ~45 (**realised 33**) |
 | `src_python/tin_engine/viz/scene.py` | edge dedup, mask decode, role join, disagreement findings, bbox, `Scene` | ~90 |
-| `src_python/tin_engine/viz/svg.py` | viewport transform, element emission, legend, scale bar, header band | ~110 |
-| `src_python/tin_engine/viz/fixtures.py` | the eight fixtures | ~80 |
+| `src_python/tin_engine/viz/svg.py` | viewport transform, element emission, legend, scale bar, header band | ~110 (**realised 304**) |
+| `src_python/tin_engine/viz/fixtures.py` | the eight fixtures | ~80 (**realised 175**) |
 | `src_python/tin_engine/viz/__init__.py` | re-exports | ~5 |
-| `src_python/tin_engine/cli.py` (additions) | `draw`, `--list`, path validation | ~45 |
+| `src_python/tin_engine/cli.py` (additions) | `draw`, `--list`, path validation | ~45 (**realised 139**) |
 
 **~610 production LOC.** Under `CLAUDE.md` §2's 700, but the margin is thin and
 the binding half is the half that overruns. Non-production changes on top:
@@ -649,6 +731,37 @@ So: **after `fixtures.py` is green, re-run the count over `viz/`. If the 6b
 total exceeds 500 non-comment lines, 6b-ii splits again** -- at 500 rather than
 700 because `cli.py` and the two ordinary suites still follow, and the point of
 a pre-declared seam is that it fires before the ceiling, not at it.
+
+**Measured on the tree this paragraph ships in: the 6b total is 709 by the
+command, and the gate fires by 209 lines.** Per file, by
+`grep -vcE '^\s*(//|#|\*|/\*|\*/|$)'`: `scene.py` 193 (6b-i's, unchanged),
+`svg.py` 304, `fixtures.py` 175, `style.py` 33, plus 4 added lines in
+`__init__.py`. The instrument's `\*` blind spot swallows four more real lines
+(three in `svg.py`, one in `cli.py`), so the true figure is 713; it is recorded
+the same way 6b-i's was, with the command's number first, because the command is
+what a reader will re-run.
+
+**The seam it names could not be cut, and that is the finding rather than an
+excuse.** The gate's own wording places the measurement "after `fixtures.py` is
+green" -- which is after `@tester` has committed `test_viz_svg.py` red, and that
+single file covers `style.py`, `svg.py` **and** `fixtures.py` together. Cutting
+6b-ii in two therefore means splitting a committed test file, and
+`docs/increments/README.md` step 3 forbids the green step from touching one. So
+the gate as written can only fire once the split it authorises has become
+unavailable. **The fix is to the protocol, not to this increment: a LOC gate has
+to sit before the red step, not after it**, because the red step is what fixes
+the shape of the PR. Any future pre-declared seam should be measured against the
+*design's* file list at the moment `@tester` is briefed.
+
+What the ceiling in `CLAUDE.md` §2 actually bounds -- one pull request -- is not
+breached: this PR is **655** production lines by the command (659 true), 45
+under the 700. The 709 is the cumulative 6b figure across two PRs, which is what
+the gate asked for and which no rule bounds. Composition, for the open question
+about whether §2's unit should exclude docstrings: of `svg.py`'s 307 true lines,
+107 are docstring and 200 executable; `fixtures.py` is 32 and 143, and its 143
+is almost entirely typed coordinates; `style.py` is 23 and 10. Declaration and
+documentation surface is where the lines went for the third time in this
+increment, exactly as 6a and 6b-i recorded.
 
 ## What is worth testing
 
@@ -879,7 +992,7 @@ The Python API surface section also gains a line for `tin_engine.viz`; the
 
 ### Owed by 6b
 
-**`ROADMAP.md` — to be rewritten in 6b, and the defect is larger than a missing line.**
+**`ROADMAP.md` — rewritten in 6b-ii. Done.** The defect was larger than a missing line.
 
 The file's last commit is `f4efb6b`, *Use meshio for writing to file*, dated
 **9 November 2018** (`git log -1 --format='%ad %s' f4efb6b`). Its three bullets
@@ -896,7 +1009,9 @@ is that an unreferenced, seven-year-stale roadmap sits at the top level where a
 new reader will find it first and be misled by it.
 
 Two honest repairs: delete it, or rewrite it as an index. **Ruled: rewrite as an
-index**, because the one thing `docs/increments/` genuinely lacks is a single
+index, and done on this branch** -- one table, one row per increment, carrying
+the number, one line, the status with its merge commit, and the path to the
+record; because the one thing `docs/increments/` genuinely lacks is a single
 screen showing what shipped and what is next. The rewrite carries, per
 increment, only: the number, one line, the status, and the path to the record —
 and **nothing that duplicates an increment file**, because duplicated detail is
@@ -910,10 +1025,14 @@ describes 6b's files.
 1. The directory listing's `viz/` entry gains `scene.py`, `style.py`, `svg.py`
    and `fixtures.py` as they land, and loses the "(6b)" marker. **Done for
    `scene.py` in 6b-i**, which also corrected that line's signature: shipped is
-   `build_scene(pslg, mesh=None, ...)`, not `(mesh, pslg)`. `style.py`, `svg.py`
-   and `fixtures.py` remain 6b-ii's.
+   `build_scene(pslg, mesh=None, ...)`, not `(mesh, pslg)`. **The remaining
+   three, and the `__init__.py` line that still promised re-exports as future
+   work, are done in 6b-ii.**
 2. The Python API surface section's `tin_engine.viz` line gains the `draw`
-   command once `cli.py` carries it. 6b-ii's.
+   command once `cli.py` carries it. **Done in 6b-ii**, and it states the two
+   things about the command that are not guessable: that the role mapping onto
+   `ChainRole` is the composition root's, and that the fixture itself is the
+   `PslgLike`.
 
 **`testing.md`**
 
@@ -923,6 +1042,9 @@ describes 6b's files.
    at the top of this section says why it moved earlier.
 4. State explicitly in "What we do not test" that the stylesheet is not tested
    and that a golden-file SVG comparison is rejected — otherwise that section
-   leaves the gap open for someone to fill. **6b-ii's**, because that is the
-   half that writes the stylesheet; asserting now that an unwritten stylesheet
-   is untested is the same defect in the other direction.
+   leaves the gap open for someone to fill. **Done in 6b-ii**, which is the half
+   that writes the stylesheet; asserting at 6a or 6b-i that an unwritten
+   stylesheet is untested would have been the same defect in the other
+   direction. The `viz` section also moves from `[partly live]` to `[live]`,
+   with `test_viz_svg.py` and `test_cli_draw.py` marked `[live]` and what they
+   pin stated in one sentence.
