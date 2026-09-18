@@ -1,6 +1,12 @@
 # Increment 6 — the CDT viewer
 
-Status: design settled. Design only; no production code and no tests exist yet.
+Status: design settled; **6a has landed, 6b has not.** The contingency split
+under "Files and LOC" fired: `6a` (the binding surface) is on this branch as
+`11d2acc` red and `94f94e2` green, and `6b` (the renderer) is unwritten -- no
+`viz/scene.py`, `viz/style.py`, `viz/svg.py`, `viz/fixtures.py`, no `draw`
+command, and no `tests/python/test_viz_scene.py`. What exists in
+`src_python/tin_engine/viz/` is `__init__.py` and `protocols.py`, both 6a's.
+Re-runnable: `git log --oneline master..HEAD` and `ls src_python/tin_engine/viz/`.
 
 **The number is authoring order, not ship order.** This increment is designed
 sixth and **ships before `05b`** (`docs/increments/05b-noder-driver.md`, not yet
@@ -441,16 +447,92 @@ than discovered mid-PR, because the seam is already natural:
   CLI command. ~375 LOC. Buildable and fully testable against the protocols
   without 6a, which is the point of `protocols.py` being in 6a's half.
 
-**6a as shipped: 441 non-comment production lines against the ~235 estimated**
--- `bindings/core.cpp` 264 (est. ~150), `_core.pyi` 118 (est. ~60),
-`viz/protocols.py` 52 (est. ~25), `viz/__init__.py` 7 (not estimated). Under
-`CLAUDE.md` §2's 700, and the overrun is entirely docstring and stub body: risk
-6 named pybind docstrings as the pressure and named the right one, but the
-estimate was made against a calibration file with far shorter ones. The
-consequence for 6b is that the split is now load-bearing rather than
-precautionary: 441 + the ~375 estimated for the renderer exceeds 700, so the two
-halves cannot be recombined into one PR, and 6b should re-estimate before it
-starts rather than inherit ~375.
+**6a as shipped: 437 non-comment production lines against the ~235 estimated**
+-- `bindings/core.cpp` +260 (est. ~150), `_core.pyi` +118 (est. ~60),
+`viz/protocols.py` 52 (est. ~25), `viz/__init__.py` 7 (not estimated). Measured
+at `bc53100` by counting added, non-comment, non-blank lines:
+
+```sh
+for f in bindings/core.cpp src_python/tin_engine/_core.pyi \
+         src_python/tin_engine/viz/protocols.py \
+         src_python/tin_engine/viz/__init__.py; do
+  git diff master...HEAD -- "$f" | grep '^+' | grep -v '^+++' | sed 's/^+//' \
+    | grep -vcE '^\s*(//|#|\*|/\*|\*/|$)'
+done
+```
+
+An earlier revision of this paragraph recorded 441 and `core.cpp` at 264; the
+command above returns 437 and 260, and the command is the definition. Under
+`CLAUDE.md` §2's 700 either way.
+
+The overrun is entirely docstring and stub body: risk 6 named pybind docstrings
+as the pressure and named the right one, but the estimate was made against a
+calibration file with far shorter ones. Two consequences, and they are
+different in kind:
+
+- **The halves cannot be recombined.** 437 + the ~375 estimated for the
+  renderer is 812. 6a and 6b are two PRs, not one, and that is now arithmetic
+  rather than caution.
+- **6b's own estimate is suspect, but not by the same factor.** See the seam
+  ruling below.
+
+### 6b's seam: pre-declared, armed, with a firing condition
+
+**Ruled: yes, 6b carries a pre-declared seam, and it cuts at `Scene`.**
+
+- **6b-i — the geometry mapping.** `viz/scene.py` and
+  `tests/python/test_viz_scene.py`, which is this increment's sole
+  invariant-critical suite and therefore carries the mutation round. Est. ~90
+  production lines. It consumes `MeshLike` and `PslgLike`, which 6a already
+  shipped, and imports nothing else; it is reviewable end to end against a
+  hand-built fake with no compiled extension in the process.
+- **6b-ii — the renderer and the command.** `viz/svg.py`, `viz/style.py`,
+  `viz/fixtures.py`, `viz/__init__.py`'s re-exports, `cli.py`'s `draw`, and the
+  `test_viz_svg.py` / `test_cli_draw.py` suites. Est. ~285.
+
+**The cut is dependency-ordered and cannot be reversed.** `svg.py` is
+`(Scene, SvgStyle) -> str` and `Scene` is defined in `scene.py`, so 6b-i ships
+first. `style.py` goes with 6b-ii, not 6b-i: `SvgStyle` is the renderer's input
+and the scene builder never sees it, so pairing them keeps 6b-i purely the
+mesh-and-PSLG-to-geometry mapping. This is the one place the split is *not*
+symmetric with 6a's, where `protocols.py` was deliberately pushed into the
+earlier half so either half could be built first.
+
+The honest cost: **6b-i produces no picture.** It ends with a `Scene` a person
+can inspect in a REPL and a mutation round, and the increment's stated
+requirement -- a human looking at a drawing -- is met only at 6b-ii. That is
+acceptable for a contingency that may not fire; it would not be acceptable as a
+default, which is why the seam is armed rather than fired.
+
+**Why not simply apply 6a's realised factor.** 437/235 is 1.86, and 1.86 x 375
+is 697 -- at the ceiling, which is the argument for a seam. But that factor is
+not transferable verbatim, and the counter-evidence is in this repo: increment
+3's `include/terrain/core/pslg_builder.hpp` was estimated at 255 and came in at
+**249 non-comment** (`grep -vcE '^\s*(//|\*|/\*|\*/|$)'
+include/terrain/core/pslg_builder.hpp`; 457 raw), a factor of 0.98 on a file
+that is nothing but algorithm. The 6a blow-up is concentrated in
+declaration-surface files -- pybind docstrings, `.pyi` stub bodies,
+`Protocol` members, each of which is one line of meaning per several lines of
+text. `scene.py` and `svg.py` are algorithm and should behave like increment 3;
+`fixtures.py` is declarative data and is the 6b file most likely to behave like
+6a. So 6b's plausible range is ~400-600, not a confident ~697.
+
+**The firing condition, because increment 3 named a seam and it went unused.**
+Increment 3 said "no split" *and* named where the split would cut, and the seam
+was never used because nobody re-measured -- a note to a future reader is not a
+contingency. So the measurement here has a moment, an owner, a command and a
+threshold:
+
+> After `viz/scene.py` is green and before `viz/svg.py` is started,
+> `@developer` runs the count command above over `src_python/tin_engine/viz/`.
+> **If `scene.py` alone exceeds 150 non-comment lines** (est. 90; factor 1.67),
+> 6b-ii is split into its own PR without further argument.
+
+150 rather than a number near 700 because the measurement has to happen while a
+split is still cheap: `scene.py` is the only 6b module whose realised density
+can be known before the largest module is written, and a split decided at 690
+is a split decided too late. If `scene.py` lands at or under 150, the seam
+stands down and 6b ships as one PR.
 
 ## What is worth testing
 
@@ -520,13 +602,48 @@ it.
 4. **Zero-copy lifetime.** A `py::array_t` over an `IndexedMesh2`'s vectors
    without a correct base object is a use-after-free whose symptom is a
    plausible-looking wrong picture. It is the one genuinely dangerous line here.
-   Guarded by a named test that drops every reference to the mesh and then reads
-   the array, and by the asan Debug job.
+   **What guards it, as shipped in 6a:** every array-returning accessor goes
+   through one helper, `readonly_view` in `bindings/core.cpp`, which takes the
+   owning `py::object` as the array's base -- six surfaces in total
+   (`Pslg.vertices`, `Pslg.chain_indices`, `Pslg.indices_of`,
+   `IndexedMesh2.vertices`, `.triangles`, `.constrained_edges`). `@reviewer`
+   read the mechanism on all six; `@developer` falsified three of them by
+   substituting a decoy capsule for the owner and confirming the suite goes red.
+   The assertions are `TestZeroCopyLifetime` in `tests/python/test_core_cdt.py`:
+   one test drops every reference to the mesh and the outcome, churns the
+   allocator, and re-reads; a second asserts the base object and its refcount
+   directly, so a failure says "no keep-alive" rather than "the numbers
+   changed". That pair runs in the `python` job of
+   `.github/workflows/main.yaml` on all three interpreter legs.
+
+   **What does not guard it: asan.** No CI job compiles this increment's array
+   code under a sanitizer. The `sanitizers` job
+   (`.github/workflows/main.yaml:48-69`) configures `-DCMAKE_BUILD_TYPE=Debug`
+   with `-fsanitize=address,undefined` and sets no other option, and
+   `RASPUTIN_BUILD_PYTHON` defaults `OFF` (`CMakeLists.txt:73`), so
+   `bindings/core.cpp` is never in that build at all. The `python` job builds
+   the extension -- via `pip install -e`, which configures
+   `RASPUTIN_BUILD_PYTHON=ON` (`pyproject.toml:77`) -- but with no sanitizer
+   flags. Re-runnable in two greps:
+   `grep -n RASPUTIN_BUILD_PYTHON .github/workflows/main.yaml` returns nothing,
+   and `grep -n 'option(RASPUTIN_BUILD_PYTHON' CMakeLists.txt` shows the `OFF`.
+   An earlier revision of this line claimed "and by the asan Debug job"; it was
+   never true, and it is exactly the "X is verified by Y" where Y evaluates a
+   different object that `.claude/REQUIRED-READING.md` rules on -- named here
+   rather than deleted, because this increment is the one that cites that rule.
+
+   Closing the gap means enabling `RASPUTIN_BUILD_PYTHON` on the sanitizer
+   runner, which needs pybind11 and a Python dev environment installed there.
+   That is its own change with its own justification and is **not** part of this
+   increment; the `RASPUTIN_SANITIZER` option already listed as *planned* in
+   `project_structure.md`'s build section is the natural place for it.
 5. **`--labels` on a large mesh** produces an enormous unreadable file.
    Guarded by the refusal above `--label-limit`, which is a hard error and not a
    warning.
 6. **The LOC margin is thin** (~610 of 700) and pybind docstrings count against
-   it. Hence the pre-declared split rather than a discovered one.
+   it. Hence the pre-declared split rather than a discovered one. **Realised:**
+   this risk fired. The split was used, 6a overran its estimate by 86%, and the
+   cause was the one named here. See "6b's seam" for what follows from it.
 7. **Scope creep toward a plotting library.** The first feature request that
    cannot be served by static SVG — hover, picking, a colour ramp over elevation
    — will be argued as a reason to add matplotlib. The dependency ruling above
@@ -537,7 +654,40 @@ it.
 Per `docs/increments/README.md`, these are fixed in this PR or not recorded.
 There is no ledger.
 
-**`ROADMAP.md` — rewritten, and the defect is larger than a missing line.**
+**This section is split by owing PR, because two different obligations were
+being conflated.** `docs/increments/README.md`'s rule closes over *defects found
+during* an increment -- pre-existing rot the increment happened to walk past.
+Deferring one of those to the half of the increment that creates the thing it
+documents is consistent with the rule. But a falsehood an increment *creates*
+is not a found defect; nothing licenses shipping a document this branch made
+untrue, and a deferred entry of that kind reads as work 6a skipped. So:
+
+- **Owed by 6a**, and fixed in this PR: the two `project_structure.md`
+  statements that `94f94e2` falsified.
+- **Owed by 6b**: the `ROADMAP.md` rewrite and the `testing.md` `viz` section.
+  Both name 6b's modules and `tests/python/test_viz_scene.py`, none of which
+  exist yet; writing them at 6a would mean a `[live]` catalog entry for an
+  absent suite, which is the same class of defect as the risk-4 line above.
+  Genuinely 6b's, and deferring them is what the README licenses.
+
+### Owed by 6a
+
+**`project_structure.md`** -- two statements `94f94e2` made false.
+
+1. The `bindings/core.cpp` section said the module "Currently binds the
+   `Point2`/`Point3` value types". False as of `94f94e2`. Rewritten for the
+   surface that exists, including the statement that `PslgBuilder` is
+   deliberately not exposed and why.
+2. The directory listing showed `src_python/tin_engine/` without `viz/`, which
+   now exists. Added, with the two modules that are actually there and the rest
+   marked as 6b's.
+
+The Python API surface section also gains a line for `tin_engine.viz`; the
+`draw` command is 6b's and is named there as pending rather than described.
+
+### Owed by 6b
+
+**`ROADMAP.md` — to be rewritten in 6b, and the defect is larger than a missing line.**
 
 The file's last commit is `f4efb6b`, *Use meshio for writing to file*, dated
 **9 November 2018** (`git log -1 --format='%ad %s' f4efb6b`). Its three bullets
@@ -562,18 +712,17 @@ exactly how the current file rotted. It gains this increment and `05b` as the
 two open entries, with the ordering ruling above stated in one line so the
 number-versus-ship-order gap is not a puzzle for the next reader.
 
-**`project_structure.md`**
+**`project_structure.md`** -- the remaining entry, which is 6b's because it
+describes 6b's files.
 
-1. The directory listing shows `src_python/tin_engine/` with `raster.py` and
-   `io/` marked *(planned)* and nothing else. Add `viz/` and its six modules.
-2. The `bindings/core.cpp` section describes the module as exposing point
-   primitives. Rewrite for the surface above, including the statement that
-   `PslgBuilder` is deliberately not exposed and why.
-3. The Python API surface section gains `tin_engine.viz` and the `draw` command.
+1. The directory listing's `viz/` entry gains `scene.py`, `style.py`, `svg.py`
+   and `fixtures.py` as they land, and loses the "(6b)" marker.
+2. The Python API surface section's `tin_engine.viz` line gains the `draw`
+   command once `cli.py` carries it.
 
 **`testing.md`**
 
-4. Add a `viz` section to the invariant catalog, marked `[planned]` until this
+3. Add a `viz` section to the invariant catalog, marked `[planned]` until this
    merges and `[live]` after, naming `test_viz_scene.py` as the
    invariant-critical suite and stating explicitly that the stylesheet is not
    tested and that a golden-file SVG comparison is rejected — otherwise

@@ -55,6 +55,14 @@ src_python/tin_engine/     # public Python API (distribution name: rasputin)
   __init__.py              # re-exports from tin_engine._core
   cli.py                   # Typer entry point declared in pyproject
   raster.py                # the ONLY adapter from decoded data into _core (planned)
+  _core.pyi                # type stubs for the compiled extension
+  viz/                     # CDT -> SVG renderer; never imports _core
+    __init__.py            # package docstring; re-exports arrive with 6b
+    protocols.py           # MeshLike / PslgLike / ChainLike -- typing.Protocol
+    scene.py               # (mesh, pslg) -> Scene (6b)
+    style.py               # SvgStyle: frozen Pydantic V2 (6b)
+    svg.py                 # (Scene, SvgStyle) -> str (6b)
+    fixtures.py            # the synthetic gallery (6b)
   io/                      # all file decoding lives here (planned)
     __init__.py
     geotiff.py             # TIFF container + GeoKey decoding -> DemTile
@@ -253,7 +261,18 @@ Final Lawson edge-flip pass. Skips constraint-tagged edges. Parallel with edge-c
 
 ### `bindings/core.cpp`
 
-Single pybind11 module that exposes the C++ API to Python. Built as the `_core` extension, installed into the `tin_engine` package, and re-exported by `src_python/tin_engine/__init__.py`. Currently binds the `Point2`/`Point3` value types; `__repr__` routes through the `std::formatter` specializations in `point.hpp` so the C++ and Python renderings cannot drift.
+Single pybind11 module that exposes the C++ API to Python. Built as the `_core` extension, installed into the `tin_engine` package, and re-exported by `src_python/tin_engine/__init__.py`. Typed from `src_python/tin_engine/_core.pyi`, which is what `mypy --strict` sees.
+
+As of increment 6a (`94f94e2`, `docs/increments/06-cdt-viewer.md`) it binds:
+
+- the `Point2`/`Point3` value types, whose `__repr__` routes through the `std::formatter` specializations in `point.hpp` so the C++ and Python renderings cannot drift;
+- the `dot` and `cross` free functions over both point types;
+- `Pslg`, `Chain`, `PslgDiagnostic`, `PslgBuildResult`, `IndexedMesh2` and `CdtOutcome`, plus the `ChainRole`, `PslgError` and `CdtStatus` enums and a `describe(CdtStatus)` helper;
+- two more free functions: `build_pslg`, which validates and returns a `PslgBuildResult` carrying a diagnostics list rather than raising, and `triangulate`, which wraps the kernel call in `py::gil_scoped_release` -- the only call in the module long enough to be worth the release.
+
+Every array-shaped accessor -- `Pslg.vertices`, `Pslg.chain_indices`, `Pslg.indices_of`, `IndexedMesh2.vertices`, `.triangles`, `.constrained_edges` -- returns a **read-only, zero-copy `py::array_t` whose base object is the owner**, built through the single `readonly_view` helper. Nothing is copied and nothing outlives its buffer.
+
+**`PslgBuilder` is deliberately not exposed, and neither is any kernel template parameter.** The builder is a mutable accumulator; binding it would put half-built, validation-pending state on the Python side and make `Pslg`'s "validated on construction" guarantee unenforceable from there. Python hands `build_pslg` a finished array of vertices and chains and gets back either a `Pslg` or the reasons it is not one. A new accessor on this surface is a design change that needs a reason in an increment file, not a line in a PR.
 
 ## Build system
 
@@ -274,7 +293,9 @@ There is no `setup.py`. It was removed with the foundation reset, along with the
 
 ## Python API surface
 
-The public API is the `tin_engine` package, calling into `tin_engine._core`. The pre-migration `rasputin.*` modules (`mesh.py`, `geometry.py`, `reader.py`, `tin_repository.py` and friends) are archived under `legacy/rasputin/` rather than kept in place, so this is a re-implementation against the new backend rather than a rewiring of stable modules. Porting proceeds one entry point at a time; shapes worth preserving should be read out of `legacy/` before being reintroduced.
+The public API is the `tin_engine` package, calling into `tin_engine._core`. `tin_engine.viz` is the renderer that turns a triangulation into an SVG a person can look at; it consumes the `typing.Protocol`s in `viz/protocols.py` and **never imports `_core`**, so it is testable with no compiled extension in the process. `cli.py` is the single composition root that joins the two -- the same shape as the rule below that exactly one module adapts decoded raster data into `_core`. The `rasputin draw` command that drives it is increment 6b's and does not exist yet.
+
+The pre-migration `rasputin.*` modules (`mesh.py`, `geometry.py`, `reader.py`, `tin_repository.py` and friends) are archived under `legacy/rasputin/` rather than kept in place, so this is a re-implementation against the new backend rather than a rewiring of stable modules. Porting proceeds one entry point at a time; shapes worth preserving should be read out of `legacy/` before being reintroduced.
 
 ## What gets deleted, eventually
 

@@ -70,6 +70,17 @@ def cross(a: Point3, b: Point3) -> Point3:
 # for the checker's benefit; at runtime they are pybind11 enum objects, which
 # support the same ``name``, ``value``, ``__members__`` and call-by-value
 # protocol but are not instances of ``enum.Enum``.
+#
+# IDENTITY IS THE PART THAT DOES NOT CARRY OVER. Compare with ``==``, never
+# with ``is``. A real ``Enum`` member is a singleton, so ``is`` is the
+# idiomatic comparison and no checker will flag it here -- but every read of an
+# enum-valued attribute builds a fresh pybind11 object, so
+# ``outcome.status is CdtStatus.Ok`` is False even when the status IS Ok, and
+# so is ``outcome.status is outcome.status``. Only ``CdtStatus.Ok is
+# CdtStatus.Ok``, comparing the class attribute with itself, holds. The trap
+# therefore fires on exactly the values a caller tests: the ones that came out
+# of C++. ``==``, ``!=``, ``in`` against a tuple, and use as a dict key all
+# behave as expected, because they go through ``__eq__`` and ``__hash__``.
 
 class ChainRole(Enum):
     """The role a constraint chain plays in the domain."""
@@ -204,9 +215,11 @@ def build_pslg(
     vertices: npt.ArrayLike,
     chains: Iterable[tuple[Sequence[int], ChainRole, bool]],
 ) -> PslgBuildResult:
-    """Validate a constraint set. Invalid input is data, not an exception:
-    a ``ValueError`` means the vertex array is not ``(N, 2)``, and a
-    ``TypeError`` means a path or filename was passed where coordinates belong.
+    """Validate a constraint set. The coordinates are copied, so the result
+    neither aliases nor keeps alive the array handed in. Invalid input is data,
+    not an exception: a ``ValueError`` means the vertex array is not ``(N, 2)``,
+    and a ``TypeError`` means a path or filename was passed where coordinates
+    belong.
     """
 
 def triangulate(pslg: Pslg, delaunay: bool = ...) -> CdtOutcome:

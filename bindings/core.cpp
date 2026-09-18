@@ -94,9 +94,15 @@ template <typename T>
         throw py::type_error("vertices must be convertible to a float64 array of shape (N, 2)");
     }
     if (array.ndim() != 2 || array.shape(1) != 2) {
-        throw py::value_error(
-            std::format("vertices must have shape (N, 2), got a {}-dimensional array",
-                        array.ndim()));
+        // The whole shape, not just the rank: the predicate rejects (3, 3) on
+        // its second dimension, and "a 2-dimensional array" both reads as a
+        // contradiction and never names the dimension that is wrong.
+        std::string shape{"("};
+        for (py::ssize_t i = 0; i < array.ndim(); ++i) {
+            shape += std::format("{}{}", array.shape(i), i + 1 < array.ndim() ? ", " : "");
+        }
+        shape += array.ndim() == 1 ? ",)" : ")";
+        throw py::value_error(std::format("vertices must have shape (N, 2), got shape {}", shape));
     }
     const auto n = static_cast<std::size_t>(array.shape(0));
     const double* xy = array.data();
@@ -185,7 +191,7 @@ equality, read-only coordinates, and a hash consistent with equality.
 Dot product of two points of the same dimension.
 
 Accepts two Point2 or two Point3. Mixing dimensions raises TypeError rather
-than coercing. Runs in constant time.
+than coercing.
 )doc");
     m.def("dot", py::overload_cast<const Point3&, const Point3&>(&terrain::dot),
           py::arg("a"), py::arg("b"), "Dot product of two Point3.");
@@ -199,7 +205,7 @@ For two Point2 this returns a float: the scalar z-component of the 3D cross
 product, i.e. a.x*b.y - a.y*b.x. Its sign gives the orientation of the turn
 from a to b. For two Point3 it returns a Point3 orthogonal to both.
 
-Mixing dimensions raises TypeError. Runs in constant time.
+Mixing dimensions raises TypeError.
 )doc");
     m.def("cross", py::overload_cast<const Point3&, const Point3&>(&terrain::cross),
           py::arg("a"), py::arg("b"),
@@ -234,14 +240,25 @@ Why the validator rejected a proposed PSLG. Carried by PslgDiagnostic.error.
 The validator is exhaustive rather than early-returning, so bulk-wrong input
 commonly yields several of these at once.
 )doc")
-        .value("NoOuterChain", PslgError::NoOuterChain)
-        .value("ChainTooShort", PslgError::ChainTooShort)
-        .value("IndexOutOfRange", PslgError::IndexOutOfRange)
-        .value("NonFiniteVertex", PslgError::NonFiniteVertex)
-        .value("StoredClosure", PslgError::StoredClosure)
-        .value("WrongWinding", PslgError::WrongWinding)
-        .value("DegenerateRing", PslgError::DegenerateRing)
-        .value("VertexCountOverflow", PslgError::VertexCountOverflow);
+        .value("NoOuterChain", PslgError::NoOuterChain,
+               "No chain has role Outer, so there is no bounded domain to mesh.")
+        .value("ChainTooShort", PslgError::ChainTooShort,
+               "A chain has fewer vertices than its role needs: 3 for a ring, 2 for a "
+               "breakline.")
+        .value("IndexOutOfRange", PslgError::IndexOutOfRange,
+               "A chain names a vertex the buffer does not hold. The offending value is in "
+               "the message, never in .vertex.")
+        .value("NonFiniteVertex", PslgError::NonFiniteVertex,
+               "A vertex coordinate is NaN or infinite.")
+        .value("StoredClosure", PslgError::StoredClosure,
+               "A ring repeats its first vertex as its last. Drop the trailing index: a "
+               "chain stores distinct vertices and closes implicitly.")
+        .value("WrongWinding", PslgError::WrongWinding,
+               "A ring turns the wrong way: Outer must be counterclockwise, Hole clockwise.")
+        .value("DegenerateRing", PslgError::DegenerateRing,
+               "A ring encloses no area because all its vertices are collinear.")
+        .value("VertexCountOverflow", PslgError::VertexCountOverflow,
+               "The vertices or the chain indices do not fit Chain's 32-bit fields.");
 
     py::enum_<CdtStatus>(m, "CdtStatus", R"doc(
 What the triangulation backend did, grouped by what the caller should do about
@@ -425,9 +442,11 @@ mirroring the C++ accessor.
 Validate a constraint set and return a PslgBuildResult.
 
 vertices is any (N, 2) float64-convertible array-like; chains is a sequence of
-(indices, role, is_river). Invalid input is reported as the result's whole
-diagnostics list rather than raised. A mis-shaped vertex array is a ValueError;
-a path or a filename is a TypeError, because the core never sees a path.
+(indices, role, is_river). The coordinates are copied, so the returned Pslg
+neither aliases nor keeps alive the array handed in. Invalid input is reported
+as the result's whole diagnostics list rather than raised. A mis-shaped vertex
+array is a ValueError; a path or a filename is a TypeError, because the core
+never sees a path.
 )doc");
 
     m.def(
