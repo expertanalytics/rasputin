@@ -77,8 +77,10 @@ def _read(path: Path, absent: str) -> str:
         # Only a regular file may be opened. Dropping is_file() to surface broken
         # symlinks also admitted FIFOs, and open() on a FIFO with no writer BLOCKS
         # -- a recovery tool that hangs is worse than one that crashes, because
-        # nothing prints at all. Measured: with a FIFO in the directory the run
-        # times out; without it, it completes.
+        # nothing prints at all. Measured before this guard: with a FIFO in the
+        # directory the run timed out; without it, it completed. Time it from
+        # outside the process -- signal.alarm raises TimeoutError, which is an
+        # OSError, which the except below would swallow.
         if not stat.S_ISREG(path.stat().st_mode):
             return "(not a regular file)"
         return path.read_text(errors="replace").rstrip()

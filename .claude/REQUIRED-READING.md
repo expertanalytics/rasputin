@@ -120,6 +120,14 @@ broken inputs verified a fix that had just widened a glob from `*.md` to every
 file, all five were valid UTF-8 because the bug had been, and the first non-UTF-8
 file killed the tool (`fdbd532`).
 
+And make the probe able to fail. If a pass looks the same as a probe that never
+ran, it measured nothing. A reviewer timed this tool's FIFO case with
+`signal.alarm`, but `TimeoutError` is an `OSError`, so the blocking `open()`
+raised the alarm *inside* the `except OSError` it was meant to expose: the probe
+reported "no hang" in output produced entirely by the hang. Time a hang from
+outside the process, and prefer a probe whose pass and its own absence look
+different — `b0bf129` is the correction.
+
 When there is nothing to run — a comment, a design invariant, a claim of the
 form "X is verified by Y" — one question catches the same defect by inspection,
 in a line, with no build: **is the claim about the same object the code
