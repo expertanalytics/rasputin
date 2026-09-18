@@ -801,6 +801,68 @@ stylesheet, fail on every cosmetic improvement, and detect only the class of
 defect a human sees instantly. Written down because it is the first thing
 someone will propose.
 
+## Prior art in `legacy/`
+
+Added retroactively on 2026-09-18, in the commit that made this section part of
+step 1 in `docs/increments/README.md`. Increment 6 is the increment that exposed
+the gap: a renderer was designed here without anyone opening the legacy tree's
+renderer, and the conclusion below — that it answers a different question — was
+never reached because it was never asked.
+
+`grep -rln "scene\|colour\|color\|visuali" legacy/rasputin/` returns **ten**
+files: `application.py`, `geometry.py`, `globcov_repository.py`,
+`gml_repository.py`, `land_cover_repository.py`, `material_specification.py`,
+`mesh_colouring.py`, `mesh_utils.py`, `tin_repository.py`, `web_visualize.py`.
+Seven are not the rendering path, and they divide two ways. Four are land-cover
+colour tables — `legacy/rasputin/globcov_repository.py:78`,
+`legacy/rasputin/gml_repository.py:72`,
+`legacy/rasputin/land_cover_repository.py:16` and
+`legacy/rasputin/tin_repository.py:72`. Three touch rendering but carry no
+drawing logic: `legacy/rasputin/application.py:26` builds avalanche colour maps,
+`legacy/rasputin/mesh_utils.py:27` names a colour field in a docstring, and
+`legacy/rasputin/material_specification.py:8` is the three.js material spec —
+which is the file this section cites below as its evidence for per-face
+colouring, so an earlier revision that swept it into "ingestion or storage" was
+filing its own witness under the wrong heading.
+
+The rendering path is `web_visualize.py` (181 lines),
+`legacy/rasputin/geometry.py:169-187` (`write_scene`) and `mesh_colouring.py`
+(96), plus `py2js.py` (72), which **that grep does not reach** — it is found by
+following `write_scene`'s import, not by the token search.
+
+An earlier revision of this paragraph claimed the grep returned those four. It
+does not, and nobody ran it before writing it down. That is the failure this
+whole section exists to make visible, committed in the section itself, which is
+why the rule now asks for the returned file list rather than the command alone.
+
+**Nothing is carried across, and the reason is the artefact, not the age.**
+`write_scene` copies a web template directory and emits `data.js` —
+`const geometries = [...]` — for a three.js viewer, with textures and material
+specifications. `mesh_colouring.py` colours a **3D terrain mesh** — per vertex
+for elevation (`color_field_by_height` indexes `points`), and **per face** for
+slope, aspect and avalanche danger, which consume face normals and which
+`legacy/rasputin/material_specification.py:19` confirms with `"vertexColors":
+"THREE.FaceColors"`. A port briefed from a "per vertex" reading would
+re-derive a per-vertex scheme for a per-face quantity. This increment draws a **2D
+constrained triangulation** as SVG so a person can judge whether the
+triangulator is correct. Different artefact, different audience, no shared
+geometry: the legacy **rendering** code has no notion of a constrained edge.
+`legacy/rasputin/triangulate_dem.h` has a strong one --
+`CGAL::Constrained_Delaunay_triangulation_2`, `insert_constraint` -- but
+`grep -n constraint legacy/bindings.cpp` returns nothing, so constraints never
+crossed into Python and nothing downstream could ever have drawn them.
+
+**What is waiting, and must not be reinvented when it is wanted.**
+`mesh_colouring.py` carries domain thresholds that are not derivable from first
+principles and would be silently wrong if guessed: slope banded at `5.0e-2` rad,
+`30°` and `55°`, and `color_field_by_avalanche_danger` keyed on
+`avalanche.varsom_angles` — the Norwegian avalanche classification. Any future
+increment that colours by elevation, slope or aspect is a **port**, not a
+design, and `@migration-expert` reads those files before `@tester` is spawned.
+The same holds for `solar_position.h`, 752 lines of solar geometry with no
+equivalent anywhere in the new tree and by some distance the largest body of
+domain logic this project has not yet moved.
+
 ## Not in scope
 
 Elevation, z coordinates, hillshade, any 3D. Refinement and its visualisation.
