@@ -53,21 +53,25 @@ survive. The same applies one level up, to *what is currently being asked*:
   by the subagent, which may be exactly the thing that died, and the rule
   recurses, so a nested subagent's file is its own spawner's and never the
   session's; and a session **sweeps `.claude/current-task/` of every file
-  except those of agents it is currently waiting on, after step 1 above and
-  never before it.** A file from a dead agent therefore survives at most one round.
-  That last sweep is the backstop, because it is the only deletion that still
-  happens when the agent owing one is gone.
+  except those of agents it is currently waiting on, directly or transitively,
+  after step 1 above and never before it.** A file from a dead agent therefore
+  survives at most one round. That last sweep is the backstop, because it is the
+  only deletion that still happens when the agent owing one is gone.
 
-  The sweep test is an exception for what is live, and both other spellings
-  failed. "Every file I did not just spawn" is provenance, and it was wrong: a session already mid-round with two
-  live subagents has, at the instant it starts a parallel round, *just* spawned
-  none of them, so that criterion deletes its own live agents' files and every
-  nested one. "Every file I am no longer waiting on" is its dual and fails the
-  other way: an orphan from a dead predecessor session is one you were never
-  waiting on, so it is never one you are *no longer* waiting on, and nothing
-  ever licenses deleting it — which is the case the backstop exists for. Ordering matters for the same reason — sweep before reading and
-  the file destroyed is precisely the dead step's, which is the case the
-  backstop exists for.
+  The sweep test is an exception for what is live, and the two simpler spellings
+  both failed. "Every file I did not just spawn" is provenance: a session already
+  mid-round with two live subagents has, at the instant it starts a parallel
+  round, *just* spawned none of them, so that criterion deletes its own live
+  agents' files. "Every file I am no longer waiting on" is its dual and fails the
+  other way — an orphan from a dead predecessor session is one you were never
+  waiting on, so it is never one you are *no longer* waiting on, and nothing ever
+  licenses deleting it. *Transitively* is what settles the nested case: you wait
+  on your subagent, not on its subagent, so without it a live nested file is
+  swept and a dead one lives forever, and the text supports whichever reading
+  the reader arrives with.
+
+  Sweep after the read, never before, because the file a premature sweep
+  destroys is precisely the dead step's — the one the backstop exists for.
 
   **One session per working tree.** `session.md` is a reserved singular name and
   nothing assigns it, so two sessions in one tree collide on it exactly as
@@ -108,6 +112,13 @@ is the current session"; it was reading `CLAUDE_SESSION_ID` where the harness
 exports `CLAUDE_CODE_SESSION_ID`, so a one-word bug shipped as an inherent
 limitation, from reading the source instead of running it. One second of
 execution refutes it. `0fa05e3` is the correction.
+
+The probe set is a claim too. Derive it from the code as fixed, not from the bug
+as found: a fix that widens what the code accepts widens the inputs that can
+break it, and re-running the old probes tests the old code. Measured — five
+broken inputs verified a fix that had just widened a glob from `*.md` to every
+file, all five were valid UTF-8 because the bug had been, and the first non-UTF-8
+file killed the tool (`fdbd532`).
 
 When there is nothing to run — a comment, a design invariant, a claim of the
 form "X is verified by Y" — one question catches the same defect by inspection,

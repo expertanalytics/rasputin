@@ -96,10 +96,12 @@ def print_current_task() -> None:
     print("== .claude/current-task/session.md ==")
     print(_read(session, "(absent -- no session-level ask was recorded in flight)"))
 
-    # Every entry, not just *.md: a subagent that names its file without an
-    # extension must not become invisible to the tool whose job is surfacing
-    # what would otherwise be lost.
-    others = sorted(p for p in tasks.glob("*") if p.is_file() and p.name != "session.md")
+    # Every entry, not just *.md, and not p.is_file(): a subagent that names its
+    # file without an extension, or leaves a broken symlink, must not become
+    # invisible to the tool whose job is surfacing what would otherwise be lost.
+    # is_file() is false for a dangling symlink, so it dropped one silently;
+    # not is_dir() surfaces it and _read's FileNotFoundError names it.
+    others = sorted(p for p in tasks.glob("*") if not p.is_dir() and p.name != "session.md")
     if not others:
         return
     # No staleness flag here. It was computed from session.md's mtime, but
@@ -117,8 +119,8 @@ def print_current_task() -> None:
         print(f"\n-- {path.name} ({stamp})")
         print(_read(path, "(unreadable)"))
     print(
-        "\nDelete a subagent file once its handback is read; sweep any belonging"
-        " to an agent you are no longer waiting on, after reading the turns below."
+        "\nDelete a subagent file once its handback is read; sweep the rest per"
+        " the lifecycle rule in .claude/REQUIRED-READING.md, after the turns below."
     )
 
 
