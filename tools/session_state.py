@@ -2,18 +2,26 @@
 """Print what the previous session was in the middle of.
 
 Answers one question: when a session starts cold or resumes after a context
-loss, what was actually being asked? Reads `.claude/current-task.md` (the
-in-flight ask, if the previous session wrote one) and the predecessor session
-transcript under ~/.claude/projects/, including prompts the user queued and the
-harness absorbed mid-turn -- which is where a lost instruction hides, because
-such a prompt never appears as a normal user turn.
+loss, what was actually being asked? Reads `.claude/current-task/` (the in-flight
+asks -- `session.md` first, each subagent's file after it as context) and the
+predecessor session transcript under ~/.claude/projects/, including prompts the
+user queued and the harness absorbed mid-turn -- which is where a lost
+instruction hides, because such a prompt never appears as a normal user turn.
 
 Known gap: only user entries whose content is a plain string are captured, so a
 prompt carrying an attachment or image arrives as a list and is dropped. No turn
 in this project is currently lost that way, but the failure is silent, which is
 the worst mode for a tool whose job is to surface a dropped turn.
 
-Usage: python tools/session_state.py [--turns N]
+Untested: nothing under tests/ exercises this file and no CI job runs it, so
+every defect in it so far was found by hand. When a gate suite is written, take
+this file first -- it is what the project's own recovery depends on and the only
+one with a demonstrated hang -- and cover the input classes that actually bit,
+since two of them nobody guessed: FIFO (open() blocks with no writer, and an
+in-process timeout cannot see it), symlink loop, dangling symlink, directory,
+non-UTF-8, chmod 000, no extension, missing directory.
+
+Usage: python3 tools/session_state.py [--turns N]
 """
 
 from __future__ import annotations
@@ -22,6 +30,8 @@ import argparse
 import json
 import os
 import re
+import stat
+from datetime import datetime
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
@@ -62,17 +72,82 @@ def human_turns(path: Path) -> list[tuple[str, str, str]]:
     return found
 
 
+def _read(path: Path, absent: str) -> str:
+    """Contents, or a named placeholder.
+
+    A recovery tool that dies on one unreadable file takes the human-turn
+    half -- the reason it exists -- down with it. Measured twice: a chmod 000
+    file raised PermissionError, and once the glob widened past *.md, a
+    non-UTF-8 file raised UnicodeDecodeError, which is a ValueError and so
+    passed both excepts. Hence errors="replace", as human_turns already does.
+    """
+    try:
+        # Only a regular file may be opened. Dropping is_file() to surface broken
+        # symlinks also admitted FIFOs, and open() on a FIFO with no writer BLOCKS
+        # -- a recovery tool that hangs is worse than one that crashes, because
+        # nothing prints at all. Measured before this guard: with a FIFO in the
+        # directory the run timed out; without it, it completed. Time it from
+        # outside the process -- signal.alarm raises TimeoutError, which is an
+        # OSError, which the except below would swallow.
+        if not stat.S_ISREG(path.stat().st_mode):
+            return "(not a regular file)"
+        return path.read_text(errors="replace").rstrip()
+    except FileNotFoundError:
+        return absent
+    except OSError:
+        return "(unreadable)"
+
+
+def print_current_task() -> None:
+    """Print the session's ask first, then each subagent's as context.
+
+    A cold session needs one of these promoted, not a flat dump: `session.md` is
+    the record of what the round is for, and a subagent file is a fragment of it
+    delegated. Both are printed because a subagent file may be the only trace of
+    a step that died, but the order says which one to believe about the round.
+
+    Sorted by name for stable output. session.md is promoted above the rest
+    explicitly, so the order among subagent files decides nothing.
+    """
+    tasks = REPO / ".claude" / "current-task"
+    session = tasks / "session.md"
+    print("== .claude/current-task/session.md ==")
+    print(_read(session, "(absent -- no session-level ask was recorded in flight)"))
+
+    # Every entry, not just *.md, and not p.is_file(): a subagent that names its
+    # file without an extension, or leaves a broken symlink, must not become
+    # invisible to the tool whose job is surfacing what would otherwise be lost.
+    # is_file() is false for a dangling symlink, so it dropped one silently;
+    # not is_dir() surfaces it and _read's FileNotFoundError names it.
+    others = sorted(p for p in tasks.glob("*") if not p.is_dir() and p.name != "session.md")
+    if not others:
+        return
+    # No staleness flag here. It was computed from session.md's mtime, but
+    # session.md is overwritten as a round progresses, so an ordinary
+    # write-spawn-update sequence made every LIVE subagent file predate it and
+    # get marked for sweeping -- the one file a cold session must not lose.
+    # Liveness is not visible from a directory listing, so the sweep rule in
+    # .claude/REQUIRED-READING.md owns it and this prints what is there.
+    print(f"\n== {len(others)} subagent ask(s), as context ==")
+    for path in others:
+        try:
+            stamp = datetime.fromtimestamp(path.stat().st_mtime).strftime("%Y-%m-%d %H:%M")
+        except OSError:
+            stamp = "unknown time"
+        print(f"\n-- {path.name} ({stamp})")
+        print(_read(path, "(unreadable)"))
+    print(
+        "\nDelete a subagent file once its handback is read; sweep the rest per"
+        " the lifecycle rule in .claude/REQUIRED-READING.md, after the turns below."
+    )
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--turns", type=int, default=5)
     args = parser.parse_args()
 
-    current = REPO / ".claude" / "current-task.md"
-    print("== .claude/current-task.md ==")
-    if current.exists():
-        print(current.read_text().rstrip())
-    else:
-        print("(absent -- no ask was recorded in flight)")
+    print_current_task()
 
     # Claude Code exports CLAUDE_CODE_SESSION_ID; the older spelling is kept as a
     # fallback so the script still excludes the current session if that changes.

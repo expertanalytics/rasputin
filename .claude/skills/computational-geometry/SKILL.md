@@ -35,8 +35,13 @@ Core domain constraints and architecture for the C++ terrain-meshing engine (CDT
   over snapped output is red on correct output, and an oracle re-derived from the
   producer's own bookkeeping is a self-confirming invariant that cannot fail when
   the thing it checks is broken. Borrow the producer's *predicate*, never its
-  records. Worked example, four occurrences and each one introduced by the fix to
-  the previous: `docs/increments/05-noder.md`, guarantees 14 and 15.
+  records. Worked example, where each occurrence was introduced by the fix to the
+  previous: `docs/increments/05-noder.md`, guarantees 14 and 15. The parent rule
+  carries the evidence, so it is not repeated here. This is the
+  geometry instance of one general rule, not a rule of its own — the same defect
+  reaches gate scripts and comments, where "the producer's relation" has no
+  meaning; `.claude/REQUIRED-READING.md` states it there as *is the claim about
+  the same object the code evaluates?*
 
 ## 4. Change & Review Boundaries
 * **Change Limit:** see the ceiling in `CLAUDE.md` §2.

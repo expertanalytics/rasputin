@@ -17,7 +17,9 @@ lib/geometry
 lib/build_*
 .venv
 .claude/settings.local.json
+# pre-a46481c; guards a stray file left in an old worktree
 .claude/current-task.md
+.claude/current-task/
 
 # Coverage artifacts (--cov is enabled by default in pyproject addopts)
 .coverage

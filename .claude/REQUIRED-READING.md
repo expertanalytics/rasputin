@@ -5,7 +5,8 @@
 "Ok, let's continue" is not an instruction. Neither is `git log`. Before the
 first subagent spawn, the first commit, or the first edit, in this order:
 
-1. `python tools/session_state.py` — prints `.claude/current-task.md` and the
+1. `python3 tools/session_state.py` — prints `.claude/current-task/` (the
+   session's ask first, each subagent's after it, as context) and the
    last human turns of the predecessor session, **including prompts the user
    queued and the harness absorbed mid-turn**. An absorbed prompt never appears
    as a normal turn, which is how a session on 2026-09-17 lost the instruction
@@ -26,11 +27,62 @@ sufficient: it shows what was finished, never what was asked.
 `docs/increments/README.md` puts designs on disk because transcripts do not
 survive. The same applies one level up, to *what is currently being asked*:
 
-- **The current ask lives in `.claude/current-task.md`** — untracked and
-  gitignored, because it is per-working-tree and worthless after the fact.
-  Write it when a user request starts a round, in three lines or fewer (the
-  ask, the persona it went to, the file it will produce); delete it when the
-  round lands. One file, overwritten, never a ledger.
+- **The current ask lives in `.claude/current-task/`** — a directory, untracked
+  and gitignored, because it is per-working-tree and worthless after the fact.
+  Three lines or fewer per file (the ask, the persona it went to, the file it
+  will produce). Work here runs in parallel, so there is one file per writer:
+
+  - `session.md` is the **main session's** record, and only the main session
+    writes it. It is what a cold session reads first.
+  - every other file is one subagent's, named `<persona>-<HHMMSS>.md`
+    (`tester-142530.md`). **The spawner assigns the path in the prompt**; a
+    subagent writes that path and no other. Assigning it is what keeps two
+    parallel `@tester`s from colliding, and it is why "do not touch
+    `session.md`" no longer has to be retyped into every brief.
+
+  This became one file per writer after a single shared file failed within an
+  hour of being legislated: `@tester` wrote `.claude/current-task.md` and
+  destroyed the session's record verbatim, leaving three lines of subagent ask
+  where the only on-disk note of the round had been. A mechanism built to
+  survive a context loss would have caused one.
+
+  It is still not a ledger, and several files make a ledger easier to get wrong,
+  so the deletions are assigned rather than left to good intentions:
+  `session.md` is overwritten in place and deleted when the round lands; a
+  subagent's file is deleted by **its spawner**, on reading the handback — never
+  by the subagent, which may be exactly the thing that died, and the rule
+  recurses, so a nested subagent's file is its own spawner's and never the
+  session's; and a session **sweeps `.claude/current-task/` of every file
+  except those of agents it is currently waiting on, directly or transitively,
+  after step 1 above and never before it.** A file from a dead agent therefore
+  survives at most one round. That last sweep is the backstop, because it is the
+  only deletion that still happens when the agent owing one is gone.
+
+  The sweep test is an exception for what is live, and the two simpler spellings
+  both failed. "Every file I did not just spawn" is provenance: a session already
+  mid-round with two live subagents has, at the instant it starts a parallel
+  round, *just* spawned none of them, so that criterion deletes its own live
+  agents' files. "Every file I am no longer waiting on" is its dual and fails the
+  other way — an orphan from a dead predecessor session is one you were never
+  waiting on, so it is never one you are *no longer* waiting on, and nothing ever
+  licenses deleting it. *Transitively* is what settles the nested case: you wait
+  on your subagent, not on its subagent, so without it a live nested file is
+  swept and a dead one lives forever, and the text supports whichever reading
+  the reader arrives with.
+
+  Sweep after the read, never before, because the file a premature sweep
+  destroys is precisely the dead step's — the one the backstop exists for.
+
+  **One session per working tree.** `session.md` is a reserved singular name and
+  nothing assigns it, so two sessions in one tree collide on it exactly as
+  subagents once did. The subagent fix does not apply, because the thing that
+  hands out a subagent's path is its spawner and no one hands out a session's.
+  Concurrent sessions need separate worktrees; `git worktree add` is the cheap
+  answer and `.claude/current-task/` is per-tree by construction.
+
+  Nothing mechanically stops a persona writing `session.md`; the control is that
+  it is handed a different path and never has cause to guess one. A `PreToolUse`
+  hook is the only real enforcement, and it needs approval — see *The harness*.
 - **A subagent whose product is a file creates that file first and writes
   incrementally.** The kernel audit above died having emitted only a progress
   line; had it created its target file on arrival, the round would have been
@@ -61,6 +113,48 @@ exports `CLAUDE_CODE_SESSION_ID`, so a one-word bug shipped as an inherent
 limitation, from reading the source instead of running it. One second of
 execution refutes it. `0fa05e3` is the correction.
 
+The probe set is a claim too. Derive it from the code as fixed, not from the bug
+as found: a fix that widens what the code accepts widens the inputs that can
+break it, and re-running the old probes tests the old code. Measured — five
+broken inputs verified a fix that had just widened a glob from `*.md` to every
+file, all five were valid UTF-8 because the bug had been, and the first non-UTF-8
+file killed the tool (`fdbd532`).
+
+And make the probe able to fail. If a pass looks the same as a probe that never
+ran, it measured nothing. A reviewer timed this tool's FIFO case with
+`signal.alarm`, but `TimeoutError` is an `OSError`, so the blocking `open()`
+raised the alarm *inside* the `except OSError` it was meant to expose: the probe
+reported "no hang" in output produced entirely by the hang. Time a hang from
+outside the process, and prefer a probe whose pass and its own absence look
+different — `b0bf129` is the correction.
+
+When there is nothing to run — a comment, a design invariant, a claim of the
+form "X is verified by Y" — one question catches the same defect by inspection,
+in a line, with no build: **is the claim about the same object the code
+evaluates?** In every occurrence recorded below it was not. A §2 gate
+matched path-shaped keys (`boost/geometry`, `date/date.h`) against bare CMake
+tokens, so `find_package(Boost COMPONENTS geometry)` and `date::date` passed
+until `1807e73`. Three increment-2 tests bounded the compiler's FMA choice
+rather than `FastKernel`'s error (`dd67a68`). Increment 5's oracles used exact
+incidence where the producer used hot-pixel proximity, a "second" candidate
+generator that was the same broad phase, and the dedup's own records in place of
+the input (`docs/increments/05-noder.md`, guarantees 14 and 15). A comment credited the
+NaN fixture with killing the `!= 0.0` mutant of a function guarded by
+`> 0.0 && <= max()`, where the second conjunct rejects NaN under either
+spelling, so that fixture kills nothing (`7ece838`). That sentence was itself
+committed with the two objects swapped and caught by this branch's own pre-push
+pass — the check applied to the paragraph that defines it. Each repair was made in the same
+mode as the defect — reasoning about the claim instead of running it — which is
+how the repairs kept seeding the next occurrence.
+
+So **do not write "X is verified by Y" until Y has been run against a broken
+X**, and where Y cannot be run, apply the object-identity question instead.
+Verify a gate the way this paragraph's first example was verified before being
+written down: append the prohibited directive to `CMakeLists.txt`, run
+`python3 tools/check_prohibited_deps.py`, confirm it fails naming both, restore
+the file. Note the asymmetry the list exposes — `tools/*.py` is executable code
+with no suite behind it, unlike the C++ it gates.
+
 This binds claims about behaviour — what a script does, what a suite covers,
 what a file says — not design opinions, which have no command to run. If you
 cannot, state the mechanism rather than the incident: a mechanism someone can
@@ -79,7 +173,7 @@ user's.**
 ### What runs on an instruction's momentum
 
 No fresh approval, however many steps it takes: editing any file, spawning any
-persona, running builds, tests and gates, writing `.claude/current-task.md`,
+persona, running builds, tests and gates, writing under `.claude/current-task/`,
 and `git commit`. All of it is undone by `git reset` and none of it is visible
 to anyone else. An instruction carries through as much of this as satisfying it
 requires — "re-verify with `@reviewer`" does authorise acting on what the
@@ -138,7 +232,7 @@ On a prose or tooling branch the pass has a different scope from a code one:
 
 One pass per branch is affordable on `docs/increments/README.md`'s cost terms —
 it is the same pass the code path already pays — and it is the only step here
-that has repeatedly found real defects. On this branch alone `@reviewer` caught
+that has repeatedly found real defects. On PR #68 alone `@reviewer` caught
 the false limitation in `debd8d1`, the unswept citations in `760dbd9`, and two
 of the three self-confirming invariants in increment 5. The session driving
 those rounds produced every one of them and saw none.
@@ -149,6 +243,10 @@ A `SessionStart` hook that runs `tools/session_state.py` and prints its output
 is worth wiring, because this check fails exactly where a human is least likely
 to run a command by hand. Propose it for approval separately; do not add it to
 `.claude/settings.json` on your own initiative.
+
+A `PreToolUse` hook denying `Write`/`Edit` on `.claude/current-task/session.md`
+from a subagent is the only thing that would make the session's file structurally
+safe rather than conventionally safe; propose it the same way.
 
 The same applies to a `PreToolUse` hook on `Bash(git push*)`, and it is the one
 mechanism that would make the approval boundary self-enforcing. Do not assume
