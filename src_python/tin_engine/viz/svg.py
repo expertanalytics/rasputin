@@ -10,8 +10,12 @@ Two conventions are worth stating before reading the emitters.
 
 **Class tokens are structure; colour is not.** Every edge element carries the
 stroke class it belongs to -- ``constrained``/``unconstrained``, ``role-outer``
-and friends, ``river``, ``finding`` -- and :data:`STYLESHEET` turns those tokens
-into strokes. The tokens are what the suite asserts, because "the right edges
+and friends, ``finding``, and at most one property token -- and
+:data:`STYLESHEET` turns those tokens into strokes. A property token this module
+cannot name arrives from ``SvgStyle.property_strokes``, which is how the
+precedence stays the composition root's decision and this module stays free of a
+vocabulary; a token with no CSS rule simply resolves to the stroke it already
+had. The tokens are what the suite asserts, because "the right edges
 carry the right class" is the part a wrong picture gets wrong while still
 looking plausible; the colours are taste and are deliberately untested.
 
@@ -36,7 +40,7 @@ from xml.sax.saxutils import escape
 import numpy as np
 
 from .scene import BBox, Scene, SceneEdge, SceneKind
-from .style import SvgStyle
+from .style import PropertyStroke, SvgStyle
 
 SVG_NS = "http://www.w3.org/2000/svg"
 
@@ -141,19 +145,41 @@ def _group(gid: str, rows: list[str]) -> str:
     return "\n".join([f'<g id="{gid}">', *rows, "</g>"])
 
 
-def _edge_classes(edge: SceneEdge, findings: frozenset[tuple[int, int]]) -> str:
+def _property_token(properties: int, strokes: tuple[PropertyStroke, ...]) -> str | None:
+    """The one token an edge's property set is drawn with, or ``None``.
+
+    First match over ``strokes``, which is in descending draw priority: an edge
+    carries a SET and a polyline carries one stroke, because two overlaid
+    strokes on one line read as a rendering defect rather than as two features.
+    First match rather than the lowest set bit, because priority is the
+    stylesheet's ruling and a bit position is a vocabulary's numbering.
+
+    A property with no stroke contributes nothing and the edge is still drawn as
+    the constraint it is. That is the deliberate asymmetry: the DATA path may not
+    lose a property -- ``features.EdgeVocabulary.names`` raises on a bit nobody
+    names -- while the DRAWING path may decline to draw one. A lost property is a
+    wrong answer; an undrawn one is a picture with less in it.
+    """
+    return next((s.token for s in strokes if properties >> s.bit & 1), None)
+
+
+def _edge_classes(
+    edge: SceneEdge, findings: frozenset[tuple[int, int]], style: SvgStyle
+) -> str:
     """Every stroke class this edge belongs to, space separated.
 
     ``constrained`` is the mesh mask's verdict and ``role-*`` the input chains';
     they are separate tokens because they are separate derivations, and
-    ``finding`` marks the edges where the two disagree (risk 2). A river is a
-    breakline plus a bit, so it is a fourth stroke rather than a fourth role.
+    ``finding`` marks the edges where the two disagree (risk 2). A property is a
+    role's stroke plus one token, so it is a fourth class rather than a fourth
+    role.
     """
     tokens = ["constrained" if edge.constrained else "unconstrained"]
     if edge.role is not None:
         tokens.append(f"role-{_role_name(edge.role)}")
-    if edge.is_river:
-        tokens.append("river")
+    token = _property_token(edge.properties, style.property_strokes)
+    if token is not None:
+        tokens.append(token)
     if (edge.a, edge.b) in findings:
         tokens.append("finding")
     return " ".join(tokens)
@@ -182,7 +208,7 @@ def _triangles(scene: Scene, view: Viewport) -> str:
     return _group("triangles", rows)
 
 
-def _edges(scene: Scene, view: Viewport) -> str:
+def _edges(scene: Scene, view: Viewport, style: SvgStyle) -> str:
     """One ``<line>`` per scene edge -- one, because 6b-i deduplicated them.
 
     An interior edge emitted twice is drawn at double weight and the picture
@@ -196,7 +222,8 @@ def _edges(scene: Scene, view: Viewport) -> str:
         x1, y1 = view.point(float(vertices[edge.a][0]), float(vertices[edge.a][1]))
         x2, y2 = view.point(float(vertices[edge.b][0]), float(vertices[edge.b][1]))
         rows.append(
-            f'<line class="{_edge_classes(edge, findings)}" x1="{_num(x1)}" y1="{_num(y1)}"'
+            f'<line class="{_edge_classes(edge, findings, style)}"'
+            f' x1="{_num(x1)}" y1="{_num(y1)}"'
             f' x2="{_num(x2)}" y2="{_num(y2)}"/>'
         )
     return _group("edges", rows)
@@ -272,12 +299,21 @@ def _header(scene: Scene, style: SvgStyle, title: str, status: str, message: str
 
 
 def _legend(style: SvgStyle) -> str:
-    """The five stroke classes, named. Without it the colours mean nothing."""
+    """The stroke classes, named. Without it the colours mean nothing.
+
+    The property rows are DERIVED from ``style.property_strokes`` rather than
+    written down here: a hard-coded ``river`` row would be a vocabulary in the
+    module that holds none, and it would name a stroke the default style can
+    never emit -- a legend entry for a class no edge in the document carries.
+    """
     entries = [
         ("role-outer constrained", "outer ring"),
         ("role-hole constrained", "hole ring"),
         ("role-breakline constrained", "breakline"),
-        ("role-breakline river constrained", "river breakline"),
+        *(
+            (f"constrained {stroke.token}", stroke.token)
+            for stroke in style.property_strokes
+        ),
         ("unconstrained", "unconstrained edge"),
     ]
     rows: list[str] = []
@@ -361,7 +397,7 @@ def render_svg(
                 f"<style>{STYLESHEET}</style>",
                 f'<rect class="page" x="0" y="0" width="{style.width}" height="{style.height}"/>',
                 _triangles(scene, view),
-                _edges(scene, view),
+                _edges(scene, view, style),
                 _vertices(scene, view, style),
                 _labels(scene, view, labels),
                 _header(scene, style, title, status, message),

@@ -114,7 +114,7 @@ class CdtStatus(Enum):
 
 @final
 class Chain:
-    """One constraint chain: a run of ``chain_indices``, its role, its flag."""
+    """One constraint chain: a run of ``chain_indices``, its role, its set."""
 
     @property
     def begin(self) -> int: ...
@@ -125,7 +125,12 @@ class Chain:
     @property
     def role(self) -> ChainRole: ...
     @property
-    def is_river(self) -> bool: ...
+    def properties(self) -> int:
+        """The feature property set, as a bare 32-bit mask.
+
+        An ``int``: ``EdgeProperties`` is deliberately not bound, and the
+        meaning of each bit lives in ``tin_engine.features.EdgeVocabulary``.
+        """
 
 @final
 class PslgDiagnostic:
@@ -219,12 +224,13 @@ def describe(status: CdtStatus) -> str:
 
 def build_pslg(
     vertices: npt.ArrayLike,
-    chains: Iterable[tuple[Sequence[int], ChainRole, bool]],
+    chains: Iterable[tuple[Sequence[int], ChainRole, int]],
 ) -> PslgBuildResult:
     """Validate a constraint set. The coordinates are copied, so the result
     neither aliases nor keeps alive the array handed in. Invalid input is data,
-    not an exception: a ``ValueError`` means the vertex array is not ``(N, 2)``,
-    and a ``TypeError`` means a path or filename was passed where coordinates
+    not an exception: a ``ValueError`` means the vertex array is not ``(N, 2)``
+    or a chain's property mask is negative or carries a bit at or above 32, and
+    a ``TypeError`` means a path or filename was passed where coordinates
     belong.
     """
 

@@ -38,7 +38,13 @@ class ChainLike(Protocol):
         """
 
     @property
-    def is_river(self) -> bool: ...
+    def properties(self) -> int:
+        """The chain's feature set, as a bare mask.
+
+        An ``int`` because ``viz/`` may not hold a vocabulary: which bit means
+        which feature is ``tin_engine.features``' answer and the composition
+        root's to supply, exactly as ``role``'s concrete type is.
+        """
 
 
 class PslgLike(Protocol):

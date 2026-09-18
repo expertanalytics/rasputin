@@ -6,8 +6,13 @@ for the same reason: a vocabulary is *data travelling with the mesh*, not a
 constant in the source.
 
 **This module imports nothing first-party and never imports the compiled
-extension.** That is what lets ``tin_engine.viz`` depend on it, ``viz`` being
-forbidden the extension (``project_structure.md:278``).
+extension**, so it is constructible and testable with no extension in the
+process. It is emphatically *not* a module ``tin_engine.viz`` may reach for:
+``test_viz_svg.py::TestModuleIsolation`` pins that ``style.py`` and
+``fixtures.py`` import no first-party module at all, and ``viz/`` needs no
+vocabulary -- ``svg.py`` takes its draw precedence from ``SvgStyle`` and
+``cli.py``, the composition root, is the one module that names both a bit and a
+feature.
 
 The risk this module exists to narrow is a producer and a consumer disagreeing
 about which bit means "river". Nothing in C++ can see that: it merges opaque

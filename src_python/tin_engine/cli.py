@@ -36,9 +36,10 @@ import numpy as np
 import typer
 
 from tin_engine._core import ChainRole, IndexedMesh2, build_pslg, describe, triangulate
+from tin_engine.features import DEFAULT_VOCABULARY
 from tin_engine.viz.fixtures import GALLERY, Fixture
 from tin_engine.viz.scene import build_scene
-from tin_engine.viz.style import SvgStyle
+from tin_engine.viz.style import PropertyStroke, SvgStyle
 from tin_engine.viz.svg import render_svg
 
 app = typer.Typer(
@@ -59,6 +60,29 @@ ROLES = {
 #: no ``Pslg`` stores. ``scene.py`` cannot work this out -- it may not name the
 #: enum -- and without it every ring closure is drawn as a false alarm.
 CLOSED_ROLES = ("outer", "hole")
+
+#: The **gallery's** draw precedence, in DESCENDING priority: first match wins,
+#: and an edge carrying several properties is drawn with exactly one token.
+#:
+#: Named by FEATURE rather than derived from the vocabulary's numbering, because
+#: those are two different questions -- water is drawn over infrastructure
+#: however a vocabulary chose to number them -- and named *here* because
+#: `style.py` and `svg.py` hold no vocabulary and `viz/` may not import one at
+#: all. It is this module's to supply, exactly as :data:`ROLES` and
+#: :data:`CLOSED_ROLES` are.
+#:
+#: It is the gallery's list and not all of :data:`DEFAULT_VOCABULARY`. The
+#: legend is derived from it, and a token `svg.py`'s stylesheet has no rule for
+#: draws identically to the row above it, so declaring all seven features would
+#: put six legend rows on every picture that a reader cannot tell apart --
+#: measured by drawing the gallery. It grows when the stylesheet does.
+_PRECEDENCE = ("river",)
+
+_BIT_OF = {prop.name: prop.bit for prop in DEFAULT_VOCABULARY.properties}
+
+PROPERTY_STROKES = tuple(
+    PropertyStroke(bit=_BIT_OF[name], token=name) for name in _PRECEDENCE
+)
 
 DEFAULT_LABEL_LIMIT = 500
 
@@ -92,7 +116,7 @@ def _triangulated(fixture: Fixture, delaunay: bool) -> tuple[IndexedMesh2 | None
     than only the first; or the backend can refuse to triangulate a valid one.
     """
     chains = [
-        ([int(i) for i in fixture.indices_of(c)], ROLES[chain.role], chain.is_river)
+        ([int(i) for i in fixture.indices_of(c)], ROLES[chain.role], int(chain.properties))
         for c, chain in enumerate(fixture.chains)
     ]
     result = build_pslg(np.asarray(fixture.vertices), chains)
@@ -195,7 +219,7 @@ def draw(
     target = _destination(out, out_parent, name)
     document = render_svg(
         scene,
-        SvgStyle(show_vertices=show_vertices),
+        SvgStyle(show_vertices=show_vertices, property_strokes=PROPERTY_STROKES),
         title=title,
         status=status,
         message=message,

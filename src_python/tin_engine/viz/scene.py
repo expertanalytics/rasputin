@@ -77,8 +77,12 @@ class SceneEdge:
     role: object | None
     """The role of the first input chain containing this pair, or ``None``.
     Opaque: the scene compares roles and uses them as keys, never reads them."""
-    is_river: bool
-    """``True`` if *any* contributing chain was a river."""
+    properties: int
+    """The UNION of the property sets of every chain contributing this edge.
+
+    The full set, never ranked and never reduced: which one of them gets drawn
+    is a question about a document and is answered in ``svg.py``, at the one
+    layer a human is looking at. ``0`` is an unclassified edge."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -130,12 +134,16 @@ def _mesh_edges(mesh: MeshLike) -> tuple[set[Pair], set[Pair]]:
     return edges, masked
 
 
-def _chain_edges(pslg: PslgLike, closed_roles: Sequence[object]) -> dict[Pair, tuple[object, bool]]:
-    """Join each undirected pair to ``(role, is_river)`` over the input chains.
+def _chain_edges(pslg: PslgLike, closed_roles: Sequence[object]) -> dict[Pair, tuple[object, int]]:
+    """Join each undirected pair to ``(role, properties)`` over the input chains.
 
-    The earliest chain containing a pair wins the role -- roles are opaque and
-    so cannot be ranked by value -- while ``is_river`` is the OR over every
-    contributing chain, because the bit means "some chain here was a river".
+    The two fields have deliberately different merge rules. The earliest chain
+    containing a pair wins the role -- roles are opaque and so cannot be ranked
+    by value -- while ``properties`` is the UNION over every contributing chain,
+    because the set means "every property of every chain that contributed
+    geometry here". Union is commutative, associative and idempotent, so the
+    answer does not depend on the order the chains happen to arrive in; a
+    priority scheme has none of the three.
 
     A ``Pslg`` never stores a ring's closing edge, and ``ChainLike.role`` is
     typed ``object`` so this module cannot name ``ChainRole``. ``closed_roles``
@@ -150,9 +158,10 @@ def _chain_edges(pslg: PslgLike, closed_roles: Sequence[object]) -> dict[Pair, t
     ``test_a_single_vertex_ring_is_never_closed_into_a_self_loop`` is what
     defends it. Double emission is *not* the reason, whatever the design once
     said: ``joined`` is keyed on ``_key``, so closing a two-vertex chain would
-    write the same key twice and the second write would only OR ``is_river``.
+    write the same key twice and the second write would only union the
+    properties.
     """
-    joined: dict[Pair, tuple[object, bool]] = {}
+    joined: dict[Pair, tuple[object, int]] = {}
     for c, chain in enumerate(pslg.chains):
         walk = [int(i) for i in pslg.indices_of(c)]
         if len(walk) > 2 and any(chain.role == closed for closed in closed_roles):
@@ -161,9 +170,9 @@ def _chain_edges(pslg: PslgLike, closed_roles: Sequence[object]) -> dict[Pair, t
             pair = _key(a, b)
             previous = joined.get(pair)
             if previous is None:
-                joined[pair] = (chain.role, chain.is_river)
+                joined[pair] = (chain.role, int(chain.properties))
             else:
-                joined[pair] = (previous[0], previous[1] or chain.is_river)
+                joined[pair] = (previous[0], previous[1] | int(chain.properties))
     return joined
 
 
@@ -244,7 +253,7 @@ def build_scene(
         triangles = np.asarray(drawable.triangles, dtype=np.uint32)
 
     edges = tuple(
-        SceneEdge(a, b, (a, b) in masked, *joined.get((a, b), (None, False)))
+        SceneEdge(a, b, (a, b) in masked, *joined.get((a, b), (None, 0)))
         for a, b in sorted(drawn)
     )
     findings = _findings(edges) if drawable is not None else ()

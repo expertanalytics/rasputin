@@ -194,7 +194,13 @@ or `Hole` ring, and so is a walled enclosure.
 merged tree: `bindings/core.cpp:442` passes it positionally,
 `tests/cpp/support/pslg_cases.hpp:252` and
 `tests/cpp/property/prop_pslg_invariants.cpp:456` pass it positionally, and
-both overloads default it.
+both overloads default it. **Every line number in this section and in "How the
+red step handles two mutation-round suites" below is read against `c3210c1`**,
+the merged tree this increment measured, and this PR is what moves them;
+`tools/check_citations.py` flags them as at-risk for exactly that reason, and
+they resolve — `git show c3210c1:tests/cpp/support/pslg_cases.hpp | sed -n
+'216p;252p'` prints `bool is_river{false};` and the `add_chain` forwarding
+line.
 
 **Ruling: it stays third, stays positional, keeps its default, and changes
 type.**
@@ -238,9 +244,15 @@ failure the previous section relies on.
 ## The boundary model
 
 New module, `src_python/tin_engine/features.py`. It **imports nothing
-first-party and never imports `_core`** — which is what lets `viz/` depend on
-it, `viz/` being forbidden from importing the extension
-(`project_structure.md:278`).
+first-party and never imports `_core`**, so it is constructible and testable
+with no compiled extension in the process. **Corrected in this PR:** this
+paragraph originally read "which is what lets `viz/` depend on it". That is
+unsupportable and unnecessary. `test_viz_svg.py::TestModuleIsolation` pins that
+`style.py` and `fixtures.py` import **no** first-party module at all and that
+`svg.py`'s first-party imports are confined to `{.scene, .style, .protocols}`,
+so no `viz/` module may import `features` — and under the renderer ruling below
+none needs to: `svg.py` takes its precedence from `SvgStyle` and `cli.py`, the
+composition root, is the one module that names both.
 
 ```python
 class EdgeProperty(BaseModel):          # frozen, extra="forbid"
@@ -406,6 +418,18 @@ gallery scale, two overlaid strokes on one polyline read as a rendering defect.
   colours are "taste" that lives in `svg.py`'s CSS. A default naming `river`
   would be policy in the module that declares it holds none.
 
+### One stale half of a comment, recorded rather than edited
+
+`tests/python/test_viz_svg.py:132-136`, the comment above `GALLERY_STROKES`
+(`:137`), claims both "Water over infrastructure" and "deliberately NOT in bit
+order". With
+`RIVER_BIT = 0` those cannot both hold: water-first *is* bit order here. **The
+list itself is authoritative and correct** — it is road-first, which is what
+keeps `test_the_declared_order_is_preserved` able to catch a model that sorts by
+bit — so only the phrase is stale. It is recorded here rather than fixed because
+commit 4 is `@developer`'s and touches no test file; the edit is one line and is
+`@tester`'s to make.
+
 ### Why this is 7's and not 6's
 
 The set on the edge and the single token in the document are the same decision
@@ -475,21 +499,33 @@ line, because it is where the round's cost actually is.
 ### First: one of the two is not affected
 
 `tests/cpp/property/prop_pslg_invariants.cpp` contains **exactly one**
-`is_river` token, at line 456:
+`is_river` token, at line 456 of the pre-rename file:
 
 ```cpp
 b.add_chain(std::span<const std::uint32_t>{idx}, s.role, s.is_river);
 ```
 
-It is a **pass-through** of `ChainSpec::is_river` (`pslg_cases.hpp:216`) into
-the builder. **No assertion in that file mentions it**, and no mutant in
-increment 3's round concerns it — that round is about vertices, windings and
-diagnostic sets.
+**Corrected in this PR: one token is not one site, and the cost was
+understated.** `grep -c is_river` prints 1 because the other three sites pass
+the field *positionally*, without naming it —
+`git show c3210c1:tests/cpp/property/prop_pslg_invariants.cpp | grep -n
+'ChainRole::[A-Za-z]*, false}'` prints lines 500, 506 and 511, three
+`ChainSpec{…, ChainRole::X, false}` aggregate initialisers. Four sites, not
+one. A token count read as a site count, which is the same error this document
+records at "What I now find false" item 2 for `fixtures.py`.
+
+The **ruling** the figure supports is unaffected and stands: it is a
+**pass-through** of `ChainSpec::is_river` (`pslg_cases.hpp:216`) into the
+builder, the three aggregate initialisers are the empty set spelled positionally,
+**no assertion in that file mentions it**, and no mutant in increment 3's round
+concerns it — that round is about vertices, windings and diagnostic sets.
+`@tester` reconfirmed that independently in the red step.
 
 **Ruling: `prop_pslg_invariants.cpp` gets no mutation round in this
 increment.** A mutation round exists to prove that a suite's *assertions* kill
 mutants; this change alters no assertion in that file. What it alters is a
-field name in a shared support header and one forwarding expression. Recording
+field name in a shared support header, one forwarding expression and three
+positional aggregate initialisers. Recording
 this as a ruling rather than as an omission is the point: `05b-noder-driver.md`
 counted two invariant-critical suites by file list, which is true and, as a cost
 estimate, misleading by roughly the whole of the C++ half.

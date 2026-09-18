@@ -402,25 +402,30 @@ public:
     // COLLAPSE AN ADJACENT DUPLICATE FIRST.
     //
     // This index-taking overload is the primitive.
+    //
+    // The third parameter is a SET, not a bool, and there is deliberately no
+    // conversion from one: add_chain(idx, role, true) fails to compile rather
+    // than keeping its old meaning. See edge_properties.hpp.
     PslgBuilder& add_chain(std::span<const std::uint32_t> idx, ChainRole role,
-                           bool is_river = false) {
+                           EdgeProperties properties = {}) {
         const auto begin = static_cast<std::uint32_t>(chain_indices_.size());
         chain_indices_.insert(chain_indices_.end(), idx.begin(), idx.end());
-        chains_.push_back(Chain{begin, static_cast<std::uint32_t>(idx.size()), role, is_river});
+        chains_.push_back(Chain{begin, static_cast<std::uint32_t>(idx.size()), role, properties});
         return *this;
     }
 
     // Appends its points to the vertex buffer VERBATIM, WITH NO DEDUP, and
     // emits the consecutive index run. It exists so tests and simple Python
     // ingress do not each hand-roll the same loop.
-    PslgBuilder& add_chain(std::span<const Point2> pts, ChainRole role, bool is_river = false) {
+    PslgBuilder& add_chain(std::span<const Point2> pts, ChainRole role,
+                           EdgeProperties properties = {}) {
         const std::uint32_t first = append_vertices(pts);
         const auto count = static_cast<std::uint32_t>(pts.size());
         const auto begin = static_cast<std::uint32_t>(chain_indices_.size());
         for (std::uint32_t i = 0; i < count; ++i) {
             chain_indices_.push_back(first + i);
         }
-        chains_.push_back(Chain{begin, count, role, is_river});
+        chains_.push_back(Chain{begin, count, role, properties});
         return *this;
     }
 
