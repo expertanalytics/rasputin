@@ -122,6 +122,10 @@ template <pred::GeometryKernel K>
 // that provably contains the answer, using only comparisons between coordinates
 // the caller supplied.
 //
+// The Crossing precondition also gives std::clamp its own: the two segments'
+// coordinate ranges overlap on both axes, so xlo <= xhi and ylo <= yhi, and
+// clamp's !(hi < lo) requirement is met rather than assumed.
+//
 // The clamp is also what ESTABLISHES snap's precondition: after it, p lies
 // inside a box whose corners are caller coordinates that already passed
 // can_snap in the driver's one-pass check, so can_snap(p) holds by monotonicity

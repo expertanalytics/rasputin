@@ -51,8 +51,10 @@ TEST_CASE("is_valid_spacing accepts exactly the finite positive spacings", "[nod
 
     // -0.0 does NOT separate the two spellings: `> 0.0` is false for it and
     // `!= 0.0` is also false, because `-0.0 == 0.0` in IEEE. Kept because the
-    // answer is right and a reader will wonder. What kills the `!= 0.0` mutant
-    // is the negative and NaN lines below, which it wrongly accepts. Mutant 5.
+    // answer is right and a reader will wonder. Mutant 5 is killed by exactly
+    // three of the lines below -- -1.0, -0.1 and -inf -- and by no other. NaN
+    // and +inf kill nothing: `<= max()` is false for both under either
+    // spelling. Measured by building the mutant and running these arguments.
     REQUIRE_FALSE(is_valid_spacing(-0.0));
 
     REQUIRE_FALSE(is_valid_spacing(-1.0));
