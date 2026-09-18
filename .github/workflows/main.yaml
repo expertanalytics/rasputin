@@ -80,7 +80,7 @@ jobs:
 
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
+          python-version: "3.12"
 
       # CLAUDE.md section 2. The constraint the whole project is organised
       # around, checked against imports and declared dependencies rather than
@@ -116,7 +116,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.11", "3.12", "3.13"]
+        python-version: ["3.12", "3.13", "3.14"]
 
     steps:
       - uses: actions/checkout@v4
@@ -133,13 +133,17 @@ jobs:
       - name: Tests
         run: pytest
 
-      # Static gates, per CLAUDE.md section 4. Run on 3.11 only: mypy and ruff
-      # are configured for a single target version, so repeating them across
-      # the matrix reports the same findings three times.
+      # Static gates, per CLAUDE.md section 4. Run on the floor leg only:
+      # mypy and ruff are configured for a single target version, so repeating
+      # them across the matrix reports the same findings once per leg. The leg
+      # must be the floor, because that is the version the two tools are
+      # configured for -- checking floor semantics on a newer leg means the
+      # installed stubs are newer than the target, which is what made this gate
+      # fail on a 3.14 venv while the floor was 3.11.
       - name: mypy (strict)
-        if: matrix.python-version == '3.11'
+        if: matrix.python-version == '3.12'
         run: mypy
 
       - name: ruff
-        if: matrix.python-version == '3.11'
+        if: matrix.python-version == '3.12'
         run: ruff check .

@@ -22,7 +22,7 @@ This project is governed by specialized sub-agents. Always defer tasks to the co
   `Rasterio` (it wraps GDAL), `Boost.Geometry`, or external `date` libraries.
   Enforced by `tools/check_prohibited_deps.py` over imports, includes, declared
   dependencies and build directives. `legacy/` is exempt.
-* **Core Stack:** Modern C++ (C++20 Concepts, Pybind11, `std::chrono`) + Async Python 3.11+ (Pydantic V2, Typer, Shapely, PyProj, NumPy, tifffile).
+* **Core Stack:** Modern C++ (C++20 Concepts, Pybind11, `std::chrono`) + Async Python 3.12+ (Pydantic V2, Typer, Shapely, PyProj, NumPy, tifffile).
 * **I/O Boundary:** File decoding is Python's. The C++ core never opens a file, sees a path, or links a codec, and CRS never crosses into it. See the `raster` section of `project_structure.md`.
 
 ## 3. Test-Driven Development (TDD) Protocol
