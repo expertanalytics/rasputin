@@ -400,9 +400,10 @@ class TestMeshArrays:
 
 
 class TestZeroCopyLifetime:
-    """Risk 4: a py::array_t over an IndexedMesh2's vectors without a correct
-    base object is a use-after-free whose symptom is a plausible-looking wrong
-    picture. This is the single most valuable assertion in the increment."""
+    """Risk 4: a py::array_t over an IndexedMesh2's or a Pslg's vectors without
+    a correct base object is a use-after-free whose symptom is a
+    plausible-looking wrong picture. This is the single most valuable assertion
+    in the increment, and it is owed by all six arrays, not just the mesh's."""
 
     def test_arrays_outlive_the_mesh_and_the_outcome(self, breakline_pslg: Any) -> None:
         outcome = _core.triangulate(breakline_pslg)
@@ -429,6 +430,43 @@ class TestZeroCopyLifetime:
             arr = getattr(mesh, name)
             assert arr.base is not None
             assert sys.getrefcount(arr.base) > 1
+
+    def test_pslg_arrays_outlive_the_pslg_and_the_build_result(self, square: np.ndarray) -> None:
+        """The same claim for the three Pslg views, which the mesh tests above
+        cannot reach. `square_pslg`/`breakline_pslg` already exercise the
+        *wrapper's* keep-alive -- they return `result.pslg` and drop the result
+        -- so what is left untested is the array-over-a-dropped-`Pslg` link.
+        The PSLG is built inline because a fixture would hold it alive for the
+        whole test, and that reference is the one this test has to remove."""
+        points = np.vstack([square, [[EAST + 20.0, NORTH + 40.0], [EAST + 80.0, NORTH + 40.0]]])
+        result = _core.build_pslg(
+            points,
+            [
+                ([0, 1, 2, 3], _core.ChainRole.Outer, False),
+                ([4, 5], _core.ChainRole.Breakline, True),
+            ],
+        )
+        assert result.ok, [d.message for d in result.diagnostics]
+        pslg = result.pslg
+        # indices_of(1), not (0): a chain at a non-zero offset, so the view is a
+        # distinct span into the buffer rather than an alias of its front.
+        views = (pslg.vertices, pslg.chain_indices, pslg.indices_of(1))
+        expected = tuple(np.array(view) for view in views)
+
+        del pslg, result
+        gc.collect()
+        churn = [np.full(1 << 16, i, dtype=np.float64) for i in range(64)]
+        assert len(churn) == 64
+
+        for view, want in zip(views, expected, strict=True):
+            # This pair is the check, in this order. Reading a freed buffer is
+            # undefined rather than reliably wrong, so `array_equal` alone could
+            # pass on allocator luck; `base` is a live `_core.Pslg` only if both
+            # links -- array to Pslg, Pslg to PslgBuildResult -- are held, and
+            # that holds or fails whatever the bytes say.
+            assert isinstance(view.base, _core.Pslg)
+            assert sys.getrefcount(view.base) > 1
+            assert np.array_equal(view, want)
 
 
 # --------------------------------------------------------------------------
