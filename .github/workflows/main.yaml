@@ -116,7 +116,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.11", "3.12", "3.13"]
+        python-version: ["3.11", "3.12", "3.13", "3.14"]
 
     steps:
       - uses: actions/checkout@v4
@@ -134,8 +134,11 @@ jobs:
         run: pytest
 
       # Static gates, per CLAUDE.md section 4. Run on 3.11 only: mypy and ruff
-      # are configured for a single target version, so repeating them across
-      # the matrix reports the same findings three times.
+      # are configured for a single target version -- the floor -- so repeating
+      # them across the matrix reports the same findings once per leg. 3.11 is
+      # also the only leg whose installed stubs match that target: numpy 2.5
+      # requires >=3.12, so a newer leg type-checks floor semantics against
+      # newer stubs, which is how this gate fails locally on a 3.14 venv.
       - name: mypy (strict)
         if: matrix.python-version == '3.11'
         run: mypy
