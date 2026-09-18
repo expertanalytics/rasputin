@@ -281,10 +281,11 @@ TEST_CASE("crossing_point returns the lattice point a crossing lands on", "[nodi
     REQUIRE(crossing_point<DefaultKernel>(dyadic, u, v) == GridPoint{64, 64});  // (4, 4) / 2^-4
 }
 
-// THE CLAMP, and mutant 9. The invariant holds for EVERY crossing, which is why
-// it needs no specially-found fixture: the design considered hunting a
-// near-parallel pair whose unclamped result escapes the coordinate ranges and
-// ruled that the universal invariant is both stronger and cheaper.
+// THE CLAMP, and mutant 9. The invariant holds for EVERY crossing, but that is
+// NOT enough to kill the mutant: a well-conditioned crossing lands in range with
+// or without the clamp, and measured, the clamp-removed mutant survives every
+// case above. The last fixture in this case is the one that kills it, found by a
+// seeded scan. The design's contrary ruling is corrected in `05-noder.md`.
 //
 // Stated on the node's CELL rather than on its coordinate, and that is exact
 // rather than a tolerance: the clamped point provably lies in the intersection
@@ -353,8 +354,9 @@ TEST_CASE("crossing_point lands in the intersection of the coordinate ranges", "
 // is the exact index-space midpoint of the host's two endpoints, so in index
 // space it is on the host by construction. In world coordinates it is not:
 // fl(ix * 0.1) perturbs each of the three points independently, and the node
-// ends up 3.1e-10 m off the host's line -- six thousandths of an ulp of a metre,
-// and about 3e-9 of a cell.
+// ends up 4.254e-10 m off the host's line -- 0.457 ulp at this northing, where
+// ulp(7.9e6) = 9.313e-10, and 4.25e-9 of a cell. Recomputed with exact rationals
+// over the actual doubles.
 //
 // on_segment<DefaultKernel> asks EXACT INCIDENCE and correctly answers false.
 // segment_meets_cell asks HOT-PIXEL PROXIMITY -- does the segment pass through

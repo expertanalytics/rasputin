@@ -1412,7 +1412,9 @@ nodes — because that is the case where a reader expects collapse.
    comment must say that is where the input came from.
 4. `kMaxGridIndex` raised to `2^62`, or `can_snap` comparing `<` where it needs
    `<=` or vice versa — the four-corner boundary block.
-5. `is_valid_spacing` written as `spacing != 0.0` — the `-0.0` case.
+5. `is_valid_spacing` written as `spacing != 0.0` — killed by the negative and
+   NaN fixtures, which it wrongly accepts. **Not** by `-0.0`: that compares
+   equal to `0.0` in IEEE, so both spellings reject it.
 6. `Touching` and `Crossing` swapped when the meeting point is an endpoint; any
    one of the four orientation signs flipped.
 7. The collinear arm returning `Overlapping` for a single shared point.

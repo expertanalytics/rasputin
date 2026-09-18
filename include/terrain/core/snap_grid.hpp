@@ -71,8 +71,9 @@ inline constexpr std::int64_t kMaxGridIndex = std::int64_t{1} << 51;
 // that asserts on it is a check that rots. The driver calls this and returns a
 // status; SnapGrid asserts it.
 //
-// Spelled `> 0.0`, never `!= 0.0`: both reject +0.0, but only the first rejects
-// -0.0, whose reciprocal is -inf and whose grid is nonsense.
+// Spelled `> 0.0`, never `!= 0.0`. Both reject +0.0 and both reject -0.0, since
+// `-0.0 == 0.0` in IEEE. What `!= 0.0` wrongly ACCEPTS is every negative spacing
+// and every NaN, either of which makes the grid nonsense.
 [[nodiscard]] constexpr bool is_valid_spacing(double spacing) noexcept {
     return spacing > 0.0 && spacing <= std::numeric_limits<double>::max();
 }
