@@ -143,3 +143,23 @@ add_terrain_test(test_cdt_indexed_mesh unit/test_cdt_indexed_mesh.cpp)
 # header-only FastKernel so it needs terrain_predicates no more than it needs
 # terrain_cdt; see the comment at the top of the file.
 add_terrain_test(test_cdt_backend_seam unit/test_cdt_backend_seam.cpp)
+
+# Noding, increment 5a: the noder's numeric half -- the snap grid, the pairwise
+# intersection classification and construction, the hot-pixel predicate and the
+# node set.
+#
+# THE LINK LINES ARE PART OF THE SEAM BETWEEN 5a AND 5b, and are checkable
+# rather than argued: no target here links terrain_cdt, and no 5a header
+# includes core/pslg.hpp. 5a is everything whose correctness is a question about
+# numbers; the moment one of these suites needs a Chain, the split has been
+# violated and the build says so.
+#
+# Registration follows docs/increments/05-noder.md, "Files and LOC":
+# test_noding_node_set names no kernel and uses the plain helper; the other
+# three use add_terrain_backend_test, which links the compiled
+# terrain_predicates target that DefaultKernel needs.
+add_terrain_backend_test(test_noding_snap_rounding unit/test_noding_snap_rounding.cpp)
+add_terrain_backend_test(test_noding_pairwise_intersection unit/test_noding_pairwise_intersection.cpp)
+add_terrain_backend_test(prop_noding_snap_invariants property/prop_noding_snap_invariants.cpp)
+
+add_terrain_test(test_noding_node_set unit/test_noding_node_set.cpp)
