@@ -22,6 +22,7 @@ import argparse
 import json
 import os
 import re
+import stat
 from datetime import datetime
 from pathlib import Path
 
@@ -73,6 +74,13 @@ def _read(path: Path, absent: str) -> str:
     passed both excepts. Hence errors="replace", as human_turns already does.
     """
     try:
+        # Only a regular file may be opened. Dropping is_file() to surface broken
+        # symlinks also admitted FIFOs, and open() on a FIFO with no writer BLOCKS
+        # -- a recovery tool that hangs is worse than one that crashes, because
+        # nothing prints at all. Measured: with a FIFO in the directory the run
+        # times out; without it, it completes.
+        if not stat.S_ISREG(path.stat().st_mode):
+            return "(not a regular file)"
         return path.read_text(errors="replace").rstrip()
     except FileNotFoundError:
         return absent
