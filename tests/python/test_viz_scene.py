@@ -151,6 +151,15 @@ MESH_VERTICES = np.array(
     dtype=np.float64,
 )
 
+# `indexed_mesh.hpp` guarantee 4: the mesh's vertex array *begins with* the
+# PSLG's, it does not equal it -- the backend may append points of its own.
+# Index 6 stands for one such point. It is placed outside the rectangle so that
+# a scene built from the input vertices instead of the mesh's has a bbox that
+# visibly omits it, and no triangle indexes it, so `MESH_TRIANGLES` and
+# `MESH_MASKS` stay valid against this vertex array unchanged.
+BACKEND_VERTEX = np.array([[EAST + 160.0, NORTH + 130.0]], dtype=np.float64)
+MESH_VERTICES_PLUS_BACKEND = np.concatenate([MESH_VERTICES, BACKEND_VERTEX])
+
 # Every triangle counterclockwise, which is what `triangulate` guarantees; the
 # six of them tile the rectangle exactly (8000 m^2, checked by hand).
 MESH_TRIANGLES = np.array(
@@ -271,6 +280,12 @@ def pslg() -> FakePslg:
 @pytest.fixture
 def mesh() -> FakeMesh:
     return FakeMesh(MESH_VERTICES, MESH_TRIANGLES, MESH_MASKS)
+
+
+@pytest.fixture
+def mesh_with_backend_vertex() -> FakeMesh:
+    """The same triangulation over a vertex array longer than the input's."""
+    return FakeMesh(MESH_VERTICES_PLUS_BACKEND, MESH_TRIANGLES, MESH_MASKS)
 
 
 @pytest.fixture
@@ -396,9 +411,19 @@ class TestMaskConvention:
         [(0, (0, 1)), (1, (4, 5)), (2, (0, 3)), (3, (1, 2)), (4, (4, 5)), (5, (2, 3))],
     )
     def test_each_single_bit_mask_names_its_own_edge(
-        self, scene: Any, triangle: int, expected: tuple[int, int]
+        self, pslg: FakePslg, triangle: int, expected: tuple[int, int]
     ) -> None:
-        assert expected in masked_pairs(scene), f"triangle {triangle}"
+        # Per-triangle attribution, which is what the name claims: membership in
+        # the whole scene's constrained set is already implied by the set
+        # equality above and would pass for any triangle. The mesh is cut down
+        # to this one triangle, so the masked set can only come from its bit.
+        one = FakeMesh(
+            MESH_VERTICES,
+            MESH_TRIANGLES[triangle : triangle + 1],
+            MESH_MASKS[triangle : triangle + 1],
+        )
+        scene = scene_module().build_scene(pslg, one, closed_roles=CLOSED)
+        assert masked_pairs(scene) == frozenset({expected})
 
     def test_no_interior_edge_is_constrained(self, scene: Any) -> None:
         interior = ALL_EDGES - EXPECTED_CONSTRAINED
@@ -419,7 +444,11 @@ class TestEdgeDedup:
         self, scene: Any
     ) -> None:
         # The breakline (4, 5) is bit 1 of triangle 1 and bit 0 of triangle 4.
+        # `constrained` is the mask's verdict and so is the object
+        # "double-classified" is a claim about; `role` is the chain join's, and
+        # is asserted alongside only because the two must agree here.
         breakline = edge_at(scene, 4, 5)
+        assert breakline.constrained is True
         assert breakline.role is Role.Breakline
 
     def test_endpoints_are_canonically_ordered(self, scene: Any) -> None:
@@ -561,11 +590,43 @@ class TestRoleJoin:
             (kinds.MASKED_EDGE_WITHOUT_CHAIN, 0, 3)
         ]
 
-    def test_a_breakline_is_never_closed(self, pslg: FakePslg, mesh: FakeMesh) -> None:
-        # The breakline is [4, 5]; closing a two-vertex chain would emit (4, 5)
-        # twice, and closing a longer one would invent a constraint.
+    def test_a_breakline_is_never_closed(self, mesh: FakeMesh) -> None:
+        # What excludes a breakline is `Breakline not in closed_roles`, not the
+        # chain's length. The fixture's two-vertex breakline cannot show that:
+        # closing it re-emits `_key(4, 5)`, and `_chain_edges` accumulates into
+        # a dict keyed on exactly that pair, so the second write only ORs
+        # `is_river` and the edge still appears once under the mutant. A
+        # three-vertex breakline can: closing [4, 5, 2] invents the constraint
+        # (2, 4), which is a real mesh edge and so would silently be drawn as
+        # one.
+        pslg = make_pslg(
+            [
+                ([0, 1, 2, 3], Role.Outer, False),
+                ([4, 5, 2], Role.Breakline, True),
+            ]
+        )
         scene = scene_module().build_scene(pslg, mesh, closed_roles=CLOSED)
+        assert edge_at(scene, 2, 4).role is None
         assert len([e for e in scene.edges if (int(e.a), int(e.b)) == (4, 5)]) == 1
+
+    def test_a_single_vertex_ring_is_never_closed_into_a_self_loop(
+        self, mesh: FakeMesh
+    ) -> None:
+        # This is what the length guard defends, and the only thing it does:
+        # a one-vertex chain closed emits `_key(a, a)`, a self-loop that
+        # violates `SceneEdge`'s `a < b` invariant and that no viewport
+        # transform can draw. A two-vertex chain closed is harmless -- see
+        # above -- so the guard may not be relaxed below two.
+        pslg = make_pslg(
+            [
+                ([0, 1, 2, 3], Role.Outer, False),
+                ([4, 5], Role.Breakline, True),
+                ([2], Role.Outer, False),
+            ]
+        )
+        scene = scene_module().build_scene(pslg, mesh, closed_roles=CLOSED)
+        assert [(int(e.a), int(e.b)) for e in scene.edges if int(e.a) >= int(e.b)] == []
+        assert pairs(scene.edges) == ALL_EDGES
 
 
 class TestClassification:
@@ -626,7 +687,10 @@ class TestClassification:
     ) -> None:
         # There is no mask to disagree with, so every chain edge would be a
         # CHAIN_EDGE_WITHOUT_MASK finding -- five alarms on a picture whose real
-        # alarm is the status. The join is not performed at all.
+        # alarm is the status. The join itself still runs and the roles it
+        # attaches survive (`test_the_pslg_only_scene_keeps_the_roles`); what is
+        # suppressed is the findings derived from comparing it to a mask that
+        # was never produced.
         supplied = empty_mesh if ok else mesh
         scene = scene_module().build_scene(pslg, supplied, ok=ok, closed_roles=CLOSED)
         assert list(scene.findings) == []
@@ -715,3 +779,51 @@ class TestBoundingBox:
         broken = FakeMesh(vertices, MESH_TRIANGLES, MESH_MASKS)
         with pytest.raises(ValueError, match="finite"):
             scene_module().build_scene(pslg, broken, closed_roles=CLOSED)
+
+
+class TestBackendIntroducedVertices:
+    """`indexed_mesh.hpp` guarantee 4 says the mesh's vertex array *begins
+    with* the PSLG's -- not that it equals it. The backend may append points of
+    its own, and the scene draws the mesh's array whenever there is a mesh.
+
+    Every other fixture here builds the PSLG and the mesh from one array, so
+    the two sources are indistinguishable: measured, `source = pslg.vertices`
+    passed the whole suite. It is not a cosmetic difference. Under that mutant
+    6b-ii's viewport transform indexes triangle corners into an array that is
+    too short, the bbox omits every backend-introduced point, and the finiteness
+    guard inspects a strictly narrower set than the one that gets drawn -- which
+    is why the third test below is here and not in `TestBoundingBox`.
+    """
+
+    def test_the_scene_carries_the_meshs_vertices_not_the_inputs(
+        self, pslg: FakePslg, mesh_with_backend_vertex: FakeMesh
+    ) -> None:
+        scene = scene_module().build_scene(pslg, mesh_with_backend_vertex, closed_roles=CLOSED)
+        assert len(scene.vertices) == 7
+        assert np.array_equal(np.asarray(scene.vertices), MESH_VERTICES_PLUS_BACKEND)
+
+    def test_the_bbox_covers_a_backend_introduced_vertex(
+        self, pslg: FakePslg, mesh_with_backend_vertex: FakeMesh
+    ) -> None:
+        # Absolute tolerance, for `TestBoundingBox`'s reason: at an easting of
+        # 4.3e5 the default relative one is +-0.43 m.
+        box = scene_module().build_scene(
+            pslg, mesh_with_backend_vertex, closed_roles=CLOSED
+        ).bbox
+        assert box.max_x == pytest.approx(EAST + 160.0, rel=0.0, abs=1e-9)
+        assert box.max_y == pytest.approx(NORTH + 130.0, rel=0.0, abs=1e-9)
+
+    def test_the_finiteness_guard_inspects_the_meshs_vertices(self, pslg: FakePslg) -> None:
+        vertices = MESH_VERTICES_PLUS_BACKEND.copy()
+        vertices[6, 0] = np.nan
+        broken = FakeMesh(vertices, MESH_TRIANGLES, MESH_MASKS)
+        with pytest.raises(ValueError, match="finite"):
+            scene_module().build_scene(pslg, broken, closed_roles=CLOSED)
+
+    def test_a_scene_without_a_mesh_falls_back_to_the_input_vertices(
+        self, pslg: FakePslg
+    ) -> None:
+        # The other direction: with no drawable mesh there is no longer array to
+        # prefer, and the input's own vertices are what the picture is of.
+        scene = scene_module().build_scene(pslg, None, ok=False, closed_roles=CLOSED)
+        assert np.array_equal(np.asarray(scene.vertices), MESH_VERTICES)
