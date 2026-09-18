@@ -163,3 +163,13 @@ add_terrain_backend_test(test_noding_pairwise_intersection unit/test_noding_pair
 add_terrain_backend_test(prop_noding_snap_invariants property/prop_noding_snap_invariants.cpp)
 
 add_terrain_test(test_noding_node_set unit/test_noding_node_set.cpp)
+
+# Edge properties, increment 7: the opaque per-edge property set.
+#
+# The plain helper, deliberately: EdgeProperties names no kernel, includes no
+# predicate header and is constexpr throughout, so it links terrain_headers and
+# Catch2 and nothing else. test_cdt_indexed_mesh is registered the same way for
+# the same reason -- a value type in core/ needs neither terrain_predicates nor
+# terrain_cdt, and a link line that pulled either in would hide a dependency
+# this header must not grow.
+add_terrain_test(test_edge_properties unit/test_edge_properties.cpp)
