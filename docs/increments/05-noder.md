@@ -500,8 +500,10 @@ by the collinear arm or the four-orientation arm, and this arm returns
 
 It stays, for two reasons that are not style. First, `classify` is a template on
 `pred::GeometryKernel` and must be total and defensible for **any** conforming
-`K`, including `FastKernel`, whose mis-signed orientation is exactly what drops a
-genuine touch into this arm; without it the answer there is `Disjoint`, which is
+`K`, including `FastKernel`, whose wrong orientation is exactly what drops a
+genuine meeting into this arm — measured, at Web Mercator magnitudes, as a
+wrongly-`Collinear` answer dropping a genuine crossing there, see "Template
+spend"; without it the answer there is `Disjoint`, which is
 the silent wrong answer rather than the conservative one. Second, deleting it
 makes the exhaustiveness of the classification rest on the case analysis in the
 paragraph above rather than on the code, and that analysis is precisely the kind
@@ -1415,12 +1417,22 @@ nodes — because that is the case where a reader expects collapse.
    one of the four orientation signs flipped.
 7. The collinear arm returning `Overlapping` for a single shared point.
 8. The collinear arm testing one axis instead of both — the vertical pair.
-9. The clamp removed from `crossing_point` — killed by the coordinate-range
-   assertion, which holds for *every* crossing and therefore needs no
-   specially-found fixture. **This is deliberate**: an earlier draft of this
-   design proposed finding a near-parallel pair whose unclamped result escapes
-   the range, and that fixture may not exist at reasonable search effort. The
-   universal invariant is both stronger and cheaper.
+9. The clamp removed from `crossing_point` — killed by **a found near-parallel
+   fixture**, and by that alone. This entry previously ruled the opposite: that
+   the universal coordinate-range assertion, which holds for *every* crossing,
+   killed the mutant without a specially-found pair, and that such a pair "may
+   not exist at reasonable search effort". **Both halves of that are false, and
+   the suite measured it.** A well-conditioned crossing lands inside the
+   coordinate ranges with or without the clamp, so the universal invariant alone
+   leaves the mutant alive through the whole suite; and the fixture does exist —
+   a seeded 4e5-sample scan over near-parallel crossings at Web Mercator
+   magnitudes found one in under a minute (`u = 1.5`, i.e. half a segment beyond
+   `s.b`, putting the unclamped point 3.3e7 m outside the range box on a pair
+   whose true crossing is interior to both). It is the last case in
+   `test_noding_pairwise_intersection.cpp`'s "crossing_point lands in the
+   intersection of the coordinate ranges", with its provenance at the fixture.
+   The universal invariant stays, because it is the statement of the contract;
+   it is simply not what kills this mutant.
 10. `NodeSet` ids assigned in first-appearance order — killed by the shuffle
     property, and by nothing else.
 11. `NodeSet` keyed on `world()` coordinates rather than on `GridPoint`.
@@ -1447,9 +1459,11 @@ nodes — because that is the case where a reader expects collapse.
     `return Disjoint`. **Killed by nothing in the suite, and that is accepted,
     not an oversight.** Under `DefaultKernel` the arm never returns `Touching`
     (see "the endpoint arm is a totality fallback"), so no fixture can kill it
-    there without asserting a coin flip, and the single `TEMPLATE_TEST_CASE`
-    buys only near-parallel `Disjoint`-vs-`Crossing` under `FastKernel` and does
-    not reach it. The arm is defended by the case analysis, not by a test.
+    there without asserting a coin flip. The single `TEMPLATE_TEST_CASE` *does*
+    reach the arm under `FastKernel` — that correction is in "Template spend" —
+    but its assertion is "not `Crossing`", which both `Touching` and the
+    mutant's `Disjoint` satisfy, so it does not kill it either. The arm is
+    defended by the case analysis, not by a test.
     Listed, like 11, so nobody spends the round hunting the fixture.
 
 ### Template spend
@@ -1459,12 +1473,32 @@ nodes — because that is the case where a reader expects collapse.
 decide anything.
 
 Exactly one `TEMPLATE_TEST_CASE` over `{FastKernel, DefaultKernel}`, doing one
-job: a near-parallel crossing at UTM33 magnitudes where `FastKernel` mis-signs
-one orientation and reports `Disjoint` for a genuine `Crossing`, while
-`DefaultKernel` reports `Crossing`. What it proves is that the classification
+job: a near-parallel crossing at **Web Mercator full-extent** magnitudes where
+`FastKernel` gets the orientation wrong and answers something other than
+`Crossing`, while `DefaultKernel` reports `Crossing`. What it proves is that the classification
 actually flows through `K` — that nobody has written the four determinants
 inline in `double` — which is the same job, and the same justification, as
 increment 3's single sliver-winding cross product.
+
+**This paragraph previously specified the fixture at UTM33 magnitudes and
+predicted a mis-signed orientation reported as `Disjoint`. Both were wrong, and
+the suite measured both.** At UTM33 magnitudes the pair does not exist:
+`FastKernel`'s error in `orient2d` goes as `eps·|dx·dy|`, while the smallest
+nonzero determinant the coordinates can express goes as `|dx|·ulp(y)` ≈
+`eps·|dx|·|y|`, so the first exceeds the second only when a point's offset from
+the segment is comparable to the absolute coordinate magnitude — at northing
+7.9e6 over even a 100 km domain that ratio is 0.013. Measured: over 1.8e6
+near-line triples about a 100 km UTM33 segment the two kernels disagreed on
+**zero**. At Web Mercator full extent (±2.0037e7 with a 4e7 span) the ratio
+reaches 2 and `FastKernel` does go wrong — but it answers `Collinear` rather
+than a flipped sign, which drops a genuine crossing into `classify`'s **endpoint
+arm**, exactly the case that arm is documented to exist for. The arm's answer
+there is `Touching` without floating-point contraction and `Disjoint` with it,
+so the assertion is the robust one they share: under `FastKernel` the answer is
+not `Crossing`. That is a better outcome than the prediction, because the
+endpoint arm now has a fixture behind it rather than only a case analysis — note
+that this does *not* make mutant 18 killable, since the mutant's `return
+Disjoint` is one of the two answers this fixture already tolerates.
 
 **Everything else runs under `DefaultKernel` only, and `FastKernel` is forbidden
 in the property suite.** Same ruling and same reason as increment 4: the property
