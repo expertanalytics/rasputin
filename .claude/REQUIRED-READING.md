@@ -53,16 +53,19 @@ survive. The same applies one level up, to *what is currently being asked*:
   by the subagent, which may be exactly the thing that died, and the rule
   recurses, so a nested subagent's file is its own spawner's and never the
   session's; and a session **sweeps `.claude/current-task/` of every file
-  belonging to an agent it is no longer waiting on, after step 1 above and never
-  before it.** A file from a dead agent therefore survives at most one round.
+  except those of agents it is currently waiting on, after step 1 above and
+  never before it.** A file from a dead agent therefore survives at most one round.
   That last sweep is the backstop, because it is the only deletion that still
   happens when the agent owing one is gone.
 
-  The sweep test is liveness, not provenance. "Every file I did not just spawn"
-  was the first spelling and it was wrong: a session already mid-round with two
+  The sweep test is an exception for what is live, and both other spellings
+  failed. "Every file I did not just spawn" is provenance, and it was wrong: a session already mid-round with two
   live subagents has, at the instant it starts a parallel round, *just* spawned
   none of them, so that criterion deletes its own live agents' files and every
-  nested one. Ordering matters for the same reason — sweep before reading and
+  nested one. "Every file I am no longer waiting on" is its dual and fails the
+  other way: an orphan from a dead predecessor session is one you were never
+  waiting on, so it is never one you are *no longer* waiting on, and nothing
+  ever licenses deleting it — which is the case the backstop exists for. Ordering matters for the same reason — sweep before reading and
   the file destroyed is precisely the dead step's, which is the case the
   backstop exists for.
 
@@ -119,9 +122,9 @@ generator that was the same broad phase, and the dedup's own records in place of
 the input (`docs/increments/05-noder.md`, guarantees 14 and 15). A comment credited the
 NaN fixture with killing the `!= 0.0` mutant of a function guarded by
 `> 0.0 && <= max()`, where the second conjunct rejects NaN under either
-spelling, so that fixture kills nothing (`7ece838`). That sentence itself
-shipped with the two objects swapped and was caught in review — the check
-applied to the paragraph that defines it. Each repair was made in the same
+spelling, so that fixture kills nothing (`7ece838`). That sentence was itself
+committed with the two objects swapped and caught by this branch's own pre-push
+pass — the check applied to the paragraph that defines it. Each repair was made in the same
 mode as the defect — reasoning about the claim instead of running it — which is
 how the repairs kept seeding the next occurrence.
 

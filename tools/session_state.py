@@ -64,15 +64,16 @@ def human_turns(path: Path) -> list[tuple[str, str, str]]:
 
 
 def _read(path: Path, absent: str) -> str:
-    """Contents, or a named placeholder. Never raises.
+    """Contents, or a named placeholder.
 
     A recovery tool that dies on one unreadable file takes the human-turn
-    half -- the reason it exists -- down with it. Measured: a chmod 000 file
-    raised PermissionError out of read_text() and main() never reached the
-    transcript scan.
+    half -- the reason it exists -- down with it. Measured twice: a chmod 000
+    file raised PermissionError, and once the glob widened past *.md, a
+    non-UTF-8 file raised UnicodeDecodeError, which is a ValueError and so
+    passed both excepts. Hence errors="replace", as human_turns already does.
     """
     try:
-        return path.read_text().rstrip()
+        return path.read_text(errors="replace").rstrip()
     except FileNotFoundError:
         return absent
     except OSError:
@@ -87,8 +88,8 @@ def print_current_task() -> None:
     delegated. Both are printed because a subagent file may be the only trace of
     a step that died, but the order says which one to believe about the round.
 
-    Ordering by mtime would be wrong here -- the newest file is whichever
-    subagent wrote last, which is precisely not the thing to read first.
+    Sorted by name for stable output. session.md is promoted above the rest
+    explicitly, so the order among subagent files decides nothing.
     """
     tasks = REPO / ".claude" / "current-task"
     session = tasks / "session.md"
