@@ -59,7 +59,7 @@ src_python/tin_engine/     # public Python API (distribution name: rasputin)
   viz/                     # CDT -> SVG renderer; never imports _core
     __init__.py            # package docstring; re-exports arrive with 6b
     protocols.py           # MeshLike / PslgLike / ChainLike -- typing.Protocol
-    scene.py               # (mesh, pslg) -> Scene (6b)
+    scene.py               # build_scene(pslg, mesh) -> Scene
     style.py               # SvgStyle: frozen Pydantic V2 (6b)
     svg.py                 # (Scene, SvgStyle) -> str (6b)
     fixtures.py            # the synthetic gallery (6b)

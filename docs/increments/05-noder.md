@@ -940,7 +940,7 @@ of them:
   one function to get right, and its correctness is checkable without noding
   anything.
 - **Guarantee 14 is additionally verified all-pairs, on small inputs, in the
-  property suite.** `prop_noding_no_crossings.cpp` (the name `testing.md:257`
+  property suite.** `prop_noding_no_crossings.cpp` (the name `testing.md:283`
   already reserves) runs the full noder on generated constraint sets of a few
   dozen segments and then checks both clauses of 14 by **brute force over every
   (edge, edge) and (node, edge) pair**, with no broad phase anywhere in the

@@ -142,6 +142,15 @@ def _chain_edges(pslg: PslgLike, closed_roles: Sequence[object]) -> dict[Pair, t
     is therefore supplied by ``cli.py``, the composition root that knows the
     enum; without it every ring's closure is a false finding. Membership uses
     only ``==``/``__hash__``.
+
+    Fewer than three vertices is not a ring, so ``len(walk) > 2`` appends no
+    closure. The invariant-critical half of that guard is the **one**-vertex
+    chain: closing it emits ``_key(a, a)``, a self-loop, which violates
+    ``SceneEdge``'s documented ``a < b`` ordering --
+    ``test_a_single_vertex_ring_is_never_closed_into_a_self_loop`` is what
+    defends it. Double emission is *not* the reason, whatever the design once
+    said: ``joined`` is keyed on ``_key``, so closing a two-vertex chain would
+    write the same key twice and the second write would only OR ``is_river``.
     """
     joined: dict[Pair, tuple[object, bool]] = {}
     for c, chain in enumerate(pslg.chains):
@@ -223,9 +232,10 @@ def build_scene(
 
     joined = _chain_edges(pslg, closed_roles)
     if drawable is None:
-        # No mask to disagree with, so the join is not performed at all: every
-        # chain edge would otherwise be an alarm on a picture whose real alarm
-        # is the status.
+        # No mask to disagree with, so findings are suppressed: every chain edge
+        # would otherwise be an alarm on a picture whose real alarm is the
+        # status. The join itself still runs -- roles are kept, because the
+        # PSLG-only picture is drawn in role colours.
         drawn, masked = set(joined), set[Pair]()
         triangles = np.zeros((0, 3), dtype=np.uint32)
     else:

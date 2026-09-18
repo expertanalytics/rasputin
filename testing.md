@@ -65,7 +65,7 @@ Used for: integration tests, performance baselines, visual-regression spot-check
 
 ## Invariant catalog [partly live]
 
-These are the "water tight" properties — they must hold on every input regardless of tier. Sections marked **[live]** describe modules that exist and are enforced by the suites under `tests/cpp/`; **[planned]** sections describe modules that do not exist yet. Property tests run them against generators that produce random inputs in each module's domain.
+These are the "water tight" properties — they must hold on every input regardless of tier. Sections marked **[live]** describe modules that exist and are enforced by the suites under `tests/cpp/` — or, for the Python `viz` section, under `tests/python/`; **[planned]** sections describe modules that do not exist yet. Property tests run them against generators that produce random inputs in each module's domain.
 
 ### `predicates` [live]
 
@@ -162,6 +162,32 @@ These are the "water tight" properties — they must hold on every input regardl
 - Output graph is a tree (or forest, if multiple outlets).
 - Strahler order is monotonic non-decreasing from headwater to outlet.
 - A confluence of two order-`k` streams produces an order-`k+1` segment downstream.
+
+### `viz` [partly live]
+
+The only Python section of this catalog, and the only one whose module is pure
+computation over data handed across the pybind11 boundary rather than C++.
+`tests/python/test_viz_scene.py` **[live]** is increment 6b-i's sole
+invariant-critical suite (`docs/increments/06-cdt-viewer.md`, "What is worth
+testing"); it runs against hand-built fakes of `MeshLike`/`PslgLike` with no
+compiled extension in the process, which is what `viz/`'s protocol boundary
+buys. `tests/python/test_viz_svg.py` and `tests/python/test_cli_draw.py` are
+**[planned]** — 6b-ii's, ordinary rather than invariant-critical, because a
+renderer's failure mode is a wrong-looking picture and a person catches that
+instantly.
+
+Invariants over `build_scene` — all `[live]`:
+
+- Bit `e` of a triangle's mask names the edge `(v[e], v[(e+1)%3])`, matching `indexed_mesh.hpp`. The mutant this suite exists for is the rotation to CGAL's opposite-vertex convention, which draws a plausible picture with every constraint stroke on the wrong edge; see the `cdt` section above for why a one-bit mask is the sharpest fixture for it.
+- Every undirected edge is emitted exactly once, with endpoints canonically ordered `a < b`, and in a deterministic order. An interior edge shared by two triangles is neither drawn twice nor double-classified, and a mask bit set on only one of the two incident triangles survives.
+- The scene **records** mask-versus-chain disagreement rather than reconciling it: a masked edge matching no chain, and a chain edge in no mask, each produce their own finding and are each still drawn. These are two independently derived answers to "this edge is a constraint", which is the only reason their agreement means anything.
+- The role join is the input's verdict and stays separate from the mask's: an edge in two chains takes the first chain's role, and its river bit is the OR over every contributing chain.
+- Ring closure is the caller's policy, not the scene's (`closed_roles`); a chain of fewer than three vertices is never closed, and a one-vertex chain is never closed into a self-loop, which would violate the `a < b` ordering above.
+- Classification is total: a populated mesh, `Ok` with zero triangles, a missing mesh, and a non-`Ok` status each map to their own kind, and a non-`Ok` status wins over a mesh that — per the `cdt` section — cannot accompany it.
+- No drawable mesh means no findings, and the roles are kept regardless: the PSLG-only picture is drawn in role colours, and there is no mask for the chains to disagree with.
+- The bbox contains every vertex, pads a zero-extent axis about its own centre while leaving a healthy axis alone, and reports that it padded. Non-finite coordinates are refused with `ValueError` rather than poisoning the bounds silently.
+- The vertices and bbox are the **mesh's** when a mesh is drawn, so a backend-introduced vertex is inside the picture; they fall back to the input PSLG's only when there is no mesh.
+- `viz` imports no compiled extension and no first-party module but `viz.protocols` — pinned by a test, because it is what keeps the suite runnable without a build.
 
 ## Frameworks [partly live]
 
