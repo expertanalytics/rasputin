@@ -81,6 +81,16 @@ if(RASPUTIN_BUILD_PYTHON)
     # links. Omitting the second links on macOS (a MODULE is allowed undefined
     # symbols) and fails at import, so the C++ build is not where it is caught.
     target_link_libraries(_core PRIVATE terrain_headers terrain_cdt terrain_predicates)
+
+    # Both static libraries are linked into a SHARED module here, so their
+    # objects must be position-independent. On ELF the linker refuses outright
+    # -- "relocation R_X86_64_PC32 ... can not be used when making a shared
+    # object; recompile with -fPIC" -- while Mach-O does not care, so this is
+    # invisible on macOS and fails every Linux leg. Set on the libraries rather
+    # than globally: it is a property of being linked into _core, and the ctest
+    # executables that also consume them need nothing.
+    set_property(TARGET terrain_cdt terrain_predicates
+                 PROPERTY POSITION_INDEPENDENT_CODE ON)
     target_compile_options(_core PRIVATE -Wall -Wextra -Wpedantic -Werror)
 
     install(TARGETS _core LIBRARY DESTINATION tin_engine)
