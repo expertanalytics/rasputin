@@ -6,3 +6,9 @@ the style model and the fixture gallery are 6b-ii. Nothing in this package impor
 it is testable against a hand-built fake with no compiled extension in the
 process, and ``cli.py`` is the single composition root that joins the two.
 """
+
+from .scene import Scene, build_scene
+from .style import SvgStyle
+from .svg import render_svg
+
+__all__ = ["Scene", "SvgStyle", "build_scene", "render_svg"]
