@@ -960,7 +960,15 @@ class TestStrokeClasses:
             )
         )
         line = edge_element(document, 4, 5, scene)
-        assert property_tokens(line, ("river", "road")) == ["river"]
+        # WHICH token wins is the next test's subject, not this one's, so the
+        # expectation is the gallery list's own head rather than a literal:
+        # `GALLERY_STROKES` is declared 800 lines up and an expectation spelled
+        # `["river"]` here names a different object than the one the fixture
+        # defines -- which is exactly how this test and the next came to
+        # contradict each other. The order is pinned in place so that a reorder
+        # reads as a fixture change and not as a renderer failure.
+        assert GALLERY_STROKES[0] == (ROAD_BIT, "road"), "the gallery is road-first"
+        assert property_tokens(line, ("river", "road")) == [GALLERY_STROKES[0][1]]
 
     def test_the_stroke_drawn_is_the_styles_first_match_not_the_lowest_bit(
         self, mesh: FakeMesh
