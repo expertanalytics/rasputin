@@ -304,6 +304,20 @@ def classes(element: ET.Element) -> frozenset[str]:
     return frozenset((element.get("class") or "").split())
 
 
+def header_line(document: ET.Element, needle: str) -> ET.Element:
+    """The one `<text>` of the header band that carries `needle`.
+
+    A class token is structure, not taste (see `svg.py`'s own convention), so
+    `alarm` is assertable where a colour is not -- and it is the design's stated
+    mechanism for "degeneracy and emptiness are the loudest thing on the page".
+    Asserting it needs the individual line rather than the band's collapsed
+    text, which is what this returns.
+    """
+    lines = [t for t in group(document, "header").iter(tag("text")) if needle in text_of(t)]
+    assert len(lines) == 1, f"expected one header line saying {needle!r}, found {len(lines)}"
+    return lines[0]
+
+
 def numbers(text: str) -> list[float]:
     return [float(m) for m in re.findall(r"-?\d+(?:\.\d+)?(?:[eE][-+]?\d+)?", text)]
 
@@ -471,7 +485,13 @@ class TestModuleIsolation:
         # a fixture nobody can read as data.
         assert [n for n in self.imports("fixtures") if n.startswith((".", "tin_engine"))] == []
 
-    def test_the_cli_is_the_only_module_that_maps_roles_to_the_enum(self) -> None:
+    def test_the_cli_names_the_enum_that_viz_may_not(self) -> None:
+        # Named for what it actually checks: that `ChainRole` appears in
+        # `cli.py` at all, which is the other half of the four `_core` checks
+        # above -- they establish that no `viz/` module names it, this one that
+        # the composition root does. *Exclusivity* is theirs; that the mapping
+        # is total is `test_cli_draw.py`'s, which may import `_core` where this
+        # suite may not.
         source = (REPO_ROOT / "src_python" / "tin_engine" / "cli.py").read_text(encoding="utf-8")
         assert "ChainRole" in source
 
@@ -901,8 +921,9 @@ class TestFailurePresentation:
     outline" triangulates successfully to nothing, and in a release build with
     the assert compiled out one test is the only guard. The viewer is the second
     guard, and it only works if the failure is conspicuous rather than blank --
-    which is why two of the eight gallery fixtures exist to put this
-    presentation in front of a person rather than have it assumed.
+    which is why three of the eight gallery fixtures exist to put this
+    presentation in front of a person rather than have it assumed --
+    `not-noded`, `degenerate` and, since `4482649`, `hole-in-hole`.
     """
 
     @pytest.fixture(params=["empty_scene", "failed_scene"])
@@ -936,6 +957,7 @@ class TestFailurePresentation:
         header = text_of(group(document, "header"))
         assert "NotNoded" in header
         assert "Point 4 is exactly on a constrained edge" in header
+        assert "alarm" in classes(header_line(document, "NotNoded")), "the status is not loud"
 
     def test_ok_but_empty_says_so_in_those_words(self, empty_scene: Any) -> None:
         # The design's own wording, and the whole point of the mode having its
@@ -962,6 +984,7 @@ class TestFailurePresentation:
         assert scene.bbox.padded is True
         document = parse(viz_module("svg").render_svg(scene, style=make_style()))
         assert "padded" in text_of(group(document, "header")).lower()
+        assert "alarm" in classes(header_line(document, "padded")), "the padding is not loud"
 
 
 # --- The gallery ------------------------------------------------------------

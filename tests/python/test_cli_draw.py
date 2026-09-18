@@ -51,7 +51,7 @@ import numpy as np
 import pytest
 from typer.testing import CliRunner
 
-from tin_engine.cli import app
+from tin_engine.cli import ROLES, app
 
 SVG_NS = "http://www.w3.org/2000/svg"
 
@@ -190,6 +190,17 @@ class TestCommandSurface:
         assert "Usage" in message
         assert "--list" in message
 
+    def test_the_cli_maps_every_role_the_enum_has(self) -> None:
+        # The claim `test_viz_svg.py::TestModuleIsolation` cannot make, because
+        # that suite may not import `_core`: the mapping this module owns is
+        # total both ways. A role the enum gains and `ROLES` does not is a
+        # fixture vocabulary that silently cannot express it.
+        import tin_engine._core as core
+
+        # `__members__` rather than iteration: a pybind11 enum type is not
+        # iterable, so `set(ChainRole)` is a TypeError and not a set.
+        assert set(ROLES.values()) == set(core.ChainRole.__members__.values())
+
 
 class TestOutput:
     def test_out_writes_a_parseable_svg(self, tmp_path: Path) -> None:
@@ -242,19 +253,36 @@ class TestOutput:
     def test_no_delaunay_still_draws(self, tmp_path: Path) -> None:
         # One bound bool, and the cheapest intuition in the increment: the user
         # sees both triangulations of the same input. This asserts only that the
-        # flag reaches the backend without breaking the picture -- that the two
-        # pictures DIFFER is not asserted, because no fixture is guaranteed to
-        # have a flippable quadrilateral and a test that assumed one would be
-        # flaky by construction.
+        # picture survives the flag; that the two pictures DIFFER is the test
+        # below, which is what actually holds the flag to the backend.
         target = tmp_path / "raw.svg"
         result = invoke("catchment", "--out", str(target), "--no-delaunay")
         assert result.exit_code == 0, plain(result.output)
         assert elements(written(target), "triangles", "polygon") != []
 
+    def test_no_delaunay_draws_a_different_triangulation(self, tmp_path: Path) -> None:
+        # The flag has to reach `triangulate`, and nothing above holds it there:
+        # hard-wiring `delaunay=True` in `cli.py` left the whole suite passing.
+        # The fixtures are fixed data, so this is not a gamble on some quad
+        # happening to be flippable -- measured on this tree, `catchment`'s two
+        # triangle sets are 26 triangles each with a symmetric difference of 38,
+        # and it is the only fixture that both triangulates and differs by
+        # enough to be worth asserting on (`corner-hole`'s difference is 0).
+        drawn = {}
+        for label, extra in (("delaunay", ()), ("raw", ("--no-delaunay",))):
+            target = tmp_path / f"{label}.svg"
+            result = invoke("catchment", "--out", str(target), *extra)
+            assert result.exit_code == 0, plain(result.output)
+            polygons = elements(written(target), "triangles", "polygon")
+            assert polygons != [], f"{label} drew no triangle"
+            drawn[label] = {polygon.get("points") for polygon in polygons}
+        assert len(drawn["raw"]) == len(drawn["delaunay"]), "the two fill the same domain"
+        assert drawn["raw"] != drawn["delaunay"], "--no-delaunay drew the Delaunay mesh"
+
     @pytest.mark.parametrize("name", GALLERY_NAMES)
     def test_every_fixture_in_the_gallery_draws(self, name: str, tmp_path: Path) -> None:
-        # Including the two deliberate failures: a fixture that cannot be drawn
-        # is a fixture nobody will look at.
+        # Including the three deliberate failures: a fixture that cannot be
+        # drawn is a fixture nobody will look at.
         target = tmp_path / f"{name}.svg"
         result = invoke(name, "--out", str(target))
         assert result.exit_code == 0, plain(result.output)
@@ -376,12 +404,17 @@ class TestPathHandling:
 
 
 class TestFailurePresentation:
-    """The two deliberate failure fixtures, seen rather than assumed.
+    """The three deliberate failure fixtures, seen rather than assumed.
 
     `06-cdt-viewer.md`: "a failure presentation nobody has looked at is a failure
-    presentation that is wrong." Both fixtures exit 0 and produce a picture --
-    the exit code reports whether a picture was drawn, and a drawn failure is
-    still a drawn picture. What the engine refused is in the header band.
+    presentation that is wrong." All three exit 0 and produce a picture -- the
+    exit code reports whether a picture was drawn, and a drawn failure is still
+    a drawn picture. What the engine refused is in the header band.
+
+    They fail at three different depths, which is why three: `degenerate` never
+    reaches `triangulate` at all (the PSLG validator rejects it), `not-noded`
+    and `hole-in-hole` are backend refusals -- `NotNoded` and, since `4482649`,
+    `InvalidTopology`.
     """
 
     def test_the_not_noded_fixture_really_fails_in_the_backend(self) -> None:
@@ -425,7 +458,16 @@ class TestFailurePresentation:
         header = group_text(written(target), "header")
         assert any(word in header for word in words), f"{words} not in {header!r}"
 
-    @pytest.mark.parametrize("name", ["not-noded", "degenerate"])
+    def test_the_hole_in_hole_fixture_really_fails_in_the_backend(self) -> None:
+        # The third refusal, and the newest: `4482649` turned this fixture from
+        # a drawable mesh into an `InvalidTopology` refusal. The same probe the
+        # other two carry, for the same reason -- if it ever triangulated again
+        # the blank-page case below would silently stop testing a failure.
+        drawable, words = core_verdict("hole-in-hole")
+        assert drawable is False
+        assert words != ["Ok"]
+
+    @pytest.mark.parametrize("name", ["not-noded", "degenerate", "hole-in-hole"])
     def test_a_failed_fixture_is_never_a_blank_page(
         self, name: str, tmp_path: Path
     ) -> None:
