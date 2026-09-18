@@ -129,6 +129,17 @@ picture is written by Python, from data, to a path Python resolved.
 | `CdtOutcome` | `cdt/result.hpp` | read-only `status`, `message`, `mesh`, `ok()` |
 | `build_pslg(...)` | `core/pslg_builder.hpp` | free function, declarative, returns a result object |
 | `triangulate(pslg, delaunay=True)` | `cdt/triangulate.hpp` | free function, **GIL released** |
+| `PslgError` | `core/pslg_builder.hpp` | `py::enum_`, eight values |
+
+`PslgError` was missing from this table in the design as first written, and
+`PslgDiagnostic.error` has to be *something*: 6a's suite requires only that four
+independently broken chains give four distinct values, which an enum, an int and
+a string all satisfy. **Ruled in 6a: an enum**, because `ChainRole` and
+`CdtStatus` already establish that a C++ enumeration crosses this boundary as an
+enumeration, a string would make every Python consumer compare magic text, and
+an int would lose the names the diagnostic is read for. `PslgDiagnostic` and
+`Chain` cross as frozen record classes for the same reason, and are named here
+so the surface stays exhaustive.
 
 `Pslg` accessors: `vertices` as a read-only `(N, 2)` `float64` array, and
 `chains` as a list of frozen records `(begin, count, role, is_river)` plus
@@ -409,8 +420,13 @@ binding estimate is larger than its apparent complexity; the existing
 
 **~610 production LOC.** Under `CLAUDE.md` §2's 700, but the margin is thin and
 the binding half is the half that overruns. Non-production changes on top:
-`CMakeLists.txt` gains `terrain_cdt` on the `_core` link line (the bindings
-target currently links headers only); `testing.md` gains a `viz` section marked
+`CMakeLists.txt` gains `terrain_cdt` **and `terrain_predicates`** on the `_core`
+link line (the bindings target currently links headers only) -- the second
+because `build_pslg` validates under `DefaultKernel`, which is the same pair,
+for the same two reasons, that `tests/cpp/CMakeLists.txt`'s
+`add_terrain_cdt_test` links. Omitting it is not caught by the C++ build: a
+pybind11 MODULE links on macOS with undefined symbols allowed and fails at
+`import`; `testing.md` gains a `viz` section marked
 `[planned]` until merge, then `[live]`; `project_structure.md`'s directory
 listing, `bindings/core.cpp` section and Python API surface section gain `viz/`
 and the new binding surface.
@@ -424,6 +440,17 @@ than discovered mid-PR, because the seam is already natural:
 - **6b — the renderer.** `viz/{scene,svg,style,fixtures,__init__}.py` and the
   CLI command. ~375 LOC. Buildable and fully testable against the protocols
   without 6a, which is the point of `protocols.py` being in 6a's half.
+
+**6a as shipped: 441 non-comment production lines against the ~235 estimated**
+-- `bindings/core.cpp` 264 (est. ~150), `_core.pyi` 118 (est. ~60),
+`viz/protocols.py` 52 (est. ~25), `viz/__init__.py` 7 (not estimated). Under
+`CLAUDE.md` §2's 700, and the overrun is entirely docstring and stub body: risk
+6 named pybind docstrings as the pressure and named the right one, but the
+estimate was made against a calibration file with far shorter ones. The
+consequence for 6b is that the split is now load-bearing rather than
+precautionary: 441 + the ~375 estimated for the renderer exceeds 700, so the two
+halves cannot be recombined into one PR, and 6b should re-estimate before it
+starts rather than inherit ~375.
 
 ## What is worth testing
 

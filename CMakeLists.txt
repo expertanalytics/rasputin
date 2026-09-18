@@ -75,7 +75,12 @@ if(RASPUTIN_BUILD_PYTHON)
     find_package(pybind11 CONFIG REQUIRED)
 
     pybind11_add_module(_core bindings/core.cpp)
-    target_link_libraries(_core PRIVATE terrain_headers)
+    # terrain_cdt for DetriaBackend::triangulate, and terrain_predicates
+    # because build_pslg validates under DefaultKernel -- the same pair, for
+    # the same two reasons, that tests/cpp/CMakeLists.txt's add_terrain_cdt_test
+    # links. Omitting the second links on macOS (a MODULE is allowed undefined
+    # symbols) and fails at import, so the C++ build is not where it is caught.
+    target_link_libraries(_core PRIVATE terrain_headers terrain_cdt terrain_predicates)
     target_compile_options(_core PRIVATE -Wall -Wextra -Wpedantic -Werror)
 
     install(TARGETS _core LIBRARY DESTINATION tin_engine)
