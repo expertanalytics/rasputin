@@ -15,7 +15,7 @@ in `docs/increments/06-cdt-viewer.md`, "The ordering ruling".
 | 1 | Exact geometric predicates | shipped (`d0946bc`, `aeb667a`) | `docs/increments/01-predicates.md` |
 | 2 | 2D geometry value types | shipped (`1a60ad4`) | `docs/increments/02-core-geometry.md` |
 | 3 | The PSLG and its validator | shipped (`d984ff8`) | `docs/increments/03-pslg.md` |
-| 4 | The constrained Delaunay triangulation | shipped (`f22ddd3`, `238e511`) | `docs/increments/04-cdt.md` |
+| 4 | The constrained Delaunay triangulation | shipped (`f22ddd3`) | `docs/increments/04-cdt.md` |
 | 5a | The noder's numeric floor: snap grid and hot pixels | shipped (`e090909`) | `docs/increments/05-noder.md` |
 | 5b | The noder proper: segment splitting and the noded PSLG | not started; record not yet written | `docs/increments/05b-noder-driver.md` |
 | 6a | The pybind11 CDT surface | shipped (`311459b`) | `docs/increments/06-cdt-viewer.md` |

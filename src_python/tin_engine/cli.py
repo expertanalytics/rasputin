@@ -114,10 +114,14 @@ def _destination(out: Path | None, out_parent: Path | None, name: str) -> Path:
 
     A hostile boundary, per the python skill. ``resolve()`` first, so that
     ``..`` cannot smuggle a write out of an explicitly permitted parent; refuse
-    a symlink outright rather than following it, because a link pointing back
+    a symlinked ``--out`` rather than following it, because a link pointing back
     *inside* the permitted parent passes containment and still overwrites a file
     the user never named; and turn a missing directory into a message rather
     than a traceback.
+
+    The symlink check is on the **final component only**: a symlinked parent
+    directory is resolved by ``resolve()`` and then judged by containment, which
+    is the right answer for ``--out-parent`` and is all this boundary claims.
     """
     if out is None:
         # "The common case is show me this now": a fresh directory of its own,
@@ -162,9 +166,13 @@ def draw(
 ) -> None:
     """Draw a gallery fixture as an SVG.
 
-    Exit code 0 means a picture was produced, which includes the two deliberate
-    failure fixtures: a drawn failure is still a drawn picture, and the engine's
-    refusal is in the header band where a person can read it.
+    Exit code 0 means a picture was produced, which includes the three
+    deliberate failure fixtures -- ``degenerate``, which the PSLG validator
+    refuses before ``triangulate`` is reached, and ``not-noded`` and
+    ``hole-in-hole``, which the backend refuses: a drawn failure is still a
+    drawn picture. A caller who wants the engine's verdict rather than the
+    renderer's therefore reads the header band, not the exit code; the status
+    and the engine's own words are written there.
     """
     if list_:
         for fixture in GALLERY.values():

@@ -269,6 +269,11 @@ rasputin draw sliver-fan --out /tmp/sliver.svg
 - `--labels` draws vertex indices; refused above `--label-limit` (default 500
   vertices) with a message naming the count, rather than emitting an
   unreadable file.
+- `--vertices` draws one dot per vertex. Off by default, per "What the picture
+  shows" item 5, and this flag is the only way to turn it on: `SvgStyle` carries
+  a `show_vertices` field, and a style field with no CLI route to it is dead
+  weight. Independent of `--labels`, which draws the index rather than the dot
+  and is the option with a limit on it.
 - `--no-delaunay` forwards `CdtOptions::delaunay = false`, so the user can see
   *both* triangulations of the same input and form an opinion about what the
   Delaunay property is buying. This is one bound bool and it is the cheapest
@@ -284,7 +289,14 @@ scope".
 
 ## What the picture shows
 
-Drawn in this order, because later strokes must win where they overlap:
+Drawn in this order — **with one exception, items 3 and 4** — because later
+strokes must win where they overlap. The exception is recorded in `svg.py`'s
+module docstring as built: the two edge classes share a single `<g id="edges">`
+emitted in sorted `Scene.edges` order, so constrained and unconstrained strokes
+interleave and are separated by **width and opacity in the stylesheet** rather
+than by paint order. That is a deliberate simplification of this list, not a
+defect: one sorted pass is what makes the emitted order a function of the scene
+alone, and the class token each edge carries is what the suite asserts.
 
 1. **Page background**, a light neutral that is *not* white. A hole in the mesh
    is simply the absence of triangles, so it reads as a hole only if the page
@@ -296,9 +308,10 @@ Drawn in this order, because later strokes must win where they overlap:
 3. **Unconstrained edges**, thin, light. Deduplicated: each interior edge is
    shared by two triangles and must be emitted once, or every interior edge is
    drawn at double weight and the picture lies about density.
-4. **Constrained edges**, thicker and saturated, drawn on top, **coloured by the
-   role of the input chain they came from** — outer boundary, hole boundary,
-   breakline, river breakline. Four visually distinct strokes.
+4. **Constrained edges**, thicker and saturated — and so legible over an
+   unconstrained edge without being painted after it — **coloured by the role of
+   the input chain they came from**: outer boundary, hole boundary, breakline,
+   river breakline. Four visually distinct strokes.
 5. **Vertices**, small dots, off by default; **indices**, off by default.
 6. **Legend** (the five stroke classes), **scale bar** in world units, and a
    **header band** carrying status, triangle count, vertex count,
@@ -457,14 +470,51 @@ Each exists to answer one question a person can ask of the picture:
 | `catchment` | outer ring with two lake holes and a braided breakline — the shape the project is actually for |
 | `sliver-fan` | a fan of near-collinear constraints; what the triangulator does with extreme aspect ratios |
 | `corner-hole` | a hole touching the outer ring at exactly one vertex — `InvalidTopology`'s neighbour, and a topology a person should look at |
-| `hole-in-hole` | a hole nested directly inside a second hole. **Drawn as a third failure presentation, not as a mesh** -- the backend answers `InvalidTopology`, "A hole was directly inside another hole", which is precisely "what in-domain means" made visible. `test_viz_svg.py::TestGallery::test_hole_in_hole_really_nests_twice` requires two chains of role `hole` with one strictly inside the other, so every fixture satisfying the suite is a fixture the backend refuses; the row as first written expected a mesh |
+| `hole-in-hole` | a hole nested directly inside a second hole. **Drawn as a third failure presentation, not as a mesh** -- the backend answers `InvalidTopology`, "A hole was directly inside another hole", which is precisely "what in-domain means" made visible. The row as first written expected a mesh, and **the narrowing that made it a refusal was the red step's, not an unsatisfiability of the design** — see "`hole-in-hole`: what the suite requires and what the design meant" below |
 | `breakline-chain` | an open breakline crossing the interior; where the Delaunay property visibly stops |
 | `river` | the same, with `is_river` set, so the `is_river` stroke is exercised before 5b depends on it |
 | `not-noded` | two crossing constraints — a **deliberate failure fixture**, rendering the non-`Ok` presentation, so that presentation is seen rather than assumed |
 | `degenerate` | an all-collinear point set. **Refused before `triangulate` is ever reached, so this is *not* the `DegenerateGeometry` presentation** -- `build_pslg` rejects the ring with `PslgError.DegenerateRing`, "chain 0 is declared Outer but every vertex is collinear", and returns no `Pslg` at all. The design's intent survives: the input is drawn alone with the engine's own words in the header band. The words are a `PslgDiagnostic`'s. Found in 6b-ii's red step; see "The `PslgLike` is the fixture itself" below, which is the decision this forced |
 
-The last two matter as much as the first six: a failure presentation nobody has
-looked at is a failure presentation that is wrong.
+**Three of the eight are failure presentations, and they are rows 4, 7 and 8
+rather than the last two**: `hole-in-hole` and `not-noded` are backend refusals
+(`InvalidTopology`, `NotNoded`) of a PSLG the validator accepted, and
+`degenerate` never reaches `triangulate` because the validator refuses it first.
+They matter as much as the five that mesh: a failure presentation nobody has
+looked at is a failure presentation that is wrong. That said, three refusal
+pages out of eight is more than this gallery set out to have — see the next
+section.
+
+### `hole-in-hole`: what the suite requires and what the design meant
+
+Worth stating plainly, because the row above was rewritten after the fact and
+the first rewrite justified itself in a circle.
+
+- **What the suite requires.** `test_viz_svg.py::TestGallery::test_hole_in_hole_really_nests_twice`
+  asserts two chains **of role `hole`**, one strictly inside the other. Under
+  that reading every satisfying fixture is one the backend refuses, because a
+  hole directly inside a hole is exactly `InvalidTopology`.
+- **What the design meant.** This row originally said "a hole nested inside a
+  second *outline*" — outer ring, hole, and inside that hole a second outer ring
+  carrying its own hole: an island in a lake with a pond on it.
+- **The design's reading is reachable.** Four nested rings in that order, at
+  gallery magnitudes, pass `build_pslg` and triangulate `Ok` with 16 triangles.
+  Reproduce it by handing `build_pslg` the chains
+  `(Outer, Hole, Outer, Hole)` on four concentric squares with the outer ones
+  wound CCW and the holes CW, then calling `triangulate`.
+
+So the design was satisfiable as a **mesh**; the red step narrowed it to two
+holes, and the row was then rewritten to match the test. The refusal row is not
+wrong — it accurately describes the fixture that exists — but it must not be
+read as saying the design's picture is impossible.
+
+**Follow-up, not this increment's.** Changing the fixture now costs a test
+amendment and a re-render, and 6b-ii's red-before-green trace is worth more than
+the picture. But the design's reading is the only entry that would show *nested
+in-domain regions* — a region inside a hole, which is the thing "in-domain"
+actually means — and three of eight fixtures are now refusal pages. A ninth
+fixture on the design's reading, or a widening of the test to accept it, belongs
+on the next viewer increment.
 
 ### The `PslgLike` is the fixture itself -- and why the roles are strings
 

@@ -18,9 +18,12 @@ onto the enum before calling ``build_pslg``. Keeping the fixture itself a
 
 Ring winding is the validator's, not a preference: an ``outer`` ring must be
 counter-clockwise and a ``hole`` clockwise, and neither stores its closing
-index. Two fixtures are deliberate failures -- ``not-noded`` and ``degenerate``
--- because a failure presentation nobody has looked at is a failure
-presentation that is wrong.
+index. **Three** of the eight are deliberate failures, and they fail at two
+different depths: ``degenerate`` never reaches ``triangulate`` at all, because
+the PSLG validator refuses it (``PslgError.DegenerateRing``), while
+``not-noded`` and ``hole-in-hole`` are backend refusals of a valid PSLG
+(``NotNoded`` and ``InvalidTopology``). All three are here because a failure
+presentation nobody has looked at is a failure presentation that is wrong.
 """
 
 from __future__ import annotations
