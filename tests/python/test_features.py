@@ -32,21 +32,23 @@ Two rules here are architecture rather than hygiene:
   `viz/` is allowed to depend on it -- `viz/` may not import this module at
   all, and `test_viz_svg.py::TestModuleIsolation` exists to deny exactly that
   permission, pinning `style.py` and `fixtures.py` to zero first-party imports.
-  `cli.py` is the one module that names both a bit and a feature. The rule is
-  checked here by parsing the source, not by inspecting `sys.modules`, because
-  `tin_engine/__init__.py` imports `_core` itself -- so an import-time check
+  `cli.py`, the composition root, is the only module that imports both this
+  one and `viz.style` (`cli.py:39,42`). The rule is checked here by parsing the
+  source, not by inspecting `sys.modules`, because `tin_engine/__init__.py`
+  imports `_core` itself -- so an import-time check
   would be asserting something about the package rather than about this module.
   Same reasoning, same mechanism, as `test_viz_protocols.py`.
 * **The name pattern keeps a vocabulary name usable as a CSS class token, and
   is defence in depth. It is not what closes the injection hole.**
-  `viz/svg.py:_edge_classes` does interpolate into a ``class="..."`` attribute
-  **unescaped** -- only `_text` escapes -- but what it interpolates is
-  `style.PropertyStroke.token` (`svg.py:161,225`), never an `EdgeProperty`
-  name, because `viz/` cannot import this module. The only bridge is
-  `cli.py:84`, which builds a `PropertyStroke` from a name and so re-validates
-  through `style.py:51`'s own, deliberately wider `^[a-z][a-z0-9_-]*$` -- a CSS
-  class may carry a hyphen and a feature name may not. A quote-carrying name
-  dies there whatever `^[a-z][a-z0-9_]*$` says. The attribute is closed by
+  `viz/svg.py`'s `_edge_classes` (`svg.py:166`) joins
+  `style.PropertyStroke.token` values, which `_edges` then interpolates into a
+  ``class="..."`` attribute **unescaped** (`svg.py:225`) -- only `_text`
+  escapes -- and never an `EdgeProperty` name, because `viz/` cannot import
+  this module. The only bridge is `cli.py:84`, which builds a `PropertyStroke`
+  from a name and so re-validates through `style.py:51`'s own, deliberately
+  wider `^[a-z][a-z0-9_-]*$` -- a CSS class may carry a hyphen and a feature
+  name may not. A quote-carrying name dies there whatever
+  `^[a-z][a-z0-9_]*$` says. The attribute is closed by
   `PropertyStroke.token`, and the suite over that boundary is
   `test_viz_svg.py::TestPropertyStrokes`.
 
@@ -141,7 +143,8 @@ def test_edge_property_refuses_a_name_that_is_not_a_css_class_token(name: str) -
     both stay, under the corrected reason: a quote or a space makes a name
     unusable as a CSS class token, which is what this pattern is for. It is not
     what protects the ``class="..."`` attribute. `svg.py:_edge_classes`
-    interpolates `style.PropertyStroke.token` unescaped, never a name from this
+    (`svg.py:166`) joins `style.PropertyStroke.token` values and `_edges`
+    (`svg.py:225`) interpolates the result unescaped, never a name from this
     module, and `cli.py:84` re-validates any name through that model before it
     can reach the attribute -- see `test_viz_svg.py::TestPropertyStrokes`, which
     refuses the same shapes at the boundary that is load-bearing. Relaxing this

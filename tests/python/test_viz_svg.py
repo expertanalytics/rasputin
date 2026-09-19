@@ -626,13 +626,14 @@ class TestPropertyStrokes:
 
     `PropertyStroke.token`'s `^[a-z][a-z0-9_-]*$` is the pattern that is
     actually load-bearing, and this is the suite over it. `_edge_classes`
-    (`svg.py:161,225`) interpolates a TOKEN into a `class="..."` attribute
-    UNESCAPED -- only `_text` escapes -- and it never sees an
-    `EdgeProperty.name`, because `viz/` may import no vocabulary at all. The
-    one bridge is `cli.py:84`, which constructs a `PropertyStroke` from a
-    feature name, so every name that can reach the attribute is re-validated
-    here. A token containing a quote ends the attribute, and a stylesheet read
-    from a configuration file is untrusted input.
+    (`svg.py:166`) joins TOKENS into one string and `_edges` (`svg.py:225`)
+    interpolates that string into a `class="..."` attribute UNESCAPED -- only
+    `_text` escapes -- and neither ever sees an `EdgeProperty.name`, because
+    `viz/` may import no vocabulary at all. The one bridge is `cli.py:84`,
+    which constructs a `PropertyStroke` from a feature name, so every name that
+    can reach the attribute is re-validated here. A token containing a quote
+    ends the attribute, and a stylesheet read from a configuration file is
+    untrusted input.
 
     `features.EdgeProperty.name`'s narrower `^[a-z][a-z0-9_]*$` is defence in
     depth behind this pattern, not the other way round -- a quote-carrying
@@ -690,10 +691,13 @@ class TestPropertyStrokes:
         matches `$` BEFORE a trailing newline, so a validator hand-written as
         `re.match(r"^[a-z][a-z0-9_-]*$", token)` accepts `"river\\n"` while
         `Field(pattern=...)` -- pydantic's Rust engine, where `$` is
-        end-of-haystack -- refuses it. Without them, that hand-rolled mutant
-        survives this class while dying in `test_features.py`, over a pattern
-        no attribute depends on. All three were probed against pydantic 2.13.5
-        before being written down.
+        end-of-haystack -- refuses it. `"river\\n"` alone carries that kill:
+        without it, the hand-rolled mutant survives this class while dying in
+        `test_features.py`, over a pattern no attribute depends on. The
+        embedded-newline and non-ASCII cases are its companions, pinning the
+        pattern's shape rather than discriminating against that mutant --
+        probed against pydantic 2.13.5, both are refused by the real model and
+        by the mutant alike.
         """
         import pydantic
 
