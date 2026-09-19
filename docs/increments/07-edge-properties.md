@@ -762,8 +762,16 @@ against the merge base `4834568`. The anchor is deliberately not written as a
 hash. Naming one recurses: the commit that updates the hash is itself a commit,
 and if it touches a production file — as every one of these correction rounds
 has, because they edit `features.py`'s docstring — it becomes the anchor the
-moment it lands, falsifying the line it just wrote. Two successive versions of
-this sentence were falsified exactly that way. Resolve it instead:
+moment it lands, falsifying the line it just wrote.
+
+Two successive versions of this sentence named a hash and each went stale within
+a round: `e51ad75` wrote `7cc83a9` and `929f643` wrote `e922b4b`, both correct
+on landing and both falsified by the next production commit. Neither was
+self-falsifying — both were docs-only, which `git show --name-only --format=
+e51ad75 929f643` shows — so they are ordinary staleness, not the recursion above.
+The recursion is the sharper case, and the commit that removed the last hash is
+it: touching `features.py` for the docstring fix, it would have falsified a hash
+it wrote in the same breath. Resolve the anchor instead:
 
 ```bash
 git log --oneline -1 -- include/ bindings/ src_python/
