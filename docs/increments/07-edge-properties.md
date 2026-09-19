@@ -755,11 +755,21 @@ are the expensive part of this round**: 8 existing test files on master, 5 more
 once 6b-ii merges, 2 new suites. The largest single file is `test_viz_svg.py` at
 24 occurrences, and it is **not** invariant-critical (`06-cdt-viewer.md:695-699`).
 
-### Reconciliation: ~185 estimated, 382 measured
+### Reconciliation: ~185 estimated, 383 measured
 
-Measured on `e922b4b` — the last commit on this branch that touches a
-production file, which is the anchor that stays true while the prose settles —
-against the merge base `4834568`, with this section's own
+Measured at **the last commit on this branch that touches a production file**,
+against the merge base `4834568`. The anchor is deliberately not written as a
+hash. Naming one recurses: the commit that updates the hash is itself a commit,
+and if it touches a production file — as every one of these correction rounds
+has, because they edit `features.py`'s docstring — it becomes the anchor the
+moment it lands, falsifying the line it just wrote. Two successive versions of
+this sentence were falsified exactly that way. Resolve it instead:
+
+```bash
+git log --oneline -1 -- include/ bindings/ src_python/
+```
+
+with this section's own
 instruments applied to the **added** non-comment lines of the diff —
 `git diff 4834568..HEAD -- <file> | grep '^+' | grep -v '^+++' | sed 's/^\+//' |
 grep -vcE '^\s*(//|$)'` for C++ and `'^\s*(#|$)'` for Python.
@@ -771,18 +781,19 @@ grep -vcE '^\s*(//|$)'` for C++ and `'^\s*(#|$)'` for Python.
 | `include/terrain/core/pslg_builder.hpp` | ~4 | 5 | |
 | `bindings/core.cpp` | ~30 | 55 | |
 | `src_python/tin_engine/_core.pyi` | ~3 | 10 | |
-| `src_python/tin_engine/features.py` | ~55 | **141** | 2.6× |
+| `src_python/tin_engine/features.py` | ~55 | **142** | 2.6× |
 | `src_python/tin_engine/viz/protocols.py` | ~2 | 6 | |
 | `src_python/tin_engine/viz/scene.py` | ~10 | 20 | |
 | `src_python/tin_engine/viz/style.py` | ~16 | 30 | |
 | `src_python/tin_engine/viz/svg.py` | ~8 | **44** | 5.5× |
 | `src_python/tin_engine/viz/fixtures.py` | ~4 | **31** | 7.8× |
 | `src_python/tin_engine/cli.py` | ~5 | 9 | |
-| **Total** | **~185** | **382** | 2.1× |
+| **Total** | **~185** | **383** | 2.1× |
 
-**Re-measured three times, and the enumeration is deliberately gone.** The
-table was first anchored to `7cc83a9` and read 49 / 131 / 366; it is now 55 /
-141 / 382. Each re-measurement was forced by a review round correcting prose
+**Re-measured on every correction round, and the enumeration is deliberately
+gone.** The table first read 49 / 131 / 366; it now reads 55 / 142 / 383. How
+many rounds that is, is itself a number that goes stale, which is why it is not
+written here either. Each re-measurement was forced by a review round correcting prose
 inside `features.py`'s module docstring, which the instrument counts, and each
 of the first two tried to record *which* commits had moved it — "Three later
 commits" naming two, then "Four later commits" naming three. Both were off by
@@ -797,15 +808,15 @@ the one on the page — so it is re-measured here, and the delta stated rather
 than the anchor asserted. The instrument is the one in the paragraph above,
 re-run per file.
 
-**The no-LOC-gate ruling above survives and is not revisited**: 382 against 700
-leaves 318 of headroom, so a gate at the ceiling would still have been a
+**The no-LOC-gate ruling above survives and is not revisited**: 383 against 700
+leaves 317 of headroom, so a gate at the ceiling would still have been a
 trip-wire nobody could trip. Recording that is not the point of this section.
 
 **The row the estimate warned about did not double; the rows nobody watched
 did.** `bindings/core.cpp` is the row this document flagged as "the one row that
 has doubled twice before" and predicted at ~215 total if it doubled again. It
 came in at 55 against ~30 — over, but by the least of any Python or binding row
-in proportion. The 197-line overrun is 86 in `features.py` and 63 across
+in proportion. The 198-line overrun is 87 in `features.py` and 63 across
 `svg.py` and `fixtures.py`, with the remaining 48 spread over the other nine
 rows. (The 366-line version of this paragraph said "83 across `svg.py` and
 `fixtures.py`" where the table's own rows gave 36 and 27. A per-row sum is one
@@ -813,7 +824,7 @@ subtraction each and was not done; it is done now, and it reconciles to the
 total.)
 
 **`features.py` overran on documentation, not on code, and the instrument is
-why.** Of its 141 non-comment lines, **94 are docstring lines and 51 of those
+why.** Of its 142 non-comment lines, **95 are docstring lines and 52 of those
 are the module docstring**; 47 are executable, against an estimate of ~55. Every
 line this increment added to the row after the first measurement was docstring;
 the executable count has not moved. So
@@ -822,9 +833,9 @@ counts `"""` docstrings, which is exactly the accounting `06-cdt-viewer.md`
 already hit ("68 of the 194 true lines are docstrings"). Twice now the estimate
 has been made as if it measured executable lines and then checked with an
 instrument that does not. Re-runnable: the module docstring closes at
-`sed -n '51p' src_python/tin_engine/features.py`, and
+`sed -n '52p' src_python/tin_engine/features.py`, and
 `python3 -c "import ast,sys;t=ast.parse(open(sys.argv[1]).read());print(sum(n.body[0].end_lineno-n.body[0].lineno+1 for n in ast.walk(t) if isinstance(n,(ast.Module,ast.FunctionDef,ast.ClassDef)) and ast.get_docstring(n) is not None))" src_python/tin_engine/features.py`
-prints `94`.
+prints `95`.
 
 **The 6b-ii rows were not stale, which rules out the explanation risk 4
 offered.** Risk 4 warned that if 6b-ii's review round changed `_edge_classes` or
