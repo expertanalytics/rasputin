@@ -142,8 +142,22 @@ template <typename T>
             "not the old is_river flag",
             chain, std::string{py::str(mask)}));
     }
+    // The type arm is separate from the range arm below because the two
+    // defects are different objects and the message has to name the one that
+    // was rejected. isinstance<py::int_> is a strict PyLong_Check, so a
+    // numpy.int64 -- what a caller holds after indexing any integer array --
+    // is refused here however legal its value; folded into the range arm it
+    // was reported as "the property mask 1 is not a set of bits below 32",
+    // telling the caller to fix the one thing that was not wrong. The bool arm
+    // above already names the type for exactly this reason.
+    if (!py::isinstance<py::int_>(mask)) {
+        throw py::value_error(
+            std::format("chain {}: the property mask has type {}; pass a built-in int of "
+                        "property bits",
+                        chain, std::string{py::str(py::type::of(mask))}));
+    }
     const py::int_ ceiling{std::uint64_t{1} << EdgeProperties::kMaxProperties};
-    if (!py::isinstance<py::int_>(mask) || mask < py::int_{0} || mask >= ceiling) {
+    if (mask < py::int_{0} || mask >= ceiling) {
         throw py::value_error(
             std::format("chain {}: the property mask {} is not a set of bits below {}", chain,
                         std::string{py::str(mask)}, EdgeProperties::kMaxProperties));
