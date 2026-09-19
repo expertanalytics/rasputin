@@ -25,11 +25,15 @@ below is why it has to be that way: `06-cdt-viewer.md` says the `degenerate`
 fixture shows "the `DegenerateGeometry` presentation", but an all-collinear ring
 never reaches `triangulate` -- the PSLG validator rejects it first, so there is
 no `Pslg` object at all and nothing for `build_scene` to be given unless the
-fixture is itself a `PslgLike`. Measured, on this tree:
+fixture is itself a `PslgLike`. Measured, on this tree -- the third element of
+a chain spec is a mask of property bits, so the empty set is `0`, and the
+pre-migration `False` raises `ValueError` at the binding instead of returning
+diagnostics at all:
 
-    build_pslg(collinear, [(range(4), ChainRole.Outer, False)]).diagnostics
-    -> [PslgError.DegenerateRing, 'chain 0 is declared Outer but every vertex
-        is collinear']
+    [(d.error, d.message) for d in build_pslg(
+        collinear, [(range(4), ChainRole.Outer, 0)]).diagnostics]
+    -> [(<PslgError.DegenerateRing: 6>,
+         'chain 0 is declared Outer but every vertex is collinear')]
 
 The presentation the design wants is still seen -- the input drawn alone with
 the engine's own words in the header band -- but the words come from a

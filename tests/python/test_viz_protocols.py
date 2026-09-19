@@ -35,12 +35,21 @@ import numpy as np
 import pytest
 
 from tin_engine import _core
+from tin_engine.features import DEFAULT_VOCABULARY
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 VIZ_DIR = REPO_ROOT / "src_python" / "tin_engine" / "viz"
 
 EAST = 430_000.0
 NORTH = 6_900_000.0
+
+# The properties position of a chain spec is a mask of property bits, not a
+# flag: `0` is the empty set -- an unclassified constraint -- and a named bit
+# comes from a vocabulary rather than from a literal, so that the number at
+# the call site carries its units. A `bool` here is the pre-migration
+# `is_river` spelling and `build_pslg` refuses it.
+NO_PROPERTIES = 0
+RIVER = DEFAULT_VOCABULARY.mask("river")
 
 MESH_MEMBERS = {"vertices", "triangles", "constrained_edges", "triangle_count", "empty"}
 PSLG_MEMBERS = {"vertices", "chains", "chain_indices", "indices_of"}
@@ -86,8 +95,8 @@ def mesh() -> Any:
     result = _core.build_pslg(
         vertices,
         [
-            ([0, 1, 2, 3], _core.ChainRole.Outer, False),
-            ([4, 5], _core.ChainRole.Breakline, True),
+            ([0, 1, 2, 3], _core.ChainRole.Outer, NO_PROPERTIES),
+            ([4, 5], _core.ChainRole.Breakline, RIVER),
         ],
     )
     assert result.ok, [d.message for d in result.diagnostics]
