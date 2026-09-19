@@ -51,6 +51,7 @@
 #include <pslg_cases.hpp>
 #include <ring_cases.hpp>
 
+#include <terrain/core/edge_properties.hpp>
 #include <terrain/core/point.hpp>
 #include <terrain/core/pslg.hpp>
 #include <terrain/core/pslg_builder.hpp>
@@ -66,6 +67,7 @@
 
 using terrain::Chain;
 using terrain::ChainRole;
+using terrain::EdgeProperties;
 using terrain::Point2;
 using terrain::Pslg;
 using terrain::PslgBuilder;
@@ -87,6 +89,8 @@ using terrain::test::cw_square;
 using terrain::test::find_error;
 using terrain::test::has_error;
 using terrain::test::indices;
+using terrain::test::kRiver;
+using terrain::test::kRoad;
 using terrain::test::open_breakline;
 using terrain::test::points;
 using terrain::test::render;
@@ -949,24 +953,68 @@ TEST_CASE("chains may share vertices, which is what the index encoding is for",
     CHECK(r.pslg->vertices().size() == 5);
 }
 
-// is_river is data, not structure, and is never validated. It is permitted on
-// every role -- a wide river or a lake is legitimately an area feature.
-TEST_CASE("is_river is carried through untouched on every role", "[pslg][builder][is_river]") {
+// The property set is data, not structure, and is never validated. It is
+// permitted on every role -- a wide river or a lake is legitimately an area
+// feature, and so is a walled enclosure.
+//
+// The outer ring carries TWO DISJOINT properties, which is the case one bit
+// could not express and the reason this test is worth more than a rename: a
+// builder that stored "was anything set" rather than the set itself, or that
+// kept only the lowest member, passes every one-bit form of this assertion and
+// fails the first line below.
+TEST_CASE("the property set is carried through untouched on every role",
+          "[pslg][builder][properties]") {
     PslgBuilder b;
-    b.add_chain(points(ccw_square()), ChainRole::Outer, true);
-    b.add_chain(points(cw_hole()), ChainRole::Hole, true);
-    b.add_chain(points(open_breakline()), ChainRole::Breakline, true);
+    b.add_chain(points(ccw_square()), ChainRole::Outer, kRiver | kRoad);
+    b.add_chain(points(cw_hole()), ChainRole::Hole, kRiver);
+    b.add_chain(points(open_breakline()), ChainRole::Breakline, kRoad);
     b.add_chain(points(translated(points(open_breakline()), Point2{1.0, 1.0})),
-                ChainRole::Breakline, false);
+                ChainRole::Breakline);
     const PslgBuildResult r = build(std::move(b));
 
     INFO(render(r));
     REQUIRE(r.ok());
     const Pslg& p = *r.pslg;
-    CHECK(p.chains()[0].is_river);
-    CHECK(p.chains()[1].is_river);
-    CHECK(p.chains()[2].is_river);
-    CHECK_FALSE(p.chains()[3].is_river);
+    CHECK(p.chains()[0].properties == (kRiver | kRoad));
+    CHECK(p.chains()[1].properties == kRiver);
+    CHECK(p.chains()[2].properties == kRoad);
+    // The default third argument is the empty set, which is what the absent
+    // bool meant. Every call site that passed nothing is unchanged in meaning.
+    CHECK(p.chains()[3].properties.empty());
+
+    // And the sets stay apart. Two chains carrying disjoint members must not
+    // come out of the builder unioned: union is the NODER's rule, over output
+    // edges a chain contributes geometry to, and applying it here would merge
+    // constraints that share nothing but a builder.
+    CHECK_FALSE(p.chains()[1].properties.contains(kRoad));
+    CHECK_FALSE(p.chains()[2].properties.contains(kRiver));
+}
+
+// A property set is never structure, and this is the statement of it: the
+// validator's verdict on a constraint set does not depend on any chain's
+// properties. Same geometry, two property assignments, byte-identical outcome.
+TEST_CASE("the validator's verdict does not depend on any chain's properties",
+          "[pslg][builder][properties]") {
+    const auto built_with = [](EdgeProperties outer, EdgeProperties hole) {
+        PslgBuilder b;
+        b.add_chain(points(ccw_square()), ChainRole::Outer, outer);
+        b.add_chain(points(cw_hole()), ChainRole::Hole, hole);
+        return build(std::move(b));
+    };
+    const PslgBuildResult bare = built_with(EdgeProperties{}, EdgeProperties{});
+    const PslgBuildResult laden = built_with(kRiver | kRoad, kRoad);
+
+    INFO(render(bare));
+    INFO(render(laden));
+    REQUIRE(bare.ok());
+    REQUIRE(laden.ok());
+    CHECK(bare.pslg->vertices().size() == laden.pslg->vertices().size());
+    CHECK(bare.pslg->chains().size() == laden.pslg->chains().size());
+    for (std::size_t c = 0; c < bare.pslg->chains().size(); ++c) {
+        CHECK(bare.pslg->chains()[c].begin == laden.pslg->chains()[c].begin);
+        CHECK(bare.pslg->chains()[c].count == laden.pslg->chains()[c].count);
+        CHECK(bare.pslg->chains()[c].role == laden.pslg->chains()[c].role);
+    }
 }
 
 // ---------------------------------------------------------------------------

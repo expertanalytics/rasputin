@@ -76,6 +76,19 @@ SCENE_PATH = REPO_ROOT / "src_python" / "tin_engine" / "viz" / "scene.py"
 EAST = 430_000.0
 NORTH = 6_900_000.0
 
+# Bare masks, deliberately. `scene.py` is forbidden a vocabulary -- it unions
+# opaque words exactly as it treats `role` as `object` -- and so is this suite:
+# a mask reaches the scene builder from `cli.py`, which holds the vocabulary,
+# and the scene may not ask what bit 0 means.
+#
+# TWO of them, and DISJOINT, because that is what one bit could not express.
+# `RIVER | RIVER` is `RIVER`, so union and "take the last contributor" are
+# indistinguishable; `RIVER | ROAD` is neither operand, so one fixture in one
+# order separates them. See `TestPropertyJoin`.
+NO_PROPERTIES = 0
+RIVER = 1 << 0
+ROAD = 1 << 1
+
 
 class Role(enum.Enum):
     """A stand-in for `_core.ChainRole`, which this suite may not import.
@@ -98,7 +111,7 @@ class FakeChain:
     begin: int
     count: int
     role: Role
-    is_river: bool
+    properties: int
 
 
 @dataclass(frozen=True)
@@ -135,7 +148,7 @@ class FakeMesh:
 #
 #   3 +-------------------+ 2
 #     | \               / |
-#     |   4 ==========5   |        4=5 is the breakline (is_river)
+#     |   4 ==========5   |        4=5 is the breakline (properties: RIVER)
 #     | /               \ |
 #   0 +-------------------+ 1
 #
@@ -213,7 +226,7 @@ ALL_EDGES = frozenset(
 
 MESH_MEMBERS = ("vertices", "triangles", "constrained_edges", "triangle_count", "empty")
 PSLG_MEMBERS = ("vertices", "chains", "chain_indices", "indices_of")
-CHAIN_MEMBERS = ("begin", "count", "role", "is_river")
+CHAIN_MEMBERS = ("begin", "count", "role", "properties")
 
 
 def scene_module() -> ModuleType:
@@ -247,13 +260,13 @@ def edge_at(scene: Any, a: int, b: int) -> Any:
 
 
 def make_pslg(
-    chains: list[tuple[list[int], Role, bool]],
+    chains: list[tuple[list[int], Role, int]],
     vertices: npt.NDArray[np.float64] | None = None,
 ) -> FakePslg:
     flat: list[int] = []
     records: list[FakeChain] = []
-    for indices, role, is_river in chains:
-        records.append(FakeChain(len(flat), len(indices), role, is_river))
+    for indices, role, properties in chains:
+        records.append(FakeChain(len(flat), len(indices), role, properties))
         flat.extend(indices)
     return FakePslg(
         vertices=MESH_VERTICES if vertices is None else vertices,
@@ -271,8 +284,8 @@ def pslg() -> FakePslg:
     """
     return make_pslg(
         [
-            ([0, 1, 2, 3], Role.Outer, False),
-            ([4, 5], Role.Breakline, True),
+            ([0, 1, 2, 3], Role.Outer, NO_PROPERTIES),
+            ([4, 5], Role.Breakline, RIVER),
         ]
     )
 
@@ -315,8 +328,8 @@ class TestFixtureSanity:
         ("fake", "members"),
         [
             (FakeMesh(MESH_VERTICES, MESH_TRIANGLES, MESH_MASKS), MESH_MEMBERS),
-            (make_pslg([([0, 1, 2, 3], Role.Outer, False)]), PSLG_MEMBERS),
-            (FakeChain(0, 4, Role.Outer, False), CHAIN_MEMBERS),
+            (make_pslg([([0, 1, 2, 3], Role.Outer, NO_PROPERTIES)]), PSLG_MEMBERS),
+            (FakeChain(0, 4, Role.Outer, NO_PROPERTIES), CHAIN_MEMBERS),
         ],
     )
     def test_the_fakes_carry_every_protocol_member(
@@ -477,18 +490,18 @@ class TestRoleJoin:
         for a, b in [(0, 1), (1, 2), (2, 3), (0, 3)]:
             assert edge_at(scene, a, b).role is Role.Outer
 
-    def test_the_river_bit_reaches_the_edge(self, scene: Any) -> None:
-        assert edge_at(scene, 4, 5).is_river is True
+    def test_the_property_set_reaches_the_edge(self, scene: Any) -> None:
+        assert edge_at(scene, 4, 5).properties == RIVER
 
-    def test_an_ordinary_constrained_edge_is_not_a_river(self, scene: Any) -> None:
-        assert edge_at(scene, 0, 1).is_river is False
+    def test_an_ordinary_constrained_edge_carries_no_property(self, scene: Any) -> None:
+        assert edge_at(scene, 0, 1).properties == NO_PROPERTIES
 
-    def test_unconstrained_edges_have_no_role_and_no_river_bit(self, scene: Any) -> None:
+    def test_unconstrained_edges_have_no_role_and_no_properties(self, scene: Any) -> None:
         for a, b in sorted(ALL_EDGES - EXPECTED_CONSTRAINED):
             edge = edge_at(scene, a, b)
             assert edge.constrained is False
             assert edge.role is None
-            assert edge.is_river is False
+            assert edge.properties == NO_PROPERTIES
 
     def test_the_join_agrees_on_well_formed_input(self, scene: Any) -> None:
         assert list(scene.findings) == []
@@ -498,34 +511,100 @@ class TestRoleJoin:
         # role, because `role` is opaque and cannot be ranked by value.
         pslg = make_pslg(
             [
-                ([0, 1, 2, 3], Role.Outer, False),
-                ([4, 5], Role.Breakline, True),
-                ([0, 1], Role.Breakline, True),
+                ([0, 1, 2, 3], Role.Outer, NO_PROPERTIES),
+                ([4, 5], Role.Breakline, RIVER),
+                ([0, 1], Role.Breakline, RIVER),
             ]
         )
         scene = scene_module().build_scene(pslg, mesh, closed_roles=CLOSED)
         assert edge_at(scene, 0, 1).role is Role.Outer
 
-    @pytest.mark.parametrize("river_first", [True, False])
-    def test_the_river_bit_is_the_or_over_every_chain_on_the_edge(
-        self, mesh: FakeMesh, river_first: bool
+    def test_the_property_set_is_the_union_over_every_chain_on_the_edge(
+        self, mesh: FakeMesh
     ) -> None:
-        # Mirrors `testing.md`'s noding invariant: the bit means "some
-        # contributing chain was a river", so neither an earlier nor a later
-        # chain may clear it. Both orders, because a single order is passed by
-        # an implementation that simply takes the last chain's bit -- measured:
-        # with only the river-last case, the overwrite mutant survived.
-        bits = [True, False] if river_first else [False, True]
+        # Mirrors `testing.md`'s noding invariant: the set means "the
+        # properties of every chain that contributed geometry here", so neither
+        # an earlier nor a later chain may drop one.
+        #
+        # ONE fixture, in ONE order, where the one-bit form needed a
+        # `parametrize` over both chain orders. Under one bit,
+        # `RIVER | RIVER == RIVER`, so union, first-wins and last-wins all
+        # produce the same answer and only a chosen ordering separates them --
+        # measured then: with only the river-last case, the overwrite mutant
+        # survived. `RIVER | ROAD` equals NEITHER operand, so a single order
+        # kills first-wins, last-wins and "the first chain's set" at once. The
+        # two assertions below are what make that explicit rather than implied:
+        # the answer is the union, and it is not either contributor.
         pslg = make_pslg(
             [
-                ([0, 1, 2, 3], Role.Outer, False),
-                ([4, 5], Role.Breakline, True),
-                ([0, 1], Role.Breakline, bits[0]),
-                ([0, 1], Role.Breakline, bits[1]),
+                ([0, 1, 2, 3], Role.Outer, NO_PROPERTIES),
+                ([4, 5], Role.Breakline, RIVER),
+                ([0, 1], Role.Breakline, RIVER),
+                ([0, 1], Role.Breakline, ROAD),
             ]
         )
         scene = scene_module().build_scene(pslg, mesh, closed_roles=CLOSED)
-        assert edge_at(scene, 0, 1).is_river is True
+        edge = edge_at(scene, 0, 1)
+        assert edge.properties == RIVER | ROAD
+        assert edge.properties != RIVER
+        assert edge.properties != ROAD
+
+    def test_the_union_does_not_depend_on_the_order_of_the_contributing_chains(
+        self, mesh: FakeMesh
+    ) -> None:
+        # Commutativity, asserted rather than assumed: the noder's merge is a
+        # reduce over an UNORDERED set of contributing chains, and an answer
+        # that depended on visit order would be a wrong answer no
+        # single-threaded run reproduces. The scene is the first consumer with
+        # a set wide enough for the two orders to be able to differ.
+        def properties_with(first: int, second: int) -> int:
+            pslg = make_pslg(
+                [
+                    ([0, 1, 2, 3], Role.Outer, NO_PROPERTIES),
+                    ([0, 1], Role.Breakline, first),
+                    ([0, 1], Role.Breakline, second),
+                ]
+            )
+            scene = scene_module().build_scene(pslg, mesh, closed_roles=CLOSED)
+            return int(edge_at(scene, 0, 1).properties)
+
+        assert properties_with(RIVER, ROAD) == properties_with(ROAD, RIVER) == RIVER | ROAD
+
+    def test_the_role_takes_the_first_chain_while_the_properties_take_the_union(
+        self, mesh: FakeMesh
+    ) -> None:
+        # The two fields deliberately have DIFFERENT merge rules -- role: the
+        # first contributor wins, because roles are opaque and cannot be ranked
+        # by value; properties: union, because the set means "every property of
+        # every chain here". Applying the role's rule to the property set is
+        # `06-cdt-viewer.md`'s "right-looking wrong picture" in miniature, and
+        # under one bit the two rules agreed on every fixture this suite had.
+        pslg = make_pslg(
+            [
+                ([0, 1], Role.Outer, RIVER),
+                ([0, 1], Role.Breakline, ROAD),
+            ]
+        )
+        scene = scene_module().build_scene(pslg, mesh, closed_roles=CLOSED)
+        edge = edge_at(scene, 0, 1)
+        assert edge.role is Role.Outer
+        assert edge.properties == RIVER | ROAD
+
+    def test_an_unclassified_chain_does_not_clear_a_classified_ones_set(
+        self, mesh: FakeMesh
+    ) -> None:
+        # The empty set is the identity of the union and must behave as one
+        # from either side. An implementation that assigned rather than unioned
+        # loses the river to whichever plain chain happens to come last.
+        pslg = make_pslg(
+            [
+                ([0, 1, 2, 3], Role.Outer, NO_PROPERTIES),
+                ([0, 1], Role.Breakline, RIVER),
+                ([0, 1], Role.Breakline, NO_PROPERTIES),
+            ]
+        )
+        scene = scene_module().build_scene(pslg, mesh, closed_roles=CLOSED)
+        assert edge_at(scene, 0, 1).properties == RIVER
 
     def test_a_masked_edge_matching_no_chain_is_a_finding(self, pslg: FakePslg) -> None:
         # Triangle 0's mask gains bit 2, edge (5, 0) -- an interior edge no
@@ -557,9 +636,9 @@ class TestRoleJoin:
         # of any triangle. This is the input half of the disagreement.
         pslg = make_pslg(
             [
-                ([0, 1, 2, 3], Role.Outer, False),
-                ([4, 5], Role.Breakline, True),
-                ([0, 2], Role.Breakline, False),
+                ([0, 1, 2, 3], Role.Outer, NO_PROPERTIES),
+                ([4, 5], Role.Breakline, RIVER),
+                ([0, 2], Role.Breakline, NO_PROPERTIES),
             ]
         )
         scene = scene_module().build_scene(pslg, mesh, closed_roles=CLOSED)
@@ -571,9 +650,9 @@ class TestRoleJoin:
     def test_a_chain_edge_in_no_mask_is_still_drawn(self, mesh: FakeMesh) -> None:
         pslg = make_pslg(
             [
-                ([0, 1, 2, 3], Role.Outer, False),
-                ([4, 5], Role.Breakline, True),
-                ([0, 2], Role.Breakline, False),
+                ([0, 1, 2, 3], Role.Outer, NO_PROPERTIES),
+                ([4, 5], Role.Breakline, RIVER),
+                ([0, 2], Role.Breakline, NO_PROPERTIES),
             ]
         )
         scene = scene_module().build_scene(pslg, mesh, closed_roles=CLOSED)
@@ -595,14 +674,14 @@ class TestRoleJoin:
         # chain's length. The fixture's two-vertex breakline cannot show that:
         # closing it re-emits `_key(4, 5)`, and `_chain_edges` accumulates into
         # a dict keyed on exactly that pair, so the second write only ORs
-        # `is_river` and the edge still appears once under the mutant. A
+        # the property set and the edge still appears once under the mutant. A
         # three-vertex breakline can: closing [4, 5, 2] invents the constraint
         # (2, 4), which is a real mesh edge and so would silently be drawn as
         # one.
         pslg = make_pslg(
             [
-                ([0, 1, 2, 3], Role.Outer, False),
-                ([4, 5, 2], Role.Breakline, True),
+                ([0, 1, 2, 3], Role.Outer, NO_PROPERTIES),
+                ([4, 5, 2], Role.Breakline, RIVER),
             ]
         )
         scene = scene_module().build_scene(pslg, mesh, closed_roles=CLOSED)
@@ -624,9 +703,9 @@ class TestRoleJoin:
         # semantic boundary.
         pslg = make_pslg(
             [
-                ([0, 1, 2, 3], Role.Outer, False),
-                ([4, 5], Role.Breakline, True),
-                ([2], Role.Outer, False),
+                ([0, 1, 2, 3], Role.Outer, NO_PROPERTIES),
+                ([4, 5], Role.Breakline, RIVER),
+                ([2], Role.Outer, NO_PROPERTIES),
             ]
         )
         scene = scene_module().build_scene(pslg, mesh, closed_roles=CLOSED)
@@ -732,7 +811,7 @@ class TestBoundingBox:
     def collinear(self, points: list[tuple[float, float]]) -> Any:
         vertices = np.array(points, dtype=np.float64)
         indices = list(range(len(points)))
-        pslg = make_pslg([(indices, Role.Breakline, False)], vertices=vertices)
+        pslg = make_pslg([(indices, Role.Breakline, NO_PROPERTIES)], vertices=vertices)
         return scene_module().build_scene(pslg, None, ok=False)
 
     def test_a_zero_width_box_is_padded_about_its_centre(self) -> None:
@@ -780,7 +859,7 @@ class TestBoundingBox:
         # without it is an SVG that renders as nothing, in silence.
         vertices = MESH_VERTICES.copy()
         vertices[2, 1] = bad
-        pslg = make_pslg([([0, 1, 2, 3], Role.Outer, False)], vertices=vertices)
+        pslg = make_pslg([([0, 1, 2, 3], Role.Outer, NO_PROPERTIES)], vertices=vertices)
         broken = FakeMesh(vertices, MESH_TRIANGLES, MESH_MASKS)
         with pytest.raises(ValueError, match="finite"):
             scene_module().build_scene(pslg, broken, closed_roles=CLOSED)

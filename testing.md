@@ -107,7 +107,7 @@ These are the "water tight" properties — they must hold on every input regardl
 - Every input vertex appears in the output vertex set (post-snap).
 - Every output vertex is either an input vertex (snapped) or lies on at least two input segments.
 - Sum of output segment lengths equals sum of input segment lengths, modulo snap perturbation. The bound is `√2·h` per segment for grid spacing `h`, not `h`: a vertex moves by at most half a cell diagonal, `h/√2`, and a segment moves at both ends.
-- `is_river` bit on any output segment is the OR of the bits on the input segments that contributed.
+- The feature property **set** on any output segment is the **union** of the sets on the input segments that contributed — not the OR of one `is_river` bit. An edge may end up carrying two properties, three or none; at a coarse resolution one segment is legitimately both a road and a river (`docs/increments/07-edge-properties.md`). The invariant is stated over sets because union is commutative, associative and idempotent, which is exactly what makes it reducible over the *unordered* set of contributors the broad phase produces — so a test may assert the result without fixing a visit order, and a merge that depended on one would be caught by permuting the inputs.
 
 ### `cdt` [live]
 

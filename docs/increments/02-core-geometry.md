@@ -99,7 +99,10 @@ bool on_segment(const Segment2&, const Point2&);
 ```
 
 `operator==` is **ordered**: `{a,b} != {b,a}`. Ring edges are directed and the
-noder's `is_river` merge cares. An unordered comparison, if ever needed, gets
+noder's edge-property merge cares. (It was spelled "the noder's `is_river`
+merge" when this was written; increment 7 replaced the one bit with a property
+*set*, and the claim about ordering is unaffected — union over sets does not
+make a directed edge undirected.) An unordered comparison, if ever needed, gets
 its own name.
 
 `on_segment` is the one predicate: point on closed segment, exact — collinearity

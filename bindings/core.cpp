@@ -6,6 +6,7 @@
 #include <terrain/cdt/detria_backend.hpp>
 #include <terrain/cdt/result.hpp>
 #include <terrain/cdt/triangulate.hpp>
+#include <terrain/core/edge_properties.hpp>
 #include <terrain/core/indexed_mesh.hpp>
 #include <terrain/core/point.hpp>
 #include <terrain/core/pslg.hpp>
@@ -27,6 +28,7 @@ namespace py = pybind11;
 
 using terrain::Chain;
 using terrain::ChainRole;
+using terrain::EdgeProperties;
 using terrain::IndexedMesh2;
 using terrain::Point2;
 using terrain::Point3;
@@ -112,6 +114,65 @@ template <typename T>
         points.push_back(Point2{xy[2 * i], xy[2 * i + 1]});
     }
     return points;
+}
+
+// The one admission check on an untrusted property mask, and a ValueError
+// rather than a PslgDiagnostic: PslgError enumerates structural defects of a
+// constraint set, every one of which a C++ caller can also commit, and this one
+// no C++ caller can -- EdgeProperties::bit is the only route to a set bit and
+// i >= kMaxProperties is a precondition violation rather than a datum. It joins
+// the mis-shaped vertex array above as a marshalling failure.
+//
+// Compared AS PYTHON INTEGERS rather than cast first, because a Python int is
+// unbounded: casting 1 << 64 to any C++ integer type raises before the check
+// could run, and `mask >> 32` on a negative int is -1 in Python -- truthy, and
+// not a bit position.
+[[nodiscard]] EdgeProperties as_properties(const py::object& mask, std::size_t chain) {
+    // bool first, and separately, because Python's bool IS an int: it satisfies
+    // the isinstance check below and 0 and 1 are both in range, so the
+    // pre-migration spelling (idx, role, is_river) would pass silently. True
+    // would even mean "river" -- but only because bit 0 happens to be river in
+    // DEFAULT_VOCABULARY, which lives in Python and can be renumbered without
+    // any C++ suite noticing. The C++ half refuses the same spelling outright
+    // (EdgeProperties has no conversion from bool in either direction), and the
+    // boundary must not be the one place it survives.
+    if (py::isinstance<py::bool_>(mask)) {
+        throw py::value_error(std::format(
+            "chain {}: the property mask is a bool ({}); pass a mask of property bits, "
+            "not the old is_river flag",
+            chain, std::string{py::str(mask)}));
+    }
+    // The type arm is separate from the range arm below because the two
+    // defects are different objects and the message has to name the one that
+    // was rejected. isinstance<py::int_> is a strict PyLong_Check, so a
+    // numpy.int64 -- what a caller holds after indexing any integer array --
+    // is refused here however legal its value; folded into the range arm it
+    // was reported as "the property mask 1 is not a set of bits below 32",
+    // telling the caller to fix the one thing that was not wrong. The bool arm
+    // above already names the type for exactly this reason.
+    if (!py::isinstance<py::int_>(mask)) {
+        throw py::value_error(
+            std::format("chain {}: the property mask has type {}; pass a built-in int of "
+                        "property bits",
+                        chain, std::string{py::str(py::type::of(mask))}));
+    }
+    const py::int_ ceiling{std::uint64_t{1} << EdgeProperties::kMaxProperties};
+    if (mask < py::int_{0} || mask >= ceiling) {
+        throw py::value_error(
+            std::format("chain {}: the property mask {} is not a set of bits below {}", chain,
+                        std::string{py::str(mask)}, EdgeProperties::kMaxProperties));
+    }
+    // Bit by bit, because EdgeProperties has no conversion from a word in
+    // either direction and must never grow one: that absence is what makes
+    // add_chain(idx, role, true) a compile error rather than a changed meaning.
+    const auto word = mask.cast<std::uint32_t>();
+    EdgeProperties properties;
+    for (unsigned i = 0; i < EdgeProperties::kMaxProperties; ++i) {
+        if (((word >> i) & 1u) != 0u) {
+            properties = properties | EdgeProperties::bit(i);
+        }
+    }
+    return properties;
 }
 
 }  // namespace
@@ -279,13 +340,22 @@ it rather than by where in the backend it arose. describe() renders each one.
 
     py::class_<Chain>(m, "Chain", R"doc(
 One constraint chain: a half-open run [begin, begin + count) of chain_indices,
-its role, and whether it is a river. Frozen; count counts DISTINCT vertices, so
-a closed ring does not store its closing index.
+its role, and its property set. Frozen; count counts DISTINCT vertices, so a
+closed ring does not store its closing index.
 )doc")
         .def_readonly("begin", &Chain::begin, "Offset of this chain's first index.")
         .def_readonly("count", &Chain::count, "Number of distinct vertices in this chain.")
         .def_readonly("role", &Chain::role, "The chain's ChainRole.")
-        .def_readonly("is_river", &Chain::is_river, "Whether the chain is a river feature.");
+        .def_property_readonly(
+            "properties", [](const Chain& self) { return self.properties.bits(); },
+            R"doc(The chain's feature property set, as a bare 32-bit mask.
+
+An int, because EdgeProperties is deliberately not bound: Python already has an
+integer with |, & and bit_count(), and the meaning of each bit lives in one
+Pydantic model, tin_engine.features.EdgeVocabulary. A bound class would grow a
+second, competing vocabulary object next to it and carry no meaning the int does
+not.
+)doc");
 
     py::class_<PslgDiagnostic>(m, "PslgDiagnostic", R"doc(
 One reason a proposed PSLG was rejected: an error, the offending chain, the
@@ -436,10 +506,13 @@ mirroring the C++ accessor.
         "build_pslg",
         [](const py::object& vertices, const py::iterable& chains) {
             PslgBuilder builder{as_points(vertices)};
+            std::size_t index = 0;
             for (const py::handle chain : chains) {
-                const auto [indices, role, is_river] =
-                    chain.cast<std::tuple<std::vector<std::uint32_t>, ChainRole, bool>>();
-                builder.add_chain(std::span<const std::uint32_t>{indices}, role, is_river);
+                const auto [indices, role, mask] =
+                    chain.cast<std::tuple<std::vector<std::uint32_t>, ChainRole, py::object>>();
+                builder.add_chain(std::span<const std::uint32_t>{indices}, role,
+                                  as_properties(mask, index));
+                ++index;
             }
             return std::move(builder).build<terrain::pred::DefaultKernel>();
         },
@@ -447,11 +520,14 @@ mirroring the C++ accessor.
 Validate a constraint set and return a PslgBuildResult.
 
 vertices is any (N, 2) float64-convertible array-like; chains is a sequence of
-(indices, role, is_river). The coordinates are copied, so the returned Pslg
-neither aliases nor keeps alive the array handed in. Invalid input is reported
-as the result's whole diagnostics list rather than raised. A mis-shaped vertex
-array is a ValueError; a path or a filename is a TypeError, because the core
-never sees a path.
+(indices, role, properties), where properties is a bare mask whose bits are
+named by a tin_engine.features.EdgeVocabulary. The coordinates are copied, so
+the returned Pslg neither aliases nor keeps alive the array handed in. Invalid
+input is reported as the result's whole diagnostics list rather than raised. A
+mis-shaped vertex array is a ValueError, and so is a mask that is negative or
+carries a bit at or above 32 -- both are marshalling failures rather than
+PslgDiagnostics, because no C++ caller can commit either. A path or a filename
+is a TypeError, because the core never sees a path.
 )doc");
 
     m.def(

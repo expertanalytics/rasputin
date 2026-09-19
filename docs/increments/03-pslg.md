@@ -44,7 +44,7 @@ struct Chain {
     std::uint32_t begin{};
     std::uint32_t count{};                       // distinct vertices; closure NOT counted
     ChainRole role{ChainRole::Breakline};
-    bool is_river{false};
+    EdgeProperties properties{};                 // widened by increment 7; see below
     friend constexpr bool operator==(const Chain&, const Chain&) = default;
 };
 ```
@@ -62,11 +62,23 @@ the repeated last index is **not** stored, exactly as increment 2 specified for
 `Ring`. For `Breakline` the chain is open and `count` is the vertex count of an
 open polyline.
 
-`is_river` is one bit per chain. It is permitted on every role — a wide river or
-a lake is legitimately an area feature — and it is never validated, because it
-is data, not structure. Only the noder (increment 5) can produce an edge whose
-bit disagrees with its source chain, and it contributes a sparse override set
-then, on `NodedPslg`, not here.
+**`properties` is a SET of feature bits per chain**, one `EdgeProperties`
+(`include/terrain/core/edge_properties.hpp`). It is permitted on every role — a
+wide river or a lake is legitimately an area feature, and so is a walled
+enclosure — and it is never validated, because it is data, not structure. Only
+the noder (increment 5) can produce an edge whose set disagrees with its source
+chain, and it contributes a sparse override set then, on `NodedPslg`, not here.
+
+**Increment 3 shipped this as one bit, `bool is_river{false}`, and increment 7
+replaced it.** The field was widened in place rather than added alongside, and
+the member renamed to `properties`: a `Chain` has no edges of its own that
+outlive it, and the relation is inheritance downward, every output edge a chain
+contributes geometry to receiving that chain's set. `EdgeProperties` admits no
+conversion to or from `bool` or an integer in either direction, so
+`add_chain(idx, role, true)` fails to compile rather than keeping its old
+meaning. This file remains the record of what was true at increment 3 and says
+so here; `docs/increments/07-edge-properties.md` is the ruling and owns the
+type.
 
 ```cpp
 class Pslg {
@@ -161,8 +173,9 @@ public:
     explicit PslgBuilder(std::vector<Point2> vertices);          // takes ownership
 
     std::uint32_t append_vertices(std::span<const Point2>);      // returns first new index
-    PslgBuilder& add_chain(std::span<const std::uint32_t>, ChainRole, bool is_river = false);
-    PslgBuilder& add_chain(std::span<const Point2>,        ChainRole, bool is_river = false);
+    // increment 3 shipped these with a trailing `bool is_river = false`
+    PslgBuilder& add_chain(std::span<const std::uint32_t>, ChainRole, EdgeProperties = {});
+    PslgBuilder& add_chain(std::span<const Point2>,        ChainRole, EdgeProperties = {});
 
     template <pred::GeometryKernel K>
     [[nodiscard]] PslgBuildResult build() &&;
@@ -573,8 +586,8 @@ What the CDT wrapper reads, and nothing else:
 | provenance for diagnostics | `chains()[c]` | — |
 
 Breaklines reach detria **edge by edge**, never as a chain. The chain structure
-exists for our benefit — provenance, the `is_river` bit, validation — not the
-backend's.
+exists for our benefit — provenance, the feature property set, validation — not
+the backend's.
 
 **The one-scratch-buffer rule.** `addOutline`, `addHole` and `setPoints` store a
 `ReadonlySpan` and do not copy; the caller's buffers must outlive

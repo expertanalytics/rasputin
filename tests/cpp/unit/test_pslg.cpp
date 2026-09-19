@@ -17,6 +17,7 @@
 #include <pslg_cases.hpp>
 #include <ring_cases.hpp>
 
+#include <terrain/core/edge_properties.hpp>
 #include <terrain/core/point.hpp>
 #include <terrain/core/pslg.hpp>
 #include <terrain/core/pslg_builder.hpp>
@@ -44,6 +45,8 @@ using terrain::pred::DefaultKernel;
 using terrain::test::ccw_square;
 using terrain::test::cw_hole;
 using terrain::test::indices;
+using terrain::test::kRiver;
+using terrain::test::kRoad;
 using terrain::test::open_breakline;
 using terrain::test::points;
 using terrain::test::render;
@@ -55,8 +58,8 @@ namespace {
 [[nodiscard]] Pslg three_chain_pslg() {
     PslgBuilder b;
     b.add_chain(points(ccw_square()), ChainRole::Outer);
-    b.add_chain(points(cw_hole()), ChainRole::Hole, true);
-    b.add_chain(points(open_breakline()), ChainRole::Breakline);
+    b.add_chain(points(cw_hole()), ChainRole::Hole, kRiver);
+    b.add_chain(points(open_breakline()), ChainRole::Breakline, kRiver | kRoad);
     PslgBuildResult r = std::move(b).build<DefaultKernel>();
     REQUIRE(r.ok());
     return std::move(*r.pslg);
@@ -171,15 +174,27 @@ TEST_CASE("indices_of sub-spans partition chain_indices contiguously", "[pslg][a
     CHECK(expected_begin == p.chain_indices().size());
 }
 
-TEST_CASE("roles and the is_river bit survive the build", "[pslg][accessors]") {
+// The property SET, not a bit: chain 2 carries two disjoint members, which is
+// what distinguishes "the builder stored the set it was handed" from "the
+// builder stored whether the set was non-empty". Under one bit those two are
+// the same assertion.
+TEST_CASE("roles and the property set survive the build", "[pslg][accessors]") {
     const Pslg p = three_chain_pslg();
     REQUIRE(p.chains().size() == 3);
     CHECK(p.chains()[0].role == ChainRole::Outer);
     CHECK(p.chains()[1].role == ChainRole::Hole);
     CHECK(p.chains()[2].role == ChainRole::Breakline);
-    CHECK_FALSE(p.chains()[0].is_river);
-    CHECK(p.chains()[1].is_river);
-    CHECK_FALSE(p.chains()[2].is_river);
+    CHECK(p.chains()[0].properties.empty());
+    CHECK(p.chains()[1].properties == kRiver);
+    CHECK(p.chains()[2].properties == (kRiver | kRoad));
+    // Equality is the assertion above; containment is the one a consumer makes,
+    // and a set that is a strict superset of kRiver is not kRiver.
+    CHECK(p.chains()[2].properties.contains(kRiver));
+    CHECK(p.chains()[2].properties.contains(kRoad));
+    CHECK_FALSE(p.chains()[1].properties.contains(kRoad));
+    // No chain's set leaked into another's: the builder appends, it never
+    // merges. Merging is the noder's, over output edges, and not a Chain's.
+    CHECK_FALSE(p.chains()[0].properties.contains(kRiver));
 }
 
 // ---------------------------------------------------------------------------

@@ -155,7 +155,9 @@ an int would lose the names the diagnostic is read for. `PslgDiagnostic` and
 so the surface stays exhaustive.
 
 `Pslg` accessors: `vertices` as a read-only `(N, 2)` `float64` array, and
-`chains` as a list of frozen records `(begin, count, role, is_river)` plus
+`chains` as a list of frozen records `(begin, count, role, properties)` — the
+fourth field widened from one `bool is_river` to a 32-bit property mask by
+increment 7 — plus
 `chain_indices` as a read-only `(M,)` `uint32` array. `indices_of(c)` is bound
 because the role map needs it and recomputing `begin:begin+count` in Python is
 an off-by-one nobody should be given the opportunity to write twice.
@@ -189,8 +191,12 @@ build_pslg(vertices, chains) -> PslgBuildResult
 ```
 
 where `vertices` is any `(N, 2)` float64-convertible array-like and `chains` is
-a sequence of `(indices, role, is_river)`. The C++ side runs
-`PslgBuilder::add_chain(span<const uint32_t>, role, is_river)` per entry and
+a sequence of `(indices, role, properties)`, where `properties` is an `int`
+property mask. **Increment 7 replaced the `bool is_river` this line first
+carried, and the boundary now refuses the old spelling**: a `bool` in the
+properties position raises `ValueError`, as does a mask that is negative or
+carries a bit at or above 32 (`7473712`). The C++ side runs
+`PslgBuilder::add_chain(span<const uint32_t>, role, EdgeProperties)` per entry and
 `build<DefaultKernel>()`. The returned `PslgBuildResult` exposes `ok`, `pslg`
 (`None` unless `ok`), and `diagnostics` as a list of frozen records
 `(error, chain, vertex, message)` — the **whole** vector, because
@@ -350,8 +356,10 @@ not a ring — and, for the one-vertex case, because the closure would be
 `_key(a, a)`, a self-loop violating `SceneEdge`'s `a < b` ordering. Not because
 of double emission: an earlier revision of this line said "closing one would
 emit its single edge twice", which the implementation contradicts — the join
-accumulates into a dict keyed on `_key(a, b)`, so a repeated key only ORs
-`is_river`.
+accumulates into a dict keyed on `_key(a, b)`, so a repeated key only unions the
+edge's property set (one `is_river` bit when this was written; increment 7
+widened it, and union over a set has the same idempotence the argument relies
+on).
 `tests/python/test_viz_scene.py::TestRoleJoin::test_a_single_vertex_ring_is_never_closed_into_a_self_loop`
 is what defends the guard.
 
@@ -459,7 +467,7 @@ change here. Stated so that nobody later "fixes" the absence.
 ## The gallery
 
 Declarative data in `fixtures.py` — a name, a description, a vertex array, a
-list of `(indices, role, is_river)`. No procedural generation, because a fixture
+list of `(indices, role, properties)`. No procedural generation, because a fixture
 whose coordinates are computed is a fixture nobody can check by reading. All
 authored at realistic coordinate magnitudes (see the ordering ruling).
 
@@ -472,9 +480,24 @@ Each exists to answer one question a person can ask of the picture:
 | `corner-hole` | a hole touching the outer ring at exactly one vertex — `InvalidTopology`'s neighbour, and a topology a person should look at |
 | `hole-in-hole` | a hole nested directly inside a second hole. **Drawn as a third failure presentation, not as a mesh** -- the backend answers `InvalidTopology`, "A hole was directly inside another hole", which is precisely "what in-domain means" made visible. The row as first written expected a mesh, and **the narrowing that made it a refusal was the red step's, not an unsatisfiability of the design** — see "`hole-in-hole`: what the suite requires and what the design meant" below |
 | `breakline-chain` | an open breakline crossing the interior; where the Delaunay property visibly stops |
-| `river` | the same, with `is_river` set, so the `is_river` stroke is exercised before 5b depends on it |
+| `river` | the same, with the `river` property set (bit 0), so the property stroke is exercised before 5b depends on it. Written as `is_river = True` at increment 6; carries an `int` mask from increment 7 |
 | `not-noded` | two crossing constraints — a **deliberate failure fixture**, rendering the non-`Ok` presentation, so that presentation is seen rather than assumed |
 | `degenerate` | an all-collinear point set. **Refused before `triangulate` is ever reached, so this is *not* the `DegenerateGeometry` presentation** -- `build_pslg` rejects the ring with `PslgError.DegenerateRing`, "chain 0 is declared Outer but every vertex is collinear", and returns no `Pslg` at all. The design's intent survives: the input is drawn alone with the engine's own words in the header band. The words are a `PslgDiagnostic`'s. Found in 6b-ii's red step; see "The `PslgLike` is the fixture itself" below, which is the decision this forced |
+
+**The two-property fixture increment 7 wanted is owed, and it is blocked on the
+stylesheet rather than on the gallery.** `docs/increments/07-edge-properties.md`
+planned a ninth row carrying two properties at once — the case that makes
+first-match-wins draw precedence visible in a *picture* rather than only in
+`tests/python/test_viz_svg.py`. It did not land, and the reason is a property of
+this document's territory, not of that increment's budget: `cli.py`'s
+`_PRECEDENCE` is `("river",)`, one element, because `svg.py`'s `STYLESHEET`
+carries exactly one property rule, `line.river`. A second precedence entry
+emits a class token no rule resolves, so the second fixture would draw an
+*unstyled* line and the picture would show nothing the one-property picture does
+not. The stylesheet is this increment's, per the ruling that a class token is
+structure and the colour it resolves to is taste — so **a second CSS rule comes
+first, and the fixture with it**. Until then `test_viz_svg.py` is the only place
+precedence is exercised, and that is recorded here rather than left silent.
 
 **Three of the eight are failure presentations, and they are rows 4, 7 and 8
 rather than the last two**: `hole-in-hole` and `not-noded` are backend refusals
@@ -684,9 +707,20 @@ approximates that unit imperfectly, as this one line demonstrates. It is kept
 because a Python-only variant would make the numbers incomparable to 6a's, and
 because a one-line undercount at this size cannot flip a gate on its own. The
 blind spot is exactly one line in `scene.py` and zero lines in all three 6a
-Python files, so no published figure is affected. Re-runnable:
-`grep -nE '^\s*\*' src_python/tin_engine/viz/*.py src_python/tin_engine/_core.pyi`
-prints exactly `scene.py:203:    *,`.
+Python files, so no published figure is affected. Re-runnable, **against
+`995f258`**, the commit this paragraph was written at and the last at which
+`viz/` held exactly the three 6a files:
+`git show 995f258:src_python/tin_engine/viz/scene.py | grep -nE '^\s*\*'`
+prints exactly `203:    *,`.
+
+The unqualified present-tense form (`grep -nE '^\s*\*'` over
+`src_python/tin_engine/viz/*.py` and `_core.pyi`, "prints exactly
+`scene.py:203:    *,`") stood here and is **false of the tree today**, in two
+ways: `scene.py`'s line is now `:212`, and `svg.py` — which did not exist at
+`995f258` — contributes two more real undercounted lines (`:313`, `:373`) plus
+two docstring lines the pattern also matches. The figure above is unaffected,
+because it is increment 6's measurement of increment 6; a re-runnable claim that
+silently starts measuring a later tree is not, which is why it is now anchored.
 Factor 2.16 on the ~90 estimate. The composition is the interesting part, and it
 contradicts the "algorithm behaves like increment 3" prediction only in the
 accounting: **68 of the 194 true lines are docstrings** and 126 are

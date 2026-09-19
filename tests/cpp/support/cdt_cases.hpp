@@ -121,7 +121,7 @@ template <pred::GeometryKernel K>
     b.add_chain(points(cw_rect(13.0, 13.0, 17.0, 17.0)), ChainRole::Hole);
     b.add_chain(points(std::vector<Point2>{Point2{2.0, 10.0}, Point2{10.0, 11.0},
                                            Point2{18.0, 10.0}}),
-                ChainRole::Breakline, /*is_river=*/true);
+                ChainRole::Breakline, /*properties=*/kRiver);
     b.add_chain(points(std::vector<Point2>{Point2{9.0, 15.0}, Point2{11.0, 12.0}}),
                 ChainRole::Breakline);
     return b;

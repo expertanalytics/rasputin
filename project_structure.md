@@ -13,6 +13,8 @@ include/terrain/           # public C++ headers, header-only where possible
     bbox.hpp               # Box2; empty-box identity, exact closed containment
     segment.hpp            # Segment2 and on_segment<K>
     ring.hpp               # Ring concept, PointRing / IndexedRing, point_in_ring<K>
+    edge_properties.hpp    # EdgeProperties: a set of 32 opaque feature bits,
+                           #   no feature NAME anywhere in terrain::
     pslg.hpp               # Pslg, Chain, ChainRole — validated planar input
     pslg_builder.hpp       # PslgBuilder, PslgDiagnostic, the validator
     indexed_mesh.hpp       # IndexedMesh2: SoA mesh + per-triangle constrained mask
@@ -55,12 +57,18 @@ src_python/tin_engine/     # public Python API (distribution name: rasputin)
   __init__.py              # re-exports from tin_engine._core
   cli.py                   # Typer entry point declared in pyproject
   raster.py                # the ONLY adapter from decoded data into _core (planned)
+  features.py              # EdgeVocabulary: which bit means which feature.
+                           #   The names C++ refuses to hold. Imports nothing
+                           #   first-party and never imports _core
   _core.pyi                # type stubs for the compiled extension
   viz/                     # CDT -> SVG renderer; never imports _core
     __init__.py            # re-exports Scene, SvgStyle, build_scene, render_svg
     protocols.py           # MeshLike / PslgLike / ChainLike -- typing.Protocol
     scene.py               # build_scene(pslg, mesh=None, ...) -> Scene
-    style.py               # SvgStyle: frozen Pydantic V2, canvas geometry only
+    style.py               # SvgStyle: frozen Pydantic V2. Canvas geometry,
+                           #   plus PropertyStroke — the bit -> CSS-token draw
+                           #   precedence, which is structure, not taste, and
+                           #   carries positions rather than feature names
     svg.py                 # (Scene, SvgStyle) -> str; the stylesheet lives here
     fixtures.py            # the eight-fixture synthetic gallery, declarative
   io/                      # all file decoding lives here (planned)
@@ -228,9 +236,14 @@ Implements `auto_catchments.md`: pit filling (priority-flood with epsilon, plus 
 
 ### `noding`
 
-Implements the constraint-noding section of `parallel_refinement.md`. Uniform-grid broad phase (the raster's grid is convenient, not required — it is a spatial index, not the snap grid), robust pairwise intersection, snap rounding, segment splitting, deduplication. Outputs a clean PSLG. `is_river` is one bit per **chain**, not per edge — only the
-noder can produce an edge whose bit disagrees with its source chain, and it
-contributes a sparse per-edge override set then. See `docs/increments/03-pslg.md`.
+Implements the constraint-noding section of `parallel_refinement.md`. Uniform-grid broad phase (the raster's grid is convenient, not required — it is a spatial index, not the snap grid), robust pairwise intersection, snap rounding, segment splitting, deduplication. Outputs a clean PSLG. Feature properties are a **set** of bits
+(`core/edge_properties.hpp`), carried per **chain**, not per edge — only the
+noder can produce an edge whose set disagrees with its source chain, and it
+contributes a sparse per-edge override set then. The merge at an intersection or
+a coincidence is **union**, which is commutative, associative and idempotent and
+therefore reducible over an unordered set of contributing chains. See
+`docs/increments/07-edge-properties.md`; `docs/increments/03-pslg.md` is the
+record of the one-bit `is_river` form that increment 7 replaced.
 
 ### `cdt`
 
@@ -249,7 +262,7 @@ dropped the honest options are a different library or our own CDT over the
 
 ### `mesh`
 
-Core data structures: vertex array, triangle array, ternary tree of refinement nodes, per-edge constraint bitmask (currently just `is_river`). Owns the flatten-to-final-mesh step. Used by `refinement`, `flip`, and bindings.
+Core data structures: vertex array, triangle array, ternary tree of refinement nodes, per-edge feature property set (`EdgeProperties`, a set of up to 32 opaque bits — never one `is_river` flag). Owns the flatten-to-final-mesh step. Used by `refinement`, `flip`, and bindings.
 
 ### `refinement`
 

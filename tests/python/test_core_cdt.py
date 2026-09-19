@@ -38,6 +38,7 @@ import numpy as np
 import pytest
 
 from tin_engine import _core
+from tin_engine.features import DEFAULT_VOCABULARY, MAX_PROPERTIES
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 STUB = REPO_ROOT / "src_python" / "tin_engine" / "_core.pyi"
@@ -51,6 +52,15 @@ NO_VERTEX = 2**32 - 1
 # fixture in [0,1]^2 silently exercises the easy case.
 EAST = 430_000.0
 NORTH = 6_900_000.0
+
+# Masks as a caller is meant to obtain them: from a vocabulary, never as a bare
+# literal. `EdgeProperties` is not bound -- the boundary carries the raw word --
+# so an `int` here is a number with no units, and going through `mask()` is the
+# only thing that says which units. The empty set is the default and means an
+# unclassified constraint, which is what the absent `is_river` bit meant.
+NO_PROPERTIES = 0
+RIVER = DEFAULT_VOCABULARY.mask("river")
+ROAD = DEFAULT_VOCABULARY.mask("road")
 
 
 # --------------------------------------------------------------------------
@@ -74,7 +84,7 @@ def square() -> np.ndarray:
 
 @pytest.fixture
 def square_pslg(square: np.ndarray) -> Any:
-    result = _core.build_pslg(square, [([0, 1, 2, 3], _core.ChainRole.Outer, False)])
+    result = _core.build_pslg(square, [([0, 1, 2, 3], _core.ChainRole.Outer, NO_PROPERTIES)])
     assert result.ok, [d.message for d in result.diagnostics]
     return result.pslg
 
@@ -88,8 +98,8 @@ def breakline_pslg(square: np.ndarray) -> Any:
     result = _core.build_pslg(
         vertices,
         [
-            ([0, 1, 2, 3], _core.ChainRole.Outer, False),
-            ([4, 5], _core.ChainRole.Breakline, True),
+            ([0, 1, 2, 3], _core.ChainRole.Outer, NO_PROPERTIES),
+            ([4, 5], _core.ChainRole.Breakline, RIVER | ROAD),
         ],
     )
     assert result.ok, [d.message for d in result.diagnostics]
@@ -122,9 +132,9 @@ def crossing_pslg(square: np.ndarray) -> Any:
     result = _core.build_pslg(
         vertices,
         [
-            ([0, 1, 2, 3], _core.ChainRole.Outer, False),
-            ([4, 5], _core.ChainRole.Breakline, False),
-            ([6, 7], _core.ChainRole.Breakline, False),
+            ([0, 1, 2, 3], _core.ChainRole.Outer, NO_PROPERTIES),
+            ([4, 5], _core.ChainRole.Breakline, NO_PROPERTIES),
+            ([6, 7], _core.ChainRole.Breakline, NO_PROPERTIES),
         ],
     )
     assert result.ok, [d.message for d in result.diagnostics]
@@ -155,8 +165,8 @@ def broken_build() -> Any:
         dtype=np.float64,
     )
     chains = [
-        ([0, 1], _core.ChainRole.Hole, False),
-        ([2, 99], _core.ChainRole.Breakline, False),
+        ([0, 1], _core.ChainRole.Hole, NO_PROPERTIES),
+        ([2, 99], _core.ChainRole.Breakline, NO_PROPERTIES),
     ]
     return _core.build_pslg(vertices, chains)
 
@@ -229,7 +239,7 @@ class TestCdtStatus:
 
 class TestBuildPslg:
     def test_returns_a_pslg_and_no_diagnostics_on_valid_input(self, square: np.ndarray) -> None:
-        result = _core.build_pslg(square, [([0, 1, 2, 3], _core.ChainRole.Outer, False)])
+        result = _core.build_pslg(square, [([0, 1, 2, 3], _core.ChainRole.Outer, NO_PROPERTIES)])
         assert result.ok is True
         assert result.pslg is not None
         assert list(result.diagnostics) == []
@@ -238,13 +248,157 @@ class TestBuildPslg:
         # The design says "any (N, 2) float64-convertible array-like", so a
         # list of lists must work without the caller reaching for numpy.
         ring = [[EAST, NORTH], [EAST + 10.0, NORTH], [EAST + 10.0, NORTH + 10.0]]
-        result = _core.build_pslg(ring, [([0, 1, 2], _core.ChainRole.Outer, False)])
+        result = _core.build_pslg(ring, [([0, 1, 2], _core.ChainRole.Outer, NO_PROPERTIES)])
         assert result.ok
 
     def test_rejects_a_vertex_array_that_is_not_n_by_2(self) -> None:
         bad = np.zeros((4, 3), dtype=np.float64)
         with pytest.raises(ValueError):
-            _core.build_pslg(bad, [([0, 1, 2], _core.ChainRole.Outer, False)])
+            _core.build_pslg(bad, [([0, 1, 2], _core.ChainRole.Outer, NO_PROPERTIES)])
+
+    def test_carries_a_property_mask_through_unchanged(self, square: np.ndarray) -> None:
+        # Able to fail on its own, and the reason the three refusals below mean
+        # anything: a binding that refused every mask would pass all of them.
+        result = _core.build_pslg(
+            square, [([0, 1, 2, 3], _core.ChainRole.Outer, RIVER | ROAD)]
+        )
+        assert result.ok, [d.message for d in result.diagnostics]
+        assert result.pslg is not None
+        assert result.pslg.chains[0].properties == RIVER | ROAD
+
+    def test_accepts_the_highest_legal_bit(self, square: np.ndarray) -> None:
+        # The boundary itself, from below: bit 31 is inside `kMaxProperties`
+        # and a range check written with `>=` where `>` belongs refuses it.
+        top = 1 << (MAX_PROPERTIES - 1)
+        result = _core.build_pslg(square, [([0, 1, 2, 3], _core.ChainRole.Outer, top)])
+        assert result.ok, [d.message for d in result.diagnostics]
+        assert result.pslg is not None
+        assert result.pslg.chains[0].properties == top
+
+    @pytest.mark.parametrize(
+        "mask",
+        [1 << MAX_PROPERTIES, (1 << MAX_PROPERTIES) + 1, 1 << 64, -1, -(1 << 40)],
+        ids=["just-above", "above-plus-legal-bit", "far-above", "minus-one", "far-below"],
+    )
+    def test_rejects_a_mask_outside_the_ceiling(self, square: np.ndarray, mask: int) -> None:
+        # Marshalling, not a `PslgDiagnostic`. `PslgError` enumerates structural
+        # defects of a constraint set, every one of which a C++ caller can also
+        # commit; this one no C++ caller can, because `EdgeProperties::bit` is
+        # the only route to a set bit and `i >= kMaxProperties` is a
+        # precondition violation rather than a datum. It joins the mis-shaped
+        # vertex array above as a `ValueError`.
+        #
+        # `-1` is the case a range check written as `mask >> 32` misses: in
+        # Python the shift of a negative int is `-1`, which is truthy but is not
+        # a bit position, and casting it to `uint32_t` yields a full word.
+        with pytest.raises(ValueError):
+            _core.build_pslg(square, [([0, 1, 2, 3], _core.ChainRole.Outer, mask)])
+
+    def test_an_out_of_range_mask_names_the_chain_it_came_from(
+        self, square: np.ndarray
+    ) -> None:
+        # Never silently, and never anonymously: the refusal has to say which
+        # chain, or a caller with forty chains is told only that one of them is
+        # wrong. Chain 1 rather than chain 0, so a message that hard-codes `0`
+        # cannot pass.
+        vertices = np.vstack([square, [[EAST + 20.0, NORTH + 40.0], [EAST + 80.0, NORTH + 40.0]]])
+        with pytest.raises(ValueError, match=r"\b1\b"):
+            _core.build_pslg(
+                vertices,
+                [
+                    ([0, 1, 2, 3], _core.ChainRole.Outer, RIVER),
+                    ([4, 5], _core.ChainRole.Breakline, 1 << MAX_PROPERTIES),
+                ],
+            )
+
+    @pytest.mark.parametrize("flag", [True, False], ids=["true", "false"])
+    def test_rejects_a_bool_in_the_properties_position(
+        self, square: np.ndarray, flag: bool
+    ) -> None:
+        # The pre-migration spelling was `(idx, role, is_river)`, and `bool` is
+        # a subclass of `int`, so `py::isinstance<py::int_>` admits it: the old
+        # call keeps working, with its *old* meaning. That is the exact inverse
+        # of what the C++ half guarantees -- `EdgeProperties` has no constructor
+        # from `bool` in either direction, precisely so `add_chain(idx, role,
+        # true)` fails at the compiler rather than compiling to something else,
+        # and the increment rejects a `bool is_river()` shim by name for the
+        # same reason. The boundary owes the same refusal.
+        #
+        # `True` produces the right answer today only by coincidence: bit 0
+        # happens to be "river" in `DEFAULT_VOCABULARY`, and the vocabulary
+        # lives in Python, where no C++ suite can see it renumbered. `False`
+        # matters as much -- it is the spelling at every non-river site, and it
+        # yields the empty set under any numbering, so it would pass forever
+        # without anyone revisiting it.
+        #
+        # `mypy --strict` does not close this half: `_core.pyi` types the
+        # position as `int`, and `bool` is a subtype of `int`.
+        #
+        # Chain 1 rather than chain 0, so a message that hard-codes `0` cannot
+        # pass, and named the same way an out-of-range mask is named above.
+        vertices = np.vstack([square, [[EAST + 20.0, NORTH + 40.0], [EAST + 80.0, NORTH + 40.0]]])
+        with pytest.raises(ValueError, match=r"\bchain 1\b"):
+            _core.build_pslg(
+                vertices,
+                [
+                    ([0, 1, 2, 3], _core.ChainRole.Outer, RIVER),
+                    ([4, 5], _core.ChainRole.Breakline, flag),
+                ],
+            )
+
+    @pytest.mark.parametrize(
+        "mask",
+        [np.int64(1), np.uint8(3), 1.0, "1"],
+        ids=["numpy-int64", "numpy-uint8", "float", "str"],
+    )
+    def test_a_non_int_mask_is_refused_by_its_type_and_not_its_value(
+        self, square: np.ndarray, mask: Any
+    ) -> None:
+        # The refusal has to name the object the predicate actually rejected.
+        # `py::isinstance<py::int_>` is a strict `PyLong_Check`, so a
+        # `numpy.int64` -- the type a caller holds after indexing any integer
+        # array -- is refused for its *type*, correctly and deliberately. The
+        # message renders the *value*, and for `numpy.int64(1)` that produces
+        # "the property mask 1 is not a set of bits below 32" about a mask that
+        # is a perfectly legal set of bits below 32. The caller is told to fix
+        # the one thing that is not wrong.
+        #
+        # Every input here has an in-range value, and the control below proves
+        # it: the same value as a built-in `int` is accepted. So the type name
+        # is the only thing that can distinguish this refusal from the
+        # out-of-range one pinned below, and nothing else in the message can
+        # stand in for it.
+        #
+        # The *property* is pinned, never the sentence: `type(mask).__name__`
+        # renders "int64" inside "numpy.int64" and "float" inside any phrasing
+        # of a float, so the wording stays free to improve. Pinning prose is
+        # what makes a diagnostic test fail on every improvement -- the same
+        # reasoning the design uses to refuse a golden-file SVG comparison.
+        #
+        # `bool` is absent on purpose: it is an `int` subclass with its own
+        # earlier arm and its own test, `test_rejects_a_bool_in_the_properties
+        # _position`. These four are the non-`int` cases proper.
+        with pytest.raises(ValueError) as excinfo:
+            _core.build_pslg(square, [([0, 1, 2, 3], _core.ChainRole.Outer, mask)])
+        assert type(mask).__name__ in str(excinfo.value), str(excinfo.value)
+
+        control = _core.build_pslg(square, [([0, 1, 2, 3], _core.ChainRole.Outer, int(mask))])
+        assert control.ok, "the value is legal; only the type was ever wrong"
+
+    def test_an_out_of_range_mask_is_refused_by_its_value(self, square: np.ndarray) -> None:
+        # The other half of the pair above, and the reason that one means
+        # anything: when the value *is* the defect, the value is what the
+        # message must carry. A refusal that named only the type here would be
+        # the mirror-image defect -- "a property mask must be an int" about an
+        # `int` -- and the two cases have to stay distinguishable in the output.
+        #
+        # A mask with a legal bit set as well as an illegal one, so a message
+        # that echoed some sanitized or truncated word rather than what the
+        # caller passed cannot pass.
+        mask = (1 << MAX_PROPERTIES) | RIVER
+        with pytest.raises(ValueError) as excinfo:
+            _core.build_pslg(square, [([0, 1, 2, 3], _core.ChainRole.Outer, mask)])
+        assert str(mask) in str(excinfo.value), str(excinfo.value)
 
     def test_reports_failure_as_data_rather_than_raising(self, broken_build: Any) -> None:
         assert broken_build.ok is False
@@ -317,10 +471,15 @@ class TestPslg:
         outer, breakline = chains
         assert (outer.begin, outer.count) == (0, 4)
         assert outer.role == _core.ChainRole.Outer
-        assert outer.is_river is False
+        assert outer.properties == 0
         assert (breakline.begin, breakline.count) == (4, 2)
         assert breakline.role == _core.ChainRole.Breakline
-        assert breakline.is_river is True
+        # A two-member set, not a bit. An `int` at the boundary is a type with
+        # no units, so a binding that marshalled "were any properties set"
+        # rather than the word itself would return 1 here and pass every
+        # one-bit form of this assertion.
+        assert breakline.properties == RIVER | ROAD
+        assert breakline.properties == 0b11
         with pytest.raises(AttributeError):
             outer.count = 99
 
@@ -442,8 +601,8 @@ class TestZeroCopyLifetime:
         result = _core.build_pslg(
             points,
             [
-                ([0, 1, 2, 3], _core.ChainRole.Outer, False),
-                ([4, 5], _core.ChainRole.Breakline, True),
+                ([0, 1, 2, 3], _core.ChainRole.Outer, NO_PROPERTIES),
+                ([4, 5], _core.ChainRole.Breakline, RIVER),
             ],
         )
         assert result.ok, [d.message for d in result.diagnostics]
@@ -628,7 +787,7 @@ def large_pslg() -> Any:
         ]
     )
     result = _core.build_pslg(
-        np.vstack([ring, interior]), [([0, 1, 2, 3], _core.ChainRole.Outer, False)]
+        np.vstack([ring, interior]), [([0, 1, 2, 3], _core.ChainRole.Outer, NO_PROPERTIES)]
     )
     assert result.ok, [d.message for d in result.diagnostics]
     return result.pslg
@@ -793,6 +952,22 @@ class TestStubs:
 
     def test_stub_file_exists(self) -> None:
         assert STUB.is_file()
+
+    def test_the_stub_declares_the_chains_property_set(self) -> None:
+        # `Chain.properties` is an `int` at the boundary: `EdgeProperties` is
+        # deliberately not bound, because Python already has an integer with
+        # `|`, `&` and `bit_count()` and the semantics live in
+        # `EdgeVocabulary`. A stub still declaring `is_river` is a stub mypy
+        # checks the wrong name against, in silence.
+        tree = ast.parse(STUB.read_text(encoding="utf-8"))
+        chain = next(
+            node
+            for node in ast.walk(tree)
+            if isinstance(node, ast.ClassDef) and node.name == "Chain"
+        )
+        members = {node.name for node in chain.body if isinstance(node, ast.FunctionDef)}
+        assert "properties" in members
+        assert "is_river" not in members
 
     @pytest.mark.parametrize("name", NEW_SURFACE)
     def test_stub_declares_the_new_surface(self, name: str) -> None:

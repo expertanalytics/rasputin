@@ -42,6 +42,7 @@
 // original's buffers, and that bug survives every test that never copies. Do
 // not add one.
 
+#include <terrain/core/edge_properties.hpp>
 #include <terrain/core/point.hpp>
 #include <terrain/core/ring.hpp>
 #include <terrain/core/segment.hpp>
@@ -74,14 +75,17 @@ enum class ChainRole : std::uint8_t { Outer, Hole, Breakline };
 // ChainRole(0). If the enumerator order is ever changed, this NSDMI is what
 // keeps the property; it is not decoration.
 //
-// is_river is one bit per chain, permitted on every role -- a wide river or a
-// lake is legitimately an area feature -- and never validated, because it is
-// data, not structure.
+// properties is the chain's feature set, permitted on every role -- a wide
+// river or a lake is legitimately an area feature, and so is a walled
+// enclosure -- and never validated, because it is data, not structure. It is
+// NAMED `properties` rather than `edge_properties`: a Chain has no edges of its
+// own that outlive it, and the relation is inheritance downward, every output
+// edge a chain contributes geometry to receiving that chain's set.
 struct Chain {
     std::uint32_t begin{};
     std::uint32_t count{};
     ChainRole role{ChainRole::Breakline};
-    bool is_river{false};
+    EdgeProperties properties{};
 
     friend constexpr bool operator==(const Chain&, const Chain&) = default;
 };
