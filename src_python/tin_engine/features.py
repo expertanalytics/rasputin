@@ -11,8 +11,11 @@ process. It is emphatically *not* a module ``tin_engine.viz`` may reach for:
 ``test_viz_svg.py::TestModuleIsolation`` pins that ``style.py`` and
 ``fixtures.py`` import no first-party module at all, and ``viz/`` needs no
 vocabulary -- ``svg.py`` takes its draw precedence from ``SvgStyle`` and
-``cli.py``, the composition root, is the one module that names both a bit and a
-feature.
+``cli.py``, the composition root, is the only module that imports both this
+one and ``viz.style``. (It is *not* "the one module that names both a bit and a
+feature", as this docstring said until increment 7's review round:
+:data:`DEFAULT_VOCABULARY` below names seven of each, and ``cli.py`` names no
+bit literal -- it looks one up through ``_BIT_OF[name]``.)
 
 The risk this module exists to narrow is a producer and a consumer disagreeing
 about which bit means "river". Nothing in C++ can see that: it merges opaque
@@ -34,8 +37,9 @@ mechanisms, in descending strength:
 The name pattern ``^[a-z][a-z0-9_]*$`` keeps a vocabulary name usable as a CSS
 class token, and is defence in depth. It is **not** what closes the injection
 hole, and this docstring said it was: ``viz/svg.py``'s ``_edge_classes``
-interpolates ``style.PropertyStroke.token`` into a ``class="..."`` attribute
-unescaped, never an :class:`EdgeProperty` name -- ``viz/`` cannot import this
+(``svg.py:166``) joins ``style.PropertyStroke.token`` values, which ``_edges``
+then interpolates into a ``class="..."`` attribute unescaped (``svg.py:225``) --
+never an :class:`EdgeProperty` name, because ``viz/`` cannot import this
 module. The only bridge is ``cli.py``, which constructs a ``PropertyStroke``
 from a name and so re-validates through ``style.py``'s own, deliberately wider
 ``^[a-z][a-z0-9_-]*$`` (a CSS class may carry a hyphen; a feature name may

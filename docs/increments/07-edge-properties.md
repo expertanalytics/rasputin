@@ -258,7 +258,12 @@ unsupportable and unnecessary. `test_viz_svg.py::TestModuleIsolation` pins that
 `svg.py`'s first-party imports are confined to `{.scene, .style, .protocols}`,
 so no `viz/` module may import `features` — and under the renderer ruling below
 none needs to: `svg.py` takes its precedence from `SvgStyle` and `cli.py`, the
-composition root, is the one module that names both.
+composition root, is the only module that imports both `features` and
+`viz.style`. (Not "the one module that names both a bit and a feature", which
+this document and `features.py` both said until this PR: `DEFAULT_VOCABULARY`
+names seven bits and seven features in one block, and `cli.py` names no bit
+literal at all — it looks one up through `_BIT_OF[name]`. The checkable
+statement is the one about imports, and `TestModuleIsolation` half-pins it.)
 
 ```python
 class EdgeProperty(BaseModel):          # frozen, extra="forbid"
@@ -297,11 +302,22 @@ DEFAULT_VOCABULARY = EdgeVocabulary(properties=(
   into a `class="…"` attribute **unescaped** — line 154,
   `f"role-{_role_name(edge.role)}"`; only `_text` escapes, at line 162. Run
   `git show origin/increment6b-ii-renderer-red:src_python/tin_engine/viz/svg.py`.
-  Today every token comes from an enum name and is safe by construction. A
-  vocabulary read from a configuration file is not, and a name containing a
-  quote ends the attribute. The pattern is that hole's only closure, and it is
-  cheaper than escaping because a CSS class token has no legitimate use for any
-  character the pattern excludes.
+  A vocabulary read from a configuration file is not safe by construction, and a
+  name containing a quote would end the attribute.
+
+  **Corrected in this PR:** the two sentences that stood here — "every token
+  comes from an enum name" and "the pattern is that hole's only closure" — were
+  both wrong about the object. There is no enum on this path; the tokens are
+  `cli.py:79`'s `_PRECEDENCE = ("river",)`, a literal tuple of `str`. And this
+  pattern closes nothing: what `svg.py` interpolates is
+  `style.PropertyStroke.token`, never an `EdgeProperty.name`, because `viz/`
+  may import no vocabulary at all. The one bridge is `cli.py:84`, which builds a
+  `PropertyStroke` from a name and so re-validates through `style.py:51`'s
+  deliberately wider `^[a-z][a-z0-9_-]*$` — a CSS class may carry a hyphen, a
+  feature name may not. A quote-carrying name dies there whatever this pattern
+  says. Keep the pattern: it keeps a vocabulary name usable as a class token and
+  is defence in depth behind the one that is load-bearing. `viz/style.py:40-51`
+  is where the boundary is documented, because that is where it is enforced.
 
 ### How a producer and a consumer come to agree which bit means "river"
 
@@ -400,7 +416,10 @@ to fix something that is not broken. The two arms are therefore separate in
 **Refusing rather than coercing is the decision, and it is deliberate.** The
 alternative was to accept anything with `__index__`, which would let
 `mask = arr[i]` through. It is an asymmetry with `vertices`, which takes any
-array-like through `np.asarray`, and a NumPy-first caller will meet it. Refused
+array-like through
+`py::array_t<double, c_style | forcecast>::ensure` (`bindings/core.cpp:93-94`) —
+forcecast, not `np.asarray`, which the boundary never calls — and a NumPy-first
+caller will meet it. Refused
 anyway: the mask is a *set of bits in a vocabulary* whose only correct source is
 `EdgeVocabulary.mask()`, which returns a built-in `int`. A `numpy.int64` in that
 position means the caller has routed a mask through an array, where a silent
@@ -728,7 +747,7 @@ once 6b-ii merges, 2 new suites. The largest single file is `test_viz_svg.py` at
 
 ### Reconciliation: ~185 estimated, 377 measured
 
-Measured on `7cc83a9` against the merge base `4834568`, with this section's own
+Measured on `1a1fd05` against the merge base `4834568`, with this section's own
 instruments applied to the **added** non-comment lines of the diff —
 `git diff 4834568..HEAD -- <file> | grep '^+' | grep -v '^+++' | sed 's/^\+//' |
 grep -vcE '^\s*(//|$)'` for C++ and `'^\s*(#|$)'` for Python.
