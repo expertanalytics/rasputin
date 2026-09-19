@@ -37,7 +37,8 @@ mechanisms, in descending strength:
 The name pattern ``^[a-z][a-z0-9_]*$`` keeps a vocabulary name usable as a CSS
 class token, and is defence in depth. It is **not** what closes the injection
 hole, and this docstring said it was: ``viz/svg.py``'s ``_edge_classes``
-(``svg.py:166``) joins ``style.PropertyStroke.token`` values, which ``_edges``
+(``svg.py:166``) joins at most one ``style.PropertyStroke.token`` with up to
+three literal classes, which ``_edges``
 then interpolates into a ``class="..."`` attribute unescaped (``svg.py:225``) --
 never an :class:`EdgeProperty` name, because ``viz/`` cannot import this
 module. The only bridge is ``cli.py``, which constructs a ``PropertyStroke``
