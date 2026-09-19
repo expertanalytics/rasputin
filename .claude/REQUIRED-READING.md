@@ -128,6 +128,24 @@ reported "no hang" in output produced entirely by the hang. Time a hang from
 outside the process, and prefer a probe whose pass and its own absence look
 different — `b0bf129` is the correction.
 
+This tree has a standing instance of that hazard: **`pytest` does not rebuild
+the C++ extension.** scikit-build-core's editable auto-rebuild needs `ninja`,
+which is not installed, so it silently no-ops, and a run after a change to
+`bindings/core.cpp` exercises the previously installed `.so`. A green handback
+from a session that never rebuilt is byte-identical to one that did. Rebuild and
+reinstall explicitly before every `pytest` that is meant to measure C++:
+
+```bash
+cmake --build build-pyext -j --target _core
+cp build-pyext/_core.cpython-*-darwin.so .venv/lib/python3.*/site-packages/tin_engine/
+```
+
+`pip install -e . --no-build-isolation` is not the route — `scikit_build_core`
+is absent from the venv. This paragraph was verified the way it asks you to
+verify: increment 7's fixed `bindings/core.cpp` was replaced on disk with the
+pre-fix version that four tests were written to refute, and `pytest` reported
+94 passed. A broken X, and Y did not notice.
+
 When there is nothing to run — a comment, a design invariant, a claim of the
 form "X is verified by Y" — one question catches the same defect by inspection,
 in a line, with no build: **is the claim about the same object the code

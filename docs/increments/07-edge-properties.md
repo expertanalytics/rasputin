@@ -384,6 +384,19 @@ shim is rejected by name above), so the boundary must not be the one place it
 survives. `py::isinstance<py::bool_>` is the check; the `int_` check cannot make
 it, which is precisely why the hole existed.
 
+**And it raises `ValueError` on a mask that is not a built-in `int` at all** —
+`numpy.int64`, the type a caller holds after indexing any integer array — naming
+the **type**, not the value. `py::isinstance<py::int_>` is a strict
+`PyLong_Check` and has always rejected these, but the refusal was originally one
+disjunction with the range check and so reported *"the property mask 1 is not a
+set of bits below 32"*, where `1` is a perfectly legal mask. The general rule,
+which the `bool` hole above is the other instance of: **a refusal names the
+object the predicate rejected, not a neighbouring one that happens to be
+renderable.** A message that names a legal value as the defect sends the caller
+to fix something that is not broken. The two arms are therefore separate in
+`bindings/core.cpp`, and must stay distinguishable — the type arm names
+`py::type::of(mask)`, the range arm names the value.
+
 **`EdgeProperties::bit(i)` has a narrow contract**: precondition
 `i < kMaxProperties`, debug-asserted, unchecked in release. This is exactly
 `SnapGrid`'s shape — `can_snap` is "the driver's one-pass admission check … and
@@ -866,6 +879,7 @@ would.
 | Empty property set | everywhere | **Legal, and the default.** An unclassified constraint. Not an error, not a diagnostic, not a warning. |
 | `EdgeProperties::bit(i)`, `i >= 32` | C++ | Precondition, debug `assert`, unchecked in release. `SnapGrid::snap`'s shape. |
 | Mask with a bit `>= 32`, or negative, from Python | `build_pslg` | `ValueError`, naming the chain index. Marshalling, not a `PslgDiagnostic`. |
+| Mask that is not a built-in `int` (e.g. `numpy.int64`, `float`, `str`) | `build_pslg` | `ValueError`, naming the chain index **and the type**. The range arm names the value; the two must stay distinguishable. |
 | Two vocabulary properties on one bit | `EdgeVocabulary` | Pydantic `ValidationError` at construction. |
 | Two vocabulary properties with one name | `EdgeVocabulary` | Pydantic `ValidationError` at construction. |
 | Name outside `^[a-z][a-z0-9_]*$` | `EdgeProperty` | Pydantic `ValidationError`. |
