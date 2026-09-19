@@ -296,7 +296,7 @@ DEFAULT_VOCABULARY = EdgeVocabulary(properties=(
   `increment6b-ii-renderer-red`, `svg.py`'s `_edge_classes` interpolates its tokens
   into a `class="…"` attribute **unescaped** — line 154,
   `f"role-{_role_name(edge.role)}"`; only `_text` escapes, at line 162. Run
-  `git show increment6b-ii-renderer-red:src_python/tin_engine/viz/svg.py`.
+  `git show origin/increment6b-ii-renderer-red:src_python/tin_engine/viz/svg.py`.
   Today every token comes from an enum name and is safe by construction. A
   vocabulary read from a configuration file is not, and a name containing a
   quote ends the attribute. The pattern is that hole's only closure, and it is
@@ -396,6 +396,18 @@ renderable.** A message that names a legal value as the defect sends the caller
 to fix something that is not broken. The two arms are therefore separate in
 `bindings/core.cpp`, and must stay distinguishable — the type arm names
 `py::type::of(mask)`, the range arm names the value.
+
+**Refusing rather than coercing is the decision, and it is deliberate.** The
+alternative was to accept anything with `__index__`, which would let
+`mask = arr[i]` through. It is an asymmetry with `vertices`, which takes any
+array-like through `np.asarray`, and a NumPy-first caller will meet it. Refused
+anyway: the mask is a *set of bits in a vocabulary* whose only correct source is
+`EdgeVocabulary.mask()`, which returns a built-in `int`. A `numpy.int64` in that
+position means the caller has routed a mask through an array, where a silent
+width or signedness change is a bit set or lost with no error — exactly the
+class of defect this increment exists to make impossible. `cli.py`'s `int(...)`
+is the one-character fix at the one place a mask legitimately comes from an
+array. `vertices` is coordinates, where `np.asarray` is the point.
 
 **`EdgeProperties::bit(i)` has a narrow contract**: precondition
 `i < kMaxProperties`, debug-asserted, unchecked in release. This is exactly
@@ -533,7 +545,7 @@ made this change look uniformly expensive:
 | `tests/python/test_viz_scene.py` | **10** | no | **yes** |
 
 Plus, on `increment6b-ii-renderer-red` and therefore on master once it merges
-(`git grep -c -i river increment6b-ii-renderer-red`):
+(`git grep -c -i river origin/increment6b-ii-renderer-red`):
 `src_python/tin_engine/viz/svg.py` (6), `src_python/tin_engine/viz/fixtures.py`
 (8), `src_python/tin_engine/cli.py` (1), `tests/python/test_viz_svg.py` (24),
 `tests/python/test_cli_draw.py` (2).
@@ -1052,10 +1064,10 @@ each. Nothing else in `05-noder.md` was touched; its own one-bit prose remains
 Each with the command that refutes it, run before being written down.
 
 1. **`05b-noder-driver.md`: "whoever owns `style.py`" owns the river stroke.**
-   `git grep -n -i river increment6b-ii-renderer-red -- src_python/tin_engine/viz/style.py`
+   `git grep -n -i river origin/increment6b-ii-renderer-red -- src_python/tin_engine/viz/style.py`
    returns **nothing**. The stylesheet is `svg.py`'s `STYLESHEET`
    (`line.river { stroke: #0b8fb0; … }`, line 56 of
-   `git show increment6b-ii-renderer-red:src_python/tin_engine/viz/svg.py`) and the
+   `git show origin/increment6b-ii-renderer-red:src_python/tin_engine/viz/svg.py`) and the
    class token is chosen in `_edge_classes`, lines 155-156 of the same file. `style.py` is `SvgStyle`, a frozen
    Pydantic model of canvas arithmetic whose own docstring says colours live in
    `svg.py` "because a class token on an element is structure … while the colour
@@ -1063,17 +1075,25 @@ Each with the command that refutes it, run before being written down.
    list in `style.py` — but as structure, and for the opposite reason from the
    one implied.
 2. **"All eight rows of `fixtures.py`."**
-   `git grep -c -i river increment6b-ii-renderer-red -- src_python/tin_engine/viz/fixtures.py`
+   `git grep -c -i river origin/increment6b-ii-renderer-red -- src_python/tin_engine/viz/fixtures.py`
    prints `8`, but those are eight *occurrences*, of which exactly **one** is a
-   gallery row: `RIVER`, at line 178 of
-   `git show increment6b-ii-renderer-red:src_python/tin_engine/viz/fixtures.py`. The
-   rest are the `FixtureChain` field (line 45), the builder loop (82-83), a
-   comment (95), the fixture's description string (180) and the gallery tuple
-   entry (218).
-   `06-cdt-viewer.md:465` confirms one river row. A line count read as a row
-   count.
+   gallery row: `RIVER`, at line 181 of
+   `git show origin/increment6b-ii-renderer-red:src_python/tin_engine/viz/fixtures.py`. The
+   rest are the `FixtureChain` field (line 48), the builder loop (85-86), a
+   comment (98), the fixture's name string (182), its description string (183)
+   and the gallery tuple entry (221).
+   `06-cdt-viewer.md:483` — the `river` row of the gallery table — confirms one
+   river row. A line count read as a row count.
+
+   This correction is itself a correction. As first written the section gave
+   178/45/82-83/95/180/218 and listed six of the eight occurrences: the numbers
+   were `git diff` **hunk-header** starts read as line numbers, each three
+   context lines above the line meant, and the name string at 182 was dropped.
+   In a finding whose punch line is "a line count read as a row count", the
+   count was wrong twice over. `git show origin/increment6b-ii-renderer-red:src_python/tin_engine/viz/fixtures.py | grep -ni river`
+   returns `48, 85, 86, 98, 181, 182, 183, 221` — eight, and the numbers above.
 3. **The 14-file list is complete for master and incomplete for 6b-ii.**
-   `git grep -ln is_river increment6b-ii-renderer-red` also returns
+   `git grep -ln is_river origin/increment6b-ii-renderer-red` also returns
    `src_python/tin_engine/cli.py` (`:95`) and `tests/python/test_cli_draw.py`,
    and `git grep -c -i river` on that branch returns **24** for
    `tests/python/test_viz_svg.py` — the largest single test-churn file in the

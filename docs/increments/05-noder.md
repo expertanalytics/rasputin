@@ -462,7 +462,7 @@ both `segments_intersect` and `intersection_point` with the note that
 "intersection *construction* rounds, rounding needs the snap grid" and that
 "segment intersection is the noder's defining operation and should be designed
 with the snap grid in the same head"
-(`docs/increments/02-core-geometry.md:343-381`). Designed with it in the same
+(`docs/increments/02-core-geometry.md:380-381`). Designed with it in the same
 head, the answer is that they are two functions and only one of them rounds:
 
 - `classify` is a **predicate**. It divides nothing, constructs nothing, and has

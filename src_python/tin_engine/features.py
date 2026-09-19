@@ -31,11 +31,16 @@ mechanisms, in descending strength:
    than dropping it. Dropping is the silent loss; this is the only moment the
    system can see it.
 
-The name pattern ``^[a-z][a-z0-9_]*$`` is a security boundary and not a style
-preference: ``viz/svg.py``'s ``_edge_classes`` interpolates its tokens into a
-``class="..."`` attribute unescaped, so a name read from a configuration file
-and containing a quote would end the attribute. A CSS class token has no
-legitimate use for any character the pattern excludes.
+The name pattern ``^[a-z][a-z0-9_]*$`` keeps a vocabulary name usable as a CSS
+class token, and is defence in depth. It is **not** what closes the injection
+hole, and this docstring said it was: ``viz/svg.py``'s ``_edge_classes``
+interpolates ``style.PropertyStroke.token`` into a ``class="..."`` attribute
+unescaped, never an :class:`EdgeProperty` name -- ``viz/`` cannot import this
+module. The only bridge is ``cli.py``, which constructs a ``PropertyStroke``
+from a name and so re-validates through ``style.py``'s own, deliberately wider
+``^[a-z][a-z0-9_-]*$`` (a CSS class may carry a hyphen; a feature name may
+not). A quote-carrying name dies there whatever this pattern says. The boundary
+is documented where it is enforced, in ``viz/style.py``.
 
 See ``docs/increments/07-edge-properties.md``.
 """
