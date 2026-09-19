@@ -1,13 +1,18 @@
 """`tin_engine.features`: the edge-property vocabulary at the boundary.
 
-Committed RED. `src_python/tin_engine/features.py` does not exist, so the
-import below raises `ModuleNotFoundError: No module named 'tin_engine.features'`
-while this file is collected. That is the intended red for increment 7's
-commit 1, and it is deliberately a module-scope import rather than the
-per-test import `test_viz_protocols.py` uses: there the point was that a
-missing `viz/` package should name itself in one test instead of aborting
-collection of a suite that also tests the bindings, and here the whole file is
-about one module that either exists or does not.
+Committed red at `dc8994b`: `src_python/tin_engine/features.py` did not exist
+yet, so the import below raised `ModuleNotFoundError: No module named
+'tin_engine.features'` while this file was collected, which was the intended
+red for increment 7's commit 1. The module landed in `e5dee4e` and the suite
+has been green since.
+
+What outlives that step is the choice the red step made: the import is
+deliberately module-scope rather than the per-test import
+`test_viz_protocols.py` uses. There the point was that a missing `viz/`
+package should name itself in one test instead of aborting collection of a
+suite that also tests the bindings; here the whole file is about one module
+that either exists or does not, so aborting collection is the honest failure
+and remains the right shape now that the module exists.
 
 **This is the only invariant-critical suite in increment 7 and it carries the
 increment's one mutation round** (`docs/increments/07-edge-properties.md`, "What
@@ -46,6 +51,7 @@ from pathlib import Path
 
 import pydantic
 import pytest
+
 from tin_engine.features import DEFAULT_VOCABULARY, EdgeProperty, EdgeVocabulary
 
 REPO_ROOT = Path(__file__).resolve().parents[2]

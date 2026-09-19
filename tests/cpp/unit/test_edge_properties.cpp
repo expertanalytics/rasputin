@@ -1,7 +1,9 @@
 // Unit tests for terrain/core/edge_properties.hpp.
 //
-// Committed RED: the header does not exist yet, so this translation unit fails
-// at the #include. That is the intended red for increment 7's commit 1.
+// Committed red at dc8994b: the header did not exist yet, so this translation
+// unit failed at the #include. That was the intended red for increment 7's
+// commit 1. include/terrain/core/edge_properties.hpp landed in e5dee4e, and
+// this translation unit has compiled and passed since.
 //
 // NOT invariant-critical, and docs/increments/07-edge-properties.md says so in
 // writing: EdgeProperties is a value type over one std::uint32_t with no kernel
@@ -131,6 +133,28 @@ static_assert(!std::is_convertible_v<EdgeProperties, std::uint32_t>);
 // "not contextually convertible to 'bool'", and the probe that says so fails
 // when the assertion is inverted.
 static_assert(!std::is_constructible_v<bool, EdgeProperties>);
+
+// The same asymmetry again, in the mirror-image position, where it went
+// unstated until review: an `explicit operator std::uint32_t` leaves
+// is_convertible_v<EdgeProperties, std::uint32_t> FALSE, so it passes the two
+// is_convertible_v lines above untouched while making
+// static_cast<std::uint32_t>(props) legal -- a second way out of the type
+// beside bits(), which the header rejects by name. is_constructible_v<T,
+// EdgeProperties> is the weaker claim of each pair and subsumes its
+// is_convertible_v<EdgeProperties, T> partner, which is why the int direction
+// needs only the second line and no is_convertible_v twin.
+//
+// The two are NOT redundant with each other, and the reason is [over.match.conv]:
+// in direct-initialization an EXPLICIT conversion function is a candidate only
+// when it yields exactly the destination type, so an `explicit operator
+// std::uint32_t` does not make an int constructible and vice versa. One
+// assertion per forbidden spelling is therefore the minimum, and each was
+// falsified against its own: adding `explicit operator std::uint32_t` to
+// edge_properties.hpp breaks the build on the first line alone, and adding
+// `explicit operator int` on the second alone -- in both cases naming no other
+// assertion in this file.
+static_assert(!std::is_constructible_v<std::uint32_t, EdgeProperties>);
+static_assert(!std::is_constructible_v<int, EdgeProperties>);
 
 // ---------------------------------------------------------------------------
 // The empty set.
