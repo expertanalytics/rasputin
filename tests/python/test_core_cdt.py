@@ -311,6 +311,41 @@ class TestBuildPslg:
                 ],
             )
 
+    @pytest.mark.parametrize("flag", [True, False], ids=["true", "false"])
+    def test_rejects_a_bool_in_the_properties_position(
+        self, square: np.ndarray, flag: bool
+    ) -> None:
+        # The pre-migration spelling was `(idx, role, is_river)`, and `bool` is
+        # a subclass of `int`, so `py::isinstance<py::int_>` admits it: the old
+        # call keeps working, with its *old* meaning. That is the exact inverse
+        # of what the C++ half guarantees -- `EdgeProperties` has no constructor
+        # from `bool` in either direction, precisely so `add_chain(idx, role,
+        # true)` fails at the compiler rather than compiling to something else,
+        # and the increment rejects a `bool is_river()` shim by name for the
+        # same reason. The boundary owes the same refusal.
+        #
+        # `True` produces the right answer today only by coincidence: bit 0
+        # happens to be "river" in `DEFAULT_VOCABULARY`, and the vocabulary
+        # lives in Python, where no C++ suite can see it renumbered. `False`
+        # matters as much -- it is the spelling at every non-river site, and it
+        # yields the empty set under any numbering, so it would pass forever
+        # without anyone revisiting it.
+        #
+        # `mypy --strict` does not close this half: `_core.pyi` types the
+        # position as `int`, and `bool` is a subtype of `int`.
+        #
+        # Chain 1 rather than chain 0, so a message that hard-codes `0` cannot
+        # pass, and named the same way an out-of-range mask is named above.
+        vertices = np.vstack([square, [[EAST + 20.0, NORTH + 40.0], [EAST + 80.0, NORTH + 40.0]]])
+        with pytest.raises(ValueError, match=r"\bchain 1\b"):
+            _core.build_pslg(
+                vertices,
+                [
+                    ([0, 1, 2, 3], _core.ChainRole.Outer, RIVER),
+                    ([4, 5], _core.ChainRole.Breakline, flag),
+                ],
+            )
+
     def test_reports_failure_as_data_rather_than_raising(self, broken_build: Any) -> None:
         assert broken_build.ok is False
         assert broken_build.pslg is None

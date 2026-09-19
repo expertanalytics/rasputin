@@ -130,10 +130,10 @@ RIVER = 1 << RIVER_BIT
 ROAD = 1 << ROAD_BIT
 
 #: The precedence the gallery draws under, in DESCENDING priority: first match
-#: wins. Water over infrastructure, and deliberately NOT in bit order --
-#: priority belongs to the stylesheet, not to how a vocabulary chose to number
-#: its features, and a renderer that sorted by bit would pass a list that
-#: happened to agree with the numbering.
+#: wins. Road over river, which is deliberately NOT bit order -- priority
+#: belongs to the stylesheet, not to how a vocabulary chose to number its
+#: features, and a renderer that sorted by bit would pass a list that happened
+#: to agree with the numbering.
 GALLERY_STROKES = ((ROAD_BIT, "road"), (RIVER_BIT, "river"))
 
 
