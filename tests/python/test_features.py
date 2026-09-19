@@ -26,19 +26,35 @@ test makes a named claim disappear rather than a line count drop.
 
 Two rules here are architecture rather than hygiene:
 
-* **`features.py` imports nothing first-party and never imports `_core`.** That
-  is what lets `viz/` depend on it, `viz/` being forbidden the extension
-  (`project_structure.md:278`). It is checked by parsing the source, not by
-  inspecting `sys.modules`, because `tin_engine/__init__.py` imports `_core`
-  itself -- so an import-time check would be asserting something about the
-  package rather than about this module. Same reasoning, same mechanism, as
-  `test_viz_protocols.py`.
-* **The name pattern is a security boundary, not a style preference.**
-  `viz/svg.py:_edge_classes` interpolates its tokens into a ``class="..."``
-  attribute **unescaped** -- only `_text` escapes. Today every token comes from
-  an enum name and is safe by construction; a vocabulary read from a
-  configuration file is not, and a name containing a quote ends the attribute.
-  `^[a-z][a-z0-9_]*$` is that hole's only closure.
+* **`features.py` imports nothing first-party and never imports `_core`.** The
+  reason is the one the module's own docstring gives: it is constructible and
+  testable with no extension in the process. It is emphatically *not* that
+  `viz/` is allowed to depend on it -- `viz/` may not import this module at
+  all, and `test_viz_svg.py::TestModuleIsolation` exists to deny exactly that
+  permission, pinning `style.py` and `fixtures.py` to zero first-party imports.
+  `cli.py` is the one module that names both a bit and a feature. The rule is
+  checked here by parsing the source, not by inspecting `sys.modules`, because
+  `tin_engine/__init__.py` imports `_core` itself -- so an import-time check
+  would be asserting something about the package rather than about this module.
+  Same reasoning, same mechanism, as `test_viz_protocols.py`.
+* **The name pattern keeps a vocabulary name usable as a CSS class token, and
+  is defence in depth. It is not what closes the injection hole.**
+  `viz/svg.py:_edge_classes` does interpolate into a ``class="..."`` attribute
+  **unescaped** -- only `_text` escapes -- but what it interpolates is
+  `style.PropertyStroke.token` (`svg.py:161,225`), never an `EdgeProperty`
+  name, because `viz/` cannot import this module. The only bridge is
+  `cli.py:84`, which builds a `PropertyStroke` from a name and so re-validates
+  through `style.py:51`'s own, deliberately wider `^[a-z][a-z0-9_-]*$` -- a CSS
+  class may carry a hyphen and a feature name may not. A quote-carrying name
+  dies there whatever `^[a-z][a-z0-9_]*$` says. The attribute is closed by
+  `PropertyStroke.token`, and the suite over that boundary is
+  `test_viz_svg.py::TestPropertyStrokes`.
+
+  What tokens exist today is not an enum, either: `cli.py:79`'s
+  `_PRECEDENCE = ("river",)` is a literal tuple of `str`, and there is no enum
+  anywhere on this path. A vocabulary read from a configuration file is still
+  untrusted input, and a second, narrower gate on it is worth its lines -- so
+  every case below stays.
 """
 
 from __future__ import annotations
@@ -122,9 +138,16 @@ def test_edge_property_refuses_a_name_that_is_not_a_css_class_token(name: str) -
     """MUTANT 5: the name pattern relaxed to any ``str``.
 
     The design names two of these as the minimum -- a quote and a space -- and
-    both are here for the reason it gives: `svg.py:_edge_classes` interpolates
-    the token into ``class="..."`` unescaped, so a quote ends the attribute and
-    a space makes one name into two classes.
+    both stay, under the corrected reason: a quote or a space makes a name
+    unusable as a CSS class token, which is what this pattern is for. It is not
+    what protects the ``class="..."`` attribute. `svg.py:_edge_classes`
+    interpolates `style.PropertyStroke.token` unescaped, never a name from this
+    module, and `cli.py:84` re-validates any name through that model before it
+    can reach the attribute -- see `test_viz_svg.py::TestPropertyStrokes`, which
+    refuses the same shapes at the boundary that is load-bearing. Relaxing this
+    pattern to any ``str`` therefore does not open the injection hole; it lets a
+    name into the vocabulary that the drawing layer would then refuse, which is
+    a failure moved to a worse place rather than prevented.
 
     ``river\\n`` is the one that is not about SVG. Python's ``re`` matches ``$``
     *before* a trailing newline, so a validator hand-written as

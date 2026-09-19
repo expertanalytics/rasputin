@@ -624,11 +624,19 @@ class TestPropertyStrokes:
     the document, and the colour that token resolves to is the CSS's. The list
     is in descending draw priority and the first match wins.
 
-    `PropertyStroke.token` is validated against `^[a-z][a-z0-9_-]*$` for the
-    same reason `EdgeProperty.name` is, and it is not style: `_edge_classes`
-    interpolates its tokens into a `class="..."` attribute UNESCAPED -- only
-    `_text` escapes -- so a token containing a quote ends the attribute. A
-    stylesheet read from a configuration file is untrusted input.
+    `PropertyStroke.token`'s `^[a-z][a-z0-9_-]*$` is the pattern that is
+    actually load-bearing, and this is the suite over it. `_edge_classes`
+    (`svg.py:161,225`) interpolates a TOKEN into a `class="..."` attribute
+    UNESCAPED -- only `_text` escapes -- and it never sees an
+    `EdgeProperty.name`, because `viz/` may import no vocabulary at all. The
+    one bridge is `cli.py:84`, which constructs a `PropertyStroke` from a
+    feature name, so every name that can reach the attribute is re-validated
+    here. A token containing a quote ends the attribute, and a stylesheet read
+    from a configuration file is untrusted input.
+
+    `features.EdgeProperty.name`'s narrower `^[a-z][a-z0-9_]*$` is defence in
+    depth behind this pattern, not the other way round -- a quote-carrying
+    feature name dies at this model whatever that one says.
     """
 
     def test_the_default_is_empty(self) -> None:
@@ -666,13 +674,27 @@ class TestPropertyStrokes:
 
     @pytest.mark.parametrize(
         "token",
-        ['ri"ver', "ri ver", "River", "1river", "_river", "river>", "", "riv<er"],
+        ['ri"ver', "ri ver", "River", "1river", "_river", "river>", "", "riv<er",
+         "river\n", "riv\ner", "riv\u00e9r"],
         ids=["quote", "space", "capital", "leading-digit", "leading-underscore",
-             "gt", "empty", "lt"],
+             "gt", "empty", "lt", "trailing-newline", "embedded-newline",
+             "non-ascii"],
     )
     def test_a_token_that_would_escape_the_class_attribute_is_refused(
         self, token: str
     ) -> None:
+        """The hostile-input set for the pattern that is the boundary.
+
+        The two newline cases and the non-ASCII one mirror
+        `test_features.py`'s, and belong here more than there: Python's `re`
+        matches `$` BEFORE a trailing newline, so a validator hand-written as
+        `re.match(r"^[a-z][a-z0-9_-]*$", token)` accepts `"river\\n"` while
+        `Field(pattern=...)` -- pydantic's Rust engine, where `$` is
+        end-of-haystack -- refuses it. Without them, that hand-rolled mutant
+        survives this class while dying in `test_features.py`, over a pattern
+        no attribute depends on. All three were probed against pydantic 2.13.5
+        before being written down.
+        """
         import pydantic
 
         with pytest.raises(pydantic.ValidationError):
