@@ -145,16 +145,29 @@ Reference: Goodrich-Guibas-Hershberger-Tanenbaum for classical snap rounding; Ha
 3. **Snap intersection points and near-vertices** to the precision grid.
 4. **Split each input segment** at all intersections lying on it, in arc-order along the segment.
 5. **Deduplicate** endpoints — multiple constraints meeting at the same snapped grid cell collapse to a single node.
-6. **Output** a list of `(p0, p1, is_river)` segments plus the deduplicated vertex array.
+6. **Output** the deduplicated vertex array plus the output segments, each carrying a **property set** — not a flat list of `(p0, p1, is_river)` triples.
 
 ### Edge metadata
 
-Only one constraint type carries through to the mesh: **river**. The rest of the hydrology and land-cover semantics is face-based (queried per cell via point-in-polygon against the original input polygons), so non-river constraint edges don't need to remember what feature they came from.
+**An output edge carries a set of properties, not a bit.**
 
-- One bit per edge: `is_river`.
-- Merge rule at intersections and coincidences: logical OR.
-- If a road runs along a river after snapping, the merged edge keeps `is_river = true` and the road is geometrically forgotten — it added no structure the river wasn't already enforcing.
-- Land-cover and other feature polygons are still fed into the CDT (so face boundaries align with feature boundaries) but their edges carry no metadata after noding.
+The one-bit `is_river` form that stood here rested on a claim that is false for
+every linear feature that is not a river: that non-river constraint edges "don't
+need to remember what feature they came from", because the rest of the
+hydrology and land-cover semantics is face-based and queried per cell by
+point-in-polygon. **That works for area features and cannot work for linear
+ones.** Point-in-polygon can tell you a face is forest, because forest has an
+interior to be inside; it cannot tell you an edge is a road, because a road has
+no interior. Buffering one into a polygon is a tolerance, and this project has
+none. The face-based fallback therefore recovers land cover and recovers nothing
+about roads, railways, walls or contours — and this document's own step 1 lists
+roads as an input feature class alongside rivers and lakes.
+
+- **A property set per output edge**, merged at intersections and coincidences by **union**. Union, not logical OR of one bit: the operation is the same `|` on the representation, but what it ranges over is a set, and an edge may end up carrying two properties, three or none.
+- Union is commutative, associative and idempotent, which is what lets the merge be a parallel reduce over an **unordered** set of contributing chains, in any order, with no tie-break. That is the same property node ids rest on, and it is why the merge is not, for example, "the highest-priority contributor wins".
+- **If a road runs along a river after snapping, the merged edge is both.** The road is *geometrically* forgotten — it added no structure the river was not already enforcing, and that half of the old text was right and is kept — but it is not forgotten *semantically*. Those are different objects, and conflating them is what the one-bit form did.
+- Land-cover and other **area** feature polygons are still fed into the CDT (so face boundaries align with feature boundaries) and their area semantics stay face-based, queried per cell. That half of the original claim is sound, and it is the reason the edge property set is a small vocabulary of *linear* features rather than a general attribute channel: the legacy land-cover vocabulary alone runs to 23 classes (`legacy/rasputin/globcov_repository.py:15`), and none of them belongs on an edge.
+- **The C++ core does not name the properties.** It merges an opaque fixed-width bitset (`include/terrain/core/edge_properties.hpp`, 32 bits); the mapping from bit position to feature name is Python's, in `src_python/tin_engine/features.py`. See `docs/increments/07-edge-properties.md` for the ruling and for which increment owns the type.
 
 ### Watch list
 

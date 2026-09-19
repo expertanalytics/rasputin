@@ -9,7 +9,7 @@ Given a DEM raster and a seed pixel (or set of pixels), output:
 - **Catchment polygon** — the closed boundary of every pixel that drains to the seed.
 - **River and creek polylines** — vectorized stream network within the catchment, ordered so creeks and minor rivers are distinguishable from major ones.
 
-Both feed directly into the constraint noding step. Catchment boundaries provide the outer constraint polygon for the mesh; river polylines provide constraints carrying `is_river = true`.
+Both feed directly into the constraint noding step. Catchment boundaries provide the outer constraint polygon for the mesh; river polylines provide constraints carrying the `river` property.
 
 ## Pipeline
 
@@ -103,8 +103,14 @@ Output: stream order per polyline. The caller picks a cutoff to separate creeks 
 ## Output for the noding step
 
 - **Catchment polygon** — outer boundary of the catchment mask, simplified to the noding-grid resolution. Becomes the surrounding polygon constraint.
-- **Internal polygons** (lakes, optionally pre-classified land cover) — fed separately, no `is_river` flag.
-- **River/creek polylines** — each polyline tagged `is_river = true`. Caller decides the Strahler-order cutoff for inclusion.
+- **Internal polygons** (lakes, optionally pre-classified land cover) — fed separately, with the empty property set. Empty is the legal default, not a missing flag: an unclassified constraint is the normal state of the system. A lake that the caller *does* want classified may carry a property like any other chain; nothing about an area feature forbids it.
+- **River/creek polylines** — each polyline carries the `river` property. Caller decides the Strahler-order cutoff for inclusion.
+
+A chain's tag is a **set** of properties, not one boolean: the same polyline may
+be both `river` and, say, `road` where a track runs along the bank, and the
+noder merges contributors by union. Which bit means `river` is a Python-side
+vocabulary (`src_python/tin_engine/features.py`); the C++ core merges opaque
+bits and names no feature. See `docs/increments/07-edge-properties.md`.
 
 All these go into the noder (see `parallel_refinement.md` § Constraint noding), which resolves any intersections (e.g. a creek crossing a forest boundary) before the CDT.
 
@@ -151,5 +157,5 @@ Memory bandwidth is the typical bottleneck, not compute. Tile sizes should be ch
 ## Runtime parameters (not design decisions)
 
 - **Stream accumulation threshold** — minimum upstream area to qualify as a stream pixel.
-- **River-vs-creek Strahler order cutoff** — caller picks the order at which a stream is classified as a river for `is_river` tagging.
+- **River-vs-creek Strahler order cutoff** — caller picks the order at which a stream is classified as a river for `river` tagging. The cutoff survives the widening to property sets unchanged: deciding when a creek becomes a river is a real caller decision about the *data*, not about the carrier.
 - **Hybrid pit-removal flag** — opt in to Lindsay (2016) breach-or-fill instead of pure fill.

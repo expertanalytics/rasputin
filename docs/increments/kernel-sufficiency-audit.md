@@ -379,7 +379,12 @@ Taking 5.1 as given, these claims in the provisional `05-noder.md` do not hold:
   four of a pair's triples, so the pair rate is lower and was never measured. The
   `Overlapping` relation, and with it `parallel_refinement.md:156`'s rule that a
   road snapped onto a river merges and keeps `is_river = true`, will essentially
-  never trigger for a diagonal river. The document names the *opposite* defect —
+  never trigger for a diagonal river. (Increment 7 replaced that one bit with a
+  property *set* and moved the rule to `parallel_refinement.md:168`, where the
+  merged edge is *both* road and river. The audit's finding is unaffected: it is
+  about how often `Overlapping` fires, not about what is carried when it does.
+  The quotation above is left as it stood, this file being an audit dated to
+  `e412a43`/#67.) The document names the *opposite* defect —
   reporting `Overlapping` where `Touching` is right — as "the single most likely
   defect in the function"; the measurement says the likely defect is on the other
   side.

@@ -119,7 +119,7 @@ public:
 **No enumeration, no `River`, no `Road`, no named member of any kind.**
 `terrain::` never spells a feature name. The mapping from bit position to
 feature name is a Python concern and lives in a Pydantic model at the boundary,
-alongside CRS metadata and everything else `project_structure.md:185` keeps out
+alongside CRS metadata and everything else `project_structure.md:183-187` keeps out
 of C++. This is **stricter than what ships today**, where `Chain::is_river`
 spells "river" inside the core, and it is the one place this correction makes
 the architecture cleaner rather than merely wider.
@@ -181,10 +181,16 @@ inherited. Spelling the chain's field `edge_properties` would suggest the two
 arrays are the same object; they are not, and the noder's guarantee 15 is
 exactly the statement of how one becomes the other.
 
-The existing comment at `include/terrain/core/pslg.hpp:77-79` — "one bit per
-chain, permitted on every role … and never validated, because it is data, not
-structure" — survives its widening intact and is the one sentence in this
-increment that does not change meaning. Its "permitted on every role" clause
+The existing comment at `include/terrain/core/pslg.hpp` carried, at `c3210c1`
+(`:77-79`), "is_river is one bit per chain, permitted on every role … and never
+validated, because it is data, not structure". **Only the second half
+survived**, and the first half is exactly what this increment deleted: the
+comment now reads, at `include/terrain/core/pslg.hpp:78-80`, "properties is the chain's feature set,
+permitted on every role … and never validated, because it is data, not
+structure". This paragraph originally claimed
+the whole sentence "survives its widening intact"; that was written before the
+migration and is false of the tree it produced — the carrier clause changed and
+only the *validation* clause did not change meaning. Its "permitted on every role" clause
 matters more now than it did: a wide river or a lake is legitimately an `Outer`
 or `Hole` ring, and so is a walled enclosure.
 
@@ -315,7 +321,7 @@ can see. Three mechanisms, in descending strength:
    **exactly as CRS is**. An artifact read back with a fingerprint that does not
    match the vocabulary in hand is refused. The vocabulary is therefore *data
    travelling with the mesh*, not a constant in the source — which is the same
-   ruling `project_structure.md:185` already makes about CRS, for the same
+   ruling `project_structure.md:183-187` already makes about CRS, for the same
    reason, and the analogy is the argument.
 3. **`names(mask)` raises on a bit no property names**, rather than dropping it.
    Dropping is the silent loss this entire increment exists to prevent, and
@@ -427,22 +433,36 @@ gallery scale, two overlaid strokes on one polyline read as a rendering defect.
   precedent is exact and already in the tree: `scene.py`'s `closed_roles` is
   supplied by `cli.py` for precisely this reason — "``closed_roles`` is
   therefore supplied by ``cli.py``, the composition root that knows the enum"
-  (`src_python/tin_engine/viz/scene.py:141-143`). `style.py`'s own docstring
+  (`src_python/tin_engine/viz/scene.py:149-151`; `:141-143` before this branch
+  moved it). `style.py`'s own docstring
   draws the same line: it models "the arithmetic the viewport divides by", and
   colours are "taste" that lives in `svg.py`'s CSS. A default naming `river`
   would be policy in the module that declares it holds none.
 
-### One stale half of a comment, recorded rather than edited
+### One stale half of a comment, recorded rather than edited — and since fixed
 
-`tests/python/test_viz_svg.py:132-136`, the comment above `GALLERY_STROKES`
-(`:137`), claims both "Water over infrastructure" and "deliberately NOT in bit
-order". With
-`RIVER_BIT = 0` those cannot both hold: water-first *is* bit order here. **The
-list itself is authoritative and correct** — it is road-first, which is what
-keeps `test_the_declared_order_is_preserved` able to catch a model that sorts by
-bit — so only the phrase is stale. It is recorded here rather than fixed because
-commit 4 is `@developer`'s and touches no test file; the edit is one line and is
+At `781c1bf`, `tests/python/test_viz_svg.py:132-136` — the comment above
+`GALLERY_STROKES` (`:137`) — claimed both "Water over infrastructure" and
+"deliberately NOT in bit order". With `RIVER_BIT = 0` those cannot both hold:
+water-first *is* bit order here. **The list itself was authoritative and
+correct** — it is road-first, which is what keeps
+`test_the_declared_order_is_preserved` able to catch a model that sorts by bit —
+so only the phrase was stale. It was recorded here rather than fixed because
+commit 4 is `@developer`'s and touches no test file; the edit was one line and
 `@tester`'s to make.
+
+**`@tester` made it, in `1ca9414`.** The comment now reads "Road over river,
+which is deliberately NOT bit order", the contradiction is gone, and the
+paragraph above describes a state of the tree this branch's own sweep ended.
+It is kept, in the past tense, because the deferral it records is the reason the
+red/green trace is readable — and because this is the **third** repair on this
+branch to leave a stale claim behind it, after `pslg.hpp`'s "survives its
+widening intact" (see "The field") and the eight-document list below. The
+pattern is the one `.claude/REQUIRED-READING.md` names: a repair made by
+reasoning about a claim rather than re-running it seeds the next occurrence.
+Re-runnable: `git show 781c1bf:tests/python/test_viz_svg.py | sed -n '133p'`
+prints the old phrase and `sed -n '133p' tests/python/test_viz_svg.py` prints
+the new one.
 
 ### Why this is 7's and not 6's
 
@@ -681,6 +701,69 @@ are the expensive part of this round**: 8 existing test files on master, 5 more
 once 6b-ii merges, 2 new suites. The largest single file is `test_viz_svg.py` at
 24 occurrences, and it is **not** invariant-critical (`06-cdt-viewer.md:672-676`).
 
+### Reconciliation: ~185 estimated, 366 measured
+
+Measured on `7cc83a9` against the merge base `4834568`, with this section's own
+instruments applied to the **added** non-comment lines of the diff —
+`git diff 4834568..HEAD -- <file> | grep '^+' | grep -v '^+++' | sed 's/^\+//' |
+grep -vcE '^\s*(//|$)'` for C++ and `'^\s*(#|$)'` for Python.
+
+| File | Est. | Actual | |
+|---|---|---|---|
+| `include/terrain/core/edge_properties.hpp` | ~45 | 29 | under |
+| `include/terrain/core/pslg.hpp` | ~3 | 2 | |
+| `include/terrain/core/pslg_builder.hpp` | ~4 | 5 | |
+| `bindings/core.cpp` | ~30 | 49 | |
+| `src_python/tin_engine/_core.pyi` | ~3 | 10 | |
+| `src_python/tin_engine/features.py` | ~55 | **131** | 2.4× |
+| `src_python/tin_engine/viz/protocols.py` | ~2 | 6 | |
+| `src_python/tin_engine/viz/scene.py` | ~10 | 20 | |
+| `src_python/tin_engine/viz/style.py` | ~16 | 30 | |
+| `src_python/tin_engine/viz/svg.py` | ~8 | **44** | 5.5× |
+| `src_python/tin_engine/viz/fixtures.py` | ~4 | **31** | 7.8× |
+| `src_python/tin_engine/cli.py` | ~5 | 9 | |
+| **Total** | **~185** | **366** | 2.0× |
+
+**The no-LOC-gate ruling above survives and is not revisited**: 366 against 700
+leaves 334 of headroom, so a gate at the ceiling would still have been a
+trip-wire nobody could trip. Recording that is not the point of this section.
+
+**The row the estimate warned about did not double; the rows nobody watched
+did.** `bindings/core.cpp` is the row this document flagged as "the one row that
+has doubled twice before" and predicted at ~215 total if it doubled again. It
+came in at 49 against ~30 — over, but by the least of any Python or binding row
+in proportion. The 181-line overrun is 76 in `features.py` and 83 across
+`svg.py` and `fixtures.py`.
+
+**`features.py` overran on documentation, not on code, and the instrument is
+why.** Of its 131 non-comment lines, **84 are docstring lines and 41 of those
+are the module docstring**; 47 are executable, against an estimate of ~55. So
+the *code* came in under. `grep -vcE '^\s*(#|$)'` excludes `#` comments and
+counts `"""` docstrings, which is exactly the accounting `06-cdt-viewer.md`
+already hit ("68 of the 194 true lines are docstrings"). Twice now the estimate
+has been made as if it measured executable lines and then checked with an
+instrument that does not. Re-runnable: the module docstring closes at
+`sed -n '41p' src_python/tin_engine/features.py`, and
+`python3 -c "import ast,sys;t=ast.parse(open(sys.argv[1]).read());print(sum(n.body[0].end_lineno-n.body[0].lineno+1 for n in ast.walk(t) if isinstance(n,(ast.Module,ast.FunctionDef,ast.ClassDef)) and ast.get_docstring(n) is not None))" src_python/tin_engine/features.py`
+prints `84`.
+
+**The 6b-ii rows were not stale, which rules out the explanation risk 4
+offered.** Risk 4 warned that if 6b-ii's review round changed `_edge_classes` or
+`fixtures.py`, these rows' estimates would go stale and have to be re-read.
+`git diff --stat c3210c1 4834568 -- src_python/tin_engine/viz/
+src_python/tin_engine/cli.py` prints **nothing**: the files this increment
+estimated against are byte-identical to the ones it edited. The viz overrun is
+plain under-estimation of the work — `_edge_classes` grew a precedence scan and
+a legend argument, and `fixtures.py` grew a second property constant and a
+widened `FixtureChain` — and attributing it to branch drift would have been
+false.
+
+**What to carry into the next estimate.** State the row in the unit the
+instrument counts, or state both: for a new Python module with a real module
+docstring, a ~55-line code estimate is a ~130-line measured row and the gap is
+not overrun. That is the whole finding; an estimate nobody reconciles is a
+decision nobody revisits.
+
 ## What is worth testing
 
 | Unit | Suite | Invariant-critical? |
@@ -791,7 +874,7 @@ would.
 | Artifact fingerprint ≠ vocabulary in hand | the reader | Refuse. Same policy as a CRS mismatch. |
 | Edge with a property that has no stroke | `svg.py` | **Draw no extra token.** Deliberately *not* an error — see "the one asymmetry". |
 | Edge with several properties that all have strokes | `svg.py` | Highest-priority token only, by `SvgStyle.property_strokes` order. |
-| A chain's set on a role with no edges (1-vertex chain) | validator | Untouched. `is_river` was "never validated, because it is data, not structure" (`pslg.hpp:77-79`) and that survives. |
+| A chain's set on a role with no edges (1-vertex chain) | validator | Untouched. `is_river` was "never validated, because it is data, not structure" (`pslg.hpp:80`) and that survives. |
 
 **Never silently.** Every row above either succeeds, or refuses with the value
 that did not fit. `04-cdt.md`'s ruling ("never silently produces a mesh that
@@ -844,46 +927,97 @@ instance for semantics rather than geometry.
 Per `docs/increments/README.md`: fixed here, or not recorded. There is no
 ledger, and this list is closed.
 
-- **`parallel_refinement.md`** — the corrected "Edge metadata" section is sound
-  and is not rewritten. One line changes: `:190-192` points at
-  `05b-noder-driver.md` for "the ruling and … which increment owns the type";
-  the owner is this file.
-- **`auto_catchments.md`** — `:12`, `:106`, `:107`, `:154` tag river polylines
-  `is_river = true` and describe lakes as having "no `is_river` flag". Restated
-  over property sets, with the Strahler-cutoff paragraph (`:154`) kept, since
-  choosing when a creek becomes a river is a real caller decision that survives
-  the widening unchanged.
-- **`project_structure.md`** — `:266`'s `mesh` section says "the per-edge
-  feature property set (increment 7; one bit, `is_river`, until then)"; the
-  parenthesis goes. The directory listing at `:64-78` gains
-  `src_python/tin_engine/features.py`, and the `core` module description gains
-  `edge_properties.hpp`.
-- **`docs/increments/02-core-geometry.md:101-102`** — "the noder's `is_river`
-  merge cares" about `operator==` being ordered. The claim about ordering is
-  true and stays; the spelling is stale.
-- **`docs/increments/03-pslg.md`** — `:47`, `:65`, `:172-173` and `:593` carry
-  the `bool is_river` declaration, its paragraph and the two `add_chain`
-  signatures. Widened in place, with a note that increment 3 shipped the one-bit
-  form and 7 replaced it — `03-pslg.md` remains the record of what was true at
-  increment 3 and says so, following `05b-noder-driver.md`'s treatment of
-  `04-cdt.md`'s mapping table.
-- **`docs/increments/06-cdt-viewer.md`** — `:153`, `:187-188`, `:336`, `:444`
-  and `:457` describe the chain record and the `river` fixture row over one bit.
-  Widened, and `:457`'s row gains the two-property fixture the renderer ruling
-  requires.
-- **`docs/increments/05b-noder-driver.md`** — three corrections, all measured
-  in "What I now find false" below: the `style.py` attribution, the
-  `fixtures.py` row count, and the increment-7 LOC row. Its "Edge properties"
-  section otherwise stands and is *not* rewritten; a pointer to this file
-  replaces its "for increment 7 to rule on" framing, since the ruling now
-  exists.
-- **`docs/increments/05-noder.md`** — `:781`, `:840-853`, `:890-895`, `:926`,
-  `:972-1003` are already marked by `05b-noder-driver.md` as superseded in
-  width. **Not re-touched here**; that marking is 5b's PR's and duplicating it
-  would be the ledger this project refuses to keep.
-- **`testing.md`** — the `noding` invariant list's OR rule, if 5b's PR has not
-  already replaced it by the time this lands. Checked at review; if 5b's text
-  is in place it is already stated over sets and there is nothing to do.
+**Status, written at review and not before.** The eight entries below were
+committed in the future tense with **none of them executed**, and a closed list
+nobody executes is worse than an open one, because it reads as done. The check
+that catches it is one line and was not run until `@reviewer` ran it:
+`git diff --name-only 4834568..HEAD -- '*.md'` returned exactly one path, this
+file. Seven entries are now executed; one is deferred, and the reason is a
+property of the document rather than of the round's budget. Each entry says
+which, and no entry is carried forward.
+
+- **`parallel_refinement.md`** — **executed, and larger than planned, because
+  the entry was written against the wrong tree.** This entry said "the corrected
+  'Edge metadata' section is sound and is not rewritten" and that one line
+  changes, the `:190-192` forward pointer to `05b-noder-driver.md`. **Neither
+  object exists on this branch.** The correction and that pointer live only on
+  `increment5b-design`, which has not merged: `git show
+  increment5b-design:parallel_refinement.md | grep -n 'a set of properties, not
+  a bit'` finds it and `grep -n 'a set of properties, not a bit'
+  parallel_refinement.md` found nothing before this commit. What stood in the
+  tree was the **uncorrected one-bit form** — "Only one constraint type carries
+  through to the mesh: **river**", "One bit per edge: `is_river`", the
+  face-based fallback claim that is false for linear features — and step 6's
+  `(p0, p1, is_river)` output. The section is now stated over property sets, in
+  substance the same correction `increment5b-design` carries, pointing at this
+  file rather than at `05b-noder-driver.md` because a citation to a file absent
+  from the tree is a broken citation. **If `increment5b-design` merges later,
+  this section is a conflict to resolve, not two independent edits.**
+- **`auto_catchments.md`** — **executed.** `:12`, `:106`, `:107` and `:154`
+  restated over property sets: river polylines carry the `river` property, lakes
+  carry the empty set (legal, the default, not a missing flag), and a chain's
+  tag is a set rather than a boolean. The Strahler-cutoff paragraph is kept and
+  now says why it survives the widening: the cutoff is a decision about the
+  data, not about the carrier.
+- **`project_structure.md`** — **executed, against different line numbers than
+  this entry predicted.** The `mesh` section's stale text was at `:252` —
+  "per-edge constraint bitmask (currently just `is_river`)", not the
+  `:266` "(increment 7; one bit, `is_river`, until then)" this entry quoted — and
+  it now names `EdgeProperties`. The `noding` section at `:231` said "`is_river`
+  is one bit per **chain**, not per edge" and now says the properties are a set
+  merged by union, pointing here. The directory listing gains
+  `include/terrain/core/edge_properties.hpp` and
+  `src_python/tin_engine/features.py`, and `style.py`'s one-line description —
+  "canvas geometry only", false since `PropertyStroke` landed there — now names
+  the bit-to-token precedence and says why it is structure.
+- **`docs/increments/02-core-geometry.md:102`** — **executed.** "the noder's
+  `is_river` merge" is now "the noder's edge-property merge", with a parenthesis
+  recording the old spelling and stating that union over sets leaves the
+  ordering claim untouched.
+- **`docs/increments/03-pslg.md`** — **executed**, at `:47`, `:65`, `:164-165`
+  and `:576` (this entry cited `:172-173` and `:593`; the file had moved). The
+  declaration, its paragraph and both `add_chain` signatures are widened in
+  place, each marked with what increment 3 shipped, and the paragraph says
+  explicitly that this file remains the record of what was true at increment 3.
+- **`docs/increments/06-cdt-viewer.md`** — **executed**, at `:158`, `:192-193`,
+  `:354`, `:462` and `:475`. `:192-193` was the sharpest entry on the list: it
+  instructed a reader to call `add_chain(indices, role, is_river)`, which is the
+  one spelling `7473712` added a `ValueError` to refuse, and it now says so.
+  `:475`'s row does **not** gain the two-property fixture this entry promised —
+  see the ruling added to that document under the gallery table: the fixture is
+  owed, and it is blocked on `svg.py`'s `STYLESHEET` carrying exactly one
+  property rule, so a second precedence token would draw an unstyled line.
+  `:712`'s re-runnable probe was also false of the tree and is now anchored to
+  `995f258`; that was not on this list and is recorded rather than passed over.
+- **`docs/increments/05b-noder-driver.md`** — **DEFERRED, and the reason is that
+  the document is not in this tree.** `git cat-file -e
+  HEAD:docs/increments/05b-noder-driver.md` fails; the file exists only on
+  `increment5b-design`. Editing it would mean either creating a file this branch
+  has no business creating or pushing a second branch, and neither is a
+  documentation fix. The three corrections it is owed — the `style.py`
+  attribution, the `fixtures.py` row count and the increment-7 LOC row — are
+  each stated in full under "What I now find false" below, with the command that
+  refutes them, so they are recoverable by whoever merges that branch. **They
+  are owed to `increment5b-design`'s PR, not to a later round of this one.**
+- **`docs/increments/05-noder.md`** — **correctly excluded and untouched**, for
+  the reason first given: `05b-noder-driver.md` already marks those lines as
+  superseded in width, and duplicating the marking would be the ledger this
+  project refuses to keep.
+- **`testing.md`** — **executed.** This entry made the work conditional on 5b
+  having landed first; it has not, so the `noding` invariant list still carried
+  "`is_river` bit on any output segment is the OR of the bits on the input
+  segments that contributed". It is now stated over sets and union, with the
+  reason the set form matters to a *test*: union's commutativity and
+  idempotence are what let the invariant be asserted without fixing a visit
+  order over the broad phase's contributors.
+
+**One document outside the list was also corrected**, and recording it here is
+the alternative to silence rather than an admission that the list reopens:
+`docs/increments/kernel-sufficiency-audit.md:381` cites
+`parallel_refinement.md:156`'s road-over-river rule, which this commit moved to
+`:168` and restated. The audit is dated to `e412a43`/#67 and its finding is
+about how often `Overlapping` fires, not about what is carried when it does, so
+the quotation is left as it stood and a parenthesis records the move.
 
 ## What I now find false in the documents this increment depends on
 
