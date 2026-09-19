@@ -165,6 +165,25 @@ pass — the check applied to the paragraph that defines it. Each repair was mad
 mode as the defect — reasoning about the claim instead of running it — which is
 how the repairs kept seeding the next occurrence.
 
+One corollary, learned the expensive way on increment 7's review rounds, which
+found this defect repeatedly and **found no defect in behaviour at all**. Several
+instances were in the text repairing the previous one. The common property: each
+was a sentence that had to be **re-derived whenever anything around it changed**
+— a commit hash naming "the current anchor", a count of how many commits had
+moved a figure, a list of which ones. Correcting such a sentence is a move that
+reproduces itself, because the commit applying the correction is itself a commit
+and can falsify the line it just wrote.
+
+So when a claim's truth depends on the state of the tree, **write the rule and
+the command that resolves it, not the resolved value**. `07-edge-properties.md`
+now says "measured at the last commit that touches a production file" and prints
+`git log --oneline -1 -- include/ bindings/ src_python/`, where it used to name a
+hash; the enumeration beside it was deleted rather than corrected again. Those
+were the first corrections in that sequence that did not falsify themselves on
+landing. A resolved value is a citation with an expiry date nobody can see —
+and note that no counter appears in this paragraph, which is the rule applied to
+itself: "how many rounds" is exactly such a value.
+
 So **do not write "X is verified by Y" until Y has been run against a broken
 X**, and where Y cannot be run, apply the object-identity question instead.
 Verify a gate the way this paragraph's first example was verified before being
