@@ -15,7 +15,7 @@ evidence**, not inherited:
    drive the CDT: `detria` needs `addOutline`/`addHole` per ring
    (`04-cdt.md:547-556`), and a flat edge list has thrown the `Outer`/`Hole`
    distinction away. The noder preserves chains and roles.
-2. `03-pslg.md:67-69` and `project_structure.md`'s `noding` section both say the
+2. `03-pslg.md:65-70` and `project_structure.md`'s `noding` section both say the
    noder contributes `is_river` as "a sparse per-edge **override** set". There is
    nothing left to override: after noding an edge may descend from two chains at
    once, so it has no single source bit to differ from. Dense, one byte per
@@ -25,6 +25,19 @@ evidence**, not inherited:
    guarantees rather than merely permits. The fifth, the `is_river` OR rule at
    line 110, is true and survives as guarantee 15. Replacements under
    "Documentation this PR fixes", covering all five.
+
+**All three quotations above are of text that no longer stands, and that is the
+point rather than a defect**: increment 7 fixed them at their sources in
+`e51ad75`. `parallel_refinement.md:148` now outputs property sets rather than
+"a list of `(p0, p1, is_river)` segments"; `03-pslg.md:65-70` describes a
+property set and the C++ member is `Chain::properties`; `testing.md:110` states
+the OR rule over sets and union. Read items 1-3 as "what these documents said
+when this design was written, and why", with `git show 4834568:` in front of
+each path to see it. Only the line numbers were refreshed here — **nothing else
+in this file was touched by increment 7**, and in particular the one-bit
+spelling in this document's own prose is superseded in width by
+`05b-noder-driver.md`, which is that branch's marking to make and not this
+one's.
 
 Nothing here re-derives an exactness claim that commit `e412a43` already
 refuted. Snapped coordinates are **not** exactly representable, and the
@@ -449,7 +462,7 @@ both `segments_intersect` and `intersection_point` with the note that
 "intersection *construction* rounds, rounding needs the snap grid" and that
 "segment intersection is the noder's defining operation and should be designed
 with the snap grid in the same head"
-(`docs/increments/02-core-geometry.md:340-378`). Designed with it in the same
+(`docs/increments/02-core-geometry.md:343-381`). Designed with it in the same
 head, the answer is that they are two functions and only one of them rounds:
 
 - `classify` is a **predicate**. It divides nothing, constructs nothing, and has
@@ -563,7 +576,7 @@ consequences, and they are rulings rather than observations:
   `Crossing`-or-`Disjoint`**, with a comment saying why the weaker assertion is
   the honest one.
 - **`Overlapping` is no longer load-bearing for the `is_river` merge.**
-  `parallel_refinement.md:156`'s road-along-a-river rule cannot depend on a
+  `parallel_refinement.md:168`'s road-along-a-river rule cannot depend on a
   relation that essentially never fires for a diagonal river. It does not have
   to: after 5b's hot-pixel split pass, two coincident edges are coincident as
   **node-id pairs**, and the merge is driven by exact integer edge-key dedup on
@@ -741,7 +754,7 @@ numbering, and therefore every downstream index in the mesh, is reproducible
 across runs and across thread counts, which is the bit-identity
 `testing.md`'s parallelism section asks for. First-appearance order would make
 the numbering depend on scheduling. It also matches
-`parallel_refinement.md:170`'s "parallel sort + unique" exactly.
+`parallel_refinement.md:183`'s "parallel sort + unique" exactly.
 
 **The consequence, and it is not small: index identity with the input `Pslg` is
 gone.** `Pslg` guarantee 9 promises a caller's index `k` means the same point
@@ -786,7 +799,7 @@ private: /* private constructor, the noder its only friend */ };
 **Same shape as `Pslg`, deliberately** — same accessors, same chain/role
 structure, same closure-is-implied convention — so increment 4's wrapper changes
 `const Pslg&` to `const NodedPslg&` and nothing else, which is the "mechanical"
-change `03-pslg.md:490-493` and `04-cdt.md:659-660` both booked. It is **not** a
+change `03-pslg.md:503-506` and `04-cdt.md:659-660` both booked. It is **not** a
 subclass of `Pslg` and there is no conversion between them: the whole point is
 that the two types promise different things, and an implicit conversion would
 let un-noded input reach the CDT through a signature that says it cannot.
@@ -842,7 +855,7 @@ let un-noded input reach the CDT through a signature that says it cannot.
     that the OR was applied consistently to the contributors the dedup
     **recorded**. A dropped contributing chain — the defect this guarantee
     exists to exclude, and the road-along-a-river case at
-    `parallel_refinement.md:156` that `is_river` turns on — is absent from both,
+    `parallel_refinement.md:168` that `is_river` turns on — is absent from both,
     and a mesh that has silently lost a river bit verifies clean. Naming a check
     that cannot fail is worse than naming none, because it converts "unchecked"
     into "apparently checked".
@@ -871,10 +884,10 @@ of through the predicate. The verification is the condition; node counts are a
 progress metric and nothing more.
 
 **The `is_river` representation is dense, one `std::uint8_t` per edge**, which
-overturns `03-pslg.md:67-69`'s "sparse override set" on the terms that document set
+overturns `03-pslg.md:65-70`'s "sparse override set" on the terms that document set
 for it. An override set is sparse only if most edges agree with a single source
 chain. After noding an edge can descend from two chains — a road snapped onto a
-river is exactly `parallel_refinement.md:156`'s example, and the merged edge
+river is exactly `parallel_refinement.md:168`'s example, and the merged edge
 keeps `is_river = true` while the road is geometrically forgotten — so there is
 no single base bit for an override to be an exception to. A dense byte array is
 one allocation, index-aligned with the edge enumeration the CDT wrapper already
@@ -1061,7 +1074,7 @@ The first column is the condition; the fourth names what increment 4's
 | T-junction: a vertex near another constraint's interior | **fixes** | `segment_meets_cell` + split the host at that node — **not** `Touching`, which is exact incidence and mostly false here | `NotNoded` (`PointOnConstrainedEdge`) |
 | Crossing constraints | **fixes** | `Crossing` + `crossing_point` + split both | `NotNoded` (`ConstrainedEdgeIntersection`) |
 | Collinear overlap (road along a river) | **fixes** | both split at each other's nodes by `segment_meets_cell`; the duplicate edges dedup on their node-id pairs and the bits OR. Does **not** depend on `classify` reporting `Overlapping` | `Ok`, silently double-constrained |
-| Three or more constraints meeting at a point | **fixes** | implicitly: all snap to one cell (`parallel_refinement.md:162`), and every segment through that cell is split at it | `DegenerateGeometry` |
+| Three or more constraints meeting at a point | **fixes** | implicitly: all snap to one cell (`parallel_refinement.md:175`), and every segment through that cell is split at it | `DegenerateGeometry` |
 | Hole touching its outer ring at one shared node | **passes through** | already one node after dedup; increment 4 measured 5 interior triangles and pinned it | `Ok` |
 | Collinear redundant vertices within a ring | **passes through** | not a defect; increment 4 measured 3 interior triangles | `Ok` |
 | A breakline that is a closed polyline | **passes through** | open chain, coincident ends; legal per `Pslg` stage 4's breakline exemption | `Ok` |
@@ -1097,13 +1110,13 @@ rather than discovered:
 edges of a figure-eight ring produces a ring that still visits a node twice; its
 "interior" is not well defined, so neither is its winding or its role.
 Resolving it into simple components is polygon repair, which belongs upstream —
-`parallel_refinement.md:161` already says "flag for resimplification or
+`parallel_refinement.md:174` already says "flag for resimplification or
 auto-fix" and the flag is this status. Detect (the same machinery: a chain
 paired against itself), reject, name the chain. **No severity field, no
 warning-level diagnostic**: increment 3 risk 2 warns that a severity field is how
 a validator starts having opinions, and that ruling stands.
 
-**Nesting is still not computed.** `03-pslg.md:520-526` reserved
+**Nesting is still not computed.** `03-pslg.md:533-539` reserved
 `nesting_forest<K>(const NodedPslg&)` for the increment where non-crossing input
 makes the answer meaningful — which is this one. It is still deferred, and now
 for a better reason than "the input might cross": `detria` computes nesting
@@ -1689,7 +1702,7 @@ There is no ledger.
    - "Sum of output segment lengths equals sum of input segment lengths, modulo
      snap perturbation. The bound is `√2·h` per segment" — false twice over. A
      collinear overlap merge **deletes** length outright (the road along the
-     river is geometrically forgotten, `parallel_refinement.md:156`), and a
+     river is geometrically forgotten, `parallel_refinement.md:168`), and a
      segment split at `m` points accumulates up to `m` displacements, so the
      bound is not per segment. The `√2·h` arithmetic itself is right and worth
      keeping; the claim it is attached to is not. Replace with the one-way

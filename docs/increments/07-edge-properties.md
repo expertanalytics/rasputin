@@ -699,7 +699,7 @@ ceiling, which is why no LOC gate is armed.
 **Test churn, counted separately because tests are excluded from the ceiling and
 are the expensive part of this round**: 8 existing test files on master, 5 more
 once 6b-ii merges, 2 new suites. The largest single file is `test_viz_svg.py` at
-24 occurrences, and it is **not** invariant-critical (`06-cdt-viewer.md:672-676`).
+24 occurrences, and it is **not** invariant-critical (`06-cdt-viewer.md:695-699`).
 
 ### Reconciliation: ~185 estimated, 366 measured
 
@@ -1013,11 +1013,25 @@ which, and no entry is carried forward.
 
 **One document outside the list was also corrected**, and recording it here is
 the alternative to silence rather than an admission that the list reopens:
-`docs/increments/kernel-sufficiency-audit.md:381` cites
+`docs/increments/kernel-sufficiency-audit.md:380` cited
 `parallel_refinement.md:156`'s road-over-river rule, which this commit moved to
 `:168` and restated. The audit is dated to `e412a43`/#67 and its finding is
 about how often `Overlapping` fires, not about what is carried when it does, so
-the quotation is left as it stood and a parenthesis records the move.
+its quotation of the old rule is left as it stood, the number is refreshed, and
+a parenthesis records both.
+
+**A further sweep was owed and is done: every citation *into* the nine files
+this commit edits.** Editing a document moves every line number pointing at it,
+which is the failure mode `tools/check_citations.py`'s at-risk list exists to
+surface — it went from 10 entries to 49 the moment these edits landed, and 20 of
+those had genuinely drifted. Refreshed, and re-read as quotations, in
+`05-noder.md` (13 citations into `parallel_refinement.md`, `03-pslg.md` and
+`02-core-geometry.md`), `kernel-sufficiency-audit.md` (2) and this file (3).
+`05-noder.md`'s three overturned premises are the interesting case: all three
+quote text this commit replaced at its source, so a note there marks them as
+quotations of the pre-fix documents with the `git show 4834568:` that recovers
+each. Nothing else in `05-noder.md` was touched; its own one-bit prose remains
+`05b-noder-driver.md`'s to supersede.
 
 ## What I now find false in the documents this increment depends on
 
@@ -1042,7 +1056,7 @@ Each with the command that refutes it, run before being written down.
    rest are the `FixtureChain` field (line 45), the builder loop (82-83), a
    comment (95), the fixture's description string (180) and the gallery tuple
    entry (218).
-   `06-cdt-viewer.md:457` confirms one river row. A line count read as a row
+   `06-cdt-viewer.md:465` confirms one river row. A line count read as a row
    count.
 3. **The 14-file list is complete for master and incomplete for 6b-ii.**
    `git grep -ln is_river increment6b-ii-renderer-red` also returns
@@ -1050,7 +1064,7 @@ Each with the command that refutes it, run before being written down.
    and `git grep -c -i river` on that branch returns **24** for
    `tests/python/test_viz_svg.py` — the largest single test-churn file in the
    change, absent from every list of it so far. It is not invariant-critical
-   (`06-cdt-viewer.md:672-676`).
+   (`06-cdt-viewer.md:695-699`).
 4. **"Two of which carry mutation rounds" is true by file list and misleading
    as a cost.** `grep -c is_river tests/cpp/property/prop_pslg_invariants.cpp`
    prints `1`, and that one line is a pass-through with no assertion attached.
@@ -1064,11 +1078,29 @@ Each with the command that refutes it, run before being written down.
 6. **`docs/increments/02-core-geometry.md:101-102` still calls it "the noder's
    `is_river` merge".** Stale spelling; the substantive claim (`operator==` on
    `Segment2` is ordered and the merge depends on it) is true and stays.
+   **Fixed in `e51ad75`**: `:102` now reads "the noder's edge-property merge",
+   with the old spelling recorded in a parenthesis, so this finding is
+   discharged rather than standing.
 
-**Nothing in `parallel_refinement.md`'s corrected "Edge metadata" section is
-false.** It was re-read line by line against this design: the union semantics,
-the commutativity/associativity/idempotence argument, the "geometrically
-forgotten but not semantically forgotten" distinction, the area/linear split,
-the 23-class land-cover figure (verified above at 23) and the "the C++ core does
-not name the properties" ruling are all exactly what this increment implements.
-Its only defect is the forward pointer in item 1 of the fix list.
+7. **And the one this section got wrong about itself.** The paragraph below
+   asserted that `parallel_refinement.md`'s "Edge metadata" section was already
+   corrected and that it had been "re-read line by line against this design".
+   **That re-read was of `increment5b-design`'s copy, not of this branch's.**
+   `git show increment5b-design:parallel_refinement.md | grep -c 'a set of
+   properties, not a bit'` prints `1`; the same grep against `HEAD` before
+   `e51ad75` printed `0`. The section in the tree was the uncorrected one-bit
+   form throughout. This is the object-identity failure
+   `.claude/REQUIRED-READING.md` describes — the claim was about a different
+   object from the one a reader would open — and it is recorded here rather than
+   quietly deleted, because the correction and the defect were made in the same
+   mode.
+
+**What `increment5b-design`'s corrected "Edge metadata" section says is not
+false**, and `e51ad75` brought the substance of it into this branch's
+`parallel_refinement.md:150-171`: the union semantics, the
+commutativity/associativity/idempotence argument, the "geometrically forgotten
+but not semantically forgotten" distinction, the area/linear split, the 23-class
+land-cover figure (verified above at 23) and the "the C++ core does not name the
+properties" ruling are all exactly what this increment implements. **If
+`increment5b-design` merges, that section is a conflict to resolve, not two
+independent edits.**
