@@ -764,14 +764,26 @@ and if it touches a production file — as every one of these correction rounds
 has, because they edit `features.py`'s docstring — it becomes the anchor the
 moment it lands, falsifying the line it just wrote.
 
-Two successive versions of this sentence named a hash and each went stale within
-a round: `e51ad75` wrote `7cc83a9` and `929f643` wrote `e922b4b`, both correct
-on landing and both falsified by the next production commit. Neither was
-self-falsifying — both were docs-only, which `git show --name-only --format=
-e51ad75 929f643` shows — so they are ordinary staleness, not the recursion above.
-The recursion is the sharper case, and the commit that removed the last hash is
-it: touching `features.py` for the docstring fix, it would have falsified a hash
-it wrote in the same breath. Resolve the anchor instead:
+Two versions of this sentence named a hash, and they failed differently — which
+is worth separating, because a single mechanism was claimed for both and only
+one of them has it.
+
+`e51ad75` wrote "Measured on `7cc83a9`": a plain measurement stamp, made before
+any anchor rule existed. `7cc83a9` is not a production-touching commit at all
+(`git log --oneline master..HEAD -- include/ bindings/ src_python/` does not
+list it), so it was never the anchor this section now means. What made the
+pairing false was `e9fa738`, a **docs-only** commit that updated the total to
+377 and left the stamp reading `7cc83a9`.
+
+`929f643` wrote "Measured on `e922b4b` — the last commit on this branch that
+touches a production file". That one did state the rule, and `e922b4b` was the
+last such commit when it landed; `7f66079` falsified it a round later.
+
+Neither commit falsified its own line — `git show --name-only --format= e51ad75
+929f643` returns docs only — so both are ordinary staleness, not the recursion
+above. The recursion is the sharper case, and the commit that removed the last
+hash is it: touching `features.py` for the docstring fix, it would have
+falsified a hash it wrote in the same breath. Resolve the anchor instead:
 
 ```bash
 git log --oneline -1 -- include/ bindings/ src_python/
