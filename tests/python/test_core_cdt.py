@@ -346,6 +346,60 @@ class TestBuildPslg:
                 ],
             )
 
+    @pytest.mark.parametrize(
+        "mask",
+        [np.int64(1), np.uint8(3), 1.0, "1"],
+        ids=["numpy-int64", "numpy-uint8", "float", "str"],
+    )
+    def test_a_non_int_mask_is_refused_by_its_type_and_not_its_value(
+        self, square: np.ndarray, mask: Any
+    ) -> None:
+        # The refusal has to name the object the predicate actually rejected.
+        # `py::isinstance<py::int_>` is a strict `PyLong_Check`, so a
+        # `numpy.int64` -- the type a caller holds after indexing any integer
+        # array -- is refused for its *type*, correctly and deliberately. The
+        # message renders the *value*, and for `numpy.int64(1)` that produces
+        # "the property mask 1 is not a set of bits below 32" about a mask that
+        # is a perfectly legal set of bits below 32. The caller is told to fix
+        # the one thing that is not wrong.
+        #
+        # Every input here has an in-range value, and the control below proves
+        # it: the same value as a built-in `int` is accepted. So the type name
+        # is the only thing that can distinguish this refusal from the
+        # out-of-range one pinned below, and nothing else in the message can
+        # stand in for it.
+        #
+        # The *property* is pinned, never the sentence: `type(mask).__name__`
+        # renders "int64" inside "numpy.int64" and "float" inside any phrasing
+        # of a float, so the wording stays free to improve. Pinning prose is
+        # what makes a diagnostic test fail on every improvement -- the same
+        # reasoning the design uses to refuse a golden-file SVG comparison.
+        #
+        # `bool` is absent on purpose: it is an `int` subclass with its own
+        # earlier arm and its own test, `test_rejects_a_bool_in_the_properties
+        # _position`. These four are the non-`int` cases proper.
+        with pytest.raises(ValueError) as excinfo:
+            _core.build_pslg(square, [([0, 1, 2, 3], _core.ChainRole.Outer, mask)])
+        assert type(mask).__name__ in str(excinfo.value), str(excinfo.value)
+
+        control = _core.build_pslg(square, [([0, 1, 2, 3], _core.ChainRole.Outer, int(mask))])
+        assert control.ok, "the value is legal; only the type was ever wrong"
+
+    def test_an_out_of_range_mask_is_refused_by_its_value(self, square: np.ndarray) -> None:
+        # The other half of the pair above, and the reason that one means
+        # anything: when the value *is* the defect, the value is what the
+        # message must carry. A refusal that named only the type here would be
+        # the mirror-image defect -- "a property mask must be an int" about an
+        # `int` -- and the two cases have to stay distinguishable in the output.
+        #
+        # A mask with a legal bit set as well as an illegal one, so a message
+        # that echoed some sanitized or truncated word rather than what the
+        # caller passed cannot pass.
+        mask = (1 << MAX_PROPERTIES) | RIVER
+        with pytest.raises(ValueError) as excinfo:
+            _core.build_pslg(square, [([0, 1, 2, 3], _core.ChainRole.Outer, mask)])
+        assert str(mask) in str(excinfo.value), str(excinfo.value)
+
     def test_reports_failure_as_data_rather_than_raising(self, broken_build: Any) -> None:
         assert broken_build.ok is False
         assert broken_build.pslg is None
