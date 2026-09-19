@@ -108,7 +108,7 @@ different predicates, and §5 shows they differ on the great majority of snapped
 input: at `s = 0.1` only 207 of 2976 grid-collinear general-direction triples
 come back `Collinear`.
 
-The consequence for `parallel_refinement.md:176`'s watch-list item — "T-junctions
+The consequence for `parallel_refinement.md:200`'s watch-list item — "T-junctions
 where a polyline endpoint lands on another segment's interior" — is that
 `classify` will report `Disjoint` for most of them, the host segment is never
 split, and the T-junction survives into the CDT. The verification pass of
@@ -377,7 +377,7 @@ Taking 5.1 as given, these claims in the provisional `05-noder.md` do not hold:
   are `Collinear`" fires for axis-aligned pairs and for **at most** ~7 % of
   others — 7 % is the per-*triple* rate measured in §5.1, and the arm needs all
   four of a pair's triples, so the pair rate is lower and was never measured. The
-  `Overlapping` relation, and with it `parallel_refinement.md:168`'s rule that a
+  `Overlapping` relation, and with it `parallel_refinement.md:176`'s rule that a
   road snapped onto a river merges and keeps `is_river = true`, will essentially
   never trigger for a diagonal river. (Increment 7 replaced that one bit with a
   property *set*: the rule now stands at `:168` — the number above is refreshed
