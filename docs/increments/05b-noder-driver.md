@@ -179,151 +179,151 @@ right-looking wrong picture is exactly the failure mode `06-cdt-viewer.md` says
 testing effort goes to, and the noder's silent failures — a dropped broad-phase
 candidate, a lost edge property — are invisible at gallery scale.
 
-## Edge properties: an edge carries a set, and whose change that is
+## Edge properties: the type is increment 7's, the per-edge array is 5b's
 
-A correction arrived from the user while this design was being written, and it
-lands on guarantee 15: **"we should classify edges and not nodes. An edge might
-have several properties. At a coarse resolution, the same line segment can be
-both a road and a river."**
+The carrier is `terrain::EdgeProperties`, shipped by increment 7:
+`include/terrain/core/edge_properties.hpp` for the type,
+`src_python/tin_engine/features.py` for the vocabulary that names its bits, and
+`docs/increments/07-edge-properties.md` for every ruling about either — the
+width and its ceiling, the absence of named members, union rather than priority,
+what was rejected, and the boundary model. **None of that is restated here.**
+`docs/increments/README.md` asks a prompt to say "read the file" rather than to
+carry the file; the same holds between two designs, and a copy is the thing that
+goes stale. `git log --oneline -1 -- include/terrain/core/edge_properties.hpp`
+names the commit that last moved the type.
 
-It contradicts `parallel_refinement.md`'s "Edge metadata" section, which is
-fixed in this PR rather than recorded. The claim that was false:
+What 5b consumes, unchanged:
 
-> The rest of the hydrology and land-cover semantics is face-based (queried per
-> cell via point-in-polygon against the original input polygons), so non-river
-> constraint edges don't need to remember what feature they came from.
+- **`Chain::properties`**, an `EdgeProperties` — increment 3's `Chain::is_river`
+  no longer exists. The noder preserves it chain-for-chain (guarantee 16).
+- **Union as the merge**, commutative, associative and idempotent. Those three
+  are the only properties of the type this increment leans on.
+- **A core that names no feature.** There is no `River` enumerator in
+  `terrain::`, so the noder cannot condition on one — which is why every ruling
+  below is about *where* bits are merged and never about *which*.
 
-**The face-based fallback works for area features and cannot work for linear
-ones.** Point-in-polygon can tell you a face is forest, because forest has an
-interior to be inside. It cannot tell you an edge is a road, because a road has
-no interior; buffering one into a polygon is a tolerance, and this project has
-none (increment 2, "Tolerances: there are none"). So the fallback recovers land
-cover and recovers nothing about roads, railways, walls or contours — and the
-same document's step 1 (`parallel_refinement.md:7`) lists roads as an input
-feature class alongside rivers and lakes. The road-along-a-river coincidence is
-where the loss becomes *visible*, not the whole of the loss.
+**The noder does not care how many bits there are.** That was the test of whether
+this design had been over-fitted to one bit, back when `Chain::is_river` was
+still the field; it had not. The width change cost the sections below nothing:
+same array, same index alignment against the flat `(c, k)` enumeration, same
+`edge_base`, same dedup key, same one-directional oracle. Guarantee 14(a) — the
+`Overlapping` amendment — is likewise untouched by it, being a statement about
+geometry rather than about meaning.
 
-**"Geometrically forgotten" stays true.** The road added no structure the river
-was not already enforcing, and the merged edge is one edge. What does not follow
-is forgetting it *semantically*. Those are different objects and the one-bit form
-conflated them.
+Four things are 5b's own, and are ruled here. A fifth, deferred by this
+design to whoever owned the stylesheet, has since been answered elsewhere and
+closes the section.
 
-### The ruling on scope: this is not 5b's, and 5b must not fake it
+### The array is dense: one entry per output edge, not a sparse override set
 
-`is_river` is a `bool` on `Chain` (`include/terrain/core/pslg.hpp:84`) — increment
-3's type. Widening it reaches, measured by
-`grep -rn 'is_river' --include='*.hpp' --include='*.cpp' --include='*.py' --include='*.pyi' .`:
-`include/terrain/core/pslg.hpp`, `PslgBuilder::add_chain`'s third parameter,
-`bindings/core.cpp:288` and `:440`, `src_python/tin_engine/_core.pyi:128`,
-`src_python/tin_engine/viz/protocols.py:41`,
-`src_python/tin_engine/viz/scene.py:80,134-166`, and six test files including two
-invariant-critical ones (`tests/python/test_viz_scene.py`,
-`tests/cpp/property/prop_pslg_invariants.cpp`) plus
-`tests/cpp/support/pslg_cases.hpp` and `tests/cpp/support/cdt_cases.hpp`. On the
-`increment6b-ii-renderer-red` branch it also reaches `viz/style.py`,
-`viz/svg.py` and all eight rows of `viz/fixtures.py`.
+`edge_properties()` is a `std::span<const EdgeProperties>` of length
+`edge_base(chains().size())`, one entry per flat `(c, k)`, which is guarantee 15.
+`docs/increments/03-pslg.md` and `project_structure.md` each assumed a **sparse
+override set** before this design and each now says dense, naming this document
+for the shape.
 
-**That is three shipped increments' types and two invariant-critical suites. It
-is its own increment — call it 7, "edge properties" — and squeezing it into the
-round in flight would put a type change to increment 3's `Pslg` inside a PR whose
-subject is topology.** The user asked for a correction, not for it to be
-absorbed.
+An override set is sparse only if most edges agree with a single source value
+that the exceptions override. **After noding there is no such source value.** An
+output edge can descend from two input chains at once — that is the fact the
+property *set* exists for — so the thing a sparse form would record an exception
+*to* does not exist. Encoding an array that has no default sparsely buys nothing
+and costs three things: an index structure, a branch on every read, and a second
+spelling of "empty" that cannot be told apart from "absent". The empty set is
+already the default `EdgeProperties{}`, and it means *unclassified* — a legal,
+expected state, not a missing one.
 
-**5b is therefore designed against a property set it does not introduce**, which
-costs this increment almost nothing, because the noder's side of the change is a
-*width* change and not a structural one:
+Dense also costs nothing worth naming: one 32-bit word per output edge, in one
+contiguous `std::vector`, trivially parallel-reducible, against an output that
+already carries a `Point2` per vertex and a `std::uint32_t` per chain position.
 
-- `edge_is_river()` becomes `edge_properties()`;
-  `std::span<const std::uint8_t>` becomes `std::span<const EdgeProperties>`.
-- The merge stays one `|` per contributing chain. Same array, same index
-  alignment against the flat `(c, k)` enumeration, same `edge_base`, same dedup
-  key, same one-directional oracle. **The noder does not care how many bits there
-  are**, which is the test of whether this design was over-fitted to one bit; it
-  was not.
-- Guarantee 15 is restated over sets below. Guarantee 14(a) — the `Overlapping`
-  amendment — is **unaffected**: it is a statement about geometry, and duplicate
-  edges are legal for geometric reasons that have nothing to do with what the two
-  chains mean.
+### The merge happens at the node-id edge-key dedup, not at a classification
 
-**If increment 7 has not merged when 5b is built, `EdgeProperties` is a one-bit
-set whose only member is the river bit**, defined in increment 7's header with
-one enumerator. The current behaviour is the degenerate case of the correct
-design, and widening it later is a change to a *vocabulary*, not to the noder.
-What 5b may **not** do is ship `std::uint8_t edge_is_river`, because that is the
-shape that has to be rewritten.
+Step 5 of the split pass is where the union is taken: for each flat position
+`(c, k)`, the union over every input chain carrying an output edge with the same
+node-id pair `(min(u, v), max(u, v))`. The ruling's content is what it excludes:
 
-**Ordering recommendation: increment 7 lands before 5b.** Not because 5b needs
-it — 5b works against a one-member set — but because the noder is the first
-consumer that genuinely needs the *union* semantics, and because numbering here
-has never been merge order (increment 6 was designed and merged before 5b). The
-decision is the user's; the design is written so that either order works.
+- **No collinear-overlap classification participates.** The tempting spelling is
+  "union the properties of every pair `classify<K>` calls `Overlapping`", and it
+  would put a kernel predicate, and therefore floating point, inside the merge.
+  It is also redundant: guarantee 14(a) as amended says two output edges that
+  overlap at all have **equal** node-id pairs, so on noded output the integer key
+  *is* the overlap relation. A predicate would re-derive, less exactly and at a
+  cost, what the key already decides.
+- **The key is integers**, which is `05-noder.md`'s standing rule for the merge,
+  and is what keeps the result independent of which way a snap rounded.
+- **The reduce is over an unordered collection.** Contributing chains arrive in
+  chain-enumeration order and, within a round, in whatever order the broad phase
+  populated buckets; the answer may not depend on either. Union's three algebraic
+  properties are the whole licence for that, and they are why a priority scheme
+  would have been unusable here even had one been on offer.
+- **The dedup does not merge chains.** It is over the edge *set* and its product
+  is the property array. Two chains that run together after snapping remain two
+  chains, index-for-index with the input (guarantee 16); what they come to share
+  is node ids, and therefore per-edge entries, not identity. The Python
+  renderer already performs the same join one layer up — `viz/scene.py`'s
+  `_chain_edges` unions `properties` per undirected pair while letting the first
+  contributing chain keep the role — which is corroboration that the shape is
+  right, not a dependency.
 
-### The representation: an opaque fixed-width bitset the core does not name
+### Guarantee 15's oracle: built from the input, asserted as a subset
 
-For increment 7 to rule on, argued here because 5b's guarantee 15 is written
-against it:
+A design constraint on the suite rather than a choice the suite makes, so it is
+ruled here; the assertion is written out under "What is worth testing", and the
+reason 15 is not the builder's is under `noding/noded_pslg_builder.hpp`.
 
-```cpp
-// include/terrain/core/edge_properties.hpp (increment 7), namespace terrain
-class EdgeProperties {
-public:
-    static constexpr unsigned kMaxProperties = 32;
+- **Built from the input, never from the dedup's own provenance map.** An oracle
+  that asks the noder which chains it recorded as contributing, and then asserts
+  the union over those, is the dedup restating itself: it is green on any merge
+  that is internally consistent, including one that silently drops a contributor.
+  Borrow the producer's *predicate* — `segment_meets_cell<K>` plus arc-order
+  betweenness — and never its *records* (`computational-geometry/SKILL.md`; the
+  worked history is `05-noder.md`, guarantees 14 and 15).
+- **A subset, not an equality, and one direction only.** The union over the input
+  chains that the relation admits for an output edge `e` is a subset of
+  `edge_properties()[e]`. The converse is *false*, not merely unproven: a chain
+  that passes near both nodes and spans them satisfies the relation without
+  having contributed geometry, so the oracle's set can be strictly smaller than
+  the truth. Asserting equality would make the suite red on correct output —
+  increment 5's exact-incidence failure in a new costume.
+- A spuriously *added* property therefore escapes this assertion by construction
+  and is owed a mutant instead; that is mutant 7.
 
-    constexpr EdgeProperties() = default;                       // the empty set
-    [[nodiscard]] static constexpr EdgeProperties bit(unsigned i) noexcept;
-    [[nodiscard]] constexpr bool empty() const noexcept;
-    [[nodiscard]] constexpr bool contains(EdgeProperties) const noexcept;  // superset
-    [[nodiscard]] constexpr std::uint32_t bits() const noexcept;
+### No bare word per edge, and the reason is now what the type is
 
-    friend constexpr EdgeProperties operator|(EdgeProperties, EdgeProperties) noexcept;
-    friend constexpr bool operator==(const EdgeProperties&, const EdgeProperties&) = default;
-};
-```
+5b may not carry an edge's properties as a `std::uint8_t`, a `bool`, or a
+`std::uint32_t` anywhere inside `terrain::` — not on `NodedPslg`, not in the
+builder's arrays, not as a span. When this prohibition was first written the
+argument was that a one-bit `edge_is_river` would have to be rewritten once the
+set arrived. That argument has expired. The stronger one is the shipped type:
 
-**Closed-width, open-vocabulary. Three properties decide it:**
+**`EdgeProperties` has no conversion to or from `bool`, `int` or `std::uint32_t`
+in either direction.** `bits()` is the one way out, `bit()` and `operator|` the
+one way in, and the constructor that takes a word is private and two-argument so
+that not even `std::is_constructible_v` finds a route. The header says why, and
+the two failure modes it names are exactly the ones a bare per-edge array
+reopens: `if (edge_is_river)` compiles again, and a call site that passed `true`
+keeps compiling with a changed meaning. A bare array would reinstate both one
+level below the field that closed them, on a per-edge array rather than a
+per-chain field, and at a place where nothing re-validates: the mask admission
+check lives in `bindings/core.cpp`, where untrusted masks arrive, and noded
+output never passes through it.
 
-1. **Union must be commutative, associative and idempotent**, because the merge
-   is a reduce over an unordered set of contributing chains — the broad phase
-   visits buckets in whatever order it visits them, and the result may not depend
-   on that. `|` on a bitset is all three for free. A priority scheme ("highest-
-   ranked contributor wins") is none of them and would need a tie-break whose
-   only honest source is input order, which is exactly what node ids are sorted
-   to avoid.
-2. **The C++ core must not name the properties.** There is no `River`
-   enumerator, no `Road`, no enumeration at all: `terrain::` never spells a
-   feature name. The mapping from bit position to feature name is a Python
-   concern and belongs in a Pydantic model at the boundary, alongside CRS
-   metadata and everything else the core is kept ignorant of. This is stricter
-   than what `Chain::is_river` does today — the core currently spells "river" —
-   and it is the one place this correction makes the architecture *cleaner*
-   rather than merely wider. The one future consumer that genuinely needs to ask
-   "is this edge a river", a refinement or hydrology policy, is handed a mask by
-   its caller rather than compiled against a vocabulary.
-3. **32 bits, and the ceiling is named rather than discovered.** One word per
-   edge, trivially parallel-reducible, no allocation. The vocabulary it has to
-   hold is *linear* features — river, road, railway, coastline, contour, wall,
-   ditch — which is under ten, not land cover, whose legacy vocabulary alone runs
-   to 23 classes (`legacy/rasputin/globcov_repository.py:15`) and which stays
-   face-based for the sound half of the claim corrected above. If a 33rd linear
-   feature type ever arrives, widening to 64 is a one-line change to a type that
-   nobody pattern-matches on, because nobody can: it has no named members.
+Bare masks are legal in exactly two places, both outside `terrain::` — the
+binding's admission of an untrusted mask, and the accessors that hand a mask to
+Python. Between those two boundaries an edge's properties travel as the type.
 
-**What is rejected, and why, so it is not re-proposed:** a per-edge index into a
-caller-supplied attribute table. It is genuinely open, and it makes the merge
-allocate — the union of two table rows is a new row — which turns a parallel
-reduce into a synchronised one and puts an indirection on the hottest array in
-the noder's output. An open vocabulary is worth having; an open *cardinality* is
-not, at this cost, on evidence of ten.
+### The renderer question this design deferred has been answered
 
-### The renderer has no answer for an edge that is both, and that is 6's
-
-`viz/scene.py:80`'s `SceneEdge` carries `is_river: bool` and the stylesheet on
-`increment6b-ii-renderer-red` has one river stroke class. An edge that is both
-road and river needs either a precedence order or two strokes. **Two strokes on
-one line is unreadable at gallery scale**, so the direction is a declared
-precedence in the style model with the set still carried on the edge — but that
-is a decision for whoever owns `style.py`, in increment 7's PR or a follow-up to
-6, and this document does not make it. Named so it is not discovered.
+An edge that is both a road and a river needed either a precedence order or two
+strokes, and this document declined to choose, naming the decision as the
+stylesheet owner's. Increment 7 made it: one stroke per edge under a declared
+precedence — the order of `SvgStyle.property_strokes`, expressly not bit order,
+since a bit position is a vocabulary's numbering and priority is the
+stylesheet's — with the full set still carried on the edge as
+`SceneEdge.properties`. See `docs/increments/07-edge-properties.md`,
+"The renderer: the ruling 5b named and deferred". Nothing of it is 5b's, and
+what remains 5b-adjacent is risk 15: at 5c the scene join must be fed the
+`NodedPslg` and not the `Pslg`.
 
 ## The seam, and why it is not `05-noder.md`'s
 
@@ -1241,14 +1241,18 @@ Continuing `05-noder.md`'s register, which ends at 12.
     saying why it is small. Residual: a defect that only appears above that size
     is not found here. The gallery is the counterweight, and it is the third
     thing the renderer buys.
-20. **The edge-property vocabulary is Python's, and nothing checks it.** The
-    core merges opaque bits; the bit-to-name mapping lives at the boundary, so
-    two producers that disagree about which bit means "river" produce a mesh
-    that is wrong in a way no C++ suite can see. Mitigated by the mapping being
-    one Pydantic model in one place rather than a convention; that mitigation is
-    increment 7's to build and 5b cannot check it. This is the price of keeping
-    feature names out of `terrain::`, and it is the right price, but it is a
-    price.
+20. **The edge-property vocabulary is Python's, and no C++ suite can check
+    it.** The core merges opaque bits; the bit-to-name mapping lives at the
+    boundary, so two producers that disagree about which bit means "river"
+    produce a mesh that is wrong in a way nothing in `terrain::` can see.
+    Mitigated at the boundary and not here: the mapping is one Pydantic model
+    rather than a convention, with a digest over its `(bit, name)` pairs for an
+    artifact to carry and compare on read
+    (`src_python/tin_engine/features.py`; `docs/increments/07-edge-properties.md`
+    inherits this entry as its own risk and owns the mitigation). **5b still
+    cannot check it**, because the noder sees bits and never reads a
+    fingerprint. Residual and unchanged: this is the price of keeping feature
+    names out of `terrain::`, and it is the right price, but it is a price.
 21. **`max_rounds` has a default and a default is a policy.** Four is defended
     above on measured rarity, not on proof. If real breakline data needs more,
     the symptom is `NotConverged` on input a person believes is fine, and the
@@ -1333,6 +1337,15 @@ this document's premises establish and the fourth of which is the user's:
    density, about the merge being keyed on node ids and about there being no
    single source bit to override survives verbatim, so it is marked rather than
    rewritten.
+
+   *Historical, and true when written: the marking ends by saying this file's
+   "Edge properties" section "carries the ruling and the scope". It carried both
+   until increment 7 shipped the type; as of `6f7f7c8`, where this design was
+   rebased onto that increment, it carries the scope and the shape on
+   `NodedPslg`, and `docs/increments/07-edge-properties.md` is the ruling on the
+   type. The clause is left standing as the record of what was true then;
+   `grep -n 'carries the ruling and the scope' docs/increments/05-noder.md`
+   finds it, and it belongs to whoever next edits that file.*
 
 **`docs/increments/03-pslg.md`** and **`project_structure.md`** each carry the
 same widening where they describe the per-edge array, for the same reason.
