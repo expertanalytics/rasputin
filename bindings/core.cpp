@@ -128,6 +128,20 @@ template <typename T>
 // could run, and `mask >> 32` on a negative int is -1 in Python -- truthy, and
 // not a bit position.
 [[nodiscard]] EdgeProperties as_properties(const py::object& mask, std::size_t chain) {
+    // bool first, and separately, because Python's bool IS an int: it satisfies
+    // the isinstance check below and 0 and 1 are both in range, so the
+    // pre-migration spelling (idx, role, is_river) would pass silently. True
+    // would even mean "river" -- but only because bit 0 happens to be river in
+    // DEFAULT_VOCABULARY, which lives in Python and can be renumbered without
+    // any C++ suite noticing. The C++ half refuses the same spelling outright
+    // (EdgeProperties has no conversion from bool in either direction), and the
+    // boundary must not be the one place it survives.
+    if (py::isinstance<py::bool_>(mask)) {
+        throw py::value_error(std::format(
+            "chain {}: the property mask is a bool ({}); pass a mask of property bits, "
+            "not the old is_river flag",
+            chain, std::string{py::str(mask)}));
+    }
     const py::int_ ceiling{std::uint64_t{1} << EdgeProperties::kMaxProperties};
     if (!py::isinstance<py::int_>(mask) || mask < py::int_{0} || mask >= ceiling) {
         throw py::value_error(

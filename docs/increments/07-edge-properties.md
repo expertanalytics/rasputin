@@ -361,8 +361,22 @@ caller can also commit, and this one no C++ caller can — `EdgeProperties::bit`
 is the only route to a set bit and `i >= kMaxProperties` is a precondition
 violation, not a datum. Putting a marshalling error into that enum would put a
 Python type error inside a C++ vocabulary. It joins the mis-shaped vertex array
-(`bindings/core.cpp:452`) as a marshalling `ValueError`, which is the existing
+(`bindings/core.cpp:107`) as a marshalling `ValueError`, which is the existing
 precedent and the right one.
+
+**And it raises `ValueError` on a `bool`**, naming the chain index the same way.
+This was a hole, found after the migration commit and closed after it: `bool` is
+a subclass of `int` in Python, so `py::isinstance<py::int_>` admits `True` and
+`False`, and both are in range. The pre-migration call `add_chain(idx, role,
+is_river)` therefore kept working at the boundary with its *old* meaning —
+`True` even produced the right set, but only because bit 0 happens to be `river`
+in `DEFAULT_VOCABULARY`, which is a Python object no C++ suite can see
+renumbered. Right by coincidence, not by design, and risk 20 in miniature. The
+C++ half refuses the same spelling outright (`EdgeProperties` admits no
+conversion from `bool` in either direction, which is why a `bool is_river()`
+shim is rejected by name above), so the boundary must not be the one place it
+survives. `py::isinstance<py::bool_>` is the check; the `int_` check cannot make
+it, which is precisely why the hole existed.
 
 **`EdgeProperties::bit(i)` has a narrow contract**: precondition
 `i < kMaxProperties`, debug-asserted, unchecked in release. This is exactly
