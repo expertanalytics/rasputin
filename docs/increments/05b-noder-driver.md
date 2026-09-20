@@ -1011,27 +1011,36 @@ settle, so it was searched.
 
 #### The bounded ring search, and the intermediate result that looks like a refutation
 
-Read the two lines of each block in order, because **the first line alone looks
-like a counterexample set and is not one**. A search that stops at "the winding
-flipped" reports 853 four-gons and 2,612 five-gons as refutations of the ruling
-and exits non-zero. Applying the mechanism's own filter — does any node's cell
-meet an edge it is not an endpoint of — takes every one of them to zero. The
-flip count and the graze count are **equal in all four blocks**, which is the
-claim, stated as a number rather than as a structural argument:
+Read each block's stages in order, because **the flip count alone looks like a
+counterexample set and is not one**. A search that stops at "the winding
+flipped" reports thousands of refutations of the ruling and exits non-zero.
+Applying the mechanism's own filter — does any node's cell meet an edge it is not
+an endpoint of — takes every one of them to zero. **`FLIPPED` equals `grazed`
+and `SURVIVORS` is zero in every block**, which is the claim, as a number rather
+than as a structural argument:
 
 ```
-4-gons (0.25 step, 9x9 candidates, strict simplicity):
-  tested 782105 | winding flipped 853 | grazed (14(b) splits, NonSimpleRing first) 853 | SURVIVORS 0
-4-gons (0.25 step, 9x9 candidates, loose simplicity):
-  tested 782105 | winding flipped 853 | grazed (14(b) splits, NonSimpleRing first) 853 | SURVIVORS 0
-5-gons (0.50 step, 6x6 candidates, strict simplicity):
-  tested 449068 | winding flipped 0 | grazed (14(b) splits, NonSimpleRing first) 0 | SURVIVORS 0
-5-gons (0.50 step, 6x6 candidates, loose simplicity):
-  tested 543876 | winding flipped 2612 | grazed (14(b) splits, NonSimpleRing first) 2612 | SURVIVORS 0
+4-gons, 0.25 step, 9x9, loose simplicity, simple-after REQUIRED:
+  tested 2459896 | repeat-id 1376569 | not-simple-after 301222 | same-winding 781252 | FLIPPED 853 | grazed 853 | SURVIVORS 0
+4-gons, 0.25 step, 9x9, loose simplicity, simple-after not required:
+  tested 2459896 | repeat-id 1376569 | not-simple-after 0 | same-winding 1080766 | FLIPPED 2561 | grazed 2561 | SURVIVORS 0
+4-gons, 0.25 step, 9x9, strict simplicity, simple-after REQUIRED:
+  tested 2459896 | repeat-id 1376569 | not-simple-after 301222 | same-winding 781252 | FLIPPED 853 | grazed 853 | SURVIVORS 0
+5-gons, 0.50 step, 6x6, loose simplicity, simple-after REQUIRED:
+  tested 1217716 | repeat-id 538504 | not-simple-after 135336 | same-winding 541264 | FLIPPED 2612 | grazed 2612 | SURVIVORS 0
+5-gons, 0.50 step, 6x6, loose simplicity, simple-after not required:
+  tested 1217716 | repeat-id 538504 | not-simple-after 0 | same-winding 673192 | FLIPPED 6020 | grazed 6020 | SURVIVORS 0
+5-gons, 0.50 step, 6x6, strict simplicity, simple-after REQUIRED:
+  tested 1016516 | repeat-id 435812 | not-simple-after 131636 | same-winding 449068 | FLIPPED 0 | grazed 0 | SURVIVORS 0
+5-gons, 0.25 step, 7x7, loose simplicity, simple-after REQUIRED:
+  tested 6263524 | repeat-id 5457883 | not-simple-after 191199 | same-winding 614111 | FLIPPED 331 | grazed 331 | SURVIVORS 0
 ```
 
-**All 3,465 flips graze. Not most — every one.** The program, inline because a
-scratch directory is not a citation:
+The four stages plus `FLIPPED` sum to `tested` in every block, which is what says
+no ring is silently dropped: a rejection stage that quietly ate candidates would
+show up as a shortfall, and that arithmetic is the only self-check the program
+has. The program, inline — a design that names a throwaway it does not contain
+is not reproducible by the next reader, whoever still has a copy today:
 
 ```cpp
 // /tmp/ringsearch.cpp
@@ -1096,9 +1105,11 @@ static bool grazes(const SnapGrid& g, const std::vector<GridPoint>& ids,
     return false;
 }
 
-struct Counts { long tested = 0, flipped = 0, grazed = 0, survivors = 0; };
+struct Counts { long tested = 0, repeat = 0, nonsimple_after = 0, same = 0,
+                flipped = 0, grazed = 0, survivors = 0; };
 
-static void run(const char* label, std::size_t n, double step, int side, bool strict) {
+static void run(const char* label, std::size_t n, double step, int side, bool strict,
+                bool require_simple_after) {
     const SnapGrid g{1.0};
     std::vector<Point2> cand;
     for (int i = 0; i < side; ++i)
@@ -1131,12 +1142,13 @@ static void run(const char* label, std::size_t n, double step, int side, bool st
             for (std::size_t x = 0; x < n && !repeat; ++x)
                 for (std::size_t y = x + 1; y < n && !repeat; ++y)
                     repeat = (ids[x] == ids[y]);
-            if (repeat) continue;          // RingCollapsed / NonSimpleRing, refused earlier
-            if (!simple(post, strict)) continue;  // NonSimpleRing, refused earlier
-
             ++c.tested;
+            if (repeat) { ++c.repeat; continue; }   // refused earlier: repeated node id
+            if (require_simple_after && !simple(post, strict)) {
+                ++c.nonsimple_after; continue;     // refused earlier: crossing route
+            }
             const double a1 = shoelace(post);
-            if (a1 == 0.0 || (a1 > 0.0) == (a0 > 0.0)) continue;
+            if (a1 == 0.0 || (a1 > 0.0) == (a0 > 0.0)) { ++c.same; continue; }
             ++c.flipped;
             if (grazes(g, ids, post)) ++c.grazed; else ++c.survivors;
         } while (std::next_permutation(rest.begin(), rest.end()));
@@ -1147,17 +1159,23 @@ static void run(const char* label, std::size_t n, double step, int side, bool st
         ++pick[i];
         for (std::size_t j = i + 1; j < n; ++j) pick[j] = pick[j - 1] + 1;
     }
-    std::printf("%s (%.2f step, %dx%d candidates, %s simplicity):\n"
-                "  tested %ld | winding flipped %ld | grazed (14(b) splits, "
-                "NonSimpleRing first) %ld | SURVIVORS %ld\n",
-                label, step, side, side, strict ? "strict" : "loose", c.tested, c.flipped, c.grazed, c.survivors);
+    std::printf("%s, %.2f step, %dx%d, %s simplicity, simple-after %s:\n"
+                "  tested %ld | repeat-id %ld | not-simple-after %ld | same-winding %ld"
+                " | FLIPPED %ld | grazed %ld | SURVIVORS %ld\n",
+                label, step, side, side, strict ? "strict" : "loose",
+                require_simple_after ? "REQUIRED" : "not required",
+                c.tested, c.repeat, c.nonsimple_after, c.same, c.flipped, c.grazed,
+                c.survivors);
 }
 
 int main() {
-    run("4-gons", 4, 0.25, 9, true);
-    run("4-gons", 4, 0.25, 9, false);
-    run("5-gons", 5, 0.5, 6, true);
-    run("5-gons", 5, 0.5, 6, false);
+    run("4-gons", 4, 0.25, 9, false, true);
+    run("4-gons", 4, 0.25, 9, false, false);
+    run("4-gons", 4, 0.25, 9, true, true);
+    run("5-gons", 5, 0.50, 6, false, true);
+    run("5-gons", 5, 0.50, 6, false, false);
+    run("5-gons", 5, 0.50, 6, true, true);
+    run("5-gons", 5, 0.25, 7, false, true);
     return 0;
 }
 ```
@@ -1166,43 +1184,87 @@ int main() {
 c++ -std=c++20 -O2 -Iinclude /tmp/ringsearch.cpp build/libterrain_predicates.a -o /tmp/ringsearch && /tmp/ringsearch
 ```
 
-Under four seconds. Simplicity is decided by 5a's own `classify<K>` rather than
-by a hand-rolled segment test, so the search borrows the *predicate* and none of
-the producer's records, per `computational-geometry/SKILL.md`. **Two simplicity
-filters are run, not one**, and the reason is that the strict one is the wrong
-instrument on its own: requiring non-adjacent edges to be `Disjoint` excludes
-rings where a vertex merely touches a non-adjacent edge, and on 5-gons that
-filter is so tight it admits **zero** flips — a search that measures nothing and
-whose output is indistinguishable from a search that measures everything and
-finds nothing. The loose filter, rejecting proper crossings only, is what
-produces the 2,612. On 4-gons the two filters agree exactly, which is the check
-that the loose one has not been loosened into admitting garbage.
+Simplicity is decided by 5a's own `classify<K>` rather than by a hand-rolled
+segment test, so the search borrows the *predicate* and none of the producer's
+records, per `computational-geometry/SKILL.md`.
+
+**Two questions, two sets, and the design picks neither — it labels both.** The
+`simple-after` switch is not a tuning knob, it selects which question is being
+asked, and a reader who reproduces one block and compares it to the other's
+number will think they have found something:
+
+- **`simple-after REQUIRED` is the set of candidate counterexamples**, and it is
+  the right set for "is `RingDegenerateAfterSnap` reachable". A ring that is
+  non-simple after snapping is already refused by `NonSimpleRing` through the
+  *crossing* route, so it never needed the graze argument at all and cannot be a
+  counterexample to it.
+- **`simple-after not required` is the stronger test of the graze mechanism
+  itself**, precisely because it admits rings the tight set excludes — 6,020
+  five-gon flips against 2,612 — and every one of them still grazes. That is a
+  harder test of the mechanism, not a larger count of counterexample candidates,
+  and the two claims must not be swapped.
+
+**Two other instrument findings, both of which cut against the obvious reading.**
+
+*The strict simplicity filter measures nothing on 5-gons.* Requiring non-adjacent
+edges to be `Disjoint` excludes rings where a vertex merely touches a
+non-adjacent edge, and it is so tight that the 5-gon block admits **zero** flips
+— output indistinguishable from a search that measured everything and found
+nothing, which is exactly the hazard `.claude/REQUIRED-READING.md` names. The
+loose filter, rejecting proper crossings only, produces the 2,612. On 4-gons the
+two agree exactly, which is the check that the loose one has not been loosened
+into admitting garbage.
+
+*A finer sub-cell step makes flips rarer, not commoner.* The 5-gon block at a
+0.25 step over 7×7 tests 6,263,524 rings — five times the 0.50 block — and finds
+**331** flips against 2,612, because finer steps put more vertices in one cell
+and `repeat-id` rejects 5,457,883 of them, 87 % of the total, before the winding
+is ever compared. **The flip count is not a measure of how hard the search
+tried.** A reader tuning the lattice to maximise flips is tuning toward the wide
+set, not toward a better search.
+
+**Two independently written programs, and what is and is not reconciled.** This
+program is a reconstruction from a stated method, written without sight of the
+original; the original was re-run with the same stage instrumentation. The
+load-bearing result is identical in both, and so is the 87 % `repeat-id`
+rejection at the finer lattice, which is a specific enough agreement to say the
+two programs are measuring the same thing. **The totals are not reconciled.**
+The `simple-after` filter is a real part of the gap and it is not the whole of
+it: in *this* program it moves the 5-gon flip count by a factor of 2.3
+(6,020 → 2,612) and by 3.0 on 4-gons (2,561 → 853), where closing the gap to the
+original's figures would need a factor near 50. The remaining difference is some
+further divergence in enumeration or filtering that prose cannot settle; putting
+the two sources side by side is what would settle it, and **nothing in the ruling
+depends on it**, because the quantity the ruling rests on is `SURVIVORS`, which
+is zero in every block of both.
 
 **The bound, stated honestly. This is evidence, not a theorem.** Two ring sizes,
-two small lattices, and the searched space is bounded by construction. It does
-*not* cover n > 5, non-convex configurations beyond what 5 vertices reach, or
-rings spanning many cells. One thing it covers more of than it appears to: the
+three lattices, and the searched space is bounded by construction. It does *not*
+cover n > 5, non-convex configurations beyond what 5 vertices reach, or rings
+spanning many cells. One thing it covers more of than it appears to: the
 parameter is the **step-to-spacing ratio**, not the spacing, because `snap` is
 exactly scale-covariant on dyadic spacings — scaling the points and `h` together
 changes only an exponent and leaves every grid index, every orientation sign and
 every area sign identical. So "at `SnapGrid{1.0}`" is not the limitation it reads
-as; "at 4 and 8 sub-cell steps" is.
+as; "at 2, 4 and 8 sub-cell steps" is.
 
 **Consequences, all three measured rather than argued.**
 
-- The demotion of `RingDegenerateAfterSnap` to a self-check now rests on 3,465
-  measured flips with zero survivors, not on the structural sketch above.
+- The demotion of `RingDegenerateAfterSnap` to a self-check rests on measured
+  flips with zero survivors, not on the structural sketch above.
 - **Mutant 8 stays struck, for a measured reason.** There is no killing input in
   the searched space, and the rule stands: *a mutant with no killer is not a
   weaker mutant, it is a claim the round would have shipped as covered.*
 - **`05-noder.md` risk 3's relocation is measured, not inferred.** Delete the
-  winding re-check and all 3,465 of these rings are still refused, by
+  winding re-check and every one of these rings is still refused, by
   `NonSimpleRing`, via 14(b) — which is exactly what the graze column counts.
 
 **What would reopen it** is one survivor at any size, which promotes the status
 back to a diagnosis and hands mutant 8 its killer. Re-running the program above
-at a larger `n` or a finer step is the cheap way to look, and it is the right
-thing to do before anyone *relies* on this beyond 5b.
+at a larger `n` or a wider lattice is the cheap way to look, and it is the right
+thing to do before anyone *relies* on this beyond 5b. Note from the finer-step
+block which direction to search: more vertices per cell is the wrong way, since
+`repeat-id` eats the candidates before the question is asked.
 
 **Reporting: one status, one message, and the message carries the count.** The
 noder does not return a diagnostics vector, and the reason is
@@ -1593,10 +1655,11 @@ a different increment's:
    Its live half is mutant 10, which kills the same silent wrong mesh through
    the node repeat that actually occurs. **A mutant with no killer is not a
    weaker mutant; it is a claim that the round would have shipped as covered.**
-   The bounded ring search in that section has since put a number on it: 3,465
-   winding flips across two ring sizes, **every one of them grazed**, zero
-   survivors. So the absence of a killer is measured rather than assumed.
-   Reinstated the moment that search turns up a survivor at any size.
+   The bounded ring search in that section has since measured it: across two
+   ring sizes, three lattices and two independently written programs, **every
+   winding flip grazes and no block has a survivor**. So the absence of a killer
+   is measured rather than assumed. Reinstated the moment that search turns up a
+   survivor at any size.
 9. **The `RingCollapsed` check dropped.** Killed by a hole smaller than one cell.
 10. **`NonSimpleRing` checked by a segment-pair scan that only finds interior
     crossings**, missing a ring that revisits a node. Killed by a figure-eight
