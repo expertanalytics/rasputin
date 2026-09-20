@@ -205,3 +205,8 @@ add_terrain_backend_test(test_noding_noded_pslg_builder unit/test_noding_noded_p
 # quietly. Registering it with add_terrain_backend_test would leave every
 # assertion passing and the proof gone.
 add_terrain_test(prop_noding_broad_phase property/prop_noding_broad_phase.cpp)
+
+# The driver's property suite. Invariant-critical. The file name is the one
+# testing.md's layout block reserves for 5b; `grep -n prop_noding_no_crossings
+# testing.md` resolves it.
+add_terrain_backend_test(prop_noding_no_crossings property/prop_noding_no_crossings.cpp)
