@@ -1516,22 +1516,34 @@ independent by construction**:
    diagonal against `(1,0)` and `(0,1)`, and on the anti-diagonal against `(0,0)`
    and `(1,1)` — the probe above, as a test. It calls nothing in 5b. **It stands
    whatever `node<K>` does**, including after 5d changes the predicate, at which
-   point its expected values flip to `false` on the second pair and it becomes
-   5d's regression test without being rewritten. That independence is the point:
+   point **all four** of its `segment_meets_cell` expectations flip to `false` —
+   both pairs are grazes through the *same* lattice corner, so a predicate change
+   that touches one touches all of them — and it becomes 5d's regression test
+   without being rewritten. An earlier revision said "the second pair"; the count
+   was wrong and the load-bearing half, *without being rewritten*, was not. That independence is the point:
    it pins the geometric fact that every other ruling here rests on, at a layer
    that no 5b decision can move.
 2. **The outcome, `NotConverged`.** The full driver on the tie, asserting the
    status and that `outcome.pslg` is disengaged. This one is 5d's to change.
 
 **And it is load-bearing either way**, which is the argument for carrying both
-rather than folding them. Case 2 is what kills mutant 5 — the loop condition
-spelled "until a round produces no new node". Under that spelling the tie
-converges to `Ok` at the end of round 1, because `(1,0)` and `(0,1)` are already
-nodes — they came from the other chains — so round 1 splits an edge at two
-**existing** nodes and manufactures none; under the correct spelling it runs to the
-cap. It is the only fixture in the increment on which those two spellings give
-different *statuses* rather than different edge counts, so if case 2 is dropped
-as "a test of a bug we are going to fix", mutant 5 loses its killer along with it.
+rather than folding them. Case 2 bears on mutant 5 — the loop condition spelled
+"until a round produces no new node". Under that spelling the tie converges to
+`Ok` at the end of round 1, because `(1,0)` and `(0,1)` are already nodes — they
+came from the other chains — so round 1 splits an edge at two **existing** nodes
+and manufactures none; under the correct spelling it runs to the cap.
+
+**The precise claim, because a looser one contradicts the mutants list.** Mutant
+5 below names the road-along-a-river fixture as its killer, and that fixture
+exists; so case 2 is *not* "mutant 5's only killer", and an earlier revision of
+this paragraph said it was. What is true, and what the suite records, is
+narrower: **case 2 is the only fixture in the increment on which the two loop
+spellings produce different *statuses* rather than different edge counts** — so
+it is the only killer that fails loudly, and the others fail by a count a reader
+has to interpret. That is the reason not to delete it as "a test of a bug we are
+going to fix", and it is stated narrowly on purpose: a warning that rests on a
+claim this document contradicts three screens further down is a warning someone
+will argue their way past.
 
 **`prop_noding_broad_phase.cpp` — invariant-critical, mutation round.** This is
 `05-noder.md` risk 12's whole mitigation and the one function in the increment
@@ -1633,7 +1645,11 @@ a different increment's:
    "until the verification passes". Killed by a fixture whose second round splits
    an existing edge at an *existing* node — the road-along-a-river at a spacing
    where the road's vertices snap into the river's cells on round 1 and the
-   river's edges must be split on round 2.
+   river's edges must be split on round 2. **The lattice-corner fixture's case 2
+   kills it too, and differently**: there the two spellings differ in *status*
+   rather than in edge count, which is the only loud failure of the two. See
+   "What the lattice-corner fixture is for" — the two entries are consistent and
+   were not always.
 6. **`max_rounds` treated as a success** — returning the last candidate instead of
    `NotConverged`. Killed by asserting that a non-`Ok` outcome's `pslg` is
    disengaged, on a fixture built to need more rounds than a cap of 1.
@@ -1757,54 +1773,44 @@ Continuing `05-noder.md`'s register, which ends at 12.
 16. **An exact corner graze makes the split pass and guarantee 14(b)
     inconsistent, and the input cannot converge.** Upgraded from "named" to a
     ruling, because the worked case above was checked and came back red; the
-    probe and the divergent orbit are there and are not repeated here.
+    probe and the divergent orbit are in "The tie does not converge" above and
+    are not repeated here.
 
     **What actually triggers it, corrected.** An earlier revision of this entry
     said "on axis-aligned cadastral data at a decimetre spacing that is not
     exotic". The probe's lines 3 and 4 refute that: an axis-parallel edge grazes
     no flanking cell, and axis-aligned runs are the *clean* case. The trigger is
     a constraint edge passing **exactly through a lattice corner** — a 45° run,
-    or any slope whose grid intersections land on corners — with nodes present on
+    or any slope whose grid crossings land on corners — with nodes present on
     **both** flanking cells. A 45° parcel or property boundary at a decimetre
     spacing is not exotic either, so the frequency claim survives its own
-    correction; only the geometry in it was wrong.
+    correction; only the geometry in it was wrong. It also does **not** require a
+    constructed point: `docs/increments/05d-corner-graze.md` carries a
+    configuration of round decimetres on a decimetre grid where `classify<K>`
+    reports `Disjoint` for every pair and the defect appears anyway.
 
     **Ruling: `NotConverged` is the right answer for 5b and the wrong answer for
-    the product, and the fix is deferred to a named increment 5d, owned by
-    `@architect`.** Not 5b: the fix changes what "meets" means, and the predicate
-    that would have to change is 5a's shipped `segment_meets_cell`, which has its
-    own mutation round and five mutants (13–17) aimed at it — reopening it inside
-    a PR that is already at ~445 lines and whose suites are committed red buys a
-    second unreviewed decision for the price of one. Not 5c either: 5c is the
-    crossing, its budget is Python surface, and a predicate change landing in the
-    same PR as the binding would be invisible under it.
+    the product, and the fix is `docs/increments/05d-corner-graze.md`**, owned by
+    `@architect`. Not 5b: the fix changes 5a's shipped `segment_meets_cell`,
+    which has its own mutation round and mutants 13–17 aimed at it, and
+    reopening it inside a PR that is already at ~445 lines and whose suites are
+    committed red buys a second unreviewed decision for the price of one. Not 5c
+    either: 5c is the crossing, its budget is Python surface, and a predicate
+    change landing in the same PR as the binding would be invisible under it.
 
-    **What 5d is, named now so it is not re-derived.** The geometric fact the
-    probe exposes is that a corner-only touch is the case where the segment meets
-    the closed cell in a **single point**, at distance exactly `h/√2` from
-    `world(g)` — the maximum the hot pixel admits, and the one distance at which
-    "on the edge" and "off the edge" are both defensible. Closed cells answer
-    *on*; that answer is what demands the split, and the split is what
-    reintroduces the violation. 5d replaces `segment_meets_cell` in **both** the
-    split rule and 14(b) with a predicate that excludes a single-point corner
-    touch and is otherwise identical. It is *not* half-open cells: half-open cells
-    are direction-dependent and would reopen the T-junction-detection question
-    the audit closed, whereas excluding a corner-only touch is symmetric, is a
-    measure-zero change to the accepted set, and leaves every genuine T-junction —
-    which meets a cell in a sub-segment of positive length — detected exactly as
-    now. The L-shaped chain that the probe's lines 3 and 4 show to be clean is the
-    fixpoint 5d converges to.
+    **The specification is in that file and is not duplicated here** — what the
+    replacement predicate is, why it is not half-open cells, which existing
+    assertions invert, and what it costs the 5a mutation round. This entry states
+    only what 5b ships in the meantime: **`NotConverged`**, with the message
+    naming the spacing, plus the lattice-corner fixture, which is what makes the
+    defect visible the moment anyone re-opens the question. The residual is that
+    between 5b and 5d a user with a 45° breakline can be told to refine a spacing
+    that may not help them. Refining does not remove the pathology, it re-rolls
+    it: the lattice moves, and whether the flanking cells of some corner on that
+    run still hold nodes is a fresh question at every `h`. That is the part a
+    reader must not miss, and it is why the lever column for `NotConverged` in
+    the status table carries a second sentence — which 5d deletes.
 
-    **What 5b ships in the meantime, and it is not nothing.** `NotConverged`,
-    with the message naming the spacing, plus the lattice-corner fixture, which
-    is what makes the defect visible the moment anyone re-opens the question.
-    **This entry is 5d's specification**; the residual is that between 5b and 5d
-    a user with a 45° breakline can be told to refine a spacing that may not
-    help them. Refining does not remove the pathology, it re-rolls it: the
-    lattice moves, and whether the flanking cells of some corner on that run
-    still hold nodes is a fresh question at every `h`. That is the part a reader
-    must not miss, and it is why the lever column for `NotConverged` in the status table now carries a
-    second sentence.
 17. **The verifier shares `segment_meets_cell<K>` with the driver.** That is
     borrowing a *predicate*, which `computational-geometry/SKILL.md` licenses,
     and not borrowing *records*, which it forbids — but it is one shared object,
