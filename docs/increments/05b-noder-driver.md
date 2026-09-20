@@ -1043,7 +1043,11 @@ input produced at increment 4, which is where the failure moved from.
 **The lever for `NotConverged` has an exception and the message cannot tell you
 which case you are in.** Risk 1 — snap rounding creating a crossing that was not
 in the input — is genuinely cured by a finer spacing. Risk 16's corner graze is
-scale-invariant and is not: halving `h` reproduces it at the next lattice corner.
+not reliably cured by one: refining moves the lattice, so whether the flanking
+cells still hold nodes is re-rolled rather than fixed, and a spacing that cures
+one corner can create another elsewhere in the same data. For any *given*
+fixture a different spacing usually does clear it, which is why the lever is
+still worth printing; what it is not is a guarantee.
 5b ships both under one status because the noder cannot distinguish them without
 5d's predicate, and naming that here is cheaper than a status row that would have
 to be deleted when 5d lands.
@@ -1422,13 +1426,15 @@ a different increment's:
     `node_of_input_vertex` total over the input's vertex array — so the extra
     vertex *is* a node and the second run has exactly one more. Node ids are the
     set's sorted order, so the extra vertex also shifts every id that sorts after
-    it, and a naive index-by-index comparison fails on correct output. The
-    assertion is therefore over the node set as a **set of `GridPoint`s**: the
-    second run's set equals the first's plus exactly the one snapped extra
-    vertex. Bit-identity of the coordinates follows from `world`'s determinism
-    and does not need asserting separately. The mutant dies because an anchored
-    `snap` moves the bounding box and therefore moves *every* node, so the two
-    sets differ by far more than one point.
+    it, and a naive index-by-index comparison fails on correct output. Two
+    assertions restore it, and the second is a property of the fixture rather
+    than of the code: the node count is exactly one greater, and the extra
+    vertex is **placed so that it sorts last** — a grid index larger in `ix`
+    than anything in the domain — so no existing id moves and the
+    index-by-index coordinate comparison is legitimate again. Placing it there
+    is part of the fixture, not an accident of it. The mutant dies because an
+    anchored `snap` moves the bounding box and therefore moves *every* node, so
+    the comparison fails at the first index rather than only at the last.
 13. **The verifier's clause 14(b) returning `true` unconditionally**, or checking
     `on_segment<K>` instead of `segment_meets_cell<K>`. Killed **only** by
     `test_noding_noded_pslg_builder.cpp`'s hand-built T-junction candidate — not
@@ -1534,10 +1540,11 @@ Continuing `05-noder.md`'s register, which ends at 12.
     with the message naming the spacing, plus the lattice-corner fixture, which
     is what makes the defect visible the moment anyone re-opens the question.
     **This entry is 5d's specification**; the residual is that between 5b and 5d
-    a user with a 45° breakline can be told to refine a spacing that will not
-    help them, because the pathology is scale-invariant — halving `h` reproduces
-    it at the next corner down. That is the part a reader must not miss, and it
-    is why the lever column for `NotConverged` in the status table now carries a
+    a user with a 45° breakline can be told to refine a spacing that may not
+    help them. Refining does not remove the pathology, it re-rolls it: the
+    lattice moves, and whether the flanking cells of some corner on that run
+    still hold nodes is a fresh question at every `h`. That is the part a reader
+    must not miss, and it is why the lever column for `NotConverged` in the status table now carries a
     second sentence.
 17. **The verifier shares `segment_meets_cell<K>` with the driver.** That is
     borrowing a *predicate*, which `computational-geometry/SKILL.md` licenses,
