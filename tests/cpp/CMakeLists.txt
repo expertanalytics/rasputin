@@ -191,3 +191,8 @@ add_terrain_backend_test(test_noding_noded_pslg unit/test_noding_noded_pslg.cpp)
 # 10: a const NodedPslg needs no synchronisation, which is what lets 5c release
 # the GIL around node() and read the result from whichever thread it lands on.
 target_link_libraries(test_noding_noded_pslg PRIVATE Threads::Threads)
+
+# The verifier. Invariant-critical: the only suite in 5b that can fail when the
+# VERIFIER is broken, which is the whole reason NodedPslgBuilder is a separate
+# type rather than a pass inside node<K>'s loop.
+add_terrain_backend_test(test_noding_noded_pslg_builder unit/test_noding_noded_pslg_builder.cpp)
