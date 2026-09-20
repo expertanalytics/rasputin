@@ -316,13 +316,15 @@ TEST_CASE("the unit diagonal grazes both flanking cells and the tie is exact",
     // the anti-diagonal through the same lattice corner, so it grazes the closed
     // cells of (0,0) and (1,1) -- neither of which is an endpoint of it.
     //
-    // 05b-noder-driver.md, "The unit diagonal through a lattice corner", asserts
-    // the opposite: "Guarantee 14 still holds on it, which @tester should check
-    // by hand rather than assume". Checked by hand, and it does not. The design
-    // checks only 14(a), over edge PAIRS, and 14(a) does hold: the two
-    // non-consecutive edges are parallel and disjoint. It never asks 14(b) of the
-    // chain's own endpoints against its own middle edge. This is a design defect,
-    // not a test defect, and the case below is its consequence.
+    // An earlier revision of 05b-noder-driver.md, "The unit diagonal through a
+    // lattice corner", asserted the opposite -- that guarantee 14 still holds
+    // here and @tester should check it by hand rather than assume. Checked by
+    // hand, and it does not; the design now records that correction and keeps
+    // the refuted bullet as the shape of the error. What it checked was 14(a),
+    // over edge PAIRS, and 14(a) does hold: the two non-consecutive edges are
+    // parallel and disjoint. It never asks 14(b) -- a (node, edge) claim -- of
+    // the chain's own endpoints against its own middle edge. This case pins that
+    // arithmetic, and the case below is its consequence.
     const Segment2 middle{grid.world(GridPoint{0, 1}), grid.world(GridPoint{1, 0})};
     REQUIRE(segment_meets_cell<DefaultKernel>(grid, middle, GridPoint{0, 0}));
     REQUIRE(segment_meets_cell<DefaultKernel>(grid, middle, GridPoint{1, 1}));
@@ -339,6 +341,18 @@ TEST_CASE("a constraint through a lattice corner flanked by nodes does not conve
     // -- a finer or coarser spacing moves the corner off the lattice. What is
     // NOT right is Ok, and a driver that reports Ok here has either skipped the
     // verification pass or is running a verifier that agrees with it.
+    //
+    // DO NOT DELETE THIS CASE AS "A TEST OF A BUG WE ARE GOING TO FIX". Its
+    // expected status is increment 5d's to change, but the fixture is mutant 5's
+    // killer -- the loop condition spelled "until a round produces no new node"
+    // instead of "until the verification passes". Under that spelling the tie
+    // converges to Ok at the end of round 1, because (1,0) and (0,1) are already
+    // nodes from the flanking chains, so round 1 splits an edge at two EXISTING
+    // nodes and manufactures none; under the correct spelling it runs to the cap.
+    // 05b-noder-driver.md, "What the lattice-corner fixture is for", records this
+    // as the only fixture in the increment on which the two spellings differ in
+    // STATUS rather than in edge count, so deleting it costs mutant 5 the only
+    // killer that fails loudly.
     const SnapGrid grid{0.1};
     PslgBuilder b;
     b.add_chain(square(-10.0, -10.0, 10.0, 10.0), ChainRole::Outer);
@@ -526,31 +540,45 @@ TEST_CASE("a hole smaller than one cell collapses and is refused", "[noding][nod
 
 TEST_CASE("a hole whose winding flips under snapping is refused, never reversed",
           "[noding][node][status]") {
-    // MUTANT 8: the winding re-check dropped, or a reversed ring silently
-    // repaired. 05-noder.md risk 3 calls that a silent wrong mesh with no
-    // diagnostic anywhere -- the hole is meshed as an island and nothing says so.
-    //
     // THIS CASE ASSERTS NonSimpleRing, NOT RingDegenerateAfterSnap, AND THAT IS
-    // A FINDING ABOUT THE DESIGN RATHER THAN A CONCESSION.
+    // NOW THE DOCUMENTED BEHAVIOUR RATHER THAN AN OBSERVATION AWAITING A RULING.
+    // 05b-noder-driver.md, "`RingDegenerateAfterSnap` is a self-check, and risk
+    // 3's mitigation moves", demotes that status to a self-check with a name,
+    // exactly like MalformedOutput and CdtStatus::NotNoded: it stays in the enum
+    // and the check stays in the code, but it is not a diagnosis anybody is owed
+    // a fixture for, because no input can reach it.
     //
     // The sliver below does flip: clockwise before snapping and counterclockwise
     // after, measured against the shipped orientation<K> at spacing 1.0, where
-    // (0, 0), (10, 0.4), (20, 0.6) becomes (0, 0), (10, 0), (20, 1). But the
-    // noder never gets to ask. A winding flip requires the ring's signed area to
-    // fall below the rounding scale, which puts a vertex within half a cell of
-    // the edge opposite it -- and that is exactly the grazing condition
-    // segment_meets_cell tests. So the split pass reintroduces the middle node
-    // into the closing edge, the closed chain visits it twice, and
-    // NonSimpleRing is reported first.
+    // (0, 0), (10, 0.4), (20, 0.6) becomes (0, 0), (10, 0), (20, 1). The noder
+    // never gets to ask. A winding flip requires the ring's signed area to fall
+    // below the rounding scale, which puts a vertex within half a cell of the
+    // edge opposite it -- exactly the grazing condition segment_meets_cell
+    // tests. Guarantee 14(b) then REQUIRES that edge to be split there, the
+    // split repeats a node id, and NonSimpleRing fires one stage before ring
+    // re-validation ever runs.
     //
     // The argument is structural, not an accident of these numbers: thin enough
     // to flip IS near enough to graze. Four candidate slivers were measured and
-    // all four grazed. RingDegenerateAfterSnap may therefore be unreachable from
-    // a valid Pslg, which would make it a self-check like MalformedOutput rather
-    // than a diagnosis -- and it would mean mutant 8 has no killing fixture
-    // anywhere in this increment, because dropping the winding check changes
-    // nothing an input can show. That is the design's question to answer, not a
-    // suite that can answer it.
+    // all four grazed; the residual -- a ring simple before snapping, simple and
+    // node-repeat-free after it, and reversed -- was settled by search. See
+    // "The bounded ring search, and the intermediate result that looks like a
+    // refutation": a bounded exhaustive enumeration of 4-gons and 5-gons, run by
+    // two independently written programs with different enumerations, simplicity
+    // filters and lattices, reports FLIPPED == grazed and SURVIVORS == 0 in every
+    // block. That is evidence and not a theorem -- two ring sizes, small lattices
+    // -- and the design says so.
+    //
+    // MUTANT 8 (the winding re-check dropped, or a reversed ring silently
+    // repaired) IS THEREFORE STRUCK: it has no killer input anywhere in this
+    // increment, and a mutant with no killer is not a weaker mutant, it is a
+    // claim the round would have shipped as covered. Its live half is mutant 10,
+    // which kills the same silent wrong mesh through the node repeat that does
+    // occur. 05-noder.md risk 3 -- a reversed hole meshed as an island with no
+    // diagnostic anywhere -- is mitigated by guarantee 14(b) plus the node-repeat
+    // check, one stage earlier than that document places it; the winding re-check
+    // is defence in depth behind them. Mutant 8 is reinstated the moment the
+    // search turns up a survivor at any ring size.
     PslgBuilder b;
     b.add_chain(square(-50.0, -50.0, 50.0, 50.0), ChainRole::Outer);
     b.add_chain(std::vector<Point2>{Point2{0.0, 0.0}, Point2{10.0, 0.4}, Point2{20.0, 0.6}},
@@ -560,10 +588,10 @@ TEST_CASE("a hole whose winding flips under snapping is refused, never reversed"
     REQUIRE(out.status == NodeStatus::NonSimpleRing);
     REQUIRE_FALSE(out.ok());
 
-    // What the fixture can still pin, whichever status wins: the hole is NOT
-    // silently reversed and handed back as a mesh. 05-noder.md risk 3's failure
-    // mode is a hole meshed as an island with no diagnostic, and an engaged
-    // pslg here would be exactly that.
+    // What the fixture pins beyond the status itself: the hole is NOT silently
+    // reversed and handed back as a mesh. 05-noder.md risk 3's failure mode is a
+    // hole meshed as an island with no diagnostic, and an engaged pslg here
+    // would be exactly that.
     REQUIRE_FALSE(out.pslg.has_value());
     REQUIRE_FALSE(out.message.empty());
 }
