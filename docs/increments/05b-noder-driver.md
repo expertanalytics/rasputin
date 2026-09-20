@@ -6,7 +6,8 @@ own worked degeneracy; the section that asked for the check is corrected in
 place rather than reworded, the consequence is ruled on as risk 16, and two
 further findings — `RingDegenerateAfterSnap`'s reachability and
 `NodedPslgBuilder::build`'s status for a guarantee-14 refusal — are settled in
-the sections that own them. Three smaller measured corrections are folded into
+the sections that own them, the first of them by a bounded exhaustive search
+whose program and output are inline. Three smaller measured corrections are folded into
 mutants 11 and 12 and the builder's suite. No production line count moves.
 Also: **5b is split before the red step, not after it.**
 `docs/increments/05-noder.md` designed 5a in full and fixed 5b's seam; this
@@ -997,19 +998,211 @@ plus the node-repeat check**, and the winding re-check is defence in depth behin
 it. `05-noder.md`'s entry is corrected accordingly in this PR; the risk itself is
 real and unchanged, only its mitigation moves.
 
-**What is and is not settled without an implementation.** The collinear case is
-settled by the argument above, which needs no code. The sliver case is settled by
-`@tester`'s four measurements plus the area bound — a simple ring's signed area
-changes by at most its perimeter times `h/√2` under snapping, so a flip needs
-area below that, which is the sliver regime. **Not settled**: that no ring exists
+**The collinear and sliver cases are settled by argument; the residual was
+settled by search.** The collinear case needs no code — a ring whose nodes are
+exactly collinear has a spanning edge containing the others. The sliver case has
+the area bound behind it: a simple ring's signed area changes by at most its
+perimeter times `h/√2` under snapping, so a flip needs area below that, which is
+the sliver regime. What neither settles is the residual — **that no ring exists
 which is simple before snapping, simple *and* node-repeat-free after it, and
-reversed. What would settle it is a bounded exhaustive search rather than an
-argument — every simple 4-gon and 5-gon with vertices on a small integer lattice,
-snapped at a spacing that moves them, checking for a flipped winding with no
-repeated node id. That is a throwaway of perhaps thirty lines, it is nobody's
-suite, and it is worth running **before 5b's green commit** because a single
-counterexample promotes `RingDegenerateAfterSnap` back to a diagnosis and gives
-mutant 8 its killer. Owner: `@architect`, at the same time as 5d's predicate.
+reversed**, since such a ring would reach the winding check and make
+`RingDegenerateAfterSnap` a diagnosis after all. That one is not an argument's to
+settle, so it was searched.
+
+#### The bounded ring search, and the intermediate result that looks like a refutation
+
+Read the two lines of each block in order, because **the first line alone looks
+like a counterexample set and is not one**. A search that stops at "the winding
+flipped" reports 853 four-gons and 2,612 five-gons as refutations of the ruling
+and exits non-zero. Applying the mechanism's own filter — does any node's cell
+meet an edge it is not an endpoint of — takes every one of them to zero. The
+flip count and the graze count are **equal in all four blocks**, which is the
+claim, stated as a number rather than as a structural argument:
+
+```
+4-gons (0.25 step, 9x9 candidates, strict simplicity):
+  tested 782105 | winding flipped 853 | grazed (14(b) splits, NonSimpleRing first) 853 | SURVIVORS 0
+4-gons (0.25 step, 9x9 candidates, loose simplicity):
+  tested 782105 | winding flipped 853 | grazed (14(b) splits, NonSimpleRing first) 853 | SURVIVORS 0
+5-gons (0.50 step, 6x6 candidates, strict simplicity):
+  tested 449068 | winding flipped 0 | grazed (14(b) splits, NonSimpleRing first) 0 | SURVIVORS 0
+5-gons (0.50 step, 6x6 candidates, loose simplicity):
+  tested 543876 | winding flipped 2612 | grazed (14(b) splits, NonSimpleRing first) 2612 | SURVIVORS 0
+```
+
+**All 3,465 flips graze. Not most — every one.** The program, inline because a
+scratch directory is not a citation:
+
+```cpp
+// /tmp/ringsearch.cpp
+// Bounded exhaustive search: does a ring exist that is simple and non-degenerate
+// BEFORE snapping, has no repeated snapped node id and is still simple AFTER,
+// and whose winding has flipped -- WITHOUT any node's cell meeting an edge it is
+// not an endpoint of? Such a ring would be reachable RingDegenerateAfterSnap.
+#include <algorithm>
+#include <cstdio>
+#include <vector>
+#include "terrain/core/snap_grid.hpp"
+#include "terrain/noding/intersect.hpp"
+#include "terrain/predicates/default_kernel.hpp"
+
+using namespace terrain;
+using K = pred::DefaultKernel;
+using noding::SegmentRelation;
+
+static double shoelace(const std::vector<Point2>& r) {
+    double t = 0.0;
+    const Point2 o = r[0];
+    for (std::size_t i = 1; i + 1 < r.size(); ++i) t += cross(r[i] - o, r[i + 1] - o);
+    return 0.5 * t;
+}
+
+// Simple: adjacent edges meet only at their shared endpoint (Touching, never
+// Overlapping), non-adjacent edges are Disjoint. Exact, via 5a's classify<K>.
+static bool simple(const std::vector<Point2>& r, bool strict) {
+    const std::size_t n = r.size();
+    for (std::size_t i = 0; i < n; ++i) {
+        const Segment2 a{r[i], r[(i + 1) % n]};
+        if (a.a.x == a.b.x && a.a.y == a.b.y) return false;
+        for (std::size_t j = i + 1; j < n; ++j) {
+            const Segment2 b{r[j], r[(j + 1) % n]};
+            const bool adj = (j == i + 1) || (i == 0 && j == n - 1);
+            const SegmentRelation rel = noding::classify<K>(a, b);
+            if (adj) {
+                if (rel != SegmentRelation::Touching) return false;
+            } else if (strict) {
+                if (rel != SegmentRelation::Disjoint) return false;
+            } else {
+                // Loose: proper crossings only. A vertex merely touching a
+                // non-adjacent edge is admitted.
+                if (rel == SegmentRelation::Crossing) return false;
+            }
+        }
+    }
+    return true;
+}
+
+// The mechanism under test: 14(b) over the ring's own nodes and its own edges.
+static bool grazes(const SnapGrid& g, const std::vector<GridPoint>& ids,
+                   const std::vector<Point2>& r) {
+    const std::size_t n = r.size();
+    for (std::size_t e = 0; e < n; ++e) {
+        const Segment2 s{r[e], r[(e + 1) % n]};
+        for (std::size_t v = 0; v < n; ++v) {
+            if (v == e || v == (e + 1) % n) continue;
+            if (noding::segment_meets_cell<K>(g, s, ids[v])) return true;
+        }
+    }
+    return false;
+}
+
+struct Counts { long tested = 0, flipped = 0, grazed = 0, survivors = 0; };
+
+static void run(const char* label, std::size_t n, double step, int side, bool strict) {
+    const SnapGrid g{1.0};
+    std::vector<Point2> cand;
+    for (int i = 0; i < side; ++i)
+        for (int j = 0; j < side; ++j) cand.push_back(Point2{i * step, j * step});
+
+    Counts c;
+    std::vector<std::size_t> pick(n);
+    const std::size_t m = cand.size();
+    // Every n-subset; every distinct cyclic order of it (first index pinned,
+    // reflections halved). Recursion-free combination walk.
+    for (std::size_t i = 0; i < n; ++i) pick[i] = i;
+    for (;;) {
+        std::vector<std::size_t> rest(pick.begin() + 1, pick.end());
+        std::sort(rest.begin(), rest.end());
+        do {
+            if (rest.back() < rest.front()) continue;  // drop the reflection
+            std::vector<Point2> pre{cand[pick[0]]};
+            for (std::size_t k : rest) pre.push_back(cand[k]);
+            if (!simple(pre, strict)) continue;
+            const double a0 = shoelace(pre);
+            if (a0 == 0.0) continue;
+
+            std::vector<GridPoint> ids;
+            std::vector<Point2> post;
+            for (const Point2& p : pre) {
+                ids.push_back(g.snap(p));
+                post.push_back(g.world(ids.back()));
+            }
+            bool repeat = false;
+            for (std::size_t x = 0; x < n && !repeat; ++x)
+                for (std::size_t y = x + 1; y < n && !repeat; ++y)
+                    repeat = (ids[x] == ids[y]);
+            if (repeat) continue;          // RingCollapsed / NonSimpleRing, refused earlier
+            if (!simple(post, strict)) continue;  // NonSimpleRing, refused earlier
+
+            ++c.tested;
+            const double a1 = shoelace(post);
+            if (a1 == 0.0 || (a1 > 0.0) == (a0 > 0.0)) continue;
+            ++c.flipped;
+            if (grazes(g, ids, post)) ++c.grazed; else ++c.survivors;
+        } while (std::next_permutation(rest.begin(), rest.end()));
+
+        std::size_t i = n;
+        while (i-- > 0) if (pick[i] != i + m - n) break;
+        if (i == static_cast<std::size_t>(-1)) break;
+        ++pick[i];
+        for (std::size_t j = i + 1; j < n; ++j) pick[j] = pick[j - 1] + 1;
+    }
+    std::printf("%s (%.2f step, %dx%d candidates, %s simplicity):\n"
+                "  tested %ld | winding flipped %ld | grazed (14(b) splits, "
+                "NonSimpleRing first) %ld | SURVIVORS %ld\n",
+                label, step, side, side, strict ? "strict" : "loose", c.tested, c.flipped, c.grazed, c.survivors);
+}
+
+int main() {
+    run("4-gons", 4, 0.25, 9, true);
+    run("4-gons", 4, 0.25, 9, false);
+    run("5-gons", 5, 0.5, 6, true);
+    run("5-gons", 5, 0.5, 6, false);
+    return 0;
+}
+```
+
+```sh
+c++ -std=c++20 -O2 -Iinclude /tmp/ringsearch.cpp build/libterrain_predicates.a -o /tmp/ringsearch && /tmp/ringsearch
+```
+
+Under four seconds. Simplicity is decided by 5a's own `classify<K>` rather than
+by a hand-rolled segment test, so the search borrows the *predicate* and none of
+the producer's records, per `computational-geometry/SKILL.md`. **Two simplicity
+filters are run, not one**, and the reason is that the strict one is the wrong
+instrument on its own: requiring non-adjacent edges to be `Disjoint` excludes
+rings where a vertex merely touches a non-adjacent edge, and on 5-gons that
+filter is so tight it admits **zero** flips — a search that measures nothing and
+whose output is indistinguishable from a search that measures everything and
+finds nothing. The loose filter, rejecting proper crossings only, is what
+produces the 2,612. On 4-gons the two filters agree exactly, which is the check
+that the loose one has not been loosened into admitting garbage.
+
+**The bound, stated honestly. This is evidence, not a theorem.** Two ring sizes,
+two small lattices, and the searched space is bounded by construction. It does
+*not* cover n > 5, non-convex configurations beyond what 5 vertices reach, or
+rings spanning many cells. One thing it covers more of than it appears to: the
+parameter is the **step-to-spacing ratio**, not the spacing, because `snap` is
+exactly scale-covariant on dyadic spacings — scaling the points and `h` together
+changes only an exponent and leaves every grid index, every orientation sign and
+every area sign identical. So "at `SnapGrid{1.0}`" is not the limitation it reads
+as; "at 4 and 8 sub-cell steps" is.
+
+**Consequences, all three measured rather than argued.**
+
+- The demotion of `RingDegenerateAfterSnap` to a self-check now rests on 3,465
+  measured flips with zero survivors, not on the structural sketch above.
+- **Mutant 8 stays struck, for a measured reason.** There is no killing input in
+  the searched space, and the rule stands: *a mutant with no killer is not a
+  weaker mutant, it is a claim the round would have shipped as covered.*
+- **`05-noder.md` risk 3's relocation is measured, not inferred.** Delete the
+  winding re-check and all 3,465 of these rings are still refused, by
+  `NonSimpleRing`, via 14(b) — which is exactly what the graze column counts.
+
+**What would reopen it** is one survivor at any size, which promotes the status
+back to a diagnosis and hands mutant 8 its killer. Re-running the program above
+at a larger `n` or a finer step is the cheap way to look, and it is the right
+thing to do before anyone *relies* on this beyond 5b.
 
 **Reporting: one status, one message, and the message carries the count.** The
 noder does not return a diagnostics vector, and the reason is
@@ -1400,7 +1593,10 @@ a different increment's:
    Its live half is mutant 10, which kills the same silent wrong mesh through
    the node repeat that actually occurs. **A mutant with no killer is not a
    weaker mutant; it is a claim that the round would have shipped as covered.**
-   Reinstated if the bounded search named in that section finds a counterexample.
+   The bounded ring search in that section has since put a number on it: 3,465
+   winding flips across two ring sizes, **every one of them grazed**, zero
+   survivors. So the absence of a killer is measured rather than assumed.
+   Reinstated the moment that search turns up a survivor at any size.
 9. **The `RingCollapsed` check dropped.** Killed by a hole smaller than one cell.
 10. **`NonSimpleRing` checked by a segment-pair scan that only finds interior
     crossings**, missing a ring that revisits a node. Killed by a figure-eight

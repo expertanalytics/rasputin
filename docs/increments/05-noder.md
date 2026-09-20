@@ -1615,8 +1615,11 @@ something a later increment depends on; this one would not.
    the ring is still refused. **The mitigation is guarantee 14(b) plus the
    node-repeat `NonSimpleRing` check**; the winding re-check is defence in depth
    behind it, and `NodeStatus::RingDegenerateAfterSnap` is a self-check with a
-   name rather than a diagnosis. The ruling, the mechanism, the limit of the
-   argument and the bounded search that would settle the residual are in
+   name rather than a diagnosis. **The relocation is measured, not inferred**: a
+   bounded exhaustive search over 4- and 5-gons found 3,465 rings whose winding
+   flips under snapping and *every one of them* is caught by 14(b), so deleting
+   the winding re-check refuses all 3,465 anyway. The ruling, the mechanism, the
+   search with its program and its honest bound, and what would reopen it are in
    `docs/increments/05b-noder-driver.md`, section "`RingDegenerateAfterSnap` is a
    self-check". This correction is increment 5b's, made here because this is
    where the claim lives.
