@@ -210,3 +210,9 @@ add_terrain_test(prop_noding_broad_phase property/prop_noding_broad_phase.cpp)
 # testing.md's layout block reserves for 5b; `grep -n prop_noding_no_crossings
 # testing.md` resolves it.
 add_terrain_backend_test(prop_noding_no_crossings property/prop_noding_no_crossings.cpp)
+
+# node.hpp's SECOND file: the driver's hand-built fixtures. This is Gate B's one
+# declared relaxation -- a property file and a fixture file for the same header
+# split along a different axis than the one Gate B protects, and both would move
+# to a 5b-ii together if a seam is ever cut.
+add_terrain_backend_test(test_noding_node unit/test_noding_node.cpp)
