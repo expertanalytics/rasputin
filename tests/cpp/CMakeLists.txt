@@ -196,3 +196,12 @@ target_link_libraries(test_noding_noded_pslg PRIVATE Threads::Threads)
 # VERIFIER is broken, which is the whole reason NodedPslgBuilder is a separate
 # type rather than a pass inside node<K>'s loop.
 add_terrain_backend_test(test_noding_noded_pslg_builder unit/test_noding_noded_pslg_builder.cpp)
+
+# The broad phase. Invariant-critical, and it USES THE PLAIN HELPER
+# DELIBERATELY, which is the same kind of claim the CDT seam suite above makes.
+# broad_phase.hpp is kernel-free -- it compares bounding boxes and never asks an
+# orientation -- so terrain_predicates is absent from this link line and a broad
+# phase that ever reaches for a predicate fails to LINK here rather than passing
+# quietly. Registering it with add_terrain_backend_test would leave every
+# assertion passing and the proof gone.
+add_terrain_test(prop_noding_broad_phase property/prop_noding_broad_phase.cpp)
