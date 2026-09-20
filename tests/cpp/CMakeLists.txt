@@ -173,3 +173,21 @@ add_terrain_test(test_noding_node_set unit/test_noding_node_set.cpp)
 # terrain_cdt, and a link line that pulled either in would hide a dependency
 # this header must not grow.
 add_terrain_test(test_edge_properties unit/test_edge_properties.cpp)
+
+# Noding, increment 5b: the noder's topology half -- the output type, the broad
+# phase, the verifier and the driver.
+#
+# FIVE SUITES AGAINST FOUR HEADERS, which is Gate B's mapping plus its one
+# declared relaxation (docs/increments/05b-noder-driver.md, "What is worth
+# testing"): node.hpp gets a property file and a fixture file, split along a
+# different axis than the one Gate B protects. Everything else is one test file
+# per production header.
+#
+# No target here links terrain_cdt. Nothing in 5b knows the CDT exists; 5c is
+# where that changes, and the link line is where it will show.
+add_terrain_backend_test(test_noding_noded_pslg unit/test_noding_noded_pslg.cpp)
+
+# The concurrent-read case in the NodedPslg suite is 5b's analogue of guarantee
+# 10: a const NodedPslg needs no synchronisation, which is what lets 5c release
+# the GIL around node() and read the result from whichever thread it lands on.
+target_link_libraries(test_noding_noded_pslg PRIVATE Threads::Threads)
