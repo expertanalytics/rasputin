@@ -1601,10 +1601,25 @@ something a later increment depends on; this one would not.
    input precision and boundary tolerance (`parallel_refinement.md:130-137`).
 3. **The winding re-check is a consequence nothing in the tree anticipated.**
    `Pslg` guarantee 6 is a statement about pre-snap coordinates and this document
-   is the first to say so. If it is dropped from the implementation, a reversed
-   sliver hole reaches `detria` and meshes as an island with no diagnostic
-   anywhere — a silent wrong mesh, which is the failure class this project
-   spends its mutation budget avoiding.
+   is the first to say so. The risk is real: a reversed sliver hole that reaches
+   `detria` meshes as an island with no diagnostic anywhere — a silent wrong
+   mesh, which is the failure class this project spends its mutation budget
+   avoiding.
+
+   **The mitigation is not the winding re-check, and this entry said it was.**
+   Measured during increment 5b's red round: four candidate slivers built to flip
+   a hole's winding were all refused as `NonSimpleRing` before the winding check
+   ran, because a winding flip puts a vertex inside the hot pixel of the opposite
+   edge, the split pass is then *required* by guarantee 14(b) to split that edge
+   at it, and the ring repeats a node id. Drop the winding re-check entirely and
+   the ring is still refused. **The mitigation is guarantee 14(b) plus the
+   node-repeat `NonSimpleRing` check**; the winding re-check is defence in depth
+   behind it, and `NodeStatus::RingDegenerateAfterSnap` is a self-check with a
+   name rather than a diagnosis. The ruling, the mechanism, the limit of the
+   argument and the bounded search that would settle the residual are in
+   `docs/increments/05b-noder-driver.md`, section "`RingDegenerateAfterSnap` is a
+   self-check". This correction is increment 5b's, made here because this is
+   where the claim lives.
 4. **Construction error is unbounded for near-parallel pairs**, and the clamp
    bounds it only to the overlap region. For such a pair the combinatorial answer
    is whatever snap rounding says. Not fixable without exact constructions, which

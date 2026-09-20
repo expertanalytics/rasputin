@@ -1,6 +1,14 @@
 # Increment 5b — the noder's topology half
 
-Status: design settled, **and 5b is split before the red step, not after it.**
+Status: design settled and **amended after the red round**, which refuted one of
+its own claims. `@tester`'s suite found guarantee 14 false on this document's
+own worked degeneracy; the section that asked for the check is corrected in
+place rather than reworded, the consequence is ruled on as risk 16, and two
+further findings — `RingDegenerateAfterSnap`'s reachability and
+`NodedPslgBuilder::build`'s status for a guarantee-14 refusal — are settled in
+the sections that own them. Three smaller measured corrections are folded into
+mutants 11 and 12 and the builder's suite. No production line count moves.
+Also: **5b is split before the red step, not after it.**
 `docs/increments/05-noder.md` designed 5a in full and fixed 5b's seam; this
 document discharges that obligation and overturns three things in it on
 evidence. The re-estimate below comes to **~786 non-comment production lines**
@@ -593,20 +601,111 @@ the tie-break). Three things follow, and the third is the one that matters:
   the closed `h/√2`-neighbourhood — so the one-way Hausdorff bound
   (`05-noder.md`'s fix 8) holds, at equality. This is the fixture that shows the
   bound is tight and not merely an over-estimate.
-- Guarantee 14 still holds on it, which `@tester` should check by hand rather
-  than assume: consecutive edges share an endpoint (`Touching`), and the two
-  non-consecutive edges `(0,0)-(0,1)` and `(1,0)-(1,1)` are parallel and
-  disjoint.
+- **Guarantee 14 does not hold on it. It was checked and it is false**, and the
+  correction is the next subsection. An earlier revision of this bullet read
+  "Guarantee 14 still holds on it, which `@tester` should check by hand rather
+  than assume", and gave the reason: consecutive edges share an endpoint
+  (`Touching`), and the two non-consecutive edges `(0,0)-(0,1)` and
+  `(1,0)-(1,1)` are parallel and disjoint. Every clause of that is true and the
+  conclusion is still wrong, because all of it is about **14(a)**, which quantifies
+  over edge *pairs*. It never asks 14(b) — a (node, edge) claim — of the resolved
+  chain's own interior nodes against its own middle edge. The bullet is kept in
+  the record rather than deleted, because it is the shape of the error, not a typo:
+  a clause that was checked against the wrong quantifier.
 
-**Named fixture, `test_noding_node.cpp`: the lattice-corner tie.** It is the
-cheapest input that exercises the tie-break, the grazed corner and the tightness
-of the deformation bound at once, and it is the one case where a reader's
-intuition ("the split points lie on the segment") is visibly wrong.
+#### The tie does not converge, and the probe that shows it
 
-For a **closed ring** the same zigzag can in principle make the ring non-simple,
-which the builder would reject as `NonSimpleRing`. That is risk 16 below rather
-than a design change: the input needed is a ring edge passing exactly through a
-lattice corner flanked by two nodes, at one cell's separation.
+`@tester` ran the check this section asked for and it came back red; it was then
+re-run independently. The probe, against 5a's shipped
+`segment_meets_cell<DefaultKernel>` and `SnapGrid{1.0}`, linking
+`libterrain_predicates.a` — build directory per `CLAUDE.md` §4, and any of the
+tree's `build*` directories carries the archive:
+
+```cpp
+// /tmp/probe5b.cpp
+#include <cstdio>
+#include "terrain/core/snap_grid.hpp"
+#include "terrain/noding/intersect.hpp"
+#include "terrain/predicates/default_kernel.hpp"
+using namespace terrain;
+using K = pred::DefaultKernel;
+static void probe(const char* n, GridPoint a, GridPoint b, const SnapGrid& gr,
+                  GridPoint c, GridPoint d) {
+    Segment2 s{gr.world(a), gr.world(b)};
+    std::printf("%s (%d,%d)-(%d,%d): meets (%d,%d)=%d  meets (%d,%d)=%d\n", n,
+                (int)a.ix, (int)a.iy, (int)b.ix, (int)b.iy, (int)c.ix, (int)c.iy,
+                (int)noding::segment_meets_cell<K>(gr, s, c),
+                (int)d.ix, (int)d.iy,
+                (int)noding::segment_meets_cell<K>(gr, s, d));
+}
+int main() {
+    SnapGrid gr{1.0};
+    probe("diag", {0,0}, {1,1}, gr, {1,0}, {0,1});   // the input edge
+    probe("mid ", {0,1}, {1,0}, gr, {0,0}, {1,1});   // the resolved chain's middle edge
+    probe("e1  ", {0,0}, {0,1}, gr, {1,0}, {1,1});   // its first edge
+    probe("e3  ", {1,0}, {1,1}, gr, {0,0}, {0,1});   // its third edge
+    return 0;
+}
+```
+
+```sh
+c++ -std=c++20 -Iinclude /tmp/probe5b.cpp build/libterrain_predicates.a -o /tmp/probe5b && /tmp/probe5b
+```
+
+prints
+
+```
+diag (0,0)-(1,1): meets (1,0)=1  meets (0,1)=1
+mid  (0,1)-(1,0): meets (0,0)=1  meets (1,1)=1
+e1   (0,0)-(0,1): meets (1,0)=0  meets (1,1)=0
+e3   (1,0)-(1,1): meets (0,0)=0  meets (0,1)=0
+```
+
+Line 1 is why the edge is split at both. Line 2 is the finding: the resolved
+chain's **middle edge is the anti-diagonal through the same lattice corner**, so
+it grazes the closed cells of `(0,0)` and `(1,1)` — neither of which is an
+endpoint of it. **That is a 14(b) violation in the output of round 1**, and
+lines 3 and 4 say it is the only one: the two outer edges are clean.
+
+So round 2 must split the middle edge at `(0,0)` and `(1,1)`. Their projections
+along `(0,1) → (1,0)` are again exactly equal, the tie again resolves
+lexicographically, and the middle edge becomes `(0,1), (0,0), (1,1), (1,0)` —
+whose own middle edge is the **original diagonal**, which line 1 says grazes
+`(1,0)` and `(0,1)`. Round 3 splits that. The two configurations map into each
+other, the chain gains two positions per round and never satisfies 14(b):
+
+```
+round 0: (0,0) (1,1)
+round 1: (0,0) (0,1) (1,0) (1,1)
+round 2: (0,0) (0,1) (0,0) (1,1) (1,0) (1,1)
+round 3: (0,0) (0,1) (0,0) (0,1) (1,0) (1,1) (1,0) (1,1)
+```
+
+**`Ok` is the one answer this input cannot receive**, at any `max_rounds`. The
+terminating answer is `NotConverged`, and it is reached by the cap rather than by
+a fixpoint. Note also that from round 2 the chain **doubles back** — `05-noder.md`
+risk 10 after all, one round later than the bullet above says — and that the
+repeated node pairs are duplicate edges, which amended 14(a) permits, so 14(a)
+never fires and 14(b) is carrying the whole refusal.
+
+A satisfying configuration does exist — lines 3 and 4 show that the L-shaped
+chain `(0,0) → (0,1) → (1,1)` grazes nothing — and the split pass cannot reach
+it, because the pass is defined to split an edge at **every** node whose closed
+cell it meets, and 14(b) as written demands exactly that. The two are
+inconsistent on an exact corner graze. This is a design defect, not a
+`@tester` finding about an implementation, and it is ruled on as risk 16 below.
+
+**Named fixture, `test_noding_node.cpp`: the lattice-corner tie.** Its purpose
+has changed with the finding and is stated in full under risk 16; it is still
+the cheapest input that exercises the tie-break, the grazed corner and the
+tightness of the deformation bound at once, and it is now also the only fixture
+that reaches `NotConverged`.
+
+For a **closed ring** the same zigzag makes the ring non-simple by round 2 — the
+repeated node ids above are precisely what the `NonSimpleRing` check looks for —
+so a ring hits `NonSimpleRing` where an open chain hits `NotConverged`. Both are
+risk 16; the input needed is a ring edge passing exactly through a lattice corner
+flanked by two nodes, at one cell's separation.
 
 ### `noding/broad_phase.hpp` — the index, and its one query
 
@@ -720,6 +819,32 @@ reached and to another round otherwise, and maps 11/12/13/16 straight through as
 things to the person reading them**: `NotConverged` says "try a finer spacing",
 `MalformedOutput` says "this is our bug".
 
+**And `build()` itself must name them, which an earlier revision left to the
+driver alone.** `@tester` found the gap: the driver cannot map what it cannot
+distinguish, and `build<K>()` returns a single `NodeStatus`, so the discriminator
+has to be *in* that status or nowhere. Confirmed as `@tester` pinned it:
+
+> **`NodedPslgBuilder::build<K>()` returns `NodeStatus::NotConverged` for a
+> refusal of guarantee 14 (either clause) and `NodeStatus::MalformedOutput` for a
+> refusal of 11, 12, 13 or 16.**
+
+The reading that makes that coherent, and it belongs at the head of the header
+rather than in a suite comment: **`NodeStatus` is the status of an *outcome*, not
+of a check. The builder reports the status the driver would report if this were
+the last round.** Under that reading `build()`'s mapping is the identity at the
+cap — the driver forwards rather than translates — and the only place the name
+reads oddly is the unit suite, where a hand-built T-junction candidate comes back
+`NotConverged` having converged nothing. That oddity is confined to one file read
+by people who have this paragraph; a third enumerator to remove it would cost an
+enum row, a `describe` arm, a Python enum member at 5c and a mapping the driver
+would immediately collapse. The nine-row enum stands.
+
+A refusal that violates **both** 14(b) and 11/12/13/16 reports `MalformedOutput`:
+the self-check outranks the diagnosis, because a builder that is being handed
+malformed arrays has no basis for saying anything about convergence. 14(a) and
+14(b) both reporting is not such a case — both are 14, both are `NotConverged`,
+and see the partial-overlap note under the builder's suite.
+
 **Why guarantee 15 is not the builder's.** Its oracle must be built from the
 *input* — that is `05-noder.md`'s guarantee-15 ruling, arrived at after the
 obvious check turned out to be the dedup restating itself — and the builder does
@@ -821,7 +946,9 @@ Between 5 and 6, for every closed chain:
   `orientation<K>` (`include/terrain/core/ring.hpp:233`). An `Outer` ring that is
   no longer counterclockwise, or a `Hole` no longer clockwise, or either now
   `Collinear` → `RingDegenerateAfterSnap`. **Never silently reversed**, following
-  increment 3's stage 5 rule.
+  increment 3's stage 5 rule. **It is a self-check, not a diagnosis** — see
+  "`RingDegenerateAfterSnap` is a self-check" below, which is the ruling and also
+  relocates `05-noder.md` risk 3's mitigation.
 - **Simplicity**, in the one form the noder can decide for free: a closed chain
   that visits the same node id twice. → `NonSimpleRing`. This is the
   figure-eight case, and it is detected by a `std::vector<std::uint32_t>` sort
@@ -830,6 +957,59 @@ Between 5 and 6, for every closed chain:
   nodes. That equivalence is what makes the check cheap and it is worth a
   comment in the header, because the obvious implementation is a quadratic
   segment-pair scan.
+
+#### `RingDegenerateAfterSnap` is a self-check, and risk 3's mitigation moves
+
+`@tester` measured four candidate slivers designed to flip a hole's winding under
+snapping. **All four were refused as `NonSimpleRing` before the winding check
+could fire**, and reordering the throwaway's checks into this section's stated
+order (count → winding → simplicity) did not change it, because the refusal is
+not raised by the ordering — it is raised one stage earlier, by the split pass.
+
+The mechanism, and it is exact rather than statistical. Take a ring whose
+snapped winding has flipped or collapsed. Its snapped signed area has crossed
+zero, which puts some vertex `C` on the far side of the chord its neighbours span
+by less than the rounding scale — so `C` lies within half a cell of an edge it is
+not an endpoint of, which is precisely `segment_meets_cell`. Guarantee 14(b) then
+*requires* that edge to be split at `C`, and the ring `… A, C, B …` with `A–B`
+split at `C` becomes `… A, C, B, C …`. **It repeats a node id, which is the
+`NonSimpleRing` predicate verbatim.** The collinear case is the same argument with
+no slack at all: any ring whose nodes are exactly collinear has a spanning edge
+containing the others, is split at them, and repeats them.
+
+**Ruling: `RingDegenerateAfterSnap` is demoted to a self-check with a name,
+exactly like `MalformedOutput` and `CdtStatus::NotNoded`.** It stays in the
+enum and the check stays in the code — deleting a cheap check whose job is to be
+unreachable is how a later change makes it reachable in silence — but its
+`describe` text says "self-check", its status-table lever column says so, and
+**no fixture is owed for it**, because none can exist. That last clause is the
+evidence for the demotion rather than an excuse for the gap: a status with no
+reachable input is a status with no test, and the honest form is to say which
+kind of status it is.
+
+**And `05-noder.md` risk 3's mitigation is not where that document thinks it
+is.** Risk 3 reads: if the winding re-check is dropped, "a reversed sliver hole
+reaches `detria` and meshes as an island with no diagnostic anywhere". That is
+false on this design. Drop the winding re-check entirely and the same ring is
+still refused — by `NonSimpleRing`, from the node repeat the split pass
+manufactured, one stage earlier. The mitigation for risk 3 is **guarantee 14(b)
+plus the node-repeat check**, and the winding re-check is defence in depth behind
+it. `05-noder.md`'s entry is corrected accordingly in this PR; the risk itself is
+real and unchanged, only its mitigation moves.
+
+**What is and is not settled without an implementation.** The collinear case is
+settled by the argument above, which needs no code. The sliver case is settled by
+`@tester`'s four measurements plus the area bound — a simple ring's signed area
+changes by at most its perimeter times `h/√2` under snapping, so a flip needs
+area below that, which is the sliver regime. **Not settled**: that no ring exists
+which is simple before snapping, simple *and* node-repeat-free after it, and
+reversed. What would settle it is a bounded exhaustive search rather than an
+argument — every simple 4-gon and 5-gon with vertices on a small integer lattice,
+snapped at a spacing that moves them, checking for a flipped winding with no
+repeated node id. That is a throwaway of perhaps thirty lines, it is nobody's
+suite, and it is worth running **before 5b's green commit** because a single
+counterexample promotes `RingDegenerateAfterSnap` back to a diagnosis and gives
+mutant 8 its killer. Owner: `@architect`, at the same time as 5d's predicate.
 
 **Reporting: one status, one message, and the message carries the count.** The
 noder does not return a diagnostics vector, and the reason is
@@ -855,10 +1035,18 @@ input produced at increment 4, which is where the failure moved from.
 | `InvalidSnapSpacing` | step 0, `is_valid_spacing` | supply a finite positive spacing | n/a |
 | `CoordinateOutOfRange` | step 0, `can_snap`, naming the vertex | coarsen the spacing, or re-project | `Ok`, or nonsense |
 | `RingCollapsed` | ring re-validation, naming the chain and spacing | **finer** spacing | `Ok`, or `DegenerateGeometry` |
-| `RingDegenerateAfterSnap` | ring re-validation, `orientation<K>` | **finer** spacing; never auto-reversed | `Ok`, with a hole meshed as an island |
+| `RingDegenerateAfterSnap` | ring re-validation, `orientation<K>` | none; a self-check — see below | `Ok`, with a hole meshed as an island |
 | `NonSimpleRing` | ring re-validation, repeated node id | polygon repair, upstream | `NotNoded` |
-| `NotConverged` | 14 refused at `max_rounds` | **finer** spacing, or raise the cap | n/a |
-| `MalformedOutput` | 11/12/13/16 refused | none; this is our bug | n/a |
+| `NotConverged` | `build<K>()` refused 14, at `max_rounds` | **finer** spacing, or raise the cap — **except on risk 16's corner graze, where neither helps** | n/a |
+| `MalformedOutput` | `build<K>()` refused 11/12/13/16 | none; this is our bug | n/a |
+
+**The lever for `NotConverged` has an exception and the message cannot tell you
+which case you are in.** Risk 1 — snap rounding creating a crossing that was not
+in the input — is genuinely cured by a finer spacing. Risk 16's corner graze is
+scale-invariant and is not: halving `h` reproduces it at the next lattice corner.
+5b ships both under one status because the noder cannot distinguish them without
+5d's predicate, and naming that here is cheaper than a status row that would have
+to be deleted when 5d lands.
 
 Note the shape `05-noder.md` names and it survives re-derivation: the failures do
 not disappear, they **move**, and they move to the stage that can say something
@@ -1012,6 +1200,25 @@ is not cheap for a different reason: the test churn crosses eight files and two
 of them are invariant-critical, so the mutation budget is spent on suites that
 already have one.
 
+**The estimate survives the red round, and one row is the one to watch.**
+`@tester` built a throwaway implementation of all four headers during the red
+round and measured it, under this section's C++ instrument, at **350** non-comment
+lines — 95 under the estimate, with only `noded_pslg_builder.hpp` over its own
+row, at 127 against ~110. That reading is confirmed: a throwaway is a *lower*
+bound on the shipped header, since it carries no comments the project's density
+would demand and none of the header's documentation burden, so 350 against 445 is
+headroom rather than a refutation, and the one row that came in over is the row
+whose contents this round has grown. None of this round's rulings adds production
+lines — 5d is deferred, the `NodeStatus` reading is a comment, and
+`RingDegenerateAfterSnap`'s demotion deletes no check — so **5b stays ~445**.
+The figure to re-measure is the shipped one, at the green commit, with
+
+```sh
+for f in include/terrain/core/noded_pslg.hpp include/terrain/noding/broad_phase.hpp \
+         include/terrain/noding/noded_pslg_builder.hpp include/terrain/noding/node.hpp; do
+  grep -vcE '^\s*(//|$)' $f; done
+```
+
 **Nobody should relitigate the seam on a line count in either direction.** If 5b
 comes in at 320 the seam still stands, because 5c's Python surface would not fit
 beside it, and because the two halves are reviewed by different eyes against
@@ -1040,6 +1247,33 @@ writing: a property file and a fixture file for the same header are a split
 along a different axis than the one Gate B protects, and both can move to a 5b-ii
 together if a seam is ever cut.
 
+**What the lattice-corner fixture is for, stated explicitly because the finding
+changed it.** It was written as a fixture that would confirm guarantee 14; it is
+now the fixture that refutes it, so its purpose has to be in the design rather
+than inferred from the assertions. It carries **two cases and they are
+independent by construction**:
+
+1. **The arithmetic, in 5a's predicates alone.** `segment_meets_cell<K>` on the
+   diagonal against `(1,0)` and `(0,1)`, and on the anti-diagonal against `(0,0)`
+   and `(1,1)` — the probe above, as a test. It calls nothing in 5b. **It stands
+   whatever `node<K>` does**, including after 5d changes the predicate, at which
+   point its expected values flip to `false` on the second pair and it becomes
+   5d's regression test without being rewritten. That independence is the point:
+   it pins the geometric fact that every other ruling here rests on, at a layer
+   that no 5b decision can move.
+2. **The outcome, `NotConverged`.** The full driver on the tie, asserting the
+   status and that `outcome.pslg` is disengaged. This one is 5d's to change.
+
+**And it is load-bearing either way**, which is the argument for carrying both
+rather than folding them. Case 2 is what kills mutant 5 — the loop condition
+spelled "until a round produces no new node". Under that spelling the tie
+converges to `Ok` at the end of round 1, because `(1,0)` and `(0,1)` are already
+nodes — they came from the other chains — so round 1 splits an edge at two
+**existing** nodes and manufactures none; under the correct spelling it runs to the
+cap. It is the only fixture in the increment on which those two spellings give
+different *statuses* rather than different edge counts, so if case 2 is dropped
+as "a test of a bug we are going to fix", mutant 5 loses its killer along with it.
+
 **`prop_noding_broad_phase.cpp` — invariant-critical, mutation round.** This is
 `05-noder.md` risk 12's whole mitigation and the one function in the increment
 with an oracle that does not touch the noder. For generated segment sets and
@@ -1058,8 +1292,22 @@ slice that overlaps its neighbour (16). And, symmetrically and just as
 important, an **acceptance**: the road-along-a-river duplicate-edge candidate,
 which the pre-amendment 14(a) would have refused.
 
+**A partial collinear overlap cannot be isolated to 14(a), and the suite must
+not pin the clause.** `@tester` measured it: the overlap's inner endpoint is a
+node that lies *on* the other edge, so its cell meets an edge it is not an
+endpoint of, and 14(b) refuses it too. It is always a double refusal. The case
+is still worth carrying — it is the amended clause's negative half — but the
+assertion is on the **status**, which is `NotConverged` for either clause, and
+never on which clause fired. Nothing in the design lets a caller see the clause,
+so a suite that could see it would be reading the implementation. Same for the
+crossing-edges case, which 14(b) also catches once the crossing point is a node.
+
 **`prop_noding_no_crossings.cpp` — invariant-critical, mutation round.** The name
-`testing.md:292` reserves. It runs the full noder on generated constraint sets of
+`testing.md`'s layout block reserves; `grep -n prop_noding_no_crossings testing.md`
+resolves it, and the line number is deliberately not written down here, per
+`.claude/REQUIRED-READING.md` — this citation was already stale once, having been
+written as a bare line number that the layout block had since moved off.
+It runs the full noder on generated constraint sets of
 a few dozen segments, then checks, **with no broad phase anywhere in the check**:
 
 - **Guarantee 14, brute force** over every (edge, edge) and every (node, edge)
@@ -1088,9 +1336,12 @@ a few dozen segments, then checks, **with no broad phase anywhere in the check**
 - **Determinism**: the same input shuffled in vertex order produces node ids that
   are a function of the point set, hence identical output geometry.
 
-`tests/cpp/property/noding_generators.h` arrives here — `testing.md:211`
-describes it as producing "random sets of polylines with controllable density of
+`tests/cpp/property/noding_generators.h` arrives here — `testing.md` describes it
+as producing "random sets of polylines with controllable density of
 intersections", which is 5b's generator and not 5a's.
+`grep -n 'controllable density' testing.md` resolves the line; it is not written
+down, for the same reason as the citation two paragraphs above, and that one was
+stale too when this round found it.
 
 **`test_noding_noded_pslg.cpp` — not invariant-critical, and no mutation round.**
 It is an accessor suite over a value type: spans, slices, `edge_base`'s prefix
@@ -1135,10 +1386,17 @@ a different increment's:
    the absence of the river's. This is the mutant `05-noder.md` says 5b owes
    because guarantee 15's oracle is one-directional, and it is the only thing
    standing between a lost property and a silent wrong answer.
-8. **The winding re-check dropped**, or a reversed ring silently repaired. Killed
-   by the sliver-hole fixture whose winding flips under snapping —
-   `05-noder.md` risk 3, which it calls a silent wrong mesh with no diagnostic
-   anywhere.
+8. **Struck, and the reason is the finding rather than a change of mind.** It
+   read: "the winding re-check dropped, or a reversed ring silently repaired;
+   killed by the sliver-hole fixture whose winding flips under snapping". There
+   is no such fixture — see "`RingDegenerateAfterSnap` is a self-check". Four
+   candidates were measured and all four are refused as `NonSimpleRing` by the
+   split pass before the winding check runs, so this mutant has **no killer
+   input**, which is exactly what it means for the check to be a self-check.
+   Its live half is mutant 10, which kills the same silent wrong mesh through
+   the node repeat that actually occurs. **A mutant with no killer is not a
+   weaker mutant; it is a claim that the round would have shipped as covered.**
+   Reinstated if the bounded search named in that section finds a counterexample.
 9. **The `RingCollapsed` check dropped.** Killed by a hole smaller than one cell.
 10. **`NonSimpleRing` checked by a segment-pair scan that only finds interior
     crossings**, missing a ring that revisits a node. Killed by a figure-eight
@@ -1146,12 +1404,31 @@ a different increment's:
     form it can take.
 11. **Arc order by node id instead of by dot product.** Killed by a segment whose
     split nodes sort differently under `GridPoint`'s lexicographic order than
-    along the segment — any segment running down-and-right.
+    along the segment. An earlier revision said "any segment running
+    down-and-right"; that is wrong and would have produced a mutant that
+    survives. `GridPoint`'s order is lexicographic in `(ix, iy)`
+    (`include/terrain/core/snap_grid.hpp:43-51`), so the direction that inverts
+    it against arc order is **decreasing `ix`** — down-and-right has `ix`
+    increasing and the two orders agree. The fixture is a segment whose `ix`
+    decreases from `a` to `b`, or a vertical segment whose `iy` decreases.
 12. **An input-dependent anchor**: subtracting a bounding-box origin before
     snapping. `05-noder.md` mutant 12 assigns this to 5b's driver, since 5a's
     `snap` has no argument it could arrive through. Killed by noding a fixture,
-    then noding it again with one extra far-away unreferenced vertex, and
-    requiring the node coordinates to be bit-identical.
+    then noding it again with one extra far-away unreferenced vertex.
+
+    **The assertion is not "bit-identical output", and getting that wrong costs
+    the mutant.** Step 3 builds the `NodeSet` over **every snapped input vertex**,
+    referenced or not — deliberately, because that is what makes
+    `node_of_input_vertex` total over the input's vertex array — so the extra
+    vertex *is* a node and the second run has exactly one more. Node ids are the
+    set's sorted order, so the extra vertex also shifts every id that sorts after
+    it, and a naive index-by-index comparison fails on correct output. The
+    assertion is therefore over the node set as a **set of `GridPoint`s**: the
+    second run's set equals the first's plus exactly the one snapped extra
+    vertex. Bit-identity of the coordinates follows from `world`'s determinism
+    and does not need asserting separately. The mutant dies because an anchored
+    `snap` moves the bounding box and therefore moves *every* node, so the two
+    sets differ by far more than one point.
 13. **The verifier's clause 14(b) returning `true` unconditionally**, or checking
     `on_segment<K>` instead of `segment_meets_cell<K>`. Killed **only** by
     `test_noding_noded_pslg_builder.cpp`'s hand-built T-junction candidate — not
@@ -1212,15 +1489,56 @@ Continuing `05-noder.md`'s register, which ends at 12.
     wrong, because the instrument is the thing that lies. Mitigated by
     `tests/python/test_viz_protocols.py`'s join, which is where `PslgLike`
     conformance is checked, and by the `not-noded` fixture rendering clean.
-16. **Grazed corners inflate degree and edge count on lattice-aligned input.**
-    The worked case above requires a constraint through a lattice corner with
-    nodes on the flanking cells; on axis-aligned cadastral data at a decimetre
-    spacing that is not exotic. The output is *correct* — 14(b) demands it — but a
-    long axis-aligned run can acquire a node per cell. For a closed ring the
-    transverse zigzag can in principle produce a self-touching ring and a
-    `NonSimpleRing` rejection on input that was simple. Not mitigated, because
-    the alternative is half-open cells, which 5a has shipped closed and which
-    would reopen the T-junction-detection question the audit closed. Named.
+16. **An exact corner graze makes the split pass and guarantee 14(b)
+    inconsistent, and the input cannot converge.** Upgraded from "named" to a
+    ruling, because the worked case above was checked and came back red; the
+    probe and the divergent orbit are there and are not repeated here.
+
+    **What actually triggers it, corrected.** An earlier revision of this entry
+    said "on axis-aligned cadastral data at a decimetre spacing that is not
+    exotic". The probe's lines 3 and 4 refute that: an axis-parallel edge grazes
+    no flanking cell, and axis-aligned runs are the *clean* case. The trigger is
+    a constraint edge passing **exactly through a lattice corner** — a 45° run,
+    or any slope whose grid intersections land on corners — with nodes present on
+    **both** flanking cells. A 45° parcel or property boundary at a decimetre
+    spacing is not exotic either, so the frequency claim survives its own
+    correction; only the geometry in it was wrong.
+
+    **Ruling: `NotConverged` is the right answer for 5b and the wrong answer for
+    the product, and the fix is deferred to a named increment 5d, owned by
+    `@architect`.** Not 5b: the fix changes what "meets" means, and the predicate
+    that would have to change is 5a's shipped `segment_meets_cell`, which has its
+    own mutation round and five mutants (13–17) aimed at it — reopening it inside
+    a PR that is already at ~445 lines and whose suites are committed red buys a
+    second unreviewed decision for the price of one. Not 5c either: 5c is the
+    crossing, its budget is Python surface, and a predicate change landing in the
+    same PR as the binding would be invisible under it.
+
+    **What 5d is, named now so it is not re-derived.** The geometric fact the
+    probe exposes is that a corner-only touch is the case where the segment meets
+    the closed cell in a **single point**, at distance exactly `h/√2` from
+    `world(g)` — the maximum the hot pixel admits, and the one distance at which
+    "on the edge" and "off the edge" are both defensible. Closed cells answer
+    *on*; that answer is what demands the split, and the split is what
+    reintroduces the violation. 5d replaces `segment_meets_cell` in **both** the
+    split rule and 14(b) with a predicate that excludes a single-point corner
+    touch and is otherwise identical. It is *not* half-open cells: half-open cells
+    are direction-dependent and would reopen the T-junction-detection question
+    the audit closed, whereas excluding a corner-only touch is symmetric, is a
+    measure-zero change to the accepted set, and leaves every genuine T-junction —
+    which meets a cell in a sub-segment of positive length — detected exactly as
+    now. The L-shaped chain that the probe's lines 3 and 4 show to be clean is the
+    fixpoint 5d converges to.
+
+    **What 5b ships in the meantime, and it is not nothing.** `NotConverged`,
+    with the message naming the spacing, plus the lattice-corner fixture, which
+    is what makes the defect visible the moment anyone re-opens the question.
+    **This entry is 5d's specification**; the residual is that between 5b and 5d
+    a user with a 45° breakline can be told to refine a spacing that will not
+    help them, because the pathology is scale-invariant — halving `h` reproduces
+    it at the next corner down. That is the part a reader must not miss, and it
+    is why the lever column for `NotConverged` in the status table now carries a
+    second sentence.
 17. **The verifier shares `segment_meets_cell<K>` with the driver.** That is
     borrowing a *predicate*, which `computational-geometry/SKILL.md` licenses,
     and not borrowing *records*, which it forbids — but it is one shared object,
@@ -1323,8 +1641,9 @@ recorded.
 what stays reachable from a `NodedPslg`. **5c's**, for the same reason as
 `testing.md`'s marker: it is false until the signature changes.
 
-**`docs/increments/05-noder.md`** — four corrections, the first three of which
-this document's premises establish and the fourth of which is the user's:
+**`docs/increments/05-noder.md`** — five corrections, the first three of which
+this document's premises establish, the fourth of which is the user's, and the
+fifth of which came out of `@tester`'s red round:
 
 1. Guarantee 14(a) is false on duplicate edges; the amended clause replaces it.
 2. The 5b row of "Files and LOC" names no Python file and estimates the signature
@@ -1346,6 +1665,10 @@ this document's premises establish and the fourth of which is the user's:
    type. The clause is left standing as the record of what was true then;
    `grep -n 'carries the ruling and the scope' docs/increments/05-noder.md`
    finds it, and it belongs to whoever next edits that file.*
+5. **Risk 3 names the wrong mitigation.** It says the winding re-check is what
+   stands between a reversed sliver hole and a silent wrong mesh; measured, the
+   refusal comes one stage earlier from `NonSimpleRing`. Corrected in place, with
+   the mechanism and the residual pointing here.
 
 **`docs/increments/03-pslg.md`** and **`project_structure.md`** each carry the
 same widening where they describe the per-edge array, for the same reason.
