@@ -146,6 +146,16 @@ verify: increment 7's fixed `bindings/core.cpp` was replaced on disk with the
 pre-fix version that four tests were written to refute, and `pytest` reported
 94 passed. A broken X, and Y did not notice.
 
+The C++ side has its own version, and it bites hardest during a mutation round.
+**`cmake --build` can miss a restore.** After putting a mutated header back with
+`cp`, the restored file's mtime can land in the same second as the object built
+from the mutant, so the build reports "Built target" and rebuilds nothing;
+`ctest` then measures the mutant. A green that belongs to the mutant and a red
+that belongs to nothing are both available this way, and neither looks unusual.
+**`touch` the file after any `cp`-based restore**, before building. Measured
+here while re-running a mutation a subagent reported: the first rebuild was a
+no-op and the second, after `touch`, was not.
+
 When there is nothing to run — a comment, a design invariant, a claim of the
 form "X is verified by Y" — one question catches the same defect by inspection,
 in a line, with no build: **is the claim about the same object the code
