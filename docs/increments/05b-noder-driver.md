@@ -476,7 +476,8 @@ time there are lines to count the shape is fixed — so what is armed is an
 obligation on whoever writes 5c's design: re-estimate `bindings/core.cpp` and
 `_core.pyi` against what 5b's `NodeStatus`, `NodedPslg` and `NodeOutcome`
 actually turned out to be, before `@tester` is briefed, and if the total passes
-**550**, move `cli.py` and `--snap-spacing` to a 5d. Declared now so that 5c's
+**550**, move `cli.py` and `--snap-spacing` to a **5e** — this said "a 5d", and
+`docs/increments/05d-corner-graze.md` is now a different increment. Declared now so that 5c's
 suite layout is chosen knowing it, and spelled as a duty rather than as a
 threshold precisely because the threshold form is the one with the one-for-three
 record.
@@ -1634,7 +1635,23 @@ consumer. Named a third time so it is not re-derived a fourth.
 `src/cdt/detria_backend.cpp` (the definition) each replace `const Pslg&` with
 `const NodedPslg&` and swap the include. The wrapper body is untouched: it walks
 `vertices()`, `chains()` and `indices_of(c)`, all of which `NodedPslg` has with
-the same signatures. ~6 lines.
+the same signatures.
+
+**Corrected at 5c: that list is short by one, and the branch does not compile
+without it.** `include/terrain/cdt/constrained_edges.hpp` takes a `const Pslg&`
+too, and `src/cdt/detria_backend.cpp` constructs it. Find the set rather than
+trusting this list: `git grep -ln "const Pslg&" 93fc772 -- include/terrain/cdt/
+src/cdt/` returns **four** files at 5b's tip — the three named above plus that
+one. 5c ruled that this fourth becomes a template over a `ChainedGraph` concept
+rather than being retyped, so that `test_cdt_constrained_edges.cpp`'s hand-built
+degenerate `Pslg` fixtures are not forced through the noder; that file stayed
+byte-identical, which is the return on the ruling and is only demonstrated by
+not touching it.
+
+The `~6 lines` above is the estimate this paragraph offered for three files. 5c
+re-estimated the corrected set at **18** and measured **8** — under, like every
+other C++ row in that increment. See `docs/increments/05c-noder-wiring.md`, "The
+C++ signature change".
 
 **`bindings/core.cpp`, and this part is not.** `bindings/core.cpp:466` calls
 `terrain::cdt::triangulate<DetriaBackend>(pslg, options)` with a `const Pslg&`;
@@ -1657,8 +1674,22 @@ unaffected), and a second failure presentation — a noder failure has a
 noder's own words the way it already carries the backend's.
 
 **And the scene must be fed the `NodedPslg`**, per "What the renderer buys this
-increment". That is a one-line change in `cli.py` and it is the one line that,
-got wrong, turns the whole gallery red while the mesh underneath is correct.
+increment". The second half of that sentence was right and is why it is worth
+reading: got wrong, it turns the whole gallery red while the mesh underneath is
+correct.
+
+**Corrected at 5c: it is not a one-line change.** This paragraph said it was.
+The mechanism it missed is the role vocabulary, not the index spaces this
+document reasons about elsewhere. `cli.py` held one `CLOSED_ROLES` of **strings**
+and `viz/scene.py` closes a ring with `chain.role == closed`; a `NodedPslg`'s
+roles are `ChainRole` enums, and `ChainRole.Outer == "outer"` is `False`. So
+swapping the source alone closes no ring at all: one
+`MASKED_EDGE_WITHOUT_CHAIN` per ring, the alarm colour over a correct mesh —
+exactly the failure this paragraph predicted, by a route it did not see. 5c
+splits the constant in two and carries the applicable one beside the source it
+applies to. Measured at 5c: `cli.py` came in at 99 non-comment lines against a
+38-line estimate. See `docs/increments/05c-noder-wiring.md`, "5b's 'one-line
+change' is wrong".
 
 **Python suites change too** — `tests/python/test_core_cdt.py`'s
 `test_reports_a_non_noded_input_as_a_failure_status` asserts that
