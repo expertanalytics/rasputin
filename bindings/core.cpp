@@ -8,9 +8,12 @@
 #include <terrain/cdt/triangulate.hpp>
 #include <terrain/core/edge_properties.hpp>
 #include <terrain/core/indexed_mesh.hpp>
+#include <terrain/core/noded_pslg.hpp>
 #include <terrain/core/point.hpp>
 #include <terrain/core/pslg.hpp>
 #include <terrain/core/pslg_builder.hpp>
+#include <terrain/noding/node.hpp>
+#include <terrain/noding/noded_pslg_builder.hpp>
 #include <terrain/predicates/default_kernel.hpp>
 
 #include <cstddef>
@@ -30,6 +33,7 @@ using terrain::Chain;
 using terrain::ChainRole;
 using terrain::EdgeProperties;
 using terrain::IndexedMesh2;
+using terrain::NodedPslg;
 using terrain::Point2;
 using terrain::Point3;
 using terrain::Pslg;
@@ -42,6 +46,9 @@ using terrain::cdt::CdtOptions;
 using terrain::cdt::CdtOutcome;
 using terrain::cdt::CdtStatus;
 using terrain::cdt::DetriaBackend;
+using terrain::noding::NodeOptions;
+using terrain::noding::NodeOutcome;
+using terrain::noding::NodeStatus;
 
 namespace {
 
@@ -79,6 +86,75 @@ template <typename T>
     return readonly_view<std::uint32_t>(owner, indices.data(),
                                         {static_cast<py::ssize_t>(indices.size())},
                                         {static_cast<py::ssize_t>(sizeof(std::uint32_t))});
+}
+
+// The dense per-edge property masks, as bare uint32. EdgeProperties is
+// deliberately not bound -- Python already has an integer with |, & and
+// bit_count(), and Chain.properties already crosses as bits() -- so this
+// reinterprets the buffer rather than wrapping each element. The static_assert
+// is what stops that being a silent lie if the type ever grows a member.
+[[nodiscard]] py::array_t<std::uint32_t> properties_view(const py::object& owner,
+                                                         std::span<const EdgeProperties> props) {
+    static_assert(sizeof(EdgeProperties) == sizeof(std::uint32_t) &&
+                      std::is_standard_layout_v<EdgeProperties>,
+                  "the (E,) uint32 view reinterprets the EdgeProperties buffer as bare masks");
+    return readonly_view<std::uint32_t>(owner,
+                                        reinterpret_cast<const std::uint32_t*>(props.data()),
+                                        {static_cast<py::ssize_t>(props.size())},
+                                        {static_cast<py::ssize_t>(sizeof(EdgeProperties))});
+}
+
+// The four accessors of viz/protocols.py's PslgLike, bound once for both graph
+// types. NOT ~25 lines saved: PslgLike is a structural contract with three
+// implementations, and a member added to one hand-written block and forgotten
+// on the other is a drift the protocol suite catches only for whichever type it
+// happens to name. One template makes the two bindings the same object.
+//
+// The return is deliberately NOT [[nodiscard]], where 05c-noder-wiring.md's
+// sketch of this signature had it: Pslg chains nothing onto it, so the
+// attribute would buy one -Wunused-result cast at the only call that correctly
+// ignores the value. The registration is the effect; the handle is a
+// convenience for the caller that adds accessors.
+template <typename T>
+py::class_<T> bind_pslg_like(py::module_& m, const char* name, const char* doc) {
+    return py::class_<T>(m, name, doc)
+        .def_property_readonly(
+            "vertices",
+            [](const py::object& self) {
+                return point_view(self, self.template cast<const T&>().vertices());
+            },
+            "Read-only (N, 2) float64 view of the vertex buffer.")
+        .def_property_readonly(
+            "chains",
+            [](const T& self) {
+                return std::vector<Chain>{self.chains().begin(), self.chains().end()};
+            },
+            "The chains, in order, as frozen Chain records. Unlike the array\n"
+            "accessors on this type, this COPIES: a fresh list of C chains is\n"
+            "built on every read, so bind it once rather than re-reading it\n"
+            "inside a per-edge loop.")
+        .def_property_readonly(
+            "chain_indices",
+            [](const py::object& self) {
+                return index_view(self, self.template cast<const T&>().chain_indices());
+            },
+            "Read-only (M,) uint32 view of the flat index buffer.")
+        // The C++ precondition is a debug assert, which in a release build is
+        // no precondition at all; reached from Python it has to be an
+        // exception rather than a crash vector.
+        .def(
+            "indices_of",
+            [](const py::object& self, std::size_t c) {
+                const T& graph = self.template cast<const T&>();
+                if (c >= graph.chains().size()) {
+                    throw py::index_error(std::format("chain {} is out of range: this PSLG has "
+                                                      "{} chains",
+                                                      c, graph.chains().size()));
+                }
+                return index_view(self, graph.indices_of(c));
+            },
+            py::arg("c"),
+            "Read-only uint32 view of chain c's indices. Raises IndexError out of range.");
 }
 
 // TypeError for a path, ValueError for a mis-shaped array: the first is a
@@ -333,10 +409,41 @@ it rather than by where in the backend it arose. describe() renders each one.
         .value("MalformedInput", CdtStatus::MalformedInput)
         .value("BackendFailure", CdtStatus::BackendFailure);
 
+    py::enum_<NodeStatus>(m, "NodeStatus", R"doc(
+What the noder did, grouped by what the caller should do about it. describe()
+renders each one, and three of the rows point at the snap spacing -- two of them
+in opposite directions, which is why the lever is part of the prose rather than
+inferred from the name.
+)doc")
+        .value("Ok", NodeStatus::Ok)
+        .value("NotRun", NodeStatus::NotRun)
+        .value("InvalidSnapSpacing", NodeStatus::InvalidSnapSpacing)
+        .value("CoordinateOutOfRange", NodeStatus::CoordinateOutOfRange)
+        .value("RingCollapsed", NodeStatus::RingCollapsed)
+        .value("RingDegenerateAfterSnap", NodeStatus::RingDegenerateAfterSnap)
+        .value("NonSimpleRing", NodeStatus::NonSimpleRing)
+        .value("NotConverged", NodeStatus::NotConverged)
+        .value("MalformedOutput", NodeStatus::MalformedOutput);
+
+    // ONE NAME OVER TWO ENUMERATIONS, and the safety question is answered by
+    // pybind11's two-pass resolution: the first pass runs every overload with
+    // conversions disabled and py::enum_ registers a distinct Python type per
+    // enumeration, so describe(CdtStatus.Ok) and describe(NodeStatus.Ok) resolve
+    // exactly even though both are integer 0 underneath. Two names would force
+    // every caller holding a status to branch on its type to choose a function,
+    // which is precisely the branch a status band does not otherwise need.
     m.def("describe", [](CdtStatus status) { return std::string{terrain::cdt::describe(status)}; },
           py::arg("status"),
           "One sentence of prose for a CdtStatus, including every failure "
-          "status. Raises TypeError for anything that is not a CdtStatus.");
+          "status. Raises TypeError for anything that is neither a CdtStatus "
+          "nor a NodeStatus.");
+
+    m.def("describe",
+          [](NodeStatus status) { return std::string{terrain::noding::describe(status)}; },
+          py::arg("status"),
+          "One sentence of prose for a NodeStatus, including the self-checks. "
+          "Raises TypeError for anything that is neither a NodeStatus nor a "
+          "CdtStatus.");
 
     py::class_<Chain>(m, "Chain", R"doc(
 One constraint chain: a half-open run [begin, begin + count) of chain_indices,
@@ -391,50 +498,13 @@ diagnostic per call turns one fix into N round trips.
                       "Rebuilt on every read, like Pslg.chains and unlike the array\n"
                       "accessors; bind it once if you read it more than once.");
 
-    py::class_<Pslg>(m, "Pslg", R"doc(
+    bind_pslg_like<Pslg>(m, "Pslg", R"doc(
 A validated planar straight-line graph: the constraint set, checked once.
 
 Opaque and not constructible from Python. There is exactly one producer,
 build_pslg, and holding a Pslg is the proof that validation ran -- a Python
 constructor would void that proof. Every accessor is a read-only view.
-)doc")
-        .def_property_readonly(
-            "vertices",
-            [](const py::object& self) {
-                return point_view(self, self.cast<const Pslg&>().vertices());
-            },
-            "Read-only (N, 2) float64 view of the vertex buffer.")
-        .def_property_readonly(
-            "chains",
-            [](const Pslg& self) {
-                return std::vector<Chain>{self.chains().begin(), self.chains().end()};
-            },
-            "The chains, in order, as frozen Chain records. Unlike the array\n"
-            "accessors on this type, this COPIES: a fresh list of C chains is\n"
-            "built on every read, so bind it once rather than re-reading it\n"
-            "inside a per-edge loop.")
-        .def_property_readonly(
-            "chain_indices",
-            [](const py::object& self) {
-                return index_view(self, self.cast<const Pslg&>().chain_indices());
-            },
-            "Read-only (M,) uint32 view of the flat index buffer.")
-        // The C++ precondition is a debug assert, which in a release build is
-        // no precondition at all; reached from Python it has to be an
-        // exception rather than a crash vector.
-        .def(
-            "indices_of",
-            [](const py::object& self, std::size_t c) {
-                const Pslg& pslg = self.cast<const Pslg&>();
-                if (c >= pslg.chains().size()) {
-                    throw py::index_error(std::format("chain {} is out of range: this PSLG has "
-                                                      "{} chains",
-                                                      c, pslg.chains().size()));
-                }
-                return index_view(self, pslg.indices_of(c));
-            },
-            py::arg("c"),
-            "Read-only uint32 view of chain c's indices. Raises IndexError out of range.");
+)doc");
 
     py::class_<IndexedMesh2>(m, "IndexedMesh2", R"doc(
 A flat indexed triangle mesh: vertices, triangles, and one constraint mask per
@@ -498,6 +568,95 @@ mirroring the C++ accessor.
             "The mesh, which keeps this outcome alive.")
         .def("ok", &CdtOutcome::ok, "True iff status is Ok.");
 
+    bind_pslg_like<NodedPslg>(m, "NodedPslg", R"doc(
+The constraint set after snap rounding: every crossing and every hot-pixel
+incidence resolved into a node.
+
+Opaque, not constructible from Python, and NOT a subclass of Pslg -- there is no
+conversion either way. That is the point: triangulate takes one of these, so
+un-noded input is unrepresentable at the entry point rather than diagnosed
+inside it. Holding one is the proof that NodedPslgBuilder's verification ran,
+which is why the builder itself does not cross.
+
+It has the same SHAPE as Pslg -- vertices, chains, chain_indices, indices_of --
+because the renderer's scene join is structural and must be fed the noded graph
+rather than the input one. Node ids are NOT input vertex ids: the node set is
+ordered by its lattice point, so use node_of_input_vertex to follow an input
+vertex across.
+)doc")
+        .def_property_readonly(
+            "grid_spacing", [](const NodedPslg& self) { return self.grid().spacing(); },
+            "The snap spacing this graph was noded at, in the input's units.\n"
+            "The SnapGrid itself does not cross: a grid vocabulary in Python\n"
+            "next to no consumer, where this is the one value a caller needs\n"
+            "and it is the value it handed in.")
+        .def_property_readonly(
+            "edge_properties",
+            [](const py::object& self) {
+                return properties_view(self, self.cast<const NodedPslg&>().edge_properties());
+            },
+            "Read-only (E,) uint32 view of the per-edge property masks, DENSE\n"
+            "and index-aligned with the flat edge enumeration: chain c's edge k\n"
+            "is at sum(edge_count(j) for j < c) + k. Each entry is the UNION\n"
+            "over every input chain that contributed geometry to that edge, so\n"
+            "a road noded along a river carries both bits. 0 means\n"
+            "unclassified, which is a legal value and not an error.")
+        .def_property_readonly(
+            "node_of_input_vertex",
+            [](const py::object& self) {
+                return index_view(self, self.cast<const NodedPslg&>().node_of_input_vertex());
+            },
+            "Read-only (N,) uint32 view mapping each INPUT vertex position onto\n"
+            "its node id. Total over the input's vertex array, unreferenced\n"
+            "vertices included. The only thing that answers \"where did vertex 4\n"
+            "go\" without a coordinate search.");
+
+    py::class_<NodeOutcome>(m, "NodeOutcome", R"doc(
+What node() returned: a NodedPslg, or a status and a message saying why not.
+
+Mirrors PslgBuildResult and CdtOutcome. On Ok the message is empty and pslg is
+present; on failure pslg is None and the message says something. ok() is a
+method rather than a property, mirroring the C++ accessor -- and note that `if
+outcome.ok` is truthy for a bound method, so the parentheses are load-bearing.
+)doc")
+        .def_readonly("status", &NodeOutcome::status, "The NodeStatus.")
+        .def_readonly("message", &NodeOutcome::message,
+                      "The noder's diagnosis, empty on success.")
+        .def_property_readonly(
+            "pslg",
+            [](const NodeOutcome& self) { return self.ok() ? &*self.pslg : nullptr; },
+            py::return_value_policy::reference_internal,
+            "The NodedPslg, which keeps this outcome alive, or None if ok is False.")
+        .def("ok", &NodeOutcome::ok, "True iff a NodedPslg was produced.");
+
+    m.def(
+        "node",
+        [](const Pslg& pslg, double spacing, std::uint32_t max_rounds) {
+            const NodeOptions options{spacing, max_rounds};
+            // Licensed by node.hpp:5-11 and by nothing else: node<K> is a pure
+            // function of (pslg, options) with no statics and no caches, so two
+            // threads on one Pslg produce bit-identical output. Nothing
+            // Python-owned is touched between release and reacquire -- the
+            // input is a C++ object the wrapper owns, and the outcome is
+            // converted after the lock returns.
+            const py::gil_scoped_release unlocked;
+            return terrain::noding::node<terrain::pred::DefaultKernel>(pslg, options);
+        },
+        py::arg("pslg"), py::arg("spacing"), py::arg("max_rounds") = 4, R"doc(
+Snap-round a validated PSLG into a NodedPslg, releasing the GIL for the duration.
+
+spacing has NO DEFAULT, mirroring NodeOptions::spacing: the right value is a
+policy question about the data and this layer is not the composition root.
+max_rounds caps the settling loop and reproduces the C++ default; raising it can
+only ever turn a refusal into a success, never into a different mesh.
+
+A refused noding is a fact about the terrain and about the spacing, so it comes
+back as a status rather than as an exception -- build_pslg's rule, applied to the
+second engine entry point. Only a mis-shaped argument raises: a NodedPslg, a
+path or a filename is a TypeError, because noding twice is a caller error and
+the core never sees a path.
+)doc");
+
     // A free function rather than a bound PslgBuilder: build() is
     // rvalue-ref-qualified, so binding it would leave a moved-from builder that
     // any Python name could still call. Python declares what PSLG it wants and
@@ -532,7 +691,7 @@ is a TypeError, because the core never sees a path.
 
     m.def(
         "triangulate",
-        [](const Pslg& pslg, bool delaunay) {
+        [](const NodedPslg& pslg, bool delaunay) {
             const CdtOptions options{delaunay};
             // The one call in this module long enough to be worth the cost of
             // releasing: a refinement pass running these in parallel would
@@ -542,10 +701,12 @@ is a TypeError, because the core never sees a path.
             return terrain::cdt::triangulate<DetriaBackend>(pslg, options);
         },
         py::arg("pslg"), py::arg("delaunay") = true, R"doc(
-Triangulate a validated PSLG, releasing the GIL for the duration.
+Triangulate a noded PSLG, releasing the GIL for the duration.
 
-The input must already be noded: crossing constraints are a failure status, not
-a repair. With delaunay=False the backend skips the Delaunay flips, so the same
-input can be seen both ways.
+The parameter is a NodedPslg and there is no Pslg overload: as of increment 5c,
+un-noded input is unrepresentable here rather than diagnosed inside, so handing
+this a Pslg is a TypeError and not a status. Call node() first. With
+delaunay=False the backend skips the Delaunay flips, so the same input can be
+seen both ways.
 )doc");
 }

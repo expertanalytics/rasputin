@@ -112,6 +112,23 @@ class CdtStatus(Enum):
     MalformedInput = 5
     BackendFailure = 6
 
+class NodeStatus(Enum):
+    """What the noder did, grouped by what to do about it.
+
+    ``Ok`` is 0 in this enumeration and in :class:`CdtStatus`, and the two are
+    different types: compare a status against its own enumeration's member.
+    """
+
+    Ok = 0
+    NotRun = 1
+    InvalidSnapSpacing = 2
+    CoordinateOutOfRange = 3
+    RingCollapsed = 4
+    RingDegenerateAfterSnap = 5
+    NonSimpleRing = 6
+    NotConverged = 7
+    MalformedOutput = 8
+
 @final
 class Chain:
     """One constraint chain: a run of ``chain_indices``, its role, its set."""
@@ -187,6 +204,75 @@ class Pslg:
         """Read-only view of chain ``c``'s indices. ``IndexError`` if out of range."""
 
 @final
+class NodedPslg:
+    """A PSLG after snap rounding. Not constructible from Python.
+
+    NOT a subclass of :class:`Pslg` and there is no conversion either way:
+    :func:`triangulate` takes one of these, so un-noded input is
+    unrepresentable at the entry point rather than diagnosed inside it. It has
+    the same four shared accessors, because the renderer's scene join is
+    structural.
+
+    Node ids are **not** input vertex ids -- the node set is ordered by its
+    lattice point -- so follow an input vertex across with
+    :attr:`node_of_input_vertex`.
+    """
+
+    @property
+    def vertices(self) -> npt.NDArray[np.float64]:
+        """Read-only ``(N, 2)`` view of the node coordinates."""
+
+    @property
+    def chains(self) -> list[Chain]:
+        """The chains, in order. Copies on every read, like ``Pslg.chains``."""
+
+    @property
+    def chain_indices(self) -> npt.NDArray[np.uint32]:
+        """Read-only ``(M,)`` view of the flat index buffer."""
+
+    def indices_of(self, c: int) -> npt.NDArray[np.uint32]:
+        """Read-only view of chain ``c``'s indices. ``IndexError`` if out of range."""
+
+    @property
+    def grid_spacing(self) -> float:
+        """The spacing this graph was noded at. The ``SnapGrid`` does not cross."""
+
+    @property
+    def edge_properties(self) -> npt.NDArray[np.uint32]:
+        """Read-only ``(E,)`` view of the dense per-edge property masks.
+
+        Index-aligned with the flat edge enumeration: chain ``c``'s edge ``k``
+        sits at ``sum(edge_count(j) for j < c) + k``. Each entry is the union
+        over every input chain that contributed geometry to that edge, and 0
+        means *unclassified* rather than *wrong*.
+        """
+
+    @property
+    def node_of_input_vertex(self) -> npt.NDArray[np.uint32]:
+        """Read-only ``(N,)`` view mapping each input vertex onto its node id.
+
+        Total over the input's vertex array, unreferenced vertices included.
+        """
+
+@final
+class NodeOutcome:
+    """A ``NodedPslg``, or a status and a message saying why not.
+
+    ``ok()`` is a method, not a property -- ``if outcome.ok`` is truthy for a
+    bound method and never sees a failure.
+    """
+
+    @property
+    def status(self) -> NodeStatus: ...
+    @property
+    def message(self) -> str: ...
+    @property
+    def pslg(self) -> NodedPslg | None:
+        """The noded graph, or None. Engaged iff ``status`` is ``Ok``."""
+
+    def ok(self) -> bool: ...
+
+@final
 class IndexedMesh2:
     """A flat indexed triangle mesh. Not constructible from Python.
 
@@ -219,8 +305,19 @@ class CdtOutcome:
     def mesh(self) -> IndexedMesh2: ...
     def ok(self) -> bool: ...
 
+@overload
 def describe(status: CdtStatus) -> str:
     """One sentence of prose for a ``CdtStatus``."""
+
+@overload
+def describe(status: NodeStatus) -> str:
+    """One sentence of prose for a ``NodeStatus``."""
+
+def describe(status: CdtStatus | NodeStatus) -> str:
+    """Two ``@overload`` stubs rather than one union parameter: pybind11
+    resolves this by exact type with conversions disabled, and both
+    enumerations' ``Ok`` is integer 0. A single union stub would type-check a
+    call the runtime rejects."""
 
 def build_pslg(
     vertices: npt.ArrayLike,
@@ -234,5 +331,16 @@ def build_pslg(
     belong.
     """
 
-def triangulate(pslg: Pslg, delaunay: bool = ...) -> CdtOutcome:
-    """Triangulate an already-noded PSLG, releasing the GIL for the duration."""
+def node(pslg: Pslg, spacing: float, max_rounds: int = ...) -> NodeOutcome:
+    """Snap-round a validated PSLG, releasing the GIL for the duration.
+
+    ``spacing`` has no default: the right value is a policy question about the
+    data, and this layer is not the composition root. A refused noding is a
+    status, not an exception; only a mis-shaped argument raises.
+    """
+
+def triangulate(pslg: NodedPslg, delaunay: bool = ...) -> CdtOutcome:
+    """Triangulate a noded PSLG, releasing the GIL for the duration.
+
+    Takes a ``NodedPslg`` and not a ``Pslg``: call :func:`node` first.
+    """
