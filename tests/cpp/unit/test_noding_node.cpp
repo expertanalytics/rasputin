@@ -538,6 +538,50 @@ TEST_CASE("a hole smaller than one cell collapses and is refused", "[noding][nod
     REQUIRE_FALSE(out.message.empty());
 }
 
+TEST_CASE("a breakline smaller than one cell collapses to one node and is Ok",
+          "[noding][node][status]") {
+    // The open counterpart of the case above, and the outcome is the OPPOSITE:
+    // Ok, by design (05b-noder-driver.md, "An open chain that collapses to one
+    // node is Ok, and it is pinned"). The count < 3 refusal is is_closed(role)'s
+    // alone. A ring of under three nodes has no interior and no winding, so
+    // orientation<K> has nothing to answer; an open chain of one node is asked
+    // no question it cannot answer, and an over-coarse spacing is the caller's
+    // instruction rather than the noder's bug. The builder-side pin is
+    // test_noding_noded_pslg_builder.cpp's pair of count-guard cases; this one
+    // pins the end-to-end outcome, over arrays the noder really produced.
+    //
+    // THE CHAIN COUNT IS THE LOAD-BEARING ASSERTION. Guarantee 16 promises
+    // index-for-index chain order with the input, which is what lets a
+    // Python-side per-chain attribute array stay valid without a map, and it is
+    // the mitigation for half of 05-noder.md risk 5. Dropping a collapsed chain
+    // -- the obvious alternative to accepting it -- breaks exactly that, and a
+    // silently dropped chain is the failure 16 names.
+    const SnapGrid grid{1.0};
+    const std::vector<Point2> breakline{Point2{5.0, 5.0}, Point2{5.0, 5.2}, Point2{5.1, 5.3}};
+    for (const Point2& p : breakline) {
+        REQUIRE(grid.snap(p) == GridPoint{5, 5});
+    }
+
+    PslgBuilder b;
+    b.add_chain(square(-50.0, -50.0, 50.0, 50.0), ChainRole::Outer);
+    b.add_chain(breakline, ChainRole::Breakline, kRiver);
+
+    const NodeOutcome out = node<DefaultKernel>(built(std::move(b)), NodeOptions{1.0});
+    REQUIRE(out.status == NodeStatus::Ok);
+    REQUIRE(out.ok());
+
+    const NodedPslg& p = *out.pslg;
+    REQUIRE(p.chains().size() == 2);
+    REQUIRE(p.chains()[1].role == ChainRole::Breakline);
+    REQUIRE(p.chains()[1].properties == kRiver);
+
+    // One node, no edge, and the empty range every downstream loop handles.
+    REQUIRE(run_of(p, 1).size() == 1);
+    REQUIRE(run_of(p, 1)[0] == id_of(p, GridPoint{5, 5}));
+    REQUIRE(p.edge_count(1) == 0);
+    REQUIRE(p.edge_base(1) == p.edge_base(2));
+}
+
 TEST_CASE("a hole whose winding flips under snapping is refused, never reversed",
           "[noding][node][status]") {
     // THIS CASE ASSERTS NonSimpleRing, NOT RingDegenerateAfterSnap, AND THAT IS
