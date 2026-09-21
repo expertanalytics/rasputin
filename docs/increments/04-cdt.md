@@ -701,6 +701,35 @@ happens not to cross. Its fixtures are hand-made non-crossing sets. When
 increment 5 lands, `NotNoded` becomes unreachable by type and joins
 `MalformedInput` as a self-check.
 
+**Corrected at increment 5c: "mechanically" is wrong, and the correction is
+appended rather than struck out.** The ruling above stays as the record of what
+increment 4 decided. It is also the last copy of the claim still standing:
+`05-noder.md` prices the whole change at ~10 lines in one row of its "Files and
+LOC" table and then refutes that row in the paragraph beneath it,
+`05b-noder-driver.md`'s risk 13 names this sentence as one of three booking it
+as mechanical, and `03-pslg.md` retracted its own version before 5c ran. What
+5c measured:
+
+- **The retyping itself is mechanical — and it is not the three files 5b
+  listed.** `git grep -n "const Pslg&" 93fc772 -- include/terrain/cdt/` returns
+  four lines across three headers, and `include/terrain/cdt/constrained_edges.hpp`
+  is one of them: `ConstraintEdgeSet`'s constructor had to become a template over
+  a `ChainedGraph` concept, which is a design decision rather than a retype, and
+  the branch does not compile without it. Five C++ files, estimated 18
+  non-comment lines and measured **8**.
+- **What the retyping drags is not mechanical at all.** The Python binding calls
+  the entry point, so retyping it breaks that translation unit and the only
+  repair is to bind a producer of `NodedPslg`: `bindings/core.cpp`,
+  `_core.pyi`, `cli.py`, the Python suites and the renderer's scene join.
+  Measured at **+304** on top of that 8, for a net **+312** against 5c's own
+  ~256 estimate.
+
+So the first half of the ruling holds — reserving the name rather than stubbing
+it was right, for the reason given — and the second half cost a PR of its own.
+`docs/increments/05c-noder-wiring.md` is that PR, and "The C++ signature change,
+and the file 5b's list does not contain" is the section that found the fifth
+file.
+
 ## Files and LOC
 
 The unit is **non-comment production lines** — `CLAUDE.md` §2's unit, stated

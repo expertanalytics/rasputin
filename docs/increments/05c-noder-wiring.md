@@ -1261,8 +1261,15 @@ in the list is a forecast miss and gets named as one in review.
 Per `docs/increments/README.md` — found during this increment, fixed in this
 increment's PR, or not recorded:
 
-* **`docs/increments/04-cdt.md`** gains the unreachability paragraph beneath its
-  mapping table. The table stays.
+* **`docs/increments/04-cdt.md`** is corrected in two places, both appended
+  rather than folded in, because the text they correct is the record of what
+  increment 4 decided. Its mapping table gains the unreachability paragraph
+  beneath it, and the table stays. Its "Noded input: the ruling" section gains a
+  retraction of **"mechanically"**: the C++ retyping was mechanical and came in
+  at 8 lines, the Python it drags was +304, and the fifth C++ file was a design
+  decision rather than a retype. That sentence is the one `05-noder.md` priced
+  at ~10 lines and `05b-noder-driver.md`'s risk 13 names, so leaving it standing
+  leaves three documents pointing at a premise this increment refuted.
 * **`docs/increments/05b-noder-driver.md`** is corrected in three places: the
   C++ signature change is **five** files, not four (`constrained_edges.hpp` is
   missing from its "C++, and this part really is mechanical" paragraph); feeding
