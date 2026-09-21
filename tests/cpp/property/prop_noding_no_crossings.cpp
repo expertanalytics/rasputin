@@ -165,10 +165,37 @@ struct ArcKey {
     return ArcKey{(w.x - s.a.x) * d.x + (w.y - s.a.y) * d.y, g};
 }
 
-// For one input segment: the node ids whose cells it meets, in arc order. This
-// is exactly the sequence step 4 says the segment is split into, reconstructed
-// from the input. Precomputed per segment because the alternative is
-// O(edges * segments * nodes) calls into the exact kernel.
+// The id of the node a point snaps to. Guarantee 11 puts every input vertex in
+// the node set, so the lookup cannot fail on a successful outcome; a linear scan
+// is affordable for the same reason the guarantee-14 scan above is.
+[[nodiscard]] std::uint32_t node_id_of(const Point2& p, const SnapGrid& grid,
+                                       const std::vector<GridPoint>& nodes) {
+    const GridPoint g = grid.snap(p);
+    const auto it = std::ranges::find(nodes, g);
+    REQUIRE(it != nodes.end());
+    return static_cast<std::uint32_t>(it - nodes.begin());
+}
+
+// For one input segment: the node ids whose cells it meets, in arc order, with
+// the segment's own two endpoint nodes ANCHORED first and last rather than
+// sorted into position. This is exactly the sequence step 4 says the segment is
+// split into, reconstructed from the input. Precomputed per segment because the
+// alternative is O(edges * segments * nodes) calls into the exact kernel.
+//
+// The anchoring is borrowed from the producer's SPECIFICATION -- the step 4
+// ruling in docs/increments/05b-noder-driver.md, which is normative, and not
+// from any record the noder kept -- so this oracle still refutes a driver that
+// deviates from it. A plain sort here is a LATENT DEFECT rather than a
+// stylistic difference: a cell reaches h/sqrt(2) from its centre, so a grazed
+// node x can project BEHIND s.a, and a plain sort promotes it to the front. With
+// met arc-sorted as [x, a, y, b] (a, b the endpoint nodes) the anchored sequence
+// pairs {a,x} {x,y} {y,b}; the plain sort pairs {a,x} {a,y} {y,b}. `contributes`
+// keys on min/max, so the false claim is {a,y} -- a pair the driver never emits.
+// It is inert only while no other chain produces {a,y}; the moment one does,
+// this chain's properties are unioned into `proven` for an edge it never
+// touched, `proven` stops being a subset, and check_guarantee_15 goes RED ON
+// CORRECT OUTPUT. That is increment 5's exact-incidence failure again, with a
+// different cause and not yet firing.
 [[nodiscard]] std::vector<std::uint32_t> split_sequence(const Segment2& s, const SnapGrid& grid,
                                                         const std::vector<GridPoint>& nodes) {
     std::vector<std::pair<ArcKey, std::uint32_t>> met;
@@ -179,11 +206,21 @@ struct ArcKey {
     }
     std::ranges::sort(met, [](const auto& a, const auto& b) { return a.first < b.first; });
 
+    const std::uint32_t a = node_id_of(s.a, grid, nodes);
+    const std::uint32_t b = node_id_of(s.b, grid, nodes);
+
     std::vector<std::uint32_t> ids;
-    ids.reserve(met.size());
-    for (const auto& [key, id] : met) {
-        ids.push_back(id);
+    ids.reserve(met.size() + 2);
+    ids.push_back(a);
+    if (a == b) {
+        return ids;  // the segment collapsed under snapping; it contributes no edge
     }
+    for (const auto& [key, id] : met) {
+        if (id != a && id != b) {
+            ids.push_back(id);
+        }
+    }
+    ids.push_back(b);
     return ids;
 }
 
