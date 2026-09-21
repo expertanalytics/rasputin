@@ -192,10 +192,13 @@ be instantiated in order to test the layer above it.
 a design decision in it:
 
 ```sh
-grep -rn "const Pslg&" include/terrain/cdt/
+git grep -n "const Pslg&" 93fc772 -- include/terrain/cdt/
 ```
 
-returns four lines: `triangulate.hpp:47`, the `CdtBackend` concept's
+returns four lines. The command is spelled against the branch point on purpose:
+5c is the increment that retypes these, so the same grep run against the working
+tree correctly returns nothing, and a reader who runs that form first learns only
+that the work landed. The four are: `triangulate.hpp:47`, the `CdtBackend` concept's
 requires-clause; `triangulate.hpp:55`, the generic entry point;
 `detria_backend.hpp:22`, which 5b's list has — and `constrained_edges.hpp:48`,
 `ConstraintEdgeSet::ConstraintEdgeSet(const Pslg&)`,
