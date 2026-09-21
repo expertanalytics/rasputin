@@ -461,10 +461,18 @@ TEST_CASE("an edge_properties array whose length is not edge_base(n) is refused"
 // an open chain of one node is asked no question it cannot answer, and its
 // edge_count is the empty range every loop already handles.
 //
-// Both halves are needed and neither is redundant. Widening the guard to a bare
-// `count < 3` looks like a correction and today nothing goes red -- an unpinned
-// acceptance is a refusal waiting to be tidied in. Deleting the guard outright
-// looks like the same correction from the other end. The two cases below are one
+// Both halves are needed and neither is redundant -- but NOT for the reason the
+// first draft of this comment gave, and the measurement is worth carrying.
+// Widening the guard to a bare `count < 3` was said to be free; it is not. It
+// fails 26 registered cases across four suites, because every open chain in
+// `valid_candidate()` has `count == 2` and the widening refuses them all. The
+// mutant that really was unpinned is `|| count < 2` -- how a maintainer would
+// actually spell "an open chain of one node ought to be refused" -- and it
+// fails exactly two cases, the acceptance case below and its end-to-end
+// counterpart in test_noding_node.cpp, and nothing else. That "and nothing
+// else" is the evidence the acceptance was uncovered before them. Deleting the
+// guard outright looks like the same correction from the other end, and until
+// 797144c the closed arm it guards had no test at all. The two cases below are one
 // pair and should be read as one.
 // ---------------------------------------------------------------------------
 
