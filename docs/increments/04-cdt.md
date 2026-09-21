@@ -620,6 +620,28 @@ sceptical reader re-runs.
 | Single-chain PSLG (one `Outer` triangle) | accepted, 1 interior triangle | `Ok` | The minimal valid input. A fixture. |
 | Sliver outer ring (`{0,0},{4,0},{4,1e-13}`) | accepted, 1 triangle | `Ok` | No area threshold anywhere. "No near-zero-area triangle" is not an invariant this project can state — see `testing.md` fixes. |
 
+**What increment 5c made unreachable, appended rather than folded in.** The
+table above stays exactly as it is, because it is the record of what was true at
+increment 4 and several of its rows were *measured* against detria. As of 5c,
+`triangulate` takes a `NodedPslg`, and the noder's guarantees remove four of
+those rows from the reachable set:
+
+- `PointOnConstrainedEdge` and `ConstrainedEdgeIntersection` — guarantee 14
+  makes both unreachable, so `CdtStatus::NotNoded` joins `MalformedInput` as a
+  self-check. `describe(CdtStatus::NotNoded)` keeps naming the noder as the fix,
+  because at that point it is naming the thing that should have been called.
+- `DuplicatePointsFound` — guarantee 12 plus `world` injectivity;
+  `PolylineDuplicateConsecutivePoints` — guarantee 13. `DegenerateGeometry`
+  therefore loses both its reachable rows, `AllPointsAreCollinear` having been
+  unreachable already.
+
+**Reachable from a `NodedPslg`: `Ok`, `InvalidTopology`, `BackendFailure`.** No
+enumerator is deleted. The remaining statuses stay testable without running the
+noder, because `NodedPslgBuilder` is public and is not the `Pslg` validator: a
+suite can hand-build a candidate with a hole outside its outline, get `Ok` from
+the builder, and reach `InvalidTopology` through the backend. See
+`docs/increments/05c-noder-wiring.md`, "What becomes unreachable in `CdtStatus`".
+
 **One `Pslg` guarantee we lean on and should name.** Stage 4 rejects a stored
 closure, so `idx[begin] != idx[begin + count - 1]` as points. Combined with
 auto-closing, that means the edge detria synthesises to close a ring can never be
