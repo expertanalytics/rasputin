@@ -305,6 +305,11 @@ class CdtOutcome:
     def mesh(self) -> IndexedMesh2: ...
     def ok(self) -> bool: ...
 
+# Two ``@overload`` stubs and no union parameter, the pattern ``cross`` above
+# uses: pybind11 resolves this by exact type with conversions disabled, and both
+# enumerations' ``Ok`` is integer 0, so a single union stub would type-check a
+# call the runtime rejects. No implementation stub follows -- 05c-noder-wiring.md
+# asks for one, but a .pyi may not carry one and ``cross`` does not either.
 @overload
 def describe(status: CdtStatus) -> str:
     """One sentence of prose for a ``CdtStatus``."""
@@ -312,12 +317,6 @@ def describe(status: CdtStatus) -> str:
 @overload
 def describe(status: NodeStatus) -> str:
     """One sentence of prose for a ``NodeStatus``."""
-
-def describe(status: CdtStatus | NodeStatus) -> str:
-    """Two ``@overload`` stubs rather than one union parameter: pybind11
-    resolves this by exact type with conversions disabled, and both
-    enumerations' ``Ok`` is integer 0. A single union stub would type-check a
-    call the runtime rejects."""
 
 def build_pslg(
     vertices: npt.ArrayLike,
