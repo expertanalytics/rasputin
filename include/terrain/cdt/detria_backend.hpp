@@ -14,12 +14,12 @@
 
 #include <terrain/cdt/result.hpp>
 #include <terrain/cdt/triangulate.hpp>
-#include <terrain/core/pslg.hpp>
+#include <terrain/core/noded_pslg.hpp>
 
 namespace terrain::cdt {
 
 struct DetriaBackend {
-    [[nodiscard]] static CdtOutcome triangulate(const Pslg& pslg, const CdtOptions& options);
+    [[nodiscard]] static CdtOutcome triangulate(const NodedPslg& pslg, const CdtOptions& options);
 };
 
 static_assert(CdtBackend<DetriaBackend>);

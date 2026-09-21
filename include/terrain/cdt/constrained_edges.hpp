@@ -35,6 +35,7 @@
 #include <terrain/core/pslg.hpp>
 
 #include <algorithm>
+#include <concepts>
 #include <cstddef>
 #include <cstdint>
 #include <span>
@@ -42,10 +43,29 @@
 
 namespace terrain::cdt {
 
-// Every constraint edge of a Pslg, as an unordered index pair, sorted once.
+// The three members this file reads, and the only three. Pslg and NodedPslg
+// both have all of them, which is what lets the mask computation stay testable
+// on hand-built Pslg input after triangulate stops accepting one.
+//
+// THE HELPER IS STRUCTURAL AND THE ENTRY POINT IS NOT, deliberately: a
+// ChainedGraph-templated triangulate would restore Pslg as a legal argument and
+// undo increment 5c while leaving every test green. See
+// docs/increments/05c-noder-wiring.md. The concept lives here rather than in a
+// header of its own because it has exactly one consumer, and a shared header
+// invites a second.
+template <typename G>
+concept ChainedGraph = requires(const G& g, std::size_t c) {
+    { g.chains().size() } -> std::convertible_to<std::size_t>;
+    { g.edge_count(c) } -> std::convertible_to<std::size_t>;
+    { g.indices_of(c) } -> std::convertible_to<std::span<const std::uint32_t>>;
+};
+
+// Every constraint edge of a chained graph, as an unordered index pair, sorted
+// once.
 class ConstraintEdgeSet {
 public:
-    explicit ConstraintEdgeSet(const Pslg& pslg) {
+    template <ChainedGraph G>
+    explicit ConstraintEdgeSet(const G& pslg) {
         std::size_t total = 0;
         for (std::size_t c = 0; c < pslg.chains().size(); ++c) {
             total += pslg.edge_count(c);
