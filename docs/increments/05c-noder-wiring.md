@@ -416,10 +416,9 @@ deleted in favour of the other: delete the CLI guard and `rasputin draw
 --snap-spacing -1` silently produces a picture of a failure that is not about
 the terrain; delete the C++ guard and the library has an unchecked precondition.
 
-### 2. `--max-rounds` is **not** exposed, and this is the corner-graze ruling
+### 2. `--max-rounds` is **not** exposed, and `describe` loses a lever
 
-`describe(NodeStatus::NotConverged)` names two levers: "use a finer spacing **or
-raise the cap**". The CLI exposes only the first, deliberately.
+The CLI exposes the spacing and not the cap, deliberately.
 
 The cap is a bound on a loop, not a parameter of the answer — at any value the
 outcome is "the same mesh or `NotConverged`, never a different mesh"
@@ -430,9 +429,43 @@ constraint edge through a lattice corner with nodes on both flanking cells has
 cap*. Handing a user a knob whose visible effect on the one failure they are
 most likely to meet is "the same refusal, slower" is worse than not having it.
 
-`@tester` and `@developer` should read that as: the presentation text for
-`NotConverged` (below) **must not promise the cap**, because the CLI does not
-turn it and, for the deferred case, turning it would not help.
+**And the header's sentence goes with it. `describe(NodeStatus::NotConverged)`
+today names two levers** — "use a finer spacing **or raise the cap**"
+(`noded_pslg_builder.hpp:106-108`). **Ruling: it names one.** `@developer` makes
+this edit in the green commit:
+
+```cpp
+            return "the constraint set did not settle within the round cap; "
+                   "use a finer spacing";
+```
+
+**This is not a compromise struck between the CLI's knobs and the header's
+prose, and reading it that way would get the next one wrong.** The sentence was
+wrong on its own terms, for every audience, before the CLI existed. `Ok` is
+unreachable at any cap on the corner graze — that is a property of the
+predicate, not of who is calling — so a caller who *can* turn the cap is told to
+turn it into the same refusal. The design already knew: `05b-noder-driver.md:1478`
+reads "raise the cap — **except on risk 16's corner graze, where neither
+helps**". The header states the unqualified form. The design was right and the
+header drifted from it; 5c is where a human first reads the header's words, so
+5c is where the drift surfaced. The CLI did not create the problem, it exposed
+it.
+
+The shortened text is still true for a library caller, because it states the
+lever that holds for all of them and no more. What is dropped is advice that was
+never universally true, not advice specific to the CLI.
+
+**One implementation constraint, and it is a citation rather than a style
+preference: the arm stays at exactly two source lines.**
+`05b-noder-driver.md:1560` cites `noded_pslg_builder.hpp:217` as the site of a
+recorded mutation, and that line number is downstream of this string. Collapsing
+the two lines into one moves it and falsifies a mutation record this branch is
+not re-running. The replacement above is two lines for that reason.
+
+`@tester` and `@developer` should read the whole of this as: the presentation
+text for `NotConverged` (below) **must not promise the cap**, because the CLI
+does not turn it and, for the deferred case, turning it would not help anyone
+who did.
 
 ### 3. What a user sees when the noder refuses — including the corner graze
 
@@ -452,9 +485,12 @@ For the corner graze specifically, the band reads:
 
 ```
 NotConverged   the constraint set did not settle within the round cap; use a
-               finer spacing or raise the cap   the constraint set did not
-               settle in 4 rounds at spacing 0.001: <the last round's refusal>
+               finer spacing   the constraint set did not settle in 4 rounds
+               at spacing 0.001: <the last round's refusal>
 ```
+
+That is the shortened arm ruled above, printed. The band names one lever
+because the header now names one.
 
 **The default does not dodge 5d, and pretending otherwise would be the wrong
 ruling.** `05d-corner-graze.md:30-45` shows the orbit arising from *ordinary GIS
@@ -845,6 +881,7 @@ approximates.
 | `include/terrain/cdt/detria_backend.hpp` | the declaration | 2 |
 | `include/terrain/cdt/constrained_edges.hpp` | `ChainedGraph` concept, templated constructor | 10 |
 | `src/cdt/detria_backend.cpp` | signature and include; body untouched | 3 |
+| `include/terrain/noding/noded_pslg_builder.hpp` | `describe(NotConverged)` drops the cap lever; two lines in, two lines out | 0 |
 | `bindings/core.cpp` | `NodeStatus`, `describe` overload, `bind_pslg_like`, `NodedPslg`, `NodeOutcome`, `node()`, retyped `triangulate` | 135 |
 | `src_python/tin_engine/_core.pyi` | stubs for all of it | 60 |
 | `src_python/tin_engine/cli.py` | `node()` call, `--snap-spacing`, `Attempt`, the noder's failure presentation, `_PRECEDENCE` | 38 |
@@ -863,7 +900,7 @@ crossing nobody can read). Together they are 15 lines and they are the reason
 5c's total did not fall as far as the binding re-estimate alone would suggest.
 
 **Not production code, and the round is not free.** The test churn is the
-largest uncosted part of 5c and it crosses **five** suites, three of them C++:
+largest uncosted part of 5c and it crosses **six** suites, four of them C++:
 
 * `tests/cpp/unit/test_cdt_detria_backend.cpp` (~500 lines) and
   `tests/cpp/property/prop_cdt_invariants.cpp` (~430) build `Pslg` fixtures and
@@ -874,11 +911,36 @@ largest uncosted part of 5c and it crosses **five** suites, three of them C++:
 * `tests/cpp/unit/test_cdt_constrained_edges.cpp` (~250) is **unchanged** — that
   is what the `ChainedGraph` concept buys, and it is the concrete return on the
   ten lines it costs.
-* `tests/python/test_core_cdt.py:660`,
-  `test_reports_a_non_noded_input_as_a_failure_status`, asserts that
-  `crossing_pslg` fails. After 5c that input cannot reach `triangulate` at all;
-  the test moves to the noding suite and becomes an assertion that it
-  *succeeds*.
+* `tests/cpp/unit/test_cdt_backend_seam.cpp` is the sixth, and it appeared in no
+  list until now. It has to change, and not by choice: `CdtBackend` is spelled
+  in terms of the entry point's parameter, so retyping `triangulate` retypes the
+  concept, and every fake backend in the file declares that parameter. Leave
+  them at `const Pslg&` and the fakes the suite asserts *are* backends stop
+  satisfying `CdtBackend`, which `STATIC_REQUIRE` reports at compile time. That
+  is the finding, not a compile accident — the suite exists to be the place
+  where a change to the seam's signature announces itself.
+
+  Two substantive changes `@tester` made here, both **endorsed**, recorded so
+  `@reviewer` audits them against a written reason:
+
+  - **`UnNodedCdtBackend` is new**: the pre-5c signature kept alive as a type
+    that must now *fail* the concept. Without it, the retype is revertible with
+    every other assertion in the file staying green — nothing else in the suite
+    can tell a concept that rejects `Pslg` from one that accepts it. It is also
+    the first place a compiler checks 5c's architectural product: **un-noded
+    input unrepresentable at the entry point rather than diagnosed inside it.**
+  - **`FailingCdtBackend` returns `BackendFailure` instead of
+    `CdtStatus::NotNoded`**, required by 5c's own ruling above that `NotNoded`
+    becomes a self-check no `NodedPslg` can reach. A fake handing one back would
+    read as a claim that it still can.
+* `tests/python/test_core_cdt.py`'s
+  `test_reports_a_non_noded_input_as_a_failure_status` asserts that
+  `crossing_pslg` fails. After 5c that input cannot reach `triangulate` at all,
+  so the case splits in two: the noding suite asserts the crossing *succeeds*,
+  and what stays in the CDT suite is that handing `triangulate` a `Pslg` is a
+  `TypeError` rather than a status. No line number is cited, because this
+  increment is what moves it — locate it by name, or by
+  `grep -rn non_noded tests/python/`.
 * `tests/python/test_cli_draw.py` pins the `not-noded` fixture's presentation,
   which is the picture this increment changes.
 
@@ -890,15 +952,30 @@ commit.
 
 **Gate B's mapping applies: one test file per production surface.** Four
 surfaces, four files, and the C++ half of this increment adds no new suite —
-`test_cdt_constrained_edges.cpp` grows one case for the concept and the three
-existing CDT suites are *amended* rather than replaced.
+the existing CDT suites are *amended* rather than replaced.
 
 | Surface | Suite | Invariant-critical? |
 |---|---|---|
-| `ChainedGraph` + retyped entry point | `tests/cpp/unit/test_cdt_constrained_edges.cpp` (amended) | no |
+| `ChainedGraph` + retyped entry point | `tests/cpp/unit/test_cdt_backend_seam.cpp` (amended) | no |
 | the `node`/`NodedPslg`/`NodeOutcome` binding | `tests/python/test_core_noding.py` (new) | **yes** |
 | `cli.py`'s pipeline and failure presentation | `tests/python/test_cli_draw.py` (amended) | no |
 | the structural join | `tests/python/test_viz_protocols.py` (amended) | no |
+
+**That row used to name `test_cdt_constrained_edges.cpp`, and it contradicted
+"Files and LOC", which says that file is unchanged.** The contradiction is
+resolved in favour of *unchanged*, because that is the load-bearing claim: the
+stated return on the ten lines `ChainedGraph` costs is that not one of that
+file's twenty-odd hand-built `Pslg` fixtures needs adapting, and the only way to
+demonstrate it is to not touch the file. A case added there would spend the
+claim to buy a case that fits elsewhere.
+
+Elsewhere is the seam suite. `ChainedGraph` is a seam between two graph types
+and one consumer, and the retyped entry point is the same suite's subject
+already; `test_cdt_backend_seam.cpp` is also registered against the plain test
+helper, which is what lets it assert on `triangulate` without linking a backend.
+`@tester` placed the case there and its header comment at
+`test_cdt_backend_seam.cpp:44-52` states this argument in the file itself.
+Endorsed; the design is what was wrong.
 
 **The invariant-critical suite is the binding one**, and the reason is where the
 silent failures live. Everything in `bindings/core.cpp` that 5c adds is a
