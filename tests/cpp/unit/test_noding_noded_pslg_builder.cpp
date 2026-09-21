@@ -452,6 +452,56 @@ TEST_CASE("an edge_properties array whose length is not edge_base(n) is refused"
 }
 
 // ---------------------------------------------------------------------------
+// THE ASYMMETRY OF THE count < 3 GUARD, PINNED FROM BOTH SIDES.
+//
+// 05b-noder-driver.md, "An open chain that collapses to one node is Ok, and it
+// is pinned": the refusal belongs to is_closed(role) ALONE, and an open chain of
+// one node is accepted BY DESIGN rather than tolerated. A ring of under three
+// nodes has no interior and no winding, so orientation<K> has nothing to answer;
+// an open chain of one node is asked no question it cannot answer, and its
+// edge_count is the empty range every loop already handles.
+//
+// Both halves are needed and neither is redundant. Widening the guard to a bare
+// `count < 3` looks like a correction and today nothing goes red -- an unpinned
+// acceptance is a refusal waiting to be tidied in. Deleting the guard outright
+// looks like the same correction from the other end. The two cases below are one
+// pair and should be read as one.
+// ---------------------------------------------------------------------------
+
+TEST_CASE("an open chain of one node is accepted, contributing no edge",
+          "[noding][noded_pslg_builder]") {
+    // A third breakline whose every vertex snapped to the same node: count == 1,
+    // zero edges, five metres clear of the other two so that no other guarantee
+    // can be the reason for the verdict. Arrays the noder did not produce, which
+    // is the whole reason the builder is a separate type.
+    Candidate c = breaklines({GridPoint{0, 0}, GridPoint{0, 50}, GridPoint{100, 0},
+                              GridPoint{100, 50}, GridPoint{50, 500}},
+                             {{0, 2}, {1, 3}, {4}}, {kRoad, kRiver, kRoad});
+
+    const NodeOutcome out = c.verify();
+    REQUIRE(out.status == NodeStatus::Ok);
+    REQUIRE(out.message.empty());
+
+    const auto& p = *out.pslg;
+    REQUIRE(p.chains().size() == 3);
+    REQUIRE(p.edge_count(2) == 0);
+    REQUIRE(p.edge_base(2) == p.edge_base(3));
+    REQUIRE(p.edge_properties().size() == p.edge_base(p.chains().size()));
+}
+
+TEST_CASE("a closed chain of under three nodes is refused, which is the other half",
+          "[noding][noded_pslg_builder]") {
+    Candidate c = breaklines({GridPoint{0, 0}, GridPoint{0, 50}}, {{0, 1}}, {kRoad});
+    c.chains[0].role = ChainRole::Outer;  // the same two nodes, now a ring
+
+    const NodeOutcome out = c.verify();
+    REQUIRE(out.status == kOurBug);
+    // Named, because the same candidate also has a closed chain's edge count
+    // disagreeing with its property array and either would refuse it.
+    REQUIRE(out.message.find("closed chain") != std::string::npos);
+}
+
+// ---------------------------------------------------------------------------
 // The accepted candidate's own arithmetic, so that an acceptance is not merely
 // the absence of a refusal.
 // ---------------------------------------------------------------------------
