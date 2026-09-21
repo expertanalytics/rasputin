@@ -845,7 +845,14 @@ class TestCornerGrazePresentation:
         assert invoke("catchment", "--out", str(target)).exit_code == 0
         header = group_text(written(target), "header")
         assert "NotConverged" in header
-        assert core.describe(core.NodeStatus.NotConverged).split()[0] in header
+        # The whole sentence, not its first word -- which is "the", and passes
+        # on a band printing one article. Derived from `describe` at run time
+        # rather than written out, so a reworded row keeps this green: what is
+        # pinned is that the band carries the engine's words verbatim, which is
+        # the passthrough claim. Normalised on both sides because `group_text`
+        # collapses the SVG's whitespace and the row may be laid out with more.
+        sentence = " ".join(core.describe(core.NodeStatus.NotConverged).split())
+        assert sentence in header
         assert "did not settle in 4 rounds" in header
 
     def test_the_cli_adds_no_lever_of_its_own(self, not_converged: str, tmp_path: Path) -> None:
