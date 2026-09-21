@@ -93,8 +93,8 @@ CORE_CLOSED_ROLES: tuple[object, ...] = (ChainRole.Outer, ChainRole.Hole)
 #: those are two different questions -- water is drawn over infrastructure
 #: however a vocabulary chose to number them -- and named *here* because
 #: `style.py` and `svg.py` hold no vocabulary and `viz/` may not import one at
-#: all. It is this module's to supply, exactly as :data:`ROLES` and
-#: :data:`CLOSED_ROLES` are.
+#: all. It is this module's to supply, exactly as :data:`ROLES`,
+#: :data:`FIXTURE_CLOSED_ROLES` and :data:`CORE_CLOSED_ROLES` are.
 #:
 #: It is the gallery's list and not all of :data:`DEFAULT_VOCABULARY`. The
 #: legend is derived from it, and a token `svg.py`'s stylesheet has no rule for

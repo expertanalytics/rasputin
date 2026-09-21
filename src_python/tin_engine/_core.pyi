@@ -308,8 +308,9 @@ class CdtOutcome:
 # Two ``@overload`` stubs and no union parameter, the pattern ``cross`` above
 # uses: pybind11 resolves this by exact type with conversions disabled, and both
 # enumerations' ``Ok`` is integer 0, so a single union stub would type-check a
-# call the runtime rejects. No implementation stub follows -- 05c-noder-wiring.md
-# asks for one, but a .pyi may not carry one and ``cross`` does not either.
+# call the runtime rejects. No implementation stub follows, because a stub file
+# may not carry one: mypy rejects "an implementation for an overloaded function"
+# in a ``.pyi``, and ``cross`` above declares two overloads and nothing else.
 @overload
 def describe(status: CdtStatus) -> str:
     """One sentence of prose for a ``CdtStatus``."""
