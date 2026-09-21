@@ -136,6 +136,18 @@ ROAD = 1 << ROAD_BIT
 #: to agree with the numbering.
 GALLERY_STROKES = ((ROAD_BIT, "road"), (RIVER_BIT, "river"))
 
+#: Which gallery fixtures the design gives property bits to, and why -- the
+#: expectation `test_no_fixture_carries_a_property_by_accident` is held against.
+#: Named data rather than a literal inside the assertion, so that a fixture
+#: earning a property is one edit here with a reason next to it.
+CLASSIFIED_FIXTURES = {
+    "river": "the property stroke's own fixture: one breakline, the river bit",
+    # `05c-noder-wiring.md`, "The gallery": the crossing is the increment's
+    # product, so its two breaklines carry road and river, as its C++ twin at
+    # `tests/cpp/unit/test_noding_node.cpp:162-165` always has.
+    "not-noded": "a road crossing a river, in two colours, meeting at a node",
+}
+
 
 class Role(enum.Enum):
     """A stand-in for `_core.ChainRole`, which this suite may not import.
@@ -1213,9 +1225,11 @@ class TestFailurePresentation:
     outline" triangulates successfully to nothing, and in a release build with
     the assert compiled out one test is the only guard. The viewer is the second
     guard, and it only works if the failure is conspicuous rather than blank --
-    which is why three of the eight gallery fixtures exist to put this
+    which is why two of the eight gallery fixtures exist to put this
     presentation in front of a person rather than have it assumed --
-    `not-noded`, `degenerate` and, since `4482649`, `hole-in-hole`.
+    `degenerate` and, since `4482649`, `hole-in-hole`. `not-noded` was a third
+    until 5c, which noded its crossing: it now draws a mesh, and that is the
+    increment's product rather than a fixture going missing here.
     """
 
     @pytest.fixture(params=["empty_scene", "failed_scene"])
@@ -1523,15 +1537,34 @@ class TestGallery:
         assert RIVER in masks
         assert set(masks) <= {NO_PROPERTIES, RIVER}
 
-    def test_only_the_river_fixture_carries_a_property(self) -> None:
-        # Able to fail on its own: if every fixture set a bit, the test above
-        # would pass without the `river` fixture existing at all.
+    def test_no_fixture_carries_a_property_by_accident(self) -> None:
+        # Was `test_only_the_river_fixture_carries_a_property`, asserting
+        # `== {"river"}`, until 5c gave `not-noded` road and river. "Exactly one
+        # fixture" was a count of the gallery as it stood, not a property of it,
+        # and it had to be rewritten the first time a second fixture earned a
+        # bit. What the case was actually protecting is the half that still has
+        # teeth: a bit is set where the design says and NOWHERE else, so that
+        # `test_the_river_fixture_sets_the_river_bit_and_only_that_bit` cannot
+        # pass vacuously off a gallery that classified everything.
+        #
+        # Three assertions, each able to fail on its own. The equality catches a
+        # fixture that gained or lost a mask silently; the strict subset catches
+        # the vacuous gallery even if someone widens the set above to match it;
+        # the bit check catches a literal typed one position off, which is the
+        # accident this gallery is most exposed to -- `fixtures.py` writes bare
+        # numbers because `viz/` may import no vocabulary.
         classified = {
             name
             for name in GALLERY_NAMES
             if any(chain.properties for chain in gallery()[name].chains)
         }
-        assert classified == {"river"}
+        assert classified == set(CLASSIFIED_FIXTURES)
+        assert classified < set(GALLERY_NAMES), "every fixture carries a property"
+        for name in sorted(classified):
+            stray = [
+                int(chain.properties) & ~(RIVER | ROAD) for chain in gallery()[name].chains
+            ]
+            assert not any(stray), f"{name} sets a bit outside road and river"
 
     def test_the_sliver_fan_is_near_collinear_without_being_collinear(self) -> None:
         # The aspect-ratio question: near-collinear is the hard case for the
