@@ -12,6 +12,17 @@ against the **merged tree and the shipped headers**, not against 5b's
 description of them, which is why several of 5b's forward statements are
 corrected below rather than carried.
 
+**And every line number below is read against that tree** — source files and
+`05b-noder-driver.md` alike, the two things this PR then edited out from under
+them. `git show 93fc772:<path> | sed -n '<n>p'` is what resolves one; the
+working tree is not, which is why `tools/check_citations.py` lists them as
+at-risk. Where a passage is instead reading what this increment *produced*, the
+sentence says so, which the post-red rulings and the measurements under
+**Reconciliation** do. Several citations into 5b are quoted by phrase rather
+than numbered, and one of those quotes carries a `git show 93fc772:` command of
+its own, because 5b's *text* changed there and not merely its line numbering: a
+number would resolve to the correction rather than to the claim being answered.
+
 ## What this increment is for
 
 The user's destination, in their words: *"the case where a road crosses a river,
@@ -184,10 +195,16 @@ a design decision in it:
 grep -rn "const Pslg&" include/terrain/cdt/
 ```
 
-returns `triangulate.hpp:52`, `triangulate.hpp:59` — and
-`constrained_edges.hpp:48`, `ConstraintEdgeSet::ConstraintEdgeSet(const Pslg&)`,
+returns four lines: `triangulate.hpp:47`, the `CdtBackend` concept's
+requires-clause; `triangulate.hpp:55`, the generic entry point;
+`detria_backend.hpp:22`, which 5b's list has — and `constrained_edges.hpp:48`,
+`ConstraintEdgeSet::ConstraintEdgeSet(const Pslg&)`,
 which `src/cdt/detria_backend.cpp:128` constructs from its argument. Retyping
-the backend without retyping this does not compile.
+the backend without retyping this does not compile. (The two `triangulate.hpp`
+numbers read `:52` and `:59` when this section was first written, and were wrong
+against `93fc772` as well as after it: run the grep through
+`git grep -n "const Pslg&" 93fc772 -- include/terrain/cdt/` rather than trusting
+either.)
 
 **Ruling: `ConstraintEdgeSet`'s constructor becomes a template over a small
 concept; `triangulate` does not.** The two halves are deliberate and they point
@@ -470,10 +487,10 @@ prose, and reading it that way would get the next one wrong.** The sentence was
 wrong on its own terms, for every audience, before the CLI existed. `Ok` is
 unreachable at any cap on the corner graze — that is a property of the
 predicate, not of who is calling — so a caller who *can* turn the cap is told to
-turn it into the same refusal. The design already knew: `05b-noder-driver.md:1478`
-reads "raise the cap — **except on risk 16's corner graze, where neither
-helps**". The header states the unqualified form. The design was right and the
-header drifted from it; 5c is where a human first reads the header's words, so
+turn it into the same refusal. The design already knew: the `NotConverged` row
+of `05b-noder-driver.md`'s status table reads "raise the cap — **except on
+risk 16's corner graze, where neither helps**". The header states the
+unqualified form. The design was right and the header drifted from it; 5c is where a human first reads the header's words, so
 5c is where the drift surfaced. The CLI did not create the problem, it exposed
 it.
 
@@ -483,8 +500,9 @@ never universally true, not advice specific to the CLI.
 
 **One implementation constraint, and it is a citation rather than a style
 preference: the arm stays at exactly two source lines.**
-`05b-noder-driver.md:1560` cites `noded_pslg_builder.hpp:217` as the site of a
-recorded mutation, and that line number is downstream of this string. Collapsing
+`05b-noder-driver.md`'s mutation record — "Measured here, not asserted, with the
+guard patched into ..." — cites `noded_pslg_builder.hpp:217` as the site, and
+that line number is downstream of this string. Collapsing
 the two lines into one moves it and falsifies a mutation record this branch is
 not re-running. The replacement above is two lines for that reason.
 
@@ -539,9 +557,12 @@ that deliberately does not fix it.
 
 ### 4. The scene's source — and 5b's "one-line change" is wrong
 
-`05b-noder-driver.md:1656-1661` says feeding `build_scene` the noded graph "is a
-one-line change in `cli.py`". **It is a two-field change, and doing the
-documented half alone turns the whole gallery red.**
+`05b-noder-driver.md`'s "And the scene must be fed the `NodedPslg`" paragraph
+says feeding `build_scene` the noded graph "is a one-line change in `cli.py`".
+**It is a two-field change, and doing the documented half alone turns the whole
+gallery red.** That paragraph carries the correction now rather than the claim,
+so `git show 93fc772:docs/increments/05b-noder-driver.md | grep -n 'one-line
+change'` is what shows the sentence this section answers.
 
 `cli.py:212` today passes the **fixture** as the `PslgLike`, together with
 `CLOSED_ROLES = ("outer", "hole")` — *strings*, because a fixture's roles are
@@ -759,7 +780,8 @@ so that the reservation is unambiguous whether or not it is ever allocated.
 
 ### Defect 2: the C++ factor is three-for-four, and the re-derivation
 
-The sentence declining to double the C++ rows (`05b-noder-driver.md:1734-1736`)
+The sentence declining to double the C++ rows — "The C++ rows are *not*
+doubled", in `05b-noder-driver.md`'s "Files and LOC" —
 rests on "increments 3, 4 and 5a all came in at or under their C++ estimates".
 With 5b in the sample:
 
@@ -1243,9 +1265,10 @@ increment's PR, or not recorded:
   mapping table. The table stays.
 * **`docs/increments/05b-noder-driver.md`** is corrected in three places: the
   C++ signature change is **five** files, not four (`constrained_edges.hpp` is
-  missing from `:1631-1640`); feeding the scene a `NodedPslg` is **not** a
-  one-line change (`:1660`) and the second field is `closed_roles`; and Gate
-  C's overflow increment is **5e**, not 5d (`:479`), because `05d` is now the
+  missing from its "C++, and this part really is mechanical" paragraph); feeding
+  the scene a `NodedPslg` is **not** a one-line change (its "And the scene must
+  be fed the `NodedPslg`" paragraph) and the second field is `closed_roles`; and
+  Gate C's overflow increment is **5e**, not 5d, because `05d` is now the
   corner graze. A fourth: its Python-suites paragraph cited a line number in
   `tests/python/test_core_cdt.py` for a test this increment splits, so the
   number is dropped in favour of the test's name and a `grep`, per
@@ -1254,9 +1277,10 @@ increment's PR, or not recorded:
 * **`src_python/tin_engine/viz/fixtures.py:21-26`** — three deliberate failures
   become two, and `not-noded` changes role.
 
-**Not corrected, because 5b corrected it itself:** the C++ estimate paragraph at
-`:1734-1736` rests on a three-for-three record, and 5b's own reconciliation
-section already says so (`:1829-1836`, "three-for-four, not three-for-three"). It
+**Not corrected, because 5b corrected it itself:** the "The C++ rows are *not*
+doubled" paragraph in its "Files and LOC" rests on a three-for-three record, and
+5b's own reconciliation section already says so — "three-for-four, not
+three-for-three". It
 did not, however, *re-derive the factor* — it said the sentence "is weaker than
 when it was written" and left it standing. That is the half Gate C hands to this
 document, and the table above is it. Editing the shipped reconciliation section

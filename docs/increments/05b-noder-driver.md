@@ -34,8 +34,10 @@ Three premises from `05-noder.md` are overturned below, each with the command
 that refutes it:
 
 1. **The signature change is not mechanical and is not ~10 lines.**
-   `bindings/core.cpp:466` calls `terrain::cdt::triangulate<DetriaBackend>(pslg,
-   options)` on a `const Pslg&`. Retyping the CDT entry point breaks that
+   The binding calls `terrain::cdt::triangulate<DetriaBackend>(pslg, options)`
+   on a `const Pslg&`, and still does at 5b's own merge: `git show
+   93fc772:bindings/core.cpp | grep -n 'const Pslg& pslg, bool delaunay'`.
+   Retyping the CDT entry point breaks that
    translation unit, and the only repair is to bind a producer of `NodedPslg` —
    which drags `_core.pyi`, `cli.py`, the Python suites and the renderer's scene
    join along with it. `05-noder.md`'s "Files and LOC" table books this as one
@@ -1618,7 +1620,8 @@ because at that point it is naming the thing that should have been called.
 
 ### Nesting is still not computed
 
-`03-pslg.md:520-526` reserved `nesting_forest<K>(const NodedPslg&)` for the
+`03-pslg.md`'s "Grouping: neither declared nor computed" section reserved
+`nesting_forest<K>(const NodedPslg&)` for the
 increment where non-crossing input makes the answer meaningful, which is this
 one. Still deferred, and for `05-noder.md`'s better reason rather than the
 original one: `detria` computes nesting itself and diagnoses the failures as
@@ -1653,10 +1656,14 @@ re-estimated the corrected set at **18** and measured **8** — under, like ever
 other C++ row in that increment. See `docs/increments/05c-noder-wiring.md`, "The
 C++ signature change".
 
-**`bindings/core.cpp`, and this part is not.** `bindings/core.cpp:466` calls
-`terrain::cdt::triangulate<DetriaBackend>(pslg, options)` with a `const Pslg&`;
-retyping the C++ entry point breaks that translation unit, so the binding is
-**not optional and cannot be deferred**. There is no smaller consistent step
+**`bindings/core.cpp`, and this part is not.** It calls
+`terrain::cdt::triangulate<DetriaBackend>(pslg, options)` with a `const Pslg&`
+(`git show 93fc772:bindings/core.cpp | grep -n 'const Pslg& pslg, bool
+delaunay'`); retyping the C++ entry point breaks that translation unit, so the
+binding is **not optional and cannot be deferred**. 5c is where that was
+cashed, and it cashed the way this paragraph says: `686ec1b` retypes the
+lambda, and `grep -n 'const NodedPslg& pslg, bool delaunay' bindings/core.cpp`
+is what stands there now. There is no smaller consistent step
 than: `py::enum_<NodeStatus>` plus a `describe` overload, `py::class_<SnapGrid>`,
 `py::class_<NodedPslg>` mirroring the five `Pslg` properties plus `grid`,
 `edge_properties` and `node_of_input_vertex`, `py::class_<NodeOutcome>`, and an
@@ -2157,9 +2164,11 @@ construction.
 Continuing `05-noder.md`'s register, which ends at 12.
 
 13. **The signature change is not mechanical, and three documents say it is.**
-    `03-pslg.md:490-493` and `04-cdt.md:659-660` both book it as mechanical and
-    `05-noder.md` estimates it at ~10 lines; `bindings/core.cpp:466` is the line
-    that refutes all three. Mitigated by making it 5c's own PR with the Python
+    `03-pslg.md`'s "Increment 4's wrapper signature" paragraph and `04-cdt.md`'s
+    "Noded input: the ruling" both book it as mechanical and `05-noder.md`
+    estimates it at ~10 lines; the binding refutes all three — `git show
+    93fc772:bindings/core.cpp | grep -n 'const Pslg& pslg, bool delaunay'`.
+    Mitigated by making it 5c's own PR with the Python
     surface it drags along. Residual: a reader of any of those three documents
     still arrives expecting a one-line change, which is why the correction is
     made in `05-noder.md` itself in this PR rather than recorded here.
@@ -2322,7 +2331,8 @@ fifth of which came out of `@tester`'s red round:
 
 1. Guarantee 14(a) is false on duplicate edges; the amended clause replaces it.
 2. The 5b row of "Files and LOC" names no Python file and estimates the signature
-   change at ~10; `bindings/core.cpp:466` refutes it.
+   change at ~10; the binding refutes it (`git show 93fc772:bindings/core.cpp |
+   grep -n 'const Pslg& pslg, bool delaunay'`).
 3. The "Contingency split of 5b" section proposes a seam that this document does
    not take; it is replaced by a pointer here rather than left as a live
    alternative a later reader might act on.

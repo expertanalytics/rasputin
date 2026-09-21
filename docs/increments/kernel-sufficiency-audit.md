@@ -147,9 +147,11 @@ stronger than "the cost is acceptable" — there is nothing to profile.**
 ### There is no production caller
 
 `grep -rn incircle include src` returns the predicates module, one *comment* in
-`include/terrain/cdt/triangulate.hpp:30`, and nothing else. The CDT is detria's
-own triangulator behind increment 4's wrapper; `04-cdt.md:816` uses our
-`incircle` as a **test oracle**, not in the mesh path. `DefaultKernel::incircle`
+`include/terrain/cdt/triangulate.hpp` — obligation 5 of the `CdtBackend`
+contract, which `grep -n incircle` over that file is what finds — and nothing
+else. The CDT is detria's own triangulator behind increment 4's wrapper;
+`04-cdt.md`'s "The property suite runs under `DefaultKernel` only" ruling uses
+our `incircle` as a **test oracle**, not in the mesh path. `DefaultKernel::incircle`
 is today called only by tests.
 
 An interface addition justified by "profiling demands it"
