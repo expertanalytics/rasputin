@@ -986,13 +986,36 @@ promotes it to an end.
 With met arc-sorted as `[x, a, y, b]` (`a = node(s.a)`, `b = node(s.b)`), the
 anchored sequence is `[a, x, y, b]` and yields the undirected pairs `{a,x}`,
 `{x,y}`, `{y,b}`; the plain sort yields `{x,a}`, `{a,y}`, `{y,b}`. `{a,x}` and
-`{x,a}` are the same pair, so the difference is exactly one pair: the plain sort
-claims `{a,y}`, which the driver never produces. Guarantee 15's oracle iterates
-the *output* edges, so a claimed pair that is not an output edge is inert — but
-if some other chain produced `{a,y}`, this chain's properties are unioned into
-`proven` for an edge it never touched, `proven` stops being a subset, and
-`REQUIRE(contains(proven))` goes **red on correct output**. That is increment 5's
-exact-incidence failure with a different cause, latent rather than firing.
+`{x,a}` are the same pair, so the symmetric difference is **two** pairs, not one:
+the plain sort **gains** `{a,y}`, which the driver never produces, and **loses**
+`{x,y}`, which it does. An earlier revision of this paragraph said "exactly one
+pair" and was counting only the half it went on to argue from.
+
+**The ruling survives because the two directions are not symmetric, and that
+asymmetry is the whole argument.** `check_guarantee_15` only ever *unions* into
+`proven` and then asserts `out.edge_properties()[e.flat].contains(proven)`. So:
+
+- a **wrongly-claimed** pair can push `proven` past what the edge's properties
+  really are — if some other chain produced `{a,y}`, this chain's properties are
+  unioned in for an edge it never touched, `proven` stops being a subset, and the
+  `REQUIRE` goes **red on correct output**. That is increment 5's exact-incidence
+  failure with a different cause;
+- a **wrongly-omitted** pair merely makes `proven` smaller, which an assertion
+  that is already one-directional absorbs by construction. It is permanently
+  inert, not inert-for-now.
+
+So the correct claim is **exactly one pair in the direction that can fail**, and
+it is the gained one. The lost pair is why the oracle is weaker than it looks,
+not why it is wrong.
+
+**And it is latent in the strongest sense: the generator never produces the
+case.** `@tester` instrumented `split_sequence` to compute both spellings side by
+side across the suite's generated sets and found **0 divergences over ~1000 input
+segments**. So the grazed-node-behind-`s.a` case is not merely inert under the old
+oracle — no seed reaches it, and no amount of running the old suite would have
+found this. It was found by reading the rule against the code, which is the
+`is the claim about the same object the code evaluates?` inspection rather than a
+run, and is the case `.claude/REQUIRED-READING.md` reserves that question for.
 
 > **Ruling: `split_sequence` in `tests/cpp/property/prop_noding_no_crossings.cpp`
 > should be respelled to anchor its endpoints, matching this rule.** That is
@@ -1130,10 +1153,23 @@ fire first and report `RingDegenerateAfterSnap` where the honest diagnosis is
 a valid `Pslg` whose *snapped* ring takes such a shape, and the bounded search
 below found no surviving flip at all — but it is the clause the four measured
 slivers do not cover, and the "no fixture can exist" claim above is therefore
-*not refuted by the search*, not *proved*. Settling it is one line in
-`/tmp/ringsearch.cpp`: for each grazed flip, also report whether
-`orientation<K>` of the **split** ring matches the role. That is `@tester`'s to
-run, at 5d, when the predicate that decides "grazed" moves anyway.
+*not refuted by the search*, not *proved*.
+
+**It is 5d's to settle, not this increment's, and that is a ruling rather than a
+deferral.** At 5b the 3 410 in 500 000 changes *which name a refusal carries* —
+`RingDegenerateAfterSnap` where `NonSimpleRing` is the honest diagnosis — and not
+whether the ring is refused or what the caller should do about it. Nobody is owed
+that distinction here. At 5d they are, because 5d narrows
+`segment_meets_cell<K>`, which is the predicate the whole demotion rests on: the
+argument is "the split pass refuses it one stage earlier", and what decides
+whether the split pass fires is exactly that predicate. `@tester` and
+`@orchestrator` reached this independently and it is recorded in
+`docs/increments/05d-corner-graze.md` under "`RingDegenerateAfterSnap`'s
+demotion rests on this predicate", **with two obligations rather than one**: the
+one-line orientation report *and* a re-run of the whole bounded ring search
+against the new predicate. The second is the one at risk of being skipped —
+`SURVIVORS 0` is a measurement of the *old* predicate, so re-running only the new
+probe tests the old question with the new code.
 
 **And `05-noder.md` risk 3's mitigation is not where that document thinks it
 is.** Risk 3 reads: if the winding re-check is dropped, "a reversed sliver hole
@@ -1504,22 +1540,60 @@ does not say so is the accepted cost: it cannot distinguish "collapsed" from
 lives at the composition root (`cli.py`, 5c).
 
 **And it must be pinned, because an unpinned acceptance is a refusal waiting to
-be tidied in.** Nothing currently fails if someone widens `noded_pslg_builder.hpp`'s
-`is_closed(ch.role) && count < 3` to `count < 3`, or adds a `count < 2` guard to
-the driver; both look like corrections. Two fixtures, `@tester`'s to write:
+be tidied in.** The mutant that expresses "an open chain of one node ought to be
+refused", spelled as minimally as a maintainer would spell it, is **`|| count < 2`
+added to `noded_pslg_builder.hpp`'s guard**: it refuses `count == 1` and leaves
+every other chain alone. That is the one that was unpinned. Two fixtures, both now
+written, each the sole killer of its side:
 
-- `tests/cpp/unit/test_noding_noded_pslg_builder.cpp` — a **hand-built**
-  candidate with an open chain of `count == 1`, required to `build<K>()` as `Ok`.
-  This is the one that pins the guard's asymmetry at the guard, against arrays the
-  noder did not produce, which is the whole reason the builder is a separate type.
-  The same file's existing closed-chain-under-3 refusal is its counterpart and the
-  two should read as a pair.
-- `tests/cpp/unit/test_noding_node.cpp` — a short open breakline at a spacing
-  coarse enough to collapse it, asserting `Ok`, `chains().size()` equal to the
-  input's, and `edge_count(c) == 0` for that chain. This pins the end-to-end
+- `tests/cpp/unit/test_noding_noded_pslg_builder.cpp` (`797144c`) — a
+  **hand-built** candidate with an open chain of `count == 1`, required to
+  `build<K>()` as `Ok`. This pins the guard's asymmetry at the guard, against
+  arrays the noder did not produce, which is the whole reason the builder is a
+  separate type.
+- `tests/cpp/unit/test_noding_node.cpp` (`9600ad9`) — a short open breakline at a
+  spacing coarse enough to collapse it, asserting `Ok`, `chains().size()` equal to
+  the input's, and `edge_count(c) == 0` for that chain. This pins the end-to-end
   outcome and guarantee 16 together.
 
-Neither is written here, and `@architect` does not touch either file.
+Measured here, not asserted, with the guard patched into
+`include/terrain/noding/noded_pslg_builder.hpp:217`, the header `touch`ed after
+each restore per `.claude/REQUIRED-READING.md`'s C++ stale-artifact hazard, and
+`ctest --test-dir build` run over all 611:
+
+| Mutant | ctest cases failed |
+|---|---|
+| baseline | 0 of 611 |
+| `\|\| count < 2` added to the guard | **2** — exactly the two cases above |
+| `is_closed(ch.role) && count < 3` widened to bare `count < 3` | **26**, across four suites |
+
+**An earlier revision of this paragraph named the wrong mutant and its premise
+was false.** It said "nothing currently fails if someone widens ... to
+`count < 3`". That widening is killed 26 times over, because every open chain in
+the builder suite's `valid_candidate()` has `count == 2` and the widened guard
+refuses them all — it was never the unpinned one. The figure above is the one
+measured for this section; `@tester` reported **8** for the same mutant and
+`@orchestrator` **26**, and the units differ (assertions against registered
+`ctest` cases) rather than the measurements disagreeing. **No reconciliation is
+attempted, deliberately: the claim was "nothing fails", and that is refuted at
+8, at 26, and at 1.** Recording which figure is which unit is worth more than
+picking one.
+
+**The conclusion is unchanged.** The acceptance genuinely was unpinned — at the
+commit before those two fixtures, the `count < 2` mutant killed nothing, which is
+visible in the row above: the only two cases it fails are the two that section
+added.
+
+**And the closed arm of the same guard had no test at all.** An earlier revision
+of the first bullet called the closed-chain-under-3 refusal "the same file's
+existing" case and asked that the two read as a pair. There was no such case:
+`is_closed(role) && count < 3` was reachable, argued for in this document, and
+unexercised, so deleting the guard outright was as free as widening it. `@tester`
+wrote it in `797144c` alongside the acceptance case, and it is the sole killer of
+guard deletion. **Nothing in the guarantee list above ever covered it** — 11-16
+say what a `NodedPslg` promises, not which refusals have fixtures, and reading a
+guarantee as a claim about coverage is how this gap stayed open. The pair exists
+now; what did not exist is the half this document assumed.
 
 ### What becomes unreachable in `CdtStatus`, at 5c
 

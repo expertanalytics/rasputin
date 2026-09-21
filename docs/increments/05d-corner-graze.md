@@ -300,8 +300,53 @@ misread does. `05b`'s test-plan section says this in the same narrow form; it is
 repeated here because it is precisely the kind of thing a later increment deletes
 in good faith.
 
-Nothing else in 5b changes. `node.hpp` and `noded_pslg_builder.hpp` each call the
-predicate by name and keep calling it by name.
+`node.hpp` and `noded_pslg_builder.hpp` each call the predicate by name and keep
+calling it by name, so no production line in 5b moves. **One 5b design claim does
+move, and it is the one below.**
+
+### `RingDegenerateAfterSnap`'s demotion rests on this predicate, and 5d must re-run the search that established it
+
+`05b-noder-driver.md` demotes `NodeStatus::RingDegenerateAfterSnap` to a
+self-check with no fixture owed. The argument is not about windings at all: a
+ring whose snapped winding flipped has a vertex within half a cell of an edge it
+is not an endpoint of, so **14(b) requires that edge to be split there**, the
+split repeats a node id, and `NonSimpleRing` fires one stage earlier. "Within half
+a cell of an edge" is `segment_meets_cell` — **the predicate this increment
+narrows.** Narrow it and a ring that is split-and-repeated today may stop being
+split, at which point the ring reaches the winding check intact and the demoted
+status is reachable again.
+
+So 5d carries two obligations here, and the second is the one easily missed:
+
+1. **Re-run the orientation probe.** `05b-noder-driver.md`'s residual: over 500 000
+   split-shaped rings `orientation<K>` never returned `Collinear`, but its reading
+   matched the pre-split ring's in only 496 590 — the other 3 410 would report
+   `RingDegenerateAfterSnap` where the honest diagnosis is `NonSimpleRing`. One
+   line in the ring search reports it.
+2. **Re-run the bounded ring search itself**, the whole program, against the *new*
+   predicate — not only the new probe. `05b`'s `SURVIVORS 0` and `FLIPPED ==
+   grazed` in every block are measurements of the **old** `segment_meets_cell`,
+   and they are what the demotion actually rests on. If a narrowed predicate makes
+   `SURVIVORS` nonzero, the demotion is refuted and `RingDegenerateAfterSnap`
+   becomes a diagnosis owed a fixture and a lever.
+
+Obligation 2 is `.claude/REQUIRED-READING.md`'s rule about deriving the probe set
+from the code **as fixed** rather than from the bug as found, in its exact shape:
+this increment *narrows* what the predicate accepts, which narrows what gets
+split, which widens what can reach the winding check. Re-running only the probe
+that 5b wrote against the predicate 5d ships tests the old question with the new
+code — the same move as the five UTF-8 inputs in `fdbd532` that verified a fix
+which had just widened the glob. The program is pasted inline in `05b`'s "The
+bounded ring search" section for precisely this: a design that names a throwaway
+it does not contain is not re-runnable by the reader who needs it.
+
+**And the orientation probe belongs here rather than at 5b**, which `@tester` and
+`@orchestrator` both concluded independently and this design adopts. Its subject
+is a predicate with a scheduled expiry — this increment — and at 5b the 3 410 in
+500 000 changes *which name a refusal carries*, not whether the input is refused:
+either way the ring is rejected and the caller is told to repair the polygon.
+Nobody is owed that distinction at 5b. Here they are, because here the predicate
+that produces it changes.
 
 ## Degeneracy policy
 
