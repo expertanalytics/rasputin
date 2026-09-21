@@ -129,11 +129,15 @@ NO_PROPERTIES = 0
 RIVER = 1 << RIVER_BIT
 ROAD = 1 << ROAD_BIT
 
-#: The precedence the gallery draws under, in DESCENDING priority: first match
-#: wins. Road over river, which is deliberately NOT bit order -- priority
-#: belongs to the stylesheet, not to how a vocabulary chose to number its
-#: features, and a renderer that sorted by bit would pass a list that happened
-#: to agree with the numbering.
+#: THIS SUITE'S OWN stroke fixture, in DESCENDING priority: first match wins.
+#: It is NOT the gallery's order and must not be read as it -- the real gallery
+#: is `cli.PROPERTY_STROKES`, river first, pinned by
+#: `test_cli_draw.py::test_water_is_drawn_over_infrastructure`.
+#:
+#: Road first here is the point. River is bit 0 and road is bit 1, so the real
+#: gallery happens to agree with bit order; a renderer that sorted by bit would
+#: pass against it and prove nothing. Reversing the order here is what makes
+#: the declared sequence the only thing that can explain a pass.
 GALLERY_STROKES = ((ROAD_BIT, "road"), (RIVER_BIT, "river"))
 
 #: Which gallery fixtures the design gives property bits to, and why -- the
@@ -1005,7 +1009,10 @@ class TestStrokeClasses:
         # defines -- which is exactly how this test and the next came to
         # contradict each other. The order is pinned in place so that a reorder
         # reads as a fixture change and not as a renderer failure.
-        assert GALLERY_STROKES[0] == (ROAD_BIT, "road"), "the gallery is road-first"
+        assert GALLERY_STROKES[0] == (ROAD_BIT, "road"), (
+            "this suite's fixture is road-first on purpose, unlike both bit "
+            "order and the real gallery"
+        )
         assert property_tokens(line, ("river", "road")) == [GALLERY_STROKES[0][1]]
 
     def test_the_stroke_drawn_is_the_styles_first_match_not_the_lowest_bit(

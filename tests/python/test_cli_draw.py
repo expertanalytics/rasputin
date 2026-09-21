@@ -595,7 +595,8 @@ class TestNodedCrossing:
         assert {"river", "road"} <= tokens
 
     def test_water_is_drawn_over_infrastructure(self) -> None:
-        # The ordering rule `cli.py:64-67` states, named by FEATURE rather than
+        # The ordering rule `cli._PRECEDENCE` states (`grep -n _PRECEDENCE
+        # src_python/tin_engine/cli.py`), named by FEATURE rather than
         # derived from the vocabulary's numbering: an edge carrying both bits
         # is drawn with exactly one token, and it is the river's.
         assert [stroke.token for stroke in cli.PROPERTY_STROKES] == ["river", "road"]
