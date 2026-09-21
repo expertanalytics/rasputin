@@ -1660,9 +1660,13 @@ noder's own words the way it already carries the backend's.
 increment". That is a one-line change in `cli.py` and it is the one line that,
 got wrong, turns the whole gallery red while the mesh underneath is correct.
 
-**Python suites change too** — `tests/python/test_core_cdt.py:501`'s
+**Python suites change too** — `tests/python/test_core_cdt.py`'s
 `test_reports_a_non_noded_input_as_a_failure_status` asserts that
 `crossing_pslg` fails, and after 5c that input cannot reach `triangulate` at all.
+No line number is cited, because 5c is the increment that moves it; locate it
+with `grep -rn non_noded tests/python/`, and see `05c-noder-wiring.md`'s churn
+list for what it became — it split rather than moved, and the CDT half is a
+`TypeError` rather than a status.
 That is `@tester`'s change, in its own commit with the reason in the message, per
 `docs/increments/README.md`'s "no test change hides inside an implementation
 commit". Tests are excluded from the LOC count; the *round* is not free.

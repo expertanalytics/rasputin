@@ -900,7 +900,26 @@ crossing nobody can read). Together they are 15 lines and they are the reason
 5c's total did not fall as far as the binding re-estimate alone would suggest.
 
 **Not production code, and the round is not free.** The test churn is the
-largest uncosted part of 5c and it crosses **six** suites, four of them C++:
+largest uncosted part of 5c.
+
+**What this list enumerates, so that its count is checkable rather than a
+judgement: every test file that already exists and that 5c changes** — not the
+subset someone judged expensive, and not the new suites, which are in "What is
+worth testing" instead. `tests/python/test_core_noding.py` is therefore absent
+by construction: it is new. The membership rule resolves to a command, which is
+how it should be re-derived rather than trusted:
+
+```sh
+git diff --name-only <branch point>..HEAD -- tests/ | grep -v test_core_noding
+```
+
+**Seven files, four of them C++** — three suites and the `cdt_cases.hpp` support
+header the C++ suites share. An eighth entry is listed below precisely because
+it is *not* one of the seven.
+
+The earlier count of five was not a scope line, it was a list with no membership
+rule, which is how `test_cdt_backend_seam.cpp` stayed off it while being
+unbuildable without a change. A rule is what makes the next omission visible.
 
 * `tests/cpp/unit/test_cdt_detria_backend.cpp` (~500 lines) and
   `tests/cpp/property/prop_cdt_invariants.cpp` (~430) build `Pslg` fixtures and
@@ -908,11 +927,22 @@ largest uncosted part of 5c and it crosses **six** suites, four of them C++:
   `node<DefaultKernel>` or through a hand-built `NodedPslgBuilder` candidate, and
   the cases pinning `NotNoded` and `DegenerateGeometry` are **deleted**, per the
   ruling above.
-* `tests/cpp/unit/test_cdt_constrained_edges.cpp` (~250) is **unchanged** — that
-  is what the `ChainedGraph` concept buys, and it is the concrete return on the
-  ten lines it costs.
-* `tests/cpp/unit/test_cdt_backend_seam.cpp` is the sixth, and it appeared in no
-  list until now. It has to change, and not by choice: `CdtBackend` is spelled
+* `tests/cpp/support/cdt_cases.hpp` is where most of that churn actually lands,
+  and it is a **support header rather than a suite** — counted here because the
+  membership rule is "test file", and named because a reader looking for the two
+  suites' diff will find half of it in a third file. It gains a
+  `node_fixture<K>()` beside `build_fixture<K>()`, a fixture-level spacing
+  constant, and a `node_of(noded, input)` helper for guarantee 9's array. That
+  last one is the load-bearing addition: **node ids are not input indices** —
+  the node set is sorted by `GridPoint` — so every assertion in the two suites
+  written against a literal vertex index has to route through it.
+* `tests/cpp/unit/test_cdt_constrained_edges.cpp` (~250) is the **eighth file,
+  and it is not one of the seven**: it is **unchanged**. That is what the
+  `ChainedGraph` concept buys, and it is the concrete return on the ten lines it
+  costs. It is listed under a rule that excludes it because an unchanged file is
+  only evidence if someone says in advance that it will be.
+* `tests/cpp/unit/test_cdt_backend_seam.cpp` appeared in no list until this
+  revision. It has to change, and not by choice: `CdtBackend` is spelled
   in terms of the entry point's parameter, so retyping `triangulate` retypes the
   concept, and every fake backend in the file declares that parameter. Leave
   them at `const Pslg&` and the fakes the suite asserts *are* backends stop
@@ -943,6 +973,15 @@ largest uncosted part of 5c and it crosses **six** suites, four of them C++:
   `grep -rn non_noded tests/python/`.
 * `tests/python/test_cli_draw.py` pins the `not-noded` fixture's presentation,
   which is the picture this increment changes.
+* `tests/python/test_viz_protocols.py` is the seventh, and the one the earlier
+  count missed for a different reason than the seam suite did: its *new*
+  assertion — `NodedPslg` satisfying `PslgLike`, the third implementation — is
+  listed under "What is worth testing" as added coverage, and that made it look
+  like a file with no churn. It has churn as well. Its shared `mesh` fixture
+  builds through `triangulate(result.pslg)` today, so 5c routes it through
+  `node()` and every test unpacking that fixture changes arity with it. Added
+  coverage and forced churn in one file is exactly the case a list without a
+  membership rule drops.
 
 All of it is `@tester`'s, in its own commits with the reason in the message, per
 `docs/increments/README.md`: no test change hides inside an implementation
@@ -1074,7 +1113,11 @@ increment's PR, or not recorded:
   missing from `:1631-1640`); feeding the scene a `NodedPslg` is **not** a
   one-line change (`:1660`) and the second field is `closed_roles`; and Gate
   C's overflow increment is **5e**, not 5d (`:479`), because `05d` is now the
-  corner graze.
+  corner graze. A fourth: its Python-suites paragraph cited a line number in
+  `tests/python/test_core_cdt.py` for a test this increment splits, so the
+  number is dropped in favour of the test's name and a `grep`, per
+  `.claude/REQUIRED-READING.md` on resolved values. The paragraph's claim is
+  still true; only the citation expired.
 * **`src_python/tin_engine/viz/fixtures.py:21-26`** — three deliberate failures
   become two, and `not-noded` changes role.
 
