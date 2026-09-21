@@ -27,13 +27,25 @@ evidence**, not inherited:
    "Documentation this PR fixes", covering all five.
 
 **All three quotations above are of text that no longer stands, and that is the
-point rather than a defect**: increment 7 fixed them at their sources in
-`e51ad75`. `parallel_refinement.md:148` now outputs property sets rather than
-"a list of `(p0, p1, is_river)` segments"; `03-pslg.md:65-70` describes a
-property set and the C++ member is `Chain::properties`; `testing.md:110` states
-the OR rule over sets and union. Read items 1-3 as "what these documents said
-when this design was written, and why", with `git show 4834568:` in front of
-each path to see it. Only the line numbers were refreshed here — **nothing else
+point rather than a defect** — but they stopped standing in two separate waves,
+which matters because only the first was increment 7's.
+
+Increment 7 fixed items 1 and 3 at their sources in `e51ad75`:
+`parallel_refinement.md`'s step 6 outputs property sets rather than "a list of
+`(p0, p1, is_river)` segments", `03-pslg.md` describes a property set and the
+C++ member is `Chain::properties`, and `testing.md` states the OR rule over sets
+and union. Read items 1-3 as "what these documents said when this design was
+written, and why", with `git show 4834568:` in front of each path to see it.
+
+**Item 2 outlived that wave and was settled by 5b itself**, in `6f7f7c8`, when
+the design was rebased onto the merged increment 7 and the conflict had to be
+resolved one way or the other. `03-pslg.md` and `project_structure.md` both said
+*sparse override set*; both now say **dense**, with item 2's own reason — after
+noding an edge may descend from two chains at once, so it has no single source
+value to be an exception to. So item 2 is no longer a premise this design
+overturns against the documents; it is a ruling the documents now carry. It is
+kept here because the argument is the reason, and deleting it would leave the
+conclusion standing in two files with the reason in none. Only the line numbers were refreshed here — **nothing else
 in this file was touched by increment 7**, and in particular the one-bit
 spelling in this document's own prose is superseded in width by
 `05b-noder-driver.md`, which is that branch's marking to make and not this
@@ -576,7 +588,7 @@ consequences, and they are rulings rather than observations:
   `Crossing`-or-`Disjoint`**, with a comment saying why the weaker assertion is
   the honest one.
 - **`Overlapping` is no longer load-bearing for the `is_river` merge.**
-  `parallel_refinement.md:168`'s road-along-a-river rule cannot depend on a
+  `parallel_refinement.md:176`'s road-along-a-river rule cannot depend on a
   relation that essentially never fires for a diagonal river. It does not have
   to: after 5b's hot-pixel split pass, two coincident edges are coincident as
   **node-id pairs**, and the merge is driven by exact integer edge-key dedup on
@@ -754,7 +766,7 @@ numbering, and therefore every downstream index in the mesh, is reproducible
 across runs and across thread counts, which is the bit-identity
 `testing.md`'s parallelism section asks for. First-appearance order would make
 the numbering depend on scheduling. It also matches
-`parallel_refinement.md:183`'s "parallel sort + unique" exactly.
+`parallel_refinement.md:207`'s "parallel sort + unique" exactly.
 
 **The consequence, and it is not small: index identity with the input `Pslg` is
 gone.** `Pslg` guarantee 9 promises a caller's index `k` means the same point
@@ -813,8 +825,16 @@ let un-noded input reach the CDT through a signature that says it cannot.
 12. No two vertices are equal — dedup, and injectivity above.
 13. No edge is zero-length; no chain has a repeated consecutive index.
 14. **Two clauses, and they need two different checks.** (a) No two edges cross
-    in their interiors — `classify<K>` returns `Disjoint` or `Touching` for
-    every candidate pair. (b) No node's **cell** meets an edge it is not an
+    in their interiors — for every pair of distinct output edges `classify<K>`
+    returns `Disjoint` or `Touching`, **or** returns `Overlapping` and the two
+    edges have equal node-id pairs `(min(u,v), max(u,v))`. *(Amended by
+    `docs/increments/05b-noder-driver.md`. The clause as first written —
+    `Disjoint` or `Touching`, full stop — is false on the one input guarantee 15
+    exists for: a road noded along a river leaves two chains carrying the same
+    edge, and `classify` on two identical segments returns `Overlapping`. A
+    partial overlap is still a violation, and after the split pass there is no
+    third case, since each of two overlapping collinear edges is split at the
+    other's nodes.)* (b) No node's **cell** meets an edge it is not an
     endpoint of — `segment_meets_cell<K>` is false for every (node, edge)
     candidate pair with that node not an endpoint. This is the promise the
     type's name makes, and 5b establishes it by **verification** — a second
@@ -855,7 +875,7 @@ let un-noded input reach the CDT through a signature that says it cannot.
     that the OR was applied consistently to the contributors the dedup
     **recorded**. A dropped contributing chain — the defect this guarantee
     exists to exclude, and the road-along-a-river case at
-    `parallel_refinement.md:168` that `is_river` turns on — is absent from both,
+    `parallel_refinement.md:176` that `is_river` turns on — is absent from both,
     and a mesh that has silently lost a river bit verifies clean. Naming a check
     that cannot fail is worse than naming none, because it converts "unchecked"
     into "apparently checked".
@@ -883,11 +903,20 @@ is the surviving-T-junction failure arriving through the loop condition instead
 of through the predicate. The verification is the condition; node counts are a
 progress metric and nothing more.
 
+**Superseded in its representation, not in its reasoning:** an edge carries a
+**property set** merged by **union**, not one bit merged by OR — at a coarse
+resolution the same segment can be both a road and a river, and the face-based
+fallback that excused dropping non-river semantics works only for area features.
+Everything below about *density*, about the merge being keyed on node ids and
+about there being no single source bit to override survives verbatim and is
+strengthened; only the width changes. `docs/increments/05b-noder-driver.md`,
+"Edge properties", carries the ruling and the scope.
+
 **The `is_river` representation is dense, one `std::uint8_t` per edge**, which
 overturns `03-pslg.md:65-70`'s "sparse override set" on the terms that document set
 for it. An override set is sparse only if most edges agree with a single source
 chain. After noding an edge can descend from two chains — a road snapped onto a
-river is exactly `parallel_refinement.md:168`'s example, and the merged edge
+river is exactly `parallel_refinement.md:176`'s example, and the merged edge
 keeps `is_river = true` while the road is geometrically forgotten — so there is
 no single base bit for an override to be an exception to. A dense byte array is
 one allocation, index-aligned with the edge enumeration the CDT wrapper already
@@ -953,7 +982,7 @@ of them:
   one function to get right, and its correctness is checkable without noding
   anything.
 - **Guarantee 14 is additionally verified all-pairs, on small inputs, in the
-  property suite.** `prop_noding_no_crossings.cpp` (the name `testing.md:289`
+  property suite.** `prop_noding_no_crossings.cpp` (the name `testing.md:301`
   already reserves) runs the full noder on generated constraint sets of a few
   dozen segments and then checks both clauses of 14 by **brute force over every
   (edge, edge) and (node, edge) pair**, with no broad phase anywhere in the
@@ -1074,7 +1103,7 @@ The first column is the condition; the fourth names what increment 4's
 | T-junction: a vertex near another constraint's interior | **fixes** | `segment_meets_cell` + split the host at that node — **not** `Touching`, which is exact incidence and mostly false here | `NotNoded` (`PointOnConstrainedEdge`) |
 | Crossing constraints | **fixes** | `Crossing` + `crossing_point` + split both | `NotNoded` (`ConstrainedEdgeIntersection`) |
 | Collinear overlap (road along a river) | **fixes** | both split at each other's nodes by `segment_meets_cell`; the duplicate edges dedup on their node-id pairs and the bits OR. Does **not** depend on `classify` reporting `Overlapping` | `Ok`, silently double-constrained |
-| Three or more constraints meeting at a point | **fixes** | implicitly: all snap to one cell (`parallel_refinement.md:175`), and every segment through that cell is split at it | `DegenerateGeometry` |
+| Three or more constraints meeting at a point | **fixes** | implicitly: all snap to one cell (`parallel_refinement.md:199`), and every segment through that cell is split at it | `DegenerateGeometry` |
 | Hole touching its outer ring at one shared node | **passes through** | already one node after dedup; increment 4 measured 5 interior triangles and pinned it | `Ok` |
 | Collinear redundant vertices within a ring | **passes through** | not a defect; increment 4 measured 3 interior triangles | `Ok` |
 | A breakline that is a closed polyline | **passes through** | open chain, coincident ends; legal per `Pslg` stage 4's breakline exemption | `Ok` |
@@ -1110,7 +1139,7 @@ rather than discovered:
 edges of a figure-eight ring produces a ring that still visits a node twice; its
 "interior" is not well defined, so neither is its winding or its role.
 Resolving it into simple components is polygon repair, which belongs upstream —
-`parallel_refinement.md:174` already says "flag for resimplification or
+`parallel_refinement.md:198` already says "flag for resimplification or
 auto-fix" and the flag is this status. Detect (the same machinery: a chain
 paired against itself), reject, name the chain. **No severity field, no
 warning-level diagnostic**: increment 3 risk 2 warns that a severity field is how
@@ -1241,6 +1270,16 @@ production code:
 | `include/terrain/noding/node.hpp` | `NodeStatus`, `describe`, `NodeOptions`, `NodeOutcome`, `node<K>`, the hot-pixel split pass and edge-key dedup | ~250 |
 | `include/terrain/cdt/*`, `src/cdt/detria_backend.cpp` | `const Pslg&` → `const NodedPslg&` | ~10 |
 
+**That last row is wrong and the whole 5b estimate with it.** `bindings/core.cpp:466`
+calls `terrain::cdt::triangulate<DetriaBackend>(pslg, options)` on a
+`const Pslg&`, so retyping the entry point breaks the Python extension, and the
+only repair is to bind a producer of `NodedPslg` — which drags
+`src_python/tin_engine/_core.pyi`, `src_python/tin_engine/cli.py`, the Python
+suites and the renderer's scene join with it. No Python file appears in the
+table above. `docs/increments/05b-noder-driver.md` re-estimates the whole of 5b
+at ~786 non-comment production lines and splits it; the C++ figures below stand,
+what was missing is everything on the other side of the binding.
+
 **~480 production LOC**, header-only (the driver is a template on `K`, as
 increment 3's validator is, so nothing goes in `src/noding/`). Under the
 ceiling, without the margin 5a has. The ~20 over the draft is step 4 of the
@@ -1256,9 +1295,14 @@ also that 5b's estimate contains a header nobody has designed in full yet
 (`noded_pslg.hpp` at ~120), so the honest direction of travel for that number is
 up. Nobody should relitigate the seam on a line count in either direction.
 
-**Contingency split of 5b, dependency-ordered**, if it overruns — the likely
-cause being `describe` growing one `std::format` call per status enumerator,
-which is exactly what nearly split increment 3 and increment 4:
+**Contingency split of 5b, dependency-ordered**, if it overruns. **Superseded:
+`docs/increments/05b-noder-driver.md` splits 5b at a different seam — all of the
+C++ in 5b, the signature change and the Python crossing in 5c — on the measured
+grounds that C++ estimates here have come in at or under and binding estimates at
+twice. The two below are recorded as what was proposed, not as a live
+alternative.** The overrun cause anticipated was `describe` growing one
+`std::format` call per status enumerator, which is exactly what nearly split
+increment 3 and increment 4:
 
 - **5b** — `core/noded_pslg.hpp` and `noding/broad_phase.hpp`, plus their suites.
   `NodedPslg` would then need a producer to exist at all, so the split point is a
@@ -1557,10 +1601,29 @@ something a later increment depends on; this one would not.
    input precision and boundary tolerance (`parallel_refinement.md:130-137`).
 3. **The winding re-check is a consequence nothing in the tree anticipated.**
    `Pslg` guarantee 6 is a statement about pre-snap coordinates and this document
-   is the first to say so. If it is dropped from the implementation, a reversed
-   sliver hole reaches `detria` and meshes as an island with no diagnostic
-   anywhere — a silent wrong mesh, which is the failure class this project
-   spends its mutation budget avoiding.
+   is the first to say so. The risk is real: a reversed sliver hole that reaches
+   `detria` meshes as an island with no diagnostic anywhere — a silent wrong
+   mesh, which is the failure class this project spends its mutation budget
+   avoiding.
+
+   **The mitigation is not the winding re-check, and this entry said it was.**
+   Measured during increment 5b's red round: four candidate slivers built to flip
+   a hole's winding were all refused as `NonSimpleRing` before the winding check
+   ran, because a winding flip puts a vertex inside the hot pixel of the opposite
+   edge, the split pass is then *required* by guarantee 14(b) to split that edge
+   at it, and the ring repeats a node id. Drop the winding re-check entirely and
+   the ring is still refused. **The mitigation is guarantee 14(b) plus the
+   node-repeat `NonSimpleRing` check**; the winding re-check is defence in depth
+   behind it, and `NodeStatus::RingDegenerateAfterSnap` is a self-check with a
+   name rather than a diagnosis. **The relocation is measured, not inferred**: a
+   bounded exhaustive search over 4- and 5-gons finds that *every* ring whose
+   winding flips under snapping is caught by 14(b) — in every block, under two
+   independently written programs — so deleting the winding re-check refuses all
+   of them anyway. The ruling, the mechanism, the
+   search with its program and its honest bound, and what would reopen it are in
+   `docs/increments/05b-noder-driver.md`, section "`RingDegenerateAfterSnap` is a
+   self-check". This correction is increment 5b's, made here because this is
+   where the claim lives.
 4. **Construction error is unbounded for near-parallel pairs**, and the clamp
    bounds it only to the overlap region. For such a pair the combinatorial answer
    is whatever snap rounding says. Not fixable without exact constructions, which
@@ -1632,6 +1695,19 @@ something a later increment depends on; this one would not.
 Per `docs/increments/README.md`, these are fixed in this PR or not recorded.
 There is no ledger.
 
+**Six of the eleven did not land, and that is recorded here because the section
+asserts otherwise.** `git diff --stat 41054aa~1 e090909 -- testing.md
+parallel_refinement.md project_structure.md docs/increments/03-pslg.md
+docs/increments/01-predicates.md` prints two files, and checking those two line
+by line rather than by filename: **2a, 2b and 11 shipped; 1, 2, 2c, 3, 4, 5, 6, 7
+and 8 did not** — nine of eleven. Step 6 of the algorithm still emitted a flat
+segment list and step 4 still said "lying on it". They were re-found while
+designing 5b and are fixed in **5b's** PR instead; item 9, the `[planned]`
+marker, is 5c's, since it describes what CI enforces over a module that ships.
+Line numbers quoted below are the pre-fix ones and are stale by design: the text
+they pointed at no longer exists. See `docs/increments/05b-noder-driver.md`,
+"Documentation this PR fixes".
+
 **`parallel_refinement.md`**
 
 1. Step 6 of the noding algorithm (line 148) — "Output a list of
@@ -1702,7 +1778,7 @@ There is no ledger.
    - "Sum of output segment lengths equals sum of input segment lengths, modulo
      snap perturbation. The bound is `√2·h` per segment" — false twice over. A
      collinear overlap merge **deletes** length outright (the road along the
-     river is geometrically forgotten, `parallel_refinement.md:168`), and a
+     river is geometrically forgotten, `parallel_refinement.md:176`), and a
      segment split at `m` points accumulates up to `m` displacements, so the
      bound is not per segment. The `√2·h` arithmetic itself is right and worth
      keeping; the claim it is attached to is not. Replace with the one-way

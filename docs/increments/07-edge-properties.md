@@ -1126,7 +1126,10 @@ which, and no entry is carried forward.
 the alternative to silence rather than an admission that the list reopens:
 `docs/increments/kernel-sufficiency-audit.md:380` cited
 `parallel_refinement.md:156`'s road-over-river rule, which this commit moved to
-`:168` and restated. The audit is dated to `e412a43`/#67 and its finding is
+`:168` and restated. (It moved again, to `:176`, when 5b was rebased onto this
+increment in `6f7f7c8` — three positions for one unchanged rule, which is the
+case for citing the quotation and letting `tools/check_citations.py` chase the
+number.) The audit is dated to `e412a43`/#67 and its finding is
 about how often `Overlapping` fires, not about what is carried when it does, so
 its quotation of the old rule is left as it stood, the number is refreshed, and
 a parenthesis records both.

@@ -103,11 +103,22 @@ These are the "water tight" properties — they must hold on every input regardl
 
 ### `noding` [planned]
 
-- No two output segments intersect in their interior.
-- Every input vertex appears in the output vertex set (post-snap).
-- Every output vertex is either an input vertex (snapped) or lies on at least two input segments.
-- Sum of output segment lengths equals sum of input segment lengths, modulo snap perturbation. The bound is `√2·h` per segment for grid spacing `h`, not `h`: a vertex moves by at most half a cell diagonal, `h/√2`, and a segment moves at both ends.
-- The feature property **set** on any output segment is the **union** of the sets on the input segments that contributed — not the OR of one `is_river` bit. An edge may end up carrying two properties, three or none; at a coarse resolution one segment is legitimately both a road and a river (`docs/increments/07-edge-properties.md`). The invariant is stated over sets because union is commutative, associative and idempotent, which is exactly what makes it reducible over the *unordered* set of contributors the broad phase produces — so a test may assert the result without fixing a visit order, and a merge that depended on one would be caught by permuting the inputs.
+The list below replaces the five bullets that stood here until increment 5b.
+Three of them were false, and `docs/increments/05-noder.md` gives the
+measurement for each. A fourth — the feature-property bullet — was already
+corrected upstream by increment 7, from a one-bit `is_river` OR to a union over
+property sets; 5b keeps that correction and sharpens where the merge happens and
+what the oracle may be built from. The marker stays `[planned]` until 5c merges: 5b ships a noder that
+no production code calls.
+
+- **No two output edges cross in their interiors** — guarantee 14(a). It is *verified* by a second pass over the output, not established by construction, because snap rounding can create a crossing that was not in the input. Two output edges with **equal** node-id pairs are permitted and are what the property union below exists for; a partial collinear overlap is not, and after splitting there is no third case.
+- **No node's cell meets an edge it is not an endpoint of** — guarantee 14(b), and the half a reader will assume follows from the one above. It does not: this is the hot-pixel form, `segment_meets_cell`, not exact incidence, and it is strictly the stronger of the two. A T-junction the split pass missed is caught here rather than blessed, which an exact-incidence spelling would not do.
+- Every input vertex's **snapped image** is an output node, and `node_of_input_vertex` maps it there. Not "every input vertex appears in the output": after dedup, two input vertices in one cell produce **one** output node.
+- Every output vertex is either the snapped image of an input vertex or the snapped image of a **constructed** crossing of two input segments. Not "lies on at least two input segments": commit `e412a43` establishes that a constructed crossing point need not lie on *either* segment after snapping.
+- **One-way Hausdorff, not a length sum**: every output edge derived from input segment `e` lies within the closed `h/√2`-neighbourhood of `e`, for grid spacing `h`, and within `k·h/√2` after `k` noding rounds. The sum-of-lengths form that stood here was false twice over — a collinear overlap merge deletes length outright, and a segment split at `m` points accumulates up to `m` displacements, so the bound is not per segment. The `√2` arithmetic is right and is kept: a vertex moves by at most half a cell diagonal.
+- The property set on any output edge is the **union** over the input **chains** that contributed to it — guarantee 15. Union rather than a one-bit OR: at a coarse resolution one segment can be both a road and a river, so an edge carries a set (`parallel_refinement.md`, "Edge metadata", and `docs/increments/07-edge-properties.md` for the type). The merge happens at the node-id edge-key dedup, not at a collinear-overlap classification. It is verified against an oracle built from the **input**, never from the dedup's own provenance map, which would only restate the dedup — and asserted as a **subset**, not an equality, because a chain passing near both nodes satisfies the contribution relation without having contributed.
+- No two output vertices are equal; no output edge is zero-length; every output coordinate satisfies `grid.snapped(v) == v` bitwise; output chain order and roles match the input chain-for-chain.
+- Node ids are independent of input order and of thread count.
 
 ### `cdt` [live]
 
@@ -206,7 +217,7 @@ Invariants over `build_scene` — all `[live]`:
 - **hypothesis** for Python property-based tests.
 - **pytest-benchmark** for performance regression tracking on tier-3 fixtures.
 
-Property test generators live alongside the modules they test (e.g. `tests/cpp/property/noding_generators.h` produces random sets of polylines with controllable density of intersections).
+Property test generators live alongside the modules they test (e.g. `tests/cpp/property/noding_generators.h` produces random sets of polylines with controllable density of intersections). That header arrives with increment 5b, the noder's topology half; increment 5a's property suite generates points, spacings and segment pairs, not polyline sets.
 
 ## Parallelism testing [planned]
 
@@ -286,7 +297,8 @@ tests/cpp/
     test_refinement_fan_subdivision.cpp
     ...
   property/
-    prop_noding_no_crossings.cpp         # one file per invariant
+    prop_noding_snap_invariants.cpp      # one file per invariant (increment 5a)
+    prop_noding_no_crossings.cpp         # increment 5b: guarantees 14 and 15
     prop_refinement_tolerance.cpp
     prop_flip_constraint_preservation.cpp
     ...

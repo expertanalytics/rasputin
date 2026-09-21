@@ -17,6 +17,8 @@ include/terrain/           # public C++ headers, header-only where possible
                            #   no feature NAME anywhere in terrain::
     pslg.hpp               # Pslg, Chain, ChainRole — validated planar input
     pslg_builder.hpp       # PslgBuilder, PslgDiagnostic, the validator
+    snap_grid.hpp          # GridPoint, SnapGrid: the lattice noded output lies on
+    noded_pslg.hpp         # NodedPslg: the noder's output, the CDT's input (5b)
     indexed_mesh.hpp       # IndexedMesh2: SoA mesh + per-triangle constrained mask
   predicates/
     orientation.hpp        # Orientation / Incircle vocabulary; no includes at all
@@ -24,6 +26,13 @@ include/terrain/           # public C++ headers, header-only where possible
     kernel.hpp             # GeometryKernel, FastKernel, FilteredKernel<E>
     detria_exact.hpp       # DetriaExact declaration; does NOT include detria
     default_kernel.hpp     # DefaultKernel = FilteredKernel<DetriaExact>
+  noding/
+    intersect.hpp          # SegmentRelation, classify, crossing_point,
+                           #   segment_meets_cell (the hot-pixel predicate)
+    node_set.hpp           # NodeSet: dedup by sorted grid keys
+    broad_phase.hpp        # uniform bucket index, for_each_candidate (5b)
+    noded_pslg_builder.hpp # NodeStatus, NodeOutcome, the verifier (5b)
+    node.hpp               # NodeOptions and node<K>, the driver (5b)
   cdt/
     result.hpp             # CdtStatus, CdtOptions, CdtOutcome
     triangulate.hpp        # CdtBackend concept and the generic entry point
@@ -44,7 +53,8 @@ src/                       # C++ implementation, one directory per module
   parallel_util/           # work distribution, atomics, thread pool
   vector_simplify/         # Visvalingam-Whyatt, Douglas-Peucker, topology checks
   hydrology/               # pit fill, flow direction, accumulation, catchments, streams
-  noding/                  # snap rounding, PSLG construction
+                           # (no noding/ here, and none planned: the noder is
+                           #  header-only, its driver a template on the kernel)
   cdt/                     # thin wrapper over vendored Detria
   mesh/                    # triangle/vertex data structures, ternary tree, edge tags
   refinement/              # adaptive ternary-tree refinement
@@ -236,14 +246,13 @@ Implements `auto_catchments.md`: pit filling (priority-flood with epsilon, plus 
 
 ### `noding`
 
-Implements the constraint-noding section of `parallel_refinement.md`. Uniform-grid broad phase (the raster's grid is convenient, not required — it is a spatial index, not the snap grid), robust pairwise intersection, snap rounding, segment splitting, deduplication. Outputs a clean PSLG. Feature properties are a **set** of bits
-(`core/edge_properties.hpp`), carried per **chain**, not per edge — only the
-noder can produce an edge whose set disagrees with its source chain, and it
-contributes a sparse per-edge override set then. The merge at an intersection or
-a coincidence is **union**, which is commutative, associative and idempotent and
-therefore reducible over an unordered set of contributing chains. See
-`docs/increments/07-edge-properties.md`; `docs/increments/03-pslg.md` is the
-record of the one-bit `is_river` form that increment 7 replaced.
+Implements the constraint-noding section of `parallel_refinement.md`. Uniform-grid broad phase, robust pairwise intersection, snap rounding, segment splitting, deduplication. Outputs a `NodedPslg` — the deduplicated node array, the chains with their roles and windings preserved, the per-edge property array and the snap grid.
+
+**The broad phase is a spatial index and its cell size has no relationship to the snap grid's.** The raster's grid is convenient, not required; the snap grid is not even an option. Here is the number that makes it non-negotiable: at a 5 cm spacing a 100 km domain has a snap lattice of 2e6 × 2e6 = **4e12 cells**, and at a decimetre 1e12. A broad phase bucketed at that spacing would allocate one bucket per cell to hold a few thousand segments. The two grids answer different questions — the snap grid quantises *coordinates* and is sized by input precision; the broad phase filters *candidate pairs* and is sized by segment density.
+
+Feature semantics are **per chain** on `Pslg` and a dense array **per edge** on `NodedPslg`, index-aligned with that type's flat edge enumeration — not a sparse override set, because after noding an edge can descend from two chains at once and so has no single source value to override. The merge is **union**, which is commutative, associative and idempotent and therefore reducible over an unordered set of contributing chains: an edge can be both a road and a river. The one-bit `is_river` form was replaced by a property set in increment 7 (`core/edge_properties.hpp`, up to 32 opaque bits); see `docs/increments/07-edge-properties.md` for the ruling, `docs/increments/03-pslg.md` for the record of the form it replaced, and `docs/increments/05b-noder-driver.md`, "Edge properties", for the shape on `NodedPslg`.
+
+**Header-only: there is no `src/noding/` and none is planned.** The driver is a template on the kernel, as increment 3's validator is.
 
 ### `cdt`
 
@@ -262,7 +271,7 @@ dropped the honest options are a different library or our own CDT over the
 
 ### `mesh`
 
-Core data structures: vertex array, triangle array, ternary tree of refinement nodes, per-edge feature property set (`EdgeProperties`, a set of up to 32 opaque bits — never one `is_river` flag). Owns the flatten-to-final-mesh step. Used by `refinement`, `flip`, and bindings.
+Core data structures: vertex array, triangle array, ternary tree of refinement nodes, per-edge constraint bitmask, and the per-edge feature property set (`EdgeProperties`, a set of up to 32 opaque bits — never one `is_river` flag). Owns the flatten-to-final-mesh step. Used by `refinement`, `flip`, and bindings.
 
 ### `refinement`
 

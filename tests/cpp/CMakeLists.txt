@@ -173,3 +173,46 @@ add_terrain_test(test_noding_node_set unit/test_noding_node_set.cpp)
 # terrain_cdt, and a link line that pulled either in would hide a dependency
 # this header must not grow.
 add_terrain_test(test_edge_properties unit/test_edge_properties.cpp)
+
+# Noding, increment 5b: the noder's topology half -- the output type, the broad
+# phase, the verifier and the driver.
+#
+# FIVE SUITES AGAINST FOUR HEADERS, which is Gate B's mapping plus its one
+# declared relaxation (docs/increments/05b-noder-driver.md, "What is worth
+# testing"): node.hpp gets a property file and a fixture file, split along a
+# different axis than the one Gate B protects. Everything else is one test file
+# per production header.
+#
+# No target here links terrain_cdt. Nothing in 5b knows the CDT exists; 5c is
+# where that changes, and the link line is where it will show.
+add_terrain_backend_test(test_noding_noded_pslg unit/test_noding_noded_pslg.cpp)
+
+# The concurrent-read case in the NodedPslg suite is 5b's analogue of guarantee
+# 10: a const NodedPslg needs no synchronisation, which is what lets 5c release
+# the GIL around node() and read the result from whichever thread it lands on.
+target_link_libraries(test_noding_noded_pslg PRIVATE Threads::Threads)
+
+# The verifier. Invariant-critical: the only suite in 5b that can fail when the
+# VERIFIER is broken, which is the whole reason NodedPslgBuilder is a separate
+# type rather than a pass inside node<K>'s loop.
+add_terrain_backend_test(test_noding_noded_pslg_builder unit/test_noding_noded_pslg_builder.cpp)
+
+# The broad phase. Invariant-critical, and it USES THE PLAIN HELPER
+# DELIBERATELY, which is the same kind of claim the CDT seam suite above makes.
+# broad_phase.hpp is kernel-free -- it compares bounding boxes and never asks an
+# orientation -- so terrain_predicates is absent from this link line and a broad
+# phase that ever reaches for a predicate fails to LINK here rather than passing
+# quietly. Registering it with add_terrain_backend_test would leave every
+# assertion passing and the proof gone.
+add_terrain_test(prop_noding_broad_phase property/prop_noding_broad_phase.cpp)
+
+# The driver's property suite. Invariant-critical. The file name is the one
+# testing.md's layout block reserves for 5b; `grep -n prop_noding_no_crossings
+# testing.md` resolves it.
+add_terrain_backend_test(prop_noding_no_crossings property/prop_noding_no_crossings.cpp)
+
+# node.hpp's SECOND file: the driver's hand-built fixtures. This is Gate B's one
+# declared relaxation -- a property file and a fixture file for the same header
+# split along a different axis than the one Gate B protects, and both would move
+# to a 5b-ii together if a seam is ever cut.
+add_terrain_backend_test(test_noding_node unit/test_noding_node.cpp)
