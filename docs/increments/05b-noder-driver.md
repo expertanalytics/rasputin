@@ -294,6 +294,31 @@ reason 15 is not the builder's is under `noding/noded_pslg_builder.hpp`.
   having contributed geometry, so the oracle's set can be strictly smaller than
   the truth. Asserting equality would make the suite red on correct output —
   increment 5's exact-incidence failure in a new costume.
+- **And that is not the only reason. The oracle is exact only in round 1.** It
+  splits the **input** segments against the **final** node set. The driver splits
+  the input segments in round 1, but from round 2 it splits the **snapped pieces**
+  — which step 6 mandates, and which is the whole of what makes 14(b) reachable
+  at a fixpoint instead of merely re-detected. A piece is a different segment from
+  the segment it came from: it has different endpoints, so a different arc order,
+  a different `segment_meets_cell` answer for a node near the seam, and therefore
+  a legitimately different refinement. On any input that takes a second round the
+  oracle and the driver are relating different objects, and only the subset
+  direction survives that. The first reason is about which *chains* the relation
+  admits; this one is about which *segments* each side is splitting. Both point
+  the same way, which is why one assertion covers them.
+- **The converse's state, as evidence rather than as proof.** `@developer` could
+  not construct an input on which the oracle claims a contribution the driver does
+  not make, and no generated seed produced one. That is the state of the search,
+  not a theorem: nothing here rules out a multi-round input where a piece's
+  refinement drops a pair the input segment's would have had. If such an input
+  exists the subset direction still holds, which is the point of choosing it.
+- **This is the assertion to re-check when 5d changes the predicate.** Both
+  reasons above are stated in terms of `segment_meets_cell<K>`: the first through
+  "passes near both nodes", the second through what a piece's endpoints do to that
+  answer. 5d narrows the predicate, so it moves the boundary that both arguments
+  sit on, and a narrower predicate is exactly the direction that could turn an
+  inert difference into a `proven` superset. Re-run the reasoning, not just the
+  suite — the suite is green under both.
 - A spuriously *added* property therefore escapes this assertion by construction
   and is owed a mutant instead; that is mutant 7.
 
@@ -436,7 +461,9 @@ obeyed cheaply at the moment it fires:
 > commit against the mapping in "What is worth testing" below, and raises a
 > deviation **before** the commit.
 
-The mapping is four production headers to four test files. It is deliberately
+The mapping is four production headers to four test files, plus the one declared
+relaxation — `node.hpp`'s second, fixture file — which makes **five** registered
+suites in all; see "What is worth testing". It is deliberately
 one-to-one even where a shared file would be convenient — `broad_phase.hpp` and
 `noded_pslg_builder.hpp` would sit naturally in one suite, and they are split
 anyway. The cost of the discipline is a few extra `add_terrain_backend_test`
@@ -800,6 +827,11 @@ public:
 `build()` checks guarantees 11, 12, 13, 14(a), 14(b) and 16 and produces a
 `NodedPslg` only if all hold. It does **not** check 15 — see below.
 
+**The minimum-node-count guard is `is_closed(role)`'s alone**, so an open chain
+of a single node is accepted and an open chain is never asked for three. That is a
+ruling rather than a consequence of how the condition was written; it is argued
+and pinned under "An open chain that collapses to one node is `Ok`".
+
 **Ordering, and it is not arbitrary.** 11 and 12 come first because they are
 O(n) and because 14's node-id reasoning is meaningless without them; 13 next; 14
 last, because it is the expensive one. 16 is a comparison against the input
@@ -916,7 +948,59 @@ decide made explicit:
    `cell_min`/`cell_max` box — never by `world(g)`. For each segment the nodes
    `g` with `segment_meets_cell<K>(grid, seg, g)`, sorted by the dot product of
    `(world(g) - s.a)` with `(s.b - s.a)`, ties broken by `GridPoint`'s `<=>`, are
-   its split points.
+   its split points. **The endpoints are anchored, not sorted** — see below.
+
+##### The split sequence is anchored at its own endpoints
+
+An earlier revision of step 4 said only "sorted by the dot product", and left the
+implementation to discover that a plain sort of the met set is not a split
+sequence. It is ruled here because the choice is the design's:
+
+> **A segment's split sequence is `node(s.a)`, then the nodes it meets in arc
+> order with `node(s.a)` and `node(s.b)` removed, then `node(s.b)`.** The
+> endpoints are placed, never sorted into position. A segment whose two endpoints
+> snap to the same node has the one-element sequence `[node(s.a)]` and
+> contributes no edge.
+
+The reason is continuity, and it is a consequence of the cell's reach rather than
+of anything the sort does wrong. A cell extends `h/√2` from its centre, so a node
+`x` grazed near `s.a` can have `dot(world(x) - s.a, s.b - s.a) < 0` — it projects
+*behind* the segment's own start. A plain sort then puts `x` first, the segment's
+piece list begins `x → node(s.a)`, and the reassembled chain no longer begins at
+the node the previous segment ended at. The chain is discontinuous and nothing
+downstream says so: guarantees 11–14 are all satisfied by a discontinuous run,
+and `NonSimpleRing` only sees repeated ids. The same argument holds at `s.b`.
+Anchoring costs one `push_back` at each end and removes the failure mode
+entirely. `node.hpp` carries the rule as a comment where the sequence is built.
+
+**Does it agree with the plain sort?** In every non-degenerate case, yes, and the
+two spellings are then textually different and observationally identical:
+`node(s.a)` and `node(s.b)` are always *members* of the met set — each endpoint
+lies on the segment and inside its own node's cell, so `segment_meets_cell`
+admits it unconditionally — and when no grazed node projects outside `[0, |s|]`
+they are already the arc-order extremes. The spellings diverge on exactly the
+inputs where one does: the anchored sequence keeps `x` interior, the plain sort
+promotes it to an end.
+
+**And the divergence is observable, which is why the oracle is not left alone.**
+With met arc-sorted as `[x, a, y, b]` (`a = node(s.a)`, `b = node(s.b)`), the
+anchored sequence is `[a, x, y, b]` and yields the undirected pairs `{a,x}`,
+`{x,y}`, `{y,b}`; the plain sort yields `{x,a}`, `{a,y}`, `{y,b}`. `{a,x}` and
+`{x,a}` are the same pair, so the difference is exactly one pair: the plain sort
+claims `{a,y}`, which the driver never produces. Guarantee 15's oracle iterates
+the *output* edges, so a claimed pair that is not an output edge is inert — but
+if some other chain produced `{a,y}`, this chain's properties are unioned into
+`proven` for an edge it never touched, `proven` stops being a subset, and
+`REQUIRE(contains(proven))` goes **red on correct output**. That is increment 5's
+exact-incidence failure with a different cause, latent rather than firing.
+
+> **Ruling: `split_sequence` in `tests/cpp/property/prop_noding_no_crossings.cpp`
+> should be respelled to anchor its endpoints, matching this rule.** That is
+> borrowing the producer's *specification*, not its records — the rule above is
+> normative here, so an oracle written to it still refutes a driver that deviates,
+> whereas the plain sort encodes a spec this design does not state. It is
+> `@tester`'s file and lands as `@tester`'s own commit with the reason in the
+> message, per `docs/increments/README.md`. `@architect` does not touch it.
 5. **Reassemble chains and merge.** Each input chain becomes one output chain
    with the same role and property set (guarantee 16), its index run being the
    concatenation of its segments' node sequences with the shared endpoints
@@ -987,6 +1071,69 @@ unreachable is how a later change makes it reachable in silence — but its
 evidence for the demotion rather than an excuse for the gap: a status with no
 reachable input is a status with no test, and the honest form is to say which
 kind of status it is.
+
+#### The ruling depends on an increment 2 implementation choice, and nothing says so
+
+The paragraph above says reordering the checks into count → winding → simplicity
+did not change the outcome. That holds only because the winding check does not
+fire on a ring the split pass has just made non-simple — and **whether it fires
+depends on which of two instruments `ring.hpp` spells `orientation<K>` as**. The
+repo contains both, and on exactly the shape a split produces they disagree.
+
+Probed against the shipped headers, compiled and run rather than reasoned about.
+Take `A = (0,0)`, `B = (10,0)`, `C = (5,1)` — the ring `A,B,C` with `A–B` split at
+a grazing `C`, which is the `… A, C, B, C …` shape the mechanism above
+manufactures:
+
+```
+orientation<FastKernel>(A,B,C,B) = Clockwise     signed_area(A,B,C,B) = 0
+orientation<FastKernel>(A,C,B,C) = CounterClockwise  signed_area(A,C,B,C) = 0
+```
+
+The zero is not a rounding artefact and does not depend on the coordinates: with
+the shoelace translated to `vertex(0)`, the ring `A,X,B,X` contributes exactly
+`cross(X-A, B-A)` and `cross(B-A, X-A)`, which are exact negatives, so the sum is
+identically zero for **every** split sliver of this shape. A shoelace sign would
+return `Collinear`, `Collinear != want`, and the ring would raise
+`RingDegenerateAfterSnap` — the status this increment has just demoted as
+unreachable — on the very input the demotion is argued from.
+
+`orientation<K>` survives because increment 2 spelled it as an **extreme-vertex
+walk advancing `prev` and `fwd` independently** (`include/terrain/core/ring.hpp:233`,
+with the reason in the comment above it: a lockstep walk returns `Collinear` for
+the proper triangle `{A,A,B,C}`). A repeated vertex costs it one collinear triple
+and it walks past. Measured, because "walks past" is a claim: over 500 000
+randomly generated rings of the shape a split produces — vertex `D` placed within
+0.05 of edge `A–B` and `A–B` split at it — and separately over 3 200 000 rings
+with a repeated vertex inserted at an arbitrary position, `orientation<FastKernel>`
+returned `Collinear` **zero times**. `signed_area` is zero on all of the
+sliver-shaped ones by the identity above.
+
+**What would break it, stated plainly: anyone "simplifying" `orientation<K>` to a
+shoelace sign silently reopens a status this increment closed.** The two look
+interchangeable — both answer "which way does this ring wind" — and the shoelace
+is shorter, cheaper and kernel-free, which is the whole reason the simplification
+is tempting. `ring.hpp`'s own comment already forbids it for a different reason
+(cancellation over a sliver at UTM33 magnitudes); this is a second, independent
+reason, and it lives here because this is where the ruling that depends on it is.
+`docs/increments/02-core-geometry.md` may deserve the same note beside
+`orientation`'s own design — **that is another file and this section does not edit
+it**; whoever next opens it can carry the probe across.
+
+**One residual, named rather than absorbed.** `orientation<K>` returning a
+*definite* orientation is measured above and is what the demotion needs. Whether
+it returns the orientation matching the chain's `role` is a separate question and
+is **not** invariant: in the 500 000-ring probe the split ring's reading differed
+from the pre-split ring's in 3 410 cases. On those shapes the winding check would
+fire first and report `RingDegenerateAfterSnap` where the honest diagnosis is
+`NonSimpleRing`. That does not make the status reachable — the input must also be
+a valid `Pslg` whose *snapped* ring takes such a shape, and the bounded search
+below found no surviving flip at all — but it is the clause the four measured
+slivers do not cover, and the "no fixture can exist" claim above is therefore
+*not refuted by the search*, not *proved*. Settling it is one line in
+`/tmp/ringsearch.cpp`: for each grazed flip, also report whether
+`orientation<K>` of the **split** ring matches the role. That is `@tester`'s to
+run, at 5d, when the predicate that decides "grazed" moves anyway.
 
 **And `05-noder.md` risk 3's mitigation is not where that document thinks it
 is.** Risk 3 reads: if the winding re-check is dropped, "a reversed sliver hole
@@ -1285,7 +1432,7 @@ input produced at increment 4, which is where the failure moved from.
 
 | `NodeStatus` | Raised by | Actionable lever | Was, at increment 4 |
 |---|---|---|---|
-| `Ok` | — | — | `Ok`, or `NotNoded`, or `DegenerateGeometry` |
+| `Ok` | — | — (but see "an open chain that collapses to one node", below) | `Ok`, or `NotNoded`, or `DegenerateGeometry` |
 | `NotRun` | default-constructed `NodeOutcome` | none; a self-check | `CdtStatus::NotRun` |
 | `InvalidSnapSpacing` | step 0, `is_valid_spacing` | supply a finite positive spacing | n/a |
 | `CoordinateOutOfRange` | step 0, `can_snap`, naming the vertex | coarsen the spacing, or re-project | `Ok`, or nonsense |
@@ -1313,6 +1460,66 @@ actionable. Three of the nine rows point at the spacing, two of them in opposite
 directions — `RingCollapsed` and `NotConverged` both want a finer grid,
 `CoordinateOutOfRange` wants a coarser one. That is `05-noder.md` risk 2 showing
 through the status enum, and it is why there is no default spacing to hide it.
+
+### An open chain that collapses to one node is `Ok`, and it is pinned
+
+At a coarse enough spacing every vertex of a short breakline snaps to the same
+node. The chain survives as `count == 1` and contributes zero edges. The table
+above had no row for it and the builder's guarantee list did not cover it, so it
+was decided by whichever `if` happened to be written. It is ruled here.
+
+> **Ruling: `node<K>` and `NodedPslgBuilder::build<K>()` accept an open chain of
+> one node, with status `Ok`. The `count < 3` refusal is `is_closed(role)`'s
+> alone, and that asymmetry is deliberate.**
+
+Four reasons, in the order that decides it:
+
+- **It is not our bug, and `MalformedOutput` is the only refusal available.**
+  Every status the enum offers here reads as a diagnosis of the wrong thing.
+  `MalformedOutput` says "this is our bug" — it is the self-check for guarantees
+  the driver establishes *by construction* — and a chain collapsing under an
+  over-coarse spacing is not a construction failure, it is the spacing doing
+  exactly what the caller asked. `RingCollapsed` is the closed-chain form of the
+  same event and its name would be a lie on an open chain. A tenth enumerator
+  would cost a row, a `describe` arm, a Python enum member at 5c and a mapping,
+  to report an outcome that is already correct.
+- **Guarantee 16 forbids the alternative.** Dropping the chain would break chain
+  order index-for-index with the input, which is the mitigation for half of
+  `05-noder.md` risk 5 and the reason a Python-side per-chain attribute array
+  stays valid without a map. A silently dropped chain is the failure 16 names.
+- **The output is well-formed, not merely tolerated.** `edge_count(c)` is
+  `count - 1 == 0`, `edge_base` still tiles, `edge_properties` is still
+  index-aligned, and the node itself is in the vertex set and reaches the CDT as a
+  point. Nothing downstream has to special-case it; the degenerate case is the
+  empty range, which every loop already handles.
+- **The closed case genuinely differs.** A ring of fewer than three nodes has no
+  interior and no winding, so `orientation<K>` and the hole classification behind
+  it have nothing to answer. An open chain of one node is asked no question it
+  cannot answer.
+
+**A caller who wanted the edge back wants a finer spacing**, which is
+`RingCollapsed`'s lever arriving without `RingCollapsed`'s status. That the noder
+does not say so is the accepted cost: it cannot distinguish "collapsed" from
+"deliberately coarse" without a policy it has no business holding, and policy
+lives at the composition root (`cli.py`, 5c).
+
+**And it must be pinned, because an unpinned acceptance is a refusal waiting to
+be tidied in.** Nothing currently fails if someone widens `noded_pslg_builder.hpp`'s
+`is_closed(ch.role) && count < 3` to `count < 3`, or adds a `count < 2` guard to
+the driver; both look like corrections. Two fixtures, `@tester`'s to write:
+
+- `tests/cpp/unit/test_noding_noded_pslg_builder.cpp` — a **hand-built**
+  candidate with an open chain of `count == 1`, required to `build<K>()` as `Ok`.
+  This is the one that pins the guard's asymmetry at the guard, against arrays the
+  noder did not produce, which is the whole reason the builder is a separate type.
+  The same file's existing closed-chain-under-3 refusal is its counterpart and the
+  two should read as a pair.
+- `tests/cpp/unit/test_noding_node.cpp` — a short open breakline at a spacing
+  coarse enough to collapse it, asserting `Ok`, `chains().size()` equal to the
+  input's, and `edge_count(c) == 0` for that chain. This pins the end-to-end
+  outcome and guarantee 16 together.
+
+Neither is written here, and `@architect` does not touch either file.
 
 ### What becomes unreachable in `CdtStatus`, at 5c
 
@@ -1416,9 +1623,23 @@ prints `57`, `89`, `33` — 179, which is the figure `41ac5b6` reports.
 **~445 production LOC.** Header-only; nothing in `src/noding/`, because the
 driver is a template on `K` exactly as increment 3's validator is. Non-C++
 changes in the same PR, listed separately because they are not production code:
-four suite registrations in `tests/cpp/CMakeLists.txt` (all four via
-`add_terrain_backend_test`, since all four name a kernel), and the documentation
-fixes at the end.
+**five** suite registrations in `tests/cpp/CMakeLists.txt` — four headers but
+five files, because `node.hpp` has the second file declared under "What is worth
+testing" — and they are **not all registered the same way**.
+
+Four go through `add_terrain_backend_test`, because they name a kernel.
+`prop_noding_broad_phase` goes through plain `add_terrain_test`
+(`tests/cpp/CMakeLists.txt:207`), **and the asymmetry is a design property, not
+an oversight.** `broad_phase.hpp` includes `core/bbox.hpp`, `core/point.hpp` and
+`core/segment.hpp` and no predicate header: it compares bounding boxes and never
+asks an orientation. Registering its suite without the backend leaves
+`terrain_predicates` off that link line, so a broad phase that ever reaches for a
+predicate **fails to link** rather than passing quietly. Under
+`add_terrain_backend_test` the same regression would compile, link, and leave
+every assertion green — the proof deleted and nothing red. The kernel-free
+one-directional bbox contract at the head of the header is a claim about the
+*link line* as much as about the code, and this is the registration that checks
+it. Anyone tidying the four-versus-one into uniformity is removing the check.
 
 **5c — the crossing:**
 
@@ -1470,13 +1691,86 @@ headroom rather than a refutation, and the one row that came in over is the row
 whose contents this round has grown. None of this round's rulings adds production
 lines — 5d is deferred, the `NodeStatus` reading is a comment, and
 `RingDegenerateAfterSnap`'s demotion deletes no check — so **5b stays ~445**.
-The figure to re-measure is the shipped one, at the green commit, with
+
+### Reconciliation: ~445 estimated, 675 measured
+
+Measured at **the last commit on this branch that touches a production file**.
+The anchor is a rule and not a hash, for `07-edge-properties.md`'s reason: a hash
+names a commit, the commit that updates the hash is itself a commit, and a
+correction round that touches a header falsifies the line it just wrote. Resolve
+it:
+
+```bash
+git log --oneline -1 -- include/ bindings/ src_python/
+```
+
+and re-run this section's C++ instrument per file:
 
 ```sh
 for f in include/terrain/core/noded_pslg.hpp include/terrain/noding/broad_phase.hpp \
          include/terrain/noding/noded_pslg_builder.hpp include/terrain/noding/node.hpp; do
   grep -vcE '^\s*(//|$)' $f; done
 ```
+
+| File | Est. | Actual | |
+|---|---|---|---|
+| `include/terrain/core/noded_pslg.hpp` | ~85 | 72 | under |
+| `include/terrain/noding/broad_phase.hpp` | ~70 | 84 | |
+| `include/terrain/noding/noded_pslg_builder.hpp` | ~110 | 249 | **2.3×** |
+| `include/terrain/noding/node.hpp` | ~180 | 270 | 1.5× |
+| **Total** | **~445** | **675** | **1.52×** |
+
+**The row this section named as the one to watch is the row that blew out**, and
+that is the finding rather than the total. The paragraph above says "the one row
+that came in over is the row whose contents this round has grown", naming
+`noded_pslg_builder.hpp` at 127 against ~110 in the throwaway. Shipped, it is 249
+— 139 over its own row, and 60 % of the whole overrun. The warning was correct in
+direction and understated by an order of magnitude in size, which is the more
+useful record: a row identified as growing was still estimated as if it were not.
+
+**Where the 230 went, per row rather than in aggregate**, because
+`07-edge-properties.md`'s own correction round was forced by a total nobody had
+decomposed. `noded_pslg_builder.hpp` carries six guarantee checks as six named
+private members, each with its refusal message formatted and its ordering reason
+in a comment, plus `NodeStatus`, `describe` and `NodeOutcome`; the estimate priced
+the checks and not the diagnostics — a `std::format` refusal that names the chain
+and the spacing is three or four lines where "return an error" is one, and the
+status table above owes one such message per row. `node.hpp` at 270 against ~180
+is the six-step pass plus `revalidate_rings` as a separate function, which the
+estimate folded into the step list. `broad_phase.hpp`'s +14 is the documented
+one-directional contract; `noded_pslg.hpp` came in under.
+
+**The instrument counts the comments this project asks for**, and that is not an
+excuse but it is an accounting fact worth carrying: `grep -vcE '^\s*(//|$)'`
+excludes `//` and blank lines, so the non-comment count is what `CLAUDE.md` §2
+means and these headers' unusually heavy `//` blocks are already excluded. The
+overrun is code, not prose — the opposite of `features.py`'s at increment 7, and
+the reason to state which of the two a given overrun is.
+
+**The ceiling holds and is not close**: 675 against 700 non-comment production
+lines, 25 of headroom. That is thin enough to be worth saying out loud — **5b has
+no room for another production line**, and any ruling that would add one belongs
+in 5c or 5d rather than here. Every ruling this round added is prose or a test.
+
+**What this does to 5c's ~341.** The C++ estimate's track record is now
+**three-for-four, not three-for-three**: increments 3, 4 and 5a came in at or
+under, and 5b came in at 1.52×. The sentence above that declines to double the C++
+rows — "for the complementary measured reason" — rests on that record, so it is
+weaker than when it was written. It is not withdrawn, because 5c's C++ row is ~6
+mechanical lines and the estimate's risk is concentrated in the binding row, which
+is already doubled on the measured binding factor. What changes is the margin:
+~341 was quoted against 700 as comfortable, and the honest reading now is that a
+5b-sized 1.5× on the Python and binding rows would put 5c around 500 — still one
+PR, no longer comfortable, and inside one row's slip of **Gate C's 550**. Gate C
+already obliges 5c's design to re-estimate `bindings/core.cpp` and `_core.pyi`
+against what 5b's types turned out to be; this table is the evidence that the
+obligation is real, and it now applies to the C++ rows too.
+
+**What to carry into the next estimate.** The row that grew during the design
+round is the row to re-estimate, not merely to watch: this document flagged
+`noded_pslg_builder.hpp` as having grown and then left its ~110 unchanged. Naming
+a row as at risk and not re-pricing it is the same move as an estimate nobody
+reconciles.
 
 **Nobody should relitigate the seam on a line count in either direction.** If 5b
 comes in at 320 the seam still stands, because 5c's Python surface would not fit
