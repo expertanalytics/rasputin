@@ -1,8 +1,11 @@
 # Increment 5c — wiring the noder through
 
-**Status: design.** Written before `@tester` is briefed, per
-`docs/increments/README.md`. No production code and no tests are part of this
-document.
+**Status: design, with a reconciliation appended.** The body was written before
+`@tester` was briefed, per `docs/increments/README.md`, and no production code
+or tests are part of it. Rulings made after the red commit — and the two places
+where the design was wrong and the code is right — are marked where they land
+rather than folded in silently, and the measured cost is in **Reconciliation**
+at the end.
 
 **Branch point:** master at `93fc772` — increment 5b merged as PR #76. Written
 against the **merged tree and the shipped headers**, not against 5b's
@@ -290,8 +293,18 @@ able to consume either.
 
 ```cpp
 template <typename T>
-[[nodiscard]] py::class_<T> bind_pslg_like(py::module_& m, const char* name, const char* doc);
+py::class_<T> bind_pslg_like(py::module_& m, const char* name, const char* doc);
 ```
+
+**No `[[nodiscard]]`, and the sketch originally had one.** It does not compile
+under this project's `-Werror`: `Pslg` chains nothing onto the returned handle,
+so the attribute buys exactly one `-Wunused-result` cast at the one call that
+*correctly* ignores the value. The registration is the effect and the handle is
+a convenience for the caller that adds accessors — which is only `NodedPslg`.
+The attribute was carried over from the `readonly_view` helpers above it, where
+the return *is* the whole result; here it is not, and "every helper in this file
+is `[[nodiscard]]`" was pattern-matching rather than a reason. `@developer`
+dropped it and named this sketch in a comment at the definition.
 
 `Pslg`'s existing block is replaced by a call to it; `NodedPslg`'s extra
 accessors are chained onto the returned `py::class_`. The reason is not the
@@ -363,9 +376,22 @@ def node(pslg: Pslg, spacing: float, max_rounds: int = 4) -> NodeOutcome
 Stubs for all of the above, or `mypy --strict` fails at `cli.py`'s first call.
 Two things in it are not mechanical:
 
-* `describe` becomes **two `@overload` stubs plus an implementation stub**, the
-  pattern `cross` already uses in this file (`_core.pyi:62-67`) and the reason
-  the file is hand-written rather than generated (`_core.pyi:3-5`).
+* `describe` becomes **two `@overload` stubs and nothing else**, the pattern
+  `cross` already uses in this file and the reason the file is hand-written
+  rather than generated (`_core.pyi:3-5`).
+
+  **This said "plus an implementation stub" and that was wrong — mypy rejects
+  it**: *"An implementation for an overloaded function is not allowed in a stub
+  file."* A `.pyi` declares; there is no body to implement, so the two
+  `@overload` stubs *are* the declaration. Worse than merely wrong, the sentence
+  **misdescribed the example it cited in the same breath** — `cross` has two
+  overloads and no implementation stub, which is the object-identity failure
+  `.claude/REQUIRED-READING.md` names: the claim was about a different object
+  than the one on the page. Reading the cited lines would have caught it without
+  running anything. `@developer` shipped two overloads with a comment, and the
+  committed suite already agreed with the code before this correction:
+  `test_describe_is_declared_as_an_overload_set` asserts exactly
+  `len(overloads) == 2`.
 * `NodeOutcome.pslg` is `NodedPslg | None`, matching `PslgBuildResult.pslg`'s
   stub — the `Optional` is the type system carrying "engaged iff status == Ok",
   and it is what makes `cli.py`'s `if outcome.pslg is None` a narrowing rather
@@ -819,7 +845,7 @@ sed -n '165,186p' src_python/tin_engine/_core.pyi | grep -vcE '^\s*(#|$)'  # cla
 | `NodeStatus` enum, 9 rows | `CdtStatus` = 9 | 12 |
 | `class NodedPslg` | `class Pslg` = 17 | 24 |
 | `class NodeOutcome` | `CdtOutcome` = 9 | 11 |
-| `describe`: two `@overload` + impl stub | `describe` = 2 | 7 |
+| `describe`: two `@overload` stubs, no implementation stub | `describe` = 2 | 7 |
 | `node()` | `triangulate()` = 1 | 5 |
 | `triangulate` retype | — | 1 |
 | **Total** | | **60** |
@@ -890,7 +916,9 @@ approximates.
 | **Total** | | **~256** |
 
 Against `CLAUDE.md` §2's 700, and against Gate C's 550: comfortable at the point
-estimate and clear at the adverse ~505.
+estimate and clear at the adverse ~505. **Measured after the fact at +312, with
+one row at 2.6× — see Reconciliation.** These are the predictions; they are left
+as written, because a prediction edited to match its outcome measures nothing.
 
 **Two rows 5b's list does not contain**, both found by reading the shipped tree
 rather than the design: `constrained_edges.hpp` (the fifth file with
@@ -902,24 +930,61 @@ crossing nobody can read). Together they are 15 lines and they are the reason
 **Not production code, and the round is not free.** The test churn is the
 largest uncosted part of 5c.
 
-**What this list enumerates, so that its count is checkable rather than a
-judgement: every test file that already exists and that 5c changes** — not the
-subset someone judged expensive, and not the new suites, which are in "What is
-worth testing" instead. `tests/python/test_core_noding.py` is therefore absent
-by construction: it is new. The membership rule resolves to a command, which is
-how it should be re-derived rather than trusted:
+**What this list enumerates: every test file that already exists and that 5c's
+rulings invalidate** — not the subset someone judged expensive, and not the new
+suites, which are in "What is worth testing" instead.
+`tests/python/test_core_noding.py` is therefore absent by construction: it is
+new.
+
+**The membership rule has to be a forecast, and a diff is not one.** This is
+worth stating at length because the obvious rule is wrong in a way that looks
+right. `git diff --name-only <branch point>..HEAD -- tests/` resolves, is
+checkable, and returns exactly the files below. It is also **an audit, not a
+forecast**: it can only name files someone has already edited, and the entire
+purpose of this list is to tell `@tester` which files must be edited *before*
+anyone has touched them. A file that must change and has not yet been touched is
+invisible to it.
+
+That failed twice in this one increment. `test_cdt_backend_seam.cpp` was the
+first. `tests/python/test_viz_svg.py` was the second, found by `@developer` at
+green: its `TestGallery::test_only_the_river_fixture_carries_a_property` asserts
+that `river` is the only gallery fixture carrying a property mask, and "The
+gallery" section above requires `not-noded` to gain the road and river bits.
+The design decides that conflict and the test is stale — but the diff rule could
+not have said so, because nothing had been edited yet.
+
+**So the forecast is derived per ruling, at the branch point.** Each ruling in
+this document that changes something a test can observe — a parameter type, a
+fixture's contents, an enum arm's text — names the observable, and the candidate
+set is every test file mentioning it *at the branch point*:
 
 ```sh
-git diff --name-only <branch point>..HEAD -- tests/ | grep -v test_core_noding
+git grep -l "triangulate" <branch point> -- tests/     # the retyped entry point
+git grep -ln "properties" <branch point> -- tests/python/   # the gallery's masks
 ```
 
-**Seven files, four of them C++** — three suites and the `cdt_cases.hpp` support
-header the C++ suites share. An eighth entry is listed below precisely because
-it is *not* one of the seven.
+Run at `93fc772`, those two return twelve files and seven. The union contains
+every file listed below **and both of the misses above** — `test_cdt_backend_seam.cpp`
+in the first, `test_viz_svg.py` in the second. It over-produces on purpose: a
+candidate is *read and then either listed or cleared*, and `test_viz_scene.py`,
+`test_cdt_indexed_mesh.cpp`, `test_core.py` and `test_features.py` are cleared
+because they name the observable without asserting the value 5c changes.
+Over-production is the correct failure mode for a forecast; a forecast that
+under-produces is the two incidents.
+
+**The diff command keeps its job, which is the other one.** It is what
+`@reviewer` runs at the end: a file in the diff and not in this list is a
+forecast miss, named as such. Forecast first, audit after, and the gap between
+them is the finding.
+
+**Eight files, four of them C++** — three suites and the `cdt_cases.hpp` support
+header the C++ suites share. A ninth entry is listed below precisely because it
+is *not* one of the eight.
 
 The earlier count of five was not a scope line, it was a list with no membership
-rule, which is how `test_cdt_backend_seam.cpp` stayed off it while being
-unbuildable without a change. A rule is what makes the next omission visible.
+rule at all, which is how `test_cdt_backend_seam.cpp` stayed off it while being
+unbuildable without a change. A rule is what makes the next omission visible —
+and a rule that can only look backwards makes it visible one round too late.
 
 * `tests/cpp/unit/test_cdt_detria_backend.cpp` (~500 lines) and
   `tests/cpp/property/prop_cdt_invariants.cpp` (~430) build `Pslg` fixtures and
@@ -936,8 +1001,8 @@ unbuildable without a change. A rule is what makes the next omission visible.
   last one is the load-bearing addition: **node ids are not input indices** —
   the node set is sorted by `GridPoint` — so every assertion in the two suites
   written against a literal vertex index has to route through it.
-* `tests/cpp/unit/test_cdt_constrained_edges.cpp` (~250) is the **eighth file,
-  and it is not one of the seven**: it is **unchanged**. That is what the
+* `tests/cpp/unit/test_cdt_constrained_edges.cpp` (~250) is the **ninth file,
+  and it is not one of the eight**: it is **unchanged**. That is what the
   `ChainedGraph` concept buys, and it is the concrete return on the ten lines it
   costs. It is listed under a rule that excludes it because an unchanged file is
   only evidence if someone says in advance that it will be.
@@ -973,8 +1038,19 @@ unbuildable without a change. A rule is what makes the next omission visible.
   `grep -rn non_noded tests/python/`.
 * `tests/python/test_cli_draw.py` pins the `not-noded` fixture's presentation,
   which is the picture this increment changes.
-* `tests/python/test_viz_protocols.py` is the seventh, and the one the earlier
-  count missed for a different reason than the seam suite did: its *new*
+* `tests/python/test_viz_svg.py`'s
+  `TestGallery::test_only_the_river_fixture_carries_a_property` asserts that
+  `river` is the only gallery fixture whose chains carry a property mask. **"The
+  gallery" section above invalidates that**, deliberately: `not-noded`'s two
+  breaklines gain the road and river bits, because a road crossing a river in
+  two colours is the increment's product. **Ruling: the assertion is stale and
+  `@tester` amends it** — the classified set becomes `{"river", "not-noded"}`,
+  and the test keeps its stated ability to fail, which is that a fixture set
+  where *everything* carries a bit must still be caught. This is not a case of
+  the design bending to a test; the test pins a fact 5c changes on purpose, and
+  the fact is the one a person looks at.
+* `tests/python/test_viz_protocols.py` is the one the earlier count missed for a
+  different reason than the seam suite did: its *new*
   assertion — `NodedPslg` satisfying `PslgLike`, the third implementation — is
   listed under "What is worth testing" as added coverage, and that made it look
   like a file with no churn. It has churn as well. Its shared `mesh` fixture
@@ -1100,6 +1176,63 @@ on and the one a passing status will not reveal.
    cases that pinned `NotNoded` and `DegenerateGeometry`. Authorised above, with
    the mechanism that makes each unreachable stated, so `@reviewer` audits the
    deletion against a written reason rather than against a diff.
+
+## Reconciliation: what it cost, measured
+
+Written after the green commits, against the tree rather than against this
+document's predictions. The rule, not a resolved value: measure the branch point
+to **the last commit that touches a production file**, which
+`git log --oneline -1 -- include/ src/ bindings/ src_python/` prints, with the
+two instruments this document declared:
+
+```sh
+git diff -U0 93fc772..<that commit> -- <file> | grep '^+' | grep -v '^+++' | sed 's/^+//' \
+  | grep -vcE '^\s*(//|$)'      # C++; '^\s*(#|$)' for Python, and again for '^-'
+```
+
+**Net +312 against ~256. Ratio 1.22, under the adverse ~505 and well under
+`CLAUDE.md` §2's 700.** Gate D did not fire: `bindings/core.cpp` came in at
+**120 against its 135 budget and its 200 trip**, measured before `cli.py` was
+started, which is the order the gate specifies.
+
+| Row | Est. | Measured | Ratio |
+|---|---|---|---|
+| the five C++ files (`constrained_edges.hpp` is all of it) | 18 | 8 | 0.44 |
+| `bindings/core.cpp` | 135 | 120 | 0.89 |
+| `_core.pyi` | 60 | 79 | 1.32 |
+| `cli.py` | 38 | **99** | **2.61** |
+| `fixtures.py` + `svg.py` | 5 | 6 | 1.2 |
+
+**The overrun is one row, and its diagnosis is the one this document already
+made and then failed to apply to itself.** The binding rows were re-priced
+against measured shipped blocks precisely because a line-by-line *sketch*
+systematically under-counts — that argument is in "The re-estimate, by measured
+analogue rather than by sketch-and-double" above. `cli.py`'s 38 was priced by
+sketch, as edits to an existing function. What landed is a new `Attempt`
+dataclass, `_triangulated` rewritten to three exit points, two helpers, the
+option, `DEFAULT_SNAP_SPACING`, and two role vocabularies — **every one of them
+something this document asks for by name**, in the `Attempt` ruling and the
+composition-root section. Nothing unplanned was written; the row was priced as
+if the plan were small.
+
+So the lesson is not "`cli.py` is hard to estimate". It is that **the instrument
+defect was diagnosed, fixed on the rows where it had already burned someone, and
+left standing on the row nobody had been burned on yet.** A fix applied only
+where the incident occurred is half a fix. The transferable rule, for whoever
+writes the next increment file: **a row that introduces a new type, a new
+control-flow shape, or a new module constant is not an edit to an existing
+function and must not be priced as one** — price it against a shipped block of
+the same shape, which is what the binding rows did.
+
+`_core.pyi` at 1.32 is the second-worst row and is the same defect in miniature:
+a stub row was priced against `class Pslg` = 17 for `class NodedPslg`, and the
+declaration that landed also carries the enum, the outcome and two overloads
+whose prose the checker requires.
+
+**The forecast counts, checked against the audit.** The list above forecasts
+eight test files and names a ninth that must not change. That claim is checked,
+not asserted, with the audit command in that section; a file in the diff and not
+in the list is a forecast miss and gets named as one in review.
 
 ## What this PR corrects elsewhere
 
