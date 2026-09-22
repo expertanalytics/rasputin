@@ -1,6 +1,6 @@
 # Increment 8 — the crossing gallery
 
-Status: design settled. No production code, no tests, no engine change and no
+Status: shipped on this branch. No engine change and no
 C++ line. This increment adds three fixtures to the gallery, renames one, adds
 one stylesheet rule and its precedence entry, corrects two false sentences in
 `06-cdt-viewer.md` and one false comment in `fixtures.py`.

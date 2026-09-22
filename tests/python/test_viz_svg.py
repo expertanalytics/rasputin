@@ -18,7 +18,7 @@ array or the stylesheet. What is asserted is structure and arithmetic:
 * element counts equal the scene's primitive counts;
 * the viewport transform flips y, preserves aspect, and centres the bbox;
 * the failure presentations are non-blank and carry their status text;
-* the gallery is the eight fixtures the design names, and each one is the shape
+* the gallery is the fixtures the design names, and each one is the shape
   its table row claims.
 
 The `class` attribute *is* asserted, and the distinction matters. A class token
@@ -1253,7 +1253,7 @@ class TestFailurePresentation:
     outline" triangulates successfully to nothing, and in a release build with
     the assert compiled out one test is the only guard. The viewer is the second
     guard, and it only works if the failure is conspicuous rather than blank --
-    which is why two of the eight gallery fixtures exist to put this
+    which is why two gallery fixtures exist to put this
     presentation in front of a person rather than have it assumed --
     `degenerate` and, since `4482649`, `hole-in-hole`. `road-crosses-river` was a third
     until 5c, which noded its crossing: it now draws a mesh, and that is the

@@ -481,7 +481,10 @@ Each exists to answer one question a person can ask of the picture:
 | `hole-in-hole` | a hole nested directly inside a second hole. **Drawn as a third failure presentation, not as a mesh** -- the backend answers `InvalidTopology`, "A hole was directly inside another hole", which is precisely "what in-domain means" made visible. The row as first written expected a mesh, and **the narrowing that made it a refusal was the red step's, not an unsatisfiability of the design** — see "`hole-in-hole`: what the suite requires and what the design meant" below |
 | `breakline-chain` | an open breakline crossing the interior; where the Delaunay property visibly stops |
 | `river` | the same, with the `river` property set (bit 0), so the property stroke is exercised before 5b depends on it. Written as `is_river = True` at increment 6; carries an `int` mask from increment 7 |
-| `not-noded` | two crossing constraints. **No longer a failure fixture: since 5c the noder resolves the crossing and the row draws a mesh.** The name describes the input and has become misleading, and `docs/increments/08-crossing-gallery.md` rules on the rename and on the three crossing fixtures this row was the only member of |
+| `road-crosses-river` | two crossing constraints, meshed: since 5c the noder resolves the crossing. Named `not-noded` until increment 8 renamed it — that name stated a resolved condition of the tree, false before 5b and true after |
+| `road-enters-forest` | a breakline crossing an area feature's boundary, one endpoint inside it. The *entering* case |
+| `wall-leaves-domain` | a breakline crossing the outer ring, one endpoint outside the domain. The only gallery row that draws a `Finding`, and the finding is the correct answer |
+| `bridge-over-lake` | a breakline crossing a closed breakline and passing clean through. The terrain under it is meshed, which is `08-crossing-gallery.md`'s ruling 1 drawn |
 | `degenerate` | an all-collinear point set. **Refused before `triangulate` is ever reached, so this is *not* the `DegenerateGeometry` presentation** -- `build_pslg` rejects the ring with `PslgError.DegenerateRing`, "chain 0 is declared Outer but every vertex is collinear", and returns no `Pslg` at all. The design's intent survives: the input is drawn alone with the engine's own words in the header band. The words are a `PslgDiagnostic`'s. Found in 6b-ii's red step; see "The `PslgLike` is the fixture itself" below, which is the decision this forced |
 
 **The two-property fixture increment 7 wanted is owed, and it is blocked on the
@@ -506,16 +509,17 @@ carries two property bits on one chain, so `test_viz_svg.py` is still the only
 place precedence is exercised. `docs/increments/08-crossing-gallery.md` records
 the debt as open and says why it did not take it.
 
-**Two of the eight are failure presentations, rows 4 and 8** — `hole-in-hole`
-is a backend refusal (`InvalidTopology`) of a PSLG the validator accepted, and
-`degenerate` never reaches `triangulate` because the validator refuses it first.
-They matter as much as the six that mesh: a failure presentation nobody has
-looked at is a failure presentation that is wrong.
+**Two fixtures are failure presentations: `hole-in-hole` and `degenerate`.**
+`hole-in-hole` is a backend refusal (`InvalidTopology`) of a PSLG the validator
+accepted; `degenerate` never reaches `triangulate` because the validator refuses
+it first. They matter as much as the ones that mesh: a failure presentation
+nobody has looked at is a failure presentation that is wrong. No count and no
+row ordinals — the gallery grows, and the probe below resolves the set.
 
-**As first written this paragraph said three, rows 4, 7 and 8, and closed by
-noting that three refusal pages out of eight was more than this gallery set out
-to have.** 5c removed the third without anyone acting on that concern: the noder
-resolves `not-noded`'s crossing, so row 7 draws a mesh. Re-derive the set rather
+**As first written this paragraph said three, and closed by noting that three
+refusal pages was more than this gallery set out to have.** 5c removed the
+third without anyone acting on that concern: the noder resolves the crossing, so
+`road-crosses-river` draws a mesh. Re-derive the set rather
 than trusting the count here — the probe at the top of
 `docs/increments/08-crossing-gallery.md` prints each fixture's `SceneKind`.
 
