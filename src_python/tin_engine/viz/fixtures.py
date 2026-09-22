@@ -25,11 +25,13 @@ backend refusal of a valid PSLG (``InvalidTopology``). Both are here because a
 failure presentation nobody has looked at is a failure presentation that is
 wrong.
 
-``not-noded`` was a third until increment 5c and is now the showcase: the noder
-resolves its crossing, so it draws a mesh. It keeps its name, because the name
-describes the INPUT, which is still not noded -- its value is being a regression
-fixture with two states, and the picture changing between two commits under one
-name is the thing worth having.
+``road-crosses-river`` was a third until increment 5c and is now the showcase:
+the noder resolves its crossing, so it draws a mesh. Its value is being a
+regression fixture with two states, and the picture changing between two commits
+is the thing worth having. It was called ``not-noded`` until increment 8, a name
+that encoded a resolved state of the tree -- false before 5b, true after -- so
+it had already expired once; the new name states the geometry, which no commit
+can change.
 """
 
 from __future__ import annotations
@@ -117,16 +119,17 @@ _BOX_700_500 = [[0.0, 0.0], [700.0, 0.0], [700.0, 500.0], [0.0, 500.0]]
 
 CATCHMENT = _fixture(
     "catchment",
-    "an outer ring with two lake holes and an interior breakline -- the shape the project is for",
+    "an outer ring with two interior holes and an interior breakline"
+    " -- the shape the project is for",
     [
         # The outline, counter-clockwise from the south-west.
         [0.0, 0.0], [300.0, 40.0], [620.0, 0.0], [900.0, 180.0], [960.0, 520.0],
         [740.0, 760.0], [420.0, 900.0], [120.0, 760.0], [20.0, 480.0], [60.0, 220.0],
-        # Lake one, clockwise.
+        # The first interior hole, clockwise.
         [200.0, 380.0], [300.0, 340.0], [260.0, 250.0], [160.0, 280.0],
-        # Lake two, clockwise.
+        # The second interior hole, clockwise.
         [640.0, 640.0], [760.0, 600.0], [720.0, 500.0], [600.0, 520.0],
-        # A breakline through the northern half, clear of both lakes.
+        # A breakline through the northern half, clear of both holes.
         [120.0, 560.0], [340.0, 620.0], [520.0, 760.0],
     ],
     [
@@ -201,8 +204,8 @@ RIVER = _fixture(
     [(range(4), "outer", 0), ([4, 5, 6], "breakline", 1)],
 )
 
-NOT_NODED = _fixture(
-    "not-noded",
+ROAD_CROSSES_RIVER = _fixture(
+    "road-crosses-river",
     "a road crossing a river: two constraints meeting at a point neither names, noded",
     [
         [0.0, 0.0], [700.0, 0.0], [700.0, 700.0], [0.0, 700.0],
@@ -216,7 +219,7 @@ NOT_NODED = _fixture(
         # rather than a grey crossing.
         ([4, 5], "breakline", 2),
         # Crosses the chain above at (350, 350), a point neither chain names:
-        # that is what "not noded" means, and the noder (5b) is what fixes it.
+        # the input is not noded, and the noder (5b) is what resolves it.
         ([6, 7], "breakline", 1),
     ],
 )
@@ -239,7 +242,7 @@ GALLERY: Mapping[str, Fixture] = {
         HOLE_IN_HOLE,
         BREAKLINE_CHAIN,
         RIVER,
-        NOT_NODED,
+        ROAD_CROSSES_RIVER,
         DEGENERATE,
     )
 }
