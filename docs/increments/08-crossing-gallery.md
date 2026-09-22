@@ -539,6 +539,22 @@ git diff master...HEAD -- src_python/tin_engine/viz/fixtures.py \
 Tests are excluded from the ceiling. Estimated at ~120 lines across the two
 suites, most of it the mechanical `GALLERY_NAMES` widening.
 
+### Measured
+
+Both figures, labelled, per `PRINCIPLES.md` B4. Taken with the command above,
+run verbatim; a variant of it that drops the `\*` arm returns 61 for the same
+tree, which is why the command and not the number is the thing to carry.
+
+| | Estimate | Measured |
+|---|---|---|
+| production, non-comment | ~55 | **58** — `fixtures.py` 56, `svg.py` 1, `cli.py` 1 |
+| tests, non-comment | ~120 | **221** |
+
+Production is 1.05x the estimate and 8.3% of `CLAUDE.md` §2's ceiling. Tests are
+1.8x, outside the ceiling, and `@reviewer` audited the overrun rather than
+accepting it: five distinct wrong oracles are killed, each by a different case,
+so the negatives are what make the positives able to fail rather than padding.
+
 ## Open, and deliberately not closed here
 
 - **The two-property fixture** `07-edge-properties.md` asked for. Unblocked as
