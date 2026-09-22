@@ -109,7 +109,10 @@ GALLERY_NAMES = (
     "hole-in-hole",
     "breakline-chain",
     "river",
-    "not-noded",
+    "road-crosses-river",
+    "road-enters-forest",
+    "wall-leaves-domain",
+    "bridge-over-lake",
     "degenerate",
 )
 
@@ -125,9 +128,19 @@ ROLE_NAMES = frozenset({"outer", "hole", "breakline"})
 # the case this whole widening exists for and the one a single bit cannot state.
 RIVER_BIT = 0
 ROAD_BIT = 1
+COASTLINE_BIT = 3
+WALL_BIT = 5
 NO_PROPERTIES = 0
 RIVER = 1 << RIVER_BIT
 ROAD = 1 << ROAD_BIT
+COASTLINE = 1 << COASTLINE_BIT
+WALL = 1 << WALL_BIT
+
+#: Every bit the gallery is allowed to set, which is what
+#: `test_no_fixture_carries_a_property_by_accident` holds the fixtures to.
+#: Widened here and nowhere else, so that a fixture earning a bit is one edit
+#: with a reason beside it in `CLASSIFIED_FIXTURES`.
+DECLARED_BITS = RIVER | ROAD | COASTLINE | WALL
 
 #: THIS SUITE'S OWN stroke fixture, in DESCENDING priority: first match wins.
 #: It is NOT the gallery's order and must not be read as it -- the real gallery
@@ -148,8 +161,16 @@ CLASSIFIED_FIXTURES = {
     "river": "the property stroke's own fixture: one breakline, the river bit",
     # `05c-noder-wiring.md`, "The gallery": the crossing is the increment's
     # product, so its two breaklines carry road and river, as its C++ twin at
-    # `tests/cpp/unit/test_noding_node.cpp:162-165` always has.
-    "not-noded": "a road crossing a river, in two colours, meeting at a node",
+    # `tests/cpp/unit/test_noding_node.cpp` (case `RoadAcrossRiver`) always has.
+    "road-crosses-river": "a road crossing a river, in two colours, meeting at a node",
+    # Increment 8. The road carries `road`; the forest ring carries NOTHING,
+    # because `DEFAULT_VOCABULARY` has no forest bit and a fixture that invented
+    # a number would assert something the vocabulary does not say.
+    "road-enters-forest": "the road bit; the area ring it enters is deliberately unclassified",
+    "wall-leaves-domain": "the wall bit, on the one chain that leaves the catchment",
+    # The only fixture with an area feature the vocabulary CAN name, which is
+    # what makes the shoreline read as water rather than as a generic ring.
+    "bridge-over-lake": "coastline on the shoreline ring, road on the deck",
 }
 
 
@@ -1234,7 +1255,7 @@ class TestFailurePresentation:
     guard, and it only works if the failure is conspicuous rather than blank --
     which is why two of the eight gallery fixtures exist to put this
     presentation in front of a person rather than have it assumed --
-    `degenerate` and, since `4482649`, `hole-in-hole`. `not-noded` was a third
+    `degenerate` and, since `4482649`, `hole-in-hole`. `road-crosses-river` was a third
     until 5c, which noded its crossing: it now draws a mesh, and that is the
     increment's product rather than a fixture going missing here.
     """
@@ -1328,7 +1349,8 @@ def properly_cross(
     """Do segments `pq` and `rs` cross at an interior point of both?
 
     Strict orientation signs on both sides, so a shared endpoint or a T-junction
-    is not a crossing -- the `not-noded` fixture has to be a *crossing*, since a
+    is not a crossing -- the `road-crosses-river` fixture has to be a *crossing*,
+    since a
     T-junction is a different unnoded defect and triangulates differently.
     """
     def sign(value: float) -> int:
@@ -1338,7 +1360,7 @@ def properly_cross(
     # strict: with a boolean test a zero determinant reads as "negative", so a
     # shared endpoint -- determinant exactly zero -- is reported as a crossing.
     # Measured: the self-test below failed under `(d1 > 0) != (d2 > 0)`, which
-    # would have let `corner-hole`'s touching rings satisfy `not-noded`'s test.
+    # would have let `corner-hole`'s touching rings satisfy the crossing test.
     d1, d2 = sign(cross(r, s, p)), sign(cross(r, s, q))
     d3, d4 = sign(cross(p, q, r)), sign(cross(p, q, s))
     return d1 * d2 < 0 and d3 * d4 < 0
@@ -1366,7 +1388,7 @@ class TestGalleryPredicates:
         assert not properly_cross(a, b, (EAST + 200.0, NORTH), (EAST + 200.0, NORTH + 100.0))
 
     def test_a_shared_endpoint_is_not_a_crossing(self) -> None:
-        # What separates `not-noded` from `corner-hole`: one is two constraints
+        # What separates `road-crosses-river` from `corner-hole`: two constraints
         # through each other, the other is two rings meeting at a vertex.
         a, b = (EAST, NORTH), (EAST + 100.0, NORTH)
         assert not properly_cross(a, b, b, (EAST + 100.0, NORTH + 100.0))
@@ -1391,13 +1413,19 @@ def bounds(points: Sequence[Sequence[float]]) -> tuple[float, float, float, floa
     return min(xs), min(ys), max(xs), max(ys)
 
 
+#: The fixtures whose area feature is a closed breakline, and the chain index of
+#: that ring in each. Named data, so that adding a third area fixture is one
+#: edit rather than a new copy of the tests that read it.
+AREA_RINGS = {"road-enters-forest": 1, "bridge-over-lake": 1}
+
+
 class TestGallery:
-    """Eight fixtures, each answering one question a person can ask of a
+    """Eleven fixtures, each answering one question a person can ask of a
     picture. Declarative data -- no procedural generation, because a fixture
     whose coordinates are computed is a fixture nobody can check by reading.
     """
 
-    def test_it_holds_exactly_the_eight_named_fixtures(self) -> None:
+    def test_it_holds_exactly_the_eleven_named_fixtures(self) -> None:
         assert sorted(gallery()) == sorted(GALLERY_NAMES)
 
     @pytest.mark.parametrize("name", GALLERY_NAMES)
@@ -1546,7 +1574,7 @@ class TestGallery:
 
     def test_no_fixture_carries_a_property_by_accident(self) -> None:
         # Was `test_only_the_river_fixture_carries_a_property`, asserting
-        # `== {"river"}`, until 5c gave `not-noded` road and river. "Exactly one
+        # `== {"river"}`, until 5c gave the crossing road and river. "Exactly one
         # fixture" was a count of the gallery as it stood, not a property of it,
         # and it had to be rewritten the first time a second fixture earned a
         # bit. What the case was actually protecting is the half that still has
@@ -1569,9 +1597,9 @@ class TestGallery:
         assert classified < set(GALLERY_NAMES), "every fixture carries a property"
         for name in sorted(classified):
             stray = [
-                int(chain.properties) & ~(RIVER | ROAD) for chain in gallery()[name].chains
+                int(chain.properties) & ~DECLARED_BITS for chain in gallery()[name].chains
             ]
-            assert not any(stray), f"{name} sets a bit outside road and river"
+            assert not any(stray), f"{name} sets a bit outside {DECLARED_BITS:#b}"
 
     def test_the_sliver_fan_is_near_collinear_without_being_collinear(self) -> None:
         # The aspect-ratio question: near-collinear is the hard case for the
@@ -1592,11 +1620,14 @@ class TestGallery:
         assert len(points) >= 3
         assert all(sine_of(points[0], points[1], p) < 1.0e-9 for p in points[2:])
 
-    def test_the_not_noded_fixture_really_crosses(self) -> None:
-        # A deliberate failure fixture. If its constraints stopped crossing it
-        # would triangulate cleanly and the non-`Ok` presentation nobody has
-        # looked at would go back to being assumed rather than seen.
-        fixture = gallery()["not-noded"]
+    def test_the_road_crosses_river_fixture_really_crosses(self) -> None:
+        # The showcase since 5c: the noder resolves this crossing, so the
+        # fixture draws a mesh. What must not change is the INPUT -- if its
+        # constraints stopped crossing, the noder would have nothing to do and
+        # the picture would stop being the thing the fixture exists to show.
+        # The name says the geometry, which no commit can falsify; `not-noded`
+        # said a state of the tree, and that state had already flipped once.
+        fixture = gallery()["road-crosses-river"]
         segments = [
             (points[i], points[i + 1])
             for c in range(len(fixture.chains))
@@ -1610,6 +1641,105 @@ class TestGallery:
             if i < j and properly_cross(p, q, r, s)
         ]
         assert crossings, "no two constraints cross"
+
+    # --- Increment 8: the crossing gallery ---------------------------------
+    #
+    # Three rows whose subject is a breakline crossing something: an area
+    # boundary, the outer ring, and an area boundary twice. The engine-side
+    # claims -- constructed nodes, findings, triangles under the lake -- are in
+    # `test_cli_draw.py`, which is the suite allowed to run the engine. What is
+    # held here is the DATA: that the fixtures say what the design says they
+    # say, checkable by reading the coordinates.
+
+    @pytest.mark.parametrize("name", sorted(AREA_RINGS))
+    def test_an_area_feature_is_a_closed_breakline(self, name: str) -> None:
+        # Ruling 2. A forest is not a hole -- the terrain inside it is meshed --
+        # so it is a chain of role `breakline` whose last INDEX repeats its
+        # first. `pslg_builder.hpp`'s stored-closure stage and its winding stage
+        # are both guarded by `is_closed(ch.role)`, which is false for
+        # `Breakline`, so storing the closure is legal here and only here
+        # (`grep -n 'StoredClosure\|is_closed' include/terrain/core/pslg_builder.hpp`).
+        fixture = gallery()[name]
+        c = AREA_RINGS[name]
+        assert fixture.chains[c].role == "breakline", f"{name} chain {c} is not a breakline"
+        indices = [int(i) for i in fixture.indices_of(c)]
+        assert indices[0] == indices[-1], f"{name}'s area ring does not close"
+        assert len(set(indices)) >= 3, "a ring needs three distinct vertices"
+
+    @pytest.mark.parametrize("name", sorted(AREA_RINGS))
+    def test_the_closure_repeats_an_index_and_not_a_coordinate(self, name: str) -> None:
+        # Able to fail on its own, and it is the half the test above cannot
+        # see: closing by repeating the COORDINATE would leave two distinct
+        # vertices at one point and lean on the noder's snap grid to merge
+        # them, which is a correctness argument where none is needed. So no two
+        # DISTINCT indices of the ring may name the same point.
+        fixture = gallery()[name]
+        points = chain_points(fixture, AREA_RINGS[name])
+        interior = points[:-1]
+        assert len(set(interior)) == len(interior), f"{name} repeats a coordinate"
+
+    def test_no_open_breakline_stores_a_closure(self) -> None:
+        # The controlled negative for the pair above: a predicate that called
+        # every chain closed would pass both. `breakline-chain`, `river` and
+        # the road chains are open polylines and must stay open.
+        for name in GALLERY_NAMES:
+            fixture = gallery()[name]
+            for c in range(len(fixture.chains)):
+                if AREA_RINGS.get(name) == c:
+                    continue
+                indices = [int(i) for i in fixture.indices_of(c)]
+                assert indices[0] != indices[-1], f"{name} chain {c} stores a closure"
+
+    def test_the_road_enters_the_forest_rather_than_passing_through_it(self) -> None:
+        # The asymmetry that separates this row from `bridge-over-lake`: ONE
+        # endpoint of the road is inside the area ring and one is outside. A
+        # fixture whose road spanned the ring would draw the bridge picture in
+        # the forest's colours and the gallery would show one case twice.
+        fixture = gallery()["road-enters-forest"]
+        ring = bounds(chain_points(fixture, AREA_RINGS["road-enters-forest"]))
+        road = chain_points(fixture, 2)
+        inside = [p for p in road if ring[0] < p[0] < ring[2] and ring[1] < p[1] < ring[3]]
+        assert len(inside) == 1, f"{len(inside)} of the road's ends are inside the forest"
+
+    def test_the_bridge_spans_the_lake_rather_than_entering_it(self) -> None:
+        # The other half of that comparison, and the reason both are written:
+        # either assertion alone passes on a gallery holding two copies of the
+        # same case.
+        fixture = gallery()["bridge-over-lake"]
+        ring = bounds(chain_points(fixture, AREA_RINGS["bridge-over-lake"]))
+        road = chain_points(fixture, 2)
+        inside = [p for p in road if ring[0] < p[0] < ring[2] and ring[1] < p[1] < ring[3]]
+        assert inside == [], "the bridge ends inside the lake"
+        assert road[0][0] < ring[0] and road[-1][0] > ring[2], "the bridge does not span"
+
+    def test_the_lake_ring_is_water_and_the_forest_ring_is_unclassified(self) -> None:
+        # Ruling 1 needs the shoreline to READ as water before "the terrain
+        # under it is the water surface" is an argument rather than a caption,
+        # and `coastline` is the one area class `DEFAULT_VOCABULARY` has
+        # (`grep -n 'EdgeProperty(name=' src_python/tin_engine/features.py`).
+        # The forest ring carries nothing, because no honest number exists --
+        # asserted rather than left implicit, since mask 0 is also what a
+        # forgotten mask looks like.
+        lake = gallery()["bridge-over-lake"]
+        assert int(lake.chains[AREA_RINGS["bridge-over-lake"]].properties) == COASTLINE
+        assert int(lake.chains[2].properties) == ROAD
+        forest = gallery()["road-enters-forest"]
+        assert int(forest.chains[AREA_RINGS["road-enters-forest"]].properties) == (
+            NO_PROPERTIES
+        )
+        assert int(forest.chains[2].properties) == ROAD
+
+    def test_the_wall_leaves_the_domain(self) -> None:
+        # One segment, one crossing of the OUTER ring, one endpoint outside it.
+        # That last clause is the fixture: it is why this row draws a finding,
+        # and a wall wholly inside the box would draw none.
+        fixture = gallery()["wall-leaves-domain"]
+        outer = bounds(chain_points(fixture, chains_with(fixture, "outer")[0]))
+        wall = chain_points(fixture, 1)
+        assert len(wall) == 2, "one segment, so the crossing is checkable by reading"
+        assert int(fixture.chains[1].properties) == WALL
+        outside = [p for p in wall if not (outer[0] <= p[0] <= outer[2])]
+        assert len(outside) == 1, f"{len(outside)} of the wall's ends are outside the domain"
 
     @pytest.mark.parametrize("name", GALLERY_NAMES)
     def test_every_fixture_renders_without_a_mesh(self, name: str) -> None:
