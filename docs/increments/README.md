@@ -58,6 +58,18 @@ folded into the green one. The rule is not "tests are frozen after red"; it is
 "`@developer` does not edit tests, and no test change hides inside an
 implementation commit".
 
+**The merge updates `ROADMAP.md`'s row for that increment**, in the same PR,
+before the merge rather than after it. The table is an index of what shipped and
+it is the only file a newcomer reads to orient themselves.
+
+This is a step rather than an expectation because the expectation failed.
+Increments 5b, 5c, 5d and 7 all shipped or were designed while that table said
+5b was "not started", and the whole `raster/` module is in the tree with no row
+and no record. The cause was structural: nothing in this protocol referred to
+that file, so the one document describing the state of the work was the one
+document no step maintained. A ledger nobody settles is worse than none, and the
+same argument that retires a documentation-debt section applies to an index.
+
 **Increment PRs merge with a merge commit, never a squash.** The whole protocol
 rests on the red commit staying ahead of the green one in history, and one
 squash destroys that evidence silently and irreversibly.
