@@ -475,13 +475,13 @@ Each exists to answer one question a person can ask of the picture:
 
 | Name | Shows |
 |---|---|
-| `catchment` | outer ring with two lake holes and a braided breakline — the shape the project is actually for |
+| `catchment` | outer ring with two interior holes and one open breakline — the shape the project is actually for. **The row said "two lake holes and a braided breakline" and neither noun holds**: under `08-crossing-gallery.md`'s first ruling a lake is meshed terrain at water height and so cannot be a hole, and the chain is a single three-point polyline, not a braid. Read `CATCHMENT` in `fixtures.py`; its own comments carry the same false noun and are corrected in increment 8's PR |
 | `sliver-fan` | a fan of near-collinear constraints; what the triangulator does with extreme aspect ratios |
 | `corner-hole` | a hole touching the outer ring at exactly one vertex — `InvalidTopology`'s neighbour, and a topology a person should look at |
 | `hole-in-hole` | a hole nested directly inside a second hole. **Drawn as a third failure presentation, not as a mesh** -- the backend answers `InvalidTopology`, "A hole was directly inside another hole", which is precisely "what in-domain means" made visible. The row as first written expected a mesh, and **the narrowing that made it a refusal was the red step's, not an unsatisfiability of the design** — see "`hole-in-hole`: what the suite requires and what the design meant" below |
 | `breakline-chain` | an open breakline crossing the interior; where the Delaunay property visibly stops |
 | `river` | the same, with the `river` property set (bit 0), so the property stroke is exercised before 5b depends on it. Written as `is_river = True` at increment 6; carries an `int` mask from increment 7 |
-| `not-noded` | two crossing constraints — a **deliberate failure fixture**, rendering the non-`Ok` presentation, so that presentation is seen rather than assumed |
+| `not-noded` | two crossing constraints. **No longer a failure fixture: since 5c the noder resolves the crossing and the row draws a mesh.** The name describes the input and has become misleading, and `docs/increments/08-crossing-gallery.md` rules on the rename and on the three crossing fixtures this row was the only member of |
 | `degenerate` | an all-collinear point set. **Refused before `triangulate` is ever reached, so this is *not* the `DegenerateGeometry` presentation** -- `build_pslg` rejects the ring with `PslgError.DegenerateRing`, "chain 0 is declared Outer but every vertex is collinear", and returns no `Pslg` at all. The design's intent survives: the input is drawn alone with the engine's own words in the header band. The words are a `PslgDiagnostic`'s. Found in 6b-ii's red step; see "The `PslgLike` is the fixture itself" below, which is the decision this forced |
 
 **The two-property fixture increment 7 wanted is owed, and it is blocked on the
@@ -489,24 +489,35 @@ stylesheet rather than on the gallery.** `docs/increments/07-edge-properties.md`
 planned a ninth row carrying two properties at once — the case that makes
 first-match-wins draw precedence visible in a *picture* rather than only in
 `tests/python/test_viz_svg.py`. It did not land, and the reason is a property of
-this document's territory, not of that increment's budget: `cli.py`'s
-`_PRECEDENCE` is `("river",)`, one element, because `svg.py`'s `STYLESHEET`
-carries exactly one property rule, `line.river`. A second precedence entry
-emits a class token no rule resolves, so the second fixture would draw an
-*unstyled* line and the picture would show nothing the one-property picture does
-not. The stylesheet is this increment's, per the ruling that a class token is
-structure and the colour it resolves to is taste — so **a second CSS rule comes
-first, and the fixture with it**. Until then `test_viz_svg.py` is the only place
-precedence is exercised, and that is recorded here rather than left silent.
+this document's territory, not of that increment's budget: at the time,
+`cli.py`'s `_PRECEDENCE` held one element because `svg.py`'s `STYLESHEET`
+carried exactly one property rule, `line.river`. A second precedence entry
+emits a class token no rule resolves, so the second fixture would have drawn an
+*unstyled* line and shown nothing the one-property picture does not. The
+stylesheet is this increment's, per the ruling that a class token is structure
+and the colour it resolves to is taste — so **a second CSS rule comes first,
+and the fixture with it**.
 
-**Three of the eight are failure presentations, and they are rows 4, 7 and 8
-rather than the last two**: `hole-in-hole` and `not-noded` are backend refusals
-(`InvalidTopology`, `NotNoded`) of a PSLG the validator accepted, and
+**That blocker is gone and the fixture is still owed.** Both halves have since
+grown; resolve them rather than reading a count here —
+`grep -n '_PRECEDENCE' src_python/tin_engine/cli.py` and
+`grep -n '^line\.' src_python/tin_engine/viz/svg.py`. No gallery fixture yet
+carries two property bits on one chain, so `test_viz_svg.py` is still the only
+place precedence is exercised. `docs/increments/08-crossing-gallery.md` records
+the debt as open and says why it did not take it.
+
+**Two of the eight are failure presentations, rows 4 and 8** — `hole-in-hole`
+is a backend refusal (`InvalidTopology`) of a PSLG the validator accepted, and
 `degenerate` never reaches `triangulate` because the validator refuses it first.
-They matter as much as the five that mesh: a failure presentation nobody has
-looked at is a failure presentation that is wrong. That said, three refusal
-pages out of eight is more than this gallery set out to have — see the next
-section.
+They matter as much as the six that mesh: a failure presentation nobody has
+looked at is a failure presentation that is wrong.
+
+**As first written this paragraph said three, rows 4, 7 and 8, and closed by
+noting that three refusal pages out of eight was more than this gallery set out
+to have.** 5c removed the third without anyone acting on that concern: the noder
+resolves `not-noded`'s crossing, so row 7 draws a mesh. Re-derive the set rather
+than trusting the count here — the probe at the top of
+`docs/increments/08-crossing-gallery.md` prints each fixture's `SceneKind`.
 
 ### `hole-in-hole`: what the suite requires and what the design meant
 
