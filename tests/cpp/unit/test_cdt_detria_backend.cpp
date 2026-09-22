@@ -20,10 +20,22 @@
 // wording would fail the suite on an upstream improvement to it. What is pinned
 // is the empty/non-empty split, which is ours.
 //
-// Every fixture is hand-made NON-CROSSING where a mesh is expected. Between
-// increments 4 and 5 the wrapper is correct on all input and useful only on
-// input that happens not to cross; that is a stated risk, not an oversight
-// here.
+// AMENDED AT INCREMENT 5c, when triangulate started taking a NodedPslg. Every
+// fixture now reaches the backend through node_fixture<DefaultKernel>, and six
+// cases are DELETED rather than adapted because the inputs behind them can no
+// longer be expressed as a NodedPslg at all -- guarantees 12, 13 and 14. Which
+// six, and which guarantee each, is in the commit message; the fixtures stay in
+// cdt_cases.hpp because the noding suites use them.
+//
+// NODE IDS ARE NOT INPUT INDICES. The node set is sorted, so every assertion
+// that names a literal vertex index is routed through node_of(), which is
+// guarantee 9's array. An assertion left on a raw index would still compile and
+// would be asking about a different vertex.
+//
+// Fixtures are no longer required to be non-crossing for a mesh to exist -- the
+// noder is what removed that precondition, and it is the whole point of the
+// increment -- but the ones here remain hand-made disjoint so that the triangle
+// counts below stay statements about the BACKEND rather than about the noder.
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -34,6 +46,7 @@
 #include <terrain/cdt/result.hpp>
 #include <terrain/cdt/triangulate.hpp>
 #include <terrain/core/indexed_mesh.hpp>
+#include <terrain/core/noded_pslg.hpp>
 #include <terrain/core/point.hpp>
 #include <terrain/core/pslg.hpp>
 #include <terrain/core/pslg_builder.hpp>
@@ -48,8 +61,7 @@
 #include <vector>
 
 using terrain::IndexedMesh2;
-using terrain::Point2;
-using terrain::Pslg;
+using terrain::NodedPslg;
 using terrain::PslgBuilder;
 using terrain::TriangleIndices;
 using terrain::cdt::CdtOptions;
@@ -58,15 +70,31 @@ using terrain::cdt::CdtStatus;
 using terrain::cdt::DetriaBackend;
 using terrain::cdt::describe;
 using terrain::pred::DefaultKernel;
-using terrain::test::build_fixture;
 using terrain::test::edge_uses;
+using terrain::test::kFixtureSpacing;
+using terrain::test::node_fixture;
+using terrain::test::node_of;
 using terrain::test::undirected_key;
 
 namespace {
 
-[[nodiscard]] CdtOutcome run(PslgBuilder b, const CdtOptions& options = {}) {
-    const Pslg pslg = build_fixture<DefaultKernel>(std::move(b));
-    return terrain::cdt::triangulate<DetriaBackend>(pslg, options);
+// A fixture, noded, triangulated, with the noded graph kept: the index-sensitive
+// cases below need it to translate a fixture's vertex number into a node id.
+struct Run {
+    NodedPslg noded;
+    CdtOutcome out;
+};
+
+[[nodiscard]] Run noded_run(PslgBuilder b, const CdtOptions& options = {},
+                            double spacing = kFixtureSpacing) {
+    NodedPslg noded = node_fixture<DefaultKernel>(std::move(b), spacing);
+    CdtOutcome out = terrain::cdt::triangulate<DetriaBackend>(noded, options);
+    return Run{std::move(noded), std::move(out)};
+}
+
+[[nodiscard]] CdtOutcome run(PslgBuilder b, const CdtOptions& options = {},
+                             double spacing = kFixtureSpacing) {
+    return noded_run(std::move(b), options, spacing).out;
 }
 
 // The set of triangles, each rotated to start at its lowest index, so two
@@ -134,7 +162,9 @@ TEST_CASE("Ok implies an empty message and failure implies a non-empty one",
     REQUIRE(good.ok());
     CHECK(good.message.empty());
 
-    const CdtOutcome bad = run(terrain::test::crossing_breaklines_domain());
+    // The crossing fixture used to be this arm. It triangulates now, so the
+    // failure has to come from a status a NodedPslg can still reach: nesting.
+    const CdtOutcome bad = run(terrain::test::hole_outside_outline_domain());
     REQUIRE_FALSE(bad.ok());
     CHECK_FALSE(bad.message.empty());
 }
@@ -247,16 +277,21 @@ TEST_CASE("an island in a lake is supported", "[cdt][backend][degeneracy]") {
 // Euler check counts referenced vertices for exactly this reason.
 TEST_CASE("a vertex outside the outer ring is kept but unreferenced",
           "[cdt][backend][degeneracy]") {
-    const CdtOutcome out = run(terrain::test::outside_vertex_domain());
+    const Run r = noded_run(terrain::test::outside_vertex_domain());
 
-    REQUIRE(out.status == CdtStatus::Ok);
-    CHECK(out.mesh.triangle_count() == 2);
-    REQUIRE(out.mesh.vertices().size() == 5);
-    CHECK(out.mesh.vertices()[4] == Point2{9.0, 9.0});
-    for (const TriangleIndices& t : out.mesh.triangles()) {
-        CHECK(t[0] != 4u);
-        CHECK(t[1] != 4u);
-        CHECK(t[2] != 4u);
+    REQUIRE(r.out.status == CdtStatus::Ok);
+    CHECK(r.out.mesh.triangle_count() == 2);
+    REQUIRE(r.out.mesh.vertices().size() == 5);
+    // The unreferenced vertex survives the noder too -- the node set is built
+    // over every snapped input vertex, referenced or not, which is what makes
+    // node_of_input_vertex total -- so the claim is unchanged and only the
+    // index is looked up rather than written down.
+    const std::uint32_t outside = node_of(r.noded, 4u);
+    CHECK(r.out.mesh.vertices()[outside] == r.noded.vertices()[outside]);
+    for (const TriangleIndices& t : r.out.mesh.triangles()) {
+        CHECK(t[0] != outside);
+        CHECK(t[1] != outside);
+        CHECK(t[2] != outside);
     }
 }
 
@@ -265,9 +300,14 @@ TEST_CASE("a vertex outside the outer ring is kept but unreferenced",
 // near-zero-area triangle" is not an invariant this project can state; the
 // strongest true statement is that every triangle is counterclockwise under an
 // exact predicate, which the property suite asserts.
+// The spacing is the fixture's, not a global: 4 units long and 1e-13 tall, so
+// at kFixtureSpacing the ring collapses to under three nodes and node() answers
+// RingCollapsed -- correct behaviour, and the reason node_fixture takes a
+// spacing at all. At 1e-14 the three nodes are distinct and the backend sees
+// the sliver the row of the table is about.
 TEST_CASE("a sliver outer ring is an ordinary one-triangle domain",
           "[cdt][backend][degeneracy]") {
-    const CdtOutcome out = run(terrain::test::sliver_domain());
+    const CdtOutcome out = run(terrain::test::sliver_domain(), CdtOptions{}, 1e-14);
 
     REQUIRE(out.status == CdtStatus::Ok);
     CHECK(out.mesh.triangle_count() == 1);
@@ -287,16 +327,6 @@ TEST_CASE("a closed-loop breakline does not carve a hole", "[cdt][backend][degen
     CHECK(out.mesh.triangle_count() == 10);  // 8 were it a hole
 }
 
-// ...but only when the loop closes on a SHARED INDEX. The same ring road with a
-// coincident closing vertex is the duplicate-coordinate row of the table all
-// over again, and the pair of tests is what stops the one above being read as
-// "closed-loop breaklines are fine".
-TEST_CASE("a closed-loop breakline spelled with a coincident vertex is DegenerateGeometry",
-          "[cdt][backend][degeneracy]") {
-    const CdtOutcome out = run(terrain::test::coincident_closed_breakline_domain());
-
-    CHECK(out.status == CdtStatus::DegenerateGeometry);
-}
 
 // ---------------------------------------------------------------------------
 // The degeneracy table -- the failing rows, and the status each maps to
@@ -307,58 +337,29 @@ TEST_CASE("a closed-loop breakline spelled with a coincident vertex is Degenerat
 // below. Nothing is lost by the grouping: the offending indices are in
 // `message`.
 
-// A Pslg permits coincident vertices; detria's duplicate scan runs over the
-// WHOLE point array, unreferenced vertices included. This is the most likely
-// failure on real data -- two features digitised to the same corner -- and it
-// is not fixable here: a coordinate-keyed dedup needs the snap grid increment 5
-// owns.
-TEST_CASE("coincident vertices are DegenerateGeometry even when unreferenced",
-          "[cdt][backend][degeneracy]") {
-    const CdtOutcome out = run(terrain::test::duplicate_unreferenced_vertex_domain());
-
-    CHECK(out.status == CdtStatus::DegenerateGeometry);
-}
-
-TEST_CASE("a hole touching its outer ring at coincident vertices is DegenerateGeometry",
-          "[cdt][backend][degeneracy]") {
-    const CdtOutcome out = run(terrain::test::coincident_touch_hole_domain());
-
-    // Same geometry as the accepted corner-touching fixture, spelled with a
-    // second vertex instead of a shared index. How you spell the touch decides
-    // whether it works.
-    CHECK(out.status == CdtStatus::DegenerateGeometry);
-}
-
-// {0, 0, 1, 2, 3}: a valid Pslg -- increment 2's degeneracy 4 accepts a
-// repeated index -- that detria refuses. Passed through as a status rather than
-// pre-checked.
-TEST_CASE("a repeated consecutive index is DegenerateGeometry", "[cdt][backend][degeneracy]") {
-    const CdtOutcome out = run(terrain::test::repeated_index_ring_domain());
-
-    CHECK(out.status == CdtStatus::DegenerateGeometry);
-}
-
-// A T-junction: a vertex lying exactly ON a constraint edge it is not part of.
-// parallel_refinement.md assigns this to the noder, so until increment 5 lands
-// it is a loud failure and never a mesh that ignores it.
-TEST_CASE("a foreign vertex on a constraint edge is NotNoded", "[cdt][backend][degeneracy]") {
-    const CdtOutcome out = run(terrain::test::foreign_vertex_on_constraint_domain());
-
-    CHECK(out.status == CdtStatus::NotNoded);
-    CHECK(out.mesh.empty());
-}
-
-// Crossing constraints. The load-bearing part is the second assertion: the CDT
-// NEVER SILENTLY PRODUCES A MESH THAT IGNORES A CROSSING. It does not repair,
-// does not insert intersection points, and returns no mesh.
-TEST_CASE("crossing constraint edges are NotNoded and yield no mesh",
-          "[cdt][backend][degeneracy]") {
-    const CdtOutcome out = run(terrain::test::crossing_breaklines_domain());
-
-    CHECK(out.status == CdtStatus::NotNoded);
-    CHECK(out.mesh.empty());
-    CHECK_FALSE(describe(CdtStatus::NotNoded).empty());
-}
+// SIX CASES WERE DELETED HERE AT INCREMENT 5c, and this comment is what stops
+// the gap reading as a suite that was quietly weakened. Each asserted a status
+// no NodedPslg can carry into the backend, and each was verified against the
+// shipped node<DefaultKernel> before being removed rather than argued away:
+//
+//   coincident closing vertex, coincident unreferenced pair, coincident hole
+//   touch  -> guarantee 12 plus world() injectivity. Two points in one cell
+//             ARE one node, so DuplicatePointsFound has no input. Measured:
+//             each fixture nodes Ok, and the coincident pair's graph is
+//             node-for-node the shared-index fixture's.
+//   repeated consecutive index {0,0,1,2,3} -> guarantee 13. Measured: node()
+//             returns Ok with a four-node ring, having collapsed the repeat.
+//   a foreign vertex on a constraint edge -> guarantee 14(b). Measured: the
+//             outer ring comes back SPLIT at it, five nodes, status Ok.
+//   two crossing breaklines -> guarantee 14(a). Measured: nine nodes, three
+//             chains, status Ok. That input's new answer is asserted in
+//             tests/python/test_core_noding.py end to end, and drawn by
+//             `rasputin draw not-noded`.
+//
+// DegenerateGeometry and NotNoded therefore lose every reachable row and join
+// MalformedInput as self-checks. No enumerator is deleted, describe() still
+// renders all seven above, and the fixtures stay in cdt_cases.hpp because the
+// noding suites are now the ones that use them.
 
 TEST_CASE("a hole sharing a whole edge with its outer ring is InvalidTopology",
           "[cdt][backend][degeneracy]") {
@@ -401,17 +402,18 @@ TEST_CASE("a hole containing the outer ring is InvalidTopology", "[cdt][backend]
 // precondition.
 TEST_CASE("a constraint edge outside the domain is dropped, not honoured",
           "[cdt][backend][degeneracy]") {
-    const CdtOutcome out = run(terrain::test::out_of_domain_breaklines_domain());
+    const Run r = noded_run(terrain::test::out_of_domain_breaklines_domain());
 
-    REQUIRE(out.status == CdtStatus::Ok);
-    CHECK(out.mesh.triangle_count() == 8);  // the hole domain; the breaklines add nothing
+    REQUIRE(r.out.status == CdtStatus::Ok);
+    CHECK(r.out.mesh.triangle_count() == 8);  // the hole domain; the breaklines add nothing
 
-    const auto uses = edge_uses(out.mesh);
-    CHECK(uses.find(undirected_key(8, 9)) == uses.end());    // outside the outer ring
-    CHECK(uses.find(undirected_key(10, 11)) == uses.end());  // inside the hole
-    // Both breakline vertex pairs are still in the vertex array, in order:
-    // index identity does not depend on a vertex being used.
-    CHECK(out.mesh.vertices().size() == 12);
+    const auto uses = edge_uses(r.out.mesh);
+    CHECK(uses.find(undirected_key(node_of(r.noded, 8u), node_of(r.noded, 9u))) == uses.end());
+    CHECK(uses.find(undirected_key(node_of(r.noded, 10u), node_of(r.noded, 11u))) == uses.end());
+    // Both breakline vertex pairs are still in the vertex array: index identity
+    // does not depend on a vertex being used, and the noder kept every input
+    // vertex as a node of its own.
+    CHECK(r.out.mesh.vertices().size() == 12);
 }
 
 // ---------------------------------------------------------------------------
@@ -445,7 +447,8 @@ TEST_CASE("a constraint edge outside the domain is dropped, not honoured",
 // the closing edge is present, on a non-convex ring where it is a wall of the
 // domain rather than a hull edge, and the interior is the closed polygon's.
 TEST_CASE("an open ring span is closed by the backend", "[cdt][backend][characterisation]") {
-    const CdtOutcome out = run(terrain::test::l_shaped_domain());
+    const Run r = noded_run(terrain::test::l_shaped_domain());
+    const CdtOutcome& out = r.out;
 
     REQUIRE(out.status == CdtStatus::Ok);
     // The L-shaped hexagon, closed: 2*6 - 6 - 2. An unclosed polyline bounds no
@@ -456,7 +459,7 @@ TEST_CASE("an open ring span is closed by the backend", "[cdt][backend][characte
     // The closing edge (v5, v0) is a boundary edge -- used by exactly one
     // triangle -- and it carries its mask bit there.
     const auto uses = edge_uses(out.mesh);
-    const auto it = uses.find(undirected_key(5, 0));
+    const auto it = uses.find(undirected_key(node_of(r.noded, 5u), node_of(r.noded, 0u)));
     REQUIRE(it != uses.end());
     REQUIRE(it->second.size() == 1);
     CHECK(out.mesh.is_constrained(it->second.front().triangle, it->second.front().slot));
@@ -489,16 +492,17 @@ TEST_CASE("delaunay=false still triangulates the same domain", "[cdt][backend][o
 // Obligation 1 of the CdtBackend concept, for this backend in its strongest
 // form: DetriaBackend appends nothing, so the arrays are equal, not merely
 // prefixed. Index k means the same point coming out as going in.
-TEST_CASE("the mesh vertex array is the Pslg's, element for element",
+TEST_CASE("the mesh vertex array is the NodedPslg's, element for element",
           "[cdt][backend][identity]") {
-    const Pslg pslg = build_fixture<DefaultKernel>(terrain::test::polygon_with_holes_domain());
-    const CdtOutcome out = terrain::cdt::triangulate<DetriaBackend>(pslg);
+    const NodedPslg noded =
+        node_fixture<DefaultKernel>(terrain::test::polygon_with_holes_domain());
+    const CdtOutcome out = terrain::cdt::triangulate<DetriaBackend>(noded);
 
     REQUIRE(out.ok());
-    REQUIRE(out.mesh.vertices().size() == pslg.vertices().size());
-    for (std::size_t i = 0; i < pslg.vertices().size(); ++i) {
+    REQUIRE(out.mesh.vertices().size() == noded.vertices().size());
+    for (std::size_t i = 0; i < noded.vertices().size(); ++i) {
         INFO("vertex " << i);
-        CHECK(out.mesh.vertices()[i] == pslg.vertices()[i]);
+        CHECK(out.mesh.vertices()[i] == noded.vertices()[i]);
     }
 }
 

@@ -34,8 +34,10 @@ Three premises from `05-noder.md` are overturned below, each with the command
 that refutes it:
 
 1. **The signature change is not mechanical and is not ~10 lines.**
-   `bindings/core.cpp:466` calls `terrain::cdt::triangulate<DetriaBackend>(pslg,
-   options)` on a `const Pslg&`. Retyping the CDT entry point breaks that
+   The binding calls `terrain::cdt::triangulate<DetriaBackend>(pslg, options)`
+   on a `const Pslg&`, and still does at 5b's own merge: `git show
+   93fc772:bindings/core.cpp | grep -n 'const Pslg& pslg, bool delaunay'`.
+   Retyping the CDT entry point breaks that
    translation unit, and the only repair is to bind a producer of `NodedPslg` —
    which drags `_core.pyi`, `cli.py`, the Python suites and the renderer's scene
    join along with it. `05-noder.md`'s "Files and LOC" table books this as one
@@ -476,7 +478,8 @@ time there are lines to count the shape is fixed — so what is armed is an
 obligation on whoever writes 5c's design: re-estimate `bindings/core.cpp` and
 `_core.pyi` against what 5b's `NodeStatus`, `NodedPslg` and `NodeOutcome`
 actually turned out to be, before `@tester` is briefed, and if the total passes
-**550**, move `cli.py` and `--snap-spacing` to a 5d. Declared now so that 5c's
+**550**, move `cli.py` and `--snap-spacing` to a **5e** — this said "a 5d", and
+`docs/increments/05d-corner-graze.md` is now a different increment. Declared now so that 5c's
 suite layout is chosen knowing it, and spelled as a duty rather than as a
 threshold precisely because the threshold form is the one with the one-for-three
 record.
@@ -1617,7 +1620,8 @@ because at that point it is naming the thing that should have been called.
 
 ### Nesting is still not computed
 
-`03-pslg.md:520-526` reserved `nesting_forest<K>(const NodedPslg&)` for the
+`03-pslg.md`'s "Grouping: neither declared nor computed" section reserved
+`nesting_forest<K>(const NodedPslg&)` for the
 increment where non-crossing input makes the answer meaningful, which is this
 one. Still deferred, and for `05-noder.md`'s better reason rather than the
 original one: `detria` computes nesting itself and diagnoses the failures as
@@ -1634,12 +1638,32 @@ consumer. Named a third time so it is not re-derived a fourth.
 `src/cdt/detria_backend.cpp` (the definition) each replace `const Pslg&` with
 `const NodedPslg&` and swap the include. The wrapper body is untouched: it walks
 `vertices()`, `chains()` and `indices_of(c)`, all of which `NodedPslg` has with
-the same signatures. ~6 lines.
+the same signatures.
 
-**`bindings/core.cpp`, and this part is not.** `bindings/core.cpp:466` calls
-`terrain::cdt::triangulate<DetriaBackend>(pslg, options)` with a `const Pslg&`;
-retyping the C++ entry point breaks that translation unit, so the binding is
-**not optional and cannot be deferred**. There is no smaller consistent step
+**Corrected at 5c: that list is short by one, and the branch does not compile
+without it.** `include/terrain/cdt/constrained_edges.hpp` takes a `const Pslg&`
+too, and `src/cdt/detria_backend.cpp` constructs it. Find the set rather than
+trusting this list: `git grep -ln "const Pslg&" 93fc772 -- include/terrain/cdt/
+src/cdt/` returns **four** files at 5b's tip — the three named above plus that
+one. 5c ruled that this fourth becomes a template over a `ChainedGraph` concept
+rather than being retyped, so that `test_cdt_constrained_edges.cpp`'s hand-built
+degenerate `Pslg` fixtures are not forced through the noder; that file stayed
+byte-identical, which is the return on the ruling and is only demonstrated by
+not touching it.
+
+The `~6 lines` above is the estimate this paragraph offered for three files. 5c
+re-estimated the corrected set at **18** and measured **8** — under, like every
+other C++ row in that increment. See `docs/increments/05c-noder-wiring.md`, "The
+C++ signature change".
+
+**`bindings/core.cpp`, and this part is not.** It calls
+`terrain::cdt::triangulate<DetriaBackend>(pslg, options)` with a `const Pslg&`
+(`git show 93fc772:bindings/core.cpp | grep -n 'const Pslg& pslg, bool
+delaunay'`); retyping the C++ entry point breaks that translation unit, so the
+binding is **not optional and cannot be deferred**. 5c is where that was
+cashed, and it cashed the way this paragraph says: `686ec1b` retypes the
+lambda, and `grep -n 'const NodedPslg& pslg, bool delaunay' bindings/core.cpp`
+is what stands there now. There is no smaller consistent step
 than: `py::enum_<NodeStatus>` plus a `describe` overload, `py::class_<SnapGrid>`,
 `py::class_<NodedPslg>` mirroring the five `Pslg` properties plus `grid`,
 `edge_properties` and `node_of_input_vertex`, `py::class_<NodeOutcome>`, and an
@@ -1657,12 +1681,30 @@ unaffected), and a second failure presentation — a noder failure has a
 noder's own words the way it already carries the backend's.
 
 **And the scene must be fed the `NodedPslg`**, per "What the renderer buys this
-increment". That is a one-line change in `cli.py` and it is the one line that,
-got wrong, turns the whole gallery red while the mesh underneath is correct.
+increment". The second half of that sentence was right and is why it is worth
+reading: got wrong, it turns the whole gallery red while the mesh underneath is
+correct.
 
-**Python suites change too** — `tests/python/test_core_cdt.py:501`'s
+**Corrected at 5c: it is not a one-line change.** This paragraph said it was.
+The mechanism it missed is the role vocabulary, not the index spaces this
+document reasons about elsewhere. `cli.py` held one `CLOSED_ROLES` of **strings**
+and `viz/scene.py` closes a ring with `chain.role == closed`; a `NodedPslg`'s
+roles are `ChainRole` enums, and `ChainRole.Outer == "outer"` is `False`. So
+swapping the source alone closes no ring at all: one
+`MASKED_EDGE_WITHOUT_CHAIN` per ring, the alarm colour over a correct mesh —
+exactly the failure this paragraph predicted, by a route it did not see. 5c
+splits the constant in two and carries the applicable one beside the source it
+applies to. Measured at 5c: `cli.py` came in at 99 non-comment lines against a
+38-line estimate. See `docs/increments/05c-noder-wiring.md`, "5b's 'one-line
+change' is wrong".
+
+**Python suites change too** — `tests/python/test_core_cdt.py`'s
 `test_reports_a_non_noded_input_as_a_failure_status` asserts that
 `crossing_pslg` fails, and after 5c that input cannot reach `triangulate` at all.
+No line number is cited, because 5c is the increment that moves it; locate it
+with `grep -rn non_noded tests/python/`, and see `05c-noder-wiring.md`'s churn
+list for what it became — it split rather than moved, and the CDT half is a
+`TypeError` rather than a status.
 That is `@tester`'s change, in its own commit with the reason in the message, per
 `docs/increments/README.md`'s "no test change hides inside an implementation
 commit". Tests are excluded from the LOC count; the *round* is not free.
@@ -2122,9 +2164,11 @@ construction.
 Continuing `05-noder.md`'s register, which ends at 12.
 
 13. **The signature change is not mechanical, and three documents say it is.**
-    `03-pslg.md:490-493` and `04-cdt.md:659-660` both book it as mechanical and
-    `05-noder.md` estimates it at ~10 lines; `bindings/core.cpp:466` is the line
-    that refutes all three. Mitigated by making it 5c's own PR with the Python
+    `03-pslg.md`'s "Increment 4's wrapper signature" paragraph and `04-cdt.md`'s
+    "Noded input: the ruling" both book it as mechanical and `05-noder.md`
+    estimates it at ~10 lines; the binding refutes all three — `git show
+    93fc772:bindings/core.cpp | grep -n 'const Pslg& pslg, bool delaunay'`.
+    Mitigated by making it 5c's own PR with the Python
     surface it drags along. Residual: a reader of any of those three documents
     still arrives expecting a one-line change, which is why the correction is
     made in `05-noder.md` itself in this PR rather than recorded here.
@@ -2287,7 +2331,8 @@ fifth of which came out of `@tester`'s red round:
 
 1. Guarantee 14(a) is false on duplicate edges; the amended clause replaces it.
 2. The 5b row of "Files and LOC" names no Python file and estimates the signature
-   change at ~10; `bindings/core.cpp:466` refutes it.
+   change at ~10; the binding refutes it (`git show 93fc772:bindings/core.cpp |
+   grep -n 'const Pslg& pslg, bool delaunay'`).
 3. The "Contingency split of 5b" section proposes a seam that this document does
    not take; it is replaced by a pointer here rather than left as a live
    alternative a later reader might act on.

@@ -20,6 +20,9 @@
 // express them and a model that violates one produces a wrong mesh rather than
 // a compile error:
 //
+//   0. The parameter is a NodedPslg and there is no Pslg overload: un-noded
+//      input is unrepresentable at the entry point rather than diagnosed inside
+//      it, which is increment 5c's architectural product.
 //   1. The returned vertex array BEGINS WITH pslg.vertices(), element-wise and
 //      in order. Additional vertices may only be appended.
 //   2. Only in-domain triangles are returned: nothing inside a Hole, nothing
@@ -36,7 +39,7 @@
 //      later acquires a meaning nobody checked.
 
 #include <terrain/cdt/result.hpp>
-#include <terrain/core/pslg.hpp>
+#include <terrain/core/noded_pslg.hpp>
 
 #include <cassert>
 #include <concepts>
@@ -44,7 +47,7 @@
 namespace terrain::cdt {
 
 template <typename B>
-concept CdtBackend = requires(const Pslg& pslg, const CdtOptions& options) {
+concept CdtBackend = requires(const NodedPslg& pslg, const CdtOptions& options) {
     { B::triangulate(pslg, options) } -> std::same_as<CdtOutcome>;
 };
 
@@ -52,7 +55,7 @@ concept CdtBackend = requires(const Pslg& pslg, const CdtOptions& options) {
 // every backend including ones not written yet -- which is the difference
 // between a concept that names a signature and a concept that means something.
 template <CdtBackend B>
-[[nodiscard]] CdtOutcome triangulate(const Pslg& pslg, const CdtOptions& options = {}) {
+[[nodiscard]] CdtOutcome triangulate(const NodedPslg& pslg, const CdtOptions& options = {}) {
     CdtOutcome out = B::triangulate(pslg, options);
 
     // No Ok with an empty mesh, no mesh alongside an error. The first half is

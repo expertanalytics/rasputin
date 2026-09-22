@@ -32,9 +32,11 @@
 // Every generator takes an explicit std::mt19937_64: a test seeds once and the
 // whole sequence is reproducible.
 
+#include <terrain/core/noded_pslg.hpp>
 #include <terrain/core/point.hpp>
 #include <terrain/core/pslg.hpp>
 #include <terrain/core/pslg_builder.hpp>
+#include <terrain/noding/node.hpp>
 #include <terrain/predicates/kernel.hpp>
 
 #include <pslg_cases.hpp>
@@ -61,6 +63,41 @@ template <pred::GeometryKernel K>
         throw std::logic_error{"cdt_cases fixture is not a valid Pslg:\n" + render(r)};
     }
     return std::move(*r.pslg);
+}
+
+// INCREMENT 5c: the same fixture, noded, because that is what cdt::triangulate
+// now takes. Templated on K for the reason at the top of this header -- the
+// seam suite links no compiled target and must instantiate under FastKernel --
+// and node<K> is header-only, so including it here costs that suite nothing.
+//
+// A millimetre-scale default against fixtures whose features are units apart:
+// fine enough that nothing merges, coarse enough that the lattice cannot
+// overflow. It is a parameter rather than a constant because ONE fixture needs
+// a different one -- the sliver is 1e-13 tall and collapses to under three
+// nodes at this spacing, which is RingCollapsed and correct behaviour. Measured
+// on this tree, not assumed; every other fixture here nodes at kFixtureSpacing
+// with its vertex count and its chain structure unchanged, EXCEPT the four the
+// noder exists to change (the crossing, the T-junction, the coincident pairs
+// and the repeated index), whose backend cases are deleted for that reason.
+inline constexpr double kFixtureSpacing = 1e-6;
+
+template <pred::GeometryKernel K>
+[[nodiscard]] NodedPslg node_fixture(PslgBuilder b, double spacing = kFixtureSpacing) {
+    const Pslg pslg = build_fixture<K>(std::move(b));
+    noding::NodeOutcome out = noding::node<K>(pslg, noding::NodeOptions{spacing});
+    if (!out.ok()) {
+        throw std::logic_error{"cdt_cases fixture does not node: " + out.message};
+    }
+    return std::move(*out.pslg);
+}
+
+// NODE IDS ARE NOT INPUT INDICES. The node set is sorted by GridPoint, so a
+// fixture's vertex 5 is some other node afterwards, and every assertion written
+// against a literal index has to be routed through guarantee 9's array. This is
+// the only mapping there is; a coordinate search would be the alternative and
+// would be answering a different question.
+[[nodiscard]] inline std::uint32_t node_of(const NodedPslg& noded, std::uint32_t input) {
+    return noded.node_of_input_vertex()[input];
 }
 
 // ---------------------------------------------------------------------------
@@ -164,7 +201,9 @@ template <pred::GeometryKernel K>
 }
 
 // A vertex lying exactly ON a constraint edge it is not part of: the T-junction
-// the noder owns. Unreferenced, which a valid Pslg permits.
+// the noder owns -- and, as of 5c, the noder splits the outer ring at it, so
+// this fixture nodes to a five-vertex ring rather than reaching the backend as
+// NotNoded. Kept because the noding suites use it; it has no backend case.
 [[nodiscard]] inline PslgBuilder foreign_vertex_on_constraint_domain() {
     PslgBuilder b;
     b.add_chain(points(ccw_rect(0.0, 0.0, 10.0, 10.0)), ChainRole::Outer);
@@ -203,7 +242,8 @@ template <pred::GeometryKernel K>
     return b;
 }
 
-// Two crossing breaklines: the un-noded input increment 5 owns.
+// Two crossing breaklines: the un-noded input increment 5 owns, and as of 5c
+// the input node() turns into a nine-node graph the backend triangulates.
 [[nodiscard]] inline PslgBuilder crossing_breaklines_domain() {
     PslgBuilder b;
     b.add_chain(points(ccw_rect(0.0, 0.0, 10.0, 10.0)), ChainRole::Outer);

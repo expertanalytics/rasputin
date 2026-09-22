@@ -15,11 +15,14 @@ evidence**, not inherited:
    drive the CDT: `detria` needs `addOutline`/`addHole` per ring
    (`04-cdt.md:547-556`), and a flat edge list has thrown the `Outer`/`Hole`
    distinction away. The noder preserves chains and roles.
-2. `03-pslg.md:65-70` and `project_structure.md`'s `noding` section both say the
-   noder contributes `is_river` as "a sparse per-edge **override** set". There is
+2. `03-pslg.md`'s per-chain feature paragraph and `project_structure.md`'s
+   `noding` section both said the noder contributes `is_river` as "a sparse
+   per-edge **override** set". There is
    nothing left to override: after noding an edge may descend from two chains at
    once, so it has no single source bit to differ from. Dense, one byte per
-   edge.
+   edge. Both documents have since been corrected to this answer —
+   `grep -rn 'sparse override set' docs/increments/03-pslg.md
+   project_structure.md` finds the retraction in each, not the claim.
 3. `testing.md`'s `noding` invariant list has **five** bullets (lines 106-110);
    **three of them are false**, one of them false in a way that snapping
    guarantees rather than merely permits. The fifth, the `is_river` OR rule at
@@ -811,7 +814,10 @@ private: /* private constructor, the noder its only friend */ };
 **Same shape as `Pslg`, deliberately** — same accessors, same chain/role
 structure, same closure-is-implied convention — so increment 4's wrapper changes
 `const Pslg&` to `const NodedPslg&` and nothing else, which is the "mechanical"
-change `03-pslg.md:503-506` and `04-cdt.md:659-660` both booked. It is **not** a
+change `03-pslg.md`'s "Increment 4's wrapper signature" paragraph and
+`04-cdt.md`'s "Noded input: the ruling" both booked. Neither is cited by line
+number any more: both sections have moved since, and `grep -n 'mechanical'` over
+the two files is what finds them. It is **not** a
 subclass of `Pslg` and there is no conversion between them: the whole point is
 that the two types promise different things, and an implicit conversion would
 let un-noded input reach the CDT through a signature that says it cannot.
@@ -913,7 +919,8 @@ strengthened; only the width changes. `docs/increments/05b-noder-driver.md`,
 "Edge properties", carries the ruling and the scope.
 
 **The `is_river` representation is dense, one `std::uint8_t` per edge**, which
-overturns `03-pslg.md:65-70`'s "sparse override set" on the terms that document set
+overturns `03-pslg.md`'s "sparse override set" — since retracted there — on the
+terms that document set
 for it. An override set is sparse only if most edges agree with a single source
 chain. After noding an edge can descend from two chains — a road snapped onto a
 river is exactly `parallel_refinement.md:176`'s example, and the merged edge
@@ -1145,7 +1152,8 @@ paired against itself), reject, name the chain. **No severity field, no
 warning-level diagnostic**: increment 3 risk 2 warns that a severity field is how
 a validator starts having opinions, and that ruling stands.
 
-**Nesting is still not computed.** `03-pslg.md:533-539` reserved
+**Nesting is still not computed.** `03-pslg.md`'s "Grouping: neither declared
+nor computed" section reserved
 `nesting_forest<K>(const NodedPslg&)` for the increment where non-crossing input
 makes the answer meaningful — which is this one. It is still deferred, and now
 for a better reason than "the input might cross": `detria` computes nesting
@@ -1160,8 +1168,10 @@ After 5b, the CDT's entry point takes a `NodedPslg`. Then:
 - `PointOnConstrainedEdge` and `ConstrainedEdgeIntersection` — guarantee 14 makes
   both unreachable, so `CdtStatus::NotNoded` **joins `MalformedInput` as a
   self-check**: it firing means the `NodedPslg` did not come from the noder or
-  the wrapper mis-built a span. `04-cdt.md:676-680` predicted exactly this and it
-  lands unchanged.
+  the wrapper mis-built a span. `04-cdt.md` predicted exactly this — "when
+  increment 5 lands, `NotNoded` becomes unreachable by type and joins
+  `MalformedInput` as a self-check", closing its "Noded input: the ruling"
+  section — and it lands unchanged.
 - `DuplicatePointsFound` — guarantee 12 plus `world` injectivity make it
   unreachable. `PolylineDuplicateConsecutivePoints` — guarantee 13. So
   `CdtStatus::DegenerateGeometry` loses both of its reachable rows and becomes a
@@ -1270,10 +1280,14 @@ production code:
 | `include/terrain/noding/node.hpp` | `NodeStatus`, `describe`, `NodeOptions`, `NodeOutcome`, `node<K>`, the hot-pixel split pass and edge-key dedup | ~250 |
 | `include/terrain/cdt/*`, `src/cdt/detria_backend.cpp` | `const Pslg&` → `const NodedPslg&` | ~10 |
 
-**That last row is wrong and the whole 5b estimate with it.** `bindings/core.cpp:466`
-calls `terrain::cdt::triangulate<DetriaBackend>(pslg, options)` on a
-`const Pslg&`, so retyping the entry point breaks the Python extension, and the
-only repair is to bind a producer of `NodedPslg` — which drags
+**That last row is wrong and the whole 5b estimate with it.** `bindings/core.cpp`
+called `terrain::cdt::triangulate<DetriaBackend>(pslg, options)` on a
+`const Pslg&`, and went on doing so until increment 5c (`git show
+93fc772:bindings/core.cpp | grep -n 'const Pslg& pslg, bool delaunay'` for the
+state this row missed; `grep -n 'const NodedPslg& pslg, bool delaunay'
+bindings/core.cpp` for what 5c left). Retyping the entry point broke the Python
+extension, and the only repair was to bind a producer of `NodedPslg` — which
+dragged
 `src_python/tin_engine/_core.pyi`, `src_python/tin_engine/cli.py`, the Python
 suites and the renderer's scene join with it. No Python file appears in the
 table above. `docs/increments/05b-noder-driver.md` re-estimates the whole of 5b

@@ -10,6 +10,14 @@ problem behind an import.
 Scope is 6a only: the bindings, the stubs and `viz/protocols.py`. The renderer,
 the fixtures and `rasputin draw` are 6b and appear nowhere here.
 
+AMENDED AT INCREMENT 5c, when `triangulate` stopped taking a `Pslg`. Every
+triangulation below now goes through `node()` first, and the entry point's
+refusal of an un-noded `Pslg` is pinned as a `TypeError` rather than as a
+status: un-noded input is unrepresentable at the entry point rather than
+diagnosed inside it (`core/noded_pslg.hpp:36-40`). Two cases went with the
+change and the reasons are in the commit message. The noder's own surface is
+`test_core_noding.py`; what stays here is `triangulate`'s.
+
 What the design (`docs/increments/06-cdt-viewer.md`, "The binding surface")
 makes this suite responsible for, in descending order of what a defect would
 cost:
@@ -62,6 +70,11 @@ NO_PROPERTIES = 0
 RIVER = DEFAULT_VOCABULARY.mask("river")
 ROAD = DEFAULT_VOCABULARY.mask("road")
 
+# A millimetre on the ground at these magnitudes, and the same number `cli.py`
+# defaults to. Restated rather than imported: this suite tests the engine, and
+# taking the value from the composition root would make the two move together.
+SPACING = 1e-3
+
 
 # --------------------------------------------------------------------------
 # Fixtures
@@ -107,25 +120,44 @@ def breakline_pslg(square: np.ndarray) -> Any:
 
 
 @pytest.fixture
-def mesh(breakline_pslg: Any) -> Any:
-    outcome = _core.triangulate(breakline_pslg)
+def mesh(noded_breakline: Any) -> Any:
+    outcome = _core.triangulate(noded_breakline)
     assert outcome.ok(), outcome.message
     return outcome.mesh
 
 
 @pytest.fixture
-def crossing_pslg(square: np.ndarray) -> Any:
-    """Two breaklines that cross in the interior: valid as a PSLG (a Pslg
-    promises no pairwise disjointness) and not noded, so the backend must fail
-    rather than produce a mesh."""
+def noded_breakline(breakline_pslg: Any) -> Any:
+    """`breakline_pslg`, noded: what `triangulate` takes as of increment 5c.
+
+    The input needs no noding -- nothing in it crosses -- which is deliberate:
+    the fixtures below assert triangle counts and vertex identity, and a
+    fixture that gained nodes on the way in would make every such count a
+    statement about the noder instead of about the backend.
+    """
+    outcome = _core.node(breakline_pslg, SPACING)
+    assert outcome.ok(), outcome.message
+    return outcome.pslg
+
+
+@pytest.fixture
+def hole_outside_noded(square: np.ndarray) -> Any:
+    """A hole lying outside every outline: the one refusal still reachable from
+    Python after 5c.
+
+    The noder accepts it -- `NodedPslgBuilder` is not the PSLG validator and
+    computes no nesting (`noded_pslg_builder.hpp:45-49`) -- and the backend
+    refuses it with `InvalidTopology`. It replaces the crossing fixture as the
+    failure arm of the tests below, because a crossing can no longer reach
+    `triangulate` at all.
+    """
     vertices = np.vstack(
         [
             square,
             [
-                [EAST + 20.0, NORTH + 20.0],
-                [EAST + 80.0, NORTH + 60.0],
-                [EAST + 20.0, NORTH + 60.0],
-                [EAST + 80.0, NORTH + 20.0],
+                [EAST + 300.0, NORTH + 300.0],
+                [EAST + 300.0, NORTH + 340.0],
+                [EAST + 340.0, NORTH + 340.0],
             ],
         ]
     )
@@ -133,12 +165,13 @@ def crossing_pslg(square: np.ndarray) -> Any:
         vertices,
         [
             ([0, 1, 2, 3], _core.ChainRole.Outer, NO_PROPERTIES),
-            ([4, 5], _core.ChainRole.Breakline, NO_PROPERTIES),
-            ([6, 7], _core.ChainRole.Breakline, NO_PROPERTIES),
+            ([4, 5, 6], _core.ChainRole.Hole, NO_PROPERTIES),
         ],
     )
     assert result.ok, [d.message for d in result.diagnostics]
-    return result.pslg
+    outcome = _core.node(result.pslg, SPACING)
+    assert outcome.ok(), outcome.message
+    return outcome.pslg
 
 
 @pytest.fixture
@@ -544,14 +577,17 @@ class TestMeshArrays:
     def test_every_triangle_index_is_in_range(self, mesh: Any) -> None:
         assert int(mesh.triangles.max()) < mesh.vertices.shape[0]
 
-    def test_mesh_vertices_begin_with_the_pslg_vertices(
-        self, breakline_pslg: Any, mesh: Any
+    def test_mesh_vertices_begin_with_the_noded_vertices(
+        self, noded_breakline: Any, mesh: Any
     ) -> None:
         # triangulate.hpp semantic obligation 1 and indexed_mesh.hpp guarantee
         # 4: index k means the same point on both sides. 6b's role join is
-        # built entirely on this, and it is checkable only from here.
-        n = breakline_pslg.vertices.shape[0]
-        assert np.array_equal(mesh.vertices[:n], breakline_pslg.vertices)
+        # built entirely on this, and as of 5c the side that has to match is
+        # the NODED graph's -- `cli.py` draws the scene from that graph, so a
+        # mesh whose indices agreed with the pre-noding `Pslg` instead would
+        # put every edge in the wrong place.
+        n = noded_breakline.vertices.shape[0]
+        assert np.array_equal(mesh.vertices[:n], noded_breakline.vertices)
 
     def test_mesh_is_not_constructible_from_python(self) -> None:
         with pytest.raises(TypeError):
@@ -564,8 +600,8 @@ class TestZeroCopyLifetime:
     plausible-looking wrong picture. This is the single most valuable assertion
     in the increment, and it is owed by all six arrays, not just the mesh's."""
 
-    def test_arrays_outlive_the_mesh_and_the_outcome(self, breakline_pslg: Any) -> None:
-        outcome = _core.triangulate(breakline_pslg)
+    def test_arrays_outlive_the_mesh_and_the_outcome(self, noded_breakline: Any) -> None:
+        outcome = _core.triangulate(noded_breakline)
         assert outcome.ok()
         mesh = outcome.mesh
         vertices, triangles, mask = mesh.vertices, mesh.triangles, mesh.constrained_edges
@@ -634,40 +670,41 @@ class TestZeroCopyLifetime:
 
 
 class TestTriangulate:
-    def test_succeeds_on_a_valid_pslg(self, breakline_pslg: Any) -> None:
-        outcome = _core.triangulate(breakline_pslg)
+    def test_succeeds_on_a_noded_pslg(self, noded_breakline: Any) -> None:
+        outcome = _core.triangulate(noded_breakline)
         assert outcome.status == _core.CdtStatus.Ok
         assert outcome.ok() is True
         assert outcome.message == ""
         assert outcome.mesh.triangle_count > 0
 
-    def test_delaunay_flag_is_reachable_in_both_settings(self, breakline_pslg: Any) -> None:
+    def test_delaunay_flag_is_reachable_in_both_settings(self, noded_breakline: Any) -> None:
         # One bound bool, and the cheapest intuition in the increment: the user
         # gets to see both triangulations of the same input.
-        on = _core.triangulate(breakline_pslg, delaunay=True)
-        off = _core.triangulate(breakline_pslg, delaunay=False)
+        on = _core.triangulate(noded_breakline, delaunay=True)
+        off = _core.triangulate(noded_breakline, delaunay=False)
         assert on.ok() and off.ok()
         # The vertex set is fixed, so flipping cannot change the counts; the
         # two triangulations may legitimately differ edge for edge.
         assert on.mesh.vertices.shape == off.mesh.vertices.shape
         assert on.mesh.triangle_count == off.mesh.triangle_count
 
-    def test_delaunay_defaults_to_true(self, breakline_pslg: Any) -> None:
-        default = _core.triangulate(breakline_pslg)
-        explicit = _core.triangulate(breakline_pslg, delaunay=True)
+    def test_delaunay_defaults_to_true(self, noded_breakline: Any) -> None:
+        default = _core.triangulate(noded_breakline)
+        explicit = _core.triangulate(noded_breakline, delaunay=True)
         assert np.array_equal(default.mesh.triangles, explicit.mesh.triangles)
 
-    def test_reports_a_non_noded_input_as_a_failure_status(self, crossing_pslg: Any) -> None:
-        # Which non-Ok status the backend picks is its own classification and
-        # is not pinned here; that it fails, says something, and hands back no
-        # mesh is the contract, and it is what 6b's failure presentation draws.
-        outcome = _core.triangulate(crossing_pslg)
-        assert outcome.status != _core.CdtStatus.Ok
-        assert outcome.ok() is False
-        assert outcome.message.strip()
-        assert _core.describe(outcome.status).strip()
+    def test_refuses_an_un_noded_pslg_as_a_type_error(self, breakline_pslg: Any) -> None:
+        # This REPLACES `test_reports_a_non_noded_input_as_a_failure_status`,
+        # which handed `triangulate` a crossing and asserted a non-Ok status.
+        # As of 5c that input cannot reach the entry point at all: guarantee
+        # 14(a) refuses a crossing inside `node()`, so `CdtStatus::NotNoded` is
+        # a self-check and the `Pslg` itself is the wrong type here. The
+        # architectural product of 5b+5c is exactly this TypeError -- a status
+        # would mean the diagnosis still lived inside the backend.
+        with pytest.raises(TypeError):
+            _core.triangulate(breakline_pslg)
 
-    @pytest.mark.parametrize("pslg_name", ["breakline_pslg", "crossing_pslg"])
+    @pytest.mark.parametrize("pslg_name", ["noded_breakline", "hole_outside_noded"])
     def test_outcome_never_pairs_ok_with_an_empty_mesh(
         self, request: pytest.FixtureRequest, pslg_name: str
     ) -> None:
@@ -678,8 +715,8 @@ class TestTriangulate:
         assert outcome.ok() == (outcome.mesh.triangle_count > 0)
         assert outcome.ok() == (outcome.message == "")
 
-    def test_outcome_fields_are_read_only(self, breakline_pslg: Any) -> None:
-        outcome = _core.triangulate(breakline_pslg)
+    def test_outcome_fields_are_read_only(self, noded_breakline: Any) -> None:
+        outcome = _core.triangulate(noded_breakline)
         with pytest.raises(AttributeError):
             outcome.status = _core.CdtStatus.BackendFailure
 
@@ -687,7 +724,7 @@ class TestTriangulate:
         with pytest.raises(TypeError):
             _core.triangulate(square)
 
-    def test_concurrent_triangulation_of_one_pslg_agrees(self, breakline_pslg: Any) -> None:
+    def test_concurrent_triangulation_of_one_pslg_agrees(self, noded_breakline: Any) -> None:
         # A const Pslg is safe for concurrent read (testing.md, core geometry
         # -- PSLG). With the GIL released this stops being theoretical: two
         # threads genuinely execute the backend at once, and a binding that
@@ -697,7 +734,7 @@ class TestTriangulate:
 
         def run() -> None:
             barrier.wait(timeout=30.0)
-            results.append(_core.triangulate(breakline_pslg).mesh.triangles)
+            results.append(_core.triangulate(noded_breakline).mesh.triangles)
 
         threads = [threading.Thread(target=run) for _ in range(4)]
         for t in threads:
@@ -790,7 +827,9 @@ def large_pslg() -> Any:
         np.vstack([ring, interior]), [([0, 1, 2, 3], _core.ChainRole.Outer, NO_PROPERTIES)]
     )
     assert result.ok, [d.message for d in result.diagnostics]
-    return result.pslg
+    outcome = _core.node(result.pslg, SPACING)
+    assert outcome.ok(), outcome.message
+    return outcome.pslg
 
 
 class TestGil:

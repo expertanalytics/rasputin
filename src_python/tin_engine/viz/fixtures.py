@@ -18,12 +18,18 @@ onto the enum before calling ``build_pslg``. Keeping the fixture itself a
 
 Ring winding is the validator's, not a preference: an ``outer`` ring must be
 counter-clockwise and a ``hole`` clockwise, and neither stores its closing
-index. **Three** of the eight are deliberate failures, and they fail at two
-different depths: ``degenerate`` never reaches ``triangulate`` at all, because
-the PSLG validator refuses it (``PslgError.DegenerateRing``), while
-``not-noded`` and ``hole-in-hole`` are backend refusals of a valid PSLG
-(``NotNoded`` and ``InvalidTopology``). All three are here because a failure
-presentation nobody has looked at is a failure presentation that is wrong.
+index. **Two** of the eight are deliberate failures, and they fail at two different
+depths: ``degenerate`` never reaches the triangulator at all, because the PSLG
+validator refuses it (``PslgError.DegenerateRing``), while ``hole-in-hole`` is a
+backend refusal of a valid PSLG (``InvalidTopology``). Both are here because a
+failure presentation nobody has looked at is a failure presentation that is
+wrong.
+
+``not-noded`` was a third until increment 5c and is now the showcase: the noder
+resolves its crossing, so it draws a mesh. It keeps its name, because the name
+describes the INPUT, which is still not noded -- its value is being a regression
+fixture with two states, and the picture changing between two commits under one
+name is the thing worth having.
 """
 
 from __future__ import annotations
@@ -197,17 +203,21 @@ RIVER = _fixture(
 
 NOT_NODED = _fixture(
     "not-noded",
-    "two crossing constraints -- a deliberate failure, rendering the non-Ok presentation",
+    "a road crossing a river: two constraints meeting at a point neither names, noded",
     [
         [0.0, 0.0], [700.0, 0.0], [700.0, 700.0], [0.0, 700.0],
         [100.0, 100.0], [600.0, 600.0], [100.0, 600.0], [600.0, 100.0],
     ],
     [
         (range(4), "outer", 0),
-        ([4, 5], "breakline", 0),
+        # Bits 1 and 0, spelled as the bare numbers a vocabulary would give for
+        # "road" and "river": this module holds no vocabulary and may not import
+        # one. The two colours are what make the picture the user's sentence
+        # rather than a grey crossing.
+        ([4, 5], "breakline", 2),
         # Crosses the chain above at (350, 350), a point neither chain names:
         # that is what "not noded" means, and the noder (5b) is what fixes it.
-        ([6, 7], "breakline", 0),
+        ([6, 7], "breakline", 1),
     ],
 )
 

@@ -256,8 +256,9 @@ paragraph originally read "which is what lets `viz/` depend on it". That is
 unsupportable and unnecessary. `test_viz_svg.py::TestModuleIsolation` pins that
 `style.py` and `fixtures.py` import **no** first-party module at all and that
 `svg.py`'s first-party imports are confined to
-`{.scene, .style, .protocols, tin_engine.viz.scene}` (`test_viz_svg.py:533` --
-four entries, the last the absolute spelling of the first),
+`{.scene, .style, .protocols, tin_engine.viz.scene}`
+(`test_viz_svg.py::TestModuleIsolation::test_the_renderer_imports_only_its_own_siblings`
+-- four entries, the last the absolute spelling of the first),
 so no `viz/` module may import `features` — and under the renderer ruling below
 none needs to: `svg.py` takes its precedence from `SvgStyle` and `cli.py`, the
 composition root, is the only module that imports both `features` and
@@ -310,18 +311,21 @@ DEFAULT_VOCABULARY = EdgeVocabulary(properties=(
   **Corrected in this PR:** the two sentences that stood here — "every token
   comes from an enum name" and "the pattern is that hole's only closure" — were
   both wrong about the object. The **property** token comes from no enum -- it
-  is `cli.py:79`'s `_PRECEDENCE = ("river",)`, a literal tuple of `str`. The
+  is `cli.py`'s `_PRECEDENCE`, a literal tuple of `str` that no enum backs
+  (`grep -n '_PRECEDENCE =' src_python/tin_engine/cli.py`; its membership grows
+  with the stylesheet and is not what this sentence turns on). The
   retracted sentence was wrong because of *every*, not because there is no enum
-  anywhere: `_edge_classes` emits four kinds of token (`svg.py:177-184`) -- the
+  anywhere: `_edge_classes` emits four kinds of token (`viz/svg.py`) -- the
   `constrained`/`unconstrained` literal, `role-*`, the property token,
   `finding` -- and only the property one traces to `_PRECEDENCE`. The `role-*`
   token beside it **is** enum-derived, through `_role_name`'s
-  `getattr(role, "name", role)` (`svg.py:133-135`) over a `_core.ChainRole`
+  `getattr(role, "name", role)` (`viz/svg.py`) over a `_core.ChainRole`
   handed in by `cli.py`, and that is exactly what made "every token comes from
   an enum name" look true of all of them. And this
   pattern closes nothing: what `svg.py` interpolates is
   `style.PropertyStroke.token`, never an `EdgeProperty.name`, because `viz/`
-  may import no vocabulary at all. The one bridge is `cli.py:84`, which builds a
+  may import no vocabulary at all. The one bridge is `cli.py`'s
+  `PROPERTY_STROKES`, which builds a
   `PropertyStroke` from a name and so re-validates through `style.py:51`'s
   deliberately wider `^[a-z][a-z0-9_-]*$` — a CSS class may carry a hyphen, a
   feature name may not. A quote-carrying name dies there whatever this pattern
@@ -393,8 +397,8 @@ caller can also commit, and this one no C++ caller can — `EdgeProperties::bit`
 is the only route to a set bit and `i >= kMaxProperties` is a precondition
 violation, not a datum. Putting a marshalling error into that enum would put a
 Python type error inside a C++ vocabulary. It joins the mis-shaped vertex array
-(`bindings/core.cpp:107`) as a marshalling `ValueError`, which is the existing
-precedent and the right one.
+(`bindings/core.cpp`'s `as_points`) as a marshalling `ValueError`, which is the
+existing precedent and the right one.
 
 **And it raises `ValueError` on a `bool`**, naming the chain index the same way.
 This was a hole, found after the migration commit and closed after it: `bool` is
@@ -427,7 +431,7 @@ to fix something that is not broken. The two arms are therefore separate in
 alternative was to accept anything with `__index__`, which would let
 `mask = arr[i]` through. It is an asymmetry with `vertices`, which takes any
 array-like through
-`py::array_t<double, c_style | forcecast>::ensure` (`bindings/core.cpp:93-94`) —
+`py::array_t<double, c_style | forcecast>::ensure` (`as_points` again) —
 forcecast, not `np.asarray`, which the boundary never calls — and a NumPy-first
 caller will meet it. Refused
 anyway: the mask is a *set of bits in a vocabulary* whose only correct source is
@@ -1124,7 +1128,8 @@ which, and no entry is carried forward.
 
 **One document outside the list was also corrected**, and recording it here is
 the alternative to silence rather than an admission that the list reopens:
-`docs/increments/kernel-sufficiency-audit.md:380` cited
+`docs/increments/kernel-sufficiency-audit.md`'s "`classify`'s collinear arm is
+nearly dead code on real input" bullet cited
 `parallel_refinement.md:156`'s road-over-river rule, which this commit moved to
 `:168` and restated. (It moved again, to `:176`, when 5b was rebased onto this
 increment in `6f7f7c8` — three positions for one unchanged rule, which is the

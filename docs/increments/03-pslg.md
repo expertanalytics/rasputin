@@ -517,10 +517,19 @@ vertex indices are not the input's, and `node_of_input_vertex` maps around it.
 Increment 4's wrapper signature should be written against `const Pslg&` today
 and changed to `const NodedPslg&` then. **That change is not mechanical**, as an
 earlier revision of this paragraph and `docs/increments/04-cdt.md` both said it
-was: `bindings/core.cpp:466` calls the entry point on a `const Pslg&`, so
-retyping it breaks the Python extension and drags `_core.pyi`, `cli.py` and the
+was: the Python binding called the entry point on a `const Pslg&`, so retyping
+it broke the Python extension and dragged `_core.pyi`, `cli.py` and the
 renderer's scene join with it. `docs/increments/05b-noder-driver.md` gives the
-cost and makes it a PR of its own. It is listed under Risks.
+cost and made it a PR of its own. It is listed under Risks.
+
+**Discharged at increment 5c, and the forecast held.** The binding now reads
+`const NodedPslg&` — `grep -n 'const NodedPslg& pslg, bool delaunay'
+bindings/core.cpp` — and `686ec1b` is the commit that retyped it, against
+`git show 93fc772:bindings/core.cpp | grep -n 'const Pslg& pslg, bool delaunay'`
+for the state this paragraph argued from. The line number that stood here is
+gone rather than refreshed: it named a line that had already drifted before 5c
+touched the file, which is what `.claude/REQUIRED-READING.md` means by a
+resolved value.
 
 ## Grouping: neither declared nor computed, and not in this increment
 

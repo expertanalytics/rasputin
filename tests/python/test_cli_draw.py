@@ -13,10 +13,11 @@ that knows both, and its job is:
 
 1. look a fixture up in `viz.fixtures.GALLERY`;
 2. map the fixture's string roles onto `_core.ChainRole` and call `build_pslg`,
-   then `triangulate`;
-3. hand the **fixture itself** to `build_scene` as the `PslgLike`, with the
-   mesh and the `ok` bit from the backend, and `closed_roles=("outer", "hole")`;
-4. pass the status name, `describe(status)` and the backend message to
+   then `node`, then `triangulate`;
+3. hand the **most-processed graph that exists** to `build_scene` as the
+   `PslgLike`, together with the closed-role vocabulary THAT graph's roles
+   speak -- strings for a fixture, `ChainRole` values for a `NodedPslg`;
+4. pass the status name, `describe(status)` and the engine's message to
    `render_svg` as text;
 5. resolve and validate the output path, and write the bytes.
 
@@ -42,6 +43,18 @@ them from the engine at run time rather than hard-coding either.
 
 Path handling is tested as a hostile boundary, per the python skill: traversal
 out of an explicitly provided parent, and a symlink that resolves back inside it.
+
+AMENDED AT INCREMENT 5c, which is the increment this file exists to observe:
+`rasputin draw not-noded` stops drawing zero triangles and starts drawing a
+noded crossing. Step 3 is the part that a status assertion cannot see. A
+`NodedPslg`'s roles are `ChainRole` values and `CLOSED_ROLES` was a tuple of
+STRINGS; `ChainRole.Outer == "outer"` is False, so passing the noded graph
+while leaving the vocabulary alone closes no ring, and every ring's closing
+edge becomes a `MASKED_EDGE_WITHOUT_CHAIN` -- the whole gallery in the alarm
+colour over a correct mesh, with `CdtStatus.Ok` in the band. `TestNodedCrossing`
+below holds that line twice: once at the picture, where findings must be zero,
+and once structurally, against the source and the vocabulary the composition
+root actually paired.
 """
 
 from __future__ import annotations
@@ -55,6 +68,7 @@ import numpy as np
 import pytest
 from typer.testing import CliRunner
 
+import tin_engine.cli as cli
 from tin_engine.cli import ROLES, app
 
 SVG_NS = "http://www.w3.org/2000/svg"
@@ -71,6 +85,18 @@ GALLERY_NAMES = (
 )
 
 DEFAULT_LABEL_LIMIT = 500
+
+#: `cli.py`'s default, restated here rather than imported: a test that took the
+#: number from the module under test would agree with any value it was given.
+#: A millimetre on the ground, the gallery's coordinates being UTM-shaped.
+DEFAULT_SNAP_SPACING = 1e-3
+
+#: Fine enough that a UTM easting overflows the snap lattice -- `kMaxGridIndex`
+#: is 2**51, so the representable coordinate at spacing s is s * 2.25e15. This
+#: is how a NODER refusal is reached from the CLI with no fixture of its own,
+#: and it is the lower bound that makes `--snap-spacing` an option rather than
+#: a constant hidden in a header.
+OVERFLOWING_SNAP_SPACING = 1e-12
 
 runner = CliRunner(env={"NO_COLOR": "1", "TERM": "dumb"})
 
@@ -116,7 +142,7 @@ def gallery() -> Any:
     return importlib.import_module("tin_engine.viz.fixtures").GALLERY
 
 
-def core_verdict(name: str) -> tuple[bool, list[str]]:
+def core_verdict(name: str, spacing: float = DEFAULT_SNAP_SPACING) -> tuple[bool, list[str]]:
     """What the engine actually says about a fixture, computed here.
 
     The oracle for a passthrough claim is the engine's own words, so this
@@ -126,7 +152,10 @@ def core_verdict(name: str) -> tuple[bool, list[str]]:
     the engine said reaches the picture.
 
     Returns `(drawable, words)`: whether a mesh was produced at all, and the
-    strings the header band must carry.
+    strings the header band must carry. Three refusal layers can answer now --
+    the validator, the noder and the backend -- and the caller does not get to
+    know which, which is the point: the claim under test is only that whatever
+    the engine said reaches the picture.
     """
     import tin_engine._core as core
 
@@ -144,7 +173,10 @@ def core_verdict(name: str) -> tuple[bool, list[str]]:
     if not result.ok:
         return False, [d.error.name for d in result.diagnostics]
     assert result.pslg is not None
-    outcome = core.triangulate(result.pslg)
+    noded = core.node(result.pslg, spacing)
+    if not noded.ok():
+        return False, [noded.status.name]
+    outcome = core.triangulate(noded.pslg)
     return outcome.ok(), [outcome.status.name]
 
 
@@ -448,33 +480,14 @@ class TestFailurePresentation:
     exit code reports whether a picture was drawn, and a drawn failure is still
     a drawn picture. What the engine refused is in the header band.
 
-    They fail at three different depths, which is why three: `degenerate` never
-    reaches `triangulate` at all (the PSLG validator rejects it), `not-noded`
-    and `hole-in-hole` are backend refusals -- `NotNoded` and, since `4482649`,
-    `InvalidTopology`.
+    TWO of them as of increment 5c, not three: `not-noded` is now drawn as a
+    mesh and has its own class below. The two that remain fail at two different
+    depths -- `degenerate` never reaches `triangulate` at all (the PSLG
+    validator rejects it), `hole-in-hole` is a backend refusal
+    (`InvalidTopology`, since `4482649`). A third depth is now reachable and
+    has no fixture of its own: the NODER's refusal, exercised through
+    `--snap-spacing` in `TestSnapSpacing`.
     """
-
-    def test_the_not_noded_fixture_really_fails_in_the_backend(self) -> None:
-        # The probe that keeps the assertion below from going vacuous: if the
-        # fixture ever triangulated cleanly, the non-`Ok` presentation would not
-        # be exercised by anything.
-        drawable, words = core_verdict("not-noded")
-        assert drawable is False
-        assert words != ["Ok"]
-
-    def test_the_not_noded_picture_carries_the_backends_own_words(
-        self, tmp_path: Path
-    ) -> None:
-        _, words = core_verdict("not-noded")
-        target = tmp_path / "not-noded.svg"
-        assert invoke("not-noded", "--out", str(target)).exit_code == 0
-        header = group_text(written(target), "header")
-        assert any(word in header for word in words), f"{words} not in {header!r}"
-
-    def test_the_not_noded_picture_draws_no_triangle(self, tmp_path: Path) -> None:
-        target = tmp_path / "not-noded.svg"
-        assert invoke("not-noded", "--out", str(target)).exit_code == 0
-        assert elements(written(target), "triangles", "polygon") == []
 
     def test_the_degenerate_fixture_is_refused_before_triangulation(self) -> None:
         # The design says this fixture shows "the DegenerateGeometry
@@ -504,7 +517,7 @@ class TestFailurePresentation:
         assert drawable is False
         assert words != ["Ok"]
 
-    @pytest.mark.parametrize("name", ["not-noded", "degenerate", "hole-in-hole"])
+    @pytest.mark.parametrize("name", ["degenerate", "hole-in-hole"])
     def test_a_failed_fixture_is_never_a_blank_page(
         self, name: str, tmp_path: Path
     ) -> None:
@@ -519,3 +532,383 @@ class TestFailurePresentation:
             "role-" in (line.get("class") or "")
             for line in elements(document, "edges", "line")
         ), "the input is drawn without its role colours"
+
+
+class TestNodedCrossing:
+    """`rasputin draw not-noded`, which is the increment's entire product.
+
+    The fixture keeps its name because the name describes the INPUT, which is
+    still not noded; its value is being a regression fixture with two states,
+    and the picture changing between two commits under one name is the thing
+    worth having.
+
+    Every assertion here would be satisfied by a wrong picture if it only
+    checked the status, which is why none of them only checks the status.
+    """
+
+    def test_the_crossing_now_triangulates(self) -> None:
+        # The probe the rest of the class rests on, and the exact inversion of
+        # the case this suite carried until 5c: the same fixture, the same
+        # helper, the opposite answer.
+        drawable, words = core_verdict("not-noded")
+        assert drawable is True
+        assert words == ["Ok"]
+
+    def test_the_picture_is_a_mesh(self, tmp_path: Path) -> None:
+        target = tmp_path / "not-noded.svg"
+        result = invoke("not-noded", "--out", str(target))
+        assert result.exit_code == 0, plain(result.output)
+        assert elements(written(target), "triangles", "polygon") != []
+
+    def test_the_picture_carries_no_finding(self, tmp_path: Path) -> None:
+        # THE assertion of the increment. A `NodedPslg`'s roles are `ChainRole`
+        # values; `CLOSED_ROLES` was a tuple of strings, and
+        # `ChainRole.Outer == "outer"` is False. Pass the noded graph without
+        # changing the vocabulary and no ring closes: one
+        # `MASKED_EDGE_WITHOUT_CHAIN` per ring, drawn in the alarm colour over
+        # a mesh the engine is perfectly happy with. A test that checked only
+        # `CdtStatus.Ok` passes against exactly that picture.
+        target = tmp_path / "not-noded.svg"
+        assert invoke("not-noded", "--out", str(target)).exit_code == 0
+        document = written(target)
+        alarms = [
+            line
+            for line in elements(document, "edges", "line")
+            if "finding" in (line.get("class") or "")
+        ]
+        assert alarms == []
+        assert re.search(r"(?i)\bfindings\b\D{0,3}0\b", group_text(document, "header"))
+
+    def test_the_road_and_the_river_are_drawn_apart(self, tmp_path: Path) -> None:
+        # The user's sentence, in two colours: "a road crossing a river". Both
+        # property strokes must reach the picture, which needs `_PRECEDENCE` to
+        # name both and `svg.py` to have a rule for each -- without the second,
+        # a road edge draws identically to the row above it and the legend
+        # gains a row a reader cannot tell apart.
+        target = tmp_path / "not-noded.svg"
+        assert invoke("not-noded", "--out", str(target)).exit_code == 0
+        tokens = {
+            token
+            for line in elements(written(target), "edges", "line")
+            for token in (line.get("class") or "").split()
+        }
+        assert {"river", "road"} <= tokens
+
+    def test_water_is_drawn_over_infrastructure(self) -> None:
+        # The ordering rule `cli._PRECEDENCE` states (`grep -n _PRECEDENCE
+        # src_python/tin_engine/cli.py`), named by FEATURE rather than
+        # derived from the vocabulary's numbering: an edge carrying both bits
+        # is drawn with exactly one token, and it is the river's.
+        assert [stroke.token for stroke in cli.PROPERTY_STROKES] == ["river", "road"]
+
+    def test_the_band_says_the_backend_was_happy(self, tmp_path: Path) -> None:
+        target = tmp_path / "not-noded.svg"
+        assert invoke("not-noded", "--out", str(target)).exit_code == 0
+        assert "Ok" in group_text(written(target), "header")
+
+
+class TestAttempt:
+    """The source and its closed-role vocabulary are ONE value.
+
+    `05c-noder-wiring.md`, "The scene's source": a source without its roles
+    must be unrepresentable, because the failure it causes is invisible to
+    every status assertion in this file. The picture test above is the
+    consequence; this is the mechanism, asserted directly so that a failure
+    says "the vocabulary does not match the source" rather than "the picture
+    has alarms on it".
+    """
+
+    def attempt(self, name: str, spacing: float = DEFAULT_SNAP_SPACING) -> Any:
+        # Keyword arguments, so this pins the two knobs by name and not the
+        # positional order of a private helper.
+        return cli._triangulated(gallery()[name], delaunay=True, spacing=spacing)
+
+    def test_it_is_frozen(self) -> None:
+        import dataclasses
+
+        assert dataclasses.is_dataclass(cli.Attempt)
+        assert cli.Attempt.__dataclass_params__.frozen is True
+
+    def test_it_carries_the_source_and_the_vocabulary_together(self) -> None:
+        import dataclasses
+
+        names = {f.name for f in dataclasses.fields(cli.Attempt)}
+        assert {"source", "closed_roles", "mesh", "ok", "status", "message"} <= names
+
+    @pytest.mark.parametrize("name", GALLERY_NAMES)
+    def test_every_ring_of_the_source_speaks_the_vocabulary(self, name: str) -> None:
+        # The oracle is the FIXTURE's own declaration -- which chains it called
+        # `outer` and `hole` -- and never the source's roles, which is the
+        # value under test. Chain order is preserved through `build_pslg` and
+        # `node`, so position is the join.
+        fixture = gallery()[name]
+        attempt = self.attempt(name)
+        for c, declared in enumerate(fixture.chains):
+            if declared.role not in ("outer", "hole"):
+                continue
+            role = attempt.source.chains[c].role
+            assert role in attempt.closed_roles, (
+                f"{name} chain {c} is a ring with role {role!r}, "
+                f"which is not in {attempt.closed_roles!r}"
+            )
+
+    def test_a_noded_fixture_is_drawn_from_the_noded_graph(self) -> None:
+        # "The most-processed graph that exists", with no branch on the CDT's
+        # status: when the noder succeeded, its output is the truer picture,
+        # because it shows the splits the backend was actually handed.
+        import tin_engine._core as core
+
+        attempt = self.attempt("not-noded")
+        assert isinstance(attempt.source, core.NodedPslg)
+        # And it really did gain a node -- otherwise the claim is vacuous.
+        assert len(attempt.source.vertices) > len(np.asarray(gallery()["not-noded"].vertices))
+
+    def test_a_rejected_fixture_is_drawn_from_the_fixture(self) -> None:
+        # `degenerate` has no `Pslg` at all, so the fixture is the only
+        # `PslgLike` that exists -- and its roles are strings, which is exactly
+        # why the vocabulary cannot be a module constant.
+        attempt = self.attempt("degenerate")
+        assert attempt.source is gallery()["degenerate"]
+        assert attempt.closed_roles == ("outer", "hole")
+
+
+class TestSnapSpacing:
+    """Two refusal channels, neither removable in favour of the other.
+
+    `typer` refuses a non-finite or non-positive `--snap-spacing` as a USAGE
+    error and exits 2 without drawing anything -- the same line `_destination`
+    already draws between a bad `--out` and a refused fixture. The engine
+    refuses it as a library precondition, `NodeStatus::InvalidSnapSpacing`, for
+    callers that are not this CLI; that half is pinned in `test_core_noding.py`.
+    Delete the CLI guard and `--snap-spacing -1` silently produces a picture of
+    a failure that is not about the terrain.
+    """
+
+    @pytest.mark.parametrize("value", ["0", "-1", "nan", "-inf"])
+    def test_a_non_positive_or_non_finite_spacing_is_a_usage_error(
+        self, value: str, tmp_path: Path
+    ) -> None:
+        target = tmp_path / "refused.svg"
+        result = invoke("catchment", f"--snap-spacing={value}", "--out", str(target))
+        assert result.exit_code == 2, plain(result.output)
+        message = plain(result.output)
+        assert "snap-spacing" in message, f"the refusal does not name the option: {message!r}"
+        assert not target.exists(), "a usage error drew a picture"
+
+    def test_the_option_is_documented_with_its_default(self) -> None:
+        result = runner.invoke(app, ["draw", "--help"])
+        assert result.exit_code == 0
+        assert "--snap-spacing" in plain(result.output)
+
+    def test_the_default_is_a_named_constant_with_its_reasoning(self) -> None:
+        # Not a literal inside a `typer.Option`: three of the nine noder
+        # statuses point at this number and two point in opposite directions,
+        # so it is a policy choice the composition root makes on the record.
+        assert cli.DEFAULT_SNAP_SPACING == DEFAULT_SNAP_SPACING
+        source = (
+            Path(cli.__file__).read_text(encoding="utf-8")
+            if cli.__file__
+            else ""
+        )
+        assert "DEFAULT_SNAP_SPACING" in source
+
+    def test_a_coarser_spacing_still_draws(self, tmp_path: Path) -> None:
+        target = tmp_path / "coarse.svg"
+        result = invoke("not-noded", "--snap-spacing=0.5", "--out", str(target))
+        assert result.exit_code == 0, plain(result.output)
+        assert elements(written(target), "triangles", "polygon") != []
+
+    def test_the_spacing_reaches_the_engine(self, tmp_path: Path) -> None:
+        # Nothing above holds the option to `node()`: a `cli.py` that accepted
+        # `--snap-spacing` and passed the constant would satisfy every one of
+        # them. At 1e-12 a UTM easting overflows the lattice, so the engine
+        # must answer `CoordinateOutOfRange` -- a value only the real argument
+        # can produce.
+        drawable, words = core_verdict("catchment", OVERFLOWING_SNAP_SPACING)
+        assert drawable is False
+        assert words == ["CoordinateOutOfRange"]
+
+        target = tmp_path / "overflow.svg"
+        result = invoke(
+            "catchment", f"--snap-spacing={OVERFLOWING_SNAP_SPACING}", "--out", str(target)
+        )
+        assert result.exit_code == 0, plain(result.output)
+        assert "CoordinateOutOfRange" in group_text(written(target), "header")
+
+
+class TestNoderRefusalPresentation:
+    """What a user sees when the NODER refuses: a diagnosis about the data,
+    with the spacing as the lever.
+
+    The input drawn alone in role colours, findings suppressed, exit 0, and a
+    band carrying `describe(status)` followed by the engine's own message --
+    the same two-part join `_triangulated` already builds for a `CdtStatus`.
+    A drawn failure is still a drawn picture, so the exit code stays 0 and a
+    caller who wants the verdict reads the band.
+    """
+
+    def test_a_refused_noding_draws_the_input_in_role_colours(
+        self, tmp_path: Path
+    ) -> None:
+        target = tmp_path / "refused.svg"
+        result = invoke(
+            "catchment", f"--snap-spacing={OVERFLOWING_SNAP_SPACING}", "--out", str(target)
+        )
+        assert result.exit_code == 0, plain(result.output)
+        document = written(target)
+        lines = elements(document, "edges", "line")
+        assert lines != [], "the refusal drew a blank page"
+        assert any("role-" in (line.get("class") or "") for line in lines)
+
+    def test_a_refused_noding_draws_no_triangle_and_no_finding(
+        self, tmp_path: Path
+    ) -> None:
+        target = tmp_path / "refused.svg"
+        assert invoke(
+            "catchment", f"--snap-spacing={OVERFLOWING_SNAP_SPACING}", "--out", str(target)
+        ).exit_code == 0
+        document = written(target)
+        assert elements(document, "triangles", "polygon") == []
+        alarms = [
+            line
+            for line in elements(document, "edges", "line")
+            if "finding" in (line.get("class") or "")
+        ]
+        assert alarms == [], "findings are not suppressed on a refusal"
+
+    def test_the_band_carries_the_engines_own_words(self, tmp_path: Path) -> None:
+        import tin_engine._core as core
+
+        target = tmp_path / "refused.svg"
+        assert invoke(
+            "catchment", f"--snap-spacing={OVERFLOWING_SNAP_SPACING}", "--out", str(target)
+        ).exit_code == 0
+        header = group_text(written(target), "header")
+        sentence = core.describe(core.NodeStatus.CoordinateOutOfRange)
+        # The prose is the engine's and is not pinned here; that it CROSSED is.
+        assert sentence.split()[0] in header
+        assert "CoordinateOutOfRange" in header
+
+
+class TestCornerGrazePresentation:
+    """`NotConverged`, which is the first place a human meets the corner graze.
+
+    No gallery fixture reaches it -- the period-two orbit needs input already
+    rounded to the grid's own resolution -- so the outcome is substituted at
+    the seam `cli.py` calls. That is the only thing faked: the status and the
+    message are the engine's real ones, and everything downstream of
+    `_triangulated` is the shipped code.
+
+    It is a diagnosis about the data with the spacing as the lever. It is NOT
+    a crash, and it is not a promise that a bigger cap helps -- for the graze
+    it provably cannot, the orbit having period two.
+    """
+
+    class _Refusal:
+        """A `NodeOutcome` the binding cannot construct from Python."""
+
+        def __init__(self, status: Any, message: str) -> None:
+            self.pslg = None
+            self.status = status
+            self.message = message
+
+        def ok(self) -> bool:
+            return False
+
+    @pytest.fixture
+    def not_converged(self, monkeypatch: pytest.MonkeyPatch) -> str:
+        import tin_engine._core as core
+
+        message = (
+            "the constraint set did not settle in 4 rounds at spacing 0.001: "
+            "a constraint edge still meets a node's cell"
+        )
+        monkeypatch.setattr(
+            cli,
+            "node",
+            lambda *_args, **_kw: self._Refusal(core.NodeStatus.NotConverged, message),
+        )
+        return message
+
+    def test_it_is_drawn_rather_than_raised(self, not_converged: str, tmp_path: Path) -> None:
+        target = tmp_path / "graze.svg"
+        result = invoke("catchment", "--out", str(target))
+        assert result.exit_code == 0, plain(result.output)
+        assert elements(written(target), "edges", "line") != []
+        assert elements(written(target), "triangles", "polygon") == []
+
+    def test_the_band_carries_the_status_the_prose_and_the_message(
+        self, not_converged: str, tmp_path: Path
+    ) -> None:
+        import tin_engine._core as core
+
+        target = tmp_path / "graze.svg"
+        assert invoke("catchment", "--out", str(target)).exit_code == 0
+        header = group_text(written(target), "header")
+        assert "NotConverged" in header
+        # The whole sentence, not its first word -- which is "the", and passes
+        # on a band printing one article. Derived from `describe` at run time
+        # rather than written out, so a reworded row keeps this green: what is
+        # pinned is that the band carries the engine's words verbatim, which is
+        # the passthrough claim. Normalised on both sides because `group_text`
+        # collapses the SVG's whitespace and the row may be laid out with more.
+        sentence = " ".join(core.describe(core.NodeStatus.NotConverged).split())
+        assert sentence in header
+        assert "did not settle in 4 rounds" in header
+
+    def test_the_cli_adds_no_lever_of_its_own(self, not_converged: str, tmp_path: Path) -> None:
+        # The band is the engine's two sentences and nothing this module wrote.
+        # A CLI-authored sentence here would be a second authority for a C++
+        # fact, drifting the first time a row is reworded -- and the one lever
+        # it would be tempted to name is the cap, which the CLI does not turn.
+        target = tmp_path / "graze.svg"
+        assert invoke("catchment", "--out", str(target)).exit_code == 0
+        header = group_text(written(target), "header")
+        assert "--max-rounds" not in header
+        assert "max_rounds" not in header
+
+
+class TestMaxRoundsIsNotExposed:
+    """The cap is a bound on a loop, not a parameter of the answer: at any
+    value the outcome is the same mesh or `NotConverged`, never a different
+    mesh. For the corner graze `Ok` is unreachable at ANY cap, so a knob whose
+    visible effect on the failure a user is most likely to meet is "the same
+    refusal, slower" is worse than not having it."""
+
+    def test_the_option_does_not_exist(self, tmp_path: Path) -> None:
+        target = tmp_path / "x.svg"
+        result = invoke("not-noded", "--max-rounds", "16", "--out", str(target))
+        assert result.exit_code == 2
+        assert "max-rounds" in plain(result.output)
+        assert not target.exists()
+
+    def test_the_help_offers_the_spacing_and_not_the_cap(self) -> None:
+        text = plain(runner.invoke(app, ["draw", "--help"]).output)
+        assert "--snap-spacing" in text
+        assert "max-rounds" not in text
+
+
+class TestTheDefaultSpacingSuitsTheGallery:
+    """A default that refuses a shipped fixture is a broken default, and the
+    answer to that is a different default rather than a per-fixture knob --
+    `Fixture` has no spacing field, and adding one would put a policy in the
+    module that declares it holds none. Measured over the whole gallery rather
+    than argued."""
+
+    @pytest.mark.parametrize("name", GALLERY_NAMES)
+    def test_every_valid_fixture_nodes_at_the_default(self, name: str) -> None:
+        import tin_engine._core as core
+
+        fixture = gallery()[name]
+        chains = [
+            ([int(i) for i in fixture.indices_of(c)], ROLES[chain.role], int(chain.properties))
+            for c, chain in enumerate(fixture.chains)
+        ]
+        result = core.build_pslg(np.asarray(fixture.vertices), chains)
+        if not result.ok:
+            # `degenerate` never reaches the noder; that is its own test.
+            pytest.skip(f"{name} is refused by the PSLG validator")
+        outcome = core.node(result.pslg, DEFAULT_SNAP_SPACING)
+        assert outcome.status == core.NodeStatus.Ok, (
+            f"{name} is refused at the default spacing: {outcome.message}"
+        )

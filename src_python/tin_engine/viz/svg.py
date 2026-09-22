@@ -58,6 +58,7 @@ line.role-outer { stroke: #1b5e20; }
 line.role-hole { stroke: #b06000; }
 line.role-breakline { stroke: #1a4f8a; }
 line.river { stroke: #0b8fb0; stroke-width: 2.6; }
+line.road { stroke: #8a5a00; stroke-width: 2.2; }
 line.finding { stroke: #c0132b; stroke-width: 3.2; stroke-dasharray: 6 3; }
 circle.vertex { fill: #444444; }
 text { font-family: sans-serif; font-size: 11px; fill: #23282d; }

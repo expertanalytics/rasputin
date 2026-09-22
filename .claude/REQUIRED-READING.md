@@ -146,6 +146,16 @@ verify: increment 7's fixed `bindings/core.cpp` was replaced on disk with the
 pre-fix version that four tests were written to refute, and `pytest` reported
 94 passed. A broken X, and Y did not notice.
 
+`ctest` does not know whether the build succeeded. It runs whatever executable
+sits at the path each test was registered with, so a target that **fails to
+rebuild leaves its previous binary in place** and its tests keep reporting their
+old result. A red suite reports green, and the only honest signal is
+`cmake --build`'s own exit. Measured here: with three targets failing to compile,
+`ctest` reported 44 failures; planting a `int main(){return 0;}` at one target's
+registered path took that to **40**, four tests passing against a binary
+containing nothing. Read the build's exit status before you read `ctest`, and
+treat a green `ctest` after a failed build as no evidence at all.
+
 The C++ side has its own version, and it bites hardest during a mutation round.
 **`cmake --build` can miss a restore.** After putting a mutated header back with
 `cp`, the restored file's mtime can land in the same second as the object built

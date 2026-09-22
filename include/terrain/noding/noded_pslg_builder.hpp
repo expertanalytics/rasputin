@@ -104,8 +104,8 @@ enum class NodeStatus : int {
         case NodeStatus::NonSimpleRing:
             return "a ring visits the same node twice; repair the polygon upstream";
         case NodeStatus::NotConverged:
-            return "the constraint set did not settle within the round cap; use a "
-                   "finer spacing or raise the cap";
+            return "the constraint set did not settle within the round cap; "
+                   "use a finer spacing";
         case NodeStatus::MalformedOutput:
             return "the noder produced output violating its own guarantees; this "
                    "is our bug";

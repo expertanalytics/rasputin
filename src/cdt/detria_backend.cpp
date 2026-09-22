@@ -8,7 +8,7 @@
 #include <terrain/cdt/result.hpp>
 #include <terrain/core/indexed_mesh.hpp>
 #include <terrain/core/point.hpp>
-#include <terrain/core/pslg.hpp>
+#include <terrain/core/noded_pslg.hpp>
 
 #include <detria.hpp>
 
@@ -77,7 +77,7 @@ using Triangulation = detria::Triangulation<Point2, std::uint32_t>;
 // individual std::uint32_t values to setConstrainedEdge, which are copied into
 // detria's own vector. NO BUFFER CONSTRUCTED INSIDE THIS FUNCTION IS EVER PASSED
 // TO A DETRIA CALL, and the Triangulation is a local in the same scope as the
-// const Pslg& parameter, so it cannot outlive the argument.
+// const NodedPslg& parameter, so it cannot outlive the argument.
 //
 // indices_of(c) goes STRAIGHT into addOutline/addHole with no closing index:
 // detria closes an open polyline itself (createConstrainedEdges seeds
@@ -85,7 +85,7 @@ using Triangulation = detria::Triangulation<Point2, std::uint32_t>;
 // dangle. The backend suite's characterisation test pins that behaviour; if a
 // re-pin breaks it, the fix is one scratch buffer for the whole triangulation
 // with sub-spans handed out, and nothing else changes.
-CdtOutcome DetriaBackend::triangulate(const Pslg& pslg, const CdtOptions& options) {
+CdtOutcome DetriaBackend::triangulate(const NodedPslg& pslg, const CdtOptions& options) {
     Triangulation tri;  // by value, on the stack: move-only, and a member would
                         // give this backend the state the concept forbids
     tri.setPoints(pslg.vertices());

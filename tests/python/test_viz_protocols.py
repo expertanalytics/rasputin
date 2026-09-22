@@ -20,6 +20,13 @@ Two things make this module worth a suite of its own, small as it is:
 The module is imported inside the tests rather than at module scope, so a
 missing `viz/` fails as a named `ModuleNotFoundError` in one test instead of an
 error before collection.
+
+AMENDED AT INCREMENT 5c. `PslgLike` acquires a THIRD implementation --
+`_core.NodedPslg` -- and it is the one `cli.py` actually hands to
+`build_scene` once the noder is wired through, so the join below is no longer
+a statement about a type the renderer might one day see. `NodedPslg` was given
+`Pslg`'s shape for exactly this reason (`core/noded_pslg.hpp:41-45`); this is
+the assertion that the shape survived the binding layer.
 """
 
 from __future__ import annotations
@@ -50,6 +57,9 @@ NORTH = 6_900_000.0
 # `is_river` spelling and `build_pslg` refuses it.
 NO_PROPERTIES = 0
 RIVER = DEFAULT_VOCABULARY.mask("river")
+
+# A millimetre on the ground at these magnitudes; `cli.py`'s default.
+SPACING = 1e-3
 
 MESH_MEMBERS = {"vertices", "triangles", "constrained_edges", "triangle_count", "empty"}
 PSLG_MEMBERS = {"vertices", "chains", "chain_indices", "indices_of"}
@@ -100,9 +110,11 @@ def mesh() -> Any:
         ],
     )
     assert result.ok, [d.message for d in result.diagnostics]
-    outcome = _core.triangulate(result.pslg)
+    noded = _core.node(result.pslg, SPACING)
+    assert noded.ok(), noded.message
+    outcome = _core.triangulate(noded.pslg)
     assert outcome.ok(), outcome.message
-    return outcome.mesh, result.pslg
+    return outcome.mesh, result.pslg, noded.pslg
 
 
 class TestModuleShape:
@@ -179,17 +191,36 @@ class TestBoundTypesSatisfyTheProtocols:
     indefinitely and both halves of the increment stay green."""
 
     def test_indexed_mesh_satisfies_mesh_like(self, mesh: Any) -> None:
-        real, _ = mesh
+        real, _, _ = mesh
         missing = [m for m in protocol_members(protocols().MeshLike) if not hasattr(real, m)]
         assert missing == []
 
     def test_pslg_satisfies_pslg_like(self, mesh: Any) -> None:
-        _, pslg = mesh
+        _, pslg, _ = mesh
         missing = [m for m in protocol_members(protocols().PslgLike) if not hasattr(pslg, m)]
         assert missing == []
 
+    def test_noded_pslg_satisfies_pslg_like(self, mesh: Any) -> None:
+        # Increment 5c: the graph `cli.py` actually draws from. One function
+        # template binds the four shared accessors for both types precisely so
+        # that a member cannot be added to one and forgotten on the other --
+        # and a drift that this file catches only for whichever type it happens
+        # to name is the drift that reaches the picture.
+        _, _, noded = mesh
+        missing = [m for m in protocol_members(protocols().PslgLike) if not hasattr(noded, m)]
+        assert missing == []
+
     def test_bound_chain_record_satisfies_chain_like(self, mesh: Any) -> None:
-        _, pslg = mesh
+        _, pslg, _ = mesh
         chain = pslg.chains[0]
+        missing = [m for m in protocol_members(protocols().ChainLike) if not hasattr(chain, m)]
+        assert missing == []
+
+    def test_a_noded_chain_record_satisfies_chain_like(self, mesh: Any) -> None:
+        # `NodedPslg.chains` carries `ChainRole` values, not the fixtures'
+        # strings, which is why `cli.py` may not hold the source and its
+        # closed-role vocabulary apart.
+        _, _, noded = mesh
+        chain = noded.chains[0]
         missing = [m for m in protocol_members(protocols().ChainLike) if not hasattr(chain, m)]
         assert missing == []

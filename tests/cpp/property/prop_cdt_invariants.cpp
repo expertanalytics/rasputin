@@ -20,7 +20,18 @@
 // The generator is cdt_cases.hpp's, not increment 3's valid_chain_specs: a CDT
 // property over crossing constraints would assert almost nothing, because a
 // crossing is a NotNoded failure with no mesh. See that header for the full
-// reason.
+// reason. That reason SURVIVES increment 5c and is worth saying, because the
+// noder looks like it removes it: node() would turn a generated crossing into a
+// mesh, but it would also change the vertex and chain counts the Euler property
+// takes from DomainShape, so the property would be asserting Euler's formula
+// against a domain nobody declared. The generator's disjointness is now about
+// the ORACLE rather than about the backend's tolerance.
+//
+// AMENDED AT INCREMENT 5c. Every case is noded before it is triangulated, at
+// cdt_cases.hpp's kFixtureSpacing. Measured over all 24 seeds on both arms
+// before this was written: every generated domain nodes Ok with its vertex
+// count and its chain structure unchanged, so every count below is still the
+// count the generator declared.
 
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/generators/catch_generators.hpp>
@@ -34,6 +45,7 @@
 #include <terrain/cdt/result.hpp>
 #include <terrain/cdt/triangulate.hpp>
 #include <terrain/core/indexed_mesh.hpp>
+#include <terrain/core/noded_pslg.hpp>
 #include <terrain/core/point.hpp>
 #include <terrain/core/pslg.hpp>
 #include <terrain/core/ring.hpp>
@@ -55,9 +67,9 @@ using terrain::Chain;
 using terrain::ChainRole;
 using terrain::IndexedMesh2;
 using terrain::IndexedRing;
+using terrain::NodedPslg;
 using terrain::Point2;
 using terrain::PointInRing;
-using terrain::Pslg;
 using terrain::Segment2;
 using terrain::TriangleIndices;
 using terrain::cdt::CdtOptions;
@@ -75,10 +87,10 @@ using terrain::test::EdgeUse;
 using terrain::test::GeneratedDomain;
 using terrain::test::apex;
 using terrain::test::blocks_visibility;
-using terrain::test::build_fixture;
 using terrain::test::edge_uses;
 using terrain::test::euler_triangles;
 using terrain::test::generated_domain;
+using terrain::test::node_fixture;
 using terrain::test::undirected_key;
 
 namespace {
@@ -95,7 +107,7 @@ constexpr int seed_count = 24;
 // bug here: the layout guarantees disjoint features, which is precisely the
 // precondition a mesh existing at all depends on before increment 5.
 struct Case {
-    Pslg pslg;
+    NodedPslg pslg;
     DomainShape shape;
     CdtOutcome outcome;
 };
@@ -103,7 +115,7 @@ struct Case {
 [[nodiscard]] Case generated(int seed, const CdtOptions& options = {}) {
     std::mt19937_64 rng = seeded(seed);
     GeneratedDomain domain = generated_domain(rng);
-    Pslg pslg = build_fixture<DefaultKernel>(std::move(domain.builder));
+    NodedPslg pslg = node_fixture<DefaultKernel>(std::move(domain.builder));
     CdtOutcome outcome = terrain::cdt::triangulate<DetriaBackend>(pslg, options);
     INFO("status " << static_cast<int>(outcome.status) << ": " << outcome.message);
     REQUIRE(outcome.ok());
@@ -114,7 +126,7 @@ struct Case {
 // ConstraintEdgeSet: the mask property must not be checked against the same
 // code that computes the mask, or it asserts only that a function equals
 // itself.
-[[nodiscard]] std::set<std::uint64_t> input_edges(const Pslg& p) {
+[[nodiscard]] std::set<std::uint64_t> input_edges(const NodedPslg& p) {
     std::set<std::uint64_t> out;
     for (std::size_t c = 0; c < p.chains().size(); ++c) {
         const std::span<const std::uint32_t> idx = p.indices_of(c);
@@ -382,7 +394,11 @@ TEST_CASE("no triangle lies in a hole or outside the domain", "[cdt][property][d
 // pslg.vertices(), element-wise, in order. DetriaBackend appends nothing, so
 // for it the arrays are equal -- the seam permits a future backend that inserts
 // Steiner points to append them, which is why the concept says "begins with".
-TEST_CASE("the mesh vertex array is the input's", "[cdt][property][identity]") {
+// As of 5c the input side of this identity is the NODED graph, and that is not
+// a rename: the two index spaces genuinely differ, because node ids are the
+// sorted node set's order. Every downstream consumer -- the mask join, cli.py's
+// scene -- reads the mesh against the graph that was handed to the backend.
+TEST_CASE("the mesh vertex array is the noded input's", "[cdt][property][identity]") {
     const int seed = GENERATE(range(0, seed_count));
     const Case c = generated(seed);
 
@@ -422,7 +438,12 @@ TEST_CASE("a corrupted domain fails and returns no mesh", "[cdt][property][ident
     domain.builder.add_chain(terrain::test::points(terrain::test::cw_rect(1000.0, 1000.0,
                                                                          1010.0, 1010.0)),
                              ChainRole::Hole);
-    const Pslg pslg = build_fixture<DefaultKernel>(std::move(domain.builder));
+    // The corruption is a hole outside every outline, which the NODER accepts --
+    // NodedPslgBuilder is not the Pslg validator and computes no nesting
+    // (noded_pslg_builder.hpp:45-49). That is what keeps InvalidTopology
+    // reachable after the signature change, and it is the only reason this
+    // property did not go with the deleted backend cases.
+    const NodedPslg pslg = node_fixture<DefaultKernel>(std::move(domain.builder));
 
     const CdtOutcome out = terrain::cdt::triangulate<DetriaBackend>(pslg);
 

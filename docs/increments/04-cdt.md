@@ -620,6 +620,28 @@ sceptical reader re-runs.
 | Single-chain PSLG (one `Outer` triangle) | accepted, 1 interior triangle | `Ok` | The minimal valid input. A fixture. |
 | Sliver outer ring (`{0,0},{4,0},{4,1e-13}`) | accepted, 1 triangle | `Ok` | No area threshold anywhere. "No near-zero-area triangle" is not an invariant this project can state — see `testing.md` fixes. |
 
+**What increment 5c made unreachable, appended rather than folded in.** The
+table above stays exactly as it is, because it is the record of what was true at
+increment 4 and several of its rows were *measured* against detria. As of 5c,
+`triangulate` takes a `NodedPslg`, and the noder's guarantees remove four of
+those rows from the reachable set:
+
+- `PointOnConstrainedEdge` and `ConstrainedEdgeIntersection` — guarantee 14
+  makes both unreachable, so `CdtStatus::NotNoded` joins `MalformedInput` as a
+  self-check. `describe(CdtStatus::NotNoded)` keeps naming the noder as the fix,
+  because at that point it is naming the thing that should have been called.
+- `DuplicatePointsFound` — guarantee 12 plus `world` injectivity;
+  `PolylineDuplicateConsecutivePoints` — guarantee 13. `DegenerateGeometry`
+  therefore loses both its reachable rows, `AllPointsAreCollinear` having been
+  unreachable already.
+
+**Reachable from a `NodedPslg`: `Ok`, `InvalidTopology`, `BackendFailure`.** No
+enumerator is deleted. The remaining statuses stay testable without running the
+noder, because `NodedPslgBuilder` is public and is not the `Pslg` validator: a
+suite can hand-build a candidate with a hole outside its outline, get `Ok` from
+the builder, and reach `InvalidTopology` through the backend. See
+`docs/increments/05c-noder-wiring.md`, "What becomes unreachable in `CdtStatus`".
+
 **One `Pslg` guarantee we lean on and should name.** Stage 4 rejects a stored
 closure, so `idx[begin] != idx[begin + count - 1]` as points. Combined with
 auto-closing, that means the edge detria synthesises to close a ring can never be
@@ -678,6 +700,35 @@ and 5 the wrapper is *correct* on all input and *useful* only on input that
 happens not to cross. Its fixtures are hand-made non-crossing sets. When
 increment 5 lands, `NotNoded` becomes unreachable by type and joins
 `MalformedInput` as a self-check.
+
+**Corrected at increment 5c: "mechanically" is wrong, and the correction is
+appended rather than struck out.** The ruling above stays as the record of what
+increment 4 decided. It is also the last copy of the claim still standing:
+`05-noder.md` prices the whole change at ~10 lines in one row of its "Files and
+LOC" table and then refutes that row in the paragraph beneath it,
+`05b-noder-driver.md`'s risk 13 names this sentence as one of three booking it
+as mechanical, and `03-pslg.md` retracted its own version before 5c ran. What
+5c measured:
+
+- **The retyping itself is mechanical — and it is not the three files 5b
+  listed.** `git grep -n "const Pslg&" 93fc772 -- include/terrain/cdt/` returns
+  four lines across three headers, and `include/terrain/cdt/constrained_edges.hpp`
+  is one of them: `ConstraintEdgeSet`'s constructor had to become a template over
+  a `ChainedGraph` concept, which is a design decision rather than a retype, and
+  the branch does not compile without it. Five C++ files, estimated 18
+  non-comment lines and measured **8**.
+- **What the retyping drags is not mechanical at all.** The Python binding calls
+  the entry point, so retyping it breaks that translation unit and the only
+  repair is to bind a producer of `NodedPslg`: `bindings/core.cpp`,
+  `_core.pyi`, `cli.py`, the Python suites and the renderer's scene join.
+  Measured at **+304** on top of that 8, for a net **+312** against 5c's own
+  ~256 estimate.
+
+So the first half of the ruling holds — reserving the name rather than stubbing
+it was right, for the reason given — and the second half cost a PR of its own.
+`docs/increments/05c-noder-wiring.md` is that PR, and "The C++ signature change,
+and the file 5b's list does not contain" is the section that found the fifth
+file.
 
 ## Files and LOC
 
