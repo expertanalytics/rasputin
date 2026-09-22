@@ -1509,9 +1509,16 @@ class TestGallery:
         assert chains_with(gallery()[name], "outer"), f"{name} has no outer chain"
 
     def test_the_catchment_is_the_shape_the_project_is_for(self) -> None:
+        # Neither noun the messages used to carry survives increment 8. A hole
+        # is not a lake -- ruling 1 makes a lake MESHED terrain at water height,
+        # so `bridge-over-lake` is where a lake lives and a hole cannot be one.
+        # And the breakline is a single open three-point polyline, not a braid:
+        # read `CATCHMENT`'s chain list in `fixtures.py`.
         fixture = gallery()["catchment"]
-        assert len(chains_with(fixture, "hole")) == 2, "two lake holes"
-        assert chains_with(fixture, "breakline"), "a braided breakline"
+        assert len(chains_with(fixture, "hole")) == 2, "two interior holes"
+        breaklines = chains_with(fixture, "breakline")
+        assert len(breaklines) == 1, "one interior breakline"
+        assert len(chain_points(fixture, breaklines[0])) == 3
 
     @pytest.mark.parametrize("name", ["catchment", "hole-in-hole"])
     def test_each_hole_sits_strictly_inside_an_outer_ring(self, name: str) -> None:
