@@ -5,13 +5,11 @@ The rules this project works by.
 Each entry is a rule, how to apply it, a pointer to where its incident is
 recorded, and a status. The incident itself is not here.
 
-Three kinds of document, three homes:
+**When you learn something, write it in the log** — `docs/retrospectives/`.
+Only a retrospective promotes a log entry to a principle here. The file you
+happen to have open is not the log, and neither is this one.
 
-| Kind | Home | Read when |
-|---|---|---|
-| Principles | this file | before acting |
-| Logs | `docs/retrospectives/` | when tracing why a rule exists |
-| Designs | `docs/increments/NN-*.md` | when working that increment |
+Designs live in `docs/increments/NN-*.md` and hold no findings.
 
 **Origin** is a reference, not an account. Commits and files, no retelling.
 
@@ -25,7 +23,8 @@ retirement at the next retrospective.
 
 ### A1 — Run the command before writing the claim
 
-**Rule.** Naming a check is not performing one. Run it, then write it down.
+**Rule.** Run the check, then write the claim. Naming a check is not
+performing one, and neither is being confident about it.
 **Apply.** Any sentence of the form "X does Y" about a script, a suite, a gate
 or a file.
 **Origin.** `debd8d1`, corrected by `0fa05e3`.
@@ -33,16 +32,16 @@ or a file.
 
 ### A2 — Derive the probe set from the code as fixed, not the bug as found
 
-**Rule.** A fix that widens what the code accepts widens what can break it.
-Re-running the old probes tests the old code.
+**Rule.** Choose the probes from what the code accepts **now**, not from what
+broke. Re-running the old probes tests the old code.
 **Apply.** After any change to an input domain.
 **Origin.** `fdbd532`.
 **Status.** In force. Last exercised: 5b.
 
 ### A3 — Make the probe able to fail
 
-**Rule.** If a pass looks the same as a probe that never ran, it measured
-nothing.
+**Rule.** Before trusting a pass, check the probe could have failed. A pass
+that looks the same as a probe that never ran measured nothing.
 **Apply.** Prefer a probe whose pass and its own absence look different. Time a
 hang from outside the process.
 **Origin.** `b0bf129`. Recurrence: 5b's ring search, `05b-noder-driver.md`,
@@ -58,12 +57,13 @@ hang from outside the process.
 
 ### A5 — Four stale artifacts can make a run meaningless
 
-**Rule.** `pytest` does not rebuild the extension; `cmake --build` can skip a
-`cp` restore; **`ctest` reports the previous binary after a failed build**;
-Python imports a stale `.pyc` when mtime and size are unchanged.
-**Apply.** Rebuild and reinstall before any `pytest` measuring C++. `touch`
-after any `cp` restore. **Read `cmake --build`'s exit status before `ctest`'s
-summary.**
+**Rule.** Rebuild and reinstall before any `pytest` that measures C++.
+`touch` after any `cp` restore. Read `cmake --build`'s exit status before you
+read `ctest`'s summary. A clean-looking run proves nothing until you have.
+**Apply.** Four artifacts go stale silently: `pytest` does not rebuild the
+extension, `cmake --build` can skip a `cp` restore, `ctest` reports the previous
+binary after a failed build, and Python imports a stale `.pyc` when mtime and
+size are unchanged.
 **Origin.** `.claude/REQUIRED-READING.md`, which carries the reproduction of
 each.
 **Status.** In force. Last exercised: 5c.
