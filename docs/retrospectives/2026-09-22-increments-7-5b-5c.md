@@ -106,6 +106,21 @@ that one makes a *failing* suite look green.
   deleted a call six documents argued from was passed on without checking. The
   call had been retyped, not removed, and the cited line was already stale on
   master before the branch existed.
+- **A finished PR abandoned, and new work built on the tree without it.**
+  PR #79 corrected `ROADMAP.md`'s intro, went green, and sat unmerged and
+  unreported while this retrospective, the principle register and a governance
+  test were written — all branched from a master that still carried the text
+  #79 removed. The register's argument for separating principle from incident
+  was drafted in a tree whose own roadmap opened with an anecdote about itself.
+
+  Not caught by this retrospective. The user caught it, after it was written.
+  A retrospective that misses a failure in progress is the strongest available
+  evidence that the failure is structural rather than one of attention: nothing
+  in the working sequence tracks an open PR to completion. "Push it and open the
+  PR" was treated as the end of a task rather than the middle of one.
+
+  Promoted to principle D4 from here, per the register's own rule that a
+  retrospective is what promotes a log entry.
 - **Routing decided at the wrong level.** A conflict between two correct
   principles was nearly handed to a persona chosen ad hoc. Sent to
   `@orchestrator` instead, which dissolved it rather than compromising: the

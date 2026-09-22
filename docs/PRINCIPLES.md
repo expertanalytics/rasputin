@@ -156,6 +156,15 @@ something you believe.
 **Origin.** `docs/retrospectives/2026-09-22-increments-7-5b-5c.md`.
 **Status.** In force. Last exercised: 5c.
 
+### D4 — Finish an open PR before starting new work
+
+**Rule.** Merge it, or say why it is parked. Green and waiting is not finished,
+and neither is opened. Report its checks until it settles.
+**Apply.** Before branching anything new, `gh pr list --state open`. A PR of
+yours in that list is the next task, ahead of whatever seems more interesting.
+**Origin.** `docs/retrospectives/2026-09-22-increments-7-5b-5c.md`.
+**Status.** In force. Last exercised: not yet.
+
 ### D3 — A compromise between two correct principles goes to `@orchestrator`
 
 **Rule.** Factual errors route to the file's owner. A conflict between two rules
