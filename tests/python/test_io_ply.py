@@ -50,9 +50,14 @@ from plyread import element_bytes, parse_header, read_ply, vertex_array
 #: `TestDoublePrecision` proves the probe can fail before trusting it (A3).
 EASTING = 430_000.001
 
+#: A z the caller supplied and nothing snapped. The grid rounds x and y; ruling
+#: 4 says z is the caller's, so it is the coordinate with no lattice behind it
+#: and the one a fixed-decimal ASCII format loses first.
+ELEVATION = 12.345_678_901_2
+
 VERTICES = np.array(
     [
-        [EASTING, 6_900_000.5, 12.25],
+        [EASTING, 6_900_000.5, ELEVATION],
         [430_010.0, 6_900_000.5, 13.5],
         [430_010.0, 6_900_010.0, 14.0],
         [EASTING, 6_900_010.0, 11.0],
