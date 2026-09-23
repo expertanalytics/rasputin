@@ -1,4 +1,4 @@
-"""`tin_engine.io.ply.write_ply`: increment 10's byte writer, committed RED.
+"""`tin_engine.io.ply.write_ply`: increment 10's byte writer.
 
 `10-mesh-output.md` names the **binary body** as this increment's
 invariant-critical suite, so this file carries the mutation round. The defect
@@ -12,9 +12,10 @@ blob. It never asks the writer where anything is. That is deliberate and it is
 the difference between a test and a restatement of the implementation
 (`PRINCIPLES.md` B1).
 
-The intended failure at this commit is `ModuleNotFoundError: tin_engine.io`.
-The package does not exist; `write_ply` is imported at module scope so that the
-absence is one collection error rather than eleven confusing ones.
+Committed red at `1d4ec8b`, when the intended failure was
+`ModuleNotFoundError: tin_engine.io` -- the package did not exist, and
+`write_ply` is imported at module scope so the absence was one collection error
+rather than eleven confusing ones. Green since `299fe9a`.
 
 TWO THINGS THIS SUITE DELIBERATELY DOES NOT ASSERT.
 
@@ -288,6 +289,42 @@ class TestTheTwoFilesRegister:
         # Guards the assertion above from passing on two empty slices, which is
         # what it would do if `element_bytes` ever stopped finding the block.
         assert element_bytes(surface, "vertex")
+
+
+class TestTheGuardsThatHadNeverRun:
+    """The two guards beyond what the rest of this suite asks for.
+
+    `PRINCIPLES.md` A4: neither may be credited with covering anything until it
+    has run against a broken input. Both were the only uncovered production
+    lines in the tree until these tests existed.
+
+    The control-character case is the one that matters. The guard originally
+    tested `"\n" in comment` while its own comment said a newline "would forge
+    a header line" -- naming one line terminator where the object at risk is
+    any of them. Measured before it was widened: a `\r` in `--crs` put a second
+    `comment` line into the header and exited 0.
+    """
+
+    @pytest.mark.parametrize("bad", ["\r", "\n", "\x00", "\x7f"])
+    def test_a_control_character_in_a_comment_is_refused(self, bad: str) -> None:
+        with pytest.raises(ValueError, match="control character"):
+            write_ply(VERTICES, faces=FACES, comments=[f"crs x{bad}forged"])
+
+    def test_a_non_ascii_comment_is_refused_by_name(self) -> None:
+        # A degree sign in a projection string is ordinary. This used to escape
+        # as UnicodeEncodeError, which the Raises contract does not promise.
+        with pytest.raises(ValueError, match="ASCII"):
+            write_ply(VERTICES, faces=FACES, comments=["crs ETRS89 \N{DEGREE SIGN}N"])
+
+    def test_edge_properties_must_have_one_entry_per_edge(self) -> None:
+        # Without this the short array broadcasts into the structured array and
+        # produces a valid file carrying wrong masks -- the silent kind.
+        with pytest.raises(ValueError):
+            write_ply(
+                VERTICES,
+                edges=EDGES,
+                edge_properties=np.zeros(len(EDGES) - 1, dtype=np.uint32),
+            )
 
 
 class TestPurity:

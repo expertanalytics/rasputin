@@ -1,7 +1,7 @@
-"""`rasputin mesh`: increment 10's command, committed RED.
+"""`rasputin mesh`: increment 10's command.
 
-`tin_engine.cli` already exists, so the intended failure here is Click's
-`No such command 'mesh'` -- exit code 2, no file written. Every test that
+Committed red at `1d4ec8b`; `tin_engine.cli` already existed, so the intended
+failure was Click's `No such command 'mesh'` -- exit code 2, no file written. Every test that
 asserts a refusal also asserts what the refusal *says*, because an assertion of
 the form `exit_code != 0` alone would pass against the missing command and
 measure nothing (the same trap `test_cli_draw.py` documents).
