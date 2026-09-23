@@ -514,6 +514,16 @@ def mesh(
     comments = [f"crs {crs}"] if crs else []
     comments.append(FLAT_COMMENT)
 
+    # --crs is unvalidated free text by ruling 5, so the writer's refusals are
+    # refusals a person meets by typing, not internal invariants. A degree sign
+    # in a projection string is ordinary and used to exit 1 with a 23-line
+    # traceback. Turn the writer's ValueError into the usage error it is, in
+    # the one place that knows the text came from the command line.
+    try:
+        write_ply(np.zeros((1, 3)), faces=np.zeros((0, 3)), comments=comments)
+    except ValueError as exc:
+        raise typer.BadParameter(str(exc), param_hint="--crs") from exc
+
     surface = _destination(out, out_parent, name)
     surface.write_bytes(
         write_ply(

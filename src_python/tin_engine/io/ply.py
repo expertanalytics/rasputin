@@ -71,8 +71,10 @@ def write_ply(
     Raises:
         ValueError: if `vertices` is not `(N, 3)`; if `faces` and `edges` are
             both given or neither is (ruling 3); if `edge_properties` is given
-            without `edges`, or does not have one entry per edge; or if a
-            comment contains a newline, which would forge a header line.
+            without `edges`, or does not have one entry per edge; if a comment
+            contains a control character, any of which forges a header line in
+            a line-oriented format; or if a comment is not ASCII, which the
+            header's encoding cannot carry.
     """
     points = np.ascontiguousarray(vertices, dtype="<f8")
     if points.ndim != 2 or points.shape[1] != 3:
@@ -82,8 +84,28 @@ def write_ply(
         raise ValueError(f"exactly one of faces and edges must be given; got {which}")
     if edge_properties is not None and edges is None:
         raise ValueError("edge_properties needs edges; it has no meaning beside faces")
-    if any("\n" in comment for comment in comments):
-        raise ValueError("a comment may not contain a newline")
+    for comment in comments:
+        # Any control character, not just \n. A PLY header is line-oriented and
+        # \r terminates a line for every CRLF-tolerant reader, which is most of
+        # them -- so an unguarded \r forges a header line exactly as \n would.
+        # Measured before this guard was widened: `--crs "x\rcomment forged"`
+        # wrote that second line into the header and exited 0.
+        bad = next((ch for ch in comment if ch < " " or ch == "\x7f"), None)
+        if bad is not None:
+            raise ValueError(
+                f"a comment may not contain control characters; got {bad!r}"
+            )
+        # ASCII is the header's encoding, so a non-ASCII comment cannot be
+        # written. --crs is unvalidated free text by ruling 5 and a degree sign
+        # in a projection string is ordinary, so this is a refusal a caller
+        # meets, not an internal invariant: it must be the documented
+        # ValueError and not a UnicodeEncodeError escaping from the encode
+        # below.
+        if not comment.isascii():
+            bad = next(ch for ch in comment if not ch.isascii())
+            raise ValueError(
+                f"a comment must be ASCII; got {bad!r} in {comment!r}"
+            )
 
     blocks = [(_vertex_declaration(len(points)), _vertex_body(points, ascii))]
     if faces is not None:
