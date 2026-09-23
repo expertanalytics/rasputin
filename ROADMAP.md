@@ -30,7 +30,7 @@ increment that most needs a picture to check against
 | 7 | Edge property sets, replacing the one-bit `is_river` | shipped (`2e7577c`, #75) | `docs/increments/07-edge-properties.md` |
 | 8 | The crossing gallery: roads into forests, bridges over lakes, structures leaving a catchment | shipped (`6d68d9b`, #81) | `docs/increments/08-crossing-gallery.md` |
 | 9 | Gallery output: `rasputin gallery` renders all eleven fixtures into a directory the caller names | designed | `docs/increments/09-gallery-output.md` |
-| 10 | Mesh output: a PLY writer, binary `double` by default, constraint edges in a second file | designed | `docs/increments/10-mesh-output.md` |
+| 10 | Mesh output: a PLY writer, binary `double` by default, constraint edges in a second file | shipped (#86) | `docs/increments/10-mesh-output.md` |
 | — | `raster/`: grid-to-world geometry and bilinear sampling | shipped (`7785fea`), **no record** | none — predates the protocol |
 
 ## What stands between here and an operational MVP
@@ -48,9 +48,12 @@ yet, so each starts at `docs/increments/README.md` step 1.
    `parallel_refinement.md`. The legacy `-ratio 0.4` was this knob.
 3. **Elevation assembly.** `IndexedMesh2` is 2D by design and z comes from
    sampling the raster per vertex. Both halves exist; nothing joins them.
-4. **Mesh output.** There is no writer of any kind. Designed as increment 10.
-5. **A CLI that does the job.** `rasputin` has `version` and `draw`; `draw`
-   renders built-in fixtures only. No path from a file on disk to a mesh on disk.
+4. **Mesh output.** Shipped as increment 10: `rasputin mesh` writes PLY, binary
+   `double` by default, with the constraint edges and their feature masks in a
+   second file. What remains is real z, which is gap 3.
+5. **A CLI that does the job.** `rasputin` has `version`, `draw` and `mesh`,
+   and all three take a built-in fixture. There is still no path from a file on
+   disk to a mesh on disk: that needs gap 1.
 
 Open and not MVP-blocking: clipping to the catchment polygon
 (`auto_catchments.md`, and `legacy/rasputin/geometry.py`'s Shapely intersection

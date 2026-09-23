@@ -567,7 +567,7 @@ gallery red.** That paragraph carries the correction now rather than the claim,
 so `git show 93fc772:docs/increments/05b-noder-driver.md | grep -n 'one-line
 change'` is what shows the sentence this section answers.
 
-`cli.py`'s `_triangulated` today passes the **fixture** as the `PslgLike`, together with
+`cli.py`'s `draw` today passes the **fixture** as the `PslgLike`, together with
 `CLOSED_ROLES = ("outer", "hole")` — *strings*, because a fixture's roles are
 strings. `viz/scene.py:167` closes a ring with
 

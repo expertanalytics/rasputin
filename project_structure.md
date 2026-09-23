@@ -80,7 +80,7 @@ src_python/tin_engine/     # public Python API (distribution name: rasputin)
                            #   precedence, which is structure, not taste, and
                            #   carries positions rather than feature names
     svg.py                 # (Scene, SvgStyle) -> str; the stylesheet lives here
-    fixtures.py            # the eight-fixture synthetic gallery, declarative
+    fixtures.py            # the synthetic gallery, declarative; `rasputin draw
   io/                      # all file decoding AND encoding lives here
     __init__.py
     ply.py                 # arrays -> PLY bytes; takes no path and opens nothing
