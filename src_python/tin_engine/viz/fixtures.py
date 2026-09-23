@@ -1,4 +1,4 @@
-"""The synthetic gallery: eight shapes, each answering one question.
+"""The synthetic gallery: eleven shapes, each answering one question.
 
 Declarative data. Nothing here is generated, because a fixture whose
 coordinates are computed is a fixture nobody can check by reading -- every
@@ -18,18 +18,22 @@ onto the enum before calling ``build_pslg``. Keeping the fixture itself a
 
 Ring winding is the validator's, not a preference: an ``outer`` ring must be
 counter-clockwise and a ``hole`` clockwise, and neither stores its closing
-index. **Two** of the eight are deliberate failures, and they fail at two different
+index -- a **closed breakline** is exempt from both checks, and is how
+``road-enters-forest`` and ``bridge-over-lake`` carry an area feature.
+**Two** of the eleven are deliberate failures, and they fail at two different
 depths: ``degenerate`` never reaches the triangulator at all, because the PSLG
 validator refuses it (``PslgError.DegenerateRing``), while ``hole-in-hole`` is a
 backend refusal of a valid PSLG (``InvalidTopology``). Both are here because a
 failure presentation nobody has looked at is a failure presentation that is
 wrong.
 
-``not-noded`` was a third until increment 5c and is now the showcase: the noder
-resolves its crossing, so it draws a mesh. It keeps its name, because the name
-describes the INPUT, which is still not noded -- its value is being a regression
-fixture with two states, and the picture changing between two commits under one
-name is the thing worth having.
+``road-crosses-river`` was a third until increment 5c and is now the showcase:
+the noder resolves its crossing, so it draws a mesh. Its value is being a
+regression fixture with two states, and the picture changing between two commits
+is the thing worth having. It was called ``not-noded`` until increment 8, a name
+that encoded a resolved state of the tree -- false before 5b, true after -- so
+it had already expired once; the new name states the geometry, which no commit
+can change.
 """
 
 from __future__ import annotations
@@ -68,7 +72,7 @@ class Fixture:
 
     ``description`` is what ``draw --list`` prints. A fixture without one is a
     fixture whose reason for existing has been lost, which is how a gallery
-    becomes a list of eight opaque nouns.
+    becomes a list of opaque nouns.
     """
 
     name: str
@@ -117,16 +121,17 @@ _BOX_700_500 = [[0.0, 0.0], [700.0, 0.0], [700.0, 500.0], [0.0, 500.0]]
 
 CATCHMENT = _fixture(
     "catchment",
-    "an outer ring with two lake holes and an interior breakline -- the shape the project is for",
+    "an outer ring with two interior holes and an interior breakline"
+    " -- the shape the project is for",
     [
         # The outline, counter-clockwise from the south-west.
         [0.0, 0.0], [300.0, 40.0], [620.0, 0.0], [900.0, 180.0], [960.0, 520.0],
         [740.0, 760.0], [420.0, 900.0], [120.0, 760.0], [20.0, 480.0], [60.0, 220.0],
-        # Lake one, clockwise.
+        # The first interior hole, clockwise.
         [200.0, 380.0], [300.0, 340.0], [260.0, 250.0], [160.0, 280.0],
-        # Lake two, clockwise.
+        # The second interior hole, clockwise.
         [640.0, 640.0], [760.0, 600.0], [720.0, 500.0], [600.0, 520.0],
-        # A breakline through the northern half, clear of both lakes.
+        # A breakline through the northern half, clear of both holes.
         [120.0, 560.0], [340.0, 620.0], [520.0, 760.0],
     ],
     [
@@ -201,8 +206,8 @@ RIVER = _fixture(
     [(range(4), "outer", 0), ([4, 5, 6], "breakline", 1)],
 )
 
-NOT_NODED = _fixture(
-    "not-noded",
+ROAD_CROSSES_RIVER = _fixture(
+    "road-crosses-river",
     "a road crossing a river: two constraints meeting at a point neither names, noded",
     [
         [0.0, 0.0], [700.0, 0.0], [700.0, 700.0], [0.0, 700.0],
@@ -216,8 +221,79 @@ NOT_NODED = _fixture(
         # rather than a grey crossing.
         ([4, 5], "breakline", 2),
         # Crosses the chain above at (350, 350), a point neither chain names:
-        # that is what "not noded" means, and the noder (5b) is what fixes it.
+        # the input is not noded, and the noder (5b) is what resolves it.
         ([6, 7], "breakline", 1),
+    ],
+)
+
+#: The two area fixtures' rings are CLOSED BREAKLINES: role `breakline`, with the
+#: first index repeated as the last. An area feature is not a hole -- the terrain
+#: inside a forest or a lake is meshed, and excluding it would leave a void in
+#: the height field -- and `pslg_builder.hpp` exempts breaklines from both the
+#: stored-closure check and the winding check (`grep -n 'StoredClosure\|is_closed'
+#: include/terrain/core/pslg_builder.hpp`), so storing the closure is legal here.
+#: The closure repeats the INDEX and never the coordinate: reusing an index is
+#: exact, while two coincident vertices would lean on the noder's snap grid to
+#: merge them, which is a correctness argument where none is needed.
+ROAD_ENTERS_FOREST = _fixture(
+    "road-enters-forest",
+    "a road crossing an area feature's boundary and stopping inside it -- one crossing, noded",
+    [
+        *_BOX_700_500,
+        # The forest ring, closed at index 4.
+        [200.0, 150.0], [500.0, 150.0], [500.0, 350.0], [200.0, 350.0],
+        # The road: it crosses the ring's western edge at (200, 250) and ends
+        # at (350, 250), inside it. The interior endpoint is what makes this
+        # ENTERING rather than passing through, which is `bridge-over-lake`.
+        [60.0, 250.0], [350.0, 250.0],
+    ],
+    [
+        (range(4), "outer", 0),
+        # Mask 0: `DEFAULT_VOCABULARY` has no forest bit, and a fixture that
+        # invented a number would assert something the vocabulary does not say.
+        ([4, 5, 6, 7, 4], "breakline", 0),
+        # Bit 1, the bare number a vocabulary would give for "road".
+        ([8, 9], "breakline", 2),
+    ],
+)
+
+WALL_LEAVES_DOMAIN = _fixture(
+    "wall-leaves-domain",
+    "a structure leaving the catchment: a wall crossing the outer ring. The exterior half is"
+    " drawn as a finding, because the mesh correctly does not contain it",
+    [*_BOX_700_500, [350.0, 250.0], [900.0, 250.0]],
+    [
+        (range(4), "outer", 0),
+        # Bit 5, the bare number a vocabulary would give for "wall". One
+        # segment, crossing the outer ring at (700, 250), with one endpoint
+        # outside the domain -- a four-point box rather than the catchment's
+        # outline, because a crossing of an eleventh outline edge is not
+        # checkable by reading.
+        ([4, 5], "breakline", 32),
+    ],
+)
+
+BRIDGE_OVER_LAKE = _fixture(
+    "bridge-over-lake",
+    "a bridge over a lake: the terrain under it is the water surface, so the deck nodes into"
+    " the shoreline and the lake is meshed",
+    [
+        *_BOX_700_500,
+        # The shoreline, closed at index 4.
+        [250.0, 150.0], [450.0, 150.0], [450.0, 350.0], [250.0, 350.0],
+        # The deck, spanning the ring: crossings at (250, 250) and (450, 250).
+        [120.0, 250.0], [580.0, 250.0],
+    ],
+    [
+        (range(4), "outer", 0),
+        # Bit 3, the bare number a vocabulary would give for "coastline" -- the
+        # one area class `DEFAULT_VOCABULARY` has, and what makes this ring read
+        # as water rather than as a generic area.
+        ([4, 5, 6, 7, 4], "breakline", 8),
+        # Bit 1, "road": a bridge is a road, and there is no bridge bit because
+        # the engine does not need to know. A bridge is not grade-separated
+        # here; the deck nodes into the shoreline like any other crossing.
+        ([8, 9], "breakline", 2),
     ],
 )
 
@@ -239,7 +315,10 @@ GALLERY: Mapping[str, Fixture] = {
         HOLE_IN_HOLE,
         BREAKLINE_CHAIN,
         RIVER,
-        NOT_NODED,
+        ROAD_CROSSES_RIVER,
+        ROAD_ENTERS_FOREST,
+        WALL_LEAVES_DOMAIN,
+        BRIDGE_OVER_LAKE,
         DEGENERATE,
     )
 }

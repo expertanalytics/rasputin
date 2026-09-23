@@ -135,7 +135,7 @@ def square() -> np.ndarray:
 def crossing_pslg(square: np.ndarray) -> Any:
     """The increment's sentence, as a PSLG: a road crossing a river.
 
-    The same geometry as the `not-noded` gallery fixture and as
+    The same geometry as the `road-crosses-river` gallery fixture and as
     `test_noding_node.cpp:162-165`, at the same UTM magnitudes. The two
     breaklines meet at (350, 350) + ORIGIN, a point neither chain names, which
     is what "not noded" means -- and after `node()` it is a vertex of both.

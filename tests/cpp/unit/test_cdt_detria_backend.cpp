@@ -354,7 +354,7 @@ TEST_CASE("a closed-loop breakline does not carve a hole", "[cdt][backend][degen
 //   two crossing breaklines -> guarantee 14(a). Measured: nine nodes, three
 //             chains, status Ok. That input's new answer is asserted in
 //             tests/python/test_core_noding.py end to end, and drawn by
-//             `rasputin draw not-noded`.
+//             `rasputin draw road-crosses-river`.
 //
 // DegenerateGeometry and NotNoded therefore lose every reachable row and join
 // MalformedInput as self-checks. No enumerator is deleted, describe() still

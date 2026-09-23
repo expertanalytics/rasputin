@@ -101,7 +101,13 @@ CORE_CLOSED_ROLES: tuple[object, ...] = (ChainRole.Outer, ChainRole.Hole)
 #: draws identically to the row above it, so declaring all seven features would
 #: put six legend rows on every picture that a reader cannot tell apart --
 #: measured by drawing the gallery. It grows when the stylesheet does.
-_PRECEDENCE = ("river", "road")
+#: Grown once, at increment 8: `bridge-over-lake`'s shoreline is an area feature
+#: the vocabulary can name, and without an entry here its token is never emitted
+#: -- the shoreline would draw as a plain breakline and the bridge picture would
+#: lose the thing it exists to show. `coastline` sits between the two tokens
+#: above, water still over infrastructure, and `svg.py` gained its CSS rule in
+#: the same commit: an entry with no rule draws identically to the row above it.
+_PRECEDENCE = ("river", "coastline", "road")
 
 _BIT_OF = {prop.name: prop.bit for prop in DEFAULT_VOCABULARY.properties}
 

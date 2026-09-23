@@ -45,8 +45,11 @@ Path handling is tested as a hostile boundary, per the python skill: traversal
 out of an explicitly provided parent, and a symlink that resolves back inside it.
 
 AMENDED AT INCREMENT 5c, which is the increment this file exists to observe:
-`rasputin draw not-noded` stops drawing zero triangles and starts drawing a
-noded crossing. Step 3 is the part that a status assertion cannot see. A
+the crossing fixture stops drawing zero triangles and starts drawing a noded
+crossing. RENAMED AT INCREMENT 8: it is `road-crosses-river`, not `not-noded`.
+The old name encoded a resolved state of the tree -- false before 5b, true
+after -- so it had already expired once; the new one names the geometry, which
+no commit can change. Step 3 is the part that a status assertion cannot see. A
 `NodedPslg`'s roles are `ChainRole` values and `CLOSED_ROLES` was a tuple of
 STRINGS; `ChainRole.Outer == "outer"` is False, so passing the noded graph
 while leaving the vocabulary alone closes no ring, and every ring's closing
@@ -80,7 +83,10 @@ GALLERY_NAMES = (
     "hole-in-hole",
     "breakline-chain",
     "river",
-    "not-noded",
+    "road-crosses-river",
+    "road-enters-forest",
+    "wall-leaves-domain",
+    "bridge-over-lake",
     "degenerate",
 )
 
@@ -480,7 +486,7 @@ class TestFailurePresentation:
     exit code reports whether a picture was drawn, and a drawn failure is still
     a drawn picture. What the engine refused is in the header band.
 
-    TWO of them as of increment 5c, not three: `not-noded` is now drawn as a
+    TWO of them as of increment 5c, not three: `road-crosses-river` is drawn as a
     mesh and has its own class below. The two that remain fail at two different
     depths -- `degenerate` never reaches `triangulate` at all (the PSLG
     validator rejects it), `hole-in-hole` is a backend refusal
@@ -535,12 +541,13 @@ class TestFailurePresentation:
 
 
 class TestNodedCrossing:
-    """`rasputin draw not-noded`, which is the increment's entire product.
+    """`rasputin draw road-crosses-river`, which is 5c's entire product.
 
-    The fixture keeps its name because the name describes the INPUT, which is
-    still not noded; its value is being a regression fixture with two states,
-    and the picture changing between two commits under one name is the thing
-    worth having.
+    Its value is being a regression fixture with two states, and the picture
+    changing between two commits under one name is the thing worth having --
+    which is precisely why increment 8 renamed it. `not-noded` named the state
+    that changed, so the one name the two pictures shared was a name that had
+    stopped being true of either.
 
     Every assertion here would be satisfied by a wrong picture if it only
     checked the status, which is why none of them only checks the status.
@@ -550,13 +557,13 @@ class TestNodedCrossing:
         # The probe the rest of the class rests on, and the exact inversion of
         # the case this suite carried until 5c: the same fixture, the same
         # helper, the opposite answer.
-        drawable, words = core_verdict("not-noded")
+        drawable, words = core_verdict("road-crosses-river")
         assert drawable is True
         assert words == ["Ok"]
 
     def test_the_picture_is_a_mesh(self, tmp_path: Path) -> None:
-        target = tmp_path / "not-noded.svg"
-        result = invoke("not-noded", "--out", str(target))
+        target = tmp_path / "road-crosses-river.svg"
+        result = invoke("road-crosses-river", "--out", str(target))
         assert result.exit_code == 0, plain(result.output)
         assert elements(written(target), "triangles", "polygon") != []
 
@@ -568,8 +575,8 @@ class TestNodedCrossing:
         # `MASKED_EDGE_WITHOUT_CHAIN` per ring, drawn in the alarm colour over
         # a mesh the engine is perfectly happy with. A test that checked only
         # `CdtStatus.Ok` passes against exactly that picture.
-        target = tmp_path / "not-noded.svg"
-        assert invoke("not-noded", "--out", str(target)).exit_code == 0
+        target = tmp_path / "road-crosses-river.svg"
+        assert invoke("road-crosses-river", "--out", str(target)).exit_code == 0
         document = written(target)
         alarms = [
             line
@@ -585,8 +592,8 @@ class TestNodedCrossing:
         # name both and `svg.py` to have a rule for each -- without the second,
         # a road edge draws identically to the row above it and the legend
         # gains a row a reader cannot tell apart.
-        target = tmp_path / "not-noded.svg"
-        assert invoke("not-noded", "--out", str(target)).exit_code == 0
+        target = tmp_path / "road-crosses-river.svg"
+        assert invoke("road-crosses-river", "--out", str(target)).exit_code == 0
         tokens = {
             token
             for line in elements(written(target), "edges", "line")
@@ -599,12 +606,200 @@ class TestNodedCrossing:
         # src_python/tin_engine/cli.py`), named by FEATURE rather than
         # derived from the vocabulary's numbering: an edge carrying both bits
         # is drawn with exactly one token, and it is the river's.
-        assert [stroke.token for stroke in cli.PROPERTY_STROKES] == ["river", "road"]
+        assert [stroke.token for stroke in cli.PROPERTY_STROKES] == [
+            "river",
+            "coastline",
+            "road",
+        ]
+
+    def test_the_new_entry_does_not_reorder_the_pair_it_sits_between(self) -> None:
+        # Increment 8 adds `coastline` to `_PRECEDENCE`. It sits BETWEEN the two
+        # tokens the rule above was written for -- water over infrastructure --
+        # and the equality is a list literal, so a reordering that happened to
+        # keep all three tokens present would be caught by it but the REASON
+        # would be lost. This states the rule the literal encodes.
+        tokens = [stroke.token for stroke in cli.PROPERTY_STROKES]
+        assert tokens.index("river") < tokens.index("road")
+        assert tokens.index("coastline") < tokens.index("road"), "water under infrastructure"
 
     def test_the_band_says_the_backend_was_happy(self, tmp_path: Path) -> None:
-        target = tmp_path / "not-noded.svg"
-        assert invoke("not-noded", "--out", str(target)).exit_code == 0
+        target = tmp_path / "road-crosses-river.svg"
+        assert invoke("road-crosses-river", "--out", str(target)).exit_code == 0
         assert "Ok" in group_text(written(target), "header")
+
+
+#: The crossings increment 8 adds, and where each one lands, in LOCAL metres --
+#: the frame the fixture tables are written in, `ORIGIN` being a constant
+#: translation. The predicate below is the POSITION, never a count: a count
+#: assertion passes on a node constructed in the wrong place, which is the one
+#: failure a noder actually has.
+PREDICTED_NODES = {
+    "road-enters-forest": {(200.0, 250.0)},
+    "wall-leaves-domain": {(700.0, 250.0)},
+    "bridge-over-lake": {(250.0, 250.0), (450.0, 250.0)},
+}
+
+#: `bridge-over-lake`'s shoreline, as `(xmin, ymin, xmax, ymax)` in local
+#: metres, restated from the fixture table rather than read back off the
+#: fixture: an oracle that took the ring from the object under test would agree
+#: with any ring it was given.
+LAKE = (250.0, 150.0, 450.0, 350.0)
+
+
+def origin() -> Any:
+    import importlib
+
+    return importlib.import_module("tin_engine.viz.fixtures").ORIGIN
+
+
+def local(points: Any) -> Any:
+    """World coordinates as the fixture tables write them: metres from ORIGIN."""
+    return np.asarray(points, dtype=np.float64) - origin()
+
+
+def scene_of(name: str) -> Any:
+    from tin_engine.viz.scene import build_scene
+
+    attempt = cli._triangulated(gallery()[name], delaunay=True, spacing=DEFAULT_SNAP_SPACING)
+    return attempt, build_scene(
+        attempt.source, attempt.mesh, ok=attempt.ok, closed_roles=attempt.closed_roles
+    )
+
+
+def constructed_nodes(name: str) -> set[tuple[float, float]]:
+    """Vertices the noder built, i.e. those the fixture itself does not name.
+
+    The join is on POSITION and not on index, because the noder is free to
+    renumber. Rounded to six decimals, which at UTM magnitudes is well under a
+    micrometre and well over the snap spacing the default uses.
+    """
+    attempt, _ = scene_of(name)
+    given = {tuple(p) for p in np.round(local(gallery()[name].vertices), 6)}
+    built = {tuple(p) for p in np.round(local(attempt.source.vertices), 6)}
+    return {(float(x), float(y)) for x, y in built - given}
+
+
+def tokens_of(document: ET.Element) -> set[str]:
+    return {
+        token
+        for line in elements(document, "edges", "line")
+        for token in (line.get("class") or "").split()
+    }
+
+
+class TestCrossingGallery:
+    """Increment 8: the three cases the engine was built for, drawn.
+
+    `08-crossing-gallery.md`. No engine change -- every assertion here is
+    against behaviour that shipped in 5b and 5c and has never been shown in a
+    picture. What is new is that a reader can see it.
+    """
+
+    @pytest.mark.parametrize("name", sorted(PREDICTED_NODES))
+    def test_each_crossing_produces_a_node_where_the_design_says(self, name: str) -> None:
+        assert PREDICTED_NODES[name] <= constructed_nodes(name), (
+            f"{name} built {sorted(constructed_nodes(name))}, "
+            f"not {sorted(PREDICTED_NODES[name])}"
+        )
+
+    def test_an_input_vertex_is_not_a_constructed_node(self) -> None:
+        # `PRINCIPLES.md` A3, and the controlled negative the crossing oracle
+        # needs: an oracle that called every vertex constructed would satisfy
+        # every case above. `road-enters-forest`'s road ENDS at (350, 250),
+        # inside the forest -- the fixture names that point, so the noder did
+        # not build it.
+        assert (350.0, 250.0) not in constructed_nodes("road-enters-forest")
+
+    def test_the_bridge_meshes_the_lake(self) -> None:
+        # Ruling 1, as an assertion: a bridge is not grade-separated, so the
+        # terrain under it is meshed at water height. This is the test that
+        # fails if someone later adds a grade-separation mechanism.
+        #
+        # The CENTROID, and that is not a stylistic choice. Measured on this
+        # tree: the lake region contains ZERO vertices strictly inside it, so an
+        # "all three vertices strictly inside" oracle is red on correct output.
+        _, scene = scene_of("bridge-over-lake")
+        vertices = local(scene.vertices)
+        centroids = vertices[np.asarray(scene.triangles)].mean(axis=1)
+        inside = [c for c in centroids if LAKE[0] < c[0] < LAKE[2] and LAKE[1] < c[1] < LAKE[3]]
+        assert inside, "no triangle is drawn under the lake"
+
+    def test_no_vertex_lies_strictly_inside_the_lake(self) -> None:
+        # The measurement the test above rests on, pinned rather than recalled.
+        # If a later change puts a vertex inside the shoreline -- refinement,
+        # say -- the centroid comment stops being true and this says so, in the
+        # one place a reader would look for the reason.
+        _, scene = scene_of("bridge-over-lake")
+        v = local(scene.vertices)
+        inside = [p for p in v if LAKE[0] < p[0] < LAKE[2] and LAKE[1] < p[1] < LAKE[3]]
+        assert inside == [], (
+            f"{len(inside)} vertices are inside the lake; the centroid is no longer needed"
+        )
+
+    def test_the_wall_draws_exactly_one_finding_and_it_is_the_exterior_half(self) -> None:
+        # The first `Finding` any gallery picture has ever drawn, and it is the
+        # CORRECT answer: the mesh does not contain the half of the wall that
+        # lies outside the domain, and the engine says so. Both halves are
+        # asserted -- a count alone passes on a finding raised against the
+        # INTERIOR half, which would be a real defect wearing the same number.
+        _, scene = scene_of("wall-leaves-domain")
+        assert len(scene.findings) == 1, [f.kind.name for f in scene.findings]
+        finding = scene.findings[0]
+        assert finding.kind.name == "CHAIN_EDGE_WITHOUT_MASK"
+        v = local(scene.vertices)
+        ends = {tuple(np.round(v[finding.a], 6)), tuple(np.round(v[finding.b], 6))}
+        assert ends == {(700.0, 250.0), (900.0, 250.0)}, f"the finding is on {sorted(ends)}"
+
+    def test_the_other_new_fixtures_draw_no_finding(self) -> None:
+        # The negative that makes the count above mean something: the wall is
+        # the only new row whose chain leaves the mesh, so a renderer that
+        # alarmed on every crossing would pass the test above and fail here.
+        for name in ("road-enters-forest", "bridge-over-lake"):
+            _, scene = scene_of(name)
+            assert scene.findings == (), f"{name}: {[f.kind.name for f in scene.findings]}"
+
+    def test_the_wall_finding_reaches_the_picture_in_the_alarm_colour(
+        self, tmp_path: Path
+    ) -> None:
+        # The overlay shipped in 6b-ii and no gallery picture has ever shown
+        # one. A finding the renderer drops is a finding nobody sees.
+        target = tmp_path / "wall-leaves-domain.svg"
+        assert invoke("wall-leaves-domain", "--out", str(target)).exit_code == 0
+        document = written(target)
+        alarms = [
+            line
+            for line in elements(document, "edges", "line")
+            if "finding" in (line.get("class") or "")
+        ]
+        assert len(alarms) == 1
+        assert re.search(r"(?i)\bfindings\b\D{0,3}1\b", group_text(document, "header"))
+
+    def test_the_lake_draws_its_coastline_stroke(self, tmp_path: Path) -> None:
+        # The one stylesheet token this increment adds. Without a CSS rule and a
+        # `_PRECEDENCE` entry the shoreline draws as a plain breakline, and the
+        # bridge picture loses the thing it exists to show.
+        target = tmp_path / "bridge-over-lake.svg"
+        result = invoke("bridge-over-lake", "--out", str(target))
+        assert result.exit_code == 0, plain(result.output)
+        assert "coastline" in tokens_of(written(target))
+
+    def test_the_forest_ring_draws_no_property_stroke(self, tmp_path: Path) -> None:
+        # Able to fail on its own: a renderer that put `coastline` on every
+        # closed breakline would pass the test above. Same geometry class, mask
+        # 0, because `DEFAULT_VOCABULARY` has no forest bit and this increment
+        # does not invent one.
+        target = tmp_path / "road-enters-forest.svg"
+        assert invoke("road-enters-forest", "--out", str(target)).exit_code == 0
+        assert "coastline" not in tokens_of(written(target))
+
+    @pytest.mark.parametrize("name", sorted(PREDICTED_NODES))
+    def test_each_new_fixture_draws_a_mesh(self, name: str) -> None:
+        # None of the three is a failure fixture: the gallery's refusal rows are
+        # `degenerate` and `hole-in-hole`, and a crossing that stopped
+        # triangulating would otherwise be visible only as a missing picture.
+        drawable, words = core_verdict(name)
+        assert drawable is True, words
+        assert words == ["Ok"]
 
 
 class TestAttempt:
@@ -658,10 +853,11 @@ class TestAttempt:
         # because it shows the splits the backend was actually handed.
         import tin_engine._core as core
 
-        attempt = self.attempt("not-noded")
+        attempt = self.attempt("road-crosses-river")
         assert isinstance(attempt.source, core.NodedPslg)
         # And it really did gain a node -- otherwise the claim is vacuous.
-        assert len(attempt.source.vertices) > len(np.asarray(gallery()["not-noded"].vertices))
+        given = np.asarray(gallery()["road-crosses-river"].vertices)
+        assert len(attempt.source.vertices) > len(given)
 
     def test_a_rejected_fixture_is_drawn_from_the_fixture(self) -> None:
         # `degenerate` has no `Pslg` at all, so the fixture is the only
@@ -714,7 +910,7 @@ class TestSnapSpacing:
 
     def test_a_coarser_spacing_still_draws(self, tmp_path: Path) -> None:
         target = tmp_path / "coarse.svg"
-        result = invoke("not-noded", "--snap-spacing=0.5", "--out", str(target))
+        result = invoke("road-crosses-river", "--snap-spacing=0.5", "--out", str(target))
         assert result.exit_code == 0, plain(result.output)
         assert elements(written(target), "triangles", "polygon") != []
 
@@ -877,7 +1073,7 @@ class TestMaxRoundsIsNotExposed:
 
     def test_the_option_does_not_exist(self, tmp_path: Path) -> None:
         target = tmp_path / "x.svg"
-        result = invoke("not-noded", "--max-rounds", "16", "--out", str(target))
+        result = invoke("road-crosses-river", "--max-rounds", "16", "--out", str(target))
         assert result.exit_code == 2
         assert "max-rounds" in plain(result.output)
         assert not target.exists()
