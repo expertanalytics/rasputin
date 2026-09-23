@@ -36,8 +36,8 @@ PROHIBITED = {
     "fiona": "Fiona: wraps GDAL",
     "rasterio": "Rasterio: wraps GDAL",
     "osgeo": "osgeo: the GDAL Python bindings",
-    "boost/geometry": "Boost.Geometry: the post-CGAL core carries its own predicates",
-    "boost/geometry.hpp": "Boost.Geometry: the post-CGAL core carries its own predicates",
+    "gdalwarper.h": "GDAL: the warper header does not start with a bare 'gdal'",
+    "cpl": "CPL: GDAL's portability layer (cpl_conv.h, cpl_string.h, ...)",
     "date/date.h": "external date library: superseded by C++20 <chrono>",
     "date/tz.h": "external date library: superseded by C++20 <chrono>",
 }
@@ -45,11 +45,20 @@ PROHIBITED = {
 INCLUDE_RE = re.compile(r'^\s*#\s*include\s*[<"]([^>"]+)[>"]')
 
 
+# `_` is a boundary alongside `/` and `.` because GDAL's C++ headers are spelled
+# that way and nothing else is: gdal_priv.h is the ordinary entry point, and
+# ogr_spatialref.h is how a CRS would arrive. Measured before this was widened --
+# a planted #include <gdal_priv.h> passed the gate while the find_package(GDAL)
+# on the next line was caught, so the include layer was enforcing nothing that
+# the build layer was not already catching.
+_BOUNDARY = ("/", ".", "_")
+
+
 def offence(token: str) -> str | None:
     """Reason this import/include is prohibited, or None if it is fine."""
     low = token.lower()
     for bad, reason in PROHIBITED.items():
-        if low == bad or low.startswith(f"{bad}/") or low.startswith(f"{bad}."):
+        if low == bad or any(low.startswith(f"{bad}{sep}") for sep in _BOUNDARY):
             return reason
     return None
 
@@ -108,10 +117,9 @@ BUILD_RE = re.compile(
 
 
 # Build directives name a package, not a header path, so the include-layer keys
-# (which are path-shaped: "boost/geometry", "date/date.h") never match a bare
-# CMake token. These are the build-layer spellings.
+# (which are path-shaped: "date/date.h") never match a bare CMake token. These
+# are the build-layer spellings.
 BUILD_PROHIBITED = {
-    "boost": "Boost: the post-CGAL core carries its own predicates (Boost.Geometry is prohibited)",
     "date": "external date library: superseded by C++20 <chrono>",
 }
 

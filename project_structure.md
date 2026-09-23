@@ -326,8 +326,9 @@ After the new backend ships and the Python API is rewired:
 
 - `legacy/rasputin/triangulate_dem.h` and `legacy/bindings.cpp` (the CGAL-based originals)
 - CGAL, GMP, MPFR from the CMake dependency list — already absent from the new `CMakeLists.txt`
-- Boost.Geometry — prohibited in the new core (`CLAUDE.md` §2) and machine-checked;
-  the remaining uses are in `legacy/`, which is exempt
+- Boost.Geometry, whose only uses are in `legacy/triangulate_dem.h` and go when
+  it does. Not a prohibited dependency: `CLAUDE.md` §2 lists CGAL, GDAL and the
+  external date libraries, and this is none of them
 
 These removals are not part of the initial build-out; they're a follow-up once feature parity is reached and tests pass on the new backend.
 

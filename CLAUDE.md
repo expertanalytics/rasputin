@@ -19,7 +19,7 @@ This project is governed by specialized sub-agents. Always defer tasks to the co
   against an actual 249 non-comment, and 457 raw), and because a ceiling counted in
   raw lines penalises the comment density this project otherwise asks for.
 * **Prohibited Dependencies:** Never introduce `CGAL`, `GDAL`, `OGR`, `Fiona`,
-  `Rasterio` (it wraps GDAL), `Boost.Geometry`, or external `date` libraries.
+  `Rasterio` (it wraps GDAL), or external `date` libraries.
   Enforced by `tools/check_prohibited_deps.py` over imports, includes, declared
   dependencies and build directives. `legacy/` is exempt.
 * **Core Stack:** Modern C++ (C++20 Concepts, Pybind11, `std::chrono`) + Async Python 3.12+ (Pydantic V2, Typer, Shapely, PyProj, NumPy, tifffile).
