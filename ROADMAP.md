@@ -48,7 +48,7 @@ yet, so each starts at `docs/increments/README.md` step 1.
    `parallel_refinement.md`. The legacy `-ratio 0.4` was this knob.
 3. **Elevation assembly.** `IndexedMesh2` is 2D by design and z comes from
    sampling the raster per vertex. Both halves exist; nothing joins them.
-4. **Mesh output.** There is no writer of any kind. Designed as increment
+4. **Mesh output.** There is no writer of any kind. Designed as increment 10.
 5. **A CLI that does the job.** `rasputin` has `version` and `draw`; `draw`
    renders built-in fixtures only. No path from a file on disk to a mesh on disk.
 

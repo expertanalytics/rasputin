@@ -81,10 +81,11 @@ src_python/tin_engine/     # public Python API (distribution name: rasputin)
                            #   carries positions rather than feature names
     svg.py                 # (Scene, SvgStyle) -> str; the stylesheet lives here
     fixtures.py            # the eight-fixture synthetic gallery, declarative
-  io/                      # all file decoding lives here (planned)
+  io/                      # all file decoding AND encoding lives here
     __init__.py
-    geotiff.py             # TIFF container + GeoKey decoding -> DemTile
-    models.py              # Pydantic RasterMeta / DemTile
+    ply.py                 # arrays -> PLY bytes; takes no path and opens nothing
+    geotiff.py             # TIFF container + GeoKey decoding -> DemTile (planned)
+    models.py              # Pydantic RasterMeta / DemTile (planned)
 
 tests/
   cpp/                     # C++ tests (Catch2; unit/ and property/)
