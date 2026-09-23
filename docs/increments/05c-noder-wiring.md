@@ -526,7 +526,7 @@ the one the CLI already has, extended by one layer rather than reinvented:
 * **the band**: `status` is the enum's `.name`, `message` is
   `describe(status)` followed by the engine's own `outcome.message` — the same
   two-part join `_triangulated` already builds for a `CdtStatus`
-  (`cli.py:132`).
+  (`cli.py`'s `_band`).
 
 For the corner graze specifically, the band reads:
 
@@ -567,7 +567,7 @@ gallery red.** That paragraph carries the correction now rather than the claim,
 so `git show 93fc772:docs/increments/05b-noder-driver.md | grep -n 'one-line
 change'` is what shows the sentence this section answers.
 
-`cli.py:212` today passes the **fixture** as the `PslgLike`, together with
+`cli.py`'s `draw` today passes the **fixture** as the `PslgLike`, together with
 `CLOSED_ROLES = ("outer", "hole")` — *strings*, because a fixture's roles are
 strings. `viz/scene.py:167` closes a ring with
 
@@ -657,10 +657,10 @@ refused.
 **One stylesheet rule and one precedence entry.** `viz/svg.py:60` has
 `line.river` and nothing for `road`; `cli.py`'s `_PRECEDENCE` is `("river",)`.
 Without both, a road edge draws identically to the row above it and the legend
-gains a row a reader cannot tell apart — `cli.py:73-79` records that this was
+gains a row a reader cannot tell apart — `cli.py`'s `_PRECEDENCE` comment records that this was
 *measured* by drawing the gallery. So: one CSS line in `svg.py`, and
 `_PRECEDENCE = ("river", "road")`, water before infrastructure, keeping
-`cli.py:64-67`'s stated ordering rule. Two lines, and they are the difference
+`_PRECEDENCE`'s own stated ordering rule. Two lines, and they are the difference
 between a picture that shows the case and a picture that shows a grey crossing.
 
 **What is *not* added: a merge fixture.** The road-along-a-river case — one

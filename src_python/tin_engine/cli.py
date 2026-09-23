@@ -44,17 +44,20 @@ from pathlib import Path
 from typing import Annotated
 
 import numpy as np
+import numpy.typing as npt
 import typer
 
 from tin_engine._core import (
     ChainRole,
     IndexedMesh2,
+    NodedPslg,
     build_pslg,
     describe,
     node,
     triangulate,
 )
 from tin_engine.features import DEFAULT_VOCABULARY
+from tin_engine.io.ply import write_ply
 from tin_engine.viz.fixtures import GALLERY, Fixture
 from tin_engine.viz.protocols import PslgLike
 from tin_engine.viz.scene import build_scene
@@ -365,3 +368,195 @@ def draw(
     )
     target.write_text(document, encoding="utf-8")
     typer.echo(f"{target}")
+
+
+#: Ruling 4, verbatim. Written into BOTH files, because the thing it tells a
+#: reader -- that this surface is not terrain -- is equally untrue of each, and
+#: a person may open either one first.
+FLAT_COMMENT = "elevation none (z=0, --flat)"
+
+
+def _undirected(a: int, b: int) -> tuple[int, int]:
+    """The canonical form of an edge, so the two directions are one key."""
+    return (a, b) if a < b else (b, a)
+
+
+def _masked_pairs(mesh: IndexedMesh2) -> set[tuple[int, int]]:
+    """Every constrained mesh edge, deduplicated across the triangles sharing it.
+
+    Bit ``e`` of a triangle's mask is the edge ``(v[e], v[(e + 1) % 3])``, per
+    ``_core.pyi`` -- NOT CGAL's "edge ``e`` is opposite vertex ``e``", which is
+    a rotation of it and would write a plausible file with every constraint on
+    the wrong edge. An interior constraint is flagged by both its triangles,
+    which is why this returns a set and not a list.
+    """
+    triangles = np.asarray(mesh.triangles)
+    flags = np.asarray(mesh.constrained_edges)
+    return {
+        _undirected(int(triangle[e]), int(triangle[(e + 1) % 3]))
+        for triangle, mask in zip(triangles, flags, strict=True)
+        for e in range(3)
+        if int(mask) >> e & 1
+    }
+
+
+def _chain_masks(pslg: NodedPslg) -> dict[tuple[int, int], int]:
+    """Join each undirected node pair to the feature mask the noder gave it.
+
+    ``edge_properties`` is dense and index-aligned with the flat edge
+    enumeration: chain ``c``'s edge ``k`` sits at ``sum(edge_count(j) for j <
+    c) + k``, and ``edge_count`` is the chain's vertex count for a ring and one
+    less for a breakline -- a ring's closing edge is enumerated but not stored,
+    so ``(k + 1) % n`` is unconditional. Getting that wrong shifts every mask
+    after the first ring onto the wrong edge.
+
+    A pair reached by two chains takes the UNION, as ``viz.scene`` does: the
+    set means "every property of every chain that contributed geometry here",
+    and union is the only merge whose answer does not depend on chain order.
+    """
+    properties = np.asarray(pslg.edge_properties)
+    masks: dict[tuple[int, int], int] = {}
+    at = 0
+    for c, chain in enumerate(pslg.chains):
+        walk = [int(i) for i in pslg.indices_of(c)]
+        count = len(walk) if chain.role in CORE_CLOSED_ROLES else len(walk) - 1
+        for k in range(count):
+            pair = _undirected(walk[k], walk[(k + 1) % len(walk)])
+            masks[pair] = masks.get(pair, 0) | int(properties[at + k])
+        at += count
+    return masks
+
+
+def _constraint_arrays(
+    mesh: IndexedMesh2, pslg: NodedPslg
+) -> tuple[npt.NDArray[np.uint32], npt.NDArray[np.uint32]]:
+    """The edge block: the mesh's own constrained edges, and their feature bits.
+
+    Computed from ``constrained_edges`` and the noded graph alone, never from
+    ``viz.scene``: that module is the renderer, and a mesh writer reaching into
+    it for a topology join would make ``viz/`` load-bearing for a path that
+    draws nothing (ruling 6).
+
+    A constrained mesh edge with no entry in the noded graph gets 0, which
+    ``_core.pyi`` defines as *unclassified* rather than *wrong*.
+    """
+    masks = _chain_masks(pslg)
+    pairs = sorted(_masked_pairs(mesh))
+    return (
+        np.array(pairs, dtype=np.uint32).reshape(-1, 2),
+        np.array([masks.get(pair, 0) for pair in pairs], dtype=np.uint32),
+    )
+
+
+@app.command()
+def mesh(
+    name: Annotated[str, typer.Argument(help="Gallery fixture to write.")],
+    out: Annotated[Path, typer.Option("--out", help="Where to write the surface PLY.")],
+    flat: Annotated[
+        bool, typer.Option("--flat", help="There is no elevation source; write z = 0.")
+    ] = False,
+    out_edges: Annotated[
+        Path | None,
+        typer.Option("--out-edges", help="Also write the constraint edges, as a second PLY."),
+    ] = None,
+    out_parent: Annotated[
+        Path | None,
+        typer.Option("--out-parent", help="Refuse any output path resolving outside this."),
+    ] = None,
+    crs: Annotated[
+        str, typer.Option("--crs", help="Free text recorded as a header comment. Not validated.")
+    ] = "",
+    ascii_: Annotated[
+        bool, typer.Option("--ascii", help="Write the bodies as text, so `head` can read them.")
+    ] = False,
+    delaunay: Annotated[
+        bool, typer.Option("--delaunay/--no-delaunay", help="Triangulate with or without it.")
+    ] = True,
+    snap_spacing: Annotated[
+        float,
+        typer.Option(
+            "--snap-spacing",
+            callback=_snap_spacing,
+            help="Snap grid spacing for the noder, in the input's units.",
+        ),
+    ] = DEFAULT_SNAP_SPACING,
+) -> None:
+    """Write a gallery fixture's mesh as PLY.
+
+    Two files, never one holding both element types: MDAL's own caveat is that
+    a host application expects either a 1D mesh or a 2D one, so a file carrying
+    faces AND edges can load as nothing at all, in silence. ``--out`` gets the
+    surface; ``--out-edges`` gets the constraints, or they are not written.
+    Both repeat the identical vertex block, which is what makes the two layers
+    register on each other when a person loads them side by side.
+
+    Unlike ``draw``, a failed engine run is a non-zero exit and no file. A
+    picture of a failure is still a picture and worth producing; there is no
+    such thing as a picture of a failed file, so the refusal is reported in the
+    engine's own words instead.
+    """
+    if name not in GALLERY:
+        raise typer.BadParameter(f"unknown fixture {name}; the gallery is: {', '.join(GALLERY)}")
+    if not flat:
+        raise typer.BadParameter(
+            "nothing in this tree samples elevation yet, so z has no source; pass --flat "
+            "to write z = 0 and say so in the file"
+        )
+
+    attempt = _triangulated(GALLERY[name], delaunay=delaunay, spacing=snap_spacing)
+    if attempt.mesh is None or not isinstance(attempt.source, NodedPslg):
+        raise typer.BadParameter(
+            f"{name} has no mesh to write: {attempt.status}. {attempt.message}"
+        )
+
+    flat_vertices = np.asarray(attempt.mesh.vertices)
+    vertices = np.column_stack([flat_vertices, np.zeros(len(flat_vertices))])
+    comments = [f"crs {crs}"] if crs else []
+    comments.append(FLAT_COMMENT)
+
+    # --crs is unvalidated free text by ruling 5, so the writer's refusals are
+    # refusals a person meets by typing, not internal invariants. A degree sign
+    # in a projection string is ordinary and used to exit 1 with a 23-line
+    # traceback. Turn the writer's ValueError into the usage error it is, in
+    # the one place that knows the text came from the command line.
+    try:
+        write_ply(np.zeros((1, 3)), faces=np.zeros((0, 3)), comments=comments)
+    except ValueError as exc:
+        raise typer.BadParameter(str(exc), param_hint="--crs") from exc
+
+    surface = _destination(out, out_parent, name)
+    if out_edges is not None:
+        # Resolved, because two spellings of one path are still one file. Both
+        # writes succeed, the second overwrites the first, the command echoes
+        # two paths and exits 0 -- the caller has lost the surface they asked
+        # for and nothing said so.
+        constraints_target = _destination(out_edges, out_parent, name)
+        if constraints_target == surface:
+            raise typer.BadParameter(
+                f"--out and --out-edges both resolve to {surface}; "
+                "the second would overwrite the first",
+                param_hint="--out-edges",
+            )
+    surface.write_bytes(
+        write_ply(
+            vertices,
+            faces=np.asarray(attempt.mesh.triangles),
+            ascii=ascii_,
+            comments=comments,
+        )
+    )
+    typer.echo(f"{surface}")
+
+    if out_edges is not None:
+        edges, masks = _constraint_arrays(attempt.mesh, attempt.source)
+        constraints = _destination(out_edges, out_parent, name)
+        constraints.write_bytes(
+            write_ply(
+                vertices,
+                edges=edges,
+                edge_properties=masks,
+                ascii=ascii_,
+                comments=comments,
+            )
+        )
+        typer.echo(f"{constraints}")

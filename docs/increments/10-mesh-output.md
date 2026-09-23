@@ -1,9 +1,10 @@
 # Increment 10 — mesh output
 
-Status: design. No production code and no test on this commit.
+Status: shipped. Design, red suite, implementation and review are all on
+this branch; the reconciliation is at the end.
 
-Fills MVP gap 4 in `ROADMAP.md`: *"Mesh output. There is no writer of any
-kind."* Python only. No C++ change, no new binding, no new dependency.
+Fills MVP gap 4 in `ROADMAP.md`, which read *"Mesh output. There is no writer
+of any kind."* before this increment. Python only. No C++ change, no new binding, no new dependency.
 
 ## What is missing
 
@@ -16,7 +17,8 @@ anything it makes.
 git grep -nE "def write_|\.write_bytes|\.write_text" src_python/tin_engine
 ```
 
-returns the SVG write in `cli.draw` and nothing else.
+returned the SVG write in `cli.draw` and nothing else before this
+increment; it now returns the mesh writes as well.
 
 ## Ruling 1 — the format is PLY
 
@@ -370,3 +372,57 @@ merge rule, and its MVP-gap 4 entry is the one this increment closes.
 
 `project_structure.md`'s `io/` line changes from decoding to decoding and
 encoding, and gains `ply.py`.
+
+## What was decided below this design
+
+Four things this record did not specify. `@tester` chose them and `@developer`
+kept them, so they existed only in test source until now — which is the thing
+`docs/increments/README.md` exists to prevent.
+
+**PLY property spellings.** `x`/`y`/`z`, `vertex_indices`, `vertex1`/`vertex2`,
+and `feature_mask` for the per-edge scalar. The suite asserts the scalar
+positionally, so the name is the writer's to change.
+
+**Index types are `uint` on the wire**, both the face list's element type and
+the two endpoints, because `_core`'s indices are `uint32`. The commoner emitted
+spelling is `int`, and for any mesh under 2^31 vertices `int` is equally correct
+and more widely accepted. `_INDEX` is a single module constant and
+`plyread._DTYPES` accepts both, so the change costs no test churn.
+**If a reader refuses one of these files, flip `_INDEX` to `"int"` first.**
+
+**`--crs` is a new input this record now owns.** Ruling 5 said the text comes
+from "whatever the composition root holds"; the composition root holds nothing,
+so the flag was invented by the suite. Unvalidated free text, except that it may
+carry no control character and must be ASCII — both refusals surface as usage
+errors naming `--crs`. Absence writes no `crs` comment at all, which is a file
+nobody can georeference; whether that should instead be `comment crs unknown`
+is open and not ruled here.
+
+**A fixture with no mesh writes nothing and exits non-zero**, carrying the
+engine's own words. `draw` answers a refused fixture with a picture of the
+failure; there is no picture of a failed file.
+
+## Reconciliation
+
+Three numbers, all under `CLAUDE.md` §2's 700, and they disagree because the
+instrument does:
+
+| measurement | value |
+|---|---|
+| estimate | ~138 |
+| non-comment lines excluding docstring bodies | **191** |
+| the prescribed `grep` instrument | 276 |
+| executable statements | 109 |
+
+**191 is the measurement.** §2 fixes the unit as non-comment lines at line
+granularity, so executable statements are a different unit and adopting them
+would silently redefine the ceiling. But the prescribed instrument has no
+Python-aware arm — it was written for C++, where `//` is the only comment — and
+on the Python side a docstring **is** this project's comment form. It counts
+`ply.py` at 117 where the file is 80 without its docstrings. That is a defect in
+the instrument, not a fact about the code, and §2's own reason for rejecting raw
+lines applies to it: counting comments "penalises the comment density this
+project otherwise asks for".
+
+So the estimate overran by 39%. Not a split trigger at this size. The
+instrument is what needs fixing, and it is not fixed here.
