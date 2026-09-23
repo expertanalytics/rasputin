@@ -42,9 +42,9 @@ from __future__ import annotations
 import numpy as np
 import pytest
 from numpy.testing import assert_array_equal
-from tin_engine.io.ply import write_ply
 
 from plyread import element_bytes, parse_header, read_ply, vertex_array
+from tin_engine.io.ply import write_ply
 
 #: A millimetre-resolved easting at UTM 33N magnitudes -- `viz.fixtures.ORIGIN`
 #: is 430_000 -- carried by ruling 2 as the probe that float32 cannot survive.
