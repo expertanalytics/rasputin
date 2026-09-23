@@ -757,7 +757,8 @@ ceiling, which is why no LOC gate is armed.
 **Test churn, counted separately because tests are excluded from the ceiling and
 are the expensive part of this round**: 8 existing test files on master, 5 more
 once 6b-ii merges, 2 new suites. The largest single file is `test_viz_svg.py` at
-24 occurrences, and it is **not** invariant-critical (`06-cdt-viewer.md:695-699`).
+24 occurrences, and it is **not** invariant-critical (`06-cdt-viewer.md`,
+"What is worth testing", under "Not invariant-critical, ordinary tests").
 
 ### Reconciliation: ~185 estimated, 383 measured
 
@@ -1191,7 +1192,8 @@ Each with the command that refutes it, run before being written down.
    and `git grep -c -i river` on that branch returns **24** for
    `tests/python/test_viz_svg.py` — the largest single test-churn file in the
    change, absent from every list of it so far. It is not invariant-critical
-   (`06-cdt-viewer.md:695-699`).
+   (`06-cdt-viewer.md`, "What is worth testing", under "Not
+   invariant-critical, ordinary tests").
 4. **"Two of which carry mutation rounds" is true by file list and misleading
    as a cost.** `grep -c is_river tests/cpp/property/prop_pslg_invariants.cpp`
    prints `1`, and that one line is a pass-through with no assertion attached.

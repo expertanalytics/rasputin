@@ -1097,3 +1097,22 @@ describes 6b's files.
    direction. The `viz` section also moves from `[partly live]` to `[live]`,
    with `test_viz_svg.py` and `test_cli_draw.py` marked `[live]` and what they
    pin stated in one sentence.
+
+## What increment 9 changes about this record
+
+Appended, not inserted, so that the three `06-cdt-viewer.md:NNN` citations in
+`07-edge-properties.md` keep resolving to the text they were written against.
+Find them with `grep -rn "06-cdt-viewer.md:" docs .claude src_python tools`.
+
+`docs/increments/09-gallery-output.md` adds `rasputin gallery`, which renders
+every fixture into a directory the caller names. One thing in this record is
+incomplete because of it: this record's requirement — a person looking at a
+picture of a triangulation and forming an opinion — is met one picture at a
+time by `rasputin draw`, and is not met for the set a person actually judges
+by. Nothing here says so. Increment 9 says it.
+
+**No ruling in this record is amended.** In particular, "Rejected outright: a
+golden-file SVG comparison", under "What is worth testing", stands as written.
+An earlier draft of increment 9 committed the rendered pictures and worked
+around that rejection; the user cut that scope, and increment 9's opening
+section records why. Nothing in the tree compares SVG bytes.
