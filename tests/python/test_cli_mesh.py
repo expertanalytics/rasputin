@@ -166,6 +166,49 @@ class TestTheGeometryIsTheEngines:
         assert header.element("edge").count == len(constrained_edge_set(attempt.mesh))
 
 
+class TestTheChainMaskJoin:
+    """The whole pair-to-mask map, built from the chains independently.
+
+    `_chain_masks` walks the flat edge enumeration with a prefix sum, and its
+    own docstring says getting that wrong "shifts every mask after the first
+    ring onto the wrong edge". Nothing tested it. Measured on the mutant that
+    docstring describes -- `count = len(walk) - 1` unconditionally, dropping
+    every ring's closing edge -- the whole suite passed, 783 of 783, while the
+    join produced `(3, 4): 2` where the truth is `1`: a road edge written to
+    the file as a river, and one pair lost entirely.
+
+    A subset assertion cannot see that. This rebuilds the expected map from
+    `indices_of` and `chains` without touching `edge_properties`' layout, so it
+    is an independent answer rather than the producer's own arithmetic read
+    back.
+    """
+
+    @pytest.mark.parametrize("attempt", [FEATURED], indirect=True)
+    def test_every_pair_carries_the_mask_its_chains_gave_it(
+        self, attempt: cli.Attempt
+    ) -> None:
+        pslg = attempt.source
+        assert pslg is not None
+        properties = np.asarray(pslg.edge_properties)
+
+        expected: dict[tuple[int, int], int] = {}
+        at = 0
+        for c, chain in enumerate(pslg.chains):
+            walk = [int(i) for i in pslg.indices_of(c)]
+            closed = chain.role in cli.CORE_CLOSED_ROLES
+            edges = [
+                (walk[k], walk[(k + 1) % len(walk)])
+                for k in range(len(walk) if closed else len(walk) - 1)
+            ]
+            for k, (a, b) in enumerate(edges):
+                pair = (a, b) if a < b else (b, a)
+                expected[pair] = expected.get(pair, 0) | int(properties[at + k])
+            at += len(edges)
+
+        assert cli._chain_masks(pslg) == expected
+        assert set(expected.values()) > {0}, "the fixture must carry real bits"
+
+
 class TestTheFeatureScalar:
     """The edge file carries the noded PSLG's feature bits, or 0."""
 
