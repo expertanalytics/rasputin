@@ -29,6 +29,7 @@ increment that most needs a picture to check against
 | 6b-ii | The SVG renderer, the fixture gallery and `rasputin draw` | shipped (`4834568`, #74) | `docs/increments/06-cdt-viewer.md` |
 | 7 | Edge property sets, replacing the one-bit `is_river` | shipped (`2e7577c`, #75) | `docs/increments/07-edge-properties.md` |
 | 8 | The crossing gallery: roads into forests, bridges over lakes, structures leaving a catchment | shipped (`6d68d9b`, #81) | `docs/increments/08-crossing-gallery.md` |
+| 10 | Mesh output: a PLY writer, binary `double` by default, constraint edges in a second file | designed | `docs/increments/10-mesh-output.md` |
 | — | `raster/`: grid-to-world geometry and bilinear sampling | shipped (`7785fea`), **no record** | none — predates the protocol |
 
 ## What stands between here and an operational MVP
@@ -46,7 +47,7 @@ yet, so each starts at `docs/increments/README.md` step 1.
    `parallel_refinement.md`. The legacy `-ratio 0.4` was this knob.
 3. **Elevation assembly.** `IndexedMesh2` is 2D by design and z comes from
    sampling the raster per vertex. Both halves exist; nothing joins them.
-4. **Mesh output.** There is no writer of any kind.
+4. **Mesh output.** There is no writer of any kind. Designed as increment
 5. **A CLI that does the job.** `rasputin` has `version` and `draw`; `draw`
    renders built-in fixtures only. No path from a file on disk to a mesh on disk.
 
