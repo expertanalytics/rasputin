@@ -302,3 +302,142 @@ Constraint edges are skipped, so the original polygon and polyline geometry is p
 - **Wall-clock time:** much better at scale; throughput scales with available cores / SMs.
 - **Memory:** ternary tree adds a small overhead per internal node (3 child indices) but is trivially flattened at the end.
 - **Quality:** initial-CDT topology of un-flipped *constraint* edges persists, so input feature simplification quality matters. Interior quality is recovered by the final flip pass.
+
+## Open question: does the flip pass leave the tolerance undefined?
+
+Raised 2026-09-23. **Not settled. This section asks a question and does not
+answer it.** Whoever writes the refinement increment must rule on it before
+`@tester` is briefed, because the answer decides what the suite can assert.
+
+### The question
+
+The refinement loop terminates when every leaf triangle satisfies
+`max |s.z - plane(T)(s)| <= tol` over the samples inside it. That guarantee is
+about **each triangle's own plane**.
+
+The flip pass then runs. A flip replaces two triangles over a quadrilateral
+with two different triangles over the same four vertices. The vertices do not
+move, but the two surfaces agree only along the new diagonal — everywhere else
+in the quad they differ. Every sample in that quad is now measured against a
+plane that did not exist when the tolerance was checked, and nothing checks it
+again.
+
+So the guarantee the algorithm delivers is "error was within `tol` at the
+moment refinement converged", and the mesh handed to the caller is not that
+mesh.
+
+### How large the disagreement can be
+
+Measured on a saddle — four corners of a unit square with alternating heights
+0, 1, 0, 1:
+
+```
+same four vertices, centre of the quad
+  surface with diagonal a-b : z = 0.000
+  surface with diagonal c-d : z = 1.000
+  the flip moves the surface by 1.000 at that point
+```
+
+The full height range of the data, at a single flip, with no vertex moved. A
+saddle is the worst case rather than a typical one, and on smooth terrain the
+disagreement is bounded by local curvature — but it is not bounded by `tol`,
+and nothing in the algorithm bounds it.
+
+### Why this may be worse than a bookkeeping problem
+
+The flip criterion is the circumcircle test — it moves the mesh toward the
+Delaunay triangulation. **Delaunay is not optimal for piecewise linear
+approximation of a surface.** Dyn, Levin and Rippa showed that triangulations
+chosen from the data values outperform Delaunay for exactly this problem (*Data
+Dependent Triangulations for Piecewise Linear Interpolation*, IMA Journal of
+Numerical Analysis 10(1), 1990).
+
+If that holds here, the flip pass is not neutral with respect to `tol`: it
+systematically spends vertical accuracy to buy triangle shape. This document
+currently describes it as recovering quality, which is true for shape and may
+be false for the thing the tolerance measures.
+
+Note also that the minimum-error triangulation problem is NP-hard and not
+approximable within any multiplicative factor unless P = NP, so "flip by error"
+is a heuristic, not an optimisation with a known answer.
+
+### One thing the pseudocode omits, and why that is safe
+
+The flip pass tests the circumcircle and does not test whether the quad is
+convex, though a flip of a non-convex quad would produce overlapping triangles.
+That omission is safe, and the reason is worth writing down because a reader
+implementing it will ask.
+
+An edge that fails the circumcircle test always has a convex quad. Measured over
+200 000 random configurations: of 30 659 non-convex quads, **zero** were flagged
+as not locally Delaunay. So the circumcircle test already excludes every case
+where a flip would be illegal, and a separate convexity test would never fire.
+
+Option 5 below does not inherit this. A patch larger than two triangles has no
+such guarantee, so patch growth must test the boundary it is building.
+
+### What a ruling has to choose between
+
+1. **Flip only when every sample in the quad stays within `tol` afterwards.**
+   Keeps the guarantee; the mesh is less Delaunay than it could be.
+2. **Alternate refine and flip until both hold.** Keeps both properties; needs
+   an argument that it terminates.
+3. **Keep the flip but change its criterion from the circumcircle test to
+   approximation error.** Data-dependent, per the reference above; abandons the
+   shape guarantee the Delaunay criterion gives.
+4. **Accept it and say so.** `tol` becomes a refinement parameter rather than a
+   property of the delivered mesh, stated plainly in the API.
+
+5. **Re-triangulate a patch rather than flipping an edge.** Grow a region of
+   triangles bounded entirely by unconstrained edges, take the vertices inside
+   it, and re-solve that patch — choosing a triangulation that satisfies `tol`,
+   inserting points until one does, or both.
+
+   This is strictly more general than options 1 to 3: an edge flip is the
+   two-triangle case of it. It keeps the property that makes the flip pass
+   parallel — the patch boundary is fixed, so nothing outside changes, and the
+   conflict rule is the same one flipping already needs, that patches may not
+   overlap. If the patch polygon is convex, any triangulation of its interior
+   points is valid and covers it exactly, so the choice is free rather than
+   searched under constraints.
+
+   The reason it answers this section's question, where flipping does not: the
+   decision stops being "which of two diagonals" and becomes "any triangulation
+   of these points that meets the tolerance". `tol` becomes a constraint the
+   step solves under rather than a property it happens to preserve.
+
+   Three consequences a design must state:
+
+   - **It cannot live in the ternary tree.** An arbitrary re-triangulation of a
+     patch is not a fan subdivision, so this runs after the flatten step, on a
+     general mesh. The pipeline already flattens last, so the ordering works —
+     but "Data structure" above says the tree *is* the mesh, and it would stop
+     being true here.
+   - **Patch growth needs a stopping rule**, and it is the design parameter.
+     Too small is flipping; too large re-triangulates the mesh and loses the
+     locality that made any of this parallel.
+   - **Patches are bounded by constraints**, so a region dense with rivers and
+     roads gets small patches. That is likely the right behaviour: those are
+     the places where the input geometry should dominate the triangulation.
+
+   This has a name. *Higher-order Delaunay triangulation* relaxes the
+   circumcircle criterion over a neighbourhood rather than a single edge, and
+   is the formalisation of this idea; see "Implementing data-dependent
+   triangulations with higher order Delaunay triangulations", ACM SIGSPATIAL
+   2016. **Nobody here has read it.** Read it before designing this.
+
+Nothing here rules 4 out. It rules out leaving the document as it is, which
+promises a bound the pipeline does not deliver.
+
+Option 5 came from the user and is materially better than 1 to 4, which were
+written by an agent. Recorded with that provenance because this project has
+already found one rule that acquired the authority of a human decision without
+having been one (`project_structure.md`'s CRS paragraph, corrected 2026-09-23).
+
+### One thing to check before designing any of this
+
+This document predates every increment record and has never been through the
+protocol. Its "Library choices" section still discusses selecting a CDT, which
+increment 4 settled. Read it against the shipped tree before trusting any of
+it — the corner-graze work is the precedent for what an unchecked old design
+document costs.
