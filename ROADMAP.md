@@ -31,6 +31,7 @@ increment that most needs a picture to check against
 | 8 | The crossing gallery: roads into forests, bridges over lakes, structures leaving a catchment | shipped (`6d68d9b`, #81) | `docs/increments/08-crossing-gallery.md` |
 | 9 | Gallery output: `rasputin gallery` renders all eleven fixtures into a directory the caller names | designed | `docs/increments/09-gallery-output.md` |
 | 10 | Mesh output: a PLY writer, binary `double` by default, constraint edges in a second file | shipped (#86) | `docs/increments/10-mesh-output.md` |
+| 11 | Raster ingestion, the decode half: GeoTIFF bytes to a validated `DemTile` | designed | `docs/increments/11-raster-ingestion.md` |
 | — | `raster/`: grid-to-world geometry and bilinear sampling | shipped (`7785fea`), **no record** | none — predates the protocol |
 
 ## What stands between here and an operational MVP
@@ -42,7 +43,10 @@ yet, so each starts at `docs/increments/README.md` step 1.
 1. **Raster ingestion, Python side.** The C++ `raster/` module samples; nothing
    decodes a GeoTIFF into it. `project_structure.md` names `raster.py` as the
    only adapter from decoded data into `_core`, and marks it planned. This is
-   where CRS stops.
+   where CRS stops. Split in two: increment 11 designs the decode
+   (`io/geotiff.py`, bytes to a validated tile, no `_core`); the adapter,
+   `RasterView` and the pybind11 buffer surface are increment 12, which does
+   not yet have a record.
 2. **Refinement.** The largest piece and the actual product: coarsen a dense DEM
    under an error budget instead of triangulating what you are given. Plan in
    `parallel_refinement.md`. The legacy `-ratio 0.4` was this knob.
