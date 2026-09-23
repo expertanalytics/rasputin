@@ -525,6 +525,18 @@ def mesh(
         raise typer.BadParameter(str(exc), param_hint="--crs") from exc
 
     surface = _destination(out, out_parent, name)
+    if out_edges is not None:
+        # Resolved, because two spellings of one path are still one file. Both
+        # writes succeed, the second overwrites the first, the command echoes
+        # two paths and exits 0 -- the caller has lost the surface they asked
+        # for and nothing said so.
+        constraints_target = _destination(out_edges, out_parent, name)
+        if constraints_target == surface:
+            raise typer.BadParameter(
+                f"--out and --out-edges both resolve to {surface}; "
+                "the second would overwrite the first",
+                param_hint="--out-edges",
+            )
     surface.write_bytes(
         write_ply(
             vertices,

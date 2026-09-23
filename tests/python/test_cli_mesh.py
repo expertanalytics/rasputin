@@ -166,6 +166,28 @@ class TestTheGeometryIsTheEngines:
         assert header.element("edge").count == len(constrained_edge_set(attempt.mesh))
 
 
+class TestTheTwoDestinationsAreDistinct:
+    """One path given twice is one file, and the second write wins.
+
+    Before this guard both writes succeeded, the second overwrote the first,
+    the command echoed two paths and exited 0. The caller had lost the surface
+    they asked for with nothing to tell them.
+    """
+
+    def test_the_same_path_twice_is_refused_before_anything_is_written(
+        self, tmp_path: Path
+    ) -> None:
+        target = tmp_path / "both.ply"
+        result = CliRunner().invoke(
+            app,
+            ["mesh", "catchment", "--flat", "--out", str(target),
+             "--out-edges", str(target)],
+        )
+        assert result.exit_code != 0, plain(result.output)
+        assert "overwrite" in plain(result.output)
+        assert not target.exists(), "refused, and yet something was written"
+
+
 class TestTheChainMaskJoin:
     """The whole pair-to-mask map, built from the chains independently.
 
