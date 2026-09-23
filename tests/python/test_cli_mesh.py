@@ -180,7 +180,7 @@ class TestTheFeatureScalar:
         )
         assert result.exit_code == 0, plain(result.output)
         header, data = read_ply(edges.read_bytes())
-        written_masks = set(data[header.element("edge").properties[2].name].tolist())
+        written_masks = set(data["edge"][header.element("edge").properties[2].name].tolist())
         available = set(np.asarray(attempt.source.edge_properties).tolist())  # type: ignore[union-attr]
         assert written_masks <= available | {0}, "a mask nothing in the input carries"
         assert written_masks - {0}, f"{FEATURED} carries feature bits; none reached the file"
