@@ -121,11 +121,12 @@ y decreases as the row index grows is implied, not stored.
 
 **Grid-registered (pixel-is-point).** The convention that a raster sample is a
 point at a node, so `n` samples span `n - 1` spacings. `GTRasterTypeGeoKey`
-(1025) value 1. `include/terrain/raster/geometry.hpp` assumes it.
+(1025) value **2**, `RasterPixelIsPoint`. `include/terrain/raster/geometry.hpp` assumes it.
 
 **Area-registered (pixel-is-area).** The other convention: a sample is a cell,
 the tie point names a cell corner rather than a node, and `n` samples span `n`
-spacings. `GTRasterTypeGeoKey` value 2. Reading such a file as grid-registered
+spacings. `GTRasterTypeGeoKey` value **1**, `RasterPixelIsArea` — the
+specification's own default. Reading such a file as grid-registered
 shifts everything by half a cell.
 
 **Mosaic.** A region assembled from several raster files, each with its own

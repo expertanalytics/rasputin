@@ -21,11 +21,26 @@ Verified by matching each quoted line against its cited file.
    Pillow's `tag_v2` and decoded the GeoKey directory by hand. The only `ogr`
    string in the tree is an XML namespace prefix inside CORINE GML files.
    Nothing in the raster path has to be replaced for §2 compliance.
-2. **The legacy could only read a GeoTIFF whose projected EPSG code lies in
-   `[20000, 32760]`.** Anything else — any geographic CRS, EPSG:3857, any
-   projected code below 20000 — produced a proj4 string that `pyproj` refuses,
-   and the read died with `CRSError`. Two independent bugs cause this, both
-   reproduced below. The practical consequence is that the "CRS never crosses
+2. **The legacy read exactly two kinds of georeferencing, and both give a
+   projected CRS.** A file carrying `ProjectedCSTypeGeoKey` works only if that
+   code lies in `[20000, 32760]`; a file carrying `ProjectionGeoKey` instead
+   works through a different path that has no such window. Measured by
+   executing the legacy `GeoKeysInterpreter`:
+
+   ```
+   ProjectionGeoKey 16033, no ProjectedCSTypeGeoKey
+     -> '+proj=utm +zone=33 +units=m +ellps=WGS84 +no_defs'   pyproj: accepted
+   ProjectedCSTypeGeoKey 32633
+     -> '+init=EPSG:32633 +no_defs'                            pyproj: accepted
+   ProjectedCSTypeGeoKey 3857  (below 20000)
+     -> '+units=m +no_defs'                                    pyproj: CRSError
+   ```
+
+   An earlier revision of this section said the legacy could read *only*
+   `[20000, 32760]`, which is the window on one path presented as the whole
+   story. Increment 11 designs its refusals against this list, so the error
+   would have become a test. Two bugs narrow the `ProjectedCSTypeGeoKey` path,
+   both reproduced below. The practical consequence is that the "CRS never crosses
    into C++" question has an evidence answer: the legacy only ever handled
    projected CRS, by accident rather than by design.
 3. **There is no NoData handling anywhere in the legacy DEM path.** Not the tag,
@@ -89,11 +104,23 @@ Every CRS in the legacy, production and test, is spelled with the deprecated
 $ git grep -ni 'gdal\|ogr\|fiona\|rasterio\|osgeo' -- legacy
 ```
 
-Returns only: `geographic`/`geographical` identifiers in `legacy/rasputin/solar_position.h`,
-`legacy/rasputin/reader.py` and `legacy/rasputin/triangulate_dem.h`; `bg::cs::geographic` in
-`legacy/rasputin/triangulate_dem.h:650`; and four `ogr` XML-namespace lookups in
-`legacy/rasputin/gml_repository.py` (145, 168, 170, 173), which are element names in GML files
-produced by `ogr2ogr`, not an import. **No prohibited dependency is used.**
+Returns hits in five files — `legacy/bindings.cpp`,
+`legacy/rasputin/gml_repository.py`, `legacy/rasputin/reader.py`,
+`legacy/rasputin/solar_position.h`, `legacy/rasputin/triangulate_dem.h`. Every
+one is a false positive on the substring:
+
+- `geographic`/`geographical` identifiers in `solar_position.h`, `reader.py`,
+  `triangulate_dem.h`, and `geographic_latitude`/`geographic_longitude`
+  parameter names in `bindings.cpp` (380, 383, 387, 388);
+- `bg::cs::geographic` in `legacy/rasputin/triangulate_dem.h:650`;
+- four `ogr` XML-namespace lookups in `gml_repository.py` (145, 168, 170, 173),
+  element names in GML produced by `ogr2ogr`, not an import.
+
+**No prohibited dependency is used.** An earlier revision of this paragraph
+listed four files where the command returns five, omitting `bindings.cpp`.
+`docs/increments/README.md` asks for the command *with the file list it
+returned* precisely so a reader can tell a run from a retelling, and a list that
+is not what the command prints defeats that.
 
 ```
 $ git grep -n 'Image.open' -- legacy
@@ -115,7 +142,10 @@ legacy/rasputin/reader.py:384:    j_tag, i_tag, _, x_tag, y_tag, _ = image.tag_v
 legacy/rasputin/reader.py:387:    delta_x, delta_y, _ = image.tag_v2.get(scale_idx, (1.0, 1.0, 0.0))
 ```
 
-Exactly three TIFF tags are ever read: 33922, 33550, 34735.
+Five TIFF tags are read. Three through `tag_v2` — 33922, 33550, 34735 — and
+two more through `image_tags[...]`, which is why the grep above does not show
+them: 34736 for double-valued GeoKeys and 34737 for ASCII (§3.2). A reader
+built from the `tag_v2` grep alone cannot decode either.
 
 ```
 $ git grep -n GTRasterTypeGeoKey -- legacy
