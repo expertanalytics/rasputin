@@ -107,3 +107,27 @@ one affects correctness.
 **Broad phase.** The spatial index that proposes candidate segment pairs so the
 noder does not test every pair against every other. Its cell size is unrelated
 to the snap grid's. False positives are free; false negatives are not.
+
+## Rasters
+
+**Tie point.** The GeoTIFF `ModelTiePointTag` (33922): one raster position
+`(col, row)` paired with the world position it sits at. Together with the pixel
+scale it is the whole georeferencing of a north-up file.
+`docs/increments/11-raster-ingestion-prior-art.md` §3.2.
+
+**Pixel scale.** The GeoTIFF `ModelPixelScaleTag` (33550): the world distance
+between neighbouring raster nodes, stored positive in both axes. The fact that
+y decreases as the row index grows is implied, not stored.
+
+**Grid-registered (pixel-is-point).** The convention that a raster sample is a
+point at a node, so `n` samples span `n - 1` spacings. `GTRasterTypeGeoKey`
+(1025) value 1. `include/terrain/raster/geometry.hpp` assumes it.
+
+**Area-registered (pixel-is-area).** The other convention: a sample is a cell,
+the tie point names a cell corner rather than a node, and `n` samples span `n`
+spacings. `GTRasterTypeGeoKey` value 2. Reading such a file as grid-registered
+shifts everything by half a cell.
+
+**Mosaic.** A region assembled from several raster files, each with its own
+extent and possibly its own CRS. The legacy walked one in
+`legacy/rasputin/reader.py:434-456`.
