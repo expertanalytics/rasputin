@@ -967,7 +967,7 @@ it.
    `RASPUTIN_BUILD_PYTHON` defaults `OFF` (`CMakeLists.txt:73`), so
    `bindings/core.cpp` is never in that build at all. The `python` job builds
    the extension -- via `pip install -e`, which configures
-   `RASPUTIN_BUILD_PYTHON=ON` (`pyproject.toml:80`) -- but with no sanitizer
+   `RASPUTIN_BUILD_PYTHON=ON` (`pyproject.toml:86`) -- but with no sanitizer
    flags. Re-runnable in two greps:
    `grep -n RASPUTIN_BUILD_PYTHON .github/workflows/main.yaml` returns nothing,
    and `grep -n 'option(RASPUTIN_BUILD_PYTHON' CMakeLists.txt` shows the `OFF`.
