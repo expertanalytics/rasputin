@@ -53,6 +53,12 @@ dependencies = [
 # message naming the tag and the scheme; without imagecodecs it also points at
 # this extra, and with it says no installed codec decodes it (increment 11, §8).
 codecs = ["imagecodecs>=2024.1"]
+# Test-only: reads increment 13's .vtk output back through VTK's own readers
+# (tests/python/test_io_vtk_readback.py), which is the only place its cell-order
+# and float64 hazards are visible. Not a runtime dependency and not in `dev`:
+# the wheels are 100-140 MB. It carries no GDAL reader (13-bundled-mesh.md,
+# "Dependency facts"). CI installs it in its own step.
+viewer = ["vtk>=9.3"]
 dev = [
     "pytest>=8.0",
     "pytest-asyncio>=0.23",

@@ -1,5 +1,8 @@
 """`rasputin mesh`: increment 10's command.
 
+Amended red by increment 13's U2 (a), and only there: the default-encoding
+test is inverted, and the vertex-block identity test asks for `--binary`.
+
 Committed red at `1d4ec8b`; `tin_engine.cli` already existed, so the intended
 failure was Click's `No such command 'mesh'` -- exit code 2, no file written. Every test that
 asserts a refusal also asserts what the refusal *says*, because an assertion of
@@ -114,12 +117,25 @@ class TestTheAcceptanceInvocation:
     def test_the_constraint_file_is_a_1d_mesh(self, written: tuple[bytes, bytes]) -> None:
         assert parse_header(written[1]).names == ("vertex", "edge")
 
-    def test_both_files_are_binary_by_default(self, written: tuple[bytes, bytes]) -> None:
-        assert {parse_header(blob).fmt for blob in written} == {"binary_little_endian"}
+    def test_both_files_are_ascii_by_default(self, written: tuple[bytes, bytes]) -> None:
+        # Increment 13, U2 (a): text by default for both formats. This was
+        # `test_both_files_are_binary_by_default` under increment 10's ruling 1.
+        assert {parse_header(blob).fmt for blob in written} == {"ascii"}
 
-    def test_the_vertex_blocks_are_byte_identical(self, written: tuple[bytes, bytes]) -> None:
+    def test_the_vertex_blocks_are_byte_identical(self, tmp_path: Path) -> None:
         # Ruling 3. The two layers register on each other only because of this.
-        assert element_bytes(written[0], "vertex") == element_bytes(written[1], "vertex")
+        # Asked for in binary since U2 (a): `element_bytes` locates fixed-width
+        # records, and byte identity is a claim about the packed block.
+        surface, edges = tmp_path / "s.ply", tmp_path / "e.ply"
+        result = runner.invoke(
+            app,
+            ["mesh", FIXTURE, "--flat", "--binary", "--out", str(surface),
+             "--out-edges", str(edges)],
+        )
+        assert result.exit_code == 0, plain(result.output)
+        blobs = surface.read_bytes(), edges.read_bytes()
+        assert element_bytes(blobs[0], "vertex") == element_bytes(blobs[1], "vertex")
+        assert element_bytes(blobs[0], "vertex"), "two empty slices are trivially equal"
 
     def test_it_names_what_it_wrote(self, tmp_path: Path) -> None:
         surface = tmp_path / "surface.ply"

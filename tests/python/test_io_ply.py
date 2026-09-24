@@ -17,6 +17,13 @@ Committed red at `1d4ec8b`, when the intended failure was
 `write_ply` is imported at module scope so the absence was one collection error
 rather than eleven confusing ones. Green since `299fe9a`.
 
+Amended red by increment 13 (`13-bundled-mesh.md`), as the user's rulings
+require and no further: U2 (a) makes ASCII the default, so the default test is
+inverted and every call that means binary now says `ascii=False`; U1 (a) makes
+the edge file carry the vocabulary (ruling 9), which is
+`TestTheEdgeFileNamesItsBits` and widens the purity test to admit
+`tin_engine.features`.
+
 TWO THINGS THIS SUITE DELIBERATELY DOES NOT ASSERT.
 
 1. That QGIS or ParaView opens the result. Nobody here can run either, and
@@ -43,7 +50,9 @@ import numpy as np
 import pytest
 from numpy.testing import assert_array_equal
 
+from importscan import first_party_imports
 from plyread import element_bytes, parse_header, read_ply, vertex_array
+from tin_engine.features import DEFAULT_VOCABULARY, EdgeProperty, EdgeVocabulary
 from tin_engine.io.ply import write_ply
 
 #: A millimetre-resolved easting at UTM 33N magnitudes -- `viz.fixtures.ORIGIN`
@@ -77,26 +86,37 @@ EDGE_PROPERTIES = np.array([1, 0, 4, 6], dtype=np.uint32)
 
 @pytest.fixture
 def surface() -> bytes:
-    """The 2D mesh file: vertices and faces, binary, no edges. Ruling 3."""
-    return write_ply(VERTICES, faces=FACES)
+    """The 2D mesh file: vertices and faces, binary, no edges. Ruling 3.
+
+    Binary is asked for by name since increment 13's U2 (a) made text the
+    default: this fixture feeds the binary round trip, which is the suite's
+    invariant-critical half.
+    """
+    return write_ply(VERTICES, faces=FACES, ascii=False)
 
 
 @pytest.fixture
 def constraints() -> bytes:
     """The 1D mesh file: the same vertices, and edges instead of faces."""
-    return write_ply(VERTICES, edges=EDGES, edge_properties=EDGE_PROPERTIES)
+    return write_ply(VERTICES, edges=EDGES, edge_properties=EDGE_PROPERTIES, ascii=False)
 
 
 class TestHeader:
     """What the header declares. Parsed as text, not compared to a golden blob."""
 
-    def test_binary_little_endian_is_the_default(self, surface: bytes) -> None:
-        header = parse_header(surface)
-        assert surface.startswith(b"ply\n")
-        assert header.fmt == "binary_little_endian"
+    def test_ascii_is_the_default(self) -> None:
+        # Increment 13, U2 (a): the user reads the output, and one command has
+        # one default. This reverses increment 10's ruling 1.
+        blob = write_ply(VERTICES, faces=FACES)
+        header = parse_header(blob)
+        assert blob.startswith(b"ply\n")
+        assert header.fmt == "ascii"
         assert header.version == "1.0"
 
-    def test_ascii_is_available_behind_the_flag(self) -> None:
+    def test_binary_little_endian_is_available_behind_the_flag(self, surface: bytes) -> None:
+        assert parse_header(surface).fmt == "binary_little_endian"
+
+    def test_ascii_is_still_the_explicit_spelling(self) -> None:
         header = parse_header(write_ply(VERTICES, faces=FACES, ascii=True))
         assert header.fmt == "ascii"
 
@@ -173,13 +193,13 @@ class TestBinaryRoundTrip:
         # header terminator all land here, and none of them is visible to an
         # assertion about the arrays alone.
         read_ply(surface)
-        read_ply(write_ply(VERTICES, edges=EDGES, edge_properties=EDGE_PROPERTIES))
+        read_ply(write_ply(VERTICES, edges=EDGES, edge_properties=EDGE_PROPERTIES, ascii=False))
 
     def test_a_single_triangle_is_a_whole_file(self) -> None:
         # The smallest mesh there is. A writer that assumed more than one
         # record per block, or that wrote a separator between them, fails here
         # and nowhere else.
-        _, data = read_ply(write_ply(VERTICES[:3], faces=FACES[:1]))
+        _, data = read_ply(write_ply(VERTICES[:3], faces=FACES[:1], ascii=False))
         assert_array_equal(vertex_array(data), VERTICES[:3])
         assert_array_equal(data["face"]["vertex_indices"], FACES[:1])
 
@@ -214,18 +234,18 @@ class TestAsciiMatchesBinary:
     """One geometry, two encodings. This is what catches one mode drifting."""
 
     def test_vertices_agree(self) -> None:
-        _, binary = read_ply(write_ply(VERTICES, faces=FACES))
+        _, binary = read_ply(write_ply(VERTICES, faces=FACES, ascii=False))
         _, text = read_ply(write_ply(VERTICES, faces=FACES, ascii=True))
         assert_array_equal(vertex_array(text), vertex_array(binary))
 
     def test_faces_agree(self) -> None:
-        _, binary = read_ply(write_ply(VERTICES, faces=FACES))
+        _, binary = read_ply(write_ply(VERTICES, faces=FACES, ascii=False))
         _, text = read_ply(write_ply(VERTICES, faces=FACES, ascii=True))
         assert_array_equal(text["face"]["vertex_indices"], binary["face"]["vertex_indices"])
 
     def test_edges_and_masks_agree(self) -> None:
         kwargs = {"edges": EDGES, "edge_properties": EDGE_PROPERTIES}
-        binary_header, binary = read_ply(write_ply(VERTICES, **kwargs))
+        binary_header, binary = read_ply(write_ply(VERTICES, ascii=False, **kwargs))
         _, text = read_ply(write_ply(VERTICES, ascii=True, **kwargs))
         mask = binary_header.element("edge").properties[2].name
         assert_array_equal(text["edge"]["vertex1"], binary["edge"]["vertex1"])
@@ -233,7 +253,7 @@ class TestAsciiMatchesBinary:
         assert_array_equal(text["edge"][mask], binary["edge"][mask])
 
     def test_the_headers_differ_only_in_the_format_line(self) -> None:
-        binary = parse_header(write_ply(VERTICES, faces=FACES))
+        binary = parse_header(write_ply(VERTICES, faces=FACES, ascii=False))
         text = parse_header(write_ply(VERTICES, faces=FACES, ascii=True))
         assert binary.elements == text.elements
         assert binary.fmt != text.fmt
@@ -327,32 +347,100 @@ class TestTheGuardsThatHadNeverRun:
             )
 
 
+class TestTheEdgeFileNamesItsBits:
+    """Increment 13, ruling 9 under U1 (a): the shipped edge file broke increment 7.
+
+    `feature_mask` went out as a bare `uint` with nothing saying what bit 0
+    means and no fingerprint. The fix is two kinds of header comment, built
+    from the vocabulary through the same `names()` check the VTK writer uses:
+    `feature_bit <bit> <name>` for each property, sorted by bit, and
+    `feature_vocabulary <fingerprint>`. MDAL ignores comments; they are for
+    people and for the first reader that refuses a mismatch.
+    """
+
+    @pytest.fixture
+    def comments(self) -> tuple[str, ...]:
+        blob = write_ply(
+            VERTICES,
+            edges=EDGES,
+            edge_properties=EDGE_PROPERTIES,
+            vocabulary=DEFAULT_VOCABULARY,
+        )
+        return parse_header(blob).comments
+
+    def test_every_bit_is_named_sorted_by_bit(self, comments: tuple[str, ...]) -> None:
+        expected = [
+            f"feature_bit {bit} {name}"
+            for bit, name in sorted((p.bit, p.name) for p in DEFAULT_VOCABULARY.properties)
+        ]
+        assert [c for c in comments if c.startswith("feature_bit ")] == expected
+
+    def test_the_fingerprint_is_carried(self, comments: tuple[str, ...]) -> None:
+        assert f"feature_vocabulary {DEFAULT_VOCABULARY.fingerprint()}" in comments
+
+    def test_an_out_of_order_vocabulary_is_written_sorted(self) -> None:
+        vocabulary = EdgeVocabulary(
+            properties=(
+                EdgeProperty(name="railway", bit=2),
+                EdgeProperty(name="river", bit=0),
+                EdgeProperty(name="road", bit=1),
+            )
+        )
+        blob = write_ply(
+            VERTICES, edges=EDGES, edge_properties=EDGE_PROPERTIES, vocabulary=vocabulary
+        )
+        assert [c for c in parse_header(blob).comments if c.startswith("feature_bit ")] == [
+            "feature_bit 0 river",
+            "feature_bit 1 road",
+            "feature_bit 2 railway",
+        ]
+
+    def test_the_caller_comments_are_kept(self) -> None:
+        blob = write_ply(
+            VERTICES,
+            edges=EDGES,
+            edge_properties=EDGE_PROPERTIES,
+            vocabulary=DEFAULT_VOCABULARY,
+            comments=("crs EPSG:25833",),
+        )
+        assert "crs EPSG:25833" in parse_header(blob).comments
+
+    def test_the_masks_still_round_trip(self) -> None:
+        blob = write_ply(
+            VERTICES, edges=EDGES, edge_properties=EDGE_PROPERTIES, vocabulary=DEFAULT_VOCABULARY
+        )
+        header, data = read_ply(blob)
+        assert_array_equal(data["edge"][header.element("edge").properties[2].name], EDGE_PROPERTIES)
+
+    def test_an_unnamed_bit_is_refused_at_write_time(self) -> None:
+        # Increment 7's mechanism 3, through `vocabulary.names()`.
+        with pytest.raises(ValueError, match="bit 9"):
+            write_ply(
+                VERTICES,
+                edges=EDGES,
+                edge_properties=np.array([1, 0, 1 << 9, 0], dtype=np.uint32),
+                vocabulary=DEFAULT_VOCABULARY,
+            )
+
+
 class TestPurity:
     """Ruling 6: bytes out, no path in, no first-party import."""
 
     def test_the_return_value_is_bytes(self, surface: bytes) -> None:
         assert isinstance(surface, bytes)
 
-    def test_the_module_imports_nothing_first_party(self) -> None:
+    def test_the_only_first_party_import_is_the_vocabulary(self) -> None:
         # A writer that reached for `_core` would need the extension built to
         # test, and a writer that reached for `viz` would couple output to the
         # renderer -- the design refuses both by name. Read from the module's
         # own import statements, so a mention in prose is not a finding.
-        import ast
-        import inspect
-
+        #
+        # Widened by increment 13's U1 (a) from "nothing first-party": the edge
+        # file now carries the vocabulary (ruling 9), and `features.py` imports
+        # only hashlib and pydantic, so depending on it reaches nothing new.
         import tin_engine.io.ply as module
 
-        tree = ast.parse(inspect.getsource(module))
-        roots = set()
-        for node in ast.walk(tree):
-            if isinstance(node, ast.Import):
-                roots.update(alias.name.split(".")[0] for alias in node.names)
-            elif isinstance(node, ast.ImportFrom) and node.module and node.level == 0:
-                roots.add(node.module.split(".")[0])
-            elif isinstance(node, ast.ImportFrom) and node.level:
-                roots.add("tin_engine")  # a relative import is a first-party one
-        assert "tin_engine" not in roots
+        assert first_party_imports(module) <= {"tin_engine.features"}
 
     def test_it_is_deterministic(self) -> None:
         assert write_ply(VERTICES, faces=FACES) == write_ply(VERTICES, faces=FACES)
