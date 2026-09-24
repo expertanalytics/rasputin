@@ -51,6 +51,7 @@ class Rule(NamedTuple):
 _CGAL = "the user, 2026-09-16: 'strict zero-GDAL/CGAL dependencies'"
 _GDAL = _CGAL
 _RASTERIO = "the user, 2026-09-16: 'Let's drop rasterio first.'"
+_DATE = "the user, 2026-09-24, ratifying the class: C++20 <chrono> is the stack"
 
 # Directories that must stay clean. legacy/ is deliberately absent.
 SOURCE_DIRS = ["include", "src", "src_python", "bindings", "tests", "tools"]
@@ -72,9 +73,7 @@ PROHIBITED = {
         SPELLING, "gdal", "GDAL"),
     "date/date.h": Rule(
         "external date library: superseded by C++20 <chrono>",
-        PENDING,
-        "deleting the vendored lib/date copy was asked for (2026-09-16); "
-        "prohibiting the class was not",
+        RULED, _DATE,
         "external date libraries"),
     "date/tz.h": Rule(
         "external date library: superseded by C++20 <chrono>",
