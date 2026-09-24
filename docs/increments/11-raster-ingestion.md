@@ -1224,8 +1224,11 @@ as it stands, unless it says otherwise.
   entry `refuses_compound_crs` whose defect check reads 3072 = 5972 back
   with tifffile alone.
 - `test_refuses_geographic_crs_names_the_crs_type`: add a case
-  `compound_geographic`, 9707 → `Compound CRS`. This pins the order: it
-  must stay refusal 13. It passes today, and it guards the ordering.
+  `compound_geographic`, 9707 → `Compound CRS`. It must stay refusal 13.
+  On its own it does not guard the ordering: if 13a ran first, the message
+  would still name 3072, 9707 and `Compound CRS`. The ordering is guarded by
+  also asserting that refusal 13's message does not name `4096`, which only
+  13a's does.
 
 **Refusals 1 to 3, checks moved before `geotiff_metadata`.**
 - `test_refuses_missing_georeferencing`: add cases `tiepoint_1_value` (the
@@ -1323,13 +1326,30 @@ is left to the main session. The parts:
 
 The decoder-error ruling (§14, choice C) adds about 8 more, so about 366.
 
-`geotiff.py` is mostly the refusal list: eighteen named refusals at roughly
+`geotiff.py` is mostly the refusal list: nineteen named refusals at roughly
 three lines each, plus tag extraction, the CRS resolution, the NoData path and
 the promotion table. Comfortably inside the ceiling, which is deliberate —
 increment 12 carries the C++ concept change and needs the room.
 
 Tests are excluded from the ceiling and will be larger than the production
 code; one micro-TIFF per refusal is the point of the design.
+
+### Reconciliation
+
+Measured at `596b46e`, `models.py` plus `geotiff.py`, comments and docstrings
+excluded, counted with `ast` and `tokenize`. The `pyproject.toml` change is
+comments only.
+
+| measurement | value |
+|---|---|
+| estimate (rounds 1–3 plus choice C) | ~366 |
+| non-comment, non-blank | **278** (`geotiff.py` 232, `models.py` 46) |
+| non-comment, blank lines counted | 338 |
+
+**278 is the measurement**, 24% under the estimate and well under
+`CLAUDE.md` §2's 700. Round 3 and choice C came in over their own estimate
+(+41 against ~23): long refusal messages split across lines, a separate count
+message per georeferencing tag, and the `_stage` context manager.
 
 ---
 
@@ -1457,6 +1477,7 @@ understands and lets through what it does not.
 `truncated_ifd`, `truncated_strip` and `corrupt_deflate`. Each asserts
 `GeoTiffError`, and that `__cause__` is set. Add a `needs_codecs` case,
 `corrupt_lzw`. Under C only: `test_reader_bug_is_not_wrapped`, which
-monkeypatches `_placement` (or its round-3 successor) to raise `TypeError`
-and asserts `TypeError` is what comes out. Under D: no tests, and a
+monkeypatches `pyproj.CRS.from_epsg` (it runs inside the `with` block but
+outside all three wrapped calls) to raise `TypeError` and asserts `TypeError`
+is what comes out. Under D: no tests, and a
 docstring change.
