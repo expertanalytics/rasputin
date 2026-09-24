@@ -53,9 +53,6 @@ _GDAL = _CGAL
 _RASTERIO = "the user, 2026-09-16: 'Let's drop rasterio first.'"
 _DATE = "the user, 2026-09-24, ratifying the class: C++20 <chrono> is the stack"
 
-# Directories that must stay clean. legacy/ is deliberately absent.
-SOURCE_DIRS = ["include", "src", "src_python", "bindings", "tests", "tools"]
-
 PROHIBITED = {
     "cgal": Rule(
         "CGAL: GPL-encumbered; the migration replaces it with an MIT-licensed CDT",

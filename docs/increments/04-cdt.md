@@ -732,7 +732,7 @@ file.
 
 ## Files and LOC
 
-The unit is **non-comment production lines** — `CLAUDE.md` §2's unit, stated
+The unit is `CLAUDE.md` §2's, stated
 explicitly because three increments of estimates were ambiguous about it. These
 headers carry roughly as many comment lines as code lines, by house style, so
 the raw `wc -l` will be about double.

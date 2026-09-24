@@ -18,13 +18,15 @@ import re
 import sys
 
 PUBLISHES = (
-    (re.compile(r"\bgit\s+push\b"), "git push writes to the remote"),
+    (re.compile(r"\bgit\b[^|;&]*\bpush\b"), "git push writes to the remote"),
     (re.compile(r"\bgh\s+pr\s+(create|merge|ready|edit)\b"), "gh pr changes a pull request"),
-    (re.compile(r"\bgh\s+(release|repo\s+(create|delete|edit))\b"), "gh publishes or alters the repo"),
+    (re.compile(r"\bgh\s+(release|repo\s+(create|delete|edit))\b"),
+     "gh publishes or alters the repo"),
     (re.compile(r"--no-verify\b"), "--no-verify disables git's own hooks"),
     (re.compile(r"\bgit\s+(rebase|reset\s+--hard|filter-branch)\b|\bgit\s+commit\b.*--amend"),
      "this rewrites history, which is destructive once anything is published"),
-    (re.compile(r"\bgit\s+push\b.*(--force|-f)\b"), "a force push can discard the user's commits"),
+    (re.compile(r"\bgit\b[^|;&]*\bpush\b.*(--force|-f)\b"),
+     "a force push can discard the user's commits"),
 )
 
 

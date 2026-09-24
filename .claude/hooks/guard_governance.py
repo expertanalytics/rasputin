@@ -100,8 +100,19 @@ def main() -> int:
             # behind it.
             hits = [
                 name
-                for name in (*GOVERNED, *GOVERNED_GLOBS, *GOVERNED_PREFIXES)
-                if name.rstrip("/*") in command
+                for name in (*GOVERNED, *GOVERNED_PREFIXES)
+                if name.rstrip("/") in command
+            ]
+            # A glob cannot be used as a substring: ".claude/settings*.json*"
+            # contains a literal "*" that no real command does, so the settings
+            # files -- including settings.local.json, the permission allow-list
+            # -- went unguarded on this arm while the Edit arm caught them.
+            # Match the globs against the command's whitespace-split tokens.
+            hits += [
+                pattern
+                for pattern in GOVERNED_GLOBS
+                if any(fnmatch(token.strip("\"'<>"), f"*{pattern}")
+                       for token in command.split())
             ]
 
     if not hits:

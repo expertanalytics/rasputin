@@ -1240,7 +1240,7 @@ calls at the one site where the node's cell straddles a bucket edge.
 
 ## Files and LOC
 
-The unit is **non-comment production lines**, `CLAUDE.md` §2's unit. These
+The unit is `CLAUDE.md` §2's. These
 headers carry roughly as many comment lines as code, by house style, so raw
 `wc -l` will be about double.
 

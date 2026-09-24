@@ -414,7 +414,7 @@ instrument does:
 | the prescribed `grep` instrument | 276 |
 | executable statements | 109 |
 
-**191 is the measurement.** §2 fixes the unit as non-comment lines at line
+**191 is the measurement.** §2 fixes the unit at line
 granularity, so executable statements are a different unit and adopting them
 would silently redefine the ceiling. But the prescribed instrument has no
 Python-aware arm — it was written for C++, where `//` is the only comment — and
