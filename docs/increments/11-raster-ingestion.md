@@ -3,6 +3,11 @@
 **Status.** Design. Written by `@architect` before `@tester` is spawned, per
 `docs/increments/README.md` step 1. No production code and no tests here.
 
+**Amended after the red suite.** `@tester`'s red commit
+(`git log --oneline -1 -- tests/python/test_io_geotiff.py`) turned up seven
+design problems. Each one is ruled in place below, marked *Amended (problem N)*.
+Two of them went to the user, who chose A1 and B1; §14 records both.
+
 **Input.** `docs/increments/11-raster-ingestion-prior-art.md`, the
 `@migration-expert` report, already reviewed and corrected. That file holds the
 evidence; this file holds the rulings. Where they disagree, this file wins, and
@@ -23,8 +28,10 @@ reach `_core`; ruling 2 says why, and names the increment that finishes the job.
 4. **Area-registered files are converted, not refused** — the project's only DEM
    fixture is one. An *absent* registration key is refused.
 5. **Use `tifffile`'s own GeoKey decoding.** Do not port `GeoKeysInterpreter`.
-6. **CRS comes from `ProjectedCSTypeGeoKey` alone**, resolved through
+6. **Only `ProjectedCSTypeGeoKey` can yield an accepted CRS**, resolved through
    `pyproj.CRS.from_epsg`. No proj4 reassembly, no free-text ellipsoid regex.
+   `GeographicTypeGeoKey` is read only when 3072 is absent, and only so that
+   the refusal names the real reason (§5, problem 3).
 7. **Projected-and-metre is tested on the constructed CRS**, never on which
    GeoKeys are present.
 8. **`always_xy=True` is a hard requirement**, enforced by a grep test that
@@ -65,9 +72,24 @@ away. So:
 
 - **Increment 11**: `tin_engine/io/geotiff.py` and `tin_engine/io/models.py`.
   Pure Python. Imports `tifffile`, `pyproj`, `numpy`, `pydantic`, nothing
-  first-party, and **never `_core`**. Testable with no compiled extension in
-  the process — the same shape as `io/ply.py`, which is why increment 10 was
-  cheap.
+  first-party except `io/models.py`, and **never `_core`** — the same shape as
+  `io/ply.py`, which is why increment 10 was cheap.
+
+  *Amended (problem 2).* This section used to say the modules are "testable
+  with no compiled extension in the process". That is false as the tree
+  stands. `tin_engine/__init__.py` re-exports `Point2`, `Point3`, `cross` and
+  `dot` from `_core`, so importing any submodule loads the extension first.
+  Check it:
+
+  ```
+  $ .venv/bin/python -c "import sys, tin_engine.io.ply; print('tin_engine._core' in sys.modules)"
+  True
+  ```
+
+  The claim that holds is about the source: neither module imports `_core`,
+  and `test_module_never_imports_core` checks that by walking the AST. Whether
+  to make the stronger, process-level claim true went to the user, who chose
+  A1 (§14): the source-level claim is the one this increment makes.
 - **Increment 12**: `view.hpp` plus the row-access concept change, the pybind11
   buffer binding, `_core.pyi`, and `tin_engine/raster.py`. Also the index
   window (`window_for`, and the surviving arithmetic of
@@ -197,6 +219,29 @@ The fixture corroborates the arithmetic. Its tie point is
 size, which a corner offset by half a cell is and a node grid mis-shifted by
 half a cell is not.
 
+### A tie point that is not at pixel (0, 0)
+
+*Amended (problem 7).* The formulas above assume the tie point's raster
+coordinates `(I, J)` are `(0, 0)`. That is true of every file GDAL writes, but
+nothing required it. **Ruling: convert, do not refuse.** A tie point says that
+raster point `(I, J)` maps to model point `(X, Y)`. With a north-up affine
+placement, that fixes pixel `(0, 0)` exactly, so there is nothing to guess:
+
+```
+x_min = X - I * delta_x  [+ delta_x / 2 if area-registered]
+y_max = Y + J * delta_y  [- delta_y / 2 if area-registered]
+```
+
+`I` is the **column** and `J` the row. This is a port, not a new rule: the
+legacy did the same offset at `legacy/rasputin/reader.py:392-393` (prior art
+§3.2), under variable names that had the axes the wrong way round (prior art
+§4.3). `I` and `J` must be finite, like every other tie-point value; see
+refusal 1.
+
+The tie point's `K` and `Z` are ignored. Refusal 4 already requires ScaleZ to
+be zero, and with ScaleZ zero the file declares no vertical mapping for `Z` to
+offset, so dropping them discards nothing.
+
 **What is refused is not knowing.** If `GTRasterTypeGeoKey` is absent, or is
 32767 (user-defined), the reader raises and names the tag. Half a cell is the
 entire quantity in dispute and there is no way to recover it from the data.
@@ -214,7 +259,9 @@ of raising". Each entry below is one named test. The names are the test names.
 **Container and georeferencing**
 
 1. `refuses_missing_georeferencing` — `ModelTiepointTag` (33922) or
-   `ModelPixelScaleTag` (33550) absent. The legacy defaulted them to zeros and
+   `ModelPixelScaleTag` (33550) absent, or any of the tie point's `I`, `J`,
+   `X`, `Y` not finite (*amended, problem 7*: a NaN origin is as unusable as a
+   missing one, and nothing else caught it). The legacy defaulted them to zeros and
    `(1.0, 1.0)` and produced a unit-spaced raster at the origin (prior art
    §4.5). This is the one place the prior art calls refusal unambiguously right.
 2. `refuses_model_transformation` — `ModelTransformationTag` (34264) present. A
@@ -241,9 +288,13 @@ of raising". Each entry below is one named test. The names are the test names.
 9. `refuses_multi_sample` — `SamplesPerPixel` is not 1. A DEM has one band.
 10. `refuses_unsupported_dtype` — anything outside the promotion table in
     section 7.
-11. `refuses_missing_codec` — the page's compression needs `imagecodecs`. The
-    message names the compression scheme and the `codecs` extra. A bare
-    `KeyError` from inside `tifffile` is not a diagnostic; see section 8.
+11. `refuses_missing_codec` — the page's compression, **or its predictor**,
+    needs `imagecodecs`. The message names the tag (`Compression` (259) or
+    `Predictor` (317)), the scheme, and the `codecs` extra. A bare exception
+    from inside `tifffile` is not a diagnostic; see section 8. *Amended
+    (problem 1):* the check is a capability probe, run before any decode, and
+    not a list of scheme names. §8 gives the probe, and why the predictor is
+    included.
 
 **CRS**
 
@@ -252,6 +303,26 @@ of raising". Each entry below is one named test. The names are the test names.
     path. The legacy had two, one of them a regex over human prose.
 13. `refuses_geographic_crs` — the constructed CRS has `is_projected` false.
     Section 3.
+
+    *Amended (problem 3).* As first written, CRS came from 3072 alone. A
+    normally encoded geographic file has `GTModelTypeGeoKey` (1024) = 2,
+    `GeographicTypeGeoKey` (2048) = 4326, and no 3072. Such a file therefore
+    hit refusal 12 ("no CRS") and never refusal 13. The message was false: the
+    file does declare a CRS, just a geographic one. So refusal 13 could only
+    fire for a file that puts a geographic code in the projected key, which is
+    the rare case.
+
+    **Ruling.** CRS resolution tries 3072 first. If 3072 is absent, it tries
+    2048. Whichever code it uses is resolved with `from_epsg`, and the result
+    goes through the same `is_projected` test. So the geographic file is
+    refused as geographic, and the message names 2048, `GeographicTypeGeoKey`
+    and its value. Ruling 7 still holds: the refusal comes from the
+    constructed CRS, not from which keys are present. Ruling 6 still holds too.
+    2048 is always a geographic CRS, so it can never produce an accepted tile.
+    It is not a fallback path. Refusal 12 now means that neither key yields a
+    resolvable code. That covers 3072 absent with no 2048, and 3072 set to
+    32767 or unresolvable. The message names 3072, plus 2048 if it was
+    consulted. `GTModelTypeGeoKey` is still not read.
 14. `refuses_non_metre_linear_unit` — any horizontal axis has
     `unit_conversion_factor != 1.0`; or `ProjLinearUnitsGeoKey` (3076) is
     present and is not 9001; or the two disagree. The legacy's version of this
@@ -293,6 +364,26 @@ and the file's value. Subclasses are not worth it: no caller will branch on
 which refusal fired, and the one that might — the missing codec — is
 distinguishable by its message naming the extra to install.
 
+*Amended (problem 4).* The report said that four refusals have no tag to
+name: degenerate shape, ambiguous pages, unsupported dtype and missing codec.
+Only half of that is true. Each of the four comes from a baseline TIFF tag,
+and the rule stands for all of them. **Ruling: every refusal names the tag
+that its decision reads, by number and by name, plus the file's value.** Where
+a tag's raw value means little on its own, the message adds the value derived
+from it:
+
+| refusal | names | and adds |
+|---|---|---|
+| `refuses_degenerate_shape` | `ImageLength` (257) and/or `ImageWidth` (256), with its value | "need at least 2" |
+| `refuses_ambiguous_pages` | `NewSubfileType` (254) of the first offending page, with its value (0 when absent) | that page's index and the page count |
+| `refuses_unsupported_dtype` | `SampleFormat` (339) and `BitsPerSample` (258), with their values | the numpy dtype, e.g. `int64` |
+| `refuses_missing_codec` | `Compression` (259) or `Predictor` (317), with its value | the scheme name and the `codecs` extra |
+
+Measured, tifffile 2026.9.20: an `int64` micro-TIFF reads back as
+`bitspersample 64, sampleformat 2`, and a `bool` one as `1, 1`. The numpy
+dtype is kept in the message because `SampleFormat 2, BitsPerSample 64` is
+not how anyone would search for the problem. Both columns are required.
+
 ---
 
 ## 6. Ruling 9: NoData
@@ -305,16 +396,57 @@ semantics — any of the four bilinear corners NoData returns `nullopt` — and
 Discovery is all that is missing.
 
 **Tag present.** Tag 42113 is ASCII. The fixture's is the string `'-32767'`.
-Parse with `float()`. Then:
+**Parse the tag's text, never `page.nodata`.** Measured, tifffile 2026.9.20:
+for the text `'void'` or `'12abc'`, `page.nodata` logs a warning and returns
+`0`. That turns a malformed tag into a sentinel which deletes every
+sea-level cell. Read `page.tags[42113].value` and parse it with `float()`,
+refusing text that contains `_` (Python's `float()` accepts `'1_000'`; no TIFF
+writer means that). Then:
 
-- text that parses to NaN (`'nan'`) yields `nodata = None`. `is_nodata` already
-  catches NaN, and a NaN sentinel compared with `==` would match nothing, so
-  passing it would be worse than passing nothing.
-- otherwise convert to the **promoted array dtype** and require the round trip
-  to be exact. `sample.hpp`'s comparison is `v == *nodata_`, so a sentinel that
-  does not land on a representable value matches no cell and silently disables
-  NoData entirely. `refuses_nodata_not_representable`.
-- text that parses as neither: `refuses_unparseable_nodata`.
+- text that `float()` rejects: `refuses_unparseable_nodata`.
+- everything else goes through **one representability check** (below). If it
+  passes and the value is NaN, the result is `nodata = None`. `is_nodata`
+  already catches NaN, and a NaN sentinel compared with `==` would match
+  nothing.
+
+*Amended (problem 5).* The single check that follows replaces the earlier
+"round trip through the promoted dtype". It answers all four of the
+questions `@tester` raised.
+
+**The representability check, against the *file* dtype.** A sentinel is
+accepted only if a cell of the file's own dtype can hold exactly that value:
+
+- **integer file**: the value is finite, integral, and inside that dtype's
+  `[min, max]`;
+- **float file**: the value is NaN, or finite and survives an exact round
+  trip through that dtype.
+
+Anything else is `refuses_nodata_not_representable`, with the message naming
+the file dtype.
+
+Why the file dtype and not the promoted one (5c). The check exists because
+`sample.hpp` compares `v == *nodata_`, so a sentinel that no cell can equal
+switches NoData off without a word. Cells can only hold values of the file's
+dtype. The promoted dtype is wider, so it accepts sentinels that can never
+match: `0.5` or `-9999` on a `uint8` file pass a float32 round trip and still
+match no cell. Every row of the promotion table in §7 is exact by
+construction, so a value that is representable in the file dtype stays equal
+after promotion. A NaN on an integer file is refused for the same reason: no
+integer cell is NaN.
+
+Why no infinities (5d). `float('1e400')` is `inf`. The text names a finite
+number that no IEEE type can hold, but the float is indistinguishable from a
+file that meant infinity. The earlier rule accepted it, because inf survives a
+round trip. The ruling is that the check requires *finite or NaN*, so
+`'1e400'`, `'inf'` and `'-inf'` are all refused. A file whose voids really are
+±inf cannot be read. That trade is chosen on purpose: the refusal is loud,
+no such DEM product is known, and the rule can be loosened when one appears.
+
+**The caller's sentinel passes the same check (5b).** `v == *nodata_` does
+not care where the sentinel came from, so the check cannot care either. A
+caller sentinel that fails it is refused under the same name,
+`refuses_nodata_not_representable`. The message names the `nodata=`
+argument, not tag 42113.
 
 **Tag absent, which for most DEM products it is. Ruling: `nodata = None`. No
 value is guessed, and the array is not scanned.**
@@ -341,6 +473,28 @@ wrong and the reader cannot tell which.
 or is absent. An absent sentinel is a fact about the tile, and a later stage
 that cares can ask.
 
+**`nodata_source` records who made the NoData declaration, not whether a
+number crosses the boundary (5a).**
+
+| tag | caller | `nodata` | `nodata_source` |
+|---|---|---|---|
+| absent | absent | `None` | `"absent"` |
+| absent | `v` | `v` | `"caller"` |
+| `t` | absent | `t`, or `None` if NaN | `"tag"` |
+| `t` | equal to `t` | `t`, or `None` if NaN | `"tag"` |
+| `t` | differs from `t` | refused | `refuses_contradictory_nodata_override` |
+
+A `'nan'` tag is a declaration: the file says its voids are NaN. Recording it
+as `"absent"` would tell a later stage that the file said nothing, which is
+false. When the caller agrees with the tag, the answer is `"tag"`, because
+the file would have given the same result without the caller. "Equal" means
+the two parsed values are equal, with NaN treated as equal to NaN. The
+contradiction check runs after both values have passed the representability
+check, so a message never compares a valid value with an invalid one.
+
+The model validator enforces one implication: `nodata_source == "absent"`
+means `nodata is None`. Its converse does not hold, because of the NaN rows.
+
 ---
 
 ## 7. Types
@@ -350,7 +504,7 @@ All Pydantic V2, all frozen. `io/models.py`.
 ```
 RasterMeta
     x_min, y_max, delta_x, delta_y : float        # node grid, metres
-    cols, rows                     : int          # from array.shape only
+    cols, rows                     : StrictInt    # DemTile checks == array.shape (B1, §14)
     epsg                           : int          # projected, metre
     nodata                         : float | None
     nodata_source                  : "tag" | "caller" | "absent"
@@ -370,11 +524,37 @@ array, four keyword-named affine scalars, one optional sentinel, nothing else.
 `epsg` living on `RasterMeta` is not a CRS crossing the boundary; `raster.py`
 not passing it is what makes that true, and increment 12 owns that test.
 
-**Dimensions come from `array.shape`.** `cols` and `rows` are derived in the
-model validator, never accepted as input. `project_structure.md` already rules
+**Dimensions come from `array.shape`.** `project_structure.md` already rules
 this and prior art §5.7 is the incident: the legacy built a shape out of
 `numpy.float64` values and its guarding assertion compared `(12.0, 16.0)` to
 `(12, 16)` and passed.
+
+*Amended (problem 6).* As first written, `cols` and `rows` were to be
+"derived in the model validator, never accepted as input". They cannot be
+derived by `RasterMeta`'s own validator, because the array lives on `DemTile`.
+There are two sound readings, and they conflict. The user chose B1 (§14,
+choice B):
+
+- **Chosen (B1): `RasterMeta` keeps `rows` and `cols` as `StrictInt`.
+  `DemTile`'s `model_validator(mode="after")` refuses a tile where
+  `(meta.rows, meta.cols) != array.shape`.** `StrictInt` rejects `12.0`, which
+  kills the legacy incident at the type. The `DemTile` check makes a mismatch
+  impossible to construct. So "comes from the shape" is enforced, even though
+  it is no longer literally "derived". The reason to prefer this:
+  `RasterMeta` then describes the whole node grid on its own, including the
+  far corner, which needs `cols` and `rows`. The mosaic increment's footprint
+  walk (§10) has to read many tiles' extents from their headers without
+  decoding 100 MB of pixels each. With B1 it can build a `RasterMeta` from
+  `ImageWidth` and `ImageLength` and has nothing to reshape.
+- **Alternative (B2): remove `rows` and `cols` from `RasterMeta`, and make
+  them read-only properties on `DemTile` that return `array.shape`.** One
+  source of truth, and no validator at all. The cost: `RasterMeta` stops
+  being a complete grid description, and the mosaic increment will either add
+  the fields back or invent a second metadata type.
+
+The error for a B1 mismatch is Pydantic's `ValidationError`, not
+`GeoTiffError`. It is a programming error in whoever built the model. It does
+not describe a file.
 
 **Promotion table**, from `project_structure.md`:
 
@@ -415,7 +595,7 @@ and 33550 read directly from `page.tags`, and 34735/34736/34737 read through
 **`pyproject.toml`'s codec comment is false as installed.** It claims
 "tifffile covers uncompressed, Deflate, PackBits and LZW with no extra
 dependency". Measured, tifffile 2026.9.15, this tree's `.venv`, no
-`imagecodecs`:
+`imagecodecs`, **measuring writes** (see the amendment below):
 
 ```
 $ .venv/bin/python -c "
@@ -436,18 +616,65 @@ lzw FAIL KeyError "<COMPRESSION.LZW: 5> requires the 'imagecodecs' package"
 ```
 
 And the fixture `tests/fixtures/dem_archive/7908_3_10m_z33.tif` is LZW, so the
-repository's only DEM cannot be read without the `codecs` extra. Two
-consequences, both this increment's PR to land, per principle C3:
+repository's only DEM cannot be read without the `codecs` extra.
 
-- Correct the comment: without `imagecodecs`, tifffile covers uncompressed and
-  Deflate. PackBits and LZW need the extra, along with JPEG, ZSTD, LERC and
-  WebP.
-- `@tester` builds micro-TIFF fixtures with `compression=None` or `'deflate'`
-  so the suite runs with no optional dependency, and marks any test that reads
-  the real Kartverket fixture `skipif` on `imagecodecs` being importable.
-  `refuses_missing_codec` is then testable in both directions: a PackBits
-  micro-TIFF is refused with a useful message when the extra is absent, and
-  read when it is present.
+*Amended (problem 1).* **The measurement above is of `imwrite`, and the reader
+only reads.** Reading and writing do not match. Measured, tifffile
+2026.9.20, no `imagecodecs`: a real PackBits strip, spliced into a micro-TIFF
+by hand, **reads** correctly through tifffile's built-in
+`tifffile/_imagecodecs.py:packbits_decode`. LZW still fails on read, with
+`ValueError: <COMPRESSION.LZW: 5> requires the 'imagecodecs' package`. The
+read failure is a `ValueError`, not the `KeyError` shown above. So "PackBits
+needs the extra" was wrong for reading, and a PackBits codec refusal could
+never fire.
+
+Which schemes need the extra depends on the installed tifffile, and on the
+Python under it. `50000` (ZSTD) resolves without the extra here only because
+tifffile's built-in module imports `compression.zstd`, which is new in Python
+3.14 (`tifffile/_imagecodecs.py`, the `from compression import zstd` lines).
+So the rule is written as a probe, not as a list:
+
+```
+$ .venv/bin/python -c "
+import tifffile
+d, p = tifffile.TIFF.DECOMPRESSORS, tifffile.TIFF.PREDICTORS
+print({c: c in d for c in (1, 5, 8, 32773, 50000)}, {c: c in p for c in (1, 2, 3)})"
+{1: True, 5: False, 8: True, 32773: True, 50000: True} {1: True, 2: True, 3: False}
+```
+
+**Ruling.** Before `asarray`, the reader checks
+`page.compression in tifffile.TIFF.DECOMPRESSORS` and
+`page.predictor in tifffile.TIFF.PREDICTORS`. If either is false, it raises
+`refuses_missing_codec`. Membership tries to resolve the codec and returns
+`False` instead of raising (`CompressionCodec.__contains__` and
+`PredictorCodec.__contains__` in `tifffile/tifffile.py`), so this is
+tifffile's own answer and not a copy of it. The reader never matches
+tifffile's exception text.
+
+**The predictor is new here.** `Predictor` (317) = 3, the floating-point
+predictor, needs `imagecodecs` exactly as LZW does. Measured by patching a
+Deflate micro-TIFF's predictor to 3:
+`ValueError: <PREDICTOR.FLOATINGPOINT: 3> requires the 'imagecodecs' package`.
+GDAL writes `PREDICTOR=3` for float DEMs, so this is not an edge case.
+
+Not verified: that `TIFF.DECOMPRESSORS.__contains__` behaves the same across
+the whole range that `pyproject.toml` pins (`tifffile>=2024.1`). Only the
+installed version was run. If `@developer` finds it differs, the pin moves up.
+The rule does not change.
+
+Consequences, both this increment's PR to land, per principle C3:
+
+- Correct the `pyproject.toml` comment. Name no scheme list that rots. Say
+  that without `imagecodecs`, tifffile reads uncompressed and Deflate plus
+  whatever its built-ins cover; that LZW (the Kartverket fixture) and the
+  floating-point predictor need the extra; and give the one-line probe above
+  as the way to check any other scheme.
+- `@tester` builds micro-TIFF fixtures with `compression=None` or `'deflate'`,
+  so the suite runs with no optional dependency. Any test that reads the real
+  Kartverket fixture is marked `skipif` on `imagecodecs` being importable.
+  `refuses_missing_codec` is testable in both directions with **LZW**, not
+  PackBits: refused with a useful message when the extra is absent, and read
+  when it is present. The suite already does this.
 
 **Whole-page read.** `page.asarray()`. Windowed decode needs `page.aszarr()`
 and therefore `zarr`, which is not a dependency and is not being added here.
@@ -596,9 +823,17 @@ lines, per `CLAUDE.md` §2.
 
 | file | estimate |
 |---|---|
-| `src_python/tin_engine/io/models.py` | 80 |
-| `src_python/tin_engine/io/geotiff.py` | 230 |
-| **total** | **310** |
+| `src_python/tin_engine/io/models.py` | 90 |
+| `src_python/tin_engine/io/geotiff.py` | 250 |
+| **total** | **340** |
+
+*Amended.* The earlier figure was 310. The amendments add about 30 lines:
+the predictor probe (+3), the 2048 path in CRS resolution (+5), NoData's
+file-dtype check, the finiteness rule and the provenance table (+10), the tie
+point's `(I, J)` offset and finiteness (+4), the table of tag names for
+tagless refusals (+3), and `DemTile`'s shape validator under B1 (+5). Choice A2
+in §14, not taken, would have added about 10 lines to
+`src_python/tin_engine/__init__.py`.
 
 `geotiff.py` is mostly the refusal list: eighteen named refusals at roughly
 three lines each, plus tag extraction, the CRS resolution, the NoData path and
@@ -607,3 +842,47 @@ increment 12 carries the C++ concept change and needs the room.
 
 Tests are excluded from the ceiling and will be larger than the production
 code; one micro-TIFF per refusal is the point of the design.
+
+---
+
+## 14. Ruled by the user
+
+Two amendments set two sound principles against each other, so they went to
+the user rather than being settled quietly. **The user chose A1 and B1 on
+2026-09-24.** The options are kept below so the reasons stay on record.
+
+**Choice A: the "no compiled extension in the process" claim (§2, problem 2).**
+
+- **A1, chosen: make the claim about the source.** `geotiff.py` and
+  `models.py` never import `_core`, and `test_module_never_imports_core` checks
+  this on the AST. No code changes, and nothing outside the increment is
+  touched. `viz/` and `features.py` already make exactly this claim
+  (`project_structure.md`, "never imports _core"), so A1 matches the rest of
+  the tree. The cost: nobody can run `io/` without first building the
+  extension. CI always builds it, so today that costs nothing.
+- **A2: make the process-level claim true.** Change `tin_engine/__init__.py`
+  to re-export lazily through a module `__getattr__` (PEP 562), with a
+  `TYPE_CHECKING` import so that `mypy --strict` still sees `Point2` and the
+  others. Then a subprocess test can assert that
+  `'tin_engine._core' not in sys.modules` after `import tin_engine.io.geotiff`.
+  The gain: isolation that is enforced, not a convention, and it covers
+  `viz/` too. The cost: about 10 lines in a file this increment does not own,
+  a public-import behaviour change that `tests/python/test_core.py` relies on
+  (it should keep passing, but it has to be re-run), and a new failure mode.
+  An `ImportError` for a missing extension would move from `import tin_engine`
+  to first attribute access.
+
+**Choice B: where `rows` and `cols` live (§7, problem 6).**
+
+- **B1, chosen:** keep them on `RasterMeta` as `StrictInt`, with
+  `DemTile` refusing any disagreement with `array.shape`. `RasterMeta` stays a
+  complete grid description, which is what the mosaic increment's header-only
+  footprint walk needs.
+- **B2:** remove them from `RasterMeta`, and make them properties on `DemTile`
+  that return `array.shape`. One source of truth, no validator. The mosaic
+  increment then re-adds them or builds a second metadata type.
+
+The other five problems were ruled in place by `@architect`. Problem 3 amends
+ruling 6, and says so in §1. The user may still want to look at that
+amendment: it reads a GeoKey that ruling 6 used to exclude, though only to name
+the correct refusal.
