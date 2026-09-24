@@ -26,7 +26,8 @@ retirement at the next retrospective.
 **Rule.** Run the check, then write the claim. Naming a check is not
 performing one, and neither is being confident about it.
 **Apply.** Any sentence of the form "X does Y" about a script, a suite, a gate
-or a file.
+or a file — and any claim about what the user has asked for or ruled, which has
+a command too. See A6.
 **Origin.** `debd8d1`, corrected by `0fa05e3`.
 **Status.** In force. Last exercised: 5c.
 
@@ -70,6 +71,19 @@ each.
 
 ---
 
+### A6 — A rule in a governance file is evidence someone wrote it
+
+**Rule.** A rule in a repository document is evidence an agent wrote a sentence,
+not evidence the user made a rule. Name the commit and the human turn before
+citing it to the user or enforcing it in a gate.
+**Apply.** The git author proves nothing: every commit here carries the user's
+identity. The `Co-Authored-By` line and the transcript store are the evidence,
+and `git log -S` finds the commit. A prohibition is never a design opinion for
+this purpose, because provenance always has a command to run.
+**Origin.** `docs/retrospectives/2026-09-24-unauthored-rules.md`, which measures
+48 of 48 governance commits as agent-written.
+**Status.** In force.
+
 ## B. Claims
 
 ### B1 — A claim names the object the code evaluates
@@ -94,8 +108,12 @@ name, a symbol, or a `grep`/`git grep` that returns the set.
 ### B3 — A correction is a change and can carry the next defect
 
 **Rule.** Apply A1 and B1 to the correction itself, before committing it.
-**Apply.** Especially when the correction is *about* accuracy.
-**Origin.** `docs/retrospectives/2026-09-22-increments-7-5b-5c.md`.
+**Apply.** Especially when the correction is *about* accuracy, and in a
+governance cleanup, where the mandate to delete false rules is what licenses
+writing one.
+**Origin.** `docs/retrospectives/2026-09-22-increments-7-5b-5c.md` for the
+citation cases; `2026-09-24-unauthored-rules.md` for the chain of five commits
+in which each repair carried the next defect.
 **Status.** In force. Last exercised: 5c.
 
 ### B4 — An estimate is not a measurement and must not be reported as one
@@ -197,7 +215,7 @@ never crosses into it. `CLAUDE.md` §2 is the statement; this is the pointer.
 **Origin.** `CLAUDE.md` §2; `docs/increments/05c-noder-wiring.md`, prior art.
 **Status.** In force. Last exercised: 5c.
 
-### E4 — Under 700 non-comment production lines per PR
+### E4 — Under 700 production lines per PR
 
 **Rule.** `CLAUDE.md` §2 is the statement; this is the pointer.
 **Status.** In force. Last exercised: 5c.

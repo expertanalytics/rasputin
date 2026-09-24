@@ -716,7 +716,7 @@ Re-runnable:
 The one-line gap is the command's `\*` alternative — meant for a C block-comment
 continuation — swallowing `build_scene`'s keyword-only marker, a bare `    *,`.
 Noted rather than corrected. The command is not the definition of the unit —
-`CLAUDE.md` §2 is, exclusively, and the unit is non-comment lines. The grep is
+`CLAUDE.md` §2 is, exclusively. The grep is
 the **instrument** every figure in this document was taken with, and it
 approximates that unit imperfectly, as this one line demonstrates. It is kept
 because a Python-only variant would make the numbers incomparable to 6a's, and

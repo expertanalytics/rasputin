@@ -923,8 +923,8 @@ reason it is armed at all.
 
 Instruments as declared in `05b-noder-driver.md`: C++ `grep -vcE '^\s*(//|$)'`,
 Python `grep -vcE '^\s*(#|$)'`. Docstrings and `R"doc(...)"` bodies count as
-code under both, which is the definition `CLAUDE.md` §2's *non-comment lines*
-approximates.
+code under both, which `CLAUDE.md` §2's unit does not — §2 is the definition
+and these instruments only approximate it.
 
 | File | Contents | Est. |
 |---|---|---|

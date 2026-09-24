@@ -279,7 +279,9 @@ Candidates (MIT / BSD only):
   under this design; see `docs/increments/04-cdt.md`.
 - **Geogram** (BSD-3) — overkill under this design since we don't need its remeshing or spatial-search infrastructure.
 
-CGAL is replaced. Boost.Geometry remains useful for the upstream vector simplification step.
+CGAL is replaced. Vector simplification is step 2 and belongs to Python, where
+Shapely covers Douglas-Peucker. Visvalingam-Whyatt has no Shapely equivalent and
+would be written in-tree. Nothing in the C++ core simplifies anything.
 
 ## Final flip pass
 
@@ -302,3 +304,217 @@ Constraint edges are skipped, so the original polygon and polyline geometry is p
 - **Wall-clock time:** much better at scale; throughput scales with available cores / SMs.
 - **Memory:** ternary tree adds a small overhead per internal node (3 child indices) but is trivially flattened at the end.
 - **Quality:** initial-CDT topology of un-flipped *constraint* edges persists, so input feature simplification quality matters. Interior quality is recovered by the final flip pass.
+
+## Open question: how is triangle size controlled where terrain is flat?
+
+Raised 2026-09-23. **Not settled.**
+
+Refinement stops on elevation error alone. A flat body therefore stays coarse,
+which is usually right — it is the whole reason a TIN beats a regular grid,
+since vertex density follows terrain gradient and orographic precipitation
+follows terrain gradient too, so the adaptation transfers. Spending cells on
+flat ground is the thing this design exists to avoid.
+
+The exception: **a flat body surrounded by steep terrain may need resolution
+for water routing**, even though its own elevation residual is
+zero. Water collects there. One huge triangle cannot represent where it goes.
+
+Three ways to express that, increasing in what they assume:
+
+1. **A global area cap.** Simplest, and wrong for the reason above: it spends
+   cells on isolated flat ground.
+
+2. **Grading** — bound how much adjacent cells may differ in size. Gives the
+   wanted behaviour: a lone plain has flat neighbours and stays coarse, a valley
+   floor beside refined slopes is pulled finer. **But it costs this design its
+   core property.** The ternary tree stores `v0, v1, v2` and `children[3]` and
+   no adjacency at all, so grading needs a new structure plus a cross-triangle
+   read every round — and "zero cross-triangle communication" is what the
+   algorithm is sold on. It also cascades: refining A forces B forces C, a
+   propagation needing iteration to converge.
+
+3. **A sizing field sampled on the raster.** Precompute a target-edge-length
+   raster from local terrain roughness, **blur it**, and have refinement read it
+   exactly as it already reads elevation — one more lookup in a loop already
+   scanning the bounding box. The blur is what produces the grading: a valley
+   floor inherits a small target from its neighbourhood because the field was
+   smoothed across the boundary, not because a triangle asked its neighbour
+   anything.
+
+**Recommended: 3.** No adjacency, no cross-triangle reads, no cascade, and the
+field is fixed before refinement starts. It also composes — if flow
+accumulation exists it becomes another term in the same field, and refinement
+neither knows nor cares which inputs built it.
+
+### Why not drive this from flow accumulation directly
+
+Rejected as a *requirement*, not as a mechanism. `auto_catchments.md` already
+plans an accumulation raster for catchment delineation, so reusing it would be
+nearly free — but **the tool must work when a catchment polygon is supplied
+rather than derived**, and then no accumulation exists and computing one would
+impose a cost the caller did not ask for. So it cannot be a precondition of
+meshing. As an
+optional term in the sizing field it remains available and is worth revisiting.
+
+**Noted for later: flow accumulation as a refinement driver.** Where routing
+needs cells along flow paths through a large flat interior, a blurred roughness
+field will not put them there — grading of any kind only propagates inward from
+the edges. Accumulation would. Revisit when the derive-catchments path exists.
+
+### Separation of concerns, which this must not erode
+
+Constrained vertices are fixed before meshing and cannot be removed by
+refinement or flipping. So the count of constrained degrees of freedom is
+decided upstream, by whatever produced the polygons and polylines — and a
+DEM-derived catchment boundary can carry one vertex per pixel edge.
+
+Each stage does one thing and hands on an artefact:
+
+- **auto-catchment** produces a catchment polygon. Nothing else.
+- **simplify** reduces its vertex count to the target resolution. Separately,
+  and identically, for every other constraining polyline and polygon.
+- **mesh** consumes constraints it does not question.
+
+This is step 2 and step 5's "No simplification after this point" already, and
+it is restated because the pressure to fold simplification into meshing will
+come from whoever finds a catchment with 40 000 vertices. The answer is a better
+simplify step, not a mesher that edits its own constraints.
+
+## Open question: does the flip pass leave the tolerance undefined?
+
+Raised 2026-09-23. **Not settled. This section asks a question and does not
+answer it.** Whoever writes the refinement increment must rule on it before
+`@tester` is briefed, because the answer decides what the suite can assert.
+
+### The question
+
+The refinement loop terminates when every leaf triangle satisfies
+`max |s.z - plane(T)(s)| <= tol` over the samples inside it. That guarantee is
+about **each triangle's own plane**.
+
+The flip pass then runs. A flip replaces two triangles over a quadrilateral
+with two different triangles over the same four vertices. The vertices do not
+move, but the two surfaces agree only along the new diagonal — everywhere else
+in the quad they differ. Every sample in that quad is now measured against a
+plane that did not exist when the tolerance was checked, and nothing checks it
+again.
+
+So the guarantee the algorithm delivers is "error was within `tol` at the
+moment refinement converged", and the mesh handed to the caller is not that
+mesh.
+
+### How large the disagreement can be
+
+Measured on a saddle — four corners of a unit square with alternating heights
+0, 1, 0, 1:
+
+```
+same four vertices, centre of the quad
+  surface with diagonal a-b : z = 0.000
+  surface with diagonal c-d : z = 1.000
+  the flip moves the surface by 1.000 at that point
+```
+
+The full height range of the data, at a single flip, with no vertex moved. A
+saddle is the worst case rather than a typical one, and on smooth terrain the
+disagreement is bounded by local curvature — but it is not bounded by `tol`,
+and nothing in the algorithm bounds it.
+
+### Why this may be worse than a bookkeeping problem
+
+The flip criterion is the circumcircle test — it moves the mesh toward the
+Delaunay triangulation. **Delaunay is not optimal for piecewise linear
+approximation of a surface.** Dyn, Levin and Rippa showed that triangulations
+chosen from the data values outperform Delaunay for exactly this problem (*Data
+Dependent Triangulations for Piecewise Linear Interpolation*, IMA Journal of
+Numerical Analysis 10(1), 1990).
+
+If that holds here, the flip pass is not neutral with respect to `tol`: it
+systematically spends vertical accuracy to buy triangle shape. This document
+currently describes it as recovering quality, which is true for shape and may
+be false for the thing the tolerance measures.
+
+Note also that the minimum-error triangulation problem is NP-hard and not
+approximable within any multiplicative factor unless P = NP, so "flip by error"
+is a heuristic, not an optimisation with a known answer.
+
+### One thing the pseudocode omits, and why that is safe
+
+The flip pass tests the circumcircle and does not test whether the quad is
+convex, though a flip of a non-convex quad would produce overlapping triangles.
+That omission is safe, and the reason is worth writing down because a reader
+implementing it will ask.
+
+An edge that fails the circumcircle test always has a convex quad. Measured over
+200 000 random configurations: of 30 659 non-convex quads, **zero** were flagged
+as not locally Delaunay. So the circumcircle test already excludes every case
+where a flip would be illegal, and a separate convexity test would never fire.
+
+Option 5 below does not inherit this. A patch larger than two triangles has no
+such guarantee, so patch growth must test the boundary it is building.
+
+### What a ruling has to choose between
+
+1. **Flip only when every sample in the quad stays within `tol` afterwards.**
+   Keeps the guarantee; the mesh is less Delaunay than it could be.
+2. **Alternate refine and flip until both hold.** Keeps both properties; needs
+   an argument that it terminates.
+3. **Keep the flip but change its criterion from the circumcircle test to
+   approximation error.** Data-dependent, per the reference above; abandons the
+   shape guarantee the Delaunay criterion gives.
+4. **Accept it and say so.** `tol` becomes a refinement parameter rather than a
+   property of the delivered mesh, stated plainly in the API.
+
+5. **Re-triangulate a patch rather than flipping an edge.** Grow a region of
+   triangles bounded entirely by unconstrained edges, take the vertices inside
+   it, and re-solve that patch — choosing a triangulation that satisfies `tol`,
+   inserting points until one does, or both.
+
+   This is strictly more general than options 1 to 3: an edge flip is the
+   two-triangle case of it. It keeps the property that makes the flip pass
+   parallel — the patch boundary is fixed, so nothing outside changes, and the
+   conflict rule is the same one flipping already needs, that patches may not
+   overlap. If the patch polygon is convex, any triangulation of its interior
+   points is valid and covers it exactly, so the choice is free rather than
+   searched under constraints.
+
+   The reason it answers this section's question, where flipping does not: the
+   decision stops being "which of two diagonals" and becomes "any triangulation
+   of these points that meets the tolerance". `tol` becomes a constraint the
+   step solves under rather than a property it happens to preserve.
+
+   Three consequences a design must state:
+
+   - **It cannot live in the ternary tree.** An arbitrary re-triangulation of a
+     patch is not a fan subdivision, so this runs after the flatten step, on a
+     general mesh. The pipeline already flattens last, so the ordering works —
+     but "Data structure" above says the tree *is* the mesh, and it would stop
+     being true here.
+   - **Patch growth needs a stopping rule**, and it is the design parameter.
+     Too small is flipping; too large re-triangulates the mesh and loses the
+     locality that made any of this parallel.
+   - **Patches are bounded by constraints**, so a region dense with rivers and
+     roads gets small patches. That is likely the right behaviour: those are
+     the places where the input geometry should dominate the triangulation.
+
+   This has a name. *Higher-order Delaunay triangulation* relaxes the
+   circumcircle criterion over a neighbourhood rather than a single edge, and
+   is the formalisation of this idea; see "Implementing data-dependent
+   triangulations with higher order Delaunay triangulations", ACM SIGSPATIAL
+   2016. **Nobody here has read it.** Read it before designing this.
+
+Nothing here rules 4 out. It rules out leaving the document as it is, which
+promises a bound the pipeline does not deliver.
+
+Option 5 came from the user and is materially better than 1 to 4, which were
+written by an agent. Recorded with that provenance because this project has
+already found one rule that acquired the authority of a human decision without
+having been one (`project_structure.md`'s CRS paragraph, corrected 2026-09-23).
+
+### One thing to check before designing any of this
+
+This document predates every increment record and has never been through the
+protocol. Its "Library choices" section still discusses selecting a CDT, which
+increment 4 settled. Read it against the shipped tree before trusting any of
+it — the corner-graze work is the precedent for what an unchecked old design
+document costs.
