@@ -2,7 +2,7 @@
 
 The design is `docs/increments/11-raster-ingestion.md`; section numbers below
 are its. The reader's job is refusal (ruling 3), so most of this file is the
-eighteen named refusals of §5, one crafted micro-TIFF each, built by
+nineteen named refusals of §5 (eighteen, and round 3's 13a), one crafted micro-TIFF each, built by
 `geotiff_fixtures.py`. `test_geotiff_fixtures.py` shows, with tifffile alone,
 that every fixture carries exactly the defect its refusal names.
 
@@ -25,6 +25,7 @@ TIFF tag their decision reads, as in §5's table.
 from __future__ import annotations
 
 import ast
+import functools
 import importlib.util
 import math
 import re
@@ -35,6 +36,7 @@ from pathlib import Path
 from typing import Any
 
 import numpy as np
+import pyproj
 import pytest
 import tifffile
 
@@ -42,8 +44,12 @@ from geotiff_fixtures import (
     COLS,
     DELTA_X,
     DELTA_Y,
+    EPSG_COMPOUND,
+    EPSG_COMPOUND_GEOGRAPHIC,
+    EPSG_COMPOUND_HORIZONTAL,
     EPSG_FEET,
     EPSG_GEOCENTRIC,
+    EPSG_PROJECTED_3D,
     EPSG_UNRESOLVABLE,
     EPSG_UTM33,
     EPSG_WGS84,
@@ -60,8 +66,14 @@ from geotiff_fixtures import (
     PROJECTED_CS_TYPE,
     REFUSALS,
     ROWS,
+    SCALE,
+    THUNDERSCAN,
     TIE_X,
     TIE_Y,
+    TIEPOINT,
+    UNDECODABLE,
+    UNDECODABLE_WITH_CODECS,
+    UNKNOWN_COMPRESSION,
     USER_DEFINED,
     VERTICAL_UNITS,
     elevations,
@@ -233,6 +245,34 @@ class TestArray:
         would refuse this file. The probe must not.
         """
         np.testing.assert_array_equal(decode(packbits_tiff()).array, elevations())
+
+    def test_tile_does_not_share_the_callers_buffer(self, decode: Decode) -> None:
+        """§7, amended (round 3): `DemTile` copies. A view of an already
+        C-contiguous caller array shared its buffer, so a write by the caller
+        changed the tile that every refinement thread samples."""
+        from tin_engine.io.models import DemTile
+
+        mine = elevations(np.float32)
+        assert mine.flags.writeable and mine.flags.c_contiguous
+        tile = DemTile(meta=decode(micro_tiff()).meta, array=mine)
+        assert not np.shares_memory(mine, tile.array)
+        mine[0, 0] = 42.0
+        np.testing.assert_array_equal(tile.array, elevations(np.float32))
+
+    @pytest.mark.parametrize("origin", ["decoded", "caller_built"])
+    def test_tile_array_cannot_be_made_writeable(self, decode: Decode, origin: str) -> None:
+        """§7, amended (round 3): the tile never hands out a writeable handle.
+        A read-only view whose base is writeable can have its flag set back;
+        a view of a read-only owned copy cannot (numpy: "cannot set WRITEABLE
+        flag to True of this array")."""
+        from tin_engine.io.models import DemTile
+
+        tile = decode(micro_tiff())
+        if origin == "caller_built":
+            tile = DemTile(meta=tile.meta, array=elevations(np.float32))
+        with pytest.raises(ValueError, match="WRITEABLE"):
+            tile.array.flags.writeable = True
+        assert not tile.array.flags.writeable
 
 
 class TestFrozenModels:
@@ -527,9 +567,23 @@ class TestNoData:
         assert meta.nodata is None
         assert meta.nodata_source == "tag"
 
+    @pytest.mark.parametrize(
+        "flag", [True, False, np.True_, np.False_], ids=["true", "false", "np_true", "np_false"]
+    )
+    def test_caller_bool_is_refused(self, decode: Decode, flag: Any) -> None:
+        """§6, amended (round 3): a `bool` is not a sentinel. `False` became 0.0
+        and deleted every sea-level cell. It is `TypeError`, not `GeoTiffError`:
+        a programming error in the caller, not a fact about a file (§7, B1).
+        The message names the `nodata=` argument and the type."""
+        with pytest.raises(TypeError) as info:
+            decode(micro_tiff(), nodata=flag)
+        message = str(info.value)
+        assert "nodata" in message, message
+        assert "bool" in message.lower(), message
+
 
 # ---------------------------------------------------------------------------
-# The eighteen refusals (§5). Test names are the design's names.
+# The nineteen refusals (§5, with round 3's 13a). Test names are the design's names.
 # ---------------------------------------------------------------------------
 
 
@@ -540,34 +594,99 @@ def _tiepoint(**changes: float) -> tuple[float, ...]:
 
 
 _TIEPOINT_NAMES = ("33922", "ModelTiepointTag")
+_SCALE_NAMES = ("33550", "ModelPixelScaleTag")
 
 
 @pytest.mark.parametrize(
-    ("changes", "names"),
+    ("changes", "names", "count"),
     [
-        ({"tiepoint": None}, _TIEPOINT_NAMES),
-        ({"scale": None}, ("33550", "ModelPixelScaleTag")),
-        ({"tiepoint": _tiepoint(i=math.nan)}, (*_TIEPOINT_NAMES, "nan")),
-        ({"tiepoint": _tiepoint(j=math.inf)}, (*_TIEPOINT_NAMES, "inf")),
-        ({"tiepoint": _tiepoint(x=math.nan)}, (*_TIEPOINT_NAMES, "nan")),
-        ({"tiepoint": _tiepoint(y=-math.inf)}, (*_TIEPOINT_NAMES, "-inf")),
+        ({"tiepoint": None}, _TIEPOINT_NAMES, None),
+        ({"scale": None}, _SCALE_NAMES, None),
+        ({"tiepoint": _tiepoint(i=math.nan)}, (*_TIEPOINT_NAMES, "nan"), None),
+        ({"tiepoint": _tiepoint(j=math.inf)}, (*_TIEPOINT_NAMES, "inf"), None),
+        ({"tiepoint": _tiepoint(x=math.nan)}, (*_TIEPOINT_NAMES, "nan"), None),
+        ({"tiepoint": _tiepoint(y=-math.inf)}, (*_TIEPOINT_NAMES, "-inf"), None),
+        ({"tiepoint": TIEPOINT[:1]}, _TIEPOINT_NAMES, 1),
+        ({"tiepoint": TIEPOINT[:3]}, _TIEPOINT_NAMES, 3),
+        ({"tiepoint": TIEPOINT[:5]}, _TIEPOINT_NAMES, 5),
+        ({"scale": SCALE[:1]}, _SCALE_NAMES, 1),
+        ({"scale": SCALE[:2]}, _SCALE_NAMES, 2),
     ],
-    ids=["tiepoint_absent", "scale_absent", "i_nan", "j_inf", "x_nan", "y_negative_inf"],
+    ids=[
+        "tiepoint_absent",
+        "scale_absent",
+        "i_nan",
+        "j_inf",
+        "x_nan",
+        "y_negative_inf",
+        "tiepoint_1_value",
+        "tiepoint_3_values",
+        "tiepoint_5_values",
+        "scale_1_value",
+        "scale_2_values",
+    ],
 )
 def test_refuses_missing_georeferencing(
-    refused: Callable[..., str], changes: dict[str, Any], names: tuple[str, ...]
+    refused: Callable[..., str],
+    changes: dict[str, Any],
+    names: tuple[str, ...],
+    count: int | None,
 ) -> None:
-    """§5 refusal 1, amended (problem 7): a non-finite origin is as unusable as none."""
-    refused(micro_tiff(**changes), *names)
+    """§5 refusal 1, amended (problem 7): a non-finite origin is as unusable as none.
+
+    Amended (round 3): a short tie point, or a scale with any count but 3, is
+    refusal 1 too, and the count is the diagnosis, so the message names it.
+    These are checked from `page.tags` before `geotiff_metadata`, which would
+    otherwise raise tifffile's bare `ValueError` on the reshape. A count of 1
+    is the scalar path: a one-value DOUBLE tag reads back as a bare `float`
+    (`test_geotiff_fixtures.py` shows it), which the green code iterated.
+    """
+    message = refused(micro_tiff(**changes), *names)
+    if count is not None:
+        _names_numbers(message, count)
 
 
-def test_refuses_model_transformation(refused: Callable[..., str]) -> None:
-    """Refused even though a tie point and scale are also present."""
-    refuse_named(refused, "refuses_model_transformation")
+_TRANSFORMATION_NAMES = ("34264", "ModelTransformationTag")
 
 
-def test_refuses_multiple_tiepoints(refused: Callable[..., str]) -> None:
-    refuse_named(refused, "refuses_multiple_tiepoints")
+@pytest.mark.parametrize(
+    "build",
+    [
+        REFUSAL["refuses_model_transformation"].build,
+        lambda: micro_tiff(tiepoint=None, scale=None, transformation=(1.0, 0.0, 0.0)),
+        lambda: micro_tiff(tiepoint=None, scale=None, transformation=tuple(map(float, range(12)))),
+    ],
+    ids=["16_values_beside_tiepoint_and_scale", "3_values_alone", "12_values_alone"],
+)
+def test_refuses_model_transformation(
+    refused: Callable[..., str], build: Callable[[], Any]
+) -> None:
+    """§5 refusal 2: refused even though a tie point and scale are also present.
+
+    Amended (round 3): with any length. The 3- and 12-value cases carry no tie
+    point and no scale, so a refusal naming 34264 shows that 34264 is checked
+    before either is looked at (and before `geotiff_metadata`, whose 4x4
+    reshape used to raise first)."""
+    refused(build(), *_TRANSFORMATION_NAMES)
+
+
+@pytest.mark.parametrize(
+    ("build", "count"),
+    [
+        (lambda: micro_tiff(tiepoint=(*TIEPOINT, 1.0)), 7),
+        (lambda: micro_tiff(tiepoint=(*TIEPOINT, 1.0, 1.0, 0.0)), 9),
+        (REFUSAL["refuses_multiple_tiepoints"].build, 12),
+    ],
+    ids=["7_values", "9_values", "12_values"],
+)
+def test_refuses_multiple_tiepoints(
+    refused: Callable[..., str], build: Callable[[], Any], count: int
+) -> None:
+    """§5 refusal 3, amended (round 3): more than 6 values, whatever the count.
+    7 and 9 are not a GCP list, so the message gives the count instead. 12 is
+    the catalogue's fixture."""
+    message = refused(build(), *_TIEPOINT_NAMES)
+    _names_numbers(message, count)
 
 
 def test_refuses_nonzero_pixel_scale_z(refused: Callable[..., str]) -> None:
@@ -623,26 +742,47 @@ def test_refuses_degenerate_shape(
 
 
 @pytest.mark.parametrize(
-    ("extra_pages", "subfiletype", "index", "count"),
+    ("extra_pages", "subfiletype", "index", "count", "frames"),
     [
-        ([(elevations(), 0)], 0, 1, 2),
-        ([(elevations(rows=2, cols=2), 1), (elevations(), 0)], 0, 2, 3),
-        ([(elevations(), 2)], 2, 1, 2),
+        ([(elevations(), 0)], 0, 1, 2, False),
+        ([(elevations(rows=2, cols=2), 1), (elevations(), 0)], 0, 2, 3, False),
+        ([(elevations(), 2)], 2, 1, 2, False),
+        ([(elevations(), 0)], None, 1, 2, True),
     ],
-    ids=["second_page_full", "third_page_full_after_a_reduced_one", "second_page_is_a_page"],
+    ids=[
+        "second_page_full",
+        "third_page_full_after_a_reduced_one",
+        "second_page_is_a_page",
+        "unparsed_frame",
+    ],
 )
 def test_refuses_ambiguous_pages(
     refused: Callable[..., str],
+    monkeypatch: pytest.MonkeyPatch,
     extra_pages: list[tuple[np.ndarray, int]],
-    subfiletype: int,
+    subfiletype: int | None,
     index: int,
     count: int,
+    frames: bool,
 ) -> None:
     """§5 table: `NewSubfileType` (254) of the first offending page with its value
     (0 when absent), that page's index and the page count. Indices are 0-based:
-    §5 refusal 8 calls the page that is read "page 0"."""
+    §5 refusal 8 calls the page that is read "page 0".
+
+    Amended (round 3), `unparsed_frame`: an extra page tifffile returns as a
+    `TiffFrame` is refused, because a frame has no `is_reduced` to consult.
+    The message names 254, the index and the count, and no value (there is
+    none to read). The page is really full resolution, so the green code's
+    skip dropped a second image without a word. The test reaches for
+    tifffile's private `_useframes=True` because no public route yields a
+    frame: tifffile makes them only for LSM, NDPI and ScanImage files, never
+    a DEM. `test_geotiff_fixtures.py` shows the patch does produce a frame.
+    """
+    if frames:
+        framed = functools.partial(tifffile.TiffFile, _useframes=True)
+        monkeypatch.setattr(tifffile, "TiffFile", framed)
     message = refused(micro_tiff(extra_pages=extra_pages), "254", "NewSubfileType")
-    _names_numbers(message, subfiletype, index, count)
+    _names_numbers(message, *(n for n in (subfiletype, index, count) if n is not None))
 
 
 def test_refuses_multi_sample(refused: Callable[..., str]) -> None:
@@ -679,18 +819,52 @@ def test_refuses_unsupported_dtype(
             ("317", "Predictor", "floating"),
             FLOATING_POINT_PREDICTOR,
         ),
+        (
+            lambda: with_compression_tag(micro_tiff(), UNKNOWN_COMPRESSION),
+            ("259", "Compression"),
+            UNKNOWN_COMPRESSION,
+        ),
     ],
-    ids=["lzw_compression", "floating_point_predictor"],
+    ids=["lzw_compression", "floating_point_predictor", "unknown_compression"],
 )
 def test_refuses_missing_codec(
     refused: Callable[..., str], build: Callable[[], Any], names: tuple[str, ...], value: int
 ) -> None:
     """§8: not tifffile's bare error. Names the tag, its value, the scheme and the
     `codecs` extra. "floating" is the scheme, however it is spelled (tifffile's
-    enum says `FLOATINGPOINT`). Amended (problem 1): the predictor counts too."""
+    enum says `FLOATINGPOINT`). Amended (problem 1): the predictor counts too.
+
+    Amended (round 3), `unknown_compression`: a number tifffile's enum does not
+    know has no scheme name, and the message prints `Compression (259) = 60000`
+    with no "(unknown)" after it."""
     message = refused(build(), *names)
     _names_numbers(message, value)
     assert re.search(r"(?<!image)codecs", message), f"extra not named in {message!r}"
+    assert "(unknown)" not in message.lower(), message
+
+
+@needs_codecs
+@pytest.mark.parametrize(
+    ("code", "names"),
+    [(THUNDERSCAN, ("THUNDERSCAN",)), (UNKNOWN_COMPRESSION, ())],
+    ids=["thunderscan", "unknown_compression"],
+)
+def test_undecodable_scheme_with_extra_present_gives_no_install_advice(
+    refused: Callable[..., str], code: int, names: tuple[str, ...]
+) -> None:
+    """§5 refusal 11, amended (round 3): with imagecodecs installed, THUNDERSCAN
+    (32809) is still not decodable, so advising the user to install the extra
+    would be false. The message names the tag, value and scheme, and no
+    `pip install`. Does not run in CI, which installs `.[dev]` only (§12).
+
+    `unknown_compression` is the same rule for a number with no scheme name,
+    and carries the no-"(unknown)" check into the branch where the extra is
+    present; `test_refuses_missing_codec` only runs where it is absent."""
+    stream = with_compression_tag(micro_tiff(), code)
+    message = refused(stream, "259", "Compression", *names)
+    _names_numbers(message, code)
+    assert "pip install" not in message.lower(), message
+    assert "(unknown)" not in message.lower(), message
 
 
 @needs_codecs
@@ -766,8 +940,12 @@ def test_refuses_geographic_crs(refused: Callable[..., str]) -> None:
 
 @pytest.mark.parametrize(
     ("code", "type_name"),
-    [(EPSG_WGS84, "Geographic 2D CRS"), (EPSG_GEOCENTRIC, "Geocentric CRS")],
-    ids=["geographic", "geocentric"],
+    [
+        (EPSG_WGS84, "Geographic 2D CRS"),
+        (EPSG_GEOCENTRIC, "Geocentric CRS"),
+        (EPSG_COMPOUND_GEOGRAPHIC, "Compound CRS"),
+    ],
+    ids=["geographic", "geocentric", "compound_geographic"],
 )
 def test_refuses_geographic_crs_names_the_crs_type(
     refused: Callable[..., str], code: int, type_name: str
@@ -775,9 +953,44 @@ def test_refuses_geographic_crs_names_the_crs_type(
     """§5 refusal 13, amended (round 2): the refusal fires whenever the 3072 CRS
     is not projected, which includes geocentric. So the message names the
     constructed CRS's `type_name` (pyproj 3.8.0's spelling) and the code, rather
-    than asserting "geographic" of a CRS that is not."""
+    than asserting "geographic" of a CRS that is not.
+
+    Amended (round 3), `compound_geographic`: 9707 (WGS 84 + EGM96 height) is
+    compound, but not projected, so it stays refusal 13. With the geocentric
+    case (3 axes too), this pins that refusal 13a runs after the
+    `is_projected` test. Its message says "not a projected CRS", which 13a's
+    does not; that is what tells the two apart."""
     keys = with_keys({PROJECTED_CS_TYPE: code})
-    refused(micro_tiff(geokeys=keys), *_PROJECTED, str(code), type_name)
+    message = refused(micro_tiff(geokeys=keys), *_PROJECTED, str(code), type_name)
+    assert "4096" not in message, f"refusal 13a fired before refusal 13: {message!r}"
+
+
+@pytest.mark.parametrize(
+    ("code", "names"),
+    [
+        (
+            EPSG_COMPOUND,
+            ("Compound CRS", str(EPSG_COMPOUND_HORIZONTAL), "4096"),
+        ),
+        (EPSG_PROJECTED_3D, ("Projected CRS", "4096")),
+    ],
+    ids=["compound_projected", "projected_3d"],
+)
+def test_refuses_compound_crs(
+    refused: Callable[..., str], code: int, names: tuple[str, ...]
+) -> None:
+    """§5 refusal 13a, added in round 3 by user ruling: the 3072 CRS passes
+    `is_projected` but is not a 2-D horizontal CRS. Both used to be accepted.
+
+    5972 is compound, and pyproj reports it as projected because its
+    horizontal part is. 9895 is a "Projected CRS" with an ellipsoidal-height
+    axis: not compound, so only the axis count catches it. The message names
+    3072 and the code, the CRS's `type_name`, the axis count (3), the
+    horizontal sub-CRS's code when there is one (11022 for 5972, measured, not
+    25832), and `VerticalGeoKey (4096)` as where the vertical part belongs."""
+    keys = with_keys({PROJECTED_CS_TYPE: code})
+    message = refused(micro_tiff(geokeys=keys), *_PROJECTED, str(code), *names)
+    _names_numbers(message, 3)
 
 
 def test_a_realistically_encoded_geographic_file_is_refused(refused: Callable[..., str]) -> None:
@@ -901,6 +1114,96 @@ def test_refuses_contradictory_nodata_override(
 
 
 # ---------------------------------------------------------------------------
+# Errors from inside tifffile or a codec (§14, choice C)
+# ---------------------------------------------------------------------------
+
+_UNDECODABLE_CASES = [
+    *(pytest.param(build, stage, id=name) for name, (build, stage) in UNDECODABLE.items()),
+    *(
+        pytest.param(build, stage, id=name, marks=needs_codecs)
+        for name, (build, stage) in UNDECODABLE_WITH_CODECS.items()
+    ),
+]
+
+
+@pytest.mark.parametrize(("build", "stage"), _UNDECODABLE_CASES)
+def test_undecodable_input_is_a_geotiff_error(
+    decode: Decode, geotiff_error: type[Exception], build: Callable[[], Any], stage: str
+) -> None:
+    """§14, choice C: the three calls into tifffile are wrapped. What escaped
+    before was `TiffFileError`, `struct.error`, a bare `ValueError`, `zlib.error`
+    or an imagecodecs `RuntimeError`, and the type changed with the extra.
+
+    Now it is `GeoTiffError`, chained `from` the original, and the message
+    names the stage ("TIFF structure" or "pixel data"), the original type and
+    the original text. `test_geotiff_fixtures.py` shows tifffile alone fails
+    on every stream here."""
+    with pytest.raises(geotiff_error) as info:
+        decode(build())
+    cause = info.value.__cause__
+    assert cause is not None, "the original error is not chained"
+    assert not isinstance(cause, geotiff_error), cause
+    message = str(info.value)
+    assert stage.lower() in message.lower(), f"stage {stage!r} not named in {message!r}"
+    assert type(cause).__name__ in message, f"{type(cause).__name__} not named in {message!r}"
+    assert str(cause) in message, f"{str(cause)!r} not in {message!r}"
+
+
+def test_geokey_directory_failure_is_a_geotiff_error(
+    decode: Decode, geotiff_error: type[Exception], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """§14, choice C: the third wrapped call. No crafted file makes
+    `geotiff_metadata` raise once round 3's tag checks run first (§5: a
+    corrupt 34735 is logged, not raised), so the failure is planted."""
+
+    def broken(self: Any) -> Any:
+        raise RuntimeError("planted GeoKey failure")
+
+    monkeypatch.setattr(tifffile.TiffFile, "geotiff_metadata", property(broken))
+    with pytest.raises(geotiff_error) as info:
+        decode(micro_tiff())
+    assert isinstance(info.value.__cause__, RuntimeError)
+    message = str(info.value)
+    for token in ("GeoKey directory", "RuntimeError", "planted GeoKey failure"):
+        assert token.lower() in message.lower(), f"{token!r} not named in {message!r}"
+
+
+def test_memory_error_is_not_wrapped(decode: Decode, monkeypatch: pytest.MonkeyPatch) -> None:
+    """§14, choice C: `MemoryError` passes through untouched. It says nothing
+    about the file. Holds on the green code too, which wraps nothing; it
+    guards the wrap from swallowing it."""
+
+    def exhausted(self: Any, *args: Any, **kwargs: Any) -> Any:
+        raise MemoryError("planted")
+
+    monkeypatch.setattr(tifffile.TiffPage, "asarray", exhausted)
+    with pytest.raises(MemoryError, match="planted"):
+        decode(micro_tiff())
+
+
+def test_reader_bug_is_not_wrapped(decode: Decode, monkeypatch: pytest.MonkeyPatch) -> None:
+    """§14, choice C, and why not A: only the calls into tifffile are wrapped,
+    so the reader's own defects surface as themselves. The round-3 `TypeError`
+    for a one-value 33550 is the example: wrapped, it would have read as a file
+    refusal and never been filed as a bug.
+
+    The planted bug is in CRS resolution, which runs inside the `with` block
+    between `geotiff_metadata` and `asarray`, and outside every wrapped call.
+    It is planted on `pyproj.CRS.from_epsg` rather than on a private helper,
+    because §5 splits `_placement` in round 3 and the successor's name is not
+    fixed; §5 does fix that the code is resolved with `from_epsg`. Holds on the
+    green code too, which wraps nothing; it is what fails under option A."""
+
+    def buggy(code: Any) -> Any:
+        raise TypeError("planted reader bug")
+
+    monkeypatch.setattr(pyproj.CRS, "from_epsg", staticmethod(buggy))
+    with pytest.raises(TypeError, match="planted reader bug") as info:
+        decode(micro_tiff())
+    assert info.value.__cause__ is None
+
+
+# ---------------------------------------------------------------------------
 # Refusals are real exceptions (§5; prior art §5.9)
 # ---------------------------------------------------------------------------
 
@@ -1004,8 +1307,10 @@ def test_kartverket_fixture_decodes(decode: Decode) -> None:
 
 @needs_codecs
 def test_kartverket_fixture_is_shifted_half_a_cell(decode: Decode) -> None:
-    """§4: tie point (799745, 7950255) at 10 m, area-registered. The only check
-    that ruling 4 is implemented and not merely documented."""
+    """§4: tie point (799745, 7950255) at 10 m, area-registered. A local check
+    that the micro-TIFF result holds on the one real product; ruling 4 itself is
+    checked by `TestPlacement.test_area_registered_nodes_are_shifted_inward_half_a_cell`,
+    which runs everywhere (§12, round 3)."""
     geo = tifffile.TiffFile(KARTVERKET).geotiff_metadata
     assert geo is not None
     assert geo["ModelTiepoint"][3:5] == [799745.0, 7950255.0]

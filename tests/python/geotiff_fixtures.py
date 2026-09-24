@@ -66,6 +66,16 @@ EPSG_WGS84 = 4326
 EPSG_GEOCENTRIC = 4978
 #: Not an EPSG code pyproj can resolve (measured: `CRSError`).
 EPSG_UNRESOLVABLE = 9999
+#: ETRS89-NOR / UTM 32N + NN2000 height: a compound CRS that pyproj reports as
+#: projected, with 3 axes (§5 refusal 13a). Its horizontal part is 11022.
+EPSG_COMPOUND = 5972
+EPSG_COMPOUND_HORIZONTAL = 11022
+#: LUREF / Luxembourg TM (3D): "Projected CRS" with an ellipsoidal-height axis,
+#: not compound, so only the axis count catches it (§5 refusal 13a).
+EPSG_PROJECTED_3D = 9895
+#: WGS 84 + EGM96 height: compound with a geographic horizontal part, so
+#: `is_projected` is false and it stays refusal 13 (§5 refusal 13a, "Order").
+EPSG_COMPOUND_GEOGRAPHIC = 9707
 
 TIE_X = 500_000.0
 TIE_Y = 6_600_000.0
@@ -191,6 +201,11 @@ def with_compression_tag(stream: io.BytesIO, code: int) -> io.BytesIO:
 
 LZW = 5
 PACKBITS = 32773
+#: In tifffile's `COMPRESSION` enum, but not decodable even with imagecodecs
+#: (§5 refusal 11, round 3, measured with imagecodecs 2026.8.16).
+THUNDERSCAN = 32809
+#: Not a member of tifffile's `COMPRESSION` enum at all.
+UNKNOWN_COMPRESSION = 60000
 FLOATING_POINT_PREDICTOR = 3
 
 
@@ -229,6 +244,70 @@ def packbits_tiff() -> io.BytesIO:
         assert entry.count == 1 and entry.dtype == 4, "expected one inline LONG"
         buffer[entry.valueoffset : entry.valueoffset + 4] = value.to_bytes(4, "little")
     return with_compression_tag(io.BytesIO(bytes(buffer)), PACKBITS)
+
+
+# --------------------------------------------------------------------------
+# Streams tifffile itself cannot read (§14, choice C). Each names the stage of
+# `decode_dem` whose call into tifffile raises: "TIFF structure" for
+# `TiffFile(source)` and the page walk, "pixel data" for `asarray`.
+# --------------------------------------------------------------------------
+
+
+def _strip(stream: io.BytesIO) -> tuple[bytearray, int, int]:
+    """The file's bytes, and the offset and byte count of its one strip."""
+    page = tifffile.TiffFile(stream).pages.first
+    (offset,), (count,) = page.dataoffsets, page.databytecounts
+    return bytearray(stream.getvalue()), offset, count
+
+
+def truncated_header() -> io.BytesIO:
+    """Cut inside the 8-byte header, after the byte order and magic number."""
+    return io.BytesIO(micro_tiff().getvalue()[:6])
+
+
+def truncated_ifd() -> io.BytesIO:
+    """Cut ten bytes into the first IFD, which the header points at."""
+    data = micro_tiff().getvalue()
+    first_ifd = int.from_bytes(data[4:8], "little")
+    return io.BytesIO(data[: first_ifd + 10])
+
+
+def truncated_strip() -> io.BytesIO:
+    """Cut halfway through the strip. The strip is the file's last bytes, so
+    the IFD and every tag value survive and only the pixel read can fail."""
+    data, offset, count = _strip(micro_tiff())
+    assert offset + count == len(data), "the strip must be the last thing in the file"
+    return io.BytesIO(bytes(data[: offset + count // 2]))
+
+
+def _corrupt_strip(stream: io.BytesIO) -> io.BytesIO:
+    data, offset, count = _strip(stream)
+    data[offset : offset + count] = b"\xff" * count
+    return io.BytesIO(bytes(data))
+
+
+def corrupt_deflate() -> io.BytesIO:
+    """A Deflate tile whose strip is overwritten with 0xFF: not a zlib stream."""
+    return _corrupt_strip(micro_tiff(compression="deflate"))
+
+
+def corrupt_lzw() -> io.BytesIO:
+    """An LZW tile whose strip is overwritten with 0xFF. Writing LZW needs
+    imagecodecs, so only a `needs_codecs` test may build this."""
+    return _corrupt_strip(micro_tiff(compression="lzw"))
+
+
+UNDECODABLE: Mapping[str, tuple[Callable[[], io.BytesIO], str]] = {
+    "empty": (lambda: io.BytesIO(b""), "TIFF structure"),
+    "not_tiff": (lambda: io.BytesIO(b"this is not a TIFF file\n" * 4), "TIFF structure"),
+    "truncated_header": (truncated_header, "TIFF structure"),
+    "truncated_ifd": (truncated_ifd, "TIFF structure"),
+    "truncated_strip": (truncated_strip, "pixel data"),
+    "corrupt_deflate": (corrupt_deflate, "pixel data"),
+}
+UNDECODABLE_WITH_CODECS: Mapping[str, tuple[Callable[[], io.BytesIO], str]] = {
+    "corrupt_lzw": (corrupt_lzw, "pixel data"),
+}
 
 
 # --------------------------------------------------------------------------
@@ -350,6 +429,12 @@ REFUSALS: tuple[Refusal, ...] = (
         lambda: micro_tiff(geokeys=with_keys({PROJECTED_CS_TYPE: EPSG_WGS84})),
         lambda t: _geo(t).get("ProjectedCSTypeGeoKey") == EPSG_WGS84,
         ("4326",),
+    ),
+    Refusal(
+        "refuses_compound_crs",
+        lambda: micro_tiff(geokeys=with_keys({PROJECTED_CS_TYPE: EPSG_COMPOUND})),
+        lambda t: _geo(t).get("ProjectedCSTypeGeoKey") == EPSG_COMPOUND,
+        ("3072", "ProjectedCSTypeGeoKey", str(EPSG_COMPOUND), "Compound CRS"),
     ),
     Refusal(
         "refuses_non_metre_linear_unit",

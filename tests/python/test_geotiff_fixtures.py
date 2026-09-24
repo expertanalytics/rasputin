@@ -13,7 +13,10 @@ Two properties per refusal fixture:
 
 from __future__ import annotations
 
+import functools
+import importlib.util
 import math
+from typing import Any
 
 import numpy as np
 import pytest
@@ -24,7 +27,10 @@ from geotiff_fixtures import (
     COLS,
     DELTA_X,
     DELTA_Y,
+    EPSG_COMPOUND,
+    EPSG_COMPOUND_GEOGRAPHIC,
     EPSG_GEOCENTRIC,
+    EPSG_PROJECTED_3D,
     EPSG_UTM33,
     FLOATING_POINT_PREDICTOR,
     GEOGRAPHIC_TYPE,
@@ -32,24 +38,33 @@ from geotiff_fixtures import (
     PROJECTED_CS_TYPE,
     REFUSALS,
     ROWS,
+    SCALE,
+    THUNDERSCAN,
     TIE_X,
     TIE_Y,
+    TIEPOINT,
+    UNDECODABLE,
+    UNDECODABLE_WITH_CODECS,
+    UNKNOWN_COMPRESSION,
     Refusal,
     elevations,
     floating_point_predictor_tiff,
     micro_tiff,
     packbits_tiff,
+    with_compression_tag,
     with_keys,
 )
 
 BY_NAME = pytest.mark.parametrize("refusal", REFUSALS, ids=[r.name for r in REFUSALS])
 
 
-def test_catalogue_names_all_eighteen_refusals_once() -> None:
-    """Design §5 and §13 count eighteen; the catalogue must too, with no repeat."""
+def test_catalogue_names_all_nineteen_refusals_once() -> None:
+    """Design §5 names eighteen, and round 3 adds refusal 13a
+    (`refuses_compound_crs`). The catalogue has each once."""
     names = [r.name for r in REFUSALS]
-    assert len(names) == 18
-    assert len(set(names)) == 18
+    assert len(names) == 19
+    assert len(set(names)) == 19
+    assert "refuses_compound_crs" in names
 
 
 def test_baseline_is_a_valid_point_registered_projected_tile() -> None:
@@ -134,3 +149,117 @@ def test_non_finite_tie_point_k_and_z_survive_the_write() -> None:
     assert math.isnan(written[2])
     assert written[5] == math.inf
     assert tuple(written[i] for i in (0, 1, 3, 4)) == (0.0, 0.0, TIE_X, TIE_Y)
+
+
+# ---------------------------------------------------------------------------
+# Round 3 fixtures (§5 refusals 1-3, 8, 11 and 13a; §14 choice C)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("code", [EPSG_COMPOUND, EPSG_PROJECTED_3D, EPSG_COMPOUND_GEOGRAPHIC])
+def test_a_three_axis_crs_code_survives_the_write(code: int) -> None:
+    """Refusal 13a is about 3072 carrying a 3-axis CRS. The code reads back."""
+    geo = tifffile.TiffFile(
+        micro_tiff(geokeys=with_keys({PROJECTED_CS_TYPE: code}))
+    ).geotiff_metadata
+    assert geo is not None
+    assert int(geo["ProjectedCSTypeGeoKey"]) == code
+
+
+@pytest.mark.parametrize(
+    ("tag", "kwargs", "count"),
+    [
+        (33922, {"tiepoint": TIEPOINT[:3]}, 3),
+        (33922, {"tiepoint": TIEPOINT[:5]}, 5),
+        (33922, {"tiepoint": (*TIEPOINT, 1.0)}, 7),
+        (33922, {"tiepoint": (*TIEPOINT, 1.0, 2.0, 3.0)}, 9),
+        (33550, {"scale": SCALE[:2]}, 2),
+        (34264, {"tiepoint": None, "scale": None, "transformation": (1.0, 2.0, 3.0)}, 3),
+        (
+            34264,
+            {"tiepoint": None, "scale": None, "transformation": tuple(map(float, range(12)))},
+            12,
+        ),
+    ],
+    ids=[
+        "tiepoint_3",
+        "tiepoint_5",
+        "tiepoint_7",
+        "tiepoint_9",
+        "scale_2",
+        "transform_3",
+        "transform_12",
+    ],
+)
+def test_a_wrong_length_tag_survives_the_write(
+    tag: int, kwargs: dict[str, Any], count: int
+) -> None:
+    """§5, after refusal 5 (round 3): the tag has exactly the count the case
+    names. The transformation cases carry no tie point and no scale."""
+    tags = tifffile.TiffFile(micro_tiff(**kwargs)).pages.first.tags
+    assert len(tags[tag].value) == count
+    if tag == 34264:
+        assert 33922 not in tags and 33550 not in tags
+
+
+@pytest.mark.parametrize(
+    ("tag", "kwargs"), [(33922, {"tiepoint": (0.0,)}), (33550, {"scale": (DELTA_X,)})]
+)
+def test_a_one_value_double_tag_reads_back_as_a_bare_float(
+    tag: int, kwargs: dict[str, Any]
+) -> None:
+    """§5 (round 3), measured: "a DOUBLE tag of count 1 reads back as a bare
+    `float`, not a tuple". That is the scalar path the `*_1_value` cases take."""
+    value = tifffile.TiffFile(micro_tiff(**kwargs)).pages.first.tags[tag].value
+    assert type(value) is float
+
+
+def test_useframes_turns_a_full_resolution_second_page_into_a_frame() -> None:
+    """§5 refusal 8 (round 3), `unparsed_frame`: with tifffile's private
+    `_useframes=True`, page 1 comes back as a `TiffFrame`. Parsed normally, the
+    same page is full resolution, so the frame hides a second image."""
+    stream = micro_tiff(extra_pages=[(elevations(), 0)])
+    parsed = tifffile.TiffFile(stream).pages[1]
+    assert isinstance(parsed, tifffile.TiffPage) and not parsed.is_reduced
+    stream.seek(0)
+    framed = functools.partial(tifffile.TiffFile, _useframes=True)(stream)
+    assert len(framed.pages) == 2
+    assert isinstance(framed.pages[1], tifffile.TiffFrame)
+    assert not isinstance(framed.pages[1], tifffile.TiffPage)
+
+
+def test_unknown_and_undecodable_compression_codes() -> None:
+    """§5 refusal 11 (round 3): 60000 is not in tifffile's enum; 32809 is
+    (`THUNDERSCAN`), and tifffile has no decoder for it either way."""
+    assert UNKNOWN_COMPRESSION not in tifffile.COMPRESSION
+    assert tifffile.COMPRESSION(THUNDERSCAN).name == "THUNDERSCAN"
+    assert THUNDERSCAN not in tifffile.TIFF.DECOMPRESSORS
+    for code in (UNKNOWN_COMPRESSION, THUNDERSCAN):
+        page = tifffile.TiffFile(with_compression_tag(micro_tiff(), code)).pages.first
+        assert int(page.compression) == code
+
+
+def _tifffile_alone(stream: Any) -> None:
+    with tifffile.TiffFile(stream) as tif:
+        tif.pages.first.asarray()
+
+
+@pytest.mark.parametrize("name", list(UNDECODABLE))
+def test_undecodable_fixture_defeats_tifffile_alone(name: str) -> None:
+    """§14, choice C: each stream makes tifffile (or its codec) raise with no
+    production code involved, and the baseline does not. So the wrapping test
+    in `test_io_geotiff.py` is red because the wrap is missing."""
+    build, _ = UNDECODABLE[name]
+    with pytest.raises(Exception):  # noqa: B017 - the type is tifffile's and varies (§14)
+        _tifffile_alone(build())
+    _tifffile_alone(micro_tiff())
+
+
+@pytest.mark.skipif(
+    importlib.util.find_spec("imagecodecs") is None, reason="writing LZW needs imagecodecs"
+)
+def test_corrupt_lzw_fixture_defeats_tifffile_alone() -> None:
+    build, _ = UNDECODABLE_WITH_CODECS["corrupt_lzw"]
+    assert tifffile.TiffFile(build()).pages.first.compression == 5
+    with pytest.raises(Exception):  # noqa: B017 - imagecodecs' error class (§14)
+        _tifffile_alone(build())
