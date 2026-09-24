@@ -8,6 +8,10 @@
 design problems. Each one is ruled in place below, marked *Amended (problem N)*.
 Two of them went to the user, who chose A1 and B1; §14 records both.
 
+**Amended again (round 2).** Updating the suite to match turned up two more
+gaps and four readings `@tester` had to pin. They are ruled in place, marked
+*Amended (round 2)*, and §12 lists the tests they change.
+
 **Input.** `docs/increments/11-raster-ingestion-prior-art.md`, the
 `@migration-expert` report, already reviewed and corrected. That file holds the
 evidence; this file holds the rulings. Where they disagree, this file wins, and
@@ -31,7 +35,9 @@ reach `_core`; ruling 2 says why, and names the increment that finishes the job.
 6. **Only `ProjectedCSTypeGeoKey` can yield an accepted CRS**, resolved through
    `pyproj.CRS.from_epsg`. No proj4 reassembly, no free-text ellipsoid regex.
    `GeographicTypeGeoKey` is read only when 3072 is absent, and only so that
-   the refusal names the real reason (§5, problem 3).
+   the refusal names the real reason (§5, problem 3). *Amended (round 2):* a
+   code reached through 2048 is always refused, whatever it resolves to (§5,
+   refusal 13).
 7. **Projected-and-metre is tested on the constructed CRS**, never on which
    GeoKeys are present.
 8. **`always_xy=True` is a hard requirement**, enforced by a grep test that
@@ -242,6 +248,14 @@ The tie point's `K` and `Z` are ignored. Refusal 4 already requires ScaleZ to
 be zero, and with ScaleZ zero the file declares no vertical mapping for `Z` to
 offset, so dropping them discards nothing.
 
+*Amended (round 2), reading (a) confirmed.* "Ignored" covers non-finite
+values too. A NaN or infinite `K` or `Z` is not refused, because the reader
+never uses them, and refusing a value that is not used would be refusing on
+something the file does not assert. Refusal 1's finiteness rule covers exactly
+`I`, `J`, `X` and `Y`, the four values the placement uses. Measured, tifffile
+2026.9.20: a tie point written as `(0, 0, nan, X, Y, inf)` reads back with
+the `nan` and `inf` intact, so a micro-TIFF can carry this case.
+
 **What is refused is not knowing.** If `GTRasterTypeGeoKey` is absent, or is
 32767 (user-defined), the reader raises and names the tag. Half a cell is the
 entire quantity in dispute and there is no way to recover it from the data.
@@ -284,7 +298,10 @@ of raising". Each entry below is one named test. The names are the test names.
    such a tile can be decoded and then never sampled. Refuse at decode.
 8. `refuses_ambiguous_pages` — more than one page where the extra pages are not
    flagged reduced-resolution. Page 0 is used; being silently one of several
-   full-resolution images is not acceptable.
+   full-resolution images is not acceptable. *Amended (round 2), reading (c)
+   confirmed:* page indices in the message are 0-based, to match "page 0"
+   here and tifffile's `pages[i]`. The page after the one that is read is
+   page 1.
 9. `refuses_multi_sample` — `SamplesPerPixel` is not 1. A DEM has one band.
 10. `refuses_unsupported_dtype` — anything outside the promotion table in
     section 7.
@@ -294,7 +311,12 @@ of raising". Each entry below is one named test. The names are the test names.
     from inside `tifffile` is not a diagnostic; see section 8. *Amended
     (problem 1):* the check is a capability probe, run before any decode, and
     not a list of scheme names. §8 gives the probe, and why the predictor is
-    included.
+    included. *Amended (round 2), reading (b) confirmed:* the scheme name is
+    tifffile's enum member name, `COMPRESSION(v).name` or
+    `PREDICTOR(v).name`. For predictor 3 that is `FLOATINGPOINT` (measured,
+    tifffile 2026.9.20), and a case-insensitive match on "floating" finds
+    it. A value that tifffile's enum does not know has no name; the message
+    then gives the number alone, which it names anyway.
 
 **CRS**
 
@@ -317,12 +339,70 @@ of raising". Each entry below is one named test. The names are the test names.
     goes through the same `is_projected` test. So the geographic file is
     refused as geographic, and the message names 2048, `GeographicTypeGeoKey`
     and its value. Ruling 7 still holds: the refusal comes from the
-    constructed CRS, not from which keys are present. Ruling 6 still holds too.
-    2048 is always a geographic CRS, so it can never produce an accepted tile.
-    It is not a fallback path. Refusal 12 now means that neither key yields a
-    resolvable code. That covers 3072 absent with no 2048, and 3072 set to
-    32767 or unresolvable. The message names 3072, plus 2048 if it was
-    consulted. `GTModelTypeGeoKey` is still not read.
+    constructed CRS, not from which keys are present. ~~Ruling 6 still holds
+    too. 2048 is always a geographic CRS, so it can never produce an accepted
+    tile.~~ (Struck in round 2: that was a claim about the file, not a rule
+    the reader enforced. See below.) It is not a fallback path. Refusal 12
+    now means that neither key yields a resolvable code. That covers 3072
+    absent with no 2048, and 3072 set to 32767 or unresolvable. The message
+    names 3072, plus 2048 if it was consulted. `GTModelTypeGeoKey` is still
+    not read.
+
+    *Amended (round 2).* The problem-3 rule put a 2048 code through
+    `is_projected` and accepted it if that passed. So a file with no 3072 and
+    2048 = 25833 was accepted, and ruling 6 ("only 3072 can yield an accepted
+    CRS") was false. Nothing in the reader stopped it. Measured, tifffile
+    2026.9.20: such a micro-TIFF reads back with `GeographicTypeGeoKey` =
+    `25833`, a plain int because 25833 is not in tifffile's `GCS` enum, and
+    `pyproj.CRS.from_epsg(25833).is_projected` is `True`.
+
+    **Ruling.** A code reached through 2048 is never accepted. Which refusal
+    fires depends on the CRS it resolves to, so the message stays true:
+
+    - it resolves and `is_geographic` is true: `refuses_geographic_crs`,
+      naming 2048, `GeographicTypeGeoKey` and the code. This is the case
+      problem 3 was about.
+    - it resolves to anything else (projected, geocentric, vertical,
+      compound): `refuses_missing_crs`. The message names 3072 as absent,
+      and 2048 with its code and the CRS's `type_name`, e.g. "Projected
+      CRS". It says that a projected CRS belongs in 3072.
+    - it does not resolve, or is 32767: `refuses_missing_crs`, as before.
+
+    Measured, pyproj 3.8.0: `is_geographic` is `True` for 4326, 4258 and
+    4979, and `False` for 25833 (projected), 4978 (geocentric), 5972
+    (compound) and 3855 (vertical).
+
+    The alternatives, and why not:
+
+    - *Refuse every 2048 code as geographic, whatever it is* (the main
+      session's suggestion). It enforces ruling 6 just as well, and costs
+      one line less. But for 2048 = 25833 the message would say "geographic"
+      about a CRS that pyproj says is projected. That is the kind of false
+      message problem 3 was raised to remove, and it breaks ruling 7: the
+      refusal would come from which key was present, not from the CRS.
+    - *Accept it.* A lenient reader could say the file clearly means
+      25833. But the GeoTIFF spec puts a projected code in 3072, GDAL never
+      writes one in 2048, and a file that does has broken its own key
+      directory. Ruling 3 is that the reader's job is refusal. Guessing what
+      a malformed file meant is the legacy's failure mode.
+
+    These do not set two sound principles against each other. The chosen
+    rule meets both ruling 6 and ruling 7, so it is ruled here and not sent
+    to the user.
+
+    *Also round 2, found while checking the above.* Refusal 13 fires when
+    `is_projected` is false. Through 3072 that includes a geocentric or
+    vertical code, and a message that says "geographic" would then be false
+    for the same reason. So the refusal 13 message names the constructed
+    CRS's `type_name` (e.g. "Geographic 2D CRS", "Geocentric CRS") instead of
+    asserting "geographic". The test name stays as it is. No test pins the
+    word, so no test changes.
+
+    *Round 2, reading (d) confirmed.* When 3072 is present, whatever its
+    value, 2048 is not consulted. For 3072 = 32767 the message must name
+    "3072" and "32767". It need not mention 2048, and must not claim 2048
+    was consulted. It may mention that 2048 is present; the suite does not
+    pin that, and it should not.
 14. `refuses_non_metre_linear_unit` — any horizontal axis has
     `unit_conversion_factor != 1.0`; or `ProjLinearUnitsGeoKey` (3076) is
     present and is not 9001; or the two disagree. The legacy's version of this
@@ -479,7 +559,7 @@ number crosses the boundary (5a).**
 | tag | caller | `nodata` | `nodata_source` |
 |---|---|---|---|
 | absent | absent | `None` | `"absent"` |
-| absent | `v` | `v` | `"caller"` |
+| absent | `v` | `v`, or `None` if NaN | `"caller"` |
 | `t` | absent | `t`, or `None` if NaN | `"tag"` |
 | `t` | equal to `t` | `t`, or `None` if NaN | `"tag"` |
 | `t` | differs from `t` | refused | `refuses_contradictory_nodata_override` |
@@ -495,6 +575,34 @@ check, so a message never compares a valid value with an invalid one.
 The model validator enforces one implication: `nodata_source == "absent"`
 means `nodata is None`. Its converse does not hold, because of the NaN rows.
 
+*Amended (round 2): a NaN sentinel becomes `None` whoever declared it.* The
+rule above was stated for the tag only, and the table said `v` for a caller
+with no tag. The reason for the rule never depended on the source: a NaN
+sentinel matches no cell under `==`, `is_nodata` already catches NaN, and so
+the two tiles behave the same. So:
+
+- **Caller `nodata=nan`, no tag, float file:** `nodata = None`,
+  `nodata_source = "caller"`. The caller made a declaration, and the file
+  did not. This is the table's second row, now with the NaN clause.
+- **Caller `nan`, integer file:** refused as not representable, as before.
+  The NaN check runs after the representability check, as for the tag.
+- **Caller `nan`, tag `nan`:** equal, so `nodata = None` and `"tag"`, the
+  fourth row. This agrees with the row above: both give `None`, and only the
+  source differs, because only the source should.
+- **Caller `nan` with a finite tag, or a finite caller value with a `nan`
+  tag:** not equal, so `refuses_contradictory_nodata_override`. NaN is equal
+  to NaN here and to nothing else.
+
+**Enforced at the type.** `RasterMeta.nodata` is declared
+`float | None = Field(allow_inf_nan=False)`, so a `RasterMeta` holding a NaN
+or an infinite sentinel cannot be built. The reader cannot forget the rule on
+one path and keep it on another. It also keeps `RasterMeta` equality
+working, which a NaN field breaks (`nan != nan`). Measured, pydantic 2.13.5:
+`None` and `-9999.0` are accepted, and `nan` and `inf` both raise
+`ValidationError` with `type=finite_number`. As in §7 (B1), that is a
+programming error in whoever built the model, so it is Pydantic's error and
+not `GeoTiffError`.
+
 ---
 
 ## 7. Types
@@ -506,7 +614,7 @@ RasterMeta
     x_min, y_max, delta_x, delta_y : float        # node grid, metres
     cols, rows                     : StrictInt    # DemTile checks == array.shape (B1, §14)
     epsg                           : int          # projected, metre
-    nodata                         : float | None
+    nodata                         : float | None # finite; allow_inf_nan=False (§6, round 2)
     nodata_source                  : "tag" | "caller" | "absent"
     pixel_is_area                  : bool         # what the file declared
     vertical_unit_assumed          : bool         # section 5, refusal 14
@@ -814,6 +922,34 @@ not implemented because the EPSG path covers it.
 - **The promotion table is a parametrised test**, one case per row, asserting
   the resulting `array.dtype` — not that it is "a float".
 
+### Tests that round 2 changes (`tests/python/test_io_geotiff.py`)
+
+Added or extended. No existing assertion is reversed.
+
+- `test_refuses_missing_crs`: add a case `absent_geographic_projected`,
+  `{PROJECTED_CS_TYPE: None, GEOGRAPHIC_TYPE: EPSG_UTM33}`, naming
+  `(*_PROJECTED, *_GEOGRAPHIC, "25833")`. This is the case that was
+  accepted before. Optionally add `absent_geographic_geocentric` with 4978,
+  which takes the same branch. `REFUSALS` in `geotiff_fixtures.py` needs no
+  new entry, because the refusal is not new.
+- `TestNoData.test_caller_nan_without_tag_yields_no_sentinel` (new): a
+  float32 micro-TIFF with no tag, `nodata=math.nan`, gives `nodata is None`
+  and `nodata_source == "caller"`.
+- `test_refuses_contradictory_nodata_override`: add two parametrised cases,
+  a NaN caller with tag `"-32767"`, and `nodata=-32767.0` with tag `"nan"`.
+  Together with `test_caller_nan_agreeing_with_nan_tag_is_accepted` they pin
+  "NaN equals NaN and nothing else" from both sides.
+- `TestShapeAgreement` or a sibling class,
+  `test_meta_refuses_non_finite_nodata` (new), parametrised over `nan` and
+  `inf`: `RasterMeta.model_validate` with that `nodata` raises Pydantic's
+  `ValidationError`.
+- `TestPlacement.test_tie_point_k_and_z_are_ignored`: parametrise, adding a
+  case with `K = nan` and `Z = inf`. Reading (a).
+
+Unchanged, readings confirmed: `test_refuses_missing_codec` (b),
+`test_refuses_ambiguous_pages` (c), and the `user_defined` and
+`user_defined_beside_geographic` cases of `test_refuses_missing_crs` (d).
+
 ---
 
 ## 13. LOC estimate
@@ -834,6 +970,12 @@ point's `(I, J)` offset and finiteness (+4), the table of tag names for
 tagless refusals (+3), and `DemTile`'s shape validator under B1 (+5). Choice A2
 in §14, not taken, would have added about 10 lines to
 `src_python/tin_engine/__init__.py`.
+
+*Amended (round 2).* About +3, to **343**: the `is_geographic` branch for a
+2048 code (+2), and `allow_inf_nan=False` on `nodata` (+1, and it replaces no
+line). Treating a caller NaN like a tag NaN adds nothing if both go through
+one normalising helper, which is how `@developer` should write it. The table
+above is left at its round-1 figures.
 
 `geotiff.py` is mostly the refusal list: eighteen named refusals at roughly
 three lines each, plus tag extraction, the CRS resolution, the NoData path and
