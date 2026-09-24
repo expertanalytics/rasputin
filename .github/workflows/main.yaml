@@ -136,7 +136,7 @@ jobs:
       # The GeoTIFF suites branch on the `codecs` extra: some tests need
       # imagecodecs (LZW, the real Kartverket DEM), others test its absence.
       # No single environment runs both halves, so the step above covers the
-      # absent half and this one installs the extra and re-runs the rest.
+      # absent half and this one installs the extra and re-runs both files.
       - name: Tests with the codecs extra
         run: |
           python -m pip install -e ".[dev,codecs]"

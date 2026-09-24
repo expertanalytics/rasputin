@@ -1169,9 +1169,9 @@ not implemented because the EPSG path covers it.
   - `TestPlacement.test_area_registered_nodes_are_shifted_inward_half_a_cell`
     checks the half-cell shift on a micro-TIFF. `delta_x` is not equal to
     `delta_y` there, so a swapped shift cannot pass. It runs everywhere.
-  - The two Kartverket tests never run in CI. `main.yaml` installs `.[dev]`
-    only (`grep -n 'pip install' .github/workflows/main.yaml`), so
-    `imagecodecs` is absent and `needs_codecs` skips them.
+  - The two Kartverket tests did not run in CI at round 3: `main.yaml`
+    installed `.[dev]` only, so `imagecodecs` was absent and `needs_codecs`
+    skipped them. They run there now; see the CI-step amendment below.
 
   The Kartverket tests check that the micro-TIFF result also holds on the one
   real product. They are a local check, not the check of ruling 4.
@@ -1179,6 +1179,13 @@ not implemented because the EPSG path covers it.
   false sentence, so `@tester` corrects it (§12, round 3). Whether CI should
   install `codecs` is not ruled here. Leaving it out is what proves the
   suite runs without optional dependencies.
+
+  *Amended (CI step, `54622a4`).* The user ruled that CI installs it too.
+  The `python` job now runs `pytest` without the extra, as before, and then
+  a second step installs `.[dev,codecs]` and re-runs the two GeoTIFF test
+  files. The Kartverket tests and every other `needs_codecs` test now run
+  in CI. The first step still proves the suite runs without optional
+  dependencies.
 - **The `always_xy` test must be shown failing** against a planted violation.
   Section 9, principle A3.
 - **The promotion table is a parametrised test**, one case per row, asserting
@@ -1266,8 +1273,8 @@ as it stands, unless it says otherwise.
 - `test_undecodable_scheme_with_extra_present_gives_no_install_advice`
   (new, `needs_codecs`): Compression = 32809 (`THUNDERSCAN`). It names
   `259`, `32809` and `THUNDERSCAN`, and asserts that `pip install` does
-  not appear. This test does not run in CI (see above). It runs wherever the
-  extra is installed.
+  not appear. It runs wherever the extra is installed, which includes CI's
+  second pytest step (see above).
 
 **§6, `bool` sentinel.**
 - `TestNoData.test_caller_bool_is_refused` (new), parametrised over `True`,

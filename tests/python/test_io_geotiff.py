@@ -855,7 +855,7 @@ def test_undecodable_scheme_with_extra_present_gives_no_install_advice(
     """§5 refusal 11, amended (round 3): with imagecodecs installed, THUNDERSCAN
     (32809) is still not decodable, so advising the user to install the extra
     would be false. The message names the tag, value and scheme, and no
-    `pip install`. Does not run in CI, which installs `.[dev]` only (§12).
+    `pip install`. Runs in CI's second pytest step, which installs the extra (§12).
 
     `unknown_compression` is the same rule for a number with no scheme name,
     and carries the no-"(unknown)" check into the branch where the extra is
