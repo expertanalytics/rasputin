@@ -1480,10 +1480,14 @@ understands and lets through what it does not.
 
 **Tests (C was chosen).** `test_undecodable_input_is_a_geotiff_error`
 (new), parametrised over `empty`, `not_tiff`, `truncated_header`,
-`truncated_ifd`, `truncated_strip` and `corrupt_deflate`. Each asserts
+`truncated_ifd`, `truncated_second_ifd`, `truncated_strip` and
+`corrupt_deflate`. `truncated_second_ifd` opens and fails only in the page
+walk, so it is what keeps the walk inside the stage. Each asserts
 `GeoTiffError`, and that `__cause__` is set. Add a `needs_codecs` case,
 `corrupt_lzw`. Under C only: `test_reader_bug_is_not_wrapped`, which
 monkeypatches `pyproj.CRS.from_epsg` (it runs inside the `with` block but
 outside all three wrapped calls) to raise `TypeError` and asserts `TypeError`
-is what comes out. Under D: no tests, and a
+is what comes out, and `test_page_refusal_bug_is_not_wrapped`, which plants
+the same on `TiffPage.is_reduced` to keep the page refusal outside the stage.
+Under D: no tests, and a
 docstring change.
