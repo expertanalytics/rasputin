@@ -142,6 +142,15 @@ jobs:
           python -m pip install -e ".[dev,codecs]"
           pytest --no-cov tests/python/test_io_geotiff.py tests/python/test_geotiff_fixtures.py
 
+      # Increment 13, ruling 10: read the .vtk output back with the readers
+      # ParaView uses. The suite skips when vtk is absent, so it is run only
+      # here, after the install -- a leg whose wheel disappears fails in the
+      # install, not in a silent skip.
+      - name: Tests with the viewer extra
+        run: |
+          python -m pip install -e ".[dev,viewer]"
+          pytest --no-cov tests/python/test_io_vtk_readback.py
+
       # Static gates, per CLAUDE.md section 4. Run on the floor leg only:
       # mypy and ruff are configured for a single target version, so repeating
       # them across the matrix reports the same findings once per leg. The leg

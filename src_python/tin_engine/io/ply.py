@@ -1,15 +1,16 @@
 """A PLY writer: arrays in, bytes out.
 
 Increment 10, ruling 6. This module is pure. It takes no path, opens no file,
-imports nothing first-party, and returns `bytes`, which is what keeps the whole
-format testable with no filesystem, no raster and no compiled extension: hand
-it three arrays and compare the bytes.
+imports nothing first-party but `features` (increment 13), and returns
+`bytes`, which is what keeps the whole format testable with no filesystem, no
+raster and no compiled extension: hand it three arrays and compare the bytes.
 
 THREE RULINGS ARE ENCODED IN THE BYTES RATHER THAN IN PROSE.
 
-*Ruling 1* makes binary little-endian the default, with ASCII behind a flag for
-the case where a person wants to read a small mesh with `head`. Endianness is
-forced by `<`-prefixed dtypes so the output does not depend on the host.
+*Ruling 1* made binary little-endian the default; increment 13's U2 (a) made
+text the default instead, because the user reads the output. Binary stays
+behind the flag, and its endianness is forced by `<`-prefixed dtypes so the
+output does not depend on the host.
 
 *Ruling 2* makes the coordinates `double`, and float32 is not an option. At a
 UTM 33N easting of 430 000 the float32 step is 2**19 * 2**-24 = 3.1 cm, which
@@ -38,6 +39,8 @@ from collections.abc import Iterable, Sequence
 import numpy as np
 import numpy.typing as npt
 
+from tin_engine.features import EdgeVocabulary
+
 #: The edge element's third property: the feature mask of `_core.pyi`'s
 #: `NodedPslg.edge_properties`, one `uint32` per edge. PLY fixes no name for
 #: it -- `x`/`y`/`z`, `vertex_indices`, `vertex1`/`vertex2` are conventional
@@ -55,8 +58,9 @@ def write_ply(
     faces: npt.ArrayLike | None = None,
     edges: npt.ArrayLike | None = None,
     edge_properties: npt.ArrayLike | None = None,
-    ascii: bool = False,
+    ascii: bool = True,
     comments: Sequence[str] = (),
+    vocabulary: EdgeVocabulary | None = None,
 ) -> bytes:
     """Encode one mesh as a PLY file.
 
@@ -67,14 +71,19 @@ def write_ply(
         edge_properties: `(E,)` feature masks to ride along with `edges`.
         ascii: write the bodies as text instead of packed records.
         comments: header comment lines, in order, each without its keyword.
+        vocabulary: what each bit of `edge_properties` means. Written as
+            `feature_bit <bit> <name>` comments sorted by bit and a
+            `feature_vocabulary <fingerprint>` comment (increment 13, ruling
+            9), after `comments`.
 
     Raises:
         ValueError: if `vertices` is not `(N, 3)`; if `faces` and `edges` are
             both given or neither is (ruling 3); if `edge_properties` is given
             without `edges`, or does not have one entry per edge; if a comment
             contains a control character, any of which forges a header line in
-            a line-oriented format; or if a comment is not ASCII, which the
-            header's encoding cannot carry.
+            a line-oriented format; if a comment is not ASCII, which the
+            header's encoding cannot carry; or if a mask carries a bit
+            `vocabulary` does not name.
     """
     points = np.ascontiguousarray(vertices, dtype="<f8")
     if points.ndim != 2 or points.shape[1] != 3:
@@ -84,6 +93,17 @@ def write_ply(
         raise ValueError(f"exactly one of faces and edges must be given; got {which}")
     if edge_properties is not None and edges is None:
         raise ValueError("edge_properties needs edges; it has no meaning beside faces")
+    if vocabulary is not None:
+        # Increment 7's mechanism 3: a bit nobody names is refused, not written.
+        if edge_properties is not None:
+            for mask in np.unique(np.asarray(edge_properties)):
+                vocabulary.names(int(mask))
+        table = sorted((prop.bit, prop.name) for prop in vocabulary.properties)
+        comments = [
+            *comments,
+            *(f"feature_bit {bit} {name}" for bit, name in table),
+            f"feature_vocabulary {vocabulary.fingerprint()}",
+        ]
     for comment in comments:
         # Any control character, not just \n. A PLY header is line-oriented and
         # \r terminates a line for every CRLF-tolerant reader, which is most of

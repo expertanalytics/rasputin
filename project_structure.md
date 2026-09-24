@@ -84,8 +84,10 @@ src_python/tin_engine/     # public Python API (distribution name: rasputin)
   io/                      # all file decoding AND encoding lives here
     __init__.py
     ply.py                 # arrays -> PLY bytes; takes no path and opens nothing
-    geotiff.py             # TIFF container + GeoKey decoding -> DemTile (planned)
-    models.py              # Pydantic RasterMeta / DemTile (planned)
+    vtk_legacy.py          # arrays + EdgeVocabulary -> legacy .vtk bytes, for
+                           #   ParaView; takes no path and opens nothing
+    geotiff.py             # TIFF container + GeoKey decoding -> DemTile
+    models.py              # Pydantic RasterMeta / DemTile
 
 tests/
   cpp/                     # C++ tests (Catch2; unit/ and property/)

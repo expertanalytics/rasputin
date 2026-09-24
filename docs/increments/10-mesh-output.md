@@ -3,6 +3,14 @@
 Status: shipped. Design, red suite, implementation and review are all on
 this branch; the reconciliation is at the end.
 
+**Superseded in part by increment 13** (`13-bundled-mesh.md`). Ruling 1 (binary
+by default) is reversed: both formats now default to text, by the user's
+choice U2. Ruling 3 (two files) stands for PLY, which is kept for QGIS, but
+ParaView's PLY reader drops the edge element and narrows points to float32, so
+the ParaView format is a single `.vtk` file. The PLY edge file also now carries
+the feature vocabulary, which increment 7 ruling 2 required and this increment
+left out.
+
 Fills MVP gap 4 in `ROADMAP.md`, which read *"Mesh output. There is no writer
 of any kind."* before this increment. Python only. No C++ change, no new binding, no new dependency.
 

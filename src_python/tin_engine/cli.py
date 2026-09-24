@@ -58,6 +58,7 @@ from tin_engine._core import (
 )
 from tin_engine.features import DEFAULT_VOCABULARY
 from tin_engine.io.ply import write_ply
+from tin_engine.io.vtk_legacy import write_vtk
 from tin_engine.viz.fixtures import GALLERY, Fixture
 from tin_engine.viz.protocols import PslgLike
 from tin_engine.viz.scene import build_scene
@@ -373,7 +374,11 @@ def draw(
 #: Ruling 4, verbatim. Written into BOTH files, because the thing it tells a
 #: reader -- that this surface is not terrain -- is equally untrue of each, and
 #: a person may open either one first.
-FLAT_COMMENT = "elevation none (z=0, --flat)"
+FLAT_ELEVATION = "none (z=0, --flat)"
+FLAT_COMMENT = f"elevation {FLAT_ELEVATION}"
+
+#: What the suffix of ``--out`` selects (increment 13, ruling 8).
+MESH_SUFFIXES = (".vtk", ".ply")
 
 
 def _undirected(a: int, b: int) -> tuple[int, int]:
@@ -451,13 +456,15 @@ def _constraint_arrays(
 @app.command()
 def mesh(
     name: Annotated[str, typer.Argument(help="Gallery fixture to write.")],
-    out: Annotated[Path, typer.Option("--out", help="Where to write the surface PLY.")],
+    out: Annotated[
+        Path, typer.Option("--out", help="Where to write: .vtk for ParaView, .ply for QGIS.")
+    ],
     flat: Annotated[
         bool, typer.Option("--flat", help="There is no elevation source; write z = 0.")
     ] = False,
     out_edges: Annotated[
         Path | None,
-        typer.Option("--out-edges", help="Also write the constraint edges, as a second PLY."),
+        typer.Option("--out-edges", help="With .ply, also write the constraint edges as a PLY."),
     ] = None,
     out_parent: Annotated[
         Path | None,
@@ -466,8 +473,8 @@ def mesh(
     crs: Annotated[
         str, typer.Option("--crs", help="Free text recorded as a header comment. Not validated.")
     ] = "",
-    ascii_: Annotated[
-        bool, typer.Option("--ascii", help="Write the bodies as text, so `head` can read them.")
+    binary: Annotated[
+        bool, typer.Option("--binary/--ascii", help="Packed records, or text `head` can read.")
     ] = False,
     delaunay: Annotated[
         bool, typer.Option("--delaunay/--no-delaunay", help="Triangulate with or without it.")
@@ -481,12 +488,18 @@ def mesh(
         ),
     ] = DEFAULT_SNAP_SPACING,
 ) -> None:
-    """Write a gallery fixture's mesh as PLY.
+    """Write a gallery fixture's mesh as legacy VTK or as PLY, by the suffix of ``--out``.
 
-    Two files, never one holding both element types: MDAL's own caveat is that
-    a host application expects either a 1D mesh or a 2D one, so a file carrying
-    faces AND edges can load as nothing at all, in silence. ``--out`` gets the
-    surface; ``--out-edges`` gets the constraints, or they are not written.
+    ``.vtk`` is one file for ParaView: triangles, constraint lines, their
+    feature masks, one 0/1 array per feature that occurs, and the vocabulary
+    (``13-bundled-mesh.md``). There is no ``--format``, because it could
+    contradict the suffix. Text is the default for both formats.
+
+    ``.ply`` is for QGIS. Two files, never one holding both element types:
+    MDAL's own caveat is that a host application expects either a 1D mesh or a
+    2D one, so a file carrying faces AND edges can load as nothing at all, in
+    silence. ``--out`` gets the surface; ``--out-edges`` gets the constraints,
+    or they are not written.
     Both repeat the identical vertex block, which is what makes the two layers
     register on each other when a person loads them side by side.
 
@@ -497,6 +510,14 @@ def mesh(
     """
     if name not in GALLERY:
         raise typer.BadParameter(f"unknown fixture {name}; the gallery is: {', '.join(GALLERY)}")
+    if out.suffix not in MESH_SUFFIXES:
+        raise typer.BadParameter(
+            f"{out} has no known suffix; use {' or '.join(MESH_SUFFIXES)}", param_hint="--out"
+        )
+    if out.suffix == ".vtk" and out_edges is not None:
+        raise typer.BadParameter(
+            "a .vtk file already carries the constraint edges", param_hint="--out-edges"
+        )
     if not flat:
         raise typer.BadParameter(
             "nothing in this tree samples elevation yet, so z has no source; pass --flat "
@@ -525,6 +546,23 @@ def mesh(
         raise typer.BadParameter(str(exc), param_hint="--crs") from exc
 
     surface = _destination(out, out_parent, name)
+    if out.suffix == ".vtk":
+        edges, masks = _constraint_arrays(attempt.mesh, attempt.source)
+        fields = [("crs", crs)] if crs else []
+        fields.append(("elevation", FLAT_ELEVATION))
+        surface.write_bytes(
+            write_vtk(
+                vertices,
+                triangles=np.asarray(attempt.mesh.triangles),
+                edges=edges,
+                edge_masks=masks,
+                vocabulary=DEFAULT_VOCABULARY,
+                fields=fields,
+                binary=binary,
+            )
+        )
+        typer.echo(f"{surface}")
+        return
     if out_edges is not None:
         # Resolved, because two spellings of one path are still one file. Both
         # writes succeed, the second overwrites the first, the command echoes
@@ -541,7 +579,7 @@ def mesh(
         write_ply(
             vertices,
             faces=np.asarray(attempt.mesh.triangles),
-            ascii=ascii_,
+            ascii=not binary,
             comments=comments,
         )
     )
@@ -555,8 +593,9 @@ def mesh(
                 vertices,
                 edges=edges,
                 edge_properties=masks,
-                ascii=ascii_,
+                ascii=not binary,
                 comments=comments,
+                vocabulary=DEFAULT_VOCABULARY,
             )
         )
         typer.echo(f"{constraints}")
