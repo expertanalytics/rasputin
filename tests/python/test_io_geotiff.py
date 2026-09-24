@@ -331,6 +331,62 @@ class TestShapeAgreement:
         meta = self._meta(decode, models, nodata=-9999.0, nodata_source="caller")
         assert meta.nodata == -9999.0
 
+    def test_meta_refuses_absent_source_with_a_sentinel(
+        self, decode: Decode, models: Any, geotiff_error: type[Exception]
+    ) -> None:
+        """§6: "`nodata_source == "absent"` means `nodata is None`". A finite
+        sentinel is used so `allow_inf_nan` cannot be what refuses it, and the
+        error must come from the model validator (an empty `loc`), not a field."""
+        from pydantic import ValidationError
+
+        with pytest.raises(ValidationError, match="absent") as info:
+            self._meta(decode, models, nodata=-9999.0, nodata_source="absent")
+        assert not isinstance(info.value, geotiff_error)
+        assert [e["loc"] for e in info.value.errors()] == [()]
+
+    @pytest.mark.parametrize("source", ["absent", "tag", "caller"])
+    def test_meta_accepts_no_sentinel_from_any_source(
+        self, decode: Decode, models: Any, source: str
+    ) -> None:
+        """§6: the implication runs one way only. `None` with "tag" or "caller"
+        is the NaN rows of the table, and "absent" with `None` is the first row."""
+        meta = self._meta(decode, models, nodata=None, nodata_source=source)
+        assert (meta.nodata, meta.nodata_source) == (None, source)
+
+    @pytest.mark.parametrize(
+        "array",
+        [
+            elevations(np.float32).reshape(ROWS, COLS, 1),
+            elevations(np.float64)[np.newaxis, :, :],
+            elevations(np.int16),
+            elevations(np.float16),
+            elevations(np.bool_),
+            elevations(np.complex128),
+        ],
+        ids=["3d_trailing", "3d_leading", "int16", "float16", "bool", "complex128"],
+    )
+    def test_tile_refuses_array_not_2d_float32_or_float64(
+        self, decode: Decode, models: Any, geotiff_error: type[Exception], array: Any
+    ) -> None:
+        """§7: `array` is "numpy 2-D, C-contiguous, float32 or float64". The
+        refusal must come from the `array` field: a 3-D array would also fail
+        the shape agreement, so checking the `loc` is what makes the ndim cases
+        test this check rather than that one."""
+        from pydantic import ValidationError
+
+        with pytest.raises(ValidationError, match="2-D float32 or float64") as info:
+            models.DemTile(meta=self._meta(decode, models), array=array)
+        assert not isinstance(info.value, geotiff_error)
+        assert [e["loc"] for e in info.value.errors()] == [("array",)]
+
+    @pytest.mark.parametrize("dtype", [np.float32, np.float64])
+    def test_tile_accepts_2d_float32_and_float64(
+        self, decode: Decode, models: Any, dtype: Any
+    ) -> None:
+        """The control for the refusal above: both permitted dtypes build."""
+        tile = models.DemTile(meta=self._meta(decode, models), array=elevations(dtype))
+        assert tile.array.dtype == dtype
+
 
 PROMOTION = [
     # (file dtype, array dtype, an extreme value the promotion must keep exact)
@@ -853,14 +909,19 @@ import sys
 from geotiff_fixtures import REFUSALS
 from tin_engine.io.geotiff import decode_dem
 from tin_engine.io.models import GeoTiffError
+excluded = set(sys.argv[1:])
+unknown = excluded - {r.name for r in REFUSALS}
+if unknown:
+    sys.exit(f"UNKNOWN EXCLUSION {sorted(unknown)}")
 passed = []
-for r in REFUSALS:
+expected = [r for r in REFUSALS if r.name not in excluded]
+for r in expected:
     try:
         decode_dem(r.build(), **r.decode_kwargs)
     except GeoTiffError:
         passed.append(r.name)
-expected = {r.name for r in REFUSALS} - set(sys.argv[1:])
-missed = sorted(expected - set(passed))
+missed = sorted({r.name for r in expected} - set(passed))
+print("CHECKED", len(expected))
 print("MISSED", missed)
 sys.exit(1 if missed else 0)
 """
@@ -870,7 +931,11 @@ def test_every_refusal_survives_python_dash_o() -> None:
     """Under `-O` a bare `assert` vanishes. Every catalogue refusal must still raise.
 
     The codec refusal is excluded when the extra is installed: its fixture then
-    reaches a real LZW decoder and is not a refusal case at all.
+    reaches a real LZW decoder and is not a refusal case at all. Excluded means
+    not decoded: its fake LZW strip would make the real decoder raise its own
+    error, which is not a `GeoTiffError` and would crash the script. An
+    exclusion naming no catalogue entry fails, so a rename cannot silently
+    widen what is skipped.
     """
     excluded = ["refuses_missing_codec"] if HAS_CODECS else []
     result = subprocess.run(
@@ -884,6 +949,7 @@ def test_every_refusal_survives_python_dash_o() -> None:
     )
     assert result.returncode == 0, result.stdout + result.stderr
     assert "MISSED []" in result.stdout
+    assert f"CHECKED {len(REFUSALS) - len(excluded)}" in result.stdout, result.stdout
 
 
 # ---------------------------------------------------------------------------
