@@ -240,7 +240,9 @@ def test_unknown_and_undecodable_compression_codes() -> None:
 
 
 def _tifffile_alone(stream: Any) -> None:
+    """What `decode_dem` asks of tifffile: open, walk every page, decode page 0."""
     with tifffile.TiffFile(stream) as tif:
+        tuple(tif.pages)
         tif.pages.first.asarray()
 
 
@@ -253,6 +255,24 @@ def test_undecodable_fixture_defeats_tifffile_alone(name: str) -> None:
     with pytest.raises(Exception):  # noqa: B017 - the type is tifffile's and varies (§14)
         _tifffile_alone(build())
     _tifffile_alone(micro_tiff())
+
+
+def test_truncated_second_ifd_opens_and_fails_in_the_page_walk() -> None:
+    """The stream opens, page 0 decodes, and only reaching page 1 fails. So a
+    wrap around `TiffFile(source)` alone does not catch it: the page walk must
+    be inside the "TIFF structure" stage too (reviewer's finding on round 3)."""
+    build, stage = UNDECODABLE["truncated_second_ifd"]
+    assert stage == "TIFF structure"
+    with tifffile.TiffFile(build()) as tif:
+        assert tif.pages.first.shape == (ROWS, COLS)
+        tif.pages.first.asarray()
+        with pytest.raises(tifffile.TiffFileError, match="corrupted IFD structure"):
+            tif.pages[1]
+    with (
+        tifffile.TiffFile(build()) as tif,
+        pytest.raises(tifffile.TiffFileError, match="corrupted IFD structure"),
+    ):
+        tuple(tif.pages)
 
 
 @pytest.mark.skipif(

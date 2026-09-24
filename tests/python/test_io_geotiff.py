@@ -1170,8 +1170,8 @@ def test_geokey_directory_failure_is_a_geotiff_error(
 
 def test_memory_error_is_not_wrapped(decode: Decode, monkeypatch: pytest.MonkeyPatch) -> None:
     """§14, choice C: `MemoryError` passes through untouched. It says nothing
-    about the file. Holds on the green code too, which wraps nothing; it
-    guards the wrap from swallowing it."""
+    about the file. It guards the pixel-data stage from swallowing it, which a
+    bare `except Exception` would not (`MemoryError` is an `Exception`)."""
 
     def exhausted(self: Any, *args: Any, **kwargs: Any) -> Any:
         raise MemoryError("planted")
@@ -1191,8 +1191,8 @@ def test_reader_bug_is_not_wrapped(decode: Decode, monkeypatch: pytest.MonkeyPat
     between `geotiff_metadata` and `asarray`, and outside every wrapped call.
     It is planted on `pyproj.CRS.from_epsg` rather than on a private helper,
     because §5 splits `_placement` in round 3 and the successor's name is not
-    fixed; §5 does fix that the code is resolved with `from_epsg`. Holds on the
-    green code too, which wraps nothing; it is what fails under option A."""
+    fixed; §5 does fix that the code is resolved with `from_epsg`. It is what
+    fails under option A, one wrap around the whole body."""
 
     def buggy(code: Any) -> Any:
         raise TypeError("planted reader bug")
@@ -1200,6 +1200,30 @@ def test_reader_bug_is_not_wrapped(decode: Decode, monkeypatch: pytest.MonkeyPat
     monkeypatch.setattr(pyproj.CRS, "from_epsg", staticmethod(buggy))
     with pytest.raises(TypeError, match="planted reader bug") as info:
         decode(micro_tiff())
+    assert info.value.__cause__ is None
+
+
+def test_page_refusal_bug_is_not_wrapped(decode: Decode, monkeypatch: pytest.MonkeyPatch) -> None:
+    """§14, choice C: the "TIFF structure" stage covers opening the file and
+    walking its pages, and not the reader's refusal logic over those pages
+    (§5 refusal 8). A bug in that logic must surface as itself.
+
+    The bug is planted on tifffile's public `TiffPage.is_reduced`, which the
+    refusal consults for each extra page (§5: a reduced page is allowed).
+    Collecting the pages does not read it, so the plant fires only in the
+    reader's own check, whatever that check's helper is called. The file is
+    valid, with a reduced second page, so nothing else can raise.
+
+    Red while the refusal loop runs inside the stage: the `TypeError` comes out
+    as `GeoTiffError: TIFF structure: ... TypeError`."""
+
+    def buggy(self: Any) -> Any:
+        raise TypeError("planted refusal bug")
+
+    stream = micro_tiff(extra_pages=[(elevations(rows=2, cols=2), 1)])
+    monkeypatch.setattr(tifffile.TiffPage, "is_reduced", property(buggy))
+    with pytest.raises(TypeError, match="planted refusal bug") as info:
+        decode(stream)
     assert info.value.__cause__ is None
 
 

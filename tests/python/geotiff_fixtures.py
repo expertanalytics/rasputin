@@ -272,6 +272,18 @@ def truncated_ifd() -> io.BytesIO:
     return io.BytesIO(data[: first_ifd + 10])
 
 
+def truncated_second_ifd() -> io.BytesIO:
+    """A two-page file cut six bytes into the second IFD.
+
+    Page 0 and its strip are whole, so `TiffFile(source)` opens it; only the
+    page walk reaches IFD 1 and fails there. This is the case that needs the
+    walk inside the "TIFF structure" stage, not just the open.
+    """
+    data = micro_tiff(extra_pages=[(elevations(), 1)]).getvalue()
+    second_ifd = tifffile.TiffFile(io.BytesIO(data)).pages[1].offset
+    return io.BytesIO(data[: second_ifd + 6])
+
+
 def truncated_strip() -> io.BytesIO:
     """Cut halfway through the strip. The strip is the file's last bytes, so
     the IFD and every tag value survive and only the pixel read can fail."""
@@ -302,6 +314,7 @@ UNDECODABLE: Mapping[str, tuple[Callable[[], io.BytesIO], str]] = {
     "not_tiff": (lambda: io.BytesIO(b"this is not a TIFF file\n" * 4), "TIFF structure"),
     "truncated_header": (truncated_header, "TIFF structure"),
     "truncated_ifd": (truncated_ifd, "TIFF structure"),
+    "truncated_second_ifd": (truncated_second_ifd, "TIFF structure"),
     "truncated_strip": (truncated_strip, "pixel data"),
     "corrupt_deflate": (corrupt_deflate, "pixel data"),
 }
