@@ -76,11 +76,12 @@ class DemTile(BaseModel):
             raise ValueError(
                 f"need a 2-D float32 or float64 array, got {value.dtype} {value.shape}"
             )
-        # A read-only *view*: the caller's array keeps its own flags, and the
-        # tile never hands out a writeable handle (§7, the concurrency rule).
-        view = np.ascontiguousarray(value).view()
-        view.flags.writeable = False
-        return view
+        # An owned read-only copy, stored as a view of it: the caller's buffer
+        # is never shared, and the view's flag cannot be set back because its
+        # base is read-only too (§7, the concurrency rule, round 3).
+        copy = np.array(value, order="C", copy=True)
+        copy.flags.writeable = False
+        return copy.view()
 
     @model_validator(mode="after")
     def _shape_agrees(self) -> Self:
