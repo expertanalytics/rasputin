@@ -479,9 +479,8 @@ class TestPurity:
         assert first_party_imports(module) <= {"tin_engine.features"}
 
     def test_it_is_re_exported_from_io(self) -> None:
-        from tin_engine.io.vtk_legacy import write_vtk as writer
-
         import tin_engine.io as io
+        from tin_engine.io.vtk_legacy import write_vtk as writer
 
         assert io.write_vtk is writer
         assert "write_vtk" in io.__all__
