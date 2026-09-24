@@ -12,14 +12,13 @@ This project is governed by specialized sub-agents. Always defer tasks to the co
 * `@reviewer`: Final gatekeeper. Audits LOC, code quality, readability, and documentation.
 
 ## 2. Core Constraints & Technical Mandates
-* **Strict Size Limit:** Under **700 non-comment lines of production code per pull
-  request**, tests excluded. This is the only statement of the rule; everywhere else
-  points here. The unit is non-comment lines because that is what the increment
-  designs have always estimated in (increment 3 estimated 255 for `pslg_builder.hpp`
-  against an actual 249 non-comment, and 457 raw), and because a ceiling counted in
-  raw lines penalises the comment density this project otherwise asks for.
+* **Strict Size Limit:** Under **700 lines of production code per pull request**,
+  where a line counts unless it is a comment, a docstring, or the body of a raw
+  literal; tests excluded. The exclusions exist so the ceiling does not penalise
+  the comment density this project asks for. This is the only statement of the
+  rule; everywhere else points here.
 * **Prohibited Dependencies:** Never introduce `CGAL`, `GDAL`, `OGR`, `Fiona`,
-  `Rasterio` (it wraps GDAL), `Boost.Geometry`, or external `date` libraries.
+  `Rasterio` (it wraps GDAL), or external `date` libraries.
   Enforced by `tools/check_prohibited_deps.py` over imports, includes, declared
   dependencies and build directives. `legacy/` is exempt.
 * **Core Stack:** Modern C++ (C++20 Concepts, Pybind11, `std::chrono`) + Async Python 3.12+ (Pydantic V2, Typer, Shapely, PyProj, NumPy, tifffile).

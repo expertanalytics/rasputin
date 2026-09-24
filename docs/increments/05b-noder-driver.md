@@ -1715,8 +1715,8 @@ commit". Tests are excluded from the LOC count; the *round* is not free.
 C++, `grep -vcE '^\s*(//|$)'` — preprocessor directives are code. For Python,
 `grep -vcE '^\s*(#|$)'`. `06-cdt-viewer.md`'s single combined command undercounts
 C++ by every `#include`; see premise 3. Neither instrument excludes docstrings or
-pybind `R"doc(...)"` bodies, and `CLAUDE.md` §2's unit — non-comment lines — is
-the definition; these are the instruments that approximate it.
+pybind `R"doc(...)"` bodies, which `CLAUDE.md` §2's unit does; §2 is the
+definition and these are instruments that approximate it.
 
 Re-runnable for 5a, the calibration point:
 

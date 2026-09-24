@@ -27,3 +27,9 @@ lib/build_*
 htmlcov
 coverage.xml
 build-san
+
+# uv is not this project pipeline: pyproject.toml declares scikit-build-core and
+# CI installs with pip. A uv.lock in the tree is an artifact of someone running
+# `uv run ruff` locally because ruff was not on PATH -- which is how 1016 lines
+# of it rode into 65a1bb9 under `git add -A`, unmentioned.
+uv.lock

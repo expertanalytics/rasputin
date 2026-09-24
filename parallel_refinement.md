@@ -279,7 +279,9 @@ Candidates (MIT / BSD only):
   under this design; see `docs/increments/04-cdt.md`.
 - **Geogram** (BSD-3) — overkill under this design since we don't need its remeshing or spatial-search infrastructure.
 
-CGAL is replaced. Boost.Geometry remains useful for the upstream vector simplification step.
+CGAL is replaced. Vector simplification is step 2 and belongs to Python, where
+Shapely covers Douglas-Peucker. Visvalingam-Whyatt has no Shapely equivalent and
+would be written in-tree. Nothing in the C++ core simplifies anything.
 
 ## Final flip pass
 
@@ -302,6 +304,81 @@ Constraint edges are skipped, so the original polygon and polyline geometry is p
 - **Wall-clock time:** much better at scale; throughput scales with available cores / SMs.
 - **Memory:** ternary tree adds a small overhead per internal node (3 child indices) but is trivially flattened at the end.
 - **Quality:** initial-CDT topology of un-flipped *constraint* edges persists, so input feature simplification quality matters. Interior quality is recovered by the final flip pass.
+
+## Open question: how is triangle size controlled where terrain is flat?
+
+Raised 2026-09-23. **Not settled.**
+
+Refinement stops on elevation error alone. A flat body therefore stays coarse,
+which is usually right — it is the whole reason a TIN beats a regular grid,
+since vertex density follows terrain gradient and orographic precipitation
+follows terrain gradient too, so the adaptation transfers. Spending cells on
+flat ground is the thing this design exists to avoid.
+
+The exception: **a flat body surrounded by steep terrain may need resolution
+for water routing**, even though its own elevation residual is
+zero. Water collects there. One huge triangle cannot represent where it goes.
+
+Three ways to express that, increasing in what they assume:
+
+1. **A global area cap.** Simplest, and wrong for the reason above: it spends
+   cells on isolated flat ground.
+
+2. **Grading** — bound how much adjacent cells may differ in size. Gives the
+   wanted behaviour: a lone plain has flat neighbours and stays coarse, a valley
+   floor beside refined slopes is pulled finer. **But it costs this design its
+   core property.** The ternary tree stores `v0, v1, v2` and `children[3]` and
+   no adjacency at all, so grading needs a new structure plus a cross-triangle
+   read every round — and "zero cross-triangle communication" is what the
+   algorithm is sold on. It also cascades: refining A forces B forces C, a
+   propagation needing iteration to converge.
+
+3. **A sizing field sampled on the raster.** Precompute a target-edge-length
+   raster from local terrain roughness, **blur it**, and have refinement read it
+   exactly as it already reads elevation — one more lookup in a loop already
+   scanning the bounding box. The blur is what produces the grading: a valley
+   floor inherits a small target from its neighbourhood because the field was
+   smoothed across the boundary, not because a triangle asked its neighbour
+   anything.
+
+**Recommended: 3.** No adjacency, no cross-triangle reads, no cascade, and the
+field is fixed before refinement starts. It also composes — if flow
+accumulation exists it becomes another term in the same field, and refinement
+neither knows nor cares which inputs built it.
+
+### Why not drive this from flow accumulation directly
+
+Rejected as a *requirement*, not as a mechanism. `auto_catchments.md` already
+plans an accumulation raster for catchment delineation, so reusing it would be
+nearly free — but **the tool must work when a catchment polygon is supplied
+rather than derived**, and then no accumulation exists and computing one would
+impose a cost the caller did not ask for. So it cannot be a precondition of
+meshing. As an
+optional term in the sizing field it remains available and is worth revisiting.
+
+**Noted for later: flow accumulation as a refinement driver.** Where routing
+needs cells along flow paths through a large flat interior, a blurred roughness
+field will not put them there — grading of any kind only propagates inward from
+the edges. Accumulation would. Revisit when the derive-catchments path exists.
+
+### Separation of concerns, which this must not erode
+
+Constrained vertices are fixed before meshing and cannot be removed by
+refinement or flipping. So the count of constrained degrees of freedom is
+decided upstream, by whatever produced the polygons and polylines — and a
+DEM-derived catchment boundary can carry one vertex per pixel edge.
+
+Each stage does one thing and hands on an artefact:
+
+- **auto-catchment** produces a catchment polygon. Nothing else.
+- **simplify** reduces its vertex count to the target resolution. Separately,
+  and identically, for every other constraining polyline and polygon.
+- **mesh** consumes constraints it does not question.
+
+This is step 2 and step 5's "No simplification after this point" already, and
+it is restated because the pressure to fold simplification into meshing will
+come from whoever finds a catchment with 40 000 vertices. The answer is a better
+simplify step, not a mesher that edits its own constraints.
 
 ## Open question: does the flip pass leave the tolerance undefined?
 
