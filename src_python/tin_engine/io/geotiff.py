@@ -54,8 +54,10 @@ def decode_dem(source: BinaryIO, *, nodata: float | None = None) -> DemTile:
 
     Raises `GeoTiffError` for every §5 refusal, and (§14, choice C) when
     tifffile or a codec fails on the file; that message names the stage, the
-    original type and text, and chains the original. `MemoryError` and the
-    reader's own bugs are not wrapped.
+    original type and text, and chains the original. Only the calls into
+    tifffile are wrapped: `MemoryError` passes through, and the reader's own
+    code, refusals included, runs outside the wrapped regions, so its bugs
+    surface as themselves.
 
     The whole page is decoded, so memory is O(rows x cols), briefly doubled
     while `DemTile` takes its read-only copy (§7). `source` is read but not
@@ -67,7 +69,8 @@ def decode_dem(source: BinaryIO, *, nodata: float | None = None) -> DemTile:
         tif = tifffile.TiffFile(source)
     with tif:
         with _stage("TIFF structure"):
-            page = _single_page(tif)
+            page, pages = tif.pages.first, tuple(tif.pages)  # parses every IFD
+        _single_page(pages)
         dtype = _check_page(page)
         tie, scale = _georeferencing(page)
         with _stage("GeoKey directory"):
@@ -104,30 +107,31 @@ def _stage(stage: str) -> Iterator[None]:
     """§14, choice C: a failure inside tifffile or a codec becomes `GeoTiffError`.
 
     Wraps call sites, not types, so the reader's own code stays outside and its
-    bugs surface as bugs. A refusal raised inside passes through unchanged.
+    bugs surface as bugs. No refusal runs inside a stage. The type is named
+    with its top-level module, so `struct.error` does not read as "error".
     """
     try:
         yield
-    except (MemoryError, GeoTiffError):
+    except MemoryError:
         raise
     except Exception as error:
+        kind = type(error)
+        module = kind.__module__.partition(".")[0]
+        name = kind.__qualname__ if module == "builtins" else f"{module}.{kind.__qualname__}"
         raise GeoTiffError(
-            f"{stage}: tifffile could not decode the file: {type(error).__name__}: {error}"
+            f"{stage}: tifffile could not decode the file: {name}: {error}"
         ) from error
 
 
-def _single_page(tif: tifffile.TiffFile) -> tifffile.TiffPage:
-    """Page 0, refusing a second full-resolution page (§5 refusal 8, 0-based)."""
-    pages = tif.pages
-    for index in range(1, len(pages)):
-        extra = pages[index]
+def _single_page(pages: tuple[tifffile.TiffPage | tifffile.TiffFrame, ...]) -> None:
+    """Refuse a second full-resolution page (§5 refusal 8, 0-based)."""
+    for index, extra in enumerate(pages[1:], start=1):
         where = f"on page {index} of {len(pages)}: only page 0 may be full resolution"
         if not isinstance(extra, tifffile.TiffPage):
             # A TiffFrame has no subfiletype to consult (round 3).
             raise GeoTiffError(f"NewSubfileType (254) could not be read (a frame) {where}")
         if not extra.is_reduced:
             raise GeoTiffError(f"NewSubfileType (254) = {int(extra.subfiletype)} {where}")
-    return pages.first
 
 
 def _check_page(page: tifffile.TiffPage) -> np.dtype[Any]:
@@ -186,12 +190,12 @@ def _georeferencing(page: tifffile.TiffPage) -> tuple[list[float], list[float]]:
     scale = [float(v) for v in np.atleast_1d(tags[33550].value)]
     if len(tie) > 6:
         raise GeoTiffError(
-            f"ModelTiepointTag (33922) has {len(tie)} values; exactly 6 (one tie point) are read"
+            f"ModelTiepointTag (33922) has {_count(tie)}; exactly 6 (one tie point) are read"
         )
     if len(tie) < 6:
-        raise GeoTiffError(f"ModelTiepointTag (33922) has {len(tie)} values; need 6")
+        raise GeoTiffError(f"ModelTiepointTag (33922) has {_count(tie)}; need 6")
     if len(scale) != 3:
-        raise GeoTiffError(f"ModelPixelScaleTag (33550) has {len(scale)} values; need 3")
+        raise GeoTiffError(f"ModelPixelScaleTag (33550) has {_count(scale)}; need 3")
     if not all(math.isfinite(v) for v in (*tie[:2], *tie[3:5])):
         raise GeoTiffError(f"ModelTiepointTag (33922) = {tie}: need finite I, J, X, Y")
     if not all(math.isfinite(v) and v > 0 for v in scale[:2]):
@@ -199,6 +203,10 @@ def _georeferencing(page: tifffile.TiffPage) -> tuple[list[float], list[float]]:
     if scale[2] != 0.0:
         raise GeoTiffError(f"ModelPixelScaleTag (33550) ScaleZ = {scale[2]}; must be 0")
     return tie, scale
+
+
+def _count(values: list[float]) -> str:
+    return "1 value" if len(values) == 1 else f"{len(values)} values"
 
 
 def _placement(

@@ -50,7 +50,8 @@ dependencies = [
 # need this extra. To check any other scheme against the installed tifffile:
 #   python -c "import tifffile; print(5 in tifffile.TIFF.DECOMPRESSORS, 3 in tifffile.TIFF.PREDICTORS)"
 # tin_engine.io.geotiff runs that probe before decoding and refuses with a
-# message naming the tag, the scheme and this extra (increment 11, §8).
+# message naming the tag and the scheme; without imagecodecs it also points at
+# this extra, and with it says no installed codec decodes it (increment 11, §8).
 codecs = ["imagecodecs>=2024.1"]
 dev = [
     "pytest>=8.0",
