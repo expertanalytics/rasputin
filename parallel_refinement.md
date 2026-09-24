@@ -279,18 +279,9 @@ Candidates (MIT / BSD only):
   under this design; see `docs/increments/04-cdt.md`.
 - **Geogram** (BSD-3) — overkill under this design since we don't need its remeshing or spatial-search infrastructure.
 
-CGAL is replaced. This line used to add that Boost.Geometry *"remains useful
-for the upstream vector simplification step"*, which is stale for a reason that
-has nothing to do with the library: **simplification is step 2, which is
-Python's**, and Shapely — in the core stack — covers Douglas-Peucker there.
-Nothing in C++ needs to simplify anything. (Visvalingam-Whyatt has no Shapely
-equivalent and would be written in-tree.)
-
-`CLAUDE.md` §2 currently lists Boost.Geometry among the prohibited
-dependencies. **That prohibition has no author** — it was introduced by the
-2026-09-17 governance pass (`d1db597`) by hardening this file's original
-conditional note, *"Boost.Geometry, if no longer used after vector_simplify is
-in-tree"*, into a ban and a gate. Unresolved; see the note in `CLAUDE.md` §2.
+CGAL is replaced. Vector simplification is step 2 and belongs to Python, where
+Shapely covers Douglas-Peucker. Visvalingam-Whyatt has no Shapely equivalent and
+would be written in-tree. Nothing in the C++ core simplifies anything.
 
 ## Final flip pass
 
@@ -316,7 +307,7 @@ Constraint edges are skipped, so the original polygon and polyline geometry is p
 
 ## Open question: how is triangle size controlled where terrain is flat?
 
-Raised 2026-09-23 with the user. **Not settled.**
+Raised 2026-09-23. **Not settled.**
 
 Refinement stops on elevation error alone. A flat body therefore stays coarse,
 which is usually right — it is the whole reason a TIN beats a regular grid,
@@ -324,8 +315,8 @@ since vertex density follows terrain gradient and orographic precipitation
 follows terrain gradient too, so the adaptation transfers. Spending cells on
 flat ground is the thing this design exists to avoid.
 
-The exception the user named: **a flat body surrounded by steep terrain may
-need resolution for water routing**, even though its own elevation residual is
+The exception: **a flat body surrounded by steep terrain may need resolution
+for water routing**, even though its own elevation residual is
 zero. Water collects there. One huge triangle cannot represent where it goes.
 
 Three ways to express that, increasing in what they assume:
@@ -357,11 +348,12 @@ neither knows nor cares which inputs built it.
 
 ### Why not drive this from flow accumulation directly
 
-It was considered and rejected as a *requirement*. `auto_catchments.md` already
+Rejected as a *requirement*, not as a mechanism. `auto_catchments.md` already
 plans an accumulation raster for catchment delineation, so reusing it would be
 nearly free — but **the tool must work when a catchment polygon is supplied
 rather than derived**, and then no accumulation exists and computing one would
-impose a cost nobody asked for. So it cannot be a precondition of meshing. As an
+impose a cost the caller did not ask for. So it cannot be a precondition of
+meshing. As an
 optional term in the sizing field it remains available and is worth revisiting.
 
 **Noted for later: flow accumulation as a refinement driver.** Where routing
