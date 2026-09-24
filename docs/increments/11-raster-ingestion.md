@@ -4,8 +4,8 @@
 before `@tester` was spawned, per `docs/increments/README.md` step 1. The red
 suite and the green implementation are on branch `increment11-raster`
 (`git log --oneline -- src_python/tin_engine/io/ tests/python/test_io_geotiff.py`).
-`@reviewer`'s first pass led to round 3 below. Its rulings are not in the
-code or the suite yet. This file holds no code and no tests.
+`@reviewer`'s first pass led to round 3 below, and its rulings are in the
+code and the suite. This file holds no code and no tests.
 
 *Amended (round 3), the status line.* It said "Design" after the code was
 green.
@@ -541,13 +541,16 @@ of raising". Each entry below is one named test. The names are the test names.
     **Detection.** Refuse when `crs.is_compound` **or**
     `len(crs.axis_info) != 2`. Check it right after the `is_projected` test
     and before the unit checks. Measured, pyproj 3.8.0 / PROJ 9.8.1, every
-    EPSG code that `from_epsg` resolves and that has `is_projected` true:
+    EPSG code that `from_epsg` resolves and that has `is_projected` true.
+    Enumerated with `pyproj.database.get_codes("EPSG", "CRS")`, counting
+    `(crs.type_name, len(crs.axis_info))`; the second column adds
+    `allow_deprecated=True`:
 
-    | `type_name` | axes | count |
-    |---|---|---|
-    | Projected CRS | 2 | 5362 |
-    | Compound CRS | 3 | 320 |
-    | Projected CRS | 3 | 1 |
+    | `type_name` | axes | count | with deprecated |
+    |---|---|---|---|
+    | Projected CRS | 2 | 5345 | 5707 |
+    | Compound CRS | 3 | 320 | 330 |
+    | Projected CRS | 3 | 1 | 1 |
 
     The one 3-axis projected CRS is 9895, "LUREF / Luxembourg TM (3D)",
     with an ellipsoidal-height axis. It is not compound, so `is_compound`
@@ -1003,10 +1006,11 @@ path:
 ```
 $ uv pip install --python .venv/bin/python --target $SCRATCH/tf 'tifffile==2024.1.30' --no-deps
 $ PYTHONPATH=$SCRATCH/tf .venv/bin/python -m pytest -q tests/python/test_io_geotiff.py tests/python/test_geotiff_fixtures.py
-183 passed, 3 skipped, 143 warnings
 ```
 
-That is the same count as at 2026.9.20 (183 passed, 3 skipped). Check that
+It passes, with the same passed and skipped counts as the same command at
+2026.9.20. Counts are not given here because they change with every test
+added; re-run both to compare. Check that
 the run used the old copy:
 `PYTHONPATH=$SCRATCH/tf .venv/bin/python -c "import tifffile; print(tifffile.__version__)"`
 prints `2024.1.30`. This is the lowest release the pin allows. The pin stays.
@@ -1347,7 +1351,9 @@ comments only.
 | non-comment, blank lines counted | 338 |
 
 **278 is the measurement**, 24% under the estimate and well under
-`CLAUDE.md` §2's 700. Round 3 and choice C came in over their own estimate
+`CLAUDE.md` §2's 700. After `@reviewer`'s second pass narrowed the "TIFF
+structure" stage and fixed three messages (`aa99e6b`) it is **281**
+(`geotiff.py` 235, `models.py` 46). Round 3 and choice C came in over their own estimate
 (+41 against ~23): long refusal messages split across lines, a separate count
 message per georeferencing tag, and the `_stage` context manager.
 
