@@ -107,3 +107,48 @@ one affects correctness.
 **Broad phase.** The spatial index that proposes candidate segment pairs so the
 noder does not test every pair against every other. Its cell size is unrelated
 to the snap grid's. False positives are free; false negatives are not.
+
+## Rasters
+
+**Tie point.** The GeoTIFF `ModelTiePointTag` (33922): one raster position
+`(col, row)` paired with the world position it sits at. Together with the pixel
+scale it is the whole georeferencing of a north-up file.
+`docs/increments/11-raster-ingestion-prior-art.md` §3.2.
+
+**Pixel scale.** The GeoTIFF `ModelPixelScaleTag` (33550): the world distance
+between neighbouring raster nodes, stored positive in both axes. The fact that
+y decreases as the row index grows is implied, not stored.
+
+**Grid-registered (pixel-is-point).** The convention that a raster sample is a
+point at a node, so `n` samples span `n - 1` spacings. `GTRasterTypeGeoKey`
+(1025) value **2**, `RasterPixelIsPoint`. `include/terrain/raster/geometry.hpp` assumes it.
+
+**Area-registered (pixel-is-area).** The other convention: a sample is a cell,
+the tie point names a cell corner rather than a node, and `n` samples span `n`
+spacings. `GTRasterTypeGeoKey` value **1**, `RasterPixelIsArea` — the
+specification's own default. Reading such a file as grid-registered
+shifts everything by half a cell. The reader converts rather than refuses, and
+does not lean on that default: an absent key is refused, because half a cell is
+the entire quantity in dispute. `docs/increments/11-raster-ingestion.md`
+ruling 4.
+
+**Mosaic.** A region assembled from several raster files, each with its own
+extent and possibly its own CRS. The legacy walked one in
+`legacy/rasputin/reader.py:434-456`.
+
+**Half-cell shift.** The conversion from an area-registered file's declared
+corner grid to the node grid `RasterGeometry` needs: `x_min = tie_x + dx/2`,
+`y_max = tie_y - dy/2`, with the shape and spacings unchanged. Exact, not a
+heuristic.
+
+**NoData sentinel.** The single value that marks an absent sample in a raster.
+Discovered in Python from `GDAL_NODATA` (42113); compared in C++ with `==`, so
+it must be passed exactly as decoded and in the array's own dtype.
+`include/terrain/raster/raster.hpp`'s `is_nodata` also treats NaN as NoData
+unconditionally, with no sentinel needed.
+
+**`always_xy`.** The `pyproj.Transformer` argument that forces longitude/x
+first, ignoring the authority's declared axis order. Mandatory on every
+transformer in `src_python/`. Omitting it on `EPSG:4326` puts a point about
+6 000 km away with no exception. `docs/increments/11-raster-ingestion.md`
+ruling 8.

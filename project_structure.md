@@ -165,10 +165,18 @@ path, and never links a codec.
 
 The deciding argument is dependency gravity, not testability. GeoTIFF is not
 an array format: it is a container plus a GeoKey directory plus a CRS.
-Decoding it in C++ pulls CRS interpretation across the firewall, and CRS
-interpretation means PROJ — GDAL's own dependency. That is the neighbourhood
-this migration exists to leave. Keeping decode in Python also preserves
-Tier-1 C++ tests that need no fixtures at all.
+Decoding it in C++ means a TIFF container library, a codec set and an EPSG
+database in the core — three dependencies for a module whose entire job is to
+index into an array. Python already has all three and a Pydantic layer to
+validate them in. Keeping decode in Python also preserves Tier-1 C++ tests
+that need no fixtures at all.
+
+This paragraph used to justify the rule with "CRS interpretation means PROJ —
+GDAL's own dependency". That was false and is corrected here: PROJ is a
+standalone library, GDAL depends on PROJ rather than the reverse, and
+`CLAUDE.md` §2 lists PyProj in the core stack, so this project depends on PROJ
+and always did. The legacy used `pyproj` for every transformation and never
+linked GDAL. `docs/increments/11-raster-ingestion.md` ruling 12 is the record.
 
 `README.md` and `testing.md` already assumed this; only the prose in this
 section dissented.
@@ -180,8 +188,12 @@ data and never touches `_core`. Across the boundary go one C-contiguous 2-D
 `float32` or `float64` array, four keyword-named affine scalars, and an
 optional NoData sentinel — nothing else.
 
-- Raster dimensions are derived from `array.shape`, never passed alongside it,
-  so a shape/geometry disagreement is unrepresentable rather than validated.
+- Across the C++ boundary, raster dimensions are derived from `array.shape`,
+  never passed alongside it, so on the C++ side a shape/geometry disagreement
+  is unrepresentable rather than validated. The Python side is different:
+  `io/models.py`'s `RasterMeta` carries `rows` and `cols` (increment 11,
+  choice B1), and `DemTile` *validates* them against `array.shape`.
+  `raster.py` must not forward them.
   The legacy passed `(array, x_min, y_max, delta_x, delta_y)` positionally
   (`legacy/rasputin/reader.py:340-345`), which is the shape that let the
   transposed row/column defect live.
@@ -191,11 +203,25 @@ optional NoData sentinel — nothing else.
 - Integer DEMs are promoted in Python at decode time: 16-bit to `float32`,
   32-bit to `float64`. `int32` does not fit float32's mantissa, and promoting
   it there would silently quantise elevations.
-- **CRS never crosses into C++**, now or later. The legacy violated this by
-  pushing a proj4 string into the mesh; do not reintroduce it. Python
-  reprojects every input into one projected CRS first, and rejects a
-  geographic CRS outright — a degrees-based raster interpolates perfectly
-  happily and yields a silently distorted mesh.
+- **No CRS string crosses into C++**, now or later, because nothing there
+  reads one. No header in `raster/` has a CRS field and none can use it; a
+  field nothing reads is a field that rots. The legacy proved it by pushing a
+  proj4 string into the mesh for no consumer. Do not reintroduce it. This is
+  an argument about dependency surface and unused state, and nothing more.
+- **Every number that crosses is metres in a projected CRS**, because nothing
+  on either side can tell otherwise. This is the load-bearing rule, and it is
+  separate from the one above: that one is about where a string may live, this
+  one is about what the numbers mean. Python must deliver every input in one
+  projected, metre CRS, and rejects a geographic CRS outright. Today it does
+  this by refusal alone: `io/geotiff.py` refuses any file that is not already
+  in one, and nothing reprojects yet. Reprojection arrives no earlier than
+  the mosaic increment (`docs/increments/11-raster-ingestion.md` §9, §10).
+  Measured, pyproj 3.8.0 / PROJ 9.8.1: a 0.0002777° cell at 60°N is 15.5 m
+  east-west and 31.0 m north-south, a 2:1 anisotropy invisible to `sample.hpp`, whose bilinear
+  weights would then be computed in degrees and applied to metres. The legacy
+  never implemented this rejection — a geographic GeoTIFF happened to raise
+  during proj4 assembly, so the defence was a typo. See
+  `docs/increments/11-raster-ingestion.md` sections 3 and 5.
 - NoData discovery is Python's (a container tag); NoData semantics are C++'s
   (already implemented in `raster.hpp` and `sample.hpp`). The sentinel is
   compared with `==`, so it must be passed exactly as decoded, never re-typed
@@ -210,8 +236,13 @@ load-bearing conventions — north-up, and grid-registered (pixel-is-point) —
 which C++ can no longer verify, so the reader must enforce them. All three of
 these are gaps in the legacy, verified:
 
-- `GTRasterTypeGeoKey` (1025) is defined at `legacy/rasputin/reader.py:36` and
-  read nowhere. An area-registered TIFF therefore lands half a cell off.
+- `GTRasterTypeGeoKey` (1025) is defined in `legacy/rasputin/reader.py` and
+  read nowhere. An area-registered TIFF therefore lands half a cell off. The
+  reader converts such a file rather than refusing it — the node grid is the
+  declared corner grid shifted inward by half a cell — and refuses only a file
+  that does not say which convention it uses. The repository's own DEM fixture
+  is area-registered, which is why refusal was the wrong rule;
+  `docs/increments/11-raster-ingestion.md` ruling 4 carries the measurement.
 - `ModelTransformationTag` (34264) appears nowhere in the legacy reader, so a
   rotated or sheared transform is silently misread instead of rejected.
   `RasterGeometry` cannot represent one; it must raise.
