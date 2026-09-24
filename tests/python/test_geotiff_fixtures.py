@@ -22,13 +22,17 @@ from geotiff_fixtures import (
     COLS,
     DELTA_X,
     DELTA_Y,
+    FLOATING_POINT_PREDICTOR,
+    PACKBITS,
     REFUSALS,
     ROWS,
     TIE_X,
     TIE_Y,
     Refusal,
     elevations,
+    floating_point_predictor_tiff,
     micro_tiff,
+    packbits_tiff,
 )
 
 BY_NAME = pytest.mark.parametrize("refusal", REFUSALS, ids=[r.name for r in REFUSALS])
@@ -77,3 +81,25 @@ def test_baseline_does_not_carry_the_defect(refusal: Refusal) -> None:
         assert not refusal.witness(tifffile.TiffFile(micro_tiff(nodata="-9999")))
     else:
         assert not refusal.witness(tifffile.TiffFile(micro_tiff()))
+
+
+def test_floating_point_predictor_fixture_is_a_float_tile_declaring_predictor_3() -> None:
+    """§8: GDAL writes `PREDICTOR=3` for float DEMs. The baseline declares no predictor."""
+    page = tifffile.TiffFile(floating_point_predictor_tiff()).pages.first
+    assert page.predictor == FLOATING_POINT_PREDICTOR
+    assert page.dtype == np.float32
+    assert page.compression in (8, 32946)  # Deflate, either code
+    assert page.shape == (ROWS, COLS)
+    assert tifffile.TiffFile(micro_tiff()).pages.first.predictor == 1
+
+
+def test_packbits_fixture_is_real_packbits_that_tifffile_decodes() -> None:
+    """The strip really is PackBits, and tifffile alone decodes it to the baseline.
+
+    That is what makes the PackBits test in `test_io_geotiff.py` a statement
+    about the reader and not about the fixture.
+    """
+    page = tifffile.TiffFile(packbits_tiff()).pages.first
+    assert page.compression == PACKBITS
+    assert page.tags[279].value == (ROWS * COLS * 4 + 1,)
+    np.testing.assert_array_equal(page.asarray(), elevations())

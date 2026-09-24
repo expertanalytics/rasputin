@@ -1,7 +1,10 @@
 """Micro-GeoTIFF builders for increment 11's suite (`11-raster-ingestion.md` §12).
 
-Every stream here is an `io.BytesIO` written by `tifffile.imwrite`, 4x4 or
-smaller, uncompressed. No optional dependency is needed to build or read one.
+Every stream here is an `io.BytesIO` written by `tifffile`, 4x4 or smaller,
+uncompressed or Deflate. No optional dependency is needed to build one. Three
+builders patch the written bytes afterwards, because tifffile cannot *write*
+what they need without `imagecodecs`: an LZW `Compression`, a floating-point
+`Predictor`, and a PackBits strip (design §8).
 
 The valid baseline is deliberately asymmetric so a swap cannot pass: 3 rows by
 4 columns, `delta_x` 10 and `delta_y` 5, every cell a distinct value. Each
@@ -32,6 +35,10 @@ GEOKEY_DIRECTORY = 34735
 GDAL_METADATA = 42112
 GDAL_NODATA = 42113
 COMPRESSION = 259
+STRIP_OFFSETS = 273
+STRIP_BYTE_COUNTS = 279
+PREDICTOR = 317
+SAMPLE_FORMAT = 339
 
 # GeoKey ids.
 GT_MODEL_TYPE = 1024
@@ -155,23 +162,70 @@ def micro_tiff(
     return stream
 
 
+def with_short_tag(stream: io.BytesIO, tag: int, old: int, new: int) -> io.BytesIO:
+    """Rewrite the IFD entry `tag`, a little-endian SHORT of count 1, from `old` to `new`.
+
+    The assertion guards against the entry being found zero times or twice, so
+    a patch can never land on some other bytes that happen to match.
+    """
+    buffer = bytearray(stream.getvalue())
+    entry = tag.to_bytes(2, "little") + b"\x03\x00\x01\x00\x00\x00" + old.to_bytes(2, "little")
+    assert buffer.count(entry) == 1, f"expected exactly one tag {tag} entry with value {old}"
+    at = buffer.index(entry) + 8
+    buffer[at : at + 2] = new.to_bytes(2, "little")
+    return io.BytesIO(bytes(buffer))
+
+
 def with_compression_tag(stream: io.BytesIO, code: int) -> io.BytesIO:
     """Rewrite an uncompressed file's `Compression` (259) value to `code`.
 
     tifffile cannot *write* LZW without `imagecodecs`, but the refusal under
     test must fire before any decode, so the strip's bytes never need to be
-    valid LZW. The IFD entry is little-endian SHORT, count 1, value 1; the
-    assertion guards against it being found zero or twice.
+    valid LZW.
     """
-    buffer = bytearray(stream.getvalue())
-    entry = COMPRESSION.to_bytes(2, "little") + b"\x03\x00\x01\x00\x00\x00\x01\x00"
-    assert buffer.count(entry) == 1, "expected exactly one uncompressed Compression entry"
-    at = buffer.index(entry) + 8
-    buffer[at : at + 2] = code.to_bytes(2, "little")
-    return io.BytesIO(bytes(buffer))
+    return with_short_tag(stream, COMPRESSION, 1, code)
 
 
 LZW = 5
+PACKBITS = 32773
+FLOATING_POINT_PREDICTOR = 3
+
+
+def floating_point_predictor_tiff() -> io.BytesIO:
+    """A Deflate float32 tile declaring `Predictor` (317) = 3, as GDAL writes float DEMs.
+
+    tifffile refuses to write predictor 3 without `imagecodecs`, and refuses
+    predictor 2 for floats. So an int32 tile is written with predictor 2 and
+    then relabelled: `SampleFormat` 2 -> 3 (float) and `Predictor` 2 -> 3. The
+    strip is not valid floating-point-predicted data. It never has to be: the
+    refusal is a capability probe that runs before any decode (§8).
+    """
+    stream = micro_tiff(elevations(np.int32), compression="deflate", predictor=2)
+    stream = with_short_tag(stream, SAMPLE_FORMAT, 2, 3)
+    return with_short_tag(stream, PREDICTOR, 2, FLOATING_POINT_PREDICTOR)
+
+
+def packbits_tiff() -> io.BytesIO:
+    """The baseline tile with its one strip re-encoded as real PackBits.
+
+    tifffile cannot write PackBits without `imagecodecs` but, measured, reads
+    it with its built-in decoder (§8, problem 1). The strip is appended to the
+    file as one PackBits literal run (header byte `n - 1`, then `n` bytes), and
+    `StripOffsets`, `StripByteCounts` and `Compression` are repointed at it.
+    """
+    stream = micro_tiff()
+    page = tifffile.TiffFile(stream).pages.first
+    raw = elevations().tobytes()
+    assert len(raw) <= 128, "one literal run holds at most 128 bytes"
+    strip = bytes([len(raw) - 1]) + raw
+    buffer = bytearray(stream.getvalue())
+    offset = len(buffer)
+    buffer += strip
+    for tag, value in ((STRIP_OFFSETS, offset), (STRIP_BYTE_COUNTS, len(strip))):
+        entry = page.tags[tag]
+        assert entry.count == 1 and entry.dtype == 4, "expected one inline LONG"
+        buffer[entry.valueoffset : entry.valueoffset + 4] = value.to_bytes(4, "little")
+    return with_compression_tag(io.BytesIO(bytes(buffer)), PACKBITS)
 
 
 # --------------------------------------------------------------------------
@@ -252,13 +306,13 @@ REFUSALS: tuple[Refusal, ...] = (
         "refuses_degenerate_shape",
         lambda: micro_tiff(elevations(rows=1)),
         lambda t: t.pages.first.shape == (1, COLS),
-        (),
+        ("257", "ImageLength", "at least 2"),
     ),
     Refusal(
         "refuses_ambiguous_pages",
         lambda: micro_tiff(extra_pages=[(elevations(), 0)]),
         lambda t: len(t.pages) == 2 and not t.pages[1].is_reduced,
-        (),
+        ("254", "NewSubfileType"),
     ),
     Refusal(
         "refuses_multi_sample",
@@ -274,13 +328,13 @@ REFUSALS: tuple[Refusal, ...] = (
         "refuses_unsupported_dtype",
         lambda: micro_tiff(elevations(np.int64)),
         lambda t: t.pages.first.dtype == np.int64,
-        ("int64",),
+        ("339", "SampleFormat", "258", "BitsPerSample", "int64"),
     ),
     Refusal(
         "refuses_missing_codec",
         lambda: with_compression_tag(micro_tiff(), LZW),
         lambda t: t.pages.first.compression == LZW,
-        ("LZW",),
+        ("259", "Compression", "LZW"),
     ),
     Refusal(
         "refuses_missing_crs",
@@ -316,7 +370,7 @@ REFUSALS: tuple[Refusal, ...] = (
         "refuses_nodata_not_representable",
         lambda: micro_tiff(nodata="0.1"),
         lambda t: _tag(t, GDAL_NODATA) == "0.1" and t.pages.first.dtype == np.float32,
-        ("42113", "GDAL_NODATA", "0.1"),
+        ("42113", "GDAL_NODATA", "0.1", "float32"),
     ),
     Refusal(
         "refuses_contradictory_nodata_override",
