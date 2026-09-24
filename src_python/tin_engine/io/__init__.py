@@ -13,5 +13,6 @@ that has one (`06-cdt-viewer.md`, "no file is written below `cli.py`").
 from __future__ import annotations
 
 from .ply import write_ply
+from .vtk_legacy import write_vtk
 
-__all__ = ["write_ply"]
+__all__ = ["write_ply", "write_vtk"]
