@@ -188,8 +188,12 @@ data and never touches `_core`. Across the boundary go one C-contiguous 2-D
 `float32` or `float64` array, four keyword-named affine scalars, and an
 optional NoData sentinel — nothing else.
 
-- Raster dimensions are derived from `array.shape`, never passed alongside it,
-  so a shape/geometry disagreement is unrepresentable rather than validated.
+- Across the C++ boundary, raster dimensions are derived from `array.shape`,
+  never passed alongside it, so on the C++ side a shape/geometry disagreement
+  is unrepresentable rather than validated. The Python side is different:
+  `io/models.py`'s `RasterMeta` carries `rows` and `cols` (increment 11,
+  choice B1), and `DemTile` *validates* them against `array.shape`.
+  `raster.py` must not forward them.
   The legacy passed `(array, x_min, y_max, delta_x, delta_y)` positionally
   (`legacy/rasputin/reader.py:340-345`), which is the shape that let the
   transposed row/column defect live.
@@ -207,10 +211,13 @@ optional NoData sentinel — nothing else.
 - **Every number that crosses is metres in a projected CRS**, because nothing
   on either side can tell otherwise. This is the load-bearing rule, and it is
   separate from the one above: that one is about where a string may live, this
-  one is about what the numbers mean. Python reprojects every input into one
-  projected CRS first and rejects a geographic CRS outright. Measured, pyproj
-  3.8.0 / PROJ 9.8.1: a 0.0002777° cell at 60°N is 15.5 m east-west and 31.0 m
-  north-south, a 2:1 anisotropy invisible to `sample.hpp`, whose bilinear
+  one is about what the numbers mean. Python must deliver every input in one
+  projected, metre CRS, and rejects a geographic CRS outright. Today it does
+  this by refusal alone: `io/geotiff.py` refuses any file that is not already
+  in one, and nothing reprojects yet. Reprojection arrives no earlier than
+  the mosaic increment (`docs/increments/11-raster-ingestion.md` §9, §10).
+  Measured, pyproj 3.8.0 / PROJ 9.8.1: a 0.0002777° cell at 60°N is 15.5 m
+  east-west and 31.0 m north-south, a 2:1 anisotropy invisible to `sample.hpp`, whose bilinear
   weights would then be computed in degrees and applied to metres. The legacy
   never implemented this rejection — a geographic GeoTIFF happened to raise
   during proj4 assembly, so the defence was a typo. See

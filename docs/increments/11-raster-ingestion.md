@@ -1,7 +1,14 @@
 # Increment 11: raster ingestion, the Python side
 
-**Status.** Design. Written by `@architect` before `@tester` is spawned, per
-`docs/increments/README.md` step 1. No production code and no tests here.
+**Status.** Implemented, in review, not merged. Written by `@architect`
+before `@tester` was spawned, per `docs/increments/README.md` step 1. The red
+suite and the green implementation are on branch `increment11-raster`
+(`git log --oneline -- src_python/tin_engine/io/ tests/python/test_io_geotiff.py`).
+`@reviewer`'s first pass led to round 3 below. Its rulings are not in the
+code or the suite yet. This file holds no code and no tests.
+
+*Amended (round 3), the status line.* It said "Design" after the code was
+green.
 
 **Amended after the red suite.** `@tester`'s red commit
 (`git log --oneline -1 -- tests/python/test_io_geotiff.py`) turned up seven
@@ -11,6 +18,12 @@ Two of them went to the user, who chose A1 and B1; §14 records both.
 **Amended again (round 2).** Updating the suite to match turned up two more
 gaps and four readings `@tester` had to pin. They are ruled in place, marked
 *Amended (round 2)*, and §12 lists the tests they change.
+
+**Amended a third time (round 3).** One user ruling (refuse a compound CRS in
+3072) and `@reviewer`'s design-side findings on the green code. They are ruled
+in place, marked *Amended (round 3)*. §12 lists the tests they change. One
+question went to the user: errors raised from inside tifffile or a codec.
+The user chose option C on 2026-09-24; §14 records it.
 
 **Input.** `docs/increments/11-raster-ingestion-prior-art.md`, the
 `@migration-expert` report, already reviewed and corrected. That file holds the
@@ -28,7 +41,8 @@ reach `_core`; ruling 2 says why, and names the increment that finishes the job.
 1. **Decode only. No C++, no bindings, no `_core` import.** The adapter and the
    zero-copy view are increment 12.
 2. **`tin_engine/io/geotiff.py` takes a binary stream, not a path.**
-3. **The reader's job is refusal.** Eighteen named refusals, section 5.
+3. **The reader's job is refusal.** Nineteen named refusals, section 5.
+   *Amended (round 3):* eighteen before `refuses_compound_crs` (13a).
 4. **Area-registered files are converted, not refused** — the project's only DEM
    fixture is one. An *absent* registration key is refused.
 5. **Use `tifffile`'s own GeoKey decoding.** Do not port `GeoKeysInterpreter`.
@@ -37,7 +51,8 @@ reach `_core`; ruling 2 says why, and names the increment that finishes the job.
    `GeographicTypeGeoKey` is read only when 3072 is absent, and only so that
    the refusal names the real reason (§5, problem 3). *Amended (round 2):* a
    code reached through 2048 is always refused, whatever it resolves to (§5,
-   refusal 13).
+   refusal 13). *Amended (round 3), user ruling:* the 3072 CRS must also be
+   two-dimensional. A compound CRS in 3072 is refused (§5, refusal 13a).
 7. **Projected-and-metre is tested on the constructed CRS**, never on which
    GeoKeys are present.
 8. **`always_xy=True` is a hard requirement**, enforced by a grep test that
@@ -291,6 +306,61 @@ of raising". Each entry below is one named test. The names are the test names.
    positive. `RasterGeometry`'s constructor demands positive spacings, and a
    negative ScaleY in the wild means a file that has already flipped north-up
    somewhere upstream.
+
+   *Amended (round 3), `@reviewer` blocking finding 1: a malformed tie point
+   escaped refusals 1 to 3.* `decode_dem` calls `tif.geotiff_metadata` before
+   it reads the georeferencing tags. `geotiff_metadata` reshapes 33922 into
+   rows of 6 and 34264 into 4×4, so a wrong length raises tifffile's bare
+   `ValueError` before any refusal can run. Measured, tifffile 2026.9.20, on
+   micro-TIFFs through `decode_dem`:
+
+   - 33922 with 1, 3, 5, 7 or 9 values:
+     `ValueError: cannot reshape array of size N into shape (6)`. With 0 or 12
+     values the refusal fires as designed.
+   - 34264 with 1, 3, 12 or 17 values:
+     `ValueError: cannot reshape array of size N into shape (4,4)`. So
+     refusal 2 was delivered only for exactly 16 values.
+   - 33550 with 1 value: `TypeError: 'float' object is not iterable`. This
+     one is in the reader, not tifffile: a DOUBLE tag of count 1 reads back as
+     a bare `float`, not a tuple (33922 does the same).
+
+   **Ruling: the three tags are checked from `page.tags` before
+   `geotiff_metadata` is read.** The order in `decode_dem` becomes:
+
+   1. `_single_page`, then `_check_page` (refusals 7 to 11). Neither reads
+      GeoKeys.
+   2. The tag checks, reading `page.tags` only, in this order:
+      - 34264 present, with any length or value: refusal 2.
+      - 33922 or 33550 absent: refusal 1.
+      - 33922 with more than 6 values: refusal 3.
+      - 33922 with fewer than 6 values, or 33550 with any count but 3:
+        refusal 1.
+      - Then the existing finiteness, sign and ScaleZ checks.
+
+      A scalar tag value is a sequence of length 1.
+   3. `tif.geotiff_metadata`, and only then the steps that need GeoKeys:
+      registration (refusal 6), then CRS and units (12 to 14).
+
+   So `_placement` splits in two: the tag part moves before
+   `geotiff_metadata`, and the registration part stays after it. No new
+   refusal name is needed. The messages change, because the counts are now
+   the diagnosis:
+
+   - refusal 3: "`ModelTiepointTag (33922)` has N values; exactly 6 (one tie
+     point) are read". The old text said "a GCP list", which is false for 7
+     or 9 values.
+   - refusal 1, short tie point: "`ModelTiepointTag (33922)` has N values;
+     need 6". Short scale: "`ModelPixelScaleTag (33550)` has N values; need
+     3".
+
+   Moving a 2-value 33550 from refusal 5 to refusal 1 changes no existing
+   test: every `test_refuses_nonpositive_pixel_scale` case has 3 values.
+
+   Measured, the same run: a corrupt `GeoKeyDirectoryTag` (34735), or one
+   that points into a 34736 that is absent, does **not** raise.
+   `geotiff_metadata` logs an error and returns the keys it could read, and
+   the reader then refuses on the missing key (1025 or 3072) with a true
+   message. So 34735 needs no pre-check.
 6. `refuses_unknown_raster_type` — `GTRasterTypeGeoKey` (1025) absent or 32767.
    Section 4.
 7. `refuses_degenerate_shape` — fewer than two rows or two columns. `bilinear`
@@ -302,6 +372,27 @@ of raising". Each entry below is one named test. The names are the test names.
    confirmed:* page indices in the message are 0-based, to match "page 0"
    here and tifffile's `pages[i]`. The page after the one that is read is
    page 1.
+
+   *Amended (round 3): an extra page that is a `TiffFrame` is refused.* The
+   green code tests `isinstance(extra, TiffPage) and not extra.is_reduced`,
+   so a `TiffFrame` passes without a check. A `TiffFrame` is a page tifffile
+   chose not to parse in full. It has no `subfiletype` and no `is_reduced`
+   (measured), so the reader cannot know whether it is reduced-resolution.
+   Skipping it is the silent case this refusal exists to stop. **Ruling:
+   refuse any extra page that is not a `TiffPage`.** The message names the
+   page index and the page count. It says that `NewSubfileType` (254) could
+   not be read, because tifffile returned a frame. It does not print a value.
+
+   When does this happen? `TiffFile(stream)` with no private arguments makes
+   frames only for LSM, NDPI and ScanImage files (`tifffile/tifffile.py`,
+   `TiffFile.__init__`, the `_lsm_load_pages`, `_ndpi_load_pages` and
+   `_load_virtual_frames` branches). All three are microscopy formats, never
+   a DEM. Measured on a two-page micro-TIFF: both pages are `TiffPage`, and
+   still are after `geotiff_metadata`. With the private `_useframes=True`,
+   page 1 is a `TiffFrame`. So refusing costs no real input. The alternative
+   was to force a full parse (`tif.pages.useframes = False` before the loop).
+   It is rejected because it reaches into tifffile's page cache for a case
+   no DEM produces.
 9. `refuses_multi_sample` — `SamplesPerPixel` is not 1. A DEM has one band.
 10. `refuses_unsupported_dtype` — anything outside the promotion table in
     section 7.
@@ -317,6 +408,39 @@ of raising". Each entry below is one named test. The names are the test names.
     tifffile 2026.9.20), and a case-insensitive match on "floating" finds
     it. A value that tifffile's enum does not know has no name; the message
     then gives the number alone, which it names anyway.
+
+    *Amended (round 3): the message wording.* `@reviewer` found three faults
+    in the green message (`geotiff.py`, the `value not in known` branch).
+    The ruling for each:
+
+    - **Private API.** It looks names up with `enum._value2member_map_`.
+      **Ruling:** use `value in enum`. That is public on Python 3.12 and
+      later, which is the project's floor. Measured, Python 3.14.7:
+      `5 in tifffile.COMPRESSION` is `True`, and `60000 in ...` is `False`.
+      `COMPRESSION(60000)` raises `ValueError`, so it must not be the test.
+    - **"(unknown)".** For a number the enum does not know, it prints
+      `= 60000 (unknown)`. **Ruling:** print `Compression (259) = 60000`,
+      with no brackets, as this refusal already said.
+    - **Install advice that may be false.** It tells the user to install
+      `codecs` whatever the scheme is. Measured, tifffile 2026.9.20 with
+      imagecodecs 2026.8.16 installed in a scratch target: 28 `COMPRESSION`
+      members are still not in `DECOMPRESSORS`, e.g. `THUNDERSCAN` (32809),
+      `PIXARLOG`, `SGILOG` and `JBIG`. Every `PREDICTOR` member is. So with
+      the extra present, the green code advises installing what is already
+      installed. **Ruling:** the advice depends on whether `imagecodecs` can
+      be imported (`importlib.util.find_spec("imagecodecs") is not None`).
+      No import is needed.
+      - **Absent:** "…cannot be decoded as installed; the `codecs` extra
+        (imagecodecs) may decode it: pip install 'rasputin[codecs]'". The
+        word is "may", because the reader cannot know without the extra.
+        LZW and the floating-point predictor are the known cases, and §8's
+        probe checks any other.
+      - **Present:** "…cannot be decoded by tifffile, even with imagecodecs
+        installed". No install advice.
+
+    The tag, its number and value, and the scheme name when there is one
+    stay as they are. `test_refuses_missing_codec`'s assertions still hold,
+    because it runs only without the extra.
 
 **CRS**
 
@@ -403,6 +527,69 @@ of raising". Each entry below is one named test. The names are the test names.
     "3072" and "32767". It need not mention 2048, and must not claim 2048
     was consulted. It may mention that 2048 is present; the suite does not
     pin that, and it should not.
+
+13a. `refuses_compound_crs`: *added in round 3, by user ruling.* The 3072
+    CRS passes `is_projected` but is not a 2-D horizontal CRS.
+
+    **Why.** 3072 = 5972 (ETRS89-NOR / UTM 32N + NN2000 height) was
+    accepted, with `epsg=5972`. pyproj reports a compound CRS as projected
+    when its horizontal part is projected, so refusal 13 does not fire. All
+    three axes are metres, so refusal 14 does not fire either. GeoTIFF puts
+    the vertical part in `VerticalGeoKey` (4096), not in 3072. The user
+    ruled that it must be refused.
+
+    **Detection.** Refuse when `crs.is_compound` **or**
+    `len(crs.axis_info) != 2`. Check it right after the `is_projected` test
+    and before the unit checks. Measured, pyproj 3.8.0 / PROJ 9.8.1, every
+    EPSG code that `from_epsg` resolves and that has `is_projected` true:
+
+    | `type_name` | axes | count |
+    |---|---|---|
+    | Projected CRS | 2 | 5362 |
+    | Compound CRS | 3 | 320 |
+    | Projected CRS | 3 | 1 |
+
+    The one 3-axis projected CRS is 9895, "LUREF / Luxembourg TM (3D)",
+    with an ellipsoidal-height axis. It is not compound, so `is_compound`
+    alone misses it, and `type_name` alone ("Projected CRS") misses it too.
+    The axis count catches both shapes. `is_compound` is kept anyway: it is
+    what the user ruled on, and it is what gives the message a sub-CRS to
+    name. The same scan found nothing else that passes `is_projected`.
+
+    It is one refusal, not two. The 3-D projected CRS has the same defect: a
+    vertical axis in the key meant for a horizontal CRS. It is a compound
+    CRS in all but its PROJ encoding.
+
+    **Order against refusal 13.** `is_projected` is tested first, so nothing
+    that refusal 13 already covers moves. 4978 (geocentric, 3 axes) and 9707
+    (WGS 84 + EGM96 height, a compound with a geographic horizontal part,
+    `is_projected` false) both stay refusal 13, and its message already
+    names "Compound CRS" for 9707. If this test ran first, it would take
+    over the geocentric case that `test_refuses_geographic_crs_names_the_crs_type`
+    pins.
+
+    **Message.** It names:
+    - `ProjectedCSTypeGeoKey (3072)` and the code;
+    - the constructed CRS's `type_name`;
+    - the axis count;
+    - the horizontal sub-CRS's code, if there is one: `sub_crs_list[0].to_epsg()`
+      when `sub_crs_list` is not empty and `to_epsg()` is not `None`;
+    - that the horizontal code belongs in 3072 and the vertical one in
+      `VerticalGeoKey (4096)`.
+
+    Example: "ProjectedCSTypeGeoKey (3072) = 5972 is a Compound CRS with 3
+    axes; horizontal part EPSG 11022. Put the horizontal CRS in 3072 and the
+    vertical CRS in VerticalGeoKey (4096)".
+
+    Measured: the horizontal code for 5972 is **11022**, "ETRS89-NOR
+    [EUREF89] / UTM zone 32N". It is not 25832. So the message gives what
+    pyproj gives and does not promise a particular code. `to_epsg()` can
+    return `None`, which is why "if there is one" is part of the rule. For
+    9895, `sub_crs_list` is empty and the message names "Projected CRS" and
+    "3 axes".
+
+    Through 2048, a compound code is already refused as missing CRS, naming
+    "Compound CRS" (round 2). Nothing changes there.
 14. `refuses_non_metre_linear_unit` — any horizontal axis has
     `unit_conversion_factor != 1.0`; or `ProjLinearUnitsGeoKey` (3076) is
     present and is not 9001; or the two disagree. The legacy's version of this
@@ -549,6 +736,18 @@ different in kind from the reader guessing one. If the tag is also present and
 the two differ, `refuses_contradictory_nodata_override`: one of the two is
 wrong and the reader cannot tell which.
 
+*Amended (round 3): a `bool` is not a sentinel.* Measured on the green code:
+`decode_dem(s, nodata=True)` gives `nodata == 1.0`, and `nodata=False`
+gives `0.0`. `np.True_` behaves the same way. The type checker does not
+catch it, because `bool` is an `int` and an `int` is accepted where a
+`float` is expected. `False` would delete every sea-level cell, which is
+the §6 failure written as a typo. **Ruling:** `decode_dem` raises
+`TypeError` when `nodata` is a `bool` or a `numpy.bool_`. The message
+names the `nodata=` argument and the type. It is `TypeError` and not
+`GeoTiffError`, for the reason in §7 (B1): it is a programming error in the
+caller, not a fact about a file. Any other real number is still converted
+with `float()`, as before.
+
 `RasterMeta` records whether the sentinel came from the tag, from the caller,
 or is absent. An absent sentinel is a fact about the tile, and a later stage
 that cares can ask.
@@ -684,6 +883,33 @@ now, in Python, rather than in increment 12's adapter, because
 the same raster — is a property of the buffer, and a buffer that was ever
 writeable is one somebody can hold a writeable handle to.
 
+*Amended (round 3): `DemTile` copies the array.* The green validator returns
+`np.ascontiguousarray(value).view()` with the view's flag cleared. For an
+input that is already C-contiguous, that is a view of the **caller's**
+buffer. Measured, numpy 2.5.3: `np.shares_memory(a, tile.array)` is `True`,
+and after `a[0, 0] = 42` the tile reads `42.0`. The paragraph above says
+this must not happen. There is a second hole. The view's base is writeable,
+so `tile.array.flags.writeable = True` succeeds, and the tile hands out a
+writeable handle after all.
+
+**Ruling: copy.** The validator makes an owned C-contiguous copy
+(`np.array(value, order="C", copy=True)`), clears the copy's writeable
+flag, and stores a view of the copy. Measured: setting `writeable = True`
+on such a view raises
+`ValueError: cannot set WRITEABLE flag to True of this array`. The other
+choice was to keep the view and write down that the tile shares memory. That
+is rejected, because the concurrency rule above is the reason the array is
+read-only at all, and a shared buffer breaks that rule where no one can see
+it.
+
+**Cost.** `decode_dem` holds two copies of the pixels for a moment: the
+array from `page.asarray()`, and the tile's copy. For the 102 MB fixture the
+peak is about 204 MB. That is accepted for one tile. `decode_dem` must not
+avoid the cost with `model_construct`, because that skips every validator,
+including B1's shape check. Python cannot stop someone who reaches for
+`tile.array.base` and sets its flag. The rule is only that the tile never
+*hands out* a writeable handle.
+
 ---
 
 ## 8. Ruling 5 and 13: the decoder, and a false comment in `pyproject.toml`
@@ -702,7 +928,8 @@ and 33550 read directly from `page.tags`, and 34735/34736/34737 read through
 
 **`pyproject.toml`'s codec comment is false as installed.** It claims
 "tifffile covers uncompressed, Deflate, PackBits and LZW with no extra
-dependency". Measured, tifffile 2026.9.15, this tree's `.venv`, no
+dependency". Measured, tifffile 2026.9.20 (*amended, round 3*: this said
+2026.9.15, and 2026.9.20 is what is installed), this tree's `.venv`, no
 `imagecodecs`, **measuring writes** (see the amendment below):
 
 ```
@@ -765,10 +992,26 @@ Deflate micro-TIFF's predictor to 3:
 `ValueError: <PREDICTOR.FLOATINGPOINT: 3> requires the 'imagecodecs' package`.
 GDAL writes `PREDICTOR=3` for float DEMs, so this is not an edge case.
 
-Not verified: that `TIFF.DECOMPRESSORS.__contains__` behaves the same across
-the whole range that `pyproject.toml` pins (`tifffile>=2024.1`). Only the
-installed version was run. If `@developer` finds it differs, the pin moves up.
-The rule does not change.
+~~Not verified: that `TIFF.DECOMPRESSORS.__contains__` behaves the same across
+the whole range that `pyproject.toml` pins (`tifffile>=2024.1`).~~
+
+*Amended (round 3): the floor is checked.* `@reviewer` ran the suite at
+tifffile 2024.1.30, and it was re-run for this amendment the same way. The
+old tifffile goes into a scratch target, put ahead of the venv's copy on the
+path:
+
+```
+$ uv pip install --python .venv/bin/python --target $SCRATCH/tf 'tifffile==2024.1.30' --no-deps
+$ PYTHONPATH=$SCRATCH/tf .venv/bin/python -m pytest -q tests/python/test_io_geotiff.py tests/python/test_geotiff_fixtures.py
+183 passed, 3 skipped, 143 warnings
+```
+
+That is the same count as at 2026.9.20 (183 passed, 3 skipped). Check that
+the run used the old copy:
+`PYTHONPATH=$SCRATCH/tf .venv/bin/python -c "import tifffile; print(tifffile.__version__)"`
+prints `2024.1.30`. This is the lowest release the pin allows. The pin stays.
+It is one data point at the low end, not a check of every release in the
+range.
 
 Consequences, both this increment's PR to land, per principle C3:
 
@@ -915,8 +1158,23 @@ not implemented because the EPSG path covers it.
 - **Two tests against the real fixture**, both `skipif` on `imagecodecs`: a
   happy-path decode, and an assertion of the half-cell shift —
   `x_min == 799750.0` and `y_max == 7950250.0` from a tie point of
-  `(799745.0, 7950255.0)` at a 10 m scale. Those two numbers are the only
-  check that ruling 4 is implemented and not merely documented.
+  `(799745.0, 7950255.0)` at a 10 m scale. ~~Those two numbers are the only
+  check that ruling 4 is implemented and not merely documented.~~
+
+  *Amended (round 3).* That sentence was false twice:
+  - `TestPlacement.test_area_registered_nodes_are_shifted_inward_half_a_cell`
+    checks the half-cell shift on a micro-TIFF. `delta_x` is not equal to
+    `delta_y` there, so a swapped shift cannot pass. It runs everywhere.
+  - The two Kartverket tests never run in CI. `main.yaml` installs `.[dev]`
+    only (`grep -n 'pip install' .github/workflows/main.yaml`), so
+    `imagecodecs` is absent and `needs_codecs` skips them.
+
+  The Kartverket tests check that the micro-TIFF result also holds on the one
+  real product. They are a local check, not the check of ruling 4.
+  `test_kartverket_fixture_is_shifted_half_a_cell`'s docstring repeats the
+  false sentence, so `@tester` corrects it (§12, round 3). Whether CI should
+  install `codecs` is not ruled here. Leaving it out is what proves the
+  suite runs without optional dependencies.
 - **The `always_xy` test must be shown failing** against a planted violation.
   Section 9, principle A3.
 - **The promotion table is a parametrised test**, one case per row, asserting
@@ -950,6 +1208,80 @@ Unchanged, readings confirmed: `test_refuses_missing_codec` (b),
 `test_refuses_ambiguous_pages` (c), and the `user_defined` and
 `user_defined_beside_geographic` cases of `test_refuses_missing_crs` (d).
 
+### Tests that round 3 changes
+
+Files: `tests/python/test_io_geotiff.py` and `geotiff_fixtures.py`. No
+existing assertion is reversed. Each item below fails against the green code
+as it stands, unless it says otherwise.
+
+**Refusal 13a, compound CRS (user ruling).**
+- `test_refuses_compound_crs` (new), parametrised:
+  - `compound_projected`: 3072 = 5972. Names `3072`,
+    `ProjectedCSTypeGeoKey`, `5972`, `Compound CRS`, `11022` and `4096`.
+  - `projected_3d`: 3072 = 9895. Names `3072`, `9895`, `Projected CRS`
+    and `3`.
+- `geotiff_fixtures.py`: add `EPSG_COMPOUND = 5972`, and a `REFUSALS`
+  entry `refuses_compound_crs` whose defect check reads 3072 = 5972 back
+  with tifffile alone.
+- `test_refuses_geographic_crs_names_the_crs_type`: add a case
+  `compound_geographic`, 9707 → `Compound CRS`. This pins the order: it
+  must stay refusal 13. It passes today, and it guards the ordering.
+
+**Refusals 1 to 3, checks moved before `geotiff_metadata`.**
+- `test_refuses_missing_georeferencing`: add cases `tiepoint_1_value` (the
+  scalar path), `tiepoint_3_values`, `tiepoint_5_values`,
+  `scale_1_value` and `scale_2_values`. Each names the tag, its number
+  and the count.
+- `test_refuses_multiple_tiepoints`: parametrise over 7, 9 and 12 values.
+  Each names `33922`, `ModelTiepointTag` and the count. 12 is today's
+  catalogue case.
+- `test_refuses_model_transformation`: parametrise over 16 values (today's
+  case), 3 and 12. The 3 and 12 cases also leave out the tie point and
+  scale, so the test shows that 34264 is refused before either is looked at.
+
+**Refusal 8, `TiffFrame`.**
+- `test_refuses_ambiguous_pages`: add a case `unparsed_frame`. A two-page
+  micro-TIFF whose page 1 is **full-resolution** (subfiletype 0), opened with
+  `monkeypatch.setattr(tifffile, "TiffFile", functools.partial(<orig>, _useframes=True))`
+  so that page 1 comes back as a `TiffFrame`. It is refused, naming `254`,
+  `NewSubfileType`, page `1` and the count `2`. It uses a private
+  tifffile argument. That is accepted in a test, and the test should say
+  why: no public route yields a frame without an LSM, NDPI or ScanImage
+  file. Measured on the green code: this file is **accepted**. The second
+  full-resolution image is dropped without a word, which is exactly what
+  refusal 8 is for. A reduced-resolution frame is refused too under the
+  ruling. That is the accepted cost, and the test does not need to pin it.
+
+**Refusal 11, codec message.**
+- `test_refuses_missing_codec`: add a case `unknown_compression`,
+  Compression = 60000. It names `259`, `Compression` and `60000`, and
+  asserts that `(unknown)` does not appear.
+- `test_undecodable_scheme_with_extra_present_gives_no_install_advice`
+  (new, `needs_codecs`): Compression = 32809 (`THUNDERSCAN`). It names
+  `259`, `32809` and `THUNDERSCAN`, and asserts that `pip install` does
+  not appear. This test does not run in CI (see above). It runs wherever the
+  extra is installed.
+
+**§6, `bool` sentinel.**
+- `TestNoData.test_caller_bool_is_refused` (new), parametrised over `True`,
+  `False` and `np.True_`: raises `TypeError` naming `nodata` and `bool`.
+
+**§7, the copy.**
+- `TestArray.test_tile_does_not_share_the_callers_buffer` (new): build a
+  `DemTile` from a writeable C-contiguous float32 array. Assert that
+  `np.shares_memory` is false, and that writing to the caller's array
+  leaves `tile.array` unchanged.
+- `TestArray.test_tile_array_cannot_be_made_writeable` (new): on a decoded
+  tile, `tile.array.flags.writeable = True` raises `ValueError`.
+
+**§12 text.**
+- `test_kartverket_fixture_is_shifted_half_a_cell`: its docstring only.
+  Remove "The only check that ruling 4 is implemented", and point at
+  `TestPlacement.test_area_registered_nodes_are_shifted_inward_half_a_cell`.
+
+The decoder-error ruling (§14, choice C) adds the tests listed there under
+"Tests, if C".
+
 ---
 
 ## 13. LOC estimate
@@ -976,6 +1308,20 @@ in §14, not taken, would have added about 10 lines to
 line). Treating a caller NaN like a tag NaN adds nothing if both go through
 one normalising helper, which is how `@developer` should write it. The table
 above is left at its round-1 figures.
+
+*Amended (round 3).* About +15, to roughly **358**. This is still an
+estimate, and it is not the reconciliation against the measured count, which
+is left to the main session. The parts:
+- refusal 13a: +4;
+- the tag checks moved before `geotiff_metadata`, the scalar-to-sequence
+  step and the scale-count branch: +4;
+- the `TiffFrame` branch of refusal 8: +1;
+- the codec message (the `find_spec` import and branch; the public `in` in
+  place of `_value2member_map_` costs nothing): +3;
+- the `bool` guard on `nodata`: +2;
+- the copy in `DemTile`: +1.
+
+The decoder-error ruling (§14, choice C) adds about 8 more, so about 366.
 
 `geotiff.py` is mostly the refusal list: eighteen named refusals at roughly
 three lines each, plus tag extraction, the CRS resolution, the NoData path and
@@ -1028,3 +1374,89 @@ The other five problems were ruled in place by `@architect`. Problem 3 amends
 ruling 6, and says so in §1. The user may still want to look at that
 amendment: it reads a GeoKey that ruling 6 used to exclude, though only to name
 the correct refusal.
+
+### Choice C: errors raised from inside tifffile or a codec
+
+*Added in round 3.* This widens `@reviewer`'s open question 2. **The user
+chose C on 2026-09-24.** The options are kept below so the reasons stay on record.
+
+**What escapes.** Every refusal in §5 raises `GeoTiffError`. A file that
+tifffile or a codec cannot parse raises whatever that library raises.
+Measured through `decode_dem` on the green code, tifffile 2026.9.20, with
+and without imagecodecs 2026.8.16:
+
+| input | without imagecodecs | with imagecodecs | a `ValueError`? |
+|---|---|---|---|
+| empty, or not a TIFF | `tifffile.TiffFileError` | same | yes |
+| cut off inside the IFDs | `tifffile.TiffFileError` | same | yes |
+| cut off inside the 8-byte header | `struct.error` | same | **no** |
+| cut off inside a strip | `ValueError` ("failed to read") | same | yes |
+| corrupt Deflate payload | `zlib.error` | `imagecodecs.DeflateError` (a `RuntimeError`) | **no** |
+| corrupt LZW payload | refusal 11 (no codec) | `imagecodecs.ImcdError` (a `RuntimeError`) | **no** |
+| 33922 or 34264 of the wrong length | bare `ValueError` | same | yes; ruled by round 3 (§5) |
+
+The last row is ruled by round 3 (§5, after refusal 5). It is listed
+because it is the same kind of escape, and the same kind of fix.
+
+A corrupt 34735 does not escape. tifffile logs it and returns fewer keys,
+and a refusal then fires (§5).
+
+**Why it matters.** "The reader's job is refusal" (ruling 3) is a promise
+about what a caller must catch. Today a CLI that catches `GeoTiffError`, or
+even `ValueError`, still crashes on a corrupt Deflate strip. And the type it
+would have to catch *changes when `imagecodecs` is installed*.
+
+**Options.**
+
+- **A. Wrap everything at the boundary.** One `try` around the whole body
+  of `decode_dem`; any `Exception` that is not already `GeoTiffError`
+  becomes `GeoTiffError("could not decode: <type>: <message>")`, chained
+  `from` the original. About 4 lines. The caller catches one type. The
+  cost: it also wraps the reader's **own** bugs. The measured
+  `TypeError` for a 1-value 33550, before round 3, would have looked like
+  a file refusal, and nobody would have filed it as a bug. It breaks §5's
+  "every refusal names the tag", because no tag is known here.
+- **B. Wrap a named list** (`TiffFileError`, `struct.error`,
+  `zlib.error`, the imagecodecs error classes). About 6 lines. It never
+  wraps a reader bug. The cost: the list depends on which codec backend is
+  installed, as the Deflate row shows. imagecodecs has one error class per
+  codec, and they are `RuntimeError`s. The list is exactly the kind of
+  enumeration that §8 refused to keep for codec names, because it rots
+  without anyone seeing.
+- **C. Wrap by call site, not by type** *(chosen)*. Wrap only the
+  three places that hand control to tifffile: `TiffFile(source)` together
+  with the page walk, `geotiff_metadata`, and `asarray`. Catch
+  `Exception` there, re-raise `MemoryError` untouched, and raise
+  `GeoTiffError` chained `from` the original. The message names the stage
+  ("TIFF structure", "GeoKey directory", "pixel data"), the original type
+  and the original text. About 8 lines. The caller catches one type, and
+  the list of exception types never has to be known. The reader's own code
+  runs outside the wrapped regions, so its bugs still surface as bugs.
+  The cost: the most lines of the three. The "names the tag" rule gets an
+  explicit exception for this one class of failure, which names the stage
+  instead. And a tifffile bug would be reported as a bad file.
+- **D. Document it.** `decode_dem`'s docstring and §5 say that refusals are
+  `GeoTiffError`, and that a file tifffile cannot parse raises what tifffile
+  raises. 0 lines. The cost: it gives up on ruling 3 for exactly the files
+  most likely to arrive broken (truncated downloads). The caller must catch
+  `Exception`, which is option A done at every call site instead of once.
+
+**Why C.** A and C both keep the promise to the caller. C keeps it without
+turning the reader's own defects into refusals, and the round-3 `TypeError`
+shows that those defects exist. B keeps a list that rots. D breaks the
+promise. What C costs is lines, and the budget has room (§13).
+
+Where C and A differ is the principle "a bug should surface as a bug". A
+holds the boundary and ignores that principle. C holds both, at the price
+of a few lines and a softer "names the tag" rule. It is sent to the user
+because D is also a coherent choice: a reader that refuses what it
+understands and lets through what it does not.
+
+**Tests (C was chosen).** `test_undecodable_input_is_a_geotiff_error`
+(new), parametrised over `empty`, `not_tiff`, `truncated_header`,
+`truncated_ifd`, `truncated_strip` and `corrupt_deflate`. Each asserts
+`GeoTiffError`, and that `__cause__` is set. Add a `needs_codecs` case,
+`corrupt_lzw`. Under C only: `test_reader_bug_is_not_wrapped`, which
+monkeypatches `_placement` (or its round-3 successor) to raise `TypeError`
+and asserts `TypeError` is what comes out. Under D: no tests, and a
+docstring change.
