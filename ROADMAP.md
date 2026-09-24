@@ -32,7 +32,7 @@ increment that most needs a picture to check against
 | 9 | Gallery output: `rasputin gallery` renders all eleven fixtures into a directory the caller names | designed | `docs/increments/09-gallery-output.md` |
 | 10 | Mesh output: a PLY writer, binary `double` by default, constraint edges in a second file | shipped (#86) | `docs/increments/10-mesh-output.md` |
 | 11 | Raster ingestion, the decode half: GeoTIFF bytes to a validated `DemTile` | shipped (#89) | `docs/increments/11-raster-ingestion.md` |
-| 13 | One mesh file for ParaView: legacy `.vtk` with triangles, constraint edges, feature masks and the vocabulary, text by default | designed | `docs/increments/13-bundled-mesh.md` |
+| 13 | One mesh file for ParaView: legacy `.vtk` with triangles, constraint edges, feature masks and the vocabulary, text by default | implemented, in review | `docs/increments/13-bundled-mesh.md` |
 | — | `raster/`: grid-to-world geometry and bilinear sampling | shipped (`7785fea`), **no record** | none — predates the protocol |
 
 ## What stands between here and an operational MVP
@@ -53,9 +53,10 @@ yet, so each starts at `docs/increments/README.md` step 1.
    `parallel_refinement.md`. The legacy `-ratio 0.4` was this knob.
 3. **Elevation assembly.** `IndexedMesh2` is 2D by design and z comes from
    sampling the raster per vertex. Both halves exist; nothing joins them.
-4. **Mesh output.** Shipped as increment 10: `rasputin mesh` writes PLY, binary
-   `double` by default, with the constraint edges and their feature masks in a
-   second file. What remains is real z, which is gap 3.
+4. **Mesh output.** Shipped as increment 10 (PLY, for QGIS) and extended by
+   increment 13: `rasputin mesh --out x.vtk` writes one text file for ParaView
+   holding the triangles, the constraint edges, their feature masks and the
+   feature names. What remains is real z, which is gap 3.
 5. **A CLI that does the job.** `rasputin` has `version`, `draw` and `mesh`,
    and all three take a built-in fixture. There is still no path from a file on
    disk to a mesh on disk: that needs gap 1.

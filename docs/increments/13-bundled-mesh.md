@@ -1,7 +1,12 @@
 # Increment 13 — one mesh file for ParaView: triangles, constraint edges, feature names
 
-Status: **designed, not started.** The user ruled on the three open questions
-on 2026-09-24: U1 (a), U2 (a), U3 yes. See "Ruled by the user" below.
+Status: **implemented, in review.** The user ruled on the three open
+questions on 2026-09-24: U1 (a), U2 (a), U3 yes. See "Ruled by the user" below.
+Red suite `6223f3a`, green `4fe1eac`. Measured: 144 production lines added
+(`vtk_legacy.py` 91, `cli.py` +38, `ply.py` +13, `io/__init__.py` +2),
+against the ~155 estimate. Run the read-back suite with
+`uv run --with vtk python -m pytest`; plain `pytest` under `--with` cannot see
+the added `vtk` and skips it.
 
 Python only. No C++ change, no new binding. No new runtime dependency. It adds
 one optional test dependency (`vtk`, ruling 10).
