@@ -43,6 +43,7 @@ from geotiff_fixtures import (
     DELTA_X,
     DELTA_Y,
     EPSG_FEET,
+    EPSG_GEOCENTRIC,
     EPSG_UNRESOLVABLE,
     EPSG_UTM33,
     EPSG_WGS84,
@@ -179,9 +180,17 @@ class TestPlacement:
         assert (meta.delta_x, meta.delta_y) == (DELTA_X, DELTA_Y)
         assert meta.pixel_is_area is area
 
-    def test_tie_point_k_and_z_are_ignored(self, decode: Decode) -> None:
-        """§4: with ScaleZ zero there is no vertical mapping for K and Z to offset."""
-        meta = decode(micro_tiff(tiepoint=(0.0, 0.0, 7.0, TIE_X, TIE_Y, 100.0))).meta
+    @pytest.mark.parametrize(
+        ("k", "z"), [(7.0, 100.0), (math.nan, math.inf)], ids=["finite", "non_finite"]
+    )
+    def test_tie_point_k_and_z_are_ignored(self, decode: Decode, k: float, z: float) -> None:
+        """§4: with ScaleZ zero there is no vertical mapping for K and Z to offset.
+
+        Amended (round 2), reading (a): "ignored" covers non-finite K and Z too.
+        Refusal 1's finiteness rule is for I, J, X and Y only.
+        `test_geotiff_fixtures.py` shows the NaN and inf survive the write.
+        """
+        meta = decode(micro_tiff(tiepoint=(0.0, 0.0, k, TIE_X, TIE_Y, z))).meta
         assert (meta.x_min, meta.y_max) == (TIE_X, TIE_Y)
 
     def test_dimensions_come_from_the_array_shape_as_python_ints(self, decode: Decode) -> None:
@@ -291,6 +300,36 @@ class TestShapeAgreement:
 
         with pytest.raises(ValidationError, match=field):
             self._meta(decode, models, **{field: float(ROWS if field == "rows" else COLS)})
+
+    @pytest.mark.parametrize(
+        ("nodata", "source"),
+        [(math.nan, "tag"), (math.inf, "caller"), (-math.inf, "caller")],
+        ids=["nan", "inf", "negative_inf"],
+    )
+    def test_meta_refuses_non_finite_nodata(
+        self,
+        decode: Decode,
+        models: Any,
+        geotiff_error: type[Exception],
+        nodata: float,
+        source: str,
+    ) -> None:
+        """§6, amended (round 2): `nodata` is `allow_inf_nan=False`, so a
+        `RasterMeta` holding a NaN or infinite sentinel cannot be built. As in
+        B1 this is a programming error, so Pydantic's error, not `GeoTiffError`.
+        The source is never "absent", so the absent-means-None validator cannot
+        be what refuses it."""
+        from pydantic import ValidationError
+
+        with pytest.raises(ValidationError, match="nodata") as info:
+            self._meta(decode, models, nodata=nodata, nodata_source=source)
+        assert not isinstance(info.value, geotiff_error)
+        assert any(e["type"] == "finite_number" for e in info.value.errors())
+
+    def test_meta_accepts_finite_nodata(self, decode: Decode, models: Any) -> None:
+        """The control for the refusal above: a finite sentinel still builds."""
+        meta = self._meta(decode, models, nodata=-9999.0, nodata_source="caller")
+        assert meta.nodata == -9999.0
 
 
 PROMOTION = [
@@ -411,6 +450,13 @@ class TestNoData:
     def test_caller_sentinel_without_tag(self, decode: Decode) -> None:
         meta = decode(micro_tiff(), nodata=-9999.0).meta
         assert meta.nodata == -9999.0
+        assert meta.nodata_source == "caller"
+
+    def test_caller_nan_without_tag_yields_no_sentinel(self, decode: Decode) -> None:
+        """§6, amended (round 2): a NaN sentinel becomes None whoever declared it.
+        The caller made the declaration and the file did not, so "caller"."""
+        meta = decode(micro_tiff(), nodata=math.nan).meta
+        assert meta.nodata is None
         assert meta.nodata_source == "caller"
 
     def test_caller_sentinel_agreeing_with_tag_is_accepted(self, decode: Decode) -> None:
@@ -620,6 +666,14 @@ _GEOGRAPHIC = ("2048", "GeographicTypeGeoKey")
             {PROJECTED_CS_TYPE: None, GEOGRAPHIC_TYPE: USER_DEFINED},
             (*_PROJECTED, *_GEOGRAPHIC, "32767"),
         ),
+        (
+            {PROJECTED_CS_TYPE: None, GEOGRAPHIC_TYPE: EPSG_UTM33},
+            (*_PROJECTED, *_GEOGRAPHIC, str(EPSG_UTM33), "Projected CRS"),
+        ),
+        (
+            {PROJECTED_CS_TYPE: None, GEOGRAPHIC_TYPE: EPSG_GEOCENTRIC},
+            (*_PROJECTED, *_GEOGRAPHIC, str(EPSG_GEOCENTRIC), "Geocentric CRS"),
+        ),
     ],
     ids=[
         "absent",
@@ -628,6 +682,8 @@ _GEOGRAPHIC = ("2048", "GeographicTypeGeoKey")
         "user_defined_beside_geographic",
         "absent_geographic_unresolvable",
         "absent_geographic_user_defined",
+        "absent_geographic_projected",
+        "absent_geographic_geocentric",
     ],
 )
 def test_refuses_missing_crs(
@@ -638,6 +694,11 @@ def test_refuses_missing_crs(
     2048 is consulted only when 3072 is *absent*. So a user-defined 3072 beside
     a geographic 2048 is "no CRS", naming 3072's value, and not a geographic
     refusal; and when 2048 was consulted and failed, the message names it too.
+
+    Amended (round 2): a code reached through 2048 is never accepted. One that
+    resolves to a non-geographic CRS is this refusal, and the message names the
+    CRS's `type_name`. `absent_geographic_projected` was accepted before round
+    2; `test_geotiff_fixtures.py` shows its 2048 really reads back as 25833.
     """
     refused(micro_tiff(geokeys=with_keys(changes)), *names)
 
@@ -645,6 +706,22 @@ def test_refuses_missing_crs(
 def test_refuses_geographic_crs(refused: Callable[..., str]) -> None:
     """The constructed CRS is geographic, so it is refused. Greenfield (§3)."""
     refuse_named(refused, "refuses_geographic_crs")
+
+
+@pytest.mark.parametrize(
+    ("code", "type_name"),
+    [(EPSG_WGS84, "Geographic 2D CRS"), (EPSG_GEOCENTRIC, "Geocentric CRS")],
+    ids=["geographic", "geocentric"],
+)
+def test_refuses_geographic_crs_names_the_crs_type(
+    refused: Callable[..., str], code: int, type_name: str
+) -> None:
+    """§5 refusal 13, amended (round 2): the refusal fires whenever the 3072 CRS
+    is not projected, which includes geocentric. So the message names the
+    constructed CRS's `type_name` (pyproj 3.8.0's spelling) and the code, rather
+    than asserting "geographic" of a CRS that is not."""
+    keys = with_keys({PROJECTED_CS_TYPE: code})
+    refused(micro_tiff(geokeys=keys), *_PROJECTED, str(code), type_name)
 
 
 def test_a_realistically_encoded_geographic_file_is_refused(refused: Callable[..., str]) -> None:
@@ -749,8 +826,22 @@ def test_representability_is_checked_before_contradiction(refused: Callable[...,
     assert "42113" not in message, message
 
 
-def test_refuses_contradictory_nodata_override(refused: Callable[..., str]) -> None:
-    refuse_named(refused, "refuses_contradictory_nodata_override")
+@pytest.mark.parametrize(
+    ("tag", "caller", "names"),
+    [
+        ("-32767", -9999.0, REFUSAL["refuses_contradictory_nodata_override"].must_name),
+        ("-32767", math.nan, ("42113", "GDAL_NODATA", "-32767", "nan")),
+        ("nan", -32767.0, ("42113", "GDAL_NODATA", "nan", "-32767")),
+    ],
+    ids=["finite_both", "caller_nan_tag_finite", "caller_finite_tag_nan"],
+)
+def test_refuses_contradictory_nodata_override(
+    refused: Callable[..., str], tag: str, caller: float, names: tuple[str, ...]
+) -> None:
+    """§6: "equal" treats NaN as equal to NaN and to nothing else (round 2). With
+    `test_caller_nan_agreeing_with_nan_tag_is_accepted` this pins both sides.
+    The first case is the catalogue's fixture, with the catalogue's names."""
+    refused(micro_tiff(nodata=tag), *names, nodata=caller)
 
 
 # ---------------------------------------------------------------------------

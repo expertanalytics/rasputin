@@ -13,6 +13,8 @@ Two properties per refusal fixture:
 
 from __future__ import annotations
 
+import math
+
 import numpy as np
 import pytest
 import tifffile
@@ -22,8 +24,12 @@ from geotiff_fixtures import (
     COLS,
     DELTA_X,
     DELTA_Y,
+    EPSG_GEOCENTRIC,
+    EPSG_UTM33,
     FLOATING_POINT_PREDICTOR,
+    GEOGRAPHIC_TYPE,
     PACKBITS,
+    PROJECTED_CS_TYPE,
     REFUSALS,
     ROWS,
     TIE_X,
@@ -33,6 +39,7 @@ from geotiff_fixtures import (
     floating_point_predictor_tiff,
     micro_tiff,
     packbits_tiff,
+    with_keys,
 )
 
 BY_NAME = pytest.mark.parametrize("refusal", REFUSALS, ids=[r.name for r in REFUSALS])
@@ -103,3 +110,27 @@ def test_packbits_fixture_is_real_packbits_that_tifffile_decodes() -> None:
     assert page.compression == PACKBITS
     assert page.tags[279].value == (ROWS * COLS * 4 + 1,)
     np.testing.assert_array_equal(page.asarray(), elevations())
+
+
+@pytest.mark.parametrize("code", [EPSG_UTM33, EPSG_GEOCENTRIC], ids=["projected", "geocentric"])
+def test_a_crs_code_in_the_geographic_key_alone_survives_the_write(code: int) -> None:
+    """§5 refusal 13, round 2: the `absent_geographic_*` cases of
+    `test_refuses_missing_crs` are about 2048 carrying a non-geographic code
+    with no 3072. The bytes must say exactly that, or the case tests nothing."""
+    tif = tifffile.TiffFile(
+        micro_tiff(geokeys=with_keys({PROJECTED_CS_TYPE: None, GEOGRAPHIC_TYPE: code}))
+    )
+    geo = tif.geotiff_metadata
+    assert geo is not None
+    assert "ProjectedCSTypeGeoKey" not in geo
+    assert int(geo["GeographicTypeGeoKey"]) == code
+
+
+def test_non_finite_tie_point_k_and_z_survive_the_write() -> None:
+    """§4, round 2, reading (a): the tie point's NaN K and infinite Z are in the
+    file, so a reader that ignores them is ignoring something real."""
+    tie = (0.0, 0.0, math.nan, TIE_X, TIE_Y, math.inf)
+    written = tifffile.TiffFile(micro_tiff(tiepoint=tie)).pages.first.tags[33922].value
+    assert math.isnan(written[2])
+    assert written[5] == math.inf
+    assert tuple(written[i] for i in (0, 1, 3, 4)) == (0.0, 0.0, TIE_X, TIE_Y)

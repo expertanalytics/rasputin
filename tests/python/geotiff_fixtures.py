@@ -61,6 +61,9 @@ EPSG_UTM33 = 25833
 EPSG_FEET = 2263
 #: WGS 84, geographic.
 EPSG_WGS84 = 4326
+#: WGS 84 geocentric: neither projected nor geographic (pyproj 3.8.0,
+#: `type_name` "Geocentric CRS").
+EPSG_GEOCENTRIC = 4978
 #: Not an EPSG code pyproj can resolve (measured: `CRSError`).
 EPSG_UNRESOLVABLE = 9999
 
