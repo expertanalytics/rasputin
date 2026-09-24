@@ -19,13 +19,23 @@ under test sees what a real file would give it.
 
 from __future__ import annotations
 
+import importlib.util
 import io
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any
 
 import numpy as np
+import pytest
 import tifffile
+
+#: The one real DEM in the tree, and the markers for what decoding it needs.
+#: Shared here since increment 12, whose CLI suite is the second user.
+KARTVERKET = Path(__file__).resolve().parents[1] / "fixtures" / "dem_archive" / "7908_3_10m_z33.tif"
+HAS_CODECS = importlib.util.find_spec("imagecodecs") is not None
+needs_codecs = pytest.mark.skipif(not HAS_CODECS, reason="LZW needs the `codecs` extra (§8)")
+without_codecs = pytest.mark.skipif(HAS_CODECS, reason="tests the refusal when the extra is absent")
 
 # Tag numbers, named the way tifffile and the design name them.
 MODEL_PIXEL_SCALE = 33550
