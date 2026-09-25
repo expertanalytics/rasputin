@@ -3,23 +3,7 @@
 // mutation-tested (the design names test_mesh_lattice_split and
 // test_refinement_scan as the invariant-critical pair).
 //
-// Names assumed where the design leaves them open (namespace terrain::refinement):
-//     enum class RefineStatus { Ok, OffLattice, NotCounterClockwise, InvalidTolerance };
-//     struct RefineOptions { double tolerance; unsigned threads = 0; };
-//     struct RefineOutcome {
-//         RefineStatus status; std::string message; bool ok() const;
-//         std::vector<Point2> vertices;                    // world, via RasterGeometry::node
-//         std::vector<double> z;                           // value_at
-//         std::vector<bool-like> valid;                    // !is_nodata
-//         std::vector<TriangleIndices> triangles;
-//         std::vector<std::array<std::uint32_t, 2>> edges; // constraint edges, once each
-//         std::vector<std::uint32_t> masks;                // one per edge
-//         std::size_t rounds, inserted; double max_error; std::size_t uncovered;
-//     };
-//     template <raster::RasterSource R>
-//     RefineOutcome refine(const R& dem, const IndexedMesh2& start,
-//                          std::span<const std::array<std::uint32_t, 2>> edges,
-//                          std::span<const std::uint32_t> masks, const RefineOptions&);
+// Interface: include/terrain/refinement/refine.hpp.
 // A clockwise and a zero-area start triangle both give NotCounterClockwise.
 //
 // THE T3 ORACLE SHARES NO CODE WITH scan.hpp. It lives in this file and in

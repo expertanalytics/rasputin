@@ -2,20 +2,8 @@
 // per-triangle scan. INVARIANT-CRITICAL: the tolerance guarantee is decided
 // here, so @reviewer mutation-tests this suite.
 //
-// Names assumed where the design leaves them open (namespace terrain::refinement):
-//     enum class NodeLocation : std::uint8_t { Inside, Edge0, Edge1, Edge2 };
-//     struct ScanResult {
-//         double max_error;                         // 0 when the set is empty
-//         std::optional<mesh::LatticeVertex> node;  // the argmax, or for a void
-//                                                   // triangle the carve point
-//         NodeLocation where;                       // where `node` lies in T
-//         bool is_void;                             // a vertex is NoData (R6)
-//         std::size_t uncovered;                    // void only: valid nodes in the set
-//     };
-//     template <raster::RasterSource R>
-//     ScanResult scan(const R& dem, const mesh::LatticeMesh& m, std::uint32_t t);
-// Edge k runs from vertex k to vertex k+1. LatticeMesh is as assumed in
-// test_mesh_lattice_split.cpp.
+// Interface: include/terrain/refinement/scan.hpp (LatticeMesh from
+// include/terrain/mesh/lattice_mesh.hpp). Edge k runs from vertex k to vertex k+1.
 //
 // Every DEM below is float and every expected error is a dyadic rational, so
 // the equalities are exact: z = 3*col - 2*row + 7 plus a deviation in {0.25,

@@ -5,13 +5,8 @@ masks, *, tolerance, threads=0)` refines a start mesh against the DEM and
 returns one result object. The C++ suites carry the tolerance oracle and the
 conformity checks; this file checks what crosses the boundary.
 
-Names assumed where the design leaves them open:
-
-- the result's attributes are ``status``, ``message``, ``ok()`` (a method, as on
-  ``CdtOutcome``), ``vertices``, ``z``, ``valid``, ``triangles``, ``edges``,
-  ``masks``, ``rounds``, ``inserted``, ``max_error`` and ``uncovered``;
-- the status enum is ``_core.RefineStatus`` with members ``Ok`` and
-  ``InvalidTolerance`` (the others are named in the C++ suite).
+The binding is `refine` in `bindings/core.cpp`, typed in
+`src_python/tin_engine/_core.pyi`.
 
 Every new symbol is fetched inside a fixture, so a missing one fails its own
 tests and leaves the rest of the session collecting.

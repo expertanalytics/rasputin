@@ -1,12 +1,7 @@
 // Increment 14, T11 (docs/increments/14-adaptive-refinement.md, R7):
 // for_each_chunk over std::jthread.
 //
-// Signature assumed (R7 names only `for_each_chunk(n, threads, fn)`):
-//     template <typename Fn>
-//     void terrain::parallel_util::for_each_chunk(std::size_t n, unsigned threads, Fn&& fn);
-// where fn(begin, end) is called once per contiguous, non-empty chunk
-// [begin, end), all chunks are joined before it returns, and threads == 0
-// means hardware_concurrency (1 if that is 0).
+// Interface: include/terrain/parallel_util/chunks.hpp.
 
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/generators/catch_generators.hpp>

@@ -10,9 +10,8 @@ Wording pinned from R9's example sentence: ``refined from DEM nodes``,
 ``<n> valid DEM nodes not covered`` and ``<k> vertices without data dropped``.
 How ``<t>`` is formatted is not ruled, so it is parsed as a float.
 
-T10 runs the real tile under ``needs_codecs`` only. The design asks for it to be
-marked slow too, but no ``slow`` marker is registered and ``--strict-markers``
-is on; see the handback.
+T10 runs the real tile under ``needs_codecs`` only and has no ``slow`` marker:
+it runs only in the codecs CI job, and takes about 2 s locally at 1 m.
 """
 
 from __future__ import annotations

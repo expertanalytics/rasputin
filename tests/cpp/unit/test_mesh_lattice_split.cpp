@@ -2,23 +2,8 @@
 // LatticeMesh and its three splits. INVARIANT-CRITICAL: conformity is decided
 // here and nowhere else, so @reviewer mutation-tests this suite.
 //
-// Names assumed where the design leaves them open (namespace terrain::mesh):
-//     struct LatticeVertex { std::uint32_t row; std::uint32_t col; };  // operator==
-//     inline constexpr std::uint32_t kNoNeighbour;   // "or none" in R4
-//     class LatticeMesh {
-//         static std::optional<LatticeMesh> build(
-//             std::vector<LatticeVertex>, std::vector<TriangleIndices>,
-//             std::vector<std::uint8_t> constrained,               // 3-bit, per triangle
-//             std::vector<std::array<std::uint32_t, 3>> masks);    // per triangle edge
-//         span<const LatticeVertex> vertices() const;
-//         span<const TriangleIndices> triangles() const;
-//         std::size_t triangle_count() const;
-//         std::array<std::uint32_t, 3> neighbours(std::size_t t) const;  // across edge k
-//         bool is_constrained(std::size_t t, unsigned e) const;
-//         std::uint32_t mask(std::size_t t, unsigned e) const;
-//         std::uint32_t split_inside(std::uint32_t t, LatticeVertex p);           // 1 -> 3
-//         std::uint32_t split_edge(std::uint32_t t, unsigned e, LatticeVertex p); // 2 -> 4 or 1 -> 2
-//     };
+// Interface: include/terrain/mesh/lattice_mesh.hpp.
+//
 // Edge k runs from vertex k to vertex k+1, as in IndexedMesh2. The split
 // functions return the new vertex's index. build() refuses (nullopt) a
 // triangle whose orientation is not positive in the WORLD's handedness
@@ -214,6 +199,46 @@ TEST_CASE("split_edge on a shared edge splits both sides: two become four",
     REQUIRE(edge_info(m, {0, 0}, {1, 1}) == std::pair{false, std::uint32_t{0}});
     REQUIRE(edge_info(m, {2, 0}, {2, 2}) == std::pair{true, std::uint32_t{4}});
     REQUIRE(edge_info(m, {0, 2}, {0, 0}) == std::pair{true, std::uint32_t{1}});
+}
+
+TEST_CASE("split_edge on an interior constrained edge: both halves inherit on both sides",
+          "[refinement][lattice]") {
+    // square() with its diagonal constrained under mask 16 on both sides. The
+    // only fixture where a constrained edge has a triangle on each side, so
+    // the only one that sees u's and u2's inherited (bit, mask).
+    const auto [t, e] = GENERATE(std::pair{0u, 2u}, std::pair{1u, 0u});
+    CAPTURE(t, e);
+    auto built = LatticeMesh::build({lv(0, 0), lv(2, 0), lv(2, 2), lv(0, 2)},
+                                    {TriangleIndices{0, 1, 2}, TriangleIndices{0, 2, 3}},
+                                    {0b111, 0b111},
+                                    {std::array<std::uint32_t, 3>{8, 4, 16}, {16, 2, 1}});
+    REQUIRE(built.has_value());
+    auto m = *built;
+    m.split_edge(t, e, lv(1, 1));
+
+    REQUIRE(m.triangle_count() == 4);
+    check_topology(m);
+    const std::pair constrained16{true, std::uint32_t{16}};
+    // Read each half from every triangle carrying it: two halves, two sides.
+    std::size_t sides_seen = 0;
+    for (std::size_t tri = 0; tri < m.triangle_count(); ++tri) {
+        const auto c = corners(m, tri);
+        for (unsigned k = 0; k < 3; ++k) {
+            const RC a = c[k], b = c[(k + 1) % 3];
+            const bool on_diagonal = (a == RC{1, 1} || b == RC{1, 1}) &&
+                                     (a == RC{0, 0} || a == RC{2, 2} || b == RC{0, 0} ||
+                                      b == RC{2, 2});
+            if (!on_diagonal) continue;
+            CAPTURE(tri, k);
+            REQUIRE(std::pair{m.is_constrained(tri, k), m.mask(tri, k)} == constrained16);
+            ++sides_seen;
+        }
+    }
+    REQUIRE(sides_seen == 4);
+    REQUIRE(edge_info(m, {0, 0}, {1, 1}) == constrained16);
+    REQUIRE(edge_info(m, {1, 1}, {2, 2}) == constrained16);
+    REQUIRE(edge_info(m, {2, 0}, {1, 1}) == std::pair{false, std::uint32_t{0}});
+    REQUIRE(edge_info(m, {0, 2}, {1, 1}) == std::pair{false, std::uint32_t{0}});
 }
 
 TEST_CASE("split_edge on the boundary splits one triangle; both halves inherit",
