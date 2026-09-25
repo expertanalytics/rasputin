@@ -318,7 +318,8 @@ TEST_CASE("bilinear_batch: NaN corners are NoData even with no sentinel",
           "[raster][batch][edge]") {
     const auto g = grid_4x5();
     auto data = distinct_values<double>(g);
-    data[g.linear_index(CellIndex{0, 0})] = kNaN;
+    // (0, 2) is a zero-weight corner of node (0, 1)'s bilinear cell (0, 1).
+    data[g.linear_index(CellIndex{0, 2})] = kNaN;
     const RasterView<double> view{g, data.data(), std::nullopt};
     const std::vector<Point2> pts{g.node(CellIndex{0, 1}), g.node(CellIndex{2, 2})};
     const Batch out = run_batch(view, pts);

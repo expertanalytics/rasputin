@@ -152,7 +152,7 @@ class TestSample:
         self, raster_view: Factory, sample: Sampler
     ) -> None:
         array = elevations(np.float32, rows=3, cols=5)
-        array[0, 0] = SENTINEL
+        array[0, 2] = SENTINEL  # a corner of node (0, 1)'s bilinear cell (0, 1)
         array[2, 4] = np.nan
         view = raster_view(array, **AFFINE, nodata=SENTINEL)
         z, valid = sample(view, points(node(0, 1), node(1, 3), node(0, 3)))
@@ -196,7 +196,7 @@ class TestToCore:
 
     def test_forwards_the_sentinel(self, to_core: Any, sample: Sampler) -> None:
         array = elevations(np.float32)
-        array[0, 0] = SENTINEL
+        array[0, 2] = SENTINEL  # a corner of node (0, 1)'s bilinear cell (0, 1)
         tile = decode_dem(micro_tiff(array, nodata="-32767"))
         _, valid = sample(to_core(tile), points(node(0, 1), node(1, 3)))
         assert valid.tolist() == [False, True]
