@@ -219,20 +219,4 @@ add_terrain_backend_test(test_noding_node unit/test_noding_node.cpp)
 
 # Raster view, increment 12: RasterView<T>, row access on RasterSource, and the
 # batch sampler (docs/increments/12-dem-to-mesh.md, R2 and R4).
-#
-# RED UNTIL view.hpp EXISTS, and arranged so that red does not break the rest of
-# the build. While the header is absent the target is EXCLUDE_FROM_ALL and not
-# registered with ctest, so `cmake --build build` and `ctest` stay green and the
-# red is shown by asking for it: `cmake --build build --target test_raster_view`.
-# Once the header lands, re-running `cmake -S . -B build` puts the target in ALL
-# and registers it, with no edit to this file.
-if(EXISTS "${PROJECT_SOURCE_DIR}/include/terrain/raster/view.hpp")
-    add_terrain_test(test_raster_view unit/test_raster_view.cpp)
-else()
-    message(STATUS "test_raster_view: include/terrain/raster/view.hpp absent; "
-                   "suite built only on request (increment 12 red step)")
-    add_executable(test_raster_view EXCLUDE_FROM_ALL unit/test_raster_view.cpp)
-    target_link_libraries(test_raster_view PRIVATE
-        terrain_headers terrain_test_support Catch2::Catch2WithMain)
-    target_compile_options(test_raster_view PRIVATE -Wall -Wextra -Wpedantic -Werror)
-endif()
+add_terrain_test(test_raster_view unit/test_raster_view.cpp)

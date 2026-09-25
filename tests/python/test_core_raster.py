@@ -157,6 +157,7 @@ class TestSample:
         view = raster_view(array, **AFFINE, nodata=SENTINEL)
         z, valid = sample(view, points(node(0, 1), node(1, 3), node(0, 3)))
         assert valid.tolist() == [False, False, True]
+        assert z[:2].tolist() == [0.0, 0.0]  # invalid z is 0.0, never NaN (R2)
         assert z[2] == 3.0
 
     def test_empty_points(self, raster_view: Factory, sample: Sampler) -> None:

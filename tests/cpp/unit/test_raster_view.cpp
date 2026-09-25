@@ -324,6 +324,7 @@ TEST_CASE("bilinear_batch: NaN corners are NoData even with no sentinel",
     const std::vector<Point2> pts{g.node(CellIndex{0, 1}), g.node(CellIndex{2, 2})};
     const Batch out = run_batch(view, pts);
     REQUIRE_FALSE(out.valid[0]);
+    REQUIRE(out.z[0] == 0.0);  // an invalid point's z is 0.0, never NaN (R2)
     REQUIRE(out.valid[1]);
     REQUIRE_FALSE(std::isnan(out.z[1]));
 }
