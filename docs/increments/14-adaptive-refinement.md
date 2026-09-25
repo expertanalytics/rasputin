@@ -1,6 +1,10 @@
 # Increment 14 — adaptive refinement against the DEM, to a sup-norm tolerance
 
-Status: **designed, not started.** Written by `@architect` before `@tester`,
+Status: **implemented, in review.** Red `65c163f`; green `1cd8438`, `13c10ec`,
+`03642ea`, `9b7cdd8`, `7840ed6`. Measured 655 non-blank production lines
+(reviewer's count; the developer counted 637) against ~570, under the 700
+ceiling, so the 14b cut did not fire. Real tile at `--tolerance 1`: 670 554
+triangles, achieved max error 0.99996 m, about 3 s. Written by `@architect` before `@tester`,
 per `docs/increments/README.md` step 1. The user chose the recommendation on
 all three choices on 2026-09-25: U1 (a) opt-in, U2 (a) no flat-ground size cap
 yet, U3 (a) no flip pass (section "Ruled by the user").
@@ -191,11 +195,18 @@ loop:
         if T was already split this round: skip
         if the split needs neighbour U and U was split this round: skip
         split (R3); mark every resulting triangle as split this round
-    active = every triangle split this round, in index order
+    active = every triangle split this round, plus every marked triangle
+             skipped this round, in index order
 ```
 
-- A triangle skipped this round was split as someone's neighbour, so its pieces
-  are active and are scanned again next round. Nothing is lost.
+- A marked triangle is skipped for one of two reasons. Either it was already
+  split as someone's neighbour, so its pieces are active; or the neighbour its
+  split needs was split this round, and then it is unchanged. *Amended at
+  green:* the design first said only split triangles stay active, which dropped
+  the second case for good and could leave a triangle above tolerance. Skipped
+  triangles stay active, so both cases are scanned again next round and nothing
+  is lost. Termination holds because every round with a mark splits at least
+  the first marked triangle in index order.
 - Triangles that converged and were never touched keep their scan result and are
   not scanned again.
 - Everything the split phase does depends only on the marks and the index order.
@@ -222,9 +233,10 @@ inserted vertices never are, because they are chosen from valid nodes.
 - **The trim stays.** After refinement, increment 12's `elevation.trim` drops
   void triangles and counts their NoData vertices, unchanged.
 - The scan also counts, per void triangle, valid nodes it still holds when it
-  converges (zero, by the carving rule, except for nodes on an edge shared only
-  with void triangles). The total goes into `elevation_source` as "valid DEM
-  nodes not covered", so a loss is visible, not silent.
+  converges. Carving continues until no void triangle's closed node set holds a
+  valid node, so the total is always zero when the loop ends. It still goes into
+  `elevation_source` as "valid DEM nodes not covered", so a future change that
+  breaks carving shows up in the file, not silently.
 - Increment 12's one-cell trim around every void (bilinear refuses a cell with
   any NoData corner) does not apply here: vertices are nodes, and their z is
   read directly.
@@ -257,8 +269,11 @@ inserted vertices never are, because they are chosen from valid nodes.
   No Python object is touched inside.
 - **A TSan CI job: yes.** This is the project's first multi-threaded code path, and
   asan+ubsan cannot see a data race. TSan cannot share a build with ASan, so it is
-  a separate job on `ubuntu-latest` that builds only the refinement tests and runs
-  them with `ctest -R refinement`. That keeps it to one small target, not a second
+  a separate job on `ubuntu-latest` that builds only the four refinement test
+  binaries and runs them directly (ctest names tests by Catch case, so
+  `ctest -R refinement` matched only one), with `vm.mmap_rnd_bits=28` so TSan
+  starts on that kernel. A new refinement suite must be added to the job's
+  target list. That keeps it to one small target, not a second
   full build. A TSan report of zero races on T6 is the independent check of the
   "no shared writes" claim above.
 
@@ -438,8 +453,9 @@ Everything else is property or integration testing, not mutation-tested.
   names the tolerance and an achieved error not above it; `--tolerance` with a
   fixture is exit 2; without `--tolerance` the output is increment 12's, byte for
   byte (if U1 (a)).
-- **T10. The real tile** at tolerances 5 m and 1 m, marked slow, skipped without
-  `imagecodecs`. Reports triangles, rounds, inserted points, achieved error and
+- **T10. The real tile** at tolerances 5 m and 1 m, skipped without
+  `imagecodecs`. Not marked slow: it runs only in the codecs CI step and takes
+  about 2 s locally. Reports triangles, rounds, inserted points, achieved error and
   wall time to the test log. Asserts only that the achieved error is at most the
   tolerance and that there are fewer triangles at 5 m than at 1 m. No timing
   assertion.
@@ -448,7 +464,8 @@ Everything else is property or integration testing, not mutation-tested.
 
 ## LOC estimate
 
-Counted in `CLAUDE.md` §2's unit. An estimate, not a measurement.
+Counted in `CLAUDE.md` §2's unit. An estimate, not a measurement; the
+reconciliation follows the table.
 
 | file | what | est. |
 |---|---|---|
@@ -479,6 +496,16 @@ pre-agreed cut:
 
 U2 (b) or (c) and U3 (b) are each outside this estimate. Choosing either makes it
 two increments.
+
+
+### Reconciliation
+
+Measured by `@reviewer` over the added production lines, excluding comments,
+docstrings and raw-literal bodies: **655 non-blank** (`lattice_mesh.hpp` 175,
+`refine.hpp` 174, `bindings/core.cpp` 93, `scan.hpp` 77, `cli.py` 62,
+`_core.pyi` 41, `chunks.hpp` 27, `grid_domain.py` 4, `CMakeLists.txt` 2). That
+is 15 % over the ~570 estimate and under the 700 ceiling, so the agreed 14b cut
+did not fire.
 
 ## Acceptance
 

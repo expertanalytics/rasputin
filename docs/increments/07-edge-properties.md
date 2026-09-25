@@ -119,7 +119,7 @@ public:
 **No enumeration, no `River`, no `Road`, no named member of any kind.**
 `terrain::` never spells a feature name. The mapping from bit position to
 feature name is a Python concern and lives in a Pydantic model at the boundary,
-alongside CRS metadata and everything else `project_structure.md:212-216` keeps out
+alongside CRS metadata and everything else `project_structure.md`'s "No CRS string crosses into C++" rule keeps out
 of C++. This is **stricter than what ships today**, where `Chain::is_river`
 spells "river" inside the core, and it is the one place this correction makes
 the architecture cleaner rather than merely wider.
@@ -197,7 +197,7 @@ or `Hole` ring, and so is a walled enclosure.
 ### The parameter
 
 `PslgBuilder::add_chain`'s third parameter is a **bound positional** on the
-merged tree: `bindings/core.cpp:442` passes it positionally,
+merged tree: `bindings/core.cpp`'s `builder.add_chain(...)` in `build_pslg` passes it positionally,
 `tests/cpp/support/pslg_cases.hpp:252` and
 `tests/cpp/property/prop_pslg_invariants.cpp:456` pass it positionally, and
 both overloads default it. **Every line number in this section and in "How the
@@ -351,7 +351,7 @@ can see. Three mechanisms, in descending strength:
    **exactly as CRS is**. An artifact read back with a fingerprint that does not
    match the vocabulary in hand is refused. The vocabulary is therefore *data
    travelling with the mesh*, not a constant in the source — which is the same
-   ruling `project_structure.md:212-216` already makes about CRS, for the same
+   ruling `project_structure.md`'s "No CRS string crosses into C++" rule already makes about CRS, for the same
    reason, and the analogy is the argument.
 3. **`names(mask)` raises on a bit no property names**, rather than dropping it.
    Dropping is the silent loss this entire increment exists to prevent, and
