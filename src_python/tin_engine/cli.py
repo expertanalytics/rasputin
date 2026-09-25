@@ -5,8 +5,8 @@ that has a path, and joining the file system to the engine is its whole job
 (``tin_engine.raster`` also imports ``_core``, to build the one core raster, per
 ``project_structure.md``): ``viz/`` is written against protocols and never
 names a core type, while the core never sees a file, a path or a CRS. Everything
-that has to know both sides lives here, per ``project_structure.md``'s rule that
-exactly one module constructs a core object.
+that has to know both sides lives here. (``project_structure.md``'s rule that
+exactly one module constructs a core *raster* is about ``tin_engine.raster``.)
 
 The `draw` command in particular:
 

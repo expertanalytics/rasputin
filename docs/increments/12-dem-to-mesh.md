@@ -1,6 +1,13 @@
 # Increment 12 — from a GeoTIFF on disk to an elevated mesh in ParaView
 
-Status: **designed, not started.** Written by `@architect` before `@tester`,
+Status: **implemented, in review.** Red `39dba00` (with test fixes `2696196`,
+`5a36627`), green `3e2e9ec` (C++) and `af8e199` (Python). Measured: 319 net
+production lines (C++ 114, Python 264 added, 59 removed) against ~320.
+Unruled points settled in green: `--stride` with a fixture is refused;
+`subsample` raises `ValueError` for a stride below 1; `trim`'s `dropped`
+counts only vertices without data, since that is what the file says, and a
+valid vertex left with no triangle is removed but not counted. Written by
+`@architect` before `@tester`,
 per `docs/increments/README.md` step 1. The user chose the recommendation on
 all three open choices on 2026-09-24: U1 (a), U2 (a), U3 (a) (section "Ruled by
 the user").
@@ -254,7 +261,7 @@ kept so the reasons stay on record.
 - (c) Write the vertex with z = NaN and let the viewer cope. Keeps the full
   outline, but NaN in `POINTS` breaks ParaView's bounds and spreads into
   anything computed from the file. This project has refused silent NaN
-  everywhere else (`include/terrain/raster/raster.hpp:59`).
+  everywhere else (`include/terrain/raster/raster.hpp:62`).
 
 **U2. Row access in the concept now, or when a row-walking caller exists.**
 Two sound principles conflict. `project_structure.md` rules that row access
@@ -368,8 +375,8 @@ CLI (`tests/python/test_cli_mesh.py`), on micro-TIFFs from
 17. `.ply` output with `--dem` has the same z as the `.vtk`.
 
 Real fixture, marked `needs_codecs` (the marker already in
-`tests/python/test_io_geotiff.py:90`, moved to a shared place if a second file
-needs it):
+`tests/python/test_io_geotiff.py:90` at design time, since moved to
+`tests/python/geotiff_fixtures.py:37` because a second file needs it):
 
 18. `mesh --dem tests/fixtures/dem_archive/7908_3_10m_z33.tif --out x.vtk`
     exits 0. Every z is finite and inside [−1.3, 391.8]. The `crs` field is
