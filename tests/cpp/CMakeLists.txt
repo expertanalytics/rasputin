@@ -220,3 +220,16 @@ add_terrain_backend_test(test_noding_node unit/test_noding_node.cpp)
 # Raster view, increment 12: RasterView<T>, row access on RasterSource, and the
 # batch sampler (docs/increments/12-dem-to-mesh.md, R2 and R4).
 add_terrain_test(test_raster_view unit/test_raster_view.cpp)
+
+# Adaptive refinement, increment 14 (docs/increments/14-adaptive-refinement.md,
+# "Tests for @tester"). test_mesh_lattice_split and test_refinement_scan are the
+# invariant-critical pair. All four link Threads: the loop and chunk suites
+# start threads through for_each_chunk.
+add_terrain_test(test_refinement_chunks unit/test_refinement_chunks.cpp)
+add_terrain_test(test_mesh_lattice_split unit/test_mesh_lattice_split.cpp)
+add_terrain_test(test_refinement_scan unit/test_refinement_scan.cpp)
+add_terrain_test(prop_refinement_refine property/prop_refinement_refine.cpp)
+target_link_libraries(test_refinement_chunks PRIVATE Threads::Threads)
+target_link_libraries(test_mesh_lattice_split PRIVATE Threads::Threads)
+target_link_libraries(test_refinement_scan PRIVATE Threads::Threads)
+target_link_libraries(prop_refinement_refine PRIVATE Threads::Threads)

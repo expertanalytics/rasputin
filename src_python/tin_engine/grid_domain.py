@@ -29,6 +29,18 @@ def default_stride(meta: RasterMeta) -> int:
     return max(1, math.ceil((longest - 1) / (MAX_NODES_PER_SIDE - 1)))
 
 
+#: With ``--tolerance``, the start grid has at most this many nodes on its
+#: longer side (increment 14, R1). Refinement only splits, so the start spacing
+#: is also the largest triangle the output can have.
+REFINE_NODES_PER_SIDE = 33
+
+
+def refine_start_stride(meta: RasterMeta) -> int:
+    """The smallest stride giving at most :data:`REFINE_NODES_PER_SIDE` per side."""
+    longest = max(meta.rows, meta.cols)
+    return max(1, math.ceil((longest - 1) / (REFINE_NODES_PER_SIDE - 1)))
+
+
 def _axis(count: int, stride: int) -> list[int]:
     """Every ``stride``-th index along one axis, plus the last."""
     picked = list(range(0, count, stride))

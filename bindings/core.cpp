@@ -18,6 +18,7 @@
 #include <terrain/raster/geometry.hpp>
 #include <terrain/raster/sample.hpp>
 #include <terrain/raster/view.hpp>
+#include <terrain/refinement/refine.hpp>
 
 #include <cstddef>
 #include <cstdint>
@@ -54,6 +55,8 @@ using terrain::cdt::DetriaBackend;
 using terrain::noding::NodeOptions;
 using terrain::noding::NodeOutcome;
 using terrain::noding::NodeStatus;
+using terrain::refinement::RefineOutcome;
+using terrain::refinement::RefineStatus;
 
 namespace {
 
@@ -803,5 +806,117 @@ Bilinear z at each of the (N, 2) points, as (z, valid): float64 (N,) and bool (N
 
 valid is False outside the grid, for a non-finite point, and where any of the
 four surrounding nodes is NoData or NaN. z is 0.0 there, never NaN.
+)doc");
+
+    py::enum_<RefineStatus>(m, "RefineStatus", R"doc(
+Why refine produced a mesh or did not. Everything but Ok is a refusal of the
+input: a start vertex that is not a DEM node, a start triangle that is not
+counter-clockwise, or a tolerance that is negative or not finite.
+)doc")
+        .value("Ok", RefineStatus::Ok)
+        .value("OffLattice", RefineStatus::OffLattice)
+        .value("NotCounterClockwise", RefineStatus::NotCounterClockwise)
+        .value("InvalidTolerance", RefineStatus::InvalidTolerance);
+
+    py::class_<RefineOutcome>(m, "RefineOutcome", R"doc(
+What refine returned: a status and message, the refined mesh as read-only
+arrays that keep this outcome alive, and four numbers. The arrays are empty
+unless ok().
+)doc")
+        .def_readonly("status", &RefineOutcome::status, "The RefineStatus.")
+        .def_readonly("message", &RefineOutcome::message, "Empty on success.")
+        .def("ok", &RefineOutcome::ok, "True iff status is Ok.")
+        .def_property_readonly(
+            "vertices",
+            [](const py::object& self) {
+                return point_view(self, self.cast<const RefineOutcome&>().vertices);
+            },
+            "(M, 2) float64 world coordinates; every one is a DEM node.")
+        .def_property_readonly(
+            "z",
+            [](const py::object& self) {
+                const auto& z = self.cast<const RefineOutcome&>().z;
+                return readonly_view<double>(self, z.data(), {static_cast<py::ssize_t>(z.size())},
+                                             {static_cast<py::ssize_t>(sizeof(double))});
+            },
+            "(M,) float64, the node's DEM value; 0.0 where valid is False.")
+        .def_property_readonly(
+            "valid",
+            [](const py::object& self) {
+                static_assert(sizeof(bool) == sizeof(std::uint8_t));
+                const auto& v = self.cast<const RefineOutcome&>().valid;
+                return readonly_view<bool>(self, reinterpret_cast<const bool*>(v.data()),
+                                           {static_cast<py::ssize_t>(v.size())}, {1});
+            },
+            "(M,) bool, False where the node is NoData.")
+        .def_property_readonly(
+            "triangles",
+            [](const py::object& self) {
+                const auto& t = self.cast<const RefineOutcome&>().triangles;
+                return readonly_view<std::uint32_t>(
+                    self, reinterpret_cast<const std::uint32_t*>(t.data()),
+                    {static_cast<py::ssize_t>(t.size()), 3},
+                    {static_cast<py::ssize_t>(sizeof(TriangleIndices)),
+                     static_cast<py::ssize_t>(sizeof(std::uint32_t))});
+            },
+            "(K, 3) uint32 counter-clockwise triangles.")
+        .def_property_readonly(
+            "edges",
+            [](const py::object& self) {
+                const auto& e = self.cast<const RefineOutcome&>().edges;
+                return readonly_view<std::uint32_t>(
+                    self, reinterpret_cast<const std::uint32_t*>(e.data()),
+                    {static_cast<py::ssize_t>(e.size()), 2},
+                    {static_cast<py::ssize_t>(2 * sizeof(std::uint32_t)),
+                     static_cast<py::ssize_t>(sizeof(std::uint32_t))});
+            },
+            "(F, 2) uint32 constraint edges, each once.")
+        .def_property_readonly(
+            "masks",
+            [](const py::object& self) {
+                return index_view(self, self.cast<const RefineOutcome&>().masks);
+            },
+            "(F,) uint32 property masks, one per edge.")
+        .def_readonly("rounds", &RefineOutcome::rounds, "Scan rounds run.")
+        .def_readonly("inserted", &RefineOutcome::inserted, "Vertices inserted.")
+        .def_readonly("max_error", &RefineOutcome::max_error,
+                      "Largest |z - plane| over triangles with three valid vertices.")
+        .def_readonly("uncovered", &RefineOutcome::uncovered,
+                      "Valid DEM nodes left inside triangles with a NoData vertex.");
+
+    m.def(
+        "refine",
+        [](const BoundRasterView& raster, const IndexedMesh2& mesh, const py::object& edges,
+           const py::object& masks, double tolerance, unsigned threads) {
+            using U32 = py::array_t<std::uint32_t, py::array::c_style | py::array::forcecast>;
+            const auto e = U32::ensure(edges);
+            const auto k = U32::ensure(masks);
+            if (!e || !k || e.ndim() != 2 || e.shape(1) != 2 || k.ndim() != 1
+                || k.shape(0) != e.shape(0))
+                throw py::value_error("refine: edges must be (E, 2) and masks (E,), uint32");
+            const auto n = static_cast<std::size_t>(k.shape(0));
+            const std::span<const std::array<std::uint32_t, 2>> pairs{
+                reinterpret_cast<const std::array<std::uint32_t, 2>*>(e.data()), n};
+            const std::span<const std::uint32_t> bits{k.data(), n};
+            const terrain::refinement::RefineOptions options{tolerance, threads};
+            // Every buffer read below is held by a local or by `raster`, and
+            // the outcome is converted after the lock returns.
+            const py::gil_scoped_release unlocked;
+            return std::visit(
+                [&](const auto& v) {
+                    return terrain::refinement::refine(v, mesh, pairs, bits, options);
+                },
+                raster.view);
+        },
+        py::arg("view"), py::arg("mesh"), py::arg("edges"), py::arg("masks"), py::kw_only(),
+        py::arg("tolerance"), py::arg("threads") = 0, R"doc(
+Refine a start mesh against the DEM until every triangle is within tolerance.
+
+mesh's vertices must all be DEM nodes and its triangles counter-clockwise;
+edges (E, 2) and masks (E,) are its constraint edges as the CLI builds them.
+tolerance is in the DEM's vertical unit. threads only sets how the scan is
+split; the output is identical for every value, and 0 means all cores.
+A refused input comes back as a status; a mis-shaped array is a ValueError.
+Releases the GIL.
 )doc");
 }

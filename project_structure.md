@@ -44,20 +44,28 @@ include/terrain/           # public C++ headers, header-only where possible
     sample.hpp             # bilinear interpolation over a RasterSource
     view.hpp               # RasterView<T>: non-owning view over a contiguous
                            #   caller-supplied buffer (planned)
-    window.hpp             # window_for: bbox -> index window (planned, awaits
-                           #   a caller in refinement)
+    window.hpp             # window_for: bbox -> index window (planned; unbuilt,
+                           #   refinement walks lattice nodes directly)
+  parallel_util/
+    chunks.hpp             # for_each_chunk: contiguous chunks over std::jthread
+  mesh/
+    lattice_mesh.hpp       # LatticeMesh: flat triangle array over DEM nodes,
+                           #   neighbour links, the three splits (14)
+  refinement/
+    scan.hpp               # per-triangle sup-norm scan, NoData carve point (14)
+    refine.hpp             # RefineOptions, RefineOutcome, the round loop (14)
 
 src/                       # C++ implementation, one directory per module
                            #   (only predicates/ and cdt/ exist; rest planned)
   predicates/              # exact orient2d/incircle; namespace terrain::pred
-  parallel_util/           # work distribution, atomics, thread pool
+  parallel_util/           # (none: header-only, include/terrain/parallel_util/)
   vector_simplify/         # Visvalingam-Whyatt, Douglas-Peucker, topology checks
   hydrology/               # pit fill, flow direction, accumulation, catchments, streams
                            # (no noding/ here, and none planned: the noder is
                            #  header-only, its driver a template on the kernel)
   cdt/                     # thin wrapper over vendored Detria
-  mesh/                    # triangle/vertex data structures, ternary tree, edge tags
-  refinement/              # adaptive ternary-tree refinement
+  mesh/                    # (none: header-only, include/terrain/mesh/)
+  refinement/              # (none: header-only, include/terrain/refinement/)
   flip/                    # final Lawson edge-flip pass, constraint-respecting
 
 bindings/
@@ -126,7 +134,7 @@ predicates ───────────┬─→ vector_simplify   hydrolog
                             cdt   (thin wrapper over vendored Detria,
                                    consumes a PSLG, produces core::IndexedMesh2)
 
-                            mesh   (ternary tree; edge tags — built FROM an
+                            mesh   (flat array + adjacency; edge tags — FROM an
                               │     IndexedMesh2, so cdt and mesh both depend
                               │     downward on core and neither on the other)
                               │
@@ -155,8 +163,9 @@ row/column index.
 contiguous caller-supplied buffer. It belongs in this module, not in
 `bindings/`: it is pure C++, and every other zero-copy source (an mmap'd tile,
 an HDF5 window, a sub-window of a parent raster) produces the same type. Only
-the lifetime anchor sits with the bindings. Still to come here: `window_for`
-(bbox to index window), deferred until `refinement` gives it a caller.
+the lifetime anchor sits with the bindings. `window_for` (bbox to index
+window) stays unbuilt: `refinement` works in lattice coordinates, where a
+triangle's bounding box already is its index window (increment 14, R2).
 
 `RasterView` brought contiguous row access into the `RasterSource` concept in
 the same change, not afterwards. A scalar-only
@@ -272,7 +281,7 @@ only TU that includes `detria.hpp`, enforced by CMake privacy, an `#error` guard
 
 ### `parallel_util`
 
-Wrappers over `<thread>`, `<atomic>`, `std::execution` (or a small work-stealing pool). Compaction primitives. Parallel sort/unique wrappers. No external runtime dependency by default; TBB or OpenMP can be opted in via CMake flag.
+Header-only. Today one helper, `for_each_chunk(n, threads, fn)` in `chunks.hpp`: contiguous chunks over `std::jthread`, created per call and joined before it returns, no pool. `std::execution::par` and OpenMP were both ruled out in increment 14 (R7): neither builds on macOS without an experimental flag or an extra runtime. Needs only `Threads::Threads`.
 
 ### `vector_simplify`
 
@@ -309,11 +318,11 @@ dropped the honest options are a different library or our own CDT over the
 
 ### `mesh`
 
-Core data structures: vertex array, triangle array, ternary tree of refinement nodes, per-edge constraint bitmask, and the per-edge feature property set (`EdgeProperties`, a set of up to 32 opaque bits — never one `is_river` flag). Owns the flatten-to-final-mesh step. Used by `refinement`, `flip`, and bindings.
+`LatticeMesh` (`lattice_mesh.hpp`, increment 14): a flat triangle array over `(row, col)` DEM-node vertices with, per triangle edge, the neighbour across it, a constrained bit and a 32-bit property mask (increment 7's `EdgeProperties` bits — never one `is_river` flag). **Not a ternary tree:** an edge split changes two triangles at once, which a tree without neighbours cannot represent. A split reuses the parent's slot and appends the rest, so the array is the output as it stands and there is no flatten step. Depends on `core` only; it knows no raster. The adjacency is what a later `flip` pass needs. See `docs/increments/14-adaptive-refinement.md`, R4.
 
 ### `refinement`
 
-Implements the refinement loop in `parallel_refinement.md`. Active-list management, per-triangle DEM-sample scan with max-error tracking, fan subdivision at the max-error point, round-by-round compaction.
+Refinement against the DEM to a sup-norm tolerance (increment 14). `scan.hpp` measures a triangle's largest `|z - plane|` over the DEM nodes it contains, by exact integer tests; `refine.hpp` runs rounds of parallel scan (`parallel_util`) and serial splits in index order — a fan for an interior node, an edge split on both sides for an edge node — so the output does not depend on the thread count. Triangles with a NoData vertex are carved, not refined. See `docs/increments/14-adaptive-refinement.md`.
 
 ### `flip`
 

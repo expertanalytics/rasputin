@@ -238,13 +238,17 @@ repeat until no marks
 **Why this works:**
 
 - **No hanging nodes.** Inserting a point strictly inside `T` and fanning to its three vertices leaves the boundary of `T` untouched. No neighbor sees a new vertex on a shared edge, so the mesh stays conforming with zero cross-triangle communication.
+  *Superseded by increment 14 (R3):* fans alone never change an edge, so the error at a node on an edge never falls and refinement need not finish. Increment 14 splits whatever holds the worst node: a fan inside, both neighbours (2 → 4) on a shared edge, one triangle (1 → 2) on the boundary. Still no hanging nodes, at the cost of one neighbour's participation.
 - **Max-error insertion** (rather than centroid) chooses the point that reduces approximation error most — Garland-Heckbert-quality decisions without giving up locality. The scan that decides "refine or not" already touches every sample, so tracking the max costs nothing extra.
 - **Cache-aligned inner loop.** Iterating raster samples inside a triangle's bbox in row-major order is sequential reads from the DEM — friendly to both CPU prefetchers and GPU coalesced loads.
 - **Convergence.** For any bounded continuous height field, the planar approximation error within a triangle shrinks as the triangle does. A finite-depth refinement reaches tolerance everywhere.
+  *Superseded by increment 14:* the argument above fails for fan-only splits (see the previous bullet). Increment 14 terminates for a discrete reason instead: every insertion is a DEM node that is not yet a vertex, and the grid is finite, so it holds at tolerance 0 too.
 
 ## Data structure
 
 Ternary tree per root triangle from the initial CDT.
+
+*Superseded by increment 14 (R4):* a tree cannot record a split that spans two triangles, which the edge split needs. Increment 14 uses a flat triangle array with neighbour links (`include/terrain/mesh/lattice_mesh.hpp`); a split reuses the parent's slot and appends the rest, so there is no flatten step. The sketch below is kept as the original plan.
 
 ```
 Triangle {
@@ -302,7 +306,7 @@ Constraint edges are skipped, so the original polygon and polyline geometry is p
 
 - **Triangle count** to hit a given tolerance: comparable, since we're using max-error insertion.
 - **Wall-clock time:** much better at scale; throughput scales with available cores / SMs.
-- **Memory:** ternary tree adds a small overhead per internal node (3 child indices) but is trivially flattened at the end.
+- **Memory:** ternary tree adds a small overhead per internal node (3 child indices) but is trivially flattened at the end. (Increment 14 uses a flat array with neighbour links instead; see "Data structure".)
 - **Quality:** initial-CDT topology of un-flipped *constraint* edges persists, so input feature simplification quality matters. Interior quality is recovered by the final flip pass.
 
 ## Open question: how is triangle size controlled where terrain is flat?

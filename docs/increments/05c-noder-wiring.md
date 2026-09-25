@@ -303,7 +303,7 @@ written.
 
 ### `NodedPslg`'s binding, and the duplication it would otherwise create
 
-`py::class_<Pslg>` (`bindings/core.cpp:394-436`) binds `vertices`, `chains`,
+`py::class_<Pslg>` (`bindings/core.cpp`, `bind_pslg_like<Pslg>`) binds `vertices`, `chains`,
 `chain_indices` and `indices_of`, the last with an `IndexError` guard replacing
 a debug assert. `NodedPslg` needs the same four with the same semantics, because
 `viz/protocols.py`'s `PslgLike` is exactly those four and the renderer must be
@@ -345,7 +345,7 @@ The three accessors `NodedPslg` adds:
   bare masks, not of a bound `EdgeProperties`** — increment 7 ruled that
   `EdgeProperties` is deliberately not bound because Python already has an
   integer with `|`, `&` and `bit_count()`, and `Chain.properties`
-  (`bindings/core.cpp:349-350`) already crosses as `bits()`. Consistency with that
+  (`bindings/core.cpp`, the `"properties"` getter returning `bits()`) already crosses as `bits()`. Consistency with that
   is the whole reason, and the `static_assert` is what stops the reinterpret
   being a silent lie if the type ever grows a member.
 * `node_of_input_vertex -> NDArray[np.uint32]`, a read-only `(N,)` view. This is
@@ -368,7 +368,7 @@ so it is not read as an oversight.**
 def node(pslg: Pslg, spacing: float, max_rounds: int = 4) -> NodeOutcome
 ```
 
-* **GIL released**, exactly as `triangulate` is (`bindings/core.cpp:535-543`),
+* **GIL released**, exactly as `triangulate` is (`bindings/core.cpp`, the `triangulate` binding's `gil_scoped_release`),
   and 5b's header states the property that licenses it:
   `node<K>` "IS A PURE FUNCTION of (pslg, options). No statics, no caches, no
   global state" and two calls from two threads produce bit-identical output
@@ -378,7 +378,7 @@ def node(pslg: Pslg, spacing: float, max_rounds: int = 4) -> NodeOutcome
   `Pslg` is a C++ object the Python wrapper owns, and the outcome is converted
   after the lock returns.
 * **`terrain::pred::DefaultKernel`**, the same kernel `build_pslg` picks
-  (`bindings/core.cpp:517`). The kernel is a compile-time parameter and the
+  (`bindings/core.cpp`, `build<terrain::pred::DefaultKernel>()` in `build_pslg`). The kernel is a compile-time parameter and the
   binding layer is where this project chooses it; no kernel parameter crosses,
   by `06-cdt-viewer.md`'s ruling.
 * **`spacing` has no default here**, mirroring `NodeOptions::spacing`, which has

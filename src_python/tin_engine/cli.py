@@ -55,12 +55,13 @@ from tin_engine._core import (
     build_pslg,
     describe,
     node,
+    refine,
     sample,
     triangulate,
 )
 from tin_engine.elevation import Trimmed, trim
 from tin_engine.features import DEFAULT_VOCABULARY
-from tin_engine.grid_domain import default_stride, subsample
+from tin_engine.grid_domain import default_stride, refine_start_stride, subsample
 from tin_engine.io.geotiff import decode_dem
 from tin_engine.io.models import GeoTiffError
 from tin_engine.io.ply import write_ply
@@ -540,13 +541,24 @@ def mesh(
             help="Snap grid spacing for the noder, in the input's units.",
         ),
     ] = DEFAULT_SNAP_SPACING,
+    tolerance: Annotated[
+        float | None,
+        typer.Option(
+            "--tolerance",
+            help="With --dem, refine until every triangle is within this many metres "
+            "of the DEM; --stride then sets the start grid. Default: no refinement.",
+        ),
+    ] = None,
 ) -> None:
     """Write a mesh as legacy VTK or as PLY, by the suffix of ``--out``.
 
     The mesh is a gallery fixture's, or, with ``--dem PATH``, a GeoTIFF's
     (increment 12): every ``--stride``-th DEM node inside the grid's outer ring,
-    triangulated, with z sampled bilinearly from the DEM. Vertices where the DEM
-    has no data are dropped with their triangles, and the count is reported.
+    triangulated, with z sampled bilinearly from the DEM. With ``--tolerance``
+    (increment 14) that grid is only the start: it is refined at DEM nodes until
+    every triangle's max error is within the tolerance, and z is read at the
+    nodes. Vertices where the DEM has no data are dropped with their triangles,
+    and the count is reported.
     The file records the DEM's CRS, so ``--crs`` and ``--flat`` are refused.
 
     ``.vtk`` is one file for ParaView: triangles, constraint lines, their
@@ -592,14 +604,20 @@ def mesh(
             raise typer.BadParameter(
                 f"must be a positive integer, got {stride}", param_hint="--stride"
             )
+        if tolerance is not None and not (math.isfinite(tolerance) and tolerance >= 0):
+            raise typer.BadParameter(
+                f"must be finite and >= 0, got {tolerance}", param_hint="--tolerance"
+            )
         label = dem.stem
-        surface_mesh, sentence, epsg = _dem_mesh(dem, stride, delaunay, snap_spacing)
+        surface_mesh, sentence, epsg = _dem_mesh(dem, stride, delaunay, snap_spacing, tolerance)
         fields = [("crs", f"EPSG:{epsg}"), ("elevation_source", sentence)]
         comments = [f"crs EPSG:{epsg}", f"elevation {sentence}"]
     else:
         assert name is not None
         if stride is not None:
             raise typer.BadParameter("applies only with --dem", param_hint="--stride")
+        if tolerance is not None:
+            raise typer.BadParameter("applies only with --dem", param_hint="--tolerance")
         if not flat:
             raise typer.BadParameter(
                 "a gallery fixture has no elevation source, so z has none; pass --flat "
@@ -692,13 +710,15 @@ def _fixture_mesh(name: str, delaunay: bool, spacing: float) -> Trimmed:
 
 
 def _dem_mesh(
-    dem: Path, stride: int | None, delaunay: bool, spacing: float
+    dem: Path, stride: int | None, delaunay: bool, spacing: float, tolerance: float | None
 ) -> tuple[Trimmed, str, int]:
-    """Decode, subsample, triangulate, sample and trim (increment 12, R6).
+    """Decode, subsample, triangulate, sample or refine, and trim.
 
-    Returns the mesh, the ``elevation`` sentence for the file, and the EPSG
-    code. Every refusal is a usage error in the reader's or the engine's own
-    words, and no file is written.
+    Without ``tolerance`` this is increment 12's R6: z sampled bilinearly at
+    the stride grid. With it, increment 14's R9: the stride grid is the start
+    mesh, refined against the DEM's nodes. Returns the mesh, the ``elevation``
+    sentence for the file, and the EPSG code. Every refusal is a usage error in
+    the reader's or the engine's own words, and no file is written.
     """
     try:
         with dem.open("rb") as stream:
@@ -711,29 +731,64 @@ def _dem_mesh(
         raise typer.BadParameter(str(exc), param_hint="--dem") from exc
 
     meta = tile.meta
-    step = stride if stride is not None else default_stride(meta)
+    if stride is not None:
+        step = stride
+    else:
+        step = default_stride(meta) if tolerance is None else refine_start_stride(meta)
     xy, ring = subsample(meta, step)
     run = _engine(xy, [(ring, ChainRole.Outer, 0)], delaunay, spacing)
     if run.mesh is None or run.noded is None:
         raise typer.BadParameter(f"{dem} has no mesh to write: {run.status}. {run.message}")
 
-    mesh_xy = np.asarray(run.mesh.vertices)
-    z, valid = sample(to_core(tile), mesh_xy)
     edges, masks = _constraint_arrays(run.mesh, run.noded)
-    trimmed = trim(
-        vertices=mesh_xy,
-        triangles=np.asarray(run.mesh.triangles),
-        edges=edges,
-        edge_masks=masks,
-        z=z,
-        valid=valid,
-    )
+    if tolerance is None:
+        mesh_xy = np.asarray(run.mesh.vertices)
+        z, valid = sample(to_core(tile), mesh_xy)
+        trimmed = trim(
+            vertices=mesh_xy,
+            triangles=np.asarray(run.mesh.triangles),
+            edges=edges,
+            edge_masks=masks,
+            z=z,
+            valid=valid,
+        )
+        sentence = f"bilinear from DEM, stride {step}"
+        report = ""
+    else:
+        out = refine(to_core(tile), run.mesh, edges, masks, tolerance=tolerance)
+        if not out.ok():
+            raise typer.BadParameter(f"{dem}: {out.message}", param_hint="--dem")
+        trimmed = trim(
+            vertices=out.vertices,
+            triangles=out.triangles,
+            edges=out.edges,
+            edge_masks=out.masks,
+            z=out.z,
+            valid=out.valid,
+        )
+        sentence = (
+            f"refined from DEM nodes, tolerance {_exact(tolerance)} m, "
+            f"achieved max error {_exact(out.max_error)} m, start stride {step}, "
+            f"{out.uncovered} valid DEM nodes not covered"
+        )
+        report = (
+            f"{out.rounds} rounds, {out.inserted} points inserted, "
+            f"{len(trimmed.triangles)} triangles, achieved max error "
+            f"{_exact(out.max_error)} m, {out.uncovered} valid DEM nodes not covered, "
+        )
     if len(trimmed.triangles) == 0:
         raise typer.BadParameter(
             f"{dem} has no data under any triangle; nothing to write", param_hint="--dem"
         )
-    sentence = f"bilinear from DEM, stride {step}, {trimmed.dropped} vertices without data dropped"
+    sentence += f", {trimmed.dropped} vertices without data dropped"
     if meta.vertical_unit_assumed:
         sentence += ", vertical unit assumed metres"
-    typer.echo(f"{trimmed.dropped} vertices without data dropped", err=True)
+    typer.echo(f"{report}{trimmed.dropped} vertices without data dropped", err=True)
     return trimmed, sentence, meta.epsg
+
+
+def _exact(value: float) -> str:
+    """``value`` short where that loses nothing, else every digit, so a printed
+    achieved error can never read as above the tolerance it met."""
+    short = f"{value:g}"
+    return short if float(short) == value else repr(value)

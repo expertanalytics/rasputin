@@ -81,6 +81,9 @@ if(RASPUTIN_BUILD_PYTHON)
     # links. Omitting the second links on macOS (a MODULE is allowed undefined
     # symbols) and fails at import, so the C++ build is not where it is caught.
     target_link_libraries(_core PRIVATE terrain_headers terrain_cdt terrain_predicates)
+    # refine starts threads (include/terrain/parallel_util/chunks.hpp).
+    find_package(Threads REQUIRED)
+    target_link_libraries(_core PRIVATE Threads::Threads)
 
     # Both static libraries are linked into a SHARED module here, so their
     # objects must be position-independent. On ELF the linker refuses outright
