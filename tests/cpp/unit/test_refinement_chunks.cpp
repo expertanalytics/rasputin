@@ -75,3 +75,27 @@ TEST_CASE("for_each_chunk with one thread makes a single chunk", "[refinement][c
     REQUIRE(v.chunks.size() == 1);
     REQUIRE(v.chunks.front() == std::pair<std::size_t, std::size_t>{0, 10});
 }
+
+TEST_CASE("for_each_chunk rethrows the lowest-index chunk's exception after the join",
+          "[refinement][chunks]") {
+    // 8 items over 4 threads is chunks [0,2) [2,4) [4,6) [6,8). Every chunk
+    // reaching past `first_thrower` throws, and the lowest of them throws
+    // first_thrower itself, so that is what must be caught whatever order the
+    // threads finish in. threads == 1 is the single-chunk path, which must
+    // behave the same way.
+    const unsigned threads = GENERATE(1u, 4u);
+    const std::size_t first_thrower = GENERATE(std::size_t{0}, 2, 6);
+    CAPTURE(threads, first_thrower);
+    std::atomic<int> calls{0};
+    std::size_t caught = 99;
+    try {
+        for_each_chunk(8, threads, [&](std::size_t begin, std::size_t end) {
+            calls.fetch_add(1);
+            if (end > first_thrower) throw std::max(begin, first_thrower);
+        });
+    } catch (std::size_t b) {
+        caught = b;
+    }
+    REQUIRE(caught == first_thrower);
+    REQUIRE(calls.load() == (threads == 1 ? 1 : 4));  // no chunk is skipped
+}
