@@ -254,3 +254,11 @@ add_refinement_red_suite(test_refinement_scan refinement/scan.hpp
     unit/test_refinement_scan.cpp)
 add_refinement_red_suite(prop_refinement_refine refinement/refine.hpp
     property/prop_refinement_refine.cpp)
+
+# TEST DEFECT, WORKED AROUND HERE UNTIL @tester FIXES IT: the suite calls
+# GENERATE but does not include <catch2/generators/catch_generators.hpp>, so it
+# does not compile. Force-including the header keeps the fix out of the test
+# file, which the implementation commit must not touch. Delete this line once
+# the include is in the suite.
+target_compile_options(test_mesh_lattice_split PRIVATE
+    -include catch2/generators/catch_generators.hpp)
