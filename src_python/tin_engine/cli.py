@@ -1,8 +1,9 @@
 """Command-line interface for the rasputin terrain engine.
 
 This module is the **single composition root**. It is the only Python module
-that imports ``tin_engine._core`` and the only one that has a path, and joining
-those two is its whole job: ``viz/`` is written against protocols and never
+that has a path, and joining the file system to the engine is its whole job
+(``tin_engine.raster`` also imports ``_core``, to build the one core raster, per
+``project_structure.md``): ``viz/`` is written against protocols and never
 names a core type, while the core never sees a file, a path or a CRS. Everything
 that has to know both sides lives here, per ``project_structure.md``'s rule that
 exactly one module constructs a core object.
@@ -54,11 +55,17 @@ from tin_engine._core import (
     build_pslg,
     describe,
     node,
+    sample,
     triangulate,
 )
+from tin_engine.elevation import Trimmed, trim
 from tin_engine.features import DEFAULT_VOCABULARY
+from tin_engine.grid_domain import default_stride, subsample
+from tin_engine.io.geotiff import decode_dem
+from tin_engine.io.models import GeoTiffError
 from tin_engine.io.ply import write_ply
 from tin_engine.io.vtk_legacy import write_vtk
+from tin_engine.raster import to_core
 from tin_engine.viz.fixtures import GALLERY, Fixture
 from tin_engine.viz.protocols import PslgLike
 from tin_engine.viz.scene import build_scene
@@ -115,9 +122,7 @@ _PRECEDENCE = ("river", "coastline", "road")
 
 _BIT_OF = {prop.name: prop.bit for prop in DEFAULT_VOCABULARY.properties}
 
-PROPERTY_STROKES = tuple(
-    PropertyStroke(bit=_BIT_OF[name], token=name) for name in _PRECEDENCE
-)
+PROPERTY_STROKES = tuple(PropertyStroke(bit=_BIT_OF[name], token=name) for name in _PRECEDENCE)
 
 DEFAULT_LABEL_LIMIT = 500
 
@@ -180,6 +185,57 @@ class Attempt:
     message: str
 
 
+@dataclass(frozen=True, slots=True)
+class _Run:
+    """What ``build_pslg`` -> ``node`` -> ``triangulate`` made of some chains.
+
+    ``noded`` is None when the validator or the noder refused; ``mesh`` is None
+    when anything refused. Shared by the fixture path and the DEM path, so the
+    DEM path reaches the engine without going through a ``Fixture``.
+    """
+
+    noded: NodedPslg | None
+    mesh: IndexedMesh2 | None
+    ok: bool
+    status: str
+    message: str
+
+
+def _engine(
+    vertices: npt.ArrayLike,
+    chains: list[tuple[list[int], ChainRole, int]],
+    delaunay: bool,
+    spacing: float,
+) -> _Run:
+    """Validate, node and triangulate, reducing every refusal to words."""
+    result = build_pslg(np.asarray(vertices), chains)
+    if not result.ok or result.pslg is None:
+        return _Run(
+            noded=None,
+            mesh=None,
+            ok=False,
+            status=", ".join(d.error.name for d in result.diagnostics),
+            message="; ".join(d.message for d in result.diagnostics),
+        )
+    noded = node(result.pslg, spacing)
+    if not noded.ok() or noded.pslg is None:
+        return _Run(
+            noded=None,
+            mesh=None,
+            ok=False,
+            status=noded.status.name,
+            message=_band(describe(noded.status), noded.message),
+        )
+    outcome = triangulate(noded.pslg, delaunay)
+    return _Run(
+        noded=noded.pslg,
+        mesh=outcome.mesh if outcome.ok() else None,
+        ok=outcome.ok(),
+        status=outcome.status.name,
+        message=_band(describe(outcome.status), outcome.message),
+    )
+
+
 def _triangulated(fixture: Fixture, delaunay: bool, spacing: float) -> Attempt:
     """Run the engine on a fixture and reduce what it said to one record.
 
@@ -199,36 +255,23 @@ def _triangulated(fixture: Fixture, delaunay: bool, spacing: float) -> Attempt:
         ([int(i) for i in fixture.indices_of(c)], ROLES[chain.role], int(chain.properties))
         for c, chain in enumerate(fixture.chains)
     ]
-    result = build_pslg(np.asarray(fixture.vertices), chains)
-    if not result.ok or result.pslg is None:
+    run = _engine(fixture.vertices, chains, delaunay, spacing)
+    if run.noded is None:
         return Attempt(
             source=fixture,
             closed_roles=FIXTURE_CLOSED_ROLES,
             mesh=None,
             ok=False,
-            status=", ".join(d.error.name for d in result.diagnostics),
-            message="; ".join(d.message for d in result.diagnostics),
+            status=run.status,
+            message=run.message,
         )
-
-    noded = node(result.pslg, spacing)
-    if not noded.ok() or noded.pslg is None:
-        return Attempt(
-            source=fixture,
-            closed_roles=FIXTURE_CLOSED_ROLES,
-            mesh=None,
-            ok=False,
-            status=noded.status.name,
-            message=_band(describe(noded.status), noded.message),
-        )
-
-    outcome = triangulate(noded.pslg, delaunay)
     return Attempt(
-        source=noded.pslg,
+        source=run.noded,
         closed_roles=CORE_CLOSED_ROLES,
-        mesh=outcome.mesh if outcome.ok() else None,
-        ok=outcome.ok(),
-        status=outcome.status.name,
-        message=_band(describe(outcome.status), outcome.message),
+        mesh=run.mesh,
+        ok=run.ok,
+        status=run.status,
+        message=run.message,
     )
 
 
@@ -455,10 +498,20 @@ def _constraint_arrays(
 
 @app.command()
 def mesh(
-    name: Annotated[str, typer.Argument(help="Gallery fixture to write.")],
     out: Annotated[
         Path, typer.Option("--out", help="Where to write: .vtk for ParaView, .ply for QGIS.")
     ],
+    name: Annotated[
+        str | None, typer.Argument(help="Gallery fixture to write; or give --dem instead.")
+    ] = None,
+    dem: Annotated[
+        Path | None,
+        typer.Option("--dem", help="A GeoTIFF DEM: mesh its extent with z sampled from it."),
+    ] = None,
+    stride: Annotated[
+        int | None,
+        typer.Option("--stride", help="With --dem, every Nth DEM node. Default: <= 256 a side."),
+    ] = None,
     flat: Annotated[
         bool, typer.Option("--flat", help="There is no elevation source; write z = 0.")
     ] = False,
@@ -488,7 +541,13 @@ def mesh(
         ),
     ] = DEFAULT_SNAP_SPACING,
 ) -> None:
-    """Write a gallery fixture's mesh as legacy VTK or as PLY, by the suffix of ``--out``.
+    """Write a mesh as legacy VTK or as PLY, by the suffix of ``--out``.
+
+    The mesh is a gallery fixture's, or, with ``--dem PATH``, a GeoTIFF's
+    (increment 12): every ``--stride``-th DEM node inside the grid's outer ring,
+    triangulated, with z sampled bilinearly from the DEM. Vertices where the DEM
+    has no data are dropped with their triangles, and the count is reported.
+    The file records the DEM's CRS, so ``--crs`` and ``--flat`` are refused.
 
     ``.vtk`` is one file for ParaView: triangles, constraint lines, their
     feature masks, one 0/1 array per feature that occurs, and the vocabulary
@@ -508,7 +567,12 @@ def mesh(
     such thing as a picture of a failed file, so the refusal is reported in the
     engine's own words instead.
     """
-    if name not in GALLERY:
+    if (name is None) == (dem is None):
+        raise typer.BadParameter(
+            "give a gallery fixture name or --dem PATH, exactly one of the two",
+            param_hint="--dem",
+        )
+    if name is not None and name not in GALLERY:
         raise typer.BadParameter(f"unknown fixture {name}; the gallery is: {', '.join(GALLERY)}")
     if out.suffix not in MESH_SUFFIXES:
         raise typer.BadParameter(
@@ -518,44 +582,53 @@ def mesh(
         raise typer.BadParameter(
             "a .vtk file already carries the constraint edges", param_hint="--out-edges"
         )
-    if not flat:
-        raise typer.BadParameter(
-            "nothing in this tree samples elevation yet, so z has no source; pass --flat "
-            "to write z = 0 and say so in the file"
-        )
 
-    attempt = _triangulated(GALLERY[name], delaunay=delaunay, spacing=snap_spacing)
-    if attempt.mesh is None or not isinstance(attempt.source, NodedPslg):
-        raise typer.BadParameter(
-            f"{name} has no mesh to write: {attempt.status}. {attempt.message}"
-        )
-
-    flat_vertices = np.asarray(attempt.mesh.vertices)
-    vertices = np.column_stack([flat_vertices, np.zeros(len(flat_vertices))])
-    comments = [f"crs {crs}"] if crs else []
-    comments.append(FLAT_COMMENT)
-
-    # --crs is unvalidated free text by ruling 5, so the writer's refusals are
-    # refusals a person meets by typing, not internal invariants. A degree sign
-    # in a projection string is ordinary and used to exit 1 with a 23-line
-    # traceback. Turn the writer's ValueError into the usage error it is, in
-    # the one place that knows the text came from the command line.
-    try:
-        write_ply(np.zeros((1, 3)), faces=np.zeros((0, 3)), comments=comments)
-    except ValueError as exc:
-        raise typer.BadParameter(str(exc), param_hint="--crs") from exc
-
-    surface = _destination(out, out_parent, name)
-    if out.suffix == ".vtk":
-        edges, masks = _constraint_arrays(attempt.mesh, attempt.source)
+    if dem is not None:
+        if flat:
+            raise typer.BadParameter("--dem samples z from the DEM", param_hint="--flat")
+        if crs:
+            raise typer.BadParameter("--dem records the DEM's own CRS", param_hint="--crs")
+        if stride is not None and stride < 1:
+            raise typer.BadParameter(
+                f"must be a positive integer, got {stride}", param_hint="--stride"
+            )
+        label = dem.stem
+        surface_mesh, sentence, epsg = _dem_mesh(dem, stride, delaunay, snap_spacing)
+        fields = [("crs", f"EPSG:{epsg}"), ("elevation", sentence)]
+        comments = [f"crs EPSG:{epsg}", f"elevation {sentence}"]
+    else:
+        assert name is not None
+        if stride is not None:
+            raise typer.BadParameter("applies only with --dem", param_hint="--stride")
+        if not flat:
+            raise typer.BadParameter(
+                "a gallery fixture has no elevation source, so z has none; pass --flat "
+                "to write z = 0 and say so in the file, or mesh a DEM with --dem"
+            )
+        label = name
+        surface_mesh = _fixture_mesh(name, delaunay, snap_spacing)
+        comments = [f"crs {crs}"] if crs else []
+        comments.append(FLAT_COMMENT)
         fields = [("crs", crs)] if crs else []
         fields.append(("elevation", FLAT_ELEVATION))
+        # --crs is unvalidated free text by ruling 5, so the writer's refusals
+        # are refusals a person meets by typing, not internal invariants. Turn
+        # the writer's ValueError into the usage error it is, in the one place
+        # that knows the text came from the command line.
+        try:
+            write_ply(np.zeros((1, 3)), faces=np.zeros((0, 3)), comments=comments)
+        except ValueError as exc:
+            raise typer.BadParameter(str(exc), param_hint="--crs") from exc
+
+    vertices = surface_mesh.vertices
+    surface = _destination(out, out_parent, label)
+    if out.suffix == ".vtk":
         surface.write_bytes(
             write_vtk(
                 vertices,
-                triangles=np.asarray(attempt.mesh.triangles),
-                edges=edges,
-                edge_masks=masks,
+                triangles=surface_mesh.triangles,
+                edges=surface_mesh.edges,
+                edge_masks=surface_mesh.edge_masks,
                 vocabulary=DEFAULT_VOCABULARY,
                 fields=fields,
                 binary=binary,
@@ -568,7 +641,7 @@ def mesh(
         # writes succeed, the second overwrites the first, the command echoes
         # two paths and exits 0 -- the caller has lost the surface they asked
         # for and nothing said so.
-        constraints_target = _destination(out_edges, out_parent, name)
+        constraints_target = _destination(out_edges, out_parent, label)
         if constraints_target == surface:
             raise typer.BadParameter(
                 f"--out and --out-edges both resolve to {surface}; "
@@ -578,7 +651,7 @@ def mesh(
     surface.write_bytes(
         write_ply(
             vertices,
-            faces=np.asarray(attempt.mesh.triangles),
+            faces=surface_mesh.triangles,
             ascii=not binary,
             comments=comments,
         )
@@ -586,16 +659,81 @@ def mesh(
     typer.echo(f"{surface}")
 
     if out_edges is not None:
-        edges, masks = _constraint_arrays(attempt.mesh, attempt.source)
-        constraints = _destination(out_edges, out_parent, name)
+        constraints = _destination(out_edges, out_parent, label)
         constraints.write_bytes(
             write_ply(
                 vertices,
-                edges=edges,
-                edge_properties=masks,
+                edges=surface_mesh.edges,
+                edge_properties=surface_mesh.edge_masks,
                 ascii=not binary,
                 comments=comments,
                 vocabulary=DEFAULT_VOCABULARY,
             )
         )
         typer.echo(f"{constraints}")
+
+
+def _fixture_mesh(name: str, delaunay: bool, spacing: float) -> Trimmed:
+    """A gallery fixture's mesh at z = 0, with its constraint edges."""
+    attempt = _triangulated(GALLERY[name], delaunay=delaunay, spacing=spacing)
+    if attempt.mesh is None or not isinstance(attempt.source, NodedPslg):
+        raise typer.BadParameter(
+            f"{name} has no mesh to write: {attempt.status}. {attempt.message}"
+        )
+    flat_vertices = np.asarray(attempt.mesh.vertices)
+    edges, masks = _constraint_arrays(attempt.mesh, attempt.source)
+    return Trimmed(
+        vertices=np.column_stack([flat_vertices, np.zeros(len(flat_vertices))]),
+        triangles=np.asarray(attempt.mesh.triangles, dtype=np.uint32),
+        edges=edges,
+        edge_masks=masks,
+        dropped=0,
+    )
+
+
+def _dem_mesh(
+    dem: Path, stride: int | None, delaunay: bool, spacing: float
+) -> tuple[Trimmed, str, int]:
+    """Decode, subsample, triangulate, sample and trim (increment 12, R6).
+
+    Returns the mesh, the ``elevation`` sentence for the file, and the EPSG
+    code. Every refusal is a usage error in the reader's or the engine's own
+    words, and no file is written.
+    """
+    try:
+        with dem.open("rb") as stream:
+            tile = decode_dem(stream)
+    except OSError as exc:
+        raise typer.BadParameter(
+            f"cannot read {dem}: {exc.strerror or exc}", param_hint="--dem"
+        ) from exc
+    except GeoTiffError as exc:
+        raise typer.BadParameter(str(exc), param_hint="--dem") from exc
+
+    meta = tile.meta
+    step = stride if stride is not None else default_stride(meta)
+    xy, ring = subsample(meta, step)
+    run = _engine(xy, [(ring, ChainRole.Outer, 0)], delaunay, spacing)
+    if run.mesh is None or run.noded is None:
+        raise typer.BadParameter(f"{dem} has no mesh to write: {run.status}. {run.message}")
+
+    mesh_xy = np.asarray(run.mesh.vertices)
+    z, valid = sample(to_core(tile), mesh_xy)
+    edges, masks = _constraint_arrays(run.mesh, run.noded)
+    trimmed = trim(
+        vertices=mesh_xy,
+        triangles=np.asarray(run.mesh.triangles),
+        edges=edges,
+        edge_masks=masks,
+        z=z,
+        valid=valid,
+    )
+    if len(trimmed.triangles) == 0:
+        raise typer.BadParameter(
+            f"{dem} has no data under any triangle; nothing to write", param_hint="--dem"
+        )
+    sentence = f"bilinear from DEM, stride {step}, {trimmed.dropped} vertices without data dropped"
+    if meta.vertical_unit_assumed:
+        sentence += ", vertical unit assumed metres"
+    typer.echo(f"{trimmed.dropped} vertices without data dropped", err=True)
+    return trimmed, sentence, meta.epsg
