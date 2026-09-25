@@ -223,37 +223,16 @@ add_terrain_test(test_raster_view unit/test_raster_view.cpp)
 
 # Adaptive refinement, increment 14 (docs/increments/14-adaptive-refinement.md,
 # "Tests for @tester"). test_mesh_lattice_split and test_refinement_scan are the
-# invariant-critical pair. The scan and loop suites start threads.
-#
-# RED-STEP SCAFFOLD -- REMOVE AT GREEN. Each suite is keyed on the header it
-# tests. While that header is absent the target is EXCLUDE_FROM_ALL and not
-# registered with ctest, so `cmake --build build` and `ctest` stay green; see
-# the red with `cmake --build build --target <suite>`. Once the header lands,
-# re-running `cmake -S . -B build` registers the suite with no edit here. At
-# green, replace this function with plain add_terrain_test calls plus the
-# Threads link, as increment 12's scaffold was replaced in 416a514.
-function(add_refinement_red_suite name header)
-    if(EXISTS "${PROJECT_SOURCE_DIR}/include/terrain/${header}")
-        add_terrain_test(${name} ${ARGN})
-    else()
-        message(STATUS "${name}: include/terrain/${header} absent; "
-                       "suite built only on request (increment 14 red step)")
-        add_executable(${name} EXCLUDE_FROM_ALL ${ARGN})
-        target_link_libraries(${name} PRIVATE
-            terrain_headers terrain_test_support Catch2::Catch2WithMain)
-        target_compile_options(${name} PRIVATE -Wall -Wextra -Wpedantic -Werror)
-    endif()
-    target_link_libraries(${name} PRIVATE Threads::Threads)
-endfunction()
-
-add_refinement_red_suite(test_refinement_chunks parallel_util/chunks.hpp
-    unit/test_refinement_chunks.cpp)
-add_refinement_red_suite(test_mesh_lattice_split mesh/lattice_mesh.hpp
-    unit/test_mesh_lattice_split.cpp)
-add_refinement_red_suite(test_refinement_scan refinement/scan.hpp
-    unit/test_refinement_scan.cpp)
-add_refinement_red_suite(prop_refinement_refine refinement/refine.hpp
-    property/prop_refinement_refine.cpp)
+# invariant-critical pair. All four link Threads: the loop and chunk suites
+# start threads through for_each_chunk.
+add_terrain_test(test_refinement_chunks unit/test_refinement_chunks.cpp)
+add_terrain_test(test_mesh_lattice_split unit/test_mesh_lattice_split.cpp)
+add_terrain_test(test_refinement_scan unit/test_refinement_scan.cpp)
+add_terrain_test(prop_refinement_refine property/prop_refinement_refine.cpp)
+target_link_libraries(test_refinement_chunks PRIVATE Threads::Threads)
+target_link_libraries(test_mesh_lattice_split PRIVATE Threads::Threads)
+target_link_libraries(test_refinement_scan PRIVATE Threads::Threads)
+target_link_libraries(prop_refinement_refine PRIVATE Threads::Threads)
 
 # TEST DEFECT, WORKED AROUND HERE UNTIL @tester FIXES IT: the suite calls
 # GENERATE but does not include <catch2/generators/catch_generators.hpp>, so it
