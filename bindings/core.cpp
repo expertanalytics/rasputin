@@ -15,16 +15,21 @@
 #include <terrain/noding/node.hpp>
 #include <terrain/noding/noded_pslg_builder.hpp>
 #include <terrain/predicates/default_kernel.hpp>
+#include <terrain/raster/geometry.hpp>
+#include <terrain/raster/sample.hpp>
+#include <terrain/raster/view.hpp>
 
 #include <cstddef>
 #include <cstdint>
 #include <format>
 #include <functional>
+#include <optional>
 #include <span>
 #include <string>
 #include <tuple>
 #include <type_traits>
 #include <utility>
+#include <variant>
 #include <vector>
 
 namespace py = pybind11;
@@ -249,6 +254,38 @@ py::class_<T> bind_pslg_like(py::module_& m, const char* name, const char* doc) 
         }
     }
     return properties;
+}
+
+// The bound RasterView. The variant picks the cell type once, at construction;
+// `array` is the numpy object the view points into, held so the buffer lives as
+// long as the view does. Destroyed by pybind11 with the GIL held.
+struct BoundRasterView {
+    py::object array;
+    std::variant<terrain::raster::RasterView<float>, terrain::raster::RasterView<double>> view;
+};
+
+// Exact dtype and C order, or nothing: a conversion would be a silent copy the
+// view then outlives, so anything else is a TypeError and the caller converts.
+template <typename T>
+[[nodiscard]] std::optional<BoundRasterView> try_view(const py::object& array,
+                                                      const terrain::raster::RasterGeometry* g,
+                                                      std::optional<double> nodata) {
+    using Exact = py::array_t<T, py::array::c_style>;
+    if (!py::isinstance<Exact>(array))
+        return std::nullopt;
+    const auto a = array.cast<Exact>();
+    if (a.ndim() != 2)
+        throw py::value_error(std::format("raster_view: array must be 2-D, got {} dimensions",
+                                          a.ndim()));
+    // Rows and columns come from the array's own shape, never from an argument.
+    const terrain::raster::RasterGeometry geometry{
+        g->x_min(), g->y_max(), g->delta_x(), g->delta_y(),
+        static_cast<std::size_t>(a.shape(1)), static_cast<std::size_t>(a.shape(0))};
+    // One conversion of the sentinel to T. decode_dem has already refused a
+    // sentinel the cell type cannot hold, so it is exact.
+    const std::optional<T> sentinel =
+        nodata ? std::optional<T>{static_cast<T>(*nodata)} : std::nullopt;
+    return BoundRasterView{array, terrain::raster::RasterView<T>{geometry, a.data(), sentinel}};
 }
 
 }  // namespace
@@ -708,5 +745,63 @@ un-noded input is unrepresentable here rather than diagnosed inside, so handing
 this a Pslg is a TypeError and not a status. Call node() first. With
 delaunay=False the backend skips the Delaunay flips, so the same input can be
 seen both ways.
+)doc");
+
+    py::class_<BoundRasterView>(m, "RasterView", R"doc(
+A zero-copy view over a 2-D float32 or float64 numpy array of DEM nodes.
+Built by raster_view(), not constructible from Python. Holds the array alive.
+)doc");
+
+    m.def(
+        "raster_view",
+        [](const py::object& array, double x_min, double y_max, double delta_x, double delta_y,
+           std::optional<double> nodata) {
+            // Placeholder cols/rows of 1: only the affine half is read from it,
+            // and the RasterGeometry constructor validates the deltas here.
+            const terrain::raster::RasterGeometry affine{x_min, y_max, delta_x, delta_y, 1, 1};
+            if (auto v = try_view<float>(array, &affine, nodata))
+                return std::move(*v);
+            if (auto v = try_view<double>(array, &affine, nodata))
+                return std::move(*v);
+            throw py::type_error("raster_view: array must be a C-contiguous float32 or float64 "
+                                 "numpy array; convert it explicitly rather than have it copied");
+        },
+        py::arg("array"), py::kw_only(), py::arg("x_min"), py::arg("y_max"), py::arg("delta_x"),
+        py::arg("delta_y"), py::arg("nodata") = py::none(), R"doc(
+View a row-major DEM array as a raster without copying it.
+
+Row 0 lies at y_max and y decreases with the row index; both deltas are
+positive. Rows and columns are the array's shape. The affine scalars are
+keyword-only. Any other dtype or layout is a TypeError, never a silent copy.
+)doc");
+
+    m.def(
+        "sample",
+        [](const BoundRasterView& raster, const py::object& points) {
+            const auto xy =
+                py::array_t<double, py::array::c_style | py::array::forcecast>::ensure(points);
+            if (!xy || xy.ndim() != 2 || xy.shape(1) != 2)
+                throw py::value_error("sample: points must be a float64 array of shape (N, 2)");
+            const auto n = static_cast<std::size_t>(xy.shape(0));
+            py::array_t<double> z(static_cast<py::ssize_t>(n));
+            py::array_t<bool> valid(static_cast<py::ssize_t>(n));
+            static_assert(sizeof(Point2) == 2 * sizeof(double) && std::is_standard_layout_v<Point2>,
+                          "the (N, 2) float64 buffer is read as Point2 pairs");
+            const std::span<const Point2> pts{reinterpret_cast<const Point2*>(xy.data()), n};
+            const std::span<double> zs{z.mutable_data(), n};
+            const std::span<bool> flags{valid.mutable_data(), n};
+            {
+                // Every buffer touched below is held by a local or by `raster`.
+                const py::gil_scoped_release unlocked;
+                std::visit([&](const auto& v) { terrain::raster::bilinear_batch(v, pts, zs, flags); },
+                           raster.view);
+            }
+            return py::make_tuple(z, valid);
+        },
+        py::arg("view"), py::arg("points"), R"doc(
+Bilinear z at each of the (N, 2) points, as (z, valid): float64 (N,) and bool (N,).
+
+valid is False outside the grid, for a non-finite point, and where any of the
+four surrounding nodes is NoData or NaN. z is 0.0 there, never NaN.
 )doc");
 }
