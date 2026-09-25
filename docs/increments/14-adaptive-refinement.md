@@ -1,10 +1,11 @@
 # Increment 14 — adaptive refinement against the DEM, to a sup-norm tolerance
 
 Status: **implemented, in review.** Red `65c163f`; green `1cd8438`, `13c10ec`,
-`03642ea`, `9b7cdd8`, `7840ed6`. Measured 655 non-blank production lines
-(reviewer's count; the developer counted 637) against ~570, under the 700
+`03642ea`, `9b7cdd8`, `7840ed6`, `8869d5e` (test), `f3e8e18`. Measured 668
+non-blank production lines (reviewer's count) against ~570, under the 700
 ceiling, so the 14b cut did not fire. Real tile at `--tolerance 1`: 670 554
-triangles, achieved max error 0.99996 m, about 3 s. Written by `@architect` before `@tester`,
+triangles, achieved max error 0.99996 m, about 2 s in the test and 3 s through
+the CLI on a loaded laptop. Written by `@architect` before `@tester`,
 per `docs/increments/README.md` step 1. The user chose the recommendation on
 all three choices on 2026-09-25: U1 (a) opt-in, U2 (a) no flat-ground size cap
 yet, U3 (a) no flip pass (section "Ruled by the user").
@@ -501,10 +502,10 @@ two increments.
 ### Reconciliation
 
 Measured by `@reviewer` over the added production lines, excluding comments,
-docstrings and raw-literal bodies: **655 non-blank** (`lattice_mesh.hpp` 175,
+docstrings and raw-literal bodies: **668 non-blank** (`lattice_mesh.hpp` 175,
 `refine.hpp` 174, `bindings/core.cpp` 93, `scan.hpp` 77, `cli.py` 62,
-`_core.pyi` 41, `chunks.hpp` 27, `grid_domain.py` 4, `CMakeLists.txt` 2). That
-is 15 % over the ~570 estimate and under the 700 ceiling, so the agreed 14b cut
+`_core.pyi` 41, `chunks.hpp` 40, `grid_domain.py` 4, `CMakeLists.txt` 2). That
+is about 17 % over the ~570 estimate and under the 700 ceiling, so the agreed 14b cut
 did not fire.
 
 ## Acceptance
