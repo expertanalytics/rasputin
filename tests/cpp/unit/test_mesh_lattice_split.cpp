@@ -28,6 +28,7 @@
 // Child ORDER is pinned only where R4 pins it: the parent's slot holds a child.
 
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/generators/catch_generators.hpp>
 
 #include <terrain/mesh/lattice_mesh.hpp>
 

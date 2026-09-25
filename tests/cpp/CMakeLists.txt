@@ -233,11 +233,3 @@ target_link_libraries(test_refinement_chunks PRIVATE Threads::Threads)
 target_link_libraries(test_mesh_lattice_split PRIVATE Threads::Threads)
 target_link_libraries(test_refinement_scan PRIVATE Threads::Threads)
 target_link_libraries(prop_refinement_refine PRIVATE Threads::Threads)
-
-# TEST DEFECT, WORKED AROUND HERE UNTIL @tester FIXES IT: the suite calls
-# GENERATE but does not include <catch2/generators/catch_generators.hpp>, so it
-# does not compile. Force-including the header keeps the fix out of the test
-# file, which the implementation commit must not touch. Delete this line once
-# the include is in the suite.
-target_compile_options(test_mesh_lattice_split PRIVATE
-    -include catch2/generators/catch_generators.hpp)
