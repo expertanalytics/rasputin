@@ -576,7 +576,7 @@ def test_the_default_vocabulary_is_an_edge_vocabulary_and_is_frozen() -> None:
 def test_features_imports_nothing_first_party() -> None:
     """What lets `viz/` depend on this module.
 
-    `viz/` may not import the extension (`project_structure.md:278`), and
+    `viz/` may not import the extension (`project_structure.md:359`), and
     `tin_engine/__init__.py` imports `_core`, so this is checked by parsing the
     source rather than by inspecting `sys.modules`: an import-time check would
     be asserting something about the package, not about this module.
