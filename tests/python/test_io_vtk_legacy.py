@@ -83,9 +83,9 @@ EXPECTED_MASK = np.concatenate([MASKS, np.zeros(len(TRIANGLES), dtype=np.uint32)
 
 CRS = "EPSG:25833"
 ELEVATION_TEXT = "none (z=0, --flat)"
-FIELDS = (("crs", CRS), ("elevation", ELEVATION_TEXT))
+FIELDS = (("crs", CRS), ("elevation_source", ELEVATION_TEXT))
 
-RESERVED = ("feature_bits", "feature_names", "feature_vocabulary")
+RESERVED = ("feature_bits", "feature_names", "feature_vocabulary", "elevation")
 
 
 def write_vtk(vertices: object, **kwargs: object) -> bytes:
@@ -291,11 +291,11 @@ class TestDatasetFieldData:
 
     def test_crs_and_elevation_appear_when_given(self, parsed: VtkFile) -> None:
         assert parsed.field_data["crs"].values == (CRS,)
-        assert parsed.field_data["elevation"].values == (ELEVATION_TEXT,)
+        assert parsed.field_data["elevation_source"].values == (ELEVATION_TEXT,)
         assert parsed.field_data["crs"].type_name == "string"
 
     def test_no_crs_field_when_none_is_given(self) -> None:
-        parsed = read_vtk(write(fields=(("elevation", ELEVATION_TEXT),)))
+        parsed = read_vtk(write(fields=(("elevation_source", ELEVATION_TEXT),)))
         assert "crs" not in parsed.field_data
 
 
@@ -314,7 +314,7 @@ class TestStrings:
 
     def test_the_elevation_text_is_encoded_too(self) -> None:
         parsed = read_vtk(write())
-        assert parsed.field_data["elevation"].raw == (b"none%20(z=0,%20--flat)",)
+        assert parsed.field_data["elevation_source"].raw == (b"none%20(z=0,%20--flat)",)
 
     def test_a_literal_escape_is_not_decoded_twice(self, binary: bool) -> None:
         # `%` must be escaped first, or `%20` typed by a user comes back a space.
@@ -335,7 +335,7 @@ class TestStrings:
 
     def test_the_elevation_value_goes_through_the_same_encoder(self) -> None:
         with pytest.raises(ValueError, match="control character"):
-            write(fields=(("elevation", "none\nPOINTS 1 double"),))
+            write(fields=(("elevation_source", "none\nPOINTS 1 double"),))
 
 
 class TestFieldNames:
@@ -485,3 +485,24 @@ class TestPurity:
         assert io.write_vtk is writer
         assert "write_vtk" in io.__all__
 
+
+
+class TestPointElevation:
+    """Increment 12 amendment: z is also a point array named `elevation`, so
+    ParaView's Color By offers the heights, and no string field shadows it."""
+
+    @pytest.mark.parametrize("binary", [False, True], ids=["ascii", "binary"])
+    def test_elevation_is_z_as_point_data(self, binary: bool) -> None:
+        parsed = read_vtk(write(binary=binary))
+        assert parsed.point_count == len(VERTICES)
+        elevation = parsed.point_scalars["elevation"]
+        assert elevation.type_name == "double"
+        assert_array_equal(np.asarray(elevation.values), VERTICES[:, 2])
+
+    def test_point_data_sits_between_the_cells_and_the_cell_data(self) -> None:
+        parsed = read_vtk(write())
+        assert parsed.sections.index("POLYGONS") < parsed.sections.index("POINT_DATA")
+        assert parsed.sections.index("POINT_DATA") < parsed.sections.index("CELL_DATA")
+
+    def test_no_dataset_field_is_named_elevation(self) -> None:
+        assert "elevation" not in read_vtk(write()).field_data

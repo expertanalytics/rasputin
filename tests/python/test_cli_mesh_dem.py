@@ -107,22 +107,28 @@ class TestTheAcceptanceInvocation:
         assert_z_is_the_node_value(tile, vtk.points)
         assert len(vtk.polygons) == 2 * (tile.meta.rows - 1) * (tile.meta.cols - 1)
 
+    def test_elevation_is_a_point_array_equal_to_z(self, tmp_path: Path, baseline: Path) -> None:
+        """Increment 12 amendment: ParaView's Color By -> elevation shows the heights."""
+        vtk = run_vtk(tmp_path, baseline)
+        assert np.array_equal(np.asarray(vtk.point_scalars["elevation"].values), vtk.points[:, 2])
+        assert "elevation" not in vtk.field_data
+
     def test_records_the_crs_and_the_stride(self, tmp_path: Path, baseline: Path) -> None:
         vtk = run_vtk(tmp_path, baseline)
         assert vtk.field_data["crs"].values == ("EPSG:25833",)
-        (elevation,) = vtk.field_data["elevation"].values
+        (elevation,) = vtk.field_data["elevation_source"].values
         assert "bilinear" in elevation
         assert "stride 1" in elevation
 
     def test_an_assumed_vertical_unit_is_said(self, tmp_path: Path, baseline: Path) -> None:
-        (elevation,) = run_vtk(tmp_path, baseline).field_data["elevation"].values
+        (elevation,) = run_vtk(tmp_path, baseline).field_data["elevation_source"].values
         assert "vertical unit assumed metres" in elevation
 
     def test_a_declared_vertical_unit_is_not_called_assumed(self, tmp_path: Path) -> None:
         tif = write_tiff(
             tmp_path / "m.tif", micro_tiff(geokeys=with_keys({VERTICAL_UNITS: METRE}))
         )
-        (elevation,) = run_vtk(tmp_path, tif).field_data["elevation"].values
+        (elevation,) = run_vtk(tmp_path, tif).field_data["elevation_source"].values
         assert "assumed" not in elevation
 
     def test_stride_picks_every_nth_node_and_the_last(self, tmp_path: Path, larger: Path) -> None:
@@ -133,13 +139,13 @@ class TestTheAcceptanceInvocation:
         assert set(cols.tolist()) == {0, 3, 6, 8}
         assert len(vtk.points) == 3 * 4
         assert_z_is_the_node_value(tile, vtk.points)
-        (elevation,) = vtk.field_data["elevation"].values
+        (elevation,) = vtk.field_data["elevation_source"].values
         assert "stride 3" in elevation
 
     def test_the_default_stride_is_the_formula(self, tmp_path: Path) -> None:
         """300 columns: the smallest stride giving at most 256 per side is 2."""
         tif = write_tiff(tmp_path / "wide.tif", micro_tiff(elevations(rows=3, cols=300)))
-        (elevation,) = run_vtk(tmp_path, tif).field_data["elevation"].values
+        (elevation,) = run_vtk(tmp_path, tif).field_data["elevation_source"].values
         assert f"stride {max(1, math.ceil(299 / 255))}" in elevation
 
 
@@ -158,7 +164,7 @@ class TestNoData:
         assert len(vtk.points) == 4 * 6
         assert_z_is_the_node_value(tile, vtk.points)
         assert (vtk.points[:, 2] != float(SENTINEL)).all()
-        (elevation,) = vtk.field_data["elevation"].values
+        (elevation,) = vtk.field_data["elevation_source"].values
         assert "6 vertices without data dropped" in elevation
         # R3: the count also goes to stderr. The wording there is not ruled.
         assert re.search(r"\b6\b", output.replace(str(tmp_path), "")), output
@@ -265,7 +271,7 @@ class TestRealFixture:
         assert np.isfinite(z).all()
         assert z.min() >= -1.3 and z.max() <= 391.8
         assert vtk.field_data["crs"].values == ("EPSG:25833",)
-        (elevation,) = vtk.field_data["elevation"].values
+        (elevation,) = vtk.field_data["elevation_source"].values
         assert "stride 20" in elevation
         assert len(vtk.points) < 254 * 254, "the NoData outline drops some vertices"
         dropped = re.search(r"(\d+) vertices without data dropped", elevation)
