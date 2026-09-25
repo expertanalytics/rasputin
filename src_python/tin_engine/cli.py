@@ -554,8 +554,11 @@ def mesh(
 
     The mesh is a gallery fixture's, or, with ``--dem PATH``, a GeoTIFF's
     (increment 12): every ``--stride``-th DEM node inside the grid's outer ring,
-    triangulated, with z sampled bilinearly from the DEM. Vertices where the DEM
-    has no data are dropped with their triangles, and the count is reported.
+    triangulated, with z sampled bilinearly from the DEM. With ``--tolerance``
+    (increment 14) that grid is only the start: it is refined at DEM nodes until
+    every triangle's max error is within the tolerance, and z is read at the
+    nodes. Vertices where the DEM has no data are dropped with their triangles,
+    and the count is reported.
     The file records the DEM's CRS, so ``--crs`` and ``--flat`` are refused.
 
     ``.vtk`` is one file for ParaView: triangles, constraint lines, their
