@@ -26,7 +26,6 @@ from __future__ import annotations
 
 import ast
 import functools
-import importlib.util
 import math
 import re
 import subprocess
@@ -59,6 +58,8 @@ from geotiff_fixtures import (
     GEOGRAPHIC_TYPE,
     GT_MODEL_TYPE,
     GT_RASTER_TYPE,
+    HAS_CODECS,
+    KARTVERKET,
     LZW,
     METRE,
     PIXEL_IS_AREA,
@@ -79,16 +80,14 @@ from geotiff_fixtures import (
     elevations,
     floating_point_predictor_tiff,
     micro_tiff,
+    needs_codecs,
     packbits_tiff,
     with_compression_tag,
     with_keys,
+    without_codecs,
 )
 
 HERE = Path(__file__).resolve().parent
-KARTVERKET = HERE.parent / "fixtures" / "dem_archive" / "7908_3_10m_z33.tif"
-HAS_CODECS = importlib.util.find_spec("imagecodecs") is not None
-needs_codecs = pytest.mark.skipif(not HAS_CODECS, reason="LZW needs the `codecs` extra (§8)")
-without_codecs = pytest.mark.skipif(HAS_CODECS, reason="tests the refusal when the extra is absent")
 
 REFUSAL = {r.name: r for r in REFUSALS}
 

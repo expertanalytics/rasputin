@@ -118,7 +118,7 @@ def load(tmp_path: Path, binary: bool, reader_name: str) -> Writer:
             "edges": EDGES,
             "edge_masks": MASKS,
             "vocabulary": DEFAULT_VOCABULARY,
-            "fields": (("crs", CRS), ("elevation", ELEVATION_TEXT)),
+            "fields": (("crs", CRS), ("elevation_source", ELEVATION_TEXT)),
             "binary": binary,
         }
         kwargs.update(overrides)
@@ -241,7 +241,7 @@ class TestFieldData:
         assert strings(poly, "crs") == [CRS]
 
     def test_elevation_round_trips(self, poly: object) -> None:
-        assert strings(poly, "elevation") == [ELEVATION_TEXT]
+        assert strings(poly, "elevation_source") == [ELEVATION_TEXT]
 
     def test_an_out_of_order_vocabulary_reads_back_sorted(self, load: Writer) -> None:
         vocabulary = EdgeVocabulary(
@@ -302,5 +302,16 @@ class TestThroughTheCommand:
     def test_the_metadata_comes_through(self, written: Path) -> None:
         poly = read_back(written, "vtkPDataSetReader")
         assert strings(poly, "crs") == ["EPSG:25833"]
-        assert strings(poly, "elevation") == [ELEVATION_TEXT]
+        assert strings(poly, "elevation_source") == [ELEVATION_TEXT]
         assert strings(poly, "feature_vocabulary") == [DEFAULT_VOCABULARY.fingerprint()]
+
+
+class TestPointElevation:
+    """Increment 12 amendment, inside the reader: Color By -> elevation is the heights."""
+
+    def test_elevation_is_a_float64_point_array_equal_to_z(self, poly: object) -> None:
+        array = poly.GetPointData().GetArray("elevation")  # type: ignore[attr-defined]
+        assert array is not None, "no point array 'elevation'"
+        values = numpy_support.vtk_to_numpy(array)
+        assert values.dtype == np.float64
+        assert_array_equal(values, VERTICES[:, 2])

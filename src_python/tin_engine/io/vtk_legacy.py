@@ -39,7 +39,9 @@ import numpy.typing as npt
 from tin_engine.features import EdgeVocabulary
 
 #: The names this module writes into `FieldData` itself.
-RESERVED = frozenset({"feature_bits", "feature_names", "feature_vocabulary"})
+#: ``elevation`` is the point array of heights (increment 12), so no dataset
+#: string may take the name: ParaView's Color By would offer both.
+RESERVED = frozenset({"feature_bits", "feature_names", "feature_vocabulary", "elevation"})
 
 _FIELD_NAME = re.compile(r"[a-z][a-z0-9_]*")
 
@@ -112,6 +114,10 @@ def write_vtk(
         _body(points, "double", binary),
         _cells("LINES", lines, binary),
         _cells("POLYGONS", polygons, binary),
+        # z again, as a point array: Color By -> elevation then shows the heights.
+        f"POINT_DATA {len(points)}\n".encode("ascii"),
+        b"SCALARS elevation double 1\nLOOKUP_TABLE default\n",
+        _body(points[:, 2:], "double", binary),
         f"CELL_DATA {len(cell_masks)}\n".encode("ascii"),
         b"SCALARS feature_mask unsigned_int 1\nLOOKUP_TABLE default\n",
         _body(cell_masks.reshape(-1, 1), "unsigned_int", binary),

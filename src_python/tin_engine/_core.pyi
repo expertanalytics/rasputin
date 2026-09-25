@@ -344,3 +344,26 @@ def triangulate(pslg: NodedPslg, delaunay: bool = ...) -> CdtOutcome:
 
     Takes a ``NodedPslg`` and not a ``Pslg``: call :func:`node` first.
     """
+
+@final
+class RasterView:
+    """A zero-copy view over a 2-D DEM array. Built by :func:`raster_view`;
+    holds the array alive."""
+
+def raster_view(
+    array: npt.NDArray[np.float32] | npt.NDArray[np.float64],
+    *,
+    x_min: float,
+    y_max: float,
+    delta_x: float,
+    delta_y: float,
+    nodata: float | None = ...,
+) -> RasterView:
+    """View a C-contiguous float32 or float64 array without copying it. Any other
+    dtype or layout is a ``TypeError``; rows and columns come from its shape."""
+
+def sample(
+    view: RasterView, points: npt.ArrayLike
+) -> tuple[npt.NDArray[np.float64], npt.NDArray[np.bool_]]:
+    """Bilinear ``(z, valid)`` at ``(N, 2)`` points. ``z`` is 0.0 where ``valid``
+    is False, never NaN. Releases the GIL."""

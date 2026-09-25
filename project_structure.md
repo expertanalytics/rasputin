@@ -66,7 +66,11 @@ bindings/
 src_python/tin_engine/     # public Python API (distribution name: rasputin)
   __init__.py              # re-exports from tin_engine._core
   cli.py                   # Typer entry point declared in pyproject
-  raster.py                # the ONLY adapter from decoded data into _core (planned)
+  raster.py                # the ONLY adapter from decoded data into _core
+  grid_domain.py           # DEM extent -> stride-subsampled nodes + outer ring;
+                           #   pure numpy, never imports _core
+  elevation.py             # drops mesh vertices the DEM has no data for;
+                           #   pure numpy, never imports _core
   features.py              # EdgeVocabulary: which bit means which feature.
                            #   The names C++ refuses to hold. Imports nothing
                            #   first-party and never imports _core
@@ -147,15 +151,15 @@ templated, so `src/` holds nothing for it. Landed in `7785fea`, which also
 fixed two legacy defects — an out-of-bounds bilinear read and a transposed
 row/column index.
 
-Still to come here: `window_for` (bbox to index window), deferred until
-`refinement` gives it a caller, and `RasterView<T>` — a non-owning view over a
-contiguous caller-supplied buffer. `RasterView` belongs in this module
-(`view.hpp`), not in `bindings/`: it is pure C++, and every other zero-copy
-source (an mmap'd tile, an HDF5 window, a sub-window of a parent raster)
-produces the same type. Only the lifetime anchor sits with the bindings.
+`RasterView<T>` (`view.hpp`, increment 12) is a non-owning view over a
+contiguous caller-supplied buffer. It belongs in this module, not in
+`bindings/`: it is pure C++, and every other zero-copy source (an mmap'd tile,
+an HDF5 window, a sub-window of a parent raster) produces the same type. Only
+the lifetime anchor sits with the bindings. Still to come here: `window_for`
+(bbox to index window), deferred until `refinement` gives it a caller.
 
-When `RasterView` lands it must bring contiguous row access into the
-`RasterSource` concept in the same change, not afterwards. A scalar-only
+`RasterView` brought contiguous row access into the `RasterSource` concept in
+the same change, not afterwards. A scalar-only
 concept forces a row-major scan to recompute `linear_index` per sample and
 never to walk a row pointer, which forfeits the entire reason the view exists;
 and adding a concept requirement later forces a revisit of every model and

@@ -95,6 +95,8 @@ class VtkFile:
     lines: list[np.ndarray] = field(default_factory=list)
     polygons_header: tuple[int, int] | None = None
     polygons: list[np.ndarray] = field(default_factory=list)
+    point_count: int | None = None
+    point_scalars: dict[str, Array] = field(default_factory=dict)
     cell_count: int | None = None
     cell_sections: list[str] = field(default_factory=list)
     scalars: dict[str, Array] = field(default_factory=dict)
@@ -226,6 +228,9 @@ def read_vtk(blob: bytes) -> VtkFile:
                 out.lines_header, out.lines = (count, size), cells
             else:
                 out.polygons_header, out.polygons = (count, size), cells
+        elif keyword == "POINT_DATA":
+            out.point_count = int(words[1])
+            _point_scalars(cur, out)
         elif keyword == "CELL_DATA":
             out.cell_count = int(words[1])
             _cell_data(cur, out)
@@ -268,6 +273,21 @@ def _field_arrays(cur: _Cursor, count: int) -> dict[str, Array]:
                 name, type_name, components, cur.numbers(components * tuples, type_name)
             )
     return arrays
+
+
+def _point_scalars(cur: _Cursor, out: VtkFile) -> None:
+    """One `SCALARS` block per point array; the writer puts CELL_DATA after."""
+    assert out.point_count is not None
+    words = cur.keyword_line()
+    if not words or words[0] != "SCALARS":
+        raise ValueError(f"POINT_DATA must hold SCALARS; got {words}")
+    name, type_name = words[1], words[2]
+    components = int(words[3]) if len(words) > 3 else 1
+    table = cur.keyword_line()
+    if not table or table[0] != "LOOKUP_TABLE":
+        raise ValueError(f"SCALARS {name} must be followed by LOOKUP_TABLE; got {table}")
+    values = cur.numbers(components * out.point_count, type_name)
+    out.point_scalars[name] = Array(name, type_name, components, values)
 
 
 def _cell_data(cur: _Cursor, out: VtkFile) -> None:

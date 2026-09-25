@@ -190,7 +190,7 @@ class TestTheBundleIsTheEnginesMesh:
 
     def test_crs_and_elevation_are_carried(self, featured: VtkFile) -> None:
         assert featured.field_data["crs"].values == ("EPSG:25833",)
-        assert featured.field_data["elevation"].values == (ELEVATION_TEXT,)
+        assert featured.field_data["elevation_source"].values == (ELEVATION_TEXT,)
 
     def test_no_crs_means_no_crs_field(self, tmp_path: Path) -> None:
         out = tmp_path / "mesh.vtk"

@@ -7,6 +7,7 @@
 #include <terrain/raster/sample.hpp>
 
 #include <limits>
+#include <span>
 #include <stdexcept>
 #include <vector>
 
@@ -40,18 +41,21 @@ Raster<double> plane_raster(const RasterGeometry& g, double a, double b, double 
 
 // An independent RasterSource model: proves the concept is satisfiable by
 // something other than the one class it was written around, and that
-// sample.hpp binds to it unchanged.
+// sample.hpp binds to it unchanged. Increment 12 (R4) added row() to the
+// concept, so the double carries one: every row is the same constant.
 class ConstantRaster {
 public:
     using value_type = double;
-    ConstantRaster(RasterGeometry g, double v) : geometry_{g}, value_{v} {}
+    ConstantRaster(RasterGeometry g, double v) : geometry_{g}, value_{v}, row_(g.cols(), v) {}
     [[nodiscard]] const RasterGeometry& geometry() const noexcept { return geometry_; }
     [[nodiscard]] double value_at(const CellIndex&) const noexcept { return value_; }
     [[nodiscard]] bool is_nodata(const CellIndex&) const noexcept { return false; }
+    [[nodiscard]] std::span<const double> row(std::size_t) const noexcept { return row_; }
 
 private:
     RasterGeometry geometry_;
     double value_;
+    std::vector<double> row_;
 };
 
 } // namespace

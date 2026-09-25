@@ -216,3 +216,7 @@ add_terrain_backend_test(prop_noding_no_crossings property/prop_noding_no_crossi
 # split along a different axis than the one Gate B protects, and both would move
 # to a 5b-ii together if a seam is ever cut.
 add_terrain_backend_test(test_noding_node unit/test_noding_node.cpp)
+
+# Raster view, increment 12: RasterView<T>, row access on RasterSource, and the
+# batch sampler (docs/increments/12-dem-to-mesh.md, R2 and R4).
+add_terrain_test(test_raster_view unit/test_raster_view.cpp)

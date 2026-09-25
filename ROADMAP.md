@@ -32,34 +32,37 @@ increment that most needs a picture to check against
 | 9 | Gallery output: `rasputin gallery` renders all eleven fixtures into a directory the caller names | designed | `docs/increments/09-gallery-output.md` |
 | 10 | Mesh output: a PLY writer, binary `double` by default, constraint edges in a second file | shipped (#86) | `docs/increments/10-mesh-output.md` |
 | 11 | Raster ingestion, the decode half: GeoTIFF bytes to a validated `DemTile` | shipped (#89) | `docs/increments/11-raster-ingestion.md` |
-| 13 | One mesh file for ParaView: legacy `.vtk` with triangles, constraint edges, feature masks and the vocabulary, text by default | implemented, in review | `docs/increments/13-bundled-mesh.md` |
+| 12 | DEM to elevated mesh: the zero-copy `RasterView` and its binding, z sampled per mesh vertex, `rasputin mesh --dem file.tif` | implemented, in review | `docs/increments/12-dem-to-mesh.md` |
+| 13 | One mesh file for ParaView: legacy `.vtk` with triangles, constraint edges, feature masks and the vocabulary, text by default | shipped (#90) | `docs/increments/13-bundled-mesh.md` |
 | — | `raster/`: grid-to-world geometry and bilinear sampling | shipped (`7785fea`), **no record** | none — predates the protocol |
 
 ## What stands between here and an operational MVP
 
 An MVP is one command turning a DEM and a catchment polygon into a terrain TIN
-file. Five things are missing, in dependency order. None has an increment record
-yet, so each starts at `docs/increments/README.md` step 1.
+file. Five things were missing, in dependency order. Gap 4 has shipped; gaps 1
+and 3 and the first half of 5 are implemented as increment 12, in review; gap 2
+has no record yet.
 
 1. **Raster ingestion, Python side.** The C++ `raster/` module samples; nothing
    decodes a GeoTIFF into it. `project_structure.md` names `raster.py` as the
-   only adapter from decoded data into `_core`, and marks it planned. This is
+   only adapter from decoded data into `_core`. This is
    where CRS stops. Split in two: increment 11 decodes
    (`io/geotiff.py`, bytes to a validated tile, no `_core`); the adapter,
-   `RasterView` and the pybind11 buffer surface are increment 12, which does
-   not yet have a record.
+   `RasterView` and the pybind11 buffer surface are increment 12, in review.
 2. **Refinement.** The largest piece and the actual product: coarsen a dense DEM
    under an error budget instead of triangulating what you are given. Plan in
    `parallel_refinement.md`. The legacy `-ratio 0.4` was this knob.
 3. **Elevation assembly.** `IndexedMesh2` is 2D by design and z comes from
-   sampling the raster per vertex. Both halves exist; nothing joins them.
+   sampling the raster per vertex. Both halves exist; increment 12 joins
+   them.
 4. **Mesh output.** Shipped as increment 10 (PLY, for QGIS) and extended by
    increment 13: `rasputin mesh --out x.vtk` writes one text file for ParaView
    holding the triangles, the constraint edges, their feature masks and the
-   feature names. What remains is real z, which is gap 3.
+   feature names. Real z is gap 3, in increment 12.
 5. **A CLI that does the job.** `rasputin` has `version`, `draw` and `mesh`,
-   and all three take a built-in fixture. There is still no path from a file on
-   disk to a mesh on disk: that needs gap 1.
+   and all three take a built-in fixture. Increment 12 adds the first path
+   from a file on disk to a mesh on disk, `mesh --dem file.tif`, over a regular
+   subsample of the DEM's nodes until refinement (gap 2) replaces it.
 
 Open and not MVP-blocking: clipping to the catchment polygon
 (`auto_catchments.md`, and `legacy/rasputin/geometry.py`'s Shapely intersection

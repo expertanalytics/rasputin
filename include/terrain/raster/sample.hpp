@@ -4,7 +4,10 @@
 #include <terrain/raster/geometry.hpp>
 #include <terrain/raster/raster.hpp>
 
+#include <cstddef>
 #include <optional>
+#include <span>
+#include <stdexcept>
 
 namespace terrain::raster {
 
@@ -44,6 +47,22 @@ template <RasterSource R>
          + z01 * tx * (1.0 - ty)
          + z10 * (1.0 - tx) * ty
          + z11 * tx * ty;
+}
+
+// bilinear over every point: z[i] is the sample and valid[i] says whether
+// there is one. Where valid[i] is false, z[i] is 0.0 -- never NaN, so a
+// caller that ignores the flag still cannot leak a NaN into a file.
+// Spans of different lengths are a caller bug and throw before any write.
+template <RasterSource R>
+void bilinear_batch(const R& raster, std::span<const Point2> points,
+                    std::span<double> z, std::span<bool> valid) {
+    if (z.size() != points.size() || valid.size() != points.size())
+        throw std::invalid_argument("bilinear_batch: z and valid must match points in length");
+    for (std::size_t i = 0; i < points.size(); ++i) {
+        const auto v = bilinear(raster, points[i]);
+        valid[i] = v.has_value();
+        z[i] = v.value_or(0.0);
+    }
 }
 
 } // namespace terrain::raster

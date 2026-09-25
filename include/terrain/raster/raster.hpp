@@ -5,6 +5,7 @@
 #include <concepts>
 #include <cstddef>
 #include <optional>
+#include <span>
 #include <stdexcept>
 #include <utility>
 #include <vector>
@@ -14,7 +15,7 @@ namespace terrain::raster {
 // Everything that samples a raster goes through this contract, so an owning
 // grid and a zero-copy view over a numpy buffer stay interchangeable.
 template <typename R>
-concept RasterSource = requires(const R& r, CellIndex c) {
+concept RasterSource = requires(const R& r, CellIndex c, std::size_t i) {
     typename R::value_type;
     // same_as, not convertible_to: an implementation returning by value
     // satisfies convertible_to, and sample.hpp binds the result to a
@@ -23,10 +24,12 @@ concept RasterSource = requires(const R& r, CellIndex c) {
     { r.geometry() } -> std::same_as<const RasterGeometry&>;
     { r.value_at(c) } -> std::convertible_to<double>;
     { r.is_nodata(c) } -> std::same_as<bool>;
+    // Row i as cols() contiguous cells, for callers that walk a whole row.
+    { r.row(i) } -> std::same_as<std::span<const typename R::value_type>>;
 };
 
-// Owning raster. The zero-copy RasterView over a Python buffer lands with the
-// reader; this one exists so the C++ core is testable with no I/O at all.
+// Owning raster. The zero-copy RasterView over a Python buffer is in view.hpp;
+// this one exists so the C++ core is testable with no I/O at all.
 template <typename T>
 class Raster {
 public:
@@ -58,6 +61,10 @@ public:
         const T v = value_at(c);
         // v != v catches NaN, which must never propagate silently into a mesh.
         return v != v || (nodata_.has_value() && v == *nodata_);
+    }
+
+    [[nodiscard]] std::span<const T> row(std::size_t i) const noexcept {
+        return std::span<const T>{data_}.subspan(i * geometry_.cols(), geometry_.cols());
     }
 
 private:
