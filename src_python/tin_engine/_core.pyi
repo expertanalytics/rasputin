@@ -367,3 +367,55 @@ def sample(
 ) -> tuple[npt.NDArray[np.float64], npt.NDArray[np.bool_]]:
     """Bilinear ``(z, valid)`` at ``(N, 2)`` points. ``z`` is 0.0 where ``valid``
     is False, never NaN. Releases the GIL."""
+
+class RefineStatus(Enum):
+    """Why :func:`refine` refused, or ``Ok``."""
+
+    Ok = 0
+    OffLattice = 1
+    NotCounterClockwise = 2
+    InvalidTolerance = 3
+
+@final
+class RefineOutcome:
+    """A status, a message, the refined mesh and four numbers. The arrays are
+    read-only views that keep the outcome alive, and empty unless ``ok()``."""
+
+    @property
+    def status(self) -> RefineStatus: ...
+    @property
+    def message(self) -> str: ...
+    def ok(self) -> bool: ...
+    @property
+    def vertices(self) -> npt.NDArray[np.float64]: ...
+    @property
+    def z(self) -> npt.NDArray[np.float64]: ...
+    @property
+    def valid(self) -> npt.NDArray[np.bool_]: ...
+    @property
+    def triangles(self) -> npt.NDArray[np.uint32]: ...
+    @property
+    def edges(self) -> npt.NDArray[np.uint32]: ...
+    @property
+    def masks(self) -> npt.NDArray[np.uint32]: ...
+    @property
+    def rounds(self) -> int: ...
+    @property
+    def inserted(self) -> int: ...
+    @property
+    def max_error(self) -> float: ...
+    @property
+    def uncovered(self) -> int: ...
+
+def refine(
+    view: RasterView,
+    mesh: IndexedMesh2,
+    edges: npt.ArrayLike,
+    masks: npt.ArrayLike,
+    *,
+    tolerance: float,
+    threads: int = ...,
+) -> RefineOutcome:
+    """Refine a start mesh whose vertices are DEM nodes until every triangle is
+    within ``tolerance`` of the DEM. Releases the GIL; the output does not
+    depend on ``threads``."""
