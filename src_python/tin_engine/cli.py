@@ -594,7 +594,7 @@ def mesh(
             )
         label = dem.stem
         surface_mesh, sentence, epsg = _dem_mesh(dem, stride, delaunay, snap_spacing)
-        fields = [("crs", f"EPSG:{epsg}"), ("elevation", sentence)]
+        fields = [("crs", f"EPSG:{epsg}"), ("elevation_source", sentence)]
         comments = [f"crs EPSG:{epsg}", f"elevation {sentence}"]
     else:
         assert name is not None
@@ -610,7 +610,7 @@ def mesh(
         comments = [f"crs {crs}"] if crs else []
         comments.append(FLAT_COMMENT)
         fields = [("crs", crs)] if crs else []
-        fields.append(("elevation", FLAT_ELEVATION))
+        fields.append(("elevation_source", FLAT_ELEVATION))
         # --crs is unvalidated free text by ruling 5, so the writer's refusals
         # are refusals a person meets by typing, not internal invariants. Turn
         # the writer's ValueError into the usage error it is, in the one place

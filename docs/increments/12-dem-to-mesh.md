@@ -6,7 +6,16 @@ production lines (C++ 114, Python 264 added, 59 removed) against ~320.
 Unruled points settled in green: `--stride` with a fixture is refused;
 `subsample` raises `ValueError` for a stride below 1; `trim`'s `dropped`
 counts only vertices without data, since that is what the file says, and a
-valid vertex left with no triangle is removed but not counted. Written by
+valid vertex left with no triangle is removed but not counted.
+
+*Amended before merge, at the user's request (2026-09-25).* In ParaView the
+Color By menu offered `elevation`, but it was the dataset string describing
+the sampling; the heights were only the points' z. The `.vtk` now also writes
+`POINT_DATA` with `SCALARS elevation double` equal to z, and the string field
+is renamed `elevation_source`. `elevation` is a reserved field name in
+`write_vtk`, so no string can shadow the heights again. Red `5750ff8`.
+
+Written by
 `@architect` before `@tester`,
 per `docs/increments/README.md` step 1. The user chose the recommendation on
 all three open choices on 2026-09-24: U1 (a), U2 (a), U3 (a) (section "Ruled by
