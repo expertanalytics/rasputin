@@ -372,7 +372,7 @@ class RefineStatus(Enum):
     """Why :func:`refine` refused, or ``Ok``."""
 
     Ok = 0
-    OffLattice = 1
+    OutsideGrid = 1
     NotCounterClockwise = 2
     InvalidTolerance = 3
 
@@ -418,6 +418,7 @@ def refine(
     tolerance: float,
     threads: int = ...,
 ) -> RefineOutcome:
-    """Refine a start mesh whose vertices are DEM nodes until every triangle is
+    """Refine a start mesh whose vertices lie in the DEM's node rectangle (off-node
+    ones keep their position and get bilinear z) until every triangle is
     within ``tolerance`` of the DEM. Releases the GIL; the output does not
     depend on ``threads``."""

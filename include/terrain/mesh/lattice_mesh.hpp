@@ -1,18 +1,22 @@
 #pragma once
 
-// A triangle mesh whose every vertex is a DEM node, with neighbour links
-// (docs/increments/14-adaptive-refinement.md, R3 and R4).
+// A triangle mesh over the DEM's lattice, with neighbour links
+// (docs/increments/14-adaptive-refinement.md, R3 and R4). Every vertex that
+// refinement inserts is a DEM node; a start vertex may lie anywhere in the
+// node rectangle (docs/increments/16-domain-polygon.md, R2).
 //
 // A flat triangle array, not a tree: R3's edge split changes two triangles at
 // once, and only adjacency can find the second. A split reuses the parent's
 // slot for its first child and appends the rest, so the array stays dense and
 // is the output as it stands -- there is no flatten step.
 //
-// Frame. Vertices are (row, col) lattice indices. Orientation is taken in the
-// world's handedness, x = col and y = -row (rows grow downward), so a
-// triangle that is counter-clockwise in world coordinates is counter-clockwise
-// here too. Every test is exact integer arithmetic: coordinates are uint32, so
-// a product of two differences fits int64 with room to spare.
+// Frame. Vertices are fractional (col, row) lattice coordinates, integers for
+// a node. Orientation is taken in the world's handedness, x = col and y = -row
+// (rows grow downward), so a triangle that is counter-clockwise in world
+// coordinates is counter-clockwise here too. `orient` on nodes is exact
+// integer arithmetic (uint32 coordinates, so a product of two differences fits
+// int64); `orient_sign` on any vertices is DefaultKernel on (col, -row), exact
+// on its inputs and of the same sign for nodes.
 //
 // Edge k of a triangle runs from vertex k to vertex k+1, as in IndexedMesh2.
 // Per edge a triangle stores the neighbour across it (or kNoNeighbour), a
@@ -20,16 +24,22 @@
 // and mask on both halves of a split edge, and gives new interior edges
 // neither: constraints gain Steiner points but never move.
 //
-// Depends on core only. It knows no raster; (row, col) are just integers.
+// Depends on core and predicates. It knows no raster; (col, row) are just
+// numbers.
 
 #include <terrain/core/indexed_mesh.hpp>
+#include <terrain/core/point.hpp>
+#include <terrain/predicates/default_kernel.hpp>
 
 #include <array>
 #include <cassert>
+#include <cmath>
+#include <concepts>
 #include <cstdint>
 #include <limits>
 #include <optional>
 #include <span>
+#include <stdexcept>
 #include <unordered_map>
 #include <utility>
 #include <vector>
@@ -43,6 +53,35 @@ struct LatticeVertex {
     friend constexpr bool operator==(const LatticeVertex&, const LatticeVertex&) = default;
 };
 
+// A mesh vertex in fractional lattice coordinates: col = (x - x_min) / dx and
+// row = (y_max - y) / dy, integers exactly for a node. A LatticeVertex converts
+// to it exactly. The conversion back is checked: exact for a node, and a throw
+// for an off-node vertex, never a truncation.
+struct MeshVertex {
+    double col{};
+    double row{};
+
+    constexpr MeshVertex() = default;
+    constexpr MeshVertex(double c, double r) noexcept : col{c}, row{r} {}
+    constexpr MeshVertex(LatticeVertex v) noexcept  // NOLINT(google-explicit-constructor)
+        : col{static_cast<double>(v.col)}, row{static_cast<double>(v.row)} {}
+
+    [[nodiscard]] bool is_node() const noexcept {
+        return col == std::floor(col) && row == std::floor(row);
+    }
+    operator LatticeVertex() const {  // NOLINT(google-explicit-constructor)
+        if (!is_node())
+            throw std::domain_error("MeshVertex: an off-node vertex is not a LatticeVertex");
+        return LatticeVertex{static_cast<std::uint32_t>(row), static_cast<std::uint32_t>(col)};
+    }
+    [[nodiscard]] Point2 frame() const noexcept { return Point2{col, -row}; }
+
+    friend constexpr bool operator==(const MeshVertex&, const MeshVertex&) = default;
+    friend constexpr bool operator==(const MeshVertex& a, const LatticeVertex& b) noexcept {
+        return a == MeshVertex{b};
+    }
+};
+
 inline constexpr std::uint32_t kNoNeighbour = std::numeric_limits<std::uint32_t>::max();
 
 // Twice the signed area of (a, b, c), positive when counter-clockwise in the
@@ -54,13 +93,27 @@ inline constexpr std::uint32_t kNoNeighbour = std::numeric_limits<std::uint32_t>
     return dr1 * dc2 - dc1 * dr2;
 }
 
+// The sign of orient on any vertices, from the exact kernel on (col, -row).
+[[nodiscard]] inline int orient_sign(MeshVertex a, MeshVertex b, MeshVertex c) {
+    return static_cast<int>(pred::DefaultKernel::orient2d(a.frame(), b.frame(), c.frame()));
+}
+
 class LatticeMesh {
 public:
     // Refuses (nullopt) mismatched array lengths, an index out of range, a
     // triangle whose orientation is not positive, and a directed edge used
     // twice (an overlap or a flipped triangle). Adjacency is derived here.
+    // The LatticeVertex overload is a template so a braced vertex list always
+    // picks the MeshVertex one.
+    template <std::same_as<LatticeVertex> V>
     [[nodiscard]] static std::optional<LatticeMesh> build(
-        std::vector<LatticeVertex> vertices, std::vector<TriangleIndices> triangles,
+        std::vector<V> vertices, std::vector<TriangleIndices> triangles,
+        std::vector<std::uint8_t> constrained, std::vector<std::array<std::uint32_t, 3>> masks) {
+        return build(std::vector<MeshVertex>(vertices.begin(), vertices.end()),
+                     std::move(triangles), std::move(constrained), std::move(masks));
+    }
+    [[nodiscard]] static std::optional<LatticeMesh> build(
+        std::vector<MeshVertex> vertices, std::vector<TriangleIndices> triangles,
         std::vector<std::uint8_t> constrained, std::vector<std::array<std::uint32_t, 3>> masks) {
         const std::size_t n = triangles.size();
         if (constrained.size() != n || masks.size() != n || n >= kNoNeighbour)
@@ -79,7 +132,7 @@ public:
             for (const auto v : tri)
                 if (v >= m.vertices_.size())
                     return std::nullopt;
-            if (orient(m.vertices_[tri[0]], m.vertices_[tri[1]], m.vertices_[tri[2]]) <= 0)
+            if (orient_sign(m.vertices_[tri[0]], m.vertices_[tri[1]], m.vertices_[tri[2]]) <= 0)
                 return std::nullopt;
             for (unsigned k = 0; k < 3; ++k)
                 if (!directed.emplace(key(tri[k], tri[(k + 1) % 3]), t).second)
@@ -95,7 +148,7 @@ public:
         return m;
     }
 
-    [[nodiscard]] std::span<const LatticeVertex> vertices() const noexcept { return vertices_; }
+    [[nodiscard]] std::span<const MeshVertex> vertices() const noexcept { return vertices_; }
     [[nodiscard]] std::span<const TriangleIndices> triangles() const noexcept {
         return triangles_;
     }
@@ -109,7 +162,7 @@ public:
     [[nodiscard]] std::uint32_t mask(std::size_t t, unsigned e) const noexcept {
         return masks_[t][e];
     }
-    [[nodiscard]] LatticeVertex corner(std::size_t t, unsigned k) const noexcept {
+    [[nodiscard]] MeshVertex corner(std::size_t t, unsigned k) const noexcept {
         return vertices_[triangles_[t][k]];
     }
 
@@ -177,8 +230,8 @@ public:
         while (triangles_[u][f] != b)
             ++f;
         const auto d = triangles_[u][(f + 2) % 3];
-        assert(orient(vertices_[c], vertices_[a], vertices_[d]) > 0
-               && orient(vertices_[c], vertices_[d], vertices_[b]) > 0);
+        assert(orient_sign(vertices_[c], vertices_[a], vertices_[d]) > 0
+               && orient_sign(vertices_[c], vertices_[d], vertices_[b]) > 0);
         const Side bc = side(t, (e + 1) % 3), ca = side(t, (e + 2) % 3),
                    ad = side(u, (f + 1) % 3), db = side(u, (f + 2) % 3);
         put(t, {c, a, d}, {ca, ad, spoke(u)});
@@ -253,7 +306,7 @@ private:
                 x = to;
     }
 
-    std::vector<LatticeVertex> vertices_;
+    std::vector<MeshVertex> vertices_;
     std::vector<TriangleIndices> triangles_;
     std::vector<std::array<std::uint32_t, 3>> neighbours_;
     std::vector<std::uint8_t> constrained_;

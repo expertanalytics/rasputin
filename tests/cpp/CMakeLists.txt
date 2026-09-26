@@ -226,8 +226,8 @@ add_terrain_test(test_raster_view unit/test_raster_view.cpp)
 # invariant-critical pair. All four link Threads: the loop and chunk suites
 # start threads through for_each_chunk.
 add_terrain_test(test_refinement_chunks unit/test_refinement_chunks.cpp)
-add_terrain_test(test_mesh_lattice_split unit/test_mesh_lattice_split.cpp)
-add_terrain_test(test_refinement_scan unit/test_refinement_scan.cpp)
+add_terrain_backend_test(test_mesh_lattice_split unit/test_mesh_lattice_split.cpp)
+add_terrain_backend_test(test_refinement_scan unit/test_refinement_scan.cpp)
 target_link_libraries(test_refinement_chunks PRIVATE Threads::Threads)
 target_link_libraries(test_mesh_lattice_split PRIVATE Threads::Threads)
 target_link_libraries(test_refinement_scan PRIVATE Threads::Threads)
