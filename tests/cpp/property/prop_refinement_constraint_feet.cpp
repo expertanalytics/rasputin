@@ -355,15 +355,13 @@ void delaunay_oracle(const RasterGeometry& g, const Outcome& out) {
     REQUIRE(bad == 0);
 }
 
-// `delaunay` is false only for the one known pre-20b defect below.
 template <typename Outcome>
-Feet check(const Raster<float>& dem, const Start& start, const Outcome& out, double tol,
-           bool delaunay = true) {
+Feet check(const Raster<float>& dem, const Start& start, const Outcome& out, double tol) {
     REQUIRE(out.ok());
     const Feet feet = classify(dem, start, out);
     tolerance_oracle(dem, out, tol);
     constraints_oracle(dem, start, out, feet);
-    if (delaunay) delaunay_oracle(dem.geometry(), out);
+    delaunay_oracle(dem.geometry(), out);
     // R2 step 5: a node is footed once, so no two feet share a source node.
     REQUIRE(std::set(feet.source.begin(), feet.source.end()).size() == feet.source.size());
     return feet;
@@ -509,8 +507,7 @@ TEST_CASE("F4: at tolerance 0 the fallback inserts the footed node and the run e
     const RasterGeometry& g = dem.geometry();
     const auto start = feet_fixtures::needle_start(g);
     const auto out = run(dem, start, 0.0, true);
-    // Not Delaunay here, with feet off as well: see the [!shouldfail] case below.
-    const Feet feet = check(dem, start, out, 0.0, false);  // spacing >= floor, one foot per node
+    const Feet feet = check(dem, start, out, 0.0);  // Delaunay, spacing >= floor, one foot per node
     REQUIRE(out.max_error == 0.0);
     REQUIRE(out.feet >= 1);
     // The needle got its foot, and then went in anyway: R5's fallback.
@@ -520,16 +517,17 @@ TEST_CASE("F4: at tolerance 0 the fallback inserts the footed node and the run e
     REQUIRE(feet.source.size() <= g.rows() * g.cols());
 }
 
-TEST_CASE("Known defect, not 20b's: at tolerance 0 the needle fixture is not constrained Delaunay",
-          "[refinement][feet]") {
-    // Found by the incircle oracle when it was added to check(). Feet off or on,
-    // the output has the unconstrained interior edge (27, 2)-(27, 7) in
-    // (col, row) with (28, 4) strictly inside the circle of (27, 2) (26, 6)
-    // (27, 7) in the LatticeFrame: exact incircle determinant 12500. All four
-    // are lattice nodes, nowhere near a constraint, and the quad is convex, so
-    // Lawson should have flipped it. At 0.5 m the same fixture is Delaunay.
-    // [!shouldfail]: this case goes red when the defect is fixed, so the
-    // exemption in F4 above is removed with it.
+TEST_CASE("Lawson: at tolerance 0 the needle fixture is constrained Delaunay, feet off or on",
+          "[refinement][feet][delaunay]") {
+    // Guards the frame-collinear Lawson regression (c23583b). Orientation is
+    // exact on (col, -row), but the incircle runs in the LatticeFrame
+    // (col * dx, -(row * dy)), which rounds. A triangle that is counter-
+    // clockwise in the mesh can be collinear there, and the kernel answers
+    // Cocircular for a collinear triple, so a must_flip that asks only the
+    // new vertex's side never flips the edge; the other side would have. This
+    // fixture at tolerance 0 is where that left an illegal unconstrained edge,
+    // with feet off as well as on, so it is not a 20b defect. With must_flip
+    // reverted to the one-sided test this case and F4 above both go red.
     const auto dem = feet_fixtures::needle_dem();
     const auto start = feet_fixtures::needle_start(dem.geometry());
     const bool feet = GENERATE(false, true);
