@@ -879,6 +879,7 @@ unless ok().
             "(F,) uint32 property masks, one per edge.")
         .def_readonly("rounds", &RefineOutcome::rounds, "Scan rounds run.")
         .def_readonly("inserted", &RefineOutcome::inserted, "Vertices inserted.")
+        .def_readonly("flips", &RefineOutcome::flips, "Lawson flips, the start mesh's included.")
         .def_readonly("max_error", &RefineOutcome::max_error,
                       "Largest |z - plane| over triangles with three valid vertices.")
         .def_readonly("uncovered", &RefineOutcome::uncovered,

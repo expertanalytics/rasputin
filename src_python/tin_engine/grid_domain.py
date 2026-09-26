@@ -30,9 +30,9 @@ def default_stride(meta: RasterMeta) -> int:
 
 
 #: With ``--tolerance``, the start grid has at most this many nodes on its
-#: longer side (increment 14, R1). Refinement only splits, so the start spacing
-#: is also the largest triangle the output can have.
-REFINE_NODES_PER_SIDE = 33
+#: longer side (increment 14b, C1). With Delaunay insertion the start vertices
+#: are the only ones in unrefined flat ground, so they set its grading.
+REFINE_NODES_PER_SIDE = 129
 
 
 def refine_start_stride(meta: RasterMeta) -> int:

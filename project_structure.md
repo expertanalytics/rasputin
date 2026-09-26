@@ -50,10 +50,13 @@ include/terrain/           # public C++ headers, header-only where possible
     chunks.hpp             # for_each_chunk: contiguous chunks over std::jthread
   mesh/
     lattice_mesh.hpp       # LatticeMesh: flat triangle array over DEM nodes,
-                           #   neighbour links, the three splits (14)
+                           #   neighbour links, the three splits (14), flip (14b)
+    lawson.hpp             # LatticeFrame, legalise_around / legalise_all:
+                           #   Lawson flips on strictly-inside apexes (14b)
   refinement/
     scan.hpp               # per-triangle sup-norm scan, NoData carve point (14)
-    refine.hpp             # RefineOptions, RefineOutcome, the round loop (14)
+    refine.hpp             # RefineOptions, RefineOutcome, the round loop (14),
+                           #   Delaunay insertion (14b)
 
 src/                       # C++ implementation, one directory per module
                            #   (only predicates/ and cdt/ exist; rest planned)
