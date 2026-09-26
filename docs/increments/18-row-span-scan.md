@@ -346,7 +346,7 @@ seam. This increment only makes that additive. It builds no multi-tile code.
   `if constexpr` on a `requires` expression:
   - If `dem.row_segments(row, c0, c1, f)` exists, it forwards to it.
   - Otherwise it makes exactly one call:
-    `f({dem.row(row).subspan(c0, c1 − c0 + 1), c0, dem.nodata()})`.
+    `f({dem.row(row).subspan(c0, c1 − c0 + 1), c0})`; the sentinel is read once from `dem.nodata()` (C2).
 
   Both `Raster` and `RasterView` take the second branch. That is a single,
   inlined call per row, with no loop over segments and no runtime dispatch.
