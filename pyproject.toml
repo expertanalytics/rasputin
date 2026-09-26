@@ -119,3 +119,9 @@ python_version = "3.12"
 strict = true
 files = ["src_python/tin_engine"]
 plugins = ["pydantic.mypy"]
+
+# shapely ships no type information and types-shapely is not a dependency;
+# tin_engine.domain is its first user (increment 16).
+[[tool.mypy.overrides]]
+module = ["shapely", "shapely.*"]
+ignore_missing_imports = true
