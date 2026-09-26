@@ -235,7 +235,7 @@ needs `split_edge` to take a `MeshVertex`, and its output z is bilinear.
 - **This increment makes it no worse** under R3. Snapped Steiner points are
   nodes, so they cannot sit beside one. The split variants (C1 b) did make it
   worse (0.0280°).
-- What to do about it is Ola's (C4). Measured size: 3 triangles under 0.1° at
+- Ola sent this to increment 20b (C4). Measured size: 3 triangles under 0.1° at
   1 m out of 427 639.
 
 ### R8. After the start: the criterion is not enforced during DEM refinement (C3)
@@ -309,9 +309,10 @@ combination terminates and trims.
 
 ## Choices for Ola
 
-*Provisional (2026-09-26), pending Ola:* C1 (a), C2 (a), C3 (a), C4 (a),
-picked by the main session so the build can reach a comparison run. Ola
-reviews them against the result.
+*Provisional (2026-09-26), pending Ola:* C1 (a), C2 (a), C3 (a), picked by
+the main session so the build can reach a comparison run; Ola reviews them
+against the result. C4 is not provisional: Ola sent it to increment 20b (a
+minimum insertion distance scaled by z_tol / |grad z|).
 
 ### C1. May the start pass add vertices on input polygons and polylines?
 
@@ -448,10 +449,11 @@ them together still fit.
 
 ### What landed
 
-The developer counted about 240 production lines against ~160, under 700;
-`quality.hpp` is 148 of them (reviewer's count; 130 without blank lines),
-mostly the walk and the insert-and-requeue step. The reviewer's total is about
-222 (about 205 without blank lines), about 40 % over.
+About 240 production lines against ~160, about 50 % over, under 700;
+`quality.hpp` is 162 of them (144 without blank lines), mostly the walk and the
+insert-and-requeue step. The developer's count, confirmed by `@reviewer`'s
+re-measure (about 232 non-blank); an earlier review figure of 148 had dropped
+preprocessor and trailing-comment lines.
 Settled at green: a snapped node the walk ends on counts as "already a vertex";
 NaN or <= 0 turns the pass off; the two quality columns come last in the
 `--stats` Refinement table; the file says `25 deg`, not `25°` (increment 13's
@@ -475,7 +477,8 @@ ASCII rule).
 
 The boundary fans are gone. Two numbers differ from the batch prototype: 644
 nodes inserted (prototype 1 084: the serial pass legalises and requeues after
-every insert, so one node can clear several bad triangles), and the 10 m worst
+every insert, so likely one node clears several bad triangles; not measured),
+and the 10 m worst
 angle is 0.287°. That triangle comes from DEM refinement, not from the pass:
 `@reviewer` meshed at `--tolerance 100000` (no DEM refinement) and the start
 is exactly 25° worst with the pass on (0.461° worst, 64 % under 1°, off). C3 (a)
