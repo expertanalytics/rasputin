@@ -26,11 +26,17 @@
 // bit is a node, as before, and any other gets fractional (col, row), computed
 // once here. It keeps its world point as given for the output, and its z is
 // bilinear there (R0), or it is invalid where bilinear refuses.
+//
+// A quality start (docs/increments/20-start-quality.md, R1). With
+// min_angle_deg > 0, mesh::improve runs once after legalise_all and before the
+// first scan, and inserts DEM nodes until the start meets the angle or says why
+// not. Its nodes are counted in quality_inserted, not in inserted.
 
 #include <terrain/core/indexed_mesh.hpp>
 #include <terrain/core/point.hpp>
 #include <terrain/mesh/lattice_mesh.hpp>
 #include <terrain/mesh/lawson.hpp>
+#include <terrain/mesh/quality.hpp>
 #include <terrain/parallel_util/chunks.hpp>
 #include <terrain/predicates/default_kernel.hpp>
 #include <terrain/raster/raster.hpp>
@@ -59,6 +65,7 @@ enum class RefineStatus : std::uint8_t { Ok, OutsideGrid, NotCounterClockwise, I
 struct RefineOptions {
     double tolerance = 0.0;  // metres, finite and >= 0
     unsigned threads = 0;    // 0: hardware concurrency
+    double min_angle_deg = 0.0;  // the start-quality pass; 0 (or NaN) is off
 };
 
 struct RefineOutcome {
@@ -78,6 +85,8 @@ struct RefineOutcome {
     double max_error = 0.0;     // over triangles with three valid vertices
     std::size_t uncovered = 0;  // valid nodes still inside void triangles
     std::size_t carved = 0;     // inserts that split a void triangle, a subset of `inserted`
+    std::size_t quality_inserted = 0;  // start-quality nodes, not in `inserted`
+    std::size_t quality_skipped = 0;   // start-quality skips, every reason summed
 
     // Wall seconds on the calling thread, steady_clock (17-mesh-stats.md R6).
     // for_each_chunk joins its workers before returning, so no worker reads a
@@ -85,6 +94,7 @@ struct RefineOutcome {
     double legalise_seconds = 0.0;  // the start mesh's legalise_all
     double scan_seconds = 0.0;      // every round's parallel scan, summed
     double split_seconds = 0.0;     // every round's serial split + flip phase, summed
+    double quality_seconds = 0.0;   // the start-quality pass
 
     [[nodiscard]] bool ok() const noexcept { return status == RefineStatus::Ok; }
 };
@@ -176,6 +186,15 @@ template <raster::RasterSource R>
     auto t0 = clock::now();
     out.flips = mesh::legalise_all<pred::DefaultKernel>(m, frame, [](std::uint32_t) {});
     out.legalise_seconds = since(t0);
+    if (options.min_angle_deg > 0.0) {
+        t0 = clock::now();
+        const auto q = mesh::improve<pred::DefaultKernel>(
+            m, frame, mesh::QualityOptions{options.min_angle_deg, g.rows(), g.cols()});
+        out.quality_inserted = q.inserted;
+        out.quality_skipped = q.skipped_floor + q.skipped_outside + q.skipped_vertex
+                            + q.skipped_blocked + q.walk_bound_hits;
+        out.quality_seconds = since(t0);
+    }
     std::vector<ScanResult> results;
     std::vector<std::uint32_t> active(m.triangle_count());
     for (std::uint32_t t = 0; t < active.size(); ++t)
