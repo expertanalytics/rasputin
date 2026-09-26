@@ -137,3 +137,49 @@ class TestRefusals:
         assert not out.ok()
         assert out.status == _core.RefineStatus.InvalidTolerance  # type: ignore[attr-defined]
         assert out.message
+
+
+class TestOffNodeStart:
+    """Increment 16 (R2): an off-node start ring is refined; outside the node
+    rectangle is ``OutsideGrid``, which replaces ``OffLattice``."""
+
+    @staticmethod
+    def ring(array: np.ndarray, ring_xy: list[tuple[float, float]]) -> tuple[Any, Any, Any, Any]:
+        run = _engine(
+            np.array(ring_xy),
+            [([*range(len(ring_xy))], ChainRole.Outer, 0)],
+            True,
+            DEFAULT_SNAP_SPACING,
+        )
+        assert run.mesh is not None and run.noded is not None, run.message
+        edges, masks = _constraint_arrays(run.mesh, run.noded)
+        array.setflags(write=False)
+        view = _core.raster_view(array, x_min=X_MIN, y_max=Y_MAX, delta_x=DX, delta_y=DY)
+        return view, run.mesh, edges, masks
+
+    def test_an_off_node_ring_is_refined_and_kept_where_it_is(self, refine: Refine) -> None:
+        ring = [
+            (X_MIN + 12.3, Y_MAX - 73.3),
+            (X_MIN + 137.7, Y_MAX - 72.9),
+            (X_MIN + 136.1, Y_MAX - 6.7),
+            (X_MIN + 13.9, Y_MAX - 7.1),
+        ]
+        view, mesh, edges, masks = self.ring(rough(17, 15, 3), ring)
+        out = refine(view, mesh, edges, masks, tolerance=1.0)
+        assert out.ok(), out.message
+        assert out.inserted > 0
+        start = np.asarray(mesh.vertices)
+        assert_array_equal(np.asarray(out.vertices)[: len(start)], start)
+
+    def test_a_vertex_outside_the_grid_is_outside_grid(self, refine: Refine) -> None:
+        ring = [
+            (X_MIN - 5.0, Y_MAX - 73.3),
+            (X_MIN + 137.7, Y_MAX - 72.9),
+            (X_MIN + 136.1, Y_MAX - 6.7),
+        ]
+        view, mesh, edges, masks = self.ring(rough(17, 15, 3), ring)
+        out = refine(view, mesh, edges, masks, tolerance=1.0)
+        assert not out.ok()
+        assert out.status == _core.RefineStatus.OutsideGrid  # type: ignore[attr-defined]
+        assert out.message
+        assert not hasattr(_core.RefineStatus, "OffLattice")

@@ -14,6 +14,10 @@
 // T2 is amended: its fixed counts assumed fans. T12 is new (R10 on a cone and
 // on an island with a step coast). The outcome gains `flips` (design, Files).
 //
+// Increment 16 (docs/increments/16-domain-polygon.md) adds the off-node
+// section at the end of the file and amends T8: an off-node start vertex
+// inside the grid is accepted, and OffLattice is renamed OutsideGrid.
+//
 // Interface: include/terrain/refinement/refine.hpp.
 // A clockwise and a zero-area start triangle both give NotCounterClockwise.
 //
@@ -33,6 +37,7 @@
 #include <terrain/core/indexed_mesh.hpp>
 #include <terrain/predicates/default_kernel.hpp>
 #include <terrain/raster/raster.hpp>
+#include <terrain/raster/sample.hpp>
 #include <terrain/refinement/refine.hpp>
 
 #include "refinement_fixtures.hpp"
@@ -44,6 +49,7 @@
 #include <limits>
 #include <map>
 #include <optional>
+#include <random>
 #include <set>
 #include <thread>
 #include <utility>
@@ -452,15 +458,31 @@ TEST_CASE("T8: refusals come back as a status, not a crash", "[refinement][refin
         REQUIRE_FALSE(out.ok());
         REQUIRE_FALSE(out.message.empty());
     }
-    SECTION("an off-lattice start vertex") {
+    // Amended for increment 16 (R2): an off-node start vertex inside the node
+    // rectangle is now accepted; only one outside it is refused, as
+    // OutsideGrid (formerly OffLattice).
+    SECTION("an off-node start vertex inside the grid is accepted") {
         std::vector<Point2> xy(good.mesh.vertices().begin(), good.mesh.vertices().end());
         xy[4].x += 0.5 * dem.geometry().delta_x();  // the centre node, off by half a cell
+        StartMesh moved = good;
+        moved.mesh = IndexedMesh2{std::move(xy),
+                                  {good.mesh.triangles().begin(), good.mesh.triangles().end()},
+                                  {good.mesh.constrained_edges().begin(), good.mesh.constrained_edges().end()}};
+        const auto out = run(dem, moved, 1.0);
+        REQUIRE(out.ok());
+        REQUIRE(out.vertices[4].x == moved.mesh.vertices()[4].x);
+    }
+    SECTION("a start vertex outside the node rectangle") {
+        const double off = GENERATE(-0.5, -1e-6, std::numeric_limits<double>::quiet_NaN());
+        CAPTURE(off);
+        std::vector<Point2> xy(good.mesh.vertices().begin(), good.mesh.vertices().end());
+        xy[0].x += std::isnan(off) ? off : off * dem.geometry().delta_x();  // the top-left corner
         StartMesh bad = good;
         bad.mesh = IndexedMesh2{std::move(xy),
                                 {good.mesh.triangles().begin(), good.mesh.triangles().end()},
                                 {good.mesh.constrained_edges().begin(), good.mesh.constrained_edges().end()}};
         const auto out = run(dem, bad, 1.0);
-        REQUIRE(out.status == RefineStatus::OffLattice);
+        REQUIRE(out.status == RefineStatus::OutsideGrid);
         REQUIRE_FALSE(out.message.empty());
     }
     SECTION("a clockwise or a zero-area start triangle") {
@@ -612,4 +634,314 @@ TEST_CASE("T12: an interior constraint edge through the cone's apex stays constr
     }
     REQUIRE(covered_rows == static_cast<std::int64_t>(n - 1));
     REQUIRE(out.flips > 0);
+}
+
+// ------------------------------------------------------ increment 16 (off-node)
+//
+// docs/increments/16-domain-polygon.md, R2 and "Tests for @tester": the
+// tolerance oracle (14 T3) with off-node start rings, constrained Delaunay in
+// the frame, determinism, Z1 to Z3 and T-deg. THE TOLERANCE ORACLE HERE IS
+// INCREMENT 16's SECOND INVARIANT-CRITICAL SUITE; its mutant is an off-node
+// vertex's z taken from value_at of the rounded node instead of bilinear.
+//
+// The producer's relation, not world coordinates: an off-node vertex's
+// fractional position is (x - x_min) / dx, (y_max - y) / dy, computed from the
+// input once; membership is DefaultKernel::orient2d on (col, -row); Delaunay is
+// DefaultKernel::incircle on (col * dx, -(row * dy)) (14b's LatticeFrame). An
+// off-node vertex's z is terrain::raster::bilinear at its world point (R0),
+// and a vertex that is a node bit for bit gets value_at.
+
+
+namespace {
+
+using terrain::pred::DefaultKernel;
+using terrain::pred::Orientation;
+
+struct Frac {
+    double col;
+    double row;
+};
+
+Frac frac(const RasterGeometry& g, Point2 p) {
+    return Frac{(p.x - g.x_min()) / g.delta_x(), (g.y_max() - p.y) / g.delta_y()};
+}
+
+Point2 world(const RasterGeometry& g, double col, double row) {
+    return Point2{g.x_min() + col * g.delta_x(), g.y_max() - row * g.delta_y()};
+}
+
+bool is_node(const RasterGeometry& g, Point2 p) {
+    const Frac f = frac(g, p);
+    const double c = std::round(f.col), r = std::round(f.row);
+    if (!(c >= 0 && r >= 0 && c < static_cast<double>(g.cols()) && r < static_cast<double>(g.rows()))) return false;
+    return g.node({static_cast<std::size_t>(r), static_cast<std::size_t>(c)}) == p;
+}
+
+// A convex ring, counter-clockwise in world, fanned from vertex 0. Every ring
+// edge is a constraint with mask 1.
+struct RingStart {
+    IndexedMesh2 mesh;
+    Edges edges;
+    std::vector<std::uint32_t> masks;
+};
+
+RingStart fan(const RasterGeometry& g, const std::vector<std::array<double, 2>>& ring) {  // (col, row)
+    std::vector<Point2> xy;
+    for (const auto& [c, r] : ring) xy.push_back(world(g, c, r));
+    std::vector<TriangleIndices> tris;
+    const auto n = static_cast<std::uint32_t>(ring.size());
+    for (std::uint32_t i = 1; i + 1 < n; ++i) tris.push_back({0, i, i + 1});
+    RingStart s;
+    s.mesh = IndexedMesh2{std::move(xy), std::move(tris), std::vector<std::uint8_t>(n - 2, 0)};
+    for (std::uint32_t i = 0; i < n; ++i) {
+        s.edges.push_back({std::min(i, (i + 1) % n), std::max(i, (i + 1) % n)});
+        s.masks.push_back(1);
+    }
+    return s;
+}
+
+auto run_ring(const Raster<float>& dem, const RingStart& s, double tol, unsigned threads = 1) {
+    return refine(dem, s.mesh, std::span<const std::array<std::uint32_t, 2>>{s.edges},
+                  std::span<const std::uint32_t>{s.masks},
+                  RefineOptions{.tolerance = tol, .threads = threads});
+}
+
+// Random convex rings on a circle about a non-node centre: every vertex is
+// off-node unless the dice say otherwise, which the checks do not assume.
+std::vector<std::array<double, 2>> random_ring(std::uint32_t seed, double cc, double rc, double radius) {
+    std::mt19937 gen{seed};
+    const std::size_t k = 5 + gen() % 8u;
+    std::vector<double> theta;
+    for (std::size_t i = 0; i < k; ++i) theta.push_back(static_cast<double>(gen() % 62831u) / 10000.0);
+    std::sort(theta.begin(), theta.end());
+    theta.erase(std::unique(theta.begin(), theta.end(), [](double a, double b) { return b - a < 0.05; }),
+                theta.end());
+    std::vector<std::array<double, 2>> ring;
+    for (const double t : theta) ring.push_back({cc + radius * std::cos(t), rc - radius * std::sin(t)});
+    return ring;
+}
+
+std::optional<double> expected_z(const Raster<float>& dem, Point2 p) {
+    const RasterGeometry& g = dem.geometry();
+    if (is_node(g, p)) {
+        const Frac f = frac(g, p);
+        const terrain::raster::CellIndex c{static_cast<std::size_t>(std::round(f.row)),
+                                           static_cast<std::size_t>(std::round(f.col))};
+        if (dem.is_nodata(c)) return std::nullopt;
+        return static_cast<double>(dem.value_at(c));
+    }
+    return terrain::raster::bilinear(dem, p);
+}
+
+// Z1, Z3, R2 on inserted vertices, orientation, the tolerance oracle and R10
+// in the frame, on one outcome.
+template <typename Outcome>
+void check_offnode(const Raster<float>& dem, const IndexedMesh2& start, const Outcome& out, double tol) {
+    REQUIRE(out.ok());
+    const RasterGeometry& g = dem.geometry();
+    const std::size_t n0 = start.vertices().size();
+    REQUIRE(out.vertices.size() == n0 + out.inserted);
+    REQUIRE(out.z.size() == out.vertices.size());
+    REQUIRE(out.valid.size() == out.vertices.size());
+    std::vector<Frac> f;
+    double zmax = 0.0;
+    for (std::size_t i = 0; i < out.vertices.size(); ++i) {
+        CAPTURE(i);
+        const Point2 p = out.vertices[i];
+        if (i < n0) {
+            REQUIRE(p.x == start.vertices()[i].x);  // Z3: as given, bit for bit
+            REQUIRE(p.y == start.vertices()[i].y);
+        } else {
+            REQUIRE(is_node(g, p));  // R2: refinement inserts only nodes
+            REQUIRE(static_cast<bool>(out.valid[i]));
+        }
+        const auto z = expected_z(dem, p);  // Z1
+        REQUIRE(static_cast<bool>(out.valid[i]) == z.has_value());
+        REQUIRE(out.z[i] == z.value_or(0.0));
+        zmax = std::max(zmax, std::abs(out.z[i]));
+        f.push_back(frac(g, p));
+    }
+    auto fp = [&](std::uint32_t i) { return Point2{f[i].col, -f[i].row}; };
+    auto cross = [](Point2 a, Point2 b, Point2 c) { return (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x); };
+
+    double worst = 0.0;
+    for (const auto& tri : out.triangles) {
+        const Point2 a = fp(tri[0]), b = fp(tri[1]), c = fp(tri[2]);
+        REQUIRE(DefaultKernel::orient2d(a, b, c) == Orientation::CounterClockwise);
+        if (!(out.valid[tri[0]] && out.valid[tri[1]] && out.valid[tri[2]])) continue;
+        const double two_a = cross(a, b, c);
+        const auto lo_c = static_cast<std::int64_t>(std::ceil(std::min({a.x, b.x, c.x})));
+        const auto hi_c = static_cast<std::int64_t>(std::floor(std::max({a.x, b.x, c.x})));
+        const auto lo_r = static_cast<std::int64_t>(std::ceil(-std::max({a.y, b.y, c.y})));
+        const auto hi_r = static_cast<std::int64_t>(std::floor(-std::min({a.y, b.y, c.y})));
+        for (std::int64_t r = std::max<std::int64_t>(lo_r, 0); r <= hi_r; ++r)
+            for (std::int64_t col = std::max<std::int64_t>(lo_c, 0); col <= hi_c; ++col) {
+                const Point2 p{static_cast<double>(col), -static_cast<double>(r)};
+                if (DefaultKernel::orient2d(a, b, p) == Orientation::Clockwise
+                    || DefaultKernel::orient2d(b, c, p) == Orientation::Clockwise
+                    || DefaultKernel::orient2d(c, a, p) == Orientation::Clockwise)
+                    continue;
+                if (p == a || p == b || p == c || !valid_at(dem, {r, col})) continue;
+                const double plane = (cross(p, b, c) * out.z[tri[0]] + cross(a, p, c) * out.z[tri[1]]
+                                      + cross(a, b, p) * out.z[tri[2]]) / two_a;
+                const double err = std::abs(dem_at(dem, {r, col}) - plane);
+                worst = std::max(worst, err);
+                CAPTURE(r, col, err, tol);
+                REQUIRE(err <= tol + 1e-9 * std::max(1.0, zmax));
+            }
+    }
+    REQUIRE(out.max_error <= tol);
+    REQUIRE(std::abs(out.max_error - worst) <= 1e-9 * std::max(1.0, zmax));
+
+    // R10 in 14b's LatticeFrame on the fractional coordinates.
+    auto lf = [&](std::uint32_t i) { return Point2{f[i].col * g.delta_x(), -(f[i].row * g.delta_y())}; };
+    std::set<std::pair<std::uint32_t, std::uint32_t>> constrained;
+    for (const auto& e : out.edges) constrained.insert(std::minmax(e[0], e[1]));
+    std::map<std::pair<std::uint32_t, std::uint32_t>, std::vector<std::size_t>> sides;
+    for (std::size_t t = 0; t < out.triangles.size(); ++t)
+        for (unsigned k = 0; k < 3; ++k)
+            sides[std::minmax(out.triangles[t][k], out.triangles[t][(k + 1) % 3])].push_back(t);
+    std::size_t bad = 0;
+    for (const auto& [e, ts] : sides) {
+        REQUIRE(ts.size() <= 2);
+        if (ts.size() != 2 || constrained.count(e) != 0) continue;
+        for (unsigned s = 0; s < 2; ++s) {
+            const auto& tri = out.triangles[ts[s]];
+            std::uint32_t apex = 0;
+            for (const auto x : out.triangles[ts[1 - s]])
+                if (x != e.first && x != e.second) apex = x;
+            if (DefaultKernel::incircle(lf(tri[0]), lf(tri[1]), lf(tri[2]), lf(apex)) == terrain::pred::Incircle::Inside)
+                ++bad;
+        }
+    }
+    REQUIRE(bad == 0);
+    for (const auto m : out.masks) REQUIRE(m == 1u);  // U5: the ring's own mask, inherited by its pieces
+}
+
+}  // namespace
+
+TEST_CASE("T16: off-node rings refine to tolerance and are constrained Delaunay in the frame",
+          "[refinement][refine][offnode]") {
+    const bool rough = GENERATE(false, true);
+    const double tol = GENERATE(0.0, 0.5, 5.0);
+    const std::uint32_t seed = GENERATE(1u, 2u, 3u, 4u);
+    CAPTURE(rough, tol, seed);
+    const std::size_t n = 17;
+    const Raster<float> dem{geometry(n, n), rough ? rough_dem(n, n, seed) : smooth_dem(n, n, seed)};
+    const auto start = fan(dem.geometry(), random_ring(seed, 8.37, 8.61, 7.3));
+    const auto out = run_ring(dem, start, tol);
+    check_offnode(dem, start.mesh, out, tol);
+    if (rough && tol < 5.0) REQUIRE(out.inserted > 0);
+}
+
+TEST_CASE("T16: off-node rings are bit-identical for 1 2 7 and all threads", "[refinement][refine][offnode]") {
+    const std::size_t n = 33;
+    const Raster<float> dem{geometry(n, n), rough_dem(n, n, 11)};
+    const auto start = fan(dem.geometry(), random_ring(5, 16.21, 15.87, 15.1));
+    const auto ref = run_ring(dem, start, 3.0, 1);
+    REQUIRE(ref.ok());
+    REQUIRE(ref.inserted > 0);
+    const unsigned threads = GENERATE(2u, 7u, 0u);
+    CAPTURE(threads);
+    const auto out = run_ring(dem, start, 3.0, threads);
+    REQUIRE(out.ok());
+    REQUIRE(out.vertices == ref.vertices);
+    REQUIRE(out.z == ref.z);
+    REQUIRE(out.valid == ref.valid);
+    REQUIRE(out.triangles == ref.triangles);
+    REQUIRE(out.edges == ref.edges);
+    REQUIRE(out.masks == ref.masks);
+    REQUIRE(out.rounds == ref.rounds);
+    REQUIRE(out.flips == ref.flips);
+    REQUIRE(out.max_error == ref.max_error);
+}
+
+TEST_CASE("T16 Z1: a ring vertex exactly on a node gets value_at even next to a NoData node",
+          "[refinement][refine][offnode]") {
+    // (row 4, col 4) is a ring vertex; (4, 5) is NaN, so bilinear at (4, 4)
+    // refuses (its cell has that corner) while value_at does not.
+    const std::size_t n = 17;
+    auto z = smooth_dem(n, n, 2);
+    z[4 * n + 5] = kNaN;
+    const Raster<float> dem{geometry(n, n), std::move(z)};
+    const auto start = fan(dem.geometry(), {{4.0, 4.0}, {1.3, 14.7}, {14.7, 14.7}, {14.7, 1.3}});
+    REQUIRE(start.mesh.vertices()[0] == dem.geometry().node({4, 4}));
+    const auto out = run_ring(dem, start, 1.0);
+    check_offnode(dem, start.mesh, out, 1.0);
+    REQUIRE(static_cast<bool>(out.valid[0]));
+    REQUIRE(out.z[0] == static_cast<double>(dem.value_at({4, 4})));
+}
+
+TEST_CASE("T16 Z1: an off-node vertex's z is bilinear not the rounded node's value", "[refinement][refine][offnode]") {
+    // The node (1,1) under vertex 0 is lifted 40 m; vertex 0 rounds to it.
+    const std::size_t n = 17;
+    auto z = smooth_dem(n, n, 3);
+    z[1 * n + 1] += 40.0f;
+    const Raster<float> dem{geometry(n, n), std::move(z)};
+    const auto start = fan(dem.geometry(), {{1.3, 1.3}, {1.3, 14.7}, {14.7, 14.7}, {14.7, 1.3}});
+    const auto out = run_ring(dem, start, 0.5);
+    check_offnode(dem, start.mesh, out, 0.5);
+    REQUIRE(out.z[0] != static_cast<double>(dem.value_at({1, 1})));
+}
+
+TEST_CASE("T16 Z2: an off-node vertex in a cell with a NoData corner is invalid and its triangles are carved",
+          "[refinement][refine][offnode][nodata]") {
+    const std::size_t n = 17;
+    const bool sentinel = GENERATE(false, true);
+    CAPTURE(sentinel);
+    auto z = rough_dem(n, n, 9);
+    z[1 * n + 1] = sentinel ? -32767.0f : kNaN;  // a corner of vertex 0's cell
+    const Raster<float> dem{geometry(n, n), std::move(z),
+                            sentinel ? std::optional<float>{-32767.0f} : std::nullopt};
+    const auto start = fan(dem.geometry(), {{1.3, 1.3}, {1.3, 14.7}, {14.7, 14.7}, {14.7, 1.3}});
+    const auto out = run_ring(dem, start, 2.0);
+    check_offnode(dem, start.mesh, out, 2.0);
+    REQUIRE_FALSE(static_cast<bool>(out.valid[0]));
+    REQUIRE(out.z[0] == 0.0);
+    // Carved as far as 14 R6 says: no triangle with an invalid vertex holds a
+    // valid node strictly inside it, in the fractional frame.
+    const RasterGeometry& g = dem.geometry();
+    auto fp = [&](std::uint32_t i) { const Frac f = frac(g, out.vertices[i]); return Point2{f.col, -f.row}; };
+    for (const auto& tri : out.triangles) {
+        if (out.valid[tri[0]] && out.valid[tri[1]] && out.valid[tri[2]]) continue;
+        for (std::int64_t r = 0; r < static_cast<std::int64_t>(n); ++r)
+            for (std::int64_t col = 0; col < static_cast<std::int64_t>(n); ++col) {
+                const Point2 p{static_cast<double>(col), -static_cast<double>(r)};
+                const bool strictly = DefaultKernel::orient2d(fp(tri[0]), fp(tri[1]), p) == Orientation::CounterClockwise
+                                   && DefaultKernel::orient2d(fp(tri[1]), fp(tri[2]), p) == Orientation::CounterClockwise
+                                   && DefaultKernel::orient2d(fp(tri[2]), fp(tri[0]), p) == Orientation::CounterClockwise;
+                if (strictly) REQUIRE_FALSE(valid_at(dem, {r, col}));
+            }
+    }
+}
+
+TEST_CASE("T16 T-deg: a vertex a nanometre-cell from a node and two vertices 1e-9 apart",
+          "[refinement][refine][offnode][degenerate]") {
+    const std::size_t n = 17;
+    const Raster<float> dem{geometry(n, n), rough_dem(n, n, 4)};
+    const double eps = 1e-9;
+    SECTION("1e-9 cell from the node (15, 8)") {
+        const auto start = fan(dem.geometry(),
+                               {{1.3, 1.3}, {1.3, 14.7}, {8.0 + eps, 15.0}, {14.7, 14.7}, {14.7, 1.3}});
+        REQUIRE_FALSE(is_node(dem.geometry(), start.mesh.vertices()[2]));
+        const double tol = GENERATE(0.0, 1.0);
+        const auto out = run_ring(dem, start, tol);
+        check_offnode(dem, start.mesh, out, tol);
+    }
+    SECTION("two ring vertices 1e-9 cell apart") {
+        const auto start = fan(dem.geometry(),
+                               {{1.3, 14.7}, {14.7, 14.7}, {14.7, 1.3}, {1.3 + eps, 1.3 - eps}, {1.3, 1.3}});
+        const double tol = GENERATE(0.0, 1.0);
+        const auto out = run_ring(dem, start, tol);
+        check_offnode(dem, start.mesh, out, tol);
+    }
+}
+
+TEST_CASE("T16: a vertex on the grid border is inside the node rectangle", "[refinement][refine][offnode]") {
+    // U4 (a) refuses only outside; the border row and column are in.
+    const std::size_t n = 17;
+    const Raster<float> dem{geometry(n, n), smooth_dem(n, n, 6)};
+    const auto start = fan(dem.geometry(), {{0.0, 3.7}, {5.3, 16.0}, {16.0, 11.1}, {9.9, 0.0}});
+    const auto out = run_ring(dem, start, 1.0);
+    check_offnode(dem, start.mesh, out, 1.0);
 }
