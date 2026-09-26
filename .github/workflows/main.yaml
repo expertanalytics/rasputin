@@ -101,6 +101,7 @@ jobs:
           test_refinement_scan_offnode test_refinement_refine
           test_mesh_row_spans prop_refinement_scan_equivalence
           test_mesh_quality prop_refinement_quality
+          test_refinement_constraint_feet
 
       - name: Test
         env:
@@ -110,7 +111,8 @@ jobs:
                        test_refinement_scan prop_refinement_refine test_mesh_lawson \
                        test_refinement_scan_offnode test_refinement_refine \
                        test_mesh_row_spans prop_refinement_scan_equivalence \
-                       test_mesh_quality prop_refinement_quality; do
+                       test_mesh_quality prop_refinement_quality \
+                       test_refinement_constraint_feet; do
             build-tsan/tests/cpp/$suite
           done
 

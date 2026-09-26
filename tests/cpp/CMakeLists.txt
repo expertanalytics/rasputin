@@ -269,3 +269,19 @@ add_terrain_backend_test(test_mesh_quality unit/test_mesh_quality.cpp)
 add_terrain_backend_test(prop_refinement_quality property/prop_refinement_quality.cpp)
 target_link_libraries(test_mesh_quality PRIVATE Threads::Threads)
 target_link_libraries(prop_refinement_quality PRIVATE Threads::Threads)
+
+# Constraint feet, increment 20b (docs/increments/20b-min-insertion-distance.md,
+# "Tests for @tester"). test_refinement_constraint_feet (F1 to F5, plus 14b's
+# T6 with the rule on) is the invariant-critical suite; it runs in the TSan job.
+#
+# RED UNTIL refine.hpp NAMES THE OPTION, keyed on the text `constraint_feet` in
+# it because 20b adds no header: the suite sets RefineOptions::constraint_feet
+# and reads RefineOutcome::feet, so it is registered only once the option is
+# there. The green commit makes it build; the review drops this guard.
+file(READ "${PROJECT_SOURCE_DIR}/include/terrain/refinement/refine.hpp" _refine_hpp)
+string(FIND "${_refine_hpp}" "constraint_feet" _feet_at)
+if(NOT _feet_at EQUAL -1)
+    add_terrain_backend_test(test_refinement_constraint_feet
+                             property/prop_refinement_constraint_feet.cpp)
+    target_link_libraries(test_refinement_constraint_feet PRIVATE Threads::Threads)
+endif()
