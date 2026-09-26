@@ -297,7 +297,9 @@ combination terminates and trims.
   C++ tests keep 18's behaviour unless they ask). The CLI passes 25.
 - **`RefineOutcome`** gains `quality_inserted`, `quality_skipped` (a total;
   per-reason counts are the C++ test surface only) and `quality_seconds`.
-- **`elevation_source`** gains `start min angle 25°` (or `start quality off`).
+- **`elevation_source`** gains `start min angle 25 deg` (or `start quality off`).
+  ASCII, not `°`: increment 13's guarantee 7 keeps every file string ASCII,
+  found by `@developer` at green.
   The stderr report and `--stats`' refinement table gain the two counts, and
   the timings table a row `refine: start quality`.
 

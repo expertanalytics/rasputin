@@ -9,7 +9,8 @@ Wording the design leaves open, pinned here:
   on every refined run (``0`` and ``0`` with the pass off);
 - the ``--stats`` Refinement table gains the columns ``quality inserted`` and
   ``quality skipped``, with the same numbers as stderr;
-- the design's own: ``start min angle 25°`` or ``start quality off`` in
+- the design's own, in ASCII per increment 13 guarantee 7: ``start min angle 25 deg``
+  or ``start quality off`` in
   ``elevation_source``, and the timing row ``refine: start quality``.
 
 The binding keyword is the design's ``min_angle_deg``; the CLI passes it on
@@ -85,7 +86,7 @@ class TestTheFlag:
         vtk, _ = run(tmp_path, "--dem", str(bumpy), "--domain", str(box), "--tolerance", "1")
         assert [c["min_angle_deg"] for c in calls] == [25.0]
         text = sentence(vtk)
-        assert "start min angle 25°" in text
+        assert "start min angle 25 deg" in text
         assert "start quality off" not in text
 
     def test_the_default_is_25_on_a_stride_start(
@@ -93,7 +94,7 @@ class TestTheFlag:
     ) -> None:
         vtk, _ = run(tmp_path, "--dem", str(bumpy), "--tolerance", "1")
         assert [c["min_angle_deg"] for c in calls] == [25.0]
-        assert "start min angle 25°" in sentence(vtk)
+        assert "start min angle 25 deg" in sentence(vtk)
 
     def test_zero_is_off(
         self, tmp_path: Path, bumpy: Path, box: Path, calls: list[dict[str, Any]]
@@ -119,7 +120,7 @@ class TestTheFlag:
             "--start-min-angle", value,
         )
         assert [c["min_angle_deg"] for c in calls] == [float(value)]
-        assert f"start min angle {value}°" in sentence(vtk)
+        assert f"start min angle {value} deg" in sentence(vtk)
 
 
 class TestRefusals:
