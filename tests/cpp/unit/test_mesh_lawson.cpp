@@ -89,7 +89,7 @@ void check_topology(const LatticeMesh& m) {
     for (std::uint32_t t = 0; t < m.triangle_count(); ++t) {
         const auto& tri = m.triangles()[t];
         CAPTURE(t);
-        REQUIRE(orient(rc(v[tri[0]]), rc(v[tri[1]]), rc(v[tri[2]])) > 0);
+        REQUIRE(orient(rc(v[tri[0]].as_node().value()), rc(v[tri[1]].as_node().value()), rc(v[tri[2]].as_node().value())) > 0);
         for (unsigned k = 0; k < 3; ++k) {
             const bool fresh = directed.emplace(std::pair{tri[k], tri[(k + 1) % 3]}, t).second;
             REQUIRE(fresh);
@@ -113,7 +113,7 @@ void check_topology(const LatticeMesh& m) {
     }
     for (const auto& [edge, t] : directed)
         for (std::size_t i = 0; i < v.size(); ++i)
-            REQUIRE_FALSE(on_open_segment(rc(v[edge.first]), rc(v[edge.second]), rc(v[i])));
+            REQUIRE_FALSE(on_open_segment(rc(v[edge.first].as_node().value()), rc(v[edge.second].as_node().value()), rc(v[i].as_node().value())));
 }
 
 // Every unconstrained interior edge: the neighbour's apex is not strictly
@@ -130,8 +130,8 @@ std::size_t delaunay_violations(const LatticeMesh& m, const LatticeFrame& f) {
             for (const auto x : tu)
                 if (x != tt[k] && x != tt[(k + 1) % 3]) apex = x;
             const auto v = m.vertices();
-            if (DefaultKernel::incircle(at(f, v[tt[0]]), at(f, v[tt[1]]), at(f, v[tt[2]]),
-                                        at(f, v[apex]))
+            if (DefaultKernel::incircle(at(f, v[tt[0]].as_node().value()), at(f, v[tt[1]].as_node().value()), at(f, v[tt[2]].as_node().value()),
+                                        at(f, v[apex].as_node().value()))
                 == Incircle::Inside)
                 ++bad;
         }

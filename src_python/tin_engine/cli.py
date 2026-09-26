@@ -59,11 +59,12 @@ from tin_engine._core import (
     sample,
     triangulate,
 )
+from tin_engine.domain import DomainError, DomainPolygon, read_domain
 from tin_engine.elevation import Trimmed, trim
 from tin_engine.features import DEFAULT_VOCABULARY
 from tin_engine.grid_domain import default_stride, refine_start_stride, subsample
 from tin_engine.io.geotiff import decode_dem
-from tin_engine.io.models import GeoTiffError
+from tin_engine.io.models import GeoTiffError, RasterMeta
 from tin_engine.io.ply import write_ply
 from tin_engine.io.vtk_legacy import write_vtk
 from tin_engine.raster import to_core
@@ -549,6 +550,18 @@ def mesh(
             "of the DEM; --stride then sets the start grid. Default: no refinement.",
         ),
     ] = None,
+    domain: Annotated[
+        Path | None,
+        typer.Option(
+            "--domain",
+            help="With --dem and --tolerance, mesh only this polygon (.geojson, .json or "
+            ".wkt), starting from its boundary alone.",
+        ),
+    ] = None,
+    domain_crs: Annotated[
+        str | None,
+        typer.Option("--domain-crs", help="The --domain file's CRS, EPSG:n; required for .wkt."),
+    ] = None,
 ) -> None:
     """Write a mesh as legacy VTK or as PLY, by the suffix of ``--out``.
 
@@ -557,8 +570,10 @@ def mesh(
     triangulated, with z sampled bilinearly from the DEM. With ``--tolerance``
     (increment 14) that grid is only the start: it is refined at DEM nodes until
     every triangle's max error is within the tolerance, and z is read at the
-    nodes. Vertices where the DEM has no data are dropped with their triangles,
-    and the count is reported.
+    nodes. With ``--domain`` (increment 16) the start is the polygon's rings
+    alone, their vertices where the file puts them with bilinear z, and only
+    the inside is meshed. Vertices where the DEM has no data are dropped with
+    their triangles, and the count is reported.
     The file records the DEM's CRS, so ``--crs`` and ``--flat`` are refused.
 
     ``.vtk`` is one file for ParaView: triangles, constraint lines, their
@@ -584,6 +599,10 @@ def mesh(
             "give a gallery fixture name or --dem PATH, exactly one of the two",
             param_hint="--dem",
         )
+    if dem is None and (domain is not None or domain_crs is not None):
+        raise typer.BadParameter("applies only with --dem", param_hint="--domain")
+    if domain is None and domain_crs is not None:
+        raise typer.BadParameter("applies only with --domain", param_hint="--domain-crs")
     if name is not None and name not in GALLERY:
         raise typer.BadParameter(f"unknown fixture {name}; the gallery is: {', '.join(GALLERY)}")
     if out.suffix not in MESH_SUFFIXES:
@@ -608,10 +627,22 @@ def mesh(
             raise typer.BadParameter(
                 f"must be finite and >= 0, got {tolerance}", param_hint="--tolerance"
             )
+        if domain is not None and stride is not None:
+            raise typer.BadParameter(
+                "a domain is meshed from its boundary alone, not a stride grid",
+                param_hint="--stride",
+            )
+        if domain is not None and tolerance is None:
+            raise typer.BadParameter("--domain needs --tolerance", param_hint="--tolerance")
         label = dem.stem
-        surface_mesh, sentence, epsg = _dem_mesh(dem, stride, delaunay, snap_spacing, tolerance)
+        surface_mesh, sentence, epsg, described = _dem_mesh(
+            dem, stride, delaunay, snap_spacing, tolerance, domain, domain_crs
+        )
         fields = [("crs", f"EPSG:{epsg}"), ("elevation_source", sentence)]
         comments = [f"crs EPSG:{epsg}", f"elevation {sentence}"]
+        if described:
+            fields.append(("domain", described))
+            comments.append(f"domain {described}")
     else:
         assert name is not None
         if stride is not None:
@@ -710,15 +741,23 @@ def _fixture_mesh(name: str, delaunay: bool, spacing: float) -> Trimmed:
 
 
 def _dem_mesh(
-    dem: Path, stride: int | None, delaunay: bool, spacing: float, tolerance: float | None
-) -> tuple[Trimmed, str, int]:
+    dem: Path,
+    stride: int | None,
+    delaunay: bool,
+    spacing: float,
+    tolerance: float | None,
+    domain: Path | None = None,
+    domain_crs: str | None = None,
+) -> tuple[Trimmed, str, int, str]:
     """Decode, subsample, triangulate, sample or refine, and trim.
 
     Without ``tolerance`` this is increment 12's R6: z sampled bilinearly at
     the stride grid. With it, increment 14's R9: the stride grid is the start
-    mesh, refined against the DEM's nodes. Returns the mesh, the ``elevation``
-    sentence for the file, and the EPSG code. Every refusal is a usage error in
-    the reader's or the engine's own words, and no file is written.
+    mesh, refined against the DEM's nodes; with ``domain``, increment 16's R3,
+    the polygon's rings are. Returns the mesh, the ``elevation`` sentence for
+    the file, the EPSG code, and the ``domain`` field (empty without one).
+    Every refusal is a usage error in the reader's or the engine's own words,
+    and no file is written.
     """
     try:
         with dem.open("rb") as stream:
@@ -731,12 +770,23 @@ def _dem_mesh(
         raise typer.BadParameter(str(exc), param_hint="--dem") from exc
 
     meta = tile.meta
-    if stride is not None:
-        step = stride
+    described = ""
+    if domain is not None:
+        try:
+            polygon = read_domain(domain, meta, domain_crs)
+        except DomainError as exc:
+            raise typer.BadParameter(str(exc), param_hint="--domain") from exc
+        xy, chains, described = _domain_chains(polygon, domain.name)
+        start = "start domain boundary, boundary z bilinear"
+        run = _engine(xy, chains, delaunay, spacing)
     else:
-        step = default_stride(meta) if tolerance is None else refine_start_stride(meta)
-    xy, ring = subsample(meta, step)
-    run = _engine(xy, [(ring, ChainRole.Outer, 0)], delaunay, spacing)
+        if stride is not None:
+            step = stride
+        else:
+            step = default_stride(meta) if tolerance is None else refine_start_stride(meta)
+        xy, ring = subsample(meta, step)
+        start = f"start stride {step}"
+        run = _engine(xy, [(ring, ChainRole.Outer, 0)], delaunay, spacing)
     if run.mesh is None or run.noded is None:
         raise typer.BadParameter(f"{dem} has no mesh to write: {run.status}. {run.message}")
 
@@ -752,7 +802,7 @@ def _dem_mesh(
             z=z,
             valid=valid,
         )
-        sentence = f"bilinear from DEM, stride {step}"
+        sentence = f"bilinear from DEM, stride {step}"  # no domain without tolerance
         report = ""
     else:
         out = refine(to_core(tile), run.mesh, edges, masks, tolerance=tolerance)
@@ -768,13 +818,15 @@ def _dem_mesh(
         )
         sentence = (
             f"refined from DEM nodes, constrained Delaunay, tolerance {_exact(tolerance)} m, "
-            f"achieved max error {_exact(out.max_error)} m, start stride {step}, "
+            f"achieved max error {_exact(out.max_error)} m, {start}, "
             f"{out.uncovered} valid DEM nodes not covered"
         )
         report = (
             f"{out.rounds} rounds, {out.inserted} points inserted, {out.flips} flips, "
             f"{len(trimmed.triangles)} triangles, achieved max error "
             f"{_exact(out.max_error)} m, {out.uncovered} valid DEM nodes not covered, "
+            f"{len(run.mesh.triangles)} start triangles, "
+            f"{_off_node(np.asarray(run.mesh.vertices), meta)} start vertices off-node, "
         )
     if len(trimmed.triangles) == 0:
         raise typer.BadParameter(
@@ -784,7 +836,40 @@ def _dem_mesh(
     if meta.vertical_unit_assumed:
         sentence += ", vertical unit assumed metres"
     typer.echo(f"{report}{trimmed.dropped} vertices without data dropped", err=True)
-    return trimmed, sentence, meta.epsg
+    return trimmed, sentence, meta.epsg, described
+
+
+def _domain_chains(
+    domain: DomainPolygon, name: str
+) -> tuple[npt.NDArray[np.float64], list[tuple[list[int], ChainRole, int]], str]:
+    """R3: the outer ring as ``Outer`` and each hole as ``Hole``, mask 0 (U5),
+    and the ``domain`` field."""
+    rings = [domain.polygon.exterior, *domain.polygon.interiors]
+    points: list[tuple[float, float]] = []
+    chains: list[tuple[list[int], ChainRole, int]] = []
+    for k, ring in enumerate(rings):
+        coords = list(ring.coords)[:-1]
+        chains.append(
+            (
+                list(range(len(points), len(points) + len(coords))),
+                ChainRole.Outer if k == 0 else ChainRole.Hole,
+                0,
+            )
+        )
+        points += coords
+    holes = len(rings) - 1
+    described = f"{name}, 1 ring {holes} hole{'' if holes == 1 else 's'}, {len(points)} vertices"
+    return np.array(points, dtype=np.float64), chains, described
+
+
+def _off_node(xy: npt.NDArray[np.float64], meta: RasterMeta) -> int:
+    """How many of ``xy`` are not a DEM node bit for bit, as ``refine`` classifies."""
+    col = np.round((xy[:, 0] - meta.x_min) / meta.delta_x)
+    row = np.round((meta.y_max - xy[:, 1]) / meta.delta_y)
+    node = (meta.x_min + col * meta.delta_x == xy[:, 0]) & (
+        meta.y_max - row * meta.delta_y == xy[:, 1]
+    )
+    return int(np.count_nonzero(~node))
 
 
 def _exact(value: float) -> str:

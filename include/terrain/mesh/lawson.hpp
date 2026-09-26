@@ -9,7 +9,8 @@
 // the lifted triangulation, so the loops end; that needs the sign to be exact
 // for fixed points, which `FilteredKernel<DetriaExact>` gives.
 //
-// The circle test runs in a LatticeFrame, (col * dx, -(row * dy)): world
+// The circle test runs in a LatticeFrame, (col * dx, -(row * dy)) on the
+// fractional coordinates (docs/increments/16-domain-polygon.md, R2): world
 // coordinates without the translation, so the Delaunay property holds in the
 // world when dx != dy and the coordinates stay small for the filter.
 //
@@ -35,8 +36,8 @@ struct LatticeFrame {
     double dx = 1.0;
     double dy = 1.0;
 
-    [[nodiscard]] Point2 at(LatticeVertex v) const noexcept {
-        return Point2{static_cast<double>(v.col) * dx, -(static_cast<double>(v.row) * dy)};
+    [[nodiscard]] Point2 at(MeshVertex v) const noexcept {
+        return Point2{v.col * dx, -(v.row * dy)};
     }
 };
 

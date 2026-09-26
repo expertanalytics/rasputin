@@ -20,6 +20,12 @@
 // or a flip writes is `touched` and rescanned next round; an unwritten slot
 // still holds the triangle its last scan measured, so its result stays exact.
 // The output is constrained Delaunay in the frame (col * dx, -(row * dy)).
+//
+// Off-node start vertices (docs/increments/16-domain-polygon.md, R2). A start
+// vertex may lie anywhere in the node rectangle; one that is a node bit for
+// bit is a node, as before, and any other gets fractional (col, row), computed
+// once here. It keeps its world point as given for the output, and its z is
+// bilinear there (R0), or it is invalid where bilinear refuses.
 
 #include <terrain/core/indexed_mesh.hpp>
 #include <terrain/core/point.hpp>
@@ -28,6 +34,7 @@
 #include <terrain/parallel_util/chunks.hpp>
 #include <terrain/predicates/default_kernel.hpp>
 #include <terrain/raster/raster.hpp>
+#include <terrain/raster/sample.hpp>
 #include <terrain/refinement/scan.hpp>
 
 #include <algorithm>
@@ -36,6 +43,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <map>
+#include <optional>
 #include <span>
 #include <string>
 #include <tuple>
@@ -45,7 +53,7 @@
 
 namespace terrain::refinement {
 
-enum class RefineStatus : std::uint8_t { Ok, OffLattice, NotCounterClockwise, InvalidTolerance };
+enum class RefineStatus : std::uint8_t { Ok, OutsideGrid, NotCounterClockwise, InvalidTolerance };
 
 struct RefineOptions {
     double tolerance = 0.0;  // metres, finite and >= 0
@@ -56,8 +64,8 @@ struct RefineOutcome {
     RefineStatus status = RefineStatus::Ok;
     std::string message;  // empty on Ok
 
-    std::vector<Point2> vertices;  // world, via RasterGeometry::node
-    std::vector<double> z;         // the node's value; 0.0 where it is NoData
+    std::vector<Point2> vertices;  // world: a start vertex as given, else RasterGeometry::node
+    std::vector<double> z;         // value_at for a node, else bilinear; 0.0 where there is none
     std::vector<std::uint8_t> valid;
     std::vector<TriangleIndices> triangles;
     std::vector<std::array<std::uint32_t, 2>> edges;  // constraint edges, each once
@@ -81,26 +89,28 @@ namespace detail {
     return out;
 }
 
-// The lattice mesh for `start`, or the refusal. A vertex is on the lattice iff
-// RasterGeometry::node of its rounded (row, col) gives it back bit for bit.
+// The lattice mesh for `start`, or the refusal. A vertex is a node iff
+// RasterGeometry::node of its rounded (row, col) gives it back bit for bit;
+// otherwise it is off-node, and refused only outside the node rectangle.
 [[nodiscard]] inline std::variant<mesh::LatticeMesh, RefineOutcome> to_lattice(
     const raster::RasterGeometry& g, const IndexedMesh2& start,
     std::span<const std::array<std::uint32_t, 2>> edges, std::span<const std::uint32_t> masks) {
-    std::vector<mesh::LatticeVertex> lattice;
+    std::vector<mesh::MeshVertex> lattice;
     lattice.reserve(start.vertices().size());
     for (std::size_t i = 0; i < start.vertices().size(); ++i) {
         const Point2 p = start.vertices()[i];
-        const double col = std::round((p.x - g.x_min()) / g.delta_x());
-        const double row = std::round((g.y_max() - p.y) / g.delta_y());
-        const bool in_grid = col >= 0.0 && row >= 0.0 && col < static_cast<double>(g.cols())
-                          && row < static_cast<double>(g.rows());
-        const mesh::LatticeVertex v{in_grid ? static_cast<std::uint32_t>(row) : 0u,
-                                    in_grid ? static_cast<std::uint32_t>(col) : 0u};
-        const Point2 back = g.node({v.row, v.col});
-        if (!in_grid || back.x != p.x || back.y != p.y)
-            return refusal(RefineStatus::OffLattice,
-                           "refine: start vertex " + std::to_string(i) + " is not a DEM node");
-        lattice.push_back(v);
+        if (!g.cell_of(p))
+            return refusal(RefineStatus::OutsideGrid, "refine: start vertex " + std::to_string(i)
+                                                          + " is outside the DEM's node rectangle");
+        const double col = std::clamp((p.x - g.x_min()) / g.delta_x(), 0.0,
+                                      static_cast<double>(g.cols() - 1));
+        const double row = std::clamp((g.y_max() - p.y) / g.delta_y(), 0.0,
+                                      static_cast<double>(g.rows() - 1));
+        const raster::CellIndex node{static_cast<std::size_t>(std::round(row)),
+                                     static_cast<std::size_t>(std::round(col))};
+        lattice.push_back(g.node(node) == p ? mesh::MeshVertex{static_cast<double>(node.col),
+                                                               static_cast<double>(node.row)}
+                                            : mesh::MeshVertex{col, row});
     }
 
     std::map<std::pair<std::uint32_t, std::uint32_t>, std::uint32_t> constraint;
@@ -224,12 +234,17 @@ template <raster::RasterSource R>
         else
             out.max_error = std::max(out.max_error, r.max_error);
     }
-    for (const mesh::LatticeVertex v : m.vertices()) {
-        const raster::CellIndex c{v.row, v.col};
-        const bool valid = !dem.is_nodata(c);
-        out.vertices.push_back(g.node(c));
-        out.z.push_back(valid ? static_cast<double>(dem.value_at(c)) : 0.0);
-        out.valid.push_back(valid ? 1 : 0);
+    for (std::size_t i = 0; i < m.vertices().size(); ++i) {
+        const mesh::MeshVertex v = m.vertices()[i];
+        const bool node = v.is_node();
+        const raster::CellIndex c{node ? static_cast<std::size_t>(v.row) : 0,
+                                  node ? static_cast<std::size_t>(v.col) : 0};
+        const Point2 p = i < start.vertices().size() ? start.vertices()[i] : g.node(c);
+        const std::optional<double> z =
+            node && g.node(c) == p ? vertex_z(dem, v) : raster::bilinear(dem, p);
+        out.vertices.push_back(p);
+        out.z.push_back(z.value_or(0.0));
+        out.valid.push_back(z ? 1 : 0);
     }
     out.triangles.assign(m.triangles().begin(), m.triangles().end());
     std::tie(out.edges, out.masks) = m.constraint_edges();

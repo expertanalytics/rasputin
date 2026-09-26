@@ -810,11 +810,11 @@ four surrounding nodes is NoData or NaN. z is 0.0 there, never NaN.
 
     py::enum_<RefineStatus>(m, "RefineStatus", R"doc(
 Why refine produced a mesh or did not. Everything but Ok is a refusal of the
-input: a start vertex that is not a DEM node, a start triangle that is not
+input: a start vertex outside the DEM's node rectangle, a start triangle that is not
 counter-clockwise, or a tolerance that is negative or not finite.
 )doc")
         .value("Ok", RefineStatus::Ok)
-        .value("OffLattice", RefineStatus::OffLattice)
+        .value("OutsideGrid", RefineStatus::OutsideGrid)
         .value("NotCounterClockwise", RefineStatus::NotCounterClockwise)
         .value("InvalidTolerance", RefineStatus::InvalidTolerance);
 
@@ -913,7 +913,8 @@ unless ok().
         py::arg("tolerance"), py::arg("threads") = 0, R"doc(
 Refine a start mesh against the DEM until every triangle is within tolerance.
 
-mesh's vertices must all be DEM nodes and its triangles counter-clockwise;
+mesh's vertices must lie in the DEM's node rectangle and its triangles be
+counter-clockwise; an off-node vertex keeps its position and gets bilinear z;
 edges (E, 2) and masks (E,) are its constraint edges as the CLI builds them.
 tolerance is in the DEM's vertical unit. threads only sets how the scan is
 split; the output is identical for every value, and 0 means all cores.

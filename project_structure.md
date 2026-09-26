@@ -80,6 +80,8 @@ src_python/tin_engine/     # public Python API (distribution name: rasputin)
   raster.py                # the ONLY adapter from decoded data into _core
   grid_domain.py           # DEM extent -> stride-subsampled nodes + outer ring;
                            #   pure numpy, never imports _core
+  domain.py                # --domain: reads one polygon (GeoJSON or WKT), checks
+                           #   CRS and extent; shapely + pyproj, never imports _core
   elevation.py             # drops mesh vertices the DEM has no data for;
                            #   pure numpy, never imports _core
   features.py              # EdgeVocabulary: which bit means which feature.

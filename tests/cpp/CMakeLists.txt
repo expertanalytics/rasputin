@@ -223,19 +223,27 @@ add_terrain_test(test_raster_view unit/test_raster_view.cpp)
 
 # Adaptive refinement, increment 14 (docs/increments/14-adaptive-refinement.md,
 # "Tests for @tester"). test_mesh_lattice_split and test_refinement_scan are the
-# invariant-critical pair. All four link Threads: the loop and chunk suites
-# start threads through for_each_chunk.
+# invariant-critical pair. All three link Threads: the loop and chunk suites
+# start threads through for_each_chunk. The pair are backend tests because
+# lattice_mesh.hpp includes default_kernel.hpp (increment 16's orient_sign),
+# which needs terrain_predicates.
 add_terrain_test(test_refinement_chunks unit/test_refinement_chunks.cpp)
-add_terrain_test(test_mesh_lattice_split unit/test_mesh_lattice_split.cpp)
-add_terrain_test(test_refinement_scan unit/test_refinement_scan.cpp)
+add_terrain_backend_test(test_mesh_lattice_split unit/test_mesh_lattice_split.cpp)
+add_terrain_backend_test(test_refinement_scan unit/test_refinement_scan.cpp)
 target_link_libraries(test_refinement_chunks PRIVATE Threads::Threads)
-target_link_libraries(test_mesh_lattice_split PRIVATE Threads::Threads)
 target_link_libraries(test_refinement_scan PRIVATE Threads::Threads)
+target_link_libraries(test_mesh_lattice_split PRIVATE Threads::Threads)
 
 # Delaunay insertion, increment 14b (docs/increments/14b-delaunay-insertion.md,
 # "Tests for @tester"). test_mesh_lawson and prop_refinement_refine's T3 oracle
 # are the invariant-critical pair; both need terrain_predicates (DefaultKernel).
 add_terrain_backend_test(test_mesh_lawson unit/test_mesh_lawson.cpp)
 target_link_libraries(test_mesh_lawson PRIVATE Threads::Threads)
+
+# Off-node start vertices, increment 16 (docs/increments/16-domain-polygon.md,
+# "Tests for @tester"). test_refinement_scan_offnode and prop_refinement_refine
+# are the invariant-critical pair.
+add_terrain_backend_test(test_refinement_scan_offnode unit/test_refinement_scan_offnode.cpp)
+target_link_libraries(test_refinement_scan_offnode PRIVATE Threads::Threads)
 add_terrain_backend_test(prop_refinement_refine property/prop_refinement_refine.cpp)
 target_link_libraries(prop_refinement_refine PRIVATE Threads::Threads)
