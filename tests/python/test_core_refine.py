@@ -15,6 +15,7 @@ tests and leaves the rest of the session collecting.
 from __future__ import annotations
 
 import math
+import time
 from collections.abc import Callable
 from typing import Any
 
@@ -183,3 +184,45 @@ class TestOffNodeStart:
         assert out.status == _core.RefineStatus.OutsideGrid  # type: ignore[attr-defined]
         assert out.message
         assert not hasattr(_core.RefineStatus, "OffLattice")
+
+
+class TestStatsFields:
+    """Increment 17 (``17-mesh-stats.md`` R6, and C2 as Ola chose it, (a)):
+    three read-only seconds fields and ``carved`` on the result. Timings are
+    checked as non-negative and bounded by the call's wall time, never against
+    each other or across thread counts."""
+
+    @staticmethod
+    def timed(refine: Refine, array: np.ndarray, stride: int) -> tuple[Any, float]:
+        view, mesh, edges, masks = start(array, stride)
+        t0 = time.perf_counter()
+        out = refine(view, mesh, edges, masks, tolerance=2.0)
+        return out, time.perf_counter() - t0
+
+    def test_the_seconds_are_non_negative_and_within_the_call(self, refine: Refine) -> None:
+        out, wall = self.timed(refine, rough(33, 33, 7), 16)
+        assert out.ok(), out.message
+        parts = (out.legalise_seconds, out.scan_seconds, out.split_seconds)
+        assert all(isinstance(p, float) and p >= 0.0 for p in parts), parts
+        assert sum(parts) <= wall
+
+    def test_the_fields_are_read_only(self, refine: Refine) -> None:
+        out, _ = self.timed(refine, rough(9, 9, 1), 8)
+        for name in ("legalise_seconds", "scan_seconds", "split_seconds", "carved"):
+            getattr(out, name)  # present, so the AttributeError below is the setter's
+            with pytest.raises(AttributeError):
+                setattr(out, name, 0)
+
+    def test_carved_is_zero_without_nodata(self, refine: Refine) -> None:
+        out, _ = self.timed(refine, rough(17, 17, 3), 8)
+        assert out.ok(), out.message
+        assert out.inserted > 0
+        assert out.carved == 0
+
+    def test_carved_is_positive_with_a_nodata_corner(self, refine: Refine) -> None:
+        array = rough(17, 17, 3)
+        array[:5, :7] = np.nan
+        out, _ = self.timed(refine, array, 8)
+        assert out.ok(), out.message
+        assert isinstance(out.carved, int)
+        assert 0 < out.carved <= out.inserted

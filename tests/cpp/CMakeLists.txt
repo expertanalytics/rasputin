@@ -247,3 +247,28 @@ add_terrain_backend_test(test_refinement_scan_offnode unit/test_refinement_scan_
 target_link_libraries(test_refinement_scan_offnode PRIVATE Threads::Threads)
 add_terrain_backend_test(prop_refinement_refine property/prop_refinement_refine.cpp)
 target_link_libraries(prop_refinement_refine PRIVATE Threads::Threads)
+
+# Mesh statistics, increment 17 (docs/increments/17-mesh-stats.md, "Tests for
+# @tester"): refine's phase seconds and carving counter. Not invariant-critical.
+#
+# RED-STEP SCAFFOLD -- REMOVE AT GREEN. Keyed on `carved` appearing in
+# include/terrain/refinement/refine.hpp. While it is absent the suite is
+# EXCLUDE_FROM_ALL and not registered with ctest, so `cmake --build build` and
+# `ctest` stay green; see the red with `cmake --build build --target
+# test_refinement_refine`. The header is a configure dependency, so the switch
+# flips on the first build after it changes. At green replace this block with
+# add_terrain_backend_test plus the Threads link.
+set(_refine_hpp "${PROJECT_SOURCE_DIR}/include/terrain/refinement/refine.hpp")
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${_refine_hpp}")
+file(READ "${_refine_hpp}" _refine_src)
+if(_refine_src MATCHES "carved")
+    add_terrain_backend_test(test_refinement_refine unit/test_refinement_refine.cpp)
+else()
+    message(STATUS "test_refinement_refine: `carved` absent from refine.hpp; "
+                   "suite built only on request (increment 17 red step)")
+    add_executable(test_refinement_refine EXCLUDE_FROM_ALL unit/test_refinement_refine.cpp)
+    target_link_libraries(test_refinement_refine PRIVATE
+        terrain_headers terrain_test_support Catch2::Catch2WithMain terrain_predicates)
+    target_compile_options(test_refinement_refine PRIVATE -Wall -Wextra -Wpedantic -Werror)
+endif()
+target_link_libraries(test_refinement_refine PRIVATE Threads::Threads)
