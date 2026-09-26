@@ -123,7 +123,7 @@ class TestDeterminism:
         out = refine(view, mesh, edges, masks, tolerance=3.0, threads=threads)
         for name in ("vertices", "z", "valid", "triangles", "edges", "masks"):
             assert_array_equal(np.asarray(getattr(out, name)), np.asarray(getattr(ref, name)), name)
-        for name in ("rounds", "inserted", "max_error", "uncovered"):
+        for name in ("rounds", "inserted", "flips", "max_error", "uncovered"):
             assert getattr(out, name) == getattr(ref, name), name
 
 

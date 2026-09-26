@@ -228,8 +228,35 @@ add_terrain_test(test_raster_view unit/test_raster_view.cpp)
 add_terrain_test(test_refinement_chunks unit/test_refinement_chunks.cpp)
 add_terrain_test(test_mesh_lattice_split unit/test_mesh_lattice_split.cpp)
 add_terrain_test(test_refinement_scan unit/test_refinement_scan.cpp)
-add_terrain_test(prop_refinement_refine property/prop_refinement_refine.cpp)
 target_link_libraries(test_refinement_chunks PRIVATE Threads::Threads)
 target_link_libraries(test_mesh_lattice_split PRIVATE Threads::Threads)
 target_link_libraries(test_refinement_scan PRIVATE Threads::Threads)
-target_link_libraries(prop_refinement_refine PRIVATE Threads::Threads)
+
+# Delaunay insertion, increment 14b (docs/increments/14b-delaunay-insertion.md,
+# "Tests for @tester"). test_mesh_lawson and prop_refinement_refine's T3 oracle
+# are the invariant-critical pair; both need terrain_predicates (DefaultKernel).
+#
+# RED-STEP SCAFFOLD -- REMOVE AT GREEN. Both suites are keyed on
+# include/terrain/mesh/lawson.hpp. While it is absent they are EXCLUDE_FROM_ALL
+# and not registered with ctest, so `cmake --build build` and `ctest` stay
+# green; see the red with `cmake --build build --target test_mesh_lawson
+# prop_refinement_refine`. prop_refinement_refine is green under increment 14
+# and drops out of ctest for the red step only because it now names `flips`
+# and asserts R10. At green replace this function with two
+# add_terrain_backend_test calls plus the Threads link.
+function(add_lawson_red_suite name)
+    if(EXISTS "${PROJECT_SOURCE_DIR}/include/terrain/mesh/lawson.hpp")
+        add_terrain_backend_test(${name} ${ARGN})
+    else()
+        message(STATUS "${name}: include/terrain/mesh/lawson.hpp absent; "
+                       "suite built only on request (increment 14b red step)")
+        add_executable(${name} EXCLUDE_FROM_ALL ${ARGN})
+        target_link_libraries(${name} PRIVATE
+            terrain_headers terrain_test_support Catch2::Catch2WithMain terrain_predicates)
+        target_compile_options(${name} PRIVATE -Wall -Wextra -Wpedantic -Werror)
+    endif()
+    target_link_libraries(${name} PRIVATE Threads::Threads)
+endfunction()
+
+add_lawson_red_suite(test_mesh_lawson unit/test_mesh_lawson.cpp)
+add_lawson_red_suite(prop_refinement_refine property/prop_refinement_refine.cpp)
