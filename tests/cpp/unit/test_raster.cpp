@@ -7,6 +7,7 @@
 #include <terrain/raster/sample.hpp>
 
 #include <limits>
+#include <optional>
 #include <span>
 #include <stdexcept>
 #include <vector>
@@ -50,12 +51,14 @@ public:
     [[nodiscard]] const RasterGeometry& geometry() const noexcept { return geometry_; }
     [[nodiscard]] double value_at(const CellIndex&) const noexcept { return value_; }
     [[nodiscard]] bool is_nodata(const CellIndex&) const noexcept { return false; }
+    [[nodiscard]] const std::optional<double>& nodata() const noexcept { return nodata_; }
     [[nodiscard]] std::span<const double> row(std::size_t) const noexcept { return row_; }
 
 private:
     RasterGeometry geometry_;
     double value_;
     std::vector<double> row_;
+    std::optional<double> nodata_;  // none; RasterSource requires nodata() (increment 18, C2 (b))
 };
 
 } // namespace
