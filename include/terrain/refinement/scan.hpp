@@ -7,9 +7,11 @@
 // three vertices. Membership is three exact orientation tests, so "on an
 // edge" is a zero orientation, not a tolerance: integer arithmetic when all
 // three vertices are nodes, as in 14b, and DefaultKernel on (col, -row) when
-// one is off-node (docs/increments/16-domain-polygon.md, R2). The box is
-// ceil/floor of the fractional extents. NoData nodes are skipped. Every vertex
-// is in the node rectangle, so the box is inside the grid.
+// one is off-node (docs/increments/16-domain-polygon.md, R2). The set is not
+// tested node by node: mesh::for_each_row_span yields it exactly as one column
+// interval per row, and each interval is walked as contiguous row segments
+// (docs/increments/18-row-span-scan.md, R1 and R6). NoData nodes are skipped.
+// Every vertex is in the node rectangle, so every span is inside the grid.
 //
 // A vertex's z is value_at for a node and bilinear at its fractional position
 // otherwise (R0), refused as raster::bilinear refuses; a vertex without one is
@@ -18,8 +20,9 @@
 // For a triangle with three valid vertices the result is the largest
 // |z - plane| over the set, the node where it occurs, and where that node
 // lies. The plane at p is (o_bc z_a + o_ca z_b + o_ab z_c) / 2A, with integer
-// orientations among nodes and double ones otherwise; only the error value
-// comes out of it. The walk is row-major and only a strictly larger error
+// orientations among nodes (advanced exactly along a row) and today's double
+// expression per node otherwise, so the error is bit-identical to increment
+// 17's box walk (18's C1 (a)); only the error value comes out of it. The walk is row-major and only a strictly larger error
 // replaces the best, so ties go to the smallest (row, col) whatever order the
 // triangles are scanned in.
 //
@@ -33,7 +36,9 @@
 
 #include <terrain/core/point.hpp>
 #include <terrain/mesh/lattice_mesh.hpp>
+#include <terrain/mesh/row_spans.hpp>
 #include <terrain/raster/raster.hpp>
+#include <terrain/raster/row_segments.hpp>
 
 #include <algorithm>
 #include <array>
@@ -85,6 +90,7 @@ template <raster::RasterSource R>
 [[nodiscard]] ScanResult scan(const R& dem, const mesh::LatticeMesh& m, std::uint32_t t) {
     using mesh::LatticeVertex;
     using mesh::MeshVertex;
+    using T = typename R::value_type;
     const std::array<MeshVertex, 3> v{m.corner(t, 0), m.corner(t, 1), m.corner(t, 2)};
     const std::array<std::optional<double>, 3> zv{vertex_z(dem, v[0]), vertex_z(dem, v[1]),
                                                   vertex_z(dem, v[2])};
@@ -92,22 +98,24 @@ template <raster::RasterSource R>
     std::array<LatticeVertex, 3> lv{};
     if (nodes)
         lv = {*v[0].as_node(), *v[1].as_node(), *v[2].as_node()};
-    auto cell = [](LatticeVertex p) { return raster::CellIndex{p.row, p.col}; };
 
-    // Twice the signed area of (v[k], v[k+1], p), with its exact sign.
-    struct Orient {
-        int sign;
-        double value;
-    };
-    auto orient = [&](unsigned k, LatticeVertex p) {
+    // The exact sign of (v[k], v[k+1], p), and for an off-node triangle the
+    // double value today's plane uses. Among nodes the value is the integer
+    // orientation, which advances by exactly step[k] per column.
+    auto sign = [&](unsigned k, LatticeVertex p) {
         if (nodes) {
             const std::int64_t o = mesh::orient(lv[k], lv[(k + 1) % 3], p);
-            return Orient{(o > 0) - (o < 0), static_cast<double>(o)};
+            return (o > 0) - (o < 0);
         }
-        const Point2 a = v[k].frame(), b = v[(k + 1) % 3].frame(), q = MeshVertex{p}.frame();
-        return Orient{mesh::orient_sign(v[k], v[(k + 1) % 3], p),
-                      (b.x - a.x) * (q.y - a.y) - (b.y - a.y) * (q.x - a.x)};
+        return mesh::orient_sign(v[k], v[(k + 1) % 3], p);
     };
+    auto value = [&](unsigned k, LatticeVertex p) {
+        const Point2 a = v[k].frame(), b = v[(k + 1) % 3].frame(), q = MeshVertex{p}.frame();
+        return (b.x - a.x) * (q.y - a.y) - (b.y - a.y) * (q.x - a.x);
+    };
+    const std::array<std::int64_t, 3> step{std::int64_t{lv[1].row} - lv[0].row,
+                                           std::int64_t{lv[2].row} - lv[1].row,
+                                           std::int64_t{lv[0].row} - lv[2].row};
 
     ScanResult r;
     r.is_void = !zv[0] || !zv[1] || !zv[2];
@@ -124,48 +132,71 @@ template <raster::RasterSource R>
         return best;
     };
     double nearest = std::numeric_limits<double>::infinity();
+    const std::optional<T>& nd = dem.nodata();
+    auto missing = [&](T z) { return z != z || (nd && z == *nd); };
 
-    const auto [rlo, rhi] = std::minmax({v[0].row, v[1].row, v[2].row});
-    const auto [clo, chi] = std::minmax({v[0].col, v[1].col, v[2].col});
-    auto up = [](double x) { return static_cast<std::uint32_t>(std::ceil(x)); };
-    auto down = [](double x) { return static_cast<std::uint32_t>(std::floor(x)); };
-    for (std::uint32_t row = up(rlo); row <= down(rhi); ++row)
-        for (std::uint32_t col = up(clo); col <= down(chi); ++col) {
-            const LatticeVertex p{row, col};
-            const Orient o0 = orient(0, p), o1 = orient(1, p), o2 = orient(2, p);
-            if (o0.sign < 0 || o1.sign < 0 || o2.sign < 0 || v[0] == p || v[1] == p || v[2] == p
-                || dem.is_nodata(cell(p)))
-                continue;
-            const NodeLocation where = o0.sign == 0   ? NodeLocation::Edge0
-                                       : o1.sign == 0 ? NodeLocation::Edge1
-                                       : o2.sign == 0 ? NodeLocation::Edge2
-                                                      : NodeLocation::Inside;
-            if (r.is_void) {
-                ++r.uncovered;
-                if (const auto d = dist2(p); d < nearest) {
-                    nearest = d;
-                    r.node = p;
-                    r.where = where;
-                }
-                continue;
-            }
-            // In an extreme off-node sliver two_a can round to 0 (or below)
-            // while its exact sign is positive, and the plane would be NaN,
-            // which `err > max_error` skips. p is in the closed triangle, so
-            // the plane is a convex combination of the corner heights, and the
-            // largest corner difference bounds its error from above.
-            const auto z = static_cast<double>(dem.value_at(cell(p)));
-            const double err =
-                two_a > 0.0
-                    ? std::abs(z - (o1.value * *zv[0] + o2.value * *zv[1] + o0.value * *zv[2])
-                                       / two_a)
-                    : std::max({std::abs(z - *zv[0]), std::abs(z - *zv[1]), std::abs(z - *zv[2])});
-            if (err > r.max_error) {
-                r.max_error = err;
-                r.node = p;
-                r.where = where;
-            }
+    // In an extreme off-node sliver two_a can round to 0 (or below) while its
+    // exact sign is positive, and the plane would be NaN. p is in the closed
+    // triangle, so the plane is a convex combination of the corner heights,
+    // and the largest corner difference bounds its error from above.
+    auto error = [&](double z, double o0, double o1, double o2) {
+        return two_a > 0.0
+                   ? std::abs(z - (o1 * *zv[0] + o2 * *zv[1] + o0 * *zv[2]) / two_a)
+                   : std::max({std::abs(z - *zv[0]), std::abs(z - *zv[1]), std::abs(z - *zv[2])});
+    };
+    // NoData needs no branch: a NaN error never beats the best, and a
+    // sentinel's error is selected to 0, which never does either.
+    auto consider = [&](T z, double err, LatticeVertex p) {
+        err = missing(z) ? 0.0 : err;
+        if (err > r.max_error) {
+            r.max_error = err;
+            r.node = p;
         }
+    };
+
+    mesh::for_each_row_span(v, [&](mesh::RowSpan span) {
+        raster::for_each_row_segment(dem, span.row, span.c0, span.c1, [&](raster::RowSegment<T> s) {
+            const std::uint32_t row = span.row, c = s.first_col;
+            if (r.is_void) {
+                for (std::uint32_t j = 0; j < s.values.size(); ++j) {
+                    if (missing(s.values[j]))
+                        continue;
+                    ++r.uncovered;
+                    const LatticeVertex p{row, c + j};
+                    if (const auto d = dist2(p); d < nearest) {
+                        nearest = d;
+                        r.node = p;
+                    }
+                }
+            } else if (nodes) {
+                std::array<std::int64_t, 3> o{};
+                for (unsigned k = 0; k < 3; ++k)
+                    o[k] = mesh::orient(lv[k], lv[(k + 1) % 3], LatticeVertex{row, c});
+                for (std::uint32_t j = 0; j < s.values.size(); ++j) {
+                    const T z = s.values[j];
+                    consider(z,
+                             error(static_cast<double>(z), static_cast<double>(o[0]),
+                                   static_cast<double>(o[1]), static_cast<double>(o[2])),
+                             LatticeVertex{row, c + j});
+                    for (unsigned k = 0; k < 3; ++k)
+                        o[k] += step[k];
+                }
+            } else {
+                for (std::uint32_t j = 0; j < s.values.size(); ++j) {
+                    const LatticeVertex p{row, c + j};
+                    const T z = s.values[j];
+                    consider(z, error(static_cast<double>(z), value(0, p), value(1, p), value(2, p)), p);
+                }
+            }
+        });
+    });
+    // Where the recorded node lies, by today's exact zero-tests in today's
+    // order; once per triangle rather than per candidate.
+    if (r.node)
+        r.where = sign(0, *r.node) == 0   ? NodeLocation::Edge0
+                  : sign(1, *r.node) == 0 ? NodeLocation::Edge1
+                  : sign(2, *r.node) == 0 ? NodeLocation::Edge2
+                                          : NodeLocation::Inside;
     return r;
 }
 
