@@ -91,7 +91,7 @@ template <raster::RasterSource R>
     const bool nodes = v[0].is_node() && v[1].is_node() && v[2].is_node();
     std::array<LatticeVertex, 3> lv{};
     if (nodes)
-        lv = {v[0], v[1], v[2]};
+        lv = {*v[0].as_node(), *v[1].as_node(), *v[2].as_node()};
     auto cell = [](LatticeVertex p) { return raster::CellIndex{p.row, p.col}; };
 
     // Twice the signed area of (v[k], v[k+1], p), with its exact sign.
@@ -149,10 +149,18 @@ template <raster::RasterSource R>
                 }
                 continue;
             }
-            const double plane =
-                (o1.value * *zv[0] + o2.value * *zv[1] + o0.value * *zv[2]) / two_a;
-            if (const double err = std::abs(static_cast<double>(dem.value_at(cell(p))) - plane);
-                err > r.max_error) {
+            // In an extreme off-node sliver two_a can round to 0 (or below)
+            // while its exact sign is positive, and the plane would be NaN,
+            // which `err > max_error` skips. p is in the closed triangle, so
+            // the plane is a convex combination of the corner heights, and the
+            // largest corner difference bounds its error from above.
+            const auto z = static_cast<double>(dem.value_at(cell(p)));
+            const double err =
+                two_a > 0.0
+                    ? std::abs(z - (o1.value * *zv[0] + o2.value * *zv[1] + o0.value * *zv[2])
+                                       / two_a)
+                    : std::max({std::abs(z - *zv[0]), std::abs(z - *zv[1]), std::abs(z - *zv[2])});
+            if (err > r.max_error) {
                 r.max_error = err;
                 r.node = p;
                 r.where = where;

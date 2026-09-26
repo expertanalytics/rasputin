@@ -39,7 +39,6 @@
 #include <limits>
 #include <optional>
 #include <span>
-#include <stdexcept>
 #include <unordered_map>
 #include <utility>
 #include <vector>
@@ -55,7 +54,7 @@ struct LatticeVertex {
 
 // A mesh vertex in fractional lattice coordinates: col = (x - x_min) / dx and
 // row = (y_max - y) / dy, integers exactly for a node. A LatticeVertex converts
-// to it exactly. The conversion back is checked: exact for a node, and a throw
+// to it exactly. The way back is explicit, as_node(): exact for a node, empty
 // for an off-node vertex, never a truncation.
 struct MeshVertex {
     double col{};
@@ -69,9 +68,10 @@ struct MeshVertex {
     [[nodiscard]] bool is_node() const noexcept {
         return col == std::floor(col) && row == std::floor(row);
     }
-    operator LatticeVertex() const {  // NOLINT(google-explicit-constructor)
+    // The node this vertex is, exactly; empty for an off-node vertex.
+    [[nodiscard]] std::optional<LatticeVertex> as_node() const noexcept {
         if (!is_node())
-            throw std::domain_error("MeshVertex: an off-node vertex is not a LatticeVertex");
+            return std::nullopt;
         return LatticeVertex{static_cast<std::uint32_t>(row), static_cast<std::uint32_t>(col)};
     }
     [[nodiscard]] Point2 frame() const noexcept { return Point2{col, -row}; }

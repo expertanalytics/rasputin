@@ -221,34 +221,6 @@ add_terrain_backend_test(test_noding_node unit/test_noding_node.cpp)
 # batch sampler (docs/increments/12-dem-to-mesh.md, R2 and R4).
 add_terrain_test(test_raster_view unit/test_raster_view.cpp)
 
-# RED-STEP SCAFFOLD -- REMOVE AT GREEN. Increment 16's review replaced
-# MeshVertex's implicit, throwing conversion to LatticeVertex with a named
-# MeshVertex::as_node() -> std::optional<LatticeVertex>. test_mesh_lattice_split
-# and test_mesh_lawson call as_node, so both are keyed on the text `as_node`
-# appearing in include/terrain/mesh/lattice_mesh.hpp. While it is absent they
-# are EXCLUDE_FROM_ALL and not registered with ctest, so `cmake --build build`
-# and `ctest` stay green; see the red with `cmake --build build --target
-# test_mesh_lattice_split test_mesh_lawson`. The header is a configure
-# dependency, so the switch flips on the first build after it changes. At green
-# replace every add_as_node_red_suite call with add_terrain_backend_test plus
-# its Threads link, and delete this block.
-set(_lattice_mesh_hpp "${PROJECT_SOURCE_DIR}/include/terrain/mesh/lattice_mesh.hpp")
-set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${_lattice_mesh_hpp}")
-file(READ "${_lattice_mesh_hpp}" _lattice_mesh_src)
-function(add_as_node_red_suite name)
-    if(_lattice_mesh_src MATCHES "as_node")
-        add_terrain_backend_test(${name} ${ARGN})
-    else()
-        message(STATUS "${name}: as_node absent from lattice_mesh.hpp; "
-                       "suite built only on request (increment 16 review red step)")
-        add_executable(${name} EXCLUDE_FROM_ALL ${ARGN})
-        target_link_libraries(${name} PRIVATE
-            terrain_headers terrain_test_support Catch2::Catch2WithMain terrain_predicates)
-        target_compile_options(${name} PRIVATE -Wall -Wextra -Wpedantic -Werror)
-    endif()
-    target_link_libraries(${name} PRIVATE Threads::Threads)
-endfunction()
-
 # Adaptive refinement, increment 14 (docs/increments/14-adaptive-refinement.md,
 # "Tests for @tester"). test_mesh_lattice_split and test_refinement_scan are the
 # invariant-critical pair. All three link Threads: the loop and chunk suites
@@ -256,15 +228,17 @@ endfunction()
 # lattice_mesh.hpp includes default_kernel.hpp (increment 16's orient_sign),
 # which needs terrain_predicates.
 add_terrain_test(test_refinement_chunks unit/test_refinement_chunks.cpp)
-add_as_node_red_suite(test_mesh_lattice_split unit/test_mesh_lattice_split.cpp)
+add_terrain_backend_test(test_mesh_lattice_split unit/test_mesh_lattice_split.cpp)
 add_terrain_backend_test(test_refinement_scan unit/test_refinement_scan.cpp)
 target_link_libraries(test_refinement_chunks PRIVATE Threads::Threads)
 target_link_libraries(test_refinement_scan PRIVATE Threads::Threads)
+target_link_libraries(test_mesh_lattice_split PRIVATE Threads::Threads)
 
 # Delaunay insertion, increment 14b (docs/increments/14b-delaunay-insertion.md,
 # "Tests for @tester"). test_mesh_lawson and prop_refinement_refine's T3 oracle
 # are the invariant-critical pair; both need terrain_predicates (DefaultKernel).
-add_as_node_red_suite(test_mesh_lawson unit/test_mesh_lawson.cpp)
+add_terrain_backend_test(test_mesh_lawson unit/test_mesh_lawson.cpp)
+target_link_libraries(test_mesh_lawson PRIVATE Threads::Threads)
 
 # Off-node start vertices, increment 16 (docs/increments/16-domain-polygon.md,
 # "Tests for @tester"). test_refinement_scan_offnode and prop_refinement_refine
