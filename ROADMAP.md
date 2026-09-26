@@ -36,6 +36,7 @@ increment that most needs a picture to check against
 | 13 | One mesh file for ParaView: legacy `.vtk` with triangles, constraint edges, feature masks and the vocabulary, text by default | shipped (#90) | `docs/increments/13-bundled-mesh.md` |
 | 14 | Adaptive refinement: split triangles at the worst DEM node until every triangle's max error is within `--tolerance`; parallel scan, serial deterministic splits | shipped (#92) | `docs/increments/14-adaptive-refinement.md` |
 | 14b | Delaunay insertion: Lawson flips after each refinement insertion, never across a constraint, flipped triangles rescanned; the output is constrained Delaunay and still within `--tolerance` | implemented, in review | `docs/increments/14b-delaunay-insertion.md` |
+| 16 | Mesh a domain polygon: `--domain` (GeoJSON or WKT, one polygon with holes, CRS equal to the DEM's), vertices kept where they are with bilinear z (DEM values are point heights), the start mesh is the CDT of its rings alone, then refinement inserts DEM nodes as in 14b. Pulled forward from the catchment-clip entry at the user's request | designed, choices open | `docs/increments/16-domain-polygon.md` |
 | — | `raster/`: grid-to-world geometry and bilinear sampling | shipped (`7785fea`), **no record** | none — predates the protocol |
 
 ## What stands between here and an operational MVP
@@ -78,10 +79,29 @@ implemented and in review.
    grid. Aligned tiles are one bigger grid, so everything downstream is
    unchanged. Planned after increment 14; no record yet.
 
-Open and not MVP-blocking: **a general point insertion policy**, which the user
+Open and not MVP-blocking: **inputs in their own CRS**. The user (2026-09-26):
+"I don't think the domain CRS should have to match the DEM CRS in the future.
+This must be written down. The questions will be in which coordinate system we
+shall do the math." Increment 16 requires a match for now; a later increment
+chooses the computation CRS and reprojects inputs into it (see
+`docs/increments/16-domain-polygon.md`, "Ruled by the user"). Also **a general point insertion policy**, which the user
 wants to discuss (2026-09-26): which points refinement inserts, beyond
 increment 14b's worst DEM node, and how that meets the sizing field, coastline
-constraints and points that are not DEM nodes. Also: clipping to the catchment polygon
-(`auto_catchments.md`, and `legacy/rasputin/geometry.py`'s Shapely intersection
-is the prior art), 5d above, and land-cover partitioning, whose foundation is
-increment 7's property sets and whose consumer does not exist.
+constraints and points that are not DEM nodes. The user's direction for it
+(2026-09-26): input is geometry, never loose points; every vertex comes either
+from the input polygons and polylines, used as given, or from refinement against
+the DEM to `--tolerance`. Nothing else. Increment 16's U2 (what an input vertex
+that is not a DEM node becomes) was the first concrete question in it; the
+user ruled that input vertices stay where they are, with bilinear z. Also:
+coarsening input geometry (`parallel_refinement.md` step 2), 5d above, and
+land-cover partitioning, whose foundation is increment 7's property sets and
+whose consumer does not exist.
+
+Known defect: increment 14's NoData carving from a NoData corner appears to
+advance one node per round. Meshing the real tile from its outline alone took
+5 054 rounds and 109 s against 0.35 s from the stride grid
+(`docs/increments/16-domain-polygon.md`, M4 and R5). It needs its own look.
+
+Clipping to the catchment polygon left this list on 2026-09-26: it is increment
+16, pulled forward at the user's request. Interior polygons and polylines follow
+as 16b, designed in the same record.
