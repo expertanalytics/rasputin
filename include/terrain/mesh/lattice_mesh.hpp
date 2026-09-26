@@ -14,8 +14,9 @@
 // a node. Orientation is taken in the world's handedness, x = col and y = -row
 // (rows grow downward), so a triangle that is counter-clockwise in world
 // coordinates is counter-clockwise here too. `orient` on nodes is exact
-// integer arithmetic (uint32 coordinates, so a product of two differences fits
-// int64); `orient_sign` on any vertices is DefaultKernel on (col, -row), exact
+// integer arithmetic: each difference is bounded by the grid's dimensions, and
+// rows * cols < 2^48 for any DEM held in memory, so a product of two fits int64
+// (not so for the full uint32 range); `orient_sign` on any vertices is DefaultKernel on (col, -row), exact
 // on its inputs and of the same sign for nodes.
 //
 // Edge k of a triangle runs from vertex k to vertex k+1, as in IndexedMesh2.
