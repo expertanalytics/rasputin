@@ -247,3 +247,8 @@ add_terrain_backend_test(test_refinement_scan_offnode unit/test_refinement_scan_
 target_link_libraries(test_refinement_scan_offnode PRIVATE Threads::Threads)
 add_terrain_backend_test(prop_refinement_refine property/prop_refinement_refine.cpp)
 target_link_libraries(prop_refinement_refine PRIVATE Threads::Threads)
+
+# Mesh statistics, increment 17 (docs/increments/17-mesh-stats.md, "Tests for
+# @tester"): refine's phase seconds and carving counter. Not invariant-critical.
+add_terrain_backend_test(test_refinement_refine unit/test_refinement_refine.cpp)
+target_link_libraries(test_refinement_refine PRIVATE Threads::Threads)

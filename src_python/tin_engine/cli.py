@@ -39,7 +39,12 @@ from __future__ import annotations
 
 import importlib.metadata
 import math
+import os
+import shlex
+import sys
 import tempfile
+import time
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Annotated
@@ -52,6 +57,7 @@ from tin_engine._core import (
     ChainRole,
     IndexedMesh2,
     NodedPslg,
+    RefineOutcome,
     build_pslg,
     describe,
     node,
@@ -68,6 +74,7 @@ from tin_engine.io.models import GeoTiffError, RasterMeta
 from tin_engine.io.ply import write_ply
 from tin_engine.io.vtk_legacy import write_vtk
 from tin_engine.raster import to_core
+from tin_engine.stats import PhaseClock, Refinement, Report, Sizes, _exact, quality, render
 from tin_engine.viz.fixtures import GALLERY, Fixture
 from tin_engine.viz.protocols import PslgLike
 from tin_engine.viz.scene import build_scene
@@ -208,9 +215,15 @@ def _engine(
     chains: list[tuple[list[int], ChainRole, int]],
     delaunay: bool,
     spacing: float,
+    clock: PhaseClock | None = None,
 ) -> _Run:
-    """Validate, node and triangulate, reducing every refusal to words."""
-    result = build_pslg(np.asarray(vertices), chains)
+    """Validate, node and triangulate, reducing every refusal to words.
+
+    ``clock`` records the three calls as ``start mesh: ...`` rows; ``draw``
+    passes none and gets a fresh one that is discarded."""
+    clock = clock or PhaseClock()
+    with clock.phase("start mesh: build"):
+        result = build_pslg(np.asarray(vertices), chains)
     if not result.ok or result.pslg is None:
         return _Run(
             noded=None,
@@ -219,7 +232,8 @@ def _engine(
             status=", ".join(d.error.name for d in result.diagnostics),
             message="; ".join(d.message for d in result.diagnostics),
         )
-    noded = node(result.pslg, spacing)
+    with clock.phase("start mesh: node"):
+        noded = node(result.pslg, spacing)
     if not noded.ok() or noded.pslg is None:
         return _Run(
             noded=None,
@@ -228,7 +242,8 @@ def _engine(
             status=noded.status.name,
             message=_band(describe(noded.status), noded.message),
         )
-    outcome = triangulate(noded.pslg, delaunay)
+    with clock.phase("start mesh: triangulate"):
+        outcome = triangulate(noded.pslg, delaunay)
     return _Run(
         noded=noded.pslg,
         mesh=outcome.mesh if outcome.ok() else None,
@@ -238,7 +253,9 @@ def _engine(
     )
 
 
-def _triangulated(fixture: Fixture, delaunay: bool, spacing: float) -> Attempt:
+def _triangulated(
+    fixture: Fixture, delaunay: bool, spacing: float, clock: PhaseClock | None = None
+) -> Attempt:
     """Run the engine on a fixture and reduce what it said to one record.
 
     ``status`` and ``message`` are plain text for the header band. THREE distinct
@@ -257,7 +274,7 @@ def _triangulated(fixture: Fixture, delaunay: bool, spacing: float) -> Attempt:
         ([int(i) for i in fixture.indices_of(c)], ROLES[chain.role], int(chain.properties))
         for c, chain in enumerate(fixture.chains)
     ]
-    run = _engine(fixture.vertices, chains, delaunay, spacing)
+    run = _engine(fixture.vertices, chains, delaunay, spacing, clock)
     if run.noded is None:
         return Attempt(
             source=fixture,
@@ -562,6 +579,14 @@ def mesh(
         str | None,
         typer.Option("--domain-crs", help="The --domain file's CRS, EPSG:n; required for .wkt."),
     ] = None,
+    stats: Annotated[
+        str | None,
+        typer.Option(
+            "--stats",
+            help="Also write sizes, quality and timings as Markdown to this path (.md "
+            "recommended); - prints it on stdout after the path line(s).",
+        ),
+    ] = None,
 ) -> None:
     """Write a mesh as legacy VTK or as PLY, by the suffix of ``--out``.
 
@@ -593,7 +618,12 @@ def mesh(
     picture of a failure is still a picture and worth producing; there is no
     such thing as a picture of a failed file, so the refusal is reported in the
     engine's own words instead.
+
+    ``--stats`` (increment 17) adds a report and changes nothing else: the
+    clock always runs, the quality pass and the report only with the flag.
     """
+    clock = PhaseClock()
+    dem_run: _DemMesh | None = None
     if (name is None) == (dem is None):
         raise typer.BadParameter(
             "give a gallery fixture name or --dem PATH, exactly one of the two",
@@ -635,9 +665,11 @@ def mesh(
         if domain is not None and tolerance is None:
             raise typer.BadParameter("--domain needs --tolerance", param_hint="--tolerance")
         label = dem.stem
-        surface_mesh, sentence, epsg, described = _dem_mesh(
-            dem, stride, delaunay, snap_spacing, tolerance, domain, domain_crs
+        dem_run = _dem_mesh(
+            dem, stride, delaunay, snap_spacing, tolerance, clock, domain, domain_crs
         )
+        surface_mesh = dem_run.trimmed
+        epsg, sentence, described = dem_run.epsg, dem_run.sentence, dem_run.described
         fields = [("crs", f"EPSG:{epsg}"), ("elevation_source", sentence)]
         comments = [f"crs EPSG:{epsg}", f"elevation {sentence}"]
         if described:
@@ -655,7 +687,7 @@ def mesh(
                 "to write z = 0 and say so in the file, or mesh a DEM with --dem"
             )
         label = name
-        surface_mesh = _fixture_mesh(name, delaunay, snap_spacing)
+        surface_mesh = _fixture_mesh(name, delaunay, snap_spacing, clock)
         comments = [f"crs {crs}"] if crs else []
         comments.append(FLAT_COMMENT)
         fields = [("crs", crs)] if crs else []
@@ -671,9 +703,26 @@ def mesh(
 
     vertices = surface_mesh.vertices
     surface = _destination(out, out_parent, label)
+    targets = [surface]
+    if out_edges is not None:
+        # Resolved, because two spellings of one path are still one file. Both
+        # writes succeed, the second overwrites the first, the command echoes
+        # two paths and exits 0 -- the caller has lost the surface they asked
+        # for and nothing said so.
+        constraints = _destination(out_edges, out_parent, label)
+        if constraints == surface:
+            raise typer.BadParameter(
+                f"--out and --out-edges both resolve to {surface}; "
+                "the second would overwrite the first",
+                param_hint="--out-edges",
+            )
+        targets.append(constraints)
+    report_target = _report_target(stats, out_parent, label, targets)
+
+    encoders: list[Callable[[], bytes]]
     if out.suffix == ".vtk":
-        surface.write_bytes(
-            write_vtk(
+        encoders = [
+            lambda: write_vtk(
                 vertices,
                 triangles=surface_mesh.triangles,
                 edges=surface_mesh.edges,
@@ -682,55 +731,102 @@ def mesh(
                 fields=fields,
                 binary=binary,
             )
-        )
-        typer.echo(f"{surface}")
-        return
-    if out_edges is not None:
-        # Resolved, because two spellings of one path are still one file. Both
-        # writes succeed, the second overwrites the first, the command echoes
-        # two paths and exits 0 -- the caller has lost the surface they asked
-        # for and nothing said so.
-        constraints_target = _destination(out_edges, out_parent, label)
-        if constraints_target == surface:
-            raise typer.BadParameter(
-                f"--out and --out-edges both resolve to {surface}; "
-                "the second would overwrite the first",
-                param_hint="--out-edges",
-            )
-    surface.write_bytes(
-        write_ply(
-            vertices,
-            faces=surface_mesh.triangles,
-            ascii=not binary,
-            comments=comments,
-        )
-    )
-    typer.echo(f"{surface}")
-
-    if out_edges is not None:
-        constraints = _destination(out_edges, out_parent, label)
-        constraints.write_bytes(
-            write_ply(
+        ]
+    else:
+        encoders = [
+            lambda: write_ply(
+                vertices, faces=surface_mesh.triangles, ascii=not binary, comments=comments
+            ),
+            lambda: write_ply(
                 vertices,
                 edges=surface_mesh.edges,
                 edge_properties=surface_mesh.edge_masks,
                 ascii=not binary,
                 comments=comments,
                 vocabulary=DEFAULT_VOCABULARY,
-            )
+            ),
+        ][: len(targets)]
+    for target, encode in zip(targets, encoders, strict=True):
+        with clock.phase("write: encode"):
+            data = encode()
+        with clock.phase("write: disk"):
+            target.write_bytes(data)
+        typer.echo(f"{target}")
+    if stats is not None:
+        _write_report(clock, report_target, surface_mesh, dem_run, targets)
+
+
+def _report_target(
+    stats: str | None, out_parent: Path | None, label: str, meshes: list[Path]
+) -> Path | None:
+    """R2: where ``--stats`` writes, None for stdout (``-``) or no report,
+    checked before any mesh file is written."""
+    if stats is None or stats == "-":
+        return None
+    target = _destination(Path(stats), out_parent, label)
+    if target in meshes:
+        raise typer.BadParameter(
+            f"resolves to {target}; the report would overwrite the mesh", param_hint="--stats"
         )
-        typer.echo(f"{constraints}")
+    return target
 
 
-def _fixture_mesh(name: str, delaunay: bool, spacing: float) -> Trimmed:
+def _write_report(
+    clock: PhaseClock,
+    target: Path | None,
+    trimmed: Trimmed,
+    dem_run: _DemMesh | None,
+    files: list[Path],
+) -> None:
+    """Build the report from what ran and write it, or print it for ``-``.
+    The total stops here; the quality pass is timed on its own line (R4)."""
+    total = clock.elapsed()
+    t0 = time.perf_counter_ns()
+    meta = dem_run.meta if dem_run else None
+    sizes = Sizes(
+        output_vertices=len(trimmed.vertices),
+        output_triangles=len(trimmed.triangles),
+        constraint_edges=len(trimmed.edges),
+        files=[(f.name, f.stat().st_size) for f in files],
+        dem_nodes=(meta.rows, meta.cols) if meta else None,
+        dem_spacing=(meta.delta_x, meta.delta_y) if meta else None,
+        domain_vertices=dem_run.domain_vertices if dem_run else None,
+        domain_holes=dem_run.domain_holes if dem_run else None,
+        start_vertices=dem_run.start_vertices if dem_run else None,
+        start_triangles=dem_run.start_triangles if dem_run else None,
+        dropped=trimmed.dropped if dem_run else None,
+    )
+    refinement = dem_run.refinement if dem_run else None
+    measured = quality(trimmed.vertices, trimmed.triangles)
+    text = render(
+        Report(
+            command=shlex.join([Path(sys.argv[0]).name, *sys.argv[1:]]),
+            sizes=sizes,
+            quality=measured,
+            refinement=refinement,
+            phases=clock.phases(),
+            total=total,
+            stats_seconds=(time.perf_counter_ns() - t0) / 1e9,
+            threads=os.cpu_count() if refinement else None,
+        )
+    )
+    if target is None:
+        typer.echo(text, nl=False)
+        return
+    target.write_text(text, encoding="utf-8")
+    typer.echo(f"{target}")
+
+
+def _fixture_mesh(name: str, delaunay: bool, spacing: float, clock: PhaseClock) -> Trimmed:
     """A gallery fixture's mesh at z = 0, with its constraint edges."""
-    attempt = _triangulated(GALLERY[name], delaunay=delaunay, spacing=spacing)
+    attempt = _triangulated(GALLERY[name], delaunay=delaunay, spacing=spacing, clock=clock)
     if attempt.mesh is None or not isinstance(attempt.source, NodedPslg):
         raise typer.BadParameter(
             f"{name} has no mesh to write: {attempt.status}. {attempt.message}"
         )
     flat_vertices = np.asarray(attempt.mesh.vertices)
-    edges, masks = _constraint_arrays(attempt.mesh, attempt.source)
+    with clock.phase("start mesh: constraint edges"):
+        edges, masks = _constraint_arrays(attempt.mesh, attempt.source)
     return Trimmed(
         vertices=np.column_stack([flat_vertices, np.zeros(len(flat_vertices))]),
         triangles=np.asarray(attempt.mesh.triangles, dtype=np.uint32),
@@ -740,27 +836,46 @@ def _fixture_mesh(name: str, delaunay: bool, spacing: float) -> Trimmed:
     )
 
 
+@dataclass(frozen=True, slots=True)
+class _DemMesh:
+    """What ``_dem_mesh`` made: the mesh and its file fields, then what
+    ``--stats`` reports about the run (None where a row does not apply)."""
+
+    trimmed: Trimmed
+    sentence: str
+    epsg: int
+    described: str
+    meta: RasterMeta
+    domain_vertices: int | None
+    domain_holes: int | None
+    start_vertices: int | None
+    start_triangles: int | None
+    refinement: Refinement | None
+
+
 def _dem_mesh(
     dem: Path,
     stride: int | None,
     delaunay: bool,
     spacing: float,
     tolerance: float | None,
+    clock: PhaseClock,
     domain: Path | None = None,
     domain_crs: str | None = None,
-) -> tuple[Trimmed, str, int, str]:
+) -> _DemMesh:
     """Decode, subsample, triangulate, sample or refine, and trim.
 
     Without ``tolerance`` this is increment 12's R6: z sampled bilinearly at
     the stride grid. With it, increment 14's R9: the stride grid is the start
     mesh, refined against the DEM's nodes; with ``domain``, increment 16's R3,
     the polygon's rings are. Returns the mesh, the ``elevation`` sentence for
-    the file, the EPSG code, and the ``domain`` field (empty without one).
+    the file, the EPSG code, the ``domain`` field (empty without one), and the
+    ``--stats`` inputs; ``clock`` gets R5's phases.
     Every refusal is a usage error in the reader's or the engine's own words,
     and no file is written.
     """
     try:
-        with dem.open("rb") as stream:
+        with clock.phase("decode"), dem.open("rb") as stream:
             tile = decode_dem(stream)
     except OSError as exc:
         raise typer.BadParameter(
@@ -771,14 +886,17 @@ def _dem_mesh(
 
     meta = tile.meta
     described = ""
+    domain_vertices = domain_holes = None
     if domain is not None:
-        try:
-            polygon = read_domain(domain, meta, domain_crs)
-        except DomainError as exc:
-            raise typer.BadParameter(str(exc), param_hint="--domain") from exc
-        xy, chains, described = _domain_chains(polygon, domain.name)
+        with clock.phase("domain read"):
+            try:
+                polygon = read_domain(domain, meta, domain_crs)
+            except DomainError as exc:
+                raise typer.BadParameter(str(exc), param_hint="--domain") from exc
+            xy, chains, described = _domain_chains(polygon, domain.name)
+        domain_vertices, domain_holes = len(xy), len(polygon.polygon.interiors)
         start = "start domain boundary, boundary z bilinear"
-        run = _engine(xy, chains, delaunay, spacing)
+        run = _engine(xy, chains, delaunay, spacing, clock)
     else:
         if stride is not None:
             step = stride
@@ -786,35 +904,45 @@ def _dem_mesh(
             step = default_stride(meta) if tolerance is None else refine_start_stride(meta)
         xy, ring = subsample(meta, step)
         start = f"start stride {step}"
-        run = _engine(xy, [(ring, ChainRole.Outer, 0)], delaunay, spacing)
+        run = _engine(xy, [(ring, ChainRole.Outer, 0)], delaunay, spacing, clock)
     if run.mesh is None or run.noded is None:
         raise typer.BadParameter(f"{dem} has no mesh to write: {run.status}. {run.message}")
 
-    edges, masks = _constraint_arrays(run.mesh, run.noded)
+    with clock.phase("start mesh: constraint edges"):
+        edges, masks = _constraint_arrays(run.mesh, run.noded)
+    refinement = None
     if tolerance is None:
         mesh_xy = np.asarray(run.mesh.vertices)
-        z, valid = sample(to_core(tile), mesh_xy)
-        trimmed = trim(
-            vertices=mesh_xy,
-            triangles=np.asarray(run.mesh.triangles),
-            edges=edges,
-            edge_masks=masks,
-            z=z,
-            valid=valid,
-        )
+        with clock.phase("sample"):
+            z, valid = sample(to_core(tile), mesh_xy)
+        with clock.phase("trim"):
+            trimmed = trim(
+                vertices=mesh_xy,
+                triangles=np.asarray(run.mesh.triangles),
+                edges=edges,
+                edge_masks=masks,
+                z=z,
+                valid=valid,
+            )
         sentence = f"bilinear from DEM, stride {step}"  # no domain without tolerance
         report = ""
     else:
+        t0 = time.perf_counter_ns()
         out = refine(to_core(tile), run.mesh, edges, masks, tolerance=tolerance)
+        _refine_phases(clock, (time.perf_counter_ns() - t0) / 1e9, out)
         if not out.ok():
             raise typer.BadParameter(f"{dem}: {out.message}", param_hint="--dem")
-        trimmed = trim(
-            vertices=out.vertices,
-            triangles=out.triangles,
-            edges=out.edges,
-            edge_masks=out.masks,
-            z=out.z,
-            valid=out.valid,
+        with clock.phase("trim"):
+            trimmed = trim(
+                vertices=out.vertices,
+                triangles=out.triangles,
+                edges=out.edges,
+                edge_masks=out.masks,
+                z=out.z,
+                valid=out.valid,
+            )
+        refinement = Refinement(
+            tolerance, out.max_error, out.rounds, out.inserted, out.flips, out.uncovered, out.carved
         )
         sentence = (
             f"refined from DEM nodes, constrained Delaunay, tolerance {_exact(tolerance)} m, "
@@ -836,7 +964,32 @@ def _dem_mesh(
     if meta.vertical_unit_assumed:
         sentence += ", vertical unit assumed metres"
     typer.echo(f"{report}{trimmed.dropped} vertices without data dropped", err=True)
-    return trimmed, sentence, meta.epsg, described
+    started = refinement is not None
+    return _DemMesh(
+        trimmed=trimmed,
+        sentence=sentence,
+        epsg=meta.epsg,
+        described=described,
+        meta=meta,
+        domain_vertices=domain_vertices,
+        domain_holes=domain_holes,
+        start_vertices=len(run.mesh.vertices) if started else None,
+        start_triangles=len(run.mesh.triangles) if started else None,
+        refinement=refinement,
+    )
+
+
+def _refine_phases(clock: PhaseClock, seconds: float, out: RefineOutcome) -> None:
+    """R5 and R6: ``refine`` and its sub-rows; setup + output is the remainder."""
+    inner = (
+        ("refine: legalise start", out.legalise_seconds),
+        ("refine: scan (parallel)", out.scan_seconds),
+        ("refine: split + flip (serial)", out.split_seconds),
+    )
+    clock.add("refine", seconds)
+    for name, part in inner:
+        clock.add(name, part)
+    clock.add("refine: setup + output", max(0.0, seconds - sum(p for _, p in inner)))
 
 
 def _domain_chains(
@@ -870,10 +1023,3 @@ def _off_node(xy: npt.NDArray[np.float64], meta: RasterMeta) -> int:
         meta.y_max - row * meta.delta_y == xy[:, 1]
     )
     return int(np.count_nonzero(~node))
-
-
-def _exact(value: float) -> str:
-    """``value`` short where that loses nothing, else every digit, so a printed
-    achieved error can never read as above the tolerance it met."""
-    short = f"{value:g}"
-    return short if float(short) == value else repr(value)

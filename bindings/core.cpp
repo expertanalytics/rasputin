@@ -883,7 +883,15 @@ unless ok().
         .def_readonly("max_error", &RefineOutcome::max_error,
                       "Largest |z - plane| over triangles with three valid vertices.")
         .def_readonly("uncovered", &RefineOutcome::uncovered,
-                      "Valid DEM nodes left inside triangles with a NoData vertex.");
+                      "Valid DEM nodes left inside triangles with a NoData vertex.")
+        .def_readonly("carved", &RefineOutcome::carved,
+                      "Inserts that split a triangle with a NoData vertex.")
+        .def_readonly("legalise_seconds", &RefineOutcome::legalise_seconds,
+                      "Seconds legalising the start mesh.")
+        .def_readonly("scan_seconds", &RefineOutcome::scan_seconds,
+                      "Seconds in the parallel scans, all rounds.")
+        .def_readonly("split_seconds", &RefineOutcome::split_seconds,
+                      "Seconds in the serial split and flip phases, all rounds.");
 
     m.def(
         "refine",

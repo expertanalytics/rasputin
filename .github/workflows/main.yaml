@@ -98,7 +98,7 @@ jobs:
           cmake --build build-tsan --parallel --target
           test_refinement_chunks test_mesh_lattice_split
           test_refinement_scan prop_refinement_refine test_mesh_lawson
-          test_refinement_scan_offnode
+          test_refinement_scan_offnode test_refinement_refine
 
       - name: Test
         env:
@@ -106,7 +106,7 @@ jobs:
         run: |
           for suite in test_refinement_chunks test_mesh_lattice_split \
                        test_refinement_scan prop_refinement_refine test_mesh_lawson \
-                       test_refinement_scan_offnode; do
+                       test_refinement_scan_offnode test_refinement_refine; do
             build-tsan/tests/cpp/$suite
           done
 
