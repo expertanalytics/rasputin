@@ -270,8 +270,9 @@ class TestSectionsPerKind:
         assert "Threads:" in section(report, "Timings")
         phases = seconds(report)
         for name in (
-            "refine", "refine: legalise start", "refine: scan (parallel)",
-            "refine: split + flip (serial)", "refine: setup + output", "trim",
+            "refine", "refine: legalise start", "refine: start quality",
+            "refine: scan (parallel)", "refine: split + flip (serial)",
+            "refine: setup + output", "trim",
         ):
             assert name in phases, name
         assert "sample" not in phases
@@ -374,8 +375,8 @@ class TestTimingsAreSane:
         report, _, _ = report_of(kind)
         phases = seconds(report)
         subs = [s for name, s in phases.items() if name.startswith("refine: ")]
-        assert len(subs) == 4
-        assert sum(subs) <= phases["refine"] + self.HALF_MS * 5
-        three = sum(s for name, s in phases.items()
-                    if name.startswith("refine: ") and name != "refine: setup + output")
-        assert three <= phases["refine"] + self.HALF_MS * 4
+        assert len(subs) == 5  # increment 20 adds "refine: start quality"
+        assert sum(subs) <= phases["refine"] + self.HALF_MS * 6
+        four = sum(s for name, s in phases.items()
+                   if name.startswith("refine: ") and name != "refine: setup + output")
+        assert four <= phases["refine"] + self.HALF_MS * 5

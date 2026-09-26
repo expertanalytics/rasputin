@@ -12,17 +12,26 @@ vertices, z, valid, triangles, edges, masks, in that order, each prefixed with
 its dtype and shape -- plus the four counters. The inputs are built exactly as
 ``rasputin mesh --dem <tile> [--domain quarter.geojson] --tolerance 1`` builds
 them, through the CLI's own helpers.
+
+Increment 20 (`docs/increments/20-start-quality.md`, Q7 and R11) re-runs them
+with the start-quality pass off: the binding's ``min_angle_deg=0`` given
+explicitly, and ``rasputin mesh --start-min-angle 0`` itself, whose ``refine``
+call is captured and digested. Both must still give increment 17's digests;
+the CLI's default (25) must not.
 """
 
 from __future__ import annotations
 
 import hashlib
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 import pytest
 
+import tin_engine.cli as cli
 from geotiff_fixtures import KARTVERKET, needs_codecs
+from test_cli_mesh_dem import invoke
 from test_cli_mesh_domain import geojson, quarter_circle
 from tin_engine import _core
 from tin_engine._core import ChainRole
@@ -52,7 +61,9 @@ def digest(out: _core.RefineOutcome) -> str:
     return h.hexdigest()
 
 
-def refined(case: str, tmp_path: Path, threads: int) -> _core.RefineOutcome:
+def refined(
+    case: str, tmp_path: Path, threads: int, min_angle_deg: float | None = None
+) -> _core.RefineOutcome:
     with KARTVERKET.open("rb") as stream:
         tile = decode_dem(stream)
     if case == "tile":
@@ -64,7 +75,15 @@ def refined(case: str, tmp_path: Path, threads: int) -> _core.RefineOutcome:
     run = _engine(xy, chains, True, DEFAULT_SNAP_SPACING)
     assert run.mesh is not None and run.noded is not None, run.message
     edges, masks = _constraint_arrays(run.mesh, run.noded)
-    out = _core.refine(to_core(tile), run.mesh, edges, masks, tolerance=TOLERANCE, threads=threads)
+    if min_angle_deg is None:
+        out = _core.refine(
+            to_core(tile), run.mesh, edges, masks, tolerance=TOLERANCE, threads=threads
+        )
+    else:
+        out = _core.refine(
+            to_core(tile), run.mesh, edges, masks, tolerance=TOLERANCE, threads=threads,
+            min_angle_deg=min_angle_deg,
+        )
     assert out.ok(), out.message
     return out
 
@@ -74,3 +93,52 @@ def refined(case: str, tmp_path: Path, threads: int) -> _core.RefineOutcome:
 @pytest.mark.parametrize("case", sorted(GOLDEN))
 def test_refine_matches_the_increment_17_digest(case: str, threads: int, tmp_path: Path) -> None:
     assert digest(refined(case, tmp_path, threads)) == GOLDEN[case]
+
+
+@needs_codecs
+@pytest.mark.parametrize("threads", [1, 0])
+@pytest.mark.parametrize("case", sorted(GOLDEN))
+def test_min_angle_0_matches_the_increment_17_digest(
+    case: str, threads: int, tmp_path: Path
+) -> None:
+    assert digest(refined(case, tmp_path, threads, min_angle_deg=0.0)) == GOLDEN[case]
+
+
+def _cli_outcome(
+    case: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, *extra: str
+) -> _core.RefineOutcome:
+    """The RefineOutcome ``rasputin mesh`` itself computes for ``case``."""
+    seen: list[_core.RefineOutcome] = []
+    real = cli.refine
+
+    def spy(*args: Any, **kwargs: Any) -> _core.RefineOutcome:
+        out = real(*args, **kwargs)
+        seen.append(out)
+        return out
+
+    monkeypatch.setattr(cli, "refine", spy)
+    args = ["--dem", str(KARTVERKET), "--tolerance", "1", "--out", str(tmp_path / "x.vtk")]
+    if case == "quarter_circle":
+        args += ["--domain", str(geojson(tmp_path / "quarter.geojson", quarter_circle()))]
+    code, output = invoke(*args, *extra)
+    assert code == 0, output
+    (out,) = seen
+    return out
+
+
+@needs_codecs
+@pytest.mark.parametrize("case", sorted(GOLDEN))
+def test_the_cli_with_start_min_angle_0_matches_the_digest(
+    case: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    out = _cli_outcome(case, tmp_path, monkeypatch, "--start-min-angle", "0")
+    assert digest(out) == GOLDEN[case]
+
+
+@needs_codecs
+def test_the_cli_default_changes_the_domain_mesh(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The converse, so the test above cannot pass with a pass that never runs."""
+    out = _cli_outcome("quarter_circle", tmp_path, monkeypatch)
+    assert digest(out) != GOLDEN["quarter_circle"]

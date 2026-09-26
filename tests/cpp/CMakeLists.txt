@@ -260,3 +260,19 @@ target_link_libraries(test_refinement_refine PRIVATE Threads::Threads)
 add_terrain_backend_test(test_mesh_row_spans unit/test_mesh_row_spans.cpp)
 add_terrain_backend_test(prop_refinement_scan_equivalence
                          property/prop_refinement_scan_equivalence.cpp)
+
+# A quality start, increment 20 (docs/increments/20-start-quality.md, "Tests for
+# @tester"). test_mesh_quality (Q1 to Q6, Q8, Q9) is the invariant-critical
+# suite; prop_refinement_quality re-runs 14b's T3 and T6 with the pass on and
+# holds Q7, Q8 and Q10 through refine. Both run in the TSan job.
+#
+# RED UNTIL THE NEW HEADER EXISTS, keyed on it so the red does not break the
+# rest of the build: both suites name mesh/quality.hpp and RefineOptions'
+# new field, and are registered only once the header is on disk. The green
+# commit that adds it makes them build; the review drops this guard, as
+# increment 18's did.
+if(EXISTS "${PROJECT_SOURCE_DIR}/include/terrain/mesh/quality.hpp")
+    add_terrain_backend_test(test_mesh_quality unit/test_mesh_quality.cpp)
+    add_terrain_backend_test(prop_refinement_quality property/prop_refinement_quality.cpp)
+    target_link_libraries(prop_refinement_quality PRIVATE Threads::Threads)
+endif()
