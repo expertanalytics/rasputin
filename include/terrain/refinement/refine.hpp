@@ -31,6 +31,12 @@
 // min_angle_deg > 0, mesh::improve runs once after legalise_all and before the
 // first scan, and inserts DEM nodes until the start meets the angle or says why
 // not. Its nodes are counted in quality_inserted, not in inserted.
+//
+// Constraint feet (docs/increments/20b-min-insertion-distance.md, R2 to R6).
+// With constraint_feet, a worst node N closer than eps(N) to a constrained edge
+// of its triangle is replaced by its foot F on that edge, once per node; N may
+// still go in later if its error stays above tolerance (R5). An inserted
+// off-node vertex is output at (x_min + col dx, y_max - row dy) with vertex_z.
 
 #include <terrain/core/indexed_mesh.hpp>
 #include <terrain/core/point.hpp>
@@ -51,6 +57,7 @@
 #include <cstdint>
 #include <map>
 #include <optional>
+#include <set>
 #include <span>
 #include <string>
 #include <tuple>
@@ -66,6 +73,7 @@ struct RefineOptions {
     double tolerance = 0.0;  // metres, finite and >= 0
     unsigned threads = 0;    // 0: hardware concurrency
     double min_angle_deg = 0.0;  // the start-quality pass; 0 (or NaN) is off
+    bool constraint_feet = false;  // 20b R9: feet on constraint segments
 };
 
 struct RefineOutcome {
@@ -87,6 +95,8 @@ struct RefineOutcome {
     std::size_t carved = 0;     // inserts that split a void triangle, a subset of `inserted`
     std::size_t quality_inserted = 0;  // start-quality nodes, not in `inserted`
     std::size_t quality_skipped = 0;   // start-quality skips, every reason summed
+    std::size_t feet = 0;              // feet inserted, a subset of `inserted`
+    std::size_t feet_refused = 0;      // 20b R2 step 4: a foot refused, N inserted instead
 
     // Wall seconds on the calling thread, steady_clock (17-mesh-stats.md R6).
     // for_each_chunk joins its workers before returning, so no worker reads a
@@ -161,6 +171,78 @@ namespace detail {
     return r.node.has_value() && (r.is_void || r.max_error > tolerance);
 }
 
+// R3: eps(n) = clamp(tol / G, floor, cap), G the largest bilinear slope bound
+// over the valid cells sharing n; the cap where G is 0 (flat, or no cell).
+template <raster::RasterSource R>
+[[nodiscard]] double foot_epsilon(const R& dem, mesh::LatticeVertex n, double tol) {
+    const raster::RasterGeometry& g = dem.geometry();
+    const double dx = g.delta_x(), dy = g.delta_y();
+    double grad = 0.0;
+    for (std::uint32_t r = n.row > 0 ? n.row - 1 : 0; r <= n.row && r + 1 < g.rows(); ++r)
+        for (std::uint32_t c = n.col > 0 ? n.col - 1 : 0; c <= n.col && c + 1 < g.cols(); ++c) {
+            const auto z00 = vertex_z(dem, mesh::LatticeVertex{r, c}),
+                       z01 = vertex_z(dem, mesh::LatticeVertex{r, c + 1}),
+                       z10 = vertex_z(dem, mesh::LatticeVertex{r + 1, c}),
+                       z11 = vertex_z(dem, mesh::LatticeVertex{r + 1, c + 1});
+            if (!z00 || !z01 || !z10 || !z11)
+                continue;
+            grad = std::max(grad, std::hypot(std::max(std::abs(*z01 - *z00), std::abs(*z11 - *z10)) / dx,
+                                             std::max(std::abs(*z10 - *z00), std::abs(*z11 - *z01)) / dy));
+        }
+    const double cap = std::min(dx, dy) / 2.0, floor = std::min(dx, dy) / 100.0;
+    return grad > 0.0 ? std::clamp(tol / grad, floor, cap) : cap;
+}
+
+struct Foot {
+    unsigned edge;
+    mesh::MeshVertex at;
+};
+
+// R2 steps 1 and 2: on the first constrained edge of t that n is closer to
+// than eps (in world distance), the foot, or nothing when that foot is within
+// eps of an end or no such edge exists. n exactly on an edge is skipped.
+template <raster::RasterSource R>
+[[nodiscard]] std::optional<Foot> foot_of(const R& dem, const mesh::LatticeMesh& m,
+                                          std::uint32_t t, mesh::LatticeVertex n, double tol) {
+    const double dx = dem.geometry().delta_x(), dy = dem.geometry().delta_y();
+    std::optional<double> eps;
+    for (unsigned e = 0; e < 3; ++e) {
+        const mesh::MeshVertex a = m.corner(t, e), b = m.corner(t, (e + 1) % 3), p{n};
+        if (!m.is_constrained(t, e) || mesh::orient_sign(a, b, p) == 0)
+            continue;
+        const double ux = (b.col - a.col) * dx, uy = (b.row - a.row) * dy;
+        const double px = (p.col - a.col) * dx, py = (p.row - a.row) * dy;
+        const double s = std::clamp((px * ux + py * uy) / (ux * ux + uy * uy), 0.0, 1.0);
+        if (!eps)
+            eps = foot_epsilon(dem, n, tol);
+        if (std::hypot(px - s * ux, py - s * uy) >= *eps)
+            continue;
+        const double len = std::hypot(ux, uy);
+        if (s * len < *eps || (1.0 - s) * len < *eps)
+            return std::nullopt;
+        return Foot{e, {a.col + s * (b.col - a.col), a.row + s * (b.row - a.row)}};
+    }
+    return std::nullopt;
+}
+
+// R2 step 4: every child of splitting t's edge e (and its neighbour's) at f
+// is strictly counter-clockwise.
+[[nodiscard]] inline bool foot_fits(const mesh::LatticeMesh& m, std::uint32_t t, unsigned e,
+                                    mesh::MeshVertex f) {
+    const mesh::MeshVertex a = m.corner(t, e), b = m.corner(t, (e + 1) % 3),
+                           c = m.corner(t, (e + 2) % 3);
+    if (mesh::orient_sign(a, f, c) <= 0 || mesh::orient_sign(f, b, c) <= 0)
+        return false;
+    const std::uint32_t u = m.neighbours(t)[e];
+    if (u == mesh::kNoNeighbour)
+        return true;
+    unsigned k = 0;
+    while (m.neighbours(u)[k] != t)
+        ++k;
+    const mesh::MeshVertex d = m.corner(u, (k + 2) % 3);
+    return mesh::orient_sign(b, f, d) > 0 && mesh::orient_sign(f, a, d) > 0;
+}
+
 }  // namespace detail
 
 template <raster::RasterSource R>
@@ -196,6 +278,7 @@ template <raster::RasterSource R>
         out.quality_seconds = since(t0);
     }
     std::vector<ScanResult> results;
+    std::set<std::pair<std::uint32_t, std::uint32_t>> footed;  // (row, col), R2 step 5
     std::vector<std::uint32_t> active(m.triangle_count());
     for (std::uint32_t t = 0; t < active.size(); ++t)
         active[t] = t;
@@ -229,16 +312,30 @@ template <raster::RasterSource R>
             std::array<std::uint32_t, 4> seeds{t, before, before + 1, before + 1};
             std::size_t n_seeds = 3;
             std::uint32_t q = 0;
-            if (r.where == NodeLocation::Inside) {
+            std::optional<unsigned> edge;
+            if (r.where != NodeLocation::Inside)
+                edge = static_cast<unsigned>(r.where) - 1;
+            mesh::MeshVertex p = *r.node;
+            bool foot = false, refused = false;
+            if (options.constraint_feet && !r.is_void && !footed.contains({r.node->row, r.node->col}))
+                if (const auto f = detail::foot_of(dem, m, t, *r.node, options.tolerance)) {
+                    refused = !vertex_z(dem, f->at) || !detail::foot_fits(m, t, f->edge, f->at);
+                    foot = !refused;
+                    if (foot) {
+                        edge = f->edge;
+                        p = f->at;
+                    }
+                }
+            if (!edge) {
                 q = m.split_inside(t, *r.node);
             } else {
-                const auto e = static_cast<unsigned>(r.where) - 1;
+                const auto e = *edge;
                 const std::uint32_t u = m.neighbours(t)[e];
                 if (u != mesh::kNoNeighbour && touched[u] != 0) {
                     skipped.push_back(t);
                     continue;
                 }
-                q = m.split_edge(t, e, *r.node);
+                q = m.split_edge(t, e, p);
                 n_seeds = u != mesh::kNoNeighbour ? 4 : 2;
                 if (n_seeds == 4)
                     seeds[3] = u;
@@ -252,6 +349,10 @@ template <raster::RasterSource R>
                 [&](std::uint32_t s) { touched[s] = 1; });
             ++out.inserted;
             out.carved += r.is_void ? 1 : 0;
+            out.feet += foot ? 1 : 0;
+            out.feet_refused += refused ? 1 : 0;
+            if (foot)
+                footed.insert({r.node->row, r.node->col});
         }
         out.split_seconds += since(t0);
         if (!any)
@@ -278,9 +379,11 @@ template <raster::RasterSource R>
         const bool node = v.is_node();
         const raster::CellIndex c{node ? static_cast<std::size_t>(v.row) : 0,
                                   node ? static_cast<std::size_t>(v.col) : 0};
-        const Point2 p = i < start.vertices().size() ? start.vertices()[i] : g.node(c);
+        const bool given = i < start.vertices().size();
+        const Point2 p = given ? start.vertices()[i]
+                               : Point2{g.x_min() + v.col * g.delta_x(), g.y_max() - v.row * g.delta_y()};
         const std::optional<double> z =
-            node && g.node(c) == p ? vertex_z(dem, v) : raster::bilinear(dem, p);
+            !given || (node && g.node(c) == p) ? vertex_z(dem, v) : raster::bilinear(dem, p);
         out.vertices.push_back(p);
         out.z.push_back(z.value_or(0.0));
         out.valid.push_back(z ? 1 : 0);
