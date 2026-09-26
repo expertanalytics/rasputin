@@ -1,6 +1,6 @@
 # Increment 14 — adaptive refinement against the DEM, to a sup-norm tolerance
 
-Status: **implemented, in review.** Red `65c163f`; green `1cd8438`, `13c10ec`,
+Status: **shipped (#92).** Red `65c163f`; green `1cd8438`, `13c10ec`,
 `03642ea`, `9b7cdd8`, `7840ed6`, `8869d5e` (test), `f3e8e18`. Measured 668
 non-blank production lines (reviewer's count) against ~570, under the 700
 ceiling, so the 14b cut did not fire. Real tile at `--tolerance 1`: 670 554
@@ -349,6 +349,13 @@ why that can be wrong for water routing.
   global cap again, and `--stride` already gives one.
 
 ### U3. The flip pass (the plan's second open question)
+
+**Superseded by increment 14b (2026-09-26 design).** (a) was chosen because a
+flip after refinement changes triangles nobody rescans, so the tolerance would
+stop describing the output. 14b flips inside the loop instead (Delaunay
+insertion) and rescans every flipped triangle before the loop may stop, so the
+guarantee survives and the slivers go. See
+`docs/increments/14b-delaunay-insertion.md`, R4 and R8.
 
 A mesh made only of fans and edge splits has slivers: long thin triangles fanning
 out from inserted points. They render fine and interpolate correctly, but they

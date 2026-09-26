@@ -25,6 +25,7 @@
 #include <terrain/core/indexed_mesh.hpp>
 
 #include <array>
+#include <cassert>
 #include <cstdint>
 #include <limits>
 #include <optional>
@@ -160,6 +161,30 @@ public:
         put(u2, {q, a, d}, {Side{t, half.constrained, half.mask}, ad, spoke(u)});
         repoint(ad.neighbour, u, u2);
         return q;
+    }
+
+    // Flip t's edge e, which must have a neighbour u and a strictly convex
+    // quad (increment 14b, R4). With t = (a, b, c), e the edge (a, b) and
+    // u = (b, a, d): t's slot becomes (c, a, d) and u's (c, d, b). c is at
+    // index 0 of both, so an inserted c is opposite edge 1 in both. The four
+    // outer sides keep their neighbour, bit and mask; the new diagonal c-d
+    // has neither bit nor mask.
+    void flip(std::uint32_t t, unsigned e) {
+        const auto a = triangles_[t][e], b = triangles_[t][(e + 1) % 3],
+                   c = triangles_[t][(e + 2) % 3];
+        const auto u = neighbours_[t][e];
+        unsigned f = 0;
+        while (triangles_[u][f] != b)
+            ++f;
+        const auto d = triangles_[u][(f + 2) % 3];
+        assert(orient(vertices_[c], vertices_[a], vertices_[d]) > 0
+               && orient(vertices_[c], vertices_[d], vertices_[b]) > 0);
+        const Side bc = side(t, (e + 1) % 3), ca = side(t, (e + 2) % 3),
+                   ad = side(u, (f + 1) % 3), db = side(u, (f + 2) % 3);
+        put(t, {c, a, d}, {ca, ad, spoke(u)});
+        put(u, {c, d, b}, {spoke(t), db, bc});
+        repoint(ad.neighbour, u, t);
+        repoint(bc.neighbour, t, u);
     }
 
     // The constrained edges, each once (from the lower-indexed triangle when

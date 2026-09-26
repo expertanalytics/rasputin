@@ -767,12 +767,12 @@ def _dem_mesh(
             valid=out.valid,
         )
         sentence = (
-            f"refined from DEM nodes, tolerance {_exact(tolerance)} m, "
+            f"refined from DEM nodes, constrained Delaunay, tolerance {_exact(tolerance)} m, "
             f"achieved max error {_exact(out.max_error)} m, start stride {step}, "
             f"{out.uncovered} valid DEM nodes not covered"
         )
         report = (
-            f"{out.rounds} rounds, {out.inserted} points inserted, "
+            f"{out.rounds} rounds, {out.inserted} points inserted, {out.flips} flips, "
             f"{len(trimmed.triangles)} triangles, achieved max error "
             f"{_exact(out.max_error)} m, {out.uncovered} valid DEM nodes not covered, "
         )

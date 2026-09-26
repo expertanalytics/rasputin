@@ -228,8 +228,14 @@ add_terrain_test(test_raster_view unit/test_raster_view.cpp)
 add_terrain_test(test_refinement_chunks unit/test_refinement_chunks.cpp)
 add_terrain_test(test_mesh_lattice_split unit/test_mesh_lattice_split.cpp)
 add_terrain_test(test_refinement_scan unit/test_refinement_scan.cpp)
-add_terrain_test(prop_refinement_refine property/prop_refinement_refine.cpp)
 target_link_libraries(test_refinement_chunks PRIVATE Threads::Threads)
 target_link_libraries(test_mesh_lattice_split PRIVATE Threads::Threads)
 target_link_libraries(test_refinement_scan PRIVATE Threads::Threads)
+
+# Delaunay insertion, increment 14b (docs/increments/14b-delaunay-insertion.md,
+# "Tests for @tester"). test_mesh_lawson and prop_refinement_refine's T3 oracle
+# are the invariant-critical pair; both need terrain_predicates (DefaultKernel).
+add_terrain_backend_test(test_mesh_lawson unit/test_mesh_lawson.cpp)
+target_link_libraries(test_mesh_lawson PRIVATE Threads::Threads)
+add_terrain_backend_test(prop_refinement_refine property/prop_refinement_refine.cpp)
 target_link_libraries(prop_refinement_refine PRIVATE Threads::Threads)

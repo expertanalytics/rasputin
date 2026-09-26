@@ -10,6 +10,13 @@ Wording pinned from R9's example sentence: ``refined from DEM nodes``,
 ``<n> valid DEM nodes not covered`` and ``<k> vertices without data dropped``.
 How ``<t>`` is formatted is not ruled, so it is parsed as a float.
 
+Increment 14b (``docs/increments/14b-delaunay-insertion.md``): the default
+start stride follows the user's C1 (a), at most 129 nodes a side; the sentence
+says ``constrained Delaunay``; the stderr report carries ``<n> flips`` (the
+design says "flips in the stderr report" and leaves the wording open; this
+suite picks ``<n> flips``). T10 also reports min-angle statistics, with no
+threshold (R10).
+
 T10 runs the real tile under ``needs_codecs`` only and has no ``slow`` marker:
 it runs only in the codecs CI job, and takes about 2 s locally at 1 m.
 """
@@ -69,6 +76,20 @@ def bumpy(tmp_path: Path) -> Path:
     return write_tiff(tmp_path / "bumpy.tif", micro_tiff(array))
 
 
+def min_angles_degrees(vtk: VtkFile) -> np.ndarray:
+    """Each triangle's smallest angle, in degrees, from its world x and y."""
+    tris = np.asarray(vtk.polygons, dtype=np.int64)
+    xy = vtk.points[:, :2]
+    a, b, c = xy[tris[:, 0]], xy[tris[:, 1]], xy[tris[:, 2]]
+
+    def angle(p: np.ndarray, q: np.ndarray, r: np.ndarray) -> np.ndarray:
+        u, v = q - p, r - p
+        cos = np.einsum("ij,ij->i", u, v) / (np.linalg.norm(u, axis=1) * np.linalg.norm(v, axis=1))
+        return np.degrees(np.arccos(np.clip(cos, -1.0, 1.0)))
+
+    return np.minimum(np.minimum(angle(a, b, c), angle(b, c, a)), angle(c, a, b))
+
+
 class TestRefinedOutput:
     """T9."""
 
@@ -81,12 +102,14 @@ class TestRefinedOutput:
         assert "bilinear" not in text
         assert field(text, rf"tolerance {NUMBER} m") == 1.0
         assert field(text, rf"achieved max error {NUMBER} m") <= 1.0
-        assert field(text, rf"start stride {NUMBER}") == max(1, math.ceil(20 / 32))
+        assert field(text, rf"start stride {NUMBER}") == max(1, math.ceil(20 / 128))
+        assert "constrained Delaunay" in text
         assert field(text, rf"{NUMBER} valid DEM nodes not covered") == 0
         assert field(text, rf"{NUMBER} vertices without data dropped") == 0
         assert "vertical unit assumed metres" in text
         # R9: the same counts go to stderr. The wording there is not ruled.
         assert "not covered" in output
+        assert re.search(r"\b\d+ flips\b", output), output
 
     def test_vertices_are_nodes_carrying_their_values(self, tmp_path: Path, bumpy: Path) -> None:
         vtk, _ = run(tmp_path, bumpy, "--tolerance", "1", "--stride", "8")
@@ -104,12 +127,16 @@ class TestRefinedOutput:
         assert len(coarse.polygons) < len(fine.polygons)
         assert field(sentence(fine), rf"achieved max error {NUMBER} m") == 0.0
 
-    def test_the_default_start_stride_is_at_most_33_nodes_a_side(self, tmp_path: Path) -> None:
-        """R1: max(1, ceil((max(rows, cols) - 1) / 32)); 70 columns gives 3."""
-        array = np.random.default_rng(3).uniform(0.0, 5.0, (4, 70)).astype(np.float32)
+    @pytest.mark.parametrize(("cols", "stride"), [(70, 1), (129, 1), (130, 2), (300, 3)])
+    def test_the_default_start_stride_is_at_most_129_nodes_a_side(
+        self, tmp_path: Path, cols: int, stride: int
+    ) -> None:
+        """14b C1 (a): max(1, ceil((max(rows, cols) - 1) / 128)); 300 columns gives 3."""
+        assert stride == max(1, math.ceil((cols - 1) / 128))
+        array = np.random.default_rng(3).uniform(0.0, 5.0, (4, cols)).astype(np.float32)
         tif = write_tiff(tmp_path / "wide.tif", micro_tiff(array))
         vtk, _ = run(tmp_path, tif, "--tolerance", "1")
-        assert field(sentence(vtk), rf"start stride {NUMBER}") == math.ceil(69 / 32)
+        assert field(sentence(vtk), rf"start stride {NUMBER}") == stride
 
 
 class TestNoData:
@@ -170,22 +197,32 @@ class TestWithoutTolerance:
 
 
 class TestRealTile:
-    """T10: 7908_3_10m_z33.tif at 5 m and 1 m. No timing assertion."""
+    """T10: 7908_3_10m_z33.tif at 5 m and 1 m. No timing or angle assertion.
+
+    14b: min-angle statistics are reported (world coordinates, each
+    triangle's smallest angle), with no threshold: M2 makes the sea's
+    grading a property of the data and the stride, not of the algorithm.
+    """
 
     @needs_codecs
     def test_refines_the_real_dem(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
         polygons: dict[str, int] = {}
         for tolerance in ("5", "1"):
             began = time.perf_counter()
-            vtk, _ = run(tmp_path, KARTVERKET, "--tolerance", tolerance)
+            vtk, output = run(tmp_path, KARTVERKET, "--tolerance", tolerance)
             seconds = time.perf_counter() - began
             text = sentence(vtk)
             achieved = field(text, rf"achieved max error {NUMBER} m")
             assert achieved <= float(tolerance)
             polygons[tolerance] = len(vtk.polygons)
+            angles = min_angles_degrees(vtk)
             with capsys.disabled():
                 print(
                     f"\nT10 tolerance {tolerance} m: {len(vtk.polygons)} triangles, "
                     f"{len(vtk.points)} vertices, achieved {achieved} m, {seconds:.1f} s; {text}"
+                    f"\nT10 min angle: median {np.median(angles):.2f} deg, "
+                    f"{100 * np.mean(angles < 1.0):.1f} % under 1 deg, "
+                    f"{100 * np.mean(angles < 10.0):.1f} % under 10 deg, "
+                    f"worst {angles.min():.4f} deg; report: {output.strip()}"
                 )
         assert polygons["5"] < polygons["1"]

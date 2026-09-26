@@ -50,10 +50,13 @@ include/terrain/           # public C++ headers, header-only where possible
     chunks.hpp             # for_each_chunk: contiguous chunks over std::jthread
   mesh/
     lattice_mesh.hpp       # LatticeMesh: flat triangle array over DEM nodes,
-                           #   neighbour links, the three splits (14)
+                           #   neighbour links, the three splits (14), flip (14b)
+    lawson.hpp             # LatticeFrame, legalise_around / legalise_all:
+                           #   Lawson flips on strictly-inside apexes (14b)
   refinement/
     scan.hpp               # per-triangle sup-norm scan, NoData carve point (14)
-    refine.hpp             # RefineOptions, RefineOutcome, the round loop (14)
+    refine.hpp             # RefineOptions, RefineOutcome, the round loop (14),
+                           #   Delaunay insertion (14b)
 
 src/                       # C++ implementation, one directory per module
                            #   (only predicates/ and cdt/ exist; rest planned)
@@ -322,7 +325,7 @@ dropped the honest options are a different library or our own CDT over the
 
 ### `refinement`
 
-Refinement against the DEM to a sup-norm tolerance (increment 14). `scan.hpp` measures a triangle's largest `|z - plane|` over the DEM nodes it contains, by exact integer tests; `refine.hpp` runs rounds of parallel scan (`parallel_util`) and serial splits in index order — a fan for an interior node, an edge split on both sides for an edge node — so the output does not depend on the thread count. Triangles with a NoData vertex are carved, not refined. See `docs/increments/14-adaptive-refinement.md`.
+Refinement against the DEM to a sup-norm tolerance (increment 14). `scan.hpp` measures a triangle's largest `|z - plane|` over the DEM nodes it contains, by exact integer tests; `refine.hpp` runs rounds of parallel scan (`parallel_util`) and serial splits in index order — a fan for an interior node, an edge split on both sides for an edge node — each followed by Lawson flips (`mesh/lawson.hpp`, increment 14b) that never cross a constrained or boundary edge, with every written slot rescanned, so the output is constrained Delaunay and within tolerance, and does not depend on the thread count. Triangles with a NoData vertex are carved, not refined. See `docs/increments/14-adaptive-refinement.md`.
 
 ### `flip`
 

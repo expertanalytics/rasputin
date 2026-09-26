@@ -289,6 +289,9 @@ would be written in-tree. Nothing in the C++ core simplifies anything.
 
 ## Final flip pass
 
+*Superseded:* increment 14b flips during refinement, not after it, and
+rescans what it flips (`docs/increments/14b-delaunay-insertion.md`).
+
 After the refinement loop converges:
 
 ```
@@ -386,9 +389,10 @@ simplify step, not a mesher that edits its own constraints.
 
 ## Open question: does the flip pass leave the tolerance undefined?
 
-Raised 2026-09-23. **Not settled. This section asks a question and does not
-answer it.** Whoever writes the refinement increment must rule on it before
-`@tester` is briefed, because the answer decides what the suite can assert.
+Raised 2026-09-23. **Answered by increment 14b** (option 2, with a termination
+argument: `docs/increments/14b-delaunay-insertion.md`, R4). The text below is
+the question as it was asked; 14b ruled on it before `@tester` was briefed,
+because the answer decides what the suite can assert.
 
 ### The question
 
