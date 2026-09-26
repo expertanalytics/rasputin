@@ -237,5 +237,5 @@ target_link_libraries(test_refinement_scan PRIVATE Threads::Threads)
 # are the invariant-critical pair; both need terrain_predicates (DefaultKernel).
 add_terrain_backend_test(test_mesh_lawson unit/test_mesh_lawson.cpp)
 target_link_libraries(test_mesh_lawson PRIVATE Threads::Threads)
-# Built on request only until refine.hpp gains `flips` (the next commit).
-add_executable(prop_refinement_refine EXCLUDE_FROM_ALL property/prop_refinement_refine.cpp)
+add_terrain_backend_test(prop_refinement_refine property/prop_refinement_refine.cpp)
+target_link_libraries(prop_refinement_refine PRIVATE Threads::Threads)

@@ -13,11 +13,20 @@
 // (a NoData vertex) when its node set holds no valid node. Each split inserts
 // a valid DEM node that is not yet a vertex, and the lattice is finite, so
 // the loop terminates for every tolerance, 0 included.
+//
+// Delaunay insertion (docs/increments/14b-delaunay-insertion.md, R1 to R5).
+// The start mesh is legalised once, and each split is followed by Lawson
+// legalisation around the new vertex, in the serial phase. Every slot a split
+// or a flip writes is `touched` and rescanned next round; an unwritten slot
+// still holds the triangle its last scan measured, so its result stays exact.
+// The output is constrained Delaunay in the frame (col * dx, -(row * dy)).
 
 #include <terrain/core/indexed_mesh.hpp>
 #include <terrain/core/point.hpp>
 #include <terrain/mesh/lattice_mesh.hpp>
+#include <terrain/mesh/lawson.hpp>
 #include <terrain/parallel_util/chunks.hpp>
+#include <terrain/predicates/default_kernel.hpp>
 #include <terrain/raster/raster.hpp>
 #include <terrain/refinement/scan.hpp>
 
@@ -56,6 +65,7 @@ struct RefineOutcome {
 
     std::size_t rounds = 0;     // scans run; 1 when nothing needed a split
     std::size_t inserted = 0;   // vertices added
+    std::size_t flips = 0;      // Lawson flips, the start mesh's included
     double max_error = 0.0;     // over triangles with three valid vertices
     std::size_t uncovered = 0;  // valid nodes still inside void triangles
 
@@ -138,7 +148,9 @@ template <raster::RasterSource R>
         return std::move(*refused);
     auto& m = std::get<mesh::LatticeMesh>(built);
 
+    const mesh::LatticeFrame frame{g.delta_x(), g.delta_y()};
     RefineOutcome out;
+    out.flips = mesh::legalise_all<pred::DefaultKernel>(m, frame, [](std::uint32_t) {});
     std::vector<ScanResult> results;
     std::vector<std::uint32_t> active(m.triangle_count());
     for (std::uint32_t t = 0; t < active.size(); ++t)
@@ -153,7 +165,7 @@ template <raster::RasterSource R>
                                               results[active[i]] = scan(dem, m, active[i]);
                                       });
 
-        // `touched` is every slot a split wrote this round. A marked triangle
+        // `touched` is every slot a split or a flip wrote this round. A marked triangle
         // skipped because its neighbour was touched is itself unchanged and
         // still unconverged, so it stays active rather than being forgotten.
         std::vector<char> touched(m.triangle_count(), 0);
@@ -166,8 +178,12 @@ template <raster::RasterSource R>
             any = true;
             if (touched[t] != 0)
                 continue;
+            const auto before = static_cast<std::uint32_t>(m.triangle_count());
+            std::array<std::uint32_t, 4> seeds{t, before, before + 1, before + 1};
+            std::size_t n_seeds = 3;
+            std::uint32_t q = 0;
             if (r.where == NodeLocation::Inside) {
-                m.split_inside(t, *r.node);
+                q = m.split_inside(t, *r.node);
             } else {
                 const auto e = static_cast<unsigned>(r.where) - 1;
                 const std::uint32_t u = m.neighbours(t)[e];
@@ -175,12 +191,18 @@ template <raster::RasterSource R>
                     skipped.push_back(t);
                     continue;
                 }
-                m.split_edge(t, e, *r.node);
-                if (u != mesh::kNoNeighbour)
-                    touched[u] = 1;
+                q = m.split_edge(t, e, *r.node);
+                n_seeds = u != mesh::kNoNeighbour ? 4 : 2;
+                if (n_seeds == 4)
+                    seeds[3] = u;
             }
-            touched[t] = 1;
             touched.resize(m.triangle_count(), 1);
+            touched[t] = 1;
+            if (n_seeds == 4)
+                touched[seeds[3]] = 1;
+            out.flips += mesh::legalise_around<pred::DefaultKernel>(
+                m, q, std::span<const std::uint32_t>{seeds.data(), n_seeds}, frame,
+                [&](std::uint32_t s) { touched[s] = 1; });
             ++out.inserted;
         }
         if (!any)
