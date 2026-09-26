@@ -40,6 +40,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cmath>
 #include <cstdint>
 #include <map>
 #include <random>
@@ -54,10 +55,13 @@ using terrain::mesh::kNoNeighbour;
 using terrain::mesh::LatticeFrame;
 using terrain::mesh::LatticeMesh;
 using terrain::mesh::LatticeVertex;
+using terrain::mesh::MeshVertex;
+using terrain::mesh::orient_sign;
 using terrain::mesh::legalise_all;
 using terrain::mesh::legalise_around;
 using terrain::pred::DefaultKernel;
 using terrain::pred::Incircle;
+using terrain::pred::Orientation;
 using refinement_fixtures::on_open_segment;
 using refinement_fixtures::orient;
 using refinement_fixtures::RC;
@@ -69,9 +73,9 @@ using Masks = std::array<std::uint32_t, 3>;
 LatticeVertex lv(std::uint32_t row, std::uint32_t col) { return LatticeVertex{row, col}; }
 RC rc(LatticeVertex v) { return RC{v.row, v.col}; }
 
-Point2 at(const LatticeFrame& f, LatticeVertex v) {
-    return Point2{static_cast<double>(v.col) * f.dx, -(static_cast<double>(v.row) * f.dy)};
-}
+// Takes a MeshVertex so off-node vertices work too; a LatticeVertex converts
+// to it exactly.
+Point2 at(const LatticeFrame& f, MeshVertex v) { return Point2{v.col * f.dx, -(v.row * f.dy)}; }
 
 // Records every slot on_write reports.
 struct Writes {
@@ -130,8 +134,7 @@ std::size_t delaunay_violations(const LatticeMesh& m, const LatticeFrame& f) {
             for (const auto x : tu)
                 if (x != tt[k] && x != tt[(k + 1) % 3]) apex = x;
             const auto v = m.vertices();
-            if (DefaultKernel::incircle(at(f, v[tt[0]].as_node().value()), at(f, v[tt[1]].as_node().value()), at(f, v[tt[2]].as_node().value()),
-                                        at(f, v[apex].as_node().value()))
+            if (DefaultKernel::incircle(at(f, v[tt[0]]), at(f, v[tt[1]]), at(f, v[tt[2]]), at(f, v[apex]))
                 == Incircle::Inside)
                 ++bad;
         }
@@ -423,6 +426,53 @@ TEST_CASE("L4: the circle test runs in the scaled frame", "[lawson][frame]") {
                       || (tri[k] == b && tri[(k + 1) % 3] == a);
         REQUIRE(has_ab);
     }
+}
+
+// ---------------------------------------------------------------- L4b
+
+TEST_CASE("L4b: an edge illegal only from the side that is collinear in the frame still flips",
+          "[lawson][frame]") {
+    // Guards c23583b's must_flip directly. Orientation is exact on (col, -row);
+    // the circle test runs in the LatticeFrame (col * dx, -(row * dy)), which
+    // rounds. C sits one ulp of row off the diagonal A-B, so t0 = (A, B, C) is
+    // a counter-clockwise sliver in the mesh but collinear in the frame at
+    // dx = 3, dy = 1.5, and the kernel answers Cocircular there. From t1 =
+    // (B, A, D) the edge is plainly illegal: C lies on the chord A-B, strictly
+    // inside the circle through B, A, D. Slot 0 holds the collinear side, so
+    // legalise_all tests A-B only from t0, and legalise_around from C tests it
+    // only from t0 as well. The pre-fix one-sided test flips nothing in both.
+    //   A (col 0, row 0), B (col 1, row 1), D (col 0, row 1),
+    //   C (col 0.34, row = the double just below 0.34).
+    enum : std::uint32_t { a, b, c, d };
+    const LatticeFrame f{3.0, 1.5};
+    const std::vector<MeshVertex> v{lv(0, 0), lv(1, 1), MeshVertex{0.34, std::nextafter(0.34, 0.0)},
+                                    lv(1, 0)};
+    // Preconditions: without both, the case tests nothing.
+    REQUIRE(orient_sign(v[a], v[b], v[c]) > 0);
+    REQUIRE(DefaultKernel::orient2d(at(f, v[a]), at(f, v[b]), at(f, v[c])) == Orientation::Collinear);
+    REQUIRE(DefaultKernel::orient2d(at(f, v[b]), at(f, v[a]), at(f, v[d])) == Orientation::CounterClockwise);
+    REQUIRE(DefaultKernel::incircle(at(f, v[b]), at(f, v[a]), at(f, v[d]), at(f, v[c])) == Incircle::Inside);
+
+    const bool around = GENERATE(false, true);
+    CAPTURE(around);
+    auto m = LatticeMesh::build(v, {TriangleIndices{a, b, c}, TriangleIndices{b, a, d}}, {0, 0},
+                                {Masks{0, 0, 0}, {0, 0, 0}});
+    REQUIRE(m.has_value());
+    REQUIRE(delaunay_violations(*m, f) == 1);  // seen from t1 only
+    const std::array<std::uint32_t, 1> seeds{0};
+    const std::size_t flips =
+        around ? legalise_around<DefaultKernel>(*m, c, std::span<const std::uint32_t>{seeds}, f, Writes{}.sink())
+               : legalise_all<DefaultKernel>(*m, f, Writes{}.sink());
+    REQUIRE(flips == 1);
+    REQUIRE(delaunay_violations(*m, f) == 0);
+    // The diagonal is now C-D, and both triangles are counter-clockwise in the mesh.
+    bool has_cd = false;
+    for (const auto& tri : m->triangles()) {
+        REQUIRE(orient_sign(v[tri[0]], v[tri[1]], v[tri[2]]) > 0);
+        for (unsigned k = 0; k < 3; ++k)
+            has_cd = has_cd || (tri[k] == c && tri[(k + 1) % 3] == d) || (tri[k] == d && tri[(k + 1) % 3] == c);
+    }
+    REQUIRE(has_cd);
 }
 
 // ---------------------------------------------------------------- L5

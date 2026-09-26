@@ -416,6 +416,16 @@ class RefineOutcome:
     def scan_seconds(self) -> float: ...
     @property
     def split_seconds(self) -> float: ...
+    @property
+    def quality_inserted(self) -> int: ...
+    @property
+    def quality_skipped(self) -> int: ...
+    @property
+    def quality_seconds(self) -> float: ...
+    @property
+    def feet(self) -> int: ...
+    @property
+    def feet_refused(self) -> int: ...
 
 def refine(
     view: RasterView,
@@ -425,8 +435,12 @@ def refine(
     *,
     tolerance: float,
     threads: int = ...,
+    min_angle_deg: float = ...,
+    constraint_feet: bool = ...,
 ) -> RefineOutcome:
     """Refine a start mesh whose vertices lie in the DEM's node rectangle (off-node
     ones keep their position and get bilinear z) until every triangle is
     within ``tolerance`` of the DEM. Releases the GIL; the output does not
-    depend on ``threads``."""
+    depend on ``threads``. ``min_angle_deg`` > 0 first improves the start
+    mesh's angles with DEM nodes; 0 is off. ``constraint_feet`` inserts a
+    node's foot on a nearby constraint segment instead of the node."""

@@ -2,8 +2,9 @@
 
 // A triangle mesh over the DEM's lattice, with neighbour links
 // (docs/increments/14-adaptive-refinement.md, R3 and R4). Every vertex that
-// refinement inserts is a DEM node; a start vertex may lie anywhere in the
-// node rectangle (docs/increments/16-domain-polygon.md, R2).
+// refinement inserts is a DEM node or a foot on a constraint segment
+// (docs/increments/20b-min-insertion-distance.md, R4); a start vertex may lie
+// anywhere in the node rectangle (docs/increments/16-domain-polygon.md, R2).
 //
 // A flat triangle array, not a tree: R3's edge split changes two triangles at
 // once, and only adjacency can find the second. A split reuses the parent's
@@ -189,7 +190,7 @@ public:
     // alone (1 -> 2). With the edge as (a, b) and c opposite: (a, p, c) takes
     // t's slot and (p, b, c) is appended; u's (b, a, d) becomes (b, p, d) in
     // u's slot and (p, a, d) appended. Returns p's vertex index.
-    std::uint32_t split_edge(std::uint32_t t, unsigned e, LatticeVertex p) {
+    std::uint32_t split_edge(std::uint32_t t, unsigned e, MeshVertex p) {
         const auto q = add_vertex(p);
         const auto a = triangles_[t][e], b = triangles_[t][(e + 1) % 3],
                    c = triangles_[t][(e + 2) % 3];
@@ -275,7 +276,7 @@ private:
     [[nodiscard]] std::uint32_t next_slot() const noexcept {
         return static_cast<std::uint32_t>(triangles_.size());
     }
-    std::uint32_t add_vertex(LatticeVertex p) {
+    std::uint32_t add_vertex(MeshVertex p) {
         vertices_.push_back(p);
         return static_cast<std::uint32_t>(vertices_.size() - 1);
     }

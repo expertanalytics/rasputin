@@ -891,12 +891,23 @@ unless ok().
         .def_readonly("scan_seconds", &RefineOutcome::scan_seconds,
                       "Seconds in the parallel scans, all rounds.")
         .def_readonly("split_seconds", &RefineOutcome::split_seconds,
-                      "Seconds in the serial split and flip phases, all rounds.");
+                      "Seconds in the serial split and flip phases, all rounds.")
+        .def_readonly("quality_inserted", &RefineOutcome::quality_inserted,
+                      "DEM nodes the start-quality pass added, not in inserted.")
+        .def_readonly("quality_skipped", &RefineOutcome::quality_skipped,
+                      "Bad start triangles the pass left, every reason summed.")
+        .def_readonly("quality_seconds", &RefineOutcome::quality_seconds,
+                      "Seconds in the start-quality pass.")
+        .def_readonly("feet", &RefineOutcome::feet,
+                      "Feet inserted on constraint segments, counted in inserted.")
+        .def_readonly("feet_refused", &RefineOutcome::feet_refused,
+                      "Feet refused, their node inserted instead.");
 
     m.def(
         "refine",
         [](const BoundRasterView& raster, const IndexedMesh2& mesh, const py::object& edges,
-           const py::object& masks, double tolerance, unsigned threads) {
+           const py::object& masks, double tolerance, unsigned threads, double min_angle_deg,
+           bool constraint_feet) {
             using U32 = py::array_t<std::uint32_t, py::array::c_style | py::array::forcecast>;
             const auto e = U32::ensure(edges);
             const auto k = U32::ensure(masks);
@@ -907,7 +918,8 @@ unless ok().
             const std::span<const std::array<std::uint32_t, 2>> pairs{
                 reinterpret_cast<const std::array<std::uint32_t, 2>*>(e.data()), n};
             const std::span<const std::uint32_t> bits{k.data(), n};
-            const terrain::refinement::RefineOptions options{tolerance, threads};
+            const terrain::refinement::RefineOptions options{tolerance, threads, min_angle_deg,
+                                                             constraint_feet};
             // Every buffer read below is held by a local or by `raster`, and
             // the outcome is converted after the lock returns.
             const py::gil_scoped_release unlocked;
@@ -918,7 +930,8 @@ unless ok().
                 raster.view);
         },
         py::arg("view"), py::arg("mesh"), py::arg("edges"), py::arg("masks"), py::kw_only(),
-        py::arg("tolerance"), py::arg("threads") = 0, R"doc(
+        py::arg("tolerance"), py::arg("threads") = 0, py::arg("min_angle_deg") = 0.0,
+        py::arg("constraint_feet") = false, R"doc(
 Refine a start mesh against the DEM until every triangle is within tolerance.
 
 mesh's vertices must lie in the DEM's node rectangle and its triangles be
@@ -926,6 +939,10 @@ counter-clockwise; an off-node vertex keeps its position and gets bilinear z;
 edges (E, 2) and masks (E,) are its constraint edges as the CLI builds them.
 tolerance is in the DEM's vertical unit. threads only sets how the scan is
 split; the output is identical for every value, and 0 means all cores.
+min_angle_deg > 0 first adds DEM nodes to the start mesh until its triangles
+meet that minimum angle or a stated reason prevents it; 0 is off.
+constraint_feet inserts, for a worst node close to a constraint segment, its
+foot on the segment instead; off by default.
 A refused input comes back as a status; a mis-shaped array is a ValueError.
 Releases the GIL.
 )doc");
