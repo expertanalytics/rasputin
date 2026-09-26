@@ -1,6 +1,7 @@
 # Increment 20 — a quality start: minimum-angle Steiner nodes before DEM refinement
 
-Status: **designed, building on provisional defaults.** Ola asked the main
+Status: **implemented, in review, on provisional defaults.** Red `f7ae381`;
+green `affc955`, `a66632c` (ASCII wording), `f5489ab`. Ola asked the main
 session to "work until we can check the fruits of our efforts against the
 previous run", so the build proceeds on the recommended C1 (a), C2 (a) 25°,
 C3 (a) and C4 (a). These are the main session's provisional picks, **pending
@@ -441,6 +442,37 @@ Counted in `CLAUDE.md` §2's unit.
 On the worst overrun seen so far (+39 %), about 220. **It fits under 700, so it
 is not split.** C1 (b) adds about 90, C2 (d) about 10, C3 (b) about 25; all of
 them together still fit.
+
+### What landed
+
+About 240 production lines against ~160 (roughly 50 % over, under 700);
+`quality.hpp` is 162 of them, mostly the walk and the insert-and-requeue step.
+Settled at green: a snapped node the walk ends on counts as "already a vertex";
+NaN or <= 0 turns the pass off; the two quality columns come last in the
+`--stats` Refinement table; the file says `25 deg`, not `25°` (increment 13's
+ASCII rule).
+
+**Comparison on Ola's quarter circle** (`--binary --stats -`, "off" is
+`--start-min-angle 0`, identical to increment 18):
+
+| | 10 m off | 10 m on | 1 m off | 1 m on |
+|---|---|---|---|---|
+| triangles | 30 547 | 31 581 | 427 779 | 428 225 |
+| min angle median | 32.95° | 33.69° | 45.00° | 45.00° |
+| share < 1° | 0.31 % | 0.01 % | 0.03 % | 0.00 % |
+| share < 10° | 3.97 % | 2.54 % | 0.92 % | 0.83 % |
+| worst angle | 0.652° | 0.287° | 0.0117° | 0.0117° |
+| degree max | 43 | 16 | 43 | 18 |
+| degree >= 20 | 7 | 0 | 9 | 0 |
+| quality nodes | 0 | 644 | 0 | 644 |
+| refine | 0.134 s | 0.036 s | 0.375 s | 0.240 s |
+| total | 0.207 s | 0.106 s | 0.469 s | 0.333 s |
+
+The boundary fans are gone. Two numbers differ from the batch prototype: 644
+nodes inserted (prototype 1 084), and the 10 m worst angle is 0.287° (not
+investigated; likely a later DEM-refinement triangle, which C3 (a) leaves).
+The 1 m worst angle is the near-node sliver that increment 20b addresses (Ola:
+a minimum insertion distance scaled by z_tol / |grad z|).
 
 ## Acceptance
 

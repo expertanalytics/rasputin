@@ -53,6 +53,8 @@ include/terrain/           # public C++ headers, header-only where possible
                            #   neighbour links, the three splits (14), flip (14b)
     lawson.hpp             # LatticeFrame, legalise_around / legalise_all:
                            #   Lawson flips on strictly-inside apexes (14b)
+    quality.hpp            # improve(): minimum-angle Steiner nodes on the start
+                           #   mesh, DEM node nearest each circumcentre (20)
   refinement/
     scan.hpp               # per-triangle sup-norm scan, NoData carve point (14)
     refine.hpp             # RefineOptions, RefineOutcome, the round loop (14),
