@@ -39,6 +39,7 @@
 
 #include <algorithm>
 #include <array>
+#include <chrono>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
@@ -76,6 +77,14 @@ struct RefineOutcome {
     std::size_t flips = 0;      // Lawson flips, the start mesh's included
     double max_error = 0.0;     // over triangles with three valid vertices
     std::size_t uncovered = 0;  // valid nodes still inside void triangles
+    std::size_t carved = 0;     // inserts that split a void triangle, a subset of `inserted`
+
+    // Wall seconds on the calling thread, steady_clock (17-mesh-stats.md R6).
+    // for_each_chunk joins its workers before returning, so no worker reads a
+    // clock. Not part of the determinism guarantee.
+    double legalise_seconds = 0.0;  // the start mesh's legalise_all
+    double scan_seconds = 0.0;      // every round's parallel scan, summed
+    double split_seconds = 0.0;     // every round's serial split + flip phase, summed
 
     [[nodiscard]] bool ok() const noexcept { return status == RefineStatus::Ok; }
 };
@@ -160,7 +169,13 @@ template <raster::RasterSource R>
 
     const mesh::LatticeFrame frame{g.delta_x(), g.delta_y()};
     RefineOutcome out;
+    using clock = std::chrono::steady_clock;
+    const auto since = [](clock::time_point t0) {
+        return std::chrono::duration<double>(clock::now() - t0).count();
+    };
+    auto t0 = clock::now();
     out.flips = mesh::legalise_all<pred::DefaultKernel>(m, frame, [](std::uint32_t) {});
+    out.legalise_seconds = since(t0);
     std::vector<ScanResult> results;
     std::vector<std::uint32_t> active(m.triangle_count());
     for (std::uint32_t t = 0; t < active.size(); ++t)
@@ -169,11 +184,14 @@ template <raster::RasterSource R>
     while (true) {
         ++out.rounds;
         results.resize(m.triangle_count());
+        t0 = clock::now();
         parallel_util::for_each_chunk(active.size(), options.threads,
                                       [&](std::size_t begin, std::size_t end) {
                                           for (std::size_t i = begin; i < end; ++i)
                                               results[active[i]] = scan(dem, m, active[i]);
                                       });
+        out.scan_seconds += since(t0);
+        t0 = clock::now();
 
         // `touched` is every slot a split or a flip wrote this round. A marked triangle
         // skipped because its neighbour was touched is itself unchanged and
@@ -214,7 +232,9 @@ template <raster::RasterSource R>
                 m, q, std::span<const std::uint32_t>{seeds.data(), n_seeds}, frame,
                 [&](std::uint32_t s) { touched[s] = 1; });
             ++out.inserted;
+            out.carved += r.is_void ? 1 : 0;
         }
+        out.split_seconds += since(t0);
         if (!any)
             break;
         active.clear();
