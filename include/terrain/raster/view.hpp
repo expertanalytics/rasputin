@@ -27,6 +27,8 @@ public:
         return data_[geometry_.linear_index(c)];
     }
 
+    [[nodiscard]] const std::optional<T>& nodata() const noexcept { return nodata_; }
+
     [[nodiscard]] bool is_nodata(const CellIndex& c) const noexcept {
         const T v = value_at(c);
         // v != v is NaN, which counts as NoData with or without a sentinel.
