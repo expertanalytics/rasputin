@@ -257,15 +257,6 @@ target_link_libraries(test_refinement_refine PRIVATE Threads::Threads)
 # for @tester"). test_mesh_row_spans (T1) and prop_refinement_scan_equivalence
 # (T2, T2-seg, C2's concept change) are the invariant-critical pair; both
 # compare against the frozen box walk in support/scan_oracle.hpp.
-#
-# RED UNTIL THE NEW HEADERS EXIST, keyed on them so the red does not break the
-# rest of the build: each suite is registered only once its header is on disk.
-# The green commit that adds the headers makes them build; nothing else changes
-# here then.
-if(EXISTS "${PROJECT_SOURCE_DIR}/include/terrain/mesh/row_spans.hpp")
-    add_terrain_backend_test(test_mesh_row_spans unit/test_mesh_row_spans.cpp)
-endif()
-if(EXISTS "${PROJECT_SOURCE_DIR}/include/terrain/raster/row_segments.hpp")
-    add_terrain_backend_test(prop_refinement_scan_equivalence
-                             property/prop_refinement_scan_equivalence.cpp)
-endif()
+add_terrain_backend_test(test_mesh_row_spans unit/test_mesh_row_spans.cpp)
+add_terrain_backend_test(prop_refinement_scan_equivalence
+                         property/prop_refinement_scan_equivalence.cpp)

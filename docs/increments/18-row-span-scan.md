@@ -5,8 +5,8 @@ Status: **implemented, in review.** Red `075113e`; green `62b2926`, `9389bcf`,
 quarter circle at 1 m (see "What landed"). Ola chose C1 (a), C2 (b) simplified to one
 source-wide sentinel, C3 (a) and C4 (a) on 2026-09-26 (section "Ruled by Ola").
 Written by `@architect` before `@tester`, per `docs/increments/README.md`
-step 1, on branch `increment18-row-span-scan` off `increment17-mesh-stats`
-(PR #95). Nothing committed.
+step 1, on branch `increment18-row-span-scan`, cut from `increment17-mesh-stats`
+(since merged as #95).
 
 **Closes.** Ola's idea (2026-09-26): "an iterator over the indices of the DEM
 raster inside a triangle, in a row first fashion for better striding
