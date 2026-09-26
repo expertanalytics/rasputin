@@ -419,16 +419,28 @@ TEST_CASE("Q1 Q2 Q3: the quarter-circle analogue meets the postcondition", "[mes
     REQUIRE(q.inserted > 0);
     REQUIRE(q.walk_bound_hits == 0);  // Q5
 
-    // The pass is serial and deterministic (R10), so its outcome on this
-    // fixture is a fixed value. Pinned so a pass that acts on stale queue
-    // entries (the slot rewritten since it was queued) is caught: the
-    // postcondition alone still holds for that mutant, only the counts move.
-    // A legitimate change to the pass's order or criterion re-pins these.
-    const std::array<std::size_t, 5> expected = dy == 10.0 ? std::array<std::size_t, 5>{109, 0, 7, 0, 0}
-                                                           : std::array<std::size_t, 5>{95, 10, 41, 0, 3};
-    REQUIRE(std::array<std::size_t, 5>{q.inserted, q.skipped_floor, q.skipped_outside, q.skipped_vertex,
-                                       q.skipped_blocked}
-            == expected);
+    // The counts are NOT pinned exactly: the queue orders by a floating-point
+    // ratio and snaps floating-point circumcentres, so they move with FP
+    // contraction (dy 10 inserts 109 with FMA, 92 under -ffp-contract=off).
+    // What is pinned holds in both modes, with margin, and still catches the
+    // mutants the exact pin was added for:
+    //  * stale queue entries acted on: that pass re-processes rewritten slots
+    //    and roughly triples both counts (inserted 275 to 378, skipped_floor
+    //    313 to 353, both modes, both dy); the pass proper stays at inserted
+    //    92 to 109 and skipped_floor 0 or 10;
+    //  * a floor skip left uncounted: dy 5 has floor skips, so > 0;
+    //  * a blocked skip counted as a vertex skip: on a constrained Delaunay
+    //    mesh the snapped node is never an existing vertex reached unblocked
+    //    (see the vertex-skip test below), so skipped_vertex is exactly 0,
+    //    and dy 5 has blocked skips.
+    REQUIRE(q.inserted <= 150);
+    REQUIRE(q.skipped_floor <= 20);
+    REQUIRE(q.skipped_outside > 0);
+    REQUIRE(q.skipped_vertex == 0);
+    if (dy == 5.0) {
+        REQUIRE(q.skipped_floor > 0);
+        REQUIRE(q.skipped_blocked > 0);
+    }
 
     check_topology(m);
     REQUIRE(delaunay_violations(m, frame) == 0);  // Q2

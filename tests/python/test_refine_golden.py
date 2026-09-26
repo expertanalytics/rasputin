@@ -131,7 +131,12 @@ def _cli_outcome(
 def test_the_cli_with_start_min_angle_0_matches_the_digest(
     case: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    out = _cli_outcome(case, tmp_path, monkeypatch, "--start-min-angle", "0")
+    # Pre-20 output needs both of the CLI's post-17 passes off: the start-quality
+    # pass (increment 20) and constraint feet (increment 20b, on by default per
+    # its R9; at 1 m they add 6 vertices to the quarter circle).
+    out = _cli_outcome(
+        case, tmp_path, monkeypatch, "--start-min-angle", "0", "--no-constraint-feet"
+    )
     assert digest(out) == GOLDEN[case]
 
 
