@@ -384,8 +384,11 @@ std::size_t check_postcondition(const LatticeMesh& m, const LatticeFrame& f, con
     return explained;
 }
 
+// Every recorded skip, R4's four reasons plus the walk bound. The floor is
+// included: a floor skip is a bad triangle the pass declined, the same as the
+// others, and leaving it out let a mutant that stops counting it survive.
 std::size_t skips(const QualityOutcome& q) {
-    return q.skipped_outside + q.skipped_vertex + q.skipped_blocked + q.walk_bound_hits;
+    return q.skipped_floor + q.skipped_outside + q.skipped_vertex + q.skipped_blocked + q.walk_bound_hits;
 }
 
 double worst_angle_deg(const LatticeMesh& m, const LatticeFrame& f) {
@@ -415,6 +418,17 @@ TEST_CASE("Q1 Q2 Q3: the quarter-circle analogue meets the postcondition", "[mes
     REQUIRE(before < 5.0);   // the fans are there to be removed
     REQUIRE(q.inserted > 0);
     REQUIRE(q.walk_bound_hits == 0);  // Q5
+
+    // The pass is serial and deterministic (R10), so its outcome on this
+    // fixture is a fixed value. Pinned so a pass that acts on stale queue
+    // entries (the slot rewritten since it was queued) is caught: the
+    // postcondition alone still holds for that mutant, only the counts move.
+    // A legitimate change to the pass's order or criterion re-pins these.
+    const std::array<std::size_t, 5> expected = dy == 10.0 ? std::array<std::size_t, 5>{109, 0, 7, 0, 0}
+                                                           : std::array<std::size_t, 5>{95, 10, 41, 0, 3};
+    REQUIRE(std::array<std::size_t, 5>{q.inserted, q.skipped_floor, q.skipped_outside, q.skipped_vertex,
+                                       q.skipped_blocked}
+            == expected);
 
     check_topology(m);
     REQUIRE(delaunay_violations(m, frame) == 0);  // Q2
@@ -515,6 +529,10 @@ TEST_CASE("Q4: two breaklines at 10 degrees terminate within the bound", "[mesh]
     REQUIRE(q.inserted > 0);
     REQUIRE(q.inserted <= fx.rows * fx.cols / 4);
     REQUIRE(q.walk_bound_hits == 0);  // Q5
+    // The wedge's apex triangles snap to nodes across a breakline: the walk
+    // meets the constraint, and that is a blocked skip, never a vertex skip.
+    REQUIRE(q.skipped_blocked > 0);
+    REQUIRE(q.skipped_vertex == 0);
     check_topology(m);
     REQUIRE(delaunay_violations(m, frame) == 0);
     check_inserted_are_nodes(m, fx, q);
@@ -618,6 +636,39 @@ TEST_CASE("Q1: a bad triangle below the floor is left alone", "[mesh][quality]")
     REQUIRE(s.circumradius < floor_of(frame));
     const QualityOutcome q = run(m, frame, fx);
     REQUIRE(q.inserted == 0);
-    REQUIRE(skips(q) == 0);
+    REQUIRE(q.skipped_floor == 1);  // declined, and counted as declined
+    REQUIRE(skips(q) == q.skipped_floor);
     REQUIRE(m.triangle_count() == 1);
+}
+
+TEST_CASE("Q1: a snapped node that is already a vertex is skipped, not duplicated", "[mesh][quality]") {
+    // R4's third skip. On a constrained Delaunay mesh the vertex nearest a bad
+    // triangle's circumcentre is hidden behind a constraint, so the walk is
+    // blocked first; this fixture is therefore NOT legalised, and improve is
+    // called directly. (col, row): A (0, 10), B (20, 10), C (10, 8) is bad
+    // (5.7 deg at A and B), circumcentre exactly on node (10, 34), R = 24.
+    // Across the unconstrained edge AB the neighbour ABD has D = (10, 34) as
+    // its far apex (45 and 67.5 deg, good). The walk crosses AB, finds p equal
+    // to D (two zero orientations), and must skip.
+    const LatticeFrame frame{1.0, 1.0};
+    Fixture fx;
+    fx.rows = 36;  // D strictly inside the rectangle, not on its border
+    fx.cols = 21;
+    fx.vertices = {MeshVertex{0, 10}, MeshVertex{20, 10}, MeshVertex{10, 8}, MeshVertex{10, 34}};
+    fx.triangles = {{0, 1, 2}, {0, 3, 1}};
+    fx.constraints = {{undirected(1, 2), 1}, {undirected(2, 0), 1}, {undirected(0, 3), 1}, {undirected(3, 1), 1}};
+    LatticeMesh m = build(fx);
+    const Shape s = shape(frame, fx.vertices[0], fx.vertices[1], fx.vertices[2]);
+    REQUIRE(clearly_bad(s, kTheta));
+    REQUIRE(clearly_above_floor(s, frame));
+    REQUIRE(snapped(s, frame, fx.rows, fx.cols) == std::optional<MeshVertex>{fx.vertices[3]});
+
+    const QualityOutcome q =
+        improve<DefaultKernel>(m, frame, QualityOptions{.min_angle_deg = kTheta, .rows = fx.rows, .cols = fx.cols});
+    REQUIRE(q.skipped_vertex == 1);
+    REQUIRE(q.inserted == 0);
+    REQUIRE(skips(q) == 1);
+    REQUIRE(m.vertices().size() == fx.vertices.size());  // no second copy of D
+    REQUIRE(std::vector<TriangleIndices>(m.triangles().begin(), m.triangles().end()) == fx.triangles);
+    check_topology(m);  // includes: no two vertices equal
 }
