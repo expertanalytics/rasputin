@@ -252,3 +252,11 @@ target_link_libraries(prop_refinement_refine PRIVATE Threads::Threads)
 # @tester"): refine's phase seconds and carving counter. Not invariant-critical.
 add_terrain_backend_test(test_refinement_refine unit/test_refinement_refine.cpp)
 target_link_libraries(test_refinement_refine PRIVATE Threads::Threads)
+
+# The row-span scan, increment 18 (docs/increments/18-row-span-scan.md, "Tests
+# for @tester"). test_mesh_row_spans (T1) and prop_refinement_scan_equivalence
+# (T2, T2-seg, C2's concept change) are the invariant-critical pair; both
+# compare against the frozen box walk in support/scan_oracle.hpp.
+add_terrain_backend_test(test_mesh_row_spans unit/test_mesh_row_spans.cpp)
+add_terrain_backend_test(prop_refinement_scan_equivalence
+                         property/prop_refinement_scan_equivalence.cpp)

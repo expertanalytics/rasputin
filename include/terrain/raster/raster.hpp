@@ -24,6 +24,9 @@ concept RasterSource = requires(const R& r, CellIndex c, std::size_t i) {
     { r.geometry() } -> std::same_as<const RasterGeometry&>;
     { r.value_at(c) } -> std::convertible_to<double>;
     { r.is_nodata(c) } -> std::same_as<bool>;
+    // The one sentinel for the whole source, so a row walk can test the value
+    // it already holds instead of re-indexing (increment 18, C2 (b)).
+    { r.nodata() } -> std::same_as<const std::optional<typename R::value_type>&>;
     // Row i as cols() contiguous cells, for callers that walk a whole row.
     { r.row(i) } -> std::same_as<std::span<const typename R::value_type>>;
 };

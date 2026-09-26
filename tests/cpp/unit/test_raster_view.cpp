@@ -81,9 +81,12 @@ public:
     [[nodiscard]] const RasterGeometry& geometry() const noexcept { return geometry_; }
     [[nodiscard]] double value_at(const CellIndex&) const noexcept { return 0.0; }
     [[nodiscard]] bool is_nodata(const CellIndex&) const noexcept { return false; }
+    // Present so the missing row() is the only reason it fails (increment 18, C2 (b)).
+    [[nodiscard]] const std::optional<double>& nodata() const noexcept { return nodata_; }
 
 private:
     RasterGeometry geometry_;
+    std::optional<double> nodata_;
 };
 
 // The independent test double from test_raster.cpp, with row() added as the
@@ -95,11 +98,13 @@ public:
     [[nodiscard]] const RasterGeometry& geometry() const noexcept { return geometry_; }
     [[nodiscard]] double value_at(const CellIndex&) const noexcept { return row_.front(); }
     [[nodiscard]] bool is_nodata(const CellIndex&) const noexcept { return false; }
+    [[nodiscard]] const std::optional<double>& nodata() const noexcept { return nodata_; }
     [[nodiscard]] std::span<const double> row(std::size_t) const noexcept { return row_; }
 
 private:
     RasterGeometry geometry_;
     std::vector<double> row_;
+    std::optional<double> nodata_;  // none; RasterSource requires nodata() (increment 18, C2 (b))
 };
 
 // Points that exercise every branch of bilinear: nodes, cell interiors, the

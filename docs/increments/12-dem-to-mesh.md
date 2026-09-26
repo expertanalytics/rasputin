@@ -270,7 +270,7 @@ kept so the reasons stay on record.
 - (c) Write the vertex with z = NaN and let the viewer cope. Keeps the full
   outline, but NaN in `POINTS` breaks ParaView's bounds and spreads into
   anything computed from the file. This project has refused silent NaN
-  everywhere else (`include/terrain/raster/raster.hpp:62`).
+  everywhere else (`include/terrain/raster/raster.hpp:65`).
 
 **U2. Row access in the concept now, or when a row-walking caller exists.**
 Two sound principles conflict. `project_structure.md` rules that row access
