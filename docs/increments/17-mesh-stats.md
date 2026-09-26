@@ -1,6 +1,8 @@
 # Increment 17 — `rasputin mesh --stats`: sizes, quality and timings as Markdown
 
-Status: **designed, not started.** Written by `@architect` before `@tester`, per
+Status: **implemented, in review.** Red `5843d10`; green `a5d2674` (C++),
+`9d6ba5d` (`stats.py`), `4a1d806` (`cli.py`). Measured 421 added / 73 removed,
+net 348 production lines against ~210 (see "What landed"). Written by `@architect` before `@tester`, per
 `docs/increments/README.md` step 1, on branch `increment17-mesh-stats` off
 `increment16-domain-polygon` (PR #94, merged). The user chose C1 (a) stdout
 and C2 (a) count carving on 2026-09-26 (section "Ruled by the user").
@@ -354,7 +356,7 @@ CLI (`tests/python/test_cli_mesh_stats.py`), with the extension:
   non-negative float; the refine sub-rows sum to at most `refine`. No
   thresholds.
 
-C++ (`test_refinement_refine`, extended): the three seconds fields are
+C++ (`test_refinement_refine`, new in this increment): the three seconds fields are
 non-negative and sum to no more than a wall clock around the call; with C2 (a),
 `carved` is 0 on a DEM without NoData and positive on one with a NoData corner.
 
@@ -373,6 +375,32 @@ Counted in `CLAUDE.md` §2's unit.
 On the worst overrun seen so far (+39 %), about 290. Under 700; not split.
 Increment 16 overran most in `cli.py` option declarations and refusals, so
 that is where to look if this grows.
+
+### What landed
+
+Measured by `@developer` and `@reviewer` (`CLAUDE.md` §2's unit): **+421 / −73,
+net 348**, against ~210: 66 % over the estimate and 20 % over the 290
+contingency, still under 700.
+
+| file | measured | est. |
+|---|---|---|
+| `cli.py` | +199 / −72 | ~65 |
+| `stats.py` | 189 | ~120 |
+| `refine.hpp` | 16 | ~15 |
+| `bindings/core.cpp` | +9 / −1 | ~8 (with `.pyi`) |
+| `_core.pyi` | 8 | |
+
+The prediction above did not hold. The overrun is not option declarations and
+refusals; it is the write section restructured into one encode/target loop
+(every destination resolved before any write), the `_DemMesh` dataclass
+replacing `_dem_mesh`'s tuple, `_write_report` / `_report_target`, and the
+`with clock.phase(...)` re-indentation of existing calls, much of which is
+churn rather than new behaviour. `stats.py` is larger mainly in `render`'s
+omission rules and formatting.
+
+The real quarter-circle run at 1 m (Ola's example) reported refine at 3.29 s
+of 3.39 s, with `refine: scan (parallel)` at 3.11 s; carving 0. This is the
+starting point of the performance investigation that follows.
 
 ## What was measured
 

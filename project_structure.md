@@ -84,6 +84,8 @@ src_python/tin_engine/     # public Python API (distribution name: rasputin)
                            #   CRS and extent; shapely + pyproj, never imports _core
   elevation.py             # drops mesh vertices the DEM has no data for;
                            #   pure numpy, never imports _core
+  stats.py                 # --stats: PhaseClock, quality, Report, render to
+                           #   Markdown; numpy only, no _core, no typer
   features.py              # EdgeVocabulary: which bit means which feature.
                            #   The names C++ refuses to hold. Imports nothing
                            #   first-party and never imports _core

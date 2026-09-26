@@ -37,7 +37,7 @@ increment that most needs a picture to check against
 | 14 | Adaptive refinement: split triangles at the worst DEM node until every triangle's max error is within `--tolerance`; parallel scan, serial deterministic splits | shipped (#92) | `docs/increments/14-adaptive-refinement.md` |
 | 14b | Delaunay insertion: Lawson flips after each refinement insertion, never across a constraint, flipped triangles rescanned; the output is constrained Delaunay and still within `--tolerance` | shipped (#93) | `docs/increments/14b-delaunay-insertion.md` |
 | 16 | Mesh a domain polygon: `--domain` (GeoJSON or WKT, one polygon with holes, CRS equal to the DEM's), vertices kept where they are with bilinear z (DEM values are point heights), the start mesh is the CDT of its rings alone, then refinement inserts DEM nodes as in 14b. Pulled forward from the catchment-clip entry at the user's request | shipped (#94) | `docs/increments/16-domain-polygon.md` |
-| 17 | `rasputin mesh --stats PATH` (or `-` for stdout): a Markdown report of sizes, plan-view quality (min angle, vertex degree), refinement counters and per-phase timings, with `refine`'s legalise, scan and split-and-flip times from new `RefineOutcome` fields | designed | `docs/increments/17-mesh-stats.md` |
+| 17 | `rasputin mesh --stats PATH` (or `-` for stdout): a Markdown report of sizes, plan-view quality (min angle, vertex degree), refinement counters and per-phase timings, with `refine`'s legalise, scan and split-and-flip times from new `RefineOutcome` fields | implemented, in review | `docs/increments/17-mesh-stats.md` |
 | — | `raster/`: grid-to-world geometry and bilinear sampling | shipped (`7785fea`), **no record** | none — predates the protocol |
 
 ## What stands between here and an operational MVP
