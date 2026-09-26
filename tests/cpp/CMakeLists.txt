@@ -241,34 +241,7 @@ target_link_libraries(test_mesh_lawson PRIVATE Threads::Threads)
 # Off-node start vertices, increment 16 (docs/increments/16-domain-polygon.md,
 # "Tests for @tester"). test_refinement_scan_offnode and prop_refinement_refine
 # are the invariant-critical pair.
-#
-# RED-STEP SCAFFOLD -- REMOVE AT GREEN. Both suites are keyed on
-# `struct MeshVertex` appearing in include/terrain/mesh/lattice_mesh.hpp (the
-# increment adds no header to key on). While it is absent they are
-# EXCLUDE_FROM_ALL and not registered with ctest, so `cmake --build build` and
-# `ctest` stay green; see the red with `cmake --build build --target
-# test_refinement_scan_offnode prop_refinement_refine`. prop_refinement_refine
-# is green under 14b and drops out of ctest for the red step only because it
-# now names OutsideGrid and off-node rings. The header is a configure
-# dependency, so the switch flips on the first build after it changes. At green
-# replace this block with two add_terrain_backend_test calls plus the Threads
-# link.
-set(_lattice_mesh_hpp "${PROJECT_SOURCE_DIR}/include/terrain/mesh/lattice_mesh.hpp")
-set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${_lattice_mesh_hpp}")
-file(READ "${_lattice_mesh_hpp}" _lattice_mesh_src)
-function(add_offnode_red_suite name)
-    if(_lattice_mesh_src MATCHES "struct MeshVertex")
-        add_terrain_backend_test(${name} ${ARGN})
-    else()
-        message(STATUS "${name}: MeshVertex absent from lattice_mesh.hpp; "
-                       "suite built only on request (increment 16 red step)")
-        add_executable(${name} EXCLUDE_FROM_ALL ${ARGN})
-        target_link_libraries(${name} PRIVATE
-            terrain_headers terrain_test_support Catch2::Catch2WithMain terrain_predicates)
-        target_compile_options(${name} PRIVATE -Wall -Wextra -Wpedantic -Werror)
-    endif()
-    target_link_libraries(${name} PRIVATE Threads::Threads)
-endfunction()
-
-add_offnode_red_suite(test_refinement_scan_offnode unit/test_refinement_scan_offnode.cpp)
-add_offnode_red_suite(prop_refinement_refine property/prop_refinement_refine.cpp)
+add_terrain_backend_test(test_refinement_scan_offnode unit/test_refinement_scan_offnode.cpp)
+target_link_libraries(test_refinement_scan_offnode PRIVATE Threads::Threads)
+add_terrain_backend_test(prop_refinement_refine property/prop_refinement_refine.cpp)
+target_link_libraries(prop_refinement_refine PRIVATE Threads::Threads)
