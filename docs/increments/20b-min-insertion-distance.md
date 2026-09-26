@@ -416,8 +416,12 @@ On the worst overrun seen so far (increment 20: about +50 %), about 150. **Under
 
 ### What landed
 
-132 production lines against ~100 (+32 %, under 700); most in `refine.hpp`
-(about 90 against 70). Settled at green: `--no-constraint-feet` needs
+126 net production lines against ~100 (+26 %, under 700), the Lawson fix
+below included (3 of them); 90 in `refine.hpp` against ~70. Method: for each
+production file the branch touches (`include/`, `bindings/`, `src_python/`),
+count the lines at the branch tip and at `d32ce59` (the last increment-20
+commit), skipping comments, docstrings and raw-literal bodies per `CLAUDE.md`
+§2; blank lines count. The figure is the difference. Settled at green: `--no-constraint-feet` needs
 `--tolerance` and `--dem`, like `--start-min-angle`; only the first
 constrained edge closer than ε is tried; a refusal is counted only when `N` is
 then inserted; when `G` is 0, ε is the cap (otherwise 0/0 at tolerance 0 on
@@ -440,6 +444,23 @@ Found at green, fixed by `@tester` in `cb7eb96`: increment 20's Q1 pin
 `-ffp-contract=off`); it is now bounds that hold in both modes and still kill
 the stale-check and miscount mutants. The golden CLI test needs both passes
 off to reproduce pre-20 output.
+
+Found at review, fixed in `c23583b`: a Lawson defect older than 20b.
+Orientation is exact on (col, -row), but the circle test ran in the rounded
+`LatticeFrame`. A triangle counter-clockwise in the mesh but collinear in the
+frame got Cocircular, so an illegal edge seen from that side never flipped.
+The feet suite's Delaunay oracle found it at tolerance 0. `must_flip` now asks
+the side that is counter-clockwise in the frame.
+
+- At tolerance > 0 flip decisions change. In the default build flip counts and
+  the slot order change too: `@reviewer` measured T16 Z2 going from 242 to 239
+  flips and T-deg section 2 from 235 to 241. The triangle set is unchanged, and
+  no non-Delaunay output at tolerance > 0 was found before the fix.
+- Correction to `f6a6ecf`'s message: digests and flip counts are identical with
+  and without the fix only in the `-ffp-contract=off` build, not "in both
+  builds".
+- Tests: the needle case and F4 in the feet suite, and L4b in
+  `test_mesh_lawson`, go red against the pre-fix `lawson.hpp`.
 
 ## Acceptance
 

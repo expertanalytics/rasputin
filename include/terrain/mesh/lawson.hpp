@@ -43,8 +43,9 @@ struct LatticeFrame {
 
 namespace detail {
 
-// Whether t's edge e must flip: interior, unconstrained, and the apex across
-// it strictly inside t's circle in the frame.
+// Whether t's edge e must flip: interior, unconstrained, and the quad's
+// incircle determinant positive in the frame -- the apex across e inside t's
+// circle, or t's apex inside the neighbour's circle.
 template <pred::GeometryKernel K>
 [[nodiscard]] bool must_flip(const LatticeMesh& m, std::uint32_t t, unsigned e,
                              const LatticeFrame& f) {
@@ -59,10 +60,13 @@ template <pred::GeometryKernel K>
     const Point2 a = f.at(v[tri[e]]), b = f.at(v[tri[(e + 1) % 3]]), c = f.at(v[tri[(e + 2) % 3]]),
                  d = f.at(v[m.triangles()[u][(j + 2) % 3]]);
     // Orientation is exact on (col, -row), but the frame rounds col * dx and
-    // row * dy, so an off-node sliver that is counter-clockwise in the mesh
-    // can be collinear or clockwise here, and its circle then says nothing.
-    // The test is asked of whichever side is counter-clockwise in the frame:
-    // where both are, the two answers are the same exact determinant.
+    // row * dy, so a triangle counter-clockwise in the mesh can be collinear
+    // or clockwise here. The kernel answers Cocircular for a collinear triple
+    // and reorders a clockwise one, whose answer then has the wrong sign for
+    // termination. So the test is asked only of a side counter-clockwise in
+    // the frame. Both branches flip exactly when the same exact determinant,
+    // on the frame points of the quad in mesh CCW order, is positive; a flip
+    // lowers the sum of signed lifted volumes, so the process terminates.
     if (K::orient2d(a, b, c) == pred::Orientation::CounterClockwise)
         return K::incircle(a, b, c, d) == pred::Incircle::Inside;
     return K::orient2d(b, a, d) == pred::Orientation::CounterClockwise
