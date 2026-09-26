@@ -1,6 +1,8 @@
 # Increment 18 — the refinement scan walks row spans, not bounding boxes
 
-Status: **designed, not started.** Ola chose C1 (a), C2 (b) simplified to one
+Status: **implemented, in review.** Red `075113e`; green `62b2926`, `9389bcf`,
+`3d395c3`. Output byte-identical to `e0578e5`; scan 15x faster on Ola's
+quarter circle at 1 m (see "What landed"). Ola chose C1 (a), C2 (b) simplified to one
 source-wide sentinel, C3 (a) and C4 (a) on 2026-09-26 (section "Ruled by Ola").
 Written by `@architect` before `@tester`, per `docs/increments/README.md`
 step 1, on branch `increment18-row-span-scan` off `increment17-mesh-stats`
@@ -634,6 +636,27 @@ Counted in `CLAUDE.md` §2's unit.
 Increment 17's measured overrun was +66 %. On that basis the figure is about
 250, which is under 700, so there is no split. `scan_oracle.hpp` is test code
 and is not counted.
+
+### What landed
+
+Measured by `@developer`: **+168 / −42, net 126** production lines against
+~150, under the estimate.
+
+Timings, median of three runs with `--stats`, "before" built from `e0578e5`;
+every output file is byte-identical before and after, and T3's digests match:
+
+| run | scan before → after | speed-up | bar | refine | total |
+|---|---|---|---|---|---|
+| quarter circle, 1 m | 3.120 → 0.207 s | 15× | ≥ 5× | 3.294 → 0.381 s | 3.389 → 0.475 s |
+| quarter circle, 10 m | 2.664 → 0.125 s | 21× | ≥ 3× | 2.674 → 0.135 s | 2.745 → 0.205 s |
+| tile, no domain, 1 m | 0.100 → 0.076 s | 1.3× | not slower | 0.284 → 0.264 s | 0.431 → 0.414 s |
+
+All three bars met. Settled at green: `where` is classified once per triangle
+on the recorded node with the oracle's own exact zero-tests, instead of R1d's
+derivation from `flat_edge` (which T1 still tests); a horizontal edge's row
+is decided by one exact sign with no predicate call; a NaN estimate in the
+mixed path falls to the widened box's low end and the exact correction finds
+the bound.
 
 ## Acceptance
 
