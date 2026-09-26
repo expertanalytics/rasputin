@@ -85,3 +85,24 @@ design anything.
   rulings".
 - Also for the retrospective: simplification from dense meshes, meaning
   Garland and Heckbert 1997 (quadric error metrics) and Lindstrom and Turk.
+
+## First experiment, 2026-09-26: parked
+
+This was a scratchpad prototype and was not kept. It inserted the worst node
+greedily, then flipped an unconstrained convex quad when the flip strictly
+lowered the max vertical error over the quad's DEM nodes. The "hybrid" variant
+also refused any flip that would create an angle under 1°. The "lex" variants
+used a tie-break that the prototype added and did not document. Setup: quarter
+circle, on battery.
+
+| variant | 10 m triangles | vs baseline | 1 m triangles | vs baseline | 1 m refine s |
+|---|---|---|---|---|---|
+| baseline (HEAD defaults) | 31 581 | — | 428 217 | — | 0.25 |
+| DDT | 79 873 | +153 % | 583 267 | +36 % | 3.9 |
+| hybrid | 67 749 | +115 % | 543 781 | +27 % | 3.2 |
+| hybrid, lex | 53 867 | +71 % | 464 187 | +8 % | 3.7 |
+
+Every variant met its tolerance, and every DDT variant had a worst angle near
+0°. The local max-error flip rule costs triangles instead of saving them. Ola
+parked DDT for now. Any revisit should try the smoothness costs of Dyn, Levin
+and Rippa rather than the local max error.
