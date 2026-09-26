@@ -17,7 +17,10 @@ Increment 20 (`docs/increments/20-start-quality.md`, Q7 and R11) re-runs them
 with the start-quality pass off: the binding's ``min_angle_deg=0`` given
 explicitly, and ``rasputin mesh --start-min-angle 0`` itself, whose ``refine``
 call is captured and digested. Both must still give increment 17's digests;
-the CLI's default (25) must not.
+the CLI's default (25) must not. Since increment 20b the CLI also turns
+constraint feet on by default, so the pre-20 output needs both
+``--start-min-angle 0`` and ``--no-constraint-feet``; the binding's default
+(``constraint_feet=False``) already leaves them off.
 """
 
 from __future__ import annotations

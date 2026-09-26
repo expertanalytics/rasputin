@@ -320,12 +320,50 @@ void constraints_oracle(const Raster<float>& dem, const Start& start, const Outc
     }
 }
 
+// 14b R10 with feet on: every interior edge that is not a constraint edge has
+// neither apex strictly inside the other triangle's circle, in 14b's
+// LatticeFrame (col dx, -(row dy)) on the fractional coordinates recovered from
+// the output. A foot's split must be legalised like any other (R2 step 3);
+// prop_refinement_refine.cpp's T16 oracle, restated here.
 template <typename Outcome>
-Feet check(const Raster<float>& dem, const Start& start, const Outcome& out, double tol) {
+void delaunay_oracle(const RasterGeometry& g, const Outcome& out) {
+    auto lf = [&](std::uint32_t i) {
+        const Frac f = frac(g, out.vertices[i]);
+        return Point2{f.col * g.delta_x(), -(f.row * g.delta_y())};
+    };
+    std::set<std::pair<std::uint32_t, std::uint32_t>> constrained;
+    for (const auto& e : out.edges) constrained.insert(std::minmax(e[0], e[1]));
+    std::map<std::pair<std::uint32_t, std::uint32_t>, std::vector<std::size_t>> sides;
+    for (std::size_t t = 0; t < out.triangles.size(); ++t)
+        for (unsigned k = 0; k < 3; ++k)
+            sides[std::minmax(out.triangles[t][k], out.triangles[t][(k + 1) % 3])].push_back(t);
+    std::size_t bad = 0;
+    for (const auto& [e, ts] : sides) {
+        REQUIRE(ts.size() <= 2);
+        if (ts.size() != 2 || constrained.count(e) != 0) continue;
+        for (unsigned s = 0; s < 2; ++s) {
+            const auto& tri = out.triangles[ts[s]];
+            std::uint32_t apex = 0;
+            for (const auto x : out.triangles[ts[1 - s]])
+                if (x != e.first && x != e.second) apex = x;
+            if (DefaultKernel::incircle(lf(tri[0]), lf(tri[1]), lf(tri[2]), lf(apex)) == terrain::pred::Incircle::Inside) {
+                UNSCOPED_INFO("edge " << e.first << "-" << e.second << " apex " << apex);
+                ++bad;
+            }
+        }
+    }
+    REQUIRE(bad == 0);
+}
+
+// `delaunay` is false only for the one known pre-20b defect below.
+template <typename Outcome>
+Feet check(const Raster<float>& dem, const Start& start, const Outcome& out, double tol,
+           bool delaunay = true) {
     REQUIRE(out.ok());
     const Feet feet = classify(dem, start, out);
     tolerance_oracle(dem, out, tol);
     constraints_oracle(dem, start, out, feet);
+    if (delaunay) delaunay_oracle(dem.geometry(), out);
     // R2 step 5: a node is footed once, so no two feet share a source node.
     REQUIRE(std::set(feet.source.begin(), feet.source.end()).size() == feet.source.size());
     return feet;
@@ -442,7 +480,7 @@ TEST_CASE("F2: a foot in a NoData cell is refused and the node inserted instead"
     const auto start = feet_fixtures::needle_start(g);
     const auto out = run(dem, start, 0.5, true);
     check(dem, start, out, 0.5);
-    REQUIRE(out.feet_refused >= 1);
+    REQUIRE(out.feet_refused == 1);  // measured: the needle alone is refused
     REQUIRE(has_vertex(g, out.vertices, kNeedle));
 }
 
@@ -471,7 +509,8 @@ TEST_CASE("F4: at tolerance 0 the fallback inserts the footed node and the run e
     const RasterGeometry& g = dem.geometry();
     const auto start = feet_fixtures::needle_start(g);
     const auto out = run(dem, start, 0.0, true);
-    const Feet feet = check(dem, start, out, 0.0);  // spacing >= floor, one foot per node
+    // Not Delaunay here, with feet off as well: see the [!shouldfail] case below.
+    const Feet feet = check(dem, start, out, 0.0, false);  // spacing >= floor, one foot per node
     REQUIRE(out.max_error == 0.0);
     REQUIRE(out.feet >= 1);
     // The needle got its foot, and then went in anyway: R5's fallback.
@@ -479,6 +518,23 @@ TEST_CASE("F4: at tolerance 0 the fallback inserts the footed node and the run e
     REQUIRE(has_vertex(g, out.vertices, kNeedle));
     // R6.2: one foot per node (check() above), so no more feet than nodes.
     REQUIRE(feet.source.size() <= g.rows() * g.cols());
+}
+
+TEST_CASE("Known defect, not 20b's: at tolerance 0 the needle fixture is not constrained Delaunay",
+          "[refinement][feet][!shouldfail]") {
+    // Found by the incircle oracle when it was added to check(). Feet off or on,
+    // the output has the unconstrained interior edge (27, 2)-(27, 7) in
+    // (col, row) with (28, 4) strictly inside the circle of (27, 2) (26, 6)
+    // (27, 7) in the LatticeFrame: exact incircle determinant 12500. All four
+    // are lattice nodes, nowhere near a constraint, and the quad is convex, so
+    // Lawson should have flipped it. At 0.5 m the same fixture is Delaunay.
+    // [!shouldfail]: this case goes red when the defect is fixed, so the
+    // exemption in F4 above is removed with it.
+    const auto dem = feet_fixtures::needle_dem();
+    const auto start = feet_fixtures::needle_start(dem.geometry());
+    const bool feet = GENERATE(false, true);
+    CAPTURE(feet);
+    delaunay_oracle(dem.geometry(), run(dem, start, 0.0, feet));
 }
 
 // ------------------------------------------------------------------------ F5
@@ -539,4 +595,107 @@ TEST_CASE("T6 with feet: bit-identical for 1 2 7 and all threads", "[refinement]
     REQUIRE(refine_digest::digest(other) == refine_digest::digest(ref));
     REQUIRE(other.feet == ref.feet);
     REQUIRE(other.feet_refused == ref.feet_refused);
+}
+
+// ---------------------------------------------------------------- the helpers, directly
+//
+// detail::foot_epsilon, foot_of and foot_fits on hand-built inputs. Each case
+// names the mutant it was checked against; see the commit that added them.
+
+namespace {
+
+using terrain::mesh::LatticeMesh;
+using terrain::mesh::LatticeVertex;
+using terrain::mesh::MeshVertex;
+
+// refinement_fixtures::geometry: dx = 10 m, dy = 5 m, so cap = 2.5 m and floor = 0.05 m.
+Raster<float> plane(std::size_t rows, std::size_t cols, double per_x, std::optional<float> nodata = std::nullopt) {
+    const auto g = refinement_fixtures::geometry(rows, cols);
+    std::vector<float> z;
+    for (std::size_t r = 0; r < rows; ++r)
+        for (std::size_t c = 0; c < cols; ++c) z.push_back(static_cast<float>(per_x * static_cast<double>(c) * g.delta_x()));
+    return Raster<float>{g, std::move(z), nodata};
+}
+
+}  // namespace
+
+TEST_CASE("R3: foot_epsilon is the cap where G is 0, for any tolerance", "[refinement][feet][helpers]") {
+    const auto dem = plane(5, 5, 0.0);
+    const double tol = GENERATE(0.0, 1e-3, 1.0, 1e6);
+    CAPTURE(tol);
+    REQUIRE(terrain::refinement::detail::foot_epsilon(dem, LatticeVertex{2, 2}, tol) == cap(dem.geometry()));
+    REQUIRE(terrain::refinement::detail::foot_epsilon(dem, LatticeVertex{0, 0}, tol) == cap(dem.geometry()));  // a corner node: one cell
+}
+
+TEST_CASE("R3: foot_epsilon is tol / G clamped to [floor, cap]", "[refinement][feet][helpers]") {
+    // z = x: G = 1 exactly (10 m per 10 m column, 0 per row).
+    const auto dem = plane(5, 5, 1.0);
+    const RasterGeometry& g = dem.geometry();
+    using terrain::refinement::detail::foot_epsilon;
+    REQUIRE(foot_epsilon(dem, LatticeVertex{2, 2}, 1.0) == 1.0);        // inside the band: tol / G
+    REQUIRE(foot_epsilon(dem, LatticeVertex{2, 2}, 100.0) == cap(g));   // clamped down
+    REQUIRE(foot_epsilon(dem, LatticeVertex{2, 2}, 1e-4) == floor_eps(g));  // clamped up
+    REQUIRE(foot_epsilon(dem, LatticeVertex{2, 2}, 0.0) == floor_eps(g));   // tolerance 0 on a slope: the floor
+}
+
+TEST_CASE("R3: a cell with a NoData corner is left out of G", "[refinement][feet][helpers]") {
+    // Flat, except node (1, 1) is the sentinel: the four cells around it each
+    // have that corner, so G takes none of them. If it did, -9999 m over 10 m
+    // would put ε at the floor. Node (2, 2)'s cells include (1, 1)'s cell too.
+    const float sentinel = -9999.0f;
+    auto dem0 = plane(5, 5, 0.0);
+    std::vector<float> z(25, 0.0f);
+    z[1 * 5 + 1] = sentinel;
+    const Raster<float> dem{dem0.geometry(), std::move(z), sentinel};
+    using terrain::refinement::detail::foot_epsilon;
+    REQUIRE(foot_epsilon(dem, LatticeVertex{2, 2}, 1.0) == cap(dem.geometry()));
+    REQUIRE(foot_epsilon(dem, LatticeVertex{1, 1}, 1.0) == cap(dem.geometry()));  // every cell has it: G = 0
+}
+
+TEST_CASE("R2 step 2: no foot within eps of a segment end", "[refinement][feet][helpers]") {
+    // One triangle (col, row): A (6, 0.8), B (1.8, 0.8), C (1, 3); A-B is
+    // constrained and runs along row 0.8, 1 m from row 1. Flat DEM, so eps is
+    // the cap, 2.5 m. The node (row 1, col 4) projects 22 m from B: a foot.
+    // The node (row 1, col 2) projects 2 m from B, inside eps: no foot (N goes in).
+    const auto dem = plane(6, 8, 0.0);
+    auto m = LatticeMesh::build(std::vector<MeshVertex>{{6.0, 0.8}, {1.8, 0.8}, {1.0, 3.0}}, {{0, 1, 2}}, {1u}, {{{7u, 0u, 0u}}});
+    REQUIRE(m.has_value());
+    using terrain::refinement::detail::foot_of;
+
+    const auto far = foot_of(dem, *m, 0, LatticeVertex{1, 4}, 1.0);
+    REQUIRE(far.has_value());
+    REQUIRE(far->edge == 0u);
+    REQUIRE(std::abs(far->at.col - 4.0) <= 1e-12);  // the projection of N
+    REQUIRE(far->at.row == 0.8);
+
+    REQUIRE_FALSE(foot_of(dem, *m, 0, LatticeVertex{1, 2}, 1.0).has_value());  // M2
+
+    // The same at A's end: A moved to (4.1, 0.8), the node at col 4 is 1 m from it.
+    auto m2 = LatticeMesh::build(std::vector<MeshVertex>{{4.1, 0.8}, {1.8, 0.8}, {1.0, 3.0}}, {{0, 1, 2}}, {1u}, {{{7u, 0u, 0u}}});
+    REQUIRE(m2.has_value());
+    REQUIRE_FALSE(foot_of(dem, *m2, 0, LatticeVertex{1, 4}, 1.0).has_value());  // M2
+    REQUIRE(foot_of(dem, *m2, 0, LatticeVertex{1, 3}, 1.0).has_value());          // the control, 9 m from A
+}
+
+TEST_CASE("R2 step 4: foot_fits refuses a foot that folds either side of the edge", "[refinement][feet][helpers]") {
+    // t = (A, B, C) and its neighbour u = (B, A, D) across the constrained
+    // edge A-B, both slivers: A (0, 2), B (4, 2), C (2, 1.999), D (2, 2.001)
+    // in (col, row). A candidate foot a hundredth of a row off A-B folds
+    // whichever sliver it is off towards.
+    auto m = LatticeMesh::build(std::vector<MeshVertex>{{0.0, 2.0}, {4.0, 2.0}, {2.0, 1.999}, {2.0, 2.001}},
+                                {{0, 1, 2}, {1, 0, 3}}, {1u, 1u}, {{{1u, 0u, 0u}, {1u, 0u, 0u}}});
+    REQUIRE(m.has_value());
+    REQUIRE(m->neighbours(0)[0] == 1u);
+    using terrain::refinement::detail::foot_fits;
+
+    REQUIRE(foot_fits(*m, 0, 0, MeshVertex{1.0, 2.0}));         // on the edge: fits
+    REQUIRE_FALSE(foot_fits(*m, 0, 0, MeshVertex{1.0, 1.99}));  // M5: past C, t's side folds
+    REQUIRE_FALSE(foot_fits(*m, 0, 0, MeshVertex{1.0, 2.01}));  // M8: past D, only u's side folds
+    REQUIRE_FALSE(foot_fits(*m, 1, 0, MeshVertex{1.0, 1.99}));  // from u: t is the neighbour now
+
+    // With no neighbour only t's side is asked: past D is then fine.
+    auto lone = LatticeMesh::build(std::vector<MeshVertex>{{0.0, 2.0}, {4.0, 2.0}, {2.0, 1.999}}, {{0, 1, 2}}, {1u}, {{{1u, 0u, 0u}}});
+    REQUIRE(lone.has_value());
+    REQUIRE(foot_fits(*lone, 0, 0, MeshVertex{1.0, 2.01}));
+    REQUIRE_FALSE(foot_fits(*lone, 0, 0, MeshVertex{1.0, 1.99}));
 }

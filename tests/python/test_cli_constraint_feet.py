@@ -41,7 +41,7 @@ import pytest
 
 import tin_engine.cli as cli
 from geotiff_fixtures import KARTVERKET, micro_tiff, needs_codecs
-from test_cli_mesh_dem import invoke, write_tiff
+from test_cli_mesh_dem import USAGE, invoke, write_tiff
 from test_cli_mesh_domain import SQUARE, geojson, quarter_circle
 from test_cli_mesh_refine import NUMBER, field, min_angles_degrees, sentence
 from test_cli_mesh_stats import mesh, section, table
@@ -181,6 +181,29 @@ class TestTheFlag:
     def test_the_sentence_is_ascii(self, tmp_path: Path, bumpy: Path, box: Path) -> None:
         vtk, _ = run(tmp_path, "--dem", str(bumpy), "--domain", str(box), "--tolerance", "1")
         assert sentence(vtk).isascii()
+
+
+class TestRefusals:
+    """R9: ``--no-constraint-feet`` is refused where it could change nothing."""
+
+    def test_without_tolerance(self, tmp_path: Path, bumpy: Path) -> None:
+        target = tmp_path / "x.vtk"
+        code, output = invoke("--dem", str(bumpy), "--no-constraint-feet", "--out", str(target))
+        assert code == USAGE, output
+        assert "No such option" not in output  # refused for its use, not unknown
+        assert "--no-constraint-feet needs --tolerance" in output
+        assert not target.exists()
+
+    def test_without_dem(self, tmp_path: Path) -> None:
+        target = tmp_path / "x.vtk"
+        code, output = invoke(
+            "catchment", "--flat", "--no-constraint-feet", "--out", str(target)
+        )
+        assert code == USAGE, output
+        assert "No such option" not in output  # refused for its use, not unknown
+        assert "applies only with --dem" in output
+        assert "--no-constraint-feet" in output
+        assert not target.exists()
 
 
 class TestReport:
