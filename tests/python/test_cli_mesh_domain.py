@@ -176,6 +176,30 @@ class TestDomainOutput:
             assert abs(vtk.points[i, 0] - x) <= SNAP / 2 + 1e-9
             assert abs(vtk.points[i, 1] - y) <= SNAP / 2 + 1e-9
 
+    def test_an_input_vertex_on_the_snap_grid_comes_out_bit_for_bit(self, tmp_path: Path) -> None:
+        """Z3: positions are the input's, never recomputed from the fractional frame.
+
+        With the grid's x_min at 0, x = 12.708 does not survive the frame round
+        trip, x_min + ((x - x_min) / dx) * dx; near TIE_X = 500 000 every
+        coordinate does, which is why the other fixtures cannot tell. 12.708 is
+        on the 1 mm snap grid, so U6's snap leaves it where it is and the output
+        must hold it exactly.
+        """
+        x_min = 0.0
+        odd = (12_708 * SNAP, TIE_Y - 73.3)
+        assert x_min + ((odd[0] - x_min) / 10.0) * 10.0 != odd[0]
+        assert round(odd[0] / SNAP) * SNAP == odd[0]
+        array = np.random.default_rng(16).uniform(0.0, 50.0, (ROWS, COLS)).astype(np.float32)
+        tif = write_tiff(
+            tmp_path / "origin.tif", micro_tiff(array, tiepoint=(0.0, 0.0, 0.0, x_min, TIE_Y, 0.0))
+        )
+        ring = [odd, *((x - TIE_X, y) for x, y in SQUARE[1:])]
+        vtk, _ = meshed(tmp_path, tif, geojson(tmp_path / "origin.geojson", ring))
+        for x, y in ring:
+            snapped = (round(x / SNAP) * SNAP, round(y / SNAP) * SNAP)
+            i = nearest(vtk.points, *snapped)
+            assert (vtk.points[i, 0], vtk.points[i, 1]) == snapped
+
     def test_boundary_z_is_bilinear_and_inserted_vertices_are_nodes(
         self, tmp_path: Path, bumpy: Path, square: Path
     ) -> None:
@@ -350,6 +374,29 @@ class TestRefusals:
         )
         assert code == 0, output
         assert target.exists()
+
+    def test_geojson_with_an_agreeing_domain_crs_is_accepted(
+        self, tmp_path: Path, bumpy: Path, square: Path
+    ) -> None:
+        code, output, target = mesh(
+            tmp_path, bumpy, square, "--tolerance", "1", "--domain-crs", "EPSG:25833"
+        )
+        assert code == 0, output
+        assert target.exists()
+
+    def test_geojson_with_a_disagreeing_domain_crs(
+        self, tmp_path: Path, bumpy: Path, square: Path
+    ) -> None:
+        self.refused(
+            tmp_path,
+            bumpy,
+            square,
+            "--tolerance",
+            "1",
+            "--domain-crs",
+            "EPSG:25832",
+            says=("--domain-crs", "25832", "25833"),
+        )
 
     def test_a_vertex_outside_the_node_rectangle(self, tmp_path: Path, bumpy: Path) -> None:
         outer = [*SQUARE[:1], (TIE_X + 200.5, TIE_Y - 72.9), *SQUARE[2:]]

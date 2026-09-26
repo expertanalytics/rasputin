@@ -685,11 +685,9 @@ struct RingStart {
     std::vector<std::uint32_t> masks;
 };
 
-RingStart fan(const RasterGeometry& g, const std::vector<std::array<double, 2>>& ring) {  // (col, row)
-    std::vector<Point2> xy;
-    for (const auto& [c, r] : ring) xy.push_back(world(g, c, r));
+RingStart fan(std::vector<Point2> xy) {  // world
     std::vector<TriangleIndices> tris;
-    const auto n = static_cast<std::uint32_t>(ring.size());
+    const auto n = static_cast<std::uint32_t>(xy.size());
     for (std::uint32_t i = 1; i + 1 < n; ++i) tris.push_back({0, i, i + 1});
     RingStart s;
     s.mesh = IndexedMesh2{std::move(xy), std::move(tris), std::vector<std::uint8_t>(n - 2, 0)};
@@ -698,6 +696,12 @@ RingStart fan(const RasterGeometry& g, const std::vector<std::array<double, 2>>&
         s.masks.push_back(1);
     }
     return s;
+}
+
+RingStart fan(const RasterGeometry& g, const std::vector<std::array<double, 2>>& ring) {  // (col, row)
+    std::vector<Point2> xy;
+    for (const auto& [c, r] : ring) xy.push_back(world(g, c, r));
+    return fan(std::move(xy));
 }
 
 auto run_ring(const Raster<float>& dem, const RingStart& s, double tol, unsigned threads = 1) {
@@ -944,4 +948,25 @@ TEST_CASE("T16: a vertex on the grid border is inside the node rectangle", "[ref
     const auto start = fan(dem.geometry(), {{0.0, 3.7}, {5.3, 16.0}, {16.0, 11.1}, {9.9, 0.0}});
     const auto out = run_ring(dem, start, 1.0);
     check_offnode(dem, start.mesh, out, 1.0);
+}
+
+TEST_CASE("T16 Z3: a start vertex that does not survive the frame round trip comes out as given",
+          "[refinement][refine][offnode]") {
+    // Every other fixture here sits near x_min = 500 000, where
+    // x_min + ((x - x_min) / dx) * dx rounds back to x whatever the quotient
+    // did, so an output position recomputed from the fractional frame is
+    // indistinguishable from the input. With x_min = 0 it is not: x = 12.708
+    // gives 12.708000000000002 through the frame. The REQUIRE below is the
+    // fixture's own proof that the test can fail.
+    const std::size_t n = 17;
+    const RasterGeometry g{0.0, 160.0, 10.0, 10.0, n, n};
+    const Point2 odd{12.708, 12.701};
+    REQUIRE(g.x_min() + ((odd.x - g.x_min()) / g.delta_x()) * g.delta_x() != odd.x);
+    const Raster<float> dem{g, rough_dem(n, n, 7)};
+    const auto start = fan({odd, Point2{147.3, 13.1}, Point2{146.9, 147.2}, Point2{13.2, 146.7}});
+    const double tol = GENERATE(0.0, 1.0);
+    const auto out = run_ring(dem, start, tol);
+    check_offnode(dem, start.mesh, out, tol);  // Z3: as given, bit for bit
+    REQUIRE(out.vertices[0].x == odd.x);
+    REQUIRE(out.vertices[0].y == odd.y);
 }

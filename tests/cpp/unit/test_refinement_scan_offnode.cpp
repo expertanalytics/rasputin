@@ -310,3 +310,20 @@ TEST_CASE("scan off-node: a NoData corner with zero weight still voids an off-no
     const auto s = scan(dem, one(mv(0.625, 0.0), mv(0.5, 7.5), mv(7.5, 7.5)), 0);
     REQUIRE(s.is_void);
 }
+
+TEST_CASE("scan off-node: the carve point is nearest in both row and column of the fractional frame",
+          "[refinement][scan][offnode][nodata]") {
+    // A = (col 6.625, row 0.625) sits in the cell whose corner (0, 6) is NaN,
+    // so A is a NoData vertex and the triangle is void. The triangle's valid
+    // nodes nearest A are all on row 1, cols 1 to 6: equal in row distance,
+    // so only the column term separates them. By squared distance (6, 1) is
+    // 0.53 cell^2 from A and (1, 1) is 31.8; a carving distance that drops the
+    // column term ties them and the row-major scan returns (1, 1).
+    auto z = plane(9);
+    z[0 * 9 + 6] = kNaN;
+    const auto dem = dem_of(9, std::move(z));
+    const auto s = scan(dem, one(mv(6.625, 0.625), mv(0.5, 0.75), mv(7.5, 7.5)), 0);
+    REQUIRE(s.is_void);
+    REQUIRE(s.node == LatticeVertex{1, 6});
+    REQUIRE(s.where == NodeLocation::Inside);
+}

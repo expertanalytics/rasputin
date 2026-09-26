@@ -117,6 +117,14 @@ class TestReading:
     ) -> None:
         assert domain.read_domain(write(tmp_path, geojson(square(), crs=crs)), META).epsg == 25833
 
+    @pytest.mark.parametrize("flag", ["EPSG:25833", "epsg:25833"])
+    @pytest.mark.parametrize("member", [UTM33, "EPSG:25833"])
+    def test_geojson_with_an_agreeing_domain_crs(
+        self, domain: ModuleType, tmp_path: Path, member: str, flag: str
+    ) -> None:
+        path = write(tmp_path, geojson(square(), crs=member))
+        assert domain.read_domain(path, META, flag).epsg == 25833
+
     def test_the_json_suffix_is_geojson(self, domain: ModuleType, tmp_path: Path) -> None:
         path = write(tmp_path, geojson(square()), name="d.json")
         assert domain.read_domain(path, META).epsg == 25833
@@ -204,6 +212,28 @@ class TestRefusals:
 
     def test_a_mismatched_epsg(self, domain: ModuleType, tmp_path: Path) -> None:
         refused(domain, write(tmp_path, geojson(square(), crs="EPSG:25832")), "25832", "25833")
+
+    @pytest.mark.parametrize(
+        ("member", "flag", "says"),
+        [
+            (UTM33, "EPSG:25832", ("25833", "25832", "--domain-crs")),
+            ("EPSG:25832", "EPSG:25833", ("25832", "25833", "--domain-crs")),
+            (None, "EPSG:25833", ("4326", "25833", "--domain-crs")),
+        ],
+    )
+    def test_geojson_with_a_disagreeing_domain_crs(
+        self,
+        domain: ModuleType,
+        tmp_path: Path,
+        member: str | None,
+        flag: str,
+        says: tuple[str, ...],
+    ) -> None:
+        """The flag never overrides the file's own CRS: a disagreement is refused.
+
+        The third row is a file with no ``crs`` member, which RFC 7946 makes
+        WGS 84; ``--domain-crs`` does not supply one."""
+        refused(domain, write(tmp_path, geojson(square(), crs=member)), *says, crs=flag)
 
     def test_wkt_without_a_crs(self, domain: ModuleType, tmp_path: Path) -> None:
         refused(domain, write(tmp_path, Polygon(OUTER).wkt, name="d.wkt"))

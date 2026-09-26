@@ -25,6 +25,7 @@
 #include <map>
 #include <optional>
 #include <set>
+#include <type_traits>
 #include <utility>
 #include <vector>
 
@@ -32,6 +33,7 @@ using terrain::TriangleIndices;
 using terrain::mesh::kNoNeighbour;
 using terrain::mesh::LatticeMesh;
 using terrain::mesh::LatticeVertex;
+using terrain::mesh::MeshVertex;
 using refinement_fixtures::in_closed;
 using refinement_fixtures::on_open_segment;
 using refinement_fixtures::orient;
@@ -45,7 +47,7 @@ LatticeVertex lv(std::uint32_t row, std::uint32_t col) { return LatticeVertex{ro
 std::array<RC, 3> corners(const LatticeMesh& m, std::size_t t) {
     const auto& tri = m.triangles()[t];
     const auto v = m.vertices();
-    return {rc(v[tri[0]]), rc(v[tri[1]]), rc(v[tri[2]])};
+    return {rc(v[tri[0]].as_node().value()), rc(v[tri[1]].as_node().value()), rc(v[tri[2]].as_node().value())};
 }
 
 std::int64_t area2_sum(const LatticeMesh& m) {
@@ -84,7 +86,7 @@ void check_topology(const LatticeMesh& m) {
     for (const auto& [edge, t] : directed)
         for (std::size_t i = 0; i < v.size(); ++i) {
             CAPTURE(edge.first, edge.second, i);
-            REQUIRE_FALSE(on_open_segment(rc(v[edge.first]), rc(v[edge.second]), rc(v[i])));
+            REQUIRE_FALSE(on_open_segment(rc(v[edge.first].as_node().value()), rc(v[edge.second].as_node().value()), rc(v[i].as_node().value())));
         }
 }
 
@@ -326,4 +328,22 @@ TEST_CASE("a long deterministic sequence of splits stays conforming", "[refineme
             REQUIRE((m.neighbours(t)[k] == kNoNeighbour) == (side != 0));
         }
     }
+}
+
+// Increment 16 review ruling: the checked back-conversion MeshVertex ->
+// LatticeVertex is a named query, not an implicit throwing conversion, so a
+// node/off-node mix-up is a compile error or an empty optional, never a throw
+// found at run time. The widening LatticeVertex -> MeshVertex stays implicit.
+static_assert(std::is_convertible_v<LatticeVertex, MeshVertex>);
+static_assert(!std::is_convertible_v<MeshVertex, LatticeVertex>);
+static_assert(std::is_same_v<decltype(std::declval<const MeshVertex&>().as_node()),
+                             std::optional<LatticeVertex>>);
+
+TEST_CASE("as_node is exact for a node and empty for an off-node vertex", "[refinement][lattice]") {
+    REQUIRE(MeshVertex{7.0, 3.0}.as_node() == LatticeVertex{3, 7});
+    REQUIRE(MeshVertex{lv(4'000'000'000u, 0)}.as_node() == lv(4'000'000'000u, 0));
+    REQUIRE(MeshVertex{0.0, 0.0}.as_node() == lv(0, 0));
+    REQUIRE_FALSE(MeshVertex{7.5, 3.0}.as_node().has_value());
+    REQUIRE_FALSE(MeshVertex{7.0, 3.0 + 1e-9}.as_node().has_value());
+    REQUIRE_FALSE(MeshVertex{0.625, 0.625}.as_node().has_value());
 }
