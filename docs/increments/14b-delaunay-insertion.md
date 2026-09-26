@@ -1,6 +1,10 @@
 # Increment 14b — Delaunay insertion in the refinement loop
 
-Status: **designed, not started.** Written by `@architect` before `@tester`, per
+Status: **implemented, in review.** Red `74d3f67`; green `8987ec7`, `508934d`,
+`9c9d36a`; test fix `1aa245b`. Measured 124 non-blank production lines
+(reviewer's count) against ~130. Real tile at `--tolerance 1`: 463 974
+triangles, median minimum angle 45 deg, 0.0 % under 1 deg, worst 0.63 deg,
+achieved max error 0.99998 m. Written by `@architect` before `@tester`, per
 `docs/increments/README.md` step 1. The user chose C1 (a), C2 (a) and C3 (a) on
 2026-09-26, and asked for a more general point insertion policy to be
 discussed later (section "Ruled by the user").

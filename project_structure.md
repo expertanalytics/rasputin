@@ -325,7 +325,7 @@ dropped the honest options are a different library or our own CDT over the
 
 ### `refinement`
 
-Refinement against the DEM to a sup-norm tolerance (increment 14). `scan.hpp` measures a triangle's largest `|z - plane|` over the DEM nodes it contains, by exact integer tests; `refine.hpp` runs rounds of parallel scan (`parallel_util`) and serial splits in index order — a fan for an interior node, an edge split on both sides for an edge node — so the output does not depend on the thread count. Triangles with a NoData vertex are carved, not refined. See `docs/increments/14-adaptive-refinement.md`.
+Refinement against the DEM to a sup-norm tolerance (increment 14). `scan.hpp` measures a triangle's largest `|z - plane|` over the DEM nodes it contains, by exact integer tests; `refine.hpp` runs rounds of parallel scan (`parallel_util`) and serial splits in index order — a fan for an interior node, an edge split on both sides for an edge node — each followed by Lawson flips (`mesh/lawson.hpp`, increment 14b) that never cross a constrained or boundary edge, with every written slot rescanned, so the output is constrained Delaunay and within tolerance, and does not depend on the thread count. Triangles with a NoData vertex are carved, not refined. See `docs/increments/14-adaptive-refinement.md`.
 
 ### `flip`
 

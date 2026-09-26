@@ -391,8 +391,8 @@ simplify step, not a mesher that edits its own constraints.
 
 Raised 2026-09-23. **Answered by increment 14b** (option 2, with a termination
 argument: `docs/increments/14b-delaunay-insertion.md`, R4). The text below is
-the question as it was asked. Whoever writes the refinement increment must rule on it before
-`@tester` is briefed, because the answer decides what the suite can assert.
+the question as it was asked; 14b ruled on it before `@tester` was briefed,
+because the answer decides what the suite can assert.
 
 ### The question
 
