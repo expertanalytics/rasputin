@@ -152,3 +152,45 @@ first, ignoring the authority's declared axis order. Mandatory on every
 transformer in `src_python/`. Omitting it on `EPSG:4326` puts a point about
 6 000 km away with no exception. `docs/increments/11-raster-ingestion.md`
 ruling 8.
+
+## Refinement
+
+**Sup-norm error (of a triangle).** The largest `|z_DEM(n) − P(n)|` over every
+valid DEM node `n` in the closed triangle, its own vertices excluded, where `P`
+is the plane through the triangle's three vertex heights. Refinement stops when
+every triangle's sup-norm error is at most `--tolerance`. Ola's choice, recorded
+in `docs/increments/14-adaptive-refinement.md`.
+
+**Worst node.** The node attaining a triangle's sup-norm error; ties go to the
+smallest `(row, col)`. Refinement's default insertion point.
+
+**Void triangle.** A triangle with at least one vertex whose DEM height is
+NoData. It has no plane, so it has no sup-norm error.
+
+**Carving.** Refinement's treatment of a void triangle: insert the valid DEM
+node nearest a NoData vertex (squared lattice distance, ties to the smallest
+`(row, col)`), repeatedly, until no void triangle's closed node set holds a
+valid node. `docs/increments/14-adaptive-refinement.md` R6.
+
+**Trim.** The step after refinement that drops every triangle with a NoData
+vertex, and every vertex then unused, and counts the dropped vertices.
+`src_python/tin_engine/elevation.py`.
+
+**Foot (of a node on a segment).** Given a DEM node `N` and a constraint
+segment `S` from `A` to `B`, both in world coordinates, the foot is the point
+`F = A + t·(B − A)` with `t = ((N − A)·(B − A)) / |B − A|²`, the orthogonal
+projection of `N` onto the line through `S`. It is a foot of `N` on `S` only
+when `0 < t < 1`, so `F` lies strictly inside the segment. In refinement
+(increment 20b), when the worst node `N` lies within `ε` of a constrained edge
+of its triangle, the foot is inserted instead of `N`, splitting that edge in
+two; the foot's height is bilinear (reading 1). The insertion is refused, and
+`N` is used instead, when `F` is within `ε` of either segment end, when a
+resulting triangle would not be strictly counter-clockwise under the exact
+kernel, or when `F`'s DEM cell has a NoData corner. A node gets at most one
+foot. `docs/increments/20b-min-insertion-distance.md`.
+
+**ε (constraint-foot distance).** In increment 20b,
+`ε = clamp(tol / G, cell / 100, cell / 2)`, where `tol` is `--tolerance`,
+`G` is the largest bilinear slope bound over the four DEM cells around `N`,
+and `cell` is the DEM spacing. Within `ε` of `N`, height changes by at most
+about `tol`, which is the scale refinement resolves (Ola).

@@ -1,6 +1,7 @@
 # Increment 20b — a minimum insertion distance from constraints, scaled by the tolerance
 
-Status: **designed, not started.** Ola chose C1 (a), C2 (a) and C3 (a) on
+Status: **implemented, in review.** Red `5f86eeb`; green `d82de77`, `59d9fa5`;
+test fixes `cb7eb96`. Ola chose C1 (a), C2 (a) and C3 (a) on
 2026-09-26 (section "Ruled by Ola"); 20 and 20b land together in one PR, and a
 retrospective follows. Written by `@architect`
 before `@tester`, per `docs/increments/README.md` step 1, on branch
@@ -410,6 +411,33 @@ Counted in `CLAUDE.md` §2's unit.
 
 On the worst overrun seen so far (increment 20: about +50 %), about 150. **Under
 700, not split.** C1 (b) is about 10 fewer; C3 (b) about 15 more.
+
+### What landed
+
+132 production lines against ~100 (+32 %, under 700); most in `refine.hpp`
+(about 90 against 70). Settled at green: `--no-constraint-feet` needs
+`--tolerance` and `--dem`, like `--start-min-angle`; only the first
+constrained edge closer than ε is tried; a refusal is counted only when `N` is
+then inserted; when `G` is 0, ε is the cap (otherwise 0/0 at tolerance 0 on
+flat ground); the footed set is written only in the serial phase.
+
+Ola's quarter circle, text `.vtk` with `--stats`, in the session's
+`paraview/runs/20b-constraint-feet/`:
+
+| run | triangles | worst angle | < 0.1° | < 1° | max degree | feet | refine |
+|---|---|---|---|---|---|---|---|
+| 1 m, feet | 428 217 | 0.3955° | 0 | 12 | 18 | 6 | 0.241 s |
+| 1 m, no feet | 428 225 | 0.0117° | 3 | 19 | 18 | 0 | 0.239 s |
+| 10 m, either | 31 581 | 0.2873° | 0 | 4 | 16 | 0 | 0.036 s |
+
+Both 1 m runs reach 0.99998 m. The rule costs about 2 ms. At 10 m it never
+fires and the mesh equals increment 20's.
+
+Found at green, fixed by `@tester` in `cb7eb96`: increment 20's Q1 pin
+(`inserted == 109`) depended on floating-point contraction (92 under
+`-ffp-contract=off`); it is now bounds that hold in both modes and still kill
+the stale-check and miscount mutants. The golden CLI test needs both passes
+off to reproduce pre-20 output.
 
 ## Acceptance
 
