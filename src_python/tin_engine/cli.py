@@ -147,6 +147,8 @@ DEFAULT_LABEL_LIMIT = 500
 #: easting overflows well before ``1e-12``. A millimetre sits four orders of
 #: magnitude clear of that and shows the gallery what its input said.
 DEFAULT_SNAP_SPACING = 1e-3
+# Increment 20, C2 (a): the start mesh's minimum angle, degrees.
+DEFAULT_START_MIN_ANGLE = 25.0
 
 
 @app.callback()
@@ -579,6 +581,15 @@ def mesh(
         str | None,
         typer.Option("--domain-crs", help="The --domain file's CRS, EPSG:n; required for .wkt."),
     ] = None,
+    start_min_angle: Annotated[
+        float | None,
+        typer.Option(
+            "--start-min-angle",
+            help="With --tolerance, add DEM nodes to the start mesh until its triangles "
+            "have no angle under this many degrees, or a stated reason prevents it; "
+            "0 is off, at most 35. Default: 25.",
+        ),
+    ] = None,
     stats: Annotated[
         str | None,
         typer.Option(
@@ -664,9 +675,21 @@ def mesh(
             )
         if domain is not None and tolerance is None:
             raise typer.BadParameter("--domain needs --tolerance", param_hint="--tolerance")
+        if start_min_angle is not None and not (
+            math.isfinite(start_min_angle) and 0 <= start_min_angle <= 35
+        ):
+            raise typer.BadParameter(
+                f"must be finite, >= 0 and <= 35, got {start_min_angle}",
+                param_hint="--start-min-angle",
+            )
+        if start_min_angle is not None and tolerance is None:
+            raise typer.BadParameter(
+                "--start-min-angle needs --tolerance", param_hint="--start-min-angle"
+            )
         label = dem.stem
         dem_run = _dem_mesh(
-            dem, stride, delaunay, snap_spacing, tolerance, clock, domain, domain_crs
+            dem, stride, delaunay, snap_spacing, tolerance, clock, domain, domain_crs,
+            DEFAULT_START_MIN_ANGLE if start_min_angle is None else start_min_angle,
         )
         surface_mesh = dem_run.trimmed
         epsg, sentence, described = dem_run.epsg, dem_run.sentence, dem_run.described
@@ -681,6 +704,8 @@ def mesh(
             raise typer.BadParameter("applies only with --dem", param_hint="--stride")
         if tolerance is not None:
             raise typer.BadParameter("applies only with --dem", param_hint="--tolerance")
+        if start_min_angle is not None:
+            raise typer.BadParameter("applies only with --dem", param_hint="--start-min-angle")
         if not flat:
             raise typer.BadParameter(
                 "a gallery fixture has no elevation source, so z has none; pass --flat "
@@ -862,13 +887,15 @@ def _dem_mesh(
     clock: PhaseClock,
     domain: Path | None = None,
     domain_crs: str | None = None,
+    min_angle: float = 0.0,
 ) -> _DemMesh:
     """Decode, subsample, triangulate, sample or refine, and trim.
 
     Without ``tolerance`` this is increment 12's R6: z sampled bilinearly at
     the stride grid. With it, increment 14's R9: the stride grid is the start
     mesh, refined against the DEM's nodes; with ``domain``, increment 16's R3,
-    the polygon's rings are. Returns the mesh, the ``elevation`` sentence for
+    the polygon's rings are. ``min_angle`` > 0 improves the start's angles
+    first (increment 20). Returns the mesh, the ``elevation`` sentence for
     the file, the EPSG code, the ``domain`` field (empty without one), and the
     ``--stats`` inputs; ``clock`` gets R5's phases.
     Every refusal is a usage error in the reader's or the engine's own words,
@@ -928,7 +955,9 @@ def _dem_mesh(
         report = ""
     else:
         t0 = time.perf_counter_ns()
-        out = refine(to_core(tile), run.mesh, edges, masks, tolerance=tolerance)
+        out = refine(
+            to_core(tile), run.mesh, edges, masks, tolerance=tolerance, min_angle_deg=min_angle
+        )
         _refine_phases(clock, (time.perf_counter_ns() - t0) / 1e9, out)
         if not out.ok():
             raise typer.BadParameter(f"{dem}: {out.message}", param_hint="--dem")
@@ -942,14 +971,20 @@ def _dem_mesh(
                 valid=out.valid,
             )
         refinement = Refinement(
-            tolerance, out.max_error, out.rounds, out.inserted, out.flips, out.uncovered, out.carved
+            tolerance, out.max_error, out.rounds, out.inserted, out.flips, out.uncovered,
+            out.carved, out.quality_inserted, out.quality_skipped,
+        )
+        quality_start = f"start min angle {_exact(min_angle)} deg" if min_angle > 0 else (
+            "start quality off"
         )
         sentence = (
             f"refined from DEM nodes, constrained Delaunay, tolerance {_exact(tolerance)} m, "
-            f"achieved max error {_exact(out.max_error)} m, {start}, "
+            f"achieved max error {_exact(out.max_error)} m, {start}, {quality_start}, "
             f"{out.uncovered} valid DEM nodes not covered"
         )
         report = (
+            f"{out.quality_inserted} start quality nodes inserted, "
+            f"{out.quality_skipped} start quality skips, "
             f"{out.rounds} rounds, {out.inserted} points inserted, {out.flips} flips, "
             f"{len(trimmed.triangles)} triangles, achieved max error "
             f"{_exact(out.max_error)} m, {out.uncovered} valid DEM nodes not covered, "
@@ -983,6 +1018,7 @@ def _refine_phases(clock: PhaseClock, seconds: float, out: RefineOutcome) -> Non
     """R5 and R6: ``refine`` and its sub-rows; setup + output is the remainder."""
     inner = (
         ("refine: legalise start", out.legalise_seconds),
+        ("refine: start quality", out.quality_seconds),
         ("refine: scan (parallel)", out.scan_seconds),
         ("refine: split + flip (serial)", out.split_seconds),
     )
