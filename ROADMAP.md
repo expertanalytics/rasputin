@@ -35,8 +35,8 @@ increment that most needs a picture to check against
 | 12 | DEM to elevated mesh: the zero-copy `RasterView` and its binding, z sampled per mesh vertex, `rasputin mesh --dem file.tif` | shipped (#91) | `docs/increments/12-dem-to-mesh.md` |
 | 13 | One mesh file for ParaView: legacy `.vtk` with triangles, constraint edges, feature masks and the vocabulary, text by default | shipped (#90) | `docs/increments/13-bundled-mesh.md` |
 | 14 | Adaptive refinement: split triangles at the worst DEM node until every triangle's max error is within `--tolerance`; parallel scan, serial deterministic splits | shipped (#92) | `docs/increments/14-adaptive-refinement.md` |
-| 14b | Delaunay insertion: Lawson flips after each refinement insertion, never across a constraint, flipped triangles rescanned; the output is constrained Delaunay and still within `--tolerance` | implemented, in review | `docs/increments/14b-delaunay-insertion.md` |
-| 16 | Mesh a domain polygon: `--domain` (GeoJSON or WKT, one polygon with holes, CRS equal to the DEM's), vertices kept where they are with bilinear z (DEM values are point heights), the start mesh is the CDT of its rings alone, then refinement inserts DEM nodes as in 14b. Pulled forward from the catchment-clip entry at the user's request | designed, choices open | `docs/increments/16-domain-polygon.md` |
+| 14b | Delaunay insertion: Lawson flips after each refinement insertion, never across a constraint, flipped triangles rescanned; the output is constrained Delaunay and still within `--tolerance` | shipped (#93) | `docs/increments/14b-delaunay-insertion.md` |
+| 16 | Mesh a domain polygon: `--domain` (GeoJSON or WKT, one polygon with holes, CRS equal to the DEM's), vertices kept where they are with bilinear z (DEM values are point heights), the start mesh is the CDT of its rings alone, then refinement inserts DEM nodes as in 14b. Pulled forward from the catchment-clip entry at the user's request | implemented, in review | `docs/increments/16-domain-polygon.md` |
 | — | `raster/`: grid-to-world geometry and bilinear sampling | shipped (`7785fea`), **no record** | none — predates the protocol |
 
 ## What stands between here and an operational MVP
@@ -44,8 +44,8 @@ increment that most needs a picture to check against
 An MVP is one command turning a DEM and a catchment polygon into a terrain TIN
 file. Six things were missing, in dependency order. Gap 4 has shipped; gaps 1
 and 3 and the first half of 5 shipped as increment 12 (#91); gap 2's first half
-shipped as increment 14 (#92), and 14b, which fixes its triangle shape, is
-implemented and in review.
+shipped as increment 14 (#92), and 14b, which fixes its triangle shape, shipped
+as #93.
 
 1. **Raster ingestion, Python side.** The C++ `raster/` module samples; nothing
    decodes a GeoTIFF into it. `project_structure.md` names `raster.py` as the

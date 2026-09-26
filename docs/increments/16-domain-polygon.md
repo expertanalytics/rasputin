@@ -1,6 +1,9 @@
 # Increment 16 — mesh a domain polygon, starting from its boundary alone
 
-Status: **designed, not started.** The user chose U1 (a), U3 (a), U4 (a),
+Status: **implemented, in review.** Red `5de08e8`; green `b18a1b0`, `d6f05cd`,
+`07317f5`; review round `386c555` (tests) and `4389e03` (`as_node`, the `two_a` guard).
+Measured 322 production lines at `07317f5` against ~260 (see "Reconciliation").
+The user chose U1 (a), U3 (a), U4 (a),
 U5 (a) and U6 (a) on 2026-09-26, with a standing caveat on U1: the domain's CRS
 will not always have to match the DEM's (section "Ruled by the user"). Written by `@architect` before `@tester`, per
 `docs/increments/README.md` step 1, on branch `increment16-domain-polygon` off
@@ -204,8 +207,15 @@ rectangle `refine` refuses (`OutsideGrid`, replacing `OffLattice`).
 `LatticeFrame`, incircle), with `DefaultKernel`, which is exact on its inputs.
 Node-only triangles keep today's `int64` path, which gives the same signs,
 because their coordinates are small integers. A mixed triangle uses the kernel.
-There is no second frame, so an inside test near a shared edge cannot disagree
-between the two triangles that share it.
+Inside tests use one frame, `(col, -row)`, so an inside test near a shared edge
+cannot disagree between the two triangles that share it. *Correction at review:*
+`incircle` runs in a second frame, 14b's scaled `(col*dx, -row*dy)`. For an
+off-node vertex the two are different roundings, and Lawson's termination needs
+every triangle counter-clockwise in the incircle frame; a triangle barely CCW in
+the unscaled frame (orientation near rounding, about 1e-11 cells at this tile's
+size) could fail that, and `flip` only asserts orientation. Not observed; T-deg's
+1e-9 fixtures sit far above it. Recorded as a known limit; the fix, if needed, is
+to run mixed orientations in `LatticeFrame` too.
 
 **The scan (14 R2) for a triangle with an off-node vertex.**
 - The bounding box is `ceil`/`floor` of the fractional extents, clamped to the
@@ -477,7 +487,9 @@ numeric is ported.
     relation** (exact kernel on the fractional frame), not world coordinates.
   - S4: node-only triangles give bit-identical results to 14b's.
   - Mutants: the `int64` path used for a mixed triangle (truncated coordinates);
-    the box computed with `floor` on both ends; an off-node vertex compared to
+    the box's low bound computed as `floor(x) + 1` (the design first listed
+    `floor` on both ends, which is equivalent: it only adds candidates the exact
+    orientations reject); an off-node vertex compared to
     nodes by rounded `(row, col)`, which would exclude a real node.
 - **`prop_refinement_refine`, the tolerance oracle (14 T3), with off-node start
   rings.** Random polygons with off-node vertices over synthetic terrain; every
@@ -536,6 +548,42 @@ second lets the user mesh the quarter circle, so the split would not deliver
 the acceptance run in its first half, which is why it is not recommended. 16b
 (features, closed and open breaklines) is about 100 more, with no C++ change
 now that crossings are off-node vertices.
+
+### Reconciliation
+
+Measured by `@developer` and `@reviewer` at `07317f5`: **322** production lines
+added (C++ 143: `scan.hpp` 68, `lattice_mesh.hpp` 43, `refine.hpp` 29,
+`lawson.hpp` 2, `core.cpp` 1; Python 179: `domain.py` 92, `cli.py` 86,
+`_core.pyi` 1). +24 % on ~260, inside the +39 % band; not split. Most of the
+overrun is `cli.py` (86 against 45): option declarations and refusals.
+
+**z in the scan and in the output are computed two ways.** The scan uses
+bilinear at the vertex's fractional `(col, row)`; the output uses
+`raster::bilinear` at the input world point, bit for bit (Z1). The world-point
+route in the scan was off by about 1.5e-9 on rough terrain (S3). The two can
+disagree only within an ulp of a cell line: one valid and one NoData, or a
+vertex whose fractional coordinates come out exactly integer when its world
+point is not a node.
+
+**T-real, the quarter circle** (536 ring vertices, 235 off-node, 534 start
+triangles), measured by `@developer`:
+
+| | 1 m | 10 m |
+|---|---|---|
+| triangles | 427 779 | 30 547 |
+| rounds / flips | 40 / 452 067 | 33 / 40 108 |
+| achieved max error | 0.999998 m | 9.998 m |
+| wall time, whole command | 4.1–4.6 s | 2.8–3.0 s |
+| degree median / p99 / max | 6 / 9 / 43 | 6 / 10 / 43 |
+| min angle median, under 1° | 45.0°, 0.03 % | 33.0°, 0.31 % |
+| worst angle | 0.0117° | 0.65° |
+
+The 1 m worst angle is an off-node arc vertex close to a DEM node: expected under
+R2 (refinement inserts nodes, input vertices are not snapped), reviewed as not a
+defect, and input for the point-insertion-policy discussion. The user's visual
+inspection found fans from the 200 m boundary into empty sea: grading from a
+dense boundary into flat interior is unbounded, the same cause as 14b's sea
+stars, moved to the boundary.
 
 ## Acceptance
 
