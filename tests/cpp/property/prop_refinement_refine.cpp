@@ -542,10 +542,24 @@ TEST_CASE("T12: the refined mesh is constrained Delaunay on a cone and an island
     CAPTURE(on_island, stride, tol);
     const auto dem = on_island ? island(n, 2.0, 2.0) : cone(n, 2.0, 2.0);
     const auto start = grid_mesh(dem.geometry(), stride);
+    // The start mesh's own error, measured by a refine that may insert nothing.
+    const auto untouched = run(dem, start, 1e9);
+    REQUIRE(untouched.inserted == 0);
+    const double start_error = untouched.max_error;
+    CAPTURE(start_error);
+
     const auto out = run(dem, start, tol);
     check_refined(dem, start, out, tol);
-    REQUIRE(out.inserted > 0);
-    REQUIRE(out.flips > 0);
+    // Refine inserts exactly when the start mesh is out of tolerance. At 5 m
+    // every start mesh here is already within it (1.2 to 4.7 m), so that row
+    // checks the no-op path.
+    REQUIRE((out.inserted > 0) == (start_error > tol));
+    if (out.inserted == 0) REQUIRE(out.flips == 0);
+    // Tolerance 0 forces thousands of interior inserts on every combination,
+    // so it must flip, and check_refined then catches a flipped slot that is
+    // not rescanned. At 1 m a flip is not guaranteed: the cone at stride 4
+    // inserts two nodes on start-grid edges and legitimately needs none.
+    if (tol == 0.0) REQUIRE(out.flips > 0);
 }
 
 TEST_CASE("T12: constrained Delaunay in world coordinates when dx differs from dy", "[refinement][refine][delaunay]") {
