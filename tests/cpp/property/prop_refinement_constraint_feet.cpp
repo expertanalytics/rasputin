@@ -532,7 +532,10 @@ TEST_CASE("Lawson: at tolerance 0 the needle fixture is constrained Delaunay, fe
     const auto start = feet_fixtures::needle_start(dem.geometry());
     const bool feet = GENERATE(false, true);
     CAPTURE(feet);
-    delaunay_oracle(dem.geometry(), run(dem, start, 0.0, feet));
+    const auto out = run(dem, start, 0.0, feet);
+    REQUIRE(out.ok());  // a refused run has no triangles, and the oracle would pass on nothing
+    REQUIRE_FALSE(out.triangles.empty());
+    delaunay_oracle(dem.geometry(), out);
 }
 
 // ------------------------------------------------------------------------ F5
@@ -672,7 +675,7 @@ TEST_CASE("R2 step 2: no foot within eps of a segment end", "[refinement][feet][
     auto m2 = LatticeMesh::build(std::vector<MeshVertex>{{4.1, 0.8}, {1.8, 0.8}, {1.0, 3.0}}, {{0, 1, 2}}, {1u}, {{{7u, 0u, 0u}}});
     REQUIRE(m2.has_value());
     REQUIRE_FALSE(foot_of(dem, *m2, 0, LatticeVertex{1, 4}, 1.0).has_value());  // M2
-    REQUIRE(foot_of(dem, *m2, 0, LatticeVertex{1, 3}, 1.0).has_value());          // the control, 9 m from A
+    REQUIRE(foot_of(dem, *m2, 0, LatticeVertex{1, 3}, 1.0).has_value());          // the control, 11 m from A
 }
 
 TEST_CASE("R2 step 4: foot_fits refuses a foot that folds either side of the edge", "[refinement][feet][helpers]") {
