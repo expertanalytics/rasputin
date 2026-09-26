@@ -56,9 +56,17 @@ template <pred::GeometryKernel K>
     while (m.triangles()[u][j] != tri[(e + 1) % 3])
         ++j;
     const auto v = m.vertices();
-    return K::incircle(f.at(v[tri[0]]), f.at(v[tri[1]]), f.at(v[tri[2]]),
-                       f.at(v[m.triangles()[u][(j + 2) % 3]]))
-        == pred::Incircle::Inside;
+    const Point2 a = f.at(v[tri[e]]), b = f.at(v[tri[(e + 1) % 3]]), c = f.at(v[tri[(e + 2) % 3]]),
+                 d = f.at(v[m.triangles()[u][(j + 2) % 3]]);
+    // Orientation is exact on (col, -row), but the frame rounds col * dx and
+    // row * dy, so an off-node sliver that is counter-clockwise in the mesh
+    // can be collinear or clockwise here, and its circle then says nothing.
+    // The test is asked of whichever side is counter-clockwise in the frame:
+    // where both are, the two answers are the same exact determinant.
+    if (K::orient2d(a, b, c) == pred::Orientation::CounterClockwise)
+        return K::incircle(a, b, c, d) == pred::Incircle::Inside;
+    return K::orient2d(b, a, d) == pred::Orientation::CounterClockwise
+        && K::incircle(b, a, d, c) == pred::Incircle::Inside;
 }
 
 }  // namespace detail

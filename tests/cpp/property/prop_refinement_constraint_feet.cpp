@@ -521,7 +521,7 @@ TEST_CASE("F4: at tolerance 0 the fallback inserts the footed node and the run e
 }
 
 TEST_CASE("Known defect, not 20b's: at tolerance 0 the needle fixture is not constrained Delaunay",
-          "[refinement][feet][!shouldfail]") {
+          "[refinement][feet]") {
     // Found by the incircle oracle when it was added to check(). Feet off or on,
     // the output has the unconstrained interior edge (27, 2)-(27, 7) in
     // (col, row) with (28, 4) strictly inside the circle of (27, 2) (26, 6)
