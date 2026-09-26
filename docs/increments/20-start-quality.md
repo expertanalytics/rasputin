@@ -1,12 +1,11 @@
 # Increment 20 — a quality start: minimum-angle Steiner nodes before DEM refinement
 
-Status: **implemented, in review, on provisional defaults.** Red `f7ae381`;
-green `affc955`, `a66632c` (ASCII wording), `f5489ab`. Ola asked the main
-session to "work until we can check the fruits of our efforts against the
-previous run", so the build proceeds on the recommended C1 (a), C2 (a) 25°
-and C3 (a). These are the main session's provisional picks, **pending Ola's
-review**, not Ola's rulings. C4 is not provisional: Ola sent it to increment
-20b, a minimum insertion distance (section "Choices for Ola").
+Status: **landed with 20b as interim; C1-C3 open, carried to 20c.** Red
+`f7ae381`; green `affc955`, `a66632c` (ASCII wording), `f5489ab`. The build
+ran on the main session's provisional picks C1 (a), C2 (a) 25° and C3 (a).
+Ola reviewed them on 2026-09-26 and accepted none as final; see "Ola's
+rulings" under "Choices for Ola". C4 went to increment 20b, a minimum
+insertion distance.
 Written by `@architect` before `@tester`, per `docs/increments/README.md`
 step 1, on branch `increment20-start-quality` off master `a9a93bc` (increments
 14 to 18).
@@ -313,6 +312,24 @@ combination terminates and trims.
 the main session so the build can reach a comparison run; Ola reviews them
 against the result. C4 is not provisional: Ola sent it to increment 20b (a
 minimum insertion distance scaled by z_tol / |grad z|).
+
+**Ola's rulings (2026-09-26).** The code as merged implements the provisional
+picks. They are interim, not settled:
+
+- **C1: open, leaning to (b).** Ola: "We should of course allow adding point to
+  the constraints if that improves the mesh props!!" A split on a constraint
+  is allowed when it improves the mesh. M1's cost of splitting at every
+  encroachment argues for a criterion that decides each split, not against
+  splitting.
+- **C2: open.** Ola: "25 should be soft. 24.99 should be ok, if not exploited.
+  Consider a penalty approach for efficiency." A hard threshold is replaced by
+  a penalty that a Steiner node or a split must pay for in angle gained.
+- **C3: suspended.** Ola: "C3 should be suspended, this is quite absurd." Start
+  only is not the intended final state; refinement leaves 17 % of triangles
+  under 20° at 10 m (R8).
+- All three go to **increment 20c**: one penalty-based quality criterion,
+  applied at the start and during refinement, which may split constraints.
+  `@architect` measures its cost against this increment's pass first.
 
 ### C1. May the start pass add vertices on input polygons and polylines?
 

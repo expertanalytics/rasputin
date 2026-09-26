@@ -1,6 +1,6 @@
 # Increment 20b — a minimum insertion distance from constraints, scaled by the tolerance
 
-Status: **implemented, in review.** Red `5f86eeb`; green `d82de77`, `59d9fa5`;
+Status: **implemented, reviewed, lands with 20.** Red `5f86eeb`; green `d82de77`, `59d9fa5`;
 test fixes `cb7eb96`. Ola chose C1 (a), C2 (a) and C3 (a) on
 2026-09-26 (section "Ruled by Ola"); 20 and 20b land together in one PR, and a
 retrospective follows. Written by `@architect`
