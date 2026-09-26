@@ -109,7 +109,8 @@ def quality(vertices: npt.ArrayLike, triangles: npt.ArrayLike) -> Quality:
 class Refinement:
     """``refine``'s counters, copied out by ``cli.py`` so no ``_core`` type
     reaches this module. ``carved`` None omits its column, and so does a
-    ``quality_*`` None (increment 20's start-quality pass)."""
+    ``quality_*`` None (increment 20's start-quality pass) or a ``feet`` None
+    (increment 20b's constraint feet)."""
 
     tolerance: float
     max_error: float
@@ -120,6 +121,7 @@ class Refinement:
     carved: int | None = None
     quality_inserted: int | None = None
     quality_skipped: int | None = None
+    feet: int | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -231,6 +233,7 @@ def _refinement(r: Refinement) -> list[str]:
     for header, count in (
         ("quality inserted", r.quality_inserted),
         ("quality skipped", r.quality_skipped),
+        ("feet", r.feet),
     ):
         if count is not None:
             cells.append((header, str(count)))

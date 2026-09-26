@@ -590,6 +590,14 @@ def mesh(
             "0 is off, at most 35. Default: 25.",
         ),
     ] = None,
+    no_constraint_feet: Annotated[
+        bool,
+        typer.Option(
+            "--no-constraint-feet",
+            help="With --tolerance, insert a DEM node close to a constraint segment as "
+            "before, instead of its foot on the segment.",
+        ),
+    ] = False,
     stats: Annotated[
         str | None,
         typer.Option(
@@ -686,10 +694,15 @@ def mesh(
             raise typer.BadParameter(
                 "--start-min-angle needs --tolerance", param_hint="--start-min-angle"
             )
+        if no_constraint_feet and tolerance is None:
+            raise typer.BadParameter(
+                "--no-constraint-feet needs --tolerance", param_hint="--no-constraint-feet"
+            )
         label = dem.stem
         dem_run = _dem_mesh(
             dem, stride, delaunay, snap_spacing, tolerance, clock, domain, domain_crs,
             DEFAULT_START_MIN_ANGLE if start_min_angle is None else start_min_angle,
+            not no_constraint_feet,
         )
         surface_mesh = dem_run.trimmed
         epsg, sentence, described = dem_run.epsg, dem_run.sentence, dem_run.described
@@ -706,6 +719,8 @@ def mesh(
             raise typer.BadParameter("applies only with --dem", param_hint="--tolerance")
         if start_min_angle is not None:
             raise typer.BadParameter("applies only with --dem", param_hint="--start-min-angle")
+        if no_constraint_feet:
+            raise typer.BadParameter("applies only with --dem", param_hint="--no-constraint-feet")
         if not flat:
             raise typer.BadParameter(
                 "a gallery fixture has no elevation source, so z has none; pass --flat "
@@ -888,6 +903,7 @@ def _dem_mesh(
     domain: Path | None = None,
     domain_crs: str | None = None,
     min_angle: float = 0.0,
+    feet: bool = False,
 ) -> _DemMesh:
     """Decode, subsample, triangulate, sample or refine, and trim.
 
@@ -895,9 +911,10 @@ def _dem_mesh(
     the stride grid. With it, increment 14's R9: the stride grid is the start
     mesh, refined against the DEM's nodes; with ``domain``, increment 16's R3,
     the polygon's rings are. ``min_angle`` > 0 improves the start's angles
-    first (increment 20). Returns the mesh, the ``elevation`` sentence for
-    the file, the EPSG code, the ``domain`` field (empty without one), and the
-    ``--stats`` inputs; ``clock`` gets R5's phases.
+    first (increment 20); ``feet`` inserts constraint feet (increment 20b).
+    Returns the mesh, the ``elevation`` sentence for the file, the EPSG code,
+    the ``domain`` field (empty without one), and the ``--stats`` inputs;
+    ``clock`` gets R5's phases.
     Every refusal is a usage error in the reader's or the engine's own words,
     and no file is written.
     """
@@ -956,7 +973,8 @@ def _dem_mesh(
     else:
         t0 = time.perf_counter_ns()
         out = refine(
-            to_core(tile), run.mesh, edges, masks, tolerance=tolerance, min_angle_deg=min_angle
+            to_core(tile), run.mesh, edges, masks, tolerance=tolerance, min_angle_deg=min_angle,
+            constraint_feet=feet,
         )
         _refine_phases(clock, (time.perf_counter_ns() - t0) / 1e9, out)
         if not out.ok():
@@ -972,7 +990,7 @@ def _dem_mesh(
             )
         refinement = Refinement(
             tolerance, out.max_error, out.rounds, out.inserted, out.flips, out.uncovered,
-            out.carved, out.quality_inserted, out.quality_skipped,
+            out.carved, out.quality_inserted, out.quality_skipped, out.feet,
         )
         quality_start = f"start min angle {_exact(min_angle)} deg" if min_angle > 0 else (
             "start quality off"
@@ -980,11 +998,13 @@ def _dem_mesh(
         sentence = (
             f"refined from DEM nodes, constrained Delaunay, tolerance {_exact(tolerance)} m, "
             f"achieved max error {_exact(out.max_error)} m, {start}, {quality_start}, "
+            f"constraint feet {'on' if feet else 'off'}, "
             f"{out.uncovered} valid DEM nodes not covered"
         )
         report = (
             f"{out.quality_inserted} start quality nodes inserted, "
             f"{out.quality_skipped} start quality skips, "
+            f"{out.feet} constraint feet, {out.feet_refused} feet refused, "
             f"{out.rounds} rounds, {out.inserted} points inserted, {out.flips} flips, "
             f"{len(trimmed.triangles)} triangles, achieved max error "
             f"{_exact(out.max_error)} m, {out.uncovered} valid DEM nodes not covered, "
