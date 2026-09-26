@@ -3,12 +3,13 @@
 Status: **implemented, in review, on provisional defaults.** Red `f7ae381`;
 green `affc955`, `a66632c` (ASCII wording), `f5489ab`. Ola asked the main
 session to "work until we can check the fruits of our efforts against the
-previous run", so the build proceeds on the recommended C1 (a), C2 (a) 25°,
-C3 (a) and C4 (a). These are the main session's provisional picks, **pending
-Ola's review**, not Ola's rulings (section "Choices for Ola").
+previous run", so the build proceeds on the recommended C1 (a), C2 (a) 25°
+and C3 (a). These are the main session's provisional picks, **pending Ola's
+review**, not Ola's rulings. C4 is not provisional: Ola sent it to increment
+20b, a minimum insertion distance (section "Choices for Ola").
 Written by `@architect` before `@tester`, per `docs/increments/README.md`
 step 1, on branch `increment20-start-quality` off master `a9a93bc` (increments
-14 to 18). Not committed.
+14 to 18).
 
 **Closes.** The boundary fans Ola saw in increment 16's output. Ola's idea, in
 their words: "At the initial cdt, we could have a set of default quality
@@ -161,7 +162,8 @@ What it shows:
 1. **Queue.** Every bad triangle, keyed by `(ratio descending, slot
    ascending)`. Each entry also stores the triangle's three vertex indices.
 2. **Pop.** An entry whose slot no longer holds those three vertices is stale
-   and dropped. A current entry is re-tested (it may no longer be bad).
+   and dropped. A current entry needs no re-test: the same three vertices give
+   the same ratio, so the slot-identity check is the whole staleness test.
 3. **Skip rules** (R5), in this order: circumradius below the floor;
    circumcentre outside the node rectangle; the snapped node is already a
    vertex; the walk to it crosses a constrained edge or leaves the mesh.
@@ -286,7 +288,8 @@ combination terminates and trims.
 ### R11. CLI, options, report
 
 - **`--start-min-angle DEG`, default 25.** `0` turns the pass off, and the
-  output is then bit-identical to increment 18's. Refused: negative,
+  mesh is then bit-identical to increment 18's (the file's provenance
+  sentence adds `start quality off`). Refused: negative,
   non-finite, above 35 (in practice Delaunay refinement stops terminating
   somewhere above 33°; with the lattice it still ends, but the cost is no longer a start
   cost). Only meaningful with `--tolerance`; given without it, refused like
@@ -445,15 +448,17 @@ them together still fit.
 
 ### What landed
 
-About 240 production lines against ~160 (roughly 50 % over, under 700);
-`quality.hpp` is 162 of them, mostly the walk and the insert-and-requeue step.
+The developer counted about 240 production lines against ~160, under 700;
+`quality.hpp` is 148 of them (reviewer's count; 130 without blank lines),
+mostly the walk and the insert-and-requeue step. The reviewer's total is about
+222 (about 205 without blank lines), about 40 % over.
 Settled at green: a snapped node the walk ends on counts as "already a vertex";
 NaN or <= 0 turns the pass off; the two quality columns come last in the
 `--stats` Refinement table; the file says `25 deg`, not `25°` (increment 13's
 ASCII rule).
 
 **Comparison on Ola's quarter circle** (`--binary --stats -`, "off" is
-`--start-min-angle 0`, identical to increment 18):
+`--start-min-angle 0`, whose mesh is identical to increment 18's):
 
 | | 10 m off | 10 m on | 1 m off | 1 m on |
 |---|---|---|---|---|
@@ -469,8 +474,12 @@ ASCII rule).
 | total | 0.207 s | 0.106 s | 0.469 s | 0.333 s |
 
 The boundary fans are gone. Two numbers differ from the batch prototype: 644
-nodes inserted (prototype 1 084), and the 10 m worst angle is 0.287° (not
-investigated; likely a later DEM-refinement triangle, which C3 (a) leaves).
+nodes inserted (prototype 1 084: the serial pass legalises and requeues after
+every insert, so one node can clear several bad triangles), and the 10 m worst
+angle is 0.287°. That triangle comes from DEM refinement, not from the pass:
+`@reviewer` meshed at `--tolerance 100000` (no DEM refinement) and the start
+is exactly 25° worst with the pass on (0.461° worst, 64 % under 1°, off). C3 (a)
+leaves DEM-refinement triangles alone.
 The 1 m worst angle is the near-node sliver that increment 20b addresses (Ola:
 a minimum insertion distance scaled by z_tol / |grad z|).
 
@@ -479,7 +488,10 @@ a minimum insertion distance scaled by z_tol / |grad z|).
 - The quarter circle at `--tolerance 10`: no fans from the boundary in
   ParaView; `--stats` shows start triangles near 2 700, under 1° near 0.01 %,
   maximum degree near 15, and `refine` faster than increment 18's.
-- `--start-min-angle 0` reproduces increment 18's output bit for bit.
+- `--start-min-angle 0` reproduces increment 18's mesh bit for bit; the file's
+  provenance sentence adds `start quality off`.
+- Known, not fixed: a triangle degenerate in double arithmetic has a NaN ratio
+  and is neither queued nor counted (reviewer); rare.
 - All gates in `CLAUDE.md` §4 green, including the TSan job; CI green.
 
 ## Not in scope
