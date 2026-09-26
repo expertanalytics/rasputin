@@ -247,7 +247,9 @@ constraint segment**. What that costs:
   alternative is C2 (b).
 - R2 step 2 (F near an end, insert N) is safe for the same reason as the
   vertex-disc measurement: N beside a vertex inherits its height, and M1 shows
-  such nodes are never selected in practice. Counted, so a change shows.
+  such nodes are never selected in practice. *Correction at review:* step 2 is
+  not counted anywhere (the code inserts N and counts nothing); a test now pins
+  it with a fixture whose foot falls within ε of a segment end.
 
 ### R6. Termination
 

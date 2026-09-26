@@ -176,21 +176,40 @@ valid node. `docs/increments/14-adaptive-refinement.md` R6.
 vertex, and every vertex then unused, and counts the dropped vertices.
 `src_python/tin_engine/elevation.py`.
 
-**Foot (of a node on a segment).** Given a DEM node `N` and a constraint
-segment `S` from `A` to `B`, both in world coordinates, the foot is the point
-`F = A + t·(B − A)` with `t = ((N − A)·(B − A)) / |B − A|²`, the orthogonal
-projection of `N` onto the line through `S`. It is a foot of `N` on `S` only
-when `0 < t < 1`, so `F` lies strictly inside the segment. In refinement
-(increment 20b), when the worst node `N` lies within `ε` of a constrained edge
-of its triangle, the foot is inserted instead of `N`, splitting that edge in
-two; the foot's height is bilinear (reading 1). The insertion is refused, and
-`N` is used instead, when `F` is within `ε` of either segment end, when a
-resulting triangle would not be strictly counter-clockwise under the exact
-kernel, or when `F`'s DEM cell has a NoData corner. A node gets at most one
-foot. `docs/increments/20b-min-insertion-distance.md`.
+**Foot (of a node on a segment).** Let `N` be a DEM node and `S` a constraint
+segment from `A` to `B`, both in world coordinates. With
+`s = clamp(((N − A)·(B − A)) / |B − A|², 0, 1)`, the foot is `F = A + s·(B − A)`,
+the point of the closed segment nearest `N`; the distance from `N` to `S` is
+`|N − F|`.
 
-**ε (constraint-foot distance).** In increment 20b,
-`ε = clamp(tol / G, cell / 100, cell / 2)`, where `tol` is `--tolerance`,
-`G` is the largest bilinear slope bound over the four DEM cells around `N`,
-and `cell` is the DEM spacing. Within `ε` of `N`, height changes by at most
-about `tol`, which is the scale refinement resolves (Ola).
+In refinement (increment 20b, `include/terrain/refinement/refine.hpp`,
+`detail::foot_of`), when the worst node `N` of a non-void triangle `T` has not
+already been given a foot, `T`'s three edges are tried in edge order, skipping
+any edge that is not constrained and any edge `N` lies exactly on (exact
+orientation zero; that case is refinement's ordinary edge split at `N`). On the
+**first** remaining edge with `|N − F| < ε`:
+
+- if `F` is within `ε` of either end (`s·|S| < ε` or `(1 − s)·|S| < ε`), no foot
+  is used: `N` is inserted, and nothing is counted;
+- otherwise `F` is the foot. It is inserted instead of `N`, splitting that edge
+  (and the neighbour's side) in two, with height `vertex_z` at `F`: bilinear
+  interpolation of the DEM (increment 16, R0). `N` is recorded as footed.
+
+If no edge qualifies, `N` is inserted as usual. A foot is **refused**, `N`
+inserted instead and `feet_refused` incremented, in exactly two cases: `F`'s
+DEM cell has a NoData corner (`vertex_z` gives no height), or a resulting
+triangle on either side of the edge would not be strictly counter-clockwise
+under the exact kernel (`detail::foot_fits`). A node is footed at most once. A
+split deferred because a neighbour was already written this round (increment
+14b's skip rule) is neither counted nor footed; it is retried next round.
+`docs/increments/20b-min-insertion-distance.md`.
+
+**ε (constraint-foot distance).** In increment 20b (`detail::foot_epsilon`),
+`ε = clamp(tol / G, m / 100, m / 2)` with `m = min(dx, dy)` the smaller DEM
+spacing and `tol` the `--tolerance`. `G` is the largest slope bound over the up
+to four DEM cells that have `N` as a corner, leaving out any cell outside the
+grid or with a NoData corner; a cell's bound is
+`hypot(max(|z01 − z00|, |z11 − z10|) / dx, max(|z10 − z00|, |z11 − z01|) / dy)`.
+When `G` is 0 (flat, or no valid cell), `ε` is the cap `m / 2`, including at
+tolerance 0. Within `ε` of `N`, height changes by at most about `tol`, which is
+the scale refinement resolves (Ola).

@@ -58,7 +58,8 @@ include/terrain/           # public C++ headers, header-only where possible
   refinement/
     scan.hpp               # per-triangle sup-norm scan, NoData carve point (14)
     refine.hpp             # RefineOptions, RefineOutcome, the round loop (14),
-                           #   Delaunay insertion (14b)
+                           #   Delaunay insertion (14b), the quality-start call
+                           #   (20), constraint feet (20b)
 
 src/                       # C++ implementation, one directory per module
                            #   (only predicates/ and cdt/ exist; rest planned)
@@ -331,7 +332,7 @@ dropped the honest options are a different library or our own CDT over the
 
 ### `refinement`
 
-Refinement against the DEM to a sup-norm tolerance (increment 14). `scan.hpp` measures a triangle's largest `|z - plane|` over the DEM nodes it contains, by exact integer tests; `refine.hpp` runs rounds of parallel scan (`parallel_util`) and serial splits in index order — a fan for an interior node, an edge split on both sides for an edge node — each followed by Lawson flips (`mesh/lawson.hpp`, increment 14b) that never cross a constrained or boundary edge, with every written slot rescanned, so the output is constrained Delaunay and within tolerance, and does not depend on the thread count. Triangles with a NoData vertex are carved, not refined. See `docs/increments/14-adaptive-refinement.md`.
+Refinement against the DEM to a sup-norm tolerance (increment 14). `scan.hpp` measures a triangle's largest `|z - plane|` over the DEM nodes it contains, by exact integer tests; `refine.hpp` runs rounds of parallel scan (`parallel_util`) and serial splits in index order — a fan for an interior node, an edge split on both sides for an edge node — each followed by Lawson flips (`mesh/lawson.hpp`, increment 14b) that never cross a constrained or boundary edge, with every written slot rescanned, so the output is constrained Delaunay and within tolerance, and does not depend on the thread count. Triangles with a NoData vertex are carved, not refined. Before the first scan, an optional minimum-angle pass (`mesh/quality.hpp`, increment 20) improves the start mesh; during refinement, a worst node within ε of a constraint segment is replaced by its foot on the segment (increment 20b, see `docs/GLOSSARY.md`). See `docs/increments/14-adaptive-refinement.md`.
 
 ### `flip`
 
