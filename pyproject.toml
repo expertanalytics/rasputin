@@ -65,7 +65,7 @@ dev = [
     "pytest-cov>=4.1",
     "hypothesis>=6.100",
     "mypy>=1.10",
-    "ruff>=0.5",
+    "ruff~=0.16.8",  # pinned: `ruff format --check` gates CI; style shifts per minor
 ]
 
 [project.scripts]
@@ -111,6 +111,11 @@ src = ["src_python", "tests/python"]
 # docs/benchmarks/<date>/ holds dated one-off measurement scripts, kept verbatim
 # as evidence. The maintained benchmark is tools/bench.py (@perf), checked by mypy below.
 exclude = ["legacy", "docs/benchmarks"]
+
+[tool.ruff.format]
+# docs/ holds design records whose code blocks are quotations, cited by line;
+# the formatter would rewrite Python inside Markdown and break both.
+exclude = ["docs/**"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "N", "UP", "B", "SIM", "RUF", "ASYNC"]
