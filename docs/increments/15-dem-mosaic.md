@@ -188,8 +188,11 @@ They are measurement scripts, not production code, and nothing imports them.
   nodes is @perf's (15d acceptance).
 
 Not measured: Deflate or LZW decode throughput for a whole tile, the triangle
-count at basin scale, and the BHO polygon's CRS (SIRGAS 2000, EPSG:4674, is
-likely, not checked).
+count at basin scale. The BHO polygon's CRS was checked afterwards by the main
+session (web, 2026-09-27): ANA's metadata gives SIRGAS 2000, **EPSG:4674**,
+geographic. ANADEM's *data* licence is still not found: no statement beyond the
+repository's MIT software licence turned up, so Copernicus GLO-30's terms for
+modified data apply at least (its notice, plus a notice of modification).
 
 ## Prior art: legacy and literature
 
