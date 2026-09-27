@@ -172,13 +172,18 @@ baseline search 60, evidence writing 70, Typer app 50: about 500 lines, under
 the 700 ceiling. Plus `tools/bench.py` added to mypy's `files` in
 `pyproject.toml`, so the strict gate covers it.
 
-Measured at green: about 690 lines counted as section 2 counts them (blank
+Measured at green (`90f45ae`): about 690 lines counted as section 2 counts them (blank
 lines in, comments and docstrings out; 688 to 691 depending on whether the two
 `# fmt: off/on` lines count), 582 without blank lines, so the estimate was low
 by about 80 lines. The margin rests on 16 regions packed by hand under
 `# fmt: skip` / `# fmt: off`; formatted normally it is about 780 counted lines
 (827 raw). That total was the first PR's count, because that PR added the
-whole file; CLAUDE.md section 2 says what a later PR counts.
+whole file; CLAUDE.md section 2 says what a later PR counts. The `# fmt:
+off/on` pair was removed in `91d5b76`: its `on` was indented, so ruff never
+switched formatting back on, and the format gate skipped everything from `run`
+to the end of the file. The signature it guarded was already in ruff's layout.
+The packed regions left are `# fmt: skip` lines (`grep -c "fmt: skip"
+tools/bench.py`).
 
 ## Ruled by Ola (2026-09-27)
 
