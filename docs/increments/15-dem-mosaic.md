@@ -1005,7 +1005,8 @@ the stem of the first file as given.
 
 **Fixtures.** `tests/fixtures/dtm10/`, cut by `tests/fixtures/dtm10/extract.py`
 from Ola's archive (`DTM10_UTM33_20220924`), one release, © Kartverket, CC BY
-4.0:
+4.0 (checked by the main session, 2026-09-27, against Geonorge's metadata API
+for dataset `dddbb667-1303-4ac5-8640-7ec04c0e3918`: "Åpne data", CC BY 4.0):
 
 - `seam/`: 6400_4 | 6400_1, rows 3072-3327, 307 columns each, with a 51-column
   overlap. It agrees bit for bit, and a one-column shift disagrees; the script
