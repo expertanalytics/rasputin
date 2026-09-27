@@ -31,14 +31,25 @@ Per `CLAUDE.md` §3, with the artifact each step produces:
 
 1. `@architect` writes `docs/increments/NN-name.md`. Design only — types,
    invariants, exclusions, degeneracy policy, LOC estimate. No production code.
-   The file carries a **Prior art in `legacy/`** section: what the legacy tree
+   The file carries a **Prior art: legacy and literature** section, written
+   before the design, not after it.
+
+   *Literature.* Name the published method the increment builds on, with a
+   citation, and say what differs from it. If the increment claims something
+   new, say what was searched and what was found; a novelty claim is not made
+   without that check. This is the retrospective's rule 1
+   (`docs/retrospectives/2026-09-27-increments-14-to-20b.md`): increments 14,
+   14b and 18 rebuilt Garland and Heckbert 1995 without reading it. It applies
+   to increment files written after 2026-09-27.
+
+   *Legacy.* What the legacy tree
    holds on this increment's subject, and either what is being carried across or
    why nothing is. "Nothing" is a legitimate answer and the commonest one — the
    post-CGAL increments replace what CGAL *did*, and `legacy/triangulate_dem.h`
    only ever *called* it — but it is an answer, with the grep that reached it,
    not an omission — and the section pastes the command **with the file list it
    returned**, because a cited grep and an unrun one look identical on the page.
-   Applies to increment files written from this commit onward; 01-05 predate it.
+   Increment files 01-05 predate this half.
    Where the answer is not "nothing", `@migration-expert` reads
    the legacy source and reports intent before `@tester` is spawned — before,
    because a suite written against re-derived intent pins the re-derivation, and
@@ -47,7 +58,8 @@ Per `CLAUDE.md` §3, with the artifact each step produces:
    suite is committed **red**, before the implementation exists.
 3. `@developer` reads both and makes it green. The green commit touches **no
    test file** — that is what makes the trace mean anything.
-4. `@reviewer` audits before merge. CI is authoritative.
+4. `@reviewer` audits before merge. CI is authoritative. An increment that
+   touches refine or mesh code also needs `@perf`'s acceptance run (below).
 
 Steps 2 and 3 are not strictly once each. A ruling can land after the red
 commit, and the suite that encodes it is still `@tester`'s to write — increment
@@ -78,6 +90,24 @@ The red commit stays ahead of the green one in history. That trace is the only
 thing that makes the test-first claim verifiable after the fact; a governance
 audit found every production file in this repo had previously landed in the
 same commit as its test.
+
+## Acceptance: an increment that touches refine or mesh code
+
+This is the one statement of the retrospective's rule 2. An increment whose
+diff touches refine or mesh code (`include/terrain/refinement/`,
+`include/terrain/mesh/`, and what drives them) is accepted only with:
+
+- **the 1 m benchmark and a thread-scaling sweep**, run from a checked-in
+  script, `tools/bench.py`, and compared with the previous increment's run;
+- **the power state recorded with each run** (`pmset -g batt`). A battery run
+  is compared only against a battery baseline, and an AC run only against an
+  AC one, because Ola develops while travelling;
+- the evidence committed under `docs/benchmarks/<date>/`.
+
+`@perf` owns all of it (`.claude/agents/perf.md`). `tools/bench.py` does not
+exist yet, so the first increment this applies to includes `@perf` writing it.
+The baseline is `docs/benchmarks/2026-09-26/`: the 1 m benchmark on battery,
+the scaling sweep on both.
 
 ## Cost constraints
 
