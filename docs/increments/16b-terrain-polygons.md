@@ -866,11 +866,18 @@ Everything else is unit, property or integration testing:
   Monitoring Service, European Environment Agency), that it is clipped and
   re-encoded, the funding sentence, and no endorsement. The `corine` maps'
   `notice` carries a one-line form of the same into every mesh built from
-  them (R10). **Not verified:** the exact attribution line the Copernicus
-  Land Monitoring Service website asks for today (recalled as "© European
-  Union, Copernicus Land Monitoring Service 2018, European Environment Agency
-  (EEA)"); no web access in this round. Ola or the main session should check
-  `land.copernicus.eu` before the extract is committed.
+  them (R10). **Checked by the main session (2026-09-28)** against the EEA's
+  current catalogue record for CLC2018 vector v2020_20u1
+  (`sdi.eea.europa.eu/catalogue/copernicus/api/records/71c95a07-e296-44fc-b22b-415f42acfdf0`):
+  the governing act is now Regulation (EU) 2021/696 with access still under
+  1159/2013, and the record states **three** conditions: inform the public of
+  the source; state clearly where the data were adapted or modified; do not
+  convey EU endorsement. It prescribes no exact wording and does not repeat
+  the funding sentence (keeping it, from the download's own metadata, is
+  harmless). The recalled "© European Union, Copernicus Land Monitoring
+  Service 2018, European Environment Agency (EEA)" satisfies condition 1.
+  SQLite's R-tree module is present locally (3.53.4); CI's Linux Python is
+  not yet checked, so 16b-1's first CI run settles it.
 - **Found in passing:** `tests/fixtures/corine/0000_4326_corine2018_4e6064_GML.gml`
   (30 MB, 399 CORINE features over Norway in EPSG:4326, written by OGR,
   committed with the foundation reset `3096ccc`) carries no attribution, and
