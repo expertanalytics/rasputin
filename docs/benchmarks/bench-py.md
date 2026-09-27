@@ -294,6 +294,34 @@ whose generated part ends at the line `MARKER`; whatever follows that line in
 an existing README is kept on a rerun. The README names `2.2x` beside the
 ceiling, every verdict line, and `--accept-quality` when it was used.
 
+**The threshold boundary** (follow-up red, 2026-09-27). "Strictly more than
+the threshold" is decided without a rounded ratio: a median exactly
+`threshold_pct` above the baseline's is `ACCEPTED`. With medians 20.0 and 21.0
+the ratio `21.0 / 20.0 - 1` rounds to 0.050000000000000044, so a
+`pct > threshold` test called exactly 5 % a regression; comparing exact
+products (`new * 100 > base * (100 + threshold)`) does not. 5.5 % at the
+default and 8 % at 7.5 are regressions with their size.
+
+**Bad input exits 3, not a traceback** (follow-up red, 2026-09-27). Exit 3
+through `typer.Exit`, one line naming the offending file, no evidence written:
+
+- `run` with a `--dem` or `--domain` path that does not exist is refused
+  **before the build and before any child**, so a typo is not found out after
+  the measurement it would spoil.
+- A `run.json` that does not load as a `RunRecord` (truncated, empty, or valid
+  JSON from another schema) and that the caller **named** is refused:
+  `compare NEW_DIR` (also when `NEW_DIR/run.json` is missing), `compare
+  --baseline DIR`, and `run --baseline DIR`, the last before the build and any
+  child.
+- *Settled here:* a malformed `run.json` met during the **baseline search**
+  (`find_baseline`, from `run` or `compare` without `--baseline`) is
+  **skipped with a `UserWarning` naming its path**, and the search goes on.
+  Not an error, because `run` searches after measuring: an error there would
+  throw away the measurement over a file unrelated to it, and a `RunRecord`
+  that gains a required field would make every older record invalid and every
+  run fail. Not silent, because a skipped record can change which baseline is
+  chosen, and the warning is how the reader of the verdict learns that.
+
 ## Settled at green (@perf, 2026-09-27)
 
 **Where the Release `.so` lands and how `pkg/` is assembled** (the red suite

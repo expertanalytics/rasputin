@@ -556,6 +556,37 @@ def test_threshold_lowered_rejects_four_percent(bench: ModuleType) -> None:
     assert v.lines[0].endswith("(+4.0 %)")
 
 
+@pytest.mark.parametrize(
+    ("threshold", "base", "new", "status", "size"),
+    [
+        (5.0, 20.0, 21.0, "ACCEPTED", None),
+        (5.0, 20.0, 21.1, "REGRESSION", "(+5.5 %)"),
+        (7.5, 40.0, 43.0, "ACCEPTED", None),
+        (7.5, 40.0, 43.2, "REGRESSION", "(+8.0 %)"),
+    ],
+    ids=["exactly-5-accepted", "5.5-regression", "exactly-7.5-accepted", "8-regression"],
+)
+def test_time_regression_is_strictly_more_than_the_threshold(
+    bench: ModuleType, threshold: float, base: float, new: float, status: str, size: str | None
+) -> None:
+    """A median exactly `threshold` percent slower is accepted, anything above is not.
+
+    The medians are exact in binary and so are the products `new * 100` and
+    `base * (100 + threshold)`, so "exactly 5 %" is exact in the reals. The
+    ratio `21.0 / 20.0 - 1` is not: it rounds to 0.050000000000000044, which a
+    `pct > threshold` test reads as more than 5 %. The boundary has to be
+    decided without that rounding.
+    """
+    base_record = make(bench, with_median(record_dict(), "tile", 0, base))
+    new_record = make(bench, with_median(record_dict(), "tile", 0, new), threshold_pct=threshold)
+    v = bench.verdict(new_record, base_record)
+    assert v.status == status, v.lines
+    if size is None:
+        assert not any(line.startswith("REGRESSION") for line in v.lines)
+    else:
+        assert v.lines == [f"REGRESSION: tile refine_s[t=0] {base:.4f} -> {new:.4f} {size}"]
+
+
 def test_faster_is_accepted(bench: ModuleType) -> None:
     assert bench.verdict(make(bench, slower(0.5)), make(bench)).status == "ACCEPTED"
 
@@ -673,6 +704,50 @@ def test_find_baseline_never_returns_the_record_itself(bench: ModuleType, tmp_pa
     record = make(bench)
     store(tmp_path, record, "2026-09-27", "i21")
     assert bench.find_baseline(tmp_path, record, lambda a, b: True) is None
+
+
+# A stored run.json that is not a RunRecord: truncated, empty, and valid JSON
+# from a schema that is not this one (the realistic case: RunRecord gains a
+# required field and every older record stops validating).
+MALFORMED_RUN_JSON = [
+    '{"label": "i21", "started": ',
+    "",
+    json.dumps({"label": "i21", "started": "2026-09-20T02:00:00+00:00"}),
+]
+MALFORMED_IDS = ["truncated", "empty", "schema-drift"]
+
+
+def store_malformed(root: Path, text: str, date: str, label: str) -> Path:
+    directory = root / date / label
+    directory.mkdir(parents=True)
+    (directory / "run.json").write_text(text)
+    return directory
+
+
+@pytest.mark.parametrize("text", MALFORMED_RUN_JSON, ids=MALFORMED_IDS)
+def test_find_baseline_skips_a_malformed_run_json_with_a_warning_naming_it(
+    bench: ModuleType, tmp_path: Path, text: str
+) -> None:
+    """Pinned in bench-py.md: skip with a warning, never abort the search.
+
+    The file sorts after the valid baseline, so an implementation that stops at
+    the first bad file does not find the valid one either.
+    """
+    valid = store(tmp_path, make(bench, started="2026-09-20T01:00:00+00:00"), "2026-09-20", "good")
+    store_malformed(tmp_path, text, "2026-09-20", "zz-broken")
+    new = make(bench, started="2026-09-27T10:00:00+00:00")
+    with pytest.warns(UserWarning, match="zz-broken"):
+        found = bench.find_baseline(tmp_path, new, lambda a, b: True)
+    assert found is not None
+    assert found[0] == valid
+
+
+def test_find_baseline_with_only_a_malformed_run_json_is_none(
+    bench: ModuleType, tmp_path: Path
+) -> None:
+    store_malformed(tmp_path, "{", "2026-09-20", "broken")
+    with pytest.warns(UserWarning, match="broken"):
+        assert bench.find_baseline(tmp_path, make(bench), lambda a, b: True) is None
 
 
 # --------------------------------------------------------------- evidence
@@ -1011,6 +1086,138 @@ def test_compare_rejudges_stored_evidence(
     result = cli.invoke(bench.app, ["compare", str(new_dir), "--baseline", str(base_dir)])
     assert result.exit_code == exit_code, result.output
     assert status in result.output
+
+
+# ------------------------------------------------- clean exits, not tracebacks
+#
+# bench-py.md: a refused or failed run exits 3 and writes no evidence. These pin
+# that bad input is refused the same way: exit 3 through `typer.Exit` (so
+# `result.exception` is the `SystemExit`, not an escaped `FileNotFoundError` or
+# `ValidationError`), a message naming the offending file, and, for `run`,
+# refused before any build or child, so a missing input is not found out only
+# after the measurement it spoils.
+
+
+def assert_refused(result: Any, names: str) -> None:
+    assert result.exit_code == 3, result.output
+    assert isinstance(result.exception, SystemExit), repr(result.exception)
+    assert "Traceback" not in result.output
+    # The name only: the printed path may be resolved (/private/var vs /var)
+    # and a long line may be wrapped.
+    assert names in "".join(result.output.split()), result.output
+
+
+def assert_nothing_started(fake: FakeRunner, ws: dict[str, Path]) -> None:
+    assert fake.children() == []
+    assert not any(Path(c[0]).name == "cmake" for c in fake.calls)
+    assert list(ws["out_root"].rglob("run.json")) == []
+
+
+def test_run_refuses_a_missing_dem_before_building(
+    bench: ModuleType, workspace: dict[str, Path], use_runner: Callable[[Any], None]
+) -> None:
+    fake = FakeRunner(bench)
+    use_runner(fake)
+    workspace["dem"] = workspace["dem"].with_name("missing-dem.tif")
+    result = cli.invoke(bench.app, run_args(workspace, "t1"))  # a build is asked for
+    assert_refused(result, "missing-dem.tif")
+    assert_nothing_started(fake, workspace)
+
+
+def test_run_refuses_a_missing_domain_before_building(
+    bench: ModuleType, workspace: dict[str, Path], use_runner: Callable[[Any], None]
+) -> None:
+    fake = FakeRunner(bench)
+    use_runner(fake)
+    nowhere = workspace["tree"] / "nowhere.geojson"
+    args = [*run_args(workspace, "t1"), "--domain", str(nowhere)]  # after --domain tile
+    result = cli.invoke(bench.app, args)
+    assert_refused(result, "nowhere.geojson")
+    assert_nothing_started(fake, workspace)
+
+
+@pytest.mark.parametrize("text", MALFORMED_RUN_JSON, ids=MALFORMED_IDS)
+def test_run_refuses_a_malformed_named_baseline_before_measuring(
+    bench: ModuleType, workspace: dict[str, Path], use_runner: Callable[[Any], None], text: str
+) -> None:
+    """A `--baseline` the caller named is not skipped: it is refused, and
+    before the measurement, which would otherwise be lost with it."""
+    fake = FakeRunner(bench)
+    use_runner(fake)
+    named = store_malformed(workspace["tree"], text, "stored", "bad-baseline")
+    result = cli.invoke(bench.app, [*run_args(workspace, "t1"), "--baseline", str(named)])
+    assert_refused(result, "bad-baseline")
+    assert_nothing_started(fake, workspace)
+
+
+def test_run_skips_a_malformed_stored_run_and_keeps_its_evidence(
+    bench: ModuleType, workspace: dict[str, Path], use_runner: Callable[[Any], None]
+) -> None:
+    use_runner(FakeRunner(bench, refine_s=1.0))
+    first = cli.invoke(bench.app, [*run_args(workspace, "base"), "--no-build"])
+    assert first.exit_code == 2, first.output
+    (date_dir,) = workspace["out_root"].iterdir()
+    store_malformed(workspace["out_root"], "{", date_dir.name, "zz-broken")
+
+    use_runner(FakeRunner(bench, refine_s=1.0))
+    with pytest.warns(UserWarning, match="zz-broken"):
+        second = cli.invoke(bench.app, [*run_args(workspace, "new"), "--no-build"])
+    assert second.exit_code == 0, second.output
+    assert "ACCEPTED" in second.output
+    assert run_json(workspace, "new")["verdict"][0] == "ACCEPTED"
+
+
+@pytest.fixture
+def stored_pair(bench: ModuleType, tmp_path: Path) -> tuple[Path, Path]:
+    base_dir, new_dir = tmp_path / "base", tmp_path / "new"
+    base_dir.mkdir()
+    new_dir.mkdir()
+    bench.write_evidence(make(bench), base_dir)
+    bench.write_evidence(make(bench, started="2026-09-27T12:00:00+00:00"), new_dir)
+    return base_dir, new_dir
+
+
+@pytest.mark.parametrize("text", MALFORMED_RUN_JSON, ids=MALFORMED_IDS)
+def test_compare_refuses_a_malformed_new_run(
+    bench: ModuleType, stored_pair: tuple[Path, Path], text: str
+) -> None:
+    base_dir, new_dir = stored_pair
+    (new_dir / "run.json").write_text(text)
+    result = cli.invoke(bench.app, ["compare", str(new_dir), "--baseline", str(base_dir)])
+    assert_refused(result, "new/run.json")
+
+
+def test_compare_refuses_a_directory_without_run_json(
+    bench: ModuleType, stored_pair: tuple[Path, Path]
+) -> None:
+    base_dir, new_dir = stored_pair
+    (new_dir / "run.json").unlink()
+    result = cli.invoke(bench.app, ["compare", str(new_dir), "--baseline", str(base_dir)])
+    assert_refused(result, "new/run.json")
+
+
+@pytest.mark.parametrize("text", MALFORMED_RUN_JSON, ids=MALFORMED_IDS)
+def test_compare_refuses_a_malformed_named_baseline(
+    bench: ModuleType, stored_pair: tuple[Path, Path], text: str
+) -> None:
+    base_dir, new_dir = stored_pair
+    (base_dir / "run.json").write_text(text)
+    result = cli.invoke(bench.app, ["compare", str(new_dir), "--baseline", str(base_dir)])
+    assert_refused(result, "base/run.json")
+
+
+def test_compare_search_skips_a_malformed_stored_run(
+    bench: ModuleType, tmp_path: Path, use_runner: Callable[[Any], None]
+) -> None:
+    root = tmp_path / "evidence"
+    store(root, make(bench), "2026-09-27", "base")
+    store_malformed(root, "{", "2026-09-27", "zz-broken")
+    new_dir = store(root, make(bench, started="2026-09-27T12:00:00+00:00"), "2026-09-28", "new")
+    use_runner(FakeRunner(bench))  # git merge-base --is-ancestor: yes
+    with pytest.warns(UserWarning, match="zz-broken"):
+        result = cli.invoke(bench.app, ["compare", str(new_dir), "--out-root", str(root)])
+    assert result.exit_code == 0, result.output
+    assert "ACCEPTED" in result.output
 
 
 # ------------------------------------------------------- one real child run
