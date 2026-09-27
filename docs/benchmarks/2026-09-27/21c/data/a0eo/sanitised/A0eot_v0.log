@@ -1,0 +1,10 @@
+(lldb) target create "/opt/homebrew/Cellar/python@3.14/3.14.7/Frameworks/Python.framework/Versions/3.14/bin/python3.14"
+Current executable set to '/opt/homebrew/Cellar/python@3.14/3.14.7/Frameworks/Python.framework/Versions/3.14/bin/python3.14' (arm64).
+(lldb) settings set -- target.run-args  "tools/bench.py" "_child" "--pkg" "/private/tmp/claude-501/-Users-skavhaug-projects-rasputin/38487caf-f56e-46a3-b05b-867af1fb1619/scratchpad/wt-eo/pkg-hard" "--threads" "1" "--" "mesh" "--dem" "tests/fixtures/dem_archive/7908_3_10m_z33.tif" "--tolerance" "1" "--domain" "docs/benchmarks/2026-09-26/quarter.geojson" "--out" "/private/tmp/claude-501/-Users-skavh
+(lldb) settings set target.process.stop-on-exec false
+(lldb) run
+644 start quality nodes inserted, 0 start quality skips, 6 constraint feet, 0 feet refused, 41 rounds, 213464 points inserted, 445657 flips, 428217 triangles, achieved max error 0.9999796549479072 m, 0 valid DEM nodes not covered, 534 start triangles, 235 start vertices off-node, 0 vertices without data dropped
+/private/tmp/claude-501/-Users-skavhaug-projects-rasputin/38487caf-f56e-46a3-b05b-867af1fb1619/scratchpad/hard/A0eot_v0.vtk
+BENCH {"refine_s": 2.4704465409740806, "app_s": 3.325515542004723, "max_error": 0.9999796549479072, "rounds": 41, "inserted": 213464, "flips": 445657}
+Process 8938 launched: '/opt/homebrew/Cellar/python@3.14/3.14.7/Frameworks/Python.framework/Versions/3.14/bin/python3.14' (arm64)
+Process 8938 exited with status = 0 (0x00000000)

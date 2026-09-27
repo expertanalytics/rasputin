@@ -1,0 +1,2 @@
+
+plant eo_stalecommit: exit 1

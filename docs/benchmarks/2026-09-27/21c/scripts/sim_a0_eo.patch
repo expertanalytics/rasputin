@@ -1,0 +1,424 @@
+diff --git a/include/terrain/refinement/refine.hpp b/include/terrain/refinement/refine.hpp
+index 2c4d0bc..c321737 100644
+--- a/include/terrain/refinement/refine.hpp
++++ b/include/terrain/refinement/refine.hpp
+@@ -949,9 +949,369 @@ template <raster::RasterSource R>
+             if (!sim::plant("norenumber"))
+                 m.sim_renumber(n0, v0, smap, vmap);
+             sim::t_renum += std::chrono::duration<double>(std::chrono::steady_clock::now() - tr).count();
++        } else if (md == "A0eo" || md == "A0eofp" || md == "A0eot") {
++            // A0 with evaluate-once (21c, "A0 with evaluate-once"). As A0, except that
++            // a mark's plan, cavity and footprint are stored with the sub-round they
++            // were computed in, and recomputed only when (a) a slot of the stored
++            // footprint was written since, by the slot's write version, or (b) the
++            // `footed` status of its node changed (make_plan reads `footed`). The
++            // skip rules (touched[t], touched[u]) are applied fresh in every
++            // sub-round. Three dirty rules, i.e. which slots a commit stamps: A0eo
++            // every slot whose record (corners, neighbours, constraint bits) changed;
++            // A0eofp every slot of the winner's footprint; A0eot today's `touched`
++            // slots only (split and flipped, not pointer-only updates).
++            const bool fpdirty = md == "A0eofp";
++            const bool tdirty = md == "A0eot" || sim::plant("eo_touched");
++            const bool stalecommit = sim::plant("eo_stalecommit");
++            const bool verify = std::getenv("RASPUTIN_SIM_EOVERIFY") != nullptr;
++            const bool feet_on = options.constraint_feet;
++            const auto n0 = static_cast<std::uint32_t>(m.triangle_count());
++            const auto v0 = static_cast<std::uint32_t>(m.vertices().size());
++            std::vector<std::uint32_t> pending;
++            for (const std::uint32_t t : active)
++                if (detail::needs_split(results[t], options.tolerance))
++                    pending.push_back(t);
++            any = !pending.empty();
++            rr.marked = pending.size();
++            constexpr std::uint32_t none = ~std::uint32_t{0};
++            std::vector<std::uint32_t> best(m.triangle_count(), none);
++            std::vector<std::uint32_t> stamp(m.triangle_count(), none), writer(m.triangle_count(), none);
++            std::vector<std::uint32_t> wver(m.triangle_count(), 0);  // sub-round of the last write this round
++            std::vector<char> in_cav(m.triangle_count(), 0);
++            struct Cand {
++                Plan pl;
++                std::vector<std::uint32_t> cavity, fp;
++                std::uint32_t epoch = 0;  // sub-round the footprint was computed in; 0 = never
++                bool footed0 = false;
++                bool shared = false;
++            };
++            struct Commit {
++                std::uint32_t t, first_slot, n_slots, vertex;
++            };
++            std::vector<Commit> commits;
++            std::vector<std::int32_t> slot_of(n0, -1);
++            std::vector<Cand> pool;
++            pool.reserve(pending.size());
++            for (const auto t : pending) {
++                slot_of[t] = static_cast<std::int32_t>(pool.size());
++                pool.emplace_back();
++            }
++            std::vector<std::uint32_t> wrote;
++            const auto higher = [](std::uint32_t st, std::uint32_t t) { return st != none && st > t; };
++            const auto is_footed = [&](const Plan& pl) {
++                return footed.contains({pl.node.row, pl.node.col});
++            };
++            // Returns false when today's edge deferral applies (no cavity computed).
++            const auto evaluate = [&](Cand& c, std::uint32_t t, std::uint32_t e) {
++                c.pl = make_plan(t, results[t]);
++                c.footed0 = feet_on && !c.pl.is_void && is_footed(c.pl);
++                c.epoch = e;
++                c.cavity.clear();
++                c.fp.clear();
++                c.shared = c.pl.edge && c.pl.u != mesh::kNoNeighbour;
++                if (c.shared && touched[c.pl.u] != 0)
++                    return false;
++                c.cavity.push_back(t);
++                in_cav[t] = 1;
++                if (c.shared) {
++                    c.cavity.push_back(c.pl.u);
++                    in_cav[c.pl.u] = 1;
++                }
++                for (std::size_t i = 0; i < c.cavity.size(); ++i) {
++                    const auto s2 = c.cavity[i];
++                    for (unsigned k = 0; k < 3; ++k) {
++                        const auto n = m.neighbours(s2)[k];
++                        if (n == mesh::kNoNeighbour || in_cav[n])
++                            continue;
++                        if (!m.is_constrained(s2, k) && sim::in_circle(m, n, c.pl.p, frame)) {
++                            c.cavity.push_back(n);
++                            in_cav[n] = 1;
++                        }
++                    }
++                }
++                c.fp = c.cavity;
++                for (const auto s2 : c.cavity)
++                    for (const auto n : m.neighbours(s2))
++                        if (n != mesh::kNoNeighbour && !in_cav[n]) {
++                            c.fp.push_back(n);
++                            in_cav[n] = 2;
++                        }
++                for (const auto s2 : c.fp)
++                    in_cav[s2] = 0;
++                return true;
++            };
++            struct Item {
++                std::uint32_t t;
++                bool eval;
++            };
++            std::vector<Item> items;
++            std::vector<std::uint32_t> bids;
++            Cand fresh;
++            while (!pending.empty()) {
++                ++rr.subrounds;
++                const auto e = static_cast<std::uint32_t>(rr.subrounds);
++                rr.sr_pending.push_back(static_cast<std::uint32_t>(pending.size()));
++                best.resize(m.triangle_count(), none);
++                in_cav.resize(m.triangle_count(), 0);
++                wver.resize(m.triangle_count(), 0);
++                // Pass 1: skip rule on t, then the dirty check of a stored footprint.
++                const auto t1 = std::chrono::steady_clock::now();
++                items.clear();
++                std::size_t loads = 0;
++                for (const auto t : pending) {
++                    const Cand& c = pool[static_cast<std::size_t>(slot_of[t])];
++                    // plant eo_stalecommit: a stored plan is trusted, skip rule not re-applied
++                    if (touched[t] != 0 && !(stalecommit && c.epoch != 0)) {
++                        ++rr.skipped_touched;
++                        if (higher(writer[t], t))
++                            ++sim::skip_by_higher;
++                        continue;
++                    }
++                    bool ev = c.epoch == 0;
++                    if (!ev && !sim::plant("eo_nodirty") && !stalecommit) {
++                        bool d = false;
++                        // plant eo_ringless: the dirty check reads the cavity, not the ring
++                        const std::size_t nchk = sim::plant("eo_ringless") ? c.cavity.size() : c.fp.size();
++                        for (std::size_t i = 0; i < nchk; ++i) {
++                            const auto s2 = c.fp[i];
++                            ++loads;
++                            if (wver[s2] >= c.epoch) {
++                                d = true;
++                                break;
++                            }
++                        }
++                        if (d) {
++                            ++sim::eo_reeval_slot;
++                        } else if (feet_on && !c.pl.is_void && !sim::plant("eo_nofooted")
++                                   && is_footed(c.pl) != c.footed0) {
++                            d = true;
++                            ++sim::eo_reeval_footed;
++                        }
++                        ev = d;
++                    }
++                    items.push_back({t, ev});
++                }
++                const auto t2 = std::chrono::steady_clock::now();
++                // Pass 2: (re-)evaluate the marks that need it.
++                std::size_t nev = 0;
++                for (auto& it : items)
++                    if (it.eval) {
++                        Cand& c = pool[static_cast<std::size_t>(slot_of[it.t])];
++                        if (c.epoch == 0)
++                            ++sim::eo_first;
++                        ++nev;
++                        const bool again = verify && c.epoch != 0;
++                        if (again)
++                            fresh = c;  // verify run only: was the re-evaluation needed?
++                        const bool ev_ok = evaluate(c, it.t, e);
++                        if (again && ev_ok && fresh.pl.edge == c.pl.edge && fresh.pl.u == c.pl.u
++                            && fresh.pl.p.col == c.pl.p.col && fresh.pl.p.row == c.pl.p.row
++                            && fresh.pl.foot == c.pl.foot && fresh.pl.refused == c.pl.refused
++                            && fresh.fp == c.fp && fresh.cavity == c.cavity)
++                            ++sim::eo_reeval_same;
++                        if (!ev_ok) {
++                            c.epoch = 0;  // deferred: leaves this round, as in A0
++                            ++rr.skipped_edge;
++                            if (higher(writer[c.pl.u], it.t))
++                                ++sim::skip_by_higher;
++                            skipped.push_back(it.t);
++                            it.t = none;
++                        }
++                    }
++                const auto t3 = std::chrono::steady_clock::now();
++                // Pass 3: edge deferral for stored footprints, then reserve; winner check.
++                bids.clear();
++                std::size_t fps = 0, nclean = 0;
++                for (const auto& it : items) {
++                    if (it.t == none)
++                        continue;
++                    const Cand& c = pool[static_cast<std::size_t>(slot_of[it.t])];
++                    if (!it.eval) {
++                        ++nclean;
++                        if (!stalecommit && c.shared && touched[c.pl.u] != 0) {  // cannot happen if the rule is exact
++                            ++rr.skipped_edge;
++                            ++sim::eo_clean_edge_skip;
++                            skipped.push_back(it.t);
++                            continue;
++                        }
++                    }
++                    for (const auto s2 : c.fp)
++                        best[s2] = std::min(best[s2], it.t);
++                    fps += c.fp.size();
++                    bids.push_back(it.t);
++                }
++                pending.clear();
++                std::vector<std::uint32_t> win;
++                for (const auto t : bids) {
++                    const Cand& c = pool[static_cast<std::size_t>(slot_of[t])];
++                    bool ok = true;
++                    for (const auto s2 : c.fp)
++                        ok = ok && best[s2] == t;
++                    if (ok)
++                        win.push_back(t);
++                    else
++                        pending.push_back(t);
++                }
++                for (const auto t : bids)
++                    for (const auto s2 : pool[static_cast<std::size_t>(slot_of[t])].fp)
++                        best[s2] = none;
++                const auto t4 = std::chrono::steady_clock::now();
++                sim::t_eo_check += std::chrono::duration<double>(t2 - t1).count();
++                sim::t_eo_eval += std::chrono::duration<double>(t3 - t2).count();
++                sim::t_eo_bid += std::chrono::duration<double>(t4 - t3).count();
++                sim::n_eo_check += rr.sr_pending.back();
++                sim::n_eo_loads += loads;
++                sim::n_eo_eval += nev;
++                sim::n_eo_bid += bids.size();
++                sim::eo_rebid_clean += nclean;
++                rr.sr_evals.push_back(static_cast<std::uint32_t>(nev));
++                rr.sr_bids.push_back(static_cast<std::uint32_t>(bids.size()));
++                // Verification (separate run): a stored footprint re-used must equal a fresh one.
++                if (verify)
++                    for (const auto& it : items) {
++                        if (it.eval || it.t == none)
++                            continue;
++                        const Cand& c = pool[static_cast<std::size_t>(slot_of[it.t])];
++                        fresh = Cand{};
++                        const bool ok = evaluate(fresh, it.t, e);
++                        const auto& a = c.pl;
++                        const auto& b = fresh.pl;
++                        if (!ok || a.edge != b.edge || a.u != b.u || a.p.col != b.p.col || a.p.row != b.p.row
++                            || a.foot != b.foot || a.refused != b.refused || c.fp != fresh.fp
++                            || c.cavity != fresh.cavity)
++                            ++sim::eo_stale;
++                        ++sim::eo_verified;
++                    }
++                rr.sr_fpsum.push_back(static_cast<std::uint32_t>(fps));
++                rr.subround_winners.push_back(static_cast<std::uint32_t>(win.size()));
++                if (rr.subrounds == 1)
++                    rr.winners_first = win.size();
++                const auto tc = std::chrono::steady_clock::now();
++                std::size_t srfl = 0;
++                double tmark = 0;
++                for (const auto t : win) {
++                    const Cand& c = pool[static_cast<std::size_t>(slot_of[t])];
++                    for (const auto s2 : c.fp)
++                        if (higher(stamp[s2], t))
++                            ++sim::order_violations;
++                    for (const auto s2 : c.cavity)
++                        in_cav[s2] = 1;
++                    // A0eo: snapshot the footprint's content (sim device for "content changed").
++                    std::vector<std::array<std::uint32_t, 7>> snap;
++                    if (!fpdirty && !tdirty) {
++                        snap.reserve(c.fp.size());
++                        for (const auto s2 : c.fp) {
++                            const auto& tr = m.triangles()[s2];
++                            const auto nb = m.neighbours(s2);
++                            snap.push_back({tr[0], tr[1], tr[2], nb[0], nb[1], nb[2],
++                                            static_cast<std::uint32_t>(m.is_constrained(s2, 0) | m.is_constrained(s2, 1) << 1
++                                                                       | m.is_constrained(s2, 2) << 2)});
++                        }
++                    }
++                    const auto before = static_cast<std::uint32_t>(m.triangle_count());
++                    std::array<std::uint32_t, 4> seeds{};
++                    std::size_t n_seeds = 0;
++                    const auto q = do_split(c.pl, seeds, n_seeds);
++                    ++rr.inserted;
++                    const auto after = static_cast<std::uint32_t>(m.triangle_count());
++                    commits.push_back({t, before, after - before, q});
++                    touched.resize(after, 1);
++                    stamp.resize(after, none);
++                    writer.resize(after, none);
++                    wver.resize(after, 0);
++                    touched[t] = 1;
++                    writer[t] = t;
++                    if (n_seeds == 4) {
++                        touched[seeds[3]] = 1;
++                        writer[seeds[3]] = t;
++                    }
++                    wrote.clear();
++                    const auto fl = mesh::legalise_around<pred::DefaultKernel>(
++                        m, q, std::span<const std::uint32_t>{seeds.data(), n_seeds}, frame, flip_stack,
++                        [&](std::uint32_t s2) {
++                            touched[s2] = 1;
++                            wrote.push_back(s2);
++                        });
++                    out.flips += fl;
++                    rr.flips += fl;
++                    srfl += fl;
++                    for (const auto s2 : wrote) {
++                        if (s2 < before && (s2 >= in_cav.size() || !in_cav[s2]))
++                            ++rr.cavity_violations;
++                        if (s2 < writer.size())
++                            writer[s2] = t;
++                    }
++                    for (const auto s2 : c.cavity)
++                        in_cav[s2] = 0;
++                    // Dirty marking: the write versions.
++                    const auto tm = std::chrono::steady_clock::now();
++                    if (tdirty) {  // today's touched slots that existed before: t, u, flipped
++                        wver[t] = e;
++                        ++sim::n_eo_marks;
++                        if (n_seeds == 4) {
++                            wver[seeds[3]] = e;
++                            ++sim::n_eo_marks;
++                        }
++                        for (const auto s2 : wrote)
++                            if (s2 < before) {
++                                wver[s2] = e;
++                                ++sim::n_eo_marks;
++                            }
++                    } else if (fpdirty) {
++                        for (const auto s2 : c.fp)
++                            wver[s2] = e;
++                        sim::n_eo_marks += c.fp.size();
++                    } else {
++                        for (std::size_t i = 0; i < c.fp.size(); ++i) {
++                            const auto s2 = c.fp[i];
++                            const auto& tr = m.triangles()[s2];
++                            const auto nb = m.neighbours(s2);
++                            const std::array<std::uint32_t, 7> now{
++                                tr[0], tr[1], tr[2], nb[0], nb[1], nb[2],
++                                static_cast<std::uint32_t>(m.is_constrained(s2, 0) | m.is_constrained(s2, 1) << 1
++                                                           | m.is_constrained(s2, 2) << 2)};
++                            if (now != snap[i]) {
++                                wver[s2] = e;
++                                ++sim::n_eo_marks;
++                            }
++                        }
++                    }
++                    tmark += std::chrono::duration<double>(std::chrono::steady_clock::now() - tm).count();
++                    for (const auto s2 : c.fp)
++                        stamp[s2] = stamp[s2] == none ? t : std::max(stamp[s2], t);
++                    for (auto s2 = before; s2 < after; ++s2) {
++                        stamp[s2] = t;
++                        writer[s2] = t;
++                    }
++                    rr.fp_sum += c.fp.size();
++                    rr.fp_max = std::max(rr.fp_max, c.fp.size());
++                    fp_all.push_back(static_cast<std::uint32_t>(c.fp.size()));
++                }
++                rr.sr_flips.push_back(static_cast<std::uint32_t>(srfl));
++                sim::t_eo_mark += tmark;
++                sim::t_commit += std::chrono::duration<double>(std::chrono::steady_clock::now() - tc).count() - tmark;
++                sim::n_commit += win.size();
++                // pending is already in index order (bids were).
++            }
++            std::sort(skipped.begin(), skipped.end());
++            const auto tr = std::chrono::steady_clock::now();
++            std::vector<std::uint32_t> smap(m.triangle_count() - n0), vmap(m.vertices().size() - v0);
++            auto sorted = commits;
++            std::sort(sorted.begin(), sorted.end(), [](const Commit& a, const Commit& b) { return a.t < b.t; });
++            std::uint32_t ns = n0, nv = v0;
++            for (const auto& c : sorted) {
++                for (std::uint32_t k = 0; k < c.n_slots; ++k)
++                    smap[c.first_slot + k - n0] = ns++;
++                vmap[c.vertex - v0] = nv++;
++            }
++            for (std::size_t i = 0; i < commits.size(); ++i)
++                if (commits[i].t != sorted[i].t)
++                    ++rr.renumbered;
++            m.sim_renumber(n0, v0, smap, vmap);
++            sim::t_renum += std::chrono::duration<double>(std::chrono::steady_clock::now() - tr).count();
+         }
+         out.split_seconds += since(t0);
+-        if (md == "today" || md == "A0" || md == "A1")
++        if (md == "today" || md == "A0" || md == "A1" || md == "A0eo" || md == "A0eofp" || md == "A0eot")
+             rr.hash = sim::mesh_hash(m);
+         rounds_rec.push_back(std::move(rr));
+         if (!any)
+diff --git a/include/terrain/refinement/sim21c.hpp b/include/terrain/refinement/sim21c.hpp
+index 672b366..33121ae 100644
+--- a/include/terrain/refinement/sim21c.hpp
++++ b/include/terrain/refinement/sim21c.hpp
+@@ -95,6 +95,7 @@ struct Round {
+     // A0/A1 per sub-round: marks evaluated, footprint slots reserved, flips by winners;
+     // C per flip round: candidate edges tested, flips made.
+     std::vector<std::uint32_t> sr_pending, sr_fpsum, sr_flips, fr_cand, fr_flips;
++    std::vector<std::uint32_t> sr_evals, sr_bids;  // A0eo: full evaluations and bidders per sub-round
+     std::size_t renumbered = 0;   // A0: commits whose commit position differs from index order
+     std::uint64_t hash = 0;       // today/A0/A1: FNV-1a of the mesh at the end of the round
+ };
+@@ -106,6 +107,13 @@ inline std::size_t n_eval = 0, n_commit = 0, n_fp = 0, n_cbatch = 0, n_ctest = 0
+ // round (so today's order would have seen a different mesh), and a skip caused by
+ // a higher-index writer.
+ inline std::size_t order_violations = 0, skip_by_higher = 0;
++// A0eo/A0eofp (evaluate-once): pass timers and counts. check = skip rule + dirty
++// check per pending mark; eval = plan + cavity + ring per (re-)evaluation; bid =
++// reserve + winner check + reset per bidder; mark = write-version stores per commit.
++inline double t_eo_check = 0, t_eo_eval = 0, t_eo_bid = 0, t_eo_mark = 0;
++inline std::size_t n_eo_check = 0, n_eo_loads = 0, n_eo_eval = 0, n_eo_bid = 0, n_eo_marks = 0;
++inline std::size_t eo_first = 0, eo_reeval_slot = 0, eo_reeval_footed = 0, eo_rebid_clean = 0,
++                   eo_clean_edge_skip = 0, eo_stale = 0, eo_verified = 0, eo_reeval_same = 0;
+ 
+ inline std::uint64_t mesh_hash(const mesh::LatticeMesh& m) {
+     std::uint64_t h = 1469598103934665603ULL;
+@@ -168,6 +176,13 @@ inline void write_json(const std::string& md, const std::vector<Round>& rs, std:
+                     "\"order_violations\":%zu,\"skip_by_higher\":%zu,",
+                  t_eval, n_eval, n_fp, t_commit, n_commit, t_renum, t_cbatch, n_cbatch, t_ctest, n_ctest,
+                  t_cflip, n_cflip, order_violations, skip_by_higher);
++    std::fprintf(o, "\"eo\":{\"t_check\":%.6f,\"t_eval\":%.6f,\"t_bid\":%.6f,\"t_mark\":%.6f,"
++                    "\"n_check\":%zu,\"n_loads\":%zu,\"n_eval\":%zu,\"n_bid\":%zu,\"n_marks\":%zu,"
++                    "\"first\":%zu,\"reeval_slot\":%zu,\"reeval_footed\":%zu,\"rebid_clean\":%zu,"
++                    "\"clean_edge_skip\":%zu,\"stale\":%zu,\"verified\":%zu,\"reeval_same\":%zu},",
++                 t_eo_check, t_eo_eval, t_eo_bid, t_eo_mark, n_eo_check, n_eo_loads, n_eo_eval, n_eo_bid,
++                 n_eo_marks, eo_first, eo_reeval_slot, eo_reeval_footed, eo_rebid_clean, eo_clean_edge_skip,
++                 eo_stale, eo_verified, eo_reeval_same);
+     std::fprintf(o, "\"rounds\":[");
+     for (std::size_t i = 0; i < rs.size(); ++i) {
+         const Round& r = rs[i];
+@@ -197,6 +212,8 @@ inline void write_json(const std::string& md, const std::vector<Round>& rs, std:
+         put_list(o, "sr_flips", r.sr_flips);
+         put_list(o, "fr_cand", r.fr_cand);
+         put_list(o, "fr_flips", r.fr_flips);
++        put_list(o, "sr_evals", r.sr_evals);
++        put_list(o, "sr_bids", r.sr_bids);
+         std::fprintf(o, ",\"renumbered\":%zu,\"hash\":\"%016llx\"", r.renumbered,
+                      static_cast<unsigned long long>(r.hash));
+         std::fprintf(o, "}");

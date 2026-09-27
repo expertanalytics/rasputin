@@ -1,0 +1,731 @@
+diff --git a/include/terrain/refinement/refine.hpp b/include/terrain/refinement/refine.hpp
+index 1a6a782..0ba78d2 100644
+--- a/include/terrain/refinement/refine.hpp
++++ b/include/terrain/refinement/refine.hpp
+@@ -48,6 +48,7 @@
+ #include <terrain/raster/raster.hpp>
+ #include <terrain/raster/sample.hpp>
+ #include <terrain/refinement/scan.hpp>
++#include <terrain/refinement/sim21c.hpp>
+ 
+ #include <algorithm>
+ #include <array>
+@@ -301,6 +302,67 @@ template <raster::RasterSource R>
+     for (std::uint32_t t = 0; t < active.size(); ++t)
+         active[t] = t;
+ 
++    // ---- 21c scratch: simulations (sim21c.hpp). RASPUTIN_SIM unset: today's loop, unchanged.
++    const std::string md = sim::mode();
++    const bool rec_fp = md == "today" && std::getenv("RASPUTIN_SIM_FOOT") != nullptr;
++    std::vector<sim::Round> rounds_rec;
++    std::vector<std::uint32_t> all_sides, fp_all;
++    const std::vector<int> bs{16, 32, 64, 128, 256, 512, 1024};
++    std::vector<std::map<std::pair<long, long>, std::size_t>> blocks(bs.size());
++    std::vector<std::uint32_t> lastdepth;
++
++    struct Plan {
++        std::uint32_t t = 0;
++        std::optional<unsigned> edge;
++        std::uint32_t u = mesh::kNoNeighbour;
++        mesh::MeshVertex p;
++        mesh::LatticeVertex node;
++        bool foot = false, refused = false, is_void = false;
++    };
++    const auto make_plan = [&](std::uint32_t t, const ScanResult& r) {
++        Plan pl;
++        pl.t = t;
++        pl.node = *r.node;
++        pl.is_void = r.is_void;
++        if (r.where != NodeLocation::Inside)
++            pl.edge = static_cast<unsigned>(r.where) - 1;
++        pl.p = *r.node;
++        if (options.constraint_feet && !r.is_void && !footed.contains({r.node->row, r.node->col}))
++            if (const auto f = detail::foot_of(dem, m, t, *r.node, options.tolerance)) {
++                pl.refused = !vertex_z(dem, f->at) || !detail::foot_fits(m, t, f->edge, f->at);
++                pl.foot = !pl.refused;
++                if (pl.foot) {
++                    pl.edge = f->edge;
++                    pl.p = f->at;
++                }
++            }
++        if (pl.edge)
++            pl.u = m.neighbours(t)[*pl.edge];
++        return pl;
++    };
++    // Split per plan; returns q, fills seeds. Book-keeping as today's loop.
++    const auto do_split = [&](const Plan& pl, std::array<std::uint32_t, 4>& seeds, std::size_t& n_seeds) {
++        const auto before = static_cast<std::uint32_t>(m.triangle_count());
++        seeds = {pl.t, before, before + 1, before + 1};
++        n_seeds = 3;
++        std::uint32_t q = 0;
++        if (!pl.edge) {
++            q = m.split_inside(pl.t, pl.node);
++        } else {
++            q = m.split_edge(pl.t, *pl.edge, pl.p);
++            n_seeds = pl.u != mesh::kNoNeighbour ? 4 : 2;
++            if (n_seeds == 4)
++                seeds[3] = pl.u;
++        }
++        ++out.inserted;
++        out.carved += pl.is_void ? 1 : 0;
++        out.feet += pl.foot ? 1 : 0;
++        out.feet_refused += pl.refused ? 1 : 0;
++        if (pl.foot)
++            footed.insert({pl.node.row, pl.node.col});
++        return q;
++    };
++
+     while (true) {
+         ++out.rounds;
+         results.resize(m.triangle_count());
+@@ -312,71 +374,383 @@ template <raster::RasterSource R>
+                                       });
+         out.scan_seconds += since(t0);
+         t0 = clock::now();
++        sim::Round rr;
++        rr.active = active.size();
+ 
+-        // `touched` is every slot a split or a flip wrote this round. A marked triangle
+-        // skipped because its neighbour was touched is itself unchanged and
+-        // still unconverged, so it stays active rather than being forgotten.
+         std::vector<char> touched(m.triangle_count(), 0);
+         std::vector<std::uint32_t> skipped;
+         bool any = false;
+-        for (const std::uint32_t t : active) {
+-            const ScanResult& r = results[t];
+-            if (!detail::needs_split(r, options.tolerance))
+-                continue;
+-            any = true;
+-            if (touched[t] != 0)
+-                continue;
+-            const auto before = static_cast<std::uint32_t>(m.triangle_count());
+-            std::array<std::uint32_t, 4> seeds{t, before, before + 1, before + 1};
+-            std::size_t n_seeds = 3;
+-            std::uint32_t q = 0;
+-            std::optional<unsigned> edge;
+-            if (r.where != NodeLocation::Inside)
+-                edge = static_cast<unsigned>(r.where) - 1;
+-            mesh::MeshVertex p = *r.node;
+-            bool foot = false, refused = false;
+-            if (options.constraint_feet && !r.is_void && !footed.contains({r.node->row, r.node->col}))
+-                if (const auto f = detail::foot_of(dem, m, t, *r.node, options.tolerance)) {
+-                    refused = !vertex_z(dem, f->at) || !detail::foot_fits(m, t, f->edge, f->at);
+-                    foot = !refused;
+-                    if (foot) {
+-                        edge = f->edge;
+-                        p = f->at;
+-                    }
++        if (md.empty() || md == "today" || md == "Hser") {
++            // Hser: today's loop and skip rule, marks taken in A1's hash order (serial L1 twin of A1).
++            std::vector<std::uint32_t> order(active.begin(), active.end());
++            if (md == "Hser") {
++                const auto key = [&](std::uint32_t t) {
++                    const auto& r = results[t];
++                    const std::uint64_t h = r.node ? sim::splitmix((std::uint64_t{r.node->row} << 32 | r.node->col) ^ sim::seed()) : 0;
++                    return std::pair{h, t};
++                };
++                std::sort(order.begin(), order.end(), [&](auto a, auto b) { return key(a) < key(b); });
++            }
++            if (rec_fp)
++                lastdepth.assign(m.triangle_count(), 0);
++            std::vector<std::uint32_t> w;
++            for (const std::uint32_t t : order) {
++                const ScanResult& r = results[t];
++                if (!detail::needs_split(r, options.tolerance))
++                    continue;
++                any = true;
++                ++rr.marked;
++                if (touched[t] != 0) {
++                    ++rr.skipped_touched;
++                    continue;
+                 }
+-            if (!edge) {
+-                q = m.split_inside(t, *r.node);
+-            } else {
+-                const auto e = *edge;
+-                const std::uint32_t u = m.neighbours(t)[e];
+-                if (u != mesh::kNoNeighbour && touched[u] != 0) {
++                const Plan pl = make_plan(t, r);
++                if (pl.edge && pl.u != mesh::kNoNeighbour && touched[pl.u] != 0) {
++                    ++rr.skipped_edge;
+                     skipped.push_back(t);
+                     continue;
+                 }
+-                q = m.split_edge(t, e, p);
+-                n_seeds = u != mesh::kNoNeighbour ? 4 : 2;
++                std::array<std::uint32_t, 4> seeds{};
++                std::size_t n_seeds = 0;
++                const auto before = static_cast<std::uint32_t>(m.triangle_count());
++                const auto q = do_split(pl, seeds, n_seeds);
++                touched.resize(m.triangle_count(), 1);
++                touched[t] = 1;
+                 if (n_seeds == 4)
+-                    seeds[3] = u;
++                    touched[seeds[3]] = 1;
++                w.clear();
++                if (rec_fp) {
++                    w.push_back(t);
++                    if (n_seeds == 4)
++                        w.push_back(seeds[3]);
++                    for (auto s = before; s < m.triangle_count(); ++s)
++                        w.push_back(s);
++                }
++                const auto fl = mesh::legalise_around<pred::DefaultKernel>(
++                    m, q, std::span<const std::uint32_t>{seeds.data(), n_seeds}, frame, flip_stack,
++                    [&](std::uint32_t s) {
++                        touched[s] = 1;
++                        if (rec_fp)
++                            w.push_back(s);
++                    });
++                out.flips += fl;
++                rr.flips += fl;
++                ++rr.inserted;
++                if (rec_fp) {
++                    const auto fp = sim::footprint_after(m, w);
++                    lastdepth.resize(m.triangle_count(), 0);
++                    std::uint32_t d = 0;
++                    for (const auto s : fp)
++                        d = std::max(d, lastdepth[s]);
++                    ++d;
++                    for (const auto s : fp)
++                        lastdepth[s] = std::max(lastdepth[s], d);
++                    rr.depth = std::max<std::size_t>(rr.depth, d);
++                    rr.fp_sum += fp.size();
++                    rr.fp_max = std::max(rr.fp_max, fp.size());
++                    fp_all.push_back(static_cast<std::uint32_t>(fp.size()));
++                    sim::record_extent(rr, m, fp, pl.p, blocks, bs);
++                }
+             }
+-            touched.resize(m.triangle_count(), 1);
+-            touched[t] = 1;
+-            if (n_seeds == 4)
+-                touched[seeds[3]] = 1;
+-            out.flips += mesh::legalise_around<pred::DefaultKernel>(
+-                m, q, std::span<const std::uint32_t>{seeds.data(), n_seeds}, frame, flip_stack,
+-                [&](std::uint32_t s) { touched[s] = 1; });
+-            ++out.inserted;
+-            out.carved += r.is_void ? 1 : 0;
+-            out.feet += foot ? 1 : 0;
+-            out.feet_refused += refused ? 1 : 0;
+-            if (foot)
+-                footed.insert({r.node->row, r.node->col});
++            std::sort(skipped.begin(), skipped.end());
++            if (rec_fp) {
++                sim::close_blocks(rr, blocks, bs);
++                all_sides.insert(all_sides.end(), rr.side.begin(), rr.side.end());
++            }
++        } else if (md == "C" || md == "Cthin" || md == "Cmis" || md == "Cthin2") {
++            std::vector<std::uint32_t> marks;
++            for (const std::uint32_t t : active)
++                if (detail::needs_split(results[t], options.tolerance))
++                    marks.push_back(t);
++            any = !marks.empty();
++            rr.marked = marks.size();
++            const auto n0 = m.triangle_count();
++            std::vector<char> is_mark(n0, 0), ins(n0, 0);
++            for (const auto t : marks)
++                is_mark[t] = 1;
++            std::vector<Plan> plans;
++            plans.reserve(marks.size());
++            for (const auto t : marks)
++                plans.push_back(make_plan(t, results[t]));
++            std::vector<std::uint32_t> owner(n0, mesh::kNoNeighbour);
++            for (const auto& pl : plans) {
++                owner[pl.t] = std::min(owner[pl.t], pl.t);
++                if (pl.edge && pl.u != mesh::kNoNeighbour)
++                    owner[pl.u] = std::min(owner[pl.u], pl.t);
++            }
++            std::vector<char> dirty_flag;
++            std::vector<std::uint32_t> dirty;
++            const auto mark_dirty = [&](std::uint32_t s) {
++                if (s >= dirty_flag.size())
++                    dirty_flag.resize(m.triangle_count(), 0);
++                if (!dirty_flag[s]) {
++                    dirty_flag[s] = 1;
++                    dirty.push_back(s);
++                }
++            };
++            for (const auto& pl : plans) {
++                const bool shared = pl.edge && pl.u != mesh::kNoNeighbour;
++                if (owner[pl.t] != pl.t || (shared && owner[pl.u] != pl.t)) {
++                    ++rr.deferred_conflict;
++                    skipped.push_back(pl.t);
++                    continue;
++                }
++                bool thin = false;
++                if (md == "Cthin" || md == "Cmis")
++                    for (const auto n : m.neighbours(pl.t))
++                        if (n != mesh::kNoNeighbour && n < pl.t
++                            && (md == "Cthin" ? is_mark[n] != 0 : ins[n] != 0))
++                            thin = true;
++                if (md == "Cthin2")  // two edge hops, on the round-start mesh's marks
++                    for (const auto n : m.neighbours(pl.t))
++                        if (n != mesh::kNoNeighbour && n < n0) {
++                            if (n < pl.t && is_mark[n] != 0)
++                                thin = true;
++                            for (const auto n2 : m.neighbours(n))
++                                if (n2 != mesh::kNoNeighbour && n2 < pl.t && n2 != pl.t && is_mark[n2] != 0)
++                                    thin = true;
++                        }
++                if (thin) {
++                    ++rr.deferred_thin;
++                    skipped.push_back(pl.t);
++                    continue;
++                }
++                ins[pl.t] = 1;
++                std::array<std::uint32_t, 4> seeds{};
++                std::size_t n_seeds = 0;
++                (void)do_split(pl, seeds, n_seeds);
++                ++rr.inserted;
++                touched.resize(m.triangle_count(), 1);
++                dirty_flag.resize(m.triangle_count(), 0);
++                touched[pl.t] = 1;
++                for (std::size_t k = 0; k < n_seeds; ++k) {
++                    touched[seeds[k]] = 1;
++                    mark_dirty(seeds[k]);
++                }
++            }
++            // Flip rounds: the flippable edges among the dirty triangles' edges;
++            // an edge flips when its key is the smallest of the flippable edges
++            // of both its triangles (so no triangle is in two flips).
++            struct Fl {
++                std::uint64_t key;
++                std::uint32_t lo, hi;
++                unsigned e;
++            };
++            std::vector<std::pair<std::uint32_t, std::uint32_t>> cand;
++            std::vector<Fl> fls;
++            std::vector<std::uint64_t> best;
++            std::vector<char> used;
++            bool first = true;
++            while (!dirty.empty() && !sim::plant("noflip")) {
++                cand.clear();
++                for (const auto t : dirty)
++                    for (unsigned k = 0; k < 3; ++k) {
++                        const auto n = m.neighbours(t)[k];
++                        if (n != mesh::kNoNeighbour && !m.is_constrained(t, k))
++                            cand.emplace_back(std::min(t, n), std::max(t, n));
++                    }
++                for (const auto t : dirty)
++                    dirty_flag[t] = 0;
++                dirty.clear();
++                std::sort(cand.begin(), cand.end());
++                cand.erase(std::unique(cand.begin(), cand.end()), cand.end());
++                fls.clear();
++                for (const auto& [lo, hi] : cand) {
++                    unsigned e = 0;
++                    while (m.neighbours(lo)[e] != hi)
++                        ++e;
++                    if (mesh::detail::must_flip<pred::DefaultKernel>(m, lo, e, frame)) {
++                        const auto a = m.triangles()[lo][e], b = m.triangles()[lo][(e + 1) % 3];
++                        const std::uint64_t key =
++                            sim::splitmix(std::uint64_t{std::min(a, b)} << 32 | std::max(a, b));
++                        fls.push_back({key, lo, hi, e});
++                    }
++                }
++                if (first) {
++                    rr.flip_candidates_first = cand.size();
++                }
++                if (fls.empty())
++                    break;
++                ++rr.flip_rounds;
++                best.assign(m.triangle_count(), ~std::uint64_t{0});
++                used.assign(m.triangle_count(), 0);
++                for (const auto& f : fls) {
++                    best[f.lo] = std::min(best[f.lo], f.key);
++                    best[f.hi] = std::min(best[f.hi], f.key);
++                }
++                std::size_t nflip = 0;
++                for (const auto& f : fls) {
++                    if (best[f.lo] == f.key && best[f.hi] == f.key) {
++                        if (used[f.lo] || used[f.hi])
++                            ++rr.cavity_violations;  // two selected edges on one triangle
++                        used[f.lo] = used[f.hi] = 1;
++                        m.flip(f.lo, f.e);
++                        ++nflip;
++                        if (!sim::plant("notouch"))
++                            touched[f.lo] = touched[f.hi] = 1;
++                    }
++                    mark_dirty(f.lo);
++                    mark_dirty(f.hi);
++                }
++                if (first)
++                    rr.flips_first = nflip;
++                first = false;
++                rr.flips += nflip;
++                out.flips += nflip;
++            }
++            std::sort(skipped.begin(), skipped.end());
++        } else if (md == "A1") {
++            std::vector<std::uint32_t> pending;
++            for (const std::uint32_t t : active)
++                if (detail::needs_split(results[t], options.tolerance))
++                    pending.push_back(t);
++            any = !pending.empty();
++            rr.marked = pending.size();
++            using Prio = std::pair<std::uint64_t, std::uint32_t>;
++            const auto prio = [&](std::uint32_t t) {
++                const auto n = *results[t].node;
++                return Prio{sim::splitmix((std::uint64_t{n.row} << 32 | n.col) ^ sim::seed()), t};
++            };
++            constexpr Prio none{~std::uint64_t{0}, ~std::uint32_t{0}};
++            std::vector<Prio> best(m.triangle_count(), none);
++            std::vector<char> in_cav(m.triangle_count(), 0);
++            struct Cand {
++                Prio pr;
++                Plan pl;
++                std::vector<std::uint32_t> cavity, fp;
++            };
++            std::vector<Cand> cands;
++            std::vector<std::uint32_t> wrote;
++            while (!pending.empty()) {
++                ++rr.subrounds;
++                cands.clear();
++                best.resize(m.triangle_count(), none);
++                in_cav.resize(m.triangle_count(), 0);
++                for (const auto t : pending) {
++                    if (touched[t] != 0) {
++                        ++rr.skipped_touched;
++                        skipped.push_back(t);
++                        continue;
++                    }
++                    Cand c{prio(t), make_plan(t, results[t]), {}, {}};
++                    const bool shared = c.pl.edge && c.pl.u != mesh::kNoNeighbour;
++                    if (shared && touched[c.pl.u] != 0) {
++                        ++rr.skipped_edge;
++                        skipped.push_back(t);
++                        continue;
++                    }
++                    // Bowyer-Watson cavity from the base, across unconstrained edges.
++                    c.cavity.push_back(t);
++                    in_cav[t] = 1;
++                    if (shared) {
++                        c.cavity.push_back(c.pl.u);
++                        in_cav[c.pl.u] = 1;
++                    }
++                    for (std::size_t i = 0; i < c.cavity.size(); ++i) {
++                        const auto s = c.cavity[i];
++                        for (unsigned k = 0; k < 3; ++k) {
++                            const auto n = m.neighbours(s)[k];
++                            if (n == mesh::kNoNeighbour || in_cav[n])
++                                continue;
++                            if (!m.is_constrained(s, k) && !sim::plant("nocavity") && sim::in_circle(m, n, c.pl.p, frame)) {
++                                c.cavity.push_back(n);
++                                in_cav[n] = 1;
++                            }
++                        }
++                    }
++                    c.fp = c.cavity;
++                    for (const auto s : c.cavity)
++                        for (const auto n : m.neighbours(s))
++                            if (n != mesh::kNoNeighbour && !in_cav[n]) {
++                                c.fp.push_back(n);
++                                in_cav[n] = 2;  // ring, once
++                            }
++                    for (const auto s : c.fp)
++                        in_cav[s] = 0;
++                    for (const auto s : c.fp)
++                        best[s] = std::min(best[s], c.pr);
++                    cands.push_back(std::move(c));
++                }
++                pending.clear();
++                std::vector<std::size_t> win;
++                for (std::size_t i = 0; i < cands.size(); ++i) {
++                    bool ok = true;
++                    for (const auto s : cands[i].fp)
++                        ok = ok && best[s] == cands[i].pr;
++                    if (ok)
++                        win.push_back(i);
++                    else
++                        pending.push_back(cands[i].pl.t);
++                }
++                for (const auto& c : cands)
++                    for (const auto s : c.fp)
++                        best[s] = none;
++                std::sort(win.begin(), win.end(),
++                          [&](std::size_t a, std::size_t b) { return cands[a].pr < cands[b].pr; });
++                rr.subround_winners.push_back(static_cast<std::uint32_t>(win.size()));
++                if (rr.subrounds == 1)
++                    rr.winners_first = win.size();
++                for (const auto i : win) {
++                    const Cand& c = cands[i];
++                    for (const auto s : c.cavity)
++                        in_cav[s] = 1;
++                    const auto before = static_cast<std::uint32_t>(m.triangle_count());
++                    std::array<std::uint32_t, 4> seeds{};
++                    std::size_t n_seeds = 0;
++                    const auto q = do_split(c.pl, seeds, n_seeds);
++                    ++rr.inserted;
++                    touched.resize(m.triangle_count(), 1);
++                    touched[c.pl.t] = 1;
++                    if (n_seeds == 4)
++                        touched[seeds[3]] = 1;
++                    wrote.clear();
++                    const auto fl = mesh::legalise_around<pred::DefaultKernel>(
++                        m, q, std::span<const std::uint32_t>{seeds.data(), n_seeds}, frame, flip_stack,
++                        [&](std::uint32_t s) {
++                            touched[s] = 1;
++                            wrote.push_back(s);
++                        });
++                    out.flips += fl;
++                    rr.flips += fl;
++                    for (const auto s : wrote)
++                        if (s < before && (s >= in_cav.size() || !in_cav[s]))
++                            ++rr.cavity_violations;
++                    for (const auto s : c.cavity)
++                        in_cav[s] = 0;
++                    rr.fp_sum += c.fp.size();
++                    rr.fp_max = std::max(rr.fp_max, c.fp.size());
++                    fp_all.push_back(static_cast<std::uint32_t>(c.fp.size()));
++                }
++                std::sort(pending.begin(), pending.end());
++            }
++            std::sort(skipped.begin(), skipped.end());
++            skipped.erase(std::unique(skipped.begin(), skipped.end()), skipped.end());
+         }
+         out.split_seconds += since(t0);
++        rounds_rec.push_back(std::move(rr));
+         if (!any)
+             break;
+         detail::rebuild_active(touched, skipped, active);
+     }
++    if (!md.empty()) {
++        // Full rescan of every final triangle: the tolerance check, independent
++        // of the loop's bookkeeping.
++        std::vector<ScanResult> all(m.triangle_count());
++        parallel_util::for_each_block(all.size(), options.threads, parallel_util::BlockSchedule{},
++                                      [&](std::size_t begin, std::size_t end) {
++                                          for (std::size_t i = begin; i < end; ++i)
++                                              all[i] = scan(dem, m, static_cast<std::uint32_t>(i));
++                                      });
++        double mx = 0.0;
++        std::size_t over = 0;
++        for (const auto& r : all) {
++            if (!r.is_void)
++                mx = std::max(mx, r.max_error);
++            over += detail::needs_split(r, options.tolerance) ? 1 : 0;
++        }
++        sim::write_json(md, rounds_rec, m.triangle_count(), out.inserted, out.flips, mx, over,
++                        all.size(), all_sides, fp_all);
++    }
+ 
+     // By the stopping rule a void triangle holds no valid node, so `uncovered`
+     // sums zeros unless that rule changes; it is reported so a change shows.
+diff --git a/include/terrain/refinement/sim21c.hpp b/include/terrain/refinement/sim21c.hpp
+new file mode 100644
+index 0000000..95844f6
+--- /dev/null
++++ b/include/terrain/refinement/sim21c.hpp
+@@ -0,0 +1,212 @@
++#pragma once
++
++// SCRATCH, increment 21c measurement only (docs/benchmarks/2026-09-27/21c).
++// Never committed to include/: kept as the unapplied scripts/sim.patch.
++//
++// Serial simulations of the parallel schedules of 21-parallel-refine.md
++// section 5, selected by the environment variable RASPUTIN_SIM:
++//   today   -- today's loop (index order, skip rule), optionally recording
++//              per-insertion footprints (RASPUTIN_SIM_FOOT=1) for the
++//              dependence depth and footprint extents (section 6, Q2, Q6a);
++//   C       -- option C: batch insert (split sets disjoint by lower slot
++//              index), then flip rounds of a locally-minimal-key independent
++//              edge set (Qi, Cao and Tan);
++//   Cthin   -- C, and a mark is deferred when an edge-adjacent triangle is
++//              marked with a lower slot index (section 5's thinning rule);
++//   Cmis    -- C, and a mark inserts only if no edge-adjacent mark with a
++//              lower slot index inserts (greedy MIS in index order);
++//   A1      -- option A1: deterministic reservations, priority a hash of the
++//              worst node (row, col) then slot, footprint = Bowyer-Watson
++//              cavity plus its ring, skip rule kept.
++// Every mode writes one JSON object to RASPUTIN_SIM_OUT.
++//
++// Each parallel step is simulated serially; the argument that the serial
++// execution equals the parallel one is in the README ("Why the serial
++// simulation is the parallel result").
++
++#include <terrain/mesh/lattice_mesh.hpp>
++#include <terrain/mesh/lawson.hpp>
++#include <terrain/predicates/default_kernel.hpp>
++
++#include <algorithm>
++#include <cstdint>
++#include <cstdio>
++#include <cstdlib>
++#include <map>
++#include <string>
++#include <vector>
++
++namespace terrain::refinement::sim {
++
++inline std::string mode() {
++    const char* s = std::getenv("RASPUTIN_SIM");
++    return s ? std::string{s} : std::string{};
++}
++
++// Planted defects, to show each check can fail (README, "The checks can fail").
++inline bool plant(const char* what) {
++    const char* s = std::getenv("RASPUTIN_SIM_PLANT");
++    return s && std::string{s} == what;
++}
++
++inline std::uint64_t seed() {
++    const char* s = std::getenv("RASPUTIN_SIM_SEED");
++    return s ? std::strtoull(s, nullptr, 10) : 0;
++}
++
++inline std::uint64_t splitmix(std::uint64_t x) {
++    x += 0x9e3779b97f4a7c15ULL;
++    x = (x ^ (x >> 30)) * 0xbf58476d1ce4e5b9ULL;
++    x = (x ^ (x >> 27)) * 0x94d049bb133111ebULL;
++    return x ^ (x >> 31);
++}
++
++// Strictly inside n's circumcircle, in the frame. Answers true (the
++// conservative side: a bigger footprint) on a frame-orientation corner case.
++inline bool in_circle(const mesh::LatticeMesh& m, std::uint32_t n, mesh::MeshVertex p,
++                      const mesh::LatticeFrame& f) {
++    const auto& tri = m.triangles()[n];
++    const auto v = m.vertices();
++    if (const auto s = mesh::lattice_incircle(v[tri[0]], v[tri[1]], v[tri[2]], p, f))
++        return *s == pred::Incircle::Inside;
++    const Point2 a = f.at(v[tri[0]]), b = f.at(v[tri[1]]), c = f.at(v[tri[2]]), d = f.at(p);
++    if (pred::DefaultKernel::orient2d(a, b, c) == pred::Orientation::CounterClockwise)
++        return pred::DefaultKernel::incircle(a, b, c, d) == pred::Incircle::Inside;
++    return true;
++}
++
++// Per-round record, shared by all modes; fields a mode does not use stay 0.
++struct Round {
++    std::size_t active = 0, marked = 0, inserted = 0, skipped_touched = 0, skipped_edge = 0,
++                deferred_conflict = 0, deferred_thin = 0, flips = 0, flip_rounds = 0,
++                flip_candidates_first = 0, flips_first = 0, subrounds = 0, winners_first = 0,
++                cavity_violations = 0, fp_sum = 0, fp_max = 0, depth = 0;
++    // today+FOOT: footprint bbox larger side quantiles, and halo / boundary counts
++    std::vector<std::uint32_t> side;          // per insertion
++    std::map<int, std::size_t> leaves_halo;   // B -> insertions whose bbox leaves the B/2 halo
++    std::map<int, std::size_t> crosses;       // B -> insertions whose bbox crosses a block boundary
++    std::map<int, std::pair<std::size_t, double>> per_block;  // B -> (max, mean over hit blocks)
++    std::vector<std::uint32_t> subround_winners;  // A1
++};
++
++inline std::uint32_t quant(std::vector<std::uint32_t> v, double q) {
++    if (v.empty())
++        return 0;
++    std::sort(v.begin(), v.end());
++    return v[std::min(v.size() - 1, static_cast<std::size_t>(q * static_cast<double>(v.size())))];
++}
++
++inline void write_json(const std::string& md, const std::vector<Round>& rs, std::size_t triangles,
++                       std::size_t inserted, std::size_t flips, double full_max, std::size_t over,
++                       std::size_t full_scanned, std::vector<std::uint32_t> all_sides,
++                       std::vector<std::uint32_t> fp_all) {
++    const char* path = std::getenv("RASPUTIN_SIM_OUT");
++    if (!path)
++        return;
++    FILE* o = std::fopen(path, "w");
++    if (!o)
++        return;
++    std::fprintf(o, "{\"mode\":\"%s\",\"triangles\":%zu,\"inserted\":%zu,\"flips\":%zu,"
++                    "\"full_rescan_max_error\":%.9g,\"full_rescan_needs_split\":%zu,"
++                    "\"full_rescan_triangles\":%zu,",
++                 md.c_str(), triangles, inserted, flips, full_max, over, full_scanned);
++    std::fprintf(o, "\"fp_p50\":%u,\"fp_p90\":%u,\"fp_p99\":%u,\"fp_max\":%u,",
++                 quant(fp_all, 0.5), quant(fp_all, 0.9), quant(fp_all, 0.99),
++                 fp_all.empty() ? 0u : *std::max_element(fp_all.begin(), fp_all.end()));
++    std::fprintf(o, "\"side_p50\":%u,\"side_p90\":%u,\"side_p99\":%u,\"side_max\":%u,",
++                 quant(all_sides, 0.5), quant(all_sides, 0.9), quant(all_sides, 0.99),
++                 all_sides.empty() ? 0u : *std::max_element(all_sides.begin(), all_sides.end()));
++    std::fprintf(o, "\"rounds\":[");
++    for (std::size_t i = 0; i < rs.size(); ++i) {
++        const Round& r = rs[i];
++        std::fprintf(o, "%s{\"round\":%zu,\"active\":%zu,\"marked\":%zu,\"inserted\":%zu,"
++                        "\"skipped_touched\":%zu,\"skipped_edge\":%zu,\"deferred_conflict\":%zu,"
++                        "\"deferred_thin\":%zu,\"flips\":%zu,\"flip_rounds\":%zu,"
++                        "\"flip_candidates_first\":%zu,\"flips_first\":%zu,\"subrounds\":%zu,"
++                        "\"winners_first\":%zu,\"cavity_violations\":%zu,\"fp_sum\":%zu,"
++                        "\"fp_max\":%zu,\"depth\":%zu",
++                     i ? "," : "", i + 1, r.active, r.marked, r.inserted, r.skipped_touched,
++                     r.skipped_edge, r.deferred_conflict, r.deferred_thin, r.flips, r.flip_rounds,
++                     r.flip_candidates_first, r.flips_first, r.subrounds, r.winners_first,
++                     r.cavity_violations, r.fp_sum, r.fp_max, r.depth);
++        if (!r.side.empty())
++            std::fprintf(o, ",\"side_p50\":%u,\"side_p90\":%u,\"side_p99\":%u,\"side_max\":%u",
++                         quant(r.side, 0.5), quant(r.side, 0.9), quant(r.side, 0.99),
++                         *std::max_element(r.side.begin(), r.side.end()));
++        for (const auto& [b, n] : r.leaves_halo)
++            std::fprintf(o, ",\"leaves_halo_%d\":%zu", b, n);
++        for (const auto& [b, n] : r.crosses)
++            std::fprintf(o, ",\"crosses_%d\":%zu", b, n);
++        for (const auto& [b, mm] : r.per_block)
++            std::fprintf(o, ",\"block_max_%d\":%zu,\"block_mean_%d\":%.3f", b, mm.first, b, mm.second);
++        if (!r.subround_winners.empty()) {
++            std::fprintf(o, ",\"subround_winners\":[");
++            for (std::size_t k = 0; k < r.subround_winners.size(); ++k)
++                std::fprintf(o, "%s%u", k ? "," : "", r.subround_winners[k]);
++            std::fprintf(o, "]");
++        }
++        std::fprintf(o, "}");
++    }
++    std::fprintf(o, "]}\n");
++    std::fclose(o);
++}
++
++// Footprint of one committed insertion, from what it wrote: W (every slot
++// written, appended ones included) plus every edge neighbour of W afterwards,
++// which is the ring (read across the tested edge, and repointed).
++inline std::vector<std::uint32_t> footprint_after(const mesh::LatticeMesh& m,
++                                                  std::vector<std::uint32_t> w) {
++    std::sort(w.begin(), w.end());
++    w.erase(std::unique(w.begin(), w.end()), w.end());
++    std::vector<std::uint32_t> fp = w;
++    for (const auto s : w)
++        for (const auto n : m.neighbours(s))
++            if (n != mesh::kNoNeighbour)
++                fp.push_back(n);
++    std::sort(fp.begin(), fp.end());
++    fp.erase(std::unique(fp.begin(), fp.end()), fp.end());
++    return fp;
++}
++
++// Extent records for one insertion at p with footprint fp (today + FOOT).
++inline void record_extent(Round& rr, const mesh::LatticeMesh& m, const std::vector<std::uint32_t>& fp,
++                          mesh::MeshVertex p, std::vector<std::map<std::pair<long, long>, std::size_t>>& blocks,
++                          const std::vector<int>& bs) {
++    double c0 = p.col, c1 = p.col, r0 = p.row, r1 = p.row;
++    for (const auto s : fp)
++        for (const auto vi : m.triangles()[s]) {
++            const auto v = m.vertices()[vi];
++            c0 = std::min(c0, v.col); c1 = std::max(c1, v.col);
++            r0 = std::min(r0, v.row); r1 = std::max(r1, v.row);
++        }
++    rr.side.push_back(static_cast<std::uint32_t>(std::ceil(std::max(c1 - c0, r1 - r0))));
++    for (std::size_t k = 0; k < bs.size(); ++k) {
++        const int b = bs[k];
++        const long bc = static_cast<long>(std::floor(p.col / b)), br = static_cast<long>(std::floor(p.row / b));
++        const double lo_c = static_cast<double>(bc * b), hi_c = static_cast<double>((bc + 1) * b);
++        const double lo_r = static_cast<double>(br * b), hi_r = static_cast<double>((br + 1) * b);
++        // A box on a block's closed boundary line touches both sides: counted as crossing.
++        if (c0 < lo_c || c1 > hi_c || r0 < lo_r || r1 > hi_r || c0 == lo_c || r0 == lo_r
++            || c1 == hi_c || r1 == hi_r)
++            ++rr.crosses[b];
++        const double h = b / 2.0;
++        if (b <= 128 && (c0 < lo_c - h || c1 > hi_c + h || r0 < lo_r - h || r1 > hi_r + h))
++            ++rr.leaves_halo[b];
++        ++blocks[k][{bc, br}];
++    }
++}
++
++inline void close_blocks(Round& rr, std::vector<std::map<std::pair<long, long>, std::size_t>>& blocks,
++                         const std::vector<int>& bs) {
++    for (std::size_t k = 0; k < bs.size(); ++k) {
++        std::size_t mx = 0, sum = 0;
++        for (const auto& [key, n] : blocks[k]) {
++            mx = std::max(mx, n);
++            sum += n;
++        }
++        rr.per_block[bs[k]] = {mx, blocks[k].empty() ? 0.0 : static_cast<double>(sum) / static_cast<double>(blocks[k].size())};
++        blocks[k].clear();
++    }
++}
++
++}  // namespace terrain::refinement::sim
