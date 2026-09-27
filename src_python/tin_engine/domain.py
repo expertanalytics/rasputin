@@ -14,7 +14,8 @@ Every vertex must lie in the DEM's node rectangle, border included (U4 a):
 outside it there is no bilinear z (R0). That is :func:`check_extent`, run after
 the transform, against the mosaic.
 
-Pure: json, shapely, pyproj and ``RasterMeta``. No ``_core``, no typer.
+Pure: json, numpy, shapely, pyproj, pydantic, ``tin_engine.crs`` and
+``RasterMeta``. No ``_core``, no typer.
 """
 
 from __future__ import annotations

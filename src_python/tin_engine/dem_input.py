@@ -94,14 +94,20 @@ def _domain_plan(footprints: Any, given: DomainPolygon) -> tuple[MosaicPlan, Dom
     epsgs = sorted({f.meta.epsg for f in footprints})
     if len(epsgs) > 1:
         raise MosaicError(f"the tiles are in {len(epsgs)} CRSs, EPSG:{epsgs}; a domain needs one")
-    first = footprints[0].meta
     try:
         domain = given.to_crs(f"EPSG:{epsgs[0]}")
         box = Bounds(
             **dict(zip(("x_min", "y_min", "x_max", "y_max"), domain.polygon.bounds, strict=True))
         )
-        grown = domain.polygon.buffer(math.hypot(first.delta_x, first.delta_y), join_style="mitre")
-        plan = plan_mosaic(footprints, box, grown)
+        # The cell is the chosen lattice's, not a listed tile's (15b review, B1):
+        # plan on the polygon itself, grow by that plan's cell diagonal, and
+        # re-plan while the lattice chosen has a larger one. The reach only
+        # grows, so this ends, and the region needed is never short of the
+        # chosen lattice's own cell.
+        plan, reach, grown = plan_mosaic(footprints, box, domain.polygon), 0.0, domain.polygon
+        while (diagonal := math.hypot(plan.meta.delta_x, plan.meta.delta_y)) > reach:
+            reach, grown = diagonal, domain.polygon.buffer(diagonal, join_style="mitre")
+            plan = plan_mosaic(footprints, box, grown)
         if past := _past(box, plan.meta):  # a vertex within 1e-6 cell past a node line
             plan = plan_mosaic(footprints, past, grown)
         check_extent(domain, plan.meta)
