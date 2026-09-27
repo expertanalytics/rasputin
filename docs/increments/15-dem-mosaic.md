@@ -15,6 +15,18 @@ are last. Each has a recommendation, and the rest of the file assumes it.
   the basin-wide computation frame for the São Francisco basin (15c, 15d) are
   designed here but come **after** the Norwegian sub-increments. Nothing in
   15a or 15b depends on them.
+- **2026-09-27, Q1-Q5: "yes to all five, carry on"**, to the recommendations
+  in "Questions for Ola":
+  - **Q1:** two tiles that disagree at an overlapping node are refused,
+    naming both tiles, the node count and the largest difference.
+  - **Q2:** `--bbox` stays.
+  - **Q3:** the repository lives in `io/repository.py`, the one module in
+    `io/` that opens files.
+  - **Q4:** tiles with different NoData sentinels are refused.
+  - **Q5:** a request mixing the eight half-cell tiles with the main lattice
+    is refused; a request inside either lattice is meshed.
+
+  Q6-Q10 (the basin) wait until after the Norwegian sub-increments.
 
 ## Scope
 
@@ -933,7 +945,7 @@ that matter there.
   `docs/benchmarks/<date>/`, with the power state.
 - For all: every gate in `CLAUDE.md` §4 green, and CI green.
 
-## Questions for Ola
+## Questions for Ola (Q1-Q5 ruled 2026-09-27, see "Ruled by Ola"; Q6-Q10 open)
 
 Q1-Q5 are about Norway and are needed before 15a starts. Q6-Q10 are about
 the basin and can wait until after Norway.
