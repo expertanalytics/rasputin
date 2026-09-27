@@ -541,6 +541,30 @@ enabling the path; no call in `must_flip`. The determinant computed in doubles
 rather than `int64` was also killed, and only by the radius-8085 circle, where
 spreads come close to 2^14.
 
+### 21b: the integer path is faster (green, not acceptance)
+
+Measured by `@developer` at the green commit, back to back against 21a's head
+`d3ee2ce`, **on battery** (98 %, before and after), so it compares with no AC
+figure. Both trees were built by `bench.py`'s `build()` (Release; the base
+`.so` hashes to the 21a acceptance run's `654a2442…`), and each sample was one
+`rasputin mesh` process on the 1 m benchmark at tolerance 1, reading
+`RefineOutcome`'s phase times. Medians of 5, interleaved base/green:
+
+| domain, threads | refine, 21a -> 21b | split phase, 21a -> 21b |
+|---|---:|---:|
+| quarter, 1 | 0.444 -> 0.414 s (-6.7 %) | 0.122 -> 0.090 s (-26 %) |
+| quarter, 8 | 0.198 -> 0.164 s (-17 %) | 0.132 -> 0.098 s (-26 %) |
+| tile, 1 | 0.503 -> 0.464 s (-7.8 %) | 0.124 -> 0.091 s (-27 %) |
+| tile, 8 | 0.225 -> 0.187 s (-17 %) | 0.134 -> 0.097 s (-27 %) |
+
+The scan is unchanged, as it should be; the whole gain is in the split phase,
+and it is larger than QW2's estimate (-4 % and -8 %), so the int64 determinant
+with the frame `orient2d` it skips is cheaper than the filtered path too, not
+only than the exact path (5.0 % of refine in the profile) it replaces.
+The binary meshes hash the same as 21a's (quarter `ff705683…`, tile
+`645919aa…`), with the same flip and insertion counts. The scratch driver and
+its samples were not kept; `@perf`'s AC acceptance run is still owed.
+
 ## 4. Determinism levels
 
 Today's contract (14 R5, 14b R1, tested by 14's T6 and 18's T3 golden
