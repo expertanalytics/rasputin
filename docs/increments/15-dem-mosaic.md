@@ -27,6 +27,19 @@ are designed, not implemented; Q6-Q10 are open. Written by `@architect` before
     is refused; a request inside either lattice is meshed.
 
   Q6-Q10 (the basin) wait until after the Norwegian sub-increments.
+- **2026-09-27, Q5 as read after review ("Yes", to the main session's
+  proposal):** @reviewer found that DTM10's 51-node overlaps make a box that
+  only reaches into a half-cell tile's overlap strip select that tile and be
+  refused as mixed-lattice, although the main lattice covers every node (the
+  design's own 15a acceptance box was refused; 98 of 576 20-km boxes around
+  the eight tiles). The rule is now, per lattice, whether **its own tiles
+  cover every node the request needs**:
+  - exactly one lattice covers it: mesh on that lattice, and drop the other
+    lattices' tiles from the plan;
+  - none covers it: refuse, as before (the Q5 message);
+  - several cover it (a box wholly inside an overlap strip): use the lattice
+    with **the most tiles in the repository**, ties broken by the name of its
+    first tile. Header-only and order-independent.
 
 ## Scope
 
