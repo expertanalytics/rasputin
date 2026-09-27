@@ -1,0 +1,447 @@
+diff --git a/include/terrain/mesh/lattice_mesh.hpp b/include/terrain/mesh/lattice_mesh.hpp
+index 5bd0553..cf68020 100644
+--- a/include/terrain/mesh/lattice_mesh.hpp
++++ b/include/terrain/mesh/lattice_mesh.hpp
+@@ -258,6 +258,35 @@ public:
+         return out;
+     }
+ 
++    // SCRATCH (21c sim.patch, A0): renumber the slots >= n0 and vertices >= v0
++    // by smap[s - n0] and vmap[v - v0], both permutations of their range.
++    void sim_renumber(std::uint32_t n0, std::uint32_t v0, const std::vector<std::uint32_t>& smap,
++                      const std::vector<std::uint32_t>& vmap) {
++        const auto ms = [&](std::uint32_t s) { return s != kNoNeighbour && s >= n0 ? smap[s - n0] : s; };
++        const auto mv = [&](std::uint32_t v) { return v >= v0 ? vmap[v - v0] : v; };
++        auto tri = triangles_;
++        auto nb = neighbours_;
++        auto con = constrained_;
++        auto ma = masks_;
++        auto ve = vertices_;
++        for (std::uint32_t s = 0; s < triangles_.size(); ++s) {
++            const auto d = ms(s);
++            for (unsigned k = 0; k < 3; ++k) {
++                tri[d][k] = mv(triangles_[s][k]);
++                nb[d][k] = ms(neighbours_[s][k]);
++            }
++            con[d] = constrained_[s];
++            ma[d] = masks_[s];
++        }
++        for (std::uint32_t v = v0; v < vertices_.size(); ++v)
++            ve[mv(v)] = vertices_[v];
++        triangles_ = std::move(tri);
++        neighbours_ = std::move(nb);
++        constrained_ = std::move(con);
++        masks_ = std::move(ma);
++        vertices_ = std::move(ve);
++    }
++
+ private:
+     struct Side {
+         std::uint32_t neighbour;
+diff --git a/include/terrain/refinement/refine.hpp b/include/terrain/refinement/refine.hpp
+index 0ba78d2..2c4d0bc 100644
+--- a/include/terrain/refinement/refine.hpp
++++ b/include/terrain/refinement/refine.hpp
+@@ -458,6 +458,7 @@ template <raster::RasterSource R>
+                 all_sides.insert(all_sides.end(), rr.side.begin(), rr.side.end());
+             }
+         } else if (md == "C" || md == "Cthin" || md == "Cmis" || md == "Cthin2") {
++            const auto tb = std::chrono::steady_clock::now();
+             std::vector<std::uint32_t> marks;
+             for (const std::uint32_t t : active)
+                 if (detail::needs_split(results[t], options.tolerance))
+@@ -541,7 +542,10 @@ template <raster::RasterSource R>
+             std::vector<std::uint64_t> best;
+             std::vector<char> used;
+             bool first = true;
++            sim::t_cbatch += std::chrono::duration<double>(std::chrono::steady_clock::now() - tb).count();
++            sim::n_cbatch += marks.size();
+             while (!dirty.empty() && !sim::plant("noflip")) {
++                const auto tt = std::chrono::steady_clock::now();
+                 cand.clear();
+                 for (const auto t : dirty)
+                     for (unsigned k = 0; k < 3; ++k) {
+@@ -569,11 +573,16 @@ template <raster::RasterSource R>
+                 if (first) {
+                     rr.flip_candidates_first = cand.size();
+                 }
++                const auto tf = std::chrono::steady_clock::now();
++                sim::t_ctest += std::chrono::duration<double>(tf - tt).count();
++                sim::n_ctest += cand.size();
+                 if (fls.empty())
+                     break;
+                 ++rr.flip_rounds;
+-                best.assign(m.triangle_count(), ~std::uint64_t{0});
+-                used.assign(m.triangle_count(), 0);
++                rr.fr_cand.push_back(static_cast<std::uint32_t>(cand.size()));
++                // Sparse: sized once, reset below only where written (no O(mesh) pass per flip round).
++                best.resize(m.triangle_count(), ~std::uint64_t{0});
++                used.resize(m.triangle_count(), 0);
+                 for (const auto& f : fls) {
+                     best[f.lo] = std::min(best[f.lo], f.key);
+                     best[f.hi] = std::min(best[f.hi], f.key);
+@@ -592,6 +601,13 @@ template <raster::RasterSource R>
+                     mark_dirty(f.lo);
+                     mark_dirty(f.hi);
+                 }
++                for (const auto& f : fls) {
++                    best[f.lo] = best[f.hi] = ~std::uint64_t{0};
++                    used[f.lo] = used[f.hi] = 0;
++                }
++                rr.fr_flips.push_back(static_cast<std::uint32_t>(nflip));
++                sim::t_cflip += std::chrono::duration<double>(std::chrono::steady_clock::now() - tf).count();
++                sim::n_cflip += nflip;
+                 if (first)
+                     rr.flips_first = nflip;
+                 first = false;
+@@ -623,6 +639,8 @@ template <raster::RasterSource R>
+             std::vector<std::uint32_t> wrote;
+             while (!pending.empty()) {
+                 ++rr.subrounds;
++                rr.sr_pending.push_back(static_cast<std::uint32_t>(pending.size()));
++                const auto te1 = std::chrono::steady_clock::now();
+                 cands.clear();
+                 best.resize(m.triangle_count(), none);
+                 in_cav.resize(m.triangle_count(), 0);
+@@ -687,6 +705,17 @@ template <raster::RasterSource R>
+                         best[s] = none;
+                 std::sort(win.begin(), win.end(),
+                           [&](std::size_t a, std::size_t b) { return cands[a].pr < cands[b].pr; });
++                const auto tc1 = std::chrono::steady_clock::now();
++                sim::t_eval += std::chrono::duration<double>(tc1 - te1).count();
++                sim::n_eval += rr.sr_pending.back();
++                {
++                    std::size_t fps = 0;
++                    for (const auto& c : cands)
++                        fps += c.fp.size();
++                    sim::n_fp += fps;
++                    rr.sr_fpsum.push_back(static_cast<std::uint32_t>(fps));
++                }
++                const auto fl0 = rr.flips;
+                 rr.subround_winners.push_back(static_cast<std::uint32_t>(win.size()));
+                 if (rr.subrounds == 1)
+                     rr.winners_first = win.size();
+@@ -721,12 +750,209 @@ template <raster::RasterSource R>
+                     rr.fp_max = std::max(rr.fp_max, c.fp.size());
+                     fp_all.push_back(static_cast<std::uint32_t>(c.fp.size()));
+                 }
++                rr.sr_flips.push_back(static_cast<std::uint32_t>(rr.flips - fl0));
++                sim::t_commit += std::chrono::duration<double>(std::chrono::steady_clock::now() - tc1).count();
++                sim::n_commit += win.size();
+                 std::sort(pending.begin(), pending.end());
+             }
+             std::sort(skipped.begin(), skipped.end());
+             skipped.erase(std::unique(skipped.begin(), skipped.end()), skipped.end());
++        } else if (md == "A0") {
++            // A0: deterministic reservations with priority = slot index (today's
++            // order). Today's skip rules are applied when a mark is resolved. Winners
++            // commit in index order within a sub-round; at the end of the round the
++            // appended slots and vertices are renumbered into the order today's
++            // serial loop would have appended them (a prefix sum in index order).
++            const auto n0 = static_cast<std::uint32_t>(m.triangle_count());
++            const auto v0 = static_cast<std::uint32_t>(m.vertices().size());
++            std::vector<std::uint32_t> pending;
++            for (const std::uint32_t t : active)
++                if (detail::needs_split(results[t], options.tolerance))
++                    pending.push_back(t);
++            any = !pending.empty();
++            rr.marked = pending.size();
++            constexpr std::uint32_t none = ~std::uint32_t{0};
++            std::vector<std::uint32_t> best(m.triangle_count(), none);
++            // stamp[s]: highest index among marks committed this round whose
++            // footprint (or appended slots) held s; writer[s]: the mark that wrote s.
++            std::vector<std::uint32_t> stamp(m.triangle_count(), none), writer(m.triangle_count(), none);
++            std::vector<char> in_cav(m.triangle_count(), 0);
++            struct Cand {
++                Plan pl;
++                std::vector<std::uint32_t> cavity, fp;
++            };
++            struct Commit {
++                std::uint32_t t, first_slot, n_slots, vertex;
++            };
++            std::vector<Commit> commits;
++            std::vector<Cand> cands;
++            std::vector<std::uint32_t> wrote;
++            const auto higher = [](std::uint32_t st, std::uint32_t t) { return st != none && st > t; };
++            while (!pending.empty()) {
++                ++rr.subrounds;
++                rr.sr_pending.push_back(static_cast<std::uint32_t>(pending.size()));
++                const auto te = std::chrono::steady_clock::now();
++                std::size_t nc = 0;  // cands reused across sub-rounds: no allocation per mark
++                best.resize(m.triangle_count(), none);
++                in_cav.resize(m.triangle_count(), 0);
++                std::size_t fps = 0;
++                for (const auto t : pending) {
++                    if (touched[t] != 0) {  // today: skipped, not pushed to `skipped`
++                        ++rr.skipped_touched;
++                        if (higher(writer[t], t))
++                            ++sim::skip_by_higher;
++                        continue;
++                    }
++                    if (nc == cands.size())
++                        cands.emplace_back();
++                    Cand& c = cands[nc];
++                    c.pl = make_plan(t, results[t]);
++                    c.cavity.clear();
++                    c.fp.clear();
++                    const bool shared = c.pl.edge && c.pl.u != mesh::kNoNeighbour;
++                    if (shared && touched[c.pl.u] != 0) {  // today: edge deferral
++                        ++rr.skipped_edge;
++                        if (higher(writer[c.pl.u], t))
++                            ++sim::skip_by_higher;
++                        skipped.push_back(t);
++                        continue;
++                    }
++                    c.cavity.push_back(t);
++                    in_cav[t] = 1;
++                    if (shared) {
++                        c.cavity.push_back(c.pl.u);
++                        in_cav[c.pl.u] = 1;
++                    }
++                    for (std::size_t i = 0; i < c.cavity.size(); ++i) {
++                        const auto s2 = c.cavity[i];
++                        for (unsigned k = 0; k < 3; ++k) {
++                            const auto n = m.neighbours(s2)[k];
++                            if (n == mesh::kNoNeighbour || in_cav[n])
++                                continue;
++                            if (!m.is_constrained(s2, k) && !sim::plant("nocavity") && sim::in_circle(m, n, c.pl.p, frame)) {
++                                c.cavity.push_back(n);
++                                in_cav[n] = 1;
++                            }
++                        }
++                    }
++                    c.fp = c.cavity;
++                    for (const auto s2 : c.cavity)
++                        for (const auto n : m.neighbours(s2))
++                            if (n != mesh::kNoNeighbour && !in_cav[n]) {
++                                c.fp.push_back(n);
++                                in_cav[n] = 2;
++                            }
++                    for (const auto s2 : c.fp)
++                        in_cav[s2] = 0;
++                    const bool drop = sim::plant("noreserve") && rr.subrounds == 1 && nc == 0;
++                    if (!drop)
++                        for (const auto s2 : c.fp)
++                            best[s2] = std::min(best[s2], t);
++                    fps += c.fp.size();
++                    ++nc;
++                }
++                pending.clear();
++                std::vector<std::size_t> win;
++                for (std::size_t i = 0; i < nc; ++i) {
++                    bool ok = !(sim::plant("noreserve") && rr.subrounds == 1 && i == 0);
++                    for (const auto s2 : cands[i].fp)
++                        ok = ok && best[s2] == cands[i].pl.t;
++                    if (ok)
++                        win.push_back(i);
++                    else
++                        pending.push_back(cands[i].pl.t);
++                }
++                for (std::size_t i = 0; i < nc; ++i)
++                    for (const auto s2 : cands[i].fp)
++                        best[s2] = none;
++                const auto tc = std::chrono::steady_clock::now();
++                sim::t_eval += std::chrono::duration<double>(tc - te).count();
++                sim::n_eval += rr.sr_pending.back();
++                sim::n_fp += fps;
++                rr.sr_fpsum.push_back(static_cast<std::uint32_t>(fps));
++                rr.subround_winners.push_back(static_cast<std::uint32_t>(win.size()));  // cands in index order
++                if (rr.subrounds == 1)
++                    rr.winners_first = win.size();
++                std::size_t srfl = 0;
++                for (const auto i : win) {
++                    const Cand& c = cands[i];
++                    const auto t = c.pl.t;
++                    for (const auto s2 : c.fp)
++                        if (higher(stamp[s2], t))
++                            ++sim::order_violations;
++                    for (const auto s2 : c.cavity)
++                        in_cav[s2] = 1;
++                    const auto before = static_cast<std::uint32_t>(m.triangle_count());
++                    std::array<std::uint32_t, 4> seeds{};
++                    std::size_t n_seeds = 0;
++                    const auto q = do_split(c.pl, seeds, n_seeds);
++                    ++rr.inserted;
++                    const auto after = static_cast<std::uint32_t>(m.triangle_count());
++                    commits.push_back({t, before, after - before, q});
++                    touched.resize(after, 1);
++                    stamp.resize(after, none);
++                    writer.resize(after, none);
++                    touched[t] = 1;
++                    writer[t] = t;
++                    if (n_seeds == 4) {
++                        touched[seeds[3]] = 1;
++                        writer[seeds[3]] = t;
++                    }
++                    wrote.clear();
++                    const auto fl = mesh::legalise_around<pred::DefaultKernel>(
++                        m, q, std::span<const std::uint32_t>{seeds.data(), n_seeds}, frame, flip_stack,
++                        [&](std::uint32_t s2) {
++                            touched[s2] = 1;
++                            wrote.push_back(s2);
++                        });
++                    out.flips += fl;
++                    rr.flips += fl;
++                    srfl += fl;
++                    for (const auto s2 : wrote) {
++                        if (s2 < before && (s2 >= in_cav.size() || !in_cav[s2]))
++                            ++rr.cavity_violations;
++                        if (s2 < writer.size())
++                            writer[s2] = t;
++                    }
++                    for (const auto s2 : c.cavity)
++                        in_cav[s2] = 0;
++                    for (const auto s2 : c.fp)
++                        stamp[s2] = stamp[s2] == none ? t : std::max(stamp[s2], t);
++                    for (auto s2 = before; s2 < after; ++s2) {
++                        stamp[s2] = t;
++                        writer[s2] = t;
++                    }
++                    rr.fp_sum += c.fp.size();
++                    rr.fp_max = std::max(rr.fp_max, c.fp.size());
++                    fp_all.push_back(static_cast<std::uint32_t>(c.fp.size()));
++                }
++                rr.sr_flips.push_back(static_cast<std::uint32_t>(srfl));
++                sim::t_commit += std::chrono::duration<double>(std::chrono::steady_clock::now() - tc).count();
++                sim::n_commit += win.size();
++                std::sort(pending.begin(), pending.end());
++            }
++            std::sort(skipped.begin(), skipped.end());
++            // Renumber appended slots and vertices into index order.
++            const auto tr = std::chrono::steady_clock::now();
++            std::vector<std::uint32_t> smap(m.triangle_count() - n0), vmap(m.vertices().size() - v0);
++            auto sorted = commits;
++            std::sort(sorted.begin(), sorted.end(), [](const Commit& a, const Commit& b) { return a.t < b.t; });
++            std::uint32_t ns = n0, nv = v0;
++            for (const auto& c : sorted) {
++                for (std::uint32_t k = 0; k < c.n_slots; ++k)
++                    smap[c.first_slot + k - n0] = ns++;
++                vmap[c.vertex - v0] = nv++;
++            }
++            for (std::size_t i = 0; i < commits.size(); ++i)
++                if (commits[i].t != sorted[i].t)
++                    ++rr.renumbered;
++            if (!sim::plant("norenumber"))
++                m.sim_renumber(n0, v0, smap, vmap);
++            sim::t_renum += std::chrono::duration<double>(std::chrono::steady_clock::now() - tr).count();
+         }
+         out.split_seconds += since(t0);
++        if (md == "today" || md == "A0" || md == "A1")
++            rr.hash = sim::mesh_hash(m);
+         rounds_rec.push_back(std::move(rr));
+         if (!any)
+             break;
+diff --git a/include/terrain/refinement/sim21c.hpp b/include/terrain/refinement/sim21c.hpp
+index 95844f6..672b366 100644
+--- a/include/terrain/refinement/sim21c.hpp
++++ b/include/terrain/refinement/sim21c.hpp
+@@ -32,6 +32,7 @@
+ #include <cstdint>
+ #include <cstdio>
+ #include <cstdlib>
++#include <cstring>
+ #include <map>
+ #include <string>
+ #include <vector>
+@@ -44,9 +45,13 @@ inline std::string mode() {
+ }
+ 
+ // Planted defects, to show each check can fail (README, "The checks can fail").
++// Read once: plant() sits on hot paths, and getenv per call inflated the phase timers.
+ inline bool plant(const char* what) {
+-    const char* s = std::getenv("RASPUTIN_SIM_PLANT");
+-    return s && std::string{s} == what;
++    static const std::string s = [] {
++        const char* e = std::getenv("RASPUTIN_SIM_PLANT");
++        return e ? std::string{e} : std::string{};
++    }();
++    return !s.empty() && s == what;
+ }
+ 
+ inline std::uint64_t seed() {
+@@ -86,9 +91,50 @@ struct Round {
+     std::map<int, std::size_t> leaves_halo;   // B -> insertions whose bbox leaves the B/2 halo
+     std::map<int, std::size_t> crosses;       // B -> insertions whose bbox crosses a block boundary
+     std::map<int, std::pair<std::size_t, double>> per_block;  // B -> (max, mean over hit blocks)
+-    std::vector<std::uint32_t> subround_winners;  // A1
++    std::vector<std::uint32_t> subround_winners;  // A1, A0
++    // A0/A1 per sub-round: marks evaluated, footprint slots reserved, flips by winners;
++    // C per flip round: candidate edges tested, flips made.
++    std::vector<std::uint32_t> sr_pending, sr_fpsum, sr_flips, fr_cand, fr_flips;
++    std::size_t renumbered = 0;   // A0: commits whose commit position differs from index order
++    std::uint64_t hash = 0;       // today/A0/A1: FNV-1a of the mesh at the end of the round
+ };
+ 
++// Per-run phase timers and item counts (serial, sim code), for the scaling model.
++inline double t_eval = 0, t_commit = 0, t_renum = 0, t_cbatch = 0, t_ctest = 0, t_cflip = 0;
++inline std::size_t n_eval = 0, n_commit = 0, n_fp = 0, n_cbatch = 0, n_ctest = 0, n_cflip = 0;
++// A0: a commit whose footprint holds a slot stamped by a higher-index commit this
++// round (so today's order would have seen a different mesh), and a skip caused by
++// a higher-index writer.
++inline std::size_t order_violations = 0, skip_by_higher = 0;
++
++inline std::uint64_t mesh_hash(const mesh::LatticeMesh& m) {
++    std::uint64_t h = 1469598103934665603ULL;
++    const auto mix = [&](std::uint64_t x) { h = (h ^ x) * 1099511628211ULL; };
++    for (const auto& t : m.triangles())
++        for (const auto v : t)
++            mix(v);
++    for (std::size_t t = 0; t < m.triangle_count(); ++t)
++        for (const auto n : m.neighbours(t))
++            mix(n);
++    for (const auto& v : m.vertices()) {
++        std::uint64_t a, b;
++        std::memcpy(&a, &v.col, 8);
++        std::memcpy(&b, &v.row, 8);
++        mix(a);
++        mix(b);
++    }
++    return h;
++}
++
++inline void put_list(FILE* o, const char* name, const std::vector<std::uint32_t>& v) {
++    if (v.empty())
++        return;
++    std::fprintf(o, ",\"%s\":[", name);
++    for (std::size_t k = 0; k < v.size(); ++k)
++        std::fprintf(o, "%s%u", k ? "," : "", v[k]);
++    std::fprintf(o, "]");
++}
++
+ inline std::uint32_t quant(std::vector<std::uint32_t> v, double q) {
+     if (v.empty())
+         return 0;
+@@ -116,6 +162,12 @@ inline void write_json(const std::string& md, const std::vector<Round>& rs, std:
+     std::fprintf(o, "\"side_p50\":%u,\"side_p90\":%u,\"side_p99\":%u,\"side_max\":%u,",
+                  quant(all_sides, 0.5), quant(all_sides, 0.9), quant(all_sides, 0.99),
+                  all_sides.empty() ? 0u : *std::max_element(all_sides.begin(), all_sides.end()));
++    std::fprintf(o, "\"timers\":{\"t_eval\":%.6f,\"n_eval\":%zu,\"n_fp\":%zu,\"t_commit\":%.6f,"
++                    "\"n_commit\":%zu,\"t_renum\":%.6f,\"t_cbatch\":%.6f,\"n_cbatch\":%zu,"
++                    "\"t_ctest\":%.6f,\"n_ctest\":%zu,\"t_cflip\":%.6f,\"n_cflip\":%zu},"
++                    "\"order_violations\":%zu,\"skip_by_higher\":%zu,",
++                 t_eval, n_eval, n_fp, t_commit, n_commit, t_renum, t_cbatch, n_cbatch, t_ctest, n_ctest,
++                 t_cflip, n_cflip, order_violations, skip_by_higher);
+     std::fprintf(o, "\"rounds\":[");
+     for (std::size_t i = 0; i < rs.size(); ++i) {
+         const Round& r = rs[i];
+@@ -139,12 +191,14 @@ inline void write_json(const std::string& md, const std::vector<Round>& rs, std:
+             std::fprintf(o, ",\"crosses_%d\":%zu", b, n);
+         for (const auto& [b, mm] : r.per_block)
+             std::fprintf(o, ",\"block_max_%d\":%zu,\"block_mean_%d\":%.3f", b, mm.first, b, mm.second);
+-        if (!r.subround_winners.empty()) {
+-            std::fprintf(o, ",\"subround_winners\":[");
+-            for (std::size_t k = 0; k < r.subround_winners.size(); ++k)
+-                std::fprintf(o, "%s%u", k ? "," : "", r.subround_winners[k]);
+-            std::fprintf(o, "]");
+-        }
++        put_list(o, "subround_winners", r.subround_winners);
++        put_list(o, "sr_pending", r.sr_pending);
++        put_list(o, "sr_fpsum", r.sr_fpsum);
++        put_list(o, "sr_flips", r.sr_flips);
++        put_list(o, "fr_cand", r.fr_cand);
++        put_list(o, "fr_flips", r.fr_flips);
++        std::fprintf(o, ",\"renumbered\":%zu,\"hash\":\"%016llx\"", r.renumbered,
++                     static_cast<unsigned long long>(r.hash));
+         std::fprintf(o, "}");
+     }
+     std::fprintf(o, "]}\n");

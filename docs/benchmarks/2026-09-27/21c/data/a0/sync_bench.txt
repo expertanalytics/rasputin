@@ -1,0 +1,25 @@
+threads 8
+spawn    median   189.333 us  min   122.250  max  2918.125  (n=200)
+feb      median   131.958 us  min    97.167  max   260.959  (n=200)
+barrier  median     0.895 us  min     0.741  max     5.897  (n=15)
+spin     median     0.814 us  min     0.650  max     1.560  (n=15)
+threads 4
+spawn    median    57.583 us  min    29.584  max    97.958  (n=200)
+feb      median    58.916 us  min    33.917  max    94.417  (n=200)
+barrier  median     0.503 us  min     0.265  max     0.556  (n=15)
+spin     median     0.181 us  min     0.174  max     0.421  (n=15)
+threads 16
+spawn    median   157.375 us  min   111.708  max   260.750  (n=200)
+feb      median   156.917 us  min   107.125  max   245.042  (n=200)
+barrier  median    20.460 us  min    20.112  max    20.877  (n=15)
+spin     median    15.012 us  min    13.196  max    15.997  (n=15)
+threads 8
+spawn    median    90.083 us  min    73.666  max   143.375  (n=200)
+feb      median    85.750 us  min    64.000  max   131.209  (n=200)
+barrier  median     0.822 us  min     0.703  max     1.675  (n=15)
+spin     median     0.720 us  min     0.648  max     2.702  (n=15)
+threads 8
+spawn    median    96.209 us  min    63.250  max   138.375  (n=200)
+feb      median    82.750 us  min    58.834  max   146.625  (n=200)
+barrier  median     0.964 us  min     0.910  max     6.533  (n=15)
+spin     median     0.847 us  min     0.654  max     1.223  (n=15)

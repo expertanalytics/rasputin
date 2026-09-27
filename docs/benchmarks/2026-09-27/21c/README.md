@@ -1,6 +1,6 @@
 # Increment 21c: measurements for choosing 21d's option (@perf, 2026-09-27)
 
-Status: **done**. Measurement only; no production code changed. The scratch
+Status: **done**, with a later section "A0 and the scaling model". Measurement only; no production code changed. The scratch
 simulations are `scripts/sim.patch`, which is not applied and never committed
 to `include/`, like the serial profile's `instrument.patch`.
 
@@ -333,7 +333,8 @@ depths; the extents; that each check fails on its planted defect.
   is known. In a reservation scheme it is computed on the mesh at the start
   of a sub-round, and it can change when a lower-index mark commits. Also,
   today's numbering (slots appended in serial order) must be reproduced. A0
-  was not simulated.
+  was not simulated here; it was later the same day, in "A0 and the scaling
+  model" below.
 - **Cthin's round count on the tile** (166 rounds against 53) was not
   investigated.
 - **The tile's 20 rounds of about 196 insertions** each (rounds 22-41,
@@ -367,3 +368,182 @@ depths; the extents; that each check fails on its planted defect.
 The meshes (ASCII VTK, about 22 MB each) were written to the session
 scratchpad and deleted by the driver, or kept only for the same-mesh and
 worst-angle checks. Steps 1-2 regenerate them; `--keep` keeps them.
+
+## A0 and the scaling model (@perf, 2026-09-27, evening)
+
+Asked by Ola: "simulate A0 first, then we decide", and what is known about the
+parallel scaling of A1 against C. Measurement and a model only; no production
+code. The simulation is `scripts/sim_a0.patch`, applied **on top of**
+`scripts/sim.patch`, never committed to `include/`. Data: `data/a0/`.
+
+### Findings
+
+1. **A0 is bit-identical to today on both domains.** Mesh sha256 as
+   bench.py hashes it: quarter `1e531976…` (the 21b acceptance hash), tile
+   `11741a81…`, equal to today's. Triangles, rounds, insertions and flips are
+   equal (quarter 428,217 / 41 / 213,464 / 445,657; tile 464,290 / 53 /
+   219,837 / 445,675), and a hash of the whole lattice mesh (triangles,
+   neighbours, vertices) is equal **after every round** (41 and 53 rounds).
+   No first divergence exists to report. The rescan, Delaunay and footprint
+   checks all pass: full rescan max error 0.99998 with 0 over tolerance, 0
+   Delaunay violations, 0 consistency misses, 0 order violations.
+2. **Identity needs the end-of-round renumbering.** 212,226 of 213,464
+   commits on the quarter circle (99.4 %) happen out of index order. Without
+   renumbering (plant `norenumber`) the mesh differs from round 1 on.
+3. **Identity is measured on these two inputs, not proven.** A footprint is
+   computed at the start of a sub-round. A lower-index mark that loses and
+   commits later could, in principle, grow a footprint into a region a
+   higher-index mark has already committed. The simulation checks that at
+   every commit ("order violations": a footprint slot already stamped by a
+   higher-index commit this round). The count was 0 on both domains. A
+   production A0 would need this check at runtime with a fallback, or a proof.
+4. **A0's sub-round profile is close to A1's on the quarter circle. On the
+   tile it is worse in the first rounds.**
+
+   | domain | option | rounds | sub-rounds: median / max / total | first sub-round's winners, big rounds | sub-rounds to 90 % of a big round | largest round: winners per sub-round |
+   |---|---|---:|---|---|---|---|
+   | quarter | A0 | 41 | 13 / 24 / 469 | 4.6-19.6 % | 4-10 | r14, 45,306 marks: 4045, 3152, 2669, 2316, 1921, 1510, 1184, 827, 523, 295, 142, 82, 29, 12, 6, 1 |
+   | quarter | A1 (seed 0) | 36 | 14 / 21 / 447 | 4.6-19.4 % | 4-11 | r14, 44,823: 3821, 2945, 2542, 2136, 1816, 1517, 1225, 852, 639, 388, 234, 117, 63, 29, 16, 6, 4, 3, 3, 1 |
+   | tile | A0 | 53 | 2.5 / 101 / 592 | 4.1-26.3 % | 3-50 | r10, 58,626: 4916, 3789, 3453, 3087, 2721, 2258, 1726, 1111, 637, 300, 135, 45, 13, 3, 0 |
+   | tile | A1 (seed 0) | 51 | 4.5 / 19 / 376 | 5.3-26.1 % | 3-11 | r11, 56,301: 5268, 3986, 3471, 3056, 2470, 1931, 1390, 910, 542, 249, 113, 44, 12, 5, 2, 1 |
+
+   "Big" means at least 5,000 marks. On the tile, A0's rounds 1-3 need 101, 94
+   and 86 sub-rounds, with 2,317-6,351 marks. That is the index order's
+   dependence depth measured in section 5 (101, 88, 80), where the start
+   triangles are in grid order. A1 needs at most 19 there. A sub-round count
+   includes a final sub-round that only retires skipped marks, which can have
+   0 winners.
+5. **Re-evaluation dominates, for A0 and A1 alike.** A mark that loses is
+   evaluated again (skip checks, plan, cavity and ring, reservation) in every
+   later sub-round. Evaluations per mark: 4.00 (A0 quarter), 4.13 (A1
+   quarter), 4.46 (A0 tile), 4.00 (A1 tile), which is 2.0-2.3 million per
+   run. At the measured 279 ns each (quarter) that is 568 ms of serial work,
+   about 6 times today's whole split phase (92.6 ms).
+6. **Synchronisation on this Mac, measured** (`scripts/sync_bench.cpp`,
+   battery): starting and joining 8 fresh `std::jthread`s costs 90-189 µs
+   (medians of 3 runs; 96 µs median of medians). `parallel_util::for_each_block`
+   with a trivial body costs 83-132 µs (86 µs). The design's 90 µs is in that
+   range. With a persistent team, one `std::barrier::arrive_and_wait` of 8
+   threads costs 0.82-0.96 µs (0.90 µs); a spinning sense-reversing barrier
+   costs 0.72-0.85 µs. At 4 threads: spawn 58 µs, barrier 0.50 µs. At 16
+   threads (more than the 10 cores) the barrier costs 20 µs.
+7. **The model at 8 threads** (split phase, ms; today's serial split is 92.6
+   ms on both domains, and today's refine at 8 threads 161.7 / 186.3 ms):
+
+   | option | quarter, fresh threads per step | quarter, team + barrier | tile, fresh threads | tile, team + barrier | 2 % rule |
+   |---|---:|---:|---:|---:|---|
+   | A0 | 231 | **93** | 276 | **102** | meets (identical) |
+   | A1 | 216 | **88** | 188 | **81** | meets (+1.3 %) |
+   | C | 92 | **50** | 114 | **52** | fails (+10 %) |
+   | A0, each mark evaluated once (lower bound) | 177 | 39 | 218 | 44 | meets |
+   | A1, each mark evaluated once (lower bound) | 159 | 31 | 137 | 30 | meets |
+
+   Refine at 8 threads, adding the measured 8-thread scan and rest (section 6)
+   to the team figures: A0 157 / 190 ms, A1 152 / 169 ms, C 114 / 140 ms; the
+   lower bounds 104 / 132 (A0) and 95 / 118 (A1). Against today's 161.7 /
+   186.3 ms, **as simulated, A0 gains 3 % on the quarter circle and loses 2 %
+   on the tile, A1 gains 6-9 %, and C gains 25-30 %.** Most of the gap is re-evaluation. The rows "each mark evaluated
+   once" are a bound: they assume a loser keeps its footprint until a slot in
+   it is written. That rule was not simulated and its cost is not known.
+   **With fresh threads per step, no reservation variant beats today's serial
+   split.** 1,100-1,800 synchronisation steps at 96 µs are 108-176 ms.
+
+### The model (all of it is a model, not a measurement)
+
+`scripts/model21c.py data/a0 data/a0/sync_bench.txt` writes `data/a0/model.md`
+(4, 8 and 16 threads, both domains). The split phase at T threads is
+
+  sum over steps of ceil(items / T) × per-item cost + syncs × sync cost.
+
+- **Steps and items**, recorded per step by the simulation. A0 and A1: per
+  sub-round, an evaluation step (items: marks still pending, `sr_pending`)
+  and a commit step (items: winners); A0 also has one renumbering step per
+  round. C: per refine round, a batch step (items: marks); per flip round, a
+  test step (items: candidate edges, `fr_cand`) and a flip step (items: flips,
+  `fr_flips`). The last flip-free test of each refine round is not recorded
+  per round; its candidates (total minus recorded) are spread evenly.
+- **Syncs per step**, assumed: 3 per sub-round (reserve | check winners and
+  count | prefix sum and commit), 1 per renumbering, 2 per C batch, 3 per flip
+  round (test | select by minimum key | flip). A step with no items still
+  pays its sync. "Fresh threads" charges one spawn and join (96 µs at 8) per
+  sync; "team" one barrier (0.90 µs at 8).
+- **Per-item costs, measured serially on battery.** Evaluation: 279 ns
+  (quarter) and 259 ns (tile), from A0's timer (`t_eval / n_eval`). The same
+  routine is used for A1; A1's own timer reads 463-480 ns, because its
+  simulation still allocates per candidate and A0's does not. Commit (split
+  plus Lawson): today's production split phase per insertion, 92.6 ms /
+  213,464 = 434 ns (quarter) and 421 ns (tile). The simulation's own commit
+  timer, with its bookkeeping, reads 531-811 ns. A0 renumbering: the
+  simulation's whole-mesh copy per round, 1.7 ms (quarter) and 2.1 ms
+  (tile) per round, divided by T. A production renumbering would touch only the slots written.
+  C: batch 113-118 ns per mark, test 103-104 ns per candidate edge
+  (collecting, sorting and deduplicating included), flip 77-87 ns.
+- **Not in the model:** load imbalance within a step (every item is charged
+  the mean cost), memory bandwidth and cache effects of 8 threads, the E-cores
+  (8 P + 2 E), the 4-6 % slower split after an 8-thread scan (section 6), a
+  barrier's cost when threads arrive unevenly, and the scan and rest for C and
+  A1 (they have 10 % and 1 % more triangles, and fewer rounds; today's
+  8-thread figures are used for all). The 16-thread rows run 16 threads on 10
+  cores.
+- **At 1 thread the model gives 729 (A0), 692 (A1) and 395 (C) ms of split**,
+  against today's 92.6. That is the work the parallel schedule adds, before it
+  is divided among threads: re-evaluation for A0 and A1, and the test of 3.1
+  million candidate edges for C. The C simulation was not written for speed
+  (candidate sort per flip round), so C's figures are the simulation's, not a
+  design's.
+
+### The checks can fail
+
+Quarter circle, `RASPUTIN_SIM_PLANT` (`data/a0/plants/`):
+
+| plant | what it breaks | what caught it |
+|---|---|---|
+| `norenumber` | appended slots and vertices keep commit order | sha256 `e7bbaf47…` against `1e531976…`; round hash differs from round 1; 428,117 triangles |
+| `noreserve` | in sub-round 1 of each round, the lowest pending mark neither reserves nor wins | order violations: 84; skips caused by a higher-index writer: 11; round hash differs from round 2; 428,209 triangles |
+| `nocavity` | the cavity is the base triangles only | consistency: 506,728 misses; order violations: 842; 22 Delaunay violations; full rescan: 1 triangle over tolerance (1.11) |
+
+### Method
+
+- **Tree and build.** A scratch worktree of `7f688aa`, with `scripts/sim.patch`
+  and then `scripts/sim_a0.patch` applied, built Release by bench.py's
+  `build()` (`-O3 -DNDEBUG`, AppleClang 21). `_core` sha256 `ed06d760…`; a
+  second fresh worktree with both patches gives the same sources and the same
+  `_core` hash. On this build, quarter and tile A1 (seed 0) and C give the
+  same mesh sha256 as the stored 21c runs, so the timers added in
+  `sim_a0.patch` did not change what the modes do.
+- **What `sim_a0.patch` adds.** Mode `A0`: per sub-round, every pending mark
+  in index order applies today's skip rules first (slot written this round:
+  skipped, as today, not added to `skipped`; edge split whose neighbour was
+  written: added to `skipped`). Then it computes A1's footprint (Bowyer-Watson
+  cavity plus ring) on the current mesh and reserves each slot with its index.
+  A mark holding every slot wins. Winners commit in index order with today's
+  `split` and `legalise_around`. At the end of the round,
+  `LatticeMesh::sim_renumber` (scratch) permutes the appended slots and
+  vertices into the order a prefix sum in index order gives. It also adds
+  per-sub-round and per-flip-round work records, phase timers, and a mesh hash
+  per round to `today`, `A0` and `A1`; C's flip selection resets sparsely, and
+  `plant()` reads the environment once (the timers were otherwise inflated).
+- **Runs.** `scripts/run_a0.sh <pkg> <out>`: today, A0, A1 (seed 0) and C on
+  both domains, then the three plants on the quarter circle. The same driver,
+  quality checks and full rescan as the rest of 21c.
+- **Sync benchmark.** `c++ -std=c++20 -O3 -DNDEBUG -I include
+  scripts/sync_bench.cpp`, run for 8, 4 and 16 threads, then 8 twice more
+  (`data/a0/sync_bench.txt`): 200 samples for spawn and `for_each_block`, 15
+  samples of 2,000 barrier phases each.
+
+### Power state
+
+**Battery** throughout, 72 % to 70 %, discharging (`data/a0/pmset_*.txt`).
+Apple M1 Max, 8 P + 2 E cores. The counts and hashes do not depend on power;
+the per-item and sync costs, and so the model, do. There is no AC baseline
+for any of them.
+
+### Not measured
+
+- A parallel implementation of any option. Every speed above is the model's.
+- A rule that stops re-evaluating a loser until its footprint is written, and
+  its cost. The "evaluated once" rows only bound it.
+- A0 identity on inputs other than these two, and a proof of it.
+- A1 seeds 1-3 in this run (their sub-round profiles are in `data/sims/`).
+- Load imbalance, and sync costs with real work between barriers.
+- An AC run.
