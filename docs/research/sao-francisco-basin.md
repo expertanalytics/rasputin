@@ -113,9 +113,9 @@ In roughly the order the basin needs them:
 
 ## Open questions for Ola
 
-1. Where does the 50 m DEM come from? If it is a resampling of ANADEM or
-   Copernicus, meshing the 30 m source directly may be as cheap: refinement
-   visits nodes, and the output size is set by the tolerance.
+1. ~~Where does the 50 m DEM come from?~~ **Answered by Ola, 2026-09-27:**
+   the 50 m "was probably referring to 30m". The working assumption is a 30 m
+   DEM (ANADEM first): 708 M nodes inside the basin, 2.8 GB as float32.
 2. What tolerance is intended for the basin? It sets the triangle count more
    than anything else.
 3. Commercial use? FABDEM is non-commercial only; ANADEM and Copernicus are
