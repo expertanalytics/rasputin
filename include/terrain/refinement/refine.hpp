@@ -99,7 +99,7 @@ struct RefineOutcome {
     std::size_t feet_refused = 0;      // 20b R2 step 4: a foot refused, N inserted instead
 
     // Wall seconds on the calling thread, steady_clock (17-mesh-stats.md R6).
-    // for_each_chunk joins its workers before returning, so no worker reads a
+    // for_each_block joins its workers before returning, so no worker reads a
     // clock. Not part of the determinism guarantee.
     double legalise_seconds = 0.0;  // the start mesh's legalise_all
     double scan_seconds = 0.0;      // every round's parallel scan, summed
@@ -165,6 +165,23 @@ namespace detail {
                        "refine: a start triangle is not counter-clockwise, or the start mesh "
                        "is not a valid triangulation");
     return std::move(*m);
+}
+
+// The next round's active set: every touched slot and every skipped one,
+// ascending and once each. `skipped` is ascending (filled while walking the
+// ascending `active`) and below touched.size(), so one linear merge with the
+// slot walk gives what collecting, sorting and deduplicating gave (21a, QW3).
+inline void rebuild_active(std::span<const char> touched, std::span<const std::uint32_t> skipped,
+                           std::vector<std::uint32_t>& active) {
+    active.clear();
+    auto s = skipped.begin();
+    for (std::uint32_t t = 0; t < touched.size(); ++t) {
+        bool in = touched[t] != 0;
+        for (; s != skipped.end() && *s == t; ++s)
+            in = true;
+        if (in)
+            active.push_back(t);
+    }
 }
 
 [[nodiscard]] inline bool needs_split(const ScanResult& r, double tolerance) noexcept {
@@ -279,6 +296,7 @@ template <raster::RasterSource R>
     }
     std::vector<ScanResult> results;
     std::set<std::pair<std::uint32_t, std::uint32_t>> footed;  // (row, col), R2 step 5
+    mesh::FlipStack flip_stack;  // one buffer for every legalise_around
     std::vector<std::uint32_t> active(m.triangle_count());
     for (std::uint32_t t = 0; t < active.size(); ++t)
         active[t] = t;
@@ -287,7 +305,7 @@ template <raster::RasterSource R>
         ++out.rounds;
         results.resize(m.triangle_count());
         t0 = clock::now();
-        parallel_util::for_each_chunk(active.size(), options.threads,
+        parallel_util::for_each_block(active.size(), options.threads, parallel_util::BlockSchedule{},
                                       [&](std::size_t begin, std::size_t end) {
                                           for (std::size_t i = begin; i < end; ++i)
                                               results[active[i]] = scan(dem, m, active[i]);
@@ -345,7 +363,7 @@ template <raster::RasterSource R>
             if (n_seeds == 4)
                 touched[seeds[3]] = 1;
             out.flips += mesh::legalise_around<pred::DefaultKernel>(
-                m, q, std::span<const std::uint32_t>{seeds.data(), n_seeds}, frame,
+                m, q, std::span<const std::uint32_t>{seeds.data(), n_seeds}, frame, flip_stack,
                 [&](std::uint32_t s) { touched[s] = 1; });
             ++out.inserted;
             out.carved += r.is_void ? 1 : 0;
@@ -357,13 +375,7 @@ template <raster::RasterSource R>
         out.split_seconds += since(t0);
         if (!any)
             break;
-        active.clear();
-        for (std::uint32_t t = 0; t < touched.size(); ++t)
-            if (touched[t] != 0)
-                active.push_back(t);
-        active.insert(active.end(), skipped.begin(), skipped.end());
-        std::sort(active.begin(), active.end());
-        active.erase(std::unique(active.begin(), active.end()), active.end());
+        detail::rebuild_active(touched, skipped, active);
     }
 
     // By the stopping rule a void triangle holds no valid node, so `uncovered`
