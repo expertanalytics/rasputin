@@ -248,6 +248,29 @@ class TestRealDtm10:
         opened = di.open_dem(request(di, path))
         assert opened.tile.meta == decoded(path).meta
 
+    def test_q5_reading_a_box_on_7707_2_reaching_into_7707_1_opens_on_7707_2(
+        self, di: ModuleType
+    ) -> None:
+        """Ola's Q5 reading on real extracts. 7707_1 (y 7750690..7749740) lies
+        over 7707_2 (y 7750250..7749300); this box reaches 60 m into their
+        overlap strip, so it selects both, and only 7707_2 covers every node."""
+        box = (769800.0, 7749350.0, 770000.0, 7749800.0)
+        opened = di.open_dem(request(di, LATTICES, box=box))
+        assert [p.name for p in opened.plan.tiles] == [MAIN.name]
+        main = decoded(MAIN)
+        assert opened.tile.meta.x_min == 769800.0
+        assert opened.tile.meta.y_max == 7749800.0
+        # rows (7750250 - 7749800) / 10 = 45 .. 90, columns 5 .. 25 of 7707_2
+        assert same_array(opened.tile.array, main.array[45:91, 5:26])
+
+    def test_q5_reading_a_box_inside_the_strip_takes_the_tie_by_name(self, di: ModuleType) -> None:
+        """Both lattices cover a box wholly inside the strip and hold one tile
+        each here, so the tie goes to the first tile's name: 7707_1."""
+        box = (769800.0, 7749800.0, 770000.0, 7750200.0)
+        opened = di.open_dem(request(di, LATTICES, box=box))
+        assert [p.name for p in opened.plan.tiles] == [ODD.name]
+        assert opened.tile.meta.x_min % 10.0 == 5.0  # on 7707_1's lattice
+
     def test_q5_a_request_inside_one_lattice_opens_with_both_listed(self, di: ModuleType) -> None:
         """South of 7707_1's last row (y 7749740), only 7707_2 is selected."""
         opened = di.open_dem(request(di, LATTICES, box=(769800.0, 7749350.0, 770000.0, 7749700.0)))

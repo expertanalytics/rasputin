@@ -275,6 +275,25 @@ class TestC5Usage:
         assert (ys.min(), ys.max()) == (6599965.0, 6600000.0)
         assert field(vtk, "elevation_source").startswith("mosaic of 4 tiles, 8 x 9 nodes; ")
 
+    def test_a_box_reaching_into_another_lattices_strip_meshes_on_the_covering_one(
+        self, tmp_path: Path, mosaic_dir: Path, source: DemTile
+    ) -> None:
+        """Ola's Q5 reading, end to end. `odd.tif` is half a cell east-west off
+        the quadrants and overlaps `se.tif`; the box selects both, but only the
+        main lattice covers it, so it meshes there and records `se.tif` alone."""
+        odd = whole(5, 7, array=terrain(5, 7), x_min=500105.0, y_max=6599970.0)
+        write_tiles(mosaic_dir, {"odd.tif": odd})
+        # cols floor(7.2)=7 .. ceil(11.2)=12; rows floor(5.2)=5 .. ceil(7.6)=8
+        vtk = run_vtk(
+            tmp_path / "box.vtk",
+            "--dem", str(mosaic_dir),
+            "--bbox", "500072", "6599962", "500112", "6599974",
+        )  # fmt: skip
+        assert field(vtk, "dem_tiles") == "se.tif"
+        xs, ys = vtk.points[:, 0], vtk.points[:, 1]
+        assert (xs.min(), xs.max()) == (500070.0, 500120.0)
+        assert (ys.min(), ys.max()) == (6599960.0, 6599975.0)
+
     def test_bbox_on_one_file(self, tmp_path: Path, source: DemTile) -> None:
         """Q2: `--bbox` applies to a single file too; it is then a window of it."""
         single = write_one(tmp_path / "one.tif", source)

@@ -259,6 +259,9 @@ class TestM2LatticeGrouping:
         )  # fmt: skip
 
     def test_no_bounds_selects_both_lattices_and_is_refused(self, plan: Any, refused: Any) -> None:
+        """Unchanged by Ola's Q5 reading: without a box the request is every
+        tile, and neither lattice covers the other's nodes (odd.tif reaches
+        x 500165, past the main lattice's 500120), so none covers it (R6)."""
         tiles = self.repository()
         refused(lambda: plan(tiles), "odd.tif", "0.5 cell")
 
@@ -322,6 +325,143 @@ class TestM2LatticeGrouping:
         tiles["far.tif"] = whole(rows=3, cols=3, x_min=X0 + 1000 * DX, epsg=25832)
         result = plan(tiles, (500012.0, 6599987.0, 500033.0, 6599996.0))
         assert [p.name for p in result.tiles] == ["nw.tif"]
+
+
+class TestB1LatticeByCoverage:
+    """Ola's reading of Q5 after review ("Ruled by Ola", 2026-09-27): per
+    lattice, whether **its own tiles cover every node the request needs**.
+
+    Exactly one covers: plan on it, and the other lattices' tiles are not in
+    the plan. None covers: the Q5 refusal (the straddle tests in M2). Several
+    cover (a box wholly inside an overlap strip): the lattice with the most
+    tiles in the repository, ties by the name of its first tile.
+
+    The repository is M2's: the 9 x 13 main lattice in four, and `odd.tif`
+    (x 500105..500165, y 6599970..6599950) half a cell east-west off it. Their
+    overlap strip is x 500105..500120, y 6599970..6599960.
+
+    The odd tile is also named `a_odd.tif`, which sorts before the main
+    lattice's `ne.tif`: an implementation that takes whichever lattice comes
+    first, whatever it covers, fails one of the two names in each case.
+    """
+
+    MAIN_REACHING_INTO_THE_STRIP = (500072.0, 6599962.0, 500112.0, 6599974.0)
+    ODD_REACHING_INTO_THE_STRIP = (500106.0, 6599952.0, 500150.0, 6599969.0)
+    INSIDE_THE_STRIP = (500106.0, 6599961.0, 500114.0, 6599969.0)
+    ODD_ORIGIN = (X0 + 10.5 * DX, Y0 - 6 * DY)
+
+    @staticmethod
+    def main() -> dict[str, DemTile]:
+        return quadrants(whole(), row_cut=4, col_cut=6, overlap=1)
+
+    @staticmethod
+    def odd(name: str = "odd.tif", pieces: int = 1) -> dict[str, DemTile]:
+        """The odd lattice's 5 x 7 tile, whole, or in four named `<name>-<q>`."""
+        x_min, y_max = TestB1LatticeByCoverage.ODD_ORIGIN
+        tile = whole(rows=5, cols=7, x_min=x_min, y_max=y_max)
+        if pieces == 1:
+            return {name: tile}
+        return {
+            f"{name}-{q}": t for q, t in quadrants(tile, row_cut=2, col_cut=3, overlap=1).items()
+        }
+
+    @pytest.mark.parametrize("odd_name", ["odd.tif", "a_odd.tif"])
+    def test_a_main_box_reaching_into_the_strip_plans_on_the_main_lattice(
+        self, mz: ModuleType, plan: Any, build: Any, odd_name: str
+    ) -> None:
+        """The reviewer's case: the box selects the odd tile, and today is
+        refused as mixed-lattice, but the main lattice covers every node."""
+        main = self.main()
+        tiles = {**main, **self.odd(odd_name)}
+        result = plan(tiles, self.MAIN_REACHING_INTO_THE_STRIP)
+        assert [p.name for p in result.tiles] == ["se.tif"]
+        assert result.reference == (X0, Y0)
+        assert result.window == window(mz, 5, 7, 4, 6)
+        assert result == plan(main, self.MAIN_REACHING_INTO_THE_STRIP)
+        mosaic, loads = build(tiles, self.MAIN_REACHING_INTO_THE_STRIP)
+        assert loads.calls == ["se.tif"]
+        assert same_array(mosaic.tile.array, whole().array[5:9, 7:13])
+
+    @pytest.mark.parametrize("odd_name", ["odd.tif", "a_odd.tif"])
+    def test_an_odd_box_reaching_into_the_strip_plans_on_the_odd_lattice(
+        self, mz: ModuleType, plan: Any, odd_name: str
+    ) -> None:
+        """The mirror case. The main lattice's tiles cover the part of the box
+        over them, but not x 500130..500150 or y 6599955..6599950, which the
+        odd tile holds: the box is not clamped to the main lattice's union."""
+        odd = self.odd(odd_name)
+        result = plan({**self.main(), **odd}, self.ODD_REACHING_INTO_THE_STRIP)
+        assert [p.name for p in result.tiles] == [odd_name]
+        assert result.reference == self.ODD_ORIGIN
+        assert result.window == window(mz, 0, 0, 5, 6)
+        assert result == plan(odd, self.ODD_REACHING_INTO_THE_STRIP)
+
+    def test_several_cover_the_most_tiles_in_the_repository_wins(
+        self, mz: ModuleType, plan: Any
+    ) -> None:
+        """Main 4 tiles, odd 1; each selects exactly one tile for this box, so
+        a count of *selected* tiles would tie."""
+        main = self.main()
+        result = plan({**main, **self.odd()}, self.INSIDE_THE_STRIP)
+        assert [p.name for p in result.tiles] == ["se.tif"]
+        assert result.reference == (X0, Y0)
+        assert result == plan(main, self.INSIDE_THE_STRIP)
+
+    def test_the_count_is_of_the_repository_not_of_the_selection(
+        self, footprint: Any, mz: ModuleType
+    ) -> None:
+        """Main 1 tile (se alone), odd 2 (one far away, never selected); both
+        select one. The odd names sort after `se.tif`, so a count of the
+        selection, tied and broken by name, would choose the main lattice."""
+        x_min, y_max = self.ODD_ORIGIN
+        tiles = {
+            "se.tif": self.main()["se.tif"],
+            "x_odd.tif": self.odd()["odd.tif"],
+            "x_far.tif": whole(rows=3, cols=3, x_min=x_min + 100 * DX, y_max=y_max),
+        }
+        result = mz.plan_mosaic(
+            footprints(footprint, tiles), bounds_of(mz, self.INSIDE_THE_STRIP), None
+        )
+        assert [p.name for p in result.tiles] == ["x_odd.tif"]
+        assert result.reference == (x_min, y_max)
+
+    @pytest.mark.parametrize(
+        ("prefix", "winner"),
+        [("a", "odd"), ("o", "main")],
+        ids=["odd-first-name-sorts-first", "main-first-name-sorts-first"],
+    )
+    def test_a_tie_goes_to_the_lattice_whose_first_tile_sorts_first(
+        self, plan: Any, prefix: str, winner: str
+    ) -> None:
+        """Four tiles each. Main's first tile is `ne.tif` (last `sw.tif`); the
+        odd lattice's first is `<prefix>-ne.tif` (last `<prefix>-sw.tif`).
+        With prefix `o`, main's first name sorts first but the odd lattice's
+        last name does: a tie broken by the last tile, or by the larger first
+        name, picks the wrong one in one of the two cases."""
+        odd = self.odd(prefix, pieces=4)
+        result = plan({**self.main(), **odd}, self.INSIDE_THE_STRIP)
+        names = {p.name for p in result.tiles}
+        if winner == "odd":
+            assert names <= set(odd), names
+            assert result.reference == self.ODD_ORIGIN
+        else:
+            assert names == {"se.tif"}
+            assert result.reference == (X0, Y0)
+
+    @pytest.mark.parametrize(
+        "odd_pieces", [1, 4], ids=["most-tiles", "tie-by-name"]
+    )  # fmt: skip
+    def test_the_choice_does_not_depend_on_footprint_order(
+        self, mz: ModuleType, footprint: Any, odd_pieces: int
+    ) -> None:
+        tiles = {**self.main(), **self.odd("a", pieces=odd_pieces)}
+        prints = footprints(footprint, tiles)
+        box = bounds_of(mz, self.INSIDE_THE_STRIP)
+        first = mz.plan_mosaic(prints, box, None)
+        for k in range(len(prints)):  # every rotation, forwards and backwards
+            rotated = prints[k:] + prints[:k]
+            for order in (rotated, rotated[::-1]):
+                assert mz.plan_mosaic(order, box, None) == first
 
 
 def _meta_change(change: dict[str, Any]) -> dict[str, Any]:
@@ -418,6 +558,22 @@ class TestM4Bounds:
         assert same_array(result.tile.array, source.array[0:3, 1:7])
         assert sorted(loads.calls) == ["ne.tif", "nw.tif"]
 
+    def test_float_noise_in_a_decimetre_spacing_does_not_add_a_node_line(
+        self, mz: ModuleType, plan: Any
+    ) -> None:
+        """S3, R4 point 4's snap. At spacing 0.1 from a reference at (0, 1):
+        0.3 / 0.1 is 2.9999999999999996 (floor 2), (1 - 0.9) / 0.1 is
+        0.9999999999999998 (floor 0) and (1 - 0.7) / 0.1 is 3.0000000000000004
+        (ceil 4). Each edge is a node, so each would add a line without the snap."""
+        assert (0.3 / 0.1, (1.0 - 0.9) / 0.1, (1.0 - 0.7) / 0.1) == (
+            2.9999999999999996,
+            0.9999999999999998,
+            3.0000000000000004,
+        )  # the noise is there
+        tiles = {"d.tif": whole(x_min=0.0, y_max=1.0, dx=0.1, dy=0.1)}
+        result = plan(tiles, (0.3, 0.7, 0.6, 0.9))
+        assert result.window == window(mz, 1, 3, 3, 4)
+
     def test_a_box_meeting_no_tile_is_refused(
         self, plan: Any, refused: Any, tiles: dict[str, DemTile]
     ) -> None:
@@ -458,6 +614,57 @@ class TestM5MemoryCap:
             assert plan(tiles).meta.rows == 9
         else:
             refused(lambda: plan(tiles), "--bbox")
+
+    @pytest.mark.parametrize(
+        ("memory", "accepted"), [(2 * NODES * 8, True), (2 * NODES * 8 - 1, False)]
+    )
+    def test_the_boundary_at_eight_bytes_a_node_when_a_selected_tile_decodes_to_float64(
+        self,
+        mz: ModuleType,
+        footprint: Any,
+        refused: Any,
+        monkeypatch: pytest.MonkeyPatch,
+        memory: int,
+        accepted: bool,
+    ) -> None:
+        """S2: the cap counts the planned decoded dtype, `np.result_type` of the
+        selected footprints' `dtype`. One float64 tile makes the canvas float64
+        (R5), so the window costs 8 bytes a node, not 4."""
+        monkeypatch.setattr(mz, "physical_memory", lambda: memory)
+        tiles = quadrants(whole(), row_cut=4, col_cut=6, overlap=1)
+        prints = [
+            footprint(name=name, meta=tile.meta, dtype=np.dtype(np.float64))
+            if name == "se.tif"
+            else footprint(name=name, meta=tile.meta)
+            for name, tile in tiles.items()
+        ]
+        call = lambda: mz.plan_mosaic(prints, None, None)  # noqa: E731
+        if accepted:
+            assert call().meta.rows == 9
+        else:
+            refused(call, "--bbox", "float64")
+
+    def test_a_float64_tile_outside_the_window_does_not_count(
+        self, mz: ModuleType, footprint: Any, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Only the selected tiles decode, so only their dtypes size the canvas."""
+        monkeypatch.setattr(mz, "physical_memory", lambda: 2 * 16 * 4)
+        tiles = quadrants(whole(), row_cut=4, col_cut=6, overlap=1)
+        prints = [
+            footprint(name=name, meta=tile.meta, dtype=np.dtype(np.float64))
+            if name == "se.tif"
+            else footprint(name=name, meta=tile.meta)
+            for name, tile in tiles.items()
+        ]
+        box = bounds_of(mz, (500012.0, 6599987.0, 500033.0, 6599996.0))  # 4 x 4, nw alone
+        assert [p.name for p in mz.plan_mosaic(prints, box, None).tiles] == ["nw.tif"]
+
+    def test_a_footprints_dtype_defaults_to_float32(self, footprint: Any) -> None:
+        """S2: `TileFootprint` gains an optional decoded `dtype`, float32 unless given."""
+        tile = whole()
+        assert np.dtype(footprint(name="a.tif", meta=tile.meta).dtype) == np.float32
+        given = footprint(name="a.tif", meta=tile.meta, dtype=np.dtype(np.float64))
+        assert np.dtype(given.dtype) == np.float64
 
     def test_the_cap_is_on_the_window_not_the_union(
         self, mz: ModuleType, plan: Any, monkeypatch: pytest.MonkeyPatch
@@ -568,6 +775,32 @@ class TestM14Coverage:
         the union's bounding box, passes this; only a check of every node fails it."""
         tiles = blocks(whole(rows=9, cols=12, area=True), 3, 4, skip={(1, 1)})
         refused(lambda: plan(tiles), "500040", "500070")
+
+    def test_refusing_a_mostly_uncovered_window_costs_less_than_its_canvas(
+        self, plan: Any, refused: Any
+    ) -> None:
+        """S1: the check runs on windows the cap allows, up to half of physical
+        memory at 4 bytes a node, so what it allocates per node bounds what the
+        cap can promise. Two 2 x 2 tiles at opposite corners of a 2000 x 2000
+        window: nearly every node is uncovered. Index and coordinate arrays of
+        the uncovered nodes cost 32 bytes a node, 8x the float32 canvas; the
+        refusal must peak below the canvas itself (16 MB here). tracemalloc
+        sees numpy's buffers, so this is a count of bytes, not a timing."""
+        import tracemalloc
+
+        n = 2000
+        corners = {
+            "nw.tif": whole(rows=2, cols=2),
+            "se.tif": whole(rows=2, cols=2, x_min=X0 + (n - 2) * DX, y_max=Y0 - (n - 2) * DY),
+        }
+        canvas_bytes = n * n * 4
+        tracemalloc.start()
+        try:
+            refused(lambda: plan(corners), f"{X0 + (n - 1) * DX:.0f}", f"{Y0 - (n - 1) * DY:.0f}")
+            _, peak = tracemalloc.get_traced_memory()
+        finally:
+            tracemalloc.stop()
+        assert peak < canvas_bytes, f"peak {peak} bytes for a {canvas_bytes}-byte canvas"
 
     def test_a_request_away_from_the_hole_plans(self, plan: Any, holed: dict[str, DemTile]) -> None:
         result = plan(holed, (500001.0, 6599991.0, 500069.0, 6599999.0))
@@ -733,6 +966,30 @@ class TestM8Overlaps:
             planned = planned.model_copy(update={"tiles": tuple(reversed(planned.tiles))})
         message = refused(lambda: mz.assemble(planned, Loads(tiles)), "w.tif", "e.tif", "2.5")
         names_number(message, 3)
+
+    def test_the_refusal_names_the_tiles_whose_values_disagree(
+        self, mz: ModuleType, plan: Any, refused: Any
+    ) -> None:
+        """B2: three tiles on one 3 x 3 grid, equal everywhere but node (0, 0),
+        where `a` is NoData, `b` 1.0 and `c` 5.0. The disagreement is between
+        b and c; `a` covers the node too, but its value is not in the clash.
+        In every assembly order."""
+        source = whole(rows=3, cols=3)
+        tiles = {}
+        for name, first in (("a.tif", np.nan), ("b.tif", 1.0), ("c.tif", 5.0)):
+            array = source.array.copy()
+            array[0, 0] = first
+            tiles[name] = piece(source, 0, 3, 0, 3, array=array)
+        planned = plan(tiles)
+        for order in itertools.permutations(planned.tiles):
+            message = refused(
+                lambda o=order: mz.assemble(planned.model_copy(update={"tiles": o}), Loads(tiles)),
+                "b.tif",
+                "c.tif",
+                "4",
+            )
+            assert "a.tif" not in message, ([p.name for p in order], message)
+            names_number(message, 1)
 
     def test_one_ulp_is_a_disagreement(self, build: Any, refused: Any) -> None:
         """`==`, not `isclose`: DTM10's and ANADEM's overlaps agree bit for bit (N3, B4)."""

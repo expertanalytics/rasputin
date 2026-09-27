@@ -18,6 +18,7 @@ import importlib
 import io
 from pathlib import Path
 from types import ModuleType
+from typing import Any
 
 import numpy as np
 import pytest
@@ -143,6 +144,73 @@ class TestF2HeaderOnly:
         (footprint,) = repository.footprints()
         assert (footprint.meta.nodata, footprint.meta.nodata_source) == (-9999.0, "caller")
         assert repository.load("a.tif").meta == footprint.meta
+
+
+class TestS2DecodedDtype:
+    """S2: a footprint carries the dtype its tile decodes to, from the header
+    through `PROMOTION`, so the cap can count the canvas the plan will build."""
+
+    @pytest.mark.parametrize(
+        ("stored", "decoded_as"),
+        [
+            (np.int16, np.float32),
+            (np.uint8, np.float32),
+            (np.float32, np.float32),
+            (np.int32, np.float64),
+            (np.uint32, np.float64),
+            (np.float64, np.float64),
+        ],
+        ids=["int16", "uint8", "float32", "int32", "uint32", "float64"],
+    )
+    def test_the_footprint_dtype_is_the_decoded_one(
+        self, repo: ModuleType, tmp_path: Path, stored: Any, decoded_as: Any
+    ) -> None:
+        path = write(tmp_path / "a.tif", micro_tiff(elevations().astype(stored)))
+        repository = repo.TiffDemRepository.from_directory(tmp_path)
+        (footprint,) = repository.footprints()
+        assert np.dtype(footprint.dtype) == decoded_as
+        assert np.dtype(footprint.dtype) == decoded(path).array.dtype  # type: ignore[attr-defined]
+
+
+ARCHIVE = Path(__file__).resolve().parents[3] / "rasputin_data" / "DTM10_UTM33_20220924"
+needs_archive = pytest.mark.skipif(
+    not ARCHIVE.is_dir(), reason=f"Ola's DTM10 archive is not at {ARCHIVE}"
+)
+
+
+@needs_archive
+class TestB1RealArchive:
+    """Ola's Q5 reading on the design's own 15a acceptance box, headers only.
+
+    The 2 x 2 block 7908_3, 7908_2, 7808_4, 7808_1 is on the main lattice, and
+    the half-cell tile 7807_2's 51-node overlap reaches into its south-west
+    corner. Until the reading, the box was refused naming 7807_2. CI has no
+    archive; the synthetic equivalent is `test_mosaic.py::TestB1LatticeByCoverage`
+    and the real-extract one `test_dem_input.py::TestRealDtm10`.
+    """
+
+    BOX = (799750.0, 7849750.0, 900250.0, 7950250.0)
+    BLOCK = ("7908_3", "7908_2", "7808_4", "7808_1")
+
+    def test_the_acceptance_box_plans_on_the_main_lattice(self, repo: ModuleType) -> None:
+        mz = importlib.import_module("tin_engine.mosaic")
+        prints = repo.TiffDemRepository.from_directory(ARCHIVE).footprints()
+        x_min, y_min, x_max, y_max = self.BOX
+        box = mz.Bounds(x_min=x_min, y_min=y_min, x_max=x_max, y_max=y_max)
+        result = mz.plan_mosaic(prints, box, None)
+        assert result.reference == (-100250.0, 7950250.0)  # the main lattice's (N2)
+        assert (result.meta.rows, result.meta.cols) == (10051, 10051)
+        assert (result.meta.x_min, result.meta.y_max) == (799750.0, 7950250.0)
+        names = {p.name for p in result.tiles}
+        assert {f"{b}_10m_z33.tif" for b in self.BLOCK} <= names
+        assert "7807_2_10m_z33.tif" not in names
+        # Dropping the other lattice's tiles is the same as their absence.
+        odd = {  # N2: the half-cell tiles are 5 m east-west off
+            f.name for f in prints if (f.meta.x_min - result.reference[0]) / f.meta.delta_x % 1 != 0
+        }
+        assert "7807_2_10m_z33.tif" in odd
+        main = [f for f in prints if f.name not in odd]
+        assert result == mz.plan_mosaic(main, box, None)
 
 
 class TestF3Refusals:

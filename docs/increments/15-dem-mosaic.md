@@ -956,10 +956,13 @@ failing M1's area-registered case.
   takes exactly those parameters. `needed` is a shapely geometry in the DEM's
   CRS, and it is closed: a node on its boundary is needed. Growing a domain by
   one cell is the caller's job (15b).
-- **The cap** counts **4 bytes a node** (float32), because headers do not give
-  the decoded dtype, and refuses when `rows * cols * 4 > physical_memory() //
-  2`. A float64 mosaic is therefore under-counted by 2×. The cap is on the
-  window, not on the lattice's union.
+- **The cap** counts **the planned decoded dtype**: the itemsize of
+  `np.result_type` over the *selected* footprints' `dtype`, and refuses when
+  `rows * cols * itemsize > physical_memory() // 2`; the refusal names that
+  dtype (`float64`) and `--bbox`. A float64 tile outside the window does not
+  count. The cap is on the window, not on the lattice's union. (Amended after
+  review, S2; the red suite had pinned 4 bytes a node, which under-counted a
+  float64 mosaic by 2×.)
 - **The mosaic's `RasterMeta`**: `nodata_source` comes from the first selected
   tile by name, and `vertical_unit_assumed` is true if any selected tile's is.
 - **NoData against NoData:** two NaNs give NaN, and two sentinels give the
@@ -973,12 +976,46 @@ failing M1's area-registered case.
   - a registration difference: `registration`;
   - a NoData difference: `nodata` and both values, with `None` for an absent
     sentinel;
-  - an overlap disagreement: both names, the count as a whole number, and the
-    largest difference;
+  - an overlap disagreement: both names — the two tiles whose *values*
+    disagree, not the first tile that merely covers the node (B2) — the count
+    as a whole number, and the largest difference;
   - uncovered nodes: the node bounding box of the uncovered nodes, with each
     coordinate written out, not in scientific notation;
   - a changed tile: `changed since it was listed`;
-  - the cap: `--bbox`.
+  - the cap: `--bbox`, and the planned dtype.
+
+**Amended after review (tests after green, S1-S3, B1, B2).** Pinned by the
+test amendment that follows green `ff7cc8d`:
+
+- **Q5 as read after review (B1),** in `TestB1LatticeByCoverage`
+  (`test_mosaic.py`), the real-extract cases in `test_dem_input.py`'s
+  `TestRealDtm10`, one CLI case in `test_cli_mesh_mosaic.py`, and the
+  acceptance box against Ola's archive in `test_io_repository.py`'s
+  `TestB1RealArchive` (headers only; skipped where the archive is absent). When
+  one lattice's tiles are selected, nothing changes. When several are, **the
+  nodes a lattice must cover** are its nodes in the request's box, snapped
+  outward, clamped to the bounding box of every selected tile (any lattice) —
+  *not* to that lattice's own union, or a box running past it into the other
+  lattice's tiles would be silently cut short. Without a box, that is the
+  bounding box of every tile. So a bare `--dem DIR` over two lattices is still
+  refused as mixed-lattice (`test_no_bounds_selects_both_lattices_and_is_refused`
+  keeps its outcome), as are all the other two-lattice refusals in M2 and C4.
+  The chosen lattice's plan equals the plan of its tiles alone. The count is of
+  a lattice's tiles in the repository, not of those the box selects; "its first
+  tile" is its tile whose name sorts first.
+- **The design's acceptance box selects nine tiles, not four.** With the
+  51-node overlaps, the index-window selection (the first correction above)
+  also selects the main-lattice neighbours 7807_1, 7808_2, 7809_3, 7809_4 and
+  7909_3, whose overlap strips reach into the 2 × 2 block. The archive test
+  asserts the four are in the plan, 7807_2 is not, and the window is
+  10051 × 10051; the Acceptance's "`dem_tiles` listing four files" is not
+  pinned. Whether to drop tiles that only duplicate covered nodes is open.
+- **The coverage refusal's memory (S1).** Refusing a mostly uncovered window
+  with no `needed` peaks, by tracemalloc, below the window's float32 canvas
+  (index and coordinate arrays of the uncovered nodes cost 8× it). The
+  `needed` path is not pinned.
+- **The edge snap (S3)** has its test: at spacing 0.1, the box edges 0.3, 0.7
+  and 0.9 add no node line.
 
 **`io/models.py`.** `DemTile._adopt(meta, array)` is a classmethod. It raises
 `ValueError` on a shape, dtype, ndim or non-C-contiguous mismatch, sets the
@@ -988,8 +1025,10 @@ and `mosaic.py` contain the string `_adopt`.
 **`io/repository.py` and `io/geotiff.py`.**
 
 - `read_meta(source, *, nodata=None)`.
-- `TileFootprint(name=, meta=)`, where `name` is the file's name
-  (`path.name`).
+- `TileFootprint(name=, meta=, dtype=)`, where `name` is the file's name
+  (`path.name`) and `dtype` the numpy dtype the tile decodes to (a `np.dtype`,
+  default float32), filled by the repository from the header through
+  `geotiff.PROMOTION` (S2).
 - `TiffDemRepository(paths, *, nodata=None)` and
   `TiffDemRepository.from_directory(directory, *, nodata=None)`. Construction
   reads no file.
