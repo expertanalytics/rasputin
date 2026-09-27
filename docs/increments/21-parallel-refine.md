@@ -527,8 +527,9 @@ header beside it that `lawson.hpp` includes is `@developer`'s choice.
   `orient2d`. The suite counts kernel calls to check this. When it refuses,
   today's path runs unchanged.
 
-The suite is registered only once `lawson.hpp` names `lattice_incircle`, as
-in 21a. It starts no threads, so it is not in the TSan job.
+At the red commit the suite was registered only once `lawson.hpp` named
+`lattice_incircle`, as in 21a; the guard was removed after green. It starts no
+threads, so it is not in the TSan job.
 
 **Mutation round** against a scratch implementation that is not committed. All
 of these were killed: the sign inverted; the determinant on `(col, row)`;

@@ -299,16 +299,5 @@ target_link_libraries(test_mesh_lawson_stack PRIVATE Threads::Threads)
 # DetriaExact on the frame doubles wherever lattice_incircle answers, refusal
 # wherever QW2's conditions fail, and must_flip's decisions as today's. It
 # starts no threads, so it is not in the TSan job.
-#
-# RED UNTIL THE INTERFACE EXISTS: registered only once lawson.hpp names
-# lattice_incircle (defined there or in a header it includes), so the red does
-# not break the rest of the build. The header is a configure dependency, so the
-# green commit's edit registers the suite without a manual cmake. The review
-# drops this guard.
-set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
-    "${PROJECT_SOURCE_DIR}/include/terrain/mesh/lawson.hpp")
-file(READ "${PROJECT_SOURCE_DIR}/include/terrain/mesh/lawson.hpp" _lawson_21b)
-string(FIND "${_lawson_21b}" "lattice_incircle" _lattice_incircle_at)
-if(NOT _lattice_incircle_at EQUAL -1)
-    add_terrain_backend_test(test_mesh_lattice_incircle unit/test_mesh_lattice_incircle.cpp)
-endif()
+
+add_terrain_backend_test(test_mesh_lattice_incircle unit/test_mesh_lattice_incircle.cpp)
