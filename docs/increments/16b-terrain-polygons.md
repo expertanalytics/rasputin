@@ -295,3 +295,389 @@ What matters, read directly:
 `@migration-expert` is not needed: nothing numeric is ported, and the one
 rule carried (5xx is water) is the CLC nomenclature's own first digit
 (`Legend/CLC_legend.csv` in Ola's download).
+
+## The blueprint: data flow and boundaries
+
+```
+cli.py (composition root)                       flags -> FeatureRequest
+  │
+  ├─ dem_input.open_dem(DemRequest)              15a/15b, unchanged
+  ├─ domain.read_domain(...).to_crs(dem crs)     16/15b, unchanged
+  │
+  ├─ feature_input.open_features(request, domain, dem_crs) -> FeatureSet     [16b-1]
+  │     per source:
+  │       GeoJSON: read the file (as domain.py does)
+  │       GeoPackage: io.repository.open_geopackage(path)   read-only connection
+  │                   io.geopackage.layer_info / query_features(conn, layer, box)
+  │     region = domain boundary, densified, in the SOURCE crs, + margin      (R5)
+  │     pre-clip each geometry to region (source crs)                          (R5)
+  │     ClassMap: attribute value -> vocabulary names, or drop, or refuse      (R4)
+  │     crs.reprojector(source, dem crs), vertex by vertex                     (R5)
+  │     clip each ring or line to the domain polygon, as LINEWORK              (R6)
+  │
+  ├─ chains.start_chains(domain, features, vocabulary) -> StartChains       [16b-1]
+  │     Outer, Holes (mask 0), then every clipped ring or line as a Breakline
+  │     with its mask; closed iff unclipped (index repeated)                   (R7)
+  │
+  ├─ _engine: build_pslg -> node -> triangulate   noder merges doubled edges  (R7)
+  │                                                verifier indexed           (R8, 16b-0)
+  └─ refine, trim, write: unchanged code; new fields                           (R10)
+```
+
+Boundaries, each one checkable by an import test (`TestModuleIsolation`
+style):
+
+- **No path below `cli.py` except** `domain.py` and `feature_input.py` (which
+  read GeoJSON text, as `domain.py` already does), `dem_input.py` (which only
+  builds a repository) and `io/repository.py` (which opens files). The
+  GeoPackage decoder in `io/geopackage.py` takes an open `sqlite3.Connection`,
+  never a path: the connection is its stream.
+- **No CRS in C++.** Feature geometry reaches `_core` as `float64` `(x, y)` in
+  the DEM's CRS, like the domain.
+- **No `_core` in** `feature_input.py`, `chains.py`, `io/geopackage.py`: all
+  three are testable with no compiled extension. Roles leave `chains.py` as
+  the strings `"outer"`, `"hole"`, `"breakline"`, and `cli.py` maps them onto
+  `ChainRole` through its existing `ROLES` table.
+- **`features.py` keeps importing nothing first-party** (increment 7). The
+  class maps live in `feature_input.py`, which imports it.
+- **Declarative:** `FeatureRequest` is frozen data. `open_features` is a
+  function of the request, the domain and the files, and returns frozen data.
+  An async caller runs it in `asyncio.to_thread` (sqlite3 and GEOS block).
+
+## Rulings
+
+### R1. The input, and the flags
+
+- **`--features PATH`**, one source, by suffix: `.geojson`/`.json` is a
+  GeoJSON `FeatureCollection`; `.gpkg` is a GeoPackage. Anything else is
+  refused naming the suffix. Several sources in one run are the API's
+  (`FeatureRequest.sources` is a tuple) and a later CLI change (Q4).
+- **Only with `--domain`** (and so only with `--tolerance`, 16 R1). Features
+  are clipped to the confining polygon (R6); the stride-grid path has none.
+  Refused otherwise, as a usage error.
+- **`--features-crs TEXT`**, anything `crs.parse_crs` reads. GeoJSON: the
+  file's `crs` member, else EPSG:4326 (RFC 7946), exactly `domain.py`'s rule.
+  GeoPackage: the layer's `srs_id` through `gpkg_spatial_ref_sys` (R3). Given
+  and disagreeing with the file's own (by `pyproj.CRS` equality) is refused,
+  as for `--domain-crs`.
+- **`--features-layer NAME`**, GeoPackage only: the features table. Required
+  when the file has more than one `features` row in `gpkg_contents` (CORINE
+  has six: Europe and five overseas departments); the only one otherwise.
+  Refused for GeoJSON.
+- **`--features-map NAME`**, one of the built-in class maps (R4): `property`
+  (the default), `corine`, `corine-water`. A map read from a file is Q4.
+- **Accepted geometry**: `Polygon`, `MultiPolygon`, `LineString`,
+  `MultiLineString`. Z and M are dropped (`shapely.force_2d`). A `Point`,
+  `MultiPoint` or `GeometryCollection` is refused naming the feature: input is
+  geometry, never loose points (Ola's direction 1). An empty geometry, or a
+  GeoPackage blob with the empty flag, is skipped and counted.
+- **Feature polygons are not validated.** Their rings enter as linework (16
+  R6: no role, no winding), and a self-intersecting ring is a breakline the
+  noder nodes like any crossing. Only the confining polygon is validated
+  (16 R1). This is deliberate: refusing CORINE because one of its 2.4 M
+  polygons is invalid would help nobody, and nothing downstream reads a
+  feature as an area.
+
+### R2. Homes
+
+| module | holds | imports |
+|---|---|---|
+| `io/geopackage.py` (new) | `GpkgLayer` (frozen: table, geometry column, `srs_id`, CRS text, R-tree table or `None`); `layer_info(conn, table)`; `decode_geometry(blob) -> BaseGeometry`; `query_features(conn, layer, box, attribute) -> Iterator[RawFeature]` | `sqlite3` (types only), `struct`, shapely, pydantic |
+| `io/repository.py` | adds `open_geopackage(path) -> sqlite3.Connection`, read-only | as today, plus `sqlite3` |
+| `tin_engine/feature_input.py` (new) | `ClassMap`, the built-in maps; `FeatureSource`, `FeatureRequest`; `TerrainFeature`, `FeatureSet`; `FeatureError`; `open_features(request, domain, dem_crs) -> FeatureSet` | json, shapely, numpy, pydantic, `crs`, `domain`, `features`, `io.repository`, `io.geopackage` |
+| `tin_engine/chains.py` (new) | `StartChains`; `start_chains(domain, features, vocabulary)`: 16 R6's table as code. `cli._domain_chains` moves here and is its first half | numpy, shapely, `domain`, `feature_input`, `features` |
+| `tin_engine/features.py` | two more vocabulary entries (R4, Q3) | unchanged: nothing first-party |
+| `cli.py` | four options, refusals, one call each to `open_features` and `start_chains`, the fields (R10) | adds `feature_input`, `chains` |
+| `include/terrain/noding/noded_pslg_builder.hpp` | the verifier's sort-and-sweep (R8, 16b-0) | unchanged |
+
+**15's Q3 stays true as written:** `io/repository.py` is still "the one
+module in `io/` that opens files, read-only". SQLite cannot read from a
+Python stream, so the GeoPackage decoder's stream is the open connection.
+`io/__init__.py`'s rule gains one clause saying so.
+
+### R3. Reading a GeoPackage without GDAL
+
+- **Open read-only**: `sqlite3.connect(path.resolve().as_uri() + "?mode=ro",
+  uri=True)`, closed with `contextlib.closing` (sqlite3's own context manager
+  commits, it does not close). Read-only also means the file's triggers,
+  which need SpatiaLite (M1), never fire.
+- **Check it is a GeoPackage**: `PRAGMA application_id` is `0x47504B47`
+  (`GPKG`; Ola's file answers `1196444487`, which is that). Otherwise
+  refused. `user_version` is recorded, not checked (Ola's is `10200`, 1.2).
+- **The layer**: its `gpkg_contents` row (`data_type = 'features'`), its
+  `gpkg_geometry_columns` row (column name, `srs_id`), and its
+  `gpkg_spatial_ref_sys` row. The CRS text is `EPSG:<organization_coordsys_id>`
+  when `organization` is `EPSG` (case-insensitive), else the row's
+  `definition` WKT; either goes through `crs.parse_crs`. Ola's file: srs 3035,
+  organization `EPSG`.
+- **The spatial filter**: when `gpkg_extensions` lists `gpkg_rtree_index` for
+  the layer and `rtree_<table>_<column>` exists, the query joins it on the
+  box (`maxx >= ? AND minx <= ? AND maxy >= ? AND miny <= ?`, closed). SQLite
+  stores R-tree bounds as 32-bit floats rounded outward, so this is a
+  superset, which is all a candidate query needs. Without an index the table
+  is scanned and the report says so. **Rows are ordered by the primary key**
+  (`ORDER BY <pk>`), because an R-tree join returns rows in no stated order
+  and the mesh depends on input order (R7).
+- **The blob header** (OGC 12-128, 2.1.3), `decode_geometry`:
+  - bytes 0-1 `GP`, byte 2 version `0`; else refused;
+  - byte 3 flags: bit 0 the header's byte order (for `srs_id` and the
+    envelope), bits 1-3 the envelope code (0: none; 1: 32 bytes; 2 and 3:
+    48; 4: 64; 5-7 refused), bit 4 empty (skip and count), bit 5 extended
+    geometry type (refused: not a standard WKB geometry);
+  - bytes 4-7 `srs_id`, which must equal the layer's; else refused, naming the
+    row;
+  - the rest is WKB for `shapely.wkb.loads`, which reads either byte order.
+- **Refusals name the file, the layer and, for a row, its primary key.**
+- **The SQLite R-tree module must be compiled in.** It is in the venv's
+  Python 3.14 (SQLite 3.53.4: `CREATE VIRTUAL TABLE ... USING rtree` works);
+  whether it is in CI's Python 3.12-3.14 on `ubuntu-latest` is not verified.
+  If not, the query fails with `no such module: rtree`; the reader turns that
+  into a refusal naming the cause rather than falling back silently, and the
+  test suite's in-memory GeoPackages detect the module and say so.
+
+### R4. From feature attributes to edge bits: class maps
+
+```python
+class ClassMap(BaseModel):                 # frozen, extra="forbid"
+    name: str
+    attribute: str                         # e.g. "property", "Code_18"
+    classes: Mapping[str, tuple[str, ...]] # value -> vocabulary names
+    otherwise: Literal["refuse", "drop"] | tuple[str, ...] = "refuse"
+    notice: str = ""                       # attribution to carry into the file (R10)
+```
+
+- **A value maps to vocabulary names**; the edge mask is
+  `vocabulary.mask(*names)` (increment 7: no bare masks). `()` is a
+  constraint with no bits. `"drop"` means the feature is not a constraint at
+  all. `"refuse"` refuses the run, naming the feature and the value.
+- **Every name in a map is checked against the vocabulary when the run
+  starts**, through `mask`, which raises on a name it does not know. A map
+  can therefore not smuggle a bit number in.
+- **Built-in maps:**
+  - `property`: attribute `property`; each vocabulary name maps to itself;
+    `otherwise = "refuse"`. A feature's `property` may be one name or a list
+    of names. This is 16 R6's "each with a `property` naming a vocabulary
+    entry".
+  - `corine`: attribute `Code_18`; `511`, `512`, `521`, `522`, `523` map to
+    `("land_cover", "water")`; `otherwise = ("land_cover",)`. Every CLC
+    boundary is a constraint. The rule is the nomenclature's first digit
+    (5 = water bodies; `Legend/CLC_legend.csv`), which the legacy used too.
+  - `corine-water`: the same five codes map to `("water",)`;
+    `otherwise = "drop"`. Only shorelines, river banks and the coast.
+- **A shared edge gets the union** of its two features' masks: the noder's
+  existing merge (increment 7, "Union, not priority"). A CORINE edge between
+  a lake and a forest carries `land_cover | water`; so does one between a
+  lake and a river. **"Water on exactly one side" is not an edge bit.** It
+  needs to know which side is which, which is a region label (16c, Q2), not a
+  property of the edge. Under `corine-water` an edge is kept when at least
+  one side is water, because the kept feature's ring carries it.
+- **Why not one bit per CLC class.** 44 classes do not fit the 32-bit word,
+  and increment 7 ruled land cover "stays face-based". The bits say what
+  kind of line an edge is; which class lies on each side is 16c's.
+- **Vocabulary additions** (Q3): `land_cover` at bit 7 and `water` at bit 8.
+  `coastline` (bit 3) stays for linear coastline data; CORINE's sea
+  boundary is `water`, because a lagoon or estuary boundary is water too.
+  The fingerprint changes; no stored artifact carries one yet (R10 is the
+  first), so nothing is invalidated.
+
+### R5. CRS, and what is read
+
+- **Features go into the DEM's CRS by `crs.reprojector`**, vertex by vertex,
+  as `DomainPolygon.to_crs` does (15b R9): edges straight in the DEM's CRS,
+  one `from_crs` site, `always_xy`. A vertex with no image (`inf`) is
+  refused, naming the feature. `features_crs` and `features_transform` are
+  recorded (R10).
+- **The region.** The domain (already in the DEM's CRS) has its boundary
+  densified to at most 1 km per segment and transformed into the source CRS;
+  its convex hull, buffered by 100 m, is the region. The GeoPackage query box
+  is the region's bounds. The 100 m is a safety margin, not a tolerance:
+  a 1 km chord bends between two conformal or equal-area projections by
+  orders of magnitude less (15 B7 measured millimetres per kilometre within a
+  UTM zone), and anything the margin lets in is clipped exactly in R6.
+- **The pre-clip.** Each candidate geometry is intersected with the region
+  in the source CRS before it is reprojected. This bounds the work by the
+  domain, not by the feature: CORINE's sea polygon is 360 000 vertices (M1),
+  of which a catchment needs a few thousand; and it keeps vertices far from
+  the domain out of a transform that may have no image for them. The
+  pre-clip only removes geometry the exact clip would remove; I4 pins that
+  it changes nothing inside the domain.
+- **GeoJSON sources** are read whole (`json.loads`, as `domain.py`), then
+  filtered by `intersects(region)` and pre-clipped the same way. Streaming
+  large GeoJSON is not needed at this scale (the probe's whole-tile CORINE
+  as GeoJSON was 8 MB) and not designed.
+
+### R6. Clipping to the confining polygon: linework, not areas
+
+This is the ruling 16 R6 left to 16b ("a feature leaving the confining
+polygon is 16b's ruling").
+
+- **Each polygon ring and each line is clipped as a line**:
+  `shapely.intersection(ring_as_linestring, domain.polygon)` in the DEM's CRS,
+  domain holes included. What is outside the domain is dropped; a feature
+  wholly outside is dropped and counted.
+- **Not an area clip.** `polygon ∩ domain` would give each clipped polygon a
+  stretch of the domain's own boundary as a ring edge, so the domain boundary
+  would carry `land_cover` bits wherever a polygon was cut. Clipping rings as
+  lines gives open pieces that end on the boundary and adds no edge along it.
+- **A piece that lies along the domain boundary** (a feature edge
+  coinciding with it, possible when the domain was cut from the same data)
+  is kept. The noder merges it with the `Outer` or `Hole` edge and the union
+  gives that edge the feature's bits. That is true of the data, so it is
+  right.
+- **Crossing points** are GEOS's doubles, within rounding of the domain edge.
+  The noder snaps them and splits the ring there (05b step 4), as for any
+  crossing. No special case.
+- **Point pieces** (a ring touching the boundary at one point) are dropped:
+  a point is not geometry here.
+- **An unclipped ring enters closed; a clipped one as open pieces.** A ring
+  wholly inside comes back from GEOS as one closed line (first coordinate
+  equals last), which `start_chains` writes as a closed breakline by repeating
+  the first index (increment 8, ruling 2). GEOS may start it at a different
+  vertex; that is harmless.
+- **Extent.** After the clip every vertex is inside the domain's closure up
+  to GEOS rounding, and the domain is already inside the DEM's node
+  rectangle (16 R1). A crossing point on a domain edge that lies on the
+  rectangle's border rounds to the noder's 1 mm grid like every other vertex;
+  a DEM whose border is not on that grid can put it up to 0.5 mm outside,
+  which `refine` refuses (`OutsideGrid`). That risk already exists for the
+  domain's own vertices under 16 U6 and is not made worse; one fixture pins
+  the border-on-grid case.
+- **Increment 8's gallery rows are the fixtures**, as GeoJSON features over
+  a synthetic DEM: `road-enters-forest` (a road ending inside a closed ring),
+  `wall-leaves-domain` (a line crossing the outer ring: on this path the
+  exterior half is clipped away before the engine, so the mesh has no
+  finding), and `bridge-over-lake` (a road crossing a ring twice). The
+  gallery's own fixtures are unchanged: they test the engine, not the clip.
+
+### R7. Shared boundaries: the noder merges them
+
+- **Rings go to the engine as given**, clipped (R6), one chain per ring or
+  piece: 16 R6's letter. Every CORINE interior edge therefore arrives twice,
+  in opposite orientation.
+- **The noder already does the right thing** (M3): it merges the two copies
+  into one edge by the node-id key and unions their masks (05b guarantee
+  14(a), amended; "the merge happens at the node-id edge-key dedup"). Layouts
+  A and B gave identical noded edge sets and masks on real data.
+- **Rejected: deduplicate in Python first** (layout A). It is exact on CORINE
+  (M2: shared endpoints are bit-identical after reprojection) and halves the
+  noder's input. But it is a second merge site with its own union to get
+  right, about 30 lines, and after R8 it saves a constant factor, not an
+  order. It is the first thing to add if @perf finds `node` significant after
+  R8.
+- **Rejected: `shapely.unary_union` of the linework.** GEOS's noding may snap
+  vertices, and it drops per-edge attributes.
+- **Same-class neighbours** (CORINE's "redundant lines", readme) stay
+  constraints: the union of two equal masks is that mask, and dropping the
+  edge would need to know both sides, which R7 deliberately does not compute.
+- **Order is the source's**: features by primary key (GeoPackage) or file
+  order (GeoJSON); within a polygon, exterior then holes; within a
+  `MultiPolygon`, part order. Node ids are a function of the node set
+  (05b), but refinement's result depends on vertex order (M3: layouts A and
+  B, whose start meshes are identical, refined to 261 377 and 261 375
+  triangles), so a stated order is what makes a run reproducible.
+
+### R8. The noder's verifier, indexed [16b-0]
+
+M3's quadratic makes a 48 km CORINE square spend 25 s in `node`, and a
+catchment the size of Glomma's (about 42 000 km², 18× that square) would
+spend hours. The verifier's premise, "the candidates are small by
+construction", is false for land cover.
+
+- **Step 0, before any code: isolate the cost.** Build with
+  `check_guarantee_14` returning early, rerun `clc_nodetime.py`'s sizes, and
+  confirm the quadratic goes with it. If it does not, the cost is in steps
+  1-5, and `@architect` re-scopes 16b-0 before `@tester` starts.
+- **The replacement: sort and sweep on x.** Items are the edges (their
+  bounding boxes) and the node cells (each node's closed cell box, padded by
+  one grid spacing on every side: false positives are free, and the padding
+  removes any doubt about how the cell's bounds round). Sort by `(xmin,
+  kind, index)`. Keep the active edges whose `xmax >= ` the current `xmin`
+  (closed). Test an arriving edge against every active edge, and an arriving
+  cell against every active edge, whose closed y-intervals intersect; and an
+  arriving edge against every active cell likewise. The tests are the
+  existing `classify<K>` and `segment_meets_cell<K>`, unchanged.
+- **Completeness in one line each:** two segments that cross or overlap
+  share a point, so their closed boxes intersect; a segment that meets a
+  closed cell meets its box. Box bounds are `min`/`max` of the endpoints'
+  doubles, which is exact.
+- **Independent of `BroadPhase`.** No shared code and a different algorithm,
+  so 5b's reason for having no index ("a verification pass sharing the index
+  would be blind wherever the index is") still holds: the verifier does not
+  share the driver's index.
+- **What stays the same:** the statuses, and which inputs are refused. **What
+  may change:** which violating pair the message names first. No test asserts
+  wording (house rule).
+- **Worst case** is still quadratic (every x-interval overlapping every
+  other, such as many long parallel east-west lines); typical inputs are
+  `O(n log n + k)`. The header comment says so, replacing the false premise.
+- **The brute force stays, as the test oracle**, in `tests/cpp/support/`.
+
+### R9. Vertex density, z, and refinement
+
+- **Vertices are used as given** (Ola's direction 1): no simplification, no
+  minimum segment length, no merging of close vertices beyond the noder's
+  1 mm snap (16 U6). Measured: no two CORINE vertices within 1 mm in three
+  tiles, 52 pairs within 1 cm in one (M2). A pair within the snap would merge
+  into one node; the report shows input and noded vertex counts, so it is
+  visible.
+- **Segments shorter than a cell** (9 000-16 000 per inland tile, the
+  shortest 4 mm) enter unchanged. They cost angles, not correctness: the
+  worst angle falls to 0.0007° (M4) because a 4 mm segment is a 4 mm local
+  feature (Ruppert 1995). Coarsening is the later increment's; CORINE's exact
+  partition (M2) is what a coverage-preserving simplifier needs.
+- **z is 16 R2's**: bilinear at an off-node vertex, `value_at` at a node.
+  Nothing about a feature changes its height: a lake's shore vertices get the
+  DEM's bilinear height, not the lake level. Hydro-flattening is out of
+  scope.
+- **NoData**: a feature vertex in a cell with a NoData corner is invalid,
+  and its triangles are carved (16 R2). Unchanged.
+- **Refinement code is unchanged.** Interior constraints are what 14b R5 and
+  20b R8 already cover: never flipped, split with bits kept, feet on them
+  (M4: 30 045 feet at 1 m, none refused). The tolerance guarantee is
+  unchanged: error is measured at DEM nodes only.
+- **The quality start (20) is unchanged, and M4 is its input for 20c.** On
+  CORINE it inserts 154 640 nodes and triples the 10 m mesh. 16b does not
+  change it; Q5 asks whether the acceptance runs should record both settings.
+
+### R10. What the file records, and the report
+
+- **`features`**: source file name, layer (GeoPackage), map name, and counts
+  after the clip: e.g. `U2018_CLC2018_V2020_20u1.gpkg:U2018_CLC2018_V2020_20u1,
+  map corine, 727 features (12 dropped outside), 988 chains, 51 395
+  vertices`. `.vtk` field and `.ply` comment, like `domain`.
+- **`features_crs`** and **`features_transform`**, as `domain_crs` and
+  `domain_transform` (15b).
+- **`edge_vocabulary`**: `DEFAULT_VOCABULARY.fingerprint()` and the names by
+  bit (`0 river, 1 road, ..., 7 land_cover, 8 water`). This is increment 7's
+  mechanism 2 ("a field of whatever serialized artifact carries a mesh"),
+  which no writer has implemented yet: without it the edge masks in the file
+  cannot be read. Written whenever the file has an edge block, features or
+  not.
+- **`features_notice`**: the map's `notice`, when it has one. The CORINE maps
+  carry the Copernicus attribution (see "Test data"), because a mesh built
+  from CORINE and shared must say so and say it was modified.
+- **`elevation_source`**'s start clause becomes
+  `start domain boundary and features, vertex z bilinear` when features are
+  given.
+- **stderr**: features read, dropped outside, clipped, and input versus
+  noded vertex counts. `--stats`' phase table gains `features read` and
+  `features clip`.
+
+### R11. Scale and memory
+
+- **Per request, not per dataset.** The 8.9 GB GeoPackage is never loaded:
+  the R-tree gives candidates in 11-95 ms per tile-sized region (M1), and
+  SQLite reads only the pages it touches.
+- **Python memory** is the candidates' geometry: about 1 M raw vertices per
+  tile-sized region before the pre-clip (16 MB of coordinates plus shapely's
+  overhead), about 120 000 after. The probe's peak RSS for a whole tile was
+  330-340 MB with nothing else loaded. The DEM dominates a real run (a
+  50 km tile is 100 MB of float32; M4's 1 m run peaked at 2.4 GB for 6.6 M
+  triangles).
+- **The engine** holds the chain positions (about twice the unique vertices,
+  R7) and the noded graph: tens of MB for a catchment.
+- **A whole-Norway request is not a use case.** A coarse box around Norway
+  holds 424 319 CORINE features and 850 MB of blobs. The use case is a
+  catchment, which auto-catchment (next in the order of work) will supply.
+- **Until R8 lands, `node` is the bottleneck** (M3, M4). After it, @perf
+  measures `node` on the 48 km square and on a larger block.
