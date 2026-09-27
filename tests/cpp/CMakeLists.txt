@@ -276,3 +276,40 @@ target_link_libraries(prop_refinement_quality PRIVATE Threads::Threads)
 add_terrain_backend_test(test_refinement_constraint_feet
                          property/prop_refinement_constraint_feet.cpp)
 target_link_libraries(test_refinement_constraint_feet PRIVATE Threads::Threads)
+
+# Parallel refine quick wins, increment 21a (docs/increments/21-parallel-refine.md,
+# section 3 and "Pinned by the red suite (21a)"). Bit-identical: 14's T6 and
+# 18's golden digests are the output oracle and stay as they are.
+# test_refinement_chunks_dynamic (QW1, the dynamic block scheduler) is the
+# invariant-critical suite; test_refinement_active (QW3) and
+# test_mesh_lawson_stack (legalise_around's caller-owned stack) compare with
+# today's code. All three run in the TSan job.
+#
+# RED UNTIL THE INTERFACES EXIST, keyed on the name each suite needs, because
+# 21a adds no header: each suite is registered only once its header names it,
+# so the red does not break the rest of the build. The green commit makes them
+# build; the review drops these guards.
+# The three headers are configure dependencies, so the green commit's edit
+# re-runs the configure step and registers the suites without a manual cmake.
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
+    "${PROJECT_SOURCE_DIR}/include/terrain/parallel_util/chunks.hpp"
+    "${PROJECT_SOURCE_DIR}/include/terrain/refinement/refine.hpp"
+    "${PROJECT_SOURCE_DIR}/include/terrain/mesh/lawson.hpp")
+file(READ "${PROJECT_SOURCE_DIR}/include/terrain/parallel_util/chunks.hpp" _chunks_hpp)
+string(FIND "${_chunks_hpp}" "for_each_block" _block_at)
+if(NOT _block_at EQUAL -1)
+    add_terrain_test(test_refinement_chunks_dynamic unit/test_refinement_chunks_dynamic.cpp)
+    target_link_libraries(test_refinement_chunks_dynamic PRIVATE Threads::Threads)
+endif()
+file(READ "${PROJECT_SOURCE_DIR}/include/terrain/refinement/refine.hpp" _refine_21a)
+string(FIND "${_refine_21a}" "rebuild_active" _active_at)
+if(NOT _active_at EQUAL -1)
+    add_terrain_backend_test(test_refinement_active unit/test_refinement_active.cpp)
+    target_link_libraries(test_refinement_active PRIVATE Threads::Threads)
+endif()
+file(READ "${PROJECT_SOURCE_DIR}/include/terrain/mesh/lawson.hpp" _lawson_hpp)
+string(FIND "${_lawson_hpp}" "FlipStack" _stack_at)
+if(NOT _stack_at EQUAL -1)
+    add_terrain_backend_test(test_mesh_lawson_stack unit/test_mesh_lawson_stack.cpp)
+    target_link_libraries(test_mesh_lawson_stack PRIVATE Threads::Threads)
+endif()

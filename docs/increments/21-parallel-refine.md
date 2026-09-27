@@ -425,6 +425,44 @@ section 5 is measured against the mesh they leave.
 A smaller item folds into 21a: `legalise_around` allocates its stack per call
 (0.7 % of refine); a caller-owned buffer removes it.
 
+### Pinned by the red suite (21a)
+
+Section 3 left these names and signatures open; `@tester` chose them in the
+red step, and the suites named below hold them.
+
+- **QW1** (`include/terrain/parallel_util/chunks.hpp`,
+  `tests/cpp/unit/test_refinement_chunks_dynamic.cpp`):
+  `struct BlockSchedule { std::size_t block = 0; std::size_t inline_below; }`,
+  `constexpr std::size_t default_block(std::size_t n, unsigned threads) noexcept`
+  returning `max(1, n / (16 * threads))`, and
+  `template <class Fn> void for_each_block(std::size_t n, unsigned threads, BlockSchedule, Fn&& fn)`.
+  `block == 0` means `default_block(n, threads)` after `threads == 0` is
+  resolved as `for_each_chunk` resolves it. Block `k` is
+  `[k*b, min(n, (k+1)*b))` and `fn` is called exactly once per block, so the
+  set of calls is the same partition for every thread count. With one thread
+  or `n < inline_below`, every block runs on the calling thread in ascending
+  order. Otherwise at most `min(threads, blocks)` threads call `fn`, and blocks
+  run concurrently. Every block runs even when some throw; the exception of the
+  lowest block index that threw is rethrown after the join. The default of
+  `inline_below` is 21a's to set from the sweep and is not pinned.
+  `BlockSchedule{}` is the scan's schedule. `for_each_chunk` and its suite are
+  unchanged.
+- **QW3** (`include/terrain/refinement/refine.hpp`,
+  `tests/cpp/unit/test_refinement_active.cpp`):
+  `void detail::rebuild_active(std::span<const char> touched, std::span<const std::uint32_t> skipped, std::vector<std::uint32_t>& active)`.
+  It replaces `active`'s contents with what today's collect, sort and unique
+  give. Precondition: `skipped` is ascending and below `touched.size()`.
+- **The stack** (`include/terrain/mesh/lawson.hpp`,
+  `tests/cpp/unit/test_mesh_lawson_stack.cpp`):
+  `using FlipStack = std::vector<std::uint32_t>;` and a `legalise_around`
+  overload taking `FlipStack& stack` before `on_write`. It must produce the
+  same flips, `on_write` sequence and mesh as today's algorithm, which the
+  suite copies as its oracle. Allocation counts are not pinned.
+
+The three suites are registered in `tests/cpp/CMakeLists.txt` only once the
+header names `for_each_block`, `rebuild_active` or `FlipStack` (the 18 and
+20b precedent). The review drops those guards.
+
 ## 4. Determinism levels
 
 Today's contract (14 R5, 14b R1, tested by 14's T6 and 18's T3 golden
