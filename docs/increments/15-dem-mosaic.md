@@ -1121,8 +1121,12 @@ Deflate, 0.6 MB together.
 
 - **15a:** `rasputin mesh --dem ../rasputin_data/DTM10_UTM33_20220924/ --bbox
   … --tolerance 1` on the 2 × 2 block writes a `.vtk` that ParaView opens,
-  with `dem_tiles` listing four files. The same box over one of N2's odd tiles
-  and a neighbour is refused, naming both. The quadrant split of the benchmark
+  with `dem_tiles` listing the four block tiles among the main-lattice tiles
+  the index window selects (nine: with 51-node overlaps it also takes 7807_1,
+  7808_2, 7809_3, 7809_4 and 7909_3; corrected at the 15a test amendment), and
+  not 7807_2, whose lattice does not cover the box (Ola's Q5 reading). A box
+  that straddles one of N2's odd tiles and a neighbour so that neither lattice
+  covers it is refused, naming both. The quadrant split of the benchmark
   tile meshes identically to the tile. `--dem file.tif` output unchanged.
 - **15b:** a catchment polygon in EPSG:4326 over the archive meshes, with
   `domain_crs` and `domain_transform` recorded.
