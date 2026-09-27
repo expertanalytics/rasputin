@@ -114,8 +114,9 @@ exclude = ["legacy", "docs/benchmarks"]
 
 [tool.ruff.format]
 # docs/ holds design records whose code blocks are quotations, cited by line;
-# the formatter would rewrite Python inside Markdown and break both.
-exclude = ["docs/**"]
+# the formatter would rewrite Python inside Markdown and break both. .claude/
+# holds the push and governance hooks, edited only with Ola's yes.
+exclude = ["docs/**", ".claude/**"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "N", "UP", "B", "SIM", "RUF", "ASYNC"]
