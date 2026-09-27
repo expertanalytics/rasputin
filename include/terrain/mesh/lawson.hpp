@@ -90,23 +90,23 @@ private:
 // row * dy up to that extent and no further, so a node beyond it can have a
 // rounded frame point whose DetriaExact sign differs. Precondition: a, b, c
 // counter-clockwise on (col, -row). Otherwise empty, and the caller asks the
-// kernel. A corner with a non-finite coordinate is refused before any
-// difference is taken: is_node() is true for +-inf, and inf - inf is a NaN that
-// would pass the spread bound and reach the int64 cast.
+// kernel. A corner with a non-finite coordinate is refused by the spread test,
+// before its cast: NaN is not a node (NaN != floor(NaN)), but is_node() is true
+// for +-inf. Every coordinate of a, b, c and d enters some difference, and a
+// difference with an infinite operand is +-inf (the other finite, or infinities
+// of opposite sign) or NaN (inf - inf). `!(fabs <= bound)` is true for both,
+// where `fabs > bound` would pass NaN on to the int64 cast (UB).
 [[nodiscard]] inline std::optional<pred::Incircle> lattice_incircle(MeshVertex a, MeshVertex b,
                                                                     MeshVertex c, MeshVertex d,
                                                                     const LatticeFrame& f) noexcept {
-    const auto usable = [](MeshVertex v) {
-        return std::isfinite(v.col) && std::isfinite(v.row) && v.is_node();
-    };
-    if (!f.integer() || !usable(a) || !usable(b) || !usable(c) || !usable(d))
+    if (!f.integer() || !a.is_node() || !b.is_node() || !c.is_node() || !d.is_node())
         return std::nullopt;
     constexpr double bound = 1 << 14;
     std::array<std::array<std::int64_t, 2>, 3> p{};  // (col, -row) minus d's
     const std::array<MeshVertex, 3> abc{a, b, c};
     for (std::size_t i = 0; i < 3; ++i) {
         const double x = abc[i].col - d.col, y = d.row - abc[i].row;  // exact: integers < 2^53
-        if (std::fabs(x) > bound || std::fabs(y) > bound)
+        if (!(std::fabs(x) <= bound) || !(std::fabs(y) <= bound))  // also refuses NaN
             return std::nullopt;
         p[i] = {static_cast<std::int64_t>(x), static_cast<std::int64_t>(y)};
     }
