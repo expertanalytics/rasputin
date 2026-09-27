@@ -5,7 +5,7 @@ It was copied out of the session scratchpad so that it survives the session.
 
 The scripts are a one-off record. They hard-code scratchpad paths and git
 worktrees that no longer exist. A reusable, checked-in tool (`tools/bench.py`,
-owned by @perf) will replace them; it is not yet written. To rerun by hand, fix the paths at the top of
+owned by @perf) replaces them; its runs are not comparable with these logs. To rerun by hand, fix the paths at the top of
 `bench1m/bench.sh` and `scaling/scale.py`'s caller.
 
 - DEM: `tests/fixtures/dem_archive/7908_3_10m_z33.tif`. Domain: `quarter.geojson`

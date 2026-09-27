@@ -104,10 +104,12 @@ diff touches refine or mesh code (`include/terrain/refinement/`,
   AC one, because Ola develops while travelling;
 - the evidence committed under `docs/benchmarks/<date>/`.
 
-`@perf` owns all of it (`.claude/agents/perf.md`). `tools/bench.py` does not
-exist yet, so the first increment this applies to includes `@perf` writing it.
-The baseline is `docs/benchmarks/2026-09-26/`: the 1 m benchmark on battery,
-the scaling sweep on both.
+`@perf` owns all of it (`.claude/agents/perf.md`); the tool's design is
+`docs/benchmarks/bench-py.md`. No run is stored for `tools/bench.py` to compare
+against yet, and the 2026-09-26 logs in `docs/benchmarks/2026-09-26/` are not
+in its format, so the first acceptance run measures the previous increment's
+merge commit (`--tree`) back to back with the new one, and that pair becomes
+the first stored baseline.
 
 ## Cost constraints
 

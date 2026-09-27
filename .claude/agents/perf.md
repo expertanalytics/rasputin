@@ -19,10 +19,10 @@ it is never unmeasured again. You report measured figures only.
   that touches refine or mesh code" — the one statement of the rule): the 1 m
   benchmark and a thread-scaling sweep, compared with the previous increment's
   run.
-* **`tools/bench.py`**, the checked-in script both runs come from. It does not
-  exist yet; the one-off scripts in `docs/benchmarks/2026-09-26/` are its
-  specification. It is code under `tools/`, so it follows the TDD loop: a
-  failing test in `tests/python/` first, from `@tester`.
+* **`tools/bench.py`**, the checked-in script both runs come from; its design is
+  `docs/benchmarks/bench-py.md`. It is code under `tools/`, so a change to it
+  follows the TDD loop: a failing test in `tests/python/test_bench.py` first,
+  from `@tester`.
 * **The serial-phase profile.** About half of single-thread refine time does not
   parallelise, and the serial insert and flip phase is the suspected cause. It
   has not been profiled. Profile it before anyone designs a fix for it.

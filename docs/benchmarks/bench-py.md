@@ -1,6 +1,6 @@
 # tools/bench.py: design
 
-Status: design (@perf, 2026-09-27), not yet reviewed. Red suite written (see "Pinned by the red suite"); green: `tools/bench.py` (see "Settled at green"). The rule it serves is
+Status: design (@perf, 2026-09-27), reviewed by @reviewer with the green commit. Red suite written (see "Pinned by the red suite"); green: `tools/bench.py` (see "Settled at green"). The rule it serves is
 "Acceptance: an increment that touches refine or mesh code" in
 `docs/increments/README.md`; its specification is the one-off scripts in
 `2026-09-26/` (`bench1m/*.sh`, `run.py`, `quality.py`, `summarize.py`,
@@ -17,8 +17,10 @@ bench.py needs numpy and `tin_engine` anyway, so it runs from the venv.
 python tools/bench.py run    --label i21 [--tree .] [--dem PATH] [--domain PATH]
                              [--tolerance 1.0] [--threads 1,2,...,20] [--repeats 5]
                              [--mesh-dir DIR] [--no-build] [--baseline DIR]
+                             [--out-root docs/benchmarks] [--threshold 5]
+                             [--accept-quality]
                              [-- extra mesh args, e.g. --start-min-angle 0]
-python tools/bench.py compare NEW_DIR [--baseline DIR]
+python tools/bench.py compare NEW_DIR [--baseline DIR] [--out-root DIR]
 ```
 
 - `run` does both parts of the acceptance run: the 1 m benchmark (the CLI's
@@ -124,6 +126,8 @@ Nothing below needs the 1 m DEM or a real build.
   refusal on a Debug cache, `--no-build` recorded, power read before and after)
   is tested with no process started. The Typer app gets it from a module-level
   factory the test overrides.
+- The signatures in this list are the design's first sketch; where they
+  differ, "Pinned by the red suite" and the code win.
 - **`parse_pmset(text) -> Power`**, pure. Canned texts: `'AC Power'` with and
   without a battery line (desktop), `'Battery Power'` with a percent,
   `'UPS Power'`, empty and garbage (`unknown`).
@@ -167,6 +171,12 @@ child 40, sampling loop 40, quality and VTK reader 75, comparison and
 baseline search 60, evidence writing 70, Typer app 50: about 500 lines, under
 the 700 ceiling. Plus `tools/bench.py` added to mypy's `files` in
 `pyproject.toml`, so the strict gate covers it.
+
+Measured at green: 691 lines counted as section 2 counts them (blank lines in,
+comments and docstrings out), 582 without blank lines, so the estimate was low
+by about 80 lines. The margin rests on 16 regions packed by hand under
+`# fmt: skip` / `# fmt: off`; formatted normally the file is 781 lines. The
+next change to `tools/bench.py` has under 10 lines of room.
 
 ## Ruled by Ola (2026-09-27)
 

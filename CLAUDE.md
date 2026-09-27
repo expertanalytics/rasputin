@@ -10,7 +10,7 @@ This project is governed by specialized sub-agents. Always defer tasks to the co
 * `@tester`: Owns the test suites. Enforces the 85% coverage floor (see `testing.md`) and adversarial geometry fuzzing.
 * `@developer`: Writes clean, high-performance C++20 and async Python code.
 * `@reviewer`: Final gatekeeper. Audits CI status, LOC, red-step scaffolding, and prose claims against code.
-* `@perf`: Performance owner. Runs the benchmark and scaling acceptance for refine- and mesh-touching increments (`tools/bench.py`, not yet written), profiles the serial phase, and keeps the evidence in `docs/benchmarks/<date>/`.
+* `@perf`: Performance owner. Runs the benchmark and scaling acceptance for refine- and mesh-touching increments (`tools/bench.py`), profiles the serial phase, and keeps the evidence in `docs/benchmarks/<date>/`.
 
 ## 2. Core Constraints & Technical Mandates
 * **Strict Size Limit:** Under **700 lines of production code per pull request**,
