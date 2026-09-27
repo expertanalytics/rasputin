@@ -1,8 +1,12 @@
 #!/usr/bin/env python3
-"""Print what the previous session was in the middle of.
+"""Print the round recap, then what the previous session was in the middle of.
 
-Answers one question: when a session starts cold or resumes after a context
-loss, what was actually being asked? Reads `.claude/current-task/` (the in-flight
+The recap (retrospective rule 5, Ola): the last thing landed, what is in
+flight, decisions waiting on Ola, and the next three ROADMAP items -- all read
+from files on disk and git, so it is the same whoever runs it.
+
+Then it answers one question: when a session starts cold or resumes after a
+context loss, what was actually being asked? Reads `.claude/current-task/` (the in-flight
 asks -- `session.md` first, each subagent's file after it as context) and the
 predecessor session transcript under ~/.claude/projects/, including prompts the
 user queued and the harness absorbed mid-turn -- which is where a lost
@@ -13,13 +17,12 @@ prompt carrying an attachment or image arrives as a list and is dropped. No turn
 in this project is currently lost that way, but the failure is silent, which is
 the worst mode for a tool whose job is to surface a dropped turn.
 
-Untested: nothing under tests/ exercises this file and no CI job runs it, so
-every defect in it so far was found by hand. When a gate suite is written, take
-this file first -- it is what the project's own recovery depends on and the only
-one with a demonstrated hang -- and cover the input classes that actually bit,
-since two of them nobody guessed: FIFO (open() blocks with no writer, and an
-in-process timeout cannot see it), symlink loop, dangling symlink, directory,
-non-UTF-8, chmod 000, no extension, missing directory.
+Partly tested: tests/python/test_session_state.py covers the recap functions
+only. The transcript and current-task readers are still untested, and every
+defect in them so far was found by hand. Cover the input classes that actually
+bit, since two of them nobody guessed: FIFO (open() blocks with no writer, and
+an in-process timeout cannot see it), symlink loop, dangling symlink,
+directory, non-UTF-8, chmod 000, no extension, missing directory.
 
 Usage: python3 tools/session_state.py [--turns N]
 """
@@ -31,6 +34,7 @@ import json
 import os
 import re
 import stat
+import subprocess
 from datetime import datetime
 from pathlib import Path
 
@@ -98,6 +102,90 @@ def _read(path: Path, absent: str) -> str:
         return "(unreadable)"
 
 
+def _git(repo: Path, *args: str) -> str | None:
+    """stdout of a git command, or None if it failed."""
+    result = subprocess.run(
+        ["git", "-C", str(repo), *args], capture_output=True, text=True, check=False
+    )
+    return result.stdout.strip() if result.returncode == 0 else None
+
+
+def last_landed(repo: Path) -> str:
+    """The newest merge commit reachable from HEAD: how work lands here."""
+    found = _git(repo, "log", "-1", "--merges", "--format=%h %cs %s")
+    return found or "(no merge commit reachable from HEAD)"
+
+
+def in_flight(repo: Path, base: str = "master") -> list[str]:
+    """The current branch and its commits ahead of base, newest first."""
+    branch = _git(repo, "rev-parse", "--abbrev-ref", "HEAD") or "(unknown)"
+    ahead = _git(repo, "log", "--format=%h %s", f"{base}..HEAD")
+    if ahead is None:
+        return [f"branch {branch} (base {base} not found)"]
+    commits = ahead.splitlines()
+    return [f"branch {branch}, {len(commits)} commit(s) ahead of {base}", *commits]
+
+
+def pending_decisions(tasks: Path) -> list[str]:
+    """Lines marked `ASK OLA` in any current-task file, any case."""
+    if not tasks.is_dir():
+        return []
+    found: list[str] = []
+    for path in sorted(p for p in tasks.glob("*") if not p.is_dir()):
+        for line in _read(path, "").splitlines():
+            if "ask ola" in line.lower():
+                found.append(f"{path.name}: {line.strip()}")
+    return found
+
+
+# A table row: | # | What it is | Status | Record |
+_ROW = re.compile(r"^\|\s*([^|]+?)\s*\|\s*([^|]+?)\s*\|\s*([^|]+?)\s*\|")
+_DONE = ("shipped", "landed")
+
+
+def roadmap_next(text: str, n: int = 3) -> list[str]:
+    """The first n open rows of ROADMAP.md's first table, with their status.
+
+    Open means the status neither starts with "shipped" or "landed" nor says
+    "unscheduled". Table order is the reading order; the status is printed so
+    the reader, not this function, judges what is next.
+    """
+    rows: list[str] = []
+    in_table = False
+    for line in text.splitlines():
+        match = _ROW.match(line)
+        if not match:
+            if in_table:
+                break
+            continue
+        in_table = True
+        number, what, status = match.groups()
+        if number == "#" or set(number) <= {"-"}:
+            continue
+        plain = status.replace("*", "")
+        if plain.lower().startswith(_DONE) or "unscheduled" in plain.lower():
+            continue
+        rows.append(f"{number}: {what[:100]} [{plain}]")
+    return rows[:n]
+
+
+def print_recap() -> None:
+    """Retrospective rule 5: the structured recap every round opens with."""
+    print("== recap ==")
+    print(f"Last landed: {last_landed(REPO)}")
+    print("In flight:")
+    for line in in_flight(REPO):
+        print(f"  {line}")
+    decisions = pending_decisions(REPO / ".claude" / "current-task")
+    print("Waiting on Ola:" + ("" if decisions else " (none recorded as ASK OLA)"))
+    for line in decisions:
+        print(f"  {line}")
+    print("Next on ROADMAP.md:")
+    for row in roadmap_next(_read(REPO / "ROADMAP.md", "")):
+        print(f"  {row}")
+    print()
+
+
 def print_current_task() -> None:
     """Print the session's ask first, then each subagent's as context.
 
@@ -126,8 +214,8 @@ def print_current_task() -> None:
     # session.md is overwritten as a round progresses, so an ordinary
     # write-spawn-update sequence made every LIVE subagent file predate it and
     # get marked for sweeping -- the one file a cold session must not lose.
-    # Liveness is not visible from a directory listing, so the sweep rule in
-    # .claude/REQUIRED-READING.md owns it and this prints what is there.
+    # Liveness is not visible from a directory listing, so the lifecycle rule
+    # in .claude/REQUIRED-READING.md owns it and this prints what is there.
     print(f"\n== {len(others)} subagent ask(s), as context ==")
     for path in others:
         try:
@@ -137,8 +225,8 @@ def print_current_task() -> None:
         print(f"\n-- {path.name} ({stamp})")
         print(_read(path, "(unreadable)"))
     print(
-        "\nDelete a subagent file once its handback is read; sweep the rest per"
-        " the lifecycle rule in .claude/REQUIRED-READING.md, after the turns below."
+        "\nThe spawner deletes a subagent file once its handback is read; a file"
+        " whose writer died is deleted once the turns below have been read."
     )
 
 
@@ -147,6 +235,7 @@ def main() -> int:
     parser.add_argument("--turns", type=int, default=5)
     args = parser.parse_args()
 
+    print_recap()
     print_current_task()
 
     # Claude Code exports CLAUDE_CODE_SESSION_ID; the older spelling is kept as a
