@@ -11,8 +11,8 @@ battery. The scaling sweep ran on both battery and AC.
 
 - Quarter circle at 1 m: refine went from 3.29 s (16) to 0.24 s (20b). The
   worst angle went from 0.0117° to 0.396°, and max degree from 43 to 18.
-- The whole tile at 1 m holds at about 0.26 s from 14b on. No quality measure
-  got worse.
+- The whole tile at 1 m holds at about 0.26 s from 14b on. The only quality measure
+  that got worse is vertices of degree 20 or more, from 196 to 197 (18 to 20).
 - Every run meets the tolerance, and from 14b on no run has a Delaunay
   violation. With 20 and 20b switched off, the output is byte-identical to
   18's.

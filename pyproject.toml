@@ -109,7 +109,7 @@ src = ["src_python", "tests/python"]
 # The archived pre-migration tree is not maintained and not linted. Its 242
 # findings would otherwise drown out real ones in the new code.
 # docs/benchmarks/<date>/ holds dated one-off measurement scripts, kept verbatim
-# as evidence; tools/bench.py is the maintained, linted benchmark.
+# as evidence. The maintained benchmark will be tools/bench.py (@perf; not yet written).
 exclude = ["legacy", "docs/benchmarks"]
 
 [tool.ruff.lint]

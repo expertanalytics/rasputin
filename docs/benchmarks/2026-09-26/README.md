@@ -39,6 +39,7 @@ This measures the `_core.refine` call alone, with threads forced by
 | 16 | 0.230 | 2.17x | 0.254 | 2.12x |
 | 20 | 0.231 | 2.16x | 0.256 | 2.10x |
 
-Battery and AC agree to within about 4 %. Roughly half of the single-thread
+Battery and AC agree to within about 7 % (the largest gap is the quarter circle at 7 threads:
+0.258 s on AC against 0.241 s on battery), and they show the same ceiling. Roughly half of the single-thread
 refine time does not parallelise. That part is thought to be the serial insert
 and flip phase, but it has not been profiled yet.

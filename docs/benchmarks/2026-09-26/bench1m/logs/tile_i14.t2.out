@@ -1,0 +1,6 @@
+BENCH start_stride 158
+BENCH refine_s 0.3696
+156 rounds, 338529 points inserted, 670554 triangles, achieved max error 0.9999593098958144 m, 0 valid DEM nodes not covered, 51 vertices without data dropped
+/private/tmp/claude-501/-Users-skavhaug-projects-rasputin/d378b7a0-c4f3-40c9-be13-20c779636779/scratchpad/bench1m/logs/tmp.vtk
+BENCH app_s 0.4746
+BENCH proc_s .7031

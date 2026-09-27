@@ -1,0 +1,5 @@
+BENCH refine_s 0.2409
+644 start quality nodes inserted, 0 start quality skips, 6 constraint feet, 0 feet refused, 41 rounds, 213464 points inserted, 445657 flips, 428217 triangles, achieved max error 0.9999796549479072 m, 0 valid DEM nodes not covered, 534 start triangles, 235 start vertices off-node, 0 vertices without data dropped
+/private/tmp/claude-501/-Users-skavhaug-projects-rasputin/d378b7a0-c4f3-40c9-be13-20c779636779/scratchpad/bench1m/runs/quarter_i20b.vtk
+/private/tmp/claude-501/-Users-skavhaug-projects-rasputin/d378b7a0-c4f3-40c9-be13-20c779636779/scratchpad/bench1m/runs/quarter_i20b.stats.md
+BENCH app_s 1.0947

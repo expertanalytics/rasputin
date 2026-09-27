@@ -1,6 +1,6 @@
 # Research lead: data-dependent triangulation
 
-Status: **to look into.** Ola asked for this on 2026-09-26, after the 1 m
+Status: **parked** after a first experiment (see the end of this note). Ola asked for this on 2026-09-26, after the 1 m
 comparison against earlier increments. Written by the main session. The
 citations are from memory; each must be checked against the paper before this
 document is used in a design or in any publication.
@@ -29,7 +29,7 @@ lower the error of the piecewise-linear surface, instead of to maximise angles.
 ## Why it matters for us
 
 - **Mesh size.** Our output is ~428 k triangles at 1 m on the quarter circle
-  (scratchpad `bench1m/REPORT.md`). If DDT reaches the same sup-norm tolerance
+  (`docs/benchmarks/2026-09-26/bench1m/REPORT.md`). If DDT reaches the same sup-norm tolerance
   with noticeably fewer triangles, that beats any speedup we can get from the
   scan or the rounds.
 - **It conflicts with 20c.** 20c wants a minimum-angle criterion, at the start
