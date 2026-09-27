@@ -282,7 +282,7 @@ on nothing else from it:
 | scan imbalance at 8 threads | 16.5 of 61.8 ms | quick win 1 |
 | thread start per round | about 90 µs, 3.8 ms over 41 rounds | why options A-C need a thread team, not a spawn per step |
 | insertions per round | 77 % in rounds 9-19, 9,000-18,700 each | parallel slack per round |
-| median distance to the nearest same-round insertion, round 11 on | about 3 nodes | independence at the finest grain is rare |
+| median distance to the nearest same-round insertion, rounds 11-29 | about 3 nodes | independence at the finest grain is rare |
 | footprint (slots read or written) | mean 11.0, p99 18, max 36 | the size of a reservation |
 | write set | mean 5.5, p99 9 | slots appended and rewritten |
 | footprint conflict degree, big rounds 9-19 | mean 3.2-6.4 (7.7 in round 5) | expected winners per sub-round |
@@ -765,9 +765,13 @@ Each is answered or placed.
 ## 7. Proposed increments, LOC and invariant-critical suites
 
 Counted in `CLAUDE.md` §2's unit. Estimates, not measurements; the worst
-overrun recorded so far is +86 % (6a, `06-cdt-viewer.md`); the table gives
-each at +66 % (increment 17). At +86 % the conclusions hold: A1 (~450) comes
-to ~840 and is split in any case; C (~320) comes to ~595, still under 700.
+overrun recorded so far is +99 % for a whole increment (6a shipped 467 lines
+against ~235, `06-cdt-viewer.md:626`) and +116 % for one file (`scene.py`,
+`05b-noder-driver.md:379-382`); the table gives each at +66 % (increment 17).
+At +99 % the conclusions hold: A1 (~450) comes to ~895 and is split in any
+case; C (~320) comes to ~636, under 700. The per-file factor does not apply to
+a whole increment, but at +116 % C would be ~691, only just under, so 21d on C
+is worth counting early.
 
 | increment | what | est. | at +66 % | determinism | invariant-critical suite (mutation round) |
 |---|---|---|---|---|---|

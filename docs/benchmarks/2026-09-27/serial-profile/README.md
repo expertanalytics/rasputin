@@ -36,7 +36,7 @@ a fix. "Some of the serial parts could be parallellized by multicoloring/dd tech
    That is inferred from byte counts; no hardware counters were read.
 4. **Insertions in the same round are dense and overlap.** 41 rounds; 77 % of
    the 213,464 insertions fall in rounds 9-19, at 9,000-18,700 per round. In
-   rounds 5-21 each round touches 69-93 % of the 382 64×64-node blocks that ever receive an insertion (about 20 % of the quarter domain's ~1,776 blocks at most; the rest is flat sea or NoData, which refine never splits).
+   rounds 5-21 each round touches 69-93 % of the 382 64×64-node blocks that ever receive an insertion (about a fifth of the 64×64-node blocks that intersect `quarter.geojson`: 1,774-1,857 depending on the raster origin, counted by @reviewer with tifffile and shapely; that count is not committed. Refine never inserts into the rest; why, flat ground or NoData, is not checked).
    In rounds 11-29 the median distance to the nearest same-round insertion
    is 3 nodes. An insertion writes 5.5 triangle slots on average (p99 9) and
    reads or writes 11.0 (p99 18). 95 % of insertions share a slot, read or
@@ -289,7 +289,7 @@ Over all rounds:
 - **Spread**: in rounds 5-25 each round touches 173-355 of the 382 blocks
   (45-93 %; 69-93 % in rounds 5-21). In the big rounds a block receives at
   most 154-248 insertions. In rounds 11-29 the median nearest-neighbour
-  distance is about 3 nodes (30 m; 4.0-8.6 in rounds 30-35); in round 1 it is 27 nodes. Insertions are
+  distance is about 3 nodes (30 m; 2.8-3.6 over those rounds, `data/rounds_t1.md`); in round 1 it is 27 nodes. Insertions are
   spread over all of the domain that refine works on (the 382 blocks above) at once, and they are close together.
 - **Footprint size**: write set mean 5.49 slots (p50 5, p90 7, p99 9,
   max 18). Footprint mean 10.96 (p50 10, p90 14, p99 18, max 36). Flips per
