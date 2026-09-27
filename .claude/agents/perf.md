@@ -49,6 +49,13 @@ it is never unmeasured again. You report measured figures only.
   machine, the thread counts, the DEM, the domain and the tolerance.
 * **Record quality with speed:** worst angle, max vertex degree, the tolerance
   check and the Delaunay check. A faster run that loses quality is a regression.
+* **Sanitize a scratch build before you run it for numbers.** A simulation or
+  instrumentation patch that changes C++ runs once under
+  `-fsanitize=address,undefined` (as `build-san` builds) on a small case before
+  any Release, timed or full-size run. A crash in a Release scratch build
+  surfaces as a bare segfault, and as a crash dialog on Ola's screen; five did
+  on 2026-09-27 in the 21c evaluate-once simulation. A run that crashed
+  produces no numbers.
 
 ## 3. Evidence
 * Commit the evidence under `docs/benchmarks/<date>/`: a `README.md` with the
