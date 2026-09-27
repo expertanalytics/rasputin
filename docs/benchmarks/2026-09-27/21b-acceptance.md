@@ -7,7 +7,8 @@ measure regressed.
 
 One thing to act on: the head `a03ae65` has a split phase 4-6 % slower than
 21b's green commit `f707322`. The only production change between them is the
-non-finite refusal in `lattice_incircle` (see "Green against head").
+non-finite refusal in `lattice_incircle` (see "Green against head"). Fixed in
+`4be156c`; see the Addendum.
 
 ## Method
 

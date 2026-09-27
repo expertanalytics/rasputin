@@ -521,8 +521,9 @@ header beside it that `lawson.hpp` includes is `@developer`'s choice.
   Precondition: `a, b, c` strictly counter-clockwise on `(col, -row)`, which
   `must_flip`'s triangle is (the `LatticeMesh` invariant). It returns empty
   unless `f` came from an enabling `lattice_frame`, all four corners are nodes
-  with finite coordinates (`is_node()` is true for ±inf, and `inf - inf` is a
-  NaN that the spread bound lets through to the `int64` cast), and `|col_x - col_d|` and `|row_x - row_d|` are at most 2^14 for each `x` in
+  with finite coordinates (`is_node()` is true for ±inf; the spread test
+  `!(fabs(diff) <= 2^14)` refuses every non-finite difference, ±inf or the NaN
+  of `inf - inf`, before the `int64` cast), and `|col_x - col_d|` and `|row_x - row_d|` are at most 2^14 for each `x` in
   `a, b, c`. The bound is measured from `d`, so `a` and `b` may be 2^15 apart.
   When it answers, the answer is the sign `DetriaExact::incircle_ccw` gives on
   the frame points `(col * dx, -(row * dy))`.
@@ -573,7 +574,8 @@ with the frame `orient2d` it skips is cheaper than the filtered path too, not
 only than the exact path (5.0 % of refine in the profile) it replaces.
 The binary meshes hash the same as 21a's (quarter `ff705683…`, tile
 `645919aa…`), with the same flip and insertion counts. The scratch driver and
-its samples were not kept; `@perf`'s AC acceptance run is still owed.
+its samples were not kept. `@perf`'s acceptance run, battery against battery,
+is `docs/benchmarks/2026-09-27/21b-acceptance.md` (ACCEPTED).
 
 ## 4. Determinism levels
 
@@ -879,7 +881,8 @@ Each is answered or placed.
    QW2 would answer 99.97 % and 100 % of all refine-loop incircle calls. Only
    38 % of the ties are axis-aligned rectangles, so the general determinant is
    needed. The time saved was measured on battery at green ("21b: the
-   integer path is faster"); `@perf`'s acceptance run is still owed.
+   integer path is faster") and in `@perf`'s acceptance run
+   (`docs/benchmarks/2026-09-27/21b-acceptance.md`, ACCEPTED).
 
 4. *"The scan loses 16.5 ms of 61.8 ms to imbalance at 8 threads. Is the
    chunking free to change, given that results are written per slot? And does
@@ -956,7 +959,8 @@ suites:
 - Other tests that pin exact counts of a refined mesh (for example 14's T2
   under 14b's amendment) are for `@tester` to find in the red step.
 
-Every new suite joins the TSan job's list in `.github/workflows/main.yaml`.
+Every new suite that starts threads joins the TSan job's list in
+`.github/workflows/main.yaml`.
 
 **Acceptance for 21a, 21b and 21d** is `@perf`'s run
 (`docs/increments/README.md`, "Acceptance"): the 1 m benchmark and the thread
