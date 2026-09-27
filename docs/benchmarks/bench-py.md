@@ -99,7 +99,8 @@ With a baseline, per domain:
   count. A median more than the threshold (default 5 %, `--threshold`) above
   the baseline's is a regression, reported with its size.
 - **Quality**: a tolerance failure, any Delaunay violation, a lower worst
-  angle or a higher max degree is a regression, whatever the time.
+  angle or a higher max degree is a regression, whatever the time, unless
+  `--accept-quality` waives the last two (see "Ruled by Ola").
 - **Ceiling**: reported, not judged: speed-up at 20 threads over 1, and the
   best, against 2.2x and the baseline's.
 
@@ -167,13 +168,13 @@ baseline search 60, evidence writing 70, Typer app 50: about 500 lines, under
 the 700 ceiling. Plus `tools/bench.py` added to mypy's `files` in
 `pyproject.toml`, so the strict gate covers it.
 
-## Open for Ola
+## Ruled by Ola (2026-09-27)
 
-- The time threshold. 5 % on the median is proposed. In `REPORT.md` the
-  min-to-max spread of 3 runs, over the median, was 0.3 to 5.9 % (worst: the
-  quarter circle at head, 0.237 to 0.251 s), so single runs are noisier than
-  5 %; the median of 5 is expected to be steadier, not yet measured to be.
-- Whether a quality change is always a regression. As designed, a lower worst
-  angle or a higher max degree fails the run even when an increment trades
-  them on purpose; the alternative is an `--accept-quality` flag whose use the
-  README records.
+- **Time threshold: 5 % on the median, adjustable per run** (`--threshold`).
+  In `REPORT.md` the min-to-max spread of 3 runs, over the median, was 0.3 to
+  5.9 %, so single runs are noisier than 5 %. The first real acceptance run
+  measures the spread of the median of 5 and reports it next to the threshold.
+- **Quality loss is a regression by default.** `--accept-quality` overrides
+  a lower worst angle or a higher max degree, never a tolerance failure or a
+  Delaunay violation, and every use is written into that run's `README.md`
+  and `run.json`, with the verdict still naming the measure it waived.
