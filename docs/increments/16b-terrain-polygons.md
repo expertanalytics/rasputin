@@ -503,8 +503,9 @@ class ClassMap(BaseModel):                 # frozen, extra="forbid"
   it changes nothing inside the domain.
 - **GeoJSON sources** are read whole (`json.loads`, as `domain.py`), then
   filtered by `intersects(region)` and pre-clipped the same way. Streaming
-  large GeoJSON is not needed at this scale (the probe's whole-tile CORINE
-  as GeoJSON was 8 MB) and not designed.
+  large GeoJSON is not needed at this scale (the 2026-09-27 probe's CORINE
+  over `7908_3` as GeoJSON, 88 features in EPSG:25833, is 8 MB) and not
+  designed.
 
 ### R6. Clipping to the confining polygon: linework, not areas
 
@@ -681,3 +682,281 @@ construction", is false for land cover.
   catchment, which auto-catchment (next in the order of work) will supply.
 - **Until R8 lands, `node` is the bottleneck** (M3, M4). After it, @perf
   measures `node` on the 48 km square and on a larger block.
+
+## Invariants
+
+- **I1. Bits, from the input.** For every noded constraint edge, its mask
+  contains the union of the masks of every feature whose clipped linework
+  contributes geometry to it (05b's guarantee 15, applied to features). On a
+  partition, an interior edge's mask is exactly the union of its two
+  features' map masks. The oracle is built from the features and the map,
+  never from the noder's provenance (05b, "Guarantee 15's oracle").
+- **I2. The clip keeps input vertices exact.** Every vertex of the engine's
+  feature input is either a reprojected source vertex, bit for bit, or lies
+  within 1e-6 m of the domain's boundary (a crossing). None lies outside the
+  domain's closure by more than that.
+- **I3. Determinism.** The same request gives a bit-identical file whatever
+  order SQLite returns candidate rows in.
+- **I4. The pre-clip changes nothing inside the domain.** The engine input is
+  identical with the pre-clip and without it.
+- **I5. Ring shape.** A ring wholly inside the domain enters as one closed
+  `Breakline` (first index repeated); a clipped ring as open `Breakline`s; a
+  line as open `Breakline`s. No feature chain is `Outer` or `Hole`.
+- **I6. The verifier's verdict is the brute force's.** For every input the
+  sweep returns the status the brute-force check returns.
+- **I7. The tolerance guarantee is unchanged**: every valid DEM node in the
+  domain is within tolerance of the output mesh (14 T3's oracle), with
+  features.
+
+## Degeneracy policy
+
+| case | outcome |
+|---|---|
+| a feature edge collinear with a domain edge, fully or partly | kept; the noder merges or splits it and unions bits onto the domain edge (R6) |
+| a ring touching the domain boundary at one point | the point piece is dropped; the ring's pieces end there |
+| a feature wholly outside the domain, or inside a domain hole | dropped, counted |
+| no feature left after the clip | meshed with the domain alone; the report says 0 features (a catchment inside one land-cover polygon is legitimate) |
+| two feature vertices within the 1 mm snap | one node (16 U6); input and noded vertex counts in the report |
+| a closed feature ring collapsing to two nodes after the snap | the noder's existing handling of a collapsed breakline; one fixture pins the status |
+| a self-intersecting feature ring | linework; the noder nodes the crossing (R1) |
+| the same edge in two features, same class | one constraint edge, same mask (R7) |
+| a partial overlap or T-junction between two sources | the noder splits and merges, as for any input (05b) |
+| `Point`, `MultiPoint`, `GeometryCollection` | refused, naming the feature (R1) |
+| an empty geometry or empty-flag blob | skipped, counted |
+| an unknown attribute value | per the map: refused (naming the feature and value), dropped, or the map's default (R4) |
+| a vertex with no image under the transform | refused, naming the feature (R5) |
+| a GeoPackage without an R-tree | full scan, reported (R3) |
+| SQLite without the R-tree module | refused, naming the cause (R3) |
+| a blob with `srs_id` other than the layer's, an extended type, a bad magic or version, envelope code 5-7 | refused, naming the row (R3) |
+| not a GeoPackage (`application_id`) | refused (R3) |
+
+## Not in scope
+
+- Region labels per triangle (16c, Q2), and "water on exactly one side".
+- Coarsening or simplifying feature geometry.
+- Hydro-flattening lakes or rivers.
+- Several `--features` in one CLI run, and a class map read from a file (Q4).
+- Grade separation (increment 8, ruling 1: never).
+- Python-side deduplication of shared edges (R7; kept in pocket).
+- Streaming GeoJSON; reading GML, Shapefile, FlatGeobuf or any other format.
+- Changing the quality start or feet (20c).
+
+## Sub-increments and LOC
+
+Counted in `CLAUDE.md` §2's unit. Estimates, then the worst overrun seen so
+far (+39 %, increment 16) applied.
+
+| | file | what | est. |
+|---|---|---|---|
+| **16b-0** | `noding/noded_pslg_builder.hpp` | sort-and-sweep for 14(a) and 14(b), cell padding, header comment | ~50 |
+| | | **16b-0 total** | **~50 (worst ~70)** |
+| **16b-1** | `io/geopackage.py` | `GpkgLayer`, `layer_info`, `decode_geometry`, `query_features` | ~70 |
+| | `io/repository.py`, `io/__init__.py` | `open_geopackage` | ~8 |
+| | `feature_input.py` | `ClassMap` and three built-in maps, request and result models, GeoJSON reading, region, pre-clip, reprojection, clip, counts, refusals | ~130 |
+| | `chains.py` | `start_chains` (the domain half moved from `cli.py`, net ~+25) | ~45 |
+| | `features.py` | two vocabulary entries | ~2 |
+| **16b-2** | `cli.py` | four options and their refusals, the two calls, `features`, `features_crs`, `features_transform`, `features_notice`, `edge_vocabulary`, the sentence, the report; less `_domain_chains` | ~65 |
+| | `stats.py` | two phase rows | ~4 |
+| | | **16b-1 + 16b-2 total** | **~325 (worst ~450)** |
+
+**Two PRs, recommended:**
+
+1. **16b-0 alone.** It is C++ in the noder's invariant-critical verifier, it
+   stands on its own (every noder input benefits), its test is an
+   equivalence against brute force, and it is the one piece whose premise
+   (M3's attribution) must be confirmed before anything is written (R8 step
+   0). About 50 lines.
+2. **16b-1 and 16b-2 together.** 16b-1 alone would ship a reader nobody can
+   run; the CLI is what makes the acceptance runnable, the same argument
+   increment 16 made against splitting. About 325, worst about 450, under
+   700.
+
+If 16b-2 grows past the ceiling in review, the seam is `feature_input.py`
+plus `io/geopackage.py` (testable from Python with no CLI) first, `chains.py`
+and `cli.py` second.
+
+## Tests for `@tester`
+
+**Invariant-critical (mutation testing required): two suites.**
+
+- **`prop_noding_verifier_sweep` (C++, 16b-0)**, I6. Random PSLGs through
+  the builder in both forms, the sweep in production and the brute force
+  from `tests/cpp/support/`, asserting equal status. The generators must
+  include what the sweep can get wrong: duplicate edges in both
+  orientations; collinear partial overlaps; boxes that touch at exactly
+  equal `x` (an edge's `xmax` equal to another's `xmin`); vertical and
+  horizontal edges (zero-width boxes); a node whose cell touches an edge's
+  box only at a corner; long edges spanning every other box. Plus the
+  existing 14(a) and 14(b) refusal fixtures, unchanged.
+  Mutants: `xmax > xmin` for `>=` in eviction; open y-interval test; cells
+  unpadded and cell box computed from the node point instead of its cell;
+  arriving edges not tested against active cells; the active list evicted
+  one item late or early; sort by `xmax` instead of `xmin`.
+- **`test_feature_chains_bits` (Python, 16b-1)**, I1, I2 and I5, with the
+  oracle built from the input features and the map. On synthetic partitions
+  (a 2×2 grid of squares with one class each, a square with a hole holding a
+  second polygon, a lake with a river ending on its shore) and on the
+  committed CORINE extract through the real `_engine`.
+  Mutants: masks taken from the first contributing feature only (no union);
+  a clipped ring closed by repeating its first index; holes' rings dropped;
+  area clipping instead of line clipping (the domain boundary then carries
+  bits: caught by I1's "exactly" on a partition, and by a direct assertion
+  that no `Outer` edge carries bits where no feature edge lies on it);
+  `corine`'s 5xx rule off by one class (`52x` treated as land only).
+
+Everything else is unit, property or integration testing:
+
+- **GeoPackage decoding**: blobs with every envelope code 0-4, big- and
+  little-endian headers, the empty flag, the extended flag (refused), a bad
+  magic, version 1, envelope code 5, an `srs_id` differing from the layer's.
+  Built in memory: a test helper writes a minimal GeoPackage (the four
+  `gpkg_*` tables, one feature table, its R-tree) with `sqlite3` to
+  `tmp_path`, so the reader opens a real file. The helper is test support.
+- **Layer resolution**: one table (default), several (refused without
+  `--features-layer`), an unknown name, `data_type` other than `features`,
+  no R-tree (full scan, reported), a non-EPSG `organization` (WKT path),
+  `application_id` wrong.
+- **Class maps**: `property` with one name, a list, an unknown name
+  (refused), no `property` (refused); `corine` on every 5xx code and on
+  `111` and `999`; `corine-water` dropping non-water; a map naming a name the
+  vocabulary lacks (refused when the run starts).
+- **CRS**: a GeoJSON in EPSG:4326 over a 25833 synthetic DEM; a GeoPackage
+  in 3035; `--features-crs` agreeing and disagreeing; a vertex with no image.
+- **Region and pre-clip**: I4 on the extract (engine input with and without
+  the pre-clip, compared bit for bit).
+- **Clip degeneracies** from the table above, one fixture each.
+- **Determinism**, I3: the extract's rows returned in a shuffled order (a
+  second GeoPackage written with rows inserted in reverse) gives a
+  bit-identical `.vtk`.
+- **CLI**: `--features` without `--domain`; an unknown suffix;
+  `--features-layer` on GeoJSON; the four new fields and the notice in `.vtk`
+  and `.ply`; `edge_vocabulary` present on a run without features too.
+- **Increment 8's three rows** as GeoJSON over a synthetic DEM, end to end:
+  the road ends inside the forest ring; the wall's exterior half is absent
+  and the mesh has no edge outside the domain; the bridge road is split at
+  two shore crossings with `road` and `water` bits on the right edges.
+- **I7 on the extract**: every valid node of the committed tile inside the
+  quarter circle within tolerance, at 10 m (fast), with CORINE.
+
+## Test data
+
+- **Synthetic**: GeoJSON documents built in the tests; minimal GeoPackages
+  written by the helper above; the micro-DEMs increment 16's suites already
+  use.
+- **Committed: a CORINE extract over the committed tile `7908_3`.** An
+  extraction script under `tests/fixtures/corine/` (test support, as
+  `tests/fixtures/dtm10/extract.py` is) reads Ola's GeoPackage, takes the
+  features whose R-tree box meets the tile's 3035 image, clips them in 3035
+  to that image buffered by 1 km (so the partition is exact over the tile),
+  and writes them to a small GeoPackage with the source's table name,
+  columns, SRS row and R-tree, blobs in the source's header layout (flags
+  `0x01`). Expected size: about 11 000 vertices over the tile (M2), a few
+  hundred kB. It makes the quarter circle with CORINE (M5) a CI test.
+- **Local only, for @perf**: Ola's GeoPackage and the 48 km square in
+  `6603_4` (M4), and a larger block once R8 lands.
+- **Attribution.** The GeoPackage's own metadata
+  (`Metadata/U2018_CLC2018_V2020_20u1.xml` in Ola's download) grants "full,
+  open and free access" under Regulation (EU) No 1159/2013, on four
+  conditions: inform the public of the source; do not suggest EU endorsement;
+  state it clearly where the data "has been adapted or modified"; and
+  acknowledge that the data were produced "with funding by the European
+  Union". The extract is modified (clipped), so its `README` says, at least:
+  source (CORINE Land Cover 2018, version 2020_20u1, Copernicus Land
+  Monitoring Service, European Environment Agency), that it is clipped and
+  re-encoded, the funding sentence, and no endorsement. The `corine` maps'
+  `notice` carries a one-line form of the same into every mesh built from
+  them (R10). **Not verified:** the exact attribution line the Copernicus
+  Land Monitoring Service website asks for today (recalled as "© European
+  Union, Copernicus Land Monitoring Service 2018, European Environment Agency
+  (EEA)"); no web access in this round. Ola or the main session should check
+  `land.copernicus.eu` before the extract is committed.
+- **Found in passing:** `tests/fixtures/corine/0000_4326_corine2018_4e6064_GML.gml`
+  (30 MB, 399 CORINE features over Norway in EPSG:4326, written by OGR,
+  committed with the foundation reset `3096ccc`) carries no attribution. Only
+  `legacy/tests/test_gml_repository.py` names that directory. 16b's PR adds the
+  same attribution for it, or removes it if Ola prefers (Q6), per the rule
+  that a documentation defect found in an increment is fixed in its PR.
+
+## Acceptance
+
+- **16b-0**: R8 step 0's isolation recorded; `prop_noding_verifier_sweep`
+  green with its mutants killed; `node` on M3's 48 km square in `6603_4`
+  (layout B, the one 16b uses) far below its 83 s, with the ratio across
+  M3's sizes showing the quadratic gone. Every existing noder and gallery
+  test green; the gallery pictures unchanged.
+- **16b-1/2**: the quarter circle on the committed tile with the committed
+  extract, `--features-map corine`, at 1 m and 10 m, writes a `.vtk`
+  ParaView opens, with the fields of R10; constraint edges carry
+  `land_cover` and, on the coast, `water`; the tolerance holds; M5 is the
+  reference. Then Ola's own case: a catchment in EPSG:4326 over the DTM10
+  archive with Ola's GeoPackage.
+- **@perf, for both PRs.** README's acceptance rule applies: 16b-0 changes
+  what the start mesh costs, and 16b-2 changes what `_dem_mesh`, the code
+  that drives `refine`, feeds it. The 1 m benchmark and thread sweep with
+  `tools/bench.py` must show no change on the standard inputs (they have no
+  features; their start ring is small). In addition, @perf records the first
+  **CORINE baseline**: M4's 48 km square at 1 m and 10 m, `node` and
+  `refine` phases, triangles, peak memory, power state, under
+  `docs/benchmarks/<date>/`. The quality-start tripling (M4) is recorded
+  there as 20c's input.
+- All gates in `CLAUDE.md` §4, including the TSan job; CI green.
+
+## Questions for Ola
+
+**Q1. Where may the noder's verification spend its time?** M3: 25 s of a
+30 s run is the noder on a 48 km square of CORINE, and it grows with the
+square of the edge count.
+- **(a) Index the verifier (16b-0, R8), keep it on for every run.
+  Recommended.** About 50 lines of C++, same statuses, and the brute force
+  stays as its test oracle.
+- (b) Skip verification in Release builds. Fastest, but 5b made the
+  verification the thing that turns a missed T-junction into a refusal
+  instead of a wrong mesh; switching it off gives that up.
+- (c) Leave it; features on small catchments only. Not viable for the
+  auto-catchment work that comes next.
+
+**Q2. Region labels: which triangles lie in which polygon.** 16b makes every
+land-cover boundary a constraint edge, but the mesh does not say which class
+each triangle has, and "shoreline" (water on one side only) needs that.
+- **(a) A separate increment 16c, next after 16b: a label per triangle by
+  flood fill across unconstrained edges from one seed per feature, the method
+  of Shewchuk's Triangle (`-A`), written as a cell field `land_cover` with the
+  CLC code. Recommended.** About 80 lines, pure Python over the trimmed mesh
+  and the features; the legacy wrote the same field by testing cell centres.
+- (b) Fold it into 16b. Pushes 16b-1/2 to about 400 lines (worst 560),
+  still under 700, but adds a second invariant-critical suite to the round.
+- (c) Not needed; the edges are enough.
+
+**Q3. Two new vocabulary entries, `land_cover` (bit 7) and `water` (bit 8).**
+- **(a) Both, as R4. Recommended.** The CORINE maps need a bit for "a
+  land-cover boundary" and one for water; `coastline` stays for linear
+  coastline data.
+- (b) One bit, `land_cover`, and water left to 16c's labels.
+- (c) Reuse `coastline` for every water boundary. Wrong for lakes and rivers.
+
+**Q4. The CLI's reach in 16b.**
+- **(a) One `--features` source and the three built-in maps; several sources
+  and maps read from a file later. Recommended.** The API already takes
+  several sources; the CLI question is how flags pair with sources, which
+  deserves its own small design once a second source (roads, rivers) is on
+  the table.
+- (b) Repeatable `--features` now, each followed by its own
+  `--features-map`, paired by position. About 20 more lines, and
+  position-paired flags are easy to get wrong.
+- (c) A JSON request file (`--features-spec`) listing sources and maps. The
+  most general; about 40 more lines.
+
+**Q5. The quality start on CORINE.** It triples the 10 m mesh (M4: 211 487
+triangles without it, 480 127 with it), because dense boundaries make many
+bad start triangles.
+- **(a) Change nothing in 16b; @perf records both settings, and 20c decides
+  with this data. Recommended.**
+- (b) Turn the quality start off when features are given. Quick, but it
+  decides 20c's question by the back door.
+
+**Q6. The 30 MB CORINE GML already in `tests/fixtures/corine/`** (legacy
+test data, written by OGR, no attribution).
+- **(a) Keep it and add the attribution in 16b's PR. Recommended**: removing
+  data from the tree is your call, and the legacy suite names the directory.
+- (b) Remove it: nothing outside `legacy/` uses it, and 16b's extract
+  replaces it for everything current.
