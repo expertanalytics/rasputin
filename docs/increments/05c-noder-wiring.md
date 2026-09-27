@@ -632,10 +632,10 @@ product. Renaming it destroys that.
 **Its module docstring becomes wrong and is fixed in this PR**, per
 `docs/increments/README.md`'s rule that a documentation defect found during an
 increment is fixed in that increment's PR or not recorded.
-`viz/fixtures.py:21-26` says "**Three** of the eight are deliberate failures...
+Line numbers in this passage are at `605a60c`, where this record was written.
+`viz/fixtures.py:21-26` said "**Three** of the eight are deliberate failures...
 ``not-noded`` and ``hole-in-hole`` are backend refusals". After 5c there are
-**two**, and `not-noded` is the showcase. The inline comment at `:208-209` (line numbers here and below are at
-`605a60c`, where this record was written) —
+**two**, and `not-noded` is the showcase. The inline comment at `:208-209` —
 "the noder (5b) is what fixes it" — becomes a statement about a fix that has
 landed.
 
@@ -647,8 +647,8 @@ changed literals — `1` for the river bit and `2` for the road bit under
 a road crossing a river, in two colours, meeting at a constructed node.
 
 `fixtures.py` writes the masks as literals with a comment, because `viz/` may
-not import a vocabulary (`fixtures.py:193-194` at `605a60c` already does exactly this for
-`BREAKLINE`). Note that `test_noding_node.cpp:76-77` numbers them the other way
+not import a vocabulary (`fixtures.py:193-195` at `605a60c` already does exactly this for
+the `RIVER` fixture). Note that `test_noding_node.cpp:76-77` numbers them the other way
 round — `bit(0)` is its road. That is not a defect to reconcile: **the C++ holds
 no vocabulary at all**, by increment 7's ruling, and its test constants are
 local names. It is written down here only so that nobody "fixes" the two into
@@ -1285,7 +1285,7 @@ increment's PR, or not recorded:
   number is dropped in favour of the test's name and a `grep`, per
   `.claude/REQUIRED-READING.md` on resolved values. The paragraph's claim is
   still true; only the citation expired.
-* **`src_python/tin_engine/viz/fixtures.py:21-26`** — three deliberate failures
+* **`src_python/tin_engine/viz/fixtures.py:21-26`** (at `605a60c`) — three deliberate failures
   become two, and `not-noded` changes role.
 
 **Not corrected, because 5b corrected it itself:** the "The C++ rows are *not*
