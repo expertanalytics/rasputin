@@ -1,6 +1,6 @@
 # tools/bench.py: design
 
-Status: design (@perf, 2026-09-27), not yet reviewed. No code or tests yet. The rule it serves is
+Status: design (@perf, 2026-09-27), not yet reviewed. Red suite written (see "Pinned by the red suite"); no code yet. The rule it serves is
 "Acceptance: an increment that touches refine or mesh code" in
 `docs/increments/README.md`; its specification is the one-off scripts in
 `2026-09-26/` (`bench1m/*.sh`, `run.py`, `quality.py`, `summarize.py`,
@@ -178,3 +178,107 @@ the 700 ceiling. Plus `tools/bench.py` added to mypy's `files` in
   a lower worst angle or a higher max degree, never a tolerance failure or a
   Delaunay violation, and every use is written into that run's `README.md`
   and `run.json`, with the verdict still naming the measure it waived.
+
+## Pinned by the red suite (@tester, 2026-09-27)
+
+The seams above name functions but not every signature, field or string the
+tests have to assert on. `tests/python/test_bench.py` pins the following; where
+this section settles something the design above left open, it says so.
+
+**Module surface.** `tools/bench.py` defines, at module level: `app` (Typer),
+`make_runner()` (the factory the tests replace), `Completed`, `Runner`,
+`Power`, `Child`, `ChildError(ValueError)`, `Sample`, `TimeStats`, `Ceiling`,
+`MeshQuality`, `VtkMesh`, `RunRecord`, `Verdict`, `MARKER`, and the functions
+`parse_pmset`, `combine_power`, `parse_child`, `median_stats`, `ceiling`,
+`quality`, `read_vtk_ascii`, `comparable`, `find_baseline`, `verdict`,
+`write_evidence`. The module must import with nothing but its path (the tests
+load it by `importlib`, registered in `sys.modules` as `bench`).
+
+**Power.** `Power(state, percent, raw)`, `state` one of `ac`, `battery`,
+`mixed`, `unknown`; `percent` is `int | None`. `parse_pmset`: `'AC Power'` is
+`ac` (percent from a battery line if one is present, else `None`),
+`'Battery Power'` is `battery`. *Settled here:* `'UPS Power'` is `unknown` — it
+is neither of the two states the rule compares. `combine_power(before, after)`
+is `before`'s state when the states agree, else `mixed`.
+
+**Child.** Invoked as `python tools/bench.py _child [--pkg DIR] --threads N --
+<rasputin argv>`, where the rasputin argv starts with the subcommand (`mesh
+--dem ... --out ... --binary`). `--threads 0` means "do not force": the CLI's
+own default (the design's "default thread count"); any other N is forced into
+the `refine` call. *Settled here:* with `--no-build` the parent passes no
+`--pkg` and the child imports the installed `tin_engine`. The child's result
+is one stderr line `BENCH ` followed by a JSON object with the keys `refine_s`,
+`app_s`, `max_error`, `rounds`, `inserted`, `flips`. `parse_child(stderr, run)
+-> Child` raises `ChildError` whose message contains `run` when there is no
+such line, more than one, malformed JSON, or a missing key.
+
+**Samples and statistics.** `Sample(domain, threads, repeat, refine_s, app_s,
+proc_s, max_error, rounds, inserted, flips)`. `median_stats(samples) ->
+list[TimeStats]`, one `TimeStats(domain, threads, n, median, min, max)` per
+(domain, threads) over `refine_s`, sorted by that key. `ceiling(medians:
+Mapping[int, float]) -> Ceiling(top_threads, at_top, best, best_threads)`:
+speed-up over 1 thread at the largest thread count, and the best speed-up and
+where it is reached; key 0 (the default) is ignored.
+
+**Domains.** A domain is named `tile` (the whole DEM, no polygon) or by its
+file's stem (`quarter`). *Settled here:* `--domain` is repeatable and the
+value `tile` names the whole tile; default is `tile` and
+`docs/benchmarks/2026-09-26/quarter.geojson`.
+
+**Quality.** `quality(points, triangles, constraint_edges, tolerance,
+max_error) -> MeshQuality(worst_angle, angle_median, share_under_1,
+max_degree, within_tolerance, delaunay_checked, delaunay_ambiguous,
+delaunay_violations, mesh_sha256="")`. Angles in degrees, the share a fraction,
+the angle and degree fields as `tin_engine.stats.quality` computes them;
+`within_tolerance` is `max_error <= tolerance`; the Delaunay counts are per
+interior non-constraint edge, as `quality.py` counted them. `read_vtk_ascii(path)
+-> VtkMesh(points (N, 3), triangles (T, 3), edges (E, 2), sha256)`, `sha256`
+over the file's bytes from `POINTS` on; a `BINARY` file is a `ValueError`.
+
+**Record.** `RunRecord` fields: `label`, `started` (aware datetime), `tree`
+(`commit`, `dirty`), `bench_blob`, `child_argv`, `build` (`no_build`, `type`,
+`cxx_flags_release`, `compiler`, `so_sha256`, all but `no_build` optional),
+`machine` (`cpu_brand`, `p_cores`, `e_cores`, `memory_bytes`, `macos`,
+`python`, `numpy`), `power` (a combined `Power`), `inputs` (`dem`,
+`dem_sha256`, `domains`: list of `name`, `path`, `sha256`; `tolerance`,
+`extra_args`), `samples`, `stats`, `quality` (domain name to `MeshQuality`),
+`accept_quality`, `threshold_pct` (default 5.0), `verdict` (the verdict lines).
+The two rulings are carried by the record itself, so `run.json` records them.
+
+**Comparison.** `comparable(a, b) -> str | None`: `None`, or a reason naming
+the first mismatching field by its record name (`power`, `cpu_brand`,
+`p_cores`, `e_cores`, `dem_sha256`, `domains`, `tolerance`, `extra_args`).
+`find_baseline(root, record, is_ancestor) -> tuple[Path, RunRecord] | None`:
+the directory and record of the newest (by `started`) `root/*/*/run.json`
+strictly older than `record`, comparable, and whose commit
+`is_ancestor(candidate_commit, record_commit)` accepts. `verdict(new, base) ->
+Verdict(status, lines, exit_code)` reads `threshold_pct` and `accept_quality`
+from `new`; `base` may be `None`. Statuses `ACCEPTED`, `REGRESSION`,
+`NO BASELINE` with exit codes 0, 1, 2. Line formats:
+`NO BASELINE: <reason>`; `REGRESSION: <domain> refine_s[t=<N>] <base> -> <new>
+(+x.x %)` for time (strictly more than the threshold); `REGRESSION: <domain>
+<measure> <base> -> <new>` for `tolerance`, `delaunay_violations`,
+`worst_angle`, `max_degree`; and, for a measure `--accept-quality` waived,
+the same line prefixed `WAIVED (--accept-quality): ` instead of `REGRESSION: `.
+
+**CLI.** *Settled here:* `run` takes `--out-root DIR` (default
+`docs/benchmarks`), writes `<out-root>/<local date>/<label>/`, and searches
+`--out-root` for a baseline; `compare` takes the same option. `--threshold` is
+in percent (`--threshold 7.5`). `--threshold` and `--accept-quality` are
+`run` options only: they are stored in the record, and `compare` re-judges
+with what the new record carries. The verdict's exit code is the command's; a refused build (a
+non-Release `CMakeCache.txt` under `<tree>/build-bench`) or a failing child
+exits 3 and writes no evidence. Timing runs go in the order domain, then
+repeat, then thread count (0 first, then the `--threads` list); the quality
+run is one `--ascii` child at `--threads 0` per domain, after its timing runs.
+`pmset -g batt` is read exactly twice, before the first child and after the
+last. Machine facts come from `sysctl -n machdep.cpu.brand_string`,
+`hw.perflevel0.physicalcpu`, `hw.perflevel1.physicalcpu`, `hw.memsize`, and
+`sw_vers -productVersion`.
+
+**Evidence.** `write_evidence(record, directory)` writes `run.json`
+(`record.model_dump_json()`, round-tripping), `raw.tsv` (no header, one line
+per sample: domain, threads, repeat, refine_s, power state), and `README.md`,
+whose generated part ends at the line `MARKER`; whatever follows that line in
+an existing README is kept on a rerun. The README names `2.2x` beside the
+ceiling, every verdict line, and `--accept-quality` when it was used.
