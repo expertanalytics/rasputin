@@ -12,10 +12,17 @@ coverage). Pinned by this suite (see "Pinned by the red suite (15b)"):
 - `open_dem` moves the domain into the DEM's CRS, plans on its bounds with its
   needed region, checks its extent against the plan, and only then assembles.
   `DemInput.domain` is the domain in the DEM's CRS (`None` without one).
-- The plan is the plan of `bounds` equal to the moved domain's bounds.
+- The plan is the plan of `bounds` equal to the moved domain's bounds, except
+  where a domain vertex lies within the 1e-6-cell snap band past a node line:
+  there the domain's window is one node line wider on that side. A vertex
+  exactly on a node line, or 2e-6 cell past one, widens nothing (review S1).
 - "Grown by one cell" is pinned only away from its edge: a missing node 0.73
   cell from a domain vertex refuses the request; missing nodes 2.5 cells or
-  more from it are NaN filler. Exactly one cell is not ruled.
+  more from it are NaN filler. Exactly one cell is not ruled. The cell is the
+  chosen plan's, so a tile the domain does not select, and the order names
+  sort in, change nothing (review B1).
+- Tiles in more than one CRS are refused with a domain, naming the codes
+  (review S2).
 - Every extent refusal fires before any tile is loaded (I6).
 
 Synthetic tiles are micro-TIFFs written by `test_dem_input.py`'s helpers;
@@ -40,8 +47,9 @@ import pytest
 from pyproj import CRS, Transformer
 from shapely.geometry import Polygon, box
 
+from geotiff_fixtures import BASE_KEYS, PROJECTED_CS_TYPE
 from mosaic_fixtures import X0, Y0, blocks, quadrants, whole
-from test_dem_input import SEAM, write_tiles
+from test_dem_input import SEAM, tiff_of, write_tiles
 
 Ring = list[tuple[float, float]]
 UTM33 = "urn:ogc:def:crs:EPSG::25833"
@@ -365,3 +373,193 @@ class TestRealSeam:
         given = list(domain.polygon.exterior.coords)
         got = {(float(x), float(y)) for x, y in opened.domain.polygon.exterior.coords}
         assert got == set(to_crs("EPSG:25832", "EPSG:25833", given))
+
+
+class TestNeededRegionIsGrownByThePlansSpacing:
+    """R4 point 5: "grown by one cell" is one cell of the lattice the plan is
+    on, so the outcome does not depend on a tile the domain does not select,
+    nor on where that tile's name sorts (15b review, B1). Each repository holds
+    two spacings in one EPSG: an L of blocks with its south-east block missing,
+    and one far-away tile on the other spacing, named to sort first or last."""
+
+    FAR = 5_000.0  # the far tile's west edge, metres east of X0
+
+    @staticmethod
+    def far_fine() -> Any:
+        """A 1 m tile 5 km east of every coarse node: no domain here meets it."""
+        return whole(4, 4, dx=1.0, dy=1.0, x_min=X0 + TestNeededRegionIsGrownByThePlansSpacing.FAR)
+
+    @staticmethod
+    def far_coarse() -> Any:
+        return whole(
+            4, 4, dx=10.0, dy=10.0, x_min=X0 + TestNeededRegionIsGrownByThePlansSpacing.FAR
+        )
+
+    @pytest.mark.parametrize("fine", [None, "a_fine.tif", "z_fine.tif"])
+    def test_a_node_one_coarse_cell_away_is_needed_whatever_else_is_listed(
+        self,
+        di: ModuleType,
+        dm: ModuleType,
+        mz: ModuleType,
+        tmp_path: Path,
+        no_load: None,
+        fine: str | None,
+    ) -> None:
+        """`NEAR_THE_HOLE` on the 10 m L: the missing node (60, -60) is 7.3 m
+        from the domain, inside one 10 m cell and outside one 1 m cell. The
+        plan is on the 10 m lattice, so the request is refused, with or
+        without a 1 m tile listed first or last."""
+        tiles = blocks(whole(12, 12, dy=10.0), 6, 6, skip=[(1, 1)])
+        if fine is not None:
+            tiles[fine] = self.far_fine()
+        write_tiles(tmp_path / "dem", tiles)
+        domain = read(dm, tmp_path, NEAR_THE_HOLE, "EPSG:25833")
+        with pytest.raises(mz.MosaicError) as info:
+            di.open_dem(request(di, tmp_path / "dem", domain=domain))
+        assert "1 nodes the request needs are in no tile" in str(info.value)
+        assert "500060" in str(info.value)
+
+    @pytest.mark.parametrize("coarse", [None, "a_coarse.tif", "z_coarse.tif"])
+    def test_a_node_past_one_fine_cell_is_not_needed_whatever_else_is_listed(
+        self, di: ModuleType, dm: ModuleType, tmp_path: Path, coarse: str | None
+    ) -> None:
+        """The mirror, on a 1 m L (missing nodes x 6..11, y -6..-11) with a far
+        10 m tile: `AROUND_THE_HOLE` scaled by a tenth is 2.5 m per axis
+        (3.5 m) from the nearest missing node, past one 1 m cell and inside one
+        10 m cell. The plan is on the 1 m lattice, so the missing block is NaN
+        filler, with or without the 10 m tile listed first or last."""
+        tiles = blocks(whole(12, 12, dx=1.0, dy=1.0), 6, 6, skip=[(1, 1)])
+        if coarse is not None:
+            tiles[coarse] = self.far_coarse()
+        write_tiles(tmp_path / "dem", tiles)
+        tenth = [(X0 + (x - X0) / 10, Y0 + (y - Y0) / 10) for x, y in AROUND_THE_HOLE]
+        opened = di.open_dem(
+            request(di, tmp_path / "dem", domain=read(dm, tmp_path, tenth, "EPSG:25833"))
+        )
+        assert opened.plan.meta.delta_x == 1.0
+        assert (opened.tile.meta.rows, opened.tile.meta.cols) == (12, 12)
+        assert np.isnan(opened.tile.array[6:, 6:]).all()
+        assert np.isfinite(opened.tile.array[:6, :]).all()
+        assert np.isfinite(opened.tile.array[:, :6]).all()
+
+    @pytest.mark.parametrize("fine", ["a_fine.tif", "z_fine.tif"])
+    def test_an_unselected_tile_does_not_change_the_plan(
+        self, di: ModuleType, dm: ModuleType, tmp_path: Path, fine: str
+    ) -> None:
+        write_tiles(tmp_path / "alone", blocks(whole(12, 12, dy=10.0), 6, 6, skip=[(1, 1)]))
+        tiles = blocks(whole(12, 12, dy=10.0), 6, 6, skip=[(1, 1)])
+        tiles[fine] = self.far_fine()
+        write_tiles(tmp_path / "with", tiles)
+        domain = read(dm, tmp_path, AROUND_THE_HOLE, "EPSG:25833")
+        alone = di.open_dem(request(di, tmp_path / "alone", domain=domain))
+        with_fine = di.open_dem(request(di, tmp_path / "with", domain=domain))
+        assert with_fine.plan == alone.plan
+
+
+class TestTheSnapBand:
+    """The domain's window against `--bbox`'s, on `quad_dir` (node lines every
+    10 m in x, 5 m in y). 15a's window snaps a box edge within 1e-6 cell past
+    a node line onto it; a domain vertex there still needs the next line, so
+    the domain's window is one line wider on that side (15b, `_past`). A
+    vertex exactly on a node line, or 2e-6 cell past one, adds nothing (15b
+    review, S1: `<` made `<=` would add a line for every vertex on a node
+    line, which a gridded catchment has on every side)."""
+
+    # Every edge on a node line, interior to the 9 x 13 node rectangle:
+    # columns 2..6, rows 2..6.
+    ON_LINES = (X0 + 20.0, Y0 - 30.0, X0 + 60.0, Y0 - 10.0)
+    # Unit vector out of the rectangle for each of x_min, y_min, x_max, y_max,
+    # and the (rows, cols) and (x_min, y_max) change one more line there makes.
+    OUT = (-1, -1, 1, 1)
+
+    def plans(
+        self,
+        di: ModuleType,
+        dm: ModuleType,
+        mz: ModuleType,
+        quad_dir: Path,
+        tmp_path: Path,
+        edges: tuple[float, float, float, float],
+    ) -> tuple[Any, Any]:
+        """The domain's plan and `--bbox`'s, for the rectangle `edges`."""
+        x0, y0, x1, y1 = edges
+        ring: Ring = [(x0, y0), (x1, y0), (x1, y1), (x0, y1)]
+        domain = read(dm, tmp_path, ring, "EPSG:25833")
+        assert domain.polygon.bounds == edges  # bit for bit: same CRS, no transform
+        by_domain = di.open_dem(request(di, quad_dir, domain=domain)).plan
+        bounds = mz.Bounds(x_min=x0, y_min=y0, x_max=x1, y_max=y1)
+        by_box = di.open_dem(request(di, quad_dir, bounds=bounds)).plan
+        return by_domain, by_box
+
+    def test_on_node_lines_the_domain_window_is_the_bbox_window(
+        self, di: ModuleType, dm: ModuleType, mz: ModuleType, quad_dir: Path, tmp_path: Path
+    ) -> None:
+        by_domain, by_box = self.plans(di, dm, mz, quad_dir, tmp_path, self.ON_LINES)
+        assert (by_box.meta.rows, by_box.meta.cols) == (5, 5)
+        assert (by_box.meta.x_min, by_box.meta.y_max) == (X0 + 20.0, Y0 - 10.0)
+        assert by_domain == by_box
+
+    @pytest.mark.parametrize("edge", [0, 1, 2, 3], ids=["x_min", "y_min", "x_max", "y_max"])
+    @pytest.mark.parametrize("cells", [0.0, 2e-6])
+    def test_outside_the_band_the_domain_window_is_the_bbox_window(
+        self,
+        di: ModuleType,
+        dm: ModuleType,
+        mz: ModuleType,
+        quad_dir: Path,
+        tmp_path: Path,
+        edge: int,
+        cells: float,
+    ) -> None:
+        edges = list(self.ON_LINES)
+        edges[edge] += self.OUT[edge] * cells * (10.0 if edge % 2 == 0 else 5.0)
+        by_domain, by_box = self.plans(di, dm, mz, quad_dir, tmp_path, tuple(edges))
+        assert by_domain == by_box
+
+    @pytest.mark.parametrize("edge", [0, 1, 2, 3], ids=["x_min", "y_min", "x_max", "y_max"])
+    def test_in_the_band_the_domain_window_is_one_line_wider(
+        self,
+        di: ModuleType,
+        dm: ModuleType,
+        mz: ModuleType,
+        quad_dir: Path,
+        tmp_path: Path,
+        edge: int,
+    ) -> None:
+        """A vertex 1e-7 cell past a node line: `--bbox` snaps onto the line,
+        the domain's window takes the next one on that side only."""
+        edges = list(self.ON_LINES)
+        step = 10.0 if edge % 2 == 0 else 5.0
+        edges[edge] += self.OUT[edge] * 1e-7 * step
+        by_domain, by_box = self.plans(di, dm, mz, quad_dir, tmp_path, tuple(edges))
+        exact, _ = self.plans(di, dm, mz, quad_dir, tmp_path, self.ON_LINES)
+        assert by_box == exact
+        m, e = by_domain.meta, exact.meta
+        wider = {
+            0: (e.rows, e.cols + 1, e.x_min - 10.0, e.y_max),
+            1: (e.rows + 1, e.cols, e.x_min, e.y_max),
+            2: (e.rows, e.cols + 1, e.x_min, e.y_max),
+            3: (e.rows + 1, e.cols, e.x_min, e.y_max + 5.0),
+        }[edge]
+        assert (m.rows, m.cols, m.x_min, m.y_max) == wider
+
+
+class TestOneCrs:
+    def test_tiles_in_two_crss_with_a_domain_are_refused_before_any_load(
+        self, di: ModuleType, dm: ModuleType, mz: ModuleType, tmp_path: Path, no_load: None
+    ) -> None:
+        """R6: the domain is moved into the DEM's CRS, so the DEM must have one
+        (15b review, S2). Both tiles are in the domain's box."""
+        tiles = quadrants(whole(9, 13), row_cut=4, col_cut=6, overlap=1)
+        write_tiles(tmp_path / "two", {"nw.tif": tiles["nw.tif"]})
+        utm32 = {**BASE_KEYS, PROJECTED_CS_TYPE: 25832}
+        (tmp_path / "two" / "ne.tif").write_bytes(
+            tiff_of(tiles["ne.tif"], geokeys=utm32).getvalue()
+        )
+        domain = read(dm, tmp_path, IN_NW, "EPSG:25833")
+        with pytest.raises(mz.MosaicError) as info:
+            di.open_dem(request(di, tmp_path / "two", domain=domain))
+        message = str(info.value)
+        assert "the tiles are in 2 CRSs" in message
+        assert "EPSG:[25832, 25833]" in message
+        assert "a domain needs one" in message
