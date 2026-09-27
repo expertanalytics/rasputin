@@ -85,12 +85,21 @@ private:
 // node corners and every difference from d at most 2^14 nodes; the determinant
 // is then below 3 * 2^58 and exact. Under those conditions it is the sign
 // DetriaExact gives on the frame points, since the frame is the lattice scaled
-// by dx > 0 without rounding. Precondition: a, b, c counter-clockwise on
-// (col, -row). Otherwise empty, and the caller asks the kernel.
+// by dx > 0 without rounding. That holds only for nodes inside the rows x cols
+// grid f was built for: lattice_frame checked exactness of col * dx and
+// row * dy up to that extent and no further, so a node beyond it can have a
+// rounded frame point whose DetriaExact sign differs. Precondition: a, b, c
+// counter-clockwise on (col, -row). Otherwise empty, and the caller asks the
+// kernel. A corner with a non-finite coordinate is refused before any
+// difference is taken: is_node() is true for +-inf, and inf - inf is a NaN that
+// would pass the spread bound and reach the int64 cast.
 [[nodiscard]] inline std::optional<pred::Incircle> lattice_incircle(MeshVertex a, MeshVertex b,
                                                                     MeshVertex c, MeshVertex d,
                                                                     const LatticeFrame& f) noexcept {
-    if (!f.integer() || !a.is_node() || !b.is_node() || !c.is_node() || !d.is_node())
+    const auto usable = [](MeshVertex v) {
+        return std::isfinite(v.col) && std::isfinite(v.row) && v.is_node();
+    };
+    if (!f.integer() || !usable(a) || !usable(b) || !usable(c) || !usable(d))
         return std::nullopt;
     constexpr double bound = 1 << 14;
     std::array<std::array<std::int64_t, 2>, 3> p{};  // (col, -row) minus d's
@@ -129,6 +138,9 @@ template <pred::GeometryKernel K>
     const MeshVertex d_vertex = v[m.triangles()[u][(j + 2) % 3]];
     // The integer path first; the mesh triangle is counter-clockwise on
     // (col, -row), and it answers only where the kernel would give the same sign.
+    // Answering without consulting K assumes K's incircle sign is exact, as
+    // DefaultKernel's (FilteredKernel<DetriaExact>) is: for an inexact K the
+    // integer sign could differ from K's, and the flip sequence with it.
     if (const auto s = lattice_incircle(v[tri[e]], v[tri[(e + 1) % 3]], v[tri[(e + 2) % 3]], d_vertex, f))
         return *s == pred::Incircle::Inside;
     const Point2 a = f.at(v[tri[e]]), b = f.at(v[tri[(e + 1) % 3]]), c = f.at(v[tri[(e + 2) % 3]]),
