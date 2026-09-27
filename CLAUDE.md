@@ -5,11 +5,12 @@ This file drives the automation loops for Claude Code (`@orchestrator`) in this 
 ## 1. Multi-Agent Ecosystem
 This project is governed by specialized sub-agents. Always defer tasks to the correct persona in `.claude/agents/`:
 * `@orchestrator`: Master project driver. Handles human input and chains the TDD loop.
-* `@architect`: Enforces declarative structures, component boundaries, and interface decoupling.
+* `@architect`: Enforces declarative structures, component boundaries, and interface decoupling. Checks the literature and any novelty claim before a design.
 * `@migration-expert`: Porting lead. Deconstructs legacy logic into the new target architecture.
 * `@tester`: Owns the test suites. Enforces the 85% coverage floor (see `testing.md`) and adversarial geometry fuzzing.
 * `@developer`: Writes clean, high-performance C++20 and async Python code.
-* `@reviewer`: Final gatekeeper. Audits LOC, code quality, readability, and documentation.
+* `@reviewer`: Final gatekeeper. Audits CI status, LOC, red-step scaffolding, and prose claims against code.
+* `@perf`: Performance owner. Runs the benchmark and scaling acceptance for refine- and mesh-touching increments (`tools/bench.py`), profiles the serial phase, and keeps the evidence in `docs/benchmarks/<date>/`.
 
 ## 2. Core Constraints & Technical Mandates
 * **Strict Size Limit:** Under **700 lines of production code per pull request**,
