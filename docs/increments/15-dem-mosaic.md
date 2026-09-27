@@ -814,6 +814,7 @@ order. 15c and 15d follow later.
 | | `dem_input.py`: `DemRequest`, `open_dem` | 35 | |
 | | `cli.py`: `--dem` list, `--bbox`, refusals, fields | 45 | |
 | | **15a total** | **375** | **520** |
+| | *15b as built, measured at review (d34d79d..914dfc8, CLAUDE.md §2 unit): 150 added, of which `dem_input.py` 48 against 20 estimated; 15a + 15b against master 675, so they ship as two PRs* | | |
 | | *15a as built, measured at review (branch diff, CLAUDE.md §2 unit): 533, of which `mosaic.py` 325 against 200 estimated* | | |
 | **15b** | **Norway: the domain in its own CRS** | | |
 | | `crs.py`: `parse_crs`, `reprojector` | 30 | |
@@ -1159,7 +1160,19 @@ scratch implementation.
   spacings in one EPSG, a tile the domain does not select, and whether its
   name sorts first or last, changes neither the plan nor the refusal. A
   missing node inside one 10 m cell but outside one 1 m cell is refused on a
-  10 m plan and NaN filler on a 1 m plan.
+  10 m plan and NaN filler on a 1 m plan. When growing the region changes the
+  chosen lattice, the region is grown again by the new lattice's cell (the
+  re-plan loop; @reviewer showed a once-only growth passed this class).
+- **Open, recorded at review (not ruled):** (a) when the ungrown domain already
+  misses a node, the refusal counts only the domain's own missing nodes, a
+  lower bound on the grown region's; (b) with several spacings in one EPSG
+  (at least three lattices, @reviewer's reasoning, not a run) the lattice
+  choice can alternate as the region grows; the loop settles it by keeping the
+  larger growth, which can only add refusals. Not reachable on Ola's DTM10
+  archive (one spacing). (c) `_past`'s snap-band re-plan does not re-run the
+  growth loop; if its half-cell widening selected a lattice with a bigger
+  cell, the smaller growth would be kept. Only inside the 1e-6-cell band with
+  several lattices.
 - **One CRS** (review S2, `TestOneCrs`): tiles in more than one EPSG code with
   a domain are a `MosaicError` before any `load`, naming the count, the codes
   and "a domain needs one".
