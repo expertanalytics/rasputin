@@ -1,8 +1,10 @@
 # Increment 21 — parallel refine: quick wins, then the serial phase
 
-Status: **design only, ruled by Ola 2026-09-27** (section 8, "Ola's rulings"). Written by `@architect`
-on 2026-09-27, on branch `serial-profile`, per `docs/increments/README.md`
-step 1. No code and no tests exist for it. This file proposes a sequence of
+Status: **ruled by Ola 2026-09-27** (section 8, "Ola's rulings"). **21a and
+21b shipped** (#102, #103). **21c measured** (`docs/benchmarks/2026-09-27/21c/README.md`);
+**21d is deferred** behind the basin work (Ola, 2026-09-27: "Review and push
+21c, then basin-work"). Written by `@architect` on 2026-09-27, on branch
+`serial-profile`, per `docs/increments/README.md` step 1. This file proposes a sequence of
 small increments (21a to 21d, section 7); each gets its own Rulings and Tests
 sections when Ola has answered section 8 and the measurements in section 6
 are in.

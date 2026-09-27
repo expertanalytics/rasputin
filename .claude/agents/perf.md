@@ -58,7 +58,8 @@ it is never unmeasured again. You report measured figures only.
   `-fsanitize=undefined` with libc++'s extensive hardening mode instead. A run
   that crashed produces no numbers. A deliberate crash (a plant) stays out of
   a script's default loop: a crash in a Python process shows as a crash dialog
-  on Ola's screen, and five did on 2026-09-27 from one 21c plant.
+  on Ola's screen, and five did on 2026-09-27 from one 21c plant
+  (`docs/benchmarks/2026-09-27/21c/data/a0eo/plant_eo_stalecommit/outcome.txt`).
 
 ## 3. Evidence
 * Commit the evidence under `docs/benchmarks/<date>/`: a `README.md` with the

@@ -5,4 +5,6 @@ Counted runs (awake, battery, caffeinate -i, 2026-09-27 21:13:15-21:13:17, no sl
 Also: run_a0eo.sh plants at 20:58 (awake): sim_driver.py exit 1 within seconds, child stderr empty.
 Void, not counted: three runs between 20:58 and 21:13 that reported "no exit" after 120-600 s; the Mac
 idle-slept 21:05:26-21:09:51 (pmset -g log), so their timings measure nothing.
+Also (added in review): a fifth crash report, 21:12:27 (launched 21:12:26.9, died after 0.6 s), same
+scratch _core (UUID f1e549e0) and faulting offsets as the three above; not counted.
 Undefined behaviour: a stale plan splits a triangle a commit already rewrote.

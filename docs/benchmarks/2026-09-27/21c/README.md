@@ -1,8 +1,8 @@
 # Increment 21c: measurements for choosing 21d's option (@perf, 2026-09-27)
 
 Status: **done**, with later sections "A0 and the scaling model" and "A0 with evaluate-once". Measurement only; no production code changed. The scratch
-simulations are `scripts/sim.patch`, which is not applied and never committed
-to `include/`, like the serial profile's `instrument.patch`.
+simulations are `scripts/sim.patch`, with `sim_a0.patch` and
+`sim_a0_eo.patch` on top of it; none is applied or committed to `include/`, like the serial profile's `instrument.patch`.
 
 Asked by the main session for `docs/increments/21-parallel-refine.md`:
 section 5 (options A1, B, C, D), section 6 (the items placed in 21c) and
@@ -16,7 +16,9 @@ quarter circle, with worst angle and max degree no worse.**
    With the thinning rule of section 5 it gives +7.5 %. A greedy independent
    set gives +7.5 %, and two-hop thinning +6.5 %. The worst angle is worse in
    every variant (0.18-0.30 deg against 0.3955). Max degree is 18-20 against
-   18. The tile shows the same: +5.9 % to +9.2 %. The flipping itself is cheap
+   18. On the tile the triangle cost is the same, +5.9 % to +9.2 %, but the
+   worst angle is not: C's is better (1.14) and the thinning variants' equal
+   (0.6296). The flipping itself is cheap
    to parallelise: 7 flip rounds per refine round (median, at most 11), with
    about 47,000 independent flips in the first flip round of the largest
    round. So the triangle count is what rules C out, not its parallelism.
@@ -382,7 +384,8 @@ code. The simulation is `scripts/sim_a0.patch`, applied **on top of**
    bench.py hashes it: quarter `1e531976…` (the 21b acceptance hash), tile
    `11741a81…`, equal to today's. Triangles, rounds, insertions and flips are
    equal (quarter 428,217 / 41 / 213,464 / 445,657; tile 464,290 / 53 /
-   219,837 / 445,675), and a hash of the whole lattice mesh (triangles,
+   219,837 / 445,675; the tile's 464,290 is the VTK's count, against refine's
+   472,374 above, and `data/tables.md` explains the difference), and a hash of the whole lattice mesh (triangles,
    neighbours, vertices) is equal **after every round** (41 and 53 rounds).
    No first divergence exists to report. The rescan, Delaunay and footprint
    checks all pass: full rescan max error 0.99998 with 0 over tolerance, 0
@@ -415,9 +418,10 @@ code. The simulation is `scripts/sim_a0.patch`, applied **on top of**
    0 winners.
 5. **Re-evaluation dominates, for A0 and A1 alike.** A mark that loses is
    evaluated again (skip checks, plan, cavity and ring, reservation) in every
-   later sub-round. Evaluations per mark: 4.00 (A0 quarter), 4.13 (A1
+   later sub-round. Evaluations (visits) per mark: 4.00 (A0 quarter), 4.13 (A1
    quarter), 4.46 (A0 tile), 4.00 (A1 tile), which is 2.0-2.3 million per
-   run. At the measured 279 ns each (quarter) that is 568 ms of serial work,
+   run; "A0 with evaluate-once" below separates full evaluations (3.51 /
+   3.98) from visits. At the measured 279 ns each (quarter) that is 568 ms of serial work,
    about 6 times today's whole split phase (92.6 ms).
 6. **Synchronisation on this Mac, measured** (`scripts/sync_bench.cpp`,
    battery): starting and joining 8 fresh `std::jthread`s costs 90-189 µs
@@ -441,7 +445,7 @@ code. The simulation is `scripts/sim_a0.patch`, applied **on top of**
    Refine at 8 threads, adding the measured 8-thread scan and rest (section 6)
    to the team figures: A0 157 / 190 ms, A1 152 / 169 ms, C 114 / 140 ms; the
    lower bounds 104 / 132 (A0) and 95 / 118 (A1). Against today's 161.7 /
-   186.3 ms, **as simulated, A0 gains 3 % on the quarter circle and loses 2 %
+   186.3 ms, **as modelled, A0 gains 3 % on the quarter circle and loses 2 %
    on the tile, A1 gains 6-9 %, and C gains 25-30 %.** Most of the gap is re-evaluation. The rows "each mark evaluated
    once" are a bound: they assume a loser keeps its footprint until a slot in
    it is written. That rule was not simulated and its cost is not known.
@@ -533,7 +537,7 @@ Quarter circle, `RASPUTIN_SIM_PLANT` (`data/a0/plants/`):
 
 ### Power state
 
-**Battery** throughout, 72 % to 70 %, discharging (`data/a0/pmset_*.txt`).
+**Battery** throughout, 70 %, discharging (`data/a0/pmset_*.txt`).
 Apple M1 Max, 8 P + 2 E cores. The counts and hashes do not depend on power;
 the per-item and sync costs, and so the model, do. There is no AC baseline
 for any of them.
@@ -663,8 +667,9 @@ reads.
    runtime would not do. A re-bid costs about a fifth of an evaluation. An A0
    visit on this build costs 269 ns (quarter) and 256 ns (tile), with
    everything included.
-6. **The model at 8 threads: 7-11 % faster refine than today, about half of
-   the earlier bound's gain.** In the table, split and refine for the options
+6. **The model at 8 threads: 7-11 % faster refine than today, about a
+   quarter of the earlier bound's gain** (22-30 % of it; what halves is the
+   evaluation count, 2.1 per mark where the bound assumed 1). In the table, split and refine for the options
    are modelled; today's columns are measured.
 
    | domain | T | today split | today refine | A0 split | **A0eot split** | A0eot refine | A0eo / A0eofp refine |
@@ -769,9 +774,12 @@ Python. `run_a0eo.sh` no longer runs this plant; run it only under lldb, as in
 ### Power state
 
 **Battery** throughout: 66 % to 65 % for the simulations
-(`data/a0eo/pmset_*.txt`), 62 % to 61 % for the thread sweep. Apple M1 Max,
-8 P + 2 E. The Mac idle-slept from 21:05:26 to 21:09:51 (`pmset -g log`). No
-counted run overlapped it: simulations 20:55-20:58, sweep 21:14:58-21:15:22,
+(`data/a0eo/pmset_*.txt`), 61 % for the thread sweep. Apple M1 Max,
+8 P + 2 E. The Mac idle-slept twice (`pmset -g log`, not committed):
+20:57:26-20:57:48, when a `caffeinate` timeout ran out mid-run, and
+21:05:26-21:09:51. No counted run overlapped either, the first only just: the
+last timed file and `pmset_after.txt` are stamped 20:57:26, the second the
+sleep began, so the main run ended as it began. Simulations 20:55-20:57:26, sweep 21:14:58-21:15:22,
 sanitised runs 21:18-21:20. Three `eo_stalecommit` attempts made between
 20:58 and 21:13 are void and not counted. There is no AC baseline for any of
 these figures.
