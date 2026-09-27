@@ -19,7 +19,7 @@ A commit is cheap to amend; the cost of finding out in CI is not.
 
 NOT AUTHORITATIVE. CLAUDE.md is explicit that CI decides, and a whole branch once
 merged with CI red on every commit. `mypy` and the C++ suite are omitted here
-because they need a build; green from this hook means "these four gates passed on
+because they need a build; green from this hook means "the GATES below passed on
 these files", which is strictly less than `gh pr checks`.
 """
 
@@ -37,13 +37,14 @@ ROOT = Path(__file__).resolve().parent.parent.parent
 #: regenerates uv.lock, and uv.lock is gitignored on this branch precisely
 #: because 1016 lines of it rode into a commit that way. A hook scheduling that
 #: command on every commit would recreate the artifact forever. CI runs plain
-#: `ruff check .` (.github/workflows/main.yaml).
+#: `ruff check .` and `ruff format --check .` (.github/workflows/main.yaml).
 GATES = (
     ["python3", "tools/check_prohibited_deps.py"],
     ["python3", "tools/check_legacy_imports.py"],
     ["python3", "tools/check_detria_boundary.py"],
     ["python3", "tools/check_citations.py"],
     [str(ROOT / ".venv" / "bin" / "ruff"), "check", "."],
+    [str(ROOT / ".venv" / "bin" / "ruff"), "format", "--check", "."],
 )
 
 
