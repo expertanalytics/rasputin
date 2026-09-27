@@ -769,7 +769,7 @@ overrun recorded so far is +99 % for a whole increment (6a shipped 467 lines
 against ~235, `06-cdt-viewer.md:626`) and +116 % for one file (`scene.py`,
 `05b-noder-driver.md:379-382`); the table gives each at +66 % (increment 17).
 At +99 % the conclusions hold: A1 (~450) comes to ~895 and is split in any
-case; C (~320) comes to ~636, under 700. The per-file factor does not apply to
+case; C (~320) comes to ~637, under 700. The per-file factor does not apply to
 a whole increment, but at +116 % C would be ~691, only just under, so 21d on C
 is worth counting early.
 
