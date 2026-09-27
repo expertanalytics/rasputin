@@ -276,3 +276,18 @@ target_link_libraries(prop_refinement_quality PRIVATE Threads::Threads)
 add_terrain_backend_test(test_refinement_constraint_feet
                          property/prop_refinement_constraint_feet.cpp)
 target_link_libraries(test_refinement_constraint_feet PRIVATE Threads::Threads)
+
+# Parallel refine quick wins, increment 21a (docs/increments/21-parallel-refine.md,
+# section 3 and "Pinned by the red suite (21a)"). Bit-identical: 14's T6 and
+# 18's golden digests are the output oracle and stay as they are.
+# test_refinement_chunks_dynamic (QW1, the dynamic block scheduler) is the
+# invariant-critical suite; test_refinement_active (QW3) and
+# test_mesh_lawson_stack (legalise_around's caller-owned stack) compare with
+# today's code. All three run in the TSan job.
+
+add_terrain_test(test_refinement_chunks_dynamic unit/test_refinement_chunks_dynamic.cpp)
+target_link_libraries(test_refinement_chunks_dynamic PRIVATE Threads::Threads)
+add_terrain_backend_test(test_refinement_active unit/test_refinement_active.cpp)
+target_link_libraries(test_refinement_active PRIVATE Threads::Threads)
+add_terrain_backend_test(test_mesh_lawson_stack unit/test_mesh_lawson_stack.cpp)
+target_link_libraries(test_mesh_lawson_stack PRIVATE Threads::Threads)

@@ -425,6 +425,68 @@ section 5 is measured against the mesh they leave.
 A smaller item folds into 21a: `legalise_around` allocates its stack per call
 (0.7 % of refine); a caller-owned buffer removes it.
 
+### Pinned by the red suite (21a)
+
+Section 3 left these names and signatures open; `@tester` chose them in the
+red step, and the suites named below hold them.
+
+- **QW1** (`include/terrain/parallel_util/chunks.hpp`,
+  `tests/cpp/unit/test_refinement_chunks_dynamic.cpp`):
+  `struct BlockSchedule { std::size_t block = 0; std::size_t inline_below; }`,
+  `constexpr std::size_t default_block(std::size_t n, unsigned threads) noexcept`
+  returning `max(1, n / (16 * threads))`, and
+  `template <class Fn> void for_each_block(std::size_t n, unsigned threads, BlockSchedule, Fn&& fn)`.
+  `block == 0` means `default_block(n, threads)` after `threads == 0` is
+  resolved as `for_each_chunk` resolves it. Block `k` is
+  `[k*b, min(n, (k+1)*b))` and `fn` is called exactly once per block, so the
+  set of calls is the same partition for every thread count. With one thread
+  or `n < inline_below`, every block runs on the calling thread in ascending
+  order. Otherwise at most `min(threads, blocks)` threads call `fn`, and blocks
+  run concurrently. Every block runs even when some throw; the exception of the
+  lowest block index that threw is rethrown after the join. The default of
+  `inline_below` is 21a's to set from the sweep and is not pinned.
+  `BlockSchedule{}` is the scan's schedule. `for_each_chunk` and its suite are
+  unchanged.
+- **QW3** (`include/terrain/refinement/refine.hpp`,
+  `tests/cpp/unit/test_refinement_active.cpp`):
+  `void detail::rebuild_active(std::span<const char> touched, std::span<const std::uint32_t> skipped, std::vector<std::uint32_t>& active)`.
+  It replaces `active`'s contents with what today's collect, sort and unique
+  give. Precondition: `skipped` is ascending and below `touched.size()`.
+- **The stack** (`include/terrain/mesh/lawson.hpp`,
+  `tests/cpp/unit/test_mesh_lawson_stack.cpp`):
+  `using FlipStack = std::vector<std::uint32_t>;` and a `legalise_around`
+  overload taking `FlipStack& stack` before `on_write`. It must produce the
+  same flips, `on_write` sequence and mesh as today's algorithm, which the
+  suite copies as its oracle. Allocation counts are not pinned.
+
+At the red commit the three suites were registered only once their header
+named `for_each_block`, `rebuild_active` or `FlipStack` (the 18 and 20b
+precedent); `065a2bd` removed those guards after green.
+
+### 21a: inline_below
+
+Set to **256** by `@developer` in the green step, from a sweep that is a
+developer's quick look, not `@perf`'s acceptance run. Setup: the 1 m
+benchmark's tile (`tests/fixtures/dem_archive/7908_3_10m_z33.tif`, tolerance
+1, no domain), M1 Max on AC. A throwaway driver wrapped `cli.refine` the way
+`tools/bench.py`'s child does and called it 9 times per thread count, taking
+the median of `scan_seconds` and of the wall time of refine. `_core` was
+rebuilt for each value. Median scan in ms at 8 threads (10 threads within
+3 ms of it):
+
+| inline_below | 0 | 64 | 256 | 512 | 1024 | 2048 | 8192 | 32768 |
+|---|---|---|---|---|---|---|---|---|
+| scan, 8 threads | 58.4-58.8 | 57.2 | 57.3-57.5 | 57.5-57.6 | 58.8 | 65.9 | 83.3 | 119.7 |
+
+From 64 to 1024 the values differ by less than the run-to-run noise; 64-512
+are about 1 ms under 0, and 1024 is level with it. From 2048 up, the inline small rounds cost more
+than their thread starts save. 256 is in the middle of the flat range. Measured
+back to back against the red commit (`7b54a4e`, `for_each_chunk`): scan at
+8 threads 65.0 -> 57.7 ms and refine 243 -> 219 ms (-10 %). At 1 thread there
+is no difference beyond noise (refine 515 vs 519 ms), as QW1 predicts. The
+mesh sha256 that `bench.py` prints for the tile and the quarter circle was the same
+before and after.
+
 ## 4. Determinism levels
 
 Today's contract (14 R5, 14b R1, tested by 14's T6 and 18's T3 golden
@@ -769,13 +831,13 @@ overrun recorded so far is +99 % for a whole increment (6a shipped 467 lines
 against ~235, `06-cdt-viewer.md:626`) and +116 % for one file (`scene.py`,
 `05b-noder-driver.md:379-382`); the table gives each at +66 % (increment 17).
 At +99 % the conclusions hold: A1 (~450) comes to ~895 and is split in any
-case; C (~320) comes to ~636, under 700. The per-file factor does not apply to
+case; C (~320) comes to ~637, under 700. The per-file factor does not apply to
 a whole increment, but at +116 % C would be ~691, only just under, so 21d on C
 is worth counting early.
 
 | increment | what | est. | at +66 % | determinism | invariant-critical suite (mutation round) |
 |---|---|---|---|---|---|
-| **21a** | QW1 dynamic scan scheduling with a small-round inline threshold (`parallel_util/`), QW3 merge, `legalise_around`'s caller-owned stack; QW4 only if measured worth it (about +20) | ~60 | ~100 | bit-identical | `test_refinement_chunks`, extended to the dynamic scheduler: every index visited exactly once for every n, thread count and block size. A dropped or doubled block leaves a stale scan result, which breaks the tolerance guarantee silently, so this is where the guarantee is decided |
+| **21a** | QW1 dynamic scan scheduling with a small-round inline threshold (`parallel_util/`), QW3 merge, `legalise_around`'s caller-owned stack; QW4 only if measured worth it (about +20) | ~60 | ~100 | bit-identical | `test_refinement_chunks_dynamic`, a new suite for the dynamic scheduler (`test_refinement_chunks` is unchanged): every index visited exactly once for every n, thread count and block size. A dropped or doubled block leaves a stale scan result, which breaks the tolerance guarantee silently, so this is where the guarantee is decided |
 | **21b** | QW2 `lattice_incircle` in `mesh/`, the exact-frame check, the call in `must_flip` | ~50 | ~85 | bit-identical where it answers | a new `test_mesh_lattice_incircle`: agreement with `DetriaExact` on the frame doubles for random and adversarial node quads (grid rectangles, other cocircular lattice quads such as points on a circle of radius 5, near-overflow differences at 2^14, `dx != dy` and inexact `dx` returning `nullopt`, off-node corners returning `nullopt`). Mutants: bound at 2^15, `dx != dy` not refused, the exact-frame check dropped, a sign flip |
 | **21c** | measurement only, `@perf`; evidence under `docs/benchmarks/<date>/` | 0 | 0 | — | none |
 | **21d** (option C) | thread team (`std::barrier`, per call), batch split with prefix-sum numbering, deterministic parallel flip rounds, the round loop | ~320 | ~530 | L1 | a new `test_mesh_parallel_lawson`: CDT property, conformity and a flip-count bound on random lattice meshes with cocircular ties and constraints, and identical output for threads 1, 2, 7 and hardware concurrency. Plus `prop_refinement_refine`'s tolerance oracle re-run, with the mutant "a flipped slot not marked touched" |
@@ -804,7 +866,8 @@ Every new suite joins the TSan job's list in `.github/workflows/main.yaml`.
 
 **Acceptance for 21a, 21b and 21d** is `@perf`'s run
 (`docs/increments/README.md`, "Acceptance"): the 1 m benchmark and the thread
-sweep from `tools/bench.py`, battery against battery. For 21a and 21b the mesh
+sweep from `tools/bench.py`, one power state against the same one (21a ran on
+AC, base and 21a back to back: `docs/benchmarks/2026-09-27/21a-acceptance.md`). For 21a and 21b the mesh
 hash must be unchanged. For 21d the mesh hash changes by design, so the
 comparison is time, triangle count, worst angle and max degree (Q3).
 

@@ -78,10 +78,16 @@ template <pred::GeometryKernel K>
 // Legalise around the vertex q after it was inserted. For each seed slot that
 // contains q, the edge opposite q is tested; a flip leaves q at index 0 of both
 // slots it writes, and both go back on the stack.
+//
+// The stack is the caller's, so a loop of insertions reuses one buffer
+// (docs/increments/21-parallel-refine.md, 21a); its contents on entry are
+// discarded, and it is empty on return.
+using FlipStack = std::vector<std::uint32_t>;
+
 template <pred::GeometryKernel K, class OnWrite>
 std::size_t legalise_around(LatticeMesh& m, std::uint32_t q, std::span<const std::uint32_t> seeds,
-                            const LatticeFrame& f, OnWrite&& on_write) {
-    std::vector<std::uint32_t> stack(seeds.begin(), seeds.end());
+                            const LatticeFrame& f, FlipStack& stack, OnWrite&& on_write) {
+    stack.assign(seeds.begin(), seeds.end());
     std::size_t flips = 0;
     while (!stack.empty()) {
         const auto t = stack.back();
@@ -101,6 +107,14 @@ std::size_t legalise_around(LatticeMesh& m, std::uint32_t q, std::span<const std
         stack.push_back(u);
     }
     return flips;
+}
+
+// The same, with a stack of its own.
+template <pred::GeometryKernel K, class OnWrite>
+std::size_t legalise_around(LatticeMesh& m, std::uint32_t q, std::span<const std::uint32_t> seeds,
+                            const LatticeFrame& f, OnWrite&& on_write) {
+    FlipStack stack;
+    return legalise_around<K>(m, q, seeds, f, stack, std::forward<OnWrite>(on_write));
 }
 
 // Legalise the whole mesh: every interior edge once on the stack, and each
