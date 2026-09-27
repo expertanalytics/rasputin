@@ -1,0 +1,4 @@
+BENCH refine_s 0.1582
+38 rounds, 283965 points inserted, 591537 triangles, achieved max error 0.9999923706054688 m, 0 valid DEM nodes not covered, 199 vertices without data dropped
+/private/tmp/claude-501/-Users-skavhaug-projects-rasputin/d378b7a0-c4f3-40c9-be13-20c779636779/scratchpad/bench1m/runs/tile_i14_stride40.vtk
+BENCH app_s 1.2679

@@ -1,0 +1,1 @@
+{"triangles": 427779, "vertices": 214422, "constraint_edges": 1063, "minang_median": 45.0, "pct_lt1": 0.027818102337889426, "n_lt1": 119, "n_lt01": 3, "worst": 0.011675165852547747, "deg_max": 43, "deg_ge12": 216, "deg_ge20": 9, "cdt_edges_checked": 641137, "cdt_ambiguous": 80678, "cdt_violations": 0}

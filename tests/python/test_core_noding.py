@@ -11,7 +11,8 @@ problem behind an import.
 the extension on this machine -- scikit-build-core's editable auto-rebuild needs
 `ninja`, which is absent, so it silently no-ops and the run exercises the
 previously installed `.so`. A green handback from a session that never rebuilt
-is byte-identical to one that did (`.claude/REQUIRED-READING.md`, measured):
+is byte-identical to one that did (measured in
+`docs/retrospectives/2026-09-27-required-reading-incidents.md`):
 
     cmake --build build-pyext -j --target _core
     cp build-pyext/_core.cpython-*-darwin.so .venv/lib/python3.*/site-packages/tin_engine/

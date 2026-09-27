@@ -516,7 +516,8 @@ It is kept, in the past tense, because the deferral it records is the reason the
 red/green trace is readable — and because this is the **third** repair on this
 branch to leave a stale claim behind it, after `pslg.hpp`'s "survives its
 widening intact" (see "The field") and the eight-document list below. The
-pattern is the one `.claude/REQUIRED-READING.md` names: a repair made by
+pattern is the one `docs/retrospectives/2026-09-27-required-reading-incidents.md`
+records: a repair made by
 reasoning about a claim rather than re-running it seeds the next occurrence.
 Re-runnable: `git show 781c1bf:tests/python/test_viz_svg.py | sed -n '133p'`
 prints the old phrase and `sed -n '133p' tests/python/test_viz_svg.py` prints

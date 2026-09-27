@@ -43,7 +43,15 @@ Core domain constraints and architecture for the C++ terrain-meshing engine (CDT
   meaning; `.claude/REQUIRED-READING.md` states it there as *is the claim about
   the same object the code evaluates?*
 
-## 4. Change & Review Boundaries
+## 4. Prior Art Before Design
+* **Start from the literature:** before designing a refinement, insertion or
+  triangulation method, find the published method it builds on and cite it
+  (for example Garland and Heckbert 1995 for greedy insertion; Chew and Ruppert
+  for Delaunay refinement; Üngör for off-centres). Say what differs, and why.
+  The rule and its record live in `docs/increments/README.md` (the **Prior art:
+  legacy and literature** section) and `.claude/agents/architect.md` §4.
+
+## 5. Change & Review Boundaries
 * **Change Limit:** see the ceiling in `CLAUDE.md` §2.
 * Every major algorithmic change must explicitly document its impact on locality, parallelization, and numerical robustness.
 

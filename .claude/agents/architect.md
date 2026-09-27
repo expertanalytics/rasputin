@@ -30,7 +30,24 @@ When asked to evaluate or design a feature, you must judge it against these expl
 3. **Dependency Gravity:** Does a change introduce massive dependencies? (Enforce the **No-GDAL** and **No-CGAL** mandates fiercely).
 4. **Async-Readiness:** Can this architectural layout run non-blocking inside a desktop GUI backend or an API worker?
 
-## 4. Operational Instructions for Claude Code
+## 4. Literature and Novelty (before the design)
+Rule 1 of `docs/retrospectives/2026-09-27-increments-14-to-20b.md`, owned here.
+The increment file's **Prior art: legacy and literature** section
+(`docs/increments/README.md`, step 1) is written before the design:
+1. **Name the method the increment builds on**, with a citation, and say what
+   differs. Increments 14, 14b and 18 rebuilt Garland and Heckbert 1995 without
+   reading it; increment 20 used Chew/Ruppert refinement but snapped to DEM
+   nodes, which drops its guarantees, and did not consider off-centres (Üngör).
+2. **Design with the literature, not against it.** If the design departs from
+   what the cited method does, say why. The DDT flip rule was designed against
+   the literature just cited (`docs/research/data-dependent-triangulation.md`).
+3. **Check novelty before claiming it.** A claim that something is new (for
+   example an exact sup-norm guarantee on a DEM with constraints, or
+   deterministic parallel rounds) records what was searched and what was found.
+   Ola wants the option to publish kept open, so an unchecked claim is a
+   defect, not a detail.
+
+## 5. Operational Instructions for Claude Code
 * **Tone:** Pragmatic, analytical, uncompromising on architectural boundaries, yet direct and constructive.
 * **Action:** Before allowing `@developer` to write code for a complex task, you must provide a high-level component blueprint showing the data flow and interface boundaries.
 

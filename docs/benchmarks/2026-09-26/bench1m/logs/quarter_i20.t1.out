@@ -1,0 +1,5 @@
+BENCH refine_s 0.2374
+644 start quality nodes inserted, 0 start quality skips, 41 rounds, 213465 points inserted, 445653 flips, 428225 triangles, achieved max error 0.9999796549479072 m, 0 valid DEM nodes not covered, 534 start triangles, 235 start vertices off-node, 0 vertices without data dropped
+/private/tmp/claude-501/-Users-skavhaug-projects-rasputin/d378b7a0-c4f3-40c9-be13-20c779636779/scratchpad/bench1m/logs/tmp.vtk
+BENCH app_s 0.3375
+BENCH proc_s .9346

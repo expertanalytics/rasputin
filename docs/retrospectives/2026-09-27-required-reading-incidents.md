@@ -1,0 +1,262 @@
+# The incidents behind `.claude/REQUIRED-READING.md`
+
+Dated 2026-09-27. Moved here when `.claude/REQUIRED-READING.md` was cut to its
+rules, at @orchestrator's recommendation, accepted by Ola
+(`docs/retrospectives/2026-09-27-increments-14-to-20b.md`). The rules now live
+only in `.claude/REQUIRED-READING.md`. What follows is the reasoning and the
+incidents, moved verbatim from that file as it stood at `a1a17ed`:
+`git show a1a17ed:.claude/REQUIRED-READING.md` shows the original in place.
+Sections follow the order of the rules they support. Where the text says
+"above", "below" or "this branch", it means that file, as it was then.
+
+Two rules changed when the file was cut, so the text on them here is history,
+not the rule: the sweep of `.claude/current-task/` (now "one file per writer;
+the spawner deletes it") and the per-file lifecycle around it.
+
+## Recovery: the absorbed prompt
+
+An absorbed prompt never appears
+as a normal turn, which is how a session on 2026-09-17 lost the instruction
+"can we verify that we haven't built a kernel that is insufficient for our
+purposes" and spent a full round designing an unrequested increment instead.
+
+## In-flight state: why one file per writer
+
+This became one file per writer after a single shared file failed within an
+hour of being legislated: `@tester` wrote `.claude/current-task.md` and
+destroyed the session's record verbatim, leaving three lines of subagent ask
+where the only on-disk note of the round had been. A mechanism built to
+survive a context loss would have caused one.
+
+It is still not a ledger, and several files make a ledger easier to get wrong,
+so the deletions are assigned rather than left to good intentions:
+`session.md` is overwritten in place and deleted when the round lands; a
+subagent's file is deleted by **its spawner**, on reading the handback — never
+by the subagent, which may be exactly the thing that died, and the rule
+recurses, so a nested subagent's file is its own spawner's and never the
+session's; and a session **sweeps `.claude/current-task/` of every file
+except those of agents it is currently waiting on, directly or transitively,
+after step 1 above and never before it.** A file from a dead agent therefore
+survives at most one round. That last sweep is the backstop, because it is the
+only deletion that still happens when the agent owing one is gone.
+
+The sweep test is an exception for what is live, and the two simpler spellings
+both failed. "Every file I did not just spawn" is provenance: a session already
+mid-round with two live subagents has, at the instant it starts a parallel
+round, *just* spawned none of them, so that criterion deletes its own live
+agents' files. "Every file I am no longer waiting on" is its dual and fails the
+other way — an orphan from a dead predecessor session is one you were never
+waiting on, so it is never one you are *no longer* waiting on, and nothing ever
+licenses deleting it. *Transitively* is what settles the nested case: you wait
+on your subagent, not on its subagent, so without it a live nested file is
+swept and a dead one lives forever, and the text supports whichever reading
+the reader arrives with.
+
+Sweep after the read, never before, because the file a premature sweep
+destroys is precisely the dead step's — the one the backstop exists for.
+
+**One session per working tree.** `session.md` is a reserved singular name and
+nothing assigns it, so two sessions in one tree collide on it exactly as
+subagents once did. The subagent fix does not apply, because the thing that
+hands out a subagent's path is its spawner and no one hands out a session's.
+Concurrent sessions need separate worktrees; `git worktree add` is the cheap
+answer and `.claude/current-task/` is per-tree by construction.
+
+Nothing mechanically stops a persona writing `session.md`; the control is that
+it is handed a different path and never has cause to guess one. A `PreToolUse`
+hook is the only real enforcement, and it needs approval — see *The harness*.
+
+## Why a file-producing subagent creates its file first
+
+- **A subagent whose product is a file creates that file first and writes
+incrementally.** The kernel audit above died having emitted only a progress
+line; had it created its target file on arrival, the round would have been
+resumable instead of lost. A persona's prompt names the output path.
+
+## Why the skills step is an imperative
+
+This is stated as a step rather than left to the `skills:` frontmatter key
+because that key does not reliably preload them and subagents do not inherit
+skills from the caller. Both are re-testable in about a minute, which is why the
+instruction is an imperative rather than a declaration.
+
+A session that skips it re-derives decisions the project has already written
+down. Each `SKILL.md` is the settled answer to a question that otherwise comes
+back as an open one — `geospatial-data-formats/SKILL.md` rules on where GeoTIFF
+decoding sits, `computational-geometry/SKILL.md` on degeneracy policy.
+
+## Claims: incidents behind "run the check before you write it down"
+
+When you write a justification into this project's governance, name the command,
+file or commit a sceptical reader would use to check it — and **run it before
+you write the claim down**. Naming a check is not performing one. `debd8d1`'s
+message stated that `tools/session_state.py` "cannot identify which transcript
+is the current session"; it was reading `CLAUDE_SESSION_ID` where the harness
+exports `CLAUDE_CODE_SESSION_ID`, so a one-word bug shipped as an inherent
+limitation, from reading the source instead of running it. One second of
+execution refutes it. `0fa05e3` is the correction.
+
+The probe set is a claim too. Derive it from the code as fixed, not from the bug
+as found: a fix that widens what the code accepts widens the inputs that can
+break it, and re-running the old probes tests the old code. Measured — five
+broken inputs verified a fix that had just widened a glob from `*.md` to every
+file, all five were valid UTF-8 because the bug had been, and the first non-UTF-8
+file killed the tool (`fdbd532`).
+
+And make the probe able to fail. If a pass looks the same as a probe that never
+ran, it measured nothing. A reviewer timed this tool's FIFO case with
+`signal.alarm`, but `TimeoutError` is an `OSError`, so the blocking `open()`
+raised the alarm *inside* the `except OSError` it was meant to expose: the probe
+reported "no hang" in output produced entirely by the hang. Time a hang from
+outside the process, and prefer a probe whose pass and its own absence look
+different — `b0bf129` is the correction.
+
+## Stale artifacts: how each was measured
+
+This tree has a standing instance of that hazard: **`pytest` does not rebuild
+the C++ extension.** scikit-build-core's editable auto-rebuild needs `ninja`,
+which is not installed, so it silently no-ops, and a run after a change to
+`bindings/core.cpp` exercises the previously installed `.so`. A green handback
+from a session that never rebuilt is byte-identical to one that did. Rebuild and
+reinstall explicitly before every `pytest` that is meant to measure C++:
+
+```bash
+cmake --build build-pyext -j --target _core
+cp build-pyext/_core.cpython-*-darwin.so .venv/lib/python3.*/site-packages/tin_engine/
+```
+
+`pip install -e . --no-build-isolation` is not the route — `scikit_build_core`
+is absent from the venv. This paragraph was verified the way it asks you to
+verify: increment 7's fixed `bindings/core.cpp` was replaced on disk with the
+pre-fix version that four tests were written to refute, and `pytest` reported
+94 passed. A broken X, and Y did not notice.
+
+`ctest` does not know whether the build succeeded. It runs whatever executable
+sits at the path each test was registered with, so a target that **fails to
+rebuild leaves its previous binary in place** and its tests keep reporting their
+old result. A red suite reports green, and the only honest signal is
+`cmake --build`'s own exit. Measured here: with three targets failing to compile,
+`ctest` reported 44 failures; planting a `int main(){return 0;}` at one target's
+registered path took that to **40**, four tests passing against a binary
+containing nothing. Read the build's exit status before you read `ctest`, and
+treat a green `ctest` after a failed build as no evidence at all.
+
+The C++ side has its own version, and it bites hardest during a mutation round.
+**`cmake --build` can miss a restore.** After putting a mutated header back with
+`cp`, the restored file's mtime can land in the same second as the object built
+from the mutant, so the build reports "Built target" and rebuilds nothing;
+`ctest` then measures the mutant. A green that belongs to the mutant and a red
+that belongs to nothing are both available this way, and neither looks unusual.
+**`touch` the file after any `cp`-based restore**, before building. Measured
+here while re-running a mutation a subagent reported: the first rebuild was a
+no-op and the second, after `touch`, was not.
+
+## The object-identity question and resolved values
+
+When there is nothing to run — a comment, a design invariant, a claim of the
+form "X is verified by Y" — one question catches the same defect by inspection,
+in a line, with no build: **is the claim about the same object the code
+evaluates?** In every occurrence recorded below it was not. A §2 gate
+matched path-shaped keys (`boost/geometry`, `date/date.h`) against bare CMake
+tokens, so `find_package(Boost COMPONENTS geometry)` and `date::date` passed
+until `1807e73`. Three increment-2 tests bounded the compiler's FMA choice
+rather than `FastKernel`'s error (`dd67a68`). Increment 5's oracles used exact
+incidence where the producer used hot-pixel proximity, a "second" candidate
+generator that was the same broad phase, and the dedup's own records in place of
+the input (`docs/increments/05-noder.md`, guarantees 14 and 15). A comment credited the
+NaN fixture with killing the `!= 0.0` mutant of a function guarded by
+`> 0.0 && <= max()`, where the second conjunct rejects NaN under either
+spelling, so that fixture kills nothing (`7ece838`). That sentence was itself
+committed with the two objects swapped and caught by this branch's own pre-push
+pass — the check applied to the paragraph that defines it. Each repair was made in the same
+mode as the defect — reasoning about the claim instead of running it — which is
+how the repairs kept seeding the next occurrence.
+
+One corollary, learned the expensive way on increment 7's review rounds, which
+found this defect repeatedly and **found no defect in behaviour at all**. Several
+instances were in the text repairing the previous one. The common property: each
+was a sentence that had to be **re-derived whenever anything around it changed**
+— a commit hash naming "the current anchor", a count of how many commits had
+moved a figure, a list of which ones. Correcting such a sentence is a move that
+reproduces itself, because the commit applying the correction is itself a commit
+and can falsify the line it just wrote.
+
+So when a claim's truth depends on the state of the tree, **write the rule and
+the command that resolves it, not the resolved value**. `07-edge-properties.md`
+now says "measured at the last commit that touches a production file" and prints
+`git log --oneline -1 -- include/ bindings/ src_python/`, where it used to name a
+hash; the enumeration beside it was deleted rather than corrected again. Those
+were the first corrections in that sequence that did not falsify themselves on
+landing. A resolved value is a citation with an expiry date nobody can see —
+and note that no counter appears in this paragraph, which is the rule applied to
+itself: "how many rounds" is exactly such a value.
+
+So **do not write "X is verified by Y" until Y has been run against a broken
+X**, and where Y cannot be run, apply the object-identity question instead.
+Verify a gate the way this paragraph's first example was verified before being
+written down: append the prohibited directive to `CMakeLists.txt`, run
+`python3 tools/check_prohibited_deps.py`, confirm it fails naming both, restore
+the file. Note the asymmetry the list exposes — `tools/*.py` is executable code
+with no suite behind it, unlike the C++ it gates.
+
+This binds claims about behaviour — what a script does, what a suite covers,
+what a file says — not design opinions, which have no command to run. If you
+cannot, state the mechanism rather than the incident: a mechanism someone can
+re-run is stronger evidence than an event they can only be told about.
+
+## The approval boundary: why push, and the 2026-09-17 pushes
+
+Push, not commit, is the line because pushing a branch that has an open PR
+re-triggers CI, re-notifies a live reviewer, and silently changes what the user
+is being asked to merge while they are holding the merge. A local commit does
+none of that.
+
+**The standing grant, and its limit.**
+
+An instruction that names a publishing act is the yes for **one** occurrence of
+that act. "Push it and re-verify with `@reviewer`" authorised one push. What
+followed on 2026-09-17 was a reviewer's CHANGES REQUESTED, an `@architect`
+spawn, edits, a probe, two commits and a **second** push to a branch targeting
+master, with no further user input. Everything before the second push was
+momentum. The second push published a different tree under a spent grant.
+
+## Why @reviewer fires at the push boundary
+
+`CLAUDE.md` §3 step 4 reads as the last step of a code increment, and so a
+branch whose product is prose or tooling has been entering no loop at all.
+That is the gap. **`@reviewer` runs once on any branch before its first push,
+whether or not the branch contains production code, and again before a push
+that follows a round of findings.**
+
+The trigger is the push boundary — not per-round, not per-commit, not on
+everything. It is the same event as the approval boundary above, which is why
+neither needs bookkeeping of its own: when you stop to ask, that is when the
+pass has already happened.
+
+On a prose or tooling branch the pass has a different scope from a code one:
+
+- every claim the branch asserts, checked by running the thing it asserts
+  about, per the rule above;
+- `python3 tools/check_citations.py`, with its at-risk list **re-read as
+  quotations**. Resolving a line number is not resolving the quotation — a
+  sweep on this branch resolved all 46 citations in the kernel audit and was
+  still wrong three times, because three pointed at text the same branch had
+  rewritten to say the opposite;
+- for any rule the branch adds, the incident it prevents, named with a commit.
+
+One pass per branch is affordable on `docs/increments/README.md`'s cost terms —
+it is the same pass the code path already pays — and it is the only step here
+that has repeatedly found real defects. On PR #68 alone `@reviewer` caught
+the false limitation in `debd8d1`, the unswept citations in `760dbd9`, and two
+of the three self-confirming invariants in increment 5. The session driving
+those rounds produced every one of them and saw none.
+
+## The harness: auto mode let pushes through
+
+The same applies to a `PreToolUse` hook on `Bash(git push*)`, and it is the one
+mechanism that would make the approval boundary self-enforcing. Do not assume
+the permission system is that backstop: `git push` appears nowhere in
+`.claude/settings.local.json`'s allow-list, yet two unapproved pushes went
+through on 2026-09-17 under the auto mode configured in
+`~/.claude/settings.json`. Until a hook is approved, the rule above is the
+agent's own to keep, with nothing underneath it.

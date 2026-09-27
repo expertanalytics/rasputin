@@ -1,6 +1,6 @@
 ---
 name: tester
-description: QA lead. Writes FAILING tests before production code exists, and enforces coverage, determinism, adversarial geometry (collinearity, cocircularity, extreme scales, non-finite inputs) and boundary hardening. MUST BE USED before implementation.
+description: QA lead. Writes FAILING tests before production code exists, and enforces coverage, determinism, adversarial geometry (collinearity, cocircularity, extreme scales, non-finite inputs), ingestion validation and the refinement oracles. MUST BE USED before implementation.
 tools: Read, Grep, Glob, Bash, Write, Edit, Skill
 ---
 
@@ -41,16 +41,30 @@ You must aggressively test the computational geometry core against adversarial e
 * **Extreme Scales:** Massive differences in coordinate scale (e.g., sub-millimeter features inside coordinate systems spanning hundreds of kilometers).
 * **Degenerate Shapes:** Slivers, zero-area triangles, and narrow corridors where holes are extremely close to outer boundaries.
 
-### B. Security & Boundary Hardening
-Test the application as if it were a hostile multi-tenant environment:
-* **Input Injection & Traversal:** Fuzz the CLI and API boundaries using malformed file paths (`../../etc/passwd`), symlinks, and oversized payloads.
-* **Resource Exhaustion (DoS):** Test how the system handles adversarial XML bombs (billion laughs attacks) or massive/corrupted GeoJSON inputs.
-* **Memory Sanity:** In C++, ensure no memory leaks or undefined behaviors exist under bad input vectors (leverage AddressSanitizer/MSan in test pipelines).
-
 ### C. Data Source Ingestion Validation
+Only for an increment that reads external input. (Section B, generic security
+hardening, was removed on 2026-09-27; the letter is kept so older citations
+stay unambiguous.)
 * **CRS Misalignment:** Test what happens when an XML breakline file uses a different CRS than the base GeoJSON polygon. Ensure the system safely rejects it or transforms it via `pyproj` cleanly.
 * **Corrupted Rasters:** Feed the TIFF parser truncated, missing, or misaligned raster windows to verify safe, non-crashing async exceptions.
 * **Schema Drift:** Enforce strict Pydantic V2 error raising when custom XML or GeoJSON attributes deviate from the schema.
+
+### D. Refinement property tests carry both oracles
+This is the one statement of the retrospective's rule 3
+(`docs/retrospectives/2026-09-27-increments-14-to-20b.md`). Every property test
+of refinement output checks both, on every path it exercises (start quality on
+or off, constraint feet on or off, any tolerance, one thread or many):
+* **Constrained-Delaunay oracle:** no interior edge that is not a constraint
+  edge has an apex strictly inside the other triangle's circumcircle, decided
+  by the exact predicate in the frame the producer used.
+* **Tolerance oracle:** every valid DEM node in a triangle with three valid
+  vertices lies within `--tolerance` of that triangle's plane, recomputed from
+  the output, never from the scan's own records.
+
+Reference implementations: `delaunay_oracle` and `tolerance_oracle` in
+`tests/cpp/property/prop_refinement_constraint_feet.cpp`. The Lawson bug fixed
+in `c23583b` was present from 14b to 20b because no refinement suite carried
+the first oracle.
 
 ## 4. Operational Style Guide for Tests
 * **Idiomatic & Clean:** Test code is production code. It must be self-documenting, readable, and free of massive, unreadable boilerplate blocks. Use `pytest` fixtures heavily for data setup.
