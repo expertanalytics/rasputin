@@ -36,10 +36,6 @@ if TYPE_CHECKING:
 #: within this. Measured noise is at most 2.2e-11 cells (B3), and 0 for DTM10.
 ALIGN_TOLERANCE = 1e-6
 
-#: The cap counts float32: headers do not give the decoded dtype, so a float64
-#: mosaic is under-counted by 2x (pinned by the red suite).
-BYTES_PER_NODE = 4
-
 
 class MosaicError(ValueError):
     """A request the tiles cannot answer. A `ValueError`, like `GeoTiffError`."""
@@ -82,14 +78,16 @@ class IndexWindow(BaseModel):
 
 
 class TilePlacement(BaseModel):
-    """One selected tile: `canvas` in canvas indices, `source` in the tile's own."""
+    """One selected tile: `canvas` in canvas indices, `source` in the tile's own,
+    and the dtype its footprint says it decodes to."""
 
-    model_config = ConfigDict(frozen=True)
+    model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True)
 
     name: str
     meta: RasterMeta
     canvas: IndexWindow
     source: IndexWindow
+    dtype: np.dtype[Any] = np.dtype(np.float32)
 
 
 class MosaicPlan(BaseModel):
@@ -110,6 +108,18 @@ class Mosaic:
 
     tile: DemTile
     plan: MosaicPlan
+
+
+@dataclass(frozen=True, slots=True)
+class _Lattice:
+    """One lattice's tiles (sorted by name), its reference node, each tile's
+    global index, and the box's window on it with the tiles that meet it."""
+
+    group: list[TileFootprint]
+    reference: tuple[float, float]
+    placed: list[_Placed]
+    window: tuple[int, int, int, int]
+    selected: list[_Placed]
 
 
 @dataclass(frozen=True, slots=True)
@@ -136,56 +146,50 @@ def plan_mosaic(
     `bounds` is the box in the DEM's CRS; without it, the lattice's union.
     `needed` is a shapely geometry in the DEM's CRS, closed: a node on its
     boundary is needed. Without it, every node of the window is.
+
+    When the request selects tiles on several lattices, the plan is on the one
+    whose own tiles cover every needed node (Ola's Q5 reading, `_covering`).
     """
     if not footprints:
         raise MosaicError("no tiles to plan a mosaic from")
-    lattices: list[list[TileFootprint]] = []
+    groups: list[list[TileFootprint]] = []
     for footprint in sorted(footprints, key=lambda f: f.name):
-        group = next((g for g in lattices if _aligned(g[0].meta, footprint.meta)), None)
+        group = next((g for g in groups if _aligned(g[0].meta, footprint.meta)), None)
         if group is None:
-            lattices.append([footprint])
+            groups.append([footprint])
         else:
             group.append(footprint)
 
-    chosen: list[tuple[tuple[float, float], tuple[int, int, int, int], list[_Placed]]] = []
-    for group in lattices:
+    chosen: list[_Lattice] = []
+    for group in groups:
         reference, placed = _placed(group)
         window = _window(bounds, reference, group[0].meta, placed)
         selected = [p for p in placed if window is not None and p.meets(*window)]
         if window is not None and selected:
-            chosen.append((reference, window, selected))
+            chosen.append(_Lattice(group, reference, placed, window, selected))
     if not chosen:
         raise MosaicError(f"the box {bounds} meets no tile")
     if len(chosen) > 1:
-        raise MosaicError(_mixed(chosen[0][2][0].footprint, chosen[1][2][0].footprint))
+        return plan_mosaic(_covering(chosen, bounds, needed), bounds, needed)
 
-    (x_ref, y_ref), (r0, c0, r1, c1), selected = chosen[0]
+    lattice = chosen[0]
+    (x_ref, y_ref), (r0, c0, r1, c1), selected = lattice.reference, lattice.window, lattice.selected
     rows, cols = r1 - r0 + 1, c1 - c0 + 1
-    first = selected[0].footprint.meta
     if rows < 2 or cols < 2:
         raise MosaicError(f"the request is {rows} x {cols} nodes; a mesh needs at least 2 x 2")
-    cap = physical_memory() // 2
-    if rows * cols * BYTES_PER_NODE > cap:
+    dtype = np.result_type(*(p.footprint.dtype for p in selected))
+    cap, size = physical_memory() // 2, rows * cols * dtype.itemsize
+    if size > cap:
         raise MosaicError(
-            f"the request is {rows} x {cols} nodes, {rows * cols * BYTES_PER_NODE} bytes at "
-            f"float32, over the cap of half the physical memory ({cap} bytes); "
-            "narrow it with --bbox"
+            f"the request is {rows} x {cols} nodes, {size} bytes at {dtype}, over the cap "
+            f"of half the physical memory ({cap} bytes); narrow it with --bbox"
         )
-    meta = RasterMeta(
-        x_min=x_ref + c0 * first.delta_x,
-        y_max=y_ref - r0 * first.delta_y,
-        delta_x=first.delta_x,
-        delta_y=first.delta_y,
-        cols=cols,
-        rows=rows,
-        epsg=first.epsg,
-        nodata=first.nodata,
-        nodata_source=first.nodata_source,
-        pixel_is_area=first.pixel_is_area,
-        vertical_unit_assumed=any(p.footprint.meta.vertical_unit_assumed for p in selected),
-    )
+    vertical = any(p.footprint.meta.vertical_unit_assumed for p in selected)
+    meta = _grid(selected[0].footprint.meta, lattice.reference, lattice.window, vertical)
     tiles = tuple(_placement(p, r0, c0, r1, c1) for p in selected)
-    _check_coverage(meta, tiles, needed)
+    uncovered = _uncovered(meta, tiles, needed)
+    if uncovered:
+        raise MosaicError(uncovered)
     return MosaicPlan(
         meta=meta,
         reference=(x_ref, y_ref),
@@ -199,24 +203,23 @@ def assemble(plan: MosaicPlan, load: Callable[[str], DemTile]) -> Mosaic:
 
     One tile whose grid is the mosaic's is returned as loaded: no canvas, no
     copy (I7). Otherwise the canvas is allocated once, NaN-filled, in the
-    first tile's dtype, and handed to `DemTile` without a copy (R7). Dtypes
-    are known only after a load, so a later float64 tile re-casts it once to
-    the tiles' result dtype; both archives are float32 throughout.
+    planned dtype (the placements' result dtype, from the headers), and handed
+    to `DemTile` without a copy (R7). A hand-built footprint may under-state
+    its dtype, so a loaded tile that promotes further re-casts the canvas.
     """
     if len(plan.tiles) == 1 and plan.tiles[0].meta == plan.meta:
         return Mosaic(tile=_loaded(plan.tiles[0], load), plan=plan)
-    canvas: npt.NDArray[Any] | None = None
+    if not plan.tiles:
+        raise MosaicError("the plan has no tiles")
+    planned = np.result_type(*(t.dtype for t in plan.tiles))
+    canvas: npt.NDArray[Any] = np.full((plan.meta.rows, plan.meta.cols), np.nan, dtype=planned)
     merged: list[TilePlacement] = []
     for placement in plan.tiles:
         array = _loaded(placement, load).array
-        if canvas is None:
-            canvas = np.full((plan.meta.rows, plan.meta.cols), np.nan, dtype=array.dtype)
-        elif np.result_type(canvas.dtype, array.dtype) != canvas.dtype:
+        if np.result_type(canvas.dtype, array.dtype) != canvas.dtype:
             canvas = canvas.astype(np.result_type(canvas.dtype, array.dtype))
-        _merge(canvas, placement, array, plan.meta.nodata, merged)
+        _merge(canvas, placement, array, plan.meta.nodata, merged, load)
         merged.append(placement)
-    if canvas is None:
-        raise MosaicError("the plan has no tiles")
     return Mosaic(tile=DemTile._adopt(plan.meta, canvas), plan=plan)
 
 
@@ -252,14 +255,89 @@ def _window(
     lattice's union (R4.4); None when the box misses the union."""
     last_row = max(p.row + p.footprint.meta.rows for p in placed) - 1
     last_col = max(p.col + p.footprint.meta.cols for p in placed) - 1
+    return _clamp(_snapped(bounds, reference, m), (0, 0, last_row, last_col))
+
+
+def _snapped(
+    bounds: Bounds | None, reference: tuple[float, float], m: RasterMeta
+) -> tuple[int, int, int, int] | None:
+    """The box snapped outward to `m`'s lattice, unclamped; None for no box."""
     if bounds is None:
-        return 0, 0, last_row, last_col
+        return None
     (x_ref, y_ref), dx, dy = reference, m.delta_x, m.delta_y
-    c0 = max(math.floor(_snap((bounds.x_min - x_ref) / dx)), 0)
-    c1 = min(math.ceil(_snap((bounds.x_max - x_ref) / dx)), last_col)
-    r0 = max(math.floor(_snap((y_ref - bounds.y_max) / dy)), 0)
-    r1 = min(math.ceil(_snap((y_ref - bounds.y_min) / dy)), last_row)
+    return (
+        math.floor(_snap((y_ref - bounds.y_max) / dy)),
+        math.floor(_snap((bounds.x_min - x_ref) / dx)),
+        math.ceil(_snap((y_ref - bounds.y_min) / dy)),
+        math.ceil(_snap((bounds.x_max - x_ref) / dx)),
+    )
+
+
+def _clamp(
+    window: tuple[int, int, int, int] | None, limits: tuple[int, int, int, int]
+) -> tuple[int, int, int, int] | None:
+    """`window` (None: unbounded) inside `limits`, or None when they miss."""
+    r0, c0, r1, c1 = limits if window is None else window
+    r0, c0 = max(r0, limits[0]), max(c0, limits[1])
+    r1, c1 = min(r1, limits[2]), min(c1, limits[3])
     return (r0, c0, r1, c1) if r0 <= r1 and c0 <= c1 else None
+
+
+def _covering(chosen: list[_Lattice], bounds: Bounds | None, needed: Any) -> list[TileFootprint]:
+    """Ola's Q5 reading: of the lattices the request selects tiles on, the one
+    whose own tiles cover every node it needs; several, the most tiles, ties by
+    the first tile's name; none, the Q5 refusal.
+
+    A lattice needs its nodes in the box snapped outward, clamped to the
+    bounding box of every selected tile on any lattice, not to its own union,
+    or a box running past it into another lattice's tiles would be cut short.
+    """
+    corners = [(p.footprint.meta, lattice) for lattice in chosen for p in lattice.selected]
+    x_lo = min(m.x_min for m, _ in corners)
+    x_hi = max(m.x_min + (m.cols - 1) * m.delta_x for m, _ in corners)
+    y_hi = max(m.y_max for m, _ in corners)
+    y_lo = min(m.y_max - (m.rows - 1) * m.delta_y for m, _ in corners)
+    covering = []
+    for lattice in chosen:
+        (x_ref, y_ref), m = lattice.reference, lattice.group[0].meta
+        inside = (
+            math.ceil(_snap((y_ref - y_hi) / m.delta_y)),
+            math.ceil(_snap((x_lo - x_ref) / m.delta_x)),
+            math.floor(_snap((y_ref - y_lo) / m.delta_y)),
+            math.floor(_snap((x_hi - x_ref) / m.delta_x)),
+        )
+        window = _clamp(_snapped(bounds, lattice.reference, m), inside)
+        if window is None:
+            continue
+        tiles = tuple(_placement(p, *window) for p in lattice.placed if p.meets(*window))
+        if not _uncovered(_grid(m, lattice.reference, window, False), tiles, needed):
+            covering.append(lattice)
+    if not covering:
+        raise MosaicError(_mixed(chosen[0].selected[0].footprint, chosen[1].selected[0].footprint))
+    return min(covering, key=lambda c: (-len(c.group), c.group[0].name)).group
+
+
+def _grid(
+    first: RasterMeta,
+    reference: tuple[float, float],
+    window: tuple[int, int, int, int],
+    vertical_unit_assumed: bool,
+) -> RasterMeta:
+    """The node grid of `window` on `first`'s lattice."""
+    r0, c0, r1, c1 = window
+    return RasterMeta(
+        x_min=reference[0] + c0 * first.delta_x,
+        y_max=reference[1] - r0 * first.delta_y,
+        delta_x=first.delta_x,
+        delta_y=first.delta_y,
+        cols=c1 - c0 + 1,
+        rows=r1 - r0 + 1,
+        epsg=first.epsg,
+        nodata=first.nodata,
+        nodata_source=first.nodata_source,
+        pixel_is_area=first.pixel_is_area,
+        vertical_unit_assumed=vertical_unit_assumed,
+    )
 
 
 def _snap(cells: float) -> float:
@@ -280,26 +358,35 @@ def _placement(p: _Placed, r0: int, c0: int, r1: int, c1: int) -> TilePlacement:
         meta=m,
         canvas=IndexWindow(row0=rs - r0, col0=cs - c0, rows=rows, cols=cols),
         source=IndexWindow(row0=rs - p.row, col0=cs - p.col, rows=rows, cols=cols),
+        dtype=p.footprint.dtype,
     )
 
 
-def _check_coverage(meta: RasterMeta, tiles: tuple[TilePlacement, ...], needed: Any) -> None:
-    """Refuse a needed node no selected tile covers (R4.5, per node)."""
+def _uncovered(meta: RasterMeta, tiles: tuple[TilePlacement, ...], needed: Any) -> str | None:
+    """Why a needed node no tile covers refuses the request (R4.5, per node),
+    or None. A mask, a count and per-axis reductions: no per-node index or
+    coordinate array unless `needed` must be tested node by node (S1)."""
     uncovered = np.ones((meta.rows, meta.cols), dtype=bool)
     for t in tiles:
         c = t.canvas
         uncovered[c.row0 : c.row0 + c.rows, c.col0 : c.col0 + c.cols] = False
-    rows, cols = np.nonzero(uncovered)
-    xs = meta.x_min + cols * meta.delta_x
-    ys = meta.y_max - rows * meta.delta_y
-    if needed is not None:
-        inside = shapely.intersects_xy(needed, xs, ys)
-        xs, ys = xs[inside], ys[inside]
-    if len(xs):
-        raise MosaicError(
-            f"{len(xs)} nodes the request needs are in no tile: x {_num(xs.min())} to "
-            f"{_num(xs.max())}, y {_num(ys.min())} to {_num(ys.max())} (EPSG:{meta.epsg})"
+    if needed is not None and uncovered.any():
+        rows, cols = np.nonzero(uncovered)
+        outside = ~shapely.intersects_xy(
+            needed, meta.x_min + cols * meta.delta_x, meta.y_max - rows * meta.delta_y
         )
+        uncovered[rows[outside], cols[outside]] = False
+    count = np.count_nonzero(uncovered)
+    if not count:
+        return None
+    rows_hit = np.flatnonzero(uncovered.any(axis=1))
+    cols_hit = np.flatnonzero(uncovered.any(axis=0))
+    x0, x1 = (meta.x_min + cols_hit[i] * meta.delta_x for i in (0, -1))
+    y1, y0 = (meta.y_max - rows_hit[i] * meta.delta_y for i in (0, -1))
+    return (
+        f"{count} nodes the request needs are in no tile: x {_num(x0)} to {_num(x1)}, "
+        f"y {_num(y0)} to {_num(y1)} (EPSG:{meta.epsg})"
+    )
 
 
 def _loaded(placement: TilePlacement, load: Callable[[str], DemTile]) -> DemTile:
@@ -317,10 +404,12 @@ def _merge(
     array: npt.NDArray[Any],
     nodata: float | None,
     merged: list[TilePlacement],
+    load: Callable[[str], DemTile],
 ) -> None:
     """R5's overlap rule, per node: valid beats NoData; two valid values must
     be equal (`==`); NoData against NoData keeps the sentinel over NaN, in
-    every order."""
+    every order. A refusal names the merged tile whose value the incoming one
+    disagrees with, re-loading candidates (B2): the request is refused anyway."""
     c, s = placement.canvas, placement.source
     region = canvas[c.row0 : c.row0 + c.rows, c.col0 : c.col0 + c.cols]
     incoming = array[s.row0 : s.row0 + s.rows, s.col0 : s.col0 + s.cols]
@@ -332,11 +421,17 @@ def _merge(
     clash = old_valid & new_valid & (region != incoming)
     if clash.any():
         row, col = (int(v) for v in np.argwhere(clash)[0])
+        held = region[row, col]
         other = next(
             m.name
             for m in merged
             if m.canvas.row0 <= c.row0 + row < m.canvas.row0 + m.canvas.rows
             and m.canvas.col0 <= c.col0 + col < m.canvas.col0 + m.canvas.cols
+            and _loaded(m, load).array[
+                m.source.row0 + c.row0 + row - m.canvas.row0,
+                m.source.col0 + c.col0 + col - m.canvas.col0,
+            ]
+            == held
         )
         largest = float(np.max(np.abs(region[clash].astype(np.float64) - incoming[clash])))
         raise MosaicError(

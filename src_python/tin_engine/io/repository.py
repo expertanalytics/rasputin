@@ -11,11 +11,12 @@ from __future__ import annotations
 
 from collections.abc import Callable, Iterable
 from pathlib import Path
-from typing import Protocol
+from typing import Any, Protocol
 
+import numpy as np
 from pydantic import BaseModel, ConfigDict
 
-from .geotiff import decode_dem, read_meta
+from .geotiff import decode_dem, read_header
 from .models import DemTile, GeoTiffError, RasterMeta
 
 #: `from_directory` lists these suffixes, in any case (R2).
@@ -23,12 +24,14 @@ TILE_SUFFIXES = frozenset({".tif", ".tiff"})
 
 
 class TileFootprint(BaseModel):
-    """One tile as its header describes it: the file's name and its node grid."""
+    """One tile as its header describes it: the file's name, its node grid, and
+    the dtype it decodes to (float32 unless given; S2)."""
 
-    model_config = ConfigDict(frozen=True)
+    model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True)
 
     name: str
     meta: RasterMeta
+    dtype: np.dtype[Any] = np.dtype(np.float32)
 
 
 class DemRepository(Protocol):
@@ -79,9 +82,10 @@ class TiffDemRepository:
     def footprints(self) -> tuple[TileFootprint, ...]:
         """Read every header once, on the first call, and keep them (R2)."""
         if self._footprints is None:
+            headers = {name: self._read(name, read_header) for name in sorted(self._paths)}
             self._footprints = tuple(
-                TileFootprint(name=name, meta=self._read(name, read_meta))
-                for name in sorted(self._paths)
+                TileFootprint(name=name, meta=meta, dtype=dtype)
+                for name, (meta, dtype) in headers.items()
             )
         return self._footprints
 

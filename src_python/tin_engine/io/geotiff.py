@@ -53,8 +53,17 @@ def read_meta(source: BinaryIO, *, nodata: float | None = None) -> RasterMeta:
     damaged still gives its `RasterMeta`; `decode_dem` then refuses it at the
     "pixel data" stage. `source` is read but not closed.
     """
+    return read_header(source, nodata=nodata)[0]
+
+
+def read_header(
+    source: BinaryIO, *, nodata: float | None = None
+) -> tuple[RasterMeta, np.dtype[Any]]:
+    """`read_meta`, and the dtype `decode_dem` will return: the file's through
+    `PROMOTION` (15a S2, so a mosaic's cap can count the canvas it will build)."""
     with _tiff(source, nodata) as tif:
-        return _header(tif, nodata)[0]
+        meta, dtype = _header(tif, nodata)
+    return meta, PROMOTION[dtype]
 
 
 def decode_dem(source: BinaryIO, *, nodata: float | None = None) -> DemTile:
@@ -349,4 +358,4 @@ def _same(a: float, b: float) -> bool:
     return a == b or (math.isnan(a) and math.isnan(b))
 
 
-__all__ = ["decode_dem", "read_meta"]
+__all__ = ["decode_dem", "read_header", "read_meta"]
