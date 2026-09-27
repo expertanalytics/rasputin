@@ -44,6 +44,18 @@ important" means a switch (today's path for small inputs, a parallel path
 for large ones) or one path for everything. Section 4 lays out the levels;
 questions Q1 and Q2 in section 8 ask Ola to choose.
 
+**Ruled by Ola, 2026-09-27: "yes to all"** to the recommendations in
+section 8:
+
+- **Q1: L1.** Deterministic and independent of the thread count, in a new
+  order; T6 stays, increment 18's golden digests are re-recorded once.
+- **Q2: one path** for every input; every mesh changes once when 21d lands.
+- **Q3: at most 2 % more triangles** at 1 m on the quarter circle, worst angle
+  and max degree no worse, measured in 21c before choosing between C and A1.
+- **Q4: 21a and 21b go ahead now**; 21b waits for the tie-classification
+  measurement.
+- **Q5: domain decomposition is deferred** to the large-area (mosaic) work.
+
 ## 1. Prior art: legacy and literature
 
 ### Legacy
@@ -782,7 +794,7 @@ sweep from `tools/bench.py`, battery against battery. For 21a and 21b the mesh
 hash must be unchanged. For 21d the mesh hash changes by design, so the
 comparison is time, triangle count, worst angle and max degree (Q3).
 
-## 8. Questions for Ola
+## 8. Questions for Ola (ruled 2026-09-27; see "Ola's rulings")
 
 **Q1. Which determinism level?** Your ruling allows leaving bit-identical
 output. It does not say whether the mesh may then depend on the thread count
