@@ -1138,8 +1138,11 @@ scratch implementation.
 - `open_dem` moves the domain into the DEM's CRS, plans on its bounds with its
   needed region, runs `check_extent` against the plan's `meta`, and only then
   assembles. `DemInput.domain` is the domain in the DEM's CRS, `None` without
-  one. The plan equals the plan of `bounds` equal to the moved domain's bounds;
-  on one file that is a window of it.
+  one. The plan equals the plan of `bounds` equal to the moved domain's bounds,
+  except where a domain vertex lies within the 1e-6-cell snap band past a node
+  line: there `_past` moves that edge out and the domain's window is one node
+  line wider than `--bbox`'s (found at green, 15b). On one file the plan is a
+  window of it.
 - **The needed region**, "the domain polygon grown by one cell", is pinned
   only away from its edge: a missing node 0.73 cell from a domain vertex is
   refused (`in no tile`, naming its x); missing nodes 2.5 cells or more from

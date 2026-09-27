@@ -164,7 +164,9 @@ its corners are NoData vertices. See R5.
   area-registered DEM this is half a cell inside the image edge. See U4 for
   clipping instead. The quarter circle's straight edges lie on the border
   row and column exactly, so they pass.
-- **CRS, required, never transformed.** GeoJSON under RFC 7946 is WGS 84 unless
+- **CRS, required, never transformed** *(superseded by increment 15b: the
+  domain is reprojected into the DEM's CRS; see "Ruled by the user", U1).*
+  GeoJSON under RFC 7946 is WGS 84 unless
   it carries the 2008 spec's `crs` member, so: a GeoJSON file's CRS is its
   `crs` member (`urn:ogc:def:crs:EPSG::25833` or `EPSG:25833`), and a file
   without one is EPSG:4326 by the standard and refused as a mismatch. WKT has no
@@ -173,7 +175,8 @@ its corners are NoData vertices. See R5.
 - **`GeoPolygon` and `--bbox`.** Increment 15 says `GeoPolygon` lands with the
   clip, as its first caller. This is the clip, but it needs no transform, no
   `intersects` and no `buffer` yet. So this increment lands a smaller
-  `DomainPolygon` (shapely polygon plus EPSG code, frozen) in a new
+  `DomainPolygon` (shapely polygon plus EPSG code, frozen; since 15b, plus a
+  `crs` string instead of the code) in a new
   `tin_engine/domain.py`. When 15 lands, its `plan_mosaic` takes
   `domain.polygon.bounds` in place of `--bbox`; `--domain` and `--bbox` are then
   mutually exclusive. `GeoPolygon` with `transform` grows from `DomainPolygon`
