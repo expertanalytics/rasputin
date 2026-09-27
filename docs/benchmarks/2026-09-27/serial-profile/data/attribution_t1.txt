@@ -1,0 +1,73 @@
+self samples under refine: 13079 (1 sample = 1 ms)
+    8634   66.0 %  scan (parallel phase)
+     825    6.3 %  legalise_around loop (stack, touched marks)
+     718    5.5 %  must_flip (edge lookup, frame points)
+     653    5.0 %  exact incircle (adaptive fallback)
+     466    3.6 %  rebuild active: collect+sort+unique
+     349    2.7 %  filtered predicates (incircle/orient2d)
+     339    2.6 %  topology writes: put/repoint (callers above)
+     330    2.5 %  topology writes: flip
+     284    2.2 %  topology writes: split
+     208    1.6 %  refine body, no line info (refine.hpp:0)
+     198    1.5 %  allocation (malloc/free/memmove)
+      39    0.3 %  output: vertices, z, triangles, constraint_edges
+      18    0.1 %  pybind: outcome conversion
+      10    0.1 %  split loop bookkeeping (results read, touched, skipped)
+       6    0.0 %  start quality (improve)
+       2    0.0 %  setup: to_lattice, LatticeMesh::build
+
+allocation charged to its owner:
+      86    0.7 %  legalise_around loop (stack, touched marks)
+      55    0.4 %  must_flip (edge lookup, frame points)
+      14    0.1 %  results.resize / round setup
+      11    0.1 %  output: vertices, z, triangles, constraint_edges
+      10    0.1 %  topology writes: put/repoint (callers above)
+       7    0.1 %  split loop bookkeeping (results read, touched, skipped)
+       4    0.0 %  topology writes: split
+       4    0.0 %  pybind: outcome conversion
+       2    0.0 %  start quality (improve)
+       2    0.0 %  setup: to_lattice, LatticeMesh::build
+       2    0.0 %  refine body, no line info (refine.hpp:0)
+       1    0.0 %  rebuild active: collect+sort+unique
+
+top innermost frames:
+    8329   63.7 %  terrain::refinement::scan<terrain::raster::RasterView<float>>(terrain::raster::RasterView<float> const&, terrain::mesh::LatticeMesh const&, unsigned int)
+    1076    8.2 %  decltype(auto) std::__variant_detail::__visitation::__base::__dispatcher<0ul>::__dispatch[abi:nqe210106]<std::__variant_detail::__visitation::__variant::__value
+     380    2.9 %  terrain::mesh::detail::must_flip<terrain::pred::FilteredKernel<terrain::pred::DetriaExact>>(terrain::mesh::LatticeMesh const&, unsigned int, unsigned int, terra
+     331    2.5 %  std::__bitset_partition[abi:nqe220106]<std::_ClassicAlgPolicy, unsigned int*, std::ranges::less>(unsigned int*, unsigned int*, std::ranges::less)
+     305    2.3 %  terrain::mesh::LatticeMesh::flip(unsigned int, unsigned int)
+     296    2.3 %  std::__1::vector<terrain::mesh::MeshVertex, std::__1::allocator<terrain::mesh::MeshVertex>>::data[abi:nqe210106]() const (in _core.cpython-314-darwin.so) (vecto
+     291    2.2 %  terrain::pred::FilteredKernel<terrain::pred::DetriaExact>::incircle_ccw(terrain::Point2 const&, terrain::Point2 const&, terrain::Point2 const&, terrain::Point2 
+     246    1.9 %  terrain::mesh::LatticeMesh::put(unsigned int, std::array<unsigned int, 3ul>, std::array<terrain::mesh::LatticeMesh::Side, 3ul>)
+     226    1.7 %  detria::predicates::incircleadapt<double>(double*, double*, double*, double*, double)
+     178    1.4 %  detria::predicates::fast_expansion_sum_zeroelim<double>(int, double const*, int, double const*, double*)
+     146    1.1 %  terrain::refinement::ScanResult terrain::refinement::scan<terrain::raster::RasterView<float>>(terrain::raster::RasterView<float> const&, terrain::mesh::LatticeM
+     128    1.0 %  terrain::mesh::LatticeMesh::split_edge(unsigned int, unsigned int, terrain::mesh::MeshVertex)
+     106    0.8 %  std::__introsort<std::_ClassicAlgPolicy, std::ranges::less, unsigned int*, true>(unsigned int*, unsigned int*, std::ranges::less, std::iterator_traits<unsigned 
+      99    0.8 %  terrain::mesh::LatticeMesh::split_inside(unsigned int, terrain::mesh::LatticeVertex)
+      61    0.5 %  _platform_memmove
+      58    0.4 %  terrain::mesh::LatticeMesh::put(unsigned int, std::__1::array<unsigned int, 3ul>, std::__1::array<terrain::mesh::LatticeMesh::Side, 3ul>) (in _core.cpython-314-
+      55    0.4 %  _xzm_free_tc
+      48    0.4 %  std::__1::optional<double> terrain::refinement::vertex_z<terrain::raster::RasterView<float>>(terrain::raster::RasterView<float> const&, terrain::mesh::MeshVerte
+      41    0.3 %  terrain::pred::incircle_of_sign(double) (in _core.cpython-314-darwin.so) (orientation.hpp:57)
+      38    0.3 %  int detria::predicates::scale_expansion_zeroelim<double>(int, double const*, double, double*) (in _core.cpython-314-darwin.so) (detria.hpp:488)
+      37    0.3 %  _xzm_malloc_tc
+      32    0.2 %  terrain::raster::RasterView<float>::value_at(terrain::raster::CellIndex const&) const (in _core.cpython-314-darwin.so) (view.hpp:27)
+      31    0.2 %  terrain::mesh::MeshVertex::is_node() const (in _core.cpython-314-darwin.so) (lattice_mesh.hpp:71)
+      27    0.2 %  terrain::pred::DetriaExact::incircle_ccw(terrain::Point2 const&, terrain::Point2 const&, terrain::Point2 const&, terrain::Point2 const&)
+      26    0.2 %  terrain::refinement::RefineOutcome terrain::refinement::refine<terrain::raster::RasterView<float>>(terrain::raster::RasterView<float> const&, terrain::IndexedMe
+      26    0.2 %  double detria::predicates::incircleadapt<double>(double*, double*, double*, double*, double) (in _core.cpython-314-darwin.so) (detria.hpp:0)
+      21    0.2 %  std::__1::array<unsigned int, 3ul>& std::__1::vector<std::__1::array<unsigned int, 3ul>, std::__1::allocator<std::__1::array<unsigned int, 3ul>>>::emplace_back<
+      20    0.2 %  detria::predicates::scale_expansion_zeroelim<double>(int, double const*, double, double*)
+      15    0.1 %  std::__1::__optional_storage_base<terrain::mesh::LatticeVertex, false>::has_value[abi:nqe210106]() const (in _core.cpython-314-darwin.so) (optional:361)
+      15    0.1 %  terrain::pred::FilteredKernel<terrain::pred::DetriaExact>::incircle(terrain::Point2 const&, terrain::Point2 const&, terrain::Point2 const&, terrain::Point2 cons
+      15    0.1 %  malloc_type_malloc
+      14    0.1 %  bool terrain::mesh::detail::must_flip<terrain::pred::FilteredKernel<terrain::pred::DetriaExact>>(terrain::mesh::LatticeMesh const&, unsigned int, unsigned int, 
+      13    0.1 %  std::__partial_sort_impl[abi:nqe220106]<std::_ClassicAlgPolicy, std::ranges::less&, unsigned int*, unsigned int*>(unsigned int*, unsigned int*, unsigned int*, s
+      12    0.1 %  terrain::mesh::LatticeMesh::flip(unsigned int, unsigned int) (in _core.cpython-314-darwin.so) (lattice_mesh.hpp:232)
+      12    0.1 %  _free
+       9    0.1 %  int detria::predicates::fast_expansion_sum_zeroelim<double>(int, double const*, int, double const*, double*) (in _core.cpython-314-darwin.so) (detria.hpp:353)
+       9    0.1 %  std::__1::vector<std::__1::array<unsigned int, 3ul>, std::__1::allocator<std::__1::array<unsigned int, 3ul>>>::operator[][abi:nqe210106](unsigned long) (in _cor
+       8    0.1 %  int detria::predicates::fast_expansion_sum_zeroelim<double>(int, double const*, int, double const*, double*) (in _core.cpython-314-darwin.so) (detria.hpp:385)
+       8    0.1 %  int detria::predicates::scale_expansion_zeroelim<double>(int, double const*, double, double*) (in _core.cpython-314-darwin.so) (detria.hpp:512)
+       8    0.1 %  double detria::predicates::incircleadapt<double>(double*, double*, double*, double*, double) (in _core.cpython-314-darwin.so) (detria.hpp:600)

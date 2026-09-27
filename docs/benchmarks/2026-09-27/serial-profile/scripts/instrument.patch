@@ -1,0 +1,240 @@
+diff --git a/include/terrain/mesh/lawson.hpp b/include/terrain/mesh/lawson.hpp
+index 68165b0..5aa8d8a 100644
+--- a/include/terrain/mesh/lawson.hpp
++++ b/include/terrain/mesh/lawson.hpp
+@@ -32,6 +32,12 @@
+ 
+ namespace terrain::mesh {
+ 
++// PROFILE-ONLY: when set, legalise_around appends every slot it reads (the
++// popped triangle and its neighbour across the tested edge). Serial use only.
++namespace prof {
++inline std::vector<std::uint32_t>* reads = nullptr;
++}  // namespace prof
++
+ struct LatticeFrame {
+     double dx = 1.0;
+     double dy = 1.0;
+@@ -90,6 +96,11 @@ std::size_t legalise_around(LatticeMesh& m, std::uint32_t q, std::span<const std
+         unsigned i = 0;
+         while (i < 3 && tri[i] != q)
+             ++i;
++        if (prof::reads) {
++            prof::reads->push_back(t);
++            if (i < 3 && m.neighbours(t)[(i + 1) % 3] != kNoNeighbour)
++                prof::reads->push_back(m.neighbours(t)[(i + 1) % 3]);
++        }
+         if (i == 3 || !detail::must_flip<K>(m, t, (i + 1) % 3, f))
+             continue;
+         const auto u = m.neighbours(t)[(i + 1) % 3];
+diff --git a/include/terrain/predicates/kernel.hpp b/include/terrain/predicates/kernel.hpp
+index b794353..1a23f56 100644
+--- a/include/terrain/predicates/kernel.hpp
++++ b/include/terrain/predicates/kernel.hpp
+@@ -19,6 +19,12 @@
+ 
+ namespace terrain::pred {
+ 
++// PROFILE-ONLY (serial-profile, 2026-09-27): predicate counters, not committed.
++namespace prof {
++inline unsigned long long orient_calls = 0, orient_exact = 0, orient_exact_zero = 0;
++inline unsigned long long incircle_calls = 0, incircle_exact = 0, incircle_exact_zero = 0;
++}  // namespace prof
++
+ // Qualified static calls, for the same reason as `ExactPredicates`: a model
+ // must be usable without an instance.
+ //
+@@ -121,10 +127,14 @@ struct FilteredKernel {
+         const double det = detleft - detright;
+         const double permanent = std::fabs(detleft) + std::fabs(detright);
+ 
++        ++prof::orient_calls;
+         if (std::fabs(det) > orient2d_bound_a * permanent) {
+             return orientation_of_sign(det);
+         }
+-        return E::orient2d(a, b, c);
++        ++prof::orient_exact;
++        const auto o = E::orient2d(a, b, c);
++        prof::orient_exact_zero += o == Orientation::Collinear ? 1 : 0;
++        return o;
+     }
+ 
+     // Total and precondition-free, unlike the backend's `incircle_ccw`.
+@@ -171,10 +181,14 @@ private:
+         const double det = detail::incircle_det(a, b, c, d);
+         const double permanent = detail::incircle_permanent(a, b, c, d);
+ 
++        ++prof::incircle_calls;
+         if (std::fabs(det) > incircle_bound_a * permanent) {
+             return incircle_of_sign(det);
+         }
+-        return E::incircle_ccw(a, b, c, d);
++        ++prof::incircle_exact;
++        const auto r = E::incircle_ccw(a, b, c, d);
++        prof::incircle_exact_zero += r == Incircle::Cocircular ? 1 : 0;
++        return r;
+     }
+ };
+ 
+diff --git a/include/terrain/refinement/refine.hpp b/include/terrain/refinement/refine.hpp
+index 7605f75..4626fcf 100644
+--- a/include/terrain/refinement/refine.hpp
++++ b/include/terrain/refinement/refine.hpp
+@@ -50,6 +50,9 @@
+ #include <terrain/refinement/scan.hpp>
+ 
+ #include <algorithm>
++#include <cstdio>
++#include <cstdlib>
++#include <mutex>
+ #include <array>
+ #include <chrono>
+ #include <cmath>
+@@ -277,6 +280,10 @@ template <raster::RasterSource R>
+                             + q.skipped_blocked + q.walk_bound_hits;
+         out.quality_seconds = since(t0);
+     }
++    // PROFILE-ONLY: RASPUTIN_PROF_OUT names a file for per-round records.
++    std::FILE* prof_out = nullptr;
++    if (const char* path = std::getenv("RASPUTIN_PROF_OUT"))
++        prof_out = std::fopen(path, "w");
+     std::vector<ScanResult> results;
+     std::set<std::pair<std::uint32_t, std::uint32_t>> footed;  // (row, col), R2 step 5
+     std::vector<std::uint32_t> active(m.triangle_count());
+@@ -287,12 +294,34 @@ template <raster::RasterSource R>
+         ++out.rounds;
+         results.resize(m.triangle_count());
+         t0 = clock::now();
++        struct ChunkRec { std::size_t begin, end; double start, stop; unsigned long long nodes; };
++        std::vector<ChunkRec> chunk_recs;
++        std::mutex chunk_mu;
+         parallel_util::for_each_chunk(active.size(), options.threads,
+                                       [&](std::size_t begin, std::size_t end) {
++                                          const double c0 = since(t0);
++                                          const auto n0 = prof::scan_nodes;
+                                           for (std::size_t i = begin; i < end; ++i)
+                                               results[active[i]] = scan(dem, m, active[i]);
++                                          const double c1 = since(t0);
++                                          const std::lock_guard lock{chunk_mu};
++                                          chunk_recs.push_back({begin, end, c0, c1, prof::scan_nodes - n0});
+                                       });
+-        out.scan_seconds += since(t0);
++        const double scan_round = since(t0);
++        out.scan_seconds += scan_round;
++        if (prof_out) {
++            std::fprintf(prof_out, "R %zu %zu %.9f %zu\n", out.rounds, active.size(), scan_round, chunk_recs.size());
++            std::sort(chunk_recs.begin(), chunk_recs.end(), [](auto& a, auto& b) { return a.begin < b.begin; });
++            for (const auto& c : chunk_recs)
++                std::fprintf(prof_out, "C %zu %zu %.9f %.9f %llu\n", c.begin, c.end, c.start, c.stop, c.nodes);
++        }
++        const auto pc0 = pred::prof::incircle_calls, pe0 = pred::prof::incircle_exact,
++                   pz0 = pred::prof::incircle_exact_zero, oc0 = pred::prof::orient_calls,
++                   oe0 = pred::prof::orient_exact;
++        std::size_t marked = 0, deferred_touched = 0, deferred_edge = 0;
++        std::vector<std::uint32_t> reads, flip_writes;
++        if (prof_out)
++            mesh::prof::reads = &reads;
+         t0 = clock::now();
+ 
+         // `touched` is every slot a split or a flip wrote this round. A marked triangle
+@@ -306,8 +335,14 @@ template <raster::RasterSource R>
+             if (!detail::needs_split(r, options.tolerance))
+                 continue;
+             any = true;
+-            if (touched[t] != 0)
++            ++marked;
++            if (touched[t] != 0) {
++                ++deferred_touched;
+                 continue;
++            }
++            const std::size_t flips_before = out.flips;
++            reads.clear();
++            flip_writes.clear();
+             const auto before = static_cast<std::uint32_t>(m.triangle_count());
+             std::array<std::uint32_t, 4> seeds{t, before, before + 1, before + 1};
+             std::size_t n_seeds = 3;
+@@ -333,6 +368,7 @@ template <raster::RasterSource R>
+                 const std::uint32_t u = m.neighbours(t)[e];
+                 if (u != mesh::kNoNeighbour && touched[u] != 0) {
+                     skipped.push_back(t);
++                    ++deferred_edge;
+                     continue;
+                 }
+                 q = m.split_edge(t, e, p);
+@@ -346,15 +382,41 @@ template <raster::RasterSource R>
+                 touched[seeds[3]] = 1;
+             out.flips += mesh::legalise_around<pred::DefaultKernel>(
+                 m, q, std::span<const std::uint32_t>{seeds.data(), n_seeds}, frame,
+-                [&](std::uint32_t s) { touched[s] = 1; });
++                [&](std::uint32_t s) { touched[s] = 1; if (prof_out) flip_writes.push_back(s); });
+             ++out.inserted;
++            if (prof_out) {
++                // I col row on_edge flips | written slots | read slots | flip-written slots.
++                // Written: t, the appended slots [before, count), u; flipped
++                // slots are in the read list (a flip writes the pair it tested).
++                std::fprintf(prof_out, "I %.3f %.3f %d %zu | %u", p.col, p.row, edge ? 1 : 0,
++                             out.flips - flips_before, t);
++                for (auto s2 = before; s2 < m.triangle_count(); ++s2)
++                    std::fprintf(prof_out, " %u", s2);
++                if (n_seeds == 4)
++                    std::fprintf(prof_out, " %u", seeds[3]);
++                std::fprintf(prof_out, " |");
++                for (auto x : reads)
++                    std::fprintf(prof_out, " %u", x);
++                std::fprintf(prof_out, " |");
++                for (auto x : flip_writes)
++                    std::fprintf(prof_out, " %u", x);
++                std::fprintf(prof_out, "\n");
++            }
+             out.carved += r.is_void ? 1 : 0;
+             out.feet += foot ? 1 : 0;
+             out.feet_refused += refused ? 1 : 0;
+             if (foot)
+                 footed.insert({r.node->row, r.node->col});
+         }
+-        out.split_seconds += since(t0);
++        const double split_round = since(t0);
++        out.split_seconds += split_round;
++        mesh::prof::reads = nullptr;
++        if (prof_out)
++            std::fprintf(prof_out, "S %zu %zu %zu %zu %.9f %llu %llu %llu %llu %llu\n", marked, deferred_touched,
++                         deferred_edge, m.triangle_count(), split_round,
++                         pred::prof::incircle_calls - pc0, pred::prof::incircle_exact - pe0,
++                         pred::prof::incircle_exact_zero - pz0, pred::prof::orient_calls - oc0,
++                         pred::prof::orient_exact - oe0);
+         if (!any)
+             break;
+         active.clear();
+@@ -366,6 +428,8 @@ template <raster::RasterSource R>
+         active.erase(std::unique(active.begin(), active.end()), active.end());
+     }
+ 
++    if (prof_out)
++        std::fclose(prof_out);
+     // By the stopping rule a void triangle holds no valid node, so `uncovered`
+     // sums zeros unless that rule changes; it is reported so a change shows.
+     for (const ScanResult& r : results) {
+diff --git a/include/terrain/refinement/scan.hpp b/include/terrain/refinement/scan.hpp
+index ab526a9..ddc4ed6 100644
+--- a/include/terrain/refinement/scan.hpp
++++ b/include/terrain/refinement/scan.hpp
+@@ -50,6 +50,11 @@
+ 
+ namespace terrain::refinement {
+ 
++// PROFILE-ONLY: nodes visited by scan on this thread.
++namespace prof {
++inline thread_local unsigned long long scan_nodes = 0;
++}  // namespace prof
++
+ enum class NodeLocation : std::uint8_t { Inside, Edge0, Edge1, Edge2 };
+ 
+ struct ScanResult {
+@@ -157,6 +162,7 @@ template <raster::RasterSource R>
+     mesh::for_each_row_span(v, [&](mesh::RowSpan span) {
+         raster::for_each_row_segment(dem, span.row, span.c0, span.c1, [&](raster::RowSegment<T> s) {
+             const std::uint32_t row = span.row, c = s.first_col;
++            prof::scan_nodes += s.values.size();
+             if (r.is_void) {
+                 for (std::uint32_t j = 0; j < s.values.size(); ++j) {
+                     if (missing(s.values[j]))
