@@ -83,6 +83,29 @@ class DemTile(BaseModel):
         copy.flags.writeable = False
         return copy.view()
 
+    @classmethod
+    def _adopt(cls, meta: RasterMeta, array: npt.NDArray[Any]) -> DemTile:
+        """Take `array` as the tile's own, without the copy (increment 15a, R7).
+
+        Private: its one caller is `mosaic.assemble`, on a canvas it allocated
+        and never hands out writable, so a mosaic peaks at one canvas, not two.
+        The same checks as the public constructor, plus C-contiguity, which
+        the constructor gets from its copy. The **passed** buffer is set
+        read-only, so the concurrency rule (§7) holds: nobody keeps a writable
+        reference.
+        """
+        if array.ndim != 2 or array.dtype not in (np.float32, np.float64):
+            raise ValueError(
+                f"need a 2-D float32 or float64 array, got {array.dtype} {array.shape}"
+            )
+        if not array.flags.c_contiguous or array.shape != (meta.rows, meta.cols):
+            raise ValueError(
+                f"need a C-contiguous array of shape {(meta.rows, meta.cols)}, "
+                f"got {array.shape}, C-contiguous {array.flags.c_contiguous}"
+            )
+        array.flags.writeable = False
+        return cls.model_construct(meta=meta, array=array)
+
     @model_validator(mode="after")
     def _shape_agrees(self) -> Self:
         if (self.meta.rows, self.meta.cols) != self.array.shape:

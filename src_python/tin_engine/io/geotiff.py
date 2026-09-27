@@ -45,6 +45,18 @@ PROMOTION: dict[np.dtype[Any], np.dtype[Any]] = {
 NodataSource = Literal["tag", "caller", "absent"]
 
 
+def read_meta(source: BinaryIO, *, nodata: float | None = None) -> RasterMeta:
+    """The header phase of `decode_dem` alone (increment 15a, R3): no pixel is read.
+
+    Every refusal `decode_dem` makes from the header fires here with the same
+    message, because both run the same `_header`. A file whose pixels are
+    damaged still gives its `RasterMeta`; `decode_dem` then refuses it at the
+    "pixel data" stage. `source` is read but not closed.
+    """
+    with _tiff(source, nodata) as tif:
+        return _header(tif, nodata)[0]
+
+
 def decode_dem(source: BinaryIO, *, nodata: float | None = None) -> DemTile:
     """Decode page 0 of the GeoTIFF in `source` into a `DemTile`.
 
@@ -63,43 +75,60 @@ def decode_dem(source: BinaryIO, *, nodata: float | None = None) -> DemTile:
     while `DemTile` takes its read-only copy (§7). `source` is read but not
     closed; closing it is the caller's.
     """
+    with _tiff(source, nodata) as tif:
+        meta, dtype = _header(tif, nodata)
+        with _stage("pixel data"):
+            array = tif.pages.first.asarray().astype(PROMOTION[dtype], copy=False)
+    return DemTile(meta=meta, array=array)
+
+
+@contextmanager
+def _tiff(source: BinaryIO, nodata: float | None) -> Iterator[tifffile.TiffFile]:
+    """The caller-argument check and the TIFF structure, shared by both phases."""
     if isinstance(nodata, bool | np.bool_):
         raise TypeError(f"nodata= must be a number or None, not {type(nodata).__name__}")
     with _stage("TIFF structure"):
         tif = tifffile.TiffFile(source)
     with tif:
-        with _stage("TIFF structure"):
-            page, pages = tif.pages.first, tuple(tif.pages)  # parses every IFD
-        _single_page(pages)
-        dtype = _check_page(page)
-        tie, scale = _georeferencing(page)
-        with _stage("GeoKey directory"):
-            geokeys: dict[str, Any] = tif.geotiff_metadata or {}
-        x_min, y_max, delta_x, delta_y, area = _placement(tie, scale, geokeys)
-        epsg = _projected_epsg(geokeys)
-        vertical = geokeys.get("VerticalUnitsGeoKey")
-        if vertical is not None and int(vertical) != METRE:
-            raise GeoTiffError(
-                f"VerticalUnitsGeoKey (4099) = {int(vertical)}; only metres ({METRE}) are read"
-            )
-        sentinel, source_of = _nodata(page, dtype, nodata)
-        with _stage("pixel data"):
-            array = page.asarray().astype(PROMOTION[dtype], copy=False)
-    rows, cols = array.shape
+        yield tif
+
+
+def _header(tif: tifffile.TiffFile, nodata: float | None) -> tuple[RasterMeta, np.dtype[Any]]:
+    """Everything before the pixels (R3): the §5 header refusals, then the meta.
+
+    Returns the file dtype too, which `decode_dem` promotes by. `rows` and
+    `cols` come from ImageLength and ImageWidth, which `_check_page` has
+    bounded; `DemTile` checks them against the decoded array's shape.
+    """
+    with _stage("TIFF structure"):
+        page, pages = tif.pages.first, tuple(tif.pages)  # parses every IFD
+    _single_page(pages)
+    dtype = _check_page(page)
+    tie, scale = _georeferencing(page)
+    with _stage("GeoKey directory"):
+        geokeys: dict[str, Any] = tif.geotiff_metadata or {}
+    x_min, y_max, delta_x, delta_y, area = _placement(tie, scale, geokeys)
+    epsg = _projected_epsg(geokeys)
+    vertical = geokeys.get("VerticalUnitsGeoKey")
+    if vertical is not None and int(vertical) != METRE:
+        raise GeoTiffError(
+            f"VerticalUnitsGeoKey (4099) = {int(vertical)}; only metres ({METRE}) are read"
+        )
+    sentinel, source_of = _nodata(page, dtype, nodata)
     meta = RasterMeta(
         x_min=x_min,
         y_max=y_max,
         delta_x=delta_x,
         delta_y=delta_y,
-        cols=cols,
-        rows=rows,
+        cols=int(page.imagewidth),
+        rows=int(page.imagelength),
         epsg=epsg,
         nodata=sentinel,
         nodata_source=source_of,
         pixel_is_area=area,
         vertical_unit_assumed=vertical is None,
     )
-    return DemTile(meta=meta, array=array)
+    return meta, dtype
 
 
 @contextmanager
@@ -320,4 +349,4 @@ def _same(a: float, b: float) -> bool:
     return a == b or (math.isnan(a) and math.isnan(b))
 
 
-__all__ = ["decode_dem"]
+__all__ = ["decode_dem", "read_meta"]
