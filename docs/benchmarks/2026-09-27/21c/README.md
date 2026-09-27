@@ -1,6 +1,6 @@
 # Increment 21c: measurements for choosing 21d's option (@perf, 2026-09-27)
 
-Status: **done**, with a later section "A0 and the scaling model". Measurement only; no production code changed. The scratch
+Status: **done**, with later sections "A0 and the scaling model" and "A0 with evaluate-once". Measurement only; no production code changed. The scratch
 simulations are `scripts/sim.patch`, which is not applied and never committed
 to `include/`, like the serial profile's `instrument.patch`.
 
@@ -546,4 +546,249 @@ for any of them.
 - A0 identity on inputs other than these two, and a proof of it.
 - A1 seeds 1-3 in this run (their sub-round profiles are in `data/sims/`).
 - Load imbalance, and sync costs with real work between barriers.
+- An AC run.
+
+## A0 with evaluate-once (@perf, 2026-09-27, late evening)
+
+Asked by Ola: "simulate evaluate-once for A0". Measurement and a model only; no
+production code. The simulation is `scripts/sim_a0_eo.patch`, applied on top of
+`sim.patch` and `sim_a0.patch`, never committed to `include/`. Data:
+`data/a0eo/`; every table below is `data/a0eo/tables.md`, made by
+`scripts/a0eo.py`.
+
+### The rule
+
+A mark's plan, cavity and footprint are computed once, and stored with the
+sub-round they were computed in. In a later sub-round the mark does three things:
+
+1. **Skip rules, fresh.** Today's two skip rules (own slot written this round;
+   edge split whose neighbour was written) are applied again, as in A0.
+2. **Dirty check.** It is re-evaluated if a slot of its stored footprint was
+   written since its evaluation, or if the `footed` status of its node changed.
+   `make_plan` reads `footed`, which is not a mesh slot. Otherwise it is clean.
+3. **Bid.** A clean mark re-bids with its stored footprint; a dirty one with
+   the new one.
+
+**What an evaluation reads, and so what the dirty check must cover.** An
+evaluation reads the base triangle and, for an edge split, its neighbour `u`
+(`make_plan`, `foot_of`, `foot_fits`). It also reads the neighbours and
+constraint bits of every cavity slot, and the corners of every ring slot
+(`in_circle`). All of these are footprint slots: `u` and every other
+neighbour of the base triangle are in the ring. Vertices are append-only
+within a round. The only read outside the mesh is `footed`.
+
+**Dirty tracking.** Each slot has a write version, `wver[s]`, the sub-round of
+its last write this round. A commit in sub-round e sets `wver[s] = e` on the
+slots it writes. A mark evaluated in sub-round k is dirty when some footprint
+slot has `wver >= k`. Three versions of "the slots it writes" were simulated:
+
+| rule | a commit stamps | what it needs at runtime |
+|---|---|---|
+| `A0eot` | today's `touched` slots: the split triangle, `u`, and every flipped slot | nothing new: the stores today's loop already makes to `touched` |
+| `A0eo` | every footprint slot whose record (corners, neighbours, constraint bits) changed | hooks on every neighbour-pointer update |
+| `A0eofp` | the winner's whole footprint | the footprint the winner already holds |
+
+**Why `touched` is enough** (an argument, and measured below). A mark reads a
+ring slot's corners only. It reads a slot's neighbour pointers only when that
+slot is in its own cavity. A commit that changes only a pointer of slot n
+(n not flipped) does so because the slot across that edge, a, was in the
+winner's cavity. Every cavity slot is split or flipped, so a is touched. If n
+is in a loser's cavity, then a is in that loser's footprint, so the loser is
+dirty anyway. The argument rests on "every slot a commit rewrites lies in its
+cavity", which is the consistency check, 0 misses on every run. I wrote
+`A0eot` first as a plant, expecting it to fail. It gave 0 stale re-uses, so it
+is reported as a rule.
+
+**Parallel form (design, not measured in parallel).** `wver` is a `uint32` per
+slot. In one sub-round the winners' footprints are disjoint and each commit
+writes only inside its own cavity. So each slot has at most one writer per
+sub-round: plain stores, no atomics. Readers run in the next sub-round's check
+pass, after the barrier. Versions only grow within a round, so nothing is
+cleared; the per-round reset is the one `touched` has today. Under `A0eot`,
+`touched` itself can be the version array (`touched[s] = e` instead of 1), so
+a commit makes no extra stores. The model still charges the measured 18 ns per
+commit. The check is 4.6-5.0 loads per pending mark, over the same slots the
+reservation then touches. `footed` would need a per-node bit that a commit
+sets with an atomic `fetch_or` (two commits can share a word) and a re-bid
+reads.
+
+### Findings
+
+1. **Evaluate-once is bit-identical to today, under all three rules, on both
+   domains.** Each rule ran 4 times per domain (3 timing runs and 1
+   verification run). Mesh sha256 as bench.py hashes it: quarter `1e531976…`,
+   tile `11741a81…`. Triangles, rounds, insertions and flips are equal, and so
+   are worst angle and max degree (0.3955 / 18; 0.6296 / 74). The lattice-mesh
+   hash is equal after every round (41 and 53). The full rescan finds max
+   0.99998 with 0 over tolerance. There are 0 Delaunay violations, 0
+   consistency misses and 0 order violations.
+2. **The rule is exact on these inputs: 0 stale re-uses.** In the verification
+   runs every clean re-bid also recomputed its footprint from scratch and
+   compared plan, cavity and footprint with the stored ones. They differed 0
+   times in 391,546 to 962,433 re-uses per run.
+3. **The sub-rounds are unchanged from A0.** The per-sub-round lists of
+   winners and of pending marks equal A0's in every round of every run: 469
+   sub-rounds on the quarter circle (median 13 per round, max 24) and 592 on
+   the tile (median 2.5, max 101).
+4. **Evaluations per mark fall from 3.5-4.0 to 2.1, not to 1.** A mark is
+   visited 4.00 times on the quarter circle and 4.46 on the tile, as in A0.
+   Counted as full evaluations, those A0 visits are 3.51 and 3.98 per mark.
+   Evaluate-once needs:
+
+   | domain | rule | full evaluations / mark | re-evaluated, slot dirty | re-evaluated, `footed` | clean re-bids | re-evaluations that gave the same footprint |
+   |---|---|---:|---:|---:|---:|---:|
+   | quarter | A0eot | **2.13** | 572,958 | 0 | 702,527 | 147,102 (26 %) |
+   | quarter | A0eo | 2.52 | 773,282 | 0 | 502,203 | 347,426 (45 %) |
+   | quarter | A0eofp | 2.74 | 883,939 | 0 | 391,546 | 458,083 (52 %) |
+   | tile | A0eot | **2.11** | 568,508 | 0 | 962,433 | 146,770 (26 %) |
+   | tile | A0eo | 2.49 | 767,011 | 0 | 763,930 | 345,273 (45 %) |
+   | tile | A0eofp | 2.71 | 877,912 | 0 | 653,029 | 456,174 (52 %) |
+
+   Under `A0eot`, 45 % of the re-bids on the quarter circle are dirty (37 %
+   on the tile). A mark usually loses to a lower-index mark that then commits,
+   and that commit writes into the loser's footprint. The re-evaluations that
+   gave back the same footprint were counted in the verification runs. They
+   are what a finer rule could still save: 26 % of `A0eot`'s. The `footed`
+   trigger never fired.
+5. **Per-item costs, serial, battery** (median of 3 runs; the spread is at most
+   8 %, in the tile `A0eo` evaluation, 290-313 ns):
+
+   | domain | rule | check (skip rule + dirty check), per visit | evaluation (plan, cavity, ring) | bid (reserve, winner check, reset) | clean re-bid (check + bid) | version stores, per commit |
+   |---|---|---:|---:|---:|---:|---:|
+   | quarter | A0eot | 17 ns | 317 ns | 49 ns | 68 ns | 18 ns (4.5 stores) |
+   | tile | A0eot | 15 ns | 302 ns | 45 ns | 62 ns | 18 ns (4.4 stores) |
+   | both | A0eo / A0eofp | 15-16 ns | 281-304 ns | 45-48 ns | 62-67 ns | 43-44 / 17 ns |
+
+   `A0eo`'s version stores include the simulation's snapshot compare, which a
+   runtime would not do. A re-bid costs about a fifth of an evaluation. An A0
+   visit on this build costs 269 ns (quarter) and 256 ns (tile), with
+   everything included.
+6. **The model at 8 threads: 7-11 % faster refine than today, about half of
+   the earlier bound's gain.** In the table, split and refine for the options
+   are modelled; today's columns are measured.
+
+   | domain | T | today split | today refine | A0 split | **A0eot split** | A0eot refine | A0eo / A0eofp refine |
+   |---|---:|---:|---:|---:|---:|---:|---:|
+   | quarter | 4 | 96.1 | 199.6 | 180 | 157 | 260 | 273 / 276 |
+   | quarter | 8 | 95.3 | 161.3 | 91 | **80** | **144** | 150 / 152 |
+   | quarter | 16 | 99.0 | 164.9 | 75 | 69 | 132 | 135 / 136 |
+   | tile | 4 | 95.1 | 224.6 | 198 | 165 | 294 | 308 / 310 |
+   | tile | 8 | 95.2 | 180.5 | 100 | **84** | **169** | 176 / 177 |
+   | tile | 16 | 97.5 | 183.6 | 87 | 79 | 163 | 167 / 167 |
+
+   The A0 section's bound for "each mark evaluated once" was 39 / 44 ms of
+   split and 104 / 132 ms of refine at 8 threads. The simulated rule gives
+   80 / 84 and 144 / 169, because a mark is evaluated 2.1 times, not once. At 8
+   threads the modelled `A0eot` split is 43.0 / 40.9 ms of evaluation,
+   12.2 of commits, 10.6 / 11.4 of bids, 8.5 / 13.5 of renumbering, 4.2 of
+   checks and 1.3 / 1.6 of barriers (quarter / tile). **At 4 threads every A0
+   variant is slower than today** (260 against 200 ms). The 16-thread rows put
+   16 threads on 10 cores with a 20 µs barrier. They divide work by 16 that
+   only 10 cores can do, so they are optimistic.
+7. **What a production A0 with evaluate-once would need at runtime:**
+   - **The order check with a fallback** (flagged in the A0 section). Keep
+     `stamp[s]`, the highest index committed this round whose footprint held
+     s. At commit, a footprint slot stamped by a higher index means the index
+     order was not kept. The round must then fall back, for example redo it
+     serially from a snapshot. Measured: 0 violations on every
+     non-plant run.
+   - **A write-containment check.** The order check is blind to a stale
+     footprint: with `eo_nodirty`, 795,423 stale re-uses gave 0 order
+     violations, because the check reads the stale footprint. The check that
+     saw it is consistency: every slot a split or flip writes must be in the
+     committer's reserved cavity (86,806 misses). At runtime that is one
+     compare per written slot against the reservation (`best[s] == t`), with
+     the same fallback. Its cost is not measured.
+   - The skip rules applied fresh on every re-bid: `eo_stalecommit` below.
+   - The `footed` trigger, as a per-node bit. It never fired here, so nothing
+     on these inputs shows it is needed; the reads of `make_plan` do.
+
+### The checks can fail
+
+Quarter circle, `A0eot`, with verification on (`RASPUTIN_SIM_PLANT`,
+`data/a0eo/plant_*`):
+
+| plant | what it breaks | what caught it | what did not |
+|---|---|---|---|
+| `eo_nodirty` | never re-evaluate: every stored footprint is re-used | stale re-uses: 795,423 of 1,330,697; consistency: 86,806 misses; sub-round lists differ from A0 in 33 rounds | sha256, round hash, rescan, Delaunay, order violations (0) |
+| `eo_ringless` | the dirty check reads the cavity, not the ring | sha256 `0b971a78…`; round hash differs in 26 rounds; sub-round lists differ in 31; consistency: 36,015; order violations: 159; stale: 494,495 of 1,124,265 | rescan, Delaunay (0) |
+| `eo_stalecommit` | stored plans trusted: no dirty check, and no fresh skip rules | the process crashes before it writes a mesh: SIGSEGV, SIGSEGV and SIGBUS within 0.5 s in 3 counted runs. Under UBSan with libc++ hardening it traps in `legalise_around`, which is called from the plant's commit (`data/a0eo/sanitised/plant_stalecommit.log`) | – |
+| `eo_nofooted` | the `footed` trigger dropped | **nothing**: the trigger never fired, so the plant changes nothing | all |
+
+**The mesh-level checks cannot see `eo_nodirty`,** and this is expected. The
+simulation commits one mark at a time, and the skip rules are fresh, so no
+commit ever splits with a stale plan. A stale footprint then changes only
+which marks win in which sub-round, and here never the index order of two
+overlapping commits. In a parallel run the same defect would be a data race.
+The checks that stand for the parallel run are the stale re-use count and
+consistency. `eo_ringless` shows the mesh-level checks can fail under a defect
+specific to this rule.
+
+**The `eo_stalecommit` crashes** are the five macOS crash reports Ola saw
+(20:58, 21:12, 21:13 three times). The plant crashes by design; no other run
+crashed. To confirm it, the patched tree was built with
+`-fsanitize=undefined -fno-sanitize-recover=all` and libc++ extensive hardening,
+and run under `lldb --batch`. `A0eot`, `A0eo` and `A0eofp` on both domains, and
+`A0eot` with verification on the quarter circle, exit 0 with no report and the
+Release counts (`data/a0eo/sanitised/`). ASan could not be used: the harness
+strips `DYLD_INSERT_LIBRARIES`, so the ASan runtime cannot be preloaded into
+Python. `run_a0eo.sh` no longer runs this plant; run it only under lldb, as in
+`data/a0eo/sanitised/README.txt`.
+
+### Method
+
+- **Tree and build.** A scratch worktree of `7f688aa` with `sim.patch`,
+  `sim_a0.patch` and `sim_a0_eo.patch` applied, built Release by bench.py's
+  `build()` (`-O3 -DNDEBUG`, AppleClang 21). `_core` sha256 `a14c7252…`. A
+  second fresh worktree with the three patches has the same sources and builds
+  the same hash. `today` and `A0` were rerun on this build, and their hashes
+  and sub-round lists are the stored A0 section's.
+- **What `sim_a0_eo.patch` adds.** Modes `A0eot`, `A0eo` and `A0eofp`
+  (section "The rule"). Each sub-round has three timed passes: check, (re-)
+  evaluation, and bid with winner check. Commits and renumbering are A0's,
+  with the version stores timed separately. `RASPUTIN_SIM_EOVERIFY` recomputes
+  each clean re-bid's footprint and compares it ("stale"). It also counts
+  re-evaluations whose new footprint equals the old one. It adds the four
+  plants and per-sub-round `sr_evals` and `sr_bids`.
+- **Runs.** `scripts/run_a0eo.sh <pkg> <out>`: today and A0 once per domain,
+  each rule 3 times and once verified, then the plants. Same driver, quality
+  checks and full rescan as the rest of 21c.
+- **Scan and rest at 4, 8 and 16 threads**, for the refine column:
+  `THREADS="4 8 16" scripts/split_sweep.sh` on the unpatched tree (`_core`
+  `2b69e078…`, as in section 6; there is no code change between `7f688aa` and
+  this branch). 15 samples per cell (`data/a0eo/split_phases_4_8_16.txt`). At 8
+  threads it measures refine 161.3 / 180.5 ms against section 6's 161.7 /
+  186.3.
+- **Model.** `scripts/a0eo.py` has the same form as `model21c.py`: per
+  sub-round an evaluation step (visits × check + evaluations × evaluation +
+  bids × bid, 1 barrier) and a commit step (winners × (today's split per
+  insertion, 434 / 421 ns, + version stores), 2 barriers); per round, the
+  renumbering divided by T, 1 barrier. Barriers from `data/a0/sync_bench.txt`.
+  Every item is charged the mean cost.
+
+### Power state
+
+**Battery** throughout: 66 % to 65 % for the simulations
+(`data/a0eo/pmset_*.txt`), 62 % to 61 % for the thread sweep. Apple M1 Max,
+8 P + 2 E. The Mac idle-slept from 21:05:26 to 21:09:51 (`pmset -g log`). No
+counted run overlapped it: simulations 20:55-20:58, sweep 21:14:58-21:15:22,
+sanitised runs 21:18-21:20. Three `eo_stalecommit` attempts made between
+20:58 and 21:13 are void and not counted. There is no AC baseline for any of
+these figures.
+
+### Not measured
+
+- A parallel implementation. Every speed is the model's.
+- The cost of the runtime write-containment and order checks, and of a
+  fallback.
+- A finer dirty rule: 26 % of `A0eot`'s re-evaluations gave back the same
+  footprint.
+- An input on which the `footed` trigger fires. Its plant has not been shown
+  able to fail.
+- Identity and exactness on inputs other than these two. That `touched` is
+  exact is argued above, not proven.
+- ASan (not loadable here; UBSan with libc++ hardening was used).
+- Load imbalance, cache effects, the E-cores, barriers with uneven arrival,
+  and more threads than cores.
+- Evaluate-once for A1.
 - An AC run.

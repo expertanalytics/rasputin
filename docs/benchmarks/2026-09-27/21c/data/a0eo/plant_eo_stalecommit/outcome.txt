@@ -1,0 +1,8 @@
+eo_stalecommit (A0eot, quarter): stored plans trusted, no dirty check, skip rule not re-applied on a re-bid.
+The run never produces a mesh, so the mesh-level checks never see one.
+Counted runs (awake, battery, caffeinate -i, 2026-09-27 21:13:15-21:13:17, no sleep in pmset -g log):
+  returncode -11 (SIGSEGV) after 0.4 s; -11 (SIGSEGV) after 0.5 s; -10 (SIGBUS) after 0.4 s.
+Also: run_a0eo.sh plants at 20:58 (awake): sim_driver.py exit 1 within seconds, child stderr empty.
+Void, not counted: three runs between 20:58 and 21:13 that reported "no exit" after 120-600 s; the Mac
+idle-slept 21:05:26-21:09:51 (pmset -g log), so their timings measure nothing.
+Undefined behaviour: a stale plan splits a triangle a commit already rewrote.
