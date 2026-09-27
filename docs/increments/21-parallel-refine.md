@@ -1,6 +1,6 @@
 # Increment 21 — parallel refine: quick wins, then the serial phase
 
-Status: **design only, waiting on Ola** (section 8). Written by `@architect`
+Status: **design only, ruled by Ola 2026-09-27** (section 8, "Ola's rulings"). Written by `@architect`
 on 2026-09-27, on branch `serial-profile`, per `docs/increments/README.md`
 step 1. No code and no tests exist for it. This file proposes a sequence of
 small increments (21a to 21d, section 7); each gets its own Rulings and Tests
@@ -28,9 +28,8 @@ keeps:
 
 Recorded verbatim, not paraphrased.
 
-- 2026-09-27, before the profile: some serial parts "could be parallelised by
-  multicolouring/DD techniques, but let's wait for the analysis before we get
-  ahead of ourselves."
+- 2026-09-27, before the profile:
+  "Some of the serial parts could be parallellized by multicoloring/dd techniques, but let's wait for the analysis before we get ahead of ourselves."
 - 2026-09-27, after the profile, on the determinism contract: **"I think that
   when we are encountering geometries where this is important, ie very large
   areas, we should not rely on bit-identical outputs."**
@@ -286,7 +285,7 @@ on nothing else from it:
 | median distance to the nearest same-round insertion, round 11 on | about 3 nodes | independence at the finest grain is rare |
 | footprint (slots read or written) | mean 11.0, p99 18, max 36 | the size of a reservation |
 | write set | mean 5.5, p99 9 | slots appended and rewritten |
-| footprint conflict degree, big rounds | mean 4.7-7.7 | expected winners per sub-round |
+| footprint conflict degree, big rounds 9-19 | mean 3.2-6.4 (7.7 in round 5) | expected winners per sub-round |
 | marks deferred because their slot was rewritten | 51 % | the batch semantics every option must match or change on purpose |
 
 Two caveats carried from the evidence. The footprints were measured in the
@@ -320,6 +319,13 @@ profile's figures, not measurements.
   a result. The atomic is a work counter only. This amends 14 R7's "no
   atomics" in wording, not in substance: R7's point is no shared *result*
   writes, which still holds. TSan sees a correctly synchronised atomic.
+- **Exceptions.** `for_each_chunk` promises that the exception of the
+  lowest-index chunk that threw is rethrown, "fixed by the chunking, not by
+  thread timing" (`include/terrain/parallel_util/chunks.hpp:10-13`, tested at
+  `tests/cpp/unit/test_refinement_chunks.cpp:79`). Dynamic scheduling keeps
+  that contract: each block records its exception by block index, and the
+  lowest block index that threw is rethrown after the join. Every block is
+  still run, as today, so which blocks throw does not depend on timing.
 - **Expected gain.** Up to the 16.5 ms imbalance at 8 threads, less one
   block's work per thread. Scan roughly 62 -> 47 ms; refine at 8 threads
   roughly 0.229 -> 0.215 s (-6 %). Nothing at 1 thread.
@@ -352,7 +358,9 @@ profile's figures, not measurements.
   top of `must_flip`. It answers only when
   - all four vertices are nodes;
   - `dx == dy`, so the frame is the lattice times one positive constant, and
-    the sign of the scaled determinant is the sign of the lattice one;
+    the sign of the scaled determinant is the sign of the lattice one. The
+    integer determinant is taken on `(col, -row)`, as `MeshVertex::frame()`
+    orients the frame; on `(col, row)` the sign inverts;
   - every coordinate difference from `d` is at most 2^14 nodes. The
     determinant is then at most 12 · 2^56 < 2^63, and exact in `int64`;
   - **the frame is exact**: `col * dx` and `row * dy` are exactly
@@ -370,10 +378,9 @@ profile's figures, not measurements.
   is the same and the output is bit-identical. The exact-frame condition is
   what makes that true; without it (say `dx = 0.1`) the integer answer is the
   *true* lattice answer and the rounded frame's answer can differ on a tie.
-  That would still terminate (an integer-strict Inside has a margin far above
-  the rounding, so it is also Inside on the rounded points, and every flip
-  still lowers the rounded lifted surface), but it would change output, so it
-  is excluded.
+  That would probably still terminate (unproven: an integer-strict Inside
+  seems to keep a margin far above the rounding), but it would change output,
+  so it is excluded and nothing rests on the argument.
 - **Expected gain.** Most of the 5.0 %, plus part of the 2.7 % filtered cost
   for all-node quads, less the integer determinant's own cost. Roughly
   0.018 s at every thread count: -4 % at 1 thread, -8 % at 8.
@@ -448,8 +455,8 @@ cost is that **every** mesh changes once, small ones included. Question Q2.
 ## 5. Options for the serial phase
 
 Each option is judged against the measured density: insertions about 3 nodes
-apart from round 11 on, each conflicting with 4.7-7.7 others in the big
-rounds, footprints of about 11 slots (p99 18), 9,000-18,700 insertions in a
+apart in rounds 11-29, each conflicting with 3.2-6.4 others in the big
+rounds 9-19 (7.7 in round 5, 2,063 insertions), footprints of about 11 slots (p99 18), 9,000-18,700 insertions in a
 big round, 51 % of marks deferred by the serial loop.
 
 The ceilings below are arithmetic on the profile, after the quick wins
@@ -758,8 +765,9 @@ Each is answered or placed.
 ## 7. Proposed increments, LOC and invariant-critical suites
 
 Counted in `CLAUDE.md` §2's unit. Estimates, not measurements; the worst
-overrun seen so far is +66 % (increment 17), so each is also given at that
-bias against the 700 ceiling.
+overrun recorded so far is +86 % (6a, `06-cdt-viewer.md`); the table gives
+each at +66 % (increment 17). At +86 % the conclusions hold: A1 (~450) comes
+to ~840 and is split in any case; C (~320) comes to ~595, still under 700.
 
 | increment | what | est. | at +66 % | determinism | invariant-critical suite (mutation round) |
 |---|---|---|---|---|---|
@@ -774,7 +782,9 @@ suites:
 
 - **14's T6** (`prop_refinement_refine`, "T6: the output is bit-identical for
   1, 2, 7 and all threads", and T16 for off-node rings) compares thread
-  counts with each other, not with a stored mesh. **Under L1 it stays as it
+  counts with each other, not with a stored mesh. So do
+  `prop_refinement_quality.cpp:233` and
+  `prop_refinement_constraint_feet.cpp:587`, which join the same contract. **Under L1 it stays as it
   is and becomes 21d's determinism test.** Under L2 or L3 it would have to be
   weakened or dropped, which is a concrete cost of those levels.
 - **18's T3 golden digests** (`tests/python/test_refine_golden.py`) say that

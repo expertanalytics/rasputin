@@ -2,11 +2,14 @@
 
 Status: done (@perf). Measurement and analysis only: no fix, no design, no
 production code changed. Every figure below is from **battery** power
-(`pmset -g batt` beside each data file); no AC run was made.
+(`pmset -g batt` beside each timing sweep: `data/*.pmset`). The instrumented runs
+(`data/instr_t*_rounds.txt`, and `rounds_t1.md`, `chunks_t8.md` derived from
+them) have no committed power record; they ran in the same battery session,
+but that is not on disk. Their counts do not depend on power; their timings
+do. No AC run was made.
 
 The ask (Ola, 2026-09-27): profile refine's serial phase before anyone designs
-a fix. "Some of the serial parts could be parallelised by multicolouring/DD
-techniques, but let's wait for the analysis before we get ahead of ourselves."
+a fix. "Some of the serial parts could be parallellized by multicoloring/dd techniques, but let's wait for the analysis before we get ahead of ourselves."
 
 ## Findings
 
@@ -26,15 +29,15 @@ techniques, but let's wait for the analysis before we get ahead of ourselves."
    `active` sort between rounds is 3.6 %.
 3. **The scan speeds up about 5x at 8 threads (4.95x), not 8x, and flattens
    from about 8.** Load imbalance across the contiguous chunks costs 16.5 ms of
-   the 61.8 ms. A quarter of that imbalance is round 1 alone. Thread start
+   the 61.8 ms. Round 1 alone is 6.1 ms of it, about 39 % of that run's 15.8 ms (`data/chunks_t8.md`). Thread start
    costs 3.8 ms, and each worker is about 9 % slower than a lone thread. Above
    10 threads (8 P + 2 E cores) the last chunk starts about 30 ms late. The
    bytes read (2.6 GB/s at 8 threads) show no sign of a memory-bandwidth limit.
    That is inferred from byte counts; no hardware counters were read.
 4. **Insertions in the same round are dense and overlap.** 41 rounds; 77 % of
    the 213,464 insertions fall in rounds 9-19, at 9,000-18,700 per round. In
-   rounds 5-21 each round touches 69-93 % of the domain's 64×64-node blocks.
-   From round 11 on, the median distance to the nearest same-round insertion
+   rounds 5-21 each round touches 69-93 % of the 382 64×64-node blocks that ever receive an insertion (about 20 % of the quarter domain's ~1,776 blocks at most; the rest is flat sea or NoData, which refine never splits).
+   In rounds 11-29 the median distance to the nearest same-round insertion
    is 3 nodes. An insertion writes 5.5 triangle slots on average (p99 9) and
    reads or writes 11.0 (p99 18). 95 % of insertions share a slot, read or
    written, with another insertion of the same round; 65 % share a written
@@ -57,7 +60,8 @@ together with a scan that stops at about 5x.
   profiled and instrumented builds (`ff705683…` over the binary VTK).
 - **Machine**: Apple M1 Max, 8 P + 2 E cores, 32 GiB, macOS 27.0, AppleClang
   21.0.0, Python 3.14.7. **Power: battery**, 83-86 %, throughout
-  (`data/*.pmset`, and `run.json` of the bench.py run). `powermode 0`.
+  (`data/*.pmset`, and `run.json` of the bench.py run). `powermode 0` was
+  observed but is not recorded in any committed file.
 - **Builds** (all scratch, in gitignored `build-*` directories):
   - `build-prof`: `CMAKE_BUILD_TYPE=Release`, `CMAKE_CXX_FLAGS=-g`, which
     gives `-g -O3 -DNDEBUG … -flto`. Used for the phase sweeps. pybind11 strips
@@ -284,9 +288,9 @@ Over all rounds:
   insertions (77 %).
 - **Spread**: in rounds 5-25 each round touches 173-355 of the 382 blocks
   (45-93 %; 69-93 % in rounds 5-21). In the big rounds a block receives at
-  most 154-248 insertions. From round 11 on, the median nearest-neighbour
-  distance is about 3 nodes (30 m); in round 1 it is 27 nodes. Insertions are
-  spread over the whole domain at once, and they are close together.
+  most 154-248 insertions. In rounds 11-29 the median nearest-neighbour
+  distance is about 3 nodes (30 m; 4.0-8.6 in rounds 30-35); in round 1 it is 27 nodes. Insertions are
+  spread over all of the domain that refine works on (the 382 blocks above) at once, and they are close together.
 - **Footprint size**: write set mean 5.49 slots (p50 5, p90 7, p99 9,
   max 18). Footprint mean 10.96 (p50 10, p90 14, p99 18, max 36). Flips per
   insertion 2.09 (445,657 / 213,464).

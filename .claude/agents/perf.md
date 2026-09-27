@@ -28,10 +28,11 @@ it is never unmeasured again. You report measured figures only.
   about a third of single-thread refine, mostly Lawson legalisation, and the
   scan itself stops speeding up near 5× from load imbalance. Re-profile before
   a design relies on those figures after refine changes.
-* **The scaling ceiling.** Refine speeds up at most about 2.2× from 1 to 20
-  threads, flat from about 7, on AC as on battery
-  (`docs/benchmarks/2026-09-26/README.md`). Report each increment's ceiling
-  against it.
+* **The scaling ceiling.** Refine speeds up at most about 2.0-2.2× from 1 to
+  20 threads, flat from about 7-8: 2.2× in the 2026-09-26 sweep (AC and
+  battery, `docs/benchmarks/2026-09-26/README.md`), 2.02-2.03× on battery on
+  2026-09-27 (`docs/benchmarks/2026-09-27/serial-profile/README.md`). Report
+  each increment's ceiling against the matching power-state baseline.
 
 ## 2. How a run is made
 * **Release build, rebuilt.** `bench.py run` builds Release into
