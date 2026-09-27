@@ -1,6 +1,6 @@
 # tools/bench.py: design
 
-Status: design (@perf, 2026-09-27), not yet reviewed. Red suite written (see "Pinned by the red suite"); no code yet. The rule it serves is
+Status: design (@perf, 2026-09-27), not yet reviewed. Red suite written (see "Pinned by the red suite"); green: `tools/bench.py` (see "Settled at green"). The rule it serves is
 "Acceptance: an increment that touches refine or mesh code" in
 `docs/increments/README.md`; its specification is the one-off scripts in
 `2026-09-26/` (`bench1m/*.sh`, `run.py`, `quality.py`, `summarize.py`,
@@ -282,3 +282,28 @@ per sample: domain, threads, repeat, refine_s, power state), and `README.md`,
 whose generated part ends at the line `MARKER`; whatever follows that line in
 an existing README is kept on a rerun. The README names `2.2x` beside the
 ceiling, every verdict line, and `--accept-quality` when it was used.
+
+## Settled at green (@perf, 2026-09-27)
+
+**Where the Release `.so` lands and how `pkg/` is assembled** (the red suite
+pins only the Debug-cache refusal):
+
+- Configure: `cmake -S <tree> -B <tree>/build-bench -DCMAKE_BUILD_TYPE=Release
+  -DRASPUTIN_BUILD_PYTHON=ON -DRASPUTIN_BUILD_TESTS=OFF
+  -DPython_EXECUTABLE=<the running interpreter> -DPYBIND11_FINDPYTHON=ON`;
+  pybind11 is found by `find_package` as `build-pyext` finds it, with no
+  `pybind11_DIR` passed. Build: `cmake --build <tree>/build-bench -j --target
+  _core`. A failing configure or build exits 3 with no evidence.
+- The `.so` lands where `pybind11_add_module` puts it, the build directory's
+  root: exactly one `<tree>/build-bench/_core*.so`, or exit 3.
+- `pkg/` is rebuilt on every run: `<tree>/build-bench/pkg/tin_engine/` holds a
+  symlink to each entry of `<tree>/src_python/tin_engine/` except `__pycache__`
+  and any `_core.*`, plus a **copy** of the `.so`, whose sha256 goes into
+  `run.json`. The child gets `--pkg <tree>/build-bench/pkg` and refuses to run
+  if `tin_engine` or `_core` resolves outside it.
+- `build.compiler` is `CMAKE_CXX_COMPILER_ID` and `_VERSION` from
+  `build-bench/CMakeFiles/*/CMakeCXXCompiler.cmake`.
+- `quality()` angle and degree figures come from the **main tree's**
+  `tin_engine.stats`, imported in the parent, whatever `--tree` measures: the
+  same measuring code for both sides of a comparison.
+
