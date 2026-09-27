@@ -1,6 +1,7 @@
 // Increment 21a, QW1 (docs/increments/21-parallel-refine.md, section 3, and
 // "Pinned by the red suite (21a)"): the dynamic block scheduler that replaces
-// for_each_chunk for the scan. test_refinement_chunks extended to it.
+// for_each_chunk for the scan. A new suite; test_refinement_chunks, which pins
+// for_each_chunk, is unchanged.
 //
 // INVARIANT-CRITICAL (section 7): a dropped block leaves a stale scan result
 // and a doubled one is a second writer to a result slot, and either breaks the
@@ -181,19 +182,28 @@ TEST_CASE("for_each_block below the threshold runs on the calling thread even wi
     for (const auto id : t.by) REQUIRE(id == caller);
 }
 
+// The two exception-order cases below make arrival order opposite ways, so
+// that neither "keep the first exception to arrive" nor "keep the last" can
+// pass both. Arrival order is forced with waits on what the other blocks have
+// done, not left to sleeps racing each other; every wait has a timeout, so a
+// scheduler that serialises the blocks is slow, never hung.
+
 TEST_CASE("for_each_block rethrows the lowest throwing block's exception after running every block",
           "[refinement][chunks][dynamic]") {
     // 64 items in blocks of 4 is 16 blocks. Every block from `first` on throws
-    // its own index. Block `first` sleeps before throwing, so on the threaded
-    // path higher blocks throw earlier in time: a scheduler that keeps the
-    // first exception to arrive, or the last, or the highest index, rethrows
-    // the wrong one. The inline paths (one thread; n below the threshold) must
-    // behave the same way.
+    // its own index. On the threaded path block `first` waits until every
+    // higher block is about to throw, then a little longer, so it is the LAST
+    // to arrive. Kills: keep-the-first-to-arrive, keep-the-highest-index.
+    // (Keep-the-last-to-arrive passes this case; the next one kills it.) The
+    // inline paths (one thread; n below the threshold) run in ascending order,
+    // so there block `first` arrives first; they must rethrow the same block.
     const unsigned threads = GENERATE(1u, 4u, 8u);
     const std::size_t inline_below = GENERATE(std::size_t{0}, 65);
     const std::size_t first = GENERATE(std::size_t{0}, 1, 5, 15);
     CAPTURE(threads, inline_below, first);
-    std::atomic<int> calls{0}, short_blocks{0};
+    const bool threaded = threads > 1 && inline_below <= 64;
+    const int higher = static_cast<int>(15 - first);
+    std::atomic<int> calls{0}, short_blocks{0}, about_to_throw{0}, timed_out{0};
     std::size_t caught = 99;
     try {
         for_each_block(64, threads, BlockSchedule{.block = 4, .inline_below = inline_below},
@@ -202,15 +212,75 @@ TEST_CASE("for_each_block rethrows the lowest throwing block's exception after r
                            if (end - begin != 4) short_blocks.fetch_add(1);
                            calls.fetch_add(1);
                            const std::size_t k = begin / 4;
-                           if (k == first) std::this_thread::sleep_for(std::chrono::milliseconds{30});
+                           if (k == first && threaded) {
+                               const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds{10};
+                               while (about_to_throw.load() < higher) {
+                                   if (std::chrono::steady_clock::now() > deadline) {
+                                       timed_out.fetch_add(1);
+                                       break;
+                                   }
+                                   std::this_thread::yield();
+                               }
+                               // Let the higher blocks' throws reach the scheduler.
+                               std::this_thread::sleep_for(std::chrono::milliseconds{30});
+                           }
+                           if (k > first) about_to_throw.fetch_add(1);
                            if (k >= first) throw BlockError{k};
                        });
     } catch (const BlockError& e) {
         caught = e.block;
     }
+    REQUIRE(timed_out.load() == 0);
     REQUIRE(caught == first);
     REQUIRE(short_blocks.load() == 0);
     REQUIRE(calls.load() == 16);  // no block is skipped after a throw
+}
+
+TEST_CASE("for_each_block rethrows the lowest throwing block's exception when it arrives first",
+          "[refinement][chunks][dynamic]") {
+    // The reverse arrival order: block `low` throws at once, and block `high`
+    // waits until `low` is about to throw, then a little longer, so `low` is
+    // the FIRST to arrive and `high` the LAST, on every path (the inline paths
+    // run `low` first anyway). Kills: keep-the-last-to-arrive, and
+    // keep-the-highest-index. `high` is block 15, the last one handed out, or a
+    // middle one, so the slow block is not always the scheduler's last.
+    const unsigned threads = GENERATE(1u, 2u, 4u, 8u);
+    const std::size_t inline_below = GENERATE(std::size_t{0}, 65);
+    const std::size_t low = GENERATE(std::size_t{0}, 5);
+    const std::size_t high = GENERATE(std::size_t{9}, 15);
+    CAPTURE(threads, inline_below, low, high);
+    std::atomic<int> calls{0}, timed_out{0};
+    std::atomic<bool> low_thrown{false};
+    std::size_t caught = 99;
+    try {
+        for_each_block(64, threads, BlockSchedule{.block = 4, .inline_below = inline_below},
+                       [&](std::size_t begin, std::size_t) {
+                           calls.fetch_add(1);
+                           const std::size_t k = begin / 4;
+                           if (k == low) {
+                               low_thrown.store(true);
+                               throw BlockError{k};
+                           }
+                           if (k == high) {
+                               const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds{10};
+                               while (!low_thrown.load()) {
+                                   if (std::chrono::steady_clock::now() > deadline) {
+                                       timed_out.fetch_add(1);
+                                       break;
+                                   }
+                                   std::this_thread::yield();
+                               }
+                               // Let block `low`'s throw reach the scheduler first.
+                               std::this_thread::sleep_for(std::chrono::milliseconds{30});
+                               throw BlockError{k};
+                           }
+                       });
+    } catch (const BlockError& e) {
+        caught = e.block;
+    }
+    REQUIRE(timed_out.load() == 0);
+    REQUIRE(caught == low);
+    REQUIRE(calls.load() == 16);
 }
 
 TEST_CASE("for_each_block's exception is the same whatever the thread count and threshold",

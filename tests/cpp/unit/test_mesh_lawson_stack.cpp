@@ -28,6 +28,7 @@
 
 #include "refinement_fixtures.hpp"
 
+#include <algorithm>
 #include <array>
 #include <cstdint>
 #include <optional>
@@ -137,6 +138,33 @@ std::optional<Hit> locate(const LatticeMesh& m, LatticeVertex p) {
     return std::nullopt;
 }
 
+// Insert p as refine does: split_inside for an interior node, split_edge for
+// one on an edge (the ring's constrained edges included), with refine's
+// seeds. nullopt when p is already a vertex.
+struct Insertion {
+    std::uint32_t q;
+    std::array<std::uint32_t, 4> seeds;
+    std::size_t n_seeds;
+    bool on_edge;
+    std::span<const std::uint32_t> span() const { return {seeds.data(), n_seeds}; }
+};
+std::optional<Insertion> insert(LatticeMesh& m, LatticeVertex p) {
+    const auto hit = locate(m, p);
+    if (!hit) return std::nullopt;
+    const auto t = hit->t;
+    const auto before = static_cast<std::uint32_t>(m.triangle_count());
+    Insertion ins{0, {t, before, before + 1, before + 1}, 3, hit->edge.has_value()};
+    if (!hit->edge) {
+        ins.q = m.split_inside(t, p);
+    } else {
+        const std::uint32_t u = m.neighbours(t)[*hit->edge];
+        ins.q = m.split_edge(t, *hit->edge, p);
+        ins.n_seeds = u != kNoNeighbour ? 4 : 2;
+        if (ins.n_seeds == 4) ins.seeds[3] = u;
+    }
+    return ins;
+}
+
 void require_same_mesh(const LatticeMesh& a, const LatticeMesh& b) {
     REQUIRE(a.triangle_count() == b.triangle_count());
     REQUIRE(a.vertices().size() == b.vertices().size());
@@ -175,23 +203,11 @@ TEST_CASE("legalise_around with a caller-owned stack matches today's, insertion 
     std::size_t inserted = 0, flipped = 0, on_edges = 0;
     for (int attempt = 0; attempt < 300; ++attempt) {
         const LatticeVertex p{static_cast<std::uint32_t>(rng() % 25), static_cast<std::uint32_t>(rng() % 25)};
-        const auto hit = locate(m, p);
-        if (!hit) continue;
-        const auto t = hit->t;
-        const auto before = static_cast<std::uint32_t>(m.triangle_count());
-        std::array<std::uint32_t, 4> seeds{t, before, before + 1, before + 1};
-        std::size_t n_seeds = 3;
-        std::uint32_t q = 0;
-        if (!hit->edge) {
-            q = m.split_inside(t, p);
-        } else {
-            const std::uint32_t u = m.neighbours(t)[*hit->edge];
-            q = m.split_edge(t, *hit->edge, p);
-            n_seeds = u != kNoNeighbour ? 4 : 2;
-            if (n_seeds == 4) seeds[3] = u;
-            ++on_edges;
-        }
-        const std::span<const std::uint32_t> s{seeds.data(), n_seeds};
+        const auto ins = insert(m, p);
+        if (!ins) continue;
+        if (ins->on_edge) ++on_edges;
+        const std::uint32_t q = ins->q;
+        const auto s = ins->span();
         LatticeMesh expected = m;
         std::vector<std::uint32_t> expected_writes;
         const std::size_t expected_flips = reference_around(expected, q, s, f, expected_writes);
@@ -230,4 +246,55 @@ TEST_CASE("legalise_around with a caller-owned stack and no flip to make", "[law
             expected_flips);
     REQUIRE(writes == expected_writes);
     require_same_mesh(m, expected);
+}
+
+TEST_CASE("legalise_around discards a non-empty FlipStack's contents on entry", "[lawson][around][stack]") {
+    // lawson.hpp: the stack's "contents on entry are discarded, and it is
+    // empty on return". Before every insertion the stack is loaded with stale
+    // entries: the new seeds, reversed so they pop in the opposite order to the
+    // reference's, on top of triangle 0 and the last triangle. The result must still be the reference's (flip count, on_write
+    // sequence in order, mesh), and the stack empty on return.
+    //
+    // What this kills: an overload that keeps the stale entries on top of the
+    // seeds (prepends the seeds), which pops them first and so flips in a
+    // different order; one that leaves anything behind. What it cannot see:
+    // an overload that appends the seeds above valid stale entries. Those are
+    // popped after the seeds, when Lawson's post-condition already holds (no
+    // edge opposite q must flip, and triangles without q are skipped), so the
+    // result is identical. An out-of-range stale entry would expose it, but
+    // only as undefined behaviour, which is not a test.
+    const std::uint32_t seed = GENERATE(range(1u, 9u));
+    const std::size_t frame = GENERATE(std::size_t{0}, 1, 2);
+    CAPTURE(seed, frame);
+    const LatticeFrame f = kFrames[frame];
+    auto m = grid(4, 6, true);
+    std::mt19937 rng{seed};
+    FlipStack stack;
+    std::size_t inserted = 0, flipped = 0;
+    for (int attempt = 0; attempt < 300; ++attempt) {
+        const LatticeVertex p{static_cast<std::uint32_t>(rng() % 25), static_cast<std::uint32_t>(rng() % 25)};
+        const auto ins = insert(m, p);
+        if (!ins) continue;
+        const auto s = ins->span();
+        LatticeMesh expected = m;
+        std::vector<std::uint32_t> expected_writes;
+        const std::size_t expected_flips = reference_around(expected, ins->q, s, f, expected_writes);
+
+        stack.assign(s.begin(), s.end());
+        stack.push_back(0);
+        stack.push_back(static_cast<std::uint32_t>(m.triangle_count() - 1));
+        std::reverse(stack.begin(), stack.end());  // seeds last, reversed: popped first
+        std::vector<std::uint32_t> writes;
+        const std::size_t flips = legalise_around<DefaultKernel>(
+            m, ins->q, s, f, stack, [&writes](std::uint32_t w) { writes.push_back(w); });
+        CAPTURE(attempt, p.row, p.col);
+        REQUIRE(flips == expected_flips);
+        REQUIRE(writes == expected_writes);
+        REQUIRE(stack.empty());
+        require_same_mesh(m, expected);
+        ++inserted;
+        flipped += flips;
+    }
+    REQUIRE(inserted >= 100);
+    REQUIRE(flipped >= 20);
 }
