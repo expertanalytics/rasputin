@@ -639,8 +639,8 @@ Line numbers in this passage are at `605a60c`, where this record was written.
 "the noder (5b) is what fixes it" — becomes a statement about a fix that has
 landed.
 
-**Its two breaklines get property bits.** Today both carry mask `0`
-(`viz/fixtures.py:207,210` at `605a60c`), while the C++ suite's fixture of the *same
+**Its two breaklines get property bits.** At `605a60c` both carry mask `0`
+(`viz/fixtures.py:207,210`), while the C++ suite's fixture of the *same
 geometry* gives them road and river (`test_noding_node.cpp:162-165`). Two
 changed literals — `1` for the river bit and `2` for the road bit under
 `DEFAULT_VOCABULARY`'s numbering — and the picture becomes the user's sentence:
@@ -902,7 +902,7 @@ is priced 50 % above the block it replaces for that reason.
 ### Gate D — 5c's own, and it is a budget with an obeyable seam
 
 The one gate in this project's record that worked fired **before its suite
-existed** (`05b-noder-driver.md:430-432`); the one that failed did so because the
+existed** (`05b-noder-driver.md:434-435`); the one that failed did so because the
 committed suite spanned the seam it would have had to cut. So Gate D is armed
 with that property removed by construction:
 
@@ -1146,7 +1146,7 @@ lifetime or a reinterpret:
   `InvalidSnapSpacing` rather than raising; a path-like argument in `pslg`'s
   place is a `TypeError`, matching `build_pslg`'s boundary.
 
-**The end-to-end acceptance criterion**, which is `05b-noder-driver.md:143-146`'s
+**The end-to-end acceptance criterion**, which is `05b-noder-driver.md:145-148`'s
 criterion with the call it was waiting for:
 
 ```sh
