@@ -23,9 +23,11 @@ it is never unmeasured again. You report measured figures only.
   `docs/benchmarks/bench-py.md`. It is code under `tools/`, so a change to it
   follows the TDD loop: a failing test in `tests/python/test_bench.py` first,
   from `@tester`.
-* **The serial-phase profile.** About half of single-thread refine time does not
-  parallelise, and the serial insert and flip phase is the suspected cause. It
-  has not been profiled. Profile it before anyone designs a fix for it.
+* **The serial-phase profile.** Profiled on 2026-09-27
+  (`docs/benchmarks/2026-09-27/serial-profile/README.md`): the serial part is
+  about a third of single-thread refine, mostly Lawson legalisation, and the
+  scan itself stops speeding up near 5× from load imbalance. Re-profile before
+  a design relies on those figures after refine changes.
 * **The scaling ceiling.** Refine speeds up at most about 2.2× from 1 to 20
   threads, flat from about 7, on AC as on battery
   (`docs/benchmarks/2026-09-26/README.md`). Report each increment's ceiling
