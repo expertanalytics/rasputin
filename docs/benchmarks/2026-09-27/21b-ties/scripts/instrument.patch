@@ -1,0 +1,315 @@
+diff --git a/include/terrain/mesh/lawson.hpp b/include/terrain/mesh/lawson.hpp
+index 2796055..c4dae58 100644
+--- a/include/terrain/mesh/lawson.hpp
++++ b/include/terrain/mesh/lawson.hpp
+@@ -24,6 +24,8 @@
+ #include <terrain/mesh/lattice_mesh.hpp>
+ #include <terrain/predicates/kernel.hpp>
+ 
++#include <terrain/mesh/prof_ties.hpp>
++
+ #include <cstddef>
+ #include <cstdint>
+ #include <span>
+@@ -67,10 +69,18 @@ template <pred::GeometryKernel K>
+     // the frame. Both branches flip exactly when the same exact determinant,
+     // on the frame points of the quad in mesh CCW order, is positive; a flip
+     // lowers the sum of signed lifted volumes, so the process terminates.
+-    if (K::orient2d(a, b, c) == pred::Orientation::CounterClockwise)
+-        return K::incircle(a, b, c, d) == pred::Incircle::Inside;
+-    return K::orient2d(b, a, d) == pred::Orientation::CounterClockwise
+-        && K::incircle(b, a, d, c) == pred::Incircle::Inside;
++    const MeshVertex va = v[tri[e]], vb = v[tri[(e + 1) % 3]], vc = v[tri[(e + 2) % 3]],
++                     vd = v[m.triangles()[u][(j + 2) % 3]];
++    if (K::orient2d(a, b, c) == pred::Orientation::CounterClockwise) {
++        const auto r = K::incircle(a, b, c, d);
++        prof_ties::record(va, vb, vc, vd, f.dx, f.dy, static_cast<int>(r), pred::prof_ties::last_exact);
++        return r == pred::Incircle::Inside;
++    }
++    if (K::orient2d(b, a, d) != pred::Orientation::CounterClockwise)
++        return false;
++    const auto r = K::incircle(b, a, d, c);
++    prof_ties::record(vb, va, vd, vc, f.dx, f.dy, static_cast<int>(r), pred::prof_ties::last_exact);
++    return r == pred::Incircle::Inside;
+ }
+ 
+ }  // namespace detail
+diff --git a/include/terrain/mesh/prof_ties.hpp b/include/terrain/mesh/prof_ties.hpp
+new file mode 100644
+index 0000000..5d516f4
+--- /dev/null
++++ b/include/terrain/mesh/prof_ties.hpp
+@@ -0,0 +1,212 @@
++#pragma once
++
++// 21b tie classification (docs/increments/21-parallel-refine.md, section 3 QW2).
++// Local measurement instrumentation, never committed: kept as
++// docs/benchmarks/2026-09-27/21b-ties/scripts/instrument.patch.
++//
++// At every incircle call made by must_flip, record, on the four MeshVertex
++// corners as passed to the kernel (a, b, c counter-clockwise in the frame,
++// d the query point):
++//   - how many are DEM nodes (MeshVertex::is_node);
++//   - for four nodes: the exact lattice determinant on (col, -row) translated
++//     to d (in __int128, so it is exact whatever the spread), QW2's
++//     conditions (dx == dy; every |difference from d| <= 2^14; the frame
++//     products col * dx and row * dy exact, checked per call with fma), the
++//     agreement of the lattice sign with the kernel's answer, and the shape;
++//   - whether the kernel took the exact path, and its answer.
++// Counters are keyed by phase (0 legalise_all, 1 quality, 2 refine loop). The
++// callers are serial (the split phase), so plain globals suffice.
++
++#include <terrain/mesh/lattice_mesh.hpp>
++
++#include <algorithm>
++#include <array>
++#include <bit>
++#include <cmath>
++#include <cstdint>
++#include <cstdio>
++#include <cstdlib>
++#include <map>
++#include <set>
++#include <string>
++#include <utility>
++
++namespace terrain::mesh::prof_ties {
++
++inline int phase = -1;
++inline std::map<std::string, unsigned long long> counts;
++inline double g_dx = 0, g_dy = 0;
++inline std::size_t g_rows = 0, g_cols = 0;
++inline long long max_spread_all4 = 0, max_spread_exact4 = 0;
++
++inline void reset(double dx, double dy, std::size_t rows, std::size_t cols) {
++    counts.clear();
++    g_dx = dx;
++    g_dy = dy;
++    g_rows = rows;
++    g_cols = cols;
++    max_spread_all4 = max_spread_exact4 = 0;
++}
++
++// Significant bits of a positive finite double: 53 less the trailing zeros of
++// its 53-bit integer significand.
++inline int significant_bits(double x) {
++    int e = 0;
++    const double m = std::frexp(x, &e);
++    const auto s = static_cast<std::uint64_t>(std::ldexp(m, 53));
++    return 53 - std::countr_zero(s);
++}
++
++inline bool product_exact(double a, double b) {
++    const double p = a * b;
++    return std::fma(a, b, -p) == 0.0;
++}
++
++__extension__ typedef __int128 I;
++
++inline I lattice_det(const std::array<MeshVertex, 4>& q) {
++    const auto X = [](const MeshVertex& v) { return static_cast<I>(static_cast<long long>(v.col)); };
++    const auto Y = [](const MeshVertex& v) { return -static_cast<I>(static_cast<long long>(v.row)); };
++    const auto& d = q[3];
++    const I adx = X(q[0]) - X(d), ady = Y(q[0]) - Y(d);
++    const I bdx = X(q[1]) - X(d), bdy = Y(q[1]) - Y(d);
++    const I cdx = X(q[2]) - X(d), cdy = Y(q[2]) - Y(d);
++    const I al = adx * adx + ady * ady, bl = bdx * bdx + bdy * bdy, cl = cdx * cdx + cdy * cdy;
++    return al * (bdx * cdy - cdx * bdy) + bl * (cdx * ady - adx * cdy) + cl * (adx * bdy - bdx * ady);
++}
++
++inline long long orient_ll(const MeshVertex& a, const MeshVertex& b, const MeshVertex& c) {
++    const auto ax = static_cast<long long>(a.col), ay = -static_cast<long long>(a.row);
++    const auto bx = static_cast<long long>(b.col), by = -static_cast<long long>(b.row);
++    const auto cx = static_cast<long long>(c.col), cy = -static_cast<long long>(c.row);
++    return (bx - ax) * (cy - ay) - (by - ay) * (cx - ax);
++}
++
++// Shape of a four-node quad with a zero lattice determinant.
++inline std::string shape(const std::array<MeshVertex, 4>& q) {
++    for (int i = 0; i < 4; ++i)
++        for (int j = i + 1; j < 4; ++j)
++            for (int k = j + 1; k < 4; ++k)
++                if (orient_ll(q[i], q[j], q[k]) == 0)
++                    return "collinear_triple";
++    std::set<long long> cols, rows;
++    for (const auto& v : q) {
++        cols.insert(static_cast<long long>(v.col));
++        rows.insert(static_cast<long long>(v.row));
++    }
++    const auto c = [&](int i) { return std::pair{static_cast<long long>(q[i].col), static_cast<long long>(q[i].row)}; };
++    constexpr std::array<std::array<int, 4>, 3> pairings{{{0, 1, 2, 3}, {0, 2, 1, 3}, {0, 3, 1, 2}}};
++    for (const auto& p : pairings) {
++        const auto [x0, y0] = c(p[0]);
++        const auto [x1, y1] = c(p[1]);
++        const auto [x2, y2] = c(p[2]);
++        const auto [x3, y3] = c(p[3]);
++        const bool same_mid = x0 + x1 == x2 + x3 && y0 + y1 == y2 + y3;
++        const bool same_len = (x1 - x0) * (x1 - x0) + (y1 - y0) * (y1 - y0)
++                           == (x3 - x2) * (x3 - x2) + (y3 - y2) * (y3 - y2);
++        if (!same_mid || !same_len)
++            continue;
++        // Rectangle with diagonals (p0,p1), (p2,p3); sides p0-p2 and p0-p3.
++        const auto s1 = (x2 - x0) * (x2 - x0) + (y2 - y0) * (y2 - y0);
++        const auto s2 = (x3 - x0) * (x3 - x0) + (y3 - y0) * (y3 - y0);
++        const bool square = s1 == s2;
++        if (cols.size() == 2 && rows.size() == 2) {
++            const long long w = *cols.rbegin() - *cols.begin(), h = *rows.rbegin() - *rows.begin();
++            return std::string(square ? "axis_square" : "axis_rectangle") + "_" + std::to_string(std::min(w, h))
++                 + "x" + std::to_string(std::max(w, h));
++        }
++        return square ? "rotated_square" : "rotated_rectangle";
++    }
++    if (cols.size() == 2 || rows.size() == 2)
++        return "isosceles_trapezoid_axis";  // two parallel sides on rows or columns
++    // A cyclic quad with a pair of parallel (disjoint) chords is an isosceles
++    // trapezoid; the diagonals cross, so testing all three pairings is safe.
++    for (const auto& p : pairings) {
++        const auto [x0, y0] = c(p[0]);
++        const auto [x1, y1] = c(p[1]);
++        const auto [x2, y2] = c(p[2]);
++        const auto [x3, y3] = c(p[3]);
++        if ((x1 - x0) * (y3 - y2) - (y1 - y0) * (x3 - x2) == 0)
++            return "isosceles_trapezoid_other";
++    }
++    return "other_cyclic";
++}
++
++inline void add(const std::string& key, unsigned long long n = 1) { counts[key] += n; }
++
++inline void record(MeshVertex a, MeshVertex b, MeshVertex c, MeshVertex d, double dx, double dy, int result,
++                   bool exact) {
++    const std::string P = "p" + std::to_string(phase) + ".";
++    const std::string R = result > 0 ? "inside" : result < 0 ? "outside" : "cocircular";
++    const std::array<MeshVertex, 4> q{a, b, c, d};
++    int nodes = 0;
++    for (const auto& v : q)
++        nodes += v.is_node() ? 1 : 0;
++    const std::string path = exact ? "exact" : "filtered";
++    add(P + "calls");
++    add(P + path + ".calls");
++    add(P + path + ".result." + R);
++    add(P + path + ".nodes" + std::to_string(nodes));
++    add(P + path + ".nodes" + std::to_string(nodes) + ".result." + R);
++    if (nodes != 4)
++        return;
++    long long spread = 0;
++    for (int i = 0; i < 3; ++i) {
++        spread = std::max(spread, std::llabs(static_cast<long long>(q[i].col) - static_cast<long long>(d.col)));
++        spread = std::max(spread, std::llabs(static_cast<long long>(q[i].row) - static_cast<long long>(d.row)));
++    }
++    if (phase == 2) {
++        max_spread_all4 = std::max(max_spread_all4, spread);
++        if (exact)
++            max_spread_exact4 = std::max(max_spread_exact4, spread);
++    }
++    bool frame_exact = true;
++    for (const auto& v : q)
++        frame_exact = frame_exact && product_exact(v.col, dx) && product_exact(v.row, dy);
++    const bool eq = dx == dy;
++    const bool small = spread <= (1LL << 14);
++    const bool qualifies = eq && small && frame_exact;
++    const I det = lattice_det(q);
++    const int s = det > 0 ? 1 : det < 0 ? -1 : 0;
++    const std::string N = P + path + ".n4.";
++    add(N + (eq ? "dx_eq_dy" : "dx_ne_dy"));
++    add(N + (small ? "spread_le_2^14" : "spread_gt_2^14"));
++    add(N + (frame_exact ? "frame_exact" : "frame_inexact"));
++    add(N + (qualifies ? "qw2_qualifies" : "qw2_refuses"));
++    add(N + "lattice_det_" + (s > 0 ? "pos" : s < 0 ? "neg" : "zero"));
++    add(N + (s == result ? "lattice_sign_agrees" : "lattice_sign_differs"));
++    if (qualifies && s != result)
++        add(N + "qw2_qualifies_and_differs");
++    if (s == 0)
++        add(N + "shape." + shape(q));
++    if (exact && s != 0)
++        add(N + "exact_path_lattice_nonzero");
++}
++
++inline void dump(std::size_t rounds, std::size_t inserted, std::size_t flips) {
++    const char* path = std::getenv("RASPUTIN_TIES_OUT");
++    if (path == nullptr)
++        return;
++    std::FILE* f = std::fopen(path, "a");
++    if (f == nullptr)
++        return;
++    const int bits = significant_bits(g_dx);
++    const int width = std::bit_width(std::max(g_rows, g_cols) - 1);
++    std::fprintf(f,
++                 "{\"dx\": %.17g, \"dy\": %.17g, \"rows\": %zu, \"cols\": %zu, \"dx_significant_bits\": %d, "
++                 "\"index_bit_width\": %d, \"global_frame_exact_condition\": %s, \"rounds\": %zu, "
++                 "\"inserted\": %zu, \"flips\": %zu, \"max_spread_all4_refine\": %lld, "
++                 "\"max_spread_exact4_refine\": %lld, \"counts\": {",
++                 g_dx, g_dy, g_rows, g_cols, bits, width,
++                 (g_dx == g_dy && bits + width <= 53) ? "true" : "false", rounds, inserted, flips,
++                 max_spread_all4, max_spread_exact4);
++    bool first = true;
++    for (const auto& [k, n] : counts) {
++        std::fprintf(f, "%s\"%s\": %llu", first ? "" : ", ", k.c_str(), n);
++        first = false;
++    }
++    std::fprintf(f, "}}\n");
++    std::fclose(f);
++}
++
++}  // namespace terrain::mesh::prof_ties
+diff --git a/include/terrain/predicates/kernel.hpp b/include/terrain/predicates/kernel.hpp
+index b794353..a4f7eff 100644
+--- a/include/terrain/predicates/kernel.hpp
++++ b/include/terrain/predicates/kernel.hpp
+@@ -33,6 +33,12 @@ concept GeometryKernel = requires(Point2 a, Point2 b, Point2 c, Point2 d) {
+     { K::incircle(a, b, c, d) } -> std::same_as<Incircle>;
+ };
+ 
++// 21b tie classification (local instrumentation, never committed): whether the
++// last FilteredKernel incircle call took the exact path.
++namespace prof_ties {
++inline bool last_exact = false;
++}  // namespace prof_ties
++
+ namespace detail {
+ 
+ // The naive 3x3 lifted determinant, translated so d is the origin. Positive iff
+@@ -172,8 +178,10 @@ private:
+         const double permanent = detail::incircle_permanent(a, b, c, d);
+ 
+         if (std::fabs(det) > incircle_bound_a * permanent) {
++            prof_ties::last_exact = false;
+             return incircle_of_sign(det);
+         }
++        prof_ties::last_exact = true;
+         return E::incircle_ccw(a, b, c, d);
+     }
+ };
+diff --git a/include/terrain/refinement/refine.hpp b/include/terrain/refinement/refine.hpp
+index c0c6a25..9003583 100644
+--- a/include/terrain/refinement/refine.hpp
++++ b/include/terrain/refinement/refine.hpp
+@@ -282,9 +282,12 @@ template <raster::RasterSource R>
+     const auto since = [](clock::time_point t0) {
+         return std::chrono::duration<double>(clock::now() - t0).count();
+     };
++    mesh::prof_ties::reset(g.delta_x(), g.delta_y(), g.rows(), g.cols());
++    mesh::prof_ties::phase = 0;
+     auto t0 = clock::now();
+     out.flips = mesh::legalise_all<pred::DefaultKernel>(m, frame, [](std::uint32_t) {});
+     out.legalise_seconds = since(t0);
++    mesh::prof_ties::phase = 1;
+     if (options.min_angle_deg > 0.0) {
+         t0 = clock::now();
+         const auto q = mesh::improve<pred::DefaultKernel>(
+@@ -297,6 +300,7 @@ template <raster::RasterSource R>
+     std::vector<ScanResult> results;
+     std::set<std::pair<std::uint32_t, std::uint32_t>> footed;  // (row, col), R2 step 5
+     mesh::FlipStack flip_stack;  // one buffer for every legalise_around
++    mesh::prof_ties::phase = 2;
+     std::vector<std::uint32_t> active(m.triangle_count());
+     for (std::uint32_t t = 0; t < active.size(); ++t)
+         active[t] = t;
+@@ -378,6 +382,7 @@ template <raster::RasterSource R>
+         detail::rebuild_active(touched, skipped, active);
+     }
+ 
++    mesh::prof_ties::dump(out.rounds, out.inserted, out.flips);
+     // By the stopping rule a void triangle holds no valid node, so `uncovered`
+     // sums zeros unless that rule changes; it is reported so a change shows.
+     for (const ScanResult& r : results) {

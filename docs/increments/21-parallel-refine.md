@@ -487,6 +487,96 @@ is no difference beyond noise (refine 515 vs 519 ms), as QW1 predicts. The
 mesh sha256 that `bench.py` prints for the tile and the quarter circle was the same
 before and after.
 
+### Pinned by the red suite (21b)
+
+QW2 names `lattice_incircle(a, b, c, d) -> std::optional<Incircle>` but not
+where `dx == dy` and the exact-frame decision come from. `@tester` chose the
+following in the red step; `tests/cpp/unit/test_mesh_lattice_incircle.cpp`
+holds it. Both functions are in `namespace terrain::mesh` and reachable
+through `include/terrain/mesh/lawson.hpp`. Whether they live there or in a new
+header beside it that `lawson.hpp` includes is `@developer`'s choice.
+
+- `[[nodiscard]] LatticeFrame lattice_frame(double dx, double dy, std::size_t rows, std::size_t cols) noexcept`
+  returns a frame with the same `dx` and `dy` that also records, once per
+  refine call, whether the integer path may answer on it. It may answer only
+  when `dx == dy`, `dx` is finite and positive, and `col * dx` and `row * dy`
+  are exact for every node with `col < cols` and `row < rows`. It must answer
+  wherever QW2's sufficient condition holds: the significant bits of `dx` plus
+  `bit_width(max(rows, cols) - 1)` are at most 53. The suite tests exactly 53,
+  and 54 with a `dx` whose `3 * dx` rounds (it must refuse), on each axis. A
+  largest product `(max(rows, cols) - 1) * dx` that overflows is not exact:
+  `2^1023` on a 3 × 3 grid must refuse.
+  Between that condition and exactness, for example `dx = 0.1` on a
+  3 × 3 grid, which is exact but fails the condition, nothing is pinned.
+  `refine` builds its frame with this function instead of
+  `LatticeFrame{g.delta_x(), g.delta_y()}`. No test can see that, because the
+  output is bit-identical by design. The reviewer checks it by reading the
+  code, and `@perf`'s acceptance run shows it as time saved.
+- **A `LatticeFrame` built directly never enables the integer path.**
+  `LatticeFrame{dx, dy}`, the way every caller except refine builds one, keeps compiling
+  and keeps today's kernel path. The existing Lawson and quality suites
+  therefore still exercise that path, and the 21b suite uses such a frame as
+  its "without".
+- `[[nodiscard]] std::optional<pred::Incircle> lattice_incircle(MeshVertex a, MeshVertex b, MeshVertex c, MeshVertex d, const LatticeFrame& f) noexcept`.
+  Precondition: `a, b, c` strictly counter-clockwise on `(col, -row)`, which
+  `must_flip`'s triangle is (the `LatticeMesh` invariant). It returns empty
+  unless `f` came from an enabling `lattice_frame`, all four corners are nodes
+  with finite coordinates (`is_node()` is true for ±inf; the spread test
+  `!(fabs(diff) <= 2^14)` refuses every non-finite difference, ±inf or the NaN
+  of `inf - inf`, before the `int64` cast), and `|col_x - col_d|` and `|row_x - row_d|` are at most 2^14 for each `x` in
+  `a, b, c`. The bound is measured from `d`, so `a` and `b` may be 2^15 apart.
+  When it answers, the answer is the sign `DetriaExact::incircle_ccw` gives on
+  the frame points `(col * dx, -(row * dy))`.
+- **`must_flip` calls it first.** When it answers, `must_flip` returns
+  `answer == Inside` and asks the kernel nothing, not even the frame
+  `orient2d`. The suite counts kernel calls to check this. When it refuses,
+  today's path runs unchanged.
+
+At the red commit the suite was registered only once `lawson.hpp` named
+`lattice_incircle`, as in 21a; the guard was removed after green. It starts no
+threads, so it is not in the TSan job.
+
+**Mutation round** against a scratch implementation that is not committed. All
+of these were killed: the sign inverted; the determinant on `(col, row)`;
+refusal at exactly 2^14 (`>=`); a bound of 2^14 + 1; a bound of 2^15; the
+bound checked on one side only; the bound checked on columns only; the
+exact-frame check dropped; the exact-frame test at `< 53`; the exact-frame
+test on columns only, and on rows only; the node check dropped; the node check
+skipping `d`; `dx != dy` accepted; `dx <= 0` accepted; a directly built frame
+enabling the path; no call in `must_flip`. The determinant computed in doubles
+rather than `int64` was also killed, and only by the radius-8085 circle, where
+spreads come close to 2^14.
+
+Two mutants survived that round and were found by `@reviewer` after green: the
+exact-frame limit one bit loose (`bit_width(top - 1) - 1`) and the finite-extent
+clause dropped. A test amendment after green kills both, and adds the
+non-finite-corner refusal, which HEAD at the amendment did not have.
+
+### 21b: the integer path is faster (green, not acceptance)
+
+Measured by `@developer` at the green commit, back to back against 21a's head
+`d3ee2ce`, **on battery** (98 %, before and after), so it compares with no AC
+figure. Both trees were built by `bench.py`'s `build()` (Release; the base
+`.so` hashes to the 21a acceptance run's `654a2442…`), and each sample was one
+`rasputin mesh` process on the 1 m benchmark at tolerance 1, reading
+`RefineOutcome`'s phase times. Medians of 5, interleaved base/green:
+
+| domain, threads | refine, 21a -> 21b | split phase, 21a -> 21b |
+|---|---:|---:|
+| quarter, 1 | 0.444 -> 0.414 s (-6.7 %) | 0.122 -> 0.090 s (-26 %) |
+| quarter, 8 | 0.198 -> 0.164 s (-17 %) | 0.132 -> 0.098 s (-26 %) |
+| tile, 1 | 0.503 -> 0.464 s (-7.8 %) | 0.124 -> 0.091 s (-27 %) |
+| tile, 8 | 0.225 -> 0.187 s (-17 %) | 0.134 -> 0.097 s (-28 %) |
+
+The scan is unchanged, as it should be; the whole gain is in the split phase,
+and it is larger than QW2's estimate (-4 % and -8 %), so the int64 determinant
+with the frame `orient2d` it skips is cheaper than the filtered path too, not
+only than the exact path (5.0 % of refine in the profile) it replaces.
+The binary meshes hash the same as 21a's (quarter `ff705683…`, tile
+`645919aa…`), with the same flip and insertion counts. The scratch driver and
+its samples were not kept. `@perf`'s acceptance run, battery against battery,
+is `docs/benchmarks/2026-09-27/21b-acceptance.md` (ACCEPTED).
+
 ## 4. Determinism levels
 
 Today's contract (14 R5, 14b R1, tested by 14's T6 and 18's T3 golden
@@ -784,8 +874,15 @@ Each is answered or placed.
    cheaper exact decision for quads whose corners are all nodes? That is 5 %
    of refine and about 17 % of the serial phase."*
    **Answered: yes,** an int64 lattice incircle under four stated conditions,
-   bit-identical to today (QW2, 21b). The premise is still an inference; the
-   classification measurement in QW2 comes first.
+   bit-identical to today (QW2, 21b). **The premise is measured**
+   (`docs/benchmarks/2026-09-27/21b-ties/README.md`): every exact-path tie
+   has four node corners, lattice determinant 0 and meets QW2's conditions
+   (146,962 of 146,962 on the quarter circle, 154,502 of 154,502 on the tile);
+   QW2 would answer 99.97 % and 100 % of all refine-loop incircle calls. Only
+   38 % of the ties are axis-aligned rectangles, so the general determinant is
+   needed. The time saved was measured on battery at green ("21b: the
+   integer path is faster") and in `@perf`'s acceptance run
+   (`docs/benchmarks/2026-09-27/21b-acceptance.md`, ACCEPTED).
 
 4. *"The scan loses 16.5 ms of 61.8 ms to imbalance at 8 threads. Is the
    chunking free to change, given that results are written per slot? And does
@@ -862,7 +959,8 @@ suites:
 - Other tests that pin exact counts of a refined mesh (for example 14's T2
   under 14b's amendment) are for `@tester` to find in the red step.
 
-Every new suite joins the TSan job's list in `.github/workflows/main.yaml`.
+Every new suite that starts threads joins the TSan job's list in
+`.github/workflows/main.yaml`.
 
 **Acceptance for 21a, 21b and 21d** is `@perf`'s run
 (`docs/increments/README.md`, "Acceptance"): the 1 m benchmark and the thread

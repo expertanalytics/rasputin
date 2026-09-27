@@ -24,22 +24,100 @@
 #include <terrain/mesh/lattice_mesh.hpp>
 #include <terrain/predicates/kernel.hpp>
 
+#include <algorithm>
+#include <array>
+#include <bit>
+#include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <optional>
 #include <span>
 #include <utility>
 #include <vector>
 
 namespace terrain::mesh {
 
-struct LatticeFrame {
+// A frame built directly, LatticeFrame{dx, dy}, never enables the integer
+// incircle; only lattice_frame() below can (docs/increments/21-parallel-refine.md,
+// "Pinned by the red suite (21b)").
+class LatticeFrame {
+public:
     double dx = 1.0;
     double dy = 1.0;
+
+    constexpr LatticeFrame() noexcept = default;
+    constexpr LatticeFrame(double x, double y) noexcept : dx{x}, dy{y} {}
 
     [[nodiscard]] Point2 at(MeshVertex v) const noexcept {
         return Point2{v.col * dx, -(v.row * dy)};
     }
+    // Whether lattice_incircle may answer on this frame.
+    [[nodiscard]] bool integer() const noexcept { return integer_; }
+
+private:
+    bool integer_ = false;
+    friend LatticeFrame lattice_frame(double, double, std::size_t, std::size_t) noexcept;
 };
+
+// The frame of a rows x cols grid, with the integer path enabled when the frame
+// is the lattice times one exact constant (QW2): dx == dy, dx a positive normal
+// double, and col * dx, row * dy exact for every node. Exactness is decided by
+// QW2's sufficient condition, which is also what it takes: the significant bits
+// of dx plus bit_width(max(rows, cols) - 1) are at most 53, so every product
+// fits the mantissa; the largest one must also be finite.
+[[nodiscard]] inline LatticeFrame lattice_frame(double dx, double dy, std::size_t rows,
+                                                std::size_t cols) noexcept {
+    LatticeFrame f{dx, dy};
+    if (dx != dy || !std::isnormal(dx) || dx < 0.0)
+        return f;
+    const std::uint64_t mantissa =
+        (std::bit_cast<std::uint64_t>(dx) & ((std::uint64_t{1} << 52) - 1)) | (std::uint64_t{1} << 52);
+    const auto significant = 53 - std::countr_zero(mantissa);
+    const std::size_t top = std::max(rows, cols);
+    const auto span = top == 0 ? 0 : std::bit_width(top - 1);
+    f.integer_ = significant + span <= 53
+              && std::isfinite(static_cast<double>(top == 0 ? 0 : top - 1) * dx);
+    return f;
+}
+
+// The incircle sign of the quad (a, b, c, d) from an int64 determinant on the
+// lattice (col, -row), translated to d. Answers only on an enabling frame, four
+// node corners and every difference from d at most 2^14 nodes; the determinant
+// is then below 3 * 2^58 and exact. Under those conditions it is the sign
+// DetriaExact gives on the frame points, since the frame is the lattice scaled
+// by dx > 0 without rounding. That holds only for nodes inside the rows x cols
+// grid f was built for: lattice_frame checked exactness of col * dx and
+// row * dy up to that extent and no further, so a node beyond it can have a
+// rounded frame point whose DetriaExact sign differs. Precondition: a, b, c
+// counter-clockwise on (col, -row). Otherwise empty, and the caller asks the
+// kernel. A corner with a non-finite coordinate is refused by the spread test,
+// before its cast: NaN is not a node (NaN != floor(NaN)), but is_node() is true
+// for +-inf. Every coordinate of a, b, c and d enters some difference, and a
+// difference with an infinite operand is +-inf (the other finite, or infinities
+// of opposite sign) or NaN (inf - inf). `!(fabs <= bound)` is true for both,
+// where `fabs > bound` would pass NaN on to the int64 cast (UB).
+[[nodiscard]] inline std::optional<pred::Incircle> lattice_incircle(MeshVertex a, MeshVertex b,
+                                                                    MeshVertex c, MeshVertex d,
+                                                                    const LatticeFrame& f) noexcept {
+    if (!f.integer() || !a.is_node() || !b.is_node() || !c.is_node() || !d.is_node())
+        return std::nullopt;
+    constexpr double bound = 1 << 14;
+    std::array<std::array<std::int64_t, 2>, 3> p{};  // (col, -row) minus d's
+    const std::array<MeshVertex, 3> abc{a, b, c};
+    for (std::size_t i = 0; i < 3; ++i) {
+        const double x = abc[i].col - d.col, y = d.row - abc[i].row;  // exact: integers < 2^53
+        if (!(std::fabs(x) <= bound) || !(std::fabs(y) <= bound))  // also refuses NaN
+            return std::nullopt;
+        p[i] = {static_cast<std::int64_t>(x), static_cast<std::int64_t>(y)};
+    }
+    const auto lift = [](const std::array<std::int64_t, 2>& q) { return q[0] * q[0] + q[1] * q[1]; };
+    const auto cross = [](const std::array<std::int64_t, 2>& u, const std::array<std::int64_t, 2>& v) {
+        return u[0] * v[1] - u[1] * v[0];
+    };
+    const std::int64_t det =
+        lift(p[0]) * cross(p[1], p[2]) + lift(p[1]) * cross(p[2], p[0]) + lift(p[2]) * cross(p[0], p[1]);
+    return det > 0 ? pred::Incircle::Inside : det < 0 ? pred::Incircle::Outside : pred::Incircle::Cocircular;
+}
 
 namespace detail {
 
@@ -57,8 +135,16 @@ template <pred::GeometryKernel K>
     while (m.triangles()[u][j] != tri[(e + 1) % 3])
         ++j;
     const auto v = m.vertices();
+    const MeshVertex d_vertex = v[m.triangles()[u][(j + 2) % 3]];
+    // The integer path first; the mesh triangle is counter-clockwise on
+    // (col, -row), and it answers only where the kernel would give the same sign.
+    // Answering without consulting K assumes K's incircle sign is exact, as
+    // DefaultKernel's (FilteredKernel<DetriaExact>) is: for an inexact K the
+    // integer sign could differ from K's, and the flip sequence with it.
+    if (const auto s = lattice_incircle(v[tri[e]], v[tri[(e + 1) % 3]], v[tri[(e + 2) % 3]], d_vertex, f))
+        return *s == pred::Incircle::Inside;
     const Point2 a = f.at(v[tri[e]]), b = f.at(v[tri[(e + 1) % 3]]), c = f.at(v[tri[(e + 2) % 3]]),
-                 d = f.at(v[m.triangles()[u][(j + 2) % 3]]);
+                 d = f.at(d_vertex);
     // Orientation is exact on (col, -row), but the frame rounds col * dx and
     // row * dy, so a triangle counter-clockwise in the mesh can be collinear
     // or clockwise here. The kernel answers Cocircular for a collinear triple

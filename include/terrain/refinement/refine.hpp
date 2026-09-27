@@ -276,7 +276,7 @@ template <raster::RasterSource R>
         return std::move(*refused);
     auto& m = std::get<mesh::LatticeMesh>(built);
 
-    const mesh::LatticeFrame frame{g.delta_x(), g.delta_y()};
+    const auto frame = mesh::lattice_frame(g.delta_x(), g.delta_y(), g.rows(), g.cols());
     RefineOutcome out;
     using clock = std::chrono::steady_clock;
     const auto since = [](clock::time_point t0) {
