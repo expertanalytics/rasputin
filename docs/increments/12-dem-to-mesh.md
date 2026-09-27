@@ -68,7 +68,7 @@ fixture is decoded.
    triangles, 3.0 s.
 6. **Without `imagecodecs`, `decode_dem` refuses the fixture** with a
    `GeoTiffError` that names Compression (259) = 5 and points at the `codecs`
-   extra (`src_python/tin_engine/io/geotiff.py:169`). Nothing new is needed
+   extra (`src_python/tin_engine/io/geotiff.py:198`). Nothing new is needed
    for the no-extra case beyond turning that error into a usage error.
 
 ## Rulings
@@ -179,7 +179,7 @@ section), without changes:
     `keep_alive`.
   - The NoData value is converted to `T` exactly once. `decode_dem` already
     refuses a sentinel the cell type cannot hold
-    (`src_python/tin_engine/io/geotiff.py:307`), so the conversion is exact.
+    (`src_python/tin_engine/io/geotiff.py:336`), so the conversion is exact.
   - `sample(view, points)` takes a float64 `(N, 2)` array and returns
     `(z, valid)`. It releases the GIL.
 - `_core.pyi`: the class, the factory and `sample`.
