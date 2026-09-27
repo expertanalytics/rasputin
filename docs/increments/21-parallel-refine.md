@@ -510,7 +510,7 @@ header beside it that `lawson.hpp` includes is `@developer`'s choice.
   output is bit-identical by design. The reviewer checks it by reading the
   code, and `@perf`'s acceptance run shows it as time saved.
 - **A `LatticeFrame` built directly never enables the integer path.**
-  `LatticeFrame{dx, dy}`, the way every caller builds one today, keeps compiling
+  `LatticeFrame{dx, dy}`, the way every caller except refine builds one, keeps compiling
   and keeps today's kernel path. The existing Lawson and quality suites
   therefore still exercise that path, and the 21b suite uses such a frame as
   its "without".
@@ -556,7 +556,7 @@ figure. Both trees were built by `bench.py`'s `build()` (Release; the base
 | quarter, 1 | 0.444 -> 0.414 s (-6.7 %) | 0.122 -> 0.090 s (-26 %) |
 | quarter, 8 | 0.198 -> 0.164 s (-17 %) | 0.132 -> 0.098 s (-26 %) |
 | tile, 1 | 0.503 -> 0.464 s (-7.8 %) | 0.124 -> 0.091 s (-27 %) |
-| tile, 8 | 0.225 -> 0.187 s (-17 %) | 0.134 -> 0.097 s (-27 %) |
+| tile, 8 | 0.225 -> 0.187 s (-17 %) | 0.134 -> 0.097 s (-28 %) |
 
 The scan is unchanged, as it should be; the whole gain is in the split phase,
 and it is larger than QW2's estimate (-4 % and -8 %), so the int64 determinant
@@ -869,7 +869,8 @@ Each is answered or placed.
    (146,962 of 146,962 on the quarter circle, 154,502 of 154,502 on the tile);
    QW2 would answer 99.97 % and 100 % of all refine-loop incircle calls. Only
    38 % of the ties are axis-aligned rectangles, so the general determinant is
-   needed. The time saved is not measured.
+   needed. The time saved was measured on battery at green ("21b: the
+   integer path is faster"); `@perf`'s acceptance run is still owed.
 
 4. *"The scan loses 16.5 ms of 61.8 ms to imbalance at 8 threads. Is the
    chunking free to change, given that results are written per slot? And does

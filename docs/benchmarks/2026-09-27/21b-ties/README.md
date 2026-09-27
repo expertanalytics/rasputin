@@ -140,7 +140,8 @@ the other phases, which also go through `must_flip`:
   The remaining 411 and 3,055 calls have an off-node corner (the arc
   vertices).
 - On the tile, QW2 would answer all of `legalise_all`'s 48,133 calls, 16,129
-  of them exact ties: 15,876 are 40×40 squares and 252 are 10×40 rectangles,
+  of them exact ties: 15,876 are 40×40 squares, 252 are 10×40 rectangles and
+  one is a 10×10 square,
   from the starting mesh. It would also answer all 4,017 of the quality pass's
   calls.
 
