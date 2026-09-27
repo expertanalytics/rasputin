@@ -1,0 +1,12 @@
+quarter_today: tris 428217 rounds 41 ins 213464 flips 445657 maxerr 1.0000 full 1.0000/0 worst 0.3955 deg 18 tol True delaunay 0/641791
+quarter_A0: tris 428217 rounds 41 ins 213464 flips 445657 maxerr 1.0000 full 1.0000/0 worst 0.3955 deg 18 tol True delaunay 0/641791
+quarter_A1: tris 433669 rounds 36 ins 216190 flips 458892 maxerr 1.0000 full 1.0000/0 worst 0.2717 deg 17 tol True delaunay 0/649969
+quarter_C: tris 471045 rounds 20 ins 234878 flips 412965 maxerr 1.0000 full 1.0000/0 worst 0.1889 deg 20 tol True delaunay 0/706033
+tile_today: tris 464290 rounds 53 ins 219837 flips 445675 maxerr 1.0000 full 1.0000/0 worst 0.6296 deg 74 tol True delaunay 0/692056
+tile_A0: tris 464290 rounds 53 ins 219837 flips 445675 maxerr 1.0000 full 1.0000/0 worst 0.6296 deg 74 tol True delaunay 0/692056
+tile_A1: tris 469992 rounds 51 ins 222685 flips 457787 maxerr 1.0000 full 1.0000/0 worst 0.7848 deg 74 tol True delaunay 0/700612
+tile_C: tris 507730 rounds 45 ins 241557 flips 410455 maxerr 1.0000 full 1.0000/0 worst 1.1416 deg 74 tol True delaunay 0/757216
+quarter_A0: tris 428117 rounds 41 ins 213414 flips 445483 maxerr 1.0000 full 1.0000/0 worst 0.3955 deg 18 tol True delaunay 0/641641
+quarter_A0: tris 428209 rounds 41 ins 213460 flips 445643 maxerr 1.0000 full 1.0000/0 worst 0.3955 deg 18 tol True delaunay 0/641779
+quarter_A0: tris 427049 rounds 33 ins 212880 flips 443198 maxerr 1.0000 full 1.1100/1 worst 0.0000 deg 17 tol True delaunay 22/640039
+EXIT 0

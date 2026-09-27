@@ -1,0 +1,10 @@
+(lldb) target create "/opt/homebrew/Cellar/python@3.14/3.14.7/Frameworks/Python.framework/Versions/3.14/bin/python3.14"
+Current executable set to '/opt/homebrew/Cellar/python@3.14/3.14.7/Frameworks/Python.framework/Versions/3.14/bin/python3.14' (arm64).
+(lldb) settings set -- target.run-args  "tools/bench.py" "_child" "--pkg" "/private/tmp/claude-501/-Users-skavhaug-projects-rasputin/38487caf-f56e-46a3-b05b-867af1fb1619/scratchpad/wt-eo/pkg-hard" "--threads" "1" "--" "mesh" "--dem" "tests/fixtures/dem_archive/7908_3_10m_z33.tif" "--tolerance" "1" "--out" "/private/tmp/claude-501/-Users-skavhaug-projects-rasputin/38487caf-f56e-46a3-b05b-867af1fb16
+(lldb) settings set target.process.stop-on-exec false
+(lldb) run
+503 start quality nodes inserted, 252 start quality skips, 0 constraint feet, 0 feet refused, 53 rounds, 219837 points inserted, 445675 flips, 464290 triangles, achieved max error 0.9999759197235107 m, 0 valid DEM nodes not covered, 32258 start triangles, 0 start vertices off-node, 199 vertices without data dropped
+/private/tmp/claude-501/-Users-skavhaug-projects-rasputin/38487caf-f56e-46a3-b05b-867af1fb1619/scratchpad/hard/tile_A0eot.vtk
+BENCH {"refine_s": 3.0658170000533573, "app_s": 4.047210165997967, "max_error": 0.9999759197235107, "rounds": 53, "inserted": 219837, "flips": 445675}
+Process 9056 launched: '/opt/homebrew/Cellar/python@3.14/3.14.7/Frameworks/Python.framework/Versions/3.14/bin/python3.14' (arm64)
+Process 9056 exited with status = 0 (0x00000000)

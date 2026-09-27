@@ -1,0 +1,1 @@
+quarter_A0eot: tris 428217 rounds 41 ins 213464 flips 445657 maxerr 1.0000 full 1.0000/0 worst 0.3955 deg 18 tol True delaunay 0/641791

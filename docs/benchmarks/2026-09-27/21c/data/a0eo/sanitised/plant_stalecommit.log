@@ -1,0 +1,35 @@
+(lldb) target create "/opt/homebrew/Cellar/python@3.14/3.14.7/Frameworks/Python.framework/Versions/3.14/bin/python3.14"
+Current executable set to '/opt/homebrew/Cellar/python@3.14/3.14.7/Frameworks/Python.framework/Versions/3.14/bin/python3.14' (arm64).
+(lldb) settings set -- target.run-args  "tools/bench.py" "_child" "--pkg" "/private/tmp/claude-501/-Users-skavhaug-projects-rasputin/38487caf-f56e-46a3-b05b-867af1fb1619/scratchpad/wt-eo/pkg-hard" "--threads" "1" "--" "mesh" "--dem" "tests/fixtures/dem_archive/7908_3_10m_z33.tif" "--tolerance" "1" "--domain" "docs/benchmarks/2026-09-26/quarter.geojson" "--out" "/private/tmp/claude-501/-Users-skavh
+(lldb) settings set target.process.stop-on-exec false
+(lldb) run
+warning: _core.cpython-314-darwin.so was compiled with optimization - stepping may behave oddly; variables may not be available.
+Process 9124 launched: '/opt/homebrew/Cellar/python@3.14/3.14.7/Frameworks/Python.framework/Versions/3.14/bin/python3.14' (arm64)
+Process 9124 stopped
+* thread #2, queue = 'com.apple.main-thread', stop reason = EXC_BREAKPOINT (code=1, subcode=0x107414e20)
+    frame #0: 0x0000000107414e20 _core.cpython-314-darwin.so`unsigned long terrain::mesh::legalise_around<terrain::pred::FilteredKernel<terrain::pred::DetriaExact>, terrain::refinement::RefineOutcome terrain::refinement::refine<terrain::raster::RasterView<float>>(terrain::raster::RasterView<float> const&, terrain::IndexedMesh2 const&, std::__1::span<std::__1::array<unsigned int, 2ul> const, 184467
+   171 	using FlipStack = std::vector<std::uint32_t>;
+   172 	
+   173 	template <pred::GeometryKernel K, class OnWrite>
+-> 174 	std::size_t legalise_around(LatticeMesh& m, std::uint32_t q, std::span<const std::uint32_t> seeds,
+   175 	                            const LatticeFrame& f, FlipStack& stack, OnWrite&& on_write) {
+   176 	    stack.assign(seeds.begin(), seeds.end());
+   177 	    std::size_t flips = 0;
+note: This address is not associated with a specific line of code. This may be due to compiler optimizations.
+Target 0: (Python) stopped.
+(lldb) bt 12
+* thread #2, queue = 'com.apple.main-thread', stop reason = EXC_BREAKPOINT (code=1, subcode=0x107414e20)
+  * frame #0: 0x0000000107414e20 _core.cpython-314-darwin.so`unsigned long terrain::mesh::legalise_around<terrain::pred::FilteredKernel<terrain::pred::DetriaExact>, terrain::refinement::RefineOutcome terrain::refinement::refine<terrain::raster::RasterView<float>>(terrain::raster::RasterView<float> const&, terrain::IndexedMesh2 const&, std::__1::span<std::__1::array<unsigned int, 2ul> const, 184467
+    frame #1: 0x00000001074086bc _core.cpython-314-darwin.so`terrain::refinement::RefineOutcome terrain::refinement::refine<terrain::raster::RasterView<float>>(dem=<unavailable>, start=<unavailable>, edges=<unavailable>, masks=<unavailable>, options=0x000000016fdfad38) at refine.hpp:1229:37 [opt]
+    frame #2: 0x0000000107403f98 _core.cpython-314-darwin.so`decltype(auto) std::__1::__variant_detail::__visitation::__base::__visit_alt[abi:sqe210106]<std::__1::__variant_detail::__visitation::__variant::__value_visitor<pybind11_init__core(pybind11::module_&)::$_1::operator()((anonymous namespace)::BoundRasterView const&, terrain::IndexedMesh2 const&, pybind11::object const&, pybind11::object co
+    frame #3: 0x0000000107403f90 _core.cpython-314-darwin.so`decltype(auto) std::__1::__variant_detail::__visitation::__variant::__visit_alt[abi:sqe210106]<std::__1::__variant_detail::__visitation::__variant::__value_visitor<pybind11_init__core(pybind11::module_&)::$_1::operator()((anonymous namespace)::BoundRasterView const&, terrain::IndexedMesh2 const&, pybind11::object const&, pybind11::object
+    frame #4: 0x0000000107403f90 _core.cpython-314-darwin.so`decltype(auto) std::__1::__variant_detail::__visitation::__variant::__visit_value[abi:sqe210106]<pybind11_init__core(pybind11::module_&)::$_1::operator()((anonymous namespace)::BoundRasterView const&, terrain::IndexedMesh2 const&, pybind11::object const&, pybind11::object const&, double, unsigned int, double, bool) const::'lambda'(auto c
+    frame #5: 0x0000000107403f90 _core.cpython-314-darwin.so`decltype(auto) std::__1::visit[abi:sqe210106]<pybind11_init__core(pybind11::module_&)::$_1::operator()((anonymous namespace)::BoundRasterView const&, terrain::IndexedMesh2 const&, pybind11::object const&, pybind11::object const&, double, unsigned int, double, bool) const::'lambda'(auto const&), std::__1::variant<terrain::raster::RasterVi
+    frame #6: 0x0000000107403f90 _core.cpython-314-darwin.so`pybind11_init__core(pybind11::module_&)::$_1::operator()(this=<unavailable>, raster=0x0000007b7662efa0, mesh=0x0000007b767bf350, edges=<unavailable>, masks=<unavailable>, tolerance=1, threads=1, min_angle_deg=5.0199999999999992E-7, constraint_feet=<unavailable>) const at core.cpp:926:20 [opt] [inlined]
+    frame #7: 0x0000000107403ecc _core.cpython-314-darwin.so`terrain::refinement::RefineOutcome pybind11::detail::function_ref<terrain::refinement::RefineOutcome ((anonymous namespace)::BoundRasterView const&, terrain::IndexedMesh2 const&, pybind11::object const&, pybind11::object const&, double, unsigned int, double, bool)>::callback_fn<pybind11_init__core(pybind11::module_&)::$_1>(callable=53026
+    frame #8: 0x0000000107402dcc _core.cpython-314-darwin.so`pybind11::detail::function_ref<terrain::refinement::RefineOutcome ((anonymous namespace)::BoundRasterView const&, terrain::IndexedMesh2 const&, pybind11::object const&, pybind11::object const&, double, unsigned int, double, bool)>::operator()(this=<unavailable>, params=0x0000007b7662efa0, params=<unavailable>, params=<unavailable>, param
+    frame #9: 0x0000000107402dc0 _core.cpython-314-darwin.so`terrain::refinement::RefineOutcome pybind11::detail::argument_loader<(anonymous namespace)::BoundRasterView const&, terrain::IndexedMesh2 const&, pybind11::object const&, pybind11::object const&, double, unsigned int, double, bool>::call_impl<terrain::refinement::RefineOutcome, pybind11::detail::function_ref<terrain::refinement::RefineOu
+    frame #10: 0x0000000107402dc0 _core.cpython-314-darwin.so`std::__1::enable_if<!std::is_void<terrain::refinement::RefineOutcome>::value, terrain::refinement::RefineOutcome>::type pybind11::detail::argument_loader<(anonymous namespace)::BoundRasterView const&, terrain::IndexedMesh2 const&, pybind11::object const&, pybind11::object const&, double, unsigned int, double, bool>::call<terrain::refine
+    frame #11: 0x0000000107402dc0 _core.cpython-314-darwin.so`pybind11::handle pybind11::cpp_function::call_impl<terrain::refinement::RefineOutcome, pybind11::detail::void_type, pybind11::detail::argument_loader<(anonymous namespace)::BoundRasterView const&, terrain::IndexedMesh2 const&, pybind11::object const&, pybind11::object const&, double, unsigned int, double, bool>, (anonymous namespace)::B
+(lldb) kill
+Process 9124 exited with status = 9 (0x00000009) killed
