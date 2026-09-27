@@ -116,6 +116,16 @@ def last_landed(repo: Path) -> str:
     return found or "(no merge commit reachable from HEAD)"
 
 
+def default_base(repo: Path) -> str:
+    """origin/master when it resolves, else master.
+
+    A local master lags the remote after a PR merges on GitHub, and counting
+    against it lists already-merged commits as in flight.
+    """
+    remote = _git(repo, "rev-parse", "--verify", "--quiet", "origin/master")
+    return "origin/master" if remote else "master"
+
+
 def in_flight(repo: Path, base: str = "master") -> list[str]:
     """The current branch and its commits ahead of base, newest first."""
     branch = _git(repo, "rev-parse", "--abbrev-ref", "HEAD") or "(unknown)"
@@ -174,8 +184,11 @@ def print_recap() -> None:
     print("== recap ==")
     print(f"Last landed: {last_landed(REPO)}")
     print("In flight:")
-    for line in in_flight(REPO):
+    flight = in_flight(REPO, default_base(REPO))
+    for line in flight[:11]:
         print(f"  {line}")
+    if len(flight) > 11:
+        print(f"  ... {len(flight) - 11} older")
     decisions = pending_decisions(REPO / ".claude" / "current-task")
     print("Waiting on Ola:" + ("" if decisions else " (none recorded as ASK OLA)"))
     for line in decisions:
