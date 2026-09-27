@@ -172,11 +172,12 @@ baseline search 60, evidence writing 70, Typer app 50: about 500 lines, under
 the 700 ceiling. Plus `tools/bench.py` added to mypy's `files` in
 `pyproject.toml`, so the strict gate covers it.
 
-Measured at green: 691 lines counted as section 2 counts them (blank lines in,
-comments and docstrings out), 582 without blank lines, so the estimate was low
+Measured at green: about 690 lines counted as section 2 counts them (blank
+lines in, comments and docstrings out; 688 to 691 depending on whether the two
+`# fmt: off/on` lines count), 582 without blank lines, so the estimate was low
 by about 80 lines. The margin rests on 16 regions packed by hand under
-`# fmt: skip` / `# fmt: off`; formatted normally the file is 781 lines. The
-next change to `tools/bench.py` has under 10 lines of room.
+`# fmt: skip` / `# fmt: off`; formatted normally it is about 780 counted lines
+(827 raw). The next change to `tools/bench.py` has about 10 lines of room.
 
 ## Ruled by Ola (2026-09-27)
 

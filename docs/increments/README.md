@@ -105,11 +105,11 @@ diff touches refine or mesh code (`include/terrain/refinement/`,
 - the evidence committed under `docs/benchmarks/<date>/`.
 
 `@perf` owns all of it (`.claude/agents/perf.md`); the tool's design is
-`docs/benchmarks/bench-py.md`. No run is stored for `tools/bench.py` to compare
-against yet, and the 2026-09-26 logs in `docs/benchmarks/2026-09-26/` are not
-in its format, so the first acceptance run measures the previous increment's
-merge commit (`--tree`) back to back with the new one, and that pair becomes
-the first stored baseline.
+`docs/benchmarks/bench-py.md`. When `bench.py run` finds no comparable stored
+run (it prints `NO BASELINE` and exits 2), measure the previous increment's
+merge commit with `--tree` back to back with the new one: the older run is the
+newer one's baseline. The 2026-09-26 logs are not in `bench.py`'s format and
+are never a baseline.
 
 ## Cost constraints
 

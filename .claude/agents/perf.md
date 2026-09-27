@@ -32,9 +32,11 @@ it is never unmeasured again. You report measured figures only.
   against it.
 
 ## 2. How a run is made
-* **Release build, rebuilt.** Rebuild and reinstall the extension first, per
-  `.claude/REQUIRED-READING.md` ("Stale artifacts"); a run against a stale `.so`
-  measures the previous increment.
+* **Release build, rebuilt.** `bench.py run` builds Release into
+  `<tree>/build-bench` and runs from there by default. With `--no-build`,
+  rebuild and reinstall the extension first, per `.claude/REQUIRED-READING.md`
+  ("Stale artifacts"); a run against a stale `.so` measures the previous
+  increment.
 * **Record the power state with every run** (`pmset -g batt`). Compare a battery
   run only against a battery baseline, and AC only against AC: Ola develops
   while travelling. If the matching baseline does not exist, say so rather than
