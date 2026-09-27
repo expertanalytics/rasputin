@@ -573,9 +573,10 @@ polygon is 16b's ruling").
 - **Order is the source's**: features by primary key (GeoPackage) or file
   order (GeoJSON); within a polygon, exterior then holes; within a
   `MultiPolygon`, part order. Node ids are a function of the node set
-  (05b), but refinement's result depends on vertex order (M3: layouts A and
-  B, whose start meshes are identical, refined to 261 377 and 261 375
-  triangles), so a stated order is what makes a run reproducible.
+  (05b), but refinement's result depends on vertex order: on the 10 km
+  square, the same linework given in two chain orders (`clc_mesh.py`'s
+  `dedupe` and `dup` runs) made start meshes with the same 2 607 vertices and
+  5 165 triangles, and refined to 261 377 and 261 375 triangles, so a stated order is what makes a run reproducible.
 
 ### R8. The noder's verifier, indexed [16b-0]
 
@@ -662,7 +663,8 @@ construction", is false for land cover.
   given.
 - **stderr**: features read, dropped outside, clipped, and input versus
   noded vertex counts. `--stats`' phase table gains `features read` and
-  `features clip`.
+  `features clip` (`PhaseClock` rows are named by the caller; `stats.py` does
+  not change).
 
 ### R11. Scale and memory
 
@@ -756,8 +758,7 @@ far (+39 %, increment 16) applied.
 | | `chains.py` | `start_chains` (the domain half moved from `cli.py`, net ~+25) | ~45 |
 | | `features.py` | two vocabulary entries | ~2 |
 | **16b-2** | `cli.py` | four options and their refusals, the two calls, `features`, `features_crs`, `features_transform`, `features_notice`, `edge_vocabulary`, the sentence, the report; less `_domain_chains` | ~65 |
-| | `stats.py` | two phase rows | ~4 |
-| | | **16b-1 + 16b-2 total** | **~325 (worst ~450)** |
+| | | **16b-1 + 16b-2 total** | **~320 (worst ~445)** |
 
 **Two PRs, recommended:**
 
@@ -768,7 +769,7 @@ far (+39 %, increment 16) applied.
    0). About 50 lines.
 2. **16b-1 and 16b-2 together.** 16b-1 alone would ship a reader nobody can
    run; the CLI is what makes the acceptance runnable, the same argument
-   increment 16 made against splitting. About 325, worst about 450, under
+   increment 16 made against splitting. About 320, worst about 445, under
    700.
 
 If 16b-2 grows past the ceiling in review, the seam is `feature_input.py`
@@ -872,8 +873,10 @@ Everything else is unit, property or integration testing:
   `land.copernicus.eu` before the extract is committed.
 - **Found in passing:** `tests/fixtures/corine/0000_4326_corine2018_4e6064_GML.gml`
   (30 MB, 399 CORINE features over Norway in EPSG:4326, written by OGR,
-  committed with the foundation reset `3096ccc`) carries no attribution. Only
-  `legacy/tests/test_gml_repository.py` names that directory. 16b's PR adds the
+  committed with the foundation reset `3096ccc`) carries no attribution, and
+  nothing in the tree reads it: `grep -rln corine src_python tests tools` finds
+  only the file itself, and the legacy test reads `$RASPUTIN_DATA_DIR/corine`
+  (`legacy/tests/test_gml_repository.py:18`). 16b's PR adds the
   same attribution for it, or removes it if Ola prefers (Q6), per the rule
   that a documentation defect found in an increment is fixed in its PR.
 
@@ -956,7 +959,8 @@ bad start triangles.
 
 **Q6. The 30 MB CORINE GML already in `tests/fixtures/corine/`** (legacy
 test data, written by OGR, no attribution).
-- **(a) Keep it and add the attribution in 16b's PR. Recommended**: removing
-  data from the tree is your call, and the legacy suite names the directory.
-- (b) Remove it: nothing outside `legacy/` uses it, and 16b's extract
-  replaces it for everything current.
+- **(a) Remove it in 16b's PR. Recommended**: nothing in the tree reads it
+  (the legacy test reads `$RASPUTIN_DATA_DIR/corine`), it is 30 MB of GML
+  this project will never parse, and 16b's extract replaces it as CORINE
+  test data.
+- (b) Keep it and add the attribution.
