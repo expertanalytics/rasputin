@@ -172,12 +172,18 @@ baseline search 60, evidence writing 70, Typer app 50: about 500 lines, under
 the 700 ceiling. Plus `tools/bench.py` added to mypy's `files` in
 `pyproject.toml`, so the strict gate covers it.
 
-Measured at green: about 690 lines counted as section 2 counts them (blank
+Measured at green (`90f45ae`): about 690 lines counted as section 2 counts them (blank
 lines in, comments and docstrings out; 688 to 691 depending on whether the two
 `# fmt: off/on` lines count), 582 without blank lines, so the estimate was low
 by about 80 lines. The margin rests on 16 regions packed by hand under
 `# fmt: skip` / `# fmt: off`; formatted normally it is about 780 counted lines
-(827 raw). The next change to `tools/bench.py` has about 10 lines of room.
+(827 raw). That total was the first PR's count, because that PR added the
+whole file; CLAUDE.md section 2 says what a later PR counts. The `# fmt:
+off/on` pair was removed in `91d5b76`: its `on` was indented, so ruff never
+switched formatting back on, and the format gate skipped everything from `run`
+to the end of the file. The signature it guarded was already in ruff's layout.
+The packed regions left are `# fmt: skip` lines (`grep -c "fmt: skip"
+tools/bench.py`).
 
 ## Ruled by Ola (2026-09-27)
 
@@ -293,6 +299,34 @@ per sample: domain, threads, repeat, refine_s, power state), and `README.md`,
 whose generated part ends at the line `MARKER`; whatever follows that line in
 an existing README is kept on a rerun. The README names `2.2x` beside the
 ceiling, every verdict line, and `--accept-quality` when it was used.
+
+**The threshold boundary** (follow-up red, 2026-09-27). "Strictly more than
+the threshold" is decided without a rounded ratio: a median exactly
+`threshold_pct` above the baseline's is `ACCEPTED`. With medians 20.0 and 21.0
+the ratio `21.0 / 20.0 - 1` rounds to 0.050000000000000044, so a
+`pct > threshold` test called exactly 5 % a regression; comparing exact
+products (`new * 100 > base * (100 + threshold)`) does not. 5.5 % at the
+default and 8 % at 7.5 are regressions with their size.
+
+**Bad input exits 3, not a traceback** (follow-up red, 2026-09-27). Exit 3
+through `typer.Exit`, one line naming the offending file, no evidence written:
+
+- `run` with a `--dem` or `--domain` path that does not exist is refused
+  **before the build and before any child**, so a typo is not found out after
+  the measurement it would spoil.
+- A `run.json` that does not load as a `RunRecord` (truncated, empty, or valid
+  JSON from another schema) and that the caller **named** is refused:
+  `compare NEW_DIR` (also when `NEW_DIR/run.json` is missing), `compare
+  --baseline DIR`, and `run --baseline DIR`, the last before the build and any
+  child.
+- *Settled here:* a malformed `run.json` met during the **baseline search**
+  (`find_baseline`, from `run` or `compare` without `--baseline`) is
+  **skipped with a `UserWarning` naming its path**, and the search goes on.
+  Not an error, because `run` searches after measuring: an error there would
+  throw away the measurement over a file unrelated to it, and a `RunRecord`
+  that gains a required field would make every older record invalid and every
+  run fail. Not silent, because a skipped record can change which baseline is
+  chosen, and the warning is how the reader of the verdict learns that.
 
 ## Settled at green (@perf, 2026-09-27)
 

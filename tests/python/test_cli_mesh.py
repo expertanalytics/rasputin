@@ -62,6 +62,7 @@ def plain(text: str) -> str:
     """
     return " ".join(BOX.sub(" ", ANSI.sub("", text)).split())
 
+
 #: The design's acceptance line uses this one. It triangulates cleanly.
 FIXTURE = "catchment"
 
@@ -129,8 +130,16 @@ class TestTheAcceptanceInvocation:
         surface, edges = tmp_path / "s.ply", tmp_path / "e.ply"
         result = runner.invoke(
             app,
-            ["mesh", FIXTURE, "--flat", "--binary", "--out", str(surface),
-             "--out-edges", str(edges)],
+            [
+                "mesh",
+                FIXTURE,
+                "--flat",
+                "--binary",
+                "--out",
+                str(surface),
+                "--out-edges",
+                str(edges),
+            ],
         )
         assert result.exit_code == 0, plain(result.output)
         blobs = surface.read_bytes(), edges.read_bytes()
@@ -196,8 +205,7 @@ class TestTheTwoDestinationsAreDistinct:
         target = tmp_path / "both.ply"
         result = CliRunner().invoke(
             app,
-            ["mesh", "catchment", "--flat", "--out", str(target),
-             "--out-edges", str(target)],
+            ["mesh", "catchment", "--flat", "--out", str(target), "--out-edges", str(target)],
         )
         assert result.exit_code != 0, plain(result.output)
         assert "overwrite" in plain(result.output)
@@ -222,9 +230,7 @@ class TestTheChainMaskJoin:
     """
 
     @pytest.mark.parametrize("attempt", [FEATURED], indirect=True)
-    def test_every_pair_carries_the_mask_its_chains_gave_it(
-        self, attempt: cli.Attempt
-    ) -> None:
+    def test_every_pair_carries_the_mask_its_chains_gave_it(self, attempt: cli.Attempt) -> None:
         pslg = attempt.source
         assert pslg is not None
         properties = np.asarray(pslg.edge_properties)
@@ -256,8 +262,16 @@ class TestTheFeatureScalar:
     ) -> None:
         edges = tmp_path / "edges.ply"
         result = runner.invoke(
-            app, ["mesh", FEATURED, "--flat", "--out", str(tmp_path / "s.ply"),
-                  "--out-edges", str(edges)]
+            app,
+            [
+                "mesh",
+                FEATURED,
+                "--flat",
+                "--out",
+                str(tmp_path / "s.ply"),
+                "--out-edges",
+                str(edges),
+            ],
         )
         assert result.exit_code == 0, plain(result.output)
         header, data = read_ply(edges.read_bytes())
@@ -329,8 +343,16 @@ class TestTheAsciiFlag:
         edges = tmp_path / "edges.ply"
         result = runner.invoke(
             app,
-            ["mesh", FIXTURE, "--flat", "--ascii", "--out", str(surface),
-             "--out-edges", str(edges)],
+            [
+                "mesh",
+                FIXTURE,
+                "--flat",
+                "--ascii",
+                "--out",
+                str(surface),
+                "--out-edges",
+                str(edges),
+            ],
         )
         assert result.exit_code == 0, plain(result.output)
         assert parse_header(surface.read_bytes()).fmt == "ascii"

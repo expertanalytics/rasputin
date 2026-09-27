@@ -434,4 +434,3 @@ class TestRender:
 
     def test_render_is_pure(self, stats: ModuleType, quarter: Any) -> None:
         assert stats.render(quarter) == stats.render(quarter)
-

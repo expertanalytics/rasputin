@@ -100,8 +100,15 @@ class TestTheFlag:
         self, tmp_path: Path, bumpy: Path, box: Path, calls: list[dict[str, Any]]
     ) -> None:
         vtk, stderr = run(
-            tmp_path, "--dem", str(bumpy), "--domain", str(box), "--tolerance", "1",
-            "--start-min-angle", "0",
+            tmp_path,
+            "--dem",
+            str(bumpy),
+            "--domain",
+            str(box),
+            "--tolerance",
+            "1",
+            "--start-min-angle",
+            "0",
         )
         assert [c["min_angle_deg"] for c in calls] == [0.0]
         text = sentence(vtk)
@@ -116,8 +123,15 @@ class TestTheFlag:
         self, tmp_path: Path, bumpy: Path, box: Path, value: str, calls: list[dict[str, Any]]
     ) -> None:
         vtk, _ = run(
-            tmp_path, "--dem", str(bumpy), "--domain", str(box), "--tolerance", "1",
-            "--start-min-angle", value,
+            tmp_path,
+            "--dem",
+            str(bumpy),
+            "--domain",
+            str(box),
+            "--tolerance",
+            "1",
+            "--start-min-angle",
+            value,
         )
         assert [c["min_angle_deg"] for c in calls] == [float(value)]
         assert f"start min angle {value} deg" in sentence(vtk)
@@ -130,8 +144,16 @@ class TestRefusals:
     def test_a_bad_value(self, tmp_path: Path, bumpy: Path, box: Path, value: str) -> None:
         target = tmp_path / "x.vtk"
         code, output = invoke(
-            "--dem", str(bumpy), "--domain", str(box), "--tolerance", "1",
-            "--start-min-angle", value, "--out", str(target),
+            "--dem",
+            str(bumpy),
+            "--domain",
+            str(box),
+            "--tolerance",
+            "1",
+            "--start-min-angle",
+            value,
+            "--out",
+            str(target),
         )
         assert code == USAGE, output
         assert "No such option" not in output  # refused for its value, not unknown
@@ -140,9 +162,7 @@ class TestRefusals:
 
     def test_without_tolerance(self, tmp_path: Path, bumpy: Path) -> None:
         target = tmp_path / "x.vtk"
-        code, output = invoke(
-            "--dem", str(bumpy), "--start-min-angle", "25", "--out", str(target)
-        )
+        code, output = invoke("--dem", str(bumpy), "--start-min-angle", "25", "--out", str(target))
         assert code == USAGE, output
         assert "No such option" not in output  # refused for its value, not unknown
         assert "--start-min-angle" in output
@@ -183,8 +203,16 @@ class TestReport:
     ) -> None:
         md = tmp_path / "x.md"
         result = mesh(
-            "--dem", str(bumpy), "--domain", str(box), "--tolerance", "1",
-            "--out", str(tmp_path / "x.vtk"), "--stats", str(md),
+            "--dem",
+            str(bumpy),
+            "--domain",
+            str(box),
+            "--tolerance",
+            "1",
+            "--out",
+            str(tmp_path / "x.vtk"),
+            "--stats",
+            str(md),
         )
         report = md.read_text(encoding="utf-8")
         refinement = table(section(report, "Refinement"))
@@ -203,8 +231,18 @@ class TestReport:
     ) -> None:
         md = tmp_path / "x.md"
         mesh(
-            "--dem", str(bumpy), "--domain", str(box), "--tolerance", "1",
-            "--start-min-angle", "0", "--out", str(tmp_path / "x.vtk"), "--stats", str(md),
+            "--dem",
+            str(bumpy),
+            "--domain",
+            str(box),
+            "--tolerance",
+            "1",
+            "--start-min-angle",
+            "0",
+            "--out",
+            str(tmp_path / "x.vtk"),
+            "--stats",
+            str(md),
         )
         report = md.read_text(encoding="utf-8")
         refinement = table(section(report, "Refinement"))
@@ -252,8 +290,16 @@ class TestRealTile:
             out = tmp_path / f"q_{tolerance}_{angle}.vtk"
             began = time.perf_counter()
             result = mesh(
-                "--dem", str(KARTVERKET), "--domain", str(domain), "--tolerance", tolerance,
-                "--start-min-angle", angle, "--out", str(out),
+                "--dem",
+                str(KARTVERKET),
+                "--domain",
+                str(domain),
+                "--tolerance",
+                tolerance,
+                "--start-min-angle",
+                angle,
+                "--out",
+                str(out),
             )
             elapsed = time.perf_counter() - began
             vtk = read_vtk(out.read_bytes())
@@ -276,4 +322,3 @@ class TestRealTile:
                     f"quality {quality.groups() if quality else None}"
                 )
         assert under[("10", "25")] < under[("10", "0")]
-

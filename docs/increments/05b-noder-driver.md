@@ -155,7 +155,7 @@ depends on 6b-ii merging, 5b does not depend on it at all. Three things it buys,
 in descending order of how load-bearing they are:
 
 1. **It has already falsified a piece of this design, before any code was
-   written.** `src_python/tin_engine/viz/scene.py:200`'s `build_scene(pslg,
+   written.** `src_python/tin_engine/viz/scene.py:209`'s `build_scene(pslg,
    mesh, ...)` joins the PSLG's chain edges to the mesh's masked edges **by
    vertex-index pair** (`_chain_edges` builds `dict[Pair, ...]` from
    `indices_of(c)`; `_mesh_edges` builds `set[Pair]` from triangle corners).

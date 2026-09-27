@@ -486,7 +486,6 @@ class TestPurity:
         assert "write_vtk" in io.__all__
 
 
-
 class TestPointElevation:
     """Increment 12 amendment: z is also a point array named `elevation`, so
     ParaView's Color By offers the heights, and no string field shadows it."""

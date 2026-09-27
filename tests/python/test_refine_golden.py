@@ -84,7 +84,12 @@ def refined(
         )
     else:
         out = _core.refine(
-            to_core(tile), run.mesh, edges, masks, tolerance=TOLERANCE, threads=threads,
+            to_core(tile),
+            run.mesh,
+            edges,
+            masks,
+            tolerance=TOLERANCE,
+            threads=threads,
             min_angle_deg=min_angle_deg,
         )
     assert out.ok(), out.message

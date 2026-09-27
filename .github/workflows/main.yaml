@@ -214,3 +214,10 @@ jobs:
       - name: ruff
         if: matrix.python-version == '3.12'
         run: ruff check .
+
+      # Layout is enforced, not advised. `# fmt: skip` and `# fmt: off` are
+      # allowed with a reason (CLAUDE.md section 2); docs/ and .claude/ are
+      # excluded in pyproject.toml.
+      - name: ruff format
+        if: matrix.python-version == '3.12'
+        run: ruff format --check .

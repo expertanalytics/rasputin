@@ -34,7 +34,7 @@ SOURCE_DIRS = ["include", "src", "src_python", "bindings", "tests", "tools"]
 # RULED quotes the human who asked, with a date. SPELLING means "the same
 # library under another name" and points at the key it derives from, which must
 # itself resolve to RULED. A key that is neither does not pass.
-RULED = "ruled"      #: a human asked for it; the value quotes them, with a date
+RULED = "ruled"  #: a human asked for it; the value quotes them, with a date
 SPELLING = "spelling"  #: another name for a RULED key; the value is that key
 PENDING = "pending"  #: nobody has ruled; the value says what is unresolved
 
@@ -56,25 +56,33 @@ _DATE = "the user, 2026-09-24, ratifying the class: C++20 <chrono> is the stack"
 PROHIBITED = {
     "cgal": Rule(
         "CGAL: GPL-encumbered; the migration replaces it with an MIT-licensed CDT",
-        RULED, _CGAL, "CGAL"),
+        RULED,
+        _CGAL,
+        "CGAL",
+    ),
     "gdal": Rule("GDAL: prohibited by CLAUDE.md section 2", RULED, _GDAL, "GDAL"),
     "ogr": Rule("OGR: part of GDAL", SPELLING, "gdal", "OGR"),
     "fiona": Rule("Fiona: wraps GDAL", SPELLING, "gdal", "Fiona"),
     "rasterio": Rule("Rasterio: wraps GDAL", RULED, _RASTERIO, "Rasterio"),
     "osgeo": Rule("osgeo: the GDAL Python bindings", SPELLING, "gdal", "GDAL"),
     "gdalwarper.h": Rule(
-        "GDAL: the warper header does not start with a bare 'gdal'",
-        SPELLING, "gdal", "GDAL"),
+        "GDAL: the warper header does not start with a bare 'gdal'", SPELLING, "gdal", "GDAL"
+    ),
     "cpl": Rule(
-        "CPL: GDAL's portability layer (cpl_conv.h, cpl_string.h, ...)",
-        SPELLING, "gdal", "GDAL"),
+        "CPL: GDAL's portability layer (cpl_conv.h, cpl_string.h, ...)", SPELLING, "gdal", "GDAL"
+    ),
     "date/date.h": Rule(
         "external date library: superseded by C++20 <chrono>",
-        RULED, _DATE,
-        "external date libraries"),
+        RULED,
+        _DATE,
+        "external date libraries",
+    ),
     "date/tz.h": Rule(
         "external date library: superseded by C++20 <chrono>",
-        SPELLING, "date/date.h", "external date libraries"),
+        SPELLING,
+        "date/date.h",
+        "external date libraries",
+    ),
 }
 
 INCLUDE_RE = re.compile(r'^\s*#\s*include\s*[<"]([^>"]+)[>"]')
@@ -140,9 +148,11 @@ def build_files() -> list[Path]:
     found += [p for p in (ROOT / ".github" / "workflows").glob("*.y*ml")]
     skip = ("legacy", "build", "lib", ".venv")
     return sorted(
-        p for p in found
+        p
+        for p in found
         if not any(part.startswith(skip) or part in skip for part in p.relative_to(ROOT).parts)
     )
+
 
 BUILD_RE = re.compile(
     r"(find_package|target_link_libraries|link_libraries|find_library|FetchContent_Declare"
@@ -155,8 +165,12 @@ BUILD_RE = re.compile(
 # (which are path-shaped: "date/date.h") never match a bare CMake token. These
 # are the build-layer spellings.
 BUILD_PROHIBITED = {
-    "date": Rule("external date library: superseded by C++20 <chrono>",
-                 SPELLING, "date/date.h", "external date libraries"),
+    "date": Rule(
+        "external date library: superseded by C++20 <chrono>",
+        SPELLING,
+        "date/date.h",
+        "external date libraries",
+    ),
 }
 
 
@@ -254,7 +268,8 @@ def check_authorities() -> list[str]:
                 parent = everything.get(cursor.authority)
                 if parent is None:
                     findings.append(
-                        f"key {token!r}: derives from {cursor.authority!r}, which is not a key")
+                        f"key {token!r}: derives from {cursor.authority!r}, which is not a key"
+                    )
                     break
                 if cursor.authority in seen:
                     findings.append(f"key {token!r}: authority chain is a cycle")
@@ -264,7 +279,8 @@ def check_authorities() -> list[str]:
             else:
                 if cursor.kind == PENDING:
                     findings.append(
-                        f"key {token!r}: derives from {cursor.authority[:40]}..., unresolved")
+                        f"key {token!r}: derives from {cursor.authority[:40]}..., unresolved"
+                    )
         elif rule.kind == PENDING:
             findings.append(f"key {token!r}: NOT RULED ON -- {rule.authority}")
 
@@ -314,8 +330,10 @@ def main() -> int:
         for line in findings:
             print(f"  {line}", file=sys.stderr)
         if governance:
-            print("\n  -- prohibitions with no author, or out of step with the prose --",
-                  file=sys.stderr)
+            print(
+                "\n  -- prohibitions with no author, or out of step with the prose --",
+                file=sys.stderr,
+            )
             for line in governance:
                 print(f"  {line}", file=sys.stderr)
         print(
@@ -326,9 +344,11 @@ def main() -> int:
         )
         return 1
 
-    print(f"Prohibited dependency check OK: {scanned} source and build files "
-          f"plus pyproject.toml are clean, and all {len(PROHIBITED)} prohibitions "
-          "name who asked for them.")
+    print(
+        f"Prohibited dependency check OK: {scanned} source and build files "
+        f"plus pyproject.toml are clean, and all {len(PROHIBITED)} prohibitions "
+        "name who asked for them."
+    )
     return 0
 
 

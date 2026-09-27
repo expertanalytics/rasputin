@@ -162,7 +162,13 @@ class TestTheFlag:
         self, tmp_path: Path, bumpy: Path, box: Path, calls: list[dict[str, Any]]
     ) -> None:
         vtk, stderr = run(
-            tmp_path, "--dem", str(bumpy), "--domain", str(box), "--tolerance", "1",
+            tmp_path,
+            "--dem",
+            str(bumpy),
+            "--domain",
+            str(box),
+            "--tolerance",
+            "1",
             "--no-constraint-feet",
         )
         assert [c["constraint_feet"] for c in calls] == [False]
@@ -196,9 +202,7 @@ class TestRefusals:
 
     def test_without_dem(self, tmp_path: Path) -> None:
         target = tmp_path / "x.vtk"
-        code, output = invoke(
-            "catchment", "--flat", "--no-constraint-feet", "--out", str(target)
-        )
+        code, output = invoke("catchment", "--flat", "--no-constraint-feet", "--out", str(target))
         assert code == USAGE, output
         assert "No such option" not in output  # refused for its use, not unknown
         assert "applies only with --dem" in output
@@ -209,13 +213,19 @@ class TestRefusals:
 class TestReport:
     """R9: stderr and ``--stats`` carry the count."""
 
-    def test_stats_feet_column_matches_stderr(
-        self, tmp_path: Path, bumpy: Path, box: Path
-    ) -> None:
+    def test_stats_feet_column_matches_stderr(self, tmp_path: Path, bumpy: Path, box: Path) -> None:
         md = tmp_path / "x.md"
         result = mesh(
-            "--dem", str(bumpy), "--domain", str(box), "--tolerance", "1",
-            "--out", str(tmp_path / "x.vtk"), "--stats", str(md),
+            "--dem",
+            str(bumpy),
+            "--domain",
+            str(box),
+            "--tolerance",
+            "1",
+            "--out",
+            str(tmp_path / "x.vtk"),
+            "--stats",
+            str(md),
         )
         refinement = table(section(md.read_text(encoding="utf-8"), "Refinement"))
         header = refinement.pop("tolerance")
@@ -290,8 +300,14 @@ class TestRealTile:
             out = tmp_path / f"q_{tolerance}.vtk"
             began = time.perf_counter()
             result = mesh(
-                "--dem", str(KARTVERKET), "--domain", str(domain), "--tolerance", tolerance,
-                "--out", str(out),
+                "--dem",
+                str(KARTVERKET),
+                "--domain",
+                str(domain),
+                "--tolerance",
+                tolerance,
+                "--out",
+                str(out),
             )
             elapsed = time.perf_counter() - began
             vtk = read_vtk(out.read_bytes())

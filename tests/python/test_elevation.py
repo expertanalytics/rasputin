@@ -50,9 +50,7 @@ def trim() -> Any:
 
 
 def run(trim: Any, valid: np.ndarray) -> Any:
-    return trim(
-        vertices=XY, triangles=TRIANGLES, edges=EDGES, edge_masks=MASKS, z=Z, valid=valid
-    )
+    return trim(vertices=XY, triangles=TRIANGLES, edges=EDGES, edge_masks=MASKS, z=Z, valid=valid)
 
 
 def valid_except(*invalid: int) -> np.ndarray:

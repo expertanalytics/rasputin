@@ -141,9 +141,7 @@ class TestHeader:
         assert prop.name == "vertex_indices"
         assert prop.is_list
 
-    def test_edges_name_their_two_endpoints_and_carry_one_scalar(
-        self, constraints: bytes
-    ) -> None:
+    def test_edges_name_their_two_endpoints_and_carry_one_scalar(self, constraints: bytes) -> None:
         properties = parse_header(constraints).element("edge").properties
         assert [p.name for p in properties[:2]] == ["vertex1", "vertex2"]
         assert len(properties) == 3, "one scalar beyond the endpoints: the feature mask"
@@ -300,9 +298,7 @@ class TestTheTwoFilesRegister:
     layers line up when a person loads them side by side.
     """
 
-    def test_the_vertex_blocks_are_byte_identical(
-        self, surface: bytes, constraints: bytes
-    ) -> None:
+    def test_the_vertex_blocks_are_byte_identical(self, surface: bytes, constraints: bytes) -> None:
         assert element_bytes(surface, "vertex") == element_bytes(constraints, "vertex")
 
     def test_the_vertex_blocks_are_not_empty(self, surface: bytes) -> None:

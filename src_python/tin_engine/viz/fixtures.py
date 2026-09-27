@@ -125,14 +125,30 @@ CATCHMENT = _fixture(
     " -- the shape the project is for",
     [
         # The outline, counter-clockwise from the south-west.
-        [0.0, 0.0], [300.0, 40.0], [620.0, 0.0], [900.0, 180.0], [960.0, 520.0],
-        [740.0, 760.0], [420.0, 900.0], [120.0, 760.0], [20.0, 480.0], [60.0, 220.0],
+        [0.0, 0.0],
+        [300.0, 40.0],
+        [620.0, 0.0],
+        [900.0, 180.0],
+        [960.0, 520.0],
+        [740.0, 760.0],
+        [420.0, 900.0],
+        [120.0, 760.0],
+        [20.0, 480.0],
+        [60.0, 220.0],
         # The first interior hole, clockwise.
-        [200.0, 380.0], [300.0, 340.0], [260.0, 250.0], [160.0, 280.0],
+        [200.0, 380.0],
+        [300.0, 340.0],
+        [260.0, 250.0],
+        [160.0, 280.0],
         # The second interior hole, clockwise.
-        [640.0, 640.0], [760.0, 600.0], [720.0, 500.0], [600.0, 520.0],
+        [640.0, 640.0],
+        [760.0, 600.0],
+        [720.0, 500.0],
+        [600.0, 520.0],
         # A breakline through the northern half, clear of both holes.
-        [120.0, 560.0], [340.0, 620.0], [520.0, 760.0],
+        [120.0, 560.0],
+        [340.0, 620.0],
+        [520.0, 760.0],
     ],
     [
         (range(10), "outer", 0),
@@ -146,11 +162,18 @@ SLIVER_FAN = _fixture(
     "sliver-fan",
     "a fan of near-collinear constraints; what the triangulator does with extreme aspect ratios",
     [
-        [0.0, 0.0], [1000.0, 0.0], [1000.0, 200.0], [0.0, 200.0],
+        [0.0, 0.0],
+        [1000.0, 0.0],
+        [1000.0, 200.0],
+        [0.0, 200.0],
         # The apex, shared by all three rays, and their far ends. The first ray
         # is a three-point polyline that is near-collinear without being
         # collinear -- 1000 m long and 1 m off straight.
-        [10.0, 100.0], [500.0, 101.0], [990.0, 100.5], [990.0, 150.0], [990.0, 55.0],
+        [10.0, 100.0],
+        [500.0, 101.0],
+        [990.0, 100.5],
+        [990.0, 150.0],
+        [990.0, 55.0],
     ],
     [
         (range(4), "outer", 0),
@@ -164,8 +187,12 @@ CORNER_HOLE = _fixture(
     "corner-hole",
     "a hole touching the outer ring at exactly one vertex -- InvalidTopology's neighbour",
     [
-        [0.0, 0.0], [600.0, 0.0], [600.0, 600.0], [0.0, 600.0],
-        [560.0, 400.0], [400.0, 560.0],
+        [0.0, 0.0],
+        [600.0, 0.0],
+        [600.0, 600.0],
+        [0.0, 600.0],
+        [560.0, 400.0],
+        [400.0, 560.0],
     ],
     [
         (range(4), "outer", 0),
@@ -179,9 +206,18 @@ HOLE_IN_HOLE = _fixture(
     "hole-in-hole",
     "a hole nested inside a second outline; what in-domain means, drawn",
     [
-        [0.0, 0.0], [800.0, 0.0], [800.0, 800.0], [0.0, 800.0],
-        [150.0, 650.0], [650.0, 650.0], [650.0, 150.0], [150.0, 150.0],
-        [300.0, 500.0], [500.0, 500.0], [500.0, 300.0], [300.0, 300.0],
+        [0.0, 0.0],
+        [800.0, 0.0],
+        [800.0, 800.0],
+        [0.0, 800.0],
+        [150.0, 650.0],
+        [650.0, 650.0],
+        [650.0, 150.0],
+        [150.0, 150.0],
+        [300.0, 500.0],
+        [500.0, 500.0],
+        [500.0, 300.0],
+        [300.0, 300.0],
     ],
     [
         (range(4), "outer", 0),
@@ -210,8 +246,14 @@ ROAD_CROSSES_RIVER = _fixture(
     "road-crosses-river",
     "a road crossing a river: two constraints meeting at a point neither names, noded",
     [
-        [0.0, 0.0], [700.0, 0.0], [700.0, 700.0], [0.0, 700.0],
-        [100.0, 100.0], [600.0, 600.0], [100.0, 600.0], [600.0, 100.0],
+        [0.0, 0.0],
+        [700.0, 0.0],
+        [700.0, 700.0],
+        [0.0, 700.0],
+        [100.0, 100.0],
+        [600.0, 600.0],
+        [100.0, 600.0],
+        [600.0, 100.0],
     ],
     [
         (range(4), "outer", 0),
@@ -241,11 +283,15 @@ ROAD_ENTERS_FOREST = _fixture(
     [
         *_BOX_700_500,
         # The forest ring, closed at index 4.
-        [200.0, 150.0], [500.0, 150.0], [500.0, 350.0], [200.0, 350.0],
+        [200.0, 150.0],
+        [500.0, 150.0],
+        [500.0, 350.0],
+        [200.0, 350.0],
         # The road: it crosses the ring's western edge at (200, 250) and ends
         # at (350, 250), inside it. The interior endpoint is what makes this
         # ENTERING rather than passing through, which is `bridge-over-lake`.
-        [60.0, 250.0], [350.0, 250.0],
+        [60.0, 250.0],
+        [350.0, 250.0],
     ],
     [
         (range(4), "outer", 0),
@@ -280,9 +326,13 @@ BRIDGE_OVER_LAKE = _fixture(
     [
         *_BOX_700_500,
         # The shoreline, closed at index 4.
-        [250.0, 150.0], [450.0, 150.0], [450.0, 350.0], [250.0, 350.0],
+        [250.0, 150.0],
+        [450.0, 150.0],
+        [450.0, 350.0],
+        [250.0, 350.0],
         # The deck, spanning the ring: crossings at (250, 250) and (450, 250).
-        [120.0, 250.0], [580.0, 250.0],
+        [120.0, 250.0],
+        [580.0, 250.0],
     ],
     [
         (range(4), "outer", 0),

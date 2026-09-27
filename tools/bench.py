@@ -26,6 +26,7 @@ import subprocess
 import sys
 import tempfile
 import time
+import warnings
 from collections.abc import Callable, Mapping, Sequence
 from datetime import datetime
 from fractions import Fraction
@@ -378,7 +379,11 @@ def find_baseline(
     it, and whose commit is an ancestor of ``record``'s."""
     found: tuple[Path, RunRecord] | None = None
     for path in sorted(root.glob("*/*/run.json")):
-        candidate = RunRecord.model_validate_json(path.read_text())
+        try:
+            candidate = _load(path.parent)
+        except BenchError as exc:  # skipped, not fatal: bench-py.md "Bad input exits 3"
+            warnings.warn(f"skipped {exc}", UserWarning, stacklevel=2)
+            continue
         if candidate.started >= record.started or comparable(record, candidate) is not None:
             continue
         if found is not None and candidate.started <= found[1].started:
@@ -399,7 +404,8 @@ def verdict(new: RunRecord, base: RunRecord | None) -> Verdict:
         if old is None or old <= 0:
             continue
         pct = (s.median / old - 1.0) * 100.0
-        if pct > new.threshold_pct:
+        # Exact products, not the rounded ratio: exactly the threshold is accepted.
+        if s.median * 100.0 > old * (100.0 + new.threshold_pct):
             where = f"{s.domain} refine_s[t={s.threads}]"
             lines.append(f"REGRESSION: {where} {old:.4f} -> {s.median:.4f} (+{pct:.1f} %)")
     for name, q in new.quality.items():
@@ -551,14 +557,18 @@ def _machine(runner: Runner) -> Machine:
 
 
 def _load(directory: Path) -> RunRecord:
-    return RunRecord.model_validate_json((directory / "run.json").read_text())
+    path = directory / "run.json"
+    try:
+        return RunRecord.model_validate_json(path.read_text())
+    except (OSError, ValueError) as exc:  # pydantic's ValidationError is a ValueError
+        raise BenchError(f"{path}: not a stored run: {str(exc).splitlines()[0]}") from exc
 
 
 def _judge(
-    runner: Runner, record: RunRecord, baseline: Path | None, root: Path, tree: Path
+    runner: Runner, record: RunRecord, baseline: RunRecord | None, root: Path, tree: Path
 ) -> Verdict:
     if baseline is not None:
-        return verdict(record, _load(baseline))
+        return verdict(record, baseline)
     git = ["git", "-C", str(tree), "merge-base", "--is-ancestor"]
     found = find_baseline(root, record, lambda a, d: runner.run([*git, a, d]).returncode == 0)
     return verdict(record, found[1] if found else None)
@@ -609,7 +619,6 @@ BaselineOpt = Annotated[
 ]
 
 
-# fmt: off
 @app.command()
 def run(
     label: Annotated[str, typer.Option("--label", help="Names the evidence directory.")],
@@ -627,12 +636,19 @@ def run(
     threshold: Annotated[float, typer.Option(help="Percent on the median.")] = 5.0,
     accept_quality: Annotated[bool, typer.Option(help="Waive angle and degree loss.")] = False,
 ) -> None:
-    # fmt: on
     """Build, measure, store the evidence, and judge it against a baseline."""
     runner = make_runner()
     tree, dem = tree.resolve(), dem.resolve()
     counts = [int(t) for t in threads.split(",") if t.strip()]
     names = domain or ["tile", str(DEFAULT_QUARTER)]
+    try:  # refuse bad input before the build and any child
+        for path in [dem, *(Path(n) for n in names if n != "tile")]:
+            if not path.exists():
+                raise BenchError(f"{path}: no such file")
+        base = _load(baseline) if baseline is not None else None
+    except BenchError as exc:
+        typer.echo(f"bench: {exc}")
+        raise typer.Exit(3) from exc
     domains = [
         Domain(name="tile", path=None, sha256=None) if n == "tile"
         else Domain(name=Path(n).stem, path=str(Path(n).resolve()), sha256=_sha256(Path(n)))
@@ -669,7 +685,7 @@ def run(
         samples=samples, stats=median_stats(samples), quality=qualities,
         accept_quality=accept_quality, threshold_pct=threshold,
     )  # fmt: skip
-    v = _judge(runner, record, baseline, out_root, tree)
+    v = _judge(runner, record, base, out_root, tree)
     record.verdict = v.lines
     directory = out_root / started.date().isoformat() / label
     write_evidence(record, directory)
@@ -685,7 +701,12 @@ def compare(
     out_root: OutRoot = REPO / "docs/benchmarks",
 ) -> None:
     """Re-judge stored evidence with the threshold and waiver it carries."""
-    v = _judge(make_runner(), _load(new_dir), baseline, out_root, REPO)
+    try:
+        new, base = _load(new_dir), (_load(baseline) if baseline is not None else None)
+    except BenchError as exc:
+        typer.echo(f"bench: {exc}")
+        raise typer.Exit(3) from exc
+    v = _judge(make_runner(), new, base, out_root, REPO)
     typer.echo("\n".join(v.lines))
     raise typer.Exit(v.exit_code)
 

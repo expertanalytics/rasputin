@@ -294,9 +294,7 @@ class TestOutput:
         }
         assert "river" in tokens
 
-    def test_a_fixture_with_no_properties_draws_no_property_stroke(
-        self, tmp_path: Path
-    ) -> None:
+    def test_a_fixture_with_no_properties_draws_no_property_stroke(self, tmp_path: Path) -> None:
         # Able to fail on its own: a renderer that put the token on every
         # constrained edge would pass the test above. `breakline-chain` is the
         # same picture as `river` with the mask cleared, which is what makes
@@ -391,9 +389,7 @@ class TestLabels:
         count = len(np.asarray(gallery()["catchment"].vertices))
         assert count > 3, "the fixture cannot exceed a limit of 3"
         target = tmp_path / "unreadable.svg"
-        result = invoke(
-            "catchment", "--out", str(target), "--labels", "--label-limit", "3"
-        )
+        result = invoke("catchment", "--out", str(target), "--labels", "--label-limit", "3")
         assert result.exit_code != 0
         message = plain(result.output)
         assert str(count) in message, "the refusal does not name the vertex count"
@@ -431,9 +427,7 @@ class TestPathHandling:
 
     def test_a_path_inside_the_permitted_parent_is_written(self, tmp_path: Path) -> None:
         target = tmp_path / "inside.svg"
-        result = invoke(
-            "catchment", "--out", str(target), "--out-parent", str(tmp_path)
-        )
+        result = invoke("catchment", "--out", str(target), "--out-parent", str(tmp_path))
         assert result.exit_code == 0, plain(result.output)
         assert target.is_file()
 
@@ -505,9 +499,7 @@ class TestFailurePresentation:
         assert drawable is False
         assert words != []
 
-    def test_the_degenerate_picture_carries_the_validators_own_words(
-        self, tmp_path: Path
-    ) -> None:
+    def test_the_degenerate_picture_carries_the_validators_own_words(self, tmp_path: Path) -> None:
         _, words = core_verdict("degenerate")
         target = tmp_path / "degenerate.svg"
         assert invoke("degenerate", "--out", str(target)).exit_code == 0
@@ -524,9 +516,7 @@ class TestFailurePresentation:
         assert words != ["Ok"]
 
     @pytest.mark.parametrize("name", ["degenerate", "hole-in-hole"])
-    def test_a_failed_fixture_is_never_a_blank_page(
-        self, name: str, tmp_path: Path
-    ) -> None:
+    def test_a_failed_fixture_is_never_a_blank_page(self, name: str, tmp_path: Path) -> None:
         # The input drawn alone, in its role colours. This is the guard that
         # increment 4's risk 5 asks the viewer to be, and it is worth nothing if
         # the page comes out empty.
@@ -535,8 +525,7 @@ class TestFailurePresentation:
         document = written(target)
         assert elements(document, "edges", "line") != []
         assert any(
-            "role-" in (line.get("class") or "")
-            for line in elements(document, "edges", "line")
+            "role-" in (line.get("class") or "") for line in elements(document, "edges", "line")
         ), "the input is drawn without its role colours"
 
 
@@ -698,8 +687,7 @@ class TestCrossingGallery:
     @pytest.mark.parametrize("name", sorted(PREDICTED_NODES))
     def test_each_crossing_produces_a_node_where_the_design_says(self, name: str) -> None:
         assert PREDICTED_NODES[name] <= constructed_nodes(name), (
-            f"{name} built {sorted(constructed_nodes(name))}, "
-            f"not {sorted(PREDICTED_NODES[name])}"
+            f"{name} built {sorted(constructed_nodes(name))}, not {sorted(PREDICTED_NODES[name])}"
         )
 
     def test_an_input_vertex_is_not_a_constructed_node(self) -> None:
@@ -758,9 +746,7 @@ class TestCrossingGallery:
             _, scene = scene_of(name)
             assert scene.findings == (), f"{name}: {[f.kind.name for f in scene.findings]}"
 
-    def test_the_wall_finding_reaches_the_picture_in_the_alarm_colour(
-        self, tmp_path: Path
-    ) -> None:
+    def test_the_wall_finding_reaches_the_picture_in_the_alarm_colour(self, tmp_path: Path) -> None:
         # The overlay shipped in 6b-ii and no gallery picture has ever shown
         # one. A finding the renderer drops is a finding nobody sees.
         target = tmp_path / "wall-leaves-domain.svg"
@@ -901,11 +887,7 @@ class TestSnapSpacing:
         # statuses point at this number and two point in opposite directions,
         # so it is a policy choice the composition root makes on the record.
         assert cli.DEFAULT_SNAP_SPACING == DEFAULT_SNAP_SPACING
-        source = (
-            Path(cli.__file__).read_text(encoding="utf-8")
-            if cli.__file__
-            else ""
-        )
+        source = Path(cli.__file__).read_text(encoding="utf-8") if cli.__file__ else ""
         assert "DEFAULT_SNAP_SPACING" in source
 
     def test_a_coarser_spacing_still_draws(self, tmp_path: Path) -> None:
@@ -943,9 +925,7 @@ class TestNoderRefusalPresentation:
     caller who wants the verdict reads the band.
     """
 
-    def test_a_refused_noding_draws_the_input_in_role_colours(
-        self, tmp_path: Path
-    ) -> None:
+    def test_a_refused_noding_draws_the_input_in_role_colours(self, tmp_path: Path) -> None:
         target = tmp_path / "refused.svg"
         result = invoke(
             "catchment", f"--snap-spacing={OVERFLOWING_SNAP_SPACING}", "--out", str(target)
@@ -956,13 +936,14 @@ class TestNoderRefusalPresentation:
         assert lines != [], "the refusal drew a blank page"
         assert any("role-" in (line.get("class") or "") for line in lines)
 
-    def test_a_refused_noding_draws_no_triangle_and_no_finding(
-        self, tmp_path: Path
-    ) -> None:
+    def test_a_refused_noding_draws_no_triangle_and_no_finding(self, tmp_path: Path) -> None:
         target = tmp_path / "refused.svg"
-        assert invoke(
-            "catchment", f"--snap-spacing={OVERFLOWING_SNAP_SPACING}", "--out", str(target)
-        ).exit_code == 0
+        assert (
+            invoke(
+                "catchment", f"--snap-spacing={OVERFLOWING_SNAP_SPACING}", "--out", str(target)
+            ).exit_code
+            == 0
+        )
         document = written(target)
         assert elements(document, "triangles", "polygon") == []
         alarms = [
@@ -976,9 +957,12 @@ class TestNoderRefusalPresentation:
         import tin_engine._core as core
 
         target = tmp_path / "refused.svg"
-        assert invoke(
-            "catchment", f"--snap-spacing={OVERFLOWING_SNAP_SPACING}", "--out", str(target)
-        ).exit_code == 0
+        assert (
+            invoke(
+                "catchment", f"--snap-spacing={OVERFLOWING_SNAP_SPACING}", "--out", str(target)
+            ).exit_code
+            == 0
+        )
         header = group_text(written(target), "header")
         sentence = core.describe(core.NodeStatus.CoordinateOutOfRange)
         # The prose is the engine's and is not pinned here; that it CROSSED is.

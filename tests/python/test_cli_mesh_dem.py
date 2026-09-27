@@ -125,9 +125,7 @@ class TestTheAcceptanceInvocation:
         assert "vertical unit assumed metres" in elevation
 
     def test_a_declared_vertical_unit_is_not_called_assumed(self, tmp_path: Path) -> None:
-        tif = write_tiff(
-            tmp_path / "m.tif", micro_tiff(geokeys=with_keys({VERTICAL_UNITS: METRE}))
-        )
+        tif = write_tiff(tmp_path / "m.tif", micro_tiff(geokeys=with_keys({VERTICAL_UNITS: METRE})))
         (elevation,) = run_vtk(tmp_path, tif).field_data["elevation_source"].values
         assert "assumed" not in elevation
 

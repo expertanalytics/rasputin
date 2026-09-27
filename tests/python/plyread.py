@@ -174,8 +174,10 @@ def read_ply(blob: bytes) -> tuple[Header, dict[str, dict[str, np.ndarray]]]:
     else:
         raise ValueError(f"unsupported format {header.fmt!r}")
     if consumed != len(blob):
-        raise ValueError(f"body is {len(blob) - header.body_offset} bytes, declarations want "
-                         f"{consumed - header.body_offset}")
+        raise ValueError(
+            f"body is {len(blob) - header.body_offset} bytes, declarations want "
+            f"{consumed - header.body_offset}"
+        )
     return header, data
 
 

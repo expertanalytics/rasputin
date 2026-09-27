@@ -127,9 +127,10 @@ def expected_edge_count(graph: Any) -> int:
 @pytest.fixture
 def square() -> np.ndarray:
     """A counterclockwise outer ring at UTM33 magnitudes, closure not stored."""
-    return np.array(
-        [[0.0, 0.0], [700.0, 0.0], [700.0, 700.0], [0.0, 700.0]], dtype=np.float64
-    ) + ORIGIN
+    return (
+        np.array([[0.0, 0.0], [700.0, 0.0], [700.0, 700.0], [0.0, 700.0]], dtype=np.float64)
+        + ORIGIN
+    )
 
 
 @pytest.fixture
@@ -144,8 +145,7 @@ def crossing_pslg(square: np.ndarray) -> Any:
     vertices = np.vstack(
         [
             square,
-            np.array([[100.0, 100.0], [600.0, 600.0], [100.0, 600.0], [600.0, 100.0]])
-            + ORIGIN,
+            np.array([[100.0, 100.0], [600.0, 600.0], [100.0, 600.0], [600.0, 100.0]]) + ORIGIN,
         ]
     )
     return build(
@@ -163,9 +163,7 @@ def disjoint_pslg(square: np.ndarray) -> Any:
     """An outer ring and one breakline that touches nothing: noding it must be
     a no-op on the topology, which is the control for every claim below that
     noding *changed* something."""
-    vertices = np.vstack(
-        [square, np.array([[100.0, 350.0], [600.0, 350.0]]) + ORIGIN]
-    )
+    vertices = np.vstack([square, np.array([[100.0, 350.0], [600.0, 350.0]]) + ORIGIN])
     return build(
         vertices,
         [
@@ -269,9 +267,7 @@ class TestDescribeOverloadSet:
 
 
 class TestNode:
-    def test_nodes_a_crossing_that_triangulate_used_to_refuse(
-        self, crossing_pslg: Any
-    ) -> None:
+    def test_nodes_a_crossing_that_triangulate_used_to_refuse(self, crossing_pslg: Any) -> None:
         outcome = _core.node(crossing_pslg, SPACING)
         assert outcome.status == _core.NodeStatus.Ok
         assert outcome.ok() is True
@@ -369,9 +365,7 @@ class TestNodeRefusalsAreData:
         assert outcome.pslg is None
         assert outcome.message.strip()
 
-    def test_a_spacing_too_fine_for_the_coordinates_is_a_status(
-        self, crossing_pslg: Any
-    ) -> None:
+    def test_a_spacing_too_fine_for_the_coordinates_is_a_status(self, crossing_pslg: Any) -> None:
         # `kMaxGridIndex` is 2**51, so at spacing 1e-12 a UTM easting overflows
         # the lattice. This is the lower bound that makes `--snap-spacing` an
         # option rather than a hidden constant, and it is a diagnosis with a
@@ -450,8 +444,8 @@ class TestNodedPslgShape:
             noded_crossing.indices_of(len(noded_crossing.chains))
 
     def test_every_index_is_in_range(self, noded_crossing: Any) -> None:
-        assert int(np.asarray(noded_crossing.chain_indices).max()) < (
-            noded_crossing.vertices.shape[0]
+        assert (
+            int(np.asarray(noded_crossing.chain_indices).max()) < (noded_crossing.vertices.shape[0])
         )
 
     def test_roles_survive_noding(self, crossing_pslg: Any, noded_crossing: Any) -> None:
@@ -496,13 +490,9 @@ class TestEdgeProperties:
         # ring carries a closing edge and an open breakline does not. A
         # reinterpret with the wrong length or stride fails here and nowhere
         # else, because the values it reads are plausible either way.
-        assert noded_crossing.edge_properties.shape == (
-            expected_edge_count(noded_crossing),
-        )
+        assert noded_crossing.edge_properties.shape == (expected_edge_count(noded_crossing),)
 
-    def test_carries_both_input_features_after_the_split(
-        self, noded_crossing: Any
-    ) -> None:
+    def test_carries_both_input_features_after_the_split(self, noded_crossing: Any) -> None:
         # The picture the increment exists to draw: a road and a river, in two
         # colours, meeting at a constructed node. Both bits must survive, and
         # neither may be smeared over the other.
@@ -519,16 +509,12 @@ class TestEdgeProperties:
             for c, chain in enumerate(noded_crossing.chains)
             if chain.role == _core.ChainRole.Outer
         )
-        base = sum(
-            expected_edge_count_of(noded_crossing, k) for k in range(outer)
-        )
+        base = sum(expected_edge_count_of(noded_crossing, k) for k in range(outer))
         count = expected_edge_count_of(noded_crossing, outer)
         masks = np.asarray(noded_crossing.edge_properties)[base : base + count]
         assert np.all(masks == NO_PROPERTIES)
 
-    def test_two_features_within_one_cell_merge_into_one_edge(
-        self, square: np.ndarray
-    ) -> None:
+    def test_two_features_within_one_cell_merge_into_one_edge(self, square: np.ndarray) -> None:
         """A road running along a river: one output edge carrying both bits.
 
         The gallery cannot show this -- `Fixture` has no spacing field, and a
@@ -718,9 +704,7 @@ class TestEndToEnd:
         hits = np.flatnonzero(np.abs(vertices - meeting).max(axis=1) <= SPACING)
         assert hits.size == 1
 
-    def test_the_mesh_vertex_array_begins_with_the_noded_graphs(
-        self, noded_crossing: Any
-    ) -> None:
+    def test_the_mesh_vertex_array_begins_with_the_noded_graphs(self, noded_crossing: Any) -> None:
         # `triangulate.hpp` obligation 1, restated against the type that now
         # feeds it: index k means the same point on both sides, and `cli.py`'s
         # scene join is built entirely on that.
@@ -987,9 +971,7 @@ class TestStubs:
             if isinstance(node, ast.ClassDef) and node.name == "NodeOutcome"
         )
         pslg = next(
-            node
-            for node in cls.body
-            if isinstance(node, ast.FunctionDef) and node.name == "pslg"
+            node for node in cls.body if isinstance(node, ast.FunctionDef) and node.name == "pslg"
         )
         assert ast.unparse(pslg.returns or ast.Constant(None)) == "NodedPslg | None"
 

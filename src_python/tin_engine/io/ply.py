@@ -112,9 +112,7 @@ def write_ply(
         # wrote that second line into the header and exited 0.
         bad = next((ch for ch in comment if ch < " " or ch == "\x7f"), None)
         if bad is not None:
-            raise ValueError(
-                f"a comment may not contain control characters; got {bad!r}"
-            )
+            raise ValueError(f"a comment may not contain control characters; got {bad!r}")
         # ASCII is the header's encoding, so a non-ASCII comment cannot be
         # written. --crs is unvalidated free text by ruling 5 and a degree sign
         # in a projection string is ordinary, so this is a refusal a caller
@@ -123,9 +121,7 @@ def write_ply(
         # below.
         if not comment.isascii():
             bad = next(ch for ch in comment if not ch.isascii())
-            raise ValueError(
-                f"a comment must be ASCII; got {bad!r} in {comment!r}"
-            )
+            raise ValueError(f"a comment must be ASCII; got {bad!r} in {comment!r}")
 
     blocks = [(_vertex_declaration(len(points)), _vertex_body(points, ascii))]
     if faces is not None:

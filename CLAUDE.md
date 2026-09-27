@@ -16,8 +16,11 @@ This project is governed by specialized sub-agents. Always defer tasks to the co
 * **Strict Size Limit:** Under **700 lines of production code per pull request**,
   where a line counts unless it is a comment, a docstring, or the body of a raw
   literal; tests excluded. The exclusions exist so the ceiling does not penalise
-  the comment density this project asks for. This is the only statement of the
-  rule; everywhere else points here.
+  the comment density this project asks for. Lines count as written: packing
+  code by hand under `# fmt: skip` / `# fmt: off` is allowed, provided the
+  packed lines stay readable and the review says why each new region is
+  packed (Ola, 2026-09-27, on `tools/bench.py`). This is the only statement of
+  the rule; everywhere else points here.
 * **Prohibited Dependencies:** Never introduce `CGAL`, `GDAL`, `OGR`, `Fiona`,
   `Rasterio` (it wraps GDAL), or external `date` libraries.
   Enforced by `tools/check_prohibited_deps.py` over imports, includes, declared
@@ -60,6 +63,7 @@ ctest --test-dir build                          # all registered suites; see tes
 ```bash
 mypy                   # strict, over src_python/tin_engine
 ruff check .           # legacy/ is excluded
+ruff format --check .  # docs/ and .claude/ are excluded
 ```
 
 ### Governance gates

@@ -78,9 +78,7 @@ def test_roadmap_next_skips_shipped_landed_and_unscheduled_rows() -> None:
 
 
 def test_roadmap_next_keeps_the_status_so_the_reader_can_judge_it() -> None:
-    assert session_state.roadmap_next(ROADMAP)[1] == (
-        "20c: Soft quality criterion [to design]"
-    )
+    assert session_state.roadmap_next(ROADMAP)[1] == ("20c: Soft quality criterion [to design]")
 
 
 def test_roadmap_next_honours_n_and_ignores_rows_outside_the_first_table() -> None:
@@ -95,9 +93,7 @@ def test_roadmap_next_on_a_file_without_a_table_is_empty() -> None:
 def test_pending_decisions_collects_ask_ola_lines_from_every_task_file(
     tmp_path: Path,
 ) -> None:
-    (tmp_path / "session.md").write_text(
-        "SESSION: did a thing.\nASK OLA: fix before landing?\n"
-    )
+    (tmp_path / "session.md").write_text("SESSION: did a thing.\nASK OLA: fix before landing?\n")
     (tmp_path / "tester-101010.md").write_text("ask ola: keep the slow case?\nother\n")
     (tmp_path / "developer-111111.md").write_text("nothing pending\n")
     assert session_state.pending_decisions(tmp_path) == [
@@ -118,8 +114,18 @@ def test_last_landed_is_the_newest_merge_reachable_from_head(repo: Path) -> None
 
 def test_last_landed_without_a_merge_says_so(tmp_path: Path) -> None:
     _git(tmp_path, "init", "-q", "-b", "master")
-    _git(tmp_path, "-c", "user.email=t@e.invalid", "-c", "user.name=T",
-         "commit", "-q", "--allow-empty", "-m", "root")
+    _git(
+        tmp_path,
+        "-c",
+        "user.email=t@e.invalid",
+        "-c",
+        "user.name=T",
+        "commit",
+        "-q",
+        "--allow-empty",
+        "-m",
+        "root",
+    )
     assert session_state.last_landed(tmp_path) == "(no merge commit reachable from HEAD)"
 
 

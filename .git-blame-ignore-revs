@@ -1,0 +1,5 @@
+# Mechanical commits `git blame` should look past.
+# Use: git config blame.ignoreRevsFile .git-blame-ignore-revs
+
+# ruff format of the tree, when `ruff format --check` became a CI gate
+41db2ab24ab76c8e2f7abb5f98ddae174bf4765b

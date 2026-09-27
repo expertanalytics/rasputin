@@ -109,18 +109,14 @@ def main() -> int:
         if target.is_file():
             sources.append(target)
         elif target.is_dir():
-            sources.extend(
-                p for p in sorted(target.rglob("*")) if p.suffix in SCAN_SUFFIXES
-            )
+            sources.extend(p for p in sorted(target.rglob("*")) if p.suffix in SCAN_SUFFIXES)
 
     broken: list[str] = []
     at_risk: list[str] = []
 
     for source in sources:
         rel_source = source.relative_to(REPO) if source.is_relative_to(REPO) else source
-        for number, line in enumerate(
-            source.read_text(errors="replace").splitlines(), start=1
-        ):
+        for number, line in enumerate(source.read_text(errors="replace").splitlines(), start=1):
             for cited, start, end in CITATION.findall(line):
                 where = f"{rel_source}:{number}"
                 target = resolve(cited)
@@ -137,9 +133,7 @@ def main() -> int:
                 last = max(int(start), int(end or 0))
                 total = line_count(target)
                 if last > total:
-                    broken.append(
-                        f"{where}: cites '{cited}:{start}' -- file has {total} lines"
-                    )
+                    broken.append(f"{where}: cites '{cited}:{start}' -- file has {total} lines")
                     continue
                 rel_target = str(target.relative_to(REPO))
                 if rel_target in touched:
