@@ -487,6 +487,60 @@ is no difference beyond noise (refine 515 vs 519 ms), as QW1 predicts. The
 mesh sha256 that `bench.py` prints for the tile and the quarter circle was the same
 before and after.
 
+### Pinned by the red suite (21b)
+
+QW2 names `lattice_incircle(a, b, c, d) -> std::optional<Incircle>` but not
+where `dx == dy` and the exact-frame decision come from. `@tester` chose the
+following in the red step; `tests/cpp/unit/test_mesh_lattice_incircle.cpp`
+holds it. Both functions are in `namespace terrain::mesh` and reachable
+through `include/terrain/mesh/lawson.hpp`. Whether they live there or in a new
+header beside it that `lawson.hpp` includes is `@developer`'s choice.
+
+- `[[nodiscard]] LatticeFrame lattice_frame(double dx, double dy, std::size_t rows, std::size_t cols) noexcept`
+  returns a frame with the same `dx` and `dy` that also records, once per
+  refine call, whether the integer path may answer on it. It may answer only
+  when `dx == dy`, `dx` is finite and positive, and `col * dx` and `row * dy`
+  are exact for every node with `col < cols` and `row < rows`. It must answer
+  wherever QW2's sufficient condition holds: the significant bits of `dx` plus
+  `bit_width(max(rows, cols) - 1)` are at most 53. The suite tests exactly 53.
+  Between that condition and exactness, for example `dx = 0.1` on a
+  3 × 3 grid, which is exact but fails the condition, nothing is pinned.
+  `refine` builds its frame with this function instead of
+  `LatticeFrame{g.delta_x(), g.delta_y()}`. No test can see that, because the
+  output is bit-identical by design. The reviewer checks it by reading the
+  code, and `@perf`'s acceptance run shows it as time saved.
+- **A `LatticeFrame` built directly never enables the integer path.**
+  `LatticeFrame{dx, dy}`, the way every caller builds one today, keeps compiling
+  and keeps today's kernel path. The existing Lawson and quality suites
+  therefore still exercise that path, and the 21b suite uses such a frame as
+  its "without".
+- `[[nodiscard]] std::optional<pred::Incircle> lattice_incircle(MeshVertex a, MeshVertex b, MeshVertex c, MeshVertex d, const LatticeFrame& f) noexcept`.
+  Precondition: `a, b, c` strictly counter-clockwise on `(col, -row)`, which
+  `must_flip`'s triangle is (the `LatticeMesh` invariant). It returns empty
+  unless `f` came from an enabling `lattice_frame`, all four corners are nodes,
+  and `|col_x - col_d|` and `|row_x - row_d|` are at most 2^14 for each `x` in
+  `a, b, c`. The bound is measured from `d`, so `a` and `b` may be 2^15 apart.
+  When it answers, the answer is the sign `DetriaExact::incircle_ccw` gives on
+  the frame points `(col * dx, -(row * dy))`.
+- **`must_flip` calls it first.** When it answers, `must_flip` returns
+  `answer == Inside` and asks the kernel nothing, not even the frame
+  `orient2d`. The suite counts kernel calls to check this. When it refuses,
+  today's path runs unchanged.
+
+The suite is registered only once `lawson.hpp` names `lattice_incircle`, as
+in 21a. It starts no threads, so it is not in the TSan job.
+
+**Mutation round** against a scratch implementation that is not committed. All
+of these were killed: the sign inverted; the determinant on `(col, row)`;
+refusal at exactly 2^14 (`>=`); a bound of 2^14 + 1; a bound of 2^15; the
+bound checked on one side only; the bound checked on columns only; the
+exact-frame check dropped; the exact-frame test at `< 53`; the exact-frame
+test on columns only, and on rows only; the node check dropped; the node check
+skipping `d`; `dx != dy` accepted; `dx <= 0` accepted; a directly built frame
+enabling the path; no call in `must_flip`. The determinant computed in doubles
+rather than `int64` was also killed, and only by the radius-8085 circle, where
+spreads come close to 2^14.
+
 ## 4. Determinism levels
 
 Today's contract (14 R5, 14b R1, tested by 14's T6 and 18's T3 golden

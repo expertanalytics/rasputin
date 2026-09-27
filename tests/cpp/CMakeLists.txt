@@ -291,3 +291,24 @@ add_terrain_backend_test(test_refinement_active unit/test_refinement_active.cpp)
 target_link_libraries(test_refinement_active PRIVATE Threads::Threads)
 add_terrain_backend_test(test_mesh_lawson_stack unit/test_mesh_lawson_stack.cpp)
 target_link_libraries(test_mesh_lawson_stack PRIVATE Threads::Threads)
+
+# The integer incircle, increment 21b (docs/increments/21-parallel-refine.md,
+# section 3 QW2 and "Pinned by the red suite (21b)"). Bit-identical: 14's T6
+# and 18's golden digests are the output oracle and stay as they are.
+# test_mesh_lattice_incircle is the invariant-critical suite: agreement with
+# DetriaExact on the frame doubles wherever lattice_incircle answers, refusal
+# wherever QW2's conditions fail, and must_flip's decisions as today's. It
+# starts no threads, so it is not in the TSan job.
+#
+# RED UNTIL THE INTERFACE EXISTS: registered only once lawson.hpp names
+# lattice_incircle (defined there or in a header it includes), so the red does
+# not break the rest of the build. The header is a configure dependency, so the
+# green commit's edit registers the suite without a manual cmake. The review
+# drops this guard.
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
+    "${PROJECT_SOURCE_DIR}/include/terrain/mesh/lawson.hpp")
+file(READ "${PROJECT_SOURCE_DIR}/include/terrain/mesh/lawson.hpp" _lawson_21b)
+string(FIND "${_lawson_21b}" "lattice_incircle" _lattice_incircle_at)
+if(NOT _lattice_incircle_at EQUAL -1)
+    add_terrain_backend_test(test_mesh_lattice_incircle unit/test_mesh_lattice_incircle.cpp)
+endif()
