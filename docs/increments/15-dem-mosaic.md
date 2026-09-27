@@ -1,9 +1,9 @@
 # Increment 15 — a DEM in many tiles, inputs in their own CRS, and the computation frame
 
-Status: **design, not yet reviewed by Ola.** Written by `@architect` before
-`@tester`, per `docs/increments/README.md` step 1, on branch
-`increment15-dem-mosaic`. Nothing here is implemented. The questions for Ola
-are last. Each has a recommendation, and the rest of the file assumes it.
+Status: **Q1-Q5 ruled by Ola; 15a implemented** on branch
+`increment15-dem-mosaic` (red `2696bc2`, green `ff7cc8d`), in review. 15b-15d
+are designed, not implemented; Q6-Q10 are open. Written by `@architect` before
+`@tester`, per `docs/increments/README.md` step 1.
 
 ## Ruled by Ola
 
@@ -100,8 +100,11 @@ They are measurement scripts, not production code, and nothing imports them.
   `.aux.xml` beside it), 19 GB. Every file passes `io/geotiff.py`'s own header
   checks (the probe calls them, so a refusal would be `decode_dem`'s):
   EPSG:25833, 10 m in both axes, area-registered, float32, LZW, tiled, NoData
-  −32767 from tag 42113. 244 are 5051 × 5051 nodes; the rest 5052 or 5053 on a
-  side, and two are smaller (2881 × 3521, 4103 × 3511). Header-only read of all
+  −32767 from tag 42113. 243 are 5051 × 5051 nodes; the rest are 5052 or 5053
+  on a side, and four are short on one side (7305_3 2881 × 5051, 7405_1
+  5051 × 3521, 7405_2 5051 × 3511, 7507_4 4103 × 5052; corrected in review:
+  the probe's per-axis tallies had been paired into two tiles that do not
+  exist). Header-only read of all
   254: 0.56 s wall.
 - **N2. 246 tiles share one lattice; 8 do not.** Taking the north-west-most
   node (x −100250, y 7950250) as reference, 246 tiles sit at integer node
@@ -412,7 +415,9 @@ eight odd tiles. Here:
    `refuses_mixed_spacing`, `refuses_mixed_registration`,
    `refuses_mixed_nodata`).
 4. **The window.** `c0 = floor((bx_min − X_ref) / dx)`,
-   `c1 = ceil((bx_max − X_ref) / dx)`, rows likewise, clamped to the lattice's
+   `c1 = ceil((bx_max − X_ref) / dx)`, rows likewise (an edge within 1e-6 cell
+   of a node is first snapped onto it, so float noise in a spacing like 0.1 m
+   cannot add a node line), clamped to the lattice's
    union. The mosaic's node grid is that index window, snapped outward, so it
    covers the box. From here on everything is integer index arithmetic. The
    mosaic's `x_min` is computed as `X_ref + c0 · dx`, and its `y_max` likewise.
@@ -476,8 +481,8 @@ tile, the half-cell ones included, so the mixed-lattice refusal (Q5) fires
 before the memory cap (R7) is reached; `test_no_bounds_selects_both_lattices_
 and_is_refused` pins that order. Both refusals are correct, and the lattice
 message ends "but a --bbox inside one lattice is meshed". On one lattice alone,
-the 72 GiB union box would be refused by the cap, whose message points at
-`--bbox` and `--domain`.
+the 72 GiB union box would be refused by the cap, whose message says
+"narrow it with --bbox".
 
 ### R7. Memory
 

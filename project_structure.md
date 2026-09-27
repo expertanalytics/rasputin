@@ -83,6 +83,9 @@ src_python/tin_engine/     # public Python API (distribution name: rasputin)
   raster.py                # the ONLY adapter from decoded data into _core
   grid_domain.py           # DEM extent -> stride-subsampled nodes + outer ring;
                            #   pure numpy, never imports _core
+  mosaic.py                # plan_mosaic / assemble: select, group by lattice,
+                           #   check overlaps and coverage, stitch; no files (15a)
+  dem_input.py             # --dem/--bbox -> DemInput(tile, plan, label) (15a)
   domain.py                # --domain: reads one polygon (GeoJSON or WKT), checks
                            #   CRS and extent; shapely + pyproj, never imports _core
   elevation.py             # drops mesh vertices the DEM has no data for;
@@ -110,6 +113,8 @@ src_python/tin_engine/     # public Python API (distribution name: rasputin)
                            #   ParaView; takes no path and opens nothing
     geotiff.py             # TIFF container + GeoKey decoding -> DemTile
     models.py              # Pydantic RasterMeta / DemTile
+    repository.py          # TiffDemRepository: the ONE io/ module that opens
+                           #   files ("rb"); lists headers, loads tiles (15a)
 
 tests/
   cpp/                     # C++ tests (Catch2; unit/ and property/)

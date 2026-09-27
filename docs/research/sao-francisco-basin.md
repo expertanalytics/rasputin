@@ -25,7 +25,7 @@ marked *inferred* are extrapolations, not measurements.
 
 | DEM | spacing | what it is | licence |
 |---|---|---|---|
-| **ANADEM** (ANA / UFRGS, 2024) | 30 m (1″) | Copernicus GLO-30 with vegetation bias removed for South America (Landsat-8, Sentinel-2, GEDI lidar). Mean bias 9.6 m (COPDEM) → 1.5 m; in forest 14.3 m → 0.4 m | free and open source per its authors; exact licence to be read from the repository |
+| **ANADEM** (ANA / UFRGS, 2024) | 30 m (0.970″, measured from its headers in increment 15's B2; not Copernicus's 1″) | Copernicus GLO-30 with vegetation bias removed for South America (Landsat-8, Sentinel-2, GEDI lidar). Mean bias 9.6 m (COPDEM) → 1.5 m; in forest 14.3 m → 0.4 m | free and open source per its authors; exact licence to be read from the repository |
 | Copernicus GLO-30 | 30 m (1″) | a surface model (tree canopy and buildings included) | free (Copernicus licence) |
 | Copernicus GLO-90 | 90 m (3″) | the same at 3″ | free |
 | FABDEM | 30 m | Copernicus with forests and buildings removed (Bristol / Fathom) | CC BY-NC-SA 4.0: **non-commercial only** |
@@ -91,11 +91,12 @@ In roughly the order the basin needs them:
      plus NumPy, chunked; no GDAL), or
    - mesh in a projected CRS while sampling the geographic grid.
 
-   **One CRS for the whole basin is a real choice.** *Computed:* UTM zone 23S
-   reaches a scale error of 1.07 % at the basin's east edge, and the Brazil
-   Polyconic (EPSG:5880) 4.6 %. A Lambert conformal conic fitted to the basin
-   (standard parallels 10°S and 18.5°S, central meridian 42°W) stays within
-   **0.46 %** over the whole bounding box.
+   **One CRS for the whole basin is a real choice.** *Computed* with pyproj
+   over the whole 7-21°S, 36-48°W box (corrected in review; the first figures
+   came from a few sample points): UTM zone 23S reaches a scale error of
+   1.20 %, and the Brazil Polyconic (EPSG:5880) 4.89 %, both at 36°W 7°S. A
+   Lambert conformal conic fitted to the basin (standard parallels 10°S and
+   18.5°S, central meridian 42°W) stays within **0.52 %**.
 3. **21b's integer incircle does not apply to non-square cells.** QW2 needs
    `dx == dy`. On a geographic grid, or a projected grid resampled with
    non-square cells, refine falls back to the filtered kernel. That is correct
