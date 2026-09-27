@@ -483,8 +483,10 @@ class TestNeededRegionIsGrownByThePlansSpacing:
         gap at x 21..29, y -5..-19, which lies 1 m outside the notch. On the
         polygon itself the 1 m lattice is chosen (four tiles against three);
         grown by its 1.41 m diagonal the gap is needed, so the 10 m lattice is
-        chosen; grown by that one's 14.1 m diagonal, (60, -60) is needed and
-        the 1 m tiles are selected too, so the request is refused. Growing only
+        chosen; grown by that one's 14.1 m diagonal, (60, -60) is needed, so
+        the 10 m lattice no longer covers either, and the request is refused
+        as mixed-lattice (Q5). The 1 m tiles are selected at every stage:
+        selection follows the ungrown box. Growing only
         once, by the first plan's cell, accepts it with (60, -60) as NaN
         filler: the B1 bug by another route."""
         tiles = blocks(whole(12, 12, dy=10.0), 6, 6, skip=[(1, 1)])

@@ -188,9 +188,9 @@ jobs:
       # Suites that branch on the `codecs` extra: some tests need imagecodecs
       # (LZW, the real Kartverket DEM and DTM10 extracts), others test its
       # absence. No single environment runs both halves, so the step above
-      # covers the absent half and this one installs the extra and re-runs every
-      # codecs-gated suite: the GeoTIFF ones, and the CLI and golden suites that
-      # mesh the real tile.
+      # covers the absent half and this one installs the extra and re-runs the
+      # codecs-gated suites: the GeoTIFF ones, and the CLI and golden suites that
+      # mesh the real tile (test_cli_mesh_dem.py runs in the viewer step below).
       - name: Tests with the codecs extra
         run: |
           python -m pip install -e ".[dev,codecs]"

@@ -814,7 +814,7 @@ order. 15c and 15d follow later.
 | | `dem_input.py`: `DemRequest`, `open_dem` | 35 | |
 | | `cli.py`: `--dem` list, `--bbox`, refusals, fields | 45 | |
 | | **15a total** | **375** | **520** |
-| | *15b as built, measured at review (d34d79d..914dfc8, CLAUDE.md §2 unit): 150 added, of which `dem_input.py` 48 against 20 estimated; 15a + 15b against master 675, so they ship as two PRs* | | |
+| | *15b as built, measured at review (d34d79d..914dfc8, CLAUDE.md §2 unit): 150 added, of which `dem_input.py` 48 against 20 estimated; 15a + 15b against master 675, under the ceiling; they ship as two PRs per Ola's order* | | |
 | | *15a as built, measured at review (branch diff, CLAUDE.md §2 unit): 533, of which `mosaic.py` 325 against 200 estimated* | | |
 | **15b** | **Norway: the domain in its own CRS** | | |
 | | `crs.py`: `parse_crs`, `reprojector` | 30 | |
