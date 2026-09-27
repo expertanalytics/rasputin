@@ -63,6 +63,7 @@ ctest --test-dir build                          # all registered suites; see tes
 ```bash
 mypy                   # strict, over src_python/tin_engine
 ruff check .           # legacy/ is excluded
+ruff format --check .  # docs/ and .claude/ are excluded
 ```
 
 ### Governance gates

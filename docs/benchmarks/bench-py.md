@@ -178,9 +178,7 @@ lines in, comments and docstrings out; 688 to 691 depending on whether the two
 by about 80 lines. The margin rests on 16 regions packed by hand under
 `# fmt: skip` / `# fmt: off`; formatted normally it is about 780 counted lines
 (827 raw). That total was the first PR's count, because that PR added the
-whole file. The ceiling is per pull request: a later PR counts the lines of
-`tools/bench.py` it adds or changes (`git diff` against its base), not the
-file's total, so the file's size does not cap the next change.
+whole file; CLAUDE.md section 2 says what a later PR counts.
 
 ## Ruled by Ola (2026-09-27)
 

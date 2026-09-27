@@ -732,8 +732,9 @@ The unqualified present-tense form (`grep -nE '^\s*\*'` over
 `src_python/tin_engine/viz/*.py` and `_core.pyi`, "prints exactly
 `scene.py:203:    *,`") stood here and is **false of the tree today**, in two
 ways: `scene.py`'s line is now `:212`, and `svg.py` — which did not exist at
-`995f258` — contributes two more real undercounted lines (`:313`, `:373`) plus
-two docstring lines the pattern also matches. The figure above is unaffected,
+`995f258` — contributes two more real undercounted lines plus two docstring lines the
+pattern also matches (`grep -nE '^\s*\*' src_python/tin_engine/viz/svg.py`
+lists them). The figure above is unaffected,
 because it is increment 6's measurement of increment 6; a re-runnable claim that
 silently starts measuring a later tree is not, which is why it is now anchored.
 Factor 2.16 on the ~90 estimate. The composition is the interesting part, and it

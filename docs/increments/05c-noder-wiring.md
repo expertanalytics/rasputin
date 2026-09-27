@@ -634,19 +634,20 @@ product. Renaming it destroys that.
 increment is fixed in that increment's PR or not recorded.
 `viz/fixtures.py:21-26` says "**Three** of the eight are deliberate failures...
 ``not-noded`` and ``hole-in-hole`` are backend refusals". After 5c there are
-**two**, and `not-noded` is the showcase. The inline comment at `:208-209` —
+**two**, and `not-noded` is the showcase. The inline comment at `:208-209` (line numbers here and below are at
+`605a60c`, where this record was written) —
 "the noder (5b) is what fixes it" — becomes a statement about a fix that has
 landed.
 
 **Its two breaklines get property bits.** Today both carry mask `0`
-(`viz/fixtures.py:207,210`), while the C++ suite's fixture of the *same
+(`viz/fixtures.py:207,210` at `605a60c`), while the C++ suite's fixture of the *same
 geometry* gives them road and river (`test_noding_node.cpp:162-165`). Two
 changed literals — `1` for the river bit and `2` for the road bit under
 `DEFAULT_VOCABULARY`'s numbering — and the picture becomes the user's sentence:
 a road crossing a river, in two colours, meeting at a constructed node.
 
 `fixtures.py` writes the masks as literals with a comment, because `viz/` may
-not import a vocabulary (`fixtures.py:193-195` already does exactly this for
+not import a vocabulary (`fixtures.py:193-194` at `605a60c` already does exactly this for
 `BREAKLINE`). Note that `test_noding_node.cpp:76-77` numbers them the other way
 round — `bit(0)` is its road. That is not a defect to reconcile: **the C++ holds
 no vocabulary at all**, by increment 7's ruling, and its test constants are
