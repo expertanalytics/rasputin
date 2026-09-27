@@ -203,3 +203,25 @@ against 99.7 and 97.3 ms). The difference is the green-to-head change above.
 The design's estimate was too low by a factor of about 2 at 8 threads. As the
 increment file records, the integer path is also cheaper than the filtered
 path it replaces for all-node quads, not only than the exact path.
+
+## Addendum: the head slowdown, fixed in 4be156c (@developer, 2026-09-27)
+
+"Green against head" above measured `a03ae65`, whose non-finite refusal (four
+`std::isfinite` pairs per `lattice_incircle` call) cost 4-6 % in the split
+phase. `4be156c` folds that refusal into the spread test
+(`!(std::fabs(x) <= bound)` refuses inf and NaN alike) and drops the explicit
+checks; `[nonfinite]` still passes and UBSan stays quiet on it. Timed by
+@developer with a scratch driver (not checked in), green `f707322` and head
+`4be156c` alternating per repeat, 5 repeats, battery 86 %, discharging, ms,
+median (min-max):
+
+| domain, threads | refine, green -> head | split, green -> head |
+|---|---:|---:|
+| quarter, 1 | 410.3 (409.5-412.9) -> 409.5 (408.8-411.5) | 90.4 (89.1-90.7) -> 89.2 (89.0-90.5) |
+| quarter, 8 | 163.9 (163.0-164.0) -> 163.0 (162.1-165.2) | 97.8 (97.4-98.2) -> 97.5 (96.3-99.1) |
+| tile, 1 | 462.8 (460.2-466.4) -> 462.9 (460.9-465.5) | 90.6 (89.7-91.2) -> 90.4 (89.8-91.8) |
+| tile, 8 | 184.4 (183.8-184.8) -> 185.8 (183.2-186.2) | 96.6 (96.1-96.9) -> 97.5 (95.9-97.6) |
+
+Every range overlaps and every median is within 1.4 %: the gap is closed. The
+bench.py verdict above was measured on `a03ae65`, so it understates 21b by
+about that gap; it was not re-run on `4be156c`. Meshes equal on both domains.
