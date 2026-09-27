@@ -135,3 +135,14 @@ def test_in_flight_names_the_branch_and_its_commits_ahead_of_base(repo: Path) ->
 def test_in_flight_with_an_unknown_base_reports_rather_than_raises(repo: Path) -> None:
     lines = session_state.in_flight(repo, base="no-such-branch")
     assert lines == ["branch next (base no-such-branch not found)"]
+
+
+def test_default_base_prefers_the_remote_branch_when_it_exists(repo: Path) -> None:
+    # A local master lags the remote one after a PR merged on GitHub; counting
+    # "ahead of master" against it lists already-merged commits as in flight.
+    _git(repo, "update-ref", "refs/remotes/origin/master", "master")
+    assert session_state.default_base(repo) == "origin/master"
+
+
+def test_default_base_falls_back_to_local_master(repo: Path) -> None:
+    assert session_state.default_base(repo) == "master"
