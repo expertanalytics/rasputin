@@ -502,7 +502,10 @@ header beside it that `lawson.hpp` includes is `@developer`'s choice.
   when `dx == dy`, `dx` is finite and positive, and `col * dx` and `row * dy`
   are exact for every node with `col < cols` and `row < rows`. It must answer
   wherever QW2's sufficient condition holds: the significant bits of `dx` plus
-  `bit_width(max(rows, cols) - 1)` are at most 53. The suite tests exactly 53.
+  `bit_width(max(rows, cols) - 1)` are at most 53. The suite tests exactly 53,
+  and 54 with a `dx` whose `3 * dx` rounds (it must refuse), on each axis. A
+  largest product `(max(rows, cols) - 1) * dx` that overflows is not exact:
+  `2^1023` on a 3 × 3 grid must refuse.
   Between that condition and exactness, for example `dx = 0.1` on a
   3 × 3 grid, which is exact but fails the condition, nothing is pinned.
   `refine` builds its frame with this function instead of
@@ -517,8 +520,9 @@ header beside it that `lawson.hpp` includes is `@developer`'s choice.
 - `[[nodiscard]] std::optional<pred::Incircle> lattice_incircle(MeshVertex a, MeshVertex b, MeshVertex c, MeshVertex d, const LatticeFrame& f) noexcept`.
   Precondition: `a, b, c` strictly counter-clockwise on `(col, -row)`, which
   `must_flip`'s triangle is (the `LatticeMesh` invariant). It returns empty
-  unless `f` came from an enabling `lattice_frame`, all four corners are nodes,
-  and `|col_x - col_d|` and `|row_x - row_d|` are at most 2^14 for each `x` in
+  unless `f` came from an enabling `lattice_frame`, all four corners are nodes
+  with finite coordinates (`is_node()` is true for ±inf, and `inf - inf` is a
+  NaN that the spread bound lets through to the `int64` cast), and `|col_x - col_d|` and `|row_x - row_d|` are at most 2^14 for each `x` in
   `a, b, c`. The bound is measured from `d`, so `a` and `b` may be 2^15 apart.
   When it answers, the answer is the sign `DetriaExact::incircle_ccw` gives on
   the frame points `(col * dx, -(row * dy))`.
@@ -541,6 +545,11 @@ skipping `d`; `dx != dy` accepted; `dx <= 0` accepted; a directly built frame
 enabling the path; no call in `must_flip`. The determinant computed in doubles
 rather than `int64` was also killed, and only by the radius-8085 circle, where
 spreads come close to 2^14.
+
+Two mutants survived that round and were found by `@reviewer` after green: the
+exact-frame limit one bit loose (`bit_width(top - 1) - 1`) and the finite-extent
+clause dropped. A test amendment after green kills both, and adds the
+non-finite-corner refusal, which HEAD at the amendment did not have.
 
 ### 21b: the integer path is faster (green, not acceptance)
 

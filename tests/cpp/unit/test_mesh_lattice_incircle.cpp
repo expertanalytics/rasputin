@@ -21,8 +21,9 @@
 //       MeshVertex a, MeshVertex b, MeshVertex c, MeshVertex d, const LatticeFrame& f) noexcept;
 //   }
 //
-// A LatticeFrame built directly, LatticeFrame{dx, dy} as every caller builds
-// it today, never enables the integer path.
+// A LatticeFrame built directly, LatticeFrame{dx, dy}, never enables the
+// integer path; refine builds its frame with lattice_frame, every other caller
+// directly.
 //
 // The oracle is DetriaExact::incircle_ccw on the frame points, computed here
 // from col * dx and -(row * dy), not through LatticeFrame::at. For today's
@@ -535,6 +536,144 @@ TEST_CASE("lattice_frame enables the integer path wherever QW2's sufficient cond
     REQUIRE(lattice_incircle(a, b, c, d, lattice_frame(tiny, tiny, 1u << 20, 1u << 20)) == Incircle::Cocircular);
     // 0.1 on a 2 x 2 grid (52 + 1 = 53): col and row are 0 or 1, exact.
     REQUIRE(lattice_incircle(a, b, c, d, lattice_frame(0.1, 0.1, 2, 2)) == Incircle::Cocircular);
+}
+
+TEST_CASE("lattice_frame refuses one bit past QW2's limit and answers at it, on both axes",
+          "[lattice_incircle][frame][limit]") {
+    // Both sides of "significant bits of dx + bit_width(max(rows, cols) - 1)
+    // <= 53". One bit past it the frame can be inexact, and is for these dx:
+    // a grid with col or row 3 and a 52-bit dx whose 3 * dx needs 54 bits.
+    // A limit taken one bit loose (e.g. bit_width(top - 1) - 1) accepts them.
+    const double dx51 = 1.5 + std::ldexp(1.0, -50);  // 51 significant bits
+    // 0.1 and 1.5 + 2^-51 both have 52 significant bits.
+    const double dx = GENERATE(0.1, 1.5 + std::ldexp(1.0, -51));
+    CAPTURE(dx);
+    REQUIRE(std::fma(3.0, dx, -(3.0 * dx)) != 0.0);  // col or row 3 rounds
+    // 52 + bit_width(3) = 54: refused, whichever axis carries the 4.
+    REQUIRE_FALSE(lattice_frame(dx, dx, 4, 4).integer());
+    REQUIRE_FALSE(lattice_frame(dx, dx, 4, 2).integer());
+    REQUIRE_FALSE(lattice_frame(dx, dx, 2, 4).integer());
+    // 52 + bit_width(1) = 53: at the limit, it must answer.
+    REQUIRE(lattice_frame(dx, dx, 2, 2).integer());
+    // 51 + bit_width(3) = 53 on the 4 x 4 grid itself: must answer.
+    REQUIRE(std::fma(3.0, dx51, -(3.0 * dx51)) == 0.0);
+    REQUIRE(lattice_frame(dx51, dx51, 4, 4).integer());
+    REQUIRE(lattice_frame(dx51, dx51, 4, 2).integer());
+    REQUIRE(lattice_frame(dx51, dx51, 2, 4).integer());
+}
+
+TEST_CASE("lattice_incircle never disagrees with DetriaExact on a frame one bit past the limit",
+          "[lattice_incircle][frame][limit]") {
+    // Every ordered quad of the 4 x 4 grid, a, b, c counter-clockwise, under
+    // lattice_frame(dx, dx, 4, 4) with dx one bit past the limit. Wherever it
+    // answers, it must give the oracle's sign; and the grid holds quads whose
+    // lattice sign differs from the frame's, so an answer there is wrong.
+    const double dx = GENERATE(0.1, 1.5 + std::ldexp(1.0, -51));
+    CAPTURE(dx);
+    const LatticeFrame f = lattice_frame(dx, dx, 4, 4);
+    const LatticeFrame exact = lattice_frame(1.0, 1.0, 4, 4);  // the lattice sign
+    std::vector<MeshVertex> nodes;
+    for (std::int64_t r = 0; r < 4; ++r)
+        for (std::int64_t c = 0; c < 4; ++c)
+            nodes.push_back(node(c, r));
+    std::size_t quads = 0, sign_differs = 0, wrong = 0;
+    std::string first;
+    for (const auto& a : nodes)
+        for (const auto& b : nodes)
+            for (const auto& c : nodes) {
+                if (iorient(a, b, c) <= 0)
+                    continue;
+                for (const auto& d : nodes) {
+                    if (d == a || d == b || d == c)
+                        continue;
+                    ++quads;
+                    const auto want = oracle(dx, dx, a, b, c, d);
+                    const auto lattice = lattice_incircle(a, b, c, d, exact);
+                    REQUIRE(lattice.has_value());
+                    sign_differs += want != lattice;
+                    const auto got = lattice_incircle(a, b, c, d, f);
+                    if (got && got != want && wrong++ == 0)
+                        first = describe(a) + " " + describe(b) + " " + describe(c) + " d " + describe(d);
+                }
+            }
+    CAPTURE(quads, sign_differs, wrong, first);
+    REQUIRE(sign_differs > 0);
+    REQUIRE(wrong == 0);
+}
+
+TEST_CASE("lattice_incircle refuses the reviewer's quad on 0.1 at 4 x 4, a lattice tie the frame calls Inside",
+          "[lattice_incircle][frame][limit]") {
+    // In (col, -row): a (0, 0), b (0, -1), c (3, 0), d (1, -2). The circle
+    // through a, b, c has centre (1.5, -0.5) and squared radius 2.5, and d is
+    // on it; at dx = 0.1 the rounded frame puts d strictly inside.
+    const MeshVertex a = node(0, 0), b = node(0, 1), c = node(3, 0), d = node(1, 2);
+    REQUIRE(iorient(a, b, c) > 0);
+    REQUIRE(lattice_incircle(a, b, c, d, lattice_frame(1.0, 1.0, 4, 4)) == Incircle::Cocircular);
+    REQUIRE(oracle(0.1, 0.1, a, b, c, d) == Incircle::Inside);
+    REQUIRE_FALSE(lattice_incircle(a, b, c, d, lattice_frame(0.1, 0.1, 4, 4)).has_value());
+}
+
+TEST_CASE("lattice_frame refuses a frame whose extent overflows, and answers where it does not",
+          "[lattice_incircle][frame][extent]") {
+    // dx = 2^1023 has one significant bit, so the bit count passes on any
+    // small grid; but (top - 1) * dx is infinite once top - 1 >= 2, and an
+    // infinite frame coordinate is not exact.
+    const double huge = std::ldexp(1.0, 1023);
+    REQUIRE(std::isinf(2.0 * huge));
+    REQUIRE(std::isfinite(1.0 * huge));
+    REQUIRE_FALSE(lattice_frame(huge, huge, 3, 3).integer());
+    REQUIRE_FALSE(lattice_frame(huge, huge, 3, 2).integer());
+    REQUIRE_FALSE(lattice_frame(huge, huge, 2, 3).integer());
+    const MeshVertex a = node(0, 1), b = node(1, 1), c = node(0, 0), d = node(1, 0);  // unit square
+    REQUIRE(iorient(a, b, c) > 0);
+    REQUIRE_FALSE(lattice_incircle(a, b, c, d, lattice_frame(huge, huge, 3, 3)).has_value());
+    // On a 2 x 2 grid every product is 0 or 2^1023, finite and exact.
+    REQUIRE(lattice_frame(huge, huge, 2, 2).integer());
+    REQUIRE(lattice_incircle(a, b, c, d, lattice_frame(huge, huge, 2, 2)) == Incircle::Cocircular);
+}
+
+TEST_CASE("lattice_incircle refuses a corner with a non-finite coordinate", "[lattice_incircle][refuse][nonfinite]") {
+    // MeshVertex::is_node is true for +-inf (floor(inf) == inf), so the node
+    // check does not stop them. A corner infinite alone gives an infinite
+    // difference from d, which the spread bound refuses; but a corner and d
+    // on the same infinity give inf - inf = NaN, which passes `fabs > bound`
+    // and reaches the int64 cast, undefined for NaN. When a, b, c and d all
+    // share it, no difference is refused and a value comes back. NaN is not a
+    // node (NaN != floor(NaN)). lattice_incircle is public, so it must refuse
+    // all of these. Unreachable from refine's grid mesh. The precondition
+    // (a, b, c counter-clockwise) has no meaning here; the refusal comes first.
+    const LatticeFrame f = lattice_frame(10.0, 10.0, kBench, kBench);
+    const std::array<MeshVertex, 4> base{node(10, 12), node(12, 12), node(11, 10), node(11, 11)};
+    REQUIRE(iorient(base[0], base[1], base[2]) > 0);
+    REQUIRE(lattice_incircle(base[0], base[1], base[2], base[3], f).has_value());
+    const double bad = GENERATE(std::numeric_limits<double>::infinity(), -std::numeric_limits<double>::infinity(),
+                                std::numeric_limits<double>::quiet_NaN());
+    const bool on_col = GENERATE(true, false);
+    const auto spoil = [&](MeshVertex v) { return on_col ? MeshVertex{bad, v.row} : MeshVertex{v.col, bad}; };
+    SECTION("one corner non-finite, in each position") {
+        for (std::size_t which = 0; which < 4; ++which) {
+            auto q = base;
+            q[which] = spoil(q[which]);
+            CAPTURE(which, bad, on_col);
+            REQUIRE_FALSE(lattice_incircle(q[0], q[1], q[2], q[3], f).has_value());
+        }
+    }
+    SECTION("a corner and d on the same non-finite value; the other two corners infinitely far") {
+        for (std::size_t which = 0; which < 3; ++which) {
+            auto q = base;
+            q[which] = spoil(q[which]);
+            q[3] = spoil(q[3]);
+            CAPTURE(which, bad, on_col);
+            REQUIRE_FALSE(lattice_incircle(q[0], q[1], q[2], q[3], f).has_value());
+        }
+    }
+    SECTION("every corner on the same non-finite value, so every difference from d is NaN") {
+        auto q = base;
+        for (auto& v : q)
+            v = spoil(v);
+        CAPTURE(bad, on_col);
+        REQUIRE_FALSE(lattice_incircle(q[0], q[1], q[2], q[3], f).has_value());
+    }
 }
 
 TEST_CASE("an inexact frame changes the answer on some lattice tie, so its refusal is load-bearing",
