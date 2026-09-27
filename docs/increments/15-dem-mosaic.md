@@ -390,9 +390,10 @@ assemble(plan, load) -> Mosaic                                pixels, no files
 
 - [15a] Carried from the parked R3: `_header(tif, nodata) -> (RasterMeta,
   dtype)` holds everything `decode_dem` does before `page.asarray()`
-  (now `_header` itself, `io/geotiff.py:105-140`). `read_meta(source, *, nodata=None)` calls it (through
-  `read_header`, which also returns the decoded dtype, S2) and returns, and `decode_dem` calls it and then decodes. The header phase keeps
-  the codec refusal.
+  (now `_header` itself, `io/geotiff.py:105-140`). `read_meta(source, *,
+  nodata=None)` calls it (through `read_header`, which also returns the
+  decoded dtype, S2) and returns, and `decode_dem` calls it and then decodes.
+  The header phase keeps the codec refusal.
 - [15d] `decode_dem(source, *, window=None)`: with an `IndexWindow`, decode
   only the TIFF blocks (or strips) that meet it, and return a `DemTile` of the
   window, with its own `x_min`/`y_max`. Both archives are tiled 512 × 512 (N1,
@@ -813,6 +814,7 @@ order. 15c and 15d follow later.
 | | `dem_input.py`: `DemRequest`, `open_dem` | 35 | |
 | | `cli.py`: `--dem` list, `--bbox`, refusals, fields | 45 | |
 | | **15a total** | **375** | **520** |
+| | *15a as built, measured at review (branch diff, CLAUDE.md §2 unit): 533, of which `mosaic.py` 325 against 200 estimated* | | |
 | **15b** | **Norway: the domain in its own CRS** | | |
 | | `crs.py`: `parse_crs`, `reprojector` | 30 | |
 | | `domain.py`: `crs: str`, `to_crs`, extent against coverage; `check_crs` removed | 40 | |
