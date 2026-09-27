@@ -279,7 +279,7 @@ What matters, read directly:
   "lake material"). **Carried:** the CLC code as the key, and "5xx is water"
   as the one rule the default map uses (R4). **Not carried:** GML, `lxml`,
   and the whole file parsed per call.
-- `gml_repository.py:181-182`: `constraints()` returns `[]`.
+- `legacy/rasputin/gml_repository.py:181-182`: `constraints()` returns `[]`.
   The legacy never made land cover a constraint. `:184-226`: it labelled the
   **finished** mesh by testing each cell centre against every polygon in
   Python (`# TODO: Move to C++ for speed!`), and raised on a centre inside
@@ -288,7 +288,7 @@ What matters, read directly:
   16c's (Q2), and a flood fill over unconstrained edges (Triangle's regional
   attributes) replaces the per-centre test, which is ambiguous for a triangle
   thinner than the snap.
-- `gml_repository.py:155-159`: the data CRS from the GML's `srsName`, via
+- `legacy/rasputin/gml_repository.py:155-159`: the data CRS from the GML's `srsName`, via
   `+init=`. Not carried: CRS comes from the GeoPackage's own
   `gpkg_spatial_ref_sys` (R3) through `crs.parse_crs`.
 
