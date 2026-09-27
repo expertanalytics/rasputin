@@ -70,7 +70,8 @@ jobs:
 
   # Increment 14, R7: refinement is the first code path that starts threads,
   # and asan+ubsan cannot see a data race. TSan cannot share a build with ASan,
-  # so this is its own job, building only the four refinement suites. T6 runs
+  # so this is its own job, building only the suites listed below (refinement and
+  # the parallel helpers they use). T6 runs
   # the loop at 1, 2, 7 and all threads; a clean run is the independent check
   # of the design's "no shared writes" claim. The binaries are run directly
   # because ctest names the tests by Catch case, not by target.

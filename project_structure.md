@@ -47,7 +47,7 @@ include/terrain/           # public C++ headers, header-only where possible
     window.hpp             # window_for: bbox -> index window (planned; unbuilt,
                            #   refinement walks lattice nodes directly)
   parallel_util/
-    chunks.hpp             # for_each_chunk: contiguous chunks over std::jthread
+    chunks.hpp             # for_each_chunk (contiguous chunks) and for_each_block (dynamic blocks) over std::jthread
   mesh/
     lattice_mesh.hpp       # LatticeMesh: flat triangle array over DEM nodes,
                            #   neighbour links, the three splits (14), flip (14b)
@@ -291,7 +291,7 @@ only TU that includes `detria.hpp`, enforced by CMake privacy, an `#error` guard
 
 ### `parallel_util`
 
-Header-only. Today one helper, `for_each_chunk(n, threads, fn)` in `chunks.hpp`: contiguous chunks over `std::jthread`, created per call and joined before it returns, no pool. `std::execution::par` and OpenMP were both ruled out in increment 14 (R7): neither builds on macOS without an experimental flag or an extra runtime. Needs only `Threads::Threads`.
+Header-only. Two helpers in `chunks.hpp`, both over `std::jthread` created per call and joined before it returns, no pool: `for_each_chunk(n, threads, fn)`, contiguous equal-count chunks; and `for_each_block(n, threads, BlockSchedule, fn)`, blocks handed out from one atomic counter, run inline below `BlockSchedule::inline_below`, which refine's scan uses (increment 21a). `std::execution::par` and OpenMP were both ruled out in increment 14 (R7): neither builds on macOS without an experimental flag or an extra runtime. Needs only `Threads::Threads`.
 
 ### `vector_simplify`
 

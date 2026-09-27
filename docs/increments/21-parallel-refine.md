@@ -459,9 +459,9 @@ red step, and the suites named below hold them.
   same flips, `on_write` sequence and mesh as today's algorithm, which the
   suite copies as its oracle. Allocation counts are not pinned.
 
-The three suites are registered in `tests/cpp/CMakeLists.txt` only once the
-header names `for_each_block`, `rebuild_active` or `FlipStack` (the 18 and
-20b precedent). The review drops those guards.
+At the red commit the three suites were registered only once their header
+named `for_each_block`, `rebuild_active` or `FlipStack` (the 18 and 20b
+precedent); `065a2bd` removed those guards after green.
 
 ### 21a: inline_below
 
@@ -478,8 +478,8 @@ rebuilt for each value. Median scan in ms at 8 threads (10 threads within
 |---|---|---|---|---|---|---|---|---|
 | scan, 8 threads | 58.4-58.8 | 57.2 | 57.3-57.5 | 57.5-57.6 | 58.8 | 65.9 | 83.3 | 119.7 |
 
-From 64 to 1024 the values differ by less than the run-to-run noise, and each
-is about 1 ms under 0. From 2048 up, the inline small rounds cost more
+From 64 to 1024 the values differ by less than the run-to-run noise; 64-512
+are about 1 ms under 0, and 1024 is level with it. From 2048 up, the inline small rounds cost more
 than their thread starts save. 256 is in the middle of the flat range. Measured
 back to back against the red commit (`7b54a4e`, `for_each_chunk`): scan at
 8 threads 65.0 -> 57.7 ms and refine 243 -> 219 ms (-10 %). At 1 thread there
@@ -837,7 +837,7 @@ is worth counting early.
 
 | increment | what | est. | at +66 % | determinism | invariant-critical suite (mutation round) |
 |---|---|---|---|---|---|
-| **21a** | QW1 dynamic scan scheduling with a small-round inline threshold (`parallel_util/`), QW3 merge, `legalise_around`'s caller-owned stack; QW4 only if measured worth it (about +20) | ~60 | ~100 | bit-identical | `test_refinement_chunks`, extended to the dynamic scheduler: every index visited exactly once for every n, thread count and block size. A dropped or doubled block leaves a stale scan result, which breaks the tolerance guarantee silently, so this is where the guarantee is decided |
+| **21a** | QW1 dynamic scan scheduling with a small-round inline threshold (`parallel_util/`), QW3 merge, `legalise_around`'s caller-owned stack; QW4 only if measured worth it (about +20) | ~60 | ~100 | bit-identical | `test_refinement_chunks_dynamic`, a new suite for the dynamic scheduler (`test_refinement_chunks` is unchanged): every index visited exactly once for every n, thread count and block size. A dropped or doubled block leaves a stale scan result, which breaks the tolerance guarantee silently, so this is where the guarantee is decided |
 | **21b** | QW2 `lattice_incircle` in `mesh/`, the exact-frame check, the call in `must_flip` | ~50 | ~85 | bit-identical where it answers | a new `test_mesh_lattice_incircle`: agreement with `DetriaExact` on the frame doubles for random and adversarial node quads (grid rectangles, other cocircular lattice quads such as points on a circle of radius 5, near-overflow differences at 2^14, `dx != dy` and inexact `dx` returning `nullopt`, off-node corners returning `nullopt`). Mutants: bound at 2^15, `dx != dy` not refused, the exact-frame check dropped, a sign flip |
 | **21c** | measurement only, `@perf`; evidence under `docs/benchmarks/<date>/` | 0 | 0 | — | none |
 | **21d** (option C) | thread team (`std::barrier`, per call), batch split with prefix-sum numbering, deterministic parallel flip rounds, the round loop | ~320 | ~530 | L1 | a new `test_mesh_parallel_lawson`: CDT property, conformity and a flip-count bound on random lattice meshes with cocircular ties and constraints, and identical output for threads 1, 2, 7 and hardware concurrency. Plus `prop_refinement_refine`'s tolerance oracle re-run, with the mutant "a flipped slot not marked touched" |
