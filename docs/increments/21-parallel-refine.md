@@ -784,8 +784,13 @@ Each is answered or placed.
    cheaper exact decision for quads whose corners are all nodes? That is 5 %
    of refine and about 17 % of the serial phase."*
    **Answered: yes,** an int64 lattice incircle under four stated conditions,
-   bit-identical to today (QW2, 21b). The premise is still an inference; the
-   classification measurement in QW2 comes first.
+   bit-identical to today (QW2, 21b). **The premise is measured**
+   (`docs/benchmarks/2026-09-27/21b-ties/README.md`): every exact-path tie
+   has four node corners, lattice determinant 0 and meets QW2's conditions
+   (146,962 of 146,962 on the quarter circle, 154,502 of 154,502 on the tile);
+   QW2 would answer 99.97 % and 100 % of all refine-loop incircle calls. Only
+   38 % of the ties are axis-aligned rectangles, so the general determinant is
+   needed. The time saved is not measured.
 
 4. *"The scan loses 16.5 ms of 61.8 ms to imbalance at 8 threads. Is the
    chunking free to change, given that results are written per slot? And does
