@@ -109,7 +109,7 @@ src = ["src_python", "tests/python"]
 # The archived pre-migration tree is not maintained and not linted. Its 242
 # findings would otherwise drown out real ones in the new code.
 # docs/benchmarks/<date>/ holds dated one-off measurement scripts, kept verbatim
-# as evidence. The maintained benchmark will be tools/bench.py (@perf; not yet written).
+# as evidence. The maintained benchmark is tools/bench.py (@perf), checked by mypy below.
 exclude = ["legacy", "docs/benchmarks"]
 
 [tool.ruff.lint]
@@ -119,7 +119,7 @@ ignore = []
 [tool.mypy]
 python_version = "3.12"
 strict = true
-files = ["src_python/tin_engine"]
+files = ["src_python/tin_engine", "tools/bench.py"]
 plugins = ["pydantic.mypy"]
 
 # shapely ships no type information and types-shapely is not a dependency;

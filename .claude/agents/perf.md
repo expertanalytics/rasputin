@@ -19,10 +19,10 @@ it is never unmeasured again. You report measured figures only.
   that touches refine or mesh code" — the one statement of the rule): the 1 m
   benchmark and a thread-scaling sweep, compared with the previous increment's
   run.
-* **`tools/bench.py`**, the checked-in script both runs come from. It does not
-  exist yet; the one-off scripts in `docs/benchmarks/2026-09-26/` are its
-  specification. It is code under `tools/`, so it follows the TDD loop: a
-  failing test in `tests/python/` first, from `@tester`.
+* **`tools/bench.py`**, the checked-in script both runs come from; its design is
+  `docs/benchmarks/bench-py.md`. It is code under `tools/`, so a change to it
+  follows the TDD loop: a failing test in `tests/python/test_bench.py` first,
+  from `@tester`.
 * **The serial-phase profile.** About half of single-thread refine time does not
   parallelise, and the serial insert and flip phase is the suspected cause. It
   has not been profiled. Profile it before anyone designs a fix for it.
@@ -32,9 +32,11 @@ it is never unmeasured again. You report measured figures only.
   against it.
 
 ## 2. How a run is made
-* **Release build, rebuilt.** Rebuild and reinstall the extension first, per
-  `.claude/REQUIRED-READING.md` ("Stale artifacts"); a run against a stale `.so`
-  measures the previous increment.
+* **Release build, rebuilt.** `bench.py run` builds Release into
+  `<tree>/build-bench` and runs from there by default. With `--no-build`,
+  rebuild and reinstall the extension first, per `.claude/REQUIRED-READING.md`
+  ("Stale artifacts"); a run against a stale `.so` measures the previous
+  increment.
 * **Record the power state with every run** (`pmset -g batt`). Compare a battery
   run only against a battery baseline, and AC only against AC: Ola develops
   while travelling. If the matching baseline does not exist, say so rather than
