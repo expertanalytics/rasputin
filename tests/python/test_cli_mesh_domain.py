@@ -2,9 +2,13 @@
 
 `docs/increments/16-domain-polygon.md`, R1 to R4, with the user's rulings R0
 (point heights, bilinear between nodes), no snapping of input vertices, U1 (a)
-(the domain's CRS must match the DEM's), U3 (a), U4 (a) (refuse a polygon
-outside the node rectangle), U5 (a) (no boundary bit) and U6 (a) (the noder's
-1 mm snap is the engine's input precision).
+(the domain's CRS is its `crs` member, or `--domain-crs` for WKT), U3 (a),
+U4 (a) (refuse a polygon outside the node rectangle), U5 (a) (no boundary bit)
+and U6 (a) (the noder's 1 mm snap is the engine's input precision). U1 (a)'s
+must-match rule is replaced by increment 15b's transform
+(`15-dem-mosaic.md` R9; `test_cli_mesh_domain_crs.py`): the two tests below
+that met it now meet the extent check after the transform, which names both
+CRSs.
 
 Wording pinned from the design: the ``domain`` field is
 ``<file name>, 1 ring <h> holes, <n> vertices`` (``hole`` or ``holes``
@@ -353,11 +357,13 @@ class TestRefusals:
             says=("--domain",),
         )
 
-    def test_geojson_without_crs(self, tmp_path: Path, bumpy: Path) -> None:
+    def test_utm_numbers_without_a_crs_member(self, tmp_path: Path, bumpy: Path) -> None:
+        """WGS 84 by RFC 7946, so "longitude" 500 012: no image in UTM 33 (15b)."""
         path = geojson(tmp_path / "wgs.geojson", SQUARE, crs=None)
         self.refused(tmp_path, bumpy, path, "--tolerance", "1", says=("4326", "25833"))
 
-    def test_a_mismatched_epsg(self, tmp_path: Path, bumpy: Path) -> None:
+    def test_utm33_numbers_labelled_utm32_land_outside(self, tmp_path: Path, bumpy: Path) -> None:
+        """Transformed from zone 32 (15b), they land about 340 km west of the DEM."""
         path = geojson(tmp_path / "utm32.geojson", SQUARE, crs="EPSG:25832")
         self.refused(tmp_path, bumpy, path, "--tolerance", "1", says=("25832", "25833"))
 

@@ -1,0 +1,367 @@
+"""`open_dem` with a domain in its own CRS (increment 15b).
+
+`docs/increments/15-dem-mosaic.md` R1 ("15b adds the domain"), R4 point 5
+(the needed region: "the domain polygon grown by one cell"), R6 (the domain's
+bounds in the DEM's CRS take `--bbox`'s place, and the two exclude each other)
+and R9 (the extent check runs after the transform, against the mosaic's
+coverage). Pinned by this suite (see "Pinned by the red suite (15b)"):
+
+- `DemRequest(sources=, bounds=, nodata=, domain=)`: `domain` is a
+  `DomainPolygon` as read, in its own CRS, default `None`. A request with both
+  `bounds` and `domain` is refused with a `ValueError`.
+- `open_dem` moves the domain into the DEM's CRS, plans on its bounds with its
+  needed region, checks its extent against the plan, and only then assembles.
+  `DemInput.domain` is the domain in the DEM's CRS (`None` without one).
+- The plan is the plan of `bounds` equal to the moved domain's bounds.
+- "Grown by one cell" is pinned only away from its edge: a missing node 0.73
+  cell from a domain vertex refuses the request; missing nodes 2.5 cells or
+  more from it are NaN filler. Exactly one cell is not ruled.
+- Every extent refusal fires before any tile is loaded (I6).
+
+Synthetic tiles are micro-TIFFs written by `test_dem_input.py`'s helpers;
+the real case is the committed DTM10 seam extract (`tests/fixtures/dtm10/`),
+with a domain in EPSG:25832, the zone the place lies in.
+
+HOW THIS FILE GOES RED: `tin_engine.dem_input` and `tin_engine.domain` are
+imported inside fixtures, and `DemRequest` has no `domain` field before 15b,
+so each test fails on its own and collection is unaffected.
+"""
+
+from __future__ import annotations
+
+import importlib
+import json
+from pathlib import Path
+from types import ModuleType
+from typing import Any, ClassVar
+
+import numpy as np
+import pytest
+from pyproj import CRS, Transformer
+from shapely.geometry import Polygon, box
+
+from mosaic_fixtures import X0, Y0, blocks, quadrants, whole
+from test_dem_input import SEAM, write_tiles
+
+Ring = list[tuple[float, float]]
+UTM33 = "urn:ogc:def:crs:EPSG::25833"
+
+
+@pytest.fixture(scope="module")
+def di() -> ModuleType:
+    return importlib.import_module("tin_engine.dem_input")
+
+
+@pytest.fixture(scope="module")
+def dm() -> ModuleType:
+    return importlib.import_module("tin_engine.domain")
+
+
+@pytest.fixture(scope="module")
+def mz() -> ModuleType:
+    return importlib.import_module("tin_engine.mosaic")
+
+
+def to_crs(src: str, dst: str, ring: Ring) -> Ring:
+    """pyproj's own `always_xy` transform of `ring`: the oracle."""
+    t = Transformer.from_crs(src, dst, always_xy=True)
+    xs, ys = t.transform(np.array([p[0] for p in ring]), np.array([p[1] for p in ring]))
+    return [(float(x), float(y)) for x, y in zip(xs, ys, strict=True)]
+
+
+def domain_file(
+    path: Path, outer: Ring, holes: tuple[Ring, ...] = (), crs: str | None = UTM33
+) -> Path:
+    doc: dict[str, Any] = {
+        "type": "Polygon",
+        "coordinates": [[*r, r[0]] for r in (outer, *holes)],
+    }
+    if crs is not None:
+        doc["crs"] = {"type": "name", "properties": {"name": crs}}
+    path.write_text(json.dumps(doc))
+    return path
+
+
+def read(
+    dm: ModuleType, tmp_path: Path, utm33: Ring, crs: str, holes: tuple[Ring, ...] = ()
+) -> Any:
+    """A domain file holding the UTM 33 ring `utm33`, written in `crs`.
+
+    `crs` is "EPSG:25833" (written with its `crs` member), "EPSG:4326" (no
+    member, as RFC 7946 has it) or another EPSG code (with its member)."""
+    if crs == "EPSG:25833":
+        return dm.read_domain(domain_file(tmp_path / "d.geojson", utm33, holes))
+    outer = to_crs("EPSG:25833", crs, utm33)
+    moved = tuple(to_crs("EPSG:25833", crs, h) for h in holes)
+    member = None if crs == "EPSG:4326" else crs
+    return dm.read_domain(domain_file(tmp_path / "d.geojson", outer, moved, member))
+
+
+def request(di: ModuleType, *sources: Path, domain: Any = None, bounds: Any = None) -> Any:
+    return di.DemRequest(sources=tuple(sources), bounds=bounds, domain=domain)
+
+
+@pytest.fixture
+def no_load(monkeypatch: pytest.MonkeyPatch) -> None:
+    """I6: any tile load from here on fails the test."""
+    repository = importlib.import_module("tin_engine.io.repository")
+
+    def refuse(self: Any, name: str, *args: Any, **kwargs: Any) -> Any:
+        raise AssertionError(f"load({name!r}) was called")
+
+    monkeypatch.setattr(repository.TiffDemRepository, "load", refuse)
+
+
+# ------------------------------------------------------------------ tiles
+
+# `whole(9, 13)` in quadrants, point-registered, one shared node line:
+# nodes x 500 000 .. 500 120 (dx 10), y 6 600 000 .. 6 599 960 (dy 5); the
+# north-west tile holds rows 0-4 and columns 0-6.
+IN_NW: Ring = [
+    (X0 + 5.3, Y0 - 12.9),
+    (X0 + 33.7, Y0 - 12.1),
+    (X0 + 32.9, Y0 - 3.1),
+    (X0 + 6.1, Y0 - 3.7),
+]
+ACROSS_ALL: Ring = [
+    (X0 + 12.3, Y0 - 36.3),
+    (X0 + 107.7, Y0 - 35.9),
+    (X0 + 106.1, Y0 - 3.7),
+    (X0 + 13.9, Y0 - 4.1),
+]
+
+
+@pytest.fixture
+def quad_dir(tmp_path: Path) -> Path:
+    write_tiles(tmp_path / "quad", quadrants(whole(9, 13), row_cut=4, col_cut=6, overlap=1))
+    return tmp_path / "quad"
+
+
+# 12 x 12 nodes, dx = dy = 10, cut into four abutting 6 x 6 blocks with the
+# south-east one missing: nodes x 500 060 .. 500 110, y 6 599 940 .. 6 599 890
+# are in no tile.
+@pytest.fixture
+def l_dir(tmp_path: Path) -> Path:
+    write_tiles(tmp_path / "ell", blocks(whole(12, 12, dy=10.0), 6, 6, skip=[(1, 1)]))
+    return tmp_path / "ell"
+
+
+# A triangle whose corner (53.3, -57.1) has the missing node (60, -60) as a
+# bilinear corner: 6.7 m east and 2.9 m south, well within one cell.
+NEAR_THE_HOLE: Ring = [(X0 + 5.5, Y0 - 5.5), (X0 + 53.3, Y0 - 57.1), (X0 + 5.5, Y0 - 57.1)]
+# An L whose box holds every missing node, and whose nearest point to one,
+# (35, -35), is 25 m from each axis of (60, -60): 2.5 cells.
+AROUND_THE_HOLE: Ring = [
+    (X0 + 5.5, Y0 - 5.5),
+    (X0 + 105.5, Y0 - 5.5),
+    (X0 + 105.5, Y0 - 35.0),
+    (X0 + 35.0, Y0 - 35.0),
+    (X0 + 35.0, Y0 - 105.5),
+    (X0 + 5.5, Y0 - 105.5),
+]
+
+
+class TestDemRequest:
+    def test_domain_defaults_to_none(self, di: ModuleType, quad_dir: Path) -> None:
+        assert di.DemRequest(sources=(quad_dir,)).domain is None
+
+    def test_bounds_and_domain_exclude_each_other(
+        self, di: ModuleType, dm: ModuleType, mz: ModuleType, quad_dir: Path, tmp_path: Path
+    ) -> None:
+        """R6 and R11: with a domain, its bounds take `--bbox`'s place."""
+        domain = read(dm, tmp_path, IN_NW, "EPSG:25833")
+        bounds = mz.Bounds(x_min=X0, y_min=Y0 - 20, x_max=X0 + 50, y_max=Y0)
+        with pytest.raises(ValueError):
+            request(di, quad_dir, domain=domain, bounds=bounds)
+
+    def test_without_a_domain_the_input_has_none(self, di: ModuleType, quad_dir: Path) -> None:
+        assert di.open_dem(request(di, quad_dir)).domain is None
+
+
+class TestTheDomainChoosesTheTiles:
+    @pytest.mark.parametrize("crs", ["EPSG:25833", "EPSG:4326", "EPSG:25832"])
+    def test_the_domain_arrives_in_the_dems_crs(
+        self, di: ModuleType, dm: ModuleType, quad_dir: Path, tmp_path: Path, crs: str
+    ) -> None:
+        domain = read(dm, tmp_path, ACROSS_ALL, crs)
+        opened = di.open_dem(request(di, quad_dir, domain=domain))
+        assert CRS.from_user_input(opened.domain.crs) == CRS.from_epsg(25833)
+        given = list(domain.polygon.exterior.coords)
+        expected = given if crs == "EPSG:25833" else to_crs(crs, "EPSG:25833", given)
+        got = {(float(x), float(y)) for x, y in opened.domain.polygon.exterior.coords}
+        assert got == set(expected)
+
+    @pytest.mark.parametrize("crs", ["EPSG:25833", "EPSG:4326"])
+    def test_the_plan_is_the_plan_of_the_moved_domains_bounds(
+        self,
+        di: ModuleType,
+        dm: ModuleType,
+        mz: ModuleType,
+        quad_dir: Path,
+        tmp_path: Path,
+        crs: str,
+    ) -> None:
+        opened = di.open_dem(request(di, quad_dir, domain=read(dm, tmp_path, IN_NW, crs)))
+        x_min, y_min, x_max, y_max = opened.domain.polygon.bounds
+        bounds = mz.Bounds(x_min=x_min, y_min=y_min, x_max=x_max, y_max=y_max)
+        by_box = di.open_dem(request(di, quad_dir, bounds=bounds))
+        assert opened.plan == by_box.plan
+        assert [t.name for t in opened.plan.tiles] == ["nw.tif"]
+
+    def test_a_domain_across_every_tile_selects_every_tile(
+        self, di: ModuleType, dm: ModuleType, quad_dir: Path, tmp_path: Path
+    ) -> None:
+        domain = read(dm, tmp_path, ACROSS_ALL, "EPSG:4326")
+        opened = di.open_dem(request(di, quad_dir, domain=domain))
+        assert [t.name for t in opened.plan.tiles] == ["ne.tif", "nw.tif", "se.tif", "sw.tif"]
+
+    def test_a_single_file_is_cut_to_the_domains_window(
+        self, di: ModuleType, dm: ModuleType, quad_dir: Path, tmp_path: Path
+    ) -> None:
+        """R6 on one file: a window of it, as `--bbox` on one file gives."""
+        opened = di.open_dem(
+            request(di, quad_dir / "nw.tif", domain=read(dm, tmp_path, IN_NW, "EPSG:4326"))
+        )
+        # IN_NW spans columns 0..4 and rows 0..3 once snapped outward.
+        assert (opened.tile.meta.rows, opened.tile.meta.cols) == (4, 5)
+        assert opened.tile.meta.x_min == X0
+        assert opened.tile.meta.y_max == Y0
+
+
+class TestNeededRegion:
+    """R4 point 5 with a domain: the polygon grown by one cell, in the DEM's CRS."""
+
+    @pytest.mark.parametrize("crs", ["EPSG:25833", "EPSG:4326"])
+    def test_a_missing_node_the_boundary_needs_is_refused(
+        self,
+        di: ModuleType,
+        dm: ModuleType,
+        mz: ModuleType,
+        l_dir: Path,
+        tmp_path: Path,
+        no_load: None,
+        crs: str,
+    ) -> None:
+        domain = read(dm, tmp_path, NEAR_THE_HOLE, crs)
+        with pytest.raises(mz.MosaicError) as info:
+            di.open_dem(request(di, l_dir, domain=domain))
+        assert "in no tile" in str(info.value)
+        assert "500060" in str(info.value)
+
+    @pytest.mark.parametrize("crs", ["EPSG:25833", "EPSG:4326"])
+    def test_missing_nodes_away_from_the_domain_are_filler(
+        self, di: ModuleType, dm: ModuleType, l_dir: Path, tmp_path: Path, crs: str
+    ) -> None:
+        domain = read(dm, tmp_path, AROUND_THE_HOLE, crs)
+        opened = di.open_dem(request(di, l_dir, domain=domain))
+        tile = opened.tile
+        assert (tile.meta.rows, tile.meta.cols) == (12, 12)
+        assert np.isnan(tile.array[6:, 6:]).all()
+        assert np.isfinite(tile.array[:6, :]).all()
+        assert np.isfinite(tile.array[:, :6]).all()
+
+    def test_a_domain_enclosing_a_missing_tile_is_refused(
+        self, di: ModuleType, dm: ModuleType, mz: ModuleType, tmp_path: Path, no_load: None
+    ) -> None:
+        """The interior is needed, not only the boundary."""
+        write_tiles(tmp_path / "ring", blocks(whole(18, 18, dy=10.0), 6, 6, skip=[(1, 1)]))
+        around: Ring = [
+            (X0 + 5.5, Y0 - 5.5),
+            (X0 + 164.5, Y0 - 5.5),
+            (X0 + 164.5, Y0 - 164.5),
+            (X0 + 5.5, Y0 - 164.5),
+        ]
+        domain = read(dm, tmp_path, around, "EPSG:4326")
+        with pytest.raises(mz.MosaicError) as info:
+            di.open_dem(request(di, tmp_path / "ring", domain=domain))
+        assert "in no tile" in str(info.value)
+
+    def test_a_domain_hole_over_a_missing_tile_is_not_needed(
+        self, di: ModuleType, dm: ModuleType, tmp_path: Path
+    ) -> None:
+        """The domain's own hole, 2.5 cells wider than the missing block on
+        every side, is not part of the needed region."""
+        write_tiles(tmp_path / "ring", blocks(whole(18, 18, dy=10.0), 6, 6, skip=[(1, 1)]))
+        around: Ring = [
+            (X0 + 5.5, Y0 - 5.5),
+            (X0 + 164.5, Y0 - 5.5),
+            (X0 + 164.5, Y0 - 164.5),
+            (X0 + 5.5, Y0 - 164.5),
+        ]
+        # Missing nodes: x 60..110, y -60..-110. The hole: x 35..135, y -35..-135.
+        hole: Ring = [
+            (X0 + 35.0, Y0 - 35.0),
+            (X0 + 35.0, Y0 - 135.0),
+            (X0 + 135.0, Y0 - 135.0),
+            (X0 + 135.0, Y0 - 35.0),
+        ]
+        domain = read(dm, tmp_path, around, "EPSG:4326", holes=(hole,))
+        opened = di.open_dem(request(di, tmp_path / "ring", domain=domain))
+        assert np.isnan(opened.tile.array[6:12, 6:12]).all()
+
+
+class TestExtentAfterTheTransform:
+    """R9: the extent check runs after the transform, against the tiles, and
+    fires before any tile is loaded (I6)."""
+
+    def test_a_domain_far_from_every_tile_is_refused(
+        self, di: ModuleType, dm: ModuleType, quad_dir: Path, tmp_path: Path, no_load: None
+    ) -> None:
+        far = [(x - 200_000.0, y + 50_000.0) for x, y in IN_NW]
+        with pytest.raises(ValueError):
+            di.open_dem(request(di, quad_dir, domain=read(dm, tmp_path, far, "EPSG:4326")))
+
+    @pytest.mark.parametrize("crs", ["EPSG:25833", "EPSG:4326"])
+    def test_a_domain_reaching_past_the_tiles_is_refused_as_outside(
+        self,
+        di: ModuleType,
+        dm: ModuleType,
+        quad_dir: Path,
+        tmp_path: Path,
+        no_load: None,
+        crs: str,
+    ) -> None:
+        """The last node column is x = 500 120; one vertex is 3 m past it. The
+        window is clamped to the tiles, so the per-node coverage check alone
+        would not see it."""
+        past = [*ACROSS_ALL[:2], (X0 + 123.0, Y0 - 3.7), ACROSS_ALL[3]]
+        with pytest.raises(ValueError) as info:
+            di.open_dem(request(di, quad_dir, domain=read(dm, tmp_path, past, crs)))
+        assert "outside" in str(info.value)
+
+    def test_a_domain_on_the_last_node_line_is_inside(
+        self, di: ModuleType, dm: ModuleType, quad_dir: Path, tmp_path: Path
+    ) -> None:
+        """16's border rule, unchanged: the node rectangle is closed."""
+        corners: Ring = [(X0, Y0 - 40.0), (X0 + 120.0, Y0 - 40.0), (X0 + 120.0, Y0), (X0, Y0)]
+        opened = di.open_dem(
+            request(di, quad_dir, domain=read(dm, tmp_path, corners, "EPSG:25833"))
+        )
+        assert (opened.tile.meta.rows, opened.tile.meta.cols) == (9, 13)
+
+
+class TestRealSeam:
+    """The committed DTM10 seam (6400_4 | 6400_1, EPSG:25833, near Flekkefjord,
+    which lies in UTM zone 32), with a domain drawn in EPSG:25832."""
+
+    # Across the 51-column overlap at x 49 750 .. 50 250; every vertex off-node.
+    ACROSS_THE_SEAM: ClassVar[Ring] = [
+        (47_503.3, 6_467_207.7),
+        (52_496.1, 6_467_301.9),
+        (52_402.7, 6_469_298.3),
+        (47_601.9, 6_469_203.1),
+    ]
+
+    def test_the_extract_is_where_this_test_thinks(self) -> None:
+        node_rect = box(47_190.0, 6_466_980.0, 52_810.0, 6_469_530.0)
+        assert node_rect.contains(Polygon(self.ACROSS_THE_SEAM))
+
+    def test_a_utm32_domain_opens_both_tiles(
+        self, di: ModuleType, dm: ModuleType, tmp_path: Path
+    ) -> None:
+        domain = read(dm, tmp_path, self.ACROSS_THE_SEAM, "EPSG:25832")
+        opened = di.open_dem(request(di, SEAM, domain=domain))
+        assert [t.name for t in opened.plan.tiles] == ["6400_1_10m_z33.tif", "6400_4_10m_z33.tif"]
+        given = list(domain.polygon.exterior.coords)
+        got = {(float(x), float(y)) for x, y in opened.domain.polygon.exterior.coords}
+        assert got == set(to_crs("EPSG:25832", "EPSG:25833", given))

@@ -1078,6 +1078,105 @@ for dataset `dddbb667-1303-4ac5-8640-7ec04c0e3918`: "Åpne data", CC BY 4.0):
 
 Deflate, 0.6 MB together.
 
+### Pinned by the red suite (15b)
+
+Names and behaviours the design left open, fixed by the red commit's suites:
+`tests/python/test_crs.py`, `test_domain.py` (rewritten for the 15b API),
+`test_dem_input_domain.py` and `test_cli_mesh_domain_crs.py`. 15b is an
+ordinary suite (no invariant-critical suite, so no full mutation round), but
+the axis-order mutants were run: `test_crs.py` against a scratch `crs.py`
+(not committed) passed 31 of 31, and killed `always_xy=False`, `always_xy`
+dropped, input columns swapped, output columns swapped, pyproj's `CRSError`
+let through, and a float32 round trip. Nothing else was run against a
+scratch implementation.
+
+**`tin_engine/crs.py`.**
+
+- `parse_crs(text) -> pyproj.CRS`: anything `CRS.from_user_input` accepts,
+  including WKT2 and a PROJ string with no EPSG code. Anything else is a
+  `ValueError` naming the text. pyproj's `CRSError` is a `RuntimeError`, so it
+  must not leak: every `except ValueError` that makes a usage error would miss it.
+- `reprojector(src, dst)` takes text or `pyproj.CRS` for each, and returns a
+  callable from an `(N, 2)` array-like of `(x, y)` to an `(N, 2)` float64
+  array, bit for bit pyproj's `always_xy` transform. `x` is easting or
+  longitude whatever the CRS's axis order.
+- The only `from_crs` call in `src_python/` is in `tin_engine/crs.py` (an AST
+  scan, whose finder is tested on planted source).
+
+**`tin_engine/domain.py`.**
+
+- `read_domain(path, crs=None) -> DomainPolygon`. It no longer takes the DEM:
+  the domain is read before the tiles are planned, since its bounds choose
+  them. Parsing, the geometry refusals and the file-against-`--domain-crs`
+  refusal are 16's, unchanged; a CRS with no EPSG code and a GeoJSON `crs`
+  member naming OGC's CRS84 are now read. `check_crs` is gone.
+- `DomainPolygon`: `polygon` and `crs: str` (text pyproj parses to the
+  domain's CRS); no `epsg` field.
+- `DomainPolygon.to_crs(dst)` (text or `pyproj.CRS`):
+  - every vertex of every ring is pyproj's `always_xy` transform of the input
+    vertex, bit for bit; the vertex count per ring is unchanged; the source is
+    unchanged;
+  - the result is re-oriented to the winding contract (outer counter-clockwise,
+    holes clockwise). A CRS whose easting points west (`+axis=wnu`) mirrors the
+    ring, and is the test;
+  - **same CRS is decided by `pyproj.CRS` equality, not by `to_epsg()`**. UTM 33
+    with a west-pointing axis answers `to_epsg() == 25833` at pyproj's default
+    confidence, and skipping its transform would put the domain 1000 km west.
+    For an equal CRS the coordinates are returned bit for bit and no
+    transformer is made (`Transformer.from_crs` is patched to fail);
+  - a vertex with no image in `dst` (pyproj answers `inf`, as for latitude 95
+    or a UTM easting read as a longitude) is a `DomainError` naming both CRSs,
+    raised at reading or at the transform.
+- `check_extent(domain, meta)`: 16's node-rectangle check as a public
+  function, closed on the border, holes included; the message says `outside`
+  and names the vertex.
+
+**`tin_engine/dem_input.py`.**
+
+- `DemRequest(sources=, bounds=, nodata=, domain=None)`, `domain` a
+  `DomainPolygon` as read. Both `bounds` and `domain` is a `ValueError`.
+- `open_dem` moves the domain into the DEM's CRS, plans on its bounds with its
+  needed region, runs `check_extent` against the plan's `meta`, and only then
+  assembles. `DemInput.domain` is the domain in the DEM's CRS, `None` without
+  one. The plan equals the plan of `bounds` equal to the moved domain's bounds;
+  on one file that is a window of it.
+- **The needed region**, "the domain polygon grown by one cell", is pinned
+  only away from its edge: a missing node 0.73 cell from a domain vertex is
+  refused (`in no tile`, naming its x); missing nodes 2.5 cells or more from
+  the domain, including under a hole of the domain, are NaN filler; a domain
+  enclosing a missing tile is refused (the interior is needed). A growth of
+  exactly one cell, and the metric (Euclidean or per axis), are not ruled.
+- Every extent refusal (no tile, uncovered, outside) fires before any `load`.
+
+**`cli.py`.**
+
+- `--bbox` with `--domain` is a usage error naming both.
+- `domain_crs` is `EPSG:n` when pyproj finds an **exact** EPSG code (so OGC's
+  CRS84 is not recorded as `EPSG:4326`), and otherwise ASCII text pyproj parses
+  back to an equal CRS. `domain_transform` is the `description` of
+  `Transformer.from_crs(domain CRS, DEM CRS, always_xy=True)`, and contains
+  `none` (any case) for a domain already in the DEM's CRS. Only the `.vtk`
+  fields are pinned, not a `.ply` comment.
+- A transformed domain refused for its extent (no image, no tile, outside) is
+  a usage error naming the domain's CRS and the DEM's EPSG code, and writes
+  nothing; one reaching past the tiles also says `--domain` and `outside`.
+- **Same CRS, bit for bit.** `test_cli_mesh_domain_crs.py` holds SHA-256
+  digests of the mesh (points, cells, cell and point arrays; not field data)
+  for the micro-TIFF square of 16's suite at 1 m and the quarter circle on the
+  benchmark tile at 10 m (`needs_codecs`), recorded at `d34d79d` before any
+  15b change. Both digests are unchanged when the same run adds `--bbox` at
+  the domain's bounds, so cutting the window to the domain may not move them.
+- **Axis order, able to fail:** the run that meshes a 4326 domain unpatched is
+  refused, naming 4326 and 25833, when `Transformer.from_crs` is patched to
+  force `always_xy=False`. A GeoJSON written latitude first is refused the same
+  way.
+
+**Existing tests changed.** `test_refine_golden.py` (through it, three tests
+of `test_cli_constraint_feet.py`) calls `read_domain(path)`; red until green,
+for the signature only. In `test_cli_mesh_domain.py` the two tests that met
+16's must-match rule are renamed for what now refuses them, the extent check
+after the transform, with their assertions unchanged.
+
 ## Test data
 
 **Norway (15a, 15b).**
