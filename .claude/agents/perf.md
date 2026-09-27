@@ -50,12 +50,15 @@ it is never unmeasured again. You report measured figures only.
 * **Record quality with speed:** worst angle, max vertex degree, the tolerance
   check and the Delaunay check. A faster run that loses quality is a regression.
 * **Sanitize a scratch build before you run it for numbers.** A simulation or
-  instrumentation patch that changes C++ runs once under
-  `-fsanitize=address,undefined` (as `build-san` builds) on a small case before
-  any Release, timed or full-size run. A crash in a Release scratch build
-  surfaces as a bare segfault, and as a crash dialog on Ola's screen; five did
-  on 2026-09-27 in the 21c evaluate-once simulation. A run that crashed
-  produces no numbers.
+  instrumentation patch that changes C++ runs once sanitized on a small case
+  before any Release, timed or full-size run: `-fsanitize=address,undefined`
+  (as `build-san` builds) where it can run, which is a C++ driver or test
+  binary. ASan cannot be loaded into the Python process here (the harness
+  strips `DYLD_INSERT_LIBRARIES`), so a run through `_core` uses
+  `-fsanitize=undefined` with libc++'s extensive hardening mode instead. A run
+  that crashed produces no numbers. A deliberate crash (a plant) stays out of
+  a script's default loop: a crash in a Python process shows as a crash dialog
+  on Ola's screen, and five did on 2026-09-27 from one 21c plant.
 
 ## 3. Evidence
 * Commit the evidence under `docs/benchmarks/<date>/`: a `README.md` with the
