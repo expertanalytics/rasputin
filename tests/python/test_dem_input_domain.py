@@ -455,6 +455,50 @@ class TestNeededRegionIsGrownByThePlansSpacing:
         with_fine = di.open_dem(request(di, tmp_path / "with", domain=domain))
         assert with_fine.plan == alone.plan
 
+    # A rectangle x 5.5..53.3, y -5.5..-57.1 with a notch x 20..30 down to
+    # y -20 cut from its north edge. Its south-east corner is `NEAR_THE_HOLE`'s,
+    # 7.3 m from the missing 10 m node (60, -60).
+    NOTCHED: ClassVar[Ring] = [
+        (X0 + 5.5, Y0 - 5.5),
+        (X0 + 20.0, Y0 - 5.5),
+        (X0 + 20.0, Y0 - 20.0),
+        (X0 + 30.0, Y0 - 20.0),
+        (X0 + 30.0, Y0 - 5.5),
+        (X0 + 53.3, Y0 - 5.5),
+        (X0 + 53.3, Y0 - 57.1),
+        (X0 + 5.5, Y0 - 57.1),
+    ]
+
+    @staticmethod
+    def fine(rows: int, cols: int, west: float, north: float) -> Any:
+        return whole(rows, cols, dx=1.0, dy=1.0, x_min=X0 + west, y_max=Y0 + north)
+
+    @pytest.mark.parametrize("prefix", ["a_", "z_"])
+    def test_the_needed_region_grows_again_when_the_lattice_changes(
+        self, di: ModuleType, dm: ModuleType, mz: ModuleType, tmp_path: Path, prefix: str
+    ) -> None:
+        """The re-plan loop runs until the reach is the chosen lattice's cell.
+
+        The 10 m L plus four 1 m tiles covering `NOTCHED` except a 9 x 15-node
+        gap at x 21..29, y -5..-19, which lies 1 m outside the notch. On the
+        polygon itself the 1 m lattice is chosen (four tiles against three);
+        grown by its 1.41 m diagonal the gap is needed, so the 10 m lattice is
+        chosen; grown by that one's 14.1 m diagonal, (60, -60) is needed and
+        the 1 m tiles are selected too, so the request is refused. Growing only
+        once, by the first plan's cell, accepts it with (60, -60) as NaN
+        filler: the B1 bug by another route."""
+        tiles = blocks(whole(12, 12, dy=10.0), 6, 6, skip=[(1, 1)])
+        tiles[f"{prefix}left.tif"] = self.fine(54, 16, 5.0, -5.0)
+        tiles[f"{prefix}mid.tif"] = self.fine(39, 9, 21.0, -20.0)
+        tiles[f"{prefix}rtop.tif"] = self.fine(26, 25, 30.0, -5.0)
+        tiles[f"{prefix}rbot.tif"] = self.fine(28, 25, 30.0, -31.0)
+        write_tiles(tmp_path / "dem", tiles)
+        domain = read(dm, tmp_path, self.NOTCHED, "EPSG:25833")
+        with pytest.raises(mz.MosaicError) as info:
+            di.open_dem(request(di, tmp_path / "dem", domain=domain))
+        assert "the request selects tiles on two lattices" in str(info.value)
+        assert f"{prefix}left.tif" in str(info.value)
+
 
 class TestTheSnapBand:
     """The domain's window against `--bbox`'s, on `quad_dir` (node lines every
