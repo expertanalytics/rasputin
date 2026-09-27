@@ -1143,12 +1143,26 @@ scratch implementation.
   line: there `_past` moves that edge out and the domain's window is one node
   line wider than `--bbox`'s (found at green, 15b). On one file the plan is a
   window of it.
+- **The snap band** (review S1, `TestTheSnapBand`): with every edge on a node
+  line, or one edge 2e-6 cell past one, the domain's plan equals `--bbox`'s;
+  with one edge 1e-7 cell past a node line it is one node line wider on that
+  side only, for each of the four edges. A vertex exactly on a node line
+  widens nothing.
 - **The needed region**, "the domain polygon grown by one cell", is pinned
   only away from its edge: a missing node 0.73 cell from a domain vertex is
   refused (`in no tile`, naming its x); missing nodes 2.5 cells or more from
   the domain, including under a hole of the domain, are NaN filler; a domain
   enclosing a missing tile is refused (the interior is needed). A growth of
   exactly one cell, and the metric (Euclidean or per axis), are not ruled.
+- **The cell is the chosen plan's** (review B1,
+  `TestNeededRegionIsGrownByThePlansSpacing`): in a repository holding two
+  spacings in one EPSG, a tile the domain does not select, and whether its
+  name sorts first or last, changes neither the plan nor the refusal. A
+  missing node inside one 10 m cell but outside one 1 m cell is refused on a
+  10 m plan and NaN filler on a 1 m plan.
+- **One CRS** (review S2, `TestOneCrs`): tiles in more than one EPSG code with
+  a domain are a `MosaicError` before any `load`, naming the count, the codes
+  and "a domain needs one".
 - Every extent refusal (no tile, uncovered, outside) fires before any `load`.
 
 **`cli.py`.**
