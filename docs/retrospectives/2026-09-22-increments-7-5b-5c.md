@@ -70,6 +70,8 @@ were the first repairs in the sequence that did not fail on landing.
 ## Four stale-artifact hazards, all met rather than read about
 
 All four are in `.claude/REQUIRED-READING.md` with their reproductions.
+(Since 2026-09-27 the reproductions are in
+`2026-09-27-required-reading-incidents.md`; the rules stayed.)
 
 1. `pytest` does not rebuild the C++ extension — `ninja` absent, editable
    auto-rebuild no-ops.

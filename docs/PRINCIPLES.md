@@ -65,8 +65,10 @@ read `ctest`'s summary. A clean-looking run proves nothing until you have.
 extension, `cmake --build` can skip a `cp` restore, `ctest` reports the previous
 binary after a failed build, and Python imports a stale `.pyc` when mtime and
 size are unchanged.
-**Origin.** `.claude/REQUIRED-READING.md`, which carries the reproduction of
-each.
+**Origin.** `docs/retrospectives/2026-09-27-required-reading-incidents.md`
+carries the reproductions of the first three (the rules are in
+`.claude/REQUIRED-READING.md`); `2026-09-22-increments-7-5b-5c.md` names the
+fourth.
 **Status.** In force. Last exercised: 5c.
 
 ---
