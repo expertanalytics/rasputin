@@ -471,9 +471,13 @@ the DEM's CRS, as in the parked R6 (Q2). With a domain [15b], the domain's
 bounds in the DEM's CRS take `--bbox`'s place, and the two flags exclude each
 other (16 R1 already said so).
 
-Without `--bbox` or `--domain`, `--dem DIR` on Ola's archive plans the 72 GiB
-union box of the main lattice, and the cap refuses it (R7). That refusal is
-correct, and its message points at `--bbox` and `--domain`.
+Without `--bbox` or `--domain`, `--dem DIR` on Ola's archive selects every
+tile, the half-cell ones included, so the mixed-lattice refusal (Q5) fires
+before the memory cap (R7) is reached; `test_no_bounds_selects_both_lattices_
+and_is_refused` pins that order. Both refusals are correct, and the lattice
+message ends "but a --bbox inside one lattice is meshed". On one lattice alone,
+the 72 GiB union box would be refused by the cap, whose message points at
+`--bbox` and `--domain`.
 
 ### R7. Memory
 
