@@ -638,9 +638,9 @@ before anything else sees them.
   UTM zone the edges bend by millimetres per kilometre of edge (B7's order of
   magnitude). Not densified.
 - `check_crs`'s must-match rule (`domain.py:97` at `d34d79d`) is replaced by
-  the transform. It was kept as "one replaceable function at the Python boundary" for exactly
-  this (16, "Ruled by the user"). The extent check (16 R1) now runs after the
-  transform, against the mosaic's coverage (R4 point 5), not one tile's
+  the transform. It was kept as "one replaceable function at the Python
+  boundary" for exactly this (16, "Ruled by the user"). The extent check (16
+  R1) now runs after the transform, against the mosaic's coverage (R4 point 5), not one tile's
   rectangle.
 - A GeoJSON file without a `crs` member is EPSG:4326 (RFC 7946), and is now
   transformed rather than refused.
