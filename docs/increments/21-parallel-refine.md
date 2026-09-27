@@ -866,7 +866,8 @@ Every new suite joins the TSan job's list in `.github/workflows/main.yaml`.
 
 **Acceptance for 21a, 21b and 21d** is `@perf`'s run
 (`docs/increments/README.md`, "Acceptance"): the 1 m benchmark and the thread
-sweep from `tools/bench.py`, battery against battery. For 21a and 21b the mesh
+sweep from `tools/bench.py`, one power state against the same one (21a ran on
+AC, base and 21a back to back: `docs/benchmarks/2026-09-27/21a-acceptance.md`). For 21a and 21b the mesh
 hash must be unchanged. For 21d the mesh hash changes by design, so the
 comparison is time, triangle count, worst angle and max degree (Q3).
 
