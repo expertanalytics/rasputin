@@ -87,9 +87,7 @@ class TestNodes:
         assert len(got) == len(xy), "a node appears twice"
         assert got == expected_nodes(m, stride)
 
-    def test_last_row_and_column_appear_when_stride_does_not_divide(
-        self, grid_domain: Any
-    ) -> None:
+    def test_last_row_and_column_appear_when_stride_does_not_divide(self, grid_domain: Any) -> None:
         m = meta(10, 14)
         xy, _ = grid_domain.subsample(m, 4)
         x_max = m.x_min + (m.cols - 1) * m.delta_x
@@ -148,9 +146,7 @@ class TestDefaultStride:
         ("rows", "cols"),
         [(2, 2), (3, 4), (256, 10), (257, 10), (10, 5051), (5051, 5051), (511, 512)],
     )
-    def test_formula_and_at_most_256_per_side(
-        self, grid_domain: Any, rows: int, cols: int
-    ) -> None:
+    def test_formula_and_at_most_256_per_side(self, grid_domain: Any, rows: int, cols: int) -> None:
         stride = grid_domain.default_stride(meta(rows, cols))
         assert stride == max(1, math.ceil((max(rows, cols) - 1) / 255))
         assert len(axis(max(rows, cols), stride)) <= 256

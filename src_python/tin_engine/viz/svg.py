@@ -165,9 +165,7 @@ def _property_token(properties: int, strokes: tuple[PropertyStroke, ...]) -> str
     return next((s.token for s in strokes if properties >> s.bit & 1), None)
 
 
-def _edge_classes(
-    edge: SceneEdge, findings: frozenset[tuple[int, int]], style: SvgStyle
-) -> str:
+def _edge_classes(edge: SceneEdge, findings: frozenset[tuple[int, int]], style: SvgStyle) -> str:
     """Every stroke class this edge belongs to, space separated.
 
     ``constrained`` is the mesh mask's verdict and ``role-*`` the input chains';
@@ -312,10 +310,7 @@ def _legend(style: SvgStyle) -> str:
         ("role-outer constrained", "outer ring"),
         ("role-hole constrained", "hole ring"),
         ("role-breakline constrained", "breakline"),
-        *(
-            (f"constrained {stroke.token}", stroke.token)
-            for stroke in style.property_strokes
-        ),
+        *((f"constrained {stroke.token}", stroke.token) for stroke in style.property_strokes),
         ("unconstrained", "unconstrained edge"),
     ]
     rows: list[str] = []

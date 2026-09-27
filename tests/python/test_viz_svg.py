@@ -503,9 +503,7 @@ class TestFixtureSanity:
     fixture drifted rather than that the renderer is wrong.
     """
 
-    def test_the_scene_has_the_primitive_counts_the_assertions_assume(
-        self, scene: Any
-    ) -> None:
+    def test_the_scene_has_the_primitive_counts_the_assertions_assume(self, scene: Any) -> None:
         assert len(scene.vertices) == VERTEX_COUNT
         assert len(scene.triangles) == TRIANGLE_COUNT
         assert len(scene.edges) == EDGE_COUNT
@@ -518,9 +516,7 @@ class TestFixtureSanity:
         counts = [VERTEX_COUNT, TRIANGLE_COUNT, CONSTRAINED_COUNT, 0]
         assert len(set(counts)) == len(counts)
 
-    def test_the_bbox_is_the_one_the_viewport_numbers_were_computed_for(
-        self, scene: Any
-    ) -> None:
+    def test_the_bbox_is_the_one_the_viewport_numbers_were_computed_for(self, scene: Any) -> None:
         box = scene.bbox
         assert box.padded is False
         assert box.max_x - box.min_x == pytest.approx(100.0, rel=0.0, abs=1e-9)
@@ -712,15 +708,34 @@ class TestPropertyStrokes:
 
     @pytest.mark.parametrize(
         "token",
-        ['ri"ver', "ri ver", "River", "1river", "_river", "river>", "", "riv<er",
-         "river\n", "riv\ner", "riv\u00e9r"],
-        ids=["quote", "space", "capital", "leading-digit", "leading-underscore",
-             "gt", "empty", "lt", "trailing-newline", "embedded-newline",
-             "non-ascii"],
+        [
+            'ri"ver',
+            "ri ver",
+            "River",
+            "1river",
+            "_river",
+            "river>",
+            "",
+            "riv<er",
+            "river\n",
+            "riv\ner",
+            "riv\u00e9r",
+        ],
+        ids=[
+            "quote",
+            "space",
+            "capital",
+            "leading-digit",
+            "leading-underscore",
+            "gt",
+            "empty",
+            "lt",
+            "trailing-newline",
+            "embedded-newline",
+            "non-ascii",
+        ],
     )
-    def test_a_token_that_would_escape_the_class_attribute_is_refused(
-        self, token: str
-    ) -> None:
+    def test_a_token_that_would_escape_the_class_attribute_is_refused(self, token: str) -> None:
         """The hostile-input set for the pattern that is the boundary.
 
         The two newline cases and the non-ASCII one mirror
@@ -780,9 +795,7 @@ class TestViewport:
         # transform that took the x fit would overflow the map area vertically.
         assert self.view(scene).scale == pytest.approx(SCALE, rel=0.0, abs=1e-9)
 
-    def test_the_bottom_left_world_corner_maps_to_the_bottom_left(
-        self, scene: Any
-    ) -> None:
+    def test_the_bottom_left_world_corner_maps_to_the_bottom_left(self, scene: Any) -> None:
         x, y = self.view(scene).point(EAST, NORTH)
         assert x == pytest.approx(MAP_LEFT, rel=0.0, abs=1e-9)
         assert y == pytest.approx(MAP_BOTTOM, rel=0.0, abs=1e-9)
@@ -947,9 +960,7 @@ class TestGeometryElements:
         assert labels is None or list(labels) == []
 
     def test_labels_draw_one_index_per_vertex(self, scene: Any) -> None:
-        document = parse(
-            viz_module("svg").render_svg(scene, style=make_style(), labels=True)
-        )
+        document = parse(viz_module("svg").render_svg(scene, style=make_style(), labels=True))
         texts = children(document, "labels", "text")
         assert len(texts) == VERTEX_COUNT
         assert sorted(text_of(t) for t in texts) == sorted(str(i) for i in range(VERTEX_COUNT))
@@ -976,19 +987,13 @@ class TestStrokeClasses:
             token = "constrained" if edge.constrained else "unconstrained"
             assert token in classes(line), f"edge {(edge.a, edge.b)} is missing {token!r}"
 
-    def test_a_ring_edge_carries_its_roles_class(
-        self, document: ET.Element, scene: Any
-    ) -> None:
+    def test_a_ring_edge_carries_its_roles_class(self, document: ET.Element, scene: Any) -> None:
         assert "role-outer" in classes(edge_element(document, 0, 1, scene))
 
-    def test_a_breakline_carries_its_own_role_class(
-        self, document: ET.Element, scene: Any
-    ) -> None:
+    def test_a_breakline_carries_its_own_role_class(self, document: ET.Element, scene: Any) -> None:
         assert "role-breakline" in classes(edge_element(document, 4, 5, scene))
 
-    def test_a_property_is_a_class_of_its_own(
-        self, document: ET.Element, scene: Any
-    ) -> None:
+    def test_a_property_is_a_class_of_its_own(self, document: ET.Element, scene: Any) -> None:
         # A river is a breakline plus a property, so it is a fourth stroke
         # rather than a fourth role.
         assert "river" in classes(edge_element(document, 4, 5, scene))
@@ -1000,9 +1005,7 @@ class TestStrokeClasses:
         assert "river" not in tokens
         assert "road" not in tokens
 
-    def test_an_edge_with_two_properties_draws_exactly_one_stroke(
-        self, mesh: FakeMesh
-    ) -> None:
+    def test_an_edge_with_two_properties_draws_exactly_one_stroke(self, mesh: FakeMesh) -> None:
         # The finding this ruling rests on: at gallery scale two overlaid
         # strokes on one polyline read as a rendering defect, not as two
         # features. So the SET is carried on the edge, in full, and the
@@ -1098,9 +1101,7 @@ class TestStrokeClasses:
             assert "river" not in classes(line)
             assert "road" not in classes(line)
 
-    def test_an_unconstrained_edge_carries_no_role(
-        self, document: ET.Element, scene: Any
-    ) -> None:
+    def test_an_unconstrained_edge_carries_no_role(self, document: ET.Element, scene: Any) -> None:
         tokens = classes(edge_element(document, 0, 5, scene))
         assert [t for t in tokens if t.startswith("role-")] == []
 
@@ -1178,9 +1179,7 @@ class TestHeaderBand:
         assert "Gaula, UTM 33N" in text_of(group(document, "header"))
 
     def test_the_status_is_passed_through(self, scene: Any) -> None:
-        document = parse(
-            viz_module("svg").render_svg(scene, style=make_style(), status="Ok")
-        )
+        document = parse(viz_module("svg").render_svg(scene, style=make_style(), status="Ok"))
         assert "Ok" in text_of(group(document, "header"))
 
     def test_a_title_with_markup_in_it_cannot_break_the_document(self, scene: Any) -> None:
@@ -1188,9 +1187,7 @@ class TestHeaderBand:
         # the document as far as a browser is concerned and the user gets a
         # blank page from a file that was written successfully.
         hostile = '</svg><script>alert("x")</script> & <'
-        document = parse(
-            viz_module("svg").render_svg(scene, style=make_style(), title=hostile)
-        )
+        document = parse(viz_module("svg").render_svg(scene, style=make_style(), title=hostile))
         assert document.tag == tag("svg")
         assert hostile in text_of(group(document, "header"))
         assert list(document.iter(tag("script"))) == []
@@ -1214,9 +1211,7 @@ class TestLegendAndScaleBar:
         for _bit, token in GALLERY_STROKES:
             assert token in legend, f"the legend does not name {token!r}"
 
-    def test_the_legend_names_no_property_the_style_does_not_declare(
-        self, scene: Any
-    ) -> None:
+    def test_the_legend_names_no_property_the_style_does_not_declare(self, scene: Any) -> None:
         # Able to fail on its own, and the assertion that catches the
         # hard-coded row: under the default style there is no property stroke,
         # so there is nothing to put a legend row next to.
@@ -1297,9 +1292,7 @@ class TestFailurePresentation:
         # The design's own wording, and the whole point of the mode having its
         # own `SceneKind`: a successful call that produced nothing must not read
         # like a failure and must not read like a success.
-        document = parse(
-            viz_module("svg").render_svg(empty_scene, style=make_style(), status="Ok")
-        )
+        document = parse(viz_module("svg").render_svg(empty_scene, style=make_style(), status="Ok"))
         assert "Ok BUT EMPTY" in text_of(group(document, "header"))
 
     def test_a_failure_does_not_claim_to_be_empty_but_ok(self, failed_scene: Any) -> None:
@@ -1353,6 +1346,7 @@ def properly_cross(
     since a
     T-junction is a different unnoded defect and triangulates differently.
     """
+
     def sign(value: float) -> int:
         return (value > 0.0) - (value < 0.0)
 
@@ -1603,9 +1597,7 @@ class TestGallery:
         assert classified == set(CLASSIFIED_FIXTURES)
         assert classified < set(GALLERY_NAMES), "every fixture carries a property"
         for name in sorted(classified):
-            stray = [
-                int(chain.properties) & ~DECLARED_BITS for chain in gallery()[name].chains
-            ]
+            stray = [int(chain.properties) & ~DECLARED_BITS for chain in gallery()[name].chains]
             assert not any(stray), f"{name} sets a bit outside {DECLARED_BITS:#b}"
 
     def test_the_sliver_fan_is_near_collinear_without_being_collinear(self) -> None:
@@ -1621,9 +1613,7 @@ class TestGallery:
         assert tight, "no near-collinear triple: the fan has no sliver in it"
 
     def test_the_degenerate_fixture_is_exactly_collinear(self) -> None:
-        points = [
-            (float(x), float(y)) for x, y in np.asarray(gallery()["degenerate"].vertices)
-        ]
+        points = [(float(x), float(y)) for x, y in np.asarray(gallery()["degenerate"].vertices)]
         assert len(points) >= 3
         assert all(sine_of(points[0], points[1], p) < 1.0e-9 for p in points[2:])
 
@@ -1731,9 +1721,7 @@ class TestGallery:
         assert int(lake.chains[AREA_RINGS["bridge-over-lake"]].properties) == COASTLINE
         assert int(lake.chains[2].properties) == ROAD
         forest = gallery()["road-enters-forest"]
-        assert int(forest.chains[AREA_RINGS["road-enters-forest"]].properties) == (
-            NO_PROPERTIES
-        )
+        assert int(forest.chains[AREA_RINGS["road-enters-forest"]].properties) == (NO_PROPERTIES)
         assert int(forest.chains[2].properties) == ROAD
 
     def test_the_wall_leaves_the_domain(self) -> None:

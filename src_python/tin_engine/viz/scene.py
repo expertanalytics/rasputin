@@ -253,8 +253,7 @@ def build_scene(
         triangles = np.asarray(drawable.triangles, dtype=np.uint32)
 
     edges = tuple(
-        SceneEdge(a, b, (a, b) in masked, *joined.get((a, b), (None, 0)))
-        for a, b in sorted(drawn)
+        SceneEdge(a, b, (a, b) in masked, *joined.get((a, b), (None, 0))) for a, b in sorted(drawn)
     )
     findings = _findings(edges) if drawable is not None else ()
     return Scene(kind, vertices, triangles, edges, findings, _bbox(vertices))

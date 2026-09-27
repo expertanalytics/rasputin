@@ -165,27 +165,49 @@ class TestStatsToAFile:
     def test_ply_with_edges_then_the_report(self, tmp_path: Path) -> None:
         surface, edges, md = tmp_path / "s.ply", tmp_path / "e.ply", tmp_path / "s.md"
         result = mesh(
-            "catchment", "--flat", "--out", str(surface), "--out-edges", str(edges),
-            "--stats", str(md),
+            "catchment",
+            "--flat",
+            "--out",
+            str(surface),
+            "--out-edges",
+            str(edges),
+            "--stats",
+            str(md),
         )
         lines = result.stdout.splitlines()
         assert [same_file(a, b) for a, b in zip(lines, (surface, edges, md), strict=True)] == [
-            True, True, True,
+            True,
+            True,
+            True,
         ]
         rows = table(section(md.read_text(encoding="utf-8"), "Sizes"))
         assert "s.ply" in rows and "e.ply" in rows
 
     def test_out_parent_applies_to_the_report(self, tmp_path: Path) -> None:
         out, md = tmp_path / "x.vtk", tmp_path / "x.md"
-        mesh("catchment", "--flat", "--out", str(out), "--stats", str(md),
-             "--out-parent", str(tmp_path))
+        mesh(
+            "catchment",
+            "--flat",
+            "--out",
+            str(out),
+            "--stats",
+            str(md),
+            "--out-parent",
+            str(tmp_path),
+        )
         assert md.is_file()
 
     def test_the_stderr_summary_is_unchanged(self, tmp_path: Path, bumpy: Path) -> None:
         plain_run = mesh("--dem", str(bumpy), "--tolerance", "1", "--out", str(tmp_path / "a.vtk"))
         stats_run = mesh(
-            "--dem", str(bumpy), "--tolerance", "1", "--out", str(tmp_path / "b.vtk"),
-            "--stats", str(tmp_path / "b.md"),
+            "--dem",
+            str(bumpy),
+            "--tolerance",
+            "1",
+            "--out",
+            str(tmp_path / "b.vtk"),
+            "--stats",
+            str(tmp_path / "b.md"),
         )
         assert stats_run.stderr == plain_run.stderr
 
@@ -195,7 +217,11 @@ class TestStatsToStdout:
 
     @pytest.mark.parametrize("kind", KINDS)
     def test_the_report_follows_the_path_line(
-        self, tmp_path: Path, bumpy: Path, square: Path, kind: str,
+        self,
+        tmp_path: Path,
+        bumpy: Path,
+        square: Path,
+        kind: str,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         monkeypatch.chdir(tmp_path)
@@ -212,8 +238,14 @@ class TestStatsToStdout:
     def test_after_both_ply_paths(self, tmp_path: Path) -> None:
         surface, edges = tmp_path / "s.ply", tmp_path / "e.ply"
         result = mesh(
-            "catchment", "--flat", "--out", str(surface), "--out-edges", str(edges),
-            "--stats", "-",
+            "catchment",
+            "--flat",
+            "--out",
+            str(surface),
+            "--out-edges",
+            str(edges),
+            "--stats",
+            "-",
         )
         lines = result.stdout.splitlines()
         assert same_file(lines[0], surface) and same_file(lines[1], edges)
@@ -235,8 +267,14 @@ class TestSectionsPerKind:
         assert out.name in sizes
         phases = seconds(report)
         for row in (
-            "start mesh: build", "start mesh: node", "start mesh: triangulate",
-            "start mesh: constraint edges", "write: encode", "write: disk", "other", "total",
+            "start mesh: build",
+            "start mesh: node",
+            "start mesh: triangulate",
+            "start mesh: constraint edges",
+            "write: encode",
+            "write: disk",
+            "other",
+            "total",
         ):
             assert row in phases, row
         for absent in ("decode", "sample", "refine", "trim"):
@@ -256,7 +294,10 @@ class TestSectionsPerKind:
     def test_a_tolerance_run(self, report_of: ReportOf) -> None:
         report, result, _ = report_of("tolerance")
         assert sections(report) == [
-            "Sizes", "Quality (plan view, x/y)", "Refinement", "Timings",
+            "Sizes",
+            "Quality (plan view, x/y)",
+            "Refinement",
+            "Timings",
         ]
         refinement = table(section(report, "Refinement"))
         header = refinement.pop("tolerance")
@@ -270,9 +311,13 @@ class TestSectionsPerKind:
         assert "Threads:" in section(report, "Timings")
         phases = seconds(report)
         for name in (
-            "refine", "refine: legalise start", "refine: start quality",
-            "refine: scan (parallel)", "refine: split + flip (serial)",
-            "refine: setup + output", "trim",
+            "refine",
+            "refine: legalise start",
+            "refine: start quality",
+            "refine: scan (parallel)",
+            "refine: split + flip (serial)",
+            "refine: setup + output",
+            "trim",
         ):
             assert name in phases, name
         assert "sample" not in phases
@@ -294,16 +339,23 @@ class TestRefusals:
 
     def test_stats_resolving_to_out(self, tmp_path: Path) -> None:
         out = tmp_path / "x.vtk"
-        code, output = invoke("catchment", "--flat", "--out", str(out),
-                              "--stats", str(tmp_path / "." / "x.vtk"))
+        code, output = invoke(
+            "catchment", "--flat", "--out", str(out), "--stats", str(tmp_path / "." / "x.vtk")
+        )
         assert code == USAGE, output
         assert "--stats" in output and "overwrite" in output
         assert self.nothing_written(tmp_path) == []
 
     def test_stats_resolving_to_out_edges(self, tmp_path: Path) -> None:
         code, output = invoke(
-            "catchment", "--flat", "--out", str(tmp_path / "s.ply"),
-            "--out-edges", str(tmp_path / "e.ply"), "--stats", str(tmp_path / "e.ply"),
+            "catchment",
+            "--flat",
+            "--out",
+            str(tmp_path / "s.ply"),
+            "--out-edges",
+            str(tmp_path / "e.ply"),
+            "--stats",
+            str(tmp_path / "e.ply"),
         )
         assert code == USAGE, output
         assert "--stats" in output and "overwrite" in output
@@ -313,8 +365,14 @@ class TestRefusals:
         inside = tmp_path / "inside"
         inside.mkdir()
         code, output = invoke(
-            "catchment", "--flat", "--out", str(inside / "x.vtk"),
-            "--out-parent", str(inside), "--stats", str(tmp_path / "x.md"),
+            "catchment",
+            "--flat",
+            "--out",
+            str(inside / "x.vtk"),
+            "--out-parent",
+            str(inside),
+            "--stats",
+            str(tmp_path / "x.md"),
         )
         assert code == USAGE, output
         assert "outside the permitted parent" in output
@@ -325,8 +383,9 @@ class TestRefusals:
         target.write_text("keep\n")
         link = tmp_path / "link.md"
         link.symlink_to(target)
-        code, output = invoke("catchment", "--flat", "--out", str(tmp_path / "x.vtk"),
-                              "--stats", str(link))
+        code, output = invoke(
+            "catchment", "--flat", "--out", str(tmp_path / "x.vtk"), "--stats", str(link)
+        )
         assert code == USAGE, output
         assert "symlink" in output
         assert target.read_text() == "keep\n"
@@ -334,8 +393,16 @@ class TestRefusals:
 
     def test_a_refused_mesh_run_writes_no_report(self, tmp_path: Path, bumpy: Path) -> None:
         md = tmp_path / "x.md"
-        code, output = invoke("--dem", str(bumpy), "--tolerance", "-1",
-                              "--out", str(tmp_path / "x.vtk"), "--stats", str(md))
+        code, output = invoke(
+            "--dem",
+            str(bumpy),
+            "--tolerance",
+            "-1",
+            "--out",
+            str(tmp_path / "x.vtk"),
+            "--stats",
+            str(md),
+        )
         assert code == USAGE, output
         assert "must be finite and >= 0" in output  # the tolerance, not an unknown --stats
         assert not md.exists() and not (tmp_path / "x.vtk").exists()
@@ -377,6 +444,9 @@ class TestTimingsAreSane:
         subs = [s for name, s in phases.items() if name.startswith("refine: ")]
         assert len(subs) == 5  # increment 20 adds "refine: start quality"
         assert sum(subs) <= phases["refine"] + self.HALF_MS * 6
-        four = sum(s for name, s in phases.items()
-                   if name.startswith("refine: ") and name != "refine: setup + output")
+        four = sum(
+            s
+            for name, s in phases.items()
+            if name.startswith("refine: ") and name != "refine: setup + output"
+        )
         assert four <= phases["refine"] + self.HALF_MS * 5

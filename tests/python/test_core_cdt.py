@@ -292,9 +292,7 @@ class TestBuildPslg:
     def test_carries_a_property_mask_through_unchanged(self, square: np.ndarray) -> None:
         # Able to fail on its own, and the reason the three refusals below mean
         # anything: a binding that refused every mask would pass all of them.
-        result = _core.build_pslg(
-            square, [([0, 1, 2, 3], _core.ChainRole.Outer, RIVER | ROAD)]
-        )
+        result = _core.build_pslg(square, [([0, 1, 2, 3], _core.ChainRole.Outer, RIVER | ROAD)])
         assert result.ok, [d.message for d in result.diagnostics]
         assert result.pslg is not None
         assert result.pslg.chains[0].properties == RIVER | ROAD
@@ -327,9 +325,7 @@ class TestBuildPslg:
         with pytest.raises(ValueError):
             _core.build_pslg(square, [([0, 1, 2, 3], _core.ChainRole.Outer, mask)])
 
-    def test_an_out_of_range_mask_names_the_chain_it_came_from(
-        self, square: np.ndarray
-    ) -> None:
+    def test_an_out_of_range_mask_names_the_chain_it_came_from(self, square: np.ndarray) -> None:
         # Never silently, and never anonymously: the refusal has to say which
         # chain, or a caller with forty chains is told only that one of them is
         # wrong. Chain 1 rather than chain 0, so a message that hard-codes `0`
@@ -812,9 +808,7 @@ def large_pslg() -> Any:
     step = np.linspace(1.0, 99.0, side)
     gx, gy = np.meshgrid(step, step * 0.8)
     jitter = rng.uniform(-0.2, 0.2, size=(2, side, side))
-    interior = np.column_stack(
-        [(gx + jitter[0]).ravel() + EAST, (gy + jitter[1]).ravel() + NORTH]
-    )
+    interior = np.column_stack([(gx + jitter[0]).ravel() + EAST, (gy + jitter[1]).ravel() + NORTH])
     ring = np.array(
         [
             [EAST, NORTH],
@@ -1012,8 +1006,6 @@ class TestStubs:
     def test_stub_declares_the_new_surface(self, name: str) -> None:
         tree = ast.parse(STUB.read_text(encoding="utf-8"))
         declared = {
-            node.name
-            for node in tree.body
-            if isinstance(node, ast.ClassDef | ast.FunctionDef)
+            node.name for node in tree.body if isinstance(node, ast.ClassDef | ast.FunctionDef)
         }
         assert name in declared

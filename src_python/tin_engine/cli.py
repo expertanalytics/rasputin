@@ -700,7 +700,14 @@ def mesh(
             )
         label = dem.stem
         dem_run = _dem_mesh(
-            dem, stride, delaunay, snap_spacing, tolerance, clock, domain, domain_crs,
+            dem,
+            stride,
+            delaunay,
+            snap_spacing,
+            tolerance,
+            clock,
+            domain,
+            domain_crs,
             DEFAULT_START_MIN_ANGLE if start_min_angle is None else start_min_angle,
             not no_constraint_feet,
         )
@@ -973,7 +980,12 @@ def _dem_mesh(
     else:
         t0 = time.perf_counter_ns()
         out = refine(
-            to_core(tile), run.mesh, edges, masks, tolerance=tolerance, min_angle_deg=min_angle,
+            to_core(tile),
+            run.mesh,
+            edges,
+            masks,
+            tolerance=tolerance,
+            min_angle_deg=min_angle,
             constraint_feet=feet,
         )
         _refine_phases(clock, (time.perf_counter_ns() - t0) / 1e9, out)
@@ -989,11 +1001,19 @@ def _dem_mesh(
                 valid=out.valid,
             )
         refinement = Refinement(
-            tolerance, out.max_error, out.rounds, out.inserted, out.flips, out.uncovered,
-            out.carved, out.quality_inserted, out.quality_skipped, out.feet,
+            tolerance,
+            out.max_error,
+            out.rounds,
+            out.inserted,
+            out.flips,
+            out.uncovered,
+            out.carved,
+            out.quality_inserted,
+            out.quality_skipped,
+            out.feet,
         )
-        quality_start = f"start min angle {_exact(min_angle)} deg" if min_angle > 0 else (
-            "start quality off"
+        quality_start = (
+            f"start min angle {_exact(min_angle)} deg" if min_angle > 0 else ("start quality off")
         )
         sentence = (
             f"refined from DEM nodes, constrained Delaunay, tolerance {_exact(tolerance)} m, "

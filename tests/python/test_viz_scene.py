@@ -688,9 +688,7 @@ class TestRoleJoin:
         assert edge_at(scene, 2, 4).role is None
         assert len([e for e in scene.edges if (int(e.a), int(e.b)) == (4, 5)]) == 1
 
-    def test_a_single_vertex_ring_is_never_closed_into_a_self_loop(
-        self, mesh: FakeMesh
-    ) -> None:
+    def test_a_single_vertex_ring_is_never_closed_into_a_self_loop(self, mesh: FakeMesh) -> None:
         # This is what the length guard defends, and the only thing it does:
         # a one-vertex chain closed emits `_key(a, a)`, a self-loop that
         # violates `SceneEdge`'s `a < b` invariant and that no viewport
@@ -891,9 +889,7 @@ class TestBackendIntroducedVertices:
     ) -> None:
         # Absolute tolerance, for `TestBoundingBox`'s reason: at an easting of
         # 4.3e5 the default relative one is +-0.43 m.
-        box = scene_module().build_scene(
-            pslg, mesh_with_backend_vertex, closed_roles=CLOSED
-        ).bbox
+        box = scene_module().build_scene(pslg, mesh_with_backend_vertex, closed_roles=CLOSED).bbox
         assert box.max_x == pytest.approx(EAST + 160.0, rel=0.0, abs=1e-9)
         assert box.max_y == pytest.approx(NORTH + 130.0, rel=0.0, abs=1e-9)
 
@@ -904,9 +900,7 @@ class TestBackendIntroducedVertices:
         with pytest.raises(ValueError, match="finite"):
             scene_module().build_scene(pslg, broken, closed_roles=CLOSED)
 
-    def test_a_scene_without_a_mesh_falls_back_to_the_input_vertices(
-        self, pslg: FakePslg
-    ) -> None:
+    def test_a_scene_without_a_mesh_falls_back_to_the_input_vertices(self, pslg: FakePslg) -> None:
         # The other direction: with no drawable mesh there is no longer array to
         # prefer, and the input's own vertices are what the picture is of.
         scene = scene_module().build_scene(pslg, None, ok=False, closed_roles=CLOSED)

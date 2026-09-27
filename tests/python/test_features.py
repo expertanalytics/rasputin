@@ -506,8 +506,7 @@ def test_fingerprint_is_stable_across_processes() -> None:
     run.
     """
     program = (
-        "from tin_engine.features import DEFAULT_VOCABULARY;"
-        "print(DEFAULT_VOCABULARY.fingerprint())"
+        "from tin_engine.features import DEFAULT_VOCABULARY;print(DEFAULT_VOCABULARY.fingerprint())"
     )
 
     digests = []

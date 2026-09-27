@@ -253,9 +253,7 @@ def main() -> int:
 
     # Claude Code exports CLAUDE_CODE_SESSION_ID; the older spelling is kept as a
     # fallback so the script still excludes the current session if that changes.
-    here = os.environ.get("CLAUDE_CODE_SESSION_ID") or os.environ.get(
-        "CLAUDE_SESSION_ID", ""
-    )
+    here = os.environ.get("CLAUDE_CODE_SESSION_ID") or os.environ.get("CLAUDE_SESSION_ID", "")
     others = sorted(
         (p for p in TRANSCRIPTS.glob("*.jsonl") if p.stem != here),
         key=lambda p: p.stat().st_mtime,
