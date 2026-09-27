@@ -402,7 +402,9 @@ eight odd tiles. Here:
    that is (x −100250, y 7950250). The reference depends only on which tiles
    the repository holds. It does not depend on the request or on file order.
 3. **Selection** is by the request's box in the DEM's CRS. A tile is selected
-   when its node rectangle meets the box, closed on both sides. **All selected
+   when its node rectangle meets the box, closed on both sides (corrected by
+   the red suite: when its node *index range* meets the snapped window; see
+   "Pinned by the red suite (15a)"). **All selected
    tiles must be on one lattice** (`refuses_mixed_lattice`). The message names
    a tile from each lattice, and the difference: "7707_1 is 0.5 cell (5 m)
    east-west off 7707_2's lattice". Different CRS, spacing, registration or
@@ -429,7 +431,9 @@ eight odd tiles. Here:
 
    The check is shapely's `covers(union of tile node rectangles, needed)`, in
    the DEM's CRS. It is exact enough for rectangles on one lattice: every
-   corner is a node coordinate.
+   corner is a node coordinate. (Corrected by the red suite: the check is per
+   node, since abutting area-registered tiles leave a gap between their node
+   rectangles; see "Pinned by the red suite (15a)".)
 6. **Refused as well:** an empty repository; a box that meets no tile; a window
    under 2 × 2 nodes; a canvas over the memory cap (R7).
 
@@ -887,6 +891,128 @@ that matter there.
   windows, `decode_dem(s, window=w)` equals `decode_dem(s)` sliced to `w`,
   `meta` included. Tiled and stripped micro-TIFFs.
 - The mosaic built with windows equals the one built from whole tiles.
+
+### Pinned by the red suite (15a)
+
+Names and behaviours the design left open, fixed by the red commit's suites
+(`tests/python/test_mosaic.py`, `test_io_repository.py`, `test_io_read_meta.py`,
+`test_dem_input.py`, `test_cli_mesh_mosaic.py`). All were run green against a
+scratch implementation that was not committed; `test_mosaic.py` also killed
+39 of 39 mutants of it.
+
+**Two corrections to R4.** Both were found by the scratch implementation
+failing M1's area-registered case.
+
+- *Selection* (point 3) is by **index window**, not by the tile's node
+  rectangle meeting the box. A tile is selected when its node index range
+  meets the outward-snapped window, closed on both sides. The rectangle rule
+  leaves nodes uncovered: area-registered neighbours at x 0..50 and 60..110
+  with `bx_max = 55` snap to column 60, which only the east tile holds, and
+  that tile's rectangle does not meet the box.
+- *Coverage* (point 5) is **per node**: a node of the window that no selected
+  tile covers is uncovered. The design's check was shapely's `covers` over
+  the union of node rectangles, and it would refuse every pair of abutting
+  area-registered tiles: their node rectangles are one spacing apart, so the
+  union has a gap where no node lies.
+
+**`tin_engine/mosaic.py`.**
+
+- `ALIGN_TOLERANCE = 1e-6`; `MosaicError(ValueError)`;
+  `physical_memory() -> int`, which is `SC_PHYS_PAGES * SC_PAGE_SIZE`, looked
+  up at call time so a test can patch it.
+- `Bounds(x_min=, y_min=, x_max=, y_max=)`: a non-finite, inverted or
+  zero-extent box raises `ValueError`.
+- `IndexWindow(row0, col0, rows, cols)`. `TilePlacement(name, meta, canvas,
+  source)`: `canvas` is in canvas indices, `source` in the tile's own.
+  Without bounds, `source` is the whole tile.
+- `MosaicPlan(meta, reference, window, tiles)` is a frozen **Pydantic** model,
+  because the tests reorder `tiles` with `model_copy`. `reference` is
+  `(X_ref, Y_ref)`. `window` is the mosaic's first node as a global index,
+  plus its shape. `tiles` is sorted by name. A tile's global origin is
+  `window.row0 + canvas.row0 - source.row0`, and the same for columns.
+- `Mosaic(tile, plan)`. `plan_mosaic(footprints, bounds=None, needed=None)`
+  takes exactly those parameters. `needed` is a shapely geometry in the DEM's
+  CRS, and it is closed: a node on its boundary is needed. Growing a domain by
+  one cell is the caller's job (15b).
+- **The cap** counts **4 bytes a node** (float32), because headers do not give
+  the decoded dtype, and refuses when `rows * cols * 4 > physical_memory() //
+  2`. A float64 mosaic is therefore under-counted by 2×. The cap is on the
+  window, not on the lattice's union.
+- **The mosaic's `RasterMeta`**: `nodata_source` comes from the first selected
+  tile by name, and `vertical_unit_assumed` is true if any selected tile's is.
+- **NoData against NoData:** two NaNs give NaN, and two sentinels give the
+  sentinel (I5 needs both). NaN against the sentinel is NoData, and which of
+  the two is not ruled, only that every order gives the same answer.
+- **What messages name** (a case-insensitive substring match):
+  - a lattice straddle: both tile names, `0.5 cell`, and `east-west` or
+    `north-south`;
+  - a CRS difference: both EPSG codes;
+  - a spacing difference: `spacing` and the odd value;
+  - a registration difference: `registration`;
+  - a NoData difference: `nodata` and both values, with `None` for an absent
+    sentinel;
+  - an overlap disagreement: both names, the count as a whole number, and the
+    largest difference;
+  - uncovered nodes: the node bounding box of the uncovered nodes, with each
+    coordinate written out, not in scientific notation;
+  - a changed tile: `changed since it was listed`;
+  - the cap: `--bbox`.
+
+**`io/models.py`.** `DemTile._adopt(meta, array)` is a classmethod. It raises
+`ValueError` on a shape, dtype, ndim or non-C-contiguous mismatch, sets the
+**passed** buffer read-only, and keeps it without a copy. Only `io/models.py`
+and `mosaic.py` contain the string `_adopt`.
+
+**`io/repository.py` and `io/geotiff.py`.**
+
+- `read_meta(source, *, nodata=None)`.
+- `TileFootprint(name=, meta=)`, where `name` is the file's name
+  (`path.name`).
+- `TiffDemRepository(paths, *, nodata=None)` and
+  `TiffDemRepository.from_directory(directory, *, nodata=None)`. Construction
+  reads no file.
+- Refusals:
+  - two paths with one file name: a `ValueError` naming the name;
+  - an empty directory: a `ValueError` naming the directory;
+  - a file that fails `read_meta`: a `GeoTiffError` naming the file;
+  - `load` of an unknown name: `KeyError`.
+- Every `open` in `repository.py` uses mode `"rb"`.
+- No other `io/` module calls a file opener. The guard is an AST scan whose
+  own scanner is tested on planted source.
+- The docstring of `io/__init__.py` names `repository.py` and no longer says
+  "Nothing here opens a file."
+
+**`tin_engine/dem_input.py`.** `DemRequest(sources=, bounds=, nodata=)` is
+frozen. A directory mixed with files, or two directories, raises a
+`ValueError` whose message contains "director". No sources also raises.
+`DemInput` has `tile`, `plan` and `label`. `label` is the directory's name, or
+the stem of the first file as given.
+
+**`cli.py`.**
+
+- `--bbox` needs a short `metavar` (the scratch used `BOX`). Typer's default
+  `<float float float float>` widens the help's type column until
+  `--no-constraint-feet` is cut off at 80 columns, which fails the existing,
+  unedited `test_cli_constraint_feet.py::TestTheFlag::test_the_help_names_the_flag`.
+- `--bbox` without `--dem`, or with an invalid box, is a usage error naming
+  `--bbox`. `--bbox` on a single file meshes a window of that file.
+- **`dem_tiles`** holds the selected tiles' names, sorted and `; `-joined. It
+  is recorded whenever `--dem` is a directory or several files, even when only
+  one tile is selected, because the label is then the directory's and the file
+  used must be on record. It is never recorded for a single file.
+- The `mosaic of N tiles, R x C nodes; ` prefix and the stderr line appear only
+  for N ≥ 2.
+
+**Fixtures.** `tests/fixtures/dtm10/`, cut by `tests/fixtures/dtm10/extract.py`
+from Ola's archive (`DTM10_UTM33_20220924`), one release, © Kartverket, CC BY
+4.0:
+
+- `seam/`: 6400_4 | 6400_1, rows 3072-3327, 307 columns each, with a 51-column
+  overlap. It agrees bit for bit, and a one-column shift disagrees; the script
+  asserts both.
+- `lattices/`: 7707_1 over 7707_2, 96 × 96 each, 5 m east-west apart.
+
+Deflate, 0.6 MB together.
 
 ## Test data
 
