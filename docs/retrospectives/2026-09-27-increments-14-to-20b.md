@@ -6,8 +6,8 @@ session wrote the assessment, and Ola accepted it and added the last rule.
 
 ## Measured state
 
-The 1 m benchmark is in the scratchpad at `bench1m/REPORT.md`. The scaling
-sweep is at `scaling/raw.tsv`. Both runs were on battery.
+The evidence is in `docs/benchmarks/2026-09-26/`. The 1 m benchmark ran on
+battery. The scaling sweep ran on both battery and AC.
 
 - Quarter circle at 1 m: refine went from 3.29 s (16) to 0.24 s (20b). The
   worst angle went from 0.0117° to 0.396°, and max degree from 43 to 18.
@@ -16,7 +16,8 @@ sweep is at `scaling/raw.tsv`. Both runs were on battery.
 - Every run meets the tolerance, and from 14b on no run has a Delaunay
   violation. With 20 and 20b switched off, the output is byte-identical to
   18's.
-- Scaling: refine speeds up at most 2.1× (1 to 20 threads, flat from about 7).
+- Scaling: refine speeds up at most about 2.2× (1 to 20 threads, flat from
+  about 7). This is confirmed on AC, so it is not throttling.
   Roughly half the single-thread time does not parallelise. The likely cause
   is the serial insert and flip phase, which has not been measured.
 
@@ -61,12 +62,37 @@ The process:
 - The oracle found a real bug, and the fix was proven by tests that go red
   without it.
 
+## @orchestrator's review (accepted by Ola)
+
+It agreed with the facts, and added these points:
+- **Review earned its keep.** Review asked for the Delaunay oracle
+  (1260216), and that oracle found the Lawson bug (c23583b). 4389e03 caught a
+  NaN plane that the scan had silently skipped.
+- **Rules 1 and 2 had no owner.**
+- **The evidence was only in /tmp.** It has now moved to
+  `docs/benchmarks/2026-09-26/`.
+
+What it recommended:
+- Cut `.claude/REQUIRED-READING.md` to about 120 lines, moving the incident
+  stories to retrospectives, and simplify the current-task bookkeeping.
+- Drop the generic sections of @reviewer (2-4) and @tester (3B).
+- Fold rule 1 into the increment template's prior-art section.
+- Make rule 2 conditional, and run it from a script.
+- Move rule 4 to `orchestrator.md`.
+- Generate the rule 5 recap from session state.
+- Add a **@perf** persona, and put literature and novelty checks into
+  **@architect**'s brief.
+
 ## Rules from here
 
 1. **Every design starts with a literature check** that cites the method it
    builds on and says what differs.
-2. **Every increment's acceptance includes the 1 m benchmark and a scaling
-   sweep**, run on AC power, comparable to the previous increment.
+2. **An increment that touches refine or mesh code is accepted only with the
+   1 m benchmark and a scaling sweep**, run from a checked-in script and
+   compared with the previous increment.
+   - Each run records its power state.
+   - A battery run is compared only against a battery baseline, because Ola
+     develops while travelling.
 3. **Refinement property tests carry the constrained-Delaunay and tolerance
    oracles** on every path.
 4. **The main session reports only finished artefacts and verified figures**,
