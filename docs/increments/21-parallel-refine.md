@@ -208,6 +208,31 @@ insertion for height fields is known to the architect, and none is cited in
 this repository. This is exactly the gap a novelty claim would sit in, so it
 is not filled by guessing.
 
+### Checked by web search, 2026-09-27 (main session)
+
+The design was written from memory. Afterwards the main session checked the
+three papers the options rest on, and ran one terrain query:
+
+- **Verified:** Blelloch, Fineman, Gibbons and Shun, "Internally deterministic
+  parallel algorithms can be fast", PPoPP 2012
+  (doi:10.1145/2145816.2145840). Chernikov and Chrisochoides, "Practical and
+  efficient point insertion scheduling method for parallel guaranteed quality
+  Delaunay refinement", ICS 2004, pp. 48-57 (doi:10.1145/1006209.1006217); its
+  independence condition compares point distance with an upper bound on
+  triangle circumradius, as option B assumes. Qi, Cao and Tan, "Computing 2D
+  constrained Delaunay triangulation using the GPU", I3D 2012, extended in IEEE
+  TVCG 19(5):736-748, 2013; it flips all flippable pairs in parallel, as
+  option C assumes.
+- **Found, not in the list above:** "3D Simplification Methods and Large Scale
+  Terrain Tiling", Remote Sensing 12(3):437, 2020 (mdpi.com/2072-4292/12/3/437).
+  It adapts greedy insertion, among other methods, to work tile by tile, in
+  parallel, keeping tile-border vertices shared between neighbours. That is
+  prior art for option D (domain decomposition by tiles) on terrain. Also "A
+  fast digital terrain simplification algorithm with a partitioning method",
+  IEEE, 2000 (ieeexplore.ieee.org/document/843506), not read.
+- The other citations above are still unverified, and the searches below have
+  not been run in full.
+
 ### Searches to run before any novelty claim
 
 A claim is not made until these are run in a real database (Google Scholar,
