@@ -619,7 +619,6 @@ BaselineOpt = Annotated[
 ]
 
 
-# fmt: off
 @app.command()
 def run(
     label: Annotated[str, typer.Option("--label", help="Names the evidence directory.")],
@@ -637,7 +636,6 @@ def run(
     threshold: Annotated[float, typer.Option(help="Percent on the median.")] = 5.0,
     accept_quality: Annotated[bool, typer.Option(help="Waive angle and degree loss.")] = False,
 ) -> None:
-    # fmt: on
     """Build, measure, store the evidence, and judge it against a baseline."""
     runner = make_runner()
     tree, dem = tree.resolve(), dem.resolve()
