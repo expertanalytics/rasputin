@@ -341,7 +341,11 @@ each (T-deg).
 - **2026-09-26, the user on U1: "I don't think the domain CRS should have to
   match the DEM CRS in the future. This must be written down. The questions
   will be in which coordinate system we shall do the math."** So U1 (a)'s
-  must-match rule is this increment's scope, not a design principle. A later
+  must-match rule is this increment's scope, not a design principle.
+  **Superseded by increment 15b** (`docs/increments/15-dem-mosaic.md`, R9):
+  the domain is read in its own CRS and reprojected into the DEM's (vertices
+  only, one `from_crs` site in `crs.py`); for a projected DEM the DEM's CRS is
+  the computation CRS. A later
   increment lets the domain, feature geometry and DEM each come in their own
   CRS, and must first rule on the **computation CRS**: the one coordinate
   system the noder, CDT, refinement and predicates work in, which today is the
