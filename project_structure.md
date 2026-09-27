@@ -85,9 +85,12 @@ src_python/tin_engine/     # public Python API (distribution name: rasputin)
                            #   pure numpy, never imports _core
   mosaic.py                # plan_mosaic / assemble: select, group by lattice,
                            #   check overlaps and coverage, stitch; no files (15a)
-  dem_input.py             # --dem/--bbox -> DemInput(tile, plan, label) (15a)
-  domain.py                # --domain: reads one polygon (GeoJSON or WKT), checks
-                           #   CRS and extent; shapely + pyproj, never imports _core
+  dem_input.py             # --dem/--bbox or a domain -> DemInput(tile, plan,
+                           #   label, domain in the DEM's CRS) (15a, 15b)
+  domain.py                # --domain: reads one polygon (GeoJSON or WKT) in its
+                           #   own CRS, to_crs, check_extent; never imports _core
+  crs.py                   # parse_crs, reprojector: the one Transformer.from_crs
+                           #   site, always_xy (15b); pyproj only
   elevation.py             # drops mesh vertices the DEM has no data for;
                            #   pure numpy, never imports _core
   stats.py                 # --stats: PhaseClock, quality, Report, render to
