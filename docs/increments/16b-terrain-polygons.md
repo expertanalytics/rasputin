@@ -162,7 +162,7 @@ square with no features.
 |---|---|---|---|---|---|---|---|---|---|---|
 | 1 m | none | 0 | 0 | 6 444 390 | 36.9° | 0.00 % | 0.029° | — | — | 5.1 s |
 | 1 m | CORINE | 154 640 | 30 045 | 6 612 554 (+2.6 %) | 36.9° | 0.03 % | 0.0007° | 24.7 s | — | 30.2 s |
-| 10 m | none | 0 | 0 | 132 563 | 34.5° | 0.02 % | 0.24° | — | 0.5 s | 0.55 s |
+| 10 m | none | 0 | 0 | 132 563 | 34.5° | 0.02 % | 0.24° | — | — | 0.55 s |
 | 10 m | CORINE, quality off | 0 | 354 | 211 487 (1.6×) | 28.5° | 3.47 % | 0.015° | 24.7 s | 0.22 s | 25.0 s |
 | 10 m | CORINE, quality 25° | 154 640 | 341 | 480 127 (3.6×) | 36.9° | 0.25 % | 0.0013° | 24.7 s | 0.37 s | 25.2 s |
 
@@ -179,6 +179,20 @@ square with no features.
 - The worst angles (0.0007°, 0.0013°) come from input segments shorter than a
   centimetre and vertices closer than a metre (M2), which Ola's model keeps.
 - Peak RSS 2.4 GB at 1 m (6.6 M triangles), 0.68 GB at 10 m.
+
+### M5. The quarter circle on the committed tile, with CORINE
+
+Increment 16's T-real domain (536 ring vertices, 30 km radius about
+(850 250, 7 899 750) in `7908_3`), with the CORINE linework inside it (layout
+A), quality start 25°, feet on. This is the case a committed extract makes
+testable in CI (see "Test data").
+
+| tol | features | input vertices | triangles | < 1° | worst | `node` |
+|---|---|---|---|---|---|---|
+| 1 m | none | 536 | 428 217 | 0.00 % | 0.40° | — |
+| 1 m | CORINE | 5 627 | 441 863 (+3.2 %) | 0.08 % | 0.040° | 0.33 s |
+| 10 m | none | 536 | 31 581 | 0.01 % | 0.29° | — |
+| 10 m | CORINE | 5 627 | 54 840 (1.7×) | 0.04 % | 0.040° | 0.33 s |
 
 ## Prior art: legacy and literature
 
@@ -259,22 +273,22 @@ legacy/tests/test_land_cover_repository.py
 
 What matters, read directly:
 
-- `legacy/rasputin/gml_repository.py:13-64`: CORINE's 44 classes as an
+- `legacy/rasputin/gml_repository.py:13-66`: CORINE's 44 classes as an
   `Enum` keyed by the CLC code, read from a Norwegian GML delivery (field
-  `clc18_kode`) with `lxml`. `:111-114`: classes above 500 are lakes (a
+  `clc18_kode`) with `lxml`. `:124-127`: classes above 500 are lakes (a
   "lake material"). **Carried:** the CLC code as the key, and "5xx is water"
   as the one rule the default map uses (R4). **Not carried:** GML, `lxml`,
   and the whole file parsed per call.
-- `gml_repository.py:147-150` and `:161-163`: `constraints()` returns `[]`.
-  The legacy never made land cover a constraint. `:185-225`: it labelled the
+- `gml_repository.py:181-182`: `constraints()` returns `[]`.
+  The legacy never made land cover a constraint. `:184-226`: it labelled the
   **finished** mesh by testing each cell centre against every polygon in
   Python (`# TODO: Move to C++ for speed!`), and raised on a centre inside
-  none. `legacy/rasputin/application.py:125-151` writes that as the face
+  none. `legacy/rasputin/application.py:126-148` writes that as the face
   fields `cover_type` and `cover_color`. **Not carried in 16b:** labels are
   16c's (Q2), and a flood fill over unconstrained edges (Triangle's regional
   attributes) replaces the per-centre test, which is ambiguous for a triangle
   thinner than the snap.
-- `gml_repository.py:141-145`: the data CRS from the GML's `srsName`, via
+- `gml_repository.py:155-159`: the data CRS from the GML's `srsName`, via
   `+init=`. Not carried: CRS comes from the GeoPackage's own
   `gpkg_spatial_ref_sys` (R3) through `crs.parse_crs`.
 
