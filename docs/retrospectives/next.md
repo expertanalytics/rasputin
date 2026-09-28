@@ -52,3 +52,9 @@ red; left for a follow-up.
 `src_python/tin_engine/io/geopackage.py` and restored it with
 `git checkout` (reported, not committed). Brief-level limits did not stop
 it; a hard limit would have.
+
+2026-09-29: the main session's brief asked `@perf` to fix a `tools/bench.py`
+bug without a red test. `@perf` declined, citing its own rule (a failing
+test in `tests/python/test_bench.py` first). The brief crossed the line, the
+persona held it. The fix (create the mesh's parent directory for a `--label`
+with `/`) waits for a `@tester` red step.
