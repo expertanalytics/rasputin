@@ -350,7 +350,9 @@ TEST_CASE("DetriaExact::incircle_ccw agrees with RefExact on near-cocircular clu
             return Point2{p.x * s + nudge(rng), p.y * s + nudge(rng)};
         };
 
-        const auto triple = as_ccw(blow_up(circle[0]), blow_up(circle[4]), blow_up(circle[8]));
+        // Draws as call arguments are unsequenced (clang: left first, GCC: right first); fixed as clang's.
+        const Point2 p0 = blow_up(circle[0]), p4 = blow_up(circle[4]), p8 = blow_up(circle[8]);
+        const auto triple = as_ccw(p0, p4, p8);
         if (!triple.has_value()) {
             continue;  // Perturbed into collinearity; no CCW ordering exists.
         }

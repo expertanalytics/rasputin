@@ -253,7 +253,7 @@ class TestFieldData:
 
 
 class TestEmptyCases:
-    """`LINES 0 0`, and a mesh whose edges carry no bits."""
+    """No `LINES` block (ruling 4, revised 2026-09-28), and a mesh whose edges carry no bits."""
 
     def test_zero_edges_loads_the_triangles_intact(self, load: Writer) -> None:
         poly = load(edges=np.zeros((0, 2), dtype=np.uint32), edge_masks=np.zeros(0, np.uint32))

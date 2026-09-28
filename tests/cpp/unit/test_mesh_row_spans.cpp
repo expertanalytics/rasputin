@@ -113,12 +113,28 @@ std::optional<Tri> ccw(MeshVertex a, MeshVertex b, MeshVertex c) {
 }
 
 // mt19937's raw output is specified by the standard; distributions are not.
+// Two draws as call arguments or operands are unsequenced (clang: left first,
+// GCC: right first), so every multi-draw expression goes through locals in
+// clang's left-to-right order.
 struct Rng {
     std::mt19937 gen;
     std::uint32_t node() { return gen() % kN; }
     double unit() { return static_cast<double>(gen() % (1u << 20)) / double(1u << 20); }
-    double coord() { return std::min(static_cast<double>(node()) + unit(), double(kN - 1)); }
+    double coord() {
+        const auto n = static_cast<double>(node());
+        return std::min(n + unit(), double(kN - 1));
+    }
     bool coin() { return (gen() & 1u) != 0; }
+    MeshVertex node_vertex() {
+        const auto c = static_cast<double>(node());
+        const auto r = static_cast<double>(node());
+        return mv(c, r);
+    }
+    MeshVertex coord_vertex() {
+        const double c = coord();
+        const double r = coord();
+        return mv(c, r);
+    }
 };
 
 // Nudge a node by +-eps in col and/or row, staying inside the grid.
@@ -131,14 +147,16 @@ double nudge(Rng& g, std::uint32_t x, double eps) {
 using Gen = std::optional<Tri> (*)(Rng&);
 
 std::optional<Tri> node_only(Rng& g) {
-    return ccw(mv(g.node(), g.node()), mv(g.node(), g.node()), mv(g.node(), g.node()));
+    const auto a = g.node_vertex(), b = g.node_vertex(), c = g.node_vertex();
+    return ccw(a, b, c);
 }
 std::optional<Tri> mixed(Rng& g) {
-    auto p = [&] { return g.coin() ? mv(g.node(), g.node()) : mv(g.coord(), g.coord()); };
-    return ccw(p(), p(), p());
+    auto p = [&] { return g.coin() ? g.node_vertex() : g.coord_vertex(); };
+    const auto a = p(), b = p(), c = p();
+    return ccw(a, b, c);
 }
 std::optional<Tri> sliver(Rng& g) {
-    const auto a = mv(g.node(), g.node()), b = mv(g.node(), g.node());
+    const auto a = g.node_vertex(), b = g.node_vertex();
     const double eps = g.coin() ? 1e-7 : 1e-12;
     const double mc = (a.col + b.col) / 2, mr = (a.row + b.row) / 2;
     const double len = std::hypot(b.col - a.col, b.row - a.row);
@@ -155,7 +173,9 @@ std::optional<Tri> collinear_but_one(Rng& g) {
     if (k < 2) return std::nullopt;
     const auto a = mv(0, r0), b = mv(double(k * dc), double(r0 + k * dr));
     const std::uint32_t m = k / 2;
-    return ccw(a, b, mv(double(m * dc + (g.coin() ? 1 : 0)), double(r0 + m * dr + (g.coin() ? 0 : 1))));
+    const bool col_step = g.coin();
+    const bool row_stay = g.coin();
+    return ccw(a, b, mv(double(m * dc + (col_step ? 1 : 0)), double(r0 + m * dr + (row_stay ? 0 : 1))));
 }
 std::optional<Tri> near_node(Rng& g) {
     const double eps = g.coin() ? 1e-12 : 1e-9;
@@ -164,21 +184,28 @@ std::optional<Tri> near_node(Rng& g) {
         switch (g.gen() % 3) {
             case 0: return mv(nudge(g, c, eps), r);
             case 1: return mv(c, nudge(g, r, eps));
-            default: return mv(nudge(g, c, eps), nudge(g, r, eps));
+            default: {
+                const double nc = nudge(g, c, eps);
+                const double nr = nudge(g, r, eps);
+                return mv(nc, nr);
+            }
         }
     };
-    return ccw(p(), p(), g.coin() ? mv(g.node(), g.node()) : p());
+    const auto a = p(), b = p(), c = g.coin() ? g.node_vertex() : p();
+    return ccw(a, b, c);
 }
 std::optional<Tri> horizontal(Rng& g) {
     // An edge on a row (integer) or between rows (fractional), node or off-node ends.
     const double r = g.coin() ? double(g.node()) : std::min(g.node() + 0.5, kN - 1.0);
     auto x = [&] { return g.coin() ? double(g.node()) : g.coord(); };
-    return ccw(mv(x(), r), mv(x(), r), g.coin() ? mv(g.node(), g.node()) : mv(g.coord(), g.coord()));
+    const auto a = mv(x(), r), b = mv(x(), r), c = g.coin() ? g.node_vertex() : g.coord_vertex();
+    return ccw(a, b, c);
 }
 std::optional<Tri> vertical(Rng& g) {
     const double c = g.coin() ? double(g.node()) : g.coord();
     auto y = [&] { return g.coin() ? double(g.node()) : g.coord(); };
-    return ccw(mv(c, y()), mv(c, y()), g.coin() ? mv(g.node(), g.node()) : mv(g.coord(), g.coord()));
+    const auto a = mv(c, y()), b = mv(c, y()), third = g.coin() ? g.node_vertex() : g.coord_vertex();
+    return ccw(a, b, third);
 }
 std::optional<Tri> on_border(Rng& g) {
     auto edge = [&] {
@@ -186,7 +213,8 @@ std::optional<Tri> on_border(Rng& g) {
         const double t = g.coin() ? double(g.node()) : g.coord();
         return g.coin() ? mv(e, t) : mv(t, e);
     };
-    return ccw(edge(), edge(), g.coin() ? mv(g.node(), g.node()) : mv(g.coord(), g.coord()));
+    const auto a = edge(), b = edge(), c = g.coin() ? g.node_vertex() : g.coord_vertex();
+    return ccw(a, b, c);
 }
 
 void sweep(Gen gen, std::uint32_t seed, int count) {
