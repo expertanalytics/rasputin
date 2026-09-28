@@ -854,6 +854,60 @@ If 16b-2 grows past the ceiling in review, the seam is `feature_input.py`
 plus `io/geopackage.py` (testable from Python with no CLI) first, `chains.py`
 and `cli.py` second.
 
+#### Pinned by the red suite (16b-1/2)
+
+`@tester` chose the following in the red step; each suite's docstring states
+its part in full. Suites: `tests/python/test_io_geopackage.py`,
+`test_io_gml.py`, `test_feature_input.py`, `test_feature_chains_bits.py`
+(invariant-critical), `test_cli_mesh_features.py`; support in
+`gpkg_fixtures.py` and `feature_fixtures.py`.
+
+- `io.repository.open_geopackage(path) -> sqlite3.Connection`, read-only; the
+  only `sqlite3.connect` under `src_python/`.
+- `io.geopackage`: `GeoPackageError(ValueError)`; `layer_info(conn, table)`
+  (`None`: the only features table) `-> GpkgLayer` (frozen: `table`, `column`,
+  `pk`, `srs_id`, `crs`, `rtree` or `None`); `decode_geometry(blob) ->
+  (srs_id, geometry)` (`None` or empty for the empty flag);
+  `query_features(conn, layer, box, attribute)` yielding `fid`, `geometry`,
+  `value`, ascending by primary key; `box` is `(minx, miny, maxx, maxy)`.
+  A missing attribute column is refused naming it (SQLite would otherwise read
+  a double-quoted unknown column as a string literal).
+- `io.gml` (Q6): `GmlError(ValueError)`; `read_gml(stream, attribute) ->
+  GmlDocument(crs, features, complete)`. **The legacy file is not well-formed
+  XML** (a `</gml:featureMember>` missing at line 1097, the root never
+  closed; the legacy reader used `lxml` with `recover=True`). The suite pins:
+  every complete feature is read, `complete` is `False` for an unclosed end,
+  and a document ending inside a feature or with a syntax error is refused.
+  **Open for Ola:** accept this tolerance, or repair the fixture (two closing
+  tags, a 30 MB blob rewritten) and keep the reader strict.
+- `feature_input`: `ClassMap`; `CLASS_MAPS` with `property`, `corine`,
+  `corine-water`, `clc18_kode` (`corine` keyed on the GML's attribute);
+  `FeatureSource(path, class_map, layer=None, crs=None)`;
+  `FeatureRequest(sources, vocabulary=DEFAULT_VOCABULARY)`;
+  `FeatureError(ValueError)`; `open_features(request, domain, dem_crs) ->
+  FeatureSet(features, outside, empty)`; `TerrainFeature(fid, mask, lines)`.
+  GeoJSON `fid` is the `id` member, else the position; `.gml` is a third
+  suffix.
+- `chains.start_chains(domain, features, vocabulary) -> StartChains(vertices,
+  chains)`, chains `(indices, role, mask)` with string roles; a closed line
+  repeats its first index. `test_refine_golden.py` now takes the domain chains
+  from here (the move from `cli._domain_chains`, R2).
+- CLI: the four flags; fields `features` (`<file>[:<layer>], map <m>, <n>
+  features (<k> dropped outside), <c> chains, <v> vertices`),
+  `features_crs`, `features_transform`, `features_notice` (absent without a
+  notice), `edge_vocabulary` (`<fingerprint>; 0 river, ..., 8 water`, on every
+  `.vtk`); stderr `<n> input vertices`, `<m> noded vertices`; `--stats` rows
+  `features read`, `features clip`.
+- I4 is tested after the noder (same noded edges and masks as the test's own
+  no-pre-clip pipeline), not as identical engine input: GEOS may split a ring
+  piece at the ring's own start, which changes the chains but not the graph.
+
+**Open design points found in the red step:** R5's 100 m region buffer is in
+the source CRS, which for EPSG:4326 (the legacy GML, Ola's own case) is not
+metres; `.vtk` already carries `feature_vocabulary` (fingerprint) and
+`feature_bits`/`feature_names`, so R10's "no writer has implemented yet" is
+not so and `edge_vocabulary` partly duplicates them.
+
 ## Tests for `@tester`
 
 **Invariant-critical (mutation testing required): two suites.**

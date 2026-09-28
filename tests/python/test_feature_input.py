@@ -1,0 +1,675 @@
+"""`tin_engine.feature_input`: sources, class maps, CRS, region and clip (16b-1).
+
+`docs/increments/16b-terrain-polygons.md` R1, R4-R7, "Degeneracy policy" and
+"Tests for @tester" (class maps, CRS, region and pre-clip, clip degeneracies),
+with Ola's Q6 (b) (the legacy GML, read with the `clc18_kode` map).
+
+Pinned by this suite (see "Pinned by the red suite (16b-1/2)"):
+
+- `ClassMap(name, attribute, classes, otherwise, notice)`, frozen, extra
+  fields forbidden. `CLASS_MAPS` maps `property`, `corine`, `corine-water`
+  and `clc18_kode` to the built-in maps. `clc18_kode` is `corine` keyed on
+  the Norwegian GML's attribute. Every CORINE map's `notice` names the
+  Copernicus Land Monitoring Service and says the data were modified;
+  `property`'s is empty.
+- `FeatureSource(path, class_map, layer=None, crs=None)` and
+  `FeatureRequest(sources, vocabulary=DEFAULT_VOCABULARY)`, frozen.
+- `open_features(request, domain, dem_crs) -> FeatureSet`, `domain` already in
+  the DEM's CRS. `FeatureSet.features` is a tuple of `TerrainFeature` (`fid`,
+  `mask`, `lines`) in source order; `FeatureSet.outside` counts features read
+  and then wholly clipped away; `FeatureSet.empty` counts empty geometries
+  skipped.
+- A GeoJSON feature's `fid` is its `id` member, else its position in the file
+  (from 0). A GeoPackage row's is its primary key; a GML feature's its `fid`
+  attribute.
+- By suffix: `.geojson` and `.json`, `.gpkg`, `.gml`; anything else refused.
+- `FeatureError`, a `ValueError`, for every refusal; it names the file, and
+  for a feature its `fid`.
+- The lines of a polygon feature: its exterior's pieces, then each hole's, part
+  by part for a `MultiPolygon`.
+
+HOW THIS FILE GOES RED: `tin_engine.feature_input` is imported lazily.
+"""
+
+from __future__ import annotations
+
+import sqlite3
+from pathlib import Path
+from types import ModuleType
+from typing import Any
+
+import numpy as np
+import pytest
+import shapely
+from pyproj import CRS
+from shapely.geometry import (
+    GeometryCollection,
+    LineString,
+    MultiLineString,
+    MultiPoint,
+    MultiPolygon,
+    Point,
+    Polygon,
+)
+
+import feature_fixtures as ff
+from feature_fixtures import (
+    CROSSING,
+    UTM33,
+    Feat,
+    all_vertices,
+    at,
+    domain_of,
+    moved,
+    on_boundary,
+    open_one,
+    square,
+    within,
+    write_geojson,
+)
+from gpkg_fixtures import EXTRACT, LEGACY_GML, Layer, Row, needs_rtree, write_gpkg
+from test_cli_mesh_domain import quarter_circle
+from test_io_gml import document, member
+from tin_engine.features import DEFAULT_VOCABULARY, EdgeProperty, EdgeVocabulary
+
+V = DEFAULT_VOCABULARY
+LAEA = "EPSG:3035"
+WATER_CODES = ("511", "512", "521", "522", "523")
+BOX = domain_of(square(0, 0, 300, 300))
+INNER = square(100, 100, 200, 200)
+
+
+@pytest.fixture(scope="module")
+def fi() -> ModuleType:
+    return ff.feature_input()
+
+
+def one(tmp_path: Path, geometry: Any, props: dict[str, Any] | None = None, **kw: Any) -> Any:
+    path = write_geojson(
+        tmp_path / "f.geojson", [Feat("a", geometry, props or {"property": "road"})]
+    )
+    return open_one(path, kw.pop("domain", BOX), kw.pop("map_name", "property"), **kw)
+
+
+def lines_of(fs: Any) -> list[LineString]:
+    return [line for f in fs.features for line in f.lines]
+
+
+# --------------------------------------------------------------- class maps
+
+
+class TestClassMaps:
+    def test_the_built_in_maps(self, fi: ModuleType) -> None:
+        assert set(fi.CLASS_MAPS) == {"property", "corine", "corine-water", "clc18_kode"}
+        assert {name: m.attribute for name, m in fi.CLASS_MAPS.items()} == {
+            "property": "property",
+            "corine": "Code_18",
+            "corine-water": "Code_18",
+            "clc18_kode": "clc18_kode",
+        }
+        assert all(m.name == name for name, m in fi.CLASS_MAPS.items())
+
+    def test_the_corine_maps_carry_the_attribution(self, fi: ModuleType) -> None:
+        """R10 and "Test data": a mesh built from CORINE says so, and says the
+        data were modified."""
+        for name in ("corine", "corine-water", "clc18_kode"):
+            notice = fi.CLASS_MAPS[name].notice
+            assert "Copernicus Land Monitoring Service" in notice, name
+            assert "modified" in notice.lower(), name
+        assert fi.CLASS_MAPS["property"].notice == ""
+
+    def test_a_class_map_is_frozen_and_strict(self, fi: ModuleType) -> None:
+        corine = fi.CLASS_MAPS["corine"]
+        with pytest.raises((TypeError, ValueError)):
+            corine.attribute = "other"
+        with pytest.raises(ValueError):
+            fi.ClassMap(name="x", attribute="a", classes={}, colour="red")
+
+    def test_property_one_name(self, tmp_path: Path) -> None:
+        fs = one(tmp_path, INNER, {"property": "road"})
+        assert [f.mask for f in fs.features] == [V.mask("road")]
+
+    def test_property_a_list_of_names_is_their_union(self, tmp_path: Path) -> None:
+        fs = one(tmp_path, INNER, {"property": ["road", "water"]})
+        assert [f.mask for f in fs.features] == [V.mask("road", "water")]
+
+    def test_property_every_vocabulary_name_including_the_new_bits(self, tmp_path: Path) -> None:
+        for prop in V.properties:
+            fs = one(tmp_path, INNER, {"property": prop.name})
+            assert [f.mask for f in fs.features] == [1 << prop.bit], prop.name
+
+    def test_property_an_unknown_name_is_refused_naming_feature_and_value(
+        self, tmp_path: Path, fi: ModuleType
+    ) -> None:
+        path = write_geojson(tmp_path / "f.geojson", [Feat("f-17", INNER, {"property": "glacier"})])
+        with pytest.raises(fi.FeatureError) as caught:
+            open_one(path, BOX)
+        assert "f-17" in str(caught.value) and "glacier" in str(caught.value)
+
+    def test_property_missing_is_refused_naming_the_feature(
+        self, tmp_path: Path, fi: ModuleType
+    ) -> None:
+        path = write_geojson(tmp_path / "f.geojson", [Feat("f-18", INNER, {"name": "x"})])
+        with pytest.raises(fi.FeatureError, match="f-18"):
+            open_one(path, BOX)
+
+    @pytest.mark.parametrize("code", WATER_CODES)
+    def test_corine_water_codes_are_land_cover_and_water(self, tmp_path: Path, code: str) -> None:
+        """MUTANT 3 (in `test_feature_chains_bits`), unit by unit."""
+        fs = one(tmp_path, INNER, {"Code_18": code}, map_name="corine")
+        assert [f.mask for f in fs.features] == [V.mask("land_cover", "water")]
+
+    @pytest.mark.parametrize("code", ["111", "311", "412", "423", "999", "5", "51", "513", "530"])
+    def test_corine_every_other_code_is_land_cover(self, tmp_path: Path, code: str) -> None:
+        """`otherwise = ("land_cover",)`: an unlisted code, a malformed one
+        and the 5xx codes the nomenclature does not have included."""
+        fs = one(tmp_path, INNER, {"Code_18": code}, map_name="corine")
+        assert [f.mask for f in fs.features] == [V.mask("land_cover")]
+
+    @pytest.mark.parametrize("code", WATER_CODES)
+    def test_corine_water_keeps_water_only(self, tmp_path: Path, code: str) -> None:
+        fs = one(tmp_path, INNER, {"Code_18": code}, map_name="corine-water")
+        assert [f.mask for f in fs.features] == [V.mask("water")]
+
+    def test_corine_water_drops_land(self, tmp_path: Path) -> None:
+        features = [
+            Feat(1, INNER, {"Code_18": "311"}),
+            Feat(2, square(10, 10, 50, 50), {"Code_18": "512"}),
+        ]
+        path = write_geojson(tmp_path / "f.geojson", features)
+        fs = open_one(path, BOX, "corine-water")
+        assert [f.fid for f in fs.features] == [2]
+
+    @pytest.mark.parametrize(
+        ("code", "names"), [("512", ("land_cover", "water")), ("322", ("land_cover",))]
+    )
+    def test_clc18_kode(self, tmp_path: Path, code: str, names: tuple[str, ...]) -> None:
+        fs = one(tmp_path, INNER, {"clc18_kode": code}, map_name="clc18_kode")
+        assert [f.mask for f in fs.features] == [V.mask(*names)]
+
+    def test_a_map_naming_a_name_the_vocabulary_lacks_is_refused_at_the_start(
+        self, tmp_path: Path, fi: ModuleType
+    ) -> None:
+        """R4: checked when the run starts, even with no feature to map."""
+        bad = fi.ClassMap(
+            name="bad", attribute="kind", classes={"x": ("glacier",)}, otherwise="drop"
+        )
+        path = write_geojson(tmp_path / "f.geojson", [])
+        request = fi.FeatureRequest(sources=(fi.FeatureSource(path=path, class_map=bad),))
+        with pytest.raises(fi.FeatureError, match="glacier"):
+            fi.open_features(request, BOX, UTM33)
+
+    def test_an_otherwise_name_the_vocabulary_lacks_is_refused_too(
+        self, tmp_path: Path, fi: ModuleType
+    ) -> None:
+        bad = fi.ClassMap(name="bad", attribute="kind", classes={}, otherwise=("glacier",))
+        path = write_geojson(tmp_path / "f.geojson", [])
+        request = fi.FeatureRequest(sources=(fi.FeatureSource(path=path, class_map=bad),))
+        with pytest.raises(fi.FeatureError, match="glacier"):
+            fi.open_features(request, BOX, UTM33)
+
+    def test_the_request_vocabulary_is_the_one_masks_come_from(
+        self, tmp_path: Path, fi: ModuleType
+    ) -> None:
+        mine = EdgeVocabulary(properties=(EdgeProperty(name="road", bit=9),))
+        path = write_geojson(tmp_path / "f.geojson", [Feat("a", INNER, {"property": "road"})])
+        own_map = fi.ClassMap(name="mine", attribute="property", classes={"road": ("road",)})
+        request = fi.FeatureRequest(
+            sources=(fi.FeatureSource(path=path, class_map=own_map),), vocabulary=mine
+        )
+        fs = fi.open_features(request, BOX, UTM33)
+        assert [f.mask for f in fs.features] == [1 << 9]
+
+
+# ---------------------------------------------------------------- sources
+
+
+class TestSources:
+    def test_geojson_order_and_ids(self, tmp_path: Path) -> None:
+        features = [
+            Feat("z", square(10, 10, 20, 20), {"property": "road"}),
+            Feat(None, square(30, 10, 40, 20), {"property": "road"}),
+            Feat(7, square(50, 10, 60, 20), {"property": "road"}),
+        ]
+        fs = open_one(write_geojson(tmp_path / "f.geojson", features), BOX)
+        assert [f.fid for f in fs.features] == ["z", 1, 7]
+
+    def test_json_suffix_is_geojson(self, tmp_path: Path) -> None:
+        path = write_geojson(tmp_path / "f.json", [Feat("a", INNER, {"property": "road"})])
+        assert len(open_one(path, BOX).features) == 1
+
+    def test_an_unknown_suffix_is_refused_naming_it(self, tmp_path: Path, fi: ModuleType) -> None:
+        path = tmp_path / "f.shp"
+        path.write_bytes(b"")
+        with pytest.raises(fi.FeatureError, match=r"\.shp"):
+            open_one(path, BOX)
+
+    def test_a_layer_on_geojson_is_refused(self, tmp_path: Path, fi: ModuleType) -> None:
+        path = write_geojson(tmp_path / "f.geojson", [])
+        with pytest.raises(fi.FeatureError):
+            open_one(path, BOX, layer="x")
+
+    def test_unparseable_geojson_is_refused_naming_the_file(
+        self, tmp_path: Path, fi: ModuleType
+    ) -> None:
+        path = tmp_path / "broken.geojson"
+        path.write_text('{"type": "FeatureCollection", "features": [')
+        with pytest.raises(fi.FeatureError, match=r"broken\.geojson"):
+            open_one(path, BOX)
+
+    def test_a_missing_file_is_refused_naming_it(self, tmp_path: Path, fi: ModuleType) -> None:
+        for name in ("absent.geojson", "absent.gpkg", "absent.gml"):
+            with pytest.raises(fi.FeatureError, match=name.replace(".", r"\.")):
+                open_one(tmp_path / name, BOX)
+
+    def test_the_error_is_a_value_error(self, fi: ModuleType) -> None:
+        assert issubclass(fi.FeatureError, ValueError)
+
+    @needs_rtree
+    def test_geopackage_rows_in_key_order_with_their_values(self, tmp_path: Path) -> None:
+        polys = {9: square(10, 10, 20, 20), 2: square(30, 10, 40, 20), 5: square(50, 10, 60, 20)}
+        rows = [Row(pk, g, {"Code_18": "512" if pk == 5 else "311"}) for pk, g in polys.items()]
+        path = write_gpkg(tmp_path / "f.gpkg", [Layer("clc", 25833, rows)])
+        fs = open_one(path, BOX, "corine")
+        assert [f.fid for f in fs.features] == [2, 5, 9]
+        assert [f.mask for f in fs.features] == [
+            V.mask("land_cover"),
+            V.mask("land_cover", "water"),
+            V.mask("land_cover"),
+        ]
+
+    def test_geopackage_several_layers_need_one_named(self, tmp_path: Path, fi: ModuleType) -> None:
+        rows = [Row(1, INNER, {"Code_18": "311"})]
+        path = write_gpkg(
+            tmp_path / "f.gpkg",
+            [Layer("a", 25833, rows, rtree=False), Layer("b", 25833, rows, rtree=False)],
+        )
+        with pytest.raises(fi.FeatureError, match=r"f\.gpkg"):
+            open_one(path, BOX, "corine")
+        assert len(open_one(path, BOX, "corine", layer="b").features) == 1
+
+    def test_geopackage_a_missing_attribute_column_is_refused(
+        self, tmp_path: Path, fi: ModuleType
+    ) -> None:
+        path = write_gpkg(
+            tmp_path / "f.gpkg", [Layer("a", 25833, [Row(1, INNER)], columns=("kind",))]
+        )
+        with pytest.raises(fi.FeatureError, match="Code_18"):
+            open_one(path, BOX, "corine")
+
+    def test_geopackage_refusals_become_feature_errors_naming_the_file(
+        self, tmp_path: Path, fi: ModuleType
+    ) -> None:
+        path = write_gpkg(
+            tmp_path / "f.gpkg", [Layer("a", 25833, [Row(1, INNER)])], application_id=1
+        )
+        with pytest.raises(fi.FeatureError, match=r"f\.gpkg"):
+            open_one(path, BOX, "corine")
+
+    def test_a_file_that_is_not_sqlite_is_refused(self, tmp_path: Path, fi: ModuleType) -> None:
+        path = tmp_path / "f.gpkg"
+        path.write_bytes(b"this is not a database" * 100)
+        with pytest.raises(fi.FeatureError, match=r"f\.gpkg"):
+            open_one(path, BOX, "corine")
+
+    def test_the_geopackage_is_left_unchanged(self, tmp_path: Path) -> None:
+        path = write_gpkg(
+            tmp_path / "f.gpkg", [Layer("a", 25833, [Row(1, INNER, {"Code_18": "311"})])]
+        )
+        before = path.read_bytes()
+        open_one(path, BOX, "corine")
+        assert path.read_bytes() == before
+        with sqlite3.connect(path) as con:
+            assert con.execute("PRAGMA integrity_check").fetchone()[0] == "ok"
+
+    def test_gml_with_the_clc18_kode_map(self, tmp_path: Path) -> None:
+        lonlat = moved(INNER, UTM33, "EPSG:4326")
+        path = tmp_path / "f.gml"
+        path.write_bytes(document(member("sql_statement.1", lonlat, "512")).getvalue())
+        fs = open_one(path, BOX, "clc18_kode")
+        assert [f.fid for f in fs.features] == ["sql_statement.1"]
+        assert [f.mask for f in fs.features] == [V.mask("land_cover", "water")]
+
+    def test_gml_without_a_crs_needs_one_given(self, tmp_path: Path, fi: ModuleType) -> None:
+        path = tmp_path / "f.gml"
+        path.write_bytes(document(member("s.1", INNER, "311", srs=None)).getvalue())
+        with pytest.raises(fi.FeatureError, match=r"f\.gml"):
+            open_one(path, BOX, "clc18_kode")
+        assert len(open_one(path, BOX, "clc18_kode", crs=UTM33).features) == 1
+
+    def test_gml_refusals_become_feature_errors_naming_the_file(
+        self, tmp_path: Path, fi: ModuleType
+    ) -> None:
+        path = tmp_path / "f.gml"
+        path.write_bytes(b"<not gml")
+        with pytest.raises(fi.FeatureError, match=r"f\.gml"):
+            open_one(path, BOX, "clc18_kode")
+
+    def test_the_legacy_gml_over_the_benchmark_tile(self) -> None:
+        """Q6 (b): the committed legacy file, through the `clc18_kode` map,
+        clipped to the quarter circle. Every feature's bits are `corine`'s for
+        its code, and the sea polygon (`sql_statement.11029`, 523) is among
+        them."""
+        domain = domain_of(Polygon(quarter_circle()))
+        fs = open_one(LEGACY_GML, domain, "clc18_kode")
+        fids = {f.fid for f in fs.features}
+        assert "sql_statement.11029" in fids
+        assert len(fs.features) >= 10
+        assert {f.mask for f in fs.features} == {
+            V.mask("land_cover"),
+            V.mask("land_cover", "water"),
+        }
+        assert within(domain.polygon, all_vertices(lines_of(fs))).max() <= CROSSING
+
+
+# ---------------------------------------------------------------- geometry
+
+
+class TestGeometry:
+    @pytest.mark.parametrize(
+        "geometry",
+        [
+            pytest.param(Point(*at(150, 150)), id="point"),
+            pytest.param(MultiPoint([at(150, 150), at(160, 160)]), id="multipoint"),
+            pytest.param(GeometryCollection([INNER]), id="geometrycollection"),
+        ],
+    )
+    def test_loose_points_and_collections_are_refused_naming_the_feature(
+        self, tmp_path: Path, fi: ModuleType, geometry: Any
+    ) -> None:
+        path = write_geojson(tmp_path / "f.geojson", [Feat("pt-3", geometry, {"property": "road"})])
+        with pytest.raises(fi.FeatureError, match="pt-3"):
+            open_one(path, BOX)
+
+    def test_a_point_in_gml_is_refused_too(self, tmp_path: Path, fi: ModuleType) -> None:
+        path = tmp_path / "f.gml"
+        path.write_bytes(document(member("s.9", Point(15.0, 59.5), "311")).getvalue())
+        with pytest.raises(fi.FeatureError, match=r"s\.9"):
+            open_one(path, BOX, "clc18_kode")
+
+    def test_z_is_dropped(self, tmp_path: Path) -> None:
+        ring = [
+            (*at(100, 100), 5.0),
+            (*at(200, 100), 6.0),
+            (*at(200, 200), 7.0),
+            (*at(100, 100), 5.0),
+        ]
+        fs = one(tmp_path, Polygon(ring))
+        (line,) = lines_of(fs)
+        assert not line.has_z
+        assert set(line.coords) == {p[:2] for p in ring}
+
+    @pytest.mark.parametrize(
+        "geometry",
+        [
+            pytest.param({"type": "Polygon", "coordinates": []}, id="empty-polygon"),
+            pytest.param({"type": "LineString", "coordinates": []}, id="empty-line"),
+            pytest.param(None, id="null"),
+        ],
+    )
+    def test_an_empty_geometry_is_skipped_and_counted(self, tmp_path: Path, geometry: Any) -> None:
+        features = [
+            Feat("e", geometry, {"property": "road"}),
+            Feat("f", INNER, {"property": "road"}),
+        ]
+        fs = open_one(write_geojson(tmp_path / "f.geojson", features), BOX)
+        assert [f.fid for f in fs.features] == ["f"]
+        assert fs.empty == 1
+
+    def test_an_empty_flag_row_is_skipped_and_counted(self, tmp_path: Path) -> None:
+        from gpkg_fixtures import blob
+
+        rows = [
+            Row(1, INNER, {"Code_18": "311"}),
+            Row(2, None, {"Code_18": "311"}, raw=blob(None, 25833, empty=True)),
+        ]
+        fs = open_one(
+            write_gpkg(tmp_path / "f.gpkg", [Layer("a", 25833, rows, rtree=False)]), BOX, "corine"
+        )
+        assert [f.fid for f in fs.features] == [1]
+        assert fs.empty == 1
+
+    def test_a_self_intersecting_ring_is_linework_not_refused(self, tmp_path: Path) -> None:
+        """R1: feature polygons are not validated. Its source vertices are all
+        kept and its length is unchanged; a vertex GEOS may add at the
+        self-crossing (150, 150) is not pinned either way."""
+        bowtie = Polygon([at(100, 100), at(200, 200), at(200, 100), at(100, 200)])
+        assert not bowtie.is_valid
+        fs = one(tmp_path, bowtie)
+        assert len(fs.features) == 1
+        got = {tuple(p) for p in all_vertices(lines_of(fs))}
+        assert got - set(bowtie.exterior.coords) <= {at(150, 150)}
+        assert got >= set(bowtie.exterior.coords)
+        assert sum(line.length for line in lines_of(fs)) == pytest.approx(bowtie.length, abs=1e-6)
+
+
+# ------------------------------------------------------------------- CRS
+
+
+class TestCrs:
+    def test_geojson_without_a_crs_member_is_wgs84(self, tmp_path: Path) -> None:
+        lonlat = moved(INNER, UTM33, "EPSG:4326")
+        path = write_geojson(
+            tmp_path / "f.geojson", [Feat("a", lonlat, {"property": "road"})], crs=None
+        )
+        (line,) = lines_of(open_one(path, BOX))
+        assert set(line.coords) == set(moved(lonlat, "EPSG:4326", UTM33).exterior.coords)
+
+    def test_geojson_in_the_dems_crs_is_not_moved(self, tmp_path: Path) -> None:
+        (line,) = lines_of(one(tmp_path, INNER))
+        assert set(line.coords) == set(INNER.exterior.coords)
+
+    def test_a_given_crs_agreeing_with_the_files_is_accepted(self, tmp_path: Path) -> None:
+        path = write_geojson(tmp_path / "f.geojson", [Feat("a", INNER, {"property": "road"})])
+        assert len(open_one(path, BOX, crs="EPSG:25833").features) == 1
+        assert len(open_one(path, BOX, crs=CRS.from_epsg(25833).to_wkt()).features) == 1
+
+    def test_a_given_crs_disagreeing_with_the_files_is_refused(
+        self, tmp_path: Path, fi: ModuleType
+    ) -> None:
+        path = write_geojson(tmp_path / "f.geojson", [Feat("a", INNER, {"property": "road"})])
+        with pytest.raises(fi.FeatureError, match=r"f\.geojson"):
+            open_one(path, BOX, crs="EPSG:3035")
+
+    def test_a_given_crs_disagreeing_with_rfc_7946_is_refused(
+        self, tmp_path: Path, fi: ModuleType
+    ) -> None:
+        """domain.py's rule exactly: no `crs` member means EPSG:4326."""
+        path = write_geojson(
+            tmp_path / "f.geojson", [Feat("a", INNER, {"property": "road"})], crs=None
+        )
+        with pytest.raises(fi.FeatureError):
+            open_one(path, BOX, crs="EPSG:25833")
+
+    def test_an_unreadable_crs_is_refused(self, tmp_path: Path, fi: ModuleType) -> None:
+        path = write_geojson(
+            tmp_path / "f.geojson", [Feat("a", INNER, {"property": "road"})], crs="EPSG:0"
+        )
+        with pytest.raises(fi.FeatureError):
+            open_one(path, BOX)
+
+    def test_a_geopackage_in_3035(self, tmp_path: Path) -> None:
+        laea = moved(INNER, UTM33, "EPSG:3035")
+        path = write_gpkg(
+            tmp_path / "f.gpkg", [Layer("a", 3035, [Row(1, laea, {"Code_18": "311"})])]
+        )
+        (line,) = lines_of(open_one(path, BOX, "corine"))
+        assert set(line.coords) == set(moved(laea, "EPSG:3035", UTM33).exterior.coords)
+
+    def test_a_geopackage_given_another_crs_is_refused(
+        self, tmp_path: Path, fi: ModuleType
+    ) -> None:
+        path = write_gpkg(
+            tmp_path / "f.gpkg", [Layer("a", 3035, [Row(1, INNER, {"Code_18": "311"})])]
+        )
+        with pytest.raises(fi.FeatureError):
+            open_one(path, BOX, "corine", crs="EPSG:25833")
+
+    def test_a_vertex_with_no_image_is_refused_naming_the_feature(
+        self, tmp_path: Path, fi: ModuleType, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """R5. Forced: the transform into the DEM's CRS gives `inf` for one
+        vertex of feature `lost`, as pyproj does for a point it cannot map."""
+        import tin_engine.crs as crs_module
+
+        real = crs_module.reprojector
+        laea = moved(Polygon([at(100, 100), at(200, 100), at(150, 150), at(100, 200)]), UTM33, LAEA)
+        marker = laea.exterior.coords[2]  # in the source CRS
+
+        def fake(src: Any, dst: Any) -> Any:
+            move = real(src, dst)
+            if CRS.from_user_input(dst) != CRS.from_user_input(UTM33):
+                return move
+
+            def apply(xy: Any) -> np.ndarray:
+                out = move(xy)
+                points = np.asarray(xy, dtype=np.float64).reshape(-1, 2)
+                out[np.all(np.isclose(points, marker, rtol=0, atol=1e-6), axis=1)] = np.inf
+                return out
+
+            return apply
+
+        monkeypatch.setattr(crs_module, "reprojector", fake)
+        monkeypatch.setattr(fi, "reprojector", fake, raising=False)
+        path = write_geojson(
+            tmp_path / "f.geojson", [Feat("lost", laea, {"property": "road"})], crs=LAEA
+        )
+        with pytest.raises(fi.FeatureError, match="lost"):
+            open_one(path, BOX)
+
+
+# --------------------------------------------------------- region and clip
+
+
+class TestClip:
+    def test_a_ring_wholly_inside_is_one_closed_line(self, tmp_path: Path) -> None:
+        (line,) = lines_of(one(tmp_path, INNER))
+        assert line.coords[0] == line.coords[-1]
+        assert set(line.coords) == set(INNER.exterior.coords)
+
+    def test_a_polygon_gives_its_exterior_then_its_holes(self, tmp_path: Path) -> None:
+        hole = square(130, 130, 170, 170)
+        poly = Polygon(INNER.exterior.coords, [hole.exterior.coords])
+        lines = lines_of(one(tmp_path, poly))
+        assert [set(line.coords) for line in lines] == [
+            set(INNER.exterior.coords),
+            set(hole.exterior.coords),
+        ]
+
+    def test_a_multipolygon_gives_its_parts_in_order(self, tmp_path: Path) -> None:
+        a, b = square(200, 200, 250, 250), square(20, 20, 60, 60)
+        lines = lines_of(one(tmp_path, MultiPolygon([a, b])))
+        assert [set(line.coords) for line in lines] == [
+            set(a.exterior.coords),
+            set(b.exterior.coords),
+        ]
+
+    def test_a_multilinestring_gives_its_parts(self, tmp_path: Path) -> None:
+        a = LineString([at(10, 10), at(90, 90)])
+        b = LineString([at(10, 290), at(90, 210)])
+        lines = lines_of(one(tmp_path, MultiLineString([a, b])))
+        assert [list(line.coords) for line in lines] == [list(a.coords), list(b.coords)]
+
+    def test_a_ring_crossing_the_boundary_is_open_pieces(self, tmp_path: Path) -> None:
+        """R6: the part outside is dropped, and no edge is added along the
+        boundary. The pieces' length is the ring's length inside the domain,
+        and each piece ends on the boundary or at a source vertex (GEOS may
+        split a piece at the ring's own start, which the noder rejoins)."""
+        crossing = square(250, 100, 350, 200)
+        lines = lines_of(one(tmp_path, crossing))
+        assert lines and all(line.coords[0] != line.coords[-1] for line in lines)
+        ends = [p for line in lines for p in (line.coords[0], line.coords[-1])]
+        loose = [p for p in ends if p not in set(crossing.exterior.coords)]
+        assert loose and on_boundary(BOX.polygon, np.array(loose)).max() <= CROSSING
+        inside = shapely.intersection(LineString(crossing.exterior.coords), BOX.polygon).length
+        assert sum(line.length for line in lines) == pytest.approx(inside, abs=1e-6)
+        assert sum(line.length for line in lines) == pytest.approx(250.0, abs=1e-6)
+
+    def test_a_line_leaving_the_domain_loses_its_exterior_part(self, tmp_path: Path) -> None:
+        """Increment 8's `wall-leaves-domain`, before the engine."""
+        wall = LineString([at(150, 150), at(700, 150)])
+        (line,) = lines_of(one(tmp_path, wall, {"property": "wall"}))
+        assert line.coords[0] == at(150, 150)
+        assert line.coords[-1] == pytest.approx(at(300, 150), abs=CROSSING)
+        assert within(BOX.polygon, np.asarray(line.coords)).max() <= CROSSING
+
+    def test_a_ring_touching_the_boundary_at_one_point_keeps_no_point_piece(
+        self, tmp_path: Path
+    ) -> None:
+        diamond = Polygon([at(300, 150), at(250, 200), at(200, 150), at(250, 100)])
+        lines = lines_of(one(tmp_path, diamond))
+        assert all(isinstance(line, LineString) and len(line.coords) >= 2 for line in lines)
+        assert sum(line.length for line in lines) == pytest.approx(diamond.length, abs=1e-6)
+
+    def test_a_ring_outside_touching_at_one_point_is_dropped_and_counted(
+        self, tmp_path: Path
+    ) -> None:
+        """The degenerate point piece is all that is left: no line survives."""
+        outside = Polygon([at(300, 150), at(350, 200), at(400, 150), at(350, 100)])
+        fs = one(tmp_path, outside)
+        assert fs.features == () and fs.outside == 1
+
+    def test_a_feature_edge_along_the_boundary_is_kept(self, tmp_path: Path) -> None:
+        along = square(200, 0, 300, 100)  # its south and east edges are the domain's
+        lines = lines_of(one(tmp_path, along))
+        total = sum(line.length for line in lines)
+        assert total == pytest.approx(along.length, abs=1e-6)
+
+    def test_a_feature_in_a_domain_hole_is_dropped_and_counted(self, tmp_path: Path) -> None:
+        holed = domain_of(Polygon(square(0, 0, 300, 300).exterior.coords, [INNER.exterior.coords]))
+        fs = one(tmp_path, square(120, 120, 180, 180), domain=holed)
+        assert fs.features == () and fs.outside == 1
+
+    def test_a_feature_just_outside_is_dropped_and_counted(self, tmp_path: Path) -> None:
+        fs = one(tmp_path, square(320, 100, 360, 200))
+        assert fs.features == () and fs.outside == 1
+
+    def test_a_feature_far_away_is_not_a_feature(self, tmp_path: Path) -> None:
+        fs = one(tmp_path, square(50_000, 50_000, 50_100, 50_100))
+        assert fs.features == ()
+
+    def test_no_feature_left_is_legitimate(self, tmp_path: Path) -> None:
+        fs = open_one(write_geojson(tmp_path / "f.geojson", []), BOX)
+        assert fs.features == () and fs.outside == 0 and fs.empty == 0
+
+    def test_a_domain_hole_cuts_rings_as_lines(self, tmp_path: Path) -> None:
+        holed = domain_of(Polygon(square(0, 0, 300, 300).exterior.coords, [INNER.exterior.coords]))
+        crossing = square(150, 150, 250, 250)
+        lines = lines_of(one(tmp_path, crossing, domain=holed))
+        assert lines and all(line.coords[0] != line.coords[-1] for line in lines)
+        assert sum(line.length for line in lines) == pytest.approx(300.0, abs=1e-6)
+        assert within(holed.polygon, all_vertices(lines)).max() <= CROSSING
+
+
+# -------------------------------------------------------- the pre-clip (I4)
+
+
+class TestPreClip:
+    def test_i4_the_extract_gives_the_same_noded_graph_as_no_pre_clip(self) -> None:
+        """I4 on the extract, relationally: `open_features` + `start_chains`
+        through the engine give the same noded constraint edges, with the same
+        masks, as this test's own pipeline with no region and no pre-clip
+        (every row read whole, moved by pyproj, clipped as lines, the `corine`
+        map written from the design), handed to `start_chains` as
+        `TerrainFeature(fid=, mask=, lines=)`. Compared after the noder, where input
+        order and piece splitting no longer matter."""
+        domain = domain_of(Polygon(quarter_circle()))
+        fs = open_one(EXTRACT, domain, "corine")
+        produced = ff.run_engine(ff.start(domain, fs.features))
+
+        rows = ff.extract_features(EXTRACT, "U2018_CLC2018_V2020_20u1")
+        fi = ff.feature_input()
+        oracle_features = []
+        for pk, geometry, code in rows:
+            lines = tuple(
+                part
+                for line in ff.boundary_lines(moved(geometry, LAEA))
+                for part in shapely.get_parts(shapely.intersection(line, domain.polygon))
+                if isinstance(part, LineString) and part.length > 0
+            )
+            if lines:
+                oracle_features.append(
+                    fi.TerrainFeature(fid=pk, mask=ff.corine_mask(code), lines=lines)
+                )
+        expected = ff.run_engine(ff.start(domain, oracle_features))
+        assert produced.masks == expected.masks
