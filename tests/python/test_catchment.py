@@ -284,6 +284,45 @@ def test_the_memory_cap_refuses_before_the_flood(api: Any, monkeypatch: pytest.M
         api.delineate(request(api), repository_of(bowl()))
 
 
+def test_the_loop_stops_early_far_from_the_data_edge(api: Any) -> None:
+    """The design's pin after 0e1c29a: grow-or-stop is decided on the base
+    margin, and only the step doubles. The loop that checked the doubled
+    margin grew on every step until it met the data's edge."""
+    z = bowl()
+    tile = tile_of(z)
+    reference = full_flood(tile, seeds_in(tile, lake_box()))
+    r, c = np.nonzero(reference)
+    rows, cols = z.shape
+    # The fixture's premises: more than four base margins of data beyond the
+    # catchment on every side, and a catchment larger than the first window.
+    assert min(r.min(), c.min(), rows - 1 - r.max(), cols - 1 - c.max()) > 4 * MARGIN_CELLS
+    assert r.min() < 200 - 3 - MARGIN_CELLS
+
+    result = api.delineate(request(api), repository_of(z))
+    assert 2 <= len(result.windows) <= 3
+    m = result.meta
+    assert m.x_min > X0
+    assert m.y_max < Y0
+    assert m.x_min + (m.cols - 1) * D < X0 + (cols - 1) * D
+    assert m.y_max - (m.rows - 1) * D > Y0 - (rows - 1) * D
+    assert np.array_equal(on_whole(result, z.shape), reference)
+
+
+def test_a_catchment_inside_the_first_window_takes_one_window(api: Any) -> None:
+    """A peak with the lake on top: nothing drains into the lake, so the
+    catchment is the lake's 49 nodes, inside the first window (the lake's box
+    plus the base margin) with the margin to spare."""
+    r, c = np.indices((100, 100)).astype(np.float64)
+    z = (100.0 - np.hypot(r - 50, c - 50)).astype(np.float32)
+    lake = lake_box(50, 50)
+    result = api.delineate(
+        api.CatchmentRequest(seed=lat(50, 50), seed_crs=EPSG, lakes=(lake,), lakes_crs=EPSG),
+        repository_of(z),
+    )
+    assert result.nodes == result.seed_nodes == 49
+    assert len(result.windows) == 1
+
+
 # ---------------------------------------------------------------------------
 # Holes filled, other pieces dropped
 # ---------------------------------------------------------------------------
