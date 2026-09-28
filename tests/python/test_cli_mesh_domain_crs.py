@@ -11,13 +11,24 @@ meshes, with `domain_crs` and `domain_transform` recorded. Pinned by this suite
   from the domain's CRS to the DEM's; for a domain already in the DEM's CRS it
   says `none` (any case), and no transformer is made.
 - A domain already in the DEM's CRS meshes bit for bit as increment 16 meshed
-  it: the digests below were RECORDED FROM THE TREE BEFORE 15b, at `d34d79d`
-  (15a, whose single-file domain path is 16's), before any 15b production
-  change, with `_core` rebuilt from that tree. Both are unchanged when the
-  same run adds `--bbox` at the domain's bounds, which is what R6 makes the
-  domain do, so a window cut to the domain may not move them either. No
-  commit may update them to agree with new code.
+  it, and no transformer is made. Relational, on the same machine: the run
+  equals, in every point, cell and array, the same run with `cli.open_dem`
+  replaced by 16's data flow (the whole file, and the domain object exactly as
+  `read_domain` returned it, never through `DomainPolygon.to_crs`), and the
+  domain `_dem_mesh` receives has the read vertices bit for bit. This
+  replaced two digests recorded on macOS arm64 at `d34d79d` (test amendment
+  after PR #106's CI): Linux x86 with GCC gives the square a different digest,
+  so a recorded digest pins a platform, not a behaviour. The platform-stable
+  absolute anchor for a same-CRS domain through the CLI is increment 18's
+  `test_refine_golden.py::test_the_cli_with_start_min_angle_0_matches_the_digest`
+  (the quarter circle, whose GeoJSON names EPSG:25833); it is referenced, not
+  duplicated.
 - `--bbox` with `--domain` is a usage error naming both.
+- `dem_seams` is written on the domain path as without a domain: the
+  disagreeing pair with a domain in EPSG:4326, `none` when the overlaps agree
+  (test amendment after the 15b review). With a domain it counts only the
+  nodes inside the needed region (Ola, 2026-09-28): `none` for a disagreement
+  wholly outside it, however much of the plan's rectangle it fills.
 - A transformed domain refused for its extent (outside the DEM, in no tile, or
   with no image in the DEM's CRS) is a usage error naming the domain's CRS and
   the DEM's EPSG code, and writes nothing.
@@ -30,13 +41,15 @@ HOW THIS FILE GOES RED: it imports nothing new. Before 15b a domain in
 another CRS is refused as a CRS mismatch, `domain_crs` is not written, and
 `--bbox` with `--domain` is accepted, so those tests fail on their assertions.
 Six are guards that pass before 15b and must stay green after it: the two
-same-CRS digests, the two unknown `--domain-crs` refusals, and the far-away and
-latitude-first refusals (16's mismatch message already names both CRSs).
+same-CRS runs (then recorded as digests, now relational), the two unknown
+`--domain-crs` refusals, and the far-away and latitude-first refusals (16's
+mismatch message already names both CRSs).
 `test_axis_order_is_able_to_fail` is red before 15b through its control run.
 """
 
 from __future__ import annotations
 
+import dataclasses
 import hashlib
 import json
 from pathlib import Path
@@ -48,6 +61,9 @@ import shapely
 from pyproj import CRS, Transformer
 from shapely.geometry import Polygon
 
+import test_cli_mesh_mosaic
+import test_dem_input_domain
+import tin_engine.cli as cli
 from geotiff_fixtures import KARTVERKET, micro_tiff, needs_codecs
 from mosaic_fixtures import X0, Y0, blocks, quadrants, whole
 from test_cli_mesh_dem import write_tiff
@@ -56,17 +72,13 @@ from test_cli_mesh_domain import geojson as utm33_geojson
 from test_cli_mesh_mosaic import USAGE, invoke, terrain, write_tiles
 from test_cli_mesh_refine import NUMBER, sentence
 from test_cli_mesh_refine import field as sentence_field
+from tin_engine.dem_input import DemInput, DemRequest, open_dem
+from tin_engine.domain import DomainPolygon, read_domain
 from vtkread import VtkFile, read_vtk
 
 Ring = list[tuple[float, float]]
 SNAP = 1e-3  # DEFAULT_SNAP_SPACING: the noder's grid, applied in the DEM's CRS (R9)
 LCC = "+proj=lcc +lat_1=60 +lat_2=65 +lat_0=62 +lon_0=15 +ellps=GRS80 +units=m +no_defs"
-
-# Recorded from the tree before 15b; see the module docstring.
-GOLDEN = {
-    "square": "04b8495098bba930b85425aad36c7d4eef1f66f85585ac64c82a764c2d3b0c15",
-    "quarter_circle_10m": "696056fc9a7566cb3e9e17029182f19603de66d3f663b20e074b43ea145acf58",
-}
 
 
 def digest(vtk: VtkFile) -> str:
@@ -272,7 +284,8 @@ class TestTheDomainInItsOwnCrs:
 
 class TestTheSameCrs:
     """ "A domain already in the DEM's CRS is not transformed, and the mesh is
-    bit-identical to 16's." """
+    bit-identical to 16's." Relational, on one machine (module docstring): the
+    run as it is against the run with 16's data flow put back."""
 
     @pytest.fixture
     def bumpy(self, tmp_path: Path) -> Path:
@@ -286,12 +299,59 @@ class TestTheSameCrs:
 
         monkeypatch.setattr(Transformer, "from_crs", staticmethod(refuse))
 
+    @pytest.fixture
+    def handed_on(self, monkeypatch: pytest.MonkeyPatch) -> list[DomainPolygon | None]:
+        """Every domain the CLI hands `_dem_mesh`, in call order."""
+        seen: list[DomainPolygon | None] = []
+        real = cli._dem_mesh
+
+        def spy(*args: Any, **kwargs: Any) -> Any:
+            seen.append(kwargs.get("domain", args[7] if len(args) > 7 else None))
+            return real(*args, **kwargs)
+
+        monkeypatch.setattr(cli, "_dem_mesh", spy)
+        return seen
+
+    @staticmethod
+    def as_16_opened_it(request: DemRequest) -> DemInput:
+        """16's data flow for one file and a domain: the whole file, opened as
+        without a domain, and the domain object as `read_domain` returned it.
+        Neither `DomainPolygon.to_crs` nor the window cut to the domain runs."""
+        opened = open_dem(request.model_copy(update={"domain": None}))
+        return dataclasses.replace(opened, domain=request.domain)
+
+    def assert_as_16(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        handed_on: list[DomainPolygon | None],
+        domain: Path,
+        *args: str,
+    ) -> None:
+        now = run(tmp_path, *args, out="now.vtk")
+        with monkeypatch.context() as m:
+            m.setattr(cli, "open_dem", self.as_16_opened_it)
+            before = run(tmp_path, *args, out="before.vtk")
+        assert len(handed_on) == 2, handed_on
+        read = read_domain(domain)
+        for given in handed_on:
+            assert given is not None
+            assert given.crs == read.crs
+            for got, want in zip(rings(given), rings(read), strict=True):
+                assert got.dtype == want.dtype and got.tobytes() == want.tobytes()
+        assert len(now.points) > 0
+        assert digest(now) == digest(before)
+
     def test_the_mesh_is_16s_bit_for_bit(
-        self, tmp_path: Path, bumpy: Path, no_transformer: None
+        self,
+        tmp_path: Path,
+        bumpy: Path,
+        no_transformer: None,
+        handed_on: list[DomainPolygon | None],
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         square = utm33_geojson(tmp_path / "square.geojson", SQUARE, (HOLE,))
-        vtk = run(tmp_path, *mesh_args(bumpy, square))
-        assert digest(vtk) == GOLDEN["square"]
+        self.assert_as_16(tmp_path, monkeypatch, handed_on, square, *mesh_args(bumpy, square))
 
     def test_the_fields_say_so(self, tmp_path: Path, bumpy: Path) -> None:
         square = utm33_geojson(tmp_path / "square.geojson", SQUARE, (HOLE,))
@@ -301,11 +361,20 @@ class TestTheSameCrs:
 
     @needs_codecs
     def test_the_quarter_circle_is_16s_bit_for_bit(
-        self, tmp_path: Path, no_transformer: None
+        self,
+        tmp_path: Path,
+        no_transformer: None,
+        handed_on: list[DomainPolygon | None],
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         domain = utm33_geojson(tmp_path / "quarter.geojson", quarter_circle())
-        vtk = run(tmp_path, "--dem", str(KARTVERKET), "--domain", str(domain), "--tolerance", "10")
-        assert digest(vtk) == GOLDEN["quarter_circle_10m"]
+        args = ("--dem", str(KARTVERKET), "--domain", str(domain), "--tolerance", "10")
+        self.assert_as_16(tmp_path, monkeypatch, handed_on, domain, *args)
+
+
+def rings(domain: DomainPolygon) -> list[np.ndarray]:
+    p = domain.polygon
+    return [np.asarray(r.coords) for r in (p.exterior, *p.interiors)]
 
 
 class TestUsage:
@@ -365,6 +434,42 @@ class TestRefusedAfterTheTransform:
         run(tmp_path, *mesh_args(quad_dir, domain))  # the control: unpatched, it meshes
         monkeypatch.setattr(Transformer, "from_crs", staticmethod(latitude_first))
         refused(tmp_path, *mesh_args(quad_dir, domain), says=("4326", "25833"))
+
+
+class TestSeamsWithADomain:
+    """Ola's Q1 revised through `--domain`: `dem_seams` is recorded as without
+    one. `test_cli_mesh_mosaic.TestQ1Seams.disagreeing` (reached through its
+    module, so pytest does not collect that class twice) plants +4 at global node (2, 6), which is
+    (500 060, 6 599 990), inside `ACROSS`."""
+
+    def test_a_disagreeing_pair_is_recorded(self, tmp_path: Path) -> None:
+        source = whole(9, 13, array=terrain(9, 13))
+        dem = test_cli_mesh_mosaic.TestQ1Seams.disagreeing(tmp_path, source)
+        lon_lat = to_crs("EPSG:25833", "EPSG:4326", ACROSS)
+        vtk = run(tmp_path, *mesh_args(dem, write_geojson(tmp_path / "c.geojson", lon_lat)))
+        assert the_field(vtk, "domain_crs") == "EPSG:4326"
+        assert the_field(vtk, "dem_seams") == "ne.tif | nw.tif: nodes 1, max 4, median 4"
+
+    def test_agreeing_tiles_record_none(self, tmp_path: Path, quad_dir: Path) -> None:
+        lon_lat = to_crs("EPSG:25833", "EPSG:4326", ACROSS)
+        vtk = run(tmp_path, *mesh_args(quad_dir, write_geojson(tmp_path / "c.geojson", lon_lat)))
+        assert the_field(vtk, "dem_seams") == "none"
+
+    @pytest.mark.parametrize(
+        ("shape", "recorded"),
+        [("STRIP", "none"), ("ELL", "ne.tif | nw.tif: nodes 2, max 2, median 1.25")],
+    )
+    def test_only_the_needed_region_is_counted(
+        self, tmp_path: Path, shape: str, recorded: str
+    ) -> None:
+        """Ola, 2026-09-28. `test_dem_input_domain.TestSeamsInsideTheNeededRegion`
+        (reached through its module, so pytest does not collect it twice): the
+        strip's region misses every planted node, the L's takes two of four."""
+        planted = test_dem_input_domain.TestSeamsInsideTheNeededRegion
+        dem = planted.disagreeing(tmp_path)
+        lon_lat = to_crs("EPSG:25833", "EPSG:4326", planted.utm33(getattr(planted, shape)))
+        vtk = run(tmp_path, *mesh_args(dem, write_geojson(tmp_path / "c.geojson", lon_lat)))
+        assert the_field(vtk, "dem_seams") == recorded
 
 
 class TestRealSeam:

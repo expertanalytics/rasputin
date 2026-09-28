@@ -24,6 +24,14 @@ coverage). Pinned by this suite (see "Pinned by the red suite (15b)"):
 - Tiles in more than one CRS are refused with a domain, naming the codes
   (review S2).
 - Every extent refusal fires before any tile is loaded (I6).
+- The seam report (Ola's Q1 revised) survives the domain path: `seams` names
+  each disagreeing pair with a domain in the DEM's CRS or in another one, and
+  is `()` when the overlaps agree (test amendment after the 15b review).
+- With a domain the seam report counts only nodes inside the needed region,
+  the domain grown by the plan's cell diagonal, mitred (Ola, 2026-09-28): a
+  disagreement inside the plan's rectangle but outside that region is not
+  reported, one just outside the polygon but inside the region is, and which
+  tile's value a node takes does not change (test amendment for the ruling).
 
 Synthetic tiles are micro-TIFFs written by `test_dem_input.py`'s helpers;
 the real case is the committed DTM10 seam extract (`tests/fixtures/dtm10/`),
@@ -38,18 +46,31 @@ from __future__ import annotations
 
 import importlib
 import json
+import math
 from pathlib import Path
 from types import ModuleType
 from typing import Any, ClassVar
 
 import numpy as np
 import pytest
+import shapely
 from pyproj import CRS, Transformer
 from shapely.geometry import Polygon, box
 
 from geotiff_fixtures import BASE_KEYS, PROJECTED_CS_TYPE
-from mosaic_fixtures import X0, Y0, blocks, quadrants, whole
-from test_dem_input import SEAM, tiff_of, write_tiles
+from mosaic_fixtures import (
+    X0,
+    Y0,
+    blocks,
+    deepest_interior,
+    piece,
+    quadrants,
+    same_array,
+    seams,
+    seams_of,
+    whole,
+)
+from test_dem_input import SEAM, decoded, tiff_of, write_tiles
 
 Ring = list[tuple[float, float]]
 UTM33 = "urn:ogc:def:crs:EPSG::25833"
@@ -609,3 +630,224 @@ class TestOneCrs:
         assert "the tiles are in 2 CRSs" in message
         assert "EPSG:[25832, 25833]" in message
         assert "a domain needs one" in message
+
+
+class TestSeamsOnTheDomainPath:
+    """Ola's Q1 revised, with a domain: `DemInput.seams` is the mosaic's report,
+    as without one. `ne.tif` is planted off `nw.tif` on their shared column
+    (global column 6, in both tiles only): +0.5 at row 1, +2.0 at row 2, both
+    at least 1 mm, and +0.0005 at row 3, below it. So `ne.tif | nw.tif`,
+    nodes 2, max 2.0, median 1.25. Every planted node, (500 060, y 6 599 995
+    .. 6 599 985), lies inside `ACROSS_ALL`. A resolution that drops the seams
+    whenever a domain is given fails the disagreeing cases (15b review)."""
+
+    @staticmethod
+    def disagreeing(tmp_path: Path) -> Path:
+        source = whole(9, 13)
+        tiles = quadrants(source, row_cut=4, col_cut=6, overlap=1)
+        changed = np.array(tiles["ne.tif"].array)
+        for row, by in ((1, 0.5), (2, 2.0), (3, 0.0005)):
+            changed[row, 0] += np.float32(by)
+        tiles["ne.tif"] = piece(source, 0, 5, 6, 13, array=changed)
+        write_tiles(tmp_path / "disagree", tiles)
+        return tmp_path / "disagree"
+
+    @pytest.mark.parametrize("crs", ["EPSG:25833", "EPSG:4326", "EPSG:25832"])
+    def test_a_disagreeing_pair_is_reported_with_a_domain(
+        self, di: ModuleType, dm: ModuleType, tmp_path: Path, crs: str
+    ) -> None:
+        dem = self.disagreeing(tmp_path)
+        domain = read(dm, tmp_path, ACROSS_ALL, crs)
+        opened = di.open_dem(request(di, dem, domain=domain))
+        assert opened.domain is not None
+        assert seams(opened) == [("ne.tif", "nw.tif", 2, 2.0, 1.25)]
+
+    def test_the_report_is_the_one_without_a_domain(
+        self, di: ModuleType, dm: ModuleType, mz: ModuleType, tmp_path: Path
+    ) -> None:
+        """The same report as the node-by-node oracle over the domain's mosaic,
+        and as `--bbox` at the moved domain's bounds (the same plan, R6)."""
+        dem = self.disagreeing(tmp_path)
+        domain = read(dm, tmp_path, ACROSS_ALL, "EPSG:4326")
+        opened = di.open_dem(request(di, dem, domain=domain))
+        tiles = {p.name: decoded(p) for p in sorted(dem.iterdir())}
+        assert seams(opened) == seams_of(tiles, opened.tile.meta)
+        x_min, y_min, x_max, y_max = opened.domain.polygon.bounds
+        bounds = mz.Bounds(x_min=x_min, y_min=y_min, x_max=x_max, y_max=y_max)
+        assert seams(opened) == seams(di.open_dem(request(di, dem, bounds=bounds)))
+
+    @pytest.mark.parametrize("crs", ["EPSG:25833", "EPSG:4326"])
+    def test_agreeing_overlaps_report_nothing_with_a_domain(
+        self, di: ModuleType, dm: ModuleType, quad_dir: Path, tmp_path: Path, crs: str
+    ) -> None:
+        opened = di.open_dem(request(di, quad_dir, domain=read(dm, tmp_path, ACROSS_ALL, crs)))
+        assert [t.name for t in opened.plan.tiles] == ["ne.tif", "nw.tif", "se.tif", "sw.tif"]
+        assert opened.seams == ()
+
+
+class TestSeamsInsideTheNeededRegion:
+    """Ola, 2026-09-28 ("yes, go with a"): with a domain, the seam report counts
+    only nodes inside the needed region, the domain grown by the chosen plan's
+    cell diagonal, mitred (`_domain_plan`). Without one it is unchanged, and
+    which tile's value a node takes is unchanged everywhere.
+
+    `whole(21, 21, dy=10)` in quadrants, one shared node line at each cut:
+    nodes x 500 000 .. 500 200, y 6 600 000 .. 6 599 800, dx = dy = 10, so the
+    cell diagonal is 14.14 m. `ne.tif` is planted off `nw.tif` on their shared
+    column x 500 100 (in both tiles only) at y 6 599 990 .. 6 599 950:
+    +0.5, +2.0, +0.0005 (below 1 mm), +1.0, +4.0. Over all of them the pair is
+    nodes 4, max 4.0, median 1.5; over the two northmost, nodes 2, max 2.0,
+    median 1.25. Local coordinates below are metres east of X0 and north of
+    Y0. Every vertex sits off the node lines and off the snap band, so each
+    domain's plan is `--bbox`'s at its bounds (checked, not assumed)."""
+
+    PLANTED: ClassVar[tuple[tuple[int, float], ...]] = (
+        (1, 0.5),
+        (2, 2.0),
+        (3, 0.0005),
+        (4, 1.0),
+        (5, 4.0),
+    )
+    ALL: ClassVar[list[tuple[str, str, int, float, float]]] = [("ne.tif", "nw.tif", 4, 4.0, 1.5)]
+    NORTH_TWO: ClassVar[list[tuple[str, str, int, float, float]]] = [
+        ("ne.tif", "nw.tif", 2, 2.0, 1.25)
+    ]
+    # A thin strip from the south-west corner to the north-east one. It
+    # crosses the shared column at y -100 (where the tiles agree); the nearest
+    # planted node, (100, -50), is 50 / sqrt 2 = 35.4 m from its centre line
+    # and 31.9 m from its edge, more than twice the 14.14 m growth.
+    STRIP: ClassVar[list[tuple[float, float]]] = [
+        (5.5, -195.5),
+        (10.5, -195.5),
+        (195.5, -10.5),
+        (195.5, -5.5),
+        (190.5, -5.5),
+        (5.5, -190.5),
+    ]
+    # An L: a north arm y -5.5 .. -12.5 across the whole width, crossing the
+    # shared column, and a west arm x 5.5 .. 15.5 the whole height. Grown by
+    # 14.14 m the north arm reaches y -26.6: (100, -10) is inside the polygon,
+    # (100, -20) outside it and inside the region, (100, -40) and (100, -50)
+    # outside both, and inside the plan's rectangle.
+    ELL: ClassVar[list[tuple[float, float]]] = [
+        (5.5, -5.5),
+        (195.5, -5.5),
+        (195.5, -12.5),
+        (15.5, -12.5),
+        (15.5, -195.5),
+        (5.5, -195.5),
+    ]
+    # Wholly west of the shared column: its east edge is 7 m short of it, so
+    # (100, -10) and (100, -20) are outside the polygon, within one diagonal.
+    WEST: ClassVar[list[tuple[float, float]]] = [
+        (60.5, -5.5),
+        (93.0, -5.5),
+        (93.0, -25.5),
+        (60.5, -25.5),
+    ]
+
+    @classmethod
+    def disagreeing(cls, tmp_path: Path) -> Path:
+        source = whole(21, 21, dy=10.0)
+        tiles = quadrants(source, row_cut=10, col_cut=10, overlap=1)
+        changed = np.array(tiles["ne.tif"].array)
+        for row, by in cls.PLANTED:
+            changed[row, 0] += np.float32(by)
+        tiles["ne.tif"] = piece(source, 0, 11, 10, 21, array=changed)
+        write_tiles(tmp_path / "disagree", tiles)
+        return tmp_path / "disagree"
+
+    @staticmethod
+    def utm33(local: list[tuple[float, float]]) -> Ring:
+        return [(X0 + u, Y0 + v) for u, v in local]
+
+    @staticmethod
+    def needed_nodes(polygon: Polygon, grid: Any) -> np.ndarray:
+        """The oracle's mask: `grid`'s nodes the domain grown by `grid`'s cell
+        diagonal, mitred, covers (closed)."""
+        grown = polygon.buffer(math.hypot(grid.delta_x, grid.delta_y), join_style="mitre")
+        r, c = np.indices((grid.rows, grid.cols))
+        xs, ys = grid.x_min + c * grid.delta_x, grid.y_max - r * grid.delta_y
+        return np.asarray(shapely.covers(grown, shapely.points(xs, ys)))
+
+    def opened(self, di: ModuleType, dm: ModuleType, tmp_path: Path, local: Any) -> Any:
+        dem = self.disagreeing(tmp_path)
+        return di.open_dem(
+            request(di, dem, domain=read(dm, tmp_path, self.utm33(local), "EPSG:25833"))
+        )
+
+    def bbox_of(self, di: ModuleType, mz: ModuleType, opened: Any, tmp_path: Path) -> Any:
+        x_min, y_min, x_max, y_max = opened.domain.polygon.bounds
+        bounds = mz.Bounds(x_min=x_min, y_min=y_min, x_max=x_max, y_max=y_max)
+        return di.open_dem(request(di, tmp_path / "disagree", bounds=bounds))
+
+    def tiles(self, tmp_path: Path) -> dict[str, Any]:
+        return {p.name: decoded(p) for p in sorted((tmp_path / "disagree").iterdir())}
+
+    def test_a_seam_wholly_outside_the_needed_region_is_not_reported(
+        self, di: ModuleType, dm: ModuleType, tmp_path: Path
+    ) -> None:
+        """Ruling point 1: the planted overlap is inside the plan's rectangle,
+        both tiles are in the plan, and the region misses every planted node."""
+        opened = self.opened(di, dm, tmp_path, self.STRIP)
+        m = opened.plan.meta
+        assert {"ne.tif", "nw.tif"} <= {t.name for t in opened.plan.tiles}
+        assert (m.x_min, m.y_max, m.rows, m.cols) == (X0, Y0, 21, 21)  # the planted nodes in it
+        mask = self.needed_nodes(opened.domain.polygon, m)
+        assert not mask[1:6, 10].any()  # the region misses them
+        assert mask[10, 10]  # and crosses the column where the tiles agree
+        assert opened.seams == ()
+        assert seams_of(self.tiles(tmp_path), m, mask) == []
+
+    def test_a_seam_the_needed_region_crosses_counts_only_its_nodes(
+        self, di: ModuleType, dm: ModuleType, tmp_path: Path
+    ) -> None:
+        """Ruling point 2: the L's region takes (100, -10) and (100, -20) and
+        leaves the other planted nodes, which the plan's rectangle holds."""
+        opened = self.opened(di, dm, tmp_path, self.ELL)
+        m = opened.plan.meta
+        assert (m.x_min, m.y_max, m.rows, m.cols) == (X0, Y0, 21, 21)
+        mask = self.needed_nodes(opened.domain.polygon, m)
+        assert mask[1:6, 10].tolist() == [True, True, False, False, False]
+        assert seams_of(self.tiles(tmp_path), m, mask) == self.NORTH_TWO  # the oracle
+        assert seams(opened) == self.NORTH_TWO
+
+    def test_a_node_outside_the_polygon_inside_one_diagonal_counts(
+        self, di: ModuleType, dm: ModuleType, tmp_path: Path
+    ) -> None:
+        """The region is the grown polygon, not the polygon: every counted node
+        here is 7 m east of the domain, and bilinear z reads it there."""
+        opened = self.opened(di, dm, tmp_path, self.WEST)
+        m = opened.plan.meta
+        polygon = opened.domain.polygon
+        for y in (Y0 - 10, Y0 - 20):
+            node = shapely.Point(X0 + 100, y)
+            assert not polygon.covers(node)
+            assert 0 < polygon.distance(node) < math.hypot(m.delta_x, m.delta_y)
+        assert seams_of(self.tiles(tmp_path), m, self.needed_nodes(polygon, m)) == self.NORTH_TWO
+        assert seams(opened) == self.NORTH_TWO
+
+    @pytest.mark.parametrize("shape", ["STRIP", "ELL"])
+    def test_without_a_domain_the_same_tiles_report_every_node(
+        self, di: ModuleType, dm: ModuleType, mz: ModuleType, tmp_path: Path, shape: str
+    ) -> None:
+        """Ruling: without `--domain` the report is unchanged. `--bbox` at the
+        domain's bounds has the same plan and counts all four planted nodes."""
+        opened = self.opened(di, dm, tmp_path, getattr(self, shape))
+        boxed = self.bbox_of(di, mz, opened, tmp_path)
+        assert boxed.plan == opened.plan
+        assert seams(boxed) == self.ALL
+        assert seams_of(self.tiles(tmp_path), boxed.tile.meta) == self.ALL
+
+    @pytest.mark.parametrize("shape", ["STRIP", "ELL", "WEST"])
+    def test_which_value_a_node_takes_is_unchanged_by_the_domain(
+        self, di: ModuleType, dm: ModuleType, mz: ModuleType, tmp_path: Path, shape: str
+    ) -> None:
+        """Ruling: the mask is the report's only. On the same plan the domain's
+        mosaic is `--bbox`'s bit for bit, and the midline oracle's."""
+        opened = self.opened(di, dm, tmp_path, getattr(self, shape))
+        boxed = self.bbox_of(di, mz, opened, tmp_path)
+        assert boxed.plan == opened.plan
+        assert same_array(np.asarray(opened.tile.array), np.asarray(boxed.tile.array))
+        oracle = deepest_interior(self.tiles(tmp_path), opened.tile.meta)
+        assert np.array_equal(np.asarray(opened.tile.array, dtype=np.float64), oracle)

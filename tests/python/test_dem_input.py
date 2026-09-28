@@ -34,7 +34,17 @@ from geotiff_fixtures import (
     truncated_strip,
     with_keys,
 )
-from mosaic_fixtures import DX, X0, Y0, quadrants, same_array, whole
+from mosaic_fixtures import (
+    DX,
+    X0,
+    Y0,
+    deepest_interior,
+    quadrants,
+    same_array,
+    seams,
+    seams_of,
+    whole,
+)
 from tin_engine.io.geotiff import decode_dem
 from tin_engine.io.models import DemTile
 
@@ -221,18 +231,38 @@ class TestRealDtm10:
         assert opened.tile.meta.x_min == west.meta.x_min
         assert same_array(opened.tile.array[:, :307], west.array)
         assert same_array(opened.tile.array[:, 256:], east.array)
+        assert opened.seams == ()  # Ola's Q1 revised: an agreeing seam is not reported
 
-    def test_q1_the_seam_shifted_by_one_cell_is_refused(
-        self, di: ModuleType, mz: ModuleType, tmp_path: Path
+    def test_q1_the_seam_shifted_by_one_cell_is_reported_and_split(
+        self, di: ModuleType, tmp_path: Path
     ) -> None:
-        """The control (N3): one column off, the real overlap disagrees."""
+        """The control (N3), under Ola's Q1 revised: was
+        `test_q1_the_seam_shifted_by_one_cell_is_refused`. One column off, the
+        real overlap (now 50 columns) disagrees. It is no longer refused: the
+        seam is reported, naming the two tiles, and each node takes the value
+        of the tile it lies deepest in. Both are checked against the
+        node-by-node oracle in `mosaic_fixtures`, and the split is checked by
+        hand on the middle row, where column depth decides."""
         (tmp_path / "shifted").mkdir()
         (tmp_path / "shifted" / WEST.name).write_bytes(WEST.read_bytes())
         _shifted_copy(EAST, tmp_path / "shifted" / EAST.name, 10.0)
-        with pytest.raises(mz.MosaicError) as info:
-            di.open_dem(request(di, tmp_path / "shifted"))
-        message = str(info.value)
-        assert WEST.name in message and EAST.name in message
+        opened = di.open_dem(request(di, tmp_path / "shifted"))
+        grid = opened.tile.meta
+        assert (grid.rows, grid.cols) == (256, 307 + 307 - 50)
+        tiles = {WEST.name: decoded(WEST), EAST.name: decoded(tmp_path / "shifted" / EAST.name)}
+        expected = seams_of(tiles, grid)
+        assert [s[:2] for s in expected] == [(EAST.name, WEST.name)]  # 6400_1 sorts first
+        assert expected[0][2] > 0
+        assert seams(opened) == expected
+        assert same_array(
+            opened.tile.array, deepest_interior(tiles, grid).astype(opened.tile.array.dtype)
+        )
+        # Row 128: west's columns 257-306 are 49..0 deep, east's 0..49. The 25
+        # nearer the west tile's interior are west's, the other 25 east's.
+        west, east = tiles[WEST.name].array, tiles[EAST.name].array
+        row = opened.tile.array[128]
+        assert same_array(row[257:282], west[128, 257:282])
+        assert same_array(row[282:307], east[128, 25:50])
 
     def test_q5_the_two_lattices_together_are_refused_naming_both(
         self, di: ModuleType, mz: ModuleType
