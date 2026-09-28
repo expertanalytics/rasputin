@@ -827,6 +827,7 @@ far (+39 %, increment 16) applied.
 |---|---|---|---|
 | **16b-0** | `noding/noded_pslg_builder.hpp` | sort-and-sweep for 14(a) and 14(b), cell padding, header comment | ~50 |
 | | | **16b-0 total** | **~50 (worst ~70)** |
+| | | *16b-0 as built (`aa35a38`, CLAUDE.md §2, blank lines excluded): +98 / −21, net 77, over the worst case; the sweep ~50, padded and clamped cell boxes ~12, the 14(a)/(b) loops as callbacks +36 / −21. All three were named in the estimate row: the overrun is in the estimate, not unplanned scope* | |
 | **16b-1** | `io/geopackage.py` | `GpkgLayer`, `layer_info`, `decode_geometry`, `query_features` | ~70 |
 | | `io/repository.py`, `io/__init__.py` | `open_geopackage` | ~8 |
 | | `feature_input.py` | `ClassMap` and three built-in maps, request and result models, GeoJSON reading, region, pre-clip, reprojection, clip, counts, refusals | ~130 |

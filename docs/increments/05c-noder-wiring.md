@@ -508,6 +508,8 @@ guard patched into ..." — cites `noded_pslg_builder.hpp:217` as the site, and
 that line number is downstream of this string. Collapsing
 the two lines into one moves it and falsifies a mutation record this branch is
 not re-running. The replacement above is two lines for that reason.
+(Since 16b-0 the line has moved anyway; 05b's citation is now pinned to
+`6732564` and names the line by its text, so the constraint no longer binds.)
 
 `@tester` and `@developer` should read the whole of this as: the presentation
 text for `NotConverged` (below) **must not promise the cap**, because the CLI
