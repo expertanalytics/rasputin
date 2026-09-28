@@ -12,12 +12,16 @@ Pinned by this suite (see "Pinned by the red suite (16b-1/2)"):
   `--features` is a usage error naming itself; `--features` without
   `--domain` is a usage error naming `--features`; so is any `FeatureError`,
   and no file is written.
-- `.vtk` field `features`: `<file name>[:<layer>], map <map>, <n> features
-  (<k> dropped outside), <c> chains, <v> vertices`, where `n` is
-  `len(FeatureSet.features)`, `k` is `FeatureSet.outside`, `c` the number of
-  feature chains and `v` the number of feature vertices `start_chains` hands
-  the engine (its vertices less the domain's). The layer is written for a
-  GeoPackage only. The same text as a `.ply` comment `features <text>`.
+- `.vtk` field `features`: `<file name>[:<layer>], map <map>, <n> features,
+  <c> chains, <v> vertices`, where `n` is `len(FeatureSet.features)`, `c` the
+  number of feature chains and `v` the number of feature vertices
+  `start_chains` hands the engine (its vertices less the domain's). The layer
+  is written for a GeoPackage only. The same text as a `.ply` comment
+  `features <text>`. The field records the data used, never how the file was
+  read: it has no dropped-outside count, which is 0 behind an R-tree and 1 in
+  a scan for the same rows, so an indexed and an unindexed GeoPackage give the
+  same field (the principle of Ola's ruling of 2026-09-28, "A table in a run
+  report is output, not data.", applied by the main session).
 - `features_crs` (`crs_label` of the source's CRS) and `features_transform`
   (`none` for the DEM's own CRS, else `transform_description(source, dem)`),
   as 15b's `domain_crs` and `domain_transform`.
@@ -26,13 +30,23 @@ Pinned by this suite (see "Pinned by the red suite (16b-1/2)"):
   bilinear` with features.
 - stderr says `<n> input vertices` and `<m> noded vertices`; `--stats` has
   phase rows `features read` and `features clip`.
-- stderr's features line gives `<n> clipped`, the number of features kept
-  that crossed the domain boundary (R10: "features read, dropped outside,
-  clipped"); a GeoPackage layer without an R-tree index is read all the same,
+- stderr's features line reads `<n> features kept, <o> dropped outside, <c>
+  clipped, <e> empty skipped`: `n` counts the features kept (the line said
+  "read" for that count before), and `c` those kept that crossed the domain
+  boundary (R10: "features read, dropped outside, clipped"). How the file was
+  read, including the dropped-outside count, goes to stderr only. The
+  `--stats` row `features read` is a phase name and keeps its name. A
+  GeoPackage layer without an R-tree index is read all the same,
   and stderr says the table was scanned (R3: "Without an index the table is
   scanned and the report says so"). `TestReport`, added red after @reviewer's
   review of 16b-1/2 (the commit "16b-1/2 red: the full-scan report line and
   the clipped count (R3, R10)").
+
+The field without the dropped-outside count and the stderr line saying
+"kept" were committed red as "16b-1/2 red: the file records data counts only;
+stderr says kept": the field still carried "(<k> dropped outside)", so every
+`FEATURES_FIELD` match failed and the indexed and unindexed files differed,
+and stderr still said "features read".
 
 Committed red at `e99c8ea` (amended at `972312c`): the flags did not exist
 yet, so every run exited 2 with "No such option", which every usage test
@@ -80,8 +94,8 @@ from vtkread import VtkFile, lines_as_array, polygons_as_array, read_vtk
 V = DEFAULT_VOCABULARY
 SNAP = 1e-3
 FEATURES_FIELD = re.compile(
-    r"(?P<name>[^,:]+)(?::(?P<layer>[^,]+))?, map (?P<map>[a-z0-9-_]+), (?P<n>\d+) features "
-    r"\((?P<k>\d+) dropped outside\), (?P<c>\d+) chains, (?P<v>\d+) vertices"
+    r"(?P<name>[^,:]+)(?::(?P<layer>[^,]+))?, map (?P<map>[a-z0-9-_]+), (?P<n>\d+) features, "
+    r"(?P<c>\d+) chains, (?P<v>\d+) vertices"
 )
 
 
@@ -261,7 +275,8 @@ class TestRecord:
         fs = ff.open_one(gallery, domain)
         started = ff.start(domain, fs.features)
         chains = [c for c in started.chains if c[1] == "breakline"]
-        assert (int(match["n"]), int(match["k"])) == (len(fs.features), fs.outside) == (5, 0)
+        assert "dropped" not in match.string
+        assert int(match["n"]) == len(fs.features) == 5
         assert int(match["c"]) == len(chains)
         assert int(match["v"]) == len(started.vertices) - len(SQUARE)
         assert text_field(vtk, "features_crs") == "EPSG:25833"
@@ -350,6 +365,10 @@ CROSSINGS = [
     Feat("far", FAR_AWAY, {"property": "road"}),
 ]
 CLIPPED = re.compile(r"\b(\d+) clipped\b")
+FEATURES_LINE = re.compile(
+    r"\b(?P<n>\d+) features kept, (?P<o>\d+) dropped outside, (?P<c>\d+) clipped, "
+    r"(?P<e>\d+) empty skipped\b"
+)
 
 
 def gpkg_of(path: Path, features: list[Feat], *, rtree: bool) -> Path:
@@ -369,6 +388,18 @@ class TestReport:
         assert re.search(r"\b1 dropped outside\b", output), output
         assert [int(n) for n in CLIPPED.findall(output)] == [2], output
 
+    def test_stderr_counts_the_features_kept(
+        self, tmp_path: Path, bumpy: Path, plain_square: Path
+    ) -> None:
+        """The line's first count is the features kept, and says so: of
+        `CROSSINGS`, three kept, `far` dropped outside, two clipped, none
+        empty. "features read" named that count wrongly."""
+        path = write_geojson(tmp_path / "crossings.geojson", CROSSINGS)
+        _, output = meshed(tmp_path, bumpy, plain_square, "--features", str(path))
+        found = [m.groupdict() for m in FEATURES_LINE.finditer(output)]
+        assert found == [{"n": "3", "o": "1", "c": "2", "e": "0"}], output
+        assert not re.search(r"\bfeatures read,", output), output
+
     def test_nothing_crossing_is_zero_clipped(
         self, tmp_path: Path, bumpy: Path, plain_square: Path
     ) -> None:
@@ -380,11 +411,13 @@ class TestReport:
         self, tmp_path: Path, bumpy: Path, plain_square: Path
     ) -> None:
         """R3: "Without an index the table is scanned and the report says so".
-        The layer is still read: the features field counts the kept three."""
+        The layer is still read: the features field counts the kept three,
+        and the scan's dropped `far` is on stderr only."""
         path = gpkg_of(tmp_path / "f.gpkg", CROSSINGS, rtree=False)
         vtk, output = meshed(tmp_path, bumpy, plain_square, "--features", str(path))
         match = FEATURES_FIELD.fullmatch(text_field(vtk, "features"))
-        assert match is not None and (match["n"], match["k"]) == ("3", "1")
+        assert match is not None and match["n"] == "3", text_field(vtk, "features")
+        assert re.search(r"\b1 dropped outside\b", output), output
         assert re.search(r"scan", output, re.IGNORECASE), output
         assert re.search(r"index", output, re.IGNORECASE), output
 
@@ -392,11 +425,13 @@ class TestReport:
     def test_an_indexed_layer_gives_the_same_file_and_no_scan_line(
         self, tmp_path: Path, bumpy: Path, plain_square: Path
     ) -> None:
-        """The control: the same rows behind an R-tree give the same mesh,
-        and nothing about a scan is said. The `features` field alone may
-        differ, in `k`: the R-tree query never returns `far`, so it is not
-        counted as dropped outside, where the scan reads and drops it."""
+        """The control: the same rows behind an R-tree give the same file,
+        byte for byte, `features` field included, and nothing about a scan is
+        said. The R-tree query never returns `far` where the scan reads and
+        drops it; that difference is how the file was read, so it stays on
+        stderr and out of the file."""
         files = []
+        fields = []
         for rtree in (True, False):
             where = tmp_path / str(rtree)
             where.mkdir()
@@ -408,13 +443,9 @@ class TestReport:
             vtk = read_vtk(target.read_bytes())
             match = FEATURES_FIELD.fullmatch(text_field(vtk, "features"))
             assert match is not None and match["n"] == "3", text_field(vtk, "features")
-            files.append(
-                [
-                    line
-                    for line in target.read_bytes().splitlines()
-                    if not line.startswith(b"f.gpkg:")
-                ]
-            )
+            fields.append(text_field(vtk, "features"))
+            files.append(target.read_bytes())
+        assert fields[0] == fields[1]
         assert files[0] == files[1]
 
 
