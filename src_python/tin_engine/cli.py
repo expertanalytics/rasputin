@@ -68,10 +68,19 @@ from tin_engine._core import (
     sample,
     triangulate,
 )
+from tin_engine.chains import start_chains
 from tin_engine.crs import crs_label, parse_crs, transform_description
 from tin_engine.dem_input import DemInput, DemRequest, open_dem
 from tin_engine.domain import DomainError, DomainPolygon, read_domain
 from tin_engine.elevation import Trimmed, trim
+from tin_engine.feature_input import (
+    CLASS_MAPS,
+    FeatureError,
+    FeatureRequest,
+    FeatureSet,
+    FeatureSource,
+    open_features,
+)
 from tin_engine.features import DEFAULT_VOCABULARY
 from tin_engine.grid_domain import default_stride, refine_start_stride, subsample
 from tin_engine.io.models import DemTile, RasterMeta
@@ -619,6 +628,30 @@ def mesh(
             "before, instead of its foot on the segment.",
         ),
     ] = False,
+    features: Annotated[
+        Path | None,
+        typer.Option(
+            "--features",
+            help="With --domain, polygons and lines as constraints (.geojson, .json, .gpkg "
+            "or .gml), clipped to the domain, each edge carrying its class map's bits.",
+        ),
+    ] = None,
+    features_crs: Annotated[
+        str | None,
+        typer.Option("--features-crs", help="The --features file's CRS, anything pyproj reads."),
+    ] = None,
+    features_layer: Annotated[
+        str | None,
+        typer.Option("--features-layer", help="The GeoPackage's features table to read."),
+    ] = None,
+    features_map: Annotated[
+        str | None,
+        typer.Option(
+            "--features-map",
+            help=f"From feature attributes to edge bits: {', '.join(CLASS_MAPS)}. "
+            "Default: property.",
+        ),
+    ] = None,
     stats: Annotated[
         str | None,
         typer.Option(
@@ -672,6 +705,16 @@ def mesh(
             "give a gallery fixture name or --dem PATH, exactly one of the two",
             param_hint="--dem",
         )
+    flags = (
+        ("--features-crs", features_crs),
+        ("--features-layer", features_layer),
+        ("--features-map", features_map),
+    )
+    for flag, value in flags:
+        if features is None and value is not None:
+            raise typer.BadParameter("applies only with --features", param_hint=flag)
+    if features is not None and domain is None:
+        raise typer.BadParameter("needs --dem, --domain and --tolerance", param_hint="--features")
     if not dem and (domain is not None or domain_crs is not None):
         raise typer.BadParameter("applies only with --dem", param_hint="--domain")
     if not dem and bbox is not None:
@@ -735,6 +778,11 @@ def mesh(
                     raise typer.BadParameter(str(exc), param_hint="--domain") from exc
         opened = _open_dem(dem, bbox, clock, given)
         label = opened.label
+        dem_crs = f"EPSG:{opened.tile.meta.epsg}"
+        found = None
+        if features is not None and opened.domain is not None:
+            source = _feature_source(features, features_crs, features_layer, features_map)
+            found = _open_features(source, opened.domain, dem_crs, clock)
         dem_run = _dem_mesh(
             opened.tile,
             ", ".join(map(str, dem)),
@@ -747,6 +795,7 @@ def mesh(
             domain.name if domain is not None else "",
             DEFAULT_START_MIN_ANGLE if start_min_angle is None else start_min_angle,
             not no_constraint_feet,
+            found,
         )
         surface_mesh = dem_run.trimmed
         epsg, sentence, described = dem_run.epsg, dem_run.sentence, dem_run.described
@@ -769,6 +818,27 @@ def mesh(
             same = parse_crs(given.crs) == parse_crs(f"EPSG:{epsg}")
             how = "none" if same else transform_description(given.crs, f"EPSG:{epsg}")
             fields += [("domain_crs", crs_label(given.crs)), ("domain_transform", how)]
+        if found is not None and features is not None and dem_run.feature_counts is not None:
+            chains, feature_vertices = dem_run.feature_counts
+            layer = f":{found.layers[0]}" if found.layers[0] else ""
+            text = _ascii(
+                f"{features.name}{layer}, map {features_map or 'property'}, "
+                f"{len(found.features)} features ({found.outside} dropped outside), "
+                f"{chains} chains, {feature_vertices} vertices"
+            )
+            own = found.crs[0]
+            how = (
+                "none"
+                if parse_crs(own) == parse_crs(dem_crs)
+                else transform_description(own, dem_crs)
+            )
+            fields += [("features", text), ("features_crs", crs_label(own))]
+            fields.append(("features_transform", how))
+            comments.append(f"features {text}")
+            notice = CLASS_MAPS[features_map or "property"].notice
+            if notice:
+                fields.append(("features_notice", notice))
+                comments.append(f"features_notice {notice}")
     else:
         assert name is not None
         if stride is not None:
@@ -967,6 +1037,41 @@ def _open_dem(
         raise typer.BadParameter(_words(exc), param_hint="--dem") from exc
 
 
+def _feature_source(
+    path: Path, crs: str | None, layer: str | None, map_name: str | None
+) -> FeatureSource:
+    """R1: the ``--features`` flags as one source; a flag that cannot apply is
+    a usage error naming it."""
+    name = map_name or "property"
+    if name not in CLASS_MAPS:
+        raise typer.BadParameter(
+            f"unknown map {name}; use {', '.join(CLASS_MAPS)}", param_hint="--features-map"
+        )
+    if layer is not None and path.suffix.lower() != ".gpkg":
+        raise typer.BadParameter("applies to a .gpkg only", param_hint="--features-layer")
+    return FeatureSource(path=path, class_map=CLASS_MAPS[name], layer=layer, crs=crs)
+
+
+def _open_features(
+    source: FeatureSource, domain: DomainPolygon, dem_crs: str, clock: PhaseClock
+) -> FeatureSet:
+    """R5-R6 and R10: read and clip, timed as ``features read`` and ``features
+    clip``; a refusal is a usage error naming the feature."""
+    t0 = time.perf_counter()
+    try:
+        found = open_features(FeatureRequest(sources=(source,)), domain, dem_crs)
+    except FeatureError as exc:
+        raise typer.BadParameter(str(exc), param_hint="--features") from exc
+    clock.add("features read", time.perf_counter() - t0 - found.clip_seconds)
+    clock.add("features clip", found.clip_seconds)
+    typer.echo(
+        f"{len(found.features)} features read, {found.outside} dropped outside, "
+        f"{found.empty} empty skipped",
+        err=True,
+    )
+    return found
+
+
 def _ascii(text: str) -> str:
     """A file field's text with non-ASCII escaped, as `dem_tiles` records names."""
     return text.encode("ascii", "backslashreplace").decode("ascii")
@@ -994,6 +1099,7 @@ class _DemMesh:
     start_vertices: int | None
     start_triangles: int | None
     refinement: Refinement | None
+    feature_counts: tuple[int, int] | None = None
 
 
 def _dem_mesh(
@@ -1008,6 +1114,7 @@ def _dem_mesh(
     domain_name: str = "",
     min_angle: float = 0.0,
     feet: bool = False,
+    features: FeatureSet | None = None,
 ) -> _DemMesh:
     """Subsample, triangulate, sample or refine, and trim ``tile``.
 
@@ -1015,8 +1122,9 @@ def _dem_mesh(
     the stride grid. With it, increment 14's R9: the stride grid is the start
     mesh, refined against the DEM's nodes; with ``domain`` (already in the
     DEM's CRS, 15b; ``domain_name`` is its file's), increment 16's R3, the
-    polygon's rings are. ``min_angle`` > 0 improves the start's angles
-    first (increment 20); ``feet`` inserts constraint feet (increment 20b).
+    polygon's rings are, and ``features``' lines (16b). ``min_angle`` > 0
+    improves the start's angles first (increment 20); ``feet`` inserts
+    constraint feet (increment 20b).
     Returns the mesh, the ``elevation`` sentence for the file, the EPSG code,
     the ``domain`` field (empty without one), and the ``--stats`` inputs;
     ``clock`` gets R5's phases.
@@ -1026,11 +1134,21 @@ def _dem_mesh(
     meta = tile.meta
     described = ""
     domain_vertices = domain_holes = None
+    feature_counts = None
     if domain is not None:
-        xy, chains, described = _domain_chains(domain, domain_name)
-        domain_vertices, domain_holes = len(xy), len(domain.polygon.interiors)
+        started = start_chains(domain, features.features if features else (), DEFAULT_VOCABULARY)
+        chains = [(indices, ROLES[role], mask) for indices, role, mask in started.chains]
+        rings = (domain.polygon.exterior, *domain.polygon.interiors)
+        domain_vertices, domain_holes = sum(len(r.coords) - 1 for r in rings), len(rings) - 1
+        s = "" if domain_holes == 1 else "s"
+        described = f"{domain_name}, 1 ring {domain_holes} hole{s}, {domain_vertices} vertices"
         start = "start domain boundary, boundary z bilinear"
-        run = _engine(xy, chains, delaunay, spacing, clock)
+        run = _engine(started.vertices, chains, delaunay, spacing, clock)
+        if features is not None:
+            start = "start domain boundary and features, vertex z bilinear"
+            feature_counts = (len(chains) - len(rings), len(started.vertices) - domain_vertices)
+            noded = len(run.noded.vertices) if run.noded is not None else 0
+            typer.echo(f"{len(started.vertices)} input vertices, {noded} noded vertices", err=True)
     else:
         if stride is not None:
             step = stride
@@ -1122,7 +1240,7 @@ def _dem_mesh(
     if meta.vertical_unit_assumed:
         sentence += ", vertical unit assumed metres"
     typer.echo(f"{report}{trimmed.dropped} vertices without data dropped", err=True)
-    started = refinement is not None
+    refined = refinement is not None
     return _DemMesh(
         trimmed=trimmed,
         sentence=sentence,
@@ -1131,9 +1249,10 @@ def _dem_mesh(
         meta=meta,
         domain_vertices=domain_vertices,
         domain_holes=domain_holes,
-        start_vertices=len(run.mesh.vertices) if started else None,
-        start_triangles=len(run.mesh.triangles) if started else None,
+        start_vertices=len(run.mesh.vertices) if refined else None,
+        start_triangles=len(run.mesh.triangles) if refined else None,
         refinement=refinement,
+        feature_counts=feature_counts,
     )
 
 
@@ -1149,29 +1268,6 @@ def _refine_phases(clock: PhaseClock, seconds: float, out: RefineOutcome) -> Non
     for name, part in inner:
         clock.add(name, part)
     clock.add("refine: setup + output", max(0.0, seconds - sum(p for _, p in inner)))
-
-
-def _domain_chains(
-    domain: DomainPolygon, name: str
-) -> tuple[npt.NDArray[np.float64], list[tuple[list[int], ChainRole, int]], str]:
-    """R3: the outer ring as ``Outer`` and each hole as ``Hole``, mask 0 (U5),
-    and the ``domain`` field."""
-    rings = [domain.polygon.exterior, *domain.polygon.interiors]
-    points: list[tuple[float, float]] = []
-    chains: list[tuple[list[int], ChainRole, int]] = []
-    for k, ring in enumerate(rings):
-        coords = list(ring.coords)[:-1]
-        chains.append(
-            (
-                list(range(len(points), len(points) + len(coords))),
-                ChainRole.Outer if k == 0 else ChainRole.Hole,
-                0,
-            )
-        )
-        points += coords
-    holes = len(rings) - 1
-    described = f"{name}, 1 ring {holes} hole{'' if holes == 1 else 's'}, {len(points)} vertices"
-    return np.array(points, dtype=np.float64), chains, described
 
 
 def _off_node(xy: npt.NDArray[np.float64], meta: RasterMeta) -> int:

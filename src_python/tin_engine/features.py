@@ -14,7 +14,7 @@ vocabulary -- ``svg.py`` takes its draw precedence from ``SvgStyle`` and
 ``cli.py``, the composition root, is the only module that imports both this
 one and ``viz.style``. (It is *not* "the one module that names both a bit and a
 feature", as this docstring said until increment 7's review round:
-:data:`DEFAULT_VOCABULARY` below names seven of each, and ``cli.py`` names no
+:data:`DEFAULT_VOCABULARY` below names nine of each, and ``cli.py`` names no
 bit literal -- it looks one up through ``_BIT_OF[name]``.)
 
 The risk this module exists to narrow is a producer and a consumer disagreeing
@@ -176,5 +176,8 @@ DEFAULT_VOCABULARY = EdgeVocabulary(
         EdgeProperty(name="contour", bit=4),
         EdgeProperty(name="wall", bit=5),
         EdgeProperty(name="ditch", bit=6),
+        # Increment 16b (Q3, Ola 2026-09-28): a land-cover boundary, and water.
+        EdgeProperty(name="land_cover", bit=7),
+        EdgeProperty(name="water", bit=8),
     )
 )

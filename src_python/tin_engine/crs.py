@@ -53,6 +53,11 @@ def transform_description(src: str | CRS, dst: str | CRS) -> str:
     return str(_transformer(src, dst).description)
 
 
+def transform_definition(src: str | CRS, dst: str | CRS) -> str:
+    """PROJ's pipeline for `src` to `dst`, to see which steps it takes (16b R5)."""
+    return str(_transformer(src, dst).definition)
+
+
 def crs_label(crs: str | CRS) -> str:
     """`EPSG:n` when pyproj finds an exact EPSG code (so OGC's CRS84 is not
     `EPSG:4326`), otherwise ASCII text pyproj parses back to the same CRS."""

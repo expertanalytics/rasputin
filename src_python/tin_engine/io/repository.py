@@ -5,10 +5,15 @@ module in `io/` that opens files, and it opens them read-only (`"rb"`). It
 only stores: which tiles there are (`footprints`, header-only) and one tile's
 pixels (`load`). Choosing tiles and stitching them is `tin_engine.mosaic`'s,
 the same grid arithmetic for any storage.
+
+Increment 16b (R2, R3) adds :func:`open_geopackage`: SQLite cannot read from a
+Python stream, so a GeoPackage's "stream" is a read-only connection opened
+here, and `io/geopackage.py` decodes through it.
 """
 
 from __future__ import annotations
 
+import sqlite3
 from collections.abc import Callable, Iterable
 from pathlib import Path
 from typing import Any, Protocol
@@ -102,4 +107,14 @@ class TiffDemRepository:
                 raise GeoTiffError(f"{path.name}: {exc}") from exc
 
 
-__all__ = ["DemRepository", "TiffDemRepository", "TileFootprint"]
+def open_geopackage(path: Path) -> sqlite3.Connection:
+    """``path`` as a read-only SQLite connection (16b R3). The caller closes it.
+
+    A URI with ``mode=ro``: a missing file is refused, not created, and the
+    file's SpatiaLite triggers never fire. ``as_uri`` percent-encodes a ``?``,
+    ``#`` or space in the name, so they stay the file's.
+    """
+    return sqlite3.connect(Path(path).resolve().as_uri() + "?mode=ro", uri=True)
+
+
+__all__ = ["DemRepository", "TiffDemRepository", "TileFootprint", "open_geopackage"]
