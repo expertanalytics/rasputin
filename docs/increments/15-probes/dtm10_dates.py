@@ -2,9 +2,9 @@
 
 Evidence for "Ruled by Ola", Q1 revised (docs/increments/15-dem-mosaic.md).
 The export date of a tile is the modification date of its side files
-(`.tif.aux.xml`, else `.tfw`), which carry Kartverket's per-tile date. The
-`.tif` files' own dates are the download date and say nothing. The TIFF tags
-carry no date at all.
+(`.tif.aux.xml`, else `.tfw`; the two agree on all 254 tiles). 143 of the
+254 `.tif` files share one date, 2021-12-10, later than their side files, so
+the `.tif` date does not tell the exports apart. The TIFF tags carry no date.
 
 Usage: python dtm10_dates.py [ARCHIVE] [N_PAIRS] [SEED]
 Prints, for N random neighbour pairs on one lattice, whether they share an

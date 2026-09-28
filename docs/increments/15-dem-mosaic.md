@@ -31,9 +31,12 @@ are designed, not implemented; Q6-Q10 are open. Written by `@architect` before
   ("b", Ola).** Measured first, and widened after review with the committed
   probe `15-probes/dtm10_dates.py` (120 random neighbour pairs, seed 1; a
   tile's *export date* is the date of its side files, `.tif.aux.xml` or
-  `.tfw`; the `.tif` files' own dates are the download date and the TIFF tags
-  carry none): of 42 same-date pairs, 40 agree exactly and 41 within 1 mm, but
-  7204_4 | 7304_3 differs at 156,379 nodes by up to 5.07 m; of 77
+  `.tfw`, which agree on all 254 tiles; 143 of the 254 `.tif` files share one
+  date, 2021-12-10, later than their side files, so the `.tif` date does not
+  tell the exports apart, and the TIFF tags carry none). Of 120 sampled pairs,
+  119 share a valid node: of 42 same-date pairs, 40 agree exactly and 41
+  within 1 mm, but 7204_4 | 7304_3 differs by 1 mm or more at 156,379 nodes,
+  by up to 5.07 m; of 77
   different-date pairs, 49 agree within 1 mm and 28 do not, up to 52.1 m
   (6500_1 | 6500_2). So a shared date makes agreement likely, not certain.
   The differences have a mean near 0, are often exactly 0 on flat ground and

@@ -241,8 +241,9 @@ def assemble(plan: MosaicPlan, load: Callable[[str], DemTile]) -> Mosaic:
     `_decide`) and each pair that disagrees is reported (`_seam`).
 
     Memory: the peak is the canvas, the strips, and one load's own peak, which
-    is not one tile: decoding a DTM10 tile peaks at about 2.8 tiles (the
-    decoder's buffers and `DemTile`'s read-only copy). Measured with
+    is not one tile: decoding a DTM10 tile peaks at 2.0 to 3.0 tiles,
+    depending on the tile (the decoder's buffers and `DemTile`'s read-only
+    copy). Measured with
     tracemalloc on the 15a acceptance box (nine DTM10 tiles, 404 MB canvas,
     102 MB tiles): 720 MB, the canvas plus 3.1 tiles.
     """
