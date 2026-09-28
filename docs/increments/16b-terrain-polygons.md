@@ -686,8 +686,10 @@ builds returned `Ok`. M3's attribution holds, and 16b-0 is scoped as designed.
 - `node<K>`'s output on six integer fixtures at spacing 0.125 is pinned by a
   digest over integers only (status, grid points, chains, indices, masks,
   `node_of_input_vertex`), recorded from 6b4fcb9's brute-force verifier.
-- Registration: the suite builds only once `noded_pslg_builder.hpp` names
-  `sweep_box_pairs` (the 21a/21b guard). The review drops the guard.
+- Registration: the red commit built the suite only once
+  `noded_pslg_builder.hpp` named `sweep_box_pairs` (the 21a/21b guard). The
+  guard was dropped after green, and the suite is now registered
+  unconditionally.
 
 ### R9. Vertex density, z, and refinement
 

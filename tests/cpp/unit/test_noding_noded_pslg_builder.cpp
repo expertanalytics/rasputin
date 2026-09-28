@@ -50,6 +50,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <limits>
 #include <set>
 #include <string>
 #include <string_view>
@@ -258,6 +259,31 @@ TEST_CASE("a coordinate past kMaxGridIndex is refused, not asserted on",
     const NodeOutcome out = c.verify();
     REQUIRE(out.status == kOurBug);
     REQUIRE_FALSE(out.ok());
+}
+
+TEST_CASE("a huge spacing whose padded cell overflows is accepted, not thrown on",
+          "[noding][noded_pslg_builder]") {
+    // The +-DBL_MAX clamp on the padded node cells in check_guarantee_14. At
+    // spacing 1e308 node (1, 0) sits at x = 1e308, its cell reaches 1.5e308 and
+    // one spacing of padding takes it past DBL_MAX to +inf. Without the clamp
+    // Box2's constructor throws std::invalid_argument ("corners must be
+    // finite") out of build(); with it, this one-edge candidate is valid
+    // (every guarantee holds) and build() says so.
+    const SnapGrid grid{1e308};
+    const std::vector<Point2> vertices = world_of(grid, {GridPoint{0, 0}, GridPoint{1, 0}});
+    const std::vector<Chain> chains{Chain{0, 2, ChainRole::Breakline, kRoad}};
+    const std::vector<std::uint32_t> chain_indices{0, 1};
+    const std::vector<EdgeProperties> edge_properties{kRoad};
+    const std::vector<std::uint32_t> node_of_input_vertex{};
+    REQUIRE(grid.cell_max(grid.snap(vertices[1])).x + grid.spacing() ==
+            std::numeric_limits<double>::infinity());
+
+    NodeOutcome out;
+    REQUIRE_NOTHROW(out = NodedPslgBuilder{grid, vertices, chains, chain_indices,
+                                           edge_properties, node_of_input_vertex}
+                              .build<DefaultKernel>());
+    REQUIRE(out.status == NodeStatus::Ok);
+    REQUIRE(out.ok());
 }
 
 // ---------------------------------------------------------------------------
