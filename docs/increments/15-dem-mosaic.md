@@ -1313,6 +1313,23 @@ scratch implementation.
   a domain are a `MosaicError` before any `load`, naming the count, the codes
   and "a domain needs one".
 - Every extent refusal (no tile, uncovered, outside) fires before any `load`.
+- **Seams inside the needed region only** (Ola's ruling of 2026-09-28; test
+  amendment, `TestSeamsInsideTheNeededRegion`, and
+  `test_cli_mesh_domain_crs.py::TestSeamsWithADomain::test_only_the_needed_region_is_counted`).
+  On 21 x 21 quadrant tiles (dx = dy = 10) with `ne.tif` planted off `nw.tif`
+  at five nodes of their shared column: a thin diagonal strip whose plan is
+  the whole grid, and whose region misses every planted node, reports
+  `seams == ()` and `dem_seams` `none`; an L whose region takes two of them
+  reports exactly those (nodes 2, max 2, median 1.25), equal to `seams_of`
+  masked by the domain grown by the plan's cell diagonal, mitred
+  (`mosaic_fixtures.seams_of` takes an optional node mask); a rectangle 7 m
+  short of the column counts the nodes 7 m outside it. `--bbox` at each
+  domain's bounds has the same plan and reports all four planted nodes, and
+  the domain's mosaic is `--bbox`'s bit for bit and the midline oracle's.
+  Red at `5d12ad0` for the strip and the L (both files); the other cases pass
+  there as pins. Against a scratch implementation (a node mask in `assemble`'s
+  seam loop, not committed): masking by the ungrown polygon fails the L and
+  the 7 m case, no masking fails the strip and the L.
 
 **`cli.py`.**
 

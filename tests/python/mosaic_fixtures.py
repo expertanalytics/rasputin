@@ -234,20 +234,25 @@ SEAM_THRESHOLD = 0.001
 
 
 def seams_of(
-    tiles: Mapping[str, DemTile], grid: RasterMeta
+    tiles: Mapping[str, DemTile], grid: RasterMeta, needed: np.ndarray | None = None
 ) -> list[tuple[str, str, int, float, float]]:
     """The seam report the rule asks for, pair by pair, sorted by name:
     `(first, second, nodes, largest, median)` over the mosaic's nodes where
     both tiles hold a valid value and `|a - b| >= SEAM_THRESHOLD`;
     `|difference|` in float64, the median of an even count the mean of the
-    middle two. Pairs with no such node are left out."""
+    middle two. Pairs with no such node are left out.
+
+    `needed`, a boolean array of `grid`'s shape, keeps only the nodes it marks
+    (Ola, 2026-09-28: with `--domain`, the nodes of the needed region)."""
     placed = on_canvas(tiles, grid)
+    kept = np.ones((grid.rows, grid.cols), dtype=bool) if needed is None else needed
+    assert kept.shape == (grid.rows, grid.cols), (kept.shape, grid.rows, grid.cols)
     out = []
     names = sorted(placed)
     for i, a in enumerate(names):
         for b in names[i + 1 :]:
             va, vb = placed[a][0], placed[b][0]
-            both = ~np.isnan(va) & ~np.isnan(vb)
+            both = kept & ~np.isnan(va) & ~np.isnan(vb)
             differ = both & (np.abs(np.where(both, va - vb, 0.0)) >= SEAM_THRESHOLD)
             if differ.any():
                 gaps = np.abs(va[differ] - vb[differ])

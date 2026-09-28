@@ -20,7 +20,9 @@ meshes, with `domain_crs` and `domain_transform` recorded. Pinned by this suite
 - `--bbox` with `--domain` is a usage error naming both.
 - `dem_seams` is written on the domain path as without a domain: the
   disagreeing pair with a domain in EPSG:4326, `none` when the overlaps agree
-  (test amendment after the 15b review).
+  (test amendment after the 15b review). With a domain it counts only the
+  nodes inside the needed region (Ola, 2026-09-28): `none` for a disagreement
+  wholly outside it, however much of the plan's rectangle it fills.
 - A transformed domain refused for its extent (outside the DEM, in no tile, or
   with no image in the DEM's CRS) is a usage error naming the domain's CRS and
   the DEM's EPSG code, and writes nothing.
@@ -52,6 +54,7 @@ from pyproj import CRS, Transformer
 from shapely.geometry import Polygon
 
 import test_cli_mesh_mosaic
+import test_dem_input_domain
 from geotiff_fixtures import KARTVERKET, micro_tiff, needs_codecs
 from mosaic_fixtures import X0, Y0, blocks, quadrants, whole
 from test_cli_mesh_dem import write_tiff
@@ -389,6 +392,22 @@ class TestSeamsWithADomain:
         lon_lat = to_crs("EPSG:25833", "EPSG:4326", ACROSS)
         vtk = run(tmp_path, *mesh_args(quad_dir, write_geojson(tmp_path / "c.geojson", lon_lat)))
         assert the_field(vtk, "dem_seams") == "none"
+
+    @pytest.mark.parametrize(
+        ("shape", "recorded"),
+        [("STRIP", "none"), ("ELL", "ne.tif | nw.tif: nodes 2, max 2, median 1.25")],
+    )
+    def test_only_the_needed_region_is_counted(
+        self, tmp_path: Path, shape: str, recorded: str
+    ) -> None:
+        """Ola, 2026-09-28. `test_dem_input_domain.TestSeamsInsideTheNeededRegion`
+        (reached through its module, so pytest does not collect it twice): the
+        strip's region misses every planted node, the L's takes two of four."""
+        planted = test_dem_input_domain.TestSeamsInsideTheNeededRegion
+        dem = planted.disagreeing(tmp_path)
+        lon_lat = to_crs("EPSG:25833", "EPSG:4326", planted.utm33(getattr(planted, shape)))
+        vtk = run(tmp_path, *mesh_args(dem, write_geojson(tmp_path / "c.geojson", lon_lat)))
+        assert the_field(vtk, "dem_seams") == recorded
 
 
 class TestRealSeam:
