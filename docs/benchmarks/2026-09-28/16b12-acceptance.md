@@ -1,6 +1,6 @@
 # Increment 16b-1/2 acceptance (@perf, 2026-09-28/29): summary
 
-**Verdict: NOT ACCEPTED as designed, on one measure: the candidate read from
+**Verdict (2026-09-28): NOT ACCEPTED as designed, on one measure: the candidate read from
 Ola's European GeoPackage.** It takes **17.5-19.9 s**, against the
 design's admitted ~1 s (R5). Everything else passes. All runs were on
 **battery** and are compared against battery. The branch is `5f3a522`; the
@@ -58,3 +58,19 @@ base is `origin/master` `14f5fe3`. Method, tables and raw data are in
   `--mesh-dir` is given, because the mesh's parent directory is never
   created. The workaround was to create it first.
 - **Not measured:** a profile of `features clip`, and any AC run.
+
+## Addendum, 2026-09-29: re-timed after `d58d693` (battery, 64 → 63 %)
+
+`features read` from the Europe file, before → after `d58d693`'s
+primary-key fetch, median of 3 runs:
+
+- Catchment at 1 m: 17.90 → 1.77 s.
+- Catchment at 10 m: 19.08 → 0.98 s.
+- 48 km square at 1 m: 17.72 → 1.01 s.
+
+The totals fall from 30.3 to 14.0 s, from 28.2 to 9.9 s and from 48.0 to
+30.6 s. The three meshes are byte-identical to the earlier runs.
+**Verdict: the read defect is fixed; 16b-1/2 is ACCEPTED.**
+`features clip` (8.2-8.5 s) is a known open item, pending Ola's decision,
+and is not counted against the verdict. Details are in the README's
+addendum.

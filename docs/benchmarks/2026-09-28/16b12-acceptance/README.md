@@ -1,6 +1,6 @@
 # Increment 16b-1/2 acceptance (@perf, 2026-09-28/29)
 
-**Verdict: NOT ACCEPTED as designed, on one measure.** With Ola's European
+**Verdict (2026-09-28): NOT ACCEPTED as designed, on one measure; superseded by the 2026-09-29 addendum: ACCEPTED.** With Ola's European
 GeoPackage (EPSG:3035), reading the candidate features takes **17.5-19.9 s**.
 The design admits about 1 s for this read (R5). Everything else passes: the
 standard benchmark is unchanged, the quarter circle reproduces M5, both
@@ -321,3 +321,36 @@ writing the `.vtk` and the `--stats` pass.
   (`p16b12/meshes/`). The largest is the 48 km square at 1 m: 6.7 M
   triangles, 399 MB. To regenerate them, rerun
   `scripts/runs.sh <qc|ola|sq> 1`.
+
+## Addendum, 2026-09-29: the Europe-file cases re-timed after `d58d693`
+
+`d58d693` changes `query_features` to fetch by primary key through
+`WHERE pk IN (SELECT r.id FROM rtree … )`. The test in `58fee91` pins the
+query plan. Head was `d58d693`. The change is Python only. `tin_engine` was
+loaded from `src_python`, and the query text was checked for `IN (SELECT`
+before the runs. The `.so` is unchanged. Power: **battery**, 64 % → 63 %,
+00:19-00:23 (`logs/fix.log`). There were 3 runs per case
+(`scripts/runs.sh fix 3`). The reports are `stats/<case>-fix-r<n>.md`, and
+the table below gives medians, with the per-run range for `features read`.
+
+| case | features read, before | **features read, after** | features clip, before → after | total, before → after | triangles |
+|---|---:|---:|---:|---:|---:|
+| catchment, 1 m | 17.90 s | **1.77 s** (1.72-1.79) | 8.50 → 8.27 s | 30.34 → 14.04 s | 1 235 226 |
+| catchment, 10 m | 19.08 s | **0.98 s** (0.97-1.08) | 8.44 → 8.23 s | 28.23 → 9.90 s | 63 020 |
+| 48 km square, 1 m, quality 25° | 17.72 s | **1.01 s** (1.00-1.02) | 8.63 → 8.41 s | 47.97 → 30.60 s | 6 753 084 |
+
+- **The meshes are unchanged.** All three `.vtk` files are byte-identical
+  to the earlier runs (`cmp`), and their digests over points, triangles,
+  lines and `feature_mask` are equal (`logs/route_identity.log`). stderr
+  is unchanged: `87 features kept, 258 dropped outside, 28 clipped` and
+  `662 kept, 451 dropped outside, 69 clipped`.
+- **The read is 10-19x faster.** It now takes 0.97-1.79 s, against the
+  design's admitted 0.75-1.3 s for the R-tree scan. The 1 m catchment runs
+  are up to 0.5 s above that range, while the same query at 10 m takes
+  0.98 s. Why they differ has not been measured.
+- **`features clip` (8.2-8.5 s) is a known open item, pending Ola's
+  decision.** It is not counted against this verdict unless Ola rules
+  otherwise. It is still the largest share of feature input.
+
+**Verdict: the read defect is fixed. 16b-1/2 is ACCEPTED** (battery against
+battery), with the clip cost left open for Ola.

@@ -46,6 +46,11 @@ sq) for tol in 1 10; do
       one sq-t$tol-eu-q25 $rep --dem $T6603 --domain $SQ --tolerance $tol --features $EU --features-layer U2018_CLC2018_V2020_20u1 --features-map corine
       one sq-t$tol-eu-q0 $rep --dem $T6603 --domain $SQ --tolerance $tol --start-min-angle 0 --features $EU --features-layer U2018_CLC2018_V2020_20u1 --features-map corine
     done ;;
+fix)  # 2026-09-29: the Europe-file cases again, after d58d693's query fix
+      for tol in 1 10; do
+        one ola-t$tol-eu3035-fix $rep --dem $DATA/DTM10_UTM33_20260925 --domain $CATCH --tolerance $tol --features $EU --features-layer U2018_CLC2018_V2020_20u1 --features-map corine
+      done
+      one sq-t1-eu-q25-fix $rep --dem $T6603 --domain $SQ --tolerance 1 --features $EU --features-layer U2018_CLC2018_V2020_20u1 --features-map corine ;;
 esac
 done
 echo "### done $(date +%T) | $(pmset -g batt | head -1 | cut -d"'" -f2)"
