@@ -1344,12 +1344,16 @@ scratch implementation.
 - A transformed domain refused for its extent (no image, no tile, outside) is
   a usage error naming the domain's CRS and the DEM's EPSG code, and writes
   nothing; one reaching past the tiles also says `--domain` and `outside`.
-- **Same CRS, bit for bit.** `test_cli_mesh_domain_crs.py` holds SHA-256
-  digests of the mesh (points, cells, cell and point arrays; not field data)
-  for the micro-TIFF square of 16's suite at 1 m and the quarter circle on the
-  benchmark tile at 10 m (`needs_codecs`), recorded at `d34d79d` before any
-  15b change. Both digests are unchanged when the same run adds `--bbox` at
-  the domain's bounds, so cutting the window to the domain may not move them.
+- **Same CRS, bit for bit.** `test_cli_mesh_domain_crs.py`, relational on one
+  machine: for the micro-TIFF square of 16's suite at 1 m and the quarter
+  circle on the benchmark tile at 10 m (`needs_codecs`), the run equals (SHA-256
+  of points, cells, cell and point arrays; not field data) the same run with
+  `cli.open_dem` replaced by 16's data flow, the whole file and the domain as
+  `read_domain` returned it; the domain `_dem_mesh` receives has the read
+  vertices bit for bit; `Transformer.from_crs` is never called. It replaced
+  digests recorded at `d34d79d` on macOS arm64, whose square Linux x86 (GCC)
+  does not reproduce (PR #106's CI). The platform-stable absolute anchor is
+  `test_refine_golden.py`'s CLI quarter circle, a same-CRS domain.
 - **Axis order, able to fail:** the run that meshes a 4326 domain unpatched is
   refused, naming 4326 and 25833, when `Transformer.from_crs` is patched to
   force `always_xy=False`. A GeoJSON written latitude first is refused the same
