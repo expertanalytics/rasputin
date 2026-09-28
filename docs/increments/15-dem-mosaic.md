@@ -1,8 +1,9 @@
 # Increment 15 — a DEM in many tiles, inputs in their own CRS, and the computation frame
 
 Status: **Q1-Q5 ruled by Ola; 15a implemented** on branch
-`increment15-dem-mosaic` (red `2696bc2`, green `ff7cc8d`), in review. 15b-15d
-are designed, not implemented; Q6-Q10 are open. Written by `@architect` before
+`increment15-dem-mosaic` (red `2696bc2`, green `ff7cc8d`; PR #105). **15b
+implemented** on `increment15b-domain-crs` (red `372bb99`, green `0011741`).
+15c-15d are designed, not implemented; Q6-Q10 are open. Written by `@architect` before
 `@tester`, per `docs/increments/README.md` step 1.
 
 ## Ruled by Ola
@@ -859,6 +860,7 @@ order. 15c and 15d follow later.
 | | `cli.py`: `--dem` list, `--bbox`, refusals, fields | 45 | |
 | | **15a total** | **375** | **520** |
 | | *15b as built, measured at review (d34d79d..914dfc8, CLAUDE.md §2 unit): 150 added, of which `dem_input.py` 48 against 20 estimated; 15a + 15b against master 675, under the ceiling; they ship as two PRs per Ola's order* | | |
+| | *15b at the tip, against 15a's tip (`201a4e7..80fda64`): 148 added, 97 net* | | |
 | | *15a as built, measured at review (branch diff, CLAUDE.md §2 unit): 533, of which `mosaic.py` 325 against 200 estimated* | | |
 | | *15a after Ola's Q1 revised (cba0073): 596 added against master, of which `mosaic.py` 372 against 200 estimated* | | |
 | | *15a at the tip (a253a77): 597 added against master, blank lines excluded (`CLAUDE.md` §2 as ruled by Ola 2026-09-28); 554 net* | | |
