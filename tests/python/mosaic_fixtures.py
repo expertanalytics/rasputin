@@ -228,21 +228,27 @@ def winners(tiles: Mapping[str, DemTile], grid: RasterMeta) -> list[list[str]]:
     ]
 
 
+#: Ola, 2026-09-28: "Ignore below 1mm". A seam counts a node only where
+#: |a - b| >= 1 mm, 0.001 in the DEM's (metre) units, compared in float64.
+SEAM_THRESHOLD = 0.001
+
+
 def seams_of(
     tiles: Mapping[str, DemTile], grid: RasterMeta
 ) -> list[tuple[str, str, int, float, float]]:
     """The seam report the rule asks for, pair by pair, sorted by name:
     `(first, second, nodes, largest, median)` over the mosaic's nodes where
-    both tiles hold a valid value and the two differ; `|difference|` in
-    float64, the median of an even count the mean of the middle two. Pairs
-    that agree everywhere are left out."""
+    both tiles hold a valid value and `|a - b| >= SEAM_THRESHOLD`;
+    `|difference|` in float64, the median of an even count the mean of the
+    middle two. Pairs with no such node are left out."""
     placed = on_canvas(tiles, grid)
     out = []
     names = sorted(placed)
     for i, a in enumerate(names):
         for b in names[i + 1 :]:
             va, vb = placed[a][0], placed[b][0]
-            differ = ~np.isnan(va) & ~np.isnan(vb) & (va != vb)
+            both = ~np.isnan(va) & ~np.isnan(vb)
+            differ = both & (np.abs(np.where(both, va - vb, 0.0)) >= SEAM_THRESHOLD)
             if differ.any():
                 gaps = np.abs(va[differ] - vb[differ])
                 out.append((a, b, int(differ.sum()), float(gaps.max()), float(np.median(gaps))))

@@ -1085,7 +1085,8 @@ that was not committed; `test_mosaic.py` killed 16 of 16 mutants of it.
   `(first, second)`, empty for one tile and when every overlap agrees.
 - A seam is a **pair** of tiles. `nodes` counts the mosaic's nodes (inside the
   window, never a node a `--bbox` leaves out) where both hold a valid value
-  and the two differ (`!=`, so one ulp counts). `largest` and `median` are of
+  and the two differ (`!=`, so one ulp counts; superseded by the 1 mm
+  threshold below). `largest` and `median` are of
   `|a - b|` over those nodes only, in float64; the median of an even count is
   the mean of the middle two (`np.median`). A node in three tiles counts once
   in each disagreeing pair. Pairs that agree are not listed.
@@ -1102,6 +1103,35 @@ that was not committed; `test_mosaic.py` killed 16 of 16 mutants of it.
 - Not pinned: a stderr line for a disagreeing seam, a cap on the number of
   entries, and where the report is computed (the scratch kept each pair's
   overlap strips, which needs no second load).
+
+**Amended for Ola's 1 mm threshold (2026-09-28).** Pinned by the test
+amendment `15a tests: the seam report ignores differences below 1 mm; table
+cells escaped`: `TestSeamThreshold` in `test_mosaic.py`, the oracle
+`seams_of` in `mosaic_fixtures.py` (`SEAM_THRESHOLD`), and two tests of
+`test_cli_mesh_mosaic.py`'s `TestQ1Seams`. Run green against a scratch
+implementation that was not committed; three mutants of it killed (`>` for
+`>=`, the threshold consulted by the midline decision, the median over every
+differing node).
+
+- A seam counts a node where both tiles hold a valid value and
+  `|a - b| >= 0.001` in float64 (the DEM's units), replacing `!=`. `nodes`,
+  `largest` and `median` are over those nodes only; a pair with none is not
+  listed, so `dem_seams` is `none` and `--stats` has no `## DEM seams`
+  section when no pair qualifies. The boundary is pinned with float64 tiles
+  holding 0.0 against `0.001` (counts) and against
+  `np.nextafter(0.001, 0.0)` (does not), in either tile.
+- The midline decision does not look at the threshold: 0.5 mm apart, a node
+  still takes the deeper tile's value, ties by name, in every assembly order.
+  `TestM8Overlaps.test_one_ulp_is_a_disagreement` became
+  `test_one_ulp_is_below_the_threshold_and_still_decided_by_depth` (no seam;
+  the value is still the tie's `e.tif`).
+- `TestRealDtm10.test_q1_the_seam_shifted_by_one_cell_is_reported_and_split`
+  (`test_dem_input.py`) is unchanged but follows the oracle: 13 of the
+  shifted real seam's 12,800 differing nodes are below 1 mm.
+- **Table cells:** a `|` in a tile name is written `\|` in the
+  `## DEM seams` table, so the row keeps five cells. The `dem_seams` field is
+  not a table and keeps the name as listed (`ne.tif | n|w.tif: ...`). Which
+  layer escapes is not pinned.
 
 **`io/models.py`.** `DemTile._adopt(meta, array)` is a classmethod. It raises
 `ValueError` on a shape, dtype, ndim or non-C-contiguous mismatch, sets the

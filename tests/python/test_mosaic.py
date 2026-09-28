@@ -19,6 +19,10 @@ by name, and each disagreeing pair is reported in `Mosaic.seams`
 (`TestQ1DeepestInterior`, `TestQ1SeamReport`, and four tests of
 `TestM8Overlaps` that pinned the refusal and now pin the report).
 
+AMENDED FOR OLA'S 1 MM THRESHOLD (2026-09-28, "Ignore below 1mm"). A seam
+counts only nodes where |a - b| >= 0.001; the midline rule does not look at
+the threshold (`TestSeamThreshold`; `TestM8Overlaps`' one-ulp test inverted).
+
 HOW THIS FILE GOES RED. `tin_engine.mosaic` and `tin_engine.io.repository`
 are imported in module-scoped fixtures, as `test_bench.py` loads its tool, so
 while they are missing each test fails on its own with `ModuleNotFoundError`
@@ -1034,17 +1038,18 @@ class TestM8Overlaps:
             assert seams(result) == [("b.tif", "c.tif", 1, 4.0, 4.0)], names
             assert result.tile.array[0, 0] == 1.0, names
 
-    def test_one_ulp_is_a_disagreement(self, build: Any) -> None:
-        """`==`, not `isclose`: DTM10's and ANADEM's overlaps agree bit for bit
-        on one export date (N3, B4), so one ulp is reported. Overlap 1: the
-        shared column is on both tiles' borders, a tie, `e.tif`'s value."""
+    def test_one_ulp_is_below_the_threshold_and_still_decided_by_depth(self, build: Any) -> None:
+        """Was `test_one_ulp_is_a_disagreement`, which pinned `!=` (one ulp
+        reported). Ola, 2026-09-28: "Ignore below 1mm", so one ulp is not
+        reported. What it kept: the node's value is still decided by the
+        midline rule. Overlap 1: the shared column is on both tiles' borders,
+        a tie, `e.tif`'s value."""
         source, arrays = self.pair(1)
         value = arrays["e.tif"][2, 0]
         bumped = np.nextafter(value, np.float32(np.inf), dtype=np.float32)
         arrays["e.tif"][2, 0] = bumped
         result, _ = build(self.tiles(source, arrays))
-        ulp = float(bumped) - float(value)
-        assert seams(result) == [("e.tif", "w.tif", 1, ulp, ulp)]
+        assert result.seams == ()
         assert result.tile.array[2, 4] == bumped
 
     def test_a_disagreement_against_a_sentinel_tile_is_still_one(self, build: Any) -> None:
@@ -1383,6 +1388,102 @@ class TestQ1SeamReport:
             tiles[name] = piece(source, 0, 3, 0, 3, array=array)
         result, _ = build(tiles)
         assert seams(result) == [("a.tif", "b.tif", 1, 16777217.5, 16777217.5)]
+
+
+class TestSeamThreshold:
+    """Ola, 2026-09-28: "Ignore below 1mm". A seam counts, and the report
+    lists, only nodes where both tiles hold a valid value and
+    |a - b| >= 1 mm, 0.001 in the DEM's units, in float64; `nodes`, `largest`
+    and `median` are over those nodes only, and a pair with none is not
+    listed. Which tile's value a node takes does not depend on the threshold.
+    """
+
+    #: Exactly 1 mm (the float64 0.001 the rule compares with) and the float64
+    #: just below it. Planted as `gap` against 0.0, so `|a - b|` is the float64
+    #: itself: no rounding stands between the planted value and the compare.
+    AT = 0.001
+    BELOW = float(np.nextafter(0.001, 0.0))
+
+    @staticmethod
+    def same_grid(first: float, second: float) -> dict[str, DemTile]:
+        """`a.tif` and `b.tif` on one float64 3 x 3 grid, equal but at the
+        centre, where they hold `first` and `second`. Both are 1 deep there:
+        a tie, `a.tif`'s value."""
+        source = whole(rows=3, cols=3, dtype=np.float64)
+        tiles = {}
+        for name, centre in (("a.tif", first), ("b.tif", second)):
+            array = source.array.copy()
+            array[1, 1] = centre
+            tiles[name] = piece(source, 0, 3, 0, 3, array=array)
+        return tiles
+
+    @pytest.mark.parametrize("larger", ["a.tif", "b.tif"])
+    def test_exactly_one_millimetre_counts(self, build: Any, larger: str) -> None:
+        assert self.AT == 1e-3  # the literal the ruling names, not a neighbour
+        first, second = (self.AT, 0.0) if larger == "a.tif" else (0.0, self.AT)
+        result, _ = build(self.same_grid(first, second))
+        assert seams(result) == [("a.tif", "b.tif", 1, self.AT, self.AT)]
+        assert result.tile.array[1, 1] == first
+
+    @pytest.mark.parametrize("larger", ["a.tif", "b.tif"])
+    def test_just_below_one_millimetre_does_not(self, build: Any, larger: str) -> None:
+        assert 0.0 < self.BELOW < self.AT
+        first, second = (self.BELOW, 0.0) if larger == "a.tif" else (0.0, self.BELOW)
+        result, _ = build(self.same_grid(first, second))
+        assert result.seams == ()
+        assert result.tile.array[1, 1] == first
+
+    def test_nodes_largest_and_median_are_over_the_qualifying_nodes_only(self, build: Any) -> None:
+        """`TestM8Overlaps`' pair with overlap 3; `e.tif` differs at four
+        nodes, by 0.0005, 0.0009, 2 and 4. Two qualify: nodes 2, largest 4,
+        median 3. Over all four the count would be 4 and the median ~1."""
+        source, arrays = TestM8Overlaps.pair(3)
+        arrays["e.tif"][1, 0] += np.float32(0.0005)  # global (1, 4)
+        arrays["e.tif"][1, 1] += np.float32(0.0009)  # global (1, 5)
+        arrays["e.tif"][2, 1] += np.float32(2.0)  # global (2, 5)
+        arrays["e.tif"][2, 2] += np.float32(4.0)  # global (2, 6)
+        tiles = TestM8Overlaps.tiles(source, arrays)
+        result, _ = build(tiles)
+        assert seams(result) == [("e.tif", "w.tif", 2, 4.0, 3.0)]
+        assert seams(result) == seams_of(tiles, result.tile.meta)
+
+    def test_a_pair_below_the_threshold_everywhere_is_not_listed(self, build: Any) -> None:
+        """Quadrants with overlap 3: `ne.tif` 0.5 mm off `nw.tif` at global
+        (1, 7), in those two only; `sw.tif` 3 off `nw.tif` at global (5, 1),
+        in those two only. One entry, nw | sw."""
+        source = whole(9, 13)
+        tiles = quadrants(source, row_cut=4, col_cut=6, overlap=3)
+        for name, (r, c), delta in (("ne.tif", (1, 1), 0.0005), ("sw.tif", (1, 1), 3.0)):
+            array = np.asarray(tiles[name].array).copy()
+            array[r, c] += np.float32(delta)
+            tiles[name] = DemTile(meta=tiles[name].meta, array=array)
+        result, _ = build(tiles)
+        assert seams(result) == [("nw.tif", "sw.tif", 1, 3.0, 3.0)]
+
+    def test_a_sub_millimetre_disagreement_is_still_decided_by_depth_then_name(
+        self, mz: ModuleType, plan: Any
+    ) -> None:
+        """The midline rule does not look at the threshold. `TestM8Overlaps`'
+        pair with overlap 3, 0.5 mm apart at three nodes of row 1: at column 4
+        `w.tif` is deeper (1 against 0), at 5 a tie (`e.tif`, by name), at 6
+        `e.tif` is deeper. So the name that sorts first does not take every
+        node, and in every assembly order; nothing is reported."""
+        source, arrays = TestM8Overlaps.pair(3)
+        arrays["w.tif"][1, 4] += np.float32(0.0005)  # global (1, 4): w.tif deeper
+        arrays["e.tif"][1, 1] += np.float32(0.0005)  # global (1, 5): a tie
+        arrays["e.tif"][1, 2] -= np.float32(0.0005)  # global (1, 6): e.tif deeper
+        tiles = TestM8Overlaps.tiles(source, arrays)
+        expected = source.array.copy()
+        expected[1, 4] = arrays["w.tif"][1, 4]
+        expected[1, 5] = arrays["e.tif"][1, 1]
+        expected[1, 6] = arrays["e.tif"][1, 2]
+        assert (expected[1, 4:7] != source.array[1, 4:7]).all()  # all three planted
+        planned = plan(tiles)
+        for order in itertools.permutations(planned.tiles):
+            result = mz.assemble(planned.model_copy(update={"tiles": order}), Loads(tiles))
+            names = [p.name for p in order]
+            assert same_array(result.tile.array, expected), names
+            assert result.seams == (), names
 
 
 class TestM9SplitAndRestitch:

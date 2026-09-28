@@ -17,6 +17,7 @@ T-real cuts the committed benchmark tile into quadrants (`needs_codecs`).
 from __future__ import annotations
 
 import io
+import re
 from pathlib import Path
 
 import numpy as np
@@ -243,14 +244,14 @@ class TestQ1Seams:
     """
 
     @staticmethod
-    def disagreeing(tmp_path: Path, source: DemTile, name: str = "nw.tif") -> Path:
-        """The quadrants, `ne.tif` 4.0 higher at one node of the shared column
+    def disagreeing(tmp_path: Path, source: DemTile, name: str = "nw.tif", by: float = 4.0) -> Path:
+        """The quadrants, `ne.tif` `by` higher at one node of the shared column
         (global (2, 6), in `ne.tif` and the tile named `name` only). Was
         `TestC4Refusals.test_an_overlap_disagreement`'s directory."""
         tiles = quadrants(source, row_cut=4, col_cut=6, overlap=1)
         tiles[name] = tiles.pop("nw.tif")
         changed = np.array(tiles["ne.tif"].array)
-        changed[2, 0] += 4.0
+        changed[2, 0] += np.float32(by)
         tiles["ne.tif"] = piece(source, 0, 5, 6, 13, array=changed)
         write_tiles(tmp_path / "disagree", tiles)
         return tmp_path / "disagree"
@@ -335,6 +336,36 @@ class TestQ1Seams:
         lines = report(tmp_path, "--dem", str(mosaic_dir)).splitlines()
         assert "## Sizes" in lines
         assert "## DEM seams" not in lines
+
+    def test_a_sub_millimetre_disagreement_records_none_and_no_section(
+        self, tmp_path: Path, source: DemTile
+    ) -> None:
+        """Ola, 2026-09-28: "Ignore below 1mm". The one differing node is
+        0.5 mm off, so no pair qualifies: `none`, and `--stats` has no
+        "DEM seams" section."""
+        directory = self.disagreeing(tmp_path, source, by=0.0005)
+        vtk = run_vtk(tmp_path / "m.vtk", "--dem", str(directory))
+        assert field(vtk, "dem_seams") == "none"
+        lines = report(tmp_path, "--dem", str(directory)).splitlines()
+        assert "## Sizes" in lines
+        assert "## DEM seams" not in lines
+
+    def test_a_pipe_in_a_tile_name_is_escaped_in_the_stats_table(
+        self, tmp_path: Path, source: DemTile
+    ) -> None:
+        """Review suggestion on 15a: a `|` in a tile name would end its
+        Markdown table cell early. In the "DEM seams" table it is written
+        `\\|`, so the row still has five cells (split on unescaped pipes).
+        The `dem_seams` field is not a table and records the name as listed
+        (`ne.tif` sorts first: `e` < `|`)."""
+        directory = self.disagreeing(tmp_path, source, name="n|w.tif")
+        lines = report(tmp_path, "--dem", str(directory)).splitlines()
+        at = lines.index("## DEM seams")
+        row = next(line for line in lines[at + 1 :] if line.startswith("| ne.tif"))
+        cells = [cell.strip() for cell in re.split(r"(?<!\\)\|", row.strip().strip("|"))]
+        assert cells == ["ne.tif", "n\\|w.tif", "1", "4", "4"]
+        vtk = run_vtk(tmp_path / "m.vtk", "--dem", str(directory))
+        assert field(vtk, "dem_seams") == "ne.tif | n|w.tif: nodes 1, max 4, median 4"
 
 
 class TestC5Usage:
