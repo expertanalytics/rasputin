@@ -53,7 +53,14 @@ are designed, not implemented; Q6-Q10 are open. Written by `@architect` before
     25 m jump cannot pass unnoticed;
   - the result stays independent of tile order.
   Ola will also download a fresh single-date set from hoydedata.no, whose
-  overlaps should agree.
+  overlaps should mostly agree (the probe found one same-date pair that does
+  not); the fresh set is not blocking ("the data is data", Ola).
+- **2026-09-28, the seam report ignores differences below 1 mm** (Ola: "Ignore
+  below 1mm"). A seam counts, and the report lists, only nodes where
+  |a − b| ≥ 1 mm; float noise such as 7807_1 | 7808_4 (31 nodes, 1.5e-5 m)
+  and 7910_2 | 7910_3 (4 nodes, 2.4e-7 m) no longer appears. The midline rule
+  itself is unchanged: which tile's value a node takes does not depend on the
+  threshold.
 - **2026-09-27, Q5 as read after review ("Yes", to the main session's
   proposal):** @reviewer found that DTM10's 51-node overlaps make a box that
   only reaches into a half-cell tile's overlap strip select that tile and be
