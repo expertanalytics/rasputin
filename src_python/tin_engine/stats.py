@@ -153,6 +153,9 @@ class Report:
     total: float
     stats_seconds: float
     threads: int | None = None
+    #: One row per disagreeing pair of DEM tiles: two names, nodes, max and
+    #: median, already formatted (`mosaic.Seam.cells`; Ola's Q1 revised).
+    seams: Sequence[Sequence[str]] = ()
 
 
 def _exact(value: float) -> str:
@@ -279,6 +282,9 @@ def render(report: Report) -> str:
     """The Markdown report (R4). Pure: no clock, no I/O."""
     lines = ["# rasputin mesh — statistics", "", f"`{report.command}`", ""]
     lines += ["## Sizes", "", *_sizes(report.sizes), ""]
+    if report.seams:
+        header = ("tile", "tile", "nodes", "max", "median")
+        lines += ["## DEM seams", "", *_table(header, report.seams), ""]
     lines += ["## Quality (plan view, x/y)", "", *_quality(report.quality), ""]
     if report.refinement is not None:
         lines += ["## Refinement", "", *_refinement(report.refinement), ""]

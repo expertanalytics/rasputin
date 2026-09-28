@@ -76,7 +76,7 @@ from tin_engine.grid_domain import default_stride, refine_start_stride, subsampl
 from tin_engine.io.models import DemTile, RasterMeta
 from tin_engine.io.ply import write_ply
 from tin_engine.io.vtk_legacy import write_vtk
-from tin_engine.mosaic import Bounds
+from tin_engine.mosaic import Bounds, Seam
 from tin_engine.raster import to_core
 from tin_engine.stats import PhaseClock, Refinement, Report, Sizes, _exact, quality, render
 from tin_engine.viz.fixtures import GALLERY, Fixture
@@ -662,6 +662,7 @@ def mesh(
     """
     clock = PhaseClock()
     dem_run: _DemMesh | None = None
+    seams: tuple[Seam, ...] = ()
     if (name is None) == (not dem):
         raise typer.BadParameter(
             "give a gallery fixture name or --dem PATH, exactly one of the two",
@@ -745,8 +746,10 @@ def mesh(
         fields = [("crs", f"EPSG:{epsg}"), ("elevation_source", sentence)]
         comments = [f"crs EPSG:{epsg}", f"elevation {sentence}"]
         if len(dem) > 1 or dem[0].is_dir():  # R11: the files used, named
-            listed = "; ".join(names).encode("ascii", "backslashreplace").decode("ascii")
-            fields.append(("dem_tiles", listed))
+            fields.append(("dem_tiles", _ascii("; ".join(names))))
+            seams = opened.seams
+            listed = "; ".join(s.entry() for s in seams) or "none"
+            fields.append(("dem_seams", _ascii(listed)))  # Ola's Q1 revised
         if described:
             fields.append(("domain", described))
             comments.append(f"domain {described}")
@@ -832,7 +835,7 @@ def mesh(
             target.write_bytes(data)
         typer.echo(f"{target}")
     if stats is not None:
-        _write_report(clock, report_target, surface_mesh, dem_run, targets)
+        _write_report(clock, report_target, surface_mesh, dem_run, targets, seams)
 
 
 def _report_target(
@@ -856,6 +859,7 @@ def _write_report(
     trimmed: Trimmed,
     dem_run: _DemMesh | None,
     files: list[Path],
+    seams: tuple[Seam, ...],
 ) -> None:
     """Build the report from what ran and write it, or print it for ``-``.
     The total stops here; the quality pass is timed on its own line (R4)."""
@@ -887,6 +891,7 @@ def _write_report(
             total=total,
             stats_seconds=(time.perf_counter_ns() - t0) / 1e9,
             threads=os.cpu_count() if refinement else None,
+            seams=[s.cells() for s in seams],
         )
     )
     if target is None:
@@ -938,6 +943,11 @@ def _open_dem(
         ) from exc
     except ValueError as exc:
         raise typer.BadParameter(_words(exc), param_hint="--dem") from exc
+
+
+def _ascii(text: str) -> str:
+    """A file field's text with non-ASCII escaped, as `dem_tiles` records names."""
+    return text.encode("ascii", "backslashreplace").decode("ascii")
 
 
 def _words(exc: ValueError) -> str:

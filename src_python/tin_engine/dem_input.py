@@ -18,7 +18,7 @@ from pydantic import BaseModel, ConfigDict, model_validator
 
 from tin_engine.io.models import DemTile
 from tin_engine.io.repository import TiffDemRepository
-from tin_engine.mosaic import Bounds, MosaicPlan, assemble, plan_mosaic
+from tin_engine.mosaic import Bounds, MosaicPlan, Seam, assemble, plan_mosaic
 
 
 class DemRequest(BaseModel):
@@ -45,12 +45,14 @@ class DemRequest(BaseModel):
 
 @dataclass(frozen=True, slots=True)
 class DemInput:
-    """The tile to mesh, the plan it was assembled by, and a name for the run:
-    the directory's name, or the stem of the first file as given."""
+    """The tile to mesh, the plan it was assembled by, a name for the run (the
+    directory's name, or the stem of the first file as given), and the
+    mosaic's disagreeing seams (Ola's Q1 revised)."""
 
     tile: DemTile
     plan: MosaicPlan
     label: str
+    seams: tuple[Seam, ...] = ()
 
 
 def open_dem(request: DemRequest) -> DemInput:
@@ -64,4 +66,5 @@ def open_dem(request: DemRequest) -> DemInput:
         repository = TiffDemRepository(request.sources, nodata=request.nodata)
         label = first.stem
     plan = plan_mosaic(repository.footprints(), request.bounds, None)
-    return DemInput(tile=assemble(plan, repository.load).tile, plan=plan, label=label)
+    mosaic = assemble(plan, repository.load)
+    return DemInput(tile=mosaic.tile, plan=plan, label=label, seams=mosaic.seams)
