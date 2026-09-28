@@ -65,6 +65,13 @@ implemented** on `increment15b-domain-crs` (red `372bb99`, green `0011741`).
   and 7910_2 | 7910_3 (4 nodes, 2.4e-7 m) no longer appears. The midline rule
   itself is unchanged: which tile's value a node takes does not depend on the
   threshold.
+- **2026-09-28, with `--domain` the seam report counts only nodes inside the
+  needed region** (Ola: "yes, go with a"). The needed region is the domain
+  grown by the chosen plan's cell diagonal (15b), exactly the nodes bilinear z
+  can read. A seam whose overlap lies inside the plan's rectangle but wholly
+  outside the needed region is no longer reported (an irregular catchment's
+  bounding box can be several times its area). Without `--domain` the report
+  is unchanged. Which tile's value a node takes is unchanged everywhere.
 - **2026-09-27, Q5 as read after review ("Yes", to the main session's
   proposal):** @reviewer found that DTM10's 51-node overlaps make a box that
   only reaches into a half-cell tile's overlap strip select that tile and be
