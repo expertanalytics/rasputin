@@ -311,3 +311,25 @@ add_terrain_backend_test(test_mesh_lattice_incircle unit/test_mesh_lattice_incir
 # threads, so it is not in the TSan job.
 
 add_terrain_backend_test(prop_noding_verifier_sweep property/prop_noding_verifier_sweep.cpp)
+
+# The fine catchment's flood, increment 22 PR 1
+# (docs/increments/22-auto-catchment.md, "Flow and membership: one flood" and
+# "The red suites"). Not named invariant-critical; the descent oracle and the
+# invariants on random DEMs are the defence. It starts no threads.
+#
+# RED UNTIL hydrology/upstream.hpp EXISTS (increment 12's scaffold, 39dba00):
+# while the header is absent the target is EXCLUDE_FROM_ALL and not registered
+# with ctest, so `cmake --build build` and `ctest` stay green; see the red with
+# `cmake --build build --target test_hydrology_upstream`. Once the header lands,
+# re-running `cmake -S . -B build` registers the suite with no edit here.
+# REMOVE AT GREEN: replace the if/else with the plain add_terrain_test line.
+if(EXISTS "${PROJECT_SOURCE_DIR}/include/terrain/hydrology/upstream.hpp")
+    add_terrain_test(test_hydrology_upstream unit/test_hydrology_upstream.cpp)
+else()
+    message(STATUS "test_hydrology_upstream: include/terrain/hydrology/upstream.hpp absent; "
+                   "suite built only on request (increment 22 red step)")
+    add_executable(test_hydrology_upstream EXCLUDE_FROM_ALL unit/test_hydrology_upstream.cpp)
+    target_link_libraries(test_hydrology_upstream PRIVATE
+        terrain_headers terrain_test_support Catch2::Catch2WithMain)
+    target_compile_options(test_hydrology_upstream PRIVATE -Wall -Wextra -Wpedantic -Werror)
+endif()
