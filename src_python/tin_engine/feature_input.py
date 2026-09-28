@@ -139,7 +139,9 @@ class TerrainFeature(BaseModel):
 
 class FeatureSet(BaseModel):
     """The features in source order; ``outside`` counts those clipped away,
-    ``empty`` empty geometries skipped. ``crs`` and ``layers`` are per source
+    ``clipped`` those kept that crossed the domain's boundary, ``empty`` empty
+    geometries skipped, ``scanned`` the GeoPackage layers read without an
+    R-tree index (R3). ``crs`` and ``layers`` are per source
     (a layer for a GeoPackage only); ``clip_seconds`` is the time spent after
     reading, for the ``features clip`` row."""
 
@@ -147,7 +149,9 @@ class FeatureSet(BaseModel):
 
     features: tuple[TerrainFeature, ...]
     outside: int = 0
+    clipped: int = 0
     empty: int = 0
+    scanned: tuple[str, ...] = ()
     crs: tuple[str, ...] = ()
     layers: tuple[str | None, ...] = ()
     clip_seconds: float = 0.0
@@ -233,7 +237,9 @@ def open_features(request: FeatureRequest, domain: DomainPolygon, dem_crs: str |
     return FeatureSet(
         features=tuple(tally.features),
         outside=tally.outside,
+        clipped=tally.clipped,
         empty=tally.empty,
+        scanned=tuple(tally.scanned),
         crs=tuple(crss),
         layers=tuple(layers),
         clip_seconds=tally.seconds,
@@ -246,7 +252,8 @@ class _Tally:
     def __init__(self, domain: DomainPolygon, dem: CRS, vocabulary: EdgeVocabulary) -> None:
         self.domain, self.dem, self.vocabulary = domain, dem, vocabulary
         self.features: list[TerrainFeature] = []
-        self.outside = self.empty = 0
+        self.outside = self.clipped = self.empty = 0
+        self.scanned: list[str] = []
         self.seconds = 0.0
         shapely.prepare(domain.polygon)
 
@@ -262,6 +269,8 @@ class _Tally:
             if suffix == ".gpkg":
                 with closing(open_geopackage(path)) as conn:
                     layer = layer_info(conn, source.layer)
+                    if layer.rtree is None:
+                        self.scanned.append(layer.table)
                     own = self._own(source, layer.crs)
                     box = source_region(self.domain, self.dem, own).bounds
                     scale = 1.0 if parse_crs(own).is_geographic else 100_000.0
@@ -277,17 +286,22 @@ class _Tally:
                 self._take(source, own, ((f.fid, f.geometry, f.value) for f in doc.features))
                 return own, None
             doc = json.loads(path.read_text())
-            member = doc.get("crs")
-            own = self._own(source, member["properties"]["name"] if member else GEOJSON_DEFAULT_CRS)
-            rows = [
-                (f.get("id", k), f["geometry"] and shape(f["geometry"]), f["properties"] or {})
-                for k, f in enumerate(doc["features"])
-            ]
-            self._take(source, own, ((k, g, p.get(attribute)) for k, g, p in rows))
+            try:  # a malformed document's structure raises any of these
+                member = doc.get("crs")
+                text = member["properties"]["name"] if member else GEOJSON_DEFAULT_CRS
+                rows = [
+                    (f.get("id", k), f["geometry"] and shape(f["geometry"]), f["properties"] or {})
+                    for k, f in enumerate(doc["features"])
+                ]
+                values = [(k, g, p.get(attribute)) for k, g, p in rows]
+            except (KeyError, TypeError, AttributeError, shapely.errors.ShapelyError) as exc:
+                raise FeatureError(f"{path.name}: not a GeoJSON FeatureCollection ({exc})") from exc
+            own = self._own(source, text)
+            self._take(source, own, values)
             return own, None
         except FeatureError:
             raise
-        except (OSError, ValueError, KeyError, TypeError, AttributeError, sqlite3.Error) as exc:
+        except (OSError, ValueError, KeyError, sqlite3.Error) as exc:
             raise FeatureError(f"{path.name}: {exc}") from exc
 
     def _own(self, source: FeatureSource, text: str) -> str:
@@ -339,6 +353,8 @@ class _Tally:
             )
             if lines:
                 self.features.append(TerrainFeature(fid=fid, mask=mask, lines=lines))
+                # A dropped edge lies outside, so a pre-clipped chain is not covered.
+                self.clipped += not all(self.domain.polygon.covers(g) for g in kept)
             else:
                 self.outside += 1
             self.seconds += time.perf_counter() - t0

@@ -132,7 +132,7 @@ CORE_CLOSED_ROLES: tuple[object, ...] = (ChainRole.Outer, ChainRole.Hole)
 #:
 #: It is the gallery's list and not all of :data:`DEFAULT_VOCABULARY`. The
 #: legend is derived from it, and a token `svg.py`'s stylesheet has no rule for
-#: draws identically to the row above it, so declaring all seven features would
+#: draws identically to the row above it, so declaring all nine features would
 #: put six legend rows on every picture that a reader cannot tell apart --
 #: measured by drawing the gallery. It grows when the stylesheet does.
 #: Grown once, at increment 8: `bridge-over-lake`'s shoreline is an area feature
@@ -1066,9 +1066,11 @@ def _open_features(
     clock.add("features clip", found.clip_seconds)
     typer.echo(
         f"{len(found.features)} features read, {found.outside} dropped outside, "
-        f"{found.empty} empty skipped",
+        f"{found.clipped} clipped, {found.empty} empty skipped",
         err=True,
     )
+    for table in found.scanned:
+        typer.echo(f"{source.path.name}:{table}: no R-tree index, table scanned", err=True)
     return found
 
 
