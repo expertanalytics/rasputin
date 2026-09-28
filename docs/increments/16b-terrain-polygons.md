@@ -45,6 +45,29 @@ which this increment gives its first real input with interior constraints.
    (16b) follows the same path" (ROADMAP, "inputs in their own CRS").
 6. **Order of work** (2026-09-27): 15a/15b, then 16b, then auto-catchment.
 
+## Ruled by Ola
+
+- **2026-09-28, Q1-Q5: "Yes to Q1 - Q5"**, to the recommendations in
+  "Questions for Ola": (Q1) the verifier's pair search is indexed by sort and
+  sweep in 16b-0 and stays always on; (Q2) triangle labelling is a separate
+  increment, 16c; (Q3) new vocabulary bits `land_cover` (bit 7) and `water`
+  (bit 8); (Q4) one `--features` source per run plus the built-in maps; (Q5)
+  the quality start is unchanged, @perf records both settings, and 20c
+  decides.
+- **2026-09-28, Q6: (b), after the main session's closer look.** The 30 MB
+  `tests/fixtures/corine/0000_4326_corine2018_4e6064_GML.gml` is not stray: it
+  was added in 2020 (`8e30af4`, "Adding data for small test") together with
+  `7908_3_10m_z33.tif`, the benchmark tile, as the legacy `ingoya_test` pair.
+  It holds 200 CORINE 2018 polygons around Ingøya in EPSG:4326, in a
+  Norwegian redistribution's schema (`clc18_kode`, `sl_sdeid`), exported by
+  OGR as GML2 with `gml:coordinates`. It stays, gains a `NOTICE` (the
+  Copernicus attribution and this origin), and 16b reads it as a second real
+  fixture: a small GML2 reader (standard-library XML, no GDAL, about 40
+  lines) and a class map for `clc18_kode`. This adds to 16b-1's estimate.
+- **16b's own extract is vector** (the GeoPackage's `MULTIPOLYGON`), as is the
+  GML; the only raster land cover in view is MapBiomas for the São Francisco
+  basin, which needs a raster-to-polygon step later.
+
 ## What was measured
 
 In the scratchpad, never in the tree: `clc_probe.py` (read, reproject, clip,
@@ -911,7 +934,7 @@ Everything else is unit, property or integration testing:
   there as 20c's input.
 - All gates in `CLAUDE.md` §4, including the TSan job; CI green.
 
-## Questions for Ola
+## Questions for Ola (ruled 2026-09-28, see "Ruled by Ola")
 
 **Q1. Where may the noder's verification spend its time?** M3: 25 s of a
 30 s run is the noder on a 48 km square of CORINE, and it grows with the
