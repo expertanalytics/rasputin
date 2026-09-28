@@ -226,7 +226,7 @@ def plan_mosaic(
     )
 
 
-def assemble(plan: MosaicPlan, load: Callable[[str], DemTile]) -> Mosaic:
+def assemble(plan: MosaicPlan, load: Callable[[str], DemTile], needed: Any = None) -> Mosaic:
     """Load the plan's tiles one at a time, in plan order, into one canvas (R5).
 
     One tile whose grid is the mosaic's is returned as loaded: no canvas, no
@@ -239,6 +239,11 @@ def assemble(plan: MosaicPlan, load: Callable[[str], DemTile]) -> Mosaic:
     holds where it meets another tile's placement is kept as a strip. Once all
     are in, every overlap is decided from the strips (Ola's Q1 revised,
     `_decide`) and each pair that disagrees is reported (`_seam`).
+
+    `needed`, a shapely geometry in the DEM's CRS as for `plan_mosaic`, limits
+    the report to the overlap nodes it covers (closed; Ola, 2026-09-28: with
+    `--domain`, the needed region). Only the report: every node is decided as
+    without it, and only overlap nodes are tested, never the canvas.
 
     Memory: the peak is the canvas, the strips, and one load's own peak, which
     is not one tile: decoding a DTM10 tile peaks at 2.0 to 3.0 tiles,
@@ -268,13 +273,17 @@ def assemble(plan: MosaicPlan, load: Callable[[str], DemTile]) -> Mosaic:
                 strips[placement.name, other.name] = incoming[_within(box, c)].copy()
         del array, incoming  # before the next load, or two tiles outlive this one
     seams = []
+    if needed is not None:
+        shapely.prepare(needed)
     for i, a in enumerate(ordered):
         for b in ordered[i + 1 :]:
             box = _meet(a.canvas, b.canvas)
             if box is None:
                 continue
             _decide(canvas, box, ordered, strips, (a.name, b.name), plan.meta.nodata)
-            seam = _seam(a.name, b.name, strips[a.name, b.name], strips[b.name, a.name], plan)
+            kept = _covered(box, plan.meta, needed)
+            first, second = strips[a.name, b.name][kept], strips[b.name, a.name][kept]
+            seam = _seam(a.name, b.name, first, second, plan)
             if seam is not None:
                 seams.append(seam)
     return Mosaic(tile=DemTile._adopt(plan.meta, canvas), plan=plan, seams=tuple(seams))
@@ -517,6 +526,18 @@ def _decide(
     if nodata is not None:
         value[(best < 0) & sentinel] = nodata
     canvas[box.row0 : box.row0 + box.rows, box.col0 : box.col0 + box.cols] = value
+
+
+def _covered(box: IndexWindow, meta: RasterMeta, needed: Any) -> Any:
+    """The nodes of `box` that `needed` covers, as a boolean mask of its shape,
+    or `...` (every node) without it. A node is `x_min + col * dx`, as in
+    `_uncovered`."""
+    if needed is None:
+        return ...
+    rows = (box.row0 + np.arange(box.rows))[:, np.newaxis]
+    cols = (box.col0 + np.arange(box.cols))[np.newaxis, :]
+    xs, ys = np.broadcast_arrays(meta.x_min + cols * meta.delta_x, meta.y_max - rows * meta.delta_y)
+    return shapely.intersects_xy(needed, xs, ys)
 
 
 def _seam(

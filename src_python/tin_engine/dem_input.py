@@ -80,18 +80,21 @@ def open_dem(request: DemRequest) -> DemInput:
         label = first.stem
     footprints = repository.footprints()
     if request.domain is None or not footprints:
-        plan, domain = plan_mosaic(footprints, request.bounds, None), None
+        plan, domain, grown = plan_mosaic(footprints, request.bounds, None), None, None
     else:
-        plan, domain = _domain_plan(footprints, request.domain)
-    mosaic = assemble(plan, repository.load)
+        plan, domain, grown = _domain_plan(footprints, request.domain)
+    # With a domain the seam report counts only the needed region's nodes
+    # (Ola, 2026-09-28); which value a node takes does not depend on it.
+    mosaic = assemble(plan, repository.load, grown)
     return DemInput(tile=mosaic.tile, plan=plan, label=label, domain=domain, seams=mosaic.seams)
 
 
-def _domain_plan(footprints: Any, given: DomainPolygon) -> tuple[MosaicPlan, DomainPolygon]:
-    """The domain in the DEM's CRS, and the plan of its bounds with the
-    polygon grown by one cell needed (R4 point 5). Grown by the cell diagonal
-    with mitred corners, a superset of the four nodes bilinear z reads at any
-    point of the polygon. A refusal names both CRSs and keeps its type."""
+def _domain_plan(footprints: Any, given: DomainPolygon) -> tuple[MosaicPlan, DomainPolygon, Any]:
+    """The domain in the DEM's CRS, the plan of its bounds with the polygon
+    grown by one cell needed (R4 point 5), and that grown polygon, the needed
+    region. Grown by the cell diagonal with mitred corners, a superset of the
+    four nodes bilinear z reads at any point of the polygon. A refusal names
+    both CRSs and keeps its type."""
     epsgs = sorted({f.meta.epsg for f in footprints})
     if len(epsgs) > 1:
         raise MosaicError(f"the tiles are in {len(epsgs)} CRSs, EPSG:{epsgs}; a domain needs one")
@@ -114,7 +117,7 @@ def _domain_plan(footprints: Any, given: DomainPolygon) -> tuple[MosaicPlan, Dom
         check_extent(domain, plan.meta)
     except (DomainError, MosaicError) as exc:
         raise type(exc)(f"the domain, in {given.crs}, in the DEM's EPSG:{epsgs[0]}: {exc}") from exc
-    return plan, domain
+    return plan, domain, grown
 
 
 def _past(box: Bounds, m: RasterMeta) -> Bounds | None:
