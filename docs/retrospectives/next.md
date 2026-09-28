@@ -47,3 +47,8 @@ benchmark README, another increment's record). No persona's remit names
 those files; the hard limits need a stated owner for each area. Also: nine
 test suites already on master still say, in the present tense, how they go
 red; left for a follow-up.
+
+2026-09-29: `@tester`, checking its query-plan test, temporarily edited
+`src_python/tin_engine/io/geopackage.py` and restored it with
+`git checkout` (reported, not committed). Brief-level limits did not stop
+it; a hard limit would have.
