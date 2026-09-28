@@ -27,6 +27,26 @@ are designed, not implemented; Q6-Q10 are open. Written by `@architect` before
     is refused; a request inside either lattice is meshed.
 
   Q6-Q10 (the basin) wait until after the Norwegian sub-increments.
+- **2026-09-28, Q1 revised: overlaps that disagree are split down the middle
+  ("b", Ola).** Measured first: in 60 sampled neighbour pairs of Ola's
+  archive, the 21 made on the same export date agree bit for bit and 18 of the
+  39 made on different dates disagree (mean difference about 0, median 0 on
+  flat ground, growing with slope, up to 30 m on cliffs). Kartverket's
+  metadata explains it: the current 10 m model is exported from NDH laser data
+  where it exists, supplemented by the 2013 contour-based DTM10 (±2-6 m), and
+  tiles were exported one by one as laser coverage grew. Not land uplift
+  (mm/yr) and not glaciers. The rule:
+  - each node of an overlap takes the value of the tile whose **interior it
+    lies deepest in** (the largest distance, in nodes, to that tile's own
+    nearest border), **ties by tile name**; NoData still loses to a valid
+    value;
+  - disagreement is **no longer refused**. The run **reports each disagreeing
+    seam** (the two tiles, the number of nodes that differ, the largest and
+    the median difference) in `--stats` and in a `dem_seams` file field, so a
+    25 m jump cannot pass unnoticed;
+  - the result stays independent of tile order.
+  Ola will also download a fresh single-date set from hoydedata.no, whose
+  overlaps should agree.
 - **2026-09-27, Q5 as read after review ("Yes", to the main session's
   proposal):** @reviewer found that DTM10's 51-node overlaps make a box that
   only reaches into a half-cell tile's overlap strip select that tile and be
@@ -83,7 +103,7 @@ What is carried across, and what changes:
 | R3: `read_meta` split out of `decode_dem` | carried (R3); window decoding added in 15d | an ANADEM tile is 2.5 GiB |
 | R4: every tile in the directory on one lattice, or refuse | **changed** (R4): only the **selected** tiles must share a lattice | 8 of Ola's 254 tiles are half a cell off (N2); the parked rule refuses the whole archive |
 | R4: canvas origin from the tiles as decoded | **changed** (R4): each lattice has a **reference node**, and every node has a global index | frame coordinates must not depend on the window, for domain decomposition (R12) |
-| R5: valid beats NoData, disagreement refused, order-independent | carried (R5), now **with real data behind it** | DTM10 (N3) and ANADEM (B4) overlaps agree bit for bit |
+| R5: valid beats NoData, disagreement split down the middle and reported (Q1 revised), order-independent | carried (R5), now **with real data behind it** | DTM10 (N3) and ANADEM (B4) overlaps agree bit for bit |
 | R5: gaps stay NaN | **changed** (R5): a node the request needs that no tile covers is refused | Ola's ruling, `18-row-span-scan.md` R6: "a missing tile inside the extent is a data error" |
 | R6: `--bbox` in the DEM's CRS, no transform | carried (R6); the domain is transformed in 15b (R9) | "inputs in their own CRS" |
 | R6: `GeoPolygon` lands with the clip | superseded: 16 shipped `DomainPolygon`; 15b gives it a transform | |
@@ -126,7 +146,9 @@ They are measurement scripts, not production code, and nothing imports them.
   are at x = …745 instead of …750, and they are 5052 wide and mostly 5053 high.
   They look like a second production run. Under the parked R4 (whole directory
   on one lattice) `--dem DIR` would refuse the whole archive.
-- **N3. Neighbours overlap by 51 nodes, and the overlaps agree.** A 5051-node
+- **N3. Neighbours overlap by 51 nodes, and same-date overlaps agree.**
+  (Corrected 2026-09-28: tiles exported on different dates can disagree; see
+  "Ruled by Ola", Q1 revised.) A 5051-node
   tile is 50 km plus 510 m, so each edge neighbour shares 51 rows or columns
   (a few share 52 or 53; one pair 53). Over 4 neighbour pairs of the first
   tile, every overlapping cell is equal: 257 601 of 257 601 on each edge
@@ -471,10 +493,10 @@ Carried from the parked R5 almost unchanged.
   - one value NoData (NaN or the sentinel), the other valid: **valid wins**;
   - both NoData: NoData;
   - both valid and equal (`==`): accepted;
-  - both valid and different: **refused** (`refuses_overlap_disagreement`),
-    naming both tiles, the number of disagreeing nodes and the largest
-    difference. That is the parked U1 (a), now Q1, with measurements: DTM10
-    (N3) and ANADEM (B4) overlaps agree bit for bit where sampled.
+  - both valid and different: **the tile the node lies deepest in wins**, ties
+    by name, and the seam is reported (Q1 revised, 2026-09-28). Q1 first
+    refused this; real DTM10 overlaps from different export dates disagree,
+    so refusing blocked much of the archive.
 - The result does not depend on tile order (M10).
 - **One tile, no bounds: the loaded `DemTile` is returned as it is.** No
   canvas, no copy, so `--dem file.tif` stays bit-identical to today, memory
@@ -1145,7 +1167,8 @@ Q1-Q5 are about Norway and are needed before 15a starts. Q6-Q10 are about
 the basin and can wait until after Norway.
 
 **Q1 (the parked U1). Two tiles give different valid values at the same node.**
-Now measured: DTM10 overlaps agree bit for bit on 4 of 869 pairs (N3), and
+Now measured: DTM10 overlaps agree bit for bit on 4 of 869 pairs (N3; but see
+Q1 revised: different-date pairs disagree), and
 ANADEM's on 3 seams (B4). But the committed benchmark tile and the archive's
 tile of the same name differ at 910 706 nodes (N5), so two releases in one
 directory is a real case.
