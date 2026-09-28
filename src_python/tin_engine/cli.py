@@ -823,7 +823,7 @@ def mesh(
             layer = f":{found.layers[0]}" if found.layers[0] else ""
             text = _ascii(
                 f"{features.name}{layer}, map {features_map or 'property'}, "
-                f"{len(found.features)} features ({found.outside} dropped outside), "
+                f"{len(found.features)} features, "
                 f"{chains} chains, {feature_vertices} vertices"
             )
             own = found.crs[0]
@@ -1065,7 +1065,7 @@ def _open_features(
     clock.add("features read", time.perf_counter() - t0 - found.clip_seconds)
     clock.add("features clip", found.clip_seconds)
     typer.echo(
-        f"{len(found.features)} features read, {found.outside} dropped outside, "
+        f"{len(found.features)} features kept, {found.outside} dropped outside, "
         f"{found.clipped} clipped, {found.empty} empty skipped",
         err=True,
     )
