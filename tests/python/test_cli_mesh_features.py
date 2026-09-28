@@ -26,6 +26,13 @@ Pinned by this suite (see "Pinned by the red suite (16b-1/2)"):
   bilinear` with features.
 - stderr says `<n> input vertices` and `<m> noded vertices`; `--stats` has
   phase rows `features read` and `features clip`.
+- stderr's features line gives `<n> clipped`, the number of features kept
+  that crossed the domain boundary (R10: "features read, dropped outside,
+  clipped"); a GeoPackage layer without an R-tree index is read all the same,
+  and stderr says the table was scanned (R3: "Without an index the table is
+  scanned and the report says so"). `TestReport`, added red after @reviewer's
+  review of 16b-1/2 (the commit "16b-1/2 red: the full-scan report line and
+  the clipped count (R3, R10)").
 
 Committed red at `e99c8ea` (amended at `972312c`): the flags did not exist
 yet, so every run exited 2 with "No such option", which every usage test
@@ -55,8 +62,11 @@ from gpkg_fixtures import (
     LEGACY_GML,
     OLA_EUROPE,
     OLA_NORWAY,
+    Layer,
+    Row,
     copy_reversed,
     needs_rtree,
+    write_gpkg,
 )
 from plyread import read_ply
 from test_cli_mesh_dem import USAGE, invoke, write_tiff
@@ -325,6 +335,87 @@ class TestRecord:
         # found by its cell, `| features read |`, not by a line start.
         assert re.search(r"\|\s*features read\s*\|", output), output
         assert re.search(r"\|\s*features clip\s*\|", output), output
+
+
+# ------------------------------------------------------------ the report (R3, R10)
+
+# Two features that cross `SQUARE`'s boundary (a polygon over its west side, the
+# wall over its east side), one wholly inside, one far outside: 2 clipped.
+WEST_EDGE = Polygon([rel(2.1, -50.3), rel(40.2, -50.1), rel(40.4, -30.2), rel(2.3, -30.4)])
+FAR_AWAY = LineString([rel(900.3, -900.1), rel(950.7, -900.2)])
+CROSSINGS = [
+    Feat("forest", FOREST, {"property": "land_cover"}),
+    Feat("west", WEST_EDGE, {"property": "water"}),
+    Feat("wall", WALL, {"property": "wall"}),
+    Feat("far", FAR_AWAY, {"property": "road"}),
+]
+CLIPPED = re.compile(r"\b(\d+) clipped\b")
+
+
+def gpkg_of(path: Path, features: list[Feat], *, rtree: bool) -> Path:
+    rows = [Row(i + 1, f.geometry, dict(f.properties)) for i, f in enumerate(features)]
+    return write_gpkg(path, [Layer("t", 25833, rows, columns=("property",), rtree=rtree)])
+
+
+class TestReport:
+    def test_stderr_gives_the_clipped_count(
+        self, tmp_path: Path, bumpy: Path, plain_square: Path
+    ) -> None:
+        """R10: "features read, dropped outside, clipped". Of `CROSSINGS`,
+        `west` and `wall` cross the boundary and are kept, clipped; `far` is
+        dropped outside and `forest` is untouched."""
+        path = write_geojson(tmp_path / "crossings.geojson", CROSSINGS)
+        _, output = meshed(tmp_path, bumpy, plain_square, "--features", str(path))
+        assert re.search(r"\b1 dropped outside\b", output), output
+        assert [int(n) for n in CLIPPED.findall(output)] == [2], output
+
+    def test_nothing_crossing_is_zero_clipped(
+        self, tmp_path: Path, bumpy: Path, plain_square: Path
+    ) -> None:
+        path = write_geojson(tmp_path / "inside.geojson", CROSSINGS[:1])
+        _, output = meshed(tmp_path, bumpy, plain_square, "--features", str(path))
+        assert [int(n) for n in CLIPPED.findall(output)] == [0], output
+
+    def test_a_layer_without_an_index_is_scanned_and_reported(
+        self, tmp_path: Path, bumpy: Path, plain_square: Path
+    ) -> None:
+        """R3: "Without an index the table is scanned and the report says so".
+        The layer is still read: the features field counts the kept three."""
+        path = gpkg_of(tmp_path / "f.gpkg", CROSSINGS, rtree=False)
+        vtk, output = meshed(tmp_path, bumpy, plain_square, "--features", str(path))
+        match = FEATURES_FIELD.fullmatch(text_field(vtk, "features"))
+        assert match is not None and (match["n"], match["k"]) == ("3", "1")
+        assert re.search(r"scan", output, re.IGNORECASE), output
+        assert re.search(r"index", output, re.IGNORECASE), output
+
+    @needs_rtree
+    def test_an_indexed_layer_gives_the_same_file_and_no_scan_line(
+        self, tmp_path: Path, bumpy: Path, plain_square: Path
+    ) -> None:
+        """The control: the same rows behind an R-tree give the same mesh,
+        and nothing about a scan is said. The `features` field alone may
+        differ, in `k`: the R-tree query never returns `far`, so it is not
+        counted as dropped outside, where the scan reads and drops it."""
+        files = []
+        for rtree in (True, False):
+            where = tmp_path / str(rtree)
+            where.mkdir()
+            path = gpkg_of(where / "f.gpkg", CROSSINGS, rtree=rtree)
+            code, output, target = mesh(where, bumpy, plain_square, "--features", str(path))
+            assert code == 0, output
+            if rtree:
+                assert not re.search(r"scan", output, re.IGNORECASE), output
+            vtk = read_vtk(target.read_bytes())
+            match = FEATURES_FIELD.fullmatch(text_field(vtk, "features"))
+            assert match is not None and match["n"] == "3", text_field(vtk, "features")
+            files.append(
+                [
+                    line
+                    for line in target.read_bytes().splitlines()
+                    if not line.startswith(b"f.gpkg:")
+                ]
+            )
+        assert files[0] == files[1]
 
 
 # ------------------------------------------------- increment 8's rows, end to end
