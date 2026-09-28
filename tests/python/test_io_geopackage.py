@@ -32,6 +32,7 @@ from __future__ import annotations
 
 import ast
 import importlib
+import re
 import sqlite3
 from pathlib import Path
 from types import ModuleType
@@ -442,6 +443,60 @@ class TestQueryFeatures:
                 list(gpkg.query_features(_NoRtree(conn), layer, (0.0, 0.0, 5.0, 5.0), "Code_18"))
         finally:
             conn.close()
+
+    @needs_rtree
+    def test_the_candidate_query_is_driven_by_the_rtree(
+        self, tmp_path: Path, gpkg: ModuleType, open_geopackage: Any
+    ) -> None:
+        """With a box and an R-tree, the feature table is never scanned in
+        full: its rows are fetched by primary key and the R-tree is the scan.
+
+        The defect (`docs/benchmarks/2026-09-28/16b12-acceptance.md`): a join
+        of the table to the R-tree was planned as `SCAN t` with one R-tree
+        probe per row, 17.5-18.7 s on Ola's 2.4 M-row Europe file against
+        0.85 s for `WHERE <pk> IN (SELECT id FROM rtree_... WHERE ...)`.
+
+        How the SQL is captured without a production hook: the stdlib's
+        `sqlite3.Connection.set_trace_callback` is set on the connection
+        `open_geopackage` returns, before `query_features` runs, and records
+        every statement SQLite executes on it. SQLite's own internal R-tree
+        statements (prefixed `--`, or naming its `_node`/`_rowid` shadow tables
+        rather than the R-tree itself) are dropped; the one statement that
+        names both the feature table and its R-tree is the candidate query. Its plan
+        comes from `EXPLAIN QUERY PLAN` on the same connection, so the same
+        SQLite and the same (absent) statistics decide it. No timing is
+        measured: the plan is the property.
+
+        2 000 rows: with no `sqlite_stat1` the planner's choice is the same at
+        10, 1 000 and 5 000 rows (checked on SQLite 3.53.4), so the size only
+        guards against a small-table shortcut."""
+        rows = [
+            Row(k, box(20.0 * k, 0.0, 20.0 * k + 10.0, 10.0), {"Code_18": "111"})
+            for k in range(1, 2001)
+        ]
+        conn = open_geopackage(one_layer(tmp_path, rows))
+        issued: list[str] = []
+        try:
+            layer = gpkg.layer_info(conn, None)
+            conn.set_trace_callback(issued.append)
+            got = list(gpkg.query_features(conn, layer, (100.0, 0.0, 200.0, 10.0), "Code_18"))
+            conn.set_trace_callback(None)
+            candidates = [
+                sql
+                for sql in issued
+                if not sql.lstrip().startswith("--")
+                and re.search(rf"\b{layer.table}\b", sql)
+                and re.search(rf"\b{layer.rtree}\b", sql)
+            ]
+            assert len(candidates) == 1, issued
+            plan = [row[3] for row in conn.execute(f"EXPLAIN QUERY PLAN {candidates[0]}")]
+        finally:
+            conn.close()
+        assert {f.fid for f in got} >= {5, 6, 7, 8, 9, 10}
+        table_scans = [p for p in plan if p.startswith("SCAN") and "VIRTUAL TABLE" not in p]
+        assert table_scans == [], plan
+        assert any(p.startswith("SEARCH") and "PRIMARY KEY" in p for p in plan), plan
+        assert any(p.startswith("SCAN") and "VIRTUAL TABLE" in p for p in plan), plan
 
 
 class _NoRtree:
