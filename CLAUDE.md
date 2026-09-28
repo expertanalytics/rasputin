@@ -14,9 +14,11 @@ This project is governed by specialized sub-agents. Always defer tasks to the co
 
 ## 2. Core Constraints & Technical Mandates
 * **Strict Size Limit:** Under **700 lines of production code per pull request**,
-  where a line counts unless it is a comment, a docstring, or the body of a raw
-  literal; tests excluded. The exclusions exist so the ceiling does not penalise
-  the comment density this project asks for. Lines count as written: packing
+  where a line counts unless it is blank, a comment, a docstring, or the body of
+  a raw literal; tests excluded. The exclusions exist so the ceiling does not
+  penalise the comment density this project asks for, and blank lines add no
+  reading (Ola, 2026-09-28; before that, 20b counted blank lines). The count is
+  of lines a PR adds or changes. Lines count as written: packing
   code by hand under `# fmt: skip` / `# fmt: off` is allowed, provided the
   packed lines stay readable and the review says why each new region is
   packed (Ola, 2026-09-27, on `tools/bench.py`). This is the only statement of
