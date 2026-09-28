@@ -319,8 +319,10 @@ class TestRecord:
         )
         assert re.search(r"\b\d+ input vertices\b", output), output
         assert re.search(r"\b\d+ noded vertices\b", output), output
-        assert re.search(r"^\|\s*features read\s*\|", output, re.MULTILINE), output
-        assert re.search(r"^\|\s*features clip\s*\|", output, re.MULTILINE), output
+        # `invoke` collapses the output onto one line (`plain`), so a row is
+        # found by its cell, `| features read |`, not by a line start.
+        assert re.search(r"\|\s*features read\s*\|", output), output
+        assert re.search(r"\|\s*features clip\s*\|", output), output
 
 
 # ------------------------------------------------- increment 8's rows, end to end

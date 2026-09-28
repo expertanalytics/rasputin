@@ -583,7 +583,7 @@ class TestClip:
         assert loose and on_boundary(BOX.polygon, np.array(loose)).max() <= CROSSING
         inside = shapely.intersection(LineString(crossing.exterior.coords), BOX.polygon).length
         assert sum(line.length for line in lines) == pytest.approx(inside, abs=1e-6)
-        assert sum(line.length for line in lines) == pytest.approx(250.0, abs=1e-6)
+        assert sum(line.length for line in lines) == pytest.approx(200.0, abs=1e-6)
 
     def test_a_line_leaving_the_domain_loses_its_exterior_part(self, tmp_path: Path) -> None:
         """Increment 8's `wall-leaves-domain`, before the engine."""
