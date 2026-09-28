@@ -80,6 +80,13 @@ def write_tiles(directory: Path, tiles: dict[str, DemTile]) -> list[Path]:
     return sorted(directory.iterdir())
 
 
+def report(tmp_path: Path, *args: str) -> str:
+    """`--stats -`'s Markdown, read from stdout apart from stderr and unflattened."""
+    result = runner.invoke(app, ["mesh", *args, "--out", str(tmp_path / "m.vtk"), "--stats", "-"])
+    assert result.exit_code == 0, result.output
+    return result.stdout
+
+
 def write_one(path: Path, tile: DemTile) -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_bytes(tiff_of(tile).getvalue())
@@ -212,14 +219,6 @@ class TestC4Refusals:
         write_tiles(tmp_path / "shifted", tiles)
         self.refused(tmp_path, "--dem", str(tmp_path / "shifted"), says=("se.tif", "0.5 cell"))
 
-    def test_an_overlap_disagreement(self, tmp_path: Path, source: DemTile) -> None:
-        tiles = quadrants(source, row_cut=4, col_cut=6, overlap=1)
-        changed = np.array(tiles["ne.tif"].array)
-        changed[2, 0] += 4.0  # on the shared column
-        tiles["ne.tif"] = piece(source, 0, 5, 6, 13, array=changed)
-        write_tiles(tmp_path / "disagree", tiles)
-        self.refused(tmp_path, "--dem", str(tmp_path / "disagree"), says=("ne.tif", "nw.tif", "4"))
-
     def test_a_hole_in_the_tile_set(self, tmp_path: Path) -> None:
         from mosaic_fixtures import blocks
 
@@ -230,6 +229,112 @@ class TestC4Refusals:
     def test_an_empty_directory_names_it(self, tmp_path: Path) -> None:
         (tmp_path / "empty_dir").mkdir()
         self.refused(tmp_path, "--dem", str(tmp_path / "empty_dir"), says=("empty_dir",))
+
+
+class TestQ1Seams:
+    """Ola's Q1 revised (2026-09-28), through the CLI: a disagreeing overlap
+    meshes, and each disagreeing pair is recorded in the `dem_seams` field
+    and, with `--stats`, in a "DEM seams" section.
+
+    `dem_seams` is recorded whenever `dem_tiles` is: `none` when every
+    overlapping node agrees, else one entry per disagreeing pair, sorted,
+    `; `-joined, escaped like `dem_tiles`:
+    `<first> | <second>: nodes <n>, max <largest:g>, median <median:g>`.
+    """
+
+    @staticmethod
+    def disagreeing(tmp_path: Path, source: DemTile, name: str = "nw.tif") -> Path:
+        """The quadrants, `ne.tif` 4.0 higher at one node of the shared column
+        (global (2, 6), in `ne.tif` and the tile named `name` only). Was
+        `TestC4Refusals.test_an_overlap_disagreement`'s directory."""
+        tiles = quadrants(source, row_cut=4, col_cut=6, overlap=1)
+        tiles[name] = tiles.pop("nw.tif")
+        changed = np.array(tiles["ne.tif"].array)
+        changed[2, 0] += 4.0
+        tiles["ne.tif"] = piece(source, 0, 5, 6, 13, array=changed)
+        write_tiles(tmp_path / "disagree", tiles)
+        return tmp_path / "disagree"
+
+    def test_an_overlap_disagreement_meshes_and_is_recorded(
+        self, tmp_path: Path, source: DemTile
+    ) -> None:
+        """Was `TestC4Refusals.test_an_overlap_disagreement`, which expected a
+        refusal naming both tiles and the 4. The same names and number are now
+        in the record, and the mesh is written."""
+        vtk = run_vtk(tmp_path / "m.vtk", "--dem", str(self.disagreeing(tmp_path, source)))
+        assert field(vtk, "dem_seams") == "ne.tif | nw.tif: nodes 1, max 4, median 4"
+        assert field(vtk, "dem_tiles") == "ne.tif; nw.tif; se.tif; sw.tif"
+
+    def test_agreeing_tiles_record_none(self, tmp_path: Path, mosaic_dir: Path) -> None:
+        vtk = run_vtk(tmp_path / "m.vtk", "--dem", str(mosaic_dir))
+        assert field(vtk, "dem_seams") == "none"
+
+    def test_one_file_records_no_seams(self, tmp_path: Path, source: DemTile) -> None:
+        vtk = run_vtk(tmp_path / "one.vtk", "--dem", str(write_one(tmp_path / "one.tif", source)))
+        assert "dem_seams" not in vtk.field_data
+
+    def test_several_pairs_are_sorted_and_joined(self, tmp_path: Path) -> None:
+        """Each quadrant 1000 times its rank higher than the grid: every
+        overlap disagrees, by a constant. Six pairs, sorted by name; counts are
+        the overlaps' node counts (overlap 1 on a 9 x 13 grid: 5, 5, 7, 7, and
+        the corner node in the two diagonal pairs)."""
+        grid = whole(9, 13, array=terrain(9, 13))
+        tiles = quadrants(grid, row_cut=4, col_cut=6, overlap=1)
+        for rank, name in enumerate(sorted(tiles), start=1):
+            t = tiles[name]
+            tiles[name] = DemTile(meta=t.meta, array=np.asarray(t.array) + 1000 * rank)
+        write_tiles(tmp_path / "all", tiles)
+        vtk = run_vtk(tmp_path / "m.vtk", "--dem", str(tmp_path / "all"))
+        assert field(vtk, "dem_seams") == "; ".join(
+            [
+                "ne.tif | nw.tif: nodes 5, max 1000, median 1000",
+                "ne.tif | se.tif: nodes 7, max 2000, median 2000",
+                "ne.tif | sw.tif: nodes 1, max 3000, median 3000",
+                "nw.tif | se.tif: nodes 1, max 1000, median 1000",
+                "nw.tif | sw.tif: nodes 7, max 2000, median 2000",
+                "se.tif | sw.tif: nodes 5, max 1000, median 1000",
+            ]
+        )
+
+    def test_a_non_ascii_name_is_escaped(self, tmp_path: Path, source: DemTile) -> None:
+        directory = self.disagreeing(tmp_path, source, name="Ålesund.tif")
+        listed = next(p.name for p in directory.iterdir() if p.name.endswith("lesund.tif"))
+        escaped = listed.encode("ascii", "backslashreplace").decode("ascii")
+        vtk = run_vtk(tmp_path / "m.vtk", "--dem", str(directory))
+        recorded = field(vtk, "dem_seams")
+        assert recorded.isascii()
+        first, second = (
+            n.encode("ascii", "backslashreplace").decode("ascii")
+            for n in sorted([listed, "ne.tif"])
+        )  # the file system may store the name decomposed, which sorts first
+        assert recorded == f"{first} | {second}: nodes 1, max 4, median 4"
+        assert escaped in recorded
+
+    def test_stats_has_a_seams_section_listing_only_disagreeing_pairs(
+        self, tmp_path: Path, source: DemTile
+    ) -> None:
+        """After "Sizes", before "Quality": one table row per disagreeing pair."""
+        lines = report(tmp_path, "--dem", str(self.disagreeing(tmp_path, source))).splitlines()
+        at = lines.index("## DEM seams")
+        assert lines.index("## Sizes") < at < lines.index("## Quality (plan view, x/y)")
+        rows = []
+        for line in lines[at + 1 :]:
+            if line.startswith("## "):
+                break
+            if line.startswith("|"):
+                rows.append([cell.strip() for cell in line.strip("|").split("|")])
+        assert rows == [
+            ["tile", "tile", "nodes", "max", "median"],
+            ["---", "---", "---", "---", "---"],
+            ["ne.tif", "nw.tif", "1", "4", "4"],
+        ]
+
+    def test_stats_has_no_seams_section_when_every_overlap_agrees(
+        self, tmp_path: Path, mosaic_dir: Path
+    ) -> None:
+        lines = report(tmp_path, "--dem", str(mosaic_dir)).splitlines()
+        assert "## Sizes" in lines
+        assert "## DEM seams" not in lines
 
 
 class TestC5Usage:
@@ -333,7 +438,33 @@ class TestRealDtm10:
         vtk = run_vtk(tmp_path / "seam.vtk", "--dem", str(DTM10 / "seam"), "--tolerance", "1")
         assert field(vtk, "dem_tiles") == "6400_1_10m_z33.tif; 6400_4_10m_z33.tif"
         assert field(vtk, "elevation_source").startswith("mosaic of 2 tiles, 256 x 563 nodes; ")
+        assert field(vtk, "dem_seams") == "none"  # Ola's Q1 revised: it agrees
         assert np.isfinite(vtk.points).all()
+
+    def test_the_agreeing_real_seam_meshes_like_its_stitched_tile(self, tmp_path: Path) -> None:
+        """Ola's Q1 revised changes nothing where the overlap agrees: the seam
+        meshes exactly like one file holding west's 307 columns and east's
+        last 256, with west's georeferencing (the mesh before the change)."""
+        west_path = DTM10 / "seam" / "6400_4_10m_z33.tif"
+        east_path = DTM10 / "seam" / "6400_1_10m_z33.tif"
+        with tifffile.TiffFile(west_path) as tif:
+            page = tif.pages.first
+            tie, scale, west = page.tags[33922].value, page.tags[33550].value, page.asarray()
+        east = tifffile.imread(east_path)
+        assert np.array_equal(west[:, -51:], east[:, :51])
+        stitched = micro_tiff(
+            np.ascontiguousarray(np.hstack([west, east[:, 51:]])),
+            tiepoint=(0.0, 0.0, 0.0, tie[3], tie[4], 0.0),
+            scale=tuple(scale),
+            geokeys=with_keys({GT_RASTER_TYPE: PIXEL_IS_AREA}),
+            nodata="-32767",
+            compression="deflate",
+        )
+        single = tmp_path / "stitched.tif"
+        single.write_bytes(stitched.getvalue())
+        expected = run_vtk(tmp_path / "one.vtk", "--dem", str(single), "--tolerance", "1")
+        got = run_vtk(tmp_path / "seam.vtk", "--dem", str(DTM10 / "seam"), "--tolerance", "1")
+        same_mesh(got, expected)
 
     def test_the_two_lattices_are_refused_naming_both(self, tmp_path: Path) -> None:
         out = tmp_path / "x.vtk"

@@ -752,8 +752,10 @@ lazily inside the parallel scan.
   or snapped.
 - **I2. Order independence.** `plan_mosaic` and `assemble` give the same
   result for every permutation of the footprints.
-- **I3. Valid beats NoData; disagreement refuses.** No overlapping node is ever
-  silently chosen between two different valid values.
+- **I3. Valid beats NoData; disagreement is decided and reported** (Q1
+  revised, 2026-09-28; first "disagreement refuses"). No overlapping node is
+  ever chosen between two different valid values without the pair appearing
+  in the seam report.
 - **I4. Coverage.** Every node the request needs comes from a tile. NaN filler
   exists only outside the needed region.
 - **I5. Split and re-stitch is the identity.** A grid cut into tiles
@@ -1000,9 +1002,10 @@ failing M1's area-registered case.
   - a registration difference: `registration`;
   - a NoData difference: `nodata` and both values, with `None` for an absent
     sentinel;
-  - an overlap disagreement: both names — the two tiles whose *values*
-    disagree, not the first tile that merely covers the node (B2) — the count
-    as a whole number, and the largest difference;
+  - an overlap disagreement: *no longer a refusal* (Q1 revised); what it
+    named — the two tiles whose *values* disagree, not a tile that merely
+    covers the node (B2), the count and the largest difference — is now the
+    seam report's (below);
   - uncovered nodes: the node bounding box of the uncovered nodes, with each
     coordinate written out, not in scientific notation;
   - a changed tile: `changed since it was listed`;
@@ -1040,6 +1043,47 @@ test amendment that follows green `ff7cc8d`:
   `needed` path is not pinned.
 - **The edge snap (S3)** has its test: at spacing 0.1, the box edges 0.3, 0.7
   and 0.9 add no node line.
+
+**Amended for Ola's Q1 revised (2026-09-28).** Pinned by the test amendment
+that follows it (`15a tests: overlaps split down the middle and reported`):
+`TestQ1DeepestInterior` and `TestQ1SeamReport` in `test_mosaic.py`, four
+rewritten tests of its `TestM8Overlaps`, `TestQ1Seams` in
+`test_cli_mesh_mosaic.py`, and the real-seam cases of `test_dem_input.py` and
+`test_cli_mesh_mosaic.py`. All were run green against a scratch implementation
+that was not committed; `test_mosaic.py` killed 16 of 16 mutants of it.
+
+- **Depth** of a node in a tile is `min(r, c, rows - 1 - r, cols - 1 - c)` in
+  the tile's own indices, `rows x cols` being the **whole tile's** `meta` —
+  not the window a `--bbox` uses of it, and not the mosaic's. 0 on the
+  border. Of the tiles holding a **valid** value at a node, the deepest
+  gives it; equal depths go to the tile whose name sorts **first** (Python
+  `str` order, as the plan's). NoData against NoData is unchanged (two NaNs
+  NaN, two sentinels the sentinel, NaN against the sentinel either, the same
+  in every order). So one shared line (point-registered neighbours) is all
+  ties, and a tile wholly inside a bigger one takes only the ties.
+- **`Seam`** in `tin_engine.mosaic`, with `first`, `second` (names,
+  `first < second`), `nodes` (int), `largest` and `median` (float).
+  `Mosaic.seams` and `DemInput.seams` are tuples of them, sorted by
+  `(first, second)`, empty for one tile and when every overlap agrees.
+- A seam is a **pair** of tiles. `nodes` counts the mosaic's nodes (inside the
+  window, never a node a `--bbox` leaves out) where both hold a valid value
+  and the two differ (`!=`, so one ulp counts). `largest` and `median` are of
+  `|a - b|` over those nodes only, in float64; the median of an even count is
+  the mean of the middle two (`np.median`). A node in three tiles counts once
+  in each disagreeing pair. Pairs that agree are not listed.
+- **`dem_seams`** (file field) is recorded exactly when `dem_tiles` is:
+  `none` when no pair disagrees, else one entry per pair in `seams` order,
+  `; `-joined and escaped like `dem_tiles`:
+  `<first> | <second>: nodes <n>, max <largest:g>, median <median:g>`, for
+  example `ne.tif | nw.tif: nodes 1, max 4, median 4`. One entry per
+  disagreeing pair, not per node, so it stays small.
+- **`--stats`** has a `## DEM seams` section, between `## Sizes` and
+  `## Quality (plan view, x/y)`, only when some pair disagrees: a table
+  `| tile | tile | nodes | max | median |`, one row per entry, numbers
+  formatted as in `dem_seams`.
+- Not pinned: a stderr line for a disagreeing seam, a cap on the number of
+  entries, and where the report is computed (the scratch kept each pair's
+  overlap strips, which needs no second load).
 
 **`io/models.py`.** `DemTile._adopt(meta, array)` is a classmethod. It raises
 `ValueError` on a shape, dtype, ndim or non-C-contiguous mismatch, sets the

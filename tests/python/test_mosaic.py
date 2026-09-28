@@ -13,6 +13,12 @@ alignment check, an off-by-one in stitching offsets, an overlap check that
 accepts a disagreement, a coverage check that misses a gap); the handback of
 the red commit lists which test killed which.
 
+AMENDED FOR OLA'S Q1 REVISED (2026-09-28). Overlaps that disagree are no
+longer refused: each node takes the value of the tile it lies deepest in, ties
+by name, and each disagreeing pair is reported in `Mosaic.seams`
+(`TestQ1DeepestInterior`, `TestQ1SeamReport`, and four tests of
+`TestM8Overlaps` that pinned the refusal and now pin the report).
+
 HOW THIS FILE GOES RED. `tin_engine.mosaic` and `tin_engine.io.repository`
 are imported in module-scoped fixtures, as `test_bench.py` loads its tool, so
 while they are missing each test fails on its own with `ModuleNotFoundError`
@@ -30,7 +36,7 @@ import math
 import re
 from pathlib import Path
 from types import ModuleType
-from typing import Any
+from typing import Any, ClassVar
 
 import numpy as np
 import pytest
@@ -44,11 +50,15 @@ from mosaic_fixtures import (
     Y0,
     Loads,
     blocks,
+    deepest_interior,
     footprints,
     meta,
     piece,
     quadrants,
     same_array,
+    seams,
+    seams_of,
+    shifted_by,
     values,
     whole,
 )
@@ -875,9 +885,20 @@ class TestM7Values:
 
 
 class TestM8Overlaps:
-    """M8, R5 and I3: valid beats NoData; disagreement refuses (Q1).
+    """M8, R5 and I3: valid beats NoData; a disagreement is not refused but
+    decided by depth and reported (Ola's Q1 revised, 2026-09-28).
 
     `w.tif` and `e.tif` cut from a 4 x 9 grid, sharing `overlap` columns.
+    With overlap 3 the shared columns are 4, 5 and 6, and each node's own
+    depth (`mosaic_fixtures.own_depth`) is, in `w.tif` then `e.tif`:
+
+        rows 0 and 3:  every node is on both tiles' top or bottom border,
+                       0 against 0, a tie, so `e.tif` (it sorts first);
+        rows 1 and 2:  column 4 is 1 against 0, `w.tif`; column 5 is 1
+                       against 1, `e.tif`; column 6 is 0 against 1, `e.tif`.
+
+    The four tests below that pinned the old refusal (Q1 as first ruled) now
+    pin the report; each says what it kept.
     """
 
     ROWS, COLS = 4, 9
@@ -951,29 +972,55 @@ class TestM8Overlaps:
         result, _ = build(self.tiles(source, arrays))
         assert same_array(result.tile.array, source.array)
 
+    @pytest.mark.parametrize(
+        ("west_wins", "expected"),
+        [(False, (3, 2.5, 1.0)), (True, (4, 4.0, 1.75))],
+        ids=["odd-count", "even-count"],
+    )
     @pytest.mark.parametrize("order", ["as-named", "reversed"])
-    def test_a_disagreement_is_refused_naming_both_the_count_and_the_largest(
-        self, mz: ModuleType, plan: Any, refused: Any, order: str
+    def test_a_disagreement_is_reported_with_the_count_the_largest_and_the_median(
+        self,
+        mz: ModuleType,
+        plan: Any,
+        order: str,
+        west_wins: bool,
+        expected: tuple[int, float, float],
     ) -> None:
+        """Was `..._is_refused_naming_both_the_count_and_the_largest`. Same
+        planted differences; the run is no longer refused. It keeps: both names,
+        the count of differing nodes only (a NoData node in the overlap is not
+        one, nor are the agreeing ones), the largest |difference|, in either
+        order. New: the median, of the differing nodes only, and the value each
+        node takes. The median of an even count is the mean of the middle two.
+        """
         source, arrays = self.pair(3)
-        arrays["e.tif"][0, 1] += 0.5
-        arrays["e.tif"][2, 1] += 2.5  # the middle column of the overlap
-        arrays["e.tif"][3, 2] -= 1.0
+        arrays["e.tif"][0, 1] += 0.5  # row 0, column 5: a tie, e.tif's value
+        arrays["e.tif"][2, 1] += 2.5  # row 2, column 5, mid-overlap: 1 against 1, e.tif
+        arrays["e.tif"][3, 2] -= 1.0  # row 3, column 6: |difference| is 1
         arrays["w.tif"][1, 4] = np.nan  # a NoData node in the overlap is not counted
+        if west_wins:
+            arrays["e.tif"][2, 0] += 4.0  # row 2, column 4: w.tif is deeper, its value
         tiles = self.tiles(source, arrays)
         planned = plan(tiles)
         if order == "reversed":
             planned = planned.model_copy(update={"tiles": tuple(reversed(planned.tiles))})
-        message = refused(lambda: mz.assemble(planned, Loads(tiles)), "w.tif", "e.tif", "2.5")
-        names_number(message, 3)
+        result = mz.assemble(planned, Loads(tiles))
+        assert seams(result) == [("e.tif", "w.tif", *expected)]
+        taken = source.array.copy()
+        taken[0, 5] += 0.5
+        taken[2, 5] += 2.5
+        taken[3, 6] -= 1.0
+        assert same_array(result.tile.array, taken)
 
-    def test_the_refusal_names_the_tiles_whose_values_disagree(
-        self, mz: ModuleType, plan: Any, refused: Any
+    def test_the_report_names_the_tiles_whose_values_disagree(
+        self, mz: ModuleType, plan: Any
     ) -> None:
-        """B2: three tiles on one 3 x 3 grid, equal everywhere but node (0, 0),
-        where `a` is NoData, `b` 1.0 and `c` 5.0. The disagreement is between
-        b and c; `a` covers the node too, but its value is not in the clash.
-        In every assembly order."""
+        """B2, kept in the report (was `test_the_refusal_names_...`). Three
+        tiles on one 3 x 3 grid, equal everywhere but node (0, 0), where `a` is
+        NoData, `b` 1.0 and `c` 5.0. The seam is b | c; `a` covers the node
+        too, but its value is not in the disagreement, so no seam names it.
+        Node (0, 0) is on all three borders: a tie, and of the two valid
+        values `b.tif`'s, whose name sorts first. In every assembly order."""
         source = whole(rows=3, cols=3)
         tiles = {}
         for name, first in (("a.tif", np.nan), ("b.tif", 1.0), ("c.tif", 5.0)):
@@ -982,32 +1029,360 @@ class TestM8Overlaps:
             tiles[name] = piece(source, 0, 3, 0, 3, array=array)
         planned = plan(tiles)
         for order in itertools.permutations(planned.tiles):
-            message = refused(
-                lambda o=order: mz.assemble(planned.model_copy(update={"tiles": o}), Loads(tiles)),
-                "b.tif",
-                "c.tif",
-                "4",
-            )
-            assert "a.tif" not in message, ([p.name for p in order], message)
-            names_number(message, 1)
+            result = mz.assemble(planned.model_copy(update={"tiles": order}), Loads(tiles))
+            names = [p.name for p in order]
+            assert seams(result) == [("b.tif", "c.tif", 1, 4.0, 4.0)], names
+            assert result.tile.array[0, 0] == 1.0, names
 
-    def test_one_ulp_is_a_disagreement(self, build: Any, refused: Any) -> None:
-        """`==`, not `isclose`: DTM10's and ANADEM's overlaps agree bit for bit (N3, B4)."""
+    def test_one_ulp_is_a_disagreement(self, build: Any) -> None:
+        """`==`, not `isclose`: DTM10's and ANADEM's overlaps agree bit for bit
+        on one export date (N3, B4), so one ulp is reported. Overlap 1: the
+        shared column is on both tiles' borders, a tie, `e.tif`'s value."""
         source, arrays = self.pair(1)
         value = arrays["e.tif"][2, 0]
-        arrays["e.tif"][2, 0] = np.nextafter(value, np.float32(np.inf), dtype=np.float32)
-        message = refused(lambda: build(self.tiles(source, arrays)), "w.tif", "e.tif")
-        names_number(message, 1)
+        bumped = np.nextafter(value, np.float32(np.inf), dtype=np.float32)
+        arrays["e.tif"][2, 0] = bumped
+        result, _ = build(self.tiles(source, arrays))
+        ulp = float(bumped) - float(value)
+        assert seams(result) == [("e.tif", "w.tif", 1, ulp, ulp)]
+        assert result.tile.array[2, 4] == bumped
 
-    def test_a_disagreement_against_a_sentinel_tile_is_still_one(
-        self, build: Any, refused: Any
-    ) -> None:
-        """The sentinel is NoData only where a node holds it; elsewhere a value is a value."""
+    def test_a_disagreement_against_a_sentinel_tile_is_still_one(self, build: Any) -> None:
+        """The sentinel is NoData only where a node holds it; elsewhere a value
+        is a value, reported and decided by depth like any other."""
         source, arrays = self.pair(3, nodata=SENTINEL)
-        arrays["w.tif"][0, 4] = SENTINEL
-        arrays["w.tif"][0, 5] += 7.0
-        message = refused(lambda: build(self.tiles(source, arrays)), "w.tif", "e.tif", "7")
-        names_number(message, 1)
+        arrays["w.tif"][0, 4] = SENTINEL  # NoData: e.tif's value, not counted
+        arrays["w.tif"][0, 5] += 7.0  # a tie on row 0: e.tif's value
+        arrays["w.tif"][1, 4] += 3.0  # w.tif is deeper: its value
+        result, _ = build(self.tiles(source, arrays))
+        assert seams(result) == [("e.tif", "w.tif", 2, 7.0, 5.0)]
+        taken = source.array.copy()
+        taken[1, 4] += 3.0
+        assert same_array(result.tile.array, taken)
+
+
+def taken_from(result: Any, source: np.ndarray, offsets: dict[str, float]) -> list[str]:
+    """Row strings naming, node by node, the tile each value came from.
+
+    Every tile is `source` plus its own offset, so the offset identifies it;
+    a tile is written as its name's first letter.
+    """
+    letter = {offset: name[0] for name, offset in offsets.items()}
+    taken = np.asarray(result.tile.array, dtype=np.float64) - source
+    return ["".join(letter[float(v)] for v in row) for row in taken]
+
+
+def offset_tiles(tiles: dict[str, DemTile]) -> tuple[dict[str, DemTile], dict[str, float]]:
+    """Each tile plus 1000 times its rank by name: every overlap disagrees."""
+    offsets = {name: 1000.0 * (i + 1) for i, name in enumerate(sorted(tiles))}
+    return {name: shifted_by(t, offsets[name]) for name, t in tiles.items()}, offsets
+
+
+class TestQ1DeepestInterior:
+    """Ola's Q1 revised (2026-09-28): each overlap node takes the value of the
+    tile whose interior it lies deepest in (the largest distance, in nodes, to
+    that tile's *own* nearest border); ties go to the name that sorts first;
+    NoData still loses to a valid value; the result is independent of tile
+    order.
+
+    Every tile is the source plus its own offset, so every overlap disagrees
+    and the offset names the tile a value came from. The expected maps are
+    written out by hand, and the whole array is also checked against
+    `mosaic_fixtures.deepest_interior`, a node-by-node oracle that places
+    tiles by coordinates and shares no code with `tin_engine.mosaic`.
+    """
+
+    ROWS, WIDTH = 7, 8
+
+    def two(self, overlap: int, west: str, east: str) -> tuple[DemTile, dict[str, DemTile]]:
+        """Two 7 x 8 tiles side by side sharing `overlap` columns; west + 1000,
+        east + 2000."""
+        cols = 2 * self.WIDTH - overlap
+        source = whole(self.ROWS, cols)
+        return source, {
+            west: shifted_by(piece(source, 0, self.ROWS, 0, self.WIDTH), 1000.0),
+            east: shifted_by(piece(source, 0, self.ROWS, self.WIDTH - overlap, cols), 2000.0),
+        }
+
+    #: The overlap columns only, row by row. W: the west tile is deeper; E: the
+    #: east; T: equally deep, so the name that sorts first. Rows 0 and 6 lie on
+    #: both tiles' borders. An odd overlap has a tie column down the middle; an
+    #: even one splits cleanly where the rows are deep enough (rows 2-4), and
+    #: rows 1 and 5, 1 deep, tie the middle two columns.
+    MAPS: ClassVar[dict[int, list[str]]] = {
+        3: ["TTT", "WTE", "WTE", "WTE", "WTE", "WTE", "TTT"],
+        4: ["TTTT", "WTTE", "WWEE", "WWEE", "WWEE", "WTTE", "TTTT"],
+    }
+
+    @pytest.mark.parametrize("overlap", [3, 4], ids=["odd-tie-column", "even-midline"])
+    @pytest.mark.parametrize(
+        ("west", "east"), [("w.tif", "e.tif"), ("a.tif", "b.tif")], ids=["east-first", "west-first"]
+    )
+    def test_two_tiles_split_down_the_middle_ties_by_name(
+        self, build: Any, overlap: int, west: str, east: str
+    ) -> None:
+        source, tiles = self.two(overlap, west, east)
+        result, _ = build(tiles)
+        letter = {"W": west[0], "E": east[0], "T": min(west, east)[0]}
+        own = self.WIDTH - overlap
+        expected = [
+            west[0] * own + "".join(letter[k] for k in row) + east[0] * own
+            for row in self.MAPS[overlap]
+        ]
+        assert taken_from(result, source.array, {west: 1000.0, east: 2000.0}) == expected
+        oracle = deepest_interior(tiles, result.tile.meta).astype(np.float32)
+        assert same_array(result.tile.array, oracle)
+
+    def test_one_shared_line_is_all_ties(self, build: Any) -> None:
+        """Point-registered neighbours share one line, 0 deep in both: every
+        node is a tie, and the name that sorts first takes the whole line."""
+        source, tiles = self.two(1, "w.tif", "e.tif")
+        result, _ = build(tiles)
+        taken = taken_from(result, source.array, {"w.tif": 1000.0, "e.tif": 2000.0})
+        assert [row[self.WIDTH - 1] for row in taken] == ["e"] * self.ROWS
+
+    def test_depth_is_to_the_tiles_own_border_not_the_requests_window(self, build: Any) -> None:
+        """A box of rows 2-4 and columns 4-8 cuts both tiles of the odd pair.
+        The window's first and last rows are neither tile's border, so the
+        answer is rows 2-4 of the full tiles' map (W T E in columns 5-7), not
+        the window's (all ties, `e.tif`, on its first and last row)."""
+        source, tiles = self.two(3, "w.tif", "e.tif")
+        box = (X0 + 4 * DX, Y0 - 4 * DY, X0 + 8 * DX, Y0 - 2 * DY)
+        result, _ = build(tiles, box)
+        assert (result.tile.meta.rows, result.tile.meta.cols) == (3, 5)
+        taken = taken_from(result, source.array[2:5, 4:9], {"w.tif": 1000.0, "e.tif": 2000.0})
+        assert taken == ["wweee"] * 3
+
+    #: Rows 2-6, columns 7-11 of a 9 x 12 tile holding a 5 x 5 one flush with
+    #: its east border. The small tile's own depth never exceeds the big one's,
+    #: so it takes only the ties, and only when its name sorts first.
+    INSIDE: ClassVar[dict[str, list[str]]] = {
+        "a.tif": ["bbbba", "bbbaa", "bbaaa", "bbbaa", "bbbba"],
+        "s.tif": ["bbbbb"] * 5,
+    }
+
+    @pytest.mark.parametrize("small", ["a.tif", "s.tif"], ids=["small-first", "small-last"])
+    def test_unequal_sizes_measure_depth_to_each_tiles_own_border(
+        self, build: Any, small: str
+    ) -> None:
+        """Depth is to each tile's own border: measured to the mosaic's border
+        (here the big tile's), both would tie at every node."""
+        source = whole(9, 12)
+        tiles = {
+            "b.tif": shifted_by(piece(source, 0, 9, 0, 12), 1000.0),
+            small: shifted_by(piece(source, 2, 7, 7, 12), 2000.0),
+        }
+        result, _ = build(tiles)
+        taken = taken_from(result, source.array, {"b.tif": 1000.0, small: 2000.0})
+        assert [row[7:] for row in taken[2:7]] == self.INSIDE[small]
+        assert all(set(row) == {"b"} for row in taken[:2] + taken[7:])
+        oracle = deepest_interior(tiles, result.tile.meta).astype(np.float32)
+        assert same_array(result.tile.array, oracle)
+
+    def test_a_corner_of_three_tiles(self, build: Any) -> None:
+        """`a` 10 x 7 down the west, `b` 7 x 8 and `c` 6 x 8 stacked on the
+        east; rows 4-6, columns 4-6 are in all three. At (6, 6) `c` is 2 deep
+        and the others 0; at (5, 5) all three are 1 deep, so `a`."""
+        source = whole(10, 12)
+        tiles, offsets = offset_tiles(
+            {
+                "a.tif": piece(source, 0, 10, 0, 7),
+                "b.tif": piece(source, 0, 7, 4, 12),
+                "c.tif": piece(source, 4, 10, 4, 12),
+            }
+        )
+        result, _ = build(tiles)
+        assert taken_from(result, source.array, offsets) == [
+            "aaaaaaabbbbb",
+            "aaaaaabbbbbb",
+            "aaaaaabbbbbb",
+            "aaaaaabbbbbb",
+            "aaaaaabbbbbb",
+            "aaaaaabbbbbb",
+            "aaaaaacccccb",
+            "aaaaaacccccc",
+            "aaaaaacccccc",
+            "aaaaaaaccccc",
+        ]
+        oracle = deepest_interior(tiles, result.tile.meta).astype(np.float32)
+        assert same_array(result.tile.array, oracle)
+
+    #: Quadrants of a 10 x 12 grid cut at row 5 and column 6 with overlap 3:
+    #: 8 x 9, 8 x 6, 5 x 9 and 5 x 6 tiles, all four sharing rows 5-7 and
+    #: columns 6-8. Named so the name order is nw < ne < sw < se, and then its
+    #: reverse; the ties move with it, the deeper tile does not.
+    CORNERS: ClassVar[dict[str, list[str]]] = {
+        "abcd": [
+            "aaaaaaaaabbb",
+            "aaaaaaaabbbb",
+            "aaaaaaaabbbb",
+            "aaaaaaaabbbb",
+            "aaaaaaaabbbb",
+            "aaaaaaaabbbb",
+            "aaaaaaaabbbb",
+            "acccccccdddb",
+            "ccccccccdddd",
+            "cccccccccddd",
+        ],
+        "dcba": [
+            "ddddddcccccc",
+            "dddddddccccc",
+            "dddddddccccc",
+            "dddddddccccc",
+            "dddddddccccc",
+            "bddddddcccca",
+            "bbbbbbbaaaaa",
+            "bbbbbbbaaaaa",
+            "bbbbbbbaaaaa",
+            "bbbbbbaaaaaa",
+        ],
+    }
+
+    @staticmethod
+    def four(
+        letters: str, nodata: float | None = None
+    ) -> tuple[DemTile, dict[str, DemTile], dict[str, float]]:
+        source = whole(10, 12, nodata=nodata)
+        cut = quadrants(source, row_cut=5, col_cut=6, overlap=3)
+        named = {
+            f"{letter}.tif": cut[q]
+            for letter, q in zip(letters, ("nw.tif", "ne.tif", "sw.tif", "se.tif"), strict=True)
+        }
+        tiles, offsets = offset_tiles(named)
+        return source, tiles, offsets
+
+    @pytest.mark.parametrize("letters", ["abcd", "dcba"])
+    def test_a_corner_of_four_tiles(self, build: Any, letters: str) -> None:
+        source, tiles, offsets = self.four(letters)
+        result, _ = build(tiles)
+        assert taken_from(result, source.array, offsets) == self.CORNERS[letters]
+        oracle = deepest_interior(tiles, result.tile.meta).astype(np.float32)
+        assert same_array(result.tile.array, oracle)
+
+    @pytest.mark.parametrize("nodata", [np.nan, SENTINEL], ids=["nan", "sentinel"])
+    def test_nodata_in_the_deepest_tile_loses_to_a_shallower_valid_value(
+        self, build: Any, nodata: float
+    ) -> None:
+        """At (5, 6) `a.tif` (nw) is 2 deep and the other three 0: with NoData
+        there, the three valid values tie, and `b.tif` sorts first. At (4, 7),
+        in `a.tif` and `b.tif` only, `a.tif` is 1 deep and `b.tif` 1: a tie
+        `a.tif` would take, but its NoData leaves `b.tif`."""
+        sentinel = None if np.isnan(nodata) else SENTINEL
+        source, tiles, offsets = self.four("abcd", sentinel)
+        array = np.asarray(tiles["a.tif"].array).copy()
+        array[5, 6] = array[4, 7] = nodata
+        tiles["a.tif"] = DemTile(meta=tiles["a.tif"].meta, array=array)
+        result, _ = build(tiles)
+        expected = [list(row) for row in self.CORNERS["abcd"]]
+        assert (expected[5][6], expected[4][7]) == ("a", "a")  # with no NoData
+        expected[5][6] = expected[4][7] = "b"
+        assert taken_from(result, source.array, offsets) == ["".join(r) for r in expected]
+
+    def test_every_order_gives_the_same_mosaic_and_report(self, mz: ModuleType, plan: Any) -> None:
+        """I2 under the new rule: all 24 assembly orders of the four-tile
+        corner, with NoData in the deepest tile at one node, give one array bit
+        for bit and one seam report."""
+        _, tiles, _ = self.four("dcba")
+        array = np.asarray(tiles["d.tif"].array).copy()
+        array[5, 6] = np.nan
+        tiles["d.tif"] = DemTile(meta=tiles["d.tif"].meta, array=array)
+        planned = plan(tiles)
+        first = mz.assemble(planned, Loads(tiles))
+        for order in itertools.permutations(planned.tiles):
+            result = mz.assemble(planned.model_copy(update={"tiles": order}), Loads(tiles))
+            names = [p.name for p in order]
+            assert same_array(result.tile.array, first.tile.array), names
+            assert seams(result) == seams(first), names
+        oracle = deepest_interior(tiles, first.tile.meta).astype(np.float32)
+        assert same_array(first.tile.array, oracle)
+
+
+class TestQ1SeamReport:
+    """Ola's Q1 revised: each disagreeing seam is reported, the two tiles (by
+    name, the one that sorts first first), the number of nodes where both hold
+    a valid value and the values differ, and the largest and the median
+    |difference| over those nodes. Pairs that agree are not listed. A
+    `Mosaic`'s `seams` is a tuple sorted by the pair's names.
+    """
+
+    def test_every_pair_of_the_four_corner(self, build: Any) -> None:
+        """Every overlap of the offset quadrants disagrees by a constant, so
+        each pair's count is its overlap's node count: 8 x 3 for a | b (nw,
+        ne), 3 x 9 for a | c (nw, sw), the 3 x 3 corner for a | d and b | c,
+        3 x 6 for b | d and 5 x 3 for c | d."""
+        _, tiles, _ = TestQ1DeepestInterior.four("abcd")
+        result, _ = build(tiles)
+        assert seams(result) == [
+            ("a.tif", "b.tif", 24, 1000.0, 1000.0),
+            ("a.tif", "c.tif", 27, 2000.0, 2000.0),
+            ("a.tif", "d.tif", 9, 3000.0, 3000.0),
+            ("b.tif", "c.tif", 9, 1000.0, 1000.0),
+            ("b.tif", "d.tif", 18, 2000.0, 2000.0),
+            ("c.tif", "d.tif", 15, 1000.0, 1000.0),
+        ]
+        assert seams(result) == seams_of(tiles, result.tile.meta)
+
+    @pytest.mark.parametrize("overlap", [0, 1, 3], ids=["abutting", "shared-line", "overlap-3"])
+    def test_agreeing_seams_are_not_listed(self, build: Any, overlap: int) -> None:
+        area = overlap == 0
+        source = whole(8, 12, area=area) if area else whole(9, 13)
+        result, _ = build(quadrants(source, row_cut=4, col_cut=6, overlap=overlap))
+        assert result.seams == ()
+
+    def test_one_tile_has_no_seams(self, build: Any) -> None:
+        result, _ = build({"only.tif": whole()})
+        assert result.seams == ()
+
+    def test_only_the_disagreeing_pair_is_listed(self, build: Any) -> None:
+        """Four quadrants that agree but for one node on the nw | ne seam
+        (outside the other two tiles): one entry, not six."""
+        source = whole(9, 13)
+        tiles = quadrants(source, row_cut=4, col_cut=6, overlap=3)
+        array = np.asarray(tiles["ne.tif"].array).copy()
+        array[1, 1] -= 6.0
+        tiles["ne.tif"] = DemTile(meta=tiles["ne.tif"].meta, array=array)
+        result, _ = build(tiles)
+        assert seams(result) == [("ne.tif", "nw.tif", 1, 6.0, 6.0)]
+
+    def test_a_three_way_node_is_counted_in_each_disagreeing_pair(self, build: Any) -> None:
+        """At node (0, 0) `a` and `b` hold 1.0 and `c` 5.0: a | c and b | c
+        each count it; a | b agree and are not listed."""
+        source = whole(rows=3, cols=3)
+        tiles = {}
+        for name, first in (("a.tif", 1.0), ("b.tif", 1.0), ("c.tif", 5.0)):
+            array = source.array.copy()
+            array[0, 0] = first
+            tiles[name] = piece(source, 0, 3, 0, 3, array=array)
+        result, _ = build(tiles)
+        assert seams(result) == [
+            ("a.tif", "c.tif", 1, 4.0, 4.0),
+            ("b.tif", "c.tif", 1, 4.0, 4.0),
+        ]
+
+    def test_the_report_covers_the_mosaics_nodes_only(self, build: Any) -> None:
+        """A difference outside `--bbox` is in no node the run reads, so it is
+        not reported; one inside is."""
+        source = whole(9, 13)
+        tiles = quadrants(source, row_cut=4, col_cut=6, overlap=3)
+        array = np.asarray(tiles["ne.tif"].array).copy()
+        array[0, 0] += 2.0  # global (0, 6): outside the box
+        array[3, 1] += 5.0  # global (3, 7): inside it
+        tiles["ne.tif"] = DemTile(meta=tiles["ne.tif"].meta, array=array)
+        box = (X0 + 5 * DX, Y0 - 6 * DY, X0 + 8 * DX, Y0 - 2 * DY)  # rows 2-6, cols 5-8
+        result, _ = build(tiles, box)
+        assert seams(result) == [("ne.tif", "nw.tif", 1, 5.0, 5.0)]
+
+    def test_differences_are_taken_in_float64(self, build: Any) -> None:
+        """0.5 against 2**24 + 2, both exact in float32: the difference is
+        16777217.5 in float64 and would round to 16777218 in float32."""
+        source = whole(rows=3, cols=3)
+        tiles = {}
+        for name, first in (("a.tif", 0.5), ("b.tif", 2.0**24 + 2)):
+            array = source.array.copy()
+            array[1, 1] = first
+            tiles[name] = piece(source, 0, 3, 0, 3, array=array)
+        result, _ = build(tiles)
+        assert seams(result) == [("a.tif", "b.tif", 1, 16777217.5, 16777217.5)]
 
 
 class TestM9SplitAndRestitch:
