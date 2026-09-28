@@ -188,7 +188,7 @@ be instantiated in order to test the layer above it.
 
 5b priced this as "~6 lines" across four files: `cdt/triangulate.hpp`,
 `cdt/detria_backend.hpp`, `src/cdt/detria_backend.cpp`, plus the include swaps
-(`05b-noder-driver.md:1631-1640`). **There is a fifth**, and it is the one with
+(`05b-noder-driver.md:1631-1640` at `dc372a5`). **There is a fifth**, and it is the one with
 a design decision in it:
 
 ```sh
@@ -477,7 +477,7 @@ most likely to meet is "the same refusal, slower" is worse than not having it.
 
 **And the header's sentence goes with it. `describe(NodeStatus::NotConverged)`
 today names two levers** — "use a finer spacing **or raise the cap**"
-(`noded_pslg_builder.hpp:106-108`). **Ruling: it names one.** `@developer` makes
+(`noded_pslg_builder.hpp:106-108` at `6732564`). **Ruling: it names one.** `@developer` makes
 this edit in the green commit:
 
 ```cpp
@@ -726,7 +726,7 @@ no caller is a surface with no consumer.
 
 ## What becomes unreachable in `CdtStatus`
 
-Unchanged from `05-noder.md` and `05b-noder-driver.md:1598-1616`, and this is
+Unchanged from `05-noder.md` and `05b-noder-driver.md:1598-1616` at `dc372a5`, and this is
 the increment where it becomes true. `04-cdt.md` gains **one paragraph appended
 beneath its mapping table**, leaving the table intact as the record of what was
 true at increment 4:

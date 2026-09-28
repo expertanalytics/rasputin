@@ -5,8 +5,9 @@ to back. The branch is `4e83389`; the base is master `dc372a5`. Method,
 tables and raw data: `16b0-acceptance/README.md`.
 
 - **1 m benchmark and thread sweep** (`tools/bench.py`, three pairs): no
-  change. Pooled over all 42 cells, the change is a median of -0.28 % (range
-  -5.9 % to +2.8 %). bench.py said ACCEPTED on pairs 1 and 3. On pair 2 it
+  change. Pooled over all 42 cells (each cell's median over the three base runs
+  against its median over the three 16b-0 runs), the change is a median of
+  -0.28 % (range -5.9 % to +2.8 %). bench.py said ACCEPTED on pairs 1 and 3. On pair 2 it
   flagged two tile cells (+6.9 % at 10 threads, +8.0 % at 16); those cells
   were +0.5 % to +2.1 % in the other pairs. The same build moves by up to
   +13.5 % between runs, and `refine` does not compile the changed header.

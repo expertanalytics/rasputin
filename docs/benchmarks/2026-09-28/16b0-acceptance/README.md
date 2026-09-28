@@ -63,7 +63,7 @@ bench.py's verdicts: pair 1 **ACCEPTED**; pair 2 **REGRESSION** on two cells
   against 16b-0 run 1 exceeds 5 % in 3 of 42 cells, by up to +10.0 %.
 - `refine_s` times the `refine` call alone. The only changed header is not
   compiled into refine's code path (see above).
-- Pooled over all 42 cells, the median of the three runs' medians is -0.28 %
+- Pooled over all 42 cells, each cell's median over the three base runs against its median over the three 16b-0 runs gives a median change of -0.28 %
   (min -5.9 %, max +2.8 %), and no cell is above +5 %.
 
 Refine seconds, median of 5 per run (ms). The last column gives the median of
