@@ -48,6 +48,7 @@
 // node<K>'s, because the statuses it raises (RingCollapsed, NonSimpleRing) are
 // diagnoses about the spacing rather than claims about these arrays.
 
+#include <terrain/core/bbox.hpp>
 #include <terrain/core/edge_properties.hpp>
 #include <terrain/core/noded_pslg.hpp>
 #include <terrain/core/point.hpp>
@@ -61,10 +62,12 @@
 #include <cstddef>
 #include <cstdint>
 #include <format>
+#include <limits>
 #include <optional>
 #include <span>
 #include <string>
 #include <string_view>
+#include <tuple>
 #include <utility>
 #include <vector>
 
@@ -145,6 +148,92 @@ namespace detail {
 }
 
 }  // namespace detail
+
+// The pair search behind guarantee 14: every pair of CLOSED boxes that
+// intersect, found by sort and sweep on x (increment 16b-0, R8). Kernel-free:
+// it compares box bounds and nothing else, and what a pair MEANS is the
+// callbacks' business.
+//
+// on_edge_pair(i, j) is called exactly once for every unordered pair of edge
+// boxes that meet (i != j, either order); on_edge_cell(e, c) exactly once for
+// every edge box and cell box that meet. Two cells are never paired. A callback
+// returning false stops the sweep at once, and the function returns false;
+// otherwise it returns true. The same input gives the same calls in the same
+// order.
+//
+// The sweep: items sorted by (xmin, kind, index), a total order, so the sort is
+// deterministic. Each arriving item is tested against the ACTIVE items whose
+// xmax >= its xmin (closed), and those whose xmax is below it are dropped on the
+// way past, for good: every later item starts at or right of this one. A pair is
+// therefore reported once, when its later-sorted member arrives, and only if
+// the earlier one still spans that x -- which, with the y-test, is exactly the
+// closed-box intersection.
+//
+// COST. Typical inputs are O(n log n + k) for k reported pairs plus the
+// x-overlapping pairs whose y-intervals miss. The worst case is still
+// quadratic: many long east-west boxes all overlap in x. It is the pair search
+// only; it shares no code with the driver's BroadPhase, and must not (see
+// check_guarantee_14).
+template <class OnEdgePair, class OnEdgeCell>
+[[nodiscard]] bool sweep_box_pairs(std::span<const Box2> edges, std::span<const Box2> cells,
+                                   OnEdgePair&& on_edge_pair, OnEdgeCell&& on_edge_cell) {
+    struct Item {
+        double xmin;
+        bool is_cell;  // edges before cells on an x tie; either order is complete
+        std::size_t index;
+    };
+    std::vector<Item> items;
+    items.reserve(edges.size() + cells.size());
+    for (std::size_t i = 0; i < edges.size(); ++i) {
+        items.push_back(Item{edges[i].lo().x, false, i});
+    }
+    for (std::size_t c = 0; c < cells.size(); ++c) {
+        items.push_back(Item{cells[c].lo().x, true, c});
+    }
+    std::ranges::sort(items, [](const Item& a, const Item& b) {
+        return std::tie(a.xmin, a.is_cell, a.index) < std::tie(b.xmin, b.is_cell, b.index);
+    });
+
+    // Reports the members of `active` meeting `b`, dropping (swap-and-pop) those
+    // that end left of it. False as soon as `report` returns false.
+    const auto scan = [](std::vector<std::size_t>& active, std::span<const Box2> boxes,
+                         const Box2& b, auto&& report) {
+        for (std::size_t k = 0; k < active.size();) {
+            const Box2& a = boxes[active[k]];
+            if (a.hi().x < b.lo().x) {
+                active[k] = active.back();
+                active.pop_back();
+                continue;
+            }
+            if (a.lo().y <= b.hi().y && b.lo().y <= a.hi().y && !report(active[k])) {
+                return false;
+            }
+            ++k;
+        }
+        return true;
+    };
+
+    std::vector<std::size_t> active_edges;
+    std::vector<std::size_t> active_cells;
+    for (const Item& t : items) {
+        if (t.is_cell) {
+            const auto meet = [&](std::size_t e) { return on_edge_cell(e, t.index); };
+            if (!scan(active_edges, edges, cells[t.index], meet)) {
+                return false;
+            }
+            active_cells.push_back(t.index);
+            continue;
+        }
+        const auto pair = [&](std::size_t e) { return on_edge_pair(e, t.index); };
+        const auto meet = [&](std::size_t c) { return on_edge_cell(t.index, c); };
+        if (!scan(active_edges, edges, edges[t.index], pair) ||
+            !scan(active_cells, cells, edges[t.index], meet)) {
+            return false;
+        }
+        active_edges.push_back(t.index);
+    }
+    return true;
+}
 
 class NodedPslgBuilder {
 public:
@@ -293,14 +382,21 @@ private:
         std::uint32_t lo, hi;  // the UNDIRECTED node-id pair, which is 14(a)'s key
     };
 
-    // Guarantee 14, brute force over every (edge, edge) and every (node, edge)
-    // pair. NO BROAD PHASE: the index is the driver's, and a verification pass
-    // sharing it would be blind wherever the index is. The candidates are small
-    // by construction -- a noded constraint set, not a mesh.
+    // Guarantee 14, over the (edge, edge) and (edge, node) pairs whose closed
+    // boxes meet, found by sweep_box_pairs. Complete: two segments that cross or
+    // overlap share a point, so their boxes meet, and a segment meeting a closed
+    // cell meets any box containing the cell. Box bounds are min/max of the
+    // endpoints' doubles, so exact. NOT the driver's BroadPhase: the index is the
+    // driver's, and a verification pass sharing it would be blind wherever the
+    // index is. The sweep is a different algorithm and shares no code with it.
+    // The tests on each pair are the brute force's, unchanged; only which
+    // violating pair the message names first may differ from it.
     template <pred::GeometryKernel K>
     [[nodiscard]] NodeOutcome check_guarantee_14() {
         std::vector<Edge> edges;
+        std::vector<Box2> edge_boxes;
         edges.reserve(edge_base_.back());
+        edge_boxes.reserve(edge_base_.back());
         for (std::size_t c = 0; c < chains_.size(); ++c) {
             const std::span<const std::uint32_t> idx = indices_of(c);
             const std::size_t n = idx.size();
@@ -309,43 +405,64 @@ private:
                 const std::uint32_t v = idx[(k + 1) % n];
                 edges.push_back(Edge{Segment2{vertices_[u], vertices_[v]},
                                      std::min(u, v), std::max(u, v)});
+                edge_boxes.push_back(bbox(edges.back().segment));
             }
         }
 
+        // Node g's closed cell, padded by one spacing on every side: a false
+        // positive only costs a segment_meets_cell call, and the padding leaves
+        // no question of how the cell's bounds round. Clamped to the finite
+        // range, where Box2 lives; the edges are finite (guarantee 11), so the
+        // clamp changes no answer.
+        constexpr double kBig = std::numeric_limits<double>::max();
+        const double pad = grid_.spacing();
+        std::vector<Box2> cell_boxes;
+        cell_boxes.reserve(vertices_.size());
+        for (const Point2& v : vertices_) {
+            const GridPoint g = grid_.snap(v);
+            const Point2 lo = grid_.cell_min(g);
+            const Point2 hi = grid_.cell_max(g);
+            cell_boxes.emplace_back(
+                Point2{std::max(lo.x - pad, -kBig), std::max(lo.y - pad, -kBig)},
+                Point2{std::min(hi.x + pad, kBig), std::min(hi.y + pad, kBig)});
+        }
+
+        std::string why;
         // 14(a), amended: Disjoint or Touching, OR Overlapping with EQUAL node-id
         // pairs. Duplicate edges are legal -- a road noded along a river yields
         // two chains carrying the same edge, and classify on two identical
         // segments returns Overlapping. A PARTIAL overlap is still a violation,
         // and the clause is stated over node ids rather than over collinearity so
         // that the decision stays on integers.
-        for (std::size_t i = 0; i < edges.size(); ++i) {
-            for (std::size_t j = i + 1; j < edges.size(); ++j) {
-                const SegmentRelation r = classify<K>(edges[i].segment, edges[j].segment);
-                const bool same_pair = edges[i].lo == edges[j].lo && edges[i].hi == edges[j].hi;
-                if (r == SegmentRelation::Crossing ||
-                    (r == SegmentRelation::Overlapping && !same_pair)) {
-                    return detail::not_noded(
-                        std::format("edges ({}, {}) and ({}, {}) meet off a node", edges[i].lo,
-                                    edges[i].hi, edges[j].lo, edges[j].hi));
-                }
+        const auto edge_pair = [&](std::size_t i, std::size_t j) {
+            const Edge& a = edges[i];
+            const Edge& b = edges[j];
+            const SegmentRelation r = classify<K>(a.segment, b.segment);
+            const bool same_pair = a.lo == b.lo && a.hi == b.hi;
+            if (r == SegmentRelation::Crossing ||
+                (r == SegmentRelation::Overlapping && !same_pair)) {
+                why = std::format("edges ({}, {}) and ({}, {}) meet off a node", a.lo, a.hi,
+                                  b.lo, b.hi);
+                return false;
             }
-        }
-
+            return true;
+        };
         // 14(b), the hot-pixel clause. segment_meets_cell, NEVER on_segment:
         // world(g) is not affine at a non-dyadic spacing, so a snapped node is
         // NEAR a segment and not ON it, and an exact-incidence spelling here
         // blesses the T-junctions the split pass missed instead of catching them.
-        for (const Edge& e : edges) {
-            for (std::uint32_t g = 0; g < vertices_.size(); ++g) {
-                if (g == e.lo || g == e.hi) {
-                    continue;
-                }
-                if (segment_meets_cell<K>(grid_, e.segment, grid_.snap(vertices_[g]))) {
-                    return detail::not_noded(std::format(
-                        "node {}'s cell meets edge ({}, {}), which it does not end", g, e.lo,
-                        e.hi));
-                }
+        const auto edge_cell = [&](std::size_t i, std::size_t g) {
+            const Edge& e = edges[i];
+            if (g == e.lo || g == e.hi ||
+                !segment_meets_cell<K>(grid_, e.segment, grid_.snap(vertices_[g]))) {
+                return true;
             }
+            why = std::format("node {}'s cell meets edge ({}, {}), which it does not end", g,
+                              e.lo, e.hi);
+            return false;
+        };
+        if (!sweep_box_pairs(edge_boxes, cell_boxes, edge_pair, edge_cell)) {
+            return detail::not_noded(std::move(why));
         }
         return detail::pass();
     }
