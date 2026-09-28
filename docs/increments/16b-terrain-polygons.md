@@ -1,6 +1,7 @@
 # Increment 16b — terrain polygons: interior polygons and polylines as constraints (CORINE over Norway)
 
-Status: **designed, not built.** Questions Q1-Q6 at the end are open. Written
+Status: **16b-0 shipped (#107); 16b-1/2 designed, red step written, not
+built.** Q1-Q6 at the end were ruled on 2026-09-28 (see "Ruled by Ola"). Written
 by `@architect` before `@tester`, per `docs/increments/README.md` step 1, on
 branch `increment16b-terrain-polygons` off the unmerged 15b branch
 (`increment15b-domain-crs`). Nothing in this design depends on 15c or 15d.
@@ -81,6 +82,17 @@ which this increment gives its first real input with interior constraints.
   Ola's words are recorded for points 1 and 2; the second ("yes, let
   architect write both fixes") covers points 2 and 3. Points 4 and 5 are
   corrections of this text found by the red step, not rulings.
+- **2026-09-28, long edges and the pre-clip.** The pre-clip tests an edge in
+  the source CRS, where it is straight, but the engine draws it straight in
+  the DEM's CRS, so a long edge could miss the region and still enter the
+  domain. Ola: **"yes, widen per edge"**. Before the pre-clip decides that an
+  edge misses the region, the margin for that edge is widened by an upper
+  bound on how far the two straight lines can separate (R5, "Long edges").
+  I4 then holds with no length limit.
+- **2026-09-28, `edge_vocabulary` is dropped.** Asked whether to print it in
+  the run report instead, Ola: **"A table in a run report is output, not
+  data."** The files already carry the vocabulary, so there is no new field
+  and no report line (R10).
 
 ## What was measured
 
@@ -454,7 +466,8 @@ Python stream, so the GeoPackage decoder's stream is the open connection.
   organization `EPSG`.
 - **The spatial filter**: when `gpkg_extensions` lists `gpkg_rtree_index` for
   the layer and `rtree_<table>_<column>` exists, the query joins it on the
-  box (`maxx >= ? AND minx <= ? AND maxy >= ? AND miny <= ?`, closed). SQLite
+  box (`maxx >= ? AND minx <= ? AND maxy >= ? AND miny <= ?`, closed;
+  *widened per row for long edges, 2026-09-28: see R5, "Long edges"*). SQLite
   stores R-tree bounds as 32-bit floats rounded outward, so this is a
   superset, which is all a candidate query needs. Without an index the table
   is scanned and the report says so. **Rows are ordered by the primary key**
@@ -559,7 +572,9 @@ class ClassMap(BaseModel):                 # frozen, extra="forbid"
   EPSG:4326 and UTM 33 (measured as above). The rule instead:
   - Each polygon ring is a closed sequence of edges; each line an open one.
     An edge is **kept** when the closed segment, straight in the source CRS,
-    meets the closed region; otherwise it is outside.
+    lies within its widening `w(e)` of the closed region (distance
+    `<= w(e)`; *added 2026-09-28*, see "Long edges" below; `w = 0` is
+    "meets"); otherwise it is outside.
   - Each maximal run of outside edges is dropped. Kept edges keep their
     original vertices; the pre-clip adds no vertex.
   - **A ring with no edge dropped stays one closed ring**, with its original
@@ -573,10 +588,12 @@ class ClassMap(BaseModel):                 # frozen, extra="forbid"
   This bounds the work by the domain, not by the feature: CORINE's sea
   polygon is 360 000 vertices (M1), of which a catchment needs a few
   thousand. It keeps vertices far from the domain out of the transform,
-  except the far end of a kept edge, which lies at most one edge length away.
+  except the far end of a kept edge, which lies at most one edge length away
+  (*2026-09-28:* for a pair of CRSs with a known bound; any other pair is
+  transformed first, see "Long edges").
 - **Checked against R6 and I5.** A ring the pre-clip opens had an edge outside
-  the region, and so outside the domain (within the long-edge limit below),
-  so R6 would have cut it anyway; it
+  the region by more than its widening, and so its DEM-straight edge lies outside
+  the domain ("Long edges" below), so R6 would have cut it anyway; it
   enters R6 as open chains and leaves as open pieces, which is I5's "clipped
   ring". A ring wholly inside the domain loses no edge, stays closed, and
   enters as one closed `Breakline` (I5). A ring kept closed but crossing the
@@ -585,18 +602,96 @@ class ClassMap(BaseModel):                 # frozen, extra="forbid"
   crossings with the domain boundary, as without the pre-clip; they may start
   at a different vertex or be split at an original vertex. That is why I4 is
   stated on the noded output.
-- **Open for Ola (2026-09-28): the long-edge limit.** The edge test is made in
-  the source CRS, where the edge is straight; the engine uses the
-  DEM-straight edge. The two differ by the edge's bend. An edge that misses
-  the region in the source CRS can reach the domain in the DEM's CRS only if
-  its bend exceeds the margin: between EPSG:4326 and UTM 33 that is an
-  east-west or diagonal edge of roughly 40-55 km or more (measured as above: 30
-  km bends 31-55 m, 100 km 340-610 m, at 60-71° N). CORINE's edges are far
-  shorter; a hand-made GeoJSON need not be. Not decided here: accept and
-  document the limit, or make the edge test also keep edges long enough to
-  bend past the margin.
+- **Long edges** (*ruled 2026-09-28*, Ola: "yes, widen per edge"; this
+  replaces the open point on "the long-edge limit"). The edge test is made in
+  the source CRS, where the edge is straight; the engine draws the
+  DEM-straight edge between the same two vertices. The two lines separate by
+  the edge's bend: between EPSG:4326 and UTM 33 at 60-71° N, 30 km east-west
+  or diagonal edges bend 31-55 m and 100 km edges 340-610 m (measured as
+  above), so without a widening an edge of roughly 40 km or more could miss
+  the region and still enter the domain. Each edge's margin is therefore
+  widened by `w(e)`, an upper bound on that separation, chosen by the pair of
+  CRSs:
+  - **Source CRS equal to the DEM's** (pyproj equality): `w = 0`. The two
+    lines are the same line.
+  - **A geographic source and a Transverse Mercator DEM** (UTM included,
+    which covers every projected DEM in view). For an edge from
+    `(λa, φa)` to `(λb, φb)`, in metres in the DEM's CRS:
+
+    ```
+    B(e) = 1.25 · ℓ² · (1.09 · tan φ* + tan Δλ*) / (8 · k0 · R_min)
+    ℓ    = k0 · R_max · sqrt(Δφ² + cos²φ_min · Δλ²) / cos Δλ*
+    ```
+
+    with `Δφ`, `Δλ` the edge's extent in radians; `φ*` the larger |latitude|
+    of its two vertices and `φ_min` the smaller (0 if the edge crosses the
+    equator); `Δλ*` the larger |longitude − λ0| of the two; `λ0` and `k0` the
+    DEM projection's central meridian and scale factor; `R_min = 6 335 439 m`
+    and `R_max = 6 399 594 m`, the WGS 84 ellipsoid's smallest and largest
+    radii of curvature. `ℓ` bounds the length of the edge's image from its
+    source coordinates alone, so no vertex is transformed to compute it.
+    **Why it bounds the separation:** a curve of curvature at most `κ` and
+    length `ℓ` lies within `κ ℓ² / 8` of its chord. On a sphere of radius
+    `R`, a straight line in longitude and latitude has geodesic curvature
+    `cos ψ (1 + sin² ψ) tan φ / R`, at most `(4√6/9) tan φ / R ≈ 1.089 tan φ / R`
+    (`ψ` its angle to the parallel; a parallel has `tan φ / R`), and a
+    straight line of the Transverse Mercator plane has geodesic curvature at
+    most `tan Δλ / R` (the gradient of the log of the scale). The image's
+    plane curvature is at most their sum over the scale, which is at least
+    `k0`. The spherical derivation is carried to the ellipsoid by `R_min`
+    and `R_max` and by the factor 1.25, which also covers a Helmert or null
+    datum step (4326 to ETRS89 is null in PROJ). **Checked** with pyproj,
+    4326 → 25833, 2026-09-28: two runs of 20 000 random edges up to 8° long,
+    within |φ| ≤ 80° and |λ − 15°| ≤ 60°, each sampled at 2 001 points: the
+    measured separation is at most 0.79 `B(e)` (0.985 without the 1.25). A
+    60 km east-west edge at 60, 65 and 70° N separates by 122, 151 and
+    194 m, against `B` = 169, 209 and 268 m. **In the source's units**, for
+    the distance test:
+    `w(e) = B(e) · (180/π) / (k0 · R_min · cos(φ° + 0.1°))` degrees, where
+    `φ°` is the largest |latitude| of the edge's vertices and the region's
+    bounds. A step of `d` metres in the DEM's CRS is at most `d / k0` on the
+    ellipsoid, and a surface distance `s` moves a point by at most
+    `s / (R_min cos φ)` radians in longitude and latitude. Checked the same
+    way on 5 000 random edges up to 6° long: the DEM-straight edge, moved
+    back into EPSG:4326, stays within 0.69 `w(e)` of the source edge.
+    **Where it applies:** both vertices within |φ| ≤ 80° and
+    |λ − λ0| ≤ 60°, and no grid-based step (`hgridshift`, `deformation`) in
+    PROJ's pipeline between the two CRSs. A feature outside that is treated
+    as the next case.
+  - **Any other pair of CRSs** (Ola's GeoPackage, EPSG:3035 over UTM 33, is
+    one): no bound is claimed. The feature is reprojected first and
+    pre-clipped in the DEM's CRS, against the domain buffered by 100 m there,
+    with `w = 0`. That tests the DEM-straight edge itself, so it is exact. It
+    costs transforming every candidate vertex, not only the kept ones: 0.09 s
+    for 360 000 points (the sea polygon's size), 3035 → 25833, measured
+    2026-09-28. For scale, 3035 → 25833 bends at 58-71° N, 4-31° E are 0.5 m at 10 km,
+    4.4 m at 30 km, 49 m at 100 km and 450 m at 300 km (400 random edges
+    each, measured the same day).
+  - **Cheap:** one segment-to-region distance per edge, from the edge's two
+    vertices, and `w(e)` from the same two; no densification.
+  - **With this, the pre-clip changes nothing inside the domain, for edges
+    of any length** (I4): an edge the pre-clip drops has a DEM-straight edge
+    that misses the domain.
+  - **The candidate filters in front of the pre-clip** must not drop such an
+    edge either. GeoJSON and GML: the `intersects(region)` filter below is
+    removed, and every feature goes to the edge test. GeoPackage: a row is
+    read when its R-tree box, widened on every side by `s · max(1, s / H)`,
+    meets the region's bounds, where `s` is the box's width plus height and
+    `H` is 1° for a geographic source and 100 km for a projected one. For a
+    geographic source this contains every row with an edge the widened test
+    could keep: `w(e)` in degrees is at most `0.5 · |e| · max(1, |e| / 1°)`
+    (worst 0.49, computed from the formula over 400 000 random edges in the
+    region of validity), and `|e| <= s`. For any other pair it is an assumption that
+    the separation, moved back into the source CRS, is at most
+    `|e| · max(1, |e| / H)`; the 3035 → 25833 bends above are three orders of
+    magnitude below it. SQLite cannot index a widening that depends on the
+    row, so the query scans the R-tree's columns: on Ola's Europe file, for
+    a 50 km box, 1 006 rows in 0.75-1.3 s, against 693 rows in under 1 ms
+    for the plain box (measured 2026-09-28).
 - **GeoJSON sources** are read whole (`json.loads`, as `domain.py`), then
-  filtered by `intersects(region)` and pre-clipped the same way. Streaming
+  pre-clipped the same way (*2026-09-28:* no longer filtered by
+  `intersects(region)` first, which would drop a long edge the widening
+  keeps; see "Long edges"). GML sources likewise. Streaming
   large GeoJSON is not needed at this scale (the 2026-09-27 probe's CORINE
   over `7908_3` as GeoJSON, 88 features in EPSG:25833, is 8 MB) and not
   designed.
@@ -798,21 +893,17 @@ builds returned `Ok`. M3's attribution holds, and 16b-0 is scoped as designed.
   vertices`. `.vtk` field and `.ply` comment, like `domain`.
 - **`features_crs`** and **`features_transform`**, as `domain_crs` and
   `domain_transform` (15b).
-- **`edge_vocabulary`**: `DEFAULT_VOCABULARY.fingerprint()` and the names by
-  bit (`0 river, 1 road, ..., 7 land_cover, 8 water`). *Corrected
-  2026-09-28:* this is increment 7's mechanism 2 ("a field of whatever
-  serialized artifact carries a mesh"), and the writers already implement it.
-  Every `.vtk` carries the reserved fields `feature_bits`, `feature_names`
-  and `feature_vocabulary` (the fingerprint)
+- **No `edge_vocabulary` field, and no report line** (*ruled 2026-09-28*;
+  Ola: "A table in a run report is output, not data."). What the masks mean
+  is increment 7's mechanism 2 ("a field of whatever serialized artifact
+  carries a mesh"), and the writers already implement it: every `.vtk`
+  carries the reserved fields `feature_bits`, `feature_names` and
+  `feature_vocabulary` (the fingerprint)
   (`src_python/tin_engine/io/vtk_legacy.py`, `write_vtk`), and the edge `.ply`
   carries `feature_bit <bit> <name>` comments and a `feature_vocabulary
   <fingerprint>` comment (`io/ply.py`, `write_ply`, as `cli.py` calls it).
-  An `edge_vocabulary` field would therefore be a duplicate of what both
-  formats already record. **Open for Ola, not decided here:** (a) drop
-  `edge_vocabulary`, since the files already say what their masks mean; or
-  (b) keep the one-line form as the report's own record (stderr and
-  `--stats`), not as a file field. The red suite pins it as a `.vtk` field
-  on every run (`test_cli_mesh_features.py`), which is the duplicate.
+  With 16b's vocabulary these list `land_cover` at bit 7 and `water` at
+  bit 8 (R4). 16b adds nothing here.
 - **`features_notice`**: the map's `notice`, when it has one. The CORINE maps
   carry the Copernicus attribution (see "Test data"), because a mesh built
   from CORINE and shared must say so and say it was modified.
@@ -862,8 +953,9 @@ builds returned `Ok`. M3's attribution holds, and 16b-0 is scoped as designed.
   the pre-clip and without it. The first statement ("the engine input is
   identical") cannot hold: GEOS may start a clipped ring piece at a
   different vertex, which changes the chains but not the noded graph. Since
-  the pre-clip keeps whole edges (R5), I4 holds exactly, for an EPSG:4326
-  source too, within R5's long-edge limit.
+  the pre-clip keeps whole edges and widens each edge's margin by a bound on
+  its bend (R5, "Long edges"; 2026-09-28), I4 holds exactly, for an
+  EPSG:4326 source too, with no limit on edge length.
 - **I5. Ring shape.** A ring wholly inside the domain enters as one closed
   `Breakline` (first index repeated); a clipped ring as open `Breakline`s; a
   line as open `Breakline`s. No feature chain is `Outer` or `Hole`.
@@ -922,11 +1014,11 @@ far (+39 %, increment 16) applied.
 | | | *16b-0 as built (`aa35a38`, CLAUDE.md §2, blank lines excluded): +98 / −21, net 77, over the worst case; the sweep ~50, padded and clamped cell boxes ~12, the 14(a)/(b) loops as callbacks +36 / −21. All three were named in the estimate row: the overrun is in the estimate, not unplanned scope* | |
 | **16b-1** | `io/geopackage.py` | `GpkgLayer`, `layer_info`, `decode_geometry`, `query_features` | ~70 |
 | | `io/repository.py`, `io/__init__.py` | `open_geopackage` | ~8 |
-| | `feature_input.py` | `ClassMap` and three built-in maps, request and result models, GeoJSON reading, region, pre-clip, reprojection, clip, counts, refusals | ~130 |
+| | `feature_input.py` | `ClassMap` and three built-in maps, request and result models, GeoJSON reading, region, pre-clip, reprojection, clip, counts, refusals; the per-edge widening, the query's widening and the reproject-first route (R5, 2026-09-28, ~+20) | ~150 |
 | | `chains.py` | `start_chains` (the domain half moved from `cli.py`, net ~+25) | ~45 |
 | | `features.py` | two vocabulary entries | ~2 |
-| **16b-2** | `cli.py` | four options and their refusals, the two calls, `features`, `features_crs`, `features_transform`, `features_notice`, `edge_vocabulary`, the sentence, the report; less `_domain_chains` | ~65 |
-| | | **16b-1 + 16b-2 total** | **~320 (worst ~445)** |
+| **16b-2** | `cli.py` | four options and their refusals, the two calls, `features`, `features_crs`, `features_transform`, `features_notice`, the sentence, the report; less `_domain_chains` (`edge_vocabulary` dropped 2026-09-28, R10) | ~65 |
+| | | **16b-1 + 16b-2 total** | **~340 (worst ~475)** |
 
 **Two PRs, recommended:**
 
@@ -937,8 +1029,8 @@ far (+39 %, increment 16) applied.
    0). About 50 lines.
 2. **16b-1 and 16b-2 together.** 16b-1 alone would ship a reader nobody can
    run; the CLI is what makes the acceptance runnable, the same argument
-   increment 16 made against splitting. About 320, worst about 445, under
-   700.
+   increment 16 made against splitting. About 340, worst about 475, under
+   700 (2026-09-28: was 320 and 445 before R5's long-edge widening).
 
 If 16b-2 grows past the ceiling in review, the seam is `feature_input.py`
 plus `io/geopackage.py` (testable from Python with no CLI) first, `chains.py`
@@ -987,7 +1079,7 @@ its part in full. Suites: `tests/python/test_io_geopackage.py`,
   features (<k> dropped outside), <c> chains, <v> vertices`),
   `features_crs`, `features_transform`, `features_notice` (absent without a
   notice), `edge_vocabulary` (`<fingerprint>; 0 river, ..., 8 water`, on every
-  `.vtk`); stderr `<n> input vertices`, `<m> noded vertices`; `--stats` rows
+  `.vtk`; *dropped 2026-09-28*, R10); stderr `<n> input vertices`, `<m> noded vertices`; `--stats` rows
   `features read`, `features clip`.
 - I4 is tested after the noder (same noded edges and masks as the test's own
   no-pre-clip pipeline), not as identical engine input: GEOS may split a ring
@@ -1005,7 +1097,9 @@ the source CRS, which for EPSG:4326 (the legacy GML, Ola's own case) is not
 metres; `.vtk` already carries `feature_vocabulary` (fingerprint) and
 `feature_bits`/`feature_names`, so R10's "no writer has implemented yet" is
 not so and `edge_vocabulary` partly duplicates them. *Ruled 2026-09-28*, with
-the pre-clip's edge splitting and I4, R1 and R4: see "Ruled by Ola".
+the pre-clip's edge splitting and I4, R1 and R4: see "Ruled by Ola". R5's
+long-edge limit and `edge_vocabulary`, left open by that revision, were ruled
+the same day (R5, "Long edges"; R10).
 
 #### Consequences for the red suite (2026-09-28)
 
@@ -1040,7 +1134,30 @@ What `@tester` changes to match the rulings. No mutation rounds.
   would have moved them by metres. The test should fail against a pre-clip
   that intersects with the region.
 - **I4's existing test stays** on the noded output, as pinned above.
-- **`edge_vocabulary`**: unchanged until Ola rules R10's open point.
+- **`edge_vocabulary`**: *ruled 2026-09-28, dropped (R10).* In
+  `test_cli_mesh_features.py`, `test_the_edge_vocabulary` is **replaced** by
+  a test on the existing `.vtk` fields: on a run with `--features`,
+  `feature_bits` and `feature_names`, paired by position, include
+  `(7, "land_cover")` and `(8, "water")`, `feature_vocabulary` is
+  `DEFAULT_VOCABULARY.fingerprint()`, and there is no `edge_vocabulary`
+  field. `test_the_edge_vocabulary_without_features` (the three runs without
+  features) is **removed**: those fields are the writer's, already tested
+  since increment 13 (`test_io_vtk_legacy.py`, `test_cli_mesh_vtk.py`).
+  The module docstring's `edge_vocabulary` item goes too.
+- **Long edges widen the margin** (*2026-09-28*, R5, "Long edges"). One
+  test: a GeoJSON feature in EPSG:4326 over a UTM 33 synthetic DEM, with one
+  east-west edge of about 60 km at about 70° N, centred on the zone's
+  central meridian (15° E), and a domain about 2 km wide centred over the
+  edge's midpoint whose southern side lies 140 m north of that midpoint in
+  UTM 33. The edge is then more than 100 m from the domain, so outside the
+  region (by about 40 m in the source CRS), yet its UTM-straight line runs
+  194 m north of the midpoint and crosses the domain (checked with pyproj
+  and shapely, 2026-09-28). The edge must be kept, and the in-domain noded
+  edges must equal the no-pre-clip pipeline's (I4). The test fails against
+  a pre-clip with no widening, which drops the edge. `pre_clip` gains an
+  optional third argument, `widening`, a function of the edge's two
+  vertices giving `w(e)` in source units; left out, it is 0, so the pure
+  geometry tests above stand unchanged.
 
 ## Tests for `@tester`
 
@@ -1098,7 +1215,9 @@ Everything else is unit, property or integration testing:
   bit-identical `.vtk`.
 - **CLI**: `--features` without `--domain`; an unknown suffix;
   `--features-layer` on GeoJSON; the four new fields and the notice in `.vtk`
-  and `.ply`; `edge_vocabulary` present on a run without features too.
+  and `.ply`; with features, `feature_bits`/`feature_names` list
+  `land_cover` (7) and `water` (8) (`edge_vocabulary` dropped 2026-09-28,
+  R10).
 - **Increment 8's three rows** as GeoJSON over a synthetic DEM, end to end:
   the road ends inside the forest ring; the wall's exterior half is absent
   and the mesh has no edge outside the domain; the bridge road is split at
@@ -1146,7 +1265,7 @@ Everything else is unit, property or integration testing:
   SQLite's R-tree module is present locally (3.53.4); CI's Linux Python is
   not yet checked, so 16b-1's first CI run settles it.
 - **Found in passing:** `tests/fixtures/corine/0000_4326_corine2018_4e6064_GML.gml`
-  (30 MB, 399 CORINE features over Norway in EPSG:4326, written by OGR,
+  (30 MB, 200 CORINE features over Norway in EPSG:4326, written by OGR,
   committed with the foundation reset `3096ccc`) carries no attribution, and
   nothing in the tree reads it: `grep -rln corine src_python tests tools` finds
   only the file itself, and the legacy test reads `$RASPUTIN_DATA_DIR/corine`
