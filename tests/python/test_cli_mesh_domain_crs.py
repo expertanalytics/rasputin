@@ -18,6 +18,9 @@ meshes, with `domain_crs` and `domain_transform` recorded. Pinned by this suite
   domain do, so a window cut to the domain may not move them either. No
   commit may update them to agree with new code.
 - `--bbox` with `--domain` is a usage error naming both.
+- `dem_seams` is written on the domain path as without a domain: the
+  disagreeing pair with a domain in EPSG:4326, `none` when the overlaps agree
+  (test amendment after the 15b review).
 - A transformed domain refused for its extent (outside the DEM, in no tile, or
   with no image in the DEM's CRS) is a usage error naming the domain's CRS and
   the DEM's EPSG code, and writes nothing.
@@ -48,6 +51,7 @@ import shapely
 from pyproj import CRS, Transformer
 from shapely.geometry import Polygon
 
+import test_cli_mesh_mosaic
 from geotiff_fixtures import KARTVERKET, micro_tiff, needs_codecs
 from mosaic_fixtures import X0, Y0, blocks, quadrants, whole
 from test_cli_mesh_dem import write_tiff
@@ -365,6 +369,26 @@ class TestRefusedAfterTheTransform:
         run(tmp_path, *mesh_args(quad_dir, domain))  # the control: unpatched, it meshes
         monkeypatch.setattr(Transformer, "from_crs", staticmethod(latitude_first))
         refused(tmp_path, *mesh_args(quad_dir, domain), says=("4326", "25833"))
+
+
+class TestSeamsWithADomain:
+    """Ola's Q1 revised through `--domain`: `dem_seams` is recorded as without
+    one. `test_cli_mesh_mosaic.TestQ1Seams.disagreeing` (reached through its
+    module, so pytest does not collect that class twice) plants +4 at global node (2, 6), which is
+    (500 060, 6 599 990), inside `ACROSS`."""
+
+    def test_a_disagreeing_pair_is_recorded(self, tmp_path: Path) -> None:
+        source = whole(9, 13, array=terrain(9, 13))
+        dem = test_cli_mesh_mosaic.TestQ1Seams.disagreeing(tmp_path, source)
+        lon_lat = to_crs("EPSG:25833", "EPSG:4326", ACROSS)
+        vtk = run(tmp_path, *mesh_args(dem, write_geojson(tmp_path / "c.geojson", lon_lat)))
+        assert the_field(vtk, "domain_crs") == "EPSG:4326"
+        assert the_field(vtk, "dem_seams") == "ne.tif | nw.tif: nodes 1, max 4, median 4"
+
+    def test_agreeing_tiles_record_none(self, tmp_path: Path, quad_dir: Path) -> None:
+        lon_lat = to_crs("EPSG:25833", "EPSG:4326", ACROSS)
+        vtk = run(tmp_path, *mesh_args(quad_dir, write_geojson(tmp_path / "c.geojson", lon_lat)))
+        assert the_field(vtk, "dem_seams") == "none"
 
 
 class TestRealSeam:

@@ -24,6 +24,9 @@ coverage). Pinned by this suite (see "Pinned by the red suite (15b)"):
 - Tiles in more than one CRS are refused with a domain, naming the codes
   (review S2).
 - Every extent refusal fires before any tile is loaded (I6).
+- The seam report (Ola's Q1 revised) survives the domain path: `seams` names
+  each disagreeing pair with a domain in the DEM's CRS or in another one, and
+  is `()` when the overlaps agree (test amendment after the 15b review).
 
 Synthetic tiles are micro-TIFFs written by `test_dem_input.py`'s helpers;
 the real case is the committed DTM10 seam extract (`tests/fixtures/dtm10/`),
@@ -48,8 +51,8 @@ from pyproj import CRS, Transformer
 from shapely.geometry import Polygon, box
 
 from geotiff_fixtures import BASE_KEYS, PROJECTED_CS_TYPE
-from mosaic_fixtures import X0, Y0, blocks, quadrants, whole
-from test_dem_input import SEAM, tiff_of, write_tiles
+from mosaic_fixtures import X0, Y0, blocks, piece, quadrants, seams, seams_of, whole
+from test_dem_input import SEAM, decoded, tiff_of, write_tiles
 
 Ring = list[tuple[float, float]]
 UTM33 = "urn:ogc:def:crs:EPSG::25833"
@@ -609,3 +612,56 @@ class TestOneCrs:
         assert "the tiles are in 2 CRSs" in message
         assert "EPSG:[25832, 25833]" in message
         assert "a domain needs one" in message
+
+
+class TestSeamsOnTheDomainPath:
+    """Ola's Q1 revised, with a domain: `DemInput.seams` is the mosaic's report,
+    as without one. `ne.tif` is planted off `nw.tif` on their shared column
+    (global column 6, in both tiles only): +0.5 at row 1, +2.0 at row 2, both
+    at least 1 mm, and +0.0005 at row 3, below it. So `ne.tif | nw.tif`,
+    nodes 2, max 2.0, median 1.25. Every planted node, (500 060, y 6 599 995
+    .. 6 599 985), lies inside `ACROSS_ALL`. A resolution that drops the seams
+    whenever a domain is given fails the disagreeing cases (15b review)."""
+
+    @staticmethod
+    def disagreeing(tmp_path: Path) -> Path:
+        source = whole(9, 13)
+        tiles = quadrants(source, row_cut=4, col_cut=6, overlap=1)
+        changed = np.array(tiles["ne.tif"].array)
+        for row, by in ((1, 0.5), (2, 2.0), (3, 0.0005)):
+            changed[row, 0] += np.float32(by)
+        tiles["ne.tif"] = piece(source, 0, 5, 6, 13, array=changed)
+        write_tiles(tmp_path / "disagree", tiles)
+        return tmp_path / "disagree"
+
+    @pytest.mark.parametrize("crs", ["EPSG:25833", "EPSG:4326", "EPSG:25832"])
+    def test_a_disagreeing_pair_is_reported_with_a_domain(
+        self, di: ModuleType, dm: ModuleType, tmp_path: Path, crs: str
+    ) -> None:
+        dem = self.disagreeing(tmp_path)
+        domain = read(dm, tmp_path, ACROSS_ALL, crs)
+        opened = di.open_dem(request(di, dem, domain=domain))
+        assert opened.domain is not None
+        assert seams(opened) == [("ne.tif", "nw.tif", 2, 2.0, 1.25)]
+
+    def test_the_report_is_the_one_without_a_domain(
+        self, di: ModuleType, dm: ModuleType, mz: ModuleType, tmp_path: Path
+    ) -> None:
+        """The same report as the node-by-node oracle over the domain's mosaic,
+        and as `--bbox` at the moved domain's bounds (the same plan, R6)."""
+        dem = self.disagreeing(tmp_path)
+        domain = read(dm, tmp_path, ACROSS_ALL, "EPSG:4326")
+        opened = di.open_dem(request(di, dem, domain=domain))
+        tiles = {p.name: decoded(p) for p in sorted(dem.iterdir())}
+        assert seams(opened) == seams_of(tiles, opened.tile.meta)
+        x_min, y_min, x_max, y_max = opened.domain.polygon.bounds
+        bounds = mz.Bounds(x_min=x_min, y_min=y_min, x_max=x_max, y_max=y_max)
+        assert seams(opened) == seams(di.open_dem(request(di, dem, bounds=bounds)))
+
+    @pytest.mark.parametrize("crs", ["EPSG:25833", "EPSG:4326"])
+    def test_agreeing_overlaps_report_nothing_with_a_domain(
+        self, di: ModuleType, dm: ModuleType, quad_dir: Path, tmp_path: Path, crs: str
+    ) -> None:
+        opened = di.open_dem(request(di, quad_dir, domain=read(dm, tmp_path, ACROSS_ALL, crs)))
+        assert [t.name for t in opened.plan.tiles] == ["ne.tif", "nw.tif", "se.tif", "sw.tif"]
+        assert opened.seams == ()
