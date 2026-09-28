@@ -171,6 +171,13 @@ reader's `Update()`.
    as `LINES 0 0` when there are no constraint edges; that form was measured to
    load.
 
+   *Revised by Ola, 2026-09-28 (PR #107):* with no constraint edges, the writer
+   leaves the `LINES` block out. vtk 9.7.1 rejects `LINES 0 0`
+   (`vtkPolyDataReader` reports "Error reading lines" and returns 0 cells);
+   a file with no `LINES` block loads in 9.7.0 and 9.7.1 alike, and this
+   increment measured that form too (the "Empty cases" line under the
+   findings). Nothing else in this ruling changes.
+
 5. **Every cell array covers every cell. Triangles carry 0.** An array covering
    only the lines empties the dataset (finding 2), so leaving triangles out is
    not possible. A triangle's `feature_mask` of 0 and an unclassified
