@@ -28,10 +28,17 @@ are designed, not implemented; Q6-Q10 are open. Written by `@architect` before
 
   Q6-Q10 (the basin) wait until after the Norwegian sub-increments.
 - **2026-09-28, Q1 revised: overlaps that disagree are split down the middle
-  ("b", Ola).** Measured first: in 60 sampled neighbour pairs of Ola's
-  archive, the 21 made on the same export date agree bit for bit and 18 of the
-  39 made on different dates disagree (mean difference about 0, median 0 on
-  flat ground, growing with slope, up to 30 m on cliffs). Kartverket's
+  ("b", Ola).** Measured first, and widened after review with the committed
+  probe `15-probes/dtm10_dates.py` (120 random neighbour pairs, seed 1; a
+  tile's *export date* is the date of its side files, `.tif.aux.xml` or
+  `.tfw`; the `.tif` files' own dates are the download date and the TIFF tags
+  carry none): of 42 same-date pairs, 40 agree exactly and 41 within 1 mm, but
+  7204_4 | 7304_3 differs at 156,379 nodes by up to 5.07 m; of 77
+  different-date pairs, 49 agree within 1 mm and 28 do not, up to 52.1 m
+  (6500_1 | 6500_2). So a shared date makes agreement likely, not certain.
+  The differences have a mean near 0, are often exactly 0 on flat ground and
+  grow with slope (the first 60-pair sample, and three pairs examined node by
+  node). Kartverket's
   metadata explains it: the current 10 m model is exported from NDH laser data
   where it exists, supplemented by the 2013 contour-based DTM10 (±2-6 m), and
   tiles were exported one by one as laser coverage grew. Not land uplift
@@ -103,7 +110,7 @@ What is carried across, and what changes:
 | R3: `read_meta` split out of `decode_dem` | carried (R3); window decoding added in 15d | an ANADEM tile is 2.5 GiB |
 | R4: every tile in the directory on one lattice, or refuse | **changed** (R4): only the **selected** tiles must share a lattice | 8 of Ola's 254 tiles are half a cell off (N2); the parked rule refuses the whole archive |
 | R4: canvas origin from the tiles as decoded | **changed** (R4): each lattice has a **reference node**, and every node has a global index | frame coordinates must not depend on the window, for domain decomposition (R12) |
-| R5: valid beats NoData, disagreement split down the middle and reported (Q1 revised), order-independent | carried (R5), now **with real data behind it** | DTM10 (N3) and ANADEM (B4) overlaps agree bit for bit |
+| R5: valid beats NoData, disagreement split down the middle and reported (Q1 revised), order-independent | carried (R5), now **with real data behind it** | DTM10 overlaps between tiles exported on different dates often disagree, up to 52 m (Q1 revised); same-date ones nearly always agree; ANADEM's sampled seams agree (B4) |
 | R5: gaps stay NaN | **changed** (R5): a node the request needs that no tile covers is refused | Ola's ruling, `18-row-span-scan.md` R6: "a missing tile inside the extent is a data error" |
 | R6: `--bbox` in the DEM's CRS, no transform | carried (R6); the domain is transformed in 15b (R9) | "inputs in their own CRS" |
 | R6: `GeoPolygon` lands with the clip | superseded: 16 shipped `DomainPolygon`; 15b gives it a transform | |
@@ -274,8 +281,9 @@ modified data apply at least (its notice, plus a notice of modification).
   `gdalwarp` maps every destination pixel back through the inverse transform,
   approximated by linear interpolation along rows within an error threshold
   (default 0.125 pixel). GDAL documentation, recalled. **Differences:** no order
-  precedence, since disagreement is refused and valid beats NoData in any
-  order (R5); and no warp (R8).
+  precedence by source order: a disagreeing overlap goes to the tile the node
+  lies deepest in, ties by name, and valid beats NoData in any order (R5, Q1
+  revised); and no warp (R8).
 - **Projection choice**: Snyder, *Map Projections — A Working Manual*, USGS
   Professional Paper 1395, 1987, recalled. A Lambert conformal conic suits an
   extent wide east-west at mid latitudes, with the standard parallels about one
@@ -483,12 +491,14 @@ of `TileFootprint`.
 
 ### R5. Assembly: stitching and overlaps [15a]
 
-Carried from the parked R5 almost unchanged.
+Carried from the parked R5, with assembly reworked for Q1 revised.
 
 - The canvas is allocated once, NaN-filled, in `np.result_type` of the
   selected tiles' dtypes (float32 for both archives).
 - Tiles are loaded one at a time in plan order. Each tile's used window is
-  merged into the canvas, and the tile is dropped.
+  written whole into the canvas; where it meets another tile, a copy of its
+  values there (a strip) is kept; then the tile is dropped. Once all tiles
+  are in, each overlap is decided from the strips.
 - **Overlaps**, per node:
   - one value NoData (NaN or the sentinel), the other valid: **valid wins**;
   - both NoData: NoData;
