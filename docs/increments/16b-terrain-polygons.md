@@ -637,6 +637,58 @@ construction", is false for land cover.
   `O(n log n + k)`. The header comment says so, replacing the false premise.
 - **The brute force stays, as the test oracle**, in `tests/cpp/support/`.
 
+#### Step 0, run (2026-09-28, battery)
+
+Scratch `_core` builds of this branch's C++, one unchanged and one with
+`check_guarantee_14` returning `pass()` at its first line, through
+`clc_nodetime.py` (layout A) on squares centred in `6603_4`:
+
+| square | segments | `node`, verifier on | `node`, verifier off |
+|---|---|---|---|
+| 12 km | 3 766 | 0.134 s | 0.003 s |
+| 24 km | 14 842 | 2.07 s | 0.012 s |
+| 36 km | 30 513 | 8.99 s | 0.027 s |
+| 48 km | 51 791 | 24.83 s | 0.047 s |
+
+The verifier is 99.8 % of `node` at 48 km. 13.8× the segments cost 185× with
+it on (13.8² = 190) and 15× with it off, so the quadratic goes with it. Both
+builds returned `Ok`. M3's attribution holds, and 16b-0 is scoped as designed.
+
+#### Pinned by the red suite (16b-0)
+
+`@tester` chose the following in the red step.
+`tests/cpp/property/prop_noding_verifier_sweep.cpp` holds it; the oracle is
+`tests/cpp/support/verifier_oracle.hpp`.
+
+- In `namespace terrain::noding`, reachable through
+  `include/terrain/noding/noded_pslg_builder.hpp`:
+
+  ```cpp
+  template <class OnEdgePair, class OnEdgeCell>
+  [[nodiscard]] bool sweep_box_pairs(std::span<const Box2> edges,
+                                     std::span<const Box2> cells,
+                                     OnEdgePair&& on_edge_pair,    // bool(std::size_t, std::size_t)
+                                     OnEdgeCell&& on_edge_cell);   // bool(std::size_t edge, std::size_t cell)
+  ```
+
+  It is kernel-free. It calls `on_edge_pair(i, j)` **exactly once** for every
+  unordered pair of edge boxes whose closed boxes intersect, with `i != j` in
+  either order. It calls `on_edge_cell(e, c)` exactly once for every edge box
+  and cell box whose closed boxes intersect. It makes no other call and never
+  pairs two cells. "Exactly" is stricter than R8's "false positives are free".
+  R8's own algorithm meets it, and it is what lets the suite see an item kept
+  active too long.
+- **A callback returning `false` stops the sweep.** No further call is made
+  and the function returns `false`. It returns `true` if no callback returned
+  `false`. The same input gives the same calls in the same order.
+- `NodedPslgBuilder::build<K>()` returns the brute force's status on every
+  candidate (I6). Which violating pair the message names is not pinned.
+- `node<K>`'s output on six integer fixtures at spacing 0.125 is pinned by a
+  digest over integers only (status, grid points, chains, indices, masks,
+  `node_of_input_vertex`), recorded from 6b4fcb9's brute-force verifier.
+- Registration: the suite builds only once `noded_pslg_builder.hpp` names
+  `sweep_box_pairs` (the 21a/21b guard). The review drops the guard.
+
 ### R9. Vertex density, z, and refinement
 
 - **Vertices are used as given** (Ola's direction 1): no simplification, no

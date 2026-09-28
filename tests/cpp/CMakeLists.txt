@@ -301,3 +301,24 @@ target_link_libraries(test_mesh_lawson_stack PRIVATE Threads::Threads)
 # starts no threads, so it is not in the TSan job.
 
 add_terrain_backend_test(test_mesh_lattice_incircle unit/test_mesh_lattice_incircle.cpp)
+
+# The verifier's pair search by sort and sweep, increment 16b-0
+# (docs/increments/16b-terrain-polygons.md, R8, I6 and "Pinned by the red suite
+# (16b-0)"). prop_noding_verifier_sweep is the invariant-critical suite:
+# sweep_box_pairs reports exactly the brute force's box pairs, build() returns
+# the brute-force verifier's status (tests/cpp/support/verifier_oracle.hpp,
+# frozen at 6b4fcb9), and node<K>'s output digests are today's. It starts no
+# threads, so it is not in the TSan job.
+#
+# RED UNTIL THE INTERFACE EXISTS: registered only once noded_pslg_builder.hpp
+# names sweep_box_pairs (defined there or in a header it includes), so the red
+# does not break the rest of the build. The header is a configure dependency,
+# so the green commit's edit registers the suite without a manual cmake. The
+# review drops this guard.
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
+    "${PROJECT_SOURCE_DIR}/include/terrain/noding/noded_pslg_builder.hpp")
+file(READ "${PROJECT_SOURCE_DIR}/include/terrain/noding/noded_pslg_builder.hpp" _builder_16b0)
+string(FIND "${_builder_16b0}" "sweep_box_pairs" _sweep_box_pairs_at)
+if(NOT _sweep_box_pairs_at EQUAL -1)
+    add_terrain_backend_test(prop_noding_verifier_sweep property/prop_noding_verifier_sweep.cpp)
+endif()
