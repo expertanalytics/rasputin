@@ -215,7 +215,7 @@ cli.py  catchment
   v
 catchment.py  delineate(request, repository) -> Catchment    [no paths]
   1. seed point -> DEM CRS (crs.reprojector); lake polygon containing it
-     -> DEM CRS                                    (seed.py, shapely/pyproj)
+     -> DEM CRS             (lakes read by cli.py via feature_input.read_lakes)
   2. window = seed bounds grown by the margin
   3. loop: plan_mosaic + assemble (15a)  -> DemTile, read-only
            seed mask: DEM nodes inside the lake   (shapely.contains_xy)
@@ -281,12 +281,36 @@ Why this and not the alternatives:
   x 168680 and the dam at x 168087, so a sliver of river below the dam may be
   included. The acceptance run measures it (nodes in ours and not in NVE's).
 
-The source is any polygon layer: a GeoPackage table (`--lakes-layer`, read
-with 16b's `io/geopackage.py`, box query on the seed point, in the layer's
-own CRS) or a GeoJSON `FeatureCollection`. A multipolygon contributes the
-part containing the point. No class filter: the polygon under the point is
-the one meant. Refusals: the point in no polygon, or in two (overlapping
-input); both name the point in the source's CRS.
+The source is any polygon layer: a GeoPackage table (`--lakes-layer`) or a
+GeoJSON `FeatureCollection`. A multipolygon contributes the part containing
+the point. No class filter: the polygon under the point is the one meant.
+Refusals: the point in no polygon, or in two (overlapping input); both name
+the point in the source's CRS.
+
+**Who reads the lakes** (revised 2026-09-29, after the PR 1 red step).
+`feature_input.py`, the module that already reads 16b's sources, gains
+`read_lakes(path, layer, point, point_crs) -> (tuple of shapely geometries,
+crs text)`. It reuses 16b's reading by splitting the file-reading half of
+`_Tally.source` into a public `read_source(path, layer, attribute, box_for)`,
+which `_Tally.source` then calls, so 16b's behaviour is unchanged:
+
+- `.gpkg`: `io/repository.open_geopackage`, `io/geopackage.layer_info`
+  (`--lakes-layer`, or the only features table), then
+  `io/geopackage.query_features` with the box `box_for(layer CRS)`, here the
+  seed point moved into the layer's CRS (a point box; the R-tree widening
+  makes it a superset). The attribute column is the layer's primary key,
+  since lakes need no class.
+- `.geojson` / `.json`: `json` and `shapely.geometry.shape` per feature, the
+  CRS from the `crs` member or WGS 84, as 16b does.
+- `.gml`: comes free with `read_source`; not advertised.
+
+`read_lakes` returns every polygon or multipolygon the query yields, in the
+source's CRS; lines and points are skipped. Which one contains the point, and
+the refusals above, are `catchment.py`'s: `CatchmentRequest` carries
+`lakes` (a tuple of shapely geometries) and `lakes_crs`, and never a path.
+`cli.py` calls `read_lakes` and builds the request. This matches the red
+suite as committed: `test_catchment.py` passes geometries, and
+`test_cli_catchment.py` passes files through the CLI.
 
 **Without `--lakes`**, the seed is the one DEM node nearest the point, a pour
 point with no snapping. It is there because it costs five lines and gives the
@@ -318,10 +342,36 @@ per node (unreached, out, in), which is also the returned mask, plus the queue
 is one more byte per node, owned by numpy.
 
 Returned: the mask (a numpy `uint8` array the outcome owns), the number of
-nodes in, the bounding rows and columns of the in-nodes, and two flags:
-`touches_edge` (an in-node on the window's edge) and `touches_nodata` (an
-in-node with a NoData neighbour). A seed mask whose shape is not the raster's
-is a `ValueError` in the binding.
+nodes in, the bounding rows and columns of the in-nodes, and two flags. A seed
+mask whose shape is not the raster's is a `ValueError` in the binding.
+
+**The flags** (revised 2026-09-29, after the PR 1 red step; the first wording,
+"an in-node on the window's edge", could only ever fire for a seed, because
+every edge node and every node beside NoData is an outlet and an outlet is in
+only if it is a seed). The flags say where the catchment may continue beyond
+what the window knows. An outlet's own drainage is unknown: the window assumed
+it leaves, and in the full DEM it may instead run into the catchment. So:
+
+- `touches_edge` is true when some in-node is an edge outlet or is an
+  8-neighbour of one. On a grid that is exactly: an in-node in the first or
+  last two rows or columns (row <= 1, row >= rows - 2, the same for columns).
+- `touches_nodata` is true when some in-node is an outlet beside NoData or is
+  an 8-neighbour of one, which puts it within two nodes of NoData.
+
+An outlet can be both kinds; then both flags may be set. No comparison of
+heights is made: an edge node lower than its in-neighbour might still, in the
+full DEM, fill and spill back, so any contact counts. Conservative by design:
+a flag never misses a truncated catchment, and a catchment that merely comes
+within one node of an edge it does not cross is flagged too. The window loop
+then grows past it, so the price is a growth step, not a wrong answer.
+
+Checked against the red suite as committed (1e1b3bb): the C++
+`check_invariants` asserts the flag when an in-node is on the edge or beside
+NoData, and its absence when no in-node is within one node of the edge or two
+of NoData; this rule sets the flag exactly on the first and never on the
+second. The named cases (a seed on the edge, the V-valley, the flat lake far
+from every edge, no seed, the degenerate rasters, the binding's seed beside
+NoData) agree. **No test changes are needed.**
 
 ### The window
 
@@ -332,21 +382,81 @@ re-plan pattern as 15b's `_domain_plan`:
    the margin, `WINDOW_MARGIN_M = 2000` metres. Default (main session /
    @architect, 2026-09-29), for Ola to confirm; no flag tonight.
 2. Plan and assemble that box (15a), flood it.
-3. If the in-nodes' bounds grown by the margin fit inside the window, stop.
-   Otherwise the new box is the old box joined with the in-nodes' bounds grown
-   by twice the margin, the margin doubles, and the loop repeats from 2. The
-   box only grows and the margin doubles, so the total work is within about
-   twice the last flood's.
-4. Refuse, with the side named, when the catchment reaches a side the data
-   cannot extend (the planned window is smaller than the box asked for on
-   that side), or touches NoData: the catchment is truncated, and a truncated
-   catchment is a wrong one. Default (main session / @architect,
-   2026-09-29), for Ola to confirm; alternative: write it with a warning
-   under an `--allow-truncated` flag.
+3. and 4., revised 2026-09-29 after the PR 1 red step (the first wording
+   could loop for ever near the data's edge, where "the bounds plus the
+   margin fit" stays false while the window cannot grow). All comparisons
+   are in node indices on the plan's lattice, and all are closed: a box that
+   ends exactly on the window's last node line fits.
+
+   Let E be the data's node rectangle on the chosen lattice (the union of its
+   tiles' extents, which `plan_mosaic` clamps every window to), and W the
+   window just flooded, already inside E.
+
+   a. If `touches_nodata`, refuse: the catchment is truncated by missing
+      data, which no growth can fix.
+   b. The need N is the in-nodes' bounds grown by the margin, clamped to E.
+      A side of W *can grow* when N reaches past W on that side; since N is
+      clamped to E, that also means W is not yet at E there.
+   c. If some side can grow: the next window is W joined with N, the margin
+      doubles, and the loop repeats from 2.
+   d. Otherwise decide by the flag. If `touches_edge`, refuse, naming the
+      sides (from the bounds: an in-node in the first or last two rows or
+      columns), each of which is then at E: the catchment is cut by the
+      data's edge. If not, accept.
+
+   **It terminates.** Step c runs only when N reaches past W on some side,
+   and the next window contains N, so it has at least one more row or column
+   than W; every window lies inside E, which is finite. So step c runs at
+   most (rows of E + columns of E) times, and in practice a handful, since
+   the margin doubles. The memory cap (step 5) may refuse earlier. Every
+   exit is an accept or a refusal from a or d.
+
+   **Accepting means**: the catchment comes no closer than two nodes to any
+   edge of the window, and either the window already holds the in-nodes'
+   bounds plus the margin, or it is at the data's edge on the sides where it
+   does not. The margin is a heuristic against the known limit below; the
+   flag is the rule.
+
+   Refusing a truncated catchment stays the default (main session /
+   @architect, 2026-09-29), for Ola to confirm; alternative: write it with a
+   warning under an `--allow-truncated` flag.
 5. Memory: before each flood, refuse if nodes x (itemsize + 2) exceeds half
    the physical memory (`mosaic.physical_memory`, dtype-aware as 15a's cap
    is), naming the window's size. 15a's own cap on the array still applies
    inside `plan_mosaic`.
+
+### A lake in a closed depression
+
+Added 2026-09-29, after the PR 1 red step. **A lake seed need not have an
+outlet, and nothing is refused.** Default (main session / @architect,
+2026-09-29), for Ola to confirm.
+
+Within a window every depression drains: Priority-Flood fills it to its
+lowest rim and routes it out over that rim, so every lake has an outlet as
+far as the flood is concerned, a real one or the spill point of its
+depression. The catchment is still "every node whose flooding chain passes
+through the lake". For the nodes of the depression itself that is what the
+design wants when the lake polygon covers the depression, as it does for a
+lake whose DEM surface is its water line: all those nodes are seeds.
+
+Where it falls short: when the filled depression is larger than the lake
+polygon (a lake drawn smaller than its DEM basin, or a dry pan beside it
+below the spill level), the nodes of the depression outside the polygon are
+flooded first in, first out from the spill point, so by distance in steps.
+Those reached through lake nodes are in; those reached round the lake from
+the spill point are out, although water there would run into the lake. The
+error is bounded by the part of the depression outside the polygon and
+reached before the lake; on Bygdin, where CORINE's polygon covers the DEM's
+water surface, the acceptance's node comparison with NVE's polygon is where
+it would show.
+
+The alternative, for later: seed the whole depression. A first flood
+computes the filled levels (one value per node, 4 bytes at float32, exact
+because every level is some node's z); every node 8-connected to a seed
+through nodes whose filled level is above their own z joins the seed; a
+second flood labels as now. Twice the flood's time and 4 more bytes per
+node, and a behaviour the red suite would need to pin (a seed inside a pit).
+Not tonight.
 
 **Known limit.** Not touching the window's edge does not prove the catchment
 complete. A closed depression that straddles the window's edge drains out
@@ -536,15 +646,16 @@ request and the result are frozen; the CLI is the only place with paths.
 | `src_python/tin_engine/outline.py` | the tracer | 70 |
 | `src_python/tin_engine/catchment.py` | request, seed, window loop, result | 170 |
 | `src_python/tin_engine/dem_input.py` | repository helper split out | 10 |
+| `src_python/tin_engine/feature_input.py` | `read_source` split out of `_Tally.source`, `read_lakes` | 30 |
 | `src_python/tin_engine/cli.py` | `catchment` command, report, writer | 100 |
 | `project_structure.md` | the two C++ modules and two Python modules | docs |
 
-About 830 lines, over the 700 ceiling (CLAUDE.md §2), so two PRs on this
+About 860 lines, over the 700 ceiling (CLAUDE.md §2), so two PRs on this
 branch.
 
 ### The PR split
 
-- **PR 1, the fine catchment** (about 480 lines): `upstream.hpp` and its
+- **PR 1, the fine catchment** (about 510 lines): `upstream.hpp` and its
   binding, `outline.py`, `catchment.py`, the repository helper, and the
   `catchment` command writing the fine outline. It already answers "what is
   Bygdin's catchment" and can be compared against NVE. Red, green, review.
