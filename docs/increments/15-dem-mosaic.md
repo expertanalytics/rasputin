@@ -63,7 +63,7 @@ implemented** on `increment15b-domain-crs` (red `372bb99`, green `0011741`).
   tiles, format and lattices (the eight half-cell tiles remain), and still
   exported tile by tile (side-file dates 2020-06 to 2026-09); 144 tiles were
   re-exported since the 2022 download, and the other 110 are byte-identical.
-  The probe (120 pairs, seed 1): 32 of 32 same-date pairs agree within 1 mm;
+  The probe (120 sampled pairs, 119 overlapping, seed 1): 32 of 32 same-date pairs agree within 1 mm;
   34 of 87 different-date pairs do not, worst 34.1 m (7404_2 | 7404_3). The
   15a acceptance box reports 5 seams (4 before), up to 22.3 m. So the fresh
   set does not remove disagreeing overlaps; the midline rule and the seam
@@ -876,7 +876,8 @@ order. 15c and 15d follow later.
 | | `cli.py`: `--dem` list, `--bbox`, refusals, fields | 45 | |
 | | **15a total** | **375** | **520** |
 | | *15b as built, measured at review (d34d79d..914dfc8, CLAUDE.md §2 unit): 150 added, of which `dem_input.py` 48 against 20 estimated; 15a + 15b against master 675, under the ceiling; they ship as two PRs per Ola's order* | | |
-| | *15b at the tip, against 15a's tip (`201a4e7..80fda64`): 148 added, 97 net* | | |
+| | *15b after the merge of 15a, against 15a's tip (`201a4e7..80fda64`): 148 added, 97 net* | | |
+| | *15b at `e6b69de`, against 15a's tip (`201a4e7..e6b69de`): 162 added, 108 net; 2 over the 160 worst case, the overrun being the unestimated seam mask for Ola's 2026-09-28 ruling (`mosaic.py` +13); well under the ceiling, no split* | | |
 | | *15a as built, measured at review (branch diff, CLAUDE.md §2 unit): 533, of which `mosaic.py` 325 against 200 estimated* | | |
 | | *15a after Ola's Q1 revised (cba0073): 596 added against master, of which `mosaic.py` 372 against 200 estimated* | | |
 | | *15a at the tip (a253a77): 597 added against master, blank lines excluded (`CLAUDE.md` §2 as ruled by Ola 2026-09-28); 554 net* | | |
