@@ -5,22 +5,22 @@
 reads it "as a second real fixture: a small GML2 reader (standard-library XML,
 no GDAL, about 40 lines) and a class map for `clc18_kode`".
 
-**What the file actually is (found by this suite's author, 2026-09-28).** OGR
-wrote it as GML2 (`gml:coordinates`, `x,y` pairs, EPSG:4326 longitude first),
-and it is **not well-formed XML**: `</gml:featureMember>` is missing after
-feature `sql_statement.40965` (line 1097), so the remaining 45 members nest
-inside that one, and the document ends without closing it or
-`</ogr:FeatureCollection>`. `xml.etree.ElementTree.parse` refuses it ("no
-element found: line 1413"); the legacy reader used `lxml` with `recover=True`.
-Every one of its 200 features (`ogr:sql_statement`) is itself complete, and
-every one is a `Polygon` (counted below from the file, not typed here).
+**What the file was, and its repair.** OGR wrote it as GML2
+(`gml:coordinates`, `x,y` pairs, EPSG:4326 longitude first). As committed in
+2020 (`8e30af4`) it was not well-formed XML: `</gml:featureMember>` was
+missing after feature `sql_statement.40965` (line 1097) and the document
+ended without closing its root. Ola ruled on 2026-09-28: "Repear the broken
+file." `tests/fixtures/corine/repair_gml.py` adds the two closing tags, and the
+committed file is its output. Every one of its 200 features
+(`ogr:sql_statement`) is a `Polygon` (counted below from the file, not typed
+here).
 
-Pinned by this suite (see "Pinned by the red suite (16b-1/2)"; the tolerance
-of an unclosed end is **a choice this suite made, for Ola to confirm**):
+Pinned by this suite (see "Pinned by the red suite (16b-1/2)" and
+"Consequences for the red suite"):
 
 - `read_gml(stream, attribute) -> GmlDocument`, `stream` a binary stream (the
   reader opens nothing). `GmlDocument` has `crs` (the geometries' `srsName`,
-  or `None` when none gives one), `features` and `complete`.
+  or `None` when none gives one) and `features`.
 - A feature is an element with a `fid` attribute directly inside a
   `gml:featureMember`; its `fid` is that attribute, its `geometry` the shapely
   geometry of its one geometry property (`Polygon` with `outerBoundaryIs` and
@@ -28,11 +28,9 @@ of an unclosed end is **a choice this suite made, for Ola to confirm**):
   `Point`; a third coordinate is dropped), and its `value` the text of its
   child element named `attribute` (`None` when absent). Features in document
   order.
-- **Every complete feature is read.** A document that ends, after its last
-  complete feature, with elements still open is read, and `complete` is
-  `False`; a well-formed one has `complete` `True`. A document that ends
-  inside a feature, or has a syntax error, is refused with `GmlError` (a
-  `ValueError`).
+- **The reader is strict** (R1): a document that is not well-formed XML is
+  refused with `GmlError` (a `ValueError`), including one that ends with
+  elements still open, even after complete features.
 - Geometries naming different `srsName`s are refused.
 
 HOW THIS FILE GOES RED: `tin_engine.io.gml` is imported inside a fixture.
@@ -41,9 +39,13 @@ HOW THIS FILE GOES RED: `tin_engine.io.gml` is imported inside a fixture.
 from __future__ import annotations
 
 import ast
+import difflib
 import importlib
+import importlib.util
 import io
 import re
+import subprocess
+import xml.etree.ElementTree as ET
 from pathlib import Path
 from types import ModuleType
 from typing import Any
@@ -56,7 +58,11 @@ from shapely.geometry import LineString, MultiLineString, MultiPolygon, Point, P
 
 from gpkg_fixtures import LEGACY_GML
 
-SRC = Path(__file__).resolve().parents[2] / "src_python" / "tin_engine"
+REPO = Path(__file__).resolve().parents[2]
+SRC = REPO / "src_python" / "tin_engine"
+REPAIR_SCRIPT = LEGACY_GML.parent / "repair_gml.py"
+#: Where the legacy GML lived when it was committed in 2020 (`8e30af4`).
+GML_2020_PATH = ".circleci/rasputin_data/corine/0000_4326_corine2018_4e6064_GML.gml"
 #: The benchmark tile's node rectangle, EPSG:25833.
 TILE_7908_3 = box(799_750.0, 7_899_750.0, 850_250.0, 7_950_250.0)
 
@@ -148,7 +154,6 @@ class TestReadGml:
         doc = gml.read_gml(
             document(member("f.1", LAND, "311"), member("f.2", LAKE, "512")), "clc18_kode"
         )
-        assert doc.complete is True
         assert doc.crs == "EPSG:4326"
         assert [f.fid for f in doc.features] == ["f.1", "f.2"]
         assert [f.value for f in doc.features] == ["311", "512"]
@@ -212,28 +217,43 @@ class TestReadGml:
     def test_an_empty_collection_reads_as_nothing(self, gml: ModuleType) -> None:
         doc = gml.read_gml(document(), "clc18_kode")
         assert doc.features == () or list(doc.features) == []
-        assert doc.complete is True
+
+    def test_a_document_has_no_completeness_flag(self, gml: ModuleType) -> None:
+        """A strict reader reads a whole document or refuses it, so the first
+        design's `complete` is gone (Ola, 2026-09-28)."""
+        doc = gml.read_gml(document(member("a", LAKE)), "clc18_kode")
+        assert not hasattr(doc, "complete")
 
 
 class TestMalformed:
-    """The legacy file's two defects, and what stays refused."""
+    """The reader is strict: what is not well-formed XML is refused."""
 
-    def test_an_unclosed_end_after_complete_features_is_read_and_flagged(
-        self, gml: ModuleType
-    ) -> None:
-        doc = gml.read_gml(document(member("a", LAKE), member("b", LAND), tail=""), "clc18_kode")
-        assert [f.fid for f in doc.features] == ["a", "b"]
-        assert doc.complete is False
+    def test_a_document_whose_root_is_never_closed_is_refused(self, gml: ModuleType) -> None:
+        """The 2020 file's second defect, after complete features."""
+        with pytest.raises(gml.GmlError):
+            gml.read_gml(document(member("a", LAKE), member("b", LAND), tail=""), "clc18_kode")
 
-    def test_a_member_left_open_nests_the_rest_and_all_are_read(self, gml: ModuleType) -> None:
-        """Line 1097's defect: one `</gml:featureMember>` missing, so the next
-        members nest inside it and the end is unclosed."""
+    def test_a_member_left_open_is_refused(self, gml: ModuleType) -> None:
+        """The 2020 file's first defect: one `</gml:featureMember>` missing,
+        with the root closed. The members after it nest inside it, so the
+        root's closing tag does not match and the parser stops there."""
         broken = member("a", LAKE).replace("  </gml:featureMember>\n", "")
-        doc = gml.read_gml(
-            document(broken, member("b", LAND), member("c", LAKE), tail=""), "clc18_kode"
-        )
-        assert [f.fid for f in doc.features] == ["a", "b", "c"]
-        assert doc.complete is False
+        with pytest.raises(gml.GmlError):
+            gml.read_gml(document(broken, member("b", LAND)), "clc18_kode")
+
+    def test_both_defects_together_are_refused(self, gml: ModuleType) -> None:
+        """The 2020 file exactly, in small."""
+        broken = member("a", LAKE).replace("  </gml:featureMember>\n", "")
+        with pytest.raises(gml.GmlError):
+            gml.read_gml(document(broken, member("b", LAND), tail=""), "clc18_kode")
+
+    def test_the_refusal_names_the_parsers_line(self, gml: ModuleType) -> None:
+        """R1: the refusal names the line. Here the head is 6 lines, the
+        broken member 6 and the next 7, so the root's closing tag, where the
+        parser stops, is on line 20."""
+        broken = member("a", LAKE).replace("  </gml:featureMember>\n", "")
+        with pytest.raises(gml.GmlError, match=r"\bline 20\b"):
+            gml.read_gml(document(broken, member("b", LAND)), "clc18_kode")
 
     def test_a_document_ending_inside_a_feature_is_refused(self, gml: ModuleType) -> None:
         text = HEAD + member("a", LAKE) + member("b", LAND)[:200]
@@ -269,7 +289,11 @@ class TestMalformed:
 
 
 class TestLegacyFixture:
-    """The committed file, read whole (30 MB; about a second)."""
+    """The committed file, repaired, read whole (30 MB; about a second)."""
+
+    def test_the_committed_file_is_well_formed(self) -> None:
+        root = ET.parse(LEGACY_GML).getroot()
+        assert len(root.findall("{http://www.opengis.net/gml}featureMember")) == 200
 
     @pytest.fixture(scope="class")
     def legacy(self, gml: ModuleType) -> Any:
@@ -281,7 +305,6 @@ class TestLegacyFixture:
         fids = re.findall(r'<ogr:sql_statement fid="([^"]+)">', text)
         assert len(fids) == 200
         assert [f.fid for f in legacy.features] == fids
-        assert legacy.complete is False
 
     def test_the_values_are_the_files_clc_codes(self, legacy: Any) -> None:
         text = LEGACY_GML.read_text(encoding="utf-8")
@@ -290,6 +313,7 @@ class TestLegacyFixture:
 
     def test_the_crs_is_wgs84_and_every_geometry_a_polygon(self, legacy: Any) -> None:
         assert legacy.crs == "EPSG:4326"
+        assert len(legacy.features) == 200
         assert {f.geometry.geom_type for f in legacy.features} == {"Polygon"}
 
     def test_holes_are_read(self, legacy: Any) -> None:
@@ -310,6 +334,63 @@ class TestLegacyFixture:
         ]
         assert len(hits) == 42
         assert "sql_statement.11029" in hits
+
+
+class TestRepairScript:
+    """`tests/fixtures/corine/repair_gml.py`: the committed file is the 2020
+    file repaired, and the script runs on nothing else."""
+
+    @pytest.fixture(scope="class")
+    def repair(self) -> ModuleType:
+        spec = importlib.util.spec_from_file_location("repair_gml", REPAIR_SCRIPT)
+        assert spec is not None and spec.loader is not None
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        return module
+
+    @pytest.fixture(scope="class")
+    def original(self) -> bytes:
+        """The file as committed in 2020, from git; skipped outside a clone
+        that has the commit (a shallow CI checkout, a source archive)."""
+        try:
+            done = subprocess.run(
+                ["git", "show", f"8e30af4:{GML_2020_PATH}"],
+                cwd=REPO,
+                capture_output=True,
+                check=True,
+            )
+        except (OSError, subprocess.CalledProcessError):
+            pytest.skip("commit 8e30af4 is not in this checkout")
+        return done.stdout
+
+    def test_the_committed_file_is_the_2020_file_repaired(
+        self, repair: ModuleType, original: bytes
+    ) -> None:
+        assert repair.repair(original) == LEGACY_GML.read_bytes()
+
+    def test_the_repair_adds_the_two_closing_tags_and_nothing_else(
+        self, repair: ModuleType, original: bytes
+    ) -> None:
+        before = original.decode().splitlines()
+        after = repair.repair(original).decode().splitlines()
+        added = list(difflib.ndiff(before, after))
+        assert [d for d in added if d.startswith("- ")] == []
+        assert [d for d in added if d.startswith("+ ")] == [
+            "+   </gml:featureMember>",
+            "+ </ogr:FeatureCollection>",
+        ]
+        assert after[1097] == "  </gml:featureMember>"
+        assert "sql_statement.40965" in after[1092]
+
+    def test_the_repaired_file_is_refused(self, repair: ModuleType) -> None:
+        with pytest.raises(repair.RepairError, match="not the 2020 file"):
+            repair.repair(LEGACY_GML.read_bytes())
+
+    def test_a_file_differing_by_one_byte_is_refused(
+        self, repair: ModuleType, original: bytes
+    ) -> None:
+        with pytest.raises(repair.RepairError, match="not the 2020 file"):
+            repair.repair(original + b"\n")
 
 
 def _moved(transformer: Transformer, xy: Any) -> Any:

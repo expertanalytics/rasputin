@@ -41,7 +41,7 @@ from typing import Any
 import numpy as np
 import pytest
 import shapely
-from pyproj import CRS
+from pyproj import CRS, Transformer
 from shapely.geometry import (
     GeometryCollection,
     LineString,
@@ -672,4 +672,219 @@ class TestPreClip:
                     fi.TerrainFeature(fid=pk, mask=ff.corine_mask(code), lines=lines)
                 )
         expected = ff.run_engine(ff.start(domain, oracle_features))
+        assert produced.masks == expected.masks
+
+
+# ------------------------------------------------ the region, in metres (R5)
+
+WGS84 = "EPSG:4326"
+
+
+class TestRegion:
+    """R5 as revised on 2026-09-28: the domain is buffered by 100 m in the
+    DEM's CRS, densified, moved into the source CRS, and the region is the
+    convex hull. Pinned: `source_region(domain, dem_crs, source_crs)`, a
+    shapely `Polygon` in the source CRS. The first design buffered in the
+    source CRS, which for EPSG:4326 is 100 degrees."""
+
+    @pytest.mark.parametrize("source_crs", [WGS84, LAEA, UTM33])
+    def test_the_region_is_the_domain_plus_about_100_metres(
+        self, fi: ModuleType, source_crs: str
+    ) -> None:
+        """Moved back into the DEM's CRS, the region holds the domain with
+        at least 90 m to spare and reaches no more than 150 m from it (a
+        mitred corner of a 100 m buffer is 141 m out)."""
+        region = fi.source_region(BOX, UTM33, source_crs)
+        assert isinstance(region, Polygon)
+        back = moved(region, source_crs, UTM33)
+        assert back.contains(BOX.polygon.buffer(90.0))
+        assert BOX.polygon.buffer(150.0).contains(back)
+
+    def test_a_wgs84_region_is_hundredths_of_a_degree_not_degrees(self, fi: ModuleType) -> None:
+        """The case the first design got wrong: at 59.5° N, 100 m is about
+        0.0009° of latitude and 0.0018° of longitude."""
+        region = fi.source_region(BOX, UTM33, WGS84)
+        image = moved(BOX.polygon, UTM33, WGS84).bounds
+        grown = np.subtract(region.bounds, image) * [-1, -1, 1, 1]
+        assert np.all(grown > 0.0)
+        assert np.all(grown < 0.01)
+
+
+# ------------------------------------ the pre-clip drops whole edges (R5)
+
+#: A region in some source CRS; the pre-clip is pure geometry in that CRS.
+REGION = Polygon([(0, 0), (10, 0), (10, 10), (0, 10)])
+
+
+def chains(fi: ModuleType, geometry: Any) -> list[list[tuple[float, float]]]:
+    return [[(float(x), float(y)) for x, y in c.coords] for c in fi.pre_clip(geometry, REGION)]
+
+
+class TestPreClipKeepsWholeEdges:
+    """R5 as revised on 2026-09-28. Pinned: `pre_clip(geometry, region)`, a
+    tuple of `LineString`s in the source CRS: a polygon's exterior's chains,
+    then each hole's; a closed ring repeats its first vertex. An edge is kept
+    when the closed segment meets the closed region; each maximal run of
+    edges that miss it is dropped; no vertex is added."""
+
+    def test_a_ring_wholly_inside_stays_closed_with_its_start_vertex(self, fi: ModuleType) -> None:
+        ring = Polygon([(6, 2), (8, 2), (8, 8), (2, 8)])
+        assert chains(fi, ring) == [list(ring.exterior.coords)]
+
+    def test_a_ring_poking_out_with_no_edge_wholly_outside_stays_closed(
+        self, fi: ModuleType
+    ) -> None:
+        """Every edge meets the region (the long one only at its corner
+        (10, 10)), so none is dropped, although two vertices lie outside. The
+        exact clip in the DEM's CRS cuts it later."""
+        ring = Polygon([(5, 5), (15, 5), (5, 15)])
+        assert chains(fi, ring) == [list(ring.exterior.coords)]
+
+    def test_a_ring_losing_one_run_is_one_open_chain_joined_across_its_start(
+        self, fi: ModuleType
+    ) -> None:
+        """Edge (20, 5)-(20, 8) misses the region. What is left runs from its
+        far end, through the ring's start (5, 5), to its near end."""
+        ring = Polygon([(5, 5), (8, 5), (20, 5), (20, 8), (8, 8)])
+        assert chains(fi, ring) == [[(20, 8), (8, 8), (5, 5), (8, 5), (20, 5)]]
+
+    def test_a_ring_losing_two_runs_is_two_open_chains(self, fi: ModuleType) -> None:
+        ring = Polygon([(5, 2), (20, 2), (20, 4), (5, 4), (5, 6), (20, 6), (20, 8), (2, 8)])
+        got = sorted(chains(fi, ring))
+        assert got == sorted(
+            [
+                [(20, 4), (5, 4), (5, 6), (20, 6)],
+                [(20, 8), (2, 8), (5, 2), (20, 2)],
+            ]
+        )
+
+    def test_a_run_of_several_edges_is_dropped_as_one(self, fi: ModuleType) -> None:
+        ring = Polygon([(5, 5), (20, 5), (30, 5), (30, 8), (20, 8)])
+        assert chains(fi, ring) == [[(20, 8), (5, 5), (20, 5)]]
+
+    def test_a_line_losing_its_middle_is_two_chains(self, fi: ModuleType) -> None:
+        line = LineString([(1, 5), (8, 5), (20, 5), (20, 7), (8, 7), (2, 7)])
+        assert sorted(chains(fi, line)) == sorted(
+            [[(1, 5), (8, 5), (20, 5)], [(20, 7), (8, 7), (2, 7)]]
+        )
+
+    def test_a_line_losing_its_ends_keeps_its_middle(self, fi: ModuleType) -> None:
+        line = LineString([(-20, 5), (-10, 5), (5, 5), (20, 5), (30, 5)])
+        assert chains(fi, line) == [[(-10, 5), (5, 5), (20, 5)]]
+
+    def test_an_edge_touching_the_region_at_one_point_is_kept(self, fi: ModuleType) -> None:
+        """Closed segment, closed region: an edge through the corner (10, 10)
+        and nowhere else in the region is kept; the two edges beside it miss."""
+        touching = LineString([(20, 20), (15, 5), (5, 15), (-5, 25)])
+        assert chains(fi, touching) == [[(15, 5), (5, 15)]]
+
+    def test_a_polygon_whose_exterior_is_dropped_keeps_its_hole_closed(
+        self, fi: ModuleType
+    ) -> None:
+        hole = [(3, 3), (7, 3), (7, 7), (3, 7), (3, 3)]
+        polygon = Polygon([(-50, -50), (50, -50), (50, 50), (-50, 50)], [hole])
+        assert chains(fi, polygon) == [hole]
+
+    def test_parts_in_order_exterior_before_holes(self, fi: ModuleType) -> None:
+        a = Polygon([(1, 1), (4, 1), (4, 4)], [[(2, 1.5), (3.5, 1.5), (3.5, 3)]])
+        b = Polygon([(6, 6), (9, 6), (9, 9)])
+        got = chains(fi, MultiPolygon([a, b]))
+        assert got == [
+            list(a.exterior.coords),
+            list(a.interiors[0].coords),
+            list(b.exterior.coords),
+        ]
+
+    @pytest.mark.parametrize(
+        "geometry",
+        [
+            pytest.param(Polygon([(5, 5), (8, 5), (20, 5), (20, 8), (8, 8)]), id="one-run"),
+            pytest.param(
+                Polygon([(5, 2), (20, 2), (20, 4), (5, 4), (5, 6), (20, 6), (20, 8), (2, 8)]),
+                id="two-runs",
+            ),
+            pytest.param(LineString([(1, 5), (8, 5), (20, 5), (20, 7), (8, 7)]), id="line"),
+            pytest.param(Polygon([(-5, 3), (15, 3.3), (15, 7.1), (-5, 6.9)]), id="crossing"),
+            pytest.param(
+                LineString([(-7.3, -2.1), (13.9, 12.7), (25.0, 3.3), (4.4, -9.1)]),
+                id="slanted",
+            ),
+        ],
+    )
+    def test_no_vertex_is_added(self, fi: ModuleType, geometry: Any) -> None:
+        """Intersecting with the region would add a vertex on its boundary
+        wherever an edge crosses it; every case here has such crossings."""
+        source = {tuple(p) for p in shapely.get_coordinates(geometry).tolist()}
+        cut = shapely.intersection(shapely.MultiLineString(ff.boundary_lines(geometry)), REGION)
+        assert {tuple(p) for p in shapely.get_coordinates(cut).tolist()} - source
+        got = {p for c in chains(fi, geometry) for p in c}
+        assert got and got <= source
+
+    def test_nothing_kept_is_nothing(self, fi: ModuleType) -> None:
+        around = Polygon([(-50, -50), (50, -50), (50, 50), (-50, 50)])
+        assert fi.pre_clip(around, REGION) == ()
+
+
+class TestPreClipThroughOpenFeatures:
+    def test_a_polygon_around_the_domain_with_no_edge_kept_is_dropped_and_counted(
+        self, tmp_path: Path
+    ) -> None:
+        """It meets the region (it holds it), so it is read; none of its edges
+        do, so the pre-clip keeps nothing and it counts as outside."""
+        fs = one(tmp_path, square(-50_000, -50_000, 50_000, 50_000))
+        assert fs.features == () and fs.outside == 1
+
+
+# ------------------------------- a 10 km WGS84 edge across the region (I4)
+
+#: A 10 km domain, so that a 10 km edge can cross the region's boundary near
+#: its middle, where its bend is largest, and still enter the domain.
+WIDE = domain_of(square(0, 0, 10_000, 10_000))
+
+
+def wgs84_east_west_edge() -> LineString:
+    """An edge along one parallel, straight in EPSG:4326, from 5.1 km west of
+    the domain to 4.9 km inside it: about 10 km, its middle near the region's
+    west boundary (100 m west of the domain)."""
+    to_wgs84 = Transformer.from_crs(UTM33, WGS84, always_xy=True)
+    lon_a, lat = to_wgs84.transform(*at(-5_100, 5_000))
+    lon_b, _ = to_wgs84.transform(*at(4_900, 5_000))
+    return LineString([(lon_a, lat), (lon_b, lat)])
+
+
+def clipped_in_the_dem(line: LineString) -> tuple[LineString, ...]:
+    """Moved vertex by vertex into the DEM's CRS, clipped to `WIDE` there."""
+    pieces = shapely.get_parts(shapely.intersection(moved(line, WGS84), WIDE.polygon))
+    return tuple(p for p in pieces if isinstance(p, LineString) and p.length > 0)
+
+
+class TestLongWgs84Edge:
+    def test_an_edge_crossing_the_region_boundary_is_not_split_there(self, tmp_path: Path) -> None:
+        """I4 for an EPSG:4326 source (R5, revised 2026-09-28). The produced
+        noded edges equal those of this test's own pipeline with no pre-clip:
+        the whole edge moved vertex by vertex and clipped in the DEM's CRS.
+
+        First, that this can fail: a pre-clip that intersects the edge with
+        the region (built here with shapely and pyproj as R5 describes it)
+        splits it on the region's boundary, and its piece in the domain meets
+        the domain's west side metres away from the unsplit edge's."""
+        edge = wgs84_east_west_edge()
+        (whole,) = clipped_in_the_dem(edge)
+        region = shapely.convex_hull(
+            moved(WIDE.polygon.buffer(100.0).segmentize(1_000.0), UTM33, WGS84)
+        )
+        (split,) = clipped_in_the_dem(shapely.intersection(edge, region))
+        west = np.array([at(0, 0), at(0, 10_000)])
+        hit_whole = shapely.intersection(whole, LineString(west))
+        hit_split = shapely.intersection(split, LineString(west))
+        assert hit_whole.distance(hit_split) > 1.0
+
+        path = write_geojson(
+            tmp_path / "f.geojson", [Feat("edge", edge, {"property": "road"})], crs=None
+        )
+        fs = open_one(path, WIDE)
+        produced = ff.run_engine(ff.start(WIDE, fs.features))
+        fi = ff.feature_input()
+        oracle = fi.TerrainFeature(fid="edge", mask=V.mask("road"), lines=(whole,))
+        expected = ff.run_engine(ff.start(WIDE, [oracle]))
         assert produced.masks == expected.masks

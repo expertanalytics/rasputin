@@ -48,8 +48,13 @@ in a Norwegian redistribution's schema (attributes clc18_kode and sl_sdeid),
 written by OGR as GML 2 (gml:coordinates).
 
 Modified (before it reached this repository): selected, reprojected to
-EPSG:4326 and re-encoded as GML. The file is also not well-formed XML: a
-</gml:featureMember> is missing after feature sql_statement.40965 (line 1097)
-and the document ends without closing its root element. It is kept exactly as
-committed in 2020; the reader in src_python/tin_engine/io/gml.py reads every
-complete feature and reports the document as incomplete.
+EPSG:4326 and re-encoded as GML.
+
+Modified (in this repository, increment 16b, 2026-09-28): repaired to be
+well-formed XML (Ola: "Repear the broken file."). As committed in 2020 the
+file lacked a </gml:featureMember> after feature sql_statement.40965 (line
+1097) and ended without closing its root element. repair_gml.py in this
+directory adds exactly those two closing tags and changes nothing else; it
+runs only on the 2020 file (git blob 97ddc98, commit 8e30af4) and is
+reproducible from it, as its docstring shows. The reader in
+src_python/tin_engine/io/gml.py is strict and reads the repaired file.

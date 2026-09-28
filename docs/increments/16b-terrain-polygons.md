@@ -992,6 +992,13 @@ its part in full. Suites: `tests/python/test_io_geopackage.py`,
 - I4 is tested after the noder (same noded edges and masks as the test's own
   no-pre-clip pipeline), not as identical engine input: GEOS may split a ring
   piece at the ring's own start, which changes the chains but not the graph.
+- *Aligned with the rulings, 2026-09-28:* `read_gml(stream, attribute) ->
+  GmlDocument(crs, features)`, strict, its refusal naming the parser's line;
+  `feature_input.source_region(domain, dem_crs, source_crs) -> Polygon` in the
+  source CRS; `feature_input.pre_clip(geometry, region) -> tuple[LineString,
+  ...]` in the source CRS, a polygon's exterior's chains then each hole's, a
+  closed ring repeating its first vertex. The fixture repair is
+  `tests/fixtures/corine/repair_gml.py`.
 
 **Open design points found in the red step:** R5's 100 m region buffer is in
 the source CRS, which for EPSG:4326 (the legacy GML, Ola's own case) is not
