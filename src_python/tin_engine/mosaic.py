@@ -32,6 +32,10 @@ from tin_engine.io.models import DemTile, RasterMeta
 if TYPE_CHECKING:
     from tin_engine.io.repository import TileFootprint
 
+#: DEM units (metres for DTM10). A seam counts a node only where the two
+#: tiles differ by at least this (Ola, 2026-09-28: "Ignore below 1mm").
+SEAM_THRESHOLD = 0.001
+
 #: Cells. Two tiles share a lattice when their node offsets are integers to
 #: within this. Measured noise is at most 2.2e-11 cells (B3), and 0 for DTM10.
 ALIGN_TOLERANCE = 1e-6
@@ -104,8 +108,9 @@ class MosaicPlan(BaseModel):
 
 @dataclass(frozen=True, slots=True)
 class Seam:
-    """Two tiles whose valid values differ at `nodes` of the mosaic's nodes,
-    by `largest` and `median` there (float64); `first < second` by name."""
+    """Two tiles whose valid values differ by at least `SEAM_THRESHOLD` at
+    `nodes` of the mosaic's nodes, by `largest` and `median` there (float64);
+    `first < second` by name."""
 
     first: str
     second: str
@@ -230,11 +235,16 @@ def assemble(plan: MosaicPlan, load: Callable[[str], DemTile]) -> Mosaic:
     to `DemTile` without a copy (R7). A hand-built footprint may under-state
     its dtype, so a loaded tile that promotes further re-casts the canvas.
 
-    Each tile is written whole, then dropped; what it holds where it meets
-    another tile's placement is kept as a strip. Once all are in, every
-    overlap is decided from the strips (Ola's Q1 revised, `_decide`) and each
-    pair that disagrees is reported (`_seam`). Beyond the canvas and one
-    loaded tile, the peak is the strips plus one overlap's temporaries.
+    Each tile is written whole, then dropped before the next load; what it
+    holds where it meets another tile's placement is kept as a strip. Once all
+    are in, every overlap is decided from the strips (Ola's Q1 revised,
+    `_decide`) and each pair that disagrees is reported (`_seam`).
+
+    Memory: the peak is the canvas, the strips, and one load's own peak, which
+    is not one tile: decoding a DTM10 tile peaks at about 2.8 tiles (the
+    decoder's buffers and `DemTile`'s read-only copy). Measured with
+    tracemalloc on the 15a acceptance box (nine DTM10 tiles, 404 MB canvas,
+    102 MB tiles): 720 MB, the canvas plus 3.1 tiles.
     """
     if len(plan.tiles) == 1 and plan.tiles[0].meta == plan.meta:
         return Mosaic(tile=_loaded(plan.tiles[0], load), plan=plan)
@@ -255,6 +265,7 @@ def assemble(plan: MosaicPlan, load: Callable[[str], DemTile]) -> Mosaic:
             box = _meet(c, other.canvas)
             if other.name != placement.name and box is not None:
                 strips[placement.name, other.name] = incoming[_within(box, c)].copy()
+        del array, incoming  # before the next load, or two tiles outlive this one
     seams = []
     for i, a in enumerate(ordered):
         for b in ordered[i + 1 :]:
@@ -511,13 +522,14 @@ def _seam(
     first: str, second: str, a: npt.NDArray[Any], b: npt.NDArray[Any], plan: MosaicPlan
 ) -> Seam | None:
     """The pair's report over its overlap in the mosaic: nodes where both hold
-    a valid value and the two differ (`!=`), and the largest and median
-    `|a - b|` over those, in float64. None when they agree."""
-    a64, b64 = a.astype(np.float64), b.astype(np.float64)
-    differ = _valid(a, plan.meta.nodata) & _valid(b, plan.meta.nodata) & (a64 != b64)
-    if not differ.any():
+    a valid value and `|a - b| >= SEAM_THRESHOLD`, and the largest and median
+    `|a - b|` over those, in float64. None when no node qualifies. The
+    threshold is the report's only: `_decide` never consults it."""
+    both = _valid(a, plan.meta.nodata) & _valid(b, plan.meta.nodata)
+    gaps = np.abs(a[both].astype(np.float64) - b[both].astype(np.float64))
+    gaps = gaps[gaps >= SEAM_THRESHOLD]
+    if not gaps.size:
         return None
-    gaps = np.abs(a64[differ] - b64[differ])
     return Seam(first, second, int(gaps.size), float(gaps.max()), float(np.median(gaps)))
 
 

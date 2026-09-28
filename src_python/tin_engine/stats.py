@@ -178,8 +178,9 @@ def _bytes(n: int) -> str:
 
 
 def _table(header: Sequence[str], rows: Sequence[Sequence[str]]) -> list[str]:
+    """A Markdown table; a `|` in a cell (a tile name) is escaped `\\|`."""
     lines = ["| " + " | ".join(header) + " |", "|" + "---|" * len(header)]
-    return lines + ["| " + " | ".join(row) + " |" for row in rows]
+    return lines + ["| " + " | ".join(c.replace("|", "\\|") for c in row) + " |" for row in rows]
 
 
 def _sizes(s: Sizes) -> list[str]:
