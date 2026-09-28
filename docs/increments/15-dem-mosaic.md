@@ -860,6 +860,7 @@ order. 15c and 15d follow later.
 | | **15a total** | **375** | **520** |
 | | *15a as built, measured at review (branch diff, CLAUDE.md §2 unit): 533, of which `mosaic.py` 325 against 200 estimated* | | |
 | | *15a after Ola's Q1 revised (cba0073): 596 added against master, of which `mosaic.py` 372 against 200 estimated* | | |
+| | *15a at the tip (a253a77): 597 added against master, blank lines excluded (`CLAUDE.md` §2 as ruled by Ola 2026-09-28); 554 net* | | |
 | **15b** | **Norway: the domain in its own CRS** | | |
 | | `crs.py`: `parse_crs`, `reprojector` | 30 | |
 | | `domain.py`: `crs: str`, `to_crs`, extent against coverage; `check_crs` removed | 40 | |
