@@ -394,21 +394,38 @@ re-plan pattern as 15b's `_domain_plan`:
 
    a. If `touches_nodata`, refuse: the catchment is truncated by missing
       data, which no growth can fix.
-   b. The need N is the in-nodes' bounds grown by the margin, clamped to E.
-      A side of W *can grow* when N reaches past W on that side; since N is
-      clamped to E, that also means W is not yet at E there.
-   c. If some side can grow: the next window is W joined with N, the margin
-      doubles, and the loop repeats from 2.
+   b. The need N is the in-nodes' bounds grown by the **base** margin (2000
+      m, never doubled), clamped to E. A side of W *can grow* when N reaches
+      past W on that side; since N is clamped to E, that also means W is not
+      yet at E there.
+   c. If some side can grow: the step margin doubles (4000 m at the first
+      growth, then 8000 m, ...), the next window is W joined with the
+      in-nodes' bounds grown by the step margin, clamped to E, and the loop
+      repeats from 2. Only the step doubles; the test in b always uses the
+      base margin.
+
+   Revised 2026-09-29 at the PR 1 green step (58f6904): the previous
+   wording let the test in b use the doubled margin too, so the need grew
+   as fast as the window, every step grew, and the loop only stopped at the
+   data's edge. @developer's first Bygdin run took 8 minutes and was then
+   refused by 15a's coverage check. With the base margin in b, Bygdin gives
+   304.91 km² (-0.21 % against NVE) in 6.3 s over 3 windows.
    d. Otherwise decide by the flag. If `touches_edge`, refuse, naming the
       sides (from the bounds: an in-node in the first or last two rows or
       columns), each of which is then at E: the catchment is cut by the
       data's edge. If not, accept.
 
-   **It terminates.** Step c runs only when N reaches past W on some side,
-   and the next window contains N, so it has at least one more row or column
-   than W; every window lies inside E, which is finite. So step c runs at
-   most (rows of E + columns of E) times, and in practice a handful, since
-   the margin doubles. The memory cap (step 5) may refuse earlier. Every
+   **It terminates.** Step c runs only when N reaches past W on some side.
+   The next window contains the in-nodes' bounds grown by the step margin,
+   which is at least the base margin, so it contains N (both clamped to E)
+   and has at least one more row or column than W; every window lies inside
+   E, which is finite. So step c runs at most (rows of E + columns of E)
+   times. **And it stops early**: after a growth step the window holds the
+   last catchment's bounds plus the base margin, so a further step happens
+   only if the catchment itself grew past that in the new window. On a
+   catchment far from the data's edge the number of windows is one more
+   than the number of times the catchment outgrew its window's base margin,
+   in practice two or three. The memory cap (step 5) may refuse earlier. Every
    exit is an accept or a refusal from a or d.
 
    **Accepting means**: the catchment comes no closer than two nodes to any
@@ -416,6 +433,16 @@ re-plan pattern as 15b's `_domain_plan`:
    bounds plus the margin, or it is at the data's edge on the sides where it
    does not. The margin is a heuristic against the known limit below; the
    flag is the rule.
+
+   **What a test should pin** (for @tester; described only): on a
+   synthetic DEM whose data extends more than four base margins beyond the
+   full catchment on every side, and whose catchment is larger than the
+   first window (the bowl fixture, placed in a larger raster), the loop
+   accepts in at most 3 windows, and the final window reaches the data's
+   edge on no side. A second, cheaper pin: a catchment that lies inside the
+   first window with the base margin to spare is accepted in exactly one
+   window. The first of these fails on the pre-58f6904 loop, which grows
+   until it meets the data's edge.
 
    Refusing a truncated catchment stays the default (main session /
    @architect, 2026-09-29), for Ola to confirm; alternative: write it with a
