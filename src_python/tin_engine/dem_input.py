@@ -68,16 +68,21 @@ class DemInput:
     seams: tuple[Seam, ...] = ()
 
 
+def repository_for(
+    sources: tuple[Path, ...], nodata: float | None = None
+) -> tuple[TiffDemRepository, str]:
+    """The repository over one directory of tiles or over the files given,
+    and the run's name: the directory's name, or the first file's stem."""
+    first = sources[0]
+    if first.is_dir():
+        return TiffDemRepository.from_directory(first, nodata=nodata), first.resolve().name
+    return TiffDemRepository(sources, nodata=nodata), first.stem
+
+
 def open_dem(request: DemRequest) -> DemInput:
     """List, plan and assemble. Every refusal is a `ValueError` (`GeoTiffError`,
     `MosaicError`) or, for a file that cannot be opened, an `OSError`."""
-    first = request.sources[0]
-    if first.is_dir():
-        repository = TiffDemRepository.from_directory(first, nodata=request.nodata)
-        label = first.resolve().name
-    else:
-        repository = TiffDemRepository(request.sources, nodata=request.nodata)
-        label = first.stem
+    repository, label = repository_for(request.sources, request.nodata)
     footprints = repository.footprints()
     if request.domain is None or not footprints:
         plan, domain, grown = plan_mosaic(footprints, request.bounds, None), None, None

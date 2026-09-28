@@ -40,6 +40,7 @@ roles is therefore made unrepresentable rather than merely discouraged.
 from __future__ import annotations
 
 import importlib.metadata
+import json
 import math
 import os
 import shlex
@@ -68,9 +69,10 @@ from tin_engine._core import (
     sample,
     triangulate,
 )
+from tin_engine.catchment import CatchmentRequest, delineate
 from tin_engine.chains import start_chains
 from tin_engine.crs import crs_label, parse_crs, transform_description
-from tin_engine.dem_input import DemInput, DemRequest, open_dem
+from tin_engine.dem_input import DemInput, DemRequest, open_dem, repository_for
 from tin_engine.domain import DomainError, DomainPolygon, read_domain
 from tin_engine.elevation import Trimmed, trim
 from tin_engine.feature_input import (
@@ -80,6 +82,7 @@ from tin_engine.feature_input import (
     FeatureSet,
     FeatureSource,
     open_features,
+    read_lakes,
 )
 from tin_engine.features import DEFAULT_VOCABULARY
 from tin_engine.grid_domain import default_stride, refine_start_stride, subsample
@@ -1280,3 +1283,122 @@ def _off_node(xy: npt.NDArray[np.float64], meta: RasterMeta) -> int:
         meta.y_max - row * meta.delta_y == xy[:, 1]
     )
     return int(np.count_nonzero(~node))
+
+
+#: What the suffix of ``catchment --out`` may be: GeoJSON, which ``--domain`` reads.
+CATCHMENT_SUFFIXES = (".geojson", ".json")
+
+
+@app.command()
+def catchment(
+    out: Annotated[
+        Path, typer.Option("--out", help="Where to write the polygon: .geojson or .json.")
+    ],
+    dem: Annotated[
+        list[Path],
+        typer.Option("--dem", help="A GeoTIFF DEM, several (repeat --dem), or one directory."),
+    ],
+    seed: Annotated[
+        tuple[float, float],
+        typer.Option("--seed", metavar="X Y", help="A point in the lake, in --seed-crs."),
+    ],
+    seed_crs: Annotated[
+        str, typer.Option("--seed-crs", help="The seed's CRS, anything pyproj reads (LON LAT).")
+    ] = "EPSG:4326",
+    lakes: Annotated[
+        Path | None,
+        typer.Option(
+            "--lakes",
+            help="Lake polygons (.gpkg, .geojson or .json); the one under the seed is the "
+            "seed. Without it, the seed is the DEM node nearest the point.",
+        ),
+    ] = None,
+    lakes_layer: Annotated[
+        str | None, typer.Option("--lakes-layer", help="The GeoPackage's features table.")
+    ] = None,
+    out_parent: Annotated[
+        Path | None,
+        typer.Option("--out-parent", help="Refuse any output path resolving outside this."),
+    ] = None,
+) -> None:
+    """Write the catchment of a lake, from the DEM, as a GeoJSON polygon in the
+    DEM's CRS that ``mesh --domain`` reads (increment 22, PR 1: the fine
+    outline, drawn between DEM nodes, holes filled). A catchment cut by the
+    data's edge or by NoData is refused, and nothing is written."""
+    if lakes is None and lakes_layer is not None:
+        raise typer.BadParameter("applies only with --lakes", param_hint="--lakes-layer")
+    if out.suffix.lower() not in CATCHMENT_SUFFIXES:
+        raise typer.BadParameter(f"use {' or '.join(CATCHMENT_SUFFIXES)}", param_hint="--out")
+    target = _destination(out, out_parent, out.stem)
+    try:
+        found = None if lakes is None else read_lakes(lakes, lakes_layer, seed, seed_crs)
+    except FeatureError as exc:
+        raise typer.BadParameter(str(exc), param_hint="--lakes") from exc
+    try:
+        repository, _ = repository_for(tuple(dem))
+        request = CatchmentRequest(
+            seed=seed,
+            seed_crs=seed_crs,
+            lakes=None if found is None else found[0],
+            lakes_crs=None if found is None else found[1],
+        )
+        result = delineate(request, repository)
+    except OSError as exc:
+        raise typer.BadParameter(f"cannot read {exc.filename}: {exc}", param_hint="--dem") from exc
+    except ValueError as exc:
+        raise typer.BadParameter(_words(exc), param_hint="--dem") from exc
+    for k, w in enumerate(result.windows, 1):
+        b = w.bounds
+        typer.echo(
+            f"window {k}: x {b.x_min:.0f}-{b.x_max:.0f}, y {b.y_min:.0f}-{b.y_max:.0f}, "
+            f"{w.rows} x {w.cols} nodes, flood {w.seconds:.2f} s, "
+            + (f"grown: touches {', '.join(w.grown)}" if w.grown else "contained"),
+            err=True,
+        )
+    cell = result.meta.delta_x * result.meta.delta_y
+    if result.lake_area is None:
+        typer.echo(
+            f"seed: the pour node at {result.seed} (a pour point must lie on the flow line; "
+            "it is not snapped)",
+            err=True,
+        )
+    else:
+        typer.echo(
+            f"seed: lake of {result.lake_area / 1e6:.6f} km2, {result.seed_nodes} nodes", err=True
+        )
+    typer.echo(
+        f"catchment: {result.nodes} nodes, {result.nodes * cell / 1e6:.6f} km2 of node area",
+        err=True,
+    )
+    vertices = len(result.fine.exterior.coords) - 1
+    typer.echo(
+        f"fine outline: {vertices} vertices, {result.fine_area / 1e6:.6f} km2, "
+        f"{result.rings_dropped} rings dropped ({result.dropped_nodes} nodes), "
+        f"{result.holes_filled} holes filled ({result.holes_area / 1e6:.6f} km2), "
+        f"traced in {result.trace_seconds:.2f} s",
+        err=True,
+    )
+    properties = {
+        "seed": list(seed),
+        "seed_crs": seed_crs,
+        "nodes": result.nodes,
+        "fine_vertices": vertices,
+        "fine_area_m2": result.fine_area,
+        "windows": [[w.rows, w.cols] for w in result.windows],
+    }
+    doc = {
+        "type": "FeatureCollection",
+        "crs": {"type": "name", "properties": {"name": result.crs}},
+        "features": [
+            {
+                "type": "Feature",
+                "properties": properties,
+                "geometry": {
+                    "type": "Polygon",
+                    "coordinates": [[list(xy) for xy in result.fine.exterior.coords]],
+                },
+            }
+        ],
+    }
+    target.write_text(json.dumps(doc), encoding="utf-8")
+    typer.echo(f"{target}")

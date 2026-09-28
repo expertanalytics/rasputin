@@ -12,6 +12,7 @@
 #include <terrain/core/point.hpp>
 #include <terrain/core/pslg.hpp>
 #include <terrain/core/pslg_builder.hpp>
+#include <terrain/hydrology/upstream.hpp>
 #include <terrain/noding/node.hpp>
 #include <terrain/noding/noded_pslg_builder.hpp>
 #include <terrain/predicates/default_kernel.hpp>
@@ -290,6 +291,13 @@ template <typename T>
         nodata ? std::optional<T>{static_cast<T>(*nodata)} : std::nullopt;
     return BoundRasterView{array, terrain::raster::RasterView<T>{geometry, a.data(), sentinel}};
 }
+
+// The flood's outcome with the shape its mask is viewed in.
+struct BoundUpstream {
+    terrain::hydrology::UpstreamOutcome outcome;
+    std::size_t rows;
+    std::size_t cols;
+};
 
 }  // namespace
 
@@ -945,5 +953,56 @@ constraint_feet inserts, for a worst node close to a constraint segment, its
 foot on the segment instead; off by default.
 A refused input comes back as a status; a mis-shaped array is a ValueError.
 Releases the GIL.
+)doc");
+
+    py::class_<BoundUpstream>(m, "UpstreamOutcome", R"doc(
+What upstream() returned: the catchment's node mask, its size and bounds, and
+whether it may continue past the window's edge or past NoData.
+)doc")
+        .def_property_readonly(
+            "mask",
+            [](const py::object& self) {
+                const auto& b = self.cast<const BoundUpstream&>();
+                const auto cols = static_cast<py::ssize_t>(b.cols);
+                return readonly_view<std::uint8_t>(self, b.outcome.mask.data(),
+                                                   {static_cast<py::ssize_t>(b.rows), cols},
+                                                   {cols, 1});
+            },
+            "Read-only (rows, cols) uint8: 1 for a node in the catchment, 0 otherwise.")
+        .def_property_readonly("nodes_in", [](const BoundUpstream& b) { return b.outcome.nodes_in; })
+        .def_property_readonly("row_min", [](const BoundUpstream& b) { return b.outcome.row_min; })
+        .def_property_readonly("row_max", [](const BoundUpstream& b) { return b.outcome.row_max; })
+        .def_property_readonly("col_min", [](const BoundUpstream& b) { return b.outcome.col_min; })
+        .def_property_readonly("col_max", [](const BoundUpstream& b) { return b.outcome.col_max; })
+        .def_property_readonly("touches_edge",
+                               [](const BoundUpstream& b) { return b.outcome.touches_edge; })
+        .def_property_readonly("touches_nodata",
+                               [](const BoundUpstream& b) { return b.outcome.touches_nodata; });
+
+    m.def(
+        "upstream",
+        [](const BoundRasterView& raster, const py::object& seed) {
+            using U8 = py::array_t<std::uint8_t, py::array::c_style | py::array::forcecast>;
+            const auto s = U8::ensure(seed);
+            const auto& g = std::visit([](const auto& v) -> const auto& { return v.geometry(); },
+                                       raster.view);
+            if (!s || s.ndim() != 2 || static_cast<std::size_t>(s.shape(0)) != g.rows()
+                || static_cast<std::size_t>(s.shape(1)) != g.cols())
+                throw py::value_error(std::format(
+                    "upstream: the seed mask's shape must be the raster's ({}, {})", g.rows(),
+                    g.cols()));
+            const std::span<const std::uint8_t> seeds{s.data(), g.size()};
+            // Every buffer read below is held by a local or by `raster`.
+            const py::gil_scoped_release unlocked;
+            return BoundUpstream{
+                std::visit([&](const auto& v) { return terrain::hydrology::upstream(v, seeds); },
+                           raster.view),
+                g.rows(), g.cols()};
+        },
+        py::arg("view"), py::arg("seed"), R"doc(
+The catchment of a seed mask: every node draining into a seed (Priority-Flood).
+
+seed is (rows, cols), non-zero (or True) for a seed; any other shape is a
+ValueError. NoData is never in. Releases the GIL.
 )doc");
 }
