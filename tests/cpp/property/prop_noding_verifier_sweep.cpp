@@ -822,8 +822,10 @@ struct Lines {
             for (int k = 0; k < 40; ++k) {
                 std::vector<std::pair<double, double>> pts;
                 for (int v = 0; v < 3; ++v) {
-                    pts.emplace_back(static_cast<double>(1 + rng() % 998),
-                                     static_cast<double>(1 + rng() % 998));
+                    // Two draws as arguments are unsequenced (clang: x first, GCC: y first); fixed as clang's.
+                    const auto x = static_cast<double>(1 + rng() % 998);
+                    const auto y = static_cast<double>(1 + rng() % 998);
+                    pts.emplace_back(x, y);
                 }
                 l.line(pts);
             }

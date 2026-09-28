@@ -88,7 +88,10 @@ constexpr int seed_count = 24;
 [[nodiscard]] std::vector<ChainSpec> generated_specs(std::mt19937_64& rng) {
     std::uniform_int_distribution<std::size_t> holes{0, 4};
     std::uniform_int_distribution<std::size_t> lines{0, 3};
-    return valid_chain_specs(rng, holes(rng), lines(rng));
+    // Two draws as arguments are unsequenced (clang: holes first, GCC: lines first); fixed as clang's.
+    const std::size_t n_holes = holes(rng);
+    const std::size_t n_lines = lines(rng);
+    return valid_chain_specs(rng, n_holes, n_lines);
 }
 
 // Every property that needs a valid Pslg goes through this, so "the generator
