@@ -78,9 +78,9 @@ which this increment gives its first real input with interior constraints.
   4. R10's "no writer has implemented yet" is corrected (R10).
   5. R1 and R4 list the `.gml` suffix and the `clc18_kode` map.
 
-  Ola's words are recorded for points 1 and 2. Points 3 to 5 are corrections
-  of this text, which the main session's brief passed on as Ola's rulings of
-  the same day.
+  Ola's words are recorded for points 1 and 2; the second ("yes, let
+  architect write both fixes") covers points 2 and 3. Points 4 and 5 are
+  corrections of this text found by the red step, not rulings.
 
 ## What was measured
 
