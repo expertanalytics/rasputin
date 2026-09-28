@@ -146,11 +146,13 @@ def query_features(
     )
     params: dict[str, float] = {}
     if box is not None and layer.rtree is not None:
+        # Fetch by primary key from the R-tree's hits: a join is planned as a
+        # full scan of the table with one R-tree probe per row.
         s = "(r.maxx - r.minx + r.maxy - r.miny)"
         w = f"({s} * max(1.0, {s} / :scale))"
         select += (
-            f" JOIN {_q(layer.rtree)} r ON t.{pk} = r.id WHERE r.maxx + {w} >= :minx"
-            f" AND r.minx - {w} <= :maxx AND r.maxy + {w} >= :miny AND r.miny - {w} <= :maxy"
+            f" WHERE t.{pk} IN (SELECT r.id FROM {_q(layer.rtree)} r WHERE r.maxx + {w} >= :minx"
+            f" AND r.minx - {w} <= :maxx AND r.maxy + {w} >= :miny AND r.miny - {w} <= :maxy)"
         )
         params = dict(zip(("minx", "miny", "maxx", "maxy"), box, strict=True), scale=scale)
     try:
