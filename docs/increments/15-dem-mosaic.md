@@ -59,6 +59,15 @@ implemented** on `increment15b-domain-crs` (red `372bb99`, green `0011741`).
   Ola will also download a fresh single-date set from hoydedata.no, whose
   overlaps should mostly agree (the probe found one same-date pair that does
   not); the fresh set is not blocking ("the data is data", Ola).
+  **Measured on arrival (2026-09-28, `DTM10_UTM33_20260925`):** the same 254
+  tiles, format and lattices (the eight half-cell tiles remain), and still
+  exported tile by tile (side-file dates 2020-06 to 2026-09); 144 tiles were
+  re-exported since the 2022 download, and the other 110 are byte-identical.
+  The probe (120 pairs, seed 1): 32 of 32 same-date pairs agree within 1 mm;
+  34 of 87 different-date pairs do not, worst 34.1 m (7404_2 | 7404_3). The
+  15a acceptance box reports 5 seams (4 before), up to 22.3 m. So the fresh
+  set does not remove disagreeing overlaps; the midline rule and the seam
+  report stay necessary.
 - **2026-09-28, the seam report ignores differences below 1 mm** (Ola: "Ignore
   below 1mm"). A seam counts, and the report lists, only nodes where
   |a − b| ≥ 1 mm; float noise such as 7807_1 | 7808_4 (31 nodes, 1.5e-5 m)
