@@ -40,3 +40,10 @@ Found by `@reviewer`'s first role-boundary audit (16b-1/2, 2026-09-28):
 document (following the 16b-0 precedent); the main session's 413e91b edited
 the design document too. `@developer` and `@architect` stayed in their
 areas.
+
+Second audit (16b-1/2 re-review): `@architect` fixed files outside
+`docs/increments/` at `@reviewer`'s request (`project_structure.md`, a
+benchmark README, another increment's record). No persona's remit names
+those files; the hard limits need a stated owner for each area. Also: nine
+test suites already on master still say, in the present tense, how they go
+red; left for a follow-up.
