@@ -892,8 +892,14 @@ builds returned `Ok`. M3's attribution holds, and 16b-0 is scoped as designed.
 
 - **`features`**: source file name, layer (GeoPackage), map name, and counts
   after the clip: e.g. `U2018_CLC2018_V2020_20u1.gpkg:U2018_CLC2018_V2020_20u1,
-  map corine, 727 features (12 dropped outside), 988 chains, 51 395
-  vertices`. `.vtk` field and `.ply` comment, like `domain`.
+  map corine, 727 features, 988 chains, 51 395 vertices`. `.vtk` field and
+  `.ply` comment, like `domain`. **The field records only counts of the data
+  used** (*2026-09-28*, the main session applying Ola's principle from the
+  `edge_vocabulary` ruling in "Ruled by Ola": "A table in a run report is
+  output, not data."). It no longer carries `(<k> dropped outside)`, which depends on
+  whether the GeoPackage has an R-tree index (see stderr below). Indexed and
+  unindexed runs over the same rows write identical files (tests `c2a3898`,
+  code `db71cff`).
 - **`features_crs`** and **`features_transform`**, as `domain_crs` and
   `domain_transform` (15b).
 - **No `edge_vocabulary` field, and no report line** (*ruled 2026-09-28*;
@@ -913,10 +919,11 @@ builds returned `Ok`. M3's attribution holds, and 16b-0 is scoped as designed.
 - **`elevation_source`**'s start clause becomes
   `start domain boundary and features, vertex z bilinear` when features are
   given.
-- **stderr**, after reading: `<n> features read, <o> dropped outside, <c>
+- **stderr**, after reading: `<n> features kept, <o> dropped outside, <c>
   clipped, <e> empty skipped`, then `<file>:<table>: no R-tree index, table
   scanned` for each GeoPackage layer read without an index (R3). After
-  noding: `<v> input vertices, <m> noded vertices`. As built at `74e6c32`:
+  noding: `<v> input vertices, <m> noded vertices`. As built at `db71cff`
+  (before it, `<n> features read`):
   - `<n>` is the features kept, those with some linework inside the domain.
   - `<c>` counts the kept features whose linework the domain does not wholly
     cover: the pre-clip (R5) dropped an edge, or the exact clip (R6) cut a
@@ -931,8 +938,9 @@ builds returned `Ok`. M3's attribution holds, and 16b-0 is scoped as designed.
     the index**: `@tester` found that the same rows give 0 with an R-tree and
     1 without one. It measures work done on features that turned out not to
     matter, not how many features in the source lie outside the domain.
-    Features the class map drops (R4) are not counted anywhere. The
-    `features` field's `(<k> dropped outside)` is this same count.
+    Features the class map drops (R4) are not counted anywhere. This count
+    is on stderr only, because it describes the run, not the data (the
+    `features` field above).
 - **`--stats`**: the phase table gains `features read` and
   `features clip` (`PhaseClock` rows are named by the caller; `stats.py` does
   not change).
@@ -1100,8 +1108,8 @@ its part in full. Suites: `tests/python/test_io_geopackage.py`,
   repeats its first index. `test_refine_golden.py` now takes the domain chains
   from here (the move from `cli._domain_chains`, R2).
 - CLI: the four flags; fields `features` (`<file>[:<layer>], map <m>, <n>
-  features (<k> dropped outside), <c> chains, <v> vertices`; `<k>` as R10
-  defines it),
+  features, <c> chains, <v> vertices`; *2026-09-28, `db71cff`:* no longer
+  `(<k> dropped outside)`, R10),
   `features_crs`, `features_transform`, `features_notice` (absent without a
   notice), `edge_vocabulary` (`<fingerprint>; 0 river, ..., 8 water`, on every
   `.vtk`; *dropped 2026-09-28*, R10); stderr as R10 gives it; `--stats` rows
