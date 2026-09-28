@@ -41,7 +41,7 @@ from typing import Any
 import numpy as np
 import pytest
 import shapely
-from pyproj import CRS, Transformer
+from pyproj import CRS, Geod, Transformer
 from shapely.geometry import (
     GeometryCollection,
     LineString,
@@ -725,7 +725,13 @@ class TestPreClipKeepsWholeEdges:
     tuple of `LineString`s in the source CRS: a polygon's exterior's chains,
     then each hole's; a closed ring repeats its first vertex. An edge is kept
     when the closed segment meets the closed region; each maximal run of
-    edges that miss it is dropped; no vertex is added."""
+    edges that miss it is dropped; no vertex is added.
+
+    Amended 2026-09-28 (R5, "Long edges"): `pre_clip(geometry, region,
+    widening)`, where `widening(a, b)` takes an edge's two vertices as `(x,
+    y)` tuples and gives `w(e)` in source units; an edge is kept when its
+    distance to the region is `<= w(e)`. Left out, `w = 0`, which is the
+    rule every other test in this class pins."""
 
     def test_a_ring_wholly_inside_stays_closed_with_its_start_vertex(self, fi: ModuleType) -> None:
         ring = Polygon([(6, 2), (8, 2), (8, 8), (2, 8)])
@@ -824,6 +830,28 @@ class TestPreClipKeepsWholeEdges:
         around = Polygon([(-50, -50), (50, -50), (50, 50), (-50, 50)])
         assert fi.pre_clip(around, REGION) == ()
 
+    def test_an_edge_within_its_widening_is_kept_and_one_beyond_it_is_not(
+        self, fi: ModuleType
+    ) -> None:
+        """Edge (12, 5)-(12, 20) lies exactly 2 from the region. It is kept
+        when its own widening is 2 (the distance test is closed) and dropped
+        when it is 1.9. The widening is per edge: the edge (12, 20)-(30, 20),
+        about 10.2 from the region, gets 0, so it is dropped either way and
+        the kept chain ends at (12, 20)."""
+        line = LineString([(5, 5), (12, 5), (12, 20), (30, 20)])
+        tall = {(12.0, 5.0), (12.0, 20.0)}
+
+        def widening(w: float) -> Any:
+            def of(a: tuple[float, float], b: tuple[float, float]) -> float:
+                return w if {tuple(map(float, a)), tuple(map(float, b))} == tall else 0.0
+
+            return of
+
+        kept = fi.pre_clip(line, REGION, widening(2.0))
+        assert [list(c.coords) for c in kept] == [[(5, 5), (12, 5), (12, 20)]]
+        dropped = fi.pre_clip(line, REGION, widening(1.9))
+        assert [list(c.coords) for c in dropped] == [[(5, 5), (12, 5)]]
+
 
 class TestPreClipThroughOpenFeatures:
     def test_a_polygon_around_the_domain_with_no_edge_kept_is_dropped_and_counted(
@@ -888,3 +916,68 @@ class TestLongWgs84Edge:
         oracle = fi.TerrainFeature(fid="edge", mask=V.mask("road"), lines=(whole,))
         expected = ff.run_engine(ff.start(WIDE, [oracle]))
         assert produced.masks == expected.masks
+
+
+# -------------------- a 60 km WGS84 edge that misses the region (R5, long edges)
+
+#: The edge's parallel, and its half-width in longitude: about 60 km at 70° N,
+#: centred on UTM 33's central meridian, where its bend is largest.
+LONG_LAT, LONG_HALF = 70.0, 0.788
+
+
+def far_north_domain() -> tuple[LineString, Any]:
+    """The edge in EPSG:4326, and a domain 2 km square in UTM 33 centred over
+    the edge's midpoint, its southern side 140 m north of that midpoint."""
+    edge = LineString([(15.0 - LONG_HALF, LONG_LAT), (15.0 + LONG_HALF, LONG_LAT)])
+    mx, my = Transformer.from_crs(WGS84, UTM33, always_xy=True).transform(15.0, LONG_LAT)
+    west, east, south, north = mx - 1_000, mx + 1_000, my + 140, my + 2_140
+    return edge, domain_of(Polygon([(west, south), (east, south), (east, north), (west, north)]))
+
+
+class TestLongEdgeWidening:
+    def test_an_edge_outside_the_region_whose_dem_straight_line_enters_is_kept(
+        self, tmp_path: Path
+    ) -> None:
+        """R5, "Long edges" (Ola, 2026-09-28: "yes, widen per edge"), and I4
+        with no length limit. The edge is about 40 m outside the region in
+        EPSG:4326, but the engine draws it straight in UTM 33, where the
+        chord between its two images runs about 194 m north of its midpoint,
+        through the domain. It is kept, and the produced noded edges equal
+        those of this test's own pipeline with no pre-clip: the edge moved
+        vertex by vertex and clipped to the domain in UTM 33.
+
+        First, that this can fail: the edge misses the region (the domain
+        buffered by 100 m in UTM 33, densified, moved into EPSG:4326, its
+        convex hull, as R5 builds it), so a pre-clip with no widening drops
+        it; yet its UTM-straight line crosses the domain."""
+        edge, domain = far_north_domain()
+        assert geodesic_length(edge) == pytest.approx(60_000.0, rel=0.01)
+        region = shapely.convex_hull(
+            moved(domain.polygon.buffer(100.0).segmentize(1_000.0), UTM33, WGS84)
+        )
+        assert not edge.intersects(region)
+        assert edge.distance(region) == pytest.approx(0.00036, abs=0.00005)  # about 40 m
+        dem_straight = moved(edge, WGS84)
+        (whole,) = (
+            p
+            for p in shapely.get_parts(shapely.intersection(dem_straight, domain.polygon))
+            if isinstance(p, LineString) and p.length > 0
+        )
+        mid_y = Transformer.from_crs(WGS84, UTM33, always_xy=True).transform(15.0, LONG_LAT)[1]
+        assert whole.coords[0][1] - mid_y == pytest.approx(194.0, abs=2.0)
+
+        path = write_geojson(
+            tmp_path / "f.geojson", [Feat("edge", edge, {"property": "road"})], crs=None
+        )
+        fs = open_one(path, domain)
+        assert [f.fid for f in fs.features] == ["edge"] and fs.outside == 0
+        produced = ff.run_engine(ff.start(domain, fs.features))
+        fi = ff.feature_input()
+        oracle = fi.TerrainFeature(fid="edge", mask=V.mask("road"), lines=(whole,))
+        expected = ff.run_engine(ff.start(domain, [oracle]))
+        assert produced.masks == expected.masks
+
+
+def geodesic_length(line: LineString) -> float:
+    lon, lat = zip(*line.coords, strict=True)
+    return float(Geod(ellps="WGS84").line_length(lon, lat))

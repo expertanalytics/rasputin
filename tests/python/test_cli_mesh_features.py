@@ -22,8 +22,6 @@ Pinned by this suite (see "Pinned by the red suite (16b-1/2)"):
   (`none` for the DEM's own CRS, else `transform_description(source, dem)`),
   as 15b's `domain_crs` and `domain_transform`.
 - `features_notice`: the map's notice; absent when the map has none.
-- `edge_vocabulary`: `<fingerprint>; 0 river, 1 road, ..., 8 water`, on
-  every `.vtk` this command writes.
 - The elevation sentence says `start domain boundary and features, vertex z
   bilinear` with features.
 - stderr says `<n> input vertices` and `<m> noded vertices`; `--stats` has
@@ -155,10 +153,6 @@ def edges_at(vtk: VtkFile, point: tuple[float, float], near: float = SNAP) -> li
     return sorted(int(m) for m in masks[d <= near])
 
 
-def vocabulary_listing() -> str:
-    return ", ".join(f"{p.bit} {p.name}" for p in sorted(V.properties, key=lambda p: p.bit))
-
-
 # ------------------------------------------------------------------ usage
 
 
@@ -270,30 +264,21 @@ class TestRecord:
         assert "start domain boundary and features, vertex z bilinear" in text
         assert field(text, rf"achieved max error {NUMBER} m") <= 1.0
 
-    def test_the_edge_vocabulary(
+    def test_the_vocabulary_is_the_writers_fields_and_no_edge_vocabulary(
         self, tmp_path: Path, bumpy: Path, plain_square: Path, gallery: Path
     ) -> None:
+        """R10 as ruled on 2026-09-28 ("A table in a run report is output, not
+        data."): the masks' meaning is the writer's reserved fields, which
+        with 16b's vocabulary pair bit 7 with `land_cover` and bit 8 with
+        `water`; there is no `edge_vocabulary` field."""
         vtk, _ = meshed(tmp_path, bumpy, plain_square, "--features", str(gallery))
-        value = text_field(vtk, "edge_vocabulary")
-        assert V.fingerprint() in value
-        assert vocabulary_listing() in value
-        assert "7 land_cover, 8 water" in value
-
-    @pytest.mark.parametrize("kind", ["domain", "stride", "fixture"])
-    def test_the_edge_vocabulary_without_features(
-        self, tmp_path: Path, bumpy: Path, plain_square: Path, kind: str
-    ) -> None:
-        target = tmp_path / "x.vtk"
-        args = {
-            "domain": ["--dem", str(bumpy), "--domain", str(plain_square), "--tolerance", "1"],
-            "stride": ["--dem", str(bumpy)],
-            "fixture": ["river", "--flat"],
-        }[kind]
-        code, output = invoke(*args, "--out", str(target))
-        assert code == 0, output
-        vtk = read_vtk(target.read_bytes())
-        assert V.fingerprint() in text_field(vtk, "edge_vocabulary")
-        assert "features" not in vtk.field_data
+        bits = [int(b) for b in vtk.field_data["feature_bits"].values]
+        names = [str(n) for n in vtk.field_data["feature_names"].values]
+        assert len(bits) == len(names)
+        pairs = set(zip(bits, names, strict=True))
+        assert {(7, "land_cover"), (8, "water")} <= pairs
+        assert text_field(vtk, "feature_vocabulary") == V.fingerprint()
+        assert "edge_vocabulary" not in vtk.field_data
 
     def test_a_reprojected_source(self, tmp_path: Path, bumpy: Path, plain_square: Path) -> None:
         lonlat = [
