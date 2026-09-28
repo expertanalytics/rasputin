@@ -1,6 +1,6 @@
 # Increment 16b-1/2 acceptance (@perf, 2026-09-28/29): summary
 
-**Verdict (2026-09-28): NOT ACCEPTED as designed, on one measure: the candidate read from
+**Verdict (2026-09-28), superseded by the 2026-09-29 addendum (ACCEPTED): NOT ACCEPTED as designed, on one measure: the candidate read from
 Ola's European GeoPackage.** It takes **17.5-19.9 s**, against the
 design's admitted ~1 s (R5). Everything else passes. All runs were on
 **battery** and are compared against battery. The branch is `5f3a522`; the
