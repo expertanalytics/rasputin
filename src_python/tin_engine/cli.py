@@ -68,6 +68,7 @@ from tin_engine._core import (
     sample,
     triangulate,
 )
+from tin_engine.crs import crs_label, parse_crs, transform_description
 from tin_engine.dem_input import DemInput, DemRequest, open_dem
 from tin_engine.domain import DomainError, DomainPolygon, read_domain
 from tin_engine.elevation import Trimmed, trim
@@ -596,7 +597,10 @@ def mesh(
     ] = None,
     domain_crs: Annotated[
         str | None,
-        typer.Option("--domain-crs", help="The --domain file's CRS, EPSG:n; required for .wkt."),
+        typer.Option(
+            "--domain-crs",
+            help="The --domain file's CRS, anything pyproj reads; required for .wkt.",
+        ),
     ] = None,
     start_min_angle: Annotated[
         float | None,
@@ -674,6 +678,8 @@ def mesh(
         raise typer.BadParameter("applies only with --dem", param_hint="--bbox")
     if domain is None and domain_crs is not None:
         raise typer.BadParameter("applies only with --domain", param_hint="--domain-crs")
+    if domain is not None and bbox is not None:
+        raise typer.BadParameter("--bbox and --domain exclude each other", param_hint="--bbox")
     if name is not None and name not in GALLERY:
         raise typer.BadParameter(f"unknown fixture {name}; the gallery is: {', '.join(GALLERY)}")
     if out.suffix not in MESH_SUFFIXES:
@@ -720,7 +726,14 @@ def mesh(
             raise typer.BadParameter(
                 "--no-constraint-feet needs --tolerance", param_hint="--no-constraint-feet"
             )
-        opened = _open_dem(dem, bbox, clock)
+        given = None
+        if domain is not None:
+            with clock.phase("domain read"):
+                try:
+                    given = read_domain(domain, domain_crs)
+                except DomainError as exc:
+                    raise typer.BadParameter(str(exc), param_hint="--domain") from exc
+        opened = _open_dem(dem, bbox, clock, given)
         label = opened.label
         dem_run = _dem_mesh(
             opened.tile,
@@ -730,8 +743,8 @@ def mesh(
             snap_spacing,
             tolerance,
             clock,
-            domain,
-            domain_crs,
+            opened.domain,
+            domain.name if domain is not None else "",
             DEFAULT_START_MIN_ANGLE if start_min_angle is None else start_min_angle,
             not no_constraint_feet,
         )
@@ -750,9 +763,12 @@ def mesh(
             seams = opened.seams
             listed = "; ".join(s.entry() for s in seams) or "none"
             fields.append(("dem_seams", _ascii(listed)))  # Ola's Q1 revised
-        if described:
+        if described and given is not None:
             fields.append(("domain", described))
             comments.append(f"domain {described}")
+            same = parse_crs(given.crs) == parse_crs(f"EPSG:{epsg}")
+            how = "none" if same else transform_description(given.crs, f"EPSG:{epsg}")
+            fields += [("domain_crs", crs_label(given.crs)), ("domain_transform", how)]
     else:
         assert name is not None
         if stride is not None:
@@ -921,10 +937,14 @@ def _fixture_mesh(name: str, delaunay: bool, spacing: float, clock: PhaseClock) 
 
 
 def _open_dem(
-    dem: list[Path], bbox: tuple[float, float, float, float] | None, clock: PhaseClock
+    dem: list[Path],
+    bbox: tuple[float, float, float, float] | None,
+    clock: PhaseClock,
+    domain: DomainPolygon | None = None,
 ) -> DemInput:
-    """``--dem`` and ``--bbox`` to one tile (increment 15a, R11); every refusal,
-    the reader's or the mosaic's, is a usage error in its own words."""
+    """``--dem`` and ``--bbox`` or the read ``--domain`` to one tile (increment
+    15a and 15b, R11); every refusal, the reader's, the mosaic's or the
+    domain's extent, is a usage error in its own words."""
     try:
         bounds = (
             None
@@ -935,12 +955,14 @@ def _open_dem(
         raise typer.BadParameter(_words(exc), param_hint="--bbox") from exc
     try:
         with clock.phase("decode"):
-            return open_dem(DemRequest(sources=tuple(dem), bounds=bounds))
+            return open_dem(DemRequest(sources=tuple(dem), bounds=bounds, domain=domain))
     except OSError as exc:
         where = exc.filename or ", ".join(map(str, dem))
         raise typer.BadParameter(
             f"cannot read {where}: {exc.strerror or exc}", param_hint="--dem"
         ) from exc
+    except DomainError as exc:
+        raise typer.BadParameter(str(exc), param_hint="--domain") from exc
     except ValueError as exc:
         raise typer.BadParameter(_words(exc), param_hint="--dem") from exc
 
@@ -982,8 +1004,8 @@ def _dem_mesh(
     spacing: float,
     tolerance: float | None,
     clock: PhaseClock,
-    domain: Path | None = None,
-    domain_crs: str | None = None,
+    domain: DomainPolygon | None = None,
+    domain_name: str = "",
     min_angle: float = 0.0,
     feet: bool = False,
 ) -> _DemMesh:
@@ -991,8 +1013,9 @@ def _dem_mesh(
 
     Without ``tolerance`` this is increment 12's R6: z sampled bilinearly at
     the stride grid. With it, increment 14's R9: the stride grid is the start
-    mesh, refined against the DEM's nodes; with ``domain``, increment 16's R3,
-    the polygon's rings are. ``min_angle`` > 0 improves the start's angles
+    mesh, refined against the DEM's nodes; with ``domain`` (already in the
+    DEM's CRS, 15b; ``domain_name`` is its file's), increment 16's R3, the
+    polygon's rings are. ``min_angle`` > 0 improves the start's angles
     first (increment 20); ``feet`` inserts constraint feet (increment 20b).
     Returns the mesh, the ``elevation`` sentence for the file, the EPSG code,
     the ``domain`` field (empty without one), and the ``--stats`` inputs;
@@ -1004,13 +1027,8 @@ def _dem_mesh(
     described = ""
     domain_vertices = domain_holes = None
     if domain is not None:
-        with clock.phase("domain read"):
-            try:
-                polygon = read_domain(domain, meta, domain_crs)
-            except DomainError as exc:
-                raise typer.BadParameter(str(exc), param_hint="--domain") from exc
-            xy, chains, described = _domain_chains(polygon, domain.name)
-        domain_vertices, domain_holes = len(xy), len(polygon.polygon.interiors)
+        xy, chains, described = _domain_chains(domain, domain_name)
+        domain_vertices, domain_holes = len(xy), len(domain.polygon.interiors)
         start = "start domain boundary, boundary z bilinear"
         run = _engine(xy, chains, delaunay, spacing, clock)
     else:

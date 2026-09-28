@@ -85,9 +85,12 @@ src_python/tin_engine/     # public Python API (distribution name: rasputin)
                            #   pure numpy, never imports _core
   mosaic.py                # plan_mosaic / assemble: select, group by lattice,
                            #   check overlaps and coverage, stitch; no files (15a)
-  dem_input.py             # --dem/--bbox -> DemInput(tile, plan, label) (15a)
-  domain.py                # --domain: reads one polygon (GeoJSON or WKT), checks
-                           #   CRS and extent; shapely + pyproj, never imports _core
+  dem_input.py             # --dem/--bbox or a domain -> DemInput(tile, plan,
+                           #   label, domain in the DEM's CRS) (15a, 15b)
+  domain.py                # --domain: reads one polygon (GeoJSON or WKT) in its
+                           #   own CRS, to_crs, check_extent; never imports _core
+  crs.py                   # parse_crs, reprojector: the one Transformer.from_crs
+                           #   site, always_xy (15b); pyproj and numpy
   elevation.py             # drops mesh vertices the DEM has no data for;
                            #   pure numpy, never imports _core
   stats.py                 # --stats: PhaseClock, quality, Report, render to
@@ -243,9 +246,11 @@ optional NoData sentinel — nothing else.
   separate from the one above: that one is about where a string may live, this
   one is about what the numbers mean. Python must deliver every input in one
   projected, metre CRS, and rejects a geographic CRS outright. Today it does
-  this by refusal alone: `io/geotiff.py` refuses any file that is not already
-  in one, and nothing reprojects yet. Reprojection arrives no earlier than
-  the mosaic increment (`docs/increments/11-raster-ingestion.md` §9, §10).
+  this partly by refusal: `io/geotiff.py` refuses a DEM that is not already in
+  one, and since increment 15b the domain polygon is reprojected into the DEM's
+  CRS in Python (`crs.py`, the one `from_crs` site). A geographic DEM's
+  computation frame is 15c (`docs/increments/15-dem-mosaic.md`;
+  `docs/increments/11-raster-ingestion.md` §9, §10).
   Measured, pyproj 3.8.0 / PROJ 9.8.1: a 0.0002777° cell at 60°N is 15.5 m
   east-west and 31.0 m north-south, a 2:1 anisotropy invisible to `sample.hpp`, whose bilinear
   weights would then be computed in degrees and applied to metres. The legacy

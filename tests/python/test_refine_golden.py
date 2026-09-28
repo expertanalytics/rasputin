@@ -74,7 +74,7 @@ def refined(
         chains = [(ring, ChainRole.Outer, 0)]
     else:
         path = geojson(tmp_path / "quarter.geojson", quarter_circle())
-        xy, chains, _ = _domain_chains(read_domain(path, tile.meta), path.name)
+        xy, chains, _ = _domain_chains(read_domain(path), path.name)
     run = _engine(xy, chains, True, DEFAULT_SNAP_SPACING)
     assert run.mesh is not None and run.noded is not None, run.message
     edges, masks = _constraint_arrays(run.mesh, run.noded)
