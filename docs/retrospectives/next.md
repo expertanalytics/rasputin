@@ -58,3 +58,7 @@ bug without a red test. `@perf` declined, citing its own rule (a failing
 test in `tests/python/test_bench.py` first). The brief crossed the line, the
 persona held it. The fix (create the mesh's parent directory for a `--label`
 with `/`) waits for a `@tester` red step.
+
+2026-09-29, night: `@architect` built an uncommitted Python prototype of
+the 22 design to check its area against NVE (304.91 against 305.54 km²).
+Useful evidence, but it is implementation work in the design step.
