@@ -116,6 +116,15 @@ coarsening input geometry (`parallel_refinement.md` step 2), 5d above, and
 land-cover partitioning, whose foundation is increment 7's property sets and
 whose consumer does not exist.
 
+Open, for later (Ola, 2026-09-28): **the surface model, DOM10, alongside the
+terrain model.** Kartverket's DOM10 is the top surface (tree crowns, roofs,
+bridges) where DTM10 is the bare ground; both come from the same laser data on
+hoydedata.no. Two uses Ola wants to keep open: **shading** (terrain and surface
+shadowing, e.g. for solar radiation), which needs the surface, not the ground;
+and **canopy and building height, DOM10 minus DTM10**, for vegetation-related
+work and land-cover classification. Hydrology keeps meshing the DTM: a DOM
+mesh would dam rivers at bridges. Not designed; no increment yet.
+
 Known defect: increment 14's NoData carving from a NoData corner appears to
 advance one node per round. Meshing the real tile from its outline alone took
 5 054 rounds and 109 s against 0.35 s from the stride grid
