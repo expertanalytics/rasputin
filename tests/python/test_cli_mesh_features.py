@@ -27,10 +27,12 @@ Pinned by this suite (see "Pinned by the red suite (16b-1/2)"):
 - stderr says `<n> input vertices` and `<m> noded vertices`; `--stats` has
   phase rows `features read` and `features clip`.
 
-HOW THIS FILE GOES RED: the flags do not exist, so every run exits 2 with
-"No such option", which every usage test excludes; the runs fail on their
-exit code. `test_the_extract_is_small_and_attributed` checks committed data
-and passes before 16b.
+Committed red at `e99c8ea` (amended at `972312c`): the flags did not exist
+yet, so every run exited 2 with "No such option", which every usage test
+excludes, and the runs failed on their exit code.
+`test_the_extract_is_small_and_attributed` checks committed data and passed
+already at red. The flags landed in `5079da8` and the suite has been green
+since.
 """
 
 from __future__ import annotations

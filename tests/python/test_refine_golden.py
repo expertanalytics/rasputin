@@ -38,6 +38,7 @@ from test_cli_mesh_dem import invoke
 from test_cli_mesh_domain import geojson, quarter_circle
 from tin_engine import _core
 from tin_engine._core import ChainRole
+from tin_engine.chains import start_chains
 from tin_engine.cli import DEFAULT_SNAP_SPACING, ROLES, _constraint_arrays, _engine
 from tin_engine.domain import read_domain
 from tin_engine.features import DEFAULT_VOCABULARY
@@ -76,11 +77,8 @@ def refined(
     else:
         path = geojson(tmp_path / "quarter.geojson", quarter_circle())
         # 16b R2: the domain half of the chains moved from `cli._domain_chains`
-        # to `chains.start_chains` (test amendment in 16b-1/2's red step); the
-        # digest pins that the move changed nothing. Imported here so that
-        # collection does not depend on the new module.
-        from tin_engine.chains import start_chains
-
+        # to `chains.start_chains` (test amendment in 16b-1/2's red step,
+        # `e99c8ea`); the digest pins that the move changed nothing.
         started = start_chains(read_domain(path), (), DEFAULT_VOCABULARY)
         xy = started.vertices
         chains = [([int(i) for i in c], ROLES[role], int(m)) for c, role, m in started.chains]

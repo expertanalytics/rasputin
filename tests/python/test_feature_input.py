@@ -28,12 +28,16 @@ Pinned by this suite (see "Pinned by the red suite (16b-1/2)"):
 - The lines of a polygon feature: its exterior's pieces, then each hole's, part
   by part for a `MultiPolygon`.
 
-HOW THIS FILE GOES RED: `tin_engine.feature_input` is imported lazily.
+Committed red at `e99c8ea` (amended at `3990449` and `972312c`):
+`tin_engine.feature_input` did not exist yet, and because it is imported lazily
+each test failed on its own. It landed in `5079da8` and the suite has been
+green since.
 """
 
 from __future__ import annotations
 
 import sqlite3
+from contextlib import closing
 from pathlib import Path
 from types import ModuleType
 from typing import Any
@@ -319,7 +323,7 @@ class TestSources:
         before = path.read_bytes()
         open_one(path, BOX, "corine")
         assert path.read_bytes() == before
-        with sqlite3.connect(path) as con:
+        with closing(sqlite3.connect(path)) as con:
             assert con.execute("PRAGMA integrity_check").fetchone()[0] == "ok"
 
     def test_gml_with_the_clc18_kode_map(self, tmp_path: Path) -> None:

@@ -22,9 +22,10 @@ Pinned by this suite (see "Pinned by the red suite (16b-1/2)"):
   `box` is `(minx, miny, maxx, maxy)` in the layer's CRS, closed.
 - Refusals of a row name the layer's table and the row's primary key.
 
-HOW THIS FILE GOES RED: the modules are imported inside fixtures, so each test
-fails on its own with `ModuleNotFoundError` or `AttributeError`, and collection
-is unaffected.
+Committed red at `e99c8ea`: the modules under test did not exist yet, and
+because they are imported inside fixtures each test failed on its own with
+`ModuleNotFoundError` or `AttributeError` while collection was unaffected. They
+landed in `5079da8` and the suite has been green since.
 """
 
 from __future__ import annotations

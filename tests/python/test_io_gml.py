@@ -33,18 +33,21 @@ Pinned by this suite (see "Pinned by the red suite (16b-1/2)" and
   elements still open, even after complete features.
 - Geometries naming different `srsName`s are refused.
 
-HOW THIS FILE GOES RED: `tin_engine.io.gml` is imported inside a fixture.
+Committed red at `e99c8ea` (aligned with the amended design at `3990449`):
+`tin_engine.io.gml` did not exist yet, and because it is imported inside a
+fixture each test failed on its own. It landed in `5079da8` and the suite has
+been green since.
 """
 
 from __future__ import annotations
 
 import ast
 import difflib
+import hashlib
 import importlib
 import importlib.util
 import io
 import re
-import subprocess
 import xml.etree.ElementTree as ET
 from pathlib import Path
 from types import ModuleType
@@ -61,8 +64,12 @@ from gpkg_fixtures import LEGACY_GML
 REPO = Path(__file__).resolve().parents[2]
 SRC = REPO / "src_python" / "tin_engine"
 REPAIR_SCRIPT = LEGACY_GML.parent / "repair_gml.py"
-#: Where the legacy GML lived when it was committed in 2020 (`8e30af4`).
-GML_2020_PATH = ".circleci/rasputin_data/corine/0000_4326_corine2018_4e6064_GML.gml"
+#: The git blob hash of the legacy GML as committed in 2020 (`8e30af4`, at
+#: `.circleci/rasputin_data/corine/0000_4326_corine2018_4e6064_GML.gml`);
+#: `git rev-parse 8e30af4:<that path>` prints it in a full clone. Pinned here,
+#: independently of the script's own copy, so that the reconstruction below is
+#: checked against the real 2020 bytes without needing git history.
+BLOB_2020 = "97ddc98c4262b6b817e96cd91a23720b9b94d2a5"
 #: The benchmark tile's node rectangle, EPSG:25833.
 TILE_7908_3 = box(799_750.0, 7_899_750.0, 850_250.0, 7_950_250.0)
 
@@ -350,18 +357,19 @@ class TestRepairScript:
 
     @pytest.fixture(scope="class")
     def original(self) -> bytes:
-        """The file as committed in 2020, from git; skipped outside a clone
-        that has the commit (a shallow CI checkout, a source archive)."""
-        try:
-            done = subprocess.run(
-                ["git", "show", f"8e30af4:{GML_2020_PATH}"],
-                cwd=REPO,
-                capture_output=True,
-                check=True,
-            )
-        except (OSError, subprocess.CalledProcessError):
-            pytest.skip("commit 8e30af4 is not in this checkout")
-        return done.stdout
+        """The file as committed in 2020, rebuilt from the committed repaired
+        file by removing the two closing tags the repair added, and checked
+        against the 2020 blob hash. Self-contained: CI's depth-1 checkout has
+        no `8e30af4`, and a test that skipped there would test nothing."""
+        lines = LEGACY_GML.read_bytes().decode("utf-8").splitlines(keepends=True)
+        at = lines.index('    <ogr:sql_statement fid="sql_statement.40965">\n')
+        close = lines.index("    </ogr:sql_statement>\n", at)
+        assert lines[close + 1] == "  </gml:featureMember>\n"
+        assert lines[-1] == "</ogr:FeatureCollection>\n"
+        del lines[-1], lines[close + 1]
+        data = "".join(lines).encode("utf-8")
+        assert _blob_hash(data) == BLOB_2020
+        return data
 
     def test_the_committed_file_is_the_2020_file_repaired(
         self, repair: ModuleType, original: bytes
@@ -391,6 +399,11 @@ class TestRepairScript:
     ) -> None:
         with pytest.raises(repair.RepairError, match="not the 2020 file"):
             repair.repair(original + b"\n")
+
+
+def _blob_hash(data: bytes) -> str:
+    """Git's blob hash, computed here rather than borrowed from the script."""
+    return hashlib.sha1(b"blob %d\0" % len(data) + data).hexdigest()
 
 
 def _moved(transformer: Transformer, xy: Any) -> Any:

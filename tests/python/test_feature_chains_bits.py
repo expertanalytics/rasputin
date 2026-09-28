@@ -10,9 +10,9 @@ of the map masks of every feature whose **source** boundary, moved by pyproj
 directly, lies along it within the snap. It never reads the clip's output, the
 chains, or the noder's provenance.
 
-**Mutation testing is required here** (README, "Cost constraints"). Mutants
-killed against a scratch implementation that is not committed, each named at
-the test that kills it (`MUTANT n`):
+**Mutation testing is required here** (README, "Cost constraints"). The
+mutants below were run against the real code by @reviewer on 2026-09-28, at
+`0ccd185`; each is named at the test that is meant to kill it (`MUTANT n`):
 
 1. area clipping instead of line clipping (the domain boundary gets bits);
 2. a doubled shared edge keeping only one side's bit (a Python-side merge
@@ -22,6 +22,12 @@ the test that kills it (`MUTANT n`):
 4. read order not by primary key (the `ORDER BY` dropped);
 5. a clipped ring closed by repeating its first index;
 6. holes' rings dropped.
+
+Result: 1, 2, 4, 5, 6 and the `52x` half of 3 were killed by this suite. The
+`511 missing` half of 3 survived this suite (the CORINE extract has no `511`
+row) and was killed by `test_feature_input.py::TestClassMaps`
+(`test_corine_water_codes_are_land_cover_and_water`, parametrised over the
+water codes).
 
 Pinned by this suite (with `test_feature_input.py`; see "Pinned by the red
 suite (16b-1/2)"):
@@ -37,8 +43,10 @@ suite (16b-1/2)"):
 - `TerrainFeature` has `fid`, `mask` and `lines` (shapely `LineString`s in the
   DEM's CRS, clipped).
 
-HOW THIS FILE GOES RED: `tin_engine.feature_input` and `tin_engine.chains` are
-imported lazily (`feature_fixtures`), so each test fails on its own.
+Committed red at `e99c8ea`: `tin_engine.feature_input` and `tin_engine.chains`
+did not exist yet, and because `feature_fixtures` imports them lazily each test
+failed on its own rather than aborting collection. Both modules landed in
+`5079da8` and the suite has been green since.
 """
 
 from __future__ import annotations
