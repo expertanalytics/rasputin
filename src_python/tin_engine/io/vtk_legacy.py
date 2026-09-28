@@ -17,7 +17,9 @@ opposite.
 file and in every cell array, and every cell array covers every cell, with 0
 on triangles. VTK orders cells lines-first whatever the file says and matches
 cell data by that index, so any other order gives values to the wrong cells in
-silence; an array short of the cell count empties the dataset.
+silence; an array short of the cell count empties the dataset. With no
+constraint edges the `LINES` block is left out (ruling 4 as revised on
+2026-09-28): vtk 9.7.1 rejects `LINES 0 0`, and a file without the block loads.
 
 *Ruling 6*: the vocabulary travels as a `(bit, name)` table and a fingerprint
 in the dataset's `FieldData`, and each property set on at least one edge gets
@@ -112,7 +114,8 @@ def write_vtk(
         *dataset,
         f"POINTS {len(points)} double\n".encode("ascii"),
         _body(points, "double", binary),
-        _cells("LINES", lines, binary),
+        # Ruling 4 as revised: vtk 9.7.1 rejects `LINES 0 0`, so no edges, no block.
+        *([_cells("LINES", lines, binary)] if len(lines) else []),
         _cells("POLYGONS", polygons, binary),
         # z again, as a point array: Color By -> elevation then shows the heights.
         f"POINT_DATA {len(points)}\n".encode("ascii"),
