@@ -1,0 +1,337 @@
+### sq-t1-none-q25 r1 00:01:29 | Battery Power
+$ rasputin mesh --dem /Users/skavhaug/projects/rasputin_data/DTM10_UTM33_20260925/6603_4_10m_z33.tif --domain docs/benchmarks/2026-09-28/16b12-acceptance/catchment/square48_25833.geojson --tolerance 1
+exit 0
+0 start quality nodes inserted, 0 start quality skips, 0 constraint feet, 0 feet refused, 61 rounds, 3292582 points inserted, 7657458 flips, 6581348 triangles, achieved max error 1 m, 0 valid DEM nodes not covered, 2 start triangles, 0 start vertices off-node, 0 vertices without data dropped
+          3318300672  maximum resident set size
+| vertices without data dropped | 0 |
+| tolerance | achieved max error | rounds | inserted | carved | flips | uncovered | quality inserted | quality skipped | feet |
+| 1 m | 1 m | 61 | 3292582 | 0 | 7657458 | 0 | 0 | 0 | 0 |
+VTK read: 3292586 points, 6581348 triangles, 3822 lines, z bounds 119.28..576.11
+field feature_bits: 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7
+field feature_names: river | road | railway | coastline | contour | wall | ditch | land_cover
+field feature_vocabulary: f26769f015fd54ff7c0b49922a9eba48c28c2596b0a1f152b519658010b22c61
+field crs: EPSG:25833
+field elevation_source: refined from DEM nodes, constrained Delaunay, tolerance 1 m, achieved max error 1 m, start domain boundary, boundary z bilinear, start min angle 25 deg, constraint feet on, 0 valid DEM nodes not covered, 0 vertices without data dropped, vertical unit assumed metres
+field domain: square48_25833.geojson, 1 ring 0 holes, 4 vertices
+field domain_crs: EPSG:25833
+field domain_transform: none
+cell arrays: feature_mask
+constraint edges 3822: land_cover 0, water 0, water without land_cover 0, mask 0 3822
+cell array land_cover: absent
+cell array water: absent
+### sq-t1-none-q0 r1 00:01:54 | Battery Power
+$ rasputin mesh --dem /Users/skavhaug/projects/rasputin_data/DTM10_UTM33_20260925/6603_4_10m_z33.tif --domain docs/benchmarks/2026-09-28/16b12-acceptance/catchment/square48_25833.geojson --tolerance 1 --start-min-angle 0
+exit 0
+0 start quality nodes inserted, 0 start quality skips, 0 constraint feet, 0 feet refused, 61 rounds, 3292582 points inserted, 7657458 flips, 6581348 triangles, achieved max error 1 m, 0 valid DEM nodes not covered, 2 start triangles, 0 start vertices off-node, 0 vertices without data dropped
+          2949431296  maximum resident set size
+| vertices without data dropped | 0 |
+| tolerance | achieved max error | rounds | inserted | carved | flips | uncovered | quality inserted | quality skipped | feet |
+| 1 m | 1 m | 61 | 3292582 | 0 | 7657458 | 0 | 0 | 0 | 0 |
+VTK read: 3292586 points, 6581348 triangles, 3822 lines, z bounds 119.28..576.11
+field feature_bits: 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7
+field feature_names: river | road | railway | coastline | contour | wall | ditch | land_cover
+field feature_vocabulary: f26769f015fd54ff7c0b49922a9eba48c28c2596b0a1f152b519658010b22c61
+field crs: EPSG:25833
+field elevation_source: refined from DEM nodes, constrained Delaunay, tolerance 1 m, achieved max error 1 m, start domain boundary, boundary z bilinear, start quality off, constraint feet on, 0 valid DEM nodes not covered, 0 vertices without data dropped, vertical unit assumed metres
+field domain: square48_25833.geojson, 1 ring 0 holes, 4 vertices
+field domain_crs: EPSG:25833
+field domain_transform: none
+cell arrays: feature_mask
+constraint edges 3822: land_cover 0, water 0, water without land_cover 0, mask 0 3822
+cell array land_cover: absent
+cell array water: absent
+### sq-t1-eu-q25 r1 00:02:18 | Battery Power
+$ rasputin mesh --dem /Users/skavhaug/projects/rasputin_data/DTM10_UTM33_20260925/6603_4_10m_z33.tif --domain docs/benchmarks/2026-09-28/16b12-acceptance/catchment/square48_25833.geojson --tolerance 1 --features /Users/skavhaug/projects/rasputin_data/corine_sql/u2018_clc2018_v2020_20u1_geoPackage/DATA/U2018_CLC2018_V2020_20u1.gpkg --features-layer U2018_CLC2018_V2020_20u1 --features-map corine
+exit 0
+662 features kept, 451 dropped outside, 69 clipped, 0 empty skipped
+103420 input vertices, 51395 noded vertices
+154573 start quality nodes inserted, 51555 start quality skips, 30311 constraint feet, 0 feet refused, 30 rounds, 3172537 points inserted, 7127927 flips, 6753084 triangles, achieved max error 1 m, 0 valid DEM nodes not covered, 102627 start triangles, 51391 start vertices off-node, 0 vertices without data dropped
+          3057221632  maximum resident set size
+| vertices without data dropped | 0 |
+| tolerance | achieved max error | rounds | inserted | carved | flips | uncovered | quality inserted | quality skipped | feet |
+| 1 m | 1 m | 30 | 3172537 | 0 | 7127927 | 0 | 154573 | 51555 | 30311 |
+VTK read: 3378505 points, 6753084 triangles, 85862 lines, z bounds 119.28..576.11
+field feature_bits: 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7
+field feature_names: river | road | railway | coastline | contour | wall | ditch | land_cover
+field feature_vocabulary: f26769f015fd54ff7c0b49922a9eba48c28c2596b0a1f152b519658010b22c61
+field crs: EPSG:25833
+field elevation_source: refined from DEM nodes, constrained Delaunay, tolerance 1 m, achieved max error 1 m, start domain boundary and features, vertex z bilinear, start min angle 25 deg, constraint feet on, 0 valid DEM nodes not covered, 0 vertices without data dropped, vertical unit assumed metres
+field domain: square48_25833.geojson, 1 ring 0 holes, 4 vertices
+field domain_crs: EPSG:25833
+field domain_transform: none
+field features: U2018_CLC2018_V2020_20u1.gpkg:U2018_CLC2018_V2020_20u1, map corine, 662 features, 1055 chains, 103416 vertices
+field features_crs: EPSG:3035
+field features_transform: Inverse of Europe Equal Area 2001 + UTM zone 33N (with axis order normalized for visualization)
+field features_notice: Contains modified CORINE Land Cover 2018 data (version 2020_20u1), (c) European Union, Copernicus Land Monitoring Service 2018, European Environment Agency (EEA): clipped and re-encoded, produced with funding by the European Union, not endorsed by the EU
+cell arrays: feature_mask, land_cover, water
+constraint edges 85862: land_cover 81938, water 12155, water without land_cover 0, mask 0 3924
+cell array land_cover: sum over lines 81938
+cell array water: sum over lines 12155
+### sq-t1-eu-q0 r1 00:03:19 | Battery Power
+$ rasputin mesh --dem /Users/skavhaug/projects/rasputin_data/DTM10_UTM33_20260925/6603_4_10m_z33.tif --domain docs/benchmarks/2026-09-28/16b12-acceptance/catchment/square48_25833.geojson --tolerance 1 --start-min-angle 0 --features /Users/skavhaug/projects/rasputin_data/corine_sql/u2018_clc2018_v2020_20u1_geoPackage/DATA/U2018_CLC2018_V2020_20u1.gpkg --features-layer U2018_CLC2018_V2020_20u1 --features-map corine
+exit 0
+662 features kept, 451 dropped outside, 69 clipped, 0 empty skipped
+103420 input vertices, 51395 noded vertices
+0 start quality nodes inserted, 0 start quality skips, 31986 constraint feet, 0 feet refused, 38 rounds, 3278487 points inserted, 7689701 flips, 6655874 triangles, achieved max error 1 m, 0 valid DEM nodes not covered, 102627 start triangles, 51391 start vertices off-node, 0 vertices without data dropped
+          3058302976  maximum resident set size
+| vertices without data dropped | 0 |
+| tolerance | achieved max error | rounds | inserted | carved | flips | uncovered | quality inserted | quality skipped | feet |
+| 1 m | 1 m | 38 | 3278487 | 0 | 7689701 | 0 | 0 | 0 | 31986 |
+VTK read: 3329882 points, 6655874 triangles, 87501 lines, z bounds 119.28..576.11
+field feature_bits: 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7
+field feature_names: river | road | railway | coastline | contour | wall | ditch | land_cover
+field feature_vocabulary: f26769f015fd54ff7c0b49922a9eba48c28c2596b0a1f152b519658010b22c61
+field crs: EPSG:25833
+field elevation_source: refined from DEM nodes, constrained Delaunay, tolerance 1 m, achieved max error 1 m, start domain boundary and features, vertex z bilinear, start quality off, constraint feet on, 0 valid DEM nodes not covered, 0 vertices without data dropped, vertical unit assumed metres
+field domain: square48_25833.geojson, 1 ring 0 holes, 4 vertices
+field domain_crs: EPSG:25833
+field domain_transform: none
+field features: U2018_CLC2018_V2020_20u1.gpkg:U2018_CLC2018_V2020_20u1, map corine, 662 features, 1055 chains, 103416 vertices
+field features_crs: EPSG:3035
+field features_transform: Inverse of Europe Equal Area 2001 + UTM zone 33N (with axis order normalized for visualization)
+field features_notice: Contains modified CORINE Land Cover 2018 data (version 2020_20u1), (c) European Union, Copernicus Land Monitoring Service 2018, European Environment Agency (EEA): clipped and re-encoded, produced with funding by the European Union, not endorsed by the EU
+cell arrays: feature_mask, land_cover, water
+constraint edges 87501: land_cover 83613, water 12269, water without land_cover 0, mask 0 3888
+cell array land_cover: sum over lines 83613
+cell array water: sum over lines 12269
+### sq-t10-none-q25 r1 00:04:16 | Battery Power
+$ rasputin mesh --dem /Users/skavhaug/projects/rasputin_data/DTM10_UTM33_20260925/6603_4_10m_z33.tif --domain docs/benchmarks/2026-09-28/16b12-acceptance/catchment/square48_25833.geojson --tolerance 10
+exit 0
+0 start quality nodes inserted, 0 start quality skips, 0 constraint feet, 0 feet refused, 52 rounds, 66928 points inserted, 186432 flips, 133379 triangles, achieved max error 9.999497794833673 m, 0 valid DEM nodes not covered, 2 start triangles, 0 start vertices off-node, 0 vertices without data dropped
+           570589184  maximum resident set size
+| vertices without data dropped | 0 |
+| tolerance | achieved max error | rounds | inserted | carved | flips | uncovered | quality inserted | quality skipped | feet |
+| 10 m | 9.999497794833673 m | 52 | 66928 | 0 | 186432 | 0 | 0 | 0 | 0 |
+VTK read: 66932 points, 133379 triangles, 483 lines, z bounds 119.30..575.80
+field feature_bits: 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7
+field feature_names: river | road | railway | coastline | contour | wall | ditch | land_cover
+field feature_vocabulary: f26769f015fd54ff7c0b49922a9eba48c28c2596b0a1f152b519658010b22c61
+field crs: EPSG:25833
+field elevation_source: refined from DEM nodes, constrained Delaunay, tolerance 10 m, achieved max error 9.999497794833673 m, start domain boundary, boundary z bilinear, start min angle 25 deg, constraint feet on, 0 valid DEM nodes not covered, 0 vertices without data dropped, vertical unit assumed metres
+field domain: square48_25833.geojson, 1 ring 0 holes, 4 vertices
+field domain_crs: EPSG:25833
+field domain_transform: none
+cell arrays: feature_mask
+constraint edges 483: land_cover 0, water 0, water without land_cover 0, mask 0 483
+cell array land_cover: absent
+cell array water: absent
+### sq-t10-none-q0 r1 00:04:19 | Battery Power
+$ rasputin mesh --dem /Users/skavhaug/projects/rasputin_data/DTM10_UTM33_20260925/6603_4_10m_z33.tif --domain docs/benchmarks/2026-09-28/16b12-acceptance/catchment/square48_25833.geojson --tolerance 10 --start-min-angle 0
+exit 0
+0 start quality nodes inserted, 0 start quality skips, 0 constraint feet, 0 feet refused, 52 rounds, 66928 points inserted, 186432 flips, 133379 triangles, achieved max error 9.999497794833673 m, 0 valid DEM nodes not covered, 2 start triangles, 0 start vertices off-node, 0 vertices without data dropped
+           565133312  maximum resident set size
+| vertices without data dropped | 0 |
+| tolerance | achieved max error | rounds | inserted | carved | flips | uncovered | quality inserted | quality skipped | feet |
+| 10 m | 9.999497794833673 m | 52 | 66928 | 0 | 186432 | 0 | 0 | 0 | 0 |
+VTK read: 66932 points, 133379 triangles, 483 lines, z bounds 119.30..575.80
+field feature_bits: 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7
+field feature_names: river | road | railway | coastline | contour | wall | ditch | land_cover
+field feature_vocabulary: f26769f015fd54ff7c0b49922a9eba48c28c2596b0a1f152b519658010b22c61
+field crs: EPSG:25833
+field elevation_source: refined from DEM nodes, constrained Delaunay, tolerance 10 m, achieved max error 9.999497794833673 m, start domain boundary, boundary z bilinear, start quality off, constraint feet on, 0 valid DEM nodes not covered, 0 vertices without data dropped, vertical unit assumed metres
+field domain: square48_25833.geojson, 1 ring 0 holes, 4 vertices
+field domain_crs: EPSG:25833
+field domain_transform: none
+cell arrays: feature_mask
+constraint edges 483: land_cover 0, water 0, water without land_cover 0, mask 0 483
+cell array land_cover: absent
+cell array water: absent
+### sq-t10-eu-q25 r1 00:04:21 | Battery Power
+$ rasputin mesh --dem /Users/skavhaug/projects/rasputin_data/DTM10_UTM33_20260925/6603_4_10m_z33.tif --domain docs/benchmarks/2026-09-28/16b12-acceptance/catchment/square48_25833.geojson --tolerance 10 --features /Users/skavhaug/projects/rasputin_data/corine_sql/u2018_clc2018_v2020_20u1_geoPackage/DATA/U2018_CLC2018_V2020_20u1.gpkg --features-layer U2018_CLC2018_V2020_20u1 --features-map corine
+exit 0
+662 features kept, 451 dropped outside, 69 clipped, 0 empty skipped
+103420 input vertices, 51395 noded vertices
+154573 start quality nodes inserted, 51555 start quality skips, 350 constraint feet, 0 feet refused, 17 rounds, 34801 points inserted, 86893 flips, 480941 triangles, achieved max error 9.999960550447781 m, 0 valid DEM nodes not covered, 102627 start triangles, 51391 start vertices off-node, 0 vertices without data dropped
+           597983232  maximum resident set size
+| vertices without data dropped | 0 |
+| tolerance | achieved max error | rounds | inserted | carved | flips | uncovered | quality inserted | quality skipped | feet |
+| 10 m | 9.999960550447781 m | 17 | 34801 | 0 | 86893 | 0 | 154573 | 51555 | 350 |
+VTK read: 240769 points, 480941 triangles, 52572 lines, z bounds 119.32..574.72
+field feature_bits: 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7
+field feature_names: river | road | railway | coastline | contour | wall | ditch | land_cover
+field feature_vocabulary: f26769f015fd54ff7c0b49922a9eba48c28c2596b0a1f152b519658010b22c61
+field crs: EPSG:25833
+field elevation_source: refined from DEM nodes, constrained Delaunay, tolerance 10 m, achieved max error 9.999960550447781 m, start domain boundary and features, vertex z bilinear, start min angle 25 deg, constraint feet on, 0 valid DEM nodes not covered, 0 vertices without data dropped, vertical unit assumed metres
+field domain: square48_25833.geojson, 1 ring 0 holes, 4 vertices
+field domain_crs: EPSG:25833
+field domain_transform: none
+field features: U2018_CLC2018_V2020_20u1.gpkg:U2018_CLC2018_V2020_20u1, map corine, 662 features, 1055 chains, 103416 vertices
+field features_crs: EPSG:3035
+field features_transform: Inverse of Europe Equal Area 2001 + UTM zone 33N (with axis order normalized for visualization)
+field features_notice: Contains modified CORINE Land Cover 2018 data (version 2020_20u1), (c) European Union, Copernicus Land Monitoring Service 2018, European Environment Agency (EEA): clipped and re-encoded, produced with funding by the European Union, not endorsed by the EU
+cell arrays: feature_mask, land_cover, water
+constraint edges 52572: land_cover 51977, water 9940, water without land_cover 0, mask 0 595
+cell array land_cover: sum over lines 51977
+cell array water: sum over lines 9940
+### sq-t10-eu-q0 r1 00:04:52 | Battery Power
+$ rasputin mesh --dem /Users/skavhaug/projects/rasputin_data/DTM10_UTM33_20260925/6603_4_10m_z33.tif --domain docs/benchmarks/2026-09-28/16b12-acceptance/catchment/square48_25833.geojson --tolerance 10 --start-min-angle 0 --features /Users/skavhaug/projects/rasputin_data/corine_sql/u2018_clc2018_v2020_20u1_geoPackage/DATA/U2018_CLC2018_V2020_20u1.gpkg --features-layer U2018_CLC2018_V2020_20u1 --features-map corine
+exit 0
+662 features kept, 451 dropped outside, 69 clipped, 0 empty skipped
+103420 input vertices, 51395 noded vertices
+0 start quality nodes inserted, 0 start quality skips, 359 constraint feet, 0 feet refused, 23 rounds, 55006 points inserted, 192561 flips, 212255 triangles, achieved max error 9.999949490582509 m, 0 valid DEM nodes not covered, 102627 start triangles, 51391 start vertices off-node, 0 vertices without data dropped
+           517308416  maximum resident set size
+| vertices without data dropped | 0 |
+| tolerance | achieved max error | rounds | inserted | carved | flips | uncovered | quality inserted | quality skipped | feet |
+| 10 m | 9.999949490582509 m | 23 | 55006 | 0 | 192561 | 0 | 0 | 0 | 359 |
+VTK read: 106401 points, 212255 triangles, 52531 lines, z bounds 119.37..574.72
+field feature_bits: 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7
+field feature_names: river | road | railway | coastline | contour | wall | ditch | land_cover
+field feature_vocabulary: f26769f015fd54ff7c0b49922a9eba48c28c2596b0a1f152b519658010b22c61
+field crs: EPSG:25833
+field elevation_source: refined from DEM nodes, constrained Delaunay, tolerance 10 m, achieved max error 9.999949490582509 m, start domain boundary and features, vertex z bilinear, start quality off, constraint feet on, 0 valid DEM nodes not covered, 0 vertices without data dropped, vertical unit assumed metres
+field domain: square48_25833.geojson, 1 ring 0 holes, 4 vertices
+field domain_crs: EPSG:25833
+field domain_transform: none
+field features: U2018_CLC2018_V2020_20u1.gpkg:U2018_CLC2018_V2020_20u1, map corine, 662 features, 1055 chains, 103416 vertices
+field features_crs: EPSG:3035
+field features_transform: Inverse of Europe Equal Area 2001 + UTM zone 33N (with axis order normalized for visualization)
+field features_notice: Contains modified CORINE Land Cover 2018 data (version 2020_20u1), (c) European Union, Copernicus Land Monitoring Service 2018, European Environment Agency (EEA): clipped and re-encoded, produced with funding by the European Union, not endorsed by the EU
+cell arrays: feature_mask, land_cover, water
+constraint edges 52531: land_cover 51986, water 9938, water without land_cover 0, mask 0 545
+cell array land_cover: sum over lines 51986
+cell array water: sum over lines 9938
+### sq-t1-none-q25 r2 00:05:22 | Battery Power
+$ rasputin mesh --dem /Users/skavhaug/projects/rasputin_data/DTM10_UTM33_20260925/6603_4_10m_z33.tif --domain docs/benchmarks/2026-09-28/16b12-acceptance/catchment/square48_25833.geojson --tolerance 1
+exit 0
+0 start quality nodes inserted, 0 start quality skips, 0 constraint feet, 0 feet refused, 61 rounds, 3292582 points inserted, 7657458 flips, 6581348 triangles, achieved max error 1 m, 0 valid DEM nodes not covered, 2 start triangles, 0 start vertices off-node, 0 vertices without data dropped
+          3073802240  maximum resident set size
+| vertices without data dropped | 0 |
+| tolerance | achieved max error | rounds | inserted | carved | flips | uncovered | quality inserted | quality skipped | feet |
+| 1 m | 1 m | 61 | 3292582 | 0 | 7657458 | 0 | 0 | 0 | 0 |
+### sq-t1-none-q0 r2 00:05:42 | Battery Power
+$ rasputin mesh --dem /Users/skavhaug/projects/rasputin_data/DTM10_UTM33_20260925/6603_4_10m_z33.tif --domain docs/benchmarks/2026-09-28/16b12-acceptance/catchment/square48_25833.geojson --tolerance 1 --start-min-angle 0
+exit 0
+0 start quality nodes inserted, 0 start quality skips, 0 constraint feet, 0 feet refused, 61 rounds, 3292582 points inserted, 7657458 flips, 6581348 triangles, achieved max error 1 m, 0 valid DEM nodes not covered, 2 start triangles, 0 start vertices off-node, 0 vertices without data dropped
+          3151790080  maximum resident set size
+| vertices without data dropped | 0 |
+| tolerance | achieved max error | rounds | inserted | carved | flips | uncovered | quality inserted | quality skipped | feet |
+| 1 m | 1 m | 61 | 3292582 | 0 | 7657458 | 0 | 0 | 0 | 0 |
+### sq-t1-eu-q25 r2 00:06:00 | Battery Power
+$ rasputin mesh --dem /Users/skavhaug/projects/rasputin_data/DTM10_UTM33_20260925/6603_4_10m_z33.tif --domain docs/benchmarks/2026-09-28/16b12-acceptance/catchment/square48_25833.geojson --tolerance 1 --features /Users/skavhaug/projects/rasputin_data/corine_sql/u2018_clc2018_v2020_20u1_geoPackage/DATA/U2018_CLC2018_V2020_20u1.gpkg --features-layer U2018_CLC2018_V2020_20u1 --features-map corine
+exit 0
+662 features kept, 451 dropped outside, 69 clipped, 0 empty skipped
+103420 input vertices, 51395 noded vertices
+154573 start quality nodes inserted, 51555 start quality skips, 30311 constraint feet, 0 feet refused, 30 rounds, 3172537 points inserted, 7127927 flips, 6753084 triangles, achieved max error 1 m, 0 valid DEM nodes not covered, 102627 start triangles, 51391 start vertices off-node, 0 vertices without data dropped
+          3129278464  maximum resident set size
+| vertices without data dropped | 0 |
+| tolerance | achieved max error | rounds | inserted | carved | flips | uncovered | quality inserted | quality skipped | feet |
+| 1 m | 1 m | 30 | 3172537 | 0 | 7127927 | 0 | 154573 | 51555 | 30311 |
+### sq-t1-eu-q0 r2 00:06:50 | Battery Power
+$ rasputin mesh --dem /Users/skavhaug/projects/rasputin_data/DTM10_UTM33_20260925/6603_4_10m_z33.tif --domain docs/benchmarks/2026-09-28/16b12-acceptance/catchment/square48_25833.geojson --tolerance 1 --start-min-angle 0 --features /Users/skavhaug/projects/rasputin_data/corine_sql/u2018_clc2018_v2020_20u1_geoPackage/DATA/U2018_CLC2018_V2020_20u1.gpkg --features-layer U2018_CLC2018_V2020_20u1 --features-map corine
+exit 0
+662 features kept, 451 dropped outside, 69 clipped, 0 empty skipped
+103420 input vertices, 51395 noded vertices
+0 start quality nodes inserted, 0 start quality skips, 31986 constraint feet, 0 feet refused, 38 rounds, 3278487 points inserted, 7689701 flips, 6655874 triangles, achieved max error 1 m, 0 valid DEM nodes not covered, 102627 start triangles, 51391 start vertices off-node, 0 vertices without data dropped
+          2877227008  maximum resident set size
+| vertices without data dropped | 0 |
+| tolerance | achieved max error | rounds | inserted | carved | flips | uncovered | quality inserted | quality skipped | feet |
+| 1 m | 1 m | 38 | 3278487 | 0 | 7689701 | 0 | 0 | 0 | 31986 |
+### sq-t10-none-q25 r2 00:07:40 | Battery Power
+$ rasputin mesh --dem /Users/skavhaug/projects/rasputin_data/DTM10_UTM33_20260925/6603_4_10m_z33.tif --domain docs/benchmarks/2026-09-28/16b12-acceptance/catchment/square48_25833.geojson --tolerance 10
+exit 0
+0 start quality nodes inserted, 0 start quality skips, 0 constraint feet, 0 feet refused, 52 rounds, 66928 points inserted, 186432 flips, 133379 triangles, achieved max error 9.999497794833673 m, 0 valid DEM nodes not covered, 2 start triangles, 0 start vertices off-node, 0 vertices without data dropped
+           569049088  maximum resident set size
+| vertices without data dropped | 0 |
+| tolerance | achieved max error | rounds | inserted | carved | flips | uncovered | quality inserted | quality skipped | feet |
+| 10 m | 9.999497794833673 m | 52 | 66928 | 0 | 186432 | 0 | 0 | 0 | 0 |
+### sq-t10-none-q0 r2 00:07:41 | Battery Power
+$ rasputin mesh --dem /Users/skavhaug/projects/rasputin_data/DTM10_UTM33_20260925/6603_4_10m_z33.tif --domain docs/benchmarks/2026-09-28/16b12-acceptance/catchment/square48_25833.geojson --tolerance 10 --start-min-angle 0
+exit 0
+0 start quality nodes inserted, 0 start quality skips, 0 constraint feet, 0 feet refused, 52 rounds, 66928 points inserted, 186432 flips, 133379 triangles, achieved max error 9.999497794833673 m, 0 valid DEM nodes not covered, 2 start triangles, 0 start vertices off-node, 0 vertices without data dropped
+           565690368  maximum resident set size
+| vertices without data dropped | 0 |
+| tolerance | achieved max error | rounds | inserted | carved | flips | uncovered | quality inserted | quality skipped | feet |
+| 10 m | 9.999497794833673 m | 52 | 66928 | 0 | 186432 | 0 | 0 | 0 | 0 |
+### sq-t10-eu-q25 r2 00:07:42 | Battery Power
+$ rasputin mesh --dem /Users/skavhaug/projects/rasputin_data/DTM10_UTM33_20260925/6603_4_10m_z33.tif --domain docs/benchmarks/2026-09-28/16b12-acceptance/catchment/square48_25833.geojson --tolerance 10 --features /Users/skavhaug/projects/rasputin_data/corine_sql/u2018_clc2018_v2020_20u1_geoPackage/DATA/U2018_CLC2018_V2020_20u1.gpkg --features-layer U2018_CLC2018_V2020_20u1 --features-map corine
+exit 0
+662 features kept, 451 dropped outside, 69 clipped, 0 empty skipped
+103420 input vertices, 51395 noded vertices
+154573 start quality nodes inserted, 51555 start quality skips, 350 constraint feet, 0 feet refused, 17 rounds, 34801 points inserted, 86893 flips, 480941 triangles, achieved max error 9.999960550447781 m, 0 valid DEM nodes not covered, 102627 start triangles, 51391 start vertices off-node, 0 vertices without data dropped
+           570130432  maximum resident set size
+| vertices without data dropped | 0 |
+| tolerance | achieved max error | rounds | inserted | carved | flips | uncovered | quality inserted | quality skipped | feet |
+| 10 m | 9.999960550447781 m | 17 | 34801 | 0 | 86893 | 0 | 154573 | 51555 | 350 |
+### sq-t10-eu-q0 r2 00:08:11 | Battery Power
+$ rasputin mesh --dem /Users/skavhaug/projects/rasputin_data/DTM10_UTM33_20260925/6603_4_10m_z33.tif --domain docs/benchmarks/2026-09-28/16b12-acceptance/catchment/square48_25833.geojson --tolerance 10 --start-min-angle 0 --features /Users/skavhaug/projects/rasputin_data/corine_sql/u2018_clc2018_v2020_20u1_geoPackage/DATA/U2018_CLC2018_V2020_20u1.gpkg --features-layer U2018_CLC2018_V2020_20u1 --features-map corine
+exit 0
+662 features kept, 451 dropped outside, 69 clipped, 0 empty skipped
+103420 input vertices, 51395 noded vertices
+0 start quality nodes inserted, 0 start quality skips, 359 constraint feet, 0 feet refused, 23 rounds, 55006 points inserted, 192561 flips, 212255 triangles, achieved max error 9.999949490582509 m, 0 valid DEM nodes not covered, 102627 start triangles, 51391 start vertices off-node, 0 vertices without data dropped
+           520372224  maximum resident set size
+| vertices without data dropped | 0 |
+| tolerance | achieved max error | rounds | inserted | carved | flips | uncovered | quality inserted | quality skipped | feet |
+| 10 m | 9.999949490582509 m | 23 | 55006 | 0 | 192561 | 0 | 0 | 0 | 359 |
+### sq-t1-none-q25 r3 00:08:36 | Battery Power
+$ rasputin mesh --dem /Users/skavhaug/projects/rasputin_data/DTM10_UTM33_20260925/6603_4_10m_z33.tif --domain docs/benchmarks/2026-09-28/16b12-acceptance/catchment/square48_25833.geojson --tolerance 1
+exit 0
+0 start quality nodes inserted, 0 start quality skips, 0 constraint feet, 0 feet refused, 61 rounds, 3292582 points inserted, 7657458 flips, 6581348 triangles, achieved max error 1 m, 0 valid DEM nodes not covered, 2 start triangles, 0 start vertices off-node, 0 vertices without data dropped
+          2901229568  maximum resident set size
+| vertices without data dropped | 0 |
+| tolerance | achieved max error | rounds | inserted | carved | flips | uncovered | quality inserted | quality skipped | feet |
+| 1 m | 1 m | 61 | 3292582 | 0 | 7657458 | 0 | 0 | 0 | 0 |
+### sq-t1-none-q0 r3 00:08:54 | Battery Power
+$ rasputin mesh --dem /Users/skavhaug/projects/rasputin_data/DTM10_UTM33_20260925/6603_4_10m_z33.tif --domain docs/benchmarks/2026-09-28/16b12-acceptance/catchment/square48_25833.geojson --tolerance 1 --start-min-angle 0
+exit 0
+0 start quality nodes inserted, 0 start quality skips, 0 constraint feet, 0 feet refused, 61 rounds, 3292582 points inserted, 7657458 flips, 6581348 triangles, achieved max error 1 m, 0 valid DEM nodes not covered, 2 start triangles, 0 start vertices off-node, 0 vertices without data dropped
+          3026796544  maximum resident set size
+| vertices without data dropped | 0 |
+| tolerance | achieved max error | rounds | inserted | carved | flips | uncovered | quality inserted | quality skipped | feet |
+| 1 m | 1 m | 61 | 3292582 | 0 | 7657458 | 0 | 0 | 0 | 0 |
+### sq-t1-eu-q25 r3 00:09:13 | Battery Power
+$ rasputin mesh --dem /Users/skavhaug/projects/rasputin_data/DTM10_UTM33_20260925/6603_4_10m_z33.tif --domain docs/benchmarks/2026-09-28/16b12-acceptance/catchment/square48_25833.geojson --tolerance 1 --features /Users/skavhaug/projects/rasputin_data/corine_sql/u2018_clc2018_v2020_20u1_geoPackage/DATA/U2018_CLC2018_V2020_20u1.gpkg --features-layer U2018_CLC2018_V2020_20u1 --features-map corine
+exit 0
+662 features kept, 451 dropped outside, 69 clipped, 0 empty skipped
+103420 input vertices, 51395 noded vertices
+154573 start quality nodes inserted, 51555 start quality skips, 30311 constraint feet, 0 feet refused, 30 rounds, 3172537 points inserted, 7127927 flips, 6753084 triangles, achieved max error 1 m, 0 valid DEM nodes not covered, 102627 start triangles, 51391 start vertices off-node, 0 vertices without data dropped
+          2946039808  maximum resident set size
+| vertices without data dropped | 0 |
+| tolerance | achieved max error | rounds | inserted | carved | flips | uncovered | quality inserted | quality skipped | feet |
+| 1 m | 1 m | 30 | 3172537 | 0 | 7127927 | 0 | 154573 | 51555 | 30311 |
+### sq-t1-eu-q0 r3 00:10:02 | Battery Power
+$ rasputin mesh --dem /Users/skavhaug/projects/rasputin_data/DTM10_UTM33_20260925/6603_4_10m_z33.tif --domain docs/benchmarks/2026-09-28/16b12-acceptance/catchment/square48_25833.geojson --tolerance 1 --start-min-angle 0 --features /Users/skavhaug/projects/rasputin_data/corine_sql/u2018_clc2018_v2020_20u1_geoPackage/DATA/U2018_CLC2018_V2020_20u1.gpkg --features-layer U2018_CLC2018_V2020_20u1 --features-map corine
+exit 0
+662 features kept, 451 dropped outside, 69 clipped, 0 empty skipped
+103420 input vertices, 51395 noded vertices
+0 start quality nodes inserted, 0 start quality skips, 31986 constraint feet, 0 feet refused, 38 rounds, 3278487 points inserted, 7689701 flips, 6655874 triangles, achieved max error 1 m, 0 valid DEM nodes not covered, 102627 start triangles, 51391 start vertices off-node, 0 vertices without data dropped
+          2854338560  maximum resident set size
+| vertices without data dropped | 0 |
+| tolerance | achieved max error | rounds | inserted | carved | flips | uncovered | quality inserted | quality skipped | feet |
+| 1 m | 1 m | 38 | 3278487 | 0 | 7689701 | 0 | 0 | 0 | 31986 |
+### sq-t10-none-q25 r3 00:10:52 | Battery Power
+$ rasputin mesh --dem /Users/skavhaug/projects/rasputin_data/DTM10_UTM33_20260925/6603_4_10m_z33.tif --domain docs/benchmarks/2026-09-28/16b12-acceptance/catchment/square48_25833.geojson --tolerance 10
+exit 0
+0 start quality nodes inserted, 0 start quality skips, 0 constraint feet, 0 feet refused, 52 rounds, 66928 points inserted, 186432 flips, 133379 triangles, achieved max error 9.999497794833673 m, 0 valid DEM nodes not covered, 2 start triangles, 0 start vertices off-node, 0 vertices without data dropped
+           566050816  maximum resident set size
+| vertices without data dropped | 0 |
+| tolerance | achieved max error | rounds | inserted | carved | flips | uncovered | quality inserted | quality skipped | feet |
+| 10 m | 9.999497794833673 m | 52 | 66928 | 0 | 186432 | 0 | 0 | 0 | 0 |
+### sq-t10-none-q0 r3 00:10:53 | Battery Power
+$ rasputin mesh --dem /Users/skavhaug/projects/rasputin_data/DTM10_UTM33_20260925/6603_4_10m_z33.tif --domain docs/benchmarks/2026-09-28/16b12-acceptance/catchment/square48_25833.geojson --tolerance 10 --start-min-angle 0
+exit 0
+0 start quality nodes inserted, 0 start quality skips, 0 constraint feet, 0 feet refused, 52 rounds, 66928 points inserted, 186432 flips, 133379 triangles, achieved max error 9.999497794833673 m, 0 valid DEM nodes not covered, 2 start triangles, 0 start vertices off-node, 0 vertices without data dropped
+           565968896  maximum resident set size
+| vertices without data dropped | 0 |
+| tolerance | achieved max error | rounds | inserted | carved | flips | uncovered | quality inserted | quality skipped | feet |
+| 10 m | 9.999497794833673 m | 52 | 66928 | 0 | 186432 | 0 | 0 | 0 | 0 |
+### sq-t10-eu-q25 r3 00:10:54 | Battery Power
+$ rasputin mesh --dem /Users/skavhaug/projects/rasputin_data/DTM10_UTM33_20260925/6603_4_10m_z33.tif --domain docs/benchmarks/2026-09-28/16b12-acceptance/catchment/square48_25833.geojson --tolerance 10 --features /Users/skavhaug/projects/rasputin_data/corine_sql/u2018_clc2018_v2020_20u1_geoPackage/DATA/U2018_CLC2018_V2020_20u1.gpkg --features-layer U2018_CLC2018_V2020_20u1 --features-map corine
+exit 0
+662 features kept, 451 dropped outside, 69 clipped, 0 empty skipped
+103420 input vertices, 51395 noded vertices
+154573 start quality nodes inserted, 51555 start quality skips, 350 constraint feet, 0 feet refused, 17 rounds, 34801 points inserted, 86893 flips, 480941 triangles, achieved max error 9.999960550447781 m, 0 valid DEM nodes not covered, 102627 start triangles, 51391 start vertices off-node, 0 vertices without data dropped
+           649134080  maximum resident set size
+| vertices without data dropped | 0 |
+| tolerance | achieved max error | rounds | inserted | carved | flips | uncovered | quality inserted | quality skipped | feet |
+| 10 m | 9.999960550447781 m | 17 | 34801 | 0 | 86893 | 0 | 154573 | 51555 | 350 |
+### sq-t10-eu-q0 r3 00:11:24 | Battery Power
+$ rasputin mesh --dem /Users/skavhaug/projects/rasputin_data/DTM10_UTM33_20260925/6603_4_10m_z33.tif --domain docs/benchmarks/2026-09-28/16b12-acceptance/catchment/square48_25833.geojson --tolerance 10 --start-min-angle 0 --features /Users/skavhaug/projects/rasputin_data/corine_sql/u2018_clc2018_v2020_20u1_geoPackage/DATA/U2018_CLC2018_V2020_20u1.gpkg --features-layer U2018_CLC2018_V2020_20u1 --features-map corine
+exit 0
+662 features kept, 451 dropped outside, 69 clipped, 0 empty skipped
+103420 input vertices, 51395 noded vertices
+0 start quality nodes inserted, 0 start quality skips, 359 constraint feet, 0 feet refused, 23 rounds, 55006 points inserted, 192561 flips, 212255 triangles, achieved max error 9.999949490582509 m, 0 valid DEM nodes not covered, 102627 start triangles, 51391 start vertices off-node, 0 vertices without data dropped
+           516931584  maximum resident set size
+| vertices without data dropped | 0 |
+| tolerance | achieved max error | rounds | inserted | carved | flips | uncovered | quality inserted | quality skipped | feet |
+| 10 m | 9.999949490582509 m | 23 | 55006 | 0 | 192561 | 0 | 0 | 0 | 359 |
+### done 00:11:44 | Battery Power

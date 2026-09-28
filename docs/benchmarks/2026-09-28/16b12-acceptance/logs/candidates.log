@@ -1,0 +1,8 @@
+U2018_CLC2018_V2020_20u1.gpkg:U2018_CLC2018_V2020_20u1 (EPSG:3035): R-tree rows 2375406; query box (4390346, 4082024, 4410933, 4103082)
+  widened query: 345 rows, ids only 0.713 s; plain box: 132 rows, 0.2 ms
+  widened query with blobs: 17.527 s, 235.0 MB; decode 0.246 s
+  candidate vertices 14666859; in the 213 rows only the widening adds: 13831011; largest (vertices, fid): [(np.int32(409242), 2000982), (np.int32(394887), 2250728), (np.int32(370070), 2372099), (np.int32(359381), 2372334), (np.int32(351465), 2001146)]
+corine2018_dtm10_utm33.gpkg:corine2018 (EPSG:25833): R-tree rows 124054; query box (290173, 6637964, 310429, 6659036)
+  widened query: 262 rows, ids only 0.040 s; plain box: 130 rows, 0.1 ms
+  widened query with blobs: 0.802 s, 62.2 MB; decode 0.123 s
+  candidate vertices 3880766; in the 132 rows only the widening adds: 3053971; largest (vertices, fid): [(np.int32(409242), 54932), (np.int32(370070), 123224), (np.int32(359381), 123225), (np.int32(257823), 55038), (np.int32(241084), 123917)]

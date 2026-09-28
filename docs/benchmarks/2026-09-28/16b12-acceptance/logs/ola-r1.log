@@ -1,0 +1,193 @@
+### ola-t1-none r1 23:55:37 | Battery Power
+$ rasputin mesh --dem /Users/skavhaug/projects/rasputin_data/DTM10_UTM33_20260925 --domain docs/benchmarks/2026-09-28/16b12-acceptance/catchment/catchment_4326.geojson --tolerance 1
+exit 0
+37 start quality nodes inserted, 0 start quality skips, 693 constraint feet, 0 feet refused, 40 rounds, 608706 points inserted, 1338108 flips, 1216839 triangles, achieved max error 1 m, 0 valid DEM nodes not covered, 46 start triangles, 48 start vertices off-node, 0 vertices without data dropped
+mosaic of 4 tiles, 2089 x 2007 nodes
+          1021739008  maximum resident set size
+| vertices without data dropped | 0 |
+| 6602_1_10m_z33.tif | 6603_3_10m_z33.tif | 2472 | 0.25087 | 0.0138931 |
+| 6602_1_10m_z33.tif | 6603_4_10m_z33.tif | 18977 | 0.376282 | 0.00230408 |
+| 6602_2_10m_z33.tif | 6603_3_10m_z33.tif | 59754 | 1.74188 | 0.0246887 |
+| 6603_3_10m_z33.tif | 6603_4_10m_z33.tif | 51512 | 2.10982 | 0.0206909 |
+| tolerance | achieved max error | rounds | inserted | carved | flips | uncovered | quality inserted | quality skipped | feet |
+| 1 m | 1 m | 40 | 608706 | 0 | 1338108 | 0 | 37 | 0 | 693 |
+VTK read: 608791 points, 1216839 triangles, 741 lines, z bounds 102.48..385.39
+field feature_bits: 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7
+field feature_names: river | road | railway | coastline | contour | wall | ditch | land_cover
+field feature_vocabulary: f26769f015fd54ff7c0b49922a9eba48c28c2596b0a1f152b519658010b22c61
+field crs: EPSG:25833
+field elevation_source: mosaic of 4 tiles, 2089 x 2007 nodes; refined from DEM nodes, constrained Delaunay, tolerance 1 m, achieved max error 1 m, start domain boundary, boundary z bilinear, start min angle 25 deg, constraint feet on, 0 valid DEM nodes not covered, 0 vertices without data dropped, vertical unit assumed met
+field dem_tiles: 6602_1_10m_z33.tif; 6602_2_10m_z33.tif; 6603_3_10m_z33.tif; 6603_4_10m_z33.tif
+field dem_seams: 6602_1_10m_z33.tif | 6603_3_10m_z33.tif: nodes 2472, max 0.25087, median 0.0138931; 6602_1_10m_z33.tif | 6603_4_10m_z33.tif: nodes 18977, max 0.376282, median 0.00230408; 6602_2_10m_z33.tif | 6603_3_10m_z33.tif: nodes 59754, max 1.74188, median 0.0246887; 6603_3_10m_z33.tif | 6603_4_10m_z33.tif: nod
+field domain: catchment_4326.geojson, 1 ring 0 holes, 48 vertices
+field domain_crs: EPSG:4326
+field domain_transform: Inverse of ETRS89 to WGS 84 (1) + UTM zone 33N (with axis order normalized for visualization)
+cell arrays: feature_mask
+constraint edges 741: land_cover 0, water 0, water without land_cover 0, mask 0 741
+cell array land_cover: absent
+cell array water: absent
+### ola-t1-eu3035 r1 23:55:44 | Battery Power
+$ rasputin mesh --dem /Users/skavhaug/projects/rasputin_data/DTM10_UTM33_20260925 --domain docs/benchmarks/2026-09-28/16b12-acceptance/catchment/catchment_4326.geojson --tolerance 1 --features /Users/skavhaug/projects/rasputin_data/corine_sql/u2018_clc2018_v2020_20u1_geoPackage/DATA/U2018_CLC2018_V2020_20u1.gpkg --features-layer U2018_CLC2018_V2020_20u1 --features-map corine
+exit 0
+87 features kept, 258 dropped outside, 28 clipped, 0 empty skipped
+11316 input vertices, 5642 noded vertices
+15573 start quality nodes inserted, 5291 start quality skips, 5314 constraint feet, 0 feet refused, 29 rounds, 596775 points inserted, 1282174 flips, 1235226 triangles, achieved max error 1 m, 0 valid DEM nodes not covered, 11169 start triangles, 5642 start vertices off-node, 0 vertices without data dropped
+mosaic of 4 tiles, 2089 x 2007 nodes
+           771375104  maximum resident set size
+| vertices without data dropped | 0 |
+| 6602_1_10m_z33.tif | 6603_3_10m_z33.tif | 2472 | 0.25087 | 0.0138931 |
+| 6602_1_10m_z33.tif | 6603_4_10m_z33.tif | 18977 | 0.376282 | 0.00230408 |
+| 6602_2_10m_z33.tif | 6603_3_10m_z33.tif | 59754 | 1.74188 | 0.0246887 |
+| 6603_3_10m_z33.tif | 6603_4_10m_z33.tif | 51512 | 2.10982 | 0.0206909 |
+| tolerance | achieved max error | rounds | inserted | carved | flips | uncovered | quality inserted | quality skipped | feet |
+| 1 m | 1 m | 29 | 596775 | 0 | 1282174 | 0 | 15573 | 5291 | 5314 |
+VTK read: 617990 points, 1235226 triangles, 11027 lines, z bounds 102.49..385.39
+field feature_bits: 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7
+field feature_names: river | road | railway | coastline | contour | wall | ditch | land_cover
+field feature_vocabulary: f26769f015fd54ff7c0b49922a9eba48c28c2596b0a1f152b519658010b22c61
+field crs: EPSG:25833
+field elevation_source: mosaic of 4 tiles, 2089 x 2007 nodes; refined from DEM nodes, constrained Delaunay, tolerance 1 m, achieved max error 1 m, start domain boundary and features, vertex z bilinear, start min angle 25 deg, constraint feet on, 0 valid DEM nodes not covered, 0 vertices without data dropped, vertical unit 
+field dem_tiles: 6602_1_10m_z33.tif; 6602_2_10m_z33.tif; 6603_3_10m_z33.tif; 6603_4_10m_z33.tif
+field dem_seams: 6602_1_10m_z33.tif | 6603_3_10m_z33.tif: nodes 2472, max 0.25087, median 0.0138931; 6602_1_10m_z33.tif | 6603_4_10m_z33.tif: nodes 18977, max 0.376282, median 0.00230408; 6602_2_10m_z33.tif | 6603_3_10m_z33.tif: nodes 59754, max 1.74188, median 0.0246887; 6603_3_10m_z33.tif | 6603_4_10m_z33.tif: nod
+field domain: catchment_4326.geojson, 1 ring 0 holes, 48 vertices
+field domain_crs: EPSG:4326
+field domain_transform: Inverse of ETRS89 to WGS 84 (1) + UTM zone 33N (with axis order normalized for visualization)
+field features: U2018_CLC2018_V2020_20u1.gpkg:U2018_CLC2018_V2020_20u1, map corine, 87 features, 155 chains, 11268 vertices
+field features_crs: EPSG:3035
+field features_transform: Inverse of Europe Equal Area 2001 + UTM zone 33N (with axis order normalized for visualization)
+field features_notice: Contains modified CORINE Land Cover 2018 data (version 2020_20u1), (c) European Union, Copernicus Land Monitoring Service 2018, European Environment Agency (EEA): clipped and re-encoded, produced with funding by the European Union, not endorsed by the EU
+cell arrays: feature_mask, land_cover, water
+constraint edges 11027: land_cover 10275, water 979, water without land_cover 0, mask 0 752
+cell array land_cover: sum over lines 10275
+cell array water: sum over lines 979
+### ola-t1-no25833 r1 23:56:17 | Battery Power
+$ rasputin mesh --dem /Users/skavhaug/projects/rasputin_data/DTM10_UTM33_20260925 --domain docs/benchmarks/2026-09-28/16b12-acceptance/catchment/catchment_4326.geojson --tolerance 1 --features /Users/skavhaug/projects/rasputin_data/corine2018_dtm10_utm33.gpkg --features-layer corine2018 --features-map corine
+exit 0
+87 features kept, 175 dropped outside, 28 clipped, 0 empty skipped
+11316 input vertices, 5642 noded vertices
+15573 start quality nodes inserted, 5291 start quality skips, 5314 constraint feet, 0 feet refused, 29 rounds, 596775 points inserted, 1282174 flips, 1235226 triangles, achieved max error 1 m, 0 valid DEM nodes not covered, 11169 start triangles, 5642 start vertices off-node, 0 vertices without data dropped
+mosaic of 4 tiles, 2089 x 2007 nodes
+           888619008  maximum resident set size
+| vertices without data dropped | 0 |
+| 6602_1_10m_z33.tif | 6603_3_10m_z33.tif | 2472 | 0.25087 | 0.0138931 |
+| 6602_1_10m_z33.tif | 6603_4_10m_z33.tif | 18977 | 0.376282 | 0.00230408 |
+| 6602_2_10m_z33.tif | 6603_3_10m_z33.tif | 59754 | 1.74188 | 0.0246887 |
+| 6603_3_10m_z33.tif | 6603_4_10m_z33.tif | 51512 | 2.10982 | 0.0206909 |
+| tolerance | achieved max error | rounds | inserted | carved | flips | uncovered | quality inserted | quality skipped | feet |
+| 1 m | 1 m | 29 | 596775 | 0 | 1282174 | 0 | 15573 | 5291 | 5314 |
+VTK read: 617990 points, 1235226 triangles, 11027 lines, z bounds 102.49..385.39
+field feature_bits: 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7
+field feature_names: river | road | railway | coastline | contour | wall | ditch | land_cover
+field feature_vocabulary: f26769f015fd54ff7c0b49922a9eba48c28c2596b0a1f152b519658010b22c61
+field crs: EPSG:25833
+field elevation_source: mosaic of 4 tiles, 2089 x 2007 nodes; refined from DEM nodes, constrained Delaunay, tolerance 1 m, achieved max error 1 m, start domain boundary and features, vertex z bilinear, start min angle 25 deg, constraint feet on, 0 valid DEM nodes not covered, 0 vertices without data dropped, vertical unit 
+field dem_tiles: 6602_1_10m_z33.tif; 6602_2_10m_z33.tif; 6603_3_10m_z33.tif; 6603_4_10m_z33.tif
+field dem_seams: 6602_1_10m_z33.tif | 6603_3_10m_z33.tif: nodes 2472, max 0.25087, median 0.0138931; 6602_1_10m_z33.tif | 6603_4_10m_z33.tif: nodes 18977, max 0.376282, median 0.00230408; 6602_2_10m_z33.tif | 6603_3_10m_z33.tif: nodes 59754, max 1.74188, median 0.0246887; 6603_3_10m_z33.tif | 6603_4_10m_z33.tif: nod
+field domain: catchment_4326.geojson, 1 ring 0 holes, 48 vertices
+field domain_crs: EPSG:4326
+field domain_transform: Inverse of ETRS89 to WGS 84 (1) + UTM zone 33N (with axis order normalized for visualization)
+field features: corine2018_dtm10_utm33.gpkg:corine2018, map corine, 87 features, 155 chains, 11268 vertices
+field features_crs: EPSG:25833
+field features_transform: none
+field features_notice: Contains modified CORINE Land Cover 2018 data (version 2020_20u1), (c) European Union, Copernicus Land Monitoring Service 2018, European Environment Agency (EEA): clipped and re-encoded, produced with funding by the European Union, not endorsed by the EU
+cell arrays: feature_mask, land_cover, water
+constraint edges 11027: land_cover 10275, water 979, water without land_cover 0, mask 0 752
+cell array land_cover: sum over lines 10275
+cell array water: sum over lines 979
+### ola-t10-none r1 23:56:26 | Battery Power
+$ rasputin mesh --dem /Users/skavhaug/projects/rasputin_data/DTM10_UTM33_20260925 --domain docs/benchmarks/2026-09-28/16b12-acceptance/catchment/catchment_4326.geojson --tolerance 10
+exit 0
+37 start quality nodes inserted, 0 start quality skips, 168 constraint feet, 0 feet refused, 31 rounds, 15207 points inserted, 40976 flips, 30366 triangles, achieved max error 9.999269956118098 m, 0 valid DEM nodes not covered, 46 start triangles, 48 start vertices off-node, 0 vertices without data dropped
+mosaic of 4 tiles, 2089 x 2007 nodes
+           471334912  maximum resident set size
+| vertices without data dropped | 0 |
+| 6602_1_10m_z33.tif | 6603_3_10m_z33.tif | 2472 | 0.25087 | 0.0138931 |
+| 6602_1_10m_z33.tif | 6603_4_10m_z33.tif | 18977 | 0.376282 | 0.00230408 |
+| 6602_2_10m_z33.tif | 6603_3_10m_z33.tif | 59754 | 1.74188 | 0.0246887 |
+| 6603_3_10m_z33.tif | 6603_4_10m_z33.tif | 51512 | 2.10982 | 0.0206909 |
+| tolerance | achieved max error | rounds | inserted | carved | flips | uncovered | quality inserted | quality skipped | feet |
+| 10 m | 9.999269956118098 m | 31 | 15207 | 0 | 40976 | 0 | 37 | 0 | 168 |
+VTK read: 15292 points, 30366 triangles, 216 lines, z bounds 102.52..384.81
+field feature_bits: 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7
+field feature_names: river | road | railway | coastline | contour | wall | ditch | land_cover
+field feature_vocabulary: f26769f015fd54ff7c0b49922a9eba48c28c2596b0a1f152b519658010b22c61
+field crs: EPSG:25833
+field elevation_source: mosaic of 4 tiles, 2089 x 2007 nodes; refined from DEM nodes, constrained Delaunay, tolerance 10 m, achieved max error 9.999269956118098 m, start domain boundary, boundary z bilinear, start min angle 25 deg, constraint feet on, 0 valid DEM nodes not covered, 0 vertices without data dropped, vertical
+field dem_tiles: 6602_1_10m_z33.tif; 6602_2_10m_z33.tif; 6603_3_10m_z33.tif; 6603_4_10m_z33.tif
+field dem_seams: 6602_1_10m_z33.tif | 6603_3_10m_z33.tif: nodes 2472, max 0.25087, median 0.0138931; 6602_1_10m_z33.tif | 6603_4_10m_z33.tif: nodes 18977, max 0.376282, median 0.00230408; 6602_2_10m_z33.tif | 6603_3_10m_z33.tif: nodes 59754, max 1.74188, median 0.0246887; 6603_3_10m_z33.tif | 6603_4_10m_z33.tif: nod
+field domain: catchment_4326.geojson, 1 ring 0 holes, 48 vertices
+field domain_crs: EPSG:4326
+field domain_transform: Inverse of ETRS89 to WGS 84 (1) + UTM zone 33N (with axis order normalized for visualization)
+cell arrays: feature_mask
+constraint edges 216: land_cover 0, water 0, water without land_cover 0, mask 0 216
+cell array land_cover: absent
+cell array water: absent
+### ola-t10-eu3035 r1 23:56:28 | Battery Power
+$ rasputin mesh --dem /Users/skavhaug/projects/rasputin_data/DTM10_UTM33_20260925 --domain docs/benchmarks/2026-09-28/16b12-acceptance/catchment/catchment_4326.geojson --tolerance 10 --features /Users/skavhaug/projects/rasputin_data/corine_sql/u2018_clc2018_v2020_20u1_geoPackage/DATA/U2018_CLC2018_V2020_20u1.gpkg --features-layer U2018_CLC2018_V2020_20u1 --features-map corine
+exit 0
+87 features kept, 258 dropped outside, 28 clipped, 0 empty skipped
+11316 input vertices, 5642 noded vertices
+15573 start quality nodes inserted, 5291 start quality skips, 245 constraint feet, 0 feet refused, 20 rounds, 10426 points inserted, 26186 flips, 63020 triangles, achieved max error 9.999894849297135 m, 0 valid DEM nodes not covered, 11169 start triangles, 5642 start vertices off-node, 0 vertices without data dropped
+mosaic of 4 tiles, 2089 x 2007 nodes
+           472236032  maximum resident set size
+| vertices without data dropped | 0 |
+| 6602_1_10m_z33.tif | 6603_3_10m_z33.tif | 2472 | 0.25087 | 0.0138931 |
+| 6602_1_10m_z33.tif | 6603_4_10m_z33.tif | 18977 | 0.376282 | 0.00230408 |
+| 6602_2_10m_z33.tif | 6603_3_10m_z33.tif | 59754 | 1.74188 | 0.0246887 |
+| 6603_3_10m_z33.tif | 6603_4_10m_z33.tif | 51512 | 2.10982 | 0.0206909 |
+| tolerance | achieved max error | rounds | inserted | carved | flips | uncovered | quality inserted | quality skipped | feet |
+| 10 m | 9.999894849297135 m | 20 | 10426 | 0 | 26186 | 0 | 15573 | 5291 | 245 |
+VTK read: 31641 points, 63020 triangles, 5958 lines, z bounds 102.49..385.39
+field feature_bits: 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7
+field feature_names: river | road | railway | coastline | contour | wall | ditch | land_cover
+field feature_vocabulary: f26769f015fd54ff7c0b49922a9eba48c28c2596b0a1f152b519658010b22c61
+field crs: EPSG:25833
+field elevation_source: mosaic of 4 tiles, 2089 x 2007 nodes; refined from DEM nodes, constrained Delaunay, tolerance 10 m, achieved max error 9.999894849297135 m, start domain boundary and features, vertex z bilinear, start min angle 25 deg, constraint feet on, 0 valid DEM nodes not covered, 0 vertices without data droppe
+field dem_tiles: 6602_1_10m_z33.tif; 6602_2_10m_z33.tif; 6603_3_10m_z33.tif; 6603_4_10m_z33.tif
+field dem_seams: 6602_1_10m_z33.tif | 6603_3_10m_z33.tif: nodes 2472, max 0.25087, median 0.0138931; 6602_1_10m_z33.tif | 6603_4_10m_z33.tif: nodes 18977, max 0.376282, median 0.00230408; 6602_2_10m_z33.tif | 6603_3_10m_z33.tif: nodes 59754, max 1.74188, median 0.0246887; 6603_3_10m_z33.tif | 6603_4_10m_z33.tif: nod
+field domain: catchment_4326.geojson, 1 ring 0 holes, 48 vertices
+field domain_crs: EPSG:4326
+field domain_transform: Inverse of ETRS89 to WGS 84 (1) + UTM zone 33N (with axis order normalized for visualization)
+field features: U2018_CLC2018_V2020_20u1.gpkg:U2018_CLC2018_V2020_20u1, map corine, 87 features, 155 chains, 11268 vertices
+field features_crs: EPSG:3035
+field features_transform: Inverse of Europe Equal Area 2001 + UTM zone 33N (with axis order normalized for visualization)
+field features_notice: Contains modified CORINE Land Cover 2018 data (version 2020_20u1), (c) European Union, Copernicus Land Monitoring Service 2018, European Environment Agency (EEA): clipped and re-encoded, produced with funding by the European Union, not endorsed by the EU
+cell arrays: feature_mask, land_cover, water
+constraint edges 5958: land_cover 5698, water 768, water without land_cover 0, mask 0 260
+cell array land_cover: sum over lines 5698
+cell array water: sum over lines 768
+### ola-t10-no25833 r1 23:56:57 | Battery Power
+$ rasputin mesh --dem /Users/skavhaug/projects/rasputin_data/DTM10_UTM33_20260925 --domain docs/benchmarks/2026-09-28/16b12-acceptance/catchment/catchment_4326.geojson --tolerance 10 --features /Users/skavhaug/projects/rasputin_data/corine2018_dtm10_utm33.gpkg --features-layer corine2018 --features-map corine
+exit 0
+87 features kept, 175 dropped outside, 28 clipped, 0 empty skipped
+11316 input vertices, 5642 noded vertices
+15573 start quality nodes inserted, 5291 start quality skips, 245 constraint feet, 0 feet refused, 20 rounds, 10426 points inserted, 26186 flips, 63020 triangles, achieved max error 9.999894849297135 m, 0 valid DEM nodes not covered, 11169 start triangles, 5642 start vertices off-node, 0 vertices without data dropped
+mosaic of 4 tiles, 2089 x 2007 nodes
+           511131648  maximum resident set size
+| vertices without data dropped | 0 |
+| 6602_1_10m_z33.tif | 6603_3_10m_z33.tif | 2472 | 0.25087 | 0.0138931 |
+| 6602_1_10m_z33.tif | 6603_4_10m_z33.tif | 18977 | 0.376282 | 0.00230408 |
+| 6602_2_10m_z33.tif | 6603_3_10m_z33.tif | 59754 | 1.74188 | 0.0246887 |
+| 6603_3_10m_z33.tif | 6603_4_10m_z33.tif | 51512 | 2.10982 | 0.0206909 |
+| tolerance | achieved max error | rounds | inserted | carved | flips | uncovered | quality inserted | quality skipped | feet |
+| 10 m | 9.999894849297135 m | 20 | 10426 | 0 | 26186 | 0 | 15573 | 5291 | 245 |
+VTK read: 31641 points, 63020 triangles, 5958 lines, z bounds 102.49..385.39
+field feature_bits: 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7
+field feature_names: river | road | railway | coastline | contour | wall | ditch | land_cover
+field feature_vocabulary: f26769f015fd54ff7c0b49922a9eba48c28c2596b0a1f152b519658010b22c61
+field crs: EPSG:25833
+field elevation_source: mosaic of 4 tiles, 2089 x 2007 nodes; refined from DEM nodes, constrained Delaunay, tolerance 10 m, achieved max error 9.999894849297135 m, start domain boundary and features, vertex z bilinear, start min angle 25 deg, constraint feet on, 0 valid DEM nodes not covered, 0 vertices without data droppe
+field dem_tiles: 6602_1_10m_z33.tif; 6602_2_10m_z33.tif; 6603_3_10m_z33.tif; 6603_4_10m_z33.tif
+field dem_seams: 6602_1_10m_z33.tif | 6603_3_10m_z33.tif: nodes 2472, max 0.25087, median 0.0138931; 6602_1_10m_z33.tif | 6603_4_10m_z33.tif: nodes 18977, max 0.376282, median 0.00230408; 6602_2_10m_z33.tif | 6603_3_10m_z33.tif: nodes 59754, max 1.74188, median 0.0246887; 6603_3_10m_z33.tif | 6603_4_10m_z33.tif: nod
+field domain: catchment_4326.geojson, 1 ring 0 holes, 48 vertices
+field domain_crs: EPSG:4326
+field domain_transform: Inverse of ETRS89 to WGS 84 (1) + UTM zone 33N (with axis order normalized for visualization)
+field features: corine2018_dtm10_utm33.gpkg:corine2018, map corine, 87 features, 155 chains, 11268 vertices
+field features_crs: EPSG:25833
+field features_transform: none
+field features_notice: Contains modified CORINE Land Cover 2018 data (version 2020_20u1), (c) European Union, Copernicus Land Monitoring Service 2018, European Environment Agency (EEA): clipped and re-encoded, produced with funding by the European Union, not endorsed by the EU
+cell arrays: feature_mask, land_cover, water
+constraint edges 5958: land_cover 5698, water 768, water without land_cover 0, mask 0 260
+cell array land_cover: sum over lines 5698
+cell array water: sum over lines 768
+### done 23:57:01 | Battery Power
