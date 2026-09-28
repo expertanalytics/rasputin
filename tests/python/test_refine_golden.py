@@ -38,8 +38,10 @@ from test_cli_mesh_dem import invoke
 from test_cli_mesh_domain import geojson, quarter_circle
 from tin_engine import _core
 from tin_engine._core import ChainRole
-from tin_engine.cli import DEFAULT_SNAP_SPACING, _constraint_arrays, _domain_chains, _engine
+from tin_engine.chains import start_chains
+from tin_engine.cli import DEFAULT_SNAP_SPACING, ROLES, _constraint_arrays, _engine
 from tin_engine.domain import read_domain
+from tin_engine.features import DEFAULT_VOCABULARY
 from tin_engine.grid_domain import refine_start_stride, subsample
 from tin_engine.io.geotiff import decode_dem
 from tin_engine.raster import to_core
@@ -74,7 +76,12 @@ def refined(
         chains = [(ring, ChainRole.Outer, 0)]
     else:
         path = geojson(tmp_path / "quarter.geojson", quarter_circle())
-        xy, chains, _ = _domain_chains(read_domain(path), path.name)
+        # 16b R2: the domain half of the chains moved from `cli._domain_chains`
+        # to `chains.start_chains` (test amendment in 16b-1/2's red step,
+        # `e99c8ea`); the digest pins that the move changed nothing.
+        started = start_chains(read_domain(path), (), DEFAULT_VOCABULARY)
+        xy = started.vertices
+        chains = [([int(i) for i in c], ROLES[role], int(m)) for c, role, m in started.chains]
     run = _engine(xy, chains, True, DEFAULT_SNAP_SPACING)
     assert run.mesh is not None and run.noded is not None, run.message
     edges, masks = _constraint_arrays(run.mesh, run.noded)

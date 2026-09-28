@@ -75,9 +75,11 @@ from tin_engine.features import DEFAULT_VOCABULARY, EdgeProperty, EdgeVocabulary
 REPO_ROOT = Path(__file__).resolve().parents[2]
 FEATURES_SOURCE = REPO_ROOT / "src_python" / "tin_engine" / "features.py"
 
-# The seven linear features `DEFAULT_VOCABULARY` ships with, in bit order. The
-# tuple is written out rather than derived from the constant, because a test
-# that derives its expectation from the thing under test asserts nothing.
+# The features `DEFAULT_VOCABULARY` ships with, in bit order: the seven linear
+# ones of increment 7, then increment 16b's `land_cover` (7) and `water` (8)
+# (16b Q3, ruled by Ola 2026-09-28). The tuple is written out rather than
+# derived from the constant, because a test that derives its expectation from
+# the thing under test asserts nothing.
 DEFAULT_ROWS = (
     ("river", 0),
     ("road", 1),
@@ -86,6 +88,8 @@ DEFAULT_ROWS = (
     ("contour", 4),
     ("wall", 5),
     ("ditch", 6),
+    ("land_cover", 7),
+    ("water", 8),
 )
 
 
@@ -532,7 +536,7 @@ def test_fingerprint_is_stable_across_processes() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_the_default_vocabulary_is_the_seven_linear_features_in_bit_order() -> None:
+def test_the_default_vocabulary_is_its_nine_features_in_bit_order() -> None:
     assert tuple((p.name, p.bit) for p in DEFAULT_VOCABULARY.properties) == DEFAULT_ROWS
 
 
@@ -556,7 +560,7 @@ def test_the_default_vocabulary_round_trips_its_own_full_mask() -> None:
     every = tuple(name for name, _ in DEFAULT_ROWS)
     full = DEFAULT_VOCABULARY.mask(*every)
 
-    assert full == 0b111_1111
+    assert full == 0b1_1111_1111
     assert DEFAULT_VOCABULARY.names(full) == every
 
 

@@ -208,7 +208,7 @@ changes, nanosecond API. Each phase is wall time on the calling thread.
 | phase | covers exactly |
 |---|---|
 | decode | open the GeoTIFF, `decode_dem`, close |
-| domain read | `read_domain` and `_domain_chains` |
+| domain read | `read_domain` and `_domain_chains` (as built at `4a1d806`; 15b's `0011741` moved the `_domain_chains` call out of this phase, and 16b-1/2's `5079da8` replaced it with `chains.start_chains`, also untimed, so it falls in "other") |
 | start mesh: build / node / triangulate | the three calls inside `_engine` |
 | start mesh: constraint edges | `_constraint_arrays` on the start mesh |
 | sample | `to_core` and `sample` (no-tolerance path only) |

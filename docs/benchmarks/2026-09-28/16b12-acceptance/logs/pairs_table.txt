@@ -1,0 +1,53 @@
+base-14f5fe3: 14f5fe3 so 190587e7ba0e battery 83%->82% verdict ACCEPTED
+   quarter: worst 0.3955 maxdeg 18 tol True delaunay 0/641791 sha ccebf96a86c6c5e2
+   tile: worst 0.6296 maxdeg 74 tol True delaunay 0/692056 sha 11741a81adfa17b3
+16b12: 5f3a522 so 190587e7ba0e battery 82%->81% verdict ACCEPTED
+   quarter: worst 0.3955 maxdeg 18 tol True delaunay 0/641791 sha ccebf96a86c6c5e2
+   tile: worst 0.6296 maxdeg 74 tol True delaunay 0/692056 sha 11741a81adfa17b3
+base-14f5fe3-r2: 14f5fe3 so 190587e7ba0e battery 81%->80% verdict ACCEPTED
+   quarter: worst 0.3955 maxdeg 18 tol True delaunay 0/641791 sha ccebf96a86c6c5e2
+   tile: worst 0.6296 maxdeg 74 tol True delaunay 0/692056 sha 11741a81adfa17b3
+16b12-r2: 5f3a522 so 190587e7ba0e battery 80%->79% verdict ACCEPTED
+   quarter: worst 0.3955 maxdeg 18 tol True delaunay 0/641791 sha ccebf96a86c6c5e2
+   tile: worst 0.6296 maxdeg 74 tol True delaunay 0/692056 sha 11741a81adfa17b3
+base-14f5fe3-r3: 14f5fe3 so 190587e7ba0e battery 79%->78% verdict REGRESSION: tile refine_s[t=2] 0.3113 -> 0.3292 (+5.7 %)
+   quarter: worst 0.3955 maxdeg 18 tol True delaunay 0/641791 sha ccebf96a86c6c5e2
+   tile: worst 0.6296 maxdeg 74 tol True delaunay 0/692056 sha 11741a81adfa17b3
+16b12-r3: 5f3a522 so 190587e7ba0e battery 78%->77% verdict REGRESSION: quarter refine_s[t=0] 0.1634 -> 0.1730 (+5.8 %); REGRESSION: quarter refine_s[t=1] 0.4124 -> 0.4676 (+13.4 %
+   quarter: worst 0.3955 maxdeg 18 tol True delaunay 0/641791 sha ccebf96a86c6c5e2
+   tile: worst 0.6296 maxdeg 74 tol True delaunay 0/692056 sha 11741a81adfa17b3
+base-14f5fe3-r4: 14f5fe3 so 190587e7ba0e battery 77%->76% verdict REGRESSION: quarter refine_s[t=3] 0.2264 -> 0.2432 (+7.4 %); REGRESSION: tile refine_s[t=1] 0.4714 -> 0.5121 (+8.6 %); R
+   quarter: worst 0.3955 maxdeg 18 tol True delaunay 0/641791 sha ccebf96a86c6c5e2
+   tile: worst 0.6296 maxdeg 74 tol True delaunay 0/692056 sha 11741a81adfa17b3
+16b12-r4: 5f3a522 so 190587e7ba0e battery 76%->75% verdict ACCEPTED
+   quarter: worst 0.3955 maxdeg 18 tol True delaunay 0/641791 sha ccebf96a86c6c5e2
+   tile: worst 0.6296 maxdeg 74 tol True delaunay 0/692056 sha 11741a81adfa17b3
+| domain | threads | base r1..r4 (ms) | 16b-1/2 r1..r4 (ms) | pair changes | pooled |
+|---|---:|---|---|---|---:|
+| quarter | default (10) | 167.2 / 164.9 / 163.4 / 166.6 | 167.1 / 166.1 / 173.0 / 170.4 | -0.1, +0.7, +5.8, +2.3 | +1.8 % |
+| quarter | 1 | 422.8 / 416.2 / 412.4 / 441.4 | 415.4 / 411.7 / 467.6 / 445.1 | -1.7, -1.1, +13.4, +0.8 | +2.6 % |
+| quarter | 2 | 277.9 / 269.4 / 266.4 / 286.6 | 267.0 / 267.3 / 295.5 / 287.1 | -3.9, -0.8, +11.0, +0.2 | +1.3 % |
+| quarter | 4 | 201.6 / 199.8 / 198.5 / 208.4 | 199.5 / 199.3 / 208.1 / 206.6 | -1.0, -0.3, +4.9, -0.8 | +1.2 % |
+| quarter | 8 | 162.7 / 161.7 / 162.6 / 163.2 | 162.6 / 162.0 / 166.6 / 165.9 | -0.1, +0.2, +2.5, +1.6 | +1.0 % |
+| quarter | 10 | 165.0 / 163.7 / 166.0 / 172.7 | 163.9 / 164.1 / 176.7 / 165.5 | -0.6, +0.3, +6.5, -4.2 | -0.4 % |
+| quarter | 16 | 168.5 / 165.0 / 163.1 / 170.3 | 162.7 / 164.9 / 171.6 / 169.4 | -3.5, -0.1, +5.2, -0.5 | +0.2 % |
+| quarter | 20 | 165.8 / 165.0 / 165.5 / 176.0 | 164.2 / 165.3 / 168.8 / 167.3 | -1.0, +0.2, +2.0, -5.0 | +0.4 % |
+| tile | default (10) | 191.9 / 185.2 / 193.3 / 191.8 | 187.3 / 191.7 / 183.1 / 189.0 | -2.4, +3.5, -5.2, -1.5 | -1.9 % |
+| tile | 1 | 489.7 / 465.7 / 493.5 / 512.1 | 471.4 / 473.1 / 479.7 / 494.6 | -3.7, +1.6, -2.8, -3.4 | -3.1 % |
+| tile | 2 | 318.4 / 301.6 / 329.2 / 333.2 | 300.6 / 306.9 / 319.2 / 321.5 | -5.6, +1.8, -3.0, -3.5 | -3.3 % |
+| tile | 4 | 232.3 / 227.1 / 233.5 / 234.4 | 228.8 / 232.1 / 229.5 / 236.8 | -1.5, +2.2, -1.7, +1.0 | -0.9 % |
+| tile | 8 | 185.3 / 184.6 / 190.9 / 188.8 | 185.4 / 191.3 / 186.1 / 192.8 | +0.0, +3.6, -2.5, +2.1 | +0.9 % |
+| tile | 10 | 187.5 / 184.7 / 187.5 / 194.3 | 184.6 / 186.4 / 186.1 / 189.4 | -1.5, +0.9, -0.8, -2.5 | -0.7 % |
+| tile | 16 | 187.9 / 186.3 / 189.6 / 190.7 | 188.0 / 185.0 / 186.9 / 190.4 | +0.1, -0.7, -1.4, -0.2 | -0.7 % |
+| tile | 20 | 189.6 / 187.4 / 191.5 / 193.7 | 186.8 / 185.7 / 187.4 / 195.2 | -1.5, -0.9, -2.1, +0.8 | -1.8 % |
+pooled over 42 cells: median +0.27 %, min -3.3, max +3.4, cells > +5 %: 0
+same-build drift within base-14f5fe3*: max +11.1 % (base-14f5fe3-r2 -> base-14f5fe3-r4, ('tile', 14))
+same-build drift within 16b12*: max +13.6 % (16b12-r2 -> 16b12-r3, ('quarter', 1))
+ceiling base-14f5fe3: tile 2.64x @8 (2.58x @20); quarter 2.60x @8 (2.55x @20)
+ceiling 16b12: tile 2.56x @15 (2.52x @20); quarter 2.56x @8 (2.53x @20)
+ceiling base-14f5fe3-r2: tile 2.52x @8 (2.49x @20); quarter 2.57x @8 (2.52x @20)
+ceiling 16b12-r2: tile 2.57x @9 (2.55x @20); quarter 2.54x @8 (2.49x @20)
+ceiling base-14f5fe3-r3: tile 2.66x @12 (2.58x @20); quarter 2.58x @12 (2.49x @20)
+ceiling 16b12-r3: tile 2.60x @12 (2.56x @20); quarter 2.82x @11 (2.77x @20)
+ceiling base-14f5fe3-r4: tile 2.71x @8 (2.64x @20); quarter 2.70x @8 (2.51x @20)
+ceiling 16b12-r4: tile 2.63x @12 (2.53x @20); quarter 2.69x @10 (2.66x @20)

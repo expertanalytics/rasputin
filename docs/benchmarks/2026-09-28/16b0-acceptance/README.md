@@ -267,3 +267,7 @@ angle, in degrees; "worst" is the smallest in the mesh, in degrees.
   repo root: `.venv/bin/python docs/benchmarks/2026-09-28/16b0-acceptance/corine/scripts/drv.py
   --pkg <tree>/build-bench/pkg mesh --side 48 --tol 10 --features A --min-angle 25`
   (the committed `drv.py` also looks for `clc_*.py` beside itself).
+- `clc_mesh.py:62` and `drv.py:120` monkeypatch `cli._domain_chains`, which
+  16b-1/2 replaced with `chains.start_chains` (`5079da8`), so `drv.py mesh
+  --features A` and `clc_mesh.py` reproduce only with `<tree>` checked out at
+  16b-0's `18be867`.

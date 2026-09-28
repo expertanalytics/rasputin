@@ -1,0 +1,60 @@
+CORINE Land Cover test data in this directory
+=============================================
+
+Both files below are derived from CORINE Land Cover 2018 (CLC2018), produced by
+the Copernicus Land Monitoring Service and distributed by the European
+Environment Agency (EEA).
+
+  (c) European Union, Copernicus Land Monitoring Service 2018,
+  European Environment Agency (EEA).
+
+Produced with funding by the European Union. Access to the data is free, full
+and open under Regulation (EU) No 1159/2013 (the Copernicus data policy; the
+governing act is now Regulation (EU) 2021/696). Its conditions, per the EEA's
+catalogue record for CLC2018 vector v2020_20u1
+(sdi.eea.europa.eu/catalogue/copernicus/api/records/71c95a07-e296-44fc-b22b-415f42acfdf0):
+inform the public of the source; state clearly where the data were adapted or
+modified; do not suggest that the European Union endorses this use. Both files
+below are modified, as each entry says. Neither the European Union nor the EEA
+endorses this project or its use of the data.
+
+
+1. clc2018_7908_3.gpkg (increment 16b, 2026-09-28)
+--------------------------------------------------
+
+Source: CORINE Land Cover 2018, vector, version v2020_20u1 (the GeoPackage
+U2018_CLC2018_V2020_20u1.gpkg, layer U2018_CLC2018_V2020_20u1, EPSG:3035).
+
+Modified: selected and clipped. The features whose R-tree box meets the
+EPSG:3035 image of the committed benchmark tile's node rectangle
+(dem_archive/7908_3_10m_z33.tif, EPSG:25833) are kept, each clipped in
+EPSG:3035 to that image buffered by 1 km, and re-encoded as a small GeoPackage
+with the source's table, columns, spatial reference row and R-tree index. The
+coordinates are not reprojected; the tests reproject them. Written by
+extract.py in this directory, which is reproducible from the source file.
+
+
+2. 0000_4326_corine2018_4e6064_GML.gml and .xsd (legacy test data)
+--------------------------------------------------------------------
+
+Origin: added to this repository on 2020-03-12 in commit 8e30af4, "Adding data
+for small test", together with dem_archive/7908_3_10m_z33.tif (the benchmark
+tile), as the legacy `ingoya_test` pair (legacy/tests/test_gml_repository.py).
+It came in with no attribution; this notice supplies it (Ola's ruling on
+increment 16b's Q6, 2026-09-28).
+
+Content: 200 CORINE Land Cover 2018 polygons over northern Norway in EPSG:4326,
+in a Norwegian redistribution's schema (attributes clc18_kode and sl_sdeid),
+written by OGR as GML 2 (gml:coordinates).
+
+Modified (before it reached this repository): selected, reprojected to
+EPSG:4326 and re-encoded as GML.
+
+Modified (in this repository, increment 16b, 2026-09-28): repaired to be
+well-formed XML (Ola: "Repear the broken file."). As committed in 2020 the
+file lacked a </gml:featureMember> after feature sql_statement.40965 (line
+1097) and ended without closing its root element. repair_gml.py in this
+directory adds exactly those two closing tags and changes nothing else; it
+runs only on the 2020 file (git blob 97ddc98, commit 8e30af4) and is
+reproducible from it, as its docstring shows. The reader in
+src_python/tin_engine/io/gml.py is strict and reads the repaired file.

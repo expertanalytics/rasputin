@@ -1,0 +1,5 @@
+# pmset -g batt around the CLI blocks (the bench runs carry theirs in run.json and logs/pairs*.log;
+# every CLI case line in logs/{qc,ola-r1,ola-r23,sq}.log names the power source).
+23:54:57 (end of pair 4, just before qc/ola)  -InternalBattery-0 (id=7929955)	75%; discharging; 2:34 remaining present: true
+00:01:2x (start of the sq block)               -InternalBattery-0 (id=7929955)	72%; discharging; 2:44 remaining present: true
+00:13:00 (after the sq block)                  -InternalBattery-0 (id=7929955)	67%; discharging; 2:38 remaining present: true

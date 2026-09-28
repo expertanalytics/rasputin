@@ -8,7 +8,9 @@ extension in the process.
 
 Files are opened in exactly one module, `repository.py`, and only for reading
 (increment 15a, Ola's Q3 ruling): a DEM in many tiles has to be listed and
-read tile by tile, below `cli.py`. Every other module here takes or returns
+read tile by tile, below `cli.py`. It also opens a GeoPackage, read-only
+(increment 16b R2): SQLite cannot read a Python stream, so the open connection
+is `geopackage.py`'s stream. Every other module here takes or returns
 streams and bytes, so it is testable with no filesystem, and nothing in `io/`
 writes a file (`06-cdt-viewer.md`, "no file is written below `cli.py`").
 """

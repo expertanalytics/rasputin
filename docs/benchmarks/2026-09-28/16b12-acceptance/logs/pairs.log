@@ -1,0 +1,50 @@
+== base r1 23:36:14
+Now drawing from 'Battery Power'
+ -InternalBattery-0 (id=7929955)	83%; discharging; 4:53 remaining present: true
+power: battery; evidence: /Users/skavhaug/projects/rasputin/docs/benchmarks/2026-09-28/16b12-acceptance/base-14f5fe3; meshes: /private/tmp/claude-501/-Users-skavhaug-projects-rasputin/38487caf-f56e-46a3-b05b-867af1fb1619/scratchpad/p16b12/meshes
+ACCEPTED
+exit 0
+== 16b12 r1 23:38:27
+Now drawing from 'Battery Power'
+ -InternalBattery-0 (id=7929955)	82%; discharging; 4:23 remaining present: true
+power: battery; evidence: /Users/skavhaug/projects/rasputin/docs/benchmarks/2026-09-28/16b12-acceptance/16b12; meshes: /private/tmp/claude-501/-Users-skavhaug-projects-rasputin/38487caf-f56e-46a3-b05b-867af1fb1619/scratchpad/p16b12/meshes
+ACCEPTED
+exit 0
+== base r2 23:40:51
+Now drawing from 'Battery Power'
+ -InternalBattery-0 (id=7929955)	81%; discharging; 3:53 remaining present: true
+power: battery; evidence: /Users/skavhaug/projects/rasputin/docs/benchmarks/2026-09-28/16b12-acceptance/base-14f5fe3-r2; meshes: /private/tmp/claude-501/-Users-skavhaug-projects-rasputin/38487caf-f56e-46a3-b05b-867af1fb1619/scratchpad/p16b12/meshes
+ACCEPTED
+exit 0
+== 16b12 r2 23:43:00
+Now drawing from 'Battery Power'
+ -InternalBattery-0 (id=7929955)	80%; discharging; 3:23 remaining present: true
+power: battery; evidence: /Users/skavhaug/projects/rasputin/docs/benchmarks/2026-09-28/16b12-acceptance/16b12-r2; meshes: /private/tmp/claude-501/-Users-skavhaug-projects-rasputin/38487caf-f56e-46a3-b05b-867af1fb1619/scratchpad/p16b12/meshes
+ACCEPTED
+exit 0
+== base r3 23:45:13
+Now drawing from 'Battery Power'
+ -InternalBattery-0 (id=7929955)	79%; discharging; 2:53 remaining present: true
+power: battery; evidence: /Users/skavhaug/projects/rasputin/docs/benchmarks/2026-09-28/16b12-acceptance/base-14f5fe3-r3; meshes: /private/tmp/claude-501/-Users-skavhaug-projects-rasputin/38487caf-f56e-46a3-b05b-867af1fb1619/scratchpad/p16b12/meshes
+REGRESSION: tile refine_s[t=2] 0.3113 -> 0.3292 (+5.7 %)
+exit 1
+== 16b12 r3 23:47:28
+Now drawing from 'Battery Power'
+ -InternalBattery-0 (id=7929955)	78%; discharging; 2:55 remaining present: true
+power: battery; evidence: /Users/skavhaug/projects/rasputin/docs/benchmarks/2026-09-28/16b12-acceptance/16b12-r3; meshes: /private/tmp/claude-501/-Users-skavhaug-projects-rasputin/38487caf-f56e-46a3-b05b-867af1fb1619/scratchpad/p16b12/meshes
+REGRESSION: quarter refine_s[t=0] 0.1634 -> 0.1730 (+5.8 %)
+REGRESSION: quarter refine_s[t=1] 0.4124 -> 0.4676 (+13.4 %)
+REGRESSION: quarter refine_s[t=2] 0.2664 -> 0.2955 (+11.0 %)
+REGRESSION: quarter refine_s[t=3] 0.2207 -> 0.2398 (+8.7 %)
+REGRESSION: quarter refine_s[t=7] 0.1670 -> 0.1775 (+6.3 %)
+REGRESSION: quarter refine_s[t=9] 0.1642 -> 0.1767 (+7.6 %)
+REGRESSION: quarter refine_s[t=10] 0.1660 -> 0.1767 (+6.5 %)
+REGRESSION: quarter refine_s[t=12] 0.1596 -> 0.1704 (+6.8 %)
+REGRESSION: quarter refine_s[t=14] 0.1647 -> 0.1768 (+7.3 %)
+REGRESSION: quarter refine_s[t=15] 0.1645 -> 0.1749 (+6.3 %)
+REGRESSION: quarter refine_s[t=16] 0.1631 -> 0.1716 (+5.2 %)
+REGRESSION: quarter refine_s[t=18] 0.1633 -> 0.1733 (+6.1 %)
+exit 1
+== done 23:49:45
+Now drawing from 'Battery Power'
+ -InternalBattery-0 (id=7929955)	77%; discharging; 2:42 remaining present: true

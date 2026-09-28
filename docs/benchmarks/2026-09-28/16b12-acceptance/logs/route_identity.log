@@ -1,0 +1,6 @@
+catchment 1 m: Europe/3035 30fc3a9a387b9e3e, Norway/25833 30fc3a9a387b9e3e, equal True  (points, triangles, lines, feature_mask)
+catchment 10 m: Europe/3035 0d0833940671996c, Norway/25833 0d0833940671996c, equal True  (points, triangles, lines, feature_mask)
+2026-09-29, after d58d693 (same digest: points, triangles, lines, feature_mask):
+  ola-t1-eu3035: before 30fc3a9a387b9e3e, after 30fc3a9a387b9e3e, equal True
+  ola-t10-eu3035: before 0d0833940671996c, after 0d0833940671996c, equal True
+  sq-t1-eu-q25: before 63227a44abc3de0f, after 63227a44abc3de0f, equal True

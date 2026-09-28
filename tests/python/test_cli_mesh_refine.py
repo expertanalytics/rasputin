@@ -45,7 +45,12 @@ from test_cli_mesh_dem import (
 from tin_engine.io.geotiff import decode_dem
 from vtkread import VtkFile, read_vtk
 
-INCREMENT_12_LARGER_STRIDE_2 = "c677478e7bc132531d4fb9d799f5a9288658ac1a8a50317c3e78f79d376d09fa"
+#: Re-recorded at 16b-1/2 (was c677478e...09fa since increment 12): the file
+#: carries the vocabulary fields, and 16b adds bits 7 `land_cover` and 8
+#: `water` (R4; "The fingerprint changes"). Checked against 972312c's output:
+#: `feature_bits`, `feature_names` and `feature_vocabulary` are the only
+#: fields that differ; points, cells and every other field are the same.
+INCREMENT_12_LARGER_STRIDE_2 = "492ee90eb28d0a6a215b9912f77ad0f75492f31da2e09815544e1afbb7fb1df7"
 
 NUMBER = r"([0-9.eE+-]+|inf|nan)"
 

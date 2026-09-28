@@ -98,6 +98,14 @@ src_python/tin_engine/     # public Python API (distribution name: rasputin)
   features.py              # EdgeVocabulary: which bit means which feature.
                            #   The names C++ refuses to hold. Imports nothing
                            #   first-party and never imports _core
+  feature_input.py         # --features: a GeoJSON, GeoPackage layer or GML
+                           #   read, mapped to masks by a ClassMap, pre-clipped,
+                           #   moved to the DEM's CRS and clipped to the domain
+                           #   as linework -> FeatureSet (16b); opens GeoJSON
+                           #   and .gml itself; never imports _core
+  chains.py                # start_chains: the domain's rings, then every
+                           #   feature line, as (indices, role, mask) (16b);
+                           #   never imports _core
   _core.pyi                # type stubs for the compiled extension
   viz/                     # CDT -> SVG renderer; never imports _core
     __init__.py            # re-exports Scene, SvgStyle, build_scene, render_svg
@@ -116,8 +124,15 @@ src_python/tin_engine/     # public Python API (distribution name: rasputin)
                            #   ParaView; takes no path and opens nothing
     geotiff.py             # TIFF container + GeoKey decoding -> DemTile
     models.py              # Pydantic RasterMeta / DemTile
+    geopackage.py          # GeoPackage layer_info / query_features over an
+                           #   open sqlite3.Connection; frozen dataclasses,
+                           #   opens nothing, knows no path (16b)
+    gml.py                 # read_gml: OGR-written GML2 from a binary stream,
+                           #   standard library XML; opens nothing (16b)
     repository.py          # TiffDemRepository: the ONE io/ module that opens
-                           #   files ("rb"); lists headers, loads tiles (15a)
+                           #   files ("rb"); lists headers, loads tiles (15a);
+                           #   open_geopackage: a read-only SQLite
+                           #   connection (16b)
 
 tests/
   cpp/                     # C++ tests (Catch2; unit/ and property/)
