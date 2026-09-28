@@ -32,6 +32,10 @@ from tin_engine.io.models import DemTile, RasterMeta
 if TYPE_CHECKING:
     from tin_engine.io.repository import TileFootprint
 
+#: DEM units (metres for DTM10). A seam counts a node only where the two
+#: tiles differ by at least this (Ola, 2026-09-28: "Ignore below 1mm").
+SEAM_THRESHOLD = 0.001
+
 #: Cells. Two tiles share a lattice when their node offsets are integers to
 #: within this. Measured noise is at most 2.2e-11 cells (B3), and 0 for DTM10.
 ALIGN_TOLERANCE = 1e-6
@@ -103,11 +107,35 @@ class MosaicPlan(BaseModel):
 
 
 @dataclass(frozen=True, slots=True)
+class Seam:
+    """Two tiles whose valid values differ by at least `SEAM_THRESHOLD` at
+    `nodes` of the mosaic's nodes, by `largest` and `median` there (float64);
+    `first < second` by name."""
+
+    first: str
+    second: str
+    nodes: int
+    largest: float
+    median: float
+
+    def entry(self) -> str:
+        """The `dem_seams` entry, unescaped."""
+        _, _, n, largest, median = self.cells()
+        return f"{self.first} | {self.second}: nodes {n}, max {largest}, median {median}"
+
+    def cells(self) -> tuple[str, str, str, str, str]:
+        """The `--stats` table row, numbers formatted as in `entry`."""
+        return self.first, self.second, f"{self.nodes}", f"{self.largest:g}", f"{self.median:g}"
+
+
+@dataclass(frozen=True, slots=True)
 class Mosaic:
-    """The assembled tile, and the plan it came from, as provenance."""
+    """The assembled tile, the plan it came from, as provenance, and each pair
+    of tiles whose overlap disagrees, sorted by name (Ola's Q1 revised)."""
 
     tile: DemTile
     plan: MosaicPlan
+    seams: tuple[Seam, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -206,6 +234,18 @@ def assemble(plan: MosaicPlan, load: Callable[[str], DemTile]) -> Mosaic:
     planned dtype (the placements' result dtype, from the headers), and handed
     to `DemTile` without a copy (R7). A hand-built footprint may under-state
     its dtype, so a loaded tile that promotes further re-casts the canvas.
+
+    Each tile is written whole, then dropped before the next load; what it
+    holds where it meets another tile's placement is kept as a strip. Once all
+    are in, every overlap is decided from the strips (Ola's Q1 revised,
+    `_decide`) and each pair that disagrees is reported (`_seam`).
+
+    Memory: the peak is the canvas, the strips, and one load's own peak, which
+    is not one tile: decoding a DTM10 tile peaks at 2.0 to 3.0 tiles,
+    depending on the tile (the decoder's buffers and `DemTile`'s read-only
+    copy). Measured with
+    tracemalloc on the 15a acceptance box (nine DTM10 tiles, 404 MB canvas,
+    102 MB tiles): 720 MB, the canvas plus 3.1 tiles.
     """
     if len(plan.tiles) == 1 and plan.tiles[0].meta == plan.meta:
         return Mosaic(tile=_loaded(plan.tiles[0], load), plan=plan)
@@ -213,14 +253,31 @@ def assemble(plan: MosaicPlan, load: Callable[[str], DemTile]) -> Mosaic:
         raise MosaicError("the plan has no tiles")
     planned = np.result_type(*(t.dtype for t in plan.tiles))
     canvas: npt.NDArray[Any] = np.full((plan.meta.rows, plan.meta.cols), np.nan, dtype=planned)
-    merged: list[TilePlacement] = []
+    ordered = sorted(plan.tiles, key=lambda t: t.name)
+    strips: dict[tuple[str, str], npt.NDArray[Any]] = {}
     for placement in plan.tiles:
         array = _loaded(placement, load).array
         if np.result_type(canvas.dtype, array.dtype) != canvas.dtype:
             canvas = canvas.astype(np.result_type(canvas.dtype, array.dtype))
-        _merge(canvas, placement, array, plan.meta.nodata, merged, load)
-        merged.append(placement)
-    return Mosaic(tile=DemTile._adopt(plan.meta, canvas), plan=plan)
+        c, s = placement.canvas, placement.source
+        incoming = array[s.row0 : s.row0 + s.rows, s.col0 : s.col0 + s.cols]
+        canvas[c.row0 : c.row0 + c.rows, c.col0 : c.col0 + c.cols] = incoming
+        for other in ordered:
+            box = _meet(c, other.canvas)
+            if other.name != placement.name and box is not None:
+                strips[placement.name, other.name] = incoming[_within(box, c)].copy()
+        del array, incoming  # before the next load, or two tiles outlive this one
+    seams = []
+    for i, a in enumerate(ordered):
+        for b in ordered[i + 1 :]:
+            box = _meet(a.canvas, b.canvas)
+            if box is None:
+                continue
+            _decide(canvas, box, ordered, strips, (a.name, b.name), plan.meta.nodata)
+            seam = _seam(a.name, b.name, strips[a.name, b.name], strips[b.name, a.name], plan)
+            if seam is not None:
+                seams.append(seam)
+    return Mosaic(tile=DemTile._adopt(plan.meta, canvas), plan=plan, seams=tuple(seams))
 
 
 def _aligned(a: RasterMeta, b: RasterMeta) -> bool:
@@ -398,48 +455,83 @@ def _loaded(placement: TilePlacement, load: Callable[[str], DemTile]) -> DemTile
     return tile
 
 
-def _merge(
-    canvas: npt.NDArray[Any],
-    placement: TilePlacement,
-    array: npt.NDArray[Any],
-    nodata: float | None,
-    merged: list[TilePlacement],
-    load: Callable[[str], DemTile],
-) -> None:
-    """R5's overlap rule, per node: valid beats NoData; two valid values must
-    be equal (`==`); NoData against NoData keeps the sentinel over NaN, in
-    every order. A refusal names the merged tile whose value the incoming one
-    disagrees with, re-loading candidates (B2): the request is refused anyway."""
-    c, s = placement.canvas, placement.source
-    region = canvas[c.row0 : c.row0 + c.rows, c.col0 : c.col0 + c.cols]
-    incoming = array[s.row0 : s.row0 + s.rows, s.col0 : s.col0 + s.cols]
-    old_nan, new_nan = np.isnan(region), np.isnan(incoming)
-    old_valid, new_valid = ~old_nan, ~new_nan
+def _meet(a: IndexWindow, b: IndexWindow) -> IndexWindow | None:
+    """The canvas nodes both windows hold, or None."""
+    r0, c0 = max(a.row0, b.row0), max(a.col0, b.col0)
+    r1, c1 = min(a.row0 + a.rows, b.row0 + b.rows), min(a.col0 + a.cols, b.col0 + b.cols)
+    if r0 >= r1 or c0 >= c1:
+        return None
+    return IndexWindow(row0=r0, col0=c0, rows=r1 - r0, cols=c1 - c0)
+
+
+def _within(inner: IndexWindow, outer: IndexWindow) -> tuple[slice, slice]:
+    """`inner`'s slices in an array holding `outer` (both in canvas indices)."""
+    r, c = inner.row0 - outer.row0, inner.col0 - outer.col0
+    return slice(r, r + inner.rows), slice(c, c + inner.cols)
+
+
+def _valid(values: npt.NDArray[Any], nodata: float | None) -> npt.NDArray[np.bool_]:
+    valid = ~np.isnan(values)
     if nodata is not None:
-        old_valid &= region != nodata
-        new_valid &= incoming != nodata
-    clash = old_valid & new_valid & (region != incoming)
-    if clash.any():
-        row, col = (int(v) for v in np.argwhere(clash)[0])
-        held = region[row, col]
-        other = next(
-            m.name
-            for m in merged
-            if m.canvas.row0 <= c.row0 + row < m.canvas.row0 + m.canvas.rows
-            and m.canvas.col0 <= c.col0 + col < m.canvas.col0 + m.canvas.cols
-            and _loaded(m, load).array[
-                m.source.row0 + c.row0 + row - m.canvas.row0,
-                m.source.col0 + c.col0 + col - m.canvas.col0,
-            ]
-            == held
+        valid &= values != nodata
+    return valid
+
+
+def _decide(
+    canvas: npt.NDArray[Any],
+    box: IndexWindow,
+    ordered: list[TilePlacement],
+    strips: dict[tuple[str, str], npt.NDArray[Any]],
+    pair: tuple[str, str],
+    nodata: float | None,
+) -> None:
+    """Ola's Q1 revised over `box`, the overlap of `pair`: each node takes the
+    valid value of the tile it lies deepest in, depth being
+    `min(r, c, rows - 1 - r, cols - 1 - c)` in the whole tile's own indices;
+    ties to the name that sorts first (`ordered` is by name, and only a deeper
+    tile replaces). No valid value: the sentinel if any tile holds it, else
+    NaN, in every order. A third tile's values come from its strip with one
+    of the pair, which holds every node of `box` it covers."""
+    best = np.full((box.rows, box.cols), -1, dtype=np.int64)
+    value = np.full((box.rows, box.cols), np.nan, dtype=canvas.dtype)
+    sentinel = np.zeros((box.rows, box.cols), dtype=bool)
+    for t in ordered:
+        part = _meet(t.canvas, box)
+        if part is None:
+            continue
+        other = next(p for p in ordered if p.name == (pair[1] if t.name == pair[0] else pair[0]))
+        held = _meet(t.canvas, other.canvas)
+        assert held is not None  # it holds `part`
+        values = strips[t.name, other.name][_within(part, held)]
+        row = np.arange(part.rows) + part.row0 - t.canvas.row0 + t.source.row0
+        col = np.arange(part.cols) + part.col0 - t.canvas.col0 + t.source.col0
+        depth = np.minimum.outer(
+            np.minimum(row, t.meta.rows - 1 - row), np.minimum(col, t.meta.cols - 1 - col)
         )
-        largest = float(np.max(np.abs(region[clash].astype(np.float64) - incoming[clash])))
-        raise MosaicError(
-            f"{other} and {placement.name} disagree at {int(clash.sum())} overlapping "
-            f"nodes, by up to {largest!r}"
-        )
-    write = (old_nan & ~new_nan) | (~old_nan & ~old_valid & new_valid)
-    region[write] = incoming[write]
+        here = _within(part, box)
+        take = _valid(values, nodata) & (depth > best[here])
+        value[here][take] = values[take]
+        best[here][take] = depth[take]
+        if nodata is not None:
+            sentinel[here] |= values == nodata
+    if nodata is not None:
+        value[(best < 0) & sentinel] = nodata
+    canvas[box.row0 : box.row0 + box.rows, box.col0 : box.col0 + box.cols] = value
+
+
+def _seam(
+    first: str, second: str, a: npt.NDArray[Any], b: npt.NDArray[Any], plan: MosaicPlan
+) -> Seam | None:
+    """The pair's report over its overlap in the mosaic: nodes where both hold
+    a valid value and `|a - b| >= SEAM_THRESHOLD`, and the largest and median
+    `|a - b|` over those, in float64. None when no node qualifies. The
+    threshold is the report's only: `_decide` never consults it."""
+    both = _valid(a, plan.meta.nodata) & _valid(b, plan.meta.nodata)
+    gaps = np.abs(a[both].astype(np.float64) - b[both].astype(np.float64))
+    gaps = gaps[gaps >= SEAM_THRESHOLD]
+    if not gaps.size:
+        return None
+    return Seam(first, second, int(gaps.size), float(gaps.max()), float(np.median(gaps)))
 
 
 def _mixed(a: TileFootprint, b: TileFootprint) -> str:

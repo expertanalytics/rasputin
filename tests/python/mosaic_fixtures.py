@@ -155,3 +155,117 @@ def footprints(footprint: Callable[..., Any], tiles: Mapping[str, DemTile]) -> l
 def same_array(a: np.ndarray, b: np.ndarray) -> bool:
     """Equal bit for bit: dtype, shape and bytes (so NaN matches NaN, -0 != 0)."""
     return a.dtype == b.dtype and a.shape == b.shape and a.tobytes() == b.tobytes()
+
+
+# ---------------------------------------------------------------------------
+# Ola's Q1 revised (2026-09-28): the oracle for overlaps and seams
+# ---------------------------------------------------------------------------
+
+
+def own_depth(rows: int, cols: int) -> np.ndarray:
+    """Each node's distance, in nodes, to its own tile's nearest border.
+
+    `min(r, c, rows - 1 - r, cols - 1 - c)`: 0 on the border. The tile's own
+    border is its whole grid (`meta.rows x meta.cols`), never the window a
+    request uses of it and never the mosaic's.
+    """
+    r, c = np.indices((rows, cols))
+    return np.minimum.reduce([r, c, rows - 1 - r, cols - 1 - c])
+
+
+def on_canvas(
+    tiles: Mapping[str, DemTile], grid: RasterMeta
+) -> dict[str, tuple[np.ndarray, np.ndarray]]:
+    """Each tile's valid values (float64) and own depths on `grid`'s nodes.
+
+    NaN and -1 where the tile does not cover the node or holds NoData there
+    (NaN, or its sentinel). Tiles are placed by their coordinates, so this
+    shares no index arithmetic with `plan_mosaic`.
+    """
+    out: dict[str, tuple[np.ndarray, np.ndarray]] = {}
+    for name, tile in tiles.items():
+        m = tile.meta
+        row0 = round((grid.y_max - m.y_max) / grid.delta_y)
+        col0 = round((m.x_min - grid.x_min) / grid.delta_x)
+        value = np.full((grid.rows, grid.cols), np.nan)
+        depth = np.full((grid.rows, grid.cols), -1)
+        array = np.asarray(tile.array, dtype=np.float64)
+        valid = ~np.isnan(array)
+        if m.nodata is not None:
+            valid &= array != m.nodata
+        tile_depth = own_depth(m.rows, m.cols)
+        for i, j in zip(*np.nonzero(valid), strict=True):
+            r, c = row0 + int(i), col0 + int(j)
+            if 0 <= r < grid.rows and 0 <= c < grid.cols:
+                value[r, c], depth[r, c] = array[i, j], tile_depth[i, j]
+        out[name] = (value, depth)
+    return out
+
+
+def deepest_interior(tiles: Mapping[str, DemTile], grid: RasterMeta) -> np.ndarray:
+    """The Q1-revised mosaic, node by node: of the tiles holding a valid value,
+    the one the node lies deepest in; ties to the name that sorts first.
+    NaN where no tile holds a valid value."""
+    placed = on_canvas(tiles, grid)
+    expected = np.full((grid.rows, grid.cols), np.nan)
+    for r in range(grid.rows):
+        for c in range(grid.cols):
+            held = [(-d[r, c], name) for name, (v, d) in placed.items() if d[r, c] >= 0]
+            if held:
+                expected[r, c] = placed[min(held)[1]][0][r, c]
+    return expected
+
+
+def winners(tiles: Mapping[str, DemTile], grid: RasterMeta) -> list[list[str]]:
+    """The name of the tile each node's value is taken from, '' for none."""
+    placed = on_canvas(tiles, grid)
+    return [
+        [
+            min(((-d[r, c], n) for n, (_, d) in placed.items() if d[r, c] >= 0), default=(0, ""))[1]
+            for c in range(grid.cols)
+        ]
+        for r in range(grid.rows)
+    ]
+
+
+#: Ola, 2026-09-28: "Ignore below 1mm". A seam counts a node only where
+#: |a - b| >= 1 mm, 0.001 in the DEM's (metre) units, compared in float64.
+SEAM_THRESHOLD = 0.001
+
+
+def seams_of(
+    tiles: Mapping[str, DemTile], grid: RasterMeta
+) -> list[tuple[str, str, int, float, float]]:
+    """The seam report the rule asks for, pair by pair, sorted by name:
+    `(first, second, nodes, largest, median)` over the mosaic's nodes where
+    both tiles hold a valid value and `|a - b| >= SEAM_THRESHOLD`;
+    `|difference|` in float64, the median of an even count the mean of the
+    middle two. Pairs with no such node are left out."""
+    placed = on_canvas(tiles, grid)
+    out = []
+    names = sorted(placed)
+    for i, a in enumerate(names):
+        for b in names[i + 1 :]:
+            va, vb = placed[a][0], placed[b][0]
+            both = ~np.isnan(va) & ~np.isnan(vb)
+            differ = both & (np.abs(np.where(both, va - vb, 0.0)) >= SEAM_THRESHOLD)
+            if differ.any():
+                gaps = np.abs(va[differ] - vb[differ])
+                out.append((a, b, int(differ.sum()), float(gaps.max()), float(np.median(gaps))))
+    return out
+
+
+def seams(result: Any) -> list[tuple[str, str, int, float, float]]:
+    """A `Mosaic`'s (or `DemInput`'s) seam report as plain tuples."""
+    return [(s.first, s.second, s.nodes, s.largest, s.median) for s in result.seams]
+
+
+def shifted_by(tile: DemTile, offset: float) -> DemTile:
+    """`tile` with `offset` added to every value, NoData kept: a tile that
+    disagrees with its neighbours everywhere, by exactly `offset`."""
+    array = np.asarray(tile.array).copy()
+    valid = ~np.isnan(array)
+    if tile.meta.nodata is not None:
+        valid &= array != tile.meta.nodata
+    array[valid] += np.asarray(offset, dtype=array.dtype)
+    return DemTile(meta=tile.meta, array=array)

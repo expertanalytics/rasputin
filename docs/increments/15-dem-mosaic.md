@@ -27,6 +27,43 @@ are designed, not implemented; Q6-Q10 are open. Written by `@architect` before
     is refused; a request inside either lattice is meshed.
 
   Q6-Q10 (the basin) wait until after the Norwegian sub-increments.
+- **2026-09-28, Q1 revised: overlaps that disagree are split down the middle
+  ("b", Ola).** Measured first, and widened after review with the committed
+  probe `15-probes/dtm10_dates.py` (120 random neighbour pairs, seed 1; a
+  tile's *export date* is the date of its side files, `.tif.aux.xml` or
+  `.tfw`, which agree on all 254 tiles; 143 of the 254 `.tif` files share one
+  date, 2021-12-10, later than their side files, so the `.tif` date does not
+  tell the exports apart, and the TIFF tags carry none). Of 120 sampled pairs,
+  119 share a valid node: of 42 same-date pairs, 40 agree exactly and 41
+  within 1 mm, but 7204_4 | 7304_3 differs by 1 mm or more at 156,379 nodes,
+  by up to 5.07 m; of 77
+  different-date pairs, 49 agree within 1 mm and 28 do not, up to 52.1 m
+  (6500_1 | 6500_2). So a shared date makes agreement likely, not certain.
+  The differences have a mean near 0, are often exactly 0 on flat ground and
+  grow with slope (the first 60-pair sample, and three pairs examined node by
+  node). Kartverket's
+  metadata explains it: the current 10 m model is exported from NDH laser data
+  where it exists, supplemented by the 2013 contour-based DTM10 (±2-6 m), and
+  tiles were exported one by one as laser coverage grew. Not land uplift
+  (mm/yr) and not glaciers. The rule:
+  - each node of an overlap takes the value of the tile whose **interior it
+    lies deepest in** (the largest distance, in nodes, to that tile's own
+    nearest border), **ties by tile name**; NoData still loses to a valid
+    value;
+  - disagreement is **no longer refused**. The run **reports each disagreeing
+    seam** (the two tiles, the number of nodes that differ, the largest and
+    the median difference) in `--stats` and in a `dem_seams` file field, so a
+    25 m jump cannot pass unnoticed;
+  - the result stays independent of tile order.
+  Ola will also download a fresh single-date set from hoydedata.no, whose
+  overlaps should mostly agree (the probe found one same-date pair that does
+  not); the fresh set is not blocking ("the data is data", Ola).
+- **2026-09-28, the seam report ignores differences below 1 mm** (Ola: "Ignore
+  below 1mm"). A seam counts, and the report lists, only nodes where
+  |a − b| ≥ 1 mm; float noise such as 7807_1 | 7808_4 (31 nodes, 1.5e-5 m)
+  and 7910_2 | 7910_3 (4 nodes, 2.4e-7 m) no longer appears. The midline rule
+  itself is unchanged: which tile's value a node takes does not depend on the
+  threshold.
 - **2026-09-27, Q5 as read after review ("Yes", to the main session's
   proposal):** @reviewer found that DTM10's 51-node overlaps make a box that
   only reaches into a half-cell tile's overlap strip select that tile and be
@@ -83,7 +120,7 @@ What is carried across, and what changes:
 | R3: `read_meta` split out of `decode_dem` | carried (R3); window decoding added in 15d | an ANADEM tile is 2.5 GiB |
 | R4: every tile in the directory on one lattice, or refuse | **changed** (R4): only the **selected** tiles must share a lattice | 8 of Ola's 254 tiles are half a cell off (N2); the parked rule refuses the whole archive |
 | R4: canvas origin from the tiles as decoded | **changed** (R4): each lattice has a **reference node**, and every node has a global index | frame coordinates must not depend on the window, for domain decomposition (R12) |
-| R5: valid beats NoData, disagreement refused, order-independent | carried (R5), now **with real data behind it** | DTM10 (N3) and ANADEM (B4) overlaps agree bit for bit |
+| R5: valid beats NoData, disagreement split down the middle and reported (Q1 revised), order-independent | carried (R5), now **with real data behind it** | DTM10 overlaps between tiles exported on different dates often disagree, up to 52 m (Q1 revised); same-date ones nearly always agree; ANADEM's sampled seams agree (B4) |
 | R5: gaps stay NaN | **changed** (R5): a node the request needs that no tile covers is refused | Ola's ruling, `18-row-span-scan.md` R6: "a missing tile inside the extent is a data error" |
 | R6: `--bbox` in the DEM's CRS, no transform | carried (R6); the domain is transformed in 15b (R9) | "inputs in their own CRS" |
 | R6: `GeoPolygon` lands with the clip | superseded: 16 shipped `DomainPolygon`; 15b gives it a transform | |
@@ -126,7 +163,9 @@ They are measurement scripts, not production code, and nothing imports them.
   are at x = …745 instead of …750, and they are 5052 wide and mostly 5053 high.
   They look like a second production run. Under the parked R4 (whole directory
   on one lattice) `--dem DIR` would refuse the whole archive.
-- **N3. Neighbours overlap by 51 nodes, and the overlaps agree.** A 5051-node
+- **N3. Neighbours overlap by 51 nodes, and same-date overlaps agree.**
+  (Corrected 2026-09-28: tiles exported on different dates can disagree; see
+  "Ruled by Ola", Q1 revised.) A 5051-node
   tile is 50 km plus 510 m, so each edge neighbour shares 51 rows or columns
   (a few share 52 or 53; one pair 53). Over 4 neighbour pairs of the first
   tile, every overlapping cell is equal: 257 601 of 257 601 on each edge
@@ -252,8 +291,9 @@ modified data apply at least (its notice, plus a notice of modification).
   `gdalwarp` maps every destination pixel back through the inverse transform,
   approximated by linear interpolation along rows within an error threshold
   (default 0.125 pixel). GDAL documentation, recalled. **Differences:** no order
-  precedence, since disagreement is refused and valid beats NoData in any
-  order (R5); and no warp (R8).
+  precedence by source order: a disagreeing overlap goes to the tile the node
+  lies deepest in, ties by name, and valid beats NoData in any order (R5, Q1
+  revised); and no warp (R8).
 - **Projection choice**: Snyder, *Map Projections — A Working Manual*, USGS
   Professional Paper 1395, 1987, recalled. A Lambert conformal conic suits an
   extent wide east-west at mid latitudes, with the standard parallels about one
@@ -461,20 +501,22 @@ of `TileFootprint`.
 
 ### R5. Assembly: stitching and overlaps [15a]
 
-Carried from the parked R5 almost unchanged.
+Carried from the parked R5, with assembly reworked for Q1 revised.
 
 - The canvas is allocated once, NaN-filled, in `np.result_type` of the
   selected tiles' dtypes (float32 for both archives).
 - Tiles are loaded one at a time in plan order. Each tile's used window is
-  merged into the canvas, and the tile is dropped.
+  written whole into the canvas; where it meets another tile, a copy of its
+  values there (a strip) is kept; then the tile is dropped. Once all tiles
+  are in, each overlap is decided from the strips.
 - **Overlaps**, per node:
   - one value NoData (NaN or the sentinel), the other valid: **valid wins**;
   - both NoData: NoData;
   - both valid and equal (`==`): accepted;
-  - both valid and different: **refused** (`refuses_overlap_disagreement`),
-    naming both tiles, the number of disagreeing nodes and the largest
-    difference. That is the parked U1 (a), now Q1, with measurements: DTM10
-    (N3) and ANADEM (B4) overlaps agree bit for bit where sampled.
+  - both valid and different: **the tile the node lies deepest in wins**, ties
+    by name, and the seam is reported (Q1 revised, 2026-09-28). Q1 first
+    refused this; real DTM10 overlaps from different export dates disagree,
+    so refusing blocked much of the archive.
 - The result does not depend on tile order (M10).
 - **One tile, no bounds: the loaded `DemTile` is returned as it is.** No
   canvas, no copy, so `--dem file.tif` stays bit-identical to today, memory
@@ -730,8 +772,10 @@ lazily inside the parallel scan.
   or snapped.
 - **I2. Order independence.** `plan_mosaic` and `assemble` give the same
   result for every permutation of the footprints.
-- **I3. Valid beats NoData; disagreement refuses.** No overlapping node is ever
-  silently chosen between two different valid values.
+- **I3. Valid beats NoData; disagreement is decided and reported** (Q1
+  revised, 2026-09-28; first "disagreement refuses"). No overlapping node is
+  ever chosen between two different valid values without the pair appearing
+  in the seam report.
 - **I4. Coverage.** Every node the request needs comes from a tile. NaN filler
   exists only outside the needed region.
 - **I5. Split and re-stitch is the identity.** A grid cut into tiles
@@ -816,6 +860,8 @@ order. 15c and 15d follow later.
 | | **15a total** | **375** | **520** |
 | | *15b as built, measured at review (d34d79d..914dfc8, CLAUDE.md §2 unit): 150 added, of which `dem_input.py` 48 against 20 estimated; 15a + 15b against master 675, under the ceiling; they ship as two PRs per Ola's order* | | |
 | | *15a as built, measured at review (branch diff, CLAUDE.md §2 unit): 533, of which `mosaic.py` 325 against 200 estimated* | | |
+| | *15a after Ola's Q1 revised (cba0073): 596 added against master, of which `mosaic.py` 372 against 200 estimated* | | |
+| | *15a at the tip (a253a77): 597 added against master, blank lines excluded (`CLAUDE.md` §2 as ruled by Ola 2026-09-28); 554 net* | | |
 | **15b** | **Norway: the domain in its own CRS** | | |
 | | `crs.py`: `parse_crs`, `reprojector` | 30 | |
 | | `domain.py`: `crs: str`, `to_crs`, extent against coverage; `check_crs` removed | 40 | |
@@ -979,9 +1025,10 @@ failing M1's area-registered case.
   - a registration difference: `registration`;
   - a NoData difference: `nodata` and both values, with `None` for an absent
     sentinel;
-  - an overlap disagreement: both names — the two tiles whose *values*
-    disagree, not the first tile that merely covers the node (B2) — the count
-    as a whole number, and the largest difference;
+  - an overlap disagreement: *no longer a refusal* (Q1 revised); what it
+    named — the two tiles whose *values* disagree, not a tile that merely
+    covers the node (B2), the count and the largest difference — is now the
+    seam report's (below);
   - uncovered nodes: the node bounding box of the uncovered nodes, with each
     coordinate written out, not in scientific notation;
   - a changed tile: `changed since it was listed`;
@@ -1019,6 +1066,77 @@ test amendment that follows green `ff7cc8d`:
   `needed` path is not pinned.
 - **The edge snap (S3)** has its test: at spacing 0.1, the box edges 0.3, 0.7
   and 0.9 add no node line.
+
+**Amended for Ola's Q1 revised (2026-09-28).** Pinned by the test amendment
+that follows it (`15a tests: overlaps split down the middle and reported`):
+`TestQ1DeepestInterior` and `TestQ1SeamReport` in `test_mosaic.py`, four
+rewritten tests of its `TestM8Overlaps`, `TestQ1Seams` in
+`test_cli_mesh_mosaic.py`, and the real-seam cases of `test_dem_input.py` and
+`test_cli_mesh_mosaic.py`. All were run green against a scratch implementation
+that was not committed; `test_mosaic.py` killed 16 of 16 mutants of it.
+
+- **Depth** of a node in a tile is `min(r, c, rows - 1 - r, cols - 1 - c)` in
+  the tile's own indices, `rows x cols` being the **whole tile's** `meta` —
+  not the window a `--bbox` uses of it, and not the mosaic's. 0 on the
+  border. Of the tiles holding a **valid** value at a node, the deepest
+  gives it; equal depths go to the tile whose name sorts **first** (Python
+  `str` order, as the plan's). NoData against NoData is unchanged (two NaNs
+  NaN, two sentinels the sentinel, NaN against the sentinel either, the same
+  in every order). So one shared line (point-registered neighbours) is all
+  ties, and a tile wholly inside a bigger one takes only the ties.
+- **`Seam`** in `tin_engine.mosaic`, with `first`, `second` (names,
+  `first < second`), `nodes` (int), `largest` and `median` (float).
+  `Mosaic.seams` and `DemInput.seams` are tuples of them, sorted by
+  `(first, second)`, empty for one tile and when every overlap agrees.
+- A seam is a **pair** of tiles. `nodes` counts the mosaic's nodes (inside the
+  window, never a node a `--bbox` leaves out) where both hold a valid value
+  and the two differ (`!=`, so one ulp counts; superseded by the 1 mm
+  threshold below). `largest` and `median` are of
+  `|a - b|` over those nodes only, in float64; the median of an even count is
+  the mean of the middle two (`np.median`). A node in three tiles counts once
+  in each disagreeing pair. Pairs that agree are not listed.
+- **`dem_seams`** (file field) is recorded exactly when `dem_tiles` is:
+  `none` when no pair disagrees, else one entry per pair in `seams` order,
+  `; `-joined and escaped like `dem_tiles`:
+  `<first> | <second>: nodes <n>, max <largest:g>, median <median:g>`, for
+  example `ne.tif | nw.tif: nodes 1, max 4, median 4`. One entry per
+  disagreeing pair, not per node, so it stays small.
+- **`--stats`** has a `## DEM seams` section, between `## Sizes` and
+  `## Quality (plan view, x/y)`, only when some pair disagrees: a table
+  `| tile | tile | nodes | max | median |`, one row per entry, numbers
+  formatted as in `dem_seams`.
+- Not pinned: a stderr line for a disagreeing seam, a cap on the number of
+  entries, and where the report is computed (the scratch kept each pair's
+  overlap strips, which needs no second load).
+
+**Amended for Ola's 1 mm threshold (2026-09-28).** Pinned by the test
+amendment `15a tests: the seam report ignores differences below 1 mm; table
+cells escaped`: `TestSeamThreshold` in `test_mosaic.py`, the oracle
+`seams_of` in `mosaic_fixtures.py` (`SEAM_THRESHOLD`), and two tests of
+`test_cli_mesh_mosaic.py`'s `TestQ1Seams`. Run green against a scratch
+implementation that was not committed; three mutants of it killed (`>` for
+`>=`, the threshold consulted by the midline decision, the median over every
+differing node).
+
+- A seam counts a node where both tiles hold a valid value and
+  `|a - b| >= 0.001` in float64 (the DEM's units), replacing `!=`. `nodes`,
+  `largest` and `median` are over those nodes only; a pair with none is not
+  listed, so `dem_seams` is `none` and `--stats` has no `## DEM seams`
+  section when no pair qualifies. The boundary is pinned with float64 tiles
+  holding 0.0 against `0.001` (counts) and against
+  `np.nextafter(0.001, 0.0)` (does not), in either tile.
+- The midline decision does not look at the threshold: 0.5 mm apart, a node
+  still takes the deeper tile's value, ties by name, in every assembly order.
+  `TestM8Overlaps.test_one_ulp_is_a_disagreement` became
+  `test_one_ulp_is_below_the_threshold_and_still_decided_by_depth` (no seam;
+  the value is still the tie's `e.tif`).
+- `TestRealDtm10.test_q1_the_seam_shifted_by_one_cell_is_reported_and_split`
+  (`test_dem_input.py`) is unchanged but follows the oracle: 13 of the
+  shifted real seam's 12,800 differing nodes are below 1 mm.
+- **Table cells:** a `|` in a tile name is written `\|` in the
+  `## DEM seams` table, so the row keeps five cells. The `dem_seams` field is
+  not a table and keeps the name as listed (`ne.tif | n|w.tif: ...`). Which
+  layer escapes is not pinned.
 
 **`io/models.py`.** `DemTile._adopt(meta, array)` is a classmethod. It raises
 `ValueError` on a shape, dtype, ndim or non-C-contiguous mismatch, sets the
@@ -1274,7 +1392,8 @@ Q1-Q5 are about Norway and are needed before 15a starts. Q6-Q10 are about
 the basin and can wait until after Norway.
 
 **Q1 (the parked U1). Two tiles give different valid values at the same node.**
-Now measured: DTM10 overlaps agree bit for bit on 4 of 869 pairs (N3), and
+Now measured: DTM10 overlaps agree bit for bit on 4 of 869 pairs (N3; but see
+Q1 revised: different-date pairs disagree), and
 ANADEM's on 3 seams (B4). But the committed benchmark tile and the archive's
 tile of the same name differ at 910 706 nodes (N5), so two releases in one
 directory is a real case.

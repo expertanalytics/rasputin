@@ -25,7 +25,7 @@ from pydantic import BaseModel, ConfigDict, model_validator
 from tin_engine.domain import DomainError, DomainPolygon, check_extent
 from tin_engine.io.models import DemTile, RasterMeta
 from tin_engine.io.repository import TiffDemRepository
-from tin_engine.mosaic import Bounds, MosaicError, MosaicPlan, assemble, plan_mosaic
+from tin_engine.mosaic import Bounds, MosaicError, MosaicPlan, Seam, assemble, plan_mosaic
 
 
 class DemRequest(BaseModel):
@@ -56,14 +56,16 @@ class DemRequest(BaseModel):
 
 @dataclass(frozen=True, slots=True)
 class DemInput:
-    """The tile to mesh, the plan it was assembled by, and a name for the run:
-    the directory's name, or the stem of the first file as given; and the
-    domain in the DEM's CRS, None without one."""
+    """The tile to mesh, the plan it was assembled by, a name for the run (the
+    directory's name, or the stem of the first file as given), the domain in
+    the DEM's CRS (None without one), and the mosaic's disagreeing seams (Ola's
+    Q1 revised)."""
 
     tile: DemTile
     plan: MosaicPlan
     label: str
     domain: DomainPolygon | None = None
+    seams: tuple[Seam, ...] = ()
 
 
 def open_dem(request: DemRequest) -> DemInput:
@@ -81,9 +83,8 @@ def open_dem(request: DemRequest) -> DemInput:
         plan, domain = plan_mosaic(footprints, request.bounds, None), None
     else:
         plan, domain = _domain_plan(footprints, request.domain)
-    return DemInput(
-        tile=assemble(plan, repository.load).tile, plan=plan, label=label, domain=domain
-    )
+    mosaic = assemble(plan, repository.load)
+    return DemInput(tile=mosaic.tile, plan=plan, label=label, domain=domain, seams=mosaic.seams)
 
 
 def _domain_plan(footprints: Any, given: DomainPolygon) -> tuple[MosaicPlan, DomainPolygon]:
