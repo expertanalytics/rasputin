@@ -34,3 +34,9 @@ To decide:
    back.
 3. `@reviewer` audits who changed which files, and whether each change was
    that persona's to make.
+
+Found by `@reviewer`'s first role-boundary audit (16b-1/2, 2026-09-28):
+`@tester` commits e99c8ea and 3990449 added about 60 lines to the design
+document (following the 16b-0 precedent); the main session's 413e91b edited
+the design document too. `@developer` and `@architect` stayed in their
+areas.
