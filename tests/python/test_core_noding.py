@@ -765,8 +765,13 @@ def ladder_pslg() -> Any:
     """Enough noding work for the ticker to resolve: a grid of crossing
     breaklines, every crossing a node the driver has to construct. Deterministic
     by construction -- no random numbers -- and the counts are chosen so that
-    every crossing is strictly interior and no two coincide."""
-    rungs = 48
+    every crossing is strictly interior and no two coincide.
+
+    Sized for the probe's 0.05 s floor with margin for slower runners: 300
+    rungs a side (90 000 crossings) nodes in ~0.26 s on an M-series Mac. It was
+    48 until 16b-0, when the verifier's pair search went from quadratic to sort
+    and sweep and the old ladder fell to ~0.003 s."""
+    rungs = 300
     offsets = np.linspace(20.0, 680.0, rungs)
     ring = np.array([[0.0, 0.0], [700.0, 0.0], [700.0, 700.0], [0.0, 700.0]]) + ORIGIN
     points = [ring]

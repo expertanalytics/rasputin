@@ -301,3 +301,13 @@ target_link_libraries(test_mesh_lawson_stack PRIVATE Threads::Threads)
 # starts no threads, so it is not in the TSan job.
 
 add_terrain_backend_test(test_mesh_lattice_incircle unit/test_mesh_lattice_incircle.cpp)
+
+# The verifier's pair search by sort and sweep, increment 16b-0
+# (docs/increments/16b-terrain-polygons.md, R8, I6 and "Pinned by the red suite
+# (16b-0)"). prop_noding_verifier_sweep is the invariant-critical suite:
+# sweep_box_pairs reports exactly the brute force's box pairs, build() returns
+# the brute-force verifier's status (tests/cpp/support/verifier_oracle.hpp,
+# frozen at 6b4fcb9), and node<K>'s output digests are today's. It starts no
+# threads, so it is not in the TSan job.
+
+add_terrain_backend_test(prop_noding_verifier_sweep property/prop_noding_verifier_sweep.cpp)

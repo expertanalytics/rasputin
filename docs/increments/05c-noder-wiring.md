@@ -188,7 +188,7 @@ be instantiated in order to test the layer above it.
 
 5b priced this as "~6 lines" across four files: `cdt/triangulate.hpp`,
 `cdt/detria_backend.hpp`, `src/cdt/detria_backend.cpp`, plus the include swaps
-(`05b-noder-driver.md:1631-1640`). **There is a fifth**, and it is the one with
+(`05b-noder-driver.md:1631-1640` at `dc372a5`). **There is a fifth**, and it is the one with
 a design decision in it:
 
 ```sh
@@ -477,7 +477,7 @@ most likely to meet is "the same refusal, slower" is worse than not having it.
 
 **And the header's sentence goes with it. `describe(NodeStatus::NotConverged)`
 today names two levers** — "use a finer spacing **or raise the cap**"
-(`noded_pslg_builder.hpp:106-108`). **Ruling: it names one.** `@developer` makes
+(`noded_pslg_builder.hpp:106-108` at `6732564`). **Ruling: it names one.** `@developer` makes
 this edit in the green commit:
 
 ```cpp
@@ -508,6 +508,8 @@ guard patched into ..." — cites `noded_pslg_builder.hpp:217` as the site, and
 that line number is downstream of this string. Collapsing
 the two lines into one moves it and falsifies a mutation record this branch is
 not re-running. The replacement above is two lines for that reason.
+(Since 16b-0 the line has moved anyway; 05b's citation is now pinned to
+`6732564` and names the line by its text, so the constraint no longer binds.)
 
 `@tester` and `@developer` should read the whole of this as: the presentation
 text for `NotConverged` (below) **must not promise the cap**, because the CLI
@@ -724,7 +726,7 @@ no caller is a surface with no consumer.
 
 ## What becomes unreachable in `CdtStatus`
 
-Unchanged from `05-noder.md` and `05b-noder-driver.md:1598-1616`, and this is
+Unchanged from `05-noder.md` and `05b-noder-driver.md:1598-1616` at `dc372a5`, and this is
 the increment where it becomes true. `04-cdt.md` gains **one paragraph appended
 beneath its mapping table**, leaving the table intact as the record of what was
 true at increment 4:

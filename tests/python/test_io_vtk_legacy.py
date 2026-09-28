@@ -376,8 +376,17 @@ class TestRefusals:
             write(edge_masks=np.zeros(count, dtype=np.uint32))
 
 
+def cell_kinds(vtk: VtkFile) -> list[str]:
+    """The cell sections in file order."""
+    return [s for s in vtk.sections if s in ("LINES", "POLYGONS")]
+
+
 class TestZeroEdges:
-    """A mesh with no constraint edges is still a well-formed file (ruling 4)."""
+    """No constraint edges: the `LINES` block is left out (ruling 4, revised 2026-09-28).
+
+    vtk 9.7.1 rejects `LINES 0 0` ("Error reading lines", 0 cells); a file with
+    no `LINES` block loads in 9.7.0 and 9.7.1 alike.
+    """
 
     @pytest.fixture
     def empty(self, binary: bool) -> VtkFile:
@@ -389,13 +398,17 @@ class TestZeroEdges:
             )
         )
 
-    def test_lines_is_written_as_0_0(self, empty: VtkFile) -> None:
-        assert "LINES" in empty.sections
-        assert empty.lines_header == (0, 0)
+    def test_no_lines_block_is_written(self, empty: VtkFile) -> None:
+        assert cell_kinds(empty) == ["POLYGONS"]
+        assert empty.lines_header is None
 
-    def test_the_ascii_line_is_literally_lines_0_0(self) -> None:
+    def test_the_ascii_file_has_no_lines_keyword(self) -> None:
         blob = write(edges=np.zeros((0, 2), dtype=np.uint32), edge_masks=np.zeros(0, np.uint32))
-        assert b"\nLINES 0 0\n" in blob
+        assert b"\nLINES " not in blob
+
+    def test_a_nonempty_mesh_still_writes_lines_first(self, parsed: VtkFile) -> None:
+        assert cell_kinds(parsed) == ["LINES", "POLYGONS"]
+        assert parsed.lines_header == (len(EDGES), 3 * len(EDGES))
 
     def test_the_rest_of_the_file_is_intact(self, empty: VtkFile) -> None:
         assert_array_equal(empty.points, VERTICES)

@@ -176,13 +176,27 @@ std::vector<RasterGeometry> frames() {
 
 MeshVertex mv(double col, double row) { return MeshVertex{col, row}; }
 
+// Two draws as call arguments or operands are unsequenced (clang: left first,
+// GCC: right first), so every multi-draw expression goes through locals in
+// clang's left-to-right order.
 struct Rng {
     std::mt19937 gen;
     double node() { return static_cast<double>(gen() % kN); }
     double coord() {
-        return std::min(node() + static_cast<double>(gen() % 1024u) / 1024.0, double(kN - 1));
+        const double n = node();
+        return std::min(n + static_cast<double>(gen() % 1024u) / 1024.0, double(kN - 1));
     }
     bool coin() { return (gen() & 1u) != 0; }
+    MeshVertex node_vertex() {
+        const double c = node();
+        const double r = node();
+        return mv(c, r);
+    }
+    MeshVertex coord_vertex() {
+        const double c = coord();
+        const double r = coord();
+        return mv(c, r);
+    }
 };
 
 // Seeded triangles, node-only, mixed, near-node, slivers and horizontal, each as
@@ -193,24 +207,25 @@ std::vector<LatticeMesh> meshes(std::uint32_t seed, int count) {
     for (int i = 0; i < count; ++i) {
         std::array<MeshVertex, 3> v{};
         switch (i % 5) {
-            case 0: for (auto& p : v) p = mv(g.node(), g.node()); break;
-            case 1: for (auto& p : v) p = g.coin() ? mv(g.node(), g.node()) : mv(g.coord(), g.coord()); break;
+            case 0: for (auto& p : v) p = g.node_vertex(); break;
+            case 1: for (auto& p : v) p = g.coin() ? g.node_vertex() : g.coord_vertex(); break;
             case 2:
                 for (auto& p : v) {
                     const double e = g.coin() ? 1e-9 : -1e-12;
-                    p = mv(std::clamp(g.node() + e, 0.0, double(kN - 1)), g.node());
+                    const double c = std::clamp(g.node() + e, 0.0, double(kN - 1));
+                    p = mv(c, g.node());
                 }
                 break;
             case 3: {
-                v[0] = mv(g.node(), g.node());
-                v[1] = mv(g.node(), g.node());
+                v[0] = g.node_vertex();
+                v[1] = g.node_vertex();
                 v[2] = mv(std::clamp((v[0].col + v[1].col) / 2 + 1e-7, 0.0, double(kN - 1)),
                           (v[0].row + v[1].row) / 2);
                 break;
             }
             default: {
                 const double r = g.node();
-                v = {mv(g.coord(), r), mv(g.coord(), r), mv(g.coord(), g.coord())};
+                v = {mv(g.coord(), r), mv(g.coord(), r), g.coord_vertex()};
             }
         }
         const int s = orient_sign(v[0], v[1], v[2]);

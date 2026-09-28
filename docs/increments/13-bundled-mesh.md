@@ -85,7 +85,8 @@ float32, whatever the file declares. At northing 6.9e6 the float32 step is
    in a `FIELD` block inside `CELL_DATA` are returned by all three readers.
 
 Empty cases: `LINES 0 0`, no `LINES` block, and `FIELD features 0` all load
-correctly (1 triangle, cell data intact).
+correctly (1 triangle, cell data intact). (vtk 9.7.0; 9.7.1 rejects the first,
+see ruling 4.)
 
 **Cost at DEM scale.** A synthetic 1000 × 1000 grid: 1 000 000 vertices,
 1 996 002 triangles, 999 constraint edges, with mm-scale coordinate offsets and
@@ -170,6 +171,13 @@ reader's `Update()`.
    gives the values to the wrong cells in silence. `LINES` is always written,
    as `LINES 0 0` when there are no constraint edges; that form was measured to
    load.
+
+   *Revised by Ola, 2026-09-28 (PR #107):* with no constraint edges, the writer
+   leaves the `LINES` block out. vtk 9.7.1 rejects `LINES 0 0`
+   (`vtkPolyDataReader` reports "Error reading lines" and returns 0 cells);
+   a file with no `LINES` block loads in 9.7.0 and 9.7.1 alike, and this
+   increment measured that form too (the "Empty cases" line under the
+   findings). Nothing else in this ruling changes.
 
 5. **Every cell array covers every cell. Triangles carry 0.** An array covering
    only the lines empties the dataset (finding 2), so leaving triangles out is
@@ -457,7 +465,8 @@ Pure suite (no VTK; a parser written in the test, as increment 10 did):
 - A mask with an unnamed bit raises. A reserved field name raises.
 - Strings: space and `%` are encoded. Control characters and non-ASCII are
   refused, naming the character.
-- Zero edges: `LINES 0 0` and a well-formed file.
+- Zero edges: `LINES 0 0` and a well-formed file. (Revised 2026-09-28,
+  ruling 4: no `LINES` block.)
 - ASCII and binary decode to the same arrays.
 - Binary is big-endian. Use a value whose little-endian reading differs, and
   assert on the raw bytes.

@@ -1560,7 +1560,8 @@ written, each the sole killer of its side:
   outcome and guarantee 16 together.
 
 Measured here, not asserted, with the guard patched into
-`include/terrain/noding/noded_pslg_builder.hpp:217`, the header `touch`ed after
+`include/terrain/noding/noded_pslg_builder.hpp:217` at `6732564` (the line
+`if (is_closed(ch.role) && count < 3) {`), the header `touch`ed after
 each restore per `.claude/REQUIRED-READING.md`'s C++ stale-artifact hazard, and
 `ctest --test-dir build` run over all 611:
 
