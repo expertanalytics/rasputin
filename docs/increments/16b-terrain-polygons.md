@@ -1,7 +1,7 @@
 # Increment 16b — terrain polygons: interior polygons and polylines as constraints (CORINE over Norway)
 
-Status: **16b-0 shipped (#107); 16b-1/2 designed, red step written, not
-built.** Q1-Q6 at the end were ruled on 2026-09-28 (see "Ruled by Ola"). Written
+Status: **16b-0 shipped (#107); 16b-1/2 built (green `5079da8`), under
+review.** Q1-Q6 at the end were ruled on 2026-09-28 (see "Ruled by Ola"). Written
 by `@architect` before `@tester`, per `docs/increments/README.md` step 1, on
 branch `increment16b-terrain-polygons` off the unmerged 15b branch
 (`increment15b-domain-crs`). Nothing in this design depends on 15c or 15d.
@@ -356,6 +356,7 @@ cli.py (composition root)                       flags -> FeatureRequest
   ├─ feature_input.open_features(request, domain, dem_crs) -> FeatureSet     [16b-1]
   │     per source:
   │       GeoJSON: read the file (as domain.py does)
+  │       GML: open the file, io.gml.read_gml(stream, attribute)
   │       GeoPackage: io.repository.open_geopackage(path)   read-only connection
   │                   io.geopackage.layer_info / query_features(conn, layer, box)
   │     region = domain boundary, densified, in the SOURCE crs, + margin      (R5)
@@ -377,7 +378,8 @@ Boundaries, each one checkable by an import test (`TestModuleIsolation`
 style):
 
 - **No path below `cli.py` except** `domain.py` and `feature_input.py` (which
-  read GeoJSON text, as `domain.py` already does), `dem_input.py` (which only
+  read GeoJSON text, as `domain.py` already does; `feature_input.py` also
+  opens a `.gml` and hands `io/gml.py` the binary stream), `dem_input.py` (which only
   builds a repository) and `io/repository.py` (which opens files). The
   GeoPackage decoder in `io/geopackage.py` takes an open `sqlite3.Connection`,
   never a path: the connection is its stream.
@@ -435,10 +437,10 @@ style):
 
 | module | holds | imports |
 |---|---|---|
-| `io/geopackage.py` (new) | `GpkgLayer` (frozen: table, geometry column, `srs_id`, CRS text, R-tree table or `None`); `layer_info(conn, table)`; `decode_geometry(blob) -> BaseGeometry`; `query_features(conn, layer, box, attribute) -> Iterator[RawFeature]` | `sqlite3` (types only), `struct`, shapely, pydantic |
+| `io/geopackage.py` (new) | `GeoPackageError`; `GpkgLayer` (frozen dataclass: table, geometry column, primary key, `srs_id`, CRS text, R-tree table or `None`); `RawFeature`; `layer_info(conn, table)`; `decode_geometry(blob) -> (srs_id, BaseGeometry or None)`; `query_features(conn, layer, box, attribute, scale) -> Iterator[RawFeature]` | `sqlite3` (the connection type, and its errors caught and turned into refusals), `struct`, shapely, `dataclasses` |
 | `io/gml.py` (new, Q6; added 2026-09-28) | `GmlError`, `GmlDocument`; `read_gml(stream, attribute)`, strict (R1) | `xml.etree` (standard library), shapely |
 | `io/repository.py` | adds `open_geopackage(path) -> sqlite3.Connection`, read-only | as today, plus `sqlite3` |
-| `tin_engine/feature_input.py` (new) | `ClassMap`, the built-in maps; `FeatureSource`, `FeatureRequest`; `TerrainFeature`, `FeatureSet`; `FeatureError`; `open_features(request, domain, dem_crs) -> FeatureSet` | json, shapely, numpy, pydantic, `crs`, `domain`, `features`, `io.repository`, `io.geopackage` |
+| `tin_engine/feature_input.py` (new) | `ClassMap`, the built-in maps; `FeatureSource`, `FeatureRequest`; `TerrainFeature`, `FeatureSet`; `FeatureError`; `open_features(request, domain, dem_crs) -> FeatureSet` | json, `sqlite3` (errors only), shapely, numpy, pydantic, pyproj, `crs`, `domain`, `features`, `io.repository`, `io.geopackage`, `io.gml` |
 | `tin_engine/chains.py` (new) | `StartChains`; `start_chains(domain, features, vocabulary)`: 16 R6's table as code. `cli._domain_chains` moves here and is its first half | numpy, shapely, `domain`, `feature_input`, `features` |
 | `tin_engine/features.py` | two more vocabulary entries (R4, Q3) | unchanged: nothing first-party |
 | `cli.py` | four options, refusals, one call each to `open_features` and `start_chains`, the fields (R10) | adds `feature_input`, `chains` |
@@ -470,9 +472,10 @@ Python stream, so the GeoPackage decoder's stream is the open connection.
   *widened per row for long edges, 2026-09-28: see R5, "Long edges"*). SQLite
   stores R-tree bounds as 32-bit floats rounded outward, so this is a
   superset, which is all a candidate query needs. Without an index the table
-  is scanned and the report says so. **Rows are ordered by the primary key**
-  (`ORDER BY <pk>`), because an R-tree join returns rows in no stated order
-  and the mesh depends on input order (R7).
+  is scanned and stderr says so, one line per such layer:
+  `<file>:<table>: no R-tree index, table scanned` (R10). **Rows are
+  ordered by the primary key** (`ORDER BY <pk>`), because an R-tree join
+  returns rows in no stated order and the mesh depends on input order (R7).
 - **The blob header** (OGC 12-128, 2.1.3), `decode_geometry`:
   - bytes 0-1 `GP`, byte 2 version `0`; else refused;
   - byte 3 flags: bit 0 the header's byte order (for `srs_id` and the
@@ -910,8 +913,27 @@ builds returned `Ok`. M3's attribution holds, and 16b-0 is scoped as designed.
 - **`elevation_source`**'s start clause becomes
   `start domain boundary and features, vertex z bilinear` when features are
   given.
-- **stderr**: features read, dropped outside, clipped, and input versus
-  noded vertex counts. `--stats`' phase table gains `features read` and
+- **stderr**, after reading: `<n> features read, <o> dropped outside, <c>
+  clipped, <e> empty skipped`, then `<file>:<table>: no R-tree index, table
+  scanned` for each GeoPackage layer read without an index (R3). After
+  noding: `<v> input vertices, <m> noded vertices`. As built at `74e6c32`:
+  - `<n>` is the features kept, those with some linework inside the domain.
+  - `<c>` counts the kept features whose linework the domain does not wholly
+    cover: the pre-clip (R5) dropped an edge, or the exact clip (R6) cut a
+    line. A kept feature wholly inside the domain is not counted.
+  - `<e>` counts null and empty geometries, skipped before the class map.
+  - **`<o>`, dropped outside, counts candidates read and then found to have
+    nothing inside the domain** after the pre-clip and the clip. A candidate
+    is a feature the source hands over: every feature of a GeoJSON or GML
+    file, every row of a GeoPackage table scanned whole, but only the rows
+    the R-tree query returns when there is an index. Features far from the
+    domain never become candidates when indexed, so **the count depends on
+    the index**: `@tester` found that the same rows give 0 with an R-tree and
+    1 without one. It measures work done on features that turned out not to
+    matter, not how many features in the source lie outside the domain.
+    Features the class map drops (R4) are not counted anywhere. The
+    `features` field's `(<k> dropped outside)` is this same count.
+- **`--stats`**: the phase table gains `features read` and
   `features clip` (`PhaseClock` rows are named by the caller; `stats.py` does
   not change).
 
@@ -1014,11 +1036,13 @@ far (+39 %, increment 16) applied.
 | | | *16b-0 as built (`aa35a38`, CLAUDE.md §2, blank lines excluded): +98 / −21, net 77, over the worst case; the sweep ~50, padded and clamped cell boxes ~12, the 14(a)/(b) loops as callbacks +36 / −21. All three were named in the estimate row: the overrun is in the estimate, not unplanned scope* | |
 | **16b-1** | `io/geopackage.py` | `GpkgLayer`, `layer_info`, `decode_geometry`, `query_features` | ~70 |
 | | `io/repository.py`, `io/__init__.py` | `open_geopackage` | ~8 |
+| | `io/gml.py` | `GmlError`, `GmlDocument`, `read_gml`, strict (Q6, R1; added 2026-09-28, "about 40 lines" in the Q6 ruling, not in the total below) | ~40 |
 | | `feature_input.py` | `ClassMap` and three built-in maps, request and result models, GeoJSON reading, region, pre-clip, reprojection, clip, counts, refusals; the per-edge widening, the query's widening and the reproject-first route (R5, 2026-09-28, ~+20) | ~150 |
 | | `chains.py` | `start_chains` (the domain half moved from `cli.py`, net ~+25) | ~45 |
 | | `features.py` | two vocabulary entries | ~2 |
 | **16b-2** | `cli.py` | four options and their refusals, the two calls, `features`, `features_crs`, `features_transform`, `features_notice`, the sentence, the report; less `_domain_chains` (`edge_vocabulary` dropped 2026-09-28, R10) | ~65 |
 | | | **16b-1 + 16b-2 total** | **~340 (worst ~475)** |
+| | | *16b-1/2 as built (CLAUDE.md §2 unit, net against `origin/master`'s merge base `14f5fe3`): +627 at `0ccd185` (@reviewer), +15 in `74e6c32` (@developer: `feature_input.py` +13, `cli.py` +2), so **net +642**, over the worst case by 167 and under 700. By file at `74e6c32`: `feature_input.py` +305, `io/geopackage.py` +129, `cli.py` +93, `io/gml.py` +72, `chains.py` +36, `io/repository.py` +3, `crs.py` +2, `features.py` +2, `io/__init__.py` 0. The overrun is mostly `feature_input.py` (about twice its estimate) and `io/gml.py`, which the total did not include* | |
 
 **Two PRs, recommended:**
 
@@ -1076,10 +1100,11 @@ its part in full. Suites: `tests/python/test_io_geopackage.py`,
   repeats its first index. `test_refine_golden.py` now takes the domain chains
   from here (the move from `cli._domain_chains`, R2).
 - CLI: the four flags; fields `features` (`<file>[:<layer>], map <m>, <n>
-  features (<k> dropped outside), <c> chains, <v> vertices`),
+  features (<k> dropped outside), <c> chains, <v> vertices`; `<k>` as R10
+  defines it),
   `features_crs`, `features_transform`, `features_notice` (absent without a
   notice), `edge_vocabulary` (`<fingerprint>; 0 river, ..., 8 water`, on every
-  `.vtk`; *dropped 2026-09-28*, R10); stderr `<n> input vertices`, `<m> noded vertices`; `--stats` rows
+  `.vtk`; *dropped 2026-09-28*, R10); stderr as R10 gives it; `--stats` rows
   `features read`, `features clip`.
 - I4 is tested after the noder (same noded edges and masks as the test's own
   no-pre-clip pipeline), not as identical engine input: GEOS may split a ring
@@ -1265,13 +1290,14 @@ Everything else is unit, property or integration testing:
   SQLite's R-tree module is present locally (3.53.4); CI's Linux Python is
   not yet checked, so 16b-1's first CI run settles it.
 - **Found in passing:** `tests/fixtures/corine/0000_4326_corine2018_4e6064_GML.gml`
-  (30 MB, 200 CORINE features over Norway in EPSG:4326, written by OGR,
-  committed with the foundation reset `3096ccc`) carries no attribution, and
-  nothing in the tree reads it: `grep -rln corine src_python tests tools` finds
-  only the file itself, and the legacy test reads `$RASPUTIN_DATA_DIR/corine`
-  (`legacy/tests/test_gml_repository.py:18`). 16b's PR adds the
-  same attribution for it, or removes it if Ola prefers (Q6), per the rule
-  that a documentation defect found in an increment is fixed in its PR.
+  (30 MB, 200 CORINE features over Norway in EPSG:4326, written by OGR) was
+  added in `8e30af4` (2020-03-12, as `.circleci/rasputin_data/corine/`); the
+  foundation reset `3096ccc` only moved it here. When this design was
+  written it carried no attribution and nothing outside `legacy/` read it.
+  Q6 kept it: `tests/fixtures/corine/NOTICE` now carries its attribution and
+  its repair (next item), and `io/gml.py`'s `read_gml` reads it
+  (`tests/python/test_io_gml.py`, through `LEGACY_GML` in
+  `tests/python/gpkg_fixtures.py`).
 - **The GML fixture is repaired** (Ola, 2026-09-28: "Repear the broken
   file."). It lacks a `</gml:featureMember>` after feature
   `sql_statement.40965` (line 1097) and the closing root tag. The two tags are
