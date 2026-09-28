@@ -1,7 +1,7 @@
 # Increment 15 — a DEM in many tiles, inputs in their own CRS, and the computation frame
 
 Status: **Q1-Q5 ruled by Ola; 15a implemented** on branch
-`increment15-dem-mosaic` (red `2696bc2`, green `ff7cc8d`; PR #105). **15b
+`increment15-dem-mosaic` (red `2696bc2`, green `ff7cc8d`; merged as `40de334`, #105). **15b
 implemented** on `increment15b-domain-crs` (red `372bb99`, green `0011741`).
 15c-15d are designed, not implemented; Q6-Q10 are open. Written by `@architect` before
 `@tester`, per `docs/increments/README.md` step 1.

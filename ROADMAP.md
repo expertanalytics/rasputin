@@ -118,8 +118,9 @@ whose consumer does not exist.
 
 Open, for later (Ola, 2026-09-28): **the surface model, DOM10, alongside the
 terrain model.** Kartverket's DOM10 is the top surface (tree crowns, roofs,
-bridges) where DTM10 is the bare ground; both come from the same laser data on
-hoydedata.no. Two uses Ola wants to keep open: **shading** (terrain and surface
+bridges) where DTM10 is the bare ground; both are published on hoydedata.no
+and, where laser coverage exists, derive from the same NDH laser data (DTM10
+falls back to the 2013 contour model elsewhere). Two uses Ola wants to keep open: **shading** (terrain and surface
 shadowing, e.g. for solar radiation), which needs the surface, not the ground;
 and **canopy and building height, DOM10 minus DTM10**, for vegetation-related
 work and land-cover classification. Hydrology keeps meshing the DTM: a DOM
