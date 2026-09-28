@@ -3,11 +3,14 @@
 `project_structure.md` marked this package as the home of "all file decoding";
 increment 10 makes it the first *encoding* module too, and widens that line.
 The rule the package keeps either way is the one that matters: `io/` knows
-formats and knows nothing about `_core`, so everything in it is testable with
-no compiled extension in the process and no filesystem.
+formats and knows nothing about `_core`, so no module in it needs a compiled
+extension in the process.
 
-Nothing here opens a file. A path belongs to `cli.py`, which is the only module
-that has one (`06-cdt-viewer.md`, "no file is written below `cli.py`").
+Files are opened in exactly one module, `repository.py`, and only for reading
+(increment 15a, Ola's Q3 ruling): a DEM in many tiles has to be listed and
+read tile by tile, below `cli.py`. Every other module here takes or returns
+streams and bytes, so it is testable with no filesystem, and nothing in `io/`
+writes a file (`06-cdt-viewer.md`, "no file is written below `cli.py`").
 """
 
 from __future__ import annotations

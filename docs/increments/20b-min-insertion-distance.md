@@ -421,7 +421,8 @@ below included (3 of them); 90 in `refine.hpp` against ~70. Method: for each
 production file the branch touches (`include/`, `bindings/`, `src_python/`),
 count the lines at the branch tip and at `d32ce59` (the last increment-20
 commit), skipping comments, docstrings and raw-literal bodies per `CLAUDE.md`
-§2; blank lines count. The figure is the difference. Settled at green: `--no-constraint-feet` needs
+§2; blank lines count (superseded 2026-09-28: `CLAUDE.md` §2 now excludes
+blank lines). The figure is the difference. Settled at green: `--no-constraint-feet` needs
 `--tolerance` and `--dem`, like `--start-min-angle`; only the first
 constrained edge closer than ε is tried; a refusal is counted only when `N` is
 then inserted; when `G` is 0, ε is the cap (otherwise 0/0 at tolerance 0 on

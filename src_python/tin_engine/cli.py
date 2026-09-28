@@ -1,9 +1,11 @@
 """Command-line interface for the rasputin terrain engine.
 
-This module is the **single composition root**. It is the only Python module
-that has a path, and joining the file system to the engine is its whole job
-(``tin_engine.raster`` also imports ``_core``, to build the one core raster, per
-``project_structure.md``): ``viz/`` is written against protocols and never
+This module is the **single composition root**: joining the file system to the
+engine is its whole job. Paths from the command line also reach
+``tin_engine.domain``, ``tin_engine.dem_input`` and ``io/repository.py``, which
+read the files they name (``tin_engine.raster`` also imports ``_core``, to
+build the one core raster, per ``project_structure.md``): ``viz/`` is written
+against protocols and never
 names a core type, while the core never sees a file, a path or a CRS. Everything
 that has to know both sides lives here. (``project_structure.md``'s rule that
 exactly one module constructs a core *raster* is about ``tin_engine.raster``.)
@@ -52,6 +54,7 @@ from typing import Annotated
 import numpy as np
 import numpy.typing as npt
 import typer
+from pydantic import ValidationError
 
 from tin_engine._core import (
     ChainRole,
@@ -65,14 +68,15 @@ from tin_engine._core import (
     sample,
     triangulate,
 )
+from tin_engine.dem_input import DemInput, DemRequest, open_dem
 from tin_engine.domain import DomainError, DomainPolygon, read_domain
 from tin_engine.elevation import Trimmed, trim
 from tin_engine.features import DEFAULT_VOCABULARY
 from tin_engine.grid_domain import default_stride, refine_start_stride, subsample
-from tin_engine.io.geotiff import decode_dem
-from tin_engine.io.models import GeoTiffError, RasterMeta
+from tin_engine.io.models import DemTile, RasterMeta
 from tin_engine.io.ply import write_ply
 from tin_engine.io.vtk_legacy import write_vtk
+from tin_engine.mosaic import Bounds, Seam
 from tin_engine.raster import to_core
 from tin_engine.stats import PhaseClock, Refinement, Report, Sizes, _exact, quality, render
 from tin_engine.viz.fixtures import GALLERY, Fixture
@@ -526,8 +530,21 @@ def mesh(
         str | None, typer.Argument(help="Gallery fixture to write; or give --dem instead.")
     ] = None,
     dem: Annotated[
-        Path | None,
-        typer.Option("--dem", help="A GeoTIFF DEM: mesh its extent with z sampled from it."),
+        list[Path] | None,
+        typer.Option(
+            "--dem",
+            help="A GeoTIFF DEM, several (repeat --dem), or one directory of tiles: mesh "
+            "its extent with z sampled from it.",
+        ),
+    ] = None,
+    bbox: Annotated[
+        tuple[float, float, float, float] | None,
+        typer.Option(
+            "--bbox",
+            metavar="BOX",
+            help="With --dem, mesh only XMIN YMIN XMAX YMAX in the DEM's CRS, "
+            "snapped outward to its nodes.",
+        ),
     ] = None,
     stride: Annotated[
         int | None,
@@ -619,6 +636,8 @@ def mesh(
     the inside is meshed. Vertices where the DEM has no data are dropped with
     their triangles, and the count is reported.
     The file records the DEM's CRS, so ``--crs`` and ``--flat`` are refused.
+    ``--dem DIR`` or several ``--dem`` files are stitched into one grid first,
+    cut to ``--bbox`` if given (increment 15a, ``tin_engine.mosaic``).
 
     ``.vtk`` is one file for ParaView: triangles, constraint lines, their
     feature masks, one 0/1 array per feature that occurs, and the vocabulary
@@ -643,13 +662,16 @@ def mesh(
     """
     clock = PhaseClock()
     dem_run: _DemMesh | None = None
-    if (name is None) == (dem is None):
+    seams: tuple[Seam, ...] = ()
+    if (name is None) == (not dem):
         raise typer.BadParameter(
             "give a gallery fixture name or --dem PATH, exactly one of the two",
             param_hint="--dem",
         )
-    if dem is None and (domain is not None or domain_crs is not None):
+    if not dem and (domain is not None or domain_crs is not None):
         raise typer.BadParameter("applies only with --dem", param_hint="--domain")
+    if not dem and bbox is not None:
+        raise typer.BadParameter("applies only with --dem", param_hint="--bbox")
     if domain is None and domain_crs is not None:
         raise typer.BadParameter("applies only with --domain", param_hint="--domain-crs")
     if name is not None and name not in GALLERY:
@@ -663,7 +685,7 @@ def mesh(
             "a .vtk file already carries the constraint edges", param_hint="--out-edges"
         )
 
-    if dem is not None:
+    if dem:
         if flat:
             raise typer.BadParameter("--dem samples z from the DEM", param_hint="--flat")
         if crs:
@@ -698,9 +720,11 @@ def mesh(
             raise typer.BadParameter(
                 "--no-constraint-feet needs --tolerance", param_hint="--no-constraint-feet"
             )
-        label = dem.stem
+        opened = _open_dem(dem, bbox, clock)
+        label = opened.label
         dem_run = _dem_mesh(
-            dem,
+            opened.tile,
+            ", ".join(map(str, dem)),
             stride,
             delaunay,
             snap_spacing,
@@ -713,8 +737,19 @@ def mesh(
         )
         surface_mesh = dem_run.trimmed
         epsg, sentence, described = dem_run.epsg, dem_run.sentence, dem_run.described
+        names = [t.name for t in opened.plan.tiles]
+        if len(names) > 1:
+            mosaic = f"mosaic of {len(names)} tiles, {opened.tile.meta.rows} x "
+            mosaic += f"{opened.tile.meta.cols} nodes"
+            typer.echo(mosaic, err=True)
+            sentence = f"{mosaic}; {sentence}"
         fields = [("crs", f"EPSG:{epsg}"), ("elevation_source", sentence)]
         comments = [f"crs EPSG:{epsg}", f"elevation {sentence}"]
+        if len(dem) > 1 or dem[0].is_dir():  # R11: the files used, named
+            fields.append(("dem_tiles", _ascii("; ".join(names))))
+            seams = opened.seams
+            listed = "; ".join(s.entry() for s in seams) or "none"
+            fields.append(("dem_seams", _ascii(listed)))  # Ola's Q1 revised
         if described:
             fields.append(("domain", described))
             comments.append(f"domain {described}")
@@ -800,7 +835,7 @@ def mesh(
             target.write_bytes(data)
         typer.echo(f"{target}")
     if stats is not None:
-        _write_report(clock, report_target, surface_mesh, dem_run, targets)
+        _write_report(clock, report_target, surface_mesh, dem_run, targets, seams)
 
 
 def _report_target(
@@ -824,6 +859,7 @@ def _write_report(
     trimmed: Trimmed,
     dem_run: _DemMesh | None,
     files: list[Path],
+    seams: tuple[Seam, ...],
 ) -> None:
     """Build the report from what ran and write it, or print it for ``-``.
     The total stops here; the quality pass is timed on its own line (R4)."""
@@ -855,6 +891,7 @@ def _write_report(
             total=total,
             stats_seconds=(time.perf_counter_ns() - t0) / 1e9,
             threads=os.cpu_count() if refinement else None,
+            seams=[s.cells() for s in seams],
         )
     )
     if target is None:
@@ -883,6 +920,43 @@ def _fixture_mesh(name: str, delaunay: bool, spacing: float, clock: PhaseClock) 
     )
 
 
+def _open_dem(
+    dem: list[Path], bbox: tuple[float, float, float, float] | None, clock: PhaseClock
+) -> DemInput:
+    """``--dem`` and ``--bbox`` to one tile (increment 15a, R11); every refusal,
+    the reader's or the mosaic's, is a usage error in its own words."""
+    try:
+        bounds = (
+            None
+            if bbox is None
+            else Bounds(**dict(zip(("x_min", "y_min", "x_max", "y_max"), bbox, strict=True)))
+        )
+    except ValidationError as exc:
+        raise typer.BadParameter(_words(exc), param_hint="--bbox") from exc
+    try:
+        with clock.phase("decode"):
+            return open_dem(DemRequest(sources=tuple(dem), bounds=bounds))
+    except OSError as exc:
+        where = exc.filename or ", ".join(map(str, dem))
+        raise typer.BadParameter(
+            f"cannot read {where}: {exc.strerror or exc}", param_hint="--dem"
+        ) from exc
+    except ValueError as exc:
+        raise typer.BadParameter(_words(exc), param_hint="--dem") from exc
+
+
+def _ascii(text: str) -> str:
+    """A file field's text with non-ASCII escaped, as `dem_tiles` records names."""
+    return text.encode("ascii", "backslashreplace").decode("ascii")
+
+
+def _words(exc: ValueError) -> str:
+    """A refusal's own words: Pydantic's messages without its wrapper."""
+    if isinstance(exc, ValidationError):
+        return "; ".join(str(e["msg"]) for e in exc.errors())
+    return str(exc)
+
+
 @dataclass(frozen=True, slots=True)
 class _DemMesh:
     """What ``_dem_mesh`` made: the mesh and its file fields, then what
@@ -901,7 +975,8 @@ class _DemMesh:
 
 
 def _dem_mesh(
-    dem: Path,
+    tile: DemTile,
+    dem: str,
     stride: int | None,
     delaunay: bool,
     spacing: float,
@@ -912,7 +987,7 @@ def _dem_mesh(
     min_angle: float = 0.0,
     feet: bool = False,
 ) -> _DemMesh:
-    """Decode, subsample, triangulate, sample or refine, and trim.
+    """Subsample, triangulate, sample or refine, and trim ``tile``.
 
     Without ``tolerance`` this is increment 12's R6: z sampled bilinearly at
     the stride grid. With it, increment 14's R9: the stride grid is the start
@@ -922,19 +997,9 @@ def _dem_mesh(
     Returns the mesh, the ``elevation`` sentence for the file, the EPSG code,
     the ``domain`` field (empty without one), and the ``--stats`` inputs;
     ``clock`` gets R5's phases.
-    Every refusal is a usage error in the reader's or the engine's own words,
-    and no file is written.
+    ``dem`` names the source in messages. Every refusal is a usage error in the
+    engine's own words, and no file is written.
     """
-    try:
-        with clock.phase("decode"), dem.open("rb") as stream:
-            tile = decode_dem(stream)
-    except OSError as exc:
-        raise typer.BadParameter(
-            f"cannot read {dem}: {exc.strerror or exc}", param_hint="--dem"
-        ) from exc
-    except GeoTiffError as exc:
-        raise typer.BadParameter(str(exc), param_hint="--dem") from exc
-
     meta = tile.meta
     described = ""
     domain_vertices = domain_holes = None
