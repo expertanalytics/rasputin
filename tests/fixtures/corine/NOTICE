@@ -34,8 +34,8 @@ coordinates are not reprojected; the tests reproject them. Written by
 extract.py in this directory, which is reproducible from the source file.
 
 
-2. 0000_4326_corine2018_4e6064_GML.gml and .xsd (legacy test data)
---------------------------------------------------------------------
+2. 0000_4326_corine2018_4e6064_GML.gml (legacy test data)
+---------------------------------------------------------
 
 Origin: added to this repository on 2020-03-12 in commit 8e30af4, "Adding data
 for small test", together with dem_archive/7908_3_10m_z33.tif (the benchmark
