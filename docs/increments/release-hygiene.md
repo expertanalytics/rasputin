@@ -329,3 +329,19 @@ after step 5.
   and pushed by the main session, at `340e7a8` (section 3).
 
 Nothing is open.
+
+## 9. Status (2026-09-29, late)
+
+- Steps 0-3: done on this branch (`e9dd7f8` red, `8a24dda` green, `f5583c3`).
+- Master merged in at `89155d6` (it brought #113's hooks). The one conflict,
+  `.claude/hooks/gates_after_commit.py`, is resolved to master's version.
+- Step 4: done by the main session: `NOTICE.md`, `project_structure.md`,
+  `tests/fixtures/corine/NOTICE` (names the tag), the README's licence line,
+  and a ROADMAP row.
+- **Open, Ola's edit:** master's `gates_after_commit.py` still lists
+  `["python3", "tools/check_legacy_imports.py"]` in `gates()`, and this branch
+  deletes that tool. The line has to go. The auto-mode classifier refuses a
+  hook edit by the agent, so this edit is Ola's. Until then the hook reports
+  that one gate red ("can't open file") after each commit here, and every
+  other gate runs as before.
+- Step 5 (`@reviewer`), then the push and the PR (Ola's yes).

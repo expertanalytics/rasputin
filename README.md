@@ -114,4 +114,5 @@ simulations on triangular irregular networks. https://doi.org/10.31223/X5CS95
 
 ## Licence
 
-See [LICENSE](LICENSE). Rasputin is developed by Expert Analytics.
+MIT; see [LICENSE](LICENSE). Third-party code and data credits are in
+[NOTICE.md](NOTICE.md). Rasputin is developed by Expert Analytics.
