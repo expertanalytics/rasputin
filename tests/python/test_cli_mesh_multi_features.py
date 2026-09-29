@@ -192,23 +192,27 @@ class TestPositionalPairing:
         _, masks = edges(vtk)
         assert V.mask("wall") in set(masks.tolist())
 
-    def test_a_crs_given_for_the_second_source_only(
+    def test_a_single_crs_binds_the_first_source(
         self, tmp_path: Path, bumpy: Path, plain_square: Path
     ) -> None:
-        """`--features-crs` for the second source only pairs with the second:
-        the first reads its own file CRS, the second is told EPSG:4326."""
-        first = write_geojson(tmp_path / "a.geojson", [prop("wall", WALL, "wall")])
-        # The second source's geometry authored in EPSG:4326, its file carrying
-        # no crs member, so it must be told its CRS by the paired option.
+        """R1: a single `--features-crs` pairs with the FIRST source (index 0),
+        not the last. The first source's geometry is authored in EPSG:4326 with
+        no crs member in its file, so only the paired `--features-crs EPSG:4326`
+        lets it reproject into the DEM's CRS; the second source carries no paired
+        crs and reads its own file CRS (the default EPSG:25833 = the DEM's)."""
+        # First source in EPSG:4326, file carrying no crs member: it must be told
+        # its CRS by the single paired option, and the reprojection into the DEM
+        # CRS is observable in the recorded `features_crs`.
         lonlat = ff.moved(FOREST, "EPSG:25833", "EPSG:4326")
-        second = write_geojson(tmp_path / "b.geojson", [prop("f", lonlat, "land_cover")], crs=None)
+        first = write_geojson(tmp_path / "a.geojson", [prop("f", lonlat, "land_cover")], crs=None)
+        second = write_geojson(tmp_path / "b.geojson", [prop("wall", WALL, "wall")])
         vtk, _ = meshed(
             tmp_path, bumpy, plain_square,
-            "--features", str(first),
-            "--features", str(second), "--features-crs", "EPSG:4326",
+            "--features", str(first), "--features-crs", "EPSG:4326",
+            "--features", str(second),
         )  # fmt: skip
         crss = [c.strip() for c in text_field(vtk, "features_crs").split(";")]
-        assert crss == ["EPSG:25833", "EPSG:4326"], crss
+        assert crss == ["EPSG:4326", "EPSG:25833"], crss
 
     def test_one_features_with_no_paired_options_is_unchanged(
         self, tmp_path: Path, bumpy: Path, plain_square: Path, corine_src: Path
@@ -305,11 +309,31 @@ class TestCrossSourceMerge:
         self, tmp_path: Path, bumpy: Path, plain_square: Path
     ) -> None:
         """The merge collapses the two coincident chains to one edge run: no
-        edge on the seam carries only one source's bit."""
+        edge on the seam carries only one source's bit, and no seam edge is
+        doubled (no two edges share both endpoints). Queried at a real mesh
+        vertex — a seam endpoint — not the straight-seam midpoint (which is not
+        a vertex and can never match)."""
         vtk = self.seam_mesh(tmp_path, bumpy, plain_square)
-        masks_here = edges_at(vtk, (SHARED_X, rel(0, -40.2)[1]))
-        assert masks_here, "no constraint edge at the middle of the seam"
-        assert set(masks_here) == {V.mask("land_cover", "water")}, masks_here
+        want = V.mask("land_cover", "water")
+        # A seam endpoint IS a mesh vertex (a constraint-chain endpoint is
+        # noded), so `edges_at` finds the edges incident to it. Under a correct
+        # merge every such edge carries the union mask; a doubled seam would
+        # leave a single-source bit on one of the two coincident edges.
+        endpoint = (SHARED_X, rel(0, -55.1)[1])
+        masks_here = edges_at(vtk, endpoint)
+        assert masks_here, "no constraint edge at the seam endpoint"
+        assert set(masks_here) == {want}, masks_here
+        # Not-doubled, over the whole seam: every seam edge carries the union
+        # mask, and no seam edge is a duplicate/parallel of another (no two
+        # share both endpoints — a doubled merge would repeat one).
+        xy, masks = edges(vtk)
+        mids = (xy[:, 0] + xy[:, 1]) / 2
+        on_seam = np.asarray(shapely.distance(SEAM, shapely.points(mids))) <= SNAP
+        assert on_seam.any(), "no edge found on the shared seam"
+        assert set(masks[on_seam].tolist()) == {want}, sorted(set(masks[on_seam].tolist()))
+        seam_xy = xy[on_seam]
+        keys = {tuple(sorted((tuple(np.round(a, 3)), tuple(np.round(b, 3))))) for a, b in seam_xy}
+        assert len(keys) == on_seam.sum(), "a seam edge is doubled (a parallel edge on the seam)"
 
 
 # ------------------------------------------------------ R7 case 5: degeneracy (R3)
@@ -381,13 +405,21 @@ class TestDegeneracy:
         assert not target.exists()
 
     def test_a_layer_on_a_geojson_at_index_two_is_refused_naming_index_and_path(
-        self, tmp_path: Path, bumpy: Path, plain_square: Path, corine_src: Path, parcel_src: Path
+        self, tmp_path: Path, bumpy: Path, plain_square: Path, parcel_src: Path
     ) -> None:
         """A `--features-layer` on a non-`.gpkg` source at index 2: refused
-        naming the index and the path (R3)."""
+        naming the index and the path (R3). Under R1 left-align a single layer
+        binds source 0, so we give TWO `--features-layer` values with a `.gpkg`
+        first (its layer valid) and the `.geojson` parcel second (index 2); the
+        second layer lands on the geojson and is refused."""
+        forest_rows = [Row(1, FOREST, {"Code_18": "311"})]
+        gpkg = write_gpkg(
+            tmp_path / "corine.gpkg",
+            [Layer("corine2018", 25833, forest_rows, columns=("Code_18",))],
+        )
         code, output, target = mesh(
             tmp_path, bumpy, plain_square,
-            "--features", str(corine_src),
+            "--features", str(gpkg), "--features-layer", "corine2018", "--features-map", "corine",
             "--features", str(parcel_src), "--features-layer", "x",
         )  # fmt: skip
         assert code == USAGE, output
