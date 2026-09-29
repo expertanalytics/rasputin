@@ -40,7 +40,6 @@ ROOT = Path(__file__).resolve().parent.parent.parent
 #: `ruff check .` and `ruff format --check .` (.github/workflows/main.yaml).
 GATES = (
     ["python3", "tools/check_prohibited_deps.py"],
-    ["python3", "tools/check_legacy_imports.py"],
     ["python3", "tools/check_detria_boundary.py"],
     ["python3", "tools/check_citations.py"],
     [str(ROOT / ".venv" / "bin" / "ruff"), "check", "."],

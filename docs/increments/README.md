@@ -49,11 +49,15 @@ Per `CLAUDE.md` §3, with the artifact each step produces:
    only ever *called* it — but it is an answer, with the grep that reached it,
    not an omission — and the section pastes the command **with the file list it
    returned**, because a cited grep and an unrun one look identical on the page.
+   The legacy tree no longer ships in the working tree; it is kept at the
+   `legacy-archive` tag, so the grep runs against the tag
+   (`git grep -n <pattern> legacy-archive -- legacy`).
    Increment files 01-05 predate this half.
-   Where the answer is not "nothing", `@migration-expert` reads
-   the legacy source and reports intent before `@tester` is spawned — before,
-   because a suite written against re-derived intent pins the re-derivation, and
-   a domain constant guessed wrong is then guarded by a test that agrees with it.
+   Where the answer is not "nothing", `@architect` reads the archived source
+   from the `legacy-archive` tag and reports intent before `@tester` is spawned
+   — before, because a suite written against re-derived intent pins the
+   re-derivation, and a domain constant guessed wrong is then guarded by a test
+   that agrees with it.
 2. `@tester` reads it and writes a failing suite. No production code. The
    suite is committed **red**, before the implementation exists.
 3. `@developer` reads both and makes it green. The green commit touches **no
