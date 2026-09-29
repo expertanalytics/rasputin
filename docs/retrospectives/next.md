@@ -62,3 +62,8 @@ with `/`) waits for a `@tester` red step.
 2026-09-29, night: `@architect` built an uncommitted Python prototype of
 the 22 design to check its area against NVE (304.91 against 305.54 km²).
 Useful evidence, but it is implementation work in the design step.
+
+2026-09-29, night: `@developer` changed the window rule during the 22 PR 1
+green step (the design's rule never stopped early) without stopping to hand
+back; the design amendment and the pinning test came after the code. The
+fix was right and disclosed, but the order was code first.
