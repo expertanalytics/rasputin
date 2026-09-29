@@ -1,10 +1,12 @@
 # Release hygiene — README, INSTALL, and relicensing to MIT
 
-Status: **planned.** Written by `@architect` on 2026-09-29, on branch
-`release-docs-licence` off master `340e7a8` (16b and 16c merged, increment 22
-not). This branch carries the rewritten `README.md`, the new `INSTALL.md` and
-this plan. Nothing below is built yet; every item that changes code, tests,
-`LICENSE`, `CLAUDE.md` or `.claude/` is left to the persona named for it.
+Status: **planned, ready to execute.** Written by `@architect` on 2026-09-29,
+on branch `release-docs-licence` off master `340e7a8` (16b and 16c merged,
+increment 22 not). This branch carries the rewritten `README.md`, the new
+`INSTALL.md` and this plan. Ola answered all four questions the same day
+(section 8). The tag `legacy-archive` exists; nothing else below is built yet,
+and every item that changes code, tests, `LICENSE`, `CLAUDE.md` or `.claude/`
+is left to the persona named for it.
 
 **The ask** (Ola, 2026-09-29): "we should now rewrite the README, dropping the
 references to CGAL and the legacy code. We also need an updated INSTALL, such
@@ -18,7 +20,8 @@ therefore relicense Ola's own code and the company's.
 **Answer in one line.** Nothing forces a copyleft licence: every dependency is
 permissive or is weak copyleft used unmodified, and outside `legacy/` the tree
 is Ola's except for a handful of boilerplate lines. MIT works once `legacy/`
-leaves the tree and three gates that read it are changed.
+leaves the tree and three gates that read it are changed. The notice is
+`Copyright (c) Expert Analytics AS`, with no years (Ola, 2026-09-29).
 
 ## Prior art: legacy and literature
 
@@ -80,18 +83,19 @@ in March 2020 (`8e30af4`, `5eb4828`, `d920254`); a grep outside `legacy/`
 | `tests/fixtures/corine/0000_4326_corine2018_4e6064_GML.gml` | `tests/python/gpkg_fixtures.py` (`LEGACY_GML`), `test_io_gml.py`, `test_feature_input.py`, `test_cli_mesh_features.py` | keep. It is CORINE data (third-party, credited in `corine/NOTICE`), which Sigmund only committed; Ola's ruling on 16b's Q6 kept it |
 | `tests/fixtures/dem_archive/7908_3_10m_z33.tif` | the benchmark tile, and many tests | keep. It is Kartverket DTM10 data, which Sigmund only committed. It has **no credit in the tree**: `dtm10/extract.py` credits its own windows (© Kartverket, CC BY 4.0), but not this tile. Credit it in `NOTICE.md` (section 5) |
 
-**ASK OLA (A1).** Were Magne Nordaas, Sigmund Slang, Vinzenz Gregor Eck, Stian
-Lågstad and Olga Silantyeva working for Expert Analytics when they contributed?
-If so the company holds those lines anyway. The plan does not depend on the
-answer, because the lines it keeps are boilerplate and it deletes the rest, but
-the answer belongs in the record. (This is an engineering reading, not legal
-advice.)
+**Ruled (A1), Ola, 2026-09-29:** "All except Olga works in Expert Analytics."
+So Magne Nordaas, Sigmund Slang, Vinzenz Gregor Eck and Stian Lågstad
+contributed as the company's employees, and the company holds their lines.
+Olga Silantyeva's only commit (`176a681`, 2023) added the README's "Use cases"
+section: two paper citations, which the new README keeps as "Publications".
+They are bibliographic facts, so nothing of hers affects the licence. (This is
+an engineering reading, not legal advice.)
 
 **A later risk, not this PR's.** The radiation design (branch
 `design-terrain-radiation`, TR1) ports `legacy/rasputin/solar_position.h`.
 `git blame -C -C` gives that header 681 lines by Ola and 71 by Magne Nordaas.
-TR1's design should either rewrite Magne's lines or record Magne's (or the
-company's) permission, and should say where the solar-position algorithm itself
+Magne worked for Expert Analytics (A1), so the company holds those lines and
+no permission is needed. TR1's design should still say where the solar-position algorithm itself
 came from (it is described there as an SPA implementation checked against NREL's
 test values; NREL's own SPA C code has a licence of its own).
 
@@ -99,10 +103,13 @@ test values; NREL's own SPA C code has a licence of its own).
 
 `legacy/` is 30 tracked files, 5,224 lines, the CGAL-era pipeline by several
 authors. It keeps the GPL question open for as long as it ships in the tree, so
-it goes; history keeps it. **Before** it is removed, tag the last commit that
-holds it (proposed name `legacy-archive`), so a citation or a porting session
-can read it back with `git show legacy-archive:legacy/rasputin/reader.py`.
-Pushing that tag is a publishing act and needs Ola's yes.
+it goes; history keeps it. **Done (A4):** the annotated tag `legacy-archive`
+points at `340e7a8` (master with `legacy/`) and is pushed; Ola, 2026-09-29, on
+the name and the push: "Yes, and yes". The main session made and pushed it.
+A citation or a design reads the old tree back with
+`git show legacy-archive:legacy/rasputin/reader.py`. Check it with
+`git rev-parse --short 'legacy-archive^{commit}'` and
+`git ls-remote --tags origin legacy-archive`.
 
 What breaks, found by deleting `legacy/` in a scratch clone of master
 `340e7a8` and running every gate and the C++ build:
@@ -142,9 +149,8 @@ What breaks, found by deleting `legacy/` in a scratch clone of master
    - `.github/workflows/main.yaml`: the comment above the removed step;
    - `docs/increments/README.md` step 1, the "Legacy" half: its grep runs on
      the tag (`git grep -n <pattern> legacy-archive -- legacy`);
-   - `.claude/agents/migration-expert.md` (reads legacy from the tag), and
-     `.claude/agents/orchestrator.md` and `architect.md` where they say
-     "legacy";
+   - `.claude/agents/orchestrator.md` and `architect.md` where they say
+     "legacy" (and `@migration-expert`, which retires: below);
    - `project_structure.md`: the `legacy/` entry in the layout, "What gets
      deleted, eventually", "Existing files to integrate", and the paragraph on
      `legacy/rasputin/` under "Python API surface";
@@ -156,8 +162,27 @@ What breaks, found by deleting `legacy/` in a scratch clone of master
      `tests/python/landcover_fixtures.py`, `test_features.py`,
      `test_always_xy.py`. Prefix each path with the tag.
 
-**ASK OLA (A2).** Does `@migration-expert` stay, reading from the tag, or
-retire with `legacy/`? This plan assumes it stays.
+**Ruled (A2), Ola, 2026-09-29:** "Retire it, it was not really used much."
+`@migration-expert` goes with `legacy/`. Every live reference, from
+`git grep -n "migration-expert" -- ':!legacy'`:
+
+- `.claude/agents/migration-expert.md`: delete;
+- `CLAUDE.md` line 9, the roster entry: delete; line 41, "`@architect` or
+  `@migration-expert` defines interfaces and types": `@architect` alone; and
+  line 40's "or legacy migration step" goes;
+- `.claude/agents/orchestrator.md` line 18: "(or `@migration-expert` if
+  refactoring legacy code)" goes, and line 16's "or legacy migration";
+- `docs/increments/README.md` step 1, lines 53-56: when the "Legacy" half's
+  answer is not "nothing", `@architect` reads the source from the tag and
+  records the intent in the increment file, before `@tester` is spawned; the
+  reason given there (a suite written against re-derived intent pins it)
+  stays;
+- `tools/check_legacy_imports.py` names it in its docstring; the tool is
+  deleted anyway (item 1).
+
+The increment records 05b to 21 say "`@migration-expert` is not needed" or
+cite its report (`11-raster-ingestion-prior-art.md`). They are history and stay
+as written.
 
 ## 4. Dependency licences, checked
 
@@ -225,8 +250,7 @@ so `NOTICE.md` lands in the wheel's `licenses/` with no configuration.
 A new root file. Its content, to be written by `@developer` (or the main
 session, as it is prose):
 
-- **Rasputin itself**: MIT, © Expert Analytics (the holder string as in
-  `LICENSE`).
+- **Rasputin itself**: MIT, `Copyright (c) Expert Analytics AS`.
 - **Vendored and compiled in**:
   - detria, © Kimbatt, `lib/detria/`, commit `8aa25f3`, MIT by election; the
     MIT text is `lib/detria/LICENSE-MIT.txt`, reproduced in full;
@@ -255,12 +279,12 @@ session, as it is prose):
 Replace the GPL text with the MIT text, with the copyright line
 
 ```text
-Copyright (c) 2018-2026 Expert Analytics AS
+Copyright (c) Expert Analytics AS
 ```
 
-**ASK OLA (A3).** The holder string: the company's registered name (is it
-"Expert Analytics AS"?), and whether the years start in 2018 (the first commit)
-or are left out. `pyproject.toml`'s `authors` stays Ola; the README says
+**Ruled (A3), Ola, 2026-09-29.** On "Expert Analytics AS" as the holder:
+"Yes." On the years: "Let's drop the years, then." `pyproject.toml`'s
+`authors` stays Ola; the README says
 "developed by Expert Analytics", and its Licence section becomes "MIT; see
 LICENSE" in the same PR.
 
@@ -275,10 +299,10 @@ One PR, on this branch. One agent at a time.
 
 | step | who | what | files |
 |---|---|---|---|
-| 0 | main session, **Ola's yes** | create and push the tag `legacy-archive` on master's tip | — |
+| 0 | main session | **done**: `legacy-archive` → `340e7a8`, pushed (A4) | — |
 | 1 | `@tester` (red) | new `tests/python/test_check_citations.py`: a `legacy/` citation resolves through the tag; one past the end of the tagged file is broken; with the tag absent it is reported, not passed. Delete `tests/cpp/unit/test_solar_position.cpp` and its block in `tests/cpp/CMakeLists.txt`. Delete the unused fixtures (section 2). The prose-only `legacy/` mentions in `tests/python/*.py` get the tag prefix | `tests/` |
 | 2 | `@developer` (green), each `tools/check_*` edit behind the guard's prompt, so **Ola's yes** | `check_citations.py` resolves `legacy/` through the tag; `check_prohibited_deps.py` loses its exemption; delete `check_legacy_imports.py`; workflow: remove "Archive integrity", fetch the tag in the governance job; `pyproject.toml` ruff `exclude`; `.gitignore`'s three stale lines; tag prefix on the `include/` comments | `tools/`, `.github/`, `pyproject.toml`, `.gitignore`, `include/` (comments) |
-| 3 | main session, **Ola's yes** | `git rm -r legacy`; `LICENSE` to MIT with Ola's holder string; `CLAUDE.md` sections 2 and 4; `.claude/hooks/gates_after_commit.py`; `.claude/agents/{migration-expert,orchestrator,architect}.md`; `docs/increments/README.md` step 1 | guarded files |
+| 3 | main session, with the Edit tool, **Ola's yes** per guarded file | `git rm -r legacy`; `LICENSE` to the MIT text with `Copyright (c) Expert Analytics AS`; `CLAUDE.md` sections 1, 2, 3 and 4 (roster line, "`legacy/` is exempt", the pipeline's step 1, the ruff and legacy-gate lines); `.claude/hooks/gates_after_commit.py`; `git rm .claude/agents/migration-expert.md`; `.claude/agents/{orchestrator,architect}.md`; `docs/increments/README.md` step 1 (section 3, A2) | guarded files |
 | 4 | `@architect` or main session | `NOTICE.md`; `project_structure.md`; `tests/fixtures/corine/NOTICE`; README's licence line; a ROADMAP row | docs |
 | 5 | `@reviewer` | CI green; INSTALL end to end on a clean Linux and a clean macOS; the built wheel's `dist-info/licenses/` holds `LICENSE` (MIT) and `NOTICE.md`, and its `METADATA` no longer says GPL; the Linux-wheel licence grep of section 4; `python3 tools/check_citations.py` with the at-risk list re-read; after merge, `gh repo view --json licenseInfo` says MIT | — |
 
@@ -289,9 +313,19 @@ One PR, on this branch. One agent at a time.
 lines. Docs: `NOTICE.md` about 80 lines including the two reproduced licence
 texts; `LICENSE` 21 lines.
 
-## 8. Open for Ola
+The yes still needed per step: step 2, each `tools/check_*` edit (the
+guard's prompt); step 3, each guarded file; and the branch's push and PR,
+after step 5.
 
-- **A1** Contributors' employment (section 2); for the record only.
-- **A2** `@migration-expert` stays or retires (section 3).
-- **A3** The copyright holder string and years (section 6).
-- **A4** The tag name `legacy-archive`, and the yes to push it (section 3).
+## 8. Ola's answers (2026-09-29)
+
+- **A1, contributors:** "All except Olga works in Expert Analytics." Olga's
+  one commit is the two citations the README keeps (section 2).
+- **A2, `@migration-expert`:** "Retire it, it was not really used much."
+  Its removal is in section 3 and step 3.
+- **A3, the holder:** "Expert Analytics AS": "Yes." Years: "Let's drop the
+  years, then." The notice is `Copyright (c) Expert Analytics AS` (section 6).
+- **A4, the tag:** `legacy-archive`, and the push: "Yes, and yes". Created
+  and pushed by the main session, at `340e7a8` (section 3).
+
+Nothing is open.
