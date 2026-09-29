@@ -338,10 +338,15 @@ Nothing is open.
 - Step 4: done by the main session: `NOTICE.md`, `project_structure.md`,
   `tests/fixtures/corine/NOTICE` (names the tag), the README's licence line,
   and a ROADMAP row.
-- **Open, Ola's edit:** master's `gates_after_commit.py` still lists
-  `["python3", "tools/check_legacy_imports.py"]` in `gates()`, and this branch
-  deletes that tool. The line has to go. The auto-mode classifier refuses a
-  hook edit by the agent, so this edit is Ola's. Until then the hook reports
-  that one gate red ("can't open file") after each commit here, and every
-  other gate runs as before.
-- Step 5 (`@reviewer`), then the push and the PR (Ola's yes).
+- The gates hook's `check_legacy_imports.py` line, which master's version
+  still carried, was removed by Ola (`9dcc126`); the auto-mode classifier
+  refuses hook edits by the agent. The main checkout runs its own copy of the
+  hook, so commits here report that gate red until this branch merges.
+- Step 5, `@reviewer` round 1: CHANGES REQUESTED. The four blocking items
+  were prose (two stale line citations, this bullet, a test count in
+  `INSTALL.md`); they are fixed in the next commit. Measured size: about 31
+  production lines added and about 80 removed; tests 194 lines (§7's estimates
+  were about 55 and about 60). The wheel ships `LICENSE` (MIT) and
+  `NOTICE.md`, and its `METADATA` says MIT. INSTALL was verified on macOS;
+  Linux and the manylinux licence grep are unverified.
+- Then `@reviewer` again, the push and the PR (Ola's yes).

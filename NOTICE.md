@@ -41,7 +41,9 @@ OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 ### pybind11
 
 The Python binding layer; its headers compile into `tin_engine._core`.
-<https://github.com/pybind/pybind11>, version 3.1.0, BSD-3-Clause.
+<https://github.com/pybind/pybind11>, BSD-3-Clause. The build takes any
+pybind11 >= 2.12 (`pyproject.toml`); the text below is from 3.1.0, the version
+the licence check read.
 
 ```text
 Copyright (c) 2016 Wenzel Jakob <wenzel.jakob@epfl.ch>, All rights reserved.

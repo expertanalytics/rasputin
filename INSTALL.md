@@ -112,8 +112,9 @@ pytest
 ```
 
 This runs `tests/python/` and fails if line coverage drops below 85 %. On
-macOS arm64 with Python 3.13 and `".[dev,codecs]"` it took under two minutes:
-2358 passed, 14 skipped. The skips are expected: a few tests need the `viewer`
+macOS arm64 with Python 3.13 and `".[dev,codecs]"` it takes under two
+minutes. Every test should pass or be skipped, with none failing. The skips
+are expected: a few tests need the `viewer`
 extra, a few test the refusal when `codecs` is absent, and a few need the full
 national datasets in `../rasputin_data/` (a directory next to the clone) and
 skip when it is not there.
