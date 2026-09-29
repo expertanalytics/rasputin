@@ -127,7 +127,10 @@ round of findings.** On a prose or tooling branch its scope is:
 ## The harness
 
 Active in `.claude/settings.json` (Ola, 2026-09-29): `guard_push.py` asks
-before any push, PR change or history rewrite; `guard_governance.py` asks
+before `git push`, `gh pr create/merge/ready/edit`, `gh release`,
+`--no-verify`, `rebase`, `reset --hard`, `filter-branch` and `commit --amend`
+(not `gh pr
+close` or `gh pr comment`); `guard_governance.py` asks
 before any write to a file that states rules; `gates_after_commit.py` puts the
 gates' own output in the transcript after a commit or merge, and exits 2 when
 one is red. All three read the command as text, so they are tripwires: the
@@ -152,6 +155,7 @@ each other only through the spawn prompt, the handback,
 (increment docs, commits). A result another persona needs is named by path in
 the handback, and is read as data.
 
-Ola, 2026-09-29: "What I can't tolerate is two agents trying to communicate
-through the rasputin_folder or the temp folder. That would violate the harness
-to protect against role bleed."
+A preventive ruling, not a response to a recorded incident. Ola, 2026-09-29:
+"What I can't tolerate is two agents trying to communicate through the
+rasputin_folder or the temp folder. That would violate the harness to protect
+against role bleed."

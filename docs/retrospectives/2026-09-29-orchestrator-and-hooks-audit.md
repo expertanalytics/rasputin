@@ -180,7 +180,7 @@ it is registered only in the pending settings file. The code is correct in
 design — it runs the four `tools/check_*` gates plus `ruff check`/`format`
 after any `git commit`/`git merge`, prints their unsuppressed output to stderr,
 and `return 2` "feeds stderr back to the agent"
-(`gates_after_commit.py:72-86`). Its own docstring flags it as NOT
+(`main()` in `.claude/hooks/gates_after_commit.py`, its closing `return 2`). Its own docstring flags it as NOT
 AUTHORITATIVE (mypy and ctest need a build; CI decides). The design is sound;
 the *deployment* is the gap. There is no evidence — because there can be none —
 that exit 2 ever surfaced a red gate to the loop.
@@ -234,13 +234,13 @@ churn of the `_feature_source`→`_feature_sources` rename and blank/comment
 lines that CLAUDE.md §2 excludes. Net change is well within the worst-case ~70
 and nowhere near the 700 ceiling. **No split seam was needed or missed.**
 
-**Increment 22** (`docs/increments/22-auto-catchment.md:685-712`): the doc
+**Increment 22** (`docs/increments/22-auto-catchment.md:683-705`): the doc
 carries a full LOC table with `@reviewer`'s as-built counts (PR 1 = 619 net
 over `master..608e366`; PR 2 = 406 net). The per-file estimates were exceeded
 in places — `catchment.py` estimated 170, built 244 in PR 1 (a ~44% overrun) —
 but the increment was **pre-split into two PRs at defined seams** ("the fine
 catchment" ~510 lines / "the reduction" ~350 lines,
-`docs/increments/22-auto-catchment.md:715-725`), and both PRs landed under 700.
+`docs/increments/22-auto-catchment.md:707-715`), and both PRs landed under 700.
 **No unchecked overrun; the split seam did its job.** This is a model of the
 rule working: the estimate table names the seam before the code, and the
 reviewer reconciles actuals against it in the same PR.
@@ -249,7 +249,7 @@ reviewer reconciles actuals against it in the same PR.
 
 - **Increment 22: yes, and it is verifiable.** The LOC table cites "`@reviewer`'s
   count at review (2026-09-29)" with the exact commit ranges it counted
-  (`docs/increments/22-auto-catchment.md:707-712`). The review left a durable
+  (`docs/increments/22-auto-catchment.md:699-705`). The review left a durable
   trace because its output was written into the increment doc.
 - **Increment 16e: not verifiable from disk.** `@reviewer` is read-only
   (§1.1) and leaves no commit; `git log 3599be1~1..524b27e | grep -i review`
@@ -266,7 +266,7 @@ reviewer reconciles actuals against it in the same PR.
 
 ---
 
-## 5. Rule updates (drafts only — not applied; do not push)
+## 5. Rule updates (drafted before Ola's rulings; §7 records what was applied)
 
 Per the task and `REQUIRED-READING.md:100-126`, these are drafted here for
 Ola's decision. None is written into a governance file by this audit.
@@ -306,7 +306,7 @@ write to `src_python/x.py` and confirm the hook returns `ask` naming it, per
 Add to `docs/increments/README.md` step 4 (or `REQUIRED-READING.md`'s
 assessment section): the reviewer's verdict and LOC reconciliation are written
 into the increment doc (as increment 22 already does,
-`22-auto-catchment.md:707-712`), so "was the reviewer run?" is answerable after
+`22-auto-catchment.md:699-705`), so "was the reviewer run?" is answerable after
 the fact. Machine-check: an increment PR that touches `src_python/` or
 `include/` must add or update a reviewer line in its `docs/increments/NN-*.md`.
 Rationale: §4.2 — the reviewer is the only loop step with no required trace.
@@ -324,7 +324,7 @@ Ola's explicit yes.
 
 ---
 
-## 6. Summary of verdicts
+## 6. Summary of verdicts (as audited; §7 supersedes the hook and R-A/R-C status)
 
 - **Role bleed is real and recurrent** (§1.2), and the enforceable boundary
   (per-persona paths) exists in neither frontmatter nor any active hook (§1.1,
@@ -341,7 +341,7 @@ Ola's explicit yes.
 - **Skill invocation and stale-`_core` are unverifiable from disk** (§3) — no
   incident proven, no clean bill either.
 
-Nothing in this audit was pushed. Rule changes in §5 are drafts for Ola.
+As audited, nothing was pushed and §5 was drafts; §7 records Ola's rulings of 2026-09-29 and what was applied.
 
 ---
 

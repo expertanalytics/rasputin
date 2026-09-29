@@ -42,9 +42,10 @@ GOVERNED = (
     "docs/increments/README.md",
 )
 
-#: Matched as a glob, not a literal: .claude/settings.local.json is the
-#: permission allow-list and .claude/settings.json.pending-... is where the
-#: settings currently sit. A literal ".claude/settings.json" guards neither.
+#: Matched as a glob, not a literal: .claude/settings.json wires the hooks,
+#: .claude/settings.local.json is the permission allow-list, and a future
+#: .claude/settings.json.pending-... draft must be guarded too. A literal
+#: ".claude/settings.json" would miss the other two.
 GOVERNED_GLOBS = (".claude/settings*.json*",)
 
 #: Directory prefixes where every file is a gate: these turn prose into refusals.
