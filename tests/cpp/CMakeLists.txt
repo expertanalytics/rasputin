@@ -317,3 +317,25 @@ add_terrain_backend_test(prop_noding_verifier_sweep property/prop_noding_verifie
 # "The red suites"). Not named invariant-critical; the descent oracle and the
 # invariants on random DEMs are the defence. It starts no threads.
 add_terrain_test(test_hydrology_upstream unit/test_hydrology_upstream.cpp)
+
+# The outline reduction, increment 22 PR 2 (docs/increments/22-auto-catchment.md,
+# "The reduction" and "The red suites"): area-preserving segment collapse with
+# the exact kernel. A backend test because it names DefaultKernel. Not named
+# invariant-critical; it starts no threads.
+#
+# RED UNTIL vector_simplify/area_collapse.hpp EXISTS (increment 12's scaffold,
+# 39dba00): while the header is absent the target is EXCLUDE_FROM_ALL and not
+# registered with ctest, so `cmake --build build` and `ctest` stay green; see
+# the red with `cmake --build build --target test_area_collapse`. Once the
+# header lands, re-running `cmake -S . -B build` registers the suite.
+# REMOVE AT GREEN: replace the if/else with the plain add_terrain_backend_test line.
+if(EXISTS "${PROJECT_SOURCE_DIR}/include/terrain/vector_simplify/area_collapse.hpp")
+    add_terrain_backend_test(test_area_collapse unit/test_area_collapse.cpp)
+else()
+    message(STATUS "test_area_collapse: include/terrain/vector_simplify/area_collapse.hpp "
+                   "absent; suite built only on request (increment 22 PR 2 red step)")
+    add_executable(test_area_collapse EXCLUDE_FROM_ALL unit/test_area_collapse.cpp)
+    target_link_libraries(test_area_collapse PRIVATE
+        terrain_headers terrain_test_support Catch2::Catch2WithMain terrain_predicates)
+    target_compile_options(test_area_collapse PRIVATE -Wall -Wextra -Wpedantic -Werror)
+endif()
