@@ -444,3 +444,30 @@ def refine(
     depend on ``threads``. ``min_angle_deg`` > 0 first improves the start
     mesh's angles with DEM nodes; 0 is off. ``constraint_feet`` inserts a
     node's foot on a nearby constraint segment instead of the node."""
+
+@final
+class UpstreamOutcome:
+    """What :func:`upstream` returned. Bounds are inclusive and meaningful
+    when ``nodes_in`` > 0."""
+
+    @property
+    def mask(self) -> npt.NDArray[np.uint8]:
+        """Read-only ``(rows, cols)``: 1 for a node in the catchment, 0 otherwise."""
+    @property
+    def nodes_in(self) -> int: ...
+    @property
+    def row_min(self) -> int: ...
+    @property
+    def row_max(self) -> int: ...
+    @property
+    def col_min(self) -> int: ...
+    @property
+    def col_max(self) -> int: ...
+    @property
+    def touches_edge(self) -> bool: ...
+    @property
+    def touches_nodata(self) -> bool: ...
+
+def upstream(view: RasterView, seed: npt.ArrayLike) -> UpstreamOutcome:
+    """Every node draining into a seed of the ``(rows, cols)`` mask
+    (Priority-Flood); another shape is a ``ValueError``. Releases the GIL."""
