@@ -985,3 +985,38 @@ class TestLongEdgeWidening:
 def geodesic_length(line: LineString) -> float:
     lon, lat = zip(*line.coords, strict=True)
     return float(Geod(ellps="WGS84").line_length(lon, lat))
+
+
+# ---------------------------------------------- several sources (16e, R6/D2)
+
+
+class TestManySources:
+    """`docs/increments/16e-multi-features.md` R6/D2: `open_features` on a
+    request of several sources returns per-source tuples. `crs` and `layers`
+    are already per-source (this pins them against regression); `counts` is the
+    new field D2 adds — features kept per source, in source order."""
+
+    def two_source_request(self, tmp_path: Path, fi: ModuleType) -> Any:
+        """A first source of two features inside `INNER`, a second of one."""
+        big = square(120, 120, 180, 180)
+        small = square(130, 130, 150, 150)
+        one_more = square(160, 160, 175, 175)
+        a = write_geojson(
+            tmp_path / "a.geojson",
+            [
+                Feat("big", big, {"property": "land_cover"}),
+                Feat("small", small, {"property": "water"}),
+            ],
+        )
+        b = write_geojson(tmp_path / "b.geojson", [Feat("one", one_more, {"property": "wall"})])
+        return fi.FeatureRequest(sources=(ff.source(a), ff.source(b)))
+
+    def test_counts_are_per_source_in_order(self, tmp_path: Path, fi: ModuleType) -> None:
+        fs = fi.open_features(self.two_source_request(tmp_path, fi), BOX, UTM33)
+        assert fs.counts == (2, 1)
+        assert sum(fs.counts) == len(fs.features)
+
+    def test_crs_and_layers_are_per_source(self, tmp_path: Path, fi: ModuleType) -> None:
+        fs = fi.open_features(self.two_source_request(tmp_path, fi), BOX, UTM33)
+        assert fs.crs == (UTM33, UTM33)
+        assert fs.layers == (None, None)
