@@ -26,7 +26,8 @@
 // 32 is a ceiling named rather than discovered: one word per edge, trivially
 // parallel-reducible, no allocation. The vocabulary it must hold is LINEAR
 // features -- river, road, railway, coastline, contour, wall, ditch -- which is
-// under ten, against the 23 and 44 class land-cover enumerations in legacy/,
+// under ten, against the 23 and 44 class land-cover enumerations in the
+// legacy-archive tag's legacy/,
 // and land cover stays face-based. Widening to 64 is a one-line change to a
 // type nobody can pattern-match on, because it has no named members.
 //

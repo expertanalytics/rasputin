@@ -87,7 +87,6 @@ def gates(root: Path) -> tuple[list[str], ...]:
     ruff = find_ruff(root)
     return (
         ["python3", "tools/check_prohibited_deps.py"],
-        ["python3", "tools/check_legacy_imports.py"],
         ["python3", "tools/check_detria_boundary.py"],
         ["python3", "tools/check_citations.py"],
         [ruff, "check", "."],

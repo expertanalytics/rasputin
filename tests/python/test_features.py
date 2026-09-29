@@ -550,8 +550,8 @@ def test_river_is_bit_zero() -> None:
 
 def test_the_default_vocabulary_fits_the_cpp_word_with_room_to_spare() -> None:
     # The measured argument for kMaxProperties = 32: linear features number
-    # under ten, against 23 and 44 land-cover classes in `legacy/` -- and land
-    # cover stays face-based.
+    # under ten, against 23 and 44 land-cover classes in the legacy tree
+    # (`legacy-archive:legacy/`) -- and land cover stays face-based.
     assert len(DEFAULT_VOCABULARY.properties) < 32
     assert all(0 <= p.bit < 32 for p in DEFAULT_VOCABULARY.properties)
 

@@ -12,9 +12,6 @@ build
 build-*/
 dist
 .DS_Store
-lib/boo*
-lib/geometry
-lib/build_*
 .venv
 .claude/settings.local.json
 # pre-a46481c; guards a stray file left in an old worktree

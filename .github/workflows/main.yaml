@@ -128,7 +128,13 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      # fetch-depth: 0 brings the full history and the tags. check_citations.py
+      # resolves `legacy/` citations against the annotated tag legacy-archive
+      # (release-hygiene.md section 3); a shallow checkout has no tags, so the
+      # step below would report every legacy citation as unresolvable.
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - uses: actions/setup-python@v5
         with:
@@ -140,12 +146,6 @@ jobs:
       - name: No prohibited dependencies
         run: python tools/check_prohibited_deps.py
 
-      # legacy/ is the porting reference but is excluded from ruff, mypy and
-      # pytest, so nothing else reads it. An archive that silently rots is
-      # worse than no archive.
-      - name: Archive integrity
-        run: python tools/check_legacy_imports.py
-
       # The vendored detria header must stay inside its backend TUs -- one per
       # backend, none in any header. CMake already makes that structural
       # (lib/detria is PRIVATE on terrain_predicates and terrain_cdt), but a
@@ -154,11 +154,12 @@ jobs:
       - name: detria boundary
         run: python tools/check_detria_boundary.py
 
-      # Only the decidable half: a cited file exists and is long enough. The
-      # half that matters -- whether the quotation at that line still says what
-      # the citing prose claims -- is @reviewer's, per
-      # .claude/REQUIRED-READING.md. CI's shallow checkout has no master to diff
-      # against, so the at-risk worklist is empty here by design; run it locally.
+      # Only the decidable half is a failure: a cited file exists and is long
+      # enough (for `legacy/` paths, in the legacy-archive tag the full checkout
+      # above brings). The half that matters -- whether the quotation at that
+      # line still says what the citing prose claims -- is @reviewer's, per
+      # .claude/REQUIRED-READING.md; the tool prints it as an at-risk worklist,
+      # which does not fail the build.
       - name: Citations resolve
         run: python tools/check_citations.py
 

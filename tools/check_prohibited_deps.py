@@ -10,9 +10,6 @@ why Rasterio is excluded, and the raster docs name GDAL to explain what is being
 avoided; a naive grep flags those and gets switched off. So this inspects Python
 import statements, C/C++ #include directives, and the dependency arrays in
 pyproject.toml -- the places where a dependency is actually contracted.
-
-legacy/ is exempt: it is the archived CGAL implementation, kept deliberately as
-the porting reference, and legacy/bindings.cpp is the CGAL original.
 """
 
 from __future__ import annotations
@@ -26,7 +23,7 @@ from typing import NamedTuple
 
 ROOT = Path(__file__).resolve().parent.parent
 
-# Directories that must stay clean. legacy/ is deliberately absent.
+# Directories that must stay clean.
 SOURCE_DIRS = ["include", "src", "src_python", "bindings", "tests", "tools"]
 
 # Every prohibition carries an AUTHORITY, and the check refuses to run without
@@ -138,7 +135,7 @@ def check_cxx(path: Path) -> list[str]:
 # Scanning headers alone would pass a find_package(CGAL) or an apt install
 # libgdal-dev, which is the gate's whole purpose defeated one layer down.
 def build_files() -> list[Path]:
-    """Every CMakeLists and workflow in the tree, excluding the exempt archive.
+    """Every CMakeLists and workflow in the tree, minus generated directories.
 
     Globbed rather than listed: project_structure.md already plans per-module
     CMakeLists under src/, and a hardcoded list reports OK on the file it does
@@ -146,7 +143,7 @@ def build_files() -> list[Path]:
     """
     found = [p for p in ROOT.rglob("CMakeLists.txt")]
     found += [p for p in (ROOT / ".github" / "workflows").glob("*.y*ml")]
-    skip = ("legacy", "build", "lib", ".venv")
+    skip = ("build", "lib", ".venv")
     return sorted(
         p
         for p in found
@@ -337,9 +334,9 @@ def main() -> int:
             for line in governance:
                 print(f"  {line}", file=sys.stderr)
         print(
-            "\nlegacy/ is exempt; the new tree is not. A governance finding above is "
-            "not fixed\nby editing this file: it is a question for the user, and the "
-            "answer goes in\nCLAUDE.md section 2 and in the key's authority together.",
+            "\nA governance finding above is not fixed\nby editing this file: it is a "
+            "question for the user, and the answer goes in\nCLAUDE.md section 2 and in "
+            "the key's authority together.",
             file=sys.stderr,
         )
         return 1

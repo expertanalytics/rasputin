@@ -16,7 +16,8 @@ call sites, because a call's keywords can span lines and a line grep cannot
 tell `always_xy=True` from `always_xy=False` or from a comment. Any mention of
 `from_crs` that is not a direct call with a literal `always_xy=True` is a
 violation, which catches aliasing (`f = Transformer.from_crs`) and `**kwargs`.
-`legacy/` is out of scope: frozen, and every CRS there is `+init=`.
+The legacy tree (tag `legacy-archive`) is out of scope: it has left the working
+tree, and every CRS there is `+init=`.
 """
 
 from __future__ import annotations
