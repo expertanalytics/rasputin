@@ -60,13 +60,18 @@ include/terrain/           # public C++ headers, header-only where possible
     refine.hpp             # RefineOptions, RefineOutcome, the round loop (14),
                            #   Delaunay insertion (14b), the quality-start call
                            #   (20), constraint feet (20b)
+  hydrology/
+    upstream.hpp           # upstream(z, seed) -> UpstreamOutcome: one
+                           #   Priority-Flood labelling the nodes that drain
+                           #   into the seed set, plus edge/NoData flags (22)
 
 src/                       # C++ implementation, one directory per module
                            #   (only predicates/ and cdt/ exist; rest planned)
   predicates/              # exact orient2d/incircle; namespace terrain::pred
   parallel_util/           # (none: header-only, include/terrain/parallel_util/)
   vector_simplify/         # Visvalingam-Whyatt, Douglas-Peucker, topology checks
-  hydrology/               # pit fill, flow direction, accumulation, catchments, streams
+                           # (no hydrology/ here: it is header-only,
+                           #  include/terrain/hydrology/)
                            # (no noding/ here, and none planned: the noder is
                            #  header-only, its driver a template on the kernel)
   cdt/                     # thin wrapper over vendored Detria
@@ -102,7 +107,17 @@ src_python/tin_engine/     # public Python API (distribution name: rasputin)
                            #   read, mapped to masks by a ClassMap, pre-clipped,
                            #   moved to the DEM's CRS and clipped to the domain
                            #   as linework -> FeatureSet (16b); opens GeoJSON
-                           #   and .gml itself; never imports _core
+                           #   and .gml itself; never imports _core.
+                           #   read_source: one file's raw rows (16b's reader,
+                           #   shared); read_lakes: the polygons of --lakes
+                           #   near the seed point, in the file's CRS (22)
+  outline.py               # trace(mask): marching-squares rings between in-
+                           #   and out-nodes, (8, 4) saddle rule; numpy only,
+                           #   never imports _core (22)
+  catchment.py             # CatchmentRequest -> delineate(request, repo) ->
+                           #   Catchment: seed, the window loop over 15a's
+                           #   plan, _core.upstream and the fine ring; takes a
+                           #   DemRepository and no path (22)
   chains.py                # start_chains: the domain's rings, then every
                            #   feature line, as (indices, role, mask) (16b);
                            #   never imports _core
@@ -117,7 +132,9 @@ src_python/tin_engine/     # public Python API (distribution name: rasputin)
                            #   carries positions rather than feature names
     svg.py                 # (Scene, SvgStyle) -> str; the stylesheet lives here
     fixtures.py            # the synthetic gallery, declarative; `rasputin draw
-  io/                      # all file decoding AND encoding lives here
+  io/                      # all file decoding AND encoding lives here, with
+                           #   one exception: the catchment GeoJSON writer is
+                           #   in cli.py (22); see "Python API surface"
     __init__.py
     ply.py                 # arrays -> PLY bytes; takes no path and opens nothing
     vtk_legacy.py          # arrays + EdgeVocabulary -> legacy .vtk bytes, for
@@ -159,9 +176,9 @@ docs/increments/           # per-increment design records; see its README
 ```
                     raster ────────────────┐
                                             ▼
-predicates ───────────┬─→ vector_simplify   hydrology  (depends on raster,
-                      │                     │           parallel_util)
-                      └─→ noding ←──────────┘   (catchment outline, river polylines)
+predicates ───────────┬─→ vector_simplify   hydrology  (raster only)
+                      │
+                      └─→ noding
                               │
                               ▼
                             cdt   (thin wrapper over vendored Detria,
@@ -324,7 +341,7 @@ Visvalingam-Whyatt for area-preserving polygon simplification; Douglas-Peucker f
 
 ### `hydrology`
 
-Implements `auto_catchments.md`: pit filling (priority-flood with epsilon, plus optional Lindsay hybrid), D8 flow direction, parallel flow accumulation (Barnes-Lehman-Mulla), catchment BFS, stream extraction with Strahler ordering, mask polygonization. May depend on RichDEM (MIT) as either reference or external library — decision deferred to first implementation pass.
+Header-only; depends on `raster` only. `upstream.hpp` (increment 22): `upstream(z, seed)`, a template on the `RasterSource` concept. One Priority-Flood (Barnes, Lehman and Mulla 2014) from the window's edge and from the nodes beside NoData, ties first in, first out, labels a node *in* when it is a seed or was flooded from an *in* node. So each node drains to the node that flooded it, its lowest filled neighbour, and there is no separate fill, no flat resolution and no D8 or accumulation pass. Returns the mask, the in-nodes' count and bounds, and `touches_edge` / `touches_nodata` (an in-node that is, or neighbours, an outlet of that kind). Serial; the binding releases the GIL. What `auto_catchments.md` also sketches (epsilon filling, D8, accumulation, streams and Strahler order, RichDEM) is not built; the outline tracer is Python (`outline.py`). See `docs/increments/22-auto-catchment.md`.
 
 ### `noding`
 
@@ -387,7 +404,7 @@ CMake-based, building the header-only core plus one Python extension. C++20 requ
 - **Detria** (header-only) is vendored at a pinned SHA in `lib/detria/`. CMake does
   **not** search for a system copy: version skew in a geometry kernel across machines
   is a reproducibility hazard and vendoring a header costs nothing.
-- **External deps under consideration:** RichDEM (optional, MIT), Eigen (if linear algebra needs grow beyond what we want to hand-roll).
+- **External deps under consideration:** RichDEM (optional, MIT; increment 22 does not use it), Eigen (if linear algebra needs grow beyond what we want to hand-roll).
 - **No CGAL and no GDAL** in the new core: prohibited by `CLAUDE.md` §2.
   **No Boost.Geometry** either, which is a scope choice and not a prohibition
   — reading this line as one is what put an unauthored ban in §2 for six
@@ -401,6 +418,8 @@ There is no `setup.py`. It was removed with the foundation reset, along with the
 ## Python API surface
 
 The public API is the `tin_engine` package, calling into `tin_engine._core`. `tin_engine.viz` is the renderer that turns a triangulation into an SVG a person can look at; it consumes the `typing.Protocol`s in `viz/protocols.py` and **never imports `_core`**, so it is testable with no compiled extension in the process. `cli.py` is the single composition root that joins the two -- the same shape as the rule below that exactly one module adapts decoded raster data into `_core`. The `rasputin draw` command drives it: it looks a fixture up in `viz.fixtures.GALLERY`, maps that fixture's **string** chain roles onto `_core.ChainRole` -- `viz/` may not name the enum, so the mapping is the composition root's -- runs `build_pslg` and `triangulate`, and hands the fixture itself to `build_scene` as the `PslgLike`, which is what lets a fixture the validator rejects still be drawn. It is also the only place a path exists, and it resolves and refuses one before writing.
+
+**The catchment GeoJSON writer is in `cli.py`** (increment 22, `rasputin catchment`): it builds a one-feature `FeatureCollection` with a `crs` member and writes it, an exception to "all file encoding lives in `io/`". Recommended (@architect, 2026-09-29): move it, as a function from a polygon, its CRS text and its properties to bytes that takes no path and opens nothing, into `io/geojson.py`, the shape `io/ply.py` and `io/vtk_legacy.py` already have; `cli.py` keeps only the write. It is small, and a GUI or API worker writing a catchment would otherwise have to go through the CLI. Until it moves, this paragraph is the record of the exception.
 
 The pre-migration `rasputin.*` modules (`mesh.py`, `geometry.py`, `reader.py`, `tin_repository.py` and friends) are archived under `legacy/rasputin/` rather than kept in place, so this is a re-implementation against the new backend rather than a rewiring of stable modules. Porting proceeds one entry point at a time; shapes worth preserving should be read out of `legacy/` before being reintroduced.
 

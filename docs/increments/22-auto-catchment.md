@@ -1,7 +1,9 @@
 # Increment 22 — auto-catchment: the catchment of a lake, from the DEM (Bygdin first)
 
-Status: **designed** (`@architect`, 2026-09-29), on branch
-`increment22-autocatchment` off master `b4847d7`. Nothing is built. Ola was
+Status: **PR 1 built, under review** (2026-09-29). Designed by `@architect`
+on branch `increment22-autocatchment` off master `b4847d7`; PR 1 built at
+`58f6904` (green), under review; PR 2 (the outline reduction) designed, in a
+stacked PR ("As built" below covers PR 1 only). Ola was
 asleep while this was written; every choice he would normally make is marked
 "Default (main session / @architect, 2026-09-29), for Ola to confirm", with
 the alternative, so the loop can run tonight.
@@ -132,9 +134,9 @@ design leans on a detail beyond the abstract, it says so.
   flooded it.
 - **O'Callaghan and Mark 1984**, "The extraction of drainage networks from
   digital elevation data", *Computer Vision, Graphics, and Image Processing*,
-  doi:10.1016/S0734-189X(84)80047-X. Crossref lists it as volume 27(2), page
-  247; it is commonly cited as 28(3):323-344. Cite it by DOI until someone
-  resolves which. D8: each node drains to its steepest neighbour, slope
+  28(3):323-344, doi:10.1016/S0734-189X(84)80011-0 (checked on Crossref,
+  2026-09-29, at review; the DOI first cited here, 80047-X, is a one-page
+  item in 27(2):247). D8: each node drains to its steepest neighbour, slope
   measured with the diagonal's length. **Departure, and why:** the flood
   drains each node to its *lowest* filled neighbour, not its steepest, so the
   diagonal distance plays no part. The two differ only where a diagonal
@@ -664,21 +666,27 @@ request and the result are frozen; the CLI is the only place with paths.
 
 ### New and changed files
 
-| File | What | Production lines (estimate) |
-|---|---|---|
-| `include/terrain/hydrology/upstream.hpp` | the flood, `UpstreamOutcome` | 110 |
-| `include/terrain/vector_simplify/area_collapse.hpp` | the reduction, `ReduceOutcome`, edge grid | 260 |
-| `bindings/core.cpp` | `upstream`, `reduce_ring`, two outcome classes | 80 |
-| `src_python/tin_engine/_core.pyi` | their stubs | 30 |
-| `src_python/tin_engine/outline.py` | the tracer | 70 |
-| `src_python/tin_engine/catchment.py` | request, seed, window loop, result | 170 |
-| `src_python/tin_engine/dem_input.py` | repository helper split out | 10 |
-| `src_python/tin_engine/feature_input.py` | `read_source` split out of `_Tally.source`, `read_lakes` | 30 |
-| `src_python/tin_engine/cli.py` | `catchment` command, report, writer | 100 |
-| `project_structure.md` | the two C++ modules and two Python modules | docs |
+| File | What | Estimate | As built, PR 1 |
+|---|---|---|---|
+| `include/terrain/hydrology/upstream.hpp` | the flood, `UpstreamOutcome` | 110 | 106 |
+| `include/terrain/vector_simplify/area_collapse.hpp` | the reduction, `ReduceOutcome`, edge grid | 260 | |
+| `bindings/core.cpp` | `upstream`, `reduce_ring`, two outcome classes | 80 | 48 |
+| `src_python/tin_engine/_core.pyi` | their stubs | 30 | 19 |
+| `src_python/tin_engine/outline.py` | the tracer | 70 | 50 |
+| `src_python/tin_engine/catchment.py` | request, seed, window loop, result | 170 | 244 |
+| `src_python/tin_engine/dem_input.py` | repository helper split out | 10 | 1 |
+| `src_python/tin_engine/feature_input.py` | `read_source` split out of `_Tally.source`, `read_lakes` | 30 | 38 net |
+| `src_python/tin_engine/cli.py` | `catchment` command, report, writer | 100 | 113 |
+| **Total** | | about 860 | **619 net** (674 added, 55 removed) |
+| `project_structure.md` | the two C++ modules and two Python modules | docs | |
 
-About 860 lines, over the 700 ceiling (CLAUDE.md §2), so two PRs on this
-branch.
+About 860 lines estimated, over the 700 ceiling (CLAUDE.md §2), so two PRs.
+"As built" is `@reviewer`'s count at review (2026-09-29), by CLAUDE.md §2's
+rule (blank lines, comments and docstrings not counted), over PR 1 =
+`master..608e366`. The totals are `@reviewer`'s; the per-file numbers are
+theirs too and were not recounted here. The PR 1 column, counted at
+`58f6904`, sums to 619. PR 1 is under the 700 ceiling. PR 2's figures are the
+estimates until it is built.
 
 ### The PR split
 
@@ -690,7 +698,9 @@ branch.
   binding, and the command reducing by default with
   `--outline-tolerance`. Red, green, review, then the Bygdin acceptance run.
 
-Both go on `increment22-autocatchment`, PR 2 stacked on PR 1. Neither touches
+Both go on `increment22-autocatchment`, PR 2 stacked on PR 1. As built: PR 1
+is `master..608e366` (red `1e1b3bb`, green `58f6904`, the window test
+`608e366`); PR 2 is designed, in a stacked PR. Neither touches
 refine or mesh code, so the 1 m benchmark and scaling sweep (README, rule 2)
 do not apply; the Bygdin run below is this increment's acceptance.
 
@@ -701,7 +711,7 @@ Lean: no throwaway implementations, no mutation round. Default (main session
 invariants on random inputs are the defence. None is named invariant-critical
 for mutation testing tonight.
 
-**PR 1, C++ (Catch2), `tests/cpp/unit/hydrology_upstream.cpp`:**
+**PR 1, C++ (Catch2), `tests/cpp/unit/test_hydrology_upstream.cpp`:**
 
 - *Brute-force oracle*. For random DEMs with no interior pit and no ties,
   built as z = 10 x (steps to the nearest edge) + a distinct fraction per
@@ -747,7 +757,7 @@ for mutation testing tonight.
 
 **PR 2, C++ and Python:**
 
-- `tests/cpp/unit/area_collapse.cpp`: status for a negative, NaN or infinite
+- `tests/cpp/unit/test_area_collapse.cpp`: status for a negative, NaN or infinite
   tolerance, a clockwise ring, fewer than 4 vertices; tolerance 0 removes
   only collinear vertices; a traced rectangle of nodes reduces to at most 8
   vertices at a tolerance of one cell, with its area unchanged; a keep-point
