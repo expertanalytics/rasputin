@@ -97,7 +97,7 @@ template <raster::RasterSource R>
         each_neighbour(i, rows, cols, [&](std::size_t j) {
             if (state[j] != kUnreached)
                 return;
-            state[j] = seed[j] != 0 ? kIn : label;
+            state[j] = seed[j] != 0 ? static_cast<std::uint8_t>(kIn) : label;
             const double zj = level_of(j);
             queue.emplace(zj > level ? zj : level, counter++, j);
         });

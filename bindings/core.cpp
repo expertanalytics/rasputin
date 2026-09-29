@@ -984,8 +984,8 @@ whether it may continue past the window's edge or past NoData.
         [](const BoundRasterView& raster, const py::object& seed) {
             using U8 = py::array_t<std::uint8_t, py::array::c_style | py::array::forcecast>;
             const auto s = U8::ensure(seed);
-            const auto& g = std::visit([](const auto& v) -> const auto& { return v.geometry(); },
-                                       raster.view);
+            const auto g = std::visit([](const auto& v) -> const auto& { return v.geometry(); },
+                                      raster.view);
             if (!s || s.ndim() != 2 || static_cast<std::size_t>(s.shape(0)) != g.rows()
                 || static_cast<std::size_t>(s.shape(1)) != g.cols())
                 throw py::value_error(std::format(
