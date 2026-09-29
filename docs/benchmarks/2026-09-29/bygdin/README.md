@@ -227,12 +227,15 @@ were not run; this brief did not ask for them.
 
 ## Data and licence
 
-- **NVE's catchment polygon** (REGINE delfelt 1187, "BYGDIN") is © Norges
-  vassdrags- og energidirektorat (NVE). It is used under the Norwegian
-  Licence for Open Government Data (NLOD), which is compatible with
-  CC BY 4.0. NVE asks users to credit the rights holder and link to its
-  services: https://konto.nve.no/Information and
-  https://temakart.nve.no/tema/nedborfelt.
+- **NVE's catchment polygon** is © Norges vassdrags- og energidirektorat
+  (NVE). It is NVE's reservoir sub-catchment ("delfelt") 1187, "BYGDIN",
+  from the map service VassdragsreguleringVannkraft, layer 8
+  (https://gis3.nve.no/map/rest/services/Mapservices/VassdragsreguleringVannkraft/MapServer/8).
+  It is not a REGINE unit.
+  - It is used under the Norwegian Licence for Open Government Data
+    (NLOD), which is compatible with CC BY 4.0. NVE asks users to credit
+    the rights holder and link to its services:
+    https://konto.nve.no/Information.
   - The polygon was committed in `ad3df66` and removed in `1985720`, so it
     stays in the history.
   - To reproduce the overlap figures, fetch it with the curl command under
