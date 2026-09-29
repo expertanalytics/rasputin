@@ -34,8 +34,8 @@ outlines are valid):
 | 20 | 740 | 19.92 m |
 | 50 | 295 | 49.85 m |
 
-**Against NVE's polygon** (delfelt 1187, fetched without GDAL and saved as
-`bygdin/nve_delfelt_1187.geojson`), comparing DEM nodes:
+**Against NVE's polygon** (delfelt 1187, fetched without GDAL and not
+committed; the README gives the command and the sha256), comparing DEM nodes:
 
 - 99.12 % of NVE's nodes are in ours;
 - 99.33 % of ours are in NVE's;
@@ -65,7 +65,4 @@ This is the design's prototype figure, reproduced by the built code.
 
 **For the main session**:
 
-- The design says NVE's polygon is "not committed", but this brief asked for
-  it to be saved. It is committed, and the conflict is flagged in the
-  README.
 - No defects were found.

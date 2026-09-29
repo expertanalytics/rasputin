@@ -1,7 +1,7 @@
 """Increment 22 acceptance on Bygdin: the numbers in README.md, from run.sh's
 logs and outputs. Usage, from the repository root with .venv active:
 
-    python docs/benchmarks/2026-09-29/bygdin/analyse.py $SCRATCH > .../logs/analysis.txt
+    python docs/benchmarks/2026-09-29/bygdin/analyse.py $SCRATCH $NVE_GEOJSON > .../logs/analysis.txt
 """
 
 import json
@@ -23,6 +23,7 @@ from tin_engine.io.geopackage import decode_geometry  # noqa: E402
 HERE = Path("docs/benchmarks/2026-09-29/bygdin")
 LOG = HERE / "logs"
 SCRATCH = Path(sys.argv[1])
+NVE = Path(sys.argv[2])  # NVE's delfelt 1187 GeoJSON, fetched as README.md says
 NVE_KM2 = 305.54  # delfeltAreal_km2 of delfelt 1187
 CELL = 10.0
 
@@ -65,7 +66,7 @@ print(f"median: flood {med(floods):.2f} s, trace {med(traces):.2f} s, reduce {me
       f" maxRSS {med(rss)/1e6:.0f} MB, peak footprint {med(foot)/1e6:.0f} MB")
 
 fine = polygon(SCRATCH / "catchment_t0.geojson")
-nve = polygon(HERE / "nve_delfelt_1187.geojson")
+nve = polygon(NVE)
 print(f"\nNVE polygon: {nve.area/1e6:.4f} km2 by shapely, {shapely.get_num_coordinates(nve)} coords,"
       f" valid {nve.is_valid}; published {NVE_KM2} km2")
 print("\n| tolerance | vertices | area km2 | vs fine m2 | vs NVE 305.54 | Hausdorff densify=0.05 | 1 m: fine->red, red->fine | valid |")

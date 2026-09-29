@@ -21,13 +21,20 @@ the tables and where every number comes from.
 - **Seed**: `--seed 8.5425 61.3512` (EPSG:4326), as in the design; it falls
   in CORINE's Bygdin polygon (39.936963 km², 399,371 nodes).
 - **Reference**: NVE's reservoir catchment ("delfelt") 1187 "BYGDIN",
-  `delfeltAreal_km2` = 305.54, fetched on 2026-09-29 by curl (no GDAL) from
-  `https://gis3.nve.no/map/rest/services/Mapservices/VassdragsreguleringVannkraft/MapServer/8/query?where=delfeltNr%3D1187&outFields=*&returnGeometry=true&outSR=25833&f=geojson`
-  and saved as `nve_delfelt_1187.geojson` (one Polygon, 1376 coordinates,
-  305.5393 km² by shapely, valid). The design says this polygon is "fetched
-  by the URL, not committed"; it is committed here because the brief for
-  this run asked for it to be saved with the evidence. Remove it if the
-  design's wording should win.
+  `delfeltAreal_km2` = 305.54. Its polygon was fetched on 2026-09-29 (by
+  curl, no GDAL) with exactly this command:
+
+  ```sh
+  curl -sS --max-time 60 -o nve_delfelt_1187.geojson 'https://gis3.nve.no/map/rest/services/Mapservices/VassdragsreguleringVannkraft/MapServer/8/query?where=delfeltNr%3D1187&outFields=*&returnGeometry=true&outSR=25833&f=geojson'
+  ```
+
+  The file as fetched has sha256
+  `fe6d298b08573e50e50e711f1be9f70e9459ea823a0626516a539cd62cc4e76c`: one
+  Polygon, 1376 coordinates, 305.5393 km² by shapely, valid. As the design
+  says, it is **not committed**: its licence and attribution terms are not
+  recorded. The service can change, so a later fetch may not match the
+  sha256. If it does not, the overlap figures below apply to the file with
+  this hash, not to the new one.
 
 Scripts, both in this directory:
 
@@ -47,7 +54,8 @@ Scripts, both in this directory:
 Meshes and catchment GeoJSONs other than the committed one were written to
 the session scratchpad and are not committed. To regenerate them, run
 `SCRATCH=<dir> bash docs/benchmarks/2026-09-29/bygdin/run.sh` from the
-repository root with `.venv` active, then `python .../analyse.py <dir>`.
+repository root with `.venv` active, fetch NVE's polygon as above, then
+`python .../analyse.py <dir> <nve_delfelt_1187.geojson>`.
 The committed `bygdin_reduced_t20.geojson` is `catchment_t20_run1.geojson`,
 the default output. All four default-tolerance outputs have the same sha256,
 `8083fb5b...`.
@@ -230,4 +238,3 @@ were not run; this brief did not ask for them.
   - `analysis.txt`.
 - `bygdin_reduced_t20.geojson`: the reduced catchment (740 vertices,
   EPSG:25833), which `mesh --domain` reads.
-- `nve_delfelt_1187.geojson`: NVE's polygon, as fetched.
