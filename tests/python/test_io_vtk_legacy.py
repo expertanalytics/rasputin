@@ -533,15 +533,14 @@ class TestLandCoverCode:
     and the design names no parameter for it; `test_cli_mesh_landcover.py`
     pins the string in the file.
 
-    Committed red: `triangle_codes` is no parameter of `write_vtk`, so every
-    call with it fails on `TypeError`, and `land_cover_codes` is not
-    reserved.
+    Committed red at `196147e`: `triangle_codes` was no parameter of
+    `write_vtk`, so every call with it failed on `TypeError`, and
+    `land_cover_codes` was not reserved. Green since `0487ed0`.
     """
 
     CODES = np.array([311, 0, 512, 2**31 - 1], dtype=np.int64)
 
     def coded(self, binary: bool) -> VtkFile:
-        """Not a fixture, so a missing parameter fails the test, not its setup."""
         return read_vtk(write(triangle_codes=self.CODES, binary=binary))
 
     def test_lines_carry_0_then_each_triangle_its_code(self, binary: bool) -> None:

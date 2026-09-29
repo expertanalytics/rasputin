@@ -14,27 +14,27 @@ Pinned beyond the design's text:
 - `NanColor` is present and magenta (R4: "A code the table lacks draws in
   `NanColor`, magenta").
 
-Committed red: `tin_engine.palettes` does not exist and `rasputin palette` is
-no command, so every test fails on `ModuleNotFoundError` (raised per test by
-`palettes()`) or on the CLI's usage error for an unknown command.
+Committed red at `196147e`: `tin_engine.palettes` did not exist yet and
+`rasputin palette` was no command, so every test failed on
+`ModuleNotFoundError` or on the CLI's usage error for an unknown command. Both
+landed in `0487ed0` and the suite has been green since.
 """
 
 from __future__ import annotations
 
 import colorsys
-import importlib
 import json
 import re
 import sqlite3
 from contextlib import closing
 from pathlib import Path
-from types import ModuleType
 from typing import Any
 
 import pytest
 from typer.testing import CliRunner
 
 from gpkg_fixtures import OLA_NORWAY
+from tin_engine import palettes
 from tin_engine.cli import app
 
 runner = CliRunner(env={"NO_COLOR": "1", "TERM": "dumb"})
@@ -65,12 +65,8 @@ PRESET_NAME = "rasputin CORINE natural"
 HEX = re.compile(r"#[0-9a-fA-F]{6}")
 
 
-def palettes() -> ModuleType:
-    return importlib.import_module("tin_engine.palettes")
-
-
 def table() -> dict[int, tuple[str, str]]:
-    return dict(palettes().CORINE_NATURAL)
+    return dict(palettes.CORINE_NATURAL)
 
 
 def rgb(code: int) -> tuple[float, float, float]:
@@ -158,8 +154,7 @@ class TestFamilies:
 
 class TestPreset:
     def preset(self) -> dict[str, Any]:
-        """Not a fixture, so a missing module fails the test, not its setup."""
-        out = palettes().paraview_preset(palettes().CORINE_NATURAL, "a name")
+        out = palettes.paraview_preset(palettes.CORINE_NATURAL, "a name")
         assert isinstance(out, list) and len(out) == 1
         assert isinstance(out[0], dict)
         return out[0]
@@ -203,7 +198,7 @@ class TestCommand:
     def test_stdout_is_the_preset(self) -> None:
         result = runner.invoke(app, ["palette", "corine"])
         assert result.exit_code == 0, result.output
-        expected = palettes().paraview_preset(palettes().CORINE_NATURAL, PRESET_NAME)
+        expected = palettes.paraview_preset(palettes.CORINE_NATURAL, PRESET_NAME)
         assert json.loads(result.stdout) == expected
 
     def test_an_unknown_name_is_a_usage_error_listing_the_known(self) -> None:

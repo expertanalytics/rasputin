@@ -24,17 +24,15 @@ Pinned beyond the design's text (the design leaves them open):
   (ints), the numbers of R3's stderr line; `.codes` is the `(T,)` array.
 - `regions(triangles, edges)` takes no vertex count.
 
-Committed red: `tin_engine.landcover` does not exist, so every test fails on
-`ModuleNotFoundError`, raised per test by `landcover()` below rather than at
-collection.
+Committed red at `196147e`: `tin_engine.landcover` did not exist yet, so
+every test failed on `ModuleNotFoundError`. The module landed in `0487ed0`
+and the suite has been green since.
 """
 
 from __future__ import annotations
 
-import importlib
 from collections.abc import Sequence
 from dataclasses import dataclass
-from types import ModuleType
 from typing import Any
 
 import numpy as np
@@ -52,12 +50,9 @@ from landcover_fixtures import (
     landcover_oracle,
     spread_violations,
 )
+from tin_engine import landcover
 
 X0, Y0 = 500_000.3, 6_600_000.7
-
-
-def landcover() -> ModuleType:
-    return importlib.import_module("tin_engine.landcover")
 
 
 def rect(x0: float, y0: float, x1: float, y1: float) -> Polygon:
@@ -133,7 +128,7 @@ def _linework(geometry: BaseGeometry) -> BaseGeometry:
 
 
 def label(mesh: Mesh, polygons: Sequence[tuple[BaseGeometry, int]], margin: float = MARGIN) -> Any:
-    return landcover().label_triangles(
+    return landcover.label_triangles(
         mesh.vertices, mesh.triangles, mesh.edges, polygons=list(polygons), margin=margin
     )
 
@@ -176,21 +171,21 @@ def strip(cells: int) -> np.ndarray:
 class TestRegions:
     def test_an_unconstrained_shared_edge_joins_two_triangles(self) -> None:
         triangles, hull = two_triangles()
-        assert_array_equal(landcover().regions(triangles, hull), [0, 0])
+        assert_array_equal(landcover.regions(triangles, hull), [0, 0])
 
     def test_a_constrained_shared_edge_separates_them(self) -> None:
         triangles, hull = two_triangles()
         cut = np.vstack([hull, [[0, 2]]])
-        assert_array_equal(landcover().regions(triangles, cut), [0, 1])
+        assert_array_equal(landcover.regions(triangles, cut), [0, 1])
 
     def test_a_constraint_given_backwards_still_blocks(self) -> None:
         triangles, hull = two_triangles()
         cut = np.vstack([hull, [[2, 0]]])
-        assert_array_equal(landcover().regions(triangles, cut), [0, 1])
+        assert_array_equal(landcover.regions(triangles, cut), [0, 1])
 
     def test_no_constraints_at_all(self) -> None:
         triangles, _ = two_triangles()
-        assert_array_equal(landcover().regions(triangles, np.zeros((0, 2), dtype=np.int64)), [0, 0])
+        assert_array_equal(landcover.regions(triangles, np.zeros((0, 2), dtype=np.int64)), [0, 0])
 
     @pytest.mark.parametrize("order", ["forward", "reversed", "shuffled"])
     def test_a_strip_of_1000_triangles_is_one_component(self, order: str) -> None:
@@ -202,7 +197,7 @@ class TestRegions:
             triangles = triangles[::-1]
         elif order == "shuffled":
             triangles = triangles[np.random.default_rng(16).permutation(len(triangles))]
-        ids = np.asarray(landcover().regions(triangles, np.zeros((0, 2), dtype=np.int64)))
+        ids = np.asarray(landcover.regions(triangles, np.zeros((0, 2), dtype=np.int64)))
         assert ids.shape == (1000,)
         assert set(ids.tolist()) == {0}
 
@@ -211,7 +206,7 @@ class TestRegions:
         mesh = grid_mesh(STEPS, STEPS, [cut])
         order = np.random.default_rng(3).permutation(len(mesh.triangles))
         triangles = mesh.triangles[order]
-        ids = np.asarray(landcover().regions(triangles, mesh.edges))
+        ids = np.asarray(landcover.regions(triangles, mesh.edges))
         west = np.asarray(shapely.contains_xy(rect(0, 0, 10, 20), *mesh.centroids[order].T))
         assert west.any() and (~west).any()
         assert set(ids[west].tolist()) == {int(np.flatnonzero(west).min())}
@@ -222,10 +217,10 @@ class TestRegions:
         rng = np.random.default_rng(7)
         shuffled = mesh.edges[rng.permutation(len(mesh.edges))]
         flipped = shuffled[:, ::-1]
-        first = np.asarray(landcover().regions(mesh.triangles, mesh.edges))
+        first = np.asarray(landcover.regions(mesh.triangles, mesh.edges))
         assert len(set(first.tolist())) == 4
-        assert_array_equal(landcover().regions(mesh.triangles, shuffled), first)
-        assert_array_equal(landcover().regions(mesh.triangles, flipped), first)
+        assert_array_equal(landcover.regions(mesh.triangles, shuffled), first)
+        assert_array_equal(landcover.regions(mesh.triangles, flipped), first)
 
 
 # ---------------------------------------------------------- label_triangles
@@ -273,12 +268,12 @@ class TestLabelBasics:
         triangles = np.array([[0, 1, 2], [1, 3, 2]])
         edges = np.array([[0, 1], [1, 3], [3, 2], [2, 0], [1, 2]])
         cover = rect(-10, -10, 110, 110)
-        labels = landcover().label_triangles(
+        labels = landcover.label_triangles(
             vertices, triangles, edges, polygons=[(cover, 311)], margin=MARGIN
         )
         assert_array_equal(labels.codes, [311, 311])
         assert (labels.regions, labels.thin) == (2, 1)
-        finer = landcover().label_triangles(
+        finer = landcover.label_triangles(
             vertices, triangles, edges, polygons=[(cover, 311)], margin=1e-5
         )
         assert finer.thin == 0
@@ -349,7 +344,7 @@ class TestFixtures:
         west, east = mesh.inside(rect(4, 12, 8, 16)), mesh.inside(rect(12, 12, 16, 16))
         assert west.any() and east.any()
         assert set(codes[west | east].tolist()) == {324}
-        ids = np.asarray(landcover().regions(mesh.triangles, mesh.edges))
+        ids = np.asarray(landcover.regions(mesh.triangles, mesh.edges))
         assert set(ids[west].tolist()).isdisjoint(ids[east].tolist())
         assert (labels.regions, labels.outside) == (3, 1)
 
@@ -362,7 +357,7 @@ class TestFixtures:
         codes = np.asarray(labels.codes)
         north, south = mesh.inside(rect(4, 10, 16, 16)), mesh.inside(rect(4, 4, 16, 10))
         assert set(codes[north | south].tolist()) == {311}
-        ids = np.asarray(landcover().regions(mesh.triangles, mesh.edges))
+        ids = np.asarray(landcover.regions(mesh.triangles, mesh.edges))
         assert set(ids[north].tolist()).isdisjoint(ids[south].tolist())
         assert (labels.regions, labels.outside) == (3, 1)
 
@@ -454,5 +449,5 @@ class TestDeterminism:
 class TestPurity:
     def test_it_imports_nothing_first_party(self) -> None:
         """R1's boundary: numpy and shapely, nothing first-party, never `_core`."""
-        module = landcover()
+        module = landcover
         assert first_party_imports(module) == set()

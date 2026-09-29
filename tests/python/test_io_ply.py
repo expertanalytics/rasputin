@@ -448,8 +448,8 @@ class TestFaceCodes:
     The header comment `land_cover_codes ...` is the caller's (it arrives in
     `comments`), and `test_cli_mesh_landcover.py` pins it in the CLI's file.
 
-    Committed red: `face_codes` is no parameter of `write_ply`, so every call
-    with it fails on `TypeError`.
+    Committed red at `196147e`: `face_codes` was no parameter of `write_ply`,
+    so every call with it failed on `TypeError`. Green since `0487ed0`.
     """
 
     CODES = np.array([311, 2**31 - 1], dtype=np.int64)

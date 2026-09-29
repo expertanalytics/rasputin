@@ -594,7 +594,8 @@ class TestCommittedExtract:
     about 54 840 triangles). I7: the tolerance holds, every node covered.
 
     Increment 16c adds I1, I2, I3 and I5 on the same run (the `test_16c_`
-    tests, committed red: the file had no `land_cover_code`); its I4 is
+    tests, committed red at `196147e`: the file had no `land_cover_code`;
+    green since `0487ed0`); its I4 is
     `test_i3_rows_in_reverse_order_give_the_same_file`, unchanged."""
 
     @pytest.fixture(scope="class")

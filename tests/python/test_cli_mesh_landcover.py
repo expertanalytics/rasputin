@@ -20,10 +20,12 @@ Pinned beyond the design's text (the design leaves them open):
 - A `LineString` under a coded map keeps its code and has no polygon.
 - `rasputin mesh --help` names `land_cover_code` and `rasputin palette`.
 
-Committed red: no code writes `land_cover_code`, `land_cover_codes` or the
-stderr line; `rasputin palette` is no command; `ClassMap` has no `codes` and
-`TerrainFeature` no `code` or `polygon`; a covering polygon is dropped as
-outside; and `corine` accepts any value. Every test fails on one of those.
+Committed red at `196147e`: no code wrote `land_cover_code`,
+`land_cover_codes` or the stderr line; `rasputin palette` was no command;
+`ClassMap` had no `codes` and `TerrainFeature` no `code` or `polygon`; a
+covering polygon was dropped as outside; and `corine` accepted any value.
+Every test failed on one of those. They landed in `0487ed0` and the suite has
+been green since.
 """
 
 from __future__ import annotations
@@ -51,6 +53,7 @@ from test_cli_mesh import plain
 from test_cli_mesh_dem import USAGE, invoke, write_tiff
 from test_cli_mesh_domain import COLS, ROWS, SQUARE, geojson
 from tin_engine.cli import app
+from tin_engine.palettes import CORINE_NATURAL, paraview_preset
 from vtkread import VtkFile, read_vtk
 
 runner = CliRunner(env={"NO_COLOR": "1", "TERM": "dumb"})
@@ -463,8 +466,6 @@ def test_vtk_reads_the_array_back(tmp_path: Path, bumpy: Path, plain_square: Pat
 
 def test_palette_out_writes_the_preset(tmp_path: Path) -> None:
     """R4: `rasputin palette corine --out FILE` writes the ParaView preset."""
-    from tin_engine.palettes import CORINE_NATURAL, paraview_preset
-
     target = tmp_path / "corine_natural.json"
     result = runner.invoke(app, ["palette", "corine", "--out", str(target)])
     assert result.exit_code == 0, result.output
