@@ -1,0 +1,25 @@
+window 1: x 140240-170470, y 6811200-6825570, 1438 x 3024 nodes, flood 0.61 s, grown on north, west, south, east
+window 2: x 136250-172700, y 6807210-6829560, 2236 x 3646 nodes, flood 1.22 s, grown on north, west
+window 3: x 128580-176700, y 6802360-6837550, 3520 x 4813 nodes, flood 2.84 s, contained
+seed: lake of 39.936963 km2, 399371 nodes
+catchment: 3049095 nodes, 304.909500 km2 of node area
+fine outline: 17812 vertices, 304.909550 km2, 0 rings dropped (0 nodes), 1 holes filled (0.000050 km2), traced in 0.12 s
+reduced outline: 5513 vertices, 304.909550 km2, difference 0 m2 (0 relative), tolerance 0 m, 0.00 s
+        6.54 real         7.44 user         0.36 sys
+          1003683840  maximum resident set size
+                   0  average shared memory size
+                   0  average unshared data size
+                   0  average unshared stack size
+               96789  page reclaims
+                 109  page faults
+                   0  swaps
+                   0  block input operations
+                   0  block output operations
+                   0  messages sent
+                   0  messages received
+                   0  signals received
+                   0  voluntary context switches
+                1394  involuntary context switches
+         68121011463  instructions retired
+         24830697181  cycles elapsed
+           913196232  peak memory footprint
