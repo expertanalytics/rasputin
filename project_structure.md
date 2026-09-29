@@ -79,7 +79,9 @@ bindings/
 
 src_python/tin_engine/     # public Python API (distribution name: rasputin)
   __init__.py              # re-exports from tin_engine._core
-  cli.py                   # Typer entry point declared in pyproject
+  cli.py                   # Typer entry point declared in pyproject;
+                           #   `rasputin palette NAME [--out FILE]` writes a
+                           #   ParaView colour preset (16c)
   raster.py                # the ONLY adapter from decoded data into _core
   grid_domain.py           # DEM extent -> stride-subsampled nodes + outer ring;
                            #   pure numpy, never imports _core
@@ -103,6 +105,13 @@ src_python/tin_engine/     # public Python API (distribution name: rasputin)
                            #   moved to the DEM's CRS and clipped to the domain
                            #   as linework -> FeatureSet (16b); opens GeoJSON
                            #   and .gml itself; never imports _core
+  landcover.py             # regions, label_triangles: a land-cover code per
+                           #   triangle, components across unconstrained edges,
+                           #   one point-in-polygon test per component (16c);
+                           #   numpy and shapely, never imports _core
+  palettes.py              # CORINE_NATURAL (code -> label, colour) and
+                           #   paraview_preset(); data, imports nothing
+                           #   first-party (16c)
   chains.py                # start_chains: the domain's rings, then every
                            #   feature line, as (indices, role, mask) (16b);
                            #   never imports _core
@@ -117,11 +126,18 @@ src_python/tin_engine/     # public Python API (distribution name: rasputin)
                            #   carries positions rather than feature names
     svg.py                 # (Scene, SvgStyle) -> str; the stylesheet lives here
     fixtures.py            # the synthetic gallery, declarative; `rasputin draw
-  io/                      # all file decoding AND encoding lives here
+  io/                      # all file decoding AND encoding lives here, with
+                           #   known exceptions to move here in a follow-up:
+                           #   `palette`'s JSON is encoded in cli.py (16c), and
+                           #   increment 22's GeoJSON writer (on 22's branch)
     __init__.py
-    ply.py                 # arrays -> PLY bytes; takes no path and opens nothing
+    ply.py                 # arrays -> PLY bytes; takes no path and opens nothing;
+                           #   face_codes= adds the face property
+                           #   land_cover_code (16c)
     vtk_legacy.py          # arrays + EdgeVocabulary -> legacy .vtk bytes, for
-                           #   ParaView; takes no path and opens nothing
+                           #   ParaView; takes no path and opens nothing;
+                           #   triangle_codes=, land_cover_codes= add the cell
+                           #   array land_cover_code and its field (16c)
     geotiff.py             # TIFF container + GeoKey decoding -> DemTile
     models.py              # Pydantic RasterMeta / DemTile
     geopackage.py          # GeoPackage layer_info / query_features over an
