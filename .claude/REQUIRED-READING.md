@@ -143,8 +143,9 @@ startup, resume, `/clear`, compaction and fork. It never blocks: a failure
 exits non-zero, the session starts without the recap, and the recap is then
 run by hand (step 1 above). Spawned subagents have their own event,
 `SubagentStart`; the hooks documentation does not say outright that
-`SessionStart` skips them, so the first persona spawned with the hook live is
-checked for a recap it should not have. Its output is plain stdout
+`SessionStart` skips them, so the main session checks the first persona it
+spawns with the hook live for a recap it should not have. The hook's output is
+plain stdout
 (`python3 tools/session_state.py | wc -m` measures it), and Claude Code caps
 that at 10,000 characters: past the cap the text is saved
 to a file and only a 2,000-character preview reaches the context, so a
