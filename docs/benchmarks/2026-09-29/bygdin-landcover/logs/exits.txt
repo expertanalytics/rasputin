@@ -1,0 +1,9 @@
+lc_t10_run1 exit=0
+lc_t1_run1 exit=0
+lc_t10_run2 exit=0
+lc_t1_run2 exit=0
+lc_t10_run3 exit=0
+lc_t1_run3 exit=0
+lc_t10_ascii exit=0
+lc_t1_ascii exit=0
+palette exit=0

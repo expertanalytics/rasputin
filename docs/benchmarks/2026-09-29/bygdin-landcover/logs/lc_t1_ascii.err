@@ -1,0 +1,23 @@
+79 features kept, 342 dropped outside, 35 clipped, 0 empty skipped
+15846 input vertices, 8242 noded vertices
+15989 start quality nodes inserted, 2442 start quality skips, 5726 constraint feet, 0 feet refused, 24 rounds, 549527 points inserted, 1152221 flips, 1145434 triangles, achieved max error 1 m, 0 valid DEM nodes not covered, 15614 start triangles, 8242 start vertices off-node, 0 vertices without data dropped
+mosaic of 2 tiles, 2195 x 3314 nodes
+land cover: 124 regions, 0 outside every polygon, 0 in more than one, 0 thinner than the snap
+        7.02 real         7.80 user         0.43 sys
+          1045397504  maximum resident set size
+                   0  average shared memory size
+                   0  average unshared data size
+                   0  average unshared stack size
+              174571  page reclaims
+                  44  page faults
+                   0  swaps
+                   0  block input operations
+                   0  block output operations
+                   0  messages sent
+                   0  messages received
+                   0  signals received
+                  21  voluntary context switches
+                 764  involuntary context switches
+         99887680145  instructions retired
+         26140403929  cycles elapsed
+           866092352  peak memory footprint
