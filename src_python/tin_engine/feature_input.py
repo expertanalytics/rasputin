@@ -153,9 +153,10 @@ class FeatureSet(BaseModel):
     """The features in source order; ``outside`` counts those clipped away,
     ``clipped`` those kept that crossed the domain's boundary, ``empty`` empty
     geometries skipped, ``scanned`` the GeoPackage layers read without an
-    R-tree index (R3). ``crs`` and ``layers`` are per source
-    (a layer for a GeoPackage only); ``clip_seconds`` is the time spent after
-    reading, for the ``features clip`` row."""
+    R-tree index (R3). ``crs``, ``layers`` and ``counts`` are per source
+    (a layer for a GeoPackage only; ``counts`` the features kept from each,
+    16e R6/D2); ``clip_seconds`` is the time spent after reading, for the
+    ``features clip`` row."""
 
     model_config = ConfigDict(frozen=True)
 
@@ -166,6 +167,7 @@ class FeatureSet(BaseModel):
     scanned: tuple[str, ...] = ()
     crs: tuple[str, ...] = ()
     layers: tuple[str | None, ...] = ()
+    counts: tuple[int, ...] = ()
     clip_seconds: float = 0.0
 
 
@@ -242,10 +244,13 @@ def open_features(request: FeatureRequest, domain: DomainPolygon, dem_crs: str |
     tally = _Tally(domain, parse_crs(dem_crs), vocabulary)
     crss: list[str] = []
     layers: list[str | None] = []
+    counts: list[int] = []
     for source in request.sources:
+        before = len(tally.features)
         own, layer = tally.source(source)
         crss.append(own)
         layers.append(layer)
+        counts.append(len(tally.features) - before)
     return FeatureSet(
         features=tuple(tally.features),
         outside=tally.outside,
@@ -254,6 +259,7 @@ def open_features(request: FeatureRequest, domain: DomainPolygon, dem_crs: str |
         scanned=tuple(tally.scanned),
         crs=tuple(crss),
         layers=tuple(layers),
+        counts=tuple(counts),
         clip_seconds=tally.seconds,
     )
 
