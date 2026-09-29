@@ -43,7 +43,14 @@ from tin_engine.features import EdgeVocabulary
 #: The names this module writes into `FieldData` itself.
 #: ``elevation`` is the point array of heights (increment 12), so no dataset
 #: string may take the name: ParaView's Color By would offer both.
-RESERVED = frozenset({"feature_bits", "feature_names", "feature_vocabulary", "elevation"})
+#: ``land_cover_codes`` names the code system of the cell array
+#: ``land_cover_code`` (increment 16c, R3).
+RESERVED = frozenset(
+    {"feature_bits", "feature_names", "feature_vocabulary", "elevation", "land_cover_codes"}
+)
+
+#: The cell array of land-cover codes. Not ``land_cover``: that is 16b's bit 7.
+LAND_COVER_CODE = "land_cover_code"
 
 _FIELD_NAME = re.compile(r"[a-z][a-z0-9_]*")
 
@@ -60,6 +67,8 @@ def write_vtk(
     vocabulary: EdgeVocabulary,
     fields: Sequence[tuple[str, str]] = (),
     binary: bool = False,
+    triangle_codes: npt.ArrayLike | None = None,
+    land_cover_codes: str = "",
 ) -> bytes:
     """Encode one mesh and its constraint edges as legacy VTK 4.2 PolyData.
 
@@ -71,12 +80,18 @@ def write_vtk(
         vocabulary: what each bit of a mask means.
         fields: extra dataset strings, such as `("crs", "EPSG:25833")`.
         binary: write packed big-endian records instead of text.
+        triangle_codes: `(T,)` land-cover codes (increment 16c, R3), written
+            as the `int` cell array `land_cover_code`, 0 on every line.
+        land_cover_codes: what the codes are, written as the dataset string
+            `land_cover_codes` when non-empty and `triangle_codes` is given.
 
     Raises:
         ValueError: if `vertices` is not `(N, 3)`; if `edge_masks` does not
             have one entry per edge; if a mask carries a bit the vocabulary
             does not name; if a field name is outside `^[a-z][a-z0-9_]*$` or
-            reserved; or if a string is not ASCII or has a control character.
+            reserved; if a string is not ASCII or has a control character; or
+            if `triangle_codes` has not one entry per triangle, does not fit
+            int32, or comes with a vocabulary naming `land_cover_code`.
     """
     points = np.asarray(vertices, dtype=np.float64)
     if points.ndim != 2 or points.shape[1] != 3:
@@ -91,6 +106,17 @@ def write_vtk(
             raise ValueError(f"field name {name!r} is reserved or not ^[a-z][a-z0-9_]*$")
 
     table = sorted((prop.bit, prop.name) for prop in vocabulary.properties)
+    codes = None
+    if triangle_codes is not None:
+        codes = np.asarray(triangle_codes).reshape(-1)
+        if len(codes) != len(polygons):
+            raise ValueError(f"triangle_codes has {len(codes)} entries, {len(polygons)} triangles")
+        if len(codes) and (codes.min() < -(2**31) or codes.max() >= 2**31):
+            raise ValueError("triangle_codes must fit int32")
+        if any(name == LAND_COVER_CODE for _, name in table):
+            raise ValueError(f"the vocabulary names {LAND_COVER_CODE!r}, the codes' array")
+        if land_cover_codes:
+            fields = (*fields, ("land_cover_codes", land_cover_codes))
     used = {name for mask in np.unique(masks) for name in vocabulary.names(int(mask))}
     cell_masks = np.concatenate([masks, np.zeros(len(polygons), dtype=np.uint32)])
 
@@ -105,6 +131,10 @@ def write_vtk(
         for bit, name in table
         if name in used
     ]
+    if codes is not None:
+        # Ruling 5: every cell array covers every cell; the lines get 0.
+        cell_codes = np.concatenate([np.zeros(len(lines), dtype=np.int64), codes])
+        features.append(_numeric(LAND_COVER_CODE, cell_codes, "int", binary))
 
     out = [
         b"# vtk DataFile Version 4.2\nrasputin mesh\n",

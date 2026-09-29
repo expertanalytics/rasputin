@@ -40,6 +40,7 @@ roles is therefore made unrepresentable rather than merely discouraged.
 from __future__ import annotations
 
 import importlib.metadata
+import json
 import math
 import os
 import shlex
@@ -75,6 +76,7 @@ from tin_engine.domain import DomainError, DomainPolygon, read_domain
 from tin_engine.elevation import Trimmed, trim
 from tin_engine.feature_input import (
     CLASS_MAPS,
+    ClassMap,
     FeatureError,
     FeatureRequest,
     FeatureSet,
@@ -86,7 +88,9 @@ from tin_engine.grid_domain import default_stride, refine_start_stride, subsampl
 from tin_engine.io.models import DemTile, RasterMeta
 from tin_engine.io.ply import write_ply
 from tin_engine.io.vtk_legacy import write_vtk
+from tin_engine.landcover import label_triangles
 from tin_engine.mosaic import Bounds, Seam
+from tin_engine.palettes import PALETTES, paraview_preset
 from tin_engine.raster import to_core
 from tin_engine.stats import PhaseClock, Refinement, Report, Sizes, _exact, quality, render
 from tin_engine.viz.fixtures import GALLERY, Fixture
@@ -696,9 +700,16 @@ def mesh(
 
     ``--stats`` (increment 17) adds a report and changes nothing else: the
     clock always runs, the quality pass and the report only with the flag.
+
+    A ``--features-map`` with class codes (``corine``, ``corine-water``,
+    ``clc18_kode``) also gives every triangle its polygon's code, in the cell
+    array ``land_cover_code`` of a ``.vtk`` or the face property of a ``.ply``
+    (increment 16c); ``rasputin palette corine`` writes natural colours for it.
     """
     clock = PhaseClock()
     dem_run: _DemMesh | None = None
+    codes: npt.NDArray[np.int32] | None = None
+    codes_text = ""
     seams: tuple[Seam, ...] = ()
     if (name is None) == (not dem):
         raise typer.BadParameter(
@@ -839,6 +850,9 @@ def mesh(
             if notice:
                 fields.append(("features_notice", notice))
                 comments.append(f"features_notice {notice}")
+            cmap = CLASS_MAPS[features_map or "property"]
+            if cmap.codes:
+                codes, codes_text = _land_cover(dem_run.trimmed, found, cmap, snap_spacing, clock)
     else:
         assert name is not None
         if stride is not None:
@@ -898,12 +912,18 @@ def mesh(
                 vocabulary=DEFAULT_VOCABULARY,
                 fields=fields,
                 binary=binary,
+                triangle_codes=codes,
+                land_cover_codes=codes_text,
             )
         ]
     else:
         encoders = [
             lambda: write_ply(
-                vertices, faces=surface_mesh.triangles, ascii=not binary, comments=comments
+                vertices,
+                faces=surface_mesh.triangles,
+                ascii=not binary,
+                comments=[*comments, *([f"land_cover_codes {codes_text}"] if codes_text else [])],
+                face_codes=codes,
             ),
             lambda: write_ply(
                 vertices,
@@ -922,6 +942,48 @@ def mesh(
         typer.echo(f"{target}")
     if stats is not None:
         _write_report(clock, report_target, surface_mesh, dem_run, targets, seams)
+
+
+def _land_cover(
+    trimmed: Trimmed, found: FeatureSet, cmap: ClassMap, spacing: float, clock: PhaseClock
+) -> tuple[npt.NDArray[np.int32], str]:
+    """16c, R1-R3: a code per triangle from the coded polygons, timed as the
+    phase ``land cover``, with its stderr line; the codes and their text."""
+    polygons = [(f.polygon, f.code) for f in found.features if f.polygon is not None and f.code]
+    with clock.phase("land cover"):
+        mesh = (trimmed.vertices, trimmed.triangles, trimmed.edges)
+        labels = label_triangles(*mesh, polygons=polygons, margin=2 * spacing)
+    typer.echo(
+        f"land cover: {labels.regions} regions, {labels.outside} outside every polygon, "
+        f"{labels.overlapped} in more than one, {labels.thin} thinner than the snap",
+        err=True,
+    )
+    text = f"{cmap.codes}, attribute {cmap.attribute}, map {cmap.name}; "
+    return labels.codes, text + "0 = in no polygon, and every constraint line"
+
+
+@app.command()
+def palette(
+    name: Annotated[str, typer.Argument(help=f"The palette: {', '.join(PALETTES)}.")],
+    out: Annotated[
+        Path | None, typer.Option("--out", help="Write the preset here, not to stdout.")
+    ] = None,
+) -> None:
+    """Write a ParaView colour preset for ``land_cover_code`` (increment 16c).
+
+    Import it in ParaView's Colour Map Editor (Choose Preset, Import), then
+    colour by ``land_cover_code``; tick Interpret Values As Categories if the
+    preset does not.
+    """
+    if name not in PALETTES:
+        raise typer.BadParameter(f"unknown palette {name}; use {', '.join(PALETTES)}")
+    table, title = PALETTES[name]
+    text = json.dumps(paraview_preset(table, title), indent=1) + "\n"
+    if out is None:
+        typer.echo(text, nl=False)
+        return
+    out.write_text(text)
+    typer.echo(f"{out}")
 
 
 def _report_target(
