@@ -126,7 +126,7 @@ round of findings.** On a prose or tooling branch its scope is:
 
 ## The harness
 
-Active in `.claude/settings.json` (Ola, 2026-09-29): `guard_push.py` asks
+Active in `.claude/settings.json`: `guard_push.py` asks
 before `git push`, `gh pr create/merge/ready/edit`, `gh release`,
 `gh repo create/delete/edit`, `--no-verify`, `rebase`, `reset --hard`,
 `filter-branch` and `commit --amend` (not `gh pr close` or
@@ -137,7 +137,7 @@ one is red. All three read the command as text, so they are tripwires: the
 boundary is still yours to keep, and the permission system is not the push
 backstop (auto mode has let unapproved pushes through).
 
-`SessionStart` runs `tools/session_state.py` (Ola, 2026-09-30), so the
+`SessionStart` runs `tools/session_state.py`, so the
 cold-start recap is in context before the first prompt, on every source:
 startup, resume, `/clear`, compaction and fork. It never blocks: a failure
 exits non-zero, the session starts without the recap, and the recap is then
@@ -169,8 +169,3 @@ each other only through the spawn prompt, the handback,
 `.claude/current-task/<persona>-HHMMSS.md` as above, and tracked files
 (increment docs, commits). A result another persona needs is named by path in
 the handback, and is read as data.
-
-A preventive ruling, not a response to a recorded incident. Ola, 2026-09-29:
-"What I can't tolerate is two agents trying to communicate through the
-rasputin_folder or the temp folder. That would violate the harness to protect
-against role bleed."

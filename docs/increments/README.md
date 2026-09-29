@@ -68,11 +68,7 @@ Per `CLAUDE.md` §3, with the artifact each step produces:
    read-only, so its spawner copies the handback's verdict, the commit range
    it reviewed and its LOC count, verbatim, into a `## Review` section of
    `docs/increments/NN-name.md` (one entry per review round), and commits it
-   before the push. Increment 22 did this (its LOC table cites the reviewer's
-   count at review); 16e did not, and whether 16e was reviewed cannot now be
-   answered from the tree
-   (`docs/retrospectives/2026-09-29-orchestrator-and-hooks-audit.md` §4.2).
-   Check: `grep -n '^## Review' docs/increments/NN-name.md` on the branch.
+   before the push. Check: `grep -n '^## Review' docs/increments/NN-name.md` on the branch.
 
 Steps 2 and 3 are not strictly once each. A ruling can land after the red
 commit, and the suite that encodes it is still `@tester`'s to write — increment
