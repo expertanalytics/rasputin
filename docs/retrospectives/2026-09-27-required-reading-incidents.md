@@ -267,7 +267,7 @@ agent's own to keep, with nothing underneath it.
 `SessionStart` running `tools/session_state.py` on 2026-09-30 (PR #115). The
 incident behind `SessionStart`: on 2026-09-29 a stale `session.md`, read by
 hand, led the main session to report the finished Holleia report as
-unfinished. The recap on disk would have shown it done.
+unfinished.
 
 ## Data, scratch and temp folders: a preventive ruling
 
