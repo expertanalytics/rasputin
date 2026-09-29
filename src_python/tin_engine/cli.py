@@ -1316,6 +1316,15 @@ def catchment(
     lakes_layer: Annotated[
         str | None, typer.Option("--lakes-layer", help="The GeoPackage's features table.")
     ] = None,
+    outline_tolerance: Annotated[
+        float | None,
+        typer.Option(
+            "--outline-tolerance",
+            metavar="METRES",
+            help="Reduce the outline, keeping its area, to within this of the fine one; "
+            "0 writes the fine outline. Default: twice the DEM's cell.",
+        ),
+    ] = None,
     out_parent: Annotated[
         Path | None,
         typer.Option("--out-parent", help="Refuse any output path resolving outside this."),
@@ -1327,6 +1336,10 @@ def catchment(
     data's edge or by NoData is refused, and nothing is written."""
     if lakes is None and lakes_layer is not None:
         raise typer.BadParameter("applies only with --lakes", param_hint="--lakes-layer")
+    if outline_tolerance is not None and not (
+        math.isfinite(outline_tolerance) and outline_tolerance >= 0.0
+    ):
+        raise typer.BadParameter("must be finite and at least 0", param_hint="--outline-tolerance")
     if out.suffix.lower() not in CATCHMENT_SUFFIXES:
         raise typer.BadParameter(f"use {' or '.join(CATCHMENT_SUFFIXES)}", param_hint="--out")
     target = _destination(out, out_parent, out.stem)
@@ -1341,6 +1354,7 @@ def catchment(
             seed_crs=seed_crs,
             lakes=None if found is None else found[0],
             lakes_crs=None if found is None else found[1],
+            outline_tolerance=outline_tolerance,
         )
         result = delineate(request, repository)
     except OSError as exc:
@@ -1378,12 +1392,24 @@ def catchment(
         f"traced in {result.trace_seconds:.2f} s",
         err=True,
     )
+    reduced = result.reduced
+    kept = len(reduced.exterior.coords) - 1
+    change = reduced.area - result.fine_area
+    typer.echo(
+        f"reduced outline: {kept} vertices, {reduced.area / 1e6:.6f} km2, difference "
+        f"{change:.3g} m2 ({change / result.fine_area:.2g} relative), tolerance "
+        f"{result.tolerance:g} m, {result.reduce_seconds:.2f} s",
+        err=True,
+    )
     properties = {
         "seed": list(seed),
         "seed_crs": seed_crs,
         "nodes": result.nodes,
         "fine_vertices": vertices,
         "fine_area_m2": result.fine_area,
+        "reduced_vertices": kept,
+        "reduced_area_m2": reduced.area,
+        "outline_tolerance_m": result.tolerance,
         "windows": [[w.rows, w.cols] for w in result.windows],
     }
     doc = {
@@ -1395,7 +1421,7 @@ def catchment(
                 "properties": properties,
                 "geometry": {
                     "type": "Polygon",
-                    "coordinates": [[list(xy) for xy in result.fine.exterior.coords]],
+                    "coordinates": [[list(xy) for xy in reduced.exterior.coords]],
                 },
             }
         ],
