@@ -1,0 +1,57 @@
+CORINE polygons meeting the domain: 79; clipped area 304.909550 km2, domain 304.909550 km2
+
+== 10 m ==
+vtkPolyDataReader: 92053 cells = 8882 lines + 83171 triangles; active SCALARS feature_mask
+land_cover_code: 92053 values (one per cell: True); nonzero on lines: 0
+FieldData land_cover_codes: 'CORINE Land Cover level-3 code, attribute Code_18, map corine; 0 = in no polygon, and every constraint line'
+mesh area 304.909551 km2; triangles with code 0: 0
+| code | mesh km2 | mesh share % | CORINE clipped share % | diff (pp) | 22's table % |
+| 333 | 129.093253 | 42.33821 | 42.33821 | -0.000001 | 42.34 |
+| 332 | 65.011569 | 21.32159 | 21.32159 | +0.000000 | 21.32 |
+| 322 | 51.849126 | 17.00476 | 17.00476 | +0.000000 | 17.0 |
+| 512 | 50.191119 | 16.46099 | 16.46099 | +0.000000 | 16.46 |
+| 335 | 7.452202 | 2.44407 | 2.44407 | -0.000000 | 2.44 |
+| 412 | 1.020748 | 0.33477 | 0.33477 | +0.000000 | 0.33 |
+| 142 | 0.291534 | 0.09561 | 0.09561 | -0.000000 | 0.1 |
+largest share difference: 0.000001 pp; codes equal: True
+I1: 116398 interior unconstrained edges, 0 with differing codes
+I2: oracle checks 83171 of 83171 triangles (r > 0.003 m); disagreements 0; disagreements on the 0 unchecked: 0
+union-find: 5 hook rounds; 124 components; equal to landcover.regions: True
+ASCII run codes equal to binary run1: True
+quality: worst angle 0.00408 deg, max degree 16, max error 9.999732907715497 (within: True), Delaunay checked/ambiguous/violations 116398/1095/0
+time land cover: median 0.071 s (runs 0.075, 0.071, 0.070)
+time refine: median 0.047 s (runs 0.048, 0.047, 0.046)
+time features clip: median 1.460 s (runs 1.498, 1.460, 1.419)
+time total: median 2.075 s (runs 2.534, 2.075, 2.021)
+wall: median 2.34 s (runs 3.10, 2.34, 2.29); max RSS median 719 MB
+run1 stderr: land cover: 124 regions, 0 outside every polygon, 0 in more than one, 0 thinner than the snap
+run2 stderr: land cover: 124 regions, 0 outside every polygon, 0 in more than one, 0 thinner than the snap
+run3 stderr: land cover: 124 regions, 0 outside every polygon, 0 in more than one, 0 thinner than the snap
+
+== 1 m ==
+vtkPolyDataReader: 1159508 cells = 14074 lines + 1145434 triangles; active SCALARS feature_mask
+land_cover_code: 1159508 values (one per cell: True); nonzero on lines: 0
+FieldData land_cover_codes: 'CORINE Land Cover level-3 code, attribute Code_18, map corine; 0 = in no polygon, and every constraint line'
+mesh area 304.909551 km2; triangles with code 0: 0
+| code | mesh km2 | mesh share % | CORINE clipped share % | diff (pp) | 22's table % |
+| 333 | 129.093253 | 42.33821 | 42.33821 | -0.000001 | 42.34 |
+| 332 | 65.011569 | 21.32159 | 21.32159 | +0.000000 | 21.32 |
+| 322 | 51.849126 | 17.00476 | 17.00476 | +0.000000 | 17.0 |
+| 512 | 50.191119 | 16.46099 | 16.46099 | +0.000000 | 16.46 |
+| 335 | 7.452202 | 2.44407 | 2.44407 | -0.000000 | 2.44 |
+| 412 | 1.020748 | 0.33477 | 0.33477 | +0.000000 | 0.33 |
+| 142 | 0.291534 | 0.09561 | 0.09561 | -0.000000 | 0.1 |
+largest share difference: 0.000001 pp; codes equal: True
+I1: 1705117 interior unconstrained edges, 0 with differing codes
+I2: oracle checks 1145434 of 1145434 triangles (r > 0.003 m); disagreements 0; disagreements on the 0 unchecked: 0
+union-find: 7 hook rounds; 124 components; equal to landcover.regions: True
+ASCII run codes equal to binary run1: True
+quality: worst angle 0.00408 deg, max degree 29, max error 1.0 (within: True), Delaunay checked/ambiguous/violations 1705117/162591/0
+time land cover: median 1.296 s (runs 1.303, 1.296, 1.263)
+time refine: median 0.559 s (runs 0.573, 0.559, 0.537)
+time features clip: median 1.447 s (runs 1.447, 1.463, 1.436)
+time total: median 3.887 s (runs 3.887, 3.952, 3.800)
+wall: median 4.36 s (runs 4.36, 4.41, 4.26); max RSS median 859 MB
+run1 stderr: land cover: 124 regions, 0 outside every polygon, 0 in more than one, 0 thinner than the snap
+run2 stderr: land cover: 124 regions, 0 outside every polygon, 0 in more than one, 0 thinner than the snap
+run3 stderr: land cover: 124 regions, 0 outside every polygon, 0 in more than one, 0 thinner than the snap
