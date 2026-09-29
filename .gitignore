@@ -20,6 +20,8 @@ lib/build_*
 # pre-a46481c; guards a stray file left in an old worktree
 .claude/current-task.md
 .claude/current-task/
+# Session worktrees (a full repo copy each); never content of this repo.
+.claude/worktrees/
 
 # Coverage artifacts (--cov is enabled by default in pyproject addopts)
 .coverage

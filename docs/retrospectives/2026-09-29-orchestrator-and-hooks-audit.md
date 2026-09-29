@@ -363,6 +363,18 @@ Nothing in this audit was pushed. Rule changes in §5 are drafts for Ola.
   every worktree commit came back red with "DID NOT RUN". It now falls back to
   the main checkout's `.venv`, then to PATH. A planted `import os` was
   reported as F401 with exit 2.
+  The first live firing found two more defects. (1) The settings run
+  `$CLAUDE_PROJECT_DIR/.claude/hooks/...`, and in a worktree session that
+  variable is the **main** checkout. The hook therefore gated the main
+  checkout's branch, not the tree that was committed. It now gates the git
+  toplevel of the event's `cwd`. (2) `tools/check_citations.py` walked into
+  `.claude/worktrees/`, so every basename was ambiguous (229 "broken"). It now
+  skips that directory, and `.gitignore` lists it. Both were tested by
+  planting: the old script exits 1 with a fake nested worktree present, the
+  new one exits 0, and the hook given a worktree `cwd` goes red on a planted
+  F401 there. Disclosed: the settings rename went into the retrospective
+  commit `f01002a` because it was already staged. It was not split out, since
+  that would rewrite history.
 - **The data folders are not a channel** (Ola: "What I can't tolerate is two
   agents trying to communicate through the rasputin_folder or the temp
   folder"). This is now a rule in `.claude/REQUIRED-READING.md`. Write access to
