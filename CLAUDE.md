@@ -6,7 +6,6 @@ This file drives the automation loops for Claude Code (`@orchestrator`) in this 
 This project is governed by specialized sub-agents. Always defer tasks to the correct persona in `.claude/agents/`:
 * `@orchestrator`: Master project driver. Handles human input and chains the TDD loop.
 * `@architect`: Enforces declarative structures, component boundaries, and interface decoupling. Checks the literature and any novelty claim before a design.
-* `@migration-expert`: Porting lead. Deconstructs legacy logic into the new target architecture.
 * `@tester`: Owns the test suites. Enforces the 85% coverage floor (see `testing.md`) and adversarial geometry fuzzing.
 * `@developer`: Writes clean, high-performance C++20 and async Python code.
 * `@reviewer`: Final gatekeeper. Audits CI status, LOC, red-step scaffolding, and prose claims against code.
@@ -26,7 +25,7 @@ This project is governed by specialized sub-agents. Always defer tasks to the co
 * **Prohibited Dependencies:** Never introduce `CGAL`, `GDAL`, `OGR`, `Fiona`,
   `Rasterio` (it wraps GDAL), or external `date` libraries.
   Enforced by `tools/check_prohibited_deps.py` over imports, includes, declared
-  dependencies and build directives. `legacy/` is exempt.
+  dependencies and build directives.
 * **Core Stack:** Modern C++ (C++20 Concepts, Pybind11, `std::chrono`) + Async Python 3.12+ (Pydantic V2, Typer, Shapely, PyProj, NumPy, tifffile).
 * **I/O Boundary:** File decoding is Python's. The C++ core never opens a file, sees a path, or links a codec, and CRS never crosses into it. See the `raster` section of `project_structure.md`.
 
@@ -37,8 +36,8 @@ Before acting on this repository — in the main session as well as in any perso
 that starts cold or resumes after a context loss runs the recovery steps at the
 top of `.claude/REQUIRED-READING.md` **before** its first spawn, commit or edit;
 that is the only statement of the rule and of where in-flight state lives.
-Every code alteration or legacy migration step must execute this strict pipeline via `@orchestrator`:
-1. `@architect` or `@migration-expert` defines interfaces and types.
+Every code alteration must execute this strict pipeline via `@orchestrator`:
+1. `@architect` defines interfaces and types.
 2. `@tester` writes failing unit/async test cases *first* (including happy path and edge cases).
 3. `@developer` writes the minimal code needed to pass the active tests.
 4. `@tester` and `@reviewer` validate results and type consistency before merge readiness.
@@ -64,14 +63,13 @@ ctest --test-dir build                          # all registered suites; see tes
 ### Static gates (Python)
 ```bash
 mypy                   # strict, over src_python/tin_engine
-ruff check .           # legacy/ is excluded
+ruff check .
 ruff format --check .  # docs/ and .claude/ are excluded
 ```
 
 ### Governance gates
 ```bash
 python tools/check_prohibited_deps.py   # section 2, checked against real imports
-python tools/check_legacy_imports.py    # legacy/ must stay self-consistent
 python tools/check_detria_boundary.py   # detria.hpp stays in one TU, zero headers
 python3 tools/check_citations.py        # cited lines resolve; lists the at-risk ones
 ```

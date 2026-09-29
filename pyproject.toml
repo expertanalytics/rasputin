@@ -106,11 +106,9 @@ addopts = [
 line-length = 100
 target-version = "py312"
 src = ["src_python", "tests/python"]
-# The archived pre-migration tree is not maintained and not linted. Its 242
-# findings would otherwise drown out real ones in the new code.
 # docs/benchmarks/<date>/ holds dated one-off measurement scripts, kept verbatim
 # as evidence. The maintained benchmark is tools/bench.py (@perf), checked by mypy below.
-exclude = ["legacy", "docs/benchmarks"]
+exclude = ["docs/benchmarks"]
 
 [tool.ruff.format]
 # docs/ holds design records whose code blocks are quotations, cited by line;

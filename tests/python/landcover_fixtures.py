@@ -10,8 +10,9 @@ smaller code; Default D2).
 - `landcover_oracle`: each triangle's centroid tested against the polygons,
   for every triangle whose inradius exceeds `1.5 * margin` (the centroid is
   then further than `margin` from every input boundary, so the answer is
-  exact). The legacy's per-centre test (`legacy/rasputin/gml_repository.py`,
-  `land_cover`), vectorised, with 0 for a centre in no polygon.
+  exact). The legacy's per-centre test
+  (`legacy-archive:legacy/rasputin/gml_repository.py`, `land_cover`),
+  vectorised, with 0 for a centre in no polygon.
 - `spread_violations`: I1. Every interior edge that is not a constraint edge
   has the same code on both sides. Arrays only, no geometry.
 - `vtk_labels`: I3, I1 and I2 on one `.vtk` file, for the CLI suites.

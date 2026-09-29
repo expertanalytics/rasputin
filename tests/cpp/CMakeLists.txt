@@ -96,24 +96,6 @@ add_terrain_backend_test(prop_pslg_invariants property/prop_pslg_invariants.cpp)
 # requiring they agree.
 target_link_libraries(prop_pslg_invariants PRIVATE Threads::Threads)
 
-# Characterisation tests for the legacy solar-position header. These pin the
-# UTC/Julian-day behaviour the post-CGAL port must reproduce, and guard removal
-# of the lib/date fallback. The legacy header carries pre-existing
-# unused-parameter warnings, so that one flag is waived -- -Werror stays on.
-# It also does not link terrain_headers, so it does not go through the helper.
-add_executable(test_solar_position unit/test_solar_position.cpp)
-target_include_directories(test_solar_position PRIVATE
-    "${CMAKE_SOURCE_DIR}/legacy"
-)
-target_link_libraries(test_solar_position PRIVATE
-    Catch2::Catch2WithMain
-)
-target_compile_options(test_solar_position PRIVATE
-    -Wall -Wextra -Wpedantic -Werror -Wno-unused-parameter
-)
-
-catch_discover_tests(test_solar_position)
-
 # CDT, increment 4: the constrained Delaunay triangulation.
 #
 # `terrain_cdt` is the compiled target these suites expect: a static library

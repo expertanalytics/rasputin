@@ -173,11 +173,7 @@ src_python/tin_engine/     # public Python API (distribution name: rasputin)
 tests/
   cpp/                     # C++ tests (Catch2; unit/ and property/)
   python/                  # Python tests (pytest; hypothesis planned)
-  fixtures/                # in-repo test data (DEM, GML, textures, TIN archives)
-
-legacy/                    # archived pre-migration tree, not built
-  rasputin/
-  bindings.cpp             # CGAL-based original; not built, kept for reference
+  fixtures/                # in-repo test data (DEM, CORINE); credits in NOTICE.md
 
 lib/                       # vendored third-party
   detria/                  # detria.hpp at a pinned SHA, MIT; see its README
@@ -440,26 +436,11 @@ The public API is the `tin_engine` package, calling into `tin_engine._core`. `ti
 
 **The catchment GeoJSON writer is in `cli.py`** (increment 22, `rasputin catchment`): it builds a one-feature `FeatureCollection` with a `crs` member and writes it, an exception to "all file encoding lives in `io/`". Recommended (@architect, 2026-09-29): move it, as a function from a polygon, its CRS text and its properties to bytes that takes no path and opens nothing, into `io/geojson.py`, the shape `io/ply.py` and `io/vtk_legacy.py` already have; `cli.py` keeps only the write. It is small, and a GUI or API worker writing a catchment would otherwise have to go through the CLI. Until it moves, this paragraph is the record of the exception.
 
-The pre-migration `rasputin.*` modules (`mesh.py`, `geometry.py`, `reader.py`, `tin_repository.py` and friends) are archived under `legacy/rasputin/` rather than kept in place, so this is a re-implementation against the new backend rather than a rewiring of stable modules. Porting proceeds one entry point at a time; shapes worth preserving should be read out of `legacy/` before being reintroduced.
+The pre-migration `rasputin.*` modules (`mesh.py`, `geometry.py`, `reader.py`, `tin_repository.py` and friends) are not in the working tree. They, with the CGAL-based `triangulate_dem.h` and `bindings.cpp`, left it in the release-hygiene PR and are kept in history under the annotated tag `legacy-archive` (`docs/increments/release-hygiene.md`, section 3). A shape worth preserving is read back with `git show legacy-archive:legacy/rasputin/<file>` before it is reintroduced, and an increment's "Legacy" section greps the tag. `tools/check_citations.py` resolves a `legacy/…:N` citation through the tag.
 
-## What gets deleted, eventually
+## What was removed
 
-After the new backend ships and the Python API is rewired:
-
-- `legacy/rasputin/triangulate_dem.h` and `legacy/bindings.cpp` (the CGAL-based originals)
-- CGAL, GMP, MPFR from the CMake dependency list — already absent from the new `CMakeLists.txt`
-- Boost.Geometry, whose only uses are in `legacy/triangulate_dem.h` and go when
-  it does. Not a prohibited dependency — `CLAUDE.md` §2 is the list, and this
-  is not on it
-
-These removals are not part of the initial build-out; they're a follow-up once feature parity is reached and tests pass on the new backend.
-
-## Existing files to integrate
-
-The repo already has:
-
-- `legacy/rasputin/triangulate_dem.h` (CGAL-based, to be replaced)
-- `legacy/rasputin/*.py` (the pre-migration Python layer, pending per-module classification)
-- `lib/date/` — **removed**. The C++20 `<chrono>` calendar types replaced it; `CLAUDE.md` section 2 prohibits external `date` libraries.
-
-The new `_core/` tree is added alongside the existing C++ files; the old files stay buildable until the new pipeline reaches parity, then are removed in a single cleanup commit.
+- The CGAL-era pipeline: `legacy/` (30 files, 5,224 lines), with `tools/check_legacy_imports.py` and `@migration-expert`, which existed only for it. History keeps all three (`legacy-archive`).
+- CGAL, GMP, MPFR from the CMake dependency list.
+- Boost.Geometry, whose only uses were in `legacy/`. It was never a prohibited dependency (`CLAUDE.md` §2 is the list), only an unused one.
+- `lib/date/`. The C++20 `<chrono>` calendar types replaced it; `CLAUDE.md` §2 prohibits external `date` libraries.
