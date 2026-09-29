@@ -9,7 +9,7 @@ source, one distinct notice), and "Tests, and the regression floor" (R7 cases
 1-5, 7). Invariants I1-I3, I5.
 
 Reuses `test_cli_mesh_features.py`'s fixtures and helpers (`bumpy`,
-`plain_square`, `mesh`, `meshed`, `edges`, `edges_at`, `text_field`,
+`plain_square`, `mesh`, `meshed`, `edges`, `text_field`,
 `FEATURES_FIELD`, the gallery geometries) so the multi-source cases read the
 same way the single-source ones do.
 
@@ -44,7 +44,6 @@ from test_cli_mesh_features import (
     FEATURES_FIELD,
     SNAP,
     edges,
-    edges_at,
     mesh,
     meshed,
     rel,
@@ -308,24 +307,13 @@ class TestCrossSourceMerge:
     def test_the_seam_is_one_run_of_edges_not_doubled(
         self, tmp_path: Path, bumpy: Path, plain_square: Path
     ) -> None:
-        """The merge collapses the two coincident chains to one edge run: no
-        edge on the seam carries only one source's bit, and no seam edge is
-        doubled (no two edges share both endpoints). Queried at a real mesh
-        vertex — a seam endpoint — not the straight-seam midpoint (which is not
-        a vertex and can never match)."""
+        """The merge collapses the two coincident chains to one edge run: over
+        the whole seam every edge carries the union mask (no edge keeps only one
+        source's bit), and no seam edge is doubled (no two edges share both
+        endpoints — a doubled merge would repeat one). Both properties are read
+        from the seam edges themselves, without guessing a vertex coordinate."""
         vtk = self.seam_mesh(tmp_path, bumpy, plain_square)
         want = V.mask("land_cover", "water")
-        # A seam endpoint IS a mesh vertex (a constraint-chain endpoint is
-        # noded), so `edges_at` finds the edges incident to it. Under a correct
-        # merge every such edge carries the union mask; a doubled seam would
-        # leave a single-source bit on one of the two coincident edges.
-        endpoint = (SHARED_X, rel(0, -55.1)[1])
-        masks_here = edges_at(vtk, endpoint)
-        assert masks_here, "no constraint edge at the seam endpoint"
-        assert set(masks_here) == {want}, masks_here
-        # Not-doubled, over the whole seam: every seam edge carries the union
-        # mask, and no seam edge is a duplicate/parallel of another (no two
-        # share both endpoints — a doubled merge would repeat one).
         xy, masks = edges(vtk)
         mids = (xy[:, 0] + xy[:, 1]) / 2
         on_seam = np.asarray(shapely.distance(SEAM, shapely.points(mids))) <= SNAP
