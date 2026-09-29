@@ -293,3 +293,15 @@ add_terrain_backend_test(test_mesh_lattice_incircle unit/test_mesh_lattice_incir
 # threads, so it is not in the TSan job.
 
 add_terrain_backend_test(prop_noding_verifier_sweep property/prop_noding_verifier_sweep.cpp)
+
+# The fine catchment's flood, increment 22 PR 1
+# (docs/increments/22-auto-catchment.md, "Flow and membership: one flood" and
+# "The red suites"). Not named invariant-critical; the descent oracle and the
+# invariants on random DEMs are the defence. It starts no threads.
+add_terrain_test(test_hydrology_upstream unit/test_hydrology_upstream.cpp)
+
+# The outline reduction, increment 22 PR 2 (docs/increments/22-auto-catchment.md,
+# "The reduction" and "The red suites"): area-preserving segment collapse with
+# the exact kernel. A backend test because it names DefaultKernel. Not named
+# invariant-critical; it starts no threads.
+add_terrain_backend_test(test_area_collapse unit/test_area_collapse.cpp)

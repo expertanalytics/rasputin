@@ -12,6 +12,7 @@
 #include <terrain/core/point.hpp>
 #include <terrain/core/pslg.hpp>
 #include <terrain/core/pslg_builder.hpp>
+#include <terrain/hydrology/upstream.hpp>
 #include <terrain/noding/node.hpp>
 #include <terrain/noding/noded_pslg_builder.hpp>
 #include <terrain/predicates/default_kernel.hpp>
@@ -19,6 +20,7 @@
 #include <terrain/raster/sample.hpp>
 #include <terrain/raster/view.hpp>
 #include <terrain/refinement/refine.hpp>
+#include <terrain/vector_simplify/area_collapse.hpp>
 
 #include <cstddef>
 #include <cstdint>
@@ -289,6 +291,24 @@ template <typename T>
     const std::optional<T> sentinel =
         nodata ? std::optional<T>{static_cast<T>(*nodata)} : std::nullopt;
     return BoundRasterView{array, terrain::raster::RasterView<T>{geometry, a.data(), sentinel}};
+}
+
+// The flood's outcome with the shape its mask is viewed in.
+struct BoundUpstream {
+    terrain::hydrology::UpstreamOutcome outcome;
+    std::size_t rows;
+    std::size_t cols;
+};
+
+// An (N, 2) float64 array as Point2 pairs, copied; any other shape is a ValueError.
+[[nodiscard]] std::vector<Point2> xy_points(const py::object& a, const char* what) {
+    const auto xy = py::array_t<double, py::array::c_style | py::array::forcecast>::ensure(a);
+    if (!xy || xy.ndim() != 2 || xy.shape(1) != 2)
+        throw py::value_error(std::format("reduce_ring: {} must have shape (N, 2)", what));
+    std::vector<Point2> out(static_cast<std::size_t>(xy.shape(0)));
+    for (std::size_t i = 0; i < out.size(); ++i)
+        out[i] = Point2{xy.at(static_cast<py::ssize_t>(i), 0), xy.at(static_cast<py::ssize_t>(i), 1)};
+    return out;
 }
 
 }  // namespace
@@ -945,5 +965,103 @@ constraint_feet inserts, for a worst node close to a constraint segment, its
 foot on the segment instead; off by default.
 A refused input comes back as a status; a mis-shaped array is a ValueError.
 Releases the GIL.
+)doc");
+
+    py::class_<BoundUpstream>(m, "UpstreamOutcome", R"doc(
+What upstream() returned: the catchment's node mask, its size and bounds, and
+whether it may continue past the window's edge or past NoData.
+)doc")
+        .def_property_readonly(
+            "mask",
+            [](const py::object& self) {
+                const auto& b = self.cast<const BoundUpstream&>();
+                const auto cols = static_cast<py::ssize_t>(b.cols);
+                return readonly_view<std::uint8_t>(self, b.outcome.mask.data(),
+                                                   {static_cast<py::ssize_t>(b.rows), cols},
+                                                   {cols, 1});
+            },
+            "Read-only (rows, cols) uint8: 1 for a node in the catchment, 0 otherwise.")
+        .def_property_readonly("nodes_in", [](const BoundUpstream& b) { return b.outcome.nodes_in; })
+        .def_property_readonly("row_min", [](const BoundUpstream& b) { return b.outcome.row_min; })
+        .def_property_readonly("row_max", [](const BoundUpstream& b) { return b.outcome.row_max; })
+        .def_property_readonly("col_min", [](const BoundUpstream& b) { return b.outcome.col_min; })
+        .def_property_readonly("col_max", [](const BoundUpstream& b) { return b.outcome.col_max; })
+        .def_property_readonly("touches_edge",
+                               [](const BoundUpstream& b) { return b.outcome.touches_edge; })
+        .def_property_readonly("touches_nodata",
+                               [](const BoundUpstream& b) { return b.outcome.touches_nodata; });
+
+    m.def(
+        "upstream",
+        [](const BoundRasterView& raster, const py::object& seed) {
+            using U8 = py::array_t<std::uint8_t, py::array::c_style | py::array::forcecast>;
+            const auto s = U8::ensure(seed);
+            const auto g = std::visit([](const auto& v) -> const auto& { return v.geometry(); },
+                                      raster.view);
+            if (!s || s.ndim() != 2 || static_cast<std::size_t>(s.shape(0)) != g.rows()
+                || static_cast<std::size_t>(s.shape(1)) != g.cols())
+                throw py::value_error(std::format(
+                    "upstream: the seed mask's shape must be the raster's ({}, {})", g.rows(),
+                    g.cols()));
+            const std::span<const std::uint8_t> seeds{s.data(), g.size()};
+            // Every buffer read below is held by a local or by `raster`.
+            const py::gil_scoped_release unlocked;
+            return BoundUpstream{
+                std::visit([&](const auto& v) { return terrain::hydrology::upstream(v, seeds); },
+                           raster.view),
+                g.rows(), g.cols()};
+        },
+        py::arg("view"), py::arg("seed"), R"doc(
+The catchment of a seed mask: every node draining into a seed (Priority-Flood).
+
+seed is (rows, cols), non-zero (or True) for a seed; any other shape is a
+ValueError. NoData is never in. Releases the GIL.
+)doc");
+
+    using terrain::vector_simplify::ReduceOutcome;
+    using terrain::vector_simplify::ReduceStatus;
+    py::enum_<ReduceStatus>(m, "ReduceStatus", R"doc(
+Why reduce_ring reduced a ring or did not: Ok, or a refusal of the input.
+)doc")
+        .value("Ok", ReduceStatus::Ok)
+        .value("InvalidTolerance", ReduceStatus::InvalidTolerance)
+        .value("NotCounterClockwise", ReduceStatus::NotCounterClockwise)
+        .value("TooFewVertices", ReduceStatus::TooFewVertices);
+
+    py::class_<ReduceOutcome>(m, "ReduceOutcome", R"doc(
+What reduce_ring returned: the reduced ring, open, a status, and the counts.
+)doc")
+        .def_property_readonly(
+            "ring",
+            [](const py::object& self) {
+                return point_view(self, self.cast<const ReduceOutcome&>().ring);
+            },
+            "Read-only (M, 2) float64, open: the first vertex is not repeated.")
+        .def_readonly("status", &ReduceOutcome::status)
+        .def_property_readonly("collinear", [](const ReduceOutcome& o) { return o.counts.collinear; })
+        .def_property_readonly("collapses", [](const ReduceOutcome& o) { return o.counts.collapses; })
+        .def_property_readonly("rejected_crossing",
+                               [](const ReduceOutcome& o) { return o.counts.rejected_crossing; })
+        .def_property_readonly("rejected_seed",
+                               [](const ReduceOutcome& o) { return o.counts.rejected_seed; })
+        .def_property_readonly("rejected_tolerance",
+                               [](const ReduceOutcome& o) { return o.counts.rejected_tolerance; });
+
+    m.def(
+        "reduce_ring",
+        [](const py::object& ring, double tolerance, const py::object& keep) {
+            const std::vector<Point2> points = xy_points(ring, "ring");
+            const std::vector<Point2> kept = xy_points(keep, "keep");
+            const py::gil_scoped_release unlocked;
+            return terrain::vector_simplify::reduce_ring<terrain::pred::DefaultKernel>(
+                points, tolerance, kept);
+        },
+        py::arg("ring"), py::arg("tolerance"), py::arg("keep"), R"doc(
+Reduce an open counter-clockwise ring to a tolerance, keeping its area and the
+keep-points inside (area-preserving segment collapse, exact crossing tests).
+
+ring is (N, 2) and keep (K, 2), float64-convertible; any other shape is a
+ValueError. Tolerance 0 only drops exactly collinear vertices. A refused input
+comes back as a status. Releases the GIL.
 )doc");
 }

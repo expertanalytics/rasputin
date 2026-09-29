@@ -57,6 +57,15 @@ SEARCH_ROOTS = ("docs", ".claude", "include", "src", "src_python", "tests", "too
 
 SCAN_SUFFIXES = (".md",)
 
+# Sessions check out git worktrees here, each a full copy of the repo. Walking
+# into them made every bare basename ambiguous and every doc scanned twice
+# (229 "broken" on 2026-09-29, the first commit with the gates hook active).
+WORKTREES = REPO / ".claude" / "worktrees"
+
+
+def in_repo_proper(path: Path) -> bool:
+    return not path.is_relative_to(WORKTREES)
+
 
 def changed_files(base: str) -> set[str] | None:
     """Repo-relative paths this branch modifies, or None if base is unknown."""
@@ -87,7 +96,7 @@ def resolve(cited: str) -> Path | list[Path] | None:
         candidate
         for root in SEARCH_ROOTS
         for candidate in sorted((REPO / root).rglob(name))
-        if candidate.is_file()
+        if candidate.is_file() and in_repo_proper(candidate)
     ]
     if len(hits) == 1:
         return hits[0]
@@ -136,7 +145,11 @@ def main() -> int:
         if target.is_file():
             sources.append(target)
         elif target.is_dir():
-            sources.extend(p for p in sorted(target.rglob("*")) if p.suffix in SCAN_SUFFIXES)
+            sources.extend(
+                p
+                for p in sorted(target.rglob("*"))
+                if p.suffix in SCAN_SUFFIXES and in_repo_proper(p)
+            )
 
     broken: list[str] = []
     at_risk: list[str] = []

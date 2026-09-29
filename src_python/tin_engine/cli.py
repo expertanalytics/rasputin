@@ -69,9 +69,10 @@ from tin_engine._core import (
     sample,
     triangulate,
 )
+from tin_engine.catchment import CatchmentRequest, LakeError, delineate
 from tin_engine.chains import start_chains
 from tin_engine.crs import crs_label, parse_crs, transform_description
-from tin_engine.dem_input import DemInput, DemRequest, open_dem
+from tin_engine.dem_input import DemInput, DemRequest, open_dem, repository_for
 from tin_engine.domain import DomainError, DomainPolygon, read_domain
 from tin_engine.elevation import Trimmed, trim
 from tin_engine.feature_input import (
@@ -82,6 +83,7 @@ from tin_engine.feature_input import (
     FeatureSet,
     FeatureSource,
     open_features,
+    read_lakes,
 )
 from tin_engine.features import DEFAULT_VOCABULARY
 from tin_engine.grid_domain import default_stride, refine_start_stride, subsample
@@ -633,26 +635,28 @@ def mesh(
         ),
     ] = False,
     features: Annotated[
-        Path | None,
+        list[Path] | None,
         typer.Option(
             "--features",
             help="With --domain, polygons and lines as constraints (.geojson, .json, .gpkg "
-            "or .gml), clipped to the domain, each edge carrying its class map's bits.",
+            "or .gml), clipped to the domain, each edge carrying its class map's bits. "
+            "Repeatable: each --features is one source, paired by position with the Nth "
+            "of --features-crs, --features-layer and --features-map.",
         ),
     ] = None,
     features_crs: Annotated[
-        str | None,
-        typer.Option("--features-crs", help="The --features file's CRS, anything pyproj reads."),
+        list[str] | None,
+        typer.Option("--features-crs", help="The Nth --features file's CRS, any pyproj reads."),
     ] = None,
     features_layer: Annotated[
-        str | None,
-        typer.Option("--features-layer", help="The GeoPackage's features table to read."),
+        list[str] | None,
+        typer.Option("--features-layer", help="The Nth --features GeoPackage's features table."),
     ] = None,
     features_map: Annotated[
-        str | None,
+        list[str] | None,
         typer.Option(
             "--features-map",
-            help=f"From feature attributes to edge bits: {', '.join(CLASS_MAPS)}. "
+            help=f"The Nth --features' map from attributes to edge bits: {', '.join(CLASS_MAPS)}. "
             "Default: property.",
         ),
     ] = None,
@@ -716,15 +720,25 @@ def mesh(
             "give a gallery fixture name or --dem PATH, exactly one of the two",
             param_hint="--dem",
         )
-    flags = (
-        ("--features-crs", features_crs),
-        ("--features-layer", features_layer),
-        ("--features-map", features_map),
-    )
-    for flag, value in flags:
-        if features is None and value is not None:
-            raise typer.BadParameter("applies only with --features", param_hint=flag)
-    if features is not None and domain is None:
+    feature_paths = features or []
+    feature_crss = features_crs or []
+    feature_layers = features_layer or []
+    feature_maps = features_map or []
+    # R3: one length rule per paired option. A list longer than --features is
+    # refused naming the offending flag and the counts (M = 0 subsumes the old
+    # "applies only with --features"); a shorter list takes per-source defaults.
+    for flag, value in (
+        ("--features-crs", feature_crss),
+        ("--features-layer", feature_layers),
+        ("--features-map", feature_maps),
+    ):
+        if len(value) > len(feature_paths):
+            raise typer.BadParameter(
+                f"{len(value)} {flag} given for {len(feature_paths)} --features; "
+                "each pairs with one source by position",
+                param_hint=flag,
+            )
+    if feature_paths and domain is None:
         raise typer.BadParameter("needs --dem, --domain and --tolerance", param_hint="--features")
     if not dem and (domain is not None or domain_crs is not None):
         raise typer.BadParameter("applies only with --dem", param_hint="--domain")
@@ -791,9 +805,10 @@ def mesh(
         label = opened.label
         dem_crs = f"EPSG:{opened.tile.meta.epsg}"
         found = None
-        if features is not None and opened.domain is not None:
-            source = _feature_source(features, features_crs, features_layer, features_map)
-            found = _open_features(source, opened.domain, dem_crs, clock)
+        sources: tuple[FeatureSource, ...] = ()
+        if feature_paths and opened.domain is not None:
+            sources = _feature_sources(feature_paths, feature_crss, feature_layers, feature_maps)
+            found = _open_features(sources, opened.domain, dem_crs, clock)
         dem_run = _dem_mesh(
             opened.tile,
             ", ".join(map(str, dem)),
@@ -829,30 +844,42 @@ def mesh(
             same = parse_crs(given.crs) == parse_crs(f"EPSG:{epsg}")
             how = "none" if same else transform_description(given.crs, f"EPSG:{epsg}")
             fields += [("domain_crs", crs_label(given.crs)), ("domain_transform", how)]
-        if found is not None and features is not None and dem_run.feature_counts is not None:
+        if found is not None and sources and dem_run.feature_counts is not None:
+            # R6: one record per source, joined. Chains and noded vertices are
+            # whole-run (D5, a property of the merged PSLG, not a source), so
+            # every entry carries the run totals; the per-source part is the
+            # name, layer, map and feature count (found.counts[i]).
             chains, feature_vertices = dem_run.feature_counts
-            layer = f":{found.layers[0]}" if found.layers[0] else ""
-            text = _ascii(
-                f"{features.name}{layer}, map {features_map or 'property'}, "
-                f"{len(found.features)} features, "
-                f"{chains} chains, {feature_vertices} vertices"
-            )
-            own = found.crs[0]
-            how = (
-                "none"
-                if parse_crs(own) == parse_crs(dem_crs)
-                else transform_description(own, dem_crs)
-            )
-            fields += [("features", text), ("features_crs", crs_label(own))]
-            fields.append(("features_transform", how))
+            texts, crs_texts, transforms, notices = [], [], [], []
+            for i, src in enumerate(sources):
+                layer = f":{found.layers[i]}" if found.layers[i] else ""
+                texts.append(
+                    f"{src.path.name}{layer}, map {src.class_map.name}, "
+                    f"{found.counts[i]} features, {chains} chains, {feature_vertices} vertices"
+                )
+                own = found.crs[i]
+                crs_texts.append(crs_label(own))
+                transforms.append(
+                    "none"
+                    if parse_crs(own) == parse_crs(dem_crs)
+                    else transform_description(own, dem_crs)
+                )
+                if src.class_map.notice and src.class_map.notice not in notices:
+                    notices.append(src.class_map.notice)
+            text = _ascii("; ".join(texts))
+            fields += [("features", text), ("features_crs", "; ".join(crs_texts))]
+            fields.append(("features_transform", "; ".join(transforms)))
             comments.append(f"features {text}")
-            notice = CLASS_MAPS[features_map or "property"].notice
-            if notice:
-                fields.append(("features_notice", notice))
-                comments.append(f"features_notice {notice}")
-            cmap = CLASS_MAPS[features_map or "property"]
-            if cmap.codes:
-                codes, codes_text = _land_cover(dem_run.trimmed, found, cmap, snap_spacing, clock)
+            if notices:
+                joined = "; ".join(notices)
+                fields.append(("features_notice", joined))
+                comments.append(f"features_notice {joined}")
+            # R5: labelling runs iff a source carries codes (D1's single-system
+            # invariant is enforced in _feature_sources). Every coded source's
+            # polygons are labelled together over the merged FeatureSet.
+            coded = next((s.class_map for s in sources if s.class_map.codes), None)
+            if coded is not None:
+                codes, codes_text = _land_cover(dem_run.trimmed, found, coded, snap_spacing, clock)
     else:
         assert name is not None
         if stride is not None:
@@ -1099,29 +1126,52 @@ def _open_dem(
         raise typer.BadParameter(_words(exc), param_hint="--dem") from exc
 
 
-def _feature_source(
-    path: Path, crs: str | None, layer: str | None, map_name: str | None
-) -> FeatureSource:
-    """R1: the ``--features`` flags as one source; a flag that cannot apply is
-    a usage error naming it."""
-    name = map_name or "property"
-    if name not in CLASS_MAPS:
+def _feature_sources(
+    paths: list[Path], crss: list[str], layers: list[str], maps: list[str]
+) -> tuple[FeatureSource, ...]:
+    """R1-R3: the repeatable ``--features`` flags as one source per path, paired
+    by position; a shorter paired list defaults its missing entries. A flag that
+    cannot apply is a usage error naming the 1-based index and path, because with
+    several sources the flag alone no longer identifies which one."""
+    built: list[FeatureSource] = []
+    for i, path in enumerate(paths):
+        name = maps[i] if i < len(maps) else "property"
+        if name not in CLASS_MAPS:
+            raise typer.BadParameter(
+                f"unknown map {name} for --features {i + 1} ({path.name}); "
+                f"use {', '.join(CLASS_MAPS)}",
+                param_hint="--features-map",
+            )
+        layer = layers[i] if i < len(layers) else None
+        if layer is not None and path.suffix.lower() != ".gpkg":
+            raise typer.BadParameter(
+                f"applies to a .gpkg only, not --features {i + 1} ({path.name})",
+                param_hint="--features-layer",
+            )
+        crs = crss[i] if i < len(crss) else None
+        built.append(FeatureSource(path=path, class_map=CLASS_MAPS[name], layer=layer, crs=crs))
+    # R5/D1: one mesh has one land_cover_code system. Two sources with different
+    # non-empty code systems are refused before any meshing. Every coded map
+    # today is CORINE (same system), so this defensive refusal never fires now.
+    systems = {s.class_map.codes for s in built if s.class_map.codes}
+    if len(systems) > 1:
         raise typer.BadParameter(
-            f"unknown map {name}; use {', '.join(CLASS_MAPS)}", param_hint="--features-map"
+            f"sources carry different code systems ({', '.join(sorted(systems))}); "
+            "one mesh has one land_cover_code system",
+            param_hint="--features-map",
         )
-    if layer is not None and path.suffix.lower() != ".gpkg":
-        raise typer.BadParameter("applies to a .gpkg only", param_hint="--features-layer")
-    return FeatureSource(path=path, class_map=CLASS_MAPS[name], layer=layer, crs=crs)
+    return tuple(built)
 
 
 def _open_features(
-    source: FeatureSource, domain: DomainPolygon, dem_crs: str, clock: PhaseClock
+    sources: tuple[FeatureSource, ...], domain: DomainPolygon, dem_crs: str, clock: PhaseClock
 ) -> FeatureSet:
-    """R5-R6 and R10: read and clip, timed as ``features read`` and ``features
-    clip``; a refusal is a usage error naming the feature."""
+    """R5-R6 and R10: read and clip every source into one set, timed as
+    ``features read`` and ``features clip``; a refusal is a usage error naming
+    the feature."""
     t0 = time.perf_counter()
     try:
-        found = open_features(FeatureRequest(sources=(source,)), domain, dem_crs)
+        found = open_features(FeatureRequest(sources=sources), domain, dem_crs)
     except FeatureError as exc:
         raise typer.BadParameter(str(exc), param_hint="--features") from exc
     clock.add("features read", time.perf_counter() - t0 - found.clip_seconds)
@@ -1132,7 +1182,7 @@ def _open_features(
         err=True,
     )
     for table in found.scanned:
-        typer.echo(f"{source.path.name}:{table}: no R-tree index, table scanned", err=True)
+        typer.echo(f"{table}: no R-tree index, table scanned", err=True)
     return found
 
 
@@ -1342,3 +1392,151 @@ def _off_node(xy: npt.NDArray[np.float64], meta: RasterMeta) -> int:
         meta.y_max - row * meta.delta_y == xy[:, 1]
     )
     return int(np.count_nonzero(~node))
+
+
+#: What the suffix of ``catchment --out`` may be: GeoJSON, which ``--domain`` reads.
+CATCHMENT_SUFFIXES = (".geojson", ".json")
+
+
+@app.command()
+def catchment(
+    out: Annotated[
+        Path, typer.Option("--out", help="Where to write the polygon: .geojson or .json.")
+    ],
+    dem: Annotated[
+        list[Path],
+        typer.Option("--dem", help="A GeoTIFF DEM, several (repeat --dem), or one directory."),
+    ],
+    seed: Annotated[
+        tuple[float, float],
+        typer.Option("--seed", metavar="X Y", help="A point in the lake, in --seed-crs."),
+    ],
+    seed_crs: Annotated[
+        str, typer.Option("--seed-crs", help="The seed's CRS, anything pyproj reads (LON LAT).")
+    ] = "EPSG:4326",
+    lakes: Annotated[
+        Path | None,
+        typer.Option(
+            "--lakes",
+            help="Lake polygons (.gpkg, .geojson or .json); the one under the seed is the "
+            "seed. Without it, the seed is the DEM node nearest the point.",
+        ),
+    ] = None,
+    lakes_layer: Annotated[
+        str | None, typer.Option("--lakes-layer", help="The GeoPackage's features table.")
+    ] = None,
+    outline_tolerance: Annotated[
+        float | None,
+        typer.Option(
+            "--outline-tolerance",
+            metavar="METRES",
+            help="Reduce the outline, keeping its area, to within this of the fine one; "
+            "0 writes the fine outline without its collinear vertices. Default: twice the "
+            "DEM's cell.",
+        ),
+    ] = None,
+    out_parent: Annotated[
+        Path | None,
+        typer.Option("--out-parent", help="Refuse any output path resolving outside this."),
+    ] = None,
+) -> None:
+    """Write the catchment of a lake, from the DEM, as a GeoJSON polygon in the
+    DEM's CRS that ``mesh --domain`` reads (increment 22). The fine outline is
+    drawn between DEM nodes, holes filled, then reduced to ``--outline-tolerance``
+    keeping its area, with the seed inside. A catchment cut by the data's edge
+    or by NoData is refused, and nothing is written."""
+    if lakes is None and lakes_layer is not None:
+        raise typer.BadParameter("applies only with --lakes", param_hint="--lakes-layer")
+    if outline_tolerance is not None and not (
+        math.isfinite(outline_tolerance) and outline_tolerance >= 0.0
+    ):
+        raise typer.BadParameter("must be finite and at least 0", param_hint="--outline-tolerance")
+    if out.suffix.lower() not in CATCHMENT_SUFFIXES:
+        raise typer.BadParameter(f"use {' or '.join(CATCHMENT_SUFFIXES)}", param_hint="--out")
+    target = _destination(out, out_parent, out.stem)
+    try:
+        found = None if lakes is None else read_lakes(lakes, lakes_layer, seed, seed_crs)
+    except FeatureError as exc:
+        raise typer.BadParameter(str(exc), param_hint="--lakes") from exc
+    try:
+        repository, _ = repository_for(tuple(dem))
+        request = CatchmentRequest(
+            seed=seed,
+            seed_crs=seed_crs,
+            lakes=None if found is None else found[0],
+            lakes_crs=None if found is None else found[1],
+            outline_tolerance=outline_tolerance,
+        )
+        result = delineate(request, repository)
+    except OSError as exc:
+        raise typer.BadParameter(f"cannot read {exc.filename}: {exc}", param_hint="--dem") from exc
+    except ValueError as exc:
+        hint = "--lakes" if isinstance(exc, LakeError) else "--dem"
+        raise typer.BadParameter(_words(exc), param_hint=hint) from exc
+    for k, w in enumerate(result.windows, 1):
+        b = w.bounds
+        typer.echo(
+            f"window {k}: x {b.x_min:.0f}-{b.x_max:.0f}, y {b.y_min:.0f}-{b.y_max:.0f}, "
+            f"{w.rows} x {w.cols} nodes, flood {w.seconds:.2f} s, "
+            + (f"grown on {', '.join(w.grown)}" if w.grown else "contained"),
+            err=True,
+        )
+    cell = result.meta.delta_x * result.meta.delta_y
+    if result.lake_area is None:
+        typer.echo(
+            f"seed: the pour node at {result.seed} (a pour point must lie on the flow line; "
+            "it is not snapped)",
+            err=True,
+        )
+    else:
+        typer.echo(
+            f"seed: lake of {result.lake_area / 1e6:.6f} km2, {result.seed_nodes} nodes", err=True
+        )
+    typer.echo(
+        f"catchment: {result.nodes} nodes, {result.nodes * cell / 1e6:.6f} km2 of node area",
+        err=True,
+    )
+    vertices = len(result.fine.exterior.coords) - 1
+    typer.echo(
+        f"fine outline: {vertices} vertices, {result.fine_area / 1e6:.6f} km2, "
+        f"{result.rings_dropped} rings dropped ({result.dropped_nodes} nodes), "
+        f"{result.holes_filled} holes filled ({result.holes_area / 1e6:.6f} km2), "
+        f"traced in {result.trace_seconds:.2f} s",
+        err=True,
+    )
+    reduced = result.reduced
+    kept = len(reduced.exterior.coords) - 1
+    change = reduced.area - result.fine_area
+    typer.echo(
+        f"reduced outline: {kept} vertices, {reduced.area / 1e6:.6f} km2, difference "
+        f"{change:.3g} m2 ({change / result.fine_area:.2g} relative), tolerance "
+        f"{result.tolerance:g} m, {result.reduce_seconds:.2f} s",
+        err=True,
+    )
+    properties = {
+        "seed": list(seed),
+        "seed_crs": seed_crs,
+        "nodes": result.nodes,
+        "fine_vertices": vertices,
+        "fine_area_m2": result.fine_area,
+        "reduced_vertices": kept,
+        "reduced_area_m2": reduced.area,
+        "outline_tolerance_m": result.tolerance,
+        "windows": [[w.rows, w.cols] for w in result.windows],
+    }
+    doc = {
+        "type": "FeatureCollection",
+        "crs": {"type": "name", "properties": {"name": result.crs}},
+        "features": [
+            {
+                "type": "Feature",
+                "properties": properties,
+                "geometry": {
+                    "type": "Polygon",
+                    "coordinates": [[list(xy) for xy in reduced.exterior.coords]],
+                },
+            }
+        ],
+    }
+    target.write_text(json.dumps(doc), encoding="utf-8")
+    typer.echo(f"{target}")

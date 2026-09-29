@@ -28,6 +28,7 @@ import sqlite3
 import time
 from collections.abc import Callable, Iterable, Mapping
 from contextlib import closing
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal
 
@@ -152,9 +153,10 @@ class FeatureSet(BaseModel):
     """The features in source order; ``outside`` counts those clipped away,
     ``clipped`` those kept that crossed the domain's boundary, ``empty`` empty
     geometries skipped, ``scanned`` the GeoPackage layers read without an
-    R-tree index (R3). ``crs`` and ``layers`` are per source
-    (a layer for a GeoPackage only); ``clip_seconds`` is the time spent after
-    reading, for the ``features clip`` row."""
+    R-tree index (R3). ``crs``, ``layers`` and ``counts`` are per source
+    (a layer for a GeoPackage only; ``counts`` the features kept from each,
+    16e R6/D2); ``clip_seconds`` is the time spent after reading, for the
+    ``features clip`` row."""
 
     model_config = ConfigDict(frozen=True)
 
@@ -165,6 +167,7 @@ class FeatureSet(BaseModel):
     scanned: tuple[str, ...] = ()
     crs: tuple[str, ...] = ()
     layers: tuple[str | None, ...] = ()
+    counts: tuple[int, ...] = ()
     clip_seconds: float = 0.0
 
 
@@ -241,10 +244,13 @@ def open_features(request: FeatureRequest, domain: DomainPolygon, dem_crs: str |
     tally = _Tally(domain, parse_crs(dem_crs), vocabulary)
     crss: list[str] = []
     layers: list[str | None] = []
+    counts: list[int] = []
     for source in request.sources:
+        before = len(tally.features)
         own, layer = tally.source(source)
         crss.append(own)
         layers.append(layer)
+        counts.append(len(tally.features) - before)
     return FeatureSet(
         features=tuple(tally.features),
         outside=tally.outside,
@@ -253,6 +259,7 @@ def open_features(request: FeatureRequest, domain: DomainPolygon, dem_crs: str |
         scanned=tuple(tally.scanned),
         crs=tuple(crss),
         layers=tuple(layers),
+        counts=tuple(counts),
         clip_seconds=tally.seconds,
     )
 
@@ -270,57 +277,22 @@ class _Tally:
 
     def source(self, source: FeatureSource) -> tuple[str, str | None]:
         """Read one source and take in its features; its CRS text and layer."""
-        path, attribute = source.path, source.class_map.attribute
-        suffix = path.suffix.lower()
-        if suffix not in SUFFIXES:
-            raise FeatureError(f"{path.name}: unknown suffix {suffix or '(none)'}; use {SUFFIXES}")
-        if source.layer is not None and suffix != ".gpkg":
-            raise FeatureError(f"{path.name}: a layer applies to a GeoPackage only")
+        read = read_source(
+            source.path,
+            source.layer,
+            source.class_map.attribute,
+            lambda own: source_region(self.domain, self.dem, own).bounds,
+            source.crs,
+        )
+        if read.scanned:
+            self.scanned.append(str(read.layer))
         try:
-            if suffix == ".gpkg":
-                with closing(open_geopackage(path)) as conn:
-                    layer = layer_info(conn, source.layer)
-                    if layer.rtree is None:
-                        self.scanned.append(layer.table)
-                    own = self._own(source, layer.crs)
-                    box = source_region(self.domain, self.dem, own).bounds
-                    scale = 1.0 if parse_crs(own).is_geographic else 100_000.0
-                    found = query_features(conn, layer, box, attribute, scale)
-                    self._take(source, own, ((r.fid, r.geometry, r.value) for r in found))
-                return own, layer.table
-            if suffix == ".gml":
-                with path.open("rb") as stream:
-                    doc = read_gml(stream, attribute)
-                if doc.crs is None and source.crs is None:
-                    raise FeatureError(f"{path.name}: no geometry names its srsName; give its CRS")
-                own = self._own(source, doc.crs or str(source.crs))
-                self._take(source, own, ((f.fid, f.geometry, f.value) for f in doc.features))
-                return own, None
-            doc = json.loads(path.read_text())
-            try:  # a malformed document's structure raises any of these
-                member = doc.get("crs")
-                text = member["properties"]["name"] if member else GEOJSON_DEFAULT_CRS
-                rows = [
-                    (f.get("id", k), f["geometry"] and shape(f["geometry"]), f["properties"] or {})
-                    for k, f in enumerate(doc["features"])
-                ]
-                values = [(k, g, p.get(attribute)) for k, g, p in rows]
-            except (KeyError, TypeError, AttributeError, shapely.errors.ShapelyError) as exc:
-                raise FeatureError(f"{path.name}: not a GeoJSON FeatureCollection ({exc})") from exc
-            own = self._own(source, text)
-            self._take(source, own, values)
-            return own, None
+            self._take(source, read.crs, read.rows)
         except FeatureError:
             raise
-        except (OSError, ValueError, KeyError, sqlite3.Error) as exc:
-            raise FeatureError(f"{path.name}: {exc}") from exc
-
-    def _own(self, source: FeatureSource, text: str) -> str:
-        """The file's CRS text, checked against the one given, if any."""
-        if source.crs is not None and parse_crs(source.crs) != parse_crs(text):
-            raise FeatureError(f"{source.path.name} is in {text} but the given CRS is {source.crs}")
-        parse_crs(text)
-        return text
+        except (ValueError, KeyError) as exc:
+            raise FeatureError(f"{source.path.name}: {exc}") from exc
+        return read.crs, read.layer
 
     def _take(self, source: FeatureSource, own: str, rows: Iterable[tuple[Any, Any, Any]]) -> None:
         name, cmap = source.path.name, source.class_map
@@ -378,6 +350,100 @@ class _Tally:
             else:
                 self.outside += 1
             self.seconds += time.perf_counter() - t0
+
+
+@dataclass(frozen=True, slots=True)
+class SourceRows:
+    """What :func:`read_source` read: the file's CRS text, the GeoPackage
+    layer (None otherwise) and whether it was scanned without an R-tree, and
+    ``(fid, geometry, attribute value)`` per feature, in file order."""
+
+    crs: str
+    layer: str | None
+    scanned: bool
+    rows: list[tuple[Any, Any, Any]]
+
+
+def read_source(
+    path: Path,
+    layer: str | None,
+    attribute: str | None,
+    box_for: Callable[[str], tuple[float, float, float, float]],
+    crs: str | None = None,
+) -> SourceRows:
+    """One source's features, unclipped, in its own CRS, by suffix (R1).
+
+    ``attribute`` None reads a GeoPackage's primary key. ``box_for(own CRS)``
+    is the box a GeoPackage's R-tree is queried with. ``crs``, when given,
+    must be the file's; a GML file naming none takes it. Every refusal is a
+    :class:`FeatureError` naming the file."""
+    suffix = path.suffix.lower()
+    if suffix not in SUFFIXES:
+        raise FeatureError(f"{path.name}: unknown suffix {suffix or '(none)'}; use {SUFFIXES}")
+    if layer is not None and suffix != ".gpkg":
+        raise FeatureError(f"{path.name}: a layer applies to a GeoPackage only")
+    try:
+        if suffix == ".gpkg":
+            with closing(open_geopackage(path)) as conn:
+                info = layer_info(conn, layer)
+                own = _own(path, crs, info.crs)
+                scale = 1.0 if parse_crs(own).is_geographic else 100_000.0
+                found = query_features(conn, info, box_for(own), attribute or info.pk, scale)
+                rows = [(r.fid, r.geometry, r.value) for r in found]
+            return SourceRows(own, info.table, info.rtree is None, rows)
+        if suffix == ".gml":
+            with path.open("rb") as stream:
+                doc = read_gml(stream, attribute or "")
+            if doc.crs is None and crs is None:
+                raise FeatureError(f"{path.name}: no geometry names its srsName; give its CRS")
+            own = _own(path, crs, doc.crs or str(crs))
+            return SourceRows(
+                own, None, False, [(f.fid, f.geometry, f.value) for f in doc.features]
+            )
+        doc = json.loads(path.read_text())
+        try:  # a malformed document's structure raises any of these
+            member = doc.get("crs")
+            text = member["properties"]["name"] if member else GEOJSON_DEFAULT_CRS
+            rows = [
+                (f.get("id", k), f["geometry"] and shape(f["geometry"]), f["properties"] or {})
+                for k, f in enumerate(doc["features"])
+            ]
+            values = [(k, g, p.get(attribute)) for k, g, p in rows]
+        except (KeyError, TypeError, AttributeError, shapely.errors.ShapelyError) as exc:
+            raise FeatureError(f"{path.name}: not a GeoJSON FeatureCollection ({exc})") from exc
+        return SourceRows(_own(path, crs, text), None, False, values)
+    except FeatureError:
+        raise
+    except (OSError, ValueError, KeyError, sqlite3.Error) as exc:
+        raise FeatureError(f"{path.name}: {exc}") from exc
+
+
+def _own(path: Path, given: str | None, text: str) -> str:
+    """The file's CRS text, checked against the one given, if any."""
+    if given is not None and parse_crs(given) != parse_crs(text):
+        raise FeatureError(f"{path.name} is in {text} but the given CRS is {given}")
+    parse_crs(text)
+    return text
+
+
+def read_lakes(
+    path: Path, layer: str | None, point: tuple[float, float], point_crs: str
+) -> tuple[tuple[BaseGeometry, ...], str]:
+    """Increment 22: every polygon or multipolygon of a lake source near
+    ``point`` (in ``point_crs``), in the source's own CRS, with its CRS text.
+    A GeoPackage is queried with the point's box; lines and points are skipped."""
+
+    def box_for(own: str) -> tuple[float, float, float, float]:
+        ((x, y),) = reprojector(point_crs, own)([point])
+        return (float(x), float(y), float(x), float(y))
+
+    read = read_source(path, layer, None, box_for)
+    lakes = tuple(
+        shapely.force_2d(g)
+        for _, g, _ in read.rows
+        if g is not None and not g.is_empty and g.geom_type in ("Polygon", "MultiPolygon")
+    )
+    return lakes, read.crs
 
 
 def _finite(geometry: BaseGeometry) -> bool:
