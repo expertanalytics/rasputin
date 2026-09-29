@@ -4,7 +4,21 @@ When: after auto-catchment is ready to use (Ola, 2026-09-28). Run by
 `@orchestrator`. Items are added as they come up; the retrospective itself
 gets its own dated file here, and this file is then emptied.
 
-## Agents taking on each other's work (Ola, 2026-09-28)
+## Agents taking on each other's work (Ola, 2026-09-28): the main focus
+
+Ola, 2026-09-29: "when we do our retrospective, we should have a specific
+focus on the role bleed issue." Names for it: role drift or role bleed in
+practice; "disobey role specification" (failure mode 1.2) in the MAST
+taxonomy of multi-agent failures (Cemri et al. 2025, arXiv 2503.13657),
+which traces most such failures to weak role definitions and missing checks.
+Ola's analogy (2026-09-28): over-smoothing in GNNs, where repeated message
+passing makes every node look alike. Here every hand-off carries the whole
+context, and each persona picks up a bit of the others' jobs until the roles
+blur. The GNN remedies map across: skip connections (restate each persona's
+role and limits in every brief) and a bounded reach for messages (hard limits
+on what each persona may touch). Inside transformers the same effect is
+called rank collapse or over-smoothing, which skip connections also counter
+(Dong, Cordonnier and Loukas 2021; from memory, not checked).
 
 Ola: "One concern I have is that the agents 'leak' responsibilities to one
 another." All personas are the same model with different briefs, and each
