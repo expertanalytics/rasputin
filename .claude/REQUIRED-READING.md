@@ -128,9 +128,9 @@ round of findings.** On a prose or tooling branch its scope is:
 
 Active in `.claude/settings.json` (Ola, 2026-09-29): `guard_push.py` asks
 before `git push`, `gh pr create/merge/ready/edit`, `gh release`,
-`--no-verify`, `rebase`, `reset --hard`, `filter-branch` and `commit --amend`
-(not `gh pr
-close` or `gh pr comment`); `guard_governance.py` asks
+`gh repo create/delete/edit`, `--no-verify`, `rebase`, `reset --hard`,
+`filter-branch` and `commit --amend` (not `gh pr close` or
+`gh pr comment`); `guard_governance.py` asks
 before any write to a file that states rules; `gates_after_commit.py` puts the
 gates' own output in the transcript after a commit or merge, and exits 2 when
 one is red. All three read the command as text, so they are tripwires: the
