@@ -67,3 +67,7 @@ Useful evidence, but it is implementation work in the design step.
 green step (the design's rule never stopped early) without stopping to hand
 back; the design amendment and the pinning test came after the code. The
 fix was right and disclosed, but the order was code first.
+
+2026-09-29, night: `@developer` added user-visible behaviour (lake refusals
+reported under `--lakes`) in a review-fix commit with no failing test first;
+`@reviewer` caught it and `@tester` pinned it afterwards.
