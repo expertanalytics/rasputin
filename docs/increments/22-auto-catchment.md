@@ -1,7 +1,9 @@
 # Increment 22 — auto-catchment: the catchment of a lake, from the DEM (Bygdin first)
 
-Status: **designed** (`@architect`, 2026-09-29), on branch
-`increment22-autocatchment` off master `b4847d7`. Nothing is built. Ola was
+Status: **built, under review** (2026-09-29). Designed by `@architect` on
+branch `increment22-autocatchment` off master `b4847d7`; PR 1 built at
+`58f6904`, PR 2 at `ac778e4`; `@reviewer`'s first pass asked for changes, and
+the documentation half of them is in this file ("As built" below). Ola was
 asleep while this was written; every choice he would normally make is marked
 "Default (main session / @architect, 2026-09-29), for Ola to confirm", with
 the alternative, so the loop can run tonight.
@@ -132,9 +134,9 @@ design leans on a detail beyond the abstract, it says so.
   flooded it.
 - **O'Callaghan and Mark 1984**, "The extraction of drainage networks from
   digital elevation data", *Computer Vision, Graphics, and Image Processing*,
-  doi:10.1016/S0734-189X(84)80047-X. Crossref lists it as volume 27(2), page
-  247; it is commonly cited as 28(3):323-344. Cite it by DOI until someone
-  resolves which. D8: each node drains to its steepest neighbour, slope
+  28(3):323-344, doi:10.1016/S0734-189X(84)80011-0 (checked on Crossref,
+  2026-09-29, at review; the DOI first cited here, 80047-X, is a one-page
+  item in 27(2):247). D8: each node drains to its steepest neighbour, slope
   measured with the diagonal's length. **Departure, and why:** the flood
   drains each node to its *lowest* filled neighbour, not its steepest, so the
   diagonal distance plays no part. The two differ only where a diagonal
@@ -581,7 +583,8 @@ seed, for tolerance).
    - *Simple*: A-E and E-D do not meet any current edge except at A (with the
      edge ending at A) and at D (with the edge starting at D), and do not
      overlap those two. A uniform grid of current edges (bucket side the
-     tolerance, at least one cell) finds the candidates; it is updated on
+     larger of the tolerance and the mean fine edge, as built) finds the
+     candidates; it is updated on
      every collapse.
    - *Seed inside*: each keep-point has winding number zero around the closed
      loop A-B-C-D-E-A and lies on neither new edge. (The difference between
@@ -591,7 +594,9 @@ seed, for tolerance).
    four vertices include A, E or D, and repeat until none is admissible or 4
    vertices remain. Stale heap entries are skipped by a per-vertex version.
 
-With tolerance 0 only the collinear pass runs.
+With tolerance 0 only the collinear pass runs, so the result is the fine
+ring less its collinear vertices: 5,513 vertices on Bygdin, not the traced
+17,812 (`@reviewer`, at `ac778e4`). Same shape, same area.
 
 **Guarantees**, each with the check the tests make:
 
@@ -602,12 +607,24 @@ With tolerance 0 only the collinear pass runs.
   vertex. Tested by shapely `is_valid` and, on small cases, a brute-force
   pairwise test with exact orientation.
 - *Seed inside*: the seed point is strictly inside (shapely `contains`).
-- *Tolerance*: every fine vertex is within the tolerance of the reduced ring,
-  and every reduced vertex within the tolerance of the fine ring. So the
-  symmetric Hausdorff distance between the two is at most the tolerance plus
-  one cell: tested with shapely `hausdorff_distance(..., densify=0.05)`.
+- *Tolerance, at vertices*: every fine vertex is within the tolerance of the
+  reduced ring, and every reduced vertex within the tolerance of the fine
+  ring. That is what the deviation bounds, and all it bounds.
 - *Deterministic*: serial, ordered by (deviation, id); the same input gives
   the same bits.
+- **Measured, not guaranteed: the Hausdorff distance.** (Revised 2026-09-29
+  at review; the first version claimed a symmetric Hausdorff distance of at
+  most the tolerance plus one cell. That does not follow: the deviation never
+  bounds the interior of a reduced edge, so a long new edge can pass further
+  from the fine ring than either of its ends.) `@reviewer`'s probe at
+  `ac778e4`: on 2,000 traced lattice rings the worst was 0.93 of (tolerance
+  plus one cell), none over; on 8,994 random star rings, not from a lattice,
+  34 exceeded the tolerance, the worst by 1.34 times. Bygdin: 19.92 m at a
+  20 m tolerance. So on traced outlines it has held, and it is not proved.
+  **Open, for Ola to decide**: enforce it, by also checking the interior of
+  A-E and E-D against the fine range (the distance from each fine segment in
+  the range to the new chain, and from the new edges' points to the fine
+  segments), at some cost per candidate; or keep it measured.
 - Not guaranteed: the fewest vertices (it is greedy), or that every
   catchment node is inside (a node within the tolerance of the boundary may
   fall either side).
@@ -647,8 +664,9 @@ rasputin catchment --dem PATH [--dem PATH ...] --seed X Y [--seed-crs CRS]
   point and CRS, tolerance, node count, fine and reduced vertex counts, fine
   and reduced areas in m², the windows' sizes. Coordinates written with
   `repr` precision, so the area survives the round trip.
-- `--outline-tolerance 0` writes the fine outline (collinear vertices only
-  removed), for comparison.
+- `--outline-tolerance 0` writes the fine ring less its collinear vertices
+  (5,513 vertices on Bygdin, against 17,812 traced), same shape and area,
+  for comparison.
 - stderr, one line each: every window (box, nodes, flood seconds, and
   "grown: touches north" or "contained"); the seed (lake polygon with its
   area and seed-node count, or the pour node); the catchment (nodes, node
@@ -664,21 +682,26 @@ request and the result are frozen; the CLI is the only place with paths.
 
 ### New and changed files
 
-| File | What | Production lines (estimate) |
-|---|---|---|
-| `include/terrain/hydrology/upstream.hpp` | the flood, `UpstreamOutcome` | 110 |
-| `include/terrain/vector_simplify/area_collapse.hpp` | the reduction, `ReduceOutcome`, edge grid | 260 |
-| `bindings/core.cpp` | `upstream`, `reduce_ring`, two outcome classes | 80 |
-| `src_python/tin_engine/_core.pyi` | their stubs | 30 |
-| `src_python/tin_engine/outline.py` | the tracer | 70 |
-| `src_python/tin_engine/catchment.py` | request, seed, window loop, result | 170 |
-| `src_python/tin_engine/dem_input.py` | repository helper split out | 10 |
-| `src_python/tin_engine/feature_input.py` | `read_source` split out of `_Tally.source`, `read_lakes` | 30 |
-| `src_python/tin_engine/cli.py` | `catchment` command, report, writer | 100 |
-| `project_structure.md` | the two C++ modules and two Python modules | docs |
+| File | What | Estimate | As built, PR 1 | As built, PR 2 |
+|---|---|---|---|---|
+| `include/terrain/hydrology/upstream.hpp` | the flood, `UpstreamOutcome` | 110 | 106 | |
+| `include/terrain/vector_simplify/area_collapse.hpp` | the reduction, `ReduceOutcome`, edge grid | 260 | | 286 |
+| `bindings/core.cpp` | `upstream`, `reduce_ring`, two outcome classes | 80 | 48 | 46 |
+| `src_python/tin_engine/_core.pyi` | their stubs | 30 | 19 | 22 |
+| `src_python/tin_engine/outline.py` | the tracer | 70 | 50 | |
+| `src_python/tin_engine/catchment.py` | request, seed, window loop, result | 170 | 244, plus later edits | 23 |
+| `src_python/tin_engine/dem_input.py` | repository helper split out | 10 | 1 | |
+| `src_python/tin_engine/feature_input.py` | `read_source` split out of `_Tally.source`, `read_lakes` | 30 | 38 net | |
+| `src_python/tin_engine/cli.py` | `catchment` command, report, writer | 100 | 113 | 26 |
+| **Total** | | about 860 | **619 net** (674 added, 55 removed) | **403 net** |
+| `project_structure.md` | the two C++ modules and two Python modules | docs | | |
 
-About 860 lines, over the 700 ceiling (CLAUDE.md §2), so two PRs on this
-branch.
+"As built" is `@reviewer`'s count at review (2026-09-29), by CLAUDE.md §2's
+rule (blank lines, comments and docstrings not counted), over PR 1 =
+`master..608e366` and PR 2 = `039cf3c..ac778e4`. The totals are
+`@reviewer`'s; the per-file numbers are theirs too and were not recounted
+here, and `catchment.py`'s PR 1 figure predates the window-loop edits, so the
+PR 1 column need not sum to 619. Both PRs are under the 700 ceiling.
 
 ### The PR split
 
@@ -690,7 +713,9 @@ branch.
   binding, and the command reducing by default with
   `--outline-tolerance`. Red, green, review, then the Bygdin acceptance run.
 
-Both go on `increment22-autocatchment`, PR 2 stacked on PR 1. Neither touches
+Both go on `increment22-autocatchment`, PR 2 stacked on PR 1. As built: PR 1
+is `master..608e366` (red `1e1b3bb`, green `58f6904`, the window test
+`608e366`), PR 2 is `039cf3c..ac778e4` (red `039cf3c`, green `ac778e4`). Neither touches
 refine or mesh code, so the 1 m benchmark and scaling sweep (README, rule 2)
 do not apply; the Bygdin run below is this increment's acceptance.
 
@@ -701,7 +726,7 @@ Lean: no throwaway implementations, no mutation round. Default (main session
 invariants on random inputs are the defence. None is named invariant-critical
 for mutation testing tonight.
 
-**PR 1, C++ (Catch2), `tests/cpp/unit/hydrology_upstream.cpp`:**
+**PR 1, C++ (Catch2), `tests/cpp/unit/test_hydrology_upstream.cpp`:**
 
 - *Brute-force oracle*. For random DEMs with no interior pit and no ties,
   built as z = 10 x (steps to the nearest edge) + a distinct fraction per
@@ -747,7 +772,7 @@ for mutation testing tonight.
 
 **PR 2, C++ and Python:**
 
-- `tests/cpp/unit/area_collapse.cpp`: status for a negative, NaN or infinite
+- `tests/cpp/unit/test_area_collapse.cpp`: status for a negative, NaN or infinite
   tolerance, a clockwise ring, fewer than 4 vertices; tolerance 0 removes
   only collinear vertices; a traced rectangle of nodes reduces to at most 8
   vertices at a tolerance of one cell, with its area unchanged; a keep-point
@@ -756,11 +781,12 @@ for mutation testing tonight.
   must not cross itself; the same input twice gives equal bits.
 - `test_core_reduce.py`, on rings traced from random blobs and from the
   PR 1 synthetic catchments: the five guarantees above (area, simple, seed
-  inside, tolerance at vertices, Hausdorff within tolerance plus a cell), and
-  determinism.
+  inside, tolerance at vertices, and the Hausdorff distance, which on traced
+  lattice rings is measured within tolerance plus a cell but, per the
+  revision above, not guaranteed), and determinism.
 - `test_cli_catchment.py` gains: the default reduces; the reduced line
   reports vertices, area and the difference; `--outline-tolerance 0` gives
-  the fine ring.
+  the fine ring less its collinear vertices.
 
 ## Acceptance: Bygdin, end to end
 
@@ -777,7 +803,8 @@ Run by `@perf` after PR 2 is green, recorded under
    NVE's polygon (fetched by the URL, not committed), both ways.
 3. `rasputin mesh --dem ... --domain bygdin.geojson --tolerance 1` and
    `--tolerance 10`, each with `--stats`: triangles, vertices, time. And once
-   at `--tolerance 10` with the fine outline (`--outline-tolerance 0`), to
+   at `--tolerance 10` with the unreduced outline (`--outline-tolerance 0`,
+   the fine ring less its collinear vertices), to
    show what the reduction saves, which is Ola's first requirement.
 4. A picture is optional; the `.vtk` opens in ParaView.
 
