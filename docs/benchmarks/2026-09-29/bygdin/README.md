@@ -31,10 +31,10 @@ the tables and where every number comes from.
   The file as fetched has sha256
   `fe6d298b08573e50e50e711f1be9f70e9459ea823a0626516a539cd62cc4e76c`: one
   Polygon, 1376 coordinates, 305.5393 km² by shapely, valid. As the design
-  says, it is **not committed**: its licence and attribution terms are not
-  recorded. The service can change, so a later fetch may not match the
-  sha256. If it does not, the overlap figures below apply to the file with
-  this hash, not to the new one.
+  says, it is **not committed** (see "Data and licence" below). The
+  service can change, so a later fetch may not match the sha256. If it
+  does not, the overlap figures below apply to the file with this hash,
+  not to the new one.
 
 Scripts, both in this directory:
 
@@ -224,6 +224,28 @@ There is no earlier figure on AC or on battery to compare speed against, so
 the speed figures above are the baseline for the next increment. The
 increment does not change refine. The 1 m benchmark and the thread sweep
 were not run; this brief did not ask for them.
+
+## Data and licence
+
+- **NVE's catchment polygon** (REGINE delfelt 1187, "BYGDIN") is © Norges
+  vassdrags- og energidirektorat (NVE). It is used under the Norwegian
+  Licence for Open Government Data (NLOD), which is compatible with
+  CC BY 4.0. NVE asks users to credit the rights holder and link to its
+  services: https://konto.nve.no/Information and
+  https://temakart.nve.no/tema/nedborfelt.
+  - The polygon was committed in `ad3df66` and removed in `1985720`, so it
+    stays in the history.
+  - To reproduce the overlap figures, fetch it with the curl command under
+    "What was run".
+  - The main session checked these terms on 2026-09-29.
+- **The DEM**, DTM10 (`DTM10_UTM33_20260925`), is © Kartverket.
+- **CORINE**, the lake polygon and the `--features` land cover, is credited
+  as increment 16b's NOTICE words it (`CORINE_NOTICE` in
+  `src_python/tin_engine/feature_input.py`): "Contains modified CORINE Land
+  Cover 2018 data (version 2020_20u1), (c) European Union, Copernicus Land
+  Monitoring Service 2018, European Environment Agency (EEA): clipped and
+  re-encoded, produced with funding by the European Union, not endorsed by
+  the EU".
 
 ## Files
 
