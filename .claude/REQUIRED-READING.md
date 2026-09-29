@@ -13,8 +13,8 @@ first subagent spawn, the first commit, or the first edit, in this order:
    flight, decisions waiting on Ola, next ROADMAP items), `.claude/current-task/`
    and the predecessor's last human turns, **including prompts Ola queued and
    the harness absorbed mid-turn** (they never appear as normal turns). The
-   `SessionStart` hook puts it in context at every startup, resume, `/clear` and
-   compaction; if it is missing, run `python3 tools/session_state.py` yourself.
+   `SessionStart` hook puts it in context on startup, resume, `/clear`, compaction
+   and fork; if it is missing, run `python3 tools/session_state.py` yourself.
 2. Judge each surfaced turn against the tree: a turn with no answering commit,
    file or PR is still pending, and an earlier pending turn outranks your
    reconstruction of "what comes next".
@@ -141,9 +141,12 @@ backstop (auto mode has let unapproved pushes through).
 cold-start recap is in context before the first prompt, on every source:
 startup, resume, `/clear`, compaction and fork. It never blocks: a failure
 exits non-zero, the session starts without the recap, and the recap is then
-run by hand (step 1 above). It fires for the top-level session only, not for spawned
-subagents, which get `SubagentStart`. Its output (about 5 KB) is plain stdout,
-and Claude Code caps that at 10,000 characters: past the cap the text is saved
+run by hand (step 1 above). Spawned subagents have their own event,
+`SubagentStart`; the hooks documentation does not say outright that
+`SessionStart` skips them, so the first persona spawned with the hook live is
+checked for a recap it should not have. Its output is plain stdout
+(`python3 tools/session_state.py | wc -m` measures it), and Claude Code caps
+that at 10,000 characters: past the cap the text is saved
 to a file and only a 2,000-character preview reaches the context, so a
 `session.md` or subagent file long enough to push it over is too long. It reads
 the main checkout (`$CLAUDE_PROJECT_DIR`); a session launched *inside* a
