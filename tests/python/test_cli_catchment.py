@@ -361,6 +361,8 @@ def test_the_default_reduces_to_twice_the_cell_keeping_the_area(
     assert reduced.is_valid
     assert reduced.contains(Point(SEED))
     tolerance = 2 * D
+    # Measured, not guaranteed (698b19f); expected here because the fine ring
+    # is a traced lattice outline.
     assert shapely.hausdorff_distance(fine.exterior, reduced.exterior, densify=0.05) <= (
         tolerance + D
     )

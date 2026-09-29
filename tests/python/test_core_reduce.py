@@ -2,7 +2,8 @@
 
 `docs/increments/22-auto-catchment.md`, "The reduction" and "The red suites"
 (PR 2, `test_core_reduce.py`): on rings traced from random blobs and from the
-PR 1 synthetic catchments, the five guarantees and determinism.
+PR 1 synthetic catchments, the four guarantees, the Hausdorff distance
+measured, and determinism.
 
 Interface assumed (names chosen here, stated in the handback; they mirror the
 C++ `ReduceOutcome` in `tests/cpp/unit/test_area_collapse.cpp`):
@@ -17,11 +18,19 @@ C++ `ReduceOutcome` in `tests/cpp/unit/test_area_collapse.cpp`):
   `TooFewVertices`). Counts: `collinear`, `collapses`, `rejected_crossing`,
   `rejected_seed`, `rejected_tolerance`.
 
-The guarantees, as the design words its tests: area `|A_r - A_f| <= 1e-9
-A_f`; simple (shapely `is_valid`, `is_simple`); the seed strictly inside
+The four guarantees, as the design words its tests: area `|A_r - A_f| <=
+1e-9 A_f`; simple (shapely `is_valid`, `is_simple`); the seed strictly inside
 (shapely `contains`); every fine vertex within the tolerance of the reduced
-ring and every reduced vertex within it of the fine ring; the Hausdorff
-distance (`densify=0.05`) at most the tolerance plus one cell.
+ring and every reduced vertex within it of the fine ring.
+
+MEASURED, NOT GUARANTEED: the Hausdorff distance (`densify=0.05`) at most the
+tolerance plus one cell. The deviation bounds vertices only, so a long new
+edge may pass further from the fine ring than its ends (the design, revised
+at review in 698b19f: on random non-lattice star rings it exceeded the
+tolerance by up to 1.34 times). On traced lattice outlines it has held, and
+every ring this file draws is one: outlines traced from random blobs and the
+PR 1 catchments. `check` asserts it for that reason only; a non-lattice ring
+must not be passed to it.
 """
 
 from __future__ import annotations
@@ -56,7 +65,8 @@ def open_ring(coords: Any) -> np.ndarray:
 def check(
     core: Any, fine: np.ndarray, tolerance: float, keep: np.ndarray, cell: float = CELL
 ) -> np.ndarray:
-    """Reduce `fine` and check every guarantee; the reduced ring."""
+    """Reduce `fine`, a TRACED LATTICE RING, and check the four guarantees and
+    the measured Hausdorff bound; the reduced ring."""
     out = core.reduce_ring(fine, tolerance, keep)
     assert out.status == core.ReduceStatus.Ok
     red = np.asarray(out.ring, dtype=np.float64)
@@ -72,6 +82,8 @@ def check(
     slack = 1e-9 * max(1.0, tolerance)
     assert shapely.distance(shapely.points(fine), r.exterior).max() <= tolerance + slack
     assert shapely.distance(shapely.points(red), f.exterior).max() <= tolerance + slack
+    # Measured, not guaranteed (see the module docstring): holds on traced
+    # lattice rings, which is all this file passes here.
     assert shapely.hausdorff_distance(f.exterior, r.exterior, densify=0.05) <= tolerance + cell
     # Deterministic: the same input again gives the same bits.
     again = core.reduce_ring(fine, tolerance, keep)
