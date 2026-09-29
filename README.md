@@ -27,12 +27,10 @@ its CORINE land-cover class. Elevation © Kartverket (CC BY 4.0); land cover
   until every triangle is within `--tolerance` metres of the DEM, then kept
   Delaunay, with a minimum-angle start so there are no slivers along the
   boundary.
-- **Auto-catchment** (the watershed upstream of a lake or a point, computed
-  from the DEM) is being built; see the Auto-catchment row in
-  [ROADMAP.md](ROADMAP.md).
-
-Rasputin needs neither GDAL nor CGAL. Its Python dependencies come from PyPI,
-and the C++ core compiles during `pip install`.
+- **Auto-catchment.** `rasputin catchment` computes the catchment of a lake
+  from the DEM (a `--seed` point in the lake) and writes it as a GeoJSON
+  polygon, reduced to `--outline-tolerance` with its area kept, ready for
+  `--domain`.
 
 ## Quick example
 
