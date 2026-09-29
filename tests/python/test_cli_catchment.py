@@ -262,8 +262,45 @@ def test_lakes_layer_without_lakes_is_refused(tmp_path: Path, dem_dir: Path) -> 
     assert "--lakes" in output
 
 
-def test_a_seed_in_no_lake_is_refused(tmp_path: Path, dem_dir: Path, lakes: Path) -> None:
-    refused(tmp_path, "--dem", str(dem_dir), *utm_seed(*lat(60, 60)), "--lakes", str(lakes))
+#: Typer's line for a BadParameter with param_hint "--lakes" (6757925,
+#: LakeError), as `plain` flattens it. The whole phrase, because the old hint's
+#: line, "Invalid value for --dem:", also contains "--lakes" wherever the
+#: message quotes the flag.
+LAKES_HINT = "Invalid value for --lakes:"
+DEM_HINT = "Invalid value for --dem:"
+
+
+def test_a_seed_in_no_lake_is_refused_under_lakes(
+    tmp_path: Path, dem_dir: Path, lakes: Path
+) -> None:
+    output = refused(
+        tmp_path, "--dem", str(dem_dir), *utm_seed(*lat(60, 60)), "--lakes", str(lakes)
+    )
+    assert LAKES_HINT in output, output
+    assert DEM_HINT not in output, output
+
+
+def test_a_seed_in_two_lakes_is_refused_under_lakes(tmp_path: Path, dem_dir: Path) -> None:
+    doc = {
+        "type": "FeatureCollection",
+        "crs": {"type": "name", "properties": {"name": EPSG}},
+        "features": [
+            {
+                "type": "Feature",
+                "properties": {"name": name},
+                "geometry": {"type": "Polygon", "coordinates": [list(lake.exterior.coords)]},
+            }
+            for name, lake in (
+                ("one", lake_box()),
+                ("two", lake_box().buffer(D, join_style="mitre")),
+            )
+        ],
+    }
+    path = tmp_path / "two.geojson"
+    path.write_text(json.dumps(doc))
+    output = refused(tmp_path, "--dem", str(dem_dir), *utm_seed(), "--lakes", str(path))
+    assert LAKES_HINT in output, output
+    assert DEM_HINT not in output, output
 
 
 def test_a_catchment_cut_by_the_data_edge_writes_nothing(tmp_path: Path) -> None:
