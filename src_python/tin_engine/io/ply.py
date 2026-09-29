@@ -61,6 +61,7 @@ def write_ply(
     ascii: bool = True,
     comments: Sequence[str] = (),
     vocabulary: EdgeVocabulary | None = None,
+    face_codes: npt.ArrayLike | None = None,
 ) -> bytes:
     """Encode one mesh as a PLY file.
 
@@ -75,6 +76,9 @@ def write_ply(
             `feature_bit <bit> <name>` comments sorted by bit and a
             `feature_vocabulary <fingerprint>` comment (increment 13, ruling
             9), after `comments`.
+        face_codes: `(T,)` land-cover codes, written as the face property
+            `int land_cover_code` after `vertex_indices` (increment 16c, R3).
+            The comment naming the code system is the caller's, in `comments`.
 
     Raises:
         ValueError: if `vertices` is not `(N, 3)`; if `faces` and `edges` are
@@ -83,7 +87,8 @@ def write_ply(
             contains a control character, any of which forges a header line in
             a line-oriented format; if a comment is not ASCII, which the
             header's encoding cannot carry; or if a mask carries a bit
-            `vocabulary` does not name.
+            `vocabulary` does not name; if `face_codes` is given with `edges`,
+            has not one entry per face, or does not fit int32.
     """
     points = np.ascontiguousarray(vertices, dtype="<f8")
     if points.ndim != 2 or points.shape[1] != 3:
@@ -93,6 +98,8 @@ def write_ply(
         raise ValueError(f"exactly one of faces and edges must be given; got {which}")
     if edge_properties is not None and edges is None:
         raise ValueError("edge_properties needs edges; it has no meaning beside faces")
+    if face_codes is not None and faces is None:
+        raise ValueError("face_codes needs faces; the edge file has none")
     if vocabulary is not None:
         # Increment 7's mechanism 3: a bit nobody names is refused, not written.
         if edge_properties is not None:
@@ -125,7 +132,7 @@ def write_ply(
 
     blocks = [(_vertex_declaration(len(points)), _vertex_body(points, ascii))]
     if faces is not None:
-        blocks.append(_face_block(np.ascontiguousarray(faces, dtype="<u4"), ascii))
+        blocks.append(_face_block(np.ascontiguousarray(faces, dtype="<u4"), face_codes, ascii))
     if edges is not None:
         blocks.append(_edge_block(np.ascontiguousarray(edges, dtype="<u4"), edge_properties, ascii))
 
@@ -150,19 +157,33 @@ def _vertex_body(points: npt.NDArray[np.float64], ascii: bool) -> bytes:
     return _lines(" ".join(repr(float(c)) for c in point) for point in points)
 
 
-def _face_block(faces: npt.NDArray[np.uint32], ascii: bool) -> tuple[list[str], bytes]:
-    """The 2D mesh's block: one variable-length index list per triangle."""
+def _face_block(
+    faces: npt.NDArray[np.uint32], codes: npt.ArrayLike | None, ascii: bool
+) -> tuple[list[str], bytes]:
+    """The 2D mesh's block: one variable-length index list per triangle, and
+    optionally each triangle's land-cover code after it (increment 16c, R3)."""
+    faces = faces.reshape(-1, 3)
     declaration = [
         f"element face {len(faces)}",
         f"property list uchar {_INDEX} vertex_indices",
     ]
+    columns = [np.full(len(faces), 3), faces]
+    layout: list[tuple[str, str] | tuple[str, str, int]] = [("n", "u1"), ("v", "<u4", 3)]
+    if codes is not None:
+        values = np.asarray(codes).reshape(-1)
+        if len(values) != len(faces):
+            raise ValueError(f"face_codes has {len(values)} entries for {len(faces)} faces")
+        if len(values) and (values.min() < -(2**31) or values.max() >= 2**31):
+            raise ValueError("face_codes must fit int32")
+        declaration.append("property int land_cover_code")
+        columns.append(values)
+        layout.append(("c", "<i4"))
     if ascii:
-        return declaration, _lines(
-            " ".join(str(int(v)) for v in (len(face), *face)) for face in faces
-        )
-    records = np.zeros(len(faces), dtype=np.dtype([("n", "u1"), ("v", "<u4", (3,))]))
-    records["n"] = 3
-    records["v"] = faces.reshape(-1, 3)
+        table = np.column_stack(columns).astype(np.int64)
+        return declaration, _lines(" ".join(map(str, row)) for row in table.tolist())
+    records = np.zeros(len(faces), dtype=np.dtype(layout))
+    for (name, *_), column in zip(layout, columns, strict=True):
+        records[name] = column
     return declaration, records.tobytes()
 
 

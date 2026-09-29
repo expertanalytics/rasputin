@@ -37,7 +37,7 @@ import numpy.typing as npt
 import shapely
 from pydantic import BaseModel, ConfigDict
 from pyproj import CRS
-from shapely.geometry import LineString, Polygon, shape
+from shapely.geometry import LineString, MultiPolygon, Polygon, shape
 from shapely.geometry.base import BaseGeometry
 
 from tin_engine.crs import parse_crs, reprojector, transform_definition
@@ -56,6 +56,8 @@ MARGIN, DENSIFY = 100.0, 1_000.0
 #: WGS 84's smallest and largest radii of curvature, metres (R5, "Long edges").
 R_MIN, R_MAX = 6_335_439.0, 6_399_594.0
 WATER_CODES = ("511", "512", "521", "522", "523")
+#: A map whose values are integer class codes names its code system (16c, R5).
+CORINE_CODES = "CORINE Land Cover level-3 code"
 CORINE_NOTICE = (
     "Contains modified CORINE Land Cover 2018 data (version 2020_20u1), (c) European Union, "
     "Copernicus Land Monitoring Service 2018, European Environment Agency (EEA): clipped and "
@@ -71,7 +73,9 @@ class FeatureError(ValueError):
 
 class ClassMap(BaseModel):
     """An attribute's values to vocabulary names (R4). ``otherwise`` is what an
-    unlisted value gets: names, ``"drop"`` (no constraint) or ``"refuse"``."""
+    unlisted value gets: names, ``"drop"`` (no constraint) or ``"refuse"``.
+    ``codes``, when not empty, names the code system the values are integer
+    codes of; such a map labels triangles (16c, R5)."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
@@ -80,6 +84,7 @@ class ClassMap(BaseModel):
     classes: Mapping[str, tuple[str, ...]]
     otherwise: Literal["refuse", "drop"] | tuple[str, ...] = "refuse"
     notice: str = ""
+    codes: str = ""
 
 
 def _corine(name: str, attribute: str) -> ClassMap:
@@ -90,6 +95,7 @@ def _corine(name: str, attribute: str) -> ClassMap:
         classes=water,
         otherwise=("land_cover",),
         notice=CORINE_NOTICE,
+        codes=CORINE_CODES,
     )
 
 
@@ -106,6 +112,7 @@ CLASS_MAPS: dict[str, ClassMap] = {
         classes=dict.fromkeys(WATER_CODES, ("water",)),
         otherwise="drop",
         notice=CORINE_NOTICE,
+        codes=CORINE_CODES,
     ),
     "clc18_kode": _corine("clc18_kode", "clc18_kode"),
 }
@@ -129,13 +136,17 @@ class FeatureRequest(BaseModel):
 
 class TerrainFeature(BaseModel):
     """One feature: its fid, mask, and clipped lines in the DEM's CRS; a
-    closed line (first point repeated) is an unclipped ring."""
+    closed line (first point repeated) is an unclipped ring. Under a coded
+    map (16c, R5) it also keeps its class ``code`` and, if polygonal, its
+    ``polygon`` moved into the DEM's CRS by the transform its lines took."""
 
     model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True)
 
     fid: int | str
     mask: int
     lines: tuple[LineString, ...]
+    code: int | None = None
+    polygon: Polygon | MultiPolygon | None = None
 
 
 class FeatureSet(BaseModel):
@@ -299,18 +310,23 @@ class _Tally:
             mask = _mask(cmap, self.vocabulary, value, f"{name}: feature {fid}")
             if mask is None:
                 continue
-            moved = None
+            code = _code(value, f"{name}: feature {fid}") if cmap.codes else None
+            polygonal = code is not None and geometry.geom_type in ("Polygon", "MultiPolygon")
+            moved = polygon = None
             if move is not None and bound is not None and bound[1](geometry):
                 # Pre-clipped where its edges are straight, then moved (R5).
                 chains = pre_clip(geometry, bound[2], bound[0])
                 kept = [shapely.transform(c, move) for c in chains]
+                polygon = shapely.transform(geometry, move) if polygonal else None
             else:  # moved first, then pre-clipped exactly in the DEM's CRS
                 moved = shapely.transform(geometry, move) if move is not None else geometry
                 kept = [moved]
+                polygon = moved if polygonal else None
             if not all(_finite(g) for g in kept):
                 raise FeatureError(f"{name}: feature {fid} has a vertex with no image in the DEM")
             if moved is not None:
                 kept = list(pre_clip(moved, region))
+            coded: dict[str, Any] = {"code": code, "polygon": polygon}
             lines = tuple(
                 piece
                 for line in kept
@@ -318,9 +334,13 @@ class _Tally:
                 if isinstance(piece, LineString) and piece.length > 0
             )
             if lines:
-                self.features.append(TerrainFeature(fid=fid, mask=mask, lines=lines))
+                self.features.append(TerrainFeature(fid=fid, mask=mask, lines=lines, **coded))
                 # A dropped edge lies outside, so a pre-clipped chain is not covered.
                 self.clipped += not all(self.domain.polygon.covers(g) for g in kept)
+            elif polygon is not None and polygon.intersects(self.domain.polygon.point_on_surface()):
+                # No boundary crosses the domain, and a point of it is inside: it
+                # covers the domain, and labels it (R5). Kept, not clipped.
+                self.features.append(TerrainFeature(fid=fid, mask=mask, lines=(), **coded))
             else:
                 self.outside += 1
             self.seconds += time.perf_counter() - t0
@@ -422,6 +442,18 @@ def read_lakes(
 
 def _finite(geometry: BaseGeometry) -> bool:
     return bool(np.isfinite(shapely.get_coordinates(geometry)).all())
+
+
+def _code(value: Any, what: str) -> int:
+    """R5: a class code is an integer in 1 .. 2**31 - 1; anything else is refused."""
+    try:
+        code = int(str(value)) if not isinstance(value, list) else 0
+    except ValueError:
+        code = 0
+    if not 1 <= code < 2**31:
+        shown = value[0] if isinstance(value, list) and value else value
+        raise FeatureError(f"{what}: {shown!r} is not a class code in 1 .. 2**31 - 1")
+    return code
 
 
 def _mask(cmap: ClassMap, vocabulary: EdgeVocabulary, value: Any, what: str) -> int | None:

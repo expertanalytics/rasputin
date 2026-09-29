@@ -518,3 +518,116 @@ class TestPointElevation:
 
     def test_no_dataset_field_is_named_elevation(self) -> None:
         assert "elevation" not in read_vtk(write()).field_data
+
+
+class TestLandCoverCode:
+    """Increment 16c, R3: `write_vtk(..., triangle_codes=...)` writes a cell
+    array `land_cover_code`, `int`, 0 on every `LINES` cell and each
+    triangle's code after them, in the cell `FIELD` block beside the
+    per-feature arrays (whose count includes it), or in a block of its own
+    when there are none. `feature_mask` stays the only `SCALARS` (13, ruling
+    5). `land_cover_codes` joins `RESERVED`.
+
+    Not pinned here: how the text of the `land_cover_codes` dataset string
+    reaches the writer. R3 reserves the name, so `fields` cannot carry it,
+    and the design names no parameter for it; `test_cli_mesh_landcover.py`
+    pins the string in the file.
+
+    Committed red at `196147e`: `triangle_codes` was no parameter of
+    `write_vtk`, so every call with it failed on `TypeError`, and
+    `land_cover_codes` was not reserved. Green since `0487ed0`.
+    """
+
+    CODES = np.array([311, 0, 512, 2**31 - 1], dtype=np.int64)
+
+    def coded(self, binary: bool) -> VtkFile:
+        return read_vtk(write(triangle_codes=self.CODES, binary=binary))
+
+    def test_lines_carry_0_then_each_triangle_its_code(self, binary: bool) -> None:
+        coded = self.coded(binary)
+        expected = np.concatenate([np.zeros(len(EDGES), dtype=np.int64), self.CODES])
+        assert_array_equal(coded.cell_array("land_cover_code").values, expected)
+
+    def test_it_is_an_int_scalar_covering_every_cell(self, binary: bool) -> None:
+        coded = self.coded(binary)
+        array = coded.cell_array("land_cover_code")
+        assert (array.type_name, array.components) == ("int", 1)
+        assert len(array.values) == len(EDGES) + len(TRIANGLES)
+
+    def test_it_sits_in_the_features_block_beside_the_per_feature_arrays(
+        self, binary: bool
+    ) -> None:
+        coded = self.coded(binary)
+        assert list(coded.cell_fields) == ["features"]
+        assert set(coded.cell_fields["features"]) == {"river", "road", "railway", "land_cover_code"}
+
+    def test_feature_mask_stays_the_only_scalar(self, binary: bool) -> None:
+        coded = self.coded(binary)
+        assert list(coded.scalars) == ["feature_mask"]
+        assert_array_equal(coded.cell_array("feature_mask").values, EXPECTED_MASK)
+
+    def test_with_no_feature_arrays_it_is_written_alone(self, binary: bool) -> None:
+        parsed = read_vtk(
+            write(
+                edge_masks=np.zeros(len(EDGES), dtype=np.uint32),
+                triangle_codes=self.CODES,
+                binary=binary,
+            )
+        )
+        assert len(parsed.cell_fields) == 1
+        (arrays,) = parsed.cell_fields.values()
+        assert list(arrays) == ["land_cover_code"]
+
+    def test_with_no_edges_it_is_the_codes(self, binary: bool) -> None:
+        parsed = read_vtk(
+            write(
+                edges=np.zeros((0, 2), dtype=np.uint32),
+                edge_masks=np.zeros(0, dtype=np.uint32),
+                triangle_codes=self.CODES,
+                binary=binary,
+            )
+        )
+        assert_array_equal(parsed.cell_array("land_cover_code").values, self.CODES)
+
+    def test_only_when_given(self) -> None:
+        with_codes = read_vtk(write(triangle_codes=self.CODES))
+        without = read_vtk(write())
+        assert "land_cover_code" in with_codes.cell_fields["features"]
+        with pytest.raises(KeyError):
+            without.cell_array("land_cover_code")
+
+    def test_ascii_and_binary_agree(self) -> None:
+        text = read_vtk(write(triangle_codes=self.CODES))
+        packed = read_vtk(write(triangle_codes=self.CODES, binary=True))
+        assert_array_equal(
+            text.cell_array("land_cover_code").values, packed.cell_array("land_cover_code").values
+        )
+
+    def test_binary_is_big_endian_int32(self) -> None:
+        blob = write(
+            edges=np.zeros((0, 2), dtype=np.uint32),
+            edge_masks=np.zeros(0, dtype=np.uint32),
+            triangle_codes=self.CODES,
+            binary=True,
+        )
+        assert struct.pack(">4i", *self.CODES.tolist()) in blob
+
+    @pytest.mark.parametrize("count", [len(TRIANGLES) - 1, len(TRIANGLES) + 1])
+    def test_one_code_per_triangle(self, count: int) -> None:
+        with pytest.raises(ValueError, match="triangle"):
+            write(triangle_codes=np.zeros(count, dtype=np.int64))
+
+    def test_a_code_outside_int32_is_refused(self) -> None:
+        with pytest.raises(ValueError, match="int32"):
+            write(triangle_codes=np.array([311, 0, 512, 2**31], dtype=np.int64))
+
+    def test_a_vocabulary_naming_land_cover_code_is_refused(self) -> None:
+        clash = EdgeVocabulary(properties=(EdgeProperty(name="land_cover_code", bit=0),))
+        masks = np.array([1, 0, 0], dtype=np.uint32)
+        write(vocabulary=clash, edge_masks=masks)  # without codes: an ordinary name
+        with pytest.raises(ValueError, match="land_cover_code"):
+            write(vocabulary=clash, edge_masks=masks, triangle_codes=self.CODES)
+
+    def test_land_cover_codes_is_reserved(self) -> None:
+        with pytest.raises(ValueError, match="land_cover_codes"):
+            write(fields=(("land_cover_codes", "x"),))
