@@ -34,6 +34,15 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
 
+# `legacy/` left the working tree with release hygiene, but the increment
+# records cite it by line 147 times as their evidence. Rewriting them would
+# destroy that evidence, so a citation whose path starts with this prefix is
+# resolved against the archive tag (`git cat-file -p legacy-archive:<path>`),
+# never the working tree -- a stray or regrown `legacy/` in the checkout must
+# not answer for the archive. See docs/increments/release-hygiene.md section 3.
+LEGACY_PREFIX = "legacy/"
+LEGACY_TAG = "legacy-archive"
+
 # A citation is a path-like token with a line or line range, inside backticks:
 # `01-predicates.md:151`, `include/terrain/core/segment.hpp:68-74`. Bare
 # parenthesised forms like (detria.hpp:391) are also used, so backticks are not
@@ -89,6 +98,24 @@ def line_count(path: Path) -> int:
     return len(path.read_text(errors="replace").splitlines())
 
 
+def archived_line_count(cited: str) -> int | None:
+    """Line count of a `legacy/` path in the archive tag, or None if unresolvable.
+
+    None means the tag or the file is missing -- in either case the citation is
+    broken, and the caller names the tag so a shallow CI checkout is told what
+    to fetch rather than blaming the citation.
+    """
+    result = subprocess.run(
+        ["git", "cat-file", "-p", f"{LEGACY_TAG}:{cited}"],
+        cwd=REPO,
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        return None
+    return len(result.stdout.splitlines())
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--base", default="master")
@@ -119,6 +146,18 @@ def main() -> int:
         for number, line in enumerate(source.read_text(errors="replace").splitlines(), start=1):
             for cited, start, end in CITATION.findall(line):
                 where = f"{rel_source}:{number}"
+                if cited.startswith(LEGACY_PREFIX):
+                    last = max(int(start), int(end or 0))
+                    total = archived_line_count(cited)
+                    if total is None:
+                        broken.append(
+                            f"{where}: cites '{cited}' -- not in the working tree; "
+                            f"resolved against tag '{LEGACY_TAG}', where the tag or the "
+                            f"file is missing"
+                        )
+                    elif last > total:
+                        broken.append(f"{where}: cites '{cited}:{start}' -- file has {total} lines")
+                    continue
                 target = resolve(cited)
                 if target is None:
                     broken.append(f"{where}: cites '{cited}' -- no such file")
