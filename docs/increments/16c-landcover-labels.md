@@ -1,6 +1,7 @@
 # Increment 16c — a land-cover class per triangle, in natural colours
 
-Status: **designed** (`@architect`, 2026-09-29, night). Written before
+Status: **built (green `0487ed0`), under review.** Designed by `@architect`
+2026-09-29, night. Written before
 `@tester`, per `docs/increments/README.md` step 1, on branch
 `increment16c-landcover-labels` off master `b4847d7` (16b-1/2 merged, 22 not).
 Ola was asleep while this was written; every question a design would
@@ -465,6 +466,9 @@ not occur there and are left out; they draw in `NanColor`.
   kept, not clipped.
 - Uncoded maps behave exactly as in 16b: no polygon is moved or kept, so no
   cost is added to them.
+- Codes are checked only on the features the map keeps: under
+  `corine-water`, an unlisted value is dropped before its code is read, as
+  16b drops any unlisted value.
 
 ### R6. The CLI
 
@@ -629,18 +633,23 @@ changes; labelling runs after the mesh is finished.
 
 Production lines as `CLAUDE.md` §2 counts them (tests excluded):
 
-| file | lines |
-|---|---|
-| `landcover.py` (`regions`, incentres, `label_triangles`, `CoverLabels`) | 75 |
-| `palettes.py` (45-entry table, `paraview_preset`) | 60 |
-| `feature_input.py` (`codes`, `code`, `polygon`, coded refusals, covering polygon) | 30 |
-| `io/vtk_legacy.py` (array, fill, field, refusals) | 15 |
-| `io/ply.py` (face property, comment, refusal) | 12 |
-| `cli.py` (label call and phase, stderr line, fields and comments, `palette` command, help) | 40 |
-| **total** | **~230** |
+| file | estimate | as built (green `0487ed0`) |
+|---|---|---|
+| `landcover.py` (`regions`, incentres, `label_triangles`, `CoverLabels`) | 75 | 83 |
+| `palettes.py` (45-entry table, `paraview_preset`) | 60 | 64 |
+| `feature_input.py` (`codes`, `code`, `polygon`, coded refusals, covering polygon) | 30 | 22 |
+| `io/vtk_legacy.py` (array, fill, field, refusals) | 15 | 19 |
+| `io/ply.py` (face property, comment, refusal) | 12 | 16 |
+| `cli.py` (label call and phase, stderr line, fields and comments, `palette` command, help) | 40 | 45 |
+| **total** | **~230** | **net 249 (262 added, 13 removed)** |
 
-Worst case about 320, if the writers need more reshaping than estimated. Well
-under the 700-line ceiling; one PR.
+The estimate's worst case was about 320. Well under the 700-line ceiling; one
+PR.
+
+**As-built writer API.** `write_vtk(..., triangle_codes=None,
+land_cover_codes="")`: the codes array and the `land_cover_codes` field text
+are separate arguments, the text written only with the array.
+`write_ply(..., face_codes=None)`.
 
 ## Not in scope
 
