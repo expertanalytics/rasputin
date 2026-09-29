@@ -689,19 +689,20 @@ request and the result are frozen; the CLI is the only place with paths.
 | `bindings/core.cpp` | `upstream`, `reduce_ring`, two outcome classes | 80 | 48 | 46 |
 | `src_python/tin_engine/_core.pyi` | their stubs | 30 | 19 | 22 |
 | `src_python/tin_engine/outline.py` | the tracer | 70 | 50 | |
-| `src_python/tin_engine/catchment.py` | request, seed, window loop, result | 170 | 244, plus later edits | 23 |
+| `src_python/tin_engine/catchment.py` | request, seed, window loop, result | 170 | 244 | 24 |
 | `src_python/tin_engine/dem_input.py` | repository helper split out | 10 | 1 | |
 | `src_python/tin_engine/feature_input.py` | `read_source` split out of `_Tally.source`, `read_lakes` | 30 | 38 net | |
-| `src_python/tin_engine/cli.py` | `catchment` command, report, writer | 100 | 113 | 26 |
-| **Total** | | about 860 | **619 net** (674 added, 55 removed) | **403 net** |
+| `src_python/tin_engine/cli.py` | `catchment` command, report, writer | 100 | 113 | 28 |
+| **Total** | | about 860 | **619 net** (674 added, 55 removed) | **406 net** |
 | `project_structure.md` | the two C++ modules and two Python modules | docs | | |
 
 "As built" is `@reviewer`'s count at review (2026-09-29), by CLAUDE.md §2's
 rule (blank lines, comments and docstrings not counted), over PR 1 =
 `master..608e366` and PR 2 = `039cf3c..ac778e4`. The totals are
 `@reviewer`'s; the per-file numbers are theirs too and were not recounted
-here, and `catchment.py`'s PR 1 figure predates the window-loop edits, so the
-PR 1 column need not sum to 619. Both PRs are under the 700 ceiling.
+here. The PR 1 column, counted at `58f6904`, sums to 619. PR 2's figures
+include `6757925`'s review fix (`catchment.py` +1, `cli.py` +2), taking it
+from 403 to 406. Both PRs are under the 700 ceiling.
 
 ### The PR split
 

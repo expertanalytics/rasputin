@@ -408,7 +408,7 @@ CMake-based, building the header-only core plus one Python extension. C++20 requ
 - **Detria** (header-only) is vendored at a pinned SHA in `lib/detria/`. CMake does
   **not** search for a system copy: version skew in a geometry kernel across machines
   is a reproducibility hazard and vendoring a header costs nothing.
-- **External deps under consideration:** Eigen (if linear algebra needs grow beyond what we want to hand-roll).
+- **External deps under consideration:** RichDEM (optional, MIT; increment 22 does not use it), Eigen (if linear algebra needs grow beyond what we want to hand-roll).
 - **No CGAL and no GDAL** in the new core: prohibited by `CLAUDE.md` §2.
   **No Boost.Geometry** either, which is a scope choice and not a prohibition
   — reading this line as one is what put an unauthored ban in §2 for six
