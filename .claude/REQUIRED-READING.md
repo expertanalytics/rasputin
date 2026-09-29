@@ -9,12 +9,12 @@ order as the sections here.
 "Ok, let's continue" is not an instruction. Neither is `git log`. Before the
 first subagent spawn, the first commit, or the first edit, in this order:
 
-1. `python3 tools/session_state.py` — prints the round recap (the last thing
-   landed, what is in flight, decisions waiting on Ola, the next ROADMAP
-   items), then `.claude/current-task/` (the session's ask first, each
-   subagent's after it, as context) and the last human turns of the
-   predecessor session, **including prompts Ola queued and the harness
-   absorbed mid-turn**. An absorbed prompt never appears as a normal turn.
+1. The recap from `tools/session_state.py`: the round recap (last landed, in
+   flight, decisions waiting on Ola, next ROADMAP items), `.claude/current-task/`
+   and the predecessor's last human turns, **including prompts Ola queued and
+   the harness absorbed mid-turn** (they never appear as normal turns). The
+   `SessionStart` hook puts it in context on startup, resume, `/clear`, compaction
+   and fork; if it is missing, run `python3 tools/session_state.py` yourself.
 2. Judge each surfaced turn against the tree: a turn with no answering commit,
    file or PR is still pending, and an earlier pending turn outranks your
    reconstruction of "what comes next".
@@ -137,11 +137,26 @@ one is red. All three read the command as text, so they are tripwires: the
 boundary is still yours to keep, and the permission system is not the push
 backstop (auto mode has let unapproved pushes through).
 
+`SessionStart` runs `tools/session_state.py` (Ola, 2026-09-30), so the
+cold-start recap is in context before the first prompt, on every source:
+startup, resume, `/clear`, compaction and fork. It never blocks: a failure
+exits non-zero, the session starts without the recap, and the recap is then
+run by hand (step 1 above). Spawned subagents have their own event,
+`SubagentStart`; the hooks documentation does not say outright that
+`SessionStart` skips them, so the main session checks the first persona it
+spawns with the hook live for a recap it should not have. The hook's output is
+plain stdout
+(`python3 tools/session_state.py | wc -m` measures it), and Claude Code caps
+that at 10,000 characters: past the cap the text is saved
+to a file and only a 2,000-character preview reaches the context, so a
+`session.md` or subagent file long enough to push it over is too long. It reads
+the main checkout (`$CLAUDE_PROJECT_DIR`); a session launched *inside* a
+worktree gets a thin recap, with no `session.md` and no predecessor turns.
+
 Propose any further hook for Ola's approval; never add one to
 `.claude/settings.json` on your own initiative. Proposed and not approved:
-`SessionStart` running `tools/session_state.py`; `PreToolUse` denying a
-subagent `Write`/`Edit` on `.claude/current-task/session.md`; the per-persona
-path guard (R-B in
+`PreToolUse` denying a subagent `Write`/`Edit` on
+`.claude/current-task/session.md`; the per-persona path guard (R-B in
 `docs/retrospectives/2026-09-29-orchestrator-and-hooks-audit.md`).
 
 ## Data, scratch and temp folders are not a channel
