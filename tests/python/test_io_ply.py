@@ -440,3 +440,55 @@ class TestPurity:
 
     def test_it_is_deterministic(self) -> None:
         assert write_ply(VERTICES, faces=FACES) == write_ply(VERTICES, faces=FACES)
+
+
+class TestFaceCodes:
+    """Increment 16c, R3: `write_ply(..., face_codes=...)` puts a face property
+    `int land_cover_code` after `vertex_indices`, on the face file only.
+    The header comment `land_cover_codes ...` is the caller's (it arrives in
+    `comments`), and `test_cli_mesh_landcover.py` pins it in the CLI's file.
+
+    Committed red: `face_codes` is no parameter of `write_ply`, so every call
+    with it fails on `TypeError`.
+    """
+
+    CODES = np.array([311, 2**31 - 1], dtype=np.int64)
+
+    @pytest.mark.parametrize("ascii", [True, False], ids=["ascii", "binary"])
+    def test_the_face_property_follows_the_index_list(self, ascii: bool) -> None:
+        header, _ = read_ply(write_ply(VERTICES, faces=FACES, face_codes=self.CODES, ascii=ascii))
+        face = header.element("face")
+        assert [p.name for p in face.properties] == ["vertex_indices", "land_cover_code"]
+        assert face.properties[1].type_name == "int"
+        assert not face.properties[1].is_list
+
+    @pytest.mark.parametrize("ascii", [True, False], ids=["ascii", "binary"])
+    def test_the_codes_and_the_faces_round_trip(self, ascii: bool) -> None:
+        _, data = read_ply(write_ply(VERTICES, faces=FACES, face_codes=self.CODES, ascii=ascii))
+        assert_array_equal(data["face"]["land_cover_code"], self.CODES)
+        assert_array_equal(np.stack(list(data["face"]["vertex_indices"])), FACES)
+        assert_array_equal(vertex_array(data), VERTICES)
+
+    def test_ascii_and_binary_agree(self) -> None:
+        _, text = read_ply(write_ply(VERTICES, faces=FACES, face_codes=self.CODES))
+        _, packed = read_ply(write_ply(VERTICES, faces=FACES, face_codes=self.CODES, ascii=False))
+        assert_array_equal(text["face"]["land_cover_code"], packed["face"]["land_cover_code"])
+
+    def test_only_when_given(self) -> None:
+        coded, _ = read_ply(write_ply(VERTICES, faces=FACES, face_codes=self.CODES))
+        plain, _ = read_ply(write_ply(VERTICES, faces=FACES))
+        assert len(coded.element("face").properties) == 2
+        assert [p.name for p in plain.element("face").properties] == ["vertex_indices"]
+
+    def test_refused_with_edges(self) -> None:
+        with pytest.raises(ValueError, match="face_codes"):
+            write_ply(VERTICES, edges=EDGES, face_codes=self.CODES)
+
+    @pytest.mark.parametrize("count", [len(FACES) - 1, len(FACES) + 1])
+    def test_one_code_per_face(self, count: int) -> None:
+        with pytest.raises(ValueError, match="face"):
+            write_ply(VERTICES, faces=FACES, face_codes=np.zeros(count, dtype=np.int64))
+
+    def test_a_code_outside_int32_is_refused(self) -> None:
+        with pytest.raises(ValueError, match="int32"):
+            write_ply(VERTICES, faces=FACES, face_codes=np.array([311, 2**31], dtype=np.int64))

@@ -73,6 +73,7 @@ from geotiff_fixtures import KARTVERKET, TIE_X, TIE_Y, micro_tiff, needs_codecs
 from gpkg_fixtures import (
     DTM10,
     EXTRACT,
+    EXTRACT_TABLE,
     LEGACY_GML,
     OLA_EUROPE,
     OLA_NORWAY,
@@ -82,6 +83,7 @@ from gpkg_fixtures import (
     needs_rtree,
     write_gpkg,
 )
+from landcover_fixtures import triangle_areas, vtk_labels
 from plyread import read_ply
 from test_cli_mesh_dem import USAGE, invoke, write_tiff
 from test_cli_mesh_domain import COLS, ROWS, SQUARE, geojson, quarter_circle
@@ -589,7 +591,11 @@ def _max_error(tile: Any, points: np.ndarray, triangles: np.ndarray, domain: Pol
 class TestCommittedExtract:
     """Acceptance 16b-1/2 in CI: the quarter circle on the committed tile with
     the committed extract, `--features-map corine`, at 10 m (M5's reference:
-    about 54 840 triangles). I7: the tolerance holds, every node covered."""
+    about 54 840 triangles). I7: the tolerance holds, every node covered.
+
+    Increment 16c adds I1, I2, I3 and I5 on the same run (the `test_16c_`
+    tests, committed red: the file had no `land_cover_code`); its I4 is
+    `test_i3_rows_in_reverse_order_give_the_same_file`, unchanged."""
 
     @pytest.fixture(scope="class")
     def run(self, tmp_path_factory: pytest.TempPathFactory) -> tuple[VtkFile, str, Path]:
@@ -660,6 +666,35 @@ class TestCommittedExtract:
         assert target.read_bytes() == first.read_bytes()
 
     @needs_codecs
+    def test_16c_i1_i2_i3_land_cover_codes(self, run: Any) -> None:
+        """Increment 16c on the real mesh: every cell carries a code, 0 on the
+        lines (I3); the spread (I1); the centroid oracle against the extract's
+        polygons moved to EPSG:25833 (I2). The extract covers the quarter
+        circle, so no triangle is 0."""
+        vtk, _, _ = run
+        _, _, codes = vtk_labels(vtk, _extract_polygons())
+        assert 0 not in set(codes.tolist())
+
+    @needs_codecs
+    def test_16c_i5_class_areas_match_the_clipped_extract(self, run: Any) -> None:
+        """I5: per code, the triangles' xy area equals the area of each
+        extract polygon (moved to EPSG:25833) intersected with the quarter
+        circle, within 0.01 % of the domain's area."""
+        vtk, _, _ = run
+        codes = np.asarray(vtk.cell_array("land_cover_code").values)[len(lines_as_array(vtk)) :]
+        triangles = polygons_as_array(vtk)
+        areas = triangle_areas(vtk.points, triangles)
+        domain = Polygon(quarter_circle())
+        expected: dict[int, float] = {}
+        for polygon, code in _extract_polygons():
+            expected[code] = expected.get(code, 0.0) + polygon.intersection(domain).area
+        got = {int(c): float(areas[codes == c].sum()) for c in np.unique(codes)}
+        assert len(expected) >= 5
+        for code in set(expected) | set(got):
+            gap = abs(got.get(code, 0.0) - expected.get(code, 0.0))
+            assert gap <= 1e-4 * domain.area, (code, got.get(code), expected.get(code))
+
+    @needs_codecs
     def test_the_legacy_gml(self, tmp_path: Path) -> None:
         """Q6 (b): the legacy GML (EPSG:4326) with `clc18_kode`, same domain."""
         domain = geojson(tmp_path / "quarter.geojson", quarter_circle())
@@ -678,6 +713,14 @@ class TestCommittedExtract:
         assert match and match["name"] == LEGACY_GML.name and match["layer"] is None
         assert field(sentence(vtk), rf"achieved max error {NUMBER} m") <= 10.0
         assert V.mask("land_cover", "water") in set(edges(vtk)[1].tolist())
+
+
+def _extract_polygons() -> list[tuple[Any, int]]:
+    """The committed extract's polygons in the DEM's CRS, with their codes (16c)."""
+    return [
+        (ff.moved(geometry, "EPSG:3035"), int(code))
+        for _, geometry, code in ff.extract_features(EXTRACT, EXTRACT_TABLE)
+    ]
 
 
 # ------------------------------------------------------------ Ola's local data
