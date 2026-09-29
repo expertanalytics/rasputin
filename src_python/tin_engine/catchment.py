@@ -1,11 +1,12 @@
-"""The catchment of a lake, from the DEM (increment 22, PR 1: the fine outline).
+"""The catchment of a lake, from the DEM, as a reduced outline (increment 22).
 
 `docs/increments/22-auto-catchment.md`, "Data flow", "The seed", "The
 window" and "The fine outline". :func:`delineate` moves the seed point and the
 lake into the DEM's CRS, plans and assembles a window round them (15a), floods
 it (`_core.upstream`), grows the window until the catchment lies clearly
 inside it or is cut by the data's edge or NoData, and traces the outline of
-the in-nodes, holes filled and other pieces dropped.
+the in-nodes, holes filled and other pieces dropped. The fine outline is then
+reduced to the request's tolerance by `_core.reduce_ring`, keeping its area.
 
 No paths: the DEM comes through a `DemRepository`, and the lakes arrive as
 shapely geometries the CLI read. Blocking (the flood releases the GIL); an
@@ -16,7 +17,7 @@ from __future__ import annotations
 
 import math
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any, Self
 
 import numpy as np
@@ -25,7 +26,7 @@ import shapely
 from pydantic import BaseModel, ConfigDict, model_validator
 from shapely.geometry import Point, Polygon
 
-from tin_engine._core import UpstreamOutcome, upstream
+from tin_engine._core import ReduceStatus, UpstreamOutcome, reduce_ring, upstream
 from tin_engine.crs import crs_label, reprojector
 from tin_engine.io.models import RasterMeta
 from tin_engine.io.repository import DemRepository
@@ -50,6 +51,11 @@ class CatchmentError(ValueError):
     """A catchment that cannot be delineated, in words for the person asking."""
 
 
+class LakeError(CatchmentError):
+    """The lakes cannot seed it: the point in no lake or in two, or a lake
+    that does not move into the DEM's CRS."""
+
+
 class CatchmentRequest(BaseModel):
     """The seed point in `seed_crs`, and the lakes (shapely polygons or
     multipolygons in `lakes_crs`) of which the one containing it is the seed.
@@ -61,11 +67,17 @@ class CatchmentRequest(BaseModel):
     seed_crs: str = "EPSG:4326"
     lakes: tuple[Any, ...] | None = None
     lakes_crs: str | None = None
+    #: Metres the reduced outline may stray from the fine one; None is twice
+    #: the DEM's cell, 0 keeps the fine outline less its collinear vertices.
+    outline_tolerance: float | None = None
 
     @model_validator(mode="after")
     def _lakes_have_a_crs(self) -> Self:
         if self.lakes is not None and self.lakes_crs is None:
             raise ValueError("lakes need their CRS")
+        t = self.outline_tolerance
+        if t is not None and not (math.isfinite(t) and t >= 0.0):
+            raise ValueError(f"the outline tolerance must be finite and at least 0, got {t}")
         return self
 
 
@@ -86,7 +98,11 @@ class Catchment:
     """The fine outline (holes filled) in the DEM's CRS `crs`, the seed point
     there, the lake's area (None without one), node counts, the outline's
     area and what was left out of it, every window, and the last window's
-    mask of in-nodes with its `meta`."""
+    mask of in-nodes with its `meta`. Then the reduced outline `reduced` (the
+    CLI's `reduced_vertices` and `reduced_area_m2` are its vertex count and
+    area), the `tolerance` in metres it was reduced to (`outline_tolerance_m`;
+    0 keeps the fine outline less its collinear vertices), and the seconds the
+    trace and the reduction took."""
 
     fine: Polygon
     crs: str
@@ -103,6 +119,9 @@ class Catchment:
     mask: npt.NDArray[np.uint8]
     meta: RasterMeta
     trace_seconds: float
+    reduced: Polygon
+    tolerance: float
+    reduce_seconds: float
 
 
 def delineate(request: CatchmentRequest, repository: DemRepository) -> Catchment:
@@ -154,7 +173,9 @@ def delineate(request: CatchmentRequest, repository: DemRepository) -> Catchment
     if out.touches_edge:
         sides = _edge_sides(m, out)
         raise CatchmentError(f"the catchment is cut by the data's {' and '.join(sides)} edge")
-    return _outline(dem_crs, lake, (float(x), float(y)), out, m, seed, tuple(windows))
+    fine = _outline(dem_crs, lake, (float(x), float(y)), out, m, seed, tuple(windows))
+    tolerance = request.outline_tolerance
+    return _reduced(fine, 2.0 * max(m.delta_x, m.delta_y) if tolerance is None else tolerance)
 
 
 def _lake(request: CatchmentRequest, dem_crs: str) -> Polygon | None:
@@ -166,13 +187,13 @@ def _lake(request: CatchmentRequest, dem_crs: str) -> Polygon | None:
     found = [p for g in request.lakes for p in shapely.get_parts(g) if p.contains(point)]
     where = f"({px!r}, {py!r}) in {request.lakes_crs}"
     if not found:
-        raise CatchmentError(f"the seed point {where} is in no lake")
+        raise LakeError(f"the seed point {where} is in no lake")
     if len(found) > 1:
-        raise CatchmentError(f"the seed point {where} is in {len(found)} lakes; give one")
+        raise LakeError(f"the seed point {where} is in {len(found)} lakes; give one")
     move = reprojector(request.lakes_crs, dem_crs)
     lake = shapely.transform(found[0], move)
     if not np.isfinite(shapely.get_coordinates(lake)).all():
-        raise CatchmentError(f"the lake at {where} has a vertex with no image in {dem_crs}")
+        raise LakeError(f"the lake at {where} has a vertex with no image in {dem_crs}")
     assert isinstance(lake, Polygon)
     return lake
 
@@ -307,6 +328,24 @@ def _outline(
         mask=mask,
         meta=m,
         trace_seconds=time.perf_counter() - t0,
+        reduced=fine,
+        tolerance=0.0,
+        reduce_seconds=0.0,
+    )
+
+
+def _reduced(fine: Catchment, tolerance: float) -> Catchment:
+    """The fine outline reduced to `tolerance` by `_core.reduce_ring`, in
+    metres from its lower-left corner, the seed point kept inside."""
+    origin = np.array(fine.fine.bounds[:2])
+    ring = np.asarray(fine.fine.exterior.coords)[:-1] - origin
+    t0 = time.perf_counter()
+    out = reduce_ring(ring, tolerance, np.array([fine.seed]) - origin)
+    if out.status != ReduceStatus.Ok:
+        raise CatchmentError(f"the outline could not be reduced: {out.status.name}")
+    reduced = Polygon(np.asarray(out.ring) + origin)
+    return replace(
+        fine, reduced=reduced, tolerance=tolerance, reduce_seconds=time.perf_counter() - t0
     )
 
 

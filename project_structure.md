@@ -64,14 +64,17 @@ include/terrain/           # public C++ headers, header-only where possible
     upstream.hpp           # upstream(z, seed) -> UpstreamOutcome: one
                            #   Priority-Flood labelling the nodes that drain
                            #   into the seed set, plus edge/NoData flags (22)
+  vector_simplify/
+    area_collapse.hpp      # reduce_ring: area-preserving segment collapse
+                           #   (Kronenfeld et al. 2020) to a horizontal
+                           #   tolerance, exact crossing tests, keep-points (22)
 
 src/                       # C++ implementation, one directory per module
                            #   (only predicates/ and cdt/ exist; rest planned)
   predicates/              # exact orient2d/incircle; namespace terrain::pred
   parallel_util/           # (none: header-only, include/terrain/parallel_util/)
-  vector_simplify/         # Visvalingam-Whyatt, Douglas-Peucker, topology checks
-                           # (no hydrology/ here: it is header-only,
-                           #  include/terrain/hydrology/)
+                           # (no vector_simplify/ or hydrology/ here: both
+                           #  are header-only, include/terrain/...)
                            # (no noding/ here, and none planned: the noder is
                            #  header-only, its driver a template on the kernel)
   cdt/                     # thin wrapper over vendored Detria
@@ -118,8 +121,9 @@ src_python/tin_engine/     # public Python API (distribution name: rasputin)
                            #   never imports _core (22)
   catchment.py             # CatchmentRequest -> delineate(request, repo) ->
                            #   Catchment: seed, the window loop over 15a's
-                           #   plan, _core.upstream and the fine ring; takes a
-                           #   DemRepository and no path (22)
+                           #   plan, _core.upstream, the fine ring, and
+                           #   _core.reduce_ring; takes a DemRepository and
+                           #   no path (22)
   landcover.py             # regions, label_triangles: a land-cover code per
                            #   triangle, components across unconstrained edges,
                            #   one point-in-polygon test per component (16c);
@@ -191,9 +195,9 @@ docs/increments/           # per-increment design records; see its README
 ```
                     raster ────────────────┐
                                             ▼
-predicates ───────────┬─→ vector_simplify   hydrology  (raster only)
-                      │
-                      └─→ noding
+predicates ───────────┬─→ noding ──→ vector_simplify   hydrology  (raster only)
+                      │   (area_collapse uses noding's classify<K>
+                      │    and the predicates' kernel)
                               │
                               ▼
                             cdt   (thin wrapper over vendored Detria,
@@ -352,7 +356,7 @@ Header-only. Two helpers in `chunks.hpp`, both over `std::jthread` created per c
 
 ### `vector_simplify`
 
-Visvalingam-Whyatt for area-preserving polygon simplification; Douglas-Peucker for polyline length-preserving; multi-feature topology checks (no introduced crossings). Pre-noding step.
+Header-only. `area_collapse.hpp` (increment 22): `reduce_ring`, Kronenfeld, Stanislawski, Buttenfield and Brockmeyer's area-preserving segment collapse (APSC, 2020): each collapse replaces two vertices by one on the line that keeps the area, so the area is kept up to rounding; collapses are taken least deviation first while the fine ring's vertices stay within a horizontal tolerance; each new edge is tested for crossings with `noding::classify<K>` over a uniform grid, and keep-points (the seed) must stay inside. Serial and deterministic. Visvalingam-Whyatt and Douglas-Peucker are not used: neither keeps area. See `docs/increments/22-auto-catchment.md`.
 
 ### `hydrology`
 

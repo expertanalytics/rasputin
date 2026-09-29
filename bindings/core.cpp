@@ -20,6 +20,7 @@
 #include <terrain/raster/sample.hpp>
 #include <terrain/raster/view.hpp>
 #include <terrain/refinement/refine.hpp>
+#include <terrain/vector_simplify/area_collapse.hpp>
 
 #include <cstddef>
 #include <cstdint>
@@ -298,6 +299,17 @@ struct BoundUpstream {
     std::size_t rows;
     std::size_t cols;
 };
+
+// An (N, 2) float64 array as Point2 pairs, copied; any other shape is a ValueError.
+[[nodiscard]] std::vector<Point2> xy_points(const py::object& a, const char* what) {
+    const auto xy = py::array_t<double, py::array::c_style | py::array::forcecast>::ensure(a);
+    if (!xy || xy.ndim() != 2 || xy.shape(1) != 2)
+        throw py::value_error(std::format("reduce_ring: {} must have shape (N, 2)", what));
+    std::vector<Point2> out(static_cast<std::size_t>(xy.shape(0)));
+    for (std::size_t i = 0; i < out.size(); ++i)
+        out[i] = Point2{xy.at(static_cast<py::ssize_t>(i), 0), xy.at(static_cast<py::ssize_t>(i), 1)};
+    return out;
+}
 
 }  // namespace
 
@@ -1004,5 +1016,52 @@ The catchment of a seed mask: every node draining into a seed (Priority-Flood).
 
 seed is (rows, cols), non-zero (or True) for a seed; any other shape is a
 ValueError. NoData is never in. Releases the GIL.
+)doc");
+
+    using terrain::vector_simplify::ReduceOutcome;
+    using terrain::vector_simplify::ReduceStatus;
+    py::enum_<ReduceStatus>(m, "ReduceStatus", R"doc(
+Why reduce_ring reduced a ring or did not: Ok, or a refusal of the input.
+)doc")
+        .value("Ok", ReduceStatus::Ok)
+        .value("InvalidTolerance", ReduceStatus::InvalidTolerance)
+        .value("NotCounterClockwise", ReduceStatus::NotCounterClockwise)
+        .value("TooFewVertices", ReduceStatus::TooFewVertices);
+
+    py::class_<ReduceOutcome>(m, "ReduceOutcome", R"doc(
+What reduce_ring returned: the reduced ring, open, a status, and the counts.
+)doc")
+        .def_property_readonly(
+            "ring",
+            [](const py::object& self) {
+                return point_view(self, self.cast<const ReduceOutcome&>().ring);
+            },
+            "Read-only (M, 2) float64, open: the first vertex is not repeated.")
+        .def_readonly("status", &ReduceOutcome::status)
+        .def_property_readonly("collinear", [](const ReduceOutcome& o) { return o.counts.collinear; })
+        .def_property_readonly("collapses", [](const ReduceOutcome& o) { return o.counts.collapses; })
+        .def_property_readonly("rejected_crossing",
+                               [](const ReduceOutcome& o) { return o.counts.rejected_crossing; })
+        .def_property_readonly("rejected_seed",
+                               [](const ReduceOutcome& o) { return o.counts.rejected_seed; })
+        .def_property_readonly("rejected_tolerance",
+                               [](const ReduceOutcome& o) { return o.counts.rejected_tolerance; });
+
+    m.def(
+        "reduce_ring",
+        [](const py::object& ring, double tolerance, const py::object& keep) {
+            const std::vector<Point2> points = xy_points(ring, "ring");
+            const std::vector<Point2> kept = xy_points(keep, "keep");
+            const py::gil_scoped_release unlocked;
+            return terrain::vector_simplify::reduce_ring<terrain::pred::DefaultKernel>(
+                points, tolerance, kept);
+        },
+        py::arg("ring"), py::arg("tolerance"), py::arg("keep"), R"doc(
+Reduce an open counter-clockwise ring to a tolerance, keeping its area and the
+keep-points inside (area-preserving segment collapse, exact crossing tests).
+
+ring is (N, 2) and keep (K, 2), float64-convertible; any other shape is a
+ValueError. Tolerance 0 only drops exactly collinear vertices. A refused input
+comes back as a status. Releases the GIL.
 )doc");
 }

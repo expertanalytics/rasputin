@@ -471,3 +471,34 @@ class UpstreamOutcome:
 def upstream(view: RasterView, seed: npt.ArrayLike) -> UpstreamOutcome:
     """Every node draining into a seed of the ``(rows, cols)`` mask
     (Priority-Flood); another shape is a ``ValueError``. Releases the GIL."""
+
+class ReduceStatus(Enum):
+    """Why :func:`reduce_ring` refused, or ``Ok``."""
+
+    Ok = 0
+    InvalidTolerance = 1
+    NotCounterClockwise = 2
+    TooFewVertices = 3
+
+@final
+class ReduceOutcome:
+    """What :func:`reduce_ring` returned: the ring, open, a status and counts."""
+
+    @property
+    def ring(self) -> npt.NDArray[np.float64]: ...
+    @property
+    def status(self) -> ReduceStatus: ...
+    @property
+    def collinear(self) -> int: ...
+    @property
+    def collapses(self) -> int: ...
+    @property
+    def rejected_crossing(self) -> int: ...
+    @property
+    def rejected_seed(self) -> int: ...
+    @property
+    def rejected_tolerance(self) -> int: ...
+
+def reduce_ring(ring: npt.ArrayLike, tolerance: float, keep: npt.ArrayLike) -> ReduceOutcome:
+    """Reduce an open counter-clockwise ``(N, 2)`` ring to ``tolerance``, keeping
+    its area and the ``(K, 2)`` keep-points inside. Releases the GIL."""

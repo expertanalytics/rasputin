@@ -1,0 +1,48 @@
+## catchment
+run 1: windows [('1', '0.62'), ('2', '1.22'), ('3', '2.84')], flood sum 4.68, trace 0.13, reduce 0.04, wall 6.71, maxRSS 1069 MB, peak footprint 923 MB
+run 2: windows [('1', '0.61'), ('2', '1.22'), ('3', '2.84')], flood sum 4.67, trace 0.14, reduce 0.04, wall 6.48, maxRSS 989 MB, peak footprint 920 MB
+run 3: windows [('1', '0.61'), ('2', '1.22'), ('3', '2.89')], flood sum 4.72, trace 0.11, reduce 0.04, wall 6.53, maxRSS 982 MB, peak footprint 861 MB
+median: flood 4.68 s, trace 0.13 s, reduce 0.04 s, wall 6.53 s, other (read, seed, write, start-up) 1.68 s, maxRSS 989 MB, peak footprint 920 MB
+
+NVE polygon: 305.5393 km2 by shapely, 1376 coords, valid True; published 305.54 km2
+
+| tolerance | vertices | area km2 | vs fine m2 | vs NVE 305.54 | Hausdorff densify=0.05 | 1 m: fine->red, red->fine | valid |
+| 0 | 5513 | 304.909550 | +0 | -0.206 % | 0.00 m | 0.00, 0.00 m | True |
+| 10 | 1382 | 304.909550 | +0 | -0.206 % | 9.99 m | 9.99, 9.96 m | True |
+| 20 | 740 | 304.909550 | -2.98e-07 | -0.206 % | 19.92 m | 19.92, 19.62 m | True |
+  properties: {'seed': [8.5425, 61.3512], 'seed_crs': 'EPSG:4326', 'nodes': 3049095, 'fine_vertices': 17812, 'fine_area_m2': 304909550.0, 'reduced_vertices': 740, 'reduced_area_m2': 304909549.9999997, 'outline_tolerance_m': 20.0, 'windows': [[1438, 3024], [2236, 3646], [3520, 4813]]}
+| 50 | 295 | 304.909550 | -1.43e-06 | -0.206 % | 49.85 m | 49.85, 48.06 m | True |
+
+fine outline vs NVE boundary, 1 m samples: fine->NVE 485 m, NVE->fine 782 m
+
+## node overlap with NVE (DEM nodes at multiples of 10 m)
+ours 3049096 nodes (catchment reports 3049095), NVE 3055360 nodes, both 3028611
+of NVE's nodes in ours: 99.12 %; of ours in NVE's: 99.33 %
+ours only 20485 nodes (2.05 km2), NVE only 26749 nodes (2.67 km2)
+largest ours-not-NVE parts: [(0.255, (163743, 6813036)), (0.134, (156227, 6826776)), (0.086, (148176, 6827409))]
+largest NVE-not-ours parts: [(0.577, (149046, 6826265)), (0.439, (158666, 6826076)), (0.242, (167571, 6815768))]
+
+## meshes (median of 3 binary runs; quality from the ASCII run)
+| run | triangles | vertices | start vertices | constraint edges | refine s | total s | wall s | maxRSS MB | worst angle | max degree | max error | within tol | Delaunay checked/ambiguous/violations |
+| red_t10 | 52198 | 26576 | 740 | 952 | 0.034 | 0.356 | 0.62 | 646 | 0.3562° | 12 | 9.9998 | True | 77821/1122/0 |
+   runs (refine, total, wall, maxRSS): [(0.034, 0.356, 0.63, 643219456), (0.034, 0.355, 0.62, 645562368), (0.033, 0.356, 0.62, 647921664)]
+| fine_t10 | 72292 | 38914 | 5513 | 5534 | 0.043 | 0.388 | 0.66 | 647 | 0.6548° | 13 | 10.0000 | True | 105671/1546/0 |
+   runs (refine, total, wall, maxRSS): [(0.043, 0.39, 0.66, 646496256), (0.043, 0.388, 0.66, 648019968), (0.042, 0.388, 0.66, 647200768)]
+| red_t1 | 1129026 | 565511 | 740 | 1994 | 0.497 | 0.927 | 1.38 | 925 | 0.04612° | 18 | 1.0000 | True | 1692542/172872/0 |
+   runs (refine, total, wall, maxRSS): [(0.497, 0.933, 1.39, 923910144), (0.496, 0.927, 1.38, 925401088), (0.504, 0.915, 1.37, 929644544)]
+| fine_t1 | 1137703 | 571651 | 5513 | 5597 | 0.483 | 0.917 | 1.38 | 942 | 0.08338° | 16 | 1.0000 | True | 1703756/172995/0 |
+   runs (refine, total, wall, maxRSS): [(0.481, 0.902, 1.36, 942112768), (0.483, 0.931, 1.39, 942194688), (0.486, 0.917, 1.38, 941096960)]
+| feat_t10 | 83171 | 42110 | 8242 | 8882 | 0.046 | 1.972 | 2.24 | 776 | 0.004079° | 16 | 9.9997 | True | 116398/1095/0 |
+   runs (refine, total, wall, maxRSS): [(0.046, 2.031, 2.3, 777306112), (0.047, 1.972, 2.24, 774995968), (0.046, 1.966, 2.23, 776355840)]
+
+## land cover inside the reduced catchment (CORINE 2018, clipped by shapely)
+187 candidate rows; covered 304.910 km2 of 304.910
+| 333 | 129.093 km2 | 42.34 % |
+| 332 | 65.012 km2 | 21.32 % |
+| 322 | 51.849 km2 | 17.00 % |
+| 512 | 50.191 km2 | 16.46 % |
+| 335 | 7.452 km2 | 2.44 % |
+| 412 | 1.021 km2 | 0.33 % |
+| 142 | 0.292 km2 | 0.10 % |
+mesh cells with land_cover=1: 7835 (of 92053 cells: 8882 lines + 83171 triangles)
+mesh cells with water=1: 2005 (of 92053 cells: 8882 lines + 83171 triangles)

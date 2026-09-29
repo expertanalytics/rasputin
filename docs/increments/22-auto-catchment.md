@@ -1,9 +1,9 @@
 # Increment 22 — auto-catchment: the catchment of a lake, from the DEM (Bygdin first)
 
-Status: **PR 1 built, under review** (2026-09-29). Designed by `@architect`
-on branch `increment22-autocatchment` off master `b4847d7`; PR 1 built at
-`58f6904` (green), under review; PR 2 (the outline reduction) designed, in a
-stacked PR ("As built" below covers PR 1 only). Ola was
+Status: **built, under review** (2026-09-29). Designed by `@architect` on
+branch `increment22-autocatchment` off master `b4847d7`; PR 1 built at
+`58f6904`, PR 2 at `ac778e4`; `@reviewer`'s first pass asked for changes, and
+the documentation half of them is in this file ("As built" below). Ola was
 asleep while this was written; every choice he would normally make is marked
 "Default (main session / @architect, 2026-09-29), for Ola to confirm", with
 the alternative, so the loop can run tonight.
@@ -583,7 +583,8 @@ seed, for tolerance).
    - *Simple*: A-E and E-D do not meet any current edge except at A (with the
      edge ending at A) and at D (with the edge starting at D), and do not
      overlap those two. A uniform grid of current edges (bucket side the
-     tolerance, at least one cell) finds the candidates; it is updated on
+     larger of the tolerance and the mean fine edge, as built) finds the
+     candidates; it is updated on
      every collapse.
    - *Seed inside*: each keep-point has winding number zero around the closed
      loop A-B-C-D-E-A and lies on neither new edge. (The difference between
@@ -593,7 +594,9 @@ seed, for tolerance).
    four vertices include A, E or D, and repeat until none is admissible or 4
    vertices remain. Stale heap entries are skipped by a per-vertex version.
 
-With tolerance 0 only the collinear pass runs.
+With tolerance 0 only the collinear pass runs, so the result is the fine
+ring less its collinear vertices: 5,513 vertices on Bygdin, not the traced
+17,812 (`@reviewer`, at `ac778e4`). Same shape, same area.
 
 **Guarantees**, each with the check the tests make:
 
@@ -604,12 +607,24 @@ With tolerance 0 only the collinear pass runs.
   vertex. Tested by shapely `is_valid` and, on small cases, a brute-force
   pairwise test with exact orientation.
 - *Seed inside*: the seed point is strictly inside (shapely `contains`).
-- *Tolerance*: every fine vertex is within the tolerance of the reduced ring,
-  and every reduced vertex within the tolerance of the fine ring. So the
-  symmetric Hausdorff distance between the two is at most the tolerance plus
-  one cell: tested with shapely `hausdorff_distance(..., densify=0.05)`.
+- *Tolerance, at vertices*: every fine vertex is within the tolerance of the
+  reduced ring, and every reduced vertex within the tolerance of the fine
+  ring. That is what the deviation bounds, and all it bounds.
 - *Deterministic*: serial, ordered by (deviation, id); the same input gives
   the same bits.
+- **Measured, not guaranteed: the Hausdorff distance.** (Revised 2026-09-29
+  at review; the first version claimed a symmetric Hausdorff distance of at
+  most the tolerance plus one cell. That does not follow: the deviation never
+  bounds the interior of a reduced edge, so a long new edge can pass further
+  from the fine ring than either of its ends.) `@reviewer`'s probe at
+  `ac778e4`: on 2,000 traced lattice rings the worst was 0.93 of (tolerance
+  plus one cell), none over; on 8,994 random star rings, not from a lattice,
+  34 exceeded the tolerance, the worst by 1.34 times. Bygdin: 19.92 m at a
+  20 m tolerance. So on traced outlines it has held, and it is not proved.
+  **Open, for Ola to decide**: enforce it, by also checking the interior of
+  A-E and E-D against the fine range (the distance from each fine segment in
+  the range to the new chain, and from the new edges' points to the fine
+  segments), at some cost per candidate; or keep it measured.
 - Not guaranteed: the fewest vertices (it is greedy), or that every
   catchment node is inside (a node within the tolerance of the boundary may
   fall either side).
@@ -649,8 +664,9 @@ rasputin catchment --dem PATH [--dem PATH ...] --seed X Y [--seed-crs CRS]
   point and CRS, tolerance, node count, fine and reduced vertex counts, fine
   and reduced areas in m², the windows' sizes. Coordinates written with
   `repr` precision, so the area survives the round trip.
-- `--outline-tolerance 0` writes the fine outline (collinear vertices only
-  removed), for comparison.
+- `--outline-tolerance 0` writes the fine ring less its collinear vertices
+  (5,513 vertices on Bygdin, against 17,812 traced), same shape and area,
+  for comparison.
 - stderr, one line each: every window (box, nodes, flood seconds, and
   "grown: touches north" or "contained"); the seed (lake polygon with its
   area and seed-node count, or the pour node); the catchment (nodes, node
@@ -666,27 +682,27 @@ request and the result are frozen; the CLI is the only place with paths.
 
 ### New and changed files
 
-| File | What | Estimate | As built, PR 1 |
-|---|---|---|---|
-| `include/terrain/hydrology/upstream.hpp` | the flood, `UpstreamOutcome` | 110 | 106 |
-| `include/terrain/vector_simplify/area_collapse.hpp` | the reduction, `ReduceOutcome`, edge grid | 260 | |
-| `bindings/core.cpp` | `upstream`, `reduce_ring`, two outcome classes | 80 | 48 |
-| `src_python/tin_engine/_core.pyi` | their stubs | 30 | 19 |
-| `src_python/tin_engine/outline.py` | the tracer | 70 | 50 |
-| `src_python/tin_engine/catchment.py` | request, seed, window loop, result | 170 | 244 |
-| `src_python/tin_engine/dem_input.py` | repository helper split out | 10 | 1 |
-| `src_python/tin_engine/feature_input.py` | `read_source` split out of `_Tally.source`, `read_lakes` | 30 | 38 net |
-| `src_python/tin_engine/cli.py` | `catchment` command, report, writer | 100 | 113 |
-| **Total** | | about 860 | **619 net** (674 added, 55 removed) |
-| `project_structure.md` | the two C++ modules and two Python modules | docs | |
+| File | What | Estimate | As built, PR 1 | As built, PR 2 |
+|---|---|---|---|---|
+| `include/terrain/hydrology/upstream.hpp` | the flood, `UpstreamOutcome` | 110 | 106 | |
+| `include/terrain/vector_simplify/area_collapse.hpp` | the reduction, `ReduceOutcome`, edge grid | 260 | | 286 |
+| `bindings/core.cpp` | `upstream`, `reduce_ring`, two outcome classes | 80 | 48 | 46 |
+| `src_python/tin_engine/_core.pyi` | their stubs | 30 | 19 | 22 |
+| `src_python/tin_engine/outline.py` | the tracer | 70 | 50 | |
+| `src_python/tin_engine/catchment.py` | request, seed, window loop, result | 170 | 244 | 24 |
+| `src_python/tin_engine/dem_input.py` | repository helper split out | 10 | 1 | |
+| `src_python/tin_engine/feature_input.py` | `read_source` split out of `_Tally.source`, `read_lakes` | 30 | 38 net | |
+| `src_python/tin_engine/cli.py` | `catchment` command, report, writer | 100 | 113 | 28 |
+| **Total** | | about 860 | **619 net** (674 added, 55 removed) | **406 net** |
+| `project_structure.md` | the two C++ modules and two Python modules | docs | | |
 
-About 860 lines estimated, over the 700 ceiling (CLAUDE.md §2), so two PRs.
 "As built" is `@reviewer`'s count at review (2026-09-29), by CLAUDE.md §2's
 rule (blank lines, comments and docstrings not counted), over PR 1 =
-`master..608e366`. The totals are `@reviewer`'s; the per-file numbers are
-theirs too and were not recounted here. The PR 1 column, counted at
-`58f6904`, sums to 619. PR 1 is under the 700 ceiling. PR 2's figures are the
-estimates until it is built.
+`master..608e366` and PR 2 = `039cf3c..ac778e4`. The totals are
+`@reviewer`'s; the per-file numbers are theirs too and were not recounted
+here. The PR 1 column, counted at `58f6904`, sums to 619. PR 2's figures
+include `6757925`'s review fix (`catchment.py` +1, `cli.py` +2), taking it
+from 403 to 406. Both PRs are under the 700 ceiling.
 
 ### The PR split
 
@@ -700,7 +716,7 @@ estimates until it is built.
 
 Both go on `increment22-autocatchment`, PR 2 stacked on PR 1. As built: PR 1
 is `master..608e366` (red `1e1b3bb`, green `58f6904`, the window test
-`608e366`); PR 2 is designed, in a stacked PR. Neither touches
+`608e366`), PR 2 is `039cf3c..ac778e4` (red `039cf3c`, green `ac778e4`). Neither touches
 refine or mesh code, so the 1 m benchmark and scaling sweep (README, rule 2)
 do not apply; the Bygdin run below is this increment's acceptance.
 
@@ -766,11 +782,12 @@ for mutation testing tonight.
   must not cross itself; the same input twice gives equal bits.
 - `test_core_reduce.py`, on rings traced from random blobs and from the
   PR 1 synthetic catchments: the five guarantees above (area, simple, seed
-  inside, tolerance at vertices, Hausdorff within tolerance plus a cell), and
-  determinism.
+  inside, tolerance at vertices, and the Hausdorff distance, which on traced
+  lattice rings is measured within tolerance plus a cell but, per the
+  revision above, not guaranteed), and determinism.
 - `test_cli_catchment.py` gains: the default reduces; the reduced line
   reports vertices, area and the difference; `--outline-tolerance 0` gives
-  the fine ring.
+  the fine ring less its collinear vertices.
 
 ## Acceptance: Bygdin, end to end
 
@@ -787,7 +804,8 @@ Run by `@perf` after PR 2 is green, recorded under
    NVE's polygon (fetched by the URL, not committed), both ways.
 3. `rasputin mesh --dem ... --domain bygdin.geojson --tolerance 1` and
    `--tolerance 10`, each with `--stats`: triangles, vertices, time. And once
-   at `--tolerance 10` with the fine outline (`--outline-tolerance 0`), to
+   at `--tolerance 10` with the unreduced outline (`--outline-tolerance 0`,
+   the fine ring less its collinear vertices), to
    show what the reduction saves, which is Ola's first requirement.
 4. A picture is optional; the `.vtk` opens in ParaView.
 
