@@ -1,11 +1,12 @@
-"""The catchment of a lake, from the DEM (increment 22, PR 1: the fine outline).
+"""The catchment of a lake, from the DEM, as a reduced outline (increment 22).
 
 `docs/increments/22-auto-catchment.md`, "Data flow", "The seed", "The
 window" and "The fine outline". :func:`delineate` moves the seed point and the
 lake into the DEM's CRS, plans and assembles a window round them (15a), floods
 it (`_core.upstream`), grows the window until the catchment lies clearly
 inside it or is cut by the data's edge or NoData, and traces the outline of
-the in-nodes, holes filled and other pieces dropped.
+the in-nodes, holes filled and other pieces dropped. The fine outline is then
+reduced to the request's tolerance by `_core.reduce_ring`, keeping its area.
 
 No paths: the DEM comes through a `DemRepository`, and the lakes arrive as
 shapely geometries the CLI read. Blocking (the flood releases the GIL); an
@@ -50,6 +51,11 @@ class CatchmentError(ValueError):
     """A catchment that cannot be delineated, in words for the person asking."""
 
 
+class LakeError(CatchmentError):
+    """The lakes cannot seed it: the point in no lake or in two, or a lake
+    that does not move into the DEM's CRS."""
+
+
 class CatchmentRequest(BaseModel):
     """The seed point in `seed_crs`, and the lakes (shapely polygons or
     multipolygons in `lakes_crs`) of which the one containing it is the seed.
@@ -92,7 +98,11 @@ class Catchment:
     """The fine outline (holes filled) in the DEM's CRS `crs`, the seed point
     there, the lake's area (None without one), node counts, the outline's
     area and what was left out of it, every window, and the last window's
-    mask of in-nodes with its `meta`."""
+    mask of in-nodes with its `meta`. Then the reduced outline `reduced` (the
+    CLI's `reduced_vertices` and `reduced_area_m2` are its vertex count and
+    area), the `tolerance` in metres it was reduced to (`outline_tolerance_m`;
+    0 keeps the fine outline less its collinear vertices), and the seconds the
+    trace and the reduction took."""
 
     fine: Polygon
     crs: str
@@ -177,13 +187,13 @@ def _lake(request: CatchmentRequest, dem_crs: str) -> Polygon | None:
     found = [p for g in request.lakes for p in shapely.get_parts(g) if p.contains(point)]
     where = f"({px!r}, {py!r}) in {request.lakes_crs}"
     if not found:
-        raise CatchmentError(f"the seed point {where} is in no lake")
+        raise LakeError(f"the seed point {where} is in no lake")
     if len(found) > 1:
-        raise CatchmentError(f"the seed point {where} is in {len(found)} lakes; give one")
+        raise LakeError(f"the seed point {where} is in {len(found)} lakes; give one")
     move = reprojector(request.lakes_crs, dem_crs)
     lake = shapely.transform(found[0], move)
     if not np.isfinite(shapely.get_coordinates(lake)).all():
-        raise CatchmentError(f"the lake at {where} has a vertex with no image in {dem_crs}")
+        raise LakeError(f"the lake at {where} has a vertex with no image in {dem_crs}")
     assert isinstance(lake, Polygon)
     return lake
 

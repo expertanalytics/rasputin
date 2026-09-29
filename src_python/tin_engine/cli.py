@@ -69,7 +69,7 @@ from tin_engine._core import (
     sample,
     triangulate,
 )
-from tin_engine.catchment import CatchmentRequest, delineate
+from tin_engine.catchment import CatchmentRequest, LakeError, delineate
 from tin_engine.chains import start_chains
 from tin_engine.crs import crs_label, parse_crs, transform_description
 from tin_engine.dem_input import DemInput, DemRequest, open_dem, repository_for
@@ -1322,7 +1322,8 @@ def catchment(
             "--outline-tolerance",
             metavar="METRES",
             help="Reduce the outline, keeping its area, to within this of the fine one; "
-            "0 writes the fine outline. Default: twice the DEM's cell.",
+            "0 writes the fine outline without its collinear vertices. Default: twice the "
+            "DEM's cell.",
         ),
     ] = None,
     out_parent: Annotated[
@@ -1331,9 +1332,10 @@ def catchment(
     ] = None,
 ) -> None:
     """Write the catchment of a lake, from the DEM, as a GeoJSON polygon in the
-    DEM's CRS that ``mesh --domain`` reads (increment 22, PR 1: the fine
-    outline, drawn between DEM nodes, holes filled). A catchment cut by the
-    data's edge or by NoData is refused, and nothing is written."""
+    DEM's CRS that ``mesh --domain`` reads (increment 22). The fine outline is
+    drawn between DEM nodes, holes filled, then reduced to ``--outline-tolerance``
+    keeping its area, with the seed inside. A catchment cut by the data's edge
+    or by NoData is refused, and nothing is written."""
     if lakes is None and lakes_layer is not None:
         raise typer.BadParameter("applies only with --lakes", param_hint="--lakes-layer")
     if outline_tolerance is not None and not (
@@ -1360,13 +1362,14 @@ def catchment(
     except OSError as exc:
         raise typer.BadParameter(f"cannot read {exc.filename}: {exc}", param_hint="--dem") from exc
     except ValueError as exc:
-        raise typer.BadParameter(_words(exc), param_hint="--dem") from exc
+        hint = "--lakes" if isinstance(exc, LakeError) else "--dem"
+        raise typer.BadParameter(_words(exc), param_hint=hint) from exc
     for k, w in enumerate(result.windows, 1):
         b = w.bounds
         typer.echo(
             f"window {k}: x {b.x_min:.0f}-{b.x_max:.0f}, y {b.y_min:.0f}-{b.y_max:.0f}, "
             f"{w.rows} x {w.cols} nodes, flood {w.seconds:.2f} s, "
-            + (f"grown: touches {', '.join(w.grown)}" if w.grown else "contained"),
+            + (f"grown on {', '.join(w.grown)}" if w.grown else "contained"),
             err=True,
         )
     cell = result.meta.delta_x * result.meta.delta_y
