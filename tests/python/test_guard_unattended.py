@@ -143,3 +143,80 @@ def test_a_config_change_is_blocked_and_queued(repo: Path, mode: str) -> None:
         "guard_unattended",
         f"ConfigChange project_settings {settings}",
     )
+
+
+# ------------------------------------------------ T19, T20: failure direction
+#
+# §3.9 (review 1): once stdin parses as a JSON object, any failure refuses in
+# the shape of the event, in both modes, without `harness_mode` and without a
+# queue line. A silent exit 1 would let the prompt through to nobody.
+
+FAILED_PREFIX = "guard_unattended failed ("
+FAILED_SUFFIX = (
+    "), so this is refused rather than left for a prompt nobody may answer. It is not "
+    "queued: record it as an ASK OLA line (main session: in session.md; subagent: in its "
+    "handback) and continue."
+)
+
+
+def failure_reason(event_name: str, found: dict[str, Any] | None) -> str:
+    """R from the §3.9 failure shape for `event_name`; fails on any other shape."""
+    assert found is not None, "the hook printed nothing"
+    if event_name == "ConfigChange":
+        assert set(found) == {"decision", "reason"}
+        assert found["decision"] == "block"
+        reason: str = found["reason"]
+    elif event_name == "PermissionRequest":
+        assert set(found) == {"hookSpecificOutput"}
+        specific = found["hookSpecificOutput"]
+        assert specific["hookEventName"] == "PermissionRequest"
+        assert specific["decision"]["behavior"] == "deny"
+        reason = specific["decision"]["message"]
+    else:
+        assert set(found) == {"hookSpecificOutput"}
+        specific = found["hookSpecificOutput"]
+        assert specific["hookEventName"] == "PreToolUse"
+        assert specific["permissionDecision"] == "deny"
+        reason = specific["permissionDecisionReason"]
+    assert reason.startswith(FAILED_PREFIX), reason
+    assert reason.endswith(FAILED_SUFFIX), reason
+    return reason
+
+
+def with_list_input(event: dict[str, Any]) -> dict[str, Any]:
+    return {**event, "tool_input": ["not", "an", "object"]}
+
+
+@pytest.mark.parametrize("mode", ["off", "on"])
+@pytest.mark.parametrize("event", [ask_event, permission_event], ids=["ask", "permission"])
+def test_a_crash_after_parsing_refuses_in_the_events_shape_and_queues_nothing(
+    repo: Path, mode: str, event: Any
+) -> None:
+    set_mode(repo, mode)
+    malformed = with_list_input(event(repo))
+    failure_reason(malformed["hook_event_name"], output(repo, malformed))
+    assert queue_lines(repo) == []
+
+
+@pytest.mark.parametrize("mode", ["off", "on"])
+@pytest.mark.parametrize("stdin", ["[1, 2]", "{not json"], ids=["json-list", "not-json"])
+def test_stdin_that_is_not_a_json_object_prints_nothing(repo: Path, mode: str, stdin: str) -> None:
+    set_mode(repo, mode)
+    result = run_script(repo, GUARD_UNATTENDED, stdin)
+    assert (result.returncode, result.stdout) == (0, ""), result.stderr
+    assert queue_lines(repo) == []
+
+
+@pytest.mark.parametrize("mode", ["off", "on"])
+@pytest.mark.parametrize(
+    "event", [ask_event, permission_event, config_event], ids=["ask", "permission", "config"]
+)
+def test_a_missing_harness_mode_refuses_in_the_events_shape(
+    repo: Path, mode: str, event: Any
+) -> None:
+    set_mode(repo, mode)
+    (repo / "tools" / "harness_mode.py").unlink()
+    supplied = event(repo)
+    reason = failure_reason(supplied["hook_event_name"], output(repo, supplied))
+    assert reason.startswith(f"{FAILED_PREFIX}ModuleNotFoundError"), reason
+    assert queue_lines(repo) == []

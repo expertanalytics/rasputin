@@ -250,22 +250,69 @@ def test_recap_counts_unreadable_queue_lines(harness_repo: Path) -> None:
     assert "  (1 unreadable lines)" in lines
 
 
-def test_recap_lists_uncommitted_rule_files_in_every_worktree(
-    harness_repo: Path, tmp_path: Path
+@pytest.mark.parametrize("branch", ["null", "missing"])
+def test_recap_prints_a_null_or_missing_branch_as_no_branch_and_never_none(
+    harness_repo: Path, branch: str
 ) -> None:
-    second = tmp_path / "second-tree"
-    harness_fixtures.git(harness_repo, "worktree", "add", "-q", "-b", "side", str(second))
-    (harness_repo / "CLAUDE.md").write_text("# changed here\n")
-    (second / "CLAUDE.md").write_text("# changed there\n")
-    (harness_repo / "notes.txt").write_text("not a rule\n")
+    # §3.8 (review 1): the same text `away.py --back` groups such entries under.
+    entry = {key: value for key, value in _queue_entry(3).items() if key != "branch"}
+    if branch == "null":
+        entry["branch"] = None
+    _write_queue(harness_repo, [json.dumps(entry)])
     lines = _recap(harness_repo)
-    at = lines.index("Uncommitted rule-file changes:")
-    section: list[str] = []
-    for line in lines[at + 1 :]:
-        if not line.startswith("  "):
-            break
-        section.append(line)
-    assert len(section) == 2
-    assert any("/repo" in line and line.endswith("CLAUDE.md") for line in section)
-    assert any("/second-tree" in line and line.endswith("CLAUDE.md") for line in section)
-    assert not any("notes.txt" in line for line in section)
+    at = lines.index("Queued while unattended (1):")
+    assert lines[at + 1] == "  2026-09-30T03:00:00+00:00 (no branch) guard_push main: cmd-03"
+    assert not any("None" in line for line in lines)
+
+
+def test_recap_has_no_uncommitted_rule_file_section(harness_repo: Path) -> None:
+    # §3.8 (review 1): the scan moved to U3, so a modified rule file is not listed.
+    (harness_repo / "CLAUDE.md").write_text("# changed here\n")
+    lines = _recap(harness_repo)
+    assert "Uncommitted rule-file changes:" not in lines
+    assert not any(line.endswith(" CLAUDE.md") for line in lines)
+
+
+# ------------------------------------------------ T21: a broken harness
+#
+# §3.8 (review 1): a harness fault costs the recap one header line, never the
+# recap. The queue section is omitted; everything else prints; exit 0.
+
+UNKNOWN_TAIL = (
+    "): the recap could not read the flag or the queue. Guarded acts may be refused; "
+    "record each refusal as an ASK OLA line and continue."
+)
+
+
+def _break_harness(repo: Path, how: str) -> None:
+    module = repo / "tools" / "harness_mode.py"
+    if how == "missing":
+        module.unlink()
+    else:
+        with module.open("a") as out:
+            out.write('\n\ndef read_mode(*a, **k):\n    raise RuntimeError("planted")\n')
+
+
+@pytest.mark.parametrize("how", ["missing", "raising"])
+def test_recap_with_a_broken_harness_says_so_and_prints_the_rest(
+    harness_repo: Path, how: str
+) -> None:
+    harness_fixtures.flag_on(harness_repo)
+    _write_queue(harness_repo, [json.dumps(_queue_entry(1))])
+    tasks = harness_repo / ".claude" / "current-task"
+    tasks.mkdir(parents=True)
+    (tasks / "session.md").write_text("ASK OLA: may I push?\n")
+    _break_harness(harness_repo, how)
+
+    lines = _recap(harness_repo)
+
+    if how == "missing":
+        assert lines[0].startswith("UNATTENDED STATE UNKNOWN (ModuleNotFoundError: ")
+        assert lines[0].endswith(UNKNOWN_TAIL)
+    else:
+        assert lines[0] == f"UNATTENDED STATE UNKNOWN (RuntimeError: planted{UNKNOWN_TAIL}"
+    assert lines[1] == "== recap =="
+    waiting = next(i for i, line in enumerate(lines) if line.startswith("Waiting on Ola:"))
+    assert lines[waiting + 1] == "  session.md: ASK OLA: may I push?"
+    assert "Next on ROADMAP.md:" in lines
+    assert not any(line.startswith("Queued while unattended") for line in lines)

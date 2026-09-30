@@ -51,6 +51,11 @@ DENIED_COMMANDS = (
     "python3 tools/away.py 8h",
     "tools/away.py --back",
     "script -q /dev/null python3 tools/away.py 8h",
+    # Review 1: a path to the interpreter, a wrapper, or a reader chained to a
+    # run is still a run, not a read.
+    ".venv/bin/python3 tools/away.py --back",
+    "env python3 tools/away.py 8h",
+    "python3 -m ruff check x && python3 tools/away.py --back",
 )
 
 #: T7: reads of the same paths, which must stay silent.
@@ -59,6 +64,13 @@ SILENT_COMMANDS = (
     "cat tools/away.py",
     "git diff tools/away.py",
     "pytest tests/python/test_away.py",
+    # Review 1: a reader is recognised by the basename of its first token, or
+    # as `python -m <reader>`, so the gates the green and review steps run on
+    # away.py are not refused.
+    "../../../.venv/bin/mypy tools/away.py",
+    "/usr/bin/grep -n x tools/away.py",
+    "python3 -m ruff check tools/away.py",
+    "python -m mypy tools/away.py",
 )
 
 

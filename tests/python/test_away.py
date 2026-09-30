@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import errno
 import json
+import os
 import shutil
 import signal
 import subprocess
@@ -154,7 +155,7 @@ def enter(
 
 def test_away_without_a_terminal_exits_3_and_writes_nothing(repo: Path) -> None:
     script = repo / "tools" / "away.py"
-    assert script.exists(), "tools/away.py does not exist yet"
+    assert script.exists(), "tools/away.py is missing from the copy"
     result = subprocess.run(
         [sys.executable, str(script), "8h"],
         stdin=subprocess.DEVNULL,
@@ -275,6 +276,30 @@ def test_re_entering_while_on_stops_the_old_keep_awake_and_says_it_replaces(repo
     assert stop.calls == [((111,), {})]
     assert "replaces the window" in tty.written
     assert read_flag(repo)["keep_awake_pid"] == FAKE_PID
+
+
+@pytest.mark.skipif(os.geteuid() == 0, reason="root writes into a 0o500 directory")
+def test_a_flag_that_cannot_be_written_stops_the_keep_awake_and_changes_nothing(
+    repo: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    # §3.3 step 6 (review 1): the flag write is one unit; its failure undoes step 5.
+    state = state_dir(repo)
+    state.mkdir(mode=0o700)
+    state.chmod(0o500)
+    try:
+        code, _, spawn, stop = enter(repo, ["8h"])
+    finally:
+        state.chmod(0o700)
+    assert code == 1
+    assert len(spawn.calls) == 1
+    assert stop.calls == [((FAKE_PID,), {})]
+    captured = capsys.readouterr()
+    assert "could not write the flag" in captured.err
+    assert "keep-awake stopped" in captured.err
+    assert "UNATTENDED until" not in captured.out
+    assert not flag_path(repo).exists()
+    assert not (state / "windows.jsonl").exists()
+    assert list(state.iterdir()) == []  # no temporary file left behind
 
 
 # ---------------------------------------------------------------- T16
@@ -416,7 +441,7 @@ def test_back_with_a_broken_flag_still_deletes_it(repo: Path) -> None:
 def test_back_needs_no_terminal_even_as_a_detached_subprocess(repo: Path) -> None:
     flag_on(repo)
     script = repo / "tools" / "away.py"
-    assert script.exists(), "tools/away.py does not exist yet"
+    assert script.exists(), "tools/away.py is missing from the copy"
     result = subprocess.run(
         [sys.executable, str(script), "--back"],
         stdin=subprocess.DEVNULL,
@@ -430,3 +455,54 @@ def test_back_needs_no_terminal_even_as_a_detached_subprocess(repo: Path) -> Non
     )
     assert result.returncode == 0, result.stderr
     assert not flag_path(repo).exists()
+
+
+@pytest.mark.parametrize("branch", ["null", "missing"])
+def test_back_lists_a_null_or_missing_branch_under_no_branch(
+    repo: Path, capsys: pytest.CaptureFixture[str], branch: str
+) -> None:
+    # §3.3 (review 1): the same text the recap uses (§3.8).
+    entry = {key: value for key, value in QUEUED[0].items() if key != "branch"}
+    if branch == "null":
+        entry["branch"] = None
+    write_queue(repo, (entry,))
+    code, _ = back(repo)
+    assert code == 0
+    lines = capsys.readouterr().out.splitlines()
+    at = lines.index("Queued while away (1):")
+    assert lines[at + 1 : at + 3] == [
+        "  (no branch)",
+        "    2026-09-30T19:00:00+00:00 guard_push main: git push",
+    ]
+    assert not any("None" in line for line in lines)
+
+
+# ---------------------------------------------------------------- T22
+
+
+def test_back_survives_a_broken_session_state(repo: Path) -> None:
+    # §3.3 (review 1): the recap module is optional to --back; the flag, the
+    # keep-awake and the queue are not.
+    (repo / "tools" / "session_state.py").write_text('raise RuntimeError("planted")\n')
+    flag_on(repo)
+    write_queue(repo, QUEUED[:1])
+    result = subprocess.run(
+        [sys.executable, str(repo / "tools" / "away.py"), "--back"],
+        stdin=subprocess.DEVNULL,
+        capture_output=True,
+        text=True,
+        cwd=repo,
+        env=clean_env(),
+        start_new_session=True,
+        timeout=60,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
+    lines = result.stdout.splitlines()
+    at = lines.index("ASK OLA lines in .claude/current-task/:")
+    assert lines[at + 1] == "  (unavailable: RuntimeError: planted)"
+    assert not flag_path(repo).exists()
+    assert not (state_dir(repo) / "queue.jsonl").exists()
+    [archived] = state_dir(repo).glob("queue-*.jsonl")
+    assert len(archived.read_text().splitlines()) == 1
+    assert [w["event"] for w in windows(repo)] == ["back"]

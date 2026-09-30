@@ -63,8 +63,8 @@ def clean_env() -> dict[str, str]:
 def make_repo(root: Path) -> Path:
     """A git repository with the copied scripts and two plain files, in one commit.
 
-    Everything is committed so that the recap's uncommitted-rule-file scan (§3.8)
-    starts empty: the copied hooks and tools are themselves governed paths.
+    `CLAUDE.md` is a governed file and `notes.txt` is not, so a suite can touch
+    one of each; everything starts committed, so the working tree starts clean.
     """
     root.mkdir(parents=True, exist_ok=True)
     git(root, "init", "-q", "-b", "master")
@@ -181,7 +181,7 @@ def run_script(
 ) -> subprocess.CompletedProcess[str]:
     """Run a copied script as the harness does: its path, the event on stdin, cwd = repo."""
     script = repo / relative
-    assert script.exists(), f"{relative} does not exist yet"
+    assert script.exists(), f"{relative} is missing from the copy"
     text = stdin if isinstance(stdin, str) else json.dumps(stdin)
     return subprocess.run(
         [sys.executable, str(script), *args],
@@ -236,7 +236,7 @@ def load_tool(name: str) -> ModuleType:
     """Import `tools/<name>.py` from the real checkout, or fail naming what is missing."""
     path = REAL / "tools" / f"{name}.py"
     if not path.exists():
-        pytest.fail(f"tools/{name}.py does not exist yet")
+        pytest.fail(f"tools/{name}.py is missing from the checkout")
     spec = importlib.util.spec_from_file_location(f"u1_{name}", path)
     assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)
