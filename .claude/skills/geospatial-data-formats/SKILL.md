@@ -1,17 +1,17 @@
 ---
 name: geospatial-data-formats
-description: Zero-GDAL geospatial ingestion and CRS handling in Python. Use when reading or writing rasters and vectors, parsing GeoTIFF with tifffile, working with shapely geometry, pyproj transformations, CRS metadata models, or deciding what crosses the Python/C++ I/O boundary.
+description: Geospatial ingestion and CRS handling in Python. Use when reading or writing rasters and vectors, parsing GeoTIFF with tifffile, working with shapely geometry, pyproj transformations, CRS metadata models, or deciding what crosses the Python/C++ I/O boundary.
 ---
 
 # Agent Skill: Geospatial Data Formats & CRS Management
 
-Enforces zero-GDAL, high-performance geospatial data ingestion and processing using Shapely, PyProj, and clean metadata models.
+Enforces high-performance geospatial data ingestion and processing using Shapely, PyProj, and clean metadata models.
 
-## 1. Dependency Boundaries (No GDAL)
-* **Strict Prohibition:** Never introduce `GDAL`, `OGR`, or `Fiona` as dependencies. 
+## 1. Dependency Boundaries
+* **Prohibited:** the list is `CLAUDE.md` §2; this section says what to use instead.
 * **Allowed Libraries:** Use python-native and lightweight C-bound libraries:
   * **Vector:** `shapely` (for geometry and predicates) and `geojson` or `ujson` (for fast JSON parsing).
-  * **Raster/TIN:** direct binary parsing, or a pure-Python reader such as `tifffile`. Never `rasterio` -- it wraps GDAL. The project's own reader will live under `src_python/tin_engine/io/`.
+  * **Raster/TIN:** direct binary parsing, or a pure-Python reader such as `tifffile`. The project's own reader will live under `src_python/tin_engine/io/`.
   * **Projections:** `pyproj` (for CRS definition and transformations).
 
 ## 2. Ingestion & Performance (Large Datasets)

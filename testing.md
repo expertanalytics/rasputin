@@ -15,7 +15,7 @@ The goal is "water tight": no module ships without invariant tests, every algori
 >
 > Live today (`.github/workflows/main.yaml`): Catch2 C++ suites via ctest on
 > ubuntu and macos, an asan+ubsan Debug build of the same suites, pytest
-> across Python 3.12-3.14 with an enforced 85% line coverage floor, mypy
+> across Python 3.12-3.14 with an enforced line coverage floor, mypy
 > strict, ruff, and the governance gates in `tools/`.
 
 ## Three data tiers [planned]
@@ -280,7 +280,7 @@ Nightly adds:
 - **Invariant coverage**: every documented invariant has at least one test naming it.
 - **Edge-case coverage**: every condition handled specially in code (NaN, NoData, empty input, single-element input, boundary intersection, etc.) has a named test.
 
-Python line coverage is enforced today: `--cov-fail-under=85` in pyproject's
+Python line coverage is enforced today, by `--cov-fail-under` in pyproject's
 `addopts`, so a drop below the floor fails the run rather than being noticed in
 review. **C++ coverage is not yet measured** -- `gcovr` is not configured and no
 nightly coverage build exists, so the per-module figure above is currently a

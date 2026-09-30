@@ -21,7 +21,7 @@ Core domain constraints and architecture for the C++ terrain-meshing engine (CDT
 * **Parallel Suitability:** Favor data-parallel layouts (Structure of Arrays where applicable), regular memory access, and branch-minimized paths. Avoid pointer-heavy graph structures and recursive walks.
 
 ## 3. Robustness & Numerics
-* **Dependencies:** Do not use CGAL.
+* **Dependencies:** the prohibited list is `CLAUDE.md` §2.
 * **Filtered Arithmetic:** 
   1. Evaluate orientation, incircle, and intersections using fast hardware floats.
   2. Determine numerical ambiguity.
@@ -44,12 +44,10 @@ Core domain constraints and architecture for the C++ terrain-meshing engine (CDT
   the same object the code evaluates?*
 
 ## 4. Prior Art Before Design
-* **Start from the literature:** before designing a refinement, insertion or
-  triangulation method, find the published method it builds on and cite it
-  (for example Garland and Heckbert 1995 for greedy insertion; Chew and Ruppert
-  for Delaunay refinement; Üngör for off-centres). Say what differs, and why.
-  The rule and its record live in `docs/increments/README.md` (the **Prior art:
-  legacy and literature** section) and `.claude/agents/architect.md` §4.
+* **Start from the literature:** the rule is `docs/increments/README.md`,
+  step 1 (*Literature*). In this domain the published methods to start from
+  include Garland and Heckbert 1995 for greedy insertion, Chew and Ruppert for
+  Delaunay refinement, and Üngör for off-centres.
 
 ## 5. Change & Review Boundaries
 * **Change Limit:** see the ceiling in `CLAUDE.md` §2.

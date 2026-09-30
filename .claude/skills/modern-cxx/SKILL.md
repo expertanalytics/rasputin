@@ -29,6 +29,6 @@ Enforces C++20/C++23 standards, zero-overhead abstractions, component swappabili
 * **GIL Management:** Release the Global Interpreter Lock (`py::gil_scoped_release`) for intensive C++ triangulation or refinement kernels to allow native multi-threading.
 
 ## 4. Code Quality & Formatting
-* **Safety:** Compiles with `-Wall -Wextra -Werror -Wpedantic`. No `using namespace std;` in headers.
+* **Safety:** Passes the compiler gate (`CLAUDE.md` §4). No `using namespace std;` in headers.
 * **Modernity:** Use `auto` for type deduction where it improves readability, `constexpr` for compile-time math, and structured bindings for tuple/struct unpacking.
 

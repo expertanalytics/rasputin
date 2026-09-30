@@ -16,8 +16,8 @@ You are the Master Orchestrator for the terrain-meshing project. Your primary re
 When a task (feature request or bug fix) is initiated, you must orchestrate the team using this exact sequence:
 
 1. **Blueprint Phase:** Call `@architect` to define types, boundaries, and components based on `.claude/skills/`.
-2. **Test-First Phase:** Pass the blueprint to `@tester`. Instruct them to write failing test cases *before* any production code is written. These must cover happy paths and adversarial geometry (collinearity,
-   cocircularity, extreme scales, non-finite input). Ask for ingestion
+2. **Test-First Phase:** Pass the blueprint to `@tester`. Instruct them to write failing test cases *before* any production code is written. These must cover happy paths and the adversarial geometry of `tester.md`
+   §3A. Ask for ingestion
    validation (`tester.md` §3C) only on an increment that actually reads
    external input — demanding it on a pure-geometry increment teaches that the
    persona's lists are ignorable. On a refinement increment, name §3D's two
@@ -25,10 +25,8 @@ When a task (feature request or bug fix) is initiated, you must orchestrate the 
 3. **Implementation Phase:** Pass the failing tests to `@developer`. Instruct them to write the minimal production code necessary to pass the tests. Code must stay under the ceiling in `CLAUDE.md` §2.
 4. **Execution Phase:** Run the test suite (`pytest` or C++ binary). If tests fail, hand the errors back to `@developer` for iteration.
 5. **Quality Gate:** Once tests pass, call `@reviewer`. Its scope is the three
-   checks no gate makes — red-step scaffolding removed, every prose claim the
-   change touched still true, and actual LOC reconciled against the increment
-   doc's estimate. Readability and type safety are covered by ruff, mypy and
-   `-Werror`; do not spend the round re-asking for them. This step is the only
+   checks no gate makes (`reviewer.md` §5); do not spend the round re-asking
+   for what the gates cover. This step is the only
    unforced one in the loop, so ask for it explicitly rather than assuming green
    CI means done.
 6. **Performance Gate:** If the increment touches refine or mesh code, call
@@ -43,9 +41,9 @@ When a task (feature request or bug fix) is initiated, you must orchestrate the 
   first push, not after.
 * **State Updates:** Provide a concise, high-level log to the user after each milestone (e.g., "└─ @tester has generated 8 failing async tests. Transitioning to @developer...").
 * **Open every round with a recap:** at every new round or
-  increment, run `python3 tools/session_state.py` and open with its recap —
-  the last thing landed, what is in flight, the decisions waiting on Ola, the
-  next ROADMAP items — before anything else. Work spans days and the owner is
+  increment, run `python3 tools/session_state.py` and open with its recap
+  (its contents: `.claude/REQUIRED-READING.md`, step 1) before anything else.
+  Work spans days and the owner is
   not always present; the recap is what lets them pick the thread back up.
 * **Report only what is finished and verified:** as the main session,
   answer Ola's question first, then stop. Report only finished artefacts and
