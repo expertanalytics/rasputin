@@ -1,6 +1,8 @@
 # Harness U1: queue, don't wait (with the U0 probes)
 
-Status: design (@architect, 2026-09-30); U0 run, results in §2.5. No code. Source:
+Status: **implemented, in review.** Red `18bdab5`; green `6a19357`. Review
+round 1 asked for changes; each amendment is marked *(review 1)* where it
+stands. Designed by @architect, 2026-09-30; U0 results in §2.5. Source:
 `docs/research/unattended-mode.md` (merged in #122), cited below as *the
 design*, including *Ola's rulings (2026-09-30)* at its end. This file does not
 restate the design; it fixes what U1 builds, exactly enough for `@tester` to
@@ -326,6 +328,14 @@ keep-awake stopper.
 6. **Write** the flag (§3.2) with `until = now + minutes × BUFFER`, then
    append `{"event": "enter", "since", "until"}` to `harness/windows.jsonl`
    (U2's SUSPECT mark reads it; design §4).
+   *(review 1)* The flag write (creating the dir, the temporary file, the
+   dump and the `os.replace`) is one unit. If it raises `OSError`, `away.py`
+   calls `stop(<pid step 5 started>)` when that pid is not `null`, removes
+   the temporary file if it was created, prints to stderr
+   `away.py could not write the flag (<ExceptionType>: <message>); keep-awake stopped, nothing changed.`
+   and exits 1, with nothing on stdout and no `windows.jsonl` line. This is
+   what "any failure writes nothing and starts nothing" means after step 5
+   has started a process.
 7. **Confirm on the terminal** (stdout), exit 0:
    `UNATTENDED until <local> (<UTC ISO>). Keep-awake: caffeinate pid <pid>. Guarded acts are refused and queued. End early: python3 tools/away.py --back`
 
@@ -351,6 +361,22 @@ ASK OLA lines in .claude/current-task/:
 With no flag the first line is `No unattended flag was set.`; an empty or
 absent queue prints `(none)`. Archive: `queue.jsonl` is renamed to
 `queue-<UTC date>.jsonl`, or appended to that file and removed if it exists.
+
+*(review 1)* An entry whose `branch` is `null` or missing is grouped under
+`  (no branch)`, the same text the recap uses (§3.8).
+
+*(review 1)* **`--back` survives a broken `session_state.py`.** `away.py`
+imports `pending_decisions` from `session_state.py` inside
+`try` / `except Exception`. If the import fails, `--back` still stops the
+keep-awake, deletes the flag, appends the `back` line, prints the summary and
+archives the queue, and exits 0; under `ASK OLA lines in .claude/current-task/:`
+it prints the one line `  (unavailable: <ExceptionType>: <message>)`. Entering
+does not need `session_state` and is unaffected.
+
+`away.py`'s own `import harness_mode` stays unguarded, deliberately. `away.py`
+runs in Ola's terminal, so a traceback there is seen, not swallowed; and a
+missing `harness_mode` fails safe for the agents, because every guard that
+cannot import it denies what it would have asked (§3.9).
 
 ### 3.4 `tools/harness_mode.py`: `decide` and the queue
 
@@ -449,10 +475,21 @@ Three changes; the Bash arm's WRITES scan is otherwise unchanged.
    - Bash naming `.git/harness` together with a WRITES match or any of
      `rm`, `touch`, `ln`, `mkdir`, `unlink`, `install` as a word;
    - Bash running `away.py`: a segment (as in §3.5) with a token whose
-     basename is `away.py`, unless the segment's first token is one of
-     `cat`, `less`, `head`, `tail`, `grep`, `rg`, `wc`, `diff`, `ls`, `git`,
-     `ruff`, `mypy`, `pytest`, or `sed` without `-i`. A `script`, `expect`
-     or `unbuffer` wrapper is thereby denied too.
+     basename is `away.py`, unless the segment is a **reader**. The readers
+     are `cat`, `less`, `head`, `tail`, `grep`, `rg`, `wc`, `diff`, `ls`,
+     `git`, `ruff`, `mypy`, `pytest`, and `sed` without `-i`.
+     *(review 1)* A segment is a reader when **the basename** of its first
+     token is one of them (`../../../.venv/bin/mypy`, `/usr/bin/grep`), or
+     when the basename of its first token matches `python(3(\.\d+)?)?`, the
+     second token is `-m`, and the third is one of them
+     (`python3 -m ruff check tools/away.py`). Anything else naming
+     `away.py` is denied: `python3 tools/away.py`,
+     `.venv/bin/python3 tools/away.py --back`, `env python3 tools/away.py`,
+     and a `script`, `expect` or `unbuffer` wrapper.
+     Like §3.5, this is a text scan and a tripwire: an executable named `cat`,
+     `python3 -m away` run from `tools/`, or `python3 -c "import away; ..."`
+     gets past it. What it must not do is refuse the reads and gates the
+     green and review steps run on `away.py`; the basename rule fixes that.
 
    Reason: `Only Ola enters or leaves unattended mode, and only hooks and away.py write the harness state. Nothing is queued: this act is not an agent's to wait for.`
 
@@ -467,6 +504,8 @@ queue entry and:
 | `PreToolUse`, `tool_name == "AskUserQuestion"` | `AskUserQuestion: <first question, 200 chars>` | PreToolUse `deny` with the queue reason; `why` = `a question needs Ola; write it as the ASK OLA line` |
 | `PermissionRequest` | `<tool_name>: <command or file_path, 200 chars>` | `{"hookSpecificOutput": {"hookEventName": "PermissionRequest", "decision": {"behavior": "deny", "message": <queue reason>}}}`; `why` = `a permission prompt needs Ola` |
 | `ConfigChange` | `ConfigChange <source> <file_path>` | `{"decision": "block", "reason": "unattended: configuration changes wait for Ola"}` |
+
+Its failure outputs (a crash, or `harness_mode` missing) are in §3.9.
 
 `@tester` checks the two output shapes against the `hooks` page (sections
 *PermissionRequest* and *ConfigChange*) before pinning them; if the page
@@ -485,14 +524,36 @@ Inside the recap, after *Waiting on Ola*, whenever `queue.jsonl` holds a line
 `Queued while unattended (<n>):`, then the newest 10 as
 `  <at> <branch> <hook> <agent_type or main>: <act, 100 chars>`, then
 `  ... <n-10> older` if more, and `  (<k> unreadable lines)` if any.
+*(review 1)* A `null` or missing `branch` prints as `(no branch)`, never
+`None`, as in `--back` (§3.3). Each added line is under 200 characters, so
+the recap stays far below the 10,000-character cap.
 
-Then, per the design's U1 row and §6 (*An uncommitted rule edit in the live
-checkout*): `Uncommitted rule-file changes:` and `  <worktree> <path>` for
-each path in `git status --porcelain` of each worktree in
-`git worktree list --porcelain` for which `governed()` (imported by path from
-`.claude/hooks/guard_governance.py`) is true; at most 10 lines, then
-`  ... <n> more`. Omitted when there are none. Each added line is under 200
-characters, so the recap stays far below the 10,000-character cap.
+*(review 1)* **Moved to U3: the uncommitted rule-file scan.** The design's
+U1 row and its §6 row (*An uncommitted rule edit in the live checkout*) put
+`Uncommitted rule-file changes:` in the U1 recap. The green step's size
+fired the cut line of §5, and this scan was the named first cut. It goes to
+U3, next to the "not in force" context it belongs with. What U1 loses is
+small: at night U1 denies every rule-file edit (§3.6 item 1), so no new
+uncommitted rule edit can appear while Ola is away. What remains is a daytime
+edit left uncommitted, which Ola was present for. The cut also removes the
+recap's only import of hook code (`governed()`, loaded by path from
+`guard_governance.py`), and with it the second failure of review 1, item 3b.
+
+*(review 1)* **The recap survives a broken harness.** `session_state.py`
+imports `harness_mode` inside `try` / `except Exception`. `print_recap` wraps
+reading the state dir, the mode and the queue in `try` / `except Exception`.
+If either fails, the first line (the slot of the header above) is
+
+```
+UNATTENDED STATE UNKNOWN (<ExceptionType>: <message>): the recap could not read the flag or the queue. Guarded acts may be refused; record each refusal as an ASK OLA line and continue.
+```
+
+with `<ExceptionType>: <message>` cut to 200 characters. The queue section is
+then omitted. Everything else prints as usual: `== recap ==`, *Last landed*,
+*In flight*, *Waiting on Ola* with its `ASK OLA` lines, *Next on ROADMAP.md*,
+and the current-task section; the exit status is 0. The recap is the channel
+that tells a cold session what Ola is waiting on, so a harness fault costs
+one line, never the recap.
 
 ### 3.9 Failure direction
 
@@ -503,6 +564,31 @@ characters, so the recap stays far below the 10,000-character cap.
   into a pass. Unparseable stdin still prints nothing, as today.
 - A hook that cannot import `harness_mode` denies whatever it would have
   asked, with the import error as the reason.
+- *(review 1)* **`guard_unattended.py` follows both rules above.** Once stdin
+  parses as a JSON object, everything after it (`act_of`, the import of
+  `harness_mode`, the decision, the output) runs inside
+  `try` / `except Exception`. On an exception, **in both modes**, it prints
+  the refusal shape for its event, built without `harness_mode` (which may be
+  the thing that is missing), and exits 0:
+
+  | Event | Output on failure |
+  |---|---|
+  | `PreToolUse` | `{"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "deny", "permissionDecisionReason": R}}` |
+  | `PermissionRequest` | `{"hookSpecificOutput": {"hookEventName": "PermissionRequest", "decision": {"behavior": "deny", "message": R}}}` |
+  | `ConfigChange` | `{"decision": "block", "reason": R}` |
+  | anything else, or stdin a JSON value that is not an object | nothing |
+
+  `R` is
+  `guard_unattended failed (<ExceptionType>: <message>), so this is refused rather than left for a prompt nobody may answer. It is not queued: record it as an ASK OLA line (main session: in session.md; subagent: in its handback) and continue.`
+  Nothing is queued: the queue writer is `harness_mode`, which is either
+  missing or the thing that failed.
+  The cost is by day: a broken `guard_unattended` refuses every
+  `AskUserQuestion` and every permission prompt until it is fixed, and each
+  refusal names the error. The other direction, exit 1 with nothing on
+  stdout, lets the prompt through, and at night a prompt waits for nobody.
+  That is the stall U1 exists to remove, so the visible refusal wins.
+- *(review 1)* `session_state.py` and `away.py --back` never stop at a
+  harness fault; their outputs are pinned in §3.8 and §3.3.
 - Docstring lines U1 makes false are corrected in U1: `guard_push`'s
   "`ask`, not `deny`" and `guard_governance`'s "DECISION IS `ask`, NEVER
   `deny`" each gain the unattended exception. No other docstring text moves;
@@ -514,6 +600,7 @@ characters, so the recap stays far below the 10,000-character cap.
   listing and SUSPECT mark, the prompt-ack arm, `REWORK` lines (**U2**).
 - Night-time rule-file edits (allowed and logged on a branch), the pending
   journal, the "not in force" context, the `SubagentStart` hook (**U3**).
+- *(review 1)* The uncommitted rule-file scan in the recap (**U3**, §3.8).
 - R-B, a subagent's `ask` becoming `deny` by day (generic-harness step 8).
 - The profile, `profile.toml` (generic-harness step 4).
 - Signed acks (backlog, ruling 9).
@@ -554,8 +641,10 @@ paragraph is added (the design's §7 text, cut to what U1 enforces):
 
 "in a separate terminal" stands: probe (b) found no terminal behind `!`
 (§2.5). The `--back` clause rests on probe (b′), `!` bypassing PreToolUse,
-and on `--back` needing no terminal (§3.3). The file is governed, so the
-edit asks when `@developer` makes it.
+and on `--back` needing no terminal (§3.3). The file is governed, so
+`guard_governance` returns `ask` for the edit (T6 pins that verdict).
+*(review 1)* Whether that `ask` reaches Ola depends on the session's
+permission mode, and in auto mode it did not: see §6 item 4.
 
 ---
 
@@ -588,7 +677,7 @@ README's sense: no mutation round.
 | T4 | `guard_push`, each command below, **flag off, on, expired** | off and expired: `ask` rows ask, `pass` rows print nothing. On: `ask` rows deny with the queue reason and add one queue line (`hook` = `guard_push`, `act` = the command); `pass` rows print nothing and add none |
 | T5 | `guard_push`, broken flag, `git push` | `deny`, broken reason, one queue line |
 | T6 | `guard_governance`, Edit/Write of `CLAUDE.md` and of each new member (`tools/away.py`, `tools/harness_mode.py`, `tools/session_state.py`, `.claude/profile.toml`, `.claude/skills/x/SKILL.md`, `<tmp>/.git/hooks/pre-commit`, `<tmp>/.git/config`), flag off and on | off: `ask`; on: `deny` + queue line. `src/app/config` and `docs/config`: nothing, both modes |
-| T7 | `guard_governance`, always-denied acts (§3.6 item 3), flag off **and** on | `deny`, no queue line: Write `<tmp>/.git/harness/unattended.json`; Bash `echo {} > .git/harness/unattended.json`, `rm .git/harness/unattended.json`, `python3 tools/away.py 8h`, `tools/away.py --back`, `script -q /dev/null python3 tools/away.py 8h`. Nothing: `cat .git/harness/queue.jsonl`, `cat tools/away.py`, `git diff tools/away.py`, `pytest tests/python/test_away.py` |
+| T7 | `guard_governance`, always-denied acts (§3.6 item 3), flag off **and** on | `deny`, no queue line: Write `<tmp>/.git/harness/unattended.json`; Bash `echo {} > .git/harness/unattended.json`, `rm .git/harness/unattended.json`, `python3 tools/away.py 8h`, `tools/away.py --back`, `script -q /dev/null python3 tools/away.py 8h`. Nothing: `cat .git/harness/queue.jsonl`, `cat tools/away.py`, `git diff tools/away.py`, `pytest tests/python/test_away.py`. *(review 1)* Nothing, too: `../../../.venv/bin/mypy tools/away.py`, `/usr/bin/grep -n x tools/away.py`, `python3 -m ruff check tools/away.py`, `python -m mypy tools/away.py`. Denied, too: `.venv/bin/python3 tools/away.py --back`, `env python3 tools/away.py 8h`, `python3 -m ruff check x && python3 tools/away.py --back` |
 | T8 | subagent event (`agent_id`, `agent_type: "tester"`), `git push` | off: `ask`; on: `deny`, and the queue line carries both fields |
 | T9 | crash and bad input | `tool_input` a JSON list: `deny`, both modes, both guards. Stdin not JSON: nothing |
 | T10 | `tools/harness_mode.py` deleted from the copy, `git push` | `deny`, reason names the import error |
@@ -596,10 +685,14 @@ README's sense: no mutation round.
 | T12 | `away.py` with **no terminal**: subprocess of the copy, `start_new_session=True`, stdin `DEVNULL`, argument `8h` | exit 3; stderr contains `needs your own terminal`; no flag, no `windows.jsonl`. In process, `open_tty` raising `OSError(ENXIO)`: `spawn` never called |
 | T13 | `away.py` duration, in process | `8h`, `90m`, `1h30m`, `72h` accepted (480, 90, 90, 4320 min); `72h1m`, `0h`, `0m`, empty, `8`, `8x`, `-1h`, `1.5h`: exit 2, no flag |
 | T14 | `away.py 8h`, fake tty answering `y` | exit 0; flag with `until − since` = 9 h 36 min, mode `0o600`; `spawn` called with `["caffeinate", "-is", "-t", "34560"]`; flag's `keep_awake_pid` = the fake's pid; one `enter` line in `windows.jsonl`; stdout contains `UNATTENDED until`. Answers `n` and empty: exit 1, no flag, no spawn |
-| T15 | `away.py` edge cases | `spawn` raising `FileNotFoundError`: flag written, `keep_awake_pid` null, stdout contains `not started`. Re-entering while `on`: `stop` called with the old pid, prompt contains `replaces the window` |
+| T15 | `away.py` edge cases | `spawn` raising `FileNotFoundError`: flag written, `keep_awake_pid` null, stdout contains `not started`. Re-entering while `on`: `stop` called with the old pid, prompt contains `replaces the window`. *(review 1)* The state dir `<tmp>/.git/harness` made read-only (`0o500`) before `away.py 8h`, fake tty answering `y`: exit 1; stderr contains `could not write the flag` and `keep-awake stopped`; `stop` called with the spawned fake's pid; no `unattended.json`, no `windows.jsonl`; stdout does not contain `UNATTENDED until` |
 | T16 | the stopper, real processes | a `sleep 30` child's pid is not signalled (alive afterwards); a non-`int` pid is ignored |
-| T17 | `away.py --back` | with a flag, 3 queue lines on 2 branches, and an `ASK OLA:` line in `.claude/current-task/session.md`: stdout groups by branch and lists the line; flag gone; `queue.jsonl` gone and `queue-<date>.jsonl` holds 3 lines; one `back` line in `windows.jsonl`; `stop` called with the pid. A second `--back` appends to the same archive. No flag: `No unattended flag was set.`, exit 0 |
-| T18 | recap | on, broken, expired: the first line of §3.8 in each case; off: no such line. 12 queue lines: 10 shown and `... 2 older`; one non-JSON line: `(1 unreadable lines)`; no queue: no section. `CLAUDE.md` modified in the repository and in a second worktree (`git worktree add`): both listed; a modified `notes.txt` is not |
+| T17 | `away.py --back` | with a flag, 3 queue lines on 2 branches, and an `ASK OLA:` line in `.claude/current-task/session.md`: stdout groups by branch and lists the line; flag gone; `queue.jsonl` gone and `queue-<date>.jsonl` holds 3 lines; one `back` line in `windows.jsonl`; `stop` called with the pid. A second `--back` appends to the same archive. No flag: `No unattended flag was set.`, exit 0. *(review 1)* A queue line with `branch` `null` is listed under `  (no branch)` |
+| T18 | recap | on, broken, expired: the first line of §3.8 in each case; off: no such line. 12 queue lines: 10 shown and `... 2 older`; one non-JSON line: `(1 unreadable lines)`; no queue: no section. *(review 1)* A queue line with `branch` `null` prints `(no branch)` in the branch position, and no recap line contains `None`. The uncommitted-rule-file case is removed (moved to U3, §3.8): `CLAUDE.md` modified leaves no `Uncommitted rule-file changes:` line |
+| T19 | *(review 1)* `guard_unattended`, crash after parsing, flag off **and** on: `PreToolUse` `AskUserQuestion` and `PermissionRequest`, each with `tool_input` a JSON list | the failure shape of §3.9 for the event; reason starts `guard_unattended failed (` and contains `It is not queued`; exit 0; no queue line. Stdin a top-level JSON list, and stdin not JSON: nothing, exit 0 |
+| T20 | *(review 1)* `guard_unattended` with `tools/harness_mode.py` deleted from the copy, each of the three events of §3.7 | the failure shape of §3.9 for each event; reason contains `guard_unattended failed (ModuleNotFoundError`; exit 0 |
+| T21 | *(review 1)* recap with a broken harness, with an `ASK OLA:` line in `.claude/current-task/session.md`: (i) `tools/harness_mode.py` deleted from the copy; (ii) the copy's `harness_mode.py` with `def read_mode(*a, **k): raise RuntimeError("planted")` appended | exit 0; first line starts `UNATTENDED STATE UNKNOWN (ModuleNotFoundError: ` in (i), and in (ii) is `UNATTENDED STATE UNKNOWN (RuntimeError: planted): ` followed by the rest of §3.8's text; `== recap ==`, the `ASK OLA:` line under *Waiting on Ola*, and `Next on ROADMAP.md:` all print; no `Queued while unattended` line |
+| T22 | *(review 1)* `away.py --back` with the copy's `tools/session_state.py` replaced by `raise RuntimeError("planted")`, a flag and one queue line | exit 0; stdout contains `ASK OLA lines in .claude/current-task/:` then `  (unavailable: RuntimeError: planted)`; flag gone; queue archived; one `back` line in `windows.jsonl` |
 
 **T4's commands.** Ask: `git update-ref refs/remotes/origin/master HEAD`;
 `git -C /x update-ref -d refs/heads/y`; `git remote add up u`;
@@ -618,6 +711,15 @@ Pass: `git remote -v`; `git remote get-url origin`; `git config user.email`;
 `gh api -X GET repos/o/r/pulls -f state=open`; `curl https://api.github.com/x`;
 `curl -X POST https://example.org/x`; `git status`.
 
+*(review 1)* **Test cleanup for `@tester`**, in the same amendment commit:
+the red-step messages "does not exist yet" go
+(`tests/python/harness_fixtures.py:184` and `:239`,
+`tests/python/test_away.py:157` and `:419`, as of `6a19357`), since the
+files exist. The `make_repo` docstring in `harness_fixtures.py` (its
+"uncommitted-rule-file scan (§3.8)" sentence) and
+`test_recap_lists_uncommitted_rule_files_in_every_worktree` in
+`test_session_state.py` follow that scan's move to U3.
+
 **Pinned by the red suite where this file left a shape open** (`@tester`):
 `open_tty()` returns a text file object open for reading and writing (as
 `open("/dev/tty", "r+")`); the prompts of §3.3 step 3 are written to it and
@@ -635,23 +737,63 @@ flag, and branches appear in order of first appearance in the queue. The
 
 ## 5. Estimate
 
-Production lines as `CLAUDE.md` §2 counts them (tests excluded):
+Production lines as `CLAUDE.md` §2 counts them (tests excluded).
 
-| File | Lines |
+*(review 1)* **Measured at green `6a19357`.** The count is of lines the
+diff `18bdab5..6a19357` adds that are neither blank, comment nor docstring
+(Python's `tokenize` and `ast`, with a docstring being a body's first string
+statement). @reviewer's count and this one agree. The U0 probe scripts in
+`docs/increments/h3-probes/` are evidence, not production, and are not
+counted.
+
+| File | Design estimate | Measured |
+|---|---|---|
+| `tools/away.py` (new) | ~120 | 209 |
+| `tools/harness_mode.py` (new) | ~110 | 159 |
+| `.claude/hooks/guard_push.py` (segmenter, six matchers, routing) | +~70 | +104 |
+| `.claude/hooks/guard_governance.py` (members, always-deny, routing) | +~40 | +78 |
+| `tools/session_state.py` (header, queue, uncommitted scan) | +~40 | +70 |
+| `.claude/hooks/guard_unattended.py` (new) | ~45 | 44 |
+| `pyproject.toml` | — | +1 |
+| `.claude/settings.json` | +~16 | not yet changed (§3.11) |
+| **Total** | **~440** | **665** |
+
+Counted net (added minus removed counted lines), the Python total is 619;
+the ceiling is read against the added figure, the stricter one.
+
+**The 600 cut line fired, and the cut is taken.** The green step ran to 665,
+over the 600 this section set, and review 1's fixes add more. The named first
+cut, the uncommitted-rule-file scan of §3.8, moves to U3 (§3.8 says what U1
+loses). It removes `uncommitted_rules` (21 counted lines) and
+`import importlib.util` (1): **-22**, to 643.
+
+**The review-1 fixes**, estimated:
+
+| Fix | Lines |
 |---|---|
-| `tools/harness_mode.py` (new) | ~110 |
-| `tools/away.py` (new) | ~120 |
-| `.claude/hooks/guard_push.py` (segmenter, six matchers, routing) | +~70 |
-| `.claude/hooks/guard_governance.py` (members, always-deny, routing) | +~40 |
-| `.claude/hooks/guard_unattended.py` (new) | ~45 |
-| `tools/session_state.py` (header, queue, uncommitted scan) | +~40 |
-| `.claude/settings.json`, `pyproject.toml` | +~16 |
-| **Total** | **~440**, against the ceiling of 700 |
+| `guard_unattended.py`: catch-all and the three failure shapes (§3.9) | +~14 |
+| `session_state.py`: guarded import, guarded state read, UNKNOWN header (§3.8) | +~12 |
+| `away.py`: guarded `session_state` import, flag-write rollback (§3.3) | +~13 |
+| `guard_governance.py`: basename and `python -m` readers (§3.6) | +~3 |
+| `(no branch)` in the recap | +~0 |
+| **Subtotal** | **+~42** |
 
-Above the design's ~260 because this file fixes what that figure left open:
-the per-pattern parsing of §3.5, and the exact `--back` and recap formats.
-If the green step runs over 600, the first cut is the uncommitted-rule-file
-scan of §3.8 (~20 lines), which moves to U3.
+That gives **~685**. The `.claude/settings.json` wiring of §3.11 is still to
+come; written one hook entry per line, as `{"matcher": ..., "hooks": [...]}`,
+it is ~7 lines, for **~692: about 8 under the ceiling of 700.** That margin
+is too thin to spend on anything else, so:
+
+- The count is re-measured after the fix commit, by `@reviewer`, in the
+  same way as above, with the settings change included once it exists.
+- If the measured total with settings exceeds 700, **no behaviour is cut**:
+  the `.claude/settings.json` wiring moves to its own PR, merged right after
+  U1 with Ola's yes (it needs a fresh yes in any case, §3.11). Until that PR
+  merges, `guard_unattended.py` is in the tree but not wired, and
+  `AskUserQuestion`, permission prompts and configuration reloads still wait
+  for Ola at night. `.claude/REQUIRED-READING.md` (*The harness*) lists
+  `guard_unattended.py` among the hooks active in `.claude/settings.json`;
+  that clause would then be false, so it moves to the settings PR with the
+  wiring.
 
 ---
 
@@ -662,8 +804,19 @@ scan of §3.8 (~20 lines), which moves to U3.
 2. **The U1 settings change** (§3.11, items 1-3), one fresh yes when
    `@developer` reaches it.
 3. **Leaving sessions in auto mode**, the only mode probe (c) covers (§2.5).
-4. **Prompts during the green step**: `@developer` edits governed files
-   (`.claude/hooks/*`, `tools/session_state.py`, the new `tools/away.py` and
-   `tools/harness_mode.py` once governed, `.claude/REQUIRED-READING.md`), so
-   the green step runs while Ola is at the keyboard.
+4. **Governed-file edits in auto mode** *(review 1, corrected)*. This item
+   used to say the green step would prompt Ola, because `@developer` edits
+   governed files. What happened: the green step (`6a19357`) ran in auto
+   mode, `@developer` edited `.claude/hooks/*`, `tools/session_state.py` and
+   `.claude/REQUIRED-READING.md`, and the main session reports that no prompt
+   reached Ola for any of those edits, although the live `guard_governance`
+   returns `ask` for each. The cause is not established. One explanation that
+   fits is that in auto mode a hook's `ask` goes to the auto-mode classifier
+   rather than to Ola; `.claude/REQUIRED-READING.md` (*The harness*) already
+   says the same of the push guard ("auto mode can let an unapproved push
+   through"). For U1 this means: by day, in auto mode, the governance `ask`
+   is not a guaranteed human checkpoint for rule-file edits; the review step
+   and Ola's reading of the diff are. At night U1's `deny` does not depend on
+   anyone answering. U1 changes no rule text for this; it is recorded here as
+   an observation for the generic-harness work.
 5. The push and the PR, as always.
