@@ -260,3 +260,19 @@ the permission system is that backstop: `git push` appears nowhere in
 through on 2026-09-17 under the auto mode configured in
 `~/.claude/settings.json`. Until a hook is approved, the rule above is the
 agent's own to keep, with nothing underneath it.
+
+**Activated.** Ola approved `guard_push.py`, `guard_governance.py` and
+`gates_after_commit.py` on 2026-09-29 (PR #113; the audit is
+`docs/retrospectives/2026-09-29-orchestrator-and-hooks-audit.md`). He approved
+`SessionStart` running `tools/session_state.py` on 2026-09-30 (PR #115). The
+incident behind `SessionStart`: on 2026-09-29 a stale `session.md`, read by
+hand, led the main session to report the finished Holleia report as
+unfinished.
+
+## Data, scratch and temp folders: a preventive ruling
+
+No incident preceded this rule. Ola, 2026-09-29: "What I can't tolerate is two
+agents trying to communicate through the rasputin_folder or the temp folder.
+That would violate the harness to protect against role bleed." Ola granted
+write access to `../rasputin_data` and `../rasputin_scratch` the same day,
+and this rule came with it.
