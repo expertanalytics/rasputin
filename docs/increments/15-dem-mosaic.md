@@ -47,12 +47,17 @@ open. Written by `@architect` before
     since 16). This keeps the sup-norm guarantee against the source DEM, not
     only against the resampled grid (B6 measured up to 13 m between the two at
     30 m).
-  - **Q7 and Q8 follow from Q6.** The output CRS is the target TIN CRS, so
-    the open point is only how it is named on the command line. The grid is
+  - **Q7 and Q8 follow from Q6.** The output CRS is the target TIN CRS; still
+    open is Q7's choice between a required `--out-crs` (a) and an
+    automatically fitted projection (b). The grid is
     square in a real projection, so there is no anisotropy limit and 21b's
     integer incircle applies.
 - **2026-09-30, Q9 (memory): "32 GB is fine."** A dense canvas for the basin,
   as designed; no block-sparse raster and no decomposition for memory's sake.
+  R8 (A) as first written needed a second full-size array. At 8.6 GiB per
+  canvas and a cap of half of physical memory, two canvases would not fit
+  on 32 GB, so the 15c redesign must stream the source by window into the
+  one target canvas.
 - Still open: Q10 (the ANADEM test fixture), the basin tolerance, and whether
   commercial use matters for the DEM choice.
 - **2026-09-28, Q1 revised: overlaps that disagree are split down the middle
@@ -329,7 +334,8 @@ modified data apply at least (its notice, plus a notice of modification).
   compound terrain derivatives", *Transactions in GIS* 8(1):83-111, 2004. Both
   recalled, not reread. They study derived attributes (slope, flow). Our
   concern is narrower: resampling changes the surface the sup-norm is measured
-  against. **Difference:** we do not resample (R8).
+  against. **Difference:** we do not resample (R8). *Superseded 2026-09-30:
+  Q6 ruled resampling, with a final check against the source DEM.*
 - **Mosaicking and warping practice, for reference only (no GDAL).**
   `gdalbuildvrt` composites overlapping sources in order, later over earlier.
   `gdalwarp` maps every destination pixel back through the inverse transform,
@@ -625,6 +631,10 @@ a 32 GiB machine**, with two conditions:
   domain decomposition. Neither is designed here (Q9).
 
 ### R8. The computation frame [15c; basin, after Norway]
+
+> **Superseded 2026-09-30:** Ola ruled (A), projection onto the target TIN CRS
+> and resampling, plus a final check against the source DEM; see "Ruled by
+> Ola". The text below, which recommends (C), is kept as the record.
 
 **The question.** The core wants numbers in one Cartesian frame, roughly in
 metres, with square cells if 21b's integer incircle is to apply (`dx == dy`,
@@ -1453,7 +1463,7 @@ after the transform, with their assertions unchanged.
   `docs/benchmarks/<date>/`, with the power state.
 - For all: every gate in `CLAUDE.md` §4 green, and CI green.
 
-## Questions for Ola (Q1-Q5 ruled 2026-09-27, see "Ruled by Ola"; Q6-Q10 open)
+## Questions for Ola (Q1-Q5 ruled 2026-09-27; Q6 and Q9 ruled 2026-09-30, Q7-Q8 follow, Q7's form open; Q10 open; see "Ruled by Ola")
 
 Q1-Q5 are about Norway and are needed before 15a starts. Q6-Q10 are about
 the basin and can wait until after Norway.
@@ -1507,7 +1517,8 @@ off the other 246, and are one or two nodes larger.
   every value becomes the average of two). That is resampling (R8), and its
   own increment.
 
-**Q6 (the basin). The computation frame.**
+**Q6 (the basin). The computation frame.** *Ruled 2026-09-30: (b), resample,
+with a final check against the source DEM; see "Ruled by Ola".*
 - **(a) The lattice frame: mesh in an affine image of the DEM's own grid,
   transform the domain in and the mesh out. Recommended.** The tolerance holds
   exactly at the DEM's own nodes. Triangle shapes are judged in a frame up to
@@ -1525,7 +1536,9 @@ off the other 246, and are one or two nodes larger.
 - (b) Fit an LCC to the domain automatically, and record it as WKT2.
 - (c) Write longitude and latitude. Exact, with no bending, but in degrees.
 
-**Q8 (the basin). The anisotropy limit and the square frame.**
+**Q8 (the basin). The anisotropy limit and the square frame.** *Moot since
+Q6's ruling: the resampled grid is square in a real projection, so there is no
+anisotropy limit and no latitude refusal.*
 - **(a) A square frame (21b's integer incircle applies) and a limit of 10 %:
   the basin passes (6.5 %); geographic DEMs above about 25° latitude are
   refused. Recommended.**
