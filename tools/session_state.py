@@ -30,7 +30,6 @@ Usage: python3 tools/session_state.py [--turns N]
 from __future__ import annotations
 
 import argparse
-import importlib.util
 import json
 import os
 import re
@@ -39,10 +38,16 @@ import subprocess
 import sys
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 REPO = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO / "tools"))
-import harness_mode  # noqa: E402
+if TYPE_CHECKING:  # imported in print_recap, where a harness fault costs one line (§3.8)
+    import harness_mode
+UNKNOWN = (
+    "UNATTENDED STATE UNKNOWN ({}): the recap could not read the flag or the queue. "
+    "Guarded acts may be refused; record each refusal as an ASK OLA line and continue."
+)
 
 SLUG = re.sub(r"[^A-Za-z0-9]", "-", str(REPO))
 TRANSCRIPTS = Path.home() / ".claude" / "projects" / SLUG
@@ -215,7 +220,7 @@ def queued(state: Path | None) -> list[str]:
         try:
             entry = json.loads(line)
             entries.append(
-                f"  {entry['at']} {entry['branch']} {entry['hook']} "
+                f"  {entry['at']} {entry.get('branch') or '(no branch)'} {entry['hook']} "
                 f"{entry.get('agent_type') or 'main'}: {str(entry['act'])[:100]}"
             )
         except (ValueError, KeyError, TypeError):
@@ -228,36 +233,16 @@ def queued(state: Path | None) -> list[str]:
     return lines
 
 
-def uncommitted_rules(repo: Path) -> list[str]:
-    """Governed files with uncommitted changes, in every worktree of the repository."""
-    hook = repo / ".claude" / "hooks" / "guard_governance.py"
-    spec = importlib.util.spec_from_file_location("guard_governance", hook)
-    if spec is None or spec.loader is None or not hook.is_file():
-        return []
-    guard = importlib.util.module_from_spec(spec)
-    sys.dont_write_bytecode = True  # a __pycache__ under .claude/hooks/ is itself governed
-    spec.loader.exec_module(guard)
-    found = []
-    for line in (_git(repo, "worktree", "list", "--porcelain") or "").splitlines():
-        if not line.startswith("worktree "):
-            continue
-        tree = line.removeprefix("worktree ")
-        for change in (_git(Path(tree), "status", "--porcelain") or "").splitlines():
-            # Split, not slice: _git strips the output, eating the first line's
-            # leading status space.
-            path = change.split(None, 1)[-1].split(" -> ")[-1]
-            if guard.governed(path):
-                found.append(f"  {tree} {path}")
-    if not found:
-        return []
-    more = [f"  ... {len(found) - 10} more"] if len(found) > 10 else []
-    return ["Uncommitted rule-file changes:", *found[:10], *more]
-
-
 def print_recap() -> None:
     """Retrospective rule 5: the structured recap every round opens with."""
-    state = harness_mode.state_dir(REPO)
-    header = unattended_header(harness_mode.read_mode(state, datetime.now(UTC)))
+    try:
+        import harness_mode
+
+        state = harness_mode.state_dir(REPO)
+        header = unattended_header(harness_mode.read_mode(state, datetime.now(UTC)))
+        queue = queued(state)
+    except Exception as error:
+        header, queue = UNKNOWN.format(f"{type(error).__name__}: {error}"[:200]), []
     if header:
         print(header)
     print("== recap ==")
@@ -272,7 +257,7 @@ def print_recap() -> None:
     print("Waiting on Ola:" + ("" if decisions else " (none recorded as ASK OLA)"))
     for line in decisions:
         print(f"  {line}")
-    for line in (*queued(state), *uncommitted_rules(REPO)):
+    for line in queue:
         print(line)
     print("Next on ROADMAP.md:")
     for row in roadmap_next(_read(REPO / "ROADMAP.md", "")):

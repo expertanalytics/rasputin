@@ -69,7 +69,8 @@ GOVERNED_SUFFIXES = (".git/config",)
 #: guard becomes noise and gets disabled, which is how guards die.
 WRITES = re.compile(
     r"(>>?\s|<<\s*['\"]?\w*EOF|\bsed\s+-i|\btee\b|\bcp\b|\bmv\b|\bdd\b|\btruncate\b"
-    r"|\bgit\s+(checkout|restore|apply|revert)\b|\bpatch\b|\bpython3?\s+-\b)",
+    r"|\bgit\s+(checkout|restore|apply|revert)\b|\bpatch\b"
+    r"|\bpython3?\s+-(?!m\s+(?:ruff|mypy|pytest)\b)\b)",  # python -m <gate> is a read
 )
 
 
@@ -94,6 +95,7 @@ STATE_WRITES = re.compile(r"\b(rm|touch|ln|mkdir|unlink|install)\b")
 SEGMENTS = re.compile(r"&&|\|\||;|\||\n")
 READERS = {"cat", "less", "head", "tail", "grep", "rg", "wc", "diff", "ls", "git", "ruff",
            "mypy", "pytest"}
+PYTHON = re.compile(r"python(3(\.\d+)?)?")
 ALWAYS_DENIED = (
     "Only Ola enters or leaves unattended mode, and only hooks and away.py write the "
     "harness state. Nothing is queued: this act is not an agent's to wait for."
@@ -108,7 +110,9 @@ def runs_away(segment: str) -> bool:
         words = segment.split()
     if not any(word.split("/")[-1] == "away.py" for word in words):
         return False
-    first = words[0]
+    first = words[0].split("/")[-1]  # a reader by basename: ../../../.venv/bin/mypy
+    if PYTHON.fullmatch(first) and words[1:2] == ["-m"]:
+        first = (words[2:3] or [""])[0]  # python3 -m ruff reads; python3 away.py runs
     reads = first in READERS or (first == "sed" and not any(w.startswith("-i") for w in words))
     return not reads
 

@@ -30,7 +30,6 @@ from typing import Any, TextIO
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import harness_mode as hm
-from session_state import pending_decisions
 
 DURATION = re.compile(r"^(?:(\d+)h)?(?:(\d+)m)?$")
 USAGE = "usage: python3 tools/away.py <duration: 8h, 90m, 1h30m; at most 72h> | --back"
@@ -136,11 +135,25 @@ def enter(
         pid, awake = None, f"not started ({error})"
     since_iso, until_iso = now.isoformat(timespec="seconds"), until.isoformat(timespec="seconds")
     flag = {"since": since_iso, "until": until_iso, "set_by": "away", "keep_awake_pid": pid}
-    state.mkdir(mode=0o700, parents=True, exist_ok=True)
-    fd, temporary = tempfile.mkstemp(dir=state)  # created 0o600
-    with os.fdopen(fd, "w") as out:
-        json.dump(flag, out)
-    os.replace(temporary, state / "unattended.json")
+    temporary = None
+    try:  # one unit: on failure, undo step 5 and write nothing (§3.3 step 6)
+        state.mkdir(mode=0o700, parents=True, exist_ok=True)
+        fd, temporary = tempfile.mkstemp(dir=state)  # created 0o600
+        with os.fdopen(fd, "w") as out:
+            json.dump(flag, out)
+        os.replace(temporary, state / "unattended.json")
+    except OSError as error:
+        if pid is not None:
+            stop(pid)
+        if temporary is not None:
+            with contextlib.suppress(OSError):
+                os.unlink(temporary)
+        print(
+            f"away.py could not write the flag ({type(error).__name__}: {error}); "
+            "keep-awake stopped, nothing changed.",
+            file=sys.stderr,
+        )
+        return 1
     append(state / "windows.jsonl", {"event": "enter", "since": since_iso, "until": until_iso})
     print(
         f"UNATTENDED until {when(until)}. Keep-awake: {awake}. Guarded acts are refused and "
@@ -187,7 +200,12 @@ def back(root: Path, state: Path, now: datetime, stop: Callable[[object], None])
             )
     if not entries:
         print("  (none)")
-    decisions = pending_decisions(root / ".claude" / "current-task")
+    try:  # the recap module is optional to --back; the flag and the queue are not (§3.3)
+        from session_state import pending_decisions
+
+        decisions = pending_decisions(root / ".claude" / "current-task")
+    except Exception as error:
+        decisions = [f"(unavailable: {type(error).__name__}: {error})"]
     print("ASK OLA lines in .claude/current-task/:")
     for line in decisions or ["(none)"]:
         print(f"  {line}")

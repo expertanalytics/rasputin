@@ -29,32 +29,59 @@ def act_of(event: dict) -> tuple[str, str] | None:
     return None
 
 
+FAILED = (
+    "guard_unattended failed ({error}), so this is refused rather than left for a prompt "
+    "nobody may answer. It is not queued: record it as an ASK OLA line (main session: in "
+    "session.md; subagent: in its handback) and continue."
+)
+
+
+def refusal(name: str, reason: str) -> dict | None:
+    """The refusal in `name`'s shape, built without harness_mode (§3.7, §3.9)."""
+    if name == "PreToolUse":
+        return {"hookSpecificOutput": {"hookEventName": "PreToolUse",
+                                       "permissionDecision": "deny",
+                                       "permissionDecisionReason": reason}}
+    if name == "PermissionRequest":
+        return {"hookSpecificOutput": {"hookEventName": "PermissionRequest",
+                                       "decision": {"behavior": "deny", "message": reason}}}
+    if name == "ConfigChange":
+        return {"decision": "block", "reason": reason}
+    return None
+
+
 def main() -> int:
     try:
         event = json.load(sys.stdin)
     except (json.JSONDecodeError, ValueError):
         return 0
+    if not isinstance(event, dict):
+        return 0
+    try:
+        output = settle(event)
+    except Exception as error:  # after parsing, a crash refuses rather than waits (§3.9)
+        output = refusal(event.get("hook_event_name", ""), FAILED.format(
+            error=f"{type(error).__name__}: {error}"))
+    if output is not None:
+        print(json.dumps(output))
+    return 0
+
+
+def settle(event: dict) -> dict | None:
+    """The output for a parsed event, or None to let it through."""
     found = act_of(event)
     if found is None:
-        return 0
+        return None
     sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "tools"))
     import harness_mode
 
     act, why = found
     decision = harness_mode.settle(event, "guard_unattended", "ask", "", act, why)
     if decision.kind == "ask":  # attended: the normal question, prompt or reload
-        return 0
+        return None
     name = event["hook_event_name"]
-    if name == "PreToolUse":
-        output = harness_mode.pretool("deny", decision.reason)
-    elif name == "PermissionRequest":
-        output = {"hookSpecificOutput": {"hookEventName": "PermissionRequest",
-                                         "decision": {"behavior": "deny",
-                                                      "message": decision.reason}}}
-    else:
-        output = {"decision": "block", "reason": "unattended: configuration changes wait for Ola"}
-    print(json.dumps(output))
-    return 0
+    blocked = "unattended: configuration changes wait for Ola"
+    return refusal(name, blocked if name == "ConfigChange" else decision.reason)
 
 
 if __name__ == "__main__":
