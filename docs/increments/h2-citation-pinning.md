@@ -402,3 +402,5 @@ test 18 re-run in the real tree.
   - this file's status line and LOC section had not been updated;
   - §2.3's letter-label rule differed from the code, which uses the direct parent only; the spec was aligned to the code;
   - two design-doc citations quoted the pre-red C++ comments; they are now pinned at 7426b69.
+
+**Round 2, `@reviewer`, range `7426b69..5552702`: APPROVED.** All four blocking items are fixed and verified: the docstring count (b21ae61); the status and the measured +193; §2.3 matching `tools/check_citations.py`; the two pins, whose targets read at 7426b69. Both test files pass (147). `check_citations --base origin/master` exits 0 with nothing unpinned or broken, and its at-risk entries were re-read as quotations. ruff is clean. CI had not run (not pushed).
