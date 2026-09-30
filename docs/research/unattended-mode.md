@@ -232,13 +232,15 @@ push, `gh pr create`, `gh pr ready` and `gh pr merge`, in both modes. For
 each path in `changed(R)` it applies these rules, and the first one that
 matches refuses:
 
-| Condition | Refusal |
-|---|---|
-| the file is modified in the working tree or the index | "commit or discard it first; only committed content can be acknowledged" |
-| *B* could not be read from the forge, or its commit is missing locally | "cannot establish the base; run `git fetch`, or wait for the network" |
-| its blob at the merge-base differs from its blob at `B` now | "the base moved under this rule file: merge `B` in, then review again" |
-| the newest record for `(path, base_blob, head_blob)` is a `reject` | the reason Ola gave, and "rework or revert this file" |
-| there is no `ack` record for `(path, base_blob, head_blob)` | "run the review command" |
+Rows are cited by name, never by position.
+
+| Name | Condition | Refusal |
+|---|---|---|
+| `dirty` | the file is modified in the working tree or the index | "commit or discard it first; only committed content can be acknowledged" |
+| `no-base` | *B* could not be read from the forge, or its commit is missing locally | "cannot establish the base; run `git fetch`, or wait for the network" |
+| `stale-base` | its blob at the merge-base differs from its blob at `B` now | "the base moved under this rule file: merge `B` in, then review again" |
+| `rejected` | the newest record for `(path, base_blob, head_blob)` is a `reject` | the reason Ola gave, and "rework or revert this file" |
+| `no-ack` | there is no `ack` record for `(path, base_blob, head_blob)` | "run the review command" |
 
 For `gh pr merge` the hook resolves *R* to the PR's head
 (`gh pr view --json headRefOid`) and refuses if that is not the local
@@ -261,22 +263,20 @@ call made while the mode was on at PreToolUse time.
 tripwire only. So the one act that must be Ola's own, the push, shows him
 what it relies on:
 
-- the `ask` reason of every push, `gh pr create`, `gh pr ready` and
-  `gh pr merge` lists each ack in `changed(R)` as
-  `path  by  at  branch` (the `ask` reason is shown to the user,
-  §1). An ack Ola does not remember making, or one dated inside a night he
-  was away, is visible at the moment he says yes;
-- the review command refuses to run while the flag is on, and `away.py`
-  appends each window to `windows.jsonl`. The push prompt marks any
-  `by: "review"` ack whose `at` falls inside a recorded window as
-  **SUSPECT**. That log sits in the same store, so this check is also a
-  tripwire, but a forger now has to falsify two files in agreement;
-- stronger, optional (§9, Q9): the review command signs each ack with
-  `ssh-keygen -Y sign`, using a key that needs Ola's presence (a hardware
-  key, or an agent that confirms each use), and the gate verifies the
-  signature against `profile.unattended.allowed_signers`. No agent can
-  produce that signature while Ola is away. This is the only variant that is
-  more than a tripwire.
+- **The real backstop is the ack listing.** The `ask` reason of every
+  push, `gh pr create`, `gh pr ready` and `gh pr merge` lists each ack in
+  `changed(R)` as `path  by  at  branch` (the `ask` reason is shown to the
+  user, §1). An ack Ola does not remember making is visible at the moment
+  he says yes, whatever its fields claim.
+- **The SUSPECT mark catches careless forgeries only.** The review command
+  refuses to run while the flag is on, and no prompt ack is recorded while
+  the mode is on (above). So no genuine ack of any `by` can be dated inside
+  an away window. `away.py` appends each window to `windows.jsonl`, and the
+  push prompt marks as **SUSPECT** every ack, whatever its `by`, whose `at`
+  falls inside a recorded window. A forger who dates `at` outside every
+  window passes the mark without touching `windows.jsonl`.
+- Signed acks, the only variant that is more than a tripwire, are in the
+  backlog (ruling 9). They are not part of U1-U3.
 
 ---
 
@@ -319,10 +319,10 @@ it has been printed.
 | **The flag expires** while Ola is still away | The guards go back to `ask`, and the next guarded act stalls until he returns | This is the failure mode the mode was built to avoid, but it fails safe. The buffer and `max_hours` size it. The recap and the `SubagentStart` context state `until`, so the session can plan its work around it |
 | **The clock** | Only the expiry reads the clock, in UTC. Sleep, timezones and travel to an exhibition do not affect it. Moving the clock needs root | Nothing that grants anything depends on time. Acks are bound to blobs, not timestamps |
 | **The Mac sleeps** | The session freezes; nothing is lost | keep-awake is started by the same command. `-s` holds on AC only, and `away.py` says so when `pmset -g batt` reports battery |
-| **A merge in the morning with a stale ack** | Two cases: `B` moved and changed the same rule file, or the branch changed the file after the ack. The gate's second or fourth row refuses | The merge-base check means Ola never merges a rule diff computed against a base he did not see |
+| **A merge in the morning with a stale ack** | Two cases: `B` moved and changed the same rule file, or the branch changed the file after the ack. The gate's `stale-base` row refuses the first and `no-ack` the second, since the new `head_blob` has no ack | The merge-base check means Ola never merges a rule diff computed against a base he did not see |
 | **A rule-file edit hidden in an unrelated branch**, or made through a path the Bash tripwire could not read, once it is **committed** | `changed(R)` comes from `git diff` against a base read from the forge, so the gate catches it on a guarded push or merge. The review shows it with "no journal entry", which also says that the tripwire missed it | **Closed** for guarded publication. The gate does not depend on the journal, on the mode, on local refs, or on the branch's stated purpose. The rows below give its limits |
 | **The base is moved locally** (`git update-ref refs/remotes/origin/<base> HEAD`, or a repointed remote URL), so `changed(R)` comes out empty | *B* comes from `git ls-remote` against the profile's URL. Ref and remote writes are also guarded now (§3) | **Closed**, provided the forge is reachable. If it is not, the gate refuses |
-| **A forged ack or flag**, written through a path the scan cannot read | The flag: little is gained (§2). The ack: the gate passes | **Narrowed** by the push prompt's ack listing and the SUSPECT mark (§4). **Closed** only by signed acks (§9, Q9) |
+| **A forged ack or flag**, written through a path the scan cannot read | The flag: little is gained (§2). The ack: the gate passes | **Narrowed** by the push prompt's ack listing; the SUSPECT mark catches only a forgery dated inside an away window (§4). **Accepted** beyond that: signed acks would close it, and they are in the backlog (ruling 9) |
 | **An uncommitted rule edit in the live checkout** that the tripwire missed | It is in force now for every session and persona that reads it, and it never reaches the push gate | **Narrowed.** `SessionStart`, `SubagentStart` and `away.py --back` run `git status --porcelain` across `git worktree list`, filtered by `governed()`, and print every uncommitted rule-file change, marked "not in force". Nothing stops the agent that made the edit from reading it. **Accepted** as a known limit |
 | **Publishing through the API**: `gh api -X PUT …/pulls/N/merge`, `gh api …/pulls -f …`, `curl` | Today neither guard matches these. Checked by feeding the commands to both hooks on this branch: `gh pr merge 1` produces an `ask`, and the other three produce nothing | **Narrowed**: `guard_push` adds writing-method `gh api` and `curl` to the forge host (§3). It is still a text scan, so a script file or a different HTTP client gets past it. **Accepted** beyond that. The fix for today's hook belongs to U1 |
 | **Ola merges in the browser** | No hook runs, so there is no ack check at merge time. CI cannot check either, because acks are untracked (ruling 6) | **Narrowed**: every head that reached the forge through a guarded push passed the gate at that moment. What is left is a base that moved after the last push, which the gate's merge-base row would have caught. **Accepted**: Ola's own merge is his act. To close it, merge through the session (`gh pr merge`), or revisit ruling 6 |
@@ -339,7 +339,7 @@ it has been printed.
 |---|---|---|
 | The mode's semantics; `harness_mode.decide`; the queue reason | `owner`, rendered into the reason and the `ASK <OWNER>:` marker | Ola |
 | The flag's location and format; `away.py`; the `/dev/tty` confirmation | `unattended.max_hours`, `unattended.buffer`, `unattended.keep_awake` | 72, 1.2, `caffeinate -is -t {seconds}` |
-| The ack store, `harness_acks.check`, `harness_review.py`, the push gate, the ack listing in the push prompt | `base_branch`, `forge`, `remote_url`; optional `unattended.allowed_signers` | master, github, the rasputin URL on GitHub; signers per Q9 |
+| The ack store, `harness_acks.check`, `harness_review.py`, the push gate, the ack listing in the push prompt | `base_branch`, `forge`, `remote_url` | master, github, the rasputin URL on GitHub |
 | The governed manifest, the self-protecting set, the state dir, `profile.toml` | `profile.rule_files` (additions) | as generic-harness §3.1 |
 | New hooks: `AskUserQuestion`, `PermissionRequest`, `ConfigChange`, `SubagentStart`; the recap header; the `gh api`/`curl` and ref-write patterns in `guard_push` | forge host for the `curl` pattern | github.com |
 
@@ -375,7 +375,8 @@ figures are **estimates** of production lines as `CLAUDE.md` §2 counts them.
 |---|---|---|---|---|
 | U0 | **Probes** (no production code). (a) A deny inside a background `@tester`: does the reason arrive and does the subagent carry on? This combines with R-B's `agent_type` probe. (b) Does `!cmd` at Ola's prompt get a TTY? (c) Do `.claude/current-task/` writes prompt in a session isolated in a worktree? | with step 8's probe, but moved earlier | a temporary logging hook (settings: fresh yes) | 0 |
 | U1 | **Queue, don't wait.** `harness_mode.py` (flag, `decide`, queue), `away.py`, `guard_push` and `guard_governance` routed through `decide`, the `AskUserQuestion`, `PermissionRequest` and `ConfigChange` hooks, the `gh api`/`curl` and ref-write patterns (these close today's gap in both modes), the self-protecting set, and the recap header with the uncommitted rule-file scan. Rule-file edits are **denied** in unattended mode in this step | **after step 3** (which rewrites the same hooks' docstrings), before step 4. It fixes a live cost now, and the manifest can stay in `guard_governance` until step 4 | `.claude/hooks/*`, `tools/away.py`, `tools/session_state.py`, `.claude/settings.json` | ~260 |
-| U2 | **Acknowledgement gate.** `harness_acks.py` (the base from `ls-remote`), `harness_review.py`, the gate in `guard_push` (both modes) with the ack listing and the SUSPECT mark, the attended prompt-ack arm, and the recap's `REWORK` lines. Signed acks are added here if Q9 says so | **after step 4**, so that `governed()` and the gate share one manifest in `profile.toml` | `tools/harness_{acks,review}.py`, `.claude/hooks/guard_{push,governance}.py`, `.claude/settings.json` (PostToolUse `Edit\|Write`) | ~320 (~360 with signing) |
+| U2 | **Acknowledgement gate.** `harness_acks.py` (the base from `ls-remote`), `harness_review.py`, the gate in `guard_push` (both modes) with the ack listing and the SUSPECT mark, the attended prompt-ack arm, and the recap's `REWORK` lines. Signed acks are not included (backlog, ruling 9) | **after step 4**, so that `governed()` and the gate share one manifest in `profile.toml` | `tools/harness_{acks,review}.py`, `.claude/hooks/guard_{push,governance}.py`, `.claude/settings.json` (PostToolUse `Edit\|Write`) | ~320 |
+| backlog | **Signed acks** (ruling 9). The review command signs each ack with `ssh-keygen -Y sign`, using a key that needs Ola's presence. The gate verifies against `profile.unattended.allowed_signers` | outside U1-U3; not scheduled | `tools/harness_{acks,review}.py`, `profile.toml` | ~40 |
 | U3 | **Authorship on the diff.** The unattended `pass` arm with the journal, the "not in force" context, and the `SubagentStart` hook | after U2; independent of steps 5-9 | `guard_governance.py`, a `SubagentStart` hook, `.claude/settings.json` | ~110 |
 | — | The same code moves into the harness repo in step 6 and comes back in step 7 unchanged; the drift gate covers it | steps 6-7 | — | — |
 
@@ -428,8 +429,9 @@ writing `gh api` call, and a forged ack dated inside an away window.
    sign each ack with an SSH key that needs your presence, so the gate
    verifies a signature instead of trusting a file an agent could forge?
    *Recommend yes, if you already have a hardware key or an agent that
-   confirms each use*. Otherwise use the prompt listing and the SUSPECT mark
-   alone, and accept that forged acks are only caught by a tripwire (§6).
+   confirms each use*. Otherwise rely on the prompt listing alone, and
+   accept that forged acks are only caught by a tripwire (§6). Ruled:
+   backlog (ruling 9).
 
 **Round-1 fixes that touch a ruling** (flagged, not changed):
 
@@ -456,3 +458,4 @@ All eight open questions are answered as recommended:
 | 6 | Acknowledgement storage | Untracked for now; revisit if a durable authorship trail is wanted for publication |
 | 7 | Amend and rebase at night | Denied, even on unpushed commits, in the first version |
 | 8 | Branch with an open PR | Counts as a local branch; the push gate protects publication |
+| 9 | Signed acks (asked after review round 1) | Backlog, outside U1-U3. Ola: "Put 9 in the backlog, I don't really have time for that speed bump at the moment." Until then, forged acks are narrowed by the push prompt's ack listing only (§4, §6) |
