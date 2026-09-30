@@ -1,6 +1,6 @@
 # Harness U1: queue, don't wait (with the U0 probes)
 
-Status: design (@architect, 2026-09-30). No code. Source:
+Status: design (@architect, 2026-09-30); U0 run, results in §2.5. No code. Source:
 `docs/research/unattended-mode.md` (merged in #122), cited below as *the
 design*, including *Ola's rulings (2026-09-30)* at its end. This file does not
 restate the design; it fixes what U1 builds, exactly enough for `@tester` to
@@ -170,7 +170,59 @@ costs nothing extra: it rides along in the sitting, whose log records
 
 ### 2.5 Results
 
-(Filled in by `@architect` after the sitting, before the red suite.)
+Ola ran the sitting on 2026-09-30, 15:04-15:07 UTC, in the probe worktree
+`.claude/worktrees/u0-probe`, launched with the `--settings` flag of §2.2. The
+flag loaded the hook (the log has `PreToolUse` lines), so the fallback of §2.2
+was not needed. The events record `permission_mode: "auto"`: the mode Ola
+leaves in. The facts below come from the main session's reading of the log; the
+log itself is data in `../rasputin_scratch` and is not cited here.
+
+| Probe | Outcome | Evidence in the log |
+|---|---|---|
+| (a) deny in a background subagent | **Confirmed** | Background `@tester` (one `agent_id` throughout): `PreToolUse` Bash `echo U0-PROBE-DENY`, then 2 s later `PreToolUse` Bash `echo U0-AFTER` with the same `agent_id`, then the handback 7 s after that. `U0-AFTER` appears nowhere except the refusal reason, so the reason reached the subagent and it acted on it. Ola saw no prompt for the refused call |
+| (a′) `agent_type` | **Confirmed** | Every subagent line, `SubagentStart` included, carries `agent_type: "tester"`. Main-session lines have `agent_id` and `agent_type` null |
+| (b) terminal behind `!` | **Refuted**, as expected | The tty probe logged `stdin_isatty: false`, `dev_tty: "ENXIO"`, exit 3 |
+| (b′) `!` through PreToolUse | **No**: `!` bypasses it | No `PreToolUse` line names `u0_tty_probe.py`. The one prompt Ola saw was a `PermissionRequest` for a later **Read** of the probe script by the probe session's agent (a path outside that worktree), not for the `!` command |
+| (c) current-task writes | **Confirmed, in auto mode** | The main session's Write and Bash writes and `@tester`'s Write to `.claude/current-task/` produced no `PermissionRequest` line and no prompt |
+
+**Consequences for U1** (per §2.4):
+
+1. **(a) confirmed: U1 ships as specified.** A deny inside a background
+   subagent neither stalls nor prompts, and its reason arrives, so the queue
+   reason's instructions to a subagent (write the `ASK OLA:` line in the
+   handback, do not retry) are read by the agent they address.
+2. **(a′) confirmed:** the queue's `agent_type` and `agent_id` are populated
+   for subagents and `null` for the main session, as §3.4 states. R-B
+   (generic-harness step 8) can key on `agent_type`.
+3. **(b) refuted: the rule text says "in a separate terminal"** (§3.12,
+   unchanged). `away.py <duration>` run with `!` exits 3 without writing
+   anything, which T12 already pins.
+4. **(b′):** because `!` does not pass through PreToolUse, §3.6's guard never
+   sees an `away.py` run with `!`; for entering, the terminal check of §3.3
+   step 2 is the only barrier there, and (b) shows it holds. `--back` needs no
+   terminal (§3.3), so Ola **can** end the mode with
+   `! python3 tools/away.py --back` at a session prompt; §3.12 says so. No
+   code changes.
+5. **(c) confirmed in auto mode: no allow rules.** The allow rules §2.4
+   names for a refuted (c) are not added to §3.11.
+
+**The auto-mode caveat.** (c) is settled for auto mode only; other modes were
+not run. U1 neither pins nor checks the mode:
+
+- It cannot pin it: the permission mode is a property of each Claude Code
+  session, set at launch, and `away.py` runs in Ola's terminal outside all of
+  them.
+- Checking buys nothing U1 needs. In a mode that prompts for writes, every
+  file write prompts, not only those to `.claude/current-task/`, so
+  unattended work in such a mode is not viable whatever U1 does; allow rules
+  for one directory would not rescue it.
+- It fails visibly, not silently: at night each such prompt becomes a
+  `PermissionRequest` refusal (§3.7) with a queue line naming the tool and the
+  path, which the recap and `--back` show.
+
+If Ola starts leaving sessions in another mode, (c) is re-run in that mode
+first (the §2.3 step 1 lines, with the probe settings), and the allow rules
+of §2.4 are added to §3.11 if it refutes.
 
 ---
 
@@ -476,8 +528,9 @@ characters, so the recap stays far below the 10,000-character cap.
 1. `PreToolUse`, matcher `AskUserQuestion`.
 2. `PermissionRequest`, no matcher.
 3. `ConfigChange`, matcher `user_settings|project_settings|local_settings|skills`.
-4. Only if probe (c) refutes: `permissions.allow` gains
-   `Write(.claude/current-task/**)` and `Edit(.claude/current-task/**)`.
+
+No allow rules for `.claude/current-task/`: probe (c) confirmed in auto mode
+(§2.5).
 
 Not a settings file: `pyproject.toml`'s `[tool.mypy] files` gains
 `tools/harness_mode.py` and `tools/away.py`, so the strict gate covers them.
@@ -490,7 +543,8 @@ paragraph is added (the design's §7 text, cut to what U1 enforces):
 
 > **Unattended mode.** Only Ola enters it, with `python3 tools/away.py
 > <duration>` in a separate terminal, and it ends at the time the flag states
-> or on `away.py --back`. No agent runs `away.py` or writes
+> or on `away.py --back` (which also works with `!` at a session prompt).
+> No agent runs `away.py` or writes
 > `<git-common-dir>/harness/`. While it is on, a guarded act is refused
 > rather than asked, and the refusal is already queued: do not retry it or
 > work around it; record it as an `ASK OLA:` line (main session: in
@@ -498,8 +552,9 @@ paragraph is added (the design's §7 text, cut to what U1 enforces):
 > When Ola says he is leaving, ask him how long, and ask him to run
 > `away.py` with that duration.
 
-"in a separate terminal" becomes "in a terminal, or with `!` at the prompt"
-only if probes (b) and (b′) allow it (§2.4). The file is governed, so the
+"in a separate terminal" stands: probe (b) found no terminal behind `!`
+(§2.5). The `--back` clause rests on probe (b′), `!` bypassing PreToolUse,
+and on `--back` needing no terminal (§3.3). The file is governed, so the
 edit asks when `@developer` makes it.
 
 ---
@@ -589,13 +644,11 @@ scan of §3.8 (~20 lines), which moves to U3.
 
 ## 6. What needs Ola
 
-1. **The U0 sitting** (§2.2), once: launch the probe session with the
-   `--settings` flag, one `!` line, one prompt, then tell the U1 session it
-   is done. No settings file is edited.
-2. **Only if the flag did not load the hook**: a yes to add the probe hook to
-   the probe worktree's `.claude/settings.local.json`, and a yes to remove it.
-3. **The U1 settings change** (§3.11, items 1-3, plus item 4 if probe (c)
-   refutes), one fresh yes when `@developer` reaches it.
+1. **The U0 sitting** (§2.2): done 2026-09-30; the flag loaded the hook, so
+   no settings file was edited. Results in §2.5.
+2. **The U1 settings change** (§3.11, items 1-3), one fresh yes when
+   `@developer` reaches it.
+3. **Leaving sessions in auto mode**, the only mode probe (c) covers (§2.5).
 4. **Prompts during the green step**: `@developer` edits governed files
    (`.claude/hooks/*`, `tools/session_state.py`, the new `tools/away.py` and
    `tools/harness_mode.py` once governed, `.claude/REQUIRED-READING.md`), so
