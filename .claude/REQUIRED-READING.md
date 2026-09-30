@@ -133,9 +133,7 @@ before `git push`, `gh pr create/merge/ready/edit`, `gh release`,
 writes, `git config` writes, `git symbolic-ref` writes, `gh api` with a writing
 method, and `curl` with a writing method to the forge (not `gh pr close` or
 `gh pr comment`); `guard_governance.py` asks
-before any write to a file that states rules; `guard_unattended.py` refuses
-`AskUserQuestion`, permission prompts and configuration changes while
-unattended mode is on; `gates_after_commit.py` puts the
+before any write to a file that states rules; `gates_after_commit.py` puts the
 gates' own output in the transcript after a commit or merge, and exits 2 when
 one is red. All of them read the command as text, so they are tripwires: the
 boundary is still yours to keep, and the permission system is not the push

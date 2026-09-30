@@ -2,7 +2,8 @@
 """AskUserQuestion, PermissionRequest and ConfigChange: nobody is there to answer.
 
 Spec: docs/increments/h3-unattended-u1.md §3.7. While Ola is at the keyboard
-this hook prints nothing. In unattended mode (on, or a flag that cannot be
+this hook prints nothing, except a refusal when it crashes or the
+harness_mode module is missing. In unattended mode (on, or a flag that cannot be
 read) a question, a permission prompt or a configuration reload would wait for
 him and stall the run, so each is refused and queued instead.
 """
