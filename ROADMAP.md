@@ -104,11 +104,13 @@ have shipped.
 **Order of work from 2026-09-30, ruled by Ola** ("Unattended step first, then
 the São Francisco basin as you have proposed"):
 
-1. **The first build step of unattended mode** (`docs/research/unattended-mode.md`,
-   U1, preceded by its U0 probes). While Ola is away, a guard that would ask refuses and queues the act
-   instead, so long runs don't stall. The push guard also learns the commands
-   that pass it today (`git update-ref`, `gh api` writes, `curl` POSTs,
-   `git remote` and `git config` changes).
+1. **The first build step of unattended mode, shipped** (step U1 of
+   `docs/research/unattended-mode.md`, after its U0 probes;
+   `docs/increments/h3-unattended-u1.md`; #123, its settings wiring #124, and
+   a tty fix #125). While Ola is away (`tools/away.py`), a guard that would ask
+   refuses and queues the act instead, so long runs don't stall. The push
+   guard now also asks before `git update-ref`, `git remote`, `git config` and
+   `git symbolic-ref` writes, and `gh api` or `curl` writes to the forge.
 2. **The São Francisco basin**, in this order:
    1. measure a real piece of the basin (ANADEM tiles and the BHO outline,
       triangle counts against tolerance), `@perf`;
