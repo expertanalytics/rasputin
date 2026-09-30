@@ -79,9 +79,9 @@ against the working tree. Its messages keep naming the tag.
 | anything else | tag | `git rev-parse --verify --quiet refs/tags/<REV>^{commit}` succeeds |
 
 Branch names, `HEAD`, and anything else that moves are **not pins**. A `REV`
-that is not a sha and not a tag, but names a branch
+that is not a sha and not a tag, but is `HEAD` or names a branch
 (`refs/heads/<REV>` or `refs/remotes/*/<REV>` resolves), is broken with a
-message saying a branch is not a pin. Tags with `/` in the name
+message saying it is not a pin. Tags with `/` in the name
 (`archive/…`) are accepted.
 
 `PATH` is taken literally as a repo-relative path **at `REV`**: no basename
@@ -150,8 +150,8 @@ unpinned is non-empty**, else 0.
 |---|---|
 | Unpinned: no such file / ambiguous / last line past the end / line 0 | broken (unchanged) |
 | Unpinned `legacy/`: tag or file missing at `legacy-archive`, or past the end | broken (unchanged messages) |
-| Pinned: `REV` is neither a present sha nor a tag, and the clone is not shallow | broken: "no commit or tag `<REV>`" |
-| Pinned: `REV` names a branch and is not a tag | broken: "a branch is not a pin" |
+| Pinned: `REV` is neither a present sha, a tag, `HEAD` nor a branch, and the clone is not shallow | broken: "no commit or tag `<REV>`" |
+| Pinned: `REV` is `HEAD`, or names a branch and is not a tag | broken: "not a pin" |
 | Pinned: `REV` not found **and** `git rev-parse --is-shallow-repository` prints `true` | broken, message names the rev and says the clone is shallow and needs full history (`fetch-depth: 0`) |
 | Pinned: sha prefix ambiguous | broken |
 | Pinned: `PATH` absent at `REV` | broken: "no `<PATH>` at `<REV>`" |

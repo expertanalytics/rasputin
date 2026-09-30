@@ -139,11 +139,11 @@ was written to remove.
 ### 2.2 `guard_governance.py` WRITES regex is bypassable by construction
 
 Even when activated, the Bash arm is a substring tripwire, not a parser. The
-file says so itself (`.claude/hooks/guard_governance.py:24-25`): "a path built
+file says so itself (`.claude/hooks/guard_governance.py@180b9ac:24-25`): "a path built
 by variable expansion escapes it. It is a tripwire, not a sandbox", and
 lines 132-134 repeat it in the user-facing reason. Concretely bypassable:
 
-- **Variable-expanded path.** `WRITES` (`.hooks/guard_governance.py:56-59`)
+- **Variable-expanded path.** `WRITES` (`.claude/hooks/guard_governance.py@180b9ac:56-59`)
   matches redirection/`tee`/`cp`/`sed -i`/`python3 -`, and `governed()` matches
   the path as a literal substring (`name.rstrip("/") in command`, line 104). A
   command like `f=CLAUDE.md; echo x >> "$f"` contains no literal `CLAUDE.md`
@@ -161,7 +161,7 @@ good as the literal path appearing in the command text.
 
 ### 2.3 `guard_push.py` is sound in intent but likewise inactive and text-only
 
-`guard_push.py:20-30` matches `git push`, `gh pr create|merge|ready|edit`, `gh
+`.claude/hooks/guard_push.py@180b9ac:20-30` matches `git push`, `gh pr create|merge|ready|edit`, `gh
 release`, `--no-verify`, history rewrites and force pushes, returning `ask`.
 The patterns are reasonable. But (a) it is inactive per 2.1, so it did not
 guard any of the #110/#111/#112 pushes, and (b) like 2.2 it reads command text,
@@ -191,7 +191,7 @@ that exit 2 ever surfaced a red gate to the loop.
 
 ### 3.1 Skill invocation cannot be verified from disk, and that is itself the risk
 
-`.claude/REQUIRED-READING.md:49-54` requires each persona to invoke the
+`.claude/REQUIRED-READING.md@180b9ac:49-54` requires each persona to invoke the
 relevant `Skill` (modern-cxx / computational-geometry / python-development /
 geospatial-data-formats) itself, because "the `skills:` frontmatter key does
 not reliably preload them, and subagents do not inherit skills from the
@@ -205,7 +205,7 @@ which is currently machine-checked.
 
 ### 3.2 Stale `_core` risk was low this cycle; 16e touched no C++
 
-`REQUIRED-READING.md:82-98` codifies the stale-extension trap: `pytest` does
+`.claude/REQUIRED-READING.md@180b9ac:82-98` codifies the stale-extension trap: `pytest` does
 not rebuild `_core`, and the rebuild+`cp`+`touch` steps are manual.
 
 - **16e touched no C++** — `git show e3ec289 --stat` lists only
@@ -258,7 +258,7 @@ reviewer reconciles actuals against it in the same PR.
   structural blind spot: unlike the red and green commits, the reviewer step
   has no mandated trace, so "was the reviewer run?" is answerable only when the
   reviewer happens to write into a tracked file (as in 22).
-- **Documentation/tooling pushes:** `REQUIRED-READING.md:118-126` already
+- **Documentation/tooling pushes:** `.claude/REQUIRED-READING.md@180b9ac:118-126` already
   requires `@reviewer` once on any branch before its first push "whether or not
   the branch contains production code", with a prose/tooling scope. Compliance
   on non-code branches is likewise unverifiable from disk for the same
@@ -268,7 +268,7 @@ reviewer reconciles actuals against it in the same PR.
 
 ## 5. Rule updates (drafted before Ola's rulings; §7 records what was applied)
 
-Per the task and `REQUIRED-READING.md:100-126`, these are drafted here for
+Per the task and `.claude/REQUIRED-READING.md@180b9ac:100-126`, these are drafted here for
 Ola's decision. None is written into a governance file by this audit.
 
 ### R-A. Trim `@orchestrator` (and design/review-adjacent) tool grants
@@ -299,7 +299,7 @@ which persona issued the tool call, this hook cannot distinguish them and the
 boundary stays brief-level only. This uncertainty is why the rule is a *draft*
 for Ola, not an applied change. Machine-check once built: plant a `@tester`
 write to `src_python/x.py` and confirm the hook returns `ask` naming it, per
-`REQUIRED-READING.md:68-70`'s "plant what it forbids" discipline.
+`.claude/REQUIRED-READING.md@180b9ac:68-70`'s "plant what it forbids" discipline.
 
 ### R-C. Give the `@reviewer` step a mandated on-disk trace
 
@@ -317,7 +317,7 @@ Rationale: §4.2 — the reviewer is the only loop step with no required trace.
 But the three hooks have sat inactive since `aeccda9` while `next.md` reasons as
 if they were live. Draft for Ola: either approve wiring
 `.claude/settings.json.pending-orchestrator-review` into
-`.claude/settings.json` (a fresh-yes act per `REQUIRED-READING.md:110-112`), or
+`.claude/settings.json` (a fresh-yes act per `.claude/REQUIRED-READING.md@180b9ac:110-112`), or
 add a line to `next.md`/the harness section stating the hooks are deliberately
 dormant so no future session cites them as protection. Do not wire them without
 Ola's explicit yes.

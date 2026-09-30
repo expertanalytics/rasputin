@@ -178,37 +178,36 @@ one home:
 Found with `grep -nE` over the rule files (`CLAUDE.md`,
 `.claude/REQUIRED-READING.md`, `.claude/agents/*.md`,
 `.claude/skills/*/SKILL.md`, `docs/increments/README.md`,
-`docs/PRINCIPLES.md`, `testing.md`). Line numbers refer to the tree at
-`3245958` (read one with `git show 3245958:<path>`). Once the migration edits
-these files, `check_citations.py` will list the numbers as at-risk, which is
-expected: they are a snapshot. "Home" is where the rule should be stated
+`docs/PRINCIPLES.md`, `testing.md`). Each line citation is pinned to
+`3245958`, the tree the survey read (`git show 3245958:<path>`), so later
+edits to these files do not move it. "Home" is where the rule should be stated
 once. Each line under "Restated at" repeats the rule; lines marked *ok* only
 point at it.
 
 | Rule | Home | Restated at | Fix |
 |---|---|---|---|
-| Prohibited dependencies | `CLAUDE.md:23-26`, checked by `tools/check_prohibited_deps.py` | `.claude/agents/architect.md:30` ("No-GDAL and No-CGAL"); `.claude/skills/computational-geometry/SKILL.md:24` ("Do not use CGAL"); `.claude/skills/geospatial-data-formats/SKILL.md:10-11` (GDAL, OGR, Fiona) and `:14` ("Never `rasterio`"), plus "Zero-GDAL" in its description and summary (`:3`, `:8`). Pointers, *ok*: `orchestrator.md` line 56, `testing.md:351` | Each becomes "see `CLAUDE.md` §2". The geospatial skill keeps its how-to (tifffile, shapely, pyproj) |
-| Size ceiling | `CLAUDE.md:15-22` | `docs/PRINCIPLES.md:220` (its heading states "700"). Pointers, *ok*: `developer.md:30`, `reviewer.md:16`, `tester.md:68`, `orchestrator.md:25`, and the three skills' "Change Limit" lines (redundant but harmless) | Rename E4 without the number |
-| Reconcile LOC against the estimate | `reviewer.md:43-45` (check 3) | `reviewer.md:16-20` (the same file, again); `developer.md` lines 30-33; `orchestrator.md:29-30` | Keep check 3; the others point at it |
-| Coverage floor | `testing.md:279`, checked by `pyproject.toml:102` (`--cov-fail-under=85`) | `CLAUDE.md:9` ("85%"); `tester.md:13-14` and `:20-23` (twice in one file); `testing.md:18` and `:283-288` | State it once at `testing.md:279`; drop the number everywhere else |
-| Approval boundary | `REQUIRED-READING.md:100-116` | `PRINCIPLES.md:200-206` (E1 restates the list of acts); the message in `guard_push.py`. Pointers, *ok*: `CLAUDE.md:43-45`, `orchestrator.md:38-43` | E1 becomes an index entry (§4) |
-| `@reviewer` before a push | `REQUIRED-READING.md:118-126` | `PRINCIPLES.md:208-211` (E2) | Index entry |
-| Claims discipline | `REQUIRED-READING.md:59-80` | `PRINCIPLES.md:24-57` and `:91-108` (A1-A4, B1, B2 restate it in different words) | Index entries |
-| Stale artifacts | `REQUIRED-READING.md:81-98` | `PRINCIPLES.md:59-72` (A5, which adds a fourth artifact, the stale `.pyc`, that is stated nowhere else) | Move the fourth into the home, then index |
-| Recap contents | `REQUIRED-READING.md:12-14` | `orchestrator.md:45-49` (the same four items, plus "at every round") | The orchestrator keeps the trigger and points for the contents |
-| Red/green trace | `docs/increments/README.md:49-52` | `developer.md:23-26`; `PRINCIPLES.md:138-144` (C2) | The developer keeps its duty in one line and points |
-| Merge commits, never squash | `docs/increments/README.md:75-78` | `PRINCIPLES.md:141-142` | Index entry |
-| CI is authoritative | `CLAUDE.md:75-81` | `reviewer.md:24-31` (with the command); `docs/increments/README.md:53` | The reviewer keeps its precondition as a pointer |
-| Literature before design | `docs/increments/README.md:28-34` | `architect.md` lines 33-44 (§4, which is more detailed than its home); `.claude/skills/computational-geometry/SKILL.md:46-52` (with a pointer) | Merge §4's three points into the home. §4 keeps the duty ("you own it") and a pointer; the skill keeps only its domain examples |
-| Power state with each run | `docs/increments/README.md:82` (the Acceptance section, which calls itself "the one statement"; the power-state bullet is at 88-90) | `perf.md:39-42` | `perf.md` points |
-| Adversarial geometry list | `tester.md:37-42` (§3A) | `orchestrator.md:19-20`; `.claude/skills/computational-geometry/SKILL.md:29`; `tester.md:3` (the description) | The orchestrator says "per tester §3A" |
-| Pybind11 isolation | `.claude/skills/modern-cxx/SKILL.md:27` | `architect.md:22` | The architect points |
-| Concepts / `typing.Protocol` | `.claude/skills/modern-cxx/SKILL.md:11`, `.claude/skills/python-development/SKILL.md:34` | `architect.md:24` | The architect points |
-| `-Werror` | `CMakeLists.txt:52,70` (the check) | `.claude/skills/modern-cxx/SKILL.md:32`; named in `developer.md` line 35, `reviewer.md:13,35` and `orchestrator.md:31` | State it once in `CLAUDE.md` §4, beside the build; the others name "the compiler gate" |
-| I/O boundary | `CLAUDE.md:28` | `PRINCIPLES.md:215-216` (E3 calls itself a pointer but restates the rule) | Index entry |
-| Documentation defects | `docs/increments/README.md:130-133` | `PRINCIPLES.md:146-150` (C3) | Index entry |
-| Roadmap row | `docs/increments/README.md:69-73` | `PRINCIPLES.md:152-156` (C4) | Index entry |
-| Skills to invoke | `REQUIRED-READING.md:48-53` | `developer.md:13-17` (the same four, as a list) | `developer.md` points |
+| Prohibited dependencies | `CLAUDE.md@3245958:23-26`, checked by `tools/check_prohibited_deps.py` | `.claude/agents/architect.md@3245958:30` ("No-GDAL and No-CGAL"); `.claude/skills/computational-geometry/SKILL.md@3245958:24` ("Do not use CGAL"); `.claude/skills/geospatial-data-formats/SKILL.md@3245958:10-11` (GDAL, OGR, Fiona) and `.claude/skills/geospatial-data-formats/SKILL.md@3245958:14` ("Never `rasterio`"), plus "Zero-GDAL" in its description and summary (`.claude/skills/geospatial-data-formats/SKILL.md@3245958:3`, `.claude/skills/geospatial-data-formats/SKILL.md@3245958:8`). Pointers, *ok*: `.claude/agents/orchestrator.md@3245958:56`, `testing.md@3245958:351` | Each becomes "see `CLAUDE.md` §2". The geospatial skill keeps its how-to (tifffile, shapely, pyproj) |
+| Size ceiling | `CLAUDE.md@3245958:15-22` | `docs/PRINCIPLES.md@3245958:220` (its heading states "700"). Pointers, *ok*: `.claude/agents/developer.md@3245958:30`, `.claude/agents/reviewer.md@3245958:16`, `.claude/agents/tester.md@3245958:68`, `.claude/agents/orchestrator.md@3245958:25`, and the three skills' "Change Limit" lines (redundant but harmless) | Rename E4 without the number |
+| Reconcile LOC against the estimate | `.claude/agents/reviewer.md@3245958:43-45` (check 3) | `.claude/agents/reviewer.md@3245958:16-20` (the same file, again); `.claude/agents/developer.md@3245958:30-33`; `.claude/agents/orchestrator.md@3245958:29-30` | Keep check 3; the others point at it |
+| Coverage floor | `testing.md@3245958:279`, checked by `pyproject.toml:102` (`--cov-fail-under=85`) | `CLAUDE.md@3245958:9` ("85%"); `.claude/agents/tester.md@3245958:13-14` and `.claude/agents/tester.md@3245958:20-23` (twice in one file); `testing.md@3245958:18` and `testing.md@3245958:283-288` | State it once at `testing.md@3245958:279`; drop the number everywhere else |
+| Approval boundary | `.claude/REQUIRED-READING.md@3245958:100-116` | `docs/PRINCIPLES.md@3245958:200-206` (E1 restates the list of acts); the message in `guard_push.py`. Pointers, *ok*: `CLAUDE.md@3245958:43-45`, `.claude/agents/orchestrator.md@3245958:38-43` | E1 becomes an index entry (§4) |
+| `@reviewer` before a push | `.claude/REQUIRED-READING.md@3245958:118-126` | `docs/PRINCIPLES.md@3245958:208-211` (E2) | Index entry |
+| Claims discipline | `.claude/REQUIRED-READING.md@3245958:59-80` | `docs/PRINCIPLES.md@3245958:24-57` and `docs/PRINCIPLES.md@3245958:91-108` (A1-A4, B1, B2 restate it in different words) | Index entries |
+| Stale artifacts | `.claude/REQUIRED-READING.md@3245958:81-98` | `docs/PRINCIPLES.md@3245958:59-72` (A5, which adds a fourth artifact, the stale `.pyc`, that is stated nowhere else) | Move the fourth into the home, then index |
+| Recap contents | `.claude/REQUIRED-READING.md@3245958:12-14` | `.claude/agents/orchestrator.md@3245958:45-49` (the same four items, plus "at every round") | The orchestrator keeps the trigger and points for the contents |
+| Red/green trace | `docs/increments/README.md@3245958:49-52` | `.claude/agents/developer.md@3245958:23-26`; `docs/PRINCIPLES.md@3245958:138-144` (C2) | The developer keeps its duty in one line and points |
+| Merge commits, never squash | `docs/increments/README.md@3245958:75-78` | `docs/PRINCIPLES.md@3245958:141-142` | Index entry |
+| CI is authoritative | `CLAUDE.md@3245958:75-81` | `.claude/agents/reviewer.md@3245958:24-31` (with the command); `docs/increments/README.md@3245958:53` | The reviewer keeps its precondition as a pointer |
+| Literature before design | `docs/increments/README.md@3245958:28-34` | `.claude/agents/architect.md@3245958:33-44` (§4, which is more detailed than its home); `.claude/skills/computational-geometry/SKILL.md@3245958:46-52` (with a pointer) | Merge §4's three points into the home. §4 keeps the duty ("you own it") and a pointer; the skill keeps only its domain examples |
+| Power state with each run | `docs/increments/README.md@3245958:82` (the Acceptance section, which calls itself "the one statement"; the power-state bullet is at 88-90) | `.claude/agents/perf.md@3245958:39-42` | `perf.md` points |
+| Adversarial geometry list | `.claude/agents/tester.md@3245958:37-42` (§3A) | `.claude/agents/orchestrator.md@3245958:19-20`; `.claude/skills/computational-geometry/SKILL.md@3245958:29`; `.claude/agents/tester.md@3245958:3` (the description) | The orchestrator says "per tester §3A" |
+| Pybind11 isolation | `.claude/skills/modern-cxx/SKILL.md@3245958:27` | `.claude/agents/architect.md@3245958:22` | The architect points |
+| Concepts / `typing.Protocol` | `.claude/skills/modern-cxx/SKILL.md@3245958:11`, `.claude/skills/python-development/SKILL.md@3245958:34` | `.claude/agents/architect.md@3245958:24` | The architect points |
+| `-Werror` | `CMakeLists.txt:52,70` (the check) | `.claude/skills/modern-cxx/SKILL.md@3245958:32`; named in `.claude/agents/developer.md@3245958:35`, `.claude/agents/reviewer.md@3245958:13` and `.claude/agents/reviewer.md@3245958:35` and `.claude/agents/orchestrator.md@3245958:31` | State it once in `CLAUDE.md` §4, beside the build; the others name "the compiler gate" |
+| I/O boundary | `CLAUDE.md@3245958:28` | `docs/PRINCIPLES.md@3245958:215-216` (E3 calls itself a pointer but restates the rule) | Index entry |
+| Documentation defects | `docs/increments/README.md@3245958:130-133` | `docs/PRINCIPLES.md@3245958:146-150` (C3) | Index entry |
+| Roadmap row | `docs/increments/README.md@3245958:69-73` | `docs/PRINCIPLES.md@3245958:152-156` (C4) | Index entry |
+| Skills to invoke | `.claude/REQUIRED-READING.md@3245958:48-53` | `.claude/agents/developer.md@3245958:13-17` (the same four, as a list) | `developer.md` points |
 
 Two patterns stand out. `docs/PRINCIPLES.md` restates nearly every rule it
 indexes, which is why §4 turns it into an index. And the personas restate
@@ -325,8 +324,8 @@ Two carriers, with no overlap between them:
 Rule text changes, and a citation into it has to survive the change. Today
 the tree answers this in three different ways: line numbers (checked by
 `check_citations.py`), section ordinals kept with gaps ("There is no section
-B; letters are kept stable for citations", `tester.md:45-46`; "There are no
-sections 2-4", `reviewer.md:13`), and principle IDs (A1…E4). The generic rule
+B; letters are kept stable for citations", `.claude/agents/tester.md@3245958:45-46`; "There are no
+sections 2-4", `.claude/agents/reviewer.md@3245958:13`), and principle IDs (A1…E4). The generic rule
 keeps the third and drops the other two:
 
 1. **Living rule text is cited by ID.** An ID is a short label in a heading
@@ -533,11 +532,11 @@ Generic, optional, and it depends on R-B, because only the guard can make
 
 These are recorded for the migration steps, not fixed here.
 
-1. **Contradiction.** `docs/increments/README.md:126` says "Independent suites
-   run as parallel agents". `docs/PRINCIPLES.md:162-168` (D1) says "Dispatch
+1. **Contradiction.** `docs/increments/README.md@3245958:126` says "Independent suites
+   run as parallel agents". `docs/PRINCIPLES.md@3245958:162-168` (D1) says "Dispatch
    serially. Disjoint files do not make parallel dispatch safe." Only one of
    them can be the rule.
-2. **A claim the docs now contradict.** `REQUIRED-READING.md:48-53` says the
+2. **A claim the docs now contradict.** `.claude/REQUIRED-READING.md@3245958:48-53` says the
    `skills:` frontmatter "does not reliably preload them". The current docs
    say preloading injects the skill's full content (`sub-agents`, supported
    frontmatter, `skills`). That needs a one-minute live re-test, per the
@@ -559,17 +558,17 @@ These are recorded for the migration steps, not fixed here.
    all six as at-risk while the sweep was unmerged. Now that the sweep is on
    `master` it reports nothing, because the tool can only flag a change while
    that change is on a branch. Read against today's file, some of the numbers
-   still land on the right text (`:100-126`, `:118-126`), and some are off by
-   a line: `:49-54` now starts one line into the skills section at 48, and
-   `:110-112` misses the start of the "fresh yes" list at 109. Pinning (step 2)
+   still land on the right text (`.claude/REQUIRED-READING.md@3245958:100-126`, `.claude/REQUIRED-READING.md@3245958:118-126`), and some are off by
+   a line: `.claude/REQUIRED-READING.md@3245958:49-54` now starts one line into the skills section at 48, and
+   `.claude/REQUIRED-READING.md@3245958:110-112` misses the start of the "fresh yes" list at 109. Pinning (step 2)
    is what makes such citations durable. Three more in the same file point into
-   hooks whose docstrings step 3 will shorten: `guard_governance.py:24-25`,
-   `:56-59`, and `guard_push.py:20-30`. Four point into rule files the
-   migration edits: `docs/increments/05-noder.md:992` → `testing.md:301`;
+   hooks whose docstrings step 3 will shorten: `.claude/hooks/guard_governance.py@180b9ac:24-25`,
+   `.claude/hooks/guard_governance.py@180b9ac:56-59`, and `.claude/hooks/guard_push.py@180b9ac:20-30`. Four point into rule files the
+   migration edits: `docs/increments/05-noder.md:992` → `testing.md@3245958:301`;
    `docs/increments/05b-noder-driver.md:411` →
-   `docs/increments/README.md:65-67`; and two in code comments,
+   `docs/increments/README.md@3245958:65-67`; and two in code comments,
    `tests/cpp/property/noding_generators.h:5` and
-   `tests/cpp/property/prop_noding_no_crossings.cpp:98`, both → `testing.md:220`.
+   `tests/cpp/property/prop_noding_no_crossings.cpp:98`, both → `testing.md@3245958:220`.
    That makes 13. The two in code comments are invisible to
    `check_citations.py`, which scans only `.md` (`SCAN_SUFFIXES`), and to the
    `*.md`-only grep this design first used. They were found with
@@ -599,11 +598,11 @@ the loop: `@tester` red, `@developer` green, `@reviewer`. LOC figures are
 
 | # | Step | Files | Estimate | Citations |
 |---|---|---|---|---|
-| 1 | **One statement per rule** (prose, early, small). Apply the "Fix" column of 1.5, except the PRINCIPLES rows, which step 5 covers. Rename E4 so its heading states no number. Resolve defect 1 once Ola rules | `.claude/agents/{architect,developer,orchestrator,reviewer,tester,perf}.md`; `.claude/skills/{computational-geometry,geospatial-data-formats,modern-cxx}/SKILL.md`; `CLAUDE.md` line 9 (edited in place, so the §N numbering is untouched); `testing.md` (the floor restated at 18, edited in place so the line count stays the same, and at 283-288); `docs/PRINCIPLES.md` (E4 heading); `docs/increments/README.md` (defect 1) | 0 LOC; 1 round + `@reviewer` | First convert `05-noder.md:992` → "`testing.md`, *Test layout conventions*", because the edits to `testing.md` at 283-288 may shift line 301. Step 1 does **not** move `testing.md:220`: line 18 is edited in place and every other edit is below 220. So the two `tests/cpp/property/` comment citations stay correct without touching `tests/`, which would need `@tester`; step 2 converts them. `README.md:65-67` is cited, but step 1 only edits below it. Nothing cites the agents or skills by line (checked with `git grep`, all suffixes) |
-| 2 | **Citation tooling.** `check_citations.py` resolves `path@<rev>:<line>` (generalising the `legacy-archive` case) and ID citations (`file §ID`), and warns on unpinned line citations into governed files. Widen `SCAN_SUFFIXES` beyond `.md` to the code comments of `.py`, `.h`, `.hpp`, `.cpp`, `.cmake` and `CMakeLists.txt`. Then convert the other 12 citations of defect 5 (step 1 already converted the 13th): pin the historical ones to the commit each was written against; replace the two living ones in `tests/cpp/property/` with the heading citation "`testing.md`, *Frameworks*". `@tester` makes that edit, as part of the red step | `tools/check_citations.py`, `tests/python/test_check_citations.py`, `docs/retrospectives/2026-09-29-orchestrator-and-hooks-audit.md`, `docs/increments/05b-noder-driver.md`, `tests/cpp/property/noding_generators.h`, `tests/cpp/property/prop_noding_no_crossings.cpp` | ~80-120 LOC | After this step, every line citation into a rule file, in prose or in a code comment, is pinned or reported by the checker. The widened scan is what makes that claim checkable: run the checker after planting an unpinned `testing.md:1` in a `.cpp` comment, and it must report it |
+| 1 | **One statement per rule** (prose, early, small). Apply the "Fix" column of 1.5, except the PRINCIPLES rows, which step 5 covers. Rename E4 so its heading states no number. Resolve defect 1 once Ola rules | `.claude/agents/{architect,developer,orchestrator,reviewer,tester,perf}.md`; `.claude/skills/{computational-geometry,geospatial-data-formats,modern-cxx}/SKILL.md`; `CLAUDE.md` line 9 (edited in place, so the §N numbering is untouched); `testing.md` (the floor restated at 18, edited in place so the line count stays the same, and at 283-288); `docs/PRINCIPLES.md` (E4 heading); `docs/increments/README.md` (defect 1) | 0 LOC; 1 round + `@reviewer` | First convert `05-noder.md:992` → "`testing.md`, *Test layout conventions*", because the edits to `testing.md` at 283-288 may shift line 301. Step 1 does **not** move `testing.md@3245958:220`: line 18 is edited in place and every other edit is below 220. So the two `tests/cpp/property/` comment citations stay correct without touching `tests/`, which would need `@tester`; step 2 converts them. `docs/increments/README.md@3245958:65-67` is cited, but step 1 only edits below it. Nothing cites the agents or skills by line (checked with `git grep`, all suffixes) |
+| 2 | **Citation tooling.** `check_citations.py` resolves `path@<rev>:<line>` (generalising the `legacy-archive` case) and ID citations (`file §ID`), and warns on unpinned line citations into governed files. Widen `SCAN_SUFFIXES` beyond `.md` to the code comments of `.py`, `.h`, `.hpp`, `.cpp`, `.cmake` and `CMakeLists.txt`. Then convert the other 12 citations of defect 5 (step 1 already converted the 13th): pin the historical ones to the commit each was written against; replace the two living ones in `tests/cpp/property/` with the heading citation "`testing.md`, *Frameworks*". `@tester` makes that edit, as part of the red step | `tools/check_citations.py`, `tests/python/test_check_citations.py`, `docs/retrospectives/2026-09-29-orchestrator-and-hooks-audit.md`, `docs/increments/05b-noder-driver.md`, `tests/cpp/property/noding_generators.h`, `tests/cpp/property/prop_noding_no_crossings.cpp` | ~80-120 LOC | After this step, every line citation into a rule file, in prose or in a code comment, is pinned or reported by the checker. The widened scan is what makes that claim checkable: run the checker after planting an unpinned `testing.md:<n>` in a `.cpp` comment, and it must report it |
 | 3 | **History out of code docstrings** (defect 4). Move it verbatim into the 2026-09-30 history retrospective | `.claude/hooks/*.py`, `tools/{session_state,check_citations,check_prohibited_deps}.py`, `docs/retrospectives/2026-09-30-rule-file-history.md` | 0 LOC (docstrings do not count); 1 round | Safe after step 2, which pinned the audit's citations into the hooks |
 | 4 | **The profile.** `.claude/profile.toml` and a stdlib reader, `tools/harness_profile.py`. `session_state`, `gates_after_commit`, `guard_governance` (adding `testing.md` and `.claude/skills/`, defect 3) and `check_citations` read it. Add the single-statement gate from 1.2 as a fast gate. `CLAUDE.md` §4 points at `[[gates]]` | the above, their tests, and `CLAUDE.md` §4 (edited in place) | ~200-250 LOC | `test_session_state.py` keeps passing unchanged, since `owner = "Ola"` renders `ASK OLA`. `.claude/settings.json` is not touched, so no fresh yes is needed |
-| 5a | **Rule-text split, part 1.** Move `REQUIRED-READING`'s profile sections (skill names, stale artifacts including A5's `.pyc`, data paths) and the README's Acceptance and template-cross-product paragraphs into a new `CLAUDE.md` §5, *Project rules*, appended at the end. Leave the README heading as a pointer. Add the note for defect 6. Re-test the `skills:` preload (defect 2) | `.claude/REQUIRED-READING.md`, `docs/increments/README.md`, `CLAUDE.md` (append only), and the files that cite "Acceptance: an increment that touches refine or mesh code" by name (`git grep -n 'Acceptance: an increment'`) | 0 LOC; 1 round | §1-§4 unchanged. Name-citations updated in the same PR |
+| 5a | **Rule-text split, part 1.** Move `REQUIRED-READING`'s profile sections (skill names, stale artifacts including A5's `.pyc`, data paths) and the README's Acceptance and template-cross-product paragraphs into a new section 5 of `CLAUDE.md`, *Project rules*, appended at the end. Leave the README heading as a pointer. Add the note for defect 6. Re-test the `skills:` preload (defect 2) | `.claude/REQUIRED-READING.md`, `docs/increments/README.md`, `CLAUDE.md` (append only), and the files that cite "Acceptance: an increment that touches refine or mesh code" by name (`git grep -n 'Acceptance: an increment'`) | 0 LOC; 1 round | §1-§4 unchanged. Name-citations updated in the same PR |
 | 5b | **Rule-text split, part 2.** Turn PRINCIPLES into an index (§4, after Ola rules). Add `harness:begin/end` regions to the personas and `CLAUDE.md`. Drop the "kept for citations" notes. Trim the skills per §5d, checking each line against the tree | `docs/PRINCIPLES.md`, `.claude/agents/*.md`, `CLAUDE.md`, `.claude/skills/*/SKILL.md` | 0 LOC; 1-2 rounds | IDs unchanged, so `guard_push.py`'s "E1" still resolves |
 | 6 | **Extract the harness repo.** Build the copier template from rasputin's generic files and regions, with lock generation and `tools/check_harness.py`. Smoke test: `copier copy` into an empty repo with a toy profile, then check that the recap prints and that the guards ask on a planted push and a planted rule edit | a new repository (a publishing act: Ola) | ~150 LOC there | rasputin untouched |
 | 7 | **rasputin adopts.** Run `copier copy --vcs-ref v0.1` over the tree. Acceptance: the diff is empty apart from `.copier-answers.yml`, `.claude/harness.lock` and `tools/check_harness.py`, which joins the fast gates | those three files and `.claude/profile.toml` (the gate entry) | ~100 LOC (vendored gate) | no rule text changes if the acceptance holds |
