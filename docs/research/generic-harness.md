@@ -625,3 +625,18 @@ the original ask.
    comparison generic and the tool and triggers from the profile? *Recommend
    yes*, since every similar project will have a performance question.
 
+
+## 9. Ola's rulings (2026-09-30)
+
+All eight open questions are answered as recommended:
+
+| # | Question | Ruling |
+|---|---|---|
+| 1 | Carrier | A copier template in a new repository (for example a private `expertanalytics/agent-harness`), vendored into each project. Creating the repository and choosing its licence remain Ola's acts, taken at step 6 |
+| 2 | Owner's name | Rendered per project from the profile ("Ola", `ASK OLA:` in rasputin) |
+| 3 | `docs/PRINCIPLES.md` | Becomes an index; "last exercised" is found by `git grep` of the ID, and retirement is event-driven (step 5b) |
+| 4 | Parallel suites vs one agent at a time | One agent at a time wins; the README's "Independent suites run as parallel agents" goes (step 1) |
+| 5 | Persona pointer to `REQUIRED-READING.md` | Kept, as one line |
+| 6 | Ledger | Tracked, one file per branch, written only by the dispatcher, readable by the main session |
+| 7 | R-B timing | After step 4, starting with the `agent_type` probe. The probe's `.claude/settings.json` edit still needs Ola's yes when it comes |
+| 8 | `@perf` | In the generic layer as an optional skeleton, off by default |
