@@ -346,3 +346,18 @@ unparseable flag.
    branches. Should that include a non-default branch that already has an
    open PR? *Recommend yes.* The push gate is what protects publication, and
    a follow-up PR round is the common case.
+
+## Ola's rulings (2026-09-30)
+
+All eight open questions are answered as recommended:
+
+| # | Question | Ruling |
+|---|---|---|
+| 1 | Flag scope | Per repository |
+| 2 | Who enters the mode | Ola only, from his own terminal (`tools/away.py <duration>`, which also starts `caffeinate`). When Ola says he is leaving, the main session asks him to run it instead of starting `caffeinate` itself |
+| 3 | Duration | Mandatory, capped at 72 h, with the same ×1.2 buffer as `caffeinate` |
+| 4 | Self-protecting set | Denied at night even on a branch |
+| 5 | Daytime rule-file prompt | Ola's yes counts as the acknowledgement |
+| 6 | Acknowledgement storage | Untracked for now; revisit if a durable authorship trail is wanted for publication |
+| 7 | Amend and rebase at night | Denied, even on unpushed commits, in the first version |
+| 8 | Branch with an open PR | Counts as a local branch; the push gate protects publication |
