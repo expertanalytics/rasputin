@@ -40,6 +40,7 @@ You must aggressively test the computational geometry core against adversarial e
 * **Cocircularity:** Clusters of points lying exactly or nearly on the same circle.
 * **Extreme Scales:** Massive differences in coordinate scale (e.g., sub-millimeter features inside coordinate systems spanning hundreds of kilometers).
 * **Degenerate Shapes:** Slivers, zero-area triangles, and narrow corridors where holes are extremely close to outer boundaries.
+* **Non-finite Input:** NaN and infinite coordinates and elevations.
 
 ### C. Data Source Ingestion Validation
 Only for an increment that reads external input. (There is no section B;

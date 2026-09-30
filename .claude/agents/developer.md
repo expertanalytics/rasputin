@@ -22,8 +22,9 @@ the skills `.claude/REQUIRED-READING.md` names for what the code touches.
 - **Read `docs/increments/NN-*.md` for the increment you are implementing.** It is
   the specification. Where it and the tests disagree, the tests win and you report
   the discrepancy rather than resolving it silently.
-- **Stay under the ceiling in `CLAUDE.md` §2**, and report your actual count;
-  `@reviewer` reconciles it against the estimate (`reviewer.md` §5, check 3).
+- **Stay under the ceiling in `CLAUDE.md` §2**, and report your actual count
+  against the increment doc's estimate; if you overrun, say so. `@reviewer`
+  reconciles the two (`reviewer.md` §5, check 3).
 - **Verify before reporting**: Release and Debug+asan/ubsan, the compiler gate
   (`CLAUDE.md` §4), and the governance gates in `tools/`. For
   anything touching floating-point geometry, also build under `-ffp-contract=off`:

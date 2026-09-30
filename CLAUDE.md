@@ -58,7 +58,7 @@ cmake -S . -B build && cmake --build build -j   # -j alone: nproc is Linux-only
 ctest --test-dir build                          # all registered suites; see tests/cpp/CMakeLists.txt
 ```
 The compiler gate: the C++ targets build with `-Wall -Wextra -Wpedantic -Werror`
-(`CMakeLists.txt`), so any warning fails the build.
+(`CMakeLists.txt`, `tests/cpp/CMakeLists.txt`), so any warning fails the build.
 
 ### Static gates (Python)
 ```bash

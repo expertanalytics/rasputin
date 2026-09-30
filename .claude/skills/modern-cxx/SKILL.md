@@ -24,7 +24,7 @@ Enforces C++20/C++23 standards, zero-overhead abstractions, component swappabili
 * **Memory Locality:** Prefer contiguous memory layouts (`std::vector`). Avoid pointer-chasing topologies; represent mesh connectivity via indices into contiguous arrays.
 
 ## 3. Python Bindings (Pybind11)
-* **Binding Isolation:** Keep `pybind11` code strictly inside a dedicated wrapper layer (e.g., `bindings/`). Core C++ headers must remain 100% agnostic of Pybind11.
+* **Binding Isolation:** Keep `pybind11` code strictly inside a dedicated wrapper layer (e.g., `bindings/`). Core C++ headers must remain 100% agnostic of Python and Pybind11.
 * **Type Mapping:** Map internal C++ types safely to Python objects or NumPy arrays using `py::array_t` for high-throughput coordinate sharing without copying.
 * **GIL Management:** Release the Global Interpreter Lock (`py::gil_scoped_release`) for intensive C++ triangulation or refinement kernels to allow native multi-threading.
 
