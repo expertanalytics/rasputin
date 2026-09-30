@@ -455,7 +455,13 @@ another HTTP client gets past it.
 
 ### 3.6 `guard_governance`
 
-Three changes; the Bash arm's WRITES scan is otherwise unchanged.
+Three changes, plus one narrowing of the Bash arm's WRITES scan *(review 1)*:
+its `python -` arm no longer matches `python -m ruff`, `python -m mypy` or
+`python -m pytest` (with or without the `3`), so the green and review steps
+can run those gates on `away.py` (T7) without a prompt. Those gates' bare
+executables (`ruff`, `mypy`, `pytest`) already passed the scan, so this adds
+no write path; `python -c`, `python -m` with any other module, and a chained
+`... && python3 -c` are still asked.
 
 1. **Routed through `guard`**: every hit is verdict `ask`, `why` =
    `a rule file changes`, `act` = `<tool> <path>` or the command. At night
@@ -601,6 +607,9 @@ one line, never the recap.
 - Night-time rule-file edits (allowed and logged on a branch), the pending
   journal, the "not in force" context, the `SubagentStart` hook (**U3**).
 - *(review 1)* The uncommitted rule-file scan in the recap (**U3**, §3.8).
+- *(review 2)* A gap in `guard_governance`'s WRITES scan that predates U1:
+  `python3 - <<PY` and `python3.X -c` do not match its `python -` arm; a
+  candidate for a small separate PR.
 - R-B, a subagent's `ask` becoming `deny` by day (generic-harness step 8).
 - The profile, `profile.toml` (generic-harness step 4).
 - Signed acks (backlog, ruling 9).
