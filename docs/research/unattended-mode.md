@@ -325,7 +325,7 @@ it has been printed.
 | **A forged ack or flag**, written through a path the scan cannot read | The flag: little is gained (§2). The ack: the gate passes | **Narrowed** by the push prompt's ack listing; the SUSPECT mark catches only a forgery dated inside an away window (§4). **Accepted** beyond that: signed acks would close it, and they are in the backlog (ruling 9) |
 | **An uncommitted rule edit in the live checkout** that the tripwire missed | It is in force now for every session and persona that reads it, and it never reaches the push gate | **Narrowed.** `SessionStart`, `SubagentStart` and `away.py --back` run `git status --porcelain` across `git worktree list`, filtered by `governed()`, and print every uncommitted rule-file change, marked "not in force". Nothing stops the agent that made the edit from reading it. **Accepted** as a known limit |
 | **Publishing through the API**: `gh api -X PUT …/pulls/N/merge`, `gh api …/pulls -f …`, `curl` | Today neither guard matches these. Checked by feeding the commands to both hooks on this branch: `gh pr merge 1` produces an `ask`, and the other three produce nothing | **Narrowed**: `guard_push` adds writing-method `gh api` and `curl` to the forge host (§3). It is still a text scan, so a script file or a different HTTP client gets past it. **Accepted** beyond that. The fix for today's hook belongs to U1 |
-| **Ola merges in the browser** | No hook runs, so there is no ack check at merge time. CI cannot check either, because acks are untracked (ruling 6) | **Narrowed**: every head that reached the forge through a guarded push passed the gate at that moment. What is left is a base that moved after the last push, which the gate's merge-base row would have caught. **Accepted**: Ola's own merge is his act. To close it, merge through the session (`gh pr merge`), or revisit ruling 6 |
+| **Ola merges in the browser** | No hook runs, so there is no ack check at merge time. CI cannot check either, because acks are untracked (ruling 6) | **Narrowed**: every head that reached the forge through a guarded push passed the gate at that moment. What is left is a base that moved after the last push, which the gate's `stale-base` row would have caught. **Accepted**: Ola's own merge is his act. To close it, merge through the session (`gh pr merge`), or revisit ruling 6 |
 | **An edit to the live checkout** (`${CLAUDE_PROJECT_DIR}`) or to the self-protecting set | Denied and queued in unattended mode. `ConfigChange` blocks a settings or skill change that gets past the scan | These change tonight's enforcement or tonight's subagents before any review. **Narrowed**, not closed: a hook script or `.git/hooks` edit that gets past the scan has no backstop |
 | **An agent treats a pending rule as in force** | It is told otherwise twice: the edit's `additionalContext` and `SubagentStart` both mark it "not in force" | A persona that reads rules through its pointer (generic-harness §5c) would otherwise follow a rule nobody has authored |
 | **The queue write races** with a parallel hook | One JSON line per `O_APPEND` write, under `PIPE_BUF` | The rule of one agent at a time makes a race unlikely anyway |
@@ -446,7 +446,7 @@ writing `gh api` call, and a forged ack dated inside an away window.
 
 ## Ola's rulings (2026-09-30)
 
-All eight open questions are answered as recommended:
+All nine open questions are answered; the first eight as recommended, the ninth (signed acks) moved to the backlog:
 
 | # | Question | Ruling |
 |---|---|---|
