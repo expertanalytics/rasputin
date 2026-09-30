@@ -2,10 +2,10 @@
 
 // Deterministic generators for the noder's property suites -- increment 5b.
 //
-// testing.md:220 reserves this path and says what lives here: "random sets of
-// polylines with controllable density of intersections". It arrives with 5b and
-// not with 5a, because 5a's properties are over points, spacings and segment
-// PAIRS, and nothing in 5a consumes a polyline set.
+// `testing.md`, *Frameworks* reserves this path and says what lives here:
+// "random sets of polylines with controllable density of intersections". It
+// arrives with 5b and not with 5a, because 5a's properties are over points,
+// spacings and segment PAIRS, and nothing in 5a consumes a polyline set.
 //
 // SEEDED AND REPRODUCIBLE. Every function here is a pure function of its seed
 // and its options; std::mt19937_64 is specified by the standard down to the bit,

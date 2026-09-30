@@ -95,11 +95,11 @@ namespace {
 constexpr int seed_count = 24;
 constexpr double kSpacing = 0.1;
 
-// The two arms of the density dial. testing.md:220 calls the generator's
-// subject "controllable density of intersections" and both ends of the control
-// are worth running: the dense arm exercises the split pass and the cascade, the
-// sparse arm exercises the path where the noder must change nothing at all and
-// where a driver that splits something anyway is visible.
+// The two arms of the density dial. `testing.md`, *Frameworks* calls the
+// generator's subject "controllable density of intersections" and both ends of
+// the control are worth running: the dense arm exercises the split pass and the
+// cascade, the sparse arm exercises the path where the noder must change nothing
+// at all and where a driver that splits something anyway is visible.
 [[nodiscard]] PolylineOptions dense() { return PolylineOptions{}; }
 
 [[nodiscard]] PolylineOptions sparse() {
