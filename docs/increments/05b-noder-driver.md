@@ -408,7 +408,7 @@ conclusion, because it is what a later reader would act on.
 
 **The reason given is that the split was *impossible*: one committed test file
 (`test_viz_svg.py`) covered `style.py`, `svg.py` and `fixtures.py`, and the green
-step may not touch a test file. `docs/increments/README.md:78-80` says the
+step may not touch a test file. `docs/increments/README.md:65-67` says the
 opposite in so many words:**
 
 > The rule is not "tests are frozen after red"; it is "`@developer` does not edit

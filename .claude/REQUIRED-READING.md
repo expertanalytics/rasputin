@@ -135,7 +135,7 @@ before any write to a file that states rules; `gates_after_commit.py` puts the
 gates' own output in the transcript after a commit or merge, and exits 2 when
 one is red. All three read the command as text, so they are tripwires: the
 boundary is still yours to keep, and the permission system is not the push
-backstop (auto mode has let unapproved pushes through).
+backstop: auto mode can let an unapproved push through.
 
 `SessionStart` runs `tools/session_state.py`, so the
 cold-start recap is in context before the first prompt, on every source:

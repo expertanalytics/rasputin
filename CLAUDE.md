@@ -16,12 +16,10 @@ This project is governed by specialized sub-agents. Always defer tasks to the co
   where a line counts unless it is blank, a comment, a docstring, or the body of
   a raw literal; tests excluded. The exclusions exist so the ceiling does not
   penalise the comment density this project asks for, and blank lines add no
-  reading (Ola, 2026-09-28; before that, 20b counted blank lines). Lines count
-  as written: packing
-  code by hand under `# fmt: skip` / `# fmt: off` is allowed, provided the
-  packed lines stay readable and the review says why each new region is
-  packed (Ola, 2026-09-27, on `tools/bench.py`). This is the only statement of
-  the rule; everywhere else points here.
+  reading. Lines count as written: packing code by hand under `# fmt: skip` /
+  `# fmt: off` is allowed, provided the packed lines stay readable and the
+  review says why each new region is packed. This is the only statement of the
+  rule; everywhere else points here.
 * **Prohibited Dependencies:** Never introduce `CGAL`, `GDAL`, `OGR`, `Fiona`,
   `Rasterio` (it wraps GDAL), or external `date` libraries.
   Enforced by `tools/check_prohibited_deps.py` over imports, includes, declared
@@ -76,9 +74,8 @@ python3 tools/check_citations.py        # cited lines resolve; lists the at-risk
 
 ### CI
 The gates above also run in GitHub Actions (`.github/workflows/main.yaml`), and
-CI is authoritative: local green does not mean the branch is green. A whole
-branch once merged with CI red on every commit because the workflow was never
-checked, so **verify check status before declaring anything merge-ready**:
+CI is authoritative: local green does not mean the branch is green, so
+**verify check status before declaring anything merge-ready**:
 ```bash
 gh pr checks <pr>      # must be green; required for merge on master
 ```

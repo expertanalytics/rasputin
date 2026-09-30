@@ -19,8 +19,8 @@ happy path.
 ## 1. Core Testing Mandates & Coverage
 * **Coverage Floor:** Every pull request must keep line coverage at or above
   85% project-wide -- which is what `--cov-fail-under=85` actually enforces;
-  a per-module floor is a review obligation, not a machine-checked one, and the
-  Python surface it covers is 37 lines against ~1,200 of unmeasured C++. Anything lower needs a justification in the PR. Beyond the floor,
+  a per-module floor is a review obligation, not a machine-checked one, and
+  `--cov=tin_engine` measures the Python layer only, not the C++ core. Anything lower needs a justification in the PR. Beyond the floor,
   what matters is named coverage: every documented invariant and every
   specially-handled condition (NaN, NoData, empty input, single-element input,
   boundary intersection) has a test that names it.
@@ -42,16 +42,14 @@ You must aggressively test the computational geometry core against adversarial e
 * **Degenerate Shapes:** Slivers, zero-area triangles, and narrow corridors where holes are extremely close to outer boundaries.
 
 ### C. Data Source Ingestion Validation
-Only for an increment that reads external input. (Section B, generic security
-hardening, was removed on 2026-09-27; the letter is kept so older citations
-stay unambiguous.)
+Only for an increment that reads external input. (There is no section B;
+letters are kept stable for citations.)
 * **CRS Misalignment:** Test what happens when an XML breakline file uses a different CRS than the base GeoJSON polygon. Ensure the system safely rejects it or transforms it via `pyproj` cleanly.
 * **Corrupted Rasters:** Feed the TIFF parser truncated, missing, or misaligned raster windows to verify safe, non-crashing async exceptions.
 * **Schema Drift:** Enforce strict Pydantic V2 error raising when custom XML or GeoJSON attributes deviate from the schema.
 
 ### D. Refinement property tests carry both oracles
-This is the one statement of the retrospective's rule 3
-(`docs/retrospectives/2026-09-27-increments-14-to-20b.md`). Every property test
+This is the one statement of this rule. Every property test
 of refinement output checks both, on every path it exercises (start quality on
 or off, constraint feet on or off, any tolerance, one thread or many):
 * **Constrained-Delaunay oracle:** no interior edge that is not a constraint
@@ -62,9 +60,7 @@ or off, constraint feet on or off, any tolerance, one thread or many):
   the output, never from the scan's own records.
 
 Reference implementations: `delaunay_oracle` and `tolerance_oracle` in
-`tests/cpp/property/prop_refinement_constraint_feet.cpp`. The Lawson bug fixed
-in `c23583b` was present from 14b to 20b because no refinement suite carried
-the first oracle.
+`tests/cpp/property/prop_refinement_constraint_feet.cpp`.
 
 ## 4. Operational Style Guide for Tests
 * **Idiomatic & Clean:** Test code is production code. It must be self-documenting, readable, and free of massive, unreadable boilerplate blocks. Use `pytest` fixtures heavily for data setup.
