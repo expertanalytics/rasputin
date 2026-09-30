@@ -618,6 +618,19 @@ Pass: `git remote -v`; `git remote get-url origin`; `git config user.email`;
 `gh api -X GET repos/o/r/pulls -f state=open`; `curl https://api.github.com/x`;
 `curl -X POST https://example.org/x`; `git status`.
 
+**Pinned by the red suite where this file left a shape open** (`@tester`):
+`open_tty()` returns a text file object open for reading and writing (as
+`open("/dev/tty", "r+")`); the prompts of §3.3 step 3 are written to it and
+the answer read with `readline`. `spawn(argv, **kwargs)` returns an object with
+`pid`, as `subprocess.Popen`. `stop(pid)` is called with the old flag's
+`keep_awake_pid`; the default stopper is the module function
+`away.stop_keep_awake(pid)`, which T16 calls directly. `main`'s status may be
+returned or raised as `SystemExit` (argparse rejects `-1h` that way). The
+archive is `queue-YYYY-MM-DD.jsonl`. The `--back` summary's first line is
+`Back. Unattended since <since> until <until>` with both as written in the
+flag, and branches appear in order of first appearance in the queue. The
+`## 3.7` output shapes were checked against the `hooks` page and match it.
+
 ---
 
 ## 5. Estimate

@@ -11,11 +11,14 @@ from its path.
 from __future__ import annotations
 
 import importlib.util
+import json
 import subprocess
 from pathlib import Path
 from types import ModuleType
 
 import pytest
+
+import harness_fixtures
 
 TOOL = Path(__file__).resolve().parents[2] / "tools" / "session_state.py"
 
@@ -152,3 +155,117 @@ def test_default_base_prefers_the_remote_branch_when_it_exists(repo: Path) -> No
 
 def test_default_base_falls_back_to_local_master(repo: Path) -> None:
     assert session_state.default_base(repo) == "master"
+
+
+# ------------------------------------------------ unattended mode in the recap
+#
+# h3 U1, T18 (docs/increments/h3-unattended-u1.md §3.8, §4). The copy of the
+# script runs in a temporary repository (harness_fixtures), so its state dir is
+# that repository's `.git/harness` and the real queue is never read.
+
+
+@pytest.fixture
+def harness_repo(tmp_path: Path) -> Path:
+    return harness_fixtures.make_repo(tmp_path / "repo")
+
+
+def _recap(repo: Path) -> list[str]:
+    result = harness_fixtures.run_script(repo, "tools/session_state.py", "")
+    assert result.returncode == 0, result.stderr
+    return result.stdout.splitlines()
+
+
+def _header(lines: list[str]) -> list[str]:
+    """The lines printed before `== recap ==`."""
+    return lines[: lines.index("== recap ==")]
+
+
+def _queue_entry(n: int) -> dict[str, object]:
+    return {
+        "at": f"2026-09-30T{n:02d}:00:00+00:00",
+        "branch": "feat",
+        "cwd": "/r",
+        "agent_type": None,
+        "agent_id": None,
+        "hook": "guard_push",
+        "act": f"cmd-{n:02d}",
+        "why": "w",
+    }
+
+
+def _write_queue(repo: Path, entries: list[str]) -> None:
+    path = harness_fixtures.queue_path(repo)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("".join(line + "\n" for line in entries))
+
+
+def test_recap_while_unattended_opens_with_the_until(harness_repo: Path) -> None:
+    until = harness_fixtures.flag_on(harness_repo)
+    assert _header(_recap(harness_repo)) == [
+        f"UNATTENDED until {until:%Y-%m-%d %H:%M} UTC. Guarded acts are refused and queued: "
+        "record each as an ASK OLA line and continue."
+    ]
+
+
+def test_recap_with_a_broken_flag_opens_with_the_failure(harness_repo: Path) -> None:
+    harness_fixtures.flag_broken(harness_repo, "not-json")
+    [line] = _header(_recap(harness_repo))
+    assert line.startswith("UNATTENDED FLAG UNREADABLE (")
+    assert line.endswith("): every guarded act is refused. Ola: python3 tools/away.py --back.")
+
+
+def test_recap_with_an_expired_flag_says_the_mode_ended(harness_repo: Path) -> None:
+    harness_fixtures.flag_expired(harness_repo)
+    [line] = _header(_recap(harness_repo))
+    assert line.startswith("Unattended mode ended at ")
+    assert line.endswith(". Ola: python3 tools/away.py --back prints and archives the queue.")
+
+
+def test_recap_while_attended_has_no_header_and_no_harness_sections(harness_repo: Path) -> None:
+    lines = _recap(harness_repo)
+    assert _header(lines) == []
+    assert not any(line.startswith("Queued while unattended") for line in lines)
+    assert "Uncommitted rule-file changes:" not in lines
+
+
+def test_recap_shows_the_newest_ten_queue_lines_after_waiting_on_ola(
+    harness_repo: Path,
+) -> None:
+    _write_queue(harness_repo, [json.dumps(_queue_entry(n)) for n in range(12)])
+    lines = _recap(harness_repo)
+    waiting = next(i for i, line in enumerate(lines) if line.startswith("Waiting on Ola:"))
+    at = lines.index("Queued while unattended (12):")
+    assert at > waiting
+    shown = lines[at + 1 : at + 11]
+    assert [line.rsplit(" ", 1)[1] for line in shown] == [f"cmd-{n:02d}" for n in range(2, 12)]
+    assert shown[-1] == "  2026-09-30T11:00:00+00:00 feat guard_push main: cmd-11"
+    assert lines[at + 11] == "  ... 2 older"
+    assert not any("cmd-00" in line or "cmd-01" in line for line in lines)
+
+
+def test_recap_counts_unreadable_queue_lines(harness_repo: Path) -> None:
+    _write_queue(harness_repo, [json.dumps(_queue_entry(1)), "{not json"])
+    lines = _recap(harness_repo)
+    assert "Queued while unattended (1):" in lines or "Queued while unattended (2):" in lines
+    assert "  (1 unreadable lines)" in lines
+
+
+def test_recap_lists_uncommitted_rule_files_in_every_worktree(
+    harness_repo: Path, tmp_path: Path
+) -> None:
+    second = tmp_path / "second-tree"
+    harness_fixtures.git(harness_repo, "worktree", "add", "-q", "-b", "side", str(second))
+    (harness_repo / "CLAUDE.md").write_text("# changed here\n")
+    (second / "CLAUDE.md").write_text("# changed there\n")
+    (harness_repo / "notes.txt").write_text("not a rule\n")
+    lines = _recap(harness_repo)
+    at = lines.index("Uncommitted rule-file changes:")
+    section: list[str] = []
+    for line in lines[at + 1 :]:
+        if not line.startswith("  "):
+            break
+        section.append(line)
+    assert len(section) == 2
+    assert any("/repo" in line and line.endswith("CLAUDE.md") for line in section)
+    assert any("/second-tree" in line and line.endswith("CLAUDE.md") for line in section)
+    assert not any("notes.txt" in line for line in section)
