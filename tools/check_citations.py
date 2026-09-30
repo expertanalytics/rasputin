@@ -10,7 +10,7 @@ them pointed at text the same branch had rewritten. `@reviewer` put it exactly:
 resolving a line number is not the same as resolving the quotation.
 
 So this script does not claim to find wrong citations. The design is
-`docs/increments/h2-citation-pinning.md`. It knows five forms:
+`docs/increments/h2-citation-pinning.md`. It knows four forms:
 
   unpinned  -- `<path>:<n>`, resolved in the working tree (`legacy/` against
                the `legacy-archive` tag);
