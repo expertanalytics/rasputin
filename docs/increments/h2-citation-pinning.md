@@ -1,6 +1,7 @@
 # Harness step 2: citation pinning
 
-Status: design (@architect). No code. Source: `docs/research/generic-harness.md`
+Status: built on branch `worktree-citation-pinning` (red 7618d05, green
+5e3d8a6); see *Review* at the end. Source: `docs/research/generic-harness.md`
 §3.2, §6.3 (defect 5) and §7 (step 2).
 
 **Goal.** After this step no citation that points by line into a rule file is
@@ -116,9 +117,9 @@ tildes). Strip one optional leading `§`. The heading declares:
   end (`### E1 — …` → `E1`; `### QW1. …` → `QW1`);
 - a letter label `[A-Z]` followed by `.` then whitespace or end
   (`### C. Data Source …` → `C`; `### A tie point` declares nothing). A letter
-  label also declares `<N><L>`, where `N` is the numeric label of the nearest
-  preceding heading with fewer `#` that has one (`### C.` under `## 3.` →
-  `3C`).
+  label also declares `<N><L>`, where `N` is the numeric label of the letter
+  heading's direct parent (the nearest preceding heading with fewer `#`), if
+  that parent has one (`### C.` under `## 3.` → `3C`).
 
 An ID citation **resolves** when `ID` is in the target's declared set.
 
@@ -367,7 +368,9 @@ Mutation testing is not required (the suite is not invariant-critical).
 ## 7. LOC estimate
 
 Production lines as `CLAUDE.md` §2 counts them, all in
-`tools/check_citations.py`; tests excluded. **Estimate, not measured.**
+`tools/check_citations.py`; tests excluded. The table is the estimate. Measured
+at green by `@reviewer`: 139 → 332 counted lines, net **+193**, inside the
+estimate.
 
 | Part | Lines |
 |---|---|
@@ -388,3 +391,14 @@ black-box).
 Order of commits: red (@tester: suite plus §5.1), doc conversion (§5.2),
 green (@developer: tool only), then `@reviewer` with the planted cases of
 test 18 re-run in the real tree.
+
+## Review
+
+**Round 1, `@reviewer`, range `7426b69..45d1bd4`: CHANGES REQUESTED.**
+- **Code and gates pass.** LOC: `tools/check_citations.py` goes from 139 to 332 counted lines, net +193, inside the estimate. The only production file changed. Red (7618d05) precedes green (5e3d8a6); green touches no test file; 1ca498c sits between them. Red suite against the red-time tool: 77 failed and 70 passed. At green: 147 pass (138 + 9).
+- **Plants.** An unpinned `.cpp` comment citation, a missing sha, `@HEAD` and `@master`, a citation inside a C++ string, a line past the end, a missing §ID and a missing heading were each caught or ignored as specified. A spot-check of 10 of the 92 distinct pins in 1ca498c: all quotations hold. ruff, `mypy --strict` on the tool, and the governance gates are all green.
+- **Blocking, all prose:**
+  - the tool's docstring said "five forms" for four;
+  - this file's status line and LOC section had not been updated;
+  - §2.3's letter-label rule differed from the code, which uses the direct parent only; the spec was aligned to the code;
+  - two design-doc citations quoted the pre-red C++ comments; they are now pinned at 7426b69.

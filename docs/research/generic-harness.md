@@ -567,8 +567,8 @@ These are recorded for the migration steps, not fixed here.
    migration edits: `docs/increments/05-noder.md:992` → `testing.md@3245958:301`;
    `docs/increments/05b-noder-driver.md:411` →
    `docs/increments/README.md@3245958:65-67`; and two in code comments,
-   `tests/cpp/property/noding_generators.h:5` and
-   `tests/cpp/property/prop_noding_no_crossings.cpp:98`, both → `testing.md@3245958:220`.
+   `tests/cpp/property/noding_generators.h@7426b69:5` and
+   `tests/cpp/property/prop_noding_no_crossings.cpp@7426b69:98`, both → `testing.md@3245958:220`.
    That makes 13. The two in code comments are invisible to
    `check_citations.py`, which scans only `.md` (`SCAN_SUFFIXES`), and to the
    `*.md`-only grep this design first used. They were found with
