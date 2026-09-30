@@ -4,8 +4,8 @@ Status: **Q1-Q5 ruled by Ola; 15a implemented** on branch
 `increment15-dem-mosaic` (red `2696bc2`, green `ff7cc8d`; merged as `40de334`, #105). **15b
 implemented** on `increment15b-domain-crs` (red `372bb99`, green `0011741`).
 15c-15d are designed, not implemented. Q6 and Q9 were ruled on 2026-09-30,
-and 15c is to be redesigned on Q6's ruling; Q7 and Q8 follow from it; Q10 is
-open. Written by `@architect` before
+and 15c is to be redesigned on Q6's ruling; Q7 and Q8 follow from it; Q10 was
+ruled the same day. Written by `@architect` before
 `@tester`, per `docs/increments/README.md` step 1.
 
 ## Ruled by Ola
@@ -58,8 +58,14 @@ open. Written by `@architect` before
   canvas and a cap of half of physical memory, two canvases would not fit
   on 32 GB, so the 15c redesign must stream the source by window into the
   one target canvas.
-- Still open: Q10 (the ANADEM test fixture), the basin tolerance, and whether
-  commercial use matters for the DEM choice.
+- **2026-09-30, Q10 (the ANADEM fixture): (a), commit the extracts.** Ola: "If
+  they have given an MIT license to it, it basically means they don't really
+  care. We should, however, credit both it and the Copernicus data sources."
+  So the extracts are committed, crediting both ANADEM and Copernicus GLO-30.
+  Both credits go into `NOTICE.md`, beside the Kartverket and CORINE ones,
+  and a `NOTICE` goes in the fixture directory, as for CORINE.
+- Still open: the basin tolerance, and whether commercial use matters for the
+  DEM choice.
 - **2026-09-28, Q1 revised: overlaps that disagree are split down the middle
   ("b", Ola).** Measured first, and widened after review with the committed
   probe `15-probes/dtm10_dates.py` (120 random neighbour pairs, seed 1; a
@@ -1463,7 +1469,7 @@ after the transform, with their assertions unchanged.
   `docs/benchmarks/<date>/`, with the power state.
 - For all: every gate in `CLAUDE.md` §4 green, and CI green.
 
-## Questions for Ola (Q1-Q5 ruled 2026-09-27; Q6 and Q9 ruled 2026-09-30, Q7-Q8 follow, Q7's form open; Q10 open; see "Ruled by Ola")
+## Questions for Ola (Q1-Q5 ruled 2026-09-27; Q6 and Q9 ruled 2026-09-30, Q7-Q8 follow, Q7's form open; Q10 ruled 2026-09-30; see "Ruled by Ola")
 
 Q1-Q5 are about Norway and are needed before 15a starts. Q6-Q10 are about
 the basin and can wait until after Norway.
