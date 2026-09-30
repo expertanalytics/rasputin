@@ -1,8 +1,11 @@
 # Harness U1: queue, don't wait (with the U0 probes)
 
-Status: **implemented, in review.** Red `18bdab5`; green `6a19357`. Review
-round 1 asked for changes; each amendment is marked *(review 1)* where it
-stands. Designed by @architect, 2026-09-30; U0 results in §2.5. Source:
+Status: **merged** (#123; the settings wiring of §3.11 in #124). Red
+`18bdab5`; green `6a19357`. Review round 1 asked for changes; each amendment
+is marked *(review 1)* where it stands. **Amended 2026-10-01** for a defect
+Ola found in the merged `away.py` (entering always fails in a real terminal);
+the amendment is marked *(tty fix)* in §3.3 step 2, §4 (T23) and the
+red-suite pins. Designed by @architect, 2026-09-30; U0 results in §2.5. Source:
 `docs/research/unattended-mode.md` (merged in #122), cited below as *the
 design*, including *Ola's rulings (2026-09-30)* at its end. This file does not
 restate the design; it fixes what U1 builds, exactly enough for `@tester` to
@@ -311,6 +314,35 @@ keep-awake stopper.
 2. **Terminal**: open `/dev/tty` read-write. On `OSError`, print to stderr
    `away.py needs your own terminal: /dev/tty is not available (<errno name>). Run it in a terminal window, not through the agent.`
    and exit 3. stdin is never read.
+   *(tty fix)* **The defect.** The merged default opener is
+   `open("/dev/tty", "r+")` (`tools/away.py:254` as of `ef32ee3`). Text mode
+   `"r+"` wraps the file in `io.BufferedRandom`, which requires a seekable
+   raw file; a tty is not seekable, so on a real terminal the call raises
+   `io.UnsupportedOperation` ("File or stream is not seekable."). That is an
+   `OSError` subclass with `errno` `None`, so step 2 reported it as "no
+   terminal" and exited 3, every time. Every test injected a fake `open_tty`,
+   so the default never ran under test. Reproduced under `pty.fork()`
+   (@architect, 2026-10-01): the `"r+"` form exits with
+   `UnsupportedOperation`, errno `None`; the form below prints the prompt,
+   reads `y` and exits 0; with no controlling terminal both raise
+   `OSError(ENXIO)`, so T12 is unaffected.
+   **The corrected opener** (the default of `open_tty`, still one expression):
+   `io.TextIOWrapper(io.BufferedRWPair(io.FileIO("/dev/tty", "r"), io.FileIO("/dev/tty", "w")), line_buffering=True)`.
+   Two descriptors, one per direction, because `BufferedRWPair` must not be
+   given the same raw object twice and neither `FileIO` needs to seek.
+   `line_buffering=True` flushes each newline-ended line; the prompt
+   `Type y to confirm: ` has no newline, so the explicit `tty.flush()` before
+   `readline` stays and is what makes the prompt appear before the read
+   (`write_through=True` would not suffice: it bypasses only the text layer,
+   and `BufferedWriter` still holds the bytes).
+   **The name in the message.** `<errno name>` is `errno.errorcode[error.errno]`
+   when `errno` is set. When it is `None` (no OS error behind the exception,
+   so a defect in `away.py` rather than a missing terminal), the parenthesis
+   holds `<ExceptionType>: <message>` instead, e.g.
+   `(UnsupportedOperation: File or stream is not seekable.)`. The message and
+   exit 3 stay the same: entering still fails safe, but the parenthesis no
+   longer passes a code defect off as an OS condition. This changes the one
+   line that computes the name.
 3. **Confirm** on the tty:
    `Unattended mode for <dur> x 1.2, until <local time> (<UTC ISO>). Guarded acts will be refused and queued.`
    plus, if a flag is on, `This replaces the window ending <until>.`, then
@@ -702,6 +734,8 @@ README's sense: no mutation round.
 | T20 | *(review 1)* `guard_unattended` with `tools/harness_mode.py` deleted from the copy, each of the three events of §3.7 | the failure shape of §3.9 for each event; reason contains `guard_unattended failed (ModuleNotFoundError`; exit 0 |
 | T21 | *(review 1)* recap with a broken harness, with an `ASK OLA:` line in `.claude/current-task/session.md`: (i) `tools/harness_mode.py` deleted from the copy; (ii) the copy's `harness_mode.py` with `def read_mode(*a, **k): raise RuntimeError("planted")` appended | exit 0; first line starts `UNATTENDED STATE UNKNOWN (ModuleNotFoundError: ` in (i), and in (ii) is `UNATTENDED STATE UNKNOWN (RuntimeError: planted): ` followed by the rest of §3.8's text; `== recap ==`, the `ASK OLA:` line under *Waiting on Ola*, and `Next on ROADMAP.md:` all print; no `Queued while unattended` line |
 | T22 | *(review 1)* `away.py --back` with the copy's `tools/session_state.py` replaced by `raise RuntimeError("planted")`, a flag and one queue line | exit 0; stdout contains `ASK OLA lines in .claude/current-task/:` then `  (unavailable: RuntimeError: planted)`; flag gone; queue archived; one `back` line in `windows.jsonl` |
+| T23 | *(tty fix)* **the default `open_tty`, on a real pseudo-terminal.** `pty.fork()`; the child (whose controlling terminal is the pty slave, so `/dev/tty` is the pty) `os.execv`s `sys.executable -c <code>` that imports the fixture's copy of `away.py` by path and calls `main(["8h"], root=<tmp repo>, spawn=<fake with pid>, stop=<recorder>)` **without `open_tty`**, then exits with its status. The parent reads the master with `select` and a deadline measured in the parent (10 s; on expiry it kills the child and fails), writes `y\n` only after `Type y to confirm: ` has been read, and `waitpid`s. Second case: answer `n\n` | `y`: exit 0; the master output contains `Type y to confirm: ` before any input was written; the flag exists; one `enter` line in `windows.jsonl`. `n`: exit 1, no flag. Neither output contains `needs your own terminal`. **Fails on `ef32ee3`**: exit 3 with `(File or stream is not seekable.)` and the prompt never appears. Skipped only where `pty` is unavailable (non-POSIX), never on macOS or the Linux CI runner |
+| T24 | *(tty fix)* the name in the message, in process: `open_tty` raising `io.UnsupportedOperation("x")` | exit 3; stderr contains `needs your own terminal` and `(UnsupportedOperation: x)`; `spawn` never called. T12's `OSError(ENXIO)` case still prints `(ENXIO)` |
 
 **T4's commands.** Ask: `git update-ref refs/remotes/origin/master HEAD`;
 `git -C /x update-ref -d refs/heads/y`; `git remote add up u`;
@@ -730,9 +764,11 @@ files exist. The `make_repo` docstring in `harness_fixtures.py` (its
 `test_session_state.py` follow that scan's move to U3.
 
 **Pinned by the red suite where this file left a shape open** (`@tester`):
-`open_tty()` returns a text file object open for reading and writing (as
-`open("/dev/tty", "r+")`); the prompts of §3.3 step 3 are written to it and
-the answer read with `readline`. `spawn(argv, **kwargs)` returns an object with
+`open_tty()` returns a text file object open for reading and writing; the
+prompts of §3.3 step 3 are written to it and the answer read with `readline`.
+*(tty fix)* This pin used to read "(as `open("/dev/tty", "r+")`)", which is
+the defect of §3.3 step 2; the default is the opener given there, and T23 is
+the only test that must not inject `open_tty`. `spawn(argv, **kwargs)` returns an object with
 `pid`, as `subprocess.Popen`. `stop(pid)` is called with the old flag's
 `keep_awake_pid`; the default stopper is the module function
 `away.stop_keep_awake(pid)`, which T16 calls directly. `main`'s status may be
