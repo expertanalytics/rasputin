@@ -187,9 +187,9 @@ point at it.
 
 | Rule | Home | Restated at | Fix |
 |---|---|---|---|
-| Prohibited dependencies | `CLAUDE.md:23-26`, checked by `tools/check_prohibited_deps.py` | `.claude/agents/architect.md:30` ("No-GDAL and No-CGAL"); `.claude/skills/computational-geometry/SKILL.md:24` ("Do not use CGAL"); `.claude/skills/geospatial-data-formats/SKILL.md:10-11` (GDAL, OGR, Fiona) and `:14` ("Never `rasterio`"), plus "Zero-GDAL" in its description and summary (`:3`, `:8`). Pointers, *ok*: `orchestrator.md:56`, `testing.md:351` | Each becomes "see `CLAUDE.md` §2". The geospatial skill keeps its how-to (tifffile, shapely, pyproj) |
+| Prohibited dependencies | `CLAUDE.md:23-26`, checked by `tools/check_prohibited_deps.py` | `.claude/agents/architect.md:30` ("No-GDAL and No-CGAL"); `.claude/skills/computational-geometry/SKILL.md:24` ("Do not use CGAL"); `.claude/skills/geospatial-data-formats/SKILL.md:10-11` (GDAL, OGR, Fiona) and `:14` ("Never `rasterio`"), plus "Zero-GDAL" in its description and summary (`:3`, `:8`). Pointers, *ok*: `orchestrator.md` line 56, `testing.md:351` | Each becomes "see `CLAUDE.md` §2". The geospatial skill keeps its how-to (tifffile, shapely, pyproj) |
 | Size ceiling | `CLAUDE.md:15-22` | `docs/PRINCIPLES.md:220` (its heading states "700"). Pointers, *ok*: `developer.md:30`, `reviewer.md:16`, `tester.md:68`, `orchestrator.md:25`, and the three skills' "Change Limit" lines (redundant but harmless) | Rename E4 without the number |
-| Reconcile LOC against the estimate | `reviewer.md:43-45` (check 3) | `reviewer.md:16-20` (the same file, again); `developer.md:30-33`; `orchestrator.md:29-30` | Keep check 3; the others point at it |
+| Reconcile LOC against the estimate | `reviewer.md:43-45` (check 3) | `reviewer.md:16-20` (the same file, again); `developer.md` lines 30-33; `orchestrator.md:29-30` | Keep check 3; the others point at it |
 | Coverage floor | `testing.md:279`, checked by `pyproject.toml:102` (`--cov-fail-under=85`) | `CLAUDE.md:9` ("85%"); `tester.md:13-14` and `:20-23` (twice in one file); `testing.md:18` and `:283-288` | State it once at `testing.md:279`; drop the number everywhere else |
 | Approval boundary | `REQUIRED-READING.md:100-116` | `PRINCIPLES.md:200-206` (E1 restates the list of acts); the message in `guard_push.py`. Pointers, *ok*: `CLAUDE.md:43-45`, `orchestrator.md:38-43` | E1 becomes an index entry (§4) |
 | `@reviewer` before a push | `REQUIRED-READING.md:118-126` | `PRINCIPLES.md:208-211` (E2) | Index entry |
@@ -199,12 +199,12 @@ point at it.
 | Red/green trace | `docs/increments/README.md:49-52` | `developer.md:23-26`; `PRINCIPLES.md:138-144` (C2) | The developer keeps its duty in one line and points |
 | Merge commits, never squash | `docs/increments/README.md:75-78` | `PRINCIPLES.md:141-142` | Index entry |
 | CI is authoritative | `CLAUDE.md:75-81` | `reviewer.md:24-31` (with the command); `docs/increments/README.md:53` | The reviewer keeps its precondition as a pointer |
-| Literature before design | `docs/increments/README.md:28-34` | `architect.md:33-44` (§4, which is more detailed than its home); `.claude/skills/computational-geometry/SKILL.md:46-52` (with a pointer) | Merge §4's three points into the home. §4 keeps the duty ("you own it") and a pointer; the skill keeps only its domain examples |
+| Literature before design | `docs/increments/README.md:28-34` | `architect.md` lines 33-44 (§4, which is more detailed than its home); `.claude/skills/computational-geometry/SKILL.md:46-52` (with a pointer) | Merge §4's three points into the home. §4 keeps the duty ("you own it") and a pointer; the skill keeps only its domain examples |
 | Power state with each run | `docs/increments/README.md:82` (the Acceptance section, which calls itself "the one statement"; the power-state bullet is at 88-90) | `perf.md:39-42` | `perf.md` points |
 | Adversarial geometry list | `tester.md:37-42` (§3A) | `orchestrator.md:19-20`; `.claude/skills/computational-geometry/SKILL.md:29`; `tester.md:3` (the description) | The orchestrator says "per tester §3A" |
 | Pybind11 isolation | `.claude/skills/modern-cxx/SKILL.md:27` | `architect.md:22` | The architect points |
 | Concepts / `typing.Protocol` | `.claude/skills/modern-cxx/SKILL.md:11`, `.claude/skills/python-development/SKILL.md:34` | `architect.md:24` | The architect points |
-| `-Werror` | `CMakeLists.txt:52,70` (the check) | `.claude/skills/modern-cxx/SKILL.md:32`; named in `developer.md:35`, `reviewer.md:13,35` and `orchestrator.md:31` | State it once in `CLAUDE.md` §4, beside the build; the others name "the compiler gate" |
+| `-Werror` | `CMakeLists.txt:52,70` (the check) | `.claude/skills/modern-cxx/SKILL.md:32`; named in `developer.md` line 35, `reviewer.md:13,35` and `orchestrator.md:31` | State it once in `CLAUDE.md` §4, beside the build; the others name "the compiler gate" |
 | I/O boundary | `CLAUDE.md:28` | `PRINCIPLES.md:215-216` (E3 calls itself a pointer but restates the rule) | Index entry |
 | Documentation defects | `docs/increments/README.md:130-133` | `PRINCIPLES.md:146-150` (C3) | Index entry |
 | Roadmap row | `docs/increments/README.md:69-73` | `PRINCIPLES.md:152-156` (C4) | Index entry |
