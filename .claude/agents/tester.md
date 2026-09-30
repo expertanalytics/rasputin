@@ -19,8 +19,8 @@ happy path.
 ## 1. Core Testing Mandates & Coverage
 * **Coverage Floor:** Every pull request must keep line coverage at or above
   85% project-wide -- which is what `--cov-fail-under=85` actually enforces;
-  a per-module floor is a review obligation, not a machine-checked one, and it
-  measures the Python layer only, not the C++ core. Anything lower needs a justification in the PR. Beyond the floor,
+  a per-module floor is a review obligation, not a machine-checked one, and
+  `--cov=tin_engine` measures the Python layer only, not the C++ core. Anything lower needs a justification in the PR. Beyond the floor,
   what matters is named coverage: every documented invariant and every
   specially-handled condition (NaN, NoData, empty input, single-element input,
   boundary intersection) has a test that names it.

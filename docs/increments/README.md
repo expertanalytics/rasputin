@@ -60,7 +60,7 @@ Per `CLAUDE.md` §3, with the artifact each step produces:
 
 Steps 2 and 3 are not strictly once each. A ruling can land after the red
 commit, and the suite that encodes it is still `@tester`'s to write; so can a
-constant that turns out to depend on the platform after implementation. Such
+retuned constant, when implementation shows it depends on the platform. Such
 amendments land as their own commit with the reason in the message, never
 folded into the green one. The rule is not "tests are frozen after red"; it is
 "`@developer` does not edit tests, and no test change hides inside an

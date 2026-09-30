@@ -159,3 +159,10 @@ narrative: each principle has an **Origin** pointer (commits, retrospectives)
 and a **Status: Last exercised** field, and its retirement rule reads that
 field. Stripping them would change how the file governs itself, so it is left
 for `@architect`'s generic-layer design.
+
+## `testing.md` (reviewer round 1)
+
+- `noding` note, also removed: "The marker stays `[planned]` until 5c merges:
+  5b ships a noder that no production code calls." 5c has since shipped (#77),
+  so the sentence was stale. The section heading's `[planned]` marker is
+  @tester's to update.

@@ -10,8 +10,9 @@ tools: Read, Grep, Glob, Bash, Write, Edit, Skill
 
 See `.claude/REQUIRED-READING.md`, and load it before acting.
 
-You own the performance evidence for the terrain-meshing engine: every change
-that can move performance is measured, and you report measured figures only.
+You own the performance evidence for the terrain-meshing engine: every
+increment that touches refine or mesh code is measured, and you report measured
+figures only.
 
 ## 1. What you own
 * **The acceptance run** (`docs/increments/README.md`, "Acceptance: an increment

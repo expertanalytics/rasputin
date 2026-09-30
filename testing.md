@@ -103,13 +103,13 @@ These are the "water tight" properties — they must hold on every input regardl
 
 ### `noding` [planned]
 
-`docs/increments/05-noder.md` gives the
-measurement behind each
-item below.
-The marker stays `[planned]`
-until 5c merges: 5b ships a noder
-that no production
-code calls.
+The items below are the noder's output guarantees. The numbered ones
+(guarantees 14 and 15) are defined in `docs/increments/05-noder.md`,
+the design this section tests against. Each item states the property
+in the form the suite checks. Several spell out how that form differs
+from the obvious reading, and that difference is the point: a weaker
+property is one a mutant could satisfy while every assertion written
+for the obvious reading still passed.
 
 - **No two output edges cross in their interiors** — guarantee 14(a). It is *verified* by a second pass over the output, not established by construction, because snap rounding can create a crossing that was not in the input. Two output edges with **equal** node-id pairs are permitted and are what the property union below exists for; a partial collinear overlap is not, and after splitting there is no third case.
 - **No node's cell meets an edge it is not an endpoint of** — guarantee 14(b), and the half a reader will assume follows from the one above. It does not: this is the hot-pixel form, `segment_meets_cell`, not exact incidence, and it is strictly the stronger of the two. A T-junction the split pass missed is caught here rather than blessed, which an exact-incidence spelling would not do.
