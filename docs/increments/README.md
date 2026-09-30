@@ -29,9 +29,13 @@ Per `CLAUDE.md` §3, with the artifact each step produces:
    before the design, not after it.
 
    *Literature.* Name the published method the increment builds on, with a
-   citation, and say what differs from it. If the increment claims something
-   new, say what was searched and what was found; a novelty claim is not made
-   without that check.
+   citation, and say what differs from it. Design with the literature, not
+   against it: every departure says why, and a departure that drops the
+   method's guarantees is named as such. If the increment claims something
+   new (for example an exact sup-norm guarantee on a DEM with constraints),
+   say what was searched and what was found; a novelty claim is not made
+   without that check. The option to publish is kept open, so an unchecked
+   claim is a defect, not a detail.
 
    *Legacy.* What the legacy tree holds on this increment's subject, and either
    what is being carried across or why nothing is. "Nothing" is a legitimate
@@ -50,7 +54,7 @@ Per `CLAUDE.md` §3, with the artifact each step produces:
    suite is committed **red**, before the implementation exists.
 3. `@developer` reads both and makes it green. The green commit touches **no
    test file** — that is what makes the trace mean anything.
-4. `@reviewer` audits before merge. CI is authoritative. An increment that
+4. `@reviewer` audits before merge (CI is authoritative, `CLAUDE.md` §4). An increment that
    touches refine or mesh code also needs `@perf`'s acceptance run (below).
    **The review leaves a trace in the increment file.** `@reviewer` is
    read-only, so its spawner copies the handback's verdict, the commit range
@@ -122,10 +126,6 @@ file says which.
 smaller model only for a value-type header with no kernel parameter and no
 exactness claim; otherwise do not spend the round setting it up. Predicate,
 kernel and topology work is not delegable downward.
-
-**Independent suites run as parallel agents.** Two suites that do not share a
-header do not need to share a round. Check the dependency first: a suite whose
-header returns another header's types waits for that suite.
 
 **A documentation defect found during an increment is fixed in that increment's
 PR, or it is not recorded.** A "documentation debt" section is a ledger nobody

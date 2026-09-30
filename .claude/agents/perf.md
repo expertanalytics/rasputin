@@ -36,10 +36,9 @@ figures only.
   rebuild and reinstall the extension first, per `.claude/REQUIRED-READING.md`
   ("Stale artifacts"); a run against a stale `.so` measures the previous
   increment.
-* **Record the power state with every run** (`pmset -g batt`). Compare a battery
-  run only against a battery baseline, and AC only against AC: the power state
-  changes timings. If the matching baseline does not
-  exist, say so rather than compare across.
+* **Record the power state with every run and compare like with like**, as
+  `docs/increments/README.md`, *Acceptance*, states. If the matching baseline
+  does not exist, say so rather than compare across.
 * **Repeat and take the median**; record the
   machine, the thread counts, the DEM, the domain and the tolerance.
 * **Record quality with speed:** worst angle, max vertex degree, the tolerance

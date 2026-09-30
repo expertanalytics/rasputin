@@ -217,7 +217,7 @@ never crosses into it. `CLAUDE.md` §2 is the statement; this is the pointer.
 **Origin.** `CLAUDE.md` §2; `docs/increments/05c-noder-wiring.md`, prior art.
 **Status.** In force. Last exercised: 5c.
 
-### E4 — Under 700 production lines per PR
+### E4 — Under the production-line ceiling per PR
 
 **Rule.** `CLAUDE.md` §2 is the statement; this is the pointer.
 **Status.** In force. Last exercised: 5c.

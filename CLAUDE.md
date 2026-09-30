@@ -6,7 +6,7 @@ This file drives the automation loops for Claude Code (`@orchestrator`) in this 
 This project is governed by specialized sub-agents. Always defer tasks to the correct persona in `.claude/agents/`:
 * `@orchestrator`: Master project driver. Handles human input and chains the TDD loop.
 * `@architect`: Enforces declarative structures, component boundaries, and interface decoupling. Checks the literature and any novelty claim before a design.
-* `@tester`: Owns the test suites. Enforces the 85% coverage floor (see `testing.md`) and adversarial geometry fuzzing.
+* `@tester`: Owns the test suites. Enforces the coverage floor of `testing.md` and adversarial geometry fuzzing.
 * `@developer`: Writes clean, high-performance C++20 and async Python code.
 * `@reviewer`: Final gatekeeper. Audits CI status, LOC, red-step scaffolding, and prose claims against code.
 * `@perf`: Performance owner. Runs the benchmark and scaling acceptance for refine- and mesh-touching increments (`tools/bench.py`), profiles the serial phase, and keeps the evidence in `docs/benchmarks/<date>/`.
@@ -57,6 +57,8 @@ pytest tests/python/   # Run target Python testing suite
 cmake -S . -B build && cmake --build build -j   # -j alone: nproc is Linux-only
 ctest --test-dir build                          # all registered suites; see tests/cpp/CMakeLists.txt
 ```
+The compiler gate: the C++ targets build with `-Wall -Wextra -Wpedantic -Werror`
+(`CMakeLists.txt`, `tests/cpp/CMakeLists.txt`), so any warning fails the build.
 
 ### Static gates (Python)
 ```bash
