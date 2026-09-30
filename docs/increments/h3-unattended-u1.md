@@ -865,3 +865,27 @@ is too thin to spend on anything else, so:
    anyone answering. U1 changes no rule text for this; it is recorded here as
    an observation for the generic-harness work.
 5. The push and the PR, as always.
+
+## Review
+
+### tty fix, round 1: APPROVED
+
+Commit range reviewed: `ef32ee3..6d61278`, branch `worktree-away-tty`
+(6bd3484 spec amendment, 2065c98 red, 6d61278 green).
+
+LOC: 13 production lines added, 2 removed (net +11), all in `tools/away.py`,
+by the `CLAUDE.md` §2 rule; `git show --stat` says +17/-2, the 4 extra being
+comments. The spec's "about two lines" counts logical lines; both changes are
+one statement each, spread over several physical lines by ruff format.
+
+Checks: red before green (T23 fails with `exit 3; ... (File or stream is not
+seekable.)`, T24's errno-None case with `(x)`; all pass on HEAD); green touches
+no test; opener exactly as §3.3 step 2; the `# type: ignore[type-var]` is
+needed (typeshed's `_WrappedBuffer` requires `name`, which `BufferedRWPair`
+does not declare) and scoped to one error code; `pytest tests/python` 3166
+passed, 13 skipped; ruff check, ruff format --check, mypy, the three governance
+gates green. No ROADMAP row covers the harness work. CI not yet run: T23's
+first run on the Linux runner is after the push.
+
+Suggestions (non-blocking): the read descriptor leaks to garbage collection if
+opening the write side raises (harmless: the process exits 3 at once).
