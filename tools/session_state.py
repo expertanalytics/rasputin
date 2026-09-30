@@ -35,10 +35,20 @@ import os
 import re
 import stat
 import subprocess
-from datetime import datetime
+import sys
+from datetime import UTC, datetime
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 REPO = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(REPO / "tools"))
+if TYPE_CHECKING:  # imported in print_recap, where a harness fault costs one line (§3.8)
+    import harness_mode
+UNKNOWN = (
+    "UNATTENDED STATE UNKNOWN ({}): the recap could not read the flag or the queue. "
+    "Guarded acts may be refused; record each refusal as an ASK OLA line and continue."
+)
+
 SLUG = re.sub(r"[^A-Za-z0-9]", "-", str(REPO))
 TRANSCRIPTS = Path.home() / ".claude" / "projects" / SLUG
 
@@ -179,8 +189,62 @@ def roadmap_next(text: str, n: int = 3) -> list[str]:
     return rows[:n]
 
 
+def unattended_header(mode: harness_mode.Mode) -> str | None:
+    """The line above the recap while the flag is not off (h3 U1 §3.8)."""
+    if mode.state == "broken":
+        return (
+            f"UNATTENDED FLAG UNREADABLE ({mode.detail}): every guarded act is refused. "
+            "Ola: python3 tools/away.py --back."
+        )
+    if mode.until is None:
+        return None
+    until = f"{mode.until.astimezone(UTC):%Y-%m-%d %H:%M} UTC"
+    if mode.state == "on":
+        return (
+            f"UNATTENDED until {until}. Guarded acts are refused and queued: "
+            "record each as an ASK OLA line and continue."
+        )
+    return (
+        f"Unattended mode ended at {until}. "
+        "Ola: python3 tools/away.py --back prints and archives the queue."
+    )
+
+
+def queued(state: Path | None) -> list[str]:
+    """The newest 10 queue lines, then how many are older or unreadable."""
+    path = state / "queue.jsonl" if state else None
+    if path is None or not path.is_file():
+        return []
+    entries, bad = [], 0
+    for line in _read(path, "").splitlines():
+        try:
+            entry = json.loads(line)
+            entries.append(
+                f"  {entry['at']} {entry.get('branch') or '(no branch)'} {entry['hook']} "
+                f"{entry.get('agent_type') or 'main'}: {str(entry['act'])[:100]}"
+            )
+        except (ValueError, KeyError, TypeError):
+            bad += 1
+    lines = [f"Queued while unattended ({len(entries)}):", *entries[-10:]]
+    if len(entries) > 10:
+        lines.append(f"  ... {len(entries) - 10} older")
+    if bad:
+        lines.append(f"  ({bad} unreadable lines)")
+    return lines
+
+
 def print_recap() -> None:
     """Retrospective rule 5: the structured recap every round opens with."""
+    try:
+        import harness_mode
+
+        state = harness_mode.state_dir(REPO)
+        header = unattended_header(harness_mode.read_mode(state, datetime.now(UTC)))
+        queue = queued(state)
+    except Exception as error:
+        header, queue = UNKNOWN.format(f"{type(error).__name__}: {error}"[:200]), []
+    if header:
+        print(header)
     print("== recap ==")
     print(f"Last landed: {last_landed(REPO)}")
     print("In flight:")
@@ -193,6 +257,8 @@ def print_recap() -> None:
     print("Waiting on Ola:" + ("" if decisions else " (none recorded as ASK OLA)"))
     for line in decisions:
         print(f"  {line}")
+    for line in queue:
+        print(line)
     print("Next on ROADMAP.md:")
     for row in roadmap_next(_read(REPO / "ROADMAP.md", "")):
         print(f"  {row}")
