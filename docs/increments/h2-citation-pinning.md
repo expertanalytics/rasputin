@@ -329,7 +329,7 @@ existing tests keep passing unchanged (they pass `--paths docs`).
 12. A matching `## 7.` heading inside a fenced block does not declare `7`.
 13. `§ Name` (space after `§`) and "section 2", naming a heading the target
     lacks: not citations, exit 0.
-14. `` `x.md`, *Name* `` against `## Name [tag]` and `## Name: rest`:
+14. `` `<file>.md`, *<Name>* `` against `## Name [tag]` and `## Name: rest`:
     resolve; against `## Named`: broken.
 15. Partial path `dir/SKILL.md` with several `SKILL.md` in the tree: resolves
     by suffix; a bare `SKILL.md` stays ambiguous.
