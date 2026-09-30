@@ -1,0 +1,26 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "*",
+        "hooks": [
+          { "type": "command", "command": "python3 /Users/skavhaug/projects/rasputin/.claude/worktrees/unattended-u1/docs/increments/h3-probes/u0_probe_hook.py" }
+        ]
+      }
+    ],
+    "PermissionRequest": [
+      {
+        "hooks": [
+          { "type": "command", "command": "python3 /Users/skavhaug/projects/rasputin/.claude/worktrees/unattended-u1/docs/increments/h3-probes/u0_probe_hook.py" }
+        ]
+      }
+    ],
+    "SubagentStart": [
+      {
+        "hooks": [
+          { "type": "command", "command": "python3 /Users/skavhaug/projects/rasputin/.claude/worktrees/unattended-u1/docs/increments/h3-probes/u0_probe_hook.py" }
+        ]
+      }
+    ]
+  }
+}

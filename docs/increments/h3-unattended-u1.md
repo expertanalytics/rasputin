@@ -12,6 +12,10 @@ enters the mode, from his own terminal, for a stated duration. Independent of
 the mode, `guard_push` stops missing the ref, remote, config and API writes
 the design's §6 row *Publishing through the API* found unguarded.
 
+**Scope ruling.** Ola, 2026-09-30: the three extra hooks of §3.7
+(`AskUserQuestion`, `PermissionRequest`, `ConfigChange`) stay in U1; the scope
+is as written here.
+
 **Order.** Ola ruled on 2026-09-30 that U1 comes first ("U1 was the one I
 wanted first"). The design's §8 placed U1 after generic-harness step 3
 (history out of hook docstrings), which has not landed. The cost of the
@@ -58,14 +62,27 @@ can stop U1 (§2.4).
 
 ### 2.1 Probe files (no production code)
 
-`@tester` writes and commits them on the U1 branch, first commit, under
-`docs/increments/h3-probes/` (precedent: `docs/increments/15-probes/`):
+Committed on the U1 branch by `@architect`, under `docs/increments/h3-probes/`
+(precedent: `docs/increments/15-probes/`). They touch no `.claude/settings*.json`
+and no live hook:
 
 | File | Behaviour |
 |---|---|
-| `u0_probe_hook.py` | Reads the event from stdin. Appends one JSON line to `../rasputin_scratch/u0-probe/log.jsonl` (created if absent): `t` (UTC ISO), `hook_event_name`, `tool_name`, `agent_id`, `agent_type`, `permission_mode`, `cwd`, and the first 200 characters of `tool_input.command` or `tool_input.file_path`. Then, **only** for `PreToolUse` + `Bash` whose command contains `U0-PROBE-DENY`, prints a PreToolUse `deny` whose reason is `U0-REASON-7F3A: probe refusal. Quote this line in your handback, then run: echo U0-AFTER`. Otherwise prints nothing. Never exits non-zero |
+| `u0_probe_hook.py` | Reads the event from stdin. Appends one JSON line to the log (below; created if absent): `t` (UTC ISO), `hook_event_name`, `tool_name`, `agent_id`, `agent_type`, `permission_mode`, `cwd`, and the first 200 characters of `tool_input.command` or `tool_input.file_path`. Then, **only** for `PreToolUse` + `Bash` whose command contains `U0-PROBE-DENY`, prints a PreToolUse `deny` whose reason is `U0-REASON-7F3A: probe refusal. Quote this line in your handback, then run: echo U0-AFTER`. Otherwise prints nothing. Never exits non-zero |
 | `u0-probe-settings.json` | Wires `u0_probe_hook.py` by absolute path on `PreToolUse` (matcher `*`), `PermissionRequest` (no matcher) and `SubagentStart` (no matcher) |
-| `u0_tty_probe.py` | Prints and logs (same log, `hook_event_name: "tty-probe"`): `sys.stdin.isatty()`; whether `os.open("/dev/tty", os.O_RDWR)` succeeds (else the errno name); if it opened, writes `U0: type y and Enter within 20 s` to the tty and logs what `select` + `read` returned within 20 s |
+| `u0_tty_probe.py` | Prints and logs (same log, `hook_event_name: "tty-probe"`): `sys.stdin.isatty()`; whether `os.open("/dev/tty", os.O_RDWR)` succeeds (else the errno name); if it opened, writes `U0: type y and Enter within 20 s` to the tty and logs what `select` + `read` returned within 20 s. Exit 0: `y` read; 1: opened, no `y`; 3: no terminal |
+
+**The log** is `/Users/skavhaug/projects/rasputin_scratch/u0-probe/log.jsonl`,
+an absolute path in both scripts, so every session and subagent writes the
+same file whatever its cwd. It does not exist before the sitting.
+
+**Checked without Ola** (2026-09-30, from the Bash tool): the settings file
+parses as JSON; the hook, fed a subagent `PreToolUse` Bash event containing
+`U0-PROBE-DENY`, prints the `deny` with `U0-REASON-7F3A` and logs the line
+with `agent_type`; an event without the marker, and non-JSON stdin, print
+nothing, log, and exit 0; `u0_tty_probe.py` with stdin from `/dev/null`
+prints `"stdin_isatty": false, "dev_tty": "ENXIO"` and exits 3. The log was
+deleted afterwards.
 
 The log is data, read by the session that ran the sitting; it is not a
 channel (`.claude/REQUIRED-READING.md`, *Data, scratch and temp folders are not a channel*).
@@ -76,13 +93,15 @@ The temporary hook is **loaded by Ola's own launch flag**, so no
 `.claude/settings*.json` is edited and there is nothing to revert. Ola, in his
 own terminal, in the permission mode he uses when he leaves:
 
-1. `claude -w u0-probe --settings <U1 worktree>/docs/increments/h3-probes/u0-probe-settings.json`
+1. From the main checkout:
+   `cd /Users/skavhaug/projects/rasputin && claude -w u0-probe --settings /Users/skavhaug/projects/rasputin/.claude/worktrees/unattended-u1/docs/increments/h3-probes/u0-probe-settings.json`
    (and `--permission-mode <mode>` if that is not the default).
-2. At that session's prompt, probe (b): `! python3 <U1 worktree>/docs/increments/h3-probes/u0_tty_probe.py`,
+2. At that session's prompt, probe (b):
+   `! python3 /Users/skavhaug/projects/rasputin/.claude/worktrees/unattended-u1/docs/increments/h3-probes/u0_tty_probe.py`,
    and type `y` if asked.
 3. At the same prompt, one line: *"Run probe U0 (a)+(c) as written in
-   `<U1 worktree>/docs/increments/h3-unattended-u1.md` §2.3, then print the
-   log."* Ola may leave now. Any permission prompt that appears is itself a
+   `/Users/skavhaug/projects/rasputin/.claude/worktrees/unattended-u1/docs/increments/h3-unattended-u1.md` §2.3, then print
+   /Users/skavhaug/projects/rasputin_scratch/u0-probe/log.jsonl."* Ola may leave now. Any permission prompt that appears is itself a
    result: he answers it, and notes which it was.
 4. When the session has printed the log, Ola closes it and tells the U1
    session "U0 done". The U1 session reads the log and `@architect` writes
