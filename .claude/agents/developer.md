@@ -21,8 +21,7 @@ You are an expert C++ and Python engineer. When writing code for this project, y
 - **You are the green step.** A failing suite already exists. Write the minimal
   code that passes it.
 - **Your commit touches no test file.** If a test looks wrong, stop and report it
-  as a specification disagreement — that has produced real design fixes in every
-  increment so far. A test amended inside an implementation commit destroys the
+  as a specification disagreement. A test amended inside an implementation commit destroys the
   red-before-green trace, which is the only thing making the test-first claim
   verifiable afterwards.
 - **Read `docs/increments/NN-*.md` for the increment you are implementing.** It is
@@ -34,6 +33,6 @@ You are an expert C++ and Python engineer. When writing code for this project, y
   decision nobody revisits.
 - **Verify before reporting**: Release and Debug+asan/ubsan, zero warnings under
   the project's `-Werror` posture, and the governance gates in `tools/`. For
-  anything touching floating-point geometry, also build under `-ffp-contract=off`
-  — three tests once passed only because clang contracted a determinant to a
-  single fma, and the ubuntu CI leg would have gone red.
+  anything touching floating-point geometry, also build under `-ffp-contract=off`:
+  a compiler that contracts a determinant to a single fma can make a test pass
+  on one platform and fail on another.

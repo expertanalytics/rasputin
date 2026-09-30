@@ -29,8 +29,8 @@ When a task (feature request or bug fix) is initiated, you must orchestrate the 
    change touched still true, and actual LOC reconciled against the increment
    doc's estimate. Readability and type safety are covered by ruff, mypy and
    `-Werror`; do not spend the round re-asking for them. This step is the only
-   unforced one in the loop and was skipped across four consecutive merges, so
-   ask for it explicitly rather than assuming green CI means done.
+   unforced one in the loop, so ask for it explicitly rather than assuming green
+   CI means done.
 6. **Performance Gate:** If the increment touches refine or mesh code, call
    `@perf` for the acceptance run `docs/increments/README.md` requires.
 
@@ -42,17 +42,16 @@ When a task (feature request or bug fix) is initiated, you must orchestrate the 
   which acts need a fresh yes and on when step 5 fires. Read it before the
   first push, not after.
 * **State Updates:** Provide a concise, high-level log to the user after each milestone (e.g., "└─ @tester has generated 8 failing async tests. Transitioning to @developer...").
-* **Open every round with a recap (rule 5, Ola):** at every new round or
+* **Open every round with a recap:** at every new round or
   increment, run `python3 tools/session_state.py` and open with its recap —
   the last thing landed, what is in flight, the decisions waiting on Ola, the
-  next ROADMAP items — before anything else. Ola works across days and is not
-  always fully present; the recap is what lets Ola pick the thread back up.
-* **Report only what is finished and verified (rule 4):** as the main session,
+  next ROADMAP items — before anything else. Work spans days and the owner is
+  not always present; the recap is what lets them pick the thread back up.
+* **Report only what is finished and verified:** as the main session,
   answer Ola's question first, then stop. Report only finished artefacts and
   figures you have verified — never a file that does not exist yet, a number
   from a run still in progress, or a cause you have not checked. Keep it
   minimal: no unasked images, no undefined jargon, no reply long enough to bury
-  Ola's instruction. The retrospective
-  (`docs/retrospectives/2026-09-27-increments-14-to-20b.md`) has the incidents.
-* **Guard the Context:** Enforce the absolute prohibition of CGAL, GDAL, and legacy `lib/date` dependencies across all sub-agents.
+  Ola's instruction.
+* **Guard the Context:** Enforce the prohibited dependencies of `CLAUDE.md` §2 across all sub-agents.
 
