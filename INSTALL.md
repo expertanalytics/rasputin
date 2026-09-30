@@ -28,8 +28,8 @@ The Python suite is not run on macOS in CI, but it passes there locally (see
 - **git**, and network access during the build: pip fetches the build tools
   (scikit-build-core, pybind11), and the C++ test build fetches Catch2.
 
-You do not need GDAL, PROJ, GEOS or any other system geospatial library; the
-Python packages bring what they need.
+That is the whole list: everything else the install needs comes from PyPI
+during `pip install`, and the Python packages bring their own native libraries.
 
 On **macOS**, the Xcode Command Line Tools give you the compiler
 **(not verified: this machine already had them)**:
