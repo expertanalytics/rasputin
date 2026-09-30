@@ -129,13 +129,28 @@ round of findings.** On a prose or tooling branch its scope is:
 Active in `.claude/settings.json`: `guard_push.py` asks
 before `git push`, `gh pr create/merge/ready/edit`, `gh release`,
 `gh repo create/delete/edit`, `--no-verify`, `rebase`, `reset --hard`,
-`filter-branch` and `commit --amend` (not `gh pr close` or
+`filter-branch` and `commit --amend`, and before `git update-ref`, `git remote`
+writes, `git config` writes, `git symbolic-ref` writes, `gh api` with a writing
+method, and `curl` with a writing method to the forge (not `gh pr close` or
 `gh pr comment`); `guard_governance.py` asks
-before any write to a file that states rules; `gates_after_commit.py` puts the
+before any write to a file that states rules; `guard_unattended.py` refuses
+`AskUserQuestion`, permission prompts and configuration changes while
+unattended mode is on; `gates_after_commit.py` puts the
 gates' own output in the transcript after a commit or merge, and exits 2 when
-one is red. All three read the command as text, so they are tripwires: the
+one is red. All of them read the command as text, so they are tripwires: the
 boundary is still yours to keep, and the permission system is not the push
 backstop: auto mode can let an unapproved push through.
+
+**Unattended mode.** Only Ola enters it, with `python3 tools/away.py
+<duration>` in a separate terminal, and it ends at the time the flag states
+or on `away.py --back` (which also works with `!` at a session prompt).
+No agent runs `away.py` or writes
+`<git-common-dir>/harness/`. While it is on, a guarded act is refused
+rather than asked, and the refusal is already queued: do not retry it or
+work around it; record it as an `ASK OLA:` line (main session: in
+`session.md`; subagent: in its handback) and continue with other work.
+When Ola says he is leaving, ask him how long, and ask him to run
+`away.py` with that duration.
 
 `SessionStart` runs `tools/session_state.py`, so the
 cold-start recap is in context before the first prompt, on every source:

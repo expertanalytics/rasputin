@@ -30,15 +30,20 @@ Usage: python3 tools/session_state.py [--turns N]
 from __future__ import annotations
 
 import argparse
+import importlib.util
 import json
 import os
 import re
 import stat
 import subprocess
-from datetime import datetime
+import sys
+from datetime import UTC, datetime
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(REPO / "tools"))
+import harness_mode  # noqa: E402
+
 SLUG = re.sub(r"[^A-Za-z0-9]", "-", str(REPO))
 TRANSCRIPTS = Path.home() / ".claude" / "projects" / SLUG
 
@@ -179,8 +184,82 @@ def roadmap_next(text: str, n: int = 3) -> list[str]:
     return rows[:n]
 
 
+def unattended_header(mode: harness_mode.Mode) -> str | None:
+    """The line above the recap while the flag is not off (h3 U1 §3.8)."""
+    if mode.state == "broken":
+        return (
+            f"UNATTENDED FLAG UNREADABLE ({mode.detail}): every guarded act is refused. "
+            "Ola: python3 tools/away.py --back."
+        )
+    if mode.until is None:
+        return None
+    until = f"{mode.until.astimezone(UTC):%Y-%m-%d %H:%M} UTC"
+    if mode.state == "on":
+        return (
+            f"UNATTENDED until {until}. Guarded acts are refused and queued: "
+            "record each as an ASK OLA line and continue."
+        )
+    return (
+        f"Unattended mode ended at {until}. "
+        "Ola: python3 tools/away.py --back prints and archives the queue."
+    )
+
+
+def queued(state: Path | None) -> list[str]:
+    """The newest 10 queue lines, then how many are older or unreadable."""
+    path = state / "queue.jsonl" if state else None
+    if path is None or not path.is_file():
+        return []
+    entries, bad = [], 0
+    for line in _read(path, "").splitlines():
+        try:
+            entry = json.loads(line)
+            entries.append(
+                f"  {entry['at']} {entry['branch']} {entry['hook']} "
+                f"{entry.get('agent_type') or 'main'}: {str(entry['act'])[:100]}"
+            )
+        except (ValueError, KeyError, TypeError):
+            bad += 1
+    lines = [f"Queued while unattended ({len(entries)}):", *entries[-10:]]
+    if len(entries) > 10:
+        lines.append(f"  ... {len(entries) - 10} older")
+    if bad:
+        lines.append(f"  ({bad} unreadable lines)")
+    return lines
+
+
+def uncommitted_rules(repo: Path) -> list[str]:
+    """Governed files with uncommitted changes, in every worktree of the repository."""
+    hook = repo / ".claude" / "hooks" / "guard_governance.py"
+    spec = importlib.util.spec_from_file_location("guard_governance", hook)
+    if spec is None or spec.loader is None or not hook.is_file():
+        return []
+    guard = importlib.util.module_from_spec(spec)
+    sys.dont_write_bytecode = True  # a __pycache__ under .claude/hooks/ is itself governed
+    spec.loader.exec_module(guard)
+    found = []
+    for line in (_git(repo, "worktree", "list", "--porcelain") or "").splitlines():
+        if not line.startswith("worktree "):
+            continue
+        tree = line.removeprefix("worktree ")
+        for change in (_git(Path(tree), "status", "--porcelain") or "").splitlines():
+            # Split, not slice: _git strips the output, eating the first line's
+            # leading status space.
+            path = change.split(None, 1)[-1].split(" -> ")[-1]
+            if guard.governed(path):
+                found.append(f"  {tree} {path}")
+    if not found:
+        return []
+    more = [f"  ... {len(found) - 10} more"] if len(found) > 10 else []
+    return ["Uncommitted rule-file changes:", *found[:10], *more]
+
+
 def print_recap() -> None:
     """Retrospective rule 5: the structured recap every round opens with."""
+    state = harness_mode.state_dir(REPO)
+    header = unattended_header(harness_mode.read_mode(state, datetime.now(UTC)))
+    if header:
+        print(header)
     print("== recap ==")
     print(f"Last landed: {last_landed(REPO)}")
     print("In flight:")
@@ -193,6 +272,8 @@ def print_recap() -> None:
     print("Waiting on Ola:" + ("" if decisions else " (none recorded as ASK OLA)"))
     for line in decisions:
         print(f"  {line}")
+    for line in (*queued(state), *uncommitted_rules(REPO)):
+        print(line)
     print("Next on ROADMAP.md:")
     for row in roadmap_next(_read(REPO / "ROADMAP.md", "")):
         print(f"  {row}")

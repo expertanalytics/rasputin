@@ -26,13 +26,18 @@ by variable expansion escapes it. It is a tripwire, not a sandbox.
 
 DECISION IS `ask`, NEVER `deny`. The user may well want the edit. What must not
 happen is the edit arriving inside an unrelated commit with nobody having said
-yes. Answering the prompt IS the authorship record.
+yes. Answering the prompt IS the authorship record. The exceptions: in
+unattended mode (tools/harness_mode.py) the ask becomes a `deny` and is queued
+for Ola, and a write of the harness state or a run of away.py is always denied
+(docs/increments/h3-unattended-u1.md §3.6).
 """
 
 import json
 import re
+import shlex
 import sys
 from fnmatch import fnmatch
+from pathlib import Path
 
 #: Files whose content is normative. A change here changes what is allowed.
 GOVERNED = (
@@ -40,6 +45,11 @@ GOVERNED = (
     "docs/PRINCIPLES.md",
     ".claude/REQUIRED-READING.md",
     "docs/increments/README.md",
+    # The self-protecting set: live before any review (unattended mode, §3.6).
+    "tools/away.py",
+    "tools/harness_mode.py",
+    "tools/session_state.py",
+    ".claude/profile.toml",
 )
 
 #: A glob, not a literal: settings.json wires the hooks, settings.local.json is
@@ -48,7 +58,11 @@ GOVERNED = (
 GOVERNED_GLOBS = (".claude/settings*.json*",)
 
 #: Directory prefixes where every file is a gate: these turn prose into refusals.
-GOVERNED_PREFIXES = ("tools/check_", ".claude/agents/", ".claude/hooks/")
+GOVERNED_PREFIXES = ("tools/check_", ".claude/agents/", ".claude/hooks/", ".claude/skills/",
+                     ".git/hooks/")
+
+#: Matched with endswith only: a basename rule would govern every file named config.
+GOVERNED_SUFFIXES = (".git/config",)
 
 #: Shell constructs that write. Anything else containing a governed path is a
 #: read -- `sed -n`, `grep`, `cat`, `git show` -- and must pass silently, or the
@@ -69,7 +83,67 @@ def governed(path: str) -> bool:
     if any(fnmatch(norm, f"*{pattern}") or fnmatch(tail, pattern.split("/")[-1])
            for pattern in GOVERNED_GLOBS):
         return True
+    if any(norm.endswith(suffix) for suffix in GOVERNED_SUFFIXES):
+        return True
     return any(prefix in norm for prefix in GOVERNED_PREFIXES)
+
+
+#: Only Ola enters or leaves unattended mode; only hooks and away.py write its state.
+HARNESS_PATH = re.compile(r"(^|/)\.git/harness(/|$)")
+STATE_WRITES = re.compile(r"\b(rm|touch|ln|mkdir|unlink|install)\b")
+SEGMENTS = re.compile(r"&&|\|\||;|\||\n")
+READERS = {"cat", "less", "head", "tail", "grep", "rg", "wc", "diff", "ls", "git", "ruff",
+           "mypy", "pytest"}
+ALWAYS_DENIED = (
+    "Only Ola enters or leaves unattended mode, and only hooks and away.py write the "
+    "harness state. Nothing is queued: this act is not an agent's to wait for."
+)
+
+
+def runs_away(segment: str) -> bool:
+    """A segment running away.py, directly or through any wrapper that is not a reader."""
+    try:
+        words = shlex.split(segment)
+    except ValueError:
+        words = segment.split()
+    if not any(word.split("/")[-1] == "away.py" for word in words):
+        return False
+    first = words[0]
+    reads = first in READERS or (first == "sed" and not any(w.startswith("-i") for w in words))
+    return not reads
+
+
+def always_denied(tool: str, supplied: dict) -> bool:
+    if tool in ("Edit", "Write", "NotebookEdit"):
+        path = supplied.get("file_path") or supplied.get("notebook_path") or ""
+        return bool(HARNESS_PATH.search(path.replace("\\", "/")))
+    if tool != "Bash":
+        return False
+    command = supplied.get("command", "")
+    if ".git/harness" in command and (WRITES.search(command) or STATE_WRITES.search(command)):
+        return True
+    return any(runs_away(segment) for segment in SEGMENTS.split(command))
+
+
+def emit(event: dict, verdict: str, reason: str, act: str) -> None:
+    """Route the verdict through harness_mode; unable to import it, deny anyway."""
+    why = "a rule file changes"
+    try:
+        sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "tools"))
+        import harness_mode
+    except ImportError as error:
+        failed = f"guard_governance cannot import harness_mode ({error}); refused: {why}."
+        output = deny(failed if verdict == "ask" else reason)
+    else:
+        output = harness_mode.guard(event, "guard_governance", verdict, reason, act, why)
+    if output is not None:
+        print(json.dumps(output))
+
+
+def deny(reason: str) -> dict:
+    return {"hookSpecificOutput": {"hookEventName": "PreToolUse",
+                                   "permissionDecision": "deny",
+                                   "permissionDecisionReason": reason}}
 
 
 def main() -> int:
@@ -77,17 +151,29 @@ def main() -> int:
         event = json.load(sys.stdin)
     except (json.JSONDecodeError, ValueError):
         return 0  # A guard that crashes the session is worse than no guard.
+    try:
+        verdict(event)
+    except Exception as error:  # after parsing, a crash must not turn an ask into a pass
+        print(json.dumps(deny(f"guard_governance failed: {type(error).__name__}: {error}")))
+    return 0
 
+
+def verdict(event: dict) -> None:
     tool = event.get("tool_name", "")
     supplied = event.get("tool_input", {}) or {}
+    if always_denied(tool, supplied):
+        emit(event, "deny", ALWAYS_DENIED, "")
+        return
     hits: list[str] = []
+    act = ""
 
     if tool in ("Edit", "Write", "NotebookEdit"):
         path = supplied.get("file_path") or supplied.get("notebook_path") or ""
         if governed(path):
             hits = [path]
+            act = f"{tool} {path}"
     elif tool == "Bash":
-        command = supplied.get("command", "")
+        command = act = supplied.get("command", "")
         if WRITES.search(command):
             # Match the path as written, never its basename. A directory prefix
             # ends in "/", so its basename is "" -- and "" is a substring of
@@ -100,7 +186,7 @@ def main() -> int:
             # behind it.
             hits = [
                 name
-                for name in (*GOVERNED, *GOVERNED_PREFIXES)
+                for name in (*GOVERNED, *GOVERNED_PREFIXES, *GOVERNED_SUFFIXES)
                 if name.rstrip("/") in command
             ]
             # A glob cannot be used as a substring: ".claude/settings*.json*"
@@ -116,27 +202,16 @@ def main() -> int:
             ]
 
     if not hits:
-        return 0
+        return
 
-    print(
-        json.dumps(
-            {
-                "hookSpecificOutput": {
-                    "hookEventName": "PreToolUse",
-                    "permissionDecision": "ask",
-                    "permissionDecisionReason": (
-                        f"This changes a file that states rules: {', '.join(sorted(set(hits)))}.\n"
-                        "A rule here binds every future session. Before you say yes, ask what "
-                        "the new or changed rule is, and who asked for it -- a commit or "
-                        "something you said, not a nearby document that sounds similar.\n"
-                        "This prompt is a tripwire, not a gate: it reads the command as text "
-                        "and cannot parse shell, so a path built from a variable slips past it."
-                    ),
-                }
-            }
-        )
-    )
-    return 0
+    emit(event, "ask", (
+        f"This changes a file that states rules: {', '.join(sorted(set(hits)))}.\n"
+        "A rule here binds every future session. Before you say yes, ask what "
+        "the new or changed rule is, and who asked for it -- a commit or "
+        "something you said, not a nearby document that sounds similar.\n"
+        "This prompt is a tripwire, not a gate: it reads the command as text "
+        "and cannot parse shell, so a path built from a variable slips past it."
+    ), act)
 
 
 if __name__ == "__main__":
