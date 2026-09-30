@@ -200,7 +200,7 @@ point at it.
 | Merge commits, never squash | `docs/increments/README.md:75-78` | `PRINCIPLES.md:141-142` | Index entry |
 | CI is authoritative | `CLAUDE.md:75-81` | `reviewer.md:24-31` (with the command); `docs/increments/README.md:53` | The reviewer keeps its precondition as a pointer |
 | Literature before design | `docs/increments/README.md:28-34` | `architect.md:33-44` (§4, which is more detailed than its home); `.claude/skills/computational-geometry/SKILL.md:46-52` (with a pointer) | Merge §4's three points into the home. §4 keeps the duty ("you own it") and a pointer; the skill keeps only its domain examples |
-| Power state with each run | `docs/increments/README.md:88-90` ("the one statement") | `perf.md:39-42` | `perf.md` points |
+| Power state with each run | `docs/increments/README.md:82` (the Acceptance section, which calls itself "the one statement"; the power-state bullet is at 88-90) | `perf.md:39-42` | `perf.md` points |
 | Adversarial geometry list | `tester.md:37-42` (§3A) | `orchestrator.md:19-20`; `.claude/skills/computational-geometry/SKILL.md:29`; `tester.md:3` (the description) | The orchestrator says "per tester §3A" |
 | Pybind11 isolation | `.claude/skills/modern-cxx/SKILL.md:27` | `architect.md:22` | The architect points |
 | Concepts / `typing.Protocol` | `.claude/skills/modern-cxx/SKILL.md:11`, `.claude/skills/python-development/SKILL.md:34` | `architect.md:24` | The architect points |
@@ -343,8 +343,8 @@ keeps the third and drops the other two:
    `file:line` that points into a governed rule file.
 
 For rasputin, `CLAUDE.md` §1-§4 become IDs as they stand. The numbers must not
-move: `git grep -hoE 'CLAUDE\.md`?,? *(§ *|section )[0-9]+' -- . ':!legacy'`
-returns 120 references. New
+move; `git grep -hoE 'CLAUDE\.md`?,? *(§ *|section )[0-9]+' -- . ':!legacy' | wc -l`
+counts the references that depend on them. New
 profile sections are appended as §5 and later, never inserted. The existing
 labels stay as IDs: tester `3A`/`3C`/`3D`, reviewer `1`/`5`, architect `4`,
 PRINCIPLES `A1`-`E4`.
@@ -430,18 +430,31 @@ instances.
 argument ("subagents do not inherit context") is imprecise. Custom subagents
 do load the CLAUDE.md hierarchy (`sub-agents`, "What loads at startup"), and
 `CLAUDE.md` §3 already sends every persona to `REQUIRED-READING.md`. So the
-header is a duplicate pointer, not the only route. It should still stay, for a
-reason observed in this very spawn: the `CLAUDE.md` delivered into this
-subagent's context was the **main checkout's**
-(`/Users/skavhaug/projects/rasputin/CLAUDE.md`, which still carries
-`@migration-expert` and the dated history). It was not the worktree's
-`CLAUDE.md`, which the sweep had already cleaned. The persona's pointer is a
-relative path, so it resolves in the subagent's working tree and reads the
-branch's `REQUIRED-READING.md`. On a branch that changes the rules, the two
-routes give different rules, and only the pointer gives the right ones. One
-line in a file that is identical in every project costs nothing to maintain.
-For the same reason, do not replace the pointer with a `CLAUDE.md`
-`@import`.
+header is a duplicate pointer, not the only route. It should still stay,
+because of *which* `CLAUDE.md` a subagent receives. The docs list "every level
+of the CLAUDE.md hierarchy the main conversation loads" (`sub-agents`, "What
+loads at startup"). That is the copy the **main session loaded when it
+started**, not a fresh read of any checkout. So it can be stale against the
+main checkout and the worktree alike, and nothing in the subagent's context
+shows that it is.
+
+Reproduced twice. This spawn's injected `CLAUDE.md` carried
+`@migration-expert` and dated history, which the worktree's file no longer
+had. `@reviewer` later found the main checkout's file byte-identical to the
+worktree's, yet its own injected copy still carried `@migration-expert`, "20b
+counted blank lines" and "`legacy/` is exempt". To reproduce: change
+`CLAUDE.md` on disk after the main session has started, spawn any persona,
+and have it quote a line that the change touched. The spawned persona quotes
+the old text.
+
+The persona's pointer is a relative path that the subagent reads with its own
+tools, in its own working tree, when it acts. It is the only route that
+yields the rules as they are on the branch now. On any branch that changes
+the rules, or in any session older than the last rule change, the two routes
+disagree, and only the pointer is right. One line in a file that is identical
+in every project costs nothing to maintain. For the same reason, do not
+replace the pointer with a `CLAUDE.md` `@import`, which is expanded at the
+main session's start along with `CLAUDE.md` itself.
 
 **(d) The skill-writing rule (generic).** A line in a skill stays only if it
 (i) records a project decision that a competent engineer could reasonably
@@ -551,13 +564,25 @@ These are recorded for the migration steps, not fixed here.
    `:110-112` misses the start of the "fresh yes" list at 109. Pinning (step 2)
    is what makes such citations durable. Three more in the same file point into
    hooks whose docstrings step 3 will shorten: `guard_governance.py:24-25`,
-   `:56-59`, and `guard_push.py:20-30`. Two point into rule files the
-   migration edits: `docs/increments/05-noder.md:992` → `testing.md:301`, and
+   `:56-59`, and `guard_push.py:20-30`. Four point into rule files the
+   migration edits: `docs/increments/05-noder.md:992` → `testing.md:301`;
    `docs/increments/05b-noder-driver.md:411` →
-   `docs/increments/README.md:65-67`.
-6. **Subagents see the main checkout's `CLAUDE.md`** (5c). This affects any
-   branch that edits `CLAUDE.md`. Record it in the generic "harness" section
-   next to the existing note that `SessionStart` reads the main checkout.
+   `docs/increments/README.md:65-67`; and two in code comments,
+   `tests/cpp/property/noding_generators.h:5` and
+   `tests/cpp/property/prop_noding_no_crossings.cpp:98`, both → `testing.md:220`.
+   That makes 13. The two in code comments are invisible to
+   `check_citations.py`, which scans only `.md` (`SCAN_SUFFIXES`), and to the
+   `*.md`-only grep this design first used. They were found with
+   `git grep -nE '(PRINCIPLES|testing|CLAUDE|README)\.md:[0-9]'`, which covers
+   every suffix.
+6. **Subagents get the session's snapshot of `CLAUDE.md`** (5c). A subagent
+   receives the `CLAUDE.md` hierarchy as the main session loaded it at its own
+   start, which may be stale against every checkout. Step 5a records this
+   mechanism in the generic "harness" section, next to the existing note that
+   `SessionStart` reads the main checkout. The rule to write is: "after a rule
+   file changes, start a new main session before relying on
+   `CLAUDE.md`-delivered text in a spawned persona; a persona reads the rules
+   through its pointer".
 
 ---
 
@@ -574,8 +599,8 @@ the loop: `@tester` red, `@developer` green, `@reviewer`. LOC figures are
 
 | # | Step | Files | Estimate | Citations |
 |---|---|---|---|---|
-| 1 | **One statement per rule** (prose, early, small). Apply the "Fix" column of 1.5, except the PRINCIPLES rows, which step 5 covers. Rename E4 so its heading states no number. Resolve defect 1 once Ola rules | `.claude/agents/{architect,developer,orchestrator,reviewer,tester,perf}.md`; `.claude/skills/{computational-geometry,geospatial-data-formats,modern-cxx}/SKILL.md`; `CLAUDE.md` line 9 (edited in place, so the §N numbering is untouched); `testing.md` (the floor restated at 18 and 283-288); `docs/PRINCIPLES.md` (E4 heading); `docs/increments/README.md` (defect 1) | 0 LOC; 1 round + `@reviewer` | First convert `05-noder.md:992` → "`testing.md`, *Test layout conventions*", because the edits to `testing.md` above line 301 shift that line. `README.md:65-67` is cited, but step 1 only edits below it. Nothing cites the agents or skills by line (checked with `git grep`) |
-| 2 | **Citation tooling.** `check_citations.py` resolves `path@<rev>:<line>` (generalising the `legacy-archive` case) and ID citations (`file §ID`), and warns on unpinned line citations into governed files. Then pin the other 10 citations of defect 5 (step 1 already converted the 11th) to the commit each was written against | `tools/check_citations.py`, `tests/python/test_check_citations.py`, `docs/retrospectives/2026-09-29-orchestrator-and-hooks-audit.md`, `docs/increments/05b-noder-driver.md` | ~80-120 LOC | After this step no living citation points by line into a rule file |
+| 1 | **One statement per rule** (prose, early, small). Apply the "Fix" column of 1.5, except the PRINCIPLES rows, which step 5 covers. Rename E4 so its heading states no number. Resolve defect 1 once Ola rules | `.claude/agents/{architect,developer,orchestrator,reviewer,tester,perf}.md`; `.claude/skills/{computational-geometry,geospatial-data-formats,modern-cxx}/SKILL.md`; `CLAUDE.md` line 9 (edited in place, so the §N numbering is untouched); `testing.md` (the floor restated at 18, edited in place so the line count stays the same, and at 283-288); `docs/PRINCIPLES.md` (E4 heading); `docs/increments/README.md` (defect 1) | 0 LOC; 1 round + `@reviewer` | First convert `05-noder.md:992` → "`testing.md`, *Test layout conventions*", because the edits to `testing.md` at 283-288 may shift line 301. Step 1 does **not** move `testing.md:220`: line 18 is edited in place and every other edit is below 220. So the two `tests/cpp/property/` comment citations stay correct without touching `tests/`, which would need `@tester`; step 2 converts them. `README.md:65-67` is cited, but step 1 only edits below it. Nothing cites the agents or skills by line (checked with `git grep`, all suffixes) |
+| 2 | **Citation tooling.** `check_citations.py` resolves `path@<rev>:<line>` (generalising the `legacy-archive` case) and ID citations (`file §ID`), and warns on unpinned line citations into governed files. Widen `SCAN_SUFFIXES` beyond `.md` to the code comments of `.py`, `.h`, `.hpp`, `.cpp`, `.cmake` and `CMakeLists.txt`. Then convert the other 12 citations of defect 5 (step 1 already converted the 13th): pin the historical ones to the commit each was written against; replace the two living ones in `tests/cpp/property/` with the heading citation "`testing.md`, *Frameworks*". `@tester` makes that edit, as part of the red step | `tools/check_citations.py`, `tests/python/test_check_citations.py`, `docs/retrospectives/2026-09-29-orchestrator-and-hooks-audit.md`, `docs/increments/05b-noder-driver.md`, `tests/cpp/property/noding_generators.h`, `tests/cpp/property/prop_noding_no_crossings.cpp` | ~80-120 LOC | After this step, every line citation into a rule file, in prose or in a code comment, is pinned or reported by the checker. The widened scan is what makes that claim checkable: run the checker after planting an unpinned `testing.md:1` in a `.cpp` comment, and it must report it |
 | 3 | **History out of code docstrings** (defect 4). Move it verbatim into the 2026-09-30 history retrospective | `.claude/hooks/*.py`, `tools/{session_state,check_citations,check_prohibited_deps}.py`, `docs/retrospectives/2026-09-30-rule-file-history.md` | 0 LOC (docstrings do not count); 1 round | Safe after step 2, which pinned the audit's citations into the hooks |
 | 4 | **The profile.** `.claude/profile.toml` and a stdlib reader, `tools/harness_profile.py`. `session_state`, `gates_after_commit`, `guard_governance` (adding `testing.md` and `.claude/skills/`, defect 3) and `check_citations` read it. Add the single-statement gate from 1.2 as a fast gate. `CLAUDE.md` §4 points at `[[gates]]` | the above, their tests, and `CLAUDE.md` §4 (edited in place) | ~200-250 LOC | `test_session_state.py` keeps passing unchanged, since `owner = "Ola"` renders `ASK OLA`. `.claude/settings.json` is not touched, so no fresh yes is needed |
 | 5a | **Rule-text split, part 1.** Move `REQUIRED-READING`'s profile sections (skill names, stale artifacts including A5's `.pyc`, data paths) and the README's Acceptance and template-cross-product paragraphs into a new `CLAUDE.md` §5, *Project rules*, appended at the end. Leave the README heading as a pointer. Add the note for defect 6. Re-test the `skills:` preload (defect 2) | `.claude/REQUIRED-READING.md`, `docs/increments/README.md`, `CLAUDE.md` (append only), and the files that cite "Acceptance: an increment that touches refine or mesh code" by name (`git grep -n 'Acceptance: an increment'`) | 0 LOC; 1 round | §1-§4 unchanged. Name-citations updated in the same PR |
@@ -608,9 +633,10 @@ the original ask.
    and the README's "Independent suites run as parallel agents" goes, because
    that matches your standing instruction to dispatch serially.
 5. **Gemini (c).** Should the persona pointer to `REQUIRED-READING.md` stay?
-   *Recommend keeping it as one line.* The evidence in §5c shows that
-   subagents receive the main checkout's `CLAUDE.md`, so on a rule-editing
-   branch only the pointer reads the branch's rules.
+   *Recommend keeping it as one line.* §5c shows that a subagent receives
+   the `CLAUDE.md` the main session loaded at its own start, which may be
+   stale against every checkout. Only the pointer reads the rules as they are
+   on the branch now.
 6. **Ledger.** Should it be tracked, one file per branch, written only by the
    dispatcher (the main session and `@orchestrator`), and readable by the main
    session so it can relay it to you? Or would you rather run the main session
