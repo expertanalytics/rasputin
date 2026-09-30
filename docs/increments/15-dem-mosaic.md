@@ -3,7 +3,9 @@
 Status: **Q1-Q5 ruled by Ola; 15a implemented** on branch
 `increment15-dem-mosaic` (red `2696bc2`, green `ff7cc8d`; merged as `40de334`, #105). **15b
 implemented** on `increment15b-domain-crs` (red `372bb99`, green `0011741`).
-15c-15d are designed, not implemented; Q6-Q10 are open. Written by `@architect` before
+15c-15d are designed, not implemented. Q6 and Q9 were ruled on 2026-09-30,
+and 15c is to be redesigned on Q6's ruling; Q7 and Q8 follow from it; Q10 is
+open. Written by `@architect` before
 `@tester`, per `docs/increments/README.md` step 1.
 
 ## Ruled by Ola
@@ -28,6 +30,31 @@ implemented** on `increment15b-domain-crs` (red `372bb99`, green `0011741`).
     is refused; a request inside either lattice is meshed.
 
   Q6-Q10 (the basin) wait until after the Norwegian sub-increments.
+- **2026-09-30, Q6 (the computation frame): not the recommended lattice
+  frame.** Shown that the lattice frame's square equator-scaled cells reach
+  100 % anisotropy at 60° latitude, Ola: "This is outrageous. The only
+  solution to this is to project onto the target/TIN crs. Then, perhaps a
+  resample to restore the carthesian coordinate system, given that this does
+  not kill performance or memory. Can be highly parallellized though." So a
+  geographic DEM is **projected onto the target TIN CRS and resampled onto a
+  square Cartesian grid there**, in parallel, written block by block into the
+  target grid. R8 option (A) replaces (C), and 15c is to be redesigned by
+  `@architect` on this basis before `@tester` starts.
+  - **Final check against the source DEM, included** (Ola: "include the final
+    check"). After meshing the resampled grid, every original DEM node,
+    projected into the target CRS, is checked against the mesh, and a node
+    still outside `--tolerance` is inserted as an off-node vertex (supported
+    since 16). This keeps the sup-norm guarantee against the source DEM, not
+    only against the resampled grid (B6 measured up to 13 m between the two at
+    30 m).
+  - **Q7 and Q8 follow from Q6.** The output CRS is the target TIN CRS, so
+    the open point is only how it is named on the command line. The grid is
+    square in a real projection, so there is no anisotropy limit and 21b's
+    integer incircle applies.
+- **2026-09-30, Q9 (memory): "32 GB is fine."** A dense canvas for the basin,
+  as designed; no block-sparse raster and no decomposition for memory's sake.
+- Still open: Q10 (the ANADEM test fixture), the basin tolerance, and whether
+  commercial use matters for the DEM choice.
 - **2026-09-28, Q1 revised: overlaps that disagree are split down the middle
   ("b", Ola).** Measured first, and widened after review with the committed
   probe `15-probes/dtm10_dates.py` (120 random neighbour pairs, seed 1; a
