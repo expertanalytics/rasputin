@@ -14,6 +14,7 @@ from __future__ import annotations
 import argparse
 import contextlib
 import errno
+import io
 import json
 import math
 import os
@@ -88,7 +89,12 @@ def enter(
     try:
         tty = open_tty()
     except OSError as error:
-        name = errno.errorcode.get(error.errno or 0, str(error))
+        # errno None: no OS error behind it, so name the exception, not a code.
+        name = (
+            f"{type(error).__name__}: {error}"
+            if error.errno is None
+            else errno.errorcode.get(error.errno, str(error))
+        )
         print(
             f"away.py needs your own terminal: /dev/tty is not available ({name}). "
             "Run it in a terminal window, not through the agent.",
@@ -251,7 +257,16 @@ def main(
         minutes,
         state,
         now,
-        open_tty or (lambda: open("/dev/tty", "r+")),
+        # A tty cannot seek, so no BufferedRandom: one FileIO per direction.
+        # The ignore: typeshed's wrapped-buffer protocol wants a `name` that
+        # BufferedRWPair lacks; TextIOWrapper reads it only on `.name`.
+        open_tty
+        or (
+            lambda: io.TextIOWrapper(  # type: ignore[type-var]
+                io.BufferedRWPair(io.FileIO("/dev/tty", "r"), io.FileIO("/dev/tty", "w")),
+                line_buffering=True,
+            )
+        ),
         spawn or subprocess.Popen,
         stop,
     )

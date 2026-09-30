@@ -1,4 +1,4 @@
-"""`tools/away.py`: Ola enters and leaves unattended mode (h3 U1, T12-T17).
+"""`tools/away.py`: Ola enters and leaves unattended mode (h3 U1, T12-T17, T22-T24).
 
 The spec is `docs/increments/h3-unattended-u1.md` §3.2, §3.3 and §4. Entering
 needs a real terminal and a typed `y`; leaving needs neither. The in-process
@@ -7,8 +7,9 @@ tests drive `main(argv, *, root, now, open_tty, spawn, stop)` with fakes, and
 state is never touched and no real keep-awake process is started.
 
 Seams, as this suite pins them (§3.3 names them, not their shapes):
-`open_tty()` returns a text-mode file object open for reading and writing, as
-`open("/dev/tty", "r+")` would; `spawn(argv, **kwargs)` returns an object with
+`open_tty()` returns a text-mode file object open for reading and writing
+(the default is the non-seeking opener of §3.3 step 2, and T23 is the one
+test that does not inject it); `spawn(argv, **kwargs)` returns an object with
 a `pid`, as `subprocess.Popen` does; `stop(pid)` is called with the previous
 flag's `keep_awake_pid`. The default stopper is `stop_keep_awake(pid)`.
 """
@@ -16,13 +17,17 @@ flag's `keep_awake_pid`. The default stopper is `stop_keep_awake(pid)`.
 from __future__ import annotations
 
 import errno
+import io
 import json
 import os
+import select
 import shutil
 import signal
 import subprocess
 import sys
+import time
 from collections.abc import Callable
+from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from types import SimpleNamespace
@@ -506,3 +511,146 @@ def test_back_survives_a_broken_session_state(repo: Path) -> None:
     [archived] = state_dir(repo).glob("queue-*.jsonl")
     assert len(archived.read_text().splitlines()) == 1
     assert [w["event"] for w in windows(repo)] == ["back"]
+
+
+# ---------------------------------------------------------------- T23
+
+PROMPT = b"Type y to confirm: "
+PTY_DEADLINE = 10.0  # seconds, measured in the parent (§4, T23)
+
+#: The child's program: the fixture's copy of `away.py`, imported by path and
+#: run with no `open_tty`, so the default opener meets the pty as /dev/tty.
+PTY_CHILD = """
+import importlib.util, sys
+from pathlib import Path
+from types import SimpleNamespace
+root = Path(sys.argv[1])
+spec = importlib.util.spec_from_file_location("away_on_pty", root / "tools" / "away.py")
+module = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(module)
+spawn = lambda *args, **kwargs: SimpleNamespace(pid=4242)
+sys.exit(module.main(["8h"], root=root, spawn=spawn, stop=lambda pid: None))
+"""
+
+
+@dataclass(frozen=True)
+class PtyRun:
+    status: int
+    before_input: bytes  # what the master read before the answer was written
+    output: bytes  # everything the master read
+    answered: bool
+
+
+def read_master(master: int, deadline: float) -> bytes | None:
+    """One chunk from the pty master; b"" at end of file; None if nothing yet.
+
+    The slave's last close reads as EOF on macOS and as EIO on Linux.
+    """
+    wait = max(0.0, min(0.1, deadline - time.monotonic()))
+    ready, _, _ = select.select([master], [], [], wait)
+    if not ready:
+        return None
+    try:
+        return os.read(master, 4096)
+    except OSError as error:
+        if error.errno == errno.EIO:
+            return b""
+        raise
+
+
+def run_on_pty(repo: Path, answer: bytes) -> PtyRun:
+    """Run `PTY_CHILD` on a fresh pseudo-terminal, answering the prompt once.
+
+    The child is killed and the test failed if it has not exited within
+    `PTY_DEADLINE` seconds of the fork, so a read that never returns cannot
+    hang the suite.
+    """
+    pty = pytest.importorskip("pty")
+    script = repo / "tools" / "away.py"
+    assert script.exists(), "tools/away.py is missing from the copy"
+    pid, master = pty.fork()
+    if pid == 0:  # pragma: no cover - the child; it never returns
+        for key in [key for key in os.environ if key.startswith("GIT_")]:
+            del os.environ[key]
+        os.execv(sys.executable, [sys.executable, "-c", PTY_CHILD, str(repo)])
+    deadline = time.monotonic() + PTY_DEADLINE
+    output, before_input, answered = b"", b"", False
+    try:
+        while time.monotonic() < deadline:
+            chunk = read_master(master, deadline)
+            if chunk == b"":
+                break
+            output += chunk or b""
+            if not answered and PROMPT in output:
+                before_input, answered = output, True
+                os.write(master, answer)
+        while time.monotonic() < deadline:
+            done, status = os.waitpid(pid, os.WNOHANG)
+            if done:
+                return PtyRun(
+                    status=os.waitstatus_to_exitcode(status),
+                    before_input=before_input or output,
+                    output=output,
+                    answered=answered,
+                )
+            time.sleep(0.05)
+        os.kill(pid, signal.SIGKILL)
+        os.waitpid(pid, 0)
+        pytest.fail(f"away.py on a pty did not exit within {PTY_DEADLINE} s; read {output!r}")
+    finally:
+        os.close(master)
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="pty is POSIX only")
+def test_the_default_terminal_opener_confirms_on_a_real_pty(repo: Path) -> None:
+    run = run_on_pty(repo, b"y\n")
+    assert run.status == 0, f"exit {run.status}; the pty read {run.output!r}"
+    assert run.answered and PROMPT in run.before_input
+    assert b"needs your own terminal" not in run.output
+    assert flag_path(repo).exists()
+    assert [w["event"] for w in windows(repo)] == ["enter"]
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="pty is POSIX only")
+def test_the_default_terminal_opener_declines_on_a_real_pty(repo: Path) -> None:
+    run = run_on_pty(repo, b"n\n")
+    assert run.status == 1, f"exit {run.status}; the pty read {run.output!r}"
+    assert run.answered and PROMPT in run.before_input
+    assert b"needs your own terminal" not in run.output
+    assert not flag_path(repo).exists()
+
+
+# ---------------------------------------------------------------- T24
+
+
+def failing_tty(error: OSError) -> Callable[[], Any]:
+    def open_tty() -> Any:
+        raise error
+
+    return open_tty
+
+
+def test_a_terminal_failure_without_errno_is_named_by_its_type(
+    repo: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    # §3.3 step 2 (tty fix): errno None is a defect in away.py, not a missing
+    # terminal, and the parenthesis must not pass it off as an OS condition.
+    spawn = spawner()
+    opener = failing_tty(io.UnsupportedOperation("x"))
+    code = run_main(["8h"], root=repo, now=NOW, open_tty=opener, spawn=spawn, stop=Recorder())
+    assert code == 3
+    stderr = capsys.readouterr().err
+    assert "needs your own terminal" in stderr
+    assert "(UnsupportedOperation: x)" in stderr
+    assert spawn.calls == []
+    assert not flag_path(repo).exists()
+
+
+def test_a_terminal_failure_with_errno_is_named_by_the_errno(
+    repo: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    spawn = spawner()
+    code = run_main(["8h"], root=repo, now=NOW, open_tty=no_tty, spawn=spawn, stop=Recorder())
+    assert code == 3
+    assert "(ENXIO)" in capsys.readouterr().err
+    assert spawn.calls == []
