@@ -8,6 +8,12 @@ and 15c is to be redesigned on Q6's ruling; Q7 and Q8 follow from it; Q10 was
 ruled the same day. Written by `@architect` before
 `@tester`, per `docs/increments/README.md` step 1.
 
+**15c is redesigned in `docs/increments/15c-geographic-dem.md`** (2026-10-01,
+on Q6 and Q9). R8, R10, I9-I11, and this file's 15c tests, LOC and acceptance
+are superseded there; 15d stays designed here. Ola's rulings of 2026-10-01
+on Q11-Q17 are recorded there too, including the basin-scale direction (Q15)
+that revisits Q9's dense canvas and which 15d is to be re-read against.
+
 ## Ruled by Ola
 
 - **2026-09-27, priority:** "My priorities are to get the Norwegian cases
@@ -641,6 +647,7 @@ a 32 GiB machine**, with two conditions:
 > **Superseded 2026-09-30:** Ola ruled (A), projection onto the target TIN CRS
 > and resampling, plus a final check against the source DEM; see "Ruled by
 > Ola". The text below, which recommends (C), is kept as the record.
+> The design that replaces it is `docs/increments/15c-geographic-dem.md`.
 
 **The question.** The core wants numbers in one Cartesian frame, roughly in
 metres, with square cells if 21b's integer incircle is to apply (`dx == dy`,
@@ -758,6 +765,9 @@ into the frame. A domain given in longitude and latitude, like BHO's is
 likely to be, has edges straight in the frame, exactly.
 
 ### R10. The output CRS [15c; basin, after Norway]
+
+> **Superseded 2026-10-01** by `docs/increments/15c-geographic-dem.md`: the
+> mesh is computed in the target CRS, so nothing is transformed on output.
 
 - **`--out-crs TEXT`** (anything `pyproj.CRS.from_user_input` accepts).
   - Projected DEM: optional, and the default is the DEM's CRS. The output is
