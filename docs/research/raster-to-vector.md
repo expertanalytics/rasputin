@@ -524,6 +524,13 @@ under it. Quotations are Ola's words; the rest is the ruling as relayed.
    merged into a neighbour. Rivers as constraints come from the BHO drainage
    lines, not from the raster; only wide channels and reservoirs come from
    the raster, as water bodies.
+
+   *To be revisited in the basin-inputs increment.* Ola's later ruling
+   (increment 23, B1, 2026-10-01) drops BHO as a geometry source: "I'm not
+   interested in archaic maps"; sub-catchments and drainage will be derived
+   from the DEM. The river constraints above will then likely be
+   DEM-derived drainage lines rather than BHO's; the ruling here is
+   otherwise unchanged.
 3. **Which area must be kept, and where is the tolerance measured?**
    Simplifying after reprojection keeps each class's area in m² and makes
    the tolerance metres; simplifying in the raster's degrees is cheaper but
@@ -583,8 +590,8 @@ Sources table, with the same convention as above.
 ### What a cutoff does on this mesh
 
 Two numbers frame the question, from the Rio das Velhas piece (BHO ottobasin
-76949, 11,667.6 km²) as measured in basin piece 2.1 (commit `46eaaa3`, on
-branch `worktree-basin-measure`, not yet on master;
+76949, 11,667.6 km²) as measured in basin piece 2.1 (commit `46eaaa3`,
+merged to master in PR #127, merge commit `e7f4e98`;
 `docs/benchmarks/2026-10-01/basin-piece/README.md`, table "The piece").
 Dividing the piece's area by its triangle count gives the mean triangle area
 at each tolerance; a MapBiomas cell is about 30 m, so about 900 m²:
@@ -606,14 +613,15 @@ report (see the plan at the end).
 
 ### 1. Error diffusion
 
-- **Floyd and Steinberg 1976** ("An adaptive algorithm for spatial
-  greyscale", *Proc. SID* 17(2):75-77). No DOI; neither Crossref nor
-  OpenAlex has a record, so the bibliographic data and the content are from
-  memory and from how later papers describe it (Knuth 1987's abstract names
-  it "the Floyd-Steinberg method of adaptive grayscale"). Pixels are visited
-  in raster order; each is set to the nearest output level, and the
-  difference (input minus output) is passed to the four not-yet-visited
-  neighbours with weights 7/16, 3/16, 5/16, 1/16, which sum to one. *Gives:*
+- **Floyd and Steinberg 1976** ("An adaptive algorithm for spatial grey
+  scale", *Proc. SID* 17:75-77). No DOI; neither Crossref nor OpenAlex has
+  a record, so the bibliographic data and the content are from a secondary
+  source (Wikipedia, "Floyd–Steinberg dithering") and from how later papers
+  describe it (Knuth 1987's abstract names it "the Floyd-Steinberg method of
+  adaptive grayscale"). Pixels are visited in raster order; each is set to
+  the nearest output level, and the difference (input minus output) is
+  passed to the four not-yet-visited neighbours with weights 7/16, 3/16,
+  5/16, 1/16, which sum to one; serpentine scanning is a variant. *Gives:*
   the whole mechanism Ola proposed: a quantiser, a signed error, a fixed
   visiting order, and error passed only forward to unvisited neighbours, so
   the total over the image is kept except what falls off the last row and
@@ -686,9 +694,12 @@ report (see the plan at the end).
 
 - **The chairman assignment problem.** **Tijdeman 1980** (*Discrete Math.*;
   Crossref, text not reachable): given shares λ₁..λₖ summing to one, choose
-  one state per step so that every prefix count stays close to n·λᵢ. From
-  memory, not read: Tijdeman's bound is that every state's prefix count
-  differs from n·λᵢ by at most 1 − 1/(2k − 2). **Meijer 1973** and
+  one state per step so that every prefix count stays close to n·λᵢ.
+  Secondary: Li 2021, arXiv:2006.16237 (v4, §1.3), states the optimum as
+  "inf_ω D(ω) = 1 − 1/(2k − 2)": every state's prefix count can be kept
+  within 1 − 1/(2k − 2) of n·λᵢ, and Tijdeman gives a linear-time
+  assignment that attains it, with Meijer 1973 as the other source.
+  **Meijer 1973** and
   **Tijdeman 1973** are the earlier forms; **Schneider 1996** a refinement
   (Crossref only). *Gives:* the 1-D, k-class version of the ledger, with a
   bound that does not grow with the length of the sequence: along a
@@ -745,8 +756,12 @@ report (see the plan at the end).
   construction, checked; the fractions per triangle should be computed from
   exact cell-triangle overlap areas so that the input is conservative before
   any cutoff.
-- **CLM5 / CTSM.** Lawrence et al. 2019 describes CLM5 (abstract read). The
-  trimming settings, read in CTSM's source at commit
+- **CTSM (after the CLM5.0 release described by Lawrence et al. 2019).**
+  Lawrence et al. 2019 describes CLM5 (abstract read). The trimming settings
+  below are CTSM's, not CLM5.0's: they were added in 2019 (CTSM pull requests
+  #588, #639 and #641, for the numerical-weather-prediction "fast"
+  structure) and are absent from tag `release-clm5.0.37`. Read in CTSM's
+  source at commit
   `0f292ef9bce57a1d7fff70da245c295a31b8bb9c` (`master`, 2026-10-01):
   `bld/namelist_files/namelist_definition_ctsm.xml` and
   `src/main/surfrdUtilsMod.F90`. Correcting the recollection in the brief:
@@ -908,11 +923,7 @@ piece of basin piece 2.1), with MapBiomas at its latest year (Ola's default):
 - **Class areas.** Per class, the basin total error in km² and in percent
   of that class, for every variant and cutoff; listing which classes lose
   more than 1 %, and which vanish. The crop classes reported separately,
-  since crop transpiration is the use. Which crops the chosen collection
-  separates was not checked; from memory, recent collections have soybean,
-  sugar cane, rice, cotton, coffee and citrus, plus "other" temporary and
-  perennial crops, and no separate maize class, which matters for Ola's
-  corn-and-soybean example.
+  since crop transpiration is the use.
 - **Local placement.** The same class-area errors summed over regions at
   several scales: BHO ottobasins one and two levels below 76949, and a
   regular grid of squares at 1, 5 and 25 km. Report the largest error per
@@ -943,17 +954,44 @@ tile fraction minimum threshold land surface model", "rounding land use
 fractions conserve totals grid cells", "error diffusion categorical data
 downscaling", "error diffusion triangle mesh", "error diffusion unstructured
 mesh", "error diffusion graph vertices dithering"); the CTSM, WRF, Noah-MP
-and HRLDAS source and the JULES namelist documentation. As before, no
-general web search engine was available, so grey literature, model
-documentation not on GitHub, and theses are under-covered.
+and HRLDAS source and the JULES namelist documentation. A later pass the
+same day had web search: "error diffusion land cover fractions grid cells
+conserve area…", "dithering land use map downscaling Floyd-Steinberg
+categorical fractions allocation", "land surface model subgrid tiles minimum
+fraction threshold removed redistributed conserve total area ORCHIDEE SURFEX
+mHM VIC", "\"error diffusion\" \"land use\" OR \"land cover\" allocation
+grid area conservation rounding", "dominant land cover per grid cell bias
+minority classes lost compensation neighbouring cells mass-conserving
+aggregation categorical raster", "SWAT HRU definition threshold…". Theses
+and model documentation outside these queries are still under-covered.
+
+That pass found two things that bear on the ledger:
+
+- **Johnson and Clarke 2021**, "An area preserving method for improved
+  categorical raster resampling", *Cartography and Geographic Information
+  Science* 48(4):292-304 (Crossref, abstract; code `mikejohnson51/resample`
+  at `30912309`). Region-wide quotas per class by largest remainder; the
+  rarest class is placed first, into the cells with the highest share of it
+  (at least 10 %); leftovers go by majority. It keeps class totals over the
+  region, not locally, and it is a quota allocation, not error diffusion.
+  The closest area-conserving reallocation found.
+- **SWAT's HRU thresholds** (EPA, Lake Champlain Basin SWAT model
+  configuration report,
+  https://www.epa.gov/sites/default/files/2015-09/documents/swat-model-configuration-calibration-validation.pdf):
+  a land use under the threshold in a subbasin "is dropped and the areas of
+  the other landuses are proportionately increased", with exemptions per
+  class. The hydrology-model counterpart of CTSM's and WRF's
+  renormalisation.
 
 Found: error diffusion, including on curves, voxel surfaces and as vectors;
 discrepancy-bounded rounding over interval and region families; controlled
-rounding of tables keeping row and column sums; land-surface models trimming
-small tiles, all by renormalisation inside the cell. Not found: error
-diffusion of class *areas* over an irregular mesh, or any land-surface or
-hydrological model that compensates trimmed fractions in neighbouring
-cells.
+rounding of tables keeping row and column sums; region-wide quota
+allocation keeping class totals (Johnson and Clarke 2021); land-surface and
+hydrological models trimming small tiles, all by renormalisation inside the
+cell or subbasin (CTSM, WRF-Noah, SWAT). Not found: any error-diffusion
+scheme for land-cover fractions, error diffusion of class *areas* over an
+irregular mesh, or any land-surface or hydrological model that compensates
+trimmed fractions in neighbouring cells.
 
 **No novelty is claimed yet.** The idea is plausibly new as an application,
 but the search above cannot show it. Before a claim, the checks are: a
@@ -1050,14 +1088,16 @@ was read, so nothing in the text rests on it beyond the paper's subject):
 | Eschbach, Fan, Knox, Marcu 2003, *IEEE Signal Proc. Mag.* 20(4):39-50 | 10.1109/MSP.2003.1215230 | Crossref, abstract |
 | Eschbach, Pedersen 2017, *Electronic Imaging* 29(18):114-122 | 10.2352/ISSN.2470-1173.2017.18.COLOR-043 | Crossref, abstract |
 | Fan 1993, *Proc. ICASSP '93* 5:321-324 | 10.1109/ICASSP.1993.319812 | Crossref, abstract |
-| Floyd, Steinberg 1976, *Proc. SID* 17(2):75-77 | no DOI | no record found; from memory |
+| Floyd, Steinberg 1976, "An adaptive algorithm for spatial grey scale", *Proc. SID* 17:75-77 | no DOI | no record found; secondary (Wikipedia) |
 | Gandhi, Khuller, Parthasarathy, Srinivasan 2006, *JACM* 53(3):324-360 | 10.1145/1147954.1147956 | Crossref, abstract |
 | Jarvis, Judice, Ninke 1976, *CGIP* 5(1):13-40 | 10.1016/S0146-664X(76)80003-2 | Crossref |
+| Johnson, Clarke 2021, *Cartography and GIS* 48(4):292-304 | 10.1080/15230406.2021.1892531 | Crossref, abstract (later pass); code `mikejohnson51/resample` at `30912309` |
 | Jones 1999, *Monthly Weather Review* 127(9):2204-2210 | 10.1175/1520-0493(1999)127<2204:FASOCR>2.0.CO;2 | Crossref |
 | Knuth 1987, *ACM TOG* 6(4):245-273 | 10.1145/35039.35040 | Crossref, abstract |
 | Lau, Arce 2018, *Modern Digital Halftoning* (2nd ed.) | 10.1201/9781315219790 | Crossref; not read |
 | Lawrence et al. 2019 (CLM5), *JAMES* 11(12):4245-4287 | 10.1029/2018MS001583 | Crossref, abstract |
 | Le Page, West, Link, Patel 2016, *GMD* 9(9):3055-3069 | 10.5194/gmd-9-3055-2016 | Crossref, abstract |
+| Li 2021, arXiv:2006.16237 (v4), §1.3 | https://arxiv.org/abs/2006.16237 | read (later pass), §1.3 only |
 | Li, Bou-Zeid, Barlage, Chen, Smith 2013, *JGR Atmos.* 118(21) | 10.1002/2013JD020657 | Crossref, abstract |
 | Meijer 1973, *Indag. Math.* 76(1):9-17 | 10.1016/1385-7258(73)90015-2 | Crossref; not read |
 | Moody, Woodcock 1995, *Landscape Ecology* 10(6):363-379 | 10.1007/BF00130213 | Crossref; not read |
@@ -1067,7 +1107,7 @@ was read, so nothing in the text rests on it beyond the paper's subject):
 | Takki-Chebihi, Tokuyama 2003, *LNCS* (ISAAC 2003):425-433 | 10.1007/978-3-540-24587-2_44 | Crossref; not read |
 | Taylor 2024, *GMD* 17(1):415-430 | 10.5194/gmd-17-415-2024 | Crossref, abstract |
 | Tijdeman 1973, *JCTA* 15(2):129-137 | 10.1016/S0097-3165(73)80002-0 | Crossref; not read |
-| Tijdeman 1980, *Discrete Math.* 32(3):323-330 | 10.1016/0012-365X(80)90269-1 | Crossref; summary only; bound from memory |
+| Tijdeman 1980, *Discrete Math.* 32(3):323-330 | 10.1016/0012-365X(80)90269-1 | Crossref; summary only; bound secondary: Li 2021, arXiv:2006.16237 |
 | Tobler 1979, *JASA* 74(367):519-530 | 10.1080/01621459.1979.10481647 | Crossref, abstract |
 | Tokuyama 2007, *Graphs and Combinatorics* 23(S1):359-378 | 10.1007/s00373-007-0700-9 | Crossref; summary only |
 | Ulichney 1988, *Proc. IEEE* 76(1):56-79 | 10.1109/5.3288 | Crossref, abstract |
