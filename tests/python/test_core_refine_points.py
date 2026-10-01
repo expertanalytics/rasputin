@@ -173,12 +173,19 @@ class TestJ2ByAnIndependentOracle:
         cp = phase1.store(check_points, xy, z)
         out = refine_points(cp, *phase1.args(), tolerance=tolerance, threads=0)
         assert out.ok(), out.message
-        assert out.inserted > 0
+        # Phase 2 has work exactly when the oracle finds a check point over
+        # tolerance on phase 1's mesh alone. On this fixture phase 1's worst is
+        # about 7.15 m, so 8.0 is the case where nothing may be inserted.
+        p1 = phase1.args()
+        work = worst_excess(xy, z, p1[0], p1[1], p1[2], p1[3], tolerance, skip=p1[0]) > 1e-9
+        assert (out.inserted > 0) == work, (out.inserted, work)
         assert 0.0 <= out.max_error <= tolerance
         v, t = np.asarray(out.vertices), np.asarray(out.triangles)
         oz, ok = np.asarray(out.z), np.asarray(out.valid)
         start = np.asarray(phase1.out.vertices)
         assert_array_equal(v[: len(start)], start)
+        if not work:
+            assert_array_equal(t, p1[1])
         excess = worst_excess(xy, z, v, t, oz, ok, tolerance, skip=start)
         assert excess <= 1e-9, f"a check point is {excess} m over tolerance"
 
