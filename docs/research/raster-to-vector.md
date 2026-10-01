@@ -499,31 +499,75 @@ literature (USGS work on APSC by Stanislawski and co-authors in particular).
 
 ## Open questions for Ola
 
+Answered by Ola on 2026-10-01. Each question is kept as asked, with the ruling
+under it. Quotations are Ola's words; the rest is the ruling as relayed.
+
 1. **Constraints for every class, or only some?** Every class boundary as a
    constraint is the most expensive option (16b: 3.6x on CORINE, which is far
    coarser than MapBiomas). The alternatives are a hybrid (water and maybe
    urban as constraints, the rest as a per-triangle majority label or class
    fractions, as `mesher` and the legacy code did), or no land-cover
    constraints at all.
+
+   *Answered: the hybrid.* Water bodies and rivers are constraints; every
+   other class is carried as a fraction per triangle.
 2. **What minimum patch size, and which merge rule?** MapBiomas's own minimum
    is half a hectare (about 5 cells). For a mesh, the natural scale is the
    horizontal tolerance: for example, absorb patches smaller than a few
    times tolerance². Longest shared boundary (fewest constraints left) or
    largest neighbour (simplest), and is a class-similarity rule wanted (no
    forest absorbed into water)?
+
+   *Answered: a minimum area, no merging.* A water body is a constraint only
+   above a minimum area tied to the tolerance (a few times tolerance²); a
+   smaller one stays a fraction of the triangles it falls in, and nothing is
+   merged into a neighbour. Rivers as constraints come from the BHO drainage
+   lines, not from the raster; only wide channels and reservoirs come from
+   the raster, as water bodies.
 3. **Which area must be kept, and where is the tolerance measured?**
    Simplifying after reprojection keeps each class's area in m² and makes
    the tolerance metres; simplifying in the raster's degrees is cheaper but
    keeps area in square degrees. Is exact per-class area (as for the
    catchment) a requirement here, or is "approximately" enough, which would
    let `shapely.coverage_simplify` do the job?
+
+   *Answered: exact area.* Each lake is traced on cell edges, reprojected to
+   metres, and reduced by increment 22's area-preserving segment collapse,
+   with a no-crossing check against the other lakes, the BHO river lines and
+   the domain outline. Water bodies are disjoint, so the shared-border and
+   junction case of sections 2 and "What combines" no longer arises for
+   constraints; it remains only if a later step wants class polygons.
 4. **The diagonal checkerboard corner** (A B / B A): two A regions touching
    at a point, or one region pinched at it? For constraints, separate faces
    (4-connected, GDAL's default) are the simpler choice; it decides patch
    counts for the sieve too.
+
+   *Answered: 8-connected water, free pinch points.* Water cells touching at
+   a corner are one water body; its outline is one ring that passes each
+   pinch point twice. The pinch points are not fixed: Ola observed that the
+   area-preserving collapse itself turns a diagonal strip into a proper
+   simple polygon (width c/√2 for cell size c) when the tolerance is about a
+   cell or coarser. So the no-crossing check must let a pinch open but never
+   let the two sides cross.
 5. **Which MapBiomas collection and year**, and is the class legend to be
    reduced first (MapBiomas has several levels; merging to level 1 or 2 before
    vectorising removes many boundaries for free)?
+
+   *Answered in part.* Ola: "We need to keep high resolution on vegetation
+   types and crop farming types in Brazil." The default is MapBiomas's full
+   legend, crop types included, with fractions stored sparsely per
+   triangle; a class map may coarsen it. **The collection and year are still
+   open.**
+
+A further ruling, on the fractions themselves. Ola: "We could even have a
+cutoff on the fractions. 0.1% soybean does not carry so much information."
+And: "95% corn, 5% soybean _could_ become 100% corn. It's basically for crop
+specific transpiration." Ola proposed "a local out-of-balance ledger, trying
+to compensate for missing covers" in neighbouring triangles, kept by area,
+not by fraction, and ruled that "the general idea, Floyd-Steinberg
+dithering, applied to class areas instead of pixel intensities, and related
+publications should be used to resolve this." The prior art for that is the
+next section.
 
 ## Sources
 
