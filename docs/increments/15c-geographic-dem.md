@@ -3,7 +3,10 @@
 Status: **designed by `@architect`, 2026-10-01; not implemented.** Written
 before `@tester`, per `docs/increments/README.md` step 1. It replaces R8 and
 R10 of `docs/increments/15-dem-mosaic.md` for 15c, following Ola's Q6 and Q9
-rulings of 2026-09-30. Questions Q11-Q17 at the end are Ola's.
+rulings of 2026-09-30. **Q11-Q14, Q16 and Q17 were ruled by Ola on
+2026-10-01, and the design below is amended to them; Q15 is open, and Ola's
+direction on it supersedes this file's dense-canvas and memory reasoning at
+basin scale** (marked where it occurs, "Superseded at basin scale").
 
 ## Why a file of its own
 
@@ -30,10 +33,59 @@ R12 (what domain decomposition needs). 15d stays designed there.
   resampled grid.
 - **Q9.** "32 GB is fine": a dense canvas, no block-sparse raster. Two
   basin-sized canvases do not fit, so the source is read by window into the
-  one target canvas.
+  one target canvas. *Revisited by Ola on 2026-10-01 (Q15 below): no dense
+  canvas at basin scale.*
 - **Q10.** ANADEM extracts may be committed, crediting ANADEM and Copernicus.
-- **Open:** Q7 (who chooses the target CRS), the basin tolerance, and whether
-  commercial use matters for the DEM choice.
+- **Open then:** Q7 (who chooses the target CRS; ruled as Q11 below), the
+  basin tolerance (Q15, still open), and whether commercial use matters for
+  the DEM choice (still open).
+
+**Ruled by Ola, 2026-10-01**, on this file's Q11-Q17 (the questions are kept
+as asked at the end; each is marked with its ruling):
+
+- **Q11: (a), a required `--out-crs`, with a suggestion in the refusal.**
+  Ola: "perhaps we could automatically find a suggestion CRS based on where
+  in the world we are? We could take the bbox and use this as a criterion.
+  Something that distorts areas and angles the least, but no very rigorous
+  analysis if that is time consuming." So the suggestion is chosen by the
+  box's latitude and shape among four conformal projections, and the message
+  prints its worst scale and areal distortion over the box (D8).
+- **Q12: (a).** A projected DEM with a different `--out-crs` takes the same
+  path: resample onto the target grid, then the final check.
+- **Q13: (a).** Every source node still over tolerance is inserted.
+- **Q14: (a), extended.** The edge strip gets its own increment right after
+  15c and before 15d: check points where constraints cross grid lines, z
+  bilinear, **plus the midpoint between neighbouring crossings**. The
+  guarantee wording is the one proposed (Ola did not reword it), extended by
+  the midpoints ("The edge strip", below).
+- **Q15: open, reframed.** Memory must not decide the tolerance. Ola: "When
+  things are tiled on file, and we refine, why are we talking about memory
+  limitation? There must be easy fixes to this." Ola's direction:
+  - decompose along constraint edges, which are never flipped: "Only two
+    intersecting subdomains sharing the constraint is needed to resolve
+    potential corrections on the boundary, as these edges are never
+    flipped";
+  - read the DEM in windows with no dense canvas (this revisits Q9);
+  - a separate fetch step that caches downloaded COG tiles: "we should cache
+    the tiles we download, and probably do this as a preprocessing step, or
+    our performance will drop while we wait for download".
+
+  These get their own basin-scale design, next, in an increment file of its
+  own under `docs/increments/`. It is not designed here. This file marks
+  where its dense canvas and its memory reasoning are superseded at basin
+  scale; at the Velhas piece, 15c's acceptance size, they stand.
+- **Q16: (a).** The grid spacing is automatic; no CLI option.
+- **Q17: (a), with ANADEM's new source.** Small GLO-30 and ANADEM extracts
+  are committed after a licence check. ANADEM's own host
+  (`metadados.snirh.gov.br`) refuses with HTTP 403, and Ola confirmed it.
+  OpenTopography hosts ANADEM openly, as one cloud-optimised GeoTIFF:
+  `https://opentopography.s3.sdsc.edu/raster/ANADEM/ANADEM_be/anadem_v1_compressed_COG.tif`
+  (70.9 GB; range reads answer 206; DOI 10.5069/G9736P4G). Also ruled: the
+  BHO-derived outline (the union of 1,163 BHO 2017 5k catchments, Rio das
+  Velhas, ottobasin 76949) is committed as a fixture, with ANA's credit and
+  the CC BY 4.0 notice. ANA's metadata record for it was not read (its host
+  answers 403); it is to be checked when reachable. BHO 2017 5k is marked
+  superseded by BHAE in ANA's catalogue.
 
 **Measured on 2026-10-01** (`docs/benchmarks/2026-10-01/basin-piece/README.md`,
 by `@perf`, on Copernicus GLO-30 because ANADEM's host answered 403). The
@@ -45,7 +97,10 @@ What bears on this design:
 - **Surprise 1.** Memory, not time, limits the whole basin: a floor of about
   77 GiB at 1 m, 41 GiB at 2 m, 19 GiB at 5 m and 13 GiB at 10 m in one
   process, 8.6 GiB canvas included. Refine itself is fast (2.4 min for the
-  basin at 1 m, extrapolated).
+  basin at 1 m, extrapolated). *Superseded at basin scale:* this is the
+  floor of one process holding the whole basin, which Ola's Q15 direction
+  (decomposition, windows, no dense canvas) removes. It stays the right
+  figure for what 15c alone could do.
 - **Surprise 2.** The final check is a refinement phase, not a touch-up.
   After meshing the resampled grid, the share of interior source nodes over
   tolerance is 7.71 % at 1 m, 2.50 % at 2 m, 0.39 % at 5 m, 0.08 % at 10 m
@@ -61,6 +116,26 @@ What bears on this design:
   off by up to 541.6 m at a 20 m tolerance; on the piece's dense BHO outline,
   17.9-38.5 m over the six tolerances. It holds for a projected DEM meshed
   directly too, measured against the DEM's bilinear surface between nodes.
+
+**Measured by `@architect`, 2026-10-01, for the Q17 ruling:** the header of
+OpenTopography's ANADEM COG, by one range read of its first 256 KiB
+(`curl -r 0-262143 <url>` answered 206) and a hand parse of the first IFD:
+
+- BigTIFF; **187,853 × 262,864 nodes** (columns × rows), float32, Deflate,
+  512 × 512 tiles, NoData `-9999` in tag 42113; further IFDs follow
+  (overviews, not inspected).
+- Spacing 0.00026949458523585647° in both axes, the same as the SNIRH tiles
+  (`15-dem-mosaic.md` B2); tie point (−82.51654705336689°, 14.079475111062084°);
+  `GTRasterTypeGeoKey` 1 (area-registered, as B2).
+- **The CRS differs from the tiles':** `GTModelTypeGeoKey` 2,
+  `GeographicTypeGeoKey` **4674 (SIRGAS 2000)**, not 4326; angular units 9102
+  (degrees); and, beside the EPSG code, a citation ("SIRGAS 2000") and the
+  ellipsoid's semi-major axis and inverse flattening (keys 2049, 2057, 2059).
+  D6's reader takes the CRS from 2048 alone (checking 2054 for degrees) and
+  ignores the other three, as today's projected path takes its CRS from 3072
+  alone (`io/geotiff.py`, `_projected_epsg`); G1 has a case with this exact
+  key set. With a SIRGAS 2000 target such as EPSG:31983, the source and
+  target share a datum, so no datum shift enters the resampling.
 
 ## Prior art: legacy and literature
 
@@ -112,7 +187,16 @@ What bears on this design:
   Professional Paper 1395, 1987 (recalled). LCC and UTM are conformal: angles
   are true locally, so a triangle judged Delaunay in the target CRS is judged
   on the ground to first order, which is what Q6 bought over the lattice
-  frame's up-to-6.5 % stretch.
+  frame's up-to-6.5 % stretch. The same book is the source of Q11's
+  suggestion (D8), as recalled: its guidance to choose a projection by the
+  region's latitude and shape (azimuthal near a pole, cylindrical near the
+  equator, conic for a mid-latitude east-west extent, transverse cylindrical
+  for a north-south one) and its one-sixth rule for a conic's standard
+  parallels. **What differs:** only conformal members of each family are
+  offered (stereographic, Mercator, LCC, Transverse Mercator), because the
+  Delaunay test is about angles; Snyder's equal-area alternatives are not.
+  The distortion printed is PROJ's own projection factors (`proj_factors`,
+  through pyproj's `Proj.get_factors`), not a derivation of ours.
 
 **Novelty: none claimed.** The two phases are a composition of known
 methods. One sentence this design makes true could later look like a claim:
@@ -154,14 +238,16 @@ pass is needed.
 After 15c,
 
 ```sh
-rasputin mesh --dem anadem_23K.tif --domain bho_76949.geojson \
+rasputin mesh --dem anadem_velhas.tif --domain bho_76949.geojson \
     --out-crs EPSG:31983 --tolerance 5 --out velhas.vtk
 ```
 
 reads a geographic DEM (one file or a directory of tiles in one geographic
-CRS), resamples it onto a square grid in the target CRS, meshes that grid as
-today, then checks every source node inside the domain and inserts those still
-over 5 m. The mesh is written in the target CRS.
+CRS; here a local window cut from OpenTopography's ANADEM COG), resamples it
+onto a square grid in the target CRS, meshes that grid as today, then checks
+every source node inside the domain and inserts those still over 5 m. The
+mesh is written in the target CRS. Without `--out-crs`, a geographic DEM is
+refused, and the refusal suggests a CRS for the box (D8).
 
 - **In:** geographic DEM tiles (EPSG geographic 2D, degrees) through the
   existing reader and mosaic; the target grid; parallel resampling; the
@@ -171,9 +257,13 @@ over 5 m. The mesh is written in the target CRS.
 - **Unchanged:** a projected DEM without `--out-crs`, or with `--out-crs`
   equal to its own CRS, is meshed bit-identically to today (J1).
   `include/terrain/refinement/refine.hpp` is not edited.
-- **Out (to 15d):** decoding only the needed windows of a tile, and a
-  run on the whole basin. 15c is accepted on the Velhas piece (13.0 M
-  source nodes), and refuses a request whose working set passes the memory cap (D6).
+- **Out (to the basin-scale design that follows, Q15):** decoding only the
+  needed windows of a tile, a fetch step that caches downloaded COG tiles,
+  decomposition along constraint edges, no dense canvas, and a run on the
+  whole basin. That design replaces 15d's (`15-dem-mosaic.md`) where they
+  overlap; which parts of 15d survive is its call. 15c is accepted on the
+  Velhas piece (13.0 M source nodes), and refuses a request whose working set
+  passes the memory cap (D6).
 - **Out (placed below):** the edge strip for projected DEMs, and constraint
   feet in the final check.
 
@@ -189,7 +279,8 @@ cli.mesh  --dem --domain --out-crs --tolerance      (parses flags, nothing else)
    v  DemRequest(sources, domain, target_crs)
 dem_input.open_dem                                   [Python, orchestration]
    |  footprints (headers only)
-   |  DEM CRS == target CRS, or no --out-crs  --> today's 15a/15b path, untouched (J1)
+   |  geographic DEM, no --out-crs  --> refused; message from crs.suggest_crs(box)  (D8)
+   |  projected DEM: CRS == target CRS, or no --out-crs  --> today's 15a/15b path (J1)
    |  otherwise, the reprojected path:
    |    domain.to_crs(target)                        crs.reprojector, the one site
    |    target_grid_for(domain, target, spacing)  -> TargetGrid        (D2, pure)
@@ -221,6 +312,16 @@ The source is read through a `SourceWindows` protocol
 "one target canvas" is reached: the design never asks for the source as a
 whole, and 15d is a change of provider, not of algorithm.
 
+*Superseded at basin scale (Q15, 2026-10-01):* the one dense target canvas is
+not the basin's route; Ola's direction is windows with no dense canvas, and
+subdomains split along constraint edges. What 15c builds carries over as
+seams, not as the plan: `SourceWindows` is where cached, windowed decoding
+plugs in; a `TargetGrid` is a sub-rectangle of one global lattice (J6, its
+`row0`, `col0`), so a subdomain's grid is just a smaller `TargetGrid`, and
+`resample`, `check_point_blocks` and `CheckPoints` work on it unchanged; and
+phase 2 never flips a constraint edge (J9), the property Ola's decomposition
+rests on. The basin-scale design decides the rest.
+
 ### D2. The target grid
 
 `TargetGrid` (`target_grid.py`, frozen Pydantic):
@@ -240,8 +341,10 @@ whole, and 15d is a change of provider, not of algorithm.
   significant bits; whole metres give both.
 - **Spacing.** Default: the source's north-south node spacing in metres at
   the domain's centroid, rounded to the nearest whole metre (ANADEM 29.8 m
-  gives 30; GLO-30 1″ gives 31). The Python API takes `spacing` explicitly;
-  the CLI does not expose it (Q16). B6 measured that a finer grid does not
+  gives 30; GLO-30 1″ gives 31). For a projected source (Q12) it is the
+  source's own north-south spacing in its units, which are metres (the reader
+  refuses others), rounded the same way: DTM10 gives 10. The Python API takes
+  `spacing` explicitly; the CLI does not expose it (Q16, ruled (a)). B6 measured that a finer grid does not
   remove the resampling error, and phase 2 removes it anyway, so the default
   aims at the source's own density.
 - **Extent.** The domain in the target CRS, grown by the cell diagonal
@@ -263,7 +366,8 @@ whole, and 15d is a change of provider, not of algorithm.
 `resample(grid, source: SourceWindows, threads) -> DemTile`
 (`target_grid.py`):
 
-- One canvas of `grid.rows × grid.cols`, in the source's dtype, filled in
+- One canvas of `grid.rows × grid.cols` (dense, for the piece; *superseded
+  at basin scale* by windows, see D1 and Q15), in the source's dtype, filled in
   blocks of 256 target rows on a pool of `threads` workers. Per block: the
   nodes' `(x, y)`, one inverse transform to the DEM's CRS
   (`crs.reprojector(target, source)`), fractional source indices
@@ -418,8 +522,9 @@ metres, on or relative to a square grid. Concretely: the target grid as a
 
 - `RasterMeta` (`io/models.py`) gains `geographic: bool = False` and
   `crs: str`, filled from `epsg` when not given (`EPSG:n`); `epsg` becomes
-  `int | None` so a target CRS without an EPSG code (a fitted LCC, Q11 (b)) has
-  a meta. Existing constructions with `epsg=n` are unchanged. Call sites that
+  `int | None` so a target CRS without an EPSG code has a meta: D8's
+  suggestion is a PROJ string, and pasting it into `--out-crs` is the
+  expected use. Existing constructions with `epsg=n` are unchanged. Call sites that
   format `EPSG:{meta.epsg}` move to `meta.crs`.
 - `io/geotiff.py` accepts a geographic 2D CRS from `GeographicTypeGeoKey`
   (2048) with degree units, as B8 found it would with the one refusal lifted.
@@ -442,7 +547,10 @@ metres, on or relative to a square grid. Concretely: the target grid as a
   before any pixel is read: source canvas + target canvas + 16 B per source
   node in the source box. The Velhas piece is about 0.75 GB by that sum
   (7,197 × 4,376 source nodes, 7,347 × 4,208 target nodes). The whole basin
-  is refused in 15c by design; 15d brings the source canvas down to a window.
+  is refused in 15c by design. *Superseded at basin scale (Q15):* the cap
+  stays in 15c as a guard, but at basin scale memory is not to decide what
+  can be meshed; the basin-scale design removes the canvases rather than
+  shrinking one of them.
 - `final_check.py` (new, ~40 lines): `run(tile, start, checks, tolerance,
   threads) -> (phase-1 outcome, phase-2 outcome)`, the two calls and the
   store's construction, so `cli.py` (about 1,500 lines) grows by the options and
@@ -469,6 +577,69 @@ The output is already in the target CRS, so 15-dem-mosaic.md R10's
 transform-on-output and its `max_reprojection_z_error_estimate` field are not
 built: nothing is transformed after meshing.
 
+### D8. The suggested CRS (Q11)
+
+A geographic DEM without `--out-crs` is refused before any pixel is read
+(J10), and the refusal suggests a CRS to copy. `crs.suggest_crs(box,
+geographic_crs) -> CrsSuggestion` (`crs.py`, pure; frozen Pydantic: `proj:
+str`, `family: str`, `max_scale_error: float`, `max_areal_error: float`).
+
+- **The box:** the domain's bounds in the DEM's geographic CRS (the domain
+  transformed once through `crs.reprojector`); with `--bbox` and no
+  `--out-crs`, the box cannot be read (it is in the target CRS, D2), so the
+  DEM's own footprint from the headers is used. `(W, E, S, N)` in degrees,
+  centre `(λc, φc)`; the box's width on the ground is compared with its
+  height as `(E − W)·cos φc` against `N − S`.
+- **The family, in this order** (all conformal; thresholds settled here):
+  1. **Polar stereographic** when `|φc| ≥ 70°` or the box reaches `|φ| ≥ 80°`:
+     `+proj=stere +lat_0=±90 +lon_0=λc +lat_ts=φc` (true scale at the centre
+     latitude).
+  2. **Transverse Mercator** when the box is at least as tall as it is wide:
+     `+proj=tmerc +lat_0=0 +lon_0=λc +k=1`. `k = 1` puts the true scale on the
+     central meridian, so the error is one-sided; balancing it with `k < 1`
+     would halve the worst figure and is not done (Ola: "no very rigorous
+     analysis").
+  3. **Mercator** when wide and `|φc| ≤ 15°`: `+proj=merc +lon_0=λc
+     +lat_ts=φc`.
+  4. **Lambert conformal conic** otherwise (wide, mid-latitude): standard
+     parallels at `S + (N − S)/6` and `N − (N − S)/6` (Snyder's one-sixth
+     rule), `+lat_0=φc +lon_0=λc`.
+
+  Every angle is rounded to 0.1°, so a box moved by a few cells gets the same
+  suggestion. The datum is the DEM's own (`+ellps` of its geographic CRS,
+  with no datum shift added): ANADEM's COG is SIRGAS 2000 (GRS80), GLO-30 is
+  WGS 84.
+- **The distortion:** pyproj's `Proj(suggestion).get_factors` on a 21 × 21
+  lon-lat grid over the box, edges included; `max_scale_error` is the largest
+  `|k − 1|` over the meridional and parallel scales, `max_areal_error` the
+  largest `|areal − 1|`. `Proj` is not a `Transformer`, so J5's one
+  reprojection site is unchanged.
+- **The message**, one refusal: the DEM is geographic, `--out-crs` is
+  required, then `suggested for this box (<family>): --out-crs "<proj>"`, and
+  `worst scale error <a> %, worst areal error <b> % over the box`.
+
+**Measured with a prototype of exactly these rules** (pyproj 3.8.0, a
+throwaway script, not committed), the worst scale and areal errors:
+
+| box (W, E, S, N) | family | scale | areal |
+|---|---|---:|---:|
+| Velhas piece (−44.674, −43.459, −20.456, −18.457) | TM, `lon_0=-44.1` | 0.006 % | 0.011 % |
+| São Francisco basin, approx. (−47.7, −36.3, −21.2, −7.0) | TM, `lon_0=-42.0` | 0.49 % | 0.99 % |
+| Norway, approx. (4.5, 31.2, 57.9, 71.2) | TM, `lon_0=17.9` | 0.77 % | 1.54 % |
+| Equatorial (−70, −50, −5, 5) | Mercator | 0.38 % | 0.76 % |
+| Svalbard, approx. (10, 34, 76.4, 80.9) | polar stereographic | 0.44 % | 0.88 % |
+| Europe-wide (−10, 30, 40, 60) | LCC, 43.3°/56.7° | 0.92 % | 1.85 % |
+
+Angular distortion is under 3e-6 in every row: PROJ's factors confirm the
+four are conformal. The prototype used `+datum=WGS84` throughout; on GRS80
+the figures differ only in digits not shown. For the basin, the suggestion's
+0.49 % compares with 1.11 % (areal 2.24 %) for EPSG:31983 or 31984 over the
+same box, by the same 21 × 21 evaluation, since its central meridian sits in
+the box's middle.
+The two catchments-in-one-CRS argument for (a) still holds: the suggestion
+depends on the box, so two catchments get one CRS only if someone passes the
+same `--out-crs` to both.
+
 ## What the final check costs (Surprise 2)
 
 **What is measured** is the number of source nodes over tolerance after phase
@@ -487,8 +658,8 @@ as the proxy, and acceptance measures the real count.
 
 **Mesh size.** The output grows by about the insertion count: up to roughly
 +44 % vertices (and triangles) at 1 m and +8 % at 10 m over the basin. That is
-the price of the guarantee being about the source DEM, and it is Ola's to
-weigh (Q13).
+the price of the guarantee being about the source DEM, and Ola accepted it
+(Q13 (a), 2026-10-01).
 
 **Time, estimated** from the piece's measured rates (not measured for phase 2
 itself):
@@ -509,13 +680,20 @@ itself):
 - So on the piece: **about +6-8 s at 1 m** on today's 9.67 s process, and
   about +2-3 s at 10 m on 1.44 s, where the fixed cost dominates.
 
-**At basin scale** (15d's run, here only to place it): the fixed cost grows
+**At basin scale** (here only to place it; the run is now the basin-scale
+design's, Q15): the fixed cost grows
 with the source, 734 M ANADEM nodes: roughly 0.5-1 min of projection and a
 serial sort of over a minute; the insertions grow with the tolerance (2.6 M
 at 5 m: seconds). If the serial sort shows in 15d's profile, it is
 parallelised there.
 
-**Memory.** The store is 16 B per source node: 208 MB on the piece, 11.7 GB
+**Memory.** *Superseded at basin scale (Q15, 2026-10-01).* Everything in this
+paragraph after the piece's figure assumes one process holding the whole
+basin. Ola ruled that memory must not decide the tolerance, and directed
+decomposition along constraint edges, windowed reads and no dense canvas,
+designed next in its own increment file. The arithmetic below is kept as the
+record of why one process does not reach the basin, not as a limit on it.
+The store is 16 B per source node: 208 MB on the piece, 11.7 GB
 for the basin's 734 M ANADEM nodes. D1 drops the target canvas (8.6 GB at
 basin scale) before the store is built, so phase 2's peak is store plus mesh
 (about two copies of it: phase 1's output and phase 2's lattice mesh, which
@@ -528,8 +706,8 @@ about 36 GiB, so the basin fits at no tolerance. So **one process on 32 GB
 cannot reach the basin at 1-2 m, with or without the final check, and reaches
 it at 5-10 m only if the piece's per-node intercept does not grow with the
 canvas**; below that the route is
-domain decomposition (ROADMAP item 2.4). 15d measures it. This bears on the
-basin tolerance (Q15).
+domain decomposition (ROADMAP item 2.4), which Ola's Q15 direction now
+makes the route at every tolerance.
 
 ## The edge strip (Surprise 3), placed
 
@@ -555,25 +733,33 @@ no source node, and between nodes nothing is checked. Smaller, not gone.
 directly), which has no phase 2. There the `--tolerance` claim of every
 domain mesh is false along constraints by up to tens of metres today.
 
-**Placement: a separate increment, right after 15c and before 15d**
-(recommended in Q14). Its design in one paragraph: check points at every
-crossing of a constraint edge with a grid line, z linear between the two
-nodes of that cell side (which is the bilinear surface there, 16 R0), run
-through 15c's `refine_points` after `refine`, for any DEM. Why not inside
-15c:
+**Placement: a separate increment, right after 15c and before 15d** (ruled by
+Ola, Q14 (a), 2026-10-01). Its design in one paragraph, as ruled: check
+points at every crossing of a constraint edge with a grid line, z linear
+between the two nodes of that cell side (which is the bilinear surface there,
+16 R0), **plus the midpoint between each two neighbouring crossings along the
+edge**, z bilinear from the one cell that holds it (the piece of a straight
+edge between two consecutive grid-line crossings lies in one closed cell),
+run through 15c's `refine_points` after `refine`, for any DEM. The guarantee
+it adds reads: "at every DEM node, wherever a constraint crosses a grid line,
+and at the midpoint between neighbouring crossings". Proposed for that
+increment's design, and Ola's to overrule: an edge's two end vertices count
+as neighbours too, so the pieces at the ends of the edge get a midpoint as
+well. Why not inside 15c:
 
 1. it changes every Norwegian mesh with a domain or features, which ends J1's
    bit-identity on purpose and needs `@perf`'s acceptance on the 1 m
    benchmark;
-2. the guarantee it adds is new in kind, at points between nodes, and is
-   Ola's to word;
+2. the guarantee it adds is new in kind, at points between nodes (worded
+   above, as Ola ruled);
 3. its points lie on constraint segments, where a computed crossing can round
    a hair outside the domain and so fall in no triangle: they must be filed
    against their edge, not found by membership. That is 20b's foot geometry,
    and it needs its own red suite;
-4. 15c's two PRs are already about 360 and 380 lines.
+4. 15c's two PRs are already about 370 and 403 lines.
 
-Estimated 150-200 lines, one PR, reusing `CheckPoints` and `refine_points`.
+Estimated 160-210 lines (the midpoints add about 10), one PR, reusing
+`CheckPoints` and `refine_points`.
 Why not wait longer: until it ships, the tolerance printed on every Norwegian
 domain mesh is wrong along its edges. A cheaper stopgap exists (split any
 constrained edge of a node-free triangle longer than one cell at its midpoint,
@@ -636,19 +822,28 @@ about 40 lines): it narrows the strip and guarantees nothing.
 
 ## Not in scope
 
-- **15d:** window decoding, a source never held whole, the whole basin.
-- **The edge strip on the projected path:** its own increment (above, Q14).
+- **The basin-scale work** (Q15's direction, its own design next): window
+  decoding with no dense canvas, a fetch step caching COG tiles,
+  decomposition along constraint edges, the whole basin. 15d's design in
+  `15-dem-mosaic.md` is to be re-read against it.
+- **The edge strip on the projected path:** its own increment (above, Q14,
+  ruled).
 - **Constraint feet and start quality in phase 2** (D5).
 - **One loop shared by `refine` and `refine_points`** (D5): a later refactor.
 - **`rasputin catchment` on a geographic DEM:** refused by the `to_core` gate.
 - **Tiles in more than one CRS, and N2's half-cell tiles with their
   neighbours:** the source side is still one 15a mosaic, which refuses both.
-- **A CLI option for the grid spacing** (Q16), and vertical datums.
+- **A CLI option for the grid spacing** (ruled out, Q16 (a)), and vertical
+  datums.
 
 **Decided here, which Ola may overrule:** `--bbox` on the reprojected path is
 read in the target CRS; z in the store is `float`; check points on a start
 vertex are counted, not adopted; phase 2 without feet; a second loop rather
-than a shared one; the memory cap sums both canvases and the store.
+than a shared one; the memory cap sums both canvases and the store. For D8:
+the four families' thresholds (70° and 80° for polar, tall-or-square for TM,
+15° for Mercator), TM with `k = 1`, angles rounded to 0.1°, the DEM's own
+ellipsoid, the 21 × 21 evaluation grid, and the DEM footprint as the box when
+`--bbox` is given without `--out-crs`.
 
 ## PR split and LOC
 
@@ -674,10 +869,11 @@ and 15a's `mosaic.py` 60 % over, so the worst case applies 39 %, with
 | | `target_grid.py`: `TargetGrid`, spacing, extent, `source_region` | 80 | |
 | | `target_grid.py`: `SourceWindows`, `TileWindows`, `resample` | 55 | |
 | | `target_grid.py`: `check_point_blocks` | 35 | |
-| | `dem_input.py`: `target_crs`, the reprojected branch, the memory sum | 40 | |
+| | `dem_input.py`: `target_crs`, the reprojected branch (geographic, and a projected DEM in another CRS, Q12), the memory sum | 45 | |
+| | `crs.py`: `suggest_crs`, `CrsSuggestion`: four families, rounding, `get_factors` over the box (D8) | 27 | |
 | | `final_check.py`: the two phases and the store | 40 | |
-| | `cli.py`: `--out-crs`, Q11's refusal or fit, `_dem_mesh` through `final_check`, fields, stats rows | 75 | |
-| | **15c-2 total** | **383** | **532 (613 at +60 %)** |
+| | `cli.py`: `--out-crs`, Q11's refusal with D8's message, `_dem_mesh` through `final_check`, fields, stats rows | 63 | |
+| | **15c-2 total** | **403** | **560 (645 at +60 %)** |
 
 `target_grid.py` at 170 is the module to watch (15a's `mosaic.py` overran its
 estimate by 60 %). If it passes 250, `resample` and `check_point_blocks` move
@@ -689,8 +885,11 @@ start mesh, and `@perf` can confirm Norway is untouched. 15c-2 is plumbing on
 a prototype that already ran (`prep_dem.py`), and it wires the final check in
 the same PR that first lets a geographic DEM through, so **no release ever
 writes a geographic mesh without the final check**. Together they are about
-750 lines, over the ceiling, so they cannot be one PR. Q11 (b) would add
-about 30 lines to 15c-2; Q12 (a) about 5.
+770 lines, over the ceiling, so they cannot be one PR. The 2026-10-01
+rulings moved 15c-2 from 383 to 403: Q11's suggestion is about 15 lines more
+than the single fitted LCC first estimated (the refusal itself moves from
+`cli.py` into `crs.py`), and Q12 (a) adds 5. Q13, Q14, Q16 and Q17 add no
+production lines to 15c.
 
 **Acceptance class.** 15c-1 adds files under `include/terrain/refinement/`
 and touches `include/terrain/mesh/`, so the refine/mesh acceptance rule
@@ -700,8 +899,9 @@ rule applies to it too (below).
 
 **Documentation in the same PRs** (not counted): `project_structure.md`, the
 `raster` boundary rule as restated in D6 (15c-2); `ROADMAP.md`'s 15 row at
-each merge; `NOTICE.md` and a fixture `NOTICE` if a GLO-30 or ANADEM extract
-is committed (Q17). `15-dem-mosaic.md` already points here (this branch).
+each merge; `NOTICE.md` and a fixture `NOTICE` for the GLO-30 and ANADEM
+extracts and the BHO outline (Q17, below). `15-dem-mosaic.md` already points
+here (this branch).
 
 ## Tests for `@tester`
 
@@ -748,7 +948,9 @@ Everything else is ordinary.
 **15c-2, Python:**
 
 - **G1, the reader.** A geographic micro-TIFF with ANADEM's header numbers
-  (B2) reads with `geographic` true and `crs` `EPSG:4326`; geocentric, 3D,
+  (B2) reads with `geographic` true and `crs` `EPSG:4326`; one with the
+  OpenTopography COG's key set (2048 = 4674 with 2049, 2054 = 9102, 2057,
+  2059; "Measured" above) reads with `crs` `EPSG:4674`; geocentric, 3D,
   user-defined and non-degree geographic keys are refused, each by name.
 - **G2, the gate.** `to_core` refuses a geographic tile; `rasputin catchment`
   on one is a usage error.
@@ -772,13 +974,43 @@ Everything else is ordinary.
 - **G7, J1.** On the committed projected tile with a domain, `--out-crs` set
   to the DEM's own CRS writes the same bytes as no `--out-crs`.
 - **G8, refusals, header before pixels.** A geographic DEM without
-  `--out-crs` (if Q11 (a)), with the suggestion in the message; a source
+  `--out-crs` (Q11 (a)), with D8's suggestion in the message; a source
   region across ±180°; the memory sum over the cap; a domain vertex without
   an image. None loads a tile (a repository double that fails on `load`).
+- **G9, a projected DEM in another CRS (Q12).** A metre micro-TIFF in
+  EPSG:25833 with `--out-crs EPSG:25832` takes the reprojected path: the
+  `.vtk` is in EPSG:25832, records D7's fields, default spacing is the
+  source's, and G6's independent final check finds 0 source nodes over
+  tolerance.
+- **G10, the suggestion (D8).** One box per family, at the thresholds and
+  just past them (φc 70° against 69.9°, a box 0.01° taller than wide against one 0.01° wider,
+  φc 15° against 15.1°), gives the family and the rounded parameters. The
+  printed distortion is checked by an independent oracle, not by calling
+  `get_factors` again: finite differences of the suggestion's forward
+  transform over short geodesic steps (pyproj `Geod`) at the 21 × 21 points,
+  agreeing to 1e-6 (`@tester` may loosen it if the finite differences need it,
+  never past 1e-4). It must be shown able to fail: the oracle run against a
+  PROJ string with `+k=0.999` instead of the suggestion's differs by about
+  1e-3.
 
-**Fixtures.** Synthetic micro-TIFFs for G1-G8. One real extract for G6's
-realism, if Q17 allows: about 512 × 512 source nodes of the Velhas piece
-(ANADEM if its host answers, GLO-30 otherwise), with the credits.
+**Fixtures.** Synthetic micro-TIFFs for G1-G10. Real ones, per Q17 (a), each
+committed only after its licence is read and quoted in the fixture `NOTICE`
+(the licence check is part of the commit, not of this design):
+
+- about 512 × 512 source nodes of the Velhas piece from **GLO-30**, with the
+  Copernicus credit;
+- the same window from **ANADEM**, cut by range reads from OpenTopography's
+  COG (the URL and DOI 10.5069/G9736P4G in the `NOTICE`, with the window and
+  the date it was cut), crediting ANADEM; it is EPSG:4674, so G6's realism
+  case also exercises the COG's key set;
+- the **BHO-derived Velhas outline**, the union of 1,163 BHO 2017 5k
+  catchments of ottobasin 76949 (as `basin-piece/fetch_bho.py` built it),
+  with ANA's credit and the CC BY 4.0 notice, and the `NOTICE` saying that
+  ANA's metadata record was not read (its host answered 403) and is to be
+  checked when reachable, and that BHO 2017 5k is marked superseded by BHAE
+  in ANA's catalogue. The outline spans the whole piece and the extracts do
+  not, so G6's realism case uses the outline intersected with the extract's
+  footprint, computed in the test.
 
 ## Acceptance
 
@@ -789,8 +1021,11 @@ realism, if Q17 allows: about 512 × 512 source nodes of the Velhas piece
   commit with `--tree`, back to back). The mesh hash is unchanged and refine
   time is within noise at every thread count. Evidence under
   `docs/benchmarks/<date>/`.
-- **15c-2:** `@perf` on the Velhas piece (BHO 76949; ANADEM if its host
-  answers, GLO-30 otherwise) through `rasputin mesh --out-crs EPSG:31983`, at
+- **15c-2:** `@perf` on the Velhas piece (BHO 76949) through `rasputin mesh
+  --out-crs EPSG:31983`, on **ANADEM**, a local window cut from
+  OpenTopography's COG by range reads (a one-off cut until the basin-scale
+  design's fetch step exists), and once on GLO-30 for comparison with
+  Surprise 2, at
   tolerances 1, 2, 5, 10, 20 and 50 m: triangles, phase 1 and phase 2 times,
   the fixed cost (projection, store), peak RSS, and phase 2's insertions
   against Surprise 2's first-pass counts (approximate: Surprise 2 was
@@ -807,11 +1042,13 @@ realism, if Q17 allows: about 512 × 512 source nodes of the Velhas piece
 
 ## Questions for Ola
 
-Numbered on from `15-dem-mosaic.md`'s Q1-Q10. Each has a recommendation and
-its cost; none is decided here.
+Numbered on from `15-dem-mosaic.md`'s Q1-Q10. Kept as asked; Ola's rulings
+of 2026-10-01 are recorded in full under "What is ruled" and marked on each
+question here. Q15 is still open.
 
 **Q11 (was Q7). Who chooses the target CRS for a geographic DEM?** It is now
-the CRS the mesh is computed in, not only written in.
+the CRS the mesh is computed in, not only written in. *Ruled (a), with the
+suggestion chosen by the box's location and shape (D8).*
 - **(a) Required `--out-crs`; the refusal prints an LCC fitted to the domain
   (Snyder's one-sixth rule) to copy. Recommended.** About 15 lines. The CRS is
   a contract with whatever reads the mesh, and two catchments, or two
@@ -823,14 +1060,14 @@ the CRS the mesh is computed in, not only written in.
   to 9° past its central meridian: still conformal, scale off by about 1 %.
 
 **Q12. `--out-crs` on a projected DEM in another CRS** (say DTM10 in UTM 33,
-mesh wanted in UTM 32).
+mesh wanted in UTM 32). *Ruled (a).*
 - **(a) Take the same path: resample onto the target grid, then the final
   check. Recommended.** About 5 lines; the path does not care whether the
   source is geographic.
 - (b) Refuse, as today.
 
 **Q13. The final check's price, now measured (Surprise 2).** You ruled it in
-before its cost was known.
+before its cost was known. *Ruled (a).*
 - **(a) As ruled: insert every source node still over tolerance.
   Recommended.** The guarantee is then about the DEM you gave. Over the basin
   that is up to about +44 % vertices at 1 m, +15 % at 5 m, +8 % at 10 m; on the
@@ -843,7 +1080,8 @@ before its cost was known.
 
 **Q14. The edge strip (Surprise 3) where there is no final check** (Norway,
 any DEM meshed directly). Today `--tolerance` does not hold in slivers along
-constraints; up to tens of metres on a dense outline.
+constraints; up to tens of metres on a dense outline. *Ruled (a), plus the
+midpoint between neighbouring crossings ("The edge strip").*
 - **(a) Its own increment right after 15c, before 15d: check points at every
   crossing of a constraint with a grid line, z bilinear there, through 15c's
   `refine_points`. Recommended.** 150-200 lines, one PR; changes every
@@ -856,7 +1094,12 @@ constraints; up to tens of metres on a dense outline.
 - (d) A stopgap: split long constrained edges of node-free triangles at their
   midpoints. About 40 lines, narrows the strip, guarantees nothing.
 
-**Q15. The basin tolerance** (open since 2026-09-30). With Surprise 1 and
+**Q15. The basin tolerance** (open since 2026-09-30). *Still open, and
+reframed by Ola on 2026-10-01: memory must not decide the tolerance; the
+direction (decomposition along constraint edges, windowed reads with no
+dense canvas, a cached fetch step) is recorded under "What is ruled" and gets
+its own basin-scale design. The options below rest on the one-process memory
+reasoning that direction supersedes, and are kept as asked.* With Surprise 1 and
 this design, 1-2 m does not fit one process on 32 GB with or without the
 final check; 5-10 m may, if the piece's per-node intercept does not grow with the canvas
 (at its 17 B per node the basin fits at no tolerance), which 15d measures.
@@ -865,7 +1108,7 @@ final check; 5-10 m may, if the piece's per-node intercept does not grow with th
 - (b) 1-2 m is needed: then domain decomposition (ROADMAP item 2.4) comes
   before the whole-basin run, and 15d stops at the piece.
 
-**Q16. The target grid's spacing.**
+**Q16. The target grid's spacing.** *Ruled (a).*
 - **(a) The source's north-south spacing at the domain's centroid, rounded to
   whole metres (30 m for ANADEM, 31 m for GLO-30); no CLI option.
   Recommended.** No extra lines. B6 found a finer grid does not remove the
@@ -873,7 +1116,8 @@ final check; 5-10 m may, if the piece's per-node intercept does not grow with th
 - (b) Also a `--grid-spacing` option. About 10 lines.
 
 **Q17. Fixtures while ANADEM's host refuses us** (HTTP 403 since 30
-September).
+September). *Ruled (a) for both GLO-30 and ANADEM, ANADEM from
+OpenTopography's COG, and the BHO outline as a fixture ("Fixtures").*
 - **(a) Commit a small GLO-30 extract of the Velhas piece now, with the
   Copernicus credit, and an ANADEM one when the host answers. Recommended.**
   GLO-30's licence is recalled to allow redistribution with its notice; it is

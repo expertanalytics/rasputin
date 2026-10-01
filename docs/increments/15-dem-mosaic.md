@@ -10,7 +10,9 @@ ruled the same day. Written by `@architect` before
 
 **15c is redesigned in `docs/increments/15c-geographic-dem.md`** (2026-10-01,
 on Q6 and Q9). R8, R10, I9-I11, and this file's 15c tests, LOC and acceptance
-are superseded there; 15d stays designed here.
+are superseded there; 15d stays designed here. Ola's rulings of 2026-10-01
+on Q11-Q17 are recorded there too, including the basin-scale direction (Q15)
+that revisits Q9's dense canvas and which 15d is to be re-read against.
 
 ## Ruled by Ola
 
