@@ -7,7 +7,7 @@ rulings of 2026-09-30. Questions Q11-Q17 at the end are Ola's.
 
 ## Why a file of its own
 
-`15-dem-mosaic.md` is 1,575 lines and records four sub-increments, two of them
+`15-dem-mosaic.md` is about 1,600 lines and records four sub-increments, two of them
 shipped. Its R8 (the lattice frame) and R10 (the output CRS) are superseded by
 Q6, and its 15c test list, LOC table and acceptance were written for the
 superseded design. Rewriting them in place would leave a reader to work out
@@ -307,6 +307,9 @@ source nodes, in source row-major block order.
   `h`, `h`, rows, cols): numbers only. `add(xy, z)` converts each point to
   fractional `(col, row)` in that lattice and files it in its cell
   `(floor(row), floor(col))` (the last cell for a point on the far edges).
+  A point outside the node rectangle, or with a non-finite coordinate or z,
+  is dropped and counted in `outside` (the Python producer already drops
+  them, so a non-zero count in a run means the producer changed).
 - **Packing: 16 bytes per point**: the cell's column (`uint32`), the offsets
   inside the cell (two `float`), and z (`float`). Rows are implicit after
   sorting, with one `uint64` start offset per grid row. A `float` offset in
@@ -334,19 +337,23 @@ source nodes, in source row-major block order.
 struct PointRefineOptions { double tolerance = 0.0; unsigned threads = 0; };
 
 template <class Store>  // CheckPoints, or a test double with for_each_in
-[[nodiscard]] RefineOutcome refine_points(
-    const Store& points, const raster::RasterGeometry& grid,
+[[nodiscard]] PointRefineOutcome refine_points(
+    const Store& points,  // its geometry() is the grid: the frame and the buckets
     const IndexedMesh2& start, std::span<const double> z, std::span<const std::uint8_t> valid,
     std::span<const std::array<std::uint32_t, 2>> edges, std::span<const std::uint32_t> masks,
     const PointRefineOptions& options);
 ```
 
-`RefineOutcome` is reused. `max_error` is over check points; `coincident` and
-`coincident_max_error` are added (below). The start is phase 1's output as
+It returns `PointRefineOutcome`, defined in `refine_points.hpp`: a
+`RefineOutcome` (with `max_error` over check points) plus `coincident` and
+`coincident_max_error` (below). `RefineOutcome` itself is unchanged, so
+`refine.hpp` is not edited (J1). The grid is not a separate argument: it is
+the store's own `geometry()`, so a store filed on one grid cannot be scanned
+against another. The start is phase 1's output as
 numbers: vertices in the target CRS, their z and validity, triangles,
 constraint edges and masks.
 
-1. **Lattice.** `detail::to_lattice(grid, start, ...)` as in `refine`: a
+1. **Lattice.** `detail::to_lattice(points.geometry(), start, ...)` as in `refine`: a
    vertex that is a node bit for bit is a node, any other is off-node. A
    vertex z table `zt` holds the given z, NaN where invalid. Phase 2 never
    reads the target grid's values: `grid` is only the frame and the buckets.
@@ -426,7 +433,8 @@ metres, on or relative to a square grid. Concretely: the target grid as a
   features) and target to source (resampling, the source region).
 - `CheckPoints` and `refine_points` are bound in `bindings/core.cpp` only:
   `CheckPoints(x_min, y_max, spacing, rows, cols)`, `.add(xy, z)` (NumPy
-  arrays, validated shapes and dtypes), `.freeze()`, `.size`, `.duplicates`;
+  arrays, validated shapes and dtypes), `.freeze()`, `.size`, `.duplicates`,
+  `.outside`;
   `refine_points(points, vertices, triangles, z, valid, edges, masks, *,
   tolerance, threads)`, releasing the GIL like `refine`. `_core.pyi` stubs
   both. `include/terrain/` stays free of pybind11.
@@ -437,7 +445,7 @@ metres, on or relative to a square grid. Concretely: the target grid as a
   is refused in 15c by design; 15d brings the source canvas down to a window.
 - `final_check.py` (new, ~40 lines): `run(tile, start, checks, tolerance,
   threads) -> (phase-1 outcome, phase-2 outcome)`, the two calls and the
-  store's construction, so `cli.py` (1,542 lines) grows by the options and
+  store's construction, so `cli.py` (about 1,500 lines) grows by the options and
   fields only. It drops its reference to the target tile before building the
   store; the caller must not hold one either, and `_dem_mesh` is restructured
   so it does not.
@@ -509,14 +517,17 @@ parallelised there.
 
 **Memory.** The store is 16 B per source node: 208 MB on the piece, 11.7 GB
 for the basin's 734 M ANADEM nodes. D1 drops the target canvas (8.6 GB at
-basin scale) before the store is built, so phase 2's peak is store plus mesh,
-not store plus canvas plus mesh. Against Surprise 1's floors (13 GiB at 10 m,
+basin scale) before the store is built, so phase 2's peak is store plus mesh
+(about two copies of it: phase 1's output and phase 2's lattice mesh, which
+15d measures), not store plus canvas plus mesh. Against Surprise 1's floors (13 GiB at 10 m,
 19 GiB at 5 m, canvas included), phase 2 moves the basin's peak to roughly
 16 GiB at 10 m and 22 GiB at 5 m: floors plus arithmetic, not measurements.
 Those floors count the canvas at 4 B per node; the piece's own intercept was
-about 17 B per grid node (Surprise 1), and at that rate the basin does not fit
-at 5 m either. So **one process on 32 GB may reach the basin at 5-10 m and
-cannot at 1-2 m, with or without the final check**; below that the route is
+about 17 B per grid node (Surprise 1), and at that rate the canvas term alone is
+about 36 GiB, so the basin fits at no tolerance. So **one process on 32 GB
+cannot reach the basin at 1-2 m, with or without the final check, and reaches
+it at 5-10 m only if the piece's per-node intercept does not grow with the
+canvas**; below that the route is
 domain decomposition (ROADMAP item 2.4). 15d measures it. This bears on the
 basin tolerance (Q15).
 
@@ -642,30 +653,31 @@ than a shared one; the memory cap sums both canvases and the store.
 ## PR split and LOC
 
 Counted in `CLAUDE.md` §2's unit. Estimates; increment 10 came in 39 % over
-and 15a's `mosaic.py` 60 % over, so the worst case applies 39 % and the
-largest single module is flagged.
+and 15a's `mosaic.py` 60 % over, so the worst case applies 39 %, with
+60 % beside it, and the largest single module is flagged. Both PRs stay under
+700 at either.
 
 | | what | est. | worst |
 |---|---|---:|---:|
 | **15c-1** | **The engine: check points and the final check, in C++. No CRS anywhere** | | |
-| | `include/terrain/refinement/check_points.hpp`: store, `add`, `freeze`, query | 75 | |
+| | `include/terrain/refinement/check_points.hpp`: store, `add`, `freeze`, query, `outside` | 77 | |
 | | `include/terrain/refinement/refine_points.hpp`: `scan_points` | 70 | |
-| | `refine_points.hpp`: the loop, coincident points, output | 105 | |
+| | `refine_points.hpp`: the loop, `PointRefineOutcome`, coincident points, output | 110 | |
 | | `include/terrain/mesh/lattice_mesh.hpp`: `split_inside(MeshVertex)` | 8 | |
 | | `bindings/core.cpp`: `CheckPoints`, `refine_points`, GIL release | 75 | |
 | | `_core.pyi`: stubs | 30 | |
-| | **15c-1 total** | **363** | **505** |
+| | **15c-1 total** | **370** | **514 (592 at +60 %)** |
 | **15c-2** | **The geographic path, in Python, ending with the final check** | | |
 | | `io/geotiff.py`: geographic 2D, degree units | 30 | |
 | | `io/models.py`: `crs`, `geographic`, `epsg: int \| None` | 15 | |
-| | `raster.py`: the gate; `mosaic.py`: messages through `meta.crs` | 10 | |
+| | `raster.py`: the gate; `mosaic.py` and `catchment.py` (`catchment.py:134-135`): `EPSG:{...}` through `meta.crs` | 13 | |
 | | `target_grid.py`: `TargetGrid`, spacing, extent, `source_region` | 80 | |
 | | `target_grid.py`: `SourceWindows`, `TileWindows`, `resample` | 55 | |
 | | `target_grid.py`: `check_point_blocks` | 35 | |
 | | `dem_input.py`: `target_crs`, the reprojected branch, the memory sum | 40 | |
 | | `final_check.py`: the two phases and the store | 40 | |
 | | `cli.py`: `--out-crs`, Q11's refusal or fit, `_dem_mesh` through `final_check`, fields, stats rows | 75 | |
-| | **15c-2 total** | **380** | **530** |
+| | **15c-2 total** | **383** | **532 (613 at +60 %)** |
 
 `target_grid.py` at 170 is the module to watch (15a's `mosaic.py` overran its
 estimate by 60 %). If it passes 250, `resample` and `check_point_blocks` move
@@ -677,13 +689,14 @@ start mesh, and `@perf` can confirm Norway is untouched. 15c-2 is plumbing on
 a prototype that already ran (`prep_dem.py`), and it wires the final check in
 the same PR that first lets a geographic DEM through, so **no release ever
 writes a geographic mesh without the final check**. Together they are about
-740 lines, over the ceiling, so they cannot be one PR. Q11 (b) would add
+750 lines, over the ceiling, so they cannot be one PR. Q11 (b) would add
 about 30 lines to 15c-2; Q12 (a) about 5.
 
 **Acceptance class.** 15c-1 adds files under `include/terrain/refinement/`
 and touches `include/terrain/mesh/`, so the refine/mesh acceptance rule
 applies (`docs/increments/README.md`, "Acceptance"). 15c-2 changes no C++,
-but its acceptance is a measured run all the same (below).
+but it restructures `_dem_mesh`, which drives refine on Norway's path, so the
+rule applies to it too (below).
 
 **Documentation in the same PRs** (not counted): `project_structure.md`, the
 `raster` boundary rule as restated in D6 (15c-2); `ROADMAP.md`'s 15 row at
@@ -701,12 +714,13 @@ Everything else is ordinary.
 - **CP1, the store.** Points are filed by cell; the iteration order after
   `freeze` is the same for every permutation of the `add` calls; two points at
   one position count one duplicate; `add` after `freeze` is refused; a point
-  on the far edge is in the last cell; a point outside the node rectangle is
-  dropped.
+  on the far edge is in the last cell; a point outside the node rectangle,
+  or with a NaN coordinate or z, is dropped and counted in `outside`.
 - **RP1, a plane.** Check points whose z lie on the start mesh's planes:
   nothing inserted, `max_error` 0 to 1e-9.
-- **RP2, one bump.** One point above tolerance inside a triangle is inserted
-  at its stored position with its own z; one below is not; one exactly at the
+- **RP2, one bump.** Offsets are exact binary fractions (0.25, 0.5), so the
+  stored position equals the given one. One point above tolerance inside a
+  triangle is inserted at that position with its own z; one below is not; one exactly at the
   tolerance is not (`>`, as `needs_split`).
 - **RP3, J2 by an independent oracle.** Scattered points over a rough
   function, several tolerances (0 included). After `refine_points`, a
@@ -768,19 +782,27 @@ realism, if Q17 allows: about 512 × 512 source nodes of the Velhas piece
 
 ## Acceptance
 
-- **15c-1:** CI green. `@perf`: the 1 m benchmark's mesh hash unchanged and
-  its refine time within noise of the previous run (same power state),
-  under `docs/benchmarks/<date>/`.
+- **15c-1:** CI green. `@perf`, per `docs/increments/README.md`
+  "Acceptance": `tools/bench.py`'s 1 m benchmark and thread-scaling sweep,
+  with `pmset -g batt` recorded for each run, against the previous
+  increment's run in the same power state (on `NO BASELINE`, master's merge
+  commit with `--tree`, back to back). The mesh hash is unchanged and refine
+  time is within noise at every thread count. Evidence under
+  `docs/benchmarks/<date>/`.
 - **15c-2:** `@perf` on the Velhas piece (BHO 76949; ANADEM if its host
   answers, GLO-30 otherwise) through `rasputin mesh --out-crs EPSG:31983`, at
   tolerances 1, 2, 5, 10, 20 and 50 m: triangles, phase 1 and phase 2 times,
   the fixed cost (projection, store), peak RSS, and phase 2's insertions
-  against Surprise 2's first-pass counts. The independent final check of the
+  against Surprise 2's first-pass counts (approximate: Surprise 2 was
+  measured on a 30 m grid, and the CLI default gives 31 m on GLO-30). The independent final check of the
   basin-piece run reports **0 source nodes over tolerance, interior and
   strip**, and its control still fails when the mesh is shifted 15 m. Worst
   angle and maximum degree against phase 1's. Phase 2's thread scaling at
   1 m. For information only: phase 2 alone from the domain's start mesh
-  (through the Python API), to show what phase 1 buys.
+  (through the Python API), to show what phase 1 buys. And, for J1 on the
+  real path: `tools/bench.py`'s 1 m benchmark and thread-scaling sweep
+  against 15c-1's merge commit, same power state, with the mesh hash
+  unchanged and refine and process time within noise.
 - For both: every gate in `CLAUDE.md` §4 green, and CI green.
 
 ## Questions for Ola
@@ -836,7 +858,8 @@ constraints; up to tens of metres on a dense outline.
 
 **Q15. The basin tolerance** (open since 2026-09-30). With Surprise 1 and
 this design, 1-2 m does not fit one process on 32 GB with or without the
-final check; 5-10 m may, which 15d measures.
+final check; 5-10 m may, if the piece's per-node intercept does not grow with the canvas
+(at its 17 B per node the basin fits at no tolerance), which 15d measures.
 - **(a) Tell us what the hydrology needs; meanwhile 15d's acceptance targets
   10 m, then 5 m. Recommended.**
 - (b) 1-2 m is needed: then domain decomposition (ROADMAP item 2.4) comes
