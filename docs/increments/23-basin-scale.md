@@ -1076,8 +1076,11 @@ def decode_window(source: BlockSource, meta: RasterMeta, dtype, window, *, threa
   `GeoTiffError` naming `where` and the block index (`geotiff._stage`).
 - Tiled and stripped pages alike (`page.chunks`). DTM10 is 512² LZW tiles
   with three overviews; ANADEM is a COG.
-- The output becomes the tile through `DemTile._adopt(window_meta(...), out)`:
-  its third caller, allocated here and never handed out writable.
+- The output becomes the tile through the public `DemTile(...)`
+  constructor, one extra copy per window. A departure, accepted in review:
+  `_adopt` was designed here, but 15a's suite (`test_mosaic.py`, M15)
+  reserves `_adopt` for `mosaic.py`. Widen it only if `@perf` shows the copy
+  matters.
 
 Checked with tifffile 2026.9.20 before writing this: `page.decode(bytes, i)`
 decodes a block from its bytes alone; it does so on a page parsed from a
@@ -1129,7 +1132,7 @@ value that is a key of `SOURCES` is that source; one value is a path
 otherwise, and a key mixed with paths is refused. A key with no cache root
 is refused (B7's message, under "The CLI"). A `NotCached` becomes the
 usage error with `; run: rasputin fetch <key>` plus the run's `--domain` or
-`--bbox`, `--out-crs` and `--cache` as given. `dem_tiles` is written for a
+`--bbox`, `--out-crs` (once 15c-2 adds it) and `--cache` as given. `dem_tiles` is written for a
 catalogue source as for a directory.
 
 ### Unchanged by 23a-1
