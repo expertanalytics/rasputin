@@ -1176,3 +1176,20 @@ can no longer be expressed. Gates green. CI not yet run. Non-blocking, for the
 red step: name `geometry()` beside `for_each_in` in D4 and the comment at the
 `refine_points` signature; "`grid` is only the frame" → "the store's
 `geometry()` is only the frame"; add a ±inf case to CP1.
+
+### Round 3, `8b5315c..0a7ca47`: CHANGES REQUESTED (`@reviewer`)
+
+Production LOC 0 (+308 / −64 here, +3 / −1 in `15-dem-mosaic.md`). Ola's
+2026-10-01 rulings on Q11-Q17 recorded; the distortion table, the ANADEM COG
+header and LOC (370, 403) verified. Two blocking edits: B1 Ola's Q11 words
+quoted for keeping TM's scale at 1, though Ola made the excuse conditional
+("if that is time consuming") and balancing is one line; B2 three sentences
+still gave basin-scale work to 15d.
+
+### Round 4, `0a7ca47..2741dba`: APPROVED (`@reviewer`)
+
+Production LOC 0 (+79 / −53). B1 fixed by balancing the scale factor in
+every family (all six rows reproduced, e.g. the basin 0.25 % scale, 0.49 %
+area, against 1.11 % for UTM); B2 fixed; suggestions taken. 15c-1 370,
+15c-2 405 (563 at +39 %, 648 at +60 %). Gates green. CI runs once #128 targets
+master.
