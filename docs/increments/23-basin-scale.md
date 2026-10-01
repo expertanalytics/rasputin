@@ -2196,4 +2196,4 @@ Production LOC 0; 23c 430 (688 at +60 %). B13 (c) and B14 recorded faithfully; b
 
 ### Round 2, `4c182c8..a7c1bfb`: APPROVED (`@reviewer`)
 
-DC0 now pins the cell count, which approximates P' and is not a floor; the refusals at half of physical memory are question B15 (`mosaic.py@5a57793:209`, `catchment.py@5a57793:150`), with every dependent place conditional on Ola's answer; units in GiB (7.7 estimated against 3.60 measured). Citations resolve. CI not yet run: no PR.
+DC0 now pins the cell count, which approximates P' and is not a floor; the refusals at half of physical memory are question B15 (`src_python/tin_engine/mosaic.py@5a57793:209`, `src_python/tin_engine/catchment.py@5a57793:150`), with every dependent place conditional on Ola's answer; units in GiB (7.7 estimated against 3.60 measured). Citations resolve. CI not yet run: no PR.
