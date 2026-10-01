@@ -907,9 +907,12 @@ piece of basin piece 2.1), with MapBiomas at its latest year (Ola's default):
   absolute.
 - **Class areas.** Per class, the basin total error in km² and in percent
   of that class, for every variant and cutoff; listing which classes lose
-  more than 1 %, and which vanish. The crop classes (soybean, other
-  temporary crops, sugar cane, coffee, and whatever the collection splits
-  out) reported separately, since crop transpiration is the use.
+  more than 1 %, and which vanish. The crop classes reported separately,
+  since crop transpiration is the use. Which crops the chosen collection
+  separates was not checked; from memory, recent collections have soybean,
+  sugar cane, rice, cotton, coffee and citrus, plus "other" temporary and
+  perennial crops, and no separate maize class, which matters for Ola's
+  corn-and-soybean example.
 - **Local placement.** The same class-area errors summed over regions at
   several scales: BHO ottobasins one and two levels below 76949, and a
   regular grid of squares at 1, 5 and 25 km. Report the largest error per
@@ -1026,6 +1029,57 @@ marked as from memory in the text.
 | Wu, Sullivan 2003, *IJNME* 58(2):189-207 | 10.1002/nme.775 | Crossref |
 | Xu, Chen, Yu 2016, *Earth Science Informatics* 10:99-113 | 10.1007/s12145-016-0273-3 | Crossref; not read |
 
+Sources for "Dropped small fractions" (same convention; "summary only"
+means the abstract was elided and only Semantic Scholar's generated summary
+was read, so nothing in the text rests on it beyond the paper's subject):
+
+| Citation | DOI or URL | Checked |
+|---|---|---|
+| Adler, Kitchens, Martens, Nogueira, Tresser, Wu 1999, *Proc. SPIE* 3963:437-443 | 10.1117/12.373426 | Crossref, abstract |
+| Adler, Kitchens, Martens, Tresser, Wu 2003, *IBM J. Res. Dev.* 47(1):5-15 | 10.1147/rd.471.0005 | Crossref, abstract |
+| Asano 1996, *Proc. ICIP '96* 1:545-548 | 10.1109/ICIP.1996.559554 | Crossref, abstract |
+| Asano, Katoh, Obokata, Tokuyama 2003, *SIAM J. Comput.* 32(6):1423-1435 | 10.1137/S0097539702417511 | Crossref, abstract |
+| Bacharach 1966, *Management Science* 12(9):732-742 | 10.1287/mnsc.12.9.732 | Crossref, abstract |
+| Balinski, Young, *Fair Representation* (book, 1982) | no DOI | reviews only on Crossref; not read |
+| Best et al. 2011 (JULES part 1), *GMD* 4(3):677-699 | 10.5194/gmd-4-677-2011 | Crossref |
+| Brunton, Arikan, Urban 2015, *ACM TOG* 35(1):1-13 | 10.1145/2832905 | Crossref, abstract |
+| Cox 1987, *JASA* 82(398):520-524 | 10.1080/01621459.1987.10478456 | Crossref, abstract |
+| Cox, Ernst 1982, *INFOR* 20(4):423-432 | 10.1080/03155986.1982.11731877 | Crossref, abstract |
+| Damera-Venkata, Evans 2001, *IEEE TIP* 10(10):1552-1565 | 10.1109/83.951540 | Crossref, abstract |
+| Doerr 2004, *Inf. Proc. Letters* 92(3):113-116 | 10.1016/j.ipl.2004.07.002 | Crossref; summary only |
+| Eschbach, Fan, Knox, Marcu 2003, *IEEE Signal Proc. Mag.* 20(4):39-50 | 10.1109/MSP.2003.1215230 | Crossref, abstract |
+| Eschbach, Pedersen 2017, *Electronic Imaging* 29(18):114-122 | 10.2352/ISSN.2470-1173.2017.18.COLOR-043 | Crossref, abstract |
+| Fan 1993, *Proc. ICASSP '93* 5:321-324 | 10.1109/ICASSP.1993.319812 | Crossref, abstract |
+| Floyd, Steinberg 1976, *Proc. SID* 17(2):75-77 | no DOI | no record found; from memory |
+| Gandhi, Khuller, Parthasarathy, Srinivasan 2006, *JACM* 53(3):324-360 | 10.1145/1147954.1147956 | Crossref, abstract |
+| Jarvis, Judice, Ninke 1976, *CGIP* 5(1):13-40 | 10.1016/S0146-664X(76)80003-2 | Crossref |
+| Jones 1999, *Monthly Weather Review* 127(9):2204-2210 | 10.1175/1520-0493(1999)127<2204:FASOCR>2.0.CO;2 | Crossref |
+| Knuth 1987, *ACM TOG* 6(4):245-273 | 10.1145/35039.35040 | Crossref, abstract |
+| Lau, Arce 2018, *Modern Digital Halftoning* (2nd ed.) | 10.1201/9781315219790 | Crossref; not read |
+| Lawrence et al. 2019 (CLM5), *JAMES* 11(12):4245-4287 | 10.1029/2018MS001583 | Crossref, abstract |
+| Le Page, West, Link, Patel 2016, *GMD* 9(9):3055-3069 | 10.5194/gmd-9-3055-2016 | Crossref, abstract |
+| Li, Bou-Zeid, Barlage, Chen, Smith 2013, *JGR Atmos.* 118(21) | 10.1002/2013JD020657 | Crossref, abstract |
+| Meijer 1973, *Indag. Math.* 76(1):9-17 | 10.1016/1385-7258(73)90015-2 | Crossref; not read |
+| Moody, Woodcock 1995, *Landscape Ecology* 10(6):363-379 | 10.1007/BF00130213 | Crossref; not read |
+| Ostromoukhov 2001, *SIGGRAPH '01*:567-572 | 10.1145/383259.383326 | Crossref, abstract |
+| Sadakane, Takki-Chebihi, Tokuyama 2005, *TCS* 331(1):23-36 | 10.1016/j.tcs.2004.09.030 | Crossref; summary only |
+| Schneider 1996, *Discrete Math.* 159(1-3):217-222 | 10.1016/0012-365X(95)00110-I | Crossref; not read |
+| Takki-Chebihi, Tokuyama 2003, *LNCS* (ISAAC 2003):425-433 | 10.1007/978-3-540-24587-2_44 | Crossref; not read |
+| Taylor 2024, *GMD* 17(1):415-430 | 10.5194/gmd-17-415-2024 | Crossref, abstract |
+| Tijdeman 1973, *JCTA* 15(2):129-137 | 10.1016/S0097-3165(73)80002-0 | Crossref; not read |
+| Tijdeman 1980, *Discrete Math.* 32(3):323-330 | 10.1016/0012-365X(80)90269-1 | Crossref; summary only; bound from memory |
+| Tobler 1979, *JASA* 74(367):519-530 | 10.1080/01621459.1979.10481647 | Crossref, abstract |
+| Tokuyama 2007, *Graphs and Combinatorics* 23(S1):359-378 | 10.1007/s00373-007-0700-9 | Crossref; summary only |
+| Ulichney 1988, *Proc. IEEE* 76(1):56-79 | 10.1109/5.3288 | Crossref, abstract |
+| Ullrich, Taylor 2015, *Monthly Weather Review* 143(6):2419-2440 | 10.1175/MWR-D-14-00343.1 | Crossref |
+| Velho, Gomes 1991, *SIGGRAPH '91*:81-90 | 10.1145/122718.122727 | Crossref, abstract |
+| Verburg, Soepboer, Veldkamp et al. 2002, *Environ. Management* 30(3):391-405 | 10.1007/s00267-002-2630-x | Crossref |
+| Vernon, Le Page, Chen et al. 2018, *J. Open Research Software* 6(1):15 | 10.5334/jors.208 | Crossref, abstract |
+| West, Le Page, Huang, Wolf, Thomson 2014, *ERL* 9(6):064004 | 10.1088/1748-9326/9/6/064004 | Crossref |
+| Witten, Neal 1982, *IEEE CG&A* 2(3):47-52 | 10.1109/MCG.1982.1674228 | Crossref, abstract |
+| Zhang, Webber 1993, *SIGGRAPH '93*:305-312 | 10.1145/166117.166156 | Crossref, abstract |
+| Zheng, Liu, Lou, Vlaski, Al-Naffouri 2026, *IEEE TSP* 74:1047-1063 | 10.1109/TSP.2026.3664752 | Crossref, abstract |
+
 Software and data documentation, read 2026-10-01:
 
 - GDAL polygonize and sieve, source on master:
@@ -1042,3 +1096,15 @@ Software and data documentation, read 2026-10-01:
   https://github.com/topojson/topojson-simplify (`src/presimplify.js`)
 - mesher: https://mesher-hydro.readthedocs.io/en/latest/configuration.html
 - CORINE CLC2018: https://www.eea.europa.eu/en/datahub/datahubitem-view/a5144888-ee5a-4e5d-a7af-ccbf8ba8a8b2
+- CTSM at `0f292ef9bce57a1d7fff70da245c295a31b8bb9c`:
+  https://github.com/ESCOMP/CTSM/blob/0f292ef9bce57a1d7fff70da245c295a31b8bb9c/src/main/surfrdUtilsMod.F90 ,
+  `bld/namelist_files/namelist_definition_ctsm.xml`,
+  `bld/namelist_files/namelist_defaults_ctsm.xml`
+- WRF at `06d4240ae989cc3e50af412bb472df3d9048783c`:
+  https://github.com/wrf-model/WRF/blob/06d4240ae989cc3e50af412bb472df3d9048783c/phys/module_sf_noahdrv.F ,
+  `Registry/Registry.EM_COMMON`
+- Noah-MP at `badab7b4b51710037fc87f3dbf329b6be59b1b5a` (https://github.com/NCAR/noahmp)
+  and HRLDAS at `cd96df470220f7d7133cdbccd5f9c5355cf173e2` (https://github.com/NCAR/hrldas),
+  searched for "mosaic"
+- JULES namelists: https://jules-lsm.github.io/latest/namelists/jules_surface.nml.html ,
+  `jules_vegetation.nml.html`
