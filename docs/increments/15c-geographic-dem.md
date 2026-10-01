@@ -650,4 +650,77 @@ than a shared one; the memory cap sums both canvases and the store.
 
 ## Questions for Ola
 
-(to be written)
+Numbered on from `15-dem-mosaic.md`'s Q1-Q10. Each has a recommendation and
+its cost; none is decided here.
+
+**Q11 (was Q7). Who chooses the target CRS for a geographic DEM?** It is now
+the CRS the mesh is computed in, not only written in.
+- **(a) Required `--out-crs`; the refusal prints an LCC fitted to the domain
+  (Snyder's one-sixth rule) to copy. Recommended.** About 15 lines. The CRS is
+  a contract with whatever reads the mesh, and two catchments, or two
+  subdomains later, land in the same CRS only if someone chose it.
+- (b) Fit an LCC to each domain automatically, recorded as WKT2. About 45
+  lines. Two catchments meshed separately end up in different CRSs.
+- (c) The UTM zone of the domain's centroid, automatically. About 15 lines,
+  an EPSG code. The basin spans zones 23 and 24, so one zone is stretched up
+  to 9° past its central meridian: still conformal, scale off by about 1 %.
+
+**Q12. `--out-crs` on a projected DEM in another CRS** (say DTM10 in UTM 33,
+mesh wanted in UTM 32).
+- **(a) Take the same path: resample onto the target grid, then the final
+  check. Recommended.** About 5 lines; the path does not care whether the
+  source is geographic.
+- (b) Refuse, as today.
+
+**Q13. The final check's price, now measured (Surprise 2).** You ruled it in
+before its cost was known.
+- **(a) As ruled: insert every source node still over tolerance.
+  Recommended.** The guarantee is then about the DEM you gave. Over the basin
+  that is up to about +44 % vertices at 1 m, +15 % at 5 m, +8 % at 10 m; on the
+  piece about +6-8 s at 1 m.
+- (b) Check the source at a looser, second tolerance. Fewer insertions, a
+  weaker and two-number guarantee, about 10 more lines.
+- (c) Measure and record only, insert nothing. The guarantee is then against
+  the resampled grid, which is off the source by p99 3.1 m and max 27.8 m on
+  the piece.
+
+**Q14. The edge strip (Surprise 3) where there is no final check** (Norway,
+any DEM meshed directly). Today `--tolerance` does not hold in slivers along
+constraints; up to tens of metres on a dense outline.
+- **(a) Its own increment right after 15c, before 15d: check points at every
+  crossing of a constraint with a grid line, z bilinear there, through 15c's
+  `refine_points`. Recommended.** 150-200 lines, one PR; changes every
+  Norwegian domain mesh, so it gets `@perf`'s acceptance. The guarantee would
+  read "at every DEM node, and wherever a constraint crosses a grid line";
+  please confirm that wording or give yours.
+- (b) Inside 15c. 15c-2 would approach the ceiling, and Norway's acceptance
+  would ride on the basin work.
+- (c) Wait. The printed tolerance stays wrong along constraints.
+- (d) A stopgap: split long constrained edges of node-free triangles at their
+  midpoints. About 40 lines, narrows the strip, guarantees nothing.
+
+**Q15. The basin tolerance** (open since 2026-09-30). With Surprise 1 and
+this design, 1-2 m does not fit one process on 32 GB with or without the
+final check; 5-10 m may, which 15d measures.
+- **(a) Tell us what the hydrology needs; meanwhile 15d's acceptance targets
+  10 m, then 5 m. Recommended.**
+- (b) 1-2 m is needed: then domain decomposition (ROADMAP item 2.4) comes
+  before the whole-basin run, and 15d stops at the piece.
+
+**Q16. The target grid's spacing.**
+- **(a) The source's north-south spacing at the domain's centroid, rounded to
+  whole metres (30 m for ANADEM, 31 m for GLO-30); no CLI option.
+  Recommended.** No extra lines. B6 found a finer grid does not remove the
+  resampling error, and the final check removes it anyway.
+- (b) Also a `--grid-spacing` option. About 10 lines.
+
+**Q17. Fixtures while ANADEM's host refuses us** (HTTP 403 since 30
+September).
+- **(a) Commit a small GLO-30 extract of the Velhas piece now, with the
+  Copernicus credit, and an ANADEM one when the host answers. Recommended.**
+  GLO-30's licence is recalled to allow redistribution with its notice; it is
+  read again before anything is committed.
+- (b) Synthetic fixtures only until ANADEM is reachable.
+
+Still open from `15-dem-mosaic.md` and not this design's: whether commercial
+use matters for the DEM choice.
