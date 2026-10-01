@@ -172,9 +172,10 @@ searches to run before any claim.
 - **Galtier and George, "Prepartitioning as a way to mesh subdomains in
   parallel", IMR 1996.** Partition first, then mesh each part; interfaces
   fixed in advance.
-- **Chrisochoides, "A survey of parallel mesh generation methods", in
-  Numerical Solution of PDEs on Parallel Computers, LNCSE 51, Springer
-  (2006).** The survey to read first; recalled as classifying methods into
+- **Chrisochoides, "Parallel mesh generation", in Numerical Solution of
+  PDEs on Parallel Computers, LNCSE 51, Springer (2006), pp. 237-264,
+  doi:10.1007/3-540-31619-1_7** (title corrected from Crossref by increment
+  23). The survey to read first; recalled as classifying methods into
   tightly coupled (concurrent insertion with synchronisation), partially
   coupled and decoupled (DD).
 - **Antonopoulos, Blagojevic, Chernikov, Chrisochoides and Nikolopoulos,

@@ -176,8 +176,8 @@ the method is recalled unless it says otherwise. No full text was reread.
   plus parallelism, again for all points. And Chrisochoides, "Parallel mesh
   generation", in *Numerical Solution of PDEs on Parallel Computers*, LNCSE
   51, pp. 237-264, 2006, doi:10.1007/3-540-31619-1_7 (verified). Increment
-  21 cites this chapter as "A survey of parallel mesh generation methods";
-  Crossref's title is "Parallel Mesh Generation".
+  21 had cited it as "A survey of parallel mesh generation methods"; its
+  entry is corrected to Crossref's title on this branch.
 - **The union is constrained Delaunay.** Chew, "Constrained Delaunay
   triangulations", *Algorithmica* 4:97-108, 1989, doi:10.1007/bf01553881
   (verified). A triangle is constrained Delaunay when no vertex *visible*
