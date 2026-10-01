@@ -30,7 +30,8 @@ measured the cost: on a 48 km DTM10 square at a 10 m vertical tolerance,
 CORINE's borders with the 25° quality start made the mesh 3.6x larger
 (`docs/increments/16b-terrain-polygons.md`, the size table). CORINE is already
 generalised (25 ha minimum mapping unit, 100 m minimum width; its vertices
-were a median 54 m apart in 16b's probe). A 30 m MapBiomas staircase, with a
+were a median 51-56 m apart over 16b's three probe tiles
+(`16b-terrain-polygons.md`, the segment table)). A 30 m MapBiomas staircase, with a
 minimum mapping unit of half a hectare, has a vertex at every cell step, so
 the reduction has to do much more work than CORINE ever needed.
 
@@ -47,6 +48,7 @@ legacy-archive:legacy/rasputin/gml_repository.py
 legacy-archive:legacy/rasputin/land_cover_repository.py
 legacy-archive:legacy/rasputin/tin_repository.py
 legacy-archive:legacy/rasputin/web_visualize.py
+legacy-archive:legacy/rasputin/wfs_repository.py
 legacy-archive:legacy/tests/test_gml_repository.py
 legacy-archive:legacy/tests/test_land_cover_repository.py
 ```
@@ -65,6 +67,9 @@ What the hits hold (read from the tag):
   vector GML, already handled by 16b.
 - `tin_repository.py`, `web_visualize.py`: storage and display; nothing on
   vectorisation.
+- `wfs_repository.py`: an unfinished stub for Kartverket's INSPIRE land-cover
+  vector WFS (method bodies `pass`, an owslib `test()`); vector input,
+  nothing on vectorisation.
 
 No raster-to-polygon code, no sieve, no simplifier other than CGAL's
 surface-mesh collapse (increment 22's grep). Nothing else is carried over.
@@ -290,7 +295,8 @@ two ways to remove it, and they pull in opposite directions for a mesh:
   Visvalingam-Whyatt, GEOS coverage simplification) can only keep lattice
   corners, so a straight diagonal stays a zig-zag of corners at small
   tolerances, and at larger ones it is biased toward one side: on the probe
-  below the per-class area changed by up to 50 cells. APSC places new points
+  below the per-class area changed by up to 50 cells at a tolerance of one
+  cell, and 119 at four. APSC places new points
   off the lattice, and the line it chooses keeps the area, so a staircase
   becomes its mean line. That is the de-stairing we want.
 
@@ -407,7 +413,9 @@ coverage (`coverage_is_valid`):
 - Not area-preserving (the third column), and the tolerance is not a
   distance bound (2.24 cells at tolerance 2).
 - A one-cell island inside another class was not removed at tolerances 0.5,
-  2 and 5: it shrank to a triangle. JTS's documentation says small rings
+  2 and 5: at 0.5 it stayed a square (its corner triangles, 0.5 cell², are
+  above the area threshold, tolerance² = 0.25), at 2 and 5 it shrank to a
+  triangle. JTS's documentation says small rings
   are "removed where possible"; GEOS 3.13.1 did not do it in this case. So a
   sieve before vectorisation is needed whichever simplifier is used.
 - The vertex count stops falling: rings keep at least four vertices and
@@ -494,8 +502,11 @@ published parts put together, and Buchin et al. 2016 already have area- and
 topology-preserving subdivision simplification. If a later write-up wants to
 claim the APSC-on-a-coverage extension or the tolerance-band guarantee per
 face, the check to do first is a full read of Buchin et al. 2016, Kronenfeld
-et al. 2020 and Xu, Chen and Yu 2016, and a proper web search for grey
-literature (USGS work on APSC by Stanislawski and co-authors in particular).
+et al. 2020 and Xu, Chen and Yu 2016, a read of Kronenfeld's own APSC
+implementation (https://github.com/geobarry/line-simplify,
+`linesimplify/apsc.py`), and a proper web search for grey literature (USGS
+work on APSC by Stanislawski and co-authors in particular). A later pass the
+same day had web search; its findings are in "Novelty of the ledger" below.
 
 ## Open questions for Ola
 
@@ -526,9 +537,9 @@ under it. Quotations are Ola's words; the rest is the ruling as relayed.
    the raster, as water bodies.
 
    *To be revisited in the basin-inputs increment.* Ola's later ruling
-   (increment 23, B1, 2026-10-01) drops BHO as a geometry source: "I'm not
-   interested in archaic maps"; sub-catchments and drainage will be derived
-   from the DEM. The river constraints above will then likely be
+   (B1 in `docs/increments/23-basin-scale.md`, branch `worktree-basin-scale`,
+   2026-10-01) drops BHO as a geometry source: "I'm not interested in
+   archaic maps"; sub-catchments will be derived from the DEM. The river constraints above will then likely be
    DEM-derived drainage lines rather than BHO's; the ruling here is
    otherwise unchanged.
 3. **Which area must be kept, and where is the tolerance measured?**
@@ -541,10 +552,16 @@ under it. Quotations are Ola's words; the rest is the ruling as relayed.
    *Answered: exact area.* Each lake is traced on cell edges, reprojected to
    metres, and reduced by increment 22's area-preserving segment collapse,
    with a no-crossing check against the other lakes, the river lines (see the
-   revisit note under question 2) and
-   the domain outline. Water bodies are disjoint, so the shared-border and
+   revisit note under question 2) and the domain outline, plus §2's
+   swept-region test against their vertices. Water bodies are disjoint, so the shared-border and
    junction case of sections 2 and "What combines" no longer arises for
    constraints; it remains only if a later step wants class polygons.
+
+   *A question for the lake design:* river lines cross lake outlines where
+   they enter and leave a reservoir, so the check cannot forbid every
+   river-lake crossing. Each such crossing must be kept (as a node on both
+   lines), not forbidden; only new crossings created by the reduction are
+   errors.
 4. **The diagonal checkerboard corner** (A B / B A): two A regions touching
    at a point, or one region pinched at it? For constraints, separate faces
    (4-connected, GDAL's default) are the simpler choice; it decides patch
@@ -552,11 +569,24 @@ under it. Quotations are Ola's words; the rest is the ruling as relayed.
 
    *Answered: 8-connected water, free pinch points.* Water cells touching at
    a corner are one water body; its outline is one ring that passes each
-   pinch point twice. The pinch points are not fixed: Ola observed that the
-   area-preserving collapse itself turns a diagonal strip into a proper
-   simple polygon (width c/√2 for cell size c) when the tolerance is about a
-   cell or coarser. So the no-crossing check must let a pinch open but never
-   let the two sides cross.
+   pinch point twice. The pinch points are not fixed. Ola asked whether the
+   area-preserving collapse would not turn a diagonal strip into a proper,
+   simple polygon; it can, if the pinches may open. A staircase side
+   collapsed between fixed ends goes to its mean line, c/(2√2) from the
+   diagonal for cell size c, so a strip between two larger parts of a water
+   body becomes a simple strip of width c/√2 with the chain's area. A strip
+   that is a whole water body has no fixed ends: increment 22's
+   `reduce_ring`, on a 40-cell strip with each pinch opened by 1e-9, reached
+   its four-vertex floor at tolerances of 0.7 cell and above, a lozenge of
+   the exact area whose width runs from 0 at the tips to c·√2 (mean c/√2),
+   and made no collapse at 0.4 cell. On the ring as traced, pinches closed,
+   it made no collapse at any tolerance up to 2 cells: from 0.5 cell up,
+   every candidate within the tolerance was rejected as a crossing, because
+   a new edge touches the other pass of a pinch. So the no-crossing check
+   must let a pinch open but never let the two sides cross; that is a change
+   to increment 22's check, not a property it has. Probe:
+   `docs/research/raster-to-vector-probes/pinch_strip_probe.py` (throwaway,
+   run with the repository's venv).
 5. **Which MapBiomas collection and year**, and is the class legend to be
    reduced first (MapBiomas has several levels; merging to level 1 or 2 before
    vectorising removes many boundaries for free)?
@@ -570,8 +600,8 @@ under it. Quotations are Ola's words; the rest is the ruling as relayed.
 
 A further ruling, on the fractions themselves. Ola: "We could even have a
 cutoff on the fractions. 0.1% soybean does not carry so much information."
-And: "95% corn, 5% soybean _could_ become 100% corn. It's basically for crop
-specific transpiration." Ola proposed "a local out-of-balance ledger, trying
+And: "95% corn, 5% soybean _could_ become 100% corn." The use is
+crop-specific transpiration. Ola proposed "a local out-of-balance ledger, trying
 to compensate for missing covers" in neighbouring triangles, kept by area,
 not by fraction, and ruled that "the general idea, Floyd-Steinberg
 dithering, applied to class areas instead of pixel intensities, and related
@@ -980,10 +1010,10 @@ That pass found two things that bear on the ledger:
   Science* 48(4):292-304 (Crossref, abstract; code `mikejohnson51/resample`
   at `30912309`). Region-wide quotas per class by largest remainder; the
   rarest class is placed first, into the cells with the highest share of it
-  (at least 10 %); leftovers go by majority. It keeps class totals over the
+  (more than 10 %); leftovers go by majority. It keeps class totals over the
   region, not locally, and it is a quota allocation, not error diffusion.
   The closest area-conserving reallocation found.
-- **SWAT's HRU thresholds** (EPA, Lake Champlain Basin SWAT model
+- **SWAT's HRU thresholds** (Tetra Tech for EPA Region 1, April 2015, Lake Champlain Basin SWAT model
   configuration report,
   https://www.epa.gov/sites/default/files/2015-09/documents/swat-model-configuration-calibration-validation.pdf):
   a land use under the threshold in a subbasin "is dropped and the areas of
@@ -1156,3 +1186,7 @@ Software and data documentation, read 2026-10-01:
   searched for "mosaic"
 - JULES namelists: https://jules-lsm.github.io/latest/namelists/jules_surface.nml.html ,
   `jules_vegetation.nml.html`
+- Tetra Tech, Inc., *Lake Champlain Basin SWAT Model Configuration,
+  Calibration and Validation*, prepared for U.S. EPA Region 1, April 2015:
+  https://www.epa.gov/sites/default/files/2015-09/documents/swat-model-configuration-calibration-validation.pdf
+  (HRU threshold passage read)
