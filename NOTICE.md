@@ -90,7 +90,14 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
   `tests/fixtures/corine/`. The full attribution, the conditions of use and how
   each file was modified are in `tests/fixtures/corine/NOTICE`.
 - **Benchmark evidence** in `docs/benchmarks/` (pictures, domains, logs) is
-  derived from the same DTM10 and CORINE data and carries the same two credits.
+  derived from the same DTM10 and CORINE data and carries the same two credits,
+  except `docs/benchmarks/2026-10-01/basin-piece/`, whose figures are derived
+  from **Copernicus GLO-30**, "produced using Copernicus WorldDEM-30 © DLR e.V.
+  2010-2014 and © Airbus Defence and Space GmbH 2014-2018 provided under
+  COPERNICUS by the European Union and ESA; all rights reserved" (projected and
+  resampled, so modified), and from the **BHO 2017** catchment outlines of the
+  Agência Nacional de Águas e Saneamento Básico (ANA). Neither dataset is in
+  the repository.
 
 ## Runtime dependencies
 
