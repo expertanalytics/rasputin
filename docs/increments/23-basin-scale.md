@@ -385,9 +385,11 @@ The main session's reasoning, item by item.
 - **The chains.** Each line, from the window's edge to its edge, is clipped
   to the domain as linework (16b R6) and enters as breakline chains with mask
   `seam`. The noder nodes them like any input (crossings with the outline,
-  features and the other lines); a block corner is the crossing of two axis
-  lines, which is exact and lies on the noder's 1 mm grid when `h` is whole
-  metres.
+  features and the other lines). A block corner is where two cut lines
+  cross, at a node whose coordinates are whole metres when `h` is, so on the
+  noder's 1 mm grid; that the noder's crossing arithmetic returns it exactly
+  for two axis-parallel segments is for 23c's red suite to pin (DC9), not
+  assumed here.
 - **Why grid lines** and not, say, a balanced bisection:
   1. *No quality cost.* A node not on a grid-line seam is at least one cell
      from it, and 20b's ε is at most half a cell (`foot_epsilon`'s cap), so a
@@ -477,9 +479,10 @@ that each neighbour computes identically.** No exchange, no rounds.
    becomes `(a, p1, c), (p1, p2, c), …, (pk, b, c)`: index arithmetic, no
    geometry. Each fan triangle is counter-clockwise when every `pi` lies
    between `a` and `b` and `c` is off the edge's line by more than rounding;
-   the points lie on the edge to rounding, and the noder keeps every vertex at
-   least half a snap cell (0.5 mm) from an edge it is not on (05b's hot-pixel
-   guarantee), so the fan is valid. If it is not, refine's own check refuses
+   the points lie on the edge to rounding, and no vertex's 1 mm snap cell
+   meets an edge it is not an endpoint of (the noder's guarantee 14(b),
+   `05-noder.md`), so `c` is at least about half a millimetre off the line and
+   the fan is valid. If it is not, refine's own check refuses
    it (`NotCounterClockwise`): loud, never a silent difference between two
    pieces.
 4. **Refine with the seam frozen** (23b). `RefineOptions` gains
@@ -796,18 +799,450 @@ plus phase 2, decoding 3,061 blocks and writing.
   D, which Ola's Q5 placed with the large-area work); 21d remains the route
   for the serial phase inside one piece.
 
+## Invariants
+
+- **K1. Small runs untouched.** With no cut (the window within
+  `--block-nodes`, or `--block-nodes 0`) and `frozen_mask` 0, every mesh is
+  bit-identical to master's: 23b and 23c change nothing on that path.
+- **K2. Frozen means frozen.** In a piece, no pass inserts a vertex on a
+  frozen edge: refine's split, feet, the quality pass, `refine_points` (phase
+  2 and the edge strip). `split_edge` asserts it.
+- **K3. The guarantee over the union.** Every valid DEM node inside the
+  domain is within `--tolerance`: inside a piece by refine, on a seam by the
+  seam pass; on a grid-line seam at every point against the bilinear
+  surface. On the reprojected path, every source node too, except those
+  exactly on a seam, which are counted (`on_frozen`) with their error.
+- **K4. Conformity.** Two pieces sharing a seam edge write the same vertex
+  sequence on it, `(x, y, z)` bit for bit; checked when the index is
+  written, and a difference fails the run.
+- **K5. Determinism.** The output is a function of the inputs and the
+  options (`--block-nodes` included), never of `--jobs`, `--threads`, the
+  order pieces run in, or the machine's memory.
+- **K6. Locality.** A piece's files depend only on its job spec: its start
+  slice, its windows and its seam edges. Re-running one piece alone gives the
+  same bytes.
+- **K7. Meshing is offline.** No network on `rasputin mesh`'s path; blocks
+  meshing needs that the cache lacks are refused before any decode, naming
+  the fetch command; for the same domain and options, mesh needs a subset of
+  what fetch got.
+- **K8. The cache is honest.** A block is present exactly when its file has
+  its byte count; a fetch refuses a remote whose length, date or header
+  changed.
+- **K9. One global step, vectors only.** Noding, the start triangulation and
+  the labelling run once for the whole domain and never read the DEM; their
+  memory follows the vector input.
+- **K10. The I/O boundary.** The core sees windows, meshes, edges, a
+  tolerance and a mask, all as numbers in metres: no CRS, path or URL.
+
+## Degeneracy policy
+
+- **Nodes on a seam** (every node on a grid-line seam): the seam pass's
+  check points, never a piece's scan candidates.
+- **A seam along the outline** (a block line on a `--bbox` edge, say): not a
+  cut, since it crosses no interior. A natural cut that coincides with an
+  outline or feature edge is merged by the noder (masks unioned), frozen, and
+  handled by the seam pass like any seam.
+- **A seam along a feature edge** (a road on a block line): one edge with both
+  bits; the feature keeps its bits, and the seam's rules apply.
+- **A piece with no DEM node** (a sliver between a block line and the
+  outline): refine has nothing to scan; the seam pass still runs on its seam
+  edges, so its boundary still meets the tolerance there.
+- **A seam edge shorter than a cell** may have no check point; its two
+  vertices are its only heights, as any short constraint edge's are.
+- **NoData on a seam:** a check point whose stencil touches NoData is skipped
+  and counted; a seam vertex without a height is invalid, and the triangles
+  around it are carved by 14's rule in each piece.
+- **A fan that is not counter-clockwise** (a vertex within rounding of a seam
+  edge's line, which the noder's guarantee 14(b) rules out): refused by
+  refine's `NotCounterClockwise`, with the piece and seam named.
+- **Several components of the domain in one block:** several pieces.
+- **Four pieces at a block corner inside the domain:** the corner is a node
+  and a vertex of all four.
+- **A source node exactly on a seam** (phase 2): skipped and counted in both
+  pieces, `on_frozen`, with its error.
+- **The remote changed** between fetches: refused; `--refresh` re-fetches.
+- **A GLO-30 tile not in `tileList.txt`:** sea, "no tile"; a domain whose
+  needed region falls there gets NoData there, as 15a's coverage rule says
+  (refused if 15a would refuse it).
+
+## Not in scope
+
+- **Natural cuts** (BHO Pfafstetter units, 23e) and the simplification of
+  their shared chains (B10): designed above in outline, built later with the
+  basin's own inputs (ROADMAP item 2.5).
+- **Removing artificial seams after the run** (B4 (b)).
+- **The exchange protocol** (B5 (b)).
+- **Noding in pieces.** The global vector step is fine at basin scale with
+  outline, cuts and BHO rivers; a polygonised MapBiomas might not be, and
+  would need its own look.
+- **A process pool** for pieces, unless the GIL shows in the profile.
+- **Fetching other datasets** (BHO, MapBiomas): the catalogue is data, so
+  adding a COG source is an entry, but vector sources need their own fetch.
+- **Machines other than one:** pieces are pure data in and out, which keeps a
+  cluster possible; nothing here builds it.
+
 ## Order of work and PR split
 
-(pending)
+### The proposed order (B12)
+
+ROADMAP's "Order of work from 2026-09-30", item 2, today reads: measure a
+piece (done), 15c, 15d, parallel refine or domain decomposition, the basin's
+own inputs. Proposed in its place:
+
+1. **15c-1**, as designed (`15c-geographic-dem.md`): check points and the
+   final check in C++. Needs nothing new; ready for `@tester`.
+2. **23a-1**, windowed decoding and the cache's read side. Replaces 15d.
+3. **23a-2**, the fetch step. With 23a-1, rasputin fetches and caches its own
+   ANADEM, so 15c-2's acceptance no longer needs a one-off cut while
+   `metadados.snirh.gov.br` answers 403.
+4. **15c-2**, as designed, its acceptance on ANADEM from the cache.
+5. **The edge strip** (Q14), as designed, writing `constraint_check_points`.
+6. **23b**, frozen edges and the seam pass, in C++.
+7. **23c**, the decomposition, piece by piece, with pieces and the index as
+   output.
+8. **23d**, pieces in parallel, resumable runs, `rasputin stitch`.
+9. **The basin run**, `@perf`, no code: 50, 20, 10, 5, 2 and 1 m.
+10. **23e and the basin's own inputs**: natural cuts, BHO rivers as
+    polylines, MapBiomas land cover.
+
+**Why this order.** 23a has no dependency on the core and gives every later
+step real ANADEM data, which is what Ola asked the fetch step for ("or our
+performance will drop while we wait for download"). 23b needs `refine_points`
+(15c-1) and the edge strip's generator. 23c needs 15c-2's `TargetGrid` and
+`resample` per window, and 23b. 23d is what makes the basin fast, but
+nothing in it changes a mesh, so it goes after the first correct cut runs.
+Release hardening and 21d stay deferred, as ROADMAP has them.
+
+### PR split and LOC
+
+Counted in `CLAUDE.md` §2's unit. Estimates; the worst case applies 39 %
+(increment 10's overrun), with 60 % (15a's `mosaic.py`) beside it. Every PR
+stays under 700 at both.
+
+| PR | what | est. | +39 % | +60 % |
+|---|---|---:|---:|---:|
+| **23a-1** | **Windowed decoding and the cache, reading** | | | |
+| | `io/cog.py`: `BlockSource`, `LocalTiffBlocks`, `decode_window` on a thread pool | 60 | | |
+| | `io/repository.py`: `CacheRepository` read side, `CacheManifest`, presence | 55 | | |
+| | `BlockWindows` (15c's `SourceWindows`), the missing-block refusal | 40 | | |
+| | `fetch/sources.py`: `RemoteSource`, the catalogue (two entries) | 40 | | |
+| | `cli.py`: `--cache`, `RASPUTIN_CACHE`, `--dem <source id>` | 25 | | |
+| | **23a-1 total** | **220** | **306** | **352** |
+| **23a-2** | **The fetch step** | | | |
+| | `fetch/plan.py`: header prefix, needed region, blocks, GLO-30 tile list | 75 | | |
+| | `fetch/http.py`: ranged GET, 206 and length checks, coalescing, retries, async bound | 80 | | |
+| | `fetch/run.py`: plan, missing, download, verify, put; `--dry-run` | 50 | | |
+| | `io/repository.py`: write side, atomic put, manifest, identity check | 35 | | |
+| | `cli.py`: `rasputin fetch` | 45 | | |
+| | **23a-2 total** | **285** | **396** | **456** |
+| **23b** | **Frozen edges and the seam pass, C++** | | | |
+| | `lattice_mesh.hpp`: the frozen mask, `is_frozen`, the assertion in `split_edge` | 15 | | |
+| | `scan.hpp`: nodes on a frozen edge skipped (only for triangles with one) | 30 | | |
+| | `refine.hpp`: `frozen_mask`, no feet on frozen edges | 15 | | |
+| | `quality.hpp`: skip on frozen, `skipped_frozen` | 10 | | |
+| | `refine_points.hpp`: skip on frozen, `on_frozen` | 15 | | |
+| | `seam.hpp`: `refine_seam` (one-dimensional greedy over `constraint_check_points`) | 100 | | |
+| | `bindings/core.cpp`, `_core.pyi` | 60 | | |
+| | **23b total** | **245** | **341** | **392** |
+| **23c** | **The decomposition, piece by piece** | | | |
+| | `decompose.py`: when to cut, the grid lines as chains, `BasinPlan` | 75 | | |
+| | `features.py`: the `seam` property | 5 | | |
+| | `pieces.py`: labels, the start slice, fans | 85 | | |
+| | `pieces.py`: `PieceJob`, its windows (`TargetGrid` or mosaic plan) | 65 | | |
+| | `basin_run.py`: run pieces in order, async-ready | 45 | | |
+| | `io/mesh_index.py`: `MeshIndex`, piece writer, seam records, conformity | 85 | | |
+| | `cli.py`: `--block-nodes`, pieces output, fields | 45 | | |
+| | **23c total** | **405** | **563** | **648** |
+| **23d** | **In parallel, resumable, stitched** | | | |
+| | `basin_run.py`: `--jobs`, thread split, largest first, the memory cap | 45 | | |
+| | `basin_run.py`: job hashes, skip finished pieces | 35 | | |
+| | `stitch.py`: streaming `.vtk` and `.ply`, seam vertices numbered once | 130 | | |
+| | `cli.py`: `rasputin stitch`, `--no-stitch` | 25 | | |
+| | **23d total** | **235** | **327** | **376** |
+
+Modules to watch: `pieces.py` at 150 (split `fans` out past 220) and
+`stitch.py` at 130. 23b assumes the edge strip has written
+`constraint_check_points`; if 23b came first it would carry about 40 more.
+Natural cuts (23e) are not estimated: they get their own design with the
+basin's inputs.
+
+**Documentation in the same PRs** (not counted): `project_structure.md` (the
+`fetch/` package and the boundary rule that network code stays in it, 23a-2;
+pieces and the index, 23c); `ROADMAP.md`'s rows at each merge, and item 2's
+order once Ola rules B12; `15-dem-mosaic.md` and `15c-geographic-dem.md`
+pointing here where they hand basin scale on (this branch).
+
+**Acceptance class.** 23a-1 changes how Norway's tiles are decoded, so its
+`@perf` run checks the mesh hash and process time (below), though it touches
+no refine code. 23b, 23c and 23d touch or drive refine, so
+`docs/increments/README.md` "Acceptance" applies in full.
 
 ## Tests @tester can write red
 
-(pending)
+**Invariant-critical suites, for mutation testing:** 23b's frozen-edge suite
+(FE2-FE5) and the seam pass's oracle (SP1, SP2); 23c's conformity, union and
+equality tests (DC2-DC4, DC6). The rest is ordinary.
+
+### 23a-1 (Python)
+
+- **W1, decoding a window** equals decoding the whole file with tifffile and
+  slicing, `meta` included, for windows inside one block, across four, on
+  block boundaries and at the raster's edge; from a local tiled TIFF and from
+  the same blocks in a cache, identical arrays.
+- **W2, determinism**: identical arrays for 1 and 8 decode threads.
+- **W3, presence**: a block file of the wrong length is absent; a `.part` file
+  is ignored; the manifest round-trips.
+- **W4, the refusal**: a missing block is refused before any block is
+  decoded (a `BlockSource` double that fails on `block()`), and the message
+  names the fetch command with the domain and cache given.
+- **W5, offline**: the import test (nothing on `rasputin mesh`'s path imports
+  `tin_engine.fetch` or `urllib.request`); and a mesh from a prepared cache
+  with `socket.socket` replaced by one that raises succeeds.
+- **W6, overlaps**: `BlockWindows` over two overlapping objects equals 15a's
+  `assemble` on the same objects.
+
+### 23a-2 (Python)
+
+- **F1, the fixture**: a local range server (`http.server` in a thread)
+  serving a synthetic tiled COG written by tifffile (Deflate, 16² tiles, one
+  overview), counting requests, and able to fail after k responses, answer
+  500, answer 200 without honouring `Range`, or change `Last-Modified`.
+- **F2, the plan**: the blocks equal a brute-force test of every block's
+  footprint against the region (shapely), for a domain with a thin arm
+  through a block corner.
+- **F3, the bytes**: each cached block equals the file's byte range; no
+  request asks for a present block; coalesced requests number no more than
+  the runs of wanted blocks.
+- **F4, resume**: the server fails mid-run; a rerun requests only what is
+  missing, and the cache then equals a clean run's, byte for byte.
+- **F5, incremental**: a second, overlapping domain requests only its new
+  blocks.
+- **F6, refusals**: 200 instead of 206; a short body; a changed length or date;
+  4xx not retried; 5xx retried three times, then refused.
+- **F7, the header**: a header longer than the first prefix makes the reader
+  double the prefix; the parse never reads past what was fetched.
+- **F8, GLO-30**: a tile missing from the tile list is "no tile", not missing.
+
+### 23b (C++ Catch2 and through the binding)
+
+- **FE1, K1**: every existing refine suite, golden digests included, passes
+  unchanged with the mask 0. (This is the check that 23b changes nothing for
+  Norway; no new test.)
+- **FE2, the scan and the split**: a node exactly on a frozen grid-line edge
+  with a large error is never inserted; every other node ends within
+  tolerance (a brute-force oracle over all nodes not on frozen edges); with
+  the mask off the same node is inserted, so the test can fail.
+- **FE3, feet**: a node within ε of a frozen edge goes in itself, not a foot.
+- **FE4, the quality pass** never splits a frozen edge; `skipped_frozen`
+  counts it.
+- **FE5, `refine_points`**: a point exactly on a frozen edge is not inserted;
+  `on_frozen` and its error are reported.
+- **FE6**: `split_edge` on a frozen edge trips the assertion (debug build).
+- **SP1, a grid-line seam**: the check points are the nodes on it; after
+  `refine_seam`, the error is within tolerance at every node, and at 1,000
+  points along the line against a bilinear surface computed in NumPy
+  independently (the every-point property).
+- **SP2, a general seam**: an edge with rational endpoints; the oracle
+  recomputes crossings, midpoints and bilinear heights in exact rationals
+  (Python `fractions`) and checks every check point within tolerance
+  + 1e-9 of the output's piecewise-linear heights; tolerance 0 inserts every
+  check point with a nonzero error; ties go to the smallest parameter.
+- **SP3, sameness**: the edge given reversed, and the strip window shifted by
+  whole blocks, give the same output bit for bit.
+- **SP4, the bound**: insertions never exceed check points; NoData stencils
+  are skipped and counted.
+
+### 23c (Python, end to end on synthetic rasters)
+
+- **DC1, K1**: a domain within the block size writes the same bytes as
+  today's path.
+- **DC2, conformity, read from the files**: for every seam edge, both pieces'
+  vertex sequences are equal bit for bit. The oracle reads the piece files,
+  not the seam records or the index.
+- **DC3, a valid union**: in the stitched mesh every edge not on the outline
+  is in exactly two triangles, the triangles' area sums to the domain's
+  (shapely) to 1e-9 relative, and no two triangles overlap (brute force on a
+  small case).
+- **DC4, constrained Delaunay with the seams**: an exact incircle oracle
+  (Python `fractions`, independent of refine's predicates) finds no violation
+  when the seams count as constraints, on a case with cocircular lattice
+  points; and finds some when the seams are left out, so the test can fail
+  and shows what the union is.
+- **DC5, the tolerance over the union**: every DEM node in the domain within
+  tolerance of the stitched mesh (brute-force barycentric location, 1e-9
+  slack), seams and the edge strip included; the same mesh with z shifted by
+  twice the tolerance fails.
+- **DC6, the main session's claim, as an equality**: on a node-only case (a
+  rectangle on nodes, no features, grid-line seams, no quality start, no
+  feet), the decomposed mesh equals, as a set of world-coordinate triangles,
+  one `refine` run over the whole start triangulation with the same seams
+  frozen. Why equality can hold: pieces are slices of that triangulation in
+  its order, and every operation in a piece is the same as in the whole run,
+  restricted to the piece; with only node vertices every coordinate is an
+  integer in both frames, so no rounding differs. Control: the whole run
+  without freezing differs (`@tester` picks a case with a seam node over
+  tolerance).
+- **DC7, determinism**: `--jobs` 1 and 3, `--threads` 1 and 4, pieces in
+  reversed order: identical piece files and stitched file.
+- **DC8, locality**: one piece re-run alone from its job spec writes the same
+  bytes.
+- **DC9, geometry**: two pieces in one block; a block line through a lake
+  ring; a road along a block line (one edge, both bits); a block corner inside
+  the domain (four pieces at one node, which the noder must return exactly);
+  a sliver piece with no node.
+- **DC10, the reprojected path**: a synthetic geographic tile, `--out-crs`,
+  cut into four pieces; 15c's independent final check (G6) finds 0 source
+  nodes over tolerance on the union; `on_frozen` is 0.
+
+### 23d (Python)
+
+- **PJ1, the stitch**: the stitched file equals the union of the pieces
+  (as sets of triangles, seam vertices once), numbered by first occurrence in
+  piece-id order; it reads pieces one at a time (a reader double that refuses
+  a second open piece).
+- **PJ2, resume**: a run stopped after k pieces and rerun computes only the
+  rest, and the outputs are identical to a clean run's.
+- **PJ3, invalidation**: a changed tolerance changes every piece's hash.
 
 ## @perf acceptance
 
-(pending)
+Per `docs/increments/README.md` "Acceptance": `tools/bench.py`'s 1 m benchmark
+and thread-scaling sweep, `pmset -g batt` with every run, against the
+previous increment's run in the same power state (on `NO BASELINE`, the
+previous merge commit with `--tree`, back to back), evidence under
+`docs/benchmarks/<date>/`.
+
+- **23a-1:** the benchmark's mesh hash unchanged and process time within
+  noise (decoding is now windowed). On ANADEM: decode throughput per block and
+  per window, threads 1 to 8.
+- **23a-2:** fetch the basin's 3,061 ANADEM blocks: wall time, bytes,
+  requests, and a rerun that fetches nothing; an interrupted run resumed.
+- **23b:** the README rule in full; the mesh hash unchanged (mask 0), refine
+  within noise at every thread count.
+- **23c:** the README rule, with `--block-nodes 0` on the benchmark so it
+  stays comparable (hash unchanged), plus the benchmark cut by the default
+  block size, recorded as a new baseline. The Velhas piece on ANADEM from the
+  cache, at 1, 2, 5, 10, 20 and 50 m, cut (11 blocks at `B = 2048`) and uncut
+  (15c-2's run): triangles and their difference, worst angle, maximum degree,
+  0 constrained-Delaunay violations with seams as constraints, 0 nodes and 0
+  source nodes over tolerance by the independent check (its control still
+  failing), the seam pass's insertions, time and peak RSS.
+- **23d:** scaling on the Velhas piece at 1 m over `--jobs` × `--threads`;
+  then **the basin** at 50, 20, 10, 5, 2 and 1 m: triangles against the
+  200-box estimate (237 M at 1 m, 215-261 M), wall time per phase, fetch
+  bytes, peak RSS, and the stitched file's size. The claim to test: **peak
+  RSS under 16 GiB at every tolerance**, i.e. memory no longer decides the
+  tolerance. The independent final check over the union (on sampled pieces
+  if a full check is too long; `@perf` says which and why).
 
 ## Questions for Ola
 
-(pending)
+Numbered B1-B12, so they cannot be confused with 15's and 15c's Q1-Q17.
+
+**B1. Which cuts first?**
+- **(a) Global grid lines first (23c); BHO's Pfafstetter units later (23e),
+  with the basin's own inputs. Recommended.** Grid lines work for any input,
+  Norway included, cost nothing in quality (no foot can trigger next to
+  them), give an exact seam pass and exact seam heights, and need no new
+  data. Their price is lines in the mesh that mean nothing hydrologically
+  (B4).
+- (b) BHO units first. The pieces are hydrological units, which is what a
+  basin model wants as output; but it needs BHO for the whole basin, brings
+  a vertex every ~107 m along each seam (about +37 % vertices at 50 m on the
+  piece at level 7, arithmetic), and loses feet along seams. About 250 lines
+  more before the first basin run.
+- (c) Both in 23c: over the ceiling; two PRs anyway.
+
+**B2. When is a run cut?**
+- **(a) Only when the needed window is wider or taller than `--block-nodes`;
+  then along every block line through the domain. Recommended.** Small meshes
+  stay bit-identical to today's (K1). It is one rule, not two code paths: an
+  uncut run is the one-piece case.
+- (b) Always, along the global grid: one rule with no threshold, but any
+  mesh crossing a block line gets a seam, small ones included, and every
+  existing mesh that does changes.
+
+**B3. The block size.**
+- **(a) 2048 nodes by default (61 km at 30 m, 20 km at 10 m), as
+  `--block-nodes`, recorded in the file; 0 means never cut. Recommended.**
+  About 1 GiB per piece at 1 m in the steepest terrain measured, so eight at
+  once fit a 32 GB machine. The 1 m benchmark tile (25.5 M nodes) would be
+  cut by default, so `tools/bench.py` passes `--block-nodes 0` from 23c on.
+- (b) 4096: a quarter of the seams, up to about 4 GiB per piece at 1 m, so
+  fewer at once.
+- (c) 1024: four times the seams, a quarter of the memory.
+
+**B4. The seams in the output.**
+- **(a) Kept as constraint edges with a `seam` bit. Recommended.** The mesh is
+  constrained Delaunay with the seams as constraints; a consumer can tell a
+  seam from a river by its bit. No extra code.
+- (b) Removed after the run: for each seam, the strips on both sides
+  re-legalised across it and rescanned. The union is then Delaunay across
+  artificial seams, but both neighbours' strips must be live at once, and it
+  needs its own design (roughly 300 lines).
+
+**B5. How two pieces agree on a seam.**
+- **(a) The seam is frozen after a one-dimensional seam pass, which both
+  neighbours compute identically. Recommended.** No exchange and no rounds;
+  each piece job is self-contained. On grid-line seams it costs nothing; on
+  natural seams it gives up feet next to the seam.
+- (b) Exchange on shared segments (PCDM, the protocol Ola described): splits
+  requested by either side applied to both, in rounds until none is new.
+  Keeps feet on natural seams; needs rounds, a merge step, resumable refine
+  runs and both neighbours available. Worth it only if natural seams show
+  needles.
+
+**B6. The output of a cut run.**
+- **(a) Pieces and an index always; one stitched file for `--out x.vtk` by
+  default, skipped with `--no-stitch`. Recommended.** `--out` keeps meaning
+  one file; pieces are the durable result and what resumes a run; at the
+  basin's 1 m the stitched file is several GB and can be skipped.
+- (b) Pieces and the index only; `rasputin stitch` on request.
+
+**B7. Where the cache lives.**
+- **(a) `--cache DIR` or the `RASPUTIN_CACHE` environment variable, refused
+  if neither is set. Recommended.** Explicit, as `--out-crs` is (Q11); one
+  more option.
+- (b) A default under `../rasputin_data/cache`, next to the repository:
+  convenient here, surprising for anyone else.
+- (c) The platform's cache directory (`~/Library/Caches/rasputin` on macOS):
+  conventional, but 2 GB of DEM blocks hidden there.
+
+**B8. Sources in the first fetch PR.**
+- **(a) ANADEM (OpenTopography's COG) and GLO-30 (AWS). Recommended.** GLO-30
+  is what the basin-piece measurement used and is global; about 25 of 23a's
+  lines.
+- (b) ANADEM only.
+
+**B9. Resumable runs** (skip pieces whose job hash matches).
+- **(a) In 23d. Recommended.** About 35 lines; a basin run interrupted at 1 m
+  resumes where it stopped.
+- (b) Not now.
+
+**B10. Natural seams' vertices** (for 23e, asked now so it is not a
+surprise). BHO boundaries bring a vertex every ~107 m, used as given under
+Ola's input model.
+- **(a) Decide when 23e is designed, on measured counts. Recommended.**
+- (b) Simplify each shared chain once, between corners, with increment 22's
+  area-preserving collapse, so both sides use the same chain.
+- (c) Always as given.
+
+**B11. The basin tolerance** (Q15, open). Memory no longer limits it.
+- **(a) The basin run measures 50 down to 1 m and Ola chooses from the
+  numbers. Recommended.** Nothing in this design depends on the answer.
+- (b) Name it now, and the acceptance stops there.
+
+**B12. The order of work** in "Order of work and PR split".
+- **(a) As proposed: 15c-1, 23a-1, 23a-2, 15c-2, the edge strip, 23b, 23c,
+  23d, the basin run, 23e. Recommended.** The fetch step lands early, so
+  every later step runs on ANADEM.
+- (b) ROADMAP's current order (15c-1, 15c-2, the edge strip, then 23), with
+  15c-2's acceptance on a one-off ANADEM cut.
+
+**Decided here, which Ola may overrule:** grid lines on the computation
+lattice as artificial cuts; piece ids `(j, i, k)`; the seam pass computed by
+both neighbours rather than once; seam heights from the seam record; the
+ETag ignored; coalescing at 64 KiB gaps and 8 MiB requests; 8 connections and
+three retries; the manifest holding identity, not inventory; largest piece
+first; one process with threads; the index as JSON; pieces written beside the
+stitched file as `<out>.pieces/`.
