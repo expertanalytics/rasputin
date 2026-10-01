@@ -1237,6 +1237,9 @@ on the rare deferred path (below).
 - **Units** come from the plan: the global start triangulation's seam edges,
   split at corners, each with its two pieces and its vertex chain oriented as
   the seam pass orients it (`a < b` by `(x, y)`). A function of the input.
+  Units are numbered by their smallest seam-edge index in the start
+  triangulation, which the noder and the CDT make a function of the input;
+  "lowest-numbered" and "unit id" below mean this number.
 - **Zones.** Each triangle of a finished piece is given to exactly one of
   the piece's units: a triangle with an edge on a unit goes to that unit
   (to the lowest-numbered one if it has edges on two, at a corner); any
@@ -1313,8 +1316,12 @@ grown (`R` doubled) until no violation is left, then rescanned as in step 3;
 (b) **deferred thinning candidates**, as step 4 over the current state;
 (c) **corners where three or more pieces meet** inside the domain: a lattice
 crossing the cut added, so a removal candidate like any seam vertex, its
-star taken from the cleaned bands of the units around it; any seam edge at
-the corner that no band held loses its seam bit and is legalised here. A corner where a
+star taken from the cleaned bands of the units around it. Then, at every
+vertex where two or more units meet (kept corners on the outline, a hole or
+a feature included), any seam edge that no band held loses its seam bit, and
+a region of `R` rings around it is handled as in (a): fenced, re-legalised,
+fence-checked, grown until no violation is left, then rescanned as in step
+3. A corner where a
 seam meets the outline, a hole or a feature is an input-constraint vertex
 and is **kept**: removing it would merge two constrained edges that the
 noder's 1 mm snap need not leave collinear. So one artificial vertex stays
@@ -1328,7 +1335,7 @@ the stitcher applies.
   edge of `u` is inside band(u) or one of its fence edges, since a triangle
   with an edge on `u` is in `zone(u)`; the one exception, an edge at a
   corner whose two triangles each also have an edge on a lower-numbered
-  unit, is taken by the final pass's (c)), band edges by steps 2-3, fence
+  unit, is taken by the final pass's (c), as an (a) region, rescanned), band edges by steps 2-3, fence
   edges by step 5, run after thinning (against an outside that did not
   change) or by the final pass's (a0) and (a) (where it may have), and holes
   by Devillers' result. Locally Delaunay at every free edge is a
@@ -1591,19 +1598,19 @@ stays under 700 at both; the largest, 23c, is 656 at +60 %.
 | | `bindings/core.cpp`, `_core.pyi` | 55 | | |
 | | **23f total** | **300** | **417** | **480** |
 | **23g** | **The cleanup at stitching** | | | |
-| | `seams.py`: units from the plan, zones, bands of `R` rings, fences, band records | 95 | | |
+| | `seams.py`: units from the plan, zones, bands of `R` rings, fences, band records | 100 | | |
 | | `seam_cleanup.py`: one unit (merge, bits, legalise, rescan on a DEM strip, fence check, thin, write) | 110 | | |
-| | `seam_cleanup.py`: the final pass (shared fences, deferred items, corners), patches | 75 | | |
+| | `seam_cleanup.py`: the final pass (shared fences, deferred items, corners, unheld seam edges), patches | 85 | | |
 | | `stitch.py`: cores and cleaned bands, retired vertices dropped | 30 | | |
 | | `basin_run.py`, `cli.py`: units in parallel, keyed for resume | 20 | | |
-| | **23g total** | **330** | **459** | **528** |
+| | **23g total** | **345** | **480** | **552** |
 
 Modules to watch: `pieces.py` at 150 (split `fans` out past 220),
 `stitch.py` at 160 after 23g, and `vertex_removal.hpp` at 110, whose ear
 search stays simple because the hole is a star polygon. 23b assumes the edge
 strip has written `constraint_check_points`; if 23b came first it would carry
 about 40 more. B4 (b)'s estimate as asked was roughly 300 lines; with
-thinning, the final pass and the band records it is about 630 over 23f and
+thinning, the final pass and the band records it is about 645 over 23f and
 23g, which is why it is two PRs. 23e is not estimated: it gets its own
 design with the basin's inputs.
 
@@ -1626,7 +1633,7 @@ code, so
 **Invariant-critical suites, for mutation testing:** 23b's frozen-edge suite
 (FE2-FE5) and the seam pass's oracle (SP1, SP2); 23c's conformity, union and
 equality tests (DC2-DC4, DC6); 23f's removal and hole-recheck oracles (VR2,
-VR3, TH2); 23g's stitched-Delaunay and tolerance oracles (SC2, SC3). The
+VR3, TH2); 23g's stitched-Delaunay and tolerance oracles (SC2, SC3, SC8). The
 rest is ordinary.
 
 ### 23a-1 (Python)
@@ -1831,10 +1838,20 @@ rest is ordinary.
   fence (a long thin triangle across the band edge): the violation is
   deferred, the final pass clears it, and SC2 holds; a four-piece corner is
   removed where the tolerance allows and kept where it does not; a seam's
-  end on the outline is kept.
+  end on the outline is kept; a four-piece corner built so that both
+  triangles of one seam edge also have an edge on lower-numbered units: the
+  stitched file has no `seam` bit there, the edge is locally Delaunay (SC2's
+  oracle) and SC3 holds; the same with the corner on a feature (kept), so
+  the bit is cleared whether or not the corner is removed.
 - **SC7, memory shape**: the cleanup opens band records only, never a piece
   file, on a case with no deferral (a loader double that refuses piece
   files).
+- **SC8, zones** (pure, from band records): on DC9's corner cases, every
+  triangle with an edge on unit `u` is in zone(u) and band(u), except one
+  with edges on two units, which is in the lower-numbered unit's; every edge
+  of `u` is in band(u) or one of its fence edges. The mutant "zones by
+  nearest centroid only" fails on a case built with a triangle on `u` whose
+  centroid is nearer another unit.
 
 ## @perf acceptance
 
@@ -2075,7 +2092,8 @@ cells, the last row and column narrower, the cap winning over the minimum);
 `--pieces 1` meaning one piece whatever the size, the cap not applying;
 `N_MIN` and `N_MAX` as constants recorded in the index, not options; piece
 ids `(j, i, k)`; the seam pass computed by both neighbours rather than once;
-seam heights from the seam record; zones by the nearest unit; seam ends on
+seam heights from the seam record; zones by a unit's own edges first (the lowest-numbered at a
+corner), else the nearest unit; seam ends on
 the outline, holes and features kept; the ETag ignored; coalescing at 64 KiB
 gaps and 8 MiB requests; 8 connections and three retries; the manifest
 holding identity, not inventory; largest piece first; one process with
