@@ -1229,3 +1229,30 @@ every family (all six rows reproduced, e.g. the basin 0.25 % scale, 0.49 %
 area, against 1.11 % for UTM); B2 fixed; suggestions taken. 15c-1 370,
 15c-2 405 (563 at +39 %, 648 at +60 %). Gates green. CI runs once #128 targets
 master.
+
+### 15c-1, round 1, `a130f7c..cdd8b42`: CHANGES REQUESTED (`@reviewer`)
+
+Production LOC 445 added, 3 removed (442 net) against the estimate of 370 (+20 %, inside 514 at +39 %). Red before green confirmed (C++: missing header, then `split_inside(MeshVertex)`; Python: missing names). Green touches no test; the RP3 amendment is its own commit. Release ctest 839/839 without warnings; TSan and ASan/UBSan pass on the new suites; full `tests/python` 3195 passed against the built `_core` in an isolated venv; ruff, format, mypy and governance gates green; both at-risk citations still hold. Departures accepted: an unfrozen store throws `std::logic_error`; `split_inside` takes `MeshVertex`; one bucket per cell row, with an offset rounding to 1 moved to the next cell's corner. Blocking:
+- B1: no case where `split_edge` splits an interior edge whose neighbour has work in the same round. Dropping the neighbour's touch mark corrupts the mesh with every suite green.
+- B2: no tie-break test (ties to last survives).
+- B3: `CheckPoints.add` checks the dtype by identity and refuses pickled float64/float32 arrays.
+- B4: D4/D5 prose and two test comments describe the design before the departures.
+- B5: update ROADMAP row 15 before merge.
+
+Then @perf's acceptance run.
+
+### 15c-1, round 2, `cdd8b42..6ab7ad5`: CHANGES REQUESTED (`@reviewer`)
+
+Production LOC unchanged at 445 added, 3 removed (442 net) against the estimate of 370; this round changed 2 production lines (dtype equality in `CheckPoints.add`). Round 1's B1-B5 are fixed. The new tests kill the round-1 survivors: M11 by the targeted RP5 case, ties-to-last by the RP2 tie-break test, and the deleted `frozen()` check in C++ and in Python. A pickled float64/float32 array is accepted; byte-swapped and other dtypes are refused. Release ctest 843/843 without warnings; TSan passes on both suites; full `tests/python` 3199 passed against the rebuilt `_core` in an isolated venv; ruff, format, mypy and the governance gates green; at-risk citations still hold; the D4/D5 prose and the Velhas figures (0.754 / 1.257 GB) checked against code and arithmetic. Blocking:
+- B1: the dense RP5 case hangs under M11, and CI has no time limit (no `timeout-minutes`; the `tsan` job runs binaries outside ctest). Add `timeout-minutes` to the `cpp`, `sanitizers` and `tsan` jobs.
+- B2: ROADMAP row 15 says "(proposed in #129)", but #129 merged.
+
+@perf's acceptance run is next and can run on 6ab7ad5 meanwhile.
+
+### 15c-1, `@perf` acceptance (c3149bf): ACCEPTED
+
+Battery, 5 back-to-back pairs against master a130f7c with `--tree`; mesh hashes identical in all 10 runs (quarter `ccebf96a…`, tile `11741a81…`); refine time within noise at every thread count (median change −0.39 %, range −3.2 % to +3.6 %). Evidence: `docs/benchmarks/2026-10-01/15c-1-acceptance/`.
+
+### 15c-1, round 3, `6ab7ad5..c640be8`: APPROVED (`@reviewer`)
+
+Production LOC unchanged at 445 added, 3 removed (442 net) against the estimate of 370; the merge of master (6ca90af) and c640be8 change no production file. Round 2's B1 is fixed: `timeout-minutes: 30` on the `cpp`, `sanitizers` and `tsan` jobs (checked by parsing the YAML), and the `06-cdt-viewer.md:966` citation moved to the `sanitizers` job's new range, 51-75. B2 is fixed: "(#129)". The merge kept master's row 23 and #129's edits to the 15c record, with no conflict markers. Release ctest 843/843 without warnings; full `tests/python` 3342 passed against the rebuilt `_core` in an isolated venv; ruff, format, mypy and the governance gates green; the four at-risk citations re-read as quotations and hold. @perf's acceptance (c3149bf) covers the unchanged production code.
