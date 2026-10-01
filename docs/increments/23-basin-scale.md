@@ -252,11 +252,11 @@ legacy-archive:legacy/rasputin/wfs_repository.py
 ```
 
 Read: the first set is a docstring wish ("partition the whole area into
-disjoint topologies", `application.py:27`, repeated in `web_visualize.py`)
-and `partition()` in `triangulate_dem.h:833`, which splits a finished face
+disjoint topologies", `legacy/rasputin/application.py:27`, repeated in `web_visualize.py`)
+and `partition()` in `legacy/rasputin/triangulate_dem.h:833`, which splits a finished face
 list in two by a predicate (lakes by slope). Neither decomposes a meshing
 problem. The second set fetches over the network *at run time*, with no
-cache: `avalanche.py:30` calls `requests.get` on NVE's API, and
+cache: `legacy/rasputin/avalanche.py:30` calls `requests.get` on NVE's API, and
 `wfs_repository.py` reads a WFS service; `web_visualize.py`'s hits are
 `localhost` URLs in help text. That is the pattern Ola's direction rules out
 (meshing must never wait on the network), so **nothing is carried**. No
@@ -343,7 +343,7 @@ The main session's reasoning, item by item.
    today's code and the designed increments:** refine's worst node lying
    exactly on a constrained edge
    (`include/terrain/refinement/refine.hpp@98da562:335`, split at `:356`);
-   20b's feet (`refine.hpp@98da562:339`); the quality pass's node on an edge
+   20b's feet (`include/terrain/refinement/refine.hpp@98da562:339`); the quality pass's node on an edge
    (20 R6); 15c's `refine_points` with a check point on an edge; and the
    edge strip's check points, which lie on constraints by design. This
    design turns off all five on seams (frozen edges) and gives the seam its
