@@ -361,8 +361,8 @@ def comparable(a: RunRecord, b: RunRecord) -> str | None:
         ("p_cores", a.machine.p_cores, b.machine.p_cores),
         ("e_cores", a.machine.e_cores, b.machine.e_cores),
         ("dem_sha256", a.inputs.dem_sha256, b.inputs.dem_sha256),
-        ("domains", [(d.name, d.sha256) for d in a.inputs.domains],
-         [(d.name, d.sha256) for d in b.inputs.domains]),
+        ("domains", sorted((d.name, d.sha256) for d in a.inputs.domains),
+         sorted((d.name, d.sha256) for d in b.inputs.domains)),
         ("tolerance", a.inputs.tolerance, b.inputs.tolerance),
         ("extra_args", a.inputs.extra_args, b.inputs.extra_args),
     ]  # fmt: skip
@@ -375,10 +375,11 @@ def comparable(a: RunRecord, b: RunRecord) -> str | None:
 def find_baseline(
     root: Path, record: RunRecord, is_ancestor: Callable[[str, str], bool]
 ) -> tuple[Path, RunRecord] | None:
-    """The newest ``root/*/*/run.json`` older than ``record``, comparable with
-    it, and whose commit is an ancestor of ``record``'s."""
+    """The newest ``run.json`` at any depth under ``root``, older than
+    ``record``, comparable with it, and whose commit is an ancestor of
+    ``record``'s."""
     found: tuple[Path, RunRecord] | None = None
-    for path in sorted(root.glob("*/*/run.json")):
+    for path in sorted(root.rglob("run.json")):
         try:
             candidate = _load(path.parent)
         except BenchError as exc:  # skipped, not fatal: bench-py.md "Bad input exits 3"
