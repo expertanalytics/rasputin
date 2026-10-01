@@ -4,7 +4,8 @@ Status: **designed by `@architect`, 2026-10-01; not implemented.** Written
 before `@tester`, per `docs/increments/README.md` step 1. It replaces R8 and
 R10 of `docs/increments/15-dem-mosaic.md` for 15c, following Ola's Q6 and Q9
 rulings of 2026-09-30. **Q11-Q14, Q16 and Q17 were ruled by Ola on
-2026-10-01, and the design below is amended to them; Q15 is open, and Ola's
+2026-10-01, and the design below is amended to them (Q17's BHO fixture
+replaced later that day by a DEM-derived test catchment); Q15 is open, and Ola's
 direction on it supersedes this file's dense-canvas and memory reasoning at
 basin scale** (marked where it occurs, "Superseded at basin scale").
 
@@ -71,7 +72,8 @@ as asked at the end; each is marked with its ruling):
     our performance will drop while we wait for download".
 
   These get their own basin-scale design, next, in an increment file of its
-  own under `docs/increments/`. It is not designed here. This file marks
+  own under `docs/increments/`: `docs/increments/23-basin-scale.md`
+  (designed 2026-10-01; B1-B12 ruled by Ola the same day). It is not designed here. This file marks
   where its dense canvas and its memory reasoning are superseded at basin
   scale; at the Velhas piece, 15c's acceptance size, they stand.
 - **Q16: (a).** The grid spacing is automatic; no CLI option.
@@ -80,12 +82,14 @@ as asked at the end; each is marked with its ruling):
   (`metadados.snirh.gov.br`) refuses with HTTP 403, and Ola confirmed it.
   OpenTopography hosts ANADEM openly, as one cloud-optimised GeoTIFF:
   `https://opentopography.s3.sdsc.edu/raster/ANADEM/ANADEM_be/anadem_v1_compressed_COG.tif`
-  (70.9 GB; range reads answer 206; DOI 10.5069/G9736P4G). Also ruled: the
-  BHO-derived outline (the union of 1,163 BHO 2017 5k catchments, Rio das
-  Velhas, ottobasin 76949) is committed as a fixture, with ANA's credit and
-  the CC BY 4.0 notice. ANA's metadata record for it was not read (its host
-  answers 403); it is to be checked when reachable. BHO 2017 5k is marked
-  superseded by BHAE in ANA's catalogue.
+  (70.9 GB; range reads answer 206; DOI 10.5069/G9736P4G). Also ruled then:
+  the BHO-derived outline (the union of 1,163 BHO 2017 5k catchments, Rio
+  das Velhas, ottobasin 76949) committed as a fixture. **Replaced by Ola,
+  2026-10-01**, with the rulings on `23-basin-scale.md`'s B1-B12 (BHO is
+  dropped as a source of geometry there): "yes, switch to a DEM-derived test
+  catchment". The test domain is a catchment derived by increment 22 from
+  the ANADEM extract ("Fixtures", below); no BHO fixture is committed, and
+  no BHO licence question remains.
 
 **Measured on 2026-10-01** (`docs/benchmarks/2026-10-01/basin-piece/README.md`,
 by `@perf`, on Copernicus GLO-30 because ANADEM's host answered 403). The
@@ -717,7 +721,8 @@ The store is 16 B per source node: 208 MB on the piece, 11.7 GB
 for the basin's 734 M ANADEM nodes. D1 drops the target canvas (8.6 GB at
 basin scale) before the store is built, so phase 2's peak is store plus mesh
 (about two copies of it: phase 1's output and phase 2's lattice mesh, which
-the basin-scale design measures), not store plus canvas plus mesh. Against Surprise 1's floors (13 GiB at 10 m,
+`23-basin-scale.md` measures as peak RSS per piece in its "@perf
+acceptance"), not store plus canvas plus mesh. Against Surprise 1's floors (13 GiB at 10 m,
 19 GiB at 5 m, canvas included), phase 2 moves the basin's peak to roughly
 16 GiB at 10 m and 22 GiB at 5 m: floors plus arithmetic, not measurements.
 Those floors count the canvas at 4 B per node; the piece's own intercept was
@@ -835,7 +840,7 @@ about 40 lines): it narrows the strip and guarantees nothing.
 - **A point on the target grid's far edge:** filed in the last cell.
 - **An empty store** (a domain smaller than a source cell): one scan, nothing
   inserted, `0 source nodes` recorded.
-- **The domain in a third CRS** (BHO in EPSG:4674 over an EPSG:4326 DEM): it
+- **The domain in a third CRS** (a domain in EPSG:4674 over an EPSG:4326 DEM): it
   goes straight to the target CRS, once (15b).
 - **Datum shifts** between the source and target CRSs: whatever PROJ picks,
   recorded in `source_transform`.
@@ -923,7 +928,8 @@ rule applies to it too (below).
 **Documentation in the same PRs** (not counted): `project_structure.md`, the
 `raster` boundary rule as restated in D6 (15c-2); `ROADMAP.md`'s 15 row at
 each merge; `NOTICE.md` and a fixture `NOTICE` for the GLO-30 and ANADEM
-extracts and the BHO outline (Q17, below). `15-dem-mosaic.md` already points
+extracts and the DEM-derived test catchment (Q17, below, as replaced on
+2026-10-01). `15-dem-mosaic.md` already points
 here (this branch).
 
 ## Tests for `@tester`
@@ -1029,14 +1035,25 @@ committed only after its licence is read and quoted in the fixture `NOTICE`
   COG (the URL and DOI 10.5069/G9736P4G in the `NOTICE`, with the window and
   the date it was cut), crediting ANADEM; it is EPSG:4674, so G6's realism
   case also exercises the COG's key set;
-- the **BHO-derived Velhas outline**, the union of 1,163 BHO 2017 5k
-  catchments of ottobasin 76949 (as `basin-piece/fetch_bho.py` built it),
-  with ANA's credit and the CC BY 4.0 notice, and the `NOTICE` saying that
-  ANA's metadata record was not read (its host answered 403) and is to be
-  checked when reachable, and that BHO 2017 5k is marked superseded by BHAE
-  in ANA's catalogue. The outline spans the whole piece and the extracts do
-  not, so G6's realism case uses the outline intersected with the extract's
-  footprint, computed in the test.
+- a **DEM-derived test catchment** (Q17 as replaced on 2026-10-01), derived
+  once and committed as GeoJSON; the test never runs increment 22. Increment
+  22 reads only projected DEMs (G2 keeps `rasputin catchment` on a
+  geographic tile a usage error), so the ANADEM extract is first resampled
+  onto its 30 m EPSG:31983 target grid by this increment's own `resample`
+  (D3), and `rasputin catchment --dem <that grid> --seed X Y` (no `--lakes`:
+  the pour node is the DEM node nearest the seed) gives the outline, in
+  EPSG:31983, reduced at 22's default `--outline-tolerance`. Because
+  `resample` does not exist when the red suite is written, the fixture is
+  committed with 15c-2's green work as its own commit (a test amendment,
+  `docs/increments/README.md` step 2-3), produced by the green `resample`
+  and recorded in the `NOTICE`; until then G6's realism case is marked as
+  awaiting the fixture. `@tester`
+  chooses the seed on a channel so that the whole catchment lies inside the
+  extract (22 refuses a catchment cut by the data's edge), and the fixture's
+  `NOTICE` records the command, the seed and the commit that ran it. It
+  derives from the ANADEM extract alone, so its credit is ANADEM's and no
+  other licence applies. The catchment lies inside the extract, so G6's
+  realism case uses it as it is, with no intersection.
 
 ## Acceptance
 
@@ -1047,7 +1064,9 @@ committed only after its licence is read and quoted in the fixture `NOTICE`
   commit with `--tree`, back to back). The mesh hash is unchanged and refine
   time is within noise at every thread count. Evidence under
   `docs/benchmarks/<date>/`.
-- **15c-2:** `@perf` on the Velhas piece (BHO 76949) through `rasputin mesh
+- **15c-2:** `@perf` on the Velhas piece (BHO 76949, kept as a measurement
+  domain for comparability with the basin-piece baseline unless Ola rules
+  otherwise on `23-basin-scale.md`'s B13) through `rasputin mesh
   --out-crs EPSG:31983`, on **ANADEM**, a local window cut from
   OpenTopography's COG by range reads (a one-off cut until the basin-scale
   design's fetch step exists), and once on GLO-30 for comparison with
@@ -1143,7 +1162,9 @@ final check; 5-10 m may, if the piece's per-node intercept does not grow with th
 
 **Q17. Fixtures while ANADEM's host refuses us** (HTTP 403 since 30
 September). *Ruled (a) for both GLO-30 and ANADEM, ANADEM from
-OpenTopography's COG, and the BHO outline as a fixture ("Fixtures").*
+OpenTopography's COG, and the BHO outline as a fixture ("Fixtures"). The
+BHO outline was replaced by Ola on 2026-10-01 with a DEM-derived test
+catchment: "yes, switch to a DEM-derived test catchment".*
 - **(a) Commit a small GLO-30 extract of the Velhas piece now, with the
   Copernicus credit, and an ANADEM one when the host answers. Recommended.**
   GLO-30's licence is recalled to allow redistribution with its notice; it is
