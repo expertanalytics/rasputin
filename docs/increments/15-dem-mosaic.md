@@ -274,9 +274,9 @@ They are measurement scripts, not production code, and nothing imports them.
   east-west and 29.80 / 29.82 / 29.84 m north-south. The basin (636 920 km²,
   OAS) is **734 M nodes**. Its bounding box (48–36°W, 21–7°S, the research
   note's approximation) is **2.31 G nodes, 8.6 GiB as float32**. The basin is
-  mostly in 23K, 23L, 24K and 24L, with slivers of 23M and 24M. Whether any of
-  it lies west of 48°W (22K, 22L) is to be read from the BHO polygon; not
-  checked.
+  in 23K, 23L, 24L and 24M only, with nothing west of 47.65°W (no 22K, 22L),
+  by the BHO level-2 outline (`docs/benchmarks/2026-10-01/basin-piece/README.md`,
+  Surprises 4, measured 2026-10-01).
 - **B6. What resampling costs.** A real 1536² window of 23K over the Serra do
   Espinhaço (43.86–43.45°W, 19.16–18.74°S, heights 592–1682 m, no NoData) was
   resampled bilinearly onto square grids in the research note's basin LCC. The

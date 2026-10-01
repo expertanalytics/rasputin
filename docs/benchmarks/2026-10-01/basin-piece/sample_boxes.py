@@ -118,7 +118,7 @@ def main() -> None:
         path.write_text(json.dumps({"source": source, "basin": basin, "n": n, "side_m": side,
                                     "seed": seed, "updated_utc": time.strftime(
                                         "%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-                                    "boxes": rows}, indent=1))  # fmt: skip
+                                    "boxes": rows}, separators=(",", ":")))  # fmt: skip
         t = rec["tolerances"]
         print(f"box {k:3d} ({lon:.3f}, {lat:.3f}) z {rec['z_min']:.0f}-{rec['z_max']:.0f}: "
               + ", ".join(f"t{k2} {v['triangles']}" for k2, v in t.items()), flush=True)

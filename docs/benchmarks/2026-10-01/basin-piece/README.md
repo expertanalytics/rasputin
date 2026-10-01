@@ -76,7 +76,11 @@ second measurement: **200 random 10 km boxes over the whole basin**.
    per tolerance. The basin figure is the mean density times the basin's
    area, with a bootstrap 95 % interval of the mean. A box centre is at least
    half a box (5 km) from the basin's edge, so the sample under-weights a band
-   that wide along it.
+   that wide along it, 5.6 % of the basin's area. A box's area is taken as
+   100 km² in its UTM zone; its geodesic area differs by less than 0.2 %
+   (0.9992-1.0016 over the 200 boxes). The interval is the sampling error of
+   the mean only. It does not cover the unsampled edge band, the use of a
+   surface model for a terrain model, or the box method's own bias (step 8).
 8. **Check of the box method**: 30 random boxes inside the piece, against the
    piece meshed whole.
 
@@ -129,7 +133,8 @@ basin).
 
 **The box method holds on the piece**: at every tolerance the piece's own
 density lies inside the 95 % interval of its 30 boxes (1 m: 894.1 against
-934.2, 831.3-1,037.5; 10 m: 69.2 against 73.7, 60.7-86.9).
+934.2, 831.3-1,037.5; 10 m: 69.2 against 73.7, 60.7-86.9). Its boxes still
+read 4.5-6.5 % above the whole-piece mesh at 1-20 m and 8.2 % below at 50 m.
 
 ### The final check of Q6, measured
 
@@ -169,8 +174,12 @@ AC before and after. No baseline on this input exists; this is the first.
 1. **Memory, not time, limits the basin.** Refine is fast (6.3 s for 10.4 M
    triangles; linear extrapolation 2.4 min for the basin at 1 m), but one
    process holding the basin needs at least ~77 GiB at 1 m and ~41 GiB at 2 m.
-   At 5 m (~19 GiB) and coarser it fits the 32 GiB Mac. Q9's "a dense canvas
-   fits" holds for the canvas; the mesh is the larger part below 5 m.
+   At 5 m the floor is ~19 GiB, under the 32 GiB Mac, but a floor cannot show
+   that it fits. The piece's own intercept (0.55 GiB for a 30.9 M-node grid,
+   about 17 B per grid node once the ~66 MiB interpreter is taken off) is
+   about four times the 4 B per node that the canvas term counts. At that rate
+   the basin's 2.31 G-node canvas alone would be ~36 GiB. Whether 5 m fits is
+   not measured.
 2. **The final check is not a touch-up at small tolerances.** At 1 m it would
    find 52 M basin source nodes, 44 % of the mesh's vertex count; at 2 m 30 %;
    at 10 m 8 %. The resampling error alone (median 0.36 m, p99 3.1 m) is the
@@ -184,8 +193,13 @@ AC before and after. No baseline on this input exists; this is the first.
    BHO outline of the piece the strip's worst is 17.9-38.5 m over the six
    tolerances, and 0-30 % of its 26,294 strip nodes are over tolerance. The
    final check of Q6 would see these nodes. For a projected DEM meshed
-   directly (Norway) every DEM node inside the domain is a grid node, so
-   refine has checked them all.
+   directly (Norway) every DEM node inside the domain is a grid node, so the
+   guarantee at nodes holds. The sliver between the edge and the outermost
+   nodes is still unchecked. Measured against the DEM's own surface between
+   nodes (bilinear, increment 16 R0), it is as far off as here. The cause is
+   that a triangle whose closed node set is empty has error 0 and converges
+   (`include/terrain/refinement/scan.hpp`), so box 127 at 20 m keeps its 4
+   corners as its only boundary vertices.
 4. **The basin lies in four ANADEM tiles, not six** (B5, bounding-box
    estimate): by BHO's outline and B3's band edges, 23K 158,153 km², 23L
    308,944 km², 24L 143,525 km², 24M 24,573 km²; nothing west of 47.65°W, so
@@ -196,6 +210,15 @@ AC before and after. No baseline on this input exists; this is the first.
 6. **Refine speeds up 2.05× at 10 threads** on this input; the serial
    split + flip is 77 % of refine time at 10 threads (the `--stats` timer;
    not a profile).
+
+## Data and credits
+
+The figures here are derived from **Copernicus GLO-30**, "produced using
+Copernicus WorldDEM-30 © DLR e.V. 2010-2014 and © Airbus Defence and Space
+GmbH 2014-2018 provided under COPERNICUS by the European Union and ESA; all
+rights reserved" (projected and resampled, so modified), and from the
+**BHO 2017** catchment outlines of the Agência Nacional de Águas e Saneamento
+Básico (ANA). Neither dataset is in the repository.
 
 ## Reproduce
 
@@ -223,6 +246,32 @@ $PY $E/plant_check.py $G $O $W $S 20 15                                 # the co
 $PY $E/analyse.py $E/runs/velhas76949_glo30/results.json $O $D/bho2017_level2_76_raw.geojson \
   $E/runs/basin_boxes_glo30/boxes.json $E/runs/piece_boxes_glo30/boxes.json \
   $E/runs/velhas76949_glo30/scaling.json > $E/analysis.md
+# Surprises 4: km² per ANADEM tile (6° zones, B3's band edges) and the west edge
+$PY -c "
+import json, sys, pyproj, shapely
+from shapely.geometry import shape
+g = shape(json.load(open(sys.argv[1]))['features'][0]['geometry'])
+geod = pyproj.Geod(ellps='GRS80')
+print('west edge', round(g.bounds[0], 3))
+for z, (w, e) in {'22': (-54, -48), '23': (-48, -42), '24': (-42, -36), '25': (-36, -30)}.items():
+    for b, (s, n) in {'K': (-24, -16.26), 'L': (-16.26, -8.13), 'M': (-8.13, 0)}.items():
+        p = g.intersection(shapely.box(w, s, e, n))
+        if not p.is_empty: print(z + b, round(abs(geod.geometry_area_perimeter(p)[0]) / 1e6), 'km2')
+" $D/bho2017_level2_76_raw.geojson
+# Determinism: the final runs against the superseded earlier run
+$PY -c "
+import json, sys
+E, S = sys.argv[1] + '/runs/', sys.argv[2] + '/superseded_v1/'
+for b in ('basin_boxes_glo30', 'piece_boxes_glo30'):
+    old = {x['box']: x for x in json.load(open(S + b + '/boxes.json'))['boxes']}
+    new = {x['box']: x for x in json.load(open(E + b + '/boxes.json'))['boxes']}
+    key = lambda x, t: (x['tolerances'][t]['triangles'], x['tolerances'][t]['vertices'])
+    print(b, len(old), 'boxes, differences', sum(key(o, t) != key(new[k], t) for k, o in old.items() for t in o['tolerances']))
+o = json.load(open(S + 'velhas76949_glo30/results.json'))['runs']
+n = json.load(open(E + 'velhas76949_glo30/results.json'))['runs']
+print('piece: triangles and mesh sha256 equal at every tolerance:', all(
+    a['timed'][0]['triangles'] == b['timed'][0]['triangles'] and a['quality']['mesh_sha256'] == b['quality']['mesh_sha256'] for a, b in zip(o, n)))
+" $E $S
 curl -s -o /dev/null -w "%{http_code}\n" -r 0-10 \
   https://metadados.snirh.gov.br/files/anadem_v1_tiles/anadem_v1_23K.tif   # 403 throughout this session
 ```
@@ -238,7 +287,8 @@ curl -s -o /dev/null -w "%{http_code}\n" -r 0-10 \
   committed).
 - **Determinism**: every count and every quality-run mesh hash was identical
   in a full earlier run of the piece and both box samples
-  (`runs/checks.txt`). That earlier run is superseded only because it lacked
+  (`runs/checks.txt`; the earlier run is kept in
+  `../rasputin_scratch/basin-piece/superseded_v1/`). That earlier run is superseded only because it lacked
   the interior/strip split, and its two box samples had run concurrently
   sharing scratch mesh names (now unique per sample).
 - **Script history**: `run_sweep.py`'s `final_check` read EPSG:31983 as fixed
