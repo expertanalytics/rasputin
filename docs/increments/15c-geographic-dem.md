@@ -308,9 +308,10 @@ grid's lattice frame, so phase 2's Delaunay test is the same one phase 1 used.
 The source is read through a `SourceWindows` protocol
 (`window(r0, r1, c0, c1) -> array` and `meta`), never as a whole array. In
 15c its one implementation, `TileWindows`, slices the assembled source tile;
-15d replaces it by decoding only the blocks a window needs. That is how Q9's
-"one target canvas" is reached: the design never asks for the source as a
-whole, and 15d is a change of provider, not of algorithm.
+the basin-scale design (Q15) replaces it by decoding only the blocks a window
+needs. That is how Q9's "one target canvas" is reached: the design never asks
+for the source as a whole, and the basin-scale design (Q15) is a change of
+provider, not of algorithm.
 
 *Superseded at basin scale (Q15, 2026-10-01):* the one dense target canvas is
 not the basin's route; Ola's direction is windows with no dense canvas, and
@@ -319,8 +320,11 @@ seams, not as the plan: `SourceWindows` is where cached, windowed decoding
 plugs in; a `TargetGrid` is a sub-rectangle of one global lattice (J6, its
 `row0`, `col0`), so a subdomain's grid is just a smaller `TargetGrid`, and
 `resample`, `check_point_blocks` and `CheckPoints` work on it unchanged; and
-phase 2 never flips a constraint edge (J9), the property Ola's decomposition
-rests on. The basin-scale design decides the rest.
+J9, in two halves: phase 2 never flips a constraint edge, the property Ola's
+decomposition rests on; and phase 2 does split constraint edges, which a
+decomposition along constraints must reconcile, so both subdomains sharing a
+constraint agree on its Steiner points. The basin-scale design decides the
+rest.
 
 ### D2. The target grid
 
@@ -590,52 +594,68 @@ str`, `family: str`, `max_scale_error: float`, `max_areal_error: float`).
   DEM's own footprint from the headers is used. `(W, E, S, N)` in degrees,
   centre `(λc, φc)`; the box's width on the ground is compared with its
   height as `(E − W)·cos φc` against `N − S`.
-- **The family, in this order** (all conformal; thresholds settled here):
+- **The family, in this order** (all conformal; thresholds settled here),
+  each first written with unit scale:
   1. **Polar stereographic** when `|φc| ≥ 70°` or the box reaches `|φ| ≥ 80°`:
-     `+proj=stere +lat_0=±90 +lon_0=λc +lat_ts=φc` (true scale at the centre
-     latitude).
+     `+proj=stere +lat_0=±90 +lon_0=λc +k_0=s`.
   2. **Transverse Mercator** when the box is at least as tall as it is wide:
-     `+proj=tmerc +lat_0=0 +lon_0=λc +k=1`. `k = 1` puts the true scale on the
-     central meridian, so the error is one-sided; balancing it with `k < 1`
-     would halve the worst figure and is not done (Ola: "no very rigorous
-     analysis").
-  3. **Mercator** when wide and `|φc| ≤ 15°`: `+proj=merc +lon_0=λc
-     +lat_ts=φc`.
+     `+proj=tmerc +lat_0=0 +lon_0=λc +k=s`.
+  3. **Mercator** when wide and `|φc| ≤ 15°`: `+proj=merc +lon_0=λc +k_0=s`
+     (a scale factor in place of a true-scale latitude; PROJ takes either).
   4. **Lambert conformal conic** otherwise (wide, mid-latitude): standard
      parallels at `S + (N − S)/6` and `N − (N − S)/6` (Snyder's one-sixth
-     rule), `+lat_0=φc +lon_0=λc`.
+     rule), `+lat_0=φc +lon_0=λc +k_0=s`.
+- **The scale, balanced, in every family.** One evaluation with `s = 1`
+  (below) gives the smallest and largest point scale over the box, `kmin` and
+  `kmax`; then `s = 2/(kmin + kmax)`, rounded to 6 decimals, and a second
+  evaluation gives the figures reported. For a conformal map this puts the
+  worst scale error at `(kmax − kmin)/(kmax + kmin)`, about half the one-sided
+  figure, so it is the least a single scale factor can reach for the chosen
+  projection. It is one line and one extra evaluation, so it is not the
+  time-consuming analysis Ola's "no very rigorous analysis if that is time
+  consuming" excused. It replaces three cheaper choices made in the first
+  draft: TM with `k = 1` (one-sided error), Mercator true at the centre
+  latitude, and stereographic true at the centre latitude. For the LCC it
+  trims what the one-sixth rule leaves unbalanced over the box (0.92 % to
+  0.80 % on the Europe-wide box). Moving the standard parallels, or the
+  stereographic's centre off the pole, would be an optimisation over the box,
+  which is the rigorous analysis that was excused; not done.
 
-  Every angle is rounded to 0.1°, so a box moved by a few cells gets the same
-  suggestion. The datum is the DEM's own (`+ellps` of its geographic CRS,
-  with no datum shift added): ANADEM's COG is SIRGAS 2000 (GRS80), GLO-30 is
-  WGS 84.
+  Every angle is rounded to 0.1°, so a box moved by a few cells usually gets
+  the same suggestion (a centre near a rounding boundary can flip one digit,
+  and `s` follows the box). The datum is the DEM's own (`+ellps` of its
+  geographic CRS, with no datum shift added): ANADEM's COG is SIRGAS 2000
+  (GRS80), GLO-30 is WGS 84.
 - **The distortion:** pyproj's `Proj(suggestion).get_factors` on a 21 × 21
   lon-lat grid over the box, edges included; `max_scale_error` is the largest
   `|k − 1|` over the meridional and parallel scales, `max_areal_error` the
-  largest `|areal − 1|`. `Proj` is not a `Transformer`, so J5's one
-  reprojection site is unchanged.
+  largest `|areal − 1|`. Areal distortion is reported, not minimised: a
+  conformal map's areal scale is `k²`, so balancing `k` also roughly halves
+  it. `Proj` is not a `Transformer`, so J5's one reprojection site is
+  unchanged.
 - **The message**, one refusal: the DEM is geographic, `--out-crs` is
   required, then `suggested for this box (<family>): --out-crs "<proj>"`, and
   `worst scale error <a> %, worst areal error <b> % over the box`.
 
 **Measured with a prototype of exactly these rules** (pyproj 3.8.0, a
-throwaway script, not committed), the worst scale and areal errors:
+throwaway script, not committed), the worst scale and areal errors, balanced,
+with the unit-scale figure beside them:
 
-| box (W, E, S, N) | family | scale | areal |
-|---|---|---:|---:|
-| Velhas piece (−44.674, −43.459, −20.456, −18.457) | TM, `lon_0=-44.1` | 0.006 % | 0.011 % |
-| São Francisco basin, approx. (−47.7, −36.3, −21.2, −7.0) | TM, `lon_0=-42.0` | 0.49 % | 0.99 % |
-| Norway, approx. (4.5, 31.2, 57.9, 71.2) | TM, `lon_0=17.9` | 0.77 % | 1.54 % |
-| Equatorial (−70, −50, −5, 5) | Mercator | 0.38 % | 0.76 % |
-| Svalbard, approx. (10, 34, 76.4, 80.9) | polar stereographic | 0.44 % | 0.88 % |
-| Europe-wide (−10, 30, 40, 60) | LCC, 43.3°/56.7° | 0.92 % | 1.85 % |
+| box (W, E, S, N) | suggestion | scale | areal | scale at `s = 1` |
+|---|---|---:|---:|---:|
+| Velhas piece (−44.674, −43.459, −20.456, −18.457) | TM, `lon_0=-44.1 k=0.999972` | 0.003 % | 0.006 % | 0.006 % |
+| São Francisco basin, approx. (−47.7, −36.3, −21.2, −7.0) | TM, `lon_0=-42.0 k=0.997542` | 0.25 % | 0.49 % | 0.49 % |
+| Norway, approx. (4.5, 31.2, 57.9, 71.2) | TM, `lon_0=17.9 k=0.996173` | 0.38 % | 0.77 % | 0.77 % |
+| Equatorial (−70, −50, −5, 5) | Mercator, `k_0=0.998106` | 0.19 % | 0.38 % | 0.38 % |
+| Svalbard, approx. (10, 34, 76.4, 80.9) | polar stereographic, `k_0=0.98983` | 0.39 % | 0.78 % | 1.42 % |
+| Europe-wide (−10, 30, 40, 60) | LCC, 43.3°/56.7°, `k_0=0.99881` | 0.80 % | 1.61 % | 0.92 % |
 
 Angular distortion is under 3e-6 in every row: PROJ's factors confirm the
-four are conformal. The prototype used `+datum=WGS84` throughout; on GRS80
-the figures differ only in digits not shown. For the basin, the suggestion's
-0.49 % compares with 1.11 % (areal 2.24 %) for EPSG:31983 or 31984 over the
-same box, by the same 21 × 21 evaluation, since its central meridian sits in
-the box's middle.
+four are conformal. The prototype was run on both WGS 84 and GRS80; every
+figure shown is the same on both. For the basin, the suggestion's 0.25 %
+compares with 1.11 % (areal 2.24 %) for EPSG:31983 or 31984 over the same box,
+by the same 21 × 21 evaluation: its central meridian sits in the box's middle
+and its scale is balanced.
 The two catchments-in-one-CRS argument for (a) still holds: the suggestion
 depends on the box, so two catchments get one CRS only if someone passes the
 same `--out-crs` to both.
@@ -684,7 +704,7 @@ itself):
 design's, Q15): the fixed cost grows
 with the source, 734 M ANADEM nodes: roughly 0.5-1 min of projection and a
 serial sort of over a minute; the insertions grow with the tolerance (2.6 M
-at 5 m: seconds). If the serial sort shows in 15d's profile, it is
+at 5 m: seconds). If the serial sort shows in the basin-scale run's profile, it is
 parallelised there.
 
 **Memory.** *Superseded at basin scale (Q15, 2026-10-01).* Everything in this
@@ -697,7 +717,7 @@ The store is 16 B per source node: 208 MB on the piece, 11.7 GB
 for the basin's 734 M ANADEM nodes. D1 drops the target canvas (8.6 GB at
 basin scale) before the store is built, so phase 2's peak is store plus mesh
 (about two copies of it: phase 1's output and phase 2's lattice mesh, which
-15d measures), not store plus canvas plus mesh. Against Surprise 1's floors (13 GiB at 10 m,
+the basin-scale design measures), not store plus canvas plus mesh. Against Surprise 1's floors (13 GiB at 10 m,
 19 GiB at 5 m, canvas included), phase 2 moves the basin's peak to roughly
 16 GiB at 10 m and 22 GiB at 5 m: floors plus arithmetic, not measurements.
 Those floors count the canvas at 4 B per node; the piece's own intercept was
@@ -756,7 +776,7 @@ well. Why not inside 15c:
    a hair outside the domain and so fall in no triangle: they must be filed
    against their edge, not found by membership. That is 20b's foot geometry,
    and it needs its own red suite;
-4. 15c's two PRs are already about 370 and 403 lines.
+4. 15c's two PRs are already about 370 and 405 lines.
 
 Estimated 160-210 lines (the midpoints add about 10), one PR, reusing
 `CheckPoints` and `refine_points`.
@@ -840,10 +860,13 @@ about 40 lines): it narrows the strip and guarantees nothing.
 read in the target CRS; z in the store is `float`; check points on a start
 vertex are counted, not adopted; phase 2 without feet; a second loop rather
 than a shared one; the memory cap sums both canvases and the store. For D8:
-the four families' thresholds (70° and 80° for polar, tall-or-square for TM,
-15° for Mercator), TM with `k = 1`, angles rounded to 0.1°, the DEM's own
-ellipsoid, the 21 × 21 evaluation grid, and the DEM footprint as the box when
-`--bbox` is given without `--out-crs`.
+only conformal families (a reading of Ola's "distorts areas and angles the
+least": zero angle error, area reported, not minimised); the four families'
+thresholds (70° and 80° for polar, tall-or-square for TM, 15° for Mercator);
+one balanced scale factor per family, with the LCC's parallels and the
+stereographic's pole not optimised; angles rounded to 0.1° and `s` to 6
+decimals; the DEM's own ellipsoid; the 21 × 21 evaluation grid; and the DEM
+footprint as the box when `--bbox` is given without `--out-crs`.
 
 ## PR split and LOC
 
@@ -870,10 +893,10 @@ and 15a's `mosaic.py` 60 % over, so the worst case applies 39 %, with
 | | `target_grid.py`: `SourceWindows`, `TileWindows`, `resample` | 55 | |
 | | `target_grid.py`: `check_point_blocks` | 35 | |
 | | `dem_input.py`: `target_crs`, the reprojected branch (geographic, and a projected DEM in another CRS, Q12), the memory sum | 45 | |
-| | `crs.py`: `suggest_crs`, `CrsSuggestion`: four families, rounding, `get_factors` over the box (D8) | 27 | |
+| | `crs.py`: `suggest_crs`, `CrsSuggestion`: four families, the balanced scale, rounding, `get_factors` over the box (D8) | 29 | |
 | | `final_check.py`: the two phases and the store | 40 | |
 | | `cli.py`: `--out-crs`, Q11's refusal with D8's message, `_dem_mesh` through `final_check`, fields, stats rows | 63 | |
-| | **15c-2 total** | **403** | **560 (645 at +60 %)** |
+| | **15c-2 total** | **405** | **563 (648 at +60 %)** |
 
 `target_grid.py` at 170 is the module to watch (15a's `mosaic.py` overran its
 estimate by 60 %). If it passes 250, `resample` and `check_point_blocks` move
@@ -885,8 +908,8 @@ start mesh, and `@perf` can confirm Norway is untouched. 15c-2 is plumbing on
 a prototype that already ran (`prep_dem.py`), and it wires the final check in
 the same PR that first lets a geographic DEM through, so **no release ever
 writes a geographic mesh without the final check**. Together they are about
-770 lines, over the ceiling, so they cannot be one PR. The 2026-10-01
-rulings moved 15c-2 from 383 to 403: Q11's suggestion is about 15 lines more
+775 lines, over the ceiling, so they cannot be one PR. The 2026-10-01
+rulings moved 15c-2 from 383 to 405: Q11's suggestion is about 17 lines more
 than the single fitted LCC first estimated (the refusal itself moves from
 `cli.py` into `crs.py`), and Q12 (a) adds 5. Q13, Q14, Q16 and Q17 add no
 production lines to 15c.
@@ -985,13 +1008,16 @@ Everything else is ordinary.
 - **G10, the suggestion (D8).** One box per family, at the thresholds and
   just past them (φc 70° against 69.9°, a box 0.01° taller than wide against one 0.01° wider,
   φc 15° against 15.1°), gives the family and the rounded parameters. The
-  printed distortion is checked by an independent oracle, not by calling
-  `get_factors` again: finite differences of the suggestion's forward
+  scale is balanced: by the oracle below, the largest and smallest point
+  scales over the box sit at `1 ± max_scale_error` to within the rounding of
+  `s`. `CrsSuggestion.max_scale_error` and `max_areal_error` (the fields, not
+  the rounded printed text) are checked by an independent oracle, not by
+  calling `get_factors` again: finite differences of the suggestion's forward
   transform over short geodesic steps (pyproj `Geod`) at the 21 × 21 points,
   agreeing to 1e-6 (`@tester` may loosen it if the finite differences need it,
-  never past 1e-4). It must be shown able to fail: the oracle run against a
-  PROJ string with `+k=0.999` instead of the suggestion's differs by about
-  1e-3.
+  never past 1e-4). It must be shown able to fail: the oracle run against the
+  same suggestion with its scale factor replaced by 1 differs by about half
+  the unit-scale figure (2.5e-3 on the basin box).
 
 **Fixtures.** Synthetic micro-TIFFs for G1-G10. Real ones, per Q17 (a), each
 committed only after its licence is read and quoted in the fixture `NOTICE`
