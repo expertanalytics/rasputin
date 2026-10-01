@@ -65,9 +65,20 @@ CASES: dict[str, tuple[str, str, str | None]] = {
     "git-mv-governed": ("Bash", "git mv notes.txt CLAUDE.md", None),
     "assigned-harness": ("Bash", "H=.git/harness; echo x > $H/unattended.json", None),
     "assigned-governed": ("Bash", "G=CLAUDE; echo x > $G.md", None),
+    # The re-run comparison's further routes to the harness state, each denied
+    # by the pre-h4 text rule: a variable set by export, read, a substitution or
+    # declare, and a relative write after cd into the state dir.
+    "export-harness": ("Bash", "export H=.git/harness && echo x > $H/unattended.json", None),
+    "read-harness": ("Bash", "read H <<< .git/harness; echo x > $H/unattended.json", None),
+    "subst-harness": ("Bash", "H=$(echo .git/harness); echo x > $H/unattended.json", None),
+    "declare-harness": ("Bash", "declare H=.git/harness; echo x > $H/unattended.json", None),
+    "cd-harness": ("Bash", "cd .git/harness && echo x > unattended.json", None),
+    # A here-string commit message naming git push: a commit, not a push.
+    "commit-herestring": ("Bash", 'git commit -F - <<< "git push"', None),
 }
 
-#: §2's five false positives: neither guard speaks, by day or at night.
+#: §2's five false positives, and a here-string commit message naming git push:
+#: neither guard speaks, by day or at night.
 FALSE_POSITIVES = (
     "fp1-write",
     "fp1-bash",
@@ -82,6 +93,7 @@ FALSE_POSITIVES = (
     "fp5-grep",
     "fp5-echo-memory",
     "fp5-printf-task",
+    "commit-herestring",
 )
 
 #: Publishing acts and the one reason each gives, as today. `gh-pr-body` names
@@ -118,6 +130,11 @@ ALWAYS_DENIED_CASES = (
     "env-away",
     "subst-away",
     "assigned-harness",
+    "export-harness",
+    "read-harness",
+    "subst-harness",
+    "declare-harness",
+    "cd-harness",
 )
 ALWAYS_DENIED = (
     "Only Ola enters or leaves unattended mode, and only hooks and away.py write the "
