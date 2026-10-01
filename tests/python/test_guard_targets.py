@@ -59,6 +59,12 @@ CASES: dict[str, tuple[str, str, str | None]] = {
     "for-loop": ("Bash", "for f in CLAUDE.md; do sed -i s/a/b/ $f; done", None),
     "rm-expansion": ("Bash", "rm $f", None),
     "git-apply": ("Bash", "git apply x.patch", None),
+    # The adversarial comparison's three weakenings (W1-W3): each was judged
+    # by text before h4 and must not slip past the target-based reading.
+    "eval-push": ("Bash", 'eval "git push"', None),
+    "git-mv-governed": ("Bash", "git mv notes.txt CLAUDE.md", None),
+    "assigned-harness": ("Bash", "H=.git/harness; echo x > $H/unattended.json", None),
+    "assigned-governed": ("Bash", "G=CLAUDE; echo x > $G.md", None),
 }
 
 #: §2's five false positives: neither guard speaks, by day or at night.
@@ -84,6 +90,7 @@ PUSH_ASKS = {
     "tp-push": "git push writes to the remote",
     "tp-rebase": "this rewrites history, which is destructive once anything is published",
     "gh-pr-body": "gh pr changes a pull request",
+    "eval-push": "git push writes to the remote",  # W1: eval runs its words
 }
 
 #: Governed writes and the governed targets the ask and the refusal must name.
@@ -96,10 +103,22 @@ GOVERNED_WRITES = {
     "rm-governed": ("CLAUDE.md",),
     "expansion-tail": ("CLAUDE.md",),
     "bash-c-sed": ("CLAUDE.md",),
+    "git-mv-governed": ("CLAUDE.md",),  # W2: git mv writes its destination
 }
 
+#: W3: a governed target built from a variable assigned on the same line. What
+#: the refusal says is not pinned; that it asks by day and is refused at night is.
+ASSIGNED_GOVERNED = "assigned-governed"
+
 #: Runs of the away script and writes of the harness state: denied in both modes.
-ALWAYS_DENIED_CASES = ("tp-run-away", "tp-harness-write", "env-away", "subst-away")
+#: `assigned-harness` (W3) reaches the state through a variable set on the line.
+ALWAYS_DENIED_CASES = (
+    "tp-run-away",
+    "tp-harness-write",
+    "env-away",
+    "subst-away",
+    "assigned-harness",
+)
 ALWAYS_DENIED = (
     "Only Ola enters or leaves unattended mode, and only hooks and away.py write the "
     "harness state. Nothing is queued: this act is not an agent's to wait for."
@@ -205,6 +224,23 @@ def test_a_governed_write_is_refused_at_night_naming_its_targets(repo: Path, lab
     for target in GOVERNED_WRITES[label]:
         assert target in why, f"the refusal does not name {target}: {why!r}"
     assert why in reason
+
+
+def test_a_governed_target_built_on_the_line_asks_by_day(repo: Path) -> None:
+    """W3: `G=CLAUDE; echo x > $G.md` writes CLAUDE.md, whatever the static tail says."""
+    found = decisions(repo, ASSIGNED_GOVERNED)
+    assert set(found) == {"governance"}
+    assert found["governance"][0] == "ask"
+    assert queue_lines(repo) == []
+
+
+def test_a_governed_target_built_on_the_line_is_refused_and_queued_at_night(repo: Path) -> None:
+    set_mode(repo, "on")
+    found = decisions(repo, ASSIGNED_GOVERNED)
+    assert set(found) == {"governance"}
+    assert found["governance"][0] == "deny"
+    [line] = queue_lines(repo)
+    assert (line["hook"], line["act"]) == ("guard_governance", act_of(ASSIGNED_GOVERNED))
 
 
 # ---------------------------------------------------------------- always denied
@@ -352,6 +388,7 @@ CONTAINS: dict[str, tuple[list[str], list[str] | None]] = {
     "subst-away": (["python3", f"tools/{AWAY}", "--back"], []),
     "for-loop": (["sed", "-i", "s/a/b/", "$f"], ["$f"]),
     "git-apply": (["git", "apply", "x.patch"], None),  # its targets are unknown
+    "eval-push": (["git", "push"], []),  # W1: eval's words are a command
 }
 
 #: Unparseable (§3): unbalanced quotes, an unclosed `$(`, an unterminated heredoc.
@@ -405,6 +442,13 @@ def test_parse_reaches_into_wrappers_loops_and_substitutions(label: str) -> None
     assert matching, f"no simple command {argv} in {[s.argv for s in simples]}"
     if writes is not None:
         assert [s.writes for s in matching] == [writes]
+
+
+def test_parse_counts_the_destination_of_git_mv_as_written() -> None:
+    """W2: `git mv` writes its destination, like `mv`."""
+    simples = shell_scan.parse(CASES["git-mv-governed"][1])
+    assert simples is not None, "parse gave up on a readable line"
+    assert "CLAUDE.md" in simples[0].writes, simples[0].writes
 
 
 @pytest.mark.parametrize("command", UNPARSEABLE)
