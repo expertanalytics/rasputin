@@ -4,7 +4,8 @@ Status: **designed by `@architect`, 2026-10-01; B1-B14 ruled by Ola on
 2026-10-01 and the design reworked to the rulings; not implemented.** Design
 only, written before `@tester` per `docs/increments/README.md` step 1. The
 rulings are under "Ruled by Ola, 2026-10-01", below; the questions are kept as
-asked at the end, each marked with its ruling.
+asked at the end, each marked with its ruling; B15, asked after B14's
+ruling, is open.
 
 ## Why this record, and why its name
 
@@ -744,7 +745,10 @@ The main session's reasoning, item by item.
   1. The count: `P' = max(P, ⌈N · b / B⌉)`. If `P' ≤ 1`: **one piece**, no
      cut, today's mesh bit for bit (K1).
   2. Near-square cells: `Nx = max(1, round(√(P' · cols / rows)))`,
-     `Ny = max(1, round(P' / Nx))`.
+     `Ny = max(1, round(P' / Nx))`. The cell count approximates `P'` (Ola's
+     "approx") and is not a floor: rounding may give fewer cells than asked
+     (`--pieces 16` on the Velhas window gives 3 × 5). Only the budget bound
+     of step 3 is guaranteed.
   3. Whole spacings: `dx = ⌈cols / Nx⌉`, `dy = ⌈rows / Ny⌉` nodes. While
      `dx · dy · b > B`, add one to `Nx` if `dx ≥ dy`, else to `Ny`, and
      recompute. Then `Nx = ⌈cols / dx⌉`, `Ny = ⌈rows / dy⌉`, so no column or
@@ -781,11 +785,13 @@ The main session's reasoning, item by item.
 - **`--memory-budget`, default 16 GB, read as 16 GiB (2^34 bytes)**, a
   constant: never the machine's memory, so the mesh does not depend on the
   machine (K5). No upper limit on it, on `--pieces` or on a piece: a run whose
-  pieces do not fit the machine runs out of memory rather than being refused.
+  pieces do not fit the machine runs out of memory. Whether 15a R7's refusal
+  at half of physical memory goes too is B15, not ruled.
 - **`b(T)`, bytes per window node at tolerance `T`**, from the basin-piece
   sweep (`docs/benchmarks/2026-10-01/basin-piece/README.md`): its max-RSS fit,
   0.55 GiB + 310 B per triangle, gives about 17 B per grid node (the intercept
-  over the 30.9 M-node grid, interpreter off) plus 310 B per triangle; the
+  over the 30.9 M-node grid, leaving out the ~66 MiB interpreter) plus 310 B
+  per triangle; the
   triangles per node are the Velhas piece's (its triangles at `T` over its
   12,957,257 domain nodes), above the basin's p90 at 1 m (894 against 757
   per km²), so the estimate is high for most terrain. At `T = 0` every node
@@ -799,7 +805,7 @@ The main session's reasoning, item by item.
   Between two columns `b` is linear in `T`, rounded up (the counts fall
   convexly, so the chord is above them); above 50 m it is 19. Every window
   node is costed as a domain node, which overestimates a domain that covers
-  part of its window (the Velhas piece's 1 m run: 8.2 GB estimated, 3.60 GiB
+  part of its window (the Velhas piece's 1 m run: 7.7 GiB estimated, 3.60 GiB
   measured). The table and `B` are recorded in the index.
 - **What it gives** (`partition.py`, "What was measured"): the Velhas piece
   is one piece at every tolerance but 0; the basin is cut into 2 × 2 cells
@@ -994,8 +1000,7 @@ thresholds are under "@perf acceptance", 23g).
   the running pieces' estimates (`dx · dy · b(T)`) fit under
   `--memory-budget`, and always starts one when none is running. It can
   delay a piece, never change or refuse one. 15a R7's refusal at half of
-  physical memory is not applied to pieces or to a run under a budget: a
-  machine too small runs out of memory.
+  physical memory: deleted if Ola rules B15 (a) or (c), kept under (b).
 
 ## Windowed source reads
 
@@ -1152,7 +1157,7 @@ in the manifest, and the mesh file's `elevation_source` carries it.
 running pieces' sum under it ("Tolerance, the final check and the
 constraint check points per piece"), so memory
 follows the budget, not the basin. The estimate is high for most terrain
-(the Velhas piece at 1 m: 8.2 GB estimated, 3.60 GiB measured). The cleanup
+(the Velhas piece at 1 m: 7.7 GiB estimated, 3.60 GiB measured). The cleanup
 at stitching holds two bands per seam unit, far less than a piece.
 
 **Two levels of parallelism.** `--jobs J` pieces at once, each refining with
@@ -1370,7 +1375,7 @@ own arithmetic, so the oracle relation is the producer's
   sub-rectangle of one global lattice, J6) is the piece window; `resample`,
   `check_point_blocks`, `CheckPoints` and `refine_points` are used unchanged
   except for the frozen mask (23b). D8 and the Q11-Q17 rulings stand. Its
-  memory cap (15a R7) gives way to `--memory-budget` (B14). 15c's acceptance stays on the Velhas piece,
+  memory cap (15a R7) stays or goes by B15. 15c's acceptance stays on the Velhas piece,
   undecomposed. What 15c already marked "Superseded at basin scale" is
   replaced by this record and nothing else is. If 23a lands before 15c-2,
   15c-2's acceptance reads ANADEM from the cache instead of a one-off cut.
@@ -1587,7 +1592,7 @@ stays under 700 at both; the largest, 23c, is 688 at +60 %.
 | | `basin_run.py`: run pieces in order, async-ready | 45 | | |
 | | `io/mesh_index.py`: `MeshIndex`, piece writer, seam records, conformity | 85 | | |
 | | `cli.py`: `--pieces`, `--memory-budget`, pieces output, fields | 50 | | |
-| | `mosaic.py`: 15a R7's refusal deleted (B14; `physical_memory` stays for 22) | 0 | | |
+| | `mosaic.py` (and `catchment.py` under B15 (a)): R7's refusal deleted, if B15 (a) or (c) | 0 | | |
 | | **23c total** | **430** | **598** | **688** |
 | **23d** | **In parallel, resumable, stitched (seams kept)** | | | |
 | | `basin_run.py`: `--jobs`, thread split, largest first, admission under the budget | 45 | | |
@@ -1734,20 +1739,22 @@ rest is ordinary.
   columns and rounded up between them (0.5 m gives 452); figures of
   `partition.py` (4,208 × 7,347 nodes at 1 m and `--pieces 64` gives 6 × 11
   cells of 702 × 668; 41,332 × 50,297 at 1 m gives 5 × 7 of 8,267 × 7,186,
-  at 50 m 2 × 2); one piece at `N · b = B` and a cut at `N · b = B + 1`;
+  at 50 m 2 × 2; `--pieces 16` on the first gives 3 × 5, 15 cells: the
+  count approximates the request and is not a floor); one piece at `N · b = B` and a cut at `N · b = B + 1`;
   a large `--memory-budget` gives one piece above every former cap; for
   windows, tolerances, `--pieces` and budgets drawn at random (a seeded
-  generator, a few thousand) no cell's `dx · dy · b` exceeds the budget, the
-  count is at least `--pieces` (no upper limit), no row or column of cells is
+  generator, a few thousand) no cell's `dx · dy · b` exceeds the budget, no
+  row or column of cells is
   empty, `dx` and `dy` are whole nodes and every line is a lattice line; the
   same partition with `os.cpu_count` and `physical_memory` patched to small
   and large values (neither the count nor the cut is the machine's).
 - **DC1, K1**: a domain under the budget, and a larger one with a budget
   above its estimate, write the same bytes as today's path.
-- **DC11, no machine refusal** (B14): a mosaic over half of a patched
-  `physical_memory` is planned, not refused; 15a's M5 refusal cases in
-  `test_mosaic.py` and `test_dem_input.py` are inverted (pinned behaviour
-  that B14 changes).
+- **DC11, no machine refusal** (only if B15 is ruled (a) or (c)): a mosaic
+  over half of a patched `physical_memory` is planned, not refused; 15a's M5
+  refusal cases in `test_mosaic.py` and `test_dem_input.py` are inverted
+  (pinned behaviour B15 would change); under (a) the same for 22's catchment
+  refusal in `test_catchment.py`. Under (b), none of this.
 - **DC2, conformity, read from the files**: for every seam edge, both pieces'
   vertex sequences are equal bit for bit. The oracle reads the piece files,
   not the seam records or the index.
@@ -1922,7 +1929,7 @@ The literature pass with web search (2026-10-01, "Prior art") changed no
 recommendation; it added a note to B4 and an option (c) to B5. **All twelve
 were ruled by Ola on 2026-10-01** ("Ruled by Ola, 2026-10-01", near the
 top); they are kept as asked, each marked with its ruling, as are B13 and
-B14, asked after them and ruled the same day.
+B14, asked after them and ruled the same day. B15 is open.
 
 **B1. Which cuts first?**
 *Ruled (a), and BHO dropped entirely as a geometry source: "I'm not interested in archaic maps".*
@@ -2101,12 +2108,27 @@ seams, half the worst angle).
   over a twofold range of sizes, and the Velhas piece gets 3 × 5 cells instead
   of 60.
 
+**B15. The refusals at half of physical memory.** B14 ruled out a hard
+upper limit read from the machine for the partition. Two older refusals do
+exactly that: 15a R7 in `plan_mosaic` (`src_python/tin_engine/mosaic.py@5a57793:209`,
+a canvas over half of physical memory) and 22's identical one in
+`src_python/tin_engine/catchment.py@5a57793:150`. Neither changes a mesh;
+each refuses on a small machine what a larger one meshes.
+- **(a) Delete both. Recommended.** Matches "a machine too small runs out of
+  memory" and "we should not limit huge discretisations based on less
+  performant hardware". 23c deletes them (no lines counted), inverts the
+  pinned tests (DC11), and `physical_memory` goes if nothing else reads it.
+- (b) Keep both: a clear refusal instead of a crash or swapping, at the cost
+  of a machine-dependent limit.
+- (c) Delete 15a R7 only (the mosaic canvas, which pieces bound), keep 22's
+  until 23e windows the catchment flood.
+
 **Decided here, which Ola may overrule:** lattice lines on the computation
 lattice as artificial cuts; the partition rule's integer details (near-square
 cells, the last row and column narrower); `b(T)` from the Velhas piece's
 densities, linear between the measured tolerances and rounded up, every
 window node costed; 16 GB read as 16 GiB; the runner's admission under the
-budget; 15a R7's refusal deleted (B14's "no hard upper limit"); piece
+budget; piece
 ids `(j, i, k)`; the seam pass computed by both neighbours rather than once;
 seam heights from the seam record; zones by a unit's own edges first (the lowest-numbered at a
 corner), else the nearest unit; seam ends on
