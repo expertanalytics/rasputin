@@ -63,6 +63,7 @@ PYTHON = re.compile(r"python(3(\.\d+)?)?")
 #: Interpreter -> the option letter that introduces its program text.
 PROGRAM_FLAG = {"perl": "e", "ruby": "e", "node": "e", "sh": "c", "bash": "c", "zsh": "c"}
 SHELLS = {"sh", "bash", "zsh"}
+PLAIN_PARAMETER = re.compile(r"\$(?:\{(\w+)\}|(\w+))")
 PARAMETER = re.compile(r"\$[\w@*#?$!-]?\w*")
 EXPANSION = re.compile(r"\$(\{[^}]*\}|\([^)]*\)|[\w@*#?$!-]+)|`[^`]*`")
 
@@ -96,6 +97,7 @@ class _Scan:
         self.found: list[Simple] = []
         self.pending: list[tuple[Simple, str, bool]] = []  # heredocs: owner, delimiter, <<-
         self.backtick = False
+        self.assigned: dict[str, str] = {}  # NAME=value commands met so far on the line
 
     def run(self, close: str | None) -> None:
         """Read commands up to `close` (`)` or a backtick) or, at the top, the end."""
@@ -257,6 +259,8 @@ class _Scan:
         self.pending = []
 
     def finish(self, words: list[str], writes: list[str], heredocs: list[tuple[str, bool]]) -> None:
+        if words and all(ASSIGNMENT.match(word) for word in words):  # `H=.git/harness;`
+            self.assigned |= dict(word.split("=", 1) for word in words)
         while words and (words[0] in RESERVED or ASSIGNMENT.match(words[0])):
             words = words[1:]
         if words and words[0] in LOOP_HEADERS:
@@ -264,11 +268,20 @@ class _Scan:
         if not words and not writes and not heredocs:
             return
         simple = classify(words, writes)
-        self.found.append(simple)
+        # A variable assigned earlier on the line is read as its value: `$H/x`.
+        simple.writes = [PLAIN_PARAMETER.sub(self.value, w) for w in simple.writes]
         self.pending += [(simple, delimiter, tabs) for delimiter, tabs in heredocs]
+        if simple.argv[:1] == ["eval"]:  # eval runs its words as a command line
+            self.nested(" ".join(simple.argv[1:]))
+            if not simple.writes:
+                return
+        self.found.append(simple)
         if simple.argv and base(simple.argv[0]) in SHELLS and simple.program is not None:
             self.nested(simple.program)
             simple.program = None
+
+    def value(self, match: re.Match[str]) -> str:
+        return self.assigned.get(match.group(1) or match.group(2), match.group(0))
 
     def finish_heredoc(self, simple: Simple) -> None:
         """A heredoc is the program of an interpreter reading stdin; a shell's is parsed."""
@@ -357,7 +370,7 @@ def writer_targets(name: str, args: list[str]) -> tuple[list[str], bool]:
         while at < len(args) and args[at].startswith("-"):
             at += 2 if args[at] in ("-C", "-c") else 1
         sub, rest = (args[at], args[at + 1 :]) if at < len(args) else ("", [])
-        if sub in ("checkout", "restore"):
+        if sub in ("checkout", "restore", "mv", "rm"):
             return operands(rest, {"-b", "-B", "--source", "-s"}), False
         return [], sub in ("apply", "am")
     return [], False
