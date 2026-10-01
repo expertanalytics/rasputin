@@ -12,9 +12,10 @@ the backstop did not fire at 64 KiB or 1 MiB either). With the prefix cut to
 64 KiB or 1 MiB the wrapper recorded nothing and the offsets check failed
 (1 MiB: page 0 had 0 offsets for 188,638 blocks), so the offsets check is
 the one that fires. Prints the full-resolution page's block layout, decodes
-one block fetched by its own range request, and counts the blocks (and their compressed bytes) meeting the
-basin's and the Velhas piece's outlines. Needs network access. A measurement
-script, not production code; nothing imports it.
+one block fetched by its own range request, and counts the blocks (and their
+compressed bytes) meeting the basin's and the Velhas piece's outlines. Needs
+network access. A measurement script, not production code; nothing imports
+it.
 """
 
 from __future__ import annotations
