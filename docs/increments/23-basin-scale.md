@@ -1503,3 +1503,31 @@ ETag ignored; coalescing at 64 KiB gaps and 8 MiB requests; 8 connections and
 three retries; the manifest holding identity, not inventory; largest piece
 first; one process with threads; the index as JSON; pieces written beside the
 stitched file as `<out>.pieces/`.
+
+## Review
+
+### Round 1, `6518336..c6c9241`: CHANGES REQUESTED (`@reviewer`)
+
+Production LOC 0 (docs only; the two probes are measurement scripts nothing
+imports). Probes re-run and reproduced; code citations, the union argument,
+the arithmetic, determinism, the I/O boundary and LOC held; web spot-checks
+matched. Nine blocking edits: a close precedent missed in the novelty
+statement (Zygmunt and Róg 2026); a patent misquoted; the ANADEM prefix
+evidence assumed tifffile raises on a short read; B12 reversed part of Ola's
+Q14 placement without saying so; B1 did not name its departure from Ola's
+direction and quoted an unsupported LOC figure; W5's import oracle could not
+pass; FE6 had no death-test harness; the fan-validity argument used the
+segment where it needed the line; DC6 compared different starts.
+
+### Round 2, `c6c9241..6c3fbc5`: CHANGES REQUESTED (`@reviewer`)
+
+All nine applied. One blocking item: the probe's strict wrapper can never
+record a read past the prefix, because tifffile bounds-checks offsets first;
+the offsets count is the check.
+
+### Round 3, `6c3fbc5..aa1f7c2`: APPROVED (`@reviewer`)
+
+Whole branch `6518336..aa1f7c2`, 12 commits, +1,731 / −13, production LOC 0.
+Probe at 8 MiB reproduces every figure; at 1 MiB it fails on the offsets
+assertion. ruff, ruff format, mypy and the governance gates green. CI not yet
+run: no PR.
