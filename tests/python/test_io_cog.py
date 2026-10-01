@@ -291,7 +291,9 @@ class TestW5RefusalsBeforeDecoding:
         assert 1 in brute_force_meeting(page_of(data), w)
         with pytest.raises(GeoTiffError, match=r"block 1\b") as caught:
             decoded(cog, geotiff, local(cog, geotiff, data), data, w)
-        assert "fixture.tif" in str(caught.value)
+        # "sparse", not just the block: without the check the codec fails on
+        # the empty bytes and still names the block (review round 1).
+        assert "sparse" in str(caught.value) and "fixture.tif" in str(caught.value)
 
     def test_a_sparse_block_outside_the_window_is_never_looked_at(
         self, cog: ModuleType, geotiff: ModuleType, window: Any

@@ -7,9 +7,10 @@ window from `load_window` instead of slicing a whole tile. The oracle is
 shared and true overlaps, a disagreeing overlap (so there are seams), mixed
 dtypes, with and without a box. 15a's own suite is not edited.
 
-HOW THIS FILE GOES RED. `load_window` is a keyword `assemble` does not take
-yet (`TypeError`), and `window_meta` lives in a module that does not exist
-yet (reached through a fixture), so each test fails on its own.
+HOW THIS FILE GOES RED. `window_meta` is reached through a module-scoped
+fixture and `load_window` is a keyword argument, so if either is missing
+(`ModuleNotFoundError`, `TypeError`) each test fails on its own and the rest
+of `tests/python` still collects.
 """
 
 from __future__ import annotations

@@ -11,8 +11,8 @@ writer's `CacheManifest` are reached through fixtures, so each test errors on
 its own at setup (`ModuleNotFoundError`, `AttributeError`, `ImportError`) and
 the rest of `tests/python` still collects.
 The two source scans (no `tin_engine.fetch` or `urllib.request` off `fetch/`,
-`RASPUTIN_DATA` only in `cli.py`) pass today for the module half and are the
-guard 23a-2 must keep; `cli.py` naming `RASPUTIN_DATA` is red.
+`RASPUTIN_DATA` only in `cli.py`) are the guard 23a-2 must keep: `fetch/` is
+skipped, and `cli.py` may import it only inside a function.
 """
 
 from __future__ import annotations
@@ -298,11 +298,12 @@ class TestW5TheFetchCommandInTheMessage:
 # --------------------------------------------------------------------------
 
 
-class TestW8CacheRoot:
-    @pytest.fixture(scope="class")
-    def cache_root(self) -> Any:
-        return importlib.import_module("tin_engine.cli").cache_root
+@pytest.fixture(scope="module")
+def cache_root() -> Any:
+    return importlib.import_module("tin_engine.cli").cache_root
 
+
+class TestW8CacheRoot:
     def test_the_option_wins(self, cache_root: Any) -> None:
         assert cache_root(Path("/given"), {"RASPUTIN_DATA": "/data"}) == Path("/given")
 
