@@ -463,23 +463,178 @@ built: nothing is transformed after meshing.
 
 ## What the final check costs (Surprise 2)
 
-(to be written)
+**What is measured** is the number of source nodes over tolerance after phase
+1 (Surprise 2). That is the first scan of phase 2, not its insertion count:
+one insertion can bring its neighbours within tolerance (fewer), and a flip
+can push a node that was within tolerance out of it (more). The table uses it
+as the proxy, and acceptance measures the real count.
+
+| tolerance | basin: nodes over tol. | as share of phase 1's vertices | piece: share of source nodes over |
+|---:|---:|---:|---:|
+| 1 m | 52 M | 44 % | 22.30 % |
+| 2 m | 17 M | 30 % | |
+| 5 m | 2.6 M | 15 % | |
+| 10 m | 0.53 M | 8 % | 0.31 % |
+| 20 m | 0.12 M | 5 % | |
+
+**Mesh size.** The output grows by about the insertion count: up to roughly
++44 % vertices (and triangles) at 1 m and +8 % at 10 m over the basin. That is
+the price of the guarantee being about the source DEM, and it is Ola's to
+weigh (Q13).
+
+**Time, estimated** from the piece's measured rates (not measured for phase 2
+itself):
+
+- *Insertions.* Phase 1 at 1 m spends 4.9 s in serial split and flip for
+  about 5.2 M insertions, about 1 µs each. Phase 2's ~2.9 M first-pass
+  violators on the piece (22.30 % of 13.0 M) would be ~3 s, plus something for
+  the incircle: phase 2's vertices are off-node, so 21b's integer incircle
+  does not answer for them, and 21b measured that path at 15 % of refine.
+  Say 3-4 s.
+- *Scans.* Phase 1's scans total about 1.4 s at 1 m (6.33 s refine less the
+  4.9 s split). Phase 2 scans every triangle once over 13.0 M points, then
+  only touched ones: about 1-2 s.
+- *Fixed cost, every tolerance:* projecting the source box's 31.5 M nodes
+  (the prototype resampled 30.9 M nodes in 0.99 s on 8 threads, inverse
+  transform and bilinear together) and sorting about 13-20 M points into the
+  store (a serial sort, ~1-2 s).
+- So on the piece: **about +6-8 s at 1 m** on today's 9.67 s process, and
+  about +2-3 s at 10 m on 1.44 s, where the fixed cost dominates.
+
+**At basin scale** (15d's run, here only to place it): the fixed cost grows
+with the source, 734 M ANADEM nodes: roughly 0.5-1 min of projection and a
+serial sort of over a minute; the insertions grow with the tolerance (2.6 M
+at 5 m: seconds). If the serial sort shows in 15d's profile, it is
+parallelised there.
+
+**Memory.** The store is 16 B per source node: 208 MB on the piece, 11.7 GB
+for the basin's 734 M ANADEM nodes. D1 drops the target canvas (8.6 GB at
+basin scale) before the store is built, so phase 2's peak is store plus mesh,
+not store plus canvas plus mesh. Against Surprise 1's floors (13 GiB at 10 m,
+19 GiB at 5 m, canvas included), phase 2 moves the basin's peak to roughly
+16 GiB at 10 m and 22 GiB at 5 m: floors plus arithmetic, not measurements.
+So **one process on 32 GB reaches the basin at about 5 m and above, and not
+at 1-2 m with or without the final check**; below that the route is domain
+decomposition (ROADMAP item 2.4). This bears on the basin tolerance (Q15).
 
 ## The edge strip (Surprise 3), placed
 
-(to be written)
+**The finding, from the code.** A triangle's error is 0 when its closed node
+set is empty (`include/terrain/refinement/scan.hpp@434c374:56`), and a
+triangle is split only when its scan names a node
+(`include/terrain/refinement/refine.hpp@434c374:187-189`). By Pick's theorem a
+triangle whose three corners are nodes and whose closed node set holds no
+other node has area half a cell, so the defect needs at least one off-node
+corner: a domain or feature vertex (16, 16b) or a constraint foot (20b). It
+is therefore not confined to the domain's edge: every constraint, lake shores
+and CORINE borders included, can carry such slivers. That follows from the
+code; it was measured only along the domain's edge.
+
+**What 15c does about it.** On the reprojected path, phase 2 scans source
+nodes in every triangle, off-node corners or not, so source nodes in a strip
+are checked and inserted like any other. Surprise 3's cases (541.6 m on a
+four-corner box, 17.9-38.5 m on the BHO outline) are exactly such nodes. What
+remains is narrower: a sliver thinner than the source spacing can still hold
+no source node, and between nodes nothing is checked. Smaller, not gone.
+
+**What 15c does not do: the projected path** (Norway, and any DEM meshed
+directly), which has no phase 2. There the `--tolerance` claim of every
+domain mesh is false along constraints by up to tens of metres today.
+
+**Placement: a separate increment, right after 15c and before 15d**
+(recommended in Q14). Its design in one paragraph: check points at every
+crossing of a constraint edge with a grid line, z linear between the two
+nodes of that cell side (which is the bilinear surface there, 16 R0), run
+through 15c's `refine_points` after `refine`, for any DEM. Why not inside
+15c:
+
+1. it changes every Norwegian mesh with a domain or features, which ends J1's
+   bit-identity on purpose and needs `@perf`'s acceptance on the 1 m
+   benchmark;
+2. the guarantee it adds is new in kind, at points between nodes, and is
+   Ola's to word;
+3. its points lie on constraint segments, where a computed crossing can round
+   a hair outside the domain and so fall in no triangle: they must be filed
+   against their edge, not found by membership. That is 20b's foot geometry,
+   and it needs its own red suite;
+4. 15c's two PRs are already about 360 and 380 lines.
+
+Estimated 150-200 lines, one PR, reusing `CheckPoints` and `refine_points`.
+Why not wait longer: until it ships, the tolerance printed on every Norwegian
+domain mesh is wrong along its edges. A cheaper stopgap exists (split any
+constrained edge of a node-free triangle longer than one cell at its midpoint,
+about 40 lines): it narrows the strip and guarantees nothing.
 
 ## Invariants
 
-(to be written)
+- **J1. Norway untouched.** `refine.hpp` is not edited. A projected DEM
+  without `--out-crs`, or with `--out-crs` equal to its CRS, gives a `.vtk`
+  bit-identical to master's.
+- **J2. The guarantee, against the source.** For every check point p (a valid
+  source node inside the domain, at its stored position) that does not
+  coincide with a start vertex, and every closed output triangle containing
+  p, `|plane(p) − z_p| ≤ tolerance`, the plane from the output vertices' z.
+  Phase 1's guarantee at the resampled grid's nodes does **not** survive phase
+  2, and is not claimed: the grid is not the truth.
+- **J3. Determinism.** Phase 2's output is bit-identical for any thread count
+  and any order of `CheckPoints.add` calls; resampling is bit-identical for
+  any block size and thread count.
+- **J4. No degrees in `_core`.** `to_core` refuses a geographic tile;
+  `CheckPoints` and `refine_points` take metres in the target CRS.
+- **J5. One reprojection site**, `crs.reprojector`, `always_xy` (15 I8).
+- **J6. Global node identity.** Target node `(R, K)` is at `(K·h, −R·h)` bit
+  for bit, in every run.
+- **J7. One check point per source node**, taken from the assembled mosaic,
+  so overlaps resolve once (15 R5); duplicates are counted.
+- **J8. Phase 2 terminates**, and every vertex it inserts is a check point
+  carrying the point's own z.
+- **J9. Constraints hold.** Phase 2 splits constraint edges (both halves keep
+  the bit and the mask) and never flips one.
+- **J10. Header before pixels.** CRS kinds, the antimeridian and poles, the
+  memory cap and coverage are refused before any tile is loaded (15 I6).
 
 ## Degeneracy policy
 
-(to be written)
+- **A check point on an edge** (one zero orientation): `split_edge`; on a
+  constrained edge it becomes a Steiner point of the constraint; on the
+  domain's boundary (no neighbour), a 1 → 2 split.
+- **On a vertex:** never inserted; counted as coincident if the vertex is a
+  start vertex (D5 step 5); if it is a vertex phase 2 inserted, it is that
+  vertex's own point.
+- **Two points at one stored position:** one kept, `duplicates` counted.
+- **Slivers:** membership by exact predicates; where a sliver's doubled area
+  rounds to 0 or below, the error is bounded by the largest corner
+  difference, as the grid scan does (`scan.hpp`).
+- **Void triangles** (a NaN corner): 14's carve rule over check points.
+- **NoData:** a NoData or NaN source node is not a check point; a target node
+  whose stencil touches NoData is NoData.
+- **Unequal source spacings** (`du ≠ dv`, GLO-30 above 50°): allowed; the
+  default `h` uses the north-south spacing.
+- **No image in the target CRS** (pyproj's `inf`): a domain vertex is
+  refused; a source node is dropped (it is outside the domain).
+- **A point on the target grid's far edge:** filed in the last cell.
+- **An empty store** (a domain smaller than a source cell): one scan, nothing
+  inserted, `0 source nodes` recorded.
+- **The domain in a third CRS** (BHO in EPSG:4674 over an EPSG:4326 DEM): it
+  goes straight to the target CRS, once (15b).
+- **Datum shifts** between the source and target CRSs: whatever PROJ picks,
+  recorded in `source_transform`.
 
 ## Not in scope
 
-(to be written)
+- **15d:** window decoding, a source never held whole, the whole basin.
+- **The edge strip on the projected path:** its own increment (above, Q14).
+- **Constraint feet and start quality in phase 2** (D5).
+- **One loop shared by `refine` and `refine_points`** (D5): a later refactor.
+- **`rasputin catchment` on a geographic DEM:** refused by the `to_core` gate.
+- **Tiles in more than one CRS, and N2's half-cell tiles with their
+  neighbours:** the source side is still one 15a mosaic, which refuses both.
+- **A CLI option for the grid spacing** (Q16), and vertical datums.
+
+**Decided here, which Ola may overrule:** `--bbox` on the reprojected path is
+read in the target CRS; z in the store is `float`; check points on a start
+vertex are counted, not adopted; phase 2 without feet; a second loop rather
+than a shared one; the memory cap sums both canvases and the store.
 
 ## PR split and LOC
 
