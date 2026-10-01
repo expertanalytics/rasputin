@@ -104,12 +104,13 @@ def test_a_governed_file_is_denied_and_queued_while_unattended(
     kind, reason = found
     assert kind == "deny"
     assert reason.startswith("Refused: unattended mode is on until ")
-    assert "a rule file changes" in reason
+    # h4 §3: the refusal names the file it judged, not a generic "a rule file changes".
+    assert f"it writes {path}" in reason
     [line] = queue_lines(repo)
     assert (line["hook"], line["act"], line["why"]) == (
         "guard_governance",
         f"{tool} {path}",
-        "a rule file changes",
+        f"it writes {path}",
     )
 
 

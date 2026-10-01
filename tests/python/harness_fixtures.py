@@ -35,6 +35,9 @@ COPIED = (
     "tools/harness_mode.py",
     "tools/away.py",
     "tools/session_state.py",
+    # h4: the guards judge a command's targets through this parser
+    # (docs/increments/h4-guard-fixes.md §3). Copied when present, like the rest.
+    "tools/shell_scan.py",
 )
 
 GUARD_PUSH = ".claude/hooks/guard_push.py"

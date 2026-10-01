@@ -85,3 +85,57 @@ fix was right and disclosed, but the order was code first.
 2026-09-29, night: `@developer` added user-visible behaviour (lake refusals
 reported under `--lakes`) in a review-fix commit with no failing test first;
 `@reviewer` caught it and `@tester` pinned it afterwards.
+
+2026-10-01: `@tester`, in the 15c-1 red step, edited
+`.github/workflows/main.yaml` (two TSan entries); `@architect`, refused three
+Bash writes by the governance guard, redid them with the Edit tool.
+
+## An external review of the harness (Ola, 2026-10-01)
+
+Ola had the whole harness (`~/combined_harness_h4.txt`, branch
+`worktree-h4-guard-fix`) read by an outside model and asked for its points to
+be recorded here. Its conclusion: "I would not add much more governance right
+now. You have enough. The next quality jump comes from making the existing
+governance smaller, more state-based and more mechanically enforceable." The
+day's own evidence agrees: on 2026-10-01 about 440 lines of production code
+landed against several thousand lines of design, research and review, and
+Ola: "spending more time without quality improvements is regression of the
+agentic workflows and the harness design."
+
+Its points, in its order of priority:
+
+1. **Role-path enforcement and a named dispatcher.** The persona split is
+   "a convention with excellent monitoring, not yet an invariant" until the
+   per-persona path guard (R-B, item 1 above) lands. The main session is an
+   unnamed seventh actor with more authority than most personas; make the
+   dispatcher a first-class identity, so the policy table has six named rows
+   instead of "no `agent_type` means probably the main session".
+2. **One canonical statement per rule, and smaller skills.** The rule corpus
+   (CLAUDE.md, REQUIRED-READING, PRINCIPLES, the increment protocol, six
+   persona prompts, four skills, hooks) is "a second software system"; one
+   statement per rule is a correctness mechanism, not cleanup. Skills should
+   hold domain knowledge, project decisions and traps, not preferences that
+   harden into architecture ("Async by Default", C++20 coroutines for
+   streaming, named library choices).
+3. **A periodic harness adversary,** attacking the harness rather than a
+   change: conflicting rules, guard bypasses, stale statements, tests that
+   pass without exercising their target, authority escalation, state loss;
+   and with a remit to delete or simplify controls, not only add them. The
+   h4 old-versus-new verdict comparison of 2026-10-01 is a first instance.
+
+Also raised:
+
+- **Guard state, not actions.** Command interception is a tripwire (h4 says
+  so); critical invariants are better checked from the diff, tree and refs at
+  commit and push time, whatever route made the change. Command guards then
+  serve early, readable refusals.
+- **Recovery is weakest where isolation is strongest:** a session inside a
+  worktree gets a thin recap, while concurrent work is told to use worktrees.
+  Give every working tree a stable session identity and its own task state.
+- **Evidence routes by kind of change:** behavioural change, internal
+  refactor, and governance or tooling change, each with its own route at the
+  same quality bar, so that red-then-green is not performed as ritual for a
+  rename or a CI setting.
+- **Every control needs a measurable reason to keep existing,** generalising
+  the retirement rule for principles; otherwise "a perfectly governed system
+  that spends 30–50% of its intelligence navigating its own governance".

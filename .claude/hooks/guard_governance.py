@@ -20,9 +20,12 @@ kind of edit whose blast radius exceeds the branch it is made on.
 
 WHY IT SCANS Bash TOO. An agent told to prefer shell tooling writes files with
 heredocs and `python3 -`, not with Edit. A guard that matched only Edit and Write
-would have watched d1db597 go past. The Bash arm is a substring scan and is
-therefore both over- and under-inclusive: it cannot parse shell, so a path built
-by variable expansion escapes it. It is a tripwire, not a sandbox.
+would have watched d1db597 go past. The Bash arm judges the files a line writes
+(tools/shell_scan.py; docs/increments/h4-guard-fixes.md §3), not the words in it,
+so a governed name in a heredoc body, a quotation or a read passes. A line it
+cannot read -- unparseable, a target that is wholly a variable, a writer whose
+targets are unnamed -- is judged by the text rule it had before h4. It is a
+tripwire, not a sandbox.
 
 DECISION IS `ask`, NEVER `deny`. The user may well want the edit. What must not
 happen is the edit arriving inside an unrelated commit with nobody having said
@@ -34,10 +37,15 @@ for Ola, and a write of the harness state or a run of away.py is always denied
 
 import json
 import re
-import shlex
 import sys
 from fnmatch import fnmatch
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "tools"))
+try:
+    import shell_scan
+except ImportError:  # every line is then judged as text, as before h4
+    shell_scan = None
 
 #: Files whose content is normative. A change here changes what is allowed.
 GOVERNED = (
@@ -49,6 +57,7 @@ GOVERNED = (
     "tools/away.py",
     "tools/harness_mode.py",
     "tools/session_state.py",
+    "tools/shell_scan.py",
     ".claude/profile.toml",
 )
 
@@ -64,9 +73,10 @@ GOVERNED_PREFIXES = ("tools/check_", ".claude/agents/", ".claude/hooks/", ".clau
 #: Matched with endswith only: a basename rule would govern every file named config.
 GOVERNED_SUFFIXES = (".git/config",)
 
-#: Shell constructs that write. Anything else containing a governed path is a
-#: read -- `sed -n`, `grep`, `cat`, `git show` -- and must pass silently, or the
-#: guard becomes noise and gets disabled, which is how guards die.
+#: The text rule, for a line the parser cannot read: shell constructs that write.
+#: Anything else containing a governed path is a read -- `sed -n`, `grep`, `cat`,
+#: `git show` -- and must pass silently, or the guard becomes noise and gets
+#: disabled, which is how guards die.
 WRITES = re.compile(
     r"(>>?\s|<<\s*['\"]?\w*EOF|\bsed\s+-i|\btee\b|\bcp\b|\bmv\b|\bdd\b|\btruncate\b"
     r"|\bgit\s+(checkout|restore|apply|revert)\b|\bpatch\b"
@@ -92,48 +102,71 @@ def governed(path: str) -> bool:
 #: Only Ola enters or leaves unattended mode; only hooks and away.py write its state.
 HARNESS_PATH = re.compile(r"(^|/)\.git/harness(/|$)")
 STATE_WRITES = re.compile(r"\b(rm|touch|ln|mkdir|unlink|install)\b")
-SEGMENTS = re.compile(r"&&|\|\||;|\||\n")
-READERS = {"cat", "less", "head", "tail", "grep", "rg", "wc", "diff", "ls", "git", "ruff",
-           "mypy", "pytest"}
-PYTHON = re.compile(r"python(3(\.\d+)?)?")
+#: A run of the away script in a line the parser cannot read: its name as a word.
+AWAY_TEXT = re.compile(r"(^|[\s/'\"])away\.py\b|-m\s+(\S+\.)?away\b")
 ALWAYS_DENIED = (
     "Only Ola enters or leaves unattended mode, and only hooks and away.py write the "
     "harness state. Nothing is queued: this act is not an agent's to wait for."
 )
+CANNOT_READ = "the guard cannot read this command's targets"
 
 
-def runs_away(segment: str) -> bool:
-    """A segment running away.py, directly or through any wrapper that is not a reader."""
-    try:
-        words = shlex.split(segment)
-    except ValueError:
-        words = segment.split()
-    if not any(word.split("/")[-1] == "away.py" for word in words):
-        return False
-    first = words[0].split("/")[-1]  # a reader by basename: ../../../.venv/bin/mypy
-    if PYTHON.fullmatch(first) and words[1:2] == ["-m"]:
-        first = (words[2:3] or [""])[0]  # python3 -m ruff reads; python3 away.py runs
-    reads = first in READERS or (first == "sed" and not any(w.startswith("-i") for w in words))
-    return not reads
+def runs_away(simple) -> bool:
+    """argv[0], or the script or `-m` module of an interpreter, is away.py."""
+    first = simple.argv[0] if simple.argv else ""
+    return any(shell_scan.base(word or "") == "away.py" for word in (first, simple.script))
 
 
-def always_denied(tool: str, supplied: dict) -> bool:
-    if tool in ("Edit", "Write", "NotebookEdit"):
-        path = supplied.get("file_path") or supplied.get("notebook_path") or ""
-        return bool(HARNESS_PATH.search(path.replace("\\", "/")))
-    if tool != "Bash":
-        return False
-    command = supplied.get("command", "")
-    if ".git/harness" in command and (WRITES.search(command) or STATE_WRITES.search(command)):
-        return True
-    return any(runs_away(segment) for segment in SEGMENTS.split(command))
+def judge_bash(command: str) -> tuple[str, list[str], str] | None:
+    """("deny", [], "") or ("ask", governed targets, why) for a Bash line; None passes it."""
+    simples = shell_scan.parse(command) if shell_scan else None
+    if simples is not None:
+        targets = [t for s in simples for t in (*s.writes, *shell_scan.candidates(s))]
+        # An expansion counts as matching .git: $(git rev-parse --git-common-dir)/harness.
+        # Backstop, as before h4: a line that writes anything and names the state
+        # dir is denied, however the path reaches the write (export, read, cd).
+        if (any(HARNESS_PATH.search(shell_scan.static(t, ".git")) for t in targets)
+                or any(runs_away(s) for s in simples)
+                or (".git/harness" in command and any(s.writes or s.unknown for s in simples))):
+            return "deny", [], ""
+        # A target is judged by its static tail: $D/CLAUDE.md is CLAUDE.md.
+        hits = list(dict.fromkeys(t for t in targets if governed(shell_scan.static(t))))
+        if hits:
+            return "ask", hits, f"it writes {', '.join(hits)}"
+        if not any(s.unknown or any(not shell_scan.static(w).strip("/") for w in s.writes)
+                   for s in simples):
+            return None
+    elif AWAY_TEXT.search(command) or (
+            ".git/harness" in command and (WRITES.search(command) or STATE_WRITES.search(command))):
+        return "deny", [], ""
+    hits = text_hits(command) if WRITES.search(command) else []
+    return ("ask", hits, CANNOT_READ) if hits else None
 
 
-def emit(event: dict, verdict: str, reason: str, act: str) -> None:
+def text_hits(command: str) -> list[str]:
+    """The governed names in a line's text: the rule before h4, for a line it cannot read."""
+    # Match the path as written, never its basename. A directory prefix ends in
+    # "/", so its basename is "" -- and "" is a substring of every string, which
+    # made the first draft of this hook fire on every write-shaped command in the
+    # repository. A guard that fires on everything trains the user to approve
+    # without reading, and an approval nobody read is indistinguishable afterwards
+    # from a considered one. That manufactures the exact artifact this hook exists
+    # to prevent: a rule with consent attached and no author behind it.
+    hits = [name for name in (*GOVERNED, *GOVERNED_PREFIXES, *GOVERNED_SUFFIXES)
+            if name.rstrip("/") in command]
+    # A glob cannot be used as a substring: ".claude/settings*.json*" contains a
+    # literal "*" that no real command does, so the settings files -- including
+    # settings.local.json, the permission allow-list -- went unguarded on this arm
+    # while the Edit arm caught them. Match the globs against the command's
+    # whitespace-split tokens.
+    hits += [pattern for pattern in GOVERNED_GLOBS
+             if any(fnmatch(token.strip("\"'<>"), f"*{pattern}") for token in command.split())]
+    return sorted(set(hits))
+
+
+def emit(event: dict, verdict: str, reason: str, act: str, why: str) -> None:
     """Route the verdict through harness_mode; unable to import it, deny anyway."""
-    why = "a rule file changes"
     try:
-        sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "tools"))
         import harness_mode
     except ImportError as error:
         failed = f"guard_governance cannot import harness_mode ({error}); refused: {why}."
@@ -165,57 +198,36 @@ def main() -> int:
 def verdict(event: dict) -> None:
     tool = event.get("tool_name", "")
     supplied = event.get("tool_input", {}) or {}
-    if always_denied(tool, supplied):
-        emit(event, "deny", ALWAYS_DENIED, "")
-        return
     hits: list[str] = []
-    act = ""
+    act = why = ""
 
     if tool in ("Edit", "Write", "NotebookEdit"):
         path = supplied.get("file_path") or supplied.get("notebook_path") or ""
+        if HARNESS_PATH.search(path.replace("\\", "/")):
+            emit(event, "deny", ALWAYS_DENIED, "", "")
+            return
         if governed(path):
-            hits = [path]
-            act = f"{tool} {path}"
+            hits, act, why = [path], f"{tool} {path}", f"it writes {path}"
     elif tool == "Bash":
-        command = act = supplied.get("command", "")
-        if WRITES.search(command):
-            # Match the path as written, never its basename. A directory prefix
-            # ends in "/", so its basename is "" -- and "" is a substring of
-            # every string, which made the first draft of this hook fire on
-            # every write-shaped command in the repository. A guard that fires
-            # on everything trains the user to approve without reading, and an
-            # approval nobody read is indistinguishable afterwards from a
-            # considered one. That manufactures the exact artifact this hook
-            # exists to prevent: a rule with consent attached and no author
-            # behind it.
-            hits = [
-                name
-                for name in (*GOVERNED, *GOVERNED_PREFIXES, *GOVERNED_SUFFIXES)
-                if name.rstrip("/") in command
-            ]
-            # A glob cannot be used as a substring: ".claude/settings*.json*"
-            # contains a literal "*" that no real command does, so the settings
-            # files -- including settings.local.json, the permission allow-list
-            # -- went unguarded on this arm while the Edit arm caught them.
-            # Match the globs against the command's whitespace-split tokens.
-            hits += [
-                pattern
-                for pattern in GOVERNED_GLOBS
-                if any(fnmatch(token.strip("\"'<>"), f"*{pattern}")
-                       for token in command.split())
-            ]
+        act = supplied.get("command", "")
+        judged = judge_bash(act)
+        if judged is not None and judged[0] == "deny":
+            emit(event, "deny", ALWAYS_DENIED, "", "")
+            return
+        if judged is not None:
+            _, hits, why = judged
 
     if not hits:
         return
 
     emit(event, "ask", (
-        f"This changes a file that states rules: {', '.join(sorted(set(hits)))}.\n"
+        f"This changes a file that states rules: {', '.join(hits)}.\n"
         "A rule here binds every future session. Before you say yes, ask what "
         "the new or changed rule is, and who asked for it -- a commit or "
         "something you said, not a nearby document that sounds similar.\n"
-        "This prompt is a tripwire, not a gate: it reads the command as text "
-        "and cannot parse shell, so a path built from a variable slips past it."
-    ), act)
+        "This prompt is a tripwire, not a gate: it judges the files a shell line "
+        "writes, and a line it cannot read by its text."
+    ), act, why)
 
 
 if __name__ == "__main__":

@@ -137,8 +137,10 @@ before any write to a file that states rules; `guard_unattended.py` refuses
 `AskUserQuestion`, permission prompts and configuration changes while
 unattended mode is on; `gates_after_commit.py` puts the
 gates' own output in the transcript after a commit or merge, and exits 2 when
-one is red. All of them read the command as text, so they are tripwires: the
-boundary is still yours to keep, and the permission system is not the push
+one is red. `guard_push.py` and `guard_governance.py` judge what a command
+writes or pushes, as parsed by `tools/shell_scan.py`; a line they cannot read
+is judged by its text. They are tripwires all the same: the boundary is still
+yours to keep, and the permission system is not the push
 backstop: auto mode can let an unapproved push through.
 
 **Unattended mode.** Only Ola enters it, with `python3 tools/away.py
@@ -147,7 +149,11 @@ or on `away.py --back` (which also works with `!` at a session prompt).
 No agent runs `away.py` or writes
 `<git-common-dir>/harness/`. While it is on, a guarded act is refused
 rather than asked, and the refusal is already queued: do not retry it or
-work around it; record it as an `ASK OLA:` line (main session: in
+work around it, except a refusal whose named files are all ordinary (no rule
+file, no harness state, no push): that is a guard false positive. Redo the
+write with Edit or Write, and add a `GUARD FALSE POSITIVE:` line naming the
+files to the handback. A refused write to a rule file, or a refused push, is
+never redone by any route. Otherwise record it as an `ASK OLA:` line (main session: in
 `session.md`; subagent: in its handback) and continue with other work.
 When Ola says he is leaving, ask him how long, and ask him to run
 `away.py` with that duration.

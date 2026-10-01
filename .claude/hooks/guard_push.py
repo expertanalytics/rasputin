@@ -15,6 +15,11 @@ remotes and git config, and `gh api` / `curl` with a writing method to the forge
 `ask`, not `deny`: the user says yes constantly. The point is that they say it.
 The exception is unattended mode (tools/harness_mode.py): while Ola is away the
 ask becomes a `deny`, and the act is queued for him.
+
+The rules apply to each simple command's argv (tools/shell_scan.py;
+docs/increments/h4-guard-fixes.md §3), never to text, so `git push` in a heredoc
+body, a commit message or a PR body is not a push. A line the parser cannot
+read is judged by the text rules below, as before h4.
 """
 
 import json
@@ -22,6 +27,12 @@ import re
 import shlex
 import sys
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "tools"))
+try:
+    import shell_scan
+except ImportError:  # every line is then judged as text, as before h4
+    shell_scan = None
 
 PUBLISHES = (
     (re.compile(r"\bgit\b[^|;&]*\bpush\b"), "git push writes to the remote"),
@@ -34,6 +45,7 @@ PUBLISHES = (
     (re.compile(r"\bgit\b[^|;&]*\bpush\b.*(--force|-f)\b"),
      "a force push can discard the user's commits"),
 )
+PUSH, PR, RELEASE, NO_VERIFY, HISTORY, FORCE = (why for _, why in PUBLISHES)
 
 FORGE_HOST = "github.com"
 SEGMENTS = re.compile(r"&&|\|\||;|\||\n")
@@ -68,10 +80,10 @@ def positionals(args: list[str]) -> list[str]:
 
 
 def git_call(words: list[str]) -> tuple[str, list[str]] | None:
-    """(subcommand, its arguments) of a `git` in the segment, skipping -C/-c options."""
-    if "git" not in words:
+    """(subcommand, its arguments) of a command that is `git`, skipping -C/-c options."""
+    if not words or words[0].rsplit("/", 1)[-1] != "git":
         return None
-    at = words.index("git") + 1
+    at = 1
     while at < len(words) and words[at].startswith("-"):
         at += 2 if words[at] in ("-C", "-c") else 1
     return (words[at], words[at + 1:]) if at < len(words) else None
@@ -119,11 +131,30 @@ def segment_why(words: list[str]) -> str | None:
     return None
 
 
+def publishes(words: list[str]) -> list[str]:
+    """The PUBLISHES reasons of one simple command, read from its argv."""
+    found, call = [], git_call(words)
+    if call is not None:
+        sub, args = call
+        found += [PUSH] if sub == "push" else []
+        found += [NO_VERIFY] if "--no-verify" in args else []
+        if (sub in ("rebase", "filter-branch") or (sub == "reset" and "--hard" in args)
+                or (sub == "commit" and "--amend" in args)):
+            found.append(HISTORY)
+        if sub == "push" and any(a.startswith("--force") or a == "-f" for a in args):
+            found.append(FORCE)
+    if words and words[0].rsplit("/", 1)[-1] == "gh" and len(words) > 2:
+        group, verb = words[1:3]
+        found += [PR] if group == "pr" and verb in ("create", "merge", "ready", "edit") else []
+        if group == "release" or (group == "repo" and verb in ("create", "delete", "edit")):
+            found.append(RELEASE)
+    return found
+
+
 def emit(event: dict, verdict: str, reason: str, act: str, why: str) -> None:
     """Route the verdict through harness_mode; unable to import it, deny what would ask."""
     output = None
     try:
-        sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "tools"))
         import harness_mode
 
         output = harness_mode.guard(event, "guard_push", verdict, reason, act, why)
@@ -150,11 +181,18 @@ def main() -> int:
             return 0
         command = (event.get("tool_input", {}) or {}).get("command", "")
 
-        reasons = [why for pattern, why in PUBLISHES if pattern.search(command)]
-        for segment in SEGMENTS.split(command):
-            why = segment_why(tokens(segment))
-            if why is not None and why not in reasons:
+        simples = shell_scan.parse(command) if shell_scan else None
+        if simples is None:  # the text rules
+            reasons = [why for pattern, why in PUBLISHES if pattern.search(command)]
+            commands = [tokens(segment) for segment in SEGMENTS.split(command)]
+        else:
+            reasons = [why for s in simples for why in publishes(s.argv)]
+            commands = [s.argv for s in simples]
+        for words in commands:
+            why = segment_why(words)
+            if why is not None:
                 reasons.append(why)
+        reasons = list(dict.fromkeys(reasons))
         if not reasons:
             return 0
         why = "; ".join(reasons)
