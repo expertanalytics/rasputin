@@ -1,9 +1,11 @@
 # Increment 23: basin scale — pieces cut on constraints, windowed DEM reads, a tile cache
 
-Status: **designed by `@architect`, 2026-10-01; not implemented, nothing
-ruled yet.** Design only, written before `@tester` per
-`docs/increments/README.md` step 1. The questions for Ola are B1-B12 at the
-end; each has a recommendation and its cost.
+Status: **designed by `@architect`, 2026-10-01; B1-B12 ruled by Ola on
+2026-10-01 and the design reworked to the rulings; not implemented.** Design
+only, written before `@tester` per `docs/increments/README.md` step 1. The
+rulings are under "Ruled by Ola, 2026-10-01", below; the questions are kept as
+asked at the end, each marked with its ruling, and the new ones (B13-B15)
+follow them.
 
 ## Why this record, and why its name
 
@@ -20,9 +22,11 @@ dense canvas) at basin scale.
 
 Sub-increments, each its own PR: **23a-1** (windowed decoding and the tile
 cache, reading), **23a-2** (the fetch step), **23b** (frozen edges and the
-seam pass, in C++), **23c** (the decomposition, run piece by piece), **23d**
-(pieces in parallel, resumable runs, `rasputin stitch`). Order and sizes are
-under "Order of work".
+seam pass, in C++), **23c** (the partition, run piece by piece), **23d**
+(pieces in parallel, resumable runs, `rasputin stitch`), **23f** (seam
+removal and thinning, in C++), **23g** (seam cleanup at stitching, in
+Python). **23e** (sub-catchments from the DEM) is later and gets its own
+design. Order and sizes are under "Order of work".
 
 ## Ola's direction, 2026-10-01
 
@@ -46,13 +50,96 @@ The main session's reasoning, which this record was asked to check, is
 checked under "The subdomain model" (the union argument) and "The seam
 protocol" (where the split exchange goes).
 
+## Ruled by Ola, 2026-10-01
+
+On B1-B12 (the questions as asked are kept at the end). Where the ruling
+changes the design, the section named does the rework.
+
+- **B1: (a), artificial cuts; BHO is dropped entirely as a source of
+  geometry.** Ola: "I'm not interested in archaic maps". Sub-catchments come
+  later, derived from the DEM by extending increment 22 to many outlets, and
+  enter the mesh as a code per triangle or as ordinary constraints, never as
+  seams (23e, reworded under "Sub-catchments"). BHO is used at most for
+  official codes or for validation. The BHO measurements under "What was
+  measured" stay as the record B1 was ruled on; nothing in the design uses
+  them. Pointer, not a ruling on that record: the raster-to-vector research
+  answers its design question 2 with "Rivers as constraints come from the
+  BHO drainage lines" (`docs/research/raster-to-vector.md@4b085a5:524`, on
+  branch `worktree-raster-vector`); that answer is to be revisited, and
+  DEM-derived drainage is the likely replacement.
+- **B2 and B3: replaced by a partition of the domain's bounding box** into
+  Nx × Ny pieces, Nx · Ny about a target count, `--pieces`. Ola: "Compute
+  dx, dy, based on concurrency requirements and Nx and Ny, so that Nx*Ny
+  approx M*Np". The count is a parameter with a fixed default, **not** the
+  detected core count, so that the mesh does not depend on the machine
+  (Ola's L1 determinism ruling, increment 21). Piece sides are whole DEM
+  spacings, so seams lie on lattice lines (exact seam heights, no feet
+  lost). A size cap makes pieces smaller where a piece would exceed it
+  (memory); no piece is cut below a minimum size, so a small domain is
+  meshed in one piece, bit-identical to today. The defaults and their
+  arithmetic, and what is lost against the global grid of B3, are under
+  "Choosing the cuts".
+- **B4: (b), seams removed after the run.** The strips on both sides are
+  re-legalised across each seam and rescanned, so the stitched mesh is
+  Delaunay across artificial seams; this includes **local seam thinning**:
+  seam vertices the tolerance does not need are removed (remove, retriangulate
+  the hole, recheck the tolerance in the hole only), per seam, in parallel
+  across seams, in a fixed order along a seam, with the corners where four
+  pieces meet kept or handled in a final small pass. It happens at
+  stitching, and only a band from each neighbour is live. Bentley's
+  stitching patent is prior art. Designed under "Seam removal and thinning".
+- **B5: (a), the seam frozen after the one-dimensional pass,** computed
+  identically by both neighbours, with no communication; B4's cleanup
+  repairs the over-density and poor triangles along seams afterwards. The
+  acceptance of the stitch PR (23g) compares cut against uncut on the test
+  piece after cleanup: vertices near seams, worst angles, triangle count.
+  **(b), the exchange, is the named fallback** if the gap is large.
+- **B6: (a).** Pieces and the index always; one stitched file by default
+  for `--out`, clean (B4's cleanup); `--no-stitch` skips it. Piece files keep
+  their seams.
+- **B7: a new environment variable, `RASPUTIN_DATA`**, the data root. None
+  exists today (the legacy code read `RASPUTIN_DATA_DIR`). The cache lives at
+  `$RASPUTIN_DATA/cache`; `--cache` overrides it; a run that needs the cache
+  is refused if neither is set.
+- **B8: (a)**, ANADEM and GLO-30 in the first fetch PR.
+- **B9: (a)**, resumable runs.
+- **B10: moot**, BHO being dropped.
+- **B11: (a).** `@perf` measures the decomposed basin run from 50 m down to
+  1 m, then Ola chooses the tolerance.
+- **B12: (a)**, the proposed order, knowingly reversing part of Q14's
+  placement (Ola chose it). The order now carries 23f and 23g ("Order of
+  work").
+
+Also ruled on 2026-10-01, for `15c-geographic-dem.md`: Q17's BHO-outline
+fixture is replaced. Ola: "yes, switch to a DEM-derived test catchment". The
+test domain is a catchment derived by increment 22 from the ANADEM extract;
+no BHO, and no licence question (amended there).
+
 ## What was measured for this design
 
-By `@architect`, 2026-10-01, with the two scripts in `docs/increments/23-probes/`
+By `@architect`, 2026-10-01, with the scripts in `docs/increments/23-probes/`
 (run as `python docs/increments/23-probes/<script> ../rasputin_data/sao_francisco_piece`;
-both were run for this record and print the figures below).
+each was run for this record and prints the figures below).
 
-**BHO is an exact coverage** (`bho_coverage.py`). The 1,163 BHO 2017 5k
+**The partition, on the Velhas piece and the basin** (`partition.py`, run
+after the rulings). The rule under "Choosing the cuts", with its defaults
+(`--pieces 64`, minimum 2^19 nodes, cap 2^22 nodes), on a 30 m lattice in
+EPSG:31983. The basin's extent is BHO level 2, used only to measure; B13 asks
+what the basin run's domain is.
+
+| domain | window | domain covers | cells | meet the domain | cell nodes | largest / mean area | seams inside |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| Velhas piece | 4,208 × 7,347 = 30.9 M | 42 % | 6 × 10 | 40 | 0.52 M | 1.59 | 1,068 km |
+| basin | 41,332 × 50,297 = 2,079 M | 34 % | 20 × 25 | 226 | 4.16 M | 1.33 | 20,687 km |
+
+For the Velhas piece the minimum decides (`--pieces` 64 or more all give 58,
+rounded to 6 × 10); `--pieces 16` gives 3 × 5 cells of 2.06 M nodes, 12
+pieces. For the basin the cap decides at any `--pieces` up to 256. The
+basin's window here is 2.08 G nodes; the 2.31 G of the basin-piece README
+(Surprise 1) is that README's canvas, not reconciled with this one.
+
+**BHO is an exact coverage** (`bho_coverage.py`; the record B1 was ruled on,
+not used by the design since BHO was dropped). The 1,163 BHO 2017 5k
 elementary catchments of ottobasin 76949 (the Velhas piece of
 `docs/benchmarks/2026-10-01/basin-piece/README.md`):
 
