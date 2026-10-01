@@ -375,9 +375,8 @@ def comparable(a: RunRecord, b: RunRecord) -> str | None:
 def find_baseline(
     root: Path, record: RunRecord, is_ancestor: Callable[[str, str], bool]
 ) -> tuple[Path, RunRecord] | None:
-    """The newest ``run.json`` at any depth under ``root``, older than
-    ``record``, comparable with it, and whose commit is an ancestor of
-    ``record``'s."""
+    """The newest ``run.json`` under ``root`` (any depth) older than ``record``,
+    comparable with it, and whose commit is an ancestor of ``record``'s."""
     found: tuple[Path, RunRecord] | None = None
     for path in sorted(root.rglob("run.json")):
         try:
