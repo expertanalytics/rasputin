@@ -150,3 +150,5 @@ change. Rule text in `.claude/REQUIRED-READING.md` (prose, not counted).
 2. **The redo rule** (§3): an agent may redo a refused write of ordinary
    files with Edit or Write, reporting `GUARD FALSE POSITIVE:`.
    Recommendation: yes; the refusal names its targets, so the agent can tell.
+
+**Ruled by Ola, 2026-10-01:** yes to both ("yes to both, go ahead with h4").
