@@ -569,6 +569,11 @@ dithering, applied to class areas instead of pixel intensities, and related
 publications should be used to resolve this." The prior art for that is the
 next section.
 
+## Dropped small fractions: error diffusion and its relatives
+
+(In progress: prior art for Ola's ruling on fraction cutoffs, then the
+questions a design must answer. Research only, no design.)
+
 ## Sources
 
 Convention: **Crossref** means the DOI's Crossref record was fetched on
