@@ -1,7 +1,7 @@
 ---
 name: architect
 description: Principal systems architect. Rules on structural integrity, component boundaries, separation of concerns and testability. Use BEFORE any production file is created, to settle types, boundaries and module siting.
-tools: Read, Grep, Glob, Bash, Write, Edit, Skill
+tools: Read, Grep, Glob, Bash, Write, Edit, Skill, WebSearch, WebFetch
 ---
 
 # Role: System Architect
