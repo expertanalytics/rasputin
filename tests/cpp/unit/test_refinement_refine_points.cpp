@@ -11,7 +11,8 @@
 //        z, valid, triangles, edges, masks, rounds, inserted, max_error,
 //        uncovered and carved are read as refine's are
 //   refine_points(store, start, z, valid, edges, masks, options)
-//   LatticeMesh::split_inside(t, MeshVertex)    the +1 overload of D5 step 3
+//   LatticeMesh::split_inside(t, MeshVertex)    D5 step 3: takes an off-node
+//        vertex (a LatticeVertex converts to it exactly)
 //   an inserted vertex is output at (x_min + col h, y_max - row h), its z the
 //        point's own, valid
 //
@@ -20,6 +21,8 @@
 // exact: equality is asserted where the arithmetic is exact.
 
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/matchers/catch_matchers_exception.hpp>
+#include <catch2/matchers/catch_matchers_string.hpp>
 
 #include <terrain/core/indexed_mesh.hpp>
 #include <terrain/core/point.hpp>
@@ -40,6 +43,7 @@
 #include <map>
 #include <random>
 #include <span>
+#include <stdexcept>
 #include <utility>
 #include <vector>
 
@@ -179,7 +183,7 @@ double flat10(double, double) { return 10.0; }
 }  // namespace
 
 // --------------------------------------------------------------------------
-// The +1 function in lattice_mesh.hpp
+// split_inside in lattice_mesh.hpp, with an off-node vertex
 // --------------------------------------------------------------------------
 
 TEST_CASE("split_inside takes an off-node MeshVertex", "[lattice_mesh][split_inside]") {
@@ -257,6 +261,36 @@ TEST_CASE("RP2: one point exactly at tolerance is not inserted", "[refine_points
     REQUIRE(out.ok());
     REQUIRE(out.inserted == 0);
     REQUIRE(out.max_error == 1.0);
+}
+
+TEST_CASE("RP2: equal errors in one triangle go to the first point in store order",
+          "[refine_points][RP2][tiebreak]") {
+    // D5: the worst point wins by strictly larger error, so a tie goes to the
+    // first in store order, whatever the thread count. Both points are in the
+    // start triangle (0,0) (0,4) (4,4), off its edges, |z - 10| = 2 for both.
+    // Store order is (cell row, ...): `first` (cell row 2) before `second`
+    // (cell row 3), though `second` is added first and has the smaller z.
+    const Start s = grid_start(17, 4, flat10);
+    const std::size_t n0 = s.mesh.vertices().size();
+    const Pt first{1.25, 2.5, 12.0f}, second{0.75, 3.5, 8.0f};
+    for (const unsigned threads : {1u, 4u}) {
+        CAPTURE(threads);
+        const auto out = run(store(17, {second, first}), s, 1.0, threads);
+        REQUIRE(out.ok());
+        REQUIRE(out.inserted >= 1);
+        REQUIRE(out.vertices[n0] == world(first.col, first.row));
+        REQUIRE(out.z[n0] == 12.0);
+    }
+}
+
+TEST_CASE("refine_points refuses a store that was never frozen", "[refine_points][refusal]") {
+    const Start s = grid_start(9, 4, flat10);
+    CheckPoints cp{square(9)};
+    const std::vector<Point2> xy{world(1.5, 1.5)};
+    const std::vector<float> z{12.0f};
+    cp.add(std::span<const Point2>{xy}, std::span<const float>{z});
+    REQUIRE_THROWS_MATCHES(run(cp, s, 1.0), std::logic_error,
+                           Catch::Matchers::MessageMatches(Catch::Matchers::ContainsSubstring("not frozen")));
 }
 
 // --------------------------------------------------------------------------

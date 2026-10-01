@@ -269,6 +269,89 @@ TEST_CASE("RP3: the oracle fails on a mesh whose z is shifted by twice the toler
     REQUIRE(violations(pts, s, out, planted, tol) > 0);
 }
 
+TEST_CASE("RP5: a split shared edge skips the neighbour's stale result",
+          "[refine_points][RP5]") {
+    // Each 4 x 4 square is A = (tl, bl, br) and, after it in index order,
+    // B = (tl, br, tr), sharing the diagonal tl-br. A's worst point p is the
+    // square's centre, on the diagonal; B's worst is q, inside B but in the
+    // half (p, br, tr) that split_edge(A, p) appends, not the half it leaves
+    // in B's slot. In round 1 A splits the shared edge; B must then be skipped
+    // as touched, since its scan names q in a triangle its slot no longer
+    // holds. No flip follows p's insertion (every circle through p and an
+    // outer side has that side as diameter), so only the skip protects B.
+    auto g = refinement_fixtures::grid_mesh(grid(), 4);
+    Start s{std::move(g.mesh), std::vector<double>(g.lattice.size(), 0.0),
+            std::vector<std::uint8_t>(g.lattice.size(), 1), std::move(g.edges), std::move(g.masks)};
+    Points pts;
+    for (std::size_t r = 0; r + 4 < kN; r += 4)
+        for (std::size_t c = 0; c + 4 < kN; c += 4) {
+            const auto rr = static_cast<double>(r), cc = static_cast<double>(c);
+            pts.xy.push_back(world(cc + 2.0, rr + 2.0));  // p, |error| 5
+            pts.z.push_back(5.0f);
+            pts.xy.push_back(world(cc + 3.5, rr + 2.25));  // q, |error| 9
+            pts.z.push_back(9.0f);
+        }
+    const auto out = run(store(pts), s, 1.0, 1);
+    REQUIRE(out.ok());
+    REQUIRE(out.inserted == pts.xy.size());
+    REQUIRE(out.triangles.size() == s.mesh.triangle_count() + 2 * pts.xy.size());
+    double area = 0.0;
+    for (const auto& t : out.triangles) {
+        const Point2 a = frame(out.vertices[t[0]]), b = frame(out.vertices[t[1]]), c = frame(out.vertices[t[2]]);
+        REQUIRE(DefaultKernel::orient2d(a, b, c) == Orientation::CounterClockwise);
+        area += cross(a, b, c) / 2.0;
+    }
+    REQUIRE(area == static_cast<double>((kN - 1) * (kN - 1)));
+    REQUIRE(violations(pts, s, out, out.z, 1.0) == 0);
+    delaunay_oracle(out);
+    inserted_are_check_points(pts, s, out);
+}
+
+TEST_CASE("RP5: interior edges split with work on both sides in one round stay a triangulation",
+          "[refine_points][RP5][property]") {
+    // Every 4 x 4 square of the start is split by its diagonal, an interior
+    // edge shared by two triangles. Check points sit exactly on every diagonal
+    // (and two inside each square), so in the first round both triangles of a
+    // square name a point on their shared edge: the first to split must mark
+    // its neighbour touched, or the neighbour splits a triangle that no longer
+    // exists. threads 1, so the order is the serial one.
+    auto g = refinement_fixtures::grid_mesh(grid(), 4);
+    Start s{std::move(g.mesh), std::vector<double>(g.lattice.size(), 0.0),
+            std::vector<std::uint8_t>(g.lattice.size(), 1), std::move(g.edges), std::move(g.masks)};
+    const std::uint32_t seed = GENERATE(0u, 1u, 2u);
+    CAPTURE(seed);
+    std::mt19937 gen{seed};
+    Points pts;
+    for (std::size_t r = 0; r + 4 < kN; r += 4)
+        for (std::size_t c = 0; c + 4 < kN; c += 4) {
+            const auto rr = static_cast<double>(r), cc = static_cast<double>(c);
+            std::vector<std::pair<double, double>> at;
+            for (const double t : {0.25, 0.5, 0.75, 1.0, 1.5, 2.0, 2.5, 3.0, 3.25}) at.emplace_back(cc + t, rr + t);
+            at.emplace_back(cc + 3.0, rr + 1.0);
+            at.emplace_back(cc + 1.0, rr + 3.0);
+            for (const auto& [col, row] : at) {
+                pts.xy.push_back(world(col, row));
+                pts.z.push_back(static_cast<float>(static_cast<double>(gen() % 1537u) - 768.0) / 64.0f);
+            }
+        }
+    const double tol = 1.0;
+    const auto out = run(store(pts), s, tol, 1);
+    REQUIRE(out.ok());
+    REQUIRE(out.inserted > 0);
+    double area = 0.0;
+    for (const auto& t : out.triangles) {
+        const Point2 a = frame(out.vertices[t[0]]), b = frame(out.vertices[t[1]]), c = frame(out.vertices[t[2]]);
+        REQUIRE(DefaultKernel::orient2d(a, b, c) == Orientation::CounterClockwise);
+        area += cross(a, b, c) / 2.0;
+    }
+    const double side = static_cast<double>(kN - 1);
+    REQUIRE(area == side * side);  // dyadic corners: every term is exact
+    REQUIRE(violations(pts, s, out, out.z, tol) == 0);
+    delaunay_oracle(out);
+    constraints_oracle(out);
+    inserted_are_check_points(pts, s, out);
+}
+
 TEST_CASE("RP4: output is bit-identical for 1, 2 and 8 threads and two add orders",
           "[refine_points][RP4][determinism]") {
     const Start s = phase1();

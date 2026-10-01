@@ -26,6 +26,7 @@ tests and leaves the rest of the session collecting.
 from __future__ import annotations
 
 import ast
+import pickle
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
@@ -303,6 +304,33 @@ class TestBinding:
             store.add(xy, z)
         store.freeze()
         assert store.size == 0
+
+    def test_pickled_float64_xy_and_float32_z_are_accepted(self, store: Any) -> None:
+        """An array that crossed a process boundary (multiprocessing pickles
+        it) has an equal dtype that is not the same object. The check is on
+        what the dtype is, not on which object it is."""
+        xy = pickle.loads(pickle.dumps(np.array([[X_MIN + 15.0, Y_MAX - 15.0]])))
+        z = pickle.loads(pickle.dumps(np.array([7.0], np.float32)))
+        assert xy.dtype == np.float64 and z.dtype == np.float32
+        store.add(xy, z)
+        store.freeze()
+        assert (store.size, store.outside) == (1, 0)
+
+    @pytest.mark.parametrize("dtype", [np.float32, np.int64], ids=["float32", "int64"])
+    def test_pickled_xy_of_another_dtype_is_still_refused(self, store: Any, dtype: type) -> None:
+        xy = pickle.loads(pickle.dumps(np.array([[15, 15]], dtype)))
+        z = pickle.loads(pickle.dumps(np.ones(1, np.float32)))
+        with pytest.raises(ValueError, match="add"):
+            store.add(xy, z)
+
+    def test_refine_points_refuses_a_store_never_frozen(
+        self, check_points: Factory, refine_points: Factory
+    ) -> None:
+        p1 = Phase1(n=9, tolerance=4.0)
+        cp = check_points(x_min=X_MIN, y_max=Y_MAX, spacing=H, rows=p1.n, cols=p1.n)
+        cp.add(*scattered(p1.n, 1, seed=1))
+        with pytest.raises(RuntimeError, match="not frozen"):
+            refine_points(cp, *p1.args(), tolerance=1.0)
 
     def test_add_after_freeze_is_refused(self, store: Any) -> None:
         store.freeze()
