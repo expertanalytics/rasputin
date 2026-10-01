@@ -311,9 +311,10 @@ add_terrain_backend_test(test_area_collapse unit/test_area_collapse.cpp)
 # placed points (RP1, RP2, RP5 to RP8, the scan's tie-break, the unfrozen-store
 # refusal, and LatticeMesh::split_inside taking an off-node MeshVertex), and its
 # property suite (RP3's tolerance and Delaunay oracles, RP5's edge splits with
-# work on both sides of an interior edge, RP4's thread and add-order sweep). The record names RP3 and the
-# membership and tie-break tests (RP2, RP4, RP5) invariant-critical. The two
-# refine_points suites start threads; both run in the TSan job.
+# work on both sides of an interior edge, RP4's thread and add-order sweep).
+# The record names RP3 and the membership and tie-break tests (RP2, RP4, RP5)
+# invariant-critical. The two refine_points suites start threads; both run in
+# the TSan job.
 add_terrain_test(test_refinement_check_points unit/test_refinement_check_points.cpp)
 add_terrain_backend_test(test_refinement_refine_points unit/test_refinement_refine_points.cpp)
 target_link_libraries(test_refinement_refine_points PRIVATE Threads::Threads)
