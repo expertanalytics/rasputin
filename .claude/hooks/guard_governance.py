@@ -123,8 +123,11 @@ def judge_bash(command: str) -> tuple[str, list[str], str] | None:
     if simples is not None:
         targets = [t for s in simples for t in (*s.writes, *shell_scan.candidates(s))]
         # An expansion counts as matching .git: $(git rev-parse --git-common-dir)/harness.
+        # Backstop, as before h4: a line that writes anything and names the state
+        # dir is denied, however the path reaches the write (export, read, cd).
         if (any(HARNESS_PATH.search(shell_scan.static(t, ".git")) for t in targets)
-                or any(runs_away(s) for s in simples)):
+                or any(runs_away(s) for s in simples)
+                or (".git/harness" in command and any(s.writes or s.unknown for s in simples))):
             return "deny", [], ""
         # A target is judged by its static tail: $D/CLAUDE.md is CLAUDE.md.
         hits = list(dict.fromkeys(t for t in targets if governed(shell_scan.static(t))))
