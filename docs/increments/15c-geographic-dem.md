@@ -882,3 +882,27 @@ September).
 
 Still open from `15-dem-mosaic.md` and not this design's: whether commercial
 use matters for the DEM choice.
+
+## Review
+
+### Round 1, `434c374..9af0b47`: CHANGES REQUESTED (`@reviewer`)
+
+Production LOC 0 (docs only: this file +861, `15-dem-mosaic.md` +8). Prior
+art, the I/O boundary, the PR split and Q11-Q17 pass; every number and code
+claim checked against the tree. Four blocking prose edits: B1 `RefineOutcome`
+gained fields although `refine.hpp` was "not edited" (fixed by
+`PointRefineOutcome`); B2 the memory caveat understated (at 17 B per node the
+basin fits at no tolerance); B3 the acceptance did not name `tools/bench.py`'s
+benchmark and thread-scaling sweep for either PR; B4 a line count this branch
+made false.
+
+### Round 2, `9af0b47..529fe08`: APPROVED (`@reviewer`)
+
+Production LOC 0 (+55 / −32 in this file). B1-B4 fixed; suggestions taken.
+Estimates: 15c-1 370 (514 at +39 %, 592 at +60 %), 15c-2 383 (532, 613),
+each under 700, together about 750, so two PRs. The deviation (`refine_points`
+reads the store's `geometry()` instead of taking `grid`) accepted: a mismatch
+can no longer be expressed. Gates green. CI not yet run. Non-blocking, for the
+red step: name `geometry()` beside `for_each_in` in D4 and the comment at the
+`refine_points` signature; "`grid` is only the frame" → "the store's
+`geometry()` is only the frame"; add a ±inf case to CP1.
