@@ -1042,7 +1042,12 @@ committed only after its licence is read and quoted in the fixture `NOTICE`
   onto its 30 m EPSG:31983 target grid by this increment's own `resample`
   (D3), and `rasputin catchment --dem <that grid> --seed X Y` (no `--lakes`:
   the pour node is the DEM node nearest the seed) gives the outline, in
-  EPSG:31983, reduced at 22's default `--outline-tolerance`. `@tester`
+  EPSG:31983, reduced at 22's default `--outline-tolerance`. Because
+  `resample` does not exist when the red suite is written, the fixture is
+  committed with 15c-2's green work as its own commit (a test amendment,
+  `docs/increments/README.md` step 2-3), produced by the green `resample`
+  and recorded in the `NOTICE`; until then G6's realism case is marked as
+  awaiting the fixture. `@tester`
   chooses the seed on a channel so that the whole catchment lies inside the
   extract (22 refuses a catchment cut by the data's edge), and the fixture's
   `NOTICE` records the command, the seed and the commit that ran it. It

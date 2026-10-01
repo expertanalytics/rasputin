@@ -64,7 +64,7 @@ changes the design, the section named does the rework.
   measured" stay as the record B1 was ruled on; nothing in the design uses
   them. Pointer, not a ruling on that record: the raster-to-vector research
   answers its design question 2 with "Rivers as constraints come from the
-  BHO drainage lines" (`docs/research/raster-to-vector.md@4b085a5:524`, on
+  BHO drainage lines" (`docs/research/raster-to-vector.md@4b085a5:523-524`, on
   branch `worktree-raster-vector`); that answer is to be revisited, and
   DEM-derived drainage is the likely replacement.
 - **B2 and B3: replaced by a partition of the domain's bounding box** into
@@ -784,8 +784,8 @@ Decided here; Ola may overrule (B14).
   p90 over mean density at 1 m), P = 64 gives 1.32 at J = 10 and 1.51 at
   J = 16; P = 32 would give 1.63 and 2.02. `P` counts cells, and fewer
   pieces meet the domain (40 of 60 on the Velhas piece), some of them
-  partial, which helps the balance and lowers the count. Arithmetic on a
-  bound, for `@perf` to measure (23d).
+  partial, which helps the balance and lowers the count. This is an
+  estimate with r at the p90; the largest piece's r is for 23d to measure.
 - **`N_MIN = 2^19` nodes (724², 21.7 km at 30 m, 7.2 km at 10 m), the
   minimum: nothing to win below it.** The Velhas piece refines at 0.42 µs per
   node on one thread at 1 m (12.95 s for 30.9 M), so a domain at the
@@ -1238,8 +1238,10 @@ on the rare deferred path (below).
   split at corners, each with its two pieces and its vertex chain oriented as
   the seam pass orients it (`a < b` by `(x, y)`). A function of the input.
 - **Zones.** Each triangle of a finished piece is given to exactly one of
-  the piece's units: the one nearest its centroid (distance to the unit's
-  polyline; ties to the lower unit id). The zones of a piece are disjoint and
+  the piece's units: a triangle with an edge on a unit goes to that unit
+  (to the lowest-numbered one if it has edges on two, at a corner); any
+  other to the unit nearest its centroid (distance to the unit's polyline;
+  ties to the lower unit id). The zones of a piece are disjoint and
   cover it, so two units never claim one triangle.
 - **Bands.** The band of unit `u` on one side is the triangles of `zone(u)`
   within `R` rings of `u`'s vertices (ring 1: triangles with a vertex on `u`;
@@ -1277,13 +1279,10 @@ own coordinates, J6 and D3, so the values are those the pieces used):
    now, so feet and splits on them are allowed. A node lying exactly on a
    fence edge is skipped, which loses nothing: a fence edge never changes,
    so the mesh there is what it was when that node was within tolerance.
-4. **Fence check**: for each free fence edge, the exact incircle test of its
-   inside triangle against the recorded outside vertex. A strict violation
-   (an exact tie is not one) means the Delaunay repair wants to cross the
-   fence; it is recorded as **deferred** (below), never ignored.
-5. **Thinning**, in a fixed order along `u` from its `a` end: each vertex
+4. **Thinning**, in a fixed order along `u` from its `a` end: each vertex
    the seam pass placed on `u` (every vertex of `u` but its two corners) is a
-   candidate. If its star lies in the band and every edge at it is free:
+   candidate. A candidate whose star leaves the band is deferred. If its star
+   lies in the band and every edge at it is free:
    - retriangulate the star's polygon on the side: ears by exact orientation,
      the first valid ear in the polygon's order, then Lawson flips inside the
      hole with exact incircle and the tree's tie rule (Devillers 2002: the
@@ -1295,8 +1294,12 @@ own coordinates, J6 and D3, so the values are those the pieces used):
    - if every one is within tolerance, commit (the star's k triangles become
      k − 2, the vertex is retired); otherwise nothing changes. Nothing has to
      be undone, because nothing is written before the check.
-   A candidate whose star leaves the band is deferred. Removal never moves a
-   vertex and never touches a constraint.
+   Removal never moves a vertex and never touches a constraint.
+5. **Fence check**, run over the band as it stands after thinning: for each
+   free fence edge, the exact incircle test of its inside triangle against
+   the recorded outside vertex. A strict violation (an exact tie is not one)
+   means the Delaunay repair wants to cross the fence; it is recorded as
+   **deferred** (below), never ignored.
 6. **Write** the cleaned band (triangles, vertices, retired vertices) and the
    unit's deferred items, sorted.
 
@@ -1307,10 +1310,11 @@ state, since both sides may have changed; a violation joins (a);
 edge, taken from the current state (cleaned bands, and the piece's core when
 needed, read one piece at a time), fenced, re-legalised, fence-checked and
 grown (`R` doubled) until no violation is left, then rescanned as in step 3;
-(b) **deferred thinning candidates**, as step 5 over the current state;
+(b) **deferred thinning candidates**, as step 4 over the current state;
 (c) **corners where three or more pieces meet** inside the domain: a lattice
 crossing the cut added, so a removal candidate like any seam vertex, its
-star taken from the cleaned bands of the units around it. A corner where a
+star taken from the cleaned bands of the units around it; any seam edge at
+the corner that no band held loses its seam bit and is legalised here. A corner where a
 seam meets the outline, a hole or a feature is an input-constraint vertex
 and is **kept**: removing it would merge two constrained edges that the
 noder's 1 mm snap need not leave collinear. So one artificial vertex stays
@@ -1320,8 +1324,12 @@ the stitcher applies.
 **Why it is correct.**
 - *Delaunay across the seams.* After the final pass every free edge of the
   stitched mesh is locally Delaunay: edges in no band were already
-  (constrained Delaunay in their piece, and no seam edge among them), band
-  edges by steps 2-3, fence edges by step 4 (against an outside that did not
+  (constrained Delaunay in their piece, and no seam edge among them: every
+  edge of `u` is inside band(u) or one of its fence edges, since a triangle
+  with an edge on `u` is in `zone(u)`; the one exception, an edge at a
+  corner whose two triangles each also have an edge on a lower-numbered
+  unit, is taken by the final pass's (c)), band edges by steps 2-3, fence
+  edges by step 5, run after thinning (against an outside that did not
   change) or by the final pass's (a0) and (a) (where it may have), and holes
   by Devillers' result. Locally Delaunay at every free edge is a
   constrained Delaunay triangulation with respect to the remaining
@@ -1594,7 +1602,7 @@ Modules to watch: `pieces.py` at 150 (split `fans` out past 220),
 `stitch.py` at 160 after 23g, and `vertex_removal.hpp` at 110, whose ear
 search stays simple because the hole is a star polygon. 23b assumes the edge
 strip has written `constraint_check_points`; if 23b came first it would carry
-about 40 more. Ola's estimate for B4 (b) was roughly 300 lines; with
+about 40 more. B4 (b)'s estimate as asked was roughly 300 lines; with
 thinning, the final pass and the band records it is about 630 over 23f and
 23g, which is why it is two PRs. 23e is not estimated: it gets its own
 design with the basin's inputs.
@@ -2052,6 +2060,10 @@ rings, and 23g's gap thresholds (+1 % triangles, +25 % vertices near former
 seams, half the worst angle).
 - **(a) As decided. Recommended.** The arithmetic is in the record, and 23d
   and 23g measure what it assumed (per-piece cost, balance, deferrals).
+  Its cost: every window of 2^20 nodes or more (about 105 km² at 10 m,
+  944 km² at 30 m) is cut by default, Bygdin at 10 m and the 1 m benchmark
+  tile included, so their default meshes change (cleaned along the seams
+  from 23g on); `--pieces 1` gives today's mesh.
 - (b) A larger `N_MIN`, `2^21`: domains up to 4.2 M nodes stay whole (Bygdin
   at 10 m most likely among them), but `--pieces` then decides the count only
   over a twofold range of sizes, and the Velhas piece gets 3 × 5 cells instead
