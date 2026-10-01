@@ -8,6 +8,18 @@ and 15c is to be redesigned on Q6's ruling; Q7 and Q8 follow from it; Q10 was
 ruled the same day. Written by `@architect` before
 `@tester`, per `docs/increments/README.md` step 1.
 
+**15c is redesigned in `docs/increments/15c-geographic-dem.md`** (2026-10-01,
+on Q6 and Q9). R8, R10, I9-I11, and this file's 15c tests, LOC and acceptance
+are superseded there; 15d stays designed here, and is
+superseded at basin scale by `23-basin-scale.md` (ruled by Ola 2026-10-01). Ola's rulings of 2026-10-01
+on Q11-Q17 are recorded there too, including the basin-scale direction (Q15)
+that revisits Q9's dense canvas and which 15d is to be re-read against.
+
+**15d is re-read in `docs/increments/23-basin-scale.md`** (2026-10-01, design,
+ruled by Ola 2026-10-01): its window decoding (R3 [15d], the T-window test) moves into
+23a-1 as `decode_window`; its basin-memory plan (R7 [15d], one dense canvas)
+is superseded by pieces cut along constraints.
+
 ## Ruled by Ola
 
 - **2026-09-27, priority:** "My priorities are to get the Norwegian cases
@@ -619,6 +631,7 @@ the 72 GiB union box would be refused by the cap, whose message says
   1 GiB. All of Norway at 10 m (72 GiB box, 24 GiB of tiles): no. That is DD's
   or a block-sparse raster's problem (R12), not this increment's.
 
+*Superseded at basin scale (`23-basin-scale.md`, ruled by Ola 2026-10-01).*
 **[15d] The basin.** Its box is 8.6 GiB at float32 (B5), under the 16 GiB cap
 on Ola's Mac. So **the basin is meshable in one piece with a dense canvas on
 a 32 GiB machine**, with two conditions:
@@ -641,6 +654,7 @@ a 32 GiB machine**, with two conditions:
 > **Superseded 2026-09-30:** Ola ruled (A), projection onto the target TIN CRS
 > and resampling, plus a final check against the source DEM; see "Ruled by
 > Ola". The text below, which recommends (C), is kept as the record.
+> The design that replaces it is `docs/increments/15c-geographic-dem.md`.
 
 **The question.** The core wants numbers in one Cartesian frame, roughly in
 metres, with square cells if 21b's integer incircle is to apply (`dx == dy`,
@@ -758,6 +772,9 @@ into the frame. A domain given in longitude and latitude, like BHO's is
 likely to be, has edges straight in the frame, exactly.
 
 ### R10. The output CRS [15c; basin, after Norway]
+
+> **Superseded 2026-10-01** by `docs/increments/15c-geographic-dem.md`: the
+> mesh is computed in the target CRS, so nothing is transformed on output.
 
 - **`--out-crs TEXT`** (anything `pyproj.CRS.from_user_input` accepts).
   - Projected DEM: optional, and the default is the DEM's CRS. The output is
