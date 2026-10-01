@@ -10,7 +10,8 @@ ruled the same day. Written by `@architect` before
 
 **15c is redesigned in `docs/increments/15c-geographic-dem.md`** (2026-10-01,
 on Q6 and Q9). R8, R10, I9-I11, and this file's 15c tests, LOC and acceptance
-are superseded there; 15d stays designed here. Ola's rulings of 2026-10-01
+are superseded there; 15d stays designed here, and is
+superseded at basin scale by `23-basin-scale.md` (not yet ruled). Ola's rulings of 2026-10-01
 on Q11-Q17 are recorded there too, including the basin-scale direction (Q15)
 that revisits Q9's dense canvas and which 15d is to be re-read against.
 
@@ -630,6 +631,7 @@ the 72 GiB union box would be refused by the cap, whose message says
   1 GiB. All of Norway at 10 m (72 GiB box, 24 GiB of tiles): no. That is DD's
   or a block-sparse raster's problem (R12), not this increment's.
 
+*Superseded at basin scale (`23-basin-scale.md`, not yet ruled).*
 **[15d] The basin.** Its box is 8.6 GiB at float32 (B5), under the 16 GiB cap
 on Ola's Mac. So **the basin is meshable in one piece with a dense canvas on
 a 32 GiB machine**, with two conditions:

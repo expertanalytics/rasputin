@@ -718,7 +718,8 @@ The store is 16 B per source node: 208 MB on the piece, 11.7 GB
 for the basin's 734 M ANADEM nodes. D1 drops the target canvas (8.6 GB at
 basin scale) before the store is built, so phase 2's peak is store plus mesh
 (about two copies of it: phase 1's output and phase 2's lattice mesh, which
-the basin-scale design measures), not store plus canvas plus mesh. Against Surprise 1's floors (13 GiB at 10 m,
+`23-basin-scale.md` measures as peak RSS per piece in its "@perf
+acceptance"), not store plus canvas plus mesh. Against Surprise 1's floors (13 GiB at 10 m,
 19 GiB at 5 m, canvas included), phase 2 moves the basin's peak to roughly
 16 GiB at 10 m and 22 GiB at 5 m: floors plus arithmetic, not measurements.
 Those floors count the canvas at 4 B per node; the piece's own intercept was

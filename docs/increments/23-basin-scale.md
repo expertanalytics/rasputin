@@ -81,8 +81,14 @@ facts in `15c-geographic-dem.md` "Measured by @architect" are not repeated):
   `Last-Modified: Sun, 07 Jun 2026 02:04:54 GMT`, and **`ETag:
   "00000000000000000000000000000000-1"`, a placeholder**: the ETag cannot
   detect a changed file;
-- tifffile parses every one of the 11 pages from the first 8 MiB alone (a
-  reader that refuses any read past the prefix did not fire). The
+- tifffile parses every one of the 11 pages from the first 8 MiB alone, with
+  every page's offsets numbering its blocks and no read past the prefix (the
+  strict wrapper records any; tifffile catches the refusal and logs it rather
+  than raising, so the record and the offsets, not an exception, are the
+  check). Cut to 64 KiB or 1 MiB, tifffile still returned 11 pages, logged
+  missing tags and gave pages with no offsets (1 MiB: 0 offsets for 188,638
+  blocks on the full page), and the wrapper recorded nothing: the offsets
+  check is the one that fires, and the probe failed on it. The
   full-resolution page has 188,638 blocks of 512²; image data starts at byte
   23,716,931,662 (the overviews come first); blocks are in row-major order
   with small gaps between them;
@@ -305,6 +311,26 @@ comes from the source named. **recalled**: from memory, unchecked.
     times to achieve fully independent computation". *Gives:* the closest
     precedent for our seam pass computed by both neighbours. *Lacks:* a
     screen-space heuristic, no error guarantee, no constraints.
+  - Zygmunt and Róg, "New approach towards Digital Elevation Model data
+    generalisation using the Douglas-Peucker algorithm and Delaunay
+    triangulation based on characteristic boundary points", *Measurement*
+    260:119849, 2026, doi:10.1016/j.measurement.2025.119849 (Crossref;
+    found by `@reviewer`); preprint SSRN 2023, doi:10.2139/ssrn.4639984.
+    **Secondary:** the journal is closed (OpenAlex: no open copy),
+    ScienceDirect and SSRN both answered 403, and neither record carries an
+    abstract, so what follows is from web search summaries of the abstract:
+    characteristic points are taken along the dataset borders by
+    Douglas-Peucker under a Z-tolerance, so that neighbouring datasets share
+    identical boundary points; each dataset is then triangulated by recursive
+    Delaunay passes until the Z-tolerance holds; adjacent TINs "can be easily
+    joined ... without errors on the boundaries"; sequential and parallel
+    runs are reported. *Gives:* on the summary, the seam pass itself (a
+    vertical Douglas-Peucker over a shared border, both sides identical,
+    before the interior) and a tolerance-driven interior. *Unknown without
+    the full text:* whether borders can be constraints or breaklines (seams
+    cut along features), whether the tolerance holds between grid nodes or
+    only at them, and whether the output is independent of order and thread
+    count.
 - **Grey literature found by web search** (patents read on their Google
   Patents pages through a summarising fetch; claims not read in full):
   - Starhill et al. (Microsoft), "Maintaining consistent boundaries in
@@ -312,8 +338,8 @@ comes from the source named. **recalled**: from memory, unchecked.
     component meshes of a general 3D model simplified in parallel by edge
     collapse, with a boundary collapse whose result "is independent of the
     data on the interior of the component mesh and enables shared boundaries
-    of adjacent component meshes to simplify identically", "with no
-    additional synchronization". The same principle as our seam pass, for
+    of adjacent component meshes to simplify identically", "without the
+    need to synchronize the component meshes". The same principle as our seam pass, for
     general meshes, with no tolerance.
   - Godzaridis and St-Pierre (Bentley Systems), "Multi-resolution tiled 2.5D
     Delaunay triangulation stitching", US 10,255,716 B1, granted 2019-04-09:
@@ -361,13 +387,16 @@ communication (the Microsoft patent, and Bertilsson's thesis, which computes
 it on both sides); tile borders simplified first as polylines by a vertical
 error, then the interior (Campos et al., point-set route, first tile owns the
 border); the exact sup-norm vertical error over grid points and grid-line
-crossings (Hoppe 1998). Not found: the combination, a terrain TIN whose
-vertical tolerance is guaranteed on the seams as well as inside the pieces,
-built with no communication and an output independent of order and thread
-count. That would be a claim about a combination only. Before it is made
-anywhere public: a Google Scholar and Scopus search (web search is not a
-bibliographic index), the Campos et al. paper itself (only its code and wiki
-were read), and Galtier and George 1996 (not reached).
+crossings (Hoppe 1998). Closest found: Zygmunt and Róg (2026), which on the
+search summary already reduces dataset borders by a vertical Douglas-Peucker
+so that neighbours share identical boundary points, then triangulates each
+dataset to the Z-tolerance. What remains unconfirmed until its full text is
+read: constraints (seams cut along breaklines), the exact sup-norm between
+grid nodes, and an output independent of order and thread count. No claim is
+made. Before any is made public: the full text of Zygmunt and Róg, a Google
+Scholar and Scopus search (web search is not a bibliographic index), the
+Campos et al. paper itself (only its code and wiki were read), and Galtier
+and George 1996 (not reached).
 
 Searched, 2026-10-01. First pass: Crossref bibliographic queries for every
 citation, plus "parallel construction of triangulated irregular network from
@@ -397,7 +426,10 @@ independent refinement no communication vertical tolerance guaranteed on
 shared boundary", "Delaunay refinement terrain approximation parallel
 subdomain height error separators refined first", "heremaps tin-terrain
 zemlya tiles borders", "Delatin OR Martini RTIN tiles max error cracks
-skirts", "streaming simplification large meshes processing sequences", and
+skirts", "streaming simplification large meshes processing sequences", "parallel TIN
+generation large DEM partition blocks boundary vertices shared error
+threshold greedy insertion seamless" (run by `@reviewer`; found Zygmunt and
+Róg), and
 the patent title above. Found: the works above. The hydrology searches found
 the parallel tRIBS of Vivoni, Mascaro, Mniszewski, Fasel, Springer, Ivanov and
 Bras, "Real-world hydrologic assessment of a fully-distributed hydrological
@@ -650,8 +682,11 @@ that each neighbour computes identically.** No exchange, no rounds.
    between `a` and `b` and `c` is off the edge's line by more than rounding;
    the points lie on the edge to rounding, and no vertex's 1 mm snap cell
    meets an edge it is not an endpoint of (the noder's guarantee 14(b),
-   `05-noder.md`), so `c` is at least about half a millimetre off the line and
-   the fan is valid. If it is not, refine's own check refuses
+   `05-noder.md`), which keeps `c` half a millimetre from the segment, not
+   from its line; on a grid-line seam the `pi` are exact nodes on an
+   axis-parallel line, so the fan is valid whenever `(a, b, c)` is; on a
+   general seam a flat triangle can leave `c` within rounding of the line.
+   If it is not valid, refine's own check refuses
    it (`NotCounterClockwise`): loud, never a silent difference between two
    pieces.
 4. **Refine with the seam frozen** (23b). `RefineOptions` gains
@@ -670,7 +705,8 @@ that each neighbour computes identically.** No exchange, no rounds.
      as `coincident` is counted);
    - the edge strip makes no check points on frozen edges;
    - `LatticeMesh::split_edge` asserts that its edge is not frozen, so a
-     sixth path added later cannot do it silently.
+     sixth path added later cannot do it silently in a debug build (the
+     assertion is untested, FE6).
 5. **Heights on seams.** Each piece writes its seam vertices' z from the seam
    record (the seam pass's output), not from its own bilinear evaluation, so
    both pieces write the same z bit for bit (K4). Inside refine the planes at
@@ -794,8 +830,10 @@ list is sea, recorded as "no tile", not as missing.
 ### Planning (`fetch/plan.py`, pure)
 
 - **The header** of each object: read a prefix (1 MiB, doubling) until
-  tifffile parses every page without reading past it. ANADEM needs at most
-  8 MiB (measured). The prefix is cached as `header.bin`.
+  every page parses with the wrapper recording no read past the prefix and
+  every page's offsets numbering its blocks; tifffile does not raise on a
+  short prefix, it logs and returns a page without offsets (measured at
+  64 KiB and 1 MiB). ANADEM needs at most 8 MiB (measured). The prefix is cached as `header.bin`.
 - **The needed region** in the source CRS: the same function 15c's
   `source_region` uses (the target window's image, grown by two source
   cells), applied to the whole domain. Fetch and mesh call this one function,
@@ -860,8 +898,11 @@ Network code lives only in `fetch/` (`http.py` is the one importer of
 `urllib.request`); cache files are opened only in `io/repository.py`; CRS
 stays in Python (the manifest records the header's CRS, checked against the
 catalogue's); C++ sees decoded windows as numbers. Two checks make it
-testable: an import test that no module on `rasputin mesh`'s path imports
-`tin_engine.fetch` or `urllib.request`, and a mesh run with `socket.socket`
+testable: no `tin_engine` module on `rasputin mesh`'s path imports
+`tin_engine.fetch` or `urllib.request` in its own source (an AST check over
+`src_python/tin_engine`; `sys.modules` cannot be the oracle, because pyproj
+imports `urllib.request` itself), with `cli.py` importing `tin_engine.fetch`
+lazily inside the fetch command; and a mesh run with `socket.socket`
 replaced by one that raises (K7). The fetch step records the source's credit
 in the manifest, and the mesh file's `elevation_source` carries it.
 
@@ -953,7 +994,7 @@ plus phase 2, decoding 3,061 blocks and writing.
   two additions: its check-point generator is written as one function
   (`constraint_check_points`, in C++) that the seam pass reuses, and it makes
   no check points on frozen edges.
-- **15d's window decoding survives** (15 R3 [15d] and its T-window test) and
+- **Under B12 (a), 15d's window decoding survives** (15 R3 [15d] and its T-window test) and
   moves into 23a-1 as `decode_window` over a `BlockSource`. **15d's basin
   memory plan does not** (15 R7 [15d]: the basin "meshable in one piece with
   a dense canvas", 8.6 GiB): superseded by pieces. 15d's whole-basin run moves
@@ -975,7 +1016,8 @@ plus phase 2, decoding 3,061 blocks and writing.
   bit-identical to master's: 23b and 23c change nothing on that path.
 - **K2. Frozen means frozen.** In a piece, no pass inserts a vertex on a
   frozen edge: refine's split, feet, the quality pass, `refine_points` (phase
-  2 and the edge strip). `split_edge` asserts it.
+  2 and the edge strip). Pinned by FE2-FE5; `split_edge`'s assertion is a
+  debug guard against a later path, untested (FE6).
 - **K3. The guarantee over the union.** Every valid DEM node inside the
   domain is within `--tolerance`: inside a piece by refine, on a seam by the
   seam pass; on a grid-line seam at every point against the bilinear
@@ -1074,6 +1116,12 @@ own inputs. Proposed in its place:
 10. **23e and the basin's own inputs**: natural cuts, BHO rivers as
     polylines, MapBiomas land cover.
 
+**Against a ruling.** This reverses part of Q14's placement ruling (the
+edge strip right after 15c and before 15d, `15c-geographic-dem.md`, Q14 and
+"The edge strip"): under this order 23a-1, which replaces 15d, and 23a-2 land
+between 15c-1 and 15c-2, and the edge strip after both. B12 (b) keeps the
+ruling.
+
 **Why this order.** 23a has no dependency on the core and gives every later
 step real ANADEM data, which is what Ola asked the fetch step for ("or our
 performance will drop while we wait for download"). 23b needs `refine_points`
@@ -1164,8 +1212,11 @@ equality tests (DC2-DC4, DC6). The rest is ordinary.
 - **W4, the refusal**: a missing block is refused before any block is
   decoded (a `BlockSource` double that fails on `block()`), and the message
   names the fetch command with the domain and cache given.
-- **W5, offline**: the import test (nothing on `rasputin mesh`'s path imports
-  `tin_engine.fetch` or `urllib.request`); and a mesh from a prepared cache
+- **W5, offline**: no `tin_engine` module on `rasputin mesh`'s path imports
+  `tin_engine.fetch` or `urllib.request` in its own source (an AST check over
+  `src_python/tin_engine`; pyproj imports `urllib.request`, so `sys.modules`
+  cannot be the oracle), and `cli.py` imports `tin_engine.fetch` only inside
+  the fetch command; and a mesh from a prepared cache
   with `socket.socket` replaced by one that raises succeeds.
 - **W6, overlaps**: `BlockWindows` over two overlapping objects equals 15a's
   `assemble` on the same objects.
@@ -1189,7 +1240,9 @@ equality tests (DC2-DC4, DC6). The rest is ordinary.
 - **F6, refusals**: 200 instead of 206; a short body; a changed length or date;
   4xx not retried; 5xx retried three times, then refused.
 - **F7, the header**: a header longer than the first prefix makes the reader
-  double the prefix; the parse never reads past what was fetched.
+  double the prefix; the parse never reads past what was fetched; a prefix
+  that cuts the full page's offset array is detected (tifffile alone would
+  return the page with no offsets).
 - **F8, GLO-30**: a tile missing from the tile list is "no tile", not missing.
 
 ### 23b (C++ Catch2 and through the binding)
@@ -1206,7 +1259,11 @@ equality tests (DC2-DC4, DC6). The rest is ordinary.
   counts it.
 - **FE5, `refine_points`**: a point exactly on a frozen edge is not inserted;
   `on_frozen` and its error are reported.
-- **FE6**: `split_edge` on a frozen edge trips the assertion (debug build).
+- **FE6**: untested, as `EdgeProperties::bit`'s precondition is
+  (`tests/cpp/unit/test_edge_properties.cpp`: an assert aborts the process
+  and this tree has no death-test harness; Release CI defines `NDEBUG`).
+  K2 is pinned by FE2-FE5. A harness is not budgeted in 23b: it would be the
+  tree's first, for one assertion that guards a path no caller takes.
 - **SP1, a grid-line seam**: the check points are the nodes on it; after
   `refine_seam`, the error is within tolerance at every node, and at 1,000
   points along the line against a bilinear surface computed in NumPy
@@ -1218,6 +1275,9 @@ equality tests (DC2-DC4, DC6). The rest is ordinary.
   check point with a nonzero error; ties go to the smallest parameter.
 - **SP3, sameness**: the edge given reversed, and the strip window shifted by
   whole blocks, give the same output bit for bit.
+  In 23c, on the projected-mosaic path, a case where two pieces' windows
+  select different tile sets around one seam: both pieces get the same seam
+  points (read from the files, as DC2 does).
 - **SP4, the bound**: insertions never exceed check points; NoData stencils
   are skipped and counted.
 
@@ -1244,8 +1304,8 @@ equality tests (DC2-DC4, DC6). The rest is ordinary.
 - **DC6, the main session's claim, as an equality**: on a node-only case (a
   rectangle on nodes, no features, grid-line seams, no quality start, no
   feet), the decomposed mesh equals, as a set of world-coordinate triangles,
-  one `refine` run over the whole start triangulation with the same seams
-  frozen. Why equality can hold: pieces are slices of that triangulation in
+  one `refine` run over the whole start triangulation with the same
+  seam-pass points fanned in and the same seams frozen. Why equality can hold: pieces are slices of that triangulation in
   its order, and every operation in a piece is the same as in the whole run,
   restricted to the piece; with only node vertices every coordinate is an
   integer in both frames, so no rounding differs. Control: the whole run
@@ -1311,17 +1371,22 @@ The literature pass with web search (2026-10-01, "Prior art") changed no
 recommendation; it added a note to B4 and an option (c) to B5.
 
 **B1. Which cuts first?**
+Ola's direction (2026-10-01) was to cut on constraint edges; (a) does cut on
+constraint edges, but ones the plan adds, not ones the input has, and the
+pieces are not hydrological units.
 - **(a) Global grid lines first (23c); BHO's Pfafstetter units later (23e),
   with the basin's own inputs. Recommended.** Grid lines work for any input,
   Norway included, cost nothing in quality (no foot can trigger next to
   them), give an exact seam pass and exact seam heights, and need no new
   data. Their price is lines in the mesh that mean nothing hydrologically
-  (B4).
+  (B4), and the mesh near a seam differs from an uncut run's (seam vertices
+  placed by the 1D pass; to be measured in 23c's acceptance, cut against
+  uncut).
 - (b) BHO units first. The pieces are hydrological units, which is what a
   basin model wants as output; but it needs BHO for the whole basin, brings
   a vertex every ~107 m along each seam (about +37 % vertices at 50 m on the
-  piece at level 7, arithmetic), and loses feet along seams. About 250 lines
-  more before the first basin run.
+  piece at level 7, arithmetic), and loses feet along seams. Its size is not
+  estimated (23e gets its own design).
 - (c) Both in 23c: over the ceiling; two PRs anyway.
 
 **B2. When is a run cut?**
@@ -1363,8 +1428,9 @@ recommendation; it added a note to B4 and an option (c) to B5.
 **B5. How two pieces agree on a seam.**
 - **(a) The seam is frozen after a one-dimensional seam pass, which both
   neighbours compute identically. Recommended.** No exchange and no rounds;
-  each piece job is self-contained. On grid-line seams it costs nothing; on
-  natural seams it gives up feet next to the seam.
+  each piece job is self-contained. On grid-line seams no feet are lost (the
+  seam vertex count against an uncut run is measured in 23c's acceptance);
+  on natural seams it gives up feet next to the seam.
 - (b) Exchange on shared segments (PCDM, the protocol Ola described): splits
   requested by either side applied to both, in rounds until none is new.
   Keeps feet on natural seams; needs rounds, a merge step, resumable refine
@@ -1422,9 +1488,13 @@ Ola's input model.
 **B12. The order of work** in "Order of work and PR split".
 - **(a) As proposed: 15c-1, 23a-1, 23a-2, 15c-2, the edge strip, 23b, 23c,
   23d, the basin run, 23e. Recommended.** The fetch step lands early, so
-  every later step runs on ANADEM.
+  every later step runs on ANADEM. This reverses part of Q14's placement
+  ruling (the edge strip right after 15c and before 15d): under (a) 23a-1,
+  which replaces 15d, and 23a-2 land between 15c-1 and 15c-2, and the edge
+  strip after both.
 - (b) ROADMAP's current order (15c-1, 15c-2, the edge strip, then 23), with
-  15c-2's acceptance on a one-off ANADEM cut.
+  15c-2's acceptance on a one-off ANADEM cut. (b) keeps Q14's placement as
+  ruled.
 
 **Decided here, which Ola may overrule:** grid lines on the computation
 lattice as artificial cuts; piece ids `(j, i, k)`; the seam pass computed by
