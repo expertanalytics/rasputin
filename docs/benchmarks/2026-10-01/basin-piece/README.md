@@ -320,3 +320,15 @@ and after each block. `runs/velhas76949_glo30/logs/`: each run's output and
 `--stats`; the box samples' logs are in `logs.tar.gz`. `data_meta/`: the
 window's and grid's metadata, the B6-style check and checksums.
 `build_and_machine.json`: commit, build and machine.
+
+## Review
+
+- **Round 1, `838796c..46eaaa3`: CHANGES REQUESTED** (`@reviewer`). Production
+  LOC 0. Five blocking prose edits: B1 credits for GLO-30 and BHO in NOTICE.md
+  and here; B2 the 5 m memory figure is a floor; B3 the edge strip is unchecked
+  for a directly meshed DEM too; B4 Reproduce commands for Surprises 4 and
+  determinism; B5 the interval's scope and the corrected tile list in
+  `docs/increments/15-dem-mosaic.md`. Every re-run number reproduced exactly.
+- **Round 2, `46eaaa3..acdfce0`: APPROVED** (`@reviewer`). Production LOC 0.
+  All five fixed as asked; every new number reproduced; ruff, ruff format and
+  the governance gates green. CI has not run: the branch is not pushed.
