@@ -489,8 +489,8 @@ itself):
   about 5.2 M insertions, about 1 µs each. Phase 2's ~2.9 M first-pass
   violators on the piece (22.30 % of 13.0 M) would be ~3 s, plus something for
   the incircle: phase 2's vertices are off-node, so 21b's integer incircle
-  does not answer for them, and 21b measured that path at 15 % of refine.
-  Say 3-4 s.
+  does not answer for them; 21b's integer incircle cut refine by about 15 %
+  at 8 threads, so phase 2 loses that gain. Say 3-4 s.
 - *Scans.* Phase 1's scans total about 1.4 s at 1 m (6.33 s refine less the
   4.9 s split). Phase 2 scans every triangle once over 13.0 M points, then
   only touched ones: about 1-2 s.
@@ -513,9 +513,12 @@ basin scale) before the store is built, so phase 2's peak is store plus mesh,
 not store plus canvas plus mesh. Against Surprise 1's floors (13 GiB at 10 m,
 19 GiB at 5 m, canvas included), phase 2 moves the basin's peak to roughly
 16 GiB at 10 m and 22 GiB at 5 m: floors plus arithmetic, not measurements.
-So **one process on 32 GB reaches the basin at about 5 m and above, and not
-at 1-2 m with or without the final check**; below that the route is domain
-decomposition (ROADMAP item 2.4). This bears on the basin tolerance (Q15).
+Those floors count the canvas at 4 B per node; the piece's own intercept was
+about 17 B per grid node (Surprise 1), and at that rate the basin does not fit
+at 5 m either. So **one process on 32 GB may reach the basin at 5-10 m and
+cannot at 1-2 m, with or without the final check**; below that the route is
+domain decomposition (ROADMAP item 2.4). 15d measures it. This bears on the
+basin tolerance (Q15).
 
 ## The edge strip (Surprise 3), placed
 
@@ -638,15 +641,147 @@ than a shared one; the memory cap sums both canvases and the store.
 
 ## PR split and LOC
 
-(to be written)
+Counted in `CLAUDE.md` §2's unit. Estimates; increment 10 came in 39 % over
+and 15a's `mosaic.py` 60 % over, so the worst case applies 39 % and the
+largest single module is flagged.
+
+| | what | est. | worst |
+|---|---|---:|---:|
+| **15c-1** | **The engine: check points and the final check, in C++. No CRS anywhere** | | |
+| | `include/terrain/refinement/check_points.hpp`: store, `add`, `freeze`, query | 75 | |
+| | `include/terrain/refinement/refine_points.hpp`: `scan_points` | 70 | |
+| | `refine_points.hpp`: the loop, coincident points, output | 105 | |
+| | `include/terrain/mesh/lattice_mesh.hpp`: `split_inside(MeshVertex)` | 8 | |
+| | `bindings/core.cpp`: `CheckPoints`, `refine_points`, GIL release | 75 | |
+| | `_core.pyi`: stubs | 30 | |
+| | **15c-1 total** | **363** | **505** |
+| **15c-2** | **The geographic path, in Python, ending with the final check** | | |
+| | `io/geotiff.py`: geographic 2D, degree units | 30 | |
+| | `io/models.py`: `crs`, `geographic`, `epsg: int \| None` | 15 | |
+| | `raster.py`: the gate; `mosaic.py`: messages through `meta.crs` | 10 | |
+| | `target_grid.py`: `TargetGrid`, spacing, extent, `source_region` | 80 | |
+| | `target_grid.py`: `SourceWindows`, `TileWindows`, `resample` | 55 | |
+| | `target_grid.py`: `check_point_blocks` | 35 | |
+| | `dem_input.py`: `target_crs`, the reprojected branch, the memory sum | 40 | |
+| | `final_check.py`: the two phases and the store | 40 | |
+| | `cli.py`: `--out-crs`, Q11's refusal or fit, `_dem_mesh` through `final_check`, fields, stats rows | 75 | |
+| | **15c-2 total** | **380** | **530** |
+
+`target_grid.py` at 170 is the module to watch (15a's `mosaic.py` overran its
+estimate by 60 %). If it passes 250, `resample` and `check_point_blocks` move
+to `resample.py`.
+
+**Why this split, and this order.** 15c-1 is the risky, novel part, and it
+needs no CRS: `@tester` can drive it with scattered points and a hand-built
+start mesh, and `@perf` can confirm Norway is untouched. 15c-2 is plumbing on
+a prototype that already ran (`prep_dem.py`), and it wires the final check in
+the same PR that first lets a geographic DEM through, so **no release ever
+writes a geographic mesh without the final check**. Together they are about
+740 lines, over the ceiling, so they cannot be one PR. Q11 (b) would add
+about 30 lines to 15c-2; Q12 (a) about 5.
+
+**Acceptance class.** 15c-1 adds files under `include/terrain/refinement/`
+and touches `include/terrain/mesh/`, so the refine/mesh acceptance rule
+applies (`docs/increments/README.md`, "Acceptance"). 15c-2 changes no C++,
+but its acceptance is a measured run all the same (below).
+
+**Documentation in the same PRs** (not counted): `project_structure.md`, the
+`raster` boundary rule as restated in D6 (15c-2); `ROADMAP.md`'s 15 row at
+each merge; `NOTICE.md` and a fixture `NOTICE` if a GLO-30 or ANADEM extract
+is committed (Q17). `15-dem-mosaic.md` already points here (this branch).
 
 ## Tests for `@tester`
 
-(to be written)
+**Invariant-critical suite, for mutation testing:** 15c-1's J2 oracle (RP3)
+and the membership and tie-break tests of `scan_points` (RP2, RP4, RP5).
+Everything else is ordinary.
+
+**15c-1, C++ (Catch2) and through the binding:**
+
+- **CP1, the store.** Points are filed by cell; the iteration order after
+  `freeze` is the same for every permutation of the `add` calls; two points at
+  one position count one duplicate; `add` after `freeze` is refused; a point
+  on the far edge is in the last cell; a point outside the node rectangle is
+  dropped.
+- **RP1, a plane.** Check points whose z lie on the start mesh's planes:
+  nothing inserted, `max_error` 0 to 1e-9.
+- **RP2, one bump.** One point above tolerance inside a triangle is inserted
+  at its stored position with its own z; one below is not; one exactly at the
+  tolerance is not (`>`, as `needs_split`).
+- **RP3, J2 by an independent oracle.** Scattered points over a rough
+  function, several tolerances (0 included). After `refine_points`, a
+  brute-force check in NumPy: for every point, every output triangle whose
+  closed area contains it (barycentric, with a 1e-12 slack, so a point on an
+  edge is tested in both triangles), error at most tolerance + 1e-9. The
+  oracle does its own location, never using the store's order or the scan's
+  records (the computational-geometry skill's "producer's relation" rule:
+  borrow the predicate, not the records). It must be shown to fail: plant a
+  mesh whose z is shifted by twice the tolerance.
+- **RP4, determinism.** Threads 1, 2 and 8, and two `add` orders: identical
+  outputs, bit for bit.
+- **RP5, constraints and edges.** A point exactly on a constrained edge
+  splits it; both halves keep the bit and the mask; no constraint is ever
+  flipped; a point on the domain's boundary splits 1 → 2.
+- **RP6, void.** A start vertex with NaN z: the carve rule, `uncovered` 0 at
+  the end.
+- **RP7, coincident.** A point exactly at a start vertex with a different z:
+  not inserted, `coincident` 1, `coincident_max_error` the difference.
+- **RP8, outside.** Points outside every triangle are never inserted and
+  never raise `max_error`.
+- **RP9, the binding.** Shape and dtype refusals for `add`; the GIL is
+  released (a Python thread advances while `refine_points` runs).
+
+**15c-2, Python:**
+
+- **G1, the reader.** A geographic micro-TIFF with ANADEM's header numbers
+  (B2) reads with `geographic` true and `crs` `EPSG:4326`; geocentric, 3D,
+  user-defined and non-degree geographic keys are refused, each by name.
+- **G2, the gate.** `to_core` refuses a geographic tile; `rasputin catchment`
+  on one is a usage error.
+- **G3, the target grid.** Nodes at multiples of `h`, bit for bit; the extent
+  covers the grown domain; default spacing 30 for ANADEM's spacing and 31 for
+  GLO-30's, at 19°S.
+- **G4, resampling.** A source whose values are affine in its own index space
+  is reproduced at every target node to 1e-9 (bilinear is exact there); the
+  NoData stencil rule; identical arrays for 1 and 8 threads and two block
+  sizes.
+- **G5, check points.** Every valid source node inside the domain appears
+  exactly once, against a brute-force projection and `shapely.contains_xy`;
+  block pruning never drops an inside node (a domain with a thin arm through
+  a block corner).
+- **G6, end to end.** `rasputin mesh` on a synthetic geographic tile with a
+  rough surface, a domain in EPSG:4674 and `--out-crs EPSG:31983`: the `.vtk`
+  is in the target CRS, records D7's fields, and an independent final check
+  (the shape of `basin-piece/run_sweep.py`'s `final_check`) finds 0 source
+  nodes over tolerance, interior and strip. The same run without phase 2
+  (through the Python API) finds some: the test can fail.
+- **G7, J1.** On the committed projected tile with a domain, `--out-crs` set
+  to the DEM's own CRS writes the same bytes as no `--out-crs`.
+- **G8, refusals, header before pixels.** A geographic DEM without
+  `--out-crs` (if Q11 (a)), with the suggestion in the message; a source
+  region across ±180°; the memory sum over the cap; a domain vertex without
+  an image. None loads a tile (a repository double that fails on `load`).
+
+**Fixtures.** Synthetic micro-TIFFs for G1-G8. One real extract for G6's
+realism, if Q17 allows: about 512 × 512 source nodes of the Velhas piece
+(ANADEM if its host answers, GLO-30 otherwise), with the credits.
 
 ## Acceptance
 
-(to be written)
+- **15c-1:** CI green. `@perf`: the 1 m benchmark's mesh hash unchanged and
+  its refine time within noise of the previous run (same power state),
+  under `docs/benchmarks/<date>/`.
+- **15c-2:** `@perf` on the Velhas piece (BHO 76949; ANADEM if its host
+  answers, GLO-30 otherwise) through `rasputin mesh --out-crs EPSG:31983`, at
+  tolerances 1, 2, 5, 10, 20 and 50 m: triangles, phase 1 and phase 2 times,
+  the fixed cost (projection, store), peak RSS, and phase 2's insertions
+  against Surprise 2's first-pass counts. The independent final check of the
+  basin-piece run reports **0 source nodes over tolerance, interior and
+  strip**, and its control still fails when the mesh is shifted 15 m. Worst
+  angle and maximum degree against phase 1's. Phase 2's thread scaling at
+  1 m. For information only: phase 2 alone from the domain's start mesh
+  (through the Python API), to show what phase 1 buys.
+- For both: every gate in `CLAUDE.md` §4 green, and CI green.
 
 ## Questions for Ola
 
