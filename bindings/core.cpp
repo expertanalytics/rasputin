@@ -985,8 +985,10 @@ in outside; points at one stored position after the first in duplicates.
         .def(
             "add",
             [](CheckPoints& self, const py::array& xy, const py::array& z) {
-                if (!xy.dtype().is(py::dtype::of<double>()) || xy.ndim() != 2 || xy.shape(1) != 2
-                    || !z.dtype().is(py::dtype::of<float>()) || z.ndim() != 1 || z.shape(0) != xy.shape(0))
+                // Equality, not identity: an unpickled array carries its own
+                // dtype object. A byte-swapped one is unequal, and refused.
+                if (!xy.dtype().equal(py::dtype::of<double>()) || xy.ndim() != 2 || xy.shape(1) != 2
+                    || !z.dtype().equal(py::dtype::of<float>()) || z.ndim() != 1 || z.shape(0) != xy.shape(0))
                     throw py::value_error("CheckPoints.add: xy must be float64 (N, 2) and z float32 (N,)");
                 if (self.frozen())
                     throw std::logic_error("CheckPoints.add: the store is frozen");
