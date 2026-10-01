@@ -2115,7 +2115,7 @@ a canvas over half of physical memory) and 22's identical one in
 `src_python/tin_engine/catchment.py@5a57793:150`. Neither changes a mesh;
 each refuses on a small machine what a larger one meshes.
 - **(a) Delete both. Recommended.** Matches "a machine too small runs out of
-  memory" and "we should not limit huge discretisations based on less
+  memory" and "we should not limit huge discetisations [sic] based on less
   performant hardware". 23c deletes them (no lines counted), inverts the
   pinned tests (DC11), and `physical_memory` goes if nothing else reads it.
 - (b) Keep both: a clear refusal instead of a crash or swapping, at the cost
@@ -2189,3 +2189,11 @@ Whole branch `6518336..0818903`, 19 commits, 8 files, +2,513 / −32,
 production LOC 0. 23g 345 (552 at +60 %), 23f + 23g about 645, largest PR 23c
 at 656 at +60 %. Citations, ruff, ruff format, mypy and the governance gates
 green. CI not yet run: no PR.
+
+### B13 and B14 ruled, round 1, `5a57793..4c182c8`: CHANGES REQUESTED (`@reviewer`)
+
+Production LOC 0; 23c 430 (688 at +60 %). B13 (c) and B14 recorded faithfully; b(T) derives from the basin-piece sweep (17 B per node, 0.805 triangles per node at 1 m); `partition.py` reproduces every row; the 1 m benchmark and Bygdin stay one piece. Blocking: DC0's "at least `--pieces`" could not pass as cells (`--pieces 16` on Velhas gives 3 × 5) and could not fail as P'; deleting 15a R7's refusal was presented as decided under B14 though not asked, and `catchment.py:150` has the same refusal.
+
+### Round 2, `4c182c8..a7c1bfb`: APPROVED (`@reviewer`)
+
+DC0 now pins the cell count, which approximates P' and is not a floor; the refusals at half of physical memory are question B15 (`mosaic.py@5a57793:209`, `catchment.py@5a57793:150`), with every dependent place conditional on Ola's answer; units in GiB (7.7 estimated against 3.60 measured). Citations resolve. CI not yet run: no PR.
