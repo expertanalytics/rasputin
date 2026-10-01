@@ -572,8 +572,237 @@ next section.
 
 ## Dropped small fractions: error diffusion and its relatives
 
-(In progress: prior art for Ola's ruling on fraction cutoffs, then the
-questions a design must answer. Research only, no design.)
+Research only, no design. The ruling above sets the direction: land cover
+other than water is a sparse vector of class fractions per triangle, small
+fractions may be cut off, and the area cut off is to be made up in nearby
+triangles, kept by area and not by fraction, in the spirit of Floyd-Steinberg
+dithering. This section collects what is published on each part, then lists
+the questions a design has to answer. How each citation was checked is in the
+Sources table, with the same convention as above.
+
+### What a cutoff does on this mesh
+
+Two numbers frame the question, from the Rio das Velhas piece (BHO ottobasin
+76949, 11,667.6 km²) as measured in basin piece 2.1 (commit `46eaaa3`, on
+branch `worktree-basin-measure`, not yet on master;
+`docs/benchmarks/2026-10-01/basin-piece/README.md`, table "The piece").
+Dividing the piece's area by its triangle count gives the mean triangle area
+at each tolerance; a MapBiomas cell is about 30 m, so about 900 m²:
+
+| tolerance | triangles | mean triangle | in 30 m cells | 5 % of the mean triangle |
+|---:|---:|---:|---:|---:|
+| 1 m | 10,431,955 | 1,118 m² | 1.2 | 0.06 cells |
+| 10 m | 807,337 | 14,452 m² | 16.1 | 0.80 cells |
+| 20 m | 314,507 | 37,098 m² | 41.2 | 2.1 cells |
+| 50 m | 82,517 | 141,396 m² | 157.1 | 7.9 cells |
+
+So at 10 m a 5 % cutoff on a mean-sized triangle removes less than one cell:
+mostly the slivers of cells that straddle a triangle edge, whose rest lies in
+the neighbouring triangle. At 50 m it removes real patches. The mean hides a
+wide spread: refinement follows relief, so flat cropland, where the crop
+classes Ola cares about lie, gets triangles far larger than the mean. The
+distribution of triangle area by class is the first thing a measurement must
+report (see the plan at the end).
+
+### 1. Error diffusion
+
+- **Floyd and Steinberg 1976** ("An adaptive algorithm for spatial
+  greyscale", *Proc. SID* 17(2):75-77). No DOI; neither Crossref nor
+  OpenAlex has a record, so the bibliographic data and the content are from
+  memory and from how later papers describe it (Knuth 1987's abstract names
+  it "the Floyd-Steinberg method of adaptive grayscale"). Pixels are visited
+  in raster order; each is set to the nearest output level, and the
+  difference (input minus output) is passed to the four not-yet-visited
+  neighbours with weights 7/16, 3/16, 5/16, 1/16, which sum to one. *Gives:*
+  the whole mechanism Ola proposed: a quantiser, a signed error, a fixed
+  visiting order, and error passed only forward to unvisited neighbours, so
+  the total over the image is kept except what falls off the last row and
+  column.
+- **Jarvis, Judice and Ninke 1976** (survey, *CGIP*) and later filters with
+  larger kernels; **Ostromoukhov 2001** (abstract read): weights chosen per
+  input level, tuned so the output's spectrum is close to blue noise. *Gives:*
+  the weights are a free choice with a measurable effect on the pattern; on a
+  mesh the analogue is the weight per neighbour (by shared edge length, by
+  area, uniform), and it needs a stated criterion.
+- **Ulichney 1988** ("Dithering with blue noise", abstract read): good
+  dithering puts the error at high spatial frequency, so averages over any
+  small region are close to the input; also works out metrics for hexagonal
+  as well as square grids. *Gives:* the target property in words a
+  hydrologist would use: class areas summed over any patch of a few
+  triangles should be close to the true ones, not just over the whole basin.
+- **Order and its artefacts.** Raster-order diffusion produces directional
+  "worms" and needs a serpentine (boustrophedon) scan in practice (from
+  memory, standard in the textbooks; Lau and Arce 2018 is the current one,
+  Crossref only). **Witten and Neal 1982** (abstract read) diffuse along a
+  Peano curve to limit "cumulative error in binary subdivisions of images";
+  **Velho and Gomes 1991** (abstract read) along a Hilbert curve;
+  **Asano 1996** along a random space-filling curve, partitioned into squares
+  so the error chain is short, with an "adaptive method to distribute error
+  to neighboring pixels based on how many neighboring pixels affect them"
+  (abstract read). *Gives:* a space-filling curve is the published way to get
+  a visiting order with locality, and it has a 1-D property a raster scan
+  lacks: every prefix of the curve is a compact region, so the error carried
+  along the curve is bounded over compact regions too.
+- **Parallel variants.** **Knuth 1987**, dot diffusion (abstract read): a
+  class matrix fixes the order, error goes only to neighbours of a higher
+  class, "well suited to parallel computation". **Zhang and Webber 1993**,
+  space diffusion (abstract read): dot diffusion along a space-filling curve,
+  parallel "without paying a cost in image quality". *Gives:* deterministic,
+  data-derived orders that are not one sequential scan, which matters if the
+  pass must not be the serial phase of a basin run.
+- **Error diffusion on surfaces and graphs.** **Brunton, Arikan and Urban
+  2015** (TOG, abstract read): error diffusion on voxel surfaces of 3D prints,
+  with "a novel traversal algorithm for voxel surfaces, which allows the
+  transfer of existing error diffusion algorithms from 2D printing". The 2026
+  paper on error feedback for quantised graph filtering (*IEEE TSP*,
+  10.1109/TSP.2026.3664752, abstract read) feeds quantisation error back over
+  graph edges, in a signal-processing setting. Nothing was found that runs
+  error diffusion on a triangle mesh with irregular cell areas, which is what
+  the land-cover pass needs (searches in "Novelty of the ledger" below).
+- **Vector error diffusion.** **Damera-Venkata and Evans 2001** (abstract
+  read): colour error diffusion with matrix-valued weights, diffusing error
+  across colour channels as one vector. *Gives:* the right frame for class
+  fractions, which are a vector on a simplex: the error of one triangle is a
+  vector over classes that **sums to zero** (input fractions and output
+  fractions both sum to the triangle's area). A ledger that carries only the
+  deficits of dropped classes would not keep each triangle's total; it must
+  also carry the surplus the kept classes gained.
+- **Stability.** **Fan 1993** (abstract read): error diffusion is stable
+  (bounded state) for some filter types and can be unstable or chaotic for
+  others, depending on the weights. **Eschbach, Fan, Knox and Marcu 2003**
+  (abstract read): amplified errors or negative weights cause "strange
+  effects". **Eschbach and Pedersen 2017** (abstract read): in multilevel
+  colour error diffusion, "local instabilities ... can lead to large local
+  errors in the output, far exceeding the normally expected quantization
+  errors". **Adler, Kitchens, Martens, Nogueira and Tresser** (1999 SPIE, and
+  "The mathematics of halftoning", *IBM J. Res. Dev.* 2003; abstracts read):
+  results "on the boundedness of the errors generated by error diffusion",
+  and the link to "the chairman assignment problem". *Gives:* a bounded
+  ledger is a property to prove or measure, not a given; the multi-class case
+  is exactly where it was seen to fail.
+
+### 2. Rounding that keeps totals
+
+- **The chairman assignment problem.** **Tijdeman 1980** (*Discrete Math.*;
+  Crossref, text not reachable): given shares λ₁..λₖ summing to one, choose
+  one state per step so that every prefix count stays close to n·λᵢ. From
+  memory, not read: Tijdeman's bound is that every state's prefix count
+  differs from n·λᵢ by at most 1 − 1/(2k − 2). **Meijer 1973** and
+  **Tijdeman 1973** are the earlier forms; **Schneider 1996** a refinement
+  (Crossref only). *Gives:* the 1-D, k-class version of the ledger, with a
+  bound that does not grow with the length of the sequence: along a
+  space-filling curve, a well-built ledger keeps each class's area error over
+  every prefix of the curve below a constant number of "quanta". What the
+  quantum is here (a cell, a triangle, the cutoff times a triangle) is a
+  design question.
+- **Low-discrepancy rounding.** **Sadakane, Takki-Chebihi and Tokuyama
+  2005** and **Doerr 2004** (Crossref; abstracts not available; Semantic
+  Scholar's summaries read): a "global rounding" of a real sequence rounds
+  each entry to an adjacent integer so that the sum over *every interval*
+  differs from the true sum by less than one. **Tokuyama 2007** surveys it;
+  **Takki-Chebihi and Tokuyama 2003** extend it to outerplanar graphs, where
+  the intervals become paths. **Asano, Katoh, Obokata and Tokuyama 2003**
+  (*SIAM J. Comput.*, abstract read) round a whole matrix to minimise an
+  Lᵖ discrepancy over a chosen family of regions, show it is polynomial when
+  the family is the union of two **laminar** (nested) families, and use it
+  for halftoning. *Gives:* a precise statement of "local placement": the
+  error bound is over a named family of regions. In hydrology the natural
+  family is laminar already: BHO's ottobasins nest by Pfafstetter level. The
+  results are for rounding entries to integers, not for cutting off sparse
+  fractions, so this is an analogy, not a transfer.
+- **Controlled rounding.** **Bacharach 1966** (abstract read): rounding a
+  matrix and its row and column sums consistently is a network-flow problem
+  with lower and upper bounds, always soluble for an important subclass.
+  **Cox and Ernst 1982** (abstract read): the same as a capacitated
+  transportation problem; a controlled rounding always exists for two-way
+  tables. **Cox 1987** (abstract read): an unbiased one, constructively.
+  *Gives:* the land-cover table has exactly this shape (rows are triangles
+  with fixed areas, columns are classes with fixed basin totals), so keeping
+  every triangle's area and every class's total at once is a known, feasible
+  problem, and min-cost flow is the exact, global alternative to a greedy
+  scan, with the cost of moving area as the objective.
+- **Dependent rounding.** **Gandhi, Khuller, Parthasarathy and Srinivasan
+  2006** (abstract read): randomised rounding of fractional values on the
+  edges of a bipartite graph that keeps the degree sums, i.e. both rows and
+  columns. *Gives:* the randomised member of the same family. Determinism
+  (below) rules out an unseeded version; a version seeded from the data
+  would be deterministic, but it gives expectations, not bounds.
+- **Apportionment.** Largest-remainder (Hamilton) and divisor methods,
+  **Balinski and Young**, *Fair Representation* (book, 1982; Crossref has
+  reviews only; not read). From memory: largest remainder keeps the total
+  exactly and moves each share by less than one seat, but is not monotone
+  (the Alabama paradox). *Gives:* the per-triangle step if fractions are
+  rounded to a grid (whole cells, whole percent) rather than cut off.
+
+### 3. What climate and land-surface models do
+
+- **Conservative remapping** keeps integrals between grids: **Jones 1999**
+  (SCRIP; Crossref), **Ullrich and Taylor 2015** (Crossref), and **Taylor
+  2024** (abstract read), who shows common remapping weights can still fail
+  to conserve when grid-cell shapes and areas are misrepresented, and gives a
+  correction. *Gives:* the standard in this community is conservation by
+  construction, checked; the fractions per triangle should be computed from
+  exact cell-triangle overlap areas so that the input is conservative before
+  any cutoff.
+- **CLM5 / CTSM.** Lawrence et al. 2019 describes CLM5 (abstract read). The
+  trimming settings, read in CTSM's source at commit
+  `0f292ef9bce57a1d7fff70da245c295a31b8bb9c` (`master`, 2026-10-01):
+  `bld/namelist_files/namelist_definition_ctsm.xml` and
+  `src/main/surfrdUtilsMod.F90`. Correcting the recollection in the brief:
+  - `toosmall_soil`, `toosmall_crop`, `toosmall_glacier`, `toosmall_lake`,
+    `toosmall_wetland`, `toosmall_urban` are thresholds in **percent** on
+    **land units**, not on plant functional types; default 0, meaning off.
+    `collapse_individual_lunits` sets a land unit at or below its threshold
+    to zero and then calls `renormalize(wt_lunit, begg, 1._r8)`: the kept
+    land units are scaled up in the same grid cell. If every land unit is
+    removed it puts back the largest.
+  - `n_dom_pfts` and `n_dom_landunits` keep the N largest; default 0 (off),
+    1 in the "fast" structure. `collapse_to_dominant` scales the kept weights
+    by `wt_sum(g) / wt_dom_sum` and zeroes the rest: again renormalisation
+    inside the cell. `collapse_urban` merges urban land units into the
+    dominant one.
+  - Nothing is passed to other grid cells. Each cell keeps its total; the
+    class totals over a region are not kept.
+- **WRF-Noah mosaic** (**Li, Bou-Zeid, Barlage, Chen and Smith 2013**,
+  abstract read; WRF source `phys/module_sf_noahdrv.F` and
+  `Registry/Registry.EM_COMMON` at commit
+  `06d4240ae989cc3e50af412bb472df3d9048783c`): `sf_surface_mosaic=1` keeps
+  the `mosaic_cat` largest categories (default 3) per cell, sorted by
+  fraction, and in `lsm_mosaic_init` divides them by their sum
+  (`LANDUSEF2(i,1:mosaic_cat,j)=LANDUSEF2(i,1:mosaic_cat,j)*(1/Temp6)`).
+  Renormalisation, per cell.
+- **Noah-MP** itself has no tile mosaic: a search for "mosaic" in
+  `NCAR/noahmp` (commit `badab7b4b51710037fc87f3dbf329b6be59b1b5a`) finds
+  only the land-cover names in the parameter table, and `NCAR/hrldas`
+  (commit `cd96df470220f7d7133cdbccd5f9c5355cf173e2`) has no match. The
+  brief's "Noah-MP mosaic" is the Noah (not MP) mosaic above, as far as
+  these two repositories show.
+- **JULES** (Best et al. 2011, Crossref; namelist documentation read,
+  jules-lsm.github.io "latest"): no trimming option was found. It offers
+  `l_aggregate`, one aggregate tile per grid box, and in dynamic vegetation
+  a floor, `frac_min` (default 1.0e-6, "Minimum fraction that a PFT is
+  allowed to cover if TRIFFID is used"), which keeps tiny fractions alive
+  rather than removing them. JULES source is behind registration and was not
+  read.
+- **Land-use downscaling** places class areas spatially while keeping
+  regional totals: GCAM's downscaling (**West et al. 2014**, **Le Page et
+  al. 2016**, abstract read) and **Demeter** (**Vernon et al. 2018**,
+  abstract read) allocate projected regional areas to cells by rules and
+  priorities; **CLUE-S** (**Verburg et al. 2002**, Crossref) iterates until
+  demand is met. **Tobler 1979** (abstract read), pycnophylactic
+  interpolation: a smooth surface whose integral over each zone equals the
+  zone's total. *Gives:* "keep the totals of named regions exactly, place
+  within them by a rule" is standard practice in land-use science; the
+  region is a design choice.
+- **The bias renormalisation causes** is documented: **Moody and Woodcock
+  1995** (Crossref) on scale-dependent bias in class proportions, and Saura
+  2002 (above): dropping minority classes and scaling the rest up shrinks
+  scattered classes and grows dominant ones, systematically, not randomly.
+  A scattered class below the cutoff everywhere vanishes completely.
+
+Found nowhere: a land-surface or hydrological model that **compensates** for
+trimmed fractions in neighbouring cells. Every scheme read renormalises
+inside the cell (CLM, WRF-Noah), or does not trim (JULES).
 
 ## Sources
 
