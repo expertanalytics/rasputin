@@ -27,7 +27,8 @@ import numpy.typing as npt
 import shapely
 from pydantic import BaseModel, ConfigDict, model_validator
 
-from tin_engine.io.models import DemTile, RasterMeta
+from tin_engine.io.cog import window_meta
+from tin_engine.io.models import DemTile, IndexWindow, RasterMeta
 
 if TYPE_CHECKING:
     from tin_engine.io.repository import TileFootprint
@@ -68,17 +69,6 @@ class Bounds(BaseModel):
         ):
             raise ValueError(f"need finite x_min < x_max and y_min < y_max, got {corners}")
         return self
-
-
-class IndexWindow(BaseModel):
-    """`rows x cols` nodes starting at `(row0, col0)`."""
-
-    model_config = ConfigDict(frozen=True)
-
-    row0: int
-    col0: int
-    rows: int
-    cols: int
 
 
 class TilePlacement(BaseModel):
@@ -226,7 +216,13 @@ def plan_mosaic(
     )
 
 
-def assemble(plan: MosaicPlan, load: Callable[[str], DemTile], needed: Any = None) -> Mosaic:
+def assemble(
+    plan: MosaicPlan,
+    load: Callable[[str], DemTile],
+    needed: Any = None,
+    *,
+    load_window: Callable[[str, IndexWindow], DemTile] | None = None,
+) -> Mosaic:
     """Load the plan's tiles one at a time, in plan order, into one canvas (R5).
 
     One tile whose grid is the mosaic's is returned as loaded: no canvas, no
@@ -251,9 +247,13 @@ def assemble(plan: MosaicPlan, load: Callable[[str], DemTile], needed: Any = Non
     copy). Measured with
     tracemalloc on the 15a acceptance box (nine DTM10 tiles, 404 MB canvas,
     102 MB tiles): 720 MB, the canvas plus 3.1 tiles.
+
+    With `load_window` (23a-1), each placement's source window is loaded
+    instead of its whole tile, `load_window(name, placement.source)`, and is
+    copied whole; its meta must be `window_meta` of the listed one.
     """
     if len(plan.tiles) == 1 and plan.tiles[0].meta == plan.meta:
-        return Mosaic(tile=_loaded(plan.tiles[0], load), plan=plan)
+        return Mosaic(tile=_loaded(plan.tiles[0], load, load_window), plan=plan)
     if not plan.tiles:
         raise MosaicError("the plan has no tiles")
     planned = np.result_type(*(t.dtype for t in plan.tiles))
@@ -261,11 +261,12 @@ def assemble(plan: MosaicPlan, load: Callable[[str], DemTile], needed: Any = Non
     ordered = sorted(plan.tiles, key=lambda t: t.name)
     strips: dict[tuple[str, str], npt.NDArray[Any]] = {}
     for placement in plan.tiles:
-        array = _loaded(placement, load).array
+        array = _loaded(placement, load, load_window).array
         if np.result_type(canvas.dtype, array.dtype) != canvas.dtype:
             canvas = canvas.astype(np.result_type(canvas.dtype, array.dtype))
         c, s = placement.canvas, placement.source
-        incoming = array[s.row0 : s.row0 + s.rows, s.col0 : s.col0 + s.cols]
+        rows, cols = slice(s.row0, s.row0 + s.rows), slice(s.col0, s.col0 + s.cols)
+        incoming = array if load_window else array[rows, cols]  # a window comes cut
         canvas[c.row0 : c.row0 + c.rows, c.col0 : c.col0 + c.cols] = incoming
         for other in ordered:
             box = _meet(c, other.canvas)
@@ -455,11 +456,19 @@ def _uncovered(meta: RasterMeta, tiles: tuple[TilePlacement, ...], needed: Any) 
     )
 
 
-def _loaded(placement: TilePlacement, load: Callable[[str], DemTile]) -> DemTile:
-    tile = load(placement.name)
-    if tile.meta != placement.meta:
+def _loaded(
+    placement: TilePlacement,
+    load: Callable[[str], DemTile],
+    load_window: Callable[[str, IndexWindow], DemTile] | None,
+) -> DemTile:
+    if load_window is None:
+        tile, listed = load(placement.name), placement.meta
+    else:
+        tile = load_window(placement.name, placement.source)
+        listed = window_meta(placement.meta, placement.source)
+    if tile.meta != listed:
         raise MosaicError(
-            f"{placement.name} changed since it was listed: {tile.meta} is not {placement.meta}"
+            f"{placement.name} changed since it was listed: {tile.meta} is not {listed}"
         )
     return tile
 

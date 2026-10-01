@@ -47,7 +47,7 @@ import shlex
 import sys
 import tempfile
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Annotated
@@ -72,7 +72,7 @@ from tin_engine._core import (
 from tin_engine.catchment import CatchmentRequest, LakeError, delineate
 from tin_engine.chains import start_chains
 from tin_engine.crs import crs_label, parse_crs, transform_description
-from tin_engine.dem_input import DemInput, DemRequest, open_dem, repository_for
+from tin_engine.dem_input import CachedSource, DemInput, DemRequest, open_dem, repository_for
 from tin_engine.domain import DomainError, DomainPolygon, read_domain
 from tin_engine.elevation import Trimmed, trim
 from tin_engine.feature_input import (
@@ -87,6 +87,7 @@ from tin_engine.feature_input import (
 )
 from tin_engine.features import DEFAULT_VOCABULARY
 from tin_engine.grid_domain import default_stride, refine_start_stride, subsample
+from tin_engine.io.cog import NotCached
 from tin_engine.io.models import DemTile, RasterMeta
 from tin_engine.io.ply import write_ply
 from tin_engine.io.vtk_legacy import write_vtk
@@ -94,6 +95,7 @@ from tin_engine.landcover import label_triangles
 from tin_engine.mosaic import Bounds, Seam
 from tin_engine.palettes import PALETTES, paraview_preset
 from tin_engine.raster import to_core
+from tin_engine.sources import SOURCES
 from tin_engine.stats import PhaseClock, Refinement, Report, Sizes, _exact, quality, render
 from tin_engine.viz.fixtures import GALLERY, Fixture
 from tin_engine.viz.protocols import PslgLike
@@ -546,11 +548,19 @@ def mesh(
         str | None, typer.Argument(help="Gallery fixture to write; or give --dem instead.")
     ] = None,
     dem: Annotated[
-        list[Path] | None,
+        list[str] | None,
         typer.Option(
             "--dem",
-            help="A GeoTIFF DEM, several (repeat --dem), or one directory of tiles: mesh "
-            "its extent with z sampled from it.",
+            help="A GeoTIFF DEM, several (repeat --dem), one directory of tiles, or a "
+            f"cached catalogue source ({', '.join(SOURCES)}): mesh its extent with z "
+            "sampled from it. A file named like a source is written as a path: ./glo30.",
+        ),
+    ] = None,
+    cache: Annotated[
+        Path | None,
+        typer.Option(
+            "--cache",
+            help="The tile cache a catalogue --dem is read from. Default: $RASPUTIN_DATA/cache.",
         ),
     ] = None,
     bbox: Annotated[
@@ -794,6 +804,7 @@ def mesh(
             raise typer.BadParameter(
                 "--no-constraint-feet needs --tolerance", param_hint="--no-constraint-feet"
             )
+        paths, cached = _dem_sources(dem, cache_root(cache, os.environ))
         given = None
         if domain is not None:
             with clock.phase("domain read"):
@@ -801,7 +812,15 @@ def mesh(
                     given = read_domain(domain, domain_crs)
                 except DomainError as exc:
                     raise typer.BadParameter(str(exc), param_hint="--domain") from exc
-        opened = _open_dem(dem, bbox, clock, given)
+        try:
+            opened = _open_dem(paths, bbox, clock, given, cached)
+        except NotCached as exc:
+            area = f"--domain {domain}" if domain is not None else ""
+            if bbox is not None:
+                area = "--bbox " + " ".join(repr(v).removesuffix(".0") for v in bbox)
+            flags = " ".join(filter(None, (area, f"--cache {cache}" if cache else "")))
+            run = f"rasputin fetch {dem[0]} {flags}".rstrip()
+            raise typer.BadParameter(f"{exc}; run: {run}", param_hint="--dem") from exc
         label = opened.label
         dem_crs = f"EPSG:{opened.tile.meta.epsg}"
         found = None
@@ -831,9 +850,11 @@ def mesh(
             mosaic += f"{opened.tile.meta.cols} nodes"
             typer.echo(mosaic, err=True)
             sentence = f"{mosaic}; {sentence}"
+        if cached is not None:  # 23a-1, decided 9: the key and its credit
+            sentence = _ascii(f"{cached.source}, {SOURCES[cached.source].credit}; {sentence}")
         fields = [("crs", f"EPSG:{epsg}"), ("elevation_source", sentence)]
         comments = [f"crs EPSG:{epsg}", f"elevation {sentence}"]
-        if len(dem) > 1 or dem[0].is_dir():  # R11: the files used, named
+        if cached is not None or len(paths) > 1 or paths[0].is_dir():  # R11: the files used
             fields.append(("dem_tiles", _ascii("; ".join(names))))
             seams = opened.seams
             listed = "; ".join(s.entry() for s in seams) or "none"
@@ -1095,11 +1116,41 @@ def _fixture_mesh(name: str, delaunay: bool, spacing: float, clock: PhaseClock) 
     )
 
 
+def cache_root(option: Path | None, environ: Mapping[str, str]) -> Path | None:
+    """The tile cache (B7): ``--cache`` if given, else ``$RASPUTIN_DATA/cache``,
+    else None. The one reader of the variable; ``mesh`` passes ``os.environ``."""
+    if option is not None:
+        return option
+    data = environ.get("RASPUTIN_DATA")
+    return Path(data) / "cache" if data else None
+
+
+def _dem_sources(dem: list[str], root: Path | None) -> tuple[tuple[Path, ...], CachedSource | None]:
+    """``--dem`` as given: one catalogue key alone is that cached source
+    (23a-1); anything else is a path, so ``./glo30`` is a file."""
+    keys = [d for d in dem if d in SOURCES]
+    if not keys:
+        return tuple(Path(d) for d in dem), None
+    if len(dem) > 1:
+        raise typer.BadParameter(
+            f"{keys[0]} is a catalogue source; give it alone, not with other --dem",
+            param_hint="--dem",
+        )
+    if root is None:
+        raise typer.BadParameter(
+            "no cache: set RASPUTIN_DATA (the data root; the cache is $RASPUTIN_DATA/cache) "
+            "or pass --cache",
+            param_hint="--dem",
+        )
+    return (), CachedSource(source=keys[0], cache=root)
+
+
 def _open_dem(
-    dem: list[Path],
+    dem: tuple[Path, ...],
     bbox: tuple[float, float, float, float] | None,
     clock: PhaseClock,
     domain: DomainPolygon | None = None,
+    cached: CachedSource | None = None,
 ) -> DemInput:
     """``--dem`` and ``--bbox`` or the read ``--domain`` to one tile (increment
     15a and 15b, R11); every refusal, the reader's, the mosaic's or the
@@ -1114,7 +1165,9 @@ def _open_dem(
         raise typer.BadParameter(_words(exc), param_hint="--bbox") from exc
     try:
         with clock.phase("decode"):
-            return open_dem(DemRequest(sources=tuple(dem), bounds=bounds, domain=domain))
+            return open_dem(DemRequest(sources=dem, cached=cached, bounds=bounds, domain=domain))
+    except NotCached:
+        raise
     except OSError as exc:
         where = exc.filename or ", ".join(map(str, dem))
         raise typer.BadParameter(
