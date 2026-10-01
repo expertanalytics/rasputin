@@ -4,7 +4,7 @@ Status: **designed by `@architect`, 2026-10-01; B1-B12 ruled by Ola on
 2026-10-01 and the design reworked to the rulings; not implemented.** Design
 only, written before `@tester` per `docs/increments/README.md` step 1. The
 rulings are under "Ruled by Ola, 2026-10-01", below; the questions are kept as
-asked at the end, each marked with its ruling, and the new ones (B13-B15)
+asked at the end, each marked with its ruling, and the new ones (B13, B14)
 follow them.
 
 ## Why this record, and why its name
@@ -15,7 +15,7 @@ auto-catchment). "Basin scale" because what it delivers is the ability to
 mesh the São Francisco basin (635,194.5 km², 734 M ANADEM nodes) at any
 tolerance on one machine, with memory set by the size of a piece, not of the
 basin. It is not a sub-increment of 15: 15 is about DEM input, while this
-changes the refinement core (frozen edges, a seam pass), the run (many
+changes the refinement core (frozen edges, a seam pass, seam removal), the run (many
 pieces, in parallel) and the output (a piece per file and an index). It
 absorbs 15d's window decoding and supersedes 15's Q9 ("32 GB is fine", a
 dense canvas) at basin scale.
@@ -389,8 +389,10 @@ comes from the source named. **recalled**: from memory, unchecked.
     full resolution until both sides are merged (P-BDAM: "some of the borders
     remains not simplified until the whole mesh can be loaded entirely in
     memory"). That is the one alternative to a seam pass, seams at full
-    lattice resolution; not taken, because a 2048-node block line would
-    carry 2048 vertices per block side at every tolerance.
+    lattice resolution; not taken, because a partition line would carry a
+    vertex at every node along it into both pieces at every tolerance, and
+    the cleanup's thinning (B4 (b)) would then have to remove nearly all of
+    them; the seam pass places only what the seam's own error needs.
   - Bertilsson, "Dynamic creation of multi-resolution triangulated irregular
     network", MSc thesis MECS-2015-18, Blekinge Institute of Technology
     (read, `https://www.diva-portal.org/smash/get/diva2:867859/FULLTEXT02.pdf`;
@@ -1375,9 +1377,11 @@ own arithmetic, so the oracle relation is the producer's
 
 ## Invariants
 
-- **K1. Small runs untouched.** With no cut (the window within
-  `--block-nodes`, or `--block-nodes 0`) and `frozen_mask` 0, every mesh is
-  bit-identical to master's: 23b and 23c change nothing on that path.
+- **K1. Small runs untouched.** With one piece (a window under
+  `2 · N_MIN` nodes, or `--pieces 1`) and `frozen_mask` 0, every mesh is
+  bit-identical to master's: 23b, 23c and 23g change nothing on that path,
+  and `tools/bench.py` (which passes `--pieces 1`) stays comparable with
+  every stored run.
 - **K2. Frozen means frozen.** In a piece, no pass inserts a vertex on a
   frozen edge: refine's split, feet, the quality pass, `refine_points` (phase
   2 and the edge strip). Pinned by FE2-FE5; `split_edge`'s assertion is a
@@ -1386,13 +1390,18 @@ own arithmetic, so the oracle relation is the producer's
   domain is within `--tolerance`: inside a piece by refine, on a seam by the
   seam pass; on a grid-line seam at every point against the bilinear
   surface. On the reprojected path, every source node too, except those
-  exactly on a seam, which are counted (`on_frozen`) with their error.
+  exactly on a seam, which are counted (`on_frozen`) with their error. In
+  the stitched file, after the cleanup, every valid node and (reprojected)
+  every source node is within tolerance, seams included, by the band rescan
+  and the hole recheck; the every-point property along former seams is not
+  kept.
 - **K4. Conformity.** Two pieces sharing a seam edge write the same vertex
   sequence on it, `(x, y, z)` bit for bit; checked when the index is
   written, and a difference fails the run.
 - **K5. Determinism.** The output is a function of the inputs and the
-  options (`--block-nodes` included), never of `--jobs`, `--threads`, the
-  order pieces run in, or the machine's memory.
+  options (`--pieces` included; `N_MIN`, `N_MAX` and `R` are constants,
+  recorded in the index), never of `--jobs`, `--threads`, the order pieces
+  or seam units run in, the core count or the machine's memory.
 - **K6. Locality.** A piece's files depend only on its job spec: its start
   slice, its windows and its seam edges. Re-running one piece alone gives the
   same bytes.
@@ -1408,18 +1417,26 @@ own arithmetic, so the oracle relation is the producer's
   memory follows the vector input.
 - **K10. The I/O boundary.** The core sees windows, meshes, edges, a
   tolerance and a mask, all as numbers in metres: no CRS, path or URL.
+- **K11. The stitched file has no seams.** No edge carries the `seam` bit,
+  every free edge is locally Delaunay (so the mesh is constrained Delaunay
+  with respect to the input's constraints alone), and the vertices on former
+  seams are only those the tolerance needs under the fixed thinning order,
+  plus one per seam end on the outline, a hole or a feature.
+- **K12. Cleanup locality.** A seam unit's cleanup depends only on its two
+  band records, the DEM and the options; re-running one unit alone gives the
+  same bytes. Only the final pass sees more than one unit.
 
 ## Degeneracy policy
 
 - **Nodes on a seam** (every node on a grid-line seam): the seam pass's
   check points, never a piece's scan candidates.
-- **A seam along the outline** (a block line on a `--bbox` edge, say): not a
-  cut, since it crosses no interior. A natural cut that coincides with an
-  outline or feature edge is merged by the noder (masks unioned), frozen, and
-  handled by the seam pass like any seam.
-- **A seam along a feature edge** (a road on a block line): one edge with both
-  bits; the feature keeps its bits, and the seam's rules apply.
-- **A piece with no DEM node** (a sliver between a block line and the
+- **A seam along the outline** (a partition line on a `--bbox` edge, say):
+  not a cut, since it crosses no interior.
+- **A seam along a feature edge** (a road on a partition line): one edge with
+  both bits; the feature keeps its bits, and the seam's rules apply. The
+  cleanup clears only the seam bit, so the edge stays a constraint and its
+  vertices are not thinned.
+- **A piece with no DEM node** (a sliver between a partition line and the
   outline): refine has nothing to scan; the seam pass still runs on its seam
   edges, so its boundary still meets the tolerance there.
 - **A seam edge shorter than a cell** may have no check point; its two
@@ -1430,9 +1447,19 @@ own arithmetic, so the oracle relation is the producer's
 - **A fan that is not counter-clockwise** (a vertex within rounding of a seam
   edge's line, which the noder's guarantee 14(b) rules out): refused by
   refine's `NotCounterClockwise`, with the piece and seam named.
-- **Several components of the domain in one block:** several pieces.
-- **Four pieces at a block corner inside the domain:** the corner is a node
-  and a vertex of all four.
+- **Several components of the domain in one cell:** several pieces.
+- **Four pieces at a cell corner inside the domain:** the corner is a node
+  and a vertex of all four; the cleanup's final pass may remove it.
+- **A lattice-collinear star** (a seam vertex whose star polygon has
+  collinear vertices, common on a lattice): an ear with zero area is not
+  valid; the first valid ear in the polygon's order is taken. Cocircular
+  holes are settled by the tree's incircle tie rule.
+- **A seam unit with no vertex between its corners:** nothing to thin; its
+  one or more edges are re-legalised like any other.
+- **A band that touches the other side's outline** (a sliver piece): the
+  outline edges are constraints, so the band stops there with no fence.
+- **A deferred fence violation:** never left in place; the final pass grows
+  the region until it is gone (K11).
 - **A source node exactly on a seam** (phase 2): skipped and counted in both
   pieces, `on_frozen`, with its error.
 - **The remote changed** between fetches: refused; `--refresh` re-fetches.
@@ -1442,27 +1469,27 @@ own arithmetic, so the oracle relation is the producer's
 
 ## Not in scope
 
-- **Natural cuts** (BHO Pfafstetter units, 23e) and the simplification of
-  their shared chains (B10): designed above in outline, built later with the
-  basin's own inputs (ROADMAP item 2.5).
-- **Removing artificial seams after the run** (B4 (b)).
-- **The exchange protocol** (B5 (b)).
+- **Sub-catchments from the DEM** (23e): increment 22 extended to many
+  outlets, as codes per triangle or ordinary constraints; built later with
+  the basin's own inputs (ROADMAP item 2.5). Natural cuts are dropped (B1).
+- **The exchange protocol** (B5 (b)): the named fallback, built only if
+  23g's acceptance shows a large gap.
 - **Noding in pieces.** The global vector step is fine at basin scale with
-  outline, cuts and BHO rivers; a polygonised MapBiomas might not be, and
-  would need its own look.
+  the outline and the cuts; DEM-derived rivers or a polygonised MapBiomas
+  might not be, and would need their own look.
 - **A process pool** for pieces, unless the GIL shows in the profile.
-- **Fetching other datasets** (BHO, MapBiomas): the catalogue is data, so
+- **Fetching other datasets** (MapBiomas): the catalogue is data, so
   adding a COG source is an entry, but vector sources need their own fetch.
 - **Machines other than one:** pieces are pure data in and out, which keeps a
   cluster possible; nothing here builds it.
 
 ## Order of work and PR split
 
-### The proposed order (B12)
+### The order (B12, ruled (a))
 
-ROADMAP's "Order of work from 2026-09-30", item 2, today reads: measure a
-piece (done), 15c, 15d, parallel refine or domain decomposition, the basin's
-own inputs. Proposed in its place:
+ROADMAP's "Order of work from 2026-09-30", item 2, read: measure a piece
+(done), 15c, 15d, parallel refine or domain decomposition, the basin's own
+inputs. Ola ruled B12 (a), the proposed order; it now carries the cleanup:
 
 1. **15c-1**, as designed (`15c-geographic-dem.md`): check points and the
    final check in C++. Needs nothing new; ready for `@tester`.
@@ -1473,18 +1500,22 @@ own inputs. Proposed in its place:
 4. **15c-2**, as designed, its acceptance on ANADEM from the cache.
 5. **The edge strip** (Q14), as designed, writing `constraint_check_points`.
 6. **23b**, frozen edges and the seam pass, in C++.
-7. **23c**, the decomposition, piece by piece, with pieces and the index as
+7. **23c**, the partition, piece by piece, with pieces and the index as
    output.
-8. **23d**, pieces in parallel, resumable runs, `rasputin stitch`.
-9. **The basin run**, `@perf`, no code: 50, 20, 10, 5, 2 and 1 m.
-10. **23e and the basin's own inputs**: natural cuts, BHO rivers as
-    polylines, MapBiomas land cover.
+8. **23d**, pieces in parallel, resumable runs, `rasputin stitch` (the
+   stitched file keeps its seams until 23g).
+9. **23f**, seam removal and thinning, in C++.
+10. **23g**, the cleanup at stitching; the stitched file is clean from here.
+11. **The basin run**, `@perf`, no code: 50, 20, 10, 5, 2 and 1 m (B11);
+    then Ola chooses the tolerance.
+12. **23e and the basin's own inputs**: sub-catchments from the DEM, rivers
+    (DEM-derived drainage likely; the pointer under B1), MapBiomas land
+    cover.
 
-**Against a ruling.** This reverses part of Q14's placement ruling (the
-edge strip right after 15c and before 15d, `15c-geographic-dem.md`, Q14 and
-"The edge strip"): under this order 23a-1, which replaces 15d, and 23a-2 land
-between 15c-1 and 15c-2, and the edge strip after both. B12 (b) keeps the
-ruling.
+**Against a ruling, knowingly.** This reverses part of Q14's placement ruling
+(the edge strip right after 15c and before 15d, `15c-geographic-dem.md`, Q14
+and "The edge strip"): 23a-1, which replaces 15d, and 23a-2 land between
+15c-1 and 15c-2, and the edge strip after both. Ola chose it (B12 (a)).
 
 **Why this order.** 23a has no dependency on the core and gives every later
 step real ANADEM data, which is what Ola asked the fetch step for ("or our
@@ -1492,13 +1523,17 @@ performance will drop while we wait for download"). 23b needs `refine_points`
 (15c-1) and the edge strip's generator. 23c needs 15c-2's `TargetGrid` and
 `resample` per window, and 23b. 23d is what makes the basin fast, but
 nothing in it changes a mesh, so it goes after the first correct cut runs.
-Release hardening and 21d stay deferred, as ROADMAP has them.
+23f needs 23b's frozen mask and nothing of 23c-23d, so it could move earlier;
+it sits next to its driver so that one review reads both. 23g needs 23c's
+pieces, 23d's stitcher and 23f. The basin run waits for 23g, so that it
+measures what ships (stitched, clean). Release hardening and 21d stay
+deferred, as ROADMAP has them.
 
 ### PR split and LOC
 
 Counted in `CLAUDE.md` §2's unit. Estimates; the worst case applies 39 %
 (increment 10's overrun), with 60 % (15a's `mosaic.py`) beside it. Every PR
-stays under 700 at both.
+stays under 700 at both; the largest, 23c, is 656 at +60 %.
 
 | PR | what | est. | +39 % | +60 % |
 |---|---|---:|---:|---:|
@@ -1506,9 +1541,9 @@ stays under 700 at both.
 | | `io/cog.py`: `BlockSource`, `LocalTiffBlocks`, `decode_window` on a thread pool | 60 | | |
 | | `io/repository.py`: `CacheRepository` read side, `CacheManifest`, presence | 55 | | |
 | | `BlockWindows` (15c's `SourceWindows`), the missing-block refusal | 40 | | |
-| | `fetch/sources.py`: `RemoteSource`, the catalogue (two entries) | 40 | | |
-| | `cli.py`: `--cache`, `RASPUTIN_CACHE`, `--dem <source id>` | 25 | | |
-| | **23a-1 total** | **220** | **306** | **352** |
+| | `fetch/sources.py`: `RemoteSource`, the catalogue (two entries, B8) | 40 | | |
+| | `cli.py`: `--cache`, `RASPUTIN_DATA`, `--dem <catalogue key>` | 30 | | |
+| | **23a-1 total** | **225** | **313** | **360** |
 | **23a-2** | **The fetch step** | | | |
 | | `fetch/plan.py`: header prefix, needed region, blocks, GLO-30 tile list | 75 | | |
 | | `fetch/http.py`: ranged GET, 206 and length checks, coalescing, retries, async bound | 80 | | |
@@ -1525,44 +1560,66 @@ stays under 700 at both.
 | | `seam.hpp`: `refine_seam` (one-dimensional greedy over `constraint_check_points`) | 100 | | |
 | | `bindings/core.cpp`, `_core.pyi` | 60 | | |
 | | **23b total** | **245** | **341** | **392** |
-| **23c** | **The decomposition, piece by piece** | | | |
-| | `decompose.py`: when to cut, the grid lines as chains, `BasinPlan` | 75 | | |
+| **23c** | **The partition, piece by piece** | | | |
+| | `decompose.py`: the partition rule, the lines as chains, `BasinPlan` | 80 | | |
 | | `features.py`: the `seam` property | 5 | | |
 | | `pieces.py`: labels, the start slice, fans | 85 | | |
 | | `pieces.py`: `PieceJob`, its windows (`TargetGrid` or mosaic plan) | 65 | | |
 | | `basin_run.py`: run pieces in order, async-ready | 45 | | |
 | | `io/mesh_index.py`: `MeshIndex`, piece writer, seam records, conformity | 85 | | |
-| | `cli.py`: `--block-nodes`, pieces output, fields | 45 | | |
-| | **23c total** | **405** | **563** | **648** |
-| **23d** | **In parallel, resumable, stitched** | | | |
+| | `cli.py`: `--pieces`, pieces output, fields; `tools/bench.py`: `--pieces 1` | 45 | | |
+| | **23c total** | **410** | **570** | **656** |
+| **23d** | **In parallel, resumable, stitched (seams kept)** | | | |
 | | `basin_run.py`: `--jobs`, thread split, largest first, the memory cap | 45 | | |
 | | `basin_run.py`: job hashes, skip finished pieces | 35 | | |
-| | `stitch.py`: streaming `.vtk` and `.ply`, seam vertices numbered once | 130 | | |
+| | `stitch.py`: streaming `.vtk` and `.ply`, two passes, vertices numbered once | 130 | | |
 | | `cli.py`: `rasputin stitch`, `--no-stitch` | 25 | | |
 | | **23d total** | **235** | **327** | **376** |
+| **23f** | **Seam removal and thinning, C++** | | | |
+| | `lattice_mesh.hpp`: retire a vertex and two triangle slots; compaction on output | 35 | | |
+| | `mesh/vertex_removal.hpp`: the star's polygon, ears, Lawson in the hole, on the side | 110 | | |
+| | `refinement/thin.hpp`: ordered candidates, star-in-band test, hole recheck, commit | 75 | | |
+| | `mesh/fence.hpp`: exact incircle of each fence edge against its outside vertex | 25 | | |
+| | `bindings/core.cpp`, `_core.pyi` | 55 | | |
+| | **23f total** | **300** | **417** | **480** |
+| **23g** | **The cleanup at stitching** | | | |
+| | `seams.py`: units from the plan, zones, bands of `R` rings, fences, band records | 95 | | |
+| | `seam_cleanup.py`: one unit (merge, bits, legalise, rescan on a DEM strip, fence check, thin, write) | 110 | | |
+| | `seam_cleanup.py`: the final pass (shared fences, deferred items, corners), patches | 75 | | |
+| | `stitch.py`: cores and cleaned bands, retired vertices dropped | 30 | | |
+| | `basin_run.py`, `cli.py`: units in parallel, keyed for resume | 20 | | |
+| | **23g total** | **330** | **459** | **528** |
 
-Modules to watch: `pieces.py` at 150 (split `fans` out past 220) and
-`stitch.py` at 130. 23b assumes the edge strip has written
-`constraint_check_points`; if 23b came first it would carry about 40 more.
-Natural cuts (23e) are not estimated: they get their own design with the
-basin's inputs.
+Modules to watch: `pieces.py` at 150 (split `fans` out past 220),
+`stitch.py` at 160 after 23g, and `vertex_removal.hpp` at 110, whose ear
+search stays simple because the hole is a star polygon. 23b assumes the edge
+strip has written `constraint_check_points`; if 23b came first it would carry
+about 40 more. Ola's estimate for B4 (b) was roughly 300 lines; with
+thinning, the final pass and the band records it is about 630 over 23f and
+23g, which is why it is two PRs. 23e is not estimated: it gets its own
+design with the basin's inputs.
 
 **Documentation in the same PRs** (not counted): `project_structure.md` (the
 `fetch/` package and the boundary rule that network code stays in it, 23a-2;
-pieces and the index, 23c); `ROADMAP.md`'s rows at each merge, and item 2's
-order once Ola rules B12; `15-dem-mosaic.md` and `15c-geographic-dem.md`
-pointing here where they hand basin scale on (this branch).
+pieces and the index, 23c; the band records and the cleanup, 23g);
+`ROADMAP.md`'s rows at each merge, and item 2's order as ruled (B12 (a)),
+which this branch's PR can already write; `15-dem-mosaic.md` and
+`15c-geographic-dem.md` pointing here where they hand basin scale on (this
+branch); the `RASPUTIN_DATA` variable in the README's setup (23a-1).
 
 **Acceptance class.** 23a-1 changes how Norway's tiles are decoded, so its
 `@perf` run checks the mesh hash and process time (below), though it touches
-no refine code. 23b, 23c and 23d touch or drive refine, so
+no refine code. 23b, 23c, 23d, 23f and 23g touch or drive refine or mesh
+code, so
 `docs/increments/README.md` "Acceptance" applies in full.
 
 ## Tests @tester can write red
 
 **Invariant-critical suites, for mutation testing:** 23b's frozen-edge suite
 (FE2-FE5) and the seam pass's oracle (SP1, SP2); 23c's conformity, union and
-equality tests (DC2-DC4, DC6). The rest is ordinary.
+equality tests (DC2-DC4, DC6); 23f's removal and hole-recheck oracles (VR2,
+VR3, TH2); 23g's stitched-Delaunay and tolerance oracles (SC2, SC3). The
+rest is ordinary.
 
 ### 23a-1 (Python)
 
@@ -1584,6 +1641,12 @@ equality tests (DC2-DC4, DC6). The rest is ordinary.
   with `socket.socket` replaced by one that raises succeeds.
 - **W6, overlaps**: `BlockWindows` over two overlapping objects equals 15a's
   `assemble` on the same objects.
+- **W7, the cache root (B7)**: `--cache DIR` wins over `RASPUTIN_DATA`;
+  with only `RASPUTIN_DATA=R` set the cache is `R/cache`; with neither, a
+  catalogue `--dem` is refused naming both, and a path `--dem` runs as today
+  (`monkeypatch` on the environment); `./glo30` is a path, `glo30` a
+  catalogue key; nothing under `src_python/tin_engine` but `cli.py` reads
+  `RASPUTIN_DATA` (a source scan).
 
 ### 23a-2 (Python)
 
@@ -1647,12 +1710,22 @@ equality tests (DC2-DC4, DC6). The rest is ordinary.
 
 ### 23c (Python, end to end on synthetic rasters)
 
-- **DC1, K1**: a domain within the block size writes the same bytes as
-  today's path.
+- **DC0, the partition rule** (pure, no mesh): the two figures of
+  `partition.py` (4,208 × 7,347 nodes at `--pieces 64` gives 6 × 10 cells of
+  702 × 735; 41,332 × 50,297 gives 20 × 25 of 2,067 × 2,012); one piece at
+  `N = 2 · N_MIN − 1` and a cut at `2 · N_MIN`; `--pieces 1` one piece above
+  `N_MAX`; for windows drawn at random (a seeded generator, a few thousand)
+  no cell exceeds `N_MAX` unless `--pieces 1`, no row or column of cells is
+  empty, `dx` and `dy` are whole nodes and every line is a lattice line; the
+  same partition with `os.cpu_count` patched to 1 and to 64 (the count is
+  not the machine's).
+- **DC1, K1**: a domain under `2 · N_MIN` nodes, and a larger one with
+  `--pieces 1`, write the same bytes as today's path.
 - **DC2, conformity, read from the files**: for every seam edge, both pieces'
   vertex sequences are equal bit for bit. The oracle reads the piece files,
   not the seam records or the index.
-- **DC3, a valid union**: in the stitched mesh every edge not on the outline
+- **DC3, a valid union**: in the union of the piece files (assembled in the
+  test; the stitcher is 23d's) every edge not on the outline
   is in exactly two triangles, the triangles' area sums to the domain's
   (shapely) to 1e-9 relative, and no two triangles overlap (brute force on a
   small case).
@@ -1662,7 +1735,7 @@ equality tests (DC2-DC4, DC6). The rest is ordinary.
   points; and finds some when the seams are left out, so the test can fail
   and shows what the union is.
 - **DC5, the tolerance over the union**: every DEM node in the domain within
-  tolerance of the stitched mesh (brute-force barycentric location, 1e-9
+  tolerance of the union of the piece files (brute-force barycentric location, 1e-9
   slack), seams and the edge strip included; the same mesh with z shifted by
   twice the tolerance fails.
 - **DC6, the main session's claim, as an equality**: on a node-only case (a
@@ -1675,14 +1748,14 @@ equality tests (DC2-DC4, DC6). The rest is ordinary.
   integer in both frames, so no rounding differs. Control: the whole run
   without freezing differs (`@tester` picks a case with a seam node over
   tolerance).
-- **DC7, determinism**: `--jobs` 1 and 3, `--threads` 1 and 4, pieces in
-  reversed order: identical piece files and stitched file.
+- **DC7, determinism**: `--threads` 1 and 4, pieces in reversed order:
+  identical piece files (`--jobs` is 23d's, PJ4).
 - **DC8, locality**: one piece re-run alone from its job spec writes the same
   bytes.
-- **DC9, geometry**: two pieces in one block; a block line through a lake
-  ring; a road along a block line (one edge, both bits); a block corner inside
-  the domain (four pieces at one node, which the noder must return exactly);
-  a sliver piece with no node.
+- **DC9, geometry**: two pieces in one cell; a partition line through a
+  lake ring; a road along a partition line (one edge, both bits); a cell
+  corner inside the domain (four pieces at one node, which the noder must
+  return exactly); a sliver piece with no node.
 - **DC10, the reprojected path**: a synthetic geographic tile, `--out-crs`,
   cut into four pieces; 15c's independent final check (G6) finds 0 source
   nodes over tolerance on the union; `on_frozen` is 0.
@@ -1695,7 +1768,65 @@ equality tests (DC2-DC4, DC6). The rest is ordinary.
   a second open piece).
 - **PJ2, resume**: a run stopped after k pieces and rerun computes only the
   rest, and the outputs are identical to a clean run's.
-- **PJ3, invalidation**: a changed tolerance changes every piece's hash.
+- **PJ3, invalidation**: a changed tolerance changes every piece's hash; a
+  changed `--pieces` changes the partition and so every hash.
+- **PJ4, determinism**: `--jobs` 1 and 3, `--threads` 1 and 4: identical
+  piece files and stitched file.
+
+### 23f (C++ Catch2 and through the binding)
+
+- **VR1, retire**: removing a vertex frees its slot and two triangle slots;
+  the compacted output has no dead index, and the mesh's adjacency is valid
+  (every edge in at most two triangles, consistent neighbours).
+- **VR2, the hole is Delaunay**: for random stars (Delaunay meshes of a few
+  hundred random and lattice points), removing each interior vertex in turn
+  gives exactly the triangles a brute-force Delaunay of the remaining points
+  has inside the star, checked by an exact incircle oracle in Python
+  `fractions`; cocircular lattice stars accept any Delaunay answer (no
+  violation, not equality); the mutant "fan from the first polygon vertex,
+  no flips" fails.
+- **VR3, collinear links**: a star with three or more collinear polygon
+  vertices (a lattice line) is retriangulated with no zero-area triangle and
+  no violation.
+- **TH1, thinning keeps what it must**: on a ramp-plus-bump raster, a seam
+  vertex at the bump stays and the ones on the plane go; with tolerance 0
+  none goes; the order is the one given (reversing the candidates changes
+  the result only where the test says it may).
+- **TH2, the hole recheck is exact**: after thinning, a brute-force oracle
+  (every node, barycentric location, 1e-9 slack) finds every node within
+  tolerance; the mutant that checks only the removed vertex's own node
+  fails on a case built for it (a node in the hole off the removed vertex).
+- **TH3, the band limit**: a candidate whose star leaves the band is not
+  removed and is reported as deferred.
+- **FC1, the fence check**: an exact cocircular fence edge is not a
+  violation, one just inside is; the result is the same with the edge given
+  reversed.
+
+### 23g (Python, end to end on synthetic rasters)
+
+- **SC1, K1**: one piece, no cleanup, the same bytes as 23c's DC1.
+- **SC2, Delaunay across seams** (K11): in the stitched file no edge has the
+  `seam` bit, and the exact incircle oracle of DC4, with only the input's
+  constraints, finds no violation; the same oracle on 23d's stitched file
+  (seams kept) finds some, so the test can fail.
+- **SC3, the tolerance after cleanup**: DC5's oracle on the stitched file,
+  and on the reprojected path 15c's independent final check (G6), find 0
+  over tolerance; the z-shift control fails.
+- **SC4, thinning works**: on a case where the seam pass over-densifies (a
+  plane crossed by a seam with a bump far from it), the stitched file has
+  fewer vertices on the former seam than the piece files, and no vertex the
+  tolerance needs is gone (SC3).
+- **SC5, determinism and locality** (K5, K12): `--jobs` 1 and 4 and units in
+  reversed order give identical stitched files; one unit re-run alone from
+  its two band records gives the same bytes.
+- **SC6, the final pass**: a case built so that one band's flips reach the
+  fence (a long thin triangle across the band edge): the violation is
+  deferred, the final pass clears it, and SC2 holds; a four-piece corner is
+  removed where the tolerance allows and kept where it does not; a seam's
+  end on the outline is kept.
+- **SC7, memory shape**: the cleanup opens band records only, never a piece
+  file, on a case with no deferral (a loader double that refuses piece
+  files).
 
 ## @perf acceptance
 
@@ -1712,29 +1843,54 @@ previous merge commit with `--tree`, back to back), evidence under
   requests, and a rerun that fetches nothing; an interrupted run resumed.
 - **23b:** the README rule in full; the mesh hash unchanged (mask 0), refine
   within noise at every thread count.
-- **23c:** the README rule, with `--block-nodes 0` on the benchmark so it
-  stays comparable (hash unchanged), plus the benchmark cut by the default
-  block size, recorded as a new baseline. The Velhas piece on ANADEM from the
-  cache, at 1, 2, 5, 10, 20 and 50 m, cut (11 blocks at `B = 2048`) and uncut
-  (15c-2's run): triangles and their difference, worst angle, maximum degree,
-  0 constrained-Delaunay violations with seams as constraints, 0 nodes and 0
+- **23c:** the README rule, with `--pieces 1` on the benchmark (which
+  `tools/bench.py` now passes) so it stays comparable (hash unchanged), plus
+  the benchmark at the default `--pieces` (48 pieces), recorded as a new
+  baseline. The Velhas piece on ANADEM from the cache, at 1, 2, 5, 10, 20
+  and 50 m, cut at the default (40 pieces) and uncut (15c-2's run):
+  triangles and their difference, worst angle, maximum degree, 0
+  constrained-Delaunay violations with seams as constraints, 0 nodes and 0
   source nodes over tolerance by the independent check (its control still
-  failing), the seam pass's insertions, time and peak RSS.
-- **23d:** scaling on the Velhas piece at 1 m over `--jobs` × `--threads`;
-  then **the basin** at 50, 20, 10, 5, 2 and 1 m: triangles against the
-  200-box estimate (237 M at 1 m, 215-261 M), wall time per phase, fetch
-  bytes, peak RSS, and the stitched file's size. The claim to test: **peak
-  RSS under 16 GiB at every tolerance**, i.e. memory no longer decides the
-  tolerance. The independent final check over the union (on sampled pieces
-  if a full check is too long; `@perf` says which and why).
+  failing), the seam pass's insertions, time and peak RSS. These are the
+  before-cleanup figures 23g compares against.
+- **23d:** scaling on the Velhas piece at 1 m over `--jobs` × `--threads`,
+  against the balance bound under "The defaults"; the per-piece fixed cost
+  (planning, slicing, windows, seam pass, writing), measured on pieces at
+  `N_MIN`, which decides whether `N_MIN` stands (B14: if it exceeds 10 % of
+  such a piece's 1 m refine, `N_MIN` is doubled and the figures rerun).
+- **23f:** the README rule in full; the mesh hash unchanged (nothing in
+  23f runs on the existing path); vertex removal timed per candidate on a
+  synthetic band.
+- **23g (B5's comparison, ruled):** the Velhas piece at the same six
+  tolerances, cut and cleaned against uncut: **triangle count**; **vertices
+  within two cells of a former seam**, against the uncut mesh's in the same
+  strips; **worst angle in those strips** and the share of their triangles
+  under 5°; 0 violations by the exact incircle oracle with the input's
+  constraints only; 0 nodes and 0 source nodes over tolerance; the cleanup's
+  time, the units' bands and how many items went to the final pass. **The
+  gap is large**, and B5 (b), the exchange, goes back to Ola as the
+  fallback, if at any tolerance the cut triangles exceed uncut by more than
+  1 %, or the strip vertices by more than 25 %, or the strips' worst angle
+  is below half the uncut strips' (thresholds decided here, B14).
+- **The basin run** (B11, after 23g): the basin at 50, 20, 10, 5, 2 and 1 m:
+  triangles against the 200-box estimate (237 M at 1 m, 215-261 M), wall
+  time per phase (cleanup included), fetch bytes, peak RSS, and the stitched
+  file's size. The claim to test: **peak RSS under 16 GiB at every
+  tolerance**, i.e. memory no longer decides the tolerance. The independent
+  final check over the union (on sampled pieces if a full check is too long;
+  `@perf` says which and why). Then Ola chooses the tolerance.
 
 ## Questions for Ola
 
 Numbered B1-B12, so they cannot be confused with 15's and 15c's Q1-Q17.
 The literature pass with web search (2026-10-01, "Prior art") changed no
-recommendation; it added a note to B4 and an option (c) to B5.
+recommendation; it added a note to B4 and an option (c) to B5. **All twelve
+were ruled by Ola on 2026-10-01** ("Ruled by Ola, 2026-10-01", near the
+top); they are kept as asked, each marked with its ruling. B13 and B14, after
+them, are new.
 
 **B1. Which cuts first?**
+*Ruled (a), and BHO dropped entirely as a geometry source: "I'm not interested in archaic maps".*
 Ola's direction (2026-10-01) was to cut on constraint edges; (a) does cut on
 constraint edges, but ones the plan adds, not ones the input has, and the
 pieces are not hydrological units.
@@ -1754,6 +1910,7 @@ pieces are not hydrological units.
 - (c) Both in 23c: over the ceiling; two PRs anyway.
 
 **B2. When is a run cut?**
+*Replaced, with B3, by Ola's partition of the bounding box (`--pieces`, a cap, a minimum).*
 - **(a) Only when the needed window is wider or taller than `--block-nodes`;
   then along every block line through the domain. Recommended.** Small meshes
   stay bit-identical to today's (K1). It is one rule, not two code paths: an
@@ -1763,6 +1920,7 @@ pieces are not hydrological units.
   existing mesh that does changes.
 
 **B3. The block size.**
+*Replaced, with B2 (above).*
 - **(a) 2048 nodes by default (61 km at 30 m, 20 km at 10 m), as
   `--block-nodes`, recorded in the file; 0 means never cut. Recommended.**
   About 1 GiB per piece at 1 m in the steepest terrain measured, so eight at
@@ -1773,6 +1931,7 @@ pieces are not hydrological units.
 - (c) 1024: four times the seams, a quarter of the memory.
 
 **B4. The seams in the output.**
+*Ruled (b), with local seam thinning; designed under "Seam removal and thinning".*
 - **(a) Kept as constraint edges with a `seam` bit. Recommended.** The mesh is
   constrained Delaunay with the seams as constraints; a consumer can tell a
   seam from a river by its bit. No extra code.
@@ -1790,6 +1949,7 @@ pieces are not hydrological units.
   tolerance-driven refine does not have. Recommendation unchanged.
 
 **B5. How two pieces agree on a seam.**
+*Ruled (a); (b) is the named fallback if 23g's comparison shows a large gap.*
 - **(a) The seam is frozen after a one-dimensional seam pass, which both
   neighbours compute identically. Recommended.** No exchange and no rounds;
   each piece job is self-contained. On grid-line seams no feet are lost (the
@@ -1810,6 +1970,7 @@ pieces are not hydrological units.
   supports (a).
 
 **B6. The output of a cut run.**
+*Ruled (a), the stitched file clean; piece files keep their seams.*
 - **(a) Pieces and an index always; one stitched file for `--out x.vtk` by
   default, skipped with `--no-stitch`. Recommended.** `--out` keeps meaning
   one file; pieces are the durable result and what resumes a run; at the
@@ -1817,6 +1978,7 @@ pieces are not hydrological units.
 - (b) Pieces and the index only; `rasputin stitch` on request.
 
 **B7. Where the cache lives.**
+*Ruled: a new `RASPUTIN_DATA`, the cache at `$RASPUTIN_DATA/cache`, `--cache` overriding, refused if neither.*
 - **(a) `--cache DIR` or the `RASPUTIN_CACHE` environment variable, refused
   if neither is set. Recommended.** Explicit, as `--out-crs` is (Q11); one
   more option.
@@ -1826,30 +1988,34 @@ pieces are not hydrological units.
   conventional, but 2 GB of DEM blocks hidden there.
 
 **B8. Sources in the first fetch PR.**
+*Ruled (a).*
 - **(a) ANADEM (OpenTopography's COG) and GLO-30 (AWS). Recommended.** GLO-30
   is what the basin-piece measurement used and is global; about 25 of 23a's
   lines.
 - (b) ANADEM only.
 
 **B9. Resumable runs** (skip pieces whose job hash matches).
+*Ruled (a).*
 - **(a) In 23d. Recommended.** About 35 lines; a basin run interrupted at 1 m
   resumes where it stopped.
 - (b) Not now.
 
 **B10. Natural seams' vertices** (for 23e, asked now so it is not a
-surprise). BHO boundaries bring a vertex every ~107 m, used as given under
-Ola's input model.
+surprise). *Moot: BHO is dropped (B1).* BHO boundaries bring a vertex every
+~107 m, used as given under Ola's input model.
 - **(a) Decide when 23e is designed, on measured counts. Recommended.**
 - (b) Simplify each shared chain once, between corners, with increment 22's
   area-preserving collapse, so both sides use the same chain.
 - (c) Always as given.
 
 **B11. The basin tolerance** (Q15, open). Memory no longer limits it.
+*Ruled (a).*
 - **(a) The basin run measures 50 down to 1 m and Ola chooses from the
   numbers. Recommended.** Nothing in this design depends on the answer.
 - (b) Name it now, and the acceptance stops there.
 
 **B12. The order of work** in "Order of work and PR split".
+*Ruled (a), knowingly reversing part of Q14's placement.*
 - **(a) As proposed: 15c-1, 23a-1, 23a-2, 15c-2, the edge strip, 23b, 23c,
   23d, the basin run, 23e. Recommended.** The fetch step lands early, so
   every later step runs on ANADEM. This reverses part of Q14's placement
@@ -1860,12 +2026,48 @@ Ola's input model.
   15c-2's acceptance on a one-off ANADEM cut. (b) keeps Q14's placement as
   ruled.
 
-**Decided here, which Ola may overrule:** grid lines on the computation
-lattice as artificial cuts; piece ids `(j, i, k)`; the seam pass computed by
-both neighbours rather than once; seam heights from the seam record; the
-ETag ignored; coalescing at 64 KiB gaps and 8 MiB requests; 8 connections and
-three retries; the manifest holding identity, not inventory; largest piece
-first; one process with threads; the index as JSON; pieces written beside the
+### New questions, after the rulings
+
+**B13. The domains of the acceptance runs and of the basin run.** With BHO
+dropped as geometry (B1), two domains in this design are still BHO outlines:
+the Velhas piece (ottobasin 76949: 15c-2's, 23c's and 23g's acceptance, and
+the basin-piece baseline every comparison reads), and the basin itself (BHO
+level 2: the basin run, and `partition.py`'s figures).
+- **(a) Keep both as measurement domains only, which B1 allows ("BHO at most
+  for official codes or validation"). Recommended** for now: every figure
+  stays comparable with the basin-piece baseline, and nothing in the code
+  reads BHO.
+- (b) DEM-derived now: the Velhas catchment by increment 22 on the
+  resampled ANADEM grid (a 30.9 M-node window, inside 22's memory cap), and
+  the basin's by 22 at basin scale. The basin's is not possible yet: 22
+  floods one dense projected window, and the basin's would be the 2.08 G-node
+  canvas Ola ruled out; it needs 22 windowed, which is 23e's work. The
+  Velhas runs would also lose their baseline.
+- (c) (a) now, (b) as part of 23e, with one comparison run of the two
+  outlines when it lands.
+
+**B14. The defaults decided here**: `--pieces 64`, `N_MIN = 2^19` and
+`N_MAX = 2^22` nodes ("The defaults, by arithmetic"), the bands' `R = 4`
+rings, and 23g's gap thresholds (+1 % triangles, +25 % vertices near former
+seams, half the worst angle).
+- **(a) As decided. Recommended.** The arithmetic is in the record, and 23d
+  and 23g measure what it assumed (per-piece cost, balance, deferrals).
+- (b) A larger `N_MIN`, `2^21`: domains up to 4.2 M nodes stay whole (Bygdin
+  at 10 m most likely among them), but `--pieces` then decides the count only
+  over a twofold range of sizes, and the Velhas piece gets 3 × 5 cells instead
+  of 60.
+
+**Decided here, which Ola may overrule:** lattice lines on the computation
+lattice as artificial cuts; the partition rule's integer details (near-square
+cells, the last row and column narrower, the cap winning over the minimum);
+`--pieces 1` meaning one piece whatever the size, the cap not applying;
+`N_MIN` and `N_MAX` as constants recorded in the index, not options; piece
+ids `(j, i, k)`; the seam pass computed by both neighbours rather than once;
+seam heights from the seam record; zones by the nearest unit; seam ends on
+the outline, holes and features kept; the ETag ignored; coalescing at 64 KiB
+gaps and 8 MiB requests; 8 connections and three retries; the manifest
+holding identity, not inventory; largest piece first; one process with
+threads; the index as JSON; pieces and band records written beside the
 stitched file as `<out>.pieces/`.
 
 ## Review
