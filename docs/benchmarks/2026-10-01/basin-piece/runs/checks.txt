@@ -1,0 +1,5 @@
+{"tolerance": 20.0, "shift_m": 0.0, "control_over_tolerance": 0, "control_max": 19.999989197356626, "control_outside_mesh": 0, "source_over_tolerance": 7919}
+{"tolerance": 20.0, "shift_m": 15.0, "control_over_tolerance": 22548, "control_max": 48.912879943847656, "control_outside_mesh": 4461, "source_over_tolerance": 35017}
+basin_boxes_glo30 200 200 differences 0
+piece_boxes_glo30 30 30 differences 0
+piece [(True, True), (True, True), (True, True), (True, True), (True, True), (True, True)]

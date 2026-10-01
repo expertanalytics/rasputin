@@ -1,0 +1,167 @@
+{
+ "source": "glo30",
+ "window_lonlat": [
+  -44.67370317128792,
+  -43.45872680891939,
+  -20.456027846919216,
+  -18.45749800450768
+ ],
+ "shape": [
+  7197,
+  4376
+ ],
+ "first_node": [
+  -44.67388888888889,
+  -18.45722222222222
+ ],
+ "spacing_deg": 0.0002777777777777778,
+ "nodata_nodes": 0,
+ "z_range": [
+  527.8095092773438,
+  1925.798095703125
+ ],
+ "fetch_s": 79.8,
+ "fetched_utc": "2026-10-01T00:23:44Z",
+ "info": {
+  "tiles": [
+   {
+    "source": "https://copernicus-dem-30m.s3.amazonaws.com/Copernicus_DSM_COG_10_S19_00_W045_00_DEM/Copernicus_DSM_COG_10_S19_00_W045_00_DEM.tif",
+    "tie": [
+     0.0,
+     0.0,
+     0.0,
+     -45.0,
+     -18.0,
+     0.0
+    ],
+    "scale": [
+     0.0002777777777777778,
+     0.0002777777777777778,
+     0.0
+    ],
+    "raster_type": 2,
+    "shape": [
+     3600,
+     3600
+    ],
+    "blocks_read": 9,
+    "nodata_tag": null
+   },
+   {
+    "source": "https://copernicus-dem-30m.s3.amazonaws.com/Copernicus_DSM_COG_10_S19_00_W044_00_DEM/Copernicus_DSM_COG_10_S19_00_W044_00_DEM.tif",
+    "tie": [
+     0.0,
+     0.0,
+     0.0,
+     -44.0,
+     -18.0,
+     0.0
+    ],
+    "scale": [
+     0.0002777777777777778,
+     0.0002777777777777778,
+     0.0
+    ],
+    "raster_type": 2,
+    "shape": [
+     3600,
+     3600
+    ],
+    "blocks_read": 6,
+    "nodata_tag": null
+   },
+   {
+    "source": "https://copernicus-dem-30m.s3.amazonaws.com/Copernicus_DSM_COG_10_S20_00_W045_00_DEM/Copernicus_DSM_COG_10_S20_00_W045_00_DEM.tif",
+    "tie": [
+     0.0,
+     0.0,
+     0.0,
+     -45.0,
+     -19.0,
+     0.0
+    ],
+    "scale": [
+     0.0002777777777777778,
+     0.0002777777777777778,
+     0.0
+    ],
+    "raster_type": 2,
+    "shape": [
+     3600,
+     3600
+    ],
+    "blocks_read": 12,
+    "nodata_tag": null
+   },
+   {
+    "source": "https://copernicus-dem-30m.s3.amazonaws.com/Copernicus_DSM_COG_10_S20_00_W044_00_DEM/Copernicus_DSM_COG_10_S20_00_W044_00_DEM.tif",
+    "tie": [
+     0.0,
+     0.0,
+     0.0,
+     -44.0,
+     -19.0,
+     0.0
+    ],
+    "scale": [
+     0.0002777777777777778,
+     0.0002777777777777778,
+     0.0
+    ],
+    "raster_type": 2,
+    "shape": [
+     3600,
+     3600
+    ],
+    "blocks_read": 8,
+    "nodata_tag": null
+   },
+   {
+    "source": "https://copernicus-dem-30m.s3.amazonaws.com/Copernicus_DSM_COG_10_S21_00_W045_00_DEM/Copernicus_DSM_COG_10_S21_00_W045_00_DEM.tif",
+    "tie": [
+     0.0,
+     0.0,
+     0.0,
+     -45.0,
+     -20.0,
+     0.0
+    ],
+    "scale": [
+     0.0002777777777777778,
+     0.0002777777777777778,
+     0.0
+    ],
+    "raster_type": 2,
+    "shape": [
+     3600,
+     3600
+    ],
+    "blocks_read": 6,
+    "nodata_tag": null
+   },
+   {
+    "source": "https://copernicus-dem-30m.s3.amazonaws.com/Copernicus_DSM_COG_10_S21_00_W044_00_DEM/Copernicus_DSM_COG_10_S21_00_W044_00_DEM.tif",
+    "tie": [
+     0.0,
+     0.0,
+     0.0,
+     -44.0,
+     -20.0,
+     0.0
+    ],
+    "scale": [
+     0.0002777777777777778,
+     0.0002777777777777778,
+     0.0
+    ],
+    "raster_type": 2,
+    "shape": [
+     3600,
+     3600
+    ],
+    "blocks_read": 4,
+    "nodata_tag": null
+   }
+  ]
+ }
+}
