@@ -123,7 +123,7 @@ ignore = []
 [tool.mypy]
 python_version = "3.12"
 strict = true
-files = ["src_python/tin_engine", "tools/bench.py"]
+files = ["src_python/tin_engine", "tools/bench.py", "tools/harness_mode.py", "tools/away.py"]
 plugins = ["pydantic.mypy"]
 
 # shapely ships no type information and types-shapely is not a dependency;
