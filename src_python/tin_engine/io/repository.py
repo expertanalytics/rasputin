@@ -211,7 +211,12 @@ class CacheRepository:
             if manifest.source != self._source:
                 raise CacheError(f"{path} is the manifest of {manifest.source}, not {self._source}")
             for name, entry in sorted(manifest.objects.items()):
-                header = (self._directory / name / "header.bin").read_bytes()
+                try:
+                    header = (self._directory / name / "header.bin").read_bytes()
+                except OSError as exc:
+                    raise CacheError(
+                        f"{self._source}/{name}: no header.bin; re-fetch with --refresh"
+                    ) from exc
                 if hashlib.sha256(header).hexdigest() != entry.header_sha256:
                     raise CacheError(
                         f"{self._source}/{name}: header.bin is not the one the manifest "

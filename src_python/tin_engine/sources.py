@@ -44,8 +44,10 @@ SOURCES: Mapping[str, RemoteSource] = MappingProxyType(
             "anadem_v1_compressed_COG.tif",
             crs="EPSG:4674",
             nodata=-9999.0,
-            credit="ANADEM v1, distributed by OpenTopography, doi:10.5069/G9736P4G",
-            licence_note="read the licence on the DOI's landing page before redistributing",
+            credit="Agência Nacional de Águas e Saneamento Básico. (2025). ANADEM: A Digital "
+            "Terrain Model for South America. Distributed by OpenTopography. "
+            "https://doi.org/10.5069/G9736P4G.",
+            licence_note="CC BY 4.0 (Creative Commons Attribution 4.0 International)",
         ),
         "glo30": RemoteSource(
             id="glo30",
@@ -54,9 +56,14 @@ SOURCES: Mapping[str, RemoteSource] = MappingProxyType(
             tile_list_url=f"{_GLO30}/tileList.txt",
             crs="EPSG:4326",
             nodata=None,
-            credit="Copernicus DEM GLO-30, (c) DLR e.V. 2010-2014 and (c) Airbus Defence "
-            "and Space GmbH 2014-2018, provided under COPERNICUS by the European Union and ESA",
-            licence_note="Copernicus DEM licence: free use with this credit",
+            # The licence's Art. 6(b) notice for adapted data, verbatim but "(c)" for the sign.
+            credit="produced using Copernicus WorldDEM-30 (c) DLR e.V. 2010-2014 and (c) Airbus "
+            "Defence and Space GmbH 2014-2018 provided under COPERNICUS by the European Union "
+            "and ESA; all rights reserved",
+            # Art. 6(c): this sentence goes with any distribution of the data, modified or not.
+            licence_note="Licence for Copernicus DEM instance COP-DEM-GLO-30-F; Art. 6(c): "
+            '"The organisations in charge of the Copernicus programme by law or by delegation '
+            'do not incur any liability for any use of the Copernicus WorldDEM-30"',
         ),
     }
 )
