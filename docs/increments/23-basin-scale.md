@@ -82,11 +82,11 @@ facts in `15c-geographic-dem.md` "Measured by @architect" are not repeated):
   "00000000000000000000000000000000-1"`, a placeholder**: the ETag cannot
   detect a changed file;
 - tifffile parses every one of the 11 pages from the first 8 MiB alone, with
-  every page's offsets numbering its blocks and no read past the prefix (the
-  strict wrapper records any; tifffile catches the refusal and logs it rather
-  than raising, so the record and the offsets, not an exception, are the
-  check). Cut to 64 KiB or 1 MiB, tifffile still returned 11 pages, logged
-  missing tags and gave pages with no offsets (1 MiB: 0 offsets for 188,638
+  every page's offsets numbering its blocks and no read past the prefix
+  (tifffile checks each offset against the stream's size before reading and
+  logs a refusal rather than raising, so the strict wrapper never sees an
+  out-of-range read; the offsets count is the check). Cut to 64 KiB or
+  1 MiB, tifffile still returned 11 pages, logged missing tags and gave pages with no offsets (1 MiB: 0 offsets for 188,638
   blocks on the full page), and the wrapper recorded nothing: the offsets
   check is the one that fires, and the probe failed on it. The
   full-resolution page has 188,638 blocks of 512²; image data starts at byte
@@ -830,10 +830,10 @@ list is sea, recorded as "no tile", not as missing.
 ### Planning (`fetch/plan.py`, pure)
 
 - **The header** of each object: read a prefix (1 MiB, doubling) until
-  every page parses with the wrapper recording no read past the prefix and
-  every page's offsets numbering its blocks; tifffile does not raise on a
+  every page's offsets number its blocks; tifffile does not raise on a
   short prefix, it logs and returns a page without offsets (measured at
-  64 KiB and 1 MiB). ANADEM needs at most 8 MiB (measured). The prefix is cached as `header.bin`.
+  64 KiB and 1 MiB). ANADEM needs at most 8 MiB (measured). The prefix is
+  cached as `header.bin`.
 - **The needed region** in the source CRS: the same function 15c's
   `source_region` uses (the target window's image, grown by two source
   cells), applied to the whole domain. Fetch and mesh call this one function,

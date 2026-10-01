@@ -6,13 +6,13 @@ DATA is `../rasputin_data/sao_francisco_piece` (for the BHO outlines). Reads
 the COG's first 8 MiB with one range request and parses all 11 pages from
 that prefix alone. tifffile does not raise on a short prefix: it logs and
 returns pages without offsets. So the probe asserts that every page's
-offsets number its blocks, and that the strict reader, which refuses and
-records any read past the prefix, recorded none. With the prefix cut to
+offsets number its blocks, and, as a backstop, that the strict reader
+recorded no read past the prefix (tifffile bounds-checks offsets itself, so
+the backstop did not fire at 64 KiB or 1 MiB either). With the prefix cut to
 64 KiB or 1 MiB the wrapper recorded nothing and the offsets check failed
 (1 MiB: page 0 had 0 offsets for 188,638 blocks), so the offsets check is
-the one that fires. Prints the
-full-resolution page's block layout, decodes one block fetched by its own
-range request, and counts the blocks (and their compressed bytes) meeting the
+the one that fires. Prints the full-resolution page's block layout, decodes
+one block fetched by its own range request, and counts the blocks (and their compressed bytes) meeting the
 basin's and the Velhas piece's outlines. Needs network access. A measurement
 script, not production code; nothing imports it.
 """
@@ -40,7 +40,9 @@ PREFIX = 8 * 2**20
 class Strict(io.BytesIO):
     """A prefix that refuses, and records, any read past its end.
 
-    tifffile catches the refusal and logs it, so the record is the check.
+    A backstop: tifffile bounds-checks offsets against the stream's size
+    first, so on a short prefix it logs and returns pages without offsets,
+    and the offsets count is the check.
     """
 
     def __init__(self, data: bytes) -> None:
