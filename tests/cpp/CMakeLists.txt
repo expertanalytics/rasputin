@@ -305,3 +305,16 @@ add_terrain_test(test_hydrology_upstream unit/test_hydrology_upstream.cpp)
 # the exact kernel. A backend test because it names DefaultKernel. Not named
 # invariant-critical; it starts no threads.
 add_terrain_backend_test(test_area_collapse unit/test_area_collapse.cpp)
+
+# The final check, increment 15c-1 (docs/increments/15c-geographic-dem.md, D4,
+# D5 and "Tests for @tester"): the check-point store (CP1), refine_points on
+# placed points (RP1, RP2, RP5 to RP8, and LatticeMesh::split_inside's
+# MeshVertex overload), and its property suite (RP3's tolerance and Delaunay
+# oracles, RP4's thread and add-order sweep). The record names RP3 and the
+# membership and tie-break tests (RP2, RP4, RP5) invariant-critical. The two
+# refine_points suites start threads; both run in the TSan job.
+add_terrain_test(test_refinement_check_points unit/test_refinement_check_points.cpp)
+add_terrain_backend_test(test_refinement_refine_points unit/test_refinement_refine_points.cpp)
+target_link_libraries(test_refinement_refine_points PRIVATE Threads::Threads)
+add_terrain_backend_test(prop_refinement_refine_points property/prop_refinement_refine_points.cpp)
+target_link_libraries(prop_refinement_refine_points PRIVATE Threads::Threads)
