@@ -104,139 +104,308 @@ so which 1° tiles exist (land) is known without probing for 404s.
 
 ### Literature
 
-Bibliographic details marked **(verified)** were checked against Crossref on
-2026-10-01 (title, authors, venue, volume, pages, DOI); the description of
-the method is recalled unless it says otherwise. No full text was reread.
+How each entry was checked. The first pass, on 2026-10-01, had only Crossref
+and OpenAlex; the same day the section was redone with web search and full
+texts where they could be fetched. The marks:
+**Crossref**: the DOI's record matches authors, title, venue, volume and
+pages as given. **read**: the full text was read at the URL named, and what is
+said about the method comes from it. **code**: the source was read at the
+commit named. **secondary**: the work itself was not reached; what is said
+comes from the source named. **recalled**: from memory, unchecked.
 
 - **Streaming Delaunay.** Isenburg, Liu, Shewchuk and Snoeyink, "Streaming
   computation of Delaunay triangulations", *ACM Trans. Graphics* 25(3):
-  1049-1056, 2006, doi:10.1145/1141911.1141992 (verified). Points arrive in
-  a stream with *finalization* tags: once a region of space is known to get
-  no more points, the triangles whose circumcircles lie in finalized space
-  are written out and freed, so memory follows the front, not the data. The
-  companion "Generating raster DEM from mass points via TIN streaming",
-  GIScience 2006, LNCS 4197:186-198, doi:10.1007/11863939_13 (verified),
-  goes the other way (points to raster). **What we take:** locality as the
-  memory principle, which is Ola's, and "finish a region, write it out, free
-  it": a piece's file is written when the piece is done. **What differs:**
-  they triangulate every point, with no constraints and no refinement; we
-  choose points by error and must honour constraints. Their memory bound
-  comes from spatial finalization of a point stream; ours from pieces bounded
-  by constraints, which are independent by construction, so no front exists.
+  1049-1056, 2006, doi:10.1145/1141911.1141992 (Crossref; read,
+  `https://people.eecs.berkeley.edu/~jrs/papers/dtstream.pdf`). Points arrive
+  with *finalization* tags; a triangle is written out and freed once its
+  circumcircle meets no unfinalized cell, so memory follows the front, not
+  the data. The paper says "we have not yet implemented support for
+  constrained Delaunay triangulations". The companion "Generating raster DEM
+  from mass points via TIN streaming", GIScience 2006, LNCS 4197:186-198,
+  doi:10.1007/11863939_13 (Crossref), goes from points to a raster. **What we
+  take:** locality as the memory principle, which is Ola's, and "finish a
+  region, write it out, free it": a piece's file is written when the piece is
+  done. **What differs:** they triangulate every point, with no constraints
+  and no refinement; we choose points by error and must honour constraints.
+  Their memory bound comes from spatial finalization of a point stream; ours
+  from pieces bounded by constraints, which are independent by construction,
+  so no front exists.
 - **I/O-efficient CDT.** Agarwal, Arge and Yi, "I/O-efficient construction
-  of constrained Delaunay triangulations", ESA 2005, LNCS (volume recalled
-  as 3669) 355-366, doi:10.1007/11561071_33 (verified). An external-memory
-  CDT. **Not used:** the vector input (outline, cuts, features) fits in
-  memory at basin scale; only the DEM is large, and it is partitioned.
+  of constrained Delaunay triangulations", ESA 2005, LNCS 3669:355-366,
+  doi:10.1007/11561071_33 (Crossref; the volume number, recalled in the first
+  pass, is from web search results for the book's Springer and DBLP pages). Secondary (Isenburg et al.
+  2006, §2): a small random sample splits the points into subproblems that
+  Triangle solves in core, over many read passes. **Not used:** the vector
+  input (outline, cuts, features) fits in memory at basin scale; only the DEM
+  is large, and it is partitioned.
 - **Decoupled refinement.** Linardakis and Chrisochoides, "Delaunay
   decoupling method for parallel guaranteed quality planar mesh refinement",
   *SIAM J. Sci. Comput.* 27(4):1394-1423, 2006, doi:10.1137/030602812
-  (verified); and the graded version, *SIAM J. Sci. Comput.* 30(4):1875-1891,
-  2008, doi:10.1137/060677276 (verified). Separators are refined *before* the
-  subdomains, so that each subdomain then refines with no communication and
-  the union keeps the Delaunay and quality guarantees. **This is the method
-  we build on.** **What differs, and why:** their separators are refined from
-  the quality criterion and a sizing function, because what a subdomain will
-  need on its boundary is only known through quality bounds. Ours are refined
-  by their own one-dimensional tolerance, which is fully known in advance:
-  the TIN restricted to a constraint edge is the linear interpolant of the
-  edge's two end heights, whatever the triangles on either side are, so the
-  error at any point on the edge is a function of the edge's vertices alone
-  (the seam pass). **The guarantee we drop:** in their method the separator
-  edges end up Delaunay, so the union is Delaunay. Ours stay constraints, so
-  the union is constrained Delaunay *with respect to the seams too* (B4).
+  (Crossref); and "Graded Delaunay decoupling method for parallel guaranteed
+  quality planar mesh generation", *SIAM J. Sci. Comput.* 30(4):1875-1891,
+  2008, doi:10.1137/060677276 (Crossref; read,
+  `https://class-pages.pages.cs.odu.edu/crtcpub/assets/publications/pdf/graded-delaunay-decoupling-method-for-parallel-guaranteed-qu-2008.pdf`).
+  Read in the 2008 paper: the separators "will be a permanent part of the
+  geometry"; a preprocessing step refines them to edge lengths between
+  (√3/2)k and 2k, with k from the triangle-area bound and the local feature
+  size (Theorem 5.3, for Ruppert's algorithm), so that the unmodified
+  sequential mesher (Triangle) run on each subdomain never splits a separator
+  edge; the union is then a *conforming Delaunay* triangulation, because the
+  open diametral circles of the separator edges stay empty (Proposition 5.2).
+  **This is the method we build on.** **What differs, and why:** their
+  separator lengths come from the quality bound and a sizing function,
+  because what a subdomain needs on its boundary is known only through those
+  bounds. Ours come from the seam's own one-dimensional tolerance, which is
+  known in advance: the TIN restricted to a constraint edge is the linear
+  interpolant of the edge's two end heights, whatever the triangles on either
+  side are, so the error at any point on the edge is a function of the
+  edge's vertices alone (the seam pass). And they keep the mesher off the
+  separators by giving it nothing to split there; we forbid the split
+  outright (frozen edges), because a tolerance-driven refine has no size
+  bound that would keep it away. **The guarantee we drop:** their union is
+  Delaunay; ours is constrained Delaunay with the seams as constraints, which
+  is PCDM's guarantee (below) (B4).
 - **Interfaces first.** Galtier and George, "Prepartitioning as a way to mesh
-  subdomains in parallel", 5th International Meshing Roundtable, 1996
-  (**unverified**: not in Crossref; the IMR 1996 proceedings carry no DOI).
-  Galtier, "Load balancing issues in the prepartitioning method", LNCS,
-  1997, pp. 922-936, doi:10.1007/bfb0002835 (verified) is the same line.
-  Partition, mesh the interfaces, then mesh the subdomains independently.
-  Structurally this is our order (seam pass, then pieces).
+  subdomains in parallel", Proc. 5th International Meshing Roundtable, 1996,
+  pp. 107-121 or 107-122 (citing works differ). **Not reached:**
+  `imr.sandia.gov` answered 403 to every fetch, no other copy was found, and
+  the paper has no DOI. Secondary: Linardakis and Chrisochoides 2008 (§2, read
+  above) describe it as "a parallel projective Delaunay meshing method which
+  guarantees the quality of the elements and eliminates communication, but
+  may suffer setbacks in the form of regenerating part of the mesh"; search
+  summaries of citing works say the interfaces between subdomains are meshed
+  before the subdomains. Galtier, "Load balancing issues in the
+  prepartitioning method", LNCS, 1997, pp. 922-936, doi:10.1007/bfb0002835
+  (Crossref) is the same line. Structurally this is our order (seam pass,
+  then pieces).
 - **Exchange on shared segments.** Chernikov and Chrisochoides, "Algorithm
   872: parallel 2D constrained Delaunay mesh generation", *ACM Trans. Math.
-  Softw.* 34(1):1-20, 2008, doi:10.1145/1322436.1322442 (verified); and Kot,
-  Chernikov and Chrisochoides, "Parallel out-of-core constrained Delaunay
-  mesh generation", IDAACS 2005, pp. 183-190, doi:10.1109/idaacs.2005.282967
-  (verified). Recalled: when a subdomain splits a segment on its boundary, it
-  sends the split to the neighbour sharing that segment, so the two agree;
-  the out-of-core version swaps subdomains to disk. **This is the protocol
-  Ola describes** ("only two intersecting subdomains sharing the constraint
-  is needed"). It is the alternative of B5 (b). Its termination rests on
-  Ruppert-type bounds; ours would rest on finite candidate sets (below).
-- **Parallel Delaunay by domain decomposition**, for context: Said,
+  Softw.* 34(1):1-20, 2008, doi:10.1145/1322436.1322442 (Crossref; read,
+  `https://class-pages.pages.cs.odu.edu/crtcpub/assets/publications/pdf/algorithm-872-parallel-2d-constrained-delaunay-mesh-generati-2008.pdf`);
+  and Kot, Chernikov and Chrisochoides, "Parallel out-of-core constrained
+  Delaunay mesh generation", IDAACS 2005, pp. 183-190,
+  doi:10.1109/idaacs.2005.282967 (Crossref). Read: subdomains are separated
+  by constrained segments, and "if the mesh inside each subdomain is
+  Delaunay, then the global mesh is constrained Delaunay"; an encroached
+  boundary edge is split at its midpoint and the neighbour is sent a split
+  message, `split(p0, p1, p2)`, with care for messages that arrive out of
+  order; termination is detected with Dijkstra's algorithm. **This is the
+  protocol Ola describes** ("only two intersecting subdomains sharing the
+  constraint is needed"). It is the alternative of B5 (b), and its union
+  guarantee (constrained Delaunay with respect to the separators) is the one
+  B4 (a) gives.
+- **Parallel Delaunay and terrain triangulation**, for context: Said,
   Weatherill, Morgan and Verhoeven, "Distributed parallel Delaunay mesh
   generation", *Comput. Methods Appl. Mech. Engrg.* 177(1-2):109-125, 1999,
-  doi:10.1016/s0045-7825(98)00374-0 (verified); Blelloch, Miller, Hardwick
+  doi:10.1016/s0045-7825(98)00374-0 (Crossref); Blelloch, Miller, Hardwick
   and Talmor, "Design and implementation of a practical parallel Delaunay
   algorithm", *Algorithmica* 24(3-4):243-269, 1999, doi:10.1007/pl00008262
-  (verified); Wu, Guan and Gong, "ParaStream: a parallel streaming Delaunay
+  (Crossref); Wu, Guan and Gong, "ParaStream: a parallel streaming Delaunay
   triangulation algorithm for LiDAR points on multicore architectures",
   *Computers & Geosciences* 37(9):1355-1363, 2011,
-  doi:10.1016/j.cageo.2011.01.008 (verified), the terrain case of streaming
-  plus parallelism, again for all points. And Chrisochoides, "Parallel mesh
-  generation", in *Numerical Solution of PDEs on Parallel Computers*, LNCSE
-  51, pp. 237-264, 2006, doi:10.1007/3-540-31619-1_7 (verified). Increment
-  21 had cited it as "A survey of parallel mesh generation methods"; its
-  entry is corrected to Crossref's title on this branch.
+  doi:10.1016/j.cageo.2011.01.008 (Crossref), streaming plus parallelism for
+  all points; Chrisochoides, "Parallel mesh generation", in *Numerical
+  Solution of PDEs on Parallel Computers*, LNCSE 51, pp. 237-264, 2006,
+  doi:10.1007/3-540-31619-1_7 (Crossref; increment 21 had cited it as "A
+  survey of parallel mesh generation methods", corrected on this branch). And
+  Puppo, Davis, DeMenthon and Teng, "Parallel terrain triangulation", *IJGIS*
+  8(2):105-128, 1994, doi:10.1080/02693799408901989 (Crossref; abstract via
+  search summary): greedy selection of grid points into a Delaunay TIN on a
+  CM-2, parallel by inserting many points per pass, not by decomposing the
+  domain. Kang, Lee, Yang and Park, "A fast digital terrain simplification
+  algorithm with a partitioning method", HPC Asia 2000, vol. 2, pp. 613-618,
+  doi:10.1109/hpc.2000.843506 (Crossref; abstract, OpenAlex; paywalled, not
+  read): greedy insertion run block by block over equal rectangular blocks,
+  each insertion looking only at the current block's points and triangles,
+  with the block corners inserted first; a serial speed-up (4 to 20 times),
+  and the abstract says nothing of how block borders are refined.
 - **The union is constrained Delaunay.** Chew, "Constrained Delaunay
   triangulations", *Algorithmica* 4:97-108, 1989, doi:10.1007/bf01553881
-  (verified). A triangle is constrained Delaunay when no vertex *visible*
+  (Crossref). A triangle is constrained Delaunay when no vertex *visible*
   from its interior lies inside its circumcircle, where constraints block
   visibility. The argument under "The subdomain model" rests on this
   definition.
-- **Tiled terrain simplification.** Campos, Quintana, Garcia, Schmitt and
-  Spoelstra, "3D simplification methods and large scale terrain tiling",
-  *Remote Sensing* 12(3):437, 2020, doi:10.3390/rs12030437 (verified; first
-  found by the main session for increment 21): greedy insertion among other
-  methods, run tile by tile in parallel, keeping tile-border vertices shared
-  between neighbours. Cignoni, Ganovelli, Gobbetti, Marton, Ponchio and
-  Scopigno, "BDAM — Batched Dynamic Adaptive Meshes for high performance
-  terrain visualization", *Computer Graphics Forum* 22(3), 2003,
-  doi:10.1111/1467-8659.00698 (found by OpenAlex; authors and issue
-  recalled): TIN patches in a hierarchy, simplified to an error with
-  boundaries shared consistently between neighbours. **The closest terrain
-  prior art.** **What differs:** both are for rendering, and neither is
-  recalled as giving a sup-norm tolerance *on the shared border itself*
-  against the DEM between nodes; ours does, by the seam pass. Not reread, so
-  this difference is to be confirmed before it is written anywhere public.
+- **Tiled terrain simplification: the closest terrain prior art.** Four
+  works, each reread for this pass.
+  - Campos, Quintana, Garcia, Schmitt, Spoelstra and Schaap, "3D
+    simplification methods and large scale terrain tiling", *Remote Sensing*
+    12(3):437, 2020, doi:10.3390/rs12030437 (Crossref; **corrected**: six
+    authors, the first pass dropped Schaap). The paper itself refused every
+    fetch (MDPI and the Girona repository answered 403 or a bot check), so
+    the method was read in the authors' code and its documentation: code,
+    `coronis-computing/emodnet_qmgc` at `036aa9c`
+    (`src/tin_creation/tin_creation_greedy_insertion_strategy.cpp`,
+    `src/tin_creation/tin_creation_simplification_point_set.cpp`,
+    `src/base/zoom_tiles_scheduler.h`), and its wiki at `438824c`
+    ("General Parameters", "Point Set Simplification Parameters"). Tiles are
+    meshed one by one with a choice of methods (greedy insertion after
+    Garland and Heckbert with a vertical error, quadric edge collapse,
+    point-set simplification). **The first tile built decides a shared
+    border; neighbours built later take its border vertices as fixed** ("we
+    keep track of tiles that are already built, and we maintain and transfer
+    the border vertices to the next tiles to triangulate"). In parallel, a
+    tile in progress blocks its eight neighbours, and the wiki says "the
+    results are not deterministic" with more than one thread. In the
+    point-set route a tile's free borders are first simplified as polylines
+    with an error "computed in Z", then the interior. *Gives:* borders that
+    agree with no post-pass, and, in the point-set route, a one-dimensional
+    vertical-error pass over the border before the interior, which is the
+    shape of our seam pass. *Lacks:* a border belongs to whichever tile runs
+    first, so the mesh depends on the schedule and the thread count; in the
+    greedy route the border is checked only by the first tile's 2D run, and
+    the point-set route's interior has no error bound. **Departure:** our
+    seam is a function of the seam alone, computed identically by both
+    neighbours, so the output does not depend on the order (K5).
+  - Cignoni, Ganovelli, Gobbetti, Marton, Ponchio and Scopigno, "BDAM —
+    Batched Dynamic Adaptive Meshes for high performance terrain
+    visualization", *Computer Graphics Forum* 22(3):505-514, 2003,
+    doi:10.1111/1467-8659.00698 (Crossref, **corrected**: authors and issue
+    were recalled in the first pass; read,
+    `https://vcg.isti.cnr.it/Publications/2003/CGGMPS03a/bdam.pdf`), and the
+    same authors' "Planet-sized batched dynamic adaptive meshes (P-BDAM)",
+    IEEE Visualization 2003, pp. 147-154, doi:10.1109/VISUAL.2003.1250366
+    (Crossref; read, `http://www.crs4.it/vic/data/papers/ieeeviz03-pbdam.pdf`).
+    Patches are built bottom up: vertices on the patches' longest edges are
+    marked non-modifiable, each square block of four patches is simplified
+    by quadric edge collapse to half its vertex count with those vertices
+    locked, and the error is measured afterwards as "the maximum vertical
+    difference" by rendering both meshes and comparing depth buffers. P-BDAM
+    runs the blocks in parallel on five PCs; "synchronization is required
+    only at the completion of each bintree level". *Gives:* independent
+    simplification of blocks whose shared borders are locked, at planet
+    scale. *Lacks:* the target is a vertex count, not a tolerance; the error
+    is measured, not bounded, and on a sampled depth buffer; a border is
+    locked at the vertices the finer level left, not chosen against the DEM.
+  - Hoppe, "Smooth view-dependent level-of-detail control and its
+    application to terrain rendering", IEEE Visualization '98, pp. 35-42,
+    doi:10.1109/VISUAL.1998.745282 (Crossref; read,
+    `https://hhoppe.com/svdlod.pdf`). Blocks are simplified by edge collapse
+    until an error threshold, "we constrain ecol's to leave boundary vertices
+    untouched", then stitched 2×2 and simplified again; only the last,
+    single block simplifies the boundary. The error is the exact L∞ vertical
+    deviation from the triangulated grid, found at the vertices of the union
+    of the two triangulations: grid points inside faces and grid-line
+    crossings inside edges. *Gives:* the exact sup-norm argument our check
+    points use (nodes plus row and column crossings, Q14). Hoppe adds that
+    for quadtree and bintree subdivisions "all grid line crossings happen to
+    fall exactly on grid points", the same reason a grid-line seam's pass is
+    exact. *Lacks:* a shared border stays at
+    full resolution until both sides are merged (P-BDAM: "some of the borders
+    remains not simplified until the whole mesh can be loaded entirely in
+    memory"). That is the one alternative to a seam pass, seams at full
+    lattice resolution; not taken, because a 2048-node block line would
+    carry 2048 vertices per block side at every tolerance.
+  - Bertilsson, "Dynamic creation of multi-resolution triangulated irregular
+    network", MSc thesis MECS-2015-18, Blekinge Institute of Technology
+    (read, `https://www.diva-portal.org/smash/get/diva2:867859/FULLTEXT02.pdf`;
+    no DOI). Patches selected independently for rendering; "the border points
+    only test their height differences with other border points along the
+    same edge. This is required so as to produce identical selection for two
+    patches sharing a border", and "computes the same border points multiple
+    times to achieve fully independent computation". *Gives:* the closest
+    precedent for our seam pass computed by both neighbours. *Lacks:* a
+    screen-space heuristic, no error guarantee, no constraints.
+- **Grey literature found by web search** (patents read on their Google
+  Patents pages through a summarising fetch; claims not read in full):
+  - Starhill et al. (Microsoft), "Maintaining consistent boundaries in
+    parallel mesh simplification", US 10,043,309 B2, granted 2018-08-07:
+    component meshes of a general 3D model simplified in parallel by edge
+    collapse, with a boundary collapse whose result "is independent of the
+    data on the interior of the component mesh and enables shared boundaries
+    of adjacent component meshes to simplify identically", "with no
+    additional synchronization". The same principle as our seam pass, for
+    general meshes, with no tolerance.
+  - Godzaridis and St-Pierre (Bentley Systems), "Multi-resolution tiled 2.5D
+    Delaunay triangulation stitching", US 10,255,716 B1, granted 2019-04-09:
+    LiDAR terrain tiles triangulated independently, then stitched by removing
+    the triangles whose circumcircle crosses a tile boundary and
+    retriangulating those points with the neighbours' constraints. Prior art
+    for B4 (b), seams removed after the run.
+  - HERE `tin-terrain` (code at `b96f3f5`,
+    `src/dem2tintiles_workflow.cpp`): groups of web tiles meshed
+    independently by a greedy vertical-error method on a crop grown by 100
+    cells, then cut to tile bounds; nothing makes two groups agree on their
+    shared boundary. Mapbox Martini and Delatin mesh tiles to a maximum
+    vertical error independently; their edges do not share vertices, and the
+    maintainer's answer is skirts (`mapbox/martini` issue 7, 2019, which
+    points to `mapbox/delatin` issue 2). In web terrain the cracks are
+    hidden, not prevented.
 - **The seam pass's method.** Douglas and Peucker, "Algorithms for the
   reduction of the number of points required to represent a digitized line
   or its caricature", *Cartographica* 10(2):112-122, 1973,
-  doi:10.3138/fm57-6770-u75u-7727 (verified): insert the worst point, split,
+  doi:10.3138/fm57-6770-u75u-7727 (Crossref): insert the worst point, split,
   repeat. The seam pass is that in the vertical (height error at check
   points, not lateral distance), which is greedy insertion (Garland and
   Heckbert, CMU-CS-95-181, 1995, as in increment 14) in one dimension.
 - **Pfafstetter coding.** Verdin and Verdin, "A topological system for
   delineation and codification of the Earth's river basins", *J. Hydrology*
-  218(1-2):1-12, 1999, doi:10.1016/s0022-1694(99)00011-6 (verified). Each
+  218(1-2):1-12, 1999, doi:10.1016/s0022-1694(99)00011-6 (Crossref). Each
   level divides a basin into nine units (four tributary basins, five
   interbasins), coded by one more digit; BHO's ottocodes are this.
 - **Cloud-optimised GeoTIFF.** OGC 21-026, "OGC Cloud Optimized GeoTIFF
-  Standard", doi:10.62973/21-026 (found in Crossref, no year given; recalled
-  as 2023). Headers and offset arrays at the start, tiles addressable by
-  range request. The probe above confirms ANADEM's copy behaves so.
+  Standard", version 1.0, approved 2023-05-08, published 2023-07-14,
+  doi:10.62973/21-026 (read, `https://docs.ogc.org/is/21-026/21-026.html`;
+  the year was recalled in the first pass). Headers and offset arrays at the
+  start, tiles addressable by range request. The probe above confirms
+  ANADEM's copy behaves so.
 
-**Novelty: none claimed.** One combination could look new: *a greedy terrain
-refinement to an exact sup-norm tolerance, decomposed into pieces along
-constraints, where the pieces need no communication because each seam is
-refined beforehand by its own one-dimensional error.* Searched on
-2026-10-01: Crossref bibliographic queries for every citation above, plus
-"parallel construction of triangulated irregular network from DEM",
-"tile-based TIN generation large DEM seams" and "out-of-core terrain
+**Novelty: none claimed.** The combination that could look new: *a greedy
+terrain refinement to an exact sup-norm vertical tolerance, split into pieces
+along constraints, where each seam is refined beforehand by its own
+one-dimensional error and computed identically by both neighbours, so that no
+piece waits for another and the output does not depend on the order.* After
+the web pass every ingredient has a precedent: separators refined before the
+subdomains, with no communication (Linardakis and Chrisochoides); a shared
+boundary reduced from its own data alone so both sides agree with no
+communication (the Microsoft patent, and Bertilsson's thesis, which computes
+it on both sides); tile borders simplified first as polylines by a vertical
+error, then the interior (Campos et al., point-set route, first tile owns the
+border); the exact sup-norm vertical error over grid points and grid-line
+crossings (Hoppe 1998). Not found: the combination, a terrain TIN whose
+vertical tolerance is guaranteed on the seams as well as inside the pieces,
+built with no communication and an output independent of order and thread
+count. That would be a claim about a combination only. Before it is made
+anywhere public: a Google Scholar and Scopus search (web search is not a
+bibliographic index), the Campos et al. paper itself (only its code and wiki
+were read), and Galtier and George 1996 (not reached).
+
+Searched, 2026-10-01. First pass: Crossref bibliographic queries for every
+citation, plus "parallel construction of triangulated irregular network from
+DEM", "tile-based TIN generation large DEM seams", "out-of-core terrain
 simplification TIN large DEM"; OpenAlex full-text search for "parallel
-terrain simplification domain decomposition error bound" (4,791 results,
-nothing on the subject in the top hits), "TIN generation DEM parallel
-partition seam" (51), "greedy insertion terrain triangulation parallel tiles"
-(17), "decoupled constrained Delaunay terrain subdomains separator
-refinement" (0), "watershed partition parallel mesh generation hydrological"
-(854, hydrological models), "out-of-core triangulated irregular network
-construction large DEM" (618), "terrain approximation error guarantee tiles
-boundary consistency" (402; BDAM and ROAM, rendering) and "Pfafstetter
-subbasin parallel mesh" (1, unrelated). Nothing found does this, but Google
-Scholar, IEEE Xplore and Scopus were not searched (no access from this
-round), and Campos et al. and BDAM were not reread. So no claim is made;
-before one is, read those two and run increment 21's search list
-(`21-parallel-refine.md`, "Searches to run before any novelty claim").
+terrain simplification domain decomposition error bound", "TIN generation DEM
+parallel partition seam", "greedy insertion terrain triangulation parallel
+tiles", "decoupled constrained Delaunay terrain subdomains separator
+refinement", "watershed partition parallel mesh generation hydrological",
+"out-of-core triangulated irregular network construction large DEM", "terrain
+approximation error guarantee tiles boundary consistency", "Pfafstetter
+subbasin parallel mesh". Web pass: one search per closest work (Galtier and
+George, Campos et al., BDAM, P-BDAM, Algorithm 872, streaming Delaunay), and
+"parallel TIN generation from large DEM tiles seams consistent borders error
+bound greedy insertion", "out-of-core terrain simplification TIN tile
+boundaries error-bounded massive DEM", "parallel greedy insertion terrain TIN
+partition subdomains boundary vertices shared maximum vertical error",
+"thesis parallel triangulated irregular network construction large DEM tiles
+boundary consistency domain decomposition", "massive DEM TIN construction
+parallel blocks block boundary greedy insertion error threshold seamless
+merging", "tiled constrained Delaunay terrain mesh tile boundaries fixed
+vertices independent tiles TIN LiDAR breaklines out-of-core", "TIN mesh
+generation per sub-basin watershed partition parallel hydrological model
+shared boundary", "mesh generation each sub-catchment separately shared
+boundary polyline", "terrain TIN generation subdomains cut along breaklines
+independent refinement no communication vertical tolerance guaranteed on
+shared boundary", "Delaunay refinement terrain approximation parallel
+subdomain height error separators refined first", "heremaps tin-terrain
+zemlya tiles borders", "Delatin OR Martini RTIN tiles max error cracks
+skirts", "streaming simplification large meshes processing sequences", and
+the patent title above. Found: the works above. The hydrology searches found
+the parallel tRIBS of Vivoni, Mascaro, Mniszewski, Fasel, Springer, Ivanov and
+Bras, "Real-world hydrologic assessment of a fully-distributed hydrological
+model in a parallel computing environment", *J. Hydrology* 409(1-2):483-496,
+2011, doi:10.1016/j.jhydrol.2011.08.053 (Crossref; read,
+`http://vivoni.asu.edu/pdf/VivoniJH2011.pdf`), which partitions an existing
+basin TIN into sub-basins along the channel network to run the simulation, not
+to build the mesh; and PIHM pages on mesh constraints, not decomposition.
 
 ### Legacy
 
@@ -1138,6 +1307,8 @@ previous merge commit with `--tree`, back to back), evidence under
 ## Questions for Ola
 
 Numbered B1-B12, so they cannot be confused with 15's and 15c's Q1-Q17.
+The literature pass with web search (2026-10-01, "Prior art") changed no
+recommendation; it added a note to B4 and an option (c) to B5.
 
 **B1. Which cuts first?**
 - **(a) Global grid lines first (23c); BHO's Pfafstetter units later (23e),
@@ -1180,6 +1351,14 @@ Numbered B1-B12, so they cannot be confused with 15's and 15c's Q1-Q17.
   re-legalised across it and rescanned. The union is then Delaunay across
   artificial seams, but both neighbours' strips must be live at once, and it
   needs its own design (roughly 300 lines).
+- *From the literature pass:* (a) is the guarantee Chernikov and
+  Chrisochoides' PCDM gives (constrained Delaunay with respect to the
+  separators). (b) has a published form, Bentley's stitching patent (remove
+  the triangles whose circumcircle crosses a tile boundary, retriangulate
+  with the neighbours' points). Linardakis and Chrisochoides get a Delaunay
+  union with no post-pass by spacing the separator vertices so that no
+  diametral circle is ever entered, which needs a size bound that a
+  tolerance-driven refine does not have. Recommendation unchanged.
 
 **B5. How two pieces agree on a seam.**
 - **(a) The seam is frozen after a one-dimensional seam pass, which both
@@ -1191,6 +1370,14 @@ Numbered B1-B12, so they cannot be confused with 15's and 15c's Q1-Q17.
   Keeps feet on natural seams; needs rounds, a merge step, resumable refine
   runs and both neighbours available. Worth it only if natural seams show
   needles.
+- (c) One neighbour owns the seam and the other inherits it, the scheme of
+  Campos et al. 2020 (found in the literature pass): the seam is computed
+  once, but the mesh then depends on which piece runs first, and their
+  documentation says the results are not deterministic with more than one
+  thread. Not recommended: it breaks K5. The same pass found (a)'s principle
+  (a shared boundary reduced from its own data, so both sides agree without
+  talking) in a Microsoft patent and in Bertilsson's 2015 thesis, which
+  supports (a).
 
 **B6. The output of a cut run.**
 - **(a) Pieces and an index always; one stitched file for `--out x.vtk` by

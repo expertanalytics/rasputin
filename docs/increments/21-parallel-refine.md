@@ -237,13 +237,17 @@ three papers the options rest on, and ran one terrain query:
   constrained Delaunay triangulation using the GPU", I3D 2012, extended in IEEE
   TVCG 19(5):736-748, 2013; it flips all flippable pairs in parallel, as
   option C assumes.
-- **Found, not in the list above:** "3D Simplification Methods and Large Scale
-  Terrain Tiling", Remote Sensing 12(3):437, 2020 (mdpi.com/2072-4292/12/3/437).
-  It adapts greedy insertion, among other methods, to work tile by tile, in
-  parallel, keeping tile-border vertices shared between neighbours. That is
-  prior art for option D (domain decomposition by tiles) on terrain. Also "A
-  fast digital terrain simplification algorithm with a partitioning method",
-  IEEE, 2000 (ieeexplore.ieee.org/document/843506), not read.
+- **Found, not in the list above:** Campos et al., "3D Simplification Methods
+  and Large Scale Terrain Tiling", Remote Sensing 12(3):437, 2020
+  (mdpi.com/2072-4292/12/3/437). It adapts greedy insertion, among other
+  methods, to work tile by tile, in parallel, keeping tile-border vertices
+  shared between neighbours: the first tile built decides a shared border and
+  later neighbours inherit it, so parallel runs are not deterministic (read in
+  the authors' code and wiki by increment 23, "Prior art"). That is prior art
+  for option D (domain decomposition by tiles) on terrain. Also Kang et al.,
+  "A fast digital terrain simplification algorithm with a partitioning
+  method", IEEE, 2000 (ieeexplore.ieee.org/document/843506), abstract only, in
+  increment 23.
 - The other citations above are still unverified, and the searches below have
   not been run in full.
 
