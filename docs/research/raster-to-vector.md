@@ -540,7 +540,8 @@ under it. Quotations are Ola's words; the rest is the ruling as relayed.
 
    *Answered: exact area.* Each lake is traced on cell edges, reprojected to
    metres, and reduced by increment 22's area-preserving segment collapse,
-   with a no-crossing check against the other lakes, the BHO river lines and
+   with a no-crossing check against the other lakes, the river lines (see the
+   revisit note under question 2) and
    the domain outline. Water bodies are disjoint, so the shared-border and
    junction case of sections 2 and "What combines" no longer arises for
    constraints; it remains only if a later step wants class polygons.
@@ -719,7 +720,10 @@ report (see the plan at the end).
   the family is the union of two **laminar** (nested) families, and use it
   for halftoning. *Gives:* a precise statement of "local placement": the
   error bound is over a named family of regions. In hydrology the natural
-  family is laminar already: BHO's ottobasins nest by Pfafstetter level. The
+  family is laminar by construction: catchments derived from the DEM
+  (increment 22 extended to many outlets) nest, as sub-catchments of a
+  catchment; BHO's ottobasins, which nest by Pfafstetter level, are an
+  official-code alternative for validation only (Ola's B1 ruling). The
   results are for rounding entries to integers, not for cutting off sparse
   fractions, so this is an analogy, not a transfer.
 - **Controlled rounding.** **Bacharach 1966** (abstract read): rounding a
@@ -878,8 +882,9 @@ that bears on it.
    local errors in the multilevel case). Should the bound be a distance (a
    few triangles, a multiple of the tolerance), or a set of regions whose
    class areas must stay exact or within a bound (the low-discrepancy view,
-   Asano et al. 2003; BHO ottobasins at a finer level are a laminar family
-   already)? For crop transpiration the relevant region is probably the
+   Asano et al. 2003; catchments derived from the DEM, increment 22
+   extended to many outlets, are a laminar family by construction, and BHO's
+   ottobasins are an official-code alternative for validation only)? For crop transpiration the relevant region is probably the
    hydrological response unit the model aggregates over; which one is it?
 7. **Stability.** Can the ledger make a triangle's input fraction negative
    (it received a surplus it cannot absorb) or above one? Clipping it loses
@@ -925,7 +930,10 @@ piece of basin piece 2.1), with MapBiomas at its latest year (Ola's default):
   more than 1 %, and which vanish. The crop classes reported separately,
   since crop transpiration is the use.
 - **Local placement.** The same class-area errors summed over regions at
-  several scales: BHO ottobasins one and two levels below 76949, and a
+  several scales: catchments derived from the DEM (increment 22 extended to
+  many outlets, nested by construction) at two levels of outlet density
+  inside the piece, with BHO's ottobasins one and two levels below 76949
+  only as an official-code alternative for validation, and a
   regular grid of squares at 1, 5 and 25 km. Report the largest error per
   class per scale. A ledger that does well at the basin total but badly in
   sub-basins has failed question 6.
@@ -1011,7 +1019,7 @@ of Brunton et al. 2015 for their surface traversal.
    so the crop survives as a few triangles holding it at or above the
    cutoff. Which is wanted?
 2. **Which regions must the class areas be right for?** The whole basin
-   only, or also sub-basins (BHO ottobasins at a finer level), or the
+   only, or also sub-catchments derived from the DEM, or the
    response units the hydrological model aggregates over? That choice is
    the "local placement" bound and decides what the measurement counts as
    failure.
