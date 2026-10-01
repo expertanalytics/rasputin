@@ -1190,3 +1190,25 @@ Software and data documentation, read 2026-10-01:
   Calibration and Validation*, prepared for U.S. EPA Region 1, April 2015:
   https://www.epa.gov/sites/default/files/2015-09/documents/swat-model-configuration-calibration-validation.pdf
   (HRU threshold passage read)
+
+## Review
+
+### Round 1, `9e76a02..b82693f`: CHANGES REQUESTED (`@reviewer`)
+
+Production LOC 0. All 79 DOIs checked against Crossref; CTSM, Floyd and
+Steinberg, Tijdeman, Johnson and Clarke, SWAT, WRF, JULES, MapBiomas and the
+GRASS, JTS, PostGIS and TopoJSON quotations verified; §2's area and
+swept-region arguments hold against increment 22's code. Five blocking edits:
+the legacy file list missed `wfs_repository.py`; Q4 attributed the main
+session's diagonal-strip derivation to Ola, and `reduce_ring` makes no
+collapse on the pinched ring as traced; §6's island bullet and §3's area
+figure contradicted the note's own table; two places did not match Ola's
+words.
+
+### Round 2, `b82693f..fe7f0f5`: APPROVED (`@reviewer`)
+
+Whole branch `9e76a02..fe7f0f5`, 11 commits, 2 files, production LOC 0.
+`pinch_strip_probe.py` re-run: the architect's figures (22 collapses at 0.5
+cell with pinches opened; tolerance, not crossings, rejects at 0.2 and 0.4)
+are right and round 1's were not. Citations, ruff (probe included), mypy and
+the governance gates green. CI not yet run: no PR.
