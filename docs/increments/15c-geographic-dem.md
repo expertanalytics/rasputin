@@ -419,9 +419,15 @@ source nodes, in source row-major block order.
   is dropped and counted in `outside` (the Python producer already drops
   them, so a non-zero count in a run means the producer changed).
 - **Packing: 16 bytes per point**: the cell's column (`uint32`), the offsets
-  inside the cell (two `float`), and z (`float`). Rows are implicit after
-  sorting, with one `uint64` start offset per grid row. A `float` offset in
-  [0, 1) resolves 2⁻²⁴ of a cell, under 2 µm at 30 m. **The check point is
+  inside the cell (two `float`), and z (`float`), `static_assert`ed. The row
+  is implicit: the store keeps one bucket (a `std::vector`) per cell row,
+  about 24 bytes per row. A `float` offset resolves 2⁻²⁴ of a cell, under
+  2 µm at 30 m. An offset that rounds up to a whole cell moves the point to
+  the next cell's corner with offset 0, so every point lies in the closed
+  cell it is filed in (the last cell keeps an offset of 1 on the far edge).
+  For 15c-2's memory sum: the buckets grow geometrically during `add`, so the
+  peak before `freeze()` (which shrinks them to fit) can approach 32 bytes per
+  point. **The check point is
   the stored position**: membership, error and the inserted vertex all use the
   same reconstructed `double`, so the 2 µm is a fixed displacement of where
   the source node is taken to be, not an inconsistency. z is `float`: exact
@@ -434,7 +440,8 @@ source nodes, in source row-major block order.
   shows). `add` after `freeze` is a refusal. Afterwards the store is
   immutable and any number of threads may read it.
 - Query: `for_each_in(row, c0, c1, f)`, by binary search on the column within
-  the row's slice.
+  the row's bucket. `geometry()` and `frozen()` complete what `refine_points`
+  reads.
 
 ### D5. The final check: `refine_points`
 
@@ -444,7 +451,7 @@ source nodes, in source row-major block order.
 ```cpp
 struct PointRefineOptions { double tolerance = 0.0; unsigned threads = 0; };
 
-template <class Store>  // CheckPoints, or a test double with for_each_in
+template <class Store>  // CheckPoints, or a test double with geometry(), frozen() and for_each_in
 [[nodiscard]] PointRefineOutcome refine_points(
     const Store& points,  // its geometry() is the grid: the frame and the buckets
     const IndexedMesh2& start, std::span<const double> z, std::span<const std::uint8_t> valid,
@@ -457,14 +464,19 @@ It returns `PointRefineOutcome`, defined in `refine_points.hpp`: a
 `coincident_max_error` (below). `RefineOutcome` itself is unchanged, so
 `refine.hpp` is not edited (J1). The grid is not a separate argument: it is
 the store's own `geometry()`, so a store filed on one grid cannot be scanned
-against another. The start is phase 1's output as
+against another. An unfrozen store is a programming error: `refine_points`
+throws `std::logic_error` ("not frozen"; `RuntimeError` in Python), as `add`
+after `freeze` does, because `RefineStatus` lives in `refine.hpp`, which J1
+forbids editing. The start is phase 1's output as
 numbers: vertices in the target CRS, their z and validity, triangles,
 constraint edges and masks.
 
 1. **Lattice.** `detail::to_lattice(points.geometry(), start, ...)` as in `refine`: a
    vertex that is a node bit for bit is a node, any other is off-node. A
    vertex z table `zt` holds the given z, NaN where invalid. Phase 2 never
-   reads the target grid's values: `grid` is only the frame and the buckets.
+   reads the target grid's values: the store's `geometry()` is only the frame
+   and the buckets. The start is then legalised (`legalise_all`), as `refine`
+   does, before the first scan.
 2. **Scan** (parallel, read-only, one result per triangle), `scan_points`:
    - for each cell row the triangle meets, the column range the triangle
      covers within that band (from its vertices in the band and its edges'
@@ -481,8 +493,9 @@ constraint edges and masks.
    - a triangle with a NaN corner (void) gets 14's rule: the check point
      nearest a void corner, and `uncovered` counts its points.
 3. **Split** (serial, triangle-index order), as `refine` does: the worst point
-   goes in with `split_inside` (a `MeshVertex` overload, +1 small function in
-   `lattice_mesh.hpp`) or, on an edge (one zero orientation), `split_edge`,
+   goes in with `split_inside`, which now takes a `MeshVertex` (a
+   `LatticeVertex` converts exactly, so existing callers are unchanged; one
+   function, not an overload pair, so a braced call is not ambiguous) or, on an edge (one zero orientation), `split_edge`,
    skipped this round if the neighbour across that edge was already touched.
    A constrained edge stays constrained on both halves (as for 20b's feet).
    Its z is the point's z, appended to `zt`. `legalise_around` with
@@ -549,8 +562,10 @@ metres, on or relative to a square grid. Concretely: the target grid as a
   both. `include/terrain/` stays free of pybind11.
 - **Memory cap** (15a R7: half of physical memory), checked in `open_dem`
   before any pixel is read: source canvas + target canvas + 16 B per source
-  node in the source box. The Velhas piece is about 0.75 GB by that sum
-  (7,197 × 4,376 source nodes, 7,347 × 4,208 target nodes). The whole basin
+  node in the source box (up to 32 B at the store's peak before `freeze()`,
+  D4; 15c-2's sum is to count the peak). The Velhas piece is about 0.75 GB by
+  that sum at 16 B, 1.26 GB at 32 B (7,197 × 4,376 source nodes,
+  7,347 × 4,208 target nodes, canvases at 4 B per node). The whole basin
   is refused in 15c by design. *Superseded at basin scale (Q15):* the cap
   stays in 15c as a guard, but at basin scale memory is not to decide what
   can be meshed; the basin-scale design removes the canvases rather than
