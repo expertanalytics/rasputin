@@ -2127,3 +2127,27 @@ Whole branch `6518336..aa1f7c2`, 12 commits, +1,731 / −13, production LOC 0.
 Probe at 8 MiB reproduces every figure; at 1 MiB it fails on the offsets
 assertion. ruff, ruff format, mypy and the governance gates green. CI not yet
 run: no PR.
+
+### Round 4, `3c32d3d..ceb2df2`: CHANGES REQUESTED (`@reviewer`)
+
+Ola's B1-B12 rulings folded in. Partition rule and its arithmetic reproduced
+(`partition.py`); prior-art additions match Crossref; LOC under 700 per PR at
++60 %. No rule file changed by the commits whose Bash writes the governance
+guard had refused (edits redone with the Edit tool; for Ola to judge). Four
+blocking edits: the fence check must run after thinning; stale "not yet
+ruled" text in ROADMAP and 15; 15c's DEM-derived fixture cannot exist at the
+red step; B14 (a) did not name its cost.
+
+### Round 5, `ceb2df2..1c55a2e`: CHANGES REQUESTED (`@reviewer`)
+
+Round 4 applied; a new zone rule (a triangle with an edge on a unit belongs
+to it) found sound and complete. Four gaps: unit ids undefined; the corner
+exception path did not rescan; its scope missed kept corners; no test pinned
+the rule.
+
+### Round 6, `1c55a2e..0818903`: APPROVED (`@reviewer`)
+
+Whole branch `6518336..0818903`, 19 commits, 8 files, +2,513 / −32,
+production LOC 0. 23g 345 (552 at +60 %), 23f + 23g about 645, largest PR 23c
+at 656 at +60 %. Citations, ruff, ruff format, mypy and the governance gates
+green. CI not yet run: no PR.
