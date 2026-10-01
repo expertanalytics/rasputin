@@ -71,7 +71,8 @@ as asked at the end; each is marked with its ruling):
     our performance will drop while we wait for download".
 
   These get their own basin-scale design, next, in an increment file of its
-  own under `docs/increments/`. It is not designed here. This file marks
+  own under `docs/increments/`: `docs/increments/23-basin-scale.md`
+  (designed 2026-10-01, questions B1-B12 open). It is not designed here. This file marks
   where its dense canvas and its memory reasoning are superseded at basin
   scale; at the Velhas piece, 15c's acceptance size, they stand.
 - **Q16: (a).** The grid spacing is automatic; no CLI option.

@@ -14,6 +14,11 @@ are superseded there; 15d stays designed here. Ola's rulings of 2026-10-01
 on Q11-Q17 are recorded there too, including the basin-scale direction (Q15)
 that revisits Q9's dense canvas and which 15d is to be re-read against.
 
+**15d is re-read in `docs/increments/23-basin-scale.md`** (2026-10-01, design,
+not yet ruled): its window decoding (R3 [15d], the T-window test) moves into
+23a-1 as `decode_window`; its basin-memory plan (R7 [15d], one dense canvas)
+is superseded by pieces cut along constraints.
+
 ## Ruled by Ola
 
 - **2026-09-27, priority:** "My priorities are to get the Norwegian cases
