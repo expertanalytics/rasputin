@@ -19,7 +19,9 @@
 #include <terrain/raster/geometry.hpp>
 #include <terrain/raster/sample.hpp>
 #include <terrain/raster/view.hpp>
+#include <terrain/refinement/check_points.hpp>
 #include <terrain/refinement/refine.hpp>
+#include <terrain/refinement/refine_points.hpp>
 #include <terrain/vector_simplify/area_collapse.hpp>
 
 #include <cstddef>
@@ -57,6 +59,8 @@ using terrain::cdt::DetriaBackend;
 using terrain::noding::NodeOptions;
 using terrain::noding::NodeOutcome;
 using terrain::noding::NodeStatus;
+using terrain::refinement::CheckPoints;
+using terrain::refinement::PointRefineOutcome;
 using terrain::refinement::RefineOutcome;
 using terrain::refinement::RefineStatus;
 
@@ -964,6 +968,93 @@ meet that minimum angle or a stated reason prevents it; 0 is off.
 constraint_feet inserts, for a worst node close to a constraint segment, its
 foot on the segment instead; off by default.
 A refused input comes back as a status; a mis-shaped array is a ValueError.
+Releases the GIL.
+)doc");
+
+    py::class_<CheckPoints>(m, "CheckPoints", R"doc(
+The final check's store: check points (x, y) in the grid's frame with float32 z,
+filed by lattice cell. add() blocks, freeze() once, then pass it to
+refine_points(). Points outside the node rectangle or not finite are counted
+in outside; points at one stored position after the first in duplicates.
+)doc")
+        .def(py::init([](double x_min, double y_max, double spacing, std::size_t rows, std::size_t cols) {
+                 return CheckPoints{terrain::raster::RasterGeometry{x_min, y_max, spacing, spacing, cols, rows}};
+             }),
+             py::kw_only(), py::arg("x_min"), py::arg("y_max"), py::arg("spacing"), py::arg("rows"),
+             py::arg("cols"))
+        .def(
+            "add",
+            [](CheckPoints& self, const py::array& xy, const py::array& z) {
+                if (!xy.dtype().is(py::dtype::of<double>()) || xy.ndim() != 2 || xy.shape(1) != 2
+                    || !z.dtype().is(py::dtype::of<float>()) || z.ndim() != 1 || z.shape(0) != xy.shape(0))
+                    throw py::value_error("CheckPoints.add: xy must be float64 (N, 2) and z float32 (N,)");
+                if (self.frozen())
+                    throw std::logic_error("CheckPoints.add: the store is frozen");
+                const auto a = py::array_t<double, py::array::c_style>::ensure(xy);
+                const auto b = py::array_t<float, py::array::c_style>::ensure(z);
+                const auto n = static_cast<std::size_t>(b.shape(0));
+                self.add({reinterpret_cast<const Point2*>(a.data()), n}, {b.data(), n});
+            },
+            py::arg("xy"), py::arg("z"), "File a block of points. A ValueError for any other shape or dtype.")
+        .def("freeze", &CheckPoints::freeze, "Sort and deduplicate; add() is refused afterwards.")
+        .def_property_readonly("size", &CheckPoints::size, "Points kept, after freeze().")
+        .def_property_readonly("duplicates", &CheckPoints::duplicates, "Points dropped as duplicates.")
+        .def_property_readonly("outside", &CheckPoints::outside, "Points dropped as outside or not finite.");
+
+    py::class_<PointRefineOutcome, RefineOutcome>(m, "PointRefineOutcome", R"doc(
+What refine_points returned: RefineOutcome's fields, max_error over check
+points, plus the check points that coincide with a start vertex.
+)doc")
+        .def_readonly("coincident", &PointRefineOutcome::coincident,
+                      "Check points at a start vertex, never inserted.")
+        .def_readonly("coincident_max_error", &PointRefineOutcome::coincident_max_error,
+                      "Their largest |z - vertex z|.");
+
+    m.def(
+        "refine_points",
+        [](const CheckPoints& points, const py::object& vertices, const py::object& triangles,
+           const py::object& z, const py::object& valid, const py::object& edges, const py::object& masks,
+           double tolerance, unsigned threads) {
+            using U32 = py::array_t<std::uint32_t, py::array::c_style | py::array::forcecast>;
+            const auto t = U32::ensure(triangles), e = U32::ensure(edges), k = U32::ensure(masks);
+            const auto zs = py::array_t<double, py::array::c_style | py::array::forcecast>::ensure(z);
+            const auto ok = py::array_t<std::uint8_t, py::array::c_style | py::array::forcecast>::ensure(valid);
+            const auto v = py::array_t<double, py::array::c_style | py::array::forcecast>::ensure(vertices);
+            if (!v || v.ndim() != 2 || v.shape(1) != 2)
+                throw py::value_error("refine_points: vertices must be float64 (N, 2)");
+            const auto n = v.shape(0);
+            std::vector<Point2> xy{reinterpret_cast<const Point2*>(v.data()),
+                                   reinterpret_cast<const Point2*>(v.data()) + n};
+            if (!t || !e || !k || !zs || !ok || t.ndim() != 2 || t.shape(1) != 3 || zs.ndim() != 1
+                || zs.shape(0) != n || ok.ndim() != 1 || ok.shape(0) != n || e.ndim() != 2 || e.shape(1) != 2
+                || k.ndim() != 1 || k.shape(0) != e.shape(0))
+                throw py::value_error("refine_points: triangles must be (T, 3) uint32, z and valid (N,), "
+                                      "edges (E, 2) and masks (E,) uint32");
+            const auto nt = static_cast<std::size_t>(t.shape(0)), ne = static_cast<std::size_t>(k.shape(0));
+            const std::span<const TriangleIndices> tris{reinterpret_cast<const TriangleIndices*>(t.data()), nt};
+            for (const auto& tri : tris)
+                for (const auto i : tri)
+                    if (i >= xy.size())
+                        throw py::value_error("refine_points: a triangle index is out of range");
+            const IndexedMesh2 mesh{std::move(xy), {tris.begin(), tris.end()}, std::vector<std::uint8_t>(nt, 0)};
+            const terrain::refinement::PointRefineOptions options{tolerance, threads};
+            // Every buffer read below is held by a local or by `points`, and
+            // the outcome is converted after the lock returns.
+            const py::gil_scoped_release unlocked;
+            return terrain::refinement::refine_points(
+                points, mesh, {zs.data(), static_cast<std::size_t>(n)}, {ok.data(), static_cast<std::size_t>(n)},
+                {reinterpret_cast<const std::array<std::uint32_t, 2>*>(e.data()), ne}, {k.data(), ne}, options);
+        },
+        py::arg("points"), py::arg("vertices"), py::arg("triangles"), py::arg("z"), py::arg("valid"),
+        py::arg("edges"), py::arg("masks"), py::kw_only(), py::arg("tolerance"), py::arg("threads") = 0, R"doc(
+Refine phase 1's mesh against a frozen CheckPoints store until every check
+point is within tolerance of the plane of each triangle holding it.
+
+vertices (N, 2) in the store's frame, triangles (T, 3) counter-clockwise, z
+and valid (N,) per vertex, edges (E, 2) and masks (E,) its constraint edges.
+Inserted vertices are check points with their own z. The output does not
+depend on threads (0: all cores). A refused input comes back as a status; a
+mis-shaped array is a ValueError, an unfrozen store a RuntimeError.
 Releases the GIL.
 )doc");
 

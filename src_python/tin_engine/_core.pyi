@@ -376,10 +376,10 @@ class RefineStatus(Enum):
     NotCounterClockwise = 2
     InvalidTolerance = 3
 
-@final
 class RefineOutcome:
     """A status, a message, the refined mesh and four numbers. The arrays are
-    read-only views that keep the outcome alive, and empty unless ``ok()``."""
+    read-only views that keep the outcome alive, and empty unless ``ok()``.
+    Not final: :class:`PointRefineOutcome` extends it."""
 
     @property
     def status(self) -> RefineStatus: ...
@@ -444,6 +444,58 @@ def refine(
     depend on ``threads``. ``min_angle_deg`` > 0 first improves the start
     mesh's angles with DEM nodes; 0 is off. ``constraint_feet`` inserts a
     node's foot on a nearby constraint segment instead of the node."""
+
+@final
+class CheckPoints:
+    """The final check's store: points in the grid's frame with float32 z,
+    filed by lattice cell. ``add`` blocks, ``freeze`` once, then pass it to
+    :func:`refine_points`. ``add`` after ``freeze`` is a ``RuntimeError``."""
+
+    def __init__(
+        self, *, x_min: float, y_max: float, spacing: float, rows: int, cols: int
+    ) -> None: ...
+    def add(self, xy: npt.NDArray[np.float64], z: npt.NDArray[np.float32]) -> None:
+        """File ``(N, 2)`` float64 points with ``(N,)`` float32 z; any other
+        shape or dtype is a ``ValueError``."""
+    def freeze(self) -> None: ...
+    @property
+    def size(self) -> int: ...
+    @property
+    def duplicates(self) -> int: ...
+    @property
+    def outside(self) -> int: ...
+
+@final
+class PointRefineOutcome(RefineOutcome):
+    """What :func:`refine_points` returned: :class:`RefineOutcome`'s fields plus
+    the check points that coincide with a start vertex."""
+
+    @property
+    def vertices(self) -> npt.NDArray[np.float64]:
+        """The start vertices as given, then the inserted check points."""
+    @property
+    def max_error(self) -> float:
+        """Largest ``|z - plane|`` over the check points, in valid triangles."""
+    @property
+    def coincident(self) -> int: ...
+    @property
+    def coincident_max_error(self) -> float: ...
+
+def refine_points(
+    points: CheckPoints,
+    vertices: npt.ArrayLike,
+    triangles: npt.ArrayLike,
+    z: npt.ArrayLike,
+    valid: npt.ArrayLike,
+    edges: npt.ArrayLike,
+    masks: npt.ArrayLike,
+    *,
+    tolerance: float,
+    threads: int = ...,
+) -> PointRefineOutcome:
+    """Refine phase 1's mesh until every check point in a frozen store is within
+    ``tolerance`` of each triangle holding it. Releases the GIL; the output
+    does not depend on ``threads``."""
 
 @final
 class UpstreamOutcome:
