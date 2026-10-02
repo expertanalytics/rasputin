@@ -97,7 +97,8 @@ call. A changed path outside the row is a finding: one queue line naming the
 persona and the paths, and `additionalContext` saying "outside your role:
 restore <paths> and hand back". A command cannot be refused after it has run,
 so the finding is reported and not prevented. Ignored paths (`build/`,
-`.claude/current-task/`) are not seen, which is correct.
+`.claude/current-task/`) are not seen, which is correct for `build/`
+(see §5 for `.claude/current-task/`).
 
 ## 4. Tests @tester writes red
 
@@ -144,6 +145,8 @@ Not invariant-critical: no mutation round.
   there, and messages left in the data folders.
 - **A change made and undone within one Bash call.**
 - **A background process that writes after the call returns** (as in h5).
+- **A Bash write under `.claude/current-task/`** (gitignored). A subagent
+  that writes `session.md` or another persona's file by Bash is not seen.
 - **A persona that claims another persona's `agent_type`.** The field comes
   from Claude Code, not from the agent, so this means editing a frontmatter
   `name:`, which is a governed write.
@@ -159,8 +162,9 @@ each of the six persona files. **~125**, one PR. No settings change.
 ## 7. Questions for Ola
 
 1. **The dispatcher's identity.** Should an event with no `agent_type` simply
-   *be* the `dispatcher` row (recommended: U0 shows the absence is reliable,
-   and it needs nothing at launch)? The alternative is that every session is
+   *be* the `dispatcher` row (recommended: it needs nothing at launch)? The
+   evidence that the absence is reliable is U0, a single probe session, so
+   the build re-checks it on its first live firing. The alternative is that every session is
    started with `claude --agent dispatcher`. That needs a new
    `.claude/agents/dispatcher.md`, whose prompt would then replace the main
    session's system prompt.
