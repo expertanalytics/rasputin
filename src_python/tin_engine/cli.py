@@ -73,7 +73,14 @@ from tin_engine._core import (
 from tin_engine.catchment import CatchmentRequest, LakeError, delineate
 from tin_engine.chains import start_chains
 from tin_engine.crs import crs_label, parse_crs, transform_description
-from tin_engine.dem_input import CachedSource, DemInput, DemRequest, open_dem, repository_for
+from tin_engine.dem_input import (
+    CachedSource,
+    DemInput,
+    DemRequest,
+    OutCrsRequiredError,
+    open_dem,
+    repository_for,
+)
 from tin_engine.domain import DomainError, DomainPolygon, read_domain
 from tin_engine.elevation import Trimmed, trim
 from tin_engine.feature_input import (
@@ -1286,6 +1293,11 @@ def _open_dem(
             return open_dem(request)
     except NotCached:
         raise
+    except OutCrsRequiredError as exc:  # Q11: one unwrapped line, outside the panel, to paste
+        typer.echo(f"--out-crs '{exc.suggestion.proj}'", err=True)
+        raise typer.BadParameter(
+            f"{exc.head}; the suggested --out-crs is the line above", param_hint="--dem"
+        ) from exc
     except OSError as exc:
         where = exc.filename or ", ".join(map(str, dem))
         raise typer.BadParameter(

@@ -29,7 +29,7 @@ from typing import Any, Self
 import shapely
 from pydantic import BaseModel, ConfigDict, model_validator
 
-from tin_engine.crs import crs_label, parse_crs, reprojector, suggest_crs
+from tin_engine.crs import CrsSuggestion, crs_label, parse_crs, reprojector, suggest_crs
 from tin_engine.domain import DomainError, DomainPolygon, check_extent
 from tin_engine.io.models import DemTile, RasterMeta
 from tin_engine.io.repository import CacheRepository, TiffDemRepository
@@ -137,6 +137,15 @@ def open_dem(request: DemRequest) -> DemInput:
     return DemInput(tile=mosaic.tile, plan=plan, label=label, domain=domain, seams=mosaic.seams)
 
 
+class OutCrsRequiredError(ValueError):
+    """A geographic DEM without a target CRS (Q11 (a)): `head` says why and
+    what is suggested; `suggestion.proj` is the `--out-crs` to paste."""
+
+    def __init__(self, head: str, suggestion: CrsSuggestion) -> None:
+        super().__init__(f"{head}: --out-crs '{suggestion.proj}'")
+        self.head, self.suggestion = head, suggestion
+
+
 def _reprojected(request: DemRequest, metas: list[RasterMeta]) -> bool:
     """Whether the DEM is resampled onto a target grid (D1, Q12 (a)): it is
     geographic, or `target_crs` differs from its CRS. A geographic DEM with
@@ -161,12 +170,13 @@ def _reprojected(request: DemRequest, metas: list[RasterMeta]) -> bool:
         x0, x1 = min(m.x_min for m in metas), max(m.x_min + (m.cols - 1) * m.delta_x for m in metas)
         y0, y1 = min(m.y_max - (m.rows - 1) * m.delta_y for m in metas), max(m.y_max for m in metas)
     s = suggest_crs((x0, x1, y0, y1), first.crs)
-    raise ValueError(
+    head = (
         f"the DEM is geographic ({first.crs}), so --out-crs is required; suggested for this "
-        f"box ({s.family}, {s.proj4} on the DEM's datum): --out-crs '{s.proj}', worst scale error "
+        f"box ({s.family}, {s.proj4} on the DEM's datum), worst scale error "
         f"{100 * s.max_scale_error:.3g} %, worst areal error {100 * s.max_areal_error:.3g} % "
         "over the box"
     )
+    raise OutCrsRequiredError(head, s)
 
 
 def _open_reprojected(
