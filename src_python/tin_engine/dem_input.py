@@ -143,7 +143,16 @@ def _reprojected(request: DemRequest, metas: list[RasterMeta]) -> bool:
     no target is refused, suggesting a CRS for the box (Q11 (a), D8)."""
     first = metas[0]
     if request.target_crs is not None:
-        return parse_crs(request.target_crs) != parse_crs(first.crs)
+        target = parse_crs(request.target_crs)
+        units = sorted({a.unit_name for a in target.axis_info})
+        if not target.is_projected or any(
+            a.unit_conversion_factor != 1.0 for a in target.axis_info
+        ):
+            raise ValueError(
+                f"--out-crs {request.target_crs} is a {target.type_name} with axes in {units}; "
+                "the mesh is computed in it, so it must be a projected CRS in metres"
+            )
+        return target != parse_crs(first.crs)
     if not first.geographic:
         return False
     if request.domain is not None:
