@@ -1,0 +1,26 @@
+$ rasputin mesh --dem /Users/skavhaug/projects/rasputin_data/sao_francisco_piece/derived/bho2017_5k_76949_anadem_epsg31983_30m.tif --domain /Users/skavhaug/projects/rasputin_data/sao_francisco_piece/bho2017_5k_76949_outline_epsg4674.geojson --tolerance 2 --binary --out /Users/skavhaug/projects/rasputin_scratch/basin-piece-anadem/velhas76949_t2.bin.vtk --stats docs/benchmarks/2026-10-02/basin-piece-anadem/runs/velhas76949_anadem/logs/velhas76949_t2_run1.stats.md
+--- stdout
+/Users/skavhaug/projects/rasputin_scratch/basin-piece-anadem/velhas76949_t2.bin.vtk
+/Users/skavhaug/projects/rasputin/.claude/worktrees/basin-anadem/docs/benchmarks/2026-10-02/basin-piece-anadem/runs/velhas76949_anadem/logs/velhas76949_t2_run1.stats.md
+
+--- stderr
+10495 start quality nodes inserted, 341 start quality skips, 647 constraint feet, 0 feet refused, 41 rounds, 2278567 points inserted, 5024846 flips, 4584784 triangles, achieved max error 2 m, 0 valid DEM nodes not covered, 7307 start triangles, 7309 start vertices off-node, 0 vertices without data dropped
+BENCH {"refine_s": 2.684653458010871, "app_s": 4.27058883299469, "max_error": 2.0, "rounds": 41, "inserted": 2278567, "flips": 5024846}
+        4.66 real         9.40 user         0.39 sys
+          1860730880  maximum resident set size
+                   0  average shared memory size
+                   0  average unshared data size
+                   0  average unshared stack size
+              141610  page reclaims
+                 139  page faults
+                   0  swaps
+                   0  block input operations
+                   0  block output operations
+                   0  messages sent
+                   0  messages received
+                   0  signals received
+                 722  voluntary context switches
+                4147  involuntary context switches
+         56002152534  instructions retired
+         29450803069  cycles elapsed
+          1747404768  peak memory footprint

@@ -1,0 +1,25 @@
+$ rasputin mesh --dem /Users/skavhaug/projects/rasputin_data/sao_francisco_piece/derived/bho2017_5k_76949_anadem_epsg31983_30m.tif --domain /Users/skavhaug/projects/rasputin_data/sao_francisco_piece/bho2017_5k_76949_outline_epsg4674.geojson --tolerance 1 --binary --out /Users/skavhaug/projects/rasputin_scratch/basin-piece-anadem/scaling.bin.vtk
+--- stdout
+/Users/skavhaug/projects/rasputin_scratch/basin-piece-anadem/scaling.bin.vtk
+
+--- stderr
+10495 start quality nodes inserted, 341 start quality skips, 1014 constraint feet, 0 feet refused, 42 rounds, 4336010 points inserted, 8670211 flips, 8699303 triangles, achieved max error 1 m, 0 valid DEM nodes not covered, 7307 start triangles, 7309 start vertices off-node, 0 vertices without data dropped
+BENCH {"refine_s": 5.190442249993794, "app_s": 5.958637499978067, "max_error": 1.0, "rounds": 42, "inserted": 4336010, "flips": 8670211}
+        6.22 real        13.62 user         0.31 sys
+          2536259584  maximum resident set size
+                   0  average shared memory size
+                   0  average unshared data size
+                   0  average unshared stack size
+              160507  page reclaims
+                  44  page faults
+                   0  swaps
+                   0  block input operations
+                   0  block output operations
+                   0  messages sent
+                   0  messages received
+                   0  signals received
+                  57  voluntary context switches
+                2435  involuntary context switches
+         69687774991  instructions retired
+         41784156215  cycles elapsed
+          2513848768  peak memory footprint

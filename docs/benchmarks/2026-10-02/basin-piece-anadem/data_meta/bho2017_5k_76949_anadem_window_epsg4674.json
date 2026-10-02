@@ -1,0 +1,41 @@
+{
+ "source": "anadem",
+ "window_lonlat": [
+  -44.67370317128792,
+  -43.45872680891939,
+  -20.456027846919216,
+  -18.45749800450768
+ ],
+ "shape": [
+  7418,
+  4510
+ ],
+ "first_node": [
+  -44.673713152670075,
+  -18.457279900925958
+ ],
+ "spacing_deg": 0.00026949458523585647,
+ "nodata_nodes": 0,
+ "z_range": [
+  528.0,
+  1922.010009765625
+ ],
+ "fetch_s": 33.7,
+ "fetched_utc": "2026-10-02T00:14:25Z",
+ "info": {
+  "source": "https://opentopography.s3.sdsc.edu/raster/ANADEM/ANADEM_be/anadem_v1_compressed_COG.tif",
+  "shape": [
+   262864,
+   187853
+  ],
+  "tie": [
+   -82.51654705336689,
+   14.079475111062084
+  ],
+  "spacing_deg": 0.00026949458523585647,
+  "raster_type": 1,
+  "blocks_read": 160,
+  "bytes_read": 107977770,
+  "nodata_tag": -9999.0
+ }
+}

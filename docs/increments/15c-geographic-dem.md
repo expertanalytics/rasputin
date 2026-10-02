@@ -423,9 +423,15 @@ source nodes, in source row-major block order.
   is dropped and counted in `outside` (the Python producer already drops
   them, so a non-zero count in a run means the producer changed).
 - **Packing: 16 bytes per point**: the cell's column (`uint32`), the offsets
-  inside the cell (two `float`), and z (`float`). Rows are implicit after
-  sorting, with one `uint64` start offset per grid row. A `float` offset in
-  [0, 1) resolves 2⁻²⁴ of a cell, under 2 µm at 30 m. **The check point is
+  inside the cell (two `float`), and z (`float`), `static_assert`ed. The row
+  is implicit: the store keeps one bucket (a `std::vector`) per cell row,
+  about 24 bytes per row. A `float` offset resolves 2⁻²⁴ of a cell, under
+  2 µm at 30 m. An offset that rounds up to a whole cell moves the point to
+  the next cell's corner with offset 0, so every point lies in the closed
+  cell it is filed in (the last cell keeps an offset of 1 on the far edge).
+  For 15c-2's memory sum: the buckets grow geometrically during `add`, so the
+  peak before `freeze()` (which shrinks them to fit) can approach 32 bytes per
+  point. **The check point is
   the stored position**: membership, error and the inserted vertex all use the
   same reconstructed `double`, so the 2 µm is a fixed displacement of where
   the source node is taken to be, not an inconsistency. z is `float`: exact
@@ -438,7 +444,8 @@ source nodes, in source row-major block order.
   shows). `add` after `freeze` is a refusal. Afterwards the store is
   immutable and any number of threads may read it.
 - Query: `for_each_in(row, c0, c1, f)`, by binary search on the column within
-  the row's slice.
+  the row's bucket. `geometry()` and `frozen()` complete what `refine_points`
+  reads.
 
 ### D5. The final check: `refine_points`
 
@@ -448,7 +455,7 @@ source nodes, in source row-major block order.
 ```cpp
 struct PointRefineOptions { double tolerance = 0.0; unsigned threads = 0; };
 
-template <class Store>  // CheckPoints, or a test double with for_each_in
+template <class Store>  // CheckPoints, or a test double with geometry(), frozen() and for_each_in
 [[nodiscard]] PointRefineOutcome refine_points(
     const Store& points,  // its geometry() is the grid: the frame and the buckets
     const IndexedMesh2& start, std::span<const double> z, std::span<const std::uint8_t> valid,
@@ -461,14 +468,19 @@ It returns `PointRefineOutcome`, defined in `refine_points.hpp`: a
 `coincident_max_error` (below). `RefineOutcome` itself is unchanged, so
 `refine.hpp` is not edited (J1). The grid is not a separate argument: it is
 the store's own `geometry()`, so a store filed on one grid cannot be scanned
-against another. The start is phase 1's output as
+against another. An unfrozen store is a programming error: `refine_points`
+throws `std::logic_error` ("not frozen"; `RuntimeError` in Python), as `add`
+after `freeze` does, because `RefineStatus` lives in `refine.hpp`, which J1
+forbids editing. The start is phase 1's output as
 numbers: vertices in the target CRS, their z and validity, triangles,
 constraint edges and masks.
 
 1. **Lattice.** `detail::to_lattice(points.geometry(), start, ...)` as in `refine`: a
    vertex that is a node bit for bit is a node, any other is off-node. A
    vertex z table `zt` holds the given z, NaN where invalid. Phase 2 never
-   reads the target grid's values: `grid` is only the frame and the buckets.
+   reads the target grid's values: the store's `geometry()` is only the frame
+   and the buckets. The start is then legalised (`legalise_all`), as `refine`
+   does, before the first scan.
 2. **Scan** (parallel, read-only, one result per triangle), `scan_points`:
    - for each cell row the triangle meets, the column range the triangle
      covers within that band (from its vertices in the band and its edges'
@@ -485,8 +497,9 @@ constraint edges and masks.
    - a triangle with a NaN corner (void) gets 14's rule: the check point
      nearest a void corner, and `uncovered` counts its points.
 3. **Split** (serial, triangle-index order), as `refine` does: the worst point
-   goes in with `split_inside` (a `MeshVertex` overload, +1 small function in
-   `lattice_mesh.hpp`) or, on an edge (one zero orientation), `split_edge`,
+   goes in with `split_inside`, which now takes a `MeshVertex` (a
+   `LatticeVertex` converts exactly, so existing callers are unchanged; one
+   function, not an overload pair, so a braced call is not ambiguous) or, on an edge (one zero orientation), `split_edge`,
    skipped this round if the neighbour across that edge was already touched.
    A constrained edge stays constrained on both halves (as for 20b's feet).
    Its z is the point's z, appended to `zt`. `legalise_around` with
@@ -553,8 +566,10 @@ metres, on or relative to a square grid. Concretely: the target grid as a
   both. `include/terrain/` stays free of pybind11.
 - **Memory cap** (15a R7: half of physical memory), checked in `open_dem`
   before any pixel is read: source canvas + target canvas + 16 B per source
-  node in the source box. The Velhas piece is about 0.75 GB by that sum
-  (7,197 × 4,376 source nodes, 7,347 × 4,208 target nodes). The whole basin
+  node in the source box (up to 32 B at the store's peak before `freeze()`,
+  D4; 15c-2's sum is to count the peak). The Velhas piece is about 0.75 GB by
+  that sum at 16 B, 1.26 GB at 32 B (7,197 × 4,376 source nodes,
+  7,347 × 4,208 target nodes, canvases at 4 B per node). The whole basin
   is refused in 15c by design. *Superseded at basin scale (Q15):* the cap
   stays in 15c as a guard, but at basin scale memory is not to decide what
   can be meshed; the basin-scale design removes the canvases rather than
@@ -1213,3 +1228,30 @@ every family (all six rows reproduced, e.g. the basin 0.25 % scale, 0.49 %
 area, against 1.11 % for UTM); B2 fixed; suggestions taken. 15c-1 370,
 15c-2 405 (563 at +39 %, 648 at +60 %). Gates green. CI runs once #128 targets
 master.
+
+### 15c-1, round 1, `a130f7c..cdd8b42`: CHANGES REQUESTED (`@reviewer`)
+
+Production LOC 445 added, 3 removed (442 net) against the estimate of 370 (+20 %, inside 514 at +39 %). Red before green confirmed (C++: missing header, then `split_inside(MeshVertex)`; Python: missing names). Green touches no test; the RP3 amendment is its own commit. Release ctest 839/839 without warnings; TSan and ASan/UBSan pass on the new suites; full `tests/python` 3195 passed against the built `_core` in an isolated venv; ruff, format, mypy and governance gates green; both at-risk citations still hold. Departures accepted: an unfrozen store throws `std::logic_error`; `split_inside` takes `MeshVertex`; one bucket per cell row, with an offset rounding to 1 moved to the next cell's corner. Blocking:
+- B1: no case where `split_edge` splits an interior edge whose neighbour has work in the same round. Dropping the neighbour's touch mark corrupts the mesh with every suite green.
+- B2: no tie-break test (ties to last survives).
+- B3: `CheckPoints.add` checks the dtype by identity and refuses pickled float64/float32 arrays.
+- B4: D4/D5 prose and two test comments describe the design before the departures.
+- B5: update ROADMAP row 15 before merge.
+
+Then @perf's acceptance run.
+
+### 15c-1, round 2, `cdd8b42..6ab7ad5`: CHANGES REQUESTED (`@reviewer`)
+
+Production LOC unchanged at 445 added, 3 removed (442 net) against the estimate of 370; this round changed 2 production lines (dtype equality in `CheckPoints.add`). Round 1's B1-B5 are fixed. The new tests kill the round-1 survivors: M11 by the targeted RP5 case, ties-to-last by the RP2 tie-break test, and the deleted `frozen()` check in C++ and in Python. A pickled float64/float32 array is accepted; byte-swapped and other dtypes are refused. Release ctest 843/843 without warnings; TSan passes on both suites; full `tests/python` 3199 passed against the rebuilt `_core` in an isolated venv; ruff, format, mypy and the governance gates green; at-risk citations still hold; the D4/D5 prose and the Velhas figures (0.754 / 1.257 GB) checked against code and arithmetic. Blocking:
+- B1: the dense RP5 case hangs under M11, and CI has no time limit (no `timeout-minutes`; the `tsan` job runs binaries outside ctest). Add `timeout-minutes` to the `cpp`, `sanitizers` and `tsan` jobs.
+- B2: ROADMAP row 15 says "(proposed in #129)", but #129 merged.
+
+@perf's acceptance run is next and can run on 6ab7ad5 meanwhile.
+
+### 15c-1, `@perf` acceptance (c3149bf): ACCEPTED
+
+Battery, 5 back-to-back pairs against master a130f7c with `--tree`; mesh hashes identical in all 10 runs (quarter `ccebf96a…`, tile `11741a81…`); refine time within noise at every thread count (median change −0.39 %, range −3.2 % to +3.6 %). Evidence: `docs/benchmarks/2026-10-01/15c-1-acceptance/`.
+
+### 15c-1, round 3, `6ab7ad5..c640be8`: APPROVED (`@reviewer`)
+
+Production LOC unchanged at 445 added, 3 removed (442 net) against the estimate of 370; the merge of master (6ca90af) and c640be8 change no production file. Round 2's B1 is fixed: `timeout-minutes: 30` on the `cpp`, `sanitizers` and `tsan` jobs (checked by parsing the YAML), and the `06-cdt-viewer.md:966` citation moved to the `sanitizers` job's new range, 51-75. B2 is fixed: "(#129)". The merge kept master's row 23 and #129's edits to the 15c record, with no conflict markers. Release ctest 843/843 without warnings; full `tests/python` 3342 passed against the rebuilt `_core` in an isolated venv; ruff, format, mypy and the governance gates green; the four at-risk citations re-read as quotations and hold. @perf's acceptance (c3149bf) covers the unchanged production code.

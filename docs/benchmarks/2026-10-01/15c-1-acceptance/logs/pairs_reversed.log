@@ -1,0 +1,32 @@
+== pair 4 new 22:01:45
+Now drawing from 'Battery Power'
+ -InternalBattery-0 (id=24117347)	75%; discharging; 2:49 remaining present: true
+power: battery; evidence: /Users/skavhaug/projects/rasputin/.claude/worktrees/15c-1/docs/benchmarks/2026-10-01/15c-1-acceptance/15c-1-r4; meshes: /Users/skavhaug/.claude/jobs/85c14e7c/tmp/meshes/new-r4
+NO BASELINE: no comparable stored run
+exit 2
+== pair 4 base 22:04:05
+Now drawing from 'Battery Power'
+ -InternalBattery-0 (id=24117347)	74%; discharging; 2:48 remaining present: true
+power: battery; evidence: /Users/skavhaug/projects/rasputin/.claude/worktrees/15c-1/docs/benchmarks/2026-10-01/15c-1-acceptance/base-a130f7c-r4; meshes: /Users/skavhaug/.claude/jobs/85c14e7c/tmp/meshes/base-r4
+NO BASELINE: no comparable stored run
+exit 2
+== pair 4 compare
+ACCEPTED
+exit 0
+== pair 5 new 22:06:27
+Now drawing from 'Battery Power'
+ -InternalBattery-0 (id=24117347)	73%; discharging; 2:51 remaining present: true
+power: battery; evidence: /Users/skavhaug/projects/rasputin/.claude/worktrees/15c-1/docs/benchmarks/2026-10-01/15c-1-acceptance/15c-1-r5; meshes: /Users/skavhaug/.claude/jobs/85c14e7c/tmp/meshes/new-r5
+NO BASELINE: no comparable stored run
+exit 2
+== pair 5 base 22:08:48
+Now drawing from 'Battery Power'
+ -InternalBattery-0 (id=24117347)	72%; discharging; 2:52 remaining present: true
+power: battery; evidence: /Users/skavhaug/projects/rasputin/.claude/worktrees/15c-1/docs/benchmarks/2026-10-01/15c-1-acceptance/base-a130f7c-r5; meshes: /Users/skavhaug/.claude/jobs/85c14e7c/tmp/meshes/base-r5
+NO BASELINE: no comparable stored run
+exit 2
+== pair 5 compare
+ACCEPTED
+exit 0
+Now drawing from 'Battery Power'
+ -InternalBattery-0 (id=24117347)	71%; discharging; 2:42 remaining present: true

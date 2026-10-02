@@ -2,8 +2,9 @@
 
 // A triangle mesh over the DEM's lattice, with neighbour links
 // (docs/increments/14-adaptive-refinement.md, R3 and R4). Every vertex that
-// refinement inserts is a DEM node or a foot on a constraint segment
-// (docs/increments/20b-min-insertion-distance.md, R4); a start vertex may lie
+// refinement inserts is a DEM node, a foot on a constraint segment
+// (docs/increments/20b-min-insertion-distance.md, R4) or a check point of the
+// final check (docs/increments/15c-geographic-dem.md, D5); a start vertex may lie
 // anywhere in the node rectangle (docs/increments/16-domain-polygon.md, R2).
 //
 // A flat triangle array, not a tree: R3's edge split changes two triangles at
@@ -171,8 +172,10 @@ public:
     // Fan t into three around p, which must lie strictly inside t. The
     // children are (v0, v1, p) in t's slot, then (v1, v2, p) and (v2, v0, p)
     // appended. t's edges are unchanged, so no neighbour sees a new vertex.
-    // Returns p's vertex index.
-    std::uint32_t split_inside(std::uint32_t t, LatticeVertex p) {
+    // Returns p's vertex index. p may be off-node (the final check inserts check
+    // points, docs/increments/15c-geographic-dem.md, D5); a LatticeVertex
+    // converts to it exactly.
+    std::uint32_t split_inside(std::uint32_t t, MeshVertex p) {
         const auto q = add_vertex(p);
         const auto [v0, v1, v2] = triangles_[t];
         const std::array<Side, 3> s{side(t, 0), side(t, 1), side(t, 2)};
