@@ -1,0 +1,19 @@
+53335 start quality nodes inserted, 1220 start quality skips, 18 constraint feet, 0 feet refused, 37 rounds, 458617 points inserted, 1219387 flips, 1094297 triangles, achieved max error 19.999972944500087 m, 0 valid DEM nodes not covered, 36981 start triangles, 36983 start vertices off-node, 0 vertices without data dropped
+       48.94 real       218.78 user        54.36 sys
+         13526433792  maximum resident set size
+                   0  average shared memory size
+                   0  average unshared data size
+                   0  average unshared stack size
+            17198643  page reclaims
+                  25  page faults
+                   0  swaps
+                   0  block input operations
+                   0  block output operations
+                   0  messages sent
+                   0  messages received
+                   0  signals received
+                 129  voluntary context switches
+              244563  involuntary context switches
+       1817497619391  instructions retired
+        804209705749  cycles elapsed
+         13882157856  peak memory footprint

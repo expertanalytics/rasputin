@@ -1,0 +1,14 @@
+{
+ "prefix": "767",
+ "estimate_gb": 7.95,
+ "fetch_exit": 0,
+ "power_before": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=24117347)\t100%; charged; 0:00 remaining present: true\n",
+ "swap_before_mb": 17447.81,
+ "sampled_peak_gb": 5.02297892,
+ "late_peak_gb": 3.691434808,
+ "exit": 0,
+ "outer_wall_s": 43.9,
+ "swap_max_mb": 17447.81,
+ "power_after": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=24117347)\t100%; charged; 0:00 remaining present: true\n",
+ "mesh": "/Users/skavhaug/projects/rasputin_data/sao_francisco_piece/meshes/level3/sub_basin_767_anadem_tol2m.vtk"
+}

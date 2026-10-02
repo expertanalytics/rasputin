@@ -1,0 +1,82 @@
+{
+ "phases": [
+  {
+   "phase": "P1 decode + assemble",
+   "seconds": 2.400141954421997,
+   "start": 52281848,
+   "end": 2322516056,
+   "peak": 6812308688,
+   "exact": true
+  },
+  {
+   "phase": "P2 resample (blocks)",
+   "seconds": 17.391024112701416,
+   "start": 2322516056,
+   "end": 4476145240,
+   "peak": 14103784368,
+   "exact": true
+  },
+  {
+   "phase": "P2 end (DemTile copy)",
+   "seconds": 0.30261993408203125,
+   "start": 4476145240,
+   "end": 4476161648,
+   "peak": 6630839384,
+   "exact": false
+  },
+  {
+   "phase": "start mesh",
+   "seconds": 0.13009190559387207,
+   "start": 4476161648,
+   "end": 4478996080,
+   "peak": 4485189232,
+   "exact": false
+  },
+  {
+   "phase": "P3 refine phase 1",
+   "seconds": 7.987792253494263,
+   "start": 4478996080,
+   "end": 4651355976,
+   "peak": 5033922736,
+   "exact": false
+  },
+  {
+   "phase": "P4 store fill + freeze",
+   "seconds": 15.261667728424072,
+   "start": 4651355976,
+   "end": 2658998992,
+   "peak": 6223421720,
+   "exact": false
+  },
+  {
+   "phase": "P5 phase 2 (refine_points)",
+   "seconds": 19.630829095840454,
+   "start": 2658998992,
+   "end": 2853313904,
+   "peak": 4008418984,
+   "exact": false
+  },
+  {
+   "phase": "P6 trim + write",
+   "seconds": 3.0278751850128174,
+   "start": 2853313904,
+   "end": 85661144,
+   "peak": 3889078480,
+   "exact": false
+  }
+ ],
+ "units": {
+  "source mosaic nodes": 560943760,
+  "target grid nodes": 538409322,
+  "check points": 270407394,
+  "phase 1 triangles (2 V - hull)": 7005036,
+  "final triangles": 7791814,
+  "P1 rise per mosaic node, B": 4.047169021008452,
+  "P2 transient per block node, B (peak - start - canvas) / (threads x 256 x cols)": 135.3484981195566,
+  "P2 end rise per grid node, B (copy)": 8.00194787117746,
+  "P4 rise per check point, B": 5.813693629990015,
+  "P4 held after freeze per check point, B": -7.367982637338682,
+  "P3 rise per phase-1 triangle, B": 79.21824470281095,
+  "P5 rise per final triangle, B": 173.18431779814046
+ }
+}

@@ -1,0 +1,21 @@
+53335 start quality nodes inserted, 1220 start quality skips, 65 constraint feet, 0 feet refused, 43 rounds, 1314475 points inserted, 3421162 flips, 2940024 triangles, achieved max error 9.999999395691475 m, 0 valid DEM nodes not covered, 36981 start triangles, 36983 start vertices off-node, 0 vertices without data dropped
+/Users/skavhaug/projects/rasputin_scratch/basin-phases/761_t10.vtk
+/Users/skavhaug/projects/rasputin/.claude/worktrees/basin-phases/docs/benchmarks/2026-10-02/basin-phases/runs/761_t10.stats.md
+       47.95 real       244.93 user        19.54 sys
+         14352613376  maximum resident set size
+                   0  average shared memory size
+                   0  average unshared data size
+                   0  average unshared stack size
+             4917642  page reclaims
+                 368  page faults
+                   0  swaps
+                   0  block input operations
+                   0  block output operations
+                   0  messages sent
+                   0  messages received
+                   0  signals received
+                1358  voluntary context switches
+              437128  involuntary context switches
+       1709967398710  instructions retired
+        773510302870  cycles elapsed
+         17831228784  peak memory footprint

@@ -56,6 +56,7 @@ import json
 import math
 import os
 import re
+import shlex
 import subprocess
 import sys
 from pathlib import Path
@@ -790,3 +791,83 @@ class TestTheSuggestionPastesBack:
         )
         assert done.returncode == USAGE, done.stderr
         mesh_with(tmp_path, copied_suggestion(done.stdout + done.stderr))
+
+
+class TestASuggestionWithAnApostrophePastesBack:
+    """`@reviewer` round 4 on 8b7b0dd: the suggestion is printed as
+    `--out-crs '<WKT>'`, and a WKT can hold an apostrophe: EPSG:4266's datum
+    is M'poraloko (Gabon). The printed line, parsed as a POSIX shell parses
+    it (`shlex.split`, and `bash` itself), must give back the CRS, which
+    must mesh. A geographic micro tile in EPSG:4266, 0.5 degrees south of
+    the equator."""
+
+    LON, LAT = 10.5, -0.5
+
+    @pytest.fixture
+    def scene(self, tmp_path: Path) -> tuple[Path, Path]:
+        dem = tmp_path / "gabon.tif"
+        dem.write_bytes(
+            geographic_tile_tiff(tile_array(), lon0=self.LON, lat0=self.LAT, epsg=4266).getvalue()
+        )
+        ring = [(self.LON + c * ANADEM_STEP, self.LAT - r * ANADEM_STEP) for r, c in DOMAIN_RC]
+        return dem, write_geojson(tmp_path / "d.geojson", ring, "EPSG:4266")
+
+    @staticmethod
+    def printed_line(output: str) -> str:
+        lines = [
+            line.strip()
+            for line in ANSI.sub("", output).splitlines()
+            if line.strip().startswith("--out-crs")
+        ]
+        assert len(lines) == 1, f"one line to copy, beginning --out-crs, in {output!r}"
+        return lines[0]
+
+    def refusal(self, tmp_path: Path, scene: tuple[Path, Path]) -> str:
+        dem, domain = scene
+        result = CliRunner(env={"NO_COLOR": "1", "TERM": "dumb", "COLUMNS": "80"}).invoke(
+            app,
+            [
+                *("mesh", "--dem", str(dem), "--domain", str(domain), "--tolerance", "1"),
+                *("--out", str(tmp_path / "refused.vtk")),
+            ],
+        )
+        assert result.exit_code == USAGE, result.output
+        return self.printed_line(result.output)
+
+    def mesh(self, tmp_path: Path, scene: tuple[Path, Path], out_crs: str) -> None:
+        dem, domain = scene
+        vtk = run(
+            tmp_path,
+            *("--dem", str(dem), "--domain", str(domain), "--tolerance", "1"),
+            *("--out-crs", out_crs),
+            out="pasted.vtk",
+        )
+        assert CRS.from_user_input(field(vtk, "crs")) == CRS.from_user_input(out_crs)
+
+    def test_the_datum_does_hold_an_apostrophe(self) -> None:
+        """The case is real: pyproj's own name for the datum."""
+        datum = CRS.from_user_input("EPSG:4266").datum
+        assert datum is not None and "'" in datum.name, datum
+
+    def test_shlex_gives_back_the_crs_and_it_meshes(
+        self, tmp_path: Path, scene: tuple[Path, Path]
+    ) -> None:
+        words = shlex.split(self.refusal(tmp_path, scene))
+        assert len(words) == 2 and words[0] == "--out-crs", words
+        datum = CRS.from_user_input(words[1]).datum
+        assert datum is not None and "'" in datum.name, datum
+        self.mesh(tmp_path, scene, words[1])
+
+    def test_bash_gives_back_the_same_words(self, tmp_path: Path, scene: tuple[Path, Path]) -> None:
+        line = self.refusal(tmp_path, scene)
+        done = subprocess.run(
+            ["bash", "-c", f"printf '%s\\0' {line}"],
+            capture_output=True,
+            text=True,
+            timeout=60,
+            check=False,
+        )
+        assert done.returncode == 0, done.stderr
+        words = done.stdout.split("\0")[:-1]
+        assert len(words) == 2 and words[0] == "--out-crs", words
+        self.mesh(tmp_path, scene, words[1])
