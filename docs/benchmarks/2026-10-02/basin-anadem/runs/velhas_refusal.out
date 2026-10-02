@@ -1,0 +1,10 @@
+--out-crs 'PROJCRS["undefined",BASEGEOGCRS["SIRGAS 2000",DATUM["Sistema de Referencia Geocentrico para las AmericaS 2000",ELLIPSOID["GRS 1980",6378137,298.257222101,LENGTHUNIT["metre",1]]],PRIMEM["Greenwich",0,ANGLEUNIT["degree",0.0174532925199433]],ID["EPSG",4674]],CONVERSION["unknown",METHOD["Transverse Mercator",ID["EPSG",9807]],PARAMETER["Latitude of natural origin",0,ANGLEUNIT["degree",0.0174532925199433],ID["EPSG",8801]],PARAMETER["Longitude of natural origin",-44.1,ANGLEUNIT["degree",0.0174532925199433],ID["EPSG",8802]],PARAMETER["Scale factor at natural origin",0.999972,SCALEUNIT["unity",1],ID["EPSG",8805]],PARAMETER["False easting",0,LENGTHUNIT["metre",1],ID["EPSG",8806]],PARAMETER["False northing",0,LENGTHUNIT["metre",1],ID["EPSG",8807]]],CS[Cartesian,2],AXIS["(E)",east,ORDER[1],LENGTHUNIT["metre",1,ID["EPSG",9001]]],AXIS["(N)",north,ORDER[2],LENGTHUNIT["metre",1,ID["EPSG",9001]]]]'
+[1;33mUsage: [0m[1;32m-c[0m[1m mesh [OPTIONS] [name][0m
+[2mTry [0m[2;34m'[0m[1;2;34m-c[0m[2;34m mesh [0m[1;2;34m-[0m[1;2;34m-help[0m[2;34m'[0m[2m for help.[0m
+[31m╭─[0m[31m Error [0m[31m─────────────────────────────────────────────────────────────────────[0m[31m─╮[0m
+[31m│[0m Invalid value for [1;36m-[0m[1;36m-dem[0m: the DEM is geographic (EPSG:4674), so [1;36m-[0m[1;36m-out[0m[1;36m-crs[0m is  [31m│[0m
+[31m│[0m required; suggested for this box (transverse Mercator, +proj=tmerc +lat_0=0  [31m│[0m
+[31m│[0m +lon_0=[1;32m-44[0m.1 +k=0.999972 +x_0=0 +y_0=0 +ellps=GRS80 +units=m +no_defs on the [31m│[0m
+[31m│[0m DEM's datum), worst scale error 0.00282 %, worst areal error 0.00565 % over  [31m│[0m
+[31m│[0m the box; the suggested [1;36m-[0m[1;36m-out[0m[1;36m-crs[0m is the line above                           [31m│[0m
+[31m╰──────────────────────────────────────────────────────────────────────────────╯[0m

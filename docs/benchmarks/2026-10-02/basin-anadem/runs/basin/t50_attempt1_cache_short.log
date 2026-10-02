@@ -1,0 +1,42 @@
+[1;33mUsage: [0m[1;32m-c[0m[1m mesh [OPTIONS] [name][0m
+[2mTry [0m[2;34m'[0m[1;2;34m-c[0m[2;34m mesh [0m[1;2;34m-[0m[1;2;34m-help[0m[2;34m'[0m[2m for help.[0m
+[31m╭─[0m[31m Error [0m[31m─────────────────────────────────────────────────────────────────────[0m[31m─╮[0m
+[31m│[0m Invalid value for [1;36m-[0m[1;36m-dem[0m: anadem-v1                                           [31m│[0m
+[31m│[0m (/Users/skavhaug/projects/rasputin_data/cache/anadem-v1): 400 of the 8,700   [31m│[0m
+[31m│[0m blocks needed are not in the cache; run: rasputin fetch anadem-v1 [1;36m-[0m[1;36m-domain[0m   [31m│[0m
+[31m│[0m /Users/skavhaug/projects/rasputin_data/sao_francisco_piece/bho2017_level2_76 [31m│[0m
+[31m│[0m _raw.geojson [1;36m-[0m[1;36m-out[0m[1;36m-crs[0m 'PROJCRS["undefined",BASEGEOGCRS["SIRGAS              [31m│[0m
+[31m│[0m 2000",DATUM["Sistema de Referencia Geocentrico para las AmericaS             [31m│[0m
+[31m│[0m 2000",ELLIPSOID["GRS                                                         [31m│[0m
+[31m│[0m 1980",6378137,298.257222101,LENGTHUNIT["metre",1]]],PRIMEM["Greenwich",0,ANG [31m│[0m
+[31m│[0m LEUNIT["degree",0.0174532925199433]],ID["EPSG",4674]],CONVERSION["unknown",M [31m│[0m
+[31m│[0m ETHOD["Transverse Mercator",ID["EPSG",9807]],PARAMETER["Latitude of natural  [31m│[0m
+[31m│[0m origin",0,ANGLEUNIT["degree",0.0174532925199433],ID["EPSG",8801]],PARAMETER[ [31m│[0m
+[31m│[0m "Longitude of natural                                                        [31m│[0m
+[31m│[0m origin",[1;32m-42[0m,ANGLEUNIT["degree",0.0174532925199433],ID["EPSG",8802]],PARAMETE [31m│[0m
+[31m│[0m R["Scale factor at natural                                                   [31m│[0m
+[31m│[0m origin",0.997548,SCALEUNIT["unity",1],ID["EPSG",8805]],PARAMETER["False      [31m│[0m
+[31m│[0m easting",0,LENGTHUNIT["metre",1],ID["EPSG",8806]],PARAMETER["False           [31m│[0m
+[31m│[0m northing",0,LENGTHUNIT["metre",1],ID["EPSG",8807]]],CS[Cartesian,2],AXIS["(E [31m│[0m
+[31m│[0m )",east,ORDER[1],LENGTHUNIT["metre",1,ID["EPSG",9001]]],AXIS["(N)",north,ORD [31m│[0m
+[31m│[0m ER[2],LENGTHUNIT["metre",1,ID["EPSG",9001]]]]' [1;36m-[0m[1;36m-cache[0m                       [31m│[0m
+[31m│[0m /Users/skavhaug/projects/rasputin_data/cache                                 [31m│[0m
+[31m╰──────────────────────────────────────────────────────────────────────────────╯[0m
+        1.33 real         0.95 user         0.28 sys
+          2381873152  maximum resident set size
+                   0  average shared memory size
+                   0  average unshared data size
+                   0  average unshared stack size
+              149817  page reclaims
+                 123  page faults
+                   0  swaps
+                   0  block input operations
+                   0  block output operations
+                   0  messages sent
+                   0  messages received
+                   0  signals received
+                 509  voluntary context switches
+                 505  involuntary context switches
+         12128078103  instructions retired
+          3863637494  cycles elapsed
+          2358478984  peak memory footprint

@@ -1,0 +1,72 @@
+{
+ "runs": [
+  {
+   "tag": "t50",
+   "args": [
+    "mesh",
+    "--dem",
+    "anadem-v1",
+    "--cache",
+    "/Users/skavhaug/projects/rasputin_data/cache",
+    "--domain",
+    "/Users/skavhaug/projects/rasputin_data/sao_francisco_piece/bho2017_level2_76_raw.geojson",
+    "--out-crs",
+    "PROJCRS[\"undefined\",BASEGEOGCRS[\"SIRGAS 2000\",DATUM[\"Sistema de Referencia Geocentrico para las AmericaS 2000\",ELLIPSOID[\"GRS 1980\",6378137,298.257222101,LENGTHUNIT[\"metre\",1]]],PRIMEM[\"Greenwich\",0,ANGLEUNIT[\"degree\",0.0174532925199433]],ID[\"EPSG\",4674]],CONVERSION[\"unknown\",METHOD[\"Transverse Mercator\",ID[\"EPSG\",9807]],PARAMETER[\"Latitude of natural origin\",0,ANGLEUNIT[\"degree\",0.0174532925199433],ID[\"EPSG\",8801]],PARAMETER[\"Longitude of natural origin\",-42,ANGLEUNIT[\"degree\",0.0174532925199433],ID[\"EPSG\",8802]],PARAMETER[\"Scale factor at natural origin\",0.997548,SCALEUNIT[\"unity\",1],ID[\"EPSG\",8805]],PARAMETER[\"False easting\",0,LENGTHUNIT[\"metre\",1],ID[\"EPSG\",8806]],PARAMETER[\"False northing\",0,LENGTHUNIT[\"metre\",1],ID[\"EPSG\",8807]]],CS[Cartesian,2],AXIS[\"(E)\",east,ORDER[1],LENGTHUNIT[\"metre\",1,ID[\"EPSG\",9001]]],AXIS[\"(N)\",north,ORDER[2],LENGTHUNIT[\"metre\",1,ID[\"EPSG\",9001]]]]",
+    "--tolerance",
+    "50",
+    "--ascii",
+    "--out",
+    "/Users/skavhaug/projects/rasputin_data/sao_francisco_piece/meshes/sao_francisco_76_anadem_tol50m.vtk",
+    "--stats",
+    "runs/basin/t50.stats.md"
+   ],
+   "pmset_before": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=24117347)\t100%; charged; 0:00 remaining present: true",
+   "started_utc": "2026-10-02T12:53:41Z",
+   "swap_gb_before": 12.98205078125,
+   "wall_s": 5.08,
+   "returncode": 2,
+   "stopped": null,
+   "sampled_max_rss_gb": 0.0,
+   "sampled_max_swap_gb": 12.982,
+   "pmset_after": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=24117347)\t100%; charged; 0:00 remaining present: true",
+   "max_rss_bytes": 2381873152.0,
+   "peak_footprint_bytes": 2358478984.0,
+   "time_real_s": 1.33,
+   "note": "refused: 400 of 8,700 blocks not in the cache (log t50_attempt1_cache_short.log)"
+  },
+  {
+   "tag": "t50",
+   "args": [
+    "mesh",
+    "--dem",
+    "anadem-v1",
+    "--cache",
+    "/Users/skavhaug/projects/rasputin_data/cache",
+    "--domain",
+    "/Users/skavhaug/projects/rasputin_data/sao_francisco_piece/bho2017_level2_76_raw.geojson",
+    "--out-crs",
+    "PROJCRS[\"undefined\",BASEGEOGCRS[\"SIRGAS 2000\",DATUM[\"Sistema de Referencia Geocentrico para las AmericaS 2000\",ELLIPSOID[\"GRS 1980\",6378137,298.257222101,LENGTHUNIT[\"metre\",1]]],PRIMEM[\"Greenwich\",0,ANGLEUNIT[\"degree\",0.0174532925199433]],ID[\"EPSG\",4674]],CONVERSION[\"unknown\",METHOD[\"Transverse Mercator\",ID[\"EPSG\",9807]],PARAMETER[\"Latitude of natural origin\",0,ANGLEUNIT[\"degree\",0.0174532925199433],ID[\"EPSG\",8801]],PARAMETER[\"Longitude of natural origin\",-42,ANGLEUNIT[\"degree\",0.0174532925199433],ID[\"EPSG\",8802]],PARAMETER[\"Scale factor at natural origin\",0.997548,SCALEUNIT[\"unity\",1],ID[\"EPSG\",8805]],PARAMETER[\"False easting\",0,LENGTHUNIT[\"metre\",1],ID[\"EPSG\",8806]],PARAMETER[\"False northing\",0,LENGTHUNIT[\"metre\",1],ID[\"EPSG\",8807]]],CS[Cartesian,2],AXIS[\"(E)\",east,ORDER[1],LENGTHUNIT[\"metre\",1,ID[\"EPSG\",9001]]],AXIS[\"(N)\",north,ORDER[2],LENGTHUNIT[\"metre\",1,ID[\"EPSG\",9001]]]]",
+    "--tolerance",
+    "50",
+    "--ascii",
+    "--out",
+    "/Users/skavhaug/projects/rasputin_data/sao_francisco_piece/meshes/sao_francisco_76_anadem_tol50m.vtk",
+    "--stats",
+    "runs/basin/t50.stats.md"
+   ],
+   "pmset_before": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=24117347)\t100%; charged; 0:00 remaining present: true",
+   "started_utc": "2026-10-02T13:05:18Z",
+   "swap_gb_before": 12.67724609375,
+   "wall_s": 190.04,
+   "returncode": -15,
+   "stopped": "swap grew to 29.7 GB (+16.0 GB limit) at 189 s",
+   "sampled_max_rss_gb": 13.161,
+   "sampled_max_swap_gb": 29.702,
+   "pmset_after": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=24117347)\t100%; charged; 0:00 remaining present: true",
+   "max_rss_bytes": 16487563264.0,
+   "peak_footprint_bytes": 33161551992.0,
+   "time_real_s": 190.03,
+   "note": "stopped by the swap-growth guard (16 GB) at 189 s; not finished"
+  }
+ ]
+}
