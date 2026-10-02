@@ -2358,3 +2358,16 @@ Production LOC 0; 23c 430 (688 at +60 %). B13 (c) and B14 recorded faithfully; b
 ### Round 2, `4c182c8..a7c1bfb`: APPROVED (`@reviewer`)
 
 DC0 now pins the cell count, which approximates P' and is not a floor; the refusals at half of physical memory are question B15 (`src_python/tin_engine/mosaic.py@5a57793:209`, `src_python/tin_engine/catchment.py@5a57793:150`), with every dependent place conditional on Ola's answer; units in GiB (7.7 estimated against 3.60 measured). Citations resolve. CI not yet run: no PR.
+
+### 23a-1, round 1, `18316b6..a235716`: CHANGES REQUESTED (`@reviewer`)
+
+LOC 326 net (363 added, 37 removed) against the estimate of 270, which is +21% and inside the +39% worst case. Red came before green, and the green commit touched no test. The local gates were green. Three blocking items:
+- The GLO-30 credit was missing the licence's Art. 6(b) notice for adapted data and the Art. 6(c) no-liability sentence.
+- The ANADEM credit named no creator, which CC BY 4.0 requires.
+- Some prose was made false by the branch: four line citations had drifted, `23-basin-scale.md:1079` still named `_adopt`, and two red-step paragraphs described the tests as still red.
+
+Accepted in round 1: the public `DemTile` constructor instead of `_adopt` (one extra copy per window), NoData taken from the request, and `--cache` ignored for a path `--dem`. Mutation pass: 17 of 19 mutants killed. One survivor was equivalent (thread count). The other showed that the sparse-block test did not pin the refusal message.
+
+### 23a-1, round 2, `a235716..72ec413`: APPROVED (`@reviewer`)
+
+LOC is 336 net (373 added, 37 removed), still under the +39% worst case and far under 700. Both credits now match their sources word for word (GLO-30: the licence's Art. 6(b) notice, Art. 6(c) quoted in `licence_note`; ANADEM: OpenTopography's citation, CC BY 4.0). A missing `header.bin` is a `CacheError`; the sparse-block test fails with the sparse check removed; the four citations resolve to the quoted code; the departure and the `--out-crs` timing are recorded. pytest 3525 passed, 13 skipped in a fresh venv on this worktree's source; ruff, ruff format, mypy, `check_citations` and `check_prohibited_deps` clean. Not blocking: only `credit` reaches the mesh file, so Art. 6(c)'s sentence stays in the catalogue for 23a-2 to carry; `_ascii` writes ANADEM's accented credit as escapes. Remaining: `@perf`'s decode-speed acceptance, then CI after Ola approves the push.
