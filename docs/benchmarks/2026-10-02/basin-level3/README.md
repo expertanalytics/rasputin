@@ -1,4 +1,4 @@
-# The São Francisco basin at 20 m, one mesh per BHO level-3 sub-basin (@perf, 2026-10-02)
+# The São Francisco basin at 20, 10 and 5 m, one mesh per BHO level-3 sub-basin (@perf, 2026-10-02)
 
 An interim measurement of option (c) in `docs/research/basin-memory-options.md`
 (branch `worktree-basin-memory`): mesh each level-3 unit separately, so that
@@ -37,12 +37,12 @@ No production code changed.
 - **Domain, DEM, tolerance**: BHO 2017 50k level-3 outlines (`fetch_level3.py`
   and `runs/level3_units.json` in `../basin-phases/`). ANADEM v1 from the
   cache, with all blocks present for every unit (`runs/t20/<unit>.fetch.out`).
-  Resampled to a 30 m grid in the output CRS. Tolerance 20 m.
+  Resampled to a 30 m grid in the output CRS. Tolerances 20, 10 and 5 m.
 - **Output CRS**: the basin box's suggested `--out-crs`,
   `../basin-phases/runs/basin_out_crs.wkt`. This is a Transverse Mercator on
   SIRGAS 2000, central meridian 42° W, scale factor 0.997548, false easting and
-  northing 0. All nine files carry the same `crs` field.
-- **Unit 761** was not re-run. Its figures come from the earlier 20 m run with
+  northing 0. All 27 files carry the same `crs` field.
+- **Unit 761 at 20 m** was not re-run. Its figures come from the earlier 20 m run with
   the same software, settings and power state: `runs/t20/761.log` (the `time -l`
   output) and `runs/t20/761.stats.md`.
 - One run per unit. A test agent was running on the machine at the same time,
