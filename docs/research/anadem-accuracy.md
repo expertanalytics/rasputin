@@ -35,7 +35,9 @@ MDPI version, 17 pages; MDPI itself refused automated download).
   (ANADEM); above 21°, from 9.5 m to 5.3 m. Figure 7's quantity is not named;
   its aspect panel gives 1.30-1.63 m for ANADEM, which matches the overall
   bias rather than the RMSE, so **0.57 m is most likely a mean (bias), not an
-  RMSE** (inferred from the figures, not stated by the paper).
+  RMSE** (inferred from the figures, not stated by the paper). Copernicus's
+  aspect values (5.97-6.48 m) match neither its bias (9.56 m) nor its RMSE
+  (12.40 m), so the inference is weak.
 
 What it does not report: any relative (point-to-point, slope) accuracy, which
 is what flow routing depends on.
@@ -94,13 +96,14 @@ unverified** (paywall).
   noisier DEM (SRTM) gave a **denser TIN in a flat canyon bottom** than a
   smoother one (USGS): a tolerance near the noise level spends triangles
   tracing noise.
-- **Vivoni et al. 2005** (Hydrol. Process. 19(11):2101-2122), on a 64 km²
-  catchment with tRIBS: TIN RMSE is well below the tolerance (1 m → RMSE
-  0.53 m; 6.8 m → 2.3 m). The model response was **weakly sensitive to
-  refinement finer than the resolution it was calibrated at and strongly
-  sensitive to coarsening below it**; what mattered was resolving the
-  near-stream variable source areas, not the global tolerance. They place the
-  break near 10 % of the DEM nodes kept (6.8 m tolerance in that basin).
+- **Vivoni et al. 2005** (Hydrol. Process. 19(11):2101-2122). On Baron Fork
+  (808 km²), TIN RMSE is well below the tolerance (1 m → 0.53 m; 6.8 m →
+  2.3 m). On its 64 km² sub-basin, Peacheater Creek, the tRIBS response was
+  **weakly sensitive to refinement finer than the resolution it was
+  calibrated at and strongly sensitive to coarsening below it**; what
+  mattered was resolving the near-stream variable source areas, not the
+  global tolerance. They place the break near d = 0.1 (10 % of DEM nodes);
+  the calibrated resolution, d = 0.08, was zr = 6.8 m on Baron Fork.
 - I found **no published rule** that sets a TIN tolerance as a multiple of
   DEM error. "Do not mesh below the DEM's noise" is a reasonable inference
   from the above, not a cited result. Lee (1991, IJGIS), the drop-heuristic
@@ -128,7 +131,7 @@ For hydrological use in the São Francisco basin, with the decision Ola's:
 - **5 m** is about one absolute RMSE on open land, so it barely moves the
   absolute error (5-16 %). It is coarser than the relative noise, so local
   slopes on gentle terrain are smoothed. That matters on the flats, where
-  ANADEM's mean error is ~0.6 m and channels and floodplain relief are a few
+  ANADEM's error is ~0.6 m (quantity unnamed; §1) and channels and floodplain relief are a few
   metres.
 - **10 m** clearly degrades the surface relative to the data (absolute error
   up 19-55 %), and on flat terrain it can merge valleys a few metres deep.
@@ -136,7 +139,8 @@ For hydrological use in the São Francisco basin, with the decision Ola's:
 Uncertainty: every accuracy figure is continental (ICESat-2 over South
 America), not per basin. Nothing measures ANADEM's relative accuracy. The
 basin's land-cover mix is not measured here (MapBiomas is a 23e input). The
-error-budget factor comes from two US basins on other DEMs. On the evidence,
+error-budget factor comes from Baron Fork (Vivoni 2005) and Vivoni 2004's
+set of USGS/SRTM basins at 4 m. On the evidence,
 the defensible band is **2 to 5 m**. Where the basin is flat, the hydrology
 depends more on getting the channels into the mesh (rivers as constraints,
 23e) than on the global tolerance, so the choice within that band is likely
