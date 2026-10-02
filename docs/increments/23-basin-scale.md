@@ -2564,7 +2564,7 @@ DC0 now pins the cell count, which approximates P' and is not a floor; the refus
 LOC 326 net (363 added, 37 removed) against the estimate of 270, which is +21% and inside the +39% worst case. Red came before green, and the green commit touched no test. The local gates were green. Three blocking items:
 - The GLO-30 credit was missing the licence's Art. 6(b) notice for adapted data and the Art. 6(c) no-liability sentence.
 - The ANADEM credit named no creator, which CC BY 4.0 requires.
-- Some prose was made false by the branch: four line citations had drifted, `23-basin-scale.md:1079` still named `_adopt`, and two red-step paragraphs described the tests as still red.
+- Some prose was made false by the branch: four line citations had drifted, `docs/increments/23-basin-scale.md@0a1e522:1079` still named `_adopt`, and two red-step paragraphs described the tests as still red.
 
 Accepted in round 1: the public `DemTile` constructor instead of `_adopt` (one extra copy per window), NoData taken from the request, and `--cache` ignored for a path `--dem`. Mutation pass: 17 of 19 mutants killed. One survivor was equivalent (thread count). The other showed that the sparse-block test did not pin the refusal message.
 

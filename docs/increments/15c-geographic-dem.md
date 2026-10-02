@@ -1,6 +1,8 @@
 # Increment 15c — a geographic DEM, projected onto the TIN's CRS, resampled, and checked against its source
 
-Status: **designed by `@architect`, 2026-10-01; not implemented.** Written
+Status: **designed by `@architect`, 2026-10-01; 15c-1 shipped (#133);
+15c-2 implemented on branch `worktree-15c-2`, its departures marked "as
+built" or "built otherwise" where they occur.** Written
 before `@tester`, per `docs/increments/README.md` step 1. It replaces R8 and
 R10 of `docs/increments/15-dem-mosaic.md` for 15c, following Ola's Q6 and Q9
 rulings of 2026-09-30. **Q11-Q14, Q16 and Q17 were ruled by Ola on
@@ -388,10 +390,10 @@ rest.
   with `nodata=None` when the source has none.
 - **Deterministic:** each node is computed from its own coordinates alone,
   so block size and thread count cannot change a value.
-- The canvas becomes the tile through `DemTile._adopt` (15a R7, no copy). Its
-  docstring names `assemble` as the one caller; it gains `resample` as the
-  second, under the same rule (the buffer was allocated here and is never
-  handed out writable).
+- The canvas becomes the tile through `DemTile._adopt` (15a R7, no copy).
+  *Built otherwise (15c-2):* through the public `DemTile(...)` constructor,
+  one copy of the target canvas, as 23a-1 did, because 15a's suite (M15)
+  reserves `_adopt` for `mosaic.py`.
 - Its values are not trusted for the guarantee: phase 1 is measured against
   them, phase 2 against the source.
 
@@ -542,7 +544,8 @@ metres, on or relative to a square grid. Concretely: the target grid as a
 `(x, y)` in the target CRS with z. **No degrees, no CRS, no path.**
 
 - `RasterMeta` (`io/models.py`) gains `geographic: bool = False` and
-  `crs: str`, filled from `epsg` when not given (`EPSG:n`); `epsg` becomes
+  `crs: str`, filled from `epsg` when not given (`EPSG:n`; *as built*, set
+  to `EPSG:n` whenever `epsg` is set, overriding a given `crs`); `epsg` becomes
   `int | None` so a target CRS without an EPSG code has a meta: D8's
   suggestion is a PROJ string, and pasting it into `--out-crs` is the
   expected use. Existing constructions with `epsg=n` are unchanged. Call sites that
@@ -573,17 +576,27 @@ metres, on or relative to a square grid. Concretely: the target grid as a
   is refused in 15c by design. *Superseded at basin scale (Q15):* the cap
   stays in 15c as a guard, but at basin scale memory is not to decide what
   can be meshed; the basin-scale design removes the canvases rather than
-  shrinking one of them.
+  shrinking one of them. *Not built (15c-2):* Ola ruled B15 (a)
+  (`23-basin-scale.md`), deleting the refusals at half of physical memory,
+  so no cap was added here; 15a's own cap in `mosaic.py` goes with 23c.
 - `final_check.py` (new, ~40 lines): `run(tile, start, checks, tolerance,
   threads) -> (phase-1 outcome, phase-2 outcome)`, the two calls and the
   store's construction, so `cli.py` (about 1,500 lines) grows by the options and
   fields only. It drops its reference to the target tile before building the
   store; the caller must not hold one either, and `_dem_mesh` is restructured
-  so it does not.
+  so it does not. *Built otherwise (15c-2):* `run(start, grid, checks,
+  tolerance, clock) -> (phase-2 outcome, check points stored)`; phase 1
+  stays in `cli.py`, and the target tile is not dropped before phase 2
+  (`_dem_mesh` still holds it).
+- *Added in 15c-2:* `--out-crs` without `--domain` or `--bbox` is refused
+  (the grid needs an extent in the target CRS), and so is an `--out-crs`
+  that is not projected in metres (dda35ff), both before any pixel is read.
 
 ### D7. What the file records
 
-- `crs`: the target CRS (`EPSG:n`, else one-line WKT2, ASCII).
+- `crs`: the target CRS (`EPSG:n`, else one-line WKT2, ASCII). *As built:*
+  `EPSG:n`, else `crs_label`'s text, which for D8's suggestion is the PROJ
+  string, not WKT2.
 - `source_crs`: the DEM's; `source_transform`: pyproj's description of the
   source-to-target transformation, so a datum shift is on record.
 - `computation_grid`: e.g. `square 30 m grid in EPSG:31983, node (R, K) at
@@ -594,7 +607,9 @@ metres, on or relative to a square grid. Concretely: the target grid as a
   with a start vertex (max F m)`.
 - `--stats` rows: `resample`, `check points: project`, `check points: store`,
   `final check: scan (parallel)`, `final check: split + flip (serial)`, and
-  the source-node error beside the grid's.
+  the source-node error beside the grid's. *As built:* only the four
+  check-point and final-check rows (`final_check.run`'s clock); no
+  `resample` row and no source-node error in `--stats`.
 
 The output is already in the target CRS, so 15-dem-mosaic.md R10's
 transform-on-output and its `max_reprojection_z_error_estimate` field are not
@@ -908,7 +923,7 @@ and 15a's `mosaic.py` 60 % over, so the worst case applies 39 %, with
 | **15c-2** | **The geographic path, in Python, ending with the final check** | | |
 | | `io/geotiff.py`: geographic 2D, degree units | 30 | |
 | | `io/models.py`: `crs`, `geographic`, `epsg: int \| None` | 15 | |
-| | `raster.py`: the gate; `mosaic.py` and `catchment.py` (`catchment.py:134-135`): `EPSG:{...}` through `meta.crs` | 13 | |
+| | `raster.py`: the gate; `mosaic.py` and `catchment.py` (`catchment.py:132-133`): `EPSG:{...}` through `meta.crs` | 13 | |
 | | `target_grid.py`: `TargetGrid`, spacing, extent, `source_region` | 80 | |
 | | `target_grid.py`: `SourceWindows`, `TileWindows`, `resample` | 55 | |
 | | `target_grid.py`: `check_point_blocks` | 35 | |
@@ -1051,7 +1066,9 @@ committed only after its licence is read and quoted in the fixture `NOTICE`
   the date it was cut), crediting ANADEM; it is EPSG:4674, so G6's realism
   case also exercises the COG's key set;
 - a **DEM-derived test catchment** (Q17 as replaced on 2026-10-01), derived
-  once and committed as GeoJSON; the test never runs increment 22. Increment
+  once and committed as GeoJSON (*as built:* one bare `Polygon` with a
+  `crs` member naming EPSG:31983, not 22's FeatureCollection); the test
+  never runs increment 22. Increment
   22 reads only projected DEMs (G2 keeps `rasputin catchment` on a
   geographic tile a usage error), so the ANADEM extract is first resampled
   onto its 30 m EPSG:31983 target grid by this increment's own `resample`

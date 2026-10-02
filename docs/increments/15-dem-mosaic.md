@@ -498,7 +498,7 @@ assemble(plan, load) -> Mosaic                                pixels, no files
 
 - [15a] Carried from the parked R3: `_header(tif, nodata) -> (RasterMeta,
   dtype)` holds everything `decode_dem` does before `page.asarray()`
-  (now `_header` itself, `io/geotiff.py:122-160`). `read_meta(source, *,
+  (now `_header` itself, `io/geotiff.py:121-159`). `read_meta(source, *,
   nodata=None)` calls it (through `read_header`, which also returns the
   decoded dtype, S2) and returns, and `decode_dem` calls it and then decodes.
   The header phase keeps the codec refusal.
@@ -613,7 +613,7 @@ the 72 GiB union box would be refused by the cap, whose message says
 **[15a] One canvas, capped at half of physical memory.**
 
 - **No second canvas copy.** `DemTile`'s validator copies its array
-  (`io/models.py:94`), so the parked design peaked at two canvases. `assemble`
+  (`io/models.py:108`), so the parked design peaked at two canvases. `assemble`
   builds the canvas privately, so it can hand it over without a copy: a
   private constructor in `io/models.py`, `_adopt(meta, array)`. It runs the
   same shape and dtype checks, sets the array read-only, and stores it. Its one
