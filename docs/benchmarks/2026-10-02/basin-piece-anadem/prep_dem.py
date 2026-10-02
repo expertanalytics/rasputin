@@ -22,8 +22,10 @@ spacing. z is bilinear in the source's own (longitude, latitude) index space;
 a target node whose four source neighbours are not all valid is NoData.
 ANADEM is SIRGAS 2000 geographic (EPSG:4674), the target's own datum; GLO-30
 is WGS 84 (EPSG:4326), which PROJ takes to SIRGAS 2000 by a null
-transformation. The source window is written in the source's own CRS
-(``SOURCE_EPSG``), and every transformation reads it from there.
+transformation. The source CRS comes from the ``SOURCE_EPSG`` table, which
+``fetch`` checks against the COG's GeoKeys for ANADEM. ``fetch`` writes the
+source window in that CRS, and ``resample`` and ``check`` take it from the
+same table, not from the window file.
 """
 
 from __future__ import annotations

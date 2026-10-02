@@ -102,8 +102,11 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
   Saneamento Básico. (2025). ANADEM: A Digital Terrain Model for South
   America. Distributed by OpenTopography. https://doi.org/10.5069/G9736P4G.",
   CC BY 4.0 (projected and resampled, so modified); ANADEM is itself derived
-  from Copernicus GLO-30, whose credit above applies to it too. ANADEM is not
-  in the repository.
+  from Copernicus GLO-30, whose credit above applies to it too. As
+  OpenTopography's dataset acknowledgement asks, also cite Laipelt, L.;
+  Comini de Andrade, B.; Collischonn, W.; de Amorim Teixeira, A.; Paiva,
+  R.C.D.; Ruhoff, A. "ANADEM: A Digital Terrain Model for South America."
+  Remote Sens. 2024, 16, 2321. ANADEM is not in the repository.
 
 ## Runtime dependencies
 

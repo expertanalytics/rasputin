@@ -24,9 +24,11 @@ batt` before and after every block, in the JSON), Apple M1 Max (8P + 2E,
   offsets number its blocks, and unless the GeoKeys say area-registered
   EPSG:4674. After that it range-reads only the blocks under each window.
 - **CRS.** ANADEM is SIRGAS 2000 geographic (EPSG:4674), not WGS 84. The source
-  window is written in its own CRS (`*_anadem_window_epsg4674.tif`), and
-  `prep_dem.py` and `run_sweep.py`'s final check read the CRS from the file
-  instead of assuming EPSG:4326.
+  window is written in its own CRS (`*_anadem_window_epsg4674.tif`).
+  `prep_dem.py` takes the source CRS from its `SOURCE_EPSG` table (for
+  ANADEM, `fetch` stops unless the COG's GeoKeys say EPSG:4674), and
+  `resample` and `check` use that table too. Only `run_sweep.py`'s final check
+  reads the CRS from the window file. Neither assumes EPSG:4326.
 - `align_check.py` (new): checks that ANADEM's registration matches GLO-30's
   on the piece. `compare.py` (new): the side-by-side tables below.
 - `run_sweep.py`, `sample_boxes.py`, `analyse.py`, `scaling.py`,
@@ -147,8 +149,12 @@ density lies inside the 95 % interval of its 30 boxes (1 m: 745.6 against
 
 Derived from **ANADEM**: "Agência Nacional de Águas e Saneamento Básico.
 (2025). ANADEM: A Digital Terrain Model for South America. Distributed by
-OpenTopography. https://doi.org/10.5069/G9736P4G." Licensed CC BY 4.0;
-projected and resampled here, so modified. ANADEM is itself derived from
+OpenTopography. https://doi.org/10.5069/G9736P4G." Licensed CC BY 4.0. As
+OpenTopography's dataset acknowledgement asks, also cite
+Laipelt, L.; Comini de Andrade, B.; Collischonn, W.; de Amorim Teixeira, A.;
+Paiva, R.C.D.; Ruhoff, A. "ANADEM: A Digital Terrain Model for South America."
+Remote Sens. 2024, 16, 2321. ANADEM is projected and resampled here, so
+modified. ANADEM is itself derived from
 Copernicus GLO-30 ("produced using Copernicus WorldDEM-30 © DLR e.V.
 2010-2014 and © Airbus Defence and Space GmbH 2014-2018 provided under
 COPERNICUS by the European Union and ESA; all rights reserved"). The outlines
