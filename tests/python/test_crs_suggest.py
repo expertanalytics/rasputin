@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import math
 import re
+import warnings
 from collections.abc import Callable
 from typing import Any
 
@@ -52,9 +53,17 @@ def suggest() -> Callable[..., Any]:
     return fn
 
 
+def proj4(proj: str) -> str:
+    """The suggestion as PROJ.4 text, whatever form `proj` takes (a PROJ
+    string, or WKT2 when the DEM's datum cannot be named in one)."""
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", UserWarning)  # "loses information": the datum
+        return str(CRS.from_user_input(proj).to_proj4())
+
+
 def params(proj: str) -> dict[str, str]:
-    """`+key=value` pairs of a PROJ string; a bare `+flag` maps to ''."""
-    found = dict(re.findall(r"\+(\w+)(?:=(\S+))?", proj))
+    """`+key=value` pairs of the suggestion's PROJ.4 text; a bare `+flag` maps to ''."""
+    found = dict(re.findall(r"\+(\w+)(?:=(\S+))?", proj4(proj)))
     return {k: v for k, v in found.items()}
 
 
@@ -63,7 +72,7 @@ def scale_of(p: dict[str, str]) -> float:
 
 
 def with_scale(proj: str, value: float) -> str:
-    return re.sub(r"\+(k|k_0)=\S+", lambda m: f"+{m.group(1)}={value}", proj)
+    return re.sub(r"\+(k|k_0)=\S+", lambda m: f"+{m.group(1)}={value}", proj4(proj))
 
 
 def oracle(proj: str, box: Box) -> tuple[float, float, float, float, float]:
@@ -152,9 +161,19 @@ def test_the_family_and_its_rounded_parameters(
 
 @pytest.mark.parametrize("epsg", ["EPSG:4674", "EPSG:4326"])
 def test_the_datum_is_the_dems_own(suggest: Callable[..., Any], epsg: str) -> None:
+    """D8: "The datum is the DEM's own". Amended after `@perf`'s 15c-2
+    acceptance: an ellipsoid alone (`+ellps=`) names no datum, so pyproj
+    joined the two by a "Ballpark geographic offset". The suggestion's
+    geodetic datum is the DEM's, and the DEM-to-suggestion transformation
+    is no ballpark one."""
     got = suggest(VELHAS, epsg)
-    assert CRS(got.proj).ellipsoid.name == CRS(epsg).ellipsoid.name
-    assert CRS(got.proj).is_projected
+    suggested, dem = CRS(got.proj), CRS(epsg)
+    assert suggested.is_projected
+    assert suggested.ellipsoid.name == dem.ellipsoid.name
+    assert suggested.datum is not None and dem.datum is not None
+    assert suggested.datum.name == dem.datum.name, (suggested.datum.name, dem.datum.name)
+    described = Transformer.from_crs(dem, suggested, always_xy=True).description
+    assert "ballpark" not in described.lower(), described
 
 
 @pytest.mark.parametrize(

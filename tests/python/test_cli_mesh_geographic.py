@@ -684,3 +684,40 @@ class TestRoundOneMutantKillers:
             *self.args(geographic_dem, domain_4674),
             says=("planted final-check failure",),
         )
+
+
+# ------------------------------------------------------------------ @perf's 15c-2 acceptance
+
+
+def test_the_final_checks_timing_rows_are_not_zero(
+    tmp_path: Path, geographic_dem: Path, domain_4674: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`@perf`'s 15c-2 acceptance: "final check: scan (parallel)" and "final
+    check: split + flip (serial)" always read 0.000. When phase 2 inserts
+    points it has scanned and split, so the outcome's `scan_seconds` and
+    `split_seconds`, and the clock rows D7 names, are positive. Read from
+    the clock `final_check.run` was given, not from the printed table, whose
+    three decimals would round a small run's real time to 0."""
+    import tin_engine.final_check as final_check
+
+    seen: list[tuple[Any, Any]] = []
+    real = final_check.run
+
+    def spying(*args: Any, **kwargs: Any) -> Any:
+        outcome, n = real(*args, **kwargs)
+        clock = kwargs["clock"] if "clock" in kwargs else args[4]
+        seen.append((outcome, clock))
+        return outcome, n
+
+    monkeypatch.setattr(final_check, "run", spying)
+    run(
+        tmp_path,
+        *("--dem", str(geographic_dem), "--domain", str(domain_4674)),
+        *("--out-crs", TARGET, "--tolerance", str(TOLERANCE)),
+    )
+    ((outcome, clock),) = seen
+    assert outcome.inserted > 0, "phase 2 must have work for this test to mean anything"
+    assert outcome.scan_seconds > 0 and outcome.split_seconds > 0
+    rows = dict(clock.phases())
+    assert rows["final check: scan (parallel)"] > 0, rows
+    assert rows["final check: split + flip (serial)"] > 0, rows

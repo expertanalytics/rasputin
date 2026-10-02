@@ -38,6 +38,8 @@ from __future__ import annotations
 
 import importlib
 import math
+import threading
+import time
 from types import ModuleType
 from typing import Any
 
@@ -332,3 +334,57 @@ class TestCheckPoints:
         assert (got_xy[:, 0] <= (grid.col0 + grid.cols - 1) * H).all()
         assert (got_xy[:, 1] <= -grid.row0 * H).all()
         assert (got_xy[:, 1] >= -(grid.row0 + grid.rows - 1) * H).all()
+
+
+# ------------------------------------------------------------------ @perf's 15c-2 acceptance
+
+
+class _UsedFrom:
+    """A prepared geometry that records every thread calling into it. Each
+    call sleeps 20 ms so blocks overlap in time and the pool's four workers
+    all take one; without it, one worker could drain a short queue alone."""
+
+    def __init__(self, inner: Any) -> None:
+        self._inner = inner
+        self.threads: set[int] = set()
+
+    def __getattr__(self, name: str) -> Any:
+        attr = getattr(self._inner, name)
+        if not callable(attr):
+            return attr
+
+        def call(*args: Any, **kwargs: Any) -> Any:
+            self.threads.add(threading.get_ident())
+            time.sleep(0.02)
+            return attr(*args, **kwargs)
+
+        return call
+
+
+def test_no_prepared_geometry_is_shared_between_threads(
+    tg: ModuleType, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`@perf`'s 15c-2 acceptance: about 15 % of geographic runs crashed
+    (SIGBUS, `GEOSException: vector`), each in a pool worker inside GEOS's
+    prepared-polygon `intersects`. shapely's prepared geometries are not
+    thread-safe, and `check_point_blocks` shared one `prep(domain.polygon)`
+    across its workers. Deterministic: every `prep` result is instrumented,
+    and none may be called from more than one thread. (A fix that avoids
+    `prep` passes trivially; one that calls `shapely.prepare` on the shared
+    polygon in place is the same race and is not seen here.)"""
+    made: list[_UsedFrom] = []
+    real = tg.prep
+
+    def recording(geometry: Any) -> _UsedFrom:
+        made.append(_UsedFrom(real(geometry)))
+        return made[-1]
+
+    monkeypatch.setattr(tg, "prep", recording)
+    monkeypatch.setattr(tg, "BLOCK", 16)  # an 80 x 80 source is 25 blocks
+    tile = geographic_tile(rough(80, 80))
+    domain = a_domain(tile.meta, [(5.3, 5.7), (6.1, 74.2), (74.6, 73.4), (73.2, 6.8)])
+    grid = covering(tg, tile.meta, margin=2)
+    blocks = list(tg.check_point_blocks(grid, tg.TileWindows(tile), domain, threads=4))
+    assert sum(len(z) for _, z in blocks) > 3000
+    shared = [sorted(p.threads) for p in made if len(p.threads) > 1]
+    assert not shared, f"a prepared geometry used from {len(shared[0])} threads"
