@@ -2579,3 +2579,17 @@ Design only; estimate 373 lines, 518 at +39 % and 597 at +60 %. Correct: block c
 ### 23a-2 design, round 2, `2120609..f32a865`: CHANGES REQUESTED (`@reviewer`)
 
 ROADMAP (373), the decode count and F6 fixed. Blocking: F9 asserted which block is missing, but `NotCached` carries only counts. The one-sentence fix (assert `missing` and `needed` against the test's own counts) is in 7f14e7d, checked by the main session against the diff instead of a third round (Ola's two-round cap).
+
+### 23a-2, round 1, `99bd723..226c6dc`: CHANGES REQUESTED (`@reviewer`)
+
+LOC was 598 added and 6 removed, 592 net, against an estimate of 373. That is +60 %, one line over the +60 % column, and under 700. Two packed regions (`FetchRequest(...)` in `cli.py`, `RasterMeta(...)` in `run.py`) are keyword-only constructor calls and still readable. The red step failed its tests (11 failed, 46 errors). The green step touched no test and left only the two tests it reported red. The amendment's reasons held: F4's old box gave a single coalesced range, and Q3 ruled out `CacheWriter`, which the design places in that module. pytest 3489 passed and 16 skipped in a fresh venv; ruff, ruff format, mypy, check_prohibited_deps, check_detria_boundary and check_citations clean. Retries, 206 handling, the lock, `.part` and rename, the atomic manifest, the order of writes and the check for a changed remote all match the design. Only `fetch/http.py` imports networking. `NOTICE.txt` matches the catalogue. All of @developer's departures were sound. Mutation pass: 12 of 14 mutants killed. Blocking:
+- B16 (a) was implemented for `.vtk` only. A `.ply` mesh carried neither `licence_note` nor `cite`; a probe confirmed it.
+- Prose still called B15 open after Ola ruled it: the Status paragraph, lines ~803 and ~2250, and ROADMAP row 23.
+
+### 23a-2, round 2, `226c6dc..dd76fe8`: APPROVED (`@reviewer`)
+
+- **B16 in `.ply`:** the notes are now written as header comments in both PLY files, and `cite` only when the source has citations. The new PLY cases (cited and uncited) fail against 226c6dc's source and pass at dd76fe8.
+- **`coalesce`:** now takes `max(stop, …)`, so a span lying inside another no longer shrinks the range.
+- **Progress count:** now updated under a lock.
+- **Prose:** the B15 text is correct in the Status paragraph, lines ~803, ~1017, ~1618 and ~2250, the LOC row, DC11 and ROADMAP row 23. The departures are recorded and match the code.
+- **Checks:** pytest 3491 passed, 16 skipped in the reviewer's venv (without vtk); ruff, ruff format, mypy and check_citations clean. About 604 production lines, under 700. CI not yet run.
