@@ -39,7 +39,6 @@ roles is therefore made unrepresentable rather than merely discouraged.
 
 from __future__ import annotations
 
-import importlib.metadata
 import json
 import math
 import os
@@ -57,6 +56,7 @@ import numpy.typing as npt
 import typer
 from pydantic import ValidationError
 
+from tin_engine import installed_version
 from tin_engine._core import (
     ChainRole,
     IndexedMesh2,
@@ -186,10 +186,7 @@ def main() -> None:
 @app.command()
 def version() -> None:
     """Print the installed rasputin version."""
-    try:
-        typer.echo(importlib.metadata.version("rasputin"))
-    except importlib.metadata.PackageNotFoundError:  # pragma: no cover
-        typer.echo("unknown (rasputin is not installed)")
+    typer.echo(installed_version())
 
 
 @dataclass(frozen=True, slots=True)
