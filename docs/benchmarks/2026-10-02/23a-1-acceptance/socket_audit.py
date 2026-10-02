@@ -18,7 +18,9 @@ def _hook(name: str, args: tuple[object, ...]) -> None:
 
 
 sys.addaudithook(_hook)
-atexit.register(lambda: print(f"SOCKET_EVENTS {len(events)} {sorted(set(events))}", file=sys.stderr))
+atexit.register(
+    lambda: print(f"SOCKET_EVENTS {len(events)} {sorted(set(events))}", file=sys.stderr)
+)
 argv = sys.argv[1:]
 if argv and argv[0] == "--control":
     import socket
