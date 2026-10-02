@@ -1,4 +1,4 @@
-# The São Francisco basin at 20, 10 and 5 m, one mesh per BHO level-3 sub-basin (@perf, 2026-10-02)
+# The São Francisco basin at 20, 10, 5 and 2 m, one mesh per BHO level-3 sub-basin (@perf, 2026-10-02)
 
 An interim measurement of option (c) in `docs/research/basin-memory-options.md`
 (branch `worktree-basin-memory`): mesh each level-3 unit separately, so that
@@ -15,9 +15,9 @@ No production code changed.
 
 - **Machine**: Apple M1 Max (8 P + 2 E cores, 32 GiB), macOS 27.0, Python
   3.14.7. **AC power** for every run (`pmset -g batt` before and after each
-  run, in `runs/t20/<unit>.json`). Swap stood at about 17.6 GB in use before the
+  run, in `runs/t<t>/<unit>.json`; 761 at 20 m has no record here, see below). Swap stood at about 17.6 GB in use before the
   runs, left over from earlier work. No run added to it: `swap_max_mb` equals
-  `swap_before_mb` in every `runs/t20/<unit>.json`.
+  `swap_before_mb` in every `runs/t<t>/<unit>.json`.
 - **Software**: rasputin `worktree-15c-2` at `0b42f5b`. `_core` was built
   Release by `tools/bench.py` into that tree's `build-bench/` (sha256
   `41a22a6168db…250485f3`, the same `.so` as basin-phases and as the 761
@@ -31,17 +31,29 @@ No production code changed.
   whose estimate is above 24 GB. Then it runs `rasputin fetch anadem-v1
   --domain … --out-crs …`, and then `MallocLargeCache=0 /usr/bin/time -l
   rasputin mesh --dem anadem-v1 --cache … --domain … --out-crs … --tolerance
-  20`. Swap is polled once a second during the mesh run, and the run is killed
-  if swap grows by 3 GB (this never happened). `tabulate.py` builds the table
-  below.
+  <t>`. Swap is polled during the mesh run, and the run is killed if swap
+  grows by more than `--swap-kill-mb` (3 GB at 20, 10 and 5 m, 100 MB at 2 m).
+  A kill also stops the sequence. No run was killed. `tabulate.py` builds the
+  tables below.
+- **Added for 2 m**: footprint sampling, `--estimates`, `--driver` and
+  `--swap-kill-mb`. At 2 m the mesh can set the peak, so the basin-phases
+  estimate no longer bounds it. `--estimates=<json>` supplies the 2 m
+  estimates instead (see the 2 m section). `--driver=../basin-phases/phase_driver.py`
+  runs the unchanged CLI in-process with phase markers
+  (`<unit>.markers.jsonl`). `run_level3.py` samples the mesh process's
+  `phys_footprint` every 0.25 s into `<unit>.mem.csv`, and records
+  `late_peak_gb`, the largest sample from the start of refine phase 1 to the
+  end of the run. The kill path was planted once with `--swap-kill-mb=-1` on a
+  scratch run (766 at 20 m, outside the repository): the run was killed at
+  once and the next unit was not started.
 - **Domain, DEM, tolerance**: BHO 2017 50k level-3 outlines (`fetch_level3.py`
   and `runs/level3_units.json` in `../basin-phases/`). ANADEM v1 from the
   cache, with all blocks present for every unit (`runs/t20/<unit>.fetch.out`).
-  Resampled to a 30 m grid in the output CRS. Tolerances 20, 10 and 5 m.
+  Resampled to a 30 m grid in the output CRS. Tolerances 20, 10, 5 and 2 m.
 - **Output CRS**: the basin box's suggested `--out-crs`,
   `../basin-phases/runs/basin_out_crs.wkt`. This is a Transverse Mercator on
   SIRGAS 2000, central meridian 42° W, scale factor 0.997548, false easting and
-  northing 0. All 27 files carry the same `crs` field.
+  northing 0. All 36 files carry the same WKT in their `crs` field.
 - **Unit 761 at 20 m** was not re-run. Its figures come from the earlier 20 m run with
   the same software, settings and power state: `runs/t20/761.log` (the `time -l`
   output) and `runs/t20/761.stats.md`.
@@ -77,7 +89,7 @@ and every run exited 0.
 
 No unit came close to the memory limit. The largest peak was 761's 13.9 GB;
 the other eight peaked between 2.8 and 5.8 GB. The basin-phases estimate
-(`estimate_gb` in `runs/t20/<unit>.json`) was within 7 % of the measured peak in
+(`estimate_gb` in `runs/t20/<unit>.json`, and for 761 in `runs/t10/761.json`) was within 7 % of the measured peak in
 all nine units. For 761 it was 0.8 % high, and for the other eight it was
 1-7 % low.
 In these units the resample transient (135 B × 256 rows × cols × 10 threads)
@@ -140,12 +152,73 @@ each unit's peak moved by at most 0.5 GB, so the peak is set before
 refinement, as basin-phases found. Unit 761 at 5 m gave 7,791,814 triangles,
 the same count as basin-phases' `761_t5_nolargecache` run.
 
+## Per unit, 2 m
+
+All nine units again, with the same build, CRS and `MallocLargeCache=0`, run
+through `--driver` with footprint sampling and `--swap-kill-mb=100`. Records
+are in `runs/t2/`. AC power before and after every run, and no run added to
+swap.
+
+**Estimates.** I made three estimates, in order. Each is in `runs/t2/`.
+
+1. `estimates_620.json`, before any 2 m run: the larger of the unit's 5 m
+   peak and canvas (4 B per node) + store (30 B per check point) + mesh. The
+   mesh is priced at the options note's 620 B per triangle. The triangle count
+   is predicted from the unit's own 10 → 5 m growth, raised to the power
+   log2(2.5). That gave 761 27.8 GB and 769 33.2 GB, so both waited; the other
+   seven were at most 9.5 GB and ran.
+2. `estimates_measured.json`, after those seven: their late footprint was
+   428-542 B per output triangle, all in. 542 B per predicted triangle + 30 B
+   per check point gave 761 23.45 GB (run) and 769 28.92 GB (skipped at that
+   point; `run_level3.py` recorded the skip).
+3. `estimates_fit.json`, after 761. A least-squares fit of the late footprint
+   of the eight text runs over triangles, check points and box nodes gave
+   390 B per triangle, 1.5 B per check point and 3.3 B per node (residuals
+   ≤ 0.02 GB). Applied to 769, that predicted 18.6 GB. 761's all-in figure
+   (470 B per triangle) applied to 769's 45.4 M predicted triangles gave
+   21.3 GB. 769 was then run against the larger of the two, 21.3 GB. Its
+   measured peak was 10.76 GB. The 1.5 B per check point is basin-phases'
+   finding again: with `MallocLargeCache=0` the footprint under-counts the
+   store, whose live size is 16 B per point. The swap guard was the backstop
+   for that.
+
+**Format.** I forgot `--binary` on the first runs of 761 and 768, which came
+out as text at 1,566 MB and 628 MB. I deleted those two meshes and re-ran
+both units as binary, together with 769. The text runs' records are kept in
+`runs/t2/text_first/`; their counts are identical. In that text run 761 peaked
+at 14.39 GB with a late peak of 12.75 GB; as binary its late peak was 8.81 GB.
+Text encoding of a 27 M-triangle mesh costs about 4 GB. The files are binary
+for 761, 768 and 769 and text for the other six (763 is the largest text file,
+at 573 MB).
+
+| unit | area km² | box nodes | check points | triangles | vertices | final-check inserted (rounds) | peak footprint GB | wall s | worst angle | < 10° | max degree | .vtk MB | format |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|
+| 761 | 209,316 | 538,409,322 | 270,407,394 | 27,111,561 | 13,574,834 | 2,628,114 (17) | 14.29 | 134.3 | 0.00149° | 0.45 % | 18 | 977.2 | binary |
+| 762 | 77,174 | 148,938,480 | 104,287,612 | 6,546,170 | 3,282,386 | 736,782 (11) | 5.78 | 40.5 | 0.0129° | 0.66 % | 16 | 374.1 | ascii |
+| 763 | 42,134 | 92,050,400 | 58,985,817 | 9,970,384 | 4,992,097 | 1,256,587 (13) | 4.30 | 48.0 | 0.00699° | 0.57 % | 15 | 572.7 | ascii |
+| 764 | 34,243 | 81,616,394 | 48,440,852 | 2,329,553 | 1,170,427 | 202,681 (10) | 4.35 | 16.0 | 0.0221° | 0.47 % | 16 | 127.9 | ascii |
+| 765 | 37,876 | 114,786,552 | 55,122,267 | 4,399,899 | 2,207,250 | 426,653 (12) | 5.63 | 26.8 | 0.0375° | 0.48 % | 15 | 247.7 | ascii |
+| 766 | 30,526 | 63,760,968 | 46,225,333 | 7,239,223 | 3,625,976 | 848,623 (12) | 3.12 | 34.8 | 0.000745° | 0.48 % | 14 | 414.1 | ascii |
+| 767 | 50,881 | 100,694,256 | 71,857,853 | 8,351,232 | 4,183,356 | 941,614 (13) | 5.34 | 43.7 | 0.00511° | 0.52 % | 16 | 477.9 | ascii |
+| 768 | 45,080 | 107,687,349 | 65,762,024 | 10,901,799 | 5,458,682 | 1,387,697 (13) | 4.26 | 35.8 | 0.0043° | 0.58 % | 15 | 393.0 | binary |
+| 769 | 106,394 | 195,552,240 | 143,885,192 | 43,340,930 | 21,682,342 | 5,748,305 (13) | 10.76 | 141.6 | 0.00164° | 0.53 % | 16 | 1561.0 | binary |
+| **total** | 633,624 | 1,443,495,961 | 864,974,344 | **120,190,751** | 60,177,350 | 14,177,056 | max 14.29 | 521.5 |  |  |  | 5145.6 |  |
+
+The basin at 2 m, as nine separate meshes, has **120,190,751 triangles**,
+and the achieved maximum error was 2 m in every unit. The largest peak was
+761's 14.29 GB, set in resample as at every coarser tolerance. 769's
+10.76 GB peak was set late, by the mesh (sampled and late peaks are equal in
+`runs/t2/769.json`). 769 came out at 43.3 M triangles against 45.4 M
+predicted, and 761 at 27.1 M against 28.3 M.
+
 ## Where the meshes are
 
 They are in `../rasputin_data/sao_francisco_piece/meshes/level3/`, named
 `sub_basin_<unit>_anadem_tol<t>m.vtk`. The 761 mesh at 20 m sits one level up. They are not in the repository. That folder's
 `README.md` is the index: units, CRS, counts, credits and regenerate commands.
-Their sha256 values are in `runs/t<t>/meshes.sha256`.
+Their sha256 values are in `runs/t<t>/meshes.sha256`, every file relative to `meshes/level3/`
+(so 761 at 20 m appears as `../sub_basin_761_anadem_tol20m.vtk`); check one with
+`shasum -a 256 -c` from that folder.
 
 ## Reproduce
 
@@ -160,13 +233,16 @@ $PY run_level3.py $R $D/sao_francisco_piece/meshes/level3 ../basin-phases/runs/l
 $PY tabulate.py $R ../basin-phases/runs/level3_units.json 20 $D/sao_francisco_piece/meshes/level3 \
   $D/sao_francisco_piece/meshes
 # 10 m: R=runs/t10, tolerance 10, all nine units (761 762 … 769)
-# 5 m: R=runs/t5, tolerance 5, all nine units, plus --binary=<units> (see the 5 m section)
+# 5 m: R=runs/t5, tolerance 5, all nine units, plus --binary=769
+# 2 m: R=runs/t2, tolerance 2, all nine units, plus
+#   --binary=761,768,769 --driver=../basin-phases/phase_driver.py --swap-kill-mb=100
+#   --estimates=runs/t2/estimates_fit.json
 ```
 
 ## Files
 
-- `run_level3.py`: estimate, fetch and mesh per unit → `runs/t20/<unit>.{json,fetch.out,log,stats.md}`.
+- `run_level3.py`: estimate, fetch and mesh per unit → `runs/t<t>/<unit>.{json,fetch.out,log,stats.md}`; at 2 m also `.mem.csv` and `.markers.jsonl`.
 - `tabulate.py`: the tables above → `runs/t<tol>/table.{json,md}`.
-- `runs/t10/`, `runs/t5/`: the same records at 10 m and 5 m, with `meshes.sha256`.
+- `runs/t10/`, `runs/t5/`, `runs/t2/`: the same records at 10, 5 and 2 m, with `meshes.sha256`; `runs/t2/estimates_*.json` and `runs/t2/text_first/`.
 - `runs/t20/761.{log,stats.md}`: copied from the earlier 761 run.
 - `runs/t20/meshes.sha256`: the nine meshes.
