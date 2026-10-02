@@ -163,7 +163,7 @@ def _reprojected(request: DemRequest, metas: list[RasterMeta]) -> bool:
     s = suggest_crs((x0, x1, y0, y1), first.crs)
     raise ValueError(
         f"the DEM is geographic ({first.crs}), so --out-crs is required; suggested for this "
-        f'box ({s.family}): --out-crs "{s.proj}", worst scale error '
+        f"box ({s.family}, {s.proj4} on the DEM's datum): --out-crs '{s.proj}', worst scale error "
         f"{100 * s.max_scale_error:.3g} %, worst areal error {100 * s.max_areal_error:.3g} % "
         "over the box"
     )

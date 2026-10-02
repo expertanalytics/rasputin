@@ -21,6 +21,7 @@ import numpy as np
 import numpy.typing as npt
 from pydantic import BaseModel, ConfigDict
 from pyproj import CRS, Proj, Transformer, get_ellps_map
+from pyproj.crs import ProjectedCRS
 from pyproj.exceptions import CRSError
 
 Xy = npt.NDArray[np.float64]
@@ -80,13 +81,14 @@ def crs_label(crs: str | CRS) -> str:
 
 
 class CrsSuggestion(BaseModel):
-    """A conformal CRS for a box (15c, D8): a PROJ string, its family's name,
+    """A conformal CRS for a box (15c, D8): WKT2 on the DEM's datum, its family's name,
     and its worst point-scale and areal errors over the box."""
 
     model_config = ConfigDict(frozen=True)
 
     proj: str
     family: str
+    proj4: str = ""  # the same projection as PROJ text, without the datum
     max_scale_error: float
     max_areal_error: float
 
@@ -127,8 +129,16 @@ def suggest_crs(box: tuple[float, float, float, float], geographic_crs: str | CR
 
     _, kmin, kmax, _, _ = proj(1.0)
     text, _, _, scale_error, areal_error = proj(round(2 / (kmin + kmax), 6))
+    # On the DEM's own datum, not its ellipsoid alone, so no ballpark transform
+    # joins the two; WKT2, because no PROJ +datum names SIRGAS 2000.
+    conversion = CRS(text).coordinate_operation
+    wkt = ProjectedCRS(conversion, geodetic_crs=parse_crs(geographic_crs)).to_wkt()
     return CrsSuggestion(
-        proj=text, family=family, max_scale_error=scale_error, max_areal_error=areal_error
+        proj=wkt,
+        proj4=text,
+        family=family,
+        max_scale_error=scale_error,
+        max_areal_error=areal_error,
     )
 
 

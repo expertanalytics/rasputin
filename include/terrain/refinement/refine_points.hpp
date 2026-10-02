@@ -42,6 +42,7 @@
 
 #include <algorithm>
 #include <array>
+#include <chrono>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
@@ -201,14 +202,21 @@ template <class Store>
     for (std::uint32_t t = 0; t < active.size(); ++t)
         active[t] = t;
 
+    using clock = std::chrono::steady_clock;
+    const auto since = [](clock::time_point t0) {
+        return std::chrono::duration<double>(clock::now() - t0).count();
+    };
     while (true) {
         ++out.rounds;
         results.resize(m.triangle_count());
+        auto t0 = clock::now();
         parallel_util::for_each_block(active.size(), options.threads, parallel_util::BlockSchedule{},
                                       [&](std::size_t begin, std::size_t end) {
                                           for (std::size_t i = begin; i < end; ++i)
                                               results[active[i]] = detail::scan_points(points, m, zt, active[i]);
                                       });
+        out.scan_seconds += since(t0);
+        t0 = clock::now();
         std::vector<char> touched(m.triangle_count(), 0);
         std::vector<std::uint32_t> skipped;
         bool any = false;
@@ -248,6 +256,7 @@ template <class Store>
             ++out.inserted;
             out.carved += r.is_void ? 1 : 0;
         }
+        out.split_seconds += since(t0);
         if (!any)
             break;
         detail::rebuild_active(touched, skipped, active);

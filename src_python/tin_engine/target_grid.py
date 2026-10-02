@@ -213,7 +213,9 @@ def check_point_blocks(
     misses the domain is skipped whole; non-finite images and points outside
     the grid's node rectangle are dropped. `domain` is in the target CRS."""
     m, h = source.meta, float(grid.spacing)
-    inside = prep(domain.polygon)
+    # GEOS prepared geometries are not thread-safe, and `prep` prepares its
+    # argument in place: each block prepares its own copy (@perf's crash).
+    wkb = shapely.to_wkb(domain.polygon)
     x0, y1 = grid.col0 * h, -grid.row0 * h
     x1, y0 = x0 + (grid.cols - 1) * h, y1 - (grid.rows - 1) * h
 
@@ -228,7 +230,8 @@ def check_point_blocks(
         cc = np.concatenate([cols, right, cols[::-1], left])
         image = move(np.column_stack([m.x_min + cc * m.delta_x, m.y_max - rr * m.delta_y]))
         image = image[np.isfinite(image).all(axis=1)]
-        if not len(image) or not inside.intersects(shapely.MultiPoint(image).convex_hull.buffer(h)):
+        hull = shapely.MultiPoint(image).convex_hull.buffer(h) if len(image) else None
+        if hull is None or not prep(shapely.from_wkb(wkb)).intersects(hull):
             return None
         z = np.asarray(source.window(r0, r1, c0, c1))
         r, c = np.nonzero(_valid(z, m.nodata))
