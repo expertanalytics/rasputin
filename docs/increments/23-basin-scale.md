@@ -2541,3 +2541,11 @@ Accepted in round 1: the public `DemTile` constructor instead of `_adopt` (one e
 ### 23a-1, round 2, `a235716..72ec413`: APPROVED (`@reviewer`)
 
 LOC is 336 net (373 added, 37 removed), still under the +39% worst case and far under 700. Both credits now match their sources word for word (GLO-30: the licence's Art. 6(b) notice, Art. 6(c) quoted in `licence_note`; ANADEM: OpenTopography's citation, CC BY 4.0). A missing `header.bin` is a `CacheError`; the sparse-block test fails with the sparse check removed; the four citations resolve to the quoted code; the departure and the `--out-crs` timing are recorded. pytest 3525 passed, 13 skipped in a fresh venv on this worktree's source; ruff, ruff format, mypy, `check_citations` and `check_prohibited_deps` clean. Not blocking: only `credit` reaches the mesh file, so Art. 6(c)'s sentence stays in the catalogue for 23a-2 to carry; `_ascii` writes ANADEM's accented credit as escapes. Remaining: `@perf`'s decode-speed acceptance, then CI after Ola approves the push.
+
+### 23a-2 design, round 1, `99bd723..2120609`: CHANGES REQUESTED (`@reviewer`)
+
+Design only; estimate 373 lines, 518 at +39 % and 597 at +60 %. Correct: block counts recounted from the COG's tie point and step (basin box 8,300 = 100 × 83 against 3,061 for the outline; Velhas 160 = 16 × 10 against 82, matching @perf's fetch); RFC 9110 §13.1.5 says what is claimed; retries, coalescing, lock, `.part`, atomic manifest, `geographic=` for fetch only, `NOTICE.txt` and `cite` consistent; B16 a question. Blocking: F9's "one cell larger is `NotCached`" cannot pass (fetch grows by 6 cells, the mesh window by none); ROADMAP's 285 lines and the 3,061 decoded blocks were stale.
+
+### 23a-2 design, round 2, `2120609..f32a865`: CHANGES REQUESTED (`@reviewer`)
+
+ROADMAP (373), the decode count and F6 fixed. Blocking: F9 asserted which block is missing, but `NotCached` carries only counts. The one-sentence fix (assert `missing` and `needed` against the test's own counts) is in 7f14e7d, checked by the main session against the diff instead of a third round (Ola's two-round cap).
