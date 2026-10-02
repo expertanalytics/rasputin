@@ -317,6 +317,39 @@ def open_modes(source: str) -> list[str]:
     return modes
 
 
+#: The one class in `repository.py` that writes (23a-2: the cache's write side).
+WRITER = "CacheWriter"
+
+#: Calls that change the filesystem, matched by name as `OPENERS` are.
+WRITERS = frozenset(
+    {"write_bytes", "write_text", "mkdir", "unlink", "rmdir", "rmtree", "touch", "rename",
+     "replace", "symlink_to", "chmod"}
+)  # fmt: skip
+
+
+def split_out(source: str, name: str) -> tuple[str, str]:
+    """`source` without the top-level class `name`, and that class alone."""
+    tree = ast.parse(source)
+    inside = [n for n in tree.body if isinstance(n, ast.ClassDef) and n.name == name]
+    rest = [n for n in tree.body if n not in inside]
+    unparse = lambda nodes: ast.unparse(ast.Module(body=nodes, type_ignores=[]))  # noqa: E731
+    return unparse(rest), unparse(inside)
+
+
+def file_writers(source: str) -> list[str]:
+    """Every call in `source` that changes the filesystem, as `name:line`.
+    `str.replace` is told apart by its receiver: only `os.replace` counts."""
+    found = []
+    for node in ast.walk(ast.parse(source)):
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute):
+            name, receiver = node.func.attr, node.func.value
+            if name == "replace" and not (isinstance(receiver, ast.Name) and receiver.id == "os"):
+                continue
+            if name in WRITERS:
+                found.append(f"{name}:{node.lineno}")
+    return found
+
+
 class TestQ3OneModuleOpensFiles:
     @pytest.mark.parametrize(
         "planted",
@@ -345,10 +378,32 @@ class TestQ3OneModuleOpensFiles:
         assert offenders == {}
 
     def test_the_repository_opens_files_read_only(self) -> None:
+        """Outside `CacheWriter` (23a-2, the cache's write side), every open is
+        "rb" and nothing writes; `CacheWriter` itself is where the writes are."""
         source = (IO / "repository.py").read_text(encoding="utf-8")
         assert file_openers(source), "the repository must be the module that opens the tiles"
-        modes = open_modes(source)
+        reading, writer = split_out(source, WRITER)
+        modes = open_modes(reading)
         assert modes and all(mode == "rb" for mode in modes), modes
+        assert file_writers(reading) == []
+        assert file_writers(writer), f"{WRITER} must be where the cache is written"
+
+    @pytest.mark.parametrize(
+        "planted",
+        [
+            "def f(p):\n    return open(p, 'wb')\n",
+            "def f(p):\n    return os.open(p, os.O_CREAT)\n",
+            "def f(p):\n    p.write_bytes(b'')\n",
+            "class Other:\n    def f(self, p):\n        os.replace(p, p)\n",
+            "def f(p):\n    shutil.rmtree(p)\n",
+        ],
+    )
+    def test_the_read_only_check_finds_a_planted_write(self, planted: str) -> None:
+        source = f"class {WRITER}:\n    def put(self, p):\n        p.write_bytes(b'')\n{planted}"
+        reading, writer = split_out(source, WRITER)
+        assert file_writers(writer)
+        modes = open_modes(reading)
+        assert file_writers(reading) or any(mode != "rb" for mode in modes), planted
 
     def test_the_package_docstring_says_so(self) -> None:
         """Q3 (a): `io/`'s rule narrowed, in the package's own docstring."""

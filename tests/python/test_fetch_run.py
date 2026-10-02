@@ -212,34 +212,37 @@ class TestF4Resume:
     async def test_a_failed_run_resumes_to_a_clean_runs_tree(
         self, api: SimpleNamespace, server: RangeServer, tmp_path: Path
     ) -> None:
+        """Nodes 10..300 of the top 40 rows: about 20 blocks in each of the
+        three block rows, 80 KiB apart in the file, so three ranges. With one
+        connection and 500 after the prefix and one range, the run stops
+        part way."""
         data = wide()
         source = entry(api, server, served(server, "w.tif", data))
-        box = part_box(10.5, 1300.5, rows=40)
+        box = part_box(10.5, 300.5, rows=40)
         broken, clean = tmp_path / "broken", tmp_path / "clean"
-        server.faults.fail_after = 4
+        await fetch(api, source, clean, box, connections=1)
+        wanted = present_blocks(object_dir(clean), data)
+        assert len(server.block_ranges("w.tif")) == 3, "the box must give three ranges"
+        server.reset()
+        server.faults.fail_after = 2
         with pytest.raises(api.http.FetchError):
             await fetch(api, source, broken, box, connections=1)
-        missing = missing_after_failure(broken, data)
+        missing = missing_after_failure(broken, data, wanted)
         plant_part(broken)
         server.reset()
         await fetch(api, source, broken, box, connections=1)
         assert sorted(requested_blocks(server, "w.tif", data)) == missing
-        server.reset()
-        await fetch(api, source, clean, box, connections=1)
         assert snapshot(broken / SOURCE) == snapshot(clean / SOURCE)
 
 
-def missing_after_failure(root: Path, data: bytes) -> list[int]:
-    """The blocks of the box a clean run has that the failed run left out."""
+def missing_after_failure(root: Path, data: bytes, wanted: set[int]) -> list[int]:
+    """The blocks a clean run of the same box has that the failed run left
+    out; the failure must have come part way, after some blocks and before all."""
     directory = object_dir(root)
     assert not [n for n in block_files(directory) if n.endswith(".part")]
     have = present_blocks(directory, data)
-    assert len(have) > 0, "the failure came before any block: k too small"
-    page = page_of(data)
-    rows_needed, cols = range(3), range(1, 131)  # rows 0..2 (40 cells), cols of 10.5..1300.5
-    across = -(-int(page.imagewidth) // 16)
-    wanted = {r * across + c for r in rows_needed for c in cols}
-    assert have < wanted
+    assert have, "the failure came before any block: k too small"
+    assert have < wanted, "the failure came after every block: k too large"
     return sorted(wanted - have)
 
 
