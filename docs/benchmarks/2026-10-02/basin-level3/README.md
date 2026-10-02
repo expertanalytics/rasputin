@@ -111,12 +111,41 @@ was 761's 14.38 GB; the other eight peaked at 2.8-5.7 GB, within 0.5 GB of
 their 20 m peaks. Unit 761 at 10 m gave 2,940,024 triangles and 83,744
 final-check insertions, the same counts as basin-phases' `761_t10` runs.
 
+## Per unit, 5 m
+
+All nine units again, with the same build, CRS, `MallocLargeCache=0` and skip
+rule. Records are in `runs/t5/`. AC power before and after every run, and no
+run added to swap. Unit 769 is written as **binary** VTK (`--binary=769`)
+because the 10 m figures predicted it would pass 600 MB as text: 4.69 M
+triangles × 2.65 (761's 5 m / 10 m ratio) × 54 B per triangle as text is
+about 675 MB. As binary it is 449.5 MB. The other eight are text.
+
+| unit | area km² | box nodes | check points | triangles | vertices | final-check inserted (rounds) | peak footprint GB | wall s | worst angle | < 10° | max degree | .vtk MB | format |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|
+| 761 | 209,316 | 538,409,322 | 270,407,394 | 7,791,814 | 3,914,535 | 393,389 (13) | 14.27 | 84.4 | 0.00584° | 0.35 % | 18 | 434.3 | ascii |
+| 762 | 77,174 | 148,938,480 | 104,287,612 | 1,891,531 | 955,035 | 114,135 (11) | 5.71 | 20.0 | 0.0129° | 0.66 % | 16 | 102.7 | ascii |
+| 763 | 42,134 | 92,050,400 | 58,985,817 | 2,948,812 | 1,481,154 | 201,853 (12) | 3.72 | 20.1 | 0.00699° | 0.38 % | 15 | 162.0 | ascii |
+| 764 | 34,243 | 81,616,394 | 48,440,852 | 682,531 | 346,900 | 28,249 (10) | 4.48 | 9.5 | 0.0221° | 0.41 % | 16 | 36.6 | ascii |
+| 765 | 37,876 | 114,786,552 | 55,122,267 | 1,250,434 | 632,445 | 63,331 (17) | 5.74 | 14.0 | 0.0565° | 0.45 % | 15 | 67.4 | ascii |
+| 766 | 30,526 | 63,760,968 | 46,225,333 | 2,088,331 | 1,050,369 | 130,191 (13) | 2.81 | 13.6 | 0.00586° | 0.30 % | 14 | 113.2 | ascii |
+| 767 | 50,881 | 100,694,256 | 71,857,853 | 2,378,326 | 1,196,833 | 142,869 (13) | 5.42 | 19.0 | 0.00511° | 0.40 % | 15 | 129.7 | ascii |
+| 768 | 45,080 | 107,687,349 | 65,762,024 | 3,078,437 | 1,546,932 | 210,809 (16) | 4.14 | 21.6 | 0.00347° | 0.40 % | 14 | 169.9 | ascii |
+| 769 | 106,394 | 195,552,240 | 143,885,192 | 12,466,005 | 6,244,412 | 887,034 (14) | 5.52 | 56.2 | 0.00994° | 0.29 % | 16 | 449.5 | binary |
+| **total** | 633,624 | 1,443,495,961 | 864,974,344 | **34,576,221** | 17,368,615 | 2,171,860 | max 14.27 | 258.5 |  |  |  | 1665.4 |  |
+
+The basin at 5 m, as nine separate meshes, has **34,576,221 triangles**. The
+achieved maximum error was 4.99999-5 m in every unit. The largest peak was
+761's 14.27 GB, and the other eight peaked at 2.8-5.7 GB. Over 20, 10 and 5 m
+each unit's peak moved by at most 0.5 GB, so the peak is set before
+refinement, as basin-phases found. Unit 761 at 5 m gave 7,791,814 triangles,
+the same count as basin-phases' `761_t5_nolargecache` run.
+
 ## Where the meshes are
 
-They are in `../rasputin_data/sao_francisco_piece/meshes/level3/` (762-769),
-with the 761 mesh one level up. They are not in the repository. That folder's
+They are in `../rasputin_data/sao_francisco_piece/meshes/level3/`, named
+`sub_basin_<unit>_anadem_tol<t>m.vtk`. The 761 mesh at 20 m sits one level up. They are not in the repository. That folder's
 `README.md` is the index: units, CRS, counts, credits and regenerate commands.
-Their sha256 values are in `runs/t20/meshes.sha256`.
+Their sha256 values are in `runs/t<t>/meshes.sha256`.
 
 ## Reproduce
 
