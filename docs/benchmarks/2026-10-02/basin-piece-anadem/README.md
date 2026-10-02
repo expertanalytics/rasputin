@@ -224,3 +224,17 @@ $PY $E/compare.py $E0/runs $E/runs $D/bho2017_level2_76_raw.geojson > $E/compari
 piece's per-run logs and `--stats` files, and the box samples' logs in
 `logs.tar.gz`. `data_meta/`: the window's and grid's metadata, the B6-style
 check and checksums. `build_and_machine.json`: commit, build and machine.
+
+## Review
+
+- **Round 1, `5a57793..c6e0049`: CHANGES REQUESTED** (`@reviewer`). No
+  production code. Every number reproduced: the 10 m piece run, basin boxes
+  0-2 fetched fresh from the COG, `align_check.py`, `compare.py` (byte-identical
+  `comparison.md`), the input checksums and the `_core` sha. Gates green.
+  Blocking: the ANADEM paper (Laipelt et al. 2024), which OpenTopography's
+  acknowledgement asks for, was not cited; the README and `prep_dem.py` said
+  the CRS is read from the file, but `prep_dem.py` takes it from its
+  `SOURCE_EPSG` table.
+- **Fixes, `c6e0049..8421121`** (`@perf`): both applied; checked by the main
+  session (the citation is in `NOTICE.md` and here; the README and the
+  docstring now say only `run_sweep.py` reads the window file's CRS).
