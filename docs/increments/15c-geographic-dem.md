@@ -1272,3 +1272,18 @@ Battery, 5 back-to-back pairs against master a130f7c with `--tree`; mesh hashes 
 ### 15c-1, round 3, `6ab7ad5..c640be8`: APPROVED (`@reviewer`)
 
 Production LOC unchanged at 445 added, 3 removed (442 net) against the estimate of 370; the merge of master (6ca90af) and c640be8 change no production file. Round 2's B1 is fixed: `timeout-minutes: 30` on the `cpp`, `sanitizers` and `tsan` jobs (checked by parsing the YAML), and the `06-cdt-viewer.md:966` citation moved to the `sanitizers` job's new range, 51-75. B2 is fixed: "(#129)". The merge kept master's row 23 and #129's edits to the 15c record, with no conflict markers. Release ctest 843/843 without warnings; full `tests/python` 3342 passed against the rebuilt `_core` in an isolated venv; ruff, format, mypy and the governance gates green; the four at-risk citations re-read as quotations and hold. @perf's acceptance (c3149bf) covers the unchanged production code.
+
+### 15c-2, round 1, `26ce955..44b724b`: CHANGES REQUESTED (`@reviewer`)
+
+422 production lines added, 60 removed, 362 net, against the 405 estimate. `target_grid.py` is 171 lines against 170; its split point at 250 does not fire. Red before green confirmed. The green commit touches no test file, and the F7 amendment's reason holds. Brute-force check of the final check on the Velhas fixture: all 12,681 source nodes inside the catchment are within tolerance (max 4.99262 m at 5 m, 0.99897 m at 1 m). The check finds 851 nodes over (max 21.2 m) with phase 2 disabled, so it can fail. `suggest_crs` matches pyproj geodesic finite differences on five boxes. ANADEM is CC BY 4.0 and the credits match. Blocking:
+- B1: `--out-crs` was not checked for being projected in metres. US feet meshed in feet and the file recorded "30 m"; EPSG:4674 crashed with a traceback; EPSG:4326 got a false antimeridian refusal.
+- B2: false prose in `project_structure.md` (`io/geotiff.py` refuses non-projected DEMs; the layout list) and in D3, D6 and D7; the departures were recorded only in a commit message.
+- B3: `ROADMAP.md` row 15 was not updated.
+
+### 15c-2, round 2, `44b724b..75a6ff3`: APPROVED (`@reviewer`)
+
+- dda35ff adds 10 production lines and removes 1, for 431 added and 61 removed on the branch, under 700.
+- The B1 probes are now usage errors (exit 2) before any pixel is read, with a true message: US feet, EPSG:4674, EPSG:4326. EPSG:31983 and EPSG:5880 (metres) still mesh. The brute-force check on EPSG:31983 at 5 m still finds 0 nodes over.
+- Mutation pass: 19 of 20 mutants killed, including the refusal disabled and all four round-1 survivors re-run (multi-block loop, the store's frame, `final.ok()`, the refusal's percentages). The one survivor, `get_factors` on 3×3 points instead of 21×21, is near-equivalent.
+- Full `tests/python`: 3541 passed, 114 skipped (without the `codecs` extra). ruff, ruff format, mypy, `check_prohibited_deps` and `check_detria_boundary` green; `check_citations` exits 0 and the re-pointed quotations hold.
+- The rewrites of `project_structure.md`, D3, D6 and D7 and the ROADMAP row match the code. CI not yet run.
