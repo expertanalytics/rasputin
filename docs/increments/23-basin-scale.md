@@ -1,12 +1,13 @@
 # Increment 23: basin scale — pieces cut on constraints, windowed DEM reads, a tile cache
 
 Status: **designed by `@architect`, 2026-10-01; B1-B14 ruled by Ola on
-2026-10-01 and the design reworked to the rulings; not implemented.** Design
-only, written before `@tester` per `docs/increments/README.md` step 1. The
-rulings are under "Ruled by Ola, 2026-10-01", below; the questions are kept as
-asked at the end, each marked with its ruling; B15, asked after B14's
-ruling, is open. 23a-1, the next PR, is designed in full on 2026-10-02
-under "Windowed source reads (23a-1)".
+2026-10-01 and the design reworked to the rulings; B15 and B16 ruled
+2026-10-02. 23a-1 merged (#136); 23a-2 implemented on branch
+`worktree-23a-2`; 23b onwards not implemented.** Written before `@tester`
+per `docs/increments/README.md` step 1. The rulings are under "Ruled by Ola,
+2026-10-01", below; the questions are kept as asked at the end, each marked
+with its ruling. 23a-1 and 23a-2 are designed in full under "Windowed
+source reads (23a-1)" and "The fetch step and the tile cache".
 
 ## Why this record, and why its name
 
@@ -799,8 +800,8 @@ The main session's reasoning, item by item.
 - **`--memory-budget`, default 16 GB, read as 16 GiB (2^34 bytes)**, a
   constant: never the machine's memory, so the mesh does not depend on the
   machine (K5). No upper limit on it, on `--pieces` or on a piece: a run whose
-  pieces do not fit the machine runs out of memory. Whether 15a R7's refusal
-  at half of physical memory goes too is B15, not ruled.
+  pieces do not fit the machine runs out of memory. 15a R7's refusal at
+  half of physical memory goes too (B15, ruled (a)).
 - **`b(T)`, bytes per window node at tolerance `T`**, from the basin-piece
   sweep (`docs/benchmarks/2026-10-01/basin-piece/README.md`): its max-RSS fit,
   0.55 GiB + 310 B per triangle, gives about 17 B per grid node (the intercept
@@ -1014,7 +1015,7 @@ thresholds are under "@perf acceptance", 23g).
   the running pieces' estimates (`dx · dy · b(T)`) fit under
   `--memory-budget`, and always starts one when none is running. It can
   delay a piece, never change or refuse one. 15a R7's refusal at half of
-  physical memory: deleted if Ola rules B15 (a) or (c), kept under (b).
+  physical memory is deleted (B15, ruled (a)).
 
 ## Windowed source reads (23a-1)
 
@@ -1217,6 +1218,29 @@ nothing in it is on `rasputin mesh`'s path (K7).
 11. **`--refresh`** discards the source's cache (manifest, headers, blocks,
     under the lock) and fetches this request anew. Blocks fetched for other
     domains go with it; they are of the old remote copy anyway.
+
+**Departures by `@developer`, accepted in review (23a-2, round 1):**
+
+- `RangeClient` accepts a reply cut short at the end of the file
+  (`Content-Range` ending at `total - 1`) only when the range asked for
+  ran past it (`stop > total`); any other short reply is refused.
+- GLO-30's tiles are chosen from one box grown as if the spacing were a
+  fixed 0.001° (`fetch/run.py`'s `TILE_SPACING`, more than any tile's below
+  80°), not per tile; each tile's blocks are then planned from its own
+  header.
+- The box is moved by `crs.transform_bounds`, the one site that wraps
+  pyproj's, not by pyproj directly in `fetch/`.
+- `FetchReport` also carries the per-object plans (`plans`), and `fetch`
+  takes a `progress(done, total)` callback in bytes; the CLI's stderr line
+  is that callback.
+- A one-file source's object id is the URL's file name without its
+  extension (for ANADEM, `anadem_v1_compressed_COG`).
+- `rasputin fetch` has `--domain-crs`, with `mesh`'s meaning (the
+  `--domain` file's CRS).
+- `cite` is written, in `NOTICE.txt` and in the mesh file, only when the
+  source has citations.
+- B16 (a) is implemented for both formats: `licence_note` and `cite` as
+  `.vtk` fields and as `.ply` header comments.
 
 ### Types (frozen Pydantic)
 
@@ -1615,7 +1639,7 @@ own arithmetic, so the oracle relation is the producer's
   sub-rectangle of one global lattice, J6) is the piece window; `resample`,
   `check_point_blocks`, `CheckPoints` and `refine_points` are used unchanged
   except for the frozen mask (23b). D8 and the Q11-Q17 rulings stand. Its
-  memory cap (15a R7) stays or goes by B15. 15c's acceptance stays on the Velhas piece,
+  memory cap (15a R7) goes (B15, ruled (a)). 15c's acceptance stays on the Velhas piece,
   undecomposed. What 15c already marked "Superseded at basin scale" is
   replaced by this record and nothing else is. If 23a lands before 15c-2,
   15c-2's acceptance reads ANADEM from the cache instead of a one-off cut.
@@ -1837,7 +1861,7 @@ stays under 700 at both; the largest, 23c, is 688 at +60 %.
 | | `basin_run.py`: run pieces in order, async-ready | 45 | | |
 | | `io/mesh_index.py`: `MeshIndex`, piece writer, seam records, conformity | 85 | | |
 | | `cli.py`: `--pieces`, `--memory-budget`, pieces output, fields | 50 | | |
-| | `mosaic.py` (and `catchment.py` under B15 (a)): R7's refusal deleted, if B15 (a) or (c) | 0 | | |
+| | `mosaic.py` and `catchment.py`: the refusals at half of physical memory deleted (B15 (a)) | 0 | | |
 | | **23c total** | **430** | **598** | **688** |
 | **23d** | **In parallel, resumable, stitched (seams kept)** | | | |
 | | `basin_run.py`: `--jobs`, thread split, largest first, admission under the budget | 45 | | |
@@ -2066,11 +2090,11 @@ No network: every URL is `http://127.0.0.1:<port>/...`, put in `SOURCES` by
   and large values (neither the count nor the cut is the machine's).
 - **DC1, K1**: a domain under the budget, and a larger one with a budget
   above its estimate, write the same bytes as today's path.
-- **DC11, no machine refusal** (only if B15 is ruled (a) or (c)): a mosaic
+- **DC11, no machine refusal** (B15, ruled (a)): a mosaic
   over half of a patched `physical_memory` is planned, not refused; 15a's M5
   refusal cases in `test_mosaic.py` and `test_dem_input.py` are inverted
-  (pinned behaviour B15 would change); under (a) the same for 22's catchment
-  refusal in `test_catchment.py`. Under (b), none of this.
+  (pinned behaviour B15 changes); the same for 22's catchment refusal in
+  `test_catchment.py`.
 - **DC2, conformity, read from the files**: for every seam edge, both pieces'
   vertex sequences are equal bit for bit. The oracle reads the piece files,
   not the seam records or the index.
@@ -2247,7 +2271,8 @@ The literature pass with web search (2026-10-01, "Prior art") changed no
 recommendation; it added a note to B4 and an option (c) to B5. **All twelve
 were ruled by Ola on 2026-10-01** ("Ruled by Ola, 2026-10-01", near the
 top); they are kept as asked, each marked with its ruling, as are B13 and
-B14, asked after them and ruled the same day. B15 is open.
+B14, asked after them and ruled the same day. B15 and B16 were ruled on
+2026-10-02.
 
 **B1. Which cuts first?**
 *Ruled (a), and BHO dropped entirely as a geometry source: "I'm not interested in archaic maps".*
