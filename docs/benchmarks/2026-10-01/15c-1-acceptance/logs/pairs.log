@@ -1,0 +1,47 @@
+== pair 1 base 21:46:42
+Now drawing from 'Battery Power'
+ -InternalBattery-0 (id=24117347)	82%; discharging; 5:40 remaining present: true
+power: battery; evidence: /Users/skavhaug/projects/rasputin/.claude/worktrees/15c-1/docs/benchmarks/2026-10-01/15c-1-acceptance/base-a130f7c-r1; meshes: /Users/skavhaug/.claude/jobs/85c14e7c/tmp/meshes/base-r1
+NO BASELINE: no comparable stored run
+exit 2
+== pair 1 new 21:49:12
+Now drawing from 'Battery Power'
+ -InternalBattery-0 (id=24117347)	81%; discharging; 5:10 remaining present: true
+power: battery; evidence: /Users/skavhaug/projects/rasputin/.claude/worktrees/15c-1/docs/benchmarks/2026-10-01/15c-1-acceptance/15c-1-r1; meshes: /Users/skavhaug/.claude/jobs/85c14e7c/tmp/meshes/new-r1
+REGRESSION: quarter refine_s[t=2] 0.2801 -> 0.2946 (+5.2 %)
+REGRESSION: quarter refine_s[t=10] 0.1646 -> 0.1867 (+13.4 %)
+REGRESSION: quarter refine_s[t=12] 0.1632 -> 0.1767 (+8.3 %)
+exit 1
+== pair 2 base 21:51:45
+Now drawing from 'Battery Power'
+ -InternalBattery-0 (id=24117347)	79%; discharging; 4:30 remaining present: true
+power: battery; evidence: /Users/skavhaug/projects/rasputin/.claude/worktrees/15c-1/docs/benchmarks/2026-10-01/15c-1-acceptance/base-a130f7c-r2; meshes: /Users/skavhaug/.claude/jobs/85c14e7c/tmp/meshes/base-r2
+NO BASELINE: no comparable stored run
+exit 2
+== pair 2 new 21:54:02
+Now drawing from 'Battery Power'
+ -InternalBattery-0 (id=24117347)	79%; discharging; 4:10 remaining present: true
+power: battery; evidence: /Users/skavhaug/projects/rasputin/.claude/worktrees/15c-1/docs/benchmarks/2026-10-01/15c-1-acceptance/15c-1-r2; meshes: /Users/skavhaug/.claude/jobs/85c14e7c/tmp/meshes/new-r2
+REGRESSION: tile refine_s[t=1] 0.4748 -> 0.5444 (+14.7 %)
+REGRESSION: tile refine_s[t=3] 0.2670 -> 0.2921 (+9.4 %)
+REGRESSION: tile refine_s[t=5] 0.2129 -> 0.2287 (+7.4 %)
+REGRESSION: tile refine_s[t=12] 0.1855 -> 0.1953 (+5.3 %)
+exit 1
+== pair 3 base 21:56:18
+Now drawing from 'Battery Power'
+ -InternalBattery-0 (id=24117347)	78%; discharging; 3:40 remaining present: true
+power: battery; evidence: /Users/skavhaug/projects/rasputin/.claude/worktrees/15c-1/docs/benchmarks/2026-10-01/15c-1-acceptance/base-a130f7c-r3; meshes: /Users/skavhaug/.claude/jobs/85c14e7c/tmp/meshes/base-r3
+NO BASELINE: no comparable stored run
+exit 2
+== pair 3 new 21:58:37
+Now drawing from 'Battery Power'
+ -InternalBattery-0 (id=24117347)	76%; discharging; 3:00 remaining present: true
+power: battery; evidence: /Users/skavhaug/projects/rasputin/.claude/worktrees/15c-1/docs/benchmarks/2026-10-01/15c-1-acceptance/15c-1-r3; meshes: /Users/skavhaug/.claude/jobs/85c14e7c/tmp/meshes/new-r3
+REGRESSION: tile refine_s[t=2] 0.3145 -> 0.3384 (+7.6 %)
+REGRESSION: tile refine_s[t=10] 0.1846 -> 0.1955 (+5.9 %)
+REGRESSION: tile refine_s[t=15] 0.1864 -> 0.1990 (+6.8 %)
+REGRESSION: tile refine_s[t=17] 0.1849 -> 0.1956 (+5.8 %)
+REGRESSION: tile refine_s[t=20] 0.1854 -> 0.2046 (+10.4 %)
+exit 1
+Now drawing from 'Battery Power'
+ -InternalBattery-0 (id=24117347)	75%; discharging; 2:49 remaining present: true

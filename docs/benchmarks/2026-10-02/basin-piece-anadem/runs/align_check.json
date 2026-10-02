@@ -1,0 +1,54 @@
+{
+ "shift_rows_cols": {
+  "-1,-1": {
+   "mean": -1.485,
+   "median_abs": 3.345,
+   "rms": 7.005
+  },
+  "-1,0": {
+   "mean": -1.441,
+   "median_abs": 2.544,
+   "rms": 5.595
+  },
+  "-1,1": {
+   "mean": -1.397,
+   "median_abs": 3.507,
+   "rms": 7.466
+  },
+  "0,-1": {
+   "mean": -1.459,
+   "median_abs": 2.691,
+   "rms": 5.77
+  },
+  "0,0": {
+   "mean": -1.415,
+   "median_abs": 1.308,
+   "rms": 3.528
+  },
+  "0,1": {
+   "mean": -1.372,
+   "median_abs": 2.721,
+   "rms": 5.936
+  },
+  "1,-1": {
+   "mean": -1.433,
+   "median_abs": 3.42,
+   "rms": 7.516
+  },
+  "1,0": {
+   "mean": -1.389,
+   "median_abs": 2.496,
+   "rms": 5.83
+  },
+  "1,1": {
+   "mean": -1.346,
+   "median_abs": 3.333,
+   "rms": 7.321
+  }
+ },
+ "best_shift": "0,0",
+ "anadem_mean_abs_laplacian_m": 2.465,
+ "anadem_p99_abs_laplacian_m": 11.864,
+ "glo30_mean_abs_laplacian_m": 3.068,
+ "glo30_p99_abs_laplacian_m": 14.754
+}
