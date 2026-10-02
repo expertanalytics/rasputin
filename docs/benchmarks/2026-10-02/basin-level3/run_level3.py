@@ -1,19 +1,21 @@
 """Mesh each BHO level-3 unit of the São Francisco separately. A measurement script.
 
     python run_level3.py RUNS_DIR MESH_DIR UNITS_JSON OUTLINE_DIR CRS_WKT CACHE \
-        TOLERANCE PREFIX...
+        TOLERANCE [--binary=P,P...] PREFIX...
 
 Per unit, in order: estimate the peak footprint from the basin-phases figures
 and skip the unit if it exceeds ``LIMIT_GB``; ``rasputin fetch`` the unit's
 blocks; ``MallocLargeCache=0 /usr/bin/time -l rasputin mesh`` it into
 ``MESH_DIR``, watching swap from outside (kill at +3 GB over its level at the
-start). Writes ``RUNS_DIR/<prefix>.{fetch.out,log,stats.md,json}``.
+start), as binary VTK for the units named in ``--binary`` and as text for the
+rest. Writes ``RUNS_DIR/<prefix>.{fetch.out,log,stats.md,json}``.
 
 ``rasputin`` is the CLI of the interpreter running this script
 (``python -c "from tin_engine.cli import app; app()"``).
 """
 
 import json
+import os
 import re
 import subprocess
 import sys
@@ -53,7 +55,9 @@ def power() -> str:
 
 def main() -> None:
     runs, meshes, units_json, outlines, crs_file, cache = (Path(a) for a in sys.argv[1:7])
-    tol, prefixes = sys.argv[7], sys.argv[8:]
+    tol, rest = sys.argv[7], sys.argv[8:]
+    binary = {u for a in rest if a.startswith("--binary=") for u in a[9:].split(",")}
+    prefixes = [a for a in rest if not a.startswith("--")]
     crs = crs_file.read_text().strip()
     units = {u["prefix"]: u for u in json.loads(units_json.read_text())}
     cli = [sys.executable, "-c", "from tin_engine.cli import app; app()"]
@@ -81,9 +85,10 @@ def main() -> None:
         stats = runs / f"{p}.stats.md"
         cmd = ["/usr/bin/time", "-l", *cli, "mesh", "--dem", "anadem-v1", "--cache", str(cache),
                "--domain", str(domain), "--out-crs", crs, "--tolerance", tol,
-               "--out", str(vtk), "--stats", str(stats)]  # fmt: skip
+               "--out", str(vtk), "--stats", str(stats),
+               "--binary" if p in binary else "--ascii"]  # fmt: skip
         rec["power_before"], rec["swap_before_mb"] = power(), swap_used_mb()
-        env = {**__import__("os").environ, "MallocLargeCache": "0"}
+        env = {**os.environ, "MallocLargeCache": "0"}
         t0 = time.monotonic()
         with open(runs / f"{p}.log", "w") as log:
             proc = subprocess.Popen(cmd, stdout=log, stderr=subprocess.STDOUT, env=env)

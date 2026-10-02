@@ -15,9 +15,9 @@ No production code changed.
 
 - **Machine**: Apple M1 Max (8 P + 2 E cores, 32 GiB), macOS 27.0, Python
   3.14.7. **AC power** for every run (`pmset -g batt` before and after each
-  run, in `runs/<unit>.json`). Swap stood at about 17.6 GB in use before the
+  run, in `runs/t20/<unit>.json`). Swap stood at about 17.6 GB in use before the
   runs, left over from earlier work. No run added to it: `swap_max_mb` equals
-  `swap_before_mb` in every `runs/<unit>.json`.
+  `swap_before_mb` in every `runs/t20/<unit>.json`.
 - **Software**: rasputin `worktree-15c-2` at `0b42f5b`. `_core` was built
   Release by `tools/bench.py` into that tree's `build-bench/` (sha256
   `41a22a6168db…250485f3`, the same `.so` as basin-phases and as the 761
@@ -36,15 +36,15 @@ No production code changed.
   below.
 - **Domain, DEM, tolerance**: BHO 2017 50k level-3 outlines (`fetch_level3.py`
   and `runs/level3_units.json` in `../basin-phases/`). ANADEM v1 from the
-  cache, with all blocks present for every unit (`runs/<unit>.fetch.out`).
+  cache, with all blocks present for every unit (`runs/t20/<unit>.fetch.out`).
   Resampled to a 30 m grid in the output CRS. Tolerance 20 m.
 - **Output CRS**: the basin box's suggested `--out-crs`,
   `../basin-phases/runs/basin_out_crs.wkt`. This is a Transverse Mercator on
   SIRGAS 2000, central meridian 42° W, scale factor 0.997548, false easting and
   northing 0. All nine files carry the same `crs` field.
 - **Unit 761** was not re-run. Its figures come from the earlier 20 m run with
-  the same software, settings and power state: `runs/761.log` (the `time -l`
-  output) and `runs/761.stats.md`.
+  the same software, settings and power state: `runs/t20/761.log` (the `time -l`
+  output) and `runs/t20/761.stats.md`.
 - One run per unit. A test agent was running on the machine at the same time,
   so **the wall times only place the runs and are not timings.** Memory and
   counts are unaffected by it.
@@ -71,13 +71,13 @@ degree are plan-view figures from `--stats`.
 | **total** | 633,624 | 1,443,495,961 | 864,974,344 | **4,990,698** | 2,575,366 | 89,031 | max 13.88 | 140.4 | | | | 268.3 |
 
 The basin at 20 m, as nine separate meshes, has **4,990,698 triangles**. The
-achieved maximum error was 19.9988-20 m in every unit (`runs/<unit>.stats.md`,
+achieved maximum error was 19.9988-20 m in every unit (`runs/t20/<unit>.stats.md`,
 Refinement). No unit was skipped. No run dropped vertices for missing data,
 and every run exited 0.
 
 No unit came close to the memory limit. The largest peak was 761's 13.9 GB;
 the other eight peaked between 2.8 and 5.8 GB. The basin-phases estimate
-(`estimate_gb` in `runs/<unit>.json`) was within 7 % of the measured peak in
+(`estimate_gb` in `runs/t20/<unit>.json`) was within 7 % of the measured peak in
 all nine units. For 761 it was 0.8 % high, and for the other eight it was
 1-7 % low.
 In these units the resample transient (135 B × 256 rows × cols × 10 threads)
@@ -86,12 +86,37 @@ is the term that sets the peak.
 The check points summed over the nine units come to 865 M for 633.6 k km²,
 or 1,365 per km². basin-phases measured 1,292 per km² on 761 alone.
 
+## Per unit, 10 m
+
+The same nine units with the same build, CRS, `MallocLargeCache=0` and skip
+rule, all nine run this time (761 included). Records in `runs/t10/`. Every
+mesh is text VTK. AC power before and after every run, and no run added to swap.
+
+| unit | area km² | box nodes | check points | triangles | vertices | final-check inserted (rounds) | peak footprint GB | wall s | worst angle | < 10° | max degree | .vtk MB | format |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|
+| 761 | 209,316 | 538,409,322 | 270,407,394 | 2,940,024 | 1,488,537 | 83,744 (13) | 14.38 | 62.8 | 0.00584° | 0.41 % | 17 | 159.8 | ascii |
+| 762 | 77,174 | 148,938,480 | 104,287,612 | 741,469 | 379,995 | 24,387 (11) | 5.67 | 15.4 | 0.0129° | 0.74 % | 16 | 40.1 | ascii |
+| 763 | 42,134 | 92,050,400 | 58,985,817 | 1,140,594 | 576,976 | 44,080 (18) | 3.68 | 12.5 | 0.147° | 0.33 % | 15 | 61.0 | ascii |
+| 764 | 34,243 | 81,616,394 | 48,440,852 | 275,421 | 143,340 | 5,709 (9) | 4.42 | 8.1 | 0.0221° | 0.46 % | 16 | 14.7 | ascii |
+| 765 | 37,876 | 114,786,552 | 55,122,267 | 473,833 | 244,132 | 12,864 (15) | 5.52 | 10.8 | 0.551° | 0.52 % | 16 | 25.4 | ascii |
+| 766 | 30,526 | 63,760,968 | 46,225,333 | 787,486 | 399,906 | 27,393 (9) | 2.79 | 9.1 | 0.00586° | 0.29 % | 14 | 42.2 | ascii |
+| 767 | 50,881 | 100,694,256 | 71,857,853 | 892,431 | 453,879 | 28,800 (10) | 5.37 | 13.5 | 0.00511° | 0.42 % | 15 | 48.0 | ascii |
+| 768 | 45,080 | 107,687,349 | 65,762,024 | 1,145,198 | 580,307 | 42,516 (10) | 4.15 | 14.4 | 0.00787° | 0.40 % | 14 | 61.5 | ascii |
+| 769 | 106,394 | 195,552,240 | 143,885,192 | 4,688,908 | 2,355,725 | 180,495 (13) | 5.53 | 40.5 | 0.00994° | 0.20 % | 16 | 260.5 | ascii |
+| **total** | 633,624 | 1,443,495,961 | 864,974,344 | **13,085,364** | 6,622,797 | 449,988 | max 14.38 | 187.1 |  |  |  | 713.1 |  |
+
+The basin at 10 m, as nine separate meshes, has **13,085,364 triangles**.
+The achieved maximum error was 9.99986-10 m in every unit. The largest peak
+was 761's 14.38 GB; the other eight peaked at 2.8-5.7 GB, within 0.5 GB of
+their 20 m peaks. Unit 761 at 10 m gave 2,940,024 triangles and 83,744
+final-check insertions, the same counts as basin-phases' `761_t10` runs.
+
 ## Where the meshes are
 
 They are in `../rasputin_data/sao_francisco_piece/meshes/level3/` (762-769),
 with the 761 mesh one level up. They are not in the repository. That folder's
 `README.md` is the index: units, CRS, counts, credits and regenerate commands.
-Their sha256 values are in `runs/meshes.sha256`.
+Their sha256 values are in `runs/t20/meshes.sha256`.
 
 ## Reproduce
 
@@ -103,13 +128,16 @@ From this directory, with `PY` a python whose environment imports the Release
 $PY run_level3.py $R $D/sao_francisco_piece/meshes/level3 ../basin-phases/runs/level3_units.json \
   $D/sao_francisco_piece/bho2017_50k_level3 ../basin-phases/runs/basin_out_crs.wkt $D/cache 20 \
   762 763 764 765 766 767 768 769
-$PY tabulate.py $R ../basin-phases/runs/level3_units.json $D/sao_francisco_piece/meshes \
-  $D/sao_francisco_piece/meshes/level3
+$PY tabulate.py $R ../basin-phases/runs/level3_units.json 20 $D/sao_francisco_piece/meshes/level3 \
+  $D/sao_francisco_piece/meshes
+# 10 m: R=runs/t10, tolerance 10, all nine units (761 762 … 769)
+# 5 m: R=runs/t5, tolerance 5, all nine units, plus --binary=<units> (see the 5 m section)
 ```
 
 ## Files
 
-- `run_level3.py`: estimate, fetch and mesh per unit → `runs/<unit>.{json,fetch.out,log,stats.md}`.
-- `tabulate.py`: the table above → `runs/table.{json,md}`.
-- `runs/761.{log,stats.md}`: copied from the earlier 761 run.
-- `runs/meshes.sha256`: the nine meshes.
+- `run_level3.py`: estimate, fetch and mesh per unit → `runs/t20/<unit>.{json,fetch.out,log,stats.md}`.
+- `tabulate.py`: the tables above → `runs/t<tol>/table.{json,md}`.
+- `runs/t10/`, `runs/t5/`: the same records at 10 m and 5 m, with `meshes.sha256`.
+- `runs/t20/761.{log,stats.md}`: copied from the earlier 761 run.
+- `runs/t20/meshes.sha256`: the nine meshes.
