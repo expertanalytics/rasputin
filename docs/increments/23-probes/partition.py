@@ -6,7 +6,8 @@ DATA is `../rasputin_data/sao_francisco_piece` (see its README.md). For the
 Velhas piece (its 30 m EPSG:31983 grid as `basin-piece/prep_dem.py` built it)
 and for the basin (BHO level 2, used here only as the basin's extent), on a
 30 m lattice in EPSG:31983: the window in nodes, then the partition rule of
-`23-basin-scale.md` ("Choosing the cuts") for several `--pieces` values, with
+`23-basin-scale.md` ("Choosing the cuts") at the default `--memory-budget`,
+for several tolerances and `--pieces` requests, with
 the cells that meet the domain, the share of the domain's area in the largest
 cell against the mean, and the seam length inside the domain. A measurement
 script, not production code; nothing imports it.
@@ -14,6 +15,7 @@ script, not production code; nothing imports it.
 
 from __future__ import annotations
 
+import itertools
 import json
 import math
 import sys
@@ -25,21 +27,31 @@ from shapely.geometry import shape
 from shapely.ops import transform
 
 H_M = 30.0
-N_MIN = 1 << 19  # nodes; the minimum piece
-N_MAX = 1 << 22  # nodes; the size cap
+BUDGET = 16 << 30  # bytes; the default --memory-budget
+# Bytes per window node at a tolerance (m), from the basin-piece sweep: 17 B per
+# node plus 310 B per triangle times the Velhas piece's triangles per domain node;
+# at 0 every node is a vertex (two triangles per node).
+BYTES = ((0.0, 637), (1.0, 267), (2.0, 155), (5.0, 65), (10.0, 37), (20.0, 25), (50.0, 19))
 
 
-def partition(cols: int, rows: int, pieces: int) -> tuple[int, int, int, int]:
+def bytes_per_node(tol: float) -> int:
+    """Linear between the table's points, rounded up; the last value beyond it."""
+    for (t0, b0), (t1, b1) in itertools.pairwise(BYTES):
+        if tol <= t1:
+            return math.ceil(b0 + (b1 - b0) * (tol - t0) / (t1 - t0))
+    return BYTES[-1][1]
+
+
+def partition(cols: int, rows: int, tol: float, pieces: int) -> tuple[int, int, int, int]:
     """(nx, ny, dx, dy): the rule as designed, in whole nodes."""
-    n = cols * rows
-    if pieces <= 1 or n < 2 * N_MIN:
+    b = bytes_per_node(tol)
+    p = max(pieces, -(-cols * rows * b // BUDGET))
+    if p <= 1:
         return 1, 1, cols, rows
-    lo, hi = math.ceil(n / N_MAX), n // N_MIN
-    p = max(pieces, lo) if lo > hi else min(max(pieces, lo), hi)
     nx = max(1, round(math.sqrt(p * cols / rows)))
     ny = max(1, round(p / nx))
     dx, dy = math.ceil(cols / nx), math.ceil(rows / ny)
-    while dx * dy > N_MAX:
+    while dx * dy * b > BUDGET:
         if dx >= dy:
             nx += 1
         else:
@@ -55,8 +67,8 @@ def report(name: str, dom: shapely.Geometry, x0: float, y1: float, cols: int, ro
         f"cover {dom.area / ((cols - 1) * (rows - 1) * H_M * H_M):.0%}"
     )
     shapely.prepare(dom)
-    for pieces in (1, 16, 32, 64, 128, 256):
-        nx, ny, dx, dy = partition(cols, rows, pieces)
+    for tol, pieces in ((50, 1), (10, 1), (5, 1), (1, 1), (0.5, 1), (0, 1), (1, 16), (1, 64)):
+        nx, ny, dx, dy = partition(cols, rows, tol, pieces)
         areas, seam = [], 0.0
         for j in range(ny):
             for i in range(nx):
@@ -79,7 +91,8 @@ def report(name: str, dom: shapely.Geometry, x0: float, y1: float, cols: int, ro
         seam = sum(dom.intersection(ln).length for ln in lines)
         mean = sum(areas) / len(areas)
         print(
-            f"  --pieces {pieces:>3}: {nx:>3} x {ny:>3} cells of {dx} x {dy} nodes "
+            f"  {tol:>4} m, {bytes_per_node(tol):>3} B/node, --pieces {pieces:>2}: "
+            f"{nx:>3} x {ny:>3} cells of {dx} x {dy} nodes "
             f"({dx * dy / 1e6:.2f} M), {len(areas):>4} meet the domain, "
             f"largest/mean area {max(areas) / mean:.2f}, seams {seam / 1e3:,.0f} km"
         )
