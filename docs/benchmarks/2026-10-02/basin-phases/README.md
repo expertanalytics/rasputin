@@ -225,3 +225,8 @@ MallocLargeCache=0 $PY probe_store.py > runs/probe_store_nolargecache.out
 - The 50 m as-shipped run was made before the driver recorded the mosaic's
   shape; its `assemble` end marker carries the shape from `761_t10` (same
   plan), marked `shape_added_from`.
+
+## Review
+
+- **Round 1 (37b2695), CHANGES REQUESTED** (`@reviewer`). (1) The store figure "3.0-4.1 GB, 30-41 B per point (three runs)" rested on a single recorded run (3.04 GB, 30 B). (2) "Each run was made twice" was false: there is no 5 m as-shipped run. (3) The basin P5 rows counted the mosaic, which is freed in `final_check.run` before `refine_points` (which starts at 2.66 GB). (4) The as-shipped P2 figures (~48, ~42) had no stated derivation. (5) The reproduce section lacked the `run_phases.py`, `MallocLargeCache=0`, `counts.py`, `fetch_level3.py` and probe commands. Phase peaks, per-node figures, mesh lower bounds and scaling checked and correct.
+- **Round 2 (9df1a80), APPROVED** (`@reviewer`). All five edits applied; the new rows' arithmetic holds (as-shipped P2 47.3 / 39.4 GB; P4 end 29.8 GB live; P5 23.1-26.8 / 26.0-35.9 GB live). Production LOC 0. Not blocking: `probe_tm.py:14` hard-codes the data path; 818.6 M × 29 B is 23.7 GB, not 23.8.
