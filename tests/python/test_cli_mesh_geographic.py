@@ -40,8 +40,13 @@ HOW THIS FILE GOES RED: `--out-crs` is not an option of `mesh`, so every run
 exits 2 with "No such option" (the `refused` helper rejects that reason), and
 `DemRequest` ignores `target_crs`, so the Python-API control is refused by the
 reader. G7's comparison and the catchment refusal are guards. The ANADEM
-realism case is skipped until its fixture is committed (Q17, with 15c-2's
-green work).
+realism case runs on the fixture committed with the green work (Q17).
+
+AMENDED after `@reviewer`'s round 1 on 15c-2 ("Round 1 findings", below):
+B1, `--out-crs` must be a projected CRS in metres, refused in `open_dem`
+before any pixel is read; and four cases that kill mutants the first suite
+let live (several check-point blocks, the store's size, the refusal's
+percentages, `final.ok()` honoured).
 """
 
 from __future__ import annotations
@@ -493,10 +498,6 @@ class TestCachedGeographicSource:
 # ------------------------------------------------------------------ realism (Q17)
 
 
-@pytest.mark.skipif(
-    not (VELHAS / "anadem_velhas.tif").exists(),
-    reason="awaiting the ANADEM extract and its DEM-derived catchment (Q17, 15c-2 green)",
-)
 def test_the_anadem_extract_over_its_catchment(tmp_path: Path) -> None:
     """G6's realism case: the committed ANADEM extract (EPSG:4674, the COG's
     key set) over the DEM-derived catchment (EPSG:31983), checked against
@@ -522,3 +523,164 @@ def test_the_anadem_extract_over_its_catchment(tmp_path: Path) -> None:
     )
     assert math.isfinite(found.worst) and found.nodes > 0
     assert (found.over_interior, found.over_strip) == (0, 0), found
+
+
+# ------------------------------------------------------------------ round 1 findings
+
+
+class TestOutCrsMustBeProjectedInMetres:
+    """B1 (`@reviewer`, round 1): the target CRS is the frame `_core` computes
+    in, so it must be projected (no degrees in `_core`, J4) and in metres
+    (D6: "every number is in a projected CRS, in metres"). Refused like G8,
+    in `open_dem`, before any pixel is read, naming the problem."""
+
+    FEET = "+proj=utm +zone=23 +south +ellps=GRS80 +units=us-ft"
+
+    @pytest.mark.parametrize(
+        ("out_crs", "problem"),
+        [(FEET, r"(?i)metre"), ("EPSG:4674", r"(?i)projected"), ("EPSG:4326", r"(?i)projected")],
+        ids=["us_feet", "geographic_4674", "geographic_4326"],
+    )
+    def test_refused_naming_the_problem(
+        self,
+        tmp_path: Path,
+        geographic_dem: Path,
+        domain_4674: Path,
+        no_pixels: None,
+        out_crs: str,
+        problem: str,
+    ) -> None:
+        output = refused(
+            tmp_path,
+            *("--dem", str(geographic_dem), "--domain", str(domain_4674), "--tolerance", "1"),
+            *("--out-crs", out_crs),
+            says=("--out-crs",),
+        )
+        assert re.search(problem, output), output
+        assert not re.search(r"(?i)antimeridian|pole", output), output
+
+    @pytest.mark.parametrize("out_crs", [FEET, "EPSG:4674"], ids=["us_feet", "geographic"])
+    def test_open_dem_refuses_before_any_pixel(
+        self, geographic_dem: Path, domain_4674: Path, no_pixels: None, out_crs: str
+    ) -> None:
+        request = DemRequest(
+            sources=(geographic_dem,), domain=read_domain(domain_4674), target_crs=out_crs
+        )
+        with pytest.raises(ValueError, match=r"(?i)projected|metre"):
+            open_dem(request)
+
+    def test_a_metric_proj_string_still_meshes(
+        self, tmp_path: Path, geographic_dem: Path, domain_4674: Path
+    ) -> None:
+        """D8's own kind of suggestion: a PROJ string with no EPSG code."""
+        proj = (
+            "+proj=tmerc +lat_0=0 +lon_0=-44 +k=0.9996 +x_0=500000 +y_0=10000000"
+            " +ellps=GRS80 +units=m"
+        )
+        vtk = run(
+            tmp_path,
+            *("--dem", str(geographic_dem), "--domain", str(domain_4674)),
+            *("--out-crs", proj, "--tolerance", str(TOLERANCE)),
+        )
+        assert "checked against" in field(vtk, "elevation_source")
+
+
+class TestRoundOneMutantKillers:
+    def args(self, dem: Path, domain: Path) -> tuple[str, ...]:
+        return ("--dem", str(dem), "--domain", str(domain), "--out-crs", TARGET, "--tolerance", "1")
+
+    def test_several_check_point_blocks_are_all_checked(
+        self,
+        tmp_path: Path,
+        geographic_dem: Path,
+        domain_4674: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Source blocks of 16 x 16 nodes, so the 60 x 60 tile is 16 blocks:
+        a final check that stops after the first block leaves nodes over."""
+        monkeypatch.setattr("tin_engine.target_grid.BLOCK", 16)
+        vtk = run(tmp_path, *self.args(geographic_dem, domain_4674))
+        found = geographic_check(vtk, domain_4674)
+        assert found.nodes > 1000
+        assert (found.over_interior, found.over_strip) == (0, 0), found
+
+    def test_the_store_holds_every_point_yielded(
+        self,
+        tmp_path: Path,
+        geographic_dem: Path,
+        domain_4674: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """`checked against N source nodes` is the store's size, which equals
+        the points `check_point_blocks` yields for the same request."""
+        monkeypatch.setattr("tin_engine.target_grid.BLOCK", 16)
+        opened = open_dem(
+            DemRequest(
+                sources=(geographic_dem,), domain=read_domain(domain_4674), target_crs=TARGET
+            )
+        )
+        assert opened.checks is not None
+        yielded = sum(len(z) for _, z in opened.checks)
+        vtk = run(tmp_path, *self.args(geographic_dem, domain_4674))
+        checked = re.search(r"checked against (\d+) source nodes", field(vtk, "elevation_source"))
+        assert checked is not None
+        assert int(checked.group(1)) == yielded > 1000
+
+    def test_the_refusal_prints_percentages(
+        self, tmp_path: Path, geographic_dem: Path, domain_4674: Path, no_pixels: None
+    ) -> None:
+        """D8's message: the worst errors in per cent, the fields times 100."""
+        from tin_engine.crs import suggest_crs
+
+        given = json.loads(domain_4674.read_text())["coordinates"][0][:-1]
+        lonlat = project_ring("EPSG:4674", "EPSG:4326", given)
+        lons, lats = [p[0] for p in lonlat], [p[1] for p in lonlat]
+        s = suggest_crs((min(lons), max(lons), min(lats), max(lats)), "EPSG:4326")
+        output = squashed(
+            refused(
+                tmp_path,
+                *("--dem", str(geographic_dem), "--domain", str(domain_4674), "--tolerance", "1"),
+                says=("worst scale error",),
+            )
+        )
+        number = r"([0-9.]+(?:e[-+]?[0-9]+)?)%"
+        scale = re.search(r"worstscaleerror" + number, output)
+        areal = re.search(r"worstarealerror" + number, output)
+        assert scale is not None and areal is not None, output
+        assert float(scale.group(1)) == pytest.approx(100 * s.max_scale_error, rel=1e-2)
+        assert float(areal.group(1)) == pytest.approx(100 * s.max_areal_error, rel=1e-2)
+
+    def test_a_failed_final_check_writes_nothing(
+        self,
+        tmp_path: Path,
+        geographic_dem: Path,
+        domain_4674: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """`final.ok()` false is a usage error in the engine's words, no file."""
+        import tin_engine.final_check as final_check
+
+        real = final_check.run
+
+        class Failed:
+            def __init__(self, outcome: Any) -> None:
+                self._outcome = outcome
+
+            def ok(self) -> bool:
+                return False
+
+            message = "planted final-check failure"
+
+            def __getattr__(self, name: str) -> Any:
+                return getattr(self._outcome, name)
+
+        def failing(*args: Any, **kwargs: Any) -> Any:
+            outcome, n = real(*args, **kwargs)
+            return Failed(outcome), n
+
+        monkeypatch.setattr(final_check, "run", failing)
+        refused(
+            tmp_path,
+            *self.args(geographic_dem, domain_4674),
+            says=("planted final-check failure",),
+        )
