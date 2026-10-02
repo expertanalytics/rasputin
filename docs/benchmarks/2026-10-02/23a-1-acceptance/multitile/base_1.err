@@ -1,0 +1,21 @@
+1521 start quality nodes inserted, 764 start quality skips, 0 constraint feet, 0 feet refused, 107 rounds, 5025207 points inserted, 11123831 flips, 10074480 triangles, achieved max error 1 m, 0 valid DEM nodes not covered, 32768 start triangles, 0 start vertices off-node, 123 vertices without data dropped
+mosaic of 9 tiles, 10051 x 10051 nodes
+BENCH {"refine_s": 7.231107041996438, "app_s": 8.690101207990665, "max_error": 1.0, "rounds": 107, "inserted": 5025207, "flips": 11123831}
+        9.00 real        22.92 user         0.61 sys
+          3164192768  maximum resident set size
+                   0  average shared memory size
+                   0  average unshared data size
+                   0  average unshared stack size
+              208676  page reclaims
+                  68  page faults
+                   0  swaps
+                   0  block input operations
+                   0  block output operations
+                   0  messages sent
+                   0  messages received
+                   0  signals received
+                 105  voluntary context switches
+                8936  involuntary context switches
+        127471507476  instructions retired
+         70004373427  cycles elapsed
+          3144682376  peak memory footprint

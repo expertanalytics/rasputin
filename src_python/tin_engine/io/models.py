@@ -24,6 +24,18 @@ class GeoTiffError(ValueError):
     """
 
 
+class IndexWindow(BaseModel):
+    """`rows x cols` nodes starting at `(row0, col0)` (moved from `mosaic.py` by
+    23a-1, because `io/` imports nothing first-party but this module)."""
+
+    model_config = ConfigDict(frozen=True)
+
+    row0: int
+    col0: int
+    rows: int
+    cols: int
+
+
 class RasterMeta(BaseModel):
     """The node grid of one tile, in metres of a projected CRS.
 

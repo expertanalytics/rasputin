@@ -11,6 +11,10 @@ With a domain (increment 15b, R4 point 5, R6 and R9), the domain is moved into
 the DEM's CRS first; its bounds take the box's place, the polygon grown by one
 cell is the region whose nodes must be covered, and its extent is checked
 against the plan, all before any tile is loaded (I6).
+
+A cached source (increment 23a-1) is a catalogue key and a cache root,
+`CachedSource`, read by `CacheRepository`; its missing blocks are refused
+before any block is decoded, and every tile is decoded by window.
 """
 
 from __future__ import annotations
@@ -24,24 +28,37 @@ from pydantic import BaseModel, ConfigDict, model_validator
 
 from tin_engine.domain import DomainError, DomainPolygon, check_extent
 from tin_engine.io.models import DemTile, RasterMeta
-from tin_engine.io.repository import TiffDemRepository
+from tin_engine.io.repository import CacheRepository, TiffDemRepository
 from tin_engine.mosaic import Bounds, MosaicError, MosaicPlan, Seam, assemble, plan_mosaic
 
 
-class DemRequest(BaseModel):
-    """Exactly one directory of tiles, or one or more tile files (R11), and at
-    most one of a box in the DEM's CRS and a domain in its own (R6)."""
+class CachedSource(BaseModel):
+    """A catalogue source's key and the cache root holding `<cache>/<source>/`."""
 
     model_config = ConfigDict(frozen=True)
 
-    sources: tuple[Path, ...]
+    source: str
+    cache: Path
+
+
+class DemRequest(BaseModel):
+    """Exactly one directory of tiles, or one or more tile files (R11), or a
+    cached source (23a-1), and at most one of a box in the DEM's CRS and a
+    domain in its own (R6)."""
+
+    model_config = ConfigDict(frozen=True)
+
+    sources: tuple[Path, ...] = ()
+    cached: CachedSource | None = None
     bounds: Bounds | None = None
     nodata: float | None = None
     domain: DomainPolygon | None = None
 
     @model_validator(mode="after")
     def _one_form(self) -> Self:
-        if not self.sources:
+        if self.cached is not None and self.sources:
+            raise ValueError("give DEM sources or a cached source, not both")
+        if not self.sources and self.cached is None:
             raise ValueError("no DEM source given")
         directories = sum(p.is_dir() for p in self.sources)
         if directories and len(self.sources) > 1:
@@ -69,10 +86,13 @@ class DemInput:
 
 
 def repository_for(
-    sources: tuple[Path, ...], nodata: float | None = None
-) -> tuple[TiffDemRepository, str]:
-    """The repository over one directory of tiles or over the files given,
-    and the run's name: the directory's name, or the first file's stem."""
+    sources: tuple[Path, ...], nodata: float | None = None, cached: CachedSource | None = None
+) -> tuple[TiffDemRepository | CacheRepository, str]:
+    """The repository over one directory of tiles, over the files given, or
+    over a cached source, and the run's name: the directory's name, the first
+    file's stem, or the source's key."""
+    if cached is not None:
+        return CacheRepository(cached.cache, cached.source, nodata=nodata), cached.source
     first = sources[0]
     if first.is_dir():
         return TiffDemRepository.from_directory(first, nodata=nodata), first.resolve().name
@@ -82,7 +102,7 @@ def repository_for(
 def open_dem(request: DemRequest) -> DemInput:
     """List, plan and assemble. Every refusal is a `ValueError` (`GeoTiffError`,
     `MosaicError`) or, for a file that cannot be opened, an `OSError`."""
-    repository, label = repository_for(request.sources, request.nodata)
+    repository, label = repository_for(request.sources, request.nodata, request.cached)
     footprints = repository.footprints()
     if request.domain is None or not footprints:
         plan, domain, grown = plan_mosaic(footprints, request.bounds, None), None, None
@@ -90,7 +110,8 @@ def open_dem(request: DemRequest) -> DemInput:
         plan, domain, grown = _domain_plan(footprints, request.domain)
     # With a domain the seam report counts only the needed region's nodes
     # (Ola, 2026-09-28); which value a node takes does not depend on it.
-    mosaic = assemble(plan, repository.load, grown)
+    repository.check(plan)
+    mosaic = assemble(plan, repository.load, grown, load_window=repository.load_window)
     return DemInput(tile=mosaic.tile, plan=plan, label=label, domain=domain, seams=mosaic.seams)
 
 

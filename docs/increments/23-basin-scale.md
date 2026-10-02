@@ -5,7 +5,8 @@ Status: **designed by `@architect`, 2026-10-01; B1-B14 ruled by Ola on
 only, written before `@tester` per `docs/increments/README.md` step 1. The
 rulings are under "Ruled by Ola, 2026-10-01", below; the questions are kept as
 asked at the end, each marked with its ruling; B15, asked after B14's
-ruling, is open.
+ruling, is open. 23a-1, the next PR, is designed in full on 2026-10-02
+under "Windowed source reads (23a-1)".
 
 ## Why this record, and why its name
 
@@ -652,7 +653,7 @@ plan_basin(request) -> BasinPlan                     (Python, pure; frozen data)
   |  per piece: PieceJob(id, start slice, its seam edges, target window, source window)
   v
 run_plan(plan, jobs=J, threads=T)  [per piece, in parallel, local]   (async; asyncio.to_thread)
-  |  windows: decode_window from cache or local tiles  -> resample (15c D3)   (23a-1, 15c)
+  |  source window: plan_mosaic + assemble, tiles decoded by window  -> resample (15c D3)   (23a-1, 15c)
   |  seam pass for each of its seam edges: refine_seam(strip, edge, T)        (23b, C++)
   |  start = slice with seam edges split into fans at the seam-pass points    (23c, NumPy)
   |  refine(window, start, frozen_mask=seam)       phase 1                     (14-21, 23b)
@@ -1002,54 +1003,175 @@ thresholds are under "@perf acceptance", 23g).
   delay a piece, never change or refuse one. 15a R7's refusal at half of
   physical memory: deleted if Ola rules B15 (a) or (c), kept under (b).
 
-## Windowed source reads
+## Windowed source reads (23a-1)
 
-- **The seam is 15c's `SourceWindows`** (`window(r0, r1, c0, c1)` and `meta`),
-  which 15c built so that windowed decoding plugs in as a change of provider.
-- **23a-1 adds a block layer under it** (`io/cog.py`):
-  - `BlockSource` (protocol): `page` (the parsed full-resolution TIFF page:
-    shape, block shape, dtype, compression, offsets and byte counts) and
-    `block(index) -> bytes`. Two implementations: `LocalTiffBlocks`, a local
-    tiled GeoTIFF, reading `page.dataoffsets` ranges from the file (15 R3
-    [15d], DTM10 and ANADEM's MGRS tiles are 512² tiles); and
-    `CachedBlocks`, the cache's block files.
-  - `decode_window(blocks, window) -> DemTile`: decodes only the blocks that
-    meet the window, with `TiffPage.decode` (shown above to decode a block
-    from its bytes alone), on a thread pool (zlib releases the GIL, 15 R3),
-    into one array that becomes the tile through `DemTile._adopt` (its third
-    caller, under the same rule: allocated here, never handed out writable).
-    It equals decoding the whole tile and slicing (15's T-window).
-  - `BlockWindows(SourceWindows)`: for a source window, every object (file or
-    cached COG) meeting it, decoded by window and assembled by 15a's overlap
-    rule (R5, order-independent).
+Designed in full for `@tester` on 2026-10-02. **15a's path stays the path**:
+`plan_mosaic` from headers, then `assemble` from loads. 23a-1 changes two
+things under it: a load decodes only the blocks its placement needs, and a
+catalogue source's tiles come from the cache instead of from files. 15c-2's
+`SourceWindows` is unchanged (its `TileWindows` slices the assembled source
+tile); at basin scale that tile is one piece's source window, so nothing
+holds the basin.
+
+### Decided here
+
+1. **No `BlockWindows`.** A windowed `assemble` is the same thing (every
+   object meeting the window, decoded by window, overlaps by R5), so a second
+   assembler is not written; `SourceWindows` stays 15c-2's to define.
+2. **The catalogue is data, outside `fetch/`**: `tin_engine/sources.py`. The
+   mesh path must name catalogue keys and must not import `tin_engine.fetch`
+   (W5), so the catalogue cannot live there. `CacheManifest` moves to
+   `io/repository.py` for the same reason. `fetch/` (23a-2) imports both.
+3. **`--dem` becomes `list[str]`**, turned into paths in the CLI. `Path`
+   normalises `./glo30` to `glo30`, so the ruled "`./glo30` is a path"
+   cannot be honoured on `Path`.
+4. **`IndexWindow` moves to `io/models.py`** (re-exported by `mosaic.py`),
+   because `io/` imports nothing first-party but `io.models`.
+5. **A sparse block (byte count 0) in a needed window is refused.**
+   tifffile fills it with 0, a valid elevation; a DEM's NoData must be
+   stored, not implied.
+6. **The missing-block check runs once per plan, before any decode**
+   (`check(plan)`), and `decode_window` repeats it per window as a backstop.
+   The CLI adds the fetch command to the message: only the CLI knows the
+   flags as given.
+7. **Threads:** `decode_window(..., threads=4)`, fixed, not read from the
+   machine and not a flag; the output does not depend on it (W2).
+8. **Local reads under a lock** (`seek` and `read` on one stream). A read
+   is short against a decode; `os.pread` would exclude `BytesIO` fixtures.
+9. **`elevation_source` names the source id and the catalogue's `credit`.**
+   The manifest does not repeat the credit (one place per fact).
+10. **Geographic sources still refuse** until 15c-2 (`read_header`'s GeoKey
+    2048 refusal), after the cache checks. 23a-1's offline mesh tests use a
+    projected entry added to `SOURCES` by `monkeypatch`.
+
+### Types and functions
+
+`io/cog.py`. Imports `io.models` and `io.geotiff`; never opens a file.
+
+```
+class BlockSource(Protocol):
+    page: tifffile.TiffPage                      the full-resolution page, from the header
+    where: str                                   for messages: a file name, or "<source>/<object>"
+    def block(self, index: int) -> bytes: ...    the block's stored bytes
+    def missing(self, indices: Sequence[int]) -> tuple[int, ...]: ...
+class CacheError(ValueError)                     manifest absent, wrong source, header hash mismatch
+class NotCached(CacheError)                      missing: int, needed: int, where: str
+class LocalTiffBlocks                            (page, stream, name); missing() is always ()
+def blocks_meeting(page, window: IndexWindow) -> tuple[int, ...]       pure, ascending
+def window_meta(meta: RasterMeta, window: IndexWindow) -> RasterMeta   x_min + col0*dx, y_max - row0*dy
+def decode_window(source: BlockSource, meta: RasterMeta, dtype, window, *, threads=4) -> DemTile
+```
+
+`decode_window`:
+
+- A window outside the raster, or with fewer than one row or column, is a
+  `ValueError` (a caller's bug, not a file's).
+- `source.missing(blocks_meeting(...))` first; any → `NotCached`, before any
+  `block()` call.
+- Per block, on a `ThreadPoolExecutor(threads)`: `block(i)` →
+  `page.decode(data, i)` → the segment cropped to the raster (edge tiles
+  come padded, the last strip short) and to the window → cast by
+  `PROMOTION` into its own slice of one preallocated output. Slices are
+  disjoint, so thread count cannot change a value. A decode failure is a
+  `GeoTiffError` naming `where` and the block index (`geotiff._stage`).
+- Tiled and stripped pages alike (`page.chunks`). DTM10 is 512² LZW tiles
+  with three overviews; ANADEM is a COG.
+- The output becomes the tile through the public `DemTile(...)`
+  constructor, one extra copy per window. A departure, accepted in review:
+  `_adopt` was designed here, but 15a's suite (`test_mosaic.py`, M15)
+  reserves `_adopt` for `mosaic.py`. Widen it only if `@perf` shows the copy
+  matters.
+
+Checked with tifffile 2026.9.20 before writing this: `page.decode(bytes, i)`
+decodes a block from its bytes alone; it does so on a page parsed from a
+prefix that ends before the first block; and it still works after its
+`TiffFile` is closed.
+
+`io/geotiff.py`: `read_page(source, *, nodata) -> (RasterMeta, dtype,
+TiffPage)`, `read_header` plus the page, through the same `_header`, so
+every refusal is the same.
+
+`mosaic.py`: `assemble(plan, load, needed=None, *, load_window=None)`. With
+`load_window`, each placement is `load_window(name, placement.source)`, its
+meta must equal `window_meta(placement.meta, placement.source)` (else the
+existing "changed since it was listed" refusal), and it is copied whole.
+Without it, nothing changes (`catchment.py` and 15a's suite).
+
+`io/repository.py`:
+
+- `TiffDemRepository.load_window(name, window)`: opens the file read-only,
+  `read_page`, `LocalTiffBlocks`, `decode_window`. `check(plan)` is a no-op.
+- `CacheManifest` and `CachedObject` (frozen; 23a-2 writes them, 23a-1
+  reads them), fields under "The cache" below.
+- `CachedBlocks(directory, page, where)`: `block(i)` reads
+  `blocks/<i // blocks_across>/<i % blocks_across>.bin`; `missing` lists the
+  indices whose file is absent or not exactly the header's byte count. A
+  `.part` file has another name and is never read.
+- `CacheRepository(cache, source)`. Construction reads no file. The same
+  `footprints`, `load`, `load_window` and `check` as `TiffDemRepository`.
+  `footprints()` reads `manifest.json` (absent: `NotCached` with
+  `needed = 0`, "not in the cache"; another source id: `CacheError`), then
+  each listed object's `header.bin`, refusing one whose sha256 differs from
+  the manifest's (`CacheError`, "re-fetch with --refresh"). The footprint's
+  name is the object id. `check(plan)` sums `missing` and `needed` over
+  every placement's `blocks_meeting` and raises one `NotCached` for the
+  plan.
+
+`dem_input.py`: `DemRequest` gains `cached: CachedSource | None`
+(`source: str`, `cache: Path`), exactly one of `sources` and `cached`;
+`repository_for` returns a `CacheRepository` for it, labelled by the source
+id; `open_dem` calls `repository.check(plan)` and then
+`assemble(..., load_window=repository.load_window)`.
+
+`tin_engine/sources.py`: `RemoteSource` and `SOURCES` (fields under "Types"
+below); it imports Pydantic only.
+
+`cli.py` (`mesh`): `--cache DIR`; `RASPUTIN_DATA` read once, in the command;
+`cache_root(option, environ) -> Path | None`. `--dem` with exactly one
+value that is a key of `SOURCES` is that source; one value is a path
+otherwise, and a key mixed with paths is refused. A key with no cache root
+is refused (B7's message, under "The CLI"). A `NotCached` becomes the
+usage error with `; run: rasputin fetch <key>` plus the run's `--domain` or
+`--bbox`, `--out-crs` (once 15c-2 adds it) and `--cache` as given. `dem_tiles` is written for a
+catalogue source as for a directory.
+
+### Unchanged by 23a-1
+
 - **No dense canvas at basin scale.** Each piece holds a target window (its
   start slice's bounding box grown by the cell diagonal, snapped outward to
   the lattice) and a source window (15c D2's `source_region` of that target
   window: its image in the source CRS, grown by two source cells). Both are
-  about `B²` nodes plus margins. Nothing holds the basin.
-- **Header before pixels** (15c J10). Coverage and missing blocks are known
-  from the parsed headers and the cache's presence check before any block is
-  decoded.
-- **A projected DEM meshed directly** (Norway) gets the same: a piece's window
-  of the 15a mosaic is `plan_mosaic(footprints, piece bounds)` (pure, 15
-  R12), each tile decoded by window.
+  about `B²` nodes plus margins.
+- **Header before pixels** (15c J10): coverage from the headers, missing
+  blocks from `check(plan)`, both before any block is decoded.
+- **A projected DEM meshed directly** (Norway): a piece's window is
+  `plan_mosaic(footprints, piece bounds)` (pure, 15 R12), each tile decoded by
+  window.
 
 ## The fetch step and the tile cache
 
-### Types (`fetch/sources.py`, frozen Pydantic)
+### Types (frozen Pydantic)
 
 ```
+tin_engine/sources.py (23a-1; data, imports Pydantic only)
 RemoteSource      id ("anadem-v1", "glo30"); kind ("one-cog" | "cog-tiles");
                   url, or url_template plus tile_list_url; crs (expected, checked
                   against each header); nodata; credit; licence_note
 SOURCES           the catalogue: a Mapping[str, RemoteSource] of data, two entries
+io/repository.py (23a-1 reads, 23a-2 writes)
+CacheManifest     source id, crs, rasputin version, objects: {object id: CachedObject},
+                  requests fetched: ({domain_sha256, date}, ...)
+CachedObject      url, content_length, last_modified, header_sha256, header_bytes,
+                  block shape (rows, cols)
+fetch/plan.py (23a-2)
 FetchRequest      source id, domain (path and CRS), target CRS or None, margin
                   (source cells, default 2), cache root
 FetchPlan         source id; objects: (object id, url, block indices, bytes)
-CacheManifest     source id, url, content_length, last_modified, header_sha256,
-                  header_bytes, crs, block shape, rasputin version, and the
-                  requests fetched (domain hash, date)
 ```
+
+The date is `datetime.date` (standard library; `CLAUDE.md` §2). The objects
+a mesh reads are the manifest's, sorted by id; the blocks it has are the
+directory's.
 
 `anadem-v1` is OpenTopography's COG
 (`https://opentopography.s3.sdsc.edu/raster/ANADEM/ANADEM_be/anadem_v1_compressed_COG.tif`,
@@ -1077,7 +1199,8 @@ list is sea, recorded as "no tile", not as missing.
 ```
 <cache>/<source-id>/manifest.json                       identity, written atomically
 <cache>/<source-id>/<object-id>/header.bin              the parsed prefix
-<cache>/<source-id>/<object-id>/blocks/<row>/<col>.bin  one block, its exact bytes
+<cache>/<source-id>/<object-id>/blocks/<row>/<col>.bin  one block, its exact bytes;
+                                                         <row>, <col> in blocks, a strip's col is 0
 ```
 
 - **The directory is the inventory; the manifest is the identity.** A block is
@@ -1130,7 +1253,8 @@ environment.
 
 **`--dem`:** a catalogue key (`anadem-v1`, `glo30`) names a cached source;
 anything else is a path, as today; a file whose name is a catalogue key is
-written as a path (`./glo30`). Only a catalogue source needs the cache, so a
+written as a path (`./glo30`), which is why the option is read as text
+(23a-1, "Decided here" 3). Only a catalogue source needs the cache, so a
 mesh from local files needs neither variable nor option. A block meshing
 needs and the cache lacks is refused before any decode, naming the command:
 "anadem-v1: 37 of the 3,061 blocks this domain needs are not in DIR; run:
@@ -1147,8 +1271,8 @@ testable: no `tin_engine` module on `rasputin mesh`'s path imports
 `src_python/tin_engine`; `sys.modules` cannot be the oracle, because pyproj
 imports `urllib.request` itself), with `cli.py` importing `tin_engine.fetch`
 lazily inside the fetch command; and a mesh run with `socket.socket`
-replaced by one that raises (K7). The fetch step records the source's credit
-in the manifest, and the mesh file's `elevation_source` carries it.
+replaced by one that raises (K7). The mesh file's `elevation_source` names
+the source id and the catalogue's `credit` (23a-1).
 
 ## Memory and parallelism
 
@@ -1562,12 +1686,15 @@ stays under 700 at both; the largest, 23c, is 688 at +60 %.
 | PR | what | est. | +39 % | +60 % |
 |---|---|---:|---:|---:|
 | **23a-1** | **Windowed decoding and the cache, reading** | | | |
-| | `io/cog.py`: `BlockSource`, `LocalTiffBlocks`, `decode_window` on a thread pool | 60 | | |
-| | `io/repository.py`: `CacheRepository` read side, `CacheManifest`, presence | 55 | | |
-| | `BlockWindows` (15c's `SourceWindows`), the missing-block refusal | 40 | | |
-| | `fetch/sources.py`: `RemoteSource`, the catalogue (two entries, B8) | 40 | | |
-| | `cli.py`: `--cache`, `RASPUTIN_DATA`, `--dem <catalogue key>` | 30 | | |
-| | **23a-1 total** | **225** | **313** | **360** |
+| | `io/cog.py`: `BlockSource`, `LocalTiffBlocks`, `blocks_meeting`, `window_meta`, `decode_window`, the two errors | 75 | | |
+| | `io/geotiff.py`: `read_page` | 8 | | |
+| | `io/models.py`: `IndexWindow`, moved from `mosaic.py` | 0 | | |
+| | `mosaic.py`: `assemble(..., load_window=)` | 12 | | |
+| | `io/repository.py`: `load_window`, `CacheManifest`, `CachedObject`, `CachedBlocks`, `CacheRepository`, `check` | 85 | | |
+| | `dem_input.py`: `CachedSource`, the cache repository, `check` before `assemble` | 20 | | |
+| | `sources.py`: `RemoteSource`, the catalogue (two entries, B8) | 35 | | |
+| | `cli.py`: `--cache`, `RASPUTIN_DATA`, `--dem` as text, the key, the fetch command in the refusal | 35 | | |
+| | **23a-1 total** | **270** | **375** | **432** |
 | **23a-2** | **The fetch step** | | | |
 | | `fetch/plan.py`: header prefix, needed region, blocks, GLO-30 tile list | 75 | | |
 | | `fetch/http.py`: ranged GET, 206 and length checks, coalescing, retries, async bound | 80 | | |
@@ -1648,30 +1775,63 @@ rest is ordinary.
 
 ### 23a-1 (Python)
 
-- **W1, decoding a window** equals decoding the whole file with tifffile and
-  slicing, `meta` included, for windows inside one block, across four, on
-  block boundaries and at the raster's edge; from a local tiled TIFF and from
-  the same blocks in a cache, identical arrays.
-- **W2, determinism**: identical arrays for 1 and 8 decode threads.
-- **W3, presence**: a block file of the wrong length is absent; a `.part` file
-  is ignored; the manifest round-trips.
-- **W4, the refusal**: a missing block is refused before any block is
-  decoded (a `BlockSource` double that fails on `block()`), and the message
-  names the fetch command with the domain and cache given.
-- **W5, offline**: no `tin_engine` module on `rasputin mesh`'s path imports
+**Fixtures.** A source is `geotiff_fixtures.micro_tiff` with `tile=(16, 16)`
+on a 50 × 70 grid (edge tiles padded), Deflate with the floating-point
+predictor, one overview page, NoData cells scattered; variants: stripped
+(`rowsperstrip=8`, last strip short), LZW, int16 (promoted to float32). A
+cache is written by a test helper from the same bytes: `header.bin` is the
+file up to its first block, each block the file's own byte range at
+`blocks/<row>/<col>.bin`, `manifest.json` from `CacheManifest`. The oracle
+for pixels is tifffile's whole-page decode, sliced; nothing in it shares
+code with `decode_window`.
+
+- **W1, a window equals the whole, sliced**, `meta` equal to `window_meta`
+  of the whole file's: windows inside one block, across four, exactly on
+  block edges, reaching the last row and column, one row, one column; every
+  variant; from `LocalTiffBlocks` and from `CachedBlocks`, identical. With
+  `rasputin_data` present (skipped otherwise): a DTM10 tile, a window across
+  a 512² tile corner.
+- **W2, determinism**: `threads=1` and `threads=8` give byte-identical
+  arrays (`tobytes`, so NaN compares).
+- **W3, only the needed blocks**: a recording `BlockSource` double sees
+  `block(i)` exactly for `blocks_meeting`'s indices, each once; and
+  `blocks_meeting` equals a brute-force test of every block's pixel
+  rectangle against the window.
+- **W4, the cache's read side**: a block file of the wrong length is
+  missing; a `.part` file is ignored; the manifest round-trips through JSON;
+  a `header.bin` whose sha256 differs from the manifest's, and a manifest of
+  another source, are `CacheError`; no manifest is `NotCached` ("not in the
+  cache"). `CacheRepository` construction reads no file.
+- **W5, the refusals**: a missing block is `NotCached` before any block is
+  decoded (a double whose `block()` fails); `check(plan)` over two objects
+  counts the plan's missing and needed blocks, raised once; the CLI's message
+  names `rasputin fetch <key>` with the run's `--domain` or `--bbox`,
+  `--out-crs` and `--cache` as given. A block of byte count 0 in the window
+  (the header's TileByteCounts entry patched) is a `GeoTiffError` naming the
+  block; outside the window it is never looked at.
+- **W6, windowed assembly**: on 15a's fixtures (quadrants with overlaps,
+  mixed dtypes), `assemble(plan, load, load_window=...)` equals
+  `assemble(plan, load)`, array and seams; a `load_window` whose meta is not
+  `window_meta(placement.meta, placement.source)` gets "changed since it was
+  listed". 15a's suite stays green unedited.
+- **W7, offline**: no `tin_engine` module on `rasputin mesh`'s path imports
   `tin_engine.fetch` or `urllib.request` in its own source (an AST check over
-  `src_python/tin_engine`; pyproj imports `urllib.request`, so `sys.modules`
-  cannot be the oracle), and `cli.py` imports `tin_engine.fetch` only inside
-  the fetch command; and a mesh from a prepared cache
-  with `socket.socket` replaced by one that raises succeeds.
-- **W6, overlaps**: `BlockWindows` over two overlapping objects equals 15a's
-  `assemble` on the same objects.
-- **W7, the cache root (B7)**: `--cache DIR` wins over `RASPUTIN_DATA`;
-  with only `RASPUTIN_DATA=R` set the cache is `R/cache`; with neither, a
-  catalogue `--dem` is refused naming both, and a path `--dem` runs as today
-  (`monkeypatch` on the environment); `./glo30` is a path, `glo30` a
-  catalogue key; nothing under `src_python/tin_engine` but `cli.py` reads
-  `RASPUTIN_DATA` (a source scan).
+  `src_python/tin_engine`, with `importscan.py`; pyproj imports
+  `urllib.request`, so `sys.modules` cannot be the oracle), and `cli.py`
+  imports `tin_engine.fetch` only inside a function; a mesh from a prepared
+  cache, with a projected entry put in `SOURCES` by `monkeypatch` and
+  `socket.socket` replaced by one that raises, succeeds and gives the same
+  vertices and triangles as the same file meshed by path.
+- **W8, the cache root and the key (B7)**: `--cache DIR` wins over
+  `RASPUTIN_DATA`; with only `RASPUTIN_DATA=R` the cache is `R/cache`; with
+  neither, a catalogue `--dem` is refused naming both, and a path `--dem`
+  runs as today (`monkeypatch` on the environment); `./glo30` is a path,
+  `glo30` a key; a key and a path together are refused; nothing under
+  `src_python/tin_engine` but `cli.py` reads `RASPUTIN_DATA` (a source
+  scan); `elevation_source` names the key and its credit.
+- **W9, geographic, until 15c-2**: a cached geographic source passes the
+  cache checks and is then refused with the reader's own GeoKey message, not
+  a cache message.
 
 ### 23a-2 (Python)
 
@@ -1881,8 +2041,9 @@ previous merge commit with `--tree`, back to back), evidence under
 `docs/benchmarks/<date>/`.
 
 - **23a-1:** the benchmark's mesh hash unchanged and process time within
-  noise (decoding is now windowed). On ANADEM: decode throughput per block and
-  per window, threads 1 to 8.
+  noise (decoding is now windowed). On DTM10 tiles: decode throughput per
+  block and per window, threads 1 to 8 (ANADEM's waits for 15c-2, which
+  lifts the geographic refusal).
 - **23a-2:** fetch the basin's 3,061 ANADEM blocks: wall time, bytes,
   requests, and a rerun that fetches nothing; an interrupted run resumed.
 - **23b:** the README rule in full; the mesh hash unchanged (mask 0), refine
@@ -2197,3 +2358,16 @@ Production LOC 0; 23c 430 (688 at +60 %). B13 (c) and B14 recorded faithfully; b
 ### Round 2, `4c182c8..a7c1bfb`: APPROVED (`@reviewer`)
 
 DC0 now pins the cell count, which approximates P' and is not a floor; the refusals at half of physical memory are question B15 (`src_python/tin_engine/mosaic.py@5a57793:209`, `src_python/tin_engine/catchment.py@5a57793:150`), with every dependent place conditional on Ola's answer; units in GiB (7.7 estimated against 3.60 measured). Citations resolve. CI not yet run: no PR.
+
+### 23a-1, round 1, `18316b6..a235716`: CHANGES REQUESTED (`@reviewer`)
+
+LOC 326 net (363 added, 37 removed) against the estimate of 270, which is +21% and inside the +39% worst case. Red came before green, and the green commit touched no test. The local gates were green. Three blocking items:
+- The GLO-30 credit was missing the licence's Art. 6(b) notice for adapted data and the Art. 6(c) no-liability sentence.
+- The ANADEM credit named no creator, which CC BY 4.0 requires.
+- Some prose was made false by the branch: four line citations had drifted, `23-basin-scale.md:1079` still named `_adopt`, and two red-step paragraphs described the tests as still red.
+
+Accepted in round 1: the public `DemTile` constructor instead of `_adopt` (one extra copy per window), NoData taken from the request, and `--cache` ignored for a path `--dem`. Mutation pass: 17 of 19 mutants killed. One survivor was equivalent (thread count). The other showed that the sparse-block test did not pin the refusal message.
+
+### 23a-1, round 2, `a235716..72ec413`: APPROVED (`@reviewer`)
+
+LOC is 336 net (373 added, 37 removed), still under the +39% worst case and far under 700. Both credits now match their sources word for word (GLO-30: the licence's Art. 6(b) notice, Art. 6(c) quoted in `licence_note`; ANADEM: OpenTopography's citation, CC BY 4.0). A missing `header.bin` is a `CacheError`; the sparse-block test fails with the sparse check removed; the four citations resolve to the quoted code; the departure and the `--out-crs` timing are recorded. pytest 3525 passed, 13 skipped in a fresh venv on this worktree's source; ruff, ruff format, mypy, `check_citations` and `check_prohibited_deps` clean. Not blocking: only `credit` reaches the mesh file, so Art. 6(c)'s sentence stays in the catalogue for 23a-2 to carry; `_ascii` writes ANADEM's accented credit as escapes. Remaining: `@perf`'s decode-speed acceptance, then CI after Ola approves the push.
