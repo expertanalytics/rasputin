@@ -1,11 +1,12 @@
 # Increment 23: basin scale — pieces cut on constraints, windowed DEM reads, a tile cache
 
-Status: **designed by `@architect`, 2026-10-01; B1-B12 ruled by Ola on
+Status: **designed by `@architect`, 2026-10-01; B1-B14 ruled by Ola on
 2026-10-01 and the design reworked to the rulings; not implemented.** Design
 only, written before `@tester` per `docs/increments/README.md` step 1. The
 rulings are under "Ruled by Ola, 2026-10-01", below; the questions are kept as
-asked at the end, each marked with its ruling, and the new ones (B13, B14)
-follow them.
+asked at the end, each marked with its ruling; B15, asked after B14's
+ruling, is open. 23a-1, the next PR, is designed in full on 2026-10-02
+under "Windowed source reads (23a-1)".
 
 ## Why this record, and why its name
 
@@ -52,7 +53,7 @@ protocol" (where the split exchange goes).
 
 ## Ruled by Ola, 2026-10-01
 
-On B1-B12 (the questions as asked are kept at the end). Where the ruling
+On B1-B14 (the questions as asked are kept at the end). Where the ruling
 changes the design, the section named does the rework.
 
 - **B1: (a), artificial cuts; BHO is dropped entirely as a source of
@@ -74,11 +75,8 @@ changes the design, the section named does the rework.
   detected core count, so that the mesh does not depend on the machine
   (Ola's L1 determinism ruling, increment 21). Piece sides are whole DEM
   spacings, so seams lie on lattice lines (exact seam heights, no feet
-  lost). A size cap makes pieces smaller where a piece would exceed it
-  (memory); no piece is cut below a minimum size, so a small domain is
-  meshed in one piece, bit-identical to today. The defaults and their
-  arithmetic, and what is lost against the global grid of B3, are under
-  "Choosing the cuts".
+  lost). B14 replaced the size cap and the minimum (below). What is lost
+  against the global grid of B3 is under "Choosing the cuts".
 - **B4: (b), seams removed after the run.** The strips on both sides are
   re-legalised across each seam and rescanned, so the stitched mesh is
   Delaunay across artificial seams; this includes **local seam thinning**:
@@ -109,6 +107,23 @@ changes the design, the section named does the rework.
 - **B12: (a)**, the proposed order, knowingly reversing part of Q14's
   placement (Ola chose it). The order now carries 23f and 23g ("Order of
   work").
+- **B13: (c).** The Velhas piece's and the basin's BHO outlines stay as
+  measurement domains now; 23e derives both from the DEM, with one comparison
+  run of the two outlines; once the DEM-derived ones work, the BHO ones are
+  abandoned. Ola: "Go back, we choose option c: a, then b. When b works, we
+  can abandon a."
+- **B14: one parameter, `--memory-budget`, replaces `N_MIN`, `N_MAX` and
+  the per-piece memory cap.** Default 16 GB, fixed, not read from the
+  machine. A domain is cut only when its estimated memory at the requested
+  tolerance exceeds the budget; pieces are sized to fit it; no hard upper
+  limit anywhere; `--pieces` stays, as a request for more pieces. The same
+  parameters give the same mesh on any machine, and a machine too small runs
+  out of memory. Ola: "we should not limit huge discetisations based on less
+  performant hardware. If you have to choose a large number, you should be
+  allowed to do so. On limited resources, you should not expect to reproduce
+  huge catchments." On the old minimum: "1M DEM points seams way to small"
+  (small domains have no runtime or memory problem); on the default: "I'd
+  say 16 GB is good." The rule is under "Choosing the cuts".
 
 Also ruled on 2026-10-01, for `15c-geographic-dem.md`: Q17's BHO-outline
 fixture is replaced. Ola: "yes, switch to a DEM-derived test catchment". The
@@ -122,21 +137,28 @@ By `@architect`, 2026-10-01, with the scripts in `docs/increments/23-probes/`
 each was run for this record and prints the figures below).
 
 **The partition, on the Velhas piece and the basin** (`partition.py`, run
-after the rulings). The rule under "Choosing the cuts", with its defaults
-(`--pieces 64`, minimum 2^19 nodes, cap 2^22 nodes), on a 30 m lattice in
-EPSG:31983. The basin's extent is BHO level 2, used only to measure; B13 asks
-what the basin run's domain is.
+after the B14 ruling). The rule under "Choosing the cuts", at the default
+`--memory-budget` (16 GiB) and no `--pieces` request, on a 30 m lattice in
+EPSG:31983. Both outlines are BHO's, kept as measurement domains until 23e
+(B13 (c)).
 
-| domain | window | domain covers | cells | meet the domain | cell nodes | largest / mean area | seams inside |
-|---|---:|---:|---:|---:|---:|---:|---:|
-| Velhas piece | 4,208 × 7,347 = 30.9 M | 42 % | 6 × 10 | 40 | 0.52 M | 1.59 | 1,068 km |
-| basin | 41,332 × 50,297 = 2,079 M | 34 % | 20 × 25 | 226 | 4.16 M | 1.33 | 20,687 km |
+| domain | window | domain covers | tolerance | cells | meet the domain | cell nodes | largest / mean area | seams inside |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| Velhas piece | 4,208 × 7,347 = 30.9 M | 42 % | 0.5 m and up | 1 × 1 | 1 | 30.9 M | 1.00 | 0 |
+| Velhas piece | | | 0 | 1 × 2 | 2 | 15.5 M | 1.02 | 73 km |
+| basin | 41,332 × 50,297 = 2,079 M | 34 % | 50 m | 2 × 2 | 3 | 520 M | 1.24 | 769 km |
+| basin | | | 10 m | 2 × 3 | 5 | 346 M | 1.76 | 1,344 km |
+| basin | | | 5 m | 3 × 3 | 7 | 231 M | 1.63 | 2,438 km |
+| basin | | | 1 m | 5 × 7 | 23 | 59.4 M | 1.93 | 5,110 km |
+| basin | | | 0 | 8 × 10 | 45 | 26.0 M | 1.65 | 7,970 km |
 
-For the Velhas piece the minimum decides (`--pieces` 64 or more all give 58,
-rounded to 6 × 10); `--pieces 16` gives 3 × 5 cells of 2.06 M nodes, 12
-pieces. For the basin the cap decides at any `--pieces` up to 256. The
-basin's window here is 2.08 G nodes; the 2.31 G of the basin-piece README
-(Surprise 1) is that README's canvas, not reconciled with this one.
+The Velhas piece is one piece at every tolerance but 0, so today's mesh;
+cut on request, at 1 m `--pieces 16` gives 3 × 5 cells of 2.06 M nodes (12
+pieces) and `--pieces 64` 6 × 11 cells of 0.47 M (44 pieces). For the basin
+at 1 m, `--pieces 16` changes nothing and `--pieces 64` gives 7 × 9 cells of
+33.0 M (37 pieces). The basin's window here is 2.08 G nodes; the 2.31 G of
+the basin-piece README (Surprise 1) is that README's canvas, not reconciled
+with this one.
 
 **BHO is an exact coverage** (`bho_coverage.py`; the record B1 was ruled on,
 not used by the design since BHO was dropped). The 1,163 BHO 2017 5k
@@ -620,7 +642,7 @@ legacy constant is re-derived, so no `@migration-expert` pass is needed.
 ### The run, end to end
 
 ```
-cli.mesh --dem anadem-v1 --domain D --out-crs C --tolerance T [--pieces P]
+cli.mesh --dem anadem-v1 --domain D --out-crs C --tolerance T [--pieces P] [--memory-budget B]
   |
   v  [global, vectors only: no DEM is read here]
 plan_basin(request) -> BasinPlan                     (Python, pure; frozen data)
@@ -631,7 +653,7 @@ plan_basin(request) -> BasinPlan                     (Python, pure; frozen data)
   |  per piece: PieceJob(id, start slice, its seam edges, target window, source window)
   v
 run_plan(plan, jobs=J, threads=T)  [per piece, in parallel, local]   (async; asyncio.to_thread)
-  |  windows: decode_window from cache or local tiles  -> resample (15c D3)   (23a-1, 15c)
+  |  source window: plan_mosaic + assemble, tiles decoded by window  -> resample (15c D3)   (23a-1, 15c)
   |  seam pass for each of its seam edges: refine_seam(strip, edge, T)        (23b, C++)
   |  start = slice with seam edges split into fans at the seam-pass points    (23c, NumPy)
   |  refine(window, start, frozen_mask=seam)       phase 1                     (14-21, 23b)
@@ -698,9 +720,9 @@ The main session's reasoning, item by item.
 6. *"The cut and the split exchange must be deterministic functions of the
    input."* **Agreed, and one more input must be excluded: the machine.** A
    cut chosen from physical memory or the thread count would make the mesh
-   depend on the computer. The cut is a function of the domain, the lattice
-   and `--pieces` (with the two size constants), all recorded in the file
-   (K5). Ola's ruling on B2 and B3 says the same: the count is a parameter
+   depend on the computer. The cut is a function of the domain, the lattice,
+   the tolerance, `--pieces` and `--memory-budget` (with the `b(T)` table),
+   all recorded in the file (K5). Ola's ruling on B2 and B3 says the same: the count is a parameter
    with a fixed default, not the detected core count.
 7. *"Shared-edge splits are common, given Q14's crossing/midpoint check points
    along constraints."* **Correct under Q14 as designed** (check points
@@ -709,7 +731,7 @@ The main session's reasoning, item by item.
 
 ## Choosing the cuts
 
-### The partition (23c; B2 and B3 as ruled)
+### The partition (23c; B2, B3 and B14 as ruled)
 
 - **The lattice.** Node `(R, K)` of the computation grid: 15c's target grid
   on the reprojected path (`x = K·h`, `y = −R·h`, J6), or the mosaic's own
@@ -717,21 +739,22 @@ The main session's reasoning, item by item.
 - **The window.** The domain's bounding box grown by the cell diagonal (15b)
   and snapped outward to the lattice: `cols × rows` nodes, `N = cols · rows`,
   first node `(R0, K0)`.
-- **The rule** (Ola: "Nx*Ny approx M*Np"), all integer arithmetic on the
-  window, with `P = --pieces`, `N_MIN` the minimum piece and `N_MAX` the cap:
-  1. If `P ≤ 1` or `N < 2 · N_MIN`: **one piece**, no cut, today's mesh bit
-     for bit (K1). `--pieces 1` is one piece whatever the size: the cap then
-     does not apply, and memory is the caller's choice.
-  2. The effective count: `lo = ⌈N / N_MAX⌉` (the cap), `hi = ⌊N / N_MIN⌋`
-     (the minimum), `P' = min(max(P, lo), hi)`, or `lo` when `lo > hi` (the
-     cap wins: memory before speed).
-  3. Near-square cells: `Nx = max(1, round(√(P' · cols / rows)))`,
-     `Ny = max(1, round(P' / Nx))`.
-  4. Whole spacings: `dx = ⌈cols / Nx⌉`, `dy = ⌈rows / Ny⌉` nodes. While
-     `dx · dy > N_MAX`, add one to `Nx` if `dx ≥ dy`, else to `Ny`, and
+- **The rule** (Ola: "Nx*Ny approx M*Np"; B14), integer arithmetic on the
+  window, with `P = --pieces` (default 1, no request), `B = --memory-budget`
+  in bytes and `b = b(T)` the estimated bytes per window node at the
+  tolerance `T` (the table below):
+  1. The count: `P' = max(P, ⌈N · b / B⌉)`. If `P' ≤ 1`: **one piece**, no
+     cut, today's mesh bit for bit (K1).
+  2. Near-square cells: `Nx = max(1, round(√(P' · cols / rows)))`,
+     `Ny = max(1, round(P' / Nx))`. The cell count approximates `P'` (Ola's
+     "approx") and is not a floor: rounding may give fewer cells than asked
+     (`--pieces 16` on the Velhas window gives 3 × 5). Only the budget bound
+     of step 3 is guaranteed.
+  3. Whole spacings: `dx = ⌈cols / Nx⌉`, `dy = ⌈rows / Ny⌉` nodes. While
+     `dx · dy · b > B`, add one to `Nx` if `dx ≥ dy`, else to `Ny`, and
      recompute. Then `Nx = ⌈cols / dx⌉`, `Ny = ⌈rows / dy⌉`, so no column or
      row of cells is empty; the last ones may be narrower.
-  5. The partition lines are the lattice columns `K0 + i·dx` (`0 < i < Nx`)
+  4. The partition lines are the lattice columns `K0 + i·dx` (`0 < i < Nx`)
      and rows `R0 + j·dy` (`0 < j < Ny`), each from the window's edge to its
      edge.
   `partition.py` (23-probes) implements this rule as written here, and its
@@ -758,52 +781,40 @@ The main session's reasoning, item by item.
 - **Piece ids.** `(j, i, k)`: cell row, cell column, and the component's
   rank by its lowest start-triangle index. A function of the input alone.
 
-### The defaults, by arithmetic
+### The memory estimate and the defaults (B14 as ruled)
 
-From the basin-piece measurements
-(`docs/benchmarks/2026-10-01/basin-piece/README.md`) and `partition.py`.
-Decided here; Ola may overrule (B14).
+- **`--memory-budget`, default 16 GB, read as 16 GiB (2^34 bytes)**, a
+  constant: never the machine's memory, so the mesh does not depend on the
+  machine (K5). No upper limit on it, on `--pieces` or on a piece: a run whose
+  pieces do not fit the machine runs out of memory. Whether 15a R7's refusal
+  at half of physical memory goes too is B15, not ruled.
+- **`b(T)`, bytes per window node at tolerance `T`**, from the basin-piece
+  sweep (`docs/benchmarks/2026-10-01/basin-piece/README.md`): its max-RSS fit,
+  0.55 GiB + 310 B per triangle, gives about 17 B per grid node (the intercept
+  over the 30.9 M-node grid, leaving out the ~66 MiB interpreter) plus 310 B
+  per triangle; the
+  triangles per node are the Velhas piece's (its triangles at `T` over its
+  12,957,257 domain nodes), above the basin's p90 at 1 m (894 against 757
+  per km²), so the estimate is high for most terrain. At `T = 0` every node
+  is a vertex, two triangles per node. In whole bytes, rounded up:
 
-- **`N_MAX = 2^22` nodes (2048², 61 km at 30 m), the cap: memory.** A piece's
-  memory is about 17 B per window node (the piece's own intercept, 0.55 GiB
-  for 30.9 M nodes, interpreter off) plus 310 B per triangle (the fit). At
-  1 m the steep Velhas piece has 0.80 triangles per node (10.43 M triangles
-  over 12.96 M nodes in the domain), so 17 + 0.80 · 310 ≈ 266 B per node,
-  1.04 GiB at the cap; the basin's mean (373 triangles per km² over 1,111
-  nodes per km²) gives 121 B per node, 0.47 GiB. Ten pieces at once (the
-  measuring machine's cores) then hold at most 10.4 GiB, under 15a R7's cap
-  of half of 32 GiB. Twice the cap would be 20.8 GiB at the steep density,
-  and the runner would hold pieces back. At tolerance 0 (every node a
-  vertex, two triangles per node) a piece at the cap is 2.5 GiB.
-- **`--pieces 64`: concurrency, as M · Np with Np = 16 and M = 4.** Np is a
-  fixed reference, the next power of two above the measuring machine's 10
-  cores, so the mesh does not follow the machine. M from load balance: with
-  pieces started largest first, the run takes at most about
-  `(W / J) · (1 + r · J / P)` for total work W on J cores, where r is the
-  largest piece's work against the mean. Taking r = 2.03 (the box sample's
-  p90 over mean density at 1 m), P = 64 gives 1.32 at J = 10 and 1.51 at
-  J = 16; P = 32 would give 1.63 and 2.02. `P` counts cells, and fewer
-  pieces meet the domain (40 of 60 on the Velhas piece), some of them
-  partial, which helps the balance and lowers the count. This is an
-  estimate with r at the p90; the largest piece's r is for 23d to measure.
-- **`N_MIN = 2^19` nodes (724², 21.7 km at 30 m, 7.2 km at 10 m), the
-  minimum: nothing to win below it.** The Velhas piece refines at 0.42 µs per
-  node on one thread at 1 m (12.95 s for 30.9 M), so a domain at the
-  one-piece threshold, 2^20 nodes, refines today in about 0.21 s at 10
-  threads (2.05×), and a piece at the minimum takes about 0.22 s on one
-  thread: a per-piece cost of tens of milliseconds (not measured; 23d's
-  acceptance measures it) stays a small share. `N_MAX / N_MIN = 8`, so
-  `--pieces` decides the count over an eightfold range of window sizes
-  (33.5 M to 268 M nodes at the default); below it the minimum decides,
-  above it the cap.
-- **What it gives** (`partition.py`): the Velhas piece, 30.9 M nodes, is cut
-  into 6 × 10 cells of 0.52 M nodes, 40 of which meet the domain (the
-  minimum decides); the basin, 2.08 G nodes, into 20 × 25 cells of 4.16 M,
-  226 of which meet it (the cap decides). The 1 m benchmark tile (25.5 M
-  nodes) would be cut into 48, so `tools/bench.py` passes `--pieces 1` from
-  23c on and stays comparable with every stored run (K1). Bygdin at 10 m
-  (`docs/benchmarks/2026-09-29/bygdin.md`: a 3.05 M-node catchment) is cut
-  too, into a handful of pieces: its mesh changes, cleaned along the seams.
+  | T | 0 | 1 m | 2 m | 5 m | 10 m | 20 m | 50 m |
+  |---|---:|---:|---:|---:|---:|---:|---:|
+  | triangles per node | 2 | 0.805 | 0.443 | 0.154 | 0.062 | 0.024 | 0.006 |
+  | `b(T)`, bytes | 637 | 267 | 155 | 65 | 37 | 25 | 19 |
+
+  Between two columns `b` is linear in `T`, rounded up (the counts fall
+  convexly, so the chord is above them); above 50 m it is 19. Every window
+  node is costed as a domain node, which overestimates a domain that covers
+  part of its window (the Velhas piece's 1 m run: 7.7 GiB estimated, 3.60 GiB
+  measured). The table and `B` are recorded in the index.
+- **What it gives** (`partition.py`, "What was measured"): the Velhas piece
+  is one piece at every tolerance but 0; the basin is cut into 2 × 2 cells
+  at 50 m and 5 × 7 at 1 m (23 pieces). The 1 m benchmark tile (25.5 M nodes,
+  6.8 GB) and Bygdin at 10 m (3.05 M nodes) stay one piece, so their meshes
+  and `tools/bench.py`'s hash are unchanged (K1). Parallelism across pieces
+  is asked for with `--pieces`; at the default a domain under the budget
+  runs as today, one piece on refine's threads.
 
 ### What is lost against the global grid of B3
 
@@ -823,6 +834,8 @@ partition follows the domain instead. Lost:
 - **Pieces are not reusable between domains.** A piece of the global grid
   was the same for every domain that covered the whole block; a partition
   cell is not.
+- **Seams move with the tolerance**, since `b(T)` sets the count: the basin
+  at 50 m and at 1 m is cut differently.
 - Kept: seams on lattice lines (exact seam pass, exact heights, no feet
   lost), the mesh independent of the machine, one piece for small domains.
 
@@ -833,7 +846,10 @@ from one outlet to many, and enter the mesh as a code per triangle (as 16c's
 land-cover labels do) or, where a boundary must be in the mesh, as ordinary
 constraints: never as seams, so they do not decide the partition. BHO is used
 at most to attach official codes to DEM-derived units, or to validate them.
-23e gets its own design with the basin's own inputs.
+23e also derives the Velhas piece's and the basin's outlines from the DEM
+and runs the one comparison of each against its BHO outline (B13 (c)); the
+acceptance runs move to the DEM-derived outlines once they work. 23e gets
+its own design with the basin's own inputs.
 
 ## The seam protocol
 
@@ -929,8 +945,8 @@ inserted once). Refine ends as before: every insertion is a valid node not
 yet a vertex, and freezing only removes candidates. There are no rounds
 between pieces, so nothing else can fail to end.
 
-**Determinism.** The plan is a function of the input, the lattice and
-`--pieces`; the noder and the CDT are deterministic; piece ids come from
+**Determinism.** The plan is a function of the input, the lattice, the
+tolerance, `--pieces` and `--memory-budget`; the noder and the CDT are deterministic; piece ids come from
 the input; the seam pass is pure per edge; the slice keeps the start
 triangulation's order; each `refine` is deterministic for any thread count
 (14 R5; 21's L1 if 21d lands). So the output does not depend on `--jobs`,
@@ -981,59 +997,181 @@ thresholds are under "@perf acceptance", 23g).
 - **The seam pass on the reprojected path** reads the resampled target grid,
   as the edge strip does. The guarantee against the source DEM is phase 2's,
   at source nodes, which are not on seams.
-- **The memory cap** (15a R7, half of physical memory) applies to what runs
-  at once: the runner starts a piece only while the running pieces' window,
-  store and mesh estimates fit under it. It can delay a piece, never change
-  one.
+- **Memory at run time** (B14): the runner (23d) starts a piece only while
+  the running pieces' estimates (`dx · dy · b(T)`) fit under
+  `--memory-budget`, and always starts one when none is running. It can
+  delay a piece, never change or refuse one. 15a R7's refusal at half of
+  physical memory: deleted if Ola rules B15 (a) or (c), kept under (b).
 
-## Windowed source reads
+## Windowed source reads (23a-1)
 
-- **The seam is 15c's `SourceWindows`** (`window(r0, r1, c0, c1)` and `meta`),
-  which 15c built so that windowed decoding plugs in as a change of provider.
-- **23a-1 adds a block layer under it** (`io/cog.py`):
-  - `BlockSource` (protocol): `page` (the parsed full-resolution TIFF page:
-    shape, block shape, dtype, compression, offsets and byte counts) and
-    `block(index) -> bytes`. Two implementations: `LocalTiffBlocks`, a local
-    tiled GeoTIFF, reading `page.dataoffsets` ranges from the file (15 R3
-    [15d], DTM10 and ANADEM's MGRS tiles are 512² tiles); and
-    `CachedBlocks`, the cache's block files.
-  - `decode_window(blocks, window) -> DemTile`: decodes only the blocks that
-    meet the window, with `TiffPage.decode` (shown above to decode a block
-    from its bytes alone), on a thread pool (zlib releases the GIL, 15 R3),
-    into one array that becomes the tile through `DemTile._adopt` (its third
-    caller, under the same rule: allocated here, never handed out writable).
-    It equals decoding the whole tile and slicing (15's T-window).
-  - `BlockWindows(SourceWindows)`: for a source window, every object (file or
-    cached COG) meeting it, decoded by window and assembled by 15a's overlap
-    rule (R5, order-independent).
+Designed in full for `@tester` on 2026-10-02. **15a's path stays the path**:
+`plan_mosaic` from headers, then `assemble` from loads. 23a-1 changes two
+things under it: a load decodes only the blocks its placement needs, and a
+catalogue source's tiles come from the cache instead of from files. 15c-2's
+`SourceWindows` is unchanged (its `TileWindows` slices the assembled source
+tile); at basin scale that tile is one piece's source window, so nothing
+holds the basin.
+
+### Decided here
+
+1. **No `BlockWindows`.** A windowed `assemble` is the same thing (every
+   object meeting the window, decoded by window, overlaps by R5), so a second
+   assembler is not written; `SourceWindows` stays 15c-2's to define.
+2. **The catalogue is data, outside `fetch/`**: `tin_engine/sources.py`. The
+   mesh path must name catalogue keys and must not import `tin_engine.fetch`
+   (W5), so the catalogue cannot live there. `CacheManifest` moves to
+   `io/repository.py` for the same reason. `fetch/` (23a-2) imports both.
+3. **`--dem` becomes `list[str]`**, turned into paths in the CLI. `Path`
+   normalises `./glo30` to `glo30`, so the ruled "`./glo30` is a path"
+   cannot be honoured on `Path`.
+4. **`IndexWindow` moves to `io/models.py`** (re-exported by `mosaic.py`),
+   because `io/` imports nothing first-party but `io.models`.
+5. **A sparse block (byte count 0) in a needed window is refused.**
+   tifffile fills it with 0, a valid elevation; a DEM's NoData must be
+   stored, not implied.
+6. **The missing-block check runs once per plan, before any decode**
+   (`check(plan)`), and `decode_window` repeats it per window as a backstop.
+   The CLI adds the fetch command to the message: only the CLI knows the
+   flags as given.
+7. **Threads:** `decode_window(..., threads=4)`, fixed, not read from the
+   machine and not a flag; the output does not depend on it (W2).
+8. **Local reads under a lock** (`seek` and `read` on one stream). A read
+   is short against a decode; `os.pread` would exclude `BytesIO` fixtures.
+9. **`elevation_source` names the source id and the catalogue's `credit`.**
+   The manifest does not repeat the credit (one place per fact).
+10. **Geographic sources still refuse** until 15c-2 (`read_header`'s GeoKey
+    2048 refusal), after the cache checks. 23a-1's offline mesh tests use a
+    projected entry added to `SOURCES` by `monkeypatch`.
+
+### Types and functions
+
+`io/cog.py`. Imports `io.models` and `io.geotiff`; never opens a file.
+
+```
+class BlockSource(Protocol):
+    page: tifffile.TiffPage                      the full-resolution page, from the header
+    where: str                                   for messages: a file name, or "<source>/<object>"
+    def block(self, index: int) -> bytes: ...    the block's stored bytes
+    def missing(self, indices: Sequence[int]) -> tuple[int, ...]: ...
+class CacheError(ValueError)                     manifest absent, wrong source, header hash mismatch
+class NotCached(CacheError)                      missing: int, needed: int, where: str
+class LocalTiffBlocks                            (page, stream, name); missing() is always ()
+def blocks_meeting(page, window: IndexWindow) -> tuple[int, ...]       pure, ascending
+def window_meta(meta: RasterMeta, window: IndexWindow) -> RasterMeta   x_min + col0*dx, y_max - row0*dy
+def decode_window(source: BlockSource, meta: RasterMeta, dtype, window, *, threads=4) -> DemTile
+```
+
+`decode_window`:
+
+- A window outside the raster, or with fewer than one row or column, is a
+  `ValueError` (a caller's bug, not a file's).
+- `source.missing(blocks_meeting(...))` first; any → `NotCached`, before any
+  `block()` call.
+- Per block, on a `ThreadPoolExecutor(threads)`: `block(i)` →
+  `page.decode(data, i)` → the segment cropped to the raster (edge tiles
+  come padded, the last strip short) and to the window → cast by
+  `PROMOTION` into its own slice of one preallocated output. Slices are
+  disjoint, so thread count cannot change a value. A decode failure is a
+  `GeoTiffError` naming `where` and the block index (`geotiff._stage`).
+- Tiled and stripped pages alike (`page.chunks`). DTM10 is 512² LZW tiles
+  with three overviews; ANADEM is a COG.
+- The output becomes the tile through the public `DemTile(...)`
+  constructor, one extra copy per window. A departure, accepted in review:
+  `_adopt` was designed here, but 15a's suite (`test_mosaic.py`, M15)
+  reserves `_adopt` for `mosaic.py`. Widen it only if `@perf` shows the copy
+  matters.
+
+Checked with tifffile 2026.9.20 before writing this: `page.decode(bytes, i)`
+decodes a block from its bytes alone; it does so on a page parsed from a
+prefix that ends before the first block; and it still works after its
+`TiffFile` is closed.
+
+`io/geotiff.py`: `read_page(source, *, nodata) -> (RasterMeta, dtype,
+TiffPage)`, `read_header` plus the page, through the same `_header`, so
+every refusal is the same.
+
+`mosaic.py`: `assemble(plan, load, needed=None, *, load_window=None)`. With
+`load_window`, each placement is `load_window(name, placement.source)`, its
+meta must equal `window_meta(placement.meta, placement.source)` (else the
+existing "changed since it was listed" refusal), and it is copied whole.
+Without it, nothing changes (`catchment.py` and 15a's suite).
+
+`io/repository.py`:
+
+- `TiffDemRepository.load_window(name, window)`: opens the file read-only,
+  `read_page`, `LocalTiffBlocks`, `decode_window`. `check(plan)` is a no-op.
+- `CacheManifest` and `CachedObject` (frozen; 23a-2 writes them, 23a-1
+  reads them), fields under "The cache" below.
+- `CachedBlocks(directory, page, where)`: `block(i)` reads
+  `blocks/<i // blocks_across>/<i % blocks_across>.bin`; `missing` lists the
+  indices whose file is absent or not exactly the header's byte count. A
+  `.part` file has another name and is never read.
+- `CacheRepository(cache, source)`. Construction reads no file. The same
+  `footprints`, `load`, `load_window` and `check` as `TiffDemRepository`.
+  `footprints()` reads `manifest.json` (absent: `NotCached` with
+  `needed = 0`, "not in the cache"; another source id: `CacheError`), then
+  each listed object's `header.bin`, refusing one whose sha256 differs from
+  the manifest's (`CacheError`, "re-fetch with --refresh"). The footprint's
+  name is the object id. `check(plan)` sums `missing` and `needed` over
+  every placement's `blocks_meeting` and raises one `NotCached` for the
+  plan.
+
+`dem_input.py`: `DemRequest` gains `cached: CachedSource | None`
+(`source: str`, `cache: Path`), exactly one of `sources` and `cached`;
+`repository_for` returns a `CacheRepository` for it, labelled by the source
+id; `open_dem` calls `repository.check(plan)` and then
+`assemble(..., load_window=repository.load_window)`.
+
+`tin_engine/sources.py`: `RemoteSource` and `SOURCES` (fields under "Types"
+below); it imports Pydantic only.
+
+`cli.py` (`mesh`): `--cache DIR`; `RASPUTIN_DATA` read once, in the command;
+`cache_root(option, environ) -> Path | None`. `--dem` with exactly one
+value that is a key of `SOURCES` is that source; one value is a path
+otherwise, and a key mixed with paths is refused. A key with no cache root
+is refused (B7's message, under "The CLI"). A `NotCached` becomes the
+usage error with `; run: rasputin fetch <key>` plus the run's `--domain` or
+`--bbox`, `--out-crs` (once 15c-2 adds it) and `--cache` as given. `dem_tiles` is written for a
+catalogue source as for a directory.
+
+### Unchanged by 23a-1
+
 - **No dense canvas at basin scale.** Each piece holds a target window (its
   start slice's bounding box grown by the cell diagonal, snapped outward to
   the lattice) and a source window (15c D2's `source_region` of that target
   window: its image in the source CRS, grown by two source cells). Both are
-  about `B²` nodes plus margins. Nothing holds the basin.
-- **Header before pixels** (15c J10). Coverage and missing blocks are known
-  from the parsed headers and the cache's presence check before any block is
-  decoded.
-- **A projected DEM meshed directly** (Norway) gets the same: a piece's window
-  of the 15a mosaic is `plan_mosaic(footprints, piece bounds)` (pure, 15
-  R12), each tile decoded by window.
+  about `B²` nodes plus margins.
+- **Header before pixels** (15c J10): coverage from the headers, missing
+  blocks from `check(plan)`, both before any block is decoded.
+- **A projected DEM meshed directly** (Norway): a piece's window is
+  `plan_mosaic(footprints, piece bounds)` (pure, 15 R12), each tile decoded by
+  window.
 
 ## The fetch step and the tile cache
 
-### Types (`fetch/sources.py`, frozen Pydantic)
+### Types (frozen Pydantic)
 
 ```
+tin_engine/sources.py (23a-1; data, imports Pydantic only)
 RemoteSource      id ("anadem-v1", "glo30"); kind ("one-cog" | "cog-tiles");
                   url, or url_template plus tile_list_url; crs (expected, checked
                   against each header); nodata; credit; licence_note
 SOURCES           the catalogue: a Mapping[str, RemoteSource] of data, two entries
+io/repository.py (23a-1 reads, 23a-2 writes)
+CacheManifest     source id, crs, rasputin version, objects: {object id: CachedObject},
+                  requests fetched: ({domain_sha256, date}, ...)
+CachedObject      url, content_length, last_modified, header_sha256, header_bytes,
+                  block shape (rows, cols)
+fetch/plan.py (23a-2)
 FetchRequest      source id, domain (path and CRS), target CRS or None, margin
                   (source cells, default 2), cache root
 FetchPlan         source id; objects: (object id, url, block indices, bytes)
-CacheManifest     source id, url, content_length, last_modified, header_sha256,
-                  header_bytes, crs, block shape, rasputin version, and the
-                  requests fetched (domain hash, date)
 ```
+
+The date is `datetime.date` (standard library; `CLAUDE.md` §2). The objects
+a mesh reads are the manifest's, sorted by id; the blocks it has are the
+directory's.
 
 `anadem-v1` is OpenTopography's COG
 (`https://opentopography.s3.sdsc.edu/raster/ANADEM/ANADEM_be/anadem_v1_compressed_COG.tif`,
@@ -1061,7 +1199,8 @@ list is sea, recorded as "no tile", not as missing.
 ```
 <cache>/<source-id>/manifest.json                       identity, written atomically
 <cache>/<source-id>/<object-id>/header.bin              the parsed prefix
-<cache>/<source-id>/<object-id>/blocks/<row>/<col>.bin  one block, its exact bytes
+<cache>/<source-id>/<object-id>/blocks/<row>/<col>.bin  one block, its exact bytes;
+                                                         <row>, <col> in blocks, a strip's col is 0
 ```
 
 - **The directory is the inventory; the manifest is the identity.** A block is
@@ -1114,7 +1253,8 @@ environment.
 
 **`--dem`:** a catalogue key (`anadem-v1`, `glo30`) names a cached source;
 anything else is a path, as today; a file whose name is a catalogue key is
-written as a path (`./glo30`). Only a catalogue source needs the cache, so a
+written as a path (`./glo30`), which is why the option is read as text
+(23a-1, "Decided here" 3). Only a catalogue source needs the cache, so a
 mesh from local files needs neither variable nor option. A block meshing
 needs and the cache lacks is refused before any decode, naming the command:
 "anadem-v1: 37 of the 3,061 blocks this domain needs are not in DIR; run:
@@ -1131,28 +1271,18 @@ testable: no `tin_engine` module on `rasputin mesh`'s path imports
 `src_python/tin_engine`; `sys.modules` cannot be the oracle, because pyproj
 imports `urllib.request` itself), with `cli.py` importing `tin_engine.fetch`
 lazily inside the fetch command; and a mesh run with `socket.socket`
-replaced by one that raises (K7). The fetch step records the source's credit
-in the manifest, and the mesh file's `elevation_source` carries it.
+replaced by one that raises (K7). The mesh file's `elevation_source` names
+the source id and the catalogue's `credit` (23a-1).
 
 ## Memory and parallelism
 
-**Per piece, at the cap** (`N_MAX = 2^22` nodes, a 61.4 km square at 30 m,
-3,775 km²; the basin's pieces are 4.16 M): target window and source window
-about 16 MiB each (4 B per node), check points about 64 MiB (16 B per source
-node, 15c D4), and the mesh at about 310 B per triangle (the basin-piece fit,
-everything in one process included). Triangles per piece at the cap, by the
-basin-piece densities (all arithmetic, not measured):
-
-| tolerance | basin mean | basin p90 | the steep piece | memory per piece (mean to piece) |
-|---:|---:|---:|---:|---:|
-| 1 m | 1.41 M | 2.86 M | 3.38 M | 0.5-1.1 GiB |
-| 5 m | 0.21 M | 0.53 M | 0.64 M | 0.2-0.3 GiB |
-| 10 m | 0.08 M | 0.20 M | 0.26 M | ~0.1 GiB |
-
-So eight pieces at once at 1 m stay under about 9 GiB, and memory follows
-`--jobs`, not the basin. Pieces below the cap (the Velhas piece's are 0.52 M
-nodes) need an eighth of that. The cleanup at stitching holds two bands per
-seam unit, far less than a piece.
+**Per piece, within the budget** (B14): a piece's estimate,
+`dx · dy · b(T)`, is at most `--memory-budget`, and the runner keeps the
+running pieces' sum under it ("Tolerance, the final check and the
+constraint check points per piece"), so memory
+follows the budget, not the basin. The estimate is high for most terrain
+(the Velhas piece at 1 m: 7.7 GiB estimated, 3.60 GiB measured). The cleanup
+at stitching holds two bands per seam unit, far less than a piece.
 
 **Two levels of parallelism.** `--jobs J` pieces at once, each refining with
 `T` threads (`J × T` at most the core count; the defaults split the cores
@@ -1165,16 +1295,18 @@ out. Pieces start largest window first, so the biggest one is not last.
 Today refine reaches 2.05× at 10 threads on the Velhas piece at 1 m, with the
 serial split and flip at 77 % (basin-piece README). Pieces run their serial
 phases at the same time, so the serial phase is parallel across pieces. On
-the Velhas piece at the default (40 pieces, the largest 1.59 times the mean
-area, so about 4 % of the area), if the largest piece holds 4-8 % of the work
+the Velhas piece cut with `--pieces 64` (44 pieces, the largest 1.59 times
+the mean area, so about 4 % of the area), if the largest piece holds 4-8 % of the work
 (steepness varies; not measured), its single-thread refine is about 0.5-1.0 s,
 and the total, 12.95 s of one-thread work over 10 cores, about 1.3-1.7 s
-with the balance bound, against 6.32 s for the whole piece at 10 threads
-today: about 4-5×, before the cleanup's cost. The basin's window is 2.08 G
-nodes, 500 cells at the cap, 226 of which meet the basin: enough to keep
-every core busy. The limits then become cores, memory bandwidth, the global
-vector step and the cleanup, not the serial phase. With one piece (a small
-domain, or `--pieces 1` as the benchmark runs) nothing changes, and 21d stays
+with the balance bound (pieces started largest first take at most about
+`(W / J) · (1 + r · J / P)` for work `W` on `J` cores, `r` the largest
+piece's work over the mean), against 6.32 s for the whole piece at 10 threads
+today: about 4-5×, before the cleanup's cost. At 1 m the budget alone cuts
+the basin into 35 cells, 23 of which meet it; `--pieces` asks for more where
+the cores outnumber them. The limits then become cores, memory bandwidth, the global
+vector step and the cleanup, not the serial phase. With one piece (any
+domain under the budget, the benchmark included) nothing changes, and 21d stays
 the route for one piece's serial phase. All of this is arithmetic for
 `@perf` to measure.
 
@@ -1195,7 +1327,7 @@ plus phase 2, decoding 3,061 blocks and writing.
   (`<id>.band-<unit>.npz`, "Seam removal and thinning"). The index,
   `<out>.pieces/index.json` (`MeshIndex`, frozen Pydantic,
   `io/mesh_index.py`), holds the CRS, the tolerance, the partition
-  (`pieces`, `N_MIN`, `N_MAX`, the lattice, `Nx`, `Ny`, `dx`, `dy`), the
+  (`pieces`, `memory_budget`, `b(T)`, the lattice, `Nx`, `Ny`, `dx`, `dy`), the
   source's identity and credit, and per piece its file, sha256, counts and
   window.
 - **Conformity is checked when the index is written** (K4): for every seam
@@ -1367,7 +1499,7 @@ own arithmetic, so the oracle relation is the producer's
   sub-rectangle of one global lattice, J6) is the piece window; `resample`,
   `check_point_blocks`, `CheckPoints` and `refine_points` are used unchanged
   except for the frozen mask (23b). D8 and the Q11-Q17 rulings stand. Its
-  memory cap applies per piece. 15c's acceptance stays on the Velhas piece,
+  memory cap (15a R7) stays or goes by B15. 15c's acceptance stays on the Velhas piece,
   undecomposed. What 15c already marked "Superseded at basin scale" is
   replaced by this record and nothing else is. If 23a lands before 15c-2,
   15c-2's acceptance reads ANADEM from the cache instead of a one-off cut.
@@ -1392,11 +1524,11 @@ own arithmetic, so the oracle relation is the producer's
 
 ## Invariants
 
-- **K1. Small runs untouched.** With one piece (a window under
-  `2 · N_MIN` nodes, or `--pieces 1`) and `frozen_mask` 0, every mesh is
-  bit-identical to master's: 23b, 23c and 23g change nothing on that path,
-  and `tools/bench.py` (which passes `--pieces 1`) stays comparable with
-  every stored run.
+- **K1. Small runs untouched.** With one piece (a window whose estimate is
+  within `--memory-budget`, with no `--pieces` request) and `frozen_mask` 0,
+  every mesh is bit-identical to master's: 23b, 23c and 23g change nothing
+  on that path, and `tools/bench.py` (one piece at the default) stays
+  comparable with every stored run.
 - **K2. Frozen means frozen.** In a piece, no pass inserts a vertex on a
   frozen edge: refine's split, feet, the quality pass, `refine_points` (phase
   2 and the edge strip). Pinned by FE2-FE5; `split_edge`'s assertion is a
@@ -1414,8 +1546,8 @@ own arithmetic, so the oracle relation is the producer's
   sequence on it, `(x, y, z)` bit for bit; checked when the index is
   written, and a difference fails the run.
 - **K5. Determinism.** The output is a function of the inputs and the
-  options (`--pieces` included; `N_MIN`, `N_MAX` and `R` are constants,
-  recorded in the index), never of `--jobs`, `--threads`, the order pieces
+  options (`--tolerance`, `--pieces` and `--memory-budget` included; `b(T)`
+  and `R` are constants, recorded in the index), never of `--jobs`, `--threads`, the order pieces
   or seam units run in, the core count or the machine's memory.
 - **K6. Locality.** A piece's files depend only on its job spec: its start
   slice, its windows and its seam edges. Re-running one piece alone gives the
@@ -1523,7 +1655,8 @@ inputs. Ola ruled B12 (a), the proposed order; it now carries the cleanup:
 10. **23g**, the cleanup at stitching; the stitched file is clean from here.
 11. **The basin run**, `@perf`, no code: 50, 20, 10, 5, 2 and 1 m (B11);
     then Ola chooses the tolerance.
-12. **23e and the basin's own inputs**: sub-catchments from the DEM, rivers
+12. **23e and the basin's own inputs**: sub-catchments from the DEM, the
+    DEM-derived Velhas and basin outlines (B13 (c)), rivers
     (DEM-derived drainage likely; the pointer under B1), MapBiomas land
     cover.
 
@@ -1548,17 +1681,20 @@ deferred, as ROADMAP has them.
 
 Counted in `CLAUDE.md` §2's unit. Estimates; the worst case applies 39 %
 (increment 10's overrun), with 60 % (15a's `mosaic.py`) beside it. Every PR
-stays under 700 at both; the largest, 23c, is 656 at +60 %.
+stays under 700 at both; the largest, 23c, is 688 at +60 %.
 
 | PR | what | est. | +39 % | +60 % |
 |---|---|---:|---:|---:|
 | **23a-1** | **Windowed decoding and the cache, reading** | | | |
-| | `io/cog.py`: `BlockSource`, `LocalTiffBlocks`, `decode_window` on a thread pool | 60 | | |
-| | `io/repository.py`: `CacheRepository` read side, `CacheManifest`, presence | 55 | | |
-| | `BlockWindows` (15c's `SourceWindows`), the missing-block refusal | 40 | | |
-| | `fetch/sources.py`: `RemoteSource`, the catalogue (two entries, B8) | 40 | | |
-| | `cli.py`: `--cache`, `RASPUTIN_DATA`, `--dem <catalogue key>` | 30 | | |
-| | **23a-1 total** | **225** | **313** | **360** |
+| | `io/cog.py`: `BlockSource`, `LocalTiffBlocks`, `blocks_meeting`, `window_meta`, `decode_window`, the two errors | 75 | | |
+| | `io/geotiff.py`: `read_page` | 8 | | |
+| | `io/models.py`: `IndexWindow`, moved from `mosaic.py` | 0 | | |
+| | `mosaic.py`: `assemble(..., load_window=)` | 12 | | |
+| | `io/repository.py`: `load_window`, `CacheManifest`, `CachedObject`, `CachedBlocks`, `CacheRepository`, `check` | 85 | | |
+| | `dem_input.py`: `CachedSource`, the cache repository, `check` before `assemble` | 20 | | |
+| | `sources.py`: `RemoteSource`, the catalogue (two entries, B8) | 35 | | |
+| | `cli.py`: `--cache`, `RASPUTIN_DATA`, `--dem` as text, the key, the fetch command in the refusal | 35 | | |
+| | **23a-1 total** | **270** | **375** | **432** |
 | **23a-2** | **The fetch step** | | | |
 | | `fetch/plan.py`: header prefix, needed region, blocks, GLO-30 tile list | 75 | | |
 | | `fetch/http.py`: ranged GET, 206 and length checks, coalescing, retries, async bound | 80 | | |
@@ -1576,16 +1712,17 @@ stays under 700 at both; the largest, 23c, is 656 at +60 %.
 | | `bindings/core.cpp`, `_core.pyi` | 60 | | |
 | | **23b total** | **245** | **341** | **392** |
 | **23c** | **The partition, piece by piece** | | | |
-| | `decompose.py`: the partition rule, the lines as chains, `BasinPlan` | 80 | | |
+| | `decompose.py`: the partition rule, `b(T)`, the lines as chains, `BasinPlan` | 95 | | |
 | | `features.py`: the `seam` property | 5 | | |
 | | `pieces.py`: labels, the start slice, fans | 85 | | |
 | | `pieces.py`: `PieceJob`, its windows (`TargetGrid` or mosaic plan) | 65 | | |
 | | `basin_run.py`: run pieces in order, async-ready | 45 | | |
 | | `io/mesh_index.py`: `MeshIndex`, piece writer, seam records, conformity | 85 | | |
-| | `cli.py`: `--pieces`, pieces output, fields; `tools/bench.py`: `--pieces 1` | 45 | | |
-| | **23c total** | **410** | **570** | **656** |
+| | `cli.py`: `--pieces`, `--memory-budget`, pieces output, fields | 50 | | |
+| | `mosaic.py` (and `catchment.py` under B15 (a)): R7's refusal deleted, if B15 (a) or (c) | 0 | | |
+| | **23c total** | **430** | **598** | **688** |
 | **23d** | **In parallel, resumable, stitched (seams kept)** | | | |
-| | `basin_run.py`: `--jobs`, thread split, largest first, the memory cap | 45 | | |
+| | `basin_run.py`: `--jobs`, thread split, largest first, admission under the budget | 45 | | |
 | | `basin_run.py`: job hashes, skip finished pieces | 35 | | |
 | | `stitch.py`: streaming `.vtk` and `.ply`, two passes, vertices numbered once | 130 | | |
 | | `cli.py`: `rasputin stitch`, `--no-stitch` | 25 | | |
@@ -1638,30 +1775,63 @@ rest is ordinary.
 
 ### 23a-1 (Python)
 
-- **W1, decoding a window** equals decoding the whole file with tifffile and
-  slicing, `meta` included, for windows inside one block, across four, on
-  block boundaries and at the raster's edge; from a local tiled TIFF and from
-  the same blocks in a cache, identical arrays.
-- **W2, determinism**: identical arrays for 1 and 8 decode threads.
-- **W3, presence**: a block file of the wrong length is absent; a `.part` file
-  is ignored; the manifest round-trips.
-- **W4, the refusal**: a missing block is refused before any block is
-  decoded (a `BlockSource` double that fails on `block()`), and the message
-  names the fetch command with the domain and cache given.
-- **W5, offline**: no `tin_engine` module on `rasputin mesh`'s path imports
+**Fixtures.** A source is `geotiff_fixtures.micro_tiff` with `tile=(16, 16)`
+on a 50 × 70 grid (edge tiles padded), Deflate with the floating-point
+predictor, one overview page, NoData cells scattered; variants: stripped
+(`rowsperstrip=8`, last strip short), LZW, int16 (promoted to float32). A
+cache is written by a test helper from the same bytes: `header.bin` is the
+file up to its first block, each block the file's own byte range at
+`blocks/<row>/<col>.bin`, `manifest.json` from `CacheManifest`. The oracle
+for pixels is tifffile's whole-page decode, sliced; nothing in it shares
+code with `decode_window`.
+
+- **W1, a window equals the whole, sliced**, `meta` equal to `window_meta`
+  of the whole file's: windows inside one block, across four, exactly on
+  block edges, reaching the last row and column, one row, one column; every
+  variant; from `LocalTiffBlocks` and from `CachedBlocks`, identical. With
+  `rasputin_data` present (skipped otherwise): a DTM10 tile, a window across
+  a 512² tile corner.
+- **W2, determinism**: `threads=1` and `threads=8` give byte-identical
+  arrays (`tobytes`, so NaN compares).
+- **W3, only the needed blocks**: a recording `BlockSource` double sees
+  `block(i)` exactly for `blocks_meeting`'s indices, each once; and
+  `blocks_meeting` equals a brute-force test of every block's pixel
+  rectangle against the window.
+- **W4, the cache's read side**: a block file of the wrong length is
+  missing; a `.part` file is ignored; the manifest round-trips through JSON;
+  a `header.bin` whose sha256 differs from the manifest's, and a manifest of
+  another source, are `CacheError`; no manifest is `NotCached` ("not in the
+  cache"). `CacheRepository` construction reads no file.
+- **W5, the refusals**: a missing block is `NotCached` before any block is
+  decoded (a double whose `block()` fails); `check(plan)` over two objects
+  counts the plan's missing and needed blocks, raised once; the CLI's message
+  names `rasputin fetch <key>` with the run's `--domain` or `--bbox`,
+  `--out-crs` and `--cache` as given. A block of byte count 0 in the window
+  (the header's TileByteCounts entry patched) is a `GeoTiffError` naming the
+  block; outside the window it is never looked at.
+- **W6, windowed assembly**: on 15a's fixtures (quadrants with overlaps,
+  mixed dtypes), `assemble(plan, load, load_window=...)` equals
+  `assemble(plan, load)`, array and seams; a `load_window` whose meta is not
+  `window_meta(placement.meta, placement.source)` gets "changed since it was
+  listed". 15a's suite stays green unedited.
+- **W7, offline**: no `tin_engine` module on `rasputin mesh`'s path imports
   `tin_engine.fetch` or `urllib.request` in its own source (an AST check over
-  `src_python/tin_engine`; pyproj imports `urllib.request`, so `sys.modules`
-  cannot be the oracle), and `cli.py` imports `tin_engine.fetch` only inside
-  the fetch command; and a mesh from a prepared cache
-  with `socket.socket` replaced by one that raises succeeds.
-- **W6, overlaps**: `BlockWindows` over two overlapping objects equals 15a's
-  `assemble` on the same objects.
-- **W7, the cache root (B7)**: `--cache DIR` wins over `RASPUTIN_DATA`;
-  with only `RASPUTIN_DATA=R` set the cache is `R/cache`; with neither, a
-  catalogue `--dem` is refused naming both, and a path `--dem` runs as today
-  (`monkeypatch` on the environment); `./glo30` is a path, `glo30` a
-  catalogue key; nothing under `src_python/tin_engine` but `cli.py` reads
-  `RASPUTIN_DATA` (a source scan).
+  `src_python/tin_engine`, with `importscan.py`; pyproj imports
+  `urllib.request`, so `sys.modules` cannot be the oracle), and `cli.py`
+  imports `tin_engine.fetch` only inside a function; a mesh from a prepared
+  cache, with a projected entry put in `SOURCES` by `monkeypatch` and
+  `socket.socket` replaced by one that raises, succeeds and gives the same
+  vertices and triangles as the same file meshed by path.
+- **W8, the cache root and the key (B7)**: `--cache DIR` wins over
+  `RASPUTIN_DATA`; with only `RASPUTIN_DATA=R` the cache is `R/cache`; with
+  neither, a catalogue `--dem` is refused naming both, and a path `--dem`
+  runs as today (`monkeypatch` on the environment); `./glo30` is a path,
+  `glo30` a key; a key and a path together are refused; nothing under
+  `src_python/tin_engine` but `cli.py` reads `RASPUTIN_DATA` (a source
+  scan); `elevation_source` names the key and its credit.
+- **W9, geographic, until 15c-2**: a cached geographic source passes the
+  cache checks and is then refused with the reader's own GeoKey message, not
+  a cache message.
 
 ### 23a-2 (Python)
 
@@ -1725,17 +1895,26 @@ rest is ordinary.
 
 ### 23c (Python, end to end on synthetic rasters)
 
-- **DC0, the partition rule** (pure, no mesh): the two figures of
-  `partition.py` (4,208 × 7,347 nodes at `--pieces 64` gives 6 × 10 cells of
-  702 × 735; 41,332 × 50,297 gives 20 × 25 of 2,067 × 2,012); one piece at
-  `N = 2 · N_MIN − 1` and a cut at `2 · N_MIN`; `--pieces 1` one piece above
-  `N_MAX`; for windows drawn at random (a seeded generator, a few thousand)
-  no cell exceeds `N_MAX` unless `--pieces 1`, no row or column of cells is
+- **DC0, the partition rule** (pure, no mesh): `b(T)` at the table's
+  columns and rounded up between them (0.5 m gives 452); figures of
+  `partition.py` (4,208 × 7,347 nodes at 1 m and `--pieces 64` gives 6 × 11
+  cells of 702 × 668; 41,332 × 50,297 at 1 m gives 5 × 7 of 8,267 × 7,186,
+  at 50 m 2 × 2; `--pieces 16` on the first gives 3 × 5, 15 cells: the
+  count approximates the request and is not a floor); one piece at `N · b = B` and a cut at `N · b = B + 1`;
+  a large `--memory-budget` gives one piece above every former cap; for
+  windows, tolerances, `--pieces` and budgets drawn at random (a seeded
+  generator, a few thousand) no cell's `dx · dy · b` exceeds the budget, no
+  row or column of cells is
   empty, `dx` and `dy` are whole nodes and every line is a lattice line; the
-  same partition with `os.cpu_count` patched to 1 and to 64 (the count is
-  not the machine's).
-- **DC1, K1**: a domain under `2 · N_MIN` nodes, and a larger one with
-  `--pieces 1`, write the same bytes as today's path.
+  same partition with `os.cpu_count` and `physical_memory` patched to small
+  and large values (neither the count nor the cut is the machine's).
+- **DC1, K1**: a domain under the budget, and a larger one with a budget
+  above its estimate, write the same bytes as today's path.
+- **DC11, no machine refusal** (only if B15 is ruled (a) or (c)): a mosaic
+  over half of a patched `physical_memory` is planned, not refused; 15a's M5
+  refusal cases in `test_mosaic.py` and `test_dem_input.py` are inverted
+  (pinned behaviour B15 would change); under (a) the same for 22's catchment
+  refusal in `test_catchment.py`. Under (b), none of this.
 - **DC2, conformity, read from the files**: for every seam edge, both pieces'
   vertex sequences are equal bit for bit. The oracle reads the piece files,
   not the seam records or the index.
@@ -1862,27 +2041,26 @@ previous merge commit with `--tree`, back to back), evidence under
 `docs/benchmarks/<date>/`.
 
 - **23a-1:** the benchmark's mesh hash unchanged and process time within
-  noise (decoding is now windowed). On ANADEM: decode throughput per block and
-  per window, threads 1 to 8.
+  noise (decoding is now windowed). On DTM10 tiles: decode throughput per
+  block and per window, threads 1 to 8 (ANADEM's waits for 15c-2, which
+  lifts the geographic refusal).
 - **23a-2:** fetch the basin's 3,061 ANADEM blocks: wall time, bytes,
   requests, and a rerun that fetches nothing; an interrupted run resumed.
 - **23b:** the README rule in full; the mesh hash unchanged (mask 0), refine
   within noise at every thread count.
-- **23c:** the README rule, with `--pieces 1` on the benchmark (which
-  `tools/bench.py` now passes) so it stays comparable (hash unchanged), plus
-  the benchmark at the default `--pieces` (48 pieces), recorded as a new
-  baseline. The Velhas piece on ANADEM from the cache, at 1, 2, 5, 10, 20
-  and 50 m, cut at the default (40 pieces) and uncut (15c-2's run):
+- **23c:** the README rule; the benchmark is one piece at the default, so
+  its hash is unchanged. The Velhas piece on ANADEM from the cache, at 1, 2,
+  5, 10, 20 and 50 m, cut with `--pieces 64` (6 × 11 cells, 44 pieces) and uncut
+  (the default; 15c-2's run):
   triangles and their difference, worst angle, maximum degree, 0
   constrained-Delaunay violations with seams as constraints, 0 nodes and 0
   source nodes over tolerance by the independent check (its control still
   failing), the seam pass's insertions, time and peak RSS. These are the
   before-cleanup figures 23g compares against.
 - **23d:** scaling on the Velhas piece at 1 m over `--jobs` × `--threads`,
-  against the balance bound under "The defaults"; the per-piece fixed cost
-  (planning, slicing, windows, seam pass, writing), measured on pieces at
-  `N_MIN`, which decides whether `N_MIN` stands (B14: if it exceeds 10 % of
-  such a piece's 1 m refine, `N_MIN` is doubled and the figures rerun).
+  cut with `--pieces 64`, against one piece on the same cores; the per-piece
+  fixed cost (planning, slicing, windows, seam pass, writing) on that run's
+  smallest pieces, which tells how far a `--pieces` request pays.
 - **23f:** the README rule in full; the mesh hash unchanged (nothing in
   23f runs on the existing path); vertex removal timed per candidate on a
   synthetic band.
@@ -1911,8 +2089,8 @@ Numbered B1-B12, so they cannot be confused with 15's and 15c's Q1-Q17.
 The literature pass with web search (2026-10-01, "Prior art") changed no
 recommendation; it added a note to B4 and an option (c) to B5. **All twelve
 were ruled by Ola on 2026-10-01** ("Ruled by Ola, 2026-10-01", near the
-top); they are kept as asked, each marked with its ruling. B13 and B14, after
-them, are new.
+top); they are kept as asked, each marked with its ruling, as are B13 and
+B14, asked after them and ruled the same day. B15 is open.
 
 **B1. Which cuts first?**
 *Ruled (a), and BHO dropped entirely as a geometry source: "I'm not interested in archaic maps".*
@@ -2053,7 +2231,8 @@ surprise). *Moot: BHO is dropped (B1).* BHO boundaries bring a vertex every
 
 ### New questions, after the rulings
 
-**B13. The domains of the acceptance runs and of the basin run.** With BHO
+**B13. The domains of the acceptance runs and of the basin run.**
+*Ruled (c): (a) now, (b) in 23e, then the BHO outlines abandoned.* With BHO
 dropped as geometry (B1), two domains in this design are still BHO outlines:
 the Velhas piece (ottobasin 76949: 15c-2's, 23c's and 23g's acceptance, and
 the basin-piece baseline every comparison reads), and the basin itself (BHO
@@ -2071,8 +2250,12 @@ level 2: the basin run, and `partition.py`'s figures).
 - (c) (a) now, (b) as part of 23e, with one comparison run of the two
   outlines when it lands.
 
-**B14. The defaults decided here**: `--pieces 64`, `N_MIN = 2^19` and
-`N_MAX = 2^22` nodes ("The defaults, by arithmetic"), the bands' `R = 4`
+**B14. The defaults decided here.**
+*Ruled: neither; one `--memory-budget`, 16 GB, replaces `N_MIN`, `N_MAX` and
+the per-piece cap, and `--pieces` only asks for more ("The memory estimate
+and the defaults"). `R = 4` and 23g's thresholds were not addressed and stand
+as decided.* As asked: `--pieces 64`, `N_MIN = 2^19` and
+`N_MAX = 2^22` nodes (then under "The defaults, by arithmetic"), the bands' `R = 4`
 rings, and 23g's gap thresholds (+1 % triangles, +25 % vertices near former
 seams, half the worst angle).
 - **(a) As decided. Recommended.** The arithmetic is in the record, and 23d
@@ -2086,11 +2269,27 @@ seams, half the worst angle).
   over a twofold range of sizes, and the Velhas piece gets 3 × 5 cells instead
   of 60.
 
+**B15. The refusals at half of physical memory.** B14 ruled out a hard
+upper limit read from the machine for the partition. Two older refusals do
+exactly that: 15a R7 in `plan_mosaic` (`src_python/tin_engine/mosaic.py@5a57793:209`,
+a canvas over half of physical memory) and 22's identical one in
+`src_python/tin_engine/catchment.py@5a57793:150`. Neither changes a mesh;
+each refuses on a small machine what a larger one meshes.
+- **(a) Delete both. Recommended.** Matches "a machine too small runs out of
+  memory" and "we should not limit huge discetisations [sic] based on less
+  performant hardware". 23c deletes them (no lines counted), inverts the
+  pinned tests (DC11), and `physical_memory` goes if nothing else reads it.
+- (b) Keep both: a clear refusal instead of a crash or swapping, at the cost
+  of a machine-dependent limit.
+- (c) Delete 15a R7 only (the mosaic canvas, which pieces bound), keep 22's
+  until 23e windows the catchment flood.
+
 **Decided here, which Ola may overrule:** lattice lines on the computation
 lattice as artificial cuts; the partition rule's integer details (near-square
-cells, the last row and column narrower, the cap winning over the minimum);
-`--pieces 1` meaning one piece whatever the size, the cap not applying;
-`N_MIN` and `N_MAX` as constants recorded in the index, not options; piece
+cells, the last row and column narrower); `b(T)` from the Velhas piece's
+densities, linear between the measured tolerances and rounded up, every
+window node costed; 16 GB read as 16 GiB; the runner's admission under the
+budget; piece
 ids `(j, i, k)`; the seam pass computed by both neighbours rather than once;
 seam heights from the seam record; zones by a unit's own edges first (the lowest-numbered at a
 corner), else the nearest unit; seam ends on
@@ -2151,3 +2350,24 @@ Whole branch `6518336..0818903`, 19 commits, 8 files, +2,513 / −32,
 production LOC 0. 23g 345 (552 at +60 %), 23f + 23g about 645, largest PR 23c
 at 656 at +60 %. Citations, ruff, ruff format, mypy and the governance gates
 green. CI not yet run: no PR.
+
+### B13 and B14 ruled, round 1, `5a57793..4c182c8`: CHANGES REQUESTED (`@reviewer`)
+
+Production LOC 0; 23c 430 (688 at +60 %). B13 (c) and B14 recorded faithfully; b(T) derives from the basin-piece sweep (17 B per node, 0.805 triangles per node at 1 m); `partition.py` reproduces every row; the 1 m benchmark and Bygdin stay one piece. Blocking: DC0's "at least `--pieces`" could not pass as cells (`--pieces 16` on Velhas gives 3 × 5) and could not fail as P'; deleting 15a R7's refusal was presented as decided under B14 though not asked, and `catchment.py:150` has the same refusal.
+
+### Round 2, `4c182c8..a7c1bfb`: APPROVED (`@reviewer`)
+
+DC0 now pins the cell count, which approximates P' and is not a floor; the refusals at half of physical memory are question B15 (`src_python/tin_engine/mosaic.py@5a57793:209`, `src_python/tin_engine/catchment.py@5a57793:150`), with every dependent place conditional on Ola's answer; units in GiB (7.7 estimated against 3.60 measured). Citations resolve. CI not yet run: no PR.
+
+### 23a-1, round 1, `18316b6..a235716`: CHANGES REQUESTED (`@reviewer`)
+
+LOC 326 net (363 added, 37 removed) against the estimate of 270, which is +21% and inside the +39% worst case. Red came before green, and the green commit touched no test. The local gates were green. Three blocking items:
+- The GLO-30 credit was missing the licence's Art. 6(b) notice for adapted data and the Art. 6(c) no-liability sentence.
+- The ANADEM credit named no creator, which CC BY 4.0 requires.
+- Some prose was made false by the branch: four line citations had drifted, `23-basin-scale.md:1079` still named `_adopt`, and two red-step paragraphs described the tests as still red.
+
+Accepted in round 1: the public `DemTile` constructor instead of `_adopt` (one extra copy per window), NoData taken from the request, and `--cache` ignored for a path `--dem`. Mutation pass: 17 of 19 mutants killed. One survivor was equivalent (thread count). The other showed that the sparse-block test did not pin the refusal message.
+
+### 23a-1, round 2, `a235716..72ec413`: APPROVED (`@reviewer`)
+
+LOC is 336 net (373 added, 37 removed), still under the +39% worst case and far under 700. Both credits now match their sources word for word (GLO-30: the licence's Art. 6(b) notice, Art. 6(c) quoted in `licence_note`; ANADEM: OpenTopography's citation, CC BY 4.0). A missing `header.bin` is a `CacheError`; the sparse-block test fails with the sparse check removed; the four citations resolve to the quoted code; the departure and the `--out-crs` timing are recorded. pytest 3525 passed, 13 skipped in a fresh venv on this worktree's source; ruff, ruff format, mypy, `check_citations` and `check_prohibited_deps` clean. Not blocking: only `credit` reaches the mesh file, so Art. 6(c)'s sentence stays in the catalogue for 23a-2 to carry; `_ascii` writes ANADEM's accented credit as escapes. Remaining: `@perf`'s decode-speed acceptance, then CI after Ola approves the push.

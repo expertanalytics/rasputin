@@ -1,0 +1,2 @@
+{"tolerance": 20.0, "shift_m": 0.0, "control_over_tolerance": 0, "control_max": 19.99976206634892, "control_outside_mesh": 0, "source_over_tolerance": 4536}
+{"tolerance": 20.0, "shift_m": 15.0, "control_over_tolerance": 20101, "control_max": 45.98378372192383, "control_outside_mesh": 4461, "source_over_tolerance": 29741}

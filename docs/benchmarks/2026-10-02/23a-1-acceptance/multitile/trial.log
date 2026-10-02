@@ -1,0 +1,14 @@
+Now drawing from 'AC Power'
+ -InternalBattery-0 (id=24117347)	72%; charging; 1:30 remaining present: true
+== base round 1 02:08:11
+exit=0
+BENCH {"refine_s": 7.410994334000861, "app_s": 8.944085458992049, "max_error": 1.0, "rounds": 107, "inserted": 5025207, "flips": 11123831}
+        9.28 real        23.00 user         0.82 sys
+          3159343104  maximum resident set size
+== new round 1 02:08:20
+exit=0
+BENCH {"refine_s": 7.3462884170003235, "app_s": 8.422424708987819, "max_error": 1.0, "rounds": 107, "inserted": 5025207, "flips": 11123831}
+        8.74 real        22.15 user         0.47 sys
+          2939846656  maximum resident set size
+Now drawing from 'AC Power'
+ -InternalBattery-0 (id=24117347)	72%; charging; 1:30 remaining present: true

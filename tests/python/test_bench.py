@@ -485,6 +485,28 @@ def test_mismatch_names_the_field(bench: ModuleType, change: dict[str, Any], fie
     assert field in reason
 
 
+def reversed_domains() -> list[dict[str, Any]]:
+    """The default record's domains, listed quarter first, as a stored battery run does."""
+    return list(reversed(record_dict()["inputs"]["domains"]))
+
+
+def test_domain_order_does_not_matter(bench: ModuleType) -> None:
+    """The domains are a set: the same (name, sha256) pairs in another order
+    measure the same inputs, so the runs are comparable."""
+    stored = make(bench, inputs__domains=reversed_domains())
+    assert bench.comparable(make(bench), stored) is None
+    assert bench.comparable(stored, make(bench)) is None
+
+
+def test_domain_order_does_not_hide_a_changed_domain_hash(bench: ModuleType) -> None:
+    """Ignoring order must not ignore content: reordered, with one hash changed."""
+    domains = reversed_domains()
+    domains[0]["sha256"] = "0" * 64
+    reason = bench.comparable(make(bench), make(bench, inputs__domains=domains))
+    assert reason is not None
+    assert "domains" in reason
+
+
 # ---------------------------------------------------------------- verdict
 
 
@@ -694,6 +716,23 @@ def test_find_baseline_takes_the_newest_comparable_ancestor(
     assert directory == chosen
     assert record.tree.commit == "anc"
     assert all(descendant == "new" for _, descendant in calls)
+
+
+def test_find_baseline_finds_a_run_stored_one_level_deeper(
+    bench: ModuleType, tmp_path: Path
+) -> None:
+    """Acceptance evidence lives at ``<date>/<name>/<run>/run.json``; it is
+    searched like ``<date>/<label>/run.json``, and the newest comparable wins."""
+
+    def at(hour: int) -> Any:
+        return make(bench, started=f"2026-09-20T{hour:02d}:00:00+00:00")
+
+    store(tmp_path, at(1), "2026-09-20", "shallow-older")
+    deep = store(tmp_path / "2026-09-20", at(2), "15c-1-acceptance", "battery")
+    assert deep == tmp_path / "2026-09-20" / "15c-1-acceptance" / "battery"
+    found = bench.find_baseline(tmp_path, at(5), lambda a, b: True)
+    assert found is not None
+    assert found[0] == deep
 
 
 def test_find_baseline_none_in_an_empty_root(bench: ModuleType, tmp_path: Path) -> None:

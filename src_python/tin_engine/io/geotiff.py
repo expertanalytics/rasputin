@@ -66,6 +66,19 @@ def read_header(
     return meta, PROMOTION[dtype]
 
 
+def read_page(
+    source: BinaryIO, *, nodata: float | None = None
+) -> tuple[RasterMeta, np.dtype[Any], tifffile.TiffPage]:
+    """`read_header`, and the full-resolution page itself, for `io.cog` to
+    decode block by block (23a-1). The same `_header`, so every refusal is the
+    same. A prefix of the file that ends before its first block is enough;
+    the page decodes blocks from their bytes alone after the file is closed."""
+    with _tiff(source, nodata) as tif:
+        meta, dtype = _header(tif, nodata)
+        page = tif.pages.first
+    return meta, PROMOTION[dtype], page
+
+
 def decode_dem(source: BinaryIO, *, nodata: float | None = None) -> DemTile:
     """Decode page 0 of the GeoTIFF in `source` into a `DemTile`.
 
@@ -358,4 +371,4 @@ def _same(a: float, b: float) -> bool:
     return a == b or (math.isnan(a) and math.isnan(b))
 
 
-__all__ = ["decode_dem", "read_header", "read_meta"]
+__all__ = ["decode_dem", "read_header", "read_meta", "read_page"]

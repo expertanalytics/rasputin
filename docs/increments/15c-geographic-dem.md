@@ -1079,9 +1079,8 @@ committed only after its licence is read and quoted in the fixture `NOTICE`
   commit with `--tree`, back to back). The mesh hash is unchanged and refine
   time is within noise at every thread count. Evidence under
   `docs/benchmarks/<date>/`.
-- **15c-2:** `@perf` on the Velhas piece (BHO 76949, kept as a measurement
-  domain for comparability with the basin-piece baseline unless Ola rules
-  otherwise on `23-basin-scale.md`'s B13) through `rasputin mesh
+- **15c-2:** `@perf` on the Velhas piece (BHO 76949, a measurement domain
+  until 23e derives it from the DEM, `23-basin-scale.md` B13 (c)) through `rasputin mesh
   --out-crs EPSG:31983`, on **ANADEM**, a local window cut from
   OpenTopography's COG by range reads (a one-off cut until the basin-scale
   design's fetch step exists), and once on GLO-30 for comparison with
