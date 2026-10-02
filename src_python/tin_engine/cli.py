@@ -1294,7 +1294,7 @@ def _open_dem(
     except NotCached:
         raise
     except OutCrsRequiredError as exc:  # Q11: one unwrapped line, outside the panel, to paste
-        typer.echo(f"--out-crs '{exc.suggestion.proj}'", err=True)
+        typer.echo(f"--out-crs {shlex.quote(exc.suggestion.proj)}", err=True)
         raise typer.BadParameter(
             f"{exc.head}; the suggested --out-crs is the line above", param_hint="--dem"
         ) from exc
