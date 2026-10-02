@@ -1429,7 +1429,8 @@ the route for one piece's serial phase. All of this is arithmetic for
 sample) at the piece's 12.95 s per 10.43 M triangles on one thread is about
 5 min of refine on one core, about 40 s on 8 if it scales; resampling 734 M
 source nodes at the prototype's 30.9 M per 0.99 s on 8 threads is about 24 s;
-plus phase 2, decoding 3,061 blocks and writing.
+plus phase 2, decoding between the 3,061 blocks meeting the outline and the
+about 8,300 of its box (windows are boxes), and writing.
 
 ## Output
 
@@ -1978,8 +1979,9 @@ No network: every URL is `http://127.0.0.1:<port>/...`, put in `SOURCES` by
 - **F5, incremental**: a second, overlapping domain requests only its new
   blocks; the manifest's requests list both, and the same request twice on
   one day is listed once.
-- **F6, refusals**: 200 instead of 206 (body not read: the server sees the
-  connection closed); a short body; a wrong `Content-Range`; a changed
+- **F6, refusals**: 200 instead of 206 with a body far larger than the
+  socket buffers (several MiB), the server counting the bytes it managed to
+  send: the client reads none of it; a short body; a wrong `Content-Range`; a changed
   length or `Last-Modified` on a block response, and on a known object's
   prefix, each naming `--refresh`, with no block of that response written;
   4xx tried once; 5xx tried four times, then refused; a held lock refused;
@@ -1994,8 +1996,11 @@ No network: every URL is `http://127.0.0.1:<port>/...`, put in `SOURCES` by
 - **F9, mesh after fetch (K7)**: fetch the projected fixture for a domain
   whose box corners lie outside it, then `rasputin mesh --dem <key>` with
   `socket.socket` raising succeeds, with the same vertices and triangles as
-  the same file meshed by path; a domain one cell larger is `NotCached`
-  naming the fetch command.
+  the same file meshed by path. Then the domain is grown past the fetched
+  box, step by step, until the mesh's window first meets a block fetch did
+  not take: that mesh is `NotCached` naming the fetch command, and the block
+  it reports missing is that one (computed by the test from
+  `blocks_meeting`, not from the fetch's plan).
 - **F10, the write side**: a manifest write that fails before `os.replace`
   (monkeypatched) leaves the previous manifest readable; `NOTICE.txt`
   holds each source's `credit`, `licence_note` and every `cite` entry
