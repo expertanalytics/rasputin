@@ -2441,6 +2441,8 @@ each refuses on a small machine what a larger one meshes.
 - (c) Delete 15a R7 only (the mosaic canvas, which pieces bound), keep 22's
   until 23e windows the catchment flood.
 
+**Ruled by Ola, 2026-10-02: (a), delete both** ("B15 a").
+
 **B16. What a mesh made from a catalogue source says about its licence.**
 Asked 2026-10-02 (23a-2). Today the mesh file's `elevation_source` carries
 the catalogue's `credit` only (23a-1). GLO-30's licence, Art. 6(c), asks
@@ -2453,6 +2455,9 @@ here (23a-2)" 8), which travels with the cache, not with a mesh.
   Recommended: a mesh handed on keeps the notes the sources ask for.
 - (b) `credit` only, as now; the notes stay in `NOTICE.txt` and the docs,
   and whoever distributes a mesh carries them.
+
+**Ruled by Ola, 2026-10-02: (a), the mesh file carries them** ("B16 a"; 23a-2
+implements it). Ola also gave the go-ahead to implement 23a-2.
 
 **Decided here, which Ola may overrule:** lattice lines on the computation
 lattice as artificial cuts; the partition rule's integer details (near-square
