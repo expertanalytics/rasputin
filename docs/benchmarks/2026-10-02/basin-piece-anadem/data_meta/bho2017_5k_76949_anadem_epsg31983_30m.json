@@ -1,0 +1,15 @@
+{
+ "source_window": "bho2017_5k_76949_anadem_window_epsg4674.tif",
+ "epsg": 31983,
+ "spacing_m": 30.0,
+ "shape": [
+  7347,
+  4208
+ ],
+ "first_node": [
+  534510.0,
+  7958460.0
+ ],
+ "nodata_nodes": 0,
+ "resample_s": 0.78
+}

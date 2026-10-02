@@ -1,0 +1,15 @@
+{
+ "commit": "5a57793dcfe1baea5769eb2164070cb6635ffed0",
+ "tree_dirty_src": "",
+ "so": "build-bench/pkg/tin_engine/_core.cpython-314-darwin.so",
+ "so_sha256": "eb5f06e88a7ce151946241757d09ee3f6eb8faaee71f252119d1a69d51b9c5d5",
+ "build_type": "Release",
+ "cxx_flags_release": "-O3 -DNDEBUG",
+ "cpu": "Apple M1 Max",
+ "p_cores": "8",
+ "e_cores": "2",
+ "memory_bytes": 34359738368,
+ "macos": "27.0",
+ "python": "3.14.7",
+ "compiler": "AppleClang 21.0.0.21000101"
+}

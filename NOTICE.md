@@ -97,7 +97,16 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
   COPERNICUS by the European Union and ESA; all rights reserved" (projected and
   resampled, so modified), and from the **BHO 2017** catchment outlines of the
   Agência Nacional de Águas e Saneamento Básico (ANA). Neither dataset is in
-  the repository.
+  the repository. `docs/benchmarks/2026-10-02/basin-piece-anadem/` is derived
+  from the same BHO outlines and from **ANADEM**: "Agência Nacional de Águas e
+  Saneamento Básico. (2025). ANADEM: A Digital Terrain Model for South
+  America. Distributed by OpenTopography. https://doi.org/10.5069/G9736P4G.",
+  CC BY 4.0 (projected and resampled, so modified); ANADEM is itself derived
+  from Copernicus GLO-30, whose credit above applies to it too. As
+  OpenTopography's dataset acknowledgement asks, also cite Laipelt, L.;
+  Comini de Andrade, B.; Collischonn, W.; de Amorim Teixeira, A.; Paiva,
+  R.C.D.; Ruhoff, A. "ANADEM: A Digital Terrain Model for South America."
+  Remote Sens. 2024, 16, 2321. ANADEM is not in the repository.
 
 ## Runtime dependencies
 
