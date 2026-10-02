@@ -1,0 +1,82 @@
+{
+ "phases": [
+  {
+   "phase": "P1 decode + assemble",
+   "seconds": 2.271422863006592,
+   "start": 52527608,
+   "end": 2322204760,
+   "peak": 6811997392,
+   "exact": true
+  },
+  {
+   "phase": "P2 resample (blocks)",
+   "seconds": 17.120115041732788,
+   "start": 2322204760,
+   "end": 4475981400,
+   "peak": 13966355232,
+   "exact": true
+  },
+  {
+   "phase": "P2 end (DemTile copy)",
+   "seconds": 0.2824430465698242,
+   "start": 4475981400,
+   "end": 4475997808,
+   "peak": 6630675544,
+   "exact": false
+  },
+  {
+   "phase": "start mesh",
+   "seconds": 0.12433195114135742,
+   "start": 4475997808,
+   "end": 4478914160,
+   "peak": 4478914160,
+   "exact": false
+  },
+  {
+   "phase": "P3 refine phase 1",
+   "seconds": 4.0637829303741455,
+   "start": 4478914160,
+   "end": 4546170624,
+   "peak": 4697214864,
+   "exact": false
+  },
+  {
+   "phase": "P4 store fill + freeze",
+   "seconds": 15.386003971099854,
+   "start": 4546170624,
+   "end": 2548423304,
+   "peak": 6095692032,
+   "exact": false
+  },
+  {
+   "phase": "P5 phase 2 (refine_points)",
+   "seconds": 8.679289817810059,
+   "start": 2548423304,
+   "end": 2620529576,
+   "peak": 3101678624,
+   "exact": false
+  },
+  {
+   "phase": "P6 trim + write",
+   "seconds": 1.0277471542358398,
+   "start": 2620529576,
+   "end": 83006648,
+   "peak": 2863373488,
+   "exact": false
+  }
+ ],
+ "units": {
+  "source mosaic nodes": 560943760,
+  "target grid nodes": 538409322,
+  "check points": 270407394,
+  "phase 1 triangles (2 V - hull)": 2772536,
+  "final triangles": 2940024,
+  "P1 rise per mosaic node, B": 4.046175951756732,
+  "P2 transient per block node, B (peak - start - canvas) / (threads x 256 x cols)": 133.42084907867272,
+  "P2 end rise per grid node, B (copy)": 8.002221744593047,
+  "P4 rise per check point, B": 5.730321886094579,
+  "P4 held after freeze per check point, B": -7.387916766802612,
+  "P3 rise per phase-1 triangle, B": 78.73683299333173,
+  "P5 rise per final triangle, B": 188.180545464935
+ }
+}
