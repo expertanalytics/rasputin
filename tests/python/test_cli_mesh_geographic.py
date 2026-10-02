@@ -54,7 +54,9 @@ from __future__ import annotations
 import importlib
 import json
 import math
+import os
 import re
+import subprocess
 import sys
 from pathlib import Path
 from typing import Any
@@ -62,8 +64,9 @@ from typing import Any
 import numpy as np
 import pytest
 import shapely
-from pyproj import Transformer
+from pyproj import CRS, Transformer
 from shapely.geometry import Polygon
+from typer.testing import CliRunner
 
 from cog_fixtures import write_cache
 from geographic_fixtures import (
@@ -84,6 +87,7 @@ from geotiff_fixtures import KARTVERKET, needs_codecs
 from test_cli_catchment import invoke as invoke_any
 from test_cli_mesh_domain import quarter_circle
 from test_cli_mesh_mosaic import USAGE, invoke, same_mesh
+from tin_engine.cli import app
 from tin_engine.dem_input import DemRequest, open_dem
 from tin_engine.domain import read_domain
 from tin_engine.io.repository import TiffDemRepository
@@ -721,3 +725,68 @@ def test_the_final_checks_timing_rows_are_not_zero(
     rows = dict(clock.phases())
     assert rows["final check: scan (parallel)"] > 0, rows
     assert rows["final check: split + flip (serial)"] > 0, rows
+
+
+# ------------------------------------------------------------------ the suggestion, copied back
+
+
+SUGGESTED = re.compile(r"--out-crs[\s│]*(['\"])(.*?)\1", re.DOTALL)
+ANSI = re.compile(r"\x1b\[[0-9;]*m")
+
+
+def copied_suggestion(output: str) -> str:
+    """The CRS the refusal says to copy, exactly as printed: the quoted text
+    after `--out-crs` (a line break or panel border may come before the
+    opening quote), borders and line breaks inside it included, as a reader
+    selecting it in a terminal gets it. Only colour codes are removed."""
+    found = SUGGESTED.search(ANSI.sub("", output))
+    assert found is not None, f"no quoted --out-crs suggestion in {output!r}"
+    return found.group(2)
+
+
+def mesh_with(tmp_path: Path, out_crs: str) -> None:
+    """The suggestion passed back as `--out-crs` meshes, in that CRS."""
+    dem, catchment = VELHAS / "anadem_velhas.tif", VELHAS / "catchment.geojson"
+    vtk = run(
+        tmp_path,
+        *("--dem", str(dem), "--domain", str(catchment), "--tolerance", "5"),
+        *("--out-crs", out_crs),
+        out="copied.vtk",
+    )
+    assert CRS.from_user_input(field(vtk, "crs")) == CRS.from_user_input(out_crs)
+
+
+class TestTheSuggestionPastesBack:
+    """Q11 (a): the refusal prints a CRS to copy. `@reviewer` on 18a47cb: the
+    WKT2 suggestion is printed inside Rich's error panel, wrapped mid-token at
+    the terminal's width with `│` borders, so what a user copies never parses.
+    Run as a user would, at 80 columns, copy what is printed, paste it back."""
+
+    ARGS = (
+        "mesh",
+        *("--dem", str(VELHAS / "anadem_velhas.tif")),
+        *("--domain", str(VELHAS / "catchment.geojson")),
+        *("--tolerance", "5"),
+    )
+
+    def test_through_the_cli_runner_at_80_columns(self, tmp_path: Path) -> None:
+        result = CliRunner(env={"NO_COLOR": "1", "TERM": "dumb", "COLUMNS": "80"}).invoke(
+            app, [*self.ARGS, "--out", str(tmp_path / "refused.vtk")]
+        )
+        assert result.exit_code == USAGE, result.output
+        mesh_with(tmp_path, copied_suggestion(result.output))
+
+    def test_in_a_real_terminal_process_at_80_columns(self, tmp_path: Path) -> None:
+        env = {**os.environ, "COLUMNS": "80", "LINES": "40"}
+        env.pop("NO_COLOR", None)
+        code = "import sys; from tin_engine.cli import app; app(prog_name='rasputin')"
+        done = subprocess.run(
+            [sys.executable, "-c", code, *self.ARGS, "--out", str(tmp_path / "refused.vtk")],
+            capture_output=True,
+            text=True,
+            env=env,
+            timeout=300,
+            check=False,
+        )
+        assert done.returncode == USAGE, done.stderr
+        mesh_with(tmp_path, copied_suggestion(done.stdout + done.stderr))
