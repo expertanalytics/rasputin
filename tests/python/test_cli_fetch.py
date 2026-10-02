@@ -38,6 +38,7 @@ import tin_engine
 from cog_fixtures import write_cache
 from fetch_fixtures import PROJECTED_CRS, RangeServer, page_of, projected, snapshot
 from geotiff_fixtures import TIE_X, TIE_Y
+from plyread import read_ply
 from test_cli_mesh import plain
 from test_cli_mesh_domain import geojson
 from test_cli_mesh_mosaic import field, same_mesh
@@ -80,12 +81,16 @@ def data() -> bytes:
 
 
 def catalogue_with(
-    sources: ModuleType, monkeypatch: pytest.MonkeyPatch, url: str, crs: str = PROJECTED_CRS
+    sources: ModuleType,
+    monkeypatch: pytest.MonkeyPatch,
+    url: str,
+    crs: str = PROJECTED_CRS,
+    cite: tuple[str, ...] = CITES,
 ) -> Any:
     """`SOURCES` plus the test entry, wherever a module bound the name."""
     entry = sources.RemoteSource(
         id=KEY, kind="one-cog", url=url, crs=crs, nodata=-9999.0, credit=CREDIT,
-        licence_note=LICENCE, cite=CITES,
+        licence_note=LICENCE, cite=cite,
     )  # fmt: skip
     original = sources.SOURCES
     patched = {**original, KEY: entry}
@@ -304,6 +309,33 @@ class TestB16TheMeshCarriesTheNotes:
         assert field(vtk, "licence_note") == LICENCE
         cite = field(vtk, "cite")
         assert all(c in cite for c in CITES), cite
+
+    @pytest.mark.parametrize("cite", [CITES, ()], ids=["cited", "uncited"])
+    def test_a_ply_carries_them_as_header_comments(
+        self,
+        sources: ModuleType,
+        monkeypatch: pytest.MonkeyPatch,
+        data: bytes,
+        tmp_path: Path,
+        cite: tuple[str, ...],
+    ) -> None:
+        """PLY has no field data: the notes are `comment` lines, as `crs` and
+        `elevation` are; a `cite` line only when the source has citations."""
+        catalogue_with(sources, monkeypatch, "https://example.invalid/p.tif", cite=cite)
+        write_cache(tmp_path / "cache", KEY, {"dem": data})
+        out = tmp_path / "key.ply"
+        code, output = invoke(
+            "mesh", "--dem", KEY, "--cache", str(tmp_path / "cache"), "--out", str(out), "--ascii"
+        )
+        assert code == 0, output
+        comments = read_ply(out.read_bytes())[0].comments
+        assert any(c.startswith("elevation ") and CREDIT in c for c in comments), comments
+        assert f"licence_note {LICENCE}" in comments, comments
+        cited = [c for c in comments if c.startswith("cite ")]
+        if cite:
+            assert len(cited) == 1 and all(c in cited[0] for c in cite), comments
+        else:
+            assert cited == [], comments
 
     def test_a_mesh_by_path_carries_neither(self, data: bytes, tmp_path: Path) -> None:
         tif, out = tmp_path / "dem.tif", tmp_path / "path.vtk"
