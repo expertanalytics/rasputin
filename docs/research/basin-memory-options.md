@@ -70,7 +70,7 @@ Total ~100-130 lines (the sum of the items), in one PR. What remains is the
 target grid (8.2 GB) with one mesh in phase 1, then the store (12-14 GB)
 with two meshes in phase 2. *Est.* peaks, phase 2 deciding: 50 m ~14 GB,
 10 m ~20-22 GB (fits), **5 m ~32-34 GB (does not fit 32 GiB)**, 2 m
-~74-82 GB.
+~72-82 GB.
 
 Streaming the target grid as well would mean a windowed raster inside the
 C++ refine, whose rounds touch triangles anywhere. That is a much larger
@@ -127,11 +127,17 @@ DEM-derived units later). About 0 production lines: a script loop over
   18-26 B counts the copy and the store together, which never coexist.) P2
   adds 149 B × 256 × cols × 10 threads, ~0.38 MB per column, so ~7.6 GB at
   20,000 columns. With ~31 GB usable of 32 GiB (an assumption: OS and
-  interpreter take the rest), a unit fits at coarse tolerance up to about
-  31 / 22 to 31 / 14 GB per G node, that is **1.4-2.2 G box nodes**, if its
-  `f` is like the basin's. At 5 m it fits less, by twice its share of the
-  ~10 GB mesh. Every level-3 unit's box is smaller than the basin's 2.06 G,
-  so most should fit at 50 m with today's code. Level-3 box sizes and fill
+  interpreter take the rest), a unit's limit at coarse tolerance is the lower
+  of two, if its `f` is like the basin's:
+  - P4: 31 GB / (14-22 B) = **1.4-2.2 G box nodes**;
+  - P2: the `N` where 8 B × `N` + 0.38 MB × columns = 31 GB. For a square box
+    (`N` = columns²) that is ~42,900 columns, **~1.8 G nodes** at most. The
+    basin itself, 2.06 G nodes and 40,943 columns, needs ~32 GB here, which
+    is where it died.
+
+  So the limit is ~1.4-1.8 G box nodes. At 5 m it is lower, by twice the
+  unit's share of the ~10 GB mesh. **Units under ~1.4 G box nodes should fit
+  at 50 m with today's code.** Level-3 box sizes and fill
   ratios were not measured; the BHO attributes file on disk covers 63k km²,
   not the basin.
 

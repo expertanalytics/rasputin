@@ -25,3 +25,7 @@ python docs/benchmarks/2026-10-02/basin-memory-probe/blockprobe.py /tmp/probe_pk
   docs/benchmarks/2026-10-02/basin-anadem/runs/basin_out_crs.wkt \
   ../rasputin_data/sao_francisco_piece/bho2017_level2_76_raw.geojson
 ```
+
+The 1.562 GB peak includes the block's own output canvas and its copy by
+`DemTile(...)` (~8 B per node), so 149 B per node is slightly high for the
+temporaries alone.
