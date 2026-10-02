@@ -181,7 +181,7 @@ def coalesce(spans: Sequence[tuple[int, int]]) -> tuple[tuple[int, int], ...]:
     out: list[tuple[int, int]] = []
     for start, stop in sorted(spans):
         if out and start - out[-1][1] <= GAP and stop - out[-1][0] <= MAX_RANGE:
-            out[-1] = (out[-1][0], stop)
+            out[-1] = (out[-1][0], max(out[-1][1], stop))  # a span may lie inside another
         else:
             out.append((start, stop))
     return tuple(out)

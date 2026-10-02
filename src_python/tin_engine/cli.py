@@ -856,9 +856,11 @@ def mesh(
         comments = [f"crs EPSG:{epsg}", f"elevation {sentence}"]
         if cached is not None:  # B16 (a): the notes the source asks to travel with it
             remote = SOURCES[cached.source]
-            fields.append(("licence_note", _ascii(remote.licence_note)))
+            notes = [("licence_note", _ascii(remote.licence_note))]
             if remote.cite:
-                fields.append(("cite", _ascii("; ".join(remote.cite))))
+                notes.append(("cite", _ascii("; ".join(remote.cite))))
+            fields += notes
+            comments += [f"{key} {text}" for key, text in notes]  # PLY: header comments
         if cached is not None or len(paths) > 1 or paths[0].is_dir():  # R11: the files used
             fields.append(("dem_tiles", _ascii("; ".join(names))))
             seams = opened.seams

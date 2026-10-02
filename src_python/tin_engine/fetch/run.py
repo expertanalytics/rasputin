@@ -18,6 +18,7 @@ import datetime
 import hashlib
 import importlib.metadata
 import math
+import threading
 import time
 from collections.abc import Callable
 from typing import Any
@@ -161,7 +162,7 @@ async def _run(
     for object_id, page, index in empty:
         writer.put_block(object_id, page, index, b"")
 
-    done = 0
+    done, counting = 0, threading.Lock()
 
     def take(plan: ObjectPlan, page: tifffile.TiffPage, start: int, stop: int) -> None:
         nonlocal done
@@ -173,9 +174,10 @@ async def _run(
             offset, count = int(page.dataoffsets[i]), int(page.databytecounts[i])
             if count and start <= offset and offset + count <= stop:
                 writer.put_block(plan.object_id, page, i, got.data[offset - start :][:count])
-        done += stop - start
-        if progress is not None:
-            progress(done, report.bytes)
+        with counting:  # `take` runs on several threads at once
+            done += stop - start
+            if progress is not None:
+                progress(done, report.bytes)
 
     async def one(plan: ObjectPlan, page: tifffile.TiffPage, start: int, stop: int) -> None:
         async with gate:
