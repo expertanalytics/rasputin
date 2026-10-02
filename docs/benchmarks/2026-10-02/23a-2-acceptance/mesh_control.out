@@ -1,0 +1,7 @@
+[1mUsage: [0m[1mrasputin mesh [OPTIONS] [name][0m
+[2mTry [0m[2m'rasputin mesh [0m[1;2m-[0m[1;2m-help[0m[2m'[0m[2m for help.[0m
+╭─ Error ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+│ Invalid value for [1m-[0m[1m-dem[0m: anadem-v1/anadem_v1_compressed_COG: ProjectedCSTypeGeoKey (3072) is absent; GeographicTypeGeoKey (2048) = 4674 is a Geographic 2D CRS; a projected CRS is required          │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+NET_EVENTS urllib.Request=0 socket.connect=0 socket.__new__=1
+exit 2

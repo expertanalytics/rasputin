@@ -1,0 +1,10 @@
+anadem-v1
+
+Credit:
+Agência Nacional de Águas e Saneamento Básico. (2025). ANADEM: A Digital Terrain Model for South America. Distributed by OpenTopography. https://doi.org/10.5069/G9736P4G.
+
+Licence:
+CC BY 4.0 (Creative Commons Attribution 4.0 International)
+
+Cite:
+Laipelt, L., et al. (2024). ANADEM: A Digital Terrain Model for South America. Remote Sensing, 16(13), 2321. https://doi.org/10.3390/rs16132321

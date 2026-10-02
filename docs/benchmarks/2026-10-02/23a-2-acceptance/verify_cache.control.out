@@ -1,0 +1,20 @@
+page 187853 x 262864, tile 512, across 367
+PASS same block set: A 160, B 160
+FAIL sha256 equal block by block: 159 of 160
+PASS every block's size is the header's byte count: 160 of 160
+block bytes A 107,977,770, B 107,977,770
+PASS header.bin equal
+PASS resume asked no present block: overlap 0
+PASS present 80 + asked 80 = 160
+FAIL block 87256 (row 237, col 277) bytes 53896276051-53896882580 equal to the COG
+PASS block 87626 (row 238, col 280) bytes 54029275143-54029985569 equal to the COG
+PASS block 87988 (row 239, col 275) bytes 54159030200-54159655579 equal to the COG
+PASS block 88730 (row 241, col 283) bytes 54429650868-54430366195 equal to the COG
+PASS block 89456 (row 243, col 275) bytes 54687245461-54687892471 equal to the COG
+PASS block 89822 (row 244, col 274) bytes 54818449724-54819140069 equal to the COG
+PASS block 89826 (row 244, col 278) bytes 54821116156-54821799558 equal to the COG
+PASS block 90192 (row 245, col 277) bytes 54950701378-54951382825 equal to the COG
+PASS block 90925 (row 247, col 276) bytes 55204606683-55205249097 equal to the COG
+PASS block 90930 (row 247, col 281) bytes 55208063863-55208799568 equal to the COG
+PASS block 91298 (row 248, col 282) bytes 55335834150-55336564144 equal to the COG
+PASS block 92029 (row 250, col 279) bytes 55587982084-55588685984 equal to the COG

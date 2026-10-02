@@ -1,0 +1,17 @@
+2,556,116 of 5,904,251 bytes
+3,245,870 of 5,904,251 bytes
+4,570,674 of 5,904,251 bytes
+5,904,251 of 5,904,251 bytes
+NET_EVENTS urllib.Request=9 socket.connect=9 socket.__new__=20
+RANGE -
+RANGE bytes=0-1048575
+RANGE bytes=0-1048575
+RANGE bytes=0-1048575
+RANGE bytes=0-1048575
+RANGE bytes=18314142-19647718
+RANGE bytes=40467169-41156922
+RANGE bytes=11541305-14097420
+RANGE bytes=38401627-39726430
+real 1.81
+user 0.38
+sys 0.17

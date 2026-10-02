@@ -1,0 +1,7 @@
+[1mUsage: [0m[1mrasputin mesh [OPTIONS] [name][0m
+[2mTry [0m[2m'rasputin mesh [0m[1;2m-[0m[1;2m-help[0m[2m'[0m[2m for help.[0m
+╭─ Error ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+│ Invalid value for [1m-[0m[1m-dem[0m: anadem-v1 (/Users/skavhaug/.claude/jobs/85c14e7c/tmp/cacheNoMan/anadem-v1) is not in the cache; run: rasputin fetch anadem-v1 [1m-[0m[1m-domain[0m                                      │
+│ /Users/skavhaug/projects/rasputin_data/sao_francisco_piece/bho2017_5k_76949_outline_epsg4674.geojson [1m-[0m[1m-cache[0m /Users/skavhaug/.claude/jobs/85c14e7c/tmp/cacheNoMan                                    │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+exit 2
