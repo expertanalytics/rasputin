@@ -1,0 +1,3 @@
+anadem_v1_compressed_COG: 8,300 blocks, 4,271,915,858 bytes to fetch
+anadem-v1: 1 objects, 8,300 blocks needed, 0 present, would fetch 8,300 (0 empty) in 578 requests, 4,271,915,858 bytes, 6.2 s
+exit 0

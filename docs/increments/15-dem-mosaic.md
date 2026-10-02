@@ -498,7 +498,7 @@ assemble(plan, load) -> Mosaic                                pixels, no files
 
 - [15a] Carried from the parked R3: `_header(tif, nodata) -> (RasterMeta,
   dtype)` holds everything `decode_dem` does before `page.asarray()`
-  (now `_header` itself, `io/geotiff.py:118-153`). `read_meta(source, *,
+  (now `_header` itself, `io/geotiff.py:122-160`). `read_meta(source, *,
   nodata=None)` calls it (through `read_header`, which also returns the
   decoded dtype, S2) and returns, and `decode_dem` calls it and then decodes.
   The header phase keeps the codec refusal.

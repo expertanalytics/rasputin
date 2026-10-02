@@ -1,0 +1,3 @@
+PASS anadem-v1: NOTICE.txt equals notice(SOURCES['anadem-v1'])
+PASS anadem-v1: NOTICE.txt equals notice(SOURCES['anadem-v1'])
+PASS glo30: NOTICE.txt equals notice(SOURCES['glo30'])

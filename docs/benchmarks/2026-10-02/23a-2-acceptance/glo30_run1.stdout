@@ -1,0 +1,5 @@
+Copernicus_DSM_COG_10_S19_00_W044_00_DEM: 1 blocks, 1,324,804 bytes to fetch
+Copernicus_DSM_COG_10_S19_00_W045_00_DEM: 1 blocks, 689,754 bytes to fetch
+Copernicus_DSM_COG_10_S20_00_W044_00_DEM: 1 blocks, 2,556,116 bytes to fetch
+Copernicus_DSM_COG_10_S20_00_W045_00_DEM: 1 blocks, 1,333,577 bytes to fetch
+glo30: 4 objects, 4 blocks needed, 0 present, fetched 4 (0 empty) in 4 requests, 5,904,251 bytes, 1.4 s

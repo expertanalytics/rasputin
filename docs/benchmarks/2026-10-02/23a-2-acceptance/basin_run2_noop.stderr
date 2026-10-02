@@ -1,0 +1,2 @@
+NET_EVENTS urllib.Request=1 socket.connect=1 socket.__new__=4
+RANGE bytes=0-4194303

@@ -48,6 +48,15 @@ def reprojector(src: str | CRS, dst: str | CRS) -> Callable[[Any], Xy]:
     return apply
 
 
+def transform_bounds(
+    src: str | CRS, dst: str | CRS, box: tuple[float, float, float, float]
+) -> tuple[float, float, float, float]:
+    """`(x_min, y_min, x_max, y_max)` in `src` to the box holding its image in
+    `dst`: pyproj's `transform_bounds`, densified, `always_xy` (23a-2)."""
+    x0, y0, x1, y1 = _transformer(src, dst).transform_bounds(*box, densify_pts=21)
+    return x0, y0, x1, y1
+
+
 def transform_description(src: str | CRS, dst: str | CRS) -> str:
     """What PROJ picked for `src` to `dst` (a datum shift included), for the record."""
     return str(_transformer(src, dst).description)

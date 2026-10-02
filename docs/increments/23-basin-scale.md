@@ -1,12 +1,13 @@
 # Increment 23: basin scale — pieces cut on constraints, windowed DEM reads, a tile cache
 
 Status: **designed by `@architect`, 2026-10-01; B1-B14 ruled by Ola on
-2026-10-01 and the design reworked to the rulings; not implemented.** Design
-only, written before `@tester` per `docs/increments/README.md` step 1. The
-rulings are under "Ruled by Ola, 2026-10-01", below; the questions are kept as
-asked at the end, each marked with its ruling; B15, asked after B14's
-ruling, is open. 23a-1, the next PR, is designed in full on 2026-10-02
-under "Windowed source reads (23a-1)".
+2026-10-01 and the design reworked to the rulings; B15 and B16 ruled
+2026-10-02. 23a-1 merged (#136); 23a-2 implemented on branch
+`worktree-23a-2`; 23b onwards not implemented.** Written before `@tester`
+per `docs/increments/README.md` step 1. The rulings are under "Ruled by Ola,
+2026-10-01", below; the questions are kept as asked at the end, each marked
+with its ruling. 23a-1 and 23a-2 are designed in full under "Windowed
+source reads (23a-1)" and "The fetch step and the tile cache".
 
 ## Why this record, and why its name
 
@@ -518,6 +519,19 @@ comes from the source named. **recalled**: from memory, unchecked.
   the year was recalled in the first pass). Headers and offset arrays at the
   start, tiles addressable by range request. The probe above confirms
   ANADEM's copy behaves so.
+- **HTTP range requests.** RFC 9110 (2022): `Range` §14.2, `Content-Range`
+  §14.4, 206 §15.3.7, `If-Range` §13.1.5, which bars a date validator to a
+  client holding an entity tag and makes a date strong only under §8.8.2.2
+  (read). 23a-2 uses single ranges and checks `Content-Range` and
+  `Last-Modified` on each response instead (its "Decided here" 2).
+- **GDAL's `/vsicurl/`** is the method 23a-2 follows without the dependency
+  (`CLAUDE.md` §2): block reads by range request, consecutive ranges merged
+  (`GDAL_HTTP_MERGE_CONSECUTIVE_RANGES`), parallel single-range requests
+  because multi-range GETs are "not supported by a majority of servers
+  (including AWS S3 or Google GCS)" (`GDAL_HTTP_MULTIRANGE`), retries
+  (`GDAL_HTTP_MAX_RETRY`), all in `https://gdal.org/en/stable/user/configoptions.html`
+  (read 2026-10-02). It differs in persistence: GDAL's cache is in memory
+  per process, rasputin's is a directory of blocks that outlives the run.
 
 **Novelty: none claimed.** The combination that could look new: *a greedy
 terrain refinement to an exact sup-norm vertical tolerance, split into pieces
@@ -786,8 +800,8 @@ The main session's reasoning, item by item.
 - **`--memory-budget`, default 16 GB, read as 16 GiB (2^34 bytes)**, a
   constant: never the machine's memory, so the mesh does not depend on the
   machine (K5). No upper limit on it, on `--pieces` or on a piece: a run whose
-  pieces do not fit the machine runs out of memory. Whether 15a R7's refusal
-  at half of physical memory goes too is B15, not ruled.
+  pieces do not fit the machine runs out of memory. 15a R7's refusal at
+  half of physical memory goes too (B15, ruled (a)).
 - **`b(T)`, bytes per window node at tolerance `T`**, from the basin-piece
   sweep (`docs/benchmarks/2026-10-01/basin-piece/README.md`): its max-RSS fit,
   0.55 GiB + 310 B per triangle, gives about 17 B per grid node (the intercept
@@ -1001,7 +1015,7 @@ thresholds are under "@perf acceptance", 23g).
   the running pieces' estimates (`dx · dy · b(T)`) fit under
   `--memory-budget`, and always starts one when none is running. It can
   delay a piece, never change or refuse one. 15a R7's refusal at half of
-  physical memory: deleted if Ola rules B15 (a) or (c), kept under (b).
+  physical memory is deleted (B15, ruled (a)).
 
 ## Windowed source reads (23a-1)
 
@@ -1150,23 +1164,110 @@ catalogue source as for a directory.
 
 ## The fetch step and the tile cache
 
+Designed in full for `@tester` on 2026-10-02 (23a-2). `rasputin fetch`
+copies what a mesh of the same domain reads into the layout 23a-1 reads;
+nothing in it is on `rasputin mesh`'s path (K7).
+
+### Decided here (23a-2)
+
+1. **Fetch the box, not the outline.** 23a-1's `check(plan)` and
+   `decode_window` need every block of a placement's window, and every
+   window is a box (15c-2's source box, 23c's piece windows inside it). So
+   fetch takes the blocks meeting the domain's box, in the run's frame,
+   grown and moved into the source CRS ("Planning"). For the basin on
+   ANADEM that is about 8,300 blocks against the 3,061 meeting the grown
+   outline, and for the Velhas piece 160 against 82 (both counted on the
+   BHO outlines grown by three cells, with the probe's tie point and step,
+   in ANADEM's CRS; the `--out-crs` box's image is a little larger).
+   `@perf`'s piece fetch also took 160 blocks. Making the read side outline-aware (an absent block
+   outside the needed region read as NoData) would save the difference once,
+   at the cost of a second meaning of "missing"; not done.
+2. **No `HEAD`, no `If-Range`.** Every response carries `Content-Range`'s
+   total and `Last-Modified`; each is checked against the manifest, so
+   identity is checked on every request at no cost. `If-Range` with a date
+   is barred to a client that has an entity tag (RFC 9110 §13.1.5), and
+   ANADEM's ETag is a placeholder (measured), so it is not used either.
+3. **One range per request.** No multi-range GETs: S3 does not serve them
+   (GDAL's `GDAL_HTTP_MULTIRANGE` documentation says so of AWS S3 and GCS).
+4. **A request is all or nothing.** Its blocks are written only after the
+   whole body arrived and every length matched; a failed request writes
+   nothing, so resuming has request granularity (at most 8 MiB).
+5. **One fetch per source at a time**: `fcntl.flock` on
+   `<cache>/<source>/.lock`, non-blocking, refused if held. The OS drops it
+   when the process dies, so there is no stale lock; `.part` files are
+   cleared under it. Linux and macOS only, as CI is.
+6. **The header is parsed with geographic CRSs allowed.** `read_page` gains
+   `geographic: bool = False`; only `fetch/` passes `True`. The mesh path's
+   refusal (23a-1 W9) stays until 15c-2.
+7. **A sparse block (byte count 0) is written as an empty file**, with no
+   request. It is then present, and the mesh's own sparse refusal (23a-1,
+   decided 5) names it, rather than a misleading `NotCached`.
+8. **Source notes: `<cache>/<source>/NOTICE.txt`**, rewritten on every run
+   (not `--dry-run`) from the catalogue by `sources.notice(source)`: the
+   credit, the licence note (Art. 6(c) for GLO-30) and the works the
+   distributor asks to cite (`RemoteSource.cite`; for ANADEM, Laipelt et
+   al. 2024, as OpenTopography's acknowledgement asks). The catalogue stays
+   the one place; the file is a rendering. What the mesh file carries is
+   B16.
+9. **The requests log** appends `(region_sha256, date)` once per distinct
+   pair: the sha256 of the region as given (the domain's WKB and CRS, or the
+   box's four numbers and CRS), so equal requests on one day log once. The
+   manifest's field is renamed from `domain_sha256` (23a-1 only reads it).
+10. **No fsync per block** (thousands of files); the manifest is written to a
+    temporary file, fsynced and `os.replace`d.
+11. **`--refresh`** discards the source's cache (manifest, headers, blocks,
+    under the lock) and fetches this request anew. Blocks fetched for other
+    domains go with it; they are of the old remote copy anyway.
+
+**Departures by `@developer`, accepted in review (23a-2, round 1):**
+
+- `RangeClient` accepts a reply cut short at the end of the file
+  (`Content-Range` ending at `total - 1`) only when the range asked for
+  ran past it (`stop > total`); any other short reply is refused.
+- GLO-30's tiles are chosen from one box grown as if the spacing were a
+  fixed 0.001° (`fetch/run.py`'s `TILE_SPACING`, more than any tile's below
+  80°), not per tile; each tile's blocks are then planned from its own
+  header.
+- The box is moved by `crs.transform_bounds`, the one site that wraps
+  pyproj's, not by pyproj directly in `fetch/`.
+- `FetchReport` also carries the per-object plans (`plans`), and `fetch`
+  takes a `progress(done, total)` callback in bytes; the CLI's stderr line
+  is that callback.
+- A one-file source's object id is the URL's file name without its
+  extension (for ANADEM, `anadem_v1_compressed_COG`).
+- `rasputin fetch` has `--domain-crs`, with `mesh`'s meaning (the
+  `--domain` file's CRS).
+- `cite` is written, in `NOTICE.txt` and in the mesh file, only when the
+  source has citations.
+- B16 (a) is implemented for both formats: `licence_note` and `cite` as
+  `.vtk` fields and as `.ply` header comments.
+
 ### Types (frozen Pydantic)
 
 ```
 tin_engine/sources.py (23a-1; data, imports Pydantic only)
 RemoteSource      id ("anadem-v1", "glo30"); kind ("one-cog" | "cog-tiles");
                   url, or url_template plus tile_list_url; crs (expected, checked
-                  against each header); nodata; credit; licence_note
+                  against each header); nodata; credit; licence_note;
+                  cite: tuple[str, ...] = () (23a-2)
 SOURCES           the catalogue: a Mapping[str, RemoteSource] of data, two entries
+notice(source) -> str                                                     (23a-2)
 io/repository.py (23a-1 reads, 23a-2 writes)
 CacheManifest     source id, crs, rasputin version, objects: {object id: CachedObject},
-                  requests fetched: ({domain_sha256, date}, ...)
+                  requests: ({region_sha256, date}, ...)
 CachedObject      url, content_length, last_modified, header_sha256, header_bytes,
                   block shape (rows, cols)
-fetch/plan.py (23a-2)
-FetchRequest      source id, domain (path and CRS), target CRS or None, margin
-                  (source cells, default 2), cache root
-FetchPlan         source id; objects: (object id, url, block indices, bytes)
+CacheWriter       (root, source); a context manager holding the lock (decided 5):
+                  put_header, put_block, put_manifest, put_notice, discard
+fetch/plan.py (23a-2, pure)
+FetchRequest      source id; domain (DomainPolygon) or box (Bounds, in out_crs, else
+                  the source CRS); out_crs or None; margin (default 4); connections
+                  (default 8); dry_run; refresh
+ObjectPlan        object id, url, block indices, ranges: ((start, stop), ...), bytes
+FetchPlan         source id; objects: (ObjectPlan, ...); no_tile: (name, ...)
+fetch/run.py (23a-2)
+FetchReport       objects, blocks needed, present, fetched, empty; bytes; requests;
+                  no_tile; seconds
 ```
 
 The date is `datetime.date` (standard library; `CLAUDE.md` §2). The objects
@@ -1177,27 +1278,47 @@ directory's.
 (`https://opentopography.s3.sdsc.edu/raster/ANADEM/ANADEM_be/anadem_v1_compressed_COG.tif`,
 DOI 10.5069/G9736P4G, as ruled in Q17). `glo30` is the AWS bucket, one COG per
 1° tile, with `tileList.txt` saying which tiles exist; a tile absent from the
-list is sea, recorded as "no tile", not as missing.
+list is sea, reported as "no tile", not as missing.
 
 ### Planning (`fetch/plan.py`, pure)
 
-- **The header** of each object: read a prefix (1 MiB, doubling) until
-  every page's offsets number its blocks; tifffile does not raise on a
-  short prefix, it logs and returns a page without offsets (measured at
-  64 KiB and 1 MiB). ANADEM needs at most 8 MiB (measured). The prefix is
-  cached as `header.bin`.
-- **The needed region** in the source CRS: the same function 15c's
-  `source_region` uses (the target window's image, grown by two source
-  cells), applied to the whole domain. Fetch and mesh call this one function,
-  so for the same domain and options the blocks meshing needs are a subset of
-  the blocks fetch got (K7).
-- **Blocks**: the full-resolution page's blocks whose footprint meets the
-  region (prepared shapely). Overviews are not fetched.
+- **The header** of each object: a prefix of 1 MiB, doubled until the
+  full-resolution page has an offset and a byte count for every block of
+  its grid (`block_grid`), refused past 64 MiB. tifffile does not raise on
+  a short prefix, it logs and returns a page without offsets (measured at
+  64 KiB and 1 MiB), so the count is the check. The parse reads from a
+  stream that raises on any read past the prefix. ANADEM needs 8 MiB
+  (measured). The prefix is `header.bin`.
+- **The frame** is `out_crs` if given, else the source CRS: the CRS the
+  mesh's box is in (15c-2's target grid, or 15a's DEM CRS).
+- **The source box**: the domain's bounds in the frame (or the box as
+  given), grown by `margin` times the source's north-south spacing in
+  metres, moved into the source CRS with pyproj's `transform_bounds`
+  (densified, `always_xy`), then grown by two source cells as 15c-2's
+  `source_region` grows its box. 15c-2 grows the target box by `√2·h`:
+  42 m at the CLI's default `h` on ANADEM (30 m) and 44 m on GLO-30
+  (31 m), against the 119 m and 124 m that `margin` 4 gives. When the
+  frame is the source CRS, the box is grown by `margin + 2` cells. A box crossing
+  ±180° or reaching a pole is refused (15c-2's refusal).
+- **The blocks**: the source box as an `IndexWindow` of the page, clipped
+  to the raster, then 23a-1's `blocks_meeting`. A box that meets no block
+  is refused. For GLO-30 the objects are the listed tiles whose 1° square
+  (from the name) meets the source box, each with its own window.
+- **The ranges**: the missing blocks sorted by offset, runs whose byte gaps
+  are at most 64 KiB coalesced into one `(start, stop)` of at most 8 MiB
+  (a single larger block is its own range).
+- **K7 by construction**: the mesh's windows lie inside the source box for
+  any partition, so a mesh after a fetch of the same domain and options
+  finds every block. `check(plan)` stays the authority: a Python-API mesh
+  whose spacing `margin` does not cover is refused naming the fetch, and
+  `FetchRequest.margin` is the remedy.
 
 ### The cache (`io/repository.py`, the one module in `io/` that opens files, 15 Q3)
 
 ```
 <cache>/<source-id>/manifest.json                       identity, written atomically
+<cache>/<source-id>/NOTICE.txt                          credit, licence, citations
+<cache>/<source-id>/.lock                               held by a running fetch
 <cache>/<source-id>/<object-id>/header.bin              the parsed prefix
 <cache>/<source-id>/<object-id>/blocks/<row>/<col>.bin  one block, its exact bytes;
                                                          <row>, <col> in blocks, a strip's col is 0
@@ -1205,37 +1326,45 @@ list is sea, recorded as "no tile", not as missing.
 
 - **The directory is the inventory; the manifest is the identity.** A block is
   present exactly when its file exists with its byte count from the header.
-  Blocks are written as `*.part` and renamed, so a crash never leaves a half
-  block, and nothing has to be kept in step with the files. The manifest says
-  what the cache is a copy of, and what was asked of it.
-- **Identity.** Each fetch run sends one `HEAD` and compares
-  `Content-Length` and `Last-Modified` with the manifest, and the header
-  prefix's sha256; any change refuses ("the remote copy changed;
-  `--refresh` re-fetches it"). The ETag is not used: ANADEM's is a
-  placeholder (measured). Meshing never checks the remote; it trusts the
-  manifest, because it is offline by rule.
+  Blocks are written as `<col>.bin.part` and renamed, so a crash never
+  leaves a half block, and nothing has to be kept in step with the files.
+- **Identity.** A known object's prefix is re-read each run
+  (`header_bytes` long) and its sha256, total length and `Last-Modified`
+  compared with the manifest; every block response is checked the same way
+  (decided 2). Any change refuses: "the remote copy changed; `--refresh`
+  re-fetches it". Meshing never checks the remote; it trusts the manifest,
+  because it is offline by rule.
+- **Order of writes**: headers and the manifest first (a new object is
+  listed before any of its blocks), then blocks, then the request appended
+  to the manifest. A crash at any point leaves a cache 23a-1 reads.
 
 ### Downloading (`fetch/http.py`, `fetch/run.py`)
 
-- Standard library `urllib.request` with `Range`; no new dependency.
-- A response must be 206 with a matching `Content-Range`, and every block's
-  length must equal its byte count before the rename.
-- Runs of wanted blocks whose byte gaps are at most 64 KiB are coalesced into
-  one request of at most 8 MiB (ANADEM's blocks are in row-major order with
-  small gaps between them).
-- `asyncio` with `asyncio.to_thread` per request, at most `--connections`
-  (default 8) at once; 5xx and timeouts retried three times with backoff,
-  4xx never.
+- `http.py`, the one importer of `urllib.request`: `RangeClient.get(url,
+  start, stop) -> RangeResponse(data, total, last_modified)` and
+  `get_text(url)` (GLO-30's tile list, fetched each run, not cached). A
+  `Range` response must be 206 with `Content-Range` `bytes start-(stop-1)/total`
+  and exactly `stop - start` bytes; a 200 is refused without reading its
+  body. Timeouts, connection errors, short bodies and 5xx are retried three
+  times with delays `(1, 2, 4)` s (a field, zero in tests); 4xx never. A
+  refusal is `FetchError`, naming the URL and the range.
+- `run.py`: `async def fetch(request, source, client, writer) -> FetchReport`.
+  Each range is `asyncio.to_thread(client.get, ...)` under an
+  `asyncio.Semaphore(connections)`; its blocks are cut by the header's
+  offsets, length-checked and put (in the same thread). `client` and
+  `writer` are parameters, so the run is tested against the local server
+  and a writer in `tmp_path`, and an API worker awaits it in its own loop.
 - **Resumable:** present blocks are never requested; `.part` files are
-  removed on start. **Incremental:** a second domain fetches only its missing
-  blocks. `--dry-run` prints the plan (objects, blocks present and missing,
-  bytes). For the basin on ANADEM that is 3,061 blocks, 1.71 GiB (measured).
+  removed on start. **Incremental:** a second domain fetches only its
+  missing blocks. **`--dry-run`** reads the headers and prints the plan
+  (objects, no-tile names, blocks present and missing, bytes, requests),
+  and writes nothing, not even the directory.
 
 ### The CLI
 
 ```
 export RASPUTIN_DATA=../rasputin_data
-rasputin fetch anadem-v1 --domain basin.geojson --out-crs EPSG:31983 [--cache DIR] [--dry-run] [--refresh]
+rasputin fetch anadem-v1 --domain basin.geojson --out-crs EPSG:31983 [--cache DIR] [--dry-run] [--refresh] [--connections 8]
 rasputin mesh --dem anadem-v1 --domain basin.geojson --out-crs EPSG:31983 --tolerance 5 --out basin.vtk
 ```
 
@@ -1257,8 +1386,18 @@ written as a path (`./glo30`), which is why the option is read as text
 (23a-1, "Decided here" 3). Only a catalogue source needs the cache, so a
 mesh from local files needs neither variable nor option. A block meshing
 needs and the cache lacks is refused before any decode, naming the command:
-"anadem-v1: 37 of the 3,061 blocks this domain needs are not in DIR; run:
+"anadem-v1: 37 of the 8,300 blocks this domain needs are not in DIR; run:
 rasputin fetch anadem-v1 --domain basin.geojson --out-crs EPSG:31983".
+
+**`rasputin fetch SOURCE`** (23a-2): `SOURCE` a catalogue key; `--domain`
+or `--bbox`, exactly one, read as `mesh` reads them (the same parsers), so
+the command the mesh's refusal prints runs as given; `--out-crs`, the frame
+("Planning"); `--cache` and `RASPUTIN_DATA` through 23a-1's `cache_root`;
+`--connections` (default 8). It imports `tin_engine.fetch` inside the
+command and runs `asyncio.run(fetch(...))`. Output: the report, one line
+per object, and a progress line to stderr at each tenth of the bytes. A
+refusal (`FetchError`, `CacheError`, a held lock, a changed remote) exits
+1 with its message; a usage error exits 2.
 
 ### The I/O boundary
 
@@ -1314,7 +1453,8 @@ the route for one piece's serial phase. All of this is arithmetic for
 sample) at the piece's 12.95 s per 10.43 M triangles on one thread is about
 5 min of refine on one core, about 40 s on 8 if it scales; resampling 734 M
 source nodes at the prototype's 30.9 M per 0.99 s on 8 threads is about 24 s;
-plus phase 2, decoding 3,061 blocks and writing.
+plus phase 2, decoding between the 3,061 blocks meeting the outline and the
+about 8,300 of its box (windows are boxes), and writing.
 
 ## Output
 
@@ -1499,7 +1639,7 @@ own arithmetic, so the oracle relation is the producer's
   sub-rectangle of one global lattice, J6) is the piece window; `resample`,
   `check_point_blocks`, `CheckPoints` and `refine_points` are used unchanged
   except for the frozen mask (23b). D8 and the Q11-Q17 rulings stand. Its
-  memory cap (15a R7) stays or goes by B15. 15c's acceptance stays on the Velhas piece,
+  memory cap (15a R7) goes (B15, ruled (a)). 15c's acceptance stays on the Velhas piece,
   undecomposed. What 15c already marked "Superseded at basin scale" is
   replaced by this record and nothing else is. If 23a lands before 15c-2,
   15c-2's acceptance reads ANADEM from the cache instead of a one-off cut.
@@ -1555,7 +1695,7 @@ own arithmetic, so the oracle relation is the producer's
 - **K7. Meshing is offline.** No network on `rasputin mesh`'s path; blocks
   meshing needs that the cache lacks are refused before any decode, naming
   the fetch command; for the same domain and options, mesh needs a subset of
-  what fetch got.
+  what fetch got (the box rule under "Planning").
 - **K8. The cache is honest.** A block is present exactly when its file has
   its byte count; a fetch refuses a remote whose length, date or header
   changed.
@@ -1696,12 +1836,14 @@ stays under 700 at both; the largest, 23c, is 688 at +60 %.
 | | `cli.py`: `--cache`, `RASPUTIN_DATA`, `--dem` as text, the key, the fetch command in the refusal | 35 | | |
 | | **23a-1 total** | **270** | **375** | **432** |
 | **23a-2** | **The fetch step** | | | |
-| | `fetch/plan.py`: header prefix, needed region, blocks, GLO-30 tile list | 75 | | |
-| | `fetch/http.py`: ranged GET, 206 and length checks, coalescing, retries, async bound | 80 | | |
-| | `fetch/run.py`: plan, missing, download, verify, put; `--dry-run` | 50 | | |
-| | `io/repository.py`: write side, atomic put, manifest, identity check | 35 | | |
-| | `cli.py`: `rasputin fetch` | 45 | | |
-| | **23a-2 total** | **285** | **396** | **456** |
+| | `fetch/plan.py`: header completeness, frame and source box, blocks, GLO-30 tiles, coalescing, identity comparison | 95 | | |
+| | `fetch/http.py`: `RangeClient`, 206, `Content-Range` and length checks, retries, `FetchError` | 70 | | |
+| | `fetch/run.py`: lock, headers, identity, manifest, bounded async download, report, `--dry-run` | 85 | | |
+| | `io/repository.py`: `CacheWriter` (lock, `.part` and rename, atomic manifest, notice, discard) | 50 | | |
+| | `io/geotiff.py`: `read_page(..., geographic=)` | 8 | | |
+| | `sources.py`: `cite`, `notice` | 15 | | |
+| | `cli.py`: `rasputin fetch` | 50 | | |
+| | **23a-2 total** | **373** | **518** | **597** |
 | **23b** | **Frozen edges and the seam pass, C++** | | | |
 | | `lattice_mesh.hpp`: the frozen mask, `is_frozen`, the assertion in `split_edge` | 15 | | |
 | | `scan.hpp`: nodes on a frozen edge skipped (only for triangles with one) | 30 | | |
@@ -1719,7 +1861,7 @@ stays under 700 at both; the largest, 23c, is 688 at +60 %.
 | | `basin_run.py`: run pieces in order, async-ready | 45 | | |
 | | `io/mesh_index.py`: `MeshIndex`, piece writer, seam records, conformity | 85 | | |
 | | `cli.py`: `--pieces`, `--memory-budget`, pieces output, fields | 50 | | |
-| | `mosaic.py` (and `catchment.py` under B15 (a)): R7's refusal deleted, if B15 (a) or (c) | 0 | | |
+| | `mosaic.py` and `catchment.py`: the refusals at half of physical memory deleted (B15 (a)) | 0 | | |
 | | **23c total** | **430** | **598** | **688** |
 | **23d** | **In parallel, resumable, stitched (seams kept)** | | | |
 | | `basin_run.py`: `--jobs`, thread split, largest first, admission under the budget | 45 | | |
@@ -1835,27 +1977,65 @@ code with `decode_window`.
 
 ### 23a-2 (Python)
 
-- **F1, the fixture**: a local range server (`http.server` in a thread)
-  serving a synthetic tiled COG written by tifffile (Deflate, 16² tiles, one
-  overview), counting requests, and able to fail after k responses, answer
-  500, answer 200 without honouring `Range`, or change `Last-Modified`.
+No network: every URL is `http://127.0.0.1:<port>/...`, put in `SOURCES` by
+`monkeypatch`; retry delays are zero. Async tests use `pytest-asyncio`.
+
+- **F1, the fixture**: a range server (`http.server` in a thread, its own
+  handler) serving files written by `geotiff_fixtures.micro_tiff` (Deflate,
+  16² tiles, one overview), one projected (EPSG:32633) and one geographic
+  (EPSG:4326), plus a GLO-30-style tile list. It logs every request's range,
+  and can fail after k responses, answer 500 or 404, answer 200 ignoring
+  `Range`, send a short body, a wrong `Content-Range`, or a changed
+  `Last-Modified` or length.
 - **F2, the plan**: the blocks equal a brute-force test of every block's
-  footprint against the region (shapely), for a domain with a thin arm
-  through a block corner.
-- **F3, the bytes**: each cached block equals the file's byte range; no
-  request asks for a present block; coalesced requests number no more than
-  the runs of wanted blocks.
-- **F4, resume**: the server fails mid-run; a rerun requests only what is
-  missing, and the cache then equals a clean run's, byte for byte.
+  pixel rectangle against the source box (projected and reprojected
+  frames); the source box contains every node of the domain's box in the
+  frame, grown by `margin` (sampled densely, moved with pyproj); a box
+  outside the raster is refused; ranges cover exactly the missing blocks,
+  no range spans a gap over 64 KiB or exceeds 8 MiB unless it is one block.
+- **F3, the bytes**: each cached block equals the file's byte range; the
+  request log shows no present block requested and one request per range;
+  `header.bin` is the file's prefix; a sparse block (TileByteCounts patched
+  to 0) is an empty file and was never requested.
+- **F4, resume**: the server fails after k responses; the rerun requests
+  only the missing blocks, and the cache tree then equals a clean run's,
+  byte for byte. A stray `.part` file is gone after any run.
 - **F5, incremental**: a second, overlapping domain requests only its new
-  blocks.
-- **F6, refusals**: 200 instead of 206; a short body; a changed length or date;
-  4xx not retried; 5xx retried three times, then refused.
-- **F7, the header**: a header longer than the first prefix makes the reader
-  double the prefix; the parse never reads past what was fetched; a prefix
-  that cuts the full page's offset array is detected (tifffile alone would
-  return the page with no offsets).
-- **F8, GLO-30**: a tile missing from the tile list is "no tile", not missing.
+  blocks; the manifest's requests list both, and the same request twice on
+  one day is listed once.
+- **F6, refusals**: 200 instead of 206 with a body far larger than the
+  socket buffers (several MiB), refused, and the server sent fewer bytes
+  than the body; a short body; a wrong `Content-Range`; a changed
+  length or `Last-Modified` on a block response, and on a known object's
+  prefix, each naming `--refresh`, with no block of that response written;
+  4xx tried once; 5xx tried four times, then refused; a held lock refused;
+  a header CRS other than the catalogue's refused.
+- **F7, the header**: a header longer than 1 MiB makes the reader double
+  the prefix (the log shows 1, 2, 4 MiB); a read past the prefix raises in
+  the test's stream; a prefix that cuts the full page's offset array is
+  detected; past 64 MiB it is refused. A geographic header is read (decided
+  6) while `read_page` without the flag still refuses it (23a-1 W9 green).
+- **F8, GLO-30**: a tile missing from the list is "no tile" in the plan and
+  the report, never requested; two listed tiles become two objects.
+- **F9, mesh after fetch (K7)**: fetch the projected fixture for a domain
+  whose box corners lie outside it, then `rasputin mesh --dem <key>` with
+  `socket.socket` raising succeeds, with the same vertices and triangles as
+  the same file meshed by path. Then the domain is grown past the fetched
+  box, step by step, until the mesh's window first meets a block fetch did
+  not take: that mesh is `NotCached` naming the fetch command, and its
+  `missing` and `needed` equal the test's own counts, from `blocks_meeting`
+  on the grown windows against the blocks fetched (not from the fetch's
+  plan; growing on every side can add more than one block).
+- **F10, the write side**: a manifest write that fails before `os.replace`
+  (monkeypatched) leaves the previous manifest readable; `NOTICE.txt`
+  holds each source's `credit`, `licence_note` and every `cite` entry
+  verbatim; `--refresh` empties the source's cache and refetches; dry-run
+  leaves `tmp_path` byte-identical (an empty cache stays without a source
+  directory) and prints the counts the real run then reports.
+- **F11, the boundary**: only `fetch/http.py` imports `urllib` or
+  `http.client` (an AST scan over `src_python/tin_engine`); 23a-1's W7 stays green;
+  `rasputin fetch` with neither `--cache` nor `RASPUTIN_DATA` is refused
+  with B7's message.
 
 ### 23b (C++ Catch2 and through the binding)
 
@@ -1910,11 +2090,11 @@ code with `decode_window`.
   and large values (neither the count nor the cut is the machine's).
 - **DC1, K1**: a domain under the budget, and a larger one with a budget
   above its estimate, write the same bytes as today's path.
-- **DC11, no machine refusal** (only if B15 is ruled (a) or (c)): a mosaic
+- **DC11, no machine refusal** (B15, ruled (a)): a mosaic
   over half of a patched `physical_memory` is planned, not refused; 15a's M5
   refusal cases in `test_mosaic.py` and `test_dem_input.py` are inverted
-  (pinned behaviour B15 would change); under (a) the same for 22's catchment
-  refusal in `test_catchment.py`. Under (b), none of this.
+  (pinned behaviour B15 changes); the same for 22's catchment refusal in
+  `test_catchment.py`.
 - **DC2, conformity, read from the files**: for every seam edge, both pieces'
   vertex sequences are equal bit for bit. The oracle reads the piece files,
   not the seam records or the index.
@@ -2044,8 +2224,9 @@ previous merge commit with `--tree`, back to back), evidence under
   noise (decoding is now windowed). On DTM10 tiles: decode throughput per
   block and per window, threads 1 to 8 (ANADEM's waits for 15c-2, which
   lifts the geographic refusal).
-- **23a-2:** fetch the basin's 3,061 ANADEM blocks: wall time, bytes,
-  requests, and a rerun that fetches nothing; an interrupted run resumed.
+- **23a-2:** fetch the basin's ANADEM box (about 8,300 blocks, "Decided
+  here (23a-2)" 1): wall time, bytes, requests, `--dry-run`'s plan against
+  the run, a rerun that fetches nothing, and an interrupted run resumed.
 - **23b:** the README rule in full; the mesh hash unchanged (mask 0), refine
   within noise at every thread count.
 - **23c:** the README rule; the benchmark is one piece at the default, so
@@ -2090,7 +2271,8 @@ The literature pass with web search (2026-10-01, "Prior art") changed no
 recommendation; it added a note to B4 and an option (c) to B5. **All twelve
 were ruled by Ola on 2026-10-01** ("Ruled by Ola, 2026-10-01", near the
 top); they are kept as asked, each marked with its ruling, as are B13 and
-B14, asked after them and ruled the same day. B15 is open.
+B14, asked after them and ruled the same day. B15 and B16 were ruled on
+2026-10-02.
 
 **B1. Which cuts first?**
 *Ruled (a), and BHO dropped entirely as a geometry source: "I'm not interested in archaic maps".*
@@ -2284,6 +2466,24 @@ each refuses on a small machine what a larger one meshes.
 - (c) Delete 15a R7 only (the mosaic canvas, which pieces bound), keep 22's
   until 23e windows the catchment flood.
 
+**Ruled by Ola, 2026-10-02: (a), delete both** ("B15 a").
+
+**B16. What a mesh made from a catalogue source says about its licence.**
+Asked 2026-10-02 (23a-2). Today the mesh file's `elevation_source` carries
+the catalogue's `credit` only (23a-1). GLO-30's licence, Art. 6(c), asks
+that its no-liability sentence accompany any distribution of the data,
+modified or not; ANADEM's distributor asks that Laipelt et al. 2024 be
+cited. 23a-2 writes all of it to `<cache>/<source>/NOTICE.txt` ("Decided
+here (23a-2)" 8), which travels with the cache, not with a mesh.
+- **(a) The mesh file also carries `licence_note` and `cite`**, in its
+  header beside `elevation_source` (about 5 lines, in 23a-2's `cli.py`).
+  Recommended: a mesh handed on keeps the notes the sources ask for.
+- (b) `credit` only, as now; the notes stay in `NOTICE.txt` and the docs,
+  and whoever distributes a mesh carries them.
+
+**Ruled by Ola, 2026-10-02: (a), the mesh file carries them** ("B16 a"; 23a-2
+implements it). Ola also gave the go-ahead to implement 23a-2.
+
 **Decided here, which Ola may overrule:** lattice lines on the computation
 lattice as artificial cuts; the partition rule's integer details (near-square
 cells, the last row and column narrower); `b(T)` from the Velhas piece's
@@ -2371,3 +2571,25 @@ Accepted in round 1: the public `DemTile` constructor instead of `_adopt` (one e
 ### 23a-1, round 2, `a235716..72ec413`: APPROVED (`@reviewer`)
 
 LOC is 336 net (373 added, 37 removed), still under the +39% worst case and far under 700. Both credits now match their sources word for word (GLO-30: the licence's Art. 6(b) notice, Art. 6(c) quoted in `licence_note`; ANADEM: OpenTopography's citation, CC BY 4.0). A missing `header.bin` is a `CacheError`; the sparse-block test fails with the sparse check removed; the four citations resolve to the quoted code; the departure and the `--out-crs` timing are recorded. pytest 3525 passed, 13 skipped in a fresh venv on this worktree's source; ruff, ruff format, mypy, `check_citations` and `check_prohibited_deps` clean. Not blocking: only `credit` reaches the mesh file, so Art. 6(c)'s sentence stays in the catalogue for 23a-2 to carry; `_ascii` writes ANADEM's accented credit as escapes. Remaining: `@perf`'s decode-speed acceptance, then CI after Ola approves the push.
+
+### 23a-2 design, round 1, `99bd723..2120609`: CHANGES REQUESTED (`@reviewer`)
+
+Design only; estimate 373 lines, 518 at +39 % and 597 at +60 %. Correct: block counts recounted from the COG's tie point and step (basin box 8,300 = 100 × 83 against 3,061 for the outline; Velhas 160 = 16 × 10 against 82, matching @perf's fetch); RFC 9110 §13.1.5 says what is claimed; retries, coalescing, lock, `.part`, atomic manifest, `geographic=` for fetch only, `NOTICE.txt` and `cite` consistent; B16 a question. Blocking: F9's "one cell larger is `NotCached`" cannot pass (fetch grows by 6 cells, the mesh window by none); ROADMAP's 285 lines and the 3,061 decoded blocks were stale.
+
+### 23a-2 design, round 2, `2120609..f32a865`: CHANGES REQUESTED (`@reviewer`)
+
+ROADMAP (373), the decode count and F6 fixed. Blocking: F9 asserted which block is missing, but `NotCached` carries only counts. The one-sentence fix (assert `missing` and `needed` against the test's own counts) is in 7f14e7d, checked by the main session against the diff instead of a third round (Ola's two-round cap).
+
+### 23a-2, round 1, `99bd723..226c6dc`: CHANGES REQUESTED (`@reviewer`)
+
+LOC was 598 added and 6 removed, 592 net, against an estimate of 373. That is +60 %, one line over the +60 % column, and under 700. Two packed regions (`FetchRequest(...)` in `cli.py`, `RasterMeta(...)` in `run.py`) are keyword-only constructor calls and still readable. The red step failed its tests (11 failed, 46 errors). The green step touched no test and left only the two tests it reported red. The amendment's reasons held: F4's old box gave a single coalesced range, and Q3 ruled out `CacheWriter`, which the design places in that module. pytest 3489 passed and 16 skipped in a fresh venv; ruff, ruff format, mypy, check_prohibited_deps, check_detria_boundary and check_citations clean. Retries, 206 handling, the lock, `.part` and rename, the atomic manifest, the order of writes and the check for a changed remote all match the design. Only `fetch/http.py` imports networking. `NOTICE.txt` matches the catalogue. All of @developer's departures were sound. Mutation pass: 12 of 14 mutants killed. Blocking:
+- B16 (a) was implemented for `.vtk` only. A `.ply` mesh carried neither `licence_note` nor `cite`; a probe confirmed it.
+- Prose still called B15 open after Ola ruled it: the Status paragraph, lines ~803 and ~2250, and ROADMAP row 23.
+
+### 23a-2, round 2, `226c6dc..dd76fe8`: APPROVED (`@reviewer`)
+
+- **B16 in `.ply`:** the notes are now written as header comments in both PLY files, and `cite` only when the source has citations. The new PLY cases (cited and uncited) fail against 226c6dc's source and pass at dd76fe8.
+- **`coalesce`:** now takes `max(stop, …)`, so a span lying inside another no longer shrinks the range.
+- **Progress count:** now updated under a lock.
+- **Prose:** the B15 text is correct in the Status paragraph, lines ~803, ~1017, ~1618 and ~2250, the LOC row, DC11 and ROADMAP row 23. The departures are recorded and match the code.
+- **Checks:** pytest 3491 passed, 16 skipped in the reviewer's venv (without vtk); ruff, ruff format, mypy and check_citations clean. About 604 production lines, under 700. CI not yet run.

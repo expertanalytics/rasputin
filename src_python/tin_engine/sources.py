@@ -1,4 +1,4 @@
-"""The catalogue of remote DEM sources `rasputin fetch` copies (increment 23a-1).
+"""The catalogue of remote DEM sources `rasputin fetch` copies (increments 23a-1, 23a-2).
 
 `docs/increments/23-basin-scale.md`, "The fetch step and the tile cache" and
 B8 as ruled: ANADEM and GLO-30. Data only, importing Pydantic alone, so the
@@ -31,6 +31,8 @@ class RemoteSource(BaseModel):
     nodata: float | None
     credit: str
     licence_note: str
+    #: The works the distributor asks to cite (23a-2); `notice` and the mesh file carry them.
+    cite: tuple[str, ...] = ()
 
 
 _GLO30 = "https://copernicus-dem-30m.s3.amazonaws.com"
@@ -48,6 +50,11 @@ SOURCES: Mapping[str, RemoteSource] = MappingProxyType(
             "Terrain Model for South America. Distributed by OpenTopography. "
             "https://doi.org/10.5069/G9736P4G.",
             licence_note="CC BY 4.0 (Creative Commons Attribution 4.0 International)",
+            # OpenTopography's acknowledgement asks for the paper as well as the data.
+            cite=(
+                "Laipelt, L., et al. (2024). ANADEM: A Digital Terrain Model for South America. "
+                "Remote Sensing, 16(13), 2321. https://doi.org/10.3390/rs16132321",
+            ),
         ),
         "glo30": RemoteSource(
             id="glo30",
@@ -68,4 +75,14 @@ SOURCES: Mapping[str, RemoteSource] = MappingProxyType(
     }
 )
 
-__all__ = ["SOURCES", "RemoteSource"]
+
+def notice(source: RemoteSource) -> str:
+    """`<cache>/<source>/NOTICE.txt` (23a-2, decided 8): a rendering of the
+    catalogue entry, which stays the one place these words are kept."""
+    lines = [f"{source.id}", "", "Credit:", source.credit, "", "Licence:", source.licence_note]
+    if source.cite:
+        lines += ["", "Cite:", *source.cite]
+    return "\n".join(lines) + "\n"
+
+
+__all__ = ["SOURCES", "RemoteSource", "notice"]

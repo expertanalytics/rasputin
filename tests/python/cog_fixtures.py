@@ -23,7 +23,7 @@ module collects before 23a-1 lands.
 
 PINNED BY THIS SUITE (the record names the fields but not their spelling):
 `CacheManifest(source, crs, rasputin_version, objects, requests)`, with
-`requests` a sequence of `{domain_sha256, date}`; `CachedObject(url,
+`requests` left empty (23a-2 renames its `domain_sha256` to `region_sha256`); `CachedObject(url,
 content_length, last_modified, header_sha256, header_bytes, block_shape)`,
 `block_shape` the (rows, cols) of one block. `RemoteSource(id, kind, url,
 crs, nodata, credit, licence_note)` with `url_template` and `tile_list_url`
@@ -33,7 +33,6 @@ optional. `CacheRepository(root, source_id)` reads `<root>/<source_id>/`, and
 
 from __future__ import annotations
 
-import datetime
 import hashlib
 import io
 import shutil
@@ -295,7 +294,7 @@ def manifest_for(source_id: str, objects: Mapping[str, bytes], crs: str = "EPSG:
         crs=crs,
         rasputin_version="0.2.0.dev0",
         objects=entries,
-        requests=[{"domain_sha256": "0" * 64, "date": datetime.date(2026, 10, 1)}],
+        requests=(),  # 23a-2 renames the field (decided 9); 23a-1 reads none
     )
 
 

@@ -1,0 +1,6 @@
+NET_EVENTS urllib.Request=5 socket.connect=5 socket.__new__=12
+RANGE -
+RANGE bytes=0-1048575
+RANGE bytes=0-1048575
+RANGE bytes=0-1048575
+RANGE bytes=0-1048575
