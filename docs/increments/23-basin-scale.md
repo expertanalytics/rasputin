@@ -1980,8 +1980,8 @@ No network: every URL is `http://127.0.0.1:<port>/...`, put in `SOURCES` by
   blocks; the manifest's requests list both, and the same request twice on
   one day is listed once.
 - **F6, refusals**: 200 instead of 206 with a body far larger than the
-  socket buffers (several MiB), the server counting the bytes it managed to
-  send: the client reads none of it; a short body; a wrong `Content-Range`; a changed
+  socket buffers (several MiB), refused, and the server sent fewer bytes
+  than the body; a short body; a wrong `Content-Range`; a changed
   length or `Last-Modified` on a block response, and on a known object's
   prefix, each naming `--refresh`, with no block of that response written;
   4xx tried once; 5xx tried four times, then refused; a held lock refused;
@@ -1998,9 +1998,10 @@ No network: every URL is `http://127.0.0.1:<port>/...`, put in `SOURCES` by
   `socket.socket` raising succeeds, with the same vertices and triangles as
   the same file meshed by path. Then the domain is grown past the fetched
   box, step by step, until the mesh's window first meets a block fetch did
-  not take: that mesh is `NotCached` naming the fetch command, and the block
-  it reports missing is that one (computed by the test from
-  `blocks_meeting`, not from the fetch's plan).
+  not take: that mesh is `NotCached` naming the fetch command, and its
+  `missing` and `needed` equal the test's own counts, from `blocks_meeting`
+  on the grown windows against the blocks fetched (not from the fetch's
+  plan; growing on every side can add more than one block).
 - **F10, the write side**: a manifest write that fails before `os.replace`
   (monkeypatched) leaves the previous manifest readable; `NOTICE.txt`
   holds each source's `credit`, `licence_note` and every `cite` entry
