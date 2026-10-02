@@ -246,3 +246,8 @@ $PY tabulate.py $R ../basin-phases/runs/level3_units.json 20 $D/sao_francisco_pi
 - `runs/t10/`, `runs/t5/`, `runs/t2/`: the same records at 10, 5 and 2 m, with `meshes.sha256`; `runs/t2/estimates_*.json` and `runs/t2/text_first/`.
 - `runs/t20/761.{log,stats.md}`: copied from the earlier 761 run.
 - `runs/t20/meshes.sha256`: the nine meshes.
+
+## Review
+
+- Round 1 (@reviewer, 070aee1..b9cd316): CHANGES REQUESTED. Tables match runs/ (4,990,698 / 13,085,364 / 34,576,221 triangles; peaks 13.88 / 14.38 / 14.27 GB), 761 matches basin-phases at 10 and 5 m, sha256 sample verifies, limitation, "not timings" caveat and credits present, ruff clean. One blocking issue: lines 18, 20 and 80 cited `runs/t20/<unit>.json` for all nine units, but 761 has no 20 m record (its estimate is in `runs/t10/761.json`). Suggestion: sha256 paths relative to one folder.
+- Round 2 (@reviewer, 6e9bd39): APPROVED. 2 m table matches runs/t2 (120,190,751 triangles; peak 14.29 GB for 761, 10.76 GB for 769; all exit 0, AC power, no swap growth). Estimate story matches runs/t2/estimates_*.json (27.79/33.25, then 23.45/28.92, then 21.34 for 769). text_first counts equal the binary re-runs, and 761's text peak was 14.39 GB with a late peak of 12.75 GB. Round-1 fixes applied. All 36 sha256 entries resolve from meshes/level3/ and a five-file sample passes `shasum -c`. Ruff clean. Not blocking: the recorded skip of 769 at 28.92 GB was overwritten in `runs/t2/769.json` by the later run; it remains visible in `estimates_measured.json`.
