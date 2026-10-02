@@ -91,15 +91,16 @@ reprojected path after the fixes in (a).
 **(a) Stream within one process.** These fixes in `resample`, `DemTile`, the
 store and the loader cut the measured costs; each also lowers every piece's
 peak under (b) and (c):
-1. resample blocks sized by node count (~3 lines): removes most of the
-   ~7 GB transient on 761 [m];
+1. resample blocks sized by node count (~3 lines): removes most of, *est.*,
+   the ~9.6 GB transient on 761 [d] (135 B × 256 × 27,786 × 10 = 13.97 GB
+   peak, less the 2.24 GB mosaic and the 2.15 GB canvas);
 2. adopt the canvas instead of copying it (~3 lines; 15a's M15 test reserves
    `_adopt` for `mosaic.py`, so that test changes too);
 3. drop the target tile before phase 2, as D1 intends (~15 lines);
 4. reserve the store's rows from a counting pass, or allocate them as one
-   block (~20 lines with C++): 30 → 16 B per point [m];
-5. find and remove P1's third copy (unknown lines; 12 → 4-8 B per source node
-   while loading [m]).
+   block (~20 lines with C++): 30 B [m] → 16 B *est.* per point;
+5. find and remove P1's third copy (unknown lines; 12 B [m] → 4-8 B *est.* per
+   source node while loading).
 
 Then a cache-backed `SourceWindows`, a windowed `assemble` per window, which
 honours 23a-1's decision 1 and J7 (~60-90 lines), so the mosaic never exists.
@@ -138,8 +139,8 @@ source, so (a) and (b) are engineering here, not novelty.
 At 2-5 m, memory alone no longer forces anything: (c) meshes the whole basin
 at 2 m in 14.3 GB [m]. What 2-5 m needs is **matching edges between the
 pieces**, and only (b) provides them. (a) is not needed to make the basin
-fit as pieces. It makes the uncut basin plausible at 5 m [d], and it lowers
-every piece's peak by about half. That raises the piece size 23 can use, so
+fit as pieces. It makes the uncut basin plausible at 5 m [d], and its fixes
+about halve the peak of pieces whose peak is set in resampling, *est.* (on 761 the peak would move from P2's 14.1 GB to the 6.8 GB load in P1 [m], which fixes 1-4 leave alone); not peaks set by the mesh, such as 769's 10.76 GB at 2 m. That raises the piece size 23 can use, so
 fewer seams are needed.
 
 | option | prod. lines | basin at 5 m / 2 m on 32 GiB | edges match | keeps 23 | main risk |
@@ -154,8 +155,8 @@ fewer seams are needed.
 1. **Now:** treat the nine level-3 meshes, run with `MallocLargeCache=0`, as
    the basin's interim 2-5 m result, labelled as non-conforming at unit
    borders.
-2. **Next:** (a)'s fixes 1-4 as one small PR (~40 lines). They halve every
-   piece's peak whichever route follows, and re-measuring `b(T)` follows from
+2. **Next:** (a)'s fixes 1-4 as one small PR (~40 lines). They
+   about halve the peak of pieces whose peak is set in resampling, *est.* (on 761 the peak would move from P2's 14.1 GB to the 6.8 GB load in P1 [m], which fixes 1-4 leave alone); not peaks set by the mesh, such as 769's 10.76 GB at 2 m, whichever route follows, and re-measuring `b(T)` follows from
    them. The streaming `SourceWindows` can wait until 23c needs it.
 3. **Then:** 23b-23g, which add matching edges and parallel speed. A
    conforming 2-5 m basin mesh needs them; the memory budget does not.
