@@ -1,0 +1,61 @@
+ANADEM test data in this directory
+==================================
+
+Both files below are derived from ANADEM:
+
+  Agência Nacional de Águas e Saneamento Básico. (2025). ANADEM: A Digital
+  Terrain Model for South America. Distributed by OpenTopography.
+  https://doi.org/10.5069/G9736P4G
+
+Licence: CC BY 4.0 (Creative Commons Attribution 4.0 International),
+https://creativecommons.org/licenses/by/4.0/. As OpenTopography's dataset
+acknowledgement asks, also cite:
+
+  Laipelt, L.; Comini de Andrade, B.; Collischonn, W.; de Amorim Teixeira, A.;
+  Paiva, R.C.D.; Ruhoff, A. "ANADEM: A Digital Terrain Model for South
+  America." Remote Sens. 2024, 16, 2321. https://doi.org/10.3390/rs16132321
+
+ANADEM is itself derived from Copernicus GLO-30, "produced using Copernicus
+WorldDEM-30 © DLR e.V. 2010-2014 and © Airbus Defence and Space GmbH
+2014-2018 provided under COPERNICUS by the European Union and ESA; all rights
+reserved". Neither ANA, OpenTopography, the European Union nor ESA endorses
+this project or its use of the data.
+
+
+1. anadem_velhas.tif (increment 15c-2, 2026-10-02)
+--------------------------------------------------
+
+Source: OpenTopography's ANADEM COG,
+https://opentopography.s3.sdsc.edu/raster/ANADEM/ANADEM_be/anadem_v1_compressed_COG.tif
+(EPSG:4674, SIRGAS 2000), read by range requests on 2026-10-02 into the tile
+cache of `rasputin fetch anadem-v1`.
+
+Modified: cut and re-encoded. 320 x 320 nodes, the COG's rows 124232-124551
+and columns 142421-142740 (upper Rio das Velhas, Minas Gerais, about
+44.13-44.05 W, 19.40-19.49 S), written with the COG's key set, its spacing and
+a tie point moved to the window. The elevations are the COG's, unchanged.
+Written by extract.py in this directory, which is reproducible from the cache.
+
+
+2. catchment.geojson (increment 15c-2, 2026-10-02)
+--------------------------------------------------
+
+Derived from anadem_velhas.tif alone, by this repository's code at commit 09c8d0e
+(15c-2's green work):
+
+  a. anadem_velhas.tif resampled by tin_engine.target_grid.resample onto its
+     30 m EPSG:31983 target grid (the grid target_grid_for gives for the
+     extract's node rectangle moved into EPSG:31983, default_spacing 30 m),
+     written as a GeoTIFF in EPSG:31983;
+  b. rasputin catchment --dem <that grid> --seed 597180 7852380
+     --seed-crs EPSG:31983 --out catchment.geojson
+     (no --lakes: the pour node is the grid node nearest the seed; the default
+     --outline-tolerance, 60 m). It reported 11884 nodes, 10.695 km2, a
+     27-vertex reduced outline, contained in the grid.
+
+The seed was chosen by trying every fourth of the 400 lowest grid nodes at
+least 25 nodes from the grid's edge as pour nodes, and keeping the largest
+catchment the command did not refuse. The
+command writes a one-feature FeatureCollection; the file here holds that
+feature's Polygon geometry, unchanged, as a bare GeoJSON Polygon with the
+same crs member (EPSG:31983), which is the form the test reads.
