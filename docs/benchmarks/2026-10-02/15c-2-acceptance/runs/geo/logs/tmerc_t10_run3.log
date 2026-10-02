@@ -1,0 +1,26 @@
+$ rasputin mesh --dem anadem-v1 --cache /Users/skavhaug/projects/rasputin_data/cache --domain /Users/skavhaug/projects/rasputin_data/sao_francisco_piece/bho2017_5k_76949_outline_epsg4674.geojson --out-crs +proj=tmerc +lat_0=0 +lon_0=-44.1 +k=0.999972 +x_0=0 +y_0=0 +ellps=GRS80 +units=m +no_defs --tolerance 10 --binary --out /Users/skavhaug/.claude/jobs/85c14e7c/tmp/perf15c2-scr/tmerc_t10.bin.vtk --stats docs/benchmarks/2026-10-02/15c-2-acceptance/runs/geo/logs/tmerc_t10_run3.stats.md
+--- stdout
+/Users/skavhaug/.claude/jobs/85c14e7c/tmp/perf15c2-scr/tmerc_t10.bin.vtk
+/Users/skavhaug/projects/rasputin/.claude/worktrees/15c-2/docs/benchmarks/2026-10-02/15c-2-acceptance/runs/geo/logs/tmerc_t10_run3.stats.md
+
+--- stderr
+10534 start quality nodes inserted, 334 start quality skips, 71 constraint feet, 0 feet refused, 33 rounds, 310907 points inserted, 791238 flips, 709134 triangles, achieved max error 9.999976021902853 m, 0 valid DEM nodes not covered, 7307 start triangles, 7309 start vertices off-node, 0 vertices without data dropped
+BENCH {"refine_s": 0.42098629201063886, "app_s": 3.658455666009104, "max_error": 9.999976021902853, "rounds": 33, "inserted": 310907, "flips": 791238}
+        3.89 real        16.79 user         0.74 sys
+          1926660096  maximum resident set size
+                   0  average shared memory size
+                   0  average unshared data size
+                   0  average unshared stack size
+              248029  page reclaims
+                   0  page faults
+                   0  swaps
+                   0  block input operations
+                   0  block output operations
+                   0  messages sent
+                   0  messages received
+                   0  signals received
+                   6  voluntary context switches
+               13813  involuntary context switches
+        111709968961  instructions retired
+         51822296395  cycles elapsed
+          1901087096  peak memory footprint

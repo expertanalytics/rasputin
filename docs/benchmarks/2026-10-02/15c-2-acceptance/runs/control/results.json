@@ -1,0 +1,132 @@
+{
+ "runs": [
+  {
+   "crs": "+proj=tmerc +lat_0=0 +lon_0=-44.1 +k=0.999972 +x_0=0 +y_0=0 +ellps=GRS80 +units=m +no_defs",
+   "tolerance": 50.0,
+   "pmset_before": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=24117347)\t100%; charged; 0:00 remaining present: true\n",
+   "timed": [
+    {
+     "refine_s": 0.10247987500042655,
+     "app_s": 2.4394180829986,
+     "max_error": 49.9978212714866,
+     "rounds": 23,
+     "inserted": 23313,
+     "flips": 63330,
+     "proc_s": 3.093319124978734,
+     "max_rss_bytes": 2085928960,
+     "vertices": 41836,
+     "triangles": 76361,
+     "threads": 10,
+     "command_total_s": 2.416,
+     "rows": {
+      "start vertices": "7309",
+      "start triangles": "7307",
+      "output vertices": "41836",
+      "output triangles": "76361",
+      "constraint edges": "7309",
+      "vertices without data dropped": "0",
+      "vertex degree (triangles)": "6",
+      "domain read": "0.014",
+      "decode": "1.229",
+      "start mesh: build": "0.000",
+      "start mesh: node": "0.009",
+      "start mesh: triangulate": "0.004",
+      "start mesh: constraint edges": "0.012",
+      "refine": "0.103",
+      "refine: legalise start": "0.000",
+      "refine: start quality": "0.012",
+      "refine: scan (parallel)": "0.074",
+      "refine: split + flip (serial)": "0.010",
+      "refine: setup + output": "0.006",
+      "check points: project": "0.563",
+      "check points: store": "0.294",
+      "final check: scan (parallel)": "0.000",
+      "final check: split + flip (serial)": "0.000",
+      "trim": "0.003",
+      "write: encode": "0.008",
+      "write: disk": "0.001",
+      "other": "0.176"
+     }
+    }
+   ],
+   "started_utc": "2026-10-02T10:56:49Z",
+   "pmset_after": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=24117347)\t100%; charged; 0:00 remaining present: true\n",
+   "phase2": {
+    "source_nodes": 18860772,
+    "inserted": 680,
+    "rounds": 8,
+    "max_error": 49.99349517355654
+   },
+   "quality": {
+    "worst_angle": 0.08277869521611186,
+    "angle_median": 37.184706453233126,
+    "share_under_1": 6.547845104176215e-05,
+    "max_degree": 13,
+    "within_tolerance": true,
+    "delaunay_checked": 110887,
+    "delaunay_ambiguous": 85,
+    "delaunay_violations": 0,
+    "mesh_sha256": ""
+   },
+   "check": {
+    "shift_m": 0.0,
+    "strip_width_m": 30.0,
+    "interior": {
+     "nodes": 13791979,
+     "outside_mesh": 0,
+     "over_tolerance": 0,
+     "over_share": 0.0,
+     "max": 49.99349517778319,
+     "p99": 39.8748679842375,
+     "median": 9.528893445036374
+    },
+    "strip": {
+     "nodes": 27799,
+     "outside_mesh": 0,
+     "over_tolerance": 0,
+     "over_share": 0.0,
+     "max": 37.89556365984026,
+     "p99": 15.798429742748851,
+     "median": 1.3956094862660393
+    },
+    "mesh_sha256": "5ccbe0ac7b23419f2d8308e56346402b36b9c78238fa2453c0367dd8131304d0",
+    "quality": null
+   },
+   "control": {
+    "shift_m": 15.0,
+    "strip_width_m": 30.0,
+    "interior": {
+     "nodes": 13791979,
+     "outside_mesh": 0,
+     "over_tolerance": 1156,
+     "over_share": 8.38168329577648e-05,
+     "max": 60.733632198069245,
+     "p99": 40.02663286340656,
+     "median": 9.605560195632279
+    },
+    "strip": {
+     "nodes": 22998,
+     "outside_mesh": 4801,
+     "over_tolerance": 0,
+     "over_share": 0.0,
+     "max": 42.44422448868863,
+     "p99": 19.995852445434647,
+     "median": 1.8529026095930021
+    },
+    "mesh_sha256": "5ccbe0ac7b23419f2d8308e56346402b36b9c78238fa2453c0367dd8131304d0",
+    "quality": null
+   }
+  }
+ ],
+ "outline": "/Users/skavhaug/projects/rasputin_data/sao_francisco_piece/bho2017_5k_76949_outline_epsg4674.geojson",
+ "window": "/Users/skavhaug/projects/rasputin_data/sao_francisco_piece/bho2017_5k_76949_anadem_window_epsg4674.tif",
+ "package": "/Users/skavhaug/projects/rasputin/.claude/worktrees/15c-2/build-bench/pkg",
+ "failures": [
+  {
+   "log": "tmerc_t50_run1.fail1.log",
+   "attempt": 1,
+   "kind": "terminated abnormally (signal)",
+   "utc": "2026-10-02T11:05:11Z"
+  }
+ ]
+}

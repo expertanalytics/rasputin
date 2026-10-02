@@ -1,0 +1,25 @@
+$ rasputin mesh --dem anadem-v1 --cache /Users/skavhaug/projects/rasputin_data/cache --domain /Users/skavhaug/projects/rasputin_data/sao_francisco_piece/bho2017_5k_76949_outline_epsg4674.geojson --out-crs EPSG:31983 --tolerance 20 --ascii --out /Users/skavhaug/.claude/jobs/85c14e7c/tmp/perf15c2-scr/EPSG31983_t20.ascii.vtk
+--- stdout
+/Users/skavhaug/.claude/jobs/85c14e7c/tmp/perf15c2-scr/EPSG31983_t20.ascii.vtk
+
+--- stderr
+10495 start quality nodes inserted, 341 start quality skips, 10 constraint feet, 0 feet refused, 30 rounds, 118273 points inserted, 311670 flips, 276205 triangles, achieved max error 19.999762066340054 m, 0 valid DEM nodes not covered, 7307 start triangles, 7309 start vertices off-node, 0 vertices without data dropped
+BENCH {"refine_s": 0.2243169580178801, "app_s": 2.9625907909939997, "max_error": 19.999762066340054, "rounds": 30, "inserted": 118273, "flips": 311670}
+        3.20 real        14.35 user         0.58 sys
+          1974206464  maximum resident set size
+                   0  average shared memory size
+                   0  average unshared data size
+                   0  average unshared stack size
+              238913  page reclaims
+                   0  page faults
+                   0  swaps
+                   0  block input operations
+                   0  block output operations
+                   0  messages sent
+                   0  messages received
+                   0  signals received
+                   2  voluntary context switches
+               15361  involuntary context switches
+        107575862234  instructions retired
+         43860722968  cycles elapsed
+          1950976424  peak memory footprint

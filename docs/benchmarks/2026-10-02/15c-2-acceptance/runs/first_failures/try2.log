@@ -1,0 +1,5 @@
+10534 start quality nodes inserted, 334 start quality skips, 0 constraint feet, 0 feet refused, 23 rounds, 23313 points inserted, 63330 flips, 76361 triangles, achieved max error 49.9978212714866 m, 0 valid DEM nodes not covered, 7307 start triangles, 7309 start vertices off-node, 0 vertices without data dropped
+/Users/skavhaug/.claude/jobs/85c14e7c/tmp/x.vtk
+real 2.78
+user 12.22
+sys 1.10
