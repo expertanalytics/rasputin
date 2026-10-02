@@ -37,7 +37,9 @@ class IndexWindow(BaseModel):
 
 
 class RasterMeta(BaseModel):
-    """The node grid of one tile, in metres of a projected CRS.
+    """The node grid of one tile, in metres of a projected CRS, or in degrees
+    when `geographic` (15c-2, D6). `crs` is `EPSG:n` when `epsg` is
+    given; a CRS without an EPSG code has `epsg` None and its text in `crs`.
 
     `x_min`/`y_max` are the upper-left *node*, already shifted inward half a
     cell for an area-registered file (§4). `rows`/`cols` are `StrictInt`
@@ -52,13 +54,25 @@ class RasterMeta(BaseModel):
     delta_y: float
     cols: StrictInt
     rows: StrictInt
-    epsg: int
+    epsg: int | None
+    crs: str = ""
+    geographic: bool = False
     # Finite or None (§6, round 2): a NaN sentinel matches no cell under
     # `==`, and a NaN field would also break model equality.
     nodata: float | None = Field(allow_inf_nan=False)
     nodata_source: Literal["tag", "caller", "absent"]
     pixel_is_area: bool
     vertical_unit_assumed: bool
+
+    @model_validator(mode="before")
+    @classmethod
+    def _crs_from_epsg(cls, data: Any) -> Any:
+        # An EPSG code is the CRS; text stands alone only without one.
+        if isinstance(data, dict) and data.get("epsg") is not None:
+            data = {**data, "crs": f"EPSG:{data['epsg']}"}
+        elif isinstance(data, dict) and not data.get("crs"):
+            raise ValueError("a RasterMeta needs an EPSG code or a CRS")
+        return data
 
     @model_validator(mode="after")
     def _absent_means_none(self) -> Self:

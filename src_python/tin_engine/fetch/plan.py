@@ -19,7 +19,6 @@ from typing import Any
 import numpy as np
 import tifffile
 from pydantic import BaseModel, ConfigDict, model_validator
-from pyproj import CRS
 
 from tin_engine.crs import parse_crs, transform_bounds
 from tin_engine.domain import DomainPolygon
@@ -92,7 +91,7 @@ def parse_prefix(
     the full-resolution page (tifffile logs a short offset array and goes on,
     so the count is the check). Geographic CRSs are read (decided 6)."""
     try:
-        meta, dtype, page = read_page(_Prefix(prefix), nodata=nodata, geographic=True)
+        meta, dtype, page = read_page(_Prefix(prefix), nodata=nodata)
         rows, _, across = block_grid(page)
         count = -(-int(page.imagelength) // rows) * across
         if len(page.dataoffsets) != count or len(page.databytecounts) != count:
@@ -107,8 +106,8 @@ def parse_prefix(
 
 
 def source_box(request: FetchRequest, meta: RasterMeta) -> Bounds:
-    """The box whose blocks are fetched, in the source CRS (`meta.epsg`)."""
-    source = CRS.from_epsg(meta.epsg)
+    """The box whose blocks are fetched, in the source CRS (`meta.crs`)."""
+    source = parse_crs(meta.crs)
     frame = parse_crs(request.out_crs) if request.out_crs else source
     if request.domain is not None:
         x0, y0, x1, y1 = request.domain.to_crs(frame).polygon.bounds

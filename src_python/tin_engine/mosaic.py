@@ -295,8 +295,8 @@ def _aligned(a: RasterMeta, b: RasterMeta) -> bool:
     return _key(a) == _key(b) and all(abs(v - round(v)) <= ALIGN_TOLERANCE for v in _cells(a, b))
 
 
-def _key(m: RasterMeta) -> tuple[int, float, float, bool, float | None]:
-    return m.epsg, m.delta_x, m.delta_y, m.pixel_is_area, m.nodata
+def _key(m: RasterMeta) -> tuple[str, float, float, bool, float | None]:
+    return m.crs, m.delta_x, m.delta_y, m.pixel_is_area, m.nodata
 
 
 def _cells(a: RasterMeta, b: RasterMeta) -> tuple[float, float]:
@@ -400,6 +400,8 @@ def _grid(
         cols=c1 - c0 + 1,
         rows=r1 - r0 + 1,
         epsg=first.epsg,
+        crs=first.crs,
+        geographic=first.geographic,
         nodata=first.nodata,
         nodata_source=first.nodata_source,
         pixel_is_area=first.pixel_is_area,
@@ -452,7 +454,7 @@ def _uncovered(meta: RasterMeta, tiles: tuple[TilePlacement, ...], needed: Any) 
     y1, y0 = (meta.y_max - rows_hit[i] * meta.delta_y for i in (0, -1))
     return (
         f"{count} nodes the request needs are in no tile: x {_num(x0)} to {_num(x1)}, "
-        f"y {_num(y0)} to {_num(y1)} (EPSG:{meta.epsg})"
+        f"y {_num(y0)} to {_num(y1)} ({meta.crs})"
     )
 
 
@@ -567,8 +569,8 @@ def _seam(
 def _mixed(a: TileFootprint, b: TileFootprint) -> str:
     """Why `b` is not on `a`'s lattice (R4.3, Q5), in the terms that differ."""
     ma, mb = a.meta, b.meta
-    if ma.epsg != mb.epsg:
-        why = f"is in EPSG:{mb.epsg}, not EPSG:{ma.epsg}"
+    if ma.crs != mb.crs:
+        why = f"is in {mb.crs}, not {ma.crs}"
     elif (ma.delta_x, ma.delta_y) != (mb.delta_x, mb.delta_y):
         why = f"has spacing {mb.delta_x!r} x {mb.delta_y!r}, not {ma.delta_x!r} x {ma.delta_y!r}"
     elif ma.pixel_is_area != mb.pixel_is_area:

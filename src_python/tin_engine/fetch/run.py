@@ -25,7 +25,6 @@ from typing import Any
 
 import tifffile
 from pydantic import BaseModel, ConfigDict
-from pyproj import CRS
 
 from tin_engine.crs import parse_crs
 from tin_engine.fetch.http import FetchError, RangeClient
@@ -148,10 +147,9 @@ async def _run(
             header_bytes=len(prefix),
             block_shape=tuple(int(n) for n in page.chunks[:2]),
         )
-    epsg = next(iter(headers.values()))[1][3].epsg
     manifest = CacheManifest(
         source=source.id,
-        crs=f"EPSG:{epsg}",
+        crs=next(iter(headers.values()))[1][3].crs,
         rasputin_version=importlib.metadata.version("rasputin"),
         objects=dict(sorted(entries.items())),
         requests=known.requests if known else (),
@@ -221,9 +219,9 @@ def _header(
             raise FetchError(f"{url}: no complete header in the first {MAX_HEADER // MIB} MiB")
         size *= 2
     meta, _, page = parsed
-    if CRS.from_epsg(meta.epsg) != parse_crs(source.crs):
+    if parse_crs(meta.crs) != parse_crs(source.crs):
         raise FetchError(
-            f"{object_id}: the header's CRS is EPSG:{meta.epsg}; the catalogue's {source.id} "
+            f"{object_id}: the header's CRS is {meta.crs}; the catalogue's {source.id} "
             f"is {source.crs}"
         )
     return got.data, got.total, got.last_modified, meta, page

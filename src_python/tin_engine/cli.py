@@ -57,6 +57,7 @@ import numpy.typing as npt
 import typer
 from pydantic import ValidationError
 
+from tin_engine import final_check
 from tin_engine._core import (
     ChainRole,
     IndexedMesh2,
@@ -627,6 +628,15 @@ def mesh(
             help="The --domain file's CRS, anything pyproj reads; required for .wkt.",
         ),
     ] = None,
+    out_crs: Annotated[
+        str | None,
+        typer.Option(
+            "--out-crs",
+            help="With --dem, mesh in this CRS: a DEM in another CRS (required for a "
+            "geographic one) is resampled onto a square grid here, and with --tolerance "
+            "checked against its own nodes. --bbox is then in this CRS.",
+        ),
+    ] = None,
     start_min_angle: Annotated[
         float | None,
         typer.Option(
@@ -813,16 +823,17 @@ def mesh(
                 except DomainError as exc:
                     raise typer.BadParameter(str(exc), param_hint="--domain") from exc
         try:
-            opened = _open_dem(paths, bbox, clock, given, cached)
+            opened = _open_dem(paths, bbox, clock, given, cached, out_crs)
         except NotCached as exc:
             area = f"--domain {domain}" if domain is not None else ""
             if bbox is not None:
                 area = "--bbox " + " ".join(repr(v).removesuffix(".0") for v in bbox)
-            flags = " ".join(filter(None, (area, f"--cache {cache}" if cache else "")))
+            frame = f"--out-crs {shlex.quote(out_crs)}" if out_crs else ""
+            flags = " ".join(filter(None, (area, frame, f"--cache {cache}" if cache else "")))
             run = f"rasputin fetch {dem[0]} {flags}".rstrip()
             raise typer.BadParameter(f"{exc}; run: {run}", param_hint="--dem") from exc
         label = opened.label
-        dem_crs = f"EPSG:{opened.tile.meta.epsg}"
+        dem_crs = opened.tile.meta.crs
         found = None
         sources: tuple[FeatureSource, ...] = ()
         if feature_paths and opened.domain is not None:
@@ -841,9 +852,10 @@ def mesh(
             DEFAULT_START_MIN_ANGLE if start_min_angle is None else start_min_angle,
             not no_constraint_feet,
             found,
+            opened,
         )
         surface_mesh = dem_run.trimmed
-        epsg, sentence, described = dem_run.epsg, dem_run.sentence, dem_run.described
+        sentence, described = dem_run.sentence, dem_run.described
         names = [t.name for t in opened.plan.tiles]
         if len(names) > 1:
             mosaic = f"mosaic of {len(names)} tiles, {opened.tile.meta.rows} x "
@@ -852,8 +864,16 @@ def mesh(
             sentence = f"{mosaic}; {sentence}"
         if cached is not None:  # 23a-1, decided 9: the key and its credit
             sentence = _ascii(f"{cached.source}, {SOURCES[cached.source].credit}; {sentence}")
-        fields = [("crs", f"EPSG:{epsg}"), ("elevation_source", sentence)]
-        comments = [f"crs EPSG:{epsg}", f"elevation {sentence}"]
+        fields = [("crs", dem_crs), ("elevation_source", sentence)]
+        comments = [f"crs {dem_crs}", f"elevation {sentence}"]
+        if opened.grid is not None:  # 15c-2, D7
+            h, source_crs = opened.grid.spacing, opened.source_crs
+            fields += [
+                ("source_crs", source_crs),
+                ("source_transform", transform_description(source_crs, dem_crs)),
+                ("computation_grid", f"square {h} m grid in {dem_crs}, node (R, K) at "
+                 f"({h} K, -{h} R), resampled bilinear from {source_crs}"),
+            ]  # fmt: skip
         if cached is not None:  # B16 (a): the notes the source asks to travel with it
             remote = SOURCES[cached.source]
             notes = [("licence_note", _ascii(remote.licence_note))]
@@ -869,8 +889,8 @@ def mesh(
         if described and given is not None:
             fields.append(("domain", described))
             comments.append(f"domain {described}")
-            same = parse_crs(given.crs) == parse_crs(f"EPSG:{epsg}")
-            how = "none" if same else transform_description(given.crs, f"EPSG:{epsg}")
+            same = parse_crs(given.crs) == parse_crs(dem_crs)
+            how = "none" if same else transform_description(given.crs, dem_crs)
             fields += [("domain_crs", crs_label(given.crs)), ("domain_transform", how)]
         if found is not None and sources and dem_run.feature_counts is not None:
             # R6: one record per source, joined. Chains and noded vertices are
@@ -1245,6 +1265,7 @@ def _open_dem(
     clock: PhaseClock,
     domain: DomainPolygon | None = None,
     cached: CachedSource | None = None,
+    target_crs: str | None = None,
 ) -> DemInput:
     """``--dem`` and ``--bbox`` or the read ``--domain`` to one tile (increment
     15a and 15b, R11); every refusal, the reader's, the mosaic's or the
@@ -1259,7 +1280,10 @@ def _open_dem(
         raise typer.BadParameter(_words(exc), param_hint="--bbox") from exc
     try:
         with clock.phase("decode"):
-            return open_dem(DemRequest(sources=dem, cached=cached, bounds=bounds, domain=domain))
+            request = DemRequest(
+                sources=dem, cached=cached, bounds=bounds, domain=domain, target_crs=target_crs
+            )
+            return open_dem(request)
     except NotCached:
         raise
     except OSError as exc:
@@ -1352,7 +1376,6 @@ class _DemMesh:
 
     trimmed: Trimmed
     sentence: str
-    epsg: int
     described: str
     meta: RasterMeta
     domain_vertices: int | None
@@ -1376,6 +1399,7 @@ def _dem_mesh(
     min_angle: float = 0.0,
     feet: bool = False,
     features: FeatureSet | None = None,
+    opened: DemInput | None = None,
 ) -> _DemMesh:
     """Subsample, triangulate, sample or refine, and trim ``tile``.
 
@@ -1385,8 +1409,9 @@ def _dem_mesh(
     DEM's CRS, 15b; ``domain_name`` is its file's), increment 16's R3, the
     polygon's rings are, and ``features``' lines (16b). ``min_angle`` > 0
     improves the start's angles first (increment 20); ``feet`` inserts
-    constraint feet (increment 20b).
-    Returns the mesh, the ``elevation`` sentence for the file, the EPSG code,
+    constraint feet (increment 20b). With ``opened``'s check points (15c-2),
+    the refined mesh is checked against the source's nodes (D5).
+    Returns the mesh, the ``elevation`` sentence for the file,
     the ``domain`` field (empty without one), and the ``--stats`` inputs;
     ``clock`` gets R5's phases.
     ``dem`` names the source in messages. Every refusal is a usage error in the
@@ -1453,14 +1478,25 @@ def _dem_mesh(
         _refine_phases(clock, (time.perf_counter_ns() - t0) / 1e9, out)
         if not out.ok():
             raise typer.BadParameter(f"{dem}: {out.message}", param_hint="--dem")
+        final, checked = out, ""
+        if opened is not None and opened.grid is not None and opened.checks is not None:
+            final, n = final_check.run(out, opened.grid, opened.checks, tolerance, clock)
+            if not final.ok():
+                raise typer.BadParameter(f"{dem}: {final.message}", param_hint="--dem")
+            checked = (
+                f" against the resampled grid; checked against {n} source nodes: "
+                f"{final.inserted} inserted in {final.rounds} rounds, max error "
+                f"{_exact(final.max_error)} m at source nodes, {final.coincident} coincident "
+                f"with a start vertex (max {_exact(final.coincident_max_error)} m)"
+            )
         with clock.phase("trim"):
             trimmed = trim(
-                vertices=out.vertices,
-                triangles=out.triangles,
-                edges=out.edges,
-                edge_masks=out.masks,
-                z=out.z,
-                valid=out.valid,
+                vertices=final.vertices,
+                triangles=final.triangles,
+                edges=final.edges,
+                edge_masks=final.masks,
+                z=final.z,
+                valid=final.valid,
             )
         refinement = Refinement(
             tolerance,
@@ -1479,9 +1515,9 @@ def _dem_mesh(
         )
         sentence = (
             f"refined from DEM nodes, constrained Delaunay, tolerance {_exact(tolerance)} m, "
-            f"achieved max error {_exact(out.max_error)} m, {start}, {quality_start}, "
-            f"constraint feet {'on' if feet else 'off'}, "
-            f"{out.uncovered} valid DEM nodes not covered"
+            f"achieved max error {_exact(out.max_error)} m{checked}, {start}, "
+            f"{quality_start}, constraint feet {'on' if feet else 'off'}, "
+            f"{final.uncovered} valid DEM nodes not covered"
         )
         report = (
             f"{out.quality_inserted} start quality nodes inserted, "
@@ -1505,7 +1541,6 @@ def _dem_mesh(
     return _DemMesh(
         trimmed=trimmed,
         sentence=sentence,
-        epsg=meta.epsg,
         described=described,
         meta=meta,
         domain_vertices=domain_vertices,

@@ -18,7 +18,7 @@ import importlib.util
 import math
 from collections.abc import Iterator
 from contextlib import contextmanager
-from typing import Any, BinaryIO, Literal, NoReturn
+from typing import Any, BinaryIO, Literal
 
 import numpy as np
 import pyproj
@@ -29,6 +29,7 @@ from .models import DemTile, GeoTiffError, RasterMeta
 
 USER_DEFINED = 32767
 METRE = 9001
+DEGREE = 9102
 PIXEL_IS_AREA = 1
 PIXEL_IS_POINT = 2
 
@@ -73,12 +74,10 @@ def read_page(
     decode block by block (23a-1). The same `_header`, so every refusal is the
     same. A prefix of the file that ends before its first block is enough;
     the page decodes blocks from their bytes alone after the file is closed.
-
-    `geographic=True` accepts a geographic CRS from GeographicTypeGeoKey
-    (2048), its `meta` in degrees. Only `tin_engine.fetch` passes it (23a-2,
-    decided 6): the mesh path refuses such a source until 15c-2."""
+    `geographic` is 23a-2's flag, kept for its callers: since 15c-2 every
+    entry point reads a geographic 2D CRS (D6), so it changes nothing."""
     with _tiff(source, nodata) as tif:
-        meta, dtype = _header(tif, nodata, geographic)
+        meta, dtype = _header(tif, nodata)
         page = tif.pages.first
     return meta, PROMOTION[dtype], page
 
@@ -119,9 +118,7 @@ def _tiff(source: BinaryIO, nodata: float | None) -> Iterator[tifffile.TiffFile]
         yield tif
 
 
-def _header(
-    tif: tifffile.TiffFile, nodata: float | None, geographic: bool = False
-) -> tuple[RasterMeta, np.dtype[Any]]:
+def _header(tif: tifffile.TiffFile, nodata: float | None) -> tuple[RasterMeta, np.dtype[Any]]:
     """Everything before the pixels (R3): the §5 header refusals, then the meta.
 
     Returns the file dtype too, which `decode_dem` promotes by. `rows` and
@@ -136,8 +133,9 @@ def _header(
     with _stage("GeoKey directory"):
         geokeys: dict[str, Any] = tif.geotiff_metadata or {}
     x_min, y_max, delta_x, delta_y, area = _placement(tie, scale, geokeys)
-    epsg = _geographic_epsg(geokeys) if geographic else None
-    epsg = epsg or _projected_epsg(geokeys)
+    # 15c-2, D6: with 3072 absent, a geographic 2D CRS in degrees from 2048.
+    geographic = geokeys.get("ProjectedCSTypeGeoKey") is None
+    epsg = _geographic_epsg(geokeys) if geographic else _projected_epsg(geokeys)
     vertical = geokeys.get("VerticalUnitsGeoKey")
     if vertical is not None and int(vertical) != METRE:
         raise GeoTiffError(
@@ -152,6 +150,7 @@ def _header(
         cols=int(page.imagewidth),
         rows=int(page.imagelength),
         epsg=epsg,
+        geographic=geographic,
         nodata=sentinel,
         nodata_source=source_of,
         pixel_is_area=area,
@@ -283,10 +282,7 @@ def _placement(
 
 def _projected_epsg(geokeys: dict[str, Any]) -> int:
     """Rulings 6 and 7, §5 refusals 12-14: a projected, metre CRS from 3072 alone."""
-    projected = geokeys.get("ProjectedCSTypeGeoKey")
-    if projected is None:
-        _refuse_through_2048(geokeys.get("GeographicTypeGeoKey"))
-    code = int(projected)
+    code = int(geokeys["ProjectedCSTypeGeoKey"])
     crs = _resolve(code)
     if crs is None:
         raise GeoTiffError(f"ProjectedCSTypeGeoKey (3072) = {code} is not a resolvable EPSG code")
@@ -313,18 +309,10 @@ def _projected_epsg(geokeys: dict[str, Any]) -> int:
     return code
 
 
-def _geographic_epsg(geokeys: dict[str, Any]) -> int | None:
-    """2048's code when 3072 is absent and 2048 resolves to a geographic CRS;
-    otherwise None, and `_projected_epsg` gives the refusal (23a-2)."""
-    code = geokeys.get("GeographicTypeGeoKey")
-    if geokeys.get("ProjectedCSTypeGeoKey") is not None or code is None:
-        return None
-    crs = _resolve(int(code))
-    return int(code) if crs is not None and crs.is_geographic else None
-
-
-def _refuse_through_2048(geographic: Any) -> NoReturn:
-    """3072 is absent. A 2048 code is never accepted; pick the refusal that is true."""
+def _geographic_epsg(geokeys: dict[str, Any]) -> int:
+    """3072 is absent: a geographic 2D CRS in degrees from 2048 (15c-2, D6), or
+    the refusal that is true of what 2048 holds."""
+    geographic = geokeys.get("GeographicTypeGeoKey")
     if geographic is None:
         raise GeoTiffError("ProjectedCSTypeGeoKey (3072) is absent: no CRS")
     code = int(geographic)
@@ -332,9 +320,17 @@ def _refuse_through_2048(geographic: Any) -> NoReturn:
     consulted = f"ProjectedCSTypeGeoKey (3072) is absent; GeographicTypeGeoKey (2048) = {code}"
     if crs is None:
         raise GeoTiffError(f"{consulted} is not a resolvable EPSG code either: no CRS")
-    if crs.is_geographic:
-        raise GeoTiffError(f"{consulted} is a {crs.type_name}; a projected CRS is required")
-    raise GeoTiffError(f"{consulted} is a {crs.type_name}; a projected CRS belongs in 3072")
+    if not crs.is_geographic:
+        raise GeoTiffError(f"{consulted} is a {crs.type_name}; a projected CRS belongs in 3072")
+    if len(crs.axis_info) != 2:
+        raise GeoTiffError(f"{consulted} is a {crs.type_name}; only a geographic 2D CRS is read")
+    units = geokeys.get("GeogAngularUnitsGeoKey")
+    if units is not None and int(units) != DEGREE:
+        raise GeoTiffError(f"GeogAngularUnitsGeoKey (2054) = {int(units)}; only degrees ({DEGREE})")
+    if any(a.unit_name != "degree" for a in crs.axis_info):
+        found = sorted({a.unit_name for a in crs.axis_info})
+        raise GeoTiffError(f"{consulted} has axes in {found}, not degrees")
+    return code
 
 
 def _resolve(code: int) -> pyproj.CRS | None:

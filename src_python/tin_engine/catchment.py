@@ -129,10 +129,10 @@ def delineate(request: CatchmentRequest, repository: DemRepository) -> Catchment
     :class:`CatchmentError` (truncated by the data's edge or NoData, no lake
     or two under the point, over the memory cap)."""
     footprints = repository.footprints()
-    epsgs = sorted({f.meta.epsg for f in footprints})
-    if len(epsgs) != 1:
-        raise CatchmentError(f"the tiles are in {len(epsgs)} CRSs, EPSG:{epsgs}; need one")
-    dem_crs = f"EPSG:{epsgs[0]}"
+    crss = sorted({f.meta.crs for f in footprints})
+    if len(crss) != 1:
+        raise CatchmentError(f"the tiles are in {len(crss)} CRSs, {crss}; need one")
+    dem_crs = crss[0]
     ((x, y),) = reprojector(request.seed_crs, dem_crs)([request.seed])
     if not (math.isfinite(x) and math.isfinite(y)):
         raise CatchmentError(f"the seed {request.seed} has no image in {dem_crs}")

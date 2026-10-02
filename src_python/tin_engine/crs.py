@@ -13,12 +13,14 @@ Pure: pyproj and numpy. No paths, no `_core`; CRS never crosses into the core.
 
 from __future__ import annotations
 
+import math
 from collections.abc import Callable
 from typing import Any
 
 import numpy as np
 import numpy.typing as npt
-from pyproj import CRS, Transformer
+from pydantic import BaseModel, ConfigDict
+from pyproj import CRS, Proj, Transformer, get_ellps_map
 from pyproj.exceptions import CRSError
 
 Xy = npt.NDArray[np.float64]
@@ -75,6 +77,59 @@ def crs_label(crs: str | CRS) -> str:
     if code is not None:
         return f"EPSG:{code}"
     return parsed.to_string().encode("ascii", "backslashreplace").decode("ascii")
+
+
+class CrsSuggestion(BaseModel):
+    """A conformal CRS for a box (15c, D8): a PROJ string, its family's name,
+    and its worst point-scale and areal errors over the box."""
+
+    model_config = ConfigDict(frozen=True)
+
+    proj: str
+    family: str
+    max_scale_error: float
+    max_areal_error: float
+
+
+def suggest_crs(box: tuple[float, float, float, float], geographic_crs: str | CRS) -> CrsSuggestion:
+    """D8: the family by the box's `(W, E, S, N)` latitude and shape, on the
+    DEM's own ellipsoid, its scale factor balanced over the box (`s = 2 /
+    (kmin + kmax)` from a unit-scale evaluation), angles to 0.1 degrees."""
+    west, east, south, north = box
+    lon_c, lat_c = (west + east) / 2, (south + north) / 2
+    el = parse_crs(geographic_crs).ellipsoid
+    assert el is not None  # a geographic CRS has one
+    a, rf = el.semi_major_metre, el.inverse_flattening
+    names = [k for k, v in get_ellps_map().items() if v.get("a") == a and v.get("rf") == rf]
+    ellps = f"+ellps={names[0]}" if names else f"+a={a!r} +rf={rf!r}"
+    common = f"+lon_0={round(lon_c, 1)}"
+    if abs(lat_c) >= 70 or max(abs(south), abs(north)) >= 80:
+        family, head = "polar stereographic", f"+proj=stere +lat_0={math.copysign(90.0, lat_c)}"
+    elif (east - west) * math.cos(math.radians(lat_c)) <= north - south:
+        family, head = "transverse Mercator", "+proj=tmerc +lat_0=0"
+    elif abs(lat_c) <= 15:
+        family, head = "Mercator", "+proj=merc"
+    else:
+        sixth = (north - south) / 6
+        family = "Lambert conformal conic"
+        head = f"+proj=lcc +lat_1={round(south + sixth, 1)} +lat_2={round(north - sixth, 1)}"
+        head += f" +lat_0={round(lat_c, 1)}"
+    k = "+k" if family == "transverse Mercator" else "+k_0"
+    lon, lat = np.meshgrid(np.linspace(west, east, 21), np.linspace(south, north, 21))
+
+    def proj(s: float) -> tuple[str, float, float, float, float]:
+        text = f"{head} {common} {k}={s!r} +x_0=0 +y_0=0 {ellps} +units=m +no_defs"
+        f = Proj(text).get_factors(lon.ravel(), lat.ravel())
+        scales = np.concatenate([f.meridional_scale, f.parallel_scale])
+        areal = float(np.abs(np.asarray(f.areal_scale) - 1).max())
+        worst = float(np.abs(scales - 1).max())
+        return text, float(scales.min()), float(scales.max()), worst, areal
+
+    _, kmin, kmax, _, _ = proj(1.0)
+    text, _, _, scale_error, areal_error = proj(round(2 / (kmin + kmax), 6))
+    return CrsSuggestion(
+        proj=text, family=family, max_scale_error=scale_error, max_areal_error=areal_error
+    )
 
 
 def _transformer(src: str | CRS, dst: str | CRS) -> Transformer:
