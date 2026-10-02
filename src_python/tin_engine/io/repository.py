@@ -9,6 +9,8 @@ the same grid arithmetic for any storage.
 Increment 23a-1 adds windowed loads (`load_window`, only the blocks a window
 meets) and the tile cache's read side (`CacheRepository`): a source fetched
 by `rasputin fetch` (23a-2) is read from `<cache>/<source>/` alone, offline.
+Increment 23a-2 adds the cache's write side (`CacheWriter`), the one writer
+of `<cache>/<source>/`; the tiles and the mesh path still only read.
 
 Increment 16b (R2, R3) adds :func:`open_geopackage`: SQLite cannot read from a
 Python stream, so a GeoPackage's "stream" is a read-only connection opened
@@ -18,8 +20,11 @@ here, and `io/geopackage.py` decodes through it.
 from __future__ import annotations
 
 import datetime
+import fcntl
 import hashlib
 import io
+import os
+import shutil
 import sqlite3
 from collections.abc import Callable, Iterable, Sequence
 from pathlib import Path
@@ -133,11 +138,13 @@ class TiffDemRepository:
 
 
 class CachedRequest(BaseModel):
-    """One fetch asked of the cache: the domain's sha256 and the date."""
+    """One fetch asked of the cache: the sha256 of the region as given (the
+    domain's WKB and CRS, or the box's numbers and CRS; 23a-2, decided 9) and
+    the date."""
 
     model_config = ConfigDict(frozen=True)
 
-    domain_sha256: str
+    region_sha256: str
     date: datetime.date
 
 
@@ -259,6 +266,84 @@ class CacheRepository:
         return CachedBlocks(self._directory / name, page, f"{self._source}/{name}")
 
 
+class CacheWriter:
+    """The write side of `<root>/<source>/` (23a-2, "The cache"). `manifest`
+    and `present` read without the lock, for a dry run; every `put_*` and
+    `discard` run inside `with writer:`, which holds `.lock` by `flock`
+    (decided 5: refused if held, dropped by the OS when the process dies) and
+    clears stray `.part` files. Every file is written as `<name>.part` and
+    renamed, so a crash never leaves half a file under the real name; only the
+    manifest is fsynced (decided 10)."""
+
+    def __init__(self, root: Path, source: str) -> None:
+        self.directory, self.source = Path(root) / source, source
+        self._lock: int | None = None
+
+    def __enter__(self) -> CacheWriter:
+        self.directory.mkdir(parents=True, exist_ok=True)
+        fd = os.open(self.directory / ".lock", os.O_CREAT | os.O_RDWR, 0o644)
+        try:
+            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError as exc:
+            os.close(fd)
+            lock = self.directory / ".lock"
+            raise CacheError(f"{self.source}: another fetch holds {lock}") from exc
+        self._lock = fd
+        for stray in self.directory.rglob("*.part"):
+            stray.unlink()
+        return self
+
+    def __exit__(self, *exc: object) -> None:
+        if self._lock is not None:
+            os.close(self._lock)  # closing the descriptor drops the flock
+            self._lock = None
+
+    def manifest(self) -> CacheManifest | None:
+        path = self.directory / "manifest.json"
+        return CacheManifest.model_validate_json(path.read_bytes()) if path.is_file() else None
+
+    def present(self, object_id: str, page: tifffile.TiffPage, indices: Sequence[int]) -> set[int]:
+        """Those of `indices` whose block file is there with its byte count."""
+        blocks = CachedBlocks(self.directory / object_id, page, f"{self.source}/{object_id}")
+        return set(indices) - set(blocks.missing(indices))
+
+    def put_header(self, object_id: str, data: bytes) -> None:
+        self._put(self.directory / object_id / "header.bin", data)
+
+    def put_block(self, object_id: str, page: tifffile.TiffPage, index: int, data: bytes) -> None:
+        directory = self.directory / object_id
+        self._put(CachedBlocks(directory, page, object_id)._path(index), data)
+
+    def put_manifest(self, manifest: CacheManifest) -> None:
+        self._put(self.directory / "manifest.json", manifest.model_dump_json().encode(), sync=True)
+
+    def put_notice(self, text: str) -> None:
+        self._put(self.directory / "NOTICE.txt", text.encode())
+
+    def discard(self) -> None:
+        """Everything of the source but the lock (`--refresh`, decided 11)."""
+        for child in self.directory.iterdir():
+            if child.is_dir():
+                shutil.rmtree(child)
+            elif child.name != ".lock":
+                child.unlink()
+
+    def _put(self, path: Path, data: bytes, *, sync: bool = False) -> None:
+        assert self._lock is not None, "a CacheWriter writes only inside `with`"
+        part = path.with_name(path.name + ".part")
+        part.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            with part.open("wb") as stream:
+                stream.write(data)
+                if sync:
+                    stream.flush()
+                    os.fsync(stream.fileno())
+            os.replace(part, path)
+        except BaseException:
+            part.unlink(missing_ok=True)
+            raise
+
+
 def open_geopackage(path: Path) -> sqlite3.Connection:
     """``path`` as a read-only SQLite connection (16b R3). The caller closes it.
 
@@ -273,8 +358,10 @@ __all__ = [
     "CacheError",
     "CacheManifest",
     "CacheRepository",
+    "CacheWriter",
     "CachedBlocks",
     "CachedObject",
+    "CachedRequest",
     "DemRepository",
     "NotCached",
     "TiffDemRepository",

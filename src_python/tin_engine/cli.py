@@ -854,6 +854,11 @@ def mesh(
             sentence = _ascii(f"{cached.source}, {SOURCES[cached.source].credit}; {sentence}")
         fields = [("crs", f"EPSG:{epsg}"), ("elevation_source", sentence)]
         comments = [f"crs EPSG:{epsg}", f"elevation {sentence}"]
+        if cached is not None:  # B16 (a): the notes the source asks to travel with it
+            remote = SOURCES[cached.source]
+            fields.append(("licence_note", _ascii(remote.licence_note)))
+            if remote.cite:
+                fields.append(("cite", _ascii("; ".join(remote.cite))))
         if cached is not None or len(paths) > 1 or paths[0].is_dir():  # R11: the files used
             fields.append(("dem_tiles", _ascii("; ".join(names))))
             seams = opened.seams
@@ -1114,6 +1119,93 @@ def _fixture_mesh(name: str, delaunay: bool, spacing: float, clock: PhaseClock) 
         edge_masks=masks,
         dropped=0,
     )
+
+
+@app.command()
+def fetch(
+    source: Annotated[str, typer.Argument(help=f"A catalogue source: {', '.join(SOURCES)}.")],
+    domain: Annotated[
+        Path | None,
+        typer.Option("--domain", help="Fetch what a mesh of this polygon reads, as mesh reads it."),
+    ] = None,
+    domain_crs: Annotated[
+        str | None, typer.Option("--domain-crs", help="The --domain file's CRS, as for mesh.")
+    ] = None,
+    bbox: Annotated[
+        tuple[float, float, float, float] | None,
+        typer.Option(
+            "--bbox", metavar="BOX", help="Or XMIN YMIN XMAX YMAX in --out-crs, else the source's."
+        ),
+    ] = None,
+    out_crs: Annotated[
+        str | None, typer.Option("--out-crs", help="The frame the mesh's box is in.")
+    ] = None,
+    cache: Annotated[
+        Path | None, typer.Option("--cache", help="The tile cache. Default: $RASPUTIN_DATA/cache.")
+    ] = None,
+    dry_run: Annotated[
+        bool, typer.Option("--dry-run", help="Read the headers, print the plan, write nothing.")
+    ] = False,
+    refresh: Annotated[
+        bool, typer.Option("--refresh", help="Discard the source's cache and fetch anew.")
+    ] = False,
+    connections: Annotated[int, typer.Option("--connections", min=1)] = 8,
+) -> None:
+    """Copy what a mesh of the domain reads from a remote source into the tile
+    cache (increment 23a-2), so ``rasputin mesh --dem SOURCE`` runs offline."""
+    import asyncio
+
+    from tin_engine.fetch.http import FetchError, RangeClient
+    from tin_engine.fetch.plan import FetchRequest
+    from tin_engine.fetch.run import fetch as run
+    from tin_engine.io.repository import CacheError, CacheWriter
+
+    if source not in SOURCES:
+        raise typer.BadParameter(f"{source} is not a catalogue source ({', '.join(SOURCES)})")
+    if (domain is None) == (bbox is None):
+        raise typer.BadParameter("give exactly one of --domain and --bbox", param_hint="--bbox")
+    root = cache_root(cache, os.environ)
+    if root is None:
+        raise typer.BadParameter(
+            "no cache: set RASPUTIN_DATA (the data root; the cache is $RASPUTIN_DATA/cache) "
+            "or pass --cache",
+            param_hint="--cache",
+        )
+    try:
+        given = read_domain(domain, domain_crs) if domain is not None else None
+        corners = ("x_min", "y_min", "x_max", "y_max")
+        box = None if bbox is None else Bounds(**dict(zip(corners, bbox, strict=True)))
+        request = FetchRequest(
+            source=source, domain=given, box=box, out_crs=out_crs, connections=connections,
+            dry_run=dry_run, refresh=refresh,
+        )  # fmt: skip
+    except DomainError as exc:
+        raise typer.BadParameter(str(exc), param_hint="--domain") from exc
+    except ValueError as exc:
+        raise typer.BadParameter(_words(exc)) from exc
+    tenths = [0]
+
+    def progress(done: int, total: int) -> None:
+        if total and done * 10 // total > tenths[0]:
+            tenths[0] = done * 10 // total
+            typer.echo(f"{done:,} of {total:,} bytes", err=True)
+
+    client, writer = RangeClient(), CacheWriter(root, source)
+    try:
+        report = asyncio.run(run(request, SOURCES[source], client, writer, progress=progress))
+    except (FetchError, CacheError, ValueError) as exc:
+        typer.echo(f"Error: {exc}", err=True)
+        raise typer.Exit(1) from exc
+    for plan in report.plans:
+        typer.echo(f"{plan.object_id}: {len(plan.blocks):,} blocks, {plan.bytes:,} bytes to fetch")
+    head = "would fetch" if dry_run else "fetched"
+    typer.echo(
+        f"{source}: {report.objects} objects, {report.needed:,} blocks needed, "
+        f"{report.present:,} present, {head} {report.fetched:,} ({report.empty} empty) in "
+        f"{report.requests:,} requests, {report.bytes:,} bytes, {report.seconds:.1f} s"
+    )
+    if report.no_tile:
+        typer.echo(f"no tile (sea): {', '.join(report.no_tile)}")
 
 
 def cache_root(option: Path | None, environ: Mapping[str, str]) -> Path | None:
