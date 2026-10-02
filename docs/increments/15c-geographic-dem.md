@@ -1287,3 +1287,24 @@ Production LOC unchanged at 445 added, 3 removed (442 net) against the estimate 
 - Mutation pass: 19 of 20 mutants killed, including the refusal disabled and all four round-1 survivors re-run (multi-block loop, the store's frame, `final.ok()`, the refusal's percentages). The one survivor, `get_factors` on 3×3 points instead of 21×21, is near-equivalent.
 - Full `tests/python`: 3541 passed, 114 skipped (without the `codecs` extra). ruff, ruff format, mypy, `check_prohibited_deps` and `check_detria_boundary` green; `check_citations` exits 0 and the re-pointed quotations hold.
 - The rewrites of `project_structure.md`, D3, D6 and D7 and the ROADMAP row match the code. CI not yet run.
+
+### 15c-2, `@perf` acceptance (999559a): REGRESSION
+
+Norway path unchanged (mesh hashes identical, refine within noise). Velhas piece on ANADEM at 50, 20, 10 and 5 m: 0 source nodes over tolerance by the independent check. But the geographic run crashed in 7 of 47 starts (SIGBUS, `GEOSException`) in GEOS prepared-polygon `intersects` from `check_point_blocks`' worker threads; the suggested CRS had no datum; the final check's timing rows were always 0 (`docs/benchmarks/2026-10-02/15c-2-acceptance/`).
+
+### 15c-2, round 3, `999559a..18a47cb`: CHANGES REQUESTED (`@reviewer`)
+
+- **Fixed and confirmed:** each check-point block now prepares its own copy of the domain, so no GEOS object is shared between threads. The suggestion is WKT2 on the DEM's own datum (SIRGAS 2000 for EPSG:4674, WGS 84 for EPSG:4326), and pyproj's transform from the DEM to it is the conversion alone, with no ballpark offset. The final-check timing rows are now set in `refine_points.hpp`.
+- **Checks:** C++ built with `-Werror` and ctest passed 843/843. `tests/python` 3543 passed. Brute-force check through the WKT: 0 source nodes over tolerance.
+- **R3-B1:** the WKT in the refusal could not be copied back. Rich's panel wrapped it mid-token inside its borders, and every paste form failed to parse.
+
+### 15c-2, round 4, `18a47cb..32e45c2`: APPROVED (`@reviewer`)
+
+- **Paste-back:** the suggestion now prints as one unwrapped stderr line. Under a real pty at 80 columns it pastes back and meshes (exit 0).
+- **R4-B1, the apostrophe:** EPSG:4266 (M'poraloko) put an apostrophe inside the hand-made single quotes and broke the paste. f8944be pins the case and 32e45c2 quotes the line with `shlex.quote`. On a 4266 tile at 32e45c2, the printed line pastes back as 2 arguments in both zsh and bash, pyproj reads the WKT with the M'poraloko datum, and the mesh runs (exit 0).
+- **Basin README:** the 33.2 GB peak is measured; the array sizes are labelled as coming from planning, not a run, and their arithmetic holds.
+- **Gates:** `test_cli_mesh_geographic.py` 29 passed, 1 skipped. Red before green holds. CI not yet run.
+
+### 15c-2, `@perf` re-acceptance (c47bff6): ACCEPTED for the crash
+
+0 crashes in 200 starts (100 with EPSG:31983, 100 with the pasted WKT); the 5 m independent check finds 0 nodes over tolerance; the whole São Francisco basin does not fit 32 GiB even at 50 m (`docs/benchmarks/2026-10-02/basin-anadem/`), which is a limit of the one-process path, not a 15c-2 defect.
