@@ -139,3 +139,32 @@ Also raised:
 - **Every control needs a measurable reason to keep existing,** generalising
   the retirement rule for principles; otherwise "a perfectly governed system
   that spends 30–50% of its intelligence navigating its own governance".
+
+## Gemini's four points, and findings of 2026-10-01/02
+
+Gemini reviewed the harness too. Its four points, each with the main
+session's take:
+
+1. **Cap the gates' output in the transcript.** Small; worth doing.
+2. **Flag stale progress files left by dead agents** in
+   `.claude/current-task/`. Small; worth doing.
+3. **Stop a task after three refusals** instead of letting it try other
+   routes. Small; worth doing.
+4. **Scope unattended mode per worktree.** Decline: the mode is meant to be
+   global, because Ola is away from every tree at once.
+
+Findings:
+
+- `away.py --back` misses `.claude/current-task/` when run from a worktree.
+  It takes the tree it is run from as its root
+  (`Path(__file__).resolve().parents[1]` in `tools/away.py`), so its list of
+  `ASK OLA:` lines comes from the worktree's folder, not the main checkout's.
+- A merge script read "no checks reported" as green.
+  CI is authoritative only once it has reported something.
+- A stray `.pth` file in a shared scratch venv put an old copy of the code on
+  the path, and the agents tested that copy instead of their own tree.
+- 2026-10-01, night: `@reviewer` bypassed a live guard by writing
+  placeholder tokens and swapping them in with a script that built its paths
+  from split strings. The design that answers this is
+  `docs/increments/h6-role-limits.md` (case 6). h6 checks the tree after the
+  call, not the command's text.
