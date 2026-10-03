@@ -462,12 +462,17 @@ TEST_CASE("ES6: a strip point foot_fits refuses is counted with its error, and t
         const Mesh m = mesh_of(out);
         const auto f = e1(p.dem, p.begin, m, tol);
         CHECK(f.unfiled == 0);
-        REQUIRE(f.over > 0);
-        const Lat a = lat(g, p.begin.mesh.vertices()[0]);
-        for (const Lat q : f.over_at) {
-            CAPTURE(q.col, q.row);
-            CHECK(std::hypot(q.col - a.col, q.row - a.row) <= 1e-9);  // only at f (and its midpoint with a)
-        }
+        // L11: every point the oracle generates is repaired ("E1 holds for the
+        // rest"). The oracle merges crossings closer than 1e-12 in parameter,
+        // so f (t about 3.7e-17) is not among its points; f is measured from
+        // the test's own knowledge instead: the CC7 probe's crossing (1, 1.5),
+        // with z 6 from the plane 3 col + 2 row.
+        CHECK(f.over == 0);
+        const std::vector<OraclePoint> refused{OraclePoint{{1.0, 1.5}, 6.0, 0}};
+        const auto at_f = strip_findings(g, refused, m, tol);
+        CHECK(at_f.unfiled == 0);
+        CHECK(at_f.over == 1);
+        CHECK(at_f.worst == Catch::Approx(out.strip_refused_max_error).margin(1e-9));
         // No vertex at f; every triangle strictly counter-clockwise; E2 and
         // the Delaunay oracle hold.
         for (const Point2 v : out.vertices) CHECK_FALSE(lat(g, v) == (Lat{1.0, 1.5}));
@@ -565,6 +570,7 @@ TEST_CASE("ES8: a node on a constrained diagonal is inserted once, by whichever 
         const auto strip = strip_of(dem, b);
         const auto out = run_strip(dem, strip, b, tol);
         projected_oracles(dem, strip, b, out, tol);  // coincident 0 among them
+        CHECK(out.strip_refused == 0);  // L7: a missed consumption would show as a refusal on the vertex
         const Lat node{static_cast<double>(row), static_cast<double>(row)};
         CHECK(std::count_if(out.vertices.begin(), out.vertices.end(),
                             [&](Point2 v) { return lat(g, v) == node; }) == 1);
@@ -846,44 +852,62 @@ double ulps(double x, int k) {
     return x;
 }
 
-// One triangle (a, b, apex) with a-b constrained, over a 24 x 16 node DEM.
-// Asserts what the loop owes such a start: it ends; no two output vertices
-// share a position; every triangle is strictly counter-clockwise; E2 and
-// Delaunay hold; and every point the strip oracle finds over the tolerance is
-// within 1e-9 cells of an end and accounted for as refused.
-void ulp_run(Point2 a, Point2 b, Point2 apex, double tol) {
+// One triangle (a, b, apex) with a-b constrained, over a 24 x 16 node DEM,
+// run through refine_strip.
+struct UlpRun {
+    Raster<float> dem;
+    Begin begin;
+    PointRefineOutcome out;
+};
+
+UlpRun ulp_start(Point2 a, Point2 b, Point2 apex, double tol) {
     const auto g = exact_geometry(24, 16);
     std::vector<float> v(24 * 16);
     for (std::size_t r = 0; r < 16; ++r)
         for (std::size_t c = 0; c < 24; ++c)
             v[r * 24 + c] = static_cast<float>(1000 + 7 * c + 13 * r + 4 * ((5 * r + 3 * c) % 11));
-    const Raster<float> dem{g, std::move(v)};
+    Raster<float> dem{g, std::move(v)};
     Start s;
     s.mesh = IndexedMesh2{{a, b, apex}, {{0, 1, 2}}, {0}};
     s.edges = {{0, 1}};
     s.masks = {1};
-    const Begin begin = direct(dem, s);
+    Begin begin = direct(dem, s);
     const auto strip = strip_of(dem, begin);
-    const auto out = run_strip(dem, strip, begin, tol);
-    REQUIRE(out.ok());
-    const Mesh m = mesh_of(out);
-    const auto sh = shape_findings(dem, begin.mesh.vertices(), begin.edges, begin.masks, m);
+    auto out = run_strip(dem, strip, begin, tol);
+    return UlpRun{std::move(dem), std::move(begin), std::move(out)};
+}
+
+// What the loop owes such a start: it ends; no two output vertices share a
+// position; every triangle is strictly counter-clockwise; E2 and Delaunay
+// hold; and every point the strip oracle finds over the tolerance is within
+// 1e-9 cells of an OUTPUT vertex (L12: an end of the start edge, or a vertex
+// the run put on the constraint) and accounted for as refused.
+UlpRun ulp_run(Point2 a, Point2 b, Point2 apex, double tol) {
+    UlpRun r = ulp_start(a, b, apex, tol);
+    const auto& g = r.dem.geometry();
+    REQUIRE(r.out.ok());
+    const Mesh m = mesh_of(r.out);
+    const auto sh = shape_findings(r.dem, r.begin.mesh.vertices(), r.begin.edges, r.begin.masks, m);
     CHECK(sh.coincident == 0);
     CHECK(sh.stray == 0);
     CHECK(sh.broken_chain == 0);
-    const auto n = node_findings(dem, m, tol);
+    const auto n = node_findings(r.dem, m, tol);
     CHECK(n.not_ccw == 0);
     CHECK(n.over == 0);
     CHECK(delaunay_violations(g, m) == 0);
-    const auto f = e1(dem, begin, m, tol);
+    const auto f = e1(r.dem, r.begin, m, tol);
     CHECK(f.unfiled == 0);
-    if (f.over > 0) CHECK(out.strip_refused > 0);
-    const Lat la = lat(g, a), lb = lat(g, b);
+    if (f.over > 0) CHECK(r.out.strip_refused > 0);
     for (const Lat q : f.over_at) {
         CAPTURE(q.col, q.row);
-        CHECK(std::min(std::hypot(q.col - la.col, q.row - la.row), std::hypot(q.col - lb.col, q.row - lb.row))
-              <= 1e-9);
+        double nearest = std::numeric_limits<double>::infinity();
+        for (const Point2 v : r.out.vertices) {
+            const Lat l = lat(g, v);
+            nearest = std::min(nearest, std::hypot(q.col - l.col, q.row - l.row));
+        }
+        CHECK(nearest <= 1e-9);
     }
+    return r;
 }
 
 }  // namespace
@@ -922,5 +946,47 @@ TEST_CASE("ES13: ends within ulps of grid lines: the loop ends, with no coincide
                 ulp_run(a, b, apex, tol);
             }
         }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// ES14: a DEM node a hair off a constrained edge goes in on it (L12)
+// ---------------------------------------------------------------------------
+
+TEST_CASE("ES14: a DEM node within ulps of the constraint goes in on the chain, not beside it",
+          "[edge_strip][ES14]") {
+    // ES13's sweep input seed 11, k 0, promoted (docs/increments/15f-edge-strip.md,
+    // L12): a from (2, 2) and b from (13, 13), each moved a few ulps, so the
+    // constraint passes within ulps of the nodes (k, k) without containing
+    // them. Before L12 the rescan put such a node in with split_inside,
+    // beside the edge; it became the apex over the sub-edge, and foot_fits
+    // then refused strip points in the middle of the edge.
+    const auto g = exact_geometry(24, 16);
+    const Point2 a = world(g, ulps(2.0, 2), ulps(2.0, 4));
+    const Point2 b = world(g, ulps(13.0, -4), ulps(13.0, 2));
+    const Point2 apex = world(g, 2.984375, 2.484375);
+    SECTION("tolerance 0.5: no refusal, and the nodes near the line are on the chain") {
+        const double tol = 0.5;
+        const UlpRun r = ulp_run(a, b, apex, tol);
+        CHECK(r.out.strip_refused == 0);
+        const Mesh m = mesh_of(r.out);
+        CHECK(e1(r.dem, r.begin, m, tol).over == 0);
+        const Lat la = lat(g, a), lb = lat(g, b);
+        std::set<std::uint32_t> on_chain;
+        for (const auto& e : r.out.edges) on_chain.insert({e[0], e[1]});
+        std::size_t near_line = 0;
+        for (std::uint32_t i = 3; i < r.out.vertices.size(); ++i) {
+            const Lat p = lat(g, r.out.vertices[i]);
+            if (!is_node(p)) continue;
+            const auto [t, d] = param_dist(la, lb, p);
+            if (d > 1e-10 || t <= 0.0 || t >= 1.0) continue;
+            CAPTURE(p.col, p.row, d);
+            ++near_line;
+            CHECK(on_chain.contains(i));  // an end of an output constraint edge
+        }
+        CHECK(near_line > 0);  // the input exercises L12 at all
+    }
+    SECTION("tolerance 0: every point over the tolerance is at an output vertex") {
+        ulp_run(a, b, apex, 0.0);  // asserts it, and the rest of ES13's list
     }
 }
