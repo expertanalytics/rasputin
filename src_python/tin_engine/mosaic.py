@@ -109,9 +109,11 @@ class Seam:
     median: float
 
     def entry(self) -> str:
-        """The `dem_seams` entry, unescaped."""
+        """The `dem_seams` entry, unescaped (increment 25's wording)."""
         _, _, n, largest, median = self.cells()
-        return f"{self.first} | {self.second}: nodes {n}, max {largest}, median {median}"
+        nodes = "node" if self.nodes == 1 else "nodes"
+        head = f"{self.first} and {self.second} disagree at {n} {nodes}"
+        return f"{head}, by up to {largest} m (median {median} m)"
 
     def cells(self) -> tuple[str, str, str, str, str]:
         """The `--stats` table row, numbers formatted as in `entry`."""
