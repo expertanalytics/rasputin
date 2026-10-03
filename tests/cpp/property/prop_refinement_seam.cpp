@@ -6,10 +6,10 @@
 // green); the Python half of SP1 and SP2 (NumPy, fractions) is
 // tests/python/test_core_seam.py.
 //
-// Interface, PINNED HERE where the design gives only the words ("seam.hpp:
+// Interface, pinned at the red step and ruled by N8 to N15 ("seam.hpp:
 // refine_seam (one-dimensional greedy over constraint_check_points)"; "Output:
 // the inserted points in order from a to b, world (x, y) and z, plus z for a
-// and b themselves"); each pin is listed in the handback for @architect:
+// and b themselves"; "Settled after 23b's red step"):
 //
 //   #include <terrain/refinement/seam.hpp>
 //   struct SeamPoint   { Point2 at; double z; double s; };   world, vertex_z, parameter from a
@@ -27,8 +27,8 @@
 //   - the check points are exactly constraint_check_points' for the edge (15f
 //     D2): crossings, node crossings snapped to the node, and midpoints with
 //     the ends as neighbours. On a grid-line seam that includes midpoints on
-//     cell sides, which the greedy never needs (23 says "the check points are
-//     the nodes"; 15f's generator, which 23b reuses, adds the midpoints);
+//     cell sides, which the greedy nearly never needs (N14: 2c + 1 check
+//     points for c nodes, not the nodes alone);
 //   - an inserted point is output at (x_min + col dx, y_max - row dy) of its
 //     lattice position, with the check point's own z;
 //   - a piece with an invalid end (NoData under a or b) has no lerp. The
@@ -310,8 +310,8 @@ TEST_CASE("SP3: a strip window grown by whole cells gives the same output bit fo
     // function of its world position. Two neighbours that cut their strips
     // differently must still agree. The ends are chosen so that every
     // crossing is exact in both frames (a column span of 4 and a row span of
-    // 8 cells), so this pins the window's irrelevance, not rounding luck; see
-    // the handback for general seams.
+    // 8 cells), so this pins the window's irrelevance, not rounding luck;
+    // general seams agree only to rounding (N17).
     const auto kind = GENERATE(Terrain::Rough, Terrain::Smooth);
     const double tol = GENERATE(0.0, 0.5);
     const auto ends = GENERATE(std::array<double, 4>{8, 0, 8, 16}, std::array<double, 4>{0, 8, 16, 8},
@@ -361,7 +361,7 @@ TEST_CASE("SP4: NoData stencils are skipped and counted", "[refinement][seam][sp
 }
 
 TEST_CASE("SP4: an end on NoData carves along the seam from that end", "[refinement][seam][sp4][pinned]") {
-    // PINNED HERE (listed for @architect): node (row 0, col 8), the seam's top
+    // Ruled by N10 (pinned here at the red step): node (row 0, col 8), the top
     // end, is NoData, so that end has no height and the piece touching it is
     // void. The check point nearest it on a void piece is inserted, again and
     // again, until no void piece holds a check point; nothing on a void piece

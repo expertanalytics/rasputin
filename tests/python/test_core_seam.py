@@ -7,7 +7,7 @@ two oracles the design writes in Python: SP1's every-point check against a
 bilinear surface computed in NumPy, and SP2's check points recomputed in exact
 rationals with `fractions`.
 
-PINNED HERE, where the design gives only the words (listed in the handback):
+As N8, N12 and N13 ("Settled after 23b's red step") rule it:
 
     _core.refine_seam(view, a, b, *, tolerance) -> SeamOutcome
         a, b       (x, y) world points, the seam edge's ends

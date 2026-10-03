@@ -5,7 +5,7 @@
 //
 // The scan reads the frozen mask from the mesh (LatticeMesh::set_frozen_mask,
 // pinned in unit/test_mesh_frozen.cpp); its signature is unchanged. What this
-// suite PINS where the design is silent:
+// suite pins, as N3 ("Settled after 23b's red step") rules it:
 //   - "does not count" means what L14's coincidence radius means for a skipped
 //     node: never the argmax, never a void triangle's carve point, and not
 //     counted in `uncovered` (a void triangle beside a seam would otherwise

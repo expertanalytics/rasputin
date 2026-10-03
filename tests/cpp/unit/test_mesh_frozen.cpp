@@ -4,7 +4,7 @@
 //
 // Interface, as the PR table names it ("lattice_mesh.hpp: the frozen mask,
 // is_frozen, the assertion in split_edge"; "quality.hpp: skip on frozen,
-// skipped_frozen"), with what this suite PINS where the design is silent:
+// skipped_frozen"), as N1 and N4 ("Settled after 23b's red step") rule it:
 //
 //   void          LatticeMesh::set_frozen_mask(std::uint32_t) noexcept
 //   std::uint32_t LatticeMesh::frozen_mask() const noexcept      0 after build()

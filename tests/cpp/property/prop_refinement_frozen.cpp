@@ -3,15 +3,15 @@
 // FE5): refinement with frozen edges, through refine, refine_points and
 // refine_strip. FE2 to FE5 are invariant-critical (mutation runs at green).
 //
-// Interface, as the design names it, with what this suite PINS where it is
-// silent (each pin is listed in the handback for @architect):
+// Interface, as the design names it and as "Settled after 23b's red step"
+// rules what it left open (N1-N19; here N2, N4 to N7 and N16):
 //
 //   RefineOptions::frozen_mask        std::uint32_t, default 0; set by member assignment
 //   PointRefineOptions::frozen_mask   std::uint32_t, default 0; the same, for
 //                                     refine_points and refine_strip
-//   PointRefineOutcome::on_frozen            stored check points exactly on a
-//                                            frozen edge (open segment, exact
-//                                            orientation), each counted once
+//   PointRefineOutcome::on_frozen            stored check points on a frozen
+//                                            edge (exactly; with a strip, within
+//                                            r(g) too, N7), each counted once
 //   PointRefineOutcome::on_frozen_max_error  their largest |z - the frozen edge's
 //                                            linear z there|, ends valid; the
 //                                            edge is never split, so "there" is
@@ -692,7 +692,7 @@ TEST_CASE("FE5: refine_strip and refine_points with a strip keep the frozen edge
 
 TEST_CASE("FE5: with a strip, a check point within r(g) of a frozen edge is treated as on it",
           "[refinement][frozen][fe5][pinned]") {
-    // PINNED HERE, not in the design (listed for @architect): L12 puts a point
+    // Ruled by N7 (pinned here at the red step): L12 puts a point
     // within the coincidence radius r(g) of a constrained edge onto that edge
     // when a strip is given. On a frozen edge it must not, and inserting it by
     // split_inside instead leaves a vertex 1e-11 cells from the seam, a sliver

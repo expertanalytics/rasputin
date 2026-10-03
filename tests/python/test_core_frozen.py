@@ -4,7 +4,7 @@
 The C++ suites carry the oracles (`tests/cpp/property/prop_refinement_frozen.cpp`);
 this file checks what crosses the boundary.
 
-PINNED HERE (listed in the handback):
+As N13 ("Settled after 23b's red step") rules it:
 
     _core.refine(..., *, tolerance, threads=0, min_angle_deg=0.0,
                  constraint_feet=False, frozen_mask=0)
