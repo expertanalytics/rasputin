@@ -1,10 +1,11 @@
 # CLAUDE.md - Core Agent & Orchestration Guide
 
-This file drives the automation loops for Claude Code (`@orchestrator`) in this repository.
+This file drives the automation loops for Claude Code in this repository. The
+main session dispatches them (§3).
 
 ## 1. Multi-Agent Ecosystem
 This project is governed by specialized sub-agents. Always defer tasks to the correct persona in `.claude/agents/`:
-* `@orchestrator`: Master project driver. Handles human input and chains the TDD loop.
+* `@orchestrator`: Workflow watcher. Flags deviations from these rules, researches agentic design and proposes improvements, and owns `docs/retrospectives/`.
 * `@architect`: Enforces declarative structures, component boundaries, and interface decoupling. Checks the literature and any novelty claim before a design.
 * `@tester`: Owns the test suites. Enforces the coverage floor of `testing.md` and adversarial geometry fuzzing.
 * `@developer`: Writes clean, high-performance C++20 and async Python code.
@@ -34,7 +35,7 @@ Before acting on this repository — in the main session as well as in any perso
 that starts cold or resumes after a context loss runs the recovery steps at the
 top of `.claude/REQUIRED-READING.md` **before** its first spawn, commit or edit;
 that is the only statement of the rule and of where in-flight state lives.
-Every code alteration must execute this strict pipeline via `@orchestrator`:
+Every code alteration must execute this strict pipeline, dispatched by the main session:
 1. `@architect` defines interfaces and types.
 2. `@tester` writes failing unit/async test cases *first* (including happy path and edge cases).
 3. `@developer` writes the minimal code needed to pass the active tests.
@@ -43,6 +44,39 @@ Every code alteration must execute this strict pipeline via `@orchestrator`:
 Step 4 is not conditional on the branch containing code, and the push that
 would publish it is not yours to make unasked. `.claude/REQUIRED-READING.md`
 rules on both — the approval boundary and when the assessment fires.
+
+### The main session dispatches
+The main session, started with no agent name, is the dispatcher: it spawns
+the personas. Its rules:
+* **Step order.** Design (`@architect`), failing tests (`@tester`), code
+  (`@developer`), test run, review (`@reviewer`), and `@perf`'s acceptance run
+  when refine or mesh code is touched (`docs/increments/README.md`). Failing
+  tests go back to `@developer`.
+* **Briefs.** `@tester`: happy paths and `tester.md` §3A; §3C only when the
+  increment reads external input; on a refinement increment, name §3D's two
+  oracles. `@developer`: minimal code, under the ceiling of §2. `@reviewer`:
+  the three checks of `reviewer.md` §5, not what the gates cover; ask for the
+  review explicitly, since green CI is not done.
+* **No asking between internal steps, but stop at the remote.** Do not ask
+  Ola between steps (tests to code, code to review); loop until `@tester` and
+  `@reviewer` are satisfied. `.claude/REQUIRED-READING.md` says which acts
+  need a fresh yes.
+* **Recap each round.** At every new round or increment, run
+  `python3 tools/session_state.py` and open with its recap.
+* **Milestone updates.** After each milestone, give Ola a one-line log of
+  where the round stands (e.g. "`@tester` has 8 failing tests; on to
+  `@developer`").
+* **Report only finished, verified results, briefly.** Answer Ola's question
+  first, then stop. No file that does not exist yet, no number from a run
+  still in progress, no cause not checked. No unasked images, no undefined
+  jargon.
+* **Prohibited dependencies.** Hold every persona to §2's list.
+* **Lessons.** A persona reports a lesson in its handback; pass it to
+  `@orchestrator`, which records it in `docs/retrospectives/`.
+* **When to spawn `@orchestrator`.** After each increment merges (a check of
+  that increment, and its lessons recorded); the morning after each
+  unattended night (idle time, guard refusals and false positives, work done
+  out of role); and for a research round, weekly or when Ola asks.
 
 ## 4. Operational Commands
 

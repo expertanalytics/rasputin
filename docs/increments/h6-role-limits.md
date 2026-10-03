@@ -65,10 +65,15 @@ allowlist, not R-B's denylist).
 | `tester` | `tests/` |
 | `developer` | `src_python/`, `include/`, `src/`, `bindings/`, `tools/`, `.claude/hooks/`, `.github/`, `CMakeLists.txt`, `pyproject.toml` |
 | `perf` | `docs/benchmarks/` |
-| `architect` | `docs/`, `ROADMAP.md`, `CLAUDE.md`, `.claude/` files ending in `.md` |
-| `reviewer`, `orchestrator`, and any other name | nothing |
-| `dispatcher` (main session, §3.1) | `docs/`, `ROADMAP.md`, `.claude/current-task/session.md` |
+| `architect` | `docs/` except `docs/retrospectives/`, `ROADMAP.md`, `CLAUDE.md`, `.claude/` files ending in `.md` |
+| `orchestrator` | `docs/retrospectives/` (h7) |
+| `reviewer`, and any other name | nothing |
+| `dispatcher` (main session, §3.1) | `docs/` except `docs/retrospectives/`, `ROADMAP.md`, `.claude/current-task/session.md` |
 | every subagent | its own `.claude/current-task/<agent_type>-*.md` |
+
+A row may name an exclusion inside an allowed prefix (`docs/` except
+`docs/retrospectives/`); the lookup checks the exclusions before the
+prefixes.
 
 Rule files stay under `guard_governance.py` and h5 whatever this table says.
 The table only narrows what a persona may write; it never widens it.
@@ -135,6 +140,11 @@ Controls and edges:
     the same path rewritten by the call → attributed.
 12. A Bash call that changes nothing → no output.
 13. A Bash call that writes only under `build/` (ignored) → no output.
+14. `orchestrator` Write `docs/retrospectives/x.md` → allowed;
+    `orchestrator` Write `docs/increments/x.md` → `deny`; `architect` Write
+    `docs/retrospectives/x.md` → `deny`; `dispatcher` Write
+    `docs/retrospectives/x.md` → `ask`, and with the flag on → `deny` and
+    queued (§3.1) (h7: @orchestrator is the only writer there).
 
 Not invariant-critical: no mutation round.
 
@@ -153,13 +163,24 @@ Not invariant-critical: no mutation round.
 
 ## 6. Estimate
 
-Production lines (`CLAUDE.md` §2): `ROLES` and the row lookup ~35, the Edit
+Production lines (`CLAUDE.md` §2): `ROLES` and the row lookup, with exclusions, ~40, the Edit
 and Write verdict in `pre-tool` ~25, the dirty-set record and diff ~50,
 reporting through h5's queue and `additionalContext` paths ~15. Rule text:
 one sentence replaces two in `REQUIRED-READING.md`, plus a one-line pointer in
-each of the six persona files. **~125**, one PR. No settings change.
+each of the six persona files. **~130**, one PR. No settings change.
 
 ## 7. Questions for Ola
+
+Both ruled by Ola on 2026-10-03 (`docs/increments/h7-orchestrator-role.md`):
+
+- **Question 1: no `agent_type` is the dispatcher.** The main session,
+  started with no agent name, is the `dispatcher` row. No
+  `.claude/agents/dispatcher.md`.
+- **Question 2: `@orchestrator` is kept, with a new role** (watch the
+  workflow, research agentic design, own `docs/retrospectives/`). Its row is
+  read-only plus `docs/retrospectives/`.
+
+The questions as asked:
 
 1. **The dispatcher's identity.** Should an event with no `agent_type` simply
    *be* the `dispatcher` row (recommended: it needs nothing at launch)? The
