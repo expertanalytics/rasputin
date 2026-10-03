@@ -499,8 +499,8 @@ gallery scale, two overlaid strokes on one polyline read as a rendering defect.
 
 ### One stale half of a comment, recorded rather than edited — and since fixed
 
-At `781c1bf`, `tests/python/test_viz_svg.py:132-136` — the comment above
-`GALLERY_STROKES` (`:137`) — claimed both "Water over infrastructure" and
+At `781c1bf`, `tests/python/test_viz_svg.py@781c1bf:132-136` — the comment above
+`GALLERY_STROKES` (`tests/python/test_viz_svg.py@781c1bf:137`) — claimed both "Water over infrastructure" and
 "deliberately NOT in bit order". With `RIVER_BIT = 0` those cannot both hold:
 water-first *is* bit order here. **The list itself was authoritative and
 correct** — it is road-first, which is what keeps
