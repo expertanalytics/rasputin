@@ -216,3 +216,23 @@ governed files.
    has a table row; h3 is named only in a prose list. Rule needed: do
    harness increments get roadmap rows? Cost: one rule line, and rows for
    the shipped ones if yes.
+8. **`@reviewer` recorded its own rounds** (2026-10-03, reported by the
+   main session as its own deviation). `docs/increments/README.md@390b516:59-63`:
+   "`@reviewer` is read-only, so its spawner copies the handback's verdict
+   ... into a `## Review` section ... and commits it". The main session
+   briefed `@reviewer` to write and commit its own `## Review` entries on
+   15e (rounds 1 and 2 and the pre-push check), the hardening branch
+   (rounds 1 and 2) and this retrospective (round 1: 39eb7b8, tagged
+   `@reviewer`, which also wrote into `docs/retrospectives/`, the
+   `@orchestrator`'s area). Each complied; only the round-2 reviewer of
+   this retrospective refused, citing the rule. Two causes: the rule sits
+   in the increment protocol, which neither the brief nor `reviewer.md`
+   restates; and "read-only" is enforced only by leaving `Write` and
+   `Edit` out of `reviewer.md`'s `tools:` line, while `Bash` writes and
+   commits freely. Proposal: the reviewer persona carries the rule, one
+   line in `reviewer.md` §5 ("you do not edit or commit; your verdict goes
+   in the handback, and your spawner records it"), because the persona is
+   read on every run and a brief template is only as good as the brief
+   that forgets it; the brief need not repeat it. Once h6 lands, the
+   `reviewer` row of its `ROLES` table (no write paths) makes it enforced.
+   Cost: one line in a governed file, by day.
