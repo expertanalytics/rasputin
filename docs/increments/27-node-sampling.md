@@ -120,8 +120,10 @@ the same `node(round) == p` test (`lattice_position`, `refine.hpp:126-135`).
   in `include/terrain/raster/geometry.hpp`: the node `p` is, bit for bit, or
   nullopt. nullopt also for a non-finite `p` and for a point outside the node
   rectangle (`cell_of`'s test). The clamp-and-round is written the way
-  `lattice_position` writes it, so the two answer the same for every point;
-  a test pins that (S5).
+  `lattice_position` writes it, so `node_at` says "node" exactly where
+  refine's whole test at `refine.hpp:400-407` does; a test pins that (S5).
+  `node_at` answers on any raster, a 1 x N one included; it is `bilinear`'s
+  guard, not `node_at`, that keeps such a raster at nullopt.
 - **`bilinear`** (`sample.hpp`): after the existing `bilinear_cell_of` guard,
   `if (const auto n = g.node_at(p)) return is_nodata(*n) ? nullopt :
   value_at(*n);`, then the existing four-corner code, unchanged. The guard
@@ -166,7 +168,7 @@ measured run shows ragged seams along NoData.
 |---|---|---|
 | no `--tolerance`, stride grid (12's R6) | **yes** | every vertex is a node; a valid node next to NoData keeps its height and its triangles |
 | no `--tolerance`, mosaic tile (15) | **yes**, the same way | same `sample` call on the assembled tile |
-| `--tolerance`, start-boundary / domain output z (`refine.hpp:407`) | **no**, by construction | `bilinear` is called there only for a start vertex that is **not** a node by `lattice_position`'s test (`!given \|\| (node && g.node(c) == p) ? vertex_z : bilinear`). `node_at` is the same test, so the new branch is never taken from refine |
+| `--tolerance`, start-boundary / domain output z (`refine.hpp:407`) | **no**, by construction | `bilinear` is called there only for a start vertex that is **not** a node by refine's whole test: `lattice_position`, then `node && g.node(c) == p` (`!given \|\| (node && g.node(c) == p) ? vertex_z : bilinear`). `node_at` answers the same as that whole test (S5), so the new branch is never taken from refine |
 | `--tolerance`, `vertex_z` (scan, carving, feet, edge strip) | **no** | not touched; it already reads a node with `value_at` (`scan.hpp:80-81`) |
 | `--tolerance`, reprojected (15c: `resample`, `refine_points`) | **no** | `resample` is Python with its own four-corner rule (`target_grid.py:163-196`); `refine_points` calls `vertex_z`, not `bilinear` |
 | a reprojected tile meshed without `--tolerance`, if a run does so | the stride sampling of the resampled tile follows the new rule; `resample` does not change | the target grid's nodes are `col0 * h` with integer `h` (`target_grid.py:48`), so they are exact |
@@ -223,11 +225,14 @@ Red first, on this branch (master, with 25, merged in). No mutation round:
 the change is one early return, and the golden digests are the backstop for
 the one invariant that matters (S5, S7). The C++ cases go in
 `tests/cpp/unit/test_raster_view.cpp` (batch and view) and
-`tests/cpp/unit/test_raster.cpp` (geometry and `bilinear`).
+`tests/cpp/unit/test_raster.cpp` (geometry and `bilinear`), except S5, which
+has its own target, `tests/cpp/unit/test_raster_node_at.cpp`, so that its
+compile failure before green does not hide S1-S4 and S6.
 
 New:
 
-- **S1. On a node next to NoData, valid and exact.** For a NoData node at each
+- **S1. On a node next to NoData, valid and exact** (integer geometry:
+  origin 500000 / 7900000, spacing 10 / 5; S4 covers a non-dyadic grid). For a NoData node at each
   of its eight neighbours in turn, sentinel and NaN both: the node is valid
   and `z == value_at` bit for bit. Include an interior node, a node on the
   last row, one on the last column, and all four grid corners, because the
@@ -246,19 +251,27 @@ New:
   expression in `sample.hpp` fails.
 - **S4. Exact at every node, on a non-dyadic grid.** All nodes `g.node(c)` of
   a 200 x 300 grid with origin 500000.3 / 7900000.7 and spacing 0.7 / 0.3:
-  `z == value_at` everywhere, far edges included. Today 38 580 of 60 000 fail
-  in the measurement above. The count may differ with another compiler or
+  `z == value_at` everywhere, far edges included. Today about 38 500 of
+  60 000 fail (38 580 in the measurement above; 38 520 with `@tester`'s
+  values). The assertion does not depend on the count. The count may differ with another compiler or
   standard library, but the green assertion holds everywhere: the test's
   points and `node_at`'s comparison both come from `RasterGeometry::node`,
   whatever that compiles to. A dyadic grid does not work here: it is
   exact today too (measured: 0 failures).
-- **S5. `node_at` agrees with refine's `lattice_position`** (invariant-critical
-  for "the tolerance path is unchanged"). Over finite points in the node
-  rectangle (nodes, `nextafter` neighbours of nodes, cell-side points and
-  random points), on an integer grid, a dyadic grid and a non-dyadic one: `g.node_at(p).has_value() ==
-  lattice_position(g, p).is_node()`, and the indices agree when both say node.
-  Also `node_at` returns nullopt for NaN, infinities and points outside the
-  rectangle.
+- **S5. `node_at` agrees with refine's node test** (invariant-critical for
+  "the tolerance path is unchanged"). The reference is refine's whole test at
+  `refine.hpp:400-407`: `v = lattice_position(g, p)`, then `v.is_node() &&
+  g.node(c) == p` with `c` the node of `v`. `lattice_position(g, p).is_node()`
+  alone is **not** the reference. It is true for an off-node point whose
+  fractional coordinates round to integers, so it disagrees with a correct
+  `node_at` (`@tester` found 1300 such probes on a 0.1 grid, 350 of them from
+  `nextafter`). Over finite points in the node rectangle (nodes, `nextafter`
+  neighbours of nodes, cell-side points, random points, and NumPy-style
+  unfused node coordinates), on an integer grid, a dyadic grid and the
+  non-dyadic "tenths" grid (origin 0.1 / 100.1, spacing 0.1, 120 x 120):
+  `g.node_at(p).has_value()` equals the reference, and the indices agree when
+  both say node. Also `node_at` returns nullopt for NaN, infinities and points
+  outside the rectangle.
 - **S6. Degenerate rasters unchanged.** A 1 x N and an N x 1 raster still give
   nullopt at their nodes. Points outside, and non-finite points, still give
   nullopt.
@@ -272,6 +285,8 @@ New:
   `rasputin mesh --dem KARTVERKET` writes at its default stride, with the
   version string kept out of the bytes. Again recorded in the red commit from
   pre-change code. It must be unchanged after green (see "Which paths change").
+  The red step also pins `nodata_vertices_removed` = 397 at that stride, and
+  it stays 397 after green: every removed vertex there is a NoData node.
   `@needs_codecs`.
 
 Changed (one amendment commit on top of 25's tests, the reason in the message):
@@ -290,13 +305,16 @@ Changed (one amendment commit on top of 25's tests, the reason in the message):
 - Increment 25's `test_cli_mesh_plain_output.py`,
   `test_nodata_vertices_removed_counts_the_strided_nodes_without_data`: the
   expected count goes back to "picked nodes that are NoData" (25 at stride 1
-  on the `holed` fixture), and the docstring says so. Steps 1, 2 and 3 stay.
-  Drop `trimmed_by_the_sampler` (`test_cli_mesh_plain_output.py:155`) and its
-  assertion that at stride 1 the trim removes more than the NoData nodes
-  (`:169`).
-- `test_the_no_tolerance_summary_says_on_or_next_to`, in both files that have
-  it: `test_cli_mesh_plain_output.py:284` and `test_run_record.py:443`. Rename
-  both, and expect `vertices on NoData cells were removed`.
+  on the `holed` fixture), and the docstring says so. Steps 1, 2 and 3 stay,
+  with literal counts 25, 9 and 4. Only stride 1 is red before green; the
+  trim reaches no picked node at strides 2 and 3. Drop
+  `trimmed_by_the_sampler` and its assertion that at stride 1 the trim
+  removes more than the NoData nodes (both done in the red step, `6605dfe`).
+- `test_the_no_tolerance_summary_says_on_or_next_to`, in both files that had
+  it: renamed `test_the_no_tolerance_summary_says_on_nodata_cells`
+  (`test_cli_mesh_plain_output.py:279`, `test_run_record.py:443`). Both expect
+  `vertices on NoData cells were removed`, and also check that "next to" is
+  absent from stderr.
 - `test_cli_mesh_dem.py`, `test_a_nodata_edge_row_is_dropped_and_counted`: the
   wording goes back to `6 vertices on NoData cells`. The count stays 6: that
   fixture's NoData row is row 0, and under today's rule a node's cell reaches
