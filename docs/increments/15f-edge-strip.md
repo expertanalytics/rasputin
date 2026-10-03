@@ -2,16 +2,17 @@
 
 Status: **designed by `@architect`, 2026-10-03, while Ola was away
 (unattended).** Written before `@tester`, per `docs/increments/README.md`
-step 1. **15f-1** (the generator and its store) is implemented on
-`worktree-agent-a0cb49bea16623b07`, `@reviewer` APPROVED (round 2, "Review"
-below), and `@perf` ACCEPTED (2026-10-03, AC power: `_core` and both
-`bench.py` meshes byte-identical to master `390b516`, refine within noise;
-`docs/benchmarks/2026-10-03/15f-1-acceptance.md`); not pushed. **15f-2**:
+step 1. **15f-1** (the generator and its store) **merged as #148**
+(`@reviewer` APPROVED, round 2, "Review" below; `@perf` ACCEPTED,
+`docs/benchmarks/2026-10-03/15f-1-acceptance.md`). **15f-2**, the C++ loop:
 the C++ red step is `afd2498` on `worktree-15f-2`, and the gaps it found are
 ruled under "Settled after 15f-2's red step" (L1-L9). The C++ green step is
 `67df94c` (11 of 13 ES cases); its three open questions are ruled under
 "Settled after 15f-2's green step" (L10-L13), and the sliver cascade and the
-split into three PRs under "Settled after L12 and L13" (L14, L15). Choices that would normally go to Ola
+split into three PRs under "Settled after L12 and L13" (L14, L15), and the
+coincidence radius scaled with the lattice (L16). L14 and L16 are green at
+`99e95d7`; `@reviewer`'s round 1 is recorded under "Review". **15f-3** (the
+bindings, the Python and the full acceptance) is not started. Choices that would normally go to Ola
 were made as defaults; each is marked *default* where it occurs and listed
 under "Defaults chosen" at the end.
 
@@ -78,7 +79,7 @@ source nodes do matter, and they are covered because phase 2 and the strip
 share one loop (D1). On the projected path (Norway, any DEM meshed directly) it would turn
 "every DEM node within tolerance" false. So the strip run there also
 **rescans every triangle it writes against the DEM's nodes**, with refine's own
-`scan` (`include/terrain/refinement/scan.hpp:90`), and inserts nodes as refine
+`scan` (`scan`, `include/terrain/refinement/scan.hpp:96`), and inserts nodes as refine
 would (D4, step 3). Run "after refine" as written, the strip would trade one
 guarantee for another.
 
@@ -349,7 +350,7 @@ programming error. Two distinct indices at one position give no points:
 there is no crossing, and the one midpoint candidate sits on both ends, so
 step 6 drops it.
 7. **Heights.** Every point's z is `vertex_z(dem, point)`
-   (`include/terrain/refinement/scan.hpp:67`), the function refine uses for an
+   (`vertex_z`, `include/terrain/refinement/scan.hpp:73`), the function refine uses for an
    off-node vertex. At a node it is `value_at`. For a crossing, the cell's
    fraction across the line is exactly 0, so the expression is exactly
    `z₀ (1 − f) + z₁ f` between the two nodes of the cell side, which is Q14's
@@ -560,7 +561,7 @@ refused.
 | `src_python/tin_engine/_core.pyi` | stubs for the above |
 | `src_python/tin_engine/edge_strip.py` (new) | `generate(view, start, clock) -> ConstraintCheckPoints` and `run(view, strip, start, tolerance, clock) -> PointRefineOutcome`: the two calls and their clock rows. No geometry |
 | `src_python/tin_engine/final_check.py:22` | `run(..., strip: ConstraintCheckPoints \| None = None)`, passed on to `refine_points` |
-| `src_python/tin_engine/cli.py`, `_dem_mesh` (`:1397`) | after `refine` (`:1477`): `strip = edge_strip.generate(...)`; projected path: `final = edge_strip.run(...)`; reprojected path: `final_check.run(..., strip=strip)`; the sentence and the report (D7) |
+| `src_python/tin_engine/cli.py`, `_dem_mesh` (`:1417`) | after `refine` (`:1500`): `strip = edge_strip.generate(...)`; projected path: `final = edge_strip.run(...)`; reprojected path: `final_check.run(..., strip=strip)`; the sentence and the report (D7) |
 
 `edge_strip.py` exists so that `_dem_mesh`, already about 150 lines, grows by
 about 15 rather than 40, and so that the orchestration can be tested with a
@@ -582,7 +583,7 @@ On the tolerance path of `_dem_mesh`, in this order:
 4. `trim(final...)`, as today.
 
 A refusal from either run is a usage error in the engine's words, as today
-(`cli.py:1492-1493`).
+(`_dem_mesh`'s `typer.BadParameter(f"{dem}: {out.message}", ...)`, `cli.py:1511`, and its final-check twin at `:1517`).
 
 ### D7. What the file and `--stats` record
 
@@ -1140,8 +1141,14 @@ the split option (b) that was considered for 15f-1.
   is "DEM nodes within `r(g)` (L16) of a vertex they are not; the
   largest |node z − vertex z|".
 
-  With this rule, (17, 9) is never inserted, so no sliver forms, and (15, 8)
-  falls in a triangle beside the sub-edge, where L12 puts it on the edge.
+  With this rule, (17, 9) is never inserted, so no sliver forms. Node
+  (15, 8) is not left off the chain, either. As built (`99e95d7`), the strip's
+  row-8 crossing goes in on the chain at (14.999999999999998, 8), about
+  2e-15 from the node. The node is then within `r(g)` of that vertex, so the
+  scan skips it and counts it in `coincident`. (This sentence first said
+  L12 puts (15, 8) itself on the edge. Which of the two happens depends on
+  which set names the point first. Either way the constraint is represented
+  at (15, 8) by a vertex on the chain, which is what the case guards.)
 
   **The rejected options.**
   - L12 searching for constraints that are not edges of `t`, across slivers:
@@ -1188,8 +1195,11 @@ the split option (b) that was considered for 15f-1.
       literals, at tolerance 0 and 0.5. It asserts: no strip point over the
       tolerance farther than 1e-9 lattice units from an output vertex; node
       (17, 9) not a vertex; `coincident ≥ 1` and
-      `coincident_max_error ≤ 1e-9 · max(1, |z|)`; node (15, 8) an end of an
-      output constraint edge; E2 by `node_findings`, whose 1e-9 relative
+      `coincident_max_error ≤ 1e-9 · max(1, |z|)`; at least one vertex within
+      `r(g)` of node (15, 8), and every such vertex an end of an output
+      constraint edge (as amended in `fadcc77`; the node itself is a vertex
+      only if L12 inserts it before the strip's crossing goes in); E2 by
+      `node_findings`, whose 1e-9 relative
       slack already covers the exception; and the Delaunay oracle;
     - a **unit case for the radius**: a DEM node 1e-11 lattice units from a
       start vertex is not inserted at tolerance 0 and is counted, and one at
@@ -1369,6 +1379,7 @@ Counted in `CLAUDE.md` §2's unit. Estimates, with the worst cases at +39 %
 | | the same, **measured** at `61cdbaa` | *275* | | |
 | | L14: the radius in `scan` and `scan_points`, the end-pass count | 15 | | |
 | | **15f-2 total** (measured 275 + 15) | **290** | **296** | **299** |
+| | 15f-2 **measured** at `99e95d7` (L14 and L16 in; `@reviewer` round 1) | *316* | | |
 | **15f-3** | **The bindings, the Python and the CLI** (L15) | | | |
 | | `bindings/core.cpp`: `ConstraintCheckPoints` and `constraint_check_points` (moved from 15f-1, ruling of 2026-10-03 below) | 30 | | |
 | | `bindings/core.cpp`: `refine_points(..., strip)`, `refine_strip`, the outcome properties | 62 | | |
