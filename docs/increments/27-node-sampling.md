@@ -111,7 +111,7 @@ rerun with other draws got 31 116 and 6.72e-7. With origin 0 and spacing 1,
 with a dyadic grid (500000.5 / 7900000.25, spacing 0.5 / 0.25), and with the
 Kartverket fixture's geometry, there are none. Node identity is also the relation the producers use:
 `subsample` builds stride vertices with `node`'s expression
-(`grid_domain.py:66-67`), and refine decides that a start vertex is a node by
+(`grid_domain.py:68-69`), and refine decides that a start vertex is a node by
 the same `node(round) == p` test (`lattice_position`, `refine.hpp:126-135`).
 
 ### Where it lives
