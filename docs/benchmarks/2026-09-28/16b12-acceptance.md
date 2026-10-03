@@ -54,7 +54,7 @@ base is `origin/master` `14f5fe3`. Method, tables and raw data are in
   - Refine takes 5.9 s at 1 m. Peak RSS is 3.1 GB, which includes writing
     the file and `--stats`; 16b-0's scripts did neither.
   - Feature input is 26 s of 48 s: the same defect.
-- **Also found:** `tools/bench.py:605` fails when `--label` has a `/` and
+- **Also found:** `tools/bench.py@4d3ec3a:605` fails when `--label` has a `/` and
   `--mesh-dir` is given, because the mesh's parent directory is never
   created. The workaround was to create it first.
 - **Not measured:** a profile of `features clip`, and any AC run.

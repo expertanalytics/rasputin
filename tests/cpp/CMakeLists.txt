@@ -381,3 +381,32 @@ add_terrain_backend_test(prop_refinement_frozen property/prop_refinement_frozen.
 target_link_libraries(prop_refinement_frozen PRIVATE Threads::Threads)
 add_terrain_backend_test(prop_refinement_seam property/prop_refinement_seam.cpp)
 target_link_libraries(prop_refinement_seam PRIVATE Threads::Threads)
+
+# The release-hardening guard, increment 24
+# (docs/increments/24-release-hardening.md, sections 5 and 12, T1 to T3). The
+# suite is told what RASPUTIN_HARDENING asked for, 1 or 0, and refuses to
+# compile without it; its static_assert compares that with what the standard
+# library reports, and its forked case checks that an out-of-range read stops
+# the process. POSIX only (fork), which both CI platforms are.
+#
+# Registered by hand rather than with add_terrain_test (same links, same
+# warnings) for one property: under RASPUTIN_HARDENING=OFF the forked case
+# SKIPs, and a Catch2 run whose only case skipped exits 4, which CTest counts as
+# a failure unless SKIP_RETURN_CODE says otherwise. Catch2 v3.6.0's
+# catch_discover_tests does not set it, so the unchecked CI leg would go red on
+# a correct build.
+add_executable(test_build_hardening unit/test_build_hardening.cpp)
+target_link_libraries(test_build_hardening PRIVATE
+    terrain_headers
+    terrain_test_support
+    Catch2::Catch2WithMain
+)
+target_compile_options(test_build_hardening PRIVATE -Wall -Wextra -Wpedantic -Werror)
+target_compile_definitions(test_build_hardening PRIVATE
+    RASPUTIN_EXPECT_HARDENING=$<BOOL:${RASPUTIN_HARDENING}>)
+# A latent hole: Catch2 exits with the number of failed assertions, so a run
+# with exactly four failures would also exit 4 and read as skipped. Not
+# reachable here: each case runs as its own ctest test and none can fail more
+# than one assertion (T1 and T3 have one check each, T2 one CHECK after REQUIREs
+# that stop the case). A case that can fail four times needs this revisited.
+catch_discover_tests(test_build_hardening PROPERTIES SKIP_RETURN_CODE 4)

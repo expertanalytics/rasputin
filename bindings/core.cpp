@@ -3,6 +3,7 @@
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
 
+#include <terrain/build_info.hpp>
 #include <terrain/cdt/detria_backend.hpp>
 #include <terrain/cdt/result.hpp>
 #include <terrain/cdt/triangulate.hpp>
@@ -330,6 +331,9 @@ PYBIND11_MODULE(_core, m) {
     // later, is wrapped in py::gil_scoped_release.
     m.doc() = "C++20 geometry primitives and the constrained Delaunay\n"
             "triangulator for the rasputin terrain engine.";
+    // Which standard-library checks this build carries, as the library itself
+    // reports them (terrain/build_info.hpp; increment 24).
+    m.attr("hardening") = std::string(terrain::stdlib_hardening());
 
     py::class_<Point2>(m, "Point2", R"doc(
 A 2D point with double-precision coordinates.

@@ -559,7 +559,7 @@ refused.
 | `include/terrain/refinement/constraint_points.hpp` (new) | `ConstraintPoint`, `ConstraintCheckPoints`, `constraint_check_points` (D2, D3) |
 | `include/terrain/refinement/refine.hpp`, `detail::to_lattice` | `detail::lattice_position` extracted from it, and called by it; no change in behaviour |
 | `include/terrain/refinement/refine_points.hpp` | `detail::point_loop`; the strip scan and ownership; the sub-edge map; `refine_points(..., strip)`; `refine_strip`; the outcome fields; `PointScan` (D4) |
-| `bindings/core.cpp` | `ConstraintCheckPoints` (read-only: `size`, `no_data`, `duplicates`, `edge_count`); `constraint_check_points(view, vertices, edges)` over the bound raster variant; `refine_points(..., strip=None)`; `refine_strip(view, strip, vertices, triangles, z, valid, edges, masks, *, tolerance, threads=0)`; the new outcome properties. Every call releases the GIL, as `refine_points` does today (`bindings/core.cpp:1045`) |
+| `bindings/core.cpp` | `ConstraintCheckPoints` (read-only: `size`, `no_data`, `duplicates`, `edge_count`); `constraint_check_points(view, vertices, edges)` over the bound raster variant; `refine_points(..., strip=None)`; `refine_strip(view, strip, vertices, triangles, z, valid, edges, masks, *, tolerance, threads=0)`; the new outcome properties. Every call releases the GIL, as `refine_points` does today (`bindings/core.cpp:1049`) |
 | `src_python/tin_engine/_core.pyi` | stubs for the above |
 | `src_python/tin_engine/edge_strip.py` (new) | `generate(view, start, clock) -> ConstraintCheckPoints` and `run(view, strip, start, tolerance, clock) -> PointRefineOutcome`: the two calls and their clock rows. No geometry |
 | `src_python/tin_engine/final_check.py:22` | `run(..., strip: ConstraintCheckPoints \| None = None)`, passed on to `refine_points` |
@@ -585,7 +585,7 @@ On the tolerance path of `_dem_mesh`, in this order:
 4. `trim(final...)`, as today.
 
 A refusal from either run is a usage error in the engine's words, as today
-(`_dem_mesh`'s `typer.BadParameter(f"{dem}: {out.message}", ...)`, `cli.py:1511`, and its final-check twin at `:1517`).
+(`_dem_mesh`'s `typer.BadParameter(f"{dem}: {out.message}", ...)`, `cli.py:1519`, and its final-check twin at `:1525`).
 
 ### D7. What the file and `--stats` record
 

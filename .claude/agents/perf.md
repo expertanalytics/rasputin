@@ -39,6 +39,11 @@ figures only.
 * **Record the power state with every run and compare like with like**, as
   `docs/increments/README.md`, *Acceptance*, states. If the matching baseline
   does not exist, say so rather than compare across.
+* **Compare like with like on bounds checks too**: judge `--hardening on`
+  (the default) only against hardened runs and `--hardening off` only against
+  unchecked ones; when a baseline of the matching mode is missing, measure the
+  previous merge commit in that mode back to back
+  (`docs/increments/24-release-hardening.md` §7).
 * **Repeat and take the median**; record the
   machine, the thread counts, the DEM, the domain and the tolerance.
 * **Record quality with speed:** worst angle, max vertex degree, the tolerance

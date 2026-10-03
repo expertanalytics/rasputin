@@ -963,9 +963,9 @@ it.
 
    **What does not guard it: asan.** No CI job compiles this increment's array
    code under a sanitizer. The `sanitizers` job
-   (`.github/workflows/main.yaml:51-75`) configures `-DCMAKE_BUILD_TYPE=Debug`
+   (`.github/workflows/main.yaml:59-83`) configures `-DCMAKE_BUILD_TYPE=Debug`
    with `-fsanitize=address,undefined` and sets no other option, and
-   `RASPUTIN_BUILD_PYTHON` defaults `OFF` (`CMakeLists.txt:73`), so
+   `RASPUTIN_BUILD_PYTHON` defaults `OFF` (`CMakeLists.txt:85`), so
    `bindings/core.cpp` is never in that build at all. The `python` job builds
    the extension -- via `pip install -e`, which configures
    `RASPUTIN_BUILD_PYTHON=ON` (`pyproject.toml:86`) -- but with no sanitizer

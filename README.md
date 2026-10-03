@@ -35,7 +35,9 @@ its CORINE land-cover class. Elevation © Kartverket (CC BY 4.0); land cover
 ## Quick example
 
 Install first ([INSTALL.md](INSTALL.md)); the example needs the `codecs`
-extra, because the committed DEM tile is LZW-compressed. From the repository
+extra, because the committed DEM tile is LZW-compressed. The install is
+bounds-checked by default; INSTALL.md's "Bounds checks" section says how to
+build an unchecked copy for heavy runs. From the repository
 root:
 
 ```sh
