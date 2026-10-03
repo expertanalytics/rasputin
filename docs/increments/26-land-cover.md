@@ -1349,3 +1349,7 @@ Each with the recommendation, which is the default if Ola does not rule.
 - Several years in one mesh file.
 - A cap on classes per triangle (measured harmful).
 
+
+## Review
+
+**Design review, round 1, 2026-10-03.** Range `origin/master...` 77f35b4, 9df3822. Verdict: CHANGES REQUESTED. LOC: 0 production lines (design and throwaway probes). The rulings of 2026-10-01 are kept; the fractions-and-ledger figures, the fetch sizes, the CRS figures, the sources and the licence conflict (terms of use CC BY-SA 4.0, factsheet CC BY) all re-checked and hold. Blocking, doc fixes only: (1) unit 769's water row omits its largest body (Três Marias joins the channel, and the probe assigns a body to a unit by its first cell, which lies outside the outline), so the basin-wide lake counts are low; (2) the "Sobradinho" ring is the main São Francisco river across unit 761 (670 × 442 km, 3,159 holes), and "346 km" is half the extent, not a length; on the whole basin the channel likely joins the reservoirs into one body; (3) the ledger measurement excludes lakes forced to 100 % water, which @perf's acceptance must cover; (4) the licence question must also name the water polygons and meshes constrained by them. Not pushed; no CI.
