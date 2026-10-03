@@ -1,0 +1,22 @@
+{
+ "planned": 660915160,
+ "planned +gc": 660915160,
+ "planned +relief": 660915160,
+ "mosaic_shape": [
+  19685,
+  28496
+ ],
+ "mosaic_dtype": "float32",
+ "mosaic_nbytes": 2243775040,
+ "mosaic_base_nbytes": null,
+ "grid_rows": 19377,
+ "grid_cols": 27786,
+ "plan_tiles": 1,
+ "assembled": 7403132568,
+ "assembled +gc": 7403132568,
+ "assembled +relief": 7403132568,
+ "tile_nbytes": 2153637288,
+ "resampled": 10282902456,
+ "resampled +gc": 10282902456,
+ "resampled +relief": 10282902456
+}

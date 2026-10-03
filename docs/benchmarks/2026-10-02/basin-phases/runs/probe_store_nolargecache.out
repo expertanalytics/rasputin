@@ -1,0 +1,18 @@
+empty res 0.03 fp 0.02 lifemax 0.02
+added 0 res 2.99 fp 0.94 lifemax 1.12
+frozen res 3.23 fp 0.27 lifemax 1.12
+size 99989886
+Physical footprint:         259.5M
+Physical footprint (peak):  1.0G
+REGION TYPE                        SIZE     SIZE     SIZE     SIZE     SIZE     SIZE     SIZE    COUNT (non-coalesced) 
+Malloc Guard Page                   32K       0K       0K       0K       0K       0K       0K        2         see MALLOC ZONE table below
+Malloc Metadata                    160K     160K     160K       0K       0K       0K       0K        2         see MALLOC ZONE table below
+Malloc Metadata metadata          14.2M    13.3M    13.3M       0K       0K       0K       0K       28         see MALLOC ZONE table below
+Malloc Nano metadata                32K      16K      16K       0K       0K       0K       0K        1         see MALLOC ZONE table below
+Malloc Small                       2.7G     2.4G     1.5G       0K       0K       0K       0K      686         see MALLOC ZONE table below
+Malloc Small (empty)             608.0M   602.5M    3216K       0K       0K       0K       0K      152         see MALLOC ZONE table below
+Malloc Tiny                       4096K     160K     160K       0K       0K       0K       0K        1         see MALLOC ZONE table below
+TOTAL                            390.3G     3.3G     1.6G       0K       0K       0K       0K     2896 
+TOTAL, minus reserved VM space   390.3G     3.3G     1.6G       0K       0K       0K       0K     2896 
+DefaultMallocZone_0x1048a0000       3.3G       3.0G       1.6G         0K      20528       1.5G      17.8M      2%     866
+TOTAL                               3.3G       3.0G       1.6G         0K      20926       1.5G      17.8M      2%     868
