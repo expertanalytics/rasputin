@@ -387,8 +387,8 @@ target_compile_definitions(test_build_hardening PRIVATE
 catch_discover_tests(test_build_hardening PROPERTIES SKIP_RETURN_CODE 4)
 
 # Increment 27 (docs/increments/27-node-sampling.md, S5): RasterGeometry::node_at
-# against refine's own node test. Its own target, because node_at does not exist
-# before 27's green step and a compile failure here must not hide test_raster.
+# against refine's own node test. Its own target, because it includes refine.hpp
+# and so needs the backend target and Threads, which test_raster does not.
 # refine.hpp names DefaultKernel, hence the backend target.
 add_terrain_backend_test(test_raster_node_at unit/test_raster_node_at.cpp)
 target_link_libraries(test_raster_node_at PRIVATE Threads::Threads)

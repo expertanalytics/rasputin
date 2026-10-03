@@ -13,9 +13,9 @@
 // is also true for an off-node point whose fractional (col, row) happen to
 // round to integers.
 //
-// Its own target: node_at does not exist before increment 27, so this file
-// fails to compile in the red step and leaves test_raster and
-// test_raster_view building and running.
+// Its own target: it includes refine.hpp, which names DefaultKernel and runs
+// threads, so it links the backend target and Threads; test_raster and
+// test_raster_view stay free of both.
 
 #include <catch2/catch_test_macros.hpp>
 
