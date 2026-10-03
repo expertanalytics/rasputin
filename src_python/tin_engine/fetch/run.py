@@ -16,7 +16,6 @@ from __future__ import annotations
 import asyncio
 import datetime
 import hashlib
-import importlib.metadata
 import math
 import threading
 import time
@@ -26,6 +25,7 @@ from typing import Any
 import tifffile
 from pydantic import BaseModel, ConfigDict
 
+from tin_engine import installed_version
 from tin_engine.crs import parse_crs
 from tin_engine.fetch.http import FetchError, RangeClient
 from tin_engine.fetch.plan import FetchRequest, ObjectPlan, parse_prefix, plan_object, source_box
@@ -150,7 +150,7 @@ async def _run(
     manifest = CacheManifest(
         source=source.id,
         crs=next(iter(headers.values()))[1][3].crs,
-        rasputin_version=importlib.metadata.version("rasputin"),
+        rasputin_version=installed_version(),
         objects=dict(sorted(entries.items())),
         requests=known.requests if known else (),
     )
