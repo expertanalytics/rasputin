@@ -2,7 +2,12 @@
 
 Status: **designed by `@architect`, 2026-10-03, while Ola was away
 (unattended).** Written before `@tester`, per `docs/increments/README.md`
-step 1. Nothing here is implemented. Choices that would normally go to Ola
+step 1. **15f-1** (the generator and its store) is implemented on
+`worktree-agent-a0cb49bea16623b07`, `@reviewer` APPROVED (round 2, "Review"
+below), and `@perf` ACCEPTED (2026-10-03, AC power: `_core` and both
+`bench.py` meshes byte-identical to master `390b516`, refine within noise;
+`docs/benchmarks/2026-10-03/15f-1-acceptance.md`); not pushed. **15f-2** is
+not started. Choices that would normally go to Ola
 were made as defaults; each is marked *default* where it occurs and listed
 under "Defaults chosen" at the end.
 
