@@ -117,8 +117,11 @@ def commits_between(
     found = []
     for line in log.stdout.splitlines():
         short, _, stamp = line.partition(" ")
-        if since <= (moment := datetime.fromisoformat(stamp)) <= end:
-            found.append((moment, short))
+        try:  # an unparsable or naive date is a failed log: --back must still archive
+            if since <= (moment := datetime.fromisoformat(stamp)) <= end:
+                found.append((moment, short))
+        except (ValueError, TypeError):
+            return None
     return found
 
 
