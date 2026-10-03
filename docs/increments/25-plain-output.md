@@ -115,7 +115,7 @@ That is a defect this increment fixes (D2: the `.ply` carries the same fields as
 | `start min angle 25 deg` / `start quality off` | `:1545-1547` | the start-quality setting (increment 20) | deg | always |
 | `constraint feet on` / `off` | `:1551` | increment 20b: a worst DEM node very close to a line is replaced by the nearest point on the line | | always |
 | `0 valid DEM nodes not covered` | `:1552`, `final.uncovered` | DEM nodes with data that lie in triangles with a NoData corner after refinement. By the stopping rule there are none (`refine.hpp:390-391`), so this is a **self-check, always 0** | count | never, by construction |
-| `199 vertices without data dropped` | `:1568`, `elevation.py:25`, `:64` | mesh vertices where the DEM has no height (the node is NoData, or one of the four nodes around an off-node vertex is), removed with every triangle that uses them | count | the DEM has NoData cells inside the area |
+| `199 vertices without data dropped` | `:1568`, `elevation.py:25`, `:64` | mesh vertices where the DEM gives no height, removed with every triangle that uses them. With `--tolerance` a vertex at a DEM node has none when that node is NoData, and a vertex between nodes when one of the four nodes around it is. Without `--tolerance` every vertex is sampled bilinearly, and the sampler refuses a cell with any NoData corner even at zero weight (`12-dem-to-mesh.md`, R2), so a vertex on a valid node next to a NoData node is removed too: one cell of trim around NoData ("NoData on the no-tolerance path", below) | count | the DEM has NoData cells inside the area |
 | `vertical unit assumed metres` | `:1569-1570` | the GeoTIFF has no `VerticalUnitsGeoKey`; any other unit than metres is refused (`io/geotiff.py:139-143`); always set for cache blocks (`fetch/run.py:249`) | | the key is missing |
 
 ### stderr
@@ -834,6 +834,89 @@ as pinned.
     `POINTS` on are the mesh and its arrays, which this increment must not
     change; the fields are pinned by name in the other tests. This is the
     same span `tools/bench.py` hashes (`:333`, `:350`).
+
+## NoData on the no-tolerance path (found at the green step, a2c635d)
+
+**What was found.** `test_cli_mesh_plain_output.py::TestTheValuesAreRight::
+test_nodata_vertices_removed_counts_the_strided_nodes_without_data[1]`
+expects 25 and gets 36. On the path without `--tolerance` the vertices are
+sampled by `_core.sample`, which refuses a cell with any NoData corner, even a
+corner of zero weight. So a vertex on a valid DEM node next to a NoData node
+gets no height and is removed. `@developer` probed it: invalid rows 5-10 x
+columns 7-12 against a NoData block at rows 6-10 x columns 8-12. This is
+increment 12's one-cell trim, recorded there as "accepted for now ... changing
+the sampler is not this increment's job" (`12-dem-to-mesh.md`, R2). Increment
+14 notes that it does not apply with `--tolerance`, where z is read at nodes.
+The inventory row above described only the tolerance path; it is corrected.
+
+**Recommended: treat today's behaviour as a defect, to be fixed later in its
+own small C++ increment, and pin 25's test to today's behaviour meanwhile.**
+The sampler drops valid data: a DEM node with a value gets no height because a
+neighbour has none. Increment 12 accepted this as a stopgap and did not argue
+it was right. The fix (skip a corner whose weight is exactly zero, so a vertex
+on a node reads that node) is C++ in `raster/sample.hpp` with its own tests.
+Its acceptance has to show that the tolerance path is unchanged, and that
+does not belong in a Python-only output increment. Describing it as the
+intended rule instead would put a known loss of data into the field's
+definition.
+
+Until that fix:
+
+- **The field keeps its name and file wording.** Its meaning on the
+  no-tolerance path is "vertices on or next to a NoData cell". The inventory
+  row above says so.
+- **The summary on the no-tolerance path says it plainly.** `stride_record`'s
+  summary reads `... vertices on or next to NoData cells were removed with
+  their triangles.` instead of `on NoData cells`. With `--tolerance` the
+  wording is unchanged. That is a one-line change for `@developer`.
+- **What `@tester` changes** (one amendment commit, the reason in the
+  message). In `test_nodata_vertices_removed_counts_the_strided_nodes_without_data`,
+  the expected count is no longer "picked nodes that are NoData". It is the
+  picked nodes `(r, c)` whose bilinear cell has a NoData corner, computed in
+  NumPy with the sampler's rule. The cell's top-left node is
+  `(min(r, rows - 2), min(c, cols - 2))`; the corners are that node and the
+  nodes one row down, one column right, and one of each. The vertex count
+  assertion uses the same expected count. The docstring says the count pins
+  increment 12's one-cell trim, and that the sampler follow-up will change it
+  back to the NoData nodes alone. `step` 1, 2 and 3 stay.
+- **A follow-up row in `ROADMAP.md`**: the sampler reads a vertex on a node
+  from that node. It is proposed, not designed.
+
+## As built (green, a2c635d)
+
+Where `@developer`'s code departs from, or fills in, the text above. Each is
+accepted as described unless marked otherwise.
+
+- **No `dem_grid` on a reprojected run.** There `resampled_grid` carries the
+  grid's size and spacing, and the original DEM has no single grid in the
+  target CRS. Accepted: one grid, named for what it is.
+- **`land_cover_codes` is a record entry with `in_file=False`.** It appears
+  in `--stats` and `--record`, and the writers keep putting it into the file
+  as before (`write_vtk(land_cover_codes=...)`, the `.ply` comment). The file
+  is unchanged; D2's kept-fields table holds.
+- **`RunRecord.triangles`**, the output triangle count that the summary
+  names, is a field of the record, not an entry. It is not in `--stats` or
+  `--record` as an entry; Sizes already prints "output triangles".
+- **`Sizes.resampled`** (a bool) switches the Sizes label to "resampled grid
+  nodes" (D4).
+- **Summary above the tolerance:** `The largest difference at a <DEM node |
+  node of the original DEM> inside the mesh is <e> m, above the tolerance of
+  <t> m.`, in place of the "within" sentence. Accepted.
+- **The two warnings:** `Warning: <n> DEM nodes on a vertex differ from it by
+  up to <d> m, more than the tolerance of <t> m.` and `Warning: <n> DEM
+  nodes with data lie outside the mesh; there should be none.` Accepted, with
+  one correction: both must use the singular for a count of 1 (`1 DEM node
+  ... differs`, `1 DEM node with data lies`), as "Settled after the red step",
+  item 8 rules. They do not today. This is a production fix for
+  `@developer`; a test for it is `@tester`'s.
+- **`--flat` summary:** `<n> triangles. The heights are not real: every z
+  is 0 (--flat).` Accepted.
+- **Singular counts** go through `run_record.plural(n, one, many)`. Accepted;
+  the two warnings above should use it too.
+- **`mosaic.py`'s `Seam.entry`** returns the settled wording (`<a> and <b>
+  disagree at <n> node(s), by up to <max> m (median <median> m)`), so the
+  wording lives with the seam rather than in `run_record.py`. Accepted:
+  `Seam.cells` sits beside it and formats the same numbers.
 
 ## Review
 
