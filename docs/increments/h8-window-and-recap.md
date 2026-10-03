@@ -1,7 +1,7 @@
 # Harness h8: the unattended window, the recap and the size table
 
-Status: **design**, @architect, 2026-10-03. One PR, by day: every file it
-changes is governed. Implements Ola's rulings of 2026-10-03 on items 1 to 6 of
+Status: **design, ruled**, @architect, 2026-10-03; Ola answered §7's four
+questions the same day. One PR, by day: every file it changes is governed. Implements Ola's rulings of 2026-10-03 on items 1 to 6 of
 `docs/retrospectives/next.md`, section "The window of 2026-10-02, the restart
 of 2026-10-03, h7" (recorded in #155), and his request of the same day for a
 size table in the recap. Evidence for items 1 to 6:
@@ -119,13 +119,16 @@ ASK = re.compile(r"^[ \t]*(?:[-*+][ \t]+)?ASK OLA:(.*)$")   # case-sensitive
     for `QUEUE`;
   - `<name>:<lineno>: empty NOW line` (or `QUEUE`); an empty `ASK OLA:` is
     already warned by §3.2 and is not repeated here;
-  - `<name>:<lineno>: not a NOW, QUEUE or ASK OLA line: <first 60 characters>`.
+  - `<name>:<lineno>: not a NOW, QUEUE or ASK OLA line: <first 60 characters>`;
+  - `<name>:<lineno>: <n> characters; at most 300` for any non-blank line,
+    of any kind, longer than 300 characters (`len()` of the line without its
+    newline and trailing whitespace; `MAX_LINE = 300`). 300 passes, 301 warns.
 - An absent `session.md` gives no warning (it is deleted when a round lands).
 
 The recap prints the warnings of every checkout's `session.md` under
 `session.md format:`, prefixed as in §3.2, directly after "Waiting on Ola",
-and prints nothing when there are none. There is no length check: the ruling
-was the format (see §6, question 2).
+and prints nothing when there are none. The 300-character limit is Ola's
+ruling 2 (§7), made after a 971-character `NOW:` line.
 
 ### 3.4 Fallbacks and the longest stretch without a commit (item 1)
 
@@ -162,7 +165,7 @@ In `away.py`:
   `Longest stretch without a commit: unknown (the flag has no readable since).`;
   when git fails, `... unknown (git log failed).` With no flag, nothing.
 
-The figure is not written to `windows.jsonl` (§6, question 4).
+The figure is not written to `windows.jsonl` (§7, ruling 4).
 
 ### 3.5 Running background jobs (item 5)
 
@@ -202,8 +205,7 @@ New `tools/rule_sizes.py`, governed (§5):
 - `RULE_FILES = ("CLAUDE.md", ".claude/REQUIRED-READING.md",
   "docs/increments/README.md", "docs/PRINCIPLES.md")`, then
   `.claude/agents/*.md` and `.claude/skills/**/*.md`, each group sorted.
-  `docs/PRINCIPLES.md` is the fourth governed rule file; Ola named three
-  (§6, question 3).
+  `docs/PRINCIPLES.md` is the fourth governed rule file, in by §7, ruling 3.
 - `words(text: str) -> int`: `len(text.split())`, which is what `wc -w`
   counts for ASCII text.
 - **The reference is derived, not stored**: the newest commit reachable from
@@ -212,8 +214,7 @@ New `tools/rule_sizes.py`, governed (§5):
   the counts are the same files read at that commit (`git show
   <rev>:<path>`, or one `git cat-file --batch`). @orchestrator writes a dated
   file at each retrospective, so the reference moves with no extra step and
-  there is no reference file to keep, forget or reset. A stored JSON is the
-  alternative (§6, question 1).
+  there is no reference file to keep, forget or reset (§7, ruling 1).
 - `table(now: dict[str, int], then: dict[str, int] | None, label: str) -> list[str]`,
   pure. First line `Rule text in words, change since <label>:` where label is
   `<retrospective file name> (<hash>)`; then one line per file,
@@ -243,15 +244,14 @@ of the passages at this design's base (595c56a) and of the new text below.
 | Passage (lines at 595c56a) | Change | Removed | Added | Net |
 |---|---|---|---|---|
 | Cold start, steps 1-2 (12-20) | step 1 lists "running background jobs"; step 2 gains the item 5 sentence | 95 | 108 | +13 |
-| `.claude/current-task/` bullet (30-37) | the three-line rule moves to the subagent files; `session.md` gets item 4's format | 87 | 97 | +10 |
+| `.claude/current-task/` bullet (30-37) | the three-line rule moves to the subagent files; `session.md` gets item 4's format and ruling 2's limit | 87 | 102 | +15 |
 | new bullet after "One session per working tree" | item 6 | 0 | 27 | +27 |
 | Unattended, last sentence (158-159) | item 1 | 19 | 48 | +29 |
 | `SessionStart` paragraph, tail (168-175) | the cap sentence shortened; "thin recap in a worktree" replaced by item 2 | 89 | 68 | -21 |
-| **Total** | | 290 | 348 | **+58** |
+| **Total** | | 290 | 353 | **+63** |
 
 `CLAUDE.md`, `docs/increments/README.md`, the persona and skill files:
-unchanged (0 added, 0 removed). With question 1 answered "stored JSON", add
-about 25 words to `.claude/agents/orchestrator.md`.
+unchanged (0 added, 0 removed); ruling 1 keeps `orchestrator.md` out of it.
 
 The text, verbatim (Markdown as it goes in):
 
@@ -280,8 +280,8 @@ spawner names the path", is unchanged):
   - `session.md` is the main session's, and only the main session writes it,
     in place; it is deleted when the round lands. Each line starts with
     `NOW:` (one), `QUEUE:` (one) or `ASK OLA:` (one per decision waiting on
-    Ola); no rulings, no history. The recap lists every worktree's `ASK OLA:`
-    lines and warns on any other line.
+    Ola), at most 300 characters each; no rulings, no history. The recap
+    lists every worktree's `ASK OLA:` lines and warns on any other line.
   - Every other file is one subagent's, `<persona>-<HHMMSS>.md`, three lines
     or fewer: the ask, the persona and the file it will produce. The spawner
 ```
@@ -323,13 +323,13 @@ and can be cut: "Fill the unattended window" (now a rule) and the "check
 
 | File | Change | Production lines (CLAUDE.md §2) |
 |---|---|---|
-| `tools/session_state.py` | §3.1, 3.2, 3.3, 3.5, 3.7; docstring | ~95 |
+| `tools/session_state.py` | §3.1, 3.2, 3.3 (with the line limit), 3.5, 3.7; docstring | ~98 |
 | `tools/rule_sizes.py` | new, §3.6 | ~50 |
 | `tools/away.py` | §3.4, decisions from every worktree | ~35 |
 | `.claude/hooks/guard_governance.py` | `"tools/rule_sizes.py"` in `GOVERNED`: it runs inside the `SessionStart` hook, like the rest of the self-protecting set | 1 |
 | `.claude/REQUIRED-READING.md` | §4 | prose |
 | `tests/python/harness_fixtures.py` | `tools/rule_sizes.py` in `COPIED` | test |
-| **Total** | | **~180**, under the 700 ceiling |
+| **Total** | | **~185**, under the 700 ceiling |
 
 Overlap: h5 (red step on `worktree-h5-state-check`, not merged) also edits
 `tools/away.py` (`--back` deletes `tampered.json`), `test_away.py` and
@@ -368,7 +368,11 @@ lowercase line no longer counts) and `test_back_survives_a_broken_session_state`
 4. **Format (§3.3).** No warnings for NOW, QUEUE, two ASK OLA lines and a
    blank line, with and without bullets. Each warning text once: no NOW; two
    QUEUE; empty NOW; `Rulings: ...` on line 4 (the warning names line 4, §3.3's text);
-   `now: x` (case) is "not a" line. Absent file: none. The recap prints the
+   `now: x` (case) is "not a" line. Line length: a `NOW:` line of exactly
+   300 characters passes, 301 warns with its line number and length, and a
+   long `ASK OLA:` line warns too; trailing spaces do not count. A `NOW:` line
+   of 961 characters, as in the main `session.md` measured 2026-10-03, warns. Absent file:
+   none. The recap prints the
    `session.md format:` block only when there are warnings.
 5. **Background jobs (§3.5).** On a `ps` text built from the observed format:
    wrapper lines listed with pid, etime and the eval'd command; non-wrapper
@@ -402,21 +406,15 @@ lowercase line no longer counts) and `test_back_survives_a_broken_session_state`
     `guard_governance.py` (add it to the existing list in
     `test_guard_governance.py`).
 
-## 7. Questions for Ola (each with a default)
+## 7. Rulings (Ola, 2026-10-03)
 
-1. **Where the reference counts live.** Default: derived from git, the
-   commit that added the newest dated retrospective file (§3.6); nothing to
-   store or update. Alternative: a committed JSON that @orchestrator updates
-   at each retrospective (about 25 more words in `orchestrator.md`, and a
-   reference that can be reset by hand).
-2. **A size bound on `session.md`.** The ruling enforces the kinds of line,
-   not their length. Measured 2026-10-03: the main checkout's `session.md`
-   is 10 lines and 2,468 characters (`wc -lc`), nearly all of it in the
-   `NOW:` and `QUEUE:` lines (961 and 943 characters), and it passes §3.3
-   as designed (its two blank lines are ignored). Default: no bound in h8; if wanted, a warning past
-   1,500 characters is three lines.
-3. **`docs/PRINCIPLES.md` in the size table** (1,421 words today). Default:
-   in, as the fourth rule file `guard_governance.py` governs.
-4. **Record the longest quiet stretch in `windows.jsonl`** as well as
-   printing it, so the nightly trials have a series. Default: no; the print
-   is what was ruled, and one field can follow.
+The four questions of the first draft, answered:
+
+1. **Where the reference word counts live:** derived from git, the commit
+   that added the newest dated retrospective file (§3.6). Nothing stored.
+2. **A length limit on `session.md`:** yes, 300 characters per line; the
+   recap warns beyond it (§3.3, test 4). Ola changed his mind on seeing a
+   971-character `NOW:` line.
+3. **`docs/PRINCIPLES.md` in the size table:** yes (§3.6).
+4. **The longest quiet stretch in `windows.jsonl`:** no; `--back` prints it
+   only (§3.4).
