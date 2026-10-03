@@ -187,7 +187,7 @@ def summary(record: RunRecord) -> str:
         where = "on NoData cells" if tolerance is not None else "on or next to NoData cells"
         said.append(
             f"{plural(n, 'vertex', 'vertices')} {where} "
-            f"{'was' if n == 1 else 'were'} removed with their triangles."
+            f"{'was removed with its' if n == 1 else 'were removed with their'} triangles."
         )
     if "heights" in by:
         said.append("The heights are not real: every z is 0 (--flat).")
