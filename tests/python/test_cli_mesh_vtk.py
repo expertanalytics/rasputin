@@ -41,7 +41,8 @@ runner = CliRunner(env={"NO_COLOR": "1", "TERM": "dumb"})
 
 FIXTURE = "catchment"
 FEATURED = "road-crosses-river"
-ELEVATION_TEXT = "none (z=0, --flat)"
+#: Increment 25 (`docs/increments/25-plain-output.md`, D2): `heights`.
+HEIGHTS_TEXT = "none: every z is 0 (--flat)"
 
 
 def invoke(*args: str) -> tuple[int, str]:
@@ -188,9 +189,10 @@ class TestTheBundleIsTheEnginesMesh:
             DEFAULT_VOCABULARY.fingerprint(),
         )
 
-    def test_crs_and_elevation_are_carried(self, featured: VtkFile) -> None:
+    def test_crs_and_heights_are_carried(self, featured: VtkFile) -> None:
         assert featured.field_data["crs"].values == ("EPSG:25833",)
-        assert featured.field_data["elevation_source"].values == (ELEVATION_TEXT,)
+        assert featured.field_data["heights"].values == (HEIGHTS_TEXT,)
+        assert "elevation_source" not in featured.field_data
 
     def test_no_crs_means_no_crs_field(self, tmp_path: Path) -> None:
         out = tmp_path / "mesh.vtk"

@@ -10,8 +10,12 @@ every line), and the codes the design names for it.
 
 Pinned beyond the design's text (the design leaves them open):
 
-- The stderr line is matched as `land cover: <R> regions, <O> outside every
-  polygon, <V> in more than one, <S> thinner than the snap` (R3's words).
+- The stderr line is matched as `land cover: <R> areas between lines; <O> in
+  no polygon, <V> in more than one (the smallest wins), <S> too narrow to
+  label with certainty` (increment 25's rewording of R3's words,
+  `docs/increments/25-plain-output.md`, "stderr, reworded"); so is the
+  features line, `features: <n> kept (<c> cut at the domain outline), <o>
+  outside the domain, <e> empty`.
 - The `land_cover_codes` string contains `CORINE Land Cover level-3 code`,
   `Code_18`, `corine` and `0 =`; the PLY comment is `land_cover_codes
   <the same text>`.
@@ -59,12 +63,13 @@ from vtkread import VtkFile, read_vtk
 runner = CliRunner(env={"NO_COLOR": "1", "TERM": "dumb"})
 
 LAND_COVER_LINE = re.compile(
-    r"land cover: (?P<r>\d+) regions, (?P<o>\d+) outside every polygon, "
-    r"(?P<v>\d+) in more than one, (?P<s>\d+) thinner than the snap"
+    r"land cover: (?P<r>\d+) areas between lines; (?P<o>\d+) in no polygon, "
+    r"(?P<v>\d+) in more than one \(the smallest wins\), "
+    r"(?P<s>\d+) too narrow to label with certainty"
 )
 FEATURES_LINE = re.compile(
-    r"\b(?P<n>\d+) features kept, (?P<o>\d+) dropped outside, (?P<c>\d+) clipped, "
-    r"(?P<e>\d+) empty skipped\b"
+    r"\bfeatures: (?P<n>\d+) kept \((?P<c>\d+) cut at the domain outline\), "
+    r"(?P<o>\d+) outside the domain, (?P<e>\d+) empty\b"
 )
 CODES_SYSTEM = "CORINE Land Cover level-3 code"
 PRESET_NAME = "rasputin CORINE natural"
