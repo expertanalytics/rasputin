@@ -12,6 +12,7 @@
 #include <terrain/mesh/lattice_mesh.hpp>
 #include <terrain/mesh/lawson.hpp>
 #include <terrain/predicates/default_kernel.hpp>
+#include <terrain/raster/geometry.hpp>
 #include <terrain/refinement/constraint_points.hpp>
 #include <terrain/refinement/refine.hpp>
 #include <terrain/refinement/scan.hpp>
@@ -181,12 +182,20 @@ inline bool strip_fits(const mesh::LatticeMesh& m, std::uint32_t t, unsigned e, 
     return !flips(f, m.corner(u, (k + 2) % 3), b, a);
 }
 
-// L12: the constrained edge of t whose line p lies within 1e-10 lattice units
-// of, (col, row) Euclidean, with p's projection strictly inside it; the
+// L16: the coincidence radius of L12 and L14, max(1e-10, 64 ulp(M)) lattice
+// units, M = max(cols, rows) - 1 the largest lattice coordinate.
+[[nodiscard]] inline double coincidence_radius(const raster::RasterGeometry& g) {
+    const auto m = static_cast<double>(std::max(g.cols(), g.rows()) - 1);
+    return std::max(1e-10, 64.0 * (std::nextafter(m, std::numeric_limits<double>::infinity()) - m));
+}
+
+// L12: the constrained edge of t whose line p lies within `radius` lattice
+// units of, (col, row) Euclidean, with p's projection strictly inside it; the
 // nearest, ties to the lower edge index.
-inline std::optional<unsigned> near_constraint(const mesh::LatticeMesh& m, std::uint32_t t, mesh::MeshVertex p) {
+inline std::optional<unsigned> near_constraint(const mesh::LatticeMesh& m, std::uint32_t t, mesh::MeshVertex p,
+                                               double radius) {
     std::optional<unsigned> best;
-    double best_d = 1e-10;
+    double best_d = radius;
     for (unsigned e = 0; e < 3; ++e) {
         const mesh::MeshVertex a = m.corner(t, e), b = m.corner(t, (e + 1) % 3);
         const double dc = b.col - a.col, dr = b.row - a.row, len2 = dc * dc + dr * dr;

@@ -99,7 +99,7 @@ namespace detail {
 
 template <class Store>
 [[nodiscard]] PointScan scan_points(const Store& points, const mesh::LatticeMesh& m,
-                                    std::span<const double> zt, std::uint32_t t) {
+                                    std::span<const double> zt, std::uint32_t t, double radius = 0.0) {
     using mesh::MeshVertex;
     const raster::RasterGeometry& g = points.geometry();
     const auto& tri = m.triangles()[t];
@@ -115,8 +115,9 @@ template <class Store>
     };
     double nearest = std::numeric_limits<double>::infinity();
     auto visit = [&](MeshVertex p, float zf) {
-        if (p == v[0] || p == v[1] || p == v[2])
-            return;
+        for (unsigned k = 0; k < 3; ++k)  // a corner, or within `radius` of one (L14)
+            if (p == v[k] || (radius > 0.0 && std::hypot(p.col - v[k].col, p.row - v[k].row) <= radius))
+                return;
         for (unsigned k = 0; k < 3; ++k)
             if (mesh::orient_sign(v[k], v[(k + 1) % 3], p) < 0)
                 return;
@@ -223,6 +224,7 @@ template <class Store, class R>
 
     PointRefineOutcome out;
     out.strip_points = strip ? strip->size() : 0;
+    const double radius = strip ? coincidence_radius(g) : 0.0;  // L14, L16; 0 keeps 15c's run
     const std::size_t n0 = start.vertices().size();
     std::vector<double> zt(n0, std::numeric_limits<double>::quiet_NaN());
     for (std::size_t i = 0; i < n0 && i < z.size() && i < valid.size(); ++i)
@@ -242,14 +244,14 @@ template <class Store, class R>
     const auto scan_one = [&](std::uint32_t t) {
         PointScan r;
         if constexpr (has_store) {
-            r = scan_points(*points, m, zt, t);
+            r = scan_points(*points, m, zt, t, radius);
             r.error = r.max_error;
         }
         if (strip)
             scan_strip(*strip, offset, refused, subs, m, zt, t, r);
         if constexpr (has_dem)
             if (written[t] != 0) {
-                const ScanResult d = scan(*dem, m, t);
+                const ScanResult d = scan(*dem, m, t, radius);
                 r.max_error = d.max_error;
                 r.uncovered += d.uncovered;
                 if (d.node) {
@@ -300,7 +302,7 @@ template <class Store, class R>
             if (r.where != NodeLocation::Inside)
                 edge = static_cast<unsigned>(r.where) - 1;
             else if (strip)
-                edge = near_constraint(m, t, *r.point);
+                edge = near_constraint(m, t, *r.point, radius);
             const bool near = edge && r.where == NodeLocation::Inside;
             if (edge) {
                 const std::uint32_t u = m.neighbours(t)[*edge];
@@ -372,21 +374,45 @@ template <class Store, class R>
                 worst = std::max(worst, std::abs(pts[j].z - along(se, zt, pts[j].s)));
             }
     }
+    const auto coincide = [&](std::size_t i, double pz) {
+        ++out.coincident;
+        if (!std::isnan(zt[i]))
+            out.coincident_max_error = std::max(out.coincident_max_error, std::abs(pz - zt[i]));
+    };
+    std::vector<std::uint64_t> node_vertices;  // the vertices that are DEM nodes, as row * cols + col
+    if constexpr (has_dem) {
+        for (const mesh::MeshVertex v : m.vertices())
+            if (v.is_node())
+                node_vertices.push_back(static_cast<std::uint64_t>(v.row) * g.cols() + static_cast<std::uint64_t>(v.col));
+        std::sort(node_vertices.begin(), node_vertices.end());
+    }
     for (std::size_t i = 0; i < m.vertices().size(); ++i) {
         const mesh::MeshVertex v = m.vertices()[i];
+        // Coincident points: 15c's pass, a stored point equal to a start vertex;
+        // with a strip (L14), also any stored point or DEM node within the
+        // radius of a vertex it is not, which the scan skipped.
         if constexpr (has_store)
-            if (i < n0) {
-                const auto row = std::min(static_cast<std::size_t>(v.row), last_cell(g.rows()));
-                const auto col = std::min(static_cast<std::size_t>(v.col), last_cell(g.cols()));
-                points->for_each_in(row, col, col, [&](mesh::MeshVertex p, float pz) {
-                    if (p != v)
-                        return;
-                    ++out.coincident;
-                    if (!std::isnan(zt[i]))
-                        out.coincident_max_error =
-                            std::max(out.coincident_max_error, std::abs(static_cast<double>(pz) - zt[i]));
-                });
+            if (i < n0 || radius > 0.0) {
+                const auto cell = [&](double x, std::size_t n) {
+                    return std::min(static_cast<std::size_t>(std::max(x, 0.0)), last_cell(n));
+                };
+                for (std::size_t b = cell(v.row - radius, g.rows()); b <= cell(v.row + radius, g.rows()); ++b)
+                    points->for_each_in(b, cell(v.col - radius, g.cols()), cell(v.col + radius, g.cols()),
+                                        [&](mesh::MeshVertex p, float pz) {
+                                            const bool same = p == v;
+                                            if ((same && i < n0) || (!same && radius > 0.0
+                                                                     && std::hypot(p.col - v.col, p.row - v.row) <= radius))
+                                                coincide(i, static_cast<double>(pz));
+                                        });
             }
+        if constexpr (has_dem) {
+            const mesh::MeshVertex n{std::round(v.col), std::round(v.row)};
+            const auto key = static_cast<std::uint64_t>(n.row) * g.cols() + static_cast<std::uint64_t>(n.col);
+            if (!v.is_node() && std::hypot(v.col - n.col, v.row - n.row) <= radius
+                && !std::binary_search(node_vertices.begin(), node_vertices.end(), key))
+                if (const auto nz = vertex_z(*dem, n))
+                    coincide(i, *nz);
+        }
         out.vertices.push_back(i < n0 ? start.vertices()[i]
                                       : Point2{g.x_min() + v.col * g.delta_x(), g.y_max() - v.row * g.delta_y()});
         out.z.push_back(std::isnan(zt[i]) ? 0.0 : zt[i]);
