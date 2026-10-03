@@ -211,7 +211,7 @@ Not in scope:
   inserted. Not ruled.
 - **Constraint feet and start quality in the strip run.** As in 15c's phase 2
   (its D5). A DEM node the F2 rescan inserts next to a constraint goes in with
-  `split_inside`, as phase 2's source nodes do, except one within 1e-10
+  `split_inside`, as phase 2's source nodes do, except one within the radius `r(g)` (L16)
   lattice units of a constrained edge while a strip is present: that one goes
   in on the edge (L12).
 - **One loop shared by `refine` and `refine_points`** (15c D5's later
@@ -1023,7 +1023,7 @@ unchanged, and refused points stay excluded from E1 and reported (default 5).
   of `point_loop`, **only when a strip is given**:
   - A source point or DEM node that the scan places `Inside` triangle `t` is
     tested against each constrained edge `e` of `t`. It is a candidate when
-    its distance to the line of `e` is at most **1e-10 lattice units**
+    its distance to the line of `e` is at most **the coincidence radius `r(g)`** (L16; 1e-10 lattice units as first ruled)
     (Euclidean in `(col, row)`) and its projection falls strictly inside
     `e`. The threshold is a decade inside the oracles' `kOnEdge` (1e-9), so
     the producer and the oracle never disagree at the boundary. It is still
@@ -1124,7 +1124,7 @@ the split option (b) that was considered for 15f-1.
 
   **The rule.** When a strip is given, the scan treats a point of the
   non-strip set (a DEM node in `refine_strip`, a source point in
-  `refine_points`) that lies within **1e-10 lattice units** of a corner of
+  `refine_points`) that lies within **the coincidence radius `r(g)`** (L16; 1e-10 lattice units as first ruled) of a corner of
   its triangle as it treats a point equal to that corner. The point is
   skipped: never named, never inserted. This is a geometric test inside the
   read-only scan, with no state and no set of marks. `scan` (in `scan.hpp`)
@@ -1137,7 +1137,7 @@ the split option (b) that was considered for 15f-1.
     radius, over every vertex, not only start vertices.
 
   In `refine_strip` those two fields have no other use. Their meaning there
-  is "DEM nodes within 1e-10 lattice units of a vertex they are not; the
+  is "DEM nodes within `r(g)` (L16) of a vertex they are not; the
   largest |node z − vertex z|".
 
   With this rule, (17, 9) is never inserted, so no sliver forms, and (15, 8)
@@ -1154,10 +1154,10 @@ the split option (b) that was considered for 15f-1.
 
   **What the guarantees then say.**
   - **E2 gains an exception at rounding scale.** "Every valid DEM node
-    inside the domain is within the tolerance", except a node within 1e-10
+    inside the domain is within the tolerance", except a node within `r(g)` (L16)
     lattice units of a vertex that it is not. Such a node is counted in
     `coincident`, with its largest difference in `coincident_max_error`.
-  - That difference is the bilinear surface's change over at most 1e-10
+  - That difference is the bilinear surface's change over at most `r(g)`
     cells, plus the vertex's own rounding. It is far below any tolerance the
     CLI accepts above 0. Only at tolerance 0 can such a node exceed the
     tolerance at all.
@@ -1172,7 +1172,7 @@ the split option (b) that was considered for 15f-1.
     reported back as a design defect, and the case's tolerance is not
     widened.
   - **ASK OLA (not blocking):** E2's exception changes the wording Ola ruled
-    ("every valid DEM node ... within the tolerance") at a scale of 1e-10
+    ("every valid DEM node ... within the tolerance") at a scale of `r(g)`, 1e-10 to about 5e-10
     cells. The figure is reported, so nothing is hidden. If Ola wants it
     stated in the `.vtk` sentence, it costs one clause in 15f-3's CLI work.
   - **ASK OLA (not blocking), a separate question:** should the build pin
@@ -1198,7 +1198,7 @@ the split option (b) that was considered for 15f-1.
       in a build configured with `-DCMAKE_CXX_FLAGS=-ffp-contract=off` as
       well as the default one, and name both in the handback.
   - `@developer`, then: the radius parameter on `scan` and `scan_points`
-    (default 0), passed as 1e-10 by `point_loop` when a strip is given; the
+    (default 0), passed as `r(g)` (L16) by `point_loop` when a strip is given; the
     end-pass counting; nothing else. Run both builds, `-ffp-contract=off` and
     the default, before handing back, and confirm that `refine` and the
     no-strip `refine_points` are bit-identical (the 72 fixtures). About 15
@@ -1228,6 +1228,108 @@ the split option (b) that was considered for 15f-1.
     ones that meet 15e.
 
   The PR table and the acceptance below are updated to match.
+
+- **L16. The coincidence radius scales with the lattice: `r(g) = max(1e-10,
+  64 · ulp(M))`.** This replaces the fixed 1e-10 of L12 and L14 (Ola asked
+  for the check, 2026-10-03). Here `M = max(cols, rows) − 1` is the largest
+  lattice coordinate the geometry allows, and `ulp(M)` is
+  `std::nextafter(M, inf) − M`. One function,
+  `detail::coincidence_radius(const raster::RasterGeometry&)`, is used by
+  both L12 (`near_constraint`) and L14 (the scan's corner test).
+
+  **1. How large lattice coordinates get.**
+  - Lattice coordinates are measured from the corner of the raster handed to
+    C++, not from any global origin:
+    `col = (x − g.x_min()) / g.delta_x()` (`detail::lattice_position`,
+    `include/terrain/refinement/refine.hpp`).
+  - Under 23 that raster is the piece's own target window, snapped to the
+    global lattice but with its own `x_min` and `y_max` ("Unchanged by
+    23a-1", `23-basin-scale.md`; `window_meta`: `x_min + col0·dx`). So a
+    coordinate is at most the extent of one window, never of the basin.
+  - Windows measured or designed so far:
+    - the Norway DTM10 tile, 5,051 × 5,051 (`7908_3_10m_z33.tif`, the bench
+      DEM);
+    - 15a's mosaic box, 10,051 × 10,051;
+    - the São Francisco level-3 units at 30 m, the largest being 761 at
+      19,377 × 27,786 (`docs/benchmarks/2026-10-02/basin-level3/runs/t20/761.stats.md`);
+    - the whole basin as a single window, 41,332 × 50,297 at 30 m (23's
+      partition table). This is reached only when the memory budget allows
+      one piece, and at the default budget even 50 m tolerance cuts it 2 × 2.
+  - Under 23's partition at 1 m tolerance the basin is 5 × 7 cells of about
+    59.4 M nodes, so pieces are near 8,300 × 7,200 nodes.
+  - "1 m" in 23 and in `bench.py` is a tolerance, not a cell size. No 1 m
+    DEM is in use. A 1 m DEM over the whole basin, about 1.2 M × 1.5 M nodes,
+    is not a window any path could hold. Under 23 its pieces would again be
+    windows of about `sqrt(budget / b)` nodes per side.
+  - Nothing in the code caps a window's aspect, though. A long, thin
+    corridor at 1 m could be 10⁶ nodes long and still fit in memory, so the
+    rule must not depend on today's sizes.
+
+  **2. What the rounding is proportional to.** It is proportional to the
+  size of the coordinates, not to local differences.
+  - Strip points are computed in absolute lattice coordinates: a crossing is
+    `(K, r0 + t (r1 − r0))` (D2, step 3). The result has the magnitude of the
+    coordinate, and so does its rounding, up to a few `ulp(X)`.
+  - `near_constraint` and the scan form differences such as `p − a` first.
+    For nearby points those differences are nearly exact, so they add little
+    rounding of their own. But the positions they subtract already carry
+    their representation error of `ulp(X)`. A vertex inserted a few ulps
+    from another one is a few `ulp(X)` away.
+  - So the quantity the threshold must exceed grows with `X`, and a fixed
+    constant runs out:
+    - at the whole-basin window, 1e-10 is about 14 ulps;
+    - at 10⁶, one ulp (1.16e-10) is already larger than 1e-10.
+  - A second source of offset exists: a world coordinate's own rounding
+    (about 9.3e-10 m at a UTM northing near 7-8 × 10⁶ m), divided by the
+    cell size. It decides how near an input vertex can come to a node
+    without being one. It does not drive the sliver failure: separating two
+    points 1e-9 cells apart is easy for the exact predicates. The failure
+    comes from lattice arithmetic, so the radius tracks `ulp(X)`.
+
+  **3. The rule and its margins.**
+  - 64 ulps is 16 times the few-ulp offsets seen in the ES13 and ES15 inputs.
+  - The floor of 1e-10 keeps today's value wherever it was already sound: on
+    every lattice up to 8,191 nodes across, `r(g) = 1e-10`. That covers every
+    test lattice, the DTM10 tile and the pieces at 1 m tolerance.
+  - The extent `M` is used rather than each triangle's own coordinates. It is
+    one number per run, uniform and deterministic, and errs on the large side
+    near the origin, where 64 `ulp(M)` is still physically nothing (under
+    5e-9 m at 10 m cells, up to `M` = 5 × 10⁴).
+  - Values:
+
+    | lattice extent `M` | `ulp(M)` | `r(g)` | `r(g)` in ulps |
+    |---:|---:|---:|---:|
+    | 8 (the ES lattices) | 1.8e-15 | 1e-10 (floor) | about 56,000 |
+    | 5,050 (DTM10 tile) | 9.1e-13 | 1e-10 (floor) | 110 |
+    | 10,050 (15a box) | 1.8e-12 | 1.16e-10 | 64 |
+    | 27,785 (unit 761) | 3.6e-12 | 2.33e-10 | 64 |
+    | 50,296 (whole basin, one window) | 7.3e-12 | 4.66e-10 | 64 |
+    | 10⁶ (a corridor) | 1.16e-10 | 7.45e-9 | 64 |
+
+  **The oracles.** The tests' "on the edge" distance, `kOnEdge` (1e-9 cells,
+  `tests/cpp/support/strip_oracle.hpp`), must stay at least `10 · r(g)` for
+  the lattice under test, so that producer and oracle never disagree at the
+  boundary. On every lattice in today's suites `r(g)` is 1e-10, so 1e-9 is
+  exactly a decade inside and nothing changes. A test on a lattice wider than
+  8,191 nodes uses `max(1e-9, 10 · r(g))`. So does @perf's independent strip
+  check in 15f-3's acceptance (basin pieces, up to about 2.8 × 10⁴ across,
+  where `r(g)` is 2.33e-10).
+
+  **Who changes what.**
+  - `@tester`: the ES15 radius case needs no change. Its lattice is 9 × 9,
+    where `r(g)` is the 1e-10 floor, so 1e-11 is inside and 1e-8 outside, as
+    written. Add, red:
+    - a unit case for `coincidence_radius`: `M` = 8 gives exactly 1e-10;
+      `M` = 50,296 gives exactly 64 × 2⁻³⁷; `M` = 2²⁰ gives exactly 64 × 2⁻³²;
+    - one loop case on a lattice wider than 8,191 (for example 16,385 × 9
+      nodes, where `r(g) = 64 · 2⁻³⁸ ≈ 2.33e-10`): a start vertex 2e-10 from
+      a node is skipped and counted there, while the same offset on a 9 × 9
+      lattice is inserted. This shows the radius scales at the loop, not
+      only in the helper.
+  - `@developer`: `detail::coincidence_radius(g)` in `strip_scan.hpp`;
+    `near_constraint` reads it in place of the literal `1e-10`; L14's radius
+    is passed as `coincidence_radius(g)`. About 5 lines. L14 is otherwise
+    unchanged and can be built now.
 
 **Python (pytest), 15f-3** (L15; first planned for 15f-2):
 
