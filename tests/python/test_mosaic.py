@@ -1617,14 +1617,15 @@ class TestM15Adopt:
         assert not np.shares_memory(tile.array, buffer)
         assert buffer.flags.writeable
 
-    def test_adopt_is_called_only_from_the_mosaic(self) -> None:
-        """R7: "Its one caller is `assemble`". Grep the package for the name."""
+    def test_adopt_is_called_only_from_the_mosaic_and_the_resampler(self) -> None:
+        """R7: "Its one caller is `assemble`"; increment 15e fix 2 adds
+        `target_grid.resample`. Grep the package for the name."""
         users = sorted(
             str(path.relative_to(SRC))
             for path in SRC.rglob("*.py")
             if "_adopt" in path.read_text(encoding="utf-8")
         )
-        assert users == ["io/models.py", "mosaic.py"]
+        assert users == ["io/models.py", "mosaic.py", "target_grid.py"]
 
 
 def test_the_plan_never_loads(mz: ModuleType, footprint: Any) -> None:
