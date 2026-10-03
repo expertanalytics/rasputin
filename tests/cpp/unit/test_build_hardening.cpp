@@ -27,6 +27,7 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <csignal>
 #include <cstddef>
 #include <string>
 #include <string_view>
@@ -51,6 +52,14 @@ namespace {
 // compiler cannot prove it out of range and fold the access away, and the value
 // read goes to a volatile sink so the load is not dead.
 [[noreturn]] void read_past_the_end_and_exit() {
+    // Catch2 installs handlers for SIGABRT (and SIGILL, SIGSEGV, ...) in the
+    // parent, and the child inherits them. libstdc++'s check aborts, so on
+    // Linux the child would print Catch2's "fatal error" report for a case the
+    // parent then passes. Restore the defaults: the child just dies by the
+    // signal, which is what the parent inspects.
+    std::signal(SIGABRT, SIG_DFL);
+    std::signal(SIGILL, SIG_DFL);
+    std::signal(SIGTRAP, SIG_DFL);
     std::vector<int> v(4, 7);
     volatile std::size_t index = 4;
     volatile int sink = v[index];

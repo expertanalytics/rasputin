@@ -31,7 +31,7 @@ Names the design leaves open, chosen here (the tests are their statement):
   a None row is omitted (R4). Spacing prints once when dx == dy, else
   ``dx × dy``. File sizes are decimal: B, kB, MB, GB, one decimal above bytes.
 - ``Report(command, sizes, quality, refinement, phases, total, stats_seconds,
-  threads=None)``. ``threads`` is the design's "Threads: 10 (hardware
+  bounds_checks, threads=None, seams=())``. ``threads`` is the design's "Threads: 10 (hardware
   concurrency)" sentence, which R1's list of Report fields does not carry;
   printed only when not None. ``bounds_checks`` (increment 24, required) is the
   text after ``bounds checks: `` -- ``off`` or ``on (<mode>)`` -- and prints as

@@ -379,4 +379,9 @@ target_link_libraries(test_build_hardening PRIVATE
 target_compile_options(test_build_hardening PRIVATE -Wall -Wextra -Wpedantic -Werror)
 target_compile_definitions(test_build_hardening PRIVATE
     RASPUTIN_EXPECT_HARDENING=$<BOOL:${RASPUTIN_HARDENING}>)
+# A latent hole: Catch2 exits with the number of failed assertions, so a run
+# with exactly four failures would also exit 4 and read as skipped. Not
+# reachable here: each case runs as its own ctest test and none can fail more
+# than one assertion (T1 and T3 have one check each, T2 one CHECK after REQUIREs
+# that stop the case). A case that can fail four times needs this revisited.
 catch_discover_tests(test_build_hardening PROPERTIES SKIP_RETURN_CODE 4)

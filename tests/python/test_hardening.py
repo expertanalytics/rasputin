@@ -13,10 +13,10 @@ report; T8 (``tools/bench.py``) is in ``test_bench.py``.
 T6, the stale build-directory trap, takes two real non-editable installs with
 ``--no-build-isolation`` into one throwaway virtual environment. Not for every
 leg and not for a local ``pytest``, so it runs only with
-``RASPUTIN_INSTALL_TRAP=1``, and **one CI leg** sets that (the design's section
-12 leaves CI or manual to ``@tester``; CI, because it is what keeps the
-``pyproject.toml`` default and scikit-build-core's behaviour checked after a
-release of it changes). The command, locally or in that leg::
+``RASPUTIN_INSTALL_TRAP=1``, and **one CI leg** sets that: CI rather than a
+manual check, because it is what keeps the ``pyproject.toml`` default and
+scikit-build-core's behaviour checked after a release of it changes. The
+command, locally or in that leg::
 
     RASPUTIN_INSTALL_TRAP=1 pytest --no-cov tests/python/test_hardening.py -k trap
 
@@ -29,6 +29,7 @@ import os
 import shutil
 import subprocess
 import sys
+import tomllib
 import venv
 from pathlib import Path
 
@@ -178,12 +179,12 @@ def copy_source_tree(destination: Path) -> Path:
 
 
 def build_environment(env_dir: Path) -> Path:
-    """A venv holding ``[build-system].requires``; its python. uv when present
-    (it serves the wheels from its cache, offline after the first fetch), pip
-    otherwise."""
+    """A venv holding ``[build-system].requires``, read from this checkout's
+    ``pyproject.toml``; its python. uv when present (it serves the wheels from
+    its cache, offline after the first fetch), pip otherwise."""
     venv.EnvBuilder(with_pip=True).create(env_dir)
     python = env_dir / "bin" / "python"
-    requires = ["scikit-build-core>=0.9", "pybind11>=2.12"]
+    requires = tomllib.loads((REPO / "pyproject.toml").read_text())["build-system"]["requires"]
     uv = shutil.which("uv")
     argv = (
         [uv, "pip", "install", "--quiet", "--python", str(python), *requires]
