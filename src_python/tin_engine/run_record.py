@@ -183,8 +183,10 @@ def summary(record: RunRecord) -> str:
     removed = by.get("nodata_vertices_removed")
     if removed is not None and removed.number:
         n = int(removed.value)
+        # Without a tolerance a vertex next to a NoData cell goes too (ab692ee).
+        where = "on NoData cells" if tolerance is not None else "on or next to NoData cells"
         said.append(
-            f"{plural(n, 'vertex', 'vertices')} on NoData cells "
+            f"{plural(n, 'vertex', 'vertices')} {where} "
             f"{'was' if n == 1 else 'were'} removed with their triangles."
         )
     if "heights" in by:
@@ -197,15 +199,18 @@ def summary(record: RunRecord) -> str:
         and tolerance is not None
         and (float(at.value) > float(tolerance.value))
     ):
+        n = int(count.value)
         lines.append(
-            f"Warning: {count.value} DEM nodes on a vertex differ from it by up "
+            f"Warning: {plural(n, 'DEM node', 'DEM nodes')} on a vertex "
+            f"{'differs' if n == 1 else 'differ'} from it by up "
             f"to {at.value} m, more than the tolerance of {tolerance.value} m."
         )
     outside = by.get("dem_nodes_outside_mesh")
     if outside is not None and outside.number:
+        n = int(outside.value)
         lines.append(
-            f"Warning: {outside.value} DEM nodes with data lie outside the mesh; "
-            "there should be none."
+            f"Warning: {plural(n, 'DEM node', 'DEM nodes')} with data "
+            f"{'lies' if n == 1 else 'lie'} outside the mesh; there should be none."
         )
     return "\n".join(lines)
 
