@@ -25,24 +25,28 @@
   (serial)`; on the reprojected path the joint loop's times stay in the
   `final check:` rows, so the strip's own scan and split rows are absent.
 
-What the sentence pins is D7's, by `re.search` on each part, never the whole
-sentence: the strip clause as D7 writes it, `max error at DEM nodes at most
-<e> m` in place of `achieved max error` on the projected path only, the
-clause after the final check's on the reprojected path, and the stderr line.
-**Ola has not ruled whether the sentence states L14's rounding exception**
-(E2's DEM nodes within `r(g)` of a vertex; `ASK OLA` under L14). Nothing here
-pins its absence. If Ola says yes, the one test to extend is
-`TestProjectedPath.test_the_sentence_carries_the_strip_clause`, with the new
-clause's wording; the other searches stay as they are, unless the clause is
-put inside the strip clause or between `at most` and its number.
+What the run reports is read as increment 25 names it
+(`docs/increments/25-plain-output.md`, D2 and D6): the mesh file carries
+`tolerance_m` and `max_error_m`, an "at most" bound on both paths; the
+strip's counts are `--stats` Result rows (`line_points_checked`,
+`line_max_error_m`, `line_points_on_nodata`, `line_points_refused` and its
+`_max_error_m`, `line_points_inserted`, `line_check_dem_nodes_inserted`,
+`line_points_duplicate`), and the DEM nodes within rounding of a vertex they
+are not (15f's L14) are `dem_nodes_at_vertices` and its `_max_error_m`. 25's
+D2 answers 15f's open question on L14's rounding exception: the file states
+it through `max_error_m`, which includes those nodes, with no field of its
+own.
 
 CHOSEN HERE, where the design is silent: the NoData case puts the void on a
 node outside the domain whose cells the outline crosses (a DEM edge void), so
-`no_data` is at least 1 and the run still meets E1 at every point it keeps.
+`line_points_on_nodata` is at least 1 and the run still meets E1 at every
+point it keeps. `dem_nodes_at_vertices` is a `--stats` row on the projected
+path too, because `refine_strip` measures it there (25's D6: "where a path
+produces them, they are always in `--stats`").
 
-HOW THIS FILE GOES RED: the CLI has no strip yet, so the clause, the stderr
-line, the `--stats` rows and the new wording are absent, and the oracle finds
-the strip over the tolerance on both paths. The controls pass already.
+HOW THIS FILE GOES RED: the CLI has no strip yet, so the `line_*` rows and
+the phase rows are absent from `--stats`, and the oracle finds the strip over
+the tolerance on both paths. The controls pass already.
 
 Not invariant-critical; no mutation round.
 """
@@ -51,7 +55,6 @@ from __future__ import annotations
 
 import importlib
 import json
-import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -65,6 +68,7 @@ import tin_engine.cli as cli
 from feature_fixtures import Feat, write_geojson
 from geographic_fixtures import geographic_tile_tiff, project_ring
 from geotiff_fixtures import TIE_X, TIE_Y, micro_tiff
+from recordread import stats_names
 from strip_oracle import (
     Grid,
     StripFindings,
@@ -87,7 +91,7 @@ from test_cli_mesh_geographic import (
     triangles,
 )
 from test_cli_mesh_geographic import write_geojson as write_domain
-from test_cli_mesh_refine import NUMBER, field, sentence
+from test_cli_mesh_refine import file_field, stats_row
 from test_cli_mesh_stats import seconds
 from tin_engine.cli import app
 from tin_engine.dem_input import DemRequest, open_dem
@@ -103,38 +107,50 @@ ON_INPUT = 2e-3
 #: How far a point ruled on the start's own edges may lie from a written line.
 ON_START = 1e-6
 
-CLAUSE = re.compile(
-    r"; edge strip: (\d+) check points where constraints cross grid lines and between them "
-    r"\((\d+) without data\), (\d+) inserted, max error " + NUMBER + r" m at them, "
-    r"(\d+) refused \(max " + NUMBER + r" m\)"
-)
-REPORT = re.compile(r"(\d+) strip points inserted, (\d+) nodes inserted by the strip run")
-
 
 @dataclass(frozen=True)
-class Clause:
-    points: int
-    no_data: int
+class LineCheck:
+    """The strip's `--stats` rows (25's D6)."""
+
+    checked: int
+    on_nodata: int
     inserted: int
     max_error: float
     refused: int
     refused_max_error: float
+    dem_nodes_inserted: int | None  # refine_strip's; the reprojected path may omit it
+    duplicate: int
 
 
-def clause(text: str) -> Clause:
-    match = CLAUSE.search(text)
-    assert match is not None, f"no edge-strip clause in {text!r}"
-    p, n, i, e, r, re_ = match.groups()
-    return Clause(int(p), int(n), int(i), float(e), int(r), float(re_))
+def line_check(report: str) -> LineCheck:
+    def count(name: str) -> int:
+        return int(stats_row(report, name))
+
+    def metres(name: str) -> float:
+        return float(stats_row(report, name))
+
+    return LineCheck(
+        checked=count("line_points_checked"),
+        on_nodata=count("line_points_on_nodata"),
+        inserted=count("line_points_inserted"),
+        max_error=metres("line_max_error_m"),
+        refused=count("line_points_refused"),
+        refused_max_error=metres("line_points_refused_max_error_m"),
+        dem_nodes_inserted=(
+            count("line_check_dem_nodes_inserted")
+            if "line_check_dem_nodes_inserted" in stats_names(report)
+            else None
+        ),
+        duplicate=count("line_points_duplicate"),
+    )
 
 
 @dataclass(frozen=True)
 class Run:
-    """One `rasputin mesh` run: the file, the streams, the report, and what
+    """One `rasputin mesh` run: the file, the `--stats` report, and what
     the CLI's `refine` call was given and returned."""
 
     vtk: VtkFile
-    stderr: str
     report: str
     refine_start: Any
     refined: Any
@@ -166,7 +182,6 @@ def mesh(tmp: Path, *args: str) -> Run:
     ((start, refined),) = seen
     return Run(
         read_vtk(out.read_bytes()),
-        result.stderr,
         md.read_text(encoding="utf-8"),
         start,
         refined,
@@ -245,20 +260,24 @@ def projected(tmp_path_factory: pytest.TempPathFactory) -> Run:
 class TestProjectedPath:
     """PY3."""
 
-    def test_the_sentence_carries_the_strip_clause(self, projected: Run) -> None:
-        text = sentence(projected.vtk)
-        found = clause(text)
-        assert found.points > 0 and found.inserted > 0, found
-        assert found.no_data == 0
+    def test_the_stats_carry_the_line_check(self, projected: Run) -> None:
+        found = line_check(projected.report)
+        assert found.checked > 0 and found.inserted > 0, found
+        assert found.on_nodata == 0
         assert 0.0 <= found.max_error <= TOLERANCE
         assert (found.refused, found.refused_max_error) == (0, 0.0)
-        assert field(text, rf"max error at DEM nodes at most {NUMBER} m") <= TOLERANCE
-        assert "achieved max error" not in text, text
+        assert found.dem_nodes_inserted is not None and found.dem_nodes_inserted >= 0
+        assert found.duplicate >= 0
+        assert float(file_field(projected.vtk, "max_error_m")) <= TOLERANCE
 
-    def test_stderr_reports_the_strip_runs_insertions(self, projected: Run) -> None:
-        match = REPORT.search(" ".join(projected.stderr.split()))
-        assert match is not None, projected.stderr
-        assert int(match.group(1)) == clause(sentence(projected.vtk)).inserted
+    def test_the_nodes_at_vertices_are_measured_on_the_projected_path(self, projected: Run) -> None:
+        """25's D2 and D6: `refine_strip` counts the DEM nodes within rounding
+        of a vertex (L14), so the rows are present, and `max_error_m` is at
+        least their difference."""
+        report = projected.report
+        assert int(stats_row(report, "dem_nodes_at_vertices")) >= 0
+        at_vertices = float(stats_row(report, "dem_nodes_at_vertices_max_error_m"))
+        assert float(file_field(projected.vtk, "max_error_m")) >= at_vertices
 
     def test_e1_every_crossing_and_midpoint_is_within_tolerance(self, projected: Run) -> None:
         rings = [DOMAIN, FEATURE]
@@ -294,8 +313,9 @@ class TestProjectedPath:
         dem = tmp_path / "dem.tif"
         dem.write_bytes(micro_tiff(relief()).getvalue())
         run_ = mesh(tmp_path, "--dem", str(dem), "--stride", "4", "--tolerance", str(TOLERANCE))
-        found = clause(sentence(run_.vtk))
-        assert found.points > 0 and found.inserted == 0, found
+        found = line_check(run_.report)
+        assert found.checked > 0 and found.inserted == 0, found
+        assert found.dem_nodes_inserted == 0, found
         v, z, _ = run_.refined_arrays()
         np.testing.assert_array_equal(run_.vtk.points[:, :2], v)
         np.testing.assert_array_equal(run_.vtk.points[:, 2], z)
@@ -312,8 +332,8 @@ class TestProjectedPath:
             "--tolerance",
             str(TOLERANCE),
         )
-        found = clause(sentence(run_.vtk))
-        assert found.no_data >= 1, found
+        found = line_check(run_.report)
+        assert found.on_nodata >= 1, found
         void = array.astype(np.float64)
         void[21, 15] = np.nan
         by_input, by_start = measure(run_, projected_grid(void), [DOMAIN, FEATURE], written=True)
@@ -389,18 +409,20 @@ def reprojected(tmp_path_factory: pytest.TempPathFactory) -> Reprojected:
 class TestReprojectedPath:
     """PY4."""
 
-    def test_the_sentence_carries_the_clause_after_the_final_checks(
+    def test_the_stats_carry_the_line_check_beside_the_final_checks(
         self, reprojected: Reprojected
     ) -> None:
-        text = sentence(reprojected.run.vtk)
-        found = clause(text)
-        assert found.points > 0 and found.inserted > 0, found
+        report, vtk = reprojected.run.report, reprojected.run.vtk
+        found = line_check(report)
+        assert found.checked > 0 and found.inserted > 0, found
         assert 0.0 <= found.max_error <= TOLERANCE
         assert found.refused == 0
-        assert "against the resampled grid" in text
-        assert re.search(r"checked against \d+ source nodes", text), text
-        assert text.index("checked against") < text.index("; edge strip:")
-        assert "achieved max error" in text, "the projected-path wording leaked across"
+        assert found.dem_nodes_inserted in (None, 0), "refine_strip's count, not this path's"
+        assert stats_row(report, "resampled_grid").startswith("30 m square grid in")
+        assert int(stats_row(report, "dem_nodes_checked")) > 1000
+        stated = float(file_field(vtk, "max_error_m"))
+        at_vertices = float(stats_row(report, "dem_nodes_at_vertices_max_error_m"))
+        assert at_vertices <= stated <= max(TOLERANCE, at_vertices)
 
     def test_e1_the_outlines_crossings_against_the_resampled_grid(
         self, reprojected: Reprojected
