@@ -1,0 +1,3 @@
+points 99989886  baseline fp 2.023 GB
+after add: store 0.918 GB = 9.18 B/point
+after freeze: store 0.255 GB = 2.55 B/point (live 16 B/point = 1.600 GB)

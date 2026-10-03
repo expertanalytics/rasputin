@@ -159,6 +159,7 @@ Findings:
   It takes the tree it is run from as its root
   (`Path(__file__).resolve().parents[1]` in `tools/away.py`), so its list of
   `ASK OLA:` lines comes from the worktree's folder, not the main checkout's.
+  It recurred in the trial of 2026-10-02 (see below).
 - A merge script read "no checks reported" as green.
   CI is authoritative only once it has reported something.
 - A stray `.pth` file in a shared scratch venv put an old copy of the code on
@@ -168,3 +169,85 @@ Findings:
   from split strings. The design that answers this is
   `docs/increments/h6-role-limits.md` (case 6). h6 checks the tree after the
   call, not the command's text.
+
+## The window of 2026-10-02, the restart of 2026-10-03, h7
+
+Evidence: `2026-10-03-night-restart-h7.md`. Each item needs Ola's ruling;
+the tooling ones go through the pipeline, and all but the last touch
+governed files.
+
+1. **Long idle stretches, three windows running** (3 h 24 min, 5 h 59 min,
+   7 h 08 min; the last three long windows up to 2026-10-02). The "fill the
+   window" rule lives only in a memory note, and it failed in both windows
+   after it was written. Proposal: state it once in
+   `REQUIRED-READING.md`'s unattended section: before Ola leaves,
+   `session.md` names at least one fallback that needs no ruling and writes
+   no governed path; and have `away.py --back` print the longest stretch
+   without a commit inside the window, so idle time is measured rather than
+   reconstructed. To rule first: when Ola's plan for the night ("no new
+   increment implementation") leaves nothing decision-free, is idle
+   accepted, or what kind of work fills it? Cost: about ten lines of rule
+   text; the idle print is a small `away.py` change with tests (h-sized,
+   under 50 lines).
+2. **`away.py --back` and the recap read only one checkout's
+   `.claude/current-task/`.** Proposal: resolve the main checkout from the
+   repository's common dir, and list `ASK OLA` lines from every worktree's
+   folder. Cost: about 20 lines in `away.py`/`session_state.py`, with tests.
+3. **`ASK OLA` matching.** Proposal: keep the one-decision-per-line rule;
+   count a line only if it starts (after a bullet) with `ASK OLA:`, and warn
+   on an `ASK OLA:` line with nothing after the colon. Cost: about 10 lines
+   in `session_state.py`, with tests.
+4. **`session.md` was a 29-line log against a three-line rule** (measured
+   2026-10-03; since rewritten to 4 lines). Rule needed: enforce the rule
+   (the recap warns past three lines), or relax it to what the night queue
+   needs, with a size the recap checks. Cost: a few lines either way.
+5. **Restart and resume.** The fix is a memory note; item 1 shows a note can
+   fail within a day. Proposal: the cold-start steps in
+   `REQUIRED-READING.md` gain "list the running background jobs before
+   starting any", and the recap prints them. Cost: one rule line; the
+   recap print is about 15 lines with tests.
+6. **A merged rule change does not reach the running session.** Observed on
+   h7: `@orchestrator` was spawned after the merge with its old persona
+   prompt and the old `CLAUDE.md`. Proposal: after merging a change to
+   `CLAUDE.md` or `.claude/agents/`, restart before spawning the changed
+   persona; until then the brief says to read the persona file from disk.
+   Cost: one rule line.
+7. **`ROADMAP.md` and harness increments.** No harness increment (h2 to h7)
+   has a table row; h3 is named only in a prose list. Rule needed: do
+   harness increments get roadmap rows? Cost: one rule line, and rows for
+   the shipped ones if yes.
+8. **`@reviewer` recorded its own rounds** (2026-10-03, reported by the
+   main session as its own deviation). `docs/increments/README.md@390b516:59-63`:
+   "`@reviewer` is read-only, so its spawner copies the handback's verdict
+   ... into a `## Review` section ... and commits it". The main session
+   briefed `@reviewer` to write and commit its own `## Review` entries, and
+   seven runs complied: on 15e 3e01580, 78df916 and 70f8403 (rounds 1 and 2
+   and the pre-push note), on release hardening 22b0106 and 11db227, and on
+   this retrospective 39eb7b8 and e2230b1 (rounds 1 and 2, which also wrote
+   into `docs/retrospectives/`, `@orchestrator`'s area). One refused: the
+   reviewer of the citation-fix branch `worktree-agent-aa31dcdcb718cfc28`
+   ("I did not record the round or commit", citing the rule above).
+   Two causes: the rule sits in the increment protocol, which neither the
+   brief nor `reviewer.md` restates; and "read-only" is enforced only by
+   leaving `Write` and `Edit` out of `reviewer.md`'s `tools:` line, while
+   `Bash` writes and commits freely. Proposal: the reviewer persona carries
+   the rule, one line in `reviewer.md` §5 ("you do not edit or commit; your
+   verdict goes in the handback, and your spawner records it"), because the
+   persona is read on every run and a brief template is only as good as the
+   brief that forgets it; the brief need not repeat it. Cost: one line in a
+   governed file, by day.
+
+   h6 would not have caught these, once it is implemented (its design
+   merged in #145; no `ROLES` table is in `tools/` yet). Its `reviewer` row
+   allows no writes (`docs/increments/h6-role-limits.md@390b516:70`), but
+   §3.3 finds a Bash write by comparing the tree's dirty set
+   (`git status --porcelain` plus `git hash-object`) before and after the
+   call, not `HEAD`. All seven reviewers wrote and committed in one Bash
+   call, so the paths were clean before and after, and h6 reports nothing;
+   it sees a Bash write only while that write is uncommitted. §5 names the
+   neighbouring gap ("a change made and undone within one Bash call") but
+   not this one. Proposal for h6: the `pre-tool` snapshot also records
+   `HEAD`, and `post-tool` attributes the paths of any new commit
+   (`git diff --name-only <old>..<new>`) to the persona, judged against its
+   row like a dirty path; and §5's list gains "a write committed in the
+   same call" until then. Cost: about 10 lines and one test in h6.

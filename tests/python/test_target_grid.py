@@ -40,6 +40,7 @@ import importlib
 import math
 import threading
 import time
+from collections.abc import Callable
 from types import ModuleType
 from typing import Any
 
@@ -388,3 +389,156 @@ def test_no_prepared_geometry_is_shared_between_threads(
     assert sum(len(z) for _, z in blocks) > 3000
     shared = [sorted(p.threads) for p in made if len(p.threads) > 1]
     assert not shared, f"a prepared geometry used from {len(shared[0])} threads"
+
+
+# ------------------------------------------------------------------ 15e, fix 1: node-count blocks
+#
+# `docs/increments/15e-memory-fixes.md`, fix 1: `BLOCK_NODES = 1 << 20` and
+# `rows_per_block(cols) = max(1, BLOCK_NODES // cols)`, read at call time so a
+# test can lower it; `resample(..., block_rows=None)` uses it, and an explicit
+# `block_rows` still overrides. Went red at 9879805 because neither name existed
+# and every block was 256 rows, so one block of an 80 x 80 grid held every node.
+
+
+class _SpiedReprojector:
+    """`crs.reprojector` with every transformer it returns recording the
+    number of points it is given. One transformer per block (J5), so the
+    record is one entry per block."""
+
+    def __init__(self, real: Callable[[str, str], Callable[[Any], Any]]) -> None:
+        self._real = real
+        self._lock = threading.Lock()
+        self.lengths: list[int] = []
+
+    def __call__(self, source: str, target: str) -> Callable[[Any], Any]:
+        transform = self._real(source, target)
+
+        def recording(points: Any) -> Any:
+            with self._lock:
+                self.lengths.append(len(points))
+            return transform(points)
+
+        return recording
+
+
+@pytest.fixture
+def spied(tg: ModuleType, monkeypatch: pytest.MonkeyPatch) -> _SpiedReprojector:
+    spy = _SpiedReprojector(tg.reprojector)
+    monkeypatch.setattr(tg, "reprojector", spy)
+    return spy
+
+
+class TestBlockSize:
+    def test_the_default_is_two_to_the_twenty_nodes(self, tg: ModuleType) -> None:
+        assert tg.BLOCK_NODES == 1 << 20
+
+    @pytest.mark.parametrize(
+        "cols", [1, 2, 7, 999, 1000, 1001, 1999, 2000, 2001, 10_000], ids=lambda c: f"cols={c}"
+    )
+    def test_rows_per_block_is_the_most_rows_within_the_budget(
+        self, tg: ModuleType, monkeypatch: pytest.MonkeyPatch, cols: int
+    ) -> None:
+        """`rows x cols <= BLOCK_NODES`, and one more row would not fit; one row
+        once a row alone is over the budget (`cols > BLOCK_NODES`)."""
+        monkeypatch.setattr(tg, "BLOCK_NODES", 1000, raising=False)
+        rows = tg.rows_per_block(cols)
+        assert isinstance(rows, int)
+        if cols > 1000:
+            assert rows == 1
+        else:
+            assert rows * cols <= 1000 < (rows + 1) * cols
+
+    def test_rows_per_block_reads_the_constant_at_call_time(
+        self, tg: ModuleType, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        assert tg.rows_per_block(1024) == 1024
+        monkeypatch.setattr(tg, "BLOCK_NODES", 4096)
+        assert tg.rows_per_block(1024) == 4
+
+    @pytest.mark.parametrize("budget", ["1000", "5 rows exactly", "under one row"])
+    def test_resample_uses_it_by_default(
+        self,
+        tg: ModuleType,
+        monkeypatch: pytest.MonkeyPatch,
+        spied: _SpiedReprojector,
+        budget: str,
+    ) -> None:
+        """Each block is one transformer call of `rows_per_block(cols)` rows
+        (the last one shorter), so the number of calls is
+        `ceil(rows / rows_per_block(cols))` and no call exceeds the budget,
+        unless a single row does (then one row per block)."""
+        tile = geographic_tile(rough(80, 80))
+        grid = covering(tg, tile.meta, margin=2)
+        nodes = {"1000": 1000, "5 rows exactly": 5 * grid.cols, "under one row": grid.cols - 1}
+        limit = nodes[budget]
+        assert grid.cols * 256 > limit and grid.rows < 256, "today's 256 rows must be over it"
+        monkeypatch.setattr(tg, "BLOCK_NODES", limit, raising=False)
+        tg.resample(grid, tg.TileWindows(tile), threads=4)
+        per_block = max(1, limit // grid.cols)  # written out, not `rows_per_block`
+        assert len(spied.lengths) == math.ceil(grid.rows / per_block), spied.lengths
+        assert max(spied.lengths) == per_block * grid.cols
+        assert sum(spied.lengths) == grid.rows * grid.cols
+        if budget == "under one row":
+            assert set(spied.lengths) == {grid.cols}
+        else:
+            assert max(spied.lengths) <= limit
+
+    def test_an_explicit_block_rows_still_overrides_it(
+        self, tg: ModuleType, monkeypatch: pytest.MonkeyPatch, spied: _SpiedReprojector
+    ) -> None:
+        tile = geographic_tile(rough(80, 80))
+        grid = covering(tg, tile.meta, margin=2)
+        monkeypatch.setattr(tg, "BLOCK_NODES", 1000, raising=False)
+        tg.resample(grid, tg.TileWindows(tile), threads=4, block_rows=7)
+        assert len(spied.lengths) == math.ceil(grid.rows / 7)
+        assert max(spied.lengths) == 7 * grid.cols
+
+    def test_the_default_blocks_change_no_value(
+        self, tg: ModuleType, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """J3 with the new default: small blocks give today's 256-row bytes."""
+        array = rough(80, 80)
+        array[40, 40] = NODATA
+        tile = geographic_tile(array, nodata=NODATA)
+        grid = covering(tg, tile.meta, margin=2)
+        source = tg.TileWindows(tile)
+        whole = tg.resample(grid, source, threads=1, block_rows=256)
+        monkeypatch.setattr(tg, "BLOCK_NODES", 1000, raising=False)
+        small = tg.resample(grid, source, threads=4)
+        assert small.array.tobytes() == whole.array.tobytes()
+        assert small.meta == whole.meta
+
+
+# ------------------------------------------------------------------ 15e, fix 2: canvas adopted
+#
+# Fix 2: `resample` returns `DemTile._adopt(meta, canvas)`. Went red at 9879805
+# because it called the public constructor, whose array is a read-only view of a copy.
+
+
+class TestCanvasAdopted:
+    def test_the_tile_owns_the_canvas_itself(self, tg: ModuleType) -> None:
+        """`base is None`: the array is the `np.empty` canvas, not a view of a copy."""
+        tile = geographic_tile(rough(80, 80))
+        grid = covering(tg, tile.meta, margin=2)
+        out = tg.resample(grid, tg.TileWindows(tile), threads=4)
+        held = out.array.base is None
+        assert held, "the tile's array is a view of another array (a copy of the canvas)"
+        assert out.array.flags.c_contiguous and not out.array.flags.writeable
+        assert out.array.shape == (grid.rows, grid.cols)
+
+    def test_adopt_is_called_once_with_the_tiles_array(
+        self, tg: ModuleType, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """M15's spy pattern (`test_mosaic.py`, `TestM15Adopt`)."""
+        adopted: list[npt.NDArray[Any]] = []
+        original = DemTile._adopt
+
+        def spy(meta: Any, array: npt.NDArray[Any]) -> DemTile:
+            adopted.append(array)
+            return original(meta, array)
+
+        monkeypatch.setattr(DemTile, "_adopt", staticmethod(spy))
+        tile = geographic_tile(rough(80, 80))
+        out = tg.resample(covering(tg, tile.meta, margin=2), tg.TileWindows(tile), threads=4)
+        assert len(adopted) == 1
+        assert np.shares_memory(adopted[0], out.array)

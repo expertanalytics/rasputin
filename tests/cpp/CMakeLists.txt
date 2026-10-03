@@ -316,7 +316,25 @@ add_terrain_backend_test(test_area_collapse unit/test_area_collapse.cpp)
 # invariant-critical. The two refine_points suites start threads; both run in
 # the TSan job.
 add_terrain_test(test_refinement_check_points unit/test_refinement_check_points.cpp)
+# Increment 15e fix 4 (docs/increments/15e-memory-fixes.md): the store's slab
+# arena, its reserved_points() bound and rows across chunk boundaries. Its own
+# target, so a compile failure in it leaves every other suite built and run.
+add_terrain_test(test_refinement_check_points_arena unit/test_refinement_check_points_arena.cpp)
 add_terrain_backend_test(test_refinement_refine_points unit/test_refinement_refine_points.cpp)
 target_link_libraries(test_refinement_refine_points PRIVATE Threads::Threads)
 add_terrain_backend_test(prop_refinement_refine_points property/prop_refinement_refine_points.cpp)
 target_link_libraries(prop_refinement_refine_points PRIVATE Threads::Threads)
+
+# The edge strip's generator and store, increment 15f-1
+# (docs/increments/15f-edge-strip.md, D2, D3 and "Tests for @tester", CC1 to
+# CC9), and detail::lattice_position, extracted from refine's to_lattice with no
+# change in behaviour (D2 step 1). Two targets, one per header under test, so
+# lattice_position's suite stays free of the strip. Not invariant-critical (the
+# mutation suite is 15f-2's ES2, ES3 and ES5); neither starts threads, but
+# refine.hpp includes the chunk scheduler, so both link Threads.
+add_terrain_backend_test(test_refinement_constraint_points
+                         unit/test_refinement_constraint_points.cpp)
+target_link_libraries(test_refinement_constraint_points PRIVATE Threads::Threads)
+add_terrain_backend_test(test_refinement_lattice_position
+                         unit/test_refinement_lattice_position.cpp)
+target_link_libraries(test_refinement_lattice_position PRIVATE Threads::Threads)

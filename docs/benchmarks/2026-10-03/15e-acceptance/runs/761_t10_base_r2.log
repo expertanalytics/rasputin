@@ -1,0 +1,22 @@
+tin_engine from /private/tmp/claude-501/-Users-skavhaug-projects-rasputin/af318b82-b96d-429e-956c-0296b113f23b/scratchpad/base-7810cf8/build-bench/pkg/tin_engine/__init__.py _core from /private/tmp/claude-501/-Users-skavhaug-projects-rasputin/af318b82-b96d-429e-956c-0296b113f23b/scratchpad/base-7810cf8/build-bench/pkg/tin_engine/_core.cpython-314-darwin.so
+53335 start quality nodes inserted, 1220 start quality skips, 65 constraint feet, 0 feet refused, 43 rounds, 1314475 points inserted, 3421162 flips, 2940024 triangles, achieved max error 9.999999395691475 m, 0 valid DEM nodes not covered, 36981 start triangles, 36983 start vertices off-node, 0 vertices without data dropped
+/Users/skavhaug/projects/rasputin_scratch/15e-acceptance/761_t10_base_r2.vtk
+/Users/skavhaug/projects/rasputin/.claude/worktrees/agent-ab601ec06c6508cb9/docs/benchmarks/2026-10-03/15e-acceptance/runs/761_t10_base_r2.stats.md
+       51.60 real       245.58 user        27.50 sys
+         13781614592  maximum resident set size
+                   0  average shared memory size
+                   0  average unshared data size
+                   0  average unshared stack size
+             5774978  page reclaims
+                  53  page faults
+                   0  swaps
+                   0  block input operations
+                   0  block output operations
+                   0  messages sent
+                   0  messages received
+                   0  signals received
+               25566  voluntary context switches
+              818258  involuntary context switches
+       1725891002154  instructions retired
+        796913009978  cycles elapsed
+         15905255472  peak memory footprint

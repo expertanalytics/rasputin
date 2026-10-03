@@ -157,8 +157,9 @@ def decode_window(
 
     with ThreadPoolExecutor(threads) as pool:
         list(pool.map(put, indices))
-    # The public constructor's copy, not the canvas's no-copy route: 15a's M15
-    # pins `assemble` as that route's one caller (test_mosaic.py).
+    # The public constructor's copy, not the canvas's no-copy route: M15
+    # (test_mosaic.py) pins that route's callers to `assemble` and `resample`.
+    # Dropping this copy is fix 5 of docs/research/basin-memory-options.md.
     return DemTile(meta=window_meta(meta, w), array=out)
 
 
