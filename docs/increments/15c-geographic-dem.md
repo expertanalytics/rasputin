@@ -820,6 +820,10 @@ domain mesh is wrong along its edges. A cheaper stopgap exists (split any
 constrained edge of a node-free triangle longer than one cell at its midpoint,
 about 40 lines): it narrows the strip and guarantees nothing.
 
+*Designed in full in `docs/increments/15f-edge-strip.md` (2026-10-03),
+which supersedes the estimate above: about 490 lines in two PRs, and its own
+store rather than `CheckPoints`, for the reasons it gives.*
+
 ## Invariants
 
 - **J1. Norway untouched.** `refine.hpp` is not edited. A projected DEM
