@@ -462,7 +462,10 @@ class TestSeamsWithADomain:
         lon_lat = to_crs("EPSG:25833", "EPSG:4326", ACROSS)
         run(tmp_path, *mesh_args(dem, write_geojson(tmp_path / "c.geojson", lon_lat)))
         assert inputs(tmp_path, "domain_crs") == "EPSG:4326"
-        assert inputs(tmp_path, "dem_seams") == "ne.tif | nw.tif: nodes 1, max 4, median 4"
+        assert (
+            inputs(tmp_path, "dem_seams")
+            == "ne.tif and nw.tif disagree at 1 node, by up to 4 m (median 4 m)"
+        )
 
     def test_agreeing_tiles_record_none(self, tmp_path: Path, quad_dir: Path) -> None:
         lon_lat = to_crs("EPSG:25833", "EPSG:4326", ACROSS)
@@ -471,7 +474,10 @@ class TestSeamsWithADomain:
 
     @pytest.mark.parametrize(
         ("shape", "recorded"),
-        [("STRIP", SEAMS_AGREE), ("ELL", "ne.tif | nw.tif: nodes 2, max 2, median 1.25")],
+        [
+            ("STRIP", SEAMS_AGREE),
+            ("ELL", "ne.tif and nw.tif disagree at 2 nodes, by up to 2 m (median 1.25 m)"),
+        ],
     )
     def test_only_the_needed_region_is_counted(
         self, tmp_path: Path, shape: str, recorded: str

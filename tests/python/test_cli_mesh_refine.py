@@ -11,8 +11,9 @@ with named fields: the file carries ``tolerance_m``, ``max_error_m`` and
 self-check ``dem_nodes_outside_mesh``, ``edge_flips`` and the vertical unit
 are ``--stats`` rows (D4). ``file_field`` and ``stats_row`` below are the two
 readers every suite imports (D6). ``start_mesh`` for a stride start reads
-``every <n>th DEM node`` (the design's example); the ordinal suffix is
-parsed, not pinned.
+``every DEM node`` for a stride of 1, else ``every <n><ordinal> DEM node``
+with the English ordinal (``every 2nd``, ``every 40th``; "Settled after the
+red step", 7).
 
 Increment 14b (``docs/increments/14b-delaunay-insertion.md``): the default
 start stride follows the user's C1 (a), at most 129 nodes a side. T10 also

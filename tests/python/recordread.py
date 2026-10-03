@@ -40,7 +40,7 @@ def _cells(line: str) -> list[str]:
 
 
 #: ``dem_seams`` when every overlap agrees (increment 25, "The fields, for
-#: Ola"); a disagreeing pair keeps ``mosaic.Seam.entry``'s text.
+#: Ola"); a disagreeing pair reads ``<a> and <b> disagree at <n> node(s), ...``.
 SEAMS_AGREE = "none: the tiles agree where they overlap"
 
 #: Comments the PLY writer adds itself, describing the file's own arrays

@@ -98,7 +98,7 @@ V = DEFAULT_VOCABULARY
 SNAP = 1e-3
 FEATURES_FIELD = re.compile(
     r"(?P<name>.+?)(?: layer (?P<layer>[^,:]+))?, class map (?P<map>[a-z0-9-_]+): "
-    r"(?P<n>\d+) features, (?P<c>\d+) lines, (?P<v>\d+) vertices"
+    r"(?P<n>\d+) features?, (?P<c>\d+) lines?, (?P<v>\d+) vert(?:ex|ices)"
 )
 
 

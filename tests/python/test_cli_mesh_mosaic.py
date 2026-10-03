@@ -17,7 +17,7 @@ Increment 25 (`docs/increments/25-plain-output.md`, D2 and D4): the mesh file
 names the files used in `dem_source` (`; `-joined); `dem_tiles`, `dem_seams`
 and `dem_grid` are `--stats` rows, read here through `inputs`, and stderr's
 mosaic line reads `DEM: <n> files, <c> columns x <r> rows`. A pair's
-`dem_seams` entry keeps `mosaic.Seam.entry`'s text; agreeing overlaps read
+`dem_seams` entry reads `<a> and <b> disagree at <n> node(s), by up to ...`; agreeing overlaps read
 `none: the tiles agree where they overlap`.
 """
 
@@ -275,7 +275,8 @@ class TestQ1Seams:
     `dem_seams` is recorded whenever `dem_tiles` is: `none: the tiles agree
     where they overlap` when every overlapping node agrees, else one entry per
     disagreeing pair, sorted, `; `-joined, escaped like `dem_tiles`:
-    `<first> | <second>: nodes <n>, max <largest:g>, median <median:g>`.
+    `<first> and <second> disagree at <n> node(s), by up to <largest:g> m
+    (median <median:g> m)` (increment 25, "Settled after the red step", 8).
     """
 
     @staticmethod
@@ -299,7 +300,10 @@ class TestQ1Seams:
         in the record, and the mesh is written."""
         out = tmp_path / "m.vtk"
         vtk = run_vtk(out, "--dem", str(self.disagreeing(tmp_path, source)))
-        assert inputs(out, "dem_seams") == "ne.tif | nw.tif: nodes 1, max 4, median 4"
+        assert (
+            inputs(out, "dem_seams")
+            == "ne.tif and nw.tif disagree at 1 node, by up to 4 m (median 4 m)"
+        )
         assert inputs(out, "dem_tiles") == "ne.tif; nw.tif; se.tif; sw.tif"
         assert "dem_seams" not in vtk.field_data
 
@@ -328,12 +332,12 @@ class TestQ1Seams:
         run_vtk(tmp_path / "m.vtk", "--dem", str(tmp_path / "all"))
         assert inputs(tmp_path / "m.vtk", "dem_seams") == "; ".join(
             [
-                "ne.tif | nw.tif: nodes 5, max 1000, median 1000",
-                "ne.tif | se.tif: nodes 7, max 2000, median 2000",
-                "ne.tif | sw.tif: nodes 1, max 3000, median 3000",
-                "nw.tif | se.tif: nodes 1, max 1000, median 1000",
-                "nw.tif | sw.tif: nodes 7, max 2000, median 2000",
-                "se.tif | sw.tif: nodes 5, max 1000, median 1000",
+                "ne.tif and nw.tif disagree at 5 nodes, by up to 1000 m (median 1000 m)",
+                "ne.tif and se.tif disagree at 7 nodes, by up to 2000 m (median 2000 m)",
+                "ne.tif and sw.tif disagree at 1 node, by up to 3000 m (median 3000 m)",
+                "nw.tif and se.tif disagree at 1 node, by up to 1000 m (median 1000 m)",
+                "nw.tif and sw.tif disagree at 7 nodes, by up to 2000 m (median 2000 m)",
+                "se.tif and sw.tif disagree at 5 nodes, by up to 1000 m (median 1000 m)",
             ]
         )
 
@@ -348,7 +352,7 @@ class TestQ1Seams:
             n.encode("ascii", "backslashreplace").decode("ascii")
             for n in sorted([listed, "ne.tif"])
         )  # the file system may store the name decomposed, which sorts first
-        assert recorded == f"{first} | {second}: nodes 1, max 4, median 4"
+        assert recorded == f"{first} and {second} disagree at 1 node, by up to 4 m (median 4 m)"
         assert escaped in recorded
 
     def test_stats_has_a_seams_section_listing_only_disagreeing_pairs(
@@ -406,7 +410,7 @@ class TestQ1Seams:
         assert cells == ["ne.tif", "n\\|w.tif", "1", "4", "4"]
         run_vtk(tmp_path / "m.vtk", "--dem", str(directory))
         seams = inputs(tmp_path / "m.vtk", "dem_seams")
-        assert seams == "ne.tif | n|w.tif: nodes 1, max 4, median 4"
+        assert seams == "ne.tif and n|w.tif disagree at 1 node, by up to 4 m (median 4 m)"
 
 
 class TestC5Usage:
