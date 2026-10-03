@@ -11,11 +11,13 @@
 // parameter t along P0 -> P1, on the line exactly, clamped to the node
 // rectangle; a crossing whose rounded position is a node on the edge (exact
 // orient_sign) is that node. Sorted by t, then position, a point at the same
-// position or t as the one before it is dropped and counted in `duplicates`.
-// Midpoints are taken over the list with the ends added, before any NoData
-// drop. Every point's z is vertex_z there; a point for which it refuses (a
-// NoData corner of its cell, whatever its weight) is dropped and counted in
-// `no_data`. The ends are not check points.
+// position as the entry before it, or a t not strictly between that entry's
+// and 1, is dropped and counted in `duplicates`. Midpoints are taken over the
+// list with the ends added, before any NoData drop; one that rounds onto a
+// neighbour's position or t is a duplicate too. Every point's z is vertex_z
+// there; a point for which it refuses (a NoData corner of its cell, whatever
+// its weight) is dropped and counted in `no_data`. The ends are not check
+// points. An edge {i, i} is refused.
 //
 // The store is built only by the generator and immutable afterwards, so any
 // number of threads may read it.
@@ -109,6 +111,9 @@ template <raster::RasterSource R>
     for (const auto& given : edges) {
         const std::array<std::uint32_t, 2> e{std::min(given[0], given[1]),
                                              std::max(given[0], given[1])};
+        if (e[0] == e[1])
+            throw std::invalid_argument("constraint_check_points: edge (" + std::to_string(e[0])
+                                        + ", " + std::to_string(e[1]) + ") is degenerate");
         const mesh::MeshVertex a = end(e[0]), b = end(e[1]);
         cuts.clear();
         // Crossings: col == K exactly for a column line, row == R for a row line.
@@ -130,10 +135,11 @@ template <raster::RasterSource R>
         std::sort(cuts.begin(), cuts.end(), [](const Cut& x, const Cut& y) {
             return std::tie(x.t, x.at.col, x.at.row) < std::tie(y.t, y.at.col, y.at.row);
         });
-        // The list with the ends added, duplicates dropped: t increases strictly.
+        // The list from P0 to P1: t strictly inside (t_last, 1), and no two
+        // neighbours at one position (D2 step 5, I1-I3).
         std::vector<Cut> list{{0.0, a}};
         for (const Cut& c : cuts) {
-            if (list.size() > 1 && (c.at == list.back().at || c.t == list.back().t))
+            if (c.t <= list.back().t || c.t >= 1.0 || c.at == list.back().at)
                 ++out.duplicates_;
             else
                 list.push_back(c);
@@ -150,7 +156,13 @@ template <raster::RasterSource R>
             const Cut& r = list[i + 1];
             if (i > 0)
                 keep(l.at, l.t);
-            keep({(l.at.col + r.at.col) / 2, (l.at.row + r.at.row) / 2}, (l.t + r.t) / 2);
+            // A midpoint that rounds onto a neighbour (step 6) is a duplicate.
+            const mesh::MeshVertex mid{(l.at.col + r.at.col) / 2, (l.at.row + r.at.row) / 2};
+            const double s = (l.t + r.t) / 2;
+            if (mid == l.at || mid == r.at || s == l.t || s == r.t)
+                ++out.duplicates_;
+            else
+                keep(mid, s);
         }
         out.edges_.push_back(e);
         out.offsets_.push_back(out.points_.size());
