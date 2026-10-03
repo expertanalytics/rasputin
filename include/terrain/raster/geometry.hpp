@@ -48,6 +48,9 @@ public:
     [[nodiscard]] constexpr std::size_t cols() const noexcept { return cols_; }
     [[nodiscard]] constexpr std::size_t rows() const noexcept { return rows_; }
 
+    // All six fields, exactly (the edge strip's refusal, 15f-edge-strip.md L2).
+    friend constexpr bool operator==(const RasterGeometry&, const RasterGeometry&) = default;
+
     [[nodiscard]] constexpr double x_max() const noexcept {
         return x_min_ + static_cast<double>(cols_ - 1) * delta_x_;
     }

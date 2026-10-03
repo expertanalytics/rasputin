@@ -31,6 +31,12 @@
 // distance in the fractional frame with the same tie-break, which is where
 // the refinement loop carves it; `uncovered` counts the valid nodes in its set.
 //
+// A coincidence radius (docs/increments/15f-edge-strip.md, L14, L16). With
+// radius > 0, a node within `radius` lattice units of an off-node corner is
+// skipped as the corner itself is: never the argmax, never the carve point,
+// not counted. refine passes nothing (0) and is unchanged; only the edge
+// strip's loop passes one.
+//
 // Pure: reads the DEM and the mesh, writes nothing but its return value, so
 // any number of threads may scan one mesh at once.
 
@@ -87,7 +93,8 @@ template <raster::RasterSource R>
 }
 
 template <raster::RasterSource R>
-[[nodiscard]] ScanResult scan(const R& dem, const mesh::LatticeMesh& m, std::uint32_t t) {
+[[nodiscard]] ScanResult scan(const R& dem, const mesh::LatticeMesh& m, std::uint32_t t,
+                              double radius = 0.0) {
     using mesh::LatticeVertex;
     using mesh::MeshVertex;
     using T = typename R::value_type;
@@ -116,6 +123,17 @@ template <raster::RasterSource R>
     const std::array<std::int64_t, 3> step{std::int64_t{lv[1].row} - lv[0].row,
                                            std::int64_t{lv[2].row} - lv[1].row,
                                            std::int64_t{lv[0].row} - lv[2].row};
+
+    std::array<LatticeVertex, 3> skip{};  // nodes within `radius` of an off-node corner
+    unsigned n_skip = 0;
+    for (unsigned k = 0; k < 3 && radius > 0.0; ++k) {
+        const double c = std::round(v[k].col), w = std::round(v[k].row);
+        if (!v[k].is_node() && std::hypot(v[k].col - c, v[k].row - w) <= radius)
+            skip[n_skip++] = LatticeVertex{static_cast<std::uint32_t>(w), static_cast<std::uint32_t>(c)};
+    }
+    auto skipped = [&](LatticeVertex p) {
+        return n_skip != 0 && std::find(skip.begin(), skip.begin() + n_skip, p) != skip.begin() + n_skip;
+    };
 
     ScanResult r;
     r.is_void = !zv[0] || !zv[1] || !zv[2];
@@ -159,10 +177,10 @@ template <raster::RasterSource R>
             const std::uint32_t row = span.row, c = s.first_col;
             if (r.is_void) {
                 for (std::uint32_t j = 0; j < s.values.size(); ++j) {
-                    if (missing(s.values[j]))
+                    const LatticeVertex p{row, c + j};
+                    if (missing(s.values[j]) || skipped(p))
                         continue;
                     ++r.uncovered;
-                    const LatticeVertex p{row, c + j};
                     if (const auto d = dist2(p); d < nearest) {
                         nearest = d;
                         r.node = p;
@@ -185,7 +203,8 @@ template <raster::RasterSource R>
                 for (std::uint32_t j = 0; j < s.values.size(); ++j) {
                     const LatticeVertex p{row, c + j};
                     const T z = s.values[j];
-                    consider(z, error(static_cast<double>(z), value(0, p), value(1, p), value(2, p)), p);
+                    if (!skipped(p))
+                        consider(z, error(static_cast<double>(z), value(0, p), value(1, p), value(2, p)), p);
                 }
             }
         });

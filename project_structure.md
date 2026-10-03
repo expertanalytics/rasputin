@@ -63,7 +63,10 @@ include/terrain/           # public C++ headers, header-only where possible
     check_points.hpp       # CheckPoints: source nodes filed by target-grid
                            #   cell, for the final check (15c)
     refine_points.hpp      # refine_points: greedy insertion against stored
-                           #   check points (15c, the final check)
+                           #   check points (15c, the final check); with the
+                           #   edge strip, and refine_strip (15f)
+    strip_scan.hpp         # the edge strip inside the loop: sub-edge map,
+                           #   scan by owned sub-edge, guarded insertion (15f)
     constraint_points.hpp  # constraint_check_points, ConstraintCheckPoints:
                            #   where constraint edges cross grid lines, and
                            #   the midpoints between, filed by edge (15f)

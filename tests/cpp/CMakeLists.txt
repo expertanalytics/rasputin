@@ -339,6 +339,24 @@ add_terrain_backend_test(test_refinement_lattice_position
                          unit/test_refinement_lattice_position.cpp)
 target_link_libraries(test_refinement_lattice_position PRIVATE Threads::Threads)
 
+# The edge strip in the refinement loop, increment 15f-2
+# (docs/increments/15f-edge-strip.md, D4, E1 to E8 and "Tests for @tester",
+# ES1 to ES16). Two targets, so the oracles stay buildable on their own:
+# test_refinement_strip_oracle shows, against refine() alone, that every
+# oracle in support/strip_oracle.hpp can fail (ES1's defect half among them);
+# prop_refinement_edge_strip is the suite for refine_strip and
+# refine_points(..., strip). ES2, ES3 and ES5 are the invariant-critical
+# cases. Both start threads (refine's scheduler; ES4 sweeps 1, 2 and 8).
+add_terrain_backend_test(test_refinement_strip_oracle unit/test_refinement_strip_oracle.cpp)
+target_link_libraries(test_refinement_strip_oracle PRIVATE Threads::Threads)
+add_terrain_backend_test(prop_refinement_edge_strip property/prop_refinement_edge_strip.cpp)
+target_link_libraries(prop_refinement_edge_strip PRIVATE Threads::Threads)
+
+# L16 (docs/increments/15f-edge-strip.md): detail::coincidence_radius, by
+# hand-written powers of two; a helper with no mesh, so it has its own target.
+add_terrain_backend_test(test_refinement_coincidence_radius unit/test_refinement_coincidence_radius.cpp)
+target_link_libraries(test_refinement_coincidence_radius PRIVATE Threads::Threads)
+
 # The release-hardening guard, increment 24
 # (docs/increments/24-release-hardening.md, sections 5 and 12, T1 to T3). The
 # suite is told what RASPUTIN_HARDENING asked for, 1 or 0, and refuses to
