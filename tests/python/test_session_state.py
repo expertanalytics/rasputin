@@ -276,7 +276,10 @@ def test_recap_has_no_uncommitted_rule_file_section(harness_repo: Path) -> None:
     (harness_repo / "CLAUDE.md").write_text("# changed here\n")
     lines = _recap(harness_repo)
     assert "Uncommitted rule-file changes:" not in lines
-    assert not any(line.endswith(" CLAUDE.md") for line in lines)
+    # h8 §3.6 puts the size table, with a CLAUDE.md row, after "Next on
+    # ROADMAP.md:"; the scan this guards against printed before it.
+    before_roadmap = lines[: lines.index("Next on ROADMAP.md:")]
+    assert not any(line.endswith(" CLAUDE.md") for line in before_roadmap)
 
 
 # ------------------------------------------------ T21: a broken harness
@@ -479,7 +482,10 @@ def test_the_recap_run_from_a_worktree_reads_the_main_checkouts_task_files(
     (_tasks(inside) / "session.md").write_text("NOW: the worktree's own ask\n")
     lines = _recap(inside)
     waiting = lines.index("Waiting on Ola:")
-    assert [line.strip() for line in lines[waiting + 1 : waiting + 4]] == expected
+    # The outside worktree's absolute prefix depends on the temp directory, so
+    # its line may pass 160 characters and get §8.11's display cut.
+    shown = [line if len(line) <= 160 else line[:157] + "..." for line in expected]
+    assert [line.strip() for line in lines[waiting + 1 : waiting + 4]] == shown
     at = lines.index("== .claude/current-task/session.md ==")
     assert lines[at + 1 : at + 4] == ["NOW: n", "QUEUE: q", "ASK OLA: main?"]
     assert "NOW: the worktree's own ask" not in lines
