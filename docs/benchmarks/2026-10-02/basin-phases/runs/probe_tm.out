@@ -1,0 +1,25 @@
+planned 0.660931544 plan tiles 1 False row0=79076 col0=143168 rows=19685 cols=28496
+loaded 5.160145 traced cur/peak GB [2.244053234, 4.487927214]
+/Users/skavhaug/projects/rasputin/.claude/worktrees/basin-phases/build-bench/pkg/tin_engine/io/models.py:108: size=2140 MiB, count=2, average=1070 MiB
+/opt/homebrew/Cellar/python@3.14/3.14.7/Frameworks/Python.framework/Versions/3.14/lib/python3.14/concurrent/futures/_base.py:541: size=139 KiB, count=1980, average=72 B
+/opt/homebrew/Cellar/python@3.14/3.14.7/Frameworks/Python.framework/Versions/3.14/lib/python3.14/pathlib/__init__.py:345: size=109 KiB, count=1989, average=56 B
+/opt/homebrew/Cellar/python@3.14/3.14.7/Frameworks/Python.framework/Versions/3.14/lib/python3.14/contextlib.py:109: size=3968 B, count=62, average=64 B
+/Users/skavhaug/projects/rasputin/.claude/worktrees/basin-phases/build-bench/pkg/tin_engine/io/cog.py:98: size=2016 B, count=63, average=32 B
+/opt/homebrew/Cellar/python@3.14/3.14.7/Frameworks/Python.framework/Versions/3.14/lib/python3.14/pathlib/__init__.py:298: size=1816 B, count=31, average=59 B
+del tile 5.160177768 [8.691e-06, 4.487927214]
+Physical footprint:         4.8G
+Physical footprint (peak):  4.8G
+REGION TYPE                        SIZE     SIZE     SIZE     SIZE     SIZE     SIZE     SIZE    COUNT (non-coalesced) 
+Malloc Guard Page                   32K       0K       0K       0K       0K       0K       0K        2         see MALLOC ZONE table below
+Malloc Large                      4128K    4112K    4112K       0K       0K       0K       0K        1         see MALLOC ZONE table below
+Malloc Large (empty)               4.7G     4.7G     4.7G       0K       0K       0K       0K       39         see MALLOC ZONE table below
+Malloc Metadata                    176K     176K     176K       0K       0K       0K       0K        3         see MALLOC ZONE table below
+Malloc Metadata metadata          1200K     560K     560K       0K       0K       0K       0K        2         see MALLOC ZONE table below
+Malloc Nano metadata                32K      16K      16K       0K       0K       0K       0K        1         see MALLOC ZONE table below
+Malloc Small                      56.0M    39.0M    39.0M       0K       0K       0K       0K       16         see MALLOC ZONE table below
+Malloc Small (empty)              16.0M    11.0M    11.0M       0K       0K       0K       0K        4         see MALLOC ZONE table below
+Malloc Tiny                       4096K     240K     240K       0K       0K       0K       0K        1         see MALLOC ZONE table below
+TOTAL                            392.0G     5.1G     4.8G       0K       0K    2592K       0K     2342 
+TOTAL, minus reserved VM space   392.0G     5.1G     4.8G       0K       0K    2592K       0K     2342 
+MALLOC ZONE                         SIZE       SIZE       SIZE       SIZE      COUNT  ALLOCATED  FRAG SIZE  % FRAG   COUNT
+TOTAL                              81.2M      54.7M      54.7M         0K      69991      26.4M      28.3M     52%      25

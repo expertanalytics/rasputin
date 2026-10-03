@@ -1,0 +1,92 @@
+[
+ {
+  "prefix": "761",
+  "features": 2403,
+  "vertices": 36983,
+  "area_km2": 209316.0867871446,
+  "grid_rows": 19377,
+  "grid_cols": 27786,
+  "grid_nodes": 538409322,
+  "file": "761_epsg4674.geojson"
+ },
+ {
+  "prefix": "762",
+  "features": 729,
+  "vertices": 18516,
+  "area_km2": 77174.23966475122,
+  "grid_rows": 11709,
+  "grid_cols": 12720,
+  "grid_nodes": 148938480,
+  "file": "762_epsg4674.geojson"
+ },
+ {
+  "prefix": "763",
+  "features": 457,
+  "vertices": 13332,
+  "area_km2": 42134.3633711441,
+  "grid_rows": 11024,
+  "grid_cols": 8350,
+  "grid_nodes": 92050400,
+  "file": "763_epsg4674.geojson"
+ },
+ {
+  "prefix": "764",
+  "features": 273,
+  "vertices": 11249,
+  "area_km2": 34242.908658901084,
+  "grid_rows": 8026,
+  "grid_cols": 10169,
+  "grid_nodes": 81616394,
+  "file": "764_epsg4674.geojson"
+ },
+ {
+  "prefix": "765",
+  "features": 379,
+  "vertices": 14427,
+  "area_km2": 37876.25072054546,
+  "grid_rows": 8804,
+  "grid_cols": 13038,
+  "grid_nodes": 114786552,
+  "file": "765_epsg4674.geojson"
+ },
+ {
+  "prefix": "766",
+  "features": 369,
+  "vertices": 12313,
+  "area_km2": 30525.992075582133,
+  "grid_rows": 9972,
+  "grid_cols": 6394,
+  "grid_nodes": 63760968,
+  "file": "766_epsg4674.geojson"
+ },
+ {
+  "prefix": "767",
+  "features": 531,
+  "vertices": 15324,
+  "area_km2": 50880.789997179316,
+  "grid_rows": 8112,
+  "grid_cols": 12413,
+  "grid_nodes": 100694256,
+  "file": "767_epsg4674.geojson"
+ },
+ {
+  "prefix": "768",
+  "features": 515,
+  "vertices": 15403,
+  "area_km2": 45079.72722389849,
+  "grid_rows": 11613,
+  "grid_cols": 9273,
+  "grid_nodes": 107687349,
+  "file": "768_epsg4674.geojson"
+ },
+ {
+  "prefix": "769",
+  "features": 1179,
+  "vertices": 22426,
+  "area_km2": 106393.86911388012,
+  "grid_rows": 17485,
+  "grid_cols": 11184,
+  "grid_nodes": 195552240,
+  "file": "769_epsg4674.geojson"
+ }
+]
