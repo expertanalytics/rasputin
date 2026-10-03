@@ -180,3 +180,44 @@ no decision anywhere in refine.
   `../rasputin_scratch/hardening-2026-10-03/meshes/<run>/`. To regenerate
   one, rerun the `bench.py _child` line in any `raw/<run>/README.md` with
   `--ascii --out PATH`.
+
+## Review
+
+### Round 1 (@reviewer, 2026-10-03): CHANGES REQUESTED
+
+Reviewed `390b516..305748c`. Production LOC: 0 (docs and evidence only; the
+`CLAUDE.md` §2 ceiling does not apply). CI: none; the branch is not pushed, so
+it is not merge-ready until `gh pr checks` is green after a push.
+
+Checked and holding: `scripts/analyse.py` re-run on the committed `run.json`s
+reproduces `raw/analysis-clang.md` and `raw/analysis-gcc.md` byte for byte;
+every figure in the Result table, the per-pair spreads at 1 thread, the
+ceilings, the `_core` hashes, the 149 extra `brk` traps, the mesh hashes and
+the 42 counter tuples match them; the only negative per-pair figure is in
+`proc_s` (clang quarter, 1 thread, pair 1), so "positive for refine and for
+`app_s`" holds; the crash-not-exception point is labelled as not measured in
+Python; the CMake and CI claims match `CMakeLists.txt`,
+`tests/cpp/CMakeLists.txt`, `pyproject.toml` and `.github/workflows/main.yaml`;
+`tools/check_citations.py` passes.
+
+Blocking:
+
+1. "What this means for acceptance": "h1/h2: `REGRESSION` at 19 and 20
+   threads, +5.6 and +5.9 %" is false. Those are the last two of 39
+   `REGRESSION` lines in `raw/h2-fast/README.md` (`pairs.sh` logs only
+   `tail -2`): h2 regresses against h1 at every thread count but t=17 on the
+   tile and t=2 and t=14 on the quarter.
+2. "Where the cost goes": clang "stays roughly flat (+4.5 to +6.5 %)"
+   contradicts the Result table (+4.4..+8.0 over 2 to 20 threads) and
+   `raw/analysis-clang.md` (quarter t=12 +8.0, t=13 +7.1; tile t=14 +6.8).
+   State the range the tables give; the contrast with GCC is in how much the
+   overhead grows from 1 thread (clang about 1 to 3 points, GCC about 4 to 5).
+3. Reproducibility: the four builds are not scripted. The configure and build
+   commands, the `.variant` markers `pairs.sh` and `probes.sh` read, and the
+   renames from `build-park-*` to `build-clang-*` that `probes.sh` expects
+   are in no script and only paraphrased in Method. Check the commands in
+   (a `build.sh`, or the exact lines in Method), and take the worktree path
+   `W` the scripts hard-code from an argument or say it must be edited.
+
+Non-blocking: "A guard test catches that" (the `.github` bullet) describes a
+test that does not exist yet; "the guard test below would catch that".
