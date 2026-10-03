@@ -501,6 +501,37 @@ TEST_CASE("FE3: a node within eps of a frozen edge goes in itself, not as a foot
     check(dem, start, 1u, m, tol);
 }
 
+TEST_CASE("FE3: a frozen edge in the triangle does not stop a foot on its other constraint",
+          "[refinement][frozen][fe3]") {
+    // N5: a frozen edge is skipped as an unconstrained one is; another
+    // non-frozen constrained edge of the same triangle that qualifies still
+    // takes its foot. One start triangle (A, B, E): A-B is 20b's needle side
+    // (mask 1), 0.0035 cells from node (row 16, col 8), the bump's peak and the
+    // triangle's worst node in the first round; B-E is frozen (mask 4); E-A is
+    // mask 1. The foot lands on A-B in that first round, in a triangle that
+    // holds the frozen edge.
+    const double tol = GENERATE(0.1, 0.5);
+    const double steep = GENERATE(0.0, 1.0);
+    CAPTURE(tol, steep);
+    const auto dem = feet_fixtures::needle_dem(6.0, steep);
+    const RasterGeometry& g = dem.geometry();
+    const auto ring = feet_fixtures::needle_ring();
+    std::vector<Point2> xy{strip_oracle::world(g, ring[0][0], ring[0][1]),
+                           strip_oracle::world(g, ring[1][0], ring[1][1]), strip_oracle::world(g, 14.3, 16.2)};
+    Start start;
+    start.mesh = IndexedMesh2{std::move(xy), {{0, 1, 2}}, {0}};
+    start.edges = {{0, 1}, {1, 2}, {0, 2}};
+    start.masks = {1u, kSeam, 1u};
+
+    const RefineOutcome out = run(dem, start, Knobs{tol, kSeam, true});
+    REQUIRE(out.ok());
+    REQUIRE(out.feet >= 1);
+    const Mesh m = strip_oracle::mesh_of(out);
+    const auto ab = frozen_oracle::frozen_findings(g, start.mesh.vertices(), start.edges, start.masks, 1u, m);
+    REQUIRE(ab.on + ab.near >= 1);  // a vertex on A-B: the foot
+    check(dem, start, kSeam, m, tol);
+}
+
 // ------------------------------------------------------------------------ FE4
 
 TEST_CASE("FE4: refine's quality pass never splits a frozen edge and sums skipped_frozen into quality_skipped",
