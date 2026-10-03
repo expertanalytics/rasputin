@@ -44,9 +44,11 @@ point it keeps. `dem_nodes_at_vertices` is a `--stats` row on the projected
 path too, because `refine_strip` measures it there (25's D6: "where a path
 produces them, they are always in `--stats`").
 
-HOW THIS FILE GOES RED: the CLI has no strip yet, so the `line_*` rows and
-the phase rows are absent from `--stats`, and the oracle finds the strip over
-the tolerance on both paths. The controls pass already.
+Went red at `4157dab` (amended for increment 25 at `86e1074`) because the
+CLI had no strip: the `line_*` rows and the phase rows were absent from
+`--stats`, and the oracle found the strip over the tolerance on both paths
+(98 points, worst 16 m, projected; 152, worst 47 m, reprojected). The
+controls passed then as now.
 
 Not invariant-critical; no mutation round.
 """

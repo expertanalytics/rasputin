@@ -377,7 +377,11 @@ def assert_16s_but_the_strip(now: VtkFile, before: VtkFile, dem: Path, start: in
     such a vertex can differ in its last bits. What a window cannot change
     stays bit-identical: the triangles, the constraint edges and every cell
     array (their masks), the start vertices (the first `start`; trim keeps
-    order), and every vertex that is a DEM node, with its z. Every other
+    order), and every vertex that is a DEM node, with its z. Taking the first
+    `start` vertices as the start's rests on refine writing its start
+    vertices first and trim keeping order; if either ever changed, a strip
+    vertex could fall in that prefix and be held to bit-identity, so the
+    test would fail rather than pass wrongly. Every other
     vertex agrees within 1e-9 lattice units in each coordinate and within
     `1e-9 max(1, |z|)` in z. A difference in connectivity means a predicate
     flipped on a rounding-level difference, and fails here."""

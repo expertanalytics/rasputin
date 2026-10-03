@@ -433,6 +433,33 @@ class TestSelfChecks:
 # ---------------------------------------------------------------- the summary (D7)
 
 
+class TestRefusedLinePoints:
+    """25's D7, after 15f-3: points along the lines that could not be added
+    (15f's refused strip points) give one stderr warning with their count and
+    largest difference; none, none. Plurals as "Settled after the red step", 8."""
+
+    @staticmethod
+    def warnings(rr: ModuleType, refused: int, worst: float) -> list[str]:
+        record = projected(rr, line_points_refused=refused, line_points_refused_max_error_m=worst)
+        return [ln for ln in rr.summary(record).splitlines() if ln.startswith("Warning:")]
+
+    def test_one_is_singular(self, rr: ModuleType) -> None:
+        (warning,) = self.warnings(rr, 1, 5.4)
+        assert warning == (
+            "Warning: 1 point along the lines could not be added; its difference is 5.4 m."
+        )
+
+    def test_several_are_plural(self, rr: ModuleType) -> None:
+        (warning,) = self.warnings(rr, 3, 7.25)
+        assert warning == (
+            "Warning: 3 points along the lines could not be added; "
+            "their largest difference is 7.25 m."
+        )
+
+    def test_none_is_silent(self, rr: ModuleType) -> None:
+        assert self.warnings(rr, 0, 0.0) == []
+
+
 class TestSummary:
     def test_the_projected_summary(self, rr: ModuleType) -> None:
         text = rr.summary(projected(rr))

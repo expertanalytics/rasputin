@@ -16,8 +16,8 @@ strip: generate`; `run` records the outcome's own `scan_seconds` and
 `split_seconds` as `edge strip: scan (parallel)` and `edge strip: split +
 flip (serial)`, unchanged, as `final_check.run` does for its two rows.
 
-HOW THIS FILE GOES RED: `tin_engine.edge_strip` does not exist (the fixture's
-import fails), and `final_check.run` takes no `strip`.
+Went red at `4157dab` because `tin_engine.edge_strip` did not exist (the
+fixture's import failed) and `final_check.run` took no `strip`.
 
 Not invariant-critical; no mutation round.
 """
@@ -171,7 +171,7 @@ def test_the_module_holds_no_geometry_and_no_crs(edge_strip: ModuleType) -> None
 
 
 class TestFinalCheckPassesTheStripOn:
-    """D5, `final_check.py:22`: `run(..., strip=None)`, passed to `refine_points`."""
+    """D5, `final_check.py:28`: `run(..., strip=None)`, passed to `refine_points`."""
 
     @pytest.fixture
     def seen(self, monkeypatch: pytest.MonkeyPatch) -> list[dict[str, Any]]:

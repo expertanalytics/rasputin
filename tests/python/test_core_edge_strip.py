@@ -28,9 +28,10 @@ the DEM-node tolerance oracle (E2) and the constrained-Delaunay oracle; on
 15c's RP3 oracle, and the Delaunay oracle. The start is refine's output on a
 ring with off-node vertices, so its constraint edges cross grid lines.
 
-HOW THIS FILE GOES RED: none of these names is bound, so every fixture that
-fetches one fails with `AttributeError`; `refine_points` refuses the `strip`
-keyword with `TypeError`. The oracle self-checks at the end pass already.
+Went red at `4157dab` because none of these names was bound, so every
+fixture that fetched one failed with `AttributeError`, and `refine_points`
+refused the `strip` keyword with `TypeError`. The oracle self-checks at the
+end passed then as now.
 
 Not invariant-critical (ES2, ES3, ES5 are, in C++); no mutation round.
 """
@@ -661,7 +662,7 @@ class TestStubs:
 
 class TestTheOraclesCanFail:
     """Each oracle above, shown failing on a planted defect, so its green
-    means something. These pass before the strip exists."""
+    means something. They need no strip, and passed at the red step too."""
 
     def test_the_strip_oracle_on_a_planted_shift(self, start: Start) -> None:
         xy, z = start.oracle_points()
