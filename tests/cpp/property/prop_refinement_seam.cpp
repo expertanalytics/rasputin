@@ -517,3 +517,23 @@ TEST_CASE("SP6: a domain cut by a seam meets the tolerance at every node, seam i
         REQUIRE(sequences[0][i].second == sequences[1][i].second);
     }
 }
+
+TEST_CASE("SP2: an error equal to the tolerance is within it", "[refinement][seam][sp2]") {
+    // "While some check point p has |z_p - lerp(p)| > tolerance": strictly
+    // greater. Along row 0, a plane at tolerance 0 (every error exactly 0), and
+    // z 0 2 0 at tolerance 2 (node 1 exactly 2 off the chord, the midpoints 1),
+    // both need no point.
+    const auto plane = profile({0, 1, 2, 3, 4});
+    const auto& gp = plane.geometry();
+    const SeamOutcome p = refine_seam(plane, at(gp, 0, 0), at(gp, 4, 0), 0.0);
+    REQUIRE(p.check_points == 7);
+    REQUIRE(p.points.empty());
+    REQUIRE(p.max_error == 0.0);
+
+    const auto tent = profile({0, 2, 0});
+    const auto& gt = tent.geometry();
+    const SeamOutcome t = refine_seam(tent, at(gt, 0, 0), at(gt, 2, 0), 2.0);
+    REQUIRE(t.check_points == 3);
+    REQUIRE(t.points.empty());
+    REQUIRE(t.max_error == 2.0);
+}

@@ -400,7 +400,8 @@ class TestStubs:
     def test_refine_points_takes_tolerance_and_threads_by_keyword(self) -> None:
         fn = self.declared().get("refine_points")
         assert isinstance(fn, ast.FunctionDef), "refine_points is not stubbed"
-        assert [a.arg for a in fn.args.kwonlyargs] == ["tolerance", "threads"]
+        # 23b (N13) adds frozen_mask after them.
+        assert [a.arg for a in fn.args.kwonlyargs] == ["tolerance", "threads", "frozen_mask"]
 
     def test_point_refine_outcome_carries_the_two_counters(self) -> None:
         cls = self.declared().get("PointRefineOutcome")

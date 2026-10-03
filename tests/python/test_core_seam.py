@@ -353,3 +353,22 @@ class TestTheStub:
             "no_data",
             "max_error",
         } <= members
+
+
+class TestTheStrictInequality:
+    """Insert while an error is strictly over the tolerance: an error equal to
+    it is within."""
+
+    def test_a_plane_at_tolerance_zero_needs_no_point(self, refine_seam: Seam) -> None:
+        dem = np.array([[0, 1, 2, 3, 4]] * 2, dtype=np.float32)
+        out = refine_seam(view(dem), world(0, 0), world(4, 0), tolerance=0.0)
+        assert out.check_points == 7
+        assert np.asarray(out.points).shape == (0, 2)
+        assert out.max_error == 0.0
+
+    def test_an_error_equal_to_the_tolerance_needs_no_point(self, refine_seam: Seam) -> None:
+        dem = np.array([[0, 2, 0]] * 2, dtype=np.float32)
+        out = refine_seam(view(dem), world(0, 0), world(2, 0), tolerance=2.0)
+        assert out.check_points == 3
+        assert np.asarray(out.points).shape == (0, 2)
+        assert out.max_error == 2.0

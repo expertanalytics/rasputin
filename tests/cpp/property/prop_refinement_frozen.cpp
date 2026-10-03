@@ -754,3 +754,22 @@ TEST_CASE("N16: the frozen-edge refusal comes after 15f's not-a-constraint-edge 
     REQUIRE_THROWS_MATCHES(run_points(store, w.b, point_options(0.5, kSeam), &strip), std::logic_error,
                            Catch::Matchers::MessageMatches(not_constraint));
 }
+
+TEST_CASE("FE5: with a strip, on_frozen survives a strip point winning the triangle", "[refinement][frozen][fe5]") {
+    // One stored point exactly on the seam, a strip on every other constraint
+    // edge, and a tolerance nothing exceeds, so the run is one scan. The
+    // triangle that counts the seam point also owns an outline sub-edge whose
+    // strip points have nonzero error, and the worst of them is offered over
+    // the (skipped) stored point. The count must survive that offer.
+    const auto start = grid_seam();
+    const auto dem = ground(kSquare, {});
+    const Begin b = begin_from(dem, start);
+    const auto strip = strip_of(dem, b, kSeam);
+    REQUIRE(strip.size() > 0);
+    const CheckPoints store = store_of(kSquare, {{Lat{4, 2.5}, 100.0}});
+    const auto out = run_points(store, b, point_options(1e9, kSeam), &strip);
+    REQUIRE(out.ok());
+    REQUIRE(out.inserted == 0);
+    REQUIRE(out.strip_max_error > 0.0);  // the strip had something to offer
+    REQUIRE(out.on_frozen == 1);
+}
