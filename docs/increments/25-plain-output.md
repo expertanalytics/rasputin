@@ -1,4 +1,4 @@
-# Increment 24: plain output — what a run writes, in named fields and plain words
+# Increment 25: plain output — what a run writes, in named fields and plain words
 
 Status: **designed by `@architect`, 2026-10-03, for Ola's approval of the
 field table ("The fields, for Ola") before `@tester` starts.** Ola's ruling of
@@ -11,8 +11,10 @@ Python only. No C++ changes, no change to any mesh's geometry, so no `@perf`
 acceptance run is needed (`docs/increments/README.md`, "Acceptance": the diff
 touches neither `include/terrain/refinement/` nor `include/terrain/mesh/`).
 
-**Why "24".** Increments are numbered by subject; 23 is the last number in use
-(`ROADMAP.md`), and this is not a part of 15's DEM work. It is placed before
+**Why "25".** Increments are numbered by subject, and this is not a part of
+15's DEM work. 23 is the basin work and 24 is release hardening
+(`docs/increments/24-release-hardening.md`, on its own branch), so 25 is the
+first free number. It is placed before
 15f-3 in the order of work, which is a scheduling fact, not a number.
 
 ## Prior art: legacy and literature
@@ -270,9 +272,9 @@ after (this fixes the inventory's defect).
 - The fourteen swaps of `achieved max error` for `max error at DEM nodes
   at most` (`test_cli_constraint_feet.py`, `test_cli_mesh_domain.py`,
   `test_cli_mesh_domain_crs.py`, `test_cli_mesh_features.py`,
-  `test_cli_mesh_refine.py`, `test_cli_start_quality.py`) are dropped: 24's
+  `test_cli_mesh_refine.py`, `test_cli_start_quality.py`) are dropped: 25's
   red step already rewrites those lines as `float(field(vtk, "max_error_m"))`,
-  so 15f-3 takes 24's version of each at the rebase.
+  so 15f-3 takes 25's version of each at the rebase.
 - `test_cli_mesh_edge_strip.py`: the `CLAUSE` regex (`:107`) becomes field
   reads of D5's names; the ordering assert (`:402`, the final check before the
   strip clause) is dropped, since fields have no sentence order; `:256` and
@@ -284,7 +286,7 @@ after (this fixes the inventory's defect).
 - `test_core_*` and `test_edge_strip.py` do not read the output text and are
   unchanged.
 - This lands as one `@tester` amendment commit on 15f-3 after it is rebased
-  onto 24, with the reason in the message (README, "Steps 2 and 3 are not
+  onto 25, with the reason in the message (README, "Steps 2 and 3 are not
   strictly once each").
 
 ### D6. stderr
@@ -406,7 +408,7 @@ every digit.
 Who reads today's text (`git grep -n elevation_source`, and the clauses'
 words, over the tree):
 
-- **Tests** (rewritten by `@tester` in 24's red step):
+- **Tests** (rewritten by `@tester` in 25's red step):
   `test_cli_mesh_dem.py` (`:119-272`), `test_cli_mesh_refine.py` (`:59` and
   its `field`/`sentence` helpers), `test_cli_mesh_mosaic.py` (`:140-518`, the
   `mosaic of` prefix, and `:266-271` `dem_seams`), `test_cli_mesh_geographic.py`

@@ -589,10 +589,10 @@ A refusal from either run is a usage error in the engine's words, as today
 
 ### D7. What the file and `--stats` record
 
-**Superseded for the file, stderr and `--stats` by increment 24**
-(`docs/increments/24-plain-output.md`, D5; Ola's ruling of 2026-10-03 that the
+**Superseded for the file, stderr and `--stats` by increment 25**
+(`docs/increments/25-plain-output.md`, D5; Ola's ruling of 2026-10-03 that the
 `elevation_source` sentence is replaced by named fields before 15f-3's code
-step). The figures below land as 24's fields `line_points_checked`,
+step). The figures below land as 25's fields `line_points_checked`,
 `line_max_error_m`, `line_points_refused` and the rest; `max_error_m` carries
 the "at most" bound. The `--stats` phase rows below stand.
 
