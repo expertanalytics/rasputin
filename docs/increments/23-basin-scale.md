@@ -1683,7 +1683,8 @@ own arithmetic, so the oracle relation is the producer's
   domain is within `--tolerance`: inside a piece by refine, on a seam by the
   seam pass; on a grid-line seam at every point against the bilinear
   surface. On the reprojected path, every source node too, except those
-  exactly on a seam, which are counted (`on_frozen`) with their error. In
+  exactly on a seam, or within `r(g)` of one with a strip (N7), which are
+  counted (`on_frozen`) with their error. In
   the stitched file, after the cleanup, every valid node and (reprojected)
   every source node is within tolerance, seams included, by the band rescan
   and the hole recheck; the every-point property along former seams is not
@@ -2065,8 +2066,9 @@ No network: every URL is `http://127.0.0.1:<port>/...`, put in `SOURCES` by
   and this tree has no death-test harness; Release CI defines `NDEBUG`).
   K2 is pinned by FE2-FE5. A harness is not budgeted in 23b: it would be the
   tree's first, for one assertion that guards a path no caller takes.
-- **SP1, a grid-line seam**: the check points are the nodes on it; after
-  `refine_seam`, the error is within tolerance at every node, and at 1,000
+- **SP1, a grid-line seam**: the check points are the nodes on it and the
+  midpoints of the cell sides between them, `2c + 1` for `c` nodes (N14);
+  after `refine_seam`, the error is within tolerance at every node, and at 1,000
   points along the line against a bilinear surface computed in NumPy
   independently (the every-point property).
 - **SP2, a general seam**: an edge with rational endpoints; the oracle
@@ -2562,6 +2564,26 @@ rulings left to `@developer`, and other changes outside the PR table:
   (N7) lies in one triangle, which counts it. Both are summed over each
   slot's last result, as `max_error` is. `PointScan::offer` keeps the count
   when a strip or DEM candidate replaces the scan's winner.
+  **A rounding-scale double count, accepted as a report.** A point counted
+  for being within `r(g)` of a frozen edge, not on it, is counted by every
+  triangle that holds it (closed membership). A point lying exactly on an
+  interior edge from a frozen edge's end vertex `v`, at an angle `θ` to that
+  frozen edge, is in both triangles beside the interior edge. If each of the
+  two has a frozen edge at `v` whose projection test it passes, the point is
+  counted twice. That needs a bend in the frozen chain at `v` (two
+  collinear frozen edges cannot both hold the projection strictly inside)
+  and a distance from `v` between `r(g)` (below it, L14's corner test skips
+  the point) and `r(g)/sin θ`. Bends occur at every seam-pass point of a
+  seam that is not a lattice line, whose sub-edges are a hair off
+  collinear; on lattice-line seams only at seam corners, where the window
+  is at most `r(g)` to `r(g)·√2`. `on_frozen` is a report, not an invariant, in the
+  same class as `coincident`'s rounding-scale double counts
+  (`refine_points.hpp`, the comment above the coincident pass). If only one
+  of the two triangles has the frozen edge, the other may name the point and
+  split the interior edge there, putting a vertex within `r(g)` of the
+  frozen edge, which K2's oracle would report. That also needs exact
+  incidence with the interior edge at that distance, so it is rounding-scale
+  and is not fixed in 23b; it is the same gap N19 states for general seams.
 - **N16 is a second loop.** The frozen-strip-edge refusal runs after L2's
   check (3) has passed for every strip edge, not inside the same loop, so
   a strip that also holds a non-constraint edge is refused for that first,
@@ -2598,7 +2620,7 @@ The suites that kill a mutant are `test_mesh_frozen` (mesh),
 | M1 the scan never skips a frozen node | killed (scan, frozen) |
 | M2 the frozen skip only in the all-node path | killed (scan, frozen) |
 | M3 the frozen skip only off the all-node path | killed (scan, frozen) |
-| M4 `frozen_edge_at` does not exclude the edge's ends | survived; equivalent (a vertex has error 0, and the corner test comes first) |
+| M4 `frozen_edge_at` does not exclude the edge's ends | survived; equivalent: `for_each_row_span` excludes the triangle's vertices (`include/terrain/mesh/row_spans.hpp`), so the scan never visits a corner, and the point scan's corner test returns before `frozen_edge_at` is called. ("A vertex has error 0" was the first reason given; it is not exact at ulp level, so it is not the reason.) |
 | M5 the radius ignored (N7) | killed (frozen) |
 | M6 `is_frozen` true for any masked edge once a mask is set | killed (mesh, scan, frozen) |
 | M7 `refine` does not set the mask | killed (frozen) |
@@ -2629,7 +2651,7 @@ The suites that kill a mutant are `test_mesh_frozen` (mesh),
 | M4 skipped nodes still counted in `uncovered` | ran: killed (scan, frozen) |
 | M5 the scans skip nodes on every constrained edge | ran (both scans, since `frozen_edge_at` is shared): killed (scan, frozen) |
 | M6 `is_frozen` returns `is_constrained` | ran: killed (mesh, scan, frozen) |
-| M9 `foot_of` refuses the whole triangle when any edge is frozen | ran: **survived**. Not equivalent: N5 takes a foot on another qualifying constrained edge, and FE3's fixture has only one candidate edge. Back to `@tester` |
+| M9 `foot_of` refuses the whole triangle when any edge is frozen | survived at `f00a7b1`; killed (frozen) after `c7c225f`. Not equivalent: N5 takes a foot on another qualifying constrained edge, and FE3's first fixture has one candidate edge. `c7c225f` adds an FE3 case with a frozen side and the needle on a second, unfrozen constrained side: the foot must land there; with M9 planted all four of its generator runs fail and no other case does (confirmed by `@tester` and `@reviewer`) |
 | M14 `on_frozen` once per triangle, so each point twice | covered by `@developer`'s M14: killed |
 | M15 the frozen error measured against 0 | ran: killed (frozen) |
 | M17 L12 puts a point onto a frozen edge | covered by `@developer`'s M12: survived, unreachable (above) |
