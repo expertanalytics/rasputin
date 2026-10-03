@@ -2951,5 +2951,6 @@
  "threshold_pct": 5.0,
  "verdict": [
   "ACCEPTED"
- ]
+ ],
+ "hardening": "libc++ fast"
 }

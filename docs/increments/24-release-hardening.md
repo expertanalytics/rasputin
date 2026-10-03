@@ -5,6 +5,12 @@ and answered Q1-Q4 the same day (§11). **Implemented, in review**: one PR,
 53 net production lines (61 added, 8 removed, `@reviewer`'s count, round 1);
 departures from this design are under "As built". The measurement it rests on is
 `docs/benchmarks/2026-10-03/release-hardening/README.md` (`@perf`, #149).
+**Acceptance (`@perf`, 2026-10-03, AC): ACCEPTED**, in §7's paired form
+(`docs/benchmarks/2026-10-03/24-acceptance.md`). Built OFF, the branch matches
+master `6cdc8cc`: meshes byte-identical, refine -2.9 % to +1.6 % in both
+clean pairs, with one cell at +3.9 %. ON against OFF costs refine +4.2 % to
++5.9 % at 1 thread and +3.2 % to +11.1 % over 2 to 20 threads, which
+reproduces the study. `24-on-r2/` is the first hardened baseline.
 
 **The ask** (Ola, 2026-10-03): "I think we can live with hardening, but for
 certain runs, we might want to turn it off for speed. So normal release, turn

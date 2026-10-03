@@ -2986,5 +2986,6 @@
   "REGRESSION: tile refine_s[t=18] 0.2047 -> 0.2185 (+6.7 %)",
   "REGRESSION: tile refine_s[t=19] 0.2057 -> 0.2185 (+6.3 %)",
   "REGRESSION: tile refine_s[t=20] 0.2059 -> 0.2201 (+6.9 %)"
- ]
+ ],
+ "hardening": "libstdc++ assertions"
 }
