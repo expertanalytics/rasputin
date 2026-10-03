@@ -448,3 +448,7 @@ squash: `docs/increments/README.md`).
 - Any change to noding, the shared-edge merge, clipping or labelling geometry.
 - Broadcasting one `--features-map` to several sources (D3, rejected).
 - A compound single-flag syntax carrying path+map+crs+layer (R1, rejected).
+
+## Review
+
+**Round (citation-only fix), 2026-10-03.** Range `390b516..b213dc0` (6394c45, b213dc0). Verdict: CHANGES REQUESTED. LOC: 0 production lines (docs + test docstrings only; test ASTs unchanged modulo docstrings). Blocking: the branch shifts `## LOC` from 418-434 to 428-444, breaking `docs/retrospectives/2026-09-29-orchestrator-and-hooks-audit.md:229`; pin it as `16e-multi-features.md@390b516:418-434`. All 30 re-pointed or pinned citations read as quotations on master, `7d9882d` and `cb6f78b`. Not pushed; no CI.
