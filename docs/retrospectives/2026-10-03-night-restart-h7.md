@@ -227,3 +227,5 @@ says. Three lines still say "night" (§1 lines 17 and 63, and the quoted
 last touch governed files" may not hold for it.
 
 **Round 3 (item 8), 2026-10-03.** Range `e2230b1..21684fd` (f00f388, 21684fd). Verdict: CHANGES REQUESTED. LOC: 0 production lines (21 lines in next.md). Blocking: (1) the refusing reviewer misnamed: it was the citation-fix branch's reviewer, and e2230b1 complied; (2) h6 detects Bash writes by the dirty set, not HEAD, so a write and commit in one call goes unreported. CI pending at review time.
+
+**Round 4 (item 8 fixes), 2026-10-03.** Range `21684fd..c9d6b6a`. Verdict: APPROVED. LOC: 0 production lines (two files under `docs/retrospectives/`, +33 / -17). Both round-3 blockers fixed: the refusing reviewer named correctly (the citation-fix branch's), the seven compliant commits match the transcripts; the h6 claim now matches §3.3 (a Bash write is seen only while uncommitted), with the HEAD-snapshot proposal put to Ola. Citations resolve. Not pushed at review time; CI pending.
