@@ -20,6 +20,11 @@
 // point to the next cell's corner (offset 0), so every point lies in the closed
 // cell it is filed in.
 //
+// Storage (increment 15e, fix 4): each row is a list of fixed chunks of kChunk
+// points, carved from slabs of kSlab chunks and freed only with the store, so
+// adding never reallocates and the footprint is 16 B per point plus at most one
+// part-filled chunk per row. Point i of a row is chunks[i / kChunk][i % kChunk].
+//
 // freeze() sorts each row by (col, row offset, col offset, z), so iteration
 // order does not depend on the order of add calls, and keeps the first of
 // points at one stored position, counting the rest in `duplicates`. After it
@@ -33,6 +38,7 @@
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <memory>
 #include <span>
 #include <stdexcept>
 #include <tuple>
@@ -46,13 +52,23 @@ namespace terrain::refinement {
 
 class CheckPoints {
 public:
+    static constexpr std::size_t kChunk = 1024;  // points per chunk, 16 KiB
+    static constexpr std::size_t kSlab = 4096;   // chunks per slab, 64 MiB
+
     explicit CheckPoints(const raster::RasterGeometry& g) : geometry_{g}, rows_(last_cell(g.rows()) + 1) {}
+    // Rows point into the slabs: moving keeps them valid, copying would not.
+    CheckPoints(const CheckPoints&) = delete;
+    CheckPoints& operator=(const CheckPoints&) = delete;
+    CheckPoints(CheckPoints&&) noexcept = default;
+    CheckPoints& operator=(CheckPoints&&) noexcept = default;
 
     [[nodiscard]] const raster::RasterGeometry& geometry() const noexcept { return geometry_; }
     [[nodiscard]] bool frozen() const noexcept { return frozen_; }
     [[nodiscard]] std::size_t size() const noexcept { return size_; }
     [[nodiscard]] std::size_t duplicates() const noexcept { return duplicates_; }
     [[nodiscard]] std::size_t outside() const noexcept { return outside_; }
+    // Points' room handed out to rows: chunks x kChunk.
+    [[nodiscard]] std::size_t reserved_points() const noexcept { return chunks_ * kChunk; }
 
     void add(std::span<const Point2> xy, std::span<const float> z) {
         if (frozen_)
@@ -70,23 +86,31 @@ public:
             }
             const auto [r, dr] = file(row, g.rows());
             const auto [c, dc] = file(col, g.cols());
-            rows_[r].push_back(Packed{c, dc, dr, z[i]});
+            Row& cells = rows_[r];
+            if (cells.n == cells.chunks.size() * kChunk)
+                cells.chunks.push_back(new_chunk());
+            cells.at(cells.n++) = Packed{c, dc, dr, z[i]};
         }
     }
 
     void freeze() {
         if (frozen_)
             return;
+        std::vector<Packed> scratch;  // one row at a time: gather, sort, unique, scatter
         for (auto& row : rows_) {
-            std::ranges::sort(row, {}, [](const Packed& p) { return std::tuple{p.col, p.dr, p.dc, p.z}; });
+            scratch.resize(row.n);
+            for (std::size_t i = 0; i < row.n; ++i)
+                scratch[i] = row.at(i);
+            std::ranges::sort(scratch, {}, [](const Packed& p) { return std::tuple{p.col, p.dr, p.dc, p.z}; });
             const auto same = [](const Packed& a, const Packed& b) {
                 return a.col == b.col && a.dr == b.dr && a.dc == b.dc;
             };
-            const auto end = std::unique(row.begin(), row.end(), same);  // keeps the first
-            duplicates_ += static_cast<std::size_t>(row.end() - end);
-            row.erase(end, row.end());
-            row.shrink_to_fit();
-            size_ += row.size();
+            const auto end = std::unique(scratch.begin(), scratch.end(), same);  // keeps the first
+            duplicates_ += static_cast<std::size_t>(scratch.end() - end);
+            row.n = static_cast<std::size_t>(end - scratch.begin());
+            for (std::size_t i = 0; i < row.n; ++i)
+                row.at(i) = scratch[i];
+            size_ += row.n;
         }
         frozen_ = true;
     }
@@ -98,12 +122,21 @@ public:
     void for_each_in(std::size_t row, std::size_t c0, std::size_t c1, F&& f) const {
         if (row >= rows_.size())
             return;
-        const auto& r = rows_[row];
-        auto it = std::ranges::lower_bound(r, c0, {}, [](const Packed& p) { return std::size_t{p.col}; });
-        for (; it != r.end() && it->col <= c1; ++it)
-            f(mesh::MeshVertex{static_cast<double>(it->col) + static_cast<double>(it->dc),
-                               static_cast<double>(row) + static_cast<double>(it->dr)},
-              it->z);
+        const Row& r = rows_[row];
+        std::size_t i = 0;  // lower bound of c0 on column, over the logical index
+        for (std::size_t hi = r.n; i < hi;) {
+            const std::size_t mid = i + (hi - i) / 2;
+            if (r.at(mid).col < c0)
+                i = mid + 1;
+            else
+                hi = mid;
+        }
+        for (; i < r.n && r.at(i).col <= c1; ++i) {
+            const Packed& p = r.at(i);
+            f(mesh::MeshVertex{static_cast<double>(p.col) + static_cast<double>(p.dc),
+                               static_cast<double>(row) + static_cast<double>(p.dr)},
+              p.z);
+        }
     }
 
 private:
@@ -113,6 +146,23 @@ private:
         float z;
     };
     static_assert(sizeof(Packed) == 16);
+
+    struct Row {
+        std::vector<Packed*> chunks;
+        std::size_t n = 0;  // points in use
+        [[nodiscard]] Packed& at(std::size_t i) const { return chunks[i / kChunk][i % kChunk]; }
+    };
+
+    // A fresh chunk from the current slab, opening a slab when it is used up.
+    // for_overwrite: a slab's pages are charged only as points are written.
+    Packed* new_chunk() {
+        if (slabs_.empty() || slab_used_ == kSlab) {
+            slabs_.push_back(std::make_unique_for_overwrite<Packed[]>(kSlab * kChunk));
+            slab_used_ = 0;
+        }
+        ++chunks_;
+        return slabs_.back().get() + kChunk * slab_used_++;
+    }
 
     // The cell along one axis of n nodes and the offset in it.
     static std::pair<std::uint32_t, float> file(double f, std::size_t n) {
@@ -127,7 +177,9 @@ private:
     }
 
     raster::RasterGeometry geometry_;
-    std::vector<std::vector<Packed>> rows_;  // one per cell row
+    std::vector<Row> rows_;  // one per cell row
+    std::vector<std::unique_ptr<Packed[]>> slabs_;
+    std::size_t slab_used_ = 0, chunks_ = 0;  // chunks taken from the last slab, in all
     std::size_t size_ = 0, duplicates_ = 0, outside_ = 0;
     bool frozen_ = false;
 };
