@@ -5,9 +5,9 @@
 //       = max(1e-10, 64 * ulp(M)),  M = max(cols, rows) - 1,
 //       ulp(M) = std::nextafter(M, inf) - M.
 //
-// Its own target, so the strip suite keeps building while the helper is
-// missing. The expected values are written by hand as powers of two, never
-// computed by the formula under test.
+// The expected values are written by hand as powers of two, never computed
+// by the formula under test, and the helper is read with no mesh or loop, so
+// a wrong radius shows here before any refinement case runs.
 
 #include <catch2/catch_test_macros.hpp>
 

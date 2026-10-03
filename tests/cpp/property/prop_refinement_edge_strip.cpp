@@ -1,5 +1,5 @@
 // Increment 15f-2 (docs/increments/15f-edge-strip.md, D4, "The guarantee, and
-// its wording" E1 to E8, and "Tests for @tester" ES1 to ES11): the edge strip
+// its wording" E1 to E8, "Tests for @tester" ES1 to ES16, L1 to L16): the strip
 // in the refinement loop, through the C++ API.
 //
 //   refine_strip(dem, strip, start, z, valid, edges, masks, options)
@@ -33,7 +33,7 @@
 // On the reprojected path the tolerance oracle is 15c's J2 over the source
 // points (sources_over below), since J2 gives up the DEM-node guarantee there.
 //
-// CHOSEN HERE, where D4 is silent (see the handback):
+// Ruled in L1 and L2 (where D4 was silent), as this suite first chose them:
 //   - the logic_error refusals of D4 name their entry point in what():
 //     "refine_strip" or "refine_points", in refine's "refine: ..." style;
 //   - refine_strip refuses a tolerance that is not finite and >= 0 with
@@ -1047,7 +1047,7 @@ TEST_CASE("ES15: a DEM node within ulps of an end is skipped, so no sliver hides
     if (tol == 0.0) CHECK(near >= 1);
 }
 
-TEST_CASE("ES15: the coincidence radius is 1e-10 lattice units, applied with a strip",
+TEST_CASE("ES15: the coincidence radius r(g), the 1e-10 floor here, applied with a strip",
           "[edge_strip][ES15]") {
     // A square ring (0.5, 0.5) .. (7.5, 7.5), constrained, fanned from an
     // interior start vertex P = (4 + delta, 4). The ring's strip points go in
