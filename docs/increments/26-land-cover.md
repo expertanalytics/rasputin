@@ -3,7 +3,7 @@
 Status: **designed by `@architect`, 2026-10-03, at Ola's request; not
 ruled.** Written before `@tester` per `docs/increments/README.md` step 1.
 Nothing is built. The questions for Ola are at the end, each with a
-recommended default. Five pull requests, listed under "The PR split".
+recommended default. Six pull requests, listed under "The PR split".
 
 **Why "26".** 25 is plain output (`docs/increments/25-plain-output.md`, on
 its own branch); 26 is the first free number on every branch
@@ -12,6 +12,24 @@ only `25-plain-output.md`). In the basin order of work this is the
 "basin's own inputs" item (`docs/increments/23-basin-scale.md`, "Order of
 work", item 12), the land-cover half of it; sub-catchments and rivers from
 the DEM are the other half and get their own design.
+
+**Names used here.** Earlier increments, by number, and what they did:
+10, mesh output (its LOC overrun is the +39 % worst case used for
+estimates); 11, decoding GeoTIFFs; 16b, polygons and lines from
+GeoPackage or GeoJSON as constraint lines, with class maps naming what each
+line is; 16c, a land-cover code per triangle (regions between constraint
+lines, one point-in-polygon test per region); 16e, several feature sources
+in one mesh, one code system per mesh; 21, parallel refinement and Ola's
+determinism ruling; 22, a catchment from the DEM, its traced outline reduced
+by area-preserving segment collapse; 23, basin scale: 23a-1 reads DEM blocks
+from the local tile cache, 23a-2 is `rasputin fetch`, which fills the cache,
+23b to 23g cut a large domain into pieces, mesh them in parallel and stitch
+them with the seams cleaned up; 25, plain output (what a run writes, in
+named fields, `--stats` and `--record`); 15f-3, the last part of the edge
+strip. This increment's own pull requests are 26a to 26e. **BHO** is Brazil's
+official coding of drainage basins; a "level-3 unit" is one of the nine
+sub-basins of the São Francisco at its third level, used here only as
+measurement domains (Ola's ruling on BHO).
 
 ## In short
 
@@ -31,25 +49,26 @@ on 2026-10-01:
    matter are dropped, and the area they held is not lost: it is carried to
    the next triangles along a space-filling curve and placed there, which
    is Floyd-Steinberg error diffusion done on class areas (Ola's "local
-   out-of-balance ledger"). Class totals over the basin then stay exact to a
-   few hundred square metres, and so does any compact region, within a
-   bound the ledger itself reports.
+   out-of-balance ledger"). Class totals over the whole mesh then stay exact
+   to about a hectare, and those of any compact region within a bound the
+   ledger itself reports.
 
 Measured on real basin meshes for this design (the probes are in
 `docs/increments/26-probes/`, results under "What was measured"):
 
 - dropping small fractions the way land-surface models do (renormalising
-  inside each triangle) loses 5 to 45 % of the open water and up to 13 % of
-  the coffee in the Rio Corrente sub-basin; the ledger keeps every class's
-  total within 0.05 %;
+  inside each triangle) loses 8 to 45 % of the open water and 1.4 to 11 %
+  of the coffee in the Rio Corrente sub-basin, at a 5 % cutoff; the ledger
+  keeps every class's total within 0.05 %;
 - the cutoff must be **relative and absolute together**: an entry is dropped
   only if it is under 5 % of its triangle **and** under 1 ha. A purely
   relative cutoff drops whole fields from the large flat triangles (the
   largest is 67 km² at 20 m), the ledger then carries square kilometres
   across the map, and local errors are as bad as renormalising;
 - MapBiomas Collection 11 (August 2026, years 1985 to 2025) is on a public
-  bucket as one tiled GeoTIFF per year; the whole basin's box is 177 MB per
-  year, a tenth of ANADEM's.
+  bucket as one tiled GeoTIFF per year; the tiles meeting the basin's
+  outline are 72 MB per year (177 MB for its whole box), against 1.71 GiB of
+  ANADEM.
 
 ## Ola's rulings this builds on
 
@@ -213,9 +232,12 @@ What this shows:
    triangle where the raster has none of it): "anywhere" is slightly better
    locally (5 km: 0.10 % against 0.14 % at 2 m) and leaves a smaller end
    remainder, but writes 18 % more entries and can put soybean on a triangle
-   that has none; "present" never does. The full tables (cutoffs 1, 5 and
-   10 %; floors none, 1 ha and 10 ha; three rules) are printed by
-   `summarise.py`.
+   that has none; "present" never does. Ola's first proposal ("kept":
+   only into triangles that already hold the class above the cutoff) is
+   worse than both: with the floor, a ledger of 11.5 ha against 4.4 ha at
+   20 m and 0.30 % misplaced on 5 km squares against 0.15 %. The full
+   tables (cutoffs 1, 5 and 10 %; floors none, 1 ha and 10 ha; four rules,
+   "kept" run at 20 and 2 m) are printed by `summarise.py`.
 
 Time, single-threaded probe code: the exact areas took 6.4, 7.0, 8.2 and
 11.3 s at 20, 10, 5 and 2 m (about 0.15 µs per cell covered plus 2.2 µs per
@@ -227,9 +249,10 @@ triangle, scanning all 256 class slots each time).
 `water_probe.py`: MapBiomas class 33 (river, lake and ocean) over the box of
 each BHO level-3 unit, cut into 8-connected bodies (cells touching at a
 corner are one body), each counted inside the unit when its first cell in
-raster order is inside the outline (a crude test: a body crossing the
-outline counts in one unit only, which is why Três Marias, whose northern
-end is outside 769, is not among 769's largest). Every body of at least
+raster order is inside the outline. That is a crude test: a body crossing
+the outline counts in one unit only. Três Marias (about 1,000 km² when
+full, from memory) is not among 769's largest bodies; this test, or a low
+reservoir in 2025, may explain it, and neither was checked. Every body of at least
 1.44 ha (four times (60 m)², the minimum area of question 7) was traced on
 its cell edges, moved to the basin's Transverse Mercator (the CRS of the
 level-3 meshes), its pinch points opened by 1 nm, and reduced by increment
@@ -290,14 +313,16 @@ legacy answer to a land-cover raster (GlobCover) was the class at each
 triangle's centre, no constraints and no fractions; CORINE as vector GML is
 16b's. The three new hits, read from the tag:
 
-- `triangulate_dem.h:846`, `extract_lakes`, bound in `bindings.cpp:371`:
+- `legacy/rasputin/triangulate_dem.h:846`, `extract_lakes`, bound in
+  `legacy/bindings.cpp:371`:
   the triangles whose slope is under 0.01 are "lakes", returned as a
   separate face list. A display heuristic (flat is not water: a flat field
   is flat, a river in a gorge is not). **Not carried.**
 - `material_specification.py`: a three.js material for those faces. **Not
   carried.**
 
-`grep -n -i "fraction\|mapbiomas\|dither"` over the tag finds no line. Nothing
+`git grep -n -i -E "fraction|mapbiomas|dither" legacy-archive -- legacy`
+finds no line. Nothing
 on fractions, cutoffs or water tracing is carried over; `@migration-expert`
 is not needed.
 
@@ -465,14 +490,16 @@ ellipsoid, and the exact fractions are `f[t, k] = a[t, k] / Σₖ a[t, k]`.
 **The ledger works in the mesh's own measure**, the planar area `A[t]` of the
 triangle in the mesh's CRS, which is what a consumer multiplies a fraction
 by: the exact class areas it starts from are `f[t, k] · A[t]`. The ratio of
-planar to ellipsoidal area (the projection's scale squared) changes by at
-most 7e-4 across 20 km in either CRS (`crs_probe.py`), so the choice changes
+planar to ellipsoidal area (the projection's scale squared) changes by
+under 1e-3 across 20 km in either CRS (`crs_probe.py`: at most 7.3e-4 at the
+four places), so the choice changes
 no fraction measurably; it decides only which total is kept exact, and the
 one the user of the mesh sees is the planar one.
 
 **Class 0** (no data in MapBiomas) is a class like any other: it gets a
-fraction where it occurs. Inside the basin it occurs only outside Brazil's
-outline, which the basin does not reach.
+fraction where it occurs. Inside units 761, 769 and 764 there is none (761's
+window holds 29 M class-0 cells, every one outside its outline, at sea;
+checked by cell centre against the BHO outlines).
 
 ### 1.2 The exact overlap
 
@@ -639,4 +666,686 @@ forced to water, and per class the exact area and the written area in km²,
 their difference, the largest ledger entry in m² and the end remainder in m².
 A largest entry above 10 times the floor prints a warning to stderr (25's
 rule for self-checks).
+
+## 2. Water bodies as constraints
+
+### 2.1 Which cells, and how small is too small
+
+- **Water** is MapBiomas class 33, "river, lake and ocean". Class 31,
+  aquaculture (fish ponds), stays a fraction unless Ola rules otherwise
+  (question 6).
+- **A water body** is a set of water cells connected through edges or
+  corners (8-connected, as ruled). Two bodies are therefore always at least
+  one land cell apart, and never share a point.
+- **The horizontal tolerance** `τ` (`--water-tolerance`, metres, default
+  60 m, twice the cell, as increment 22's `--outline-tolerance` defaults to
+  twice the DEM's cell) is how far the reduced outline may stand from the
+  traced one, at vertices (22's guarantee).
+- **The minimum area** is `4τ²` (`--water-min-area-factor`, default 4):
+  1.44 ha at the default, about 17 cells. A body below it is not traced; its
+  cells stay class 33 in the fractions of the triangles they fall in, as
+  ruled ("a smaller one stays a fraction ... nothing is merged"). On the
+  three measured units, the bodies above 1.44 ha hold 63 to 98 % of the
+  water and are 6.5 to 9.5 % of the bodies.
+- **Islands.** A hole in a water body (land, connected through edges only,
+  since land is the complement of 8-connected water) of at least the minimum
+  area is kept as a hole; a smaller one is filled, so its land becomes part
+  of the lake polygon. Its area then reaches the fractions through the
+  forced-water rule (2.6) and the ledger, like every other land cell inside
+  the polygon.
+
+### 2.2 Labelling and tracing, on cell edges
+
+C++, `include/terrain/raster_vector/water.hpp`, pure: rows of class values in,
+rings out.
+
+- **Labelling by runs** (He, Chao and Suzuki 2008): each row's water cells
+  as runs; a run joins every run of the row above that it touches through an
+  edge or a corner (8-connectivity: the column ranges overlap after
+  widening by one); union-find over runs; area per body accumulated per run
+  as cell areas by row. The input arrives a strip of rows at a time (a row of
+  256-row tiles decoded from the cache). Labelling needs only the previous
+  row's runs; tracing needs the runs of the bodies it traces; so memory is
+  the water's runs, not the window: the basin's box is 2.15 G cells, its
+  water a few percent of that (2.7 % of unit 761, 0.3 % of 769).
+- **Tracing.** For every body at or above the minimum area, its boundary on
+  the cell edges ("cracks"): an edge between a water cell and a land cell,
+  oriented with the water on its left. Followed corner to corner; at a
+  corner with two ways out (the diagonal case, water at two opposite
+  corners) the turn that keeps the water connected is taken (the right turn,
+  with the water on the left), so the ring passes that corner twice: a
+  **pinch**. Corners where the direction does not change are not output.
+  Output: closed rings of integer cell corners `(col, row)`, outer rings
+  counter-clockwise and holes clockwise in a frame with y up, each with its
+  body number and area.
+- **Determinism.** Bodies are numbered by their first cell in raster order;
+  each ring starts at its lowest corner in (row, col) order. A function of
+  the raster alone.
+- **The window** is the domain's box grown by `τ` and two cells. A body that
+  reaches the window's edge is closed along the edge. That piece of ring
+  lies outside the domain's box, so it never meets the mesh, and the area
+  inside the domain is exact (2.4).
+
+`water_probe.py` is this, in Python and with labelling by cells, run on the
+three units above: 6,383 bodies traced, every ring closed, the pinches
+visited twice.
+
+### 2.3 Into metres
+
+Every ring corner is moved once: the raster's affine to longitude and
+latitude, then pyproj to the mesh's CRS (the same `crs.reprojector`). A
+corner shared by two rings (a hole touching its outer ring at a pinch)
+moves identically for both. Then all rings are shifted by one fixed origin,
+the window's lower-left corner in metres, as 22 does, so coordinates stay
+below about 2 × 10⁶ m and every ring is in the same frame (the check below
+compares rings with each other).
+
+### 2.4 The reduction: increment 22's collapse, for many rings and fixed lines
+
+`reduce_rings` in `include/terrain/vector_simplify/area_collapse.hpp`,
+generalising `reduce_ring` (which stays, as the one-ring case):
+
+```
+struct FixedLine { std::span<const Point2> points; };   // a polyline that may not be crossed
+ReduceManyOutcome reduce_rings(std::span<const Point2> vertices,
+                               std::span<const std::uint32_t> ring_offsets,  // R + 1
+                               std::span<const FixedLine> fixed,
+                               double tolerance);
+// -> rings (same layout), status per ring, counts (collinear, collapses,
+//    rejected for crossing, for a fixed vertex inside, for tolerance, anchors)
+```
+
+**Fixed lines** are every line the mesh will also hold and the lakes must not
+newly cross: the domain's outline and holes, and the lines of every
+`--features` source given to `rasputin water` (today the river lines; the
+DEM-derived ones when they exist).
+
+The steps, against increment 22's ("The reduction" in
+`22-auto-catchment.md`):
+
+1. **Anchors (new).** Every crossing or touch of a ring with a fixed line is
+   inserted into the ring as an **anchor**: a vertex at the crossing point
+   (computed in doubles from the two segments; detected with the exact
+   predicates) that is never collapsed. It may be the `A` or `D` of a
+   collapse, never `B` or `C`. A stretch where a ring runs along a fixed
+   line (collinear overlap) gets anchors at both ends, and every vertex in
+   between is frozen too. The fixed line itself is not changed; the noder
+   nodes the crossing later, and the anchor lies on the fixed segment to
+   rounding, well inside its 1 mm snap.
+2. **Collinear pass**, as 22, never dropping an anchor or a pinch.
+3. **Candidates and deviation**, as 22, per ring, against that ring's traced
+   vertices: the same area rule for `E`, the same deviation, the same
+   tolerance test at vertices.
+4. **One order over all rings**: a heap on (deviation, ring, vertex id),
+   least first. Serial and deterministic, as 22.
+5. **Checks before a collapse**, with the exact kernel:
+   - *No crossing*, now against every current edge of every ring and every
+     fixed segment, through one edge grid. Allowed touches: at `A` and `D`
+     with their own neighbouring edges (22); at a **pinch** (new): a new edge
+     may end at a point another visit of the ring (or another ring of the
+     same body) also passes, provided the two visits do not interleave
+     there: around the point, the two edges of one visit lie on one side of
+     the other visit's two edges (four exact orientation tests). This is the
+     "weakly simple" condition for the simplest case, two visits of one
+     vertex. A new edge that passes through such a point, rather than ending
+     at it, is refused. At an **anchor** (new): the new edge leaving it must
+     lie on the same side of the fixed line as the edge it replaces (one
+     orientation test), so the ring still crosses there, once.
+   - *Swept region* (generalising 22's keep-point test): no vertex of
+     another ring, of another visit of a pinch, or of a fixed line lies
+     strictly inside the loop `A-B-C-D-E-A` (winding number) or on a new
+     edge. Candidates come from the same grid.
+6. **Apply**, re-evaluate the four neighbours, repeat until nothing is
+   admissible or each ring is at its floor (four vertices, or its anchors
+   and pinches).
+
+**Guarantees**, each tested:
+
+- each ring's area equals the traced ring's to rounding, so each body's
+  area (outer minus holes) does too;
+- the area of each body **inside the domain** is kept too: a collapse's
+  loop never contains a fixed vertex and its new edges cross no fixed line,
+  so the area it moves stays on one side of the outline;
+- every ring is weakly simple (simple, except pinches that stay closed),
+  no two rings cross, and no ring crosses a fixed line except at its
+  anchors, which are the traced ring's own crossings, one for one;
+- every traced vertex is within `τ` of the reduced ring and every reduced
+  vertex within `τ` of the traced ring (22's guarantee; the Hausdorff
+  distance is measured, not guaranteed, as in 22);
+- deterministic, for any thread count (serial).
+
+**The rejected alternative**: open every pinch by a nanometre before the
+reduction and run 22's check unchanged. The probe did that and it works,
+but it moves vertices by hand (so the area is no longer the traced area
+bit for bit), the size of a safe nudge depends on the coordinates' magnitude
+(1 nm is about 70 units in the last place at 10⁵ m), and the output then
+holds vertex pairs a few nanometres apart that the noder must merge.
+
+### 2.5 Into the mesh
+
+A new command, like increment 22's `rasputin catchment`:
+
+```
+rasputin water --source mapbiomas-c11 [--year 2025] --domain D [--domain-crs ...] \
+               --out-crs C [--features RIVERS ...] [--water-tolerance 60] \
+               [--water-min-area-factor 4] --out water.geojson
+rasputin mesh --dem anadem-v1 --domain D --out-crs C --tolerance T \
+              --features water.geojson --features-map mapbiomas-water \
+              --land-cover mapbiomas-c11 [--land-cover-year 2025] --out basin.vtk
+```
+
+- `water` writes a GeoJSON `FeatureCollection` in the mesh's CRS (with its
+  `crs` member, as `catchment` writes), one feature per water body: a
+  `MultiPolygon` (a body whose reduced ring still touches itself at a pinch
+  is split there into parts that touch at a point, which is valid), with
+  properties `code` 33, `year`, the source and its credit, the traced and
+  reduced vertex counts, and the area in m². Coordinates at `repr`
+  precision so the area survives the round trip (22's rule).
+- `--features-map mapbiomas-water` is a new class map (16b's `ClassMap`):
+  every feature gets the existing `water` edge property (bit 8 of the
+  vocabulary) and, being a coded map, its polygon and code for 16c's labels
+  (code system "MapBiomas Collection 11 class number"). Nothing else in 16b
+  changes: the rings are linework, clipped to the domain, noded with the
+  other features.
+- Why a separate command and not a flag of `mesh`: the polygons can be
+  looked at and reused (several tolerances of mesh on one set of lakes), the
+  step is tested without meshing, and `mesh` keeps reading features from
+  files only. The cost is one more command in the recipe.
+
+### 2.6 Triangles inside a lake are water
+
+16c's labelling gives every triangle inside a water polygon the code 33
+(components across unconstrained edges, one point-in-polygon test per
+component). In the fractions pass such a triangle is **forced**: written as
+100 % water, its exact areas still entering the ledger (step 2 of 1.4). The
+land cells the reduced outline put inside the lake (within `τ` of the shore)
+and the water cells it left outside are equal in area, because the polygon
+keeps the traced area (filled islands apart, which are land inside by
+definition). Either way the ledger carries what forcing displaces, along the
+shore, so class totals stay exact.
+
+Forcing applies only when the land-cover year equals the water polygons'
+year (the `year` property). With another year (a reservoir that did not yet
+exist in 1985, say), lake triangles get their exact fractions like any
+other, the lake outline stays a constraint, and stderr says so once.
+
+## 3. Getting MapBiomas
+
+### 3.1 The catalogue entry
+
+`rasputin fetch` (23a-2) copies what a mesh will read into the cache, and
+the mesh never touches the network. MapBiomas fits it with four additions
+to the catalogue's data model (`sources.py`, `RemoteSource`), none to the
+download logic:
+
+| field | ANADEM, GLO-30 today | MapBiomas |
+|---|---|---|
+| `kind` | `one-cog`, `cog-tiles` | `one-cog-per-year` (new): `url_template` with `{year}` |
+| `years` (new) | none | 1985 to 2025; the default is the last |
+| `values` (new) | `heights` | `classes`: `--dem` refuses it, `--land-cover` and `water --source` refuse a `heights` source |
+| empty tiles (new) | refused when read (23a-1) | read as 0, no data |
+| `crs`, `nodata` | as now | EPSG:4326, 0 |
+
+```
+mapbiomas-c11
+  url_template  https://storage.googleapis.com/mapbiomas-public/initiatives/brasil/collection11/
+                lulc/coverage/brazil_coverage/brazil_coverage-col11_{year}.tif
+  object id     brazil_coverage-col11_{year}           (one per year in the cache)
+  credit        MapBiomas Project - Collection 11 of the Annual Series of Land Use and Land
+                Cover Maps of Brazil, accessed on {date} through the link: {url}
+  licence_note  question 2 (CC BY or CC BY-SA 4.0)
+  cite          Souza et al. (2020), Reconstructing Three Decades of Land Use and Land Cover
+                Changes in Brazilian Biomes with Landsat Archive and Earth Engine.
+                Remote Sensing 12(17), 2735. https://doi.org/10.3390/rs12172735
+```
+
+The credit format is MapBiomas's own ("MapBiomas Project- Collection
+[version] of the Annual Series of Land Use and Land Cover Maps of Brazil,
+accessed on [year] through the link: [LINK]", terms of use page,
+`sites.mapbiomas.org/conheca-o-mapbiomas/termos-de-uso/`, read 2026-10-03;
+the factsheet asks for the date, so the date of the fetch, from the cache's
+manifest, is filled in). The date `{date}` is the day the object's header
+was first fetched; the manifest gains that date per object.
+
+`rasputin fetch mapbiomas-c11 [--year 2025] --domain D --out-crs C` plans
+the tiles meeting the domain's box, as for ANADEM. Sizes per year, measured:
+177 MB for the basin's box, 5.1 MB for the Velhas piece's. The header is
+complete within 8 MiB (23a-2's doubling rule finds it). Decoding needs
+`imagecodecs` (LZW with the horizontal predictor), the existing `codecs`
+extra; without it, 11's refusal names the extra.
+
+**Reading.** A class window is a `uint8` array with its corner, cell size
+and shape (`PixelIsArea`: the tie point is a cell's corner, not a node as
+for the DEMs), read through 23a-1's block cache (`decode_window`), with
+empty tiles as zeros. A new frozen model, `ClassWindow`, beside the DEM's
+`RasterMeta`; the DEM path is untouched.
+
+### 3.2 Which collection
+
+| collection | released | years | classes | notes |
+|---|---|---|---|---|
+| 11 | 12 Aug 2026 (factsheet); files dated 18-19 Aug 2026 | 1985-2025 | 33 mapped (four new: flooded savanna, salt marsh, herbaceous and shrub formation, wind farm, all marked beta) | the latest; on the bucket as `collection11/` |
+| 10.1 | 9 Feb 2026 | 1985-2024 | as 10 | fixed river, lake and ocean in the Amazon for 1985-2003, and no-data pixels in the Amazon, Pampa and the coast |
+| 10 | before 10.1 (date not checked) | 1985-2024 | | on the bucket as `collection_10/` (`brazil_coverage_2024.tif` answered 200) |
+
+**Recommended: Collection 11, year 2025.** It is the latest, it has the
+latest year (Ola's default), and its new classes are small in area (0.84
+Mha together over Brazil, against 66.5 Mha of agriculture; wind farms and
+the herbaceous and shrub formation may occur in the basin, which was not
+checked). An 11.1 may follow as 10.1 did; the
+catalogue key carries the collection (`mapbiomas-c11`), so a later key is an
+added entry and an old mesh's record still names what it used.
+
+## 4. Pieces and seams
+
+The basin is meshed in pieces when it does not fit the memory budget
+(increment 23): the domain is cut along lattice lines, each piece is meshed
+on its own with its seams frozen, and the stitched file has the seams
+removed. How land cover fits:
+
+- **Water bodies are input geometry**, computed once for the whole domain
+  before it is cut (the "global vector step" of 23, which never reads the
+  DEM). A lake crossing a cut is two pieces of linework like any feature;
+  where a cut meets a lake outline the noder makes a vertex, which 23 keeps
+  ("a corner where a seam meets ... a feature is an input-constraint vertex
+  and is kept"). Nothing new.
+- **Fractions and the ledger are a function of the finished mesh**: one
+  Hilbert curve over all its triangles, one ledger. In a cut run they are
+  computed on the stitched mesh, after the seam cleanup, never per piece.
+  So the result does not depend on how many pieces there were or where the
+  cuts ran, and there is no ledger to hand from piece to piece. Piece files
+  (`--no-stitch`) carry no land cover (question 9). A piece-by-piece ledger
+  was considered and rejected: its triangles near seams change in the
+  cleanup, so it would have to be redone there, and its result would depend
+  on the cut.
+- **The cost** is one pass over the stitched mesh, which must be read back
+  (the stitcher writes it streaming): about 11 GB at 1 m for the whole
+  basin (section 5), under the 16 GB budget, and serial in its ledger part.
+  This waits for the stitcher (23d, 23g); until then every mesh is one
+  piece, and the land-cover pass runs inside `mesh` on the mesh in memory.
+- **Forced water** uses 16c's labels on the same mesh, so it too is
+  computed once, on the stitched mesh.
+
+## 5. Cost, at 1 to 50 m
+
+Triangle counts for the whole basin: at 2, 5, 10 and 20 m the sums of
+`@perf`'s nine ANADEM level-3 meshes (633,624 km²,
+`docs/benchmarks/2026-10-02/basin-level3/README.md`); at 1 and 50 m, which
+were not meshed on ANADEM, the GLO-30 estimate from 200 random boxes
+(635,194.5 km², `docs/benchmarks/2026-10-01/basin-piece/README.md`; a surface
+model, so high at fine tolerances). A 30 m cell is about 864 m².
+
+| tolerance | basin triangles | mean triangle | in 30 m cells | classes per triangle written | land cover in the file, `.vtk` / `.ply` | memory of the pass, one piece | ledger, serial |
+|---:|---:|---:|---:|---:|---:|---:|---:|
+| 1 m | 237 M (GLO-30) | 0.27 ha | 3.1 | ~1.1 | 3.2 / 2.7 GB | ~6 GB | ~50 s |
+| 2 m | 120.2 M | 0.53 ha | 6.1 | 1.14 | 1.6 / 1.4 GB | ~3 GB | ~25 s |
+| 5 m | 34.6 M | 1.8 ha | 21 | 1.36 | 0.51 / 0.44 GB | 0.9 GB | ~7 s |
+| 10 m | 13.1 M | 4.8 ha | 56 | 1.50 | 0.20 / 0.18 GB | 0.3 GB | ~3 s |
+| 20 m | 5.0 M | 12.7 ha | 147 | 1.65 | 81 / 71 MB | 0.12 GB | ~1 s |
+| 50 m | 1.0 M (GLO-30) | 64 ha | 735 | ~1.8 | 17 / 15 MB | 25 MB | < 1 s |
+
+How each column is made:
+
+- **Mean triangle**: the area over the triangles. At 1 m it is 3.1 cells
+  over the basin; the research note's 1.2 cells is the Velhas piece's, which
+  is steeper than the basin (2.4 times the basin's density at 1 m, per the
+  basin-piece README). Either way, at 1 m a triangle holds a few cells, and
+  the cutoff there mostly removes the slivers of cells cut by its edges.
+- **Classes per triangle written**: the Corrente's, with the 5 % cutoff and
+  the 1 ha floor (section "What was measured"); 1 and 50 m extrapolated from
+  the trend (2 m: 1.14; 20 m: 1.65). One sub-basin only: steeper and more
+  mixed land will have more.
+- **File**: binary. `.vtk`: 4 bytes of offset, 5 per entry (class and
+  float fraction) and 4 for `land_cover_code` per triangle; `.ply`: 2 bytes
+  of list counts, 5 per entry and 4 for the code. Today's binary mesh is
+  about 36 bytes per triangle (unit 761 at 2 m: 977 MB for 27.1 M
+  triangles), so land cover adds about a third. Text files are larger
+  (not measured).
+- **Memory of the pass**, over what meshing already holds: the curve order
+  (a 64-bit key and a 32-bit index per triangle, 12 bytes) and the output
+  (as in the file), about 25 bytes per triangle, against the 310 bytes per
+  triangle meshing takes (the basin-piece fit), so under 10 %. The exact
+  areas live only per chunk. **For a cut run**, where the pass reads the
+  stitched mesh back, add the mesh itself (vertex x and y, 16 bytes per
+  vertex, about 8 per triangle; triangles 12): about 45 bytes per triangle,
+  **about 11 GB at 1 m for the whole basin**, under the 16 GB budget.
+- **Ledger**: serial, at the 0.2 µs per triangle a sparse implementation
+  should reach (the probe's dense one did 1.0 µs). An estimate for `@perf`
+  to replace.
+- **The exact overlap** is not in the table: it is parallel, and the probe's
+  cost (0.15 µs per covered cell plus 2.2 µs per triangle, one thread) gives,
+  for the basin's roughly 735 M covered cells and 237 M triangles at 1 m,
+  about 10 minutes on one thread in probe code, so a minute or two on 8
+  cores before the full-cell spans make it cheaper. Moving 119 M vertices
+  through pyproj is the other cost not measured here.
+- **Fetch**: per year, 72 MB for the tiles meeting the basin's outline and
+  177 MB for its box, against ANADEM's 1.71 GiB for the blocks meeting the
+  outline.
+
+**Water bodies add constraint vertices.** Scaled from the three measured
+units, the basin has about 11,600 bodies of at least 1.44 ha and about
+105,000 reduced vertices at 60 m (Sobradinho alone 12,655). Each vertex of a
+constraint forces a few triangles where the mesh would otherwise be coarse,
+so the added triangles are a few times 105,000: perhaps 5 to 10 % at 20 m
+(5.0 M triangles), well under 1 % at 1 m (237 M). 16b's 3.6 times on CORINE
+came from every class border; water alone is a small part of that. An
+estimate; the acceptance measures it.
+
+## 6. The blueprint
+
+```
+rasputin fetch mapbiomas-c11 [--year Y] --domain D --out-crs C           (26a)
+   catalogue entry -> 23a-2's planner and downloader, unchanged     -> cache
+
+rasputin water --source mapbiomas-c11 [--year Y] --domain D --out-crs C [--features F] ...  (26d)
+   water.py (Python, pure apart from the cache read)
+     ClassWindow strips from the cache (io/repository, 23a-1)          ── uint8 rows
+     tracer = _core.WaterTracer(water classes, cell_area_by_row, min_area)
+     tracer.push(strip) for each strip; tracer.rings() ──────────────── C++, raster_vector/water.hpp
+        -> rings of integer corners, body ids, areas                       (labels by runs, cracks)
+     corners -> lon/lat -> mesh CRS (crs.reprojector), minus one origin
+     fixed lines = domain outline and holes + lines of F, same CRS
+     _core.reduce_rings(rings, fixed, tolerance) ─────────────────────── C++, vector_simplify/area_collapse.hpp
+     MultiPolygons (split at closed pinches) -> water.geojson, with code, year, credit
+
+rasputin mesh ... --features water.geojson --features-map mapbiomas-water
+                  --land-cover mapbiomas-c11 [--land-cover-year Y] [--land-cover-cutoff 5]
+                  [--land-cover-floor 1]                                   (26b, 26c)
+   the mesh as today (water rings are 16b linework; 16c labels lake triangles 33)
+   land_cover.py (Python driver)
+     vertices -> lon/lat -> index space of the class grid (crs.reprojector)
+     _core.hilbert_order(centroids) ─────────────────────────────────── C++, land_cover/ledger.hpp
+     for each chunk of 2^18 triangles along the curve:
+        ClassWindow of the chunk's box, from the cache
+        _core.class_areas(corners, window, row_area) ───────────────── C++, land_cover/overlap.hpp (parallel)
+        ledger.push(areas, planar areas, forced mask) ───────────────── C++, serial
+     -> offsets, classes, fractions, land_cover_code, the ledger report
+   writers: .vtk FieldData + cell array, .ply face lists; run record entries
+================================ _core boundary ================================
+C++ sees: integer class rows and a cell area per row; triangle corners in the
+class grid's index space; planar areas; rings and fixed lines in metres in a
+local frame. No CRS, no path, no year, no class names.
+```
+
+**Boundaries.** `land_cover.py` and `water.py` import NumPy, shapely (water
+output only) and first-party I/O through `io/repository.py`, never a path
+below the CLI; the C++ headers are pure and know no Python. The class
+numbers' meaning (33 is water) lives in the catalogue entry and the class
+map, in Python; C++'s forced mask and water class are numbers it is handed.
+Every step is a function of its inputs, testable alone: the overlap on a
+three-triangle mesh and a 4 × 4 class array; the ledger on hand-made class
+areas; the tracing on a 6 × 6 mask; the reduction on hand-made rings.
+**Async**: `land_cover.assign` and `water.extract` are blocking with the C++
+calls releasing the GIL; an API worker runs them in `asyncio.to_thread`, as
+it runs `catchment.delineate`.
+
+## 7. Invariants
+
+Fractions (26b, 26c):
+
+- **F1 (one per triangle).** Every triangle's fractions sum to 1 within
+  1e-6 (float32 in the file), with classes ascending and none repeated.
+- **F2 (exact areas).** Before the cutoff: for each class, the areas summed
+  over the triangles equal the class's area inside the mesh's footprint to
+  1e-9 relative; checked against an independent clip (shapely's
+  intersection of each triangle with each cell box, on small fixtures), and
+  per cell: the pieces of a cell over all triangles sum to the cell's area
+  covered, to 1e-12 of a cell.
+- **F3 (the threshold).** No written entry is small (below `c` of its
+  triangle and below the floor) unless it is the triangle's only class; no
+  class is written where the raster has none of it in that triangle, except
+  water in a forced triangle; a forced triangle is exactly `{33: 1}`.
+- **F4 (the stretch identity).** For every prefix of the curve and every
+  class, written minus exact equals minus the ledger after the prefix, to
+  1e-9 of the prefix's area. The test pushes chunks of one triangle and
+  reads the ledger after each.
+- **F5 (order).** Permuting the triangle rows, or the vertex numbering,
+  gives the same fractions per triangle; so does any thread count.
+- **F6 (no cutoff).** `--land-cover-cutoff 0` writes the exact fractions and
+  leaves the ledger at zero.
+
+Water (26d):
+
+- **W1 (bodies).** Every 8-connected body of at least the minimum area is
+  traced, none smaller; two cells touching at a corner are one body; a
+  hole below the minimum is filled.
+- **W2 (area).** Each reduced ring's area equals its traced ring's to 1e-9
+  relative, measured with one cross product per edge summed exactly
+  (`math.fsum`; the two-dot-product shoelace is not precise enough, see
+  "What was measured"); each body's area inside the domain likewise.
+- **W3 (topology).** Each ring weakly simple (shapely `is_valid` after
+  splitting at pinches, and a brute-force pairwise test with exact
+  orientation on small cases); no two rings cross; the number of crossings
+  of each ring with each fixed line is the traced ring's.
+- **W4 (sides).** Every vertex of every fixed line and of every other ring
+  has the same winding number with respect to each ring before and after.
+- **W5 (tolerance at vertices)** as 22.
+- **W6 (determinism)** as 22: the same bits for the same input.
+
+## 8. Degeneracy policy
+
+| case | outcome |
+|---|---|
+| a triangle vertex exactly on a grid line or corner | zero-area pieces skipped; the canonical crossing makes both neighbours agree |
+| a triangle wholly inside one cell | one entry, that class, fraction 1 |
+| a triangle partly outside the class window | refusal `OutsideWindow` (the window is built to contain every vertex, so this is a defect) |
+| class 0 (no data) inside the mesh | a class like any other, reported in `--stats` |
+| a triangle of zero planar area | none in a valid mesh; refused if met |
+| every class of a triangle small (more than 1/c classes, all under the floor) | the largest kept alone (step 5 keeps one) |
+| the ledger's largest entry above 10 times the floor | written, with a warning on stderr |
+| two water cells touching at a corner | one body; the ring visits the corner twice (a pinch) |
+| a hole touching its outer ring at a corner | both rings visit it; the pinch rule covers rings of one body |
+| a body reaching the window's edge | closed along the edge, outside the domain; area inside the domain exact |
+| a ring passing through a fixed line's vertex | an anchor there, as for a crossing |
+| a ring running along a fixed line | anchors at both ends, the vertices between frozen |
+| a fixed line touching a ring without crossing | an anchor, so the touch is kept and not turned into a crossing |
+| two fixed lines crossing on a ring | one anchor, at the shared point |
+| a reduced ring that would fall below four vertices | stops at its floor (22) |
+| the land-cover year differs from the water's | no forcing; the outlines stay; one stderr line |
+| no `--land-cover` | no arrays, no fields, as today |
+| `--land-cover` with a CORINE map in the same mesh | refused (16e's rule: one code system per mesh) |
+
+## 9. The PR split
+
+Counted in `CLAUDE.md` §2's unit. Each estimate with the worst case at
++39 % (increment 10's overrun), as 23 does; every PR stays under 700 there.
+
+| PR | what | estimate | +39 % |
+|---|---|---:|---:|
+| **26a** | **MapBiomas in the catalogue, and class windows** | | |
+| | `sources.py`: `one-cog-per-year`, `years`, `values`, empty tiles as no data, the entry | 35 | |
+| | `fetch/plan.py`, `fetch/run.py`: the year, the object id per year, the fetch date per object | 30 | |
+| | `io/models.py`, `io/cog.py`: `ClassWindow`, `uint8` blocks, empty tiles as zeros | 45 | |
+| | `io/repository.py`: a class window over a box, in strips | 40 | |
+| | `cli.py`: `fetch --year`, refusals by `values` | 20 | |
+| | **26a total** | **170** | **236** |
+| **26b** | **Exact fractions per triangle** (no cutoff) | | |
+| | `land_cover/overlap.hpp`: strips, full-cell spans, canonical crossings, chunks in parallel | 150 | |
+| | `bindings/core.cpp`, `_core.pyi`: `class_areas`, the `uint8` view | 55 | |
+| | `land_cover.py`: index-space corners, row areas, chunks, dominant class | 100 | |
+| | `io/vtk_legacy.py`, `io/ply.py`: FieldData arrays, `float`, face lists | 60 | |
+| | `cli.py`: `--land-cover`, `--land-cover-year`, record entries | 55 | |
+| | **26b total** | **420** | **584** |
+| **26c** | **The cutoff and the ledger** | | |
+| | `land_cover/ledger.hpp`: Hilbert keys and order, the quantiser, `Ledger::push`, the report | 170 | |
+| | `bindings/core.cpp`, `_core.pyi` | 45 | |
+| | `land_cover.py`: curve order, forced water from 16c's labels, the year check | 60 | |
+| | `cli.py`, `run_record.py`: cutoff and floor options, the ledger report, the warning | 45 | |
+| | **26c total** | **320** | **445** |
+| **26d-1** | **Water bodies, traced** | | |
+| | `raster_vector/water.hpp`: labels by runs, areas, cracks, pinches, holes filled | 230 | |
+| | `bindings/core.cpp`, `_core.pyi` | 45 | |
+| | `water.py`: strips from the cache, corners to metres, polygons | 80 | |
+| | `cli.py`: `rasputin water`, writing the traced polygons (no reduction yet) | 70 | |
+| | **26d-1 total** | **425** | **591** |
+| **26d-2** | **Water bodies, reduced** | | |
+| | `area_collapse.hpp`: many rings, one heap and grid, the pinch rule, anchors, fixed lines, swept region | 230 | |
+| | `bindings/core.cpp`, `_core.pyi`: `reduce_rings` | 40 | |
+| | `water.py`: fixed lines from the domain and `--features`, split at pinches | 50 | |
+| | `feature_input.py`: the `mapbiomas-water` class map | 15 | |
+| | `cli.py`: `--water-tolerance`, `--water-min-area-factor` | 20 | |
+| | **26d-2 total** | **355** | **493** |
+| **26e** | **Cut runs, and land cover for another year** (after 23g) | | |
+| | read back our own binary `.vtk` and `.ply` (vertices, triangles, labels) | 120 | |
+| | the pass on the stitched mesh; `rasputin land-cover MESH --year Y` rewriting it | 90 | |
+| | **26e total** | **210** | **292** |
+
+Order: 26a, then 26b and 26c (fractions on today's one-piece meshes: the
+level-3 units and the Velhas piece already exist and can be given land cover
+without remeshing once 26e's reader exists, or remeshed), then 26d-1 and
+26d-2, then 26e when the stitcher exists. 26b and 26d-1 can be built in
+parallel once 26a is in. Modules to watch: `area_collapse.hpp` grows from
+341 lines to about 570, past which the ring bookkeeping should move to its
+own header; `water.hpp` at 230.
+
+**Acceptance class** (`docs/increments/README.md`, "Acceptance"): no PR
+touches `include/terrain/refinement/` or `include/terrain/mesh/` or what
+drives them, so the 1 m benchmark and thread sweep are not required by the
+rule. The water polygons change what is meshed, so 26d-2's acceptance
+measures the mesh with and without them anyway (below).
+
+**Mutation testing**: the invariant-critical suites are the ledger's (F3,
+F4: a wrong sign or a missed class in the ledger update conserves nothing
+and still produces plausible fractions) and the reduction's pinch and
+anchor rules (W2-W4). Those two suites get a mutation round; the rest not.
+
+## 10. Tests `@tester` can write red
+
+Lean (Ola's rule): fixtures by hand, no throwaway implementations, the
+mutation round only where named above.
+
+**26a** (Python): the catalogue entry's fields and URL for 2025 and 1985; a
+year outside the range refused; `--dem mapbiomas-c11` refused and a heights
+source refused as land cover; planning the tiles for a box against a
+synthetic tiled `uint8` GeoTIFF on the local test server (23a-2's fixture
+pattern), with some tiles empty; empty tiles read as zeros; `PixelIsArea`
+corner arithmetic (a cell's corner, not its centre); the credit with the
+fetch date; LZW with predictor through `imagecodecs`, skipped without it.
+
+**26b** (C++ Catch2 and Python): the overlap on hand cases (a triangle in one
+cell; a unit right triangle on a 2 × 2 grid, areas 0.5 per cell; a triangle
+with a vertex on a grid corner; a long sliver along a row); F2 against
+shapely on random triangulations of a 20 × 20 class grid (the oracle uses
+GEOS's clipping, not ours: the producer's predicate, not its records);
+per-cell sums; parallel chunks equal one chunk bit for bit; the `.vtk`
+FieldData arrays and the `.ply` lists read back (VTK reader, as 16c's test);
+`land_cover_code` 0 on line cells.
+
+**26c**: F3, F4 and F6 on hand-made class areas (a triangle of 95 % corn and
+5 % soybean followed by one with soybean present: the second receives the
+5 %; a class below the cutoff everywhere and present everywhere comes out
+whole; a large triangle with a 3 km² minority above the floor keeps it); the
+Hilbert order on a known 4 × 4 grid of centroids; F5 by permutation; forced
+triangles; the year mismatch line.
+
+**26d-1**: masks by hand: a single cell (four corners); two cells touching at
+a corner (one body, one ring, the corner twice); a ring with a hole; a hole
+below the minimum filled; a body cut by the window edge; runs across a
+strip boundary; areas by row; W1.
+
+**26d-2**: the research note's diagonal strip, pinches closed, reduces (22's
+check refuses it today: red by construction); a lake crossed by a river
+line keeps both crossings and gains none (W3), the anchors fixed; a lake on
+the domain outline keeps its inside area (W2); a small island of another
+ring inside a collapse's loop refuses it (W4); Sobradinho-sized rings from
+`water_probe.py`'s output are not fixtures (too large), a 2,000-vertex
+traced ring is.
+
+## 11. `@perf`'s acceptance: a basin piece
+
+On AC power, recorded, against the existing meshes where possible.
+
+1. **Fractions, without remeshing** (26b, 26c): the Rio Corrente (unit 764)
+   at 20, 10, 5 and 2 m, the Velhas piece at 10 and 5 m, and unit 769 at
+   10 m. Report per mesh: class areas exact against MapBiomas's own count
+   (the areas of the cells whose centres fall inside the outline, an
+   independent and coarser reference, which may differ by up to the area
+   of the cells the outline crosses); written against exact per
+   class, with crops listed; the misplaced share on 1, 5 and 25 km squares;
+   the largest ledger and the end remainder; classes per triangle; time of
+   the overlap (by threads 1, 2, 4, 8) and of the ledger; peak memory.
+   **Pass:** every class within 0.1 % or 1 ha of exact; the largest ledger
+   within 10 times the floor; the 5 km 95th percentile within 0.5 %;
+   numbers close to this design's probe on the same mesh and year (the
+   probe kept ellipsoidal, not planar, areas in its ledger), or the
+   difference explained.
+2. **Water** (26d): `rasputin water` on units 769 and 761: bodies, traced and
+   reduced vertices at 30, 60 and 120 m against "What was measured", the
+   area check per body, validity, time and memory; the same on the whole
+   basin's outline for the counts (the fetch is 177 MB).
+3. **The mesh with water** (26d-2): unit 769 at 20 and 10 m, and the Velhas
+   piece at 10 m, meshed with and without `water.geojson`: triangles, refine
+   time, peak memory, worst angle. This is the number section 5 only
+   estimates.
+4. Evidence under `docs/benchmarks/<date>/26-land-cover/`, as `bench.py`'s
+   runs are kept.
+
+## 12. Questions for Ola
+
+Each with the recommendation, which is the default if Ola does not rule.
+
+1. **Which MapBiomas collection?** Collection 11 (August 2026, 1985-2025),
+   10.1 (February 2026, 1985-2024) or 10. *Recommended: 11, year 2025 by
+   default*, as the latest with the latest year; the key names the
+   collection, so a later one is an added entry.
+2. **The licence of meshes carrying MapBiomas fractions.** The Collection 11
+   factsheet says "licença Creative Commons CC-BY"; MapBiomas's terms of use
+   page says "CC-BY-SA" (Attribution-ShareAlike 4.0). Under ShareAlike, a
+   mesh file with fractions is an adaptation and must be shared under the
+   same licence; rasputin's code (MIT) is not affected. *Recommended: write
+   CC BY-SA 4.0 in the licence note, the stricter reading, until MapBiomas
+   says otherwise*; asking them is Ola's call, as licensing is.
+3. **The cutoff.** *Recommended: an entry is dropped only when it is under
+   5 % of its triangle and under 1 ha*, both options. Measured: a relative
+   cutoff alone makes the ledger carry hundreds of hectares across the map.
+   The floor could be 0.5 ha, MapBiomas's own minimum mapping unit; 1 ha
+   measured better than 10 ha and is the proposal.
+4. **Where may the ledger put a class?** Three rules were measured: only
+   into triangles already holding it above the cutoff (Ola's first
+   proposal), into triangles holding any of it ("present"), or anywhere
+   (halftoning's rule). *Recommended: "present"*: soybean is only ever
+   written where the raster has some soybean. With the 1 ha floor, Ola's
+   first proposal left a larger ledger (11.5 ha against 4.4 ha at 20 m, 6.7
+   against 4.7 ha at 2 m) and more misplaced area on 5 km squares (0.30 %
+   against 0.15 % at 20 m, 0.19 against 0.14 % at 2 m), and it lets a crop
+   thinly scattered below the cutoff everywhere vanish; "anywhere" is a little better locally but writes 18 %
+   more entries and puts classes where none was mapped.
+5. **Which regions must be right?** *Recommended: the guarantee as designed
+   (any stretch of the Hilbert curve, so any square of its grid, within
+   twice the largest ledger entry), and the acceptance measured on 1, 5 and
+   25 km squares*, until DEM-derived sub-catchments exist; then on those.
+6. **Is aquaculture (class 31) water for the constraints?** *Recommended:
+   no*: only class 33; fish ponds stay fractions.
+7. **The water tolerance and minimum area.** *Recommended: 60 m (twice the
+   cell, as the catchment outline) and four times its square, 1.44 ha*. On
+   the measured units that keeps 6.5 to 9.5 % of the bodies, holding 63 to
+   98 % of the water; the basin would have about 11,600 bodies and 105,000
+   constraint vertices.
+8. **Are triangles inside a lake 100 % water?** *Recommended: yes, when the
+   land-cover year is the water's year*; the land inside the outline goes to
+   the shore through the ledger.
+9. **Piece files in a cut run.** *Recommended: no land cover in piece files,
+   only in the stitched file*, so the result does not depend on the cut.
+10. **`rasputin water` as its own command**, writing a GeoJSON that `mesh`
+    reads as features. *Recommended: yes*, like `catchment`; the polygons can
+    be looked at and reused.
+11. **When.** The basin order puts "the basin's own inputs" after the basin
+    run. 26a-26c touch no refinement code and serve meshes that exist now
+    (the nine level-3 units). *Recommended: 26a, 26b and 26c after 15f-3 and
+    25, before the remaining basin PRs (23b on); 26d after them; 26e with
+    23g.*
+
+## Not in scope
+
+- A natural-colour palette for MapBiomas classes (`rasputin palette
+  mapbiomas`); `land_cover_code` is ready for one.
+- Rivers from the DEM, and sub-catchments (the other half of "the basin's
+  own inputs").
+- Class polygons for classes other than water (the research note's full
+  coverage simplification), which the hybrid ruling does not need.
+- A class map coarsening the legend (Ola: "a class map may coarsen it");
+  the fractions keep the full legend, and coarsening them is a sum a reader
+  can do.
+- Several years in one mesh file.
+- A cap on classes per triangle (measured harmful).
 

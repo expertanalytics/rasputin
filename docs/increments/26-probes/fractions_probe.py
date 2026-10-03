@@ -269,7 +269,8 @@ def main() -> None:
     report["cap"] = args.cap
     for c in (0.05,) if args.chosen else (0.01, 0.05, 0.10):
         for m in (1e4,) if args.chosen else (float("inf"), 1e4, 1e5):
-            for rule in ("renorm", "present") if args.chosen else ("renorm", "present", "any"):
+            rules = ("renorm", "present") if args.chosen else ("renorm", "kept", "present", "any")
+            for rule in rules:
                 res = subprocess.run(
                     [helper, "ledger", str(run), str(c), str(m), rule],
                     check=True,
