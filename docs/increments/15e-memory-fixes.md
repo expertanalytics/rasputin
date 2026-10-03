@@ -375,6 +375,25 @@ pin it if `_Once` gains callers.
 Merge still needs `@perf`'s acceptance run, a push with Ola's yes, and a
 green CI.
 
+### Pre-push check (after `@perf`, f288504)
+
+- Citations: every `check_citations.py` at-risk entry outside this file was
+  re-read as a quotation against `390b516` and this branch. None is moved by
+  this branch. The `cli.py` hunks start at line 49 (a one-line replacement,
+  no shift) and line 107; every cited line at or below 106 reads the same on
+  both trees. Already stale on master and not this PR's: the `cli.py:NN`
+  citations in `16e-multi-features.md`, `test_features.py` (`:39,42`, `:79`,
+  `:84`), `test_viz_svg.py:665` and `test_cli_mesh_multi_features.py:17`.
+  `05b-noder-driver.md:1749` and `15-dem-mosaic.md:616` hold.
+- f288504 holds: the status line, the ROADMAP row and "Acceptance run" match
+  `docs/benchmarks/2026-10-03/15e-acceptance.md`, whose figures match
+  `15e-acceptance/tables.md`, `runs/probe_store_isolated_*.out`, the `pmset`
+  records (AC, charged) and `bench.py`'s ACCEPTED verdicts. Its claim that
+  `7810cf8` and `390b516` differ only outside the code holds
+  (`git diff --stat 7810cf8 390b516 -- include src src_python bindings
+  tools/bench.py CMakeLists.txt pyproject.toml` is empty). The acceptance run
+  is done. Remaining: the push, with Ola's yes, and a green CI.
+
 ## Acceptance run
 
 `@perf`, 2026-10-03, AC power, branch at 78df916 against its base 7810cf8,
