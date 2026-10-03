@@ -81,7 +81,7 @@ source nodes do matter, and they are covered because phase 2 and the strip
 share one loop (D1). On the projected path (Norway, any DEM meshed directly) it would turn
 "every DEM node within tolerance" false. So the strip run there also
 **rescans every triangle it writes against the DEM's nodes**, with refine's own
-`scan` (`scan`, `include/terrain/refinement/scan.hpp:122`), and inserts nodes as refine
+`scan` (`scan`, `include/terrain/refinement/scan.hpp:123`), and inserts nodes as refine
 would (D4, step 3). Run "after refine" as written, the strip would trade one
 guarantee for another.
 
@@ -352,7 +352,7 @@ programming error. Two distinct indices at one position give no points:
 there is no crossing, and the one midpoint candidate sits on both ends, so
 step 6 drops it.
 7. **Heights.** Every point's z is `vertex_z(dem, point)`
-   (`vertex_z`, `include/terrain/refinement/scan.hpp:79`), the function refine uses for an
+   (`vertex_z`, `include/terrain/refinement/scan.hpp:80`), the function refine uses for an
    off-node vertex. At a node it is `value_at`. For a crossing, the cell's
    fraction across the line is exactly 0, so the expression is exactly
    `z₀ (1 − f) + z₁ f` between the two nodes of the cell side, which is Q14's
