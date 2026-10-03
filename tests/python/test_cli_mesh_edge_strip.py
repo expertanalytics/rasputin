@@ -118,7 +118,7 @@ class LineCheck:
     max_error: float
     refused: int
     refused_max_error: float
-    dem_nodes_inserted: int | None  # refine_strip's; the reprojected path may omit it
+    dem_nodes_inserted: int | None  # refine_strip's; absent on the reprojected path (P2)
     duplicate: int
 
 
@@ -417,7 +417,7 @@ class TestReprojectedPath:
         assert found.checked > 0 and found.inserted > 0, found
         assert 0.0 <= found.max_error <= TOLERANCE
         assert found.refused == 0
-        assert found.dem_nodes_inserted in (None, 0), "refine_strip's count, not this path's"
+        assert found.dem_nodes_inserted is None, "refine_strip's count: absent on this path"
         assert stats_row(report, "resampled_grid").startswith("30 m square grid in")
         assert int(stats_row(report, "dem_nodes_checked")) > 1000
         stated = float(file_field(vtk, "max_error_m"))
