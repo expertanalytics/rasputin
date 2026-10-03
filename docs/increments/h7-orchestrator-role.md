@@ -100,3 +100,16 @@ Estimate: 0 production lines.
 1. **Principle D3** (`docs/PRINCIPLES.md`), "a compromise between two
    correct principles goes to `@orchestrator`": ruled by Ola, 2026-10-03.
    D3 stays unchanged; @orchestrator proposes, Ola rules.
+
+## Review
+
+**Round 1**, @reviewer, on 0d15560: **CHANGES REQUESTED**. Blocking:
+the milestone-update rule was dropped in the move to `CLAUDE.md`; h6's
+test 14 lacked the dispatcher case that §4 claimed; the lessons rule was
+stated in full in three places. Non-blocking: put the @orchestrator schedule
+in the dispatcher rules, once; say that h6's `ROLES` lookup supports an
+exclusion. All five fixed in b6af28e, and D3 marked ruled.
+
+**Round 2**, @reviewer, on b6af28e: **APPROVED**. 0 production lines.
+Remaining non-blocking note: when h6 lands, its persona-file pointer to the
+`ROLES` table replaces the write-limit line in `.claude/agents/orchestrator.md`.
