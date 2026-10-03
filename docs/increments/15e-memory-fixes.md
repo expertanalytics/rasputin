@@ -14,7 +14,7 @@ interim result, then this PR, then 23b-23g. Source: fixes 1-4 of
 loading) and the cache-backed, windowed `SourceWindows` are **not** in scope.
 
 Named 15e because all four fixes sit on 15c-2's reprojected path
-(`--out-crs`); 15d is taken by the edge strip.
+(`--out-crs`); 15d names the window-decoding design that 23a-1 replaced, and the edge strip is 15f.
 
 Evidence labels are the note's: **[m]** measured, with its record; **[d]**
 derived by arithmetic from measured figures; *est.* from the code alone.
