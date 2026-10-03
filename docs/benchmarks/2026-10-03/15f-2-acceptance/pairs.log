@@ -1,0 +1,30 @@
+=== 15f-2-base-29d713b start 2026-10-03T14:35:31Z
+Now drawing from 'AC Power'
+ -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true
+power: ac; evidence: /Users/skavhaug/projects/rasputin/.claude/worktrees/15f-2/docs/benchmarks/2026-10-03/15f-2-base-29d713b; meshes: /private/tmp/claude-501/-Users-skavhaug-projects-rasputin/af318b82-b96d-429e-956c-0296b113f23b/scratchpad/meshes/15f-2-base-29d713b
+REGRESSION: quarter refine_s[t=1] 0.4030 -> 0.4329 (+7.4 %)
+REGRESSION: quarter refine_s[t=2] 0.2612 -> 0.2830 (+8.3 %)
+REGRESSION: tile refine_s[t=1] 0.4545 -> 0.4880 (+7.4 %)
+REGRESSION: tile refine_s[t=2] 0.2978 -> 0.3190 (+7.1 %)
+=== 15f-2-base-29d713b exit 1 2026-10-03T14:36:37Z
+=== 15f-2 start 2026-10-03T14:36:37Z
+Now drawing from 'AC Power'
+ -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true
+power: ac; evidence: /Users/skavhaug/projects/rasputin/.claude/worktrees/15f-2/docs/benchmarks/2026-10-03/15f-2; meshes: /private/tmp/claude-501/-Users-skavhaug-projects-rasputin/af318b82-b96d-429e-956c-0296b113f23b/scratchpad/meshes/15f-2
+ACCEPTED
+=== 15f-2 exit 0 2026-10-03T14:37:41Z
+=== 15f-2-r2 start 2026-10-03T14:37:41Z
+Now drawing from 'AC Power'
+ -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true
+power: ac; evidence: /Users/skavhaug/projects/rasputin/.claude/worktrees/15f-2/docs/benchmarks/2026-10-03/15f-2-r2; meshes: /private/tmp/claude-501/-Users-skavhaug-projects-rasputin/af318b82-b96d-429e-956c-0296b113f23b/scratchpad/meshes/15f-2-r2
+ACCEPTED
+=== 15f-2-r2 exit 0 2026-10-03T14:38:46Z
+=== 15f-2-base-29d713b-r2 start 2026-10-03T14:38:46Z
+Now drawing from 'AC Power'
+ -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true
+power: ac; evidence: /Users/skavhaug/projects/rasputin/.claude/worktrees/15f-2/docs/benchmarks/2026-10-03/15f-2-base-29d713b-r2; meshes: /private/tmp/claude-501/-Users-skavhaug-projects-rasputin/af318b82-b96d-429e-956c-0296b113f23b/scratchpad/meshes/15f-2-base-29d713b-r2
+ACCEPTED
+=== 15f-2-base-29d713b-r2 exit 0 2026-10-03T14:39:51Z
+ALLDONE
+Now drawing from 'AC Power'
+ -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true

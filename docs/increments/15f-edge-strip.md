@@ -11,7 +11,9 @@ ruled under "Settled after 15f-2's red step" (L1-L9). The C++ green step is
 "Settled after 15f-2's green step" (L10-L13), and the sliver cascade and the
 split into three PRs under "Settled after L12 and L13" (L14, L15), and the
 coincidence radius scaled with the lattice (L16). L14 and L16 are green at
-`99e95d7`; `@reviewer`'s round 1 is recorded under "Review". **15f-3** (the
+`99e95d7`; `@reviewer` APPROVED 15f-2 in round 2 ("Review"), and `@perf`
+ACCEPTED it (meshes and quality identical to master, refine within noise;
+`docs/benchmarks/2026-10-03/15f-2-acceptance.md`). **15f-3** (the
 bindings, the Python and the full acceptance) is not started. Choices that would normally go to Ola
 were made as defaults; each is marked *default* where it occurs and listed
 under "Defaults chosen" at the end.
@@ -1476,8 +1478,8 @@ is touched only by L14's defaulted radius.
    grid, is 0 over. Record the strip's time and memory beside the final
    check's.
 
-Evidence under `docs/benchmarks/<date>/15f-2-acceptance/` (the no-change
-run) and `docs/benchmarks/<date>/15f-3-acceptance/` (the rest).
+Evidence under `docs/benchmarks/<date>/15f-2-acceptance.md` and its
+directory (the no-change run) and `docs/benchmarks/<date>/15f-3-acceptance/` (the rest).
 
 ## Which branch to base on
 
