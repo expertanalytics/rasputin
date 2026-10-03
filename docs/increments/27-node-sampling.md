@@ -364,3 +364,7 @@ under `CLAUDE.md` §2. Far under the ceiling.
    `@perf`.
 
 Recommended defaults: 1 and 2 as recommended; 3 noted.
+
+## Review
+
+**Design review, round 1, 2026-10-03.** Commit c277ce1. Verdict: CHANGES REQUESTED. LOC: 0 (design only); ~15 plausible (a `node_at` prototype is 8 lines). The rule, the unchanged `--tolerance` path, the 38,580 / 60,000 and 95 / 300 measurements, Kartverket's 0 off-node samples and the test plan all hold; every 25 test named exists on master. Blocking: (1) merge master; `cli.py:811-812` is now :830; (2) cite `grid_domain.py` 66-67 for the stride expression; (3) the status line and line 219 assume 25 not yet merged; (4) `test_the_no_tolerance_summary_says_on_or_next_to` exists in two files: name both. Not pushed; no CI.
