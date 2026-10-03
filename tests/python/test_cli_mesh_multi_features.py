@@ -14,7 +14,9 @@ Reuses `test_cli_mesh_features.py`'s fixtures and helpers (`bumpy`,
 same way the single-source ones do.
 
 This suite is RED before any production code: `--features` and its paired
-options are single-valued (`Path | None` / `str | None`, `cli.py:637-660`), so
+options are single-valued (`Path | None` / `str | None`: `mesh`'s `features`
+to `features_map` parameters, `src_python/tin_engine/cli.py@cb6f78b:637-660`;
+after 16e they are `list[...]`, `src_python/tin_engine/cli.py@390b516:660-685`), so
 a second `--features` overrides the first rather than adding a source, and
 `_feature_sources` does not exist. The suite fails because the new multi-source
 behaviour is absent, not on an unknown option: Typer accepts a repeated
