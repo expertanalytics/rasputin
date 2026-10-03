@@ -23,6 +23,8 @@ def to_core(tile: DemTile) -> RasterView:
     if tile.array.flags.writeable:
         raise ValueError("to_core needs a read-only array; build the tile through DemTile")
     meta = tile.meta
+    if meta.geographic:  # 15c, J4: no degrees in _core
+        raise ValueError(f"a geographic DEM ({meta.crs}, degrees) cannot enter the core")
     return raster_view(
         tile.array,
         x_min=meta.x_min,

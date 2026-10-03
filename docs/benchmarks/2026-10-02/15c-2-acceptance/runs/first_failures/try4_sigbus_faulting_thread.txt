@@ -1,0 +1,26 @@
+source: ~/Library/Logs/DiagnosticReports/python3.14-2026-10-02-125536.000.ips
+{'codes': '0x0000000000000002, 0x0000007c97bfffe0', 'rawCodes': [2, 535121887200], 'type': 'EXC_BAD_ACCESS', 'signal': 'SIGBUS', 'subtype': 'KERN_PROTECTION_FAILURE at 0x0000007c97bfffe0'}
+libgeos.3.13.1.dylib geos::index::strtree::TemplateSTRtreeImpl<geos::index::chain::MonotoneChain const*, geos::index::strtree::EnvelopeTraits>::build()
+libgeos.3.13.1.dylib geos::noding::MCIndexSegmentSetMutualIntersector::intersectChains()
+libgeos.3.13.1.dylib geos::noding::MCIndexSegmentSetMutualIntersector::process(std::__1::vector<geos::noding::SegmentString const*, std::__1::allocator<geos::noding::SegmentString const*>>*)
+libgeos.3.13.1.dylib geos::noding::FastSegmentSetIntersectionFinder::intersects(std::__1::vector<geos::noding::SegmentString const*, std::__1::allocator<geos::noding::SegmentString const*>>*)
+libgeos.3.13.1.dylib geos::geom::prep::PreparedPolygonIntersects::intersects(geos::geom::Geometry const*)
+libgeos.3.13.1.dylib geos::geom::prep::PreparedPolygon::intersects(geos::geom::Geometry const*) const
+libgeos_c.1.19.2.dylib GEOSPreparedIntersects_r
+lib.cpython-314-darwin.so YY_b_p_func
+_multiarray_umath.cpython-314-darwin.so generic_wrapped_legacy_loop
+_multiarray_umath.cpython-314-darwin.so PyUFunc_GenericFunctionInternal
+_multiarray_umath.cpython-314-darwin.so ufunc_generic_fastcall
+python3.14 _TAIL_CALL_CALL_FUNCTION_EX.llvm.12183046845526178716
+python3.14 _PyFunction_Vectorcall
+python3.14 _PyObject_VectorcallTstate.llvm.14929908539099605203
+python3.14 method_vectorcall.llvm.2057999020126484118
+python3.14 context_run
+python3.14 _TAIL_CALL_CALL_METHOD_DESCRIPTOR_FAST_WITH_KEYWORDS.llvm.12183046845526178716
+python3.14 _PyFunction_Vectorcall
+python3.14 _PyObject_VectorcallTstate.llvm.14929908539099605203
+python3.14 method_vectorcall.llvm.2057999020126484118
+python3.14 thread_run
+python3.14 pythread_wrapper.llvm.8568014177308506035
+libsystem_pthread.dylib _pthread_start
+libsystem_pthread.dylib thread_start

@@ -1,0 +1,120 @@
+## python3.14-2026-10-02-125536.000.ips  EXC_BAD_ACCESS SIGBUS
+   libgeos.3.13.1.dylib geos::index::strtree::TemplateSTRtreeImpl<geos::index::chain::MonotoneChain const*, geos::index::strtree::Enve
+   libgeos.3.13.1.dylib geos::noding::MCIndexSegmentSetMutualIntersector::intersectChains()
+   libgeos.3.13.1.dylib geos::noding::MCIndexSegmentSetMutualIntersector::process(std::__1::vector<geos::noding::SegmentString const*,
+   libgeos.3.13.1.dylib geos::noding::FastSegmentSetIntersectionFinder::intersects(std::__1::vector<geos::noding::SegmentString const*
+   libgeos.3.13.1.dylib geos::geom::prep::PreparedPolygonIntersects::intersects(geos::geom::Geometry const*)
+   libgeos.3.13.1.dylib geos::geom::prep::PreparedPolygon::intersects(geos::geom::Geometry const*) const
+   libgeos_c.1.19.2.dylib GEOSPreparedIntersects_r
+   lib.cpython-314-darwin.so YY_b_p_func
+   _multiarray_umath.cpython-314-darwin.so generic_wrapped_legacy_loop
+   _multiarray_umath.cpython-314-darwin.so PyUFunc_GenericFunctionInternal
+   _multiarray_umath.cpython-314-darwin.so ufunc_generic_fastcall
+   python3.14 _TAIL_CALL_CALL_FUNCTION_EX.llvm.12183046845526178716
+   python3.14 _PyFunction_Vectorcall
+   python3.14 _PyObject_VectorcallTstate.llvm.14929908539099605203
+## python3.14-2026-10-02-130613.000.ips  EXC_BAD_ACCESS SIGSEGV
+   libgeos.3.13.1.dylib geos::index::strtree::TemplateSTRtreeImpl<geos::algorithm::locate::IndexedPointInAreaLocator::SegmentView, geo
+   libgeos.3.13.1.dylib geos::index::strtree::TemplateSTRtreeImpl<geos::algorithm::locate::IndexedPointInAreaLocator::SegmentView, geo
+   libgeos.3.13.1.dylib geos::algorithm::locate::IndexedPointInAreaLocator::locate(geos::geom::CoordinateXY const*)
+   libgeos.3.13.1.dylib geos::geom::prep::LocationNotMatchingFilter::filter_ro(geos::geom::Geometry const*)
+   libgeos.3.13.1.dylib geos::geom::Surface::apply_ro(geos::geom::GeometryComponentFilter*) const
+   libgeos.3.13.1.dylib geos::geom::prep::PreparedPolygonPredicate::isAnyTestComponentInTarget(geos::geom::Geometry const*) const
+   libgeos.3.13.1.dylib geos::geom::prep::PreparedPolygonIntersects::intersects(geos::geom::Geometry const*)
+   libgeos.3.13.1.dylib geos::geom::prep::PreparedPolygon::intersects(geos::geom::Geometry const*) const
+   libgeos_c.1.19.2.dylib GEOSPreparedIntersects_r
+   lib.cpython-314-darwin.so YY_b_p_func
+   _multiarray_umath.cpython-314-darwin.so generic_wrapped_legacy_loop
+   _multiarray_umath.cpython-314-darwin.so PyUFunc_GenericFunctionInternal
+   _multiarray_umath.cpython-314-darwin.so ufunc_generic_fastcall
+   python3.14 _TAIL_CALL_CALL_FUNCTION_EX.llvm.12183046845526178716
+## python3.14-2026-10-02-130620.000.ips  EXC_BAD_ACCESS SIGSEGV
+   libgeos.3.13.1.dylib geos::noding::SegmentIntersectionDetector::processIntersections(geos::noding::SegmentString*, unsigned long, g
+   libgeos.3.13.1.dylib geos::index::chain::MonotoneChain::computeOverlaps(unsigned long, unsigned long, geos::index::chain::MonotoneC
+   libgeos.3.13.1.dylib geos::index::chain::MonotoneChain::computeOverlaps(unsigned long, unsigned long, geos::index::chain::MonotoneC
+   libgeos.3.13.1.dylib geos::index::chain::MonotoneChain::computeOverlaps(unsigned long, unsigned long, geos::index::chain::MonotoneC
+   libgeos.3.13.1.dylib geos::index::chain::MonotoneChain::computeOverlaps(unsigned long, unsigned long, geos::index::chain::MonotoneC
+   libgeos.3.13.1.dylib geos::index::chain::MonotoneChain::computeOverlaps(unsigned long, unsigned long, geos::index::chain::MonotoneC
+   libgeos.3.13.1.dylib geos::index::chain::MonotoneChain::computeOverlaps(unsigned long, unsigned long, geos::index::chain::MonotoneC
+   libgeos.3.13.1.dylib geos::index::chain::MonotoneChain::computeOverlaps(unsigned long, unsigned long, geos::index::chain::MonotoneC
+   libgeos.3.13.1.dylib geos::index::chain::MonotoneChain::computeOverlaps(unsigned long, unsigned long, geos::index::chain::MonotoneC
+   libgeos.3.13.1.dylib geos::index::chain::MonotoneChain::computeOverlaps(unsigned long, unsigned long, geos::index::chain::MonotoneC
+   libgeos.3.13.1.dylib bool geos::index::strtree::TemplateSTRtreeImpl<geos::index::chain::MonotoneChain const*, geos::index::strtree:
+   libgeos.3.13.1.dylib bool geos::index::strtree::TemplateSTRtreeImpl<geos::index::chain::MonotoneChain const*, geos::index::strtree:
+   libgeos.3.13.1.dylib bool geos::index::strtree::TemplateSTRtreeImpl<geos::index::chain::MonotoneChain const*, geos::index::strtree:
+   libgeos.3.13.1.dylib bool geos::index::strtree::TemplateSTRtreeImpl<geos::index::chain::MonotoneChain const*, geos::index::strtree:
+## python3.14-2026-10-02-131113.000.ips  EXC_BAD_ACCESS SIGSEGV
+   libgeos.3.13.1.dylib geos::index::strtree::TemplateSTRtreeImpl<geos::algorithm::locate::IndexedPointInAreaLocator::SegmentView, geo
+   libgeos.3.13.1.dylib geos::index::strtree::TemplateSTRtreeImpl<geos::algorithm::locate::IndexedPointInAreaLocator::SegmentView, geo
+   libgeos.3.13.1.dylib geos::algorithm::locate::IndexedPointInAreaLocator::locate(geos::geom::CoordinateXY const*)
+   libgeos.3.13.1.dylib geos::geom::prep::LocationNotMatchingFilter::filter_ro(geos::geom::Geometry const*)
+   libgeos.3.13.1.dylib geos::geom::Surface::apply_ro(geos::geom::GeometryComponentFilter*) const
+   libgeos.3.13.1.dylib geos::geom::prep::PreparedPolygonPredicate::isAnyTestComponentInTarget(geos::geom::Geometry const*) const
+   libgeos.3.13.1.dylib geos::geom::prep::PreparedPolygonIntersects::intersects(geos::geom::Geometry const*)
+   libgeos.3.13.1.dylib geos::geom::prep::PreparedPolygon::intersects(geos::geom::Geometry const*) const
+   libgeos_c.1.19.2.dylib GEOSPreparedIntersects_r
+   lib.cpython-314-darwin.so YY_b_p_func
+   _multiarray_umath.cpython-314-darwin.so generic_wrapped_legacy_loop
+   _multiarray_umath.cpython-314-darwin.so PyUFunc_GenericFunctionInternal
+   _multiarray_umath.cpython-314-darwin.so ufunc_generic_fastcall
+   python3.14 _TAIL_CALL_CALL_FUNCTION_EX.llvm.12183046845526178716
+## python3.14-2026-10-02-131146.000.ips  EXC_BAD_ACCESS SIGBUS
+   ? ?
+   libgeos.3.13.1.dylib geos::index::chain::MonotoneChain::computeOverlaps(unsigned long, unsigned long, geos::index::chain::MonotoneC
+   libgeos.3.13.1.dylib geos::index::chain::MonotoneChain::computeOverlaps(unsigned long, unsigned long, geos::index::chain::MonotoneC
+   libgeos.3.13.1.dylib geos::index::chain::MonotoneChain::computeOverlaps(unsigned long, unsigned long, geos::index::chain::MonotoneC
+   libgeos.3.13.1.dylib geos::index::chain::MonotoneChain::computeOverlaps(unsigned long, unsigned long, geos::index::chain::MonotoneC
+   libgeos.3.13.1.dylib bool geos::index::strtree::TemplateSTRtreeImpl<geos::index::chain::MonotoneChain const*, geos::index::strtree:
+   libgeos.3.13.1.dylib bool geos::index::strtree::TemplateSTRtreeImpl<geos::index::chain::MonotoneChain const*, geos::index::strtree:
+   libgeos.3.13.1.dylib bool geos::index::strtree::TemplateSTRtreeImpl<geos::index::chain::MonotoneChain const*, geos::index::strtree:
+   libgeos.3.13.1.dylib bool geos::index::strtree::TemplateSTRtreeImpl<geos::index::chain::MonotoneChain const*, geos::index::strtree:
+   libgeos.3.13.1.dylib geos::noding::MCIndexSegmentSetMutualIntersector::intersectChains()
+   libgeos.3.13.1.dylib geos::noding::MCIndexSegmentSetMutualIntersector::process(std::__1::vector<geos::noding::SegmentString const*,
+   libgeos.3.13.1.dylib geos::noding::FastSegmentSetIntersectionFinder::intersects(std::__1::vector<geos::noding::SegmentString const*
+   libgeos.3.13.1.dylib geos::geom::prep::PreparedPolygonIntersects::intersects(geos::geom::Geometry const*)
+   libgeos.3.13.1.dylib geos::geom::prep::PreparedPolygon::intersects(geos::geom::Geometry const*) const
+## python3.14-2026-10-02-131202.000.ips  EXC_BAD_ACCESS SIGSEGV
+   libgeos.3.13.1.dylib geos::index::strtree::TemplateSTRtreeImpl<geos::algorithm::locate::IndexedPointInAreaLocator::SegmentView, geo
+   libgeos.3.13.1.dylib geos::index::strtree::TemplateSTRtreeImpl<geos::algorithm::locate::IndexedPointInAreaLocator::SegmentView, geo
+   libgeos.3.13.1.dylib geos::algorithm::locate::IndexedPointInAreaLocator::locate(geos::geom::CoordinateXY const*)
+   libgeos.3.13.1.dylib geos::geom::prep::LocationNotMatchingFilter::filter_ro(geos::geom::Geometry const*)
+   libgeos.3.13.1.dylib geos::geom::Surface::apply_ro(geos::geom::GeometryComponentFilter*) const
+   libgeos.3.13.1.dylib geos::geom::prep::PreparedPolygonPredicate::isAnyTestComponentInTarget(geos::geom::Geometry const*) const
+   libgeos.3.13.1.dylib geos::geom::prep::PreparedPolygonIntersects::intersects(geos::geom::Geometry const*)
+   libgeos.3.13.1.dylib geos::geom::prep::PreparedPolygon::intersects(geos::geom::Geometry const*) const
+   libgeos_c.1.19.2.dylib GEOSPreparedIntersects_r
+   lib.cpython-314-darwin.so YY_b_p_func
+   _multiarray_umath.cpython-314-darwin.so generic_wrapped_legacy_loop
+   _multiarray_umath.cpython-314-darwin.so PyUFunc_GenericFunctionInternal
+   _multiarray_umath.cpython-314-darwin.so ufunc_generic_fastcall
+   python3.14 _TAIL_CALL_CALL_FUNCTION_EX.llvm.12183046845526178716
+## python3.14-2026-10-02-131204.000.ips  EXC_CRASH SIGABRT
+   libsystem_kernel.dylib __pthread_kill
+   libsystem_pthread.dylib pthread_kill
+   libsystem_c.dylib abort
+   libsystem_malloc.dylib malloc_vreport
+   libsystem_malloc.dylib malloc_report
+   libsystem_malloc.dylib ___BUG_IN_CLIENT_OF_LIBMALLOC_POINTER_BEING_FREED_WAS_NOT_ALLOCATED
+   libgeos.3.13.1.dylib geos::index::strtree::TemplateSTRtreeImpl<geos::index::chain::MonotoneChain const*, geos::index::strtree::Enve
+   libgeos.3.13.1.dylib geos::noding::MCIndexSegmentSetMutualIntersector::intersectChains()
+   libgeos.3.13.1.dylib geos::noding::MCIndexSegmentSetMutualIntersector::process(std::__1::vector<geos::noding::SegmentString const*,
+   libgeos.3.13.1.dylib geos::noding::FastSegmentSetIntersectionFinder::intersects(std::__1::vector<geos::noding::SegmentString const*
+   libgeos.3.13.1.dylib geos::geom::prep::PreparedPolygonIntersects::intersects(geos::geom::Geometry const*)
+   libgeos.3.13.1.dylib geos::geom::prep::PreparedPolygon::intersects(geos::geom::Geometry const*) const
+   libgeos_c.1.19.2.dylib GEOSPreparedIntersects_r
+   lib.cpython-314-darwin.so YY_b_p_func
+## python3.14-2026-10-02-131403.000.ips  EXC_BAD_ACCESS SIGSEGV
+   libgeos.3.13.1.dylib geos::noding::MCIndexSegmentSetMutualIntersector::setBaseSegments(std::__1::vector<geos::noding::SegmentString
+   libgeos.3.13.1.dylib geos::noding::FastSegmentSetIntersectionFinder::FastSegmentSetIntersectionFinder(std::__1::vector<geos::noding
+   libgeos.3.13.1.dylib geos::geom::prep::PreparedPolygon::getIntersectionFinder() const
+   libgeos.3.13.1.dylib geos::geom::prep::PreparedPolygonIntersects::intersects(geos::geom::Geometry const*)
+   libgeos.3.13.1.dylib geos::geom::prep::PreparedPolygon::intersects(geos::geom::Geometry const*) const
+   libgeos_c.1.19.2.dylib GEOSPreparedIntersects_r
+   lib.cpython-314-darwin.so YY_b_p_func
+   _multiarray_umath.cpython-314-darwin.so generic_wrapped_legacy_loop
+   _multiarray_umath.cpython-314-darwin.so PyUFunc_GenericFunctionInternal
+   _multiarray_umath.cpython-314-darwin.so ufunc_generic_fastcall
+   python3.14 _TAIL_CALL_CALL_FUNCTION_EX.llvm.12183046845526178716
+   python3.14 _PyFunction_Vectorcall
+   python3.14 _PyObject_VectorcallTstate.llvm.14929908539099605203
+   python3.14 method_vectorcall.llvm.2057999020126484118

@@ -1,0 +1,26 @@
+$ rasputin mesh --dem anadem-v1 --cache /Users/skavhaug/projects/rasputin_data/cache --domain /Users/skavhaug/projects/rasputin_data/sao_francisco_piece/bho2017_5k_76949_outline_epsg4674.geojson --out-crs EPSG:31983 --tolerance 5 --binary --out /Users/skavhaug/.claude/jobs/85c14e7c/tmp/perf15c2-scr/EPSG31983_t5.bin.vtk --stats docs/benchmarks/2026-10-02/15c-2-acceptance/runs/geo/logs/EPSG31983_t5_run1.stats.md
+--- stdout
+/Users/skavhaug/.claude/jobs/85c14e7c/tmp/perf15c2-scr/EPSG31983_t5.bin.vtk
+/Users/skavhaug/projects/rasputin/.claude/worktrees/15c-2/docs/benchmarks/2026-10-02/15c-2-acceptance/runs/geo/logs/EPSG31983_t5_run1.stats.md
+
+--- stderr
+10495 start quality nodes inserted, 341 start quality skips, 218 constraint feet, 0 feet refused, 37 rounds, 774301 points inserted, 1885927 flips, 1861967 triangles, achieved max error 4.999982561383945 m, 0 valid DEM nodes not covered, 7307 start triangles, 7309 start vertices off-node, 0 vertices without data dropped
+BENCH {"refine_s": 0.9662669160170481, "app_s": 6.396701916004531, "max_error": 4.999982561383945, "rounds": 37, "inserted": 774301, "flips": 1885927}
+        6.63 real        23.84 user         0.80 sys
+          1995390976  maximum resident set size
+                   0  average shared memory size
+                   0  average unshared data size
+                   0  average unshared stack size
+              271495  page reclaims
+                   0  page faults
+                   0  swaps
+                   0  block input operations
+                   0  block output operations
+                   0  messages sent
+                   0  messages received
+                   0  signals received
+                  14  voluntary context switches
+               20039  involuntary context switches
+        125851660454  instructions retired
+         72604648127  cycles elapsed
+          1972177344  peak memory footprint

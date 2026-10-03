@@ -1,0 +1,12 @@
+10,715,958 of 103,960,182 bytes
+21,004,719 of 103,960,182 bytes
+31,219,267 of 103,960,182 bytes
+41,947,957 of 103,960,182 bytes
+52,514,578 of 103,960,182 bytes
+62,923,802 of 103,960,182 bytes
+73,387,568 of 103,960,182 bytes
+83,380,085 of 103,960,182 bytes
+93,943,770 of 103,960,182 bytes
+103,960,182 of 103,960,182 bytes
+anadem_v1_compressed_COG: 8,700 blocks, 103,960,182 bytes to fetch
+anadem-v1: 1 objects, 8,700 blocks needed, 8,300 present, fetched 400 (0 empty) in 200 requests, 103,960,182 bytes, 35.5 s

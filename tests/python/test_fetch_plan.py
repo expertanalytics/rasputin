@@ -51,7 +51,6 @@ from fetch_fixtures import (
 from geotiff_fixtures import TIE_X, TIE_Y
 from tin_engine.domain import DomainPolygon
 from tin_engine.io.geotiff import read_page
-from tin_engine.io.models import GeoTiffError
 from tin_engine.mosaic import Bounds
 
 METRES_PER_DEGREE = 111_000.0
@@ -372,8 +371,10 @@ class TestF7ThePrefix:
         meta, _, _ = plan.parse_prefix(geographic()[:MIB], nodata=None)
         assert meta.epsg == 4326
 
-    def test_read_page_reads_geographic_only_with_the_flag(self) -> None:
-        meta = header(geographic(), geographic=True)[0]
-        assert meta.epsg == 4326
-        with pytest.raises(GeoTiffError, match="2048"):
-            header(geographic())
+    def test_read_page_reads_geographic_with_or_without_the_flag(self) -> None:
+        """Amended by 15c-2 (D6): the mesh path's 2048 refusal (23a-1 W9) is
+        lifted, so `read_page` reads a geographic header without the flag too,
+        to the same meta; fetch's `geographic=True` call still reads it."""
+        with_flag = header(geographic(), geographic=True)[0]
+        assert (with_flag.epsg, with_flag.geographic, with_flag.crs) == (4326, True, "EPSG:4326")
+        assert header(geographic())[0] == with_flag

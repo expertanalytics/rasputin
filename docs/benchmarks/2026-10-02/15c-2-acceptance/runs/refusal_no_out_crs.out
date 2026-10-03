@@ -1,0 +1,6 @@
+Usage: rasputin mesh [OPTIONS] [name]
+Try 'rasputin mesh --help' for help.
+╭─ Error ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+│ Invalid value for --dem: the DEM is geographic (EPSG:4674), so --out-crs is required; suggested for this box (transverse Mercator): --out-crs "+proj=tmerc +lat_0=0 +lon_0=-44.1 +k=0.999972 +x_0=0  │
+│ +y_0=0 +ellps=GRS80 +units=m +no_defs", worst scale error 0.00282 %, worst areal error 0.00565 % over the box                                                                                        │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯

@@ -1,0 +1,214 @@
+$ rasputin mesh --dem anadem-v1 --cache /Users/skavhaug/projects/rasputin_data/cache --domain /Users/skavhaug/projects/rasputin_data/sao_francisco_piece/bho2017_5k_76949_outline_epsg4674.geojson --out-crs +proj=tmerc +lat_0=0 +lon_0=-44.1 +k=0.999972 +x_0=0 +y_0=0 +ellps=GRS80 +units=m +no_defs --tolerance 50 --binary --out /Users/skavhaug/.claude/jobs/85c14e7c/tmp/perf15c2-scr/tmerc_t50.bin.vtk --stats /Users/skavhaug/.claude/jobs/85c14e7c/tmp/perf15c2-trial/logs/tmerc_t50_run1.stats.md
+--- stdout
+
+--- stderr
+╭───────────────────── Traceback (most recent call last) ──────────────────────╮
+│ /Users/skavhaug/projects/rasputin/.claude/worktrees/15c-2/build-bench/pkg/ti │
+│ n_engine/cli.py:842 in mesh                                                  │
+│                                                                              │
+│    839 │   │   if feature_paths and opened.domain is not None:               │
+│    840 │   │   │   sources = _feature_sources(feature_paths, feature_crss,   │
+│        feature_layers, feature_maps)                                         │
+│    841 │   │   │   found = _open_features(sources, opened.domain, dem_crs,   │
+│        clock)                                                                │
+│ ❱  842 │   │   dem_run = _dem_mesh(                                          │
+│    843 │   │   │   opened.tile,                                              │
+│    844 │   │   │   ", ".join(map(str, dem)),                                 │
+│    845 │   │   │   stride,                                                   │
+│                                                                              │
+│ /Users/skavhaug/projects/rasputin/.claude/worktrees/15c-2/build-bench/pkg/ti │
+│ n_engine/cli.py:1483 in _dem_mesh                                            │
+│                                                                              │
+│   1480 │   │   │   raise typer.BadParameter(f"{dem}: {out.message}",         │
+│        param_hint="--dem")                                                   │
+│   1481 │   │   final, checked = out, ""                                      │
+│   1482 │   │   if opened is not None and opened.grid is not None and         │
+│        opened.checks is not None:                                            │
+│ ❱ 1483 │   │   │   final, n = final_check.run(out, opened.grid,              │
+│        opened.checks, tolerance, clock)                                      │
+│   1484 │   │   │   if not final.ok():                                        │
+│   1485 │   │   │   │   raise typer.BadParameter(f"{dem}: {final.message}",   │
+│        param_hint="--dem")                                                   │
+│   1486 │   │   │   checked = (                                               │
+│                                                                              │
+│ /Users/skavhaug/projects/rasputin/.claude/worktrees/15c-2/build-bench/pkg/ti │
+│ n_engine/final_check.py:36 in run                                            │
+│                                                                              │
+│   33 │   │   x_min=grid.col0 * h, y_max=-grid.row0 * h, spacing=h,           │
+│      rows=grid.rows, cols=grid.cols                                          │
+│   34 │   )                                                                   │
+│   35 │   t0, adding = time.perf_counter(), 0.0                               │
+│ ❱ 36 │   for xy, z in checks:                                                │
+│   37 │   │   t1 = time.perf_counter()                                        │
+│   38 │   │   store.add(xy, z)                                                │
+│   39 │   │   adding += time.perf_counter() - t1                              │
+│                                                                              │
+│ /Users/skavhaug/projects/rasputin/.claude/worktrees/15c-2/build-bench/pkg/ti │
+│ n_engine/target_grid.py:241 in check_point_blocks                            │
+│                                                                              │
+│   238 │   │   return xy[keep], z[r[keep], c[keep]].astype(np.float32)        │
+│   239 │                                                                      │
+│   240 │   origins = [(r, c) for r in range(0, m.rows, BLOCK) for c in        │
+│       range(0, m.cols, BLOCK)]                                               │
+│ ❱ 241 │   for found in _pool(threads, block, origins):                       │
+│   242 │   │   if found is not None:                                          │
+│   243 │   │   │   yield found                                                │
+│   244                                                                        │
+│                                                                              │
+│ /Users/skavhaug/projects/rasputin/.claude/worktrees/15c-2/build-bench/pkg/ti │
+│ n_engine/target_grid.py:146 in _pool                                         │
+│                                                                              │
+│   143 │   batch, chunk = list(items), max(1, 2 * threads)                    │
+│   144 │   with ThreadPoolExecutor(max_workers=max(1, threads)) as pool:      │
+│   145 │   │   for lo in range(0, len(batch), chunk):                         │
+│ ❱ 146 │   │   │   yield from pool.map(work, batch[lo : lo + chunk])          │
+│   147                                                                        │
+│   148                                                                        │
+│   149 def _valid(values: npt.NDArray[Any], nodata: float | None) ->          │
+│       npt.NDArray[np.bool_]:                                                 │
+│                                                                              │
+│ /Users/skavhaug/.local/share/uv/python/cpython-3.14.7-macos-aarch64-none/lib │
+│ /python3.14/concurrent/futures/_base.py:645 in result_iterator               │
+│                                                                              │
+│   642 │   │   │   │   │   │   fs.appendleft(executor.submit(fn, *args))      │
+│   643 │   │   │   │   │   # Careful not to keep a reference to the popped    │
+│       future                                                                 │
+│   644 │   │   │   │   │   if timeout is None:                                │
+│ ❱ 645 │   │   │   │   │   │   yield _result_or_cancel(fs.pop())              │
+│   646 │   │   │   │   │   else:                                              │
+│   647 │   │   │   │   │   │   yield _result_or_cancel(fs.pop(), end_time -   │
+│       time.monotonic())                                                      │
+│   648 │   │   │   finally:                                                   │
+│                                                                              │
+│ /Users/skavhaug/.local/share/uv/python/cpython-3.14.7-macos-aarch64-none/lib │
+│ /python3.14/concurrent/futures/_base.py:312 in _result_or_cancel             │
+│                                                                              │
+│   309 def _result_or_cancel(fut, timeout=None):                              │
+│   310 │   try:                                                               │
+│   311 │   │   try:                                                           │
+│ ❱ 312 │   │   │   return fut.result(timeout)                                 │
+│   313 │   │   finally:                                                       │
+│   314 │   │   │   fut.cancel()                                               │
+│   315 │   finally:                                                           │
+│                                                                              │
+│ /Users/skavhaug/.local/share/uv/python/cpython-3.14.7-macos-aarch64-none/lib │
+│ /python3.14/concurrent/futures/_base.py:454 in result                        │
+│                                                                              │
+│   451 │   │   │   │   if self._state in [CANCELLED, CANCELLED_AND_NOTIFIED]: │
+│   452 │   │   │   │   │   raise CancelledError()                             │
+│   453 │   │   │   │   elif self._state == FINISHED:                          │
+│ ❱ 454 │   │   │   │   │   return self.__get_result()                         │
+│   455 │   │   │   │   else:                                                  │
+│   456 │   │   │   │   │   raise TimeoutError()                               │
+│   457 │   │   finally:                                                       │
+│                                                                              │
+│ /Users/skavhaug/.local/share/uv/python/cpython-3.14.7-macos-aarch64-none/lib │
+│ /python3.14/concurrent/futures/_base.py:396 in __get_result                  │
+│                                                                              │
+│   393 │   def __get_result(self):                                            │
+│   394 │   │   if self._exception is not None:                                │
+│   395 │   │   │   try:                                                       │
+│ ❱ 396 │   │   │   │   raise self._exception                                  │
+│   397 │   │   │   finally:                                                   │
+│   398 │   │   │   │   # Break a reference cycle with the exception in        │
+│       self._exception                                                        │
+│   399 │   │   │   │   self = None                                            │
+│                                                                              │
+│ /Users/skavhaug/.local/share/uv/python/cpython-3.14.7-macos-aarch64-none/lib │
+│ /python3.14/concurrent/futures/thread.py:86 in run                           │
+│                                                                              │
+│    83 │   │   │   return                                                     │
+│    84 │   │                                                                  │
+│    85 │   │   try:                                                           │
+│ ❱  86 │   │   │   result = ctx.run(self.task)                                │
+│    87 │   │   except BaseException as exc:                                   │
+│    88 │   │   │   self.future.set_exception(exc)                             │
+│    89 │   │   │   # Break a reference cycle with the exception 'exc'         │
+│                                                                              │
+│ /Users/skavhaug/.local/share/uv/python/cpython-3.14.7-macos-aarch64-none/lib │
+│ /python3.14/concurrent/futures/thread.py:73 in run                           │
+│                                                                              │
+│    70 │                                                                      │
+│    71 │   def run(self, task):                                               │
+│    72 │   │   fn, args, kwargs = task                                        │
+│ ❱  73 │   │   return fn(*args, **kwargs)                                     │
+│    74                                                                        │
+│    75                                                                        │
+│    76 class _WorkItem:                                                       │
+│                                                                              │
+│ /Users/skavhaug/projects/rasputin/.claude/worktrees/15c-2/build-bench/pkg/ti │
+│ n_engine/target_grid.py:231 in block                                         │
+│                                                                              │
+│   228 │   │   cc = np.concatenate([cols, right, cols[::-1], left])           │
+│   229 │   │   image = move(np.column_stack([m.x_min + cc * m.delta_x,        │
+│       m.y_max - rr * m.delta_y]))                                            │
+│   230 │   │   image = image[np.isfinite(image).all(axis=1)]                  │
+│ ❱ 231 │   │   if not len(image) or not                                       │
+│       inside.intersects(shapely.MultiPoint(image).convex_hull.buffer(h)):    │
+│   232 │   │   │   return None                                                │
+│   233 │   │   z = np.asarray(source.window(r0, r1, c0, c1))                  │
+│   234 │   │   r, c = np.nonzero(_valid(z, m.nodata))                         │
+│                                                                              │
+│ /Users/skavhaug/.claude/jobs/85c14e7c/tmp/perf15c2-venv/lib/python3.14/site- │
+│ packages/shapely/prepared.py:53 in intersects                                │
+│                                                                              │
+│   50 │                                                                       │
+│   51 │   def intersects(self, other):                                        │
+│   52 │   │   """Return True if geometries intersect, else False."""          │
+│ ❱ 53 │   │   return self.context.intersects(other)                           │
+│   54 │                                                                       │
+│   55 │   def overlaps(self, other):                                          │
+│   56 │   │   """Return True if geometries overlap, else False."""            │
+│                                                                              │
+│ /Users/skavhaug/.claude/jobs/85c14e7c/tmp/perf15c2-venv/lib/python3.14/site- │
+│ packages/shapely/geometry/base.py:819 in intersects                          │
+│                                                                              │
+│    816 │                                                                     │
+│    817 │   def intersects(self, other):                                      │
+│    818 │   │   """Return True if geometries intersect, else False."""        │
+│ ❱  819 │   │   return _maybe_unpack(shapely.intersects(self, other))         │
+│    820 │                                                                     │
+│    821 │   def overlaps(self, other):                                        │
+│    822 │   │   """Return True if geometries overlap, else False."""          │
+│                                                                              │
+│ /Users/skavhaug/.claude/jobs/85c14e7c/tmp/perf15c2-venv/lib/python3.14/site- │
+│ packages/shapely/decorators.py:88 in wrapped                                 │
+│                                                                              │
+│    85 │   │   try:                                                           │
+│    86 │   │   │   for arr in array_args:                                     │
+│    87 │   │   │   │   arr.flags.writeable = False                            │
+│ ❱  88 │   │   │   return func(*args, **kwargs)                               │
+│    89 │   │   finally:                                                       │
+│    90 │   │   │   for arr, old_flag in zip(array_args, old_flags):           │
+│    91 │   │   │   │   arr.flags.writeable = old_flag                         │
+│                                                                              │
+│ /Users/skavhaug/.claude/jobs/85c14e7c/tmp/perf15c2-venv/lib/python3.14/site- │
+│ packages/shapely/predicates.py:878 in intersects                             │
+│                                                                              │
+│    875 │   False                                                             │
+│    876 │                                                                     │
+│    877 │   """                                                               │
+│ ❱  878 │   return lib.intersects(a, b, **kwargs)                             │
+│    879                                                                       │
+│    880                                                                       │
+│    881 @multithreading_enabled                                               │
+╰──────────────────────────────────────────────────────────────────────────────╯
+GEOSException: vector
+        2.13 real         8.04 user         0.84 sys
+          1953808384  maximum resident set size
+                   0  average shared memory size
+                   0  average unshared data size
+                   0  average unshared stack size
+              201469  page reclaims
+                  51  page faults
+                   0  swaps
+                   0  block input operations
+                   0  block output operations
+                   0  messages sent
+                   0  messages received
+                   0  signals received
+                 477  voluntary context switches
+               22667  involuntary context switches
+         66834959341  instructions retired
+         26251045156  cycles elapsed
+          2025474544  peak memory footprint

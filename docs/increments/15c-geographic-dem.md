@@ -1,6 +1,8 @@
 # Increment 15c — a geographic DEM, projected onto the TIN's CRS, resampled, and checked against its source
 
-Status: **designed by `@architect`, 2026-10-01; not implemented.** Written
+Status: **designed by `@architect`, 2026-10-01; 15c-1 shipped (#133);
+15c-2 implemented on branch `worktree-15c-2`, its departures marked "as
+built" or "built otherwise" where they occur.** Written
 before `@tester`, per `docs/increments/README.md` step 1. It replaces R8 and
 R10 of `docs/increments/15-dem-mosaic.md` for 15c, following Ola's Q6 and Q9
 rulings of 2026-09-30. **Q11-Q14, Q16 and Q17 were ruled by Ola on
@@ -388,10 +390,10 @@ rest.
   with `nodata=None` when the source has none.
 - **Deterministic:** each node is computed from its own coordinates alone,
   so block size and thread count cannot change a value.
-- The canvas becomes the tile through `DemTile._adopt` (15a R7, no copy). Its
-  docstring names `assemble` as the one caller; it gains `resample` as the
-  second, under the same rule (the buffer was allocated here and is never
-  handed out writable).
+- The canvas becomes the tile through `DemTile._adopt` (15a R7, no copy).
+  *Built otherwise (15c-2):* through the public `DemTile(...)` constructor,
+  one copy of the target canvas, as 23a-1 did, because 15a's suite (M15)
+  reserves `_adopt` for `mosaic.py`.
 - Its values are not trusted for the guarantee: phase 1 is measured against
   them, phase 2 against the source.
 
@@ -542,7 +544,8 @@ metres, on or relative to a square grid. Concretely: the target grid as a
 `(x, y)` in the target CRS with z. **No degrees, no CRS, no path.**
 
 - `RasterMeta` (`io/models.py`) gains `geographic: bool = False` and
-  `crs: str`, filled from `epsg` when not given (`EPSG:n`); `epsg` becomes
+  `crs: str`, filled from `epsg` when not given (`EPSG:n`; *as built*, set
+  to `EPSG:n` whenever `epsg` is set, overriding a given `crs`); `epsg` becomes
   `int | None` so a target CRS without an EPSG code has a meta: D8's
   suggestion is a PROJ string, and pasting it into `--out-crs` is the
   expected use. Existing constructions with `epsg=n` are unchanged. Call sites that
@@ -573,17 +576,27 @@ metres, on or relative to a square grid. Concretely: the target grid as a
   is refused in 15c by design. *Superseded at basin scale (Q15):* the cap
   stays in 15c as a guard, but at basin scale memory is not to decide what
   can be meshed; the basin-scale design removes the canvases rather than
-  shrinking one of them.
+  shrinking one of them. *Not built (15c-2):* Ola ruled B15 (a)
+  (`23-basin-scale.md`), deleting the refusals at half of physical memory,
+  so no cap was added here; 15a's own cap in `mosaic.py` goes with 23c.
 - `final_check.py` (new, ~40 lines): `run(tile, start, checks, tolerance,
   threads) -> (phase-1 outcome, phase-2 outcome)`, the two calls and the
   store's construction, so `cli.py` (about 1,500 lines) grows by the options and
   fields only. It drops its reference to the target tile before building the
   store; the caller must not hold one either, and `_dem_mesh` is restructured
-  so it does not.
+  so it does not. *Built otherwise (15c-2):* `run(start, grid, checks,
+  tolerance, clock) -> (phase-2 outcome, check points stored)`; phase 1
+  stays in `cli.py`, and the target tile is not dropped before phase 2
+  (`_dem_mesh` still holds it).
+- *Added in 15c-2:* `--out-crs` without `--domain` or `--bbox` is refused
+  (the grid needs an extent in the target CRS), and so is an `--out-crs`
+  that is not projected in metres (dda35ff), both before any pixel is read.
 
 ### D7. What the file records
 
-- `crs`: the target CRS (`EPSG:n`, else one-line WKT2, ASCII).
+- `crs`: the target CRS (`EPSG:n`, else one-line WKT2, ASCII). *As built:*
+  `EPSG:n`, else `crs_label`'s text, which for D8's suggestion is the PROJ
+  string, not WKT2.
 - `source_crs`: the DEM's; `source_transform`: pyproj's description of the
   source-to-target transformation, so a datum shift is on record.
 - `computation_grid`: e.g. `square 30 m grid in EPSG:31983, node (R, K) at
@@ -594,7 +607,9 @@ metres, on or relative to a square grid. Concretely: the target grid as a
   with a start vertex (max F m)`.
 - `--stats` rows: `resample`, `check points: project`, `check points: store`,
   `final check: scan (parallel)`, `final check: split + flip (serial)`, and
-  the source-node error beside the grid's.
+  the source-node error beside the grid's. *As built:* only the four
+  check-point and final-check rows (`final_check.run`'s clock); no
+  `resample` row and no source-node error in `--stats`.
 
 The output is already in the target CRS, so 15-dem-mosaic.md R10's
 transform-on-output and its `max_reprojection_z_error_estimate` field are not
@@ -908,7 +923,7 @@ and 15a's `mosaic.py` 60 % over, so the worst case applies 39 %, with
 | **15c-2** | **The geographic path, in Python, ending with the final check** | | |
 | | `io/geotiff.py`: geographic 2D, degree units | 30 | |
 | | `io/models.py`: `crs`, `geographic`, `epsg: int \| None` | 15 | |
-| | `raster.py`: the gate; `mosaic.py` and `catchment.py` (`catchment.py:134-135`): `EPSG:{...}` through `meta.crs` | 13 | |
+| | `raster.py`: the gate; `mosaic.py` and `catchment.py` (`catchment.py:132-133`): `EPSG:{...}` through `meta.crs` | 13 | |
 | | `target_grid.py`: `TargetGrid`, spacing, extent, `source_region` | 80 | |
 | | `target_grid.py`: `SourceWindows`, `TileWindows`, `resample` | 55 | |
 | | `target_grid.py`: `check_point_blocks` | 35 | |
@@ -1051,7 +1066,9 @@ committed only after its licence is read and quoted in the fixture `NOTICE`
   the date it was cut), crediting ANADEM; it is EPSG:4674, so G6's realism
   case also exercises the COG's key set;
 - a **DEM-derived test catchment** (Q17 as replaced on 2026-10-01), derived
-  once and committed as GeoJSON; the test never runs increment 22. Increment
+  once and committed as GeoJSON (*as built:* one bare `Polygon` with a
+  `crs` member naming EPSG:31983, not 22's FeatureCollection); the test
+  never runs increment 22. Increment
   22 reads only projected DEMs (G2 keeps `rasputin catchment` on a
   geographic tile a usage error), so the ANADEM extract is first resampled
   onto its 30 m EPSG:31983 target grid by this increment's own `resample`
@@ -1255,3 +1272,39 @@ Battery, 5 back-to-back pairs against master a130f7c with `--tree`; mesh hashes 
 ### 15c-1, round 3, `6ab7ad5..c640be8`: APPROVED (`@reviewer`)
 
 Production LOC unchanged at 445 added, 3 removed (442 net) against the estimate of 370; the merge of master (6ca90af) and c640be8 change no production file. Round 2's B1 is fixed: `timeout-minutes: 30` on the `cpp`, `sanitizers` and `tsan` jobs (checked by parsing the YAML), and the `06-cdt-viewer.md:966` citation moved to the `sanitizers` job's new range, 51-75. B2 is fixed: "(#129)". The merge kept master's row 23 and #129's edits to the 15c record, with no conflict markers. Release ctest 843/843 without warnings; full `tests/python` 3342 passed against the rebuilt `_core` in an isolated venv; ruff, format, mypy and the governance gates green; the four at-risk citations re-read as quotations and hold. @perf's acceptance (c3149bf) covers the unchanged production code.
+
+### 15c-2, round 1, `26ce955..44b724b`: CHANGES REQUESTED (`@reviewer`)
+
+422 production lines added, 60 removed, 362 net, against the 405 estimate. `target_grid.py` is 171 lines against 170; its split point at 250 does not fire. Red before green confirmed. The green commit touches no test file, and the F7 amendment's reason holds. Brute-force check of the final check on the Velhas fixture: all 12,681 source nodes inside the catchment are within tolerance (max 4.99262 m at 5 m, 0.99897 m at 1 m). The check finds 851 nodes over (max 21.2 m) with phase 2 disabled, so it can fail. `suggest_crs` matches pyproj geodesic finite differences on five boxes. ANADEM is CC BY 4.0 and the credits match. Blocking:
+- B1: `--out-crs` was not checked for being projected in metres. US feet meshed in feet and the file recorded "30 m"; EPSG:4674 crashed with a traceback; EPSG:4326 got a false antimeridian refusal.
+- B2: false prose in `project_structure.md` (`io/geotiff.py` refuses non-projected DEMs; the layout list) and in D3, D6 and D7; the departures were recorded only in a commit message.
+- B3: `ROADMAP.md` row 15 was not updated.
+
+### 15c-2, round 2, `44b724b..75a6ff3`: APPROVED (`@reviewer`)
+
+- dda35ff adds 10 production lines and removes 1, for 431 added and 61 removed on the branch, under 700.
+- The B1 probes are now usage errors (exit 2) before any pixel is read, with a true message: US feet, EPSG:4674, EPSG:4326. EPSG:31983 and EPSG:5880 (metres) still mesh. The brute-force check on EPSG:31983 at 5 m still finds 0 nodes over.
+- Mutation pass: 19 of 20 mutants killed, including the refusal disabled and all four round-1 survivors re-run (multi-block loop, the store's frame, `final.ok()`, the refusal's percentages). The one survivor, `get_factors` on 3×3 points instead of 21×21, is near-equivalent.
+- Full `tests/python`: 3541 passed, 114 skipped (without the `codecs` extra). ruff, ruff format, mypy, `check_prohibited_deps` and `check_detria_boundary` green; `check_citations` exits 0 and the re-pointed quotations hold.
+- The rewrites of `project_structure.md`, D3, D6 and D7 and the ROADMAP row match the code. CI not yet run.
+
+### 15c-2, `@perf` acceptance (999559a): REGRESSION
+
+Norway path unchanged (mesh hashes identical, refine within noise). Velhas piece on ANADEM at 50, 20, 10 and 5 m: 0 source nodes over tolerance by the independent check. But the geographic run crashed in 7 of 47 starts (SIGBUS, `GEOSException`) in GEOS prepared-polygon `intersects` from `check_point_blocks`' worker threads; the suggested CRS had no datum; the final check's timing rows were always 0 (`docs/benchmarks/2026-10-02/15c-2-acceptance/`).
+
+### 15c-2, round 3, `999559a..18a47cb`: CHANGES REQUESTED (`@reviewer`)
+
+- **Fixed and confirmed:** each check-point block now prepares its own copy of the domain, so no GEOS object is shared between threads. The suggestion is WKT2 on the DEM's own datum (SIRGAS 2000 for EPSG:4674, WGS 84 for EPSG:4326), and pyproj's transform from the DEM to it is the conversion alone, with no ballpark offset. The final-check timing rows are now set in `refine_points.hpp`.
+- **Checks:** C++ built with `-Werror` and ctest passed 843/843. `tests/python` 3543 passed. Brute-force check through the WKT: 0 source nodes over tolerance.
+- **R3-B1:** the WKT in the refusal could not be copied back. Rich's panel wrapped it mid-token inside its borders, and every paste form failed to parse.
+
+### 15c-2, round 4, `18a47cb..32e45c2`: APPROVED (`@reviewer`)
+
+- **Paste-back:** the suggestion now prints as one unwrapped stderr line. Under a real pty at 80 columns it pastes back and meshes (exit 0).
+- **R4-B1, the apostrophe:** EPSG:4266 (M'poraloko) put an apostrophe inside the hand-made single quotes and broke the paste. f8944be pins the case and 32e45c2 quotes the line with `shlex.quote`. On a 4266 tile at 32e45c2, the printed line pastes back as 2 arguments in both zsh and bash, pyproj reads the WKT with the M'poraloko datum, and the mesh runs (exit 0).
+- **Basin README:** the 33.2 GB peak is measured; the array sizes are labelled as coming from planning, not a run, and their arithmetic holds.
+- **Gates:** `test_cli_mesh_geographic.py` 29 passed, 1 skipped. Red before green holds. CI not yet run.
+
+### 15c-2, `@perf` re-acceptance (c47bff6): ACCEPTED for the crash
+
+0 crashes in 200 starts (100 with EPSG:31983, 100 with the pasted WKT); the 5 m independent check finds 0 nodes over tolerance; the whole São Francisco basin does not fit 32 GiB even at 50 m (`docs/benchmarks/2026-10-02/basin-anadem/`), which is a limit of the one-process path, not a 15c-2 defect.

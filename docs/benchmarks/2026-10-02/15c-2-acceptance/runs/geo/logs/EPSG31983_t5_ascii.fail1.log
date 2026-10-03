@@ -1,0 +1,23 @@
+$ rasputin mesh --dem anadem-v1 --cache /Users/skavhaug/projects/rasputin_data/cache --domain /Users/skavhaug/projects/rasputin_data/sao_francisco_piece/bho2017_5k_76949_outline_epsg4674.geojson --out-crs EPSG:31983 --tolerance 5 --ascii --out /Users/skavhaug/.claude/jobs/85c14e7c/tmp/perf15c2-scr/EPSG31983_t5.ascii.vtk
+--- stdout
+
+--- stderr
+time: command terminated abnormally
+        2.19 real        10.31 user         0.53 sys
+          1923694592  maximum resident set size
+                   0  average shared memory size
+                   0  average unshared data size
+                   0  average unshared stack size
+              186465  page reclaims
+                   0  page faults
+                   0  swaps
+                   0  block input operations
+                   0  block output operations
+                   0  messages sent
+                   0  messages received
+                   0  signals received
+                   0  voluntary context switches
+                7429  involuntary context switches
+         72282826990  instructions retired
+         31811451346  cycles elapsed
+          1900415328  peak memory footprint

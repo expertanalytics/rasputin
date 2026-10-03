@@ -1,0 +1,94 @@
+[
+ {
+  "crs_file": "epsg31983.txt",
+  "h": 30.0,
+  "phase2": {
+   "source_nodes": "18791066",
+   "inserted": "142643",
+   "rounds": "12",
+   "max_error": "4.999999720676556"
+  },
+  "check": {
+   "shift_m": 0.0,
+   "strip_width_m": 30.0,
+   "interior": {
+    "nodes": 13791972,
+    "outside_mesh": 0,
+    "over_tolerance": 0,
+    "over_share": 0.0,
+    "max": 4.999999376945198,
+    "p99": 4.439333547868298,
+    "median": 1.259242200787412
+   },
+   "strip": {
+    "nodes": 27806,
+    "outside_mesh": 0,
+    "over_tolerance": 0,
+    "over_share": 0.0,
+    "max": 4.998108497267822,
+    "p99": 4.504830342608331,
+    "median": 0.9735130251501687
+   },
+   "mesh_sha256": "a2bd8ed1d6675af367b5dd97d7ce063fb987b7866668ad5562abf53c43743735",
+   "quality": null
+  },
+  "control_shift15": {
+   "shift_m": 15.0,
+   "strip_width_m": 30.0,
+   "interior": {
+    "nodes": 13791972,
+    "outside_mesh": 0,
+    "over_tolerance": 1048434,
+    "over_share": 0.07601770073199104,
+    "max": 47.56414975551888,
+    "p99": 8.155267633247403,
+    "median": 1.6630372883519158
+   },
+   "strip": {
+    "nodes": 22999,
+    "outside_mesh": 4807,
+    "over_tolerance": 2115,
+    "over_share": 0.09196052002260968,
+    "max": 15.346860071644187,
+    "p99": 9.246899017551918,
+    "median": 1.3528427885903511
+   },
+   "mesh_sha256": "a2bd8ed1d6675af367b5dd97d7ce063fb987b7866668ad5562abf53c43743735",
+   "quality": null
+  }
+ },
+ {
+  "crs_file": "velhas_out_crs.wkt",
+  "h": 30.0,
+  "phase2": {
+   "source_nodes": "18860772",
+   "inserted": "143257",
+   "rounds": "10",
+   "max_error": "5"
+  },
+  "check": {
+   "shift_m": 0.0,
+   "strip_width_m": 30.0,
+   "interior": {
+    "nodes": 13791979,
+    "outside_mesh": 0,
+    "over_tolerance": 0,
+    "over_share": 0.0,
+    "max": 4.99999994575046,
+    "p99": 4.436267121811106,
+    "median": 1.2595683342806296
+   },
+   "strip": {
+    "nodes": 27799,
+    "outside_mesh": 0,
+    "over_tolerance": 0,
+    "over_share": 0.0,
+    "max": 4.997728194837691,
+    "p99": 4.4512131738178145,
+    "median": 0.9697787059849361
+   },
+   "mesh_sha256": "bb0d161bab6d232b261e0bf3cd340cee3ff176abf1dcf83dd2f2f04661d35615",
+   "quality": null
+  }
+ }
+]

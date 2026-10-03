@@ -68,7 +68,7 @@ fixture is decoded.
    triangles, 3.0 s.
 6. **Without `imagecodecs`, `decode_dem` refuses the fixture** with a
    `GeoTiffError` that names Compression (259) = 5 and points at the `codecs`
-   extra (`src_python/tin_engine/io/geotiff.py:220`). Nothing new is needed
+   extra (`src_python/tin_engine/io/geotiff.py:226`). Nothing new is needed
    for the no-extra case beyond turning that error into a usage error.
 
 ## Rulings
@@ -179,7 +179,7 @@ section), without changes:
     `keep_alive`.
   - The NoData value is converted to `T` exactly once. `decode_dem` already
     refuses a sentinel the cell type cannot hold
-    (`src_python/tin_engine/io/geotiff.py:358`), so the conversion is exact.
+    (`src_python/tin_engine/io/geotiff.py:371`), so the conversion is exact.
   - `sample(view, points)` takes a float64 `(N, 2)` array and returns
     `(z, valid)`. It releases the GIL.
 - `_core.pyi`: the class, the factory and `sample`.
@@ -384,7 +384,7 @@ CLI (`tests/python/test_cli_mesh.py`), on micro-TIFFs from
 17. `.ply` output with `--dem` has the same z as the `.vtk`.
 
 Real fixture, marked `needs_codecs` (the marker already in
-`tests/python/test_io_geotiff.py:90` at design time, since moved to
+`tests/python/test_io_geotiff.py@907d982:90` at design time, since moved to
 `tests/python/geotiff_fixtures.py:37` because a second file needs it):
 
 18. `mesh --dem tests/fixtures/dem_archive/7908_3_10m_z33.tif --out x.vtk`

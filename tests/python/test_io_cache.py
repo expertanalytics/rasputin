@@ -41,7 +41,6 @@ from geotiff_fixtures import (
     TIE_Y,
     with_keys,
 )
-from tin_engine.io.models import GeoTiffError
 
 SOURCE = "test-utm33"
 TILED = VARIANTS[0]
@@ -264,13 +263,17 @@ class TestW5CheckThePlan:
         assert repository.check(plan_mosaic(repository.footprints(), None, None)) is None
 
 
-class TestW9GeographicUntil15c2:
-    def test_a_cached_geographic_source_gets_the_readers_geokey_refusal(
+class TestW9GeographicFrom15c2:
+    """W9 inverted by 15c-2 (D6 lifts the reader's 2048 refusal, which 23a-1
+    decided 10 kept "until 15c-2"): a cached geographic source passes the cache
+    checks and lists its footprint in degrees. The refusal of a geographic DEM
+    without `--out-crs` is G8's (`test_cli_mesh_geographic.py`)."""
+
+    def test_a_cached_geographic_source_lists_a_geographic_footprint(
         self, repo: ModuleType, tmp_path: Path
     ) -> None:
         keys = with_keys({PROJECTED_CS_TYPE: None, GEOGRAPHIC_TYPE: EPSG_WGS84})
         data = build(TILED, geokeys=keys)
         write_cache(tmp_path / "cache", "geo", {"tile": data}, crs="EPSG:4326")
-        with pytest.raises(GeoTiffError, match=r"GeographicTypeGeoKey \(2048\) = 4326") as caught:
-            repo.CacheRepository(tmp_path / "cache", "geo").footprints()
-        assert not isinstance(caught.value, repo.CacheError)
+        (footprint,) = repo.CacheRepository(tmp_path / "cache", "geo").footprints()
+        assert (footprint.meta.geographic, footprint.meta.crs) == (True, "EPSG:4326")

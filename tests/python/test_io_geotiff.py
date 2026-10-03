@@ -992,11 +992,14 @@ def test_refuses_compound_crs(
     _names_numbers(message, 3)
 
 
-def test_a_realistically_encoded_geographic_file_is_refused(refused: Callable[..., str]) -> None:
-    """§5 refusal 13, amended (problem 3): ModelTypeGeographic, 2048 = 4326, no
-    3072. Refused *as geographic*, naming the key that carried the code."""
+def test_a_realistically_encoded_geographic_file_is_read(decode: Decode) -> None:
+    """§5 refusal 13, amended (problem 3), then lifted by 15c-2 (D6): ModelTypeGeographic,
+    2048 = 4326, no 3072, is a geographic DEM in degrees. It was refused as
+    geographic, naming 2048; `test_io_geotiff_geographic.py` (G1) owns the
+    geographic cases now, and 3072 = 4326 stays refused (`refuses_geographic_crs`)."""
     keys = with_keys({GT_MODEL_TYPE: 2, GEOGRAPHIC_TYPE: EPSG_WGS84, PROJECTED_CS_TYPE: None})
-    refused(micro_tiff(geokeys=keys), *_GEOGRAPHIC, str(EPSG_WGS84))
+    meta = decode(micro_tiff(geokeys=keys)).meta
+    assert (meta.geographic, meta.crs) == (True, f"EPSG:{EPSG_WGS84}")
 
 
 @pytest.mark.parametrize(

@@ -89,6 +89,11 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
   Service 2018, European Environment Agency (EEA): the files in
   `tests/fixtures/corine/`. The full attribution, the conditions of use and how
   each file was modified are in `tests/fixtures/corine/NOTICE`.
+- **ANADEM**, CC BY 4.0: the extract `tests/fixtures/velhas/anadem_velhas.tif`
+  and the catchment derived from it, `tests/fixtures/velhas/catchment.geojson`.
+  The full credit (ANA, OpenTopography, Laipelt et al. 2024, and Copernicus
+  GLO-30, from which ANADEM derives) and how each file was made are in
+  `tests/fixtures/velhas/NOTICE`.
 - **Benchmark evidence** in `docs/benchmarks/` (pictures, domains, logs) is
   derived from the same DTM10 and CORINE data and carries the same two credits,
   except `docs/benchmarks/2026-10-01/basin-piece/`, whose figures are derived

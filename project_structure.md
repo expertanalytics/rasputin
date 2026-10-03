@@ -101,6 +101,13 @@ src_python/tin_engine/     # public Python API (distribution name: rasputin)
                            #   own CRS, to_crs, check_extent; never imports _core
   crs.py                   # parse_crs, reprojector: the one Transformer.from_crs
                            #   site, always_xy (15b); pyproj and numpy
+  target_grid.py           # TargetGrid on one global lattice, source_region,
+                           #   SourceWindows / TileWindows, resample (bilinear,
+                           #   threads), check_point_blocks; never imports _core
+                           #   (15c-2)
+  final_check.py           # run: phase 2, the source nodes filed in a
+                           #   CheckPoints, then refine_points from phase 1's
+                           #   mesh (15c-2)
   elevation.py             # drops mesh vertices the DEM has no data for;
                            #   pure numpy, never imports _core
   stats.py                 # --stats: PhaseClock, quality, Report, render to
@@ -292,12 +299,14 @@ optional NoData sentinel — nothing else.
   on either side can tell otherwise. This is the load-bearing rule, and it is
   separate from the one above: that one is about where a string may live, this
   one is about what the numbers mean. Python must deliver every input in one
-  projected, metre CRS, and rejects a geographic CRS outright. Today it does
-  this partly by refusal: `io/geotiff.py` refuses a DEM that is not already in
-  one, and since increment 15b the domain polygon is reprojected into the DEM's
-  CRS in Python (`crs.py`, the one `from_crs` site). A geographic DEM's
-  computation frame is 15c (`docs/increments/15-dem-mosaic.md`;
-  `docs/increments/11-raster-ingestion.md` §9, §10).
+  projected, metre CRS, and never passes a geographic one on. Since 15c-2
+  `io/geotiff.py` reads a geographic DEM, but `raster.to_core` refuses a
+  geographic tile: the DEM is resampled in Python onto a square grid in the
+  projected, metre `--out-crs` (`target_grid.py`), and only that grid and the
+  source nodes moved into it cross. Since increment 15b the domain polygon
+  is reprojected in Python too (`crs.py`, the one `from_crs` site); see
+  `docs/increments/15c-geographic-dem.md` D6 and
+  `docs/increments/11-raster-ingestion.md` §9, §10.
   Measured, pyproj 3.8.0 / PROJ 9.8.1: a 0.0002777° cell at 60°N is 15.5 m
   east-west and 31.0 m north-south, a 2:1 anisotropy invisible to `sample.hpp`, whose bilinear
   weights would then be computed in degrees and applied to metres. The legacy

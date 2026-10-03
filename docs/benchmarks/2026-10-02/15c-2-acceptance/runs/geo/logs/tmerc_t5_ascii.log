@@ -1,0 +1,25 @@
+$ rasputin mesh --dem anadem-v1 --cache /Users/skavhaug/projects/rasputin_data/cache --domain /Users/skavhaug/projects/rasputin_data/sao_francisco_piece/bho2017_5k_76949_outline_epsg4674.geojson --out-crs +proj=tmerc +lat_0=0 +lon_0=-44.1 +k=0.999972 +x_0=0 +y_0=0 +ellps=GRS80 +units=m +no_defs --tolerance 5 --ascii --out /Users/skavhaug/.claude/jobs/85c14e7c/tmp/perf15c2-scr/tmerc_t5.ascii.vtk
+--- stdout
+/Users/skavhaug/.claude/jobs/85c14e7c/tmp/perf15c2-scr/tmerc_t5.ascii.vtk
+
+--- stderr
+10534 start quality nodes inserted, 334 start quality skips, 228 constraint feet, 0 feet refused, 35 rounds, 772720 points inserted, 1882855 flips, 1860101 triangles, achieved max error 5 m, 0 valid DEM nodes not covered, 7307 start triangles, 7309 start vertices off-node, 0 vertices without data dropped
+BENCH {"refine_s": 1.0594708340067882, "app_s": 9.358292208024068, "max_error": 5.0, "rounds": 35, "inserted": 772720, "flips": 1882855}
+        9.62 real        26.31 user         1.39 sys
+          2108522496  maximum resident set size
+                   0  average shared memory size
+                   0  average unshared data size
+                   0  average unshared stack size
+              378716  page reclaims
+                  21  page faults
+                   0  swaps
+                   0  block input operations
+                   0  block output operations
+                   0  messages sent
+                   0  messages received
+                   0  signals received
+                  16  voluntary context switches
+               39713  involuntary context switches
+        168742341729  instructions retired
+         82142552587  cycles elapsed
+          2083047944  peak memory footprint
