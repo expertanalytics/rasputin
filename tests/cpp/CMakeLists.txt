@@ -323,9 +323,9 @@ target_link_libraries(prop_refinement_refine_points PRIVATE Threads::Threads)
 
 # The edge strip's generator and store, increment 15f-1
 # (docs/increments/15f-edge-strip.md, D2, D3 and "Tests for @tester", CC1 to
-# CC6), and detail::lattice_position, extracted from refine's to_lattice with no
-# change in behaviour (D2 step 1). Two targets, so the refine suites and each
-# other still build while either header is missing. Not invariant-critical (the
+# CC9), and detail::lattice_position, extracted from refine's to_lattice with no
+# change in behaviour (D2 step 1). Two targets, one per header under test, so
+# lattice_position's suite stays free of the strip. Not invariant-critical (the
 # mutation suite is 15f-2's ES2, ES3 and ES5); neither starts threads, but
 # refine.hpp includes the chunk scheduler, so both link Threads.
 add_terrain_backend_test(test_refinement_constraint_points

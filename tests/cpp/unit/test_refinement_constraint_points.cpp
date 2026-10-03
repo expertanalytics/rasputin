@@ -1,5 +1,5 @@
 // Increment 15f-1 (docs/increments/15f-edge-strip.md, D2, D3 and "Tests for
-// @tester", CC1 to CC6): the edge-strip generator
+// @tester", CC1 to CC9): the edge-strip generator
 //
 //   constraint_check_points(dem, std::span<const Point2> vertices,
 //                           std::span<const std::array<std::uint32_t, 2>> edges)
@@ -96,8 +96,10 @@ enum class Void { Sentinel, NaN };
 
 constexpr float kSentinel = -9999.0f;
 
-Raster<float> dem(std::size_t cols, std::size_t rows, std::vector<NoData> holes = {},
-                  Void how = Void::Sentinel) {
+// The DEM over any geometry; h depends on (row, col) only.
+Raster<float> dem_on(const RasterGeometry& g, std::vector<NoData> holes = {},
+                     Void how = Void::Sentinel) {
+    const std::size_t cols = g.cols(), rows = g.rows();
     std::vector<float> data(cols * rows);
     for (std::size_t r = 0; r < rows; ++r)
         for (std::size_t c = 0; c < cols; ++c)
@@ -105,8 +107,13 @@ Raster<float> dem(std::size_t cols, std::size_t rows, std::vector<NoData> holes 
     for (const auto& n : holes)
         data[n.row * cols + n.col] =
             how == Void::NaN ? std::numeric_limits<float>::quiet_NaN() : kSentinel;
-    return how == Void::NaN ? Raster<float>{geometry(cols, rows), std::move(data)}
-                            : Raster<float>{geometry(cols, rows), std::move(data), kSentinel};
+    return how == Void::NaN ? Raster<float>{g, std::move(data)}
+                            : Raster<float>{g, std::move(data), kSentinel};
+}
+
+Raster<float> dem(std::size_t cols, std::size_t rows, std::vector<NoData> holes = {},
+                  Void how = Void::Sentinel) {
+    return dem_on(geometry(cols, rows), std::move(holes), how);
 }
 
 // Q14: a crossing of column line K at fractional row r is linear between the
@@ -804,4 +811,215 @@ TEST_CASE("CC-R: refusals are std::invalid_argument naming the generator",
             REQUIRE_REFUSED(generate(d, v, {{1, 0}}));
         }
     }
+}
+
+// ---------------------------------------------------------------------------
+// CC7 to CC9, after @reviewer's round 1 (D2 steps 5-6, the invariant I1-I3 of
+// on_edge(k), and the degenerate edge)
+// ---------------------------------------------------------------------------
+
+namespace {
+
+// The unit frame: x = col, y = -row, so a world coordinate IS its lattice
+// coordinate and std::nextafter moves an end by one lattice ulp. In the UTM
+// frame above, one world ulp is about 1e-11 cells, far from the lattice's own
+// rounding, so ulp-scale ends need this frame.
+RasterGeometry unit_frame(std::size_t cols, std::size_t rows) {
+    return RasterGeometry{0.0, 0.0, 1.0, 1.0, cols, rows};
+}
+Point2 unit(double col, double row) { return Point2{col, -row}; }
+
+double ulps(double x, int k) {
+    const double to = k > 0 ? std::numeric_limits<double>::infinity()
+                            : -std::numeric_limits<double>::infinity();
+    for (int i = 0; i < std::abs(k); ++i)
+        x = std::nextafter(x, to);
+    return x;
+}
+
+// I1-I3 on edge k of a store built on a DEM without NoData, given its lattice
+// ends in canonical order: every s in (0, 1) and strictly increasing, and in
+// P0, points..., P1 no two neighbours share a position.
+void check_invariant(const ConstraintCheckPoints& st, std::size_t k, MeshVertex a, MeshVertex b) {
+    const auto pts = st.on_edge(k);
+    INFO("edge " << k << " from (" << a.col << ", " << a.row << ") to (" << b.col << ", "
+                 << b.row << "), " << pts.size() << " points");
+    double prev_s = 0.0;
+    MeshVertex prev_at = a;
+    for (std::size_t i = 0; i < pts.size(); ++i) {
+        const ConstraintPoint& p = pts[i];
+        INFO("point " << i << " at (" << p.at.col << ", " << p.at.row << ") s " << p.s);
+        CHECK(p.s > prev_s);  // I1 at the first point, I2 after it
+        CHECK(p.s < 1.0);     // I1
+        CHECK_FALSE(p.at == prev_at);  // I3
+        prev_s = p.s;
+        prev_at = p.at;
+    }
+    if (!pts.empty())
+        CHECK_FALSE(prev_at == b);  // I3, the last point and P1
+}
+
+}  // namespace
+
+TEST_CASE("CC7: P1 one ulp past a column line: the crossing at t == 1 is dropped",
+          "[constraint_points][CC7]") {
+    // @reviewer's probe (round 1). The crossing with column 10 has t = 1
+    // exactly; kept, it would sit at s = 1, outside the open interval the
+    // loop scans, with a midpoint at s = 1 beside it.
+    const RasterGeometry g{0.0, 100.0, 1.0, 1.0, 16, 8};
+    const auto d = dem_on(g);
+    const std::vector<Point2> v{{0.8932792255671602, 100.0 - 1.5},
+                                {std::nextafter(10.0, 11.0), 100.0 - 3.25}};
+    const auto st = generate(d, v, {{0, 1}});
+    const auto pts = st.on_edge(0);
+    const MeshVertex a = lattice(g, v[0]), b = lattice(g, v[1]);
+    REQUIRE(b.col > 10.0);
+    check_invariant(st, 0, a, b);
+    // Columns 1..10 and rows 2, 3 are crossed; column 10's crossing is dropped.
+    CHECK(st.duplicates() == 1);
+    REQUIRE(pts.size() == 23);
+    for (const auto& p : pts)
+        CHECK(p.at.col < 10.0);
+    // The last piece now runs from column 9's crossing to P1.
+    CHECK(pts[21].at.col == 9.0);
+    CHECK(bits(pts[22].s) == bits((pts[21].s + 1.0) / 2));
+    CHECK(bits(pts[22].at.col) == bits((9.0 + b.col) / 2));
+}
+
+TEST_CASE("CC7: P0 one ulp before a column line: the midpoint on the crossing is dropped",
+          "[constraint_points][CC7]") {
+    // @reviewer's probe (round 1). The crossing with column 1 is a hair from
+    // P0, and the midpoint between them rounds onto the crossing, (1, 1.5).
+    const RasterGeometry g{0.0, 100.0, 1.0, 1.0, 16, 8};
+    const auto d = dem_on(g);
+    const std::vector<Point2> v{{std::nextafter(1.0, 0.0), 100.0 - 1.5}, {4.0, 100.0 - 3.25}};
+    const auto st = generate(d, v, {{0, 1}});
+    const auto pts = st.on_edge(0);
+    check_invariant(st, 0, lattice(g, v[0]), lattice(g, v[1]));
+    CHECK(st.duplicates() == 1);
+    REQUIRE(pts.size() == 10);
+    CHECK(pts[0].at == MeshVertex{1.0, 1.5});  // the crossing, now the first point
+    CHECK(pts[0].s > 0.0);
+    CHECK(pts[1].at == MeshVertex{(1.0 + pts[2].at.col) / 2, (1.5 + pts[2].at.row) / 2});
+}
+
+TEST_CASE("CC7: a seeded sweep of ends 1 to 4 ulps either side of grid lines keeps I1-I3",
+          "[constraint_points][CC7]") {
+    constexpr std::size_t cols = 24, rows = 16;
+    const auto g = unit_frame(cols, rows);
+    const auto d = dem_on(g);
+    const double cmax = static_cast<double>(cols - 1), rmax = static_cast<double>(rows - 1);
+    for (const std::uint64_t seed : {7ull, 8ull, 9ull, 0xBADC0DEull}) {
+        INFO("seed " << seed);
+        Rng rng{seed};
+        // One coordinate: on or 1-4 ulps either side of line L (inward only
+        // on the rectangle's sides), or a plain fraction.
+        auto near = [&](std::int64_t line, double max) {
+            const double l = std::clamp(static_cast<double>(line), 0.0, max);
+            int k = static_cast<int>(rng.below(9)) - 4;
+            if (l == 0.0)
+                k = std::abs(k);
+            if (l == max)
+                k = -std::abs(k);
+            return ulps(l, k);
+        };
+        auto coord = [&](double max) {
+            if (rng.below(4) == 0)
+                return rng.unit() * max;
+            return near(static_cast<std::int64_t>(rng.below(static_cast<std::uint32_t>(max) + 1)),
+                        max);
+        };
+        // The far end: anywhere, or near a line 0-2 lines from the near end,
+        // so short pieces with both ends at ulp distance from lines are common.
+        auto partner = [&](double x, double max) {
+            if (rng.below(3) == 0)
+                return coord(max);
+            const auto step = static_cast<std::int64_t>(rng.below(5)) - 2;
+            return near(static_cast<std::int64_t>(std::llround(x)) + step, max);
+        };
+        std::vector<Point2> v;
+        std::vector<Edge> edges;
+        for (std::uint32_t i = 0; i < 3000; ++i) {
+            const double ac = coord(cmax), ar = coord(rmax);
+            v.push_back(unit(ac, ar));
+            v.push_back(unit(partner(ac, cmax), partner(ar, rmax)));
+            edges.push_back(rng.below(2) == 0 ? Edge{2 * i, 2 * i + 1} : Edge{2 * i + 1, 2 * i});
+        }
+        const auto st = generate(d, v, edges);
+        CHECK(st.no_data() == 0);
+        for (std::size_t k = 0; k < st.edge_count(); ++k) {
+            const MeshVertex a = lattice(g, v[st.edge(k)[0]]), b = lattice(g, v[st.edge(k)[1]]);
+            check_invariant(st, k, a, b);
+            for (const auto& p : st.on_edge(k))
+                CHECK(p.z == Catch::Approx(bilinear(p.at.col, p.at.row, cols, rows)).epsilon(1e-12));
+        }
+    }
+}
+
+TEST_CASE("CC7: a column and a row crossing with the same t, at different positions, keep one",
+          "[constraint_points][CC7]") {
+    // (0.40625, 0.40625) to (1.578125, 1.578125 - 1 ulp): the line misses the
+    // node (1, 1) by an ulp, so neither crossing is snapped. Column 1 is
+    // crossed at (1, 0.99999999999999989) and row 1 at (1, 1), and both t
+    // round to the same double. The lower position wins the tie; the other is
+    // dropped by t and counted. Found by search: on a diagonal the two t
+    // expressions are mirror images, which is where they can round together;
+    // this edge passes near one node only, so nothing else is dropped.
+    constexpr std::size_t cols = 16, rows = 8;
+    const auto g = unit_frame(cols, rows);
+    const auto d = dem_on(g);
+    const std::vector<Point2> v{unit(0.40625, 0.40625),
+                                unit(1.578125, std::nextafter(1.578125, 0.0))};
+    const MeshVertex a = lattice(g, v[0]), b = lattice(g, v[1]);
+    // The premise, checked: same t, different positions, node not on the line.
+    const double tc = (1.0 - a.col) / (b.col - a.col);
+    const double tr = (1.0 - a.row) / (b.row - a.row);
+    const MeshVertex on_column{1.0, a.row + tc * (b.row - a.row)};
+    REQUIRE(tc == tr);
+    REQUIRE(on_column.row < 1.0);
+    REQUIRE(a.col + tr * (b.col - a.col) == 1.0);
+    REQUIRE(terrain::mesh::orient_sign(a, b, MeshVertex{1.0, 1.0}) != 0);
+
+    const auto st = generate(d, v, {{0, 1}});
+    const auto pts = st.on_edge(0);
+    check_invariant(st, 0, a, b);
+    CHECK(st.duplicates() == 1);
+    REQUIRE(pts.size() == 3);
+    CHECK(pts[1].at == on_column);
+    CHECK(pts[1].s == tc);
+    CHECK_FALSE(pts[0].at == MeshVertex{1.0, 1.0});
+    CHECK_FALSE(pts[2].at == MeshVertex{1.0, 1.0});
+}
+
+TEST_CASE("CC8: a degenerate edge {i, i} is refused", "[constraint_points][CC8]") {
+    const auto d = dem(kCols, kRows);
+    REQUIRE_REFUSED(generate(d, kCc1Vertices, {{1, 1}}));
+    REQUIRE_REFUSED(generate(d, kCc1Vertices, {{0, 1}, {0, 0}}));
+}
+
+TEST_CASE("CC8: two distinct vertices at one position give no points",
+          "[constraint_points][CC8]") {
+    const auto d = dem(kCols, kRows);
+    const auto& g = d.geometry();
+    for (const Point2 p : {world(2.5, 1.5), world(3.0, 1.25), g.node({2, 5}), world(0.3, 4.7)}) {
+        INFO("at (" << p.x << ", " << p.y << ")");
+        const auto st = generate(d, {p, p}, {{1, 0}});
+        REQUIRE(st.edge_count() == 1);
+        CHECK(st.edge(0) == Edge{0, 1});
+        CHECK(st.on_edge(0).empty());
+        CHECK(st.size() == 0);
+        CHECK(st.duplicates() == 1);  // the one midpoint candidate, on both ends
+        CHECK(st.no_data() == 0);
+    }
+}
+
+TEST_CASE("CC9: edge(k) and on_edge(k) past edge_count() throw std::out_of_range",
+          "[constraint_points][CC9]") {
+    const auto d = dem(kCols, kRows);
+    const auto st = generate(d, kCc1Vertices, {{0, 1}});
+    CHECK_THROWS_AS(st.edge(st.edge_count()), std::out_of_range);
+    CHECK_THROWS_AS(st.on_edge(st.edge_count()), std::out_of_range);
+    const auto none = generate(d, kCc1Vertices, {});
+    CHECK_THROWS_AS(none.edge(0), std::out_of_range);
+    CHECK_THROWS_AS(none.on_edge(0), std::out_of_range);
 }
