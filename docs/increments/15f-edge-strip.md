@@ -585,7 +585,7 @@ On the tolerance path of `_dem_mesh`, in this order:
 4. `trim(final...)`, as today.
 
 A refusal from either run is a usage error in the engine's words, as today
-(`_dem_mesh`'s `typer.BadParameter(f"{dem}: {out.message}", ...)`, `cli.py:1519`, and its final-check twin at `:1525`).
+(`_dem_mesh`'s `typer.BadParameter(f"{dem}: {out.message}", ...)`, `cli.py:1561`, and its final-check twin at `:1567`, which reads `checked.message`).
 
 ### D7. What the file and `--stats` record
 

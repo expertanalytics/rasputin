@@ -4,10 +4,11 @@ Status: **designed by `@architect`, 2026-10-03; revised the same day after
 Ola's review of the first field table** ("This was a surprisingly long list of
 things to put into a vtk file!"); **ruled by Ola the same day** ("Ruled by
 Ola", at the end): both field tables approved as they stand, `--record PATH`
-yes, units in the field names, `features_notice` kept in the file. Ready for
-`@tester` once `@reviewer`'s round-1 findings are fixed (done, "Changes
-after the design review, round 1", before "Review"; two defaults taken while
-Ola was away are listed there). The mesh file carries only what a user of the mesh needs;
+yes, units in the field names, `features_notice` kept in the file.
+**Implemented, in code review:** red `73863c3` and `a2fe6bb`, green
+`a2c635d`, test amendment `c45e419`, fixes `a31e2e0`, merge of master
+`acb1090`; 153 net production lines. The defaults taken while Ola was away
+are listed under "Changes after the design review, round 1". The mesh file carries only what a user of the mesh needs;
 everything else goes to `--stats` and `--record`. Ola's ruling of
 2026-10-03: before 15f-3's code step, everything `rasputin mesh` writes for a
 reader is made plain. His words on the `elevation_source` sentence: "This is
@@ -76,7 +77,9 @@ reprojected: `tests/fixtures/velhas/anadem_velhas.tif` with its catchment and
 `--out-crs EPSG:31983` at 5 m; mosaic: `tests/fixtures/dtm10/seam` at 5 m;
 features: the CORINE extract over the quarter-circle domain at 10 m).
 Only `cli.py` writes to stderr (`grep -rn "err=True\|sys.stderr"
-src_python/tin_engine` finds nothing outside it).
+src_python/tin_engine` finds nothing outside it). Every line number in this inventory is
+master `586fbc1`'s, before this increment; read them there
+(`git show 586fbc1:<path>`), not on this branch.
 
 ### The mesh file (`.vtk` FieldData; `.ply` header comments)
 
@@ -267,8 +270,8 @@ unreadable or break a legal requirement, so they stay, unchanged.
 |---|---|---|
 | `feature_bits`, `feature_names` | `io/vtk_legacy.py:124-125`; `.ply` `feature_bit <bit> <name>` comments, `io/ply.py:111` | the key to the `feature_mask` cell array and the per-feature 0/1 arrays: without it a mask of 5 does not say "river and railway" |
 | `feature_vocabulary` | `io/vtk_legacy.py:126`, `io/ply.py:112` | a digest of that key, so two files can be checked to use the same bits (increment 13) |
-| `land_cover_codes` | `io/vtk_legacy.py:118-119`, `cli.py:1009` | says which code system the `land_cover_code` cell array holds (CORINE level 3); the ParaView preset from `rasputin palette corine` colours those codes and assumes that system |
-| `features_notice` | `cli.py:930-933`, text at `feature_input.py:61-65` | the CORINE attribution ("Contains modified CORINE Land Cover 2018 data ... (c) European Union ..."), which the Copernicus data policy asks for on data derived from CORINE, as `licence_note` is for a downloaded DEM. Kept by Ola's ruling (2026-10-03) under the same rule as `dem_credit` |
+| `land_cover_codes` | `io/vtk_legacy.py:118-119`, `cli.py:1025` | says which code system the `land_cover_code` cell array holds (CORINE level 3); the ParaView preset from `rasputin palette corine` colours those codes and assumes that system |
+| `features_notice` | `cli.py:946`, text at `feature_input.py:61-65` | the CORINE attribution ("Contains modified CORINE Land Cover 2018 data ... (c) European Union ..."), which the Copernicus data policy asks for on data derived from CORINE, as `licence_note` is for a downloaded DEM. Kept by Ola's ruling (2026-10-03) under the same rule as `dem_credit` |
 
 ### D3. The rules
 
@@ -280,9 +283,9 @@ unreadable or break a legal requirement, so they stay, unchanged.
    maximum never reads above the tolerance it met.
 3. **A count of zero is omitted from the file**, never from `--stats`.
    This applies to counts only (today `nodata_vertices_removed`), never to a
-   measured value: `--tolerance 0` is accepted (`cli.py:795`) and then
+   measured value: `--tolerance 0` is accepted (`cli.py:820`) and then
    `tolerance_m 0` and `max_error_m 0` are written
-   (`test_cli_mesh_refine.py:133` asserts that maximum is 0.0).
+   (`test_cli_mesh_refine.py:151-155` asserts both).
 4. **Self-checks** live in `--stats`. If one is ever non-zero it is also
    printed to stderr as a warning, so a broken invariant is never silent.
 5. **No sentence in the file.** The one sentence, the summary, goes to stderr.
@@ -391,7 +394,7 @@ installed version, gives the same bytes:
 - `PATH` is resolved like `--stats`'s (`_destination` with `--out-parent`).
   It is refused, before any file is written, if it resolves to the mesh file,
   the `--out-edges` file or the `--stats` file, with the same kind of usage
-  error `_report_target` gives (`cli.py:1073-1085`). `-` is refused: standard
+  error `_report_target` gives (`cli.py:1098-1110`). `-` is refused: standard
   output is `--stats -`'s.
 - It is written after the mesh files and the `--stats` report, and its path is
   echoed on stdout like theirs. A refused or failed run writes no record.
@@ -427,8 +430,8 @@ affected only through `max_error_m`.
   `test_cli_mesh_refine.py`, `test_cli_start_quality.py`) are dropped: 25's red
   step rewrites those lines as `float(file_field(vtk, "max_error_m"))`, and 15f-3
   takes 25's version at the rebase. In that amendment,
-  `test_cli_mesh_refine.py:133` (`--tolerance 0`, which today asserts the
-  maximum is exactly 0.0) compares `max_error_m` with
+  `test_cli_mesh_refine.py:151-155` (`--tolerance 0`, which on 25 asserts
+  `file_field(fine, "max_error_m") == "0"`) compares `max_error_m` with
   `max(tolerance_m, dem_nodes_at_vertices_max_error_m)`, read from the file
   and from `--stats`, because after 15f-3 a node within rounding of a strip
   vertex can lift it a few units in the last place above 0 (D2).
@@ -562,7 +565,8 @@ Every file field above, plus:
 ## Compatibility
 
 Who reads today's text (`git grep -n elevation_source`, and the clauses'
-words, over the tree):
+words, over the tree): Line numbers in this section are those of master
+`586fbc1`, before 25's red step rewrote the tests they point at.
 
 - **Tests** (rewritten by `@tester` in 25's red step). The file-field reads
   become reads of `max_error_m`, `tolerance_m`, `dem_source` and the rest;
@@ -658,7 +662,7 @@ Not invariant-critical, so no mutation round (README, "Cost constraints").
   the user's own input and is out of scope, D8).
 - **`command`**: tests that read it (in `--stats` or `--record`) set
   `sys.argv` with `monkeypatch`, because `CliRunner` does not, and the
-  `command` is built from `sys.argv` (`cli.py:1118`).
+  `command` is built from `sys.argv` (`_command`, `cli.py:1130-1132`).
 - **`--stats` values with `|`** are compared after unescaping `\|`.
 - **`--record`** (D5):
   - the file parses as JSON, is ASCII, and ends in one newline;
@@ -743,6 +747,16 @@ catchment's lake line; `sys.argv` for `command`; the LOC estimate.
 - **`dem_nodes_at_vertices` and its largest difference are absent from the
   record on a path that does not measure them** (D6): before 15f-3, the
   projected path. A 0 there would claim a check that did not run.
+- **`nodata_vertices_removed` on the path without `--tolerance` means
+  vertices on or next to a NoData cell** ("NoData on the no-tolerance
+  path"): increment 12's sampler removes a valid node next to a NoData node,
+  and 25 reports what happens rather than changing the sampler; the fix is
+  its own later increment (`ROADMAP.md`).
+- **A reprojected run has no `dem_grid`** ("As built"): `resampled_grid`
+  carries that grid's size and spacing.
+- **`start_vertices` and `start_triangles` are in the Sizes section only**
+  ("Settled after the red step", item 6), so they are not in Result or in
+  `--record`.
 
 ## Settled after the red step (73863c3)
 
@@ -907,7 +921,7 @@ accepted as described unless marked otherwise.
   nodes with data lie outside the mesh; there should be none.` Accepted, with
   one correction: both must use the singular for a count of 1 (`1 DEM node
   ... differs`, `1 DEM node with data lies`), as "Settled after the red step",
-  item 8 rules. They do not today. This is a production fix for
+  item 8 rules. They do not today (fixed in a31e2e0). This is a production fix for
   `@developer`; a test for it is `@tester`'s.
 - **`--flat` summary:** `<n> triangles. The heights are not real: every z
   is 0 (--flat).` Accepted.
