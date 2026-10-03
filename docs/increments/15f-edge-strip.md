@@ -1002,7 +1002,7 @@ unchanged, and refused points stay excluded from E1 and reported (default 5).
   without copying it, which the computational-geometry skill forbids ("borrow
   the producer's predicate, never its records"). So the refused point `f`
   (`t` ≈ 3.7e-17) is not one of the oracle's points, and
-  `REQUIRE(f.over > 0)` (`prop_refinement_edge_strip.cpp:465`) asserts
+  `REQUIRE(f.over > 0)` (`prop_refinement_edge_strip.cpp:465` at `afd2498`) asserts
   something the oracle cannot see. `@tester` changes the refused section:
   - keep `strip_refused == 1` and `strip_refused_max_error ≈ 10`;
   - replace `REQUIRE(f.over > 0)` and the loop over `over_at` by
