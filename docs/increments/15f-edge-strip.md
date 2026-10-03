@@ -6,8 +6,9 @@ step 1. **15f-1** (the generator and its store) is implemented on
 `worktree-agent-a0cb49bea16623b07`, `@reviewer` APPROVED (round 2, "Review"
 below), and `@perf` ACCEPTED (2026-10-03, AC power: `_core` and both
 `bench.py` meshes byte-identical to master `390b516`, refine within noise;
-`docs/benchmarks/2026-10-03/15f-1-acceptance.md`); not pushed. **15f-2** is
-not started. Choices that would normally go to Ola
+`docs/benchmarks/2026-10-03/15f-1-acceptance.md`); not pushed. **15f-2**:
+the C++ red step is `afd2498` on `worktree-15f-2`, and the gaps it found are
+ruled under "Settled after 15f-2's red step" (L1-L9). Choices that would normally go to Ola
 were made as defaults; each is marked *default* where it occurs and listed
 under "Defaults chosen" at the end.
 
@@ -468,8 +469,9 @@ updates it (step 4).
 - **DEM nodes** (`refine_strip` only): `scan(dem, m, t)`, refine's scan,
   unchanged, in every triangle the loop has written. In round 1 that means the
   triangles `legalise_all` flipped (none on refine's output, normally). After
-  round 1 the active set is exactly the written triangles, so every active
-  triangle is scanned.
+  round 1, every triangle the run has written so far is scanned. That is not
+  the same as the active set: a skipped or refused triangle is active without
+  having been written. The gate is ruled in L3.
 - **Combining.** The first void result in the order source, strip, DEM wins.
   Otherwise the strictly largest error wins, with ties to the earlier set in
   that order, and within the strip to the lower triangle-edge index, then the
@@ -632,7 +634,9 @@ the output constraint edge that holds p.
 - **E1. The strip.** For every strip point that is not refused, `|z_p − mesh
   value at p| ≤ tolerance`. The run reports `strip_refused` and
   `strip_refused_max_error`; the guarantee is stated without refused points,
-  as 15c's J2 is stated without coincident ones.
+  as 15c's J2 is stated without coincident ones. On the reprojected path it
+  is also stated without a strip point consumed by a source point (L5): there
+  the source's z is the vertex's, and J2 governs.
 - **E2. DEM nodes kept (projected path).** After `refine_strip`, every valid
   DEM node in every closed output triangle with three valid vertices is within
   the tolerance of that triangle's plane, as after `refine` (increment 14's
@@ -814,10 +818,12 @@ and I1-I3):
   faked.
 - **ES7, void.** A constraint edge with one invalid end: carving along the
   edge, `uncovered` 0 at the end, termination.
-- **ES8, consumption.** A diagonal constrained edge through a DEM node, set up
-  so that the rescan inserts that node: no two output vertices share a
-  position, and the crossing's point is not inserted a second time (at
-  tolerance 0 as well).
+- **ES8, consumption** (as amended by L7). A diagonal constrained edge
+  through a DEM node. Projected path: the node is a vertex exactly once,
+  whichever set inserts it, and no two output vertices share a position (at
+  tolerance 0 as well). Reprojected path: a source point at that node wins the
+  tie (D4, "Combining"), its split consumes the strip point there (step 4), and
+  the strip point is not inserted a second time.
 - **ES9, the reprojected path.** `refine_points(store, ..., strip)`: J2 by
   15c's RP3 oracle and E1 by ES2's oracle both hold. The RP1-RP7 suite still
   passes with the store alone, unchanged.
@@ -826,6 +832,144 @@ and I1-I3):
   Python.
 - **ES11, E7.** A start whose strip points are all within the tolerance:
   output equal to the input, `inserted` 0.
+
+`@tester` added two cases, and the design adopts them: **ES12**, E1, E2 and
+the Delaunay oracle at UTM scale with non-square cells; **ES13**, ends within
+ulps of grid lines, with I1-I3 seen at the loop (no coincident vertex, no
+triangle that is not strictly counter-clockwise, every point over the tolerance
+within 1e-9 cells of an end and counted as refused).
+
+**Settled after 15f-2's red step (afd2498).** `@tester` found places where
+D4 says nothing or is wrong; ruled by `@architect`, 2026-10-03 (Ola away, the
+recommended option taken in each). They are part of the design, and
+`@developer` implements them as written here.
+
+- **L1. A refused strip point leaves its triangle active.** `@tester`'s choice
+  (ES6) stands. In the split phase a strip point is handled in this order:
+  1. `touched[t]` set: `continue`, as today;
+  2. the skip rule (the neighbour across its sub-edge already touched): push
+     `t` onto `skipped`, as today;
+  3. `foot_fits(m, t, e, at)` false: mark the point refused, add 1 to
+     `strip_refused`, push `t` onto `skipped`, and leave `any` true. Nothing is
+     inserted, and there is no fallback (refine's refused foot falls back to
+     its node; a strip point has none).
+
+  The skip rule comes before `foot_fits` because deferral is retried and
+  refusal is permanent: a point is never refused in a round in which it would
+  not have been split anyway. The refused marks are one flag per point of the
+  strip, written only in the serial phase and read by the next parallel scan,
+  so there is no race. Next round `t` is rescanned, its refused point is
+  skipped (D4, step 2), and it names its next worst point, of any set. Each
+  round of a refused triangle either inserts or refuses a point that was never
+  named before, so step 5's termination argument holds.
+- **L2. Refusals: order, statuses and texts.** `@tester`'s choices stand. The
+  checks run in this order, and the first that fails decides:
+  - `refine_strip`: (1) a tolerance that is not finite and ≥ 0 returns
+    `RefineStatus::InvalidTolerance` with "refine_strip: tolerance must be
+    finite and >= 0", no throw, as `refine` and `refine_points` do; (2)
+    `strip.geometry()` different from `dem.geometry()`: `std::logic_error`;
+    (3) a strip edge that is not a constraint edge of the start:
+    `std::logic_error`; (4) `to_lattice`'s refusals, as `refine`.
+  - `refine_points(..., strip)`: (1) the tolerance and (2) the frozen store as
+    today; then (3) and (4) as above, against `points.geometry()`.
+
+  Every `std::logic_error` text starts with the entry point's name and a
+  colon ("refine_strip: ...", "refine_points: ..."), in the style of
+  `"refine_points: the check-point store is not frozen"`; only the name is
+  pinned. "Differs" means any of the six fields of `RasterGeometry` (x_min,
+  y_max, delta_x, delta_y, cols, rows) compares unequal. `RasterGeometry`
+  has no `operator==` today. A defaulted one in
+  `include/terrain/raster/geometry.hpp` (one line, as `CellIndex` has) is the
+  recommended way. "A constraint edge of the start" means the unordered pair
+  appears in `edges`, whatever its mask. It is checked against that span,
+  before `to_lattice`.
+- **L3. Which triangles the DEM rescan reads (corrects D4, step 2).** In
+  `refine_strip` a triangle is scanned for DEM nodes exactly when its slot
+  has been **written** in this run. "Written" is one flag per slot that, once
+  set, stays set. `legalise_all`'s callback sets it (today that callback is
+  `[](std::uint32_t) {}`). So does every slot `touched` in a round, and every
+  new slot a split creates. Skipped and refused triangles that were not
+  written are scanned for strip points only. This makes E8 ("DEM nodes only
+  in triangles it has written") literally true. The other reading, "every
+  active triangle after round 1", would scan refine's own triangles when they
+  are skipped or refused. On a start that did not come from `refine` at the
+  same tolerance, that could insert nodes outside the written triangles.
+- **L4. What the outcome reads from the scan.** `PointScan` keeps two
+  things apart. One is the winner across sets (point, set, strip index, `s`,
+  where), for steps 3 and 4. The other is the non-strip set's own largest
+  error (source points on the reprojected path, DEM nodes in `refine_strip`)
+  and the `uncovered` counts. At the end, `max_error` is the largest of that
+  non-strip error over every slot's last result. A slot with no DEM scan
+  counts as 0. `strip_max_error` and `strip_refused_max_error` come from step
+  6's pass only, never from scan results. `uncovered` sums every set's count,
+  the strip's counted at the owning triangle.
+- **L5. Consumption in detail (D4, step 4).**
+  - A sub-edge record keeps its ends in the order of `s`, so `s_a < s_b`,
+    with `a` the end nearer `P0`.
+  - The strip point at exactly `q`'s position is looked up among the points
+    with `s` in `(s_a, s_b)`, by exact equality of `at`. A linear walk is
+    enough, because the path is taken only for a node or a source point that
+    lies exactly on a constrained edge. Binary search on `q`'s projected `s`,
+    with a check of both neighbours, is also allowed.
+  - Without such a point, `σ = clamp(((q − a) · (b − a)) / |b − a|², 0, 1)`
+    in lattice `(col, row)`, and `s_q = s_a + σ (s_b − s_a)`. If `s_q` rounds
+    onto `s_a` or `s_b`, one half has an empty interval. That is allowed: it
+    holds no point to miss, and a point sitting at `s_q` itself is still
+    measured by step 6.
+  - A consumed point is not inserted, is not counted in `strip_inserted`, and
+    is never named again (it is now an end).
+  - Step 6 measures a point whose `s` equals an end's `s` against that end's
+    z. On the projected path a consumed point's error is then exactly 0,
+    because both z's are `value_at` of the node. On the reprojected path a
+    source point that lands exactly on a strip point keeps the source's z,
+    because the source is the truth there (J2). The difference goes into
+    `strip_max_error` and is reported. E1 is stated without such points (E1
+    above). For a source point to land exactly on a crossing or a midpoint
+    needs an exact coincidence, which no ES case builds and no real input is
+    expected to produce. It is ruled so that the reported figure stays honest.
+- **L6. Counting.** `carved` counts the void insertions of every set.
+  `strip_inserted` counts every strip insertion, carved ones included, and
+  `nodes_inserted` counts every DEM-node insertion of `refine_strip`, carved
+  ones included. `inserted` is their sum with the source insertions.
+  `strip_refused` counts points, each at most once. An inserted strip vertex
+  is output at `(x_min + col dx, y_max − row dy)`, valid, with the point's z,
+  as `refine_points` outputs a source point.
+- **L7. ES8: the substitution is accepted, and D4 is not changed.** The
+  order is already fixed: the serial phase walks triangles in index order, and
+  E4 holds. What a test cannot fix is which slot holds which triangle after a
+  split, because that is `LatticeMesh`'s numbering, which the design leaves
+  open on purpose. On `@tester`'s projected fixture the strip names the node
+  in round 1: no triangle has been written, so there is no DEM scan, and ties
+  go to the strip anyway. A DEM node can reach consumption only in a later
+  round, and only if the triangle that does not own the sub-edge comes first
+  in index order and names the node. A test that forced this would pin the
+  slot numbering. Step 4 runs one code path for "any other point", source or
+  DEM node, so the reprojected section exercises it. The projected section
+  keeps "one vertex at the node". Optional for `@tester`, not blocking: add
+  `CHECK(out.strip_refused == 0)` to the projected section. At tolerance 0,
+  if the DEM route were ever taken and consumption were missing, the
+  leftover point would show as a refused insertion on top of the vertex.
+- **L8. The oracles (`tester.md` §3D), confirmed.** Every property case on the
+  projected path carries three oracles: the constrained-Delaunay oracle
+  (§3D), the DEM-node tolerance oracle (§3D; it is E2), and the strip oracle
+  (E1, ES2's). On the reprojected path the Delaunay and strip oracles stay.
+  The tolerance oracle there is 15c's J2 by RP3's oracle, over the source
+  points. This is §3D's oracle read against the DEM that path takes as the
+  truth: the source DEM, whose nodes the check points are. Phase 2 gives up
+  the resampled grid's nodes on purpose (J2, F2), so no oracle checks them.
+  ES2 and ES3 above name only their own oracle. The suite carries all three on
+  every projected case (`projected_oracles` in
+  `tests/cpp/property/prop_refinement_edge_strip.cpp`), and that is what is
+  required.
+- **L9. Later, by day: TSan.** Once `prop_refinement_edge_strip` is green,
+  it joins the TSan target list in `.github/workflows/main.yaml` (the `tsan`
+  job's `--target` list). The strip scan is a new parallel reader of shared
+  state: the sub-edge map and the refused flags. That file is not edited from
+  the unattended window; it is for 15f-2's PR, with Ola present.
+
+LOC effect: L1, L3, L4 and the `operator==` of L2 add about 15 lines to
+`refine_points.hpp`'s 203 and 1 to `geometry.hpp`. 15f-2's estimate becomes
+about 406: 564 at +39 % and 650 at +60 %, still under 700.
 
 **Python (pytest), 15f-2:**
 
