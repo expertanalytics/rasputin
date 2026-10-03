@@ -4,6 +4,22 @@ When: after auto-catchment is ready to use (Ola, 2026-09-28). Run by
 `@orchestrator`. Items are added as they come up; the retrospective itself
 gets its own dated file here, and this file is then emptied.
 
+## Taking recurring decisions off the main session (Ola, 2026-10-03)
+
+Ola: "I need even more control. My gut feeling is to offload the recurring
+decisions, or make them more mechanical." Evidence and plan:
+`2026-10-03-dispatcher-control.md`. It counts 28 main-session errors from
+27 September to 3 October, 22 of them of a kind a script, template or hook
+could have stopped, and proposes five stages, each for Ola to rule: (1)
+briefs assembled from files by a script, with a hook that refuses a spawn
+without one (about 140 lines); (2) one script that writes `session.md` and
+one that says what step comes next on each branch (about 230 to 380); (3) a
+checked-in merge runner with a lock (about 120); (4) hooks on the main
+session's own turns: concurrency cap, idle guard, unexplained codes, rule
+changes (about 125, probes first); (5) handbacks routed, reviews recorded,
+`ROADMAP.md` status generated. Each stage deletes the prose rule it
+replaces.
+
 ## Agents taking on each other's work (Ola, 2026-09-28): the main focus
 
 Ola, 2026-09-29: "when we do our retrospective, we should have a specific
