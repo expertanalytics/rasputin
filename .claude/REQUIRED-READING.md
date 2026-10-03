@@ -10,14 +10,16 @@ order as the sections here.
 first subagent spawn, the first commit, or the first edit, in this order:
 
 1. The recap from `tools/session_state.py`: the round recap (last landed, in
-   flight, decisions waiting on Ola, next ROADMAP items), `.claude/current-task/`
-   and the predecessor's last human turns, **including prompts Ola queued and
-   the harness absorbed mid-turn** (they never appear as normal turns). The
-   `SessionStart` hook puts it in context on startup, resume, `/clear`, compaction
-   and fork; if it is missing, run `python3 tools/session_state.py` yourself.
+   flight, running background jobs, decisions waiting on Ola, next ROADMAP
+   items), `.claude/current-task/` and the predecessor's last human turns,
+   **including prompts Ola queued and the harness absorbed mid-turn** (they
+   never appear as normal turns). The `SessionStart` hook puts it in context
+   on startup, resume, `/clear`, compaction and fork; if it is missing, run
+   `python3 tools/session_state.py` yourself.
 2. Judge each surfaced turn against the tree: a turn with no answering commit,
    file or PR is still pending, and an earlier pending turn outranks your
-   reconstruction of "what comes next".
+   reconstruction of "what comes next". Start no background job before the
+   running ones are listed.
 3. If anything is still ambiguous after both, **ask Ola one question**. A
    question costs a line; a guessed round costs ~150k tokens.
 
@@ -28,19 +30,23 @@ sufficient: it shows what was finished, never what was asked.
 ## While you act: in-flight state goes on disk
 
 - **The current ask lives in `.claude/current-task/`**, untracked and
-  gitignored. Three lines or fewer per file: the ask, the persona it went to,
-  the file it will produce. **One file per writer; the spawner deletes it.**
-  - `session.md` is the main session's, and only the main session writes it.
-    It is overwritten in place and deleted when the round lands. A decision
-    waiting on Ola goes in it as a line containing `ASK OLA:`; the recap
-    prints those lines.
-  - Every other file is one subagent's, `<persona>-<HHMMSS>.md`. The spawner
+  gitignored. **One file per writer; the spawner deletes it.**
+  - `session.md` is the main session's, and only the main session writes it,
+    in place; it is deleted when the round lands. Each line starts with
+    `NOW:` (one), `QUEUE:` (one) or `ASK OLA:` (one per decision waiting on
+    Ola), at most 300 characters each; no rulings, no history. The recap
+    lists every worktree's `ASK OLA:` lines and warns on any other line.
+  - Every other file is one subagent's, `<persona>-<HHMMSS>.md`, three lines
+    or fewer: the ask, the persona and the file it will produce. The spawner
     names the path in the prompt, and the subagent writes that path and no
     other. The spawner deletes it on reading the handback — never the
     subagent. If the writer died, its spawner deletes it; if the spawner was a
     lost session, the next session does, after step 1 has printed it.
 - **One session per working tree.** Nothing assigns `session.md`, so
   concurrent sessions need separate worktrees (`git worktree add`).
+- **After merging a change to `CLAUDE.md` or `.claude/agents/`, restart
+  before spawning the changed persona**; until then its brief says to read
+  the persona file from disk.
 - **A subagent whose product is a file creates that file first and writes
   incrementally**, so a death leaves something to resume. A persona's prompt
   names the output path.
@@ -156,7 +162,9 @@ files to the handback. A refused write to a rule file, or a refused push, is
 never redone by any route. Otherwise record it as an `ASK OLA:` line (main session: in
 `session.md`; subagent: in its handback) and continue with other work.
 When Ola says he is leaving, ask him how long, and ask him to run
-`away.py` with that duration.
+`away.py` with that duration. Before he leaves, the `QUEUE:` line names at
+least one fallback that needs no ruling and writes no governed path; idle
+is accepted only when no such item exists.
 
 `SessionStart` runs `tools/session_state.py`, so the
 cold-start recap is in context before the first prompt, on every source:
@@ -165,14 +173,13 @@ exits non-zero, the session starts without the recap, and the recap is then
 run by hand (step 1 above). Spawned subagents have their own event,
 `SubagentStart`; the hooks documentation does not say outright that
 `SessionStart` skips them, so the main session checks the first persona it
-spawns with the hook live for a recap it should not have. The hook's output is
-plain stdout
-(`python3 tools/session_state.py | wc -m` measures it), and Claude Code caps
-that at 10,000 characters: past the cap the text is saved
-to a file and only a 2,000-character preview reaches the context, so a
-`session.md` or subagent file long enough to push it over is too long. It reads
-the main checkout (`$CLAUDE_PROJECT_DIR`); a session launched *inside* a
-worktree gets a thin recap, with no `session.md` and no predecessor turns.
+spawns with the hook live for a recap it should not have. Claude Code caps
+the hook's stdout at 10,000 characters (`python3 tools/session_state.py | wc
+-m` measures it) and passes only a 2,000-character preview past the cap, so
+keep `session.md` and the subagent files short. The recap finds the main
+checkout from the repository's common git dir, so a session launched inside
+a worktree gets the main checkout's `session.md` and every worktree's
+`ASK OLA:` lines.
 
 Propose any further hook for Ola's approval; never add one to
 `.claude/settings.json` on your own initiative. Proposed and not approved:
