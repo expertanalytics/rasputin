@@ -163,6 +163,7 @@ class Entry:
     value: str            # ASCII, already formatted (numbers through stats._exact)
     number: float | int | None  # the bare number, for --record's JSON; None for text
     in_file: bool         # True only for the mesh-file fields of D2
+    in_inputs: bool = False  # --stats "Inputs" (else "Result"); see "Settled after the red step"
 
 @dataclass(frozen=True, slots=True)
 class RunRecord:
@@ -369,15 +370,17 @@ installed version, gives the same bytes:
 {
  "rasputin_version": "0.2.0.dev0",
  "command": "rasputin mesh --dem 7908_3_10m_z33.tif --tolerance 5 --out a.vtk --record a.json",
+ "dem_grid": "5051 columns x 5051 rows, 10 m apart",
+ "dem_tiles": "7908_3_10m_z33.tif",
+ "dem_vertical_unit": "metres",
+ "start_mesh": "every 40th DEM node",
+ "start_min_angle_deg": 25.0,
+ "snap_to_lines": "on",
  "crs": "EPSG:25833",
  "tolerance_m": 5.0,
  "max_error_m": 4.999692612800061,
  "dem_source": "7908_3_10m_z33.tif",
  "nodata_vertices_removed": 199,
- "start_mesh": "every 40th DEM node",
- "start_min_angle_deg": 25.0,
- "snap_to_lines": "on",
- "dem_grid": "5051 columns x 5051 rows, 10 m apart",
  "refinement_rounds": 53,
  "...": "..."
 }
@@ -535,7 +538,7 @@ Every file field above, plus:
 | `refinement_rounds`, `points_inserted`, `points_inserted_on_nodata`, `edge_flips` | Refinement's work: passes, points added, of them into triangles with a NoData corner, edge swaps | `53`, `45683`, `7887`, `92875` |
 | `start_quality_points_inserted`, `start_quality_points_skipped` | Points added to improve the starting mesh; tries skipped | `503`, `252` |
 | `points_snapped_to_lines`, `snaps_refused` | Points moved onto lines; moves refused | `0`, `0` |
-| `start_vertices`, `start_triangles`, `start_vertices_between_dem_nodes` | Size of the starting mesh; its vertices not on a DEM node | `16384`, `32258`, `0` |
+| `start_vertices_between_dem_nodes` | Starting-mesh vertices not on a DEM node (the starting mesh's size stays in the Sizes section; "Settled after the red step", item 6) | `0` |
 | `domain`, `domain_crs`, `domain_transform` | The domain file and shape; its coordinate system and conversion | `catchment.geojson: 1 outline, 0 holes, 27 vertices` |
 | `features`, `features_crs`, `features_transform` | Each features file: layer, class map, features, lines, vertices | `clc2018_7908_3.gpkg layer U2018_CLC2018_V2020_20u1, class map corine: 60 features, 87 lines, 10266 vertices` |
 
@@ -740,6 +743,97 @@ catchment's lake line; `sys.argv` for `command`; the LOC estimate.
 - **`dem_nodes_at_vertices` and its largest difference are absent from the
   record on a path that does not measure them** (D6): before 15f-3, the
   projected path. A 0 there would claim a check that did not run.
+
+## Settled after the red step (73863c3)
+
+`@tester`'s red step pinned choices this design had not made. Each is
+confirmed or corrected here before `@developer` starts. Two are corrected
+(items 7 and 8), and `@tester` changes the tests named there; the rest stand
+as pinned.
+
+1. **Builders: confirmed.** `refined_record`, `stride_record` and
+   `flat_record` take keyword arguments only, named after the record's
+   entries, plus `triangles` (the output triangle count, for the summary). An
+   argument not passed means the path does not produce that entry, and the
+   entry is absent. `refined_record`'s `max_error_m` argument is the measured
+   figure (refinement's, or the final check's on a reprojected run); the
+   builder applies the on-vertex rule of D2 and may raise it.
+2. **Warnings: confirmed.** `summary(record)` returns the summary sentence,
+   then one line per warning, each starting `Warning:`. `cli.py` prints it to
+   stderr as it is.
+3. **`--stats` layout: confirmed.** A section `## Inputs` and a section
+   `## Result`, each one table with rows `| wording | value | name |`; the
+   name may be in backticks; `|` in a cell is escaped `\|`. A section with no
+   rows is not printed (the gallery run has no Inputs). The order of sections,
+   which the tests leave open, is: Sizes, Inputs, DEM seams, Quality (plan
+   view, x/y), Result, Timings.
+   Which entries are Inputs: `dem_grid`, `dem_tiles`, `dem_seams`,
+   `dem_vertical_unit`, `dem_crs`, `dem_transform`, `resampled_grid`,
+   `domain`, `domain_crs`, `domain_transform`, `features`, `features_crs`,
+   `features_transform`, and the settings `start_mesh`,
+   `start_min_angle_deg`, `snap_to_lines`. Everything else is Result, which
+   starts with the file fields in D2's order. `Entry` gains `in_inputs: bool =
+   False` (defaulted, so the five-argument `Entry(...)` in the tests holds);
+   `stats_rows(record)` stays one list in record order, Inputs entries first,
+   and the builders emit them first.
+4. **`stats.Report`: confirmed.** Its `refinement` argument and the
+   `Refinement` dataclass go, and so does `Sizes.dropped` with its row. The
+   new sections reach it as two fields, `inputs` and `result`, each a
+   sequence of `(wording, value, name)`, both defaulting to empty; `cli.py`
+   splits `stats_rows` by `in_inputs` to fill them.
+5. **`--record` key order: the test plan wins.** Keys are
+   `rasputin_version`, `command`, then the record in `--stats` order, Inputs
+   then Result. D5's example was wrong (it put `crs` first and `dem_grid`
+   after `snap_to_lines`) and is corrected above.
+6. **`start_vertices` and `start_triangles`: confirmed**, in Sizes only, so
+   absent from Result and from `--record`. The `--stats` table under "The
+   fields, for Ola" listed them; `start_vertices_between_dem_nodes` is the
+   only one of the three in Result.
+7. **`start_mesh`: corrected wording, same meaning.** It is present on the
+   no-tolerance path too (that mesh is a start mesh with no refinement), and
+   for a domain it reads `the domain outline`, with features `the domain
+   outline and the feature lines`. For a stride `n` it reads `every DEM node`
+   when `n` is 1 and otherwise `every <n><ordinal> DEM node` with the English
+   ordinal: `every 2nd`, `every 3rd`, `every 21st`, `every 40th`, `every
+   112th`. "every 2th" would not be plain. `recordread.py`'s parser
+   (`every (?:(\d+)(?:st|nd|rd|th) )?DEM node`) already accepts this; any
+   test that builds the expected text as `f"every {n}th DEM node"` must use
+   the ordinal instead (`@tester`).
+8. **Wording.** Confirmed: `dem_seams` with no disagreement reads `none: the
+   tiles agree where they overlap`; `domain` reads `<file>: 1 outline, <h>
+   hole(s), <n> vertices`; `features` reads `<file>[ layer <l>], class map
+   <m>: <n> features, <c> lines, <v> vertices`, sources joined by `; `;
+   `dem_grid` starts `<c> columns x <r> rows, `; `dem_vertical_unit`
+   contains `metres`, and `assumed` only when the GeoTIFF has no vertical
+   unit. **Corrected:**
+   - **A disagreeing seam** is not today's `Seam.entry` text (`a.tif | b.tif:
+     nodes 1, max 4, median 4`), which is the terse form Ola ruled out. It
+     reads `<a> and <b> disagree at <n> node(s), by up to <max> m (median
+     <median> m)`, for example `ne.tif and nw.tif disagree at 1 node, by up to
+     4 m (median 4 m)`, pairs joined by `; ` in today's order. Numbers are
+     formatted as `Seam.cells` formats them (`:g`). `@tester` changes the
+     tests that pin the old text (`test_cli_mesh_mosaic.py:278`, `:302`,
+     `:331-336`). The separate "## DEM seams" table (item 10) keeps its
+     columns.
+   - **Plurals are correct English** everywhere: `1 hole`, `2 holes`,
+     `1 feature`, `1 line`, `1 vertex`; in the catchment, `1 separate patch`,
+     `2 separate patches`, `1 enclosed gap`, `2 enclosed gaps`. The catchment
+     and domain regexes already accept both forms; the `features` regex
+     (`(\d+) features, (\d+) lines, (\d+) vertices`) must accept `feature`,
+     `line` and `vertex` for a count of 1 (`@tester`).
+9. **`--record` refusals: confirmed.** Each is a usage error (exit 2) naming
+   `--record`, raised before any file is written; the record's path is the
+   last line on stdout.
+10. **"## DEM seams": confirmed**, kept as its own section.
+11. **`tests/python/recordread.py`: confirmed**, holding `file_field` and
+    `stats_row`; `test_cli_mesh_refine.py` re-exports them, so 15f-3's
+    import from it keeps working (D6).
+12. **The stride golden hashes the file from `POINTS` on: confirmed.** The
+    header now holds fields whose wording this increment changes, so a
+    whole-file digest would pin wording instead of the mesh. The bytes from
+    `POINTS` on are the mesh and its arrays, which this increment must not
+    change; the fields are pinned by name in the other tests. This is the
+    same span `tools/bench.py` hashes (`:333`, `:350`).
 
 ## Review
 
