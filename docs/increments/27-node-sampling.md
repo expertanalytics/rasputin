@@ -1,9 +1,10 @@
 # Increment 27: a vertex on a DEM node reads that node
 
-Status: **designed**, `@architect`, 2026-10-03. Not started. **Sequenced after
-increment 25 merges**: the branch is cut from master once 25 is in, because
-the red step changes tests that 25 adds (`docs/increments/25-plain-output.md`,
-"NoData on the no-tolerance path"). Decisions for Ola are in "For Ola".
+Status: **designed**, `@architect`, 2026-10-03. Not started. Increment 25 has
+merged (#157) and this branch has master merged in, so the tests 25 added and
+that the red step changes are on the branch already
+(`docs/increments/25-plain-output.md`, "NoData on the no-tolerance path").
+Decisions for Ola are in "For Ola".
 
 **The defect.** Without `--tolerance`, z comes from `_core.sample`, which is
 `terrain::raster::bilinear` over every mesh vertex
@@ -67,7 +68,7 @@ legacy-archive:legacy/rasputin/triangulate_dem.h
 At the tag, lines 375-388 of `legacy/rasputin/triangulate_dem.h` are
 `get_interpolated_value_at_point`, bilinear with no sentinel test, and line 182
 of `legacy/bindings.cpp` binds it; `globcov_repository.py` uses
-`no_data` only as a land-cover class name (230). Nothing is carried across:
+`no_data` only as a land-cover class, with class code 230. Nothing is carried across:
 there is no legacy NoData rule to keep.
 
 ## The rule
@@ -101,14 +102,16 @@ a node into the cell before it. When `(p.x - x_min) / delta_x` rounds just
 below the integer, `tx` comes out as 1 - 1e-16 instead of 0, and the zero
 weight is never seen. Measured with a test program that includes today's
 `sample.hpp` (`c++ -std=c++20 -O2`, Apple clang 21) and calls `bilinear` at
-`g.node(c)` for every node of a 200 x 300 grid of random values up to 1000:
+`g.node(c)` for every node of a 200 x 300 grid of values drawn uniformly from [0, 1000) (`std::mt19937`, seed 1, so
+the counts depend on the draws and the standard library):
 with origin 500000.3 / 7900000.7 and spacing 0.7 / 0.3, 38 580 of 60 000
-samples are not bit-equal to the node value (largest difference 6.6e-7 m);
-with origin 0.1 / 100.1 and spacing 0.1, 31 114. With origin 0 and spacing 1,
+samples are not bit-equal to the node value (largest difference about
+6.6e-7 m); with origin 0.1 / 100.1 and spacing 0.1, about 31 000. `@reviewer`'s
+rerun with other draws got 31 116 and 6.72e-7. With origin 0 and spacing 1,
 with a dyadic grid (500000.5 / 7900000.25, spacing 0.5 / 0.25), and with the
 Kartverket fixture's geometry, there are none. Node identity is also the relation the producers use:
 `subsample` builds stride vertices with `node`'s expression
-(`grid_domain.py:50-63`), and refine decides that a start vertex is a node by
+(`grid_domain.py:66-67`), and refine decides that a start vertex is a node by
 the same `node(round) == p` test (`lattice_position`, `refine.hpp:126-135`).
 
 ### Where it lives
@@ -135,7 +138,7 @@ the same `node(round) == p` test (`lattice_position`, `refine.hpp:126-135`).
 ### Why cell sides are not in this increment
 
 1. **No vertex on the path being fixed lies on a cell side.** Without
-   `--tolerance` there is no `--domain` and no `--features` (`cli.py:811-812`
+   `--tolerance` there is no `--domain` and no `--features` (`cli.py:830`
    refuses `--domain` without `--tolerance`). The vertices are the stride
    nodes and the ring through them. The noder makes no crossings there, and
    the triangulation adds no points. Every vertex is a node.
@@ -216,7 +219,7 @@ this increment. It is reported to Ola under "For Ola" and not changed here.
 
 ## Tests for `@tester`
 
-Red first, on a branch cut from master after 25 merges. No mutation round:
+Red first, on this branch (master, with 25, merged in). No mutation round:
 the change is one early return, and the golden digests are the backstop for
 the one invariant that matters (S5, S7). The C++ cases go in
 `tests/cpp/unit/test_raster_view.cpp` (batch and view) and
@@ -229,7 +232,8 @@ New:
   and `z == value_at` bit for bit. Include an interior node, a node on the
   last row, one on the last column, and all four grid corners, because the
   clamped last cell makes the NoData corner sit on the other side there. In
-  C++ the points are `g.node(c)` from the same binary, so any geometry works.
+  C++ the points are `g.node(c)`, computed by the same `node` that `node_at`
+  compares against, so any geometry works.
   A Python test that builds coordinates in NumPy uses integer or dyadic
   geometry (see "A limit of the exact rule").
 - **S2. On a NoData node, refused.** Sentinel and NaN.
@@ -243,9 +247,10 @@ New:
 - **S4. Exact at every node, on a non-dyadic grid.** All nodes `g.node(c)` of
   a 200 x 300 grid with origin 500000.3 / 7900000.7 and spacing 0.7 / 0.3:
   `z == value_at` everywhere, far edges included. Today 38 580 of 60 000 fail
-  on Apple clang (measured above). The count may differ on another compiler,
-  but the green assertion holds on all of them, because `node_at` compares
-  against `node` from the same binary. A dyadic grid does not work here: it is
+  in the measurement above. The count may differ with another compiler or
+  standard library, but the green assertion holds everywhere: the test's
+  points and `node_at`'s comparison both come from `RasterGeometry::node`,
+  whatever that compiles to. A dyadic grid does not work here: it is
   exact today too (measured: 0 failures).
 - **S5. `node_at` agrees with refine's `lattice_position`** (invariant-critical
   for "the tolerance path is unchanged"). Over finite points in the node
@@ -286,9 +291,12 @@ Changed (one amendment commit on top of 25's tests, the reason in the message):
   `test_nodata_vertices_removed_counts_the_strided_nodes_without_data`: the
   expected count goes back to "picked nodes that are NoData" (25 at stride 1
   on the `holed` fixture), and the docstring says so. Steps 1, 2 and 3 stay.
-  Drop `trimmed_by_the_sampler` if nothing else uses it.
-- `test_the_no_tolerance_summary_says_on_or_next_to`: rename it, and expect
-  `vertices on NoData cells were removed`.
+  Drop `trimmed_by_the_sampler` (`test_cli_mesh_plain_output.py:155`) and its
+  assertion that at stride 1 the trim removes more than the NoData nodes
+  (`:169`).
+- `test_the_no_tolerance_summary_says_on_or_next_to`, in both files that have
+  it: `test_cli_mesh_plain_output.py:284` and `test_run_record.py:443`. Rename
+  both, and expect `vertices on NoData cells were removed`.
 - `test_cli_mesh_dem.py`, `test_a_nodata_edge_row_is_dropped_and_counted`: the
   wording goes back to `6 vertices on NoData cells`. The count stays 6: that
   fixture's NoData row is row 0, and under today's rule a node's cell reaches
@@ -313,11 +321,15 @@ It **does not change**.
   comment go).
 - `grid_domain.py`: the `subsample` docstring correction above.
 
-Docs in the same PR: `12-dem-to-mesh.md` R2, the "NoData" and "On the last row
-or column" bullets, each gets a line saying increment 27 changed it.
-`25-plain-output.md`'s inventory row for `vertices without data dropped` and
-its "`nodata_vertices_removed` on the path without `--tolerance`" bullet get
-the same. The 16 text on input vertices on a node (`16-domain-polygon.md`,
+Docs in the code PR, each a line saying increment 27 changed it:
+`12-dem-to-mesh.md` R2, the "NoData" and "On the last row or column" bullets;
+`12-dem-to-mesh.md:341` (test 4, "next to a NoData corner even at zero
+weight", and the 1e-9 on the last row and column) and `:438` (the exclusion
+"Changing `bilinear`'s NoData rule"). In `25-plain-output.md`: the inventory
+row for `vertices without data dropped` (around line 121), the
+"`nodata_vertices_removed` on the path without `--tolerance`" bullet (around
+751), and the "Until that fix" block in "NoData on the no-tolerance path"
+(around 858-894). The 16 text on input vertices on a node (`16-domain-polygon.md`,
 around "An input vertex that sits exactly on a node") is still true and is not
 touched. `ROADMAP.md`: the proposed sampler row that 25 adds becomes row 27,
 updated at merge as the README requires.
