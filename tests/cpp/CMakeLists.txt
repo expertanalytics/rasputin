@@ -334,3 +334,16 @@ target_link_libraries(test_refinement_constraint_points PRIVATE Threads::Threads
 add_terrain_backend_test(test_refinement_lattice_position
                          unit/test_refinement_lattice_position.cpp)
 target_link_libraries(test_refinement_lattice_position PRIVATE Threads::Threads)
+
+# The edge strip in the refinement loop, increment 15f-2
+# (docs/increments/15f-edge-strip.md, D4, E1 to E8 and "Tests for @tester",
+# ES1 to ES11). Two targets, so the oracles stay buildable on their own:
+# test_refinement_strip_oracle shows, against refine() alone, that every
+# oracle in support/strip_oracle.hpp can fail (ES1's defect half among them);
+# prop_refinement_edge_strip is the suite for refine_strip and
+# refine_points(..., strip). ES2, ES3 and ES5 are the invariant-critical
+# cases. Both start threads (refine's scheduler; ES4 sweeps 1, 2 and 8).
+add_terrain_backend_test(test_refinement_strip_oracle unit/test_refinement_strip_oracle.cpp)
+target_link_libraries(test_refinement_strip_oracle PRIVATE Threads::Threads)
+add_terrain_backend_test(prop_refinement_edge_strip property/prop_refinement_edge_strip.cpp)
+target_link_libraries(prop_refinement_edge_strip PRIVATE Threads::Threads)
