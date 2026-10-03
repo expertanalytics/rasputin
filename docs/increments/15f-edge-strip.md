@@ -2,12 +2,19 @@
 
 Status: **designed by `@architect`, 2026-10-03, while Ola was away
 (unattended).** Written before `@tester`, per `docs/increments/README.md`
-step 1. **15f-1** (the generator and its store) is implemented on
-`worktree-agent-a0cb49bea16623b07`, `@reviewer` APPROVED (round 2, "Review"
-below), and `@perf` ACCEPTED (2026-10-03, AC power: `_core` and both
-`bench.py` meshes byte-identical to master `390b516`, refine within noise;
-`docs/benchmarks/2026-10-03/15f-1-acceptance.md`); not pushed. **15f-2** is
-not started. Choices that would normally go to Ola
+step 1. **15f-1** (the generator and its store) **merged as #148**
+(`@reviewer` APPROVED, round 2, "Review" below; `@perf` ACCEPTED,
+`docs/benchmarks/2026-10-03/15f-1-acceptance.md`). **15f-2**, the C++ loop:
+the C++ red step is `afd2498` on `worktree-15f-2`, and the gaps it found are
+ruled under "Settled after 15f-2's red step" (L1-L9). The C++ green step is
+`67df94c` (11 of 13 ES cases); its three open questions are ruled under
+"Settled after 15f-2's green step" (L10-L13), and the sliver cascade and the
+split into three PRs under "Settled after L12 and L13" (L14, L15), and the
+coincidence radius scaled with the lattice (L16). L14 and L16 are green at
+`99e95d7`; `@reviewer` APPROVED 15f-2 in round 2 ("Review"), and `@perf`
+ACCEPTED it (meshes and quality identical to master, refine within noise;
+`docs/benchmarks/2026-10-03/15f-2-acceptance.md`). **15f-3** (the
+bindings, the Python and the full acceptance) is not started. Choices that would normally go to Ola
 were made as defaults; each is marked *default* where it occurs and listed
 under "Defaults chosen" at the end.
 
@@ -51,7 +58,7 @@ These came from reading the code the strip builds on. Each one adds lines
 beyond 15c's estimate of 160-210.
 
 **F1. Membership cannot find a point on a constraint.** `scan_points`
-(`include/terrain/refinement/refine_points.hpp:83`) decides which triangle
+(`include/terrain/refinement/refine_points.hpp:101`) decides which triangle
 holds a check point with three exact orientation tests on the point's stored
 position. A crossing computed in floating point lies within rounding of its
 edge, on one side or the other. On the domain's outline, a point on the
@@ -74,7 +81,7 @@ source nodes do matter, and they are covered because phase 2 and the strip
 share one loop (D1). On the projected path (Norway, any DEM meshed directly) it would turn
 "every DEM node within tolerance" false. So the strip run there also
 **rescans every triangle it writes against the DEM's nodes**, with refine's own
-`scan` (`include/terrain/refinement/scan.hpp:90`), and inserts nodes as refine
+`scan` (`scan`, `include/terrain/refinement/scan.hpp:96`), and inserts nodes as refine
 would (D4, step 3). Run "after refine" as written, the strip would trade one
 guarantee for another.
 
@@ -207,7 +214,9 @@ Not in scope:
   inserted. Not ruled.
 - **Constraint feet and start quality in the strip run.** As in 15c's phase 2
   (its D5). A DEM node the F2 rescan inserts next to a constraint goes in with
-  `split_inside`, as phase 2's source nodes do.
+  `split_inside`, as phase 2's source nodes do, except one within the radius `r(g)` (L16)
+  lattice units of a constrained edge while a strip is present: that one goes
+  in on the edge (L12).
 - **One loop shared by `refine` and `refine_points`** (15c D5's later
   refactor). This design refactors only `refine_points`' own loop (D4).
   `refine.hpp` gets one extracted helper and no change in behaviour.
@@ -343,7 +352,7 @@ programming error. Two distinct indices at one position give no points:
 there is no crossing, and the one midpoint candidate sits on both ends, so
 step 6 drops it.
 7. **Heights.** Every point's z is `vertex_z(dem, point)`
-   (`include/terrain/refinement/scan.hpp:67`), the function refine uses for an
+   (`vertex_z`, `include/terrain/refinement/scan.hpp:73`), the function refine uses for an
    off-node vertex. At a node it is `value_at`. For a crossing, the cell's
    fraction across the line is exactly 0, so the expression is exactly
    `z₀ (1 − f) + z₁ f` between the two nodes of the cell side, which is Q14's
@@ -468,8 +477,9 @@ updates it (step 4).
 - **DEM nodes** (`refine_strip` only): `scan(dem, m, t)`, refine's scan,
   unchanged, in every triangle the loop has written. In round 1 that means the
   triangles `legalise_all` flipped (none on refine's output, normally). After
-  round 1 the active set is exactly the written triangles, so every active
-  triangle is scanned.
+  round 1, every triangle the run has written so far is scanned. That is not
+  the same as the active set: a skipped or refused triangle is active without
+  having been written. The gate is ruled in L3.
 - **Combining.** The first void result in the order source, strip, DEM wins.
   Otherwise the strictly largest error wins, with ties to the earlier set in
   that order, and within the strip to the lower triangle-edge index, then the
@@ -483,7 +493,8 @@ the neighbour across that edge was already touched. A **strip point** goes in
 with `split_edge(t, e, at)` on its sub-edge, under the same skip rule.
 Because `at` is off the edge by rounding, the split is guarded as 20b's feet
 are: `detail::foot_fits(m, t, e, at)` (in `refine.hpp`, reused, not copied)
-must find every child strictly counter-clockwise. If it does not, the point is
+must find every child strictly counter-clockwise, and the split's new edges
+must be locally Delaunay (`detail::strip_fits`, L10). If it does not, the point is
 marked **refused** for the rest of the run and counted. The vertex's z is the
 point's z. `legalise_around` follows, as today.
 
@@ -552,7 +563,7 @@ refused.
 | `src_python/tin_engine/_core.pyi` | stubs for the above |
 | `src_python/tin_engine/edge_strip.py` (new) | `generate(view, start, clock) -> ConstraintCheckPoints` and `run(view, strip, start, tolerance, clock) -> PointRefineOutcome`: the two calls and their clock rows. No geometry |
 | `src_python/tin_engine/final_check.py:22` | `run(..., strip: ConstraintCheckPoints \| None = None)`, passed on to `refine_points` |
-| `src_python/tin_engine/cli.py`, `_dem_mesh` (`:1397`) | after `refine` (`:1477`): `strip = edge_strip.generate(...)`; projected path: `final = edge_strip.run(...)`; reprojected path: `final_check.run(..., strip=strip)`; the sentence and the report (D7) |
+| `src_python/tin_engine/cli.py`, `_dem_mesh` (`:1417`) | after `refine` (`:1500`): `strip = edge_strip.generate(...)`; projected path: `final = edge_strip.run(...)`; reprojected path: `final_check.run(..., strip=strip)`; the sentence and the report (D7) |
 
 `edge_strip.py` exists so that `_dem_mesh`, already about 150 lines, grows by
 about 15 rather than 40, and so that the orchestration can be tested with a
@@ -574,7 +585,7 @@ On the tolerance path of `_dem_mesh`, in this order:
 4. `trim(final...)`, as today.
 
 A refusal from either run is a usage error in the engine's words, as today
-(`cli.py:1492-1493`).
+(`_dem_mesh`'s `typer.BadParameter(f"{dem}: {out.message}", ...)`, `cli.py:1511`, and its final-check twin at `:1517`).
 
 ### D7. What the file and `--stats` record
 
@@ -632,7 +643,9 @@ the output constraint edge that holds p.
 - **E1. The strip.** For every strip point that is not refused, `|z_p − mesh
   value at p| ≤ tolerance`. The run reports `strip_refused` and
   `strip_refused_max_error`; the guarantee is stated without refused points,
-  as 15c's J2 is stated without coincident ones.
+  as 15c's J2 is stated without coincident ones. On the reprojected path it
+  is also stated without a strip point consumed by a source point (L5): there
+  the source's z is the vertex's, and J2 governs.
 - **E2. DEM nodes kept (projected path).** After `refine_strip`, every valid
   DEM node in every closed output triangle with three valid vertices is within
   the tolerance of that triangle's plane, as after `refine` (increment 14's
@@ -814,10 +827,12 @@ and I1-I3):
   faked.
 - **ES7, void.** A constraint edge with one invalid end: carving along the
   edge, `uncovered` 0 at the end, termination.
-- **ES8, consumption.** A diagonal constrained edge through a DEM node, set up
-  so that the rescan inserts that node: no two output vertices share a
-  position, and the crossing's point is not inserted a second time (at
-  tolerance 0 as well).
+- **ES8, consumption** (as amended by L7). A diagonal constrained edge
+  through a DEM node. Projected path: the node is a vertex exactly once,
+  whichever set inserts it, and no two output vertices share a position (at
+  tolerance 0 as well). Reprojected path: a source point at that node wins the
+  tie (D4, "Combining"), its split consumes the strip point there (step 4), and
+  the strip point is not inserted a second time.
 - **ES9, the reprojected path.** `refine_points(store, ..., strip)`: J2 by
   15c's RP3 oracle and E1 by ES2's oracle both hold. The RP1-RP7 suite still
   passes with the store alone, unchanged.
@@ -827,7 +842,508 @@ and I1-I3):
 - **ES11, E7.** A start whose strip points are all within the tolerance:
   output equal to the input, `inserted` 0.
 
-**Python (pytest), 15f-2:**
+`@tester` added two cases, and the design adopts them: **ES12**, E1, E2 and
+the Delaunay oracle at UTM scale with non-square cells; **ES13**, ends within
+ulps of grid lines, with I1-I3 seen at the loop (no coincident vertex, no
+triangle that is not strictly counter-clockwise, every point over the tolerance
+within 1e-9 cells of an end and counted as refused).
+
+**Settled after 15f-2's red step (afd2498).** `@tester` found places where
+D4 says nothing or is wrong; ruled by `@architect`, 2026-10-03 (Ola away, the
+recommended option taken in each). They are part of the design, and
+`@developer` implements them as written here.
+
+- **L1. A refused strip point leaves its triangle active.** `@tester`'s choice
+  (ES6) stands. In the split phase a strip point is handled in this order:
+  1. `touched[t]` set: `continue`, as today;
+  2. the skip rule (the neighbour across its sub-edge already touched): push
+     `t` onto `skipped`, as today;
+  3. `foot_fits(m, t, e, at)` false: mark the point refused, add 1 to
+     `strip_refused`, push `t` onto `skipped`, and leave `any` true. Nothing is
+     inserted, and there is no fallback (refine's refused foot falls back to
+     its node; a strip point has none).
+
+  The skip rule comes before `foot_fits` because deferral is retried and
+  refusal is permanent: a point is never refused in a round in which it would
+  not have been split anyway. The refused marks are one flag per point of the
+  strip, written only in the serial phase and read by the next parallel scan,
+  so there is no race. Next round `t` is rescanned, its refused point is
+  skipped (D4, step 2), and it names its next worst point, of any set. Each
+  round of a refused triangle either inserts or refuses a point that was never
+  named before, so step 5's termination argument holds.
+- **L2. Refusals: order, statuses and texts.** `@tester`'s choices stand. The
+  checks run in this order, and the first that fails decides:
+  - `refine_strip`: (1) a tolerance that is not finite and ≥ 0 returns
+    `RefineStatus::InvalidTolerance` with "refine_strip: tolerance must be
+    finite and >= 0", no throw, as `refine` and `refine_points` do; (2)
+    `strip.geometry()` different from `dem.geometry()`: `std::logic_error`;
+    (3) a strip edge that is not a constraint edge of the start:
+    `std::logic_error`; (4) `to_lattice`'s refusals, as `refine`.
+  - `refine_points(..., strip)`: (1) the tolerance and (2) the frozen store as
+    today; then (3) and (4) as above, against `points.geometry()`.
+
+  Every `std::logic_error` text starts with the entry point's name and a
+  colon ("refine_strip: ...", "refine_points: ..."), in the style of
+  `"refine_points: the check-point store is not frozen"`; only the name is
+  pinned. "Differs" means any of the six fields of `RasterGeometry` (x_min,
+  y_max, delta_x, delta_y, cols, rows) compares unequal. `RasterGeometry`
+  has no `operator==` today. A defaulted one in
+  `include/terrain/raster/geometry.hpp` (one line, as `CellIndex` has) is the
+  recommended way. "A constraint edge of the start" means the unordered pair
+  appears in `edges`, whatever its mask. It is checked against that span,
+  before `to_lattice`.
+- **L3. Which triangles the DEM rescan reads (corrects D4, step 2).** In
+  `refine_strip` a triangle is scanned for DEM nodes exactly when its slot
+  has been **written** in this run. "Written" is one flag per slot that, once
+  set, stays set. `legalise_all`'s callback sets it (today that callback is
+  `[](std::uint32_t) {}`). So does every slot `touched` in a round, and every
+  new slot a split creates. Skipped and refused triangles that were not
+  written are scanned for strip points only. This makes E8 ("DEM nodes only
+  in triangles it has written") literally true. The other reading, "every
+  active triangle after round 1", would scan refine's own triangles when they
+  are skipped or refused. On a start that did not come from `refine` at the
+  same tolerance, that could insert nodes outside the written triangles.
+- **L4. What the outcome reads from the scan.** `PointScan` keeps two
+  things apart. One is the winner across sets (point, set, strip index, `s`,
+  where), for steps 3 and 4. The other is the non-strip set's own largest
+  error (source points on the reprojected path, DEM nodes in `refine_strip`)
+  and the `uncovered` counts. At the end, `max_error` is the largest of that
+  non-strip error over every slot's last result. A slot with no DEM scan
+  counts as 0. `strip_max_error` and `strip_refused_max_error` come from step
+  6's pass only, never from scan results. `uncovered` sums every set's count,
+  the strip's counted at the owning triangle.
+- **L5. Consumption in detail (D4, step 4).**
+  - A sub-edge record keeps its ends in the order of `s`, so `s_a < s_b`,
+    with `a` the end nearer `P0`.
+  - The strip point at exactly `q`'s position is looked up among the points
+    with `s` in `(s_a, s_b)`, by exact equality of `at`. A linear walk is
+    enough, because the path is taken only for a node or a source point that
+    lies exactly on a constrained edge. Binary search on `q`'s projected `s`,
+    with a check of both neighbours, is also allowed.
+  - Without such a point, `σ = clamp(((q − a) · (b − a)) / |b − a|², 0, 1)`
+    in lattice `(col, row)`, and `s_q = s_a + σ (s_b − s_a)`. If `s_q` rounds
+    onto `s_a` or `s_b`, one half has an empty interval. That is allowed: it
+    holds no point to miss, and a point sitting at `s_q` itself is still
+    measured by step 6.
+  - A consumed point is not inserted, is not counted in `strip_inserted`, and
+    is never named again (it is now an end).
+  - Step 6 measures a point whose `s` equals an end's `s` against that end's
+    z. On the projected path a consumed point's error is then exactly 0,
+    because both z's are `value_at` of the node. On the reprojected path a
+    source point that lands exactly on a strip point keeps the source's z,
+    because the source is the truth there (J2). The difference goes into
+    `strip_max_error` and is reported. E1 is stated without such points (E1
+    above). For a source point to land exactly on a crossing or a midpoint
+    needs an exact coincidence, which no ES case builds and no real input is
+    expected to produce. It is ruled so that the reported figure stays honest.
+- **L6. Counting.** `carved` counts the void insertions of every set.
+  `strip_inserted` counts every strip insertion, carved ones included, and
+  `nodes_inserted` counts every DEM-node insertion of `refine_strip`, carved
+  ones included. `inserted` is their sum with the source insertions.
+  `strip_refused` counts points, each at most once. An inserted strip vertex
+  is output at `(x_min + col dx, y_max − row dy)`, valid, with the point's z,
+  as `refine_points` outputs a source point.
+- **L7. ES8: the substitution is accepted, and D4 is not changed.** The
+  order is already fixed: the serial phase walks triangles in index order, and
+  E4 holds. What a test cannot fix is which slot holds which triangle after a
+  split, because that is `LatticeMesh`'s numbering, which the design leaves
+  open on purpose. On `@tester`'s projected fixture the strip names the node
+  in round 1: no triangle has been written, so there is no DEM scan, and ties
+  go to the strip anyway. A DEM node can reach consumption only in a later
+  round, and only if the triangle that does not own the sub-edge comes first
+  in index order and names the node. A test that forced this would pin the
+  slot numbering. Step 4 runs one code path for "any other point", source or
+  DEM node, so the reprojected section exercises it. The projected section
+  keeps "one vertex at the node". Optional for `@tester`, not blocking: add
+  `CHECK(out.strip_refused == 0)` to the projected section. At tolerance 0,
+  if the DEM route were ever taken and consumption were missing, the
+  leftover point would show as a refused insertion on top of the vertex.
+- **L8. The oracles (`tester.md` §3D), confirmed.** Every property case on the
+  projected path carries three oracles: the constrained-Delaunay oracle
+  (§3D), the DEM-node tolerance oracle (§3D; it is E2), and the strip oracle
+  (E1, ES2's). On the reprojected path the Delaunay and strip oracles stay.
+  The tolerance oracle there is 15c's J2 by RP3's oracle, over the source
+  points. This is §3D's oracle read against the DEM that path takes as the
+  truth: the source DEM, whose nodes the check points are. Phase 2 gives up
+  the resampled grid's nodes on purpose (J2, F2), so no oracle checks them.
+  ES2 and ES3 above name only their own oracle. The suite carries all three on
+  every projected case (`projected_oracles` in
+  `tests/cpp/property/prop_refinement_edge_strip.cpp`), and that is what is
+  required.
+- **L9. Later, by day: TSan.** Once `prop_refinement_edge_strip` is green,
+  it joins the TSan target list in `.github/workflows/main.yaml` (the `tsan`
+  job's `--target` list). The strip scan is a new parallel reader of shared
+  state: the sub-edge map and the refused flags. That file is not edited from
+  the unattended window; it is for 15f-2's PR, with Ola present.
+
+LOC effect: L1, L3, L4 and the `operator==` of L2 add about 15 lines to
+`refine_points.hpp`'s 203 and 1 to `geometry.hpp`. 15f-2's estimate becomes
+about 406: 564 at +39 % and 650 at +60 %, still under 700.
+
+**Settled after 15f-2's green step (67df94c).** `@developer` raised three
+points; ruled by `@architect`, 2026-10-03. None needs Ola. L10 and L12 make
+refusals rarer and no claim wider, Ola's wording of the guarantee is
+unchanged, and refused points stay excluded from E1 and reported (default 5).
+
+- **L10. `strip_fits` is accepted as a departure from D4, step 3.** A strip
+  point is guarded by `detail::strip_fits`: `foot_fits`, and then the two new
+  edges from `q` (`q`-`c`, and `q`-`d` across the sub-edge) must be locally
+  Delaunay by `must_flip`'s test. The reason: a point that is a hair off its
+  sub-edge on the far side can lie outside `t`'s circumcircle. The circle's
+  segment beyond the chord is thin near the chord's ends, so this happens
+  only there. `legalise_around` tests only the edges opposite `q`, so `q`-`c`
+  would stay non-Delaunay, and it cannot be flipped: the flip would cross the
+  constrained chain `a`-`q`-`b`. Refusing is the only exact outcome. The
+  alternative, inserting anyway and leaving a non-Delaunay edge, breaks
+  `tester.md` §3D's Delaunay oracle; without the check ES13 failed on 9
+  sweep inputs, and with it on none of 240 (`@developer`, `67df94c`). Its
+  ~20 lines were not in the estimate; they are counted below.
+  `strip_fits` also guards L12's insertions.
+- **L11. ES6: the test changes, and the oracle does not.** `ruled_points`
+  merges crossings closer than 1e-12 in parameter. That is right for an
+  independent oracle: it cannot reproduce the generator's ulp-level arithmetic
+  without copying it, which the computational-geometry skill forbids ("borrow
+  the producer's predicate, never its records"). So the refused point `f`
+  (`t` ≈ 3.7e-17) is not one of the oracle's points, and
+  `REQUIRE(f.over > 0)` (`prop_refinement_edge_strip.cpp:465` at `afd2498`) asserts
+  something the oracle cannot see. `@tester` changes the refused section:
+  - keep `strip_refused == 1` and `strip_refused_max_error ≈ 10`;
+  - replace `REQUIRE(f.over > 0)` and the loop over `over_at` by
+    `CHECK(f.over == 0)`: every point the oracle generates is repaired, which
+    is "E1 holds for the rest";
+  - measure `f` from the test's own knowledge: a hand-built one-point list
+    `{OraclePoint{{1.0, 1.5}, 6.0, 0}}` (the plane `3 col + 2 row` there),
+    through `strip_findings` at the case's tolerance. It must give `over == 1`
+    (its error, about 10, is `strip_refused_max_error`). The position is
+    the CC7 probe's, known by hand, so nothing is read from the store.
+- **L12. A non-strip point a hair off a constrained edge goes in on that
+  edge.** This is option 1 of the three `@developer` listed. In the ES13
+  sweep the rescan inserted a DEM node lying within ulps of the constraint
+  with `split_inside`. That leaves the sliver F1 describes, the node becomes
+  the apex over the sub-edge, and `foot_fits` then refuses strip points in
+  the middle of the edge, far from any end. F1's reason for filing strip
+  points by edge applies to such a node as well. The rule, in the split phase
+  of `point_loop`, **only when a strip is given**:
+  - A source point or DEM node that the scan places `Inside` triangle `t` is
+    tested against each constrained edge `e` of `t`. It is a candidate when
+    its distance to the line of `e` is at most **the coincidence radius `r(g)`** (L16; 1e-10 lattice units as first ruled)
+    (Euclidean in `(col, row)`) and its projection falls strictly inside
+    `e`. The threshold is a decade inside the oracles' `kOnEdge` (1e-9), so
+    the producer and the oracle never disagree at the boundary. It is still
+    many ulps at the basin's lattice coordinates (about 3e4).
+  - With more than one candidate, take the nearest, and on a tie the lower
+    edge index in `t`. The point then goes through L1's order with
+    `split_edge(t, e, p)` at **its own position** and its own z: touched,
+    then the skip rule, then `strip_fits`. If `strip_fits` refuses, it falls
+    back to `split_inside`, as today. Nothing is marked refused, because E2
+    and J2 need that point in the mesh. The cut then follows step 4, with
+    consumption (L5).
+  - Without a strip nothing changes, so the no-strip path stays bit-identical
+    (`@developer`'s 72 fixtures).
+
+  The other two options are rejected. An L1 fallback has nothing exact to
+  fall back to: a strip point has no other position. Accepting the refusals
+  in the test would turn a refusal from a rounding-scale event at a vertex
+  into a loss of E1 in the middle of an edge, with an error of any size.
+
+  **What the guarantee then says.** E1 is unchanged: every strip point that
+  is not refused is within tolerance. Refused points are counted and their
+  largest error is reported. What changes is the expectation stated for
+  refusals: they are expected only within rounding (1e-9 lattice units) of a
+  vertex of the output, which is either an end of a start edge or a vertex the
+  run put on the constraint. One case stays outside that expectation: a
+  **start** vertex that lies within rounding of another constraint edge
+  without being on it. This can only come from the input. A refusal it causes
+  is still counted and reported, and `@perf`'s acceptance records
+  `strip_refused` and its largest error on Bygdin and the basin pieces.
+
+  **Who changes what.**
+  - `@tester`, first, in one commit with the reason:
+    - ES13's assertion on `over_at` becomes "within 1e-9 lattice units of an
+      **output** vertex", not only of a start end. A crossing within ulps of
+      a node that went in on the edge may be refused at tolerance 0.
+    - A new case, **ES14**, promotes the sweep input seed 11, k 0, as an
+      explicit start. At tolerance 0.5 it asserts `strip_refused == 0`, the
+      strip oracle at 0 over, and the DEM node near (8, 8) an end of an
+      output constraint edge (on the chain, so not `stray` and no
+      `broken_chain`). At tolerance 0 it asserts every over point within
+      1e-9 of an output vertex. ES14 is red until `@developer` lands L12,
+      and it is what keeps the widened ES13 from hiding the original failure.
+    - Optional, from L7: `CHECK(out.strip_refused == 0)` in ES8's projected
+      section.
+  - `@developer`, then: L12 in `point_loop`'s split phase, and nothing else in
+    behaviour. If ES14 or the ES13 sweep still shows refusals in the middle of
+    an edge after L12, report the input back rather than widening the
+    threshold.
+- **L13. Where the strip machinery goes (corrects "Module to watch").**
+  `refine_points.hpp` is 582 physical lines at `67df94c`, which is past the
+  550 trigger. The design's 294 baseline was `wc -l` at `390b516`, so the
+  trigger is `wc -l` too. It counts 552 non-blank lines and 470 lines that
+  are neither blank nor comment; the "534" figure matches none of these
+  counts at `67df94c`. The strip machinery (`SubEdge`, `SubEdges`,
+  `edge_key`, `along`, `scan_strip`, `cut`, `strip_fits`, and L12's
+  candidate test) moves to a new header,
+  `include/terrain/refinement/strip_scan.hpp`, and **not** to
+  `constraint_points.hpp` as the design first said. That header is the
+  generator, which 23b's seam pass reuses without the loop. Moving the loop's
+  sub-edge map, the hash map and the Lawson predicates into it would hand
+  23b dependencies it does not use. `refine_points.hpp` includes the new
+  header. This is `@developer`'s, as its own commit after L12 is green: a
+  pure move, with no test file and no behaviour change (the suites and the
+  72-fixture identity as the check). `project_structure.md`'s `refinement/`
+  list gains the header in the same PR.
+
+LOC effect of L10-L13: `strip_fits` about 20 (already in `67df94c`'s 229
+net), L12 about 15, the new header's includes and namespace about 15. The C++
+lands near 260 against the design's 218 (+19 %). 15f-2's estimate becomes
+about 450: 626 at +39 % and 720 at +60 %. That is over 700 at the wider
+margin only, so the convention 15c and 23 kept, under 700 at both margins, no
+longer holds for 15f-2 on estimates. The ceiling is on actual lines, and
+`@reviewer` counts them. The Python half (bindings, stubs, `edge_strip.py`,
+CLI, about 187 estimated) is what is left to land. If the measured C++ plus
+that half approaches 700, the bindings and Python move to a 15f-3, which is
+the split option (b) that was considered for 15f-1.
+
+**Settled after L12 and L13 (3ff8f1d, 61cdbaa).** Ruled by `@architect`,
+2026-10-03.
+
+- **L14. A non-strip point within rounding of a vertex is not inserted.**
+  The input: ES13's sweep, seed 11, k 37, at tolerance 0. It fails when the
+  build has `-ffp-contract=off`, which is likely how CI's x86-64 runner
+  builds. The cascade, as `@developer` traced it:
+  1. DEM node (17, 9) lies within ulps of the edge's end `b`. Its projection
+     is not strictly inside the sub-edge, so L12 does not apply, and it goes
+     in by `split_inside`.
+  2. That leaves an unconstrained sliver edge, (14, 7.5000000000000009) to
+     (17, 9), lying almost on the constraint.
+  3. Node (15, 8), which lies on the constraint's line, now sits in the
+     triangle on the far side of the sliver, a triangle with no constrained
+     edge. L12 finds nothing and it goes in by `split_inside`.
+  4. (15, 8) becomes the apex over the sub-edge, and `foot_fits` refuses the
+     strip point (15.5, 8.25) in the middle of the edge.
+
+  The root is step 1: a vertex inserted a few ulps from an existing vertex.
+  It makes a sliver that every later local rule has to see through.
+
+  **The rule.** When a strip is given, the scan treats a point of the
+  non-strip set (a DEM node in `refine_strip`, a source point in
+  `refine_points`) that lies within **the coincidence radius `r(g)`** (L16; 1e-10 lattice units as first ruled) of a corner of
+  its triangle as it treats a point equal to that corner. The point is
+  skipped: never named, never inserted. This is a geometric test inside the
+  read-only scan, with no state and no set of marks. `scan` (in `scan.hpp`)
+  and `scan_points` each take a radius that defaults to 0. `refine` passes
+  nothing and is bit-identical; so is `refine_points` without a strip. After
+  the loop, the end pass finds such points per vertex and reports them in
+  `coincident` and `coincident_max_error`:
+  - for DEM nodes, it looks at the node nearest each vertex;
+  - for sources, it extends 15c's existing pass from exact equality to the
+    radius, over every vertex, not only start vertices.
+
+  In `refine_strip` those two fields have no other use. Their meaning there
+  is "DEM nodes within `r(g)` (L16) of a vertex they are not; the
+  largest |node z − vertex z|".
+
+  With this rule, (17, 9) is never inserted, so no sliver forms. Node
+  (15, 8) is not left off the chain, either. As built (`99e95d7`), the strip's
+  row-8 crossing goes in on the chain at (14.999999999999998, 8), about
+  2e-15 from the node. The node is then within `r(g)` of that vertex, so the
+  scan skips it and counts it in `coincident`. (This sentence first said
+  L12 puts (15, 8) itself on the edge. Which of the two happens depends on
+  which set names the point first. Either way the constraint is represented
+  at (15, 8) by a vertex on the chain, which is what the case guards.)
+
+  **The rejected options.**
+  - L12 searching for constraints that are not edges of `t`, across slivers:
+    this needs a walk of unbounded length and is no longer local
+    (computational-geometry skill, §5), and it treats the symptom, not the
+    sliver.
+  - Accepting the refusal: (15.5, 8.25) is about 0.56 cells from the nearest
+    vertex, so this would be the mid-edge loss of E1 that L12 already
+    refused to accept.
+
+  **What the guarantees then say.**
+  - **E2 gains an exception at rounding scale.** "Every valid DEM node
+    inside the domain is within the tolerance", except a node within `r(g)` (L16)
+    lattice units of a vertex that it is not. Such a node is counted in
+    `coincident`, with its largest difference in `coincident_max_error`.
+  - That difference is the bilinear surface's change over at most `r(g)`
+    cells, plus the vertex's own rounding. It is far below any tolerance the
+    CLI accepts above 0. Only at tolerance 0 can such a node exceed the
+    tolerance at all.
+  - **E3 (J2) gains the same exception for source points**, in the form 15c
+    already states it for exact coincidences. A source point near a vertex
+    can differ from the vertex's z by any amount, and `coincident_max_error`
+    reports it, as it does today.
+  - **E1 is unchanged.** L12's expectation for refusals stands: only within
+    1e-9 lattice units of an output vertex, apart from start vertices that
+    lie within rounding of another constraint.
+  - Any other refusal is counted and reported. An ES case that finds one is
+    reported back as a design defect, and the case's tolerance is not
+    widened.
+  - **ASK OLA (not blocking):** E2's exception changes the wording Ola ruled
+    ("every valid DEM node ... within the tolerance") at a scale of `r(g)`, 1e-10 to about 5e-10
+    cells. The figure is reported, so nothing is hidden. If Ola wants it
+    stated in the `.vtk` sentence, it costs one clause in 15f-3's CLI work.
+  - **ASK OLA (not blocking), a separate question:** should the build pin
+    `-ffp-contract=off` project-wide? Otherwise arm64 (FMA contraction on)
+    and x86-64 can differ in the last bits of any refine output. Bit-identity
+    across platforms is not claimed today (E4 is about threads and edge
+    order). Pinning it changes every stored hash on arm64, so it is Ola's
+    call and outside 15f.
+
+  **Who changes what.**
+  - `@tester`, first, red:
+    - a case **ES15** with seed 11, k 37's exact `a`, `b` and apex as
+      literals, at tolerance 0 and 0.5. It asserts: no strip point over the
+      tolerance farther than 1e-9 lattice units from an output vertex; node
+      (17, 9) not a vertex; `coincident ≥ 1` and
+      `coincident_max_error ≤ 1e-9 · max(1, |z|)`; at least one vertex within
+      `r(g)` of node (15, 8), and every such vertex an end of an output
+      constraint edge (as amended in `fadcc77`; the node itself is a vertex
+      only if L12 inserts it before the strip's crossing goes in); E2 by
+      `node_findings`, whose 1e-9 relative
+      slack already covers the exception; and the Delaunay oracle;
+    - a **unit case for the radius**: a DEM node 1e-11 lattice units from a
+      start vertex is not inserted at tolerance 0 and is counted, and one at
+      1e-8 is inserted;
+    - a **build check**: before handing back, run `prop_refinement_edge_strip`
+      in a build configured with `-DCMAKE_CXX_FLAGS=-ffp-contract=off` as
+      well as the default one, and name both in the handback.
+  - `@developer`, then: the radius parameter on `scan` and `scan_points`
+    (default 0), passed as `r(g)` (L16) by `point_loop` when a strip is given; the
+    end-pass counting; nothing else. Run both builds, `-ffp-contract=off` and
+    the default, before handing back, and confirm that `refine` and the
+    no-strip `refine_points` are bit-identical (the 72 fixtures). About 15
+    lines.
+
+- **L15. Three PRs: the bindings and Python go to 15f-3.** As L13 foresaw.
+  Measured by the line rule of `CLAUDE.md` §2 (blank and `//` lines dropped):
+  - 15f-1 is 136 net (`390b516..569b00c`);
+  - 15f-2's C++ is 275 net so far (`569b00c..61cdbaa`), about 290 with L14;
+  - 15f-2 with the Python half (about 187 estimated) would be about 477, or
+    about 590 at +60 % on the Python;
+  - the "about 712" figure counts 15f-1 into the same PR (136 + 275 + 187 at
+    +60 % ≈ 710), because the branch is stacked on 15f-1, which has not been
+    published.
+
+  Either way, the convention 15c and 23 kept no longer holds for one PR.
+  Ruled:
+  - **15f-1** stays its own PR (approved and accepted), and is published
+    and merged first;
+  - **15f-2** is the C++ loop alone, as the red step already scoped it: no
+    caller in the CLI, so no tolerance mesh changes, and its acceptance is a
+    no-change run, as 15f-1's was. It also carries the TSan entry (L9);
+  - **15f-3** carries every binding, the stubs, `edge_strip.py`,
+    `final_check.py`, the CLI, PY1-PY5, and the full acceptance (Bygdin,
+    the basin piece). It is based on 15e's tip, or master once 15e has
+    merged ("Which branch to base on"), because its Python edits are the
+    ones that meet 15e.
+
+  The PR table and the acceptance below are updated to match.
+
+- **L16. The coincidence radius scales with the lattice: `r(g) = max(1e-10,
+  64 · ulp(M))`.** This replaces the fixed 1e-10 of L12 and L14 (Ola asked
+  for the check, 2026-10-03). Here `M = max(cols, rows) − 1` is the largest
+  lattice coordinate the geometry allows, and `ulp(M)` is
+  `std::nextafter(M, inf) − M`. One function,
+  `detail::coincidence_radius(const raster::RasterGeometry&)`, is used by
+  both L12 (`near_constraint`) and L14 (the scan's corner test).
+
+  **1. How large lattice coordinates get.**
+  - Lattice coordinates are measured from the corner of the raster handed to
+    C++, not from any global origin:
+    `col = (x − g.x_min()) / g.delta_x()` (`detail::lattice_position`,
+    `include/terrain/refinement/refine.hpp`).
+  - Under 23 that raster is the piece's own target window, snapped to the
+    global lattice but with its own `x_min` and `y_max` ("Unchanged by
+    23a-1", `23-basin-scale.md`; `window_meta`: `x_min + col0·dx`). So a
+    coordinate is at most the extent of one window, never of the basin.
+  - Windows measured or designed so far:
+    - the Norway DTM10 tile, 5,051 × 5,051 (`7908_3_10m_z33.tif`, the bench
+      DEM);
+    - 15a's mosaic box, 10,051 × 10,051;
+    - the São Francisco level-3 units at 30 m, the largest being 761 at
+      19,377 × 27,786 (`docs/benchmarks/2026-10-02/basin-level3/runs/t20/761.stats.md`);
+    - the whole basin as a single window, 41,332 × 50,297 at 30 m (23's
+      partition table). This is reached only when the memory budget allows
+      one piece, and at the default budget even 50 m tolerance cuts it 2 × 2.
+  - Under 23's partition at 1 m tolerance the basin is 5 × 7 cells of about
+    59.4 M nodes, so pieces are near 8,300 × 7,200 nodes.
+  - "1 m" in 23 and in `bench.py` is a tolerance, not a cell size. No 1 m
+    DEM is in use. A 1 m DEM over the whole basin, about 1.2 M × 1.5 M nodes,
+    is not a window any path could hold. Under 23 its pieces would again be
+    windows of about `sqrt(budget / b)` nodes per side.
+  - Nothing in the code caps a window's aspect, though. A long, thin
+    corridor at 1 m could be 10⁶ nodes long and still fit in memory, so the
+    rule must not depend on today's sizes.
+
+  **2. What the rounding is proportional to.** It is proportional to the
+  size of the coordinates, not to local differences.
+  - Strip points are computed in absolute lattice coordinates: a crossing is
+    `(K, r0 + t (r1 − r0))` (D2, step 3). The result has the magnitude of the
+    coordinate, and so does its rounding, up to a few `ulp(X)`.
+  - `near_constraint` and the scan form differences such as `p − a` first.
+    For nearby points those differences are nearly exact, so they add little
+    rounding of their own. But the positions they subtract already carry
+    their representation error of `ulp(X)`. A vertex inserted a few ulps
+    from another one is a few `ulp(X)` away.
+  - So the quantity the threshold must exceed grows with `X`, and a fixed
+    constant runs out:
+    - at the whole-basin window, 1e-10 is about 14 ulps;
+    - at 10⁶, one ulp (1.16e-10) is already larger than 1e-10.
+  - A second source of offset exists: a world coordinate's own rounding
+    (about 9.3e-10 m at a UTM northing near 7-8 × 10⁶ m), divided by the
+    cell size. It decides how near an input vertex can come to a node
+    without being one. It does not drive the sliver failure: separating two
+    points 1e-9 cells apart is easy for the exact predicates. The failure
+    comes from lattice arithmetic, so the radius tracks `ulp(X)`.
+
+  **3. The rule and its margins.**
+  - 64 ulps is 16 times the few-ulp offsets seen in the ES13 and ES15 inputs.
+  - The floor of 1e-10 keeps today's value wherever it was already sound: on
+    every lattice up to 8,191 nodes across, `r(g) = 1e-10`. That covers every
+    test lattice, the DTM10 tile and the pieces at 1 m tolerance.
+  - The extent `M` is used rather than each triangle's own coordinates. It is
+    one number per run, uniform and deterministic, and errs on the large side
+    near the origin, where 64 `ulp(M)` is still physically nothing (under
+    5e-9 m at 10 m cells, up to `M` = 5 × 10⁴).
+  - Values:
+
+    | lattice extent `M` | `ulp(M)` | `r(g)` | `r(g)` in ulps |
+    |---:|---:|---:|---:|
+    | 8 (the ES lattices) | 1.8e-15 | 1e-10 (floor) | about 56,000 |
+    | 5,050 (DTM10 tile) | 9.1e-13 | 1e-10 (floor) | 110 |
+    | 10,050 (15a box) | 1.8e-12 | 1.16e-10 | 64 |
+    | 27,785 (unit 761) | 3.6e-12 | 2.33e-10 | 64 |
+    | 50,296 (whole basin, one window) | 7.3e-12 | 4.66e-10 | 64 |
+    | 10⁶ (a corridor) | 1.16e-10 | 7.45e-9 | 64 |
+
+  **The oracles.** The tests' "on the edge" distance, `kOnEdge` (1e-9 cells,
+  `tests/cpp/support/strip_oracle.hpp`), must stay at least `10 · r(g)` for
+  the lattice under test, so that producer and oracle never disagree at the
+  boundary. On every lattice in today's suites `r(g)` is 1e-10, so 1e-9 is
+  exactly a decade inside and nothing changes. A test on a lattice wider than
+  8,191 nodes uses `max(1e-9, 10 · r(g))`. So does @perf's independent strip
+  check in 15f-3's acceptance (basin pieces, up to about 2.8 × 10⁴ across,
+  where `r(g)` is 2.33e-10).
+
+  **Who changes what.**
+  - `@tester`: the ES15 radius case needs no change. Its lattice is 9 × 9,
+    where `r(g)` is the 1e-10 floor, so 1e-11 is inside and 1e-8 outside, as
+    written. Add, red:
+    - a unit case for `coincidence_radius`: `M` = 8 gives exactly 1e-10;
+      `M` = 50,296 gives exactly 64 × 2⁻³⁷; `M` = 2²⁰ gives exactly 64 × 2⁻³²;
+    - one loop case on a lattice wider than 8,191 (for example 16,385 × 9
+      nodes, where `r(g) = 64 · 2⁻³⁸ ≈ 2.33e-10`): a start vertex 2e-10 from
+      a node is skipped and counted there, while the same offset on a 9 × 9
+      lattice is inserted. This shows the radius scales at the loop, not
+      only in the helper.
+  - `@developer`: `detail::coincidence_radius(g)` in `strip_scan.hpp`;
+    `near_constraint` reads it in place of the literal `1e-10`; L14's radius
+    is passed as `coincidence_radius(g)`. About 5 lines. L14 is otherwise
+    unchanged and can be built now.
+
+**Python (pytest), 15f-3** (L15; first planned for 15f-2):
 
 - **PY1, the binding** (every binding of this increment, the store's and the
   generator's included). Shapes and dtypes refused as `ValueError`; the
@@ -860,15 +1376,23 @@ Counted in `CLAUDE.md` §2's unit. Estimates, with the worst cases at +39 %
 | | `constraint_points.hpp`: `ConstraintPoint`, `ConstraintCheckPoints`, `constraint_check_points` | 90 | | |
 | | `refine.hpp`: `detail::lattice_position` extracted | 10 | | |
 | | **15f-1 total** | **100** | **139** | **160** |
-| **15f-2** | **The strip in the loop, the bindings, and the wiring** | | | |
-| | `refine_points.hpp`: `point_loop` (the moved body's changed lines), the strip scan and ownership, the sub-edge map, `foot_fits` and refused points, consumption, the F2 rescan, the end pass, two entry points, the outcome, `PointScan` | 203 | | |
+| **15f-2** | **The strip in the loop, C++ only** (L15) | | | |
+| | `refine_points.hpp` and `strip_scan.hpp` (L13): `point_loop`, the strip scan and ownership, the sub-edge map, `strip_fits` (L10) and refused points, consumption, the F2 rescan, L12, the end pass, two entry points, the outcome, `PointScan`; `geometry.hpp`'s `operator==` | 218 | | |
+| | the same, **measured** at `61cdbaa` | *275* | | |
+| | L14: the radius in `scan` and `scan_points`, the end-pass count | 15 | | |
+| | **15f-2 total** (measured 275 + 15) | **290** | **296** | **299** |
+| | 15f-2 **measured** at `99e95d7` (L14 and L16 in; `@reviewer` round 1) | *316* | | |
+| **15f-3** | **The bindings, the Python and the CLI** (L15) | | | |
 | | `bindings/core.cpp`: `ConstraintCheckPoints` and `constraint_check_points` (moved from 15f-1, ruling of 2026-10-03 below) | 30 | | |
 | | `bindings/core.cpp`: `refine_points(..., strip)`, `refine_strip`, the outcome properties | 62 | | |
 | | `_core.pyi`: all the stubs, the store's and the generator's included | 35 | | |
 | | `edge_strip.py` | 30 | | |
 | | `final_check.py` | 5 | | |
 | | `cli.py`: the calls, the sentence, the report | 25 | | |
-| | **15f-2 total** | **390** | **542** | **624** |
+| | **15f-3 total** | **187** | **260** | **299** |
+
+For 15f-2 the margins apply to the 15 estimated lines only, since the 275 are
+measured.
 
 **Ruled by `@architect`, 2026-10-03, after 15f-1's red step (46e69ad): option
 (a), the bindings move to 15f-2.** `@tester` found that 15f-1, as first split,
@@ -887,14 +1411,18 @@ anyway and that `@tester` can drive with nothing but edges and a raster. 15f-2
 carries the behaviour change, every binding, and the acceptance. If Ola prefers one PR and
 accepts the +39 % margin only, the split can be dropped with no design change.
 
+*Superseded by L15:* the measured C++ outgrew the two-PR plan, so 15f-2 is the
+C++ loop and 15f-3 carries the bindings, the Python and the acceptance.
+
 **Why more than 15c's 160-210.** F1 needs points filed by edge, with the
 sub-edge map and the guarded insertion (about 75 lines). F2 needs the DEM
 rescan and the second entry point (about 45). Binding two entry points and a
 store is about 105. The midpoints themselves cost about 10, as 15c said.
 
 Module to watch: `refine_points.hpp` grows from 294 lines to about 500. If
-it passes 550, the strip scan and the sub-edge map move to
-`constraint_points.hpp`, beside the store they read.
+it passes 550, the strip scan and the sub-edge map move out. It passed (582 at
+`67df94c`); L13 rules where they go (`strip_scan.hpp`, not
+`constraint_points.hpp`).
 
 **Documentation in the same PRs** (not counted): `ROADMAP.md`'s row at
 each merge; a pointer from `15c-geographic-dem.md`'s "The edge strip" and from
@@ -918,7 +1446,12 @@ tile, the thread sweep), back to back with `--tree` against the previous
 increment's merge commit. Expected: geometry identical, refine time within
 noise. Power state recorded.
 
-**15f-2** changes every tolerance mesh with a constraint, so:
+**15f-2** (L15) adds C++ that no CLI path calls yet, so its acceptance is
+15f-1's: `tools/bench.py run` back to back with `--tree` against the previous
+merge, with geometry identical and refine time within noise. `refine` itself
+is touched only by L14's defaulted radius.
+
+**15f-3** changes every tolerance mesh with a constraint, so:
 
 1. **`tools/bench.py`**, as above. Expected: the tile's geometry identical
    (its outline lies along grid lines: E7 and the grid-line remark), the
@@ -927,7 +1460,7 @@ noise. Power state recorded.
    itself is not edited, so its time should be within noise.
 2. **Bygdin with CORINE**, 16c's script
    (`docs/benchmarks/2026-09-29/bygdin-landcover/run.sh`), at 10 m and 1 m
-   tolerance, master and 15f-2 back to back, same power state. Record: strip
+   tolerance, master and 15f-3 back to back, same power state. Record: strip
    points, `no_data`, inserted (strip and nodes), refused, rounds, the
    strip's time, peak memory, worst angle and share under 10° (bench.py's
    `quality()`). The **independent check**, a script of `@perf`'s that does
@@ -935,7 +1468,7 @@ noise. Power state recorded.
    CORINE borders with the DTM10 grid lines, z bilinear from the DEM,
    against the written mesh's constraint lines. On master it measures the
    projected-path Surprise 3 for the first time (count over the tolerance,
-   and the largest error). On 15f-2 it must find 0 over, or exactly the
+   and the largest error). On 15f-3 it must find 0 over, or exactly the
    refused points.
 3. **A basin piece.** The DEM-derived Velhas test catchment (15c's
    acceptance domain) at 20, 10 and 5 m, and one BHO level-3 unit, 766 (the
@@ -945,14 +1478,15 @@ noise. Power state recorded.
    grid, is 0 over. Record the strip's time and memory beside the final
    check's.
 
-Evidence under `docs/benchmarks/<date>/15f-2-acceptance/`.
+Evidence under `docs/benchmarks/<date>/15f-2-acceptance.md` and its
+directory (the no-change run) and `docs/benchmarks/<date>/15f-3-acceptance/` (the rest).
 
 ## Which branch to base on
 
 Base the implementation branch on **15e's tip**, `worktree-agent-ab601ec06c6508cb9`
 (*default*), unless 15e has merged by then, in which case base it on master.
 
-- 15f-2's Python edits land in exactly the lines 15e rewrites: `_dem_mesh`'s
+- 15f-3's Python edits (L15; first planned for 15f-2) land in exactly the lines 15e rewrites: `_dem_mesh`'s
   signature (`held`, `grid`, `checks` in place of `opened`), and the
   `del tile` before `final_check.run`. Built on master, the merge would
   conflict there, and F3's ordering (generate before `del tile`) would be
@@ -1019,3 +1553,7 @@ None blocks `@tester`.
 **15f-1, round 1, 2026-10-03.** Range `390b516..00d9239` (design 4bfeb47, red 46e69ad, ruling 08e2e14, green 00d9239). Verdict: CHANGES REQUESTED. LOC: 128 net (137 added, 9 deleted) against an estimate of 100 (+28 %, inside +39 %). Blocking: (1) "s strictly increasing" is false at the P1 end: t can round to exactly 1.0 when the end lies within an ulp past a grid line, so the last crossing and its midpoint with P1 coincide (probe: ends at col 0.8932792255671602 and nextafter(10, 11), last two points both col 10, row 3.25, s 1, duplicates 0); at P0 a crossing and its midpoint can share a position with distinct s; D2 steps 5-6 to be ruled, then a test, then the fix. (2) Red-step scaffolding at tests/cpp/CMakeLists.txt:327-328. (3) Stale citations in this file at :268, :435, :499 (refine.hpp lines moved by the extraction). (4) project_structure.md and the ROADMAP row, which the design assigns to this PR. Also to record: the .at() bounds checks on edge(k)/on_edge(k), and the duplicate comparison against the previous kept crossing. The lattice_position extraction is behaviour-preserving. Not pushed; no CI.
 
 **15f-1, round 2, 2026-10-03.** Range `390b516..2b3ee11`; this round `00d9239..2b3ee11` (e9583e9 round-1 record, 9b249e1 ruling, a991856 red, 2b3ee11 green). Verdict: APPROVED. LOC: 136 net (145 added: constraint_points.hpp 133, refine.hpp 12; 9 deleted) against an estimate of 100, +36 % net, inside +39 %; the extra lines are the I1-I3 guards, which the design did not cost (expect the same in 15f-2 where the loop meets ulp-scale ends). All four round-1 items closed; both probes rerun against 2b3ee11 (P1: 23 points, duplicates 1, s strictly increasing; P0: 10 points, duplicates 1). At-risk citations re-read: 05b-noder-driver.md:1749 holds; this file's round-1 record is history; tests/python/test_features.py:582 -> project_structure.md:359 was already stale on master (follow-up, not this PR's). Not pushed; no CI.
+
+**15f-2, round 1, 2026-10-03.** Range `9815ea4..fdbf93c` (red afd2498 … test fixes fadcc77, merge fdbf93c). Verdict: CHANGES REQUESTED. LOC: 316 net (379 added, 63 deleted): `refine_points.hpp` 138 net, `strip_scan.hpp` 165, `scan.hpp` 12, `geometry.hpp` 1; estimate about 295 (290 plus L16), +7 %. Code holds against D4 and L1-L16; `refine` and the no-strip `refine_points` unchanged by reading (measured identity is @perf's); fadcc77's ES15/ES16 corrections are fair (ES15 still fails against 3b59934's headers). Default build 897/897, nofma strip suites 47/47, TSan clean locally. Blocking: (1) the L9 TSan entry in `.github/workflows/main.yaml`; (2) red-step scaffolding in `tests/cpp/CMakeLists.txt` and the two test headers ("while the helper is missing", "ES1 to ES11", "see the handback"); (3) doc prose at :1143, :1191 (the (15, 8) behaviour since 99e95d7), the `scan.hpp` citations for `scan` and `vertex_z`, and the status line; (4) the ROADMAP 15f row. Not pushed; no CI.
+
+**15f-2, round 2, 2026-10-03.** Range `beb6505..17c2d14` (4f3e2cb test comments, 5a5486e docs, 17c2d14 TSan list and C++ comments); whole PR `9815ea4..17c2d14`. Verdict: APPROVED. LOC: 316 net (379 added, 63 deleted), unchanged from round 1 (this round's `include/` changes are comments only); about 7 % over the ~295 estimate. All four round-1 blockers closed; no production behaviour change in this range; citations re-read at 17c2d14 (`scan.hpp:96`, `:73`, `refine_points.hpp:101`, `cli.py:1417`, `:1500`, `:1511`, `:1517`, `final_check.py:22`) hold. Not pushed; no CI (the TSan entry's first CI run is pending the push).

@@ -92,7 +92,7 @@ fixture is decoded.
   measurement 5.
 - Vertex coordinates are computed as `x_min + col * delta_x` and
   `y_max - row * delta_y` in float64, the same expression as
-  `RasterGeometry::node` (`include/terrain/raster/geometry.hpp:66`). Any other
+  `RasterGeometry::node` (`include/terrain/raster/geometry.hpp:69`). Any other
   spelling can land one ulp off the node and change which cell `bilinear`
   picks.
 - Boundary-only is ruled out: four corners and a flat interior is not terrain.
