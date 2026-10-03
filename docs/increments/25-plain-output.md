@@ -606,3 +606,7 @@ Ola, 2026-10-03, on the revised design:
   the mesh, as `dem_credit` does for a downloaded DEM.
 
 No question is open.
+
+## Review
+
+**Design review, round 1, 2026-10-03.** Range `origin/master` (6cdc8cc) `..97d1e9c` (8de9714, 2462028, 16b3a5d, 97d1e9c). Verdict: CHANGES REQUESTED. LOC: 0 (design only); the reviewer thinks 135 is optimistic and expects 200 to 280, still far under 700. Inventory, the three bugs, bench.py, the 15f-3 red commit's fourteen swaps and the --record spec's buildability all check out. Blocking: (1) rule 3 (zeros omitted from the file) contradicts D2 at `--tolerance 0`; restrict it to counts; (2) D5's example JSON writes measured values as integers (`5`), against its own float rule; (3) Compatibility misses four test files (`test_cli_mesh.py`, `test_cli_mesh_landcover.py`, `test_cli_mesh_multi_features.py`, `test_cli_mesh_stats.py`); (4) D6 is incomplete on how 15f-3's red tests change (more lines in `test_cli_mesh_edge_strip.py`, its `sentence` import, docstrings, the extra paragraph in `test_cli_mesh_refine.py`); (5) `max_error_m`'s definition is not true for DEM nodes on or within rounding of a vertex; take the larger figure or state the exception, warn above tolerance, and say what happens to 15f's open question on stating it. Not pushed; no CI.
