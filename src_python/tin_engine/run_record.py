@@ -1,0 +1,218 @@
+"""The record of one ``rasputin mesh`` run, and every word it is printed in.
+
+``docs/increments/25-plain-output.md`` D1 to D7. Pure: no numpy, no ``_core``,
+no typer, so the wording is tested without the extension. ``cli.py`` copies
+numbers and strings out of what ran into a builder, and prints the one
+:class:`RunRecord` four ways: the mesh file's fields (:func:`file_fields`),
+the ``--stats`` rows (:func:`stats_rows`), one stderr summary
+(:func:`summary`) and the ``--record`` JSON (:func:`as_json`).
+"""
+
+from __future__ import annotations
+
+import json
+from dataclasses import dataclass
+
+#: A builder argument: a value, or None for "not produced on this path".
+Value = str | int | float | None
+
+#: Every entry, in record order, with its ``--stats`` wording ("The fields,
+#: for Ola"). The Inputs entries come first (``INPUTS``), then the mesh-file
+#: fields in D2's order, then the counts and checks.
+WORDING = {
+    "dem_grid": "DEM grid size and spacing",
+    "dem_tiles": "The tiles or downloaded blocks used",
+    "dem_seams": "Overlapping tiles that disagree, and by how much",
+    "dem_vertical_unit": "Unit of z",
+    "dem_crs": "The DEM's own coordinate system",
+    "dem_transform": "Conversion from the DEM's coordinate system",
+    "resampled_grid": "The grid the DEM was interpolated onto",
+    "domain": "The domain file and shape",
+    "domain_crs": "The domain's coordinate system",
+    "domain_transform": "Conversion from the domain's coordinate system",
+    "features": "Each features file: layer, class map, features, lines, vertices",
+    "features_crs": "Each features file's coordinate system",
+    "features_transform": "Conversion from each features file's coordinate system",
+    "start_mesh": "What refinement started from",
+    "start_min_angle_deg": "Starting mesh improved to this smallest angle (0 = off)",
+    "snap_to_lines": "DEM nodes very close to a line were moved onto it",
+    "crs": "Coordinate system",
+    "tolerance_m": "Tolerance",
+    "max_error_m": "Largest height error",
+    "dem_source": "DEM",
+    "dem_credit": "Credit",
+    "licence_note": "Licence",
+    "cite": "Please cite",
+    "nodata_vertices_removed": "Vertices removed on NoData",
+    "heights": "Heights",
+    "features_notice": "Credit for the features data",
+    "land_cover_codes": "What land_cover_code holds",
+    "resampled_grid_max_error_m": "Largest error against the resampled grid",
+    "dem_nodes_checked": "Nodes of the original DEM compared with the mesh",
+    "dem_check_points_inserted": "Points that comparison added",
+    "dem_check_rounds": "Passes of that comparison",
+    "dem_nodes_at_vertices": "DEM nodes on a vertex (to rounding), not compared",
+    "dem_nodes_at_vertices_max_error_m": "Their largest difference",
+    "dem_nodes_outside_mesh": "Self-check: DEM nodes with data left outside the mesh",
+    "refinement_rounds": "Refinement passes",
+    "points_inserted": "Points added",
+    "points_inserted_on_nodata": "Of them, into triangles with a NoData corner",
+    "edge_flips": "Edge swaps",
+    "start_quality_points_inserted": "Points added to improve the starting mesh",
+    "start_quality_points_skipped": "Tries skipped while improving it",
+    "points_snapped_to_lines": "Points moved onto lines",
+    "snaps_refused": "Moves onto lines refused",
+    "start_vertices_between_dem_nodes": "Starting-mesh vertices not on a DEM node",
+}
+_NAMES = list(WORDING)
+INPUTS = frozenset(_NAMES[: _NAMES.index("crs")])
+#: D2's mesh-file fields, and the CORINE notice kept by Ola's ruling.
+#: ``land_cover_codes`` is in the file too, but the writers put it there.
+IN_FILE = frozenset(_NAMES[_NAMES.index("crs") : _NAMES.index("features_notice") + 1])
+FLAT_HEIGHTS = "none: every z is 0 (--flat)"
+SEAMS_AGREE = "none: the tiles agree where they overlap"
+
+
+@dataclass(frozen=True, slots=True)
+class Entry:
+    name: str  # plain snake_case words, the unit as a suffix (_m, _deg)
+    wording: str  # the label --stats prints
+    value: str  # ASCII, already formatted
+    number: float | int | None  # the bare number, for --record's JSON; None for text
+    in_file: bool  # True only for the mesh-file fields of D2
+    in_inputs: bool = False  # --stats "Inputs", else "Result"
+
+
+@dataclass(frozen=True, slots=True)
+class RunRecord:
+    entries: tuple[Entry, ...]  # in record order; an omitted entry is absent
+    triangles: int = 0  # the output's triangle count, which the summary names
+
+
+def _exact(value: float) -> str:
+    """``value`` short where that loses nothing, else every digit, so a printed
+    maximum can never read as above the tolerance it met."""
+    short = f"{value:g}"
+    return short if float(short) == value else repr(value)
+
+
+def plural(n: int, one: str, many: str) -> str:
+    return f"{n} {one if n == 1 else many}"
+
+
+def ordinal(n: int) -> str:
+    """``every 2nd DEM node``: the English ordinal; 1 reads ``every DEM node``."""
+    if n == 1:
+        return "every DEM node"
+    suffix = "th" if n % 100 in (11, 12, 13) else {1: "st", 2: "nd", 3: "rd"}.get(n % 10, "th")
+    return f"every {n}{suffix} DEM node"
+
+
+def _entry(name: str, value: str | int | float) -> Entry:
+    """One entry: a ``_m`` or ``_deg`` name is a measured float, an int a
+    count, anything else text. D3 rule 3: a zero count is not in the file."""
+    number: float | int | None = None
+    if name.endswith(("_m", "_deg")):
+        number = float(value)
+        text = _exact(number)
+    elif isinstance(value, int):
+        number, text = value, str(value)
+    else:
+        text = str(value)
+    in_file = name in IN_FILE and not (name == "nodata_vertices_removed" and number == 0)
+    return Entry(name, WORDING[name], text, number, in_file, name in INPUTS)
+
+
+def _record(triangles: int, values: dict[str, Value]) -> RunRecord:
+    unknown = set(values) - set(WORDING)
+    if unknown:
+        raise TypeError(f"no record entry named {sorted(unknown)}")
+    entries = (_entry(n, v) for n in WORDING if (v := values.get(n)) is not None)
+    return RunRecord(entries=tuple(entries), triangles=triangles)
+
+
+def refined_record(*, triangles: int, **values: Value) -> RunRecord:
+    """A run with ``--tolerance``. ``max_error_m`` is the measured figure; D2
+    raises it to the difference at DEM nodes on a vertex where that is larger,
+    so no DEM node inside the mesh is further from it than ``max_error_m``."""
+    at = values.get("dem_nodes_at_vertices_max_error_m")
+    measured = values["max_error_m"]
+    if isinstance(at, float | int) and isinstance(measured, float | int):
+        values["max_error_m"] = max(float(measured), float(at))
+    return _record(triangles, values)
+
+
+def stride_record(*, triangles: int, **values: Value) -> RunRecord:
+    """A run without ``--tolerance``: the stride grid, sampled."""
+    return _record(triangles, values)
+
+
+def flat_record(*, triangles: int, crs: str | None = None) -> RunRecord:
+    """A gallery fixture written with ``--flat``: z is not real, and says so."""
+    return _record(triangles, {"crs": crs or None, "heights": FLAT_HEIGHTS})
+
+
+def file_fields(record: RunRecord) -> list[tuple[str, str]]:
+    """The ``.vtk`` FieldData and the ``.ply`` comments, ``(name, value)``."""
+    return [(e.name, e.value) for e in record.entries if e.in_file]
+
+
+def stats_rows(record: RunRecord) -> list[tuple[str, str, str]]:
+    """Every entry as a ``--stats`` row, ``(wording, value, name)``."""
+    return [(e.wording, e.value, e.name) for e in record.entries]
+
+
+def summary(record: RunRecord) -> str:
+    """D7: one line for a person, then one ``Warning:`` line per broken promise."""
+    by = {e.name: e for e in record.entries}
+    said = [f"{record.triangles} triangles."]
+    tolerance, top = by.get("tolerance_m"), by.get("max_error_m")
+    if tolerance is not None and top is not None:
+        who = "node of the original DEM" if "dem_nodes_checked" in by else "DEM node"
+        largest = f"{top.number:.5g}"
+        if float(top.value) <= float(tolerance.value):
+            said.append(
+                f"Every {who} inside the mesh is within {tolerance.value} m of it "
+                f"(largest difference {largest} m)."
+            )
+        else:
+            said.append(
+                f"The largest difference at a {who} inside the mesh is {largest} m, "
+                f"above the tolerance of {tolerance.value} m."
+            )
+    removed = by.get("nodata_vertices_removed")
+    if removed is not None and removed.number:
+        n = int(removed.value)
+        said.append(
+            f"{plural(n, 'vertex', 'vertices')} on NoData cells "
+            f"{'was' if n == 1 else 'were'} removed with their triangles."
+        )
+    if "heights" in by:
+        said.append("The heights are not real: every z is 0 (--flat).")
+    lines = [" ".join(said)]
+    at, count = by.get("dem_nodes_at_vertices_max_error_m"), by.get("dem_nodes_at_vertices")
+    if (
+        at is not None
+        and count is not None
+        and tolerance is not None
+        and (float(at.value) > float(tolerance.value))
+    ):
+        lines.append(
+            f"Warning: {count.value} DEM nodes on a vertex differ from it by up "
+            f"to {at.value} m, more than the tolerance of {tolerance.value} m."
+        )
+    outside = by.get("dem_nodes_outside_mesh")
+    if outside is not None and outside.number:
+        lines.append(
+            f"Warning: {outside.value} DEM nodes with data lie outside the mesh; "
+            "there should be none."
+        )
+    return "\n".join(lines)
+
+
+def as_json(record: RunRecord, version: str, command: str) -> str:
+    """D5: ``--record``'s text. The record's order, ASCII, one trailing newline."""
+    obj: dict[str, str | float | int] = {"rasputin_version": version, "command": command}
+    for e in record.entries:
+        obj[e.name] = e.value if e.number is None else e.number
+    return json.dumps(obj, indent=1, ensure_ascii=True) + "\n"
