@@ -1,12 +1,13 @@
 #pragma once
 
 // The edge strip's machinery inside the refinement loop
-// (docs/increments/15f-edge-strip.md, D4, L1-L5, L10, L12, L13): the per-triangle
-// scan result shared by every point set, the constrained sub-edge map, the strip
-// scan by owned sub-edge, the cut with consumption, the guarded insertion, and
-// L12's test for a point a hair off a constrained edge. refine_points.hpp's
-// point_loop is its one user; constraint_points.hpp (the generator, which 23b
-// reuses without the loop) does not depend on it.
+// (docs/increments/15f-edge-strip.md, D4, L1-L5, L10, L12, L13, L16): the
+// per-triangle scan result shared by every point set, the constrained sub-edge
+// map, the strip scan by owned sub-edge, the cut with consumption, the guarded
+// insertion, L16's coincidence radius (coincidence_radius, which L12 and L14
+// share), and L12's test for a point a hair off a constrained edge.
+// refine_points.hpp's point_loop is its one user; constraint_points.hpp (the
+// generator, which 23b reuses without the loop) does not depend on it.
 
 #include <terrain/core/point.hpp>
 #include <terrain/mesh/lattice_mesh.hpp>

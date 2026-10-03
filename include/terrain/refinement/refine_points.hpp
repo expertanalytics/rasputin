@@ -390,7 +390,11 @@ template <class Store, class R>
         const mesh::MeshVertex v = m.vertices()[i];
         // Coincident points: 15c's pass, a stored point equal to a start vertex;
         // with a strip (L14), also any stored point or DEM node within the
-        // radius of a vertex it is not, which the scan skipped.
+        // radius of a vertex it is not, which the scan skipped. A stored point
+        // within the radius of two vertices is counted twice, and a stored
+        // point that is itself a vertex (inserted) is counted against a strip
+        // vertex inserted within the radius of it. Both are rounding-scale
+        // events; the figure is a report, not an invariant.
         if constexpr (has_store)
             if (i < n0 || radius > 0.0) {
                 const auto cell = [&](double x, std::size_t n) {
