@@ -10,13 +10,13 @@ as Ola ruled them (Q2): ``bounds checks: on (libc++ fast)`` and
 The ``stats.render`` half of T7 is in ``test_stats.py``, beside the golden
 report; T8 (``tools/bench.py``) is in ``test_bench.py``.
 
-T6, the stale build-directory trap, takes two real non-editable installs into
-throwaway virtual environments, with pip's build isolation fetching the build
-requirements from the network. Not for every leg and not for a local
-``pytest``, so it runs only with ``RASPUTIN_INSTALL_TRAP=1``, and **one CI
-leg** sets that (the design's section 12 leaves CI or manual to ``@tester``;
-CI, because it is what keeps scikit-build-core's override precedence checked
-after a release of it changes). The command, locally or in that leg::
+T6, the stale build-directory trap, takes two real non-editable installs with
+``--no-build-isolation`` into one throwaway virtual environment. Not for every
+leg and not for a local ``pytest``, so it runs only with
+``RASPUTIN_INSTALL_TRAP=1``, and **one CI leg** sets that (the design's section
+12 leaves CI or manual to ``@tester``; CI, because it is what keeps the
+``pyproject.toml`` default and scikit-build-core's behaviour checked after a
+release of it changes). The command, locally or in that leg::
 
     RASPUTIN_INSTALL_TRAP=1 pytest --no-cov tests/python/test_hardening.py -k trap
 
@@ -142,7 +142,22 @@ class TestStatsLine:
         assert every == above == ["bounds checks: off"]
 
 
-# ------------------------------------------------------------------ T6, manual
+# ------------------------------------------------------------------------ T6
+#
+# Where the trap lives. scikit-build-core deletes a build directory's
+# CMakeCache.txt when the scikit_build_core package it runs from is not the one
+# recorded there (scikit_build_core/cmake.py, "New isolated environment ...,
+# clearing cache"). Under pip's default build isolation every install gets a
+# fresh environment, so the cache never survives and an OFF install cannot leak:
+# a T6 run that way passes with or without pyproject.toml's
+# [tool.scikit-build.cmake.define] block and so tests nothing. The cache
+# survives only when both installs build with the same scikit-build-core:
+# ``--no-build-isolation`` from one environment, which is the everyday
+# developer's rebuild. So both installs go into one venv that holds the build
+# requirements, and a sentinel entry planted in the cache after the first
+# install proves, after the second, that the cache really was reused.
+
+SENTINEL = "RASPUTIN_T6_SENTINEL:STRING=kept"
 
 
 def copy_source_tree(destination: Path) -> Path:
@@ -162,16 +177,33 @@ def copy_source_tree(destination: Path) -> Path:
     return destination
 
 
-def install(source: Path, env_dir: Path, *settings: str) -> Path:
-    """A non-editable ``pip install`` of ``source`` into a fresh venv; the
-    installed extension's path. Dependencies are not installed: the extension is
-    loaded by path below, which needs none of them."""
+def build_environment(env_dir: Path) -> Path:
+    """A venv holding ``[build-system].requires``; its python. uv when present
+    (it serves the wheels from its cache, offline after the first fetch), pip
+    otherwise."""
     venv.EnvBuilder(with_pip=True).create(env_dir)
     python = env_dir / "bin" / "python"
-    argv = [str(python), "-m", "pip", "install", "--no-deps", "--quiet", str(source), *settings]
+    requires = ["scikit-build-core>=0.9", "pybind11>=2.12"]
+    uv = shutil.which("uv")
+    argv = (
+        [uv, "pip", "install", "--quiet", "--python", str(python), *requires]
+        if uv
+        else [str(python), "-m", "pip", "install", "--quiet", *requires]
+    )
+    done = subprocess.run(argv, capture_output=True, text=True, check=False, timeout=600)
+    assert done.returncode == 0, done.stderr[-4000:]
+    return python
+
+
+def install(python: Path, source: Path, *settings: str) -> Path:
+    """A non-editable, non-isolated ``pip install`` of ``source``; the installed
+    extension's path. Dependencies are not installed: the extension is loaded by
+    path below, which needs none of them."""
+    argv = [str(python), "-m", "pip", "install", "--no-build-isolation", "--no-deps"]
+    argv += ["--quiet", str(source), *settings]
     done = subprocess.run(argv, capture_output=True, text=True, check=False, timeout=1800)
     assert done.returncode == 0, done.stderr[-4000:]
-    (built,) = env_dir.glob("lib/python*/site-packages/tin_engine/_core*.so")
+    (built,) = python.parent.parent.glob("lib/python*/site-packages/tin_engine/_core*.so")
     return built
 
 
@@ -202,19 +234,23 @@ def test_trap_an_off_install_does_not_leak_into_the_next_default_install(
 ) -> None:
     """T6: section 3's stale build-directory trap, and the override precedence.
 
-    Both installs build from one source tree and so in one
-    ``build/{wheel_tag}``. A: ``-C cmake.define.RASPUTIN_HARDENING=OFF``, which
-    must override the ON in ``pyproject.toml``. B: no setting, which must not
-    pick up A's cached OFF.
+    One source tree, so one ``build/{wheel_tag}``; one environment, so its
+    CMakeCache.txt survives between installs. A:
+    ``-C cmake.define.RASPUTIN_HARDENING=OFF``, which must override the ON in
+    ``pyproject.toml``. B: no setting, which must not pick up A's cached OFF.
+    Fails if pyproject.toml stops passing ON explicitly.
     """
     source = copy_source_tree(tmp_path / "src")
-    off = install(
-        source, tmp_path / "venv-a", "--config-settings", "cmake.define.RASPUTIN_HARDENING=OFF"
-    )
-    build_dirs = sorted((source / "build").iterdir())
-    assert len(build_dirs) == 1, build_dirs
-    default = install(source, tmp_path / "venv-b")
-    assert sorted((source / "build").iterdir()) == build_dirs, "B did not reuse A's build dir"
+    python = build_environment(tmp_path / "venv")
 
-    assert loaded_mode(off) == "none"
-    assert loaded_mode(default) == platform_mode
+    off = install(python, source, "--config-settings", "cmake.define.RASPUTIN_HARDENING=OFF")
+    assert loaded_mode(off) == "none", "the command-line OFF did not override pyproject's ON"
+    (cache,) = (source / "build").glob("*/CMakeCache.txt")
+    assert "RASPUTIN_HARDENING:BOOL=OFF" in cache.read_text()
+    cache.write_text(cache.read_text() + SENTINEL + "\n")
+
+    default = install(python, source)
+    assert SENTINEL in cache.read_text(), (
+        "scikit-build-core cleared the cache between the installs: the trap was not exercised"
+    )
+    assert loaded_mode(default) == platform_mode, "A's cached OFF leaked into the default install"
