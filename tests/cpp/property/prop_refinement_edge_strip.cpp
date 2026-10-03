@@ -1024,16 +1024,27 @@ TEST_CASE("ES15: a DEM node within ulps of an end is skipped, so no sliver hides
     }
     CHECK(r.out.coincident >= 1);
     CHECK(r.out.coincident_max_error <= 1e-9 * zmax);
-    // (15, 8), on the constraint's line, is an end of an output constraint
-    // edge. At tolerance 0 every node not skipped goes in, so it must be
-    // there; at 0.5 it may be within tolerance and never inserted, and is
-    // then only required to be on the chain if it is a vertex at all.
-    bool vertex = false, on_chain = false;
-    for (const Point2 p : r.out.vertices) vertex = vertex || lat(g, p) == on_line;
-    for (const auto& e : r.out.edges)
-        for (const std::uint32_t v : e) on_chain = on_chain || lat(g, r.out.vertices[v]) == on_line;
-    if (tol == 0.0) CHECK(vertex);
-    CHECK(on_chain == vertex);
+    // (15, 8), on the constraint's line, is represented on the chain: some
+    // output vertex within r(g) of it, and every such vertex an end of an
+    // output constraint edge. Under L14 that vertex need not be the node: the
+    // strip's crossing of row 8, at (15 - 1 ulp-ish, 8), goes in on the chain
+    // first, and the node is then skipped as within r(g) of it (counted in
+    // coincident). What the case guards is the cascade: (15, 8) beside the
+    // constraint as the apex over a sub-edge, not on it. At tolerance 0 every
+    // node not skipped goes in, so a vertex near (15, 8) must exist; at 0.5 it
+    // may be within tolerance and never inserted.
+    const double rg = radius(g);
+    std::set<std::uint32_t> chain;
+    for (const auto& e : r.out.edges) chain.insert({e[0], e[1]});
+    std::size_t near = 0;
+    for (std::uint32_t i = 0; i < r.out.vertices.size(); ++i) {
+        const Lat p = lat(g, r.out.vertices[i]);
+        if (std::hypot(p.col - on_line.col, p.row - on_line.row) > rg) continue;
+        ++near;
+        CAPTURE(p.col, p.row);
+        CHECK(chain.contains(i));
+    }
+    if (tol == 0.0) CHECK(near >= 1);
 }
 
 TEST_CASE("ES15: the coincidence radius is 1e-10 lattice units, applied with a strip",
@@ -1142,8 +1153,16 @@ TEST_CASE("ES16: a vertex 2e-10 from a node is inside the radius at 16,385 colum
     if (inside) {
         CHECK(at_node == 0);  // skipped: within r(g) of P
         CHECK(w.out.coincident >= 1);
+        // |node z - P's z|: P lies on row 4 within r(g) of the node, where
+        // the surface is linear between nodes (c0, 4) and (c0 + 1, 4), so the
+        // difference is at most that side's slope times r(g). An absolute
+        // 1e-9 was wrong for this DEM (slope 8 per cell, so 1.6e-9 at
+        // 2e-10); the bound below is still about 1e-8 smaller than any
+        // difference not of P and this node.
+        const double slope = std::abs(at(w.dem, 4, static_cast<std::size_t>(c0) + 1) - at(w.dem, 4, static_cast<std::size_t>(c0)));
+        REQUIRE(slope > 0.0);
         CHECK(w.out.coincident_max_error > 0.0);
-        CHECK(w.out.coincident_max_error <= 1e-9);
+        CHECK(w.out.coincident_max_error <= slope * radius(g) * (1.0 + 1e-6));
     } else {
         CHECK(at_node == 1);  // outside the floor: inserted as any node
         CHECK(w.out.coincident == 0);

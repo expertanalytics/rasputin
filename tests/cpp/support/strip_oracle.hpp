@@ -62,15 +62,17 @@ using Edges = std::vector<std::array<std::uint32_t, 2>>;
 inline constexpr std::size_t kN = 33;      // nodes a side in the property fixtures
 inline constexpr double kOnEdge = 1e-9;    // cells: "distance under 1e-9 cells" (ES2)
 
-// L16: the oracles' "on the edge" distance stays a decade outside the
-// producer's coincidence radius r(g) = max(1e-10, 64 ulp(M)), M = max(cols,
-// rows) - 1. Written here from the ruling, not taken from strip_scan.hpp.
-// On every lattice up to 8,191 nodes across this is kOnEdge.
-inline double on_edge_slack(const RasterGeometry& g) {
+// L16: the producer's coincidence radius r(g) = max(1e-10, 64 ulp(M)),
+// M = max(cols, rows) - 1, written here from the ruling, not taken from
+// strip_scan.hpp.
+inline double radius(const RasterGeometry& g) {
     const double m = static_cast<double>(std::max(g.cols(), g.rows()) - 1);
-    const double r = std::max(1e-10, 64.0 * (std::nextafter(m, std::numeric_limits<double>::infinity()) - m));
-    return std::max(kOnEdge, 10.0 * r);
+    return std::max(1e-10, 64.0 * (std::nextafter(m, std::numeric_limits<double>::infinity()) - m));
 }
+
+// The oracles' "on the edge" distance stays a decade outside r(g) (L16, "The
+// oracles"). On every lattice up to 8,191 nodes across this is kOnEdge.
+inline double on_edge_slack(const RasterGeometry& g) { return std::max(kOnEdge, 10.0 * radius(g)); }
 
 inline RasterGeometry exact_geometry(std::size_t cols = kN, std::size_t rows = kN) {
     return RasterGeometry{0.0, 0.0, 2.0, 1.0, cols, rows};
