@@ -52,13 +52,10 @@ write limit is the one such limit.
 
 ## 3. When it runs
 
-The dispatcher spawns @orchestrator:
-
-- after each increment merges: a workflow check of that increment, and the
-  lessons from its handbacks recorded;
-- the morning after each unattended night: a check of the night (idle time,
-  guard refusals and false positives, work done out of role);
-- for a research round: weekly, or when Ola asks.
+After each increment merges, the morning after each unattended night, and
+for a research round weekly or when Ola asks. The schedule is stated once,
+in `CLAUDE.md` §3, *The main session dispatches*, where the dispatcher reads
+it.
 
 A check produces a short report to the dispatcher and the entries it writes
 in `docs/retrospectives/`.
@@ -77,16 +74,18 @@ scope a tool to a path.
 denied (Edit, Write) or reported (Bash), like any other persona's. The
 `architect` and `dispatcher` rows, which held all of `docs/`, now exclude
 `docs/retrospectives/`, so @orchestrator is the only writer there; h6's test
-list gains a case for both. The h6 design file is updated in this PR.
+list gains test 14 for both, the dispatcher's write being an ask by day and a
+queued deny at night (h6 §3.1). The `ROLES` lookup gains exclusions inside an
+allowed prefix for this. The h6 design file is updated in this PR.
 
 ## 5. Files
 
 | File | Change |
 |---|---|
 | `.claude/agents/orchestrator.md` | rewritten for the three jobs; description and tools |
-| `CLAUDE.md` | header, §1 roster line, §3 pipeline no longer "via @orchestrator"; new "The main session dispatches" with the rules moved from the persona |
-| `docs/PRINCIPLES.md` | "write it in the log" becomes "report it; @orchestrator records it" |
-| `docs/increments/h6-role-limits.md` | questions 1 and 2 ruled; `orchestrator` row; `docs/retrospectives/` taken out of the `architect` and `dispatcher` rows; test 14 |
+| `CLAUDE.md` | header, §1 roster line, §3 pipeline no longer "via @orchestrator"; new "The main session dispatches" with the rules moved from the persona (the milestone-update rule included, as its own bullet), the lessons chain and the @orchestrator schedule |
+| `docs/PRINCIPLES.md` | "write it in the log" becomes "report it in your handback", pointing to `CLAUDE.md` §3 |
+| `docs/increments/h6-role-limits.md` | questions 1 and 2 ruled; `orchestrator` row; `docs/retrospectives/` taken out of the `architect` and `dispatcher` rows; test 14; exclusions in the `ROLES` lookup, estimate ~125 → ~130 |
 | this file | the design |
 
 No persona file or `REQUIRED-READING.md` told a persona to write a
@@ -96,10 +95,8 @@ finds only citations), so none needs redirecting. The one rule that did is
 
 Estimate: 0 production lines.
 
-## 6. Questions for Ola
+## 6. Rulings
 
-1. **Principle D3** (`docs/PRINCIPLES.md`) says a conflict between two
-   correct principles "goes to `@orchestrator`". Under the new role
-   @orchestrator can only propose. Read it as "@orchestrator frames the
-   conflict and proposes; Ola rules"? That is how this PR leaves it, with the
-   text unchanged.
+1. **Principle D3** (`docs/PRINCIPLES.md`), "a compromise between two
+   correct principles goes to `@orchestrator`": ruled by Ola, 2026-10-03.
+   D3 stays unchanged; @orchestrator proposes, Ola rules.

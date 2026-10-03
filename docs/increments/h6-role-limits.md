@@ -71,6 +71,10 @@ allowlist, not R-B's denylist).
 | `dispatcher` (main session, §3.1) | `docs/` except `docs/retrospectives/`, `ROADMAP.md`, `.claude/current-task/session.md` |
 | every subagent | its own `.claude/current-task/<agent_type>-*.md` |
 
+A row may name an exclusion inside an allowed prefix (`docs/` except
+`docs/retrospectives/`); the lookup checks the exclusions before the
+prefixes.
+
 Rule files stay under `guard_governance.py` and h5 whatever this table says.
 The table only narrows what a persona may write; it never widens it.
 
@@ -138,8 +142,9 @@ Controls and edges:
 13. A Bash call that writes only under `build/` (ignored) → no output.
 14. `orchestrator` Write `docs/retrospectives/x.md` → allowed;
     `orchestrator` Write `docs/increments/x.md` → `deny`; `architect` Write
-    `docs/retrospectives/x.md` → `deny` (h7: @orchestrator is the only writer
-    there).
+    `docs/retrospectives/x.md` → `deny`; `dispatcher` Write
+    `docs/retrospectives/x.md` → `ask`, and with the flag on → `deny` and
+    queued (§3.1) (h7: @orchestrator is the only writer there).
 
 Not invariant-critical: no mutation round.
 
@@ -158,11 +163,11 @@ Not invariant-critical: no mutation round.
 
 ## 6. Estimate
 
-Production lines (`CLAUDE.md` §2): `ROLES` and the row lookup ~35, the Edit
+Production lines (`CLAUDE.md` §2): `ROLES` and the row lookup, with exclusions, ~40, the Edit
 and Write verdict in `pre-tool` ~25, the dirty-set record and diff ~50,
 reporting through h5's queue and `additionalContext` paths ~15. Rule text:
 one sentence replaces two in `REQUIRED-READING.md`, plus a one-line pointer in
-each of the six persona files. **~125**, one PR. No settings change.
+each of the six persona files. **~130**, one PR. No settings change.
 
 ## 7. Questions for Ola
 

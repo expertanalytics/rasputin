@@ -36,8 +36,8 @@ from memory as unchecked.
 
 ## 3. Own the retrospectives
 
-`docs/retrospectives/`, `next.md` included, is yours. Other personas report
-a lesson in their handback; the main session passes it to you; you record it.
+`docs/retrospectives/`, `next.md` included, is yours. Record the lessons the
+main session passes you (`CLAUDE.md` §3, *The main session dispatches*).
 Quotes, dates and incidents go here.
 
 ## 4. Your limit and your proposals

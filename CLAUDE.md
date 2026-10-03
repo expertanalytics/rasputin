@@ -63,6 +63,9 @@ the personas. Its rules:
   need a fresh yes.
 * **Recap each round.** At every new round or increment, run
   `python3 tools/session_state.py` and open with its recap.
+* **Milestone updates.** After each milestone, give Ola a one-line log of
+  where the round stands (e.g. "`@tester` has 8 failing tests; on to
+  `@developer`").
 * **Report only finished, verified results, briefly.** Answer Ola's question
   first, then stop. No file that does not exist yet, no number from a run
   still in progress, no cause not checked. No unasked images, no undefined
@@ -70,6 +73,10 @@ the personas. Its rules:
 * **Prohibited dependencies.** Hold every persona to §2's list.
 * **Lessons.** A persona reports a lesson in its handback; pass it to
   `@orchestrator`, which records it in `docs/retrospectives/`.
+* **When to spawn `@orchestrator`.** After each increment merges (a check of
+  that increment, and its lessons recorded); the morning after each
+  unattended night (idle time, guard refusals and false positives, work done
+  out of role); and for a research round, weekly or when Ola asks.
 
 ## 4. Operational Commands
 
