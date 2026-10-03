@@ -8,7 +8,9 @@ below), and `@perf` ACCEPTED (2026-10-03, AC power: `_core` and both
 `bench.py` meshes byte-identical to master `390b516`, refine within noise;
 `docs/benchmarks/2026-10-03/15f-1-acceptance.md`); not pushed. **15f-2**:
 the C++ red step is `afd2498` on `worktree-15f-2`, and the gaps it found are
-ruled under "Settled after 15f-2's red step" (L1-L9). Choices that would normally go to Ola
+ruled under "Settled after 15f-2's red step" (L1-L9). The C++ green step is
+`67df94c` (11 of 13 ES cases); its three open questions are ruled under
+"Settled after 15f-2's green step" (L10-L13). Choices that would normally go to Ola
 were made as defaults; each is marked *default* where it occurs and listed
 under "Defaults chosen" at the end.
 
@@ -208,7 +210,9 @@ Not in scope:
   inserted. Not ruled.
 - **Constraint feet and start quality in the strip run.** As in 15c's phase 2
   (its D5). A DEM node the F2 rescan inserts next to a constraint goes in with
-  `split_inside`, as phase 2's source nodes do.
+  `split_inside`, as phase 2's source nodes do, except one within 1e-10
+  lattice units of a constrained edge while a strip is present: that one goes
+  in on the edge (L12).
 - **One loop shared by `refine` and `refine_points`** (15c D5's later
   refactor). This design refactors only `refine_points`' own loop (D4).
   `refine.hpp` gets one extracted helper and no change in behaviour.
@@ -485,7 +489,8 @@ the neighbour across that edge was already touched. A **strip point** goes in
 with `split_edge(t, e, at)` on its sub-edge, under the same skip rule.
 Because `at` is off the edge by rounding, the split is guarded as 20b's feet
 are: `detail::foot_fits(m, t, e, at)` (in `refine.hpp`, reused, not copied)
-must find every child strictly counter-clockwise. If it does not, the point is
+must find every child strictly counter-clockwise, and the split's new edges
+must be locally Delaunay (`detail::strip_fits`, L10). If it does not, the point is
 marked **refused** for the rest of the run and counted. The vertex's z is the
 point's z. `legalise_around` follows, as today.
 
@@ -971,6 +976,130 @@ LOC effect: L1, L3, L4 and the `operator==` of L2 add about 15 lines to
 `refine_points.hpp`'s 203 and 1 to `geometry.hpp`. 15f-2's estimate becomes
 about 406: 564 at +39 % and 650 at +60 %, still under 700.
 
+**Settled after 15f-2's green step (67df94c).** `@developer` raised three
+points; ruled by `@architect`, 2026-10-03. None needs Ola. L10 and L12 make
+refusals rarer and no claim wider, Ola's wording of the guarantee is
+unchanged, and refused points stay excluded from E1 and reported (default 5).
+
+- **L10. `strip_fits` is accepted as a departure from D4, step 3.** A strip
+  point is guarded by `detail::strip_fits`: `foot_fits`, and then the two new
+  edges from `q` (`q`-`c`, and `q`-`d` across the sub-edge) must be locally
+  Delaunay by `must_flip`'s test. The reason: a point that is a hair off its
+  sub-edge on the far side can lie outside `t`'s circumcircle. The circle's
+  segment beyond the chord is thin near the chord's ends, so this happens
+  only there. `legalise_around` tests only the edges opposite `q`, so `q`-`c`
+  would stay non-Delaunay, and it cannot be flipped: the flip would cross the
+  constrained chain `a`-`q`-`b`. Refusing is the only exact outcome. The
+  alternative, inserting anyway and leaving a non-Delaunay edge, breaks
+  `tester.md` §3D's Delaunay oracle; without the check ES13 failed on 9
+  sweep inputs, and with it on none of 240 (`@developer`, `67df94c`). Its
+  ~20 lines were not in the estimate; they are counted below.
+  `strip_fits` also guards L12's insertions.
+- **L11. ES6: the test changes, and the oracle does not.** `ruled_points`
+  merges crossings closer than 1e-12 in parameter. That is right for an
+  independent oracle: it cannot reproduce the generator's ulp-level arithmetic
+  without copying it, which the computational-geometry skill forbids ("borrow
+  the producer's predicate, never its records"). So the refused point `f`
+  (`t` ≈ 3.7e-17) is not one of the oracle's points, and
+  `REQUIRE(f.over > 0)` (`prop_refinement_edge_strip.cpp:465`) asserts
+  something the oracle cannot see. `@tester` changes the refused section:
+  - keep `strip_refused == 1` and `strip_refused_max_error ≈ 10`;
+  - replace `REQUIRE(f.over > 0)` and the loop over `over_at` by
+    `CHECK(f.over == 0)`: every point the oracle generates is repaired, which
+    is "E1 holds for the rest";
+  - measure `f` from the test's own knowledge: a hand-built one-point list
+    `{OraclePoint{{1.0, 1.5}, 6.0, 0}}` (the plane `3 col + 2 row` there),
+    through `strip_findings` at the case's tolerance. It must give `over == 1`
+    (its error, about 10, is `strip_refused_max_error`). The position is
+    the CC7 probe's, known by hand, so nothing is read from the store.
+- **L12. A non-strip point a hair off a constrained edge goes in on that
+  edge.** This is option 1 of the three `@developer` listed. In the ES13
+  sweep the rescan inserted a DEM node lying within ulps of the constraint
+  with `split_inside`. That leaves the sliver F1 describes, the node becomes
+  the apex over the sub-edge, and `foot_fits` then refuses strip points in
+  the middle of the edge, far from any end. F1's reason for filing strip
+  points by edge applies to such a node as well. The rule, in the split phase
+  of `point_loop`, **only when a strip is given**:
+  - A source point or DEM node that the scan places `Inside` triangle `t` is
+    tested against each constrained edge `e` of `t`. It is a candidate when
+    its distance to the line of `e` is at most **1e-10 lattice units**
+    (Euclidean in `(col, row)`) and its projection falls strictly inside
+    `e`. The threshold is a decade inside the oracles' `kOnEdge` (1e-9), so
+    the producer and the oracle never disagree at the boundary. It is still
+    many ulps at the basin's lattice coordinates (about 3e4).
+  - With more than one candidate, take the nearest, and on a tie the lower
+    edge index in `t`. The point then goes through L1's order with
+    `split_edge(t, e, p)` at **its own position** and its own z: touched,
+    then the skip rule, then `strip_fits`. If `strip_fits` refuses, it falls
+    back to `split_inside`, as today. Nothing is marked refused, because E2
+    and J2 need that point in the mesh. The cut then follows step 4, with
+    consumption (L5).
+  - Without a strip nothing changes, so the no-strip path stays bit-identical
+    (`@developer`'s 72 fixtures).
+
+  The other two options are rejected. An L1 fallback has nothing exact to
+  fall back to: a strip point has no other position. Accepting the refusals
+  in the test would turn a refusal from a rounding-scale event at a vertex
+  into a loss of E1 in the middle of an edge, with an error of any size.
+
+  **What the guarantee then says.** E1 is unchanged: every strip point that
+  is not refused is within tolerance. Refused points are counted and their
+  largest error is reported. What changes is the expectation stated for
+  refusals: they are expected only within rounding (1e-9 lattice units) of a
+  vertex of the output, which is either an end of a start edge or a vertex the
+  run put on the constraint. One case stays outside that expectation: a
+  **start** vertex that lies within rounding of another constraint edge
+  without being on it. This can only come from the input. A refusal it causes
+  is still counted and reported, and `@perf`'s acceptance records
+  `strip_refused` and its largest error on Bygdin and the basin pieces.
+
+  **Who changes what.**
+  - `@tester`, first, in one commit with the reason:
+    - ES13's assertion on `over_at` becomes "within 1e-9 lattice units of an
+      **output** vertex", not only of a start end. A crossing within ulps of
+      a node that went in on the edge may be refused at tolerance 0.
+    - A new case, **ES14**, promotes the sweep input seed 11, k 0, as an
+      explicit start. At tolerance 0.5 it asserts `strip_refused == 0`, the
+      strip oracle at 0 over, and the DEM node near (8, 8) an end of an
+      output constraint edge (on the chain, so not `stray` and no
+      `broken_chain`). At tolerance 0 it asserts every over point within
+      1e-9 of an output vertex. ES14 is red until `@developer` lands L12,
+      and it is what keeps the widened ES13 from hiding the original failure.
+    - Optional, from L7: `CHECK(out.strip_refused == 0)` in ES8's projected
+      section.
+  - `@developer`, then: L12 in `point_loop`'s split phase, and nothing else in
+    behaviour. If ES14 or the ES13 sweep still shows refusals in the middle of
+    an edge after L12, report the input back rather than widening the
+    threshold.
+- **L13. Where the strip machinery goes (corrects "Module to watch").**
+  `refine_points.hpp` is 582 physical lines at `67df94c`, which is past the
+  550 trigger. The design's 294 baseline was `wc -l` at `390b516`, so the
+  trigger is `wc -l` too. It counts 552 non-blank lines and 470 lines that
+  are neither blank nor comment; the "534" figure matches none of these
+  counts at `67df94c`. The strip machinery (`SubEdge`, `SubEdges`,
+  `edge_key`, `along`, `scan_strip`, `cut`, `strip_fits`, and L12's
+  candidate test) moves to a new header,
+  `include/terrain/refinement/strip_scan.hpp`, and **not** to
+  `constraint_points.hpp` as the design first said. That header is the
+  generator, which 23b's seam pass reuses without the loop. Moving the loop's
+  sub-edge map, the hash map and the Lawson predicates into it would hand
+  23b dependencies it does not use. `refine_points.hpp` includes the new
+  header. This is `@developer`'s, as its own commit after L12 is green: a
+  pure move, with no test file and no behaviour change (the suites and the
+  72-fixture identity as the check). `project_structure.md`'s `refinement/`
+  list gains the header in the same PR.
+
+LOC effect of L10-L13: `strip_fits` about 20 (already in `67df94c`'s 229
+net), L12 about 15, the new header's includes and namespace about 15. The C++
+lands near 260 against the design's 218 (+19 %). 15f-2's estimate becomes
+about 450: 626 at +39 % and 720 at +60 %. That is over 700 at the wider
+margin only, so the convention 15c and 23 kept, under 700 at both margins, no
+longer holds for 15f-2 on estimates. The ceiling is on actual lines, and
+`@reviewer` counts them. The Python half (bindings, stubs, `edge_strip.py`,
+CLI, about 187 estimated) is what is left to land. If the measured C++ plus
+that half approaches 700, the bindings and Python move to a 15f-3, which is
+the split option (b) that was considered for 15f-1.
+
 **Python (pytest), 15f-2:**
 
 - **PY1, the binding** (every binding of this increment, the store's and the
@@ -1037,8 +1166,9 @@ rescan and the second entry point (about 45). Binding two entry points and a
 store is about 105. The midpoints themselves cost about 10, as 15c said.
 
 Module to watch: `refine_points.hpp` grows from 294 lines to about 500. If
-it passes 550, the strip scan and the sub-edge map move to
-`constraint_points.hpp`, beside the store they read.
+it passes 550, the strip scan and the sub-edge map move out. It passed (582 at
+`67df94c`); L13 rules where they go (`strip_scan.hpp`, not
+`constraint_points.hpp`).
 
 **Documentation in the same PRs** (not counted): `ROADMAP.md`'s row at
 each merge; a pointer from `15c-geographic-dem.md`'s "The edge strip" and from
