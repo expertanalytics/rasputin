@@ -1,6 +1,9 @@
 # Increment 15e: four memory fixes on the reprojected path
 
-Status: **designed by `@architect`, 2026-10-03.** Not started.
+Status: **designed by `@architect`, 2026-10-03; implemented.** Red 9879805
+(`@tester`), green efb854f (`@developer`), fixes after `@reviewer` round 1
+in 18b7a79 and 6d2f40c. Pending: `@reviewer` round 2 and `@perf`'s
+acceptance run. Departures from the design are under "As built" below.
 
 Ola's order of 2026-10-03 for the basin: the nine level-3 meshes as the
 interim result, then this PR, then 23b-23g. Source: fixes 1-4 of
@@ -92,7 +95,9 @@ R7's condition. These texts change with it:
   (`docs/increments/15c-geographic-dem.md:394-396`) becomes "as designed".
 
 **Red test, @tester.**
-- M15's grep test (`tests/python/test_mosaic.py:1620-1626`) now expects
+- M15's grep test
+  (`test_adopt_is_called_only_from_the_mosaic_and_the_resampler`, formerly
+  `tests/python/test_mosaic.py:1620-1626`) now expects
   `["io/models.py", "mosaic.py", "target_grid.py"]`. Red today. This test
   change is the one the note anticipates. It lands in @tester's red commit.
 - Identity: `resample(...)`'s `tile.array.base is None` (the canvas
@@ -262,6 +267,34 @@ None of these blocks the work. Each is a default Ola may override:
   holding the tile for Python API callers. They drop it themselves.
 
 No question needs Ola before @tester starts.
+
+## As built
+
+Where the code departs from the design above (the design text is left as
+it was ruled):
+- **`CheckPoints` is move-only.** Its copy constructor and copy assignment
+  are deleted, because each row's chunk directory holds raw pointers into
+  the store's slabs; a copy would point into the original's slabs. The
+  defaulted moves keep those pointers valid: the slabs are
+  `std::unique_ptr<Packed[]>` and move with the store without being
+  reallocated. The binding still returns the store by value from its
+  constructor (`bindings/core.cpp`, the `py::init` lambda), which compiles
+  against the move.
+- **`for_each_in` uses a hand-written lower bound** over the chunked logical
+  index, in place of `std::ranges::lower_bound` (which would need a
+  random-access iterator written over the chunk list). It finds the same first position, the first
+  point with `col >= c0`, then walks forward while `col <= c1`: the same
+  order and the same inclusive `[c0, c1]` rule as before. The index is
+  written `chunks[i / kChunk][i % kChunk]`, equal to the design's
+  `i >> 10`, `i & 1023` for `kChunk = 1024`.
+- **`kSlab = 4096` is a public `static constexpr`**, beside `kChunk = 1024`,
+  rather than an implementation detail.
+- **`_Once.take` raises `RuntimeError` on a second take**, not
+  `AssertionError`: it is an explicit check, because `python -O` strips an
+  `assert`.
+
+Not a departure: `_dem_mesh` takes `grid` and `checks` in place of
+`opened`, as fix 3 specifies.
 
 ## Review
 
