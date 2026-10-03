@@ -333,6 +333,25 @@ inline bool strip_fits(const mesh::LatticeMesh& m, std::uint32_t t, unsigned e, 
     return !flips(f, m.corner(u, (k + 2) % 3), b, a);
 }
 
+// L12: the constrained edge of t whose line p lies within 1e-10 lattice units
+// of, (col, row) Euclidean, with p's projection strictly inside it; the
+// nearest, ties to the lower edge index.
+inline std::optional<unsigned> near_constraint(const mesh::LatticeMesh& m, std::uint32_t t, mesh::MeshVertex p) {
+    std::optional<unsigned> best;
+    double best_d = 1e-10;
+    for (unsigned e = 0; e < 3; ++e) {
+        const mesh::MeshVertex a = m.corner(t, e), b = m.corner(t, (e + 1) % 3);
+        const double dc = b.col - a.col, dr = b.row - a.row, len2 = dc * dc + dr * dr;
+        const double sigma = ((p.col - a.col) * dc + (p.row - a.row) * dr) / len2;
+        const double d = std::abs(dc * (p.row - a.row) - dr * (p.col - a.col)) / std::sqrt(len2);
+        if (m.is_constrained(t, e) && sigma > 0.0 && sigma < 1.0 && (d < best_d || (!best && d == best_d))) {
+            best = e;
+            best_d = d;
+        }
+    }
+    return best;
+}
+
 struct NoSet {};  // point_loop without a store, or without a DEM
 
 [[nodiscard]] inline PointRefineOutcome point_refusal(RefineOutcome r) {
@@ -449,21 +468,35 @@ template <class Store, class R>
             std::array<std::uint32_t, 4> seeds{t, before, before + 1, before + 1};
             std::size_t n_seeds = 3;
             std::uint32_t q = 0;
-            if (r.where == NodeLocation::Inside) {
-                q = m.split_inside(t, *r.point);
-            } else {
-                const auto e = static_cast<unsigned>(r.where) - 1;
-                const std::uint32_t u = m.neighbours(t)[e];
+            // L12: with a strip, a point Inside but a hair off a constrained edge goes in on it.
+            std::optional<unsigned> edge;
+            if (r.where != NodeLocation::Inside)
+                edge = static_cast<unsigned>(r.where) - 1;
+            else if (strip)
+                edge = near_constraint(m, t, *r.point);
+            const bool near = edge && r.where == NodeLocation::Inside;
+            if (edge) {
+                const std::uint32_t u = m.neighbours(t)[*edge];
                 if (u != mesh::kNoNeighbour && touched[u] != 0) {
                     skipped.push_back(t);
                     continue;
                 }
-                if (r.set == PointSet::Strip && !strip_fits(m, t, e, *r.point, frame)) {  // L1
-                    refused[r.strip_index] = 1;
-                    ++out.strip_refused;
-                    skipped.push_back(t);
-                    continue;
+                if ((r.set == PointSet::Strip || near) && !strip_fits(m, t, *edge, *r.point, frame)) {
+                    if (near) {  // L12: back to split_inside, nothing refused
+                        edge.reset();
+                    } else {  // L1
+                        refused[r.strip_index] = 1;
+                        ++out.strip_refused;
+                        skipped.push_back(t);
+                        continue;
+                    }
                 }
+            }
+            if (!edge) {
+                q = m.split_inside(t, *r.point);
+            } else {
+                const auto e = *edge;
+                const std::uint32_t u = m.neighbours(t)[e];
                 const auto& tri = m.triangles()[t];
                 const std::uint32_t ea = tri[e], eb = tri[(e + 1) % 3];
                 const bool constrained = m.is_constrained(t, e);
