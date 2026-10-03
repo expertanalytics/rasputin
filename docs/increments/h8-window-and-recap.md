@@ -102,7 +102,10 @@ ASK = re.compile(r"^[ \t]*(?:[-*+][ \t]+)?ASK OLA:(.*)$")   # case-sensitive
   number is not a bullet), `ASK OLA x` (no colon).
 - A counted line whose remainder is blank (`ASK OLA:`, `- ASK OLA:   `)
   is listed as `<file>:<lineno>: WARNING: empty ASK OLA line` in place of the
-  line. Others are listed as now: `<file>: <line stripped>`.
+  line. Others are listed as now: `<file>: <line stripped>`, in full.
+  The recap's display of the list is capped (§3.6: 5 lines, each cut to 160
+  characters); `away.py --back` prints the list uncapped, as it is not
+  hook output.
 - `all_decisions(repo: Path) -> list[str]`: `pending_decisions` over
   `<c>/.claude/current-task` for each `c` in `checkouts(repo)`. Lines from the
   main checkout carry no prefix; lines from another checkout are prefixed with
@@ -128,7 +131,7 @@ ASK = re.compile(r"^[ \t]*(?:[-*+][ \t]+)?ASK OLA:(.*)$")   # case-sensitive
 
 The recap runs this on the main checkout's `session.md` only, prints the
 warnings under `session.md format:` directly after "Waiting on Ola", at most
-10 then `... <n> more`, and prints nothing when there are none. A worktree's
+4 then `... <n> more` (§3.6's budget), and prints nothing when there are none. A worktree's
 `session.md` is not format-checked; its `ASK OLA:` lines are still listed
 (§3.2). The 300-character limit is Ola's
 ruling 2 (§7), made after a 971-character `NOW:` line.
@@ -192,8 +195,8 @@ towards printing nothing, so the section's heading says what it looks for.
   line whose command contains `/.claude/shell-snapshots/` and `eval '`, not in
   `exclude`, as `pid <pid>, running <etime>: <command>`, where `<command>` is
   the text between `eval '` and the next `' < /dev/null` (or the end of the
-  line), whitespace collapsed, cut to 100 characters. At most 10, then
-  `... <n> more`.
+  line), whitespace collapsed, cut to 100 characters. At most 4, then
+  `... <n> more` (§3.6's budget).
 - The caller runs `ps` as above (both macOS and procps accept it) and passes
   the PIDs of its own ancestors (walked through the `ppid` column from
   `os.getpid()`), so a recap run by hand does not list its own shell.
@@ -258,13 +261,27 @@ At today's 14 files it is about 16 lines and 600 characters.
 
 **Budget against the 10,000-character cap.** The recap printed 6,025
 characters on 2026-10-03 (round 1 review, `python3 tools/session_state.py |
-wc -m` in the main checkout). The new sections are capped so that together
-they add at most 3,000 characters: background jobs 10 lines of at most
-about 130 characters (§3.5); "Waiting on Ola" at most 20 lines of at most
-160 characters each, then `... <n> more` (the lines across all worktrees
-are new volume); `session.md format:` 10 lines (§3.3); the size table is
-bounded by its file set. A test fills every new section past its cap and
-checks the added characters (test 11).
+wc -m` in the main checkout), leaving about 3,975. That headroom moves with
+the length of the predecessor turns, so the four sections h8 adds or widens
+get a fixed budget of **3,000 characters together**, newlines and headings
+included, which leaves about 1,000 of margin at today's size. Each section's
+cap, with its worst case:
+
+| Section | Cap | Worst case, characters |
+|---|---|---|
+| Running Bash-tool jobs (§3.5) | 4 lines of at most ~136 (`  pid`, etime, 100-character command), then `... <n> more` | ~630 |
+| Waiting on Ola (§3.2) | 5 lines, each cut to 160 characters for display, then `... <n> more` | ~850 |
+| `session.md format:` (§3.3) | 4 lines of at most ~112, then `... <n> more` | ~490 |
+| Size table (§3.6) | one line per file, `  <words:5> <change:>6> <path>`; 14 files today, longest path 48 characters, so lines of at most 63 | ~980 |
+| **Total** | | **~2,950** |
+
+The 160-character cut on an `ASK OLA:` line is a display cut in the recap
+only, marked with `...`; `session.md` lines may be up to 300 characters
+(ruling 2), and the main checkout's `session.md` is printed in full further
+down by `print_current_task`, so a cut or dropped line there is still seen.
+The size table grows by up to 63 characters per added rule file, so about
+one more file uses up the budget's slack; test 11 then fails, and the fix is
+to raise the budget against the measured recap or to lower a cap.
 
 ### 3.7 Recap order
 
@@ -421,8 +438,8 @@ lowercase line no longer counts), and
    `ASK OLA:` lines are still listed).
 5. **Background jobs (§3.5).** On a `ps` text built from the observed format:
    wrapper lines listed with pid, etime and the eval'd command; non-wrapper
-   lines and excluded pids not; a command past 100 characters cut; 12
-   wrappers give 10 lines and `... 2 more`. End to end: start
+   lines and excluded pids not; a command past 100 characters cut; 6
+   wrappers give 4 lines and `... 2 more`. End to end: start
    `/bin/sh -c ": /x/.claude/shell-snapshots/s.sh && eval 'sleep 60' < /dev/null"`,
    run the recap, find its pid listed; kill it. With `ps` unavailable (a seam
    or an empty `PATH` for that call), the recap prints `(could not list: ...)`
@@ -458,10 +475,16 @@ lowercase line no longer counts), and
 10. **Governed.** A write to `tools/rule_sizes.py` gets `ask` from
     `guard_governance.py` (add it to the existing list in
     `test_guard_governance.py`).
-11. **Budget (§3.6).** With 15 wrapper processes in the `ps` text, 30
-    `ASK OLA:` lines of 300 characters across three worktrees and 15 format
-    faults, the new sections print their caps and `... <n> more`, and add at
-    most 3,000 characters to the recap.
+11. **Budget (§3.6).** With 15 wrapper processes whose commands are 300
+    characters long, 30 `ASK OLA:` lines of 300 characters across three
+    worktrees, 15 format faults in the main `session.md`, and the size table
+    over the real file set, each of the four sections prints its cap and
+    `... <n> more`, and the four sections' blocks in the recap output (from
+    each section's heading to the line before the next section's heading,
+    newlines included) sum to at most 3,000 characters. It measures those
+    blocks directly, not the recap with and without them, so the result does
+    not depend on the fixture's transcripts or `ROADMAP.md`. An `ASK OLA:`
+    line is shown cut to 160 characters ending in `...`.
 
 ## 7. Rulings (Ola, 2026-10-03)
 
