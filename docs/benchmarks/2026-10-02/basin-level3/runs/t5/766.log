@@ -1,0 +1,21 @@
+17442 start quality nodes inserted, 440 start quality skips, 92 constraint feet, 0 feet refused, 42 rounds, 890423 points inserted, 2218820 flips, 2088331 triangles, achieved max error 4.999991280691916 m, 0 valid DEM nodes not covered, 12311 start triangles, 12313 start vertices off-node, 0 vertices without data dropped
+/Users/skavhaug/projects/rasputin_data/sao_francisco_piece/meshes/level3/sub_basin_766_anadem_tol5m.vtk
+/Users/skavhaug/projects/rasputin/.claude/worktrees/basin-level3/docs/benchmarks/2026-10-02/basin-level3/runs/t5/766.stats.md
+       13.62 real        47.50 user         6.12 sys
+          2909454336  maximum resident set size
+                   0  average shared memory size
+                   0  average unshared data size
+                   0  average unshared stack size
+             2264392  page reclaims
+                   0  page faults
+                   0  swaps
+                   0  block input operations
+                   0  block output operations
+                   0  messages sent
+                   0  messages received
+                   0  signals received
+                 181  voluntary context switches
+               22422  involuntary context switches
+        330056809712  instructions retired
+        158274878015  cycles elapsed
+          2812841056  peak memory footprint

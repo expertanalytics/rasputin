@@ -1,0 +1,12 @@
+{
+ "prefix": "769",
+ "estimate_gb": 5.46,
+ "fetch_exit": 0,
+ "power_before": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=24117347)\t100%; charged; 0:00 remaining present: true\n",
+ "swap_before_mb": 17463.81,
+ "exit": 0,
+ "outer_wall_s": 56.3,
+ "swap_max_mb": 17463.81,
+ "power_after": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=24117347)\t100%; charged; 0:00 remaining present: true\n",
+ "mesh": "/Users/skavhaug/projects/rasputin_data/sao_francisco_piece/meshes/level3/sub_basin_769_anadem_tol5m.vtk"
+}
