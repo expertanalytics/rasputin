@@ -413,7 +413,7 @@ affected only through `max_error_m`.
 | strip points inserted | `line_points_inserted` | `--stats` |
 | DEM nodes inserted by the line check | `line_check_dem_nodes_inserted` | `--stats` |
 | duplicate strip points | `line_points_duplicate` | `--stats` |
-| points within rounding of a vertex, not checked, and their largest difference | `dem_nodes_at_vertices`, `dem_nodes_at_vertices_max_error_m` | `--stats` |
+| points within rounding of a vertex, not checked, and their largest difference | `dem_nodes_at_vertices`, `dem_nodes_at_vertices_max_error_m` | `--stats`; **absent from the record on a path that does not produce them** (default taken while Ola was away): today only the reprojected path counts them, so before 15f-3 a projected run has neither entry, in `--stats` or `--record`, rather than a 0 nobody measured. Where a path produces them, they are always in `--stats` and `--record`, 0 included (rule 3 omits zero counts from the file only) |
 | the "at most" bound | `max_error_m` | file |
 
 **What changes in 15f-3's red suite** (branch `worktree-15f-3`, `4157dab`):
@@ -422,13 +422,18 @@ affected only through `max_error_m`.
   most` (in `test_cli_constraint_feet.py`, `test_cli_mesh_domain.py`,
   `test_cli_mesh_domain_crs.py`, `test_cli_mesh_features.py`,
   `test_cli_mesh_refine.py`, `test_cli_start_quality.py`) are dropped: 25's red
-  step rewrites those lines as `float(field(vtk, "max_error_m"))`, and 15f-3
-  takes 25's version at the rebase.
+  step rewrites those lines as `float(file_field(vtk, "max_error_m"))`, and 15f-3
+  takes 25's version at the rebase. In that amendment,
+  `test_cli_mesh_refine.py:133` (`--tolerance 0`, which today asserts the
+  maximum is exactly 0.0) compares `max_error_m` with
+  `max(tolerance_m, dem_nodes_at_vertices_max_error_m)`, read from the file
+  and from `--stats`, because after 15f-3 a node within rounding of a strip
+  vertex can lift it a few units in the last place above 0 (D2).
 - `test_cli_mesh_edge_strip.py`:
   - the sentence-clause regex (`:106-110`) and its `clause()` reader become
     reads of the `--stats` Result rows above (or of the `--record` JSON);
     `:250-254`, `:297`, `:315` and `:396-399` read the same figures that way;
-  - `:255` becomes `float(field(vtk, "max_error_m")) <= TOLERANCE`;
+  - `:255` becomes `float(file_field(vtk, "max_error_m")) <= TOLERANCE`;
   - `:256` and `:403` (which phrase appears on which path) are dropped:
     there is no sentence; instead, `max_error_m` is in the file on both
     paths, and on the reprojected path it equals the final check's figure
@@ -732,6 +737,9 @@ catchment's lake line; `sys.argv` for `command`; the LOC estimate.
   `--stats`; it was not taken because the file's one accuracy number would
   then be untrue for those nodes.
 - **`--record -` is refused** (D5), so standard output stays `--stats -`'s.
+- **`dem_nodes_at_vertices` and its largest difference are absent from the
+  record on a path that does not measure them** (D6): before 15f-3, the
+  projected path. A 0 there would claim a check that did not run.
 
 ## Review
 
