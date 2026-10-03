@@ -324,8 +324,8 @@ def test_the_target_tile_is_dropped_before_the_final_check(
     reference to the resampled target tile survives into
     `final_check.run`, so phase 2 does not hold it. The probe is a weakref
     to the tile's array (a NumPy array takes one), read after a full
-    `gc.collect()` on entry to the final check. RED: `mesh()` holds
-    `opened`, and `_dem_mesh` its `tile` parameter, through the call."""
+    `gc.collect()` on entry to the final check. Went red at 9879805 because
+    `mesh()` held `opened`, and `_dem_mesh` its `tile` parameter, through the call."""
     from tin_engine import cli
 
     tiles: list[weakref.ref[np.ndarray]] = []

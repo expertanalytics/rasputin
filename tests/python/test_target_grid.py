@@ -396,8 +396,8 @@ def test_no_prepared_geometry_is_shared_between_threads(
 # `docs/increments/15e-memory-fixes.md`, fix 1: `BLOCK_NODES = 1 << 20` and
 # `rows_per_block(cols) = max(1, BLOCK_NODES // cols)`, read at call time so a
 # test can lower it; `resample(..., block_rows=None)` uses it, and an explicit
-# `block_rows` still overrides. RED: neither name exists, and every block is
-# 256 rows, so one block of an 80 x 80 source's grid holds every node.
+# `block_rows` still overrides. Went red at 9879805 because neither name existed
+# and every block was 256 rows, so one block of an 80 x 80 grid held every node.
 
 
 class _SpiedReprojector:
@@ -511,8 +511,8 @@ class TestBlockSize:
 
 # ------------------------------------------------------------------ 15e, fix 2: canvas adopted
 #
-# Fix 2: `resample` returns `DemTile._adopt(meta, canvas)`. RED: it calls the
-# public constructor, whose array is a read-only view of a copy.
+# Fix 2: `resample` returns `DemTile._adopt(meta, canvas)`. Went red at 9879805
+# because it called the public constructor, whose array is a read-only view of a copy.
 
 
 class TestCanvasAdopted:

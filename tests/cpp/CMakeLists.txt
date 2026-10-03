@@ -318,7 +318,7 @@ add_terrain_backend_test(test_area_collapse unit/test_area_collapse.cpp)
 add_terrain_test(test_refinement_check_points unit/test_refinement_check_points.cpp)
 # Increment 15e fix 4 (docs/increments/15e-memory-fixes.md): the store's slab
 # arena, its reserved_points() bound and rows across chunk boundaries. Its own
-# target, so that the red commit (no reserved_points yet) leaves the rest built.
+# target, so a compile failure in it leaves every other suite built and run.
 add_terrain_test(test_refinement_check_points_arena unit/test_refinement_check_points_arena.cpp)
 add_terrain_backend_test(test_refinement_refine_points unit/test_refinement_refine_points.cpp)
 target_link_libraries(test_refinement_refine_points PRIVATE Threads::Threads)

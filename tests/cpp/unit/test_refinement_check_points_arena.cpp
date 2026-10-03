@@ -19,9 +19,9 @@
 // Every position is a dyadic fraction of a cell on an integral frame, so the
 // stored position equals the given one bit for bit (as in CP1).
 //
-// HOW THIS FILE GOES RED: neither kChunk nor reserved_points() exists, so this
-// target does not compile. It is its own target so that every other suite still
-// builds (`cmake --build build -j -- -k`) and runs under ctest.
+// This file went red at 9879805 because neither kChunk nor reserved_points()
+// existed yet, so the target did not compile; its separate target kept every
+// other suite building and running under ctest.
 
 #include <catch2/catch_test_macros.hpp>
 
