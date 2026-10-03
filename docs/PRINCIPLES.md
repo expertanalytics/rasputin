@@ -5,7 +5,8 @@ The rules this project works by.
 Each entry is a rule, how to apply it, a pointer to where its incident is
 recorded, and a status. The incident itself is not here.
 
-**When you learn something, write it in the log** — `docs/retrospectives/`.
+**When you learn something, report it in your handback** (`CLAUDE.md` §3,
+*The main session dispatches*); it ends up in the log, `docs/retrospectives/`.
 Only a retrospective promotes a log entry to a principle here. The file you
 happen to have open is not the log, and neither is this one.
 
