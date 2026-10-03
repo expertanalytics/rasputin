@@ -1,0 +1,6 @@
+2026-10-03 19:17:52 +0200 Assertions          	PID 424(WindowServer) Created UserIsActive "com.apple.iohideventsystem.queue.tickle serviceID:100000c00 service:AppleHIDKeyboardEventDriverV2 product:Apple Internal Keyboard / Trackpad eventType:3" 00:00:00  id:0x0x9000097af [System: PrevIdle PrevSleep DeclUser kCPU kDisp]          
+2026-10-03 19:17:57 +0200 Assertions          	PID 428(loginwindow) Created UserIsActive "Loginwindow User Activity" 00:00:00  id:0x0x9000097b5 [System: PrevIdle PrevSleep DeclUser kCPU kDisp]          
+2026-10-03 19:17:57 +0200 Assertions          	PID 428(loginwindow) Released UserIsActive "Loginwindow User Activity" 00:00:00  id:0x0x9000097b5 [System: PrevIdle PrevSleep DeclUser kCPU kDisp]          
+2026-10-03 19:17:59 +0200 Assertions          	Summary- [System: PrevIdle PrevSleep DeclUser kCPU kDisp] Using AC(Charge: 100)          
+2026-10-03 19:21:33 +0200 Assertions          	PID 424(WindowServer) Summary UserIsActive "com.apple.iohideventsystem.queue.tickle serviceID:100000c00 service:AppleHIDKeyboardEventDriverV2 product:Apple Internal Keyboard / Trackpad eventType:3" 00:00:00  id:0x0x9000097af [System: PrevIdle PrevSleep DeclUser kCPU kDisp]          
+2026-10-03 19:22:25 +0200 Assertions          	Summary- [System: PrevIdle DeclUser kDisp] Using Batt(Charge: 100)          

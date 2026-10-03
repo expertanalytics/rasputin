@@ -17,7 +17,7 @@ jobs:
   # needs a Python package to pass, the core has grown a dependency it should
   # not have.
   cpp:
-    name: C++ core (${{ matrix.os }})
+    name: C++ core (${{ matrix.os }}${{ matrix.hardening == 'OFF' && ', unchecked' || '' }})
     runs-on: ${{ matrix.os }}
     # A hang (a non-terminating refinement loop under a bug) must fail the
     # job, not hold the runner for GitHub's 6-hour default.
@@ -26,12 +26,20 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest]
+        hardening: ["ON"]
+        # Increment 24: the unchecked build a heavy run uses
+        # (RASPUTIN_HARDENING=OFF) is one nobody else compiles. This leg keeps
+        # it compiling and runs the guard's OFF half (T1 compiles against
+        # "none", T2 is skipped). The two legs above build the default, ON.
+        include:
+          - os: ubuntu-latest
+            hardening: "OFF"
 
     steps:
       - uses: actions/checkout@v4
 
       - name: Configure
-        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DRASPUTIN_HARDENING=${{ matrix.hardening }}
 
       - name: Build
         run: cmake --build build --parallel
@@ -197,6 +205,17 @@ jobs:
 
       - name: Tests
         run: pytest
+
+      # Increment 24, T6: an unchecked install (-C
+      # cmake.define.RASPUTIN_HARDENING=OFF) must not leave its OFF in the shared
+      # build/{wheel_tag} for the next default install, and the command-line
+      # setting must override pyproject.toml's. Two real non-editable installs
+      # into one throwaway venv without build isolation (with isolation,
+      # scikit-build-core clears the cache and the trap never occurs), so one
+      # leg only, the floor.
+      - name: Hardening install trap
+        if: matrix.python-version == '3.12'
+        run: RASPUTIN_INSTALL_TRAP=1 pytest --no-cov tests/python/test_hardening.py -k trap
 
       # Suites that branch on the `codecs` extra: some tests need imagecodecs
       # (LZW, the real Kartverket DEM and DTM10 extracts), others test its
