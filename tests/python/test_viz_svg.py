@@ -659,14 +659,14 @@ class TestPropertyStrokes:
 
     `PropertyStroke.token`'s `^[a-z][a-z0-9_-]*$` is the pattern that is
     actually load-bearing, and this is the suite over it. `_edge_classes`
-    (`svg.py:166`) joins TOKENS into one string and `_edges` (`svg.py:225`)
+    (`svg.py:168`) joins TOKENS into one string and `_edges` (`svg.py:225`)
     interpolates that string into a `class="..."` attribute UNESCAPED -- only
     `_text` escapes -- and neither ever sees an `EdgeProperty.name`, because
-    `viz/` may import no vocabulary at all. The one bridge is `cli.py:84`,
-    which constructs a `PropertyStroke` from a feature name, so every name that
-    can reach the attribute is re-validated here. A token containing a quote
-    ends the attribute, and a stylesheet read from a configuration file is
-    untrusted input.
+    `viz/` may import no vocabulary at all. The one bridge is `PROPERTY_STROKES`
+    (`src_python/tin_engine/cli.py@390b516:163`), which constructs a `PropertyStroke` from
+    a feature name, so every name that can reach the attribute is re-validated here. A
+    token containing a quote ends the attribute, and a stylesheet read from a
+    configuration file is untrusted input.
 
     `features.EdgeProperty.name`'s narrower `^[a-z][a-z0-9_]*$` is defence in
     depth behind this pattern, not the other way round -- a quote-carrying
