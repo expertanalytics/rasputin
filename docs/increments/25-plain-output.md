@@ -5,7 +5,9 @@ Ola's review of the first field table** ("This was a surprisingly long list of
 things to put into a vtk file!"); **ruled by Ola the same day** ("Ruled by
 Ola", at the end): both field tables approved as they stand, `--record PATH`
 yes, units in the field names, `features_notice` kept in the file. Ready for
-`@tester`. The mesh file carries only what a user of the mesh needs;
+`@tester` once `@reviewer`'s round-1 findings are fixed (done, "Changes
+after the design review, round 1", before "Review"; two defaults taken while
+Ola was away are listed there). The mesh file carries only what a user of the mesh needs;
 everything else goes to `--stats` and `--record`. Ola's ruling of
 2026-10-03: before 15f-3's code step, everything `rasputin mesh` writes for a
 reader is made plain. His words on the `elevation_source` sentence: "This is
@@ -48,7 +50,7 @@ script reads. What differs, and why:
   a separate attribute. A VTK FieldData string array and a PLY comment have no
   slot for an attribute, and the catchment command's GeoJSON already names its
   properties this way (`outline_tolerance_m`, `fine_area_m2`, `cli.py:1730-1739`).
-- **`licence_note` and `cite` keep their shipped names** (23a-2, Ola's B16)
+- **`licence_note` and `cite` keep their shipped names** (23a-2, Ola's ruling that a downloaded source's licence notes travel in the mesh file)
   rather than ACDD's `license` and `references`. Renaming them gains nothing a
   reader needs.
 
@@ -96,7 +98,7 @@ another name), `licence_note`, `cite`, `domain`, `features`,
 `features_notice`, `land_cover_codes`. It lacks `source_crs`,
 `source_transform`, `computation_grid`, `dem_tiles`, `dem_seams`,
 `domain_crs`, `domain_transform`, `features_crs` and `features_transform`.
-That is a defect this increment fixes (D3).
+That is a defect this increment fixes (D2: the `.ply` carries the same fields as the `.vtk`).
 
 ### The clauses of `elevation_source`
 
@@ -220,6 +222,31 @@ exact largest error; after 15f-3, on the projected path, it is an upper bound
 under the same name. On a reprojected run it is the error at the original
 DEM's nodes (the final check's figure), which fixes the inventory's defect.
 
+*Default taken while Ola was away:* **the nodes that sit on a vertex are
+included.** Two kinds of DEM node are not compared by refinement: on the
+reprojected path, an original-DEM node equal to a start vertex, whose height
+can differ from the vertex's by any amount (`refine_points.hpp:28-31`, and
+15c's note on these points); after 15f-3, on both paths, a node within
+rounding of a vertex it is not (15f's L14 and L16). The run counts both and
+gives their largest difference (`coincident`, `coincident_max_error`). So
+that the definition above stays true, the record sets
+
+`max_error_m = max(the refinement's or final check's max error, the largest difference at those nodes)`
+
+and keeps the count and the difference itself in `--stats`
+(`dem_nodes_at_vertices`, `dem_nodes_at_vertices_max_error_m`). When that
+difference exceeds `tolerance_m`, stderr gets a warning naming the count and
+the difference, and `max_error_m` then reads above `tolerance_m`: the file
+does not claim a tolerance the mesh misses. This **answers 15f's open
+question** (under its L14: whether the mesh file states the rounding
+exception): the file states it through `max_error_m`, with no extra field.
+At `--tolerance 0` after 15f-3, a node within rounding of a strip vertex can
+make `max_error_m` a few units in the last place above 0; the tests compare
+`max_error_m` with `max(tolerance_m, dem_nodes_at_vertices_max_error_m)`
+(Tests, below). The safer alternative, reporting only the refinement's
+figure and the exception in `--stats`, was not taken because it makes the
+file's one accuracy number untrue for those nodes.
+
 **`--flat`**: a gallery fixture has no DEM, so `heights` = `none: every z is
 0 (--flat)` stays. Without it a flat mesh would look like real terrain.
 
@@ -250,7 +277,11 @@ unreadable or break a legal requirement, so they stay, unchanged.
 2. **Units in the name**, numbers bare: `tolerance_m 5` (ruled by Ola,
    2026-10-03). Numbers are formatted by `stats._exact`, so a printed
    maximum never reads above the tolerance it met.
-3. **Zero is omitted from the file**, never from `--stats`.
+3. **A count of zero is omitted from the file**, never from `--stats`.
+   This applies to counts only (today `nodata_vertices_removed`), never to a
+   measured value: `--tolerance 0` is accepted (`cli.py:795`) and then
+   `tolerance_m 0` and `max_error_m 0` are written
+   (`test_cli_mesh_refine.py:133` asserts that maximum is 0.0).
 4. **Self-checks** live in `--stats`. If one is ever non-zero it is also
    printed to stderr as a warning, so a broken invariant is never silent.
 5. **No sentence in the file.** The one sentence, the summary, goes to stderr.
@@ -269,9 +300,15 @@ unreadable or break a legal requirement, so they stay, unchanged.
 - **Result**: every file field, then the counts and checks that are not in
   the file (the second table under "The fields, for Ola").
 
-The wide one-row "Refinement" table goes; the Sizes and Quality sections and
-the Timings stay. On a reprojected run, "DEM nodes" in Sizes becomes
-"resampled grid nodes".
+The wide one-row "Refinement" table goes; the Quality section and the Timings
+stay as they are. Sizes keeps its rows (DEM nodes, domain vertices, start
+vertices, start triangles, output vertices, output triangles, constraint
+edges, file sizes) except "vertices without data dropped", which becomes
+`nodata_vertices_removed` in Result; `start_vertices` and `start_triangles`
+are printed in Sizes and not repeated in Result. On a reprojected run, "DEM
+nodes" in Sizes becomes "resampled grid nodes". A table cell with `|` (a tile
+name) is escaped `\|`, as today (`stats.py`, `_table`); tests compare values
+after unescaping.
 
 Renames, in `--stats` and `--record` only:
 
@@ -309,7 +346,7 @@ without a tolerance) is absent from the JSON, not `null`. An entry that is in
 **Values.** A numeric entry is a JSON number: an integer count as an integer,
 a measured value (anything ending `_m` or `_deg`) as the float `Entry.number`
 holds, which `json.dumps` writes as the shortest text that reads back to the
-same float. That float equals the one the `--stats` text parses to, so the two
+same float, so a whole number keeps its `.0` (`"tolerance_m": 5.0`). That float equals the one the `--stats` text parses to, so the two
 agree to the bit. A text entry (`crs`, `start_mesh`, `snap_to_lines` as
 `"on"`/`"off"`, `dem_source`, …) is a JSON string equal to its `--stats`
 value.
@@ -333,12 +370,12 @@ installed version, gives the same bytes:
  "rasputin_version": "0.2.0.dev0",
  "command": "rasputin mesh --dem 7908_3_10m_z33.tif --tolerance 5 --out a.vtk --record a.json",
  "crs": "EPSG:25833",
- "tolerance_m": 5,
+ "tolerance_m": 5.0,
  "max_error_m": 4.999692612800061,
  "dem_source": "7908_3_10m_z33.tif",
  "nodata_vertices_removed": 199,
  "start_mesh": "every 40th DEM node",
- "start_min_angle_deg": 25,
+ "start_min_angle_deg": 25.0,
  "snap_to_lines": "on",
  "dem_grid": "5051 columns x 5051 rows, 10 m apart",
  "refinement_rounds": 53,
@@ -387,12 +424,35 @@ affected only through `max_error_m`.
   `test_cli_mesh_refine.py`, `test_cli_start_quality.py`) are dropped: 25's red
   step rewrites those lines as `float(field(vtk, "max_error_m"))`, and 15f-3
   takes 25's version at the rebase.
-- `test_cli_mesh_edge_strip.py`: the sentence-clause regex (`:107`) becomes
-  reads of the `--stats` Result rows above; the sentence-order check (`:402`)
-  is dropped; `:256` and `:403` become: `max_error_m` is in the file on both
-  paths, and on the reprojected path it equals the final check's error; the
-  stderr check (`:258-260`) moves to the `--stats` rows; the `--stats` phase
-  rows (PY5) are unchanged.
+- `test_cli_mesh_edge_strip.py`:
+  - the sentence-clause regex (`:106-110`) and its `clause()` reader become
+    reads of the `--stats` Result rows above (or of the `--record` JSON);
+    `:250-254`, `:297`, `:315` and `:396-399` read the same figures that way;
+  - `:255` becomes `float(field(vtk, "max_error_m")) <= TOLERANCE`;
+  - `:256` and `:403` (which phrase appears on which path) are dropped:
+    there is no sentence; instead, `max_error_m` is in the file on both
+    paths, and on the reprojected path it equals the final check's figure
+    raised by the at-vertex figure (D2);
+  - `:400-401` ("against the resampled grid", "checked against N source
+    nodes") become `--stats` reads of `resampled_grid` and
+    `dem_nodes_checked`; the order check `:402` is dropped;
+  - the stderr check (`:258-261`) becomes a `--stats` check of
+    `line_points_inserted` and `line_check_dem_nodes_inserted`;
+  - `:90` imports `NUMBER`, `field` and `sentence` from
+    `test_cli_mesh_refine.py`. **25 removes `sentence`** (there is no
+    sentence) and replaces `field(text, pattern)` with a reader of one named
+    field from the file and one of a `--stats` row, kept in
+    `test_cli_mesh_refine.py` under the names `file_field(vtk, name)` and
+    `stats_row(report, name)` so 15f-3's import changes by one line;
+  - the module docstring's paragraph at `:28-37` (what the sentence pins,
+    and the open question on the rounding exception) is rewritten: it pins
+    fields, and the open question is answered by D2;
+  - the `--stats` phase rows (`edge strip: generate`, `edge strip: scan
+    (parallel)`, `edge strip: split + flip (serial)`) are unchanged.
+- `test_cli_mesh_refine.py`: the docstring paragraph that 4157dab adds
+  (lines 11-14 there, "Since increment 15f-3 ... the projected path says `max
+  error at DEM nodes at most <e> m`") is dropped at the rebase; 25 rewrites
+  that docstring to name the fields.
 - The tests that call `_core` directly, and `test_edge_strip.py`, do not read
   output text and are unchanged.
 - One `@tester` amendment commit on 15f-3 after its rebase onto 25, with the
@@ -433,7 +493,7 @@ Example values are from the runs in the inventory.
 |---|---|---|---|---|
 | `crs` | Coordinate system | The coordinate system of x and y | `EPSG:25833` | always |
 | `tolerance_m` | Tolerance | The largest height difference allowed between mesh and DEM | `5` | with a tolerance |
-| `max_error_m` | Largest height error | No DEM node inside the mesh is further than this from it | `4.999692612800061` | with a tolerance |
+| `max_error_m` | Largest height error | No DEM node inside the mesh is further than this from it (nodes sitting on a vertex included) | `4.999692612800061` | with a tolerance |
 | `dem_source` | DEM | The DEM files used, or the downloaded dataset's name | `7908_3_10m_z33.tif` / `anadem-v1` | with a DEM |
 | `dem_credit` | Credit | The credit the data's owner asks for | `Agencia Nacional de Aguas ... doi.org/10.5069/G9736P4G` | downloaded data |
 | `licence_note` | Licence | The data's licence | `CC BY 4.0 (Creative Commons Attribution 4.0 International)` | downloaded data |
@@ -487,6 +547,7 @@ Every file field above, plus:
 | `land cover: 68 regions, 0 outside every polygon, 0 in more than one, 0 thinner than the snap` | `land cover: 68 areas between lines; 0 in no polygon, 0 in more than one (the smallest wins), 0 too narrow to label with certainty` |
 | catchment: `window 1: ..., flood 0.12 s, contained` / `grown on north, east` | `window 1: ..., searched in 0.12 s, catchment inside the window` / `window widened to the north, east` |
 | catchment: `seed: the pour node at (x, y) (a pour point must lie on the flow line; it is not snapped)` | `start: the outlet node at (x, y) (an outlet must lie on the flow line; it is not moved there)` |
+| catchment: `seed: lake of X km2, N nodes` | `start: lake of X km2, N DEM nodes` |
 | catchment: `catchment: N nodes, X km2 of node area` | `catchment: N DEM nodes, X km2` |
 | catchment: `fine outline: ..., 2 rings dropped (14 nodes), 1 holes filled (...)` | `outline along DEM cells: ..., 2 separate patches left out (14 nodes), 1 enclosed gap filled (...)` |
 
@@ -508,16 +569,34 @@ words, over the tree):
   `test_cli_mesh_vtk.py` (`:193`), `test_cli_mesh_domain.py`,
   `test_cli_mesh_domain_crs.py`, `test_cli_mesh_features.py`,
   `test_cli_start_quality.py`, `test_cli_constraint_feet.py`,
-  `test_stats.py` (the Refinement table, `:235`, `:324-330`, `:399`).
+  `test_stats.py` (the Refinement table, `:235`, `:324-330`, `:399`),
+  `test_cli_mesh.py:302` (the `.ply` comment `elevation none (z=0, --flat)`,
+  which becomes `heights none: every z is 0 (--flat)`),
+  `test_cli_mesh_landcover.py:13`, `:62-66` (the land-cover and features
+  stderr lines, reworded), `test_cli_mesh_multi_features.py` (`features` at
+  `:163-270`, `:480-516`, and `features_crs` at `:215`, `:528`: both move to
+  `--stats`), `test_cli_mesh_stats.py:262`, `:285-304` (the Refinement
+  section and the "vertices without data dropped" Sizes row).
+  `test_io_ply.py:155` uses `elevation none (z=0, --flat)` only as a sample
+  comment for the writer; no change.
   `test_io_vtk_legacy.py` and `test_io_vtk_readback.py` use `elevation_source`
   only as a sample field name for the writer; they need no change.
 - **`tools/bench.py`**: does not read the text. Its numbers come from its own
   `BENCH` line, written from `refine`'s outcome (`tools/bench.py:747-752`), and
   its mesh hash covers the bytes from `POINTS` on (`:333`, `:350`), so header
   fields do not change it. Stored baselines stay comparable.
-- **`docs/benchmarks/2026-09-26/bench1m/summarize.py:18`** parses `achieved
-  max error` from that day's logs. It is dated evidence for those logs and
-  keeps working on them; it is not changed.
+- **Dated evidence scripts** that parse today's text, each for its own
+  day's logs, which they keep reading; none is changed:
+  `docs/benchmarks/2026-09-26/bench1m/summarize.py:18` (`achieved max
+  error`), `docs/benchmarks/2026-09-29/bygdin/analyse.py:125` and
+  `docs/benchmarks/2026-09-29/bygdin-landcover/analyse.py:193` (the same),
+  `docs/benchmarks/2026-10-01/basin-piece/run_sweep.py:77` and
+  `docs/benchmarks/2026-10-02/basin-piece-anadem/run_sweep.py:77` (the
+  `--stats` Sizes row "vertices without data dropped"). A new run of any of
+  them on 25's output would need its field names.
+- **`refine` stays a name in `cli.py`'s namespace**, imported from `_core`
+  as today: `tools/bench.py:731-742` replaces `vars(cli)["refine"]` to count
+  and time it, and 25's determinism test patches it the same way.
 - **Palettes** (`palettes.py`): read nothing from the file.
 - **Design records** that quote the sentence (12, 13, 14, 14b, 15, 15c, 16,
   16b, 20, 20b, 23) describe what shipped then and stay as they are. The one
@@ -538,7 +617,7 @@ Not invariant-critical, so no mutation round (README, "Cost constraints").
   `stats_rows`; a non-zero self-check produces a stderr warning;
   `max_error_m` printed through `_exact` never reads above `tolerance_m`
   when it is not above it; every number in `summary` equals a field rounded to
-  5 significant figures; no banned word (D3) in any value or the summary.
+  5 significant figures; no banned word (D3, rule 6) in any value or the summary.
 - **One vocabulary** (CLI, a projected fixture with NoData): every file field
   is in `--stats` with the same value; the `.ply` comments equal the `.vtk`
   fields name for name, apart from the writer's own (`feature_bit` lines and
@@ -546,9 +625,17 @@ Not invariant-critical, so no mutation round (README, "Cost constraints").
   D2 are still written where they were.
 - **The values are right**, against independent counts:
   `nodata_vertices_removed` equals the vertices whose bilinear sample is NoData,
-  counted in NumPy from the DEM array; `max_error_m` is at least the largest
+  counted in NumPy from the DEM array, on the no-tolerance `--stride` path
+  (there every start vertex is a DEM node at a known index, so the count is
+  exact without re-running refinement); `max_error_m` is at least the largest
   height difference at DEM nodes inside the written triangles, computed in the
-  test.
+  test, and at most `max(tolerance_m, dem_nodes_at_vertices_max_error_m)`;
+  `--tolerance 0` writes `tolerance_m 0` and `max_error_m 0` (rule 3 does not
+  omit measured values).
+- **The at-vertex rule** (D2), with the record alone: a record whose
+  at-vertex difference exceeds the refinement's maximum reports that
+  difference as `max_error_m`; above `tolerance_m` it also produces the stderr
+  warning.
 - **Reprojected** (the Velhas fixture): `max_error_m` is the error at the
   original DEM's nodes (checked independently, as 15c-2's tests do), not the
   resampled grid's; `--stats` has `dem_crs`, `resampled_grid`,
@@ -559,7 +646,12 @@ Not invariant-critical, so no mutation round (README, "Cost constraints").
   `licence_note`, `cite`), features (`features_notice` and `land_cover_codes`
   in the file; `features` in `--stats`).
 - **stderr**: each reworded line by `re.search` on its parts, and the banned
-  words over the whole of stderr.
+  words over the whole of stderr of successful runs (a refusal's text quotes
+  the user's own input and is out of scope, D8).
+- **`command`**: tests that read it (in `--stats` or `--record`) set
+  `sys.argv` with `monkeypatch`, because `CliRunner` does not, and the
+  `command` is built from `sys.argv` (`cli.py:1118`).
+- **`--stats` values with `|`** are compared after unescaping `\|`.
 - **`--record`** (D5):
   - the file parses as JSON, is ASCII, and ends in one newline;
   - its keys are `rasputin_version`, `command`, then exactly the `--stats`
@@ -584,12 +676,16 @@ Not invariant-critical, so no mutation round (README, "Cost constraints").
 
 | file | what | net est. |
 |---|---|---:|
-| `run_record.py` (new) | `Entry`, `RunRecord`, three builders, `file_fields`, `stats_rows`, `summary` | 120 |
-| `cli.py` | the sentence, the refine report and most of the field assembly replaced by the builder call and one short field list for both formats; reworded stderr lines; catchment wording | −30 |
-| `stats.py` | the Inputs and Result sections in place of the Refinement table; the Sizes label | 25 |
-| `--record` | the option, its path checks, `as_json` (ruled yes) | 20 |
-| **total** | | **135** (+39 %: 188; +60 %: 216) |
+| `run_record.py` (new) | `Entry`, `RunRecord`; about 45 entries with their wording; three builders and the omission and at-vertex rules; `file_fields`, `stats_rows`, `summary`, `as_json` | 170 |
+| `cli.py` | the sentence, the refine report and most of the field assembly replaced by copying numbers into the builder and one short field list for both formats; reworded stderr lines and warnings; catchment wording; `--record` (the option, its path checks, the write) | 0 |
+| `stats.py` | the Inputs and Result sections in place of the Refinement table; the Sizes rows | 30 |
+| **total** | | **200** (+39 %: 278; +60 %: 320) |
 
+Revised after `@reviewer`'s round 1, which expected 200 to 280: the first
+estimate (135) counted the vocabulary at a line per entry and missed the
+builders' plumbing. `cli.py` is put at zero net: it loses about 90 lines (the
+sentence, the report, the two parallel field and comment lists) and gains
+about as many (copying out the outcome numbers, the warnings, `--record`).
 One PR. 15f-3 then adds its counts as builder arguments, about 10
 lines fewer than its own estimate for the sentence clause.
 
@@ -606,6 +702,36 @@ Ola, 2026-10-03, on the revised design:
   the mesh, as `dem_credit` does for a downloaded DEM.
 
 No question is open.
+
+## Changes after the design review, round 1
+
+`@reviewer`'s five blocking findings, each fixed above:
+
+1. Rule 3 (D3) now omits zero **counts** only; a measured value of 0 is
+   written (`--tolerance 0`).
+2. D5's example shows measured values as floats (`5.0`, `25.0`), as
+   `json.dumps` writes them.
+3. Compatibility lists the test files the first grep missed, the dated
+   evidence scripts, and the `refine` name that `bench.py` patches.
+4. D6 lists every 15f-3 red-test line that reads the sentence, says that 25
+   removes the `sentence` helper and what replaces it, and covers the two
+   docstrings.
+5. `max_error_m` includes the nodes that sit on a vertex (D2), which answers
+   15f's open question on stating the rounding exception in the file.
+
+The suggestions taken: the wrong section reference; internal labels (a
+ruling's code, a test group's code) replaced by what they name; the NoData
+count test on the no-tolerance path; `|` escaping in `--stats`; the banned
+words checked on successful runs only; the Sizes rows that stay; the
+catchment's lake line; `sys.argv` for `command`; the LOC estimate.
+
+**Defaults taken while Ola was away** (for Ola to confirm or overrule):
+
+- **`max_error_m` includes the at-vertex nodes** (D2). The alternative was
+  to keep it as the refinement's figure and state the exception only in
+  `--stats`; it was not taken because the file's one accuracy number would
+  then be untrue for those nodes.
+- **`--record -` is refused** (D5), so standard output stays `--stats -`'s.
 
 ## Review
 

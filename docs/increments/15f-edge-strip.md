@@ -1193,6 +1193,9 @@ the split option (b) that was considered for 15f-1.
     ("every valid DEM node ... within the tolerance") at a scale of `r(g)`, 1e-10 to about 5e-10
     cells. The figure is reported, so nothing is hidden. If Ola wants it
     stated in the `.vtk` sentence, it costs one clause in 15f-3's CLI work.
+    *Answered by increment 25* (`docs/increments/25-plain-output.md`, D2;
+    default taken while Ola was away): the file's `max_error_m` includes the
+    largest difference at these nodes, and their count is in `--stats`.
   - **ASK OLA (not blocking), a separate question:** should the build pin
     `-ffp-contract=off` project-wide? Otherwise arm64 (FMA contraction on)
     and x86-64 can differ in the last bits of any refine output. Bit-identity
