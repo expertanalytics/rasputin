@@ -297,12 +297,19 @@ Ola's ruling; all but 15 touch governed files or tools.
     `session.md` to turn contraction off project-wide (one CMake line;
     stored mesh hashes on the Mac change, and `@perf` would measure what
     arm64 loses without fused multiply-adds).
-13. **Wrong assertions get past a red step** (3c). Recommended: no new rule.
-    The green step caught both, `@developer` reported rather than edited,
-    and the fix was one commit. The alternative, if Ola wants the catch
-    earlier: `@tester`'s red handback lists each expected value the ruling
-    does not state, with its derivation, and `@architect` confirms the list
-    before green. Cost: one short `@architect` turn per red step.
+13. **A flagged test assumption went unconfirmed before green** (3c).
+    `@tester`'s red handback flagged the ES15 choice about node (15, 8) as
+    "The ruling did not say this". The main session passed it to Ola as
+    information and asked no one to confirm it, and it was the assertion
+    `@developer` later found wrong. ES16's absolute bound was not flagged.
+    Proposal: when a red handback lists choices the ruling did not make,
+    the spawner sends that list to `@architect` to confirm or correct before
+    green, and `@tester` lists each such expected value with its derivation.
+    This would have caught ES15. It would have caught ES16 only if its bound
+    had been listed. Cost: one short `@architect` turn per red step that has
+    such choices, and one line in the main session's dispatch rules. The
+    alternative is no new rule: green caught both, and the fix was one
+    commit.
 14. **`ROADMAP.md`: conflicts, stale status, no owner** (3d, 2e, 2f). Two
     hand-resolved conflicts today, and master still says 15e is "awaiting
     the push and CI". Options: (a) the row's status says only designed, in
@@ -329,7 +336,9 @@ Ola's ruling; all but 15 touch governed files or tools.
 17. **A fallback's paths are checked by hand** (section 4). The first
     fallback queued today (h5's green step) writes three governed files;
     it was caught only because the morning check had just looked at h5.
-    Proposal, to go with item 1: a fallback line in `session.md` names the
-    paths it will write, and the recap flags any governed one. Cost: about
-    15 lines in `tools/session_state.py`, with tests. Also: `session.md` is
-    10 lines today against the three-line rule (item 4 again).
+    Proposal, to go with item 1 of "The window of 2026-10-02, the restart
+    of 2026-10-03, h7" above (state the fill-the-window rule): a fallback
+    line in `session.md` names the paths it will write, and the recap flags
+    any governed one. Cost: about 15 lines in `tools/session_state.py`, with
+    tests. Also: `session.md` was 10 lines at 15:26 UTC against the
+    three-line rule (item 4 again).
