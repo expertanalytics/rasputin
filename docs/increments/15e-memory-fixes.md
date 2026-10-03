@@ -262,3 +262,42 @@ None of these blocks the work. Each is a default Ola may override:
   holding the tile for Python API callers. They drop it themselves.
 
 No question needs Ola before @tester starts.
+
+## Review
+
+### Round 1 (`@reviewer`, 2026-10-03): CHANGES REQUESTED
+
+Range: `7810cf8..efb854f` (design 92e5356 + d81bbcd, red 9879805, green
+efb854f). Not pushed, so **no CI exists**; local runs are not CI. The branch
+sits on 7810cf8; master 390b516 merges cleanly (`git merge-tree`).
+
+LOC by `CLAUDE.md` §2, production only: **58 net** (`check_points.hpp`
++54/-14, `cli.py` +32/-18, `target_grid.py` +8/-4; `io/models.py` and
+`io/cog.py` change only docstrings and comments). 94 lines added gross.
+`@developer` counted 59. The estimate was ~65-70, so no split is needed;
+the ceiling is 700.
+
+Local evidence: `cmake --build build` exit 0, `ctest` 847/847; `pytest`
+3667 passed, 16 skipped, after rebuilding and copying `_core`; mypy, ruff,
+format, prohibited-deps and detria gates OK. The four store suites
+(arena, CP1, refine_points unit and property) pass under ASan+UBSan.
+Fix 3's test fails when `del tile` is replaced by `pass`, and passes again
+once it is restored.
+
+Blocking:
+1. Red-step scaffolding written in the present tense, now false (it is
+   `@tester`'s to fix, because `@developer` does not edit tests):
+   `tests/cpp/unit/test_refinement_check_points_arena.cpp:22-24`,
+   `tests/python/test_target_grid.py:399-400` and `:514-515`, and
+   `tests/python/test_cli_mesh_geographic.py:327-328`. Put them in the past
+   tense ("went red at 9879805 because ...") or delete them.
+2. This file's status line still says "Not started", and none of the
+   as-built departures is recorded. Update the status line and add an
+   "As built" note covering three things: `CheckPoints` is move-only
+   (its copy operations are deleted, because rows hold raw pointers into
+   the slabs); `for_each_in` uses a hand-written lower bound over the
+   logical index instead of `std::ranges::lower_bound`; and `kSlab` is
+   public. Splitting `_dem_mesh`'s `opened` into `grid` and `checks` is
+   not a departure: fix 3 specifies it.
+
+Merge also needs a green CI, `@perf`'s acceptance run, and the ROADMAP row.
