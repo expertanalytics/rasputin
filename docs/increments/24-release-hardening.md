@@ -2,7 +2,8 @@
 
 Status: **designed and ruled**, `@architect`, 2026-10-03. Ola chose option (a)
 and answered Q1-Q4 the same day (§11). **Implemented, in review**: one PR,
-62 production lines; departures from this design are under "As built". The measurement it rests on is
+53 net production lines (61 added, 8 removed, `@reviewer`'s count, round 1);
+departures from this design are under "As built". The measurement it rests on is
 `docs/benchmarks/2026-10-03/release-hardening/README.md` (`@perf`, #149).
 
 **The ask** (Ola, 2026-10-03): "I think we can live with hardening, but for
@@ -206,7 +207,7 @@ module that is actually loaded, never from a cache file or an option value:
   `bounds_checks: str` (the text after `bounds checks: `), filled by
   `cli.py` from `_core.hardening`; `stats.py` itself stays free of `_core`.
 
-**Costs.** About 55 production lines (§8). Build time and wheel size
+**Costs.** About 57 production lines (§8). Build time and wheel size
 unchanged; an OFF build is one more build, on demand. One more C++ CI leg (§6).
 What a heavy run costs Ola: a one-off second venv, rebuilt after C++ changes.
 The residual risk, a heavy run done in the wrong venv, is caught by
@@ -466,14 +467,17 @@ ran the guard (T1 OFF half compiled, T2 skipped) from the job log.
 
 ## As built
 
-Red `21d5168`, green `23d4dad`, T6 reworked `57e1264`. 62 production lines
-by `@developer`'s count (`CLAUDE.md` §2), against the design's about 57.
+Red `21d5168`, green `23d4dad`, T6 reworked `57e1264`. 53 net production
+lines, 61 added and 8 removed (`@reviewer`'s count under `CLAUDE.md` §2,
+round 1), against the design's about 57. `@developer`'s green commit said 62;
+the reviewer's count is the one of record.
 Where the implementation departs from this record:
 
-- **`tools/bench.py` came in about 26 lines over its estimate of 18**
-  (`@developer`'s figure; `git show --numstat 23d4dad -- tools/bench.py`
-  shows 30 lines added and 10 removed, comments included). The design
-  undercounted the flag, the agreement checks and the README line.
+- **`tools/bench.py`: 25 production lines added, 17 net** (`@reviewer`'s
+  count; the commit's numstat for the file shows 30 added and 10 removed,
+  with comments and blanks). Net, that is under its estimate of 18;
+  `@developer`'s report of about 26 over the estimate counted differently and
+  is superseded.
 - **`stats.Report.bounds_checks` is declared before `threads`, not after
   it**, and has no default: it is required, and a dataclass field without a
   default cannot follow `threads`, which has one. `render` prints it as its

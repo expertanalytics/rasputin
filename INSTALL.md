@@ -140,6 +140,11 @@ Another libc++ mode (`extensive`, `debug`) is chosen by setting the option OFF
 and passing the mode yourself, e.g.
 `-DCMAKE_CXX_FLAGS=-D_LIBCPP_HARDENING_MODE=_LIBCPP_HARDENING_MODE_EXTENSIVE`.
 With the option ON as well, the two definitions collide and the build fails.
+This works only for a build without the C++ tests: a `pip install` (which
+turns them off), or a plain CMake build with `-DRASPUTIN_BUILD_TESTS=OFF`. The
+tests are on by default in a plain CMake build, and their compile-time guard
+refuses a build whose option says OFF while the library reports a hardening
+mode, so a test build with the option OFF must have no hardening mode at all.
 
 ## Running the tests
 

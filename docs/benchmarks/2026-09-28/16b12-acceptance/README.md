@@ -282,7 +282,7 @@ writing the `.vtk` and the `--stats` pass.
 
 - **`tools/bench.py`: a `--label` with a `/` and `--mesh-dir` fails.** The
   quality mesh path is `mesh_dir / f"{label}_{d.name}.vtk"`
-  (`tools/bench.py:605`), and its parent directory is never created. The
+  (`tools/bench.py@4d3ec3a:605`), and its parent directory is never created. The
   child exits with `BadParameter: … is not an existing directory` and exit
   3. The first attempt at 23:33 failed this way and produced no evidence;
   its log was kept in the scratchpad, not here. The workaround was to create
