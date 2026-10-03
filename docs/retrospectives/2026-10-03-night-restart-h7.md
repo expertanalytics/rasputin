@@ -225,3 +225,5 @@ says. Three lines still say "night" (§1 lines 17 and 63, and the quoted
 "tonight"). Item 7's rule line would probably go in
 `docs/increments/README.md`, which is governed, so the intro's "all but the
 last touch governed files" may not hold for it.
+
+**Round 3 (item 8), 2026-10-03.** Range `e2230b1..21684fd` (f00f388, 21684fd). Verdict: CHANGES REQUESTED. LOC: 0 production lines (21 lines in next.md). Blocking: (1) the refusing reviewer misnamed: it was the citation-fix branch's reviewer, and e2230b1 complied; (2) h6 detects Bash writes by the dirty set, not HEAD, so a write and commit in one call goes unreported. CI pending at review time.

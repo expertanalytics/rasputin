@@ -220,20 +220,34 @@ governed files.
    main session as its own deviation). `docs/increments/README.md@390b516:59-63`:
    "`@reviewer` is read-only, so its spawner copies the handback's verdict
    ... into a `## Review` section ... and commits it". The main session
-   briefed `@reviewer` to write and commit its own `## Review` entries on
-   15e (rounds 1 and 2 and the pre-push check), the hardening branch
-   (rounds 1 and 2) and this retrospective (round 1: 39eb7b8, tagged
-   `@reviewer`, which also wrote into `docs/retrospectives/`, the
-   `@orchestrator`'s area). Each complied; only the round-2 reviewer of
-   this retrospective refused, citing the rule. Two causes: the rule sits
-   in the increment protocol, which neither the brief nor `reviewer.md`
-   restates; and "read-only" is enforced only by leaving `Write` and
-   `Edit` out of `reviewer.md`'s `tools:` line, while `Bash` writes and
-   commits freely. Proposal: the reviewer persona carries the rule, one
-   line in `reviewer.md` §5 ("you do not edit or commit; your verdict goes
-   in the handback, and your spawner records it"), because the persona is
-   read on every run and a brief template is only as good as the brief
-   that forgets it; the brief need not repeat it. Once h6 lands, the
-   `reviewer` row of its `ROLES` table (no write paths) reports such a
-   write: h6 denies Edit and Write but only reports a Bash write.
-   Cost: one line in a governed file, by day.
+   briefed `@reviewer` to write and commit its own `## Review` entries, and
+   seven runs complied: on 15e 3e01580, 78df916 and 70f8403 (rounds 1 and 2
+   and the pre-push note), on release hardening 22b0106 and 11db227, and on
+   this retrospective 39eb7b8 and e2230b1 (rounds 1 and 2, which also wrote
+   into `docs/retrospectives/`, `@orchestrator`'s area). One refused: the
+   reviewer of the citation-fix branch `worktree-agent-aa31dcdcb718cfc28`
+   ("I did not record the round or commit", citing the rule above).
+   Two causes: the rule sits in the increment protocol, which neither the
+   brief nor `reviewer.md` restates; and "read-only" is enforced only by
+   leaving `Write` and `Edit` out of `reviewer.md`'s `tools:` line, while
+   `Bash` writes and commits freely. Proposal: the reviewer persona carries
+   the rule, one line in `reviewer.md` §5 ("you do not edit or commit; your
+   verdict goes in the handback, and your spawner records it"), because the
+   persona is read on every run and a brief template is only as good as the
+   brief that forgets it; the brief need not repeat it. Cost: one line in a
+   governed file, by day.
+
+   h6 would not have caught these, once it is implemented (its design
+   merged in #145; no `ROLES` table is in `tools/` yet). Its `reviewer` row
+   allows no writes (`docs/increments/h6-role-limits.md@390b516:70`), but
+   §3.3 finds a Bash write by comparing the tree's dirty set
+   (`git status --porcelain` plus `git hash-object`) before and after the
+   call, not `HEAD`. All seven reviewers wrote and committed in one Bash
+   call, so the paths were clean before and after, and h6 reports nothing;
+   it sees a Bash write only while that write is uncommitted. §5 names the
+   neighbouring gap ("a change made and undone within one Bash call") but
+   not this one. Proposal for h6: the `pre-tool` snapshot also records
+   `HEAD`, and `post-tool` attributes the paths of any new commit
+   (`git diff --name-only <old>..<new>`) to the persona, judged against its
+   row like a dirty path; and §5's list gains "a write committed in the
+   same call" until then. Cost: about 10 lines and one test in h6.
