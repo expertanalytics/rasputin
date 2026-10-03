@@ -38,7 +38,8 @@ $ git grep -n -i "resampl" legacy-archive -- legacy
 ```
 
 The one hit is ten `reserve` calls on CGAL output vectors
-(`triangulate_dem.h:297-793`), sized from a known count. They have nothing
+(lines 297 to 793 of the archived header above, at the
+`legacy-archive` tag), sized from a known count. They have nothing
 to do with any fix here.
 
 ## Fix 1: resample blocks sized by node count
