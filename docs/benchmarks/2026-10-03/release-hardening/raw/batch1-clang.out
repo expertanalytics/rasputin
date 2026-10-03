@@ -1,0 +1,30 @@
+== h1-plain 12:49:00
+Now drawing from 'AC Power'
+exit 2 12:51:08
+power: ac; evidence: /Users/skavhaug/projects/rasputin_scratch/hardening-2026-10-03/runs/2026-10-03/h1-plain; meshes: /Users/skavhaug/projects/rasputin_scratch/hardening-2026-10-03/meshes/h1-plain
+NO BASELINE: no comparable stored run
+== h2-fast 12:51:08
+Now drawing from 'AC Power'
+exit 1 12:53:19
+REGRESSION: tile refine_s[t=19] 0.1873 -> 0.1978 (+5.6 %)
+REGRESSION: tile refine_s[t=20] 0.1875 -> 0.1986 (+5.9 %)
+== h3-fast 12:53:19
+Now drawing from 'AC Power'
+exit 0 12:55:30
+power: ac; evidence: /Users/skavhaug/projects/rasputin_scratch/hardening-2026-10-03/runs/2026-10-03/h3-fast; meshes: /Users/skavhaug/projects/rasputin_scratch/hardening-2026-10-03/meshes/h3-fast
+ACCEPTED
+== h4-plain 12:55:30
+Now drawing from 'AC Power'
+exit 0 12:57:37
+power: ac; evidence: /Users/skavhaug/projects/rasputin_scratch/hardening-2026-10-03/runs/2026-10-03/h4-plain; meshes: /Users/skavhaug/projects/rasputin_scratch/hardening-2026-10-03/meshes/h4-plain
+ACCEPTED
+== h5-plain 12:57:37
+Now drawing from 'AC Power'
+exit 0 12:59:45
+power: ac; evidence: /Users/skavhaug/projects/rasputin_scratch/hardening-2026-10-03/runs/2026-10-03/h5-plain; meshes: /Users/skavhaug/projects/rasputin_scratch/hardening-2026-10-03/meshes/h5-plain
+ACCEPTED
+== h6-fast 12:59:45
+Now drawing from 'AC Power'
+exit 1 13:01:55
+REGRESSION: tile refine_s[t=19] 0.1879 -> 0.1995 (+6.2 %)
+REGRESSION: tile refine_s[t=20] 0.1857 -> 0.1977 (+6.4 %)
