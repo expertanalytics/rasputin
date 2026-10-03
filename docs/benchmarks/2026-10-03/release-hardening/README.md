@@ -239,3 +239,26 @@ Blocking:
 
 Non-blocking: "A guard test catches that" (the `.github` bullet) describes a
 test that does not exist yet; "the guard test below would catch that".
+
+### Round 2 (@reviewer, 2026-10-03): APPROVED
+
+Reviewed `22b0106..75c1d22`, @perf's answer to round 1. Production LOC: 0.
+CI: none; the branch is still not pushed, so merge readiness waits on a green
+`gh pr checks` after the push.
+
+1. Fixed. `raw/h2-fast/README.md` has 39 `REGRESSION` lines, all `refine_s`,
+   over the 42 (domain, thread) cells; the three missing are tile t=17 and
+   quarter t=2 and t=14. Its baselines are h1-plain's medians (quarter t=0
+   0.1648, t=1 0.3991 in `raw/h1-plain/run.json`'s `stats`).
+2. Fixed. The growth figures match the "summary" blocks of
+   `raw/analysis-*.md`: clang tile +4.9 → +6.8 (1.9 points), quarter +4.5 →
+   +8.0 (3.5); GCC tile +2.6 → +7.4 (4.8), quarter +2.5 → +8.7 (6.2).
+3. Fixed, as far as can be checked without rebuilding. `scripts/build.sh`'s
+   configure line is `tools/bench.py`'s `build()` line plus the cached
+   `CMAKE_CXX_FLAGS` (and the GCC compiler). Its directory states, traced
+   through both batches' `SEQ`, leave exactly the directories `probes.sh`
+   reads (`build-clang-plain`, `build-clang-fast`, `build-park-gplain`, and
+   `build-bench` holding gassert). All four scripts pass `bash -n` and take
+   `W` as the first argument. The README says `build.sh` was written after
+   the runs and not executed.
+4. Fixed: the guard test is described as not existing yet.
