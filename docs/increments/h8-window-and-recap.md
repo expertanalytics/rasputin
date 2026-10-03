@@ -418,3 +418,7 @@ The four questions of the first draft, answered:
 3. **`docs/PRINCIPLES.md` in the size table:** yes (§3.6).
 4. **The longest quiet stretch in `windows.jsonl`:** no; `--back` prints it
    only (§3.4).
+
+## Review
+
+**Design review, round 1, 2026-10-03.** Range `5e520fe..e5d308f` (merge ea813fc). Verdict: CHANGES REQUESTED. LOC: 0 (design only); the ~185 estimate is plausible. Rulings 1, 3, 5, 6 and Ola's four answers implemented as ruled; rule text word for word; code sites checked. Blocking: (1) word counts off by two (292 removed, 355 added; net +63 right); (2) reading predecessor transcripts from the main and running checkouts was not ruled, is untested, and would print the running main session's turns as pending; (3) format warnings for every checkout's session.md go beyond item 4 (about 25 warning lines from four stale files); (4) the background-job listing prints "(none)" if the wrapper format drifts: add a recognised-format self-check; (5) `test_away.py:396` also asserts the old heading; (6) "every file it changes is governed" should say production files; the 961 vs 971 figure. Not pushed; no CI.
