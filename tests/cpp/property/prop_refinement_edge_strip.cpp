@@ -990,3 +990,92 @@ TEST_CASE("ES14: a DEM node within ulps of the constraint goes in on the chain, 
         ulp_run(a, b, apex, 0.0);  // asserts it, and the rest of ES13's list
     }
 }
+
+// ---------------------------------------------------------------------------
+// ES15 and the radius: a non-strip point within rounding of a vertex is not
+// inserted (L14)
+// ---------------------------------------------------------------------------
+
+TEST_CASE("ES15: a DEM node within ulps of an end is skipped, so no sliver hides the next node from L12",
+          "[edge_strip][ES15]") {
+    // ES13's sweep input seed 11, k 37 (docs/increments/15f-edge-strip.md,
+    // L14): a = (7 + 4 ulps, 4), b = (17 + 2 ulps, 9 + 3 ulps), apex
+    // (14.5, 5.0625). Node (17, 9) lies within ulps of b. Inserted beside it,
+    // it left a sliver almost on the constraint; node (15, 8), on the
+    // constraint's line, then fell in a triangle with no constrained edge,
+    // went in by split_inside, and foot_fits refused the strip point
+    // (15.5, 8.25) in the middle of the edge. Seen with -ffp-contract=off.
+    const auto g = exact_geometry(24, 16);
+    const Point2 a = world(g, ulps(7.0, 4), 4.0);
+    const Point2 b = world(g, ulps(17.0, 2), ulps(9.0, 3));
+    const Point2 apex = world(g, 14.5, 5.0625);
+    const double tol = GENERATE(0.0, 0.5);
+    CAPTURE(tol);
+    // ulp_run: no over point farther than 1e-9 from an output vertex, no
+    // coincident output vertices, E2 by node_findings (its 1e-9 relative
+    // slack covers L14's exception), the Delaunay oracle.
+    const UlpRun r = ulp_run(a, b, apex, tol);
+    const Lat skipped{17.0, 9.0}, on_line{15.0, 8.0};
+    double zmax = 1.0;
+    for (std::size_t i = 0; i < r.out.vertices.size(); ++i) {
+        CHECK_FALSE(lat(g, r.out.vertices[i]) == skipped);
+        if (r.out.valid[i]) zmax = std::max(zmax, std::abs(r.out.z[i]));
+    }
+    CHECK(r.out.coincident >= 1);
+    CHECK(r.out.coincident_max_error <= 1e-9 * zmax);
+    // (15, 8), on the constraint's line, is an end of an output constraint
+    // edge. At tolerance 0 every node not skipped goes in, so it must be
+    // there; at 0.5 it may be within tolerance and never inserted, and is
+    // then only required to be on the chain if it is a vertex at all.
+    bool vertex = false, on_chain = false;
+    for (const Point2 p : r.out.vertices) vertex = vertex || lat(g, p) == on_line;
+    for (const auto& e : r.out.edges)
+        for (const std::uint32_t v : e) on_chain = on_chain || lat(g, r.out.vertices[v]) == on_line;
+    if (tol == 0.0) CHECK(vertex);
+    CHECK(on_chain == vertex);
+}
+
+TEST_CASE("ES15: the coincidence radius is 1e-10 lattice units, applied with a strip",
+          "[edge_strip][ES15]") {
+    // A square ring (0.5, 0.5) .. (7.5, 7.5), constrained, fanned from an
+    // interior start vertex P = (4 + delta, 4). The ring's strip points go in
+    // first and write every triangle, so the rescan reaches node (4, 4); at
+    // tolerance 0 every other node goes in, and (4, 4) differs from the
+    // planes through P by the surface's change over delta, which is not 0
+    // (the DEM is curved through (4, 4) in both axes; on a DEM linear along
+    // the row the difference rounds away and nothing would be tested).
+    // (The DEM scan takes corner heights from the DEM, not from the run's z,
+    // so the case leaves P's z as the DEM gives it.)
+    const auto g = exact_geometry(9, 9);
+    std::vector<float> v(81);
+    for (std::size_t r = 0; r < 9; ++r)
+        for (std::size_t c = 0; c < 9; ++c) v[r * 9 + c] = static_cast<float>(c * c + r * r + (r * c) % 5);
+    const Raster<float> dem{g, std::move(v)};
+    const double delta = GENERATE(1e-11, 1e-8);
+    CAPTURE(delta);
+    Start s;
+    s.mesh = IndexedMesh2{{world(g, 0.5, 0.5), world(g, 0.5, 7.5), world(g, 7.5, 7.5), world(g, 7.5, 0.5),
+                           world(g, 4.0 + delta, 4.0)},
+                          {{0, 1, 4}, {1, 2, 4}, {2, 3, 4}, {3, 0, 4}},
+                          {0, 0, 0, 0}};
+    s.edges = {{0, 1}, {1, 2}, {2, 3}, {0, 3}};
+    s.masks = {1, 1, 1, 1};
+    const Begin b = direct(dem, s);
+    const auto strip = strip_of(dem, b);
+    const auto out = run_strip(dem, strip, b, 0.0);
+    REQUIRE(out.ok());
+    const Lat node{4.0, 4.0};
+    const auto at_node = std::count_if(out.vertices.begin(), out.vertices.end(),
+                                       [&](Point2 p) { return lat(g, p) == node; });
+    if (delta < 1e-10) {
+        CHECK(at_node == 0);  // skipped: within the radius of P
+        CHECK(out.coincident >= 1);
+        CHECK(out.coincident_max_error > 0.0);  // |node z - P's z|: the slope over delta
+        CHECK(out.coincident_max_error <= 1e-9);
+    } else {
+        CHECK(at_node == 1);  // outside the radius: inserted as any node
+        CHECK(out.coincident == 0);
+    }
+    CHECK(node_findings(dem, mesh_of(out), 0.0).over == 0);  // E2, with L14's exception inside the slack
+    CHECK(delaunay_violations(g, mesh_of(out)) == 0);
+}
