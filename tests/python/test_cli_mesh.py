@@ -296,10 +296,13 @@ class TestFlatIsAlwaysAWordSomebodyTyped:
         assert_array_equal(data["vertex"]["z"], np.zeros(len(data["vertex"]["z"])))
 
     def test_flat_says_so_in_both_headers(self, written: tuple[bytes, bytes]) -> None:
-        # Verbatim from ruling 4, because the comment is the only thing that
-        # tells a person six months later that the surface is not terrain.
+        # Ruling 4's comment, as increment 25 words it (D2, `heights`): the
+        # comment is the only thing that tells a person six months later that
+        # the surface is not terrain.
         for blob in written:
-            assert "elevation none (z=0, --flat)" in parse_header(blob).comments
+            comments = parse_header(blob).comments
+            assert "heights none: every z is 0 (--flat)" in comments
+            assert not any(c.startswith("elevation ") for c in comments), comments
 
 
 class TestTheCrsComment:

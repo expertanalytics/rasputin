@@ -2,7 +2,9 @@
 
 `docs/increments/23-basin-scale.md`, "The CLI", "The I/O boundary", 23a-2's
 F9-F11 and Ola's ruling B16 (a): a mesh made from a catalogue source carries
-the source's `licence_note` and `cite` beside `elevation_source`. The server
+the source's `licence_note` and `cite`, and since increment 25
+(`docs/increments/25-plain-output.md`, D2) its credit as `dem_credit` and its
+key as `dem_source`, in the `.vtk` and the `.ply` alike. The server
 is `fetch_fixtures.RangeServer` on 127.0.0.1, put into `SOURCES` by
 `monkeypatch` under the key `test-fetch`; the CLI's retry delays are its own
 (1, 2, 4 s), so no test here makes the CLI retry.
@@ -294,7 +296,7 @@ class TestF11TheBoundary:
 
 
 class TestB16TheMeshCarriesTheNotes:
-    def test_licence_note_and_cite_beside_elevation_source(
+    def test_licence_note_cite_and_credit_are_fields(
         self, sources: ModuleType, monkeypatch: pytest.MonkeyPatch, data: bytes, tmp_path: Path
     ) -> None:
         catalogue_with(sources, monkeypatch, "https://example.invalid/p.tif")
@@ -305,7 +307,9 @@ class TestB16TheMeshCarriesTheNotes:
         )
         assert code == 0, output
         vtk = read_vtk(out.read_bytes())
-        assert CREDIT in field(vtk, "elevation_source")
+        assert "elevation_source" not in vtk.field_data
+        assert field(vtk, "dem_credit") == CREDIT
+        assert field(vtk, "dem_source") == KEY
         assert field(vtk, "licence_note") == LICENCE
         cite = field(vtk, "cite")
         assert all(c in cite for c in CITES), cite
@@ -319,8 +323,9 @@ class TestB16TheMeshCarriesTheNotes:
         tmp_path: Path,
         cite: tuple[str, ...],
     ) -> None:
-        """PLY has no field data: the notes are `comment` lines, as `crs` and
-        `elevation` are; a `cite` line only when the source has citations."""
+        """PLY has no field data: the notes are `comment` lines, as `crs` is;
+        a `cite` line only when the source has citations (D2: the same
+        fields as the `.vtk`)."""
         catalogue_with(sources, monkeypatch, "https://example.invalid/p.tif", cite=cite)
         write_cache(tmp_path / "cache", KEY, {"dem": data})
         out = tmp_path / "key.ply"
@@ -329,7 +334,9 @@ class TestB16TheMeshCarriesTheNotes:
         )
         assert code == 0, output
         comments = read_ply(out.read_bytes())[0].comments
-        assert any(c.startswith("elevation ") and CREDIT in c for c in comments), comments
+        assert not any(c.startswith("elevation ") for c in comments), comments
+        assert f"dem_credit {CREDIT}" in comments, comments
+        assert f"dem_source {KEY}" in comments, comments
         assert f"licence_note {LICENCE}" in comments, comments
         cited = [c for c in comments if c.startswith("cite ")]
         if cite:
@@ -344,3 +351,5 @@ class TestB16TheMeshCarriesTheNotes:
         assert code == 0, output
         vtk = read_vtk(out.read_bytes())
         assert "licence_note" not in vtk.field_data and "cite" not in vtk.field_data
+        assert "dem_credit" not in vtk.field_data
+        assert field(vtk, "dem_source") == "dem.tif"
