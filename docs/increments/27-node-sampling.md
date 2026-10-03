@@ -384,3 +384,7 @@ Recommended defaults: 1 and 2 as recommended; 3 noted.
 **Design review, round 2, 2026-10-03.** Range `1477da0..8d8e394` (merge 9fb2218, prose 8d8e394). Verdict: CHANGES REQUESTED, one line: the stride expression is at `grid_domain.py:68-69`, not 66-67 (the round-1 number was the reviewer's slip). Everything else checked: the merge is clean, the new citations read as quoted, the round-1 items done. APPROVED once 68-69 is in, with no further round. Not pushed; no CI.
 
 **Design review, round 2 condition met, 2026-10-03.** b50c8d0 cites `grid_domain.py:68-69` as the reviewer required; per round 2 the design is APPROVED with no further round. Not pushed; no CI.
+
+## Ruled by Ola, 2026-10-03
+
+Ola: "yes to both", to the two decisions as recommended. (1) Nodes only now: a point exactly on a DEM node reads that node; cell sides are deferred until a measured run shows ragged edges along NoData. (2) The rule lives in the C++ sampler (`bilinear` with `RasterGeometry::node_at`), not only in the Python stride path.
