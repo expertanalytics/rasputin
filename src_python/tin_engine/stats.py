@@ -106,25 +106,6 @@ def quality(vertices: npt.ArrayLike, triangles: npt.ArrayLike) -> Quality:
 
 
 @dataclass(frozen=True, slots=True)
-class Refinement:
-    """``refine``'s counters, copied out by ``cli.py`` so no ``_core`` type
-    reaches this module. ``carved`` None omits its column, and so does a
-    ``quality_*`` None (increment 20's start-quality pass) or a ``feet`` None
-    (increment 20b's constraint feet)."""
-
-    tolerance: float
-    max_error: float
-    rounds: int
-    inserted: int
-    flips: int
-    uncovered: int
-    carved: int | None = None
-    quality_inserted: int | None = None
-    quality_skipped: int | None = None
-    feet: int | None = None
-
-
-@dataclass(frozen=True, slots=True)
 class Sizes:
     """R4's Sizes rows; a None row does not apply and is omitted.
     ``dem_nodes`` is (rows, cols), ``dem_spacing`` (dx, dy), ``files``
@@ -140,7 +121,9 @@ class Sizes:
     domain_holes: int | None = None
     start_vertices: int | None = None
     start_triangles: int | None = None
-    dropped: int | None = None
+    #: The DEM was resampled onto another grid (increment 25, D4): its nodes
+    #: are not the DEM's, and the row says so.
+    resampled: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -148,21 +131,20 @@ class Report:
     command: str
     sizes: Sizes
     quality: Quality
-    refinement: Refinement | None
     phases: Phases
     total: float
     stats_seconds: float
+    #: The text after ``bounds checks: ``, ``off`` or ``on (<mode>)``: which
+    #: build made the mesh (increment 24). Filled by the CLI from ``_core``.
+    bounds_checks: str
     threads: int | None = None
     #: One row per disagreeing pair of DEM tiles: two names, nodes, max and
     #: median, already formatted (`mosaic.Seam.cells`; Ola's Q1 revised).
     seams: Sequence[Sequence[str]] = ()
-
-
-def _exact(value: float) -> str:
-    """``value`` short where that loses nothing, else every digit, so a printed
-    achieved error can never read as above the tolerance it met."""
-    short = f"{value:g}"
-    return short if float(short) == value else repr(value)
+    #: The run record's rows (increment 25, D4), ``(wording, value, name)``:
+    #: what the run read and how it was set, and what it made.
+    inputs: Sequence[tuple[str, str, str]] = ()
+    result: Sequence[tuple[str, str, str]] = ()
 
 
 def _bytes(n: int) -> str:
@@ -188,7 +170,8 @@ def _sizes(s: Sizes) -> list[str]:
     if s.dem_nodes is not None and s.dem_spacing is not None:
         dx, dy = s.dem_spacing
         spacing = f"{dx:g}" if dx == dy else f"{dx:g} × {dy:g}"
-        rows.append(("DEM nodes", f"{s.dem_nodes[0]} × {s.dem_nodes[1]} ({spacing} m)"))
+        item = "resampled grid nodes" if s.resampled else "DEM nodes"
+        rows.append((item, f"{s.dem_nodes[0]} × {s.dem_nodes[1]} ({spacing} m)"))
     if s.domain_vertices is not None:
         holes = s.domain_holes or 0
         plural = "" if holes == 1 else "s"
@@ -199,7 +182,6 @@ def _sizes(s: Sizes) -> list[str]:
         ("output vertices", s.output_vertices),
         ("output triangles", s.output_triangles),
         ("constraint edges", s.constraint_edges),
-        ("vertices without data dropped", s.dropped),
     )
     rows += [(item, str(n)) for item, n in counts if n is not None]
     rows += [(name, _bytes(n)) for name, n in s.files]
@@ -224,24 +206,9 @@ def _quality(q: Quality) -> list[str]:
     ]
 
 
-def _refinement(r: Refinement) -> list[str]:
-    cells = [
-        ("tolerance", f"{_exact(r.tolerance)} m"),
-        ("achieved max error", f"{_exact(r.max_error)} m"),
-        ("rounds", str(r.rounds)),
-        ("inserted", str(r.inserted)),
-        *([("carved", str(r.carved))] if r.carved is not None else []),
-        ("flips", str(r.flips)),
-        ("uncovered", str(r.uncovered)),
-    ]
-    for header, count in (
-        ("quality inserted", r.quality_inserted),
-        ("quality skipped", r.quality_skipped),
-        ("feet", r.feet),
-    ):
-        if count is not None:
-            cells.append((header, str(count)))
-    return _table([h for h, _ in cells], [[c for _, c in cells]])
+def _named(rows: Sequence[tuple[str, str, str]]) -> list[str]:
+    """Record rows: wording, value, and the name the file and ``--record`` use."""
+    return _table(("item", "value", "name"), [(w, v, f"`{n}`") for w, v, n in rows])
 
 
 _TIMINGS = """\
@@ -282,12 +249,15 @@ def _timings(report: Report) -> list[str]:
 def render(report: Report) -> str:
     """The Markdown report (R4). Pure: no clock, no I/O."""
     lines = ["# rasputin mesh — statistics", "", f"`{report.command}`", ""]
+    lines += [f"bounds checks: {report.bounds_checks}", ""]
     lines += ["## Sizes", "", *_sizes(report.sizes), ""]
+    if report.inputs:
+        lines += ["## Inputs", "", *_named(report.inputs), ""]
     if report.seams:
         header = ("tile", "tile", "nodes", "max", "median")
         lines += ["## DEM seams", "", *_table(header, report.seams), ""]
     lines += ["## Quality (plan view, x/y)", "", *_quality(report.quality), ""]
-    if report.refinement is not None:
-        lines += ["## Refinement", "", *_refinement(report.refinement), ""]
+    if report.result:
+        lines += ["## Result", "", *_named(report.result), ""]
     lines += _timings(report)
     return "\n".join(lines) + "\n"

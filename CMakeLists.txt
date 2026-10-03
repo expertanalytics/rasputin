@@ -19,6 +19,18 @@ target_include_directories(terrain_headers INTERFACE
 )
 target_compile_features(terrain_headers INTERFACE cxx_std_20)
 
+# The standard library's own bounds checks, on in every build type unless a
+# heavy run asks for an unchecked build (docs/increments/24-release-hardening.md
+# section 3; about 5 % on refine). INTERFACE, so every target built against the
+# headers -- the compiled libraries, _core and each test -- agrees. Another mode
+# (extensive, debug): set this OFF and pass the mode in CMAKE_CXX_FLAGS, since
+# defining it twice is a redefinition and fails -Werror.
+option(RASPUTIN_HARDENING "Bounds-checked standard library in every build type" ON)
+if(RASPUTIN_HARDENING)
+    target_compile_definitions(terrain_headers INTERFACE
+        _LIBCPP_HARDENING_MODE=_LIBCPP_HARDENING_MODE_FAST _GLIBCXX_ASSERTIONS)
+endif()
+
 # The Python extension is built by scikit-build-core when installing the
 # wheel; it is off by default so a plain `cmake ..` still configures only the
 # header library and the C++ tests.

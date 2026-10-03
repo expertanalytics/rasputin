@@ -1,0 +1,31 @@
+== g1-gplain 13:03:46
+Now drawing from 'AC Power'
+exit 1 13:06:00
+REGRESSION: tile refine_s[t=16] 0.1969 -> 0.2068 (+5.0 %)
+REGRESSION: tile refine_s[t=18] 0.1941 -> 0.2075 (+6.9 %)
+== g2-gassert 13:06:00
+Now drawing from 'AC Power'
+exit 1 13:08:17
+REGRESSION: tile refine_s[t=19] 0.2049 -> 0.2196 (+7.2 %)
+REGRESSION: tile refine_s[t=20] 0.2049 -> 0.2215 (+8.1 %)
+== g3-gassert 13:08:17
+Now drawing from 'AC Power'
+exit 0 13:10:35
+power: ac; evidence: /Users/skavhaug/projects/rasputin_scratch/hardening-2026-10-03/runs/2026-10-03/g3-gassert; meshes: /Users/skavhaug/projects/rasputin_scratch/hardening-2026-10-03/meshes/g3-gassert
+ACCEPTED
+== g4-gplain 13:10:35
+Now drawing from 'AC Power'
+exit 0 13:12:48
+power: ac; evidence: /Users/skavhaug/projects/rasputin_scratch/hardening-2026-10-03/runs/2026-10-03/g4-gplain; meshes: /Users/skavhaug/projects/rasputin_scratch/hardening-2026-10-03/meshes/g4-gplain
+ACCEPTED
+== g5-gplain 13:12:48
+Now drawing from 'AC Power'
+exit 0 13:15:01
+power: ac; evidence: /Users/skavhaug/projects/rasputin_scratch/hardening-2026-10-03/runs/2026-10-03/g5-gplain; meshes: /Users/skavhaug/projects/rasputin_scratch/hardening-2026-10-03/meshes/g5-gplain
+ACCEPTED
+== g6-gassert 13:15:01
+Now drawing from 'AC Power'
+exit 1 13:17:18
+REGRESSION: tile refine_s[t=19] 0.2057 -> 0.2185 (+6.3 %)
+REGRESSION: tile refine_s[t=20] 0.2059 -> 0.2201 (+6.9 %)
+DONE

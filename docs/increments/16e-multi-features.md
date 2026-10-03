@@ -86,8 +86,10 @@ The plumbing below `cli.py` already models several sources. Read directly:
   flat `features` tuple.
 - `feature_input.py:152-169` — `FeatureSet.crs` and `.layers` are **already
   per-source tuples**; only `cli.py` reads them as `[0]` today
-  (`cli.py:836,842`).
-- `src_python/tin_engine/cli.py:1205` — `_dem_mesh` hands `features.features`
+  (`src_python/tin_engine/cli.py@7d9882d:836` and `src_python/tin_engine/cli.py@7d9882d:842`; on master 16e's per-source loop in `mesh`,
+  `src_python/tin_engine/cli.py@390b516:905-911`, replaces both).
+- `src_python/tin_engine/cli.py@390b516:1433` (`_dem_mesh`; line 1205 at `7d9882d`) —
+  `_dem_mesh` hands `features.features`
   (a flat `tuple[TerrainFeature, ...]`, source-agnostic) to `start_chains`, and
   the noder (`build_pslg → node → triangulate`) merges every chain into one
   PSLG. It never sees which source a chain came from.
@@ -143,14 +145,15 @@ Nth of each paired option:
   Nth `--features`. **A missing entry** (the list is shorter than
   `--features`, including the empty list) defaults to `property`, exactly as
   the single option defaulted to `property` when omitted (16b R1;
-  `cli.py:1109`).
+  formerly `_feature_source`, `src_python/tin_engine/cli.py@7d9882d:1109`; on master `_feature_sources`,
+  `src_python/tin_engine/cli.py@390b516:1317`).
 - **`--features-crs TEXT`** — repeatable; `list[str]`. The Nth applies to the
   Nth `--features`. A missing entry is `None` (the source reads its own CRS:
   16b R1's file rule per suffix).
 - **`--features-layer NAME`** — repeatable; `list[str]`. The Nth applies to the
   Nth `--features`. A missing entry is `None` (a single-`features`-table
   GeoPackage takes the only one; GeoJSON and GML refuse a layer: 16b R1,
-  `cli.py:1114`).
+  `src_python/tin_engine/cli.py@7d9882d:1114`; on master `_feature_sources`, `src_python/tin_engine/cli.py@390b516:1325`).
 
 **Why positional pairing, not a compound flag.** Typer maps a repeated
 `Option` to a `list`, so `--features a.gpkg --features b.geojson` is
@@ -182,14 +185,16 @@ and 16c CLI suites pass unchanged (verified by @tester as a regression, R7).
 
 `cli.py` gains `_feature_sources(paths, crss, layers, maps) ->
 tuple[FeatureSource, ...]`, which replaces today's single `_feature_source`
-(`cli.py:1104-1116`). It:
+(`src_python/tin_engine/cli.py@7d9882d:1104-1116`; on master `_feature_sources` is
+`src_python/tin_engine/cli.py@390b516:1308-1342`). It:
 
 1. Runs R3's degeneracy checks and raises `typer.BadParameter` on any failure.
 2. For each index `i`, pads the shorter paired lists: `map = maps[i]` or
    `"property"`; `crs = crss[i]` or `None`; `layer = layers[i]` or `None`.
 3. Reuses today's per-source validation unchanged: an unknown map name is a
-   usage error naming it (`cli.py:1110`); a `--features-layer` on a non-`.gpkg`
-   source is a usage error (`cli.py:1114`). The message names **which**
+   usage error naming it (`src_python/tin_engine/cli.py@7d9882d:1110`; on master `src_python/tin_engine/cli.py@390b516:1318`); a
+   `--features-layer` on a non-`.gpkg` source is a usage error
+   (`src_python/tin_engine/cli.py@7d9882d:1114`; on master `src_python/tin_engine/cli.py@390b516:1325`). The message names **which**
    `--features` it is about (its 1-based index and the path), because with
    several sources "applies to a .gpkg only" alone no longer identifies the
    source.
@@ -197,24 +202,26 @@ tuple[FeatureSource, ...]`, which replaces today's single `_feature_source`
    crs=c) ...)`.
 
 `FeatureRequest(sources=_feature_sources(...))` then goes to `open_features`
-as one call (`cli.py:1126`), which already loops.
+as one call (`src_python/tin_engine/cli.py@7d9882d:1126` passed a one-element tuple; on master
+`_open_features`, `src_python/tin_engine/cli.py@390b516:1353`), which already loops.
 
 ### R3. Degeneracy policy — every case a clear `typer.BadParameter`
 
 Consistent with the existing guard "applies only with --features"
-(`cli.py:726-728`), which is kept and generalised. Each row raises
+(`src_python/tin_engine/cli.py@7d9882d:726-728`), which is kept and generalised (on master the R3
+length rule in `mesh`, `src_python/tin_engine/cli.py@390b516:750-763`). Each row raises
 `typer.BadParameter` with the named `param_hint`:
 
 | case | outcome |
 |---|---|
 | **a paired option is longer than `--features`** (e.g. two `--features-map`, one `--features`) | refused: `"N --features-map given for M --features; each pairs with one source by position"`, `param_hint` the offending flag. This subsumes the old "applies only with --features" when `--features` is absent (M = 0). |
-| **a paired option with no `--features` at all** (`--features-map corine`, no `--features`) | the same rule with M = 0: refused naming the flag. Preserves `cli.py:726-728`. |
+| **a paired option with no `--features` at all** (`--features-map corine`, no `--features`) | the same rule with M = 0: refused naming the flag. Preserves `src_python/tin_engine/cli.py@7d9882d:726-728` (on master `src_python/tin_engine/cli.py@390b516:753-763`). |
 | **a paired option shorter than `--features`** | **allowed**: the missing entries take their defaults (R1). This is the common case (`--features-crs` for one source only). |
-| **`--features` given with no `--domain`** | refused, unchanged: `"needs --dem, --domain and --tolerance"`, `param_hint` `--features` (`cli.py:729-730`). Applies whenever at least one `--features` is present. |
+| **`--features` given with no `--domain`** | refused, unchanged: `"needs --dem, --domain and --tolerance"`, `param_hint` `--features` (`src_python/tin_engine/cli.py@7d9882d:729-730`; on master `mesh`, `src_python/tin_engine/cli.py@390b516:764-765`). Applies whenever at least one `--features` is present. |
 | **empty `--features` list** (no `--features` at all) | not a feature run: `found` stays `None`, the mesh has no constraints, exactly as today when `--features` is omitted. **But** any paired option present with no `--features` is the row above (refused). |
 | **the same path given twice** (`--features x.gpkg --features x.gpkg`) | **allowed**: two sources reading the same file, e.g. once as `corine` and once as `corine-water`, or two different `--features-layer` of one GeoPackage. The noder merges the duplicated edges (R4); it is the user's stated intent, and refusing it would block a real use (two layers of one file). |
-| **an unknown `--features-map` at any index** | refused naming the index and the name, listing the known maps (as `cli.py:1110`). |
-| **a `--features-layer` on a non-`.gpkg` source at any index** | refused naming the index and the path (as `cli.py:1114`). |
+| **an unknown `--features-map` at any index** | refused naming the index and the name, listing the known maps (as `src_python/tin_engine/cli.py@7d9882d:1110`; on master `src_python/tin_engine/cli.py@390b516:1318-1323`). |
+| **a `--features-layer` on a non-`.gpkg` source at any index** | refused naming the index and the path (as `src_python/tin_engine/cli.py@7d9882d:1114`; on master `src_python/tin_engine/cli.py@390b516:1325-1329`). |
 
 The one length rule — *a paired option may not be longer than `--features`* —
 covers the empty list, the map-without-features and the count-mismatch cases in
@@ -226,8 +233,8 @@ one check per paired option. A shorter paired list is always the defaults.
 mechanism 16b measured within one source. Verified by reading the flow:
 
 - `_dem_mesh` flattens every source's features into one chain list before the
-  engine sees them (`cli.py:1205`, `start_chains(domain, features.features,
-  ...)`), so the noder never distinguishes a within-source shared edge from a
+  engine sees them (`_dem_mesh`, `src_python/tin_engine/cli.py@390b516:1433`, line 1205 at `7d9882d`:
+  `start_chains(domain, features.features, ...)`), so the noder never distinguishes a within-source shared edge from a
   cross-source one. Both are two chains with the same endpoints.
 - 16b R7 and its measurement M3 established that **the noder merges every
   doubled edge exactly by the node-id edge key and unions the masks** (5b's
@@ -257,15 +264,16 @@ between reprojected sources.
 
 ### R5. Land-cover labelling over several sources
 
-`_land_cover` (16c, `cli.py:949-964`) already gathers coded polygons across the
+`_land_cover` (16c, `src_python/tin_engine/cli.py@390b516:1025-1040`; 949-964 at `7d9882d`) already gathers coded polygons across the
 whole `FeatureSet`: `polygons = [(f.polygon, f.code) for f in found.features
-if f.polygon is not None and f.code]` (`cli.py:954`). Because `open_features`
+if f.polygon is not None and f.code]` (`src_python/tin_engine/cli.py@390b516:1030`; 954 at `7d9882d`). Because `open_features`
 merges every source's features into that one tuple, a coded source's polygons
 are labelled whether or not other, uncoded sources are also present. **No
 change.** Two subtleties, decided here:
 
-- **The class map used for labelling** is read at `cli.py:855` as
-  `CLASS_MAPS[features_map or "property"]` — the single map name. With several
+- **The class map used for labelling** was read at `src_python/tin_engine/cli.py@7d9882d:855` as
+  `CLASS_MAPS[features_map or "property"]` — the single map name (on master
+  `mesh` takes the first coded source instead, `src_python/tin_engine/cli.py@390b516:931`). With several
   sources this is wrong: labelling must run when **any** source's map has codes
   (`ClassMap.codes` non-empty), and the `land_cover_codes` field text (16c R3)
   must name that coded map. **Ruling:** labelling runs iff at least one source's
@@ -283,9 +291,10 @@ change.** Two subtleties, decided here:
 
 ### R6. What the file records — one line per source
 
-Today `cli.py:834-854` writes one `features`, one `features_crs`, one
+Today `src_python/tin_engine/cli.py@7d9882d:834-854` writes one `features`, one `features_crs`, one
 `features_transform` and at most one `features_notice`, reading `found.crs[0]`,
-`found.layers[0]` and the single map name. With several sources:
+`found.layers[0]` and the single map name (on master the per-source loop in
+`mesh`, `src_python/tin_engine/cli.py@390b516:898-927`). With several sources:
 
 - **`features`** — one entry per source, joined (e.g. `; `-separated), each as
   today's text (`<name>[:layer], map <map>, <k> features, <c> chains, <v>
@@ -312,8 +321,9 @@ Today `cli.py:834-854` writes one `features`, one `features_crs`, one
   repeating it.
 - **stderr** — `_open_features`'s "N features kept, ... dropped, ... clipped,
   ... empty" line already reports whole-run totals from the merged `FeatureSet`
-  (`cli.py:1131-1134`); it stays whole-run. The R-tree-scan warning
-  (`cli.py:1136-1137`) already iterates `found.scanned`, which spans sources.
+  (`_open_features`, `src_python/tin_engine/cli.py@390b516:1358-1362`; 1131-1134 at `7d9882d`); it stays
+  whole-run. The R-tree-scan warning (`src_python/tin_engine/cli.py@390b516:1363-1364`; 1136-1137 at
+  `7d9882d`) already iterates `found.scanned`, which spans sources.
 
 ### R7. Tests, and the regression floor
 
@@ -438,3 +448,11 @@ squash: `docs/increments/README.md`).
 - Any change to noding, the shared-edge merge, clipping or labelling geometry.
 - Broadcasting one `--features-map` to several sources (D3, rejected).
 - A compound single-flag syntax carrying path+map+crs+layer (R1, rejected).
+
+## Review
+
+**Round (citation-only fix), 2026-10-03.** Range `390b516..b213dc0` (6394c45, b213dc0). Verdict: CHANGES REQUESTED. LOC: 0 production lines (docs + test docstrings only; test ASTs unchanged modulo docstrings). Blocking: the branch shifts `## LOC` from 418-434 to 428-444, breaking `docs/retrospectives/2026-09-29-orchestrator-and-hooks-audit.md:229`; pin it as `docs/increments/16e-multi-features.md@390b516:418-434`. All 30 re-pointed or pinned citations read as quotations on master, `7d9882d` and `cb6f78b`. Not pushed; no CI.
+
+**Round 2 (citation-only fix), 2026-10-03.** Range `7d4fc18..d445f65` (whole branch re-checked `390b516..d445f65` against master `008a2d0`). Verdict: CHANGES REQUESTED. LOC: 0 production lines. The round-1 blocker is resolved: the retrospective's line 229 pin `docs/increments/16e-multi-features.md@390b516:418-434` reads as the LOC estimate, and `check_citations.py` lists only history. New blocker: 15e (#147) moved the cited `cli.py` lines by +1 (lines 110-765), +6 (lines 898-1364) and +23 (`_dem_mesh`, 1433 to 1456); only `:95` holds. Pin the master-line `cli.py` citations as `cli.py@<sha>:N`, or merge master and re-point them. Not pushed; no CI.
+
+**Round 3 (citation-only fix), 2026-10-03.** Range `efca409..b585619` (9218a60, 32a9fea, b585619; whole branch re-checked `390b516..b585619` against master `008a2d0`). Verdict: APPROVED. LOC: 0 production lines (docs + test docstrings; test ASTs unchanged modulo docstrings). Round-2 blocker resolved: all master-line `cli.py` citations pinned `@390b516`, `src_python` identical to 390b516, no bare `cli.py:N` left; 07's `tests/python/test_viz_svg.py@781c1bf:132-136`/`:137` read as quoted. `check_citations.py`: one at-risk entry (16e:454 → retrospective :229), which still reads right. Merges cleanly onto `008a2d0`. Not pushed; no CI — green CI required after push.

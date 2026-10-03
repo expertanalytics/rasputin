@@ -16,9 +16,15 @@ Pinned here, from the design:
   In PR 1 the polygon is the fine outline, so its area is the marching-squares
   area of the catchment's nodes, holes filled; coordinates survive the round
   trip (`repr` precision), so the area read back is that, to 1e-12.
-- stderr has a line per window, and the fine outline's vertex count and area.
-  The wording is not pinned; these tests look for the words `window`, `fine`,
-  `vertices` and `km`.
+- stderr has a line per window, and the fine outline's vertex count and area,
+  worded since increment 25 as `docs/increments/25-plain-output.md` ("stderr,
+  reworded") gives them: `window <k>: ..., searched in <t> s, catchment
+  inside the window` (or `window widened to the <sides>`), `start: lake of
+  <a> km2, <n> DEM nodes` or `start: the outlet node at (x, y) (an outlet
+  must lie on the flow line; it is not moved there)`, `catchment: <n> DEM
+  nodes, <a> km2`, and `outline along DEM cells: <v> vertices, <a> km2, <p>
+  separate patch(es) left out (<n> nodes), <g> enclosed gap(s) filled
+  (...)`. The parts the design elides (`...`) are not pinned.
 - Every refusal is a non-zero exit and no file.
 
 PR 2 (the reduction): the default output is the reduced polygon, whose area is
@@ -179,13 +185,51 @@ def test_mesh_accepts_it_as_a_domain(tmp_path: Path, dem_dir: Path, lakes: Path)
     assert vtk.is_file() and vtk.stat().st_size > 0
 
 
+WINDOW_LINE = re.compile(
+    r"\bwindow \d+: .*?searched in [0-9.]+ s, "
+    r"(catchment inside the window|window widened to the [a-z]+(, [a-z]+)*)"
+)
+OUTLINE_LINE = re.compile(
+    r"\boutline along DEM cells: \d+ vertices, [0-9.]+ km2, \d+ separate patch(es)? left out "
+    r"\(\d+ nodes\), \d+ enclosed gaps? filled \("
+)
+#: Today's words the rewording replaces (increment 25, "stderr, reworded").
+OLD_CATCHMENT_WORDS = (
+    "flood ",
+    "contained",
+    "grown on",
+    "seed:",
+    "pour node",
+    "snapped",
+    "of node area",
+    "fine outline",
+    "rings dropped",
+    "holes filled",
+)
+
+
 def test_stderr_reports_the_windows_and_the_fine_outline(
     tmp_path: Path, dem_dir: Path, lakes: Path
 ) -> None:
     output = run(dem_dir, tmp_path / "c.geojson", *utm_seed(), "--lakes", str(lakes))
-    assert re.search(r"(?i)\bwindow", output), output
-    assert re.search(r"(?i)\bfine\b.*\bvertices\b|\bvertices\b.*\bfine\b", output), output
-    assert re.search(r"(?i)\bfine\b.*km|km.*\bfine\b", output), output
+    assert WINDOW_LINE.search(output), output
+    assert re.search(r"\bstart: lake of [0-9.]+ km2, \d+ DEM nodes\b", output), output
+    assert re.search(r"\bcatchment: \d+ DEM nodes, [0-9.]+ km2\b", output), output
+    assert OUTLINE_LINE.search(output), output
+    assert re.search(r"\breduced outline: \d+ vertices", output), output
+    for old in OLD_CATCHMENT_WORDS:
+        assert old not in output, old
+
+
+def test_stderr_names_the_outlet_without_lakes(tmp_path: Path, dem_dir: Path) -> None:
+    output = run(dem_dir, tmp_path / "c.geojson", *utm_seed(SEED[0] + 30.0, SEED[1] - 20.0))
+    outlet = (
+        r"\bstart: the outlet node at \(.+?\) \(an outlet must lie on the flow line; "
+        r"it is not moved there\)"
+    )
+    assert re.search(outlet, output), output
+    for old in OLD_CATCHMENT_WORDS:
+        assert old not in output, old
 
 
 # ---------------------------------------------------------------------------

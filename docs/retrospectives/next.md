@@ -4,6 +4,22 @@ When: after auto-catchment is ready to use (Ola, 2026-09-28). Run by
 `@orchestrator`. Items are added as they come up; the retrospective itself
 gets its own dated file here, and this file is then emptied.
 
+## Taking recurring decisions off the main session (Ola, 2026-10-03)
+
+Ola: "I need even more control. My gut feeling is to offload the recurring
+decisions, or make them more mechanical." Evidence and plan:
+`2026-10-03-dispatcher-control.md`. It counts 28 main-session errors from
+27 September to 3 October, 22 of them of a kind a script, template or hook
+could have stopped, and proposes five stages, each for Ola to rule: (1)
+briefs assembled from files by a script, with a hook that refuses a spawn
+without one (about 140 lines); (2) one script that writes `session.md` and
+one that says what step comes next on each branch (about 230 to 380); (3) a
+checked-in merge runner with a lock (about 120); (4) hooks on the main
+session's own turns: concurrency cap, idle guard, unexplained codes, rule
+changes (about 125, probes first); (5) handbacks routed, reviews recorded,
+`ROADMAP.md` status generated. Each stage deletes the prose rule it
+replaces.
+
 ## Agents taking on each other's work (Ola, 2026-09-28): the main focus
 
 Ola, 2026-09-29: "when we do our retrospective, we should have a specific
@@ -176,6 +192,13 @@ Evidence: `2026-10-03-night-restart-h7.md`. Each item needs Ola's ruling;
 the tooling ones go through the pipeline, and all but the last touch
 governed files.
 
+Status: items 1-6 were ruled by Ola on 2026-10-03 (about 15:42-15:45 UTC);
+each ruling is recorded under its item, and the proposal text is kept.
+Items 7 and 8 stay open. The rulings are to be implemented as one harness
+increment, by day, through the pipeline: they touch governed files
+(`tools/away.py`, `tools/session_state.py`, `.claude/REQUIRED-READING.md`),
+which are not written in unattended mode.
+
 1. **Long idle stretches, three windows running** (3 h 24 min, 5 h 59 min,
    7 h 08 min; the last three long windows up to 2026-10-02). The "fill the
    window" rule lives only in a memory note, and it failed in both windows
@@ -189,29 +212,59 @@ governed files.
    accepted, or what kind of work fills it? Cost: about ten lines of rule
    text; the idle print is a small `away.py` change with tests (h-sized,
    under 50 lines).
+
+   **Ruled 2026-10-03 (Ola, about 15:42-15:45 UTC):** yes, both
+   parts: the rule in `REQUIRED-READING.md` (before Ola leaves, `session.md`
+   names a fallback that needs no ruling and writes no governed path) and
+   the longest-stretch-without-a-commit print in `away.py --back`. On the
+   question to rule first: idle is accepted only when the fallback list is
+   genuinely empty.
+
 2. **`away.py --back` and the recap read only one checkout's
    `.claude/current-task/`.** Proposal: resolve the main checkout from the
    repository's common dir, and list `ASK OLA` lines from every worktree's
    folder. Cost: about 20 lines in `away.py`/`session_state.py`, with tests.
+
+   **Ruled 2026-10-03 (Ola, about 15:42-15:45 UTC):** yes, as proposed.
+
 3. **`ASK OLA` matching.** Proposal: keep the one-decision-per-line rule;
    count a line only if it starts (after a bullet) with `ASK OLA:`, and warn
    on an `ASK OLA:` line with nothing after the colon. Cost: about 10 lines
    in `session_state.py`, with tests.
+
+   **Ruled 2026-10-03 (Ola, about 15:42-15:45 UTC):** yes, as proposed: a line
+   counts only if it starts (after a bullet) with `ASK OLA:`, and an empty
+   one warns.
+
 4. **`session.md` was a 29-line log against a three-line rule** (measured
    2026-10-03; since rewritten to 4 lines). Rule needed: enforce the rule
    (the recap warns past three lines), or relax it to what the night queue
    needs, with a size the recap checks. Cost: a few lines either way.
+
+   **Ruled 2026-10-03 (Ola, about 15:42-15:45 UTC):** option (a), enforce.
+   `session.md` holds exactly one `NOW` line, one `QUEUE` line, and one
+   `ASK OLA:` line per open decision, and nothing else: no rulings and no
+   history, which go to the increment files, `ROADMAP.md` or this file.
+   The recap warns on any other kind of line.
+
 5. **Restart and resume.** The fix is a memory note; item 1 shows a note can
    fail within a day. Proposal: the cold-start steps in
    `REQUIRED-READING.md` gain "list the running background jobs before
    starting any", and the recap prints them. Cost: one rule line; the
    recap print is about 15 lines with tests.
+
+   **Ruled 2026-10-03 (Ola, about 15:42-15:45 UTC):** yes: list the running
+   background jobs before starting any, and the recap prints them.
+
 6. **A merged rule change does not reach the running session.** Observed on
    h7: `@orchestrator` was spawned after the merge with its old persona
    prompt and the old `CLAUDE.md`. Proposal: after merging a change to
    `CLAUDE.md` or `.claude/agents/`, restart before spawning the changed
    persona; until then the brief says to read the persona file from disk.
    Cost: one rule line.
+
+   **Ruled 2026-10-03 (Ola, about 15:42-15:45 UTC):** yes, as proposed.
+
 7. **`ROADMAP.md` and harness increments.** No harness increment (h2 to h7)
    has a table row; h3 is named only in a prose list. Rule needed: do
    harness increments get roadmap rows? Cost: one rule line, and rows for
@@ -251,3 +304,94 @@ governed files.
    (`git diff --name-only <old>..<new>`) to the persona, judged against its
    row like a dirty path; and §5's list gains "a write committed in the
    same call" until then. Cost: about 10 lines and one test in h6.
+
+## The merges of 2026-10-03: 15e, 15f-1, 15f-2, hardening, citations
+
+Evidence: `2026-10-03-day-merges-15e-15f.md` (section numbers below are
+that file's). Numbering continues from the section above. Each item needs
+Ola's ruling; all but 15 touch governed files or tools.
+
+9. **No `@orchestrator` check after five merges, until Ola asked** (2a). The
+   session had loaded `CLAUDE.md` before #146 added "When to spawn
+   `@orchestrator`", and all 33 of its subagents got that older copy too:
+   item 6 again, with a cost this time. Proposals: (a) item 6's rule, with
+   `/compact` as the cheap route: Claude Code re-reads the project
+   `CLAUDE.md` from disk after `/compact` (code.claude.com/docs/en/memory,
+   read 2026-10-03). Cost: one rule line. (b) Make the trigger mechanical:
+   the recap prints the PRs merged since the newest commit under
+   `docs/retrospectives/` ("3 merges with no `@orchestrator` check"). Cost:
+   about 20 lines in `tools/session_state.py`, with tests.
+10. **The required mutation tests were left out of 15e and 15f-2** (2b).
+    The README requires them for a suite the increment file names
+    invariant-critical; both files named one; the main session's briefs said
+    "no mutation rounds (lean brief)", going past the lean-briefs note's own
+    exception. To rule: does the README's requirement stand? If yes,
+    `reviewer.md` §5 gains one line ("a named invariant-critical suite has
+    its mutants run, with the kill record in a handback"), and the repair is
+    a `@tester` task on master: run 15f-2's three named mutants (ES2, ES3,
+    ES5) and 15e's on the store's gather/scatter. About 30 to 60 minutes, no
+    production change, no governed path, so it is a good unattended
+    fallback. If no, the README line becomes "optional". Cost: one line
+    either way.
+11. **Absolute tolerances get a scale check** (3a, and ES16 in 3c). L12 and
+    L14 used a fixed 1e-10 that stops working once lattice coordinates reach
+    about 10⁶; ES16 used a fixed 1e-9 where the true bound is slope × offset.
+    Proposal: one line in `architect.md` ("each absolute constant in a design
+    states the scale it assumes and the largest input it was checked at, in
+    a table like L16's") and the same line in `tester.md` for numeric bounds
+    in assertions. Source: Dawson, "Comparing Floating Point Numbers, 2012
+    Edition" (read 2026-10-03): a fixed epsilon fails once values grow;
+    compare relative to magnitude or in ulps. Cost: two lines in governed
+    files.
+12. **Fused multiply-adds** (3b). `.claude/agents/developer.md@586fbc1:30` already makes
+    `@developer` build with `-ffp-contract=off` too, and it caught ES13
+    before CI. `tester.md` has no such line. Proposal: copy that line into
+    `tester.md` (cost: one line), unless Ola rules the open question in
+    `session.md` to turn contraction off project-wide (one CMake line;
+    stored mesh hashes on the Mac change, and `@perf` would measure what
+    arm64 loses without fused multiply-adds).
+13. **A flagged test assumption went unconfirmed before green** (3c).
+    `@tester`'s red handback flagged the ES15 choice about node (15, 8) as
+    "The ruling did not say this". The main session passed it to Ola as
+    information and asked no one to confirm it, and it was the assertion
+    `@developer` later found wrong. ES16's absolute bound was not flagged.
+    Proposal: when a red handback lists choices the ruling did not make,
+    the spawner sends that list to `@architect` to confirm or correct before
+    green, and `@tester` lists each such expected value with its derivation.
+    This would have caught ES15. It would have caught ES16 only if its bound
+    had been listed. Cost: one short `@architect` turn per red step that has
+    such choices, and one line in the main session's dispatch rules. The
+    alternative is no new rule: green caught both, and the fix was one
+    commit.
+14. **`ROADMAP.md`: conflicts, stale status, no owner** (3d, 2e, 2f). Two
+    hand-resolved conflicts today, and master still says 15e is "awaiting
+    the push and CI". Options: (a) the row's status says only designed, in
+    progress or shipped, with the PR number, and the details stay in the
+    increment file's status line; (b) a small tool builds the status column
+    from the increment files' status lines, with a gate that the table is
+    current, the pattern `towncrier` uses for changelogs (each change writes
+    its own fragment, so nobody edits the shared file;
+    towncrier.readthedocs.io, read 2026-10-03), about 60 lines with tests;
+    (c) keep hand merges and only fix the stale text. Any of them also needs
+    an owner for `ROADMAP.md` and for `.github/workflows/` (edited today by
+    `@architect`, `@perf`, the main session and `@developer`); they belong on
+    the hard-limits list above. Whatever the choice, master's two stale
+    lines (`ROADMAP.md` row 15, `docs/increments/15e-memory-fixes.md@586fbc1:8`) need a docs fix.
+15. **Concurrency** (2d). Three agents ran at once several times, and three
+    edited one worktree in parallel by design at 14:30, against the "agents
+    in pairs" note. Nothing broke. To rule: do read-only `@reviewer` runs
+    count toward the two, and may personas share a worktree when their files
+    do not overlap? Cost: an update to the memory note.
+16. **Numbers passed to Ola** (3e). 15f-1's overrun went out as 45 % (gross)
+    instead of 36 % (net), copied from a handback. Proposal: `@developer`
+    reports lines as §2 counts them, net, and the main session quotes line
+    counts from `@reviewer`'s record only. Cost: one line in `developer.md`.
+17. **A fallback's paths are checked by hand** (section 4). The first
+    fallback queued today (h5's green step) writes three governed files;
+    it was caught only because the morning check had just looked at h5.
+    Proposal, to go with item 1 of "The window of 2026-10-02, the restart
+    of 2026-10-03, h7" above (state the fill-the-window rule): a fallback
+    line in `session.md` names the paths it will write, and the recap flags
+    any governed one. Cost: about 15 lines in `tools/session_state.py`, with
+    tests. Also: `session.md` was 10 lines at 15:26 UTC against the
+    three-line rule (item 4 again).

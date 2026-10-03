@@ -176,6 +176,9 @@ class RunRecord(BaseModel):
     accept_quality: bool = False
     threshold_pct: float = 5.0
     verdict: list[str] = []
+    #: The bounds checks the children's ``_core`` reported (increment 24); a
+    #: run.json from before it loads as "none", which every such run was.
+    hardening: str = "none"
 
 
 class ChildError(ValueError):
@@ -189,6 +192,7 @@ class Child(NamedTuple):
     rounds: int
     inserted: int
     flips: int
+    hardening: str = "none"
 
 
 class Ceiling(NamedTuple):
@@ -238,6 +242,7 @@ def parse_child(stderr: str, run: str) -> Child:
         return Child(
             float(values["refine_s"]), float(values["app_s"]), float(values["max_error"]),
             int(values["rounds"]), int(values["inserted"]), int(values["flips"]),
+            str(values.get("hardening", "none")),
         )  # fmt: skip
     except (ValueError, KeyError, TypeError) as exc:
         raise ChildError(f"{run}: malformed BENCH line: {exc!r}") from exc
@@ -365,6 +370,7 @@ def comparable(a: RunRecord, b: RunRecord) -> str | None:
          sorted((d.name, d.sha256) for d in b.inputs.domains)),
         ("tolerance", a.inputs.tolerance, b.inputs.tolerance),
         ("extra_args", a.inputs.extra_args, b.inputs.extra_args),
+        ("hardening", a.hardening, b.hardening),
     ]  # fmt: skip
     for name, x, y in pairs:
         if x != y:
@@ -445,7 +451,7 @@ def _readme(r: RunRecord) -> list[str]:
           if r.accept_quality else []),
         "", "## Method", "",
         f"- Started {r.started.isoformat()}; tree `{r.tree.commit}`{' (dirty)' * r.tree.dirty}; "
-        f"bench.py blob `{r.bench_blob}`. Build: {build}.",
+        f"bench.py blob `{r.bench_blob}`. Build: {build}; bounds checks: {r.hardening}.",
         f"- {m.cpu_brand}, {m.p_cores} P + {m.e_cores} E cores, {m.memory_bytes / 2**30:.0f} GiB, "
         f"macOS {m.macos}, Python {m.python}, numpy {m.numpy}.",
         f"- Power **{p.state}** ({p.percent}%), `pmset -g batt` before and after (in run.json).",
@@ -510,9 +516,10 @@ def _checked(runner: Runner, argv: Sequence[str], cwd: Path | None = None) -> Co
     return done
 
 
-def build(runner: Runner, tree: Path) -> tuple[Path, Build]:
+def build(runner: Runner, tree: Path, hardening: str = "on") -> tuple[Path, Build]:
     """Release ``_core`` in ``<tree>/build-bench``, and ``build-bench/pkg``: the
-    tree's ``tin_engine`` as symlinks plus a copy of the fresh ``.so``."""
+    tree's ``tin_engine`` as symlinks plus a copy of the fresh ``.so``. The
+    hardening option is passed on every configure, so a cached one never decides."""
     out = tree / "build-bench"
     cache = out / "CMakeCache.txt"
     kind = _cache_value(cache, "CMAKE_BUILD_TYPE")
@@ -522,6 +529,7 @@ def build(runner: Runner, tree: Path) -> tuple[Path, Build]:
         "cmake", "-S", str(tree), "-B", str(out), "-DCMAKE_BUILD_TYPE=Release",
         "-DRASPUTIN_BUILD_PYTHON=ON", "-DRASPUTIN_BUILD_TESTS=OFF",
         f"-DPython_EXECUTABLE={sys.executable}", "-DPYBIND11_FINDPYTHON=ON",
+        f"-DRASPUTIN_HARDENING={hardening.upper()}",
     ])  # fmt: skip
     _checked(runner, ["cmake", "--build", str(out), "-j", "--target", "_core"])
     built = sorted(out.glob("_core*.so"))
@@ -588,9 +596,10 @@ def _child(runner: Runner, argv: list[str], run: str) -> tuple[Child, float]:
 def _measure(
     runner: Runner, head: list[str], domains: list[Domain], mesh: list[str],
     threads: list[int], repeats: int, mesh_dir: Path, tolerance: float, label: str,
-) -> tuple[list[Sample], dict[str, MeshQuality]]:  # fmt: skip
+) -> tuple[list[Sample], dict[str, MeshQuality], set[str]]:  # fmt: skip
     """Timing runs per domain, repeat, thread count (0 first), then that
-    domain's ``--ascii`` quality run at t=0."""
+    domain's ``--ascii`` quality run at t=0; and the hardening modes reported."""
+    modes: set[str] = set()
     samples: list[Sample] = []
     qualities: dict[str, MeshQuality] = {}
     for d in domains:
@@ -600,15 +609,17 @@ def _measure(
             for t in [0, *threads]:
                 argv = [*head, "--threads", str(t), "--", *base, *timing]
                 c, proc_s = _child(runner, argv, f"{d.name} t={t} r={r}")
+                modes.add(c.hardening)
                 samples.append(Sample(domain=d.name, threads=t, repeat=r, proc_s=proc_s,
                                       **{k: getattr(c, k) for k in CHILD_KEYS}))  # fmt: skip
         out = mesh_dir / f"{label}_{d.name}.vtk"
         argv = [*head, "--threads", "0", "--", *base, "--out", str(out), "--ascii"]
         c, _ = _child(runner, argv, f"{d.name} quality")
+        modes.add(c.hardening)
         vtk = read_vtk_ascii(out)
         q = quality(vtk.points, vtk.triangles, vtk.edges, tolerance, c.max_error)
         qualities[d.name] = q.model_copy(update={"mesh_sha256": vtk.sha256})
-    return samples, qualities
+    return samples, qualities, modes
 
 
 app = typer.Typer(help="The acceptance benchmark (docs/benchmarks/bench-py.md).")
@@ -635,6 +646,7 @@ def run(
     out_root: OutRoot = REPO / "docs/benchmarks",
     threshold: Annotated[float, typer.Option(help="Percent on the median.")] = 5.0,
     accept_quality: Annotated[bool, typer.Option(help="Waive angle and degree loss.")] = False,
+    hardening: Annotated[Literal["on", "off"] | None, typer.Option(help="Default on.")] = None,
 ) -> None:
     """Build, measure, store the evidence, and judge it against a baseline."""
     runner = make_runner()
@@ -646,6 +658,8 @@ def run(
             if not path.exists():
                 raise BenchError(f"{path}: no such file")
         base = _load(baseline) if baseline is not None else None
+        if no_build and hardening is not None:
+            raise BenchError("--hardening with --no-build: nothing is built")
     except BenchError as exc:
         typer.echo(f"bench: {exc}")
         raise typer.Exit(3) from exc
@@ -661,7 +675,7 @@ def run(
         if no_build:
             pkg, built = None, Build(no_build=True)
         else:
-            pkg, built = build(runner, tree)
+            pkg, built = build(runner, tree, hardening or "on")
         head = [sys.executable, str(BENCH), "_child", *(["--pkg", str(pkg)] if pkg else [])]
         mesh = ["mesh", "--dem", str(dem), "--tolerance", f"{tolerance:g}", *(extra or [])]
         commit = _checked(runner, ["git", "-C", str(tree), "rev-parse", "HEAD"]).stdout.strip()
@@ -669,9 +683,14 @@ def run(
         blob = runner.run(["git", "-C", str(REPO), "hash-object", str(BENCH)]).stdout.strip()
         machine = _machine(runner)
         before = parse_pmset(runner.run(PMSET).stdout)
-        samples, qualities = _measure(
+        samples, qualities, modes = _measure(
             runner, head, domains, mesh, counts, repeats, meshes, tolerance, label
         )
+        if len(modes) != 1:
+            raise BenchError(f"children reported different hardening modes: {sorted(modes)}")
+        (mode,) = modes
+        if hardening is not None and (hardening == "on") != (mode != "none"):
+            raise BenchError(f"--hardening {hardening}, but the children's _core reports {mode}")
         power = combine_power(before, parse_pmset(runner.run(PMSET).stdout))
     except BenchError as exc:
         typer.echo(f"bench: {exc}")
@@ -683,7 +702,7 @@ def run(
         inputs=Inputs(dem=str(dem), dem_sha256=_sha256(dem), domains=domains,
                       tolerance=tolerance, extra_args=list(extra or [])),
         samples=samples, stats=median_stats(samples), quality=qualities,
-        accept_quality=accept_quality, threshold_pct=threshold,
+        accept_quality=accept_quality, threshold_pct=threshold, hardening=mode,
     )  # fmt: skip
     v = _judge(runner, record, base, out_root, tree)
     record.verdict = v.lines
@@ -748,7 +767,8 @@ def child_main(argv: list[str]) -> int:
         return 1
     out = seen["out"]
     values = dict(refine_s=seen["refine_s"], app_s=app_s, max_error=out.max_error,
-                  rounds=out.rounds, inserted=out.inserted, flips=out.flips)  # fmt: skip
+                  rounds=out.rounds, inserted=out.inserted, flips=out.flips,
+                  hardening=getattr(tin_engine._core, "hardening", "none"))  # fmt: skip
     print("BENCH " + json.dumps(values), file=sys.stderr)
     return 0
 

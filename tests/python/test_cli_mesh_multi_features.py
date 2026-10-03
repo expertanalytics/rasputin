@@ -9,12 +9,14 @@ source, one distinct notice), and "Tests, and the regression floor" (R7 cases
 1-5, 7). Invariants I1-I3, I5.
 
 Reuses `test_cli_mesh_features.py`'s fixtures and helpers (`bumpy`,
-`plain_square`, `mesh`, `meshed`, `edges`, `text_field`,
+`plain_square`, `mesh`, `meshed`, `edges`, `text_field`, `report`,
 `FEATURES_FIELD`, the gallery geometries) so the multi-source cases read the
 same way the single-source ones do.
 
 This suite is RED before any production code: `--features` and its paired
-options are single-valued (`Path | None` / `str | None`, `cli.py:637-660`), so
+options are single-valued (`Path | None` / `str | None`: `mesh`'s `features`
+to `features_map` parameters, `src_python/tin_engine/cli.py@cb6f78b:637-660`;
+after 16e they are `list[...]`, `src_python/tin_engine/cli.py@390b516:660-685`), so
 a second `--features` overrides the first rather than adding a source, and
 `_feature_sources` does not exist. The suite fails because the new multi-source
 behaviour is absent, not on an unknown option: Typer accepts a repeated
@@ -38,6 +40,7 @@ from feature_fixtures import Feat, write_geojson
 from geotiff_fixtures import micro_tiff
 from gpkg_fixtures import Layer, Row, needs_rtree, write_gpkg
 from landcover_fixtures import vtk_labels
+from recordread import stats_row
 from test_cli_mesh_dem import USAGE, invoke, write_tiff
 from test_cli_mesh_domain import COLS, ROWS, SQUARE, geojson
 from test_cli_mesh_features import (
@@ -47,6 +50,7 @@ from test_cli_mesh_features import (
     mesh,
     meshed,
     rel,
+    report,
     text_field,
 )
 from tin_engine.features import DEFAULT_VOCABULARY
@@ -156,9 +160,11 @@ class TestTwoSources:
         found = set(codes.tolist())
         assert 311 in found and 512 in found
 
-    def test_the_file_records_both_sources(self, vtk: VtkFile) -> None:
-        """R6 / I5: the `features` field has one entry per source, in order."""
-        text = text_field(vtk, "features")
+    def test_the_file_records_both_sources(self, vtk: VtkFile, tmp_path: Path) -> None:
+        """R6 / I5: the `features` row (a `--stats` row since increment 25)
+        has one entry per source, in order; the mesh file has none."""
+        assert "features" not in vtk.field_data
+        text = stats_row(report(tmp_path), "features")
         entries = [e.strip() for e in text.split(";")]
         assert len(entries) == 2, text
         assert FEATURES_FIELD.fullmatch(entries[0])["map"] == "corine", entries  # type: ignore[index]
@@ -182,7 +188,7 @@ class TestPositionalPairing:
             "--features", str(corine_src), "--features", str(parcel_src),
             "--features-map", "corine",
         )  # fmt: skip
-        entries = [e.strip() for e in text_field(vtk, "features").split(";")]
+        entries = [e.strip() for e in stats_row(report(tmp_path), "features").split(";")]
         assert len(entries) == 2, entries
         assert FEATURES_FIELD.fullmatch(entries[0])["map"] == "corine", entries  # type: ignore[index]
         assert FEATURES_FIELD.fullmatch(entries[1])["map"] == "property", entries  # type: ignore[index]
@@ -205,12 +211,12 @@ class TestPositionalPairing:
         lonlat = ff.moved(FOREST, "EPSG:25833", "EPSG:4326")
         first = write_geojson(tmp_path / "a.geojson", [prop("f", lonlat, "land_cover")], crs=None)
         second = write_geojson(tmp_path / "b.geojson", [prop("wall", WALL, "wall")])
-        vtk, _ = meshed(
+        _vtk, _ = meshed(
             tmp_path, bumpy, plain_square,
             "--features", str(first), "--features-crs", "EPSG:4326",
             "--features", str(second),
         )  # fmt: skip
-        crss = [c.strip() for c in text_field(vtk, "features_crs").split(";")]
+        crss = [c.strip() for c in stats_row(report(tmp_path), "features_crs").split(";")]
         assert crss == ["EPSG:4326", "EPSG:25833"], crss
 
     def test_one_features_with_no_paired_options_is_unchanged(
@@ -218,10 +224,10 @@ class TestPositionalPairing:
     ) -> None:
         """The regression guard: a single `--features` with a single
         `--features-map` still means one source with that map."""
-        vtk, _ = meshed(
+        _vtk, _ = meshed(
             tmp_path, bumpy, plain_square, "--features", str(corine_src), "--features-map", "corine"
         )
-        text = text_field(vtk, "features")
+        text = stats_row(report(tmp_path), "features")
         assert ";" not in text, text
         assert FEATURES_FIELD.fullmatch(text)["map"] == "corine", text  # type: ignore[index]
 
@@ -265,7 +271,7 @@ class TestSameFileTwice:
             "--features", str(corine_src), "--features-map", "corine",
             "--features", str(corine_src), "--features-map", "corine-water",
         )  # fmt: skip
-        entries = [e.strip() for e in text_field(vtk, "features").split(";")]
+        entries = [e.strip() for e in stats_row(report(tmp_path), "features").split(";")]
         assert len(entries) == 2, entries
         # The lake edge is present from both reads, merged, not doubled.
         _, masks = edges(vtk)
@@ -493,7 +499,8 @@ class TestRecordPerSource:
         )  # fmt: skip
         # Both sources are present (two file entries), and the shared notice is
         # named once, not per source.
-        assert len(text_field(vtk, "features").split(";")) == 2, text_field(vtk, "features")
+        features = stats_row(report(tmp_path), "features")
+        assert len(features.split(";")) == 2, features
         notice = text_field(vtk, "features_notice")
         assert notice.count("Copernicus Land Monitoring Service") == 1, notice
 
@@ -506,12 +513,12 @@ class TestRecordPerSource:
             tmp_path / "a.geojson", [coded("f", FOREST, "311"), coded("l", LAKE, "512")]
         )
         b = write_geojson(tmp_path / "b.geojson", [prop("w", WALL, "wall")])
-        vtk, _ = meshed(
+        _vtk, _ = meshed(
             tmp_path, bumpy, plain_square,
             "--features", str(a), "--features-map", "corine",
             "--features", str(b), "--features-map", "property",
         )  # fmt: skip
-        entries = [e.strip() for e in text_field(vtk, "features").split(";")]
+        entries = [e.strip() for e in stats_row(report(tmp_path), "features").split(";")]
         assert len(entries) == 2, entries
         counts = [int(FEATURES_FIELD.fullmatch(e)["n"]) for e in entries]  # type: ignore[index]
         assert counts == [2, 1], (counts, entries)
@@ -519,9 +526,9 @@ class TestRecordPerSource:
     def test_features_crs_has_one_entry_per_source(
         self, tmp_path: Path, bumpy: Path, plain_square: Path, corine_src: Path, parcel_src: Path
     ) -> None:
-        vtk, _ = meshed(
+        _vtk, _ = meshed(
             tmp_path, bumpy, plain_square,
             *two_sources(corine_src, parcel_src, a_map="corine", b_map="property"),
         )  # fmt: skip
-        crss = [c.strip() for c in text_field(vtk, "features_crs").split(";")]
+        crss = [c.strip() for c in stats_row(report(tmp_path), "features_crs").split(";")]
         assert crss == ["EPSG:25833", "EPSG:25833"], crss

@@ -10,13 +10,13 @@ must-match rule is replaced by increment 15b's transform
 that met it now meet the extent check after the transform, which names both
 CRSs.
 
-Wording pinned from the design: the ``domain`` field is
-``<file name>, 1 ring <h> holes, <n> vertices`` (``hole`` or ``holes``
-accepted, since the design gives only the zero-hole example); the sentence says
-``start domain boundary, boundary z bilinear`` in place of ``start stride``.
-The stderr wording for the start triangle count and the off-node count is not
-ruled; this suite pins ``<n> start triangles`` and ``<k> start vertices
-off-node``.
+Since increment 25 (``docs/increments/25-plain-output.md``) the domain is a
+``--stats`` row, ``domain``, worded as the design's example
+``<file name>: 1 outline, <h> holes, <n> vertices`` (``hole`` or ``holes``
+accepted, since the example has none); ``start_mesh`` is ``the domain
+outline``; the start triangle count is the Sizes row ``start triangles`` and
+the off-node count the row ``start_vertices_between_dem_nodes``. The mesh file
+carries neither (D2).
 
 The real-tile acceptance (T-real) runs under ``needs_codecs`` only. It builds
 the quarter circle from the design's numbers, reports, and asserts only the
@@ -38,8 +38,9 @@ from shapely.geometry import Point, Polygon
 
 from geotiff_fixtures import KARTVERKET, TIE_X, TIE_Y, micro_tiff, needs_codecs
 from plyread import read_ply
+from recordread import sizes_row
 from test_cli_mesh_dem import SENTINEL, USAGE, invoke, write_tiff
-from test_cli_mesh_refine import NUMBER, field, min_angles_degrees, sentence
+from test_cli_mesh_refine import file_field, min_angles_degrees, ply_fields, stats_row
 from tin_engine.io.geotiff import decode_dem
 from tin_engine.io.models import DemTile
 from vtkread import VtkFile, read_vtk
@@ -72,6 +73,17 @@ def meshed(tmp_path: Path, tif: Path, domain: Path, *extra: str) -> tuple[VtkFil
     code, output, target = mesh(tmp_path, tif, domain, "--tolerance", "1", *extra)
     assert code == 0, output
     return read_vtk(target.read_bytes()), output
+
+
+def meshed_stats(tmp_path: Path, tif: Path, domain: Path, *extra: str) -> tuple[VtkFile, str]:
+    """``meshed`` with ``--stats`` to a file: (mesh, report)."""
+    md = tmp_path / "x.md"
+    vtk, _ = meshed(tmp_path, tif, domain, "--stats", str(md), *extra)
+    return vtk, md.read_text(encoding="utf-8")
+
+
+def max_error(vtk: VtkFile) -> float:
+    return float(file_field(vtk, "max_error_m"))
 
 
 def bilinear(tile: DemTile, x: np.ndarray, y: np.ndarray) -> np.ndarray:
@@ -146,29 +158,30 @@ def cone(n: int) -> np.ndarray:
 class TestDomainOutput:
     """R3 and R4, Z1 and Z3 through the CLI."""
 
-    def test_the_field_the_sentence_and_the_report(
+    def test_the_stats_rows_and_the_file_fields(
         self, tmp_path: Path, bumpy: Path, square: Path
     ) -> None:
-        vtk, output = meshed(tmp_path, bumpy, square)
-        (domain,) = vtk.field_data["domain"].values
-        assert re.fullmatch(r"square\.geojson, 1 ring 1 holes?, 8 vertices", str(domain)), domain
-        text = sentence(vtk)
-        assert "start domain boundary, boundary z bilinear" in text
-        assert "start stride" not in text
-        assert "refined from DEM nodes" in text
-        assert field(text, rf"max error at DEM nodes at most {NUMBER} m") <= 1.0
-        assert re.search(r"\b\d+ start triangles\b", output), output
-        assert re.search(r"\b8 start vertices off-node\b", output), output
+        vtk, report = meshed_stats(tmp_path, bumpy, square)
+        domain = stats_row(report, "domain")
+        assert re.fullmatch(r"square\.geojson: 1 outline, 1 holes?, 8 vertices", domain), domain
+        assert stats_row(report, "start_mesh") == "the domain outline"
+        assert int(sizes_row(report, "start triangles")) > 0
+        assert stats_row(report, "start_vertices_between_dem_nodes") == "8"
+        assert max_error(vtk) <= 1.0
+        for moved in ("domain", "domain_crs", "domain_transform", "elevation_source"):
+            assert moved not in vtk.field_data, moved
 
-    def test_the_ply_carries_the_domain_comment(
+    def test_the_ply_carries_the_same_fields_as_the_vtk(
         self, tmp_path: Path, bumpy: Path, square: Path
     ) -> None:
+        """D2: the domain moved to ``--stats`` in both formats alike."""
         code, output, target = mesh(tmp_path, bumpy, square, "--tolerance", "1", out="x.ply")
         assert code == 0, output
         header, _ = read_ply(target.read_bytes())
-        assert any(c.startswith("domain square.geojson, 1 ring 1 hole") for c in header.comments), (
-            header.comments
-        )
+        vtk, _ = meshed(tmp_path, bumpy, square)
+        names = set(vtk.field_data) - {"feature_bits", "feature_names", "feature_vocabulary"}
+        assert set(ply_fields(header.comments)) == names
+        assert "domain" not in names
 
     def test_input_vertices_come_out_where_the_file_put_them_within_the_snap(
         self, tmp_path: Path, bumpy: Path, square: Path
@@ -251,9 +264,7 @@ class TestSyntheticEndToEnd:
         code, output, target = mesh(tmp_path, tif, domain, "--tolerance", tolerance)
         assert code == 0, output
         vtk = read_vtk(target.read_bytes())
-        assert field(sentence(vtk), rf"max error at DEM nodes at most {NUMBER} m") <= float(
-            tolerance
-        )
+        assert max_error(vtk) <= float(tolerance)
 
         shape = Polygon(self.OUTER, [self.INNER])
         grown, hole = shape.buffer(SNAP), Polygon(self.INNER).buffer(-SNAP)
@@ -276,9 +287,11 @@ class TestNoDataAndDegenerateInput:
         array = np.random.default_rng(2).uniform(0.0, 50.0, (ROWS, COLS)).astype(np.float32)
         array[15, 2] = float(SENTINEL)
         tif = write_tiff(tmp_path / "void.tif", micro_tiff(array, nodata=SENTINEL))
-        vtk, _ = meshed(tmp_path, tif, square)
+        vtk, report = meshed_stats(tmp_path, tif, square)
         assert (vtk.points[:, 2] != float(SENTINEL)).all()
-        assert field(sentence(vtk), rf"{NUMBER} vertices without data dropped") >= 1
+        removed = file_field(vtk, "nodata_vertices_removed")
+        assert int(removed) >= 1
+        assert stats_row(report, "nodata_vertices_removed") == removed
         x, y = SQUARE[0]
         assert np.hypot(vtk.points[:, 0] - x, vtk.points[:, 1] - y).min() > SNAP
 
@@ -294,7 +307,7 @@ class TestNoDataAndDegenerateInput:
         ]
         domain = geojson(tmp_path / "thin.geojson", outer)
         vtk, _ = meshed(tmp_path, bumpy, domain)
-        assert field(sentence(vtk), rf"max error at DEM nodes at most {NUMBER} m") <= 1.0
+        assert max_error(vtk) <= 1.0
         for x, y in outer:
             i = nearest(vtk.points, x, y)
             assert abs(vtk.points[i, 0] - x) <= SNAP / 2 + 1e-9
@@ -481,8 +494,7 @@ class TestRealTile:
             seconds = time.perf_counter() - began
             assert code == 0, output
             vtk = read_vtk(target.read_bytes())
-            text = sentence(vtk)
-            achieved = field(text, rf"max error at DEM nodes at most {NUMBER} m")
+            achieved = max_error(vtk)
             assert achieved <= float(tolerance)
             tris = np.asarray(vtk.polygons, dtype=np.int64)
             degree = np.bincount(tris.ravel(), minlength=len(vtk.points))
@@ -499,5 +511,5 @@ class TestRealTile:
                     f"{100 * np.mean(angles < 1.0):.2f} % under 1 deg, "
                     f"{100 * np.mean(angles < 10.0):.2f} % under 10 deg, "
                     f"worst {angles.min():.4f} deg"
-                    f"\nT-real report: {output.strip()}; {text}"
+                    f"\nT-real report: {output.strip()}"
                 )

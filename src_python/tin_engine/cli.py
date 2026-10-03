@@ -64,6 +64,7 @@ from tin_engine._core import (
     RefineOutcome,
     build_pslg,
     describe,
+    hardening,
     node,
     refine,
     sample,
@@ -102,8 +103,21 @@ from tin_engine.landcover import label_triangles
 from tin_engine.mosaic import Bounds, Seam
 from tin_engine.palettes import PALETTES, paraview_preset
 from tin_engine.raster import to_core
+from tin_engine.run_record import (
+    SEAMS_AGREE,
+    RunRecord,
+    Value,
+    as_json,
+    file_fields,
+    flat_record,
+    ordinal,
+    plural,
+    refined_record,
+    stride_record,
+    summary,
+)
 from tin_engine.sources import SOURCES
-from tin_engine.stats import PhaseClock, Refinement, Report, Sizes, _exact, quality, render
+from tin_engine.stats import PhaseClock, Report, Sizes, quality, render
 from tin_engine.target_grid import Block, TargetGrid
 from tin_engine.viz.fixtures import GALLERY, Fixture
 from tin_engine.viz.protocols import PslgLike
@@ -191,10 +205,16 @@ def main() -> None:
     """
 
 
+def bounds_checks() -> str:
+    """``off``, or ``on (<mode>)`` naming the checks the loaded ``_core`` has."""
+    return "off" if hardening == "none" else f"on ({hardening})"
+
+
 @app.command()
 def version() -> None:
-    """Print the installed rasputin version."""
+    """Print the installed rasputin version, then whether it is bounds-checked."""
     typer.echo(installed_version())
+    typer.echo(f"bounds checks: {bounds_checks()}")
 
 
 @dataclass(frozen=True, slots=True)
@@ -462,12 +482,6 @@ def draw(
     typer.echo(f"{target}")
 
 
-#: Ruling 4, verbatim. Written into BOTH files, because the thing it tells a
-#: reader -- that this surface is not terrain -- is equally untrue of each, and
-#: a person may open either one first.
-FLAT_ELEVATION = "none (z=0, --flat)"
-FLAT_COMMENT = f"elevation {FLAT_ELEVATION}"
-
 #: What the suffix of ``--out`` selects (increment 13, ruling 8).
 MESH_SUFFIXES = (".vtk", ".ply")
 
@@ -692,6 +706,13 @@ def mesh(
             "recommended); - prints it on stdout after the path line(s).",
         ),
     ] = None,
+    record_path: Annotated[
+        str | None,
+        typer.Option(
+            "--record",
+            help="Also write the run's record as JSON to this path, for reproducibility.",
+        ),
+    ] = None,
 ) -> None:
     """Write a mesh as legacy VTK or as PLY, by the suffix of ``--out``.
 
@@ -733,6 +754,10 @@ def mesh(
     ``clc18_kode``) also gives every triangle its polygon's code, in the cell
     array ``land_cover_code`` of a ``.vtk`` or the face property of a ``.ply``
     (increment 16c); ``rasputin palette corine`` writes natural colours for it.
+
+    What the run did is one record (increment 25, ``tin_engine.run_record``):
+    the file carries the fields a user of the mesh needs, ``--stats`` and
+    ``--record`` all of it, and stderr one summary.
     """
     clock = PhaseClock()
     dem_run: _DemMesh | None = None
@@ -863,56 +888,49 @@ def mesh(
             grid,
             checks,
         )
-        surface_mesh = dem_run.trimmed
-        sentence, described = dem_run.sentence, dem_run.described
+        surface_mesh, meta, values = dem_run.trimmed, dem_run.meta, dict(dem_run.values)
         names = [t.name for t in plan.tiles]
+        size = f"{meta.cols} columns x {meta.rows} rows"
         if len(names) > 1:
-            mosaic = f"mosaic of {len(names)} tiles, {dem_run.meta.rows} x "
-            mosaic += f"{dem_run.meta.cols} nodes"
-            typer.echo(mosaic, err=True)
-            sentence = f"{mosaic}; {sentence}"
-        if cached is not None:  # 23a-1, decided 9: the key and its credit
-            sentence = _ascii(f"{cached.source}, {SOURCES[cached.source].credit}; {sentence}")
-        fields = [("crs", dem_crs), ("elevation_source", sentence)]
-        comments = [f"crs {dem_crs}", f"elevation {sentence}"]
-        if grid is not None:  # 15c-2, D7
-            h = grid.spacing
-            fields += [
-                ("source_crs", source_crs),
-                ("source_transform", transform_description(source_crs, dem_crs)),
-                ("computation_grid", f"square {h} m grid in {dem_crs}, node (R, K) at "
-                 f"({h} K, -{h} R), resampled bilinear from {source_crs}"),
-            ]  # fmt: skip
+            typer.echo(f"DEM: {len(names)} files, {size}", err=True)
+        assumed = " (assumed: the DEM file does not say)" if meta.vertical_unit_assumed else ""
+        source = cached.source if cached is not None else _ascii("; ".join(names))
+        values |= {"crs": dem_crs, "dem_source": source, "dem_vertical_unit": "metres" + assumed}
+        if grid is None:
+            dx, dy = meta.delta_x, meta.delta_y
+            apart = f"{dx:g} m" if dx == dy else f"{dx:g} m x {dy:g} m"
+            values["dem_grid"] = f"{size}, {apart} apart"
+        else:  # 15c-2, D7
+            how = transform_description(source_crs, dem_crs)
+            values |= {"dem_crs": source_crs, "dem_transform": how}
+            values["resampled_grid"] = f"{grid.spacing} m square grid in {dem_crs}, {size}"
         if cached is not None:  # B16 (a): the notes the source asks to travel with it
             remote = SOURCES[cached.source]
-            notes = [("licence_note", _ascii(remote.licence_note))]
-            if remote.cite:
-                notes.append(("cite", _ascii("; ".join(remote.cite))))
-            fields += notes
-            comments += [f"{key} {text}" for key, text in notes]  # PLY: header comments
+            values["dem_credit"] = _ascii(remote.credit)
+            values["licence_note"] = _ascii(remote.licence_note)
+            values["cite"] = _ascii("; ".join(remote.cite)) or None
         if cached is not None or len(paths) > 1 or paths[0].is_dir():  # R11: the files used
-            fields.append(("dem_tiles", _ascii("; ".join(names))))
             seams = opened_seams
-            listed = "; ".join(s.entry() for s in seams) or "none"
-            fields.append(("dem_seams", _ascii(listed)))  # Ola's Q1 revised
-        if described and given is not None:
-            fields.append(("domain", described))
-            comments.append(f"domain {described}")
+            values["dem_tiles"] = _ascii("; ".join(names))
+            values["dem_seams"] = _ascii("; ".join(s.entry() for s in seams)) or SEAMS_AGREE
+        if given is not None:
             same = parse_crs(given.crs) == parse_crs(dem_crs)
             how = "none" if same else transform_description(given.crs, dem_crs)
-            fields += [("domain_crs", crs_label(given.crs)), ("domain_transform", how)]
+            values |= {"domain_crs": crs_label(given.crs), "domain_transform": how}
         if found is not None and sources and dem_run.feature_counts is not None:
-            # R6: one record per source, joined. Chains and noded vertices are
+            # R6: one entry per source, joined. Lines and their vertices are
             # whole-run (D5, a property of the merged PSLG, not a source), so
             # every entry carries the run totals; the per-source part is the
             # name, layer, map and feature count (found.counts[i]).
             chains, feature_vertices = dem_run.feature_counts
+            totals = f"{plural(chains, 'line', 'lines')}, "
+            totals += plural(feature_vertices, "vertex", "vertices")
             texts, crs_texts, transforms, notices = [], [], [], []
             for i, src in enumerate(sources):
-                layer = f":{found.layers[i]}" if found.layers[i] else ""
+                layer = f" layer {found.layers[i]}" if found.layers[i] else ""
+                counted = plural(found.counts[i], "feature", "features")
                 texts.append(
-                    f"{src.path.name}{layer}, map {src.class_map.name}, "
-                    f"{found.counts[i]} features, {chains} chains, {feature_vertices} vertices"
+                    f"{src.path.name}{layer}, class map {src.class_map.name}: {counted}, {totals}"
                 )
                 own = found.crs[i]
                 crs_texts.append(crs_label(own))
@@ -923,20 +941,18 @@ def mesh(
                 )
                 if src.class_map.notice and src.class_map.notice not in notices:
                     notices.append(src.class_map.notice)
-            text = _ascii("; ".join(texts))
-            fields += [("features", text), ("features_crs", "; ".join(crs_texts))]
-            fields.append(("features_transform", "; ".join(transforms)))
-            comments.append(f"features {text}")
-            if notices:
-                joined = "; ".join(notices)
-                fields.append(("features_notice", joined))
-                comments.append(f"features_notice {joined}")
+            values |= {"features": _ascii("; ".join(texts)), "features_crs": "; ".join(crs_texts)}
+            values["features_transform"] = "; ".join(transforms)
+            values["features_notice"] = "; ".join(notices) or None
             # R5: labelling runs iff a source carries codes (D1's single-system
             # invariant is enforced in _feature_sources). Every coded source's
             # polygons are labelled together over the merged FeatureSet.
             coded = next((s.class_map for s in sources if s.class_map.codes), None)
             if coded is not None:
                 codes, codes_text = _land_cover(dem_run.trimmed, found, coded, snap_spacing, clock)
+                values["land_cover_codes"] = codes_text
+        build = stride_record if tolerance is None else refined_record
+        record = build(triangles=len(surface_mesh.triangles), **values)
     else:
         assert name is not None
         if stride is not None:
@@ -954,16 +970,13 @@ def mesh(
             )
         label = name
         surface_mesh = _fixture_mesh(name, delaunay, snap_spacing, clock)
-        comments = [f"crs {crs}"] if crs else []
-        comments.append(FLAT_COMMENT)
-        fields = [("crs", crs)] if crs else []
-        fields.append(("elevation_source", FLAT_ELEVATION))
+        record = flat_record(triangles=len(surface_mesh.triangles), crs=crs)
         # --crs is unvalidated free text by ruling 5, so the writer's refusals
         # are refusals a person meets by typing, not internal invariants. Turn
         # the writer's ValueError into the usage error it is, in the one place
         # that knows the text came from the command line.
         try:
-            write_ply(np.zeros((1, 3)), faces=np.zeros((0, 3)), comments=comments)
+            write_ply(np.zeros((1, 3)), faces=np.zeros((0, 3)), comments=_comments(record))
         except ValueError as exc:
             raise typer.BadParameter(str(exc), param_hint="--crs") from exc
 
@@ -984,7 +997,10 @@ def mesh(
             )
         targets.append(constraints)
     report_target = _report_target(stats, out_parent, label, targets)
+    record_target = _record_target(record_path, out_parent, label, [*targets, report_target])
+    typer.echo(summary(record), err=True)
 
+    fields, comments = file_fields(record), _comments(record)
     encoders: list[Callable[[], bytes]]
     if out.suffix == ".vtk":
         encoders = [
@@ -1025,7 +1041,15 @@ def mesh(
             target.write_bytes(data)
         typer.echo(f"{target}")
     if stats is not None:
-        _write_report(clock, report_target, surface_mesh, dem_run, targets, seams)
+        _write_report(clock, report_target, surface_mesh, dem_run, targets, seams, record)
+    if record_target is not None:  # D5: after the mesh and the report
+        record_target.write_text(as_json(record, installed_version(), _command()), "ascii")
+        typer.echo(f"{record_target}")
+
+
+def _comments(record: RunRecord) -> list[str]:
+    """The record's file fields as ``.ply`` header comments, ``name value``."""
+    return [f"{name} {value}" for name, value in file_fields(record)]
 
 
 def _land_cover(
@@ -1038,8 +1062,9 @@ def _land_cover(
         mesh = (trimmed.vertices, trimmed.triangles, trimmed.edges)
         labels = label_triangles(*mesh, polygons=polygons, margin=2 * spacing)
     typer.echo(
-        f"land cover: {labels.regions} regions, {labels.outside} outside every polygon, "
-        f"{labels.overlapped} in more than one, {labels.thin} thinner than the snap",
+        f"land cover: {labels.regions} areas between lines; {labels.outside} in no polygon, "
+        f"{labels.overlapped} in more than one (the smallest wins), "
+        f"{labels.thin} too narrow to label with certainty",
         err=True,
     )
     text = f"{cmap.codes}, attribute {cmap.attribute}, map {cmap.name}; "
@@ -1085,6 +1110,28 @@ def _report_target(
     return target
 
 
+def _record_target(
+    record: str | None, out_parent: Path | None, label: str, taken: list[Path | None]
+) -> Path | None:
+    """D5: where ``--record`` writes, checked before any file is written; never
+    standard output (``--stats -``'s) nor a file this run also writes."""
+    if record is None:
+        return None
+    if record == "-":
+        raise typer.BadParameter("standard output is --stats -'s", param_hint="--record")
+    target = _destination(Path(record), out_parent, label)
+    if target in taken:
+        raise typer.BadParameter(
+            f"resolves to {target}, which this run also writes", param_hint="--record"
+        )
+    return target
+
+
+def _command() -> str:
+    """The command line as given, for ``--stats`` and ``--record``."""
+    return shlex.join([Path(sys.argv[0]).name, *sys.argv[1:]])
+
+
 def _write_report(
     clock: PhaseClock,
     target: Path | None,
@@ -1092,6 +1139,7 @@ def _write_report(
     dem_run: _DemMesh | None,
     files: list[Path],
     seams: tuple[Seam, ...],
+    record: RunRecord,
 ) -> None:
     """Build the report from what ran and write it, or print it for ``-``.
     The total stops here; the quality pass is timed on its own line (R4)."""
@@ -1109,21 +1157,23 @@ def _write_report(
         domain_holes=dem_run.domain_holes if dem_run else None,
         start_vertices=dem_run.start_vertices if dem_run else None,
         start_triangles=dem_run.start_triangles if dem_run else None,
-        dropped=trimmed.dropped if dem_run else None,
+        resampled=any(e.name == "resampled_grid" for e in record.entries),
     )
-    refinement = dem_run.refinement if dem_run else None
+    rows = [((e.wording, e.value, e.name), e.in_inputs) for e in record.entries]
     measured = quality(trimmed.vertices, trimmed.triangles)
     text = render(
         Report(
-            command=shlex.join([Path(sys.argv[0]).name, *sys.argv[1:]]),
+            command=_command(),
             sizes=sizes,
             quality=measured,
-            refinement=refinement,
             phases=clock.phases(),
             total=total,
             stats_seconds=(time.perf_counter_ns() - t0) / 1e9,
-            threads=os.cpu_count() if refinement else None,
+            bounds_checks=bounds_checks(),
+            threads=os.cpu_count() if sizes.start_vertices is not None else None,
             seams=[s.cells() for s in seams],
+            inputs=[row for row, inputs in rows if inputs],
+            result=[row for row, inputs in rows if not inputs],
         )
     )
     if target is None:
@@ -1362,12 +1412,12 @@ def _open_features(
     clock.add("features read", time.perf_counter() - t0 - found.clip_seconds)
     clock.add("features clip", found.clip_seconds)
     typer.echo(
-        f"{len(found.features)} features kept, {found.outside} dropped outside, "
-        f"{found.clipped} clipped, {found.empty} empty skipped",
+        f"features: {len(found.features)} kept ({found.clipped} cut at the domain outline), "
+        f"{found.outside} outside the domain, {found.empty} empty",
         err=True,
     )
     for table in found.scanned:
-        typer.echo(f"{table}: no R-tree index, table scanned", err=True)
+        typer.echo(f"{table}: this layer has no spatial index, so every row was read", err=True)
     return found
 
 
@@ -1385,18 +1435,17 @@ def _words(exc: ValueError) -> str:
 
 @dataclass(frozen=True, slots=True)
 class _DemMesh:
-    """What ``_dem_mesh`` made: the mesh and its file fields, then what
-    ``--stats`` reports about the run (None where a row does not apply)."""
+    """What ``_dem_mesh`` made: the mesh, then what ``--stats`` reports about
+    the run (None where a row does not apply), and the record entries it knows
+    (``run_record``'s builder arguments, increment 25)."""
 
     trimmed: Trimmed
-    sentence: str
-    described: str
     meta: RasterMeta
     domain_vertices: int | None
     domain_holes: int | None
     start_vertices: int | None
     start_triangles: int | None
-    refinement: Refinement | None
+    values: Mapping[str, Value]
     feature_counts: tuple[int, int] | None = None
 
 
@@ -1441,15 +1490,14 @@ def _dem_mesh(
     constraint feet (increment 20b). With ``grid`` and its ``checks`` (15c-2),
     the refined mesh is checked against the source's nodes (D5), after the
     tile is dropped (15e, fix 3).
-    Returns the mesh, the ``elevation`` sentence for the file,
-    the ``domain`` field (empty without one), and the ``--stats`` inputs;
+    Returns the mesh, the record entries it knows, and the ``--stats`` sizes;
     ``clock`` gets R5's phases.
     ``dem`` names the source in messages. Every refusal is a usage error in the
     engine's own words, and no file is written.
     """
     tile = held.take()
     meta = tile.meta
-    described = ""
+    values: dict[str, Value] = {}
     domain_vertices = domain_holes = None
     feature_counts = None
     if domain is not None:
@@ -1457,29 +1505,33 @@ def _dem_mesh(
         chains = [(indices, ROLES[role], mask) for indices, role, mask in started.chains]
         rings = (domain.polygon.exterior, *domain.polygon.interiors)
         domain_vertices, domain_holes = sum(len(r.coords) - 1 for r in rings), len(rings) - 1
-        s = "" if domain_holes == 1 else "s"
-        described = f"{domain_name}, 1 ring {domain_holes} hole{s}, {domain_vertices} vertices"
-        start = "start domain boundary, boundary z bilinear"
+        shape = f"{plural(domain_holes, 'hole', 'holes')}, {domain_vertices} vertices"
+        values["domain"] = f"{domain_name}: 1 outline, {shape}"
+        values["start_mesh"] = "the domain outline"
         run = _engine(started.vertices, chains, delaunay, spacing, clock)
         if features is not None:
-            start = "start domain boundary and features, vertex z bilinear"
+            values["start_mesh"] = "the domain outline and the feature lines"
             feature_counts = (len(chains) - len(rings), len(started.vertices) - domain_vertices)
             noded = len(run.noded.vertices) if run.noded is not None else 0
-            typer.echo(f"{len(started.vertices)} input vertices, {noded} noded vertices", err=True)
+            typer.echo(
+                f"lines: {len(started.vertices)} vertices read, {noded} after joining "
+                "shared edges and adding crossings",
+                err=True,
+            )
     else:
         if stride is not None:
             step = stride
         else:
             step = default_stride(meta) if tolerance is None else refine_start_stride(meta)
         xy, ring = subsample(meta, step)
-        start = f"start stride {step}"
+        values["start_mesh"] = ordinal(step)
         run = _engine(xy, [(ring, ChainRole.Outer, 0)], delaunay, spacing, clock)
     if run.mesh is None or run.noded is None:
         raise typer.BadParameter(f"{dem} has no mesh to write: {run.status}. {run.message}")
 
     with clock.phase("start mesh: constraint edges"):
         edges, masks = _constraint_arrays(run.mesh, run.noded)
-    refinement = None
+    refined = tolerance is not None
     if tolerance is None:
         mesh_xy = np.asarray(run.mesh.vertices)
         with clock.phase("sample"):
@@ -1493,8 +1545,6 @@ def _dem_mesh(
                 z=z,
                 valid=valid,
             )
-        sentence = f"bilinear from DEM, stride {step}"  # no domain without tolerance
-        report = ""
     else:
         t0 = time.perf_counter_ns()
         out = refine(
@@ -1509,18 +1559,21 @@ def _dem_mesh(
         _refine_phases(clock, (time.perf_counter_ns() - t0) / 1e9, out)
         if not out.ok():
             raise typer.BadParameter(f"{dem}: {out.message}", param_hint="--dem")
-        final, checked = out, ""
+        final: RefineOutcome = out
         del tile  # 15e fix 3: phase 2 runs without the target tile
         if grid is not None and checks is not None:
-            final, n = final_check.run(out, grid, checks, tolerance, clock)
-            if not final.ok():
-                raise typer.BadParameter(f"{dem}: {final.message}", param_hint="--dem")
-            checked = (
-                f" against the resampled grid; checked against {n} source nodes: "
-                f"{final.inserted} inserted in {final.rounds} rounds, max error "
-                f"{_exact(final.max_error)} m at source nodes, {final.coincident} coincident "
-                f"with a start vertex (max {_exact(final.coincident_max_error)} m)"
-            )
+            checked, n = final_check.run(out, grid, checks, tolerance, clock)
+            if not checked.ok():
+                raise typer.BadParameter(f"{dem}: {checked.message}", param_hint="--dem")
+            final = checked
+            values |= {
+                "resampled_grid_max_error_m": out.max_error,
+                "dem_nodes_checked": n,
+                "dem_check_points_inserted": checked.inserted,
+                "dem_check_rounds": checked.rounds,
+                "dem_nodes_at_vertices": checked.coincident,
+                "dem_nodes_at_vertices_max_error_m": checked.coincident_max_error,
+            }
         with clock.phase("trim"):
             trimmed = trim(
                 vertices=final.vertices,
@@ -1530,56 +1583,35 @@ def _dem_mesh(
                 z=final.z,
                 valid=final.valid,
             )
-        refinement = Refinement(
-            tolerance,
-            out.max_error,
-            out.rounds,
-            out.inserted,
-            out.flips,
-            out.uncovered,
-            out.carved,
-            out.quality_inserted,
-            out.quality_skipped,
-            out.feet,
-        )
-        quality_start = (
-            f"start min angle {_exact(min_angle)} deg" if min_angle > 0 else ("start quality off")
-        )
-        sentence = (
-            f"refined from DEM nodes, constrained Delaunay, tolerance {_exact(tolerance)} m, "
-            f"achieved max error {_exact(out.max_error)} m{checked}, {start}, "
-            f"{quality_start}, constraint feet {'on' if feet else 'off'}, "
-            f"{final.uncovered} valid DEM nodes not covered"
-        )
-        report = (
-            f"{out.quality_inserted} start quality nodes inserted, "
-            f"{out.quality_skipped} start quality skips, "
-            f"{out.feet} constraint feet, {out.feet_refused} feet refused, "
-            f"{out.rounds} rounds, {out.inserted} points inserted, {out.flips} flips, "
-            f"{len(trimmed.triangles)} triangles, achieved max error "
-            f"{_exact(out.max_error)} m, {out.uncovered} valid DEM nodes not covered, "
-            f"{len(run.mesh.triangles)} start triangles, "
-            f"{_off_node(np.asarray(run.mesh.vertices), meta)} start vertices off-node, "
-        )
+        values |= {
+            "start_min_angle_deg": min_angle,
+            "snap_to_lines": "on" if feet else "off",
+            "tolerance_m": tolerance,
+            "max_error_m": final.max_error,
+            "dem_nodes_outside_mesh": final.uncovered,
+            "refinement_rounds": out.rounds,
+            "points_inserted": out.inserted,
+            "points_inserted_on_nodata": out.carved,
+            "edge_flips": out.flips,
+            "start_quality_points_inserted": out.quality_inserted,
+            "start_quality_points_skipped": out.quality_skipped,
+            "points_snapped_to_lines": out.feet,
+            "snaps_refused": out.feet_refused,
+            "start_vertices_between_dem_nodes": _off_node(np.asarray(run.mesh.vertices), meta),
+        }
     if len(trimmed.triangles) == 0:
         raise typer.BadParameter(
             f"{dem} has no data under any triangle; nothing to write", param_hint="--dem"
         )
-    sentence += f", {trimmed.dropped} vertices without data dropped"
-    if meta.vertical_unit_assumed:
-        sentence += ", vertical unit assumed metres"
-    typer.echo(f"{report}{trimmed.dropped} vertices without data dropped", err=True)
-    refined = refinement is not None
+    values["nodata_vertices_removed"] = trimmed.dropped
     return _DemMesh(
         trimmed=trimmed,
-        sentence=sentence,
-        described=described,
         meta=meta,
         domain_vertices=domain_vertices,
         domain_holes=domain_holes,
         start_vertices=len(run.mesh.vertices) if refined else None,
         start_triangles=len(run.mesh.triangles) if refined else None,
-        refinement=refinement,
+        values=values,
         feature_counts=feature_counts,
     )
 
@@ -1689,32 +1721,36 @@ def catchment(
         raise typer.BadParameter(_words(exc), param_hint=hint) from exc
     for k, w in enumerate(result.windows, 1):
         b = w.bounds
+        grown = f"window widened to the {', '.join(w.grown)}"
         typer.echo(
             f"window {k}: x {b.x_min:.0f}-{b.x_max:.0f}, y {b.y_min:.0f}-{b.y_max:.0f}, "
-            f"{w.rows} x {w.cols} nodes, flood {w.seconds:.2f} s, "
-            + (f"grown on {', '.join(w.grown)}" if w.grown else "contained"),
+            f"{w.rows} x {w.cols} nodes, searched in {w.seconds:.2f} s, "
+            + (grown if w.grown else "catchment inside the window"),
             err=True,
         )
     cell = result.meta.delta_x * result.meta.delta_y
     if result.lake_area is None:
         typer.echo(
-            f"seed: the pour node at {result.seed} (a pour point must lie on the flow line; "
-            "it is not snapped)",
+            f"start: the outlet node at {result.seed} (an outlet must lie on the flow line; "
+            "it is not moved there)",
             err=True,
         )
     else:
         typer.echo(
-            f"seed: lake of {result.lake_area / 1e6:.6f} km2, {result.seed_nodes} nodes", err=True
+            f"start: lake of {result.lake_area / 1e6:.6f} km2, {result.seed_nodes} DEM nodes",
+            err=True,
         )
     typer.echo(
-        f"catchment: {result.nodes} nodes, {result.nodes * cell / 1e6:.6f} km2 of node area",
+        f"catchment: {result.nodes} DEM nodes, {result.nodes * cell / 1e6:.6f} km2",
         err=True,
     )
     vertices = len(result.fine.exterior.coords) - 1
     typer.echo(
-        f"fine outline: {vertices} vertices, {result.fine_area / 1e6:.6f} km2, "
-        f"{result.rings_dropped} rings dropped ({result.dropped_nodes} nodes), "
-        f"{result.holes_filled} holes filled ({result.holes_area / 1e6:.6f} km2), "
+        f"outline along DEM cells: {vertices} vertices, {result.fine_area / 1e6:.6f} km2, "
+        f"{plural(result.rings_dropped, 'separate patch', 'separate patches')} left out "
+        f"({result.dropped_nodes} nodes), "
+        f"{plural(result.holes_filled, 'enclosed gap', 'enclosed gaps')} filled "
+        f"({result.holes_area / 1e6:.6f} km2), "
         f"traced in {result.trace_seconds:.2f} s",
         err=True,
     )
