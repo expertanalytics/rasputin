@@ -172,7 +172,7 @@ keeps only what needs judgement.
 | **Merging** | A scratchpad script rewritten each session | Checked-in `tools/merge_queue.py`: one chain at a time (lock), "no checks reported" is not green, update branch, merge commit only, stops on a conflict and says which file | Getting Ola's word for each PR; resolving a conflict that is not mechanical |
 | **`ROADMAP.md` status** | Hand-edited in every PR | Built from the increment files' status lines (`next.md`, "The merges of 2026-10-03", item 14, option b) | none |
 | **Recording a review** | The main session appends by hand (sometimes the reviewer did, wrongly) | Script `tools/record_review.py` appends the round from the handback's fixed fields (verdict, range, line count, blocking items) | none |
-| **`session.md`** | 76 hand edits today | Script `tools/session.py now / queue / ask / answered`, writing the format Ola ruled today; the recap warns on anything else | Wording the ASK for Ola |
+| **`session.md`** | Hand-edited; 74 shell commands on it by 16:04 today | Script `tools/session.py now / queue / ask / answered`, writing the format Ola ruled today; the recap warns on anything else | Wording the ASK for Ola |
 | **When to run `@orchestrator`** | Remembered; missed five times today | The recap prints "N merges since the last retrospective" (`next.md`, "The merges of 2026-10-03", item 9b) | none |
 | **Routing what a handback raises** | Read and relayed by the main session | Handbacks end in fixed headings: Assumptions beyond the ruling, Questions for Ola, Lessons. A script (later a hook when a persona stops) turns them into queue lines: assumptions to `@architect`, questions to `ASK OLA:` lines, lessons to `@orchestrator` | Translating the questions into plain words for Ola |
 | **Filling an unattended window** | A memory note | Hook (ruled in principle, `next.md`, "The window of 2026-10-02, the restart of 2026-10-03, h7", item 1): while unattended mode is on, a turn may not end with nothing running and a decision-free item queued | Building the queue before Ola leaves |
@@ -285,9 +285,10 @@ empty; `away.py --back` prints the longest idle stretch), item 2 (`away.py
 --back` and the recap read every worktree's `.claude/current-task/`), item 3
 (an `ASK OLA:` line counts only at the start of a line, and an empty one is
 warned about), item 5 (the recap lists running background jobs), item 6
-(after a merged change to `CLAUDE.md` or `.claude/agents/`, restart or
-`/compact` before spawning), and item 4 as option (a): `session.md` holds
-NOW, QUEUE, and one `ASK OLA:` line per open decision, nothing else.
+("after merging a change to `CLAUDE.md` or `.claude/agents/`, restart
+before spawning the changed persona; until then the brief says to read the
+persona file from disk"), and item 4 as option (a): `session.md` holds NOW,
+QUEUE, and one `ASK OLA:` line per open decision, nothing else.
 
 **Stage 1: briefs come from files (the first step).** The largest group of
 costly errors, rows 1 to 8.
@@ -344,7 +345,8 @@ receive (undocumented).
   anything beside a `@perf` timing run. About 50 lines.
 - When a turn ends (`Stop`): in unattended mode, refuse to stop with
   nothing running and a decision-free item queued (item 1 of the section
-  named above); at any time, list unexplained codes in the message, as a warning only for the
+  named above); at any time, list unexplained codes in the message, as a
+  warning only for the
   first week. About 60 lines.
 - After a merge or pull that changes `CLAUDE.md`: "run `/compact` before the
   next spawn". About 15 lines.
@@ -401,3 +403,5 @@ pairs, lean briefs, fill the window). The rule count should go down, not up.
 ## Review
 
 **Round 1, 2026-10-03.** Commit 2d2d5a6. Verdict: CHANGES REQUESTED. LOC: 0 production lines (+383, +16 docs). Blocking: (1) section 1's counts are those of ~16:06:42, not 16:04 (37 spawns, 186 shell commands, 74 on session.md at 16:04:28); row 4's seven reviewer runs were seven briefs to six runs; (2) section 4 misquotes 'Building effective agents'. 25 transcript lines, the Claude Code docs quotes and every paper and article checked and true otherwise; merges cleanly onto 6cdc8cc. Not pushed; no CI.
+
+**Round 2, 2026-10-03.** Range 2d2d5a6..5d5a4eb (merge 10d274e, fixes 5d5a4eb). Verdict: CHANGES REQUESTED. LOC: 0. Round-1 fixes verified. Blocking: (1) section 3's session.md row still says 76 hand edits (74 shell commands at 16:04); (2) section 5 adds /compact to Ola's ruling on item 6, which said restart. Merges cleanly; citations resolve; not pushed; no CI.
