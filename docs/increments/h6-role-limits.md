@@ -65,9 +65,10 @@ allowlist, not R-B's denylist).
 | `tester` | `tests/` |
 | `developer` | `src_python/`, `include/`, `src/`, `bindings/`, `tools/`, `.claude/hooks/`, `.github/`, `CMakeLists.txt`, `pyproject.toml` |
 | `perf` | `docs/benchmarks/` |
-| `architect` | `docs/`, `ROADMAP.md`, `CLAUDE.md`, `.claude/` files ending in `.md` |
-| `reviewer`, `orchestrator`, and any other name | nothing |
-| `dispatcher` (main session, §3.1) | `docs/`, `ROADMAP.md`, `.claude/current-task/session.md` |
+| `architect` | `docs/` except `docs/retrospectives/`, `ROADMAP.md`, `CLAUDE.md`, `.claude/` files ending in `.md` |
+| `orchestrator` | `docs/retrospectives/` (h7) |
+| `reviewer`, and any other name | nothing |
+| `dispatcher` (main session, §3.1) | `docs/` except `docs/retrospectives/`, `ROADMAP.md`, `.claude/current-task/session.md` |
 | every subagent | its own `.claude/current-task/<agent_type>-*.md` |
 
 Rule files stay under `guard_governance.py` and h5 whatever this table says.
@@ -135,6 +136,10 @@ Controls and edges:
     the same path rewritten by the call → attributed.
 12. A Bash call that changes nothing → no output.
 13. A Bash call that writes only under `build/` (ignored) → no output.
+14. `orchestrator` Write `docs/retrospectives/x.md` → allowed;
+    `orchestrator` Write `docs/increments/x.md` → `deny`; `architect` Write
+    `docs/retrospectives/x.md` → `deny` (h7: @orchestrator is the only writer
+    there).
 
 Not invariant-critical: no mutation round.
 
@@ -160,6 +165,17 @@ one sentence replaces two in `REQUIRED-READING.md`, plus a one-line pointer in
 each of the six persona files. **~125**, one PR. No settings change.
 
 ## 7. Questions for Ola
+
+Both ruled by Ola on 2026-10-03 (`docs/increments/h7-orchestrator-role.md`):
+
+- **Question 1: no `agent_type` is the dispatcher.** The main session,
+  started with no agent name, is the `dispatcher` row. No
+  `.claude/agents/dispatcher.md`.
+- **Question 2: `@orchestrator` is kept, with a new role** (watch the
+  workflow, research agentic design, own `docs/retrospectives/`). Its row is
+  read-only plus `docs/retrospectives/`.
+
+The questions as asked:
 
 1. **The dispatcher's identity.** Should an event with no `agent_type` simply
    *be* the `dispatcher` row (recommended: it needs nothing at launch)? The

@@ -5,7 +5,8 @@ The rules this project works by.
 Each entry is a rule, how to apply it, a pointer to where its incident is
 recorded, and a status. The incident itself is not here.
 
-**When you learn something, write it in the log** — `docs/retrospectives/`.
+**When you learn something, report it in your handback**; `@orchestrator`
+records it in the log, `docs/retrospectives/`, and is the only writer there.
 Only a retrospective promotes a log entry to a principle here. The file you
 happen to have open is not the log, and neither is this one.
 
