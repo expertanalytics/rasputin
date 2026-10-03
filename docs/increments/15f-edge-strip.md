@@ -54,7 +54,7 @@ These came from reading the code the strip builds on. Each one adds lines
 beyond 15c's estimate of 160-210.
 
 **F1. Membership cannot find a point on a constraint.** `scan_points`
-(`include/terrain/refinement/refine_points.hpp:129`) decides which triangle
+(`include/terrain/refinement/refine_points.hpp:101`) decides which triangle
 holds a check point with three exact orientation tests on the point's stored
 position. A crossing computed in floating point lies within rounding of its
 edge, on one side or the other. On the domain's outline, a point on the
