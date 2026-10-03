@@ -1,0 +1,2 @@
+grid 50315 rows x 40943 cols = 2.060 G nodes
+one 256-row block, 1 thread: tracemalloc peak 1.562 GB, 149.0 B per node; its canvas 0.042 GB; wall 1.93 s
