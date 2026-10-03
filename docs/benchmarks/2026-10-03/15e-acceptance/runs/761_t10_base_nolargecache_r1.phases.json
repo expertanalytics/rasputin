@@ -1,0 +1,82 @@
+{
+ "phases": [
+  {
+   "phase": "P1 decode + assemble",
+   "seconds": 2.474247932434082,
+   "start": 51872248,
+   "end": 2322434160,
+   "peak": 6812226792,
+   "exact": true
+  },
+  {
+   "phase": "P2 resample (blocks)",
+   "seconds": 25.73705291748047,
+   "start": 2322434160,
+   "end": 4483714672,
+   "peak": 14261202032,
+   "exact": true
+  },
+  {
+   "phase": "P2 end (DemTile copy)",
+   "seconds": 0.5532741546630859,
+   "start": 4483714672,
+   "end": 4483714696,
+   "peak": 6638408816,
+   "exact": false
+  },
+  {
+   "phase": "start mesh",
+   "seconds": 0.12488079071044922,
+   "start": 4483714696,
+   "end": 4485844616,
+   "peak": 4492136072,
+   "exact": false
+  },
+  {
+   "phase": "P3 refine phase 1",
+   "seconds": 4.265016078948975,
+   "start": 4485844616,
+   "end": 4552969960,
+   "peak": 4704440184,
+   "exact": false
+  },
+  {
+   "phase": "P4 store fill + freeze",
+   "seconds": 15.706693172454834,
+   "start": 4552969960,
+   "end": 2554419872,
+   "peak": 6146990240,
+   "exact": false
+  },
+  {
+   "phase": "P5 phase 2 (refine_points)",
+   "seconds": 9.158959150314331,
+   "start": 2554419872,
+   "end": 2626444224,
+   "peak": 3107281976,
+   "exact": false
+  },
+  {
+   "phase": "P6 trim + write",
+   "seconds": 1.065281867980957,
+   "start": 2626444224,
+   "end": 83596496,
+   "peak": 2818743496,
+   "exact": false
+  }
+ ],
+ "units": {
+  "source mosaic nodes": 560943760,
+  "target grid nodes": 538409322,
+  "check points": 270407394,
+  "phase 1 triangles (2 V - hull)": 2772536,
+  "final triangles": 2940024,
+  "P1 rise per mosaic node, B": 4.047753222176854,
+  "P2 transient per block node, B (peak - start - canvas) / (threads x block rows x cols)": 137.5626802841359,
+  "P2 end rise per grid node, B (copy)": 8.016158858408474,
+  "P4 rise per check point, B": 5.894884220510627,
+  "P4 held after freeze per check point, B": -7.390885502191556,
+  "P3 rise per phase-1 triangle, B": 78.84318472330025,
+  "P5 rise per final triangle, B": 188.0467996179623
+ }
+}
