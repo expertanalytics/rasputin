@@ -497,3 +497,7 @@ Where the implementation departs from this record:
   and the sentinel, and planted both ways: with the block removed it fails
   ("A's cached OFF leaked into the default install"); with isolation restored
   it fails on the sentinel. §3 and §12 above now say when the trap occurs.
+
+## Review
+
+**Round 1, 2026-10-03.** Range `431781c..738f9dd` (design 9b4157f, merge 584a704, rulings d4d9832, red 21d5168, green 23d4dad, T6 rework 57e1264, docs 738f9dd). Verdict: CHANGES REQUESTED. LOC (CLAUDE.md §2): 61 added, 8 removed, 53 net, against about 57. Blocking: (1) conflict with origin/master 586fbc1 in `tests/cpp/CMakeLists.txt` (both appended); merge, rebuild ON and OFF, rerun ctest and pytest; (2) seven citations this branch moved (`06-cdt-viewer.md:966`, `:968`; `15f-edge-strip.md:551`; `generic-harness.md:192`, `:206`; two dated 16b12 acceptance citations of `tools/bench.py:605`, to pin); (3) INSTALL.md's "set the option OFF and pass the mode in CMAKE_CXX_FLAGS" breaks any build with the C++ tests (the compile-time guard refuses it); say it applies only without tests; (4) the "62 production lines" and bench.py figures in this file and ROADMAP row 24. Guard tests, strings, bench.py, CI YAML, governed edits and docs otherwise sound; ON 878/878, OFF 878 with T2 skipped, pytest 3696 passed. Not pushed; no CI.
