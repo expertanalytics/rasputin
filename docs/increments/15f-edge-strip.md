@@ -16,9 +16,9 @@ a 15 letter. `15d` is taken: it names the window-decoding design in
 `ROADMAP.md` and `23-basin-scale.md` still say "23a-1 replaces 15d". `15e` is
 the memory fixes (branch `worktree-agent-ab601ec06c6508cb9`). So the first free
 id is `15f` (*default*). `15e-memory-fixes.md` line 17 on that branch says
-"15d is taken by the edge strip"; that line should be changed to "15f" before
-15e's push, or by this increment's PR if it is based on 15e (see "Which branch
-to base on").
+"15d is taken by the edge strip". That stale line is noted here for 15e's PR,
+which should change it to "15f" before its push. It is not edited from this
+branch.
 
 ## What is ruled
 
@@ -699,6 +699,17 @@ implementation is asked for beyond those three mutants.
 - **CC6, direction and order.** Reversing every pair and permuting the edge
   list gives, per edge, the same points bit for bit.
 
+**Settled after 15f-1's red step (46e69ad).** The design said nothing on two
+points; `@tester` chose for both, and the choices stand as part of the
+design:
+
+- **The refusal message** of `constraint_check_points` (`std::invalid_argument`,
+  D2) contains `constraint_check_points`, in the style of refine's
+  `"refine: ..."` messages.
+- **`edge_count()` equals the number of edges given.** Each given edge is
+  filed once, as its own entry, in the order given and in canonical direction
+  (D2, step 2). An edge with no kept points has an empty `on_edge(k)`.
+
 **C++ (Catch2), the loop (15f-2):**
 
 - **ES1, the defect, then its repair.** A start mesh with a long constrained
@@ -752,7 +763,8 @@ implementation is asked for beyond those three mutants.
 
 **Python (pytest), 15f-2:**
 
-- **PY1, the binding.** Shapes and dtypes refused as `ValueError`; the
+- **PY1, the binding** (every binding of this increment, the store's and the
+  generator's included). Shapes and dtypes refused as `ValueError`; the
   properties; the GIL released (a second thread makes progress during a run,
   as 15c-1's binding tests do).
 - **PY2, `edge_strip.py` alone,** with a fake `_core`: the calls are made in
@@ -778,25 +790,35 @@ Counted in `CLAUDE.md` §2's unit. Estimates, with the worst cases at +39 %
 
 | PR | what | est. | +39 % | +60 % |
 |---|---|---:|---:|---:|
-| **15f-1** | **The generator and its store, C++** | | | |
+| **15f-1** | **The generator and its store, C++ only** | | | |
 | | `constraint_points.hpp`: `ConstraintPoint`, `ConstraintCheckPoints`, `constraint_check_points` | 90 | | |
 | | `refine.hpp`: `detail::lattice_position` extracted | 10 | | |
-| | `bindings/core.cpp`, `_core.pyi`: the store and the generator | 42 | | |
-| | **15f-1 total** | **142** | **197** | **227** |
-| **15f-2** | **The strip in the loop, and the wiring** | | | |
+| | **15f-1 total** | **100** | **139** | **160** |
+| **15f-2** | **The strip in the loop, the bindings, and the wiring** | | | |
 | | `refine_points.hpp`: `point_loop` (the moved body's changed lines), the strip scan and ownership, the sub-edge map, `foot_fits` and refused points, consumption, the F2 rescan, the end pass, two entry points, the outcome, `PointScan` | 203 | | |
+| | `bindings/core.cpp`: `ConstraintCheckPoints` and `constraint_check_points` (moved from 15f-1, ruling of 2026-10-03 below) | 30 | | |
 | | `bindings/core.cpp`: `refine_points(..., strip)`, `refine_strip`, the outcome properties | 62 | | |
-| | `_core.pyi` | 23 | | |
+| | `_core.pyi`: all the stubs, the store's and the generator's included | 35 | | |
 | | `edge_strip.py` | 30 | | |
 | | `final_check.py` | 5 | | |
 | | `cli.py`: the calls, the sentence, the report | 25 | | |
-| | **15f-2 total** | **348** | **484** | **557** |
+| | **15f-2 total** | **390** | **542** | **624** |
+
+**Ruled by `@architect`, 2026-10-03, after 15f-1's red step (46e69ad): option
+(a), the bindings move to 15f-2.** `@tester` found that 15f-1, as first split,
+would merge the generator's binding and stubs (about 42 lines) with no test
+until PY1 in 15f-2. Option (a) moves them to 15f-2, where PY1 tests them. 15f-1
+is C++ only, and its red suite (CC1-CC6 and the `lattice_position` cases) covers
+all of it. Option (b) would have moved PY1's binding cases into 15f-1. It was
+not chosen, for two reasons: the red suite is already committed, and option (b)
+would have added a Python round to a PR that nothing in Python calls yet. Both
+PRs stay under 700 at both margins.
 
 **Why two PRs** (*default*). As one PR the strip is about 490 lines: 681 at
 +39 % and 784 at +60 %, which breaks the convention 15c and 23 kept (under
-700 at both). Split this way, 15f-1 is a pure addition that 23b needs anyway
-and that `@tester` can drive with nothing but edges and a raster. 15f-2
-carries the behaviour change and its acceptance. If Ola prefers one PR and
+700 at both). Split this way, 15f-1 is a pure C++ addition that 23b needs
+anyway and that `@tester` can drive with nothing but edges and a raster. 15f-2
+carries the behaviour change, every binding, and the acceptance. If Ola prefers one PR and
 accepts the +39 % margin only, the split can be dropped with no design change.
 
 **Why more than 15c's 160-210.** F1 needs points filed by edge, with the
@@ -876,8 +898,8 @@ Base the implementation branch on **15e's tip**, `worktree-agent-ab601ec06c6508c
   against its 46.2 M check points (0.23 %), and 356,000 on 761 against
   270.4 M (0.13 %). The check-point counts are from `basin-level3/README.md`.
   So the strip needs no arena.
-- If the branch is based on 15e, its PR fixes 15e's line "15d is taken by the
-  edge strip" (the reason is under "Why 15f").
+- 15e's line "15d is taken by the edge strip" is fixed in 15e's own PR (see
+  "Why 15f"), not in this one.
 
 ## Defaults chosen
 
