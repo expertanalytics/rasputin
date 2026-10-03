@@ -663,9 +663,9 @@ class TestPropertyStrokes:
     interpolates that string into a `class="..."` attribute UNESCAPED -- only
     `_text` escapes -- and neither ever sees an `EdgeProperty.name`, because
     `viz/` may import no vocabulary at all. The one bridge is `PROPERTY_STROKES`
-    (`cli.py:163`), which constructs a `PropertyStroke` from a feature name, so
-    every name that can reach the attribute is re-validated here. A token
-    containing a quote ends the attribute, and a stylesheet read from a
+    (`src_python/tin_engine/cli.py@390b516:163`), which constructs a `PropertyStroke` from
+    a feature name, so every name that can reach the attribute is re-validated here. A
+    token containing a quote ends the attribute, and a stylesheet read from a
     configuration file is untrusted input.
 
     `features.EdgeProperty.name`'s narrower `^[a-z][a-z0-9_]*$` is defence in
