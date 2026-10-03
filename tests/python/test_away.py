@@ -393,7 +393,7 @@ def test_back_prints_the_queue_by_branch_and_archives_it(
         "    2026-09-30T21:00:00+00:00 guard_push developer: gh pr merge 1",
         "  feat-b",
         "    2026-09-30T20:00:00+00:00 guard_governance tester: Edit /r/CLAUDE.md",
-        "ASK OLA lines in .claude/current-task/:",
+        "ASK OLA lines, every worktree's .claude/current-task/:",
     ]
     assert "  session.md: ASK OLA: may I push?" in lines
     assert not flag_path(repo).exists()
@@ -504,7 +504,7 @@ def test_back_survives_a_broken_session_state(repo: Path) -> None:
     )
     assert result.returncode == 0, result.stderr
     lines = result.stdout.splitlines()
-    at = lines.index("ASK OLA lines in .claude/current-task/:")
+    at = lines.index("ASK OLA lines, every worktree's .claude/current-task/:")
     assert lines[at + 1] == "  (unavailable: RuntimeError: planted)"
     assert not flag_path(repo).exists()
     assert not (state_dir(repo) / "queue.jsonl").exists()

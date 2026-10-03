@@ -99,9 +99,10 @@ def test_pending_decisions_collects_ask_ola_lines_from_every_task_file(
     (tmp_path / "session.md").write_text("SESSION: did a thing.\nASK OLA: fix before landing?\n")
     (tmp_path / "tester-101010.md").write_text("ask ola: keep the slow case?\nother\n")
     (tmp_path / "developer-111111.md").write_text("nothing pending\n")
+    # h8 §3.2 (Ola's ruling on item 3): matching is case-sensitive, so the
+    # lowercase line no longer counts.
     assert session_state.pending_decisions(tmp_path) == [
         "session.md: ASK OLA: fix before landing?",
-        "tester-101010.md: ask ola: keep the slow case?",
     ]
 
 
