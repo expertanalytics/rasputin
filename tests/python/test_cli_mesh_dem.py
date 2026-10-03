@@ -37,6 +37,7 @@ from geotiff_fixtures import (
     without_codecs,
 )
 from plyread import read_ply, vertex_array
+from recordread import file_field, start_stride, stats_row
 from test_cli_mesh import plain
 from tin_engine.cli import app
 from tin_engine.io.geotiff import decode_dem
@@ -97,6 +98,13 @@ def run_vtk(tmp_path: Path, tif: Path, *extra: str) -> VtkFile:
     return read_vtk(out.read_bytes())
 
 
+def stats_of(tmp_path: Path, tif: Path, *extra: str) -> tuple[VtkFile, str]:
+    """``run_vtk`` with ``--stats`` beside the mesh: (mesh, report)."""
+    md = tmp_path / "x.md"
+    vtk = run_vtk(tmp_path, tif, "--stats", str(md), *extra)
+    return vtk, md.read_text(encoding="utf-8")
+
+
 class TestTheAcceptanceInvocation:
     """Test 13."""
 
@@ -114,20 +122,27 @@ class TestTheAcceptanceInvocation:
         assert "elevation" not in vtk.field_data
 
     def test_records_the_crs_and_the_stride(self, tmp_path: Path, baseline: Path) -> None:
-        vtk = run_vtk(tmp_path, baseline)
+        """Increment 25: the file names the CRS and the DEM; the stride is
+        ``start_mesh`` in ``--stats`` (assumed on the no-tolerance path too,
+        the mesh being the stride grid itself)."""
+        vtk, report = stats_of(tmp_path, baseline)
         assert vtk.field_data["crs"].values == ("EPSG:25833",)
-        (elevation,) = vtk.field_data["elevation_source"].values
-        assert "bilinear" in elevation
-        assert "stride 1" in elevation
+        assert file_field(vtk, "dem_source") == "tile.tif"
+        assert "elevation_source" not in vtk.field_data
+        for absent in ("tolerance_m", "max_error_m"):  # no tolerance, no tolerance fields
+            assert absent not in vtk.field_data, absent
+        assert start_stride(report) == 1
 
     def test_an_assumed_vertical_unit_is_said(self, tmp_path: Path, baseline: Path) -> None:
-        (elevation,) = run_vtk(tmp_path, baseline).field_data["elevation_source"].values
-        assert "vertical unit assumed metres" in elevation
+        _, report = stats_of(tmp_path, baseline)
+        unit = stats_row(report, "dem_vertical_unit")
+        assert "metres" in unit and "assumed" in unit, unit
 
     def test_a_declared_vertical_unit_is_not_called_assumed(self, tmp_path: Path) -> None:
         tif = write_tiff(tmp_path / "m.tif", micro_tiff(geokeys=with_keys({VERTICAL_UNITS: METRE})))
-        (elevation,) = run_vtk(tmp_path, tif).field_data["elevation_source"].values
-        assert "assumed" not in elevation
+        _, report = stats_of(tmp_path, tif)
+        unit = stats_row(report, "dem_vertical_unit")
+        assert "metres" in unit and "assumed" not in unit, unit
 
     def test_stride_picks_every_nth_node_and_the_last(self, tmp_path: Path, larger: Path) -> None:
         vtk = run_vtk(tmp_path, larger, "--stride", "3")
@@ -137,14 +152,14 @@ class TestTheAcceptanceInvocation:
         assert set(cols.tolist()) == {0, 3, 6, 8}
         assert len(vtk.points) == 3 * 4
         assert_z_is_the_node_value(tile, vtk.points)
-        (elevation,) = vtk.field_data["elevation_source"].values
-        assert "stride 3" in elevation
+        _, report = stats_of(tmp_path, larger, "--stride", "3")
+        assert start_stride(report) == 3
 
     def test_the_default_stride_is_the_formula(self, tmp_path: Path) -> None:
         """300 columns: the smallest stride giving at most 256 per side is 2."""
         tif = write_tiff(tmp_path / "wide.tif", micro_tiff(elevations(rows=3, cols=300)))
-        (elevation,) = run_vtk(tmp_path, tif).field_data["elevation_source"].values
-        assert f"stride {max(1, math.ceil(299 / 255))}" in elevation
+        _, report = stats_of(tmp_path, tif)
+        assert start_stride(report) == max(1, math.ceil(299 / 255))
 
 
 class TestNoData:
@@ -153,7 +168,7 @@ class TestNoData:
     def test_a_nodata_edge_row_is_dropped_and_counted(self, tmp_path: Path) -> None:
         array = elevations(rows=5, cols=6)
         array[0, :] = float(SENTINEL)
-        tif = write_tiff(tmp_path / "void.tif", micro_tiff(array, nodata=SENTINEL))
+        tif = write_tiff(tmp_path / "nodata.tif", micro_tiff(array, nodata=SENTINEL))
         out = tmp_path / "x.vtk"
         code, output = invoke("--dem", str(tif), "--out", str(out))
         assert code == 0, output
@@ -162,10 +177,10 @@ class TestNoData:
         assert len(vtk.points) == 4 * 6
         assert_z_is_the_node_value(tile, vtk.points)
         assert (vtk.points[:, 2] != float(SENTINEL)).all()
-        (elevation,) = vtk.field_data["elevation_source"].values
-        assert "6 vertices without data dropped" in elevation
-        # R3: the count also goes to stderr. The wording there is not ruled.
-        assert re.search(r"\b6\b", output.replace(str(tmp_path), "")), output
+        assert file_field(vtk, "nodata_vertices_removed") == "6"
+        # R3, worded by increment 25's summary line (D7).
+        assert re.search(r"\b6 vertices on NoData cells\b", output), output
+        assert "without data dropped" not in output
 
     def test_an_all_nodata_tile_writes_nothing(self, tmp_path: Path) -> None:
         array = np.full((3, 4), float(SENTINEL), dtype=np.float32)
@@ -261,19 +276,17 @@ class TestRealFixture:
 
     @needs_codecs
     def test_meshes_the_real_dem(self, tmp_path: Path) -> None:
-        out = tmp_path / "tile.vtk"
-        code, output = invoke("--dem", str(KARTVERKET), "--out", str(out))
+        out, md = tmp_path / "tile.vtk", tmp_path / "tile.md"
+        code, output = invoke("--dem", str(KARTVERKET), "--out", str(out), "--stats", str(md))
         assert code == 0, output
         vtk = read_vtk(out.read_bytes())
         z = vtk.points[:, 2]
         assert np.isfinite(z).all()
         assert z.min() >= -1.3 and z.max() <= 391.8
         assert vtk.field_data["crs"].values == ("EPSG:25833",)
-        (elevation,) = vtk.field_data["elevation_source"].values
-        assert "stride 20" in elevation
+        assert start_stride(md.read_text(encoding="utf-8")) == 20
         assert len(vtk.points) < 254 * 254, "the NoData outline drops some vertices"
-        dropped = re.search(r"(\d+) vertices without data dropped", elevation)
-        assert dropped is not None and int(dropped.group(1)) > 0
+        assert int(file_field(vtk, "nodata_vertices_removed")) > 0
 
         vtk_module = pytest.importorskip("vtk")
         reader = vtk_module.vtkPolyDataReader()
