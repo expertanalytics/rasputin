@@ -226,7 +226,7 @@ not rebuild `_core`, and the rebuild+`cp`+`touch` steps are manual.
 
 ### 4.1 LOC reconciliation
 
-**Increment 16e** (`docs/increments/16e-multi-features.md:418-434`): estimate
+**Increment 16e** (`docs/increments/16e-multi-features.md@390b516:418-434`): estimate
 ~45 production lines, worst case ~70. The green commit `e3ec289` shows
 `115 insertions(+), 61 deletions(-)` across `cli.py` and `feature_input.py`
 (`git show e3ec289 --stat`), but that gross count includes the reformatting
