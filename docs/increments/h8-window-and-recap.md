@@ -499,6 +499,103 @@ The four questions of the first draft, answered:
 4. **The longest quiet stretch in `windows.jsonl`:** no; `--back` prints it
    only (§3.4).
 
+## 8. Settled after the red step (cb4110e)
+
+@tester pinned 19 choices the design left open. I read each pin in the tests,
+and confirm all 19. Points 7, 13, 14 and 19 needed a ruling. They do not
+change any pinned assertion, but @tester adds the cases listed at the end of
+this section in one amendment commit before green.
+
+1. **Cap inside `background_jobs`.** Confirmed: it returns at most 4 job
+   lines, then an unindented `... <n> more`.
+2. **Indentation.** Confirmed: the recap indents every line of every list two
+   spaces, `... <n> more` included.
+3. **Job command cut.** Confirmed: exactly the first 100 characters of the
+   whitespace-collapsed text, with no marker.
+4. **`ps` call.** Confirmed: `ps` is found on `PATH` and run as an argument
+   list, not through a shell. The ancestor walk starts at the recap's own pid,
+   which is excluded with its ancestors.
+5. **Failing `ps`.** Confirmed: the section prints `(could not list: ...)`,
+   and the rest of the recap still prints.
+6. **Drift.** Confirmed: with drift and no jobs, `(wrapper format not
+   recognised)` is the only line. Under the hook launcher the line is
+   `(none)`.
+7. **`wrapper_check`.** Confirmed: a `-c` shell above the first Claude Code
+   process is not looked at, and `[]` gives `unknown`. **Ruled:** a
+   recognised wrapper among the ancestors gives `confirmed` even when no
+   Claude Code process is found above it. The wrapper is the evidence about
+   the format, and a renamed `claude` binary must not hide it.
+8. **`session_format` order.** Confirmed: warnings are grouped by category
+   in §3.3's order, in line order within each group. The "not a" quote is the
+   first 60 characters of the line with its trailing whitespace removed, with
+   no marker.
+9. **Empty `ASK OLA:` line.** Confirmed: the warning is listed in place, in
+   file order, with a 1-based line number. A counted line is listed stripped
+   of surrounding whitespace only, so its bullet stays (`- ASK OLA: b`).
+10. **Position of the format block.** Confirmed: the `session.md format:`
+    heading comes directly after the last "Waiting on Ola" line.
+11. **Display cut.** Confirmed. **Ruled exactly:** a listed line, without its
+    indent, longer than 160 characters is shown as its first 157 characters
+    plus `...`, 160 in all. Shorter lines are shown unchanged. This is within
+    the pinned bounds (157 to 163, ending `...`, starting with the first 150).
+12. **Worktree order and prefix.** Confirmed: the order after the main
+    checkout is `git worktree list --porcelain`'s. A worktree inside the main
+    checkout gets its path relative to it. Any other worktree gets its path as
+    porcelain prints it, which is absolute.
+13. **Size table formats.** Confirmed:
+    - the label is the retrospective file's basename and ` (<hash>)`;
+    - a file line is `  {words:5} {change:>6} {path}`, with `0` for an
+      unchanged file;
+    - the total line is `  {total:5} {change:>6} total`;
+    - without a reference, the lines are `  {w:5} {path}` and
+      `  {total:5} total`.
+
+    **Ruled:**
+    - a removed file's line is `f"  {0:5} removed (was {n}) {path}"`, with
+      the words column `0` and the change text unpadded;
+    - removed files come after every file present now, in the reference's
+      order (rule files, then agents, then skills, each group sorted);
+    - the total change counts them at the reference, as pinned.
+14. **What "now" is.** **Ruled: the working tree**, meaning the files on disk
+    that match the file set, tracked or not. That is what a session loads, so
+    an uncommitted rule edit is in force and must show. It also means the
+    current counts need no git.
+15. **Broken `rule_sizes` module.** Confirmed: one line,
+    `(size table unavailable: ...)`, after `Next on ROADMAP.md:`.
+16. **Stretch line position.** Confirmed: on `--back` it is `lines[1]`,
+    directly after the `Back.` line.
+17. **`commits_between` output.** Confirmed: pairs of
+    (timezone-aware `datetime`, short hash). The order is not specified,
+    because `longest_quiet` sorts.
+18. **Test 11's fixture.** Confirmed as written:
+    - 10 `ASK OLA:` lines of 300 characters in each of 3 worktrees;
+    - 15 format faults;
+    - 15 wrappers with 6-digit pids and etime `10-02:03:04`;
+    - the real rule-file set;
+    - the size block counted up to `== .claude/current-task/session.md ==`,
+      including the blank line before it.
+19. **`rule_sizes` when git fails.** **Ruled:** it prints the current counts,
+    which come from the working tree (point 14), as in the no-reference form.
+    The heading is `Rule text in words (no reference: git failed):`. The exit
+    status is 0.
+
+**What @tester adds before green** (one amendment commit; no pinned
+assertion changes):
+
+- (7) a `test_wrapper_check` case: `[SELF, wrapper("x"), "/sbin/launchd"]`
+  gives `confirmed`;
+- (11) tighten the display-cut test to `len(shown) == 160` and
+  `shown == f"session.md: {line}"[:157] + "..."`;
+- (13) the removed line in `test_table_shows_growth_...` is
+  `f"  {0:5} removed (was 7) .claude/agents/old.md"`, and it comes after the
+  four present files;
+- (14) an end-to-end case: an uncommitted 3-word append to `CLAUDE.md` shows
+  as `+15` in `sized` (the committed +12 plus 3);
+- (19) an end-to-end case: the script copied into a plain directory (no
+  repository) with one rule file prints
+  `Rule text in words (no reference: git failed):`, the file's line and the
+  total, and exits 0.
+
 ## Review
 
 **Design review, round 1, 2026-10-03.** Range `5e520fe..e5d308f` (merge ea813fc). Verdict: CHANGES REQUESTED. LOC: 0 (design only); the ~185 estimate is plausible. Rulings 1, 3, 5, 6 and Ola's four answers implemented as ruled; rule text word for word; code sites checked. Blocking: (1) word counts off by two (292 removed, 355 added; net +63 right); (2) reading predecessor transcripts from the main and running checkouts was not ruled, is untested, and would print the running main session's turns as pending; (3) format warnings for every checkout's session.md go beyond item 4 (about 25 warning lines from four stale files); (4) the background-job listing prints "(none)" if the wrapper format drifts: add a recognised-format self-check; (5) `test_away.py:396` also asserts the old heading; (6) "every file it changes is governed" should say production files; the 961 vs 971 figure. Not pushed; no CI.
