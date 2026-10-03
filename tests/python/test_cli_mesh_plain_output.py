@@ -152,6 +152,24 @@ def dem_nodes(tif: Path) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     return xy, z, z != float(SENTINEL)
 
 
+def trimmed_by_the_sampler(tif: Path, step: int) -> tuple[int, int]:
+    """(vertices the no-tolerance path removes, vertices it picks) at ``step``:
+    the picked nodes whose bilinear cell has a NoData corner, by the sampler's
+    rule (increment 12's one-cell trim; see the test that uses it)."""
+    tile = decode_dem(io.BytesIO(tif.read_bytes()))
+    nodata = np.asarray(tile.array) == float(SENTINEL)
+    rows = sorted({*range(0, ROWS, step), ROWS - 1})
+    cols = sorted({*range(0, COLS, step), COLS - 1})
+    removed = 0
+    for r in rows:
+        for c in cols:
+            top, left = min(r, ROWS - 2), min(c, COLS - 2)
+            removed += bool(nodata[top : top + 2, left : left + 2].any())
+    if step == 1:  # the fixture must exercise the trim, or this pins nothing
+        assert removed > int(nodata.sum()), "the trim reaches no valid node"
+    return removed, len(rows) * len(cols)
+
+
 # ---------------------------------------------------------------- one vocabulary
 
 
@@ -244,19 +262,36 @@ class TestTheValuesAreRight:
         self, tmp_path: Path, holed: Path, monkeypatch: pytest.MonkeyPatch, step: int
     ) -> None:
         """Without a tolerance every vertex is a DEM node at a known index,
-        so the count is exact from the array: the strided nodes (every
-        ``step``-th row and column, and the last) that are NoData."""
+        so the count is exact from the array.
+
+        This pins increment 12's one-cell trim ("accepted for now",
+        `12-dem-to-mesh.md` R2; ruled in `25-plain-output.md`, "NoData on the
+        no-tolerance path"): the sampler refuses a cell with any NoData
+        corner, even one of zero weight, so a picked node (every ``step``-th
+        row and column, and the last) is removed when its bilinear cell has a
+        NoData corner. The cell's top-left node is ``(min(r, rows - 2),
+        min(c, cols - 2))``; the corners are it and the nodes one row down,
+        one column right, and one of each. The sampler fix, a later C++
+        increment, will change this back to "picked nodes that are NoData"."""
         out = tmp_path / "x.vtk"
         mesh(monkeypatch, "--dem", str(holed), "--stride", str(step), "--out", str(out))
-        tile = decode_dem(io.BytesIO(holed.read_bytes()))
-        rows = sorted({*range(0, ROWS, step), ROWS - 1})
-        cols = sorted({*range(0, COLS, step), COLS - 1})
-        picked = np.asarray(tile.array)[np.ix_(rows, cols)]
-        expected = int((picked == float(SENTINEL)).sum())
-        assert expected > 0, "the fixture's NoData block must meet the grid"
+        expected, picked = trimmed_by_the_sampler(holed, step)
         vtk = read_vtk(out.read_bytes())
         assert file_field(vtk, "nodata_vertices_removed") == str(expected)
-        assert len(vtk.points) == len(rows) * len(cols) - expected
+        assert len(vtk.points) == picked - expected
+
+    @pytest.mark.parametrize("step", [1, 2, 3])
+    def test_the_no_tolerance_summary_says_on_or_next_to(
+        self, tmp_path: Path, holed: Path, monkeypatch: pytest.MonkeyPatch, step: int
+    ) -> None:
+        """Until the sampler fix the summary says what the count means
+        ("NoData on the no-tolerance path"); with ``--tolerance`` it does not
+        (``TestOneVocabulary.test_stderr_uses_the_same_numbers``)."""
+        out = tmp_path / "x.vtk"
+        result = mesh(monkeypatch, "--dem", str(holed), "--stride", str(step), "--out", str(out))
+        expected, _ = trimmed_by_the_sampler(holed, step)
+        said = f"{expected} vertices on or next to NoData cells were removed"
+        assert said in result.stderr, result.stderr
 
     def test_a_grid_without_nodata_writes_no_count(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch

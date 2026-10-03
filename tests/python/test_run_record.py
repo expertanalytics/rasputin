@@ -387,6 +387,15 @@ class TestMaxError:
         assert len(warnings) == 1, text
         assert re.search(r"\b3\b", warnings[0]) and "5.5" in warnings[0], warnings[0]
 
+    def test_one_node_above_the_tolerance_is_singular(self, rr: ModuleType) -> None:
+        """Plurals are correct English ("Settled after the red step", 8)."""
+        record = reprojected(
+            rr, max_error_m=4.9, dem_nodes_at_vertices=1, dem_nodes_at_vertices_max_error_m=5.5
+        )
+        (warning,) = [ln for ln in rr.summary(record).splitlines() if ln.startswith("Warning:")]
+        assert warning.startswith("Warning: 1 DEM node on a vertex differs"), warning
+        assert "nodes" not in warning, warning
+
     def test_the_stats_value_is_the_raw_at_vertex_difference(self, rr: ModuleType) -> None:
         record = reprojected(
             rr, max_error_m=4.9, dem_nodes_at_vertices=3, dem_nodes_at_vertices_max_error_m=5.5
@@ -406,6 +415,12 @@ class TestSelfChecks:
         assert "Warning" not in rr.summary(record)
         assert "dem_nodes_outside_mesh" not in fields(rr, record)
 
+    def test_one_node_outside_is_singular(self, rr: ModuleType) -> None:
+        text = rr.summary(projected(rr, dem_nodes_outside_mesh=1))
+        (warning,) = [ln for ln in text.splitlines() if ln.startswith("Warning:")]
+        assert warning.startswith("Warning: 1 DEM node with data lies"), warning
+        assert "nodes" not in warning, warning
+
     def test_a_non_zero_self_check_warns(self, rr: ModuleType) -> None:
         record = projected(rr, dem_nodes_outside_mesh=4)
         assert rows(rr, record)["dem_nodes_outside_mesh"][1] == "4"
@@ -424,6 +439,13 @@ class TestSummary:
         assert text.startswith("116389 triangles."), text
         assert "within 5 m" in text and "largest difference 4.9997 m" in text, text
         assert "199 vertices on NoData cells" in text, text
+
+    def test_the_no_tolerance_summary_says_on_or_next_to(self, rr: ModuleType) -> None:
+        """Increment 12's one-cell trim, until the sampler fix ("NoData on the
+        no-tolerance path"): the stride path's count includes vertices next to
+        a NoData cell, and the summary says so; the tolerance path does not."""
+        assert "6 vertices on or next to NoData cells were removed" in rr.summary(stride(rr))
+        assert "on or next to" not in rr.summary(projected(rr))
 
     def test_no_nodata_sentence_without_nodata(self, rr: ModuleType) -> None:
         assert "NoData" not in rr.summary(projected(rr, nodata_vertices_removed=0))
