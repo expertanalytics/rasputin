@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import datetime
 import importlib
+import importlib.metadata
 import os
 from collections.abc import Iterator, Sequence
 from pathlib import Path
@@ -481,6 +482,26 @@ class TestF10TheWriteSide:
         await fetch(api, source, tmp_path, whole_box(data))
         check_notice(api, source, tmp_path)
 
+    async def test_without_install_metadata_the_fetch_completes_and_records_unknown(
+        self,
+        api: SimpleNamespace,
+        server: RangeServer,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """A source checkout run without `pip install` has no rasputin metadata.
+
+        `rasputin version` already prints "unknown (...)" then; the manifest's
+        `rasputin_version` takes the same "unknown" placeholder instead of the
+        fetch dying with PackageNotFoundError.
+        """
+        plant_missing_install_metadata(monkeypatch)
+        data = projected()
+        source = entry(api, server, served(server, "p.tif", data))
+        report = await fetch(api, source, tmp_path, whole_box(data))
+        check_whole_fetch(server, data, tmp_path, report)
+        assert manifest(api, tmp_path).rasputin_version.startswith("unknown")
+
     async def test_refresh_empties_the_cache_and_refetches(
         self, api: SimpleNamespace, server: RangeServer, tmp_path: Path
     ) -> None:
@@ -528,6 +549,18 @@ def plant_failing_manifest_replace(monkeypatch: pytest.MonkeyPatch) -> None:
         original(src, dst, *args, **kwargs)
 
     monkeypatch.setattr(os, "replace", replace)
+
+
+def plant_missing_install_metadata(monkeypatch: pytest.MonkeyPatch) -> None:
+    """`importlib.metadata.version("rasputin")` raises as it does uninstalled."""
+    original = importlib.metadata.version
+
+    def version(name: str) -> str:
+        if name == "rasputin":
+            raise importlib.metadata.PackageNotFoundError(name)
+        return original(name)
+
+    monkeypatch.setattr(importlib.metadata, "version", version)
 
 
 def check_notice(api: SimpleNamespace, source: Any, root: Path) -> None:
