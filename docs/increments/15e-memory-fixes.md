@@ -2,8 +2,11 @@
 
 Status: **designed by `@architect`, 2026-10-03; implemented.** Red 9879805
 (`@tester`), green efb854f (`@developer`), fixes after `@reviewer` round 1
-in 18b7a79 and 6d2f40c. Pending: `@reviewer` round 2 and `@perf`'s
-acceptance run. Departures from the design are under "As built" below.
+in 18b7a79 and 6d2f40c. `@reviewer` round 2 approved (78df916).
+`@perf`'s acceptance run: **ACCEPTED** (2026-10-03,
+`docs/benchmarks/2026-10-03/15e-acceptance.md`; summary under "Acceptance
+run" below). Pending: a push with Ola's yes, and a green CI. Departures from
+the design are under "As built" below.
 
 Ola's order of 2026-10-03 for the basin: the nine level-3 meshes as the
 interim result, then this PR, then 23b-23g. Source: fixes 1-4 of
@@ -371,3 +374,21 @@ pin it if `_Once` gains callers.
 
 Merge still needs `@perf`'s acceptance run, a push with Ola's yes, and a
 green CI.
+
+## Acceptance run
+
+`@perf`, 2026-10-03, AC power, branch at 78df916 against its base 7810cf8,
+back to back: **ACCEPTED**. Evidence and method:
+`docs/benchmarks/2026-10-03/15e-acceptance.md`.
+- `tools/bench.py` 1 m run and thread sweep: no change (the second pair is
+  within ±2.6 %), and the meshes and quality are identical.
+- Sub-basin 761 at 10 m, `MallocLargeCache=0`: the peak falls from
+  14.3-14.5 GB to 6.9 GB. Resample measures 5.3-5.6 GB (sampled) against
+  ~5.8 GB derived. The overall peak is set in the store fill, 0.1 GB above
+  the load's 6.81 GB. As shipped, the peak falls from 15.4-15.9 GB to
+  10.1 GB. All eight meshes are byte-identical.
+- The store is charged 16.4 B per point, against 16.5-17 B expected and
+  34-36 B for the base in the same probe.
+- Time: resample is 28-33 % faster. The freeze is +0.26 to +0.39 s
+  (+7 to +11 %) as shipped and unchanged with the variable. The whole run is
+  13-16 % faster.
