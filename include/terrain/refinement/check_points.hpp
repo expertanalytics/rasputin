@@ -22,8 +22,9 @@
 //
 // Storage (increment 15e, fix 4): each row is a list of fixed chunks of kChunk
 // points, carved from slabs of kSlab chunks and freed only with the store, so
-// adding never reallocates and the footprint is 16 B per point plus at most one
-// part-filled chunk per row. Point i of a row is chunks[i / kChunk][i % kChunk].
+// adding never moves a stored point and the footprint is 16 B per point plus
+// at most one part-filled chunk per row. Point i of a row is
+// chunks[i / kChunk][i % kChunk].
 //
 // freeze() sorts each row by (col, row offset, col offset, z), so iteration
 // order does not depend on the order of add calls, and keeps the first of

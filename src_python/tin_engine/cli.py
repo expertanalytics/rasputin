@@ -1409,7 +1409,8 @@ class _Once[T]:
 
     def take(self) -> T:
         value, self._value = self._value, None
-        assert value is not None, "_Once.take called twice"
+        if value is None:  # explicit: `python -O` strips an assert
+            raise RuntimeError("_Once.take called twice")
         return value
 
 
