@@ -207,3 +207,21 @@ proposals states what it would cost to adopt. h5's new `tools/governed.py`
 and `tools/git_hooks.py` are not yet governed paths, so "queued refusals,
 not code" is a little too strong (the main file is governed, so the finding
 holds).
+
+**Round 2**, `@reviewer`, on eef60f4 (the fixes to round 1): **APPROVED**.
+0 production lines. Not pushed, so no CI. `python3 tools/check_citations.py`:
+all resolve, none at risk. All four blocking points are fixed, and the
+evidence matches. The idle table: bfffaa8 at 02:47:29 to `--back` at
+06:11:43 is 3 h 24 min; 2331110 at 01:06:58 to 07:06:21 is 5 h 59 min. The
+memory note's write time, 07:29 UTC on 2026-10-01, is right.
+`session.md` is now in the past tense, h2 to h7 have no rows in the
+`ROADMAP.md` table, and the transcript citation in §1b is right. The
+suggestions are taken: a cost on each proposal, 14:02 to 23:39 local, and
+the h5 parenthetical.
+Non-blocking: shorter windows fell between the three long ones
+(2026-10-01 16:58 to 18:42, 2026-10-02 09:01 to 10:50), so "three windows
+running" in `next.md` item 1 means three long windows, as its parenthetical
+says. Three lines still say "night" (§1 lines 17 and 63, and the quoted
+"tonight"). Item 7's rule line would probably go in
+`docs/increments/README.md`, which is governed, so the intro's "all but the
+last touch governed files" may not hold for it.
