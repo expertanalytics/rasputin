@@ -13,7 +13,7 @@ decisions, or make them more mechanical." Evidence and plan:
 could have stopped, and proposes five stages, each for Ola to rule: (1)
 briefs assembled from files by a script, with a hook that refuses a spawn
 without one (about 140 lines); (2) one script that writes `session.md` and
-one that says what step comes next on each branch (about 230); (3) a
+one that says what step comes next on each branch (about 230 to 380); (3) a
 checked-in merge runner with a lock (about 120); (4) hooks on the main
 session's own turns: concurrency cap, idle guard, unexplained codes, rule
 changes (about 125, probes first); (5) handbacks routed, reviews recorded,

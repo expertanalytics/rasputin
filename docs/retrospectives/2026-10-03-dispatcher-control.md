@@ -45,13 +45,13 @@ two are missing.
   session's problem. The docs say `/compact` re-reads the project
   `CLAUDE.md` from disk (code.claude.com/docs/en/memory, "Instructions seem
   lost after `/compact`").
-- **Missing, 1: volume.** By 16:04 today the main session had started 38
+- **Missing, 1: volume.** By 16:04 today the main session had started 37
   personas (this run included), sent 38 follow-up messages to running ones,
-  run 187 shell commands, and answered 39 turns from Ola. 76 of those shell
+  run 186 shell commands, and answered 39 turns from Ola. 74 of those shell
   commands name `session.md`, most of them hand-written `sed` substitutions
   followed by a `grep -c` to see whether they matched (af318b82, lines 575
   to 811). From 27 to 29 September one session ran 97 shell commands
-  containing `git commit` and 92 naming `ROADMAP.md` (38487caf). Every persona starts with an
+  containing `git commit` and 92 containing "ROADMAP" (38487caf). Every persona starts with an
   empty context; the main session runs for hours or days (85c14e7c ran from
   30 September to 3 October, through two compactions). Anthropic's own
   guidance: "As the number of tokens in the context window increases, the
@@ -88,7 +88,7 @@ or **nothing mechanical**.
 | 1 | Ola's sentence about multicolouring was paraphrased in a brief; the design then printed the paraphrase as his verbatim words | 38487caf 1732 ("my brief to `@architect` paraphrased your ... sentence") | Template: Ola's words are pasted from the transcript, never retyped. `tools/session_state.py` already extracts his turns |
 | 2 | `@perf` was asked to fix a `tools/bench.py` bug with no failing test first; `@perf` refused | 38487caf 9213; `next.md`, 2026-09-29 | Template: the brief cannot remove a step the persona's own file requires |
 | 3 | The 16b design's mutant checks were never briefed; the main session first told Ola they had not been asked for, then corrected itself | 38487caf 7690 | Script: the brief generator copies the increment file's required checks into the brief |
-| 4 | Seven `@reviewer` runs were told to write and commit their own review records, against `docs/increments/README.md` ("its spawner copies the handback's verdict") | af318b82 600: "record your round in the increment file as the rules require (commit on the branch; do not push)"; `next.md` item 8 | Template, plus the reviewer persona carrying the rule (already proposed, `next.md` item 8) |
+| 4 | Seven briefs to six `@reviewer` runs told them to write and commit their own review records, against `docs/increments/README.md` ("its spawner copies the handback's verdict") | af318b82 600: "record your round in the increment file as the rules require (commit on the branch; do not push)"; `next.md`, "The window of 2026-10-02, the restart of 2026-10-03, h7", item 8 | Template, plus the reviewer persona carrying the rule (already proposed there, item 8) |
 | 5 | The mutation tests the increment files require were left out of 15e and 15f-2 ("Lean: no throwaway or mutation rounds") | af318b82 484 and 1842; `2026-10-03-day-merges-15e-15f.md` section 2b | Script: as row 3. Dropping a required step needs a flag that writes an `ASK OLA:` line instead |
 | 6 | An `@architect` was told to "pick a free increment id"; it picked 24, already taken on an unmerged branch | af318b82 3902, then 4129 ("Id clash") | Script: next free id across all branches, not only master |
 | 7 | This run was told to write `docs/research/`, outside `@orchestrator`'s write limit | af318b82 4428 | Template: the brief carries the persona's write limit from its file |
@@ -114,13 +114,13 @@ or **nothing mechanical**.
 
 | # | What happened | Evidence | Could have been stopped by |
 |---|---|---|---|
-| 20 | Three long unattended windows with long idle stretches: 3 h 24 min, 5 h 59 min, 7 h 08 min | `2026-10-03-night-restart-h7.md` section 1a; 85c14e7c 1345, 10473 (both admitted) | Hook: while unattended mode is on, refuse to end a turn when nothing is running and the queue has an item that needs no ruling. Already ruled: `next.md` item 1 |
-| 21 | The first fallback queued for today's window (a green step) writes three governed files, which unattended mode refuses | day retrospective section 4 | Script: a queue line names the paths it will write; the recap flags governed ones (`next.md` item 17) |
+| 20 | Three long unattended windows with long idle stretches: 3 h 24 min, 5 h 59 min, 7 h 08 min | `2026-10-03-night-restart-h7.md` section 1a; 85c14e7c 1345, 10473 (both admitted) | Hook: while unattended mode is on, refuse to end a turn when nothing is running and the queue has an item that needs no ruling. Already ruled: `next.md`, "The window of 2026-10-02, the restart of 2026-10-03, h7", item 1 |
+| 21 | The first fallback queued for today's window (a green step) writes three governed files, which unattended mode refuses | day retrospective section 4 | Script: a queue line names the paths it will write; the recap flags governed ones (`next.md`, "The merges of 2026-10-03", item 17) |
 | 22 | Three agents at once several times, and three in one worktree, against the "agents in pairs" note | day retrospective section 2d | Hook: count running personas (recorded when each starts and stops) and refuse a third |
 | 23 | Merge scripts rewritten by hand in the scratchpad each session (`merge.sh`, `merge2.sh`, `merge7.sh`); one read "no checks reported" as green | af318b82 2034; `next.md`, findings of 2026-10-01/02 | Script: one checked-in, tested merge runner |
-| 24 | `ROADMAP.md` conflicts resolved by hand twice; stale "awaiting the push" text merged to master | day retrospective sections 2e, 3d | Script: the status column built from increment files (`next.md` item 14) |
+| 24 | `ROADMAP.md` conflicts resolved by hand twice; stale "awaiting the push" text merged to master | day retrospective sections 2e, 3d | Script: the status column built from increment files (`next.md`, "The merges of 2026-10-03", item 14) |
 | 25 | `session.md` grew into a 29-line log; five decisions written as bullets under one `ASK OLA:` heading were invisible to the recap | `2026-10-03-night-restart-h7.md` sections 1c, 1d | Script: a writer for `session.md` in the format Ola ruled today (NOW, QUEUE, one `ASK OLA:` line per decision) |
-| 26 | No `@orchestrator` check after five merges, until Ola asked | af318b82 3601, 3606; day retrospective section 2a | Script: the recap prints merges since the last retrospective (`next.md` item 9b) |
+| 26 | No `@orchestrator` check after five merges, until Ola asked | af318b82 3601, 3606; day retrospective section 2a | Script: the recap prints merges since the last retrospective (`next.md`, "The merges of 2026-10-03", item 9b) |
 | 27 | A rule merged at 09:43 never reached the session or its 33 personas | day retrospective section 2a; this run's own context | Hook: after a merge or pull that changes `CLAUDE.md`, say "run `/compact` before the next spawn" |
 
 ### Role
@@ -170,12 +170,12 @@ keeps only what needs judgement.
 | **Who may run now** | A memory note ("pairs") | Hook: records each persona's start and stop, refuses a third, refuses a second persona in a worktree that is busy, refuses anything beside `@perf` while it times | Asking Ola for an exception |
 | **Increment numbers** | The designing persona guesses | `tools/pipeline.py next-id`: the next id free across all branches | none |
 | **Merging** | A scratchpad script rewritten each session | Checked-in `tools/merge_queue.py`: one chain at a time (lock), "no checks reported" is not green, update branch, merge commit only, stops on a conflict and says which file | Getting Ola's word for each PR; resolving a conflict that is not mechanical |
-| **`ROADMAP.md` status** | Hand-edited in every PR | Built from the increment files' status lines (`next.md` item 14, option b) | none |
+| **`ROADMAP.md` status** | Hand-edited in every PR | Built from the increment files' status lines (`next.md`, "The merges of 2026-10-03", item 14, option b) | none |
 | **Recording a review** | The main session appends by hand (sometimes the reviewer did, wrongly) | Script `tools/record_review.py` appends the round from the handback's fixed fields (verdict, range, line count, blocking items) | none |
 | **`session.md`** | 76 hand edits today | Script `tools/session.py now / queue / ask / answered`, writing the format Ola ruled today; the recap warns on anything else | Wording the ASK for Ola |
-| **When to run `@orchestrator`** | Remembered; missed five times today | The recap prints "N merges since the last retrospective" (`next.md` item 9b) | none |
+| **When to run `@orchestrator`** | Remembered; missed five times today | The recap prints "N merges since the last retrospective" (`next.md`, "The merges of 2026-10-03", item 9b) | none |
 | **Routing what a handback raises** | Read and relayed by the main session | Handbacks end in fixed headings: Assumptions beyond the ruling, Questions for Ola, Lessons. A script (later a hook when a persona stops) turns them into queue lines: assumptions to `@architect`, questions to `ASK OLA:` lines, lessons to `@orchestrator` | Translating the questions into plain words for Ola |
-| **Filling an unattended window** | A memory note | Hook (ruled in principle, `next.md` item 1): while unattended mode is on, a turn may not end with nothing running and a decision-free item queued | Building the queue before Ola leaves |
+| **Filling an unattended window** | A memory note | Hook (ruled in principle, `next.md`, "The window of 2026-10-02, the restart of 2026-10-03, h7", item 1): while unattended mode is on, a turn may not end with nothing running and a decision-free item queued | Building the queue before Ola leaves |
 | **Picking up a rule change** | Not done | Hook after a merge or pull that changes `CLAUDE.md`: "run `/compact` before the next spawn" | Running it |
 | **Line counts and figures for Ola** | Copied from handbacks | Script: one line counter for `CLAUDE.md` section 2's rule | Choosing what Ola needs to hear |
 | **Plain language to Ola** | A memory note | Hook when a turn ends: list unexplained codes (warn first, count false positives) | Writing plainly |
@@ -198,9 +198,10 @@ Each source was read on 2026-10-03 unless marked.
    are systems where LLMs and tools are orchestrated through predefined code
    paths. Agents are systems where LLMs dynamically direct their own
    processes"; "Workflows offer predictability and consistency for
-   well-defined tasks". The orchestrator-workers pattern there "suits complex
-   tasks where subtasks can't be predicted in advance". Our pipeline (design,
-   red, green, review, `@perf`) *is* predicted in advance. The same article:
+   well-defined tasks". Of the orchestrator-workers pattern: "This workflow
+   is well-suited for complex tasks where you can't predict the subtasks
+   needed". Our pipeline (design, red, green, review, `@perf`) *is* known in
+   advance. The same article:
    "You can add programmatic checks ('gate' ...) on any intermediate steps".
    Applies to: `tools/pipeline.py`, the brief script.
 2. **Fixed pipelines beat free agents on software tasks.** Xia, Deng, Dunn
@@ -277,10 +278,16 @@ counted. Everything that touches `.claude/settings.json` or a hook needs
 Ola's yes and goes through the normal design, red, green and review steps as
 a harness increment.
 
-Already ruled today and assumed below: `next.md` items 1 (idle is accepted
-only if the fallback list is truly empty), 2, 3, 5 and 6, and item 4 as
-option (a): `session.md` holds NOW, QUEUE, and one `ASK OLA:` line per open
-decision, nothing else.
+Already ruled today and assumed below, all from the `next.md` section
+"The window of 2026-10-02, the restart of 2026-10-03, h7": item 1 (state the
+fill-the-window rule; idle is accepted only if the fallback list is truly
+empty; `away.py --back` prints the longest idle stretch), item 2 (`away.py
+--back` and the recap read every worktree's `.claude/current-task/`), item 3
+(an `ASK OLA:` line counts only at the start of a line, and an empty one is
+warned about), item 5 (the recap lists running background jobs), item 6
+(after a merged change to `CLAUDE.md` or `.claude/agents/`, restart or
+`/compact` before spawning), and item 4 as option (a): `session.md` holds
+NOW, QUEUE, and one `ASK OLA:` line per open decision, nothing else.
 
 **Stage 1: briefs come from files (the first step).** The largest group of
 costly errors, rows 1 to 8.
@@ -291,8 +298,10 @@ costly errors, rows 1 to 8.
   the output file, and the persona's write limit.
 - A `PreToolUse` hook on `Agent` and `SendMessage`, about 40 lines: refuses
   a spawn whose prompt lacks the generated block, and refuses any spawn or
-  resume while the main session's working directory is not the main
-  checkout (row 8).
+  resume while the main session's working directory differs from the
+  directory it was launched in (`$CLAUDE_PROJECT_DIR`), not from the main
+  checkout, so a session Ola starts inside a worktree is not refused
+  (row 8). `@architect` settles the comparison.
 - Six templates of about 15 lines of prose each, under `.claude/`.
 - In return, delete `CLAUDE.md` section 3's "Briefs" bullet and the "lean
   briefs" memory note: the templates replace both.
@@ -302,33 +311,40 @@ costly errors, rows 1 to 8.
 **Stage 2: one place for state, and "what comes next".** Rows 6, 21, 25, 26.
 
 - `tools/session.py`, about 80 lines: `now`, `queue add|done`, `ask`,
-  `answered`; writes the format Ola ruled. This is how `next.md` items 3 and
-  4 get implemented, not an extra.
-- `tools/pipeline.py`, about 150 lines: one line per open branch saying
-  which step is next and which required step is missing; merges since the
-  last retrospective; the next free increment id; queue items that write
-  governed paths. The recap prints it.
-- Cost: one or two harness increments, about 230 lines.
+  `answered`; writes the format Ola ruled. This is how items 3 and 4 of
+  that section get implemented, not an extra.
+- `tools/pipeline.py`, about 150 to 300 lines: one line per open branch
+  saying which step is next and which required step is missing; merges
+  since the last retrospective; the next free increment id; queue items
+  that write governed paths. The recap prints it. The lower figure assumes
+  increment files gain fixed fields the script can read without parsing
+  prose: a status line in one form, a "required checks" line (mutation
+  suite, `@perf` acceptance), and `## Review` entries with a verdict word
+  in a fixed place. Without them the script has to parse prose and the
+  upper figure applies.
+- Cost: one or two harness increments, about 230 to 380 lines.
 
 **Stage 3: merges by a checked-in runner.** Rows 16, 23, and the restart
 race.
 
 - `tools/merge_queue.py`, about 120 lines: a lock so only one chain runs;
   "no checks reported" is not green; update the branch, wait, merge commit
-  only; stop on a conflict and name the file. `next.md` item 5 (list the
-  running background jobs in the recap) reads its lock.
+  only; stop on a conflict and name the file. Item 5 of the section above
+  (list the running background jobs in the recap) reads its lock.
 - Cost: one harness increment.
 
 **Stage 4: hooks on the dispatcher's own turns.** Rows 9, 20, 22, 27. Probes
-first (does `SubagentStop` fire for background personas; how often the code
-check fires wrongly on a day's messages).
+first: does `SubagentStop` fire for background personas; how often the code
+check fires wrongly on a day's messages; and does a `/compact` in the main
+session also refresh the `CLAUDE.md` copy that the personas it then starts
+receive (undocumented).
 
 - Concurrency: `SubagentStart` and `SubagentStop` record who runs; the
   stage 1 hook refuses a third persona, a second one in a busy worktree, or
   anything beside a `@perf` timing run. About 50 lines.
 - When a turn ends (`Stop`): in unattended mode, refuse to stop with
-  nothing running and a decision-free item queued (`next.md` item 1); at any
-  time, list unexplained codes in the message, as a warning only for the
+  nothing running and a decision-free item queued (item 1 of the section
+  named above); at any time, list unexplained codes in the message, as a warning only for the
   first week. About 60 lines.
 - After a merge or pull that changes `CLAUDE.md`: "run `/compact` before the
   next spawn". About 15 lines.
@@ -340,8 +356,8 @@ Rows 10, 11, 24.
 
 - Fixed handback headings in every template (stage 1), and
   `tools/record_review.py` (about 50 lines) to append a review round.
-- `ROADMAP.md`'s status column built from the increment files (`next.md`
-  item 14, option b, about 60 lines).
+- `ROADMAP.md`'s status column built from the increment files
+  (`next.md`, "The merges of 2026-10-03", item 14, option b; about 60 lines).
 - A line counter for `CLAUDE.md` section 2 (about 60 lines), so a size
   figure has one source.
 - Later, once stage 4 shows `SubagentStop` works for background personas:
@@ -381,3 +397,7 @@ pairs, lean briefs, fill the window). The rule count should go down, not up.
 2. Stages 2 and 3 after it, in that order?
 3. Stage 4: probe first, then decide?
 4. Should this file move to `docs/research/`?
+
+## Review
+
+**Round 1, 2026-10-03.** Commit 2d2d5a6. Verdict: CHANGES REQUESTED. LOC: 0 production lines (+383, +16 docs). Blocking: (1) section 1's counts are those of ~16:06:42, not 16:04 (37 spawns, 186 shell commands, 74 on session.md at 16:04:28); row 4's seven reviewer runs were seven briefs to six runs; (2) section 4 misquotes 'Building effective agents'. 25 transcript lines, the Claude Code docs quotes and every paper and article checked and true otherwise; merges cleanly onto 6cdc8cc. Not pushed; no CI.
