@@ -12,11 +12,12 @@ from __future__ import annotations
 
 import shutil
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
 
-from harness_fixtures import Tool, git, make_repo, run_script
+from harness_fixtures import REAL, Tool, clean_env, git, make_repo, run_script
 
 rule_sizes = Tool("rule_sizes")
 
@@ -75,9 +76,9 @@ def test_table_shows_growth_cuts_new_unchanged_and_removed_files() -> None:
     assert row(97, "-3", ".claude/REQUIRED-READING.md") in body
     assert row(50, "0", ".claude/agents/b.md") in body
     assert row(5, "new", ".claude/agents/new.md") in body
-    [removed] = [line for line in body if line.endswith(" .claude/agents/old.md")]
-    assert removed.endswith(" removed (was 7) .claude/agents/old.md")
     assert len(body) == 5
+    # §8.13: words column 0, change text unpadded, after every file present now.
+    assert body[4] == f"  {0:5} removed (was 7) .claude/agents/old.md"
 
 
 def test_table_total_is_the_change_over_both_sides_including_removed_files() -> None:
@@ -232,3 +233,43 @@ def test_without_a_retrospective_the_table_has_no_reference(tmp_path: Path) -> N
     assert f"  {2:5} CLAUDE.md" in lines
     assert f"  {8:5} .claude/agents/tester.md" in lines
     assert lines[-1] == f"  {10:5} total"
+
+
+def test_an_uncommitted_edit_counts_because_now_is_the_working_tree(
+    sized: tuple[Path, str],
+) -> None:
+    # §8.14: the committed +12 plus an uncommitted 3-word append.
+    repo, _ = sized
+    with (repo / "CLAUDE.md").open("a") as out:
+        out.write("one two three\n")
+    lines = sizes(repo)
+    assert row(35, "+15", "CLAUDE.md") in lines
+    assert lines[-1] == row(110, "+10", "total")
+
+
+def test_without_a_repository_the_counts_print_with_a_git_failed_heading(
+    tmp_path: Path,
+) -> None:
+    # §8.19: git fails, so no reference; the working-tree counts still print.
+    plain = tmp_path.resolve() / "plain"
+    (plain / "tools").mkdir(parents=True)
+    source = REAL / "tools" / "rule_sizes.py"
+    assert source.exists(), "tools/rule_sizes.py is missing from the checkout"
+    shutil.copy2(source, plain / "tools" / "rule_sizes.py")
+    (plain / "CLAUDE.md").write_text("a b c\n")
+    result = subprocess.run(
+        [sys.executable, str(plain / "tools" / "rule_sizes.py")],
+        input="",
+        capture_output=True,
+        text=True,
+        cwd=plain,
+        env=clean_env(),
+        timeout=60,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.splitlines() == [
+        "Rule text in words (no reference: git failed):",
+        f"  {3:5} CLAUDE.md",
+        f"  {3:5} total",
+    ]

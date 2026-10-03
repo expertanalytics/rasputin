@@ -719,6 +719,8 @@ SELF = "/usr/bin/python3 /r/tools/session_state.py"
     [
         ([SELF, wrapper("python3 x.py"), "/opt/homebrew/bin/claude"], "confirmed"),
         ([wrapper("x"), "claude --resume"], "confirmed"),
+        # §8.7: a recognised wrapper confirms the format even with no Claude Code above it.
+        ([SELF, wrapper("x"), "/sbin/launchd"], "confirmed"),
         ([SELF, "/bin/zsh -c run it some new way", "/usr/local/bin/claude"], "drift"),
         ([SELF, "bash -c x", "claude.exe"], "drift"),
         ([SELF, HOOK_LAUNCHER, "/opt/homebrew/bin/claude"], "unknown"),
@@ -982,8 +984,8 @@ def test_a_long_ask_ola_line_is_shown_cut_to_160_characters(harness_repo: Path) 
     line = "ASK OLA: " + "b" * 291  # 300 characters
     (_tasks(harness_repo) / "session.md").write_text(f"NOW: n\nQUEUE: q\n{line}\n")
     [shown] = _block(_recap(harness_repo), "Waiting on Ola:")
-    assert shown.endswith("...")
-    assert shown.startswith(f"session.md: {line}"[:150])
-    assert 157 <= len(shown) <= 163
+    # §8.11: the first 157 characters, then `...`, 160 in all.
+    assert len(shown) == 160
+    assert shown == f"session.md: {line}"[:157] + "..."
     # The full line is still printed further down, with session.md.
     assert line in _recap(harness_repo)
