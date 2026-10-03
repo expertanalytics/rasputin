@@ -291,7 +291,7 @@ class TestRecord:
         vtk, _ = meshed(tmp_path, bumpy, plain_square, "--features", str(gallery))
         text = sentence(vtk)
         assert "start domain boundary and features, vertex z bilinear" in text
-        assert field(text, rf"achieved max error {NUMBER} m") <= 1.0
+        assert field(text, rf"max error at DEM nodes at most {NUMBER} m") <= 1.0
 
     def test_the_vocabulary_is_the_writers_fields_and_no_edge_vocabulary(
         self, tmp_path: Path, bumpy: Path, plain_square: Path, gallery: Path
@@ -619,7 +619,7 @@ class TestCommittedExtract:
     def test_i7_the_tolerance_holds(self, run: Any) -> None:
         vtk, _, _ = run
         text = sentence(vtk)
-        assert field(text, rf"achieved max error {NUMBER} m") <= 10.0
+        assert field(text, rf"max error at DEM nodes at most {NUMBER} m") <= 10.0
         assert re.search(r"\b0 valid DEM nodes not covered\b", text), text
 
     @needs_codecs
@@ -712,7 +712,7 @@ class TestCommittedExtract:
         assert text_field(vtk, "features_crs") == "EPSG:4326"
         match = FEATURES_FIELD.fullmatch(text_field(vtk, "features"))
         assert match and match["name"] == LEGACY_GML.name and match["layer"] is None
-        assert field(sentence(vtk), rf"achieved max error {NUMBER} m") <= 10.0
+        assert field(sentence(vtk), rf"max error at DEM nodes at most {NUMBER} m") <= 10.0
         assert V.mask("land_cover", "water") in set(edges(vtk)[1].tolist())
 
 
@@ -761,7 +761,7 @@ def test_olas_geopackages_over_the_dtm10_archive(tmp_path: Path, gpkg: Path, lay
     )
     match = FEATURES_FIELD.fullmatch(text_field(vtk, "features"))
     assert match and match["layer"] == layer and int(match["n"]) > 0
-    assert field(sentence(vtk), rf"achieved max error {NUMBER} m") <= 10.0
+    assert field(sentence(vtk), rf"max error at DEM nodes at most {NUMBER} m") <= 10.0
     assert V.mask("land_cover", "water") in set(edges(vtk)[1].tolist())
 
 

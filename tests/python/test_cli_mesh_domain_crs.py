@@ -212,7 +212,7 @@ class TestTheDomainInItsOwnCrs:
         assert the_field(vtk, "domain_transform") == description("EPSG:4326")
         assert the_field(vtk, "crs") == "EPSG:25833"
         assert the_field(vtk, "dem_tiles") == "ne.tif; nw.tif; se.tif; sw.tif"
-        assert sentence_field(sentence(vtk), rf"achieved max error {NUMBER} m") <= 1.0
+        assert sentence_field(sentence(vtk), rf"max error at DEM nodes at most {NUMBER} m") <= 1.0
 
     def test_utm32_geojson(self, tmp_path: Path, quad_dir: Path) -> None:
         ring = to_crs("EPSG:25833", "EPSG:25832", ACROSS)

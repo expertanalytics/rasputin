@@ -8,7 +8,10 @@ shipped CLI (merge 31629d6) on the ``larger`` fixture at ``--stride 2``.
 Wording pinned from R9's example sentence: ``refined from DEM nodes``,
 ``tolerance <t> m``, ``achieved max error <e> m``, ``start stride <s>``,
 ``<n> valid DEM nodes not covered`` and ``<k> vertices without data dropped``.
-How ``<t>`` is formatted is not ruled, so it is parsed as a float.
+How ``<t>`` is formatted is not ruled, so it is parsed as a float. Since
+increment 15f-3 (`docs/increments/15f-edge-strip.md`, D7) the projected path
+says ``max error at DEM nodes at most <e> m`` in place of ``achieved max error
+<e> m``, because the edge strip's run follows refine.
 
 Increment 14b (``docs/increments/14b-delaunay-insertion.md``): the default
 start stride follows the user's C1 (a), at most 129 nodes a side; the sentence
@@ -106,7 +109,7 @@ class TestRefinedOutput:
         assert "refined from DEM nodes" in text
         assert "bilinear" not in text
         assert field(text, rf"tolerance {NUMBER} m") == 1.0
-        assert field(text, rf"achieved max error {NUMBER} m") <= 1.0
+        assert field(text, rf"max error at DEM nodes at most {NUMBER} m") <= 1.0
         assert field(text, rf"start stride {NUMBER}") == max(1, math.ceil(20 / 128))
         assert "constrained Delaunay" in text
         assert field(text, rf"{NUMBER} valid DEM nodes not covered") == 0
@@ -130,7 +133,7 @@ class TestRefinedOutput:
         coarse, _ = run(tmp_path, bumpy, "--tolerance", "10", "--stride", "8")
         fine, _ = run(tmp_path, bumpy, "--tolerance", "0", "--stride", "8")
         assert len(coarse.polygons) < len(fine.polygons)
-        assert field(sentence(fine), rf"achieved max error {NUMBER} m") == 0.0
+        assert field(sentence(fine), rf"max error at DEM nodes at most {NUMBER} m") == 0.0
 
     @pytest.mark.parametrize(("cols", "stride"), [(70, 1), (129, 1), (130, 2), (300, 3)])
     def test_the_default_start_stride_is_at_most_129_nodes_a_side(
@@ -217,7 +220,7 @@ class TestRealTile:
             vtk, output = run(tmp_path, KARTVERKET, "--tolerance", tolerance)
             seconds = time.perf_counter() - began
             text = sentence(vtk)
-            achieved = field(text, rf"achieved max error {NUMBER} m")
+            achieved = field(text, rf"max error at DEM nodes at most {NUMBER} m")
             assert achieved <= float(tolerance)
             polygons[tolerance] = len(vtk.polygons)
             angles = min_angles_degrees(vtk)

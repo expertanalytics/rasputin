@@ -156,7 +156,7 @@ class TestDomainOutput:
         assert "start domain boundary, boundary z bilinear" in text
         assert "start stride" not in text
         assert "refined from DEM nodes" in text
-        assert field(text, rf"achieved max error {NUMBER} m") <= 1.0
+        assert field(text, rf"max error at DEM nodes at most {NUMBER} m") <= 1.0
         assert re.search(r"\b\d+ start triangles\b", output), output
         assert re.search(r"\b8 start vertices off-node\b", output), output
 
@@ -251,7 +251,9 @@ class TestSyntheticEndToEnd:
         code, output, target = mesh(tmp_path, tif, domain, "--tolerance", tolerance)
         assert code == 0, output
         vtk = read_vtk(target.read_bytes())
-        assert field(sentence(vtk), rf"achieved max error {NUMBER} m") <= float(tolerance)
+        assert field(sentence(vtk), rf"max error at DEM nodes at most {NUMBER} m") <= float(
+            tolerance
+        )
 
         shape = Polygon(self.OUTER, [self.INNER])
         grown, hole = shape.buffer(SNAP), Polygon(self.INNER).buffer(-SNAP)
@@ -292,7 +294,7 @@ class TestNoDataAndDegenerateInput:
         ]
         domain = geojson(tmp_path / "thin.geojson", outer)
         vtk, _ = meshed(tmp_path, bumpy, domain)
-        assert field(sentence(vtk), rf"achieved max error {NUMBER} m") <= 1.0
+        assert field(sentence(vtk), rf"max error at DEM nodes at most {NUMBER} m") <= 1.0
         for x, y in outer:
             i = nearest(vtk.points, x, y)
             assert abs(vtk.points[i, 0] - x) <= SNAP / 2 + 1e-9
@@ -480,7 +482,7 @@ class TestRealTile:
             assert code == 0, output
             vtk = read_vtk(target.read_bytes())
             text = sentence(vtk)
-            achieved = field(text, rf"achieved max error {NUMBER} m")
+            achieved = field(text, rf"max error at DEM nodes at most {NUMBER} m")
             assert achieved <= float(tolerance)
             tris = np.asarray(vtk.polygons, dtype=np.int64)
             degree = np.bincount(tris.ravel(), minlength=len(vtk.points))

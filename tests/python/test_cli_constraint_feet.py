@@ -311,7 +311,7 @@ class TestRealTile:
             )
             elapsed = time.perf_counter() - began
             vtk = read_vtk(out.read_bytes())
-            achieved = field(sentence(vtk), rf"achieved max error {NUMBER} m")
+            achieved = field(sentence(vtk), rf"max error at DEM nodes at most {NUMBER} m")
             assert achieved <= float(tolerance)
             angles = min_angles_degrees(vtk)
             under = int((angles < 0.1).sum())

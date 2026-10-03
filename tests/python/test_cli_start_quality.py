@@ -303,7 +303,7 @@ class TestRealTile:
             )
             elapsed = time.perf_counter() - began
             vtk = read_vtk(out.read_bytes())
-            achieved = field(sentence(vtk), rf"achieved max error {NUMBER} m")
+            achieved = field(sentence(vtk), rf"max error at DEM nodes at most {NUMBER} m")
             assert achieved <= float(tolerance)
             tris = np.asarray(vtk.polygons, dtype=np.int64)
             degree = np.bincount(tris.ravel(), minlength=len(vtk.points))
