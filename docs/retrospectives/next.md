@@ -290,7 +290,7 @@ Ola's ruling; all but 15 touch governed files or tools.
     Edition" (read 2026-10-03): a fixed epsilon fails once values grow;
     compare relative to magnitude or in ulps. Cost: two lines in governed
     files.
-12. **Fused multiply-adds** (3b). `developer.md:30` already makes
+12. **Fused multiply-adds** (3b). `.claude/agents/developer.md@586fbc1:30` already makes
     `@developer` build with `-ffp-contract=off` too, and it caught ES13
     before CI. `tester.md` has no such line. Proposal: copy that line into
     `tester.md` (cost: one line), unless Ola rules the open question in
@@ -316,7 +316,7 @@ Ola's ruling; all but 15 touch governed files or tools.
     an owner for `ROADMAP.md` and for `.github/workflows/` (edited today by
     `@architect`, `@perf`, the main session and `@developer`); they belong on
     the hard-limits list above. Whatever the choice, master's two stale
-    lines (`ROADMAP.md` row 15, `15e-memory-fixes.md:8`) need a docs fix.
+    lines (`ROADMAP.md` row 15, `docs/increments/15e-memory-fixes.md@586fbc1:8`) need a docs fix.
 15. **Concurrency** (2d). Three agents ran at once several times, and three
     edited one worktree in parallel by design at 14:30, against the "agents
     in pairs" note. Nothing broke. To rule: do read-only `@reviewer` runs
