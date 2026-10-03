@@ -13,8 +13,12 @@ split into three PRs under "Settled after L12 and L13" (L14, L15), and the
 coincidence radius scaled with the lattice (L16). L14 and L16 are green at
 `99e95d7`; `@reviewer` APPROVED 15f-2 in round 2 ("Review"), and `@perf`
 ACCEPTED it (meshes and quality identical to master, refine within noise;
-`docs/benchmarks/2026-10-03/15f-2-acceptance.md`). **15f-3** (the
-bindings, the Python and the full acceptance) is not started. Choices that would normally go to Ola
+`docs/benchmarks/2026-10-03/15f-2-acceptance.md`); merged as #152.
+**15f-3** (the bindings, the Python and the CLI) is implemented on
+`worktree-15f-3`: green at `7d841f3`, with the green step's questions ruled
+under "Settled after 15f-3's green step" (S1-S5), 179 net lines against 187.
+It is in review (`@reviewer`'s code round 1 is recorded under "Review"), and
+`@perf`'s full acceptance (Bygdin, the basin piece) is outstanding. Choices that would normally go to Ola
 were made as defaults; each is marked *default* where it occurs and listed
 under "Defaults chosen" at the end.
 
