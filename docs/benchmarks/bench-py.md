@@ -91,7 +91,11 @@ A baseline is a `run.json`. `--baseline DIR` names it; otherwise bench.py
 takes the newest `docs/benchmarks/*/*/run.json` that is comparable and whose
 commit is an ancestor of the new one. Comparable means the same power state
 (`ac` with `ac`, `battery` with `battery`), the same machine (CPU brand and
-core counts), the same DEM and domain hashes, tolerance and extra mesh args.
+core counts), the same DEM and domain hashes, tolerance and extra mesh args,
+and the same bounds-check mode (`hardening` in `run.json`, as each child's
+`_core.hardening` reported it; `--hardening on|off`, default on, passes
+`-DRASPUTIN_HARDENING` on every configure, increment 24; a `run.json` without
+the field is `none`).
 Anything else, including `mixed` or `unknown` power on either side, gives
 **NO BASELINE** with the mismatching field named: never a cross comparison.
 
