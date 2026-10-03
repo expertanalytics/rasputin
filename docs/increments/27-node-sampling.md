@@ -1,10 +1,10 @@
 # Increment 27: a vertex on a DEM node reads that node
 
-Status: **designed**, `@architect`, 2026-10-03. Not started. Increment 25 has
-merged (#157) and this branch has master merged in, so the tests 25 added and
-that the red step changes are on the branch already
-(`docs/increments/25-plain-output.md`, "NoData on the no-tolerance path").
-Decisions for Ola are in "For Ola".
+Status: **implemented, in code review**, not pushed. Designed and approved
+2026-10-03 (Ola ruled: nodes only, the rule in the C++ sampler); red `6605dfe`,
+pins on the red step's choices `80990e0`, green `6fd4076` and `a0817ba`; 13 net
+production lines; no `@perf` run needed (see "`@perf`"). The branch has master,
+with 25 (#157), merged in. Decisions for Ola are in "For Ola".
 
 **The defect.** Without `--tolerance`, z comes from `_core.sample`, which is
 `terrain::raster::bilinear` over every mesh vertex
