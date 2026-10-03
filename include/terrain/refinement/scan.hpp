@@ -37,6 +37,12 @@
 // not counted. refine passes nothing (0) and is unchanged; only the edge
 // strip's loop passes one.
 //
+// Frozen edges (docs/increments/23-basin-scale.md, N3, N7, N19). A node on a
+// frozen edge of the triangle (exact orientation, not an end) is skipped as a
+// node within the coincidence radius is, and with radius > 0 so is a node
+// within `radius` of a frozen edge, its projection strictly inside: those
+// nodes are the seam pass's. Only a triangle with a frozen edge tests this.
+//
 // Pure: reads the DEM and the mesh, writes nothing but its return value, so
 // any number of threads may scan one mesh at once.
 
@@ -92,6 +98,26 @@ template <raster::RasterSource R>
          + *z11 * tx * ty;
 }
 
+// The frozen edge of t that p lies on (exactly, not at an end), or with
+// radius > 0 lies within `radius` lattice units of, its projection strictly
+// inside; the lowest such edge index. The caller has p in the closed triangle.
+[[nodiscard]] inline std::optional<unsigned> frozen_edge_at(const mesh::LatticeMesh& m, std::uint32_t t,
+                                                            mesh::MeshVertex p, double radius = 0.0) {
+    for (unsigned e = 0; e < 3; ++e) {
+        const mesh::MeshVertex a = m.corner(t, e), b = m.corner(t, (e + 1) % 3);
+        if (!m.is_frozen(t, e) || p == a || p == b)
+            continue;
+        if (mesh::orient_sign(a, b, p) == 0)
+            return e;
+        const double dc = b.col - a.col, dr = b.row - a.row, len2 = dc * dc + dr * dr;
+        const double sigma = ((p.col - a.col) * dc + (p.row - a.row) * dr) / len2;
+        if (radius > 0.0 && sigma > 0.0 && sigma < 1.0
+            && std::abs(dc * (p.row - a.row) - dr * (p.col - a.col)) / std::sqrt(len2) <= radius)
+            return e;
+    }
+    return std::nullopt;
+}
+
 template <raster::RasterSource R>
 [[nodiscard]] ScanResult scan(const R& dem, const mesh::LatticeMesh& m, std::uint32_t t,
                               double radius = 0.0) {
@@ -131,8 +157,11 @@ template <raster::RasterSource R>
         if (!v[k].is_node() && std::hypot(v[k].col - c, v[k].row - w) <= radius)
             skip[n_skip++] = LatticeVertex{static_cast<std::uint32_t>(w), static_cast<std::uint32_t>(c)};
     }
+    const bool frozen = m.is_frozen(t, 0) || m.is_frozen(t, 1) || m.is_frozen(t, 2);
+    auto on_frozen = [&](LatticeVertex p) { return frozen && frozen_edge_at(m, t, p, radius); };
     auto skipped = [&](LatticeVertex p) {
-        return n_skip != 0 && std::find(skip.begin(), skip.begin() + n_skip, p) != skip.begin() + n_skip;
+        return (n_skip != 0 && std::find(skip.begin(), skip.begin() + n_skip, p) != skip.begin() + n_skip)
+            || on_frozen(p);
     };
 
     ScanResult r;
@@ -192,10 +221,11 @@ template <raster::RasterSource R>
                     o[k] = mesh::orient(lv[k], lv[(k + 1) % 3], LatticeVertex{row, c});
                 for (std::uint32_t j = 0; j < s.values.size(); ++j) {
                     const T z = s.values[j];
-                    consider(z,
-                             error(static_cast<double>(z), static_cast<double>(o[0]),
-                                   static_cast<double>(o[1]), static_cast<double>(o[2])),
-                             LatticeVertex{row, c + j});
+                    if (!on_frozen(LatticeVertex{row, c + j}))
+                        consider(z,
+                                 error(static_cast<double>(z), static_cast<double>(o[0]),
+                                       static_cast<double>(o[1]), static_cast<double>(o[2])),
+                                 LatticeVertex{row, c + j});
                     for (unsigned k = 0; k < 3; ++k)
                         o[k] += step[k];
                 }

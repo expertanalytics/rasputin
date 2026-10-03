@@ -14,7 +14,9 @@
 // Skips, in R4's order: circumradius below the floor sqrt(dx^2 + dy^2), so the
 // node is within R / 2 of the centre (R5); centre outside the node rectangle
 // (never clamped); the node already a vertex; the walk crossing a constrained
-// edge or leaving the mesh. The walk is bounded by triangle_count() steps.
+// edge or leaving the mesh; the node on a frozen edge of the triangle it lies
+// in (docs/increments/23-basin-scale.md, N4). The walk is bounded by
+// triangle_count() steps.
 //
 // Serial and deterministic: the queue key is (ratio descending, slot
 // ascending), and an entry whose slot no longer holds its three vertices is
@@ -54,6 +56,7 @@ struct QualityOutcome {
     std::size_t skipped_vertex = 0;   // the snapped node is already a vertex
     std::size_t skipped_blocked = 0;  // the walk met a constrained edge or left the mesh
     std::size_t walk_bound_hits = 0;  // the walk took triangle_count() steps
+    std::size_t skipped_frozen = 0;   // the snapped node lies on a frozen edge
 };
 
 namespace detail {
@@ -158,15 +161,19 @@ QualityOutcome improve(LatticeMesh& m, const LatticeFrame& f, const QualityOptio
             ++out.skipped_vertex;
             continue;
         }
+        const auto on = static_cast<unsigned>(std::find(side.begin(), side.end(), 0) - side.begin());
+        if (zeros == 1 && m.is_frozen(t, on)) {
+            ++out.skipped_frozen;
+            continue;
+        }
         const auto before = static_cast<std::uint32_t>(m.triangle_count());
         written.assign({t, before, before + 1});
         std::uint32_t q = 0;
         if (zeros == 0) {
             q = m.split_inside(t, node);
         } else {
-            const auto k = static_cast<unsigned>(std::find(side.begin(), side.end(), 0) - side.begin());
-            const auto u = m.neighbours(t)[k];
-            q = m.split_edge(t, k, node);
+            const auto u = m.neighbours(t)[on];
+            q = m.split_edge(t, on, node);
             if (u == kNoNeighbour)
                 written.pop_back();
             else

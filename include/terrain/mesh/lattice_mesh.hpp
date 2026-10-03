@@ -27,6 +27,11 @@
 // and mask on both halves of a split edge, and gives new interior edges
 // neither: constraints gain Steiner points but never move.
 //
+// Frozen edges (docs/increments/23-basin-scale.md, N1). An edge is frozen when
+// its mask meets the mesh's frozen mask (0 after build, so none is): a seam,
+// whose vertices the seam pass placed. Nothing may insert a vertex on it, and
+// split_edge asserts so; flips never touch it, since it is constrained.
+//
 // Depends on core and predicates. It knows no raster; (col, row) are just
 // numbers.
 
@@ -165,6 +170,11 @@ public:
     [[nodiscard]] std::uint32_t mask(std::size_t t, unsigned e) const noexcept {
         return masks_[t][e];
     }
+    void set_frozen_mask(std::uint32_t mask) noexcept { frozen_ = mask; }
+    [[nodiscard]] std::uint32_t frozen_mask() const noexcept { return frozen_; }
+    [[nodiscard]] bool is_frozen(std::size_t t, unsigned e) const noexcept {
+        return (masks_[t][e] & frozen_) != 0;
+    }
     [[nodiscard]] MeshVertex corner(std::size_t t, unsigned k) const noexcept {
         return vertices_[triangles_[t][k]];
     }
@@ -194,6 +204,7 @@ public:
     // t's slot and (p, b, c) is appended; u's (b, a, d) becomes (b, p, d) in
     // u's slot and (p, a, d) appended. Returns p's vertex index.
     std::uint32_t split_edge(std::uint32_t t, unsigned e, MeshVertex p) {
+        assert(!is_frozen(t, e));  // a frozen edge is never split (N1, FE6)
         const auto q = add_vertex(p);
         const auto a = triangles_[t][e], b = triangles_[t][(e + 1) % 3],
                    c = triangles_[t][(e + 2) % 3];
@@ -316,6 +327,7 @@ private:
     std::vector<std::array<std::uint32_t, 3>> neighbours_;
     std::vector<std::uint8_t> constrained_;
     std::vector<std::array<std::uint32_t, 3>> masks_;
+    std::uint32_t frozen_ = 0;
 };
 
 }  // namespace terrain::mesh

@@ -37,6 +37,11 @@
 // of its triangle is replaced by its foot F on that edge, once per node; N may
 // still go in later if its error stays above tolerance (R5). An inserted
 // off-node vertex is output at (x_min + col dx, y_max - row dy) with vertex_z.
+//
+// Frozen edges (docs/increments/23-basin-scale.md, "Refine with the seam
+// frozen", N1-N5). An edge whose mask meets frozen_mask gets no vertex: the
+// scan skips the nodes on it, no foot is taken on it, and the quality pass
+// skips a node on it. frozen_mask 0 is the run as before, bit for bit (K1).
 
 #include <terrain/core/indexed_mesh.hpp>
 #include <terrain/core/point.hpp>
@@ -74,6 +79,7 @@ struct RefineOptions {
     unsigned threads = 0;    // 0: hardware concurrency
     double min_angle_deg = 0.0;  // the start-quality pass; 0 (or NaN) is off
     bool constraint_feet = false;  // 20b R9: feet on constraint segments
+    std::uint32_t frozen_mask = 0;  // 23b: edges whose mask meets it are never split
 };
 
 struct RefineOutcome {
@@ -226,7 +232,8 @@ struct Foot {
 
 // R2 steps 1 and 2: on the first constrained edge of t that n is closer to
 // than eps (in world distance), the foot, or nothing when that foot is within
-// eps of an end or no such edge exists. n exactly on an edge is skipped.
+// eps of an end or no such edge exists. n exactly on an edge is skipped, and
+// so is a frozen edge (N5).
 template <raster::RasterSource R>
 [[nodiscard]] std::optional<Foot> foot_of(const R& dem, const mesh::LatticeMesh& m,
                                           std::uint32_t t, mesh::LatticeVertex n, double tol) {
@@ -234,7 +241,7 @@ template <raster::RasterSource R>
     std::optional<double> eps;
     for (unsigned e = 0; e < 3; ++e) {
         const mesh::MeshVertex a = m.corner(t, e), b = m.corner(t, (e + 1) % 3), p{n};
-        if (!m.is_constrained(t, e) || mesh::orient_sign(a, b, p) == 0)
+        if (!m.is_constrained(t, e) || m.is_frozen(t, e) || mesh::orient_sign(a, b, p) == 0)
             continue;
         const double ux = (b.col - a.col) * dx, uy = (b.row - a.row) * dy;
         const double px = (p.col - a.col) * dx, py = (p.row - a.row) * dy;
@@ -284,6 +291,7 @@ template <raster::RasterSource R>
     if (auto* refused = std::get_if<RefineOutcome>(&built))
         return std::move(*refused);
     auto& m = std::get<mesh::LatticeMesh>(built);
+    m.set_frozen_mask(options.frozen_mask);
 
     const auto frame = mesh::lattice_frame(g.delta_x(), g.delta_y(), g.rows(), g.cols());
     RefineOutcome out;
@@ -300,7 +308,7 @@ template <raster::RasterSource R>
             m, frame, mesh::QualityOptions{options.min_angle_deg, g.rows(), g.cols()});
         out.quality_inserted = q.inserted;
         out.quality_skipped = q.skipped_floor + q.skipped_outside + q.skipped_vertex
-                            + q.skipped_blocked + q.walk_bound_hits;
+                            + q.skipped_blocked + q.walk_bound_hits + q.skipped_frozen;
         out.quality_seconds = since(t0);
     }
     std::vector<ScanResult> results;
