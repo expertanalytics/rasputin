@@ -33,15 +33,22 @@ pair's figure, are in `raw/analysis-clang.md` and `raw/analysis-gcc.md`.
 over `bench.py`'s 5 % regression threshold. A PR that turns the checks on
 will get `REGRESSION` verdicts against a baseline built before the switch.
 In that PR the switch is the measured, deliberate cause, so the acceptance
-run for it re-baselines. The runs here are the evidence for that
-(h1/h2: `REGRESSION` at 19 and 20 threads, +5.6 and +5.9 %).
+run for it re-baselines. The runs here are the evidence for that: `bench.py`
+judged h2-fast against h1-plain and wrote 39 `REGRESSION` lines out of 42
+(domain, thread count) cells, every one except tile at 17 threads and
+quarter at 2 and 14 threads (`raw/h2-fast/README.md`, "Verdict";
+`raw/batch1-clang.out` shows only the last two, because `pairs.sh` logs
+`tail -2`).
 
-**Where the cost goes is not profiled.** One observation: with GCC the
-overhead grows with the thread count, from +2.5 % at 1 thread to about +7 %
-at 8 to 20 threads. With clang it stays roughly flat (+4.5 to +6.5 %). That
-suggests the checks cost more in the parallel part than in the serial phase
-under GCC, but nothing here measures it. Treat it as an observation, not a
-cause.
+**Where the cost goes is not profiled.** One observation: the overhead
+grows from 1 thread to the multi-threaded counts with both libraries, and
+more with GCC. Taking the largest pooled overhead over 2 to 20 threads
+minus the 1-thread figure (`raw/analysis-*.md`, "summary"): with clang it
+grows by 1.9 points on tile (+4.9 → +6.8 %) and 3.5 on quarter (+4.5 →
++8.0 %); with GCC by 4.8 points on tile (+2.6 → +7.4 %) and 6.2 on quarter
+(+2.5 → +8.7 %). That suggests the checks cost more in the parallel part
+than in the serial phase, especially under GCC, but nothing here measures
+it. Treat it as an observation, not a cause.
 
 ## Recommendation (the decision is Ola's)
 
@@ -82,8 +89,8 @@ from what is shipped, which is why it is not the recommendation.
   `ubuntu-latest` leg (system GCC, libstdc++) and `macos-latest` leg
   (AppleClang, libc++) pick the definition up from CMake. `macos-latest`
   needs an Xcode whose libc++ knows `_LIBCPP_HARDENING_MODE` (LLVM 18 and
-  later; older libc++ ignores an unknown macro silently). A guard test
-  catches that.
+  later; older libc++ ignores an unknown macro silently). The guard test
+  below would catch that; it does not exist yet.
 - A test, `@tester`'s: a ctest binary that indexes one past the end of a
   `std::vector` and is registered `WILL_FAIL`, or that `static_assert`s the
   mode macro. Without it, a toolchain that ignores the macro passes CI
@@ -108,7 +115,8 @@ from what is shipped, which is why it is not the recommendation.
 - Four Release builds of `_core` from the one tree, each configured at
   `<tree>/build-bench` with `bench.py`'s own configure line plus, for the
   hardened ones, `-DCMAKE_CXX_FLAGS=<define>`. CMake keeps a cached
-  `CMAKE_CXX_FLAGS` when `bench.py` reconfigures without it. Between runs,
+  `CMAKE_CXX_FLAGS` when `bench.py` reconfigures without it
+  (`scripts/build.sh`). Between runs,
   `scripts/pairs.sh` swaps the build directories in and out of `build-bench`
   with `mv`. `bench.py run` then rebuilt (a no-op) and assembled its `pkg/`
   as usual. Every `run.json` records the `_core` sha256, and each side's hash
@@ -172,10 +180,20 @@ no decision anywhere in refine.
   `python scripts/analyse.py . h1-plain:h2-fast h4-plain:h3-fast
   h5-plain:h6-fast`, and the same with `g1-gplain:g2-gassert
   g4-gplain:g3-gassert g5-gplain:g6-gassert`.
-- `raw/probes.txt`, from `bash scripts/probes.sh`.
-- `scripts/pairs.sh`: the driver. Batch 1 ran with an earlier, two-variant
-  version of the same swap logic. The copy here is the generalised one that
-  ran batch 2.
+- `raw/probes.txt`, from `bash scripts/probes.sh W` (W = the worktree
+  measured).
+- `scripts/build.sh W clang|gcc`: the configure and build commands for the
+  four variants, the `.variant` markers, and the directory names
+  (`build-park-*`, then `build-clang-*` for the clang pair before the GCC
+  builds) that `pairs.sh` and `probes.sh` expect. Its header gives the whole
+  sequence. It was written after the runs from the commands as run, at
+  @reviewer's request, and has not been executed: it would rebuild. During
+  the study the same configure lines were typed by hand, and the
+  `.variant` markers were written by hand before batch 2.
+- `scripts/pairs.sh W`: the driver. Batch 1 ran with an earlier, two-variant
+  version of the same swap logic, which told the variants apart by whether
+  `build-park-fast` existed. The copy here is the generalised one that ran
+  batch 2.
 - Meshes (the `--ascii` quality runs) were left out of the repository, in
   `../rasputin_scratch/hardening-2026-10-03/meshes/<run>/`. To regenerate
   one, rerun the `bench.py _child` line in any `raw/<run>/README.md` with

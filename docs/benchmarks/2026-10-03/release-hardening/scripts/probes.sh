@@ -1,8 +1,8 @@
 #!/bin/bash
 # The checks that the hardened builds are the objects measured, and that the
-# define does what it says. Run from the worktree root after the four builds;
+# define does what it says. Usage: probes.sh W, after build.sh and both batches;
 # writes nothing. Output committed as raw/probes.txt.
-W=/Users/skavhaug/projects/rasputin/.claude/worktrees/agent-a0ff1ca8678bdc0c3
+W=${1:?usage: $0 W (the worktree measured) ...}
 S=$(dirname "$0")
 echo "## compile flags of _core per build (CMakeFiles/_core.dir/flags.make)"
 for d in build-clang-plain build-clang-fast build-park-gplain build-bench; do
@@ -11,7 +11,7 @@ for d in build-clang-plain build-clang-fast build-park-gplain build-bench; do
 done
 echo
 echo "## size, brk (trap) instructions, sha256 of each _core"
-bash "$S/so_probe.sh" build-clang-plain build-clang-fast build-park-gplain build-bench
+bash "$S/so_probe.sh" "$W" build-clang-plain build-clang-fast build-park-gplain build-bench
 echo
 echo "## libstdc++ assertion handler imported (nm -u | grep -c __glibcxx_assert_fail)"
 for d in build-park-gplain build-bench; do

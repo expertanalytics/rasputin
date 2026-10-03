@@ -4,12 +4,13 @@
 # swapped in and out of <tree>/build-bench by mv; every one was configured at
 # that path, so each is consistent when in place. The variant in place is named
 # by build-bench/.variant; a parked one lives at build-park-<variant>.
-# Batch 1 (clang): SEQ="plain fast fast plain plain fast".
-# Batch 2 (GCC 16): SEQ="gplain gassert gassert gplain gplain gassert".
+# Usage: pairs.sh W, with the builds made by build.sh (see there for the order).
+# Batch 1 (clang): SEQ="plain fast fast plain plain fast" PREFIX=h.
+# Batch 2 (GCC 16): SEQ="gplain gassert gassert gplain gplain gassert" PREFIX=g.
 set -u
-W=/Users/skavhaug/projects/rasputin/.claude/worktrees/agent-a0ff1ca8678bdc0c3
-PY=/Users/skavhaug/projects/rasputin/.venv/bin/python
-OUT=/Users/skavhaug/projects/rasputin_scratch/hardening-2026-10-03
+W=${1:?usage: $0 W (the worktree measured) ...}
+PY=${PY:-/Users/skavhaug/projects/rasputin/.venv/bin/python}
+OUT=${OUT:-/Users/skavhaug/projects/rasputin_scratch/hardening-2026-10-03}
 mkdir -p "$OUT/runs" "$OUT/meshes" "$OUT/logs"
 use() {
   cur=$(cat "$W/build-bench/.variant")
