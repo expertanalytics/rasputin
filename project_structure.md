@@ -60,6 +60,13 @@ include/terrain/           # public C++ headers, header-only where possible
     refine.hpp             # RefineOptions, RefineOutcome, the round loop (14),
                            #   Delaunay insertion (14b), the quality-start call
                            #   (20), constraint feet (20b)
+    check_points.hpp       # CheckPoints: source nodes filed by target-grid
+                           #   cell, for the final check (15c)
+    refine_points.hpp      # refine_points: greedy insertion against stored
+                           #   check points (15c, the final check)
+    constraint_points.hpp  # constraint_check_points, ConstraintCheckPoints:
+                           #   where constraint edges cross grid lines, and
+                           #   the midpoints between, filed by edge (15f)
   hydrology/
     upstream.hpp           # upstream(z, seed) -> UpstreamOutcome: one
                            #   Priority-Flood labelling the nodes that drain

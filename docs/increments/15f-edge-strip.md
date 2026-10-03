@@ -265,7 +265,7 @@ Per edge, in this order:
 
 1. **Lattice ends.** Each end goes to lattice coordinates `(col, row)` by
    **the same function `refine` uses**, extracted from `detail::to_lattice`
-   (`include/terrain/refinement/refine.hpp:124-142`) as
+   (in `include/terrain/refinement/refine.hpp`) as
    `detail::lattice_position(g, p) -> mesh::MeshVertex`: a node exactly when
    `g.node` of the rounded position gives `p` back bit for bit, otherwise the
    clamped fractional position. `to_lattice` then calls it. The extraction
@@ -286,15 +286,57 @@ Per edge, in this order:
    `R` with `orient_sign(P0, P1, (K, R)) == 0` (exact) is replaced by the node
    `(K, R)` itself. A row crossing is handled the same way. The two crossings
    of one node then have one position, and step 5 keeps one of them.
-5. **Order and duplicates.** Points sorted by `t`, with ties broken by
-   position. A point at the same position as the one before it is dropped,
-   and so is one with the same `t`; both are counted in `duplicates`. After
-   this, `t` increases strictly.
-6. **Midpoints.** The list with the two ends added (`t = 0` and `t = 1`;
-   ends count as neighbours, *default*) gives one midpoint per consecutive
-   pair: the position `((a.col + b.col)/2, (a.row + b.row)/2)` and
-   `t = (t_a + t_b)/2`. The ends themselves are not check points: a vertex's
-   z is its own.
+5. **Order and duplicates.** Crossings are sorted by `t`, with ties broken by
+   position. They are then walked into a list that starts with `P0` at
+   `t = 0`. A crossing is dropped, and counted in `duplicates`, when:
+   - its `t` is not strictly between the last kept entry's `t` and 1
+     (`t ≤ t_last` or `t ≥ 1`); or
+   - its position equals the last kept entry's position.
+
+   `P1` is then appended at `t = 1`. The bound `t ≥ 1` is needed because `t`
+   can round to exactly 1.0 when `P1` lies within an ulp past a grid line
+   (@reviewer's probe, round 1: ends at col 0.8932792255671602 and
+   `nextafter(10, 11)`). A crossing's position can never equal an end's: a
+   column crossing has `col == K` exactly, and `K` is strictly between the
+   ends' columns, even after clamping and node snapping; a row crossing
+   likewise has `row == R`. So comparing the first crossing with `P0`, or
+   the last with `P1`, by position can never fire. The implementation may
+   compare against `P0` or skip it; either way the result is the same. The
+   `t` bounds, though, must be checked at both ends.
+6. **Midpoints.** Each consecutive pair `(l, r)` of the list, ends included
+   (ends count as neighbours, *default*), gives one candidate: the position
+   `((l.col + r.col)/2, (l.row + r.row)/2)` with `s = (t_l + t_r)/2`. The
+   candidate is dropped, and counted in `duplicates`, when its position equals
+   `l`'s or `r`'s, or its `s` equals `t_l` or `t_r`. All of these happen only
+   on a piece a few ulps long (@reviewer's probe, round 1:
+   `P0.col = nextafter(1, 0)` and a crossing at col 1 give a midpoint at the
+   crossing's position, `(1, 1.5)`). The ends themselves are not check
+   points: a vertex's z is its own.
+
+**The invariant of `on_edge(k)`**, which steps 5 and 6 make true and which
+`@tester` pins:
+
+- **I1.** Every point has `0 < s < 1`.
+- **I2.** `s` increases strictly along `on_edge(k)`.
+- **I3.** In the sequence `P0, points…, P1` as steps 5 and 6 leave it,
+  before step 7's NoData drops, no two neighbours share a position. So
+  without NoData, no point is at either end's position, and no two
+  consecutive points of `on_edge(k)` share one. Nothing is claimed for
+  non-neighbours, or for points that become neighbours only because a NoData
+  point between them was dropped. Such a coincidence can only arise at ulp
+  scale. The loop (15f-2) refuses that insertion through `foot_fits`, because
+  a child triangle would have zero area, and counts it.
+
+I1 is what the loop needs: it scans the open interval `(s_a, s_b)`, so a
+point with `s = 0` or `s = 1` would never be checked, silently. I3 keeps it
+from inserting a vertex on top of an end.
+
+**A degenerate edge.** A pair with equal indices (`e[0] == e[1]`) is
+refused with `std::invalid_argument`, in a message containing
+`constraint_check_points`. No mesh has such an edge, so it can only be a
+programming error. Two distinct indices at one position give no points:
+there is no crossing, and the one midpoint candidate sits on both ends, so
+step 6 drops it.
 7. **Heights.** Every point's z is `vertex_z(dem, point)`
    (`include/terrain/refinement/scan.hpp:67`), the function refine uses for an
    off-node vertex. At a node it is `value_at`. For a crossing, the cell's
@@ -306,8 +348,8 @@ Per edge, in this order:
    is counted in `no_data`.
 
 The parameter `s` stored with each point is its `t`. Per edge that gives
-`2c + 1` points for `c` distinct crossings, before NoData. An edge with no
-crossing gets its one midpoint.
+`2c + 1` points for `c` kept crossings, before NoData and the ulp-scale drops
+of step 6. An edge with no crossing gets its one midpoint.
 
 ### D3. The store: `ConstraintCheckPoints`
 
@@ -339,7 +381,10 @@ private:
 ```
 
 It is built only by the generator and is immutable afterwards, so any number of
-threads may read it. **Why not 15c's `CheckPoints`:** that store keeps a
+threads may read it. `edge(k)` and `on_edge(k)` check `k` (`.at()`) and throw
+`std::out_of_range` past `edge_count()`, as built in 15f-1 and kept as the
+design. The loop's hot path reads `on_edge` once per sub-edge, so the check
+costs nothing measurable. **Why not 15c's `CheckPoints`:** that store keeps a
 `float` offset in the cell and finds points by membership (F1). The strip
 needs the edge, the parameter, and z in `double`. A `float` z would round a
 bilinear value near 2,000 m by up to about 6e-5 m (half of the `float`
@@ -432,7 +477,7 @@ exactly on an edge, with the existing rule that skips the split this round if
 the neighbour across that edge was already touched. A **strip point** goes in
 with `split_edge(t, e, at)` on its sub-edge, under the same skip rule.
 Because `at` is off the edge by rounding, the split is guarded as 20b's feet
-are: `detail::foot_fits(m, t, e, at)` (`refine.hpp:247`, reused, not copied)
+are: `detail::foot_fits(m, t, e, at)` (in `refine.hpp`, reused, not copied)
 must find every child strictly counter-clockwise. If it does not, the point is
 marked **refused** for the rest of the run and counted. The vertex's z is the
 point's z. `legalise_around` follows, as today.
@@ -496,7 +541,7 @@ refused.
 | site | what |
 |---|---|
 | `include/terrain/refinement/constraint_points.hpp` (new) | `ConstraintPoint`, `ConstraintCheckPoints`, `constraint_check_points` (D2, D3) |
-| `include/terrain/refinement/refine.hpp:124-142` | `detail::lattice_position` extracted from `to_lattice`, which calls it; no change in behaviour |
+| `include/terrain/refinement/refine.hpp`, `detail::to_lattice` | `detail::lattice_position` extracted from it, and called by it; no change in behaviour |
 | `include/terrain/refinement/refine_points.hpp` | `detail::point_loop`; the strip scan and ownership; the sub-edge map; `refine_points(..., strip)`; `refine_strip`; the outcome fields; `PointScan` (D4) |
 | `bindings/core.cpp` | `ConstraintCheckPoints` (read-only: `size`, `no_data`, `duplicates`, `edge_count`); `constraint_check_points(view, vertices, edges)` over the bound raster variant; `refine_points(..., strip=None)`; `refine_strip(view, strip, vertices, triangles, z, valid, edges, masks, *, tolerance, threads=0)`; the new outcome properties. Every call releases the GIL, as `refine_points` does today (`bindings/core.cpp:1045`) |
 | `src_python/tin_engine/_core.pyi` | stubs for the above |
@@ -710,6 +755,22 @@ design:
   filed once, as its own entry, in the order given and in canonical direction
   (D2, step 2). An edge with no kept points has an empty `on_edge(k)`.
 
+**Added after `@reviewer`'s round 1 on 15f-1** (the ruling is D2, steps 5-6
+and I1-I3):
+
+- **CC7, the ends at ulp distance.** Both of the reviewer's probes become
+  cases. `P1` at `nextafter(10, 11)` with a crossing at col 10 gives a `t` of
+  exactly 1. `P0` at col `nextafter(1, 0)`, row 1.5, to `(4, 3.25)` gives a
+  midpoint that rounds onto the crossing. In both, I1-I3 hold, and
+  `duplicates` counts what was dropped. Plus a seeded sweep: ends placed one
+  to four ulps either side of grid lines, I1-I3 asserted on every edge.
+- **CC8, the degenerate edge.** `{i, i}` is refused, with
+  `constraint_check_points` in the message. Two distinct vertices at one
+  position give an empty `on_edge(k)`, with the midpoint counted in
+  `duplicates`.
+- **CC9, out of range.** `edge(edge_count())` and `on_edge(edge_count())`
+  throw `std::out_of_range`.
+
 **C++ (Catch2), the loop (15f-2):**
 
 - **ES1, the defect, then its repair.** A start mesh with a long constrained
@@ -834,7 +895,13 @@ it passes 550, the strip scan and the sub-edge map move to
 each merge; a pointer from `15c-geographic-dem.md`'s "The edge strip" and from
 23's order (this design branch adds both); `project_structure.md`, where it
 lists `include/terrain/refinement/` and the Python modules
-(`constraint_points.hpp`, 15f-1; `edge_strip.py`, 15f-2).
+(`constraint_points.hpp`, 15f-1; `edge_strip.py`, 15f-2). For 15f-1 both are
+done on this branch: the ROADMAP row 15f, and `project_structure.md`'s
+`refinement/` list. That list also gains 15c's `check_points.hpp` and
+`refine_points.hpp`, which it lacked; that is a documentation defect fixed
+here, per the README's rule. `project_structure.md` is not a governed file
+(`.claude/hooks/guard_governance.py`, `GOVERNED`), so it was edited during
+the unattended window.
 
 ## Acceptance (`@perf`)
 
