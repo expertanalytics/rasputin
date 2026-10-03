@@ -118,6 +118,23 @@ namespace detail {
     return out;
 }
 
+// The lattice position of a world point in the node rectangle (the caller
+// checks): the node when RasterGeometry::node of the rounded (row, col) gives
+// p back bit for bit, otherwise the clamped fractional (col, row). to_lattice
+// and the edge strip's generator (constraint_points.hpp) share it, so the
+// generator's edge ends are the loop's vertices bit for bit.
+[[nodiscard]] inline mesh::MeshVertex lattice_position(const raster::RasterGeometry& g, Point2 p) {
+    const double col =
+        std::clamp((p.x - g.x_min()) / g.delta_x(), 0.0, static_cast<double>(g.cols() - 1));
+    const double row =
+        std::clamp((g.y_max() - p.y) / g.delta_y(), 0.0, static_cast<double>(g.rows() - 1));
+    const raster::CellIndex node{static_cast<std::size_t>(std::round(row)),
+                                 static_cast<std::size_t>(std::round(col))};
+    return g.node(node) == p
+               ? mesh::MeshVertex{static_cast<double>(node.col), static_cast<double>(node.row)}
+               : mesh::MeshVertex{col, row};
+}
+
 // The lattice mesh for `start`, or the refusal. A vertex is a node iff
 // RasterGeometry::node of its rounded (row, col) gives it back bit for bit;
 // otherwise it is off-node, and refused only outside the node rectangle.
@@ -131,15 +148,7 @@ namespace detail {
         if (!g.cell_of(p))
             return refusal(RefineStatus::OutsideGrid, "refine: start vertex " + std::to_string(i)
                                                           + " is outside the DEM's node rectangle");
-        const double col = std::clamp((p.x - g.x_min()) / g.delta_x(), 0.0,
-                                      static_cast<double>(g.cols() - 1));
-        const double row = std::clamp((g.y_max() - p.y) / g.delta_y(), 0.0,
-                                      static_cast<double>(g.rows() - 1));
-        const raster::CellIndex node{static_cast<std::size_t>(std::round(row)),
-                                     static_cast<std::size_t>(std::round(col))};
-        lattice.push_back(g.node(node) == p ? mesh::MeshVertex{static_cast<double>(node.col),
-                                                               static_cast<double>(node.row)}
-                                            : mesh::MeshVertex{col, row});
+        lattice.push_back(lattice_position(g, p));
     }
 
     std::map<std::pair<std::uint32_t, std::uint32_t>, std::uint32_t> constraint;
