@@ -37,6 +37,8 @@
 
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/generators/catch_generators.hpp>
+#include <catch2/matchers/catch_matchers_exception.hpp>
+#include <catch2/matchers/catch_matchers_string.hpp>
 
 #include <terrain/core/indexed_mesh.hpp>
 #include <terrain/core/point.hpp>
@@ -58,7 +60,9 @@
 #include <map>
 #include <optional>
 #include <random>
+#include <set>
 #include <span>
+#include <stdexcept>
 #include <utility>
 #include <vector>
 
@@ -672,7 +676,81 @@ TEST_CASE("FE5: with a strip, a check point within r(g) of a frozen edge is trea
     const auto out = run_points(store, b, point_options(0.5, kSeam), &strip);
     REQUIRE(out.ok());
     REQUIRE(out.on_frozen == 1);
+    // N6: the error at its projection on the seam, sigma = 2.5 / 8 from (4, 0).
+    const auto za = strip_oracle::height(dem, Lat{4, 0}), zb = strip_oracle::height(dem, Lat{4, 8});
+    REQUIRE(std::abs(out.on_frozen_max_error - std::abs(100.0 - (*za + 2.5 / 8.0 * (*zb - *za)))) <= 1e-6);
     const Mesh m = strip_oracle::mesh_of(out);
     REQUIRE(frozen_oracle::clean(
         frozen_oracle::frozen_findings(kSquare, start.mesh.vertices(), start.edges, start.masks, kSeam, m)));
+}
+
+TEST_CASE("FE5: without a strip the frozen test is exact: a point 1e-11 off the seam goes in",
+          "[refinement][frozen][fe5]") {
+    // N7: "Without a strip, the frozen test is exact (radius 0), as L12 and L14
+    // are; K1 and 15c's path are unchanged." The same point as the case above,
+    // no strip: it is inside the right piece, not on the seam, so 15c inserts
+    // it by split_inside and on_frozen stays 0.
+    const auto start = grid_seam();
+    const auto dem = ground(kSquare, {});
+    const Begin b = begin_from(dem, start);
+    const CheckPoints store = store_of(kSquare, {{Lat{4 + 1e-11, 2.5}, 100.0}});
+    const auto out = run_points(store, b, point_options(0.5, kSeam));
+    REQUIRE(out.ok());
+    REQUIRE(out.on_frozen == 0);
+    REQUIRE(out.inserted == 1);
+}
+
+// ------------------------------------------------------------------------ N16
+
+namespace {
+
+// A strip over EVERY constraint edge of the start, the frozen seam included:
+// what a caller that forgot to leave frozen edges out would build.
+struct WholeStrip {
+    Start start = grid_seam();
+    Raster<float> dem = ground(kSquare, {});
+    Begin b = begin_from(dem, start);
+    ConstraintCheckPoints strip = strip_of(dem, b, 0);
+};
+
+}  // namespace
+
+TEST_CASE("N16: refine_strip refuses a strip edge that is frozen", "[refinement][frozen][n16]") {
+    // 23-basin-scale.md N16: std::logic_error, its text starting with the entry
+    // point's name, as 15f L2's other programming errors are. The same strip
+    // with frozen_mask 0 runs (the control).
+    const WholeStrip w;
+    REQUIRE(run_strip(w.dem, w.strip, w.b, point_options(0.5, 0)).ok());
+    REQUIRE_THROWS_MATCHES(run_strip(w.dem, w.strip, w.b, point_options(0.5, kSeam)), std::logic_error,
+                           Catch::Matchers::MessageMatches(Catch::Matchers::StartsWith("refine_strip: ")));
+}
+
+TEST_CASE("N16: refine_points with a strip refuses a strip edge that is frozen", "[refinement][frozen][n16]") {
+    const WholeStrip w;
+    const CheckPoints store = store_of(kSquare, {{Lat{2, 5}, 30.0}});
+    REQUIRE(run_points(store, w.b, point_options(0.5, 0), &w.strip).ok());
+    REQUIRE_THROWS_MATCHES(run_points(store, w.b, point_options(0.5, kSeam), &w.strip), std::logic_error,
+                           Catch::Matchers::MessageMatches(Catch::Matchers::StartsWith("refine_points: ")));
+}
+
+TEST_CASE("N16: the frozen-edge refusal comes after 15f's not-a-constraint-edge check",
+          "[refinement][frozen][n16]") {
+    // N16: "checked after L2's check (3) ... and before (4)". A strip with a
+    // frozen edge AND an edge that is no constraint of the start is refused
+    // for the second, under either entry point.
+    const WholeStrip w;
+    std::set<std::pair<std::uint32_t, std::uint32_t>> constrained;
+    for (const auto& e : w.start.edges) constrained.insert(std::minmax(e[0], e[1]));
+    Edges edges = w.start.edges;
+    const auto& tri = w.start.mesh.triangles()[0];
+    for (unsigned k = 0; k < 3 && edges.size() == w.start.edges.size(); ++k)
+        if (!constrained.contains(std::minmax(tri[k], tri[(k + 1) % 3]))) edges.push_back({tri[k], tri[(k + 1) % 3]});
+    REQUIRE(edges.size() == w.start.edges.size() + 1);
+    const auto strip = constraint_check_points(w.dem, w.b.mesh.vertices(), EdgeSpan{edges});
+    const auto not_constraint = Catch::Matchers::ContainsSubstring("is not a constraint edge of the start mesh");
+    REQUIRE_THROWS_MATCHES(run_strip(w.dem, strip, w.b, point_options(0.5, kSeam)), std::logic_error,
+                           Catch::Matchers::MessageMatches(not_constraint));
+    const CheckPoints store = store_of(kSquare, {{Lat{2, 5}, 30.0}});
+    REQUIRE_THROWS_MATCHES(run_points(store, w.b, point_options(0.5, kSeam), &strip), std::logic_error,
+                           Catch::Matchers::MessageMatches(not_constraint));
 }
