@@ -12,6 +12,13 @@ fails on its assertions, not at collection.
 Micro-TIFFs are written to `tmp_path`. Two real extracts of Ola's DTM10
 archive are read from `tests/fixtures/dtm10/` (see `extract.py` there), and
 T-real cuts the committed benchmark tile into quadrants (`needs_codecs`).
+
+Increment 25 (`docs/increments/25-plain-output.md`, D2 and D4): the mesh file
+names the files used in `dem_source` (`; `-joined); `dem_tiles`, `dem_seams`
+and `dem_grid` are `--stats` rows, read here through `inputs`, and stderr's
+mosaic line reads `DEM: <n> files, <c> columns x <r> rows`. A pair's
+`dem_seams` entry reads `<a> and <b> disagree at <n> node(s), by up to ...`; agreeing overlaps read
+`none: the tiles agree where they overlap`.
 """
 
 from __future__ import annotations
@@ -39,6 +46,7 @@ from geotiff_fixtures import (
 )
 from mosaic_fixtures import piece, quadrants, whole
 from test_cli_mesh import plain
+from test_cli_mesh_refine import SEAMS_AGREE, file_field, stats_row
 from tin_engine.cli import app
 from tin_engine.io.models import DemTile
 from vtkread import VtkFile, read_vtk
@@ -95,14 +103,26 @@ def write_one(path: Path, tile: DemTile) -> Path:
 
 
 def run_vtk(out: Path, *args: str) -> VtkFile:
-    code, output = invoke(*args, "--out", str(out))
+    """Mesh to ``out`` with ``--stats`` beside it; ``inputs`` reads that report."""
+    code, output = invoke(*args, "--out", str(out), "--stats", str(out.with_suffix(".md")))
     assert code == 0, output
     return read_vtk(out.read_bytes())
 
 
 def field(vtk: VtkFile, name: str) -> str:
-    (value,) = vtk.field_data[name].values
-    return str(value)
+    return file_field(vtk, name)
+
+
+def inputs(out: Path, name: str) -> str:
+    """The ``--stats`` row ``name`` of the ``run_vtk`` that wrote ``out``."""
+    return stats_row(out.with_suffix(".md").read_text(encoding="utf-8"), name)
+
+
+def grid_of(out: Path) -> tuple[int, int]:
+    """(columns, rows) from ``dem_grid``: ``<c> columns x <r> rows, ...``."""
+    match = re.match(r"(\d+) columns x (\d+) rows\b", inputs(out, "dem_grid"))
+    assert match is not None, inputs(out, "dem_grid")
+    return int(match.group(1)), int(match.group(2))
 
 
 def same_mesh(a: VtkFile, b: VtkFile) -> None:
@@ -133,18 +153,29 @@ class TestC1Fields:
     """C1 and R11: what a mosaic's `.vtk` records, and the stderr line."""
 
     def test_a_directory_writes_the_mosaic_fields(self, tmp_path: Path, mosaic_dir: Path) -> None:
-        code, output = invoke("--dem", str(mosaic_dir), "--out", str(tmp_path / "m.vtk"))
+        out = tmp_path / "m.vtk"
+        code, output = invoke("--dem", str(mosaic_dir), "--out", str(out))
         assert code == 0, output
-        vtk = read_vtk((tmp_path / "m.vtk").read_bytes())
+        vtk = read_vtk(out.read_bytes())
         assert field(vtk, "crs") == "EPSG:25833"
-        assert field(vtk, "elevation_source").startswith("mosaic of 4 tiles, 9 x 13 nodes; ")
-        assert field(vtk, "dem_tiles") == "ne.tif; nw.tif; se.tif; sw.tif"
-        assert "mosaic of 4 tiles, 9 x 13 nodes" in output
+        assert field(vtk, "dem_source") == "ne.tif; nw.tif; se.tif; sw.tif"
+        for moved in ("elevation_source", "dem_tiles", "dem_seams"):
+            assert moved not in vtk.field_data, moved
+        assert "DEM: 4 files, 13 columns x 9 rows" in output
+        assert "mosaic of" not in output
+
+    def test_the_stats_rows(self, tmp_path: Path, mosaic_dir: Path) -> None:
+        out = tmp_path / "m.vtk"
+        run_vtk(out, "--dem", str(mosaic_dir))
+        assert inputs(out, "dem_tiles") == "ne.tif; nw.tif; se.tif; sw.tif"
+        assert grid_of(out) == (13, 9)
 
     def test_one_file_records_no_tile_list(self, tmp_path: Path, source: DemTile) -> None:
-        vtk = run_vtk(tmp_path / "one.vtk", "--dem", str(write_one(tmp_path / "one.tif", source)))
+        out = tmp_path / "one.vtk"
+        vtk = run_vtk(out, "--dem", str(write_one(tmp_path / "one.tif", source)))
         assert "dem_tiles" not in vtk.field_data
-        assert not field(vtk, "elevation_source").startswith("mosaic")
+        assert field(vtk, "dem_source") == "one.tif"
+        assert grid_of(out) == (13, 9)
 
 
 class TestC2Equivalence:
@@ -183,7 +214,10 @@ class TestC3RepeatedDem:
         by_dir = run_vtk(tmp_path / "dir.vtk", "--dem", str(mosaic_dir))
         by_files = run_vtk(tmp_path / "files.vtk", *[arg for f in files for arg in ("--dem", f)])
         same_mesh(by_files, by_dir)
-        assert field(by_files, "dem_tiles") == field(by_dir, "dem_tiles")
+        assert field(by_files, "dem_source") == field(by_dir, "dem_source")
+        assert inputs(tmp_path / "files.vtk", "dem_tiles") == inputs(
+            tmp_path / "dir.vtk", "dem_tiles"
+        )
 
 
 class TestC4Refusals:
@@ -234,13 +268,15 @@ class TestC4Refusals:
 
 class TestQ1Seams:
     """Ola's Q1 revised (2026-09-28), through the CLI: a disagreeing overlap
-    meshes, and each disagreeing pair is recorded in the `dem_seams` field
-    and, with `--stats`, in a "DEM seams" section.
+    meshes, and each disagreeing pair is recorded in the `--stats` row
+    `dem_seams` (increment 25 moved it from the mesh file) and in a
+    "DEM seams" section.
 
-    `dem_seams` is recorded whenever `dem_tiles` is: `none` when every
-    overlapping node agrees, else one entry per disagreeing pair, sorted,
-    `; `-joined, escaped like `dem_tiles`:
-    `<first> | <second>: nodes <n>, max <largest:g>, median <median:g>`.
+    `dem_seams` is recorded whenever `dem_tiles` is: `none: the tiles agree
+    where they overlap` when every overlapping node agrees, else one entry per
+    disagreeing pair, sorted, `; `-joined, escaped like `dem_tiles`:
+    `<first> and <second> disagree at <n> node(s), by up to <largest:g> m
+    (median <median:g> m)` (increment 25, "Settled after the red step", 8).
     """
 
     @staticmethod
@@ -262,17 +298,25 @@ class TestQ1Seams:
         """Was `TestC4Refusals.test_an_overlap_disagreement`, which expected a
         refusal naming both tiles and the 4. The same names and number are now
         in the record, and the mesh is written."""
-        vtk = run_vtk(tmp_path / "m.vtk", "--dem", str(self.disagreeing(tmp_path, source)))
-        assert field(vtk, "dem_seams") == "ne.tif | nw.tif: nodes 1, max 4, median 4"
-        assert field(vtk, "dem_tiles") == "ne.tif; nw.tif; se.tif; sw.tif"
+        out = tmp_path / "m.vtk"
+        vtk = run_vtk(out, "--dem", str(self.disagreeing(tmp_path, source)))
+        assert (
+            inputs(out, "dem_seams")
+            == "ne.tif and nw.tif disagree at 1 node, by up to 4 m (median 4 m)"
+        )
+        assert inputs(out, "dem_tiles") == "ne.tif; nw.tif; se.tif; sw.tif"
+        assert "dem_seams" not in vtk.field_data
 
     def test_agreeing_tiles_record_none(self, tmp_path: Path, mosaic_dir: Path) -> None:
-        vtk = run_vtk(tmp_path / "m.vtk", "--dem", str(mosaic_dir))
-        assert field(vtk, "dem_seams") == "none"
+        run_vtk(tmp_path / "m.vtk", "--dem", str(mosaic_dir))
+        assert inputs(tmp_path / "m.vtk", "dem_seams") == SEAMS_AGREE
 
     def test_one_file_records_no_seams(self, tmp_path: Path, source: DemTile) -> None:
-        vtk = run_vtk(tmp_path / "one.vtk", "--dem", str(write_one(tmp_path / "one.tif", source)))
+        out = tmp_path / "one.vtk"
+        vtk = run_vtk(out, "--dem", str(write_one(tmp_path / "one.tif", source)))
         assert "dem_seams" not in vtk.field_data
+        report = out.with_suffix(".md").read_text(encoding="utf-8")
+        assert "| dem_seams |" not in report and "`dem_seams`" not in report
 
     def test_several_pairs_are_sorted_and_joined(self, tmp_path: Path) -> None:
         """Each quadrant 1000 times its rank higher than the grid: every
@@ -285,15 +329,15 @@ class TestQ1Seams:
             t = tiles[name]
             tiles[name] = DemTile(meta=t.meta, array=np.asarray(t.array) + 1000 * rank)
         write_tiles(tmp_path / "all", tiles)
-        vtk = run_vtk(tmp_path / "m.vtk", "--dem", str(tmp_path / "all"))
-        assert field(vtk, "dem_seams") == "; ".join(
+        run_vtk(tmp_path / "m.vtk", "--dem", str(tmp_path / "all"))
+        assert inputs(tmp_path / "m.vtk", "dem_seams") == "; ".join(
             [
-                "ne.tif | nw.tif: nodes 5, max 1000, median 1000",
-                "ne.tif | se.tif: nodes 7, max 2000, median 2000",
-                "ne.tif | sw.tif: nodes 1, max 3000, median 3000",
-                "nw.tif | se.tif: nodes 1, max 1000, median 1000",
-                "nw.tif | sw.tif: nodes 7, max 2000, median 2000",
-                "se.tif | sw.tif: nodes 5, max 1000, median 1000",
+                "ne.tif and nw.tif disagree at 5 nodes, by up to 1000 m (median 1000 m)",
+                "ne.tif and se.tif disagree at 7 nodes, by up to 2000 m (median 2000 m)",
+                "ne.tif and sw.tif disagree at 1 node, by up to 3000 m (median 3000 m)",
+                "nw.tif and se.tif disagree at 1 node, by up to 1000 m (median 1000 m)",
+                "nw.tif and sw.tif disagree at 7 nodes, by up to 2000 m (median 2000 m)",
+                "se.tif and sw.tif disagree at 5 nodes, by up to 1000 m (median 1000 m)",
             ]
         )
 
@@ -301,14 +345,14 @@ class TestQ1Seams:
         directory = self.disagreeing(tmp_path, source, name="Ålesund.tif")
         listed = next(p.name for p in directory.iterdir() if p.name.endswith("lesund.tif"))
         escaped = listed.encode("ascii", "backslashreplace").decode("ascii")
-        vtk = run_vtk(tmp_path / "m.vtk", "--dem", str(directory))
-        recorded = field(vtk, "dem_seams")
+        run_vtk(tmp_path / "m.vtk", "--dem", str(directory))
+        recorded = inputs(tmp_path / "m.vtk", "dem_seams")
         assert recorded.isascii()
         first, second = (
             n.encode("ascii", "backslashreplace").decode("ascii")
             for n in sorted([listed, "ne.tif"])
         )  # the file system may store the name decomposed, which sorts first
-        assert recorded == f"{first} | {second}: nodes 1, max 4, median 4"
+        assert recorded == f"{first} and {second} disagree at 1 node, by up to 4 m (median 4 m)"
         assert escaped in recorded
 
     def test_stats_has_a_seams_section_listing_only_disagreeing_pairs(
@@ -344,8 +388,8 @@ class TestQ1Seams:
         0.5 mm off, so no pair qualifies: `none`, and `--stats` has no
         "DEM seams" section."""
         directory = self.disagreeing(tmp_path, source, by=0.0005)
-        vtk = run_vtk(tmp_path / "m.vtk", "--dem", str(directory))
-        assert field(vtk, "dem_seams") == "none"
+        run_vtk(tmp_path / "m.vtk", "--dem", str(directory))
+        assert inputs(tmp_path / "m.vtk", "dem_seams") == SEAMS_AGREE
         lines = report(tmp_path, "--dem", str(directory)).splitlines()
         assert "## Sizes" in lines
         assert "## DEM seams" not in lines
@@ -356,16 +400,17 @@ class TestQ1Seams:
         """Review suggestion on 15a: a `|` in a tile name would end its
         Markdown table cell early. In the "DEM seams" table it is written
         `\\|`, so the row still has five cells (split on unescaped pipes).
-        The `dem_seams` field is not a table and records the name as listed
-        (`ne.tif` sorts first: `e` < `|`)."""
+        The `dem_seams` row is escaped the same way, and reads, unescaped, the
+        name as listed (`ne.tif` sorts first: `e` < `|`)."""
         directory = self.disagreeing(tmp_path, source, name="n|w.tif")
         lines = report(tmp_path, "--dem", str(directory)).splitlines()
         at = lines.index("## DEM seams")
         row = next(line for line in lines[at + 1 :] if line.startswith("| ne.tif"))
         cells = [cell.strip() for cell in re.split(r"(?<!\\)\|", row.strip().strip("|"))]
         assert cells == ["ne.tif", "n\\|w.tif", "1", "4", "4"]
-        vtk = run_vtk(tmp_path / "m.vtk", "--dem", str(directory))
-        assert field(vtk, "dem_seams") == "ne.tif | n|w.tif: nodes 1, max 4, median 4"
+        run_vtk(tmp_path / "m.vtk", "--dem", str(directory))
+        seams = inputs(tmp_path / "m.vtk", "dem_seams")
+        assert seams == "ne.tif and n|w.tif disagree at 1 node, by up to 4 m (median 4 m)"
 
 
 class TestC5Usage:
@@ -409,7 +454,8 @@ class TestC5Usage:
         xs, ys = vtk.points[:, 0], vtk.points[:, 1]
         assert (xs.min(), xs.max()) == (500010.0, 500090.0)
         assert (ys.min(), ys.max()) == (6599965.0, 6600000.0)
-        assert field(vtk, "elevation_source").startswith("mosaic of 4 tiles, 8 x 9 nodes; ")
+        assert grid_of(tmp_path / "box.vtk") == (9, 8)
+        assert field(vtk, "dem_source") == "ne.tif; nw.tif; se.tif; sw.tif"
 
     def test_a_box_reaching_into_another_lattices_strip_meshes_on_the_covering_one(
         self, tmp_path: Path, mosaic_dir: Path, source: DemTile
@@ -425,7 +471,8 @@ class TestC5Usage:
             "--dem", str(mosaic_dir),
             "--bbox", "500072", "6599962", "500112", "6599974",
         )  # fmt: skip
-        assert field(vtk, "dem_tiles") == "se.tif"
+        assert field(vtk, "dem_source") == "se.tif"
+        assert inputs(tmp_path / "box.vtk", "dem_tiles") == "se.tif"
         xs, ys = vtk.points[:, 0], vtk.points[:, 1]
         assert (xs.min(), xs.max()) == (500070.0, 500120.0)
         assert (ys.min(), ys.max()) == (6599960.0, 6599975.0)
@@ -457,19 +504,22 @@ class TestC6NonAscii:
             p.name for p in (tmp_path / "names").iterdir() if p.name.endswith("lesund.tif")
         )
         vtk = run_vtk(tmp_path / "n.vtk", "--dem", str(tmp_path / "names"))
-        recorded = field(vtk, "dem_tiles")
-        assert recorded.isascii()
-        assert listed.encode("ascii", "backslashreplace").decode("ascii") in recorded
+        escaped = listed.encode("ascii", "backslashreplace").decode("ascii")
+        for recorded in (field(vtk, "dem_source"), inputs(tmp_path / "n.vtk", "dem_tiles")):
+            assert recorded.isascii()
+            assert escaped in recorded
 
 
 class TestRealDtm10:
     """The 15a acceptance on real extracts of one release (N5): Q1 and Q5."""
 
     def test_the_real_seam_meshes(self, tmp_path: Path) -> None:
-        vtk = run_vtk(tmp_path / "seam.vtk", "--dem", str(DTM10 / "seam"), "--tolerance", "1")
-        assert field(vtk, "dem_tiles") == "6400_1_10m_z33.tif; 6400_4_10m_z33.tif"
-        assert field(vtk, "elevation_source").startswith("mosaic of 2 tiles, 256 x 563 nodes; ")
-        assert field(vtk, "dem_seams") == "none"  # Ola's Q1 revised: it agrees
+        out = tmp_path / "seam.vtk"
+        vtk = run_vtk(out, "--dem", str(DTM10 / "seam"), "--tolerance", "1")
+        assert field(vtk, "dem_source") == "6400_1_10m_z33.tif; 6400_4_10m_z33.tif"
+        assert inputs(out, "dem_tiles") == "6400_1_10m_z33.tif; 6400_4_10m_z33.tif"
+        assert inputs(out, "dem_grid") == "563 columns x 256 rows, 10 m apart"  # the design's
+        assert inputs(out, "dem_seams") == SEAMS_AGREE  # Ola's Q1 revised: it agrees
         assert np.isfinite(vtk.points).all()
 
     def test_the_agreeing_real_seam_meshes_like_its_stitched_tile(self, tmp_path: Path) -> None:
@@ -513,9 +563,9 @@ class TestRealDtm10:
             "--tolerance", "1",
         )  # fmt: skip
         # One tile selected out of a directory: the file used is on record
-        # (the label is the directory's), but it is not called a mosaic.
-        assert field(vtk, "dem_tiles") == "7707_2_10m_z33.tif"
-        assert not field(vtk, "elevation_source").startswith("mosaic")
+        # (the label is the directory's).
+        assert field(vtk, "dem_source") == "7707_2_10m_z33.tif"
+        assert inputs(tmp_path / "box.vtk", "dem_tiles") == "7707_2_10m_z33.tif"
 
 
 @needs_codecs
