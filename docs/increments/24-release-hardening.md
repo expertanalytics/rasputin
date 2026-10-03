@@ -1,8 +1,8 @@
 # Increment 24: release hardening, on by default, off for heavy runs
 
 Status: **designed and ruled**, `@architect`, 2026-10-03. Ola chose option (a)
-and answered Q1-Q4 the same day (§11). No code yet. One PR, about 55
-production lines. The measurement it rests on is
+and answered Q1-Q4 the same day (§11). **Implemented, in review**: one PR,
+62 production lines; departures from this design are under "As built". The measurement it rests on is
 `docs/benchmarks/2026-10-03/release-hardening/README.md` (`@perf`, #149).
 
 **The ask** (Ola, 2026-10-03): "I think we can live with hardening, but for
@@ -138,11 +138,20 @@ single venv is the error the reporting below exists to catch, not a workflow
 to recommend.
 
 **A stale-cache trap, and its fix.** scikit-build-core reuses
-`build/{wheel_tag}` (`pyproject.toml`, `build-dir`). If an OFF install leaves
-`RASPUTIN_HARDENING=OFF` in that directory's `CMakeCache.txt`, the next plain
-`pip install .` would reconfigure with the cached OFF, because nothing passes
-the option. So the default is passed explicitly on every build, from
-`pyproject.toml`:
+`build/{wheel_tag}` (`pyproject.toml`, `build-dir`), and an OFF install leaves
+`RASPUTIN_HARDENING=OFF` in that directory's `CMakeCache.txt`. Whether the
+next install sees it depends on scikit-build-core: it deletes the cache
+whenever the scikit-build-core it runs from is not the one recorded in the
+build directory (`scikit_build_core/cmake.py`, the log line "New isolated
+environment {} -> {}, clearing cache"). pip's default build isolation gives
+every install a fresh build environment, so a default `pip install`, into the
+same venv or a second one, starts from a cleared cache and never meets the
+trap. It occurs only when both installs build with **one** scikit-build-core:
+`--no-build-isolation` (or `uv pip install --no-build-isolation`) into one
+environment, as in reinstalling into the same venv without isolation. There,
+without a fix, the second install would reconfigure with the cached OFF,
+because nothing passes the option. So the default is passed explicitly on
+every build, from `pyproject.toml`:
 
 ```toml
 [tool.scikit-build.cmake.define]
@@ -407,15 +416,18 @@ after it. No mutation round: nothing here is invariant-critical.
   `installed_version()` exactly; line two is `bounds checks: on (<mode>)` with
   `<mode>` equal to `_core.hardening`. With `_core.hardening` monkeypatched to
   `"none"` (patch the name `cli.py` reads), line two is `bounds checks: off`.
-- **T6**, the stale build-dir trap (§3). A slow test, marked and run in one
-  CI leg only, or a manual check recorded in the review if `@tester` finds it
-  too slow for CI (it takes two real non-editable installs into throwaway
-  venvs): install with `-C cmake.define.RASPUTIN_HARDENING=OFF` into venv A,
-  then into venv B with no setting, from the same source tree and so the same
-  `build/{wheel_tag}`; assert A's `_core.hardening == "none"` and B's is the
-  platform's hardened mode. It also checks the override precedence §3 relies
-  on. `@tester` decides between CI and manual and says which in the red
-  commit message.
+- **T6**, the stale build-dir trap (§3). A slow test, run in one CI leg only.
+  Both installs must build with one scikit-build-core, or scikit-build-core
+  clears the cache between them and the test passes on nothing (§3): one
+  throwaway venv holding `[build-system].requires`, two non-editable installs
+  into it with `--no-build-isolation`, from the same source tree and so the
+  same `build/{wheel_tag}`. Install A with
+  `-C cmake.define.RASPUTIN_HARDENING=OFF`, install B with no setting; assert
+  A's `_core.hardening == "none"` and B's is the platform's hardened mode. A
+  sentinel entry planted in A's `CMakeCache.txt` must survive B, so a run in
+  which the cache was cleared fails as "the trap was not exercised". It also
+  checks the override precedence §3 relies on. (As first specified, with two
+  venvs and pip's default isolation, T6 could not fail; see "As built".)
 - **T7**, `--stats` (on an existing small fixture run of `rasputin mesh
   --stats -`): the report contains exactly one `bounds checks: ...` line,
   before the first `##` heading, equal to the `version` line two. A
@@ -451,3 +463,37 @@ ran the guard (T1 OFF half compiled, T2 skipped) from the job log.
   section.
 - `ROADMAP.md`: row 24 updated to shipped by the merge; the measurement row
   already points here.
+
+## As built
+
+Red `21d5168`, green `23d4dad`, T6 reworked `57e1264`. 62 production lines
+by `@developer`'s count (`CLAUDE.md` §2), against the design's about 57.
+Where the implementation departs from this record:
+
+- **`tools/bench.py` came in about 26 lines over its estimate of 18**
+  (`@developer`'s figure; `git show --numstat 23d4dad -- tools/bench.py`
+  shows 30 lines added and 10 removed, comments included). The design
+  undercounted the flag, the agreement checks and the README line.
+- **`stats.Report.bounds_checks` is declared before `threads`, not after
+  it**, and has no default: it is required, and a dataclass field without a
+  default cannot follow `threads`, which has one. `render` prints it as its
+  own paragraph before `## Sizes`, as §3 asks.
+- **One extra sentence in `docs/benchmarks/bench-py.md`**: its definition of
+  "comparable" now names the bounds-check mode, the `--hardening` flag and the
+  `none` default for an old `run.json`, besides the one in
+  `.claude/agents/perf.md` that §7 asked for.
+- **T2 is registered by hand, not with `add_terrain_test`**:
+  `catch_discover_tests(test_build_hardening PROPERTIES SKIP_RETURN_CODE 4)`
+  in `tests/cpp/CMakeLists.txt`. Under `RASPUTIN_HARDENING=OFF` the forked
+  case `SKIP`s, a Catch2 run whose only case skipped exits 4, and CTest counts
+  that as a failure unless told otherwise; Catch2 v3.6.0's
+  `catch_discover_tests` does not set it, so the unchecked CI leg would have
+  gone red on a correct build. Same links and warnings as `add_terrain_test`.
+- **T6 as specified could not fail.** `@developer` found it passing with
+  `pyproject.toml`'s `[tool.scikit-build.cmake.define]` block removed: two
+  venvs and pip's default build isolation mean scikit-build-core clears the
+  cache between the installs (§3), so the cached OFF never reached the second
+  one. `@tester` rewrote it (`57e1264`) to one venv, `--no-build-isolation`,
+  and the sentinel, and planted both ways: with the block removed it fails
+  ("A's cached OFF leaked into the default install"); with isolation restored
+  it fails on the sentinel. §3 and §12 above now say when the trap occurs.

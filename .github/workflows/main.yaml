@@ -209,7 +209,9 @@ jobs:
       # cmake.define.RASPUTIN_HARDENING=OFF) must not leave its OFF in the shared
       # build/{wheel_tag} for the next default install, and the command-line
       # setting must override pyproject.toml's. Two real non-editable installs
-      # into throwaway venvs, so one leg only, the floor.
+      # into one throwaway venv without build isolation (with isolation,
+      # scikit-build-core clears the cache and the trap never occurs), so one
+      # leg only, the floor.
       - name: Hardening install trap
         if: matrix.python-version == '3.12'
         run: RASPUTIN_INSTALL_TRAP=1 pytest --no-cov tests/python/test_hardening.py -k trap
