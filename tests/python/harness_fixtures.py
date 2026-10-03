@@ -38,6 +38,9 @@ COPIED = (
     # h4: the guards judge a command's targets through this parser
     # (docs/increments/h4-guard-fixes.md §3). Copied when present, like the rest.
     "tools/shell_scan.py",
+    # h8: the recap prints the size table through this module
+    # (docs/increments/h8-window-and-recap.md §3.6).
+    "tools/rule_sizes.py",
 )
 
 GUARD_PUSH = ".claude/hooks/guard_push.py"
@@ -83,6 +86,26 @@ def make_repo(root: Path) -> Path:
     git(root, "add", "-A")
     git(root, "commit", "-q", "-m", "root")
     return root
+
+
+def add_worktree(main: Path, path: Path, branch: str) -> Path:
+    """A linked worktree of `main` at `path`, on a new branch (h8 §3.1)."""
+    git(main, "worktree", "add", "-q", "-b", branch, str(path))
+    return path
+
+
+def commit_at(repo: Path, moment: datetime, message: str) -> str:
+    """An empty commit with committer and author date `moment`; its short hash."""
+    stamp = moment.isoformat(timespec="seconds")
+    env = {**clean_env(), "GIT_COMMITTER_DATE": stamp, "GIT_AUTHOR_DATE": stamp}
+    subprocess.run(
+        ["git", "-C", str(repo), "commit", "-q", "--allow-empty", "-m", message],
+        check=True,
+        capture_output=True,
+        text=True,
+        env=env,
+    )
+    return git(repo, "log", "-1", "--format=%h").strip()
 
 
 def state_dir(repo: Path) -> Path:

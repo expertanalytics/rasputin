@@ -37,12 +37,17 @@ import pytest
 
 from harness_fixtures import (
     Tool,
+    add_worktree,
     clean_env,
+    commit_at,
     flag_on,
     flag_path,
+    flag_window,
+    git,
     iso,
     make_repo,
     state_dir,
+    write_flag,
 )
 
 NOW = datetime(2026, 9, 30, 18, 0, 0, tzinfo=UTC)
@@ -654,3 +659,215 @@ def test_a_terminal_failure_with_errno_is_named_by_the_errno(
     assert code == 3
     assert "(ENXIO)" in capsys.readouterr().err
     assert spawn.calls == []
+
+
+# ---------------------------------------------------------------- h8, test 6
+#
+# docs/increments/h8-window-and-recap.md §3.4: the longest interval between
+# consecutive points of `since`, the commit times inside [since, end] sorted,
+# and `end`. Pure; commits are (time, short hash).
+
+SINCE = datetime(2026, 10, 2, 20, 0, tzinfo=UTC)
+END = SINCE + timedelta(hours=9)
+
+
+def at(hours: float) -> datetime:
+    return SINCE + timedelta(hours=hours)
+
+
+def quiet(start: datetime, end: datetime, opener: str | None, count: int) -> Any:
+    return away.Quiet(start=start, end=end, opener=opener, count=count)
+
+
+def test_quiet_is_a_frozen_dataclass() -> None:
+    found = quiet(SINCE, END, None, 0)
+    with pytest.raises(AttributeError):
+        found.count = 1
+
+
+def test_with_no_commits_the_whole_window_is_quiet() -> None:
+    assert away.longest_quiet(SINCE, END, []) == quiet(SINCE, END, None, 0)
+
+
+def test_the_longest_gap_follows_the_last_commit() -> None:
+    commits = [(at(1), "aaa1111"), (at(2), "bbb2222")]
+    assert away.longest_quiet(SINCE, END, commits) == quiet(at(2), END, "bbb2222", 2)
+
+
+def test_commits_outside_the_window_are_ignored() -> None:
+    commits = [(at(-1), "before0"), (at(1), "aaa1111"), (at(2), "bbb2222"), (at(10), "after00")]
+    assert away.longest_quiet(SINCE, END, commits) == quiet(at(2), END, "bbb2222", 2)
+
+
+def test_the_input_order_does_not_matter() -> None:
+    commits = [(at(2), "bbb2222"), (at(8.5), "ccc3333"), (at(1), "aaa1111")]
+    assert away.longest_quiet(SINCE, END, commits) == quiet(at(2), at(8.5), "bbb2222", 3)
+
+
+def test_a_tie_takes_the_earliest_interval() -> None:
+    commits = [(at(6), "bbb2222"), (at(3), "aaa1111")]
+    assert away.longest_quiet(SINCE, END, commits) == quiet(SINCE, at(3), None, 2)
+
+
+def test_the_gap_from_the_window_start_wins_when_longest() -> None:
+    assert away.longest_quiet(SINCE, END, [(at(8), "aaa1111")]) == quiet(SINCE, at(8), None, 1)
+
+
+def test_the_window_is_closed_at_both_ends() -> None:
+    # Points: since, c1 (= since), c2 (= end), end. The 9 h interval opens at c1.
+    commits = [(END, "c2c2c2c"), (SINCE, "c1c1c1c")]
+    assert away.longest_quiet(SINCE, END, commits) == quiet(SINCE, END, "c1c1c1c", 2)
+
+
+# ---------------------------------------------------------------- h8, test 7
+#
+# §3.4: `--back` prints the longest stretch without a commit on any ref, right
+# after the `Back.` line. The window is [since, min(now, until)].
+
+LONGEST = "Longest stretch without a commit (any ref): "
+
+
+def hhmm(moment: datetime) -> str:
+    return f"{moment.astimezone(UTC):%Y-%m-%d %H:%M}"
+
+
+def back_lines(repo: Path, capsys: pytest.CaptureFixture[str], now: datetime) -> list[str]:
+    capsys.readouterr()
+    code = run_main(
+        ["--back"], root=repo, now=now, open_tty=no_tty, spawn=spawner(), stop=Recorder()
+    )
+    assert code == 0
+    return capsys.readouterr().out.splitlines()
+
+
+def commit_on_branches(repo: Path, since: datetime) -> tuple[str, str]:
+    """One commit on master at since + 10 min, one on `side` at since + 40 min 30 s."""
+    first = commit_at(repo, since + timedelta(minutes=10), "on master")
+    git(repo, "checkout", "-q", "-b", "side")
+    second = commit_at(repo, since + timedelta(minutes=40, seconds=30), "on side")
+    git(repo, "checkout", "-q", "master")
+    return first, second
+
+
+def test_back_prints_the_longest_quiet_stretch_on_any_ref(
+    repo: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    since = BACK_AT - timedelta(hours=3)
+    flag_window(repo, since, BACK_AT + timedelta(hours=1))
+    _, side = commit_on_branches(repo, since)
+    lines = back_lines(repo, capsys, BACK_AT)
+    assert lines[0].startswith("Back. Unattended since ")
+    # side opens the longest interval, 2 h 19 min 30 s up to now; minutes floored.
+    gap_start = since + timedelta(minutes=40, seconds=30)
+    assert lines[1] == (
+        f"{LONGEST}2 h 19 min, {hhmm(gap_start)} to {hhmm(BACK_AT)} UTC, after {side}; "
+        "2 commit(s) in the window."
+    )
+
+
+def test_back_with_an_expired_flag_ends_the_window_at_until(
+    repo: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    since = BACK_AT - timedelta(hours=5)
+    until = BACK_AT - timedelta(hours=1)
+    flag_window(repo, since, until)
+    first = commit_at(repo, since + timedelta(hours=1), "inside")
+    commit_at(repo, until + timedelta(minutes=30), "after the window")
+    lines = back_lines(repo, capsys, BACK_AT)
+    assert lines[1] == (
+        f"{LONGEST}3 h 00 min, {hhmm(since + timedelta(hours=1))} to {hhmm(until)} UTC, "
+        f"after {first}; 1 commit(s) in the window."
+    )
+
+
+def test_back_with_no_commit_in_the_window_counts_from_its_start(
+    repo: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    # make_repo's root commit carries today's date, after BACK_AT: outside.
+    since = BACK_AT - timedelta(hours=2, minutes=5)
+    flag_window(repo, since, BACK_AT + timedelta(hours=1))
+    lines = back_lines(repo, capsys, BACK_AT)
+    assert lines[1] == (
+        f"{LONGEST}2 h 05 min, {hhmm(since)} to {hhmm(BACK_AT)} UTC, from the window's start; "
+        "0 commit(s) in the window."
+    )
+
+
+def test_back_with_an_unreadable_flag_says_the_stretch_is_unknown(
+    repo: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    write_flag(repo, "{not json")
+    lines = back_lines(repo, capsys, BACK_AT)
+    assert lines[1] == (
+        "Longest stretch without a commit: unknown (the flag has no readable since)."
+    )
+
+
+def test_back_with_no_flag_prints_no_stretch(
+    repo: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    lines = back_lines(repo, capsys, BACK_AT)
+    assert lines[0] == "No unattended flag was set."
+    assert not any(line.startswith("Longest stretch") for line in lines)
+
+
+def test_back_when_git_log_fails_says_so_and_still_clears_the_state(
+    repo: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    # A ref naming a missing object: `git log --all` fails (fatal: bad object),
+    # while `rev-parse --git-common-dir`, which finds the state dir, still works.
+    flag_on(repo, now=NOW, keep_awake_pid=777)
+    write_queue(repo, QUEUED[:1])
+    (repo / ".git" / "refs" / "heads" / "broken").write_text("0" * 39 + "1\n")
+    lines = back_lines(repo, capsys, BACK_AT)
+    assert lines[1] == "Longest stretch without a commit: unknown (git log failed)."
+    assert not flag_path(repo).exists()
+    assert not (state_dir(repo) / "queue.jsonl").exists()
+    assert len(archive(repo).read_text().splitlines()) == 1
+
+
+def test_commits_between_reads_every_ref_and_filters_to_the_window(repo: Path) -> None:
+    since = BACK_AT - timedelta(hours=3)
+    first, second = commit_on_branches(repo, since)
+    commit_at(repo, since - timedelta(minutes=1), "before")
+    found = away.commits_between(repo, since, BACK_AT)
+    assert sorted(found) == [
+        (since + timedelta(minutes=10), first),
+        (since + timedelta(minutes=40, seconds=30), second),
+    ]
+
+
+def test_commits_between_on_git_failure_is_none(repo: Path) -> None:
+    (repo / ".git" / "refs" / "heads" / "broken").write_text("0" * 39 + "1\n")
+    assert away.commits_between(repo, BACK_AT - timedelta(hours=3), BACK_AT) is None
+
+
+# ---------------------------------------------------------------- h8, test 8
+#
+# §3.1: run from a worktree, `--back` lists the main checkout's decisions (the
+# fault evidence §1b reproduced), and every worktree's, uncapped.
+
+DECISIONS = "ASK OLA lines, every worktree's .claude/current-task/:"
+
+
+def test_back_from_a_worktree_lists_the_main_checkouts_decisions(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    main = make_repo(tmp_path.resolve() / "main")
+    tree = add_worktree(main, main / ".claude" / "worktrees" / "w1", "w1")
+    main_tasks = main / ".claude" / "current-task"
+    main_tasks.mkdir(parents=True)
+    (main_tasks / "session.md").write_text(
+        "NOW: h8\nQUEUE: x\n" + "".join(f"ASK OLA: main question {n}?\n" for n in range(7))
+    )
+    tree_tasks = tree / ".claude" / "current-task"
+    tree_tasks.mkdir(parents=True)
+    (tree_tasks / "tester-101010.md").write_text("ASK OLA: worktree question?\n")
+
+    lines = back_lines(tree, capsys, BACK_AT)
+
+    at_ = lines.index(DECISIONS)
+    assert lines[at_ + 1 : at_ + 9] == [
+        *(f"  session.md: ASK OLA: main question {n}?" for n in range(7)),
+        "  .claude/worktrees/w1: tester-101010.md: ASK OLA: worktree question?",
+    ]
