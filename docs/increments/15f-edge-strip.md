@@ -559,11 +559,11 @@ refused.
 | `include/terrain/refinement/constraint_points.hpp` (new) | `ConstraintPoint`, `ConstraintCheckPoints`, `constraint_check_points` (D2, D3) |
 | `include/terrain/refinement/refine.hpp`, `detail::to_lattice` | `detail::lattice_position` extracted from it, and called by it; no change in behaviour |
 | `include/terrain/refinement/refine_points.hpp` | `detail::point_loop`; the strip scan and ownership; the sub-edge map; `refine_points(..., strip)`; `refine_strip`; the outcome fields; `PointScan` (D4) |
-| `bindings/core.cpp` | `ConstraintCheckPoints` (read-only: `size`, `no_data`, `duplicates`, `edge_count`); `constraint_check_points(view, vertices, edges)` over the bound raster variant; `refine_points(..., strip=None)`; `refine_strip(view, strip, vertices, triangles, z, valid, edges, masks, *, tolerance, threads=0)`; the new outcome properties. Every call releases the GIL, as `refine_points` does today (`bindings/core.cpp:1049`) |
+| `bindings/core.cpp` | `ConstraintCheckPoints` (read-only: `size`, `no_data`, `duplicates`, `edge_count`); `constraint_check_points(view, vertices, edges)` over the bound raster variant; `refine_points(..., strip=None)`; `refine_strip(view, strip, vertices, triangles, z, valid, edges, masks, *, tolerance, threads=0)`; the new outcome properties. Every call releases the GIL, as `refine_points` does (the `py::gil_scoped_release` in its binding, `bindings/core.cpp:1123` at `7d841f3`) |
 | `src_python/tin_engine/_core.pyi` | stubs for the above |
 | `src_python/tin_engine/edge_strip.py` (new) | `generate(view, start, clock) -> ConstraintCheckPoints` and `run(view, strip, start, tolerance, clock) -> PointRefineOutcome`: the two calls and their clock rows. No geometry |
-| `src_python/tin_engine/final_check.py:22` | `run(..., strip: ConstraintCheckPoints \| None = None)`, passed on to `refine_points` |
-| `src_python/tin_engine/cli.py`, `_dem_mesh` (`:1417`) | after `refine` (`:1500`): `strip = edge_strip.generate(...)`; projected path: `final = edge_strip.run(...)`; reprojected path: `final_check.run(..., strip=strip)`; the sentence and the report (D7) |
+| `src_python/tin_engine/final_check.py:28` | `run(..., strip: ConstraintCheckPoints \| None = None)`, passed on to `refine_points` |
+| `src_python/tin_engine/cli.py`, `_dem_mesh` (`:1466`) | after `refine` (`:1550`): `strip = edge_strip.generate(...)`; projected path: `final = edge_strip.run(...)`; reprojected path: `final_check.run(..., strip=strip)`; the sentence and the report (D7) |
 
 `edge_strip.py` exists so that `_dem_mesh`, already about 150 lines, grows by
 about 15 rather than 40, and so that the orchestration can be tested with a
@@ -585,7 +585,7 @@ On the tolerance path of `_dem_mesh`, in this order:
 4. `trim(final...)`, as today.
 
 A refusal from either run is a usage error in the engine's words, as today
-(`_dem_mesh`'s `typer.BadParameter(f"{dem}: {out.message}", ...)`, `cli.py:1561`, and its final-check twin at `:1567`, which reads `checked.message`).
+(`_dem_mesh`'s `typer.BadParameter(f"{dem}: {out.message}", ...)`, `cli.py:1561`, and the twin after either run at `:1580`, which reads `final.message`).
 
 ### D7. What the file and `--stats` record
 
@@ -655,7 +655,7 @@ the output constraint edge that holds p.
   as 15c's J2 is stated without coincident ones. On the reprojected path it
   is also stated without a strip point consumed by a source point (L5): there
   the source's z is the vertex's, and J2 governs.
-- **E2. DEM nodes kept (projected path).** After `refine_strip`, every valid
+- **E2. DEM nodes kept (projected path).** For a start that is `refine`'s output at the same tolerance (the only start the CLI gives it; S1), after `refine_strip`, every valid
   DEM node in every closed output triangle with three valid vertices is within
   the tolerance of that triangle's plane, as after `refine` (increment 14's
   guarantee). F2 is why this is an invariant and not an assumption.
@@ -1424,6 +1424,117 @@ Two notes:
   acceptance.** It is decided with the measured share of midpoints inserted
   on Bygdin and the basin piece. Nothing in 15f-3's design or red suite
   depends on it.
+
+**Settled after 15f-3's green step (7d841f3).** `@developer` left seven
+cases in five tests red as disagreeing with the design. Ruled by `@architect`,
+2026-10-03. All seven are test-side, so `@tester` changes them in one commit
+with the reasons, and `@developer` changes nothing.
+
+- **S1. `test_core_edge_strip.py::TestRefineStrip::test_e1_e2_and_delaunay_by_the_oracles[0.0]`
+  and `[0.5]`: fix the fixture.**
+  - E2 (DEM nodes kept) holds for a start that is `refine`'s output at the
+    same tolerance. That is F2's whole argument: the strip run keeps refine's
+    guarantee and repairs only the triangles it writes (L3, E8).
+  - The fixture refines `Start` at 2.0 and then runs `refine_strip` at 0.0
+    and 0.5. The unwritten triangles hold refine's 2.0 result, so the 100
+    and 72 nodes over (worst 1.94 m) are the fixture's, not the run's.
+  - The CLI always passes refine's output at the run's own tolerance.
+  - E2 above now states this precondition.
+  - **`@tester`:** build `Start` at the parametrised tolerance, so that
+    `refine` and `refine_strip` both run at 0.0, 0.5 and 2.0. Keep E1, E2
+    and Delaunay at each. The control case (refine alone, at 2.0) stays as
+    it is.
+  - Checking E2 only at 2.0 is rejected, because it would leave E2 untested
+    at tolerance 0, where the rescan does the most.
+- **S2. `test_cli_mesh_edge_strip.py::test_a_failed_strip_run_writes_nothing`:
+  a test bug.** The needle `"planted strip-run failure"` contains spaces,
+  but the output is joined with all whitespace removed.
+  **`@tester`:** normalise both sides the same way, either
+  `" ".join(plain(result.output).split())` or the needle with its spaces
+  removed.
+- **S3. `test_cli_mesh_plain_output.py::test_max_error_bounds_the_dem_nodes_inside_the_mesh[2]`
+  and `[0.5]`: 25's assertion is superseded by P1.** Line 323 asserts
+  `dem_nodes_at_vertices` absent on the projected path. That was true before
+  15f-3 (25's D6 says "today"), and P1 now requires the rows there.
+  **`@tester`:**
+  - assert both at-vertex rows present;
+  - assert `max_error_m ≥ dem_nodes_at_vertices_max_error_m`;
+  - keep `max_error_m ≤ tolerance_m` (P5);
+  - update the docstring ("no at-vertex figure before 15f-3").
+
+  This edits a test of increment 25, which has merged. That is right:
+  15f-3's behaviour is what changes the answer, and 25's D6 foresaw it.
+- **S4. `test_cli_mesh_domain_crs.py::TestTheSameCrs::test_the_mesh_is_16s_bit_for_bit`:
+  the test accepts "same up to rounding" for the strip's vertices. No C++
+  change.**
+  - *Why the meshes differ.* Lattice coordinates are measured from the
+    corner of the raster the core is given (L16).
+    - The current path cuts the DEM window to the domain. The as-16 path
+      opens the whole file. Both are on one lattice, but their origins differ
+      by a whole number of cells.
+    - Before 15f every inserted vertex was a node, and a node's world
+      coordinate `x_min + col·dx` is exact from either origin. So the two
+      meshes were bit-identical.
+    - A strip point is a computed fraction. Its rounding depends on the
+      origin, so 8 of 273 points differ by up to 7.1e-15.
+  - *Why not measure from a fixed origin.* It would have to cover the whole
+    chain, not only the generator:
+    - every off-node position, which today is `(x − x_min)/dx` (16's start
+      vertices included);
+    - the loop's insertion coordinates;
+    - the output's `x_min + col·dx`.
+
+    That is a redesign of the core's frame (15f-1, 15f-2 and 16), for a
+    property no user or later increment needs, and recommended against.
+  - *Not a defect for 23.* Increment 23 needs bit-identity only where two
+    pieces compute the same thing: the seams (K4, the conformity check).
+    - The strip makes no points on frozen (seam) edges (23, "What 23
+      added").
+    - 23b's seam pass runs on "a DEM strip that is a function of the edge
+      alone (its bounding box snapped outward to the global lattice and grown
+      by one node)" (23, the seam pass). Both neighbours therefore use the
+      same origin and get the same bits, whatever their windows.
+    - A non-seam constraint edge belongs to one piece, and no other
+      computation of it has to agree.
+    - **One condition this places on 23b, recorded here for its design:**
+      when the seam pass calls `constraint_check_points` (which 23 reuses),
+      it passes that edge-determined strip's geometry, never the piece's
+      window. 23b's red step tests both sides of a seam bit for bit with
+      **different** piece windows.
+  - **`@tester`:**
+    - keep bit-identity for everything a window cannot change: triangles,
+      constraint edges and masks, every start vertex, every vertex that is a
+      DEM node, and their z;
+    - for the other new vertices (the strip's), assert each coordinate
+      within 1e-9 lattice units of its counterpart, and z within
+      `1e-9 · max(1, |z|)`;
+    - rename the test to say so;
+    - keep the quarter-circle variant (`test_the_quarter_circle_is_16s_bit_for_bit`)
+      to the same rule if it shows the same difference.
+
+    If connectivity ever differs, a predicate decision flipped on a
+    rounding-level difference. That is to be reported, not absorbed.
+  - **For Ola (not blocking):** 15b's pin "the same-CRS path gives 16's
+    mesh bit for bit" becomes "bit for bit except the edge strip's vertices,
+    which agree to rounding". Restoring full bit-identity is the redesign
+    above, which is not recommended.
+- **S5. `test_cli_mesh_domain.py::TestDomainOutput::test_boundary_z_is_bilinear_and_inserted_vertices_are_nodes`:
+  its premise is superseded by E1 and E5.** Its premise, that every
+  non-corner vertex is a DEM node, no longer holds: strip insertions are
+  crossings and midpoints on the outline and the hole.
+  **`@tester`:**
+  - a new vertex that is a DEM node keeps the node-value check;
+  - every other new vertex must lie on the domain's outline or hole (within
+    `ON_INPUT`, 2e-3 m, the noder's 1 mm snap with margin, as in
+    `test_cli_mesh_edge_strip.py`) and carry bilinear z, like the
+    corners (E6: an inserted strip vertex carries its point's `vertex_z`);
+  - rename the test to match.
+
+The citations that moved with `7d841f3` are corrected above: D5's binding
+(`bindings/core.cpp:1123`) and `_dem_mesh` lines (`:1466`, `:1550`), `final_check.run` (`:28`), and D6's
+`:1561` and `:1580`. The "Review" record of 15f-2's round 2 cites
+`cli.py:1417` and others as they were at `17c2d14`. That is history, and it is
+left as written.
 
 **Python (pytest), 15f-3** (L15; first planned for 15f-2):
 
