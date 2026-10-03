@@ -192,6 +192,13 @@ Evidence: `2026-10-03-night-restart-h7.md`. Each item needs Ola's ruling;
 the tooling ones go through the pipeline, and all but the last touch
 governed files.
 
+Status: items 1-6 were ruled by Ola on 2026-10-03 (about 15:42-15:45 UTC);
+each ruling is recorded under its item, and the proposal text is kept.
+Items 7 and 8 stay open. The rulings are to be implemented as one harness
+increment, by day, through the pipeline: they touch governed files
+(`tools/away.py`, `tools/session_state.py`, `.claude/REQUIRED-READING.md`),
+which are not written in unattended mode.
+
 1. **Long idle stretches, three windows running** (3 h 24 min, 5 h 59 min,
    7 h 08 min; the last three long windows up to 2026-10-02). The "fill the
    window" rule lives only in a memory note, and it failed in both windows
@@ -205,29 +212,59 @@ governed files.
    accepted, or what kind of work fills it? Cost: about ten lines of rule
    text; the idle print is a small `away.py` change with tests (h-sized,
    under 50 lines).
+
+   **Ruled 2026-10-03 (Ola, about 15:42-15:45 UTC):** yes, both
+   parts: the rule in `REQUIRED-READING.md` (before Ola leaves, `session.md`
+   names a fallback that needs no ruling and writes no governed path) and
+   the longest-stretch-without-a-commit print in `away.py --back`. On the
+   question to rule first: idle is accepted only when the fallback list is
+   genuinely empty.
+
 2. **`away.py --back` and the recap read only one checkout's
    `.claude/current-task/`.** Proposal: resolve the main checkout from the
    repository's common dir, and list `ASK OLA` lines from every worktree's
    folder. Cost: about 20 lines in `away.py`/`session_state.py`, with tests.
+
+   **Ruled 2026-10-03 (Ola, about 15:42-15:45 UTC):** yes, as proposed.
+
 3. **`ASK OLA` matching.** Proposal: keep the one-decision-per-line rule;
    count a line only if it starts (after a bullet) with `ASK OLA:`, and warn
    on an `ASK OLA:` line with nothing after the colon. Cost: about 10 lines
    in `session_state.py`, with tests.
+
+   **Ruled 2026-10-03 (Ola, about 15:42-15:45 UTC):** yes, as proposed: a line
+   counts only if it starts (after a bullet) with `ASK OLA:`, and an empty
+   one warns.
+
 4. **`session.md` was a 29-line log against a three-line rule** (measured
    2026-10-03; since rewritten to 4 lines). Rule needed: enforce the rule
    (the recap warns past three lines), or relax it to what the night queue
    needs, with a size the recap checks. Cost: a few lines either way.
+
+   **Ruled 2026-10-03 (Ola, about 15:42-15:45 UTC):** option (a), enforce.
+   `session.md` holds exactly one `NOW` line, one `QUEUE` line, and one
+   `ASK OLA:` line per open decision, and nothing else: no rulings and no
+   history, which go to the increment files, `ROADMAP.md` or this file.
+   The recap warns on any other kind of line.
+
 5. **Restart and resume.** The fix is a memory note; item 1 shows a note can
    fail within a day. Proposal: the cold-start steps in
    `REQUIRED-READING.md` gain "list the running background jobs before
    starting any", and the recap prints them. Cost: one rule line; the
    recap print is about 15 lines with tests.
+
+   **Ruled 2026-10-03 (Ola, about 15:42-15:45 UTC):** yes: list the running
+   background jobs before starting any, and the recap prints them.
+
 6. **A merged rule change does not reach the running session.** Observed on
    h7: `@orchestrator` was spawned after the merge with its old persona
    prompt and the old `CLAUDE.md`. Proposal: after merging a change to
    `CLAUDE.md` or `.claude/agents/`, restart before spawning the changed
    persona; until then the brief says to read the persona file from disk.
    Cost: one rule line.
+
+   **Ruled 2026-10-03 (Ola, about 15:42-15:45 UTC):** yes, as proposed.
+
 7. **`ROADMAP.md` and harness increments.** No harness increment (h2 to h7)
    has a table row; h3 is named only in a prose list. Rule needed: do
    harness increments get roadmap rows? Cost: one rule line, and rows for
