@@ -159,6 +159,7 @@ Findings:
   It takes the tree it is run from as its root
   (`Path(__file__).resolve().parents[1]` in `tools/away.py`), so its list of
   `ASK OLA:` lines comes from the worktree's folder, not the main checkout's.
+  It recurred in the trial of 2026-10-02 (see below).
 - A merge script read "no checks reported" as green.
   CI is authoritative only once it has reported something.
 - A stray `.pth` file in a shared scratch venv put an old copy of the code on
@@ -168,3 +169,41 @@ Findings:
   from split strings. The design that answers this is
   `docs/increments/h6-role-limits.md` (case 6). h6 checks the tree after the
   call, not the command's text.
+
+## The night of 2026-10-02, the restart of 2026-10-03, h7
+
+Evidence: `2026-10-03-night-restart-h7.md`. Each item needs Ola's ruling;
+the tooling ones go through the pipeline, and all but the last touch
+governed files.
+
+1. **Seven hours idle, second night running** (3 h 25 min on 2026-10-01,
+   7 h 08 min on 2026-10-02). The "fill the window" rule lives only in a
+   memory note and did not hold. Proposal: state it once in
+   `REQUIRED-READING.md`'s unattended section: before Ola leaves,
+   `session.md` names at least one fallback that needs no ruling and writes
+   no governed path; and have `away.py --back` print the longest stretch
+   without a commit inside the window, so idle time is measured rather than
+   reconstructed. To rule first: when Ola's plan for the night ("no new
+   increment implementation") leaves nothing decision-free, is idle
+   accepted, or what kind of work fills it?
+2. **`away.py --back` and the recap read only one checkout's
+   `.claude/current-task/`.** Proposal: resolve the main checkout from the
+   repository's common dir, and list `ASK OLA` lines from every worktree's
+   folder.
+3. **`ASK OLA` matching.** Proposal: keep the one-decision-per-line rule;
+   count a line only if it starts (after a bullet) with `ASK OLA:`, and warn
+   on an `ASK OLA:` line with nothing after the colon.
+4. **`session.md` is a 29-line log against a three-line rule.** Rule needed:
+   enforce the rule (the recap warns past three lines), or relax it to what
+   the night queue needs, with a size the recap checks.
+5. **Restart and resume.** The fix is a memory note; item 1 shows a note can
+   fail within a day. Proposal: the cold-start steps in
+   `REQUIRED-READING.md` gain "list the running background jobs before
+   starting any", and the recap prints them.
+6. **A merged rule change does not reach the running session.** Observed on
+   h7: `@orchestrator` was spawned after the merge with its old persona
+   prompt and the old `CLAUDE.md`. Proposal: after merging a change to
+   `CLAUDE.md` or `.claude/agents/`, restart before spawning the changed
+   persona; until then the brief says to read the persona file from disk.
+7. **`ROADMAP.md` and harness increments.** h3 has a row; h4, h6 and h7 do
+   not. Rule needed: do harness increments get roadmap rows?
