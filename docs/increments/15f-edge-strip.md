@@ -1355,6 +1355,76 @@ the split option (b) that was considered for 15f-1.
     is passed as `coincidence_radius(g)`. About 5 lines. L14 is otherwise
     unchanged and can be built now.
 
+**Settled for 15f-3 after 25.** Increment 25 (#157) replaced the
+`elevation_source` sentence with named fields
+(`docs/increments/25-plain-output.md`, D2 and D6), and `@tester` amended
+15f-3's red suite to match (`86e1074` on `worktree-15f-3`). These are the pins
+that amendment relies on, ruled by `@architect`, 2026-10-03. Only P2 changes a
+test.
+
+- **P1. Confirmed: on the projected path the at-vertex rows are required.**
+  `refine_strip` produces `coincident` and `coincident_max_error` (L14, with
+  L16's radius), so `dem_nodes_at_vertices` and
+  `dem_nodes_at_vertices_max_error_m` are `--stats` rows there, 0 included
+  (25, D6). The file's `max_error_m` is
+  `max(refine's max_error, refine_strip's max_error, coincident_max_error)`.
+  The first two make the "at most" bound of D7; the third comes from 25's D2.
+  So `max_error_m ≥ dem_nodes_at_vertices_max_error_m` holds by
+  construction.
+- **P2. `line_check_dem_nodes_inserted` is required on the projected path
+  and absent on the reprojected path.** It is refine_strip's `nodes_inserted`,
+  the work of the DEM rescan (F2), and that rescan does not exist on the
+  reprojected path. 25's D6 already rules, for the at-vertex rows, that a
+  figure is absent from `--stats` and `--record` on a path that does not
+  produce it, "rather than a 0 nobody measured". The same rule applies here.
+  `PointRefineOutcome::nodes_inserted` is 0 in `refine_points`, but that 0 is
+  a default, not a measurement. **`@tester` changes:** in PY4,
+  `assert found.dem_nodes_inserted in (None, 0)` becomes
+  `assert found.dem_nodes_inserted is None`. PY3's
+  `is not None and >= 0` stands.
+- **P3. Confirmed: every other `line_*` row is required on both paths.** The
+  strip runs on both: `line_points_checked`, `line_max_error_m`,
+  `line_points_on_nodata`, `line_points_refused` and
+  `line_points_refused_max_error_m`, `line_points_inserted`, and
+  `line_points_duplicate`. Zeros stay in `--stats` (25, D3 rule 3).
+- **P4. Confirmed: on the reprojected path the check is
+  `at_vertices ≤ max_error_m ≤ max(TOLERANCE, at_vertices)`, not an
+  equality.** There `max_error_m = max(the final check's max_error,
+  coincident_max_error)` (25, D2). The final check stops only when its own
+  figure is at most the tolerance, and that figure is not a `--stats` row, so
+  the two-sided bound is the most the test can state without the producer's
+  record. Checking `resampled_grid` by its prefix is right. 25's field
+  table gives the value's form (`30 m square grid in EPSG:31983, 158 columns
+  x 130 rows`), and after the cell size the rest is the CRS and the grid's
+  size, which belong to the fixture.
+- **P5. Confirmed: the projected path keeps `max_error_m ≤ TOLERANCE`, the
+  plain form.** It is safe and it is the stronger test.
+  - On that path every vertex a DEM node can lie within `r(g)` of has a z
+    from the bilinear surface. Start and strip vertices take `vertex_z`, and
+    inserted nodes take their own value. So `coincident_max_error` is at
+    most the surface's slope times `r(g)`: about 1e-9 m on these fixtures,
+    against `TOLERANCE` = 1 m.
+  - The max form is needed only where the tolerance is 0, and
+    `test_cli_mesh_refine.py`'s `--tolerance 0` case already uses it (25,
+    D6).
+  - On the reprojected path the at-vertex difference compares a source z
+    with a vertex z and can be any size (15c), which is why P4 takes the max
+    form there.
+  - If a projected fixture ever fails the plain form, the at-vertex figure
+    has outgrown slope × `r(g)`. That is a defect to report, not a reason to
+    loosen the test.
+
+Two notes:
+- **25 answered L14's question for Ola** (whether the file states the E2
+  exception): it does, through `max_error_m`, which includes the nodes at
+  vertices, with no extra field (25, D2). L14's first "ASK OLA" line is
+  closed by that ruling. The second, pinning `-ffp-contract=off`, stays open
+  and outside 15f.
+- **Q1 (the every-point form, recursive midpoints) is deferred to 15f-3's
+  acceptance.** It is decided with the measured share of midpoints inserted
+  on Bygdin and the basin piece. Nothing in 15f-3's design or red suite
+  depends on it.
+
 **Python (pytest), 15f-3** (L15; first planned for 15f-2):
 
 - **PY1, the binding** (every binding of this increment, the store's and the
@@ -1556,7 +1626,9 @@ None blocks `@tester`.
   lines. One caveat: at tolerance 0 with a curved piece the recursion does
   not end, so it needs a floor (say 1/64 of a cell) and an exception for
   pieces at the floor. **Recommended: not now**, ship as ruled, and decide
-  with 15f-2's acceptance numbers (how many midpoints are inserted at all). If
+  with 15f-3's acceptance numbers (how many midpoints are inserted at all;
+  15f-2 changed no mesh, so it had none). **Deferred to 15f-3's acceptance**
+  ("Settled for 15f-3 after 25"). If
   Ola wants it, it is best ruled before `@tester` writes ES2, which would then
   sample every piece densely.
 
