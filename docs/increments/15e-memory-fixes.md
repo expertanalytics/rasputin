@@ -411,3 +411,5 @@ back to back: **ACCEPTED**. Evidence and method:
 - Time: resample is 28-33 % faster. The freeze is +0.26 to +0.39 s
   (+7 to +11 %) as shipped and unchanged with the variable. The whole run is
   13-16 % faster.
+
+**Round 3 (post-approval delta), 2026-10-03.** Range `70f8403..87df16c`. Verdict: APPROVED. LOC: 0 production lines (one line at `15e-memory-fixes.md:17`, 1 insertion, 1 deletion). The 15d half is true per `23-basin-scale.md` (23a-1 replaces 15d); the 15f half is true on branch `worktree-agent-a0cb49bea16623b07`; naming 15f before it merges is fine (a label, no path or line). No citation into 15e moved. Not pushed; no CI.
