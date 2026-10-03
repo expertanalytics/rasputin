@@ -8,6 +8,8 @@ Entries marked *(planned)* do not exist yet; the rest are in the tree today.
 
 ```
 include/terrain/           # public C++ headers, header-only where possible
+  build_info.hpp           # stdlib_hardening(): the bounds-check mode the standard
+                           #   library reports; _core.hardening and the guard (24)
   core/
     point.hpp              # Point2 / Point3 value types
     bbox.hpp               # Box2; empty-box identity, exact closed containment
