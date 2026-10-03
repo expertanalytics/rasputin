@@ -31,6 +31,10 @@ from tin_engine.mosaic import Bounds
 #: Source nodes per check-point block side (D4).
 BLOCK = 512
 
+#: Target nodes per resample block (increment 15e, fix 1): bounds one block's
+#: transient, ~135 B per node, whatever the grid's width.
+BLOCK_NODES = 1 << 20
+
 Block = tuple[npt.NDArray[np.float64], npt.NDArray[np.float32]]
 
 
@@ -151,19 +155,26 @@ def _valid(values: npt.NDArray[Any], nodata: float | None) -> npt.NDArray[np.boo
     return ok if nodata is None else ok & (values != nodata)
 
 
+def rows_per_block(cols: int) -> int:
+    """The most rows of `cols` nodes within `BLOCK_NODES`, and at least one."""
+    return max(1, BLOCK_NODES // cols)
+
+
 def resample(
-    grid: TargetGrid, source: SourceWindows, threads: int, *, block_rows: int = 256
+    grid: TargetGrid, source: SourceWindows, threads: int, *, block_rows: int | None = None
 ) -> DemTile:
     """The grid's nodes bilinear from the source in its own index space (D3).
     A node whose 2 x 2 stencil touches NoData or leaves the source is NoData:
     the source's sentinel, or NaN without one. Each node from its own
-    coordinates alone, so block size and thread count change no value (J3)."""
+    coordinates alone, so block size and thread count change no value (J3).
+    `block_rows` defaults to `rows_per_block(grid.cols)`."""
+    rows_per = rows_per_block(grid.cols) if block_rows is None else block_rows
     m = source.meta
     fill = np.nan if m.nodata is None else m.nodata
     canvas = np.empty((grid.rows, grid.cols), dtype=source.window(0, 1, 0, 1).dtype)
 
     def block(r0: int) -> None:
-        r1 = min(r0 + block_rows, grid.rows)
+        r1 = min(r0 + rows_per, grid.rows)
         lonlat = reprojector(grid.crs, m.crs)(grid.xy(r0, r1))
         col = (lonlat[:, 0] - m.x_min) / m.delta_x
         row = (m.y_max - lonlat[:, 1]) / m.delta_y
@@ -184,7 +195,7 @@ def resample(
             out[inside] = np.where(ok & _valid(d, m.nodata), z, fill)
         canvas[r0:r1] = out.reshape(r1 - r0, grid.cols)
 
-    for _ in _pool(threads, block, range(0, grid.rows, block_rows)):
+    for _ in _pool(threads, block, range(0, grid.rows, rows_per)):
         pass
     epsg = parse_crs(grid.crs).to_epsg(min_confidence=100)
     h = float(grid.spacing)
@@ -202,7 +213,9 @@ def resample(
         pixel_is_area=False,
         vertical_unit_assumed=m.vertical_unit_assumed,
     )
-    return DemTile(meta=meta, array=canvas)
+    # The canvas is adopted, not copied (15e, fix 2): it is C-contiguous of
+    # the meta's shape and never handed out writable (R7's condition).
+    return DemTile._adopt(meta, canvas)
 
 
 def check_point_blocks(

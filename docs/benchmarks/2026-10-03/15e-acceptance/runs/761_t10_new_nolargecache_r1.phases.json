@@ -1,0 +1,82 @@
+{
+ "phases": [
+  {
+   "phase": "P1 decode + assemble",
+   "seconds": 2.3803088665008545,
+   "start": 51773944,
+   "end": 2322466904,
+   "peak": 6812259560,
+   "exact": true
+  },
+  {
+   "phase": "P2 resample (blocks)",
+   "seconds": 18.143232107162476,
+   "start": 2322466904,
+   "end": 4476243592,
+   "peak": 5321363824,
+   "exact": false
+  },
+  {
+   "phase": "P2 end (DemTile copy)",
+   "seconds": 0.00012421607971191406,
+   "start": 4476243592,
+   "end": 4476243592,
+   "peak": 4476243592,
+   "exact": false
+  },
+  {
+   "phase": "start mesh",
+   "seconds": 0.1306288242340088,
+   "start": 4476243592,
+   "end": 4478963360,
+   "peak": 4480257672,
+   "exact": false
+  },
+  {
+   "phase": "P3 refine phase 1",
+   "seconds": 4.4275901317596436,
+   "start": 4478963360,
+   "end": 4546203392,
+   "peak": 4761948120,
+   "exact": false
+  },
+  {
+   "phase": "P4 store fill + freeze",
+   "seconds": 15.593335151672363,
+   "start": 2391492840,
+   "end": 4651306896,
+   "peak": 6925014560,
+   "exact": true
+  },
+  {
+   "phase": "P5 phase 2 (refine_points)",
+   "seconds": 9.171102046966553,
+   "start": 4651306896,
+   "end": 4722413744,
+   "peak": 5203235112,
+   "exact": false
+  },
+  {
+   "phase": "P6 trim + write",
+   "seconds": 0.9839448928833008,
+   "start": 4722413744,
+   "end": 70353688,
+   "peak": 4722413744,
+   "exact": false
+  }
+ ],
+ "units": {
+  "source mosaic nodes": 560943760,
+  "target grid nodes": 538409322,
+  "check points": 270407394,
+  "phase 1 triangles (2 V - hull)": 2772536,
+  "final triangles": 2940024,
+  "P1 rise per mosaic node, B": 4.047986842745162,
+  "P2 transient per block node, B (peak - start - canvas) / (threads x block rows x cols)": 82.21714143424357,
+  "P2 end rise per grid node, B (copy)": 4.000258910821755,
+  "P4 rise per check point, B": 16.765524244503464,
+  "P4 held after freeze per check point, B": 8.357071981545001,
+  "P3 rise per phase-1 triangle, B": 102.06711833498285,
+  "P5 rise per final triangle, B": 187.7291532314022
+ }
+}

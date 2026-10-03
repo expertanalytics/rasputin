@@ -51,6 +51,7 @@ percentages, `final.ok()` honoured).
 
 from __future__ import annotations
 
+import gc
 import importlib
 import json
 import math
@@ -59,6 +60,7 @@ import re
 import shlex
 import subprocess
 import sys
+import weakref
 from pathlib import Path
 from typing import Any
 
@@ -307,6 +309,48 @@ class TestEndToEnd:
         is_source = distance[np.arange(len(off)), nearest] < 1e-5
         assert is_source.sum() > 0, "phase 2 inserted nothing on a rough surface"
         assert (off[is_source, 2] == array[valid][nearest[is_source]]).all()
+
+
+# ------------------------------------------------------------------ 15e, fix 3
+
+
+def test_the_target_tile_is_dropped_before_the_final_check(
+    tmp_path: Path,
+    geographic_dem: Path,
+    domain_4674: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Increment 15e fix 3 (`docs/increments/15e-memory-fixes.md`): no
+    reference to the resampled target tile survives into
+    `final_check.run`, so phase 2 does not hold it. The probe is a weakref
+    to the tile's array (a NumPy array takes one), read after a full
+    `gc.collect()` on entry to the final check. Went red at 9879805 because
+    `mesh()` held `opened`, and `_dem_mesh` its `tile` parameter, through the call."""
+    from tin_engine import cli
+
+    tiles: list[weakref.ref[np.ndarray]] = []
+    dead_on_entry: list[bool] = []
+    real_open, real_run = cli.open_dem, cli.final_check.run
+
+    def opening(*args: Any, **kwargs: Any) -> Any:
+        result = real_open(*args, **kwargs)
+        tiles.append(weakref.ref(result.tile.array))
+        return result
+
+    def checking(*args: Any, **kwargs: Any) -> Any:
+        gc.collect()
+        dead_on_entry.extend(ref() is None for ref in tiles)
+        return real_run(*args, **kwargs)
+
+    monkeypatch.setattr(cli, "open_dem", opening)
+    monkeypatch.setattr(cli.final_check, "run", checking)
+    run(
+        tmp_path,
+        *("--dem", str(geographic_dem), "--domain", str(domain_4674)),
+        *("--out-crs", TARGET, "--tolerance", str(TOLERANCE)),
+    )
+    assert len(tiles) == 1, "open_dem was not called once"
+    assert dead_on_entry == [True], "the target tile is alive when the final check starts"
 
 
 # ------------------------------------------------------------------ G9

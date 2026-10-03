@@ -46,7 +46,7 @@ import shlex
 import sys
 import tempfile
 import time
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Iterator, Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Annotated
@@ -104,6 +104,7 @@ from tin_engine.palettes import PALETTES, paraview_preset
 from tin_engine.raster import to_core
 from tin_engine.sources import SOURCES
 from tin_engine.stats import PhaseClock, Refinement, Report, Sizes, _exact, quality, render
+from tin_engine.target_grid import Block, TargetGrid
 from tin_engine.viz.fixtures import GALLERY, Fixture
 from tin_engine.viz.protocols import PslgLike
 from tin_engine.viz.scene import build_scene
@@ -835,42 +836,47 @@ def mesh(
             flags = " ".join(filter(None, (area, frame, f"--cache {cache}" if cache else "")))
             run = f"rasputin fetch {dem[0]} {flags}".rstrip()
             raise typer.BadParameter(f"{exc}; run: {run}", param_hint="--dem") from exc
-        label = opened.label
-        dem_crs = opened.tile.meta.crs
+        # 15e fix 3: what is read later comes out of `opened`, which then goes,
+        # so the tile's one reference is the holder `_dem_mesh` empties.
+        label, plan, grid, source_crs = opened.label, opened.plan, opened.grid, opened.source_crs
+        dem_domain, checks, opened_seams = opened.domain, opened.checks, opened.seams
+        held, dem_crs = _Once(opened.tile), opened.tile.meta.crs
+        del opened
         found = None
         sources: tuple[FeatureSource, ...] = ()
-        if feature_paths and opened.domain is not None:
+        if feature_paths and dem_domain is not None:
             sources = _feature_sources(feature_paths, feature_crss, feature_layers, feature_maps)
-            found = _open_features(sources, opened.domain, dem_crs, clock)
+            found = _open_features(sources, dem_domain, dem_crs, clock)
         dem_run = _dem_mesh(
-            opened.tile,
+            held,
             ", ".join(map(str, dem)),
             stride,
             delaunay,
             snap_spacing,
             tolerance,
             clock,
-            opened.domain,
+            dem_domain,
             domain.name if domain is not None else "",
             DEFAULT_START_MIN_ANGLE if start_min_angle is None else start_min_angle,
             not no_constraint_feet,
             found,
-            opened,
+            grid,
+            checks,
         )
         surface_mesh = dem_run.trimmed
         sentence, described = dem_run.sentence, dem_run.described
-        names = [t.name for t in opened.plan.tiles]
+        names = [t.name for t in plan.tiles]
         if len(names) > 1:
-            mosaic = f"mosaic of {len(names)} tiles, {opened.tile.meta.rows} x "
-            mosaic += f"{opened.tile.meta.cols} nodes"
+            mosaic = f"mosaic of {len(names)} tiles, {dem_run.meta.rows} x "
+            mosaic += f"{dem_run.meta.cols} nodes"
             typer.echo(mosaic, err=True)
             sentence = f"{mosaic}; {sentence}"
         if cached is not None:  # 23a-1, decided 9: the key and its credit
             sentence = _ascii(f"{cached.source}, {SOURCES[cached.source].credit}; {sentence}")
         fields = [("crs", dem_crs), ("elevation_source", sentence)]
         comments = [f"crs {dem_crs}", f"elevation {sentence}"]
-        if opened.grid is not None:  # 15c-2, D7
-            h, source_crs = opened.grid.spacing, opened.source_crs
+        if grid is not None:  # 15c-2, D7
+            h = grid.spacing
             fields += [
                 ("source_crs", source_crs),
                 ("source_transform", transform_description(source_crs, dem_crs)),
@@ -886,7 +892,7 @@ def mesh(
             comments += [f"{key} {text}" for key, text in notes]  # PLY: header comments
         if cached is not None or len(paths) > 1 or paths[0].is_dir():  # R11: the files used
             fields.append(("dem_tiles", _ascii("; ".join(names))))
-            seams = opened.seams
+            seams = opened_seams
             listed = "; ".join(s.entry() for s in seams) or "none"
             fields.append(("dem_seams", _ascii(listed)))  # Ola's Q1 revised
         if described and given is not None:
@@ -1394,8 +1400,22 @@ class _DemMesh:
     feature_counts: tuple[int, int] | None = None
 
 
+class _Once[T]:
+    """A value handed on once (15e, fix 3): `take` returns it and forgets it,
+    so the holder keeps nothing alive after; a second `take` is a bug."""
+
+    def __init__(self, value: T) -> None:
+        self._value: T | None = value
+
+    def take(self) -> T:
+        value, self._value = self._value, None
+        if value is None:  # explicit: `python -O` strips an assert
+            raise RuntimeError("_Once.take called twice")
+        return value
+
+
 def _dem_mesh(
-    tile: DemTile,
+    held: _Once[DemTile],
     dem: str,
     stride: int | None,
     delaunay: bool,
@@ -1407,9 +1427,10 @@ def _dem_mesh(
     min_angle: float = 0.0,
     feet: bool = False,
     features: FeatureSet | None = None,
-    opened: DemInput | None = None,
+    grid: TargetGrid | None = None,
+    checks: Iterator[Block] | None = None,
 ) -> _DemMesh:
-    """Subsample, triangulate, sample or refine, and trim ``tile``.
+    """Subsample, triangulate, sample or refine, and trim ``held``'s tile.
 
     Without ``tolerance`` this is increment 12's R6: z sampled bilinearly at
     the stride grid. With it, increment 14's R9: the stride grid is the start
@@ -1417,14 +1438,16 @@ def _dem_mesh(
     DEM's CRS, 15b; ``domain_name`` is its file's), increment 16's R3, the
     polygon's rings are, and ``features``' lines (16b). ``min_angle`` > 0
     improves the start's angles first (increment 20); ``feet`` inserts
-    constraint feet (increment 20b). With ``opened``'s check points (15c-2),
-    the refined mesh is checked against the source's nodes (D5).
+    constraint feet (increment 20b). With ``grid`` and its ``checks`` (15c-2),
+    the refined mesh is checked against the source's nodes (D5), after the
+    tile is dropped (15e, fix 3).
     Returns the mesh, the ``elevation`` sentence for the file,
     the ``domain`` field (empty without one), and the ``--stats`` inputs;
     ``clock`` gets R5's phases.
     ``dem`` names the source in messages. Every refusal is a usage error in the
     engine's own words, and no file is written.
     """
+    tile = held.take()
     meta = tile.meta
     described = ""
     domain_vertices = domain_holes = None
@@ -1487,8 +1510,9 @@ def _dem_mesh(
         if not out.ok():
             raise typer.BadParameter(f"{dem}: {out.message}", param_hint="--dem")
         final, checked = out, ""
-        if opened is not None and opened.grid is not None and opened.checks is not None:
-            final, n = final_check.run(out, opened.grid, opened.checks, tolerance, clock)
+        del tile  # 15e fix 3: phase 2 runs without the target tile
+        if grid is not None and checks is not None:
+            final, n = final_check.run(out, grid, checks, tolerance, clock)
             if not final.ok():
                 raise typer.BadParameter(f"{dem}: {final.message}", param_hint="--dem")
             checked = (
