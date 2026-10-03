@@ -1,10 +1,10 @@
-# The unattended night of 2026-10-02, the restart of 2026-10-03, and h7
+# The unattended window of 2026-10-02, the restart of 2026-10-03, and h7
 
 Checked by `@orchestrator` on 2026-10-03 at master 390b516, its first run in
 the role h7 gave it. Times are UTC. Proposals that need Ola's ruling are in
 `next.md`; this file holds the evidence.
 
-## 1. The night: Ola away 12:02 to 21:39
+## 1. The window: Ola away 12:02 to 21:39 (14:02 to 23:39 local)
 
 The window, from `<git-common-dir>/harness/windows.jsonl`: entered
 2026-10-02T12:02:25, ended by `away.py --back` at 21:38:58 (9 h 36 min).
@@ -26,15 +26,24 @@ $ git log --all --format='%h %cI %s' --since='2026-10-02T14:32:00Z' --until='202
 (no output)
 ```
 
-So 7 h 08 min of a 9 h 36 min window was idle. This is the second night
-running: on 2026-10-01 the session sat idle 3 h 25 min for the same reason
-("the rest needs Ola's rulings"). Ola then gave the rule "fill the
-unattended window" (stage a deep queue, fallbacks that need no rulings, a
-blocked item only blocks itself), and it was kept as a memory note, not as a
-rule file. One day later the session record said "idle after that BY
-DESIGN: every remaining item needs Ola's ruling", and the night's queue in
-`session.md` had no fallback items. A memory note did not hold through the
-next night.
+So 7 h 08 min of a 9 h 36 min window was idle. It is the third long
+window running with a long idle stretch, by the same method (last commit on
+any ref inside the window, to `--back`):
+
+| Window (UTC) | Last commit | Idle to `--back` |
+|---|---|---|
+| 2026-09-30 23:36 to 2026-10-01 06:11 | bfffaa8, 02:47:29 | 3 h 24 min |
+| 2026-10-01 22:43 to 2026-10-02 07:06 | 2331110, 01:06:58 | 5 h 59 min |
+| 2026-10-02 12:02 to 21:39 | 0b6305b, 14:31:06 | 7 h 08 min |
+
+The second row: `git log --all --since=2026-10-01T22:43:29Z
+--until=2026-10-02T07:06:21Z` lists 2331110 first. After the first row Ola
+gave the rule "fill the unattended window" (stage a deep queue, fallbacks
+that need no rulings, a blocked item only blocks itself). It was kept as a
+memory note, written 2026-10-01 07:29 UTC, not as a rule file, and it failed
+in both long windows after it. On 2026-10-02 the session record said "idle
+after that BY DESIGN: every remaining item needs Ola's ruling", and the
+queue in `session.md` had no fallback items.
 
 There was also a conflict the session settled on its own: Ola's plan for the
 night was "no new increment implementation tonight", and filling the window
@@ -42,11 +51,12 @@ asks for work. Which one wins was not lifted to Ola.
 
 **Correction to the brief.** The brief named h5's green step (red tests and
 rulings on branch `worktree-h5-state-check`) as a decision-free fallback that
-was missed. It was not decision-free at night. h5's design puts its main file
-at `.claude/hooks/state_check.py`, moves the governed set out of
-`.claude/hooks/guard_governance.py`, and changes `tools/away.py`. All three
-are governed paths (`GOVERNED` and `GOVERNED_PREFIXES` in
-`guard_governance.py`), so in unattended mode each write is refused and
+was missed. It was not decision-free in unattended mode. h5's design puts
+its main file at `.claude/hooks/state_check.py`, edits
+`.claude/hooks/guard_governance.py`, and changes `tools/away.py`, all of
+them governed paths today (`GOVERNED` and `GOVERNED_PREFIXES` in
+`guard_governance.py`; its new `tools/governed.py` and `tools/git_hooks.py`
+are not yet). In unattended mode a write to any of the three is refused and
 queued, and a refused write to a rule file is never redone by any route
 (`.claude/REQUIRED-READING.md`, *The harness*). A green step there would have
 produced queued refusals, not code. The finding stands without it: the queue
@@ -65,13 +75,17 @@ pending_decisions(<this worktree>/.claude/current-task)  ->  []
 ```
 
 The main checkout's `session.md` held five open decisions at the time. This
-was already recorded in `next.md` (findings of 2026-10-01/02) and not fixed;
-it then bit in the trial it was found in.
+was already recorded in `next.md` (findings of 2026-10-01/02) and not fixed.
+It happened in the trial itself: in the main-session transcript
+`85c14e7c-2358-41ce-957c-242b9af2f79b.jsonl`, at 2026-10-02T21:38:58Z,
+`--back` run from `.claude/worktrees/basin-memory` printed "ASK OLA lines in
+.claude/current-task/: (none)".
 
 ### 1c. Decisions written as bullets under an `ASK OLA:` heading are missed
 
 `pending_decisions` in `tools/session_state.py` lists any line containing
-"ask ola", in any case. Run on a copy of `session.md` as it stands:
+"ask ola", in any case. Run on a copy of `session.md` taken on 2026-10-03
+(the 29-line version):
 
 ```
 'session.md: ASK OLA:'
@@ -92,10 +106,12 @@ on each side:
 ### 1d. `session.md` has become a log
 
 `.claude/REQUIRED-READING.md`: "Three lines or fewer per file", and
-`session.md` "is overwritten in place and deleted when the round lands". It is
-29 lines and 5,007 characters (`wc -lc`), appended to since the evening of
-2026-10-02 across several rounds. The `SessionStart` recap is capped at
-10,000 characters, so this one file takes half of it. Finding 1c follows from
+`session.md` "is overwritten in place and deleted when the round lands". On
+2026-10-03, before this check was committed, it was 29 lines and 5,007
+characters (`wc -lc`), appended to since the evening of 2026-10-02 across
+several rounds; it has since been rewritten to 4 lines. The `SessionStart`
+recap is capped at 10,000 characters, so at 29 lines this one file took half
+of it. Finding 1c follows from
 the same habit: a log grows headings, and headings hide decisions.
 
 ## 2. The restart, 2026-10-03
@@ -150,9 +166,11 @@ Lessons:
   new role only because the brief said to read the persona file from disk.
   The main session is in the same position: the dispatcher rules h7 moved
   into `CLAUDE.md` are not in its context until it restarts.
-- **`ROADMAP.md` has no row for h7**, nor for h4 or h6; h3 has one.
-  `docs/increments/README.md` says the merge updates the increment's row. It
-  is not settled whether harness increments belong in the roadmap.
+- **`ROADMAP.md` has no table row for h7**, nor for any harness increment
+  h2 to h7; h3 appears only in the prose list "Order of work from
+  2026-09-30". `docs/increments/README.md` says the merge updates the
+  increment's row. It is not settled whether harness increments belong in
+  the roadmap.
 
 ## Review
 
