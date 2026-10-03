@@ -251,3 +251,85 @@ governed files.
    (`git diff --name-only <old>..<new>`) to the persona, judged against its
    row like a dirty path; and §5's list gains "a write committed in the
    same call" until then. Cost: about 10 lines and one test in h6.
+
+## The merges of 2026-10-03: 15e, 15f-1, 15f-2, hardening, citations
+
+Evidence: `2026-10-03-day-merges-15e-15f.md` (section numbers below are
+that file's). Numbering continues from the section above. Each item needs
+Ola's ruling; all but 15 touch governed files or tools.
+
+9. **No `@orchestrator` check after five merges, until Ola asked** (2a). The
+   session had loaded `CLAUDE.md` before #146 added "When to spawn
+   `@orchestrator`", and all 33 of its subagents got that older copy too:
+   item 6 again, with a cost this time. Proposals: (a) item 6's rule, with
+   `/compact` as the cheap route: Claude Code re-reads the project
+   `CLAUDE.md` from disk after `/compact` (code.claude.com/docs/en/memory,
+   read 2026-10-03). Cost: one rule line. (b) Make the trigger mechanical:
+   the recap prints the PRs merged since the newest commit under
+   `docs/retrospectives/` ("3 merges with no `@orchestrator` check"). Cost:
+   about 20 lines in `tools/session_state.py`, with tests.
+10. **The required mutation tests were left out of 15e and 15f-2** (2b).
+    The README requires them for a suite the increment file names
+    invariant-critical; both files named one; the main session's briefs said
+    "no mutation rounds (lean brief)", going past the lean-briefs note's own
+    exception. To rule: does the README's requirement stand? If yes,
+    `reviewer.md` §5 gains one line ("a named invariant-critical suite has
+    its mutants run, with the kill record in a handback"), and the repair is
+    a `@tester` task on master: run 15f-2's three named mutants (ES2, ES3,
+    ES5) and 15e's on the store's gather/scatter. About 30 to 60 minutes, no
+    production change, no governed path, so it is a good unattended
+    fallback. If no, the README line becomes "optional". Cost: one line
+    either way.
+11. **Absolute tolerances get a scale check** (3a, and ES16 in 3c). L12 and
+    L14 used a fixed 1e-10 that stops working once lattice coordinates reach
+    about 10⁶; ES16 used a fixed 1e-9 where the true bound is slope × offset.
+    Proposal: one line in `architect.md` ("each absolute constant in a design
+    states the scale it assumes and the largest input it was checked at, in
+    a table like L16's") and the same line in `tester.md` for numeric bounds
+    in assertions. Source: Dawson, "Comparing Floating Point Numbers, 2012
+    Edition" (read 2026-10-03): a fixed epsilon fails once values grow;
+    compare relative to magnitude or in ulps. Cost: two lines in governed
+    files.
+12. **Fused multiply-adds** (3b). `developer.md:30` already makes
+    `@developer` build with `-ffp-contract=off` too, and it caught ES13
+    before CI. `tester.md` has no such line. Proposal: copy that line into
+    `tester.md` (cost: one line), unless Ola rules the open question in
+    `session.md` to turn contraction off project-wide (one CMake line;
+    stored mesh hashes on the Mac change, and `@perf` would measure what
+    arm64 loses without fused multiply-adds).
+13. **Wrong assertions get past a red step** (3c). Recommended: no new rule.
+    The green step caught both, `@developer` reported rather than edited,
+    and the fix was one commit. The alternative, if Ola wants the catch
+    earlier: `@tester`'s red handback lists each expected value the ruling
+    does not state, with its derivation, and `@architect` confirms the list
+    before green. Cost: one short `@architect` turn per red step.
+14. **`ROADMAP.md`: conflicts, stale status, no owner** (3d, 2e, 2f). Two
+    hand-resolved conflicts today, and master still says 15e is "awaiting
+    the push and CI". Options: (a) the row's status says only designed, in
+    progress or shipped, with the PR number, and the details stay in the
+    increment file's status line; (b) a small tool builds the status column
+    from the increment files' status lines, with a gate that the table is
+    current, the pattern `towncrier` uses for changelogs (each change writes
+    its own fragment, so nobody edits the shared file;
+    towncrier.readthedocs.io, read 2026-10-03), about 60 lines with tests;
+    (c) keep hand merges and only fix the stale text. Any of them also needs
+    an owner for `ROADMAP.md` and for `.github/workflows/` (edited today by
+    `@architect`, `@perf`, the main session and `@developer`); they belong on
+    the hard-limits list above. Whatever the choice, master's two stale
+    lines (`ROADMAP.md` row 15, `15e-memory-fixes.md:8`) need a docs fix.
+15. **Concurrency** (2d). Three agents ran at once several times, and three
+    edited one worktree in parallel by design at 14:30, against the "agents
+    in pairs" note. Nothing broke. To rule: do read-only `@reviewer` runs
+    count toward the two, and may personas share a worktree when their files
+    do not overlap? Cost: an update to the memory note.
+16. **Numbers passed to Ola** (3e). 15f-1's overrun went out as 45 % (gross)
+    instead of 36 % (net), copied from a handback. Proposal: `@developer`
+    reports lines as §2 counts them, net, and the main session quotes line
+    counts from `@reviewer`'s record only. Cost: one line in `developer.md`.
+17. **A fallback's paths are checked by hand** (section 4). The first
+    fallback queued today (h5's green step) writes three governed files;
+    it was caught only because the morning check had just looked at h5.
+    Proposal, to go with item 1: a fallback line in `session.md` names the
+    paths it will write, and the recap flags any governed one. Cost: about
+    15 lines in `tools/session_state.py`, with tests. Also: `session.md` is
+    10 lines today against the three-line rule (item 4 again).
