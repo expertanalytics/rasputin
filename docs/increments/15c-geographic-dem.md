@@ -391,9 +391,9 @@ rest.
 - **Deterministic:** each node is computed from its own coordinates alone,
   so block size and thread count cannot change a value.
 - The canvas becomes the tile through `DemTile._adopt` (15a R7, no copy).
-  *Built otherwise (15c-2):* through the public `DemTile(...)` constructor,
-  one copy of the target canvas, as 23a-1 did, because 15a's suite (M15)
-  reserves `_adopt` for `mosaic.py`.
+  *As designed since 15e (fix 2):* 15c-2 first built it through the public
+  `DemTile(...)` constructor, one copy of the target canvas, because 15a's
+  suite (M15) reserved `_adopt` for `mosaic.py`; 15e widened M15 and adopts.
 - Its values are not trusted for the guarantee: phase 1 is measured against
   them, phase 2 against the source.
 
@@ -586,8 +586,9 @@ metres, on or relative to a square grid. Concretely: the target grid as a
   store; the caller must not hold one either, and `_dem_mesh` is restructured
   so it does not. *Built otherwise (15c-2):* `run(start, grid, checks,
   tolerance, clock) -> (phase-2 outcome, check points stored)`; phase 1
-  stays in `cli.py`, and the target tile is not dropped before phase 2
-  (`_dem_mesh` still holds it).
+  stays in `cli.py`. *As designed since 15e (fix 3):* the target tile is
+  dropped before phase 2 (`mesh()` and `_dem_mesh` hand it on through a
+  one-shot holder, `_Once`, and `_dem_mesh` deletes it after phase 1).
 - *Added in 15c-2:* `--out-crs` without `--domain` or `--bbox` is refused
   (the grid needs an extent in the target CRS), and so is an `--out-crs`
   that is not projected in metres (dda35ff), both before any pixel is read.
@@ -819,6 +820,10 @@ Why not wait longer: until it ships, the tolerance printed on every Norwegian
 domain mesh is wrong along its edges. A cheaper stopgap exists (split any
 constrained edge of a node-free triangle longer than one cell at its midpoint,
 about 40 lines): it narrows the strip and guarantees nothing.
+
+*Designed in full in `docs/increments/15f-edge-strip.md` (2026-10-03),
+which supersedes the estimate above: about 490 lines in two PRs, and its own
+store rather than `CheckPoints`, for the reasons it gives.*
 
 ## Invariants
 

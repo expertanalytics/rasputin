@@ -1,0 +1,153 @@
+process                                     53.61 s  sampled  15.05 GB  exact  15.36 GB
+clock: domain read                           0.04 s  sampled   0.06 GB  exact   0.06 GB
+clock: decode                               24.63 s  sampled  15.05 GB  exact  15.36 GB
+assemble                                     4.07 s  sampled   6.84 GB  exact   6.84 GB
+resample                                    20.04 s  sampled  15.05 GB  exact  15.36 GB
+resample: DemTile copy                       0.51 s  sampled   9.46 GB  exact    nan GB
+clock: start mesh: build                     0.06 s  sampled    nan GB  exact    nan GB
+clock: start mesh: node                      0.05 s  sampled    nan GB  exact    nan GB
+clock: start mesh: triangulate               0.02 s  sampled   7.61 GB  exact    nan GB
+clock: start mesh: constraint edges          0.04 s  sampled    nan GB  exact    nan GB
+refine phase 1                               4.48 s  sampled   7.64 GB  exact    nan GB
+final_check.run                             23.43 s  sampled  11.75 GB  exact    nan GB
+clock: check points: store                   3.47 s  sampled  11.06 GB  exact    nan GB
+refine_points                                9.55 s  sampled  11.75 GB  exact    nan GB
+clock: trim                                  0.11 s  sampled    nan GB  exact    nan GB
+clock: write: encode                         0.05 s  sampled    nan GB  exact    nan GB
+clock: write: disk                           0.04 s  sampled   7.81 GB  exact    nan GB
+{'tag': '761_t10_base_r1', 'wall_s': 54.31, 'returncode': 0, 'stopped': None, 'time_peak_footprint_bytes': 15356849816.0}
+761_t10_base_r1 {'final_triangles': 2940024, 'check_points': 270407394, 'phase2_inserted': 83744, 'phase2_rounds': 13, 'phase1_triangles': 2772536}
+process                                     59.13 s  sampled  14.17 GB  exact  14.26 GB
+clock: domain read                           0.04 s  sampled   0.06 GB  exact   0.06 GB
+clock: decode                               28.77 s  sampled  14.17 GB  exact  14.26 GB
+assemble                                     2.06 s  sampled   4.63 GB  exact   6.81 GB
+resample                                    26.29 s  sampled  14.17 GB  exact  14.26 GB
+resample: DemTile copy                       0.52 s  sampled   5.70 GB  exact    nan GB
+clock: start mesh: build                     0.00 s  sampled    nan GB  exact    nan GB
+clock: start mesh: node                      0.05 s  sampled   4.49 GB  exact    nan GB
+clock: start mesh: triangulate               0.02 s  sampled    nan GB  exact    nan GB
+clock: start mesh: constraint edges          0.04 s  sampled    nan GB  exact    nan GB
+refine phase 1                               4.26 s  sampled   4.70 GB  exact    nan GB
+final_check.run                             24.93 s  sampled   6.15 GB  exact    nan GB
+clock: check points: store                   3.71 s  sampled   3.84 GB  exact    nan GB
+refine_points                                9.16 s  sampled   3.11 GB  exact    nan GB
+clock: trim                                  0.14 s  sampled   2.53 GB  exact    nan GB
+clock: write: encode                         0.09 s  sampled    nan GB  exact    nan GB
+clock: write: disk                           0.04 s  sampled    nan GB  exact    nan GB
+{'tag': '761_t10_base_nolargecache_r1', 'wall_s': 59.76, 'returncode': 0, 'stopped': None, 'time_peak_footprint_bytes': 14261202032.0}
+761_t10_base_nolargecache_r1 {'final_triangles': 2940024, 'check_points': 270407394, 'phase2_inserted': 83744, 'phase2_rounds': 13, 'phase1_triangles': 2772536}
+process                                     44.87 s  sampled  10.13 GB  exact  10.13 GB
+clock: domain read                           0.04 s  sampled    nan GB  exact   0.07 GB
+clock: decode                               15.77 s  sampled   7.89 GB  exact   8.76 GB
+assemble                                     1.89 s  sampled   6.83 GB  exact   7.41 GB
+resample                                    13.49 s  sampled   7.89 GB  exact   8.76 GB
+resample: DemTile copy                       0.00 s  sampled    nan GB  exact    nan GB
+clock: start mesh: build                     0.00 s  sampled    nan GB  exact    nan GB
+clock: start mesh: node                      0.06 s  sampled    nan GB  exact    nan GB
+clock: start mesh: triangulate               0.02 s  sampled    nan GB  exact    nan GB
+clock: start mesh: constraint edges          0.05 s  sampled    nan GB  exact    nan GB
+refine phase 1                               4.27 s  sampled   5.13 GB  exact    nan GB
+final_check.run                             23.79 s  sampled  10.13 GB  exact  10.13 GB
+clock: check points: store                   3.86 s  sampled   9.76 GB  exact   9.76 GB
+refine_points                                9.43 s  sampled  10.13 GB  exact  10.13 GB
+clock: trim                                  0.12 s  sampled    nan GB  exact    nan GB
+clock: write: encode                         0.05 s  sampled    nan GB  exact    nan GB
+clock: write: disk                           0.07 s  sampled   4.26 GB  exact    nan GB
+{'tag': '761_t10_new_r1', 'wall_s': 45.22, 'returncode': 0, 'stopped': None, 'time_peak_footprint_bytes': 10133167880.0}
+761_t10_new_r1 {'final_triangles': 2940024, 'check_points': 270407394, 'phase2_inserted': 83744, 'phase2_rounds': 13, 'phase1_triangles': 2772536}
+process                                     50.90 s  sampled   6.90 GB  exact   6.93 GB
+clock: domain read                           0.04 s  sampled   0.06 GB  exact   0.06 GB
+clock: decode                               20.52 s  sampled   5.32 GB  exact   6.81 GB
+assemble                                     1.99 s  sampled   4.66 GB  exact   6.81 GB
+resample                                    18.14 s  sampled   5.32 GB  exact    nan GB
+resample: DemTile copy                       0.00 s  sampled    nan GB  exact    nan GB
+clock: start mesh: build                     0.00 s  sampled    nan GB  exact    nan GB
+clock: start mesh: node                      0.06 s  sampled   4.48 GB  exact    nan GB
+clock: start mesh: triangulate               0.02 s  sampled    nan GB  exact    nan GB
+clock: start mesh: constraint edges          0.05 s  sampled    nan GB  exact    nan GB
+refine phase 1                               4.43 s  sampled   4.76 GB  exact    nan GB
+final_check.run                             24.81 s  sampled   6.90 GB  exact   6.93 GB
+clock: check points: store                   3.75 s  sampled   4.65 GB  exact    nan GB
+refine_points                                9.17 s  sampled   5.20 GB  exact    nan GB
+clock: trim                                  0.14 s  sampled   0.29 GB  exact    nan GB
+clock: write: encode                         0.08 s  sampled    nan GB  exact    nan GB
+clock: write: disk                           0.01 s  sampled    nan GB  exact    nan GB
+{'tag': '761_t10_new_nolargecache_r1', 'wall_s': 51.3, 'returncode': 0, 'stopped': None, 'time_peak_footprint_bytes': 6925014560.0}
+761_t10_new_nolargecache_r1 {'final_triangles': 2940024, 'check_points': 270407394, 'phase2_inserted': 83744, 'phase2_rounds': 13, 'phase1_triangles': 2772536}
+process                                     51.20 s  sampled  15.79 GB  exact  15.91 GB
+clock: domain read                           0.03 s  sampled    nan GB  exact   0.07 GB
+clock: decode                               23.33 s  sampled  15.79 GB  exact  15.91 GB
+assemble                                     3.00 s  sampled   7.41 GB  exact   7.41 GB
+resample                                    19.94 s  sampled  15.79 GB  exact  15.91 GB
+resample: DemTile copy                       0.34 s  sampled   9.97 GB  exact    nan GB
+clock: start mesh: build                     0.00 s  sampled    nan GB  exact    nan GB
+clock: start mesh: node                      0.06 s  sampled    nan GB  exact    nan GB
+clock: start mesh: triangulate               0.02 s  sampled    nan GB  exact    nan GB
+clock: start mesh: constraint edges          0.05 s  sampled    nan GB  exact    nan GB
+refine phase 1                               4.12 s  sampled  10.28 GB  exact    nan GB
+final_check.run                             22.76 s  sampled  12.36 GB  exact    nan GB
+clock: check points: store                   3.57 s  sampled  11.69 GB  exact    nan GB
+refine_points                                8.75 s  sampled  12.36 GB  exact    nan GB
+clock: trim                                  0.11 s  sampled    nan GB  exact    nan GB
+clock: write: encode                         0.04 s  sampled   7.72 GB  exact    nan GB
+clock: write: disk                           0.04 s  sampled    nan GB  exact    nan GB
+{'tag': '761_t10_base_r2', 'wall_s': 51.84, 'returncode': 0, 'stopped': None, 'time_peak_footprint_bytes': 15905255472.0}
+761_t10_base_r2 {'final_triangles': 2940024, 'check_points': 270407394, 'phase2_inserted': 83744, 'phase2_rounds': 13, 'phase1_triangles': 2772536}
+process                                     56.73 s  sampled  14.09 GB  exact  14.49 GB
+clock: domain read                           0.03 s  sampled    nan GB  exact   0.06 GB
+clock: decode                               27.05 s  sampled  14.09 GB  exact  14.49 GB
+assemble                                     1.98 s  sampled   5.38 GB  exact   6.81 GB
+resample                                    24.67 s  sampled  14.09 GB  exact  14.49 GB
+resample: DemTile copy                       0.49 s  sampled   5.70 GB  exact    nan GB
+clock: start mesh: build                     0.00 s  sampled    nan GB  exact    nan GB
+clock: start mesh: node                      0.05 s  sampled   4.49 GB  exact    nan GB
+clock: start mesh: triangulate               0.02 s  sampled    nan GB  exact    nan GB
+clock: start mesh: constraint edges          0.04 s  sampled    nan GB  exact    nan GB
+refine phase 1                               4.06 s  sampled   4.75 GB  exact    nan GB
+final_check.run                             24.49 s  sampled   6.16 GB  exact    nan GB
+clock: check points: store                   3.73 s  sampled   3.82 GB  exact    nan GB
+refine_points                                8.70 s  sampled   3.12 GB  exact    nan GB
+clock: trim                                  0.14 s  sampled   2.46 GB  exact    nan GB
+clock: write: encode                         0.08 s  sampled    nan GB  exact    nan GB
+clock: write: disk                           0.04 s  sampled    nan GB  exact    nan GB
+{'tag': '761_t10_base_nolargecache_r2', 'wall_s': 57.33, 'returncode': 0, 'stopped': None, 'time_peak_footprint_bytes': 14493183136.0}
+761_t10_base_nolargecache_r2 {'final_triangles': 2940024, 'check_points': 270407394, 'phase2_inserted': 83744, 'phase2_rounds': 13, 'phase1_triangles': 2772536}
+process                                     43.41 s  sampled  10.12 GB  exact  10.12 GB
+clock: domain read                           0.03 s  sampled    nan GB  exact   0.07 GB
+clock: decode                               15.26 s  sampled   7.84 GB  exact   8.82 GB
+assemble                                     1.90 s  sampled   6.64 GB  exact   7.40 GB
+resample                                    12.97 s  sampled   7.84 GB  exact   8.82 GB
+resample: DemTile copy                       0.00 s  sampled    nan GB  exact    nan GB
+clock: start mesh: build                     0.00 s  sampled    nan GB  exact    nan GB
+clock: start mesh: node                      0.05 s  sampled   5.18 GB  exact    nan GB
+clock: start mesh: triangulate               0.02 s  sampled    nan GB  exact    nan GB
+clock: start mesh: constraint edges          0.04 s  sampled    nan GB  exact    nan GB
+refine phase 1                               4.10 s  sampled   5.09 GB  exact    nan GB
+final_check.run                             23.01 s  sampled  10.12 GB  exact  10.12 GB
+clock: check points: store                   3.83 s  sampled   9.75 GB  exact    nan GB
+refine_points                                8.97 s  sampled  10.12 GB  exact  10.12 GB
+clock: trim                                  0.12 s  sampled    nan GB  exact    nan GB
+clock: write: encode                         0.05 s  sampled   4.13 GB  exact    nan GB
+clock: write: disk                           0.04 s  sampled    nan GB  exact    nan GB
+{'tag': '761_t10_new_r2', 'wall_s': 43.98, 'returncode': 0, 'stopped': None, 'time_peak_footprint_bytes': 10115424056.0}
+761_t10_new_r2 {'final_triangles': 2940024, 'check_points': 270407394, 'phase2_inserted': 83744, 'phase2_rounds': 13, 'phase1_triangles': 2772536}
+process                                     50.01 s  sampled   6.90 GB  exact   6.92 GB
+clock: domain read                           0.04 s  sampled    nan GB  exact   0.06 GB
+clock: decode                               20.78 s  sampled   6.13 GB  exact   6.81 GB
+assemble                                     1.99 s  sampled   6.13 GB  exact   6.81 GB
+resample                                    18.39 s  sampled   5.61 GB  exact    nan GB
+resample: DemTile copy                       0.00 s  sampled    nan GB  exact    nan GB
+clock: start mesh: build                     0.00 s  sampled    nan GB  exact    nan GB
+clock: start mesh: node                      0.05 s  sampled    nan GB  exact    nan GB
+clock: start mesh: triangulate               0.02 s  sampled    nan GB  exact    nan GB
+clock: start mesh: constraint edges          0.04 s  sampled    nan GB  exact    nan GB
+refine phase 1                               4.03 s  sampled   4.76 GB  exact    nan GB
+final_check.run                             24.04 s  sampled   6.90 GB  exact   6.92 GB
+clock: check points: store                   3.77 s  sampled   4.65 GB  exact    nan GB
+refine_points                                8.90 s  sampled   5.20 GB  exact    nan GB
+clock: trim                                  0.14 s  sampled   0.21 GB  exact    nan GB
+clock: write: encode                         0.08 s  sampled    nan GB  exact    nan GB
+clock: write: disk                           0.04 s  sampled   0.25 GB  exact    nan GB
+{'tag': '761_t10_new_nolargecache_r2', 'wall_s': 50.32, 'returncode': 0, 'stopped': None, 'time_peak_footprint_bytes': 6921147960.0}
+761_t10_new_nolargecache_r2 {'final_triangles': 2940024, 'check_points': 270407394, 'phase2_inserted': 83744, 'phase2_rounds': 13, 'phase1_triangles': 2772536}
+exit 0

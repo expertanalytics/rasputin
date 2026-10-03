@@ -1785,7 +1785,8 @@ inputs. Ola ruled B12 (a), the proposed order; it now carries the cleanup:
    ANADEM, so 15c-2's acceptance no longer needs a one-off cut while
    `metadados.snirh.gov.br` answers 403.
 4. **15c-2**, as designed, its acceptance on ANADEM from the cache.
-5. **The edge strip** (Q14), as designed, writing `constraint_check_points`.
+5. **The edge strip** (Q14), as designed, writing `constraint_check_points`
+   (`docs/increments/15f-edge-strip.md`, 15f-1 and 15f-2).
 6. **23b**, frozen edges and the seam pass, in C++.
 7. **23c**, the partition, piece by piece, with pieces and the index as
    output.

@@ -1,0 +1,82 @@
+{
+ "phases": [
+  {
+   "phase": "P1 decode + assemble",
+   "seconds": 3.3853468894958496,
+   "start": 58573352,
+   "end": 7408113352,
+   "peak": 7408113352,
+   "exact": true
+  },
+  {
+   "phase": "P2 resample (blocks)",
+   "seconds": 19.601263284683228,
+   "start": 7408113352,
+   "end": 8192220384,
+   "peak": 15905255472,
+   "exact": true
+  },
+  {
+   "phase": "P2 end (DemTile copy)",
+   "seconds": 0.3368849754333496,
+   "start": 8192220384,
+   "end": 10289963720,
+   "peak": 10346914528,
+   "exact": false
+  },
+  {
+   "phase": "start mesh",
+   "seconds": 0.13822293281555176,
+   "start": 10289963720,
+   "end": 10254705304,
+   "peak": 10290258632,
+   "exact": false
+  },
+  {
+   "phase": "P3 refine phase 1",
+   "seconds": 4.114789962768555,
+   "start": 10254705304,
+   "end": 9903956272,
+   "peak": 10281525936,
+   "exact": false
+  },
+  {
+   "phase": "P4 store fill + freeze",
+   "seconds": 14.00423812866211,
+   "start": 9903956272,
+   "end": 11716240528,
+   "peak": 11716240528,
+   "exact": false
+  },
+  {
+   "phase": "P5 phase 2 (refine_points)",
+   "seconds": 8.753459930419922,
+   "start": 11716240528,
+   "end": 7707468104,
+   "peak": 12363114096,
+   "exact": false
+  },
+  {
+   "phase": "P6 trim + write",
+   "seconds": 0.8181159496307373,
+   "start": 7707468104,
+   "end": 7804805520,
+   "peak": 7804805520,
+   "exact": false
+  }
+ ],
+ "units": {
+  "source mosaic nodes": 560943760,
+  "target grid nodes": 538409322,
+  "check points": 270407394,
+  "phase 1 triangles (2 V - hull)": 2772536,
+  "final triangles": 2940024,
+  "P1 rise per mosaic node, B": 13.102097793190532,
+  "P2 transient per block node, B (peak - start - canvas) / (threads x block rows x cols)": 89.1791396746563,
+  "P2 end rise per grid node, B (copy)": 5.458302922920046,
+  "P4 rise per check point, B": 6.702051409141571,
+  "P4 held after freeze per check point, B": 6.702051409141571,
+  "P3 rise per phase-1 triangle, B": 9.673682145155194,
+  "P5 rise per final triangle, B": 220.02322702127603
+ }
+}
