@@ -347,3 +347,8 @@ add_terrain_backend_test(test_refinement_strip_oracle unit/test_refinement_strip
 target_link_libraries(test_refinement_strip_oracle PRIVATE Threads::Threads)
 add_terrain_backend_test(prop_refinement_edge_strip property/prop_refinement_edge_strip.cpp)
 target_link_libraries(prop_refinement_edge_strip PRIVATE Threads::Threads)
+
+# L16 (docs/increments/15f-edge-strip.md): detail::coincidence_radius, in its
+# own target so the strip suite builds while the helper is missing.
+add_terrain_backend_test(test_refinement_coincidence_radius unit/test_refinement_coincidence_radius.cpp)
+target_link_libraries(test_refinement_coincidence_radius PRIVATE Threads::Threads)

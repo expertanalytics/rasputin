@@ -62,6 +62,16 @@ using Edges = std::vector<std::array<std::uint32_t, 2>>;
 inline constexpr std::size_t kN = 33;      // nodes a side in the property fixtures
 inline constexpr double kOnEdge = 1e-9;    // cells: "distance under 1e-9 cells" (ES2)
 
+// L16: the oracles' "on the edge" distance stays a decade outside the
+// producer's coincidence radius r(g) = max(1e-10, 64 ulp(M)), M = max(cols,
+// rows) - 1. Written here from the ruling, not taken from strip_scan.hpp.
+// On every lattice up to 8,191 nodes across this is kOnEdge.
+inline double on_edge_slack(const RasterGeometry& g) {
+    const double m = static_cast<double>(std::max(g.cols(), g.rows()) - 1);
+    const double r = std::max(1e-10, 64.0 * (std::nextafter(m, std::numeric_limits<double>::infinity()) - m));
+    return std::max(kOnEdge, 10.0 * r);
+}
+
 inline RasterGeometry exact_geometry(std::size_t cols = kN, std::size_t rows = kN) {
     return RasterGeometry{0.0, 0.0, 2.0, 1.0, cols, rows};
 }
@@ -200,6 +210,7 @@ inline std::pair<double, double> param_dist(Lat a, Lat b, Lat p) {
 
 inline StripFindings strip_findings(const RasterGeometry& g, const std::vector<OraclePoint>& pts,
                                     const Mesh& out, double tol) {
+    const double on_edge = on_edge_slack(g);
     std::vector<Lat> lv;
     for (const Point2 v : out.vertices) lv.push_back(lat(g, v));
     StripFindings f;
@@ -210,7 +221,7 @@ inline StripFindings strip_findings(const RasterGeometry& g, const std::vector<O
         for (const auto& e : out.edges) {
             const Lat a = lv[e[0]], b = lv[e[1]];
             const auto [t, d] = param_dist(a, b, p.at);
-            if (d > kOnEdge || t < -1e-12 || t > 1.0 + 1e-12) continue;
+            if (d > on_edge || t < -1e-12 || t > 1.0 + 1e-12) continue;
             filed = true;
             if (!(out.valid[e[0]] && out.valid[e[1]])) {
                 is_void = true;
@@ -356,6 +367,7 @@ inline ShapeFindings shape_findings(const Raster<float>& dem, std::span<const Po
                                     const Edges& start_edges, const std::vector<std::uint32_t>& start_masks,
                                     const Mesh& out) {
     const RasterGeometry& g = dem.geometry();
+    const double on_edge = on_edge_slack(g);
     ShapeFindings f;
     const std::size_t n0 = start_vertices.size();
     std::vector<std::array<Lat, 2>> segs;
@@ -373,7 +385,7 @@ inline ShapeFindings shape_findings(const Raster<float>& dem, std::span<const Po
             bool on = false;
             for (const auto& s : segs) {
                 const auto [t, d] = param_dist(s[0], s[1], p);
-                on = on || (d <= kOnEdge && t > 0.0 && t < 1.0);
+                on = on || (d <= on_edge && t > 0.0 && t < 1.0);
             }
             if (!on) ++f.stray;
         }
@@ -387,7 +399,7 @@ inline ShapeFindings shape_findings(const Raster<float>& dem, std::span<const Po
         for (std::size_t i = 0; i < segs.size() && !s; ++i) {
             const auto [tp, dp] = param_dist(segs[i][0], segs[i][1], p);
             const auto [tq, dq] = param_dist(segs[i][0], segs[i][1], q);
-            if (dp <= kOnEdge && dq <= kOnEdge && std::min(tp, tq) >= -kOnEdge && std::max(tp, tq) <= 1 + kOnEdge)
+            if (dp <= on_edge && dq <= on_edge && std::min(tp, tq) >= -on_edge && std::max(tp, tq) <= 1 + on_edge)
                 s = i;
         }
         if (!s) {
@@ -400,8 +412,8 @@ inline ShapeFindings shape_findings(const Raster<float>& dem, std::span<const Po
     }
     for (auto& ps : pieces) {
         std::sort(ps.begin(), ps.end());
-        bool ok = !ps.empty() && std::abs(ps.front().first) <= kOnEdge && std::abs(ps.back().second - 1.0) <= kOnEdge;
-        for (std::size_t j = 1; ok && j < ps.size(); ++j) ok = std::abs(ps[j].first - ps[j - 1].second) <= kOnEdge;
+        bool ok = !ps.empty() && std::abs(ps.front().first) <= on_edge && std::abs(ps.back().second - 1.0) <= on_edge;
+        for (std::size_t j = 1; ok && j < ps.size(); ++j) ok = std::abs(ps[j].first - ps[j - 1].second) <= on_edge;
         if (!ok) ++f.broken_chain;
     }
     return f;

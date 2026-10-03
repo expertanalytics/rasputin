@@ -75,6 +75,7 @@
 #include <set>
 #include <span>
 #include <stdexcept>
+#include <tuple>
 #include <utility>
 #include <vector>
 
@@ -1078,4 +1079,87 @@ TEST_CASE("ES15: the coincidence radius is 1e-10 lattice units, applied with a s
     }
     CHECK(node_findings(dem, mesh_of(out), 0.0).over == 0);  // E2, with L14's exception inside the slack
     CHECK(delaunay_violations(g, mesh_of(out)) == 0);
+}
+
+// ---------------------------------------------------------------------------
+// ES16: the coincidence radius scales with the lattice, at the loop (L16)
+// ---------------------------------------------------------------------------
+
+namespace {
+
+// ES15's radius fixture, placed at column c0 of a cols x 9 lattice: a
+// constrained square ring c0 - 3.5 .. c0 + 3.5 by rows 0.5 .. 7.5, fanned
+// from a start vertex P = (c0 + delta, 4), over a DEM curved through node
+// (c0, 4) in both axes (heights in local coordinates, so the floats stay
+// exact far from the origin). Tolerance 0.
+struct Wide {
+    Raster<float> dem;
+    PointRefineOutcome out;
+};
+
+Wide near_node_run(std::size_t cols, double c0, double delta) {
+    const auto g = exact_geometry(cols, 9);
+    std::vector<float> v(cols * 9, 0.0f);
+    for (std::size_t r = 0; r < 9; ++r)
+        for (std::size_t c = 0; c < cols; ++c) {
+            const double lc = static_cast<double>(c) - c0 + 4.0;
+            if (lc < 0.0 || lc > 8.0) continue;
+            const auto i = static_cast<std::size_t>(lc);
+            v[r * cols + c] = static_cast<float>(i * i + r * r + (r * i) % 5);
+        }
+    Raster<float> dem{g, std::move(v)};
+    Start s;
+    s.mesh = IndexedMesh2{{world(g, c0 - 3.5, 0.5), world(g, c0 - 3.5, 7.5), world(g, c0 + 3.5, 7.5),
+                           world(g, c0 + 3.5, 0.5), world(g, c0 + delta, 4.0)},
+                          {{0, 1, 4}, {1, 2, 4}, {2, 3, 4}, {3, 0, 4}},
+                          {0, 0, 0, 0}};
+    s.edges = {{0, 1}, {1, 2}, {2, 3}, {0, 3}};
+    s.masks = {1, 1, 1, 1};
+    const Begin b = direct(dem, s);
+    const auto strip = strip_of(dem, b);
+    auto out = run_strip(dem, strip, b, 0.0);
+    return Wide{std::move(dem), std::move(out)};
+}
+
+}  // namespace
+
+TEST_CASE("ES16: a vertex 2e-10 from a node is inside the radius at 16,385 columns and outside it at 9",
+          "[edge_strip][ES16]") {
+    // r(g) is 64 * 2^-38 (about 2.33e-10) at M = 16,384 and the 1e-10 floor at
+    // M = 8 (L16). The ring sits at the far end of the wide lattice, where
+    // the coordinates are near M.
+    const double delta = 2e-10;
+    const auto [cols, c0, inside] = GENERATE(std::tuple{std::size_t{16385}, 16380.0, true},
+                                             std::tuple{std::size_t{9}, 4.0, false});
+    CAPTURE(cols, c0, inside);
+    const Wide w = near_node_run(cols, c0, delta);
+    const auto& g = w.dem.geometry();
+    REQUIRE(w.out.ok());
+    const Lat node{c0, 4.0};
+    REQUIRE(std::hypot(lat(g, w.out.vertices[4]).col - c0, 0.0) > 1e-10);  // P is off the node by about delta
+    const auto at_node = std::count_if(w.out.vertices.begin(), w.out.vertices.end(),
+                                       [&](Point2 p) { return lat(g, p) == node; });
+    if (inside) {
+        CHECK(at_node == 0);  // skipped: within r(g) of P
+        CHECK(w.out.coincident >= 1);
+        CHECK(w.out.coincident_max_error > 0.0);
+        CHECK(w.out.coincident_max_error <= 1e-9);
+    } else {
+        CHECK(at_node == 1);  // outside the floor: inserted as any node
+        CHECK(w.out.coincident == 0);
+    }
+    const Mesh m = mesh_of(w.out);
+    CHECK(node_findings(w.dem, m, 0.0).over == 0);  // E2, L14's exception inside the slack
+    CHECK(delaunay_violations(g, m) == 0);
+    // The strip oracle and the shape checks at on_edge_slack(g): max(1e-9,
+    // 10 r(g)) on the wide lattice (L16, "The oracles").
+    const Edges ring{{0, 1}, {1, 2}, {2, 3}, {0, 3}};
+    const std::vector<Point2> starts(w.out.vertices.begin(), w.out.vertices.begin() + 5);
+    const auto f = strip_findings(g, ruled_points(w.dem, starts, ring), m, 0.0);
+    CHECK(f.unfiled == 0);
+    CHECK(f.over == 0);
+    const auto sh = shape_findings(w.dem, starts, ring, {1, 1, 1, 1}, m);
+    CHECK(sh.coincident == 0);
+    CHECK(sh.stray == 0);
+    CHECK(sh.broken_chain == 0);
 }
