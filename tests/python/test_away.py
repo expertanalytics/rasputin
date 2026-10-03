@@ -21,6 +21,7 @@ import io
 import json
 import os
 import select
+import shlex
 import shutil
 import signal
 import subprocess
@@ -346,6 +347,7 @@ def test_the_stopper_terminates_a_caffeinate_it_started() -> None:
 # ---------------------------------------------------------------- T17
 
 BACK_AT = NOW + timedelta(hours=5)
+DECISIONS_HEADING = "ASK OLA lines, every worktree's .claude/current-task/:"
 
 QUEUED = (
     {"at": "2026-09-30T19:00:00+00:00", "branch": "feat-a", "hook": "guard_push",
@@ -842,12 +844,60 @@ def test_commits_between_on_git_failure_is_none(repo: Path) -> None:
     assert away.commits_between(repo, BACK_AT - timedelta(hours=3), BACK_AT) is None
 
 
+#: `git log --format=%h %cI` output that exits 0 but does not parse: a stamp
+#: that is not a date, a line with no stamp, and a time with no offset (naive,
+#: which cannot be compared with the window's aware times).
+MALFORMED_LOG = ("abc1234 not-a-date", "garbage", "abc1234 2026-09-30T20:00:00")
+
+
+def fake_git_log(tmp_path: Path, output: str) -> Path:
+    """A `git` that prints `output` for `log` and runs the real git otherwise."""
+    real = shutil.which("git")
+    assert real is not None
+    bin_dir = tmp_path / "fake-git-bin"
+    bin_dir.mkdir()
+    script = bin_dir / "git"
+    script.write_text(
+        "#!/bin/sh\n"
+        'for arg in "$@"; do\n'
+        f"  if [ \"$arg\" = log ]; then printf '%s\\n' {shlex.quote(output)}; exit 0; fi\n"
+        "done\n"
+        f'exec {shlex.quote(real)} "$@"\n'
+    )
+    script.chmod(0o755)
+    return bin_dir
+
+
+@pytest.mark.parametrize("output", MALFORMED_LOG)
+def test_back_with_a_malformed_git_log_line_still_clears_the_state(
+    repo: Path,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+    output: str,
+) -> None:
+    # Code review round 1: a non-zero git exit was handled, a line that does
+    # not parse ended --back before the queue was archived. §3.3: the flag and
+    # the queue are not optional to --back; §3.4: the stretch is then unknown.
+    flag_on(repo, now=NOW, keep_awake_pid=777)
+    write_queue(repo, QUEUED[:1])
+    monkeypatch.setenv("PATH", f"{fake_git_log(tmp_path, output)}{os.pathsep}{os.environ['PATH']}")
+    lines = back_lines(repo, capsys, BACK_AT)
+    assert lines[0].startswith("Back. Unattended since ")
+    assert lines[1].startswith("Longest stretch without a commit: unknown (")
+    assert "Queued while away (1):" in lines
+    assert DECISIONS_HEADING in lines
+    assert not flag_path(repo).exists()
+    assert not (state_dir(repo) / "queue.jsonl").exists()
+    assert len(archive(repo).read_text().splitlines()) == 1
+
+
 # ---------------------------------------------------------------- h8, test 8
 #
 # §3.1: run from a worktree, `--back` lists the main checkout's decisions (the
 # fault evidence §1b reproduced), and every worktree's, uncapped.
 
-DECISIONS = "ASK OLA lines, every worktree's .claude/current-task/:"
+DECISIONS = DECISIONS_HEADING
 
 
 def test_back_from_a_worktree_lists_the_main_checkouts_decisions(
