@@ -33,7 +33,9 @@ Names the design leaves open, chosen here (the tests are their statement):
 - ``Report(command, sizes, quality, refinement, phases, total, stats_seconds,
   threads=None)``. ``threads`` is the design's "Threads: 10 (hardware
   concurrency)" sentence, which R1's list of Report fields does not carry;
-  printed only when not None. A phase named ``"<parent>: ..."`` where
+  printed only when not None. ``bounds_checks`` (increment 24, required) is the
+  text after ``bounds checks: `` -- ``off`` or ``on (<mode>)`` -- and prints as
+  its own paragraph between the command line and ``## Sizes``. A phase named ``"<parent>: ..."`` where
   ``<parent>`` is an earlier phase is a sub-row: listed, not added to the
   total, and announced by the line under the table.
 """
@@ -206,6 +208,8 @@ GOLDEN = """\
 
 `rasputin mesh --dem 7908_3_10m_z33.tif --domain quarter.geojson --tolerance 1 --out quarter.vtk --stats quarter.md`
 
+bounds checks: on (libc++ fast)
+
 ## Sizes
 
 | item | count |
@@ -334,6 +338,7 @@ def quarter(stats: ModuleType, quality: Any) -> Any:
         total=4.030,
         stats_seconds=0.072,
         threads=10,
+        bounds_checks="on (libc++ fast)",
     )
 
 
@@ -353,6 +358,7 @@ def fixture_report(stats: ModuleType, quality: Any) -> Any:
         phases=(("start mesh: build", 0.002), ("write: encode", 0.001)),
         total=0.004,
         stats_seconds=0.001,
+        bounds_checks="off",
     )
 
 
@@ -434,3 +440,36 @@ class TestRender:
 
     def test_render_is_pure(self, stats: ModuleType, quarter: Any) -> None:
         assert stats.render(quarter) == stats.render(quarter)
+
+
+class TestBoundsChecksLine:
+    """Increment 24, T7's render half: the line, pinned without ``_core``.
+
+    `docs/increments/24-release-hardening.md` section 3: one line before the
+    first ``##`` heading, so every stats file from a heavy run says it was
+    unchecked.
+    """
+
+    @pytest.mark.parametrize(
+        ("field", "line"),
+        [
+            ("off", "bounds checks: off"),
+            ("on (libc++ fast)", "bounds checks: on (libc++ fast)"),
+        ],
+    )
+    def test_one_line_before_the_first_section(
+        self, stats: ModuleType, fixture_report: Any, field: str, line: str
+    ) -> None:
+        import dataclasses
+
+        lines = stats.render(dataclasses.replace(fixture_report, bounds_checks=field)).splitlines()
+        first_section = next(i for i, text in enumerate(lines) if text.startswith("## "))
+        assert [t for t in lines if t.startswith("bounds checks")] == [line]
+        assert lines.index(line) < first_section
+
+    def test_the_field_is_required(self, stats: ModuleType, fixture_report: Any) -> None:
+        import dataclasses
+
+        fields = {f.name: f for f in dataclasses.fields(stats.Report)}
+        assert "bounds_checks" in fields
+        assert fields["bounds_checks"].default is dataclasses.MISSING

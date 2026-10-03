@@ -867,8 +867,13 @@ class FakeRunner:
         pmset: Sequence[str] = (AC_WITH_BATTERY, AC_WITH_BATTERY),
         refine_s: float = 1.0,
         child_code: int = 0,
+        modes: Sequence[str] | None = None,
     ) -> None:
         self.bench = bench
+        #: Increment 24: the ``hardening`` each child reports, in turn (cycled);
+        #: None reports none, as a child of an older tree's ``_core`` does not.
+        self.modes = list(modes) if modes is not None else None
+        self.child_count = 0
         self.pmset = list(pmset)
         self.refine_s = refine_s
         self.child_code = child_code
@@ -900,7 +905,10 @@ class FakeRunner:
         rasputin = args[args.index("--") + 1 :]
         if "--ascii" in rasputin:
             write_mesh(Path(rasputin[rasputin.index("--out") + 1]))
-        values = {**CHILD_JSON, "refine_s": self.refine_s}
+        values: dict[str, Any] = {**CHILD_JSON, "refine_s": self.refine_s}
+        if self.modes is not None:
+            values["hardening"] = self.modes[self.child_count % len(self.modes)]
+        self.child_count += 1
         return completed(self.bench, stderr=bench_line(values) + "\n", code=self.child_code)
 
     def children(self) -> list[list[str]]:
@@ -1281,3 +1289,178 @@ def test_real_child_wraps_the_real_refine(bench: ModuleType, tmp_path: Path, thr
     assert child.max_error <= 1.0
     assert child.rounds >= 1
     assert out.is_file()
+
+
+# ------------------------------------------------- increment 24: hardening
+#
+# docs/increments/24-release-hardening.md section 7 and T8 in section 12. The
+# mode a run measured is read from the loaded module by each child, never from
+# the flag or a cache; a run never mixes modes, never disagrees with an explicit
+# --hardening, and is never judged against a baseline of the other mode.
+
+FAST = "libc++ fast"
+
+
+def hardening_defines(fake: FakeRunner) -> list[str]:
+    """The ``-DRASPUTIN_HARDENING=...`` arguments of every configure call."""
+    configures = [c for c in fake.calls if Path(c[0]).name == "cmake" and "-S" in c]
+    assert len(configures) == 1, configures
+    return [a for a in configures[0] if a.startswith("-DRASPUTIN_HARDENING")]
+
+
+@pytest.fixture
+def buildable(workspace: dict[str, Path]) -> dict[str, Path]:
+    """A tree whose faked build leaves one ``_core*.so`` for ``build()`` to package."""
+    (workspace["tree"] / "src_python" / "tin_engine").mkdir(parents=True)
+    out = workspace["tree"] / "build-bench"
+    out.mkdir()
+    (out / "_core.cpython-314-darwin.so").write_bytes(b"not loaded: the fake child never imports")
+    return workspace
+
+
+@pytest.mark.parametrize(
+    ("flag", "define", "mode"),
+    [
+        ((), "-DRASPUTIN_HARDENING=ON", FAST),
+        (("--hardening", "on"), "-DRASPUTIN_HARDENING=ON", FAST),
+        (("--hardening", "off"), "-DRASPUTIN_HARDENING=OFF", "none"),
+    ],
+    ids=["default", "on", "off"],
+)
+def test_configure_passes_the_mode_explicitly_once(
+    bench: ModuleType,
+    buildable: dict[str, Path],
+    use_runner: Callable[[Any], None],
+    flag: tuple[str, ...],
+    define: str,
+    mode: str,
+) -> None:
+    fake = FakeRunner(bench, modes=[mode])
+    use_runner(fake)
+    result = cli.invoke(bench.app, [*run_args(buildable, "t1"), *flag])
+    assert result.exit_code == 2, result.output  # nothing stored: NO BASELINE
+    assert hardening_defines(fake) == [define]
+    assert run_json(buildable, "t1")["hardening"] == mode
+
+
+def test_the_readme_names_the_mode(
+    bench: ModuleType, buildable: dict[str, Path], use_runner: Callable[[Any], None]
+) -> None:
+    use_runner(FakeRunner(bench, modes=[FAST]))
+    result = cli.invoke(bench.app, [*run_args(buildable, "t1"), "--hardening", "on"])
+    assert result.exit_code == 2, result.output
+    readme = next(buildable["out_root"].glob("*/t1/README.md")).read_text()
+    assert FAST in readme
+
+
+def test_a_run_json_without_hardening_loads_as_none(bench: ModuleType, tmp_path: Path) -> None:
+    data = record_dict()
+    assert "hardening" not in data
+    directory = tmp_path / "old"
+    directory.mkdir()
+    (directory / "run.json").write_text(json.dumps(data))
+    assert bench.RunRecord.model_validate(data).hardening == "none"
+    assert bench._load(directory).hardening == "none"
+
+
+def test_comparable_refuses_across_modes(bench: ModuleType) -> None:
+    hardened, unchecked = make(bench, hardening=FAST), make(bench)
+    reason = bench.comparable(hardened, unchecked)
+    assert reason == f"hardening: {FAST} vs none"
+    assert bench.comparable(unchecked, hardened) == f"hardening: none vs {FAST}"
+
+
+@pytest.mark.parametrize("mode", ["none", FAST])
+def test_comparable_accepts_the_same_mode(bench: ModuleType, mode: str) -> None:
+    assert bench.comparable(make(bench, hardening=mode), make(bench, hardening=mode)) is None
+
+
+def test_find_baseline_skips_a_run_of_the_other_mode(bench: ModuleType, tmp_path: Path) -> None:
+    def at(hour: int, mode: str) -> Any:
+        return make(bench, started=f"2026-09-20T{hour:02d}:00:00+00:00", hardening=mode)
+
+    same = store(tmp_path, at(1, FAST), "2026-09-20", "hardened-older")
+    store(tmp_path, at(2, "none"), "2026-09-20", "unchecked-newer")
+    found = bench.find_baseline(tmp_path, at(5, FAST), lambda a, b: True)
+    assert found is not None
+    assert found[0] == same
+
+
+def test_parse_child_reads_the_mode(bench: ModuleType) -> None:
+    child = bench.parse_child(bench_line({**CHILD_JSON, "hardening": FAST}), run="t")
+    assert child.hardening == FAST
+
+
+def test_parse_child_without_the_mode_is_none(bench: ModuleType) -> None:
+    """An older tree's ``_core`` has no ``hardening``: its child reports none."""
+    assert bench.parse_child(bench_line(CHILD_JSON), run="t").hardening == "none"
+
+
+def test_children_reporting_different_modes_exit_3(
+    bench: ModuleType, workspace: dict[str, Path], use_runner: Callable[[Any], None]
+) -> None:
+    use_runner(FakeRunner(bench, modes=[FAST, "none"]))
+    result = cli.invoke(bench.app, [*run_args(workspace, "t1"), "--no-build"])
+    assert result.exit_code == 3, result.output
+    assert "hardening" in result.output
+    assert list(workspace["out_root"].rglob("run.json")) == []
+
+
+def test_no_build_records_the_mode_the_children_report(
+    bench: ModuleType, workspace: dict[str, Path], use_runner: Callable[[Any], None]
+) -> None:
+    use_runner(FakeRunner(bench, modes=[FAST]))
+    result = cli.invoke(bench.app, [*run_args(workspace, "t1"), "--no-build"])
+    assert result.exit_code == 2, result.output
+    assert run_json(workspace, "t1")["hardening"] == FAST
+
+
+def test_no_build_refuses_an_explicit_hardening_flag(
+    bench: ModuleType, workspace: dict[str, Path], use_runner: Callable[[Any], None]
+) -> None:
+    """Section 7: with --no-build nothing is built, so the flag cannot hold."""
+    fake = FakeRunner(bench, modes=[FAST])
+    use_runner(fake)
+    args = [*run_args(workspace, "t1"), "--no-build", "--hardening", "on"]
+    result = cli.invoke(bench.app, args)
+    assert result.exit_code == 3, result.output
+    assert "--hardening" in result.output
+    assert fake.children() == []
+    assert list(workspace["out_root"].rglob("run.json")) == []
+
+
+@pytest.mark.parametrize(
+    ("flag", "reported"),
+    [("on", "none"), ("off", FAST), ("off", "libstdc++ assertions")],
+    ids=["on-but-unchecked", "off-but-libcxx", "off-but-libstdcxx"],
+)
+def test_a_flag_the_children_contradict_exits_3(
+    bench: ModuleType,
+    buildable: dict[str, Path],
+    use_runner: Callable[[Any], None],
+    flag: str,
+    reported: str,
+) -> None:
+    use_runner(FakeRunner(bench, modes=[reported]))
+    result = cli.invoke(bench.app, [*run_args(buildable, "t1"), "--hardening", flag])
+    assert result.exit_code == 3, result.output
+    assert "hardening" in result.output
+    assert list(buildable["out_root"].rglob("run.json")) == []
+
+
+def test_real_child_reports_the_loaded_mode(bench: ModuleType, tmp_path: Path) -> None:
+    """The real child, on the installed build: its BENCH line carries the
+    attribute of the ``_core`` it loaded."""
+    core = pytest.importorskip("tin_engine._core")
+    array = np.random.default_rng(14).uniform(0.0, 50.0, (17, 21)).astype(np.float32)
+    dem = tmp_path / "bumpy.tif"
+    dem.write_bytes(micro_tiff(array).getvalue())
+    argv = [
+        sys.executable, str(TOOL), "_child", "--threads", "1", "--",
+        "mesh", "--dem", str(dem), "--tolerance", "1", "--out", str(tmp_path / "m.vtk"),
+    ]  # fmt: skip
+    proc = subprocess.run(argv, capture_output=True, text=True, timeout=300, check=False)
+    assert proc.returncode == 0, proc.stderr
+    child = bench.parse_child(proc.stderr, run="real")
+    assert child.hardening == getattr(core, "hardening", "none")
+    assert child.hardening != "none"
