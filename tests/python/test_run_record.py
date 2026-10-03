@@ -447,6 +447,18 @@ class TestSummary:
         assert "6 vertices on or next to NoData cells were removed" in rr.summary(stride(rr))
         assert "on or next to" not in rr.summary(projected(rr))
 
+    @pytest.mark.parametrize(
+        ("path", "where"),
+        [("projected", "on NoData cells"), ("stride", "on or next to NoData cells")],
+    )
+    def test_one_removed_vertex_is_singular(self, rr: ModuleType, path: str, where: str) -> None:
+        """Plurals are correct English ("Settled after the red step", 8):
+        one vertex goes with its triangles, not their triangles."""
+        record = {"projected": projected, "stride": stride}[path](rr, nodata_vertices_removed=1)
+        text = rr.summary(record)
+        assert f"1 vertex {where} was removed with its triangles." in text, text
+        assert "their" not in text, text
+
     def test_no_nodata_sentence_without_nodata(self, rr: ModuleType) -> None:
         assert "NoData" not in rr.summary(projected(rr, nodata_vertices_removed=0))
 
