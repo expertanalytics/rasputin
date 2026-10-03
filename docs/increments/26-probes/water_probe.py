@@ -130,12 +130,16 @@ def main() -> None:
     subprocess.run([str(work / "overlap_ledger"), "label", str(run), args.classes], check=True)
     lab = np.fromfile(run / "labels.i32", np.int32).reshape(win.shape)
     sizes = np.fromfile(run / "sizes.i64", np.int64)
-    ids, first = np.unique(lab.ravel(), return_index=True)
-    ids, first = ids[1:], first[1:]
-    fr, fc = np.divmod(first, win.shape[1])
-    lon = x0 + (c0 + fc + 0.5) * sx
-    lat = y0 - (r0 + fr + 0.5) * sy
-    inside = shapely.contains_xy(outline, lon, lat)
+    ids = np.arange(1, sizes.size)
+    # A body belongs to the unit when any of its cells' centres is inside the
+    # outline (design review, round 1: the first cell in raster order missed
+    # Tres Marias, whose first cell lies north of unit 769).
+    wr, wc = np.nonzero(lab)
+    wl = lab[wr, wc]
+    shapely.prepare(outline)
+    cell_in = shapely.contains_xy(outline, x0 + (c0 + wc + 0.5) * sx, y0 - (r0 + wr + 0.5) * sy)
+    cells_inside = np.bincount(wl[cell_in], minlength=sizes.size)
+    inside = cells_inside[ids] > 0
     cell_m2 = 868.0  # the window's mean cell, from fractions_probe on this unit
     _, _, crs_text = read_mesh(args.mesh)
     fwd = Transformer.from_crs(CRS.from_epsg(4326), CRS.from_user_input(crs_text), always_xy=True)
@@ -147,6 +151,8 @@ def main() -> None:
         "window_cells": int(win.size),
         "components_inside": int(inside.sum()),
         "water_km2_inside": round(float(area_m2[inside].sum()) / 1e6, 3),
+        "water_km2_cells_inside_outline": round(float(cells_inside.sum()) * cell_m2 / 1e6, 3),
+        "cell_area_m2_used": cell_m2,
         "count_at_least_ha": {
             str(ha): int(((area_m2 >= ha * 1e4) & inside).sum())
             for ha in (0.5, 1.44, 5, 10, 50, 100, 1000)
@@ -163,9 +169,8 @@ def main() -> None:
     keep = ids[(area_m2 >= 14_400) & inside]
     t0 = time.time()
     fine, pinches, outers = 0, 0, []
-    wr, wc = np.nonzero(lab)
-    wl = lab[wr, wc]
     nl = sizes.size
+    largest = int(keep[np.argmax(sizes[keep])])
     rmin = np.full(nl, 1 << 40)
     cmin = np.full(nl, 1 << 40)
     rmax = np.full(nl, -1)
@@ -178,6 +183,16 @@ def main() -> None:
         ra, ca, rb, cb = int(rmin[lid]), int(cmin[lid]), int(rmax[lid]) + 1, int(cmax[lid]) + 1
         mask = lab[ra:rb, ca:cb] == lid
         rings = rings_of(mask)
+        if lid == largest:
+            at_edge = ra == 0 or ca == 0 or rb == lab.shape[0] or cb == lab.shape[1]
+            report["largest_body"] = {
+                "cells": int(sizes[lid]),
+                "km2": round(float(sizes[lid]) * cell_m2 / 1e6, 1),
+                "box_rows_cols": [rb - ra, cb - ca],
+                "box_km_approx_ns_ew": [round((rb - ra) * 0.0309, 1), round((cb - ca) * 0.030, 1)],
+                "holes": sum(1 for g in rings if signed_area(np.array(g, float)) < 0),
+                "touches_window_edge": bool(at_edge),
+            }
         for ring in rings:
             a = np.array(ring, float)
             if signed_area(a) <= 0:
@@ -198,12 +213,20 @@ def main() -> None:
         "pinch_vertices": pinches,
         "seconds": round(t1 - t0, 1),
     }
+    big = max(range(len(outers)), key=lambda i: len(outers[i]))
+    report["largest_ring"] = {"fine": len(outers[big])}
     for tol in (30.0, 60.0, 120.0):
         tot, crossings, worst_rel, worst_ring = 0, 0, 0.0, {}
-        for xy in outers:
+        for i, xy in enumerate(outers):
             o = xy.mean(axis=0)
             r = open_pinches(xy - o)
+            t_ring = time.time()
             out = reduce_ring(r, tol, np.zeros((0, 2)))
+            if i == big:
+                report["largest_ring"][f"{tol:g} m"] = {
+                    "reduced": len(out.ring),
+                    "seconds": round(time.time() - t_ring, 2),
+                }
             red = np.asarray(out.ring)
             tot += len(red)
             crossings += out.rejected_crossing
@@ -216,7 +239,7 @@ def main() -> None:
                     "fine": len(r),
                     "reduced": len(red),
                     "collapses": out.collapses,
-                    "extent_m": float(np.abs(r).max()),
+                    "half_extent_m": float(np.abs(r).max()),
                 }
         report["reduction"][f"{tol:g} m"] = {
             "vertices": tot,
