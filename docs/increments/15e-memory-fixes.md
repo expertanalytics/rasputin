@@ -334,3 +334,40 @@ Blocking:
    not a departure: fix 3 specifies it.
 
 Merge also needs a green CI, `@perf`'s acceptance run, and the ROADMAP row.
+
+### Round 2 (`@reviewer`, 2026-10-03): APPROVED
+
+Range: `3e01580..44b72e8` (18b7a79 `@tester`, 6d2f40c `@developer`,
+44b72e8 `@architect`). Still not pushed: no PR and no remote branch, so
+**no CI exists**, and this approval does not make the branch merge-ready.
+Master 390b516 still merges cleanly (`git merge-tree`).
+
+LOC by `CLAUDE.md` §2, production only: the round adds **+1 net**
+(`cli.py`: the `assert` becomes `if ...: raise RuntimeError`; the
+`check_points.hpp` change is comment-only), so the branch is **59 net**
+against the ~65-70 estimate and the 700 ceiling. No split.
+
+Round-1 items:
+1. Closed. The four notes are in the past tense ("went red at 9879805
+   because ..."), and the `tests/cpp/CMakeLists.txt` comment no longer
+   speaks of the red commit. No line the branch adds under `tests/`,
+   `include/`, `src_python/` or `bindings/` still describes a red step in
+   the present tense (grep of `git diff 7810cf8..HEAD`).
+2. Closed. Status line, "As built" and the ROADMAP row added; each
+   as-built claim checked against the code (`check_points.hpp:56-64`,
+   `:123-127`, `:182`; `bindings/core.cpp`'s `py::init` lambda returns
+   `CheckPoints{...}` by value). The 15e citations into files the branch
+   edits were re-read as quotations at 7810cf8 and hold; the fix-2 test is
+   now cited by name.
+
+Local evidence: mypy, ruff, format, prohibited-deps and detria gates OK;
+`test_cli_mesh_geographic.py`, `test_target_grid.py`, `test_mosaic.py`:
+209 passed; the arena target rebuilt (exit 0) and passes. No full C++
+rebuild: the round's C++ changes are comments.
+
+Not blocking: the `_Once.take` second-take `RuntimeError` has no test. Its
+one caller takes once, so nothing reaches it today; a two-line test would
+pin it if `_Once` gains callers.
+
+Merge still needs `@perf`'s acceptance run, a push with Ola's yes, and a
+green CI.
