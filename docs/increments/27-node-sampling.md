@@ -8,9 +8,9 @@ Decisions for Ola are in "For Ola".
 
 **The defect.** Without `--tolerance`, z comes from `_core.sample`, which is
 `terrain::raster::bilinear` over every mesh vertex
-(`include/terrain/raster/sample.hpp:20-50`). `bilinear` refuses a point when
+(`include/terrain/raster/sample.hpp:26-59`). `bilinear` refuses a point when
 any of the four corners of its cell is NoData, also a corner whose weight is
-zero (`sample.hpp:33-35`). A vertex exactly on a DEM node that has a value
+zero (`sample.hpp:42-44`). A vertex exactly on a DEM node that has a value
 then gets no height when a neighbour has none, and the trim
 (`src_python/tin_engine/elevation.py:52-55`) removes it with its triangles.
 So a ring of valid data, one cell wide, is lost along every NoData area. On
@@ -130,7 +130,7 @@ the same `node(round) == p` test (`lattice_position`, `refine.hpp:126-135`).
   stays first, so a raster with fewer than 2 rows or columns still answers
   nullopt everywhere, nodes included, as today.
 - `bilinear_batch`, the `sample` binding and the Python side change in no
-  code. The binding's docstring (`bindings/core.cpp:833-836`), the stub's
+  code. The binding's docstring (`bindings/core.cpp:833-838`), the stub's
   (`src_python/tin_engine/_core.pyi`, `sample`) and the comment above
   `bilinear` say the new rule.
 - `lattice_position` is **not** changed to call `node_at` here. That would
@@ -341,8 +341,8 @@ It **does not change**.
 
 Docs in the code PR, each a line saying increment 27 changed it:
 `12-dem-to-mesh.md` R2, the "NoData" and "On the last row or column" bullets;
-`12-dem-to-mesh.md:341` (test 4, "next to a NoData corner even at zero
-weight", and the 1e-9 on the last row and column) and `:438` (the exclusion
+`12-dem-to-mesh.md:345` (test 4, "next to a NoData corner even at zero
+weight", and the 1e-9 on the last row and column) and `:443` (the exclusion
 "Changing `bilinear`'s NoData rule"). In `25-plain-output.md`: the inventory
 row for `vertices without data dropped` (around line 121), the
 "`nodata_vertices_removed` on the path without `--tolerance`" bullet (around
