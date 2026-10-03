@@ -316,7 +316,7 @@ They are measurement scripts, not production code, and nothing imports them.
   (2048) = 4326 is a Geographic 2D CRS; a projected CRS is required". Nothing
   else stands in the way.
 - **B9. The core's indices hold at basin size, by grep.**
-  `include/terrain/raster/` indexes with `std::size_t` (`geometry.hpp:60`), and
+  `include/terrain/raster/` indexes with `std::size_t` (`geometry.hpp:63`), and
   `RowSpan` carries `uint32` per axis (`mesh/row_spans.hpp:31`). A grep for
   32-bit flat node indices in `include/terrain/` found none. A run on 2.3 G
   nodes is @perf's (15d acceptance).
