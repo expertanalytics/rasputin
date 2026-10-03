@@ -1,8 +1,9 @@
 # Harness h8: the unattended window, the recap and the size table
 
-Status: **design, ruled**, @architect, 2026-10-03; Ola answered §7's four
-questions the same day. One PR, by day: every file it changes is governed. Implements Ola's rulings of 2026-10-03 on items 1 to 6 of
-`docs/retrospectives/next.md`, section "The window of 2026-10-02, the restart
+Status: **design, ruled, round 1 fixes**, @architect, 2026-10-03; Ola
+answered §7's four questions the same day. One PR, by day: every production
+file it changes is governed. Implements Ola's rulings of 2026-10-03 on items
+1 to 6 of `docs/retrospectives/next.md`, section "The window of 2026-10-02, the restart
 of 2026-10-03, h7" (recorded in #155), and his request of the same day for a
 size table in the recap. Evidence for items 1 to 6:
 `docs/retrospectives/2026-10-03-night-restart-h7.md` §1a to §1d and §2-§3.
@@ -77,12 +78,12 @@ What reads which checkout:
 | Last landed, In flight | the checkout the script runs in (unchanged) |
 | `session.md` and subagent files (`print_current_task`) | the main checkout |
 | Waiting on Ola | every checkout in `checkouts()` (§3.2) |
-| `session.md` format warnings | each checkout's `session.md` that exists (§3.3) |
-| Predecessor turns | the transcript folders of both the main checkout and the running checkout (`~/.claude/projects/<slug>`, slug as now), merged by time; one folder when they are the same |
+| `session.md` format warnings | the main checkout's `session.md` only (§3.3; item 4 ruled that file) |
+| Predecessor turns | unchanged: the transcript folder of the checkout the script runs in. Not ruled; merging the main checkout's folder in would print the running main session's own turns as pending |
 
-`TRANSCRIPTS` and the `.claude/current-task` path stop being import-time
-constants derived from `__file__`; they are computed in `main()` so tests can
-point them at a fixture repository.
+The `.claude/current-task` path stops being an import-time constant derived
+from `__file__`; it is computed in `main()` from `main_checkout()`, so tests
+can point it at a fixture repository.
 
 `away.py --back` takes its decisions from `all_decisions(root)` (below), so
 run from a worktree it lists the main checkout's lines, which is the fault
@@ -125,9 +126,11 @@ ASK = re.compile(r"^[ \t]*(?:[-*+][ \t]+)?ASK OLA:(.*)$")   # case-sensitive
     newline and trailing whitespace; `MAX_LINE = 300`). 300 passes, 301 warns.
 - An absent `session.md` gives no warning (it is deleted when a round lands).
 
-The recap prints the warnings of every checkout's `session.md` under
-`session.md format:`, prefixed as in §3.2, directly after "Waiting on Ola",
-and prints nothing when there are none. The 300-character limit is Ola's
+The recap runs this on the main checkout's `session.md` only, prints the
+warnings under `session.md format:` directly after "Waiting on Ola", at most
+10 then `... <n> more`, and prints nothing when there are none. A worktree's
+`session.md` is not format-checked; its `ASK OLA:` lines are still listed
+(§3.2). The 300-character limit is Ola's
 ruling 2 (§7), made after a 971-character `NOW:` line.
 
 ### 3.4 Fallbacks and the longest stretch without a commit (item 1)
@@ -148,8 +151,11 @@ In `away.py`:
   Commits outside the window are ignored; input order does not matter; on a
   tie the earliest interval wins.
 - `commits_between(root, since, end) -> list[tuple[datetime, str]] | None`:
-  `git -C root log --all --format='%h %cI' --since=<since> --until=<end>`,
-  parsed; `None` on git failure. `--all` because work lands on worktree
+  `git -C root log --all --format='%h %cI'`, parsed, and filtered to
+  `[since, end]` in Python; `None` on git failure. No `--since`/`--until`:
+  git stops a date-limited walk early when commit dates are out of order,
+  and the whole history (1,355 commits on 2026-10-03, `git rev-list --all
+  --count`) is cheap to read. `--all` because work lands on worktree
   branches.
 - In `back()`, after the `Back. Unattended since ...` line, when the flag was
   present: the window is `[since, min(now, until)]` (`until` = the flag's
@@ -191,9 +197,31 @@ towards printing nothing, so the section's heading says what it looks for.
 - The caller runs `ps` as above (both macOS and procps accept it) and passes
   the PIDs of its own ancestors (walked through the `ppid` column from
   `os.getpid()`), so a recap run by hand does not list its own shell.
+- **Format self-check**, so drift in Claude Code's wrapper shows rather than
+  reading as "nothing running". `wrapper_check(ancestors: list[str]) ->
+  Literal["confirmed", "drift", "unknown"]`, pure, takes the command lines
+  of the ancestors from the parent upward and stops at the first Claude Code
+  process (first token's basename `claude` or `claude.exe`):
+  - an ancestor recognised as a wrapper (the test `background_jobs` uses)
+    before that: `confirmed`;
+  - otherwise, an ancestor before it that is a shell run with `-c`
+    (basename `sh`, `bash` or `zsh`, second token `-c`) and is not the hook
+    launcher: `drift`. The hook launcher is a `-c` shell whose argument
+    starts with `python` and names `tools/session_state.py`: the
+    `SessionStart` command in `.claude/settings.json`;
+  - otherwise (no Claude Code ancestor, as in a terminal or a test; or only
+    the hook launcher): `unknown`.
+
+  On `drift` the recap prints `(wrapper format not recognised)` in place of
+  `(none)`, and after the job lines when there are any. The hook-launcher
+  shape is an assumption: Claude Code's hook process tree is not documented
+  and was not observed for this design. The first `SessionStart` after green
+  is the probe: the main session checks that the recap does not print the
+  drift line, and reports it if it does.
 - The recap prints, after "In flight":
   `Running Bash-tool jobs, any session (Claude Code shell wrappers):` then the
-  lines, `(none)`, or `(could not list: <error>)`.
+  lines, `(none)`, `(wrapper format not recognised)`, or
+  `(could not list: <error>)`.
 
 Foreground calls of other sessions show up too. That is wanted: it is what
 the "agents in pairs" note needs before a second C++ build.
@@ -211,8 +239,9 @@ New `tools/rule_sizes.py`, governed (§5):
 - **The reference is derived, not stored**: the newest commit reachable from
   `HEAD` that added a file matching `docs/retrospectives/2???-??-??-*.md`
   (`git log -1 --diff-filter=A --format=%h --name-only -- <pattern>`), and
-  the counts are the same files read at that commit (`git show
-  <rev>:<path>`, or one `git cat-file --batch`). @orchestrator writes a dated
+  the counts are the files matching the same set at that commit, listed with
+  `git ls-tree -r --name-only <rev> -- <paths>` (so a file removed since is
+  found) and read with `git show <rev>:<path>` or one `git cat-file --batch`. @orchestrator writes a dated
   file at each retrospective, so the reference moves with no extra step and
   there is no reference file to keep, forget or reset (§7, ruling 1).
 - `table(now: dict[str, int], then: dict[str, int] | None, label: str) -> list[str]`,
@@ -225,8 +254,17 @@ New `tools/rule_sizes.py`, governed (§5):
 - `main()` prints the table, so `python3 tools/rule_sizes.py` works on its own.
 
 The recap prints the table last in `== recap ==`, after "Next on ROADMAP.md".
-At today's 14 files it is about 16 lines and 600 characters, against the
-10,000-character cap on the hook's output.
+At today's 14 files it is about 16 lines and 600 characters.
+
+**Budget against the 10,000-character cap.** The recap printed 6,025
+characters on 2026-10-03 (round 1 review, `python3 tools/session_state.py |
+wc -m` in the main checkout). The new sections are capped so that together
+they add at most 3,000 characters: background jobs 10 lines of at most
+about 130 characters (§3.5); "Waiting on Ola" at most 20 lines of at most
+160 characters each, then `... <n> more` (the lines across all worktrees
+are new volume); `session.md format:` 10 lines (§3.3); the size table is
+bounded by its file set. A test fills every new section past its cap and
+checks the added characters (test 11).
 
 ### 3.7 Recap order
 
@@ -239,16 +277,17 @@ predecessor turns.
 ## 4. Rule text, and what it replaces
 
 All in `.claude/REQUIRED-READING.md`. The word counts are `len(text.split())`
-of the passages at this design's base (595c56a) and of the new text below.
+of the passages at this design's base (595c56a) and of the new text below;
+the current-task row counts the closing "The spawner" on both sides.
 
 | Passage (lines at 595c56a) | Change | Removed | Added | Net |
 |---|---|---|---|---|
 | Cold start, steps 1-2 (12-20) | step 1 lists "running background jobs"; step 2 gains the item 5 sentence | 95 | 108 | +13 |
-| `.claude/current-task/` bullet (30-37) | the three-line rule moves to the subagent files; `session.md` gets item 4's format and ruling 2's limit | 87 | 102 | +15 |
+| `.claude/current-task/` bullet (30-37) | the three-line rule moves to the subagent files; `session.md` gets item 4's format and ruling 2's limit | 89 | 104 | +15 |
 | new bullet after "One session per working tree" | item 6 | 0 | 27 | +27 |
 | Unattended, last sentence (158-159) | item 1 | 19 | 48 | +29 |
-| `SessionStart` paragraph, tail (168-175) | the cap sentence shortened; "thin recap in a worktree" replaced by item 2 | 89 | 68 | -21 |
-| **Total** | | 290 | 353 | **+63** |
+| `SessionStart` paragraph, tail (168-175) | the cap sentence shortened; "thin recap in a worktree" replaced by what item 2 shares | 89 | 75 | -14 |
+| **Total** | | 292 | 362 | **+70** |
 
 `CLAUDE.md`, `docs/increments/README.md`, the persona and skill files:
 unchanged (0 added, 0 removed); ruling 1 keeps `orchestrator.md` out of it.
@@ -311,13 +350,14 @@ the hook's stdout at 10,000 characters (`python3 tools/session_state.py | wc
 -m` measures it) and passes only a 2,000-character preview past the cap, so
 keep `session.md` and the subagent files short. The recap finds the main
 checkout from the repository's common git dir, so a session launched inside
-a worktree gets the same recap.
+a worktree gets the main checkout's `session.md` and every worktree's
+`ASK OLA:` lines.
 ```
 
 Item 2's sentence is true only once §3.1 is green; it lands in the green
 commit's PR, not before. Two memory notes become redundant once this merges
-and can be cut: "Fill the unattended window" (now a rule) and the "check
-`ps` before resuming" note (now in the recap).
+and can be cut: `fill-the-unattended-window.md` (now a rule) and
+`background-jobs-survive-restart.md` (now in the recap and step 2).
 
 ## 5. Files
 
@@ -332,10 +372,11 @@ and can be cut: "Fill the unattended window" (now a rule) and the "check
 | **Total** | | **~185**, under the 700 ceiling |
 
 Overlap: h5 (red step on `worktree-h5-state-check`, not merged) also edits
-`tools/away.py` (`--back` deletes `tampered.json`), `test_away.py` and
+`tools/away.py` (`--back` deletes `tampered.json`; `enter()` installs its git
+shims), appends tests at the end of `test_away.py`, edits
 `harness_fixtures.py`, and moves `GOVERNED` into `tools/governed.py`. The
-conflicts are a few lines in `back()` and one tuple; whichever merges second
-resolves them. Nothing in h8 depends on h5.
+conflicts are a few lines in `back()` and `enter()`, the appended tests and
+one tuple; whichever merges second resolves them. Nothing in h8 depends on h5.
 
 No suite here is invariant-critical (README, *Cost constraints*): no mutation
 round. No refine or mesh code: no `@perf` acceptance.
@@ -350,8 +391,10 @@ one end-to-end run per section through `run_script`.
 
 Amended (a ruling changed them, so the amendment says so in its commit):
 `test_pending_decisions_collects_ask_ola_lines_from_every_task_file` (the
-lowercase line no longer counts) and `test_back_survives_a_broken_session_state`
-(new heading, §3.1).
+lowercase line no longer counts), and
+`test_back_survives_a_broken_session_state` and
+`test_back_prints_the_queue_by_branch_and_archives_it`
+(`tests/python/test_away.py:396` asserts the old heading; new heading, §3.1).
 
 1. **Matching (§3.2).** Counted: `ASK OLA: x`, `- ASK OLA: x`, `* ASK OLA:
    x`, `  + ASK OLA: x`. Not counted: `ask ola: x`, `Note: ASK OLA: x`,
@@ -367,13 +410,15 @@ lowercase line no longer counts) and `test_back_survives_a_broken_session_state`
    `session.md` and the worktrees' lines.
 4. **Format (§3.3).** No warnings for NOW, QUEUE, two ASK OLA lines and a
    blank line, with and without bullets. Each warning text once: no NOW; two
-   QUEUE; empty NOW; `Rulings: ...` on line 4 (the warning names line 4, §3.3's text);
-   `now: x` (case) is "not a" line. Line length: a `NOW:` line of exactly
-   300 characters passes, 301 warns with its line number and length, and a
-   long `ASK OLA:` line warns too; trailing spaces do not count. A `NOW:` line
-   of 961 characters, as in the main `session.md` measured 2026-10-03, warns. Absent file:
-   none. The recap prints the
-   `session.md format:` block only when there are warnings.
+   QUEUE; empty NOW; `Rulings: ...` on line 4 (the warning names line 4,
+   §3.3's text); `now: x` (case) is "not a" line. Order: a text with every
+   kind of fault gives the warnings in §3.3's order. Line length: a `NOW:`
+   line of exactly 300 characters passes, a length over 300 warns with its
+   line number and length, and a long `ASK OLA:` line warns too; trailing
+   spaces do not count. Absent file: none. End to end: the recap prints the
+   `session.md format:` block for a faulty main `session.md`, nothing for a
+   good one, and nothing for a faulty `session.md` in a worktree (whose
+   `ASK OLA:` lines are still listed).
 5. **Background jobs (§3.5).** On a `ps` text built from the observed format:
    wrapper lines listed with pid, etime and the eval'd command; non-wrapper
    lines and excluded pids not; a command past 100 characters cut; 12
@@ -381,7 +426,12 @@ lowercase line no longer counts) and `test_back_survives_a_broken_session_state`
    `/bin/sh -c ": /x/.claude/shell-snapshots/s.sh && eval 'sleep 60' < /dev/null"`,
    run the recap, find its pid listed; kill it. With `ps` unavailable (a seam
    or an empty `PATH` for that call), the recap prints `(could not list: ...)`
-   and the rest of the recap.
+   and the rest of the recap. `wrapper_check`, pure: a recognised wrapper
+   below `claude` gives `confirmed`; a `/bin/zsh -c` ancestor of another
+   shape below `claude` (drift) gives `drift`, and the recap then prints
+   `(wrapper format not recognised)` instead of `(none)`; the hook launcher
+   (`/bin/sh -c python3 "$CLAUDE_PROJECT_DIR/tools/session_state.py"`)
+   below `claude` gives `unknown`; no `claude` ancestor gives `unknown`.
 6. **Longest quiet (§3.4), pure.** No commits: the whole window, opener
    `None`, count 0. Commits at +1 h and +2 h in a 9 h window: 7 h after the
    second. Commits before `since` or after `end` ignored; unsorted input; a
@@ -391,7 +441,10 @@ lowercase line no longer counts) and `test_back_survives_a_broken_session_state`
    passed in; commits on two branches at chosen times (`--all`); the printed
    line matches §3.4's template exactly, including `after <hash>`. The window
    ends at `now`, not the flag's `until`; with an expired flag, at `until`. A
-   `{}` flag prints the `unknown` line; no flag, no line.
+   `{}` flag prints the `unknown` line; no flag, no line. With git failing
+   (`commits_between` returning `None`, through a seam or a `root` that is
+   not a repository), `--back` prints `... unknown (git log failed).` and
+   still deletes the flag and archives the queue.
 8. **`--back` from a worktree** lists the main checkout's `session.md`
    decisions: the reproduction of evidence §1b.
 9. **Sizes (§3.6).** `words` equals `wc -w` on an ASCII fixture. In a
@@ -405,6 +458,10 @@ lowercase line no longer counts) and `test_back_survives_a_broken_session_state`
 10. **Governed.** A write to `tools/rule_sizes.py` gets `ask` from
     `guard_governance.py` (add it to the existing list in
     `test_guard_governance.py`).
+11. **Budget (§3.6).** With 15 wrapper processes in the `ps` text, 30
+    `ASK OLA:` lines of 300 characters across three worktrees and 15 format
+    faults, the new sections print their caps and `... <n> more`, and add at
+    most 3,000 characters to the recap.
 
 ## 7. Rulings (Ola, 2026-10-03)
 
