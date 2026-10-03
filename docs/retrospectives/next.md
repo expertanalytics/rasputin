@@ -234,5 +234,6 @@ governed files.
    in the handback, and your spawner records it"), because the persona is
    read on every run and a brief template is only as good as the brief
    that forgets it; the brief need not repeat it. Once h6 lands, the
-   `reviewer` row of its `ROLES` table (no write paths) makes it enforced.
+   `reviewer` row of its `ROLES` table (no write paths) reports such a
+   write: h6 denies Edit and Write but only reports a Bash write.
    Cost: one line in a governed file, by day.
