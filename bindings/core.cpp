@@ -833,7 +833,9 @@ keyword-only. Any other dtype or layout is a TypeError, never a silent copy.
 Bilinear z at each of the (N, 2) points, as (z, valid): float64 (N,) and bool (N,).
 
 valid is False outside the grid, for a non-finite point, and where any of the
-four surrounding nodes is NoData or NaN. z is 0.0 there, never NaN.
+four surrounding nodes is NoData or NaN. A point that is a DEM node bit for bit
+reads that node alone: it is valid unless that node is NoData or NaN. z is 0.0
+where valid is False, never NaN.
 )doc");
 
     py::enum_<RefineStatus>(m, "RefineStatus", R"doc(

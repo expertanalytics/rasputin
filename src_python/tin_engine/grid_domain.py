@@ -51,9 +51,12 @@ def subsample(meta: RasterMeta, stride: int) -> tuple[npt.NDArray[np.float64], l
     """The subsampled nodes as ``(N, 2)`` float64, and the perimeter ring.
 
     Nodes are row-major over the picked rows and columns. Coordinates use
-    ``RasterGeometry::node``'s expression exactly, ``x_min + col * delta_x`` and
+    ``RasterGeometry::node``'s expression, ``x_min + col * delta_x`` and
     ``y_max - row * delta_y``: any other spelling can land an ulp off the node
-    and change which cell ``bilinear`` picks.
+    and change which cell ``bilinear`` picks. The bits equal ``node``'s only
+    where the C++ compiler does not fuse that expression into a multiply-add;
+    on integer or dyadic origins and spacings they are equal either way
+    (increment 27, "A limit of the exact rule").
 
     The ring is counter-clockwise and implicitly closed (no repeated first
     index): along the bottom row, up the right column, back along the top row,
