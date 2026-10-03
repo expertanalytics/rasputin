@@ -2,10 +2,11 @@
 
 Status: **designed by `@architect`, 2026-10-03; revised the same day after
 Ola's review of the first field table** ("This was a surprisingly long list of
-things to put into a vtk file!"). He approved the cut that follows: the mesh
-file carries only what a user of the mesh needs, and everything else goes to
-`--stats` (and, if he says yes, an optional `--record` file). Two choices are
-still his ("Questions for Ola"); neither blocks `@tester`. Ola's ruling of
+things to put into a vtk file!"); **ruled by Ola the same day** ("Ruled by
+Ola", at the end): both field tables approved as they stand, `--record PATH`
+yes, units in the field names, `features_notice` kept in the file. Ready for
+`@tester`. The mesh file carries only what a user of the mesh needs;
+everything else goes to `--stats` and `--record`. Ola's ruling of
 2026-10-03: before 15f-3's code step, everything `rasputin mesh` writes for a
 reader is made plain. His words on the `elevation_source` sentence: "This is
 tribal language". He also did not recognise "DEM holes": a raster covers its
@@ -168,7 +169,7 @@ class RunRecord:
 def file_fields(record) -> list[tuple[str, str]]      # .vtk FieldData and .ply comments
 def stats_rows(record) -> list[tuple[str, str, str]]   # (wording, value, name)
 def summary(record) -> str                             # one stderr line for a person
-def as_json(record) -> str                             # --record, if Ola says yes
+def as_json(record, version, command) -> str           # --record PATH (D5)
 ```
 
 Builders (`refined_record`, `stride_record`, `flat_record`) take plain numbers
@@ -184,7 +185,7 @@ _dem_mesh / mesh: outcomes, trimmed mesh, raster metadata, input descriptions
         -> file_fields  -> write_vtk(fields=...) and write_ply(comments=...)   short subset
         -> stats_rows   -> stats.render: "Result" and "Inputs" sections        everything
         -> summary      -> stderr                                              one line
-        -> as_json      -> --record PATH                                       everything (optional)
+        -> as_json      -> --record PATH                                       everything, as JSON
 ```
 
 Why one record: the three defects in the inventory (the reprojected run
@@ -239,15 +240,15 @@ unreadable or break a legal requirement, so they stay, unchanged.
 | `feature_bits`, `feature_names` | `io/vtk_legacy.py:124-125`; `.ply` `feature_bit <bit> <name>` comments, `io/ply.py:111` | the key to the `feature_mask` cell array and the per-feature 0/1 arrays: without it a mask of 5 does not say "river and railway" |
 | `feature_vocabulary` | `io/vtk_legacy.py:126`, `io/ply.py:112` | a digest of that key, so two files can be checked to use the same bits (increment 13) |
 | `land_cover_codes` | `io/vtk_legacy.py:118-119`, `cli.py:1009` | says which code system the `land_cover_code` cell array holds (CORINE level 3); the ParaView preset from `rasputin palette corine` colours those codes and assumes that system |
-| `features_notice` | `cli.py:930-933`, text at `feature_input.py:61-65` | the CORINE attribution ("Contains modified CORINE Land Cover 2018 data ... (c) European Union ..."), which the Copernicus data policy asks for on data derived from CORINE, as `licence_note` is for a downloaded DEM. **Flagged for Ola**: it was not on his list, but it falls under the same rule as `dem_credit` |
+| `features_notice` | `cli.py:930-933`, text at `feature_input.py:61-65` | the CORINE attribution ("Contains modified CORINE Land Cover 2018 data ... (c) European Union ..."), which the Copernicus data policy asks for on data derived from CORINE, as `licence_note` is for a downloaded DEM. Kept by Ola's ruling (2026-10-03) under the same rule as `dem_credit` |
 
 ### D3. The rules
 
 1. **One name, one value, everywhere.** A file field appears in `--stats`
    (third column) and in `--record` with the same name and value; stderr's
    summary uses the same numbers.
-2. **Units in the name**, numbers bare: `tolerance_m 5` (to be ruled, see
-   "Questions for Ola"). Numbers are formatted by `stats._exact`, so a printed
+2. **Units in the name**, numbers bare: `tolerance_m 5` (ruled by Ola,
+   2026-10-03). Numbers are formatted by `stats._exact`, so a printed
    maximum never reads above the tolerance it met.
 3. **Zero is omitted from the file**, never from `--stats`.
 4. **Self-checks** live in `--stats`. If one is ever non-zero it is also
@@ -281,25 +282,85 @@ Renames, in `--stats` and `--record` only:
 | `computation_grid` | `resampled_grid` | says what it is |
 | `uncovered` | `dem_nodes_outside_mesh` | says what it counts |
 
-### D5. `--record PATH` (an option, for Ola's yes or no)
+### D5. `--record PATH` (ruled yes by Ola, 2026-10-03)
 
-Writes the whole record as a small JSON file, for reproducibility: every
-entry of `--stats`'s Inputs and Result sections as `"name": value`, numbers as
-JSON numbers, plus the rasputin version and the command line. No timings, so
-two runs of one command give the same file. About 1 kB.
+`rasputin mesh ... --record PATH` writes the whole record of the run as a
+small JSON file, for reproducibility. It is optional; without it nothing is
+written. It changes nothing else about the run.
+
+**Content.** One JSON object, keys in this order:
+
+1. `"rasputin_version"`: `installed_version()`, as `rasputin version` prints it.
+2. `"command"`: the command line, built as `--stats` builds its `command`
+   (`cli.py`, `_write_report`: the program's base name, then the arguments
+   exactly as given, `shlex.join`ed).
+3. Every entry of the record that `--stats` prints in its Inputs and Result
+   sections, in the same order, under the same names (the second table of
+   "The fields, for Ola"), and so every mesh-file field of the first table
+   that comes from the record, `features_notice` and `land_cover_codes`
+   included. The writers' feature key (`feature_bits`, `feature_names`,
+   `feature_vocabulary`) is the fixed vocabulary, not a run result, and is not
+   in the record.
+
+An entry omitted from the record (for example the 15f-3 counts on a run
+without a tolerance) is absent from the JSON, not `null`. An entry that is in
+`--stats` with 0 is in the JSON with 0.
+
+**Values.** A numeric entry is a JSON number: an integer count as an integer,
+a measured value (anything ending `_m` or `_deg`) as the float `Entry.number`
+holds, which `json.dumps` writes as the shortest text that reads back to the
+same float. That float equals the one the `--stats` text parses to, so the two
+agree to the bit. A text entry (`crs`, `start_mesh`, `snap_to_lines` as
+`"on"`/`"off"`, `dem_source`, …) is a JSON string equal to its `--stats`
+value.
+
+**Determinism.** The same command in the same directory, on the same
+installed version, gives the same bytes:
+
+- no timings, no thread count, no date or time, no host or user name, no
+  absolute path that the command line did not contain;
+- key order fixed by the record, never by a dict or a set;
+- `json.dumps(obj, indent=1, ensure_ascii=True)` plus one trailing newline;
+  ASCII only, so no platform encoding enters;
+- every value it holds is already deterministic: refinement's output is
+  bit-identical for any thread count (increments 14 and 21), and the file
+  lists, CRS labels and transform names come from the inputs.
+
+**Example** (the projected run of the inventory, shortened):
 
 ```json
-{"rasputin_version": "0.2.0.dev0", "command": "rasputin mesh --dem ... --tolerance 5",
- "crs": "EPSG:25833", "tolerance_m": 5, "max_error_m": 4.999692612800061,
- "dem_source": "7908_3_10m_z33.tif", "nodata_vertices_removed": 199,
- "start_mesh": "every 40th DEM node", "start_min_angle_deg": 25, "snap_to_lines": true,
- "dem_grid": "5051 columns x 5051 rows, 10 m apart", "refinement_rounds": 53, "...": "..."}
+{
+ "rasputin_version": "0.2.0.dev0",
+ "command": "rasputin mesh --dem 7908_3_10m_z33.tif --tolerance 5 --out a.vtk --record a.json",
+ "crs": "EPSG:25833",
+ "tolerance_m": 5,
+ "max_error_m": 4.999692612800061,
+ "dem_source": "7908_3_10m_z33.tif",
+ "nodata_vertices_removed": 199,
+ "start_mesh": "every 40th DEM node",
+ "start_min_angle_deg": 25,
+ "snap_to_lines": "on",
+ "dem_grid": "5051 columns x 5051 rows, 10 m apart",
+ "refinement_rounds": 53,
+ "...": "..."
+}
 ```
 
-Cost: about 20 production lines (the option; the same collision checks
-`--stats` has, `cli.py:1073-1085`; `as_json`), and one test class. Without it,
-the same content is in `--stats`, as Markdown rather than JSON. The command
-line holds local paths; that is why it is an option and not in the mesh file.
+**Where and when.**
+
+- `PATH` is resolved like `--stats`'s (`_destination` with `--out-parent`).
+  It is refused, before any file is written, if it resolves to the mesh file,
+  the `--out-edges` file or the `--stats` file, with the same kind of usage
+  error `_report_target` gives (`cli.py:1073-1085`). `-` is refused: standard
+  output is `--stats -`'s.
+- It is written after the mesh files and the `--stats` report, and its path is
+  echoed on stdout like theirs. A refused or failed run writes no record.
+- It works on every path the record covers: tolerance, no tolerance, and the
+  gallery's `--flat`.
+
+**Cost**: about 20 production lines (the option, its path checks, `as_json`).
+The command line holds local paths; that is why it is in the record and not in
+the mesh file.
 
 ### D6. 15f-3's figures
 
@@ -384,7 +445,7 @@ Kept because the file's own arrays or a licence need them (D2): the feature
 key (`feature_bits`, `feature_names`, `feature_vocabulary`),
 `land_cover_codes`, and `features_notice` (the CORINE attribution).
 
-### In `--stats` (and `--record`, if Ola says yes)
+### In `--stats` and `--record`
 
 Every file field above, plus:
 
@@ -499,9 +560,23 @@ Not invariant-critical, so no mutation round (README, "Cost constraints").
   in the file; `features` in `--stats`).
 - **stderr**: each reworded line by `re.search` on its parts, and the banned
   words over the whole of stderr.
-- **`--record`**, only if Ola says yes: the JSON parses; its keys equal the
-  `--stats` names; numbers are JSON numbers; two runs of one command give the
-  same bytes; it refuses a path equal to the mesh or the `--stats` file.
+- **`--record`** (D5):
+  - the file parses as JSON, is ASCII, and ends in one newline;
+  - its keys are `rasputin_version`, `command`, then exactly the `--stats`
+    Inputs and Result names in the `--stats` order;
+  - counts are JSON integers; every `_m` and `_deg` value is a number equal to
+    `float` of its `--stats` text; text values equal their `--stats` text;
+  - every mesh-file field from the record is in it with the same value;
+  - determinism: one command run twice gives the same bytes, and so does a
+    run with `tin_engine.cli.refine` monkeypatched to a wrapper that passes
+    `threads=1` (the binding's keyword, `_core.pyi:437`; the CLI has no thread
+    option); no key or value contains a time, a date, the host name, or the
+    word `seconds`;
+  - an omitted entry is absent, not `null`;
+  - refusals, each before any file exists: `PATH` equal to the mesh, to
+    `--out-edges`, to the `--stats` file, and `-`;
+  - a refused run (for example a bad `--tolerance`) leaves no record file;
+  - `--flat` and the no-tolerance path write a record too.
 
 ## LOC estimate
 
@@ -512,24 +587,22 @@ Not invariant-critical, so no mutation round (README, "Cost constraints").
 | `run_record.py` (new) | `Entry`, `RunRecord`, three builders, `file_fields`, `stats_rows`, `summary` | 120 |
 | `cli.py` | the sentence, the refine report and most of the field assembly replaced by the builder call and one short field list for both formats; reworded stderr lines; catchment wording | −30 |
 | `stats.py` | the Inputs and Result sections in place of the Refinement table; the Sizes label | 25 |
-| **without `--record`** | | **115** (+39 %: 160; +60 %: 184) |
-| `--record` | the option, its path checks, `as_json` | 20 |
-| **with `--record`** | | **135** (+39 %: 188; +60 %: 216) |
+| `--record` | the option, its path checks, `as_json` (ruled yes) | 20 |
+| **total** | | **135** (+39 %: 188; +60 %: 216) |
 
-One PR either way. 15f-3 then adds its counts as builder arguments, about 10
+One PR. 15f-3 then adds its counts as builder arguments, about 10
 lines fewer than its own estimate for the sentence clause.
 
-## Questions for Ola
+## Ruled by Ola
 
-None blocks `@tester`; each has a recommended default.
+Ola, 2026-10-03, on the revised design:
 
-- **`--record PATH`**, the full record as a JSON file next to the mesh: yes
-  or no? About 20 lines. Recommended: yes, since `--stats` is meant for
-  reading, and a script that wants to compare runs needs the numbers in a form
-  it can load.
-- **Units in the name** (`tolerance_m 5`), as the catchment file already does,
-  or in the value (`tolerance 5 m`)? Recommended: in the name, so a script
-  reads a bare number.
-- **`features_notice` stays in the file** (the CORINE attribution; D2). It
-  was not on Ola's list, but the Copernicus data policy asks for it on data
-  derived from CORINE, the same reason `dem_credit` stays. Recommended: keep it.
+- **Both field tables are approved as they stand**: the mesh-file list,
+  including the four fields kept with their reasons (the feature key,
+  `land_cover_codes`, `features_notice`), and the `--stats` list.
+- **`--record PATH`: yes.** Specified in D5.
+- **Units in the field names: yes** (`tolerance_m 5`, a bare number).
+- **`features_notice` stays in the mesh file**: the CORINE credit travels with
+  the mesh, as `dem_credit` does for a downloaded DEM.
+
+No question is open.
