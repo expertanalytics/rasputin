@@ -153,3 +153,39 @@ Lessons:
 - **`ROADMAP.md` has no row for h7**, nor for h4 or h6; h3 has one.
   `docs/increments/README.md` says the merge updates the increment's row. It
   is not settled whether harness increments belong in the roadmap.
+
+## Review
+
+**Round 1**, `@reviewer`, on 15ff2b1 (base master 390b516):
+**CHANGES REQUESTED**. 0 production lines (two prose files). Not pushed, so
+no CI. `python3 tools/check_citations.py`: all resolve, none at risk.
+Checked and holding: the window (12:02:25 to 21:38:58), the last commit
+0b6305b at 14:31:06 and the 7 h 08 min; no refusals (`--back` printed
+"Queued while away (0)"); `away.py`'s root and `pending_decisions`' match;
+h5's three files are governed; the h7 table (0d15560, b6af28e, 43b6fe8,
+390b516 with two parents); the merge times; the old persona prompt and the
+29 lines and 5,007 characters (both in this run's transcript); the quoted
+session lines. Proposals are framed for Ola's ruling. Blocking:
+
+1. "Second night running" is false by the file's own method. The window
+   2026-10-01T22:43:29 to `--back` at 2026-10-02T07:06:21 had no commit on
+   any ref from 2331110 (01:06:58) until after the window: 5 h 59 min idle.
+   That makes three windows running. Fix §1a and `next.md` item 1.
+2. `session.md` is described in the present tense ("It is 29 lines", "as it
+   stands", `next.md` item 4 "is a 29-line log"). It has since been
+   rewritten to 4 lines. State it as measured on 2026-10-03, in the past
+   tense.
+3. "h3 has one" (§3 and `next.md` item 7): h3 has no row in `ROADMAP.md`'s
+   table. It is item 1 of the "Order of work from 2026-09-30" list. No
+   harness increment (h2 to h7) has a table row.
+4. §1b says the fault "bit in the trial" but names no evidence (persona §1:
+   each finding names its file, commit or transcript line). The evidence
+   exists: main-session transcript `85c14e7c`, 2026-10-02T21:38:58Z,
+   `--back` run with cwd `.claude/worktrees/basin-memory`, printing "ASK OLA
+   lines in .claude/current-task/: (none)". Cite it.
+
+Non-blocking: the "night" ran 14:02 to 23:39 local time. None of the seven
+proposals states what it would cost to adopt. h5's new `tools/governed.py`
+and `tools/git_hooks.py` are not yet governed paths, so "queued refusals,
+not code" is a little too strong (the main file is governed, so the finding
+holds).
