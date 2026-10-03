@@ -1,7 +1,8 @@
 # Harness h8: the unattended window, the recap and the size table
 
-Status: **design, ruled, round 1 fixes**, @architect, 2026-10-03; Ola
-answered §7's four questions the same day. One PR, by day: every production
+Status: **implemented, in code review**, 2026-10-03: design by @architect,
+Ola's answers to its four questions in §7, red cb4110e and c72e60a, green
+b91f1be, tests reconciled 9ea6fd1. One PR, by day: every production
 file it changes is governed. Implements Ola's rulings of 2026-10-03 on items
 1 to 6 of `docs/retrospectives/next.md`, section "The window of 2026-10-02, the restart
 of 2026-10-03, h7" (recorded in #155), and his request of the same day for a
@@ -146,8 +147,8 @@ check flags any governed one, using `GOVERNED` from
 In `away.py`:
 
 - `longest_quiet(since: datetime, end: datetime, commits: list[tuple[datetime, str]]) -> Quiet`,
-  pure. `Quiet` is a frozen dataclass `(start, end, opener: str | None,
-  count: int)`: the longest interval between consecutive points of
+  pure. `Quiet` is a `NamedTuple` `(start, end, opener: str | None,
+  count: int)` (as built; §8, "As built"): the longest interval between consecutive points of
   `since`, the commit times inside `[since, end]` sorted, and `end`. `opener`
   is the short hash of the commit that opens the interval, `None` when it
   opens at `since`. `count` is the number of commits inside the window.
@@ -257,14 +258,15 @@ New `tools/rule_sizes.py`, governed (§5):
 - `main()` prints the table, so `python3 tools/rule_sizes.py` works on its own.
 
 The recap prints the table last in `== recap ==`, after "Next on ROADMAP.md".
-At today's 14 files it is about 16 lines and 600 characters.
+At 14 files it is 16 lines and 726 characters (`python3 tools/rule_sizes.py
+| wc -lm` at b91f1be).
 
 **Budget against the 10,000-character cap.** The recap printed 6,025
-characters on 2026-10-03 (round 1 review, `python3 tools/session_state.py |
+characters on 2026-10-03, before h8 (design review round 1, `python3 tools/session_state.py |
 wc -m` in the main checkout), leaving about 3,975. That headroom moves with
 the length of the predecessor turns, so the four sections h8 adds or widens
 get a fixed budget of **3,000 characters together**, newlines and headings
-included, which leaves about 1,000 of margin at today's size. Each section's
+included, which left about 1,000 of margin at that size. Each section's
 cap, with its worst case:
 
 | Section | Cap | Worst case, characters |
@@ -282,6 +284,11 @@ down by `print_current_task`, so a cut or dropped line there is still seen.
 The size table grows by up to 63 characters per added rule file, so about
 one more file uses up the budget's slack; test 11 then fails, and the fix is
 to raise the budget against the measured recap or to lower a cap.
+
+Measured after green, by code review round 1: about 7,450 characters after
+merging master, and about 8,850 with every capped section at its cap. Most
+of the remaining margin goes to the "Next on ROADMAP.md" rows, which h8 does
+not cap; whether to cap them is a separate question for Ola.
 
 ### 3.7 Recap order
 
@@ -595,6 +602,18 @@ assertion changes):
   repository) with one rule file prints
   `Rule text in words (no reference: git failed):`, the file's line and the
   total, and exits 0.
+
+### As built
+
+- **`Quiet` is a `NamedTuple`, not a frozen dataclass** (§3.4 said
+  dataclass). Both refuse assignment, which is what test 6 pins. A dataclass
+  whose annotations are strings (`from __future__ import annotations`)
+  resolves them through `sys.modules[cls.__module__]`, and the pty tests
+  load `away.py` with `spec_from_file_location` without registering it
+  there, so the class fails to build; code review round 1 reproduced it.
+  The field `count` shadows `tuple.count`, so it carries a narrow
+  `# type: ignore[assignment]` (`tools/away.py`, class `Quiet`); the name is
+  pinned by the tests.
 
 ## Review
 
