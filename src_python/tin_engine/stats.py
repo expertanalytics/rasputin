@@ -134,6 +134,9 @@ class Report:
     phases: Phases
     total: float
     stats_seconds: float
+    #: The text after ``bounds checks: ``, ``off`` or ``on (<mode>)``: which
+    #: build made the mesh (increment 24). Filled by the CLI from ``_core``.
+    bounds_checks: str
     threads: int | None = None
     #: One row per disagreeing pair of DEM tiles: two names, nodes, max and
     #: median, already formatted (`mosaic.Seam.cells`; Ola's Q1 revised).
@@ -246,6 +249,7 @@ def _timings(report: Report) -> list[str]:
 def render(report: Report) -> str:
     """The Markdown report (R4). Pure: no clock, no I/O."""
     lines = ["# rasputin mesh — statistics", "", f"`{report.command}`", ""]
+    lines += [f"bounds checks: {report.bounds_checks}", ""]
     lines += ["## Sizes", "", *_sizes(report.sizes), ""]
     if report.inputs:
         lines += ["## Inputs", "", *_named(report.inputs), ""]

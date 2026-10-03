@@ -86,6 +86,12 @@ build-dir = "build/{wheel_tag}"
 cmake.args = ["-DRASPUTIN_BUILD_PYTHON=ON", "-DRASPUTIN_BUILD_TESTS=OFF"]
 wheel.packages = ["src_python/tin_engine"]
 
+# Passed on every build so a cached OFF in build/{wheel_tag} from an unchecked
+# install never decides the next default one; `-C
+# cmake.define.RASPUTIN_HARDENING=OFF` overrides it (INSTALL.md, "Bounds checks").
+[tool.scikit-build.cmake.define]
+RASPUTIN_HARDENING = "ON"
+
 [tool.pytest.ini_options]
 minversion = "8.0"
 testpaths = ["tests/python"]

@@ -64,6 +64,7 @@ from tin_engine._core import (
     RefineOutcome,
     build_pslg,
     describe,
+    hardening,
     node,
     refine,
     sample,
@@ -204,10 +205,16 @@ def main() -> None:
     """
 
 
+def bounds_checks() -> str:
+    """``off``, or ``on (<mode>)`` naming the checks the loaded ``_core`` has."""
+    return "off" if hardening == "none" else f"on ({hardening})"
+
+
 @app.command()
 def version() -> None:
-    """Print the installed rasputin version."""
+    """Print the installed rasputin version, then whether it is bounds-checked."""
     typer.echo(installed_version())
+    typer.echo(f"bounds checks: {bounds_checks()}")
 
 
 @dataclass(frozen=True, slots=True)
@@ -1162,6 +1169,7 @@ def _write_report(
             phases=clock.phases(),
             total=total,
             stats_seconds=(time.perf_counter_ns() - t0) / 1e9,
+            bounds_checks=bounds_checks(),
             threads=os.cpu_count() if sizes.start_vertices is not None else None,
             seams=[s.cells() for s in seams],
             inputs=[row for row, inputs in rows if inputs],

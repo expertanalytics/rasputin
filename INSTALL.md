@@ -103,6 +103,49 @@ Changes to the C++ code are **not** picked up automatically: reinstall
 (`uv pip install -e ".[dev,codecs]"` again) after editing anything under
 `include/`, `src/` or `bindings/`.
 
+### Bounds checks (on by default)
+
+A normal install builds the C++ core with the standard library's own bounds
+checks on: `_LIBCPP_HARDENING_MODE_FAST` with libc++ (macOS),
+`_GLIBCXX_ASSERTIONS` with libstdc++ (Linux). An out-of-range index into a
+`std::vector` or `std::span` then stops the process at the faulting call (a
+crash, not a Python exception) instead of reading or writing the memory next to
+it and carrying on. The cost, measured: about 5 % on refinement (4 to 9 % across
+thread counts) and 2 to 3 % on a whole `rasputin mesh` run, with identical
+meshes ([the measurement](docs/benchmarks/2026-10-03/release-hardening/README.md)).
+
+`rasputin version` says which build is installed, on its second line:
+`bounds checks: on (libc++ fast)` (or `on (libstdc++ assertions)`), or
+`bounds checks: off`. `rasputin mesh --stats` writes the same line into its
+report.
+
+For a heavy run where those percent matter, build an unchecked copy **in a
+second virtual environment**, so the everyday one never changes mode:
+
+```sh
+uv venv .venv-unchecked
+uv pip install --python .venv-unchecked ".[codecs]" -C cmake.define.RASPUTIN_HARDENING=OFF
+.venv-unchecked/bin/rasputin version     # bounds checks: off
+```
+
+With plain `pip`, the install line is
+`python -m pip install ".[codecs]" -C cmake.define.RASPUTIN_HARDENING=OFF`.
+For the C++ tests, or any plain CMake build:
+`cmake -S . -B build-unchecked -DCMAKE_BUILD_TYPE=Release -DRASPUTIN_HARDENING=OFF`.
+
+The unchecked environment is a non-editable install, so it too needs
+reinstalling after C++ changes (see Troubleshooting).
+
+Another libc++ mode (`extensive`, `debug`) is chosen by setting the option OFF
+and passing the mode yourself, e.g.
+`-DCMAKE_CXX_FLAGS=-D_LIBCPP_HARDENING_MODE=_LIBCPP_HARDENING_MODE_EXTENSIVE`.
+With the option ON as well, the two definitions collide and the build fails.
+This works only for a build without the C++ tests: a `pip install` (which
+turns them off), or a plain CMake build with `-DRASPUTIN_BUILD_TESTS=OFF`. The
+tests are on by default in a plain CMake build, and their compile-time guard
+refuses a build whose option says OFF while the library reports a hardening
+mode, so a test build with the option OFF must have no hardening mode at all.
+
 ## Running the tests
 
 Python, from the repository root with the `dev` extra installed:
@@ -185,4 +228,5 @@ index. If you publish results, credit the data as `corine/NOTICE` shows.
 - **`Python.h: No such file or directory`** (Linux). Install your Python's
   development package (`python3-dev`), or use a Python from `uv`.
 - **C++ changes have no effect.** An editable install does not rebuild the
-  extension; reinstall.
+  extension; reinstall. The same holds for an unchecked environment
+  ("Bounds checks" above): reinstall it with the `-C` setting.

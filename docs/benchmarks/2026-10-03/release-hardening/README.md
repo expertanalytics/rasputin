@@ -173,7 +173,9 @@ no decision anywhere in refine.
 ## Files
 
 - `raw/<run>/`: `bench.py`'s `run.json`, `raw.tsv` and generated `README.md`
-  for the twelve runs. `h*` are clang, `g*` are GCC.
+  for the twelve runs. `h*` are clang, `g*` are GCC. The six hardened runs'
+  `run.json` carry their mode (`"hardening"`), stamped by increment 24's
+  acceptance (`../24-acceptance.md`, "The study's hardened runs, re-stamped").
 - `raw/batch1-clang.out`, `raw/batch2-gcc.out`: the driver's log, with
   `pmset` per run.
 - `raw/analysis-clang.md`, `raw/analysis-gcc.md`: per-pair tables, from

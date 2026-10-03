@@ -54,6 +54,10 @@ class Point3:
     def __hash__(self) -> int: ...
     def __repr__(self) -> str: ...
 
+#: The standard library's bounds checks compiled into this build: "libc++ fast",
+#: "libc++ extensive", "libc++ debug", "libstdc++ assertions", or "none".
+hardening: str
+
 @overload
 def dot(a: Point2, b: Point2) -> float: ...
 @overload
