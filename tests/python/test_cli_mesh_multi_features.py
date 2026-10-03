@@ -14,10 +14,12 @@ Reuses `test_cli_mesh_features.py`'s fixtures and helpers (`bumpy`,
 same way the single-source ones do.
 
 This suite is RED before any production code: `--features` and its paired
-options are single-valued (`Path | None` / `str | None`, `cli.py:637-660`), so
-a second `--features` overrides the first rather than adding a source, and
-`_feature_sources` does not exist. The suite fails because the new multi-source
-behaviour is absent, not on an unknown option: Typer accepts a repeated
+options are single-valued (`Path | None` / `str | None`: `mesh`'s `features`
+to `features_map` parameters, `src_python/tin_engine/cli.py@cb6f78b:637-660`;
+on master they are `list[...]`, `cli.py:660-685`), so a second `--features`
+overrides the first rather than adding a source, and `_feature_sources` does
+not exist. The suite fails because the new multi-source behaviour is absent,
+not on an unknown option: Typer accepts a repeated
 `--features` (it just keeps the last), so these runs execute and give a
 single-source result the assertions reject. `_feature_sources`'s import in
 `test_feature_input.py`'s companion case fails on the missing symbol.
