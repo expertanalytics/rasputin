@@ -10,7 +10,8 @@ below), and `@perf` ACCEPTED (2026-10-03, AC power: `_core` and both
 the C++ red step is `afd2498` on `worktree-15f-2`, and the gaps it found are
 ruled under "Settled after 15f-2's red step" (L1-L9). The C++ green step is
 `67df94c` (11 of 13 ES cases); its three open questions are ruled under
-"Settled after 15f-2's green step" (L10-L13). Choices that would normally go to Ola
+"Settled after 15f-2's green step" (L10-L13), and the sliver cascade and the
+split into three PRs under "Settled after L12 and L13" (L14, L15). Choices that would normally go to Ola
 were made as defaults; each is marked *default* where it occurs and listed
 under "Defaults chosen" at the end.
 
@@ -1100,7 +1101,135 @@ CLI, about 187 estimated) is what is left to land. If the measured C++ plus
 that half approaches 700, the bindings and Python move to a 15f-3, which is
 the split option (b) that was considered for 15f-1.
 
-**Python (pytest), 15f-2:**
+**Settled after L12 and L13 (3ff8f1d, 61cdbaa).** Ruled by `@architect`,
+2026-10-03.
+
+- **L14. A non-strip point within rounding of a vertex is not inserted.**
+  The input: ES13's sweep, seed 11, k 37, at tolerance 0. It fails when the
+  build has `-ffp-contract=off`, which is likely how CI's x86-64 runner
+  builds. The cascade, as `@developer` traced it:
+  1. DEM node (17, 9) lies within ulps of the edge's end `b`. Its projection
+     is not strictly inside the sub-edge, so L12 does not apply, and it goes
+     in by `split_inside`.
+  2. That leaves an unconstrained sliver edge, (14, 7.5000000000000009) to
+     (17, 9), lying almost on the constraint.
+  3. Node (15, 8), which lies on the constraint's line, now sits in the
+     triangle on the far side of the sliver, a triangle with no constrained
+     edge. L12 finds nothing and it goes in by `split_inside`.
+  4. (15, 8) becomes the apex over the sub-edge, and `foot_fits` refuses the
+     strip point (15.5, 8.25) in the middle of the edge.
+
+  The root is step 1: a vertex inserted a few ulps from an existing vertex.
+  It makes a sliver that every later local rule has to see through.
+
+  **The rule.** When a strip is given, the scan treats a point of the
+  non-strip set (a DEM node in `refine_strip`, a source point in
+  `refine_points`) that lies within **1e-10 lattice units** of a corner of
+  its triangle as it treats a point equal to that corner. The point is
+  skipped: never named, never inserted. This is a geometric test inside the
+  read-only scan, with no state and no set of marks. `scan` (in `scan.hpp`)
+  and `scan_points` each take a radius that defaults to 0. `refine` passes
+  nothing and is bit-identical; so is `refine_points` without a strip. After
+  the loop, the end pass finds such points per vertex and reports them in
+  `coincident` and `coincident_max_error`:
+  - for DEM nodes, it looks at the node nearest each vertex;
+  - for sources, it extends 15c's existing pass from exact equality to the
+    radius, over every vertex, not only start vertices.
+
+  In `refine_strip` those two fields have no other use. Their meaning there
+  is "DEM nodes within 1e-10 lattice units of a vertex they are not; the
+  largest |node z − vertex z|".
+
+  With this rule, (17, 9) is never inserted, so no sliver forms, and (15, 8)
+  falls in a triangle beside the sub-edge, where L12 puts it on the edge.
+
+  **The rejected options.**
+  - L12 searching for constraints that are not edges of `t`, across slivers:
+    this needs a walk of unbounded length and is no longer local
+    (computational-geometry skill, §5), and it treats the symptom, not the
+    sliver.
+  - Accepting the refusal: (15.5, 8.25) is about 0.56 cells from the nearest
+    vertex, so this would be the mid-edge loss of E1 that L12 already
+    refused to accept.
+
+  **What the guarantees then say.**
+  - **E2 gains an exception at rounding scale.** "Every valid DEM node
+    inside the domain is within the tolerance", except a node within 1e-10
+    lattice units of a vertex that it is not. Such a node is counted in
+    `coincident`, with its largest difference in `coincident_max_error`.
+  - That difference is the bilinear surface's change over at most 1e-10
+    cells, plus the vertex's own rounding. It is far below any tolerance the
+    CLI accepts above 0. Only at tolerance 0 can such a node exceed the
+    tolerance at all.
+  - **E3 (J2) gains the same exception for source points**, in the form 15c
+    already states it for exact coincidences. A source point near a vertex
+    can differ from the vertex's z by any amount, and `coincident_max_error`
+    reports it, as it does today.
+  - **E1 is unchanged.** L12's expectation for refusals stands: only within
+    1e-9 lattice units of an output vertex, apart from start vertices that
+    lie within rounding of another constraint.
+  - Any other refusal is counted and reported. An ES case that finds one is
+    reported back as a design defect, and the case's tolerance is not
+    widened.
+  - **ASK OLA (not blocking):** E2's exception changes the wording Ola ruled
+    ("every valid DEM node ... within the tolerance") at a scale of 1e-10
+    cells. The figure is reported, so nothing is hidden. If Ola wants it
+    stated in the `.vtk` sentence, it costs one clause in 15f-3's CLI work.
+  - **ASK OLA (not blocking), a separate question:** should the build pin
+    `-ffp-contract=off` project-wide? Otherwise arm64 (FMA contraction on)
+    and x86-64 can differ in the last bits of any refine output. Bit-identity
+    across platforms is not claimed today (E4 is about threads and edge
+    order). Pinning it changes every stored hash on arm64, so it is Ola's
+    call and outside 15f.
+
+  **Who changes what.**
+  - `@tester`, first, red:
+    - a case **ES15** with seed 11, k 37's exact `a`, `b` and apex as
+      literals, at tolerance 0 and 0.5. It asserts: no strip point over the
+      tolerance farther than 1e-9 lattice units from an output vertex; node
+      (17, 9) not a vertex; `coincident ≥ 1` and
+      `coincident_max_error ≤ 1e-9 · max(1, |z|)`; node (15, 8) an end of an
+      output constraint edge; E2 by `node_findings`, whose 1e-9 relative
+      slack already covers the exception; and the Delaunay oracle;
+    - a **unit case for the radius**: a DEM node 1e-11 lattice units from a
+      start vertex is not inserted at tolerance 0 and is counted, and one at
+      1e-8 is inserted;
+    - a **build check**: before handing back, run `prop_refinement_edge_strip`
+      in a build configured with `-DCMAKE_CXX_FLAGS=-ffp-contract=off` as
+      well as the default one, and name both in the handback.
+  - `@developer`, then: the radius parameter on `scan` and `scan_points`
+    (default 0), passed as 1e-10 by `point_loop` when a strip is given; the
+    end-pass counting; nothing else. Run both builds, `-ffp-contract=off` and
+    the default, before handing back, and confirm that `refine` and the
+    no-strip `refine_points` are bit-identical (the 72 fixtures). About 15
+    lines.
+
+- **L15. Three PRs: the bindings and Python go to 15f-3.** As L13 foresaw.
+  Measured by the line rule of `CLAUDE.md` §2 (blank and `//` lines dropped):
+  - 15f-1 is 136 net (`390b516..569b00c`);
+  - 15f-2's C++ is 275 net so far (`569b00c..61cdbaa`), about 290 with L14;
+  - 15f-2 with the Python half (about 187 estimated) would be about 477, or
+    about 590 at +60 % on the Python;
+  - the "about 712" figure counts 15f-1 into the same PR (136 + 275 + 187 at
+    +60 % ≈ 710), because the branch is stacked on 15f-1, which has not been
+    published.
+
+  Either way, the convention 15c and 23 kept no longer holds for one PR.
+  Ruled:
+  - **15f-1** stays its own PR (approved and accepted), and is published
+    and merged first;
+  - **15f-2** is the C++ loop alone, as the red step already scoped it: no
+    caller in the CLI, so no tolerance mesh changes, and its acceptance is a
+    no-change run, as 15f-1's was. It also carries the TSan entry (L9);
+  - **15f-3** carries every binding, the stubs, `edge_strip.py`,
+    `final_check.py`, the CLI, PY1-PY5, and the full acceptance (Bygdin,
+    the basin piece). It is based on 15e's tip, or master once 15e has
+    merged ("Which branch to base on"), because its Python edits are the
+    ones that meet 15e.
+
+  The PR table and the acceptance below are updated to match.
+
+**Python (pytest), 15f-3** (L15; first planned for 15f-2):
 
 - **PY1, the binding** (every binding of this increment, the store's and the
   generator's included). Shapes and dtypes refused as `ValueError`; the
@@ -1133,15 +1262,22 @@ Counted in `CLAUDE.md` §2's unit. Estimates, with the worst cases at +39 %
 | | `constraint_points.hpp`: `ConstraintPoint`, `ConstraintCheckPoints`, `constraint_check_points` | 90 | | |
 | | `refine.hpp`: `detail::lattice_position` extracted | 10 | | |
 | | **15f-1 total** | **100** | **139** | **160** |
-| **15f-2** | **The strip in the loop, the bindings, and the wiring** | | | |
-| | `refine_points.hpp`: `point_loop` (the moved body's changed lines), the strip scan and ownership, the sub-edge map, `foot_fits` and refused points, consumption, the F2 rescan, the end pass, two entry points, the outcome, `PointScan` | 203 | | |
+| **15f-2** | **The strip in the loop, C++ only** (L15) | | | |
+| | `refine_points.hpp` and `strip_scan.hpp` (L13): `point_loop`, the strip scan and ownership, the sub-edge map, `strip_fits` (L10) and refused points, consumption, the F2 rescan, L12, the end pass, two entry points, the outcome, `PointScan`; `geometry.hpp`'s `operator==` | 218 | | |
+| | the same, **measured** at `61cdbaa` | *275* | | |
+| | L14: the radius in `scan` and `scan_points`, the end-pass count | 15 | | |
+| | **15f-2 total** (measured 275 + 15) | **290** | **296** | **299** |
+| **15f-3** | **The bindings, the Python and the CLI** (L15) | | | |
 | | `bindings/core.cpp`: `ConstraintCheckPoints` and `constraint_check_points` (moved from 15f-1, ruling of 2026-10-03 below) | 30 | | |
 | | `bindings/core.cpp`: `refine_points(..., strip)`, `refine_strip`, the outcome properties | 62 | | |
 | | `_core.pyi`: all the stubs, the store's and the generator's included | 35 | | |
 | | `edge_strip.py` | 30 | | |
 | | `final_check.py` | 5 | | |
 | | `cli.py`: the calls, the sentence, the report | 25 | | |
-| | **15f-2 total** | **390** | **542** | **624** |
+| | **15f-3 total** | **187** | **260** | **299** |
+
+For 15f-2 the margins apply to the 15 estimated lines only, since the 275 are
+measured.
 
 **Ruled by `@architect`, 2026-10-03, after 15f-1's red step (46e69ad): option
 (a), the bindings move to 15f-2.** `@tester` found that 15f-1, as first split,
@@ -1159,6 +1295,9 @@ PRs stay under 700 at both margins.
 anyway and that `@tester` can drive with nothing but edges and a raster. 15f-2
 carries the behaviour change, every binding, and the acceptance. If Ola prefers one PR and
 accepts the +39 % margin only, the split can be dropped with no design change.
+
+*Superseded by L15:* the measured C++ outgrew the two-PR plan, so 15f-2 is the
+C++ loop and 15f-3 carries the bindings, the Python and the acceptance.
 
 **Why more than 15c's 160-210.** F1 needs points filed by edge, with the
 sub-edge map and the guarded insertion (about 75 lines). F2 needs the DEM
@@ -1192,7 +1331,12 @@ tile, the thread sweep), back to back with `--tree` against the previous
 increment's merge commit. Expected: geometry identical, refine time within
 noise. Power state recorded.
 
-**15f-2** changes every tolerance mesh with a constraint, so:
+**15f-2** (L15) adds C++ that no CLI path calls yet, so its acceptance is
+15f-1's: `tools/bench.py run` back to back with `--tree` against the previous
+merge, with geometry identical and refine time within noise. `refine` itself
+is touched only by L14's defaulted radius.
+
+**15f-3** changes every tolerance mesh with a constraint, so:
 
 1. **`tools/bench.py`**, as above. Expected: the tile's geometry identical
    (its outline lies along grid lines: E7 and the grid-line remark), the
@@ -1201,7 +1345,7 @@ noise. Power state recorded.
    itself is not edited, so its time should be within noise.
 2. **Bygdin with CORINE**, 16c's script
    (`docs/benchmarks/2026-09-29/bygdin-landcover/run.sh`), at 10 m and 1 m
-   tolerance, master and 15f-2 back to back, same power state. Record: strip
+   tolerance, master and 15f-3 back to back, same power state. Record: strip
    points, `no_data`, inserted (strip and nodes), refused, rounds, the
    strip's time, peak memory, worst angle and share under 10° (bench.py's
    `quality()`). The **independent check**, a script of `@perf`'s that does
@@ -1209,7 +1353,7 @@ noise. Power state recorded.
    CORINE borders with the DTM10 grid lines, z bilinear from the DEM,
    against the written mesh's constraint lines. On master it measures the
    projected-path Surprise 3 for the first time (count over the tolerance,
-   and the largest error). On 15f-2 it must find 0 over, or exactly the
+   and the largest error). On 15f-3 it must find 0 over, or exactly the
    refused points.
 3. **A basin piece.** The DEM-derived Velhas test catchment (15c's
    acceptance domain) at 20, 10 and 5 m, and one BHO level-3 unit, 766 (the
@@ -1219,14 +1363,15 @@ noise. Power state recorded.
    grid, is 0 over. Record the strip's time and memory beside the final
    check's.
 
-Evidence under `docs/benchmarks/<date>/15f-2-acceptance/`.
+Evidence under `docs/benchmarks/<date>/15f-2-acceptance/` (the no-change
+run) and `docs/benchmarks/<date>/15f-3-acceptance/` (the rest).
 
 ## Which branch to base on
 
 Base the implementation branch on **15e's tip**, `worktree-agent-ab601ec06c6508cb9`
 (*default*), unless 15e has merged by then, in which case base it on master.
 
-- 15f-2's Python edits land in exactly the lines 15e rewrites: `_dem_mesh`'s
+- 15f-3's Python edits (L15; first planned for 15f-2) land in exactly the lines 15e rewrites: `_dem_mesh`'s
   signature (`held`, `grid`, `checks` in place of `opened`), and the
   `del tile` before `final_check.run`. Built on master, the merge would
   conflict there, and F3's ordering (generate before `del tile`) would be
