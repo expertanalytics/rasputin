@@ -1,0 +1,34 @@
+{"t": 1791023788.8705869, "ev": "B", "name": "process", "fp": 47366624, "life_max": 47366624}
+{"t": 1791023788.8781178, "ev": "B", "name": "clock: domain read", "fp": 47759840, "life_max": 47759840}
+{"t": 1791023788.912429, "ev": "E", "name": "clock: domain read", "fp": 51806688, "life_max": 61587936}
+{"t": 1791023788.912508, "ev": "B", "name": "clock: decode", "fp": 51806688, "life_max": 61587936}
+{"t": 1791023789.307253, "ev": "B", "name": "assemble", "fp": 77218344, "life_max": 638469056}
+{"t": 1791023791.291254, "ev": "E", "name": "assemble", "fp": 2322729072, "life_max": 6812538112, "shape": [19685, 28496], "nbytes": 2243775040}
+{"t": 1791023791.2913659, "ev": "B", "name": "resample", "fp": 2322729072, "life_max": 6812538112, "rows": 19377, "cols": 27786, "block_rows": 256}
+{"t": 1791023815.439297, "ev": "B", "name": "resample: DemTile copy", "fp": 4476456584, "life_max": 14493183136}
+{"t": 1791023815.9273012, "ev": "E", "name": "resample: DemTile copy", "fp": 6631150728, "life_max": 14493183136}
+{"t": 1791023815.9606988, "ev": "E", "name": "resample", "fp": 4476440200, "life_max": 14493183136}
+{"t": 1791023815.9608479, "ev": "E", "name": "clock: decode", "fp": 4476374664, "life_max": 14493183136}
+{"t": 1791023815.9617012, "ev": "B", "name": "clock: start mesh: build", "fp": 4476374664, "life_max": 14493183136}
+{"t": 1791023815.962571, "ev": "E", "name": "clock: start mesh: build", "fp": 4476374664, "life_max": 14493183136}
+{"t": 1791023815.9626088, "ev": "B", "name": "clock: start mesh: node", "fp": 4476374664, "life_max": 14493183136}
+{"t": 1791023816.016955, "ev": "E", "name": "clock: start mesh: node", "fp": 4477488776, "life_max": 14493183136}
+{"t": 1791023816.017025, "ev": "B", "name": "clock: start mesh: triangulate", "fp": 4477488776, "life_max": 14493183136}
+{"t": 1791023816.039875, "ev": "E", "name": "clock: start mesh: triangulate", "fp": 4477488776, "life_max": 14493183136}
+{"t": 1791023816.039973, "ev": "B", "name": "clock: start mesh: constraint edges", "fp": 4477488776, "life_max": 14493183136}
+{"t": 1791023816.085084, "ev": "E", "name": "clock: start mesh: constraint edges", "fp": 4479880840, "life_max": 14493183136}
+{"t": 1791023816.08517, "ev": "B", "name": "refine phase 1", "fp": 4479880840, "life_max": 14493183136}
+{"t": 1791023820.146316, "ev": "E", "name": "refine phase 1", "fp": 4547088104, "life_max": 14493183136}
+{"t": 1791023820.146398, "ev": "B", "name": "final_check.run", "fp": 4547088104, "life_max": 14493183136}
+{"t": 1791023832.150686, "ev": "B", "name": "clock: check points: store", "fp": 3865238176, "life_max": 14493183136}
+{"t": 1791023835.882308, "ev": "E", "name": "clock: check points: store", "fp": 2568313504, "life_max": 14493183136}
+{"t": 1791023835.882441, "ev": "B", "name": "refine_points", "fp": 2568313504, "life_max": 14493183136, "store_size": 270407394}
+{"t": 1791023844.580488, "ev": "E", "name": "refine_points", "fp": 2640403392, "life_max": 14493183136}
+{"t": 1791023844.632128, "ev": "E", "name": "final_check.run", "fp": 2374540224, "life_max": 14493183136}
+{"t": 1791023844.632242, "ev": "B", "name": "clock: trim", "fp": 2374540224, "life_max": 14493183136}
+{"t": 1791023844.76915, "ev": "E", "name": "clock: trim", "fp": 2445597680, "life_max": 14493183136}
+{"t": 1791023844.7916741, "ev": "B", "name": "clock: write: encode", "fp": 2309331760, "life_max": 14493183136}
+{"t": 1791023844.870807, "ev": "E", "name": "clock: write: encode", "fp": 2416712592, "life_max": 14493183136}
+{"t": 1791023844.870906, "ev": "B", "name": "clock: write: disk", "fp": 2416712592, "life_max": 14493183136}
+{"t": 1791023844.908059, "ev": "E", "name": "clock: write: disk", "fp": 2416712592, "life_max": 14493183136}
+{"t": 1791023845.6027389, "ev": "E", "name": "process", "fp": 83858640, "life_max": 14493183136}

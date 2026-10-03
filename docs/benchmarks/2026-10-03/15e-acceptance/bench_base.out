@@ -1,0 +1,7 @@
+power: ac; evidence: docs/benchmarks/2026-10-03/15e-base-7810cf8; meshes: /private/tmp/claude-501/-Users-skavhaug-projects-rasputin/af318b82-b96d-429e-956c-0296b113f23b/scratchpad/meshes/base
+REGRESSION: quarter refine_s[t=1] 0.4270 -> 0.4778 (+11.9 %)
+REGRESSION: quarter refine_s[t=10] 0.1632 -> 0.1737 (+6.5 %)
+REGRESSION: tile refine_s[t=10] 0.1853 -> 0.1977 (+6.7 %)
+REGRESSION: tile refine_s[t=16] 0.1885 -> 0.1987 (+5.4 %)
+.venv/bin/python tools/bench.py run --label 15e-base-7810cf8 --tree       198.27s user 24.22s system 153% cpu 2:25.22 total
+exit 1

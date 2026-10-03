@@ -113,8 +113,9 @@ class DemTile(BaseModel):
     def _adopt(cls, meta: RasterMeta, array: npt.NDArray[Any]) -> DemTile:
         """Take `array` as the tile's own, without the copy (increment 15a, R7).
 
-        Private: its one caller is `mosaic.assemble`, on a canvas it allocated
-        and never hands out writable, so a mosaic peaks at one canvas, not two.
+        Private: its two callers are `mosaic.assemble` and
+        `target_grid.resample` (increment 15e), each on a canvas it allocated
+        and never hands out writable, so each peaks at one canvas, not two.
         The same checks as the public constructor, plus C-contiguity, which
         the constructor gets from its copy. The **passed** buffer is set
         read-only, so the concurrency rule (§7) holds: nobody keeps a writable
