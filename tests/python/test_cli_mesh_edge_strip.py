@@ -366,7 +366,8 @@ class TestProjectedPath:
             app, ["mesh", *args, "--tolerance", str(TOLERANCE), "--out", str(out)]
         )
         assert result.exit_code == USAGE, result.output
-        assert "planted strip-run failure" in "".join(plain(result.output).split())
+        needle = "planted strip-run failure"
+        assert "".join(needle.split()) in "".join(plain(result.output).split())
         assert "Traceback" not in result.output
         assert not out.exists()
 

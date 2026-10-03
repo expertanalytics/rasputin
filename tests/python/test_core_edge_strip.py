@@ -275,8 +275,12 @@ class TestGeneratorRefusals:
 class TestRefineStrip:
     @pytest.mark.parametrize("tolerance", [0.0, 0.5, 2.0])
     def test_e1_e2_and_delaunay_by_the_oracles(
-        self, start: Start, generator: Factory, refine_strip: Factory, tolerance: float
+        self, generator: Factory, refine_strip: Factory, tolerance: float
     ) -> None:
+        """E2 holds for a start that is refine's output at the run's own
+        tolerance, as the CLI gives it (15f's S1): the triangles the run does
+        not write keep refine's guarantee at that tolerance."""
+        start = Start(tolerance=tolerance)
         strip = start.strip(generator)
         out = refine_strip(start.view, strip, *start.args(), tolerance=tolerance)
         assert out.ok(), out.message

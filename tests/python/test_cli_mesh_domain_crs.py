@@ -15,7 +15,11 @@ meshes, with `domain_crs` and `domain_transform` recorded. Pinned by this suite
   equals, in every point, cell and array, the same run with `cli.open_dem`
   replaced by 16's data flow (the whole file, and the domain object exactly as
   `read_domain` returned it, never through `DomainPolygon.to_crs`), and the
-  domain `_dem_mesh` receives has the read vertices bit for bit. This
+  domain `_dem_mesh` receives has the read vertices bit for bit. Since
+  15f-3 (`docs/increments/15f-edge-strip.md`, S4) the edge strip's vertices
+  agree to rounding only, because their lattice coordinates are measured from
+  the window's corner and the two flows cut different windows; everything a
+  window cannot change stays bit for bit (`assert_16s_but_the_strip`). This
   replaced two digests recorded on macOS arm64 at `d34d79d` (test amendment
   after PR #106's CI): Linux x86 with GCC gives the square a different digest,
   so a recorded digest pins a platform, not a behaviour. The platform-stable
@@ -54,7 +58,7 @@ mismatch message already names both CRSs).
 from __future__ import annotations
 
 import dataclasses
-import hashlib
+import io
 import json
 from pathlib import Path
 from typing import Any, ClassVar
@@ -70,6 +74,7 @@ import test_dem_input_domain
 import tin_engine.cli as cli
 from geotiff_fixtures import KARTVERKET, micro_tiff, needs_codecs
 from mosaic_fixtures import X0, Y0, blocks, quadrants, whole
+from recordread import sizes_row
 from test_cli_mesh_dem import write_tiff
 from test_cli_mesh_domain import COLS, HOLE, ROWS, SQUARE, quarter_circle
 from test_cli_mesh_domain import geojson as utm33_geojson
@@ -77,38 +82,12 @@ from test_cli_mesh_mosaic import USAGE, invoke, terrain, write_tiles
 from test_cli_mesh_refine import SEAMS_AGREE, file_field, stats_row
 from tin_engine.dem_input import DemInput, DemRequest, open_dem
 from tin_engine.domain import DomainPolygon, read_domain
+from tin_engine.io.geotiff import decode_dem
 from vtkread import VtkFile, read_vtk
 
 Ring = list[tuple[float, float]]
 SNAP = 1e-3  # DEFAULT_SNAP_SPACING: the noder's grid, applied in the DEM's CRS (R9)
 LCC = "+proj=lcc +lat_1=60 +lat_2=65 +lat_0=62 +lon_0=15 +ellps=GRS80 +units=m +no_defs"
-
-
-def digest(vtk: VtkFile) -> str:
-    """SHA-256 over the mesh itself: points, cells and every cell and point
-    array, each prefixed with its name, dtype and shape. Field data is left out,
-    since 15b adds `domain_crs` and `domain_transform` to it."""
-    h = hashlib.sha256()
-
-    def put(name: str, a: Any) -> None:
-        arr = np.ascontiguousarray(np.asarray(a))
-        h.update(f"{name}{arr.dtype.str}{arr.shape}".encode())
-        h.update(arr.tobytes())
-
-    put("points", vtk.points)
-    for i, cell in enumerate(vtk.lines):
-        put(f"line{i}", cell)
-    for i, cell in enumerate(vtk.polygons):
-        put(f"polygon{i}", cell)
-    for group in (vtk.point_scalars, vtk.scalars):
-        for name in sorted(group):
-            put(name, group[name].values)
-    for block in sorted(vtk.cell_fields):
-        for name in sorted(vtk.cell_fields[block]):
-            values = vtk.cell_fields[block][name].values
-            if isinstance(values, np.ndarray):
-                put(f"{block}.{name}", values)
-    return h.hexdigest()
 
 
 def to_crs(src: str, dst: str, ring: Ring) -> Ring:
@@ -354,9 +333,12 @@ class TestTheSameCrs:
             for got, want in zip(rings(given), rings(read), strict=True):
                 assert got.dtype == want.dtype and got.tobytes() == want.tobytes()
         assert len(now.points) > 0
-        assert digest(now) == digest(before)
+        dem = Path(args[args.index("--dem") + 1])
+        report = (tmp_path / "now.md").read_text(encoding="utf-8")
+        start = int(sizes_row(report, "start vertices"))
+        assert_16s_but_the_strip(now, before, dem, start)
 
-    def test_the_mesh_is_16s_bit_for_bit(
+    def test_the_mesh_is_16s_up_to_the_strips_rounding(
         self,
         tmp_path: Path,
         bumpy: Path,
@@ -374,7 +356,7 @@ class TestTheSameCrs:
         assert "none" in inputs(tmp_path, "domain_transform").lower()
 
     @needs_codecs
-    def test_the_quarter_circle_is_16s_bit_for_bit(
+    def test_the_quarter_circle_is_16s_up_to_the_strips_rounding(
         self,
         tmp_path: Path,
         no_transformer: None,
@@ -384,6 +366,49 @@ class TestTheSameCrs:
         domain = utm33_geojson(tmp_path / "quarter.geojson", quarter_circle())
         args = ("--dem", str(KARTVERKET), "--domain", str(domain), "--tolerance", "10")
         self.assert_as_16(tmp_path, monkeypatch, handed_on, domain, *args)
+
+
+def assert_16s_but_the_strip(now: VtkFile, before: VtkFile, dem: Path, start: int) -> None:
+    """15f's S4: 16's mesh bit for bit, except the edge strip's vertices.
+
+    A strip point is a fraction computed in lattice coordinates measured
+    from the corner of the window the core is given (15f, L16); 16's data
+    flow opens the whole file, today's cuts the window to the domain, so
+    such a vertex can differ in its last bits. What a window cannot change
+    stays bit-identical: the triangles, the constraint edges and every cell
+    array (their masks), the start vertices (the first `start`; trim keeps
+    order), and every vertex that is a DEM node, with its z. Every other
+    vertex agrees within 1e-9 lattice units in each coordinate and within
+    `1e-9 max(1, |z|)` in z. A difference in connectivity means a predicate
+    flipped on a rounding-level difference, and fails here."""
+    assert [c.tolist() for c in now.polygons] == [c.tolist() for c in before.polygons]
+    assert [c.tolist() for c in now.lines] == [c.tolist() for c in before.lines]
+    assert sorted(now.cell_fields) == sorted(before.cell_fields)
+    for block in now.cell_fields:
+        for name, array in now.cell_fields[block].items():
+            other = before.cell_fields[block][name].values
+            assert np.array_equal(np.asarray(array.values), np.asarray(other)), (block, name)
+    for name in now.scalars:
+        assert np.array_equal(now.scalars[name].values, before.scalars[name].values), name
+    a, b = now.points, before.points
+    assert a.shape == b.shape
+    m = decode_dem(io.BytesIO(dem.read_bytes())).meta
+    col, row = (a[:, 0] - m.x_min) / m.delta_x, (m.y_max - a[:, 1]) / m.delta_y
+    node = (col == np.round(col)) & (row == np.round(row))
+    node &= m.x_min + np.round(col) * m.delta_x == a[:, 0]
+    node &= m.y_max - np.round(row) * m.delta_y == a[:, 1]
+    exact = node.copy()
+    exact[:start] = True
+    assert np.array_equal(a[exact], b[exact]), "a start or DEM-node vertex moved"
+    for name in now.point_scalars:
+        ours, theirs = now.point_scalars[name].values, before.point_scalars[name].values
+        assert np.array_equal(np.asarray(ours)[exact], np.asarray(theirs)[exact]), name
+    rest = ~exact
+    d_col = np.abs(a[rest, 0] - b[rest, 0]) / m.delta_x
+    d_row = np.abs(a[rest, 1] - b[rest, 1]) / m.delta_y
+    assert (d_col <= 1e-9).all() and (d_row <= 1e-9).all(), (d_col.max(), d_row.max())
+    bound = 1e-9 * np.maximum(1.0, np.abs(a[rest, 2]))
+    assert (np.abs(a[rest, 2] - b[rest, 2]) <= bound).all()
 
 
 def rings(domain: DomainPolygon) -> list[np.ndarray]:

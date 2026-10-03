@@ -308,8 +308,10 @@ class TestTheValuesAreRight:
         self, tmp_path: Path, holed: Path, monkeypatch: pytest.MonkeyPatch, tolerance: str
     ) -> None:
         """At least the largest error at a DEM node inside a written triangle,
-        computed here, and at most the tolerance (the projected path has no
-        at-vertex figure before 15f-3, D6)."""
+        computed here, and at least the at-vertex figure; at most the tolerance
+        (25's D2 and D6). Since 15f-3 the projected path measures the DEM
+        nodes within rounding of a vertex (15f's L14), so both at-vertex rows
+        are in `--stats` there (15f's P1, S3)."""
         out, md = tmp_path / "x.vtk", tmp_path / "x.md"
         mesh(monkeypatch, "--dem", str(holed), "--tolerance", tolerance, "--out", str(out),
              "--stats", str(md))  # fmt: skip
@@ -320,7 +322,9 @@ class TestTheValuesAreRight:
         stated = float(file_field(vtk, "max_error_m"))
         assert stated >= errors.max()
         report = md.read_text(encoding="utf-8")
-        assert "dem_nodes_at_vertices" not in stats_names(report)
+        names = stats_names(report)
+        assert {"dem_nodes_at_vertices", "dem_nodes_at_vertices_max_error_m"} <= set(names)
+        assert stated >= float(stats_row(report, "dem_nodes_at_vertices_max_error_m"))
         assert stated <= float(file_field(vtk, "tolerance_m")) == float(tolerance)
 
 
