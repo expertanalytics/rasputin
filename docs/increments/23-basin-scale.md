@@ -2547,6 +2547,99 @@ N7 (the frozen test with the radius in the point scan), N10 (carving), N16
 and LOC" are updated: about **285**, 396 at +39 % and 456 at +60 %, under
 700 at both.
 
+### As built (23b green)
+
+Green is `3c464ec`. `@tester`'s `f00a7b1` closed the two gaps the mutation
+pass found and amended 15c's stub test, which pinned `refine_points`'
+keyword-only arguments without `frozen_mask` (N13). LOC in `CLAUDE.md` §2's
+unit: 258 added and 22 removed, 236 net, against about 285. Choices the
+rulings left to `@developer`, and other changes outside the PR table:
+
+- **`on_frozen` once per point (N6), by ownership in the scan.** No end pass
+  over the store. A stored point exactly on a frozen edge is counted by the
+  triangle that owns the edge (15f D4: lower to higher vertex index in this
+  triangle, or no triangle across). A point only within `r(g)` of the edge
+  (N7) lies in one triangle, which counts it. Both are summed over each
+  slot's last result, as `max_error` is. `PointScan::offer` keeps the count
+  when a strip or DEM candidate replaces the scan's winner.
+- **N16 is a second loop.** The frozen-strip-edge refusal runs after L2's
+  check (3) has passed for every strip edge, not inside the same loop, so
+  a strip that also holds a non-constraint edge is refused for that first,
+  as N16 orders.
+- **The seam greedy keeps each piece's worst point in a priority queue.** It
+  inserts the same set as the naive greedy, since pieces are independent, and
+  ties go to the smallest `s` inside a piece. Cost is O(n log n · depth), not
+  O(n²).
+- **L12's guard is kept though the scans make it unreachable.** Both scans
+  skip a point within `r(g)` of a frozen edge, by the same distance and
+  projection `near_constraint` computes. But the two copies of that
+  expression may be FP-contracted differently, so `near_constraint` also
+  excludes frozen edges.
+- **CI:** `prop_refinement_frozen` and `prop_refinement_seam` join the TSan
+  job in `.github/workflows/main.yaml`.
+- **Citations:** three line citations in `15f-edge-strip.md` (:61, :84,
+  :355) moved to where `scan_points`, `scan` and `vertex_z` now are.
+- **K1:** a scratch program hashes `refine`, `refine_points` (with and without
+  a strip) and `refine_strip` over 756 seeded runs. It gives the same hash
+  with master's headers and with 23b's when `frozen_mask` is not named or is
+  0, both with the default FP contraction and with `-ffp-contract=off`. A
+  planted change to the scan changes the hash.
+
+**Mutation runs** (FE2-FE5, SP1, SP2; Release build, one mutant at a time,
+the source restored and touched after each). `@developer`'s 27 ran against
+`3c464ec`'s suites, and `@tester`'s list against `f00a7b1`'s. Where
+`@tester`'s mutant was the same as one of the 27, it is not run twice.
+The suites that kill a mutant are `test_mesh_frozen` (mesh),
+`test_refinement_scan_frozen` (scan), `prop_refinement_frozen` (frozen) and
+`prop_refinement_seam` (seam).
+
+| `@developer`'s mutant | verdict |
+|---|---|
+| M1 the scan never skips a frozen node | killed (scan, frozen) |
+| M2 the frozen skip only in the all-node path | killed (scan, frozen) |
+| M3 the frozen skip only off the all-node path | killed (scan, frozen) |
+| M4 `frozen_edge_at` does not exclude the edge's ends | survived; equivalent (a vertex has error 0, and the corner test comes first) |
+| M5 the radius ignored (N7) | killed (frozen) |
+| M6 `is_frozen` true for any masked edge once a mask is set | killed (mesh, scan, frozen) |
+| M7 `refine` does not set the mask | killed (frozen) |
+| M8 `point_loop` does not set the mask | killed (frozen) |
+| M9 feet taken on frozen edges | killed (frozen) |
+| M10 the quality pass splits frozen edges | killed (mesh, frozen) |
+| M11 `skipped_frozen` not summed into `quality_skipped` | killed (frozen) |
+| M12 L12 may take a frozen edge | survived; unreachable while the two distance expressions agree (above) |
+| M13 `scan_points` has no frozen test | killed (frozen) |
+| M14 `on_frozen` counted in both triangles | killed (frozen) |
+| M15 the error measured from the wrong end | killed (frozen) |
+| M16 a frozen strip edge not refused | killed (frozen) |
+| M17 `on_frozen` not summed over slots | killed (frozen) |
+| M18 `offer` drops the frozen count | survived at `3c464ec`; killed (frozen) after `f00a7b1` |
+| S1 ties between pieces to the largest `s` | survived; equivalent (pieces are independent) |
+| S2 inserts at `error >= tolerance` | survived at `3c464ec`, C++ and Python; killed (seam) after `f00a7b1` |
+| S3 no carving from the end `b` | killed (seam) |
+| S4 lerp by index, not by `s` | killed (seam) |
+| S5 ends not ordered | killed (seam) |
+| S6 `max_error` reported as 0 | killed (seam) |
+| S7 the right piece not re-offered after a split | killed (seam) |
+| S8 output x scaled by `dy` | killed (seam) |
+| S9 ties inside a piece to the largest `s` | killed (seam) |
+
+| `@tester`'s mutant | verdict |
+|---|---|
+| M3 the void branch drops the frozen skip | ran: killed (scan, frozen) |
+| M4 skipped nodes still counted in `uncovered` | ran: killed (scan, frozen) |
+| M5 the scans skip nodes on every constrained edge | ran (both scans, since `frozen_edge_at` is shared): killed (scan, frozen) |
+| M6 `is_frozen` returns `is_constrained` | ran: killed (mesh, scan, frozen) |
+| M9 `foot_of` refuses the whole triangle when any edge is frozen | ran: **survived**. Not equivalent: N5 takes a foot on another qualifying constrained edge, and FE3's fixture has only one candidate edge. Back to `@tester` |
+| M14 `on_frozen` once per triangle, so each point twice | covered by `@developer`'s M14: killed |
+| M15 the frozen error measured against 0 | ran: killed (frozen) |
+| M17 L12 puts a point onto a frozen edge | covered by `@developer`'s M12: survived, unreachable (above) |
+| M18 a frozen mask of 0 freezes everything (K1) | ran: killed (mesh, scan, frozen) |
+| S3 interpolation between the two ends only | ran: killed (seam) |
+| S4 nodes only, no midpoints | ran: killed (seam) |
+| S6 ends ordered as given | covered by `@developer`'s S5: killed |
+| S7 no carving from either end | ran (both ends; `@developer`'s S3 removed one): killed (seam) |
+| S8 inserted points output with the wrong origin | ran (`x_min` dropped): killed (seam) |
+
 ## Questions for Ola
 
 Numbered B1-B12, so they cannot be confused with 15's and 15c's Q1-Q17.
