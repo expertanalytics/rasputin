@@ -30,9 +30,10 @@ so the fetch sees the real 140 stations. Station `i` (list order) sits on a
   `NULL_TYPE` (null, `vatnlnr` set), `BLANK_TYPE` (" ", no `vatnlnr`),
   `ODD_LAKE` ("InnsjoMidtlin") and `STRAY` ("SK");
 - `NO_HIERARCHY` (2.265.0): `elvenavnhierarki` is null;
-- `RENAMED` (311.4.0): layer 0 serves `stasjonnavn` as `LAYER_0_NAME`,
-  "Femundsenden (Femunden)", its real name there, while the packaged list's
-  `name` is the PDF's wrapped extraction ("(Femunden)" in the first pass).
+- `RENAMED` (311.4.0): layer 0 serves `stasjonnavn` as `LAYER_0_NAME`, a
+  synthetic name no list row can hold, so a fetch that copies the list's
+  name fails whatever the packaged list writes for this station (the real
+  "Femundsenden (Femunden)" would pass if the list held it in full).
   Every other station's layer 0 name is its list row's.
 """
 
@@ -92,7 +93,8 @@ CHUNK = 40
 
 NEWEST, TIE, COPIES, MULTI, NO_HIERARCHY = "2.11.0", "2.32.0", "2.142.0", "19.79.0", "2.265.0"
 #: Ola's ruling of 2026-10-04: the station's name is layer 0's `stasjonnavn`.
-RENAMED, LAYER_0_NAME = "311.4.0", "Femundsenden (Femunden)"
+#: Synthetic, so the test does not depend on how the packaged list spells it.
+RENAMED, LAYER_0_NAME = "311.4.0", "Layer-0 name of 311.4.0"
 SHARED = 900001
 COPY_LOW, COPY_HIGH, SAME_NUMBER = 900010, 900011, 900012
 NULL_TYPE, BLANK_TYPE, ODD_LAKE, STRAY = 900020, 900021, 900022, 900023

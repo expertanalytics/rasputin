@@ -374,10 +374,8 @@ class TestStationsGeojson:
 
     def test_the_name_is_layer_0s_not_the_lists(self, fake: FakeNve, fetched: Path) -> None:
         """Ola's ruling of 2026-10-04: `name` is layer 0's `stasjonnavn`, as
-        served. 311.4.0's list row holds the PDF's wrapped "(Femunden)"; layer
-        0 serves "Femundsenden (Femunden)"."""
-        (row,) = [r for r in list_rows() if r["station"] == RENAMED]
-        assert row["name"] != LAYER_0_NAME, "the list must differ, or this test tells nothing"
+        served. The fake serves a synthetic name for 311.4.0 that no list row
+        holds, so the list's own spelling of it cannot make this pass."""
         assert fake.station(RENAMED).name == LAYER_0_NAME
         features = by_station(fetched / "stations.geojson")
         assert features[RENAMED]["properties"]["name"] == LAYER_0_NAME
