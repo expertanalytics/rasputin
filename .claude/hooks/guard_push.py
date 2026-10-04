@@ -6,11 +6,12 @@ working at the time, and alert me before pushing". It held because the agent
 remembered to ask. That is not a mechanism; it is a habit, and the same session
 has forgotten comparable ones.
 
-`gh pr create`, `gh pr merge` and `git push` all publish. So does a `git commit`
-carrying `--no-verify`, which is not a publish but is the disabling of somebody
-else's guard, and belongs to the user for the same reason. So do writes to refs,
-remotes and git config, and `gh api` / `curl` with a writing method to the forge
-(docs/increments/h3-unattended-u1.md §3.5).
+`gh pr create`, `gh pr merge` and `git push` all publish, and `gh pr update-branch`
+writes to a pull request's branch (docs/increments/h10-merge-queue.md §4a). So
+does a `git commit` carrying `--no-verify`, which is not a publish but is the
+disabling of somebody else's guard, and belongs to the user for the same reason.
+So do writes to refs, remotes and git config, and `gh api` / `curl` with a
+writing method to the forge (docs/increments/h3-unattended-u1.md §3.5).
 
 `ask`, not `deny`: the user says yes constantly. The point is that they say it.
 The exception is unattended mode (tools/harness_mode.py): while Ola is away the
@@ -36,7 +37,8 @@ except ImportError:  # every line is then judged as text, as before h4
 
 PUBLISHES = (
     (re.compile(r"\bgit\b[^|;&]*\bpush\b"), "git push writes to the remote"),
-    (re.compile(r"\bgh\s+pr\s+(create|merge|ready|edit)\b"), "gh pr changes a pull request"),
+    (re.compile(r"\bgh\s+pr\s+(create|merge|ready|edit|update-branch)\b"),
+     "gh pr changes a pull request"),
     (re.compile(r"\bgh\s+(release|repo\s+(create|delete|edit))\b"),
      "gh publishes or alters the repo"),
     (re.compile(r"--no-verify\b"), "--no-verify disables git's own hooks"),
@@ -145,7 +147,8 @@ def publishes(words: list[str]) -> list[str]:
             found.append(FORCE)
     if words and words[0].rsplit("/", 1)[-1] == "gh" and len(words) > 2:
         group, verb = words[1:3]
-        found += [PR] if group == "pr" and verb in ("create", "merge", "ready", "edit") else []
+        pr_writes = ("create", "merge", "ready", "edit", "update-branch")
+        found += [PR] if group == "pr" and verb in pr_writes else []
         if group == "release" or (group == "repo" and verb in ("create", "delete", "edit")):
             found.append(RELEASE)
     return found
