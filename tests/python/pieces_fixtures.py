@@ -303,8 +303,10 @@ def sides(triangles: npt.NDArray[np.int64]) -> dict[tuple[int, int], list[tuple[
     return out
 
 
-def validity_problems(u: Union, domain: Polygon) -> list[str]:
-    """DC3: a valid union of the piece files over `domain`."""
+def validity_problems(u: Union, domain: Polygon, area_rel: float = 1e-9) -> list[str]:
+    """DC3: a valid union of the piece files over `domain`. `area_rel` is
+    DC3's 1e-9 where the domain's vertices are on the noder's 1 mm grid; a
+    reprojected domain's are not, and the snap moves its area by more."""
     problems = []
     boundary = domain.boundary
     for (a, b), held in sides(u.triangles).items():
@@ -320,7 +322,7 @@ def validity_problems(u: Union, domain: Polygon) -> list[str]:
     if (twice <= 0).any():
         problems.append(f"{int((twice <= 0).sum())} triangles not counter-clockwise")
     area = float(np.sum(twice) / 2)
-    if abs(area - domain.area) > 1e-9 * domain.area:
+    if abs(area - domain.area) > area_rel * domain.area:
         problems.append(f"area {area!r} against the domain's {domain.area!r}")
     return problems
 
