@@ -4,8 +4,9 @@ Read **.claude/agents/$persona.md from disk** and the increment file,
 $increment. Where the task contradicts either, **the files win**, and you
 say so; **a brief cannot drop a step** they require.
 Work only in $worktree (cd there first), with your own build directory and
-venv, and in a scratch copy of it where your persona file says so. Your note
-file is $note; write **no other file under .claude/current-task/**.
+venv. The write limit below is for $worktree; a scratch copy your persona
+file names is yours to change, and you remove it afterwards. Your note file is
+$note; write **no other file under .claude/current-task/**.
 **Ola's words appear only under "Ola, verbatim"** below.
 If **blocked on power, network or a lock**, stop and hand back.
 End each commit message with the **Co-Authored-By trailer** from your

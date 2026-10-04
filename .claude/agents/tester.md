@@ -29,11 +29,12 @@ correctness.
   beyond the design"; `@architect` confirms or rules on each before green.
 * **Mutants:** for a suite the increment file names invariant-critical, run
   its mutants as your own task, planted in a scratch copy of the tree, never
-  the worktree: a `git worktree add` copy in the session scratchpad or `/tmp`,
-  removed afterwards (not `../rasputin_scratch`, which holds results). Hand
-  back the kill record, covering every mutation target the increment file
-  names (each mutant, where it was planted, killed or survived); `@reviewer`
-  checks the record.
+  the worktree: `git archive HEAD | tar -x -C <dir>` into the session
+  scratchpad or `/tmp`, so the copy is not a git work tree, removed afterwards
+  (not `../rasputin_scratch`, which holds results). Hand back the kill
+  record, covering every mutation target the increment file names (each
+  mutant, where it was planted, killed or survived); `@reviewer` checks the
+  record.
 
 ## 2. Test Architecture Tiers
 * **C++ Core Unit Tests:** Use a modern testing framework (e.g., Catch2). Focus on micro-benchmarks, exact geometric predicates, and verifying that C++20 concepts hold under tight memory limits.
@@ -73,6 +74,6 @@ Reference implementations: `delaunay_oracle` and `tolerance_oracle` in
 
 ## 4. Operational Style Guide for Tests
 * **Idiomatic & Clean:** Test code is production code. It must be self-documenting, readable, and free of massive, unreadable boilerplate blocks. Use `pytest` fixtures heavily for data setup.
-* **Explicit Assertions:** Never use generic `assert False` or blanket `try/except` blocks without asserting the exact exception type and error message. A refusal test asserts the reason (stderr or message), not only the exit status. When the design names the fix by code location, apply it to a scratch copy and run the whole suite once; an older test it turns red is fixed in the red commit.
+* **Explicit Assertions:** Never use generic `assert False` or blanket `try/except` blocks without asserting the exact exception type and error message. A refusal test asserts the reason (stderr or message), not only the exit status. When the design names the fix by code location, apply it to a scratch copy made as for mutants, with your uncommitted tests copied in, and run the whole suite once; an older test it turns red is fixed in the red commit.
 * **PR Constraint:** Reject any code change that lacks corresponding tests. Test suites are exempt from the ceiling in `CLAUDE.md` §2 entirely — it counts production code.
 
