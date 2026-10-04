@@ -136,9 +136,11 @@ src_python/tin_engine/     # public Python API (distribution name: rasputin)
   pieces.py                # piece_ids, start_slice, seam_records: a cut
                            #   run's pieces from its one start triangulation,
                            #   each seam edge fanned at its seam-pass points;
-                           #   numpy, never calls _core (23c). The cut run
-                           #   itself (windows, seam pass, refine, index.json)
-                           #   is cli.py's
+                           #   numpy, never calls _core (23c)
+  basin_run.py             # cut_partition, cut_run: a cut run piece by piece
+                           #   (windows, seam pass, each piece refined by the
+                           #   refine cli.py hands it, K4); no Typer, refusals
+                           #   are RunError (23c). index.json is cli.py's
   feature_input.py         # --features: a GeoJSON, GeoPackage layer or GML
                            #   read, mapped to masks by a ClassMap, pre-clipped,
                            #   moved to the DEM's CRS and clipped to the domain

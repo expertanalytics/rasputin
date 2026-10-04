@@ -191,8 +191,8 @@ What is carried across, and what changes:
 | R5: gaps stay NaN | **changed** (R5): a node the request needs that no tile covers is refused | Ola's ruling, `18-row-span-scan.md` R6: "a missing tile inside the extent is a data error" |
 | R6: `--bbox` in the DEM's CRS, no transform | carried (R6); the domain is transformed in 15b (R9) | "inputs in their own CRS" |
 | R6: `GeoPolygon` lands with the clip | superseded: 16 shipped `DomainPolygon`; 15b gives it a transform | |
-| R7: `MAX_MOSAIC_BYTES = 1 GiB`, the canvas copied twice | **changed** (R7): cap at half of physical memory; one canvas, not two | a Norwegian catchment's box passes 1 GiB (R7) |
-| R7: window decoding later | 15d (basin) | DTM10 tiles are 100 MB decoded; ANADEM's are 2.5 GiB |
+| R7: `MAX_MOSAIC_BYTES = 1 GiB`, the canvas copied twice | **changed** (R7): cap at half of physical memory; one canvas, not two. **The cap is deleted** (23c-2, `23-basin-scale.md` B15 (a)): no canvas is refused for its size, and `--memory-budget` cuts the run instead | a Norwegian catchment's box passes 1 GiB (R7) |
+| R7: window decoding later | 15d (basin); landed as 23a-1's `decode_window` | DTM10 tiles are 100 MB decoded; ANADEM's are 2.5 GiB |
 | R8: `--dem` repeatable, `--bbox`, `dem_tiles` | carried (R11) | |
 | U1-U4 | carried to the questions (Q1-Q4), U1 now with measurements | |
 
@@ -562,7 +562,8 @@ eight odd tiles. Here:
    node, since abutting area-registered tiles leave a gap between their node
    rectangles; see "Pinned by the red suite (15a)".)
 6. **Refused as well:** an empty repository; a box that meets no tile; a window
-   under 2 × 2 nodes; a canvas over the memory cap (R7).
+   under 2 × 2 nodes; a canvas over the memory cap (R7; the cap is deleted by
+   23c-2, B15 (a) of `23-basin-scale.md`).
 
 `plan_mosaic` never sees a path, a stream or a pixel. Its test double is a list
 of `TileFootprint`.
@@ -609,6 +610,9 @@ the 72 GiB union box would be refused by the cap, whose message says
 "narrow it with --bbox".
 
 ### R7. Memory
+
+*The cap below is deleted by 23c-2 (`23-basin-scale.md`, B15 (a)): a run
+over the budget is cut into pieces, not refused.*
 
 **[15a] One canvas, capped at half of physical memory.**
 

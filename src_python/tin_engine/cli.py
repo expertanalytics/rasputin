@@ -47,7 +47,7 @@ import shlex
 import sys
 import tempfile
 import time
-from collections.abc import Callable, Iterable, Iterator, Mapping
+from collections.abc import Callable, Iterator, Mapping
 from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Annotated
@@ -63,21 +63,28 @@ from tin_engine._core import (
     IndexedMesh2,
     NodedPslg,
     RefineOutcome,
-    SeamOutcome,
     build_pslg,
     describe,
     hardening,
-    indexed_mesh,
     node,
     refine,
-    refine_seam,
     sample,
     triangulate,
+)
+from tin_engine.basin_run import (
+    CutAsk,
+    CutRun,
+    How,
+    Once,
+    Refined,
+    RunError,
+    cut_partition,
+    cut_run,
 )
 from tin_engine.catchment import CatchmentRequest, LakeError, delineate
 from tin_engine.chains import start_chains
 from tin_engine.crs import crs_label, parse_crs, transform_description
-from tin_engine.decompose import DEFAULT_MEMORY_BUDGET, bytes_per_node, lines, partition
+from tin_engine.decompose import DEFAULT_MEMORY_BUDGET, bytes_per_node, lines
 from tin_engine.dem_input import (
     CachedSource,
     DemInput,
@@ -104,12 +111,8 @@ from tin_engine.io.cog import NotCached
 from tin_engine.io.mesh_index import (
     ConformityError,
     MeshIndex,
-    PartitionRecord,
     PieceCounts,
     PieceEntry,
-    PieceId,
-    PieceWindow,
-    check_conformity,
 )
 from tin_engine.io.models import DemTile, RasterMeta
 from tin_engine.io.ply import write_ply
@@ -117,7 +120,6 @@ from tin_engine.io.vtk_legacy import write_vtk
 from tin_engine.landcover import label_triangles
 from tin_engine.mosaic import Bounds, Seam
 from tin_engine.palettes import PALETTES, paraview_preset
-from tin_engine.pieces import piece_ids, seam_records, start_slice
 from tin_engine.raster import to_core
 from tin_engine.sources import SOURCES
 from tin_engine.stats import PhaseClock, Refinement, Report, Sizes, _exact, quality, render
@@ -731,7 +733,8 @@ def mesh(
             "--memory-budget",
             metavar="BYTES",
             help="With --domain, the bytes one piece is estimated to need at most; a domain "
-            "estimated over it is cut. Default: 17179869184 (16 GiB).",
+            "estimated over it is cut. Default: 17179869184 (16 GiB). For now every piece "
+            "is cut from one decoded DEM window, so peak memory is still about an uncut run's.",
         ),
     ] = None,
 ) -> None:
@@ -831,6 +834,8 @@ def mesh(
         raise typer.BadParameter(
             "a .vtk file already carries the constraint edges", param_hint="--out-edges"
         )
+    # 23c: a cut run's index at this --out is stale now, whatever this run is.
+    Path(f"{_destination(out, out_parent, '')}.pieces", "index.json").unlink(missing_ok=True)
 
     if dem:
         if flat:
@@ -876,8 +881,6 @@ def mesh(
                 f"{budget} bytes is under one node's {one} at this tolerance",
                 param_hint="--memory-budget",
             )
-        if domain is not None:  # a cut rerun: no index outlives it unless it succeeds
-            Path(f"{out}.pieces", "index.json").unlink(missing_ok=True)
         paths, cached = _dem_sources(dem, cache_root(cache, os.environ))
         given = None
         if domain is not None:
@@ -900,11 +903,11 @@ def mesh(
         # so the tile's one reference is the holder `_dem_mesh` empties.
         label, plan, grid, source_crs = opened.label, opened.plan, opened.grid, opened.source_crs
         dem_domain, checks, opened_seams = opened.domain, opened.checks, opened.seams
-        held, dem_crs = _Once(opened.tile), opened.tile.meta.crs
+        held, dem_crs = Once(opened.tile), opened.tile.meta.crs
         del opened
         ask = None
         if tolerance is not None and domain is not None:  # the window on its lattice
-            ask = _CutAsk(pieces or 1, budget, plan.reference, plan.window.row0, plan.window.col0)
+            ask = CutAsk(pieces or 1, budget, plan.reference, plan.window.row0, plan.window.col0)
             if grid is not None:  # 15c-2 J6: node (R, K) at (K h, -R h)
                 ask = replace(ask, origin=(0.0, 0.0), row0=grid.row0, col0=grid.col0)
         found = None
@@ -912,23 +915,29 @@ def mesh(
         if feature_paths and dem_domain is not None:
             sources = _feature_sources(feature_paths, feature_crss, feature_layers, feature_maps)
             found = _open_features(sources, dem_domain, dem_crs, clock)
-        dem_run = _dem_mesh(
-            held,
-            ", ".join(map(str, dem)),
-            stride,
-            delaunay,
-            snap_spacing,
-            tolerance,
-            clock,
-            dem_domain,
-            domain.name if domain is not None else "",
-            DEFAULT_START_MIN_ANGLE if start_min_angle is None else start_min_angle,
-            not no_constraint_feet,
-            found,
-            grid,
-            checks,
-            cut=ask,
-        )
+        try:
+            dem_run = _dem_mesh(
+                held,
+                ", ".join(map(str, dem)),
+                stride,
+                delaunay,
+                snap_spacing,
+                tolerance,
+                clock,
+                dem_domain,
+                domain.name if domain is not None else "",
+                DEFAULT_START_MIN_ANGLE if start_min_angle is None else start_min_angle,
+                not no_constraint_feet,
+                found,
+                grid,
+                checks,
+                cut=ask,
+            )
+        except RunError as exc:
+            raise typer.BadParameter(str(exc), param_hint="--dem") from exc
+        except ConformityError as exc:  # K4: a seam two pieces wrote differently
+            typer.echo(f"Error: {exc}", err=True)
+            raise typer.Exit(1) from exc
         surface_mesh = dem_run.trimmed
         described = dem_run.described
         names = [t.name for t in plan.tiles]
@@ -1518,7 +1527,7 @@ class _DemMesh:
     start_triangles: int | None
     refinement: Refinement | None
     feature_counts: tuple[int, int] | None = None
-    cut: _CutRun | None = None  # a cut run's pieces (23c); `trimmed` is then empty
+    cut: CutRun | None = None  # a cut run's pieces (23c); `trimmed` is then empty
 
 
 #: A cut run's `_DemMesh.trimmed`: its meshes are its pieces'.
@@ -1526,22 +1535,8 @@ _NO_MESH = Trimmed(np.zeros((0, 3)), np.zeros((0, 3), np.uint32), np.zeros((0, 2
                    np.zeros(0, np.uint32), 0)  # fmt: skip
 
 
-class _Once[T]:
-    """A value handed on once (15e, fix 3): `take` returns it and forgets it,
-    so the holder keeps nothing alive after; a second `take` is a bug."""
-
-    def __init__(self, value: T) -> None:
-        self._value: T | None = value
-
-    def take(self) -> T:
-        value, self._value = self._value, None
-        if value is None:  # explicit: `python -O` strips an assert
-            raise RuntimeError("_Once.take called twice")
-        return value
-
-
 def _dem_mesh(
-    held: _Once[DemTile],
+    held: Once[DemTile],
     dem: str,
     stride: int | None,
     delaunay: bool,
@@ -1555,7 +1550,7 @@ def _dem_mesh(
     features: FeatureSet | None = None,
     grid: TargetGrid | None = None,
     checks: Iterator[Block] | None = None,
-    cut: _CutAsk | None = None,
+    cut: CutAsk | None = None,
 ) -> _DemMesh:
     """Subsample, triangulate, sample or refine, and trim ``held``'s tile.
 
@@ -1591,7 +1586,7 @@ def _dem_mesh(
         start = "start domain boundary, boundary z bilinear"
         vertices = started.vertices
         if cut is not None and tolerance is not None:
-            part = _partition(meta, tolerance, cut)
+            part = cut_partition(meta, tolerance, cut)
         if part is not None:  # "The chains": breaklines with the seam bit
             seam = PIECE_VOCABULARY.mask("seam")
             for xy in lines(domain.polygon, part.xs, part.ys):
@@ -1637,14 +1632,14 @@ def _dem_mesh(
         sentence = f"bilinear from DEM, stride {step}"  # no domain without tolerance
         report = ""
     else:
-        how = _How(dem, tolerance, min_angle, feet, start, grid, checks)
+        how = How(dem, tolerance, min_angle, feet, start, grid, checks)
         if part is not None:
-            done = _cut_run(tile, run.mesh, edges, masks, part, how, clock)
+            done = cut_run(tile, run.mesh, edges, masks, part, how, clock, _refined)
             return _DemMesh(
                 _NO_MESH, "", described, meta, domain_vertices, domain_holes, None, None, None,
                 feature_counts, done,
             )  # fmt: skip
-        once = _Once(tile)
+        once = Once(tile)
         del tile  # 15e fix 3: `_refined` drops the last reference before phase 2
         refined = _refined(once, run.mesh, edges, masks, how, clock)
         out, trimmed, sentence = refined.out, refined.trimmed, refined.sentence
@@ -1684,41 +1679,16 @@ def _dem_mesh(
     )
 
 
-@dataclass(frozen=True, slots=True)
-class _How:
-    """How a start mesh is refined (15c-2's phase 2 with ``grid`` and
-    ``checks``), and the start's words for the sentence."""
-
-    dem: str
-    tolerance: float
-    min_angle: float
-    feet: bool
-    start: str
-    grid: TargetGrid | None
-    checks: Iterable[Block] | None
-
-
-@dataclass(frozen=True, slots=True)
-class _Refined:
-    out: RefineOutcome
-    final: RefineOutcome
-    z: npt.NDArray[np.float64]
-    trimmed: Trimmed
-    sentence: str
-    report: str
-    on_frozen: int
-
-
 def _refined(
-    held: _Once[DemTile],
+    held: Once[DemTile],
     start: IndexedMesh2,
     edges: npt.NDArray[np.uint32],
     masks: npt.NDArray[np.uint32],
-    how: _How,
+    how: How,
     clock: PhaseClock,
     frozen: int = 0,
     heights: Mapping[int, float] | None = None,
-) -> _Refined:
+) -> Refined:
     """Refine from ``start`` (14), then phase 2 with a grid (15c-2), then trim.
     The tile goes before phase 2 (15e, fix 3). No vertex goes on an edge whose
     mask meets ``frozen``; ``heights`` are a piece's seam records' z, written
@@ -1785,151 +1755,7 @@ def _refined(
         f"{len(start.triangles)} start triangles, "
         f"{_off_node(np.asarray(start.vertices), meta)} start vertices off-node, "
     )
-    return _Refined(out, final, z, trimmed, sentence, report, on_frozen)
-
-
-@dataclass(frozen=True, slots=True)
-class _CutAsk:
-    """``--pieces`` and ``--memory-budget``, and the window on its lattice:
-    lattice node (0, 0) at ``origin``, the window's first node ``(row0, col0)``."""
-
-    pieces: int
-    budget: int
-    origin: tuple[float, float]
-    row0: int
-    col0: int
-
-
-@dataclass(frozen=True, slots=True)
-class _Partitioned:
-    """A partition of more than one cell: its record and its lines' x and y."""
-
-    record: PartitionRecord
-    xs: list[float]
-    ys: list[float]
-    row0: int
-    col0: int
-
-
-@dataclass(frozen=True, slots=True)
-class _Piece:
-    id: PieceId
-    trimmed: Trimmed
-    sentence: str
-    window: PieceWindow
-    on_frozen: int
-
-
-@dataclass(frozen=True, slots=True)
-class _CutRun:
-    record: PartitionRecord
-    pieces: list[_Piece]
-
-
-def _partition(meta: RasterMeta, tolerance: float, ask: _CutAsk) -> _Partitioned | None:
-    """The window's partition ("The partition", 23c), or None for one cell,
-    which is today's run (K1). Line ``i`` is at the index's
-    ``origin_x + (col0 + i dx) h``, line ``j`` at ``origin_y - (row0 + j dy) h``."""
-    cells = partition(meta.cols, meta.rows, tolerance, pieces=ask.pieces, memory_budget=ask.budget)
-    if cells.nx * cells.ny == 1:
-        return None
-    h = meta.delta_x
-    if meta.delta_y != h:
-        raise typer.BadParameter(
-            f"the DEM's cells are {h} x {meta.delta_y}; a cut needs square ones", param_hint="--dem"
-        )
-    (ox, oy), r0, c0 = ask.origin, ask.row0, ask.col0
-    record = PartitionRecord(
-        pieces=ask.pieces, memory_budget=ask.budget, bytes_per_node=bytes_per_node(tolerance),
-        nx=cells.nx, ny=cells.ny, dx=cells.dx, dy=cells.dy, cols=meta.cols, rows=meta.rows,
-        row0=r0, col0=c0, spacing=h, origin=(ox, oy),
-    )  # fmt: skip
-    xs = [ox + (c0 + i * cells.dx) * h for i in range(1, cells.nx)]
-    ys = [oy - (r0 + j * cells.dy) * h for j in range(1, cells.ny)]
-    return _Partitioned(record, xs, ys, r0, c0)
-
-
-def _window(tile: DemTile, r0: int, r1: int, c0: int, c1: int) -> tuple[DemTile, int, int]:
-    """Rows ``r0..r1`` and columns ``c0..c1`` of ``tile``, inclusive and cut to
-    it, as a tile of their own; with its first row and column."""
-    m = tile.meta
-    r0, c0, r1, c1 = max(r0, 0), max(c0, 0), min(r1, m.rows - 1), min(c1, m.cols - 1)
-    meta = m.model_copy(
-        update={"x_min": m.x_min + c0 * m.delta_x, "y_max": m.y_max - r0 * m.delta_y,
-                "rows": r1 - r0 + 1, "cols": c1 - c0 + 1}
-    )  # fmt: skip
-    return DemTile(meta=meta, array=tile.array[r0 : r1 + 1, c0 : c1 + 1]), r0, c0
-
-
-def _cut_run(
-    tile: DemTile,
-    start: IndexedMesh2,
-    edges: npt.NDArray[np.uint32],
-    masks: npt.NDArray[np.uint32],
-    cut: _Partitioned,
-    how: _How,
-    clock: PhaseClock,
-) -> _CutRun:
-    """23c, one piece after another: each piece's slice of the one start
-    triangulation, its seam edges fanned at their seam-pass points, refined
-    on its cell's window (grown by a node) with the seams frozen; then K4
-    over the seam records of every piece (``ConformityError`` exits 1)."""
-    seam, part = PIECE_VOCABULARY.mask("seam"), cut.record
-    xy = np.asarray(start.vertices)
-    tris = np.asarray(start.triangles, dtype=np.int64)
-    flags = np.asarray(start.constrained_edges)
-    seams = edges[(masks & seam) != 0].astype(np.int64)
-    labels, ids = piece_ids(
-        tris, xy, seams, lambda x, y: (sum(y < v for v in cut.ys), sum(x > v for v in cut.xs))
-    )
-    m = tile.meta
-
-    def seam_pass(r: int) -> SeamOutcome:
-        """The seam pass on a strip that is a function of the edge alone: its
-        box snapped outward to the lattice and grown by one node (step 2)."""
-        (ax, ay), (bx, by) = xy[edges[r]].tolist()
-        c0, c1 = ((v - m.x_min) / m.delta_x for v in (min(ax, bx), max(ax, bx)))
-        r0, r1 = ((m.y_max - v) / m.delta_y for v in (max(ay, by), min(ay, by)))
-        f, c = math.floor, math.ceil
-        strip, _, _ = _window(tile, f(r0) - 1, c(r1) + 1, f(c0) - 1, c(c1) + 1)
-        return refine_seam(to_core(strip), (ax, ay), (bx, by), tolerance=how.tolerance)
-
-    checks = list(how.checks) if how.checks is not None else None
-    built, records = [], []
-    for p, (j, i, k) in enumerate(ids):
-        piece = start_slice(xy, tris, flags, edges, masks, labels == p, seam, seam_pass)
-        window, r0, c0 = _window(
-            tile, j * part.dy - 1, (j + 1) * part.dy + 1, i * part.dx - 1, (i + 1) * part.dx + 1
-        )
-        wm, grid = window.meta, how.grid
-        if grid is not None:  # phase 2's store on the piece's window
-            grid = grid.model_copy(update={"row0": grid.row0 + r0, "col0": grid.col0 + c0,
-                                           "rows": wm.rows, "cols": wm.cols})  # fmt: skip
-        words = f"piece {j}-{i}-{k} of {len(ids)} cut on DEM lattice lines, {how.start}"
-        mine = replace(how, start=words, grid=grid, checks=checks)
-        mesh = indexed_mesh(piece.vertices, piece.triangles, piece.flags)
-        done = _refined(_Once(window), mesh, piece.edges, piece.masks, mine, clock, seam, piece.z)
-        del window
-        records += seam_records((j, i, k), piece, done.final.vertices, done.z, done.final.valid)
-        dropped = done.trimmed.dropped
-        typer.echo(
-            f"piece {j}-{i}-{k}: {done.report}{dropped} vertices without data dropped", err=True
-        )
-        place = PieceWindow(row0=cut.row0 + r0, col0=cut.col0 + c0, rows=wm.rows, cols=wm.cols)
-        sentence = f"{done.sentence}, {dropped} vertices without data dropped"
-        if m.vertical_unit_assumed:
-            sentence += ", vertical unit assumed metres"
-        built.append(_Piece((j, i, k), done.trimmed, sentence, place, done.on_frozen))
-    if not any(len(p.trimmed.triangles) for p in built):
-        raise typer.BadParameter(
-            f"{how.dem} has no data under any triangle; nothing to write", param_hint="--dem"
-        )
-    try:
-        check_conformity(records)
-    except ConformityError as exc:
-        typer.echo(f"Error: {exc}", err=True)
-        raise typer.Exit(1) from exc
-    return _CutRun(part, built)
+    return Refined(out, final, z, trimmed, sentence, report, on_frozen)
 
 
 def _refine_phases(clock: PhaseClock, seconds: float, out: RefineOutcome) -> None:
