@@ -2,8 +2,16 @@
 
 Status: **designed by `@architect`, 2026-10-01; B1-B14 ruled by Ola on
 2026-10-01 and the design reworked to the rulings; B15 and B16 ruled
-2026-10-02. 23a-1 merged (#136); 23a-2 implemented on branch
-`worktree-23a-2`; 23b onwards not implemented.** Written before `@tester`
+2026-10-02. 23a-1 merged (#136); 23a-2 merged (#138); 23b implemented (red
+`45045dc`, its open points settled under "Settled after 23b's red step
+(45045dc)"; green `3c464ec`, N18 in at `185081c`), 249 net production
+lines after the master merge (248 before it; the merged sum takes one
+more line), `@perf`'s acceptance recorded at `91c7cb5` and again at
+`4541e38` (ACCEPTED, `docs/benchmarks/2026-10-04/23b-merged-acceptance.md`);
+23c split in two:
+23c-1 (about 215 estimated, 156 built) in review, no `@perf` run needed,
+and 23c-2 (about 265) with its red step written on `worktree-23c`; 23d
+onwards not implemented.** Written before `@tester`
 per `docs/increments/README.md` step 1. The rulings are under "Ruled by Ola,
 2026-10-01", below; the questions are kept as asked at the end, each marked
 with its ruling. 23a-1 and 23a-2 are designed in full under "Windowed
@@ -788,8 +796,9 @@ The main session's reasoning, item by item.
      seam, and the bilinear surface along it is piecewise linear between
      them, so after the seam pass the tolerance holds at **every point** of
      the seam against the DEM's bilinear surface, not only at check points.
-  3. *Exact heights.* A seam vertex on a lattice line is a node, so its z is
-     the node's value in both pieces, bit for bit.
+  3. *Exact heights.* A seam vertex on a lattice line is nearly always a
+     node (a cell-side midpoint only at a rounding tie, N14), so its z is
+     the node's value; both pieces write the record's z in any case (step 5).
 - **Several pieces in one cell.** Where the domain enters a cell twice, the
   labelling gives two components and so two pieces.
 - **Piece ids.** `(j, i, k)`: cell row, cell column, and the component's
@@ -889,9 +898,11 @@ the thin triangles beside them) is repaired at stitching by B4's cleanup
      midpoint between each two neighbouring crossings, the edge's ends counting
      as neighbours (Q14 as ruled, with the ends as 15c proposed). z is
      bilinear at each; a check point with a NoData stencil is skipped and
-     counted. On a grid-line seam the crossings are the nodes and the
-     midpoints add nothing (the surface is linear between nodes), so the
-     check points are the nodes.
+     counted. On a grid-line seam the crossings are the nodes, and 15f's
+     generator adds the midpoints of the cell sides between them (`2c + 1`
+     check points); the surface is linear between nodes, so the greedy
+     inserts nodes, a midpoint only at a rounding tie (N14, "Settled after
+     23b's red step").
    - *Greedy, one-dimensional.* While some check point `p` has
      `|z_p − lerp(p)| > tolerance`, where `lerp` interpolates between the
      current vertices on either side of `p`, insert the worst one (ties to the
@@ -1671,13 +1682,15 @@ own arithmetic, so the oracle relation is the producer's
   comparable with every stored run.
 - **K2. Frozen means frozen.** In a piece, no pass inserts a vertex on a
   frozen edge: refine's split, feet, the quality pass, `refine_points` (phase
-  2 and the edge strip). Pinned by FE2-FE5; `split_edge`'s assertion is a
+  2 and the edge strip), and 15f's loop: strip points, `refine_strip`'s DEM
+  rescan and L12's on-edge insertion (N7, N16). Pinned by FE2-FE5; `split_edge`'s assertion is a
   debug guard against a later path, untested (FE6).
 - **K3. The guarantee over the union.** Every valid DEM node inside the
   domain is within `--tolerance`: inside a piece by refine, on a seam by the
   seam pass; on a grid-line seam at every point against the bilinear
   surface. On the reprojected path, every source node too, except those
-  exactly on a seam, which are counted (`on_frozen`) with their error. In
+  exactly on a seam, or within `r(g)` of one with a strip (N7), which are
+  counted (`on_frozen`) with their error. In
   the stitched file, after the cleanup, every valid node and (reprojected)
   every source node is within tolerance, seams included, by the band rescan
   and the hole recheck; the every-point property along former seams is not
@@ -1726,8 +1739,10 @@ own arithmetic, so the oracle relation is the producer's
 - **A piece with no DEM node** (a sliver between a partition line and the
   outline): refine has nothing to scan; the seam pass still runs on its seam
   edges, so its boundary still meets the tolerance there.
-- **A seam edge shorter than a cell** may have no check point; its two
-  vertices are its only heights, as any short constraint edge's are.
+- **A seam edge shorter than a cell** (no crossing) has one check point,
+  its midpoint, and none when the midpoint's cell touches NoData (N15); with
+  none, its two vertices are its only heights, as any short constraint
+  edge's are.
 - **NoData on a seam:** a check point whose stencil touches NoData is skipped
   and counted; a seam vertex without a height is invalid, and the triangles
   around it are carved by 14's rule in each piece.
@@ -1850,10 +1865,10 @@ stays under 700 at both; the largest, 23c, is 688 at +60 %.
 | | `scan.hpp`: nodes on a frozen edge skipped (only for triangles with one) | 30 | | |
 | | `refine.hpp`: `frozen_mask`, no feet on frozen edges | 15 | | |
 | | `quality.hpp`: skip on frozen, `skipped_frozen` | 10 | | |
-| | `refine_points.hpp`: skip on frozen, `on_frozen` | 15 | | |
-| | `seam.hpp`: `refine_seam` (one-dimensional greedy over `constraint_check_points`) | 100 | | |
-| | `bindings/core.cpp`, `_core.pyi` | 60 | | |
-| | **23b total** | **245** | **341** | **392** |
+| | `refine_points.hpp`, `strip_scan.hpp`: skip on frozen (N7's radius with a strip), `on_frozen` once per point (N6), a frozen strip edge refused (N16) | 30 | | |
+| | `seam.hpp`: `refine_seam` (one-dimensional greedy over `constraint_check_points`, N10's carving) | 115 | | |
+| | `bindings/core.cpp`, `_core.pyi` (N13's arrays; `refine_strip`'s `frozen_mask` if 15f-3 is in, N18) | 70 | | |
+| | **23b total** (after "Settled after 23b's red step") | **285** | **396** | **456** |
 | **23c** | **The partition, piece by piece** | | | |
 | | `decompose.py`: the partition rule, `b(T)`, the lines as chains, `BasinPlan` | 95 | | |
 | | `features.py`: the `seam` property | 5 | | |
@@ -2057,17 +2072,21 @@ No network: every URL is `http://127.0.0.1:<port>/...`, put in `SOURCES` by
   and this tree has no death-test harness; Release CI defines `NDEBUG`).
   K2 is pinned by FE2-FE5. A harness is not budgeted in 23b: it would be the
   tree's first, for one assertion that guards a path no caller takes.
-- **SP1, a grid-line seam**: the check points are the nodes on it; after
-  `refine_seam`, the error is within tolerance at every node, and at 1,000
+- **SP1, a grid-line seam**: the check points are the nodes on it and the
+  midpoints of the cell sides between them, `2c + 1` for `c` nodes (N14);
+  after `refine_seam`, the error is within tolerance at every node, and at 1,000
   points along the line against a bilinear surface computed in NumPy
   independently (the every-point property).
 - **SP2, a general seam**: an edge with rational endpoints; the oracle
   recomputes crossings, midpoints and bilinear heights in exact rationals
   (Python `fractions`) and checks every check point within tolerance
-  + 1e-9 of the output's piecewise-linear heights; tolerance 0 inserts every
-  check point with a nonzero error; ties go to the smallest parameter.
-- **SP3, sameness**: the edge given reversed, and the strip window shifted by
-  whole blocks, give the same output bit for bit.
+  + 1e-9 of the output's piecewise-linear heights; at tolerance 0 every
+  check point ends at error 0 (to the slack); ties go to the smallest
+  parameter.
+- **SP3, sameness**: the edge given reversed gives the same output bit for
+  bit; the strip window shifted by whole cells does too where the lattice
+  arithmetic is exact in both windows, and agrees to rounding elsewhere
+  (N17).
   In 23c, on the projected-mosaic path, a case where two pieces' windows
   select different tile sets around one seam: both pieces get the same seam
   points (read from the files, as DC2 does).
@@ -2124,7 +2143,8 @@ No network: every URL is `http://127.0.0.1:<port>/...`, put in `SOURCES` by
   without freezing differs (`@tester` picks a case with a seam node over
   tolerance).
 - **DC7, determinism**: `--threads` 1 and 4, pieces in reversed order:
-  identical piece files (`--jobs` is 23d's, PJ4).
+  identical piece files (`--jobs` is 23d's, PJ4; the reversed order
+  moved there, "Settled after 23c's red step" item 12).
 - **DC8, locality**: one piece re-run alone from its job spec writes the same
   bytes.
 - **DC9, geometry**: two pieces in one cell; a partition line through a
@@ -2145,8 +2165,9 @@ No network: every URL is `http://127.0.0.1:<port>/...`, put in `SOURCES` by
   rest, and the outputs are identical to a clean run's.
 - **PJ3, invalidation**: a changed tolerance changes every piece's hash; a
   changed `--pieces` changes the partition and so every hash.
-- **PJ4, determinism**: `--jobs` 1 and 3, `--threads` 1 and 4: identical
-  piece files and stitched file.
+- **PJ4, determinism**: `--jobs` 1 and 3, `--threads` 1 and 4, and pieces
+  in reversed order (moved from 23c's DC7, "Settled after 23c's red step"):
+  identical piece files and stitched file.
 
 ### 23f (C++ Catch2 and through the binding)
 
@@ -2264,6 +2285,631 @@ previous merge commit with `--tree`, back to back), evidence under
   tolerance**, i.e. memory no longer decides the tolerance. The independent
   final check over the union (on sampled pieces if a full check is too long;
   `@perf` says which and why). Then Ola chooses the tolerance.
+
+## Settled after 23b's red step (45045dc)
+
+Ruled by `@architect`, 2026-10-03, with Ola present. `@tester`'s red step
+for 23b pinned 13 choices the design left open (N1-N13) and found six places
+where the design was written before 15f-1 and 15f-2 landed and is now out of
+date (N14-N19). Each is confirmed or corrected here before `@developer`
+starts, so that no red-step choice reaches green unexamined. They are part of
+the design, and `@developer` implements them as written here. The pins are
+quoted from the headers of `tests/cpp/unit/test_mesh_frozen.cpp`,
+`tests/cpp/unit/test_refinement_scan_frozen.cpp`,
+`tests/cpp/property/prop_refinement_frozen.cpp`,
+`tests/cpp/property/prop_refinement_seam.cpp`,
+`tests/python/test_core_frozen.py` and `tests/python/test_core_seam.py` at
+`45045dc`.
+
+**Verdict in one line:** all 13 pins stand. N5, N6, N7 and N10 are confirmed
+with a precision the tests do not contradict; N16 adds one refusal that
+`@tester` must write red (a frozen strip edge); nothing in the committed
+suites has to change.
+
+### The 13 pins
+
+- **N1. The mask lives on the mesh. Confirmed.**
+  `LatticeMesh::set_frozen_mask(std::uint32_t) noexcept`,
+  `frozen_mask() const noexcept` (0 after `build`) and
+  `is_frozen(t, e) const noexcept`, true exactly when
+  `(mask(t, e) & frozen_mask()) != 0`. Holding it on the mesh is right: the
+  scan, the quality pass and `split_edge`'s assertion (FE6) all receive the
+  mesh already, so no signature changes and `improve`'s stays as it is.
+  `refine`, `refine_points` and `refine_strip` call `set_frozen_mask` once,
+  after `to_lattice` and before `legalise_all`.
+- **N2. `frozen_mask` is the last member of `RefineOptions` and
+  `PointRefineOptions`. Confirmed.** Last, so every existing aggregate and
+  designated initialiser compiles unchanged (K1). `refine_strip` takes
+  `PointRefineOptions`, so it reads the same member; nothing else is added
+  for it.
+- **N3. The scan and a node on a frozen edge. Confirmed.** A node exactly on
+  a frozen edge of the triangle (exact orientation, inside the closed
+  segment, not an end) is never the argmax, never the carve point of a void
+  triangle, and not counted in `uncovered`. Only triangles with a frozen edge
+  take that path (FS3 pins it). The carve point then is the nearest valid
+  node off the frozen edge; a void triangle whose only valid nodes lie on its
+  frozen edge carves nothing, and those nodes are the seam pass's (its
+  greedy measures them, and N10's carving covers them when a seam end has
+  no z). The "not in `uncovered`" half is what keeps refine's
+  stopping rule from waiting on nodes it may not insert.
+- **N4. `skipped_frozen` is summed into `quality_skipped`. Confirmed.**
+  `RefineOutcome::quality_skipped` already reads "every reason summed";
+  `QualityOutcome::skipped_frozen` is a new reason. A bad triangle whose
+  snapped node lies exactly on a frozen edge of the triangle the walk found
+  is counted there and nothing is inserted.
+- **N5. Feet and frozen edges. Confirmed, with the rule written out.** In
+  `detail::foot_of`, a frozen edge is skipped as an unconstrained one is
+  (`continue`), so it is never a foot's edge. If another, non-frozen
+  constrained edge of the triangle qualifies under 20b's own rule, its foot
+  is taken as today; otherwise there is no foot and the node goes in itself.
+  That is not a refused foot (none was computed), so `feet_refused` does not
+  count it. FE3's fixture has one candidate edge, so the pin and this rule
+  agree.
+- **N6. `on_frozen` and `on_frozen_max_error`. Confirmed, with three
+  precisions.**
+  - It counts **stored check points** (the source set of `refine_points`)
+    that lie on a frozen edge, each point once, whatever the number of
+    triangles that hold it and whatever the thread count. How it is counted
+    once is `@developer`'s choice: an end pass over the store, or the scan
+    counting only on frozen edges the triangle owns (15f D4's ownership
+    rule: lower to higher vertex index in this triangle, or no triangle
+    across), summed over each slot's last result as L4 does for `max_error`.
+  - The error is `|z − (z_a + σ (z_b − z_a))|`, with `σ` the projection
+    parameter of the point on the frozen edge in lattice `(col, row)` and
+    `z_a`, `z_b` the loop's vertex z of its two ends. Frozen edges are never
+    split, so the edge in the output is the edge in the start.
+  - A point on a frozen edge with an end that has no z is counted and adds
+    nothing to `on_frozen_max_error` (there is no linear z to compare with),
+    as `coincident_max_error` reads "valid vertices only". It is never a
+    carve point (N3's rule, in the point scan).
+- **N7. L12 next to a frozen edge: skipped and counted in `on_frozen`.
+  Confirmed (`[pinned]` case in `prop_refinement_frozen.cpp`).** With a
+  strip given, the point scan treats a point within the coincidence radius
+  `r(g)` (15f L16) of a frozen edge of its triangle, projection strictly
+  inside it, as N3 treats a point exactly on it: skipped, never named. This
+  is a test inside the read-only scan, like L14's corner test, so it needs no
+  marks and cannot make a triangle name the same point every round. A frozen
+  edge is therefore never an L12 candidate; there is no `split_inside`
+  fallback beside a frozen edge, which would leave the sliver F1 and L14
+  describe. The order inside the scan: L14's corner test first (the point
+  counts in `coincident`), then this frozen test (it counts in `on_frozen`,
+  with N6's error at its projection), then the scan as today. Without a
+  strip, the frozen test is exact (radius 0), as L12 and L14 are; K1 and
+  15c's path are unchanged.
+- **N8. `SeamPoint`, `SeamOutcome`, `refine_seam`. Confirmed.**
+  `refine_seam(dem, a, b, tolerance)` in
+  `include/terrain/refinement/seam.hpp`; `SeamPoint{Point2 at; double z;
+  double s;}`; `SeamOutcome{Point2 a, b; std::optional<double> z_a, z_b;
+  std::vector<SeamPoint> points; std::size_t check_points, no_data; double
+  max_error;}`, with `a < b` by `(x, y)` whichever order the caller gave.
+  An inserted point is output at `(x_min + col·dx, y_max − row·dy)` of its
+  lattice position with the check point's own z, as L6 outputs a strip point.
+  `z_a`, `z_b` are `vertex_z` at the ends' lattice positions, `nullopt` where
+  it refuses. The pass passes the generator the vertices `{a, b}` in that
+  order, so the generator's canonical `P0` (15f D2, step 2) is `a` and `s`
+  runs from `a`.
+- **N9. The check points are `constraint_check_points`' for the one edge.
+  Confirmed.** That is the reuse 23 designed ("What survives of 15c, the
+  edge strip and 15d"). `check_points` and `no_data` are the store's
+  `size()` and `no_data()`. The consequences on grid-line seams and short
+  seams are N14 and N15.
+- **N10. An end on NoData: carve along the edge. Confirmed (`[pinned]` case
+  in `prop_refinement_seam.cpp`).** A piece of the polyline with an end that
+  has no z has no lerp. While such a piece holds a check point, the one
+  nearest its invalid end (smallest `|s − s_end|`, ties to the smaller `s`)
+  is inserted. This is 15f D4's void-sub-edge rule, applied in one
+  dimension, and it is needed: refine may not carve on a frozen edge (N3),
+  so without it the seam's valid nodes next to a NoData end would be covered
+  by no one. Because NoData check points are already dropped, the inserted
+  point is valid, and each invalid end costs at most one insertion. The set
+  inserted does not depend on whether carving runs before or after the
+  greedy; `@developer` may do it first.
+- **N11. `max_error` leaves out void pieces. Confirmed.** After N10 a void
+  piece holds no check point, so there is nothing to leave out at the end;
+  the rule matters only for what the greedy compares while it runs.
+- **N12. Refusals: `std::invalid_argument` naming `refine_seam`.
+  Confirmed.** For a tolerance that is negative or not finite (the text also
+  contains "tolerance"), for `a == b` (exact equality of the world points),
+  and for an end outside the node rectangle (the text contains "outside").
+  `refine_seam` checks these itself before calling the generator, so the
+  message names `refine_seam` rather than `constraint_check_points`. It
+  throws where `refine` returns a status because it is a pure function with
+  no outcome status, as the generator is; pybind11 turns
+  `std::invalid_argument` into `ValueError`.
+- **N13. The Python surface. Confirmed.**
+  `_core.refine_seam(view, a, b, *, tolerance) -> SeamOutcome`; `.a`, `.b`
+  tuples; `.z_a`, `.z_b` float or `None`; `.points` `(K, 2)`, `.z` and `.s`
+  `(K,)`, all float64 and read-only; `.check_points`, `.no_data`,
+  `.max_error`. `frozen_mask=0` as a keyword on `refine` and
+  `refine_points`; a negative mask is `TypeError` (pybind11's own refusal of
+  a negative for an unsigned parameter, nothing written for it);
+  `PointRefineOutcome.on_frozen` and `.on_frozen_max_error`; stubs in
+  `_core.pyi`. Added here: `refine_seam` releases the GIL, as every refine
+  binding does, because 23d runs pieces on threads (`asyncio.to_thread`)
+  and each runs its seam passes.
+
+### What 15f changed in 23b's design
+
+- **N14. A grid-line seam gets `2c + 1` check points, not the nodes
+  alone.** The generator adds the midpoint between each two neighbouring
+  crossings, ends included; on a grid line those are the midpoints of cell
+  sides. **Accepted as is**: filtering them would be a second code path for
+  no gain. Along a grid line both the bilinear surface and the polyline are
+  linear between nodes, so a midpoint's error is the mean of its two
+  neighbours' errors. It is never strictly the worst, and on a tie the node
+  before it wins (smaller `s`). So the greedy inserts nodes only, apart from
+  a tie broken the other way by rounding, in which case the midpoint goes in
+  at its exact half-integer position with `vertex_z`'s z. The every-point
+  property (SP1) holds either way. "Exact heights" under "Why lattice lines"
+  now reads "nearly always a node"; K4 does not depend on it, since both
+  pieces write the record's z (step 5).
+- **N15. A seam edge shorter than a cell.** With no crossing it has exactly
+  one check point, its midpoint, and none if the cell holding the midpoint
+  touches NoData (`vertex_z`'s rule). The degeneracy policy's "may have no
+  check point" is reworded to say so (SP5 pins both).
+- **N16. The paths onto a seam, after 15f-2.** K2's list was written before
+  `refine_strip` existed. The paths now are refine's split, feet, the
+  quality pass, `refine_points`' source points, and in 15f's loop the strip
+  points, the DEM rescan of `refine_strip`, and L12's on-edge insertion.
+  Each is closed:
+  - the DEM rescan calls refine's own `scan`, which reads the mesh's mask
+    (N1, N3);
+  - L12 never takes a frozen edge (N7);
+  - strip points: the caller builds the strip on non-frozen edges only, and
+    **a strip edge that is frozen is refused**, like L2's other programming
+    errors: `std::logic_error`, text starting with the entry point's name
+    (`"refine_strip: ..."`, `"refine_points: ..."`), checked after L2's
+    check (3) ("not a constraint edge of the start") and before (4).
+    Refusing rather than skipping keeps a wrong caller loud; skipping would
+    hide a strip that silently checks less than its caller thinks.
+  - consumption (15f D4, step 4) acts on strip sub-edges only, and a frozen
+    edge has none.
+
+  **`@tester` adds, red:** one case each for `refine_strip` and
+  `refine_points(..., strip)`: a strip built over every constraint edge,
+  the frozen one included, run with that edge's mask in `frozen_mask`, is
+  `std::logic_error` whose text starts with the entry point's name; the same
+  strip with `frozen_mask = 0` runs (the control). This is the only change
+  to the suites this section asks for.
+- **N17. SP3, reworded.** Lattice coordinates are measured from the corner
+  of the raster C++ is handed (15f L16), so a crossing computed in the strip
+  window and the same crossing computed in a window shifted by whole cells
+  can differ in the last bits. The claim is therefore: **the edge reversed
+  gives the same output bit for bit; a shifted window gives the same output
+  bit for bit where the lattice arithmetic is exact in both windows** (ends
+  on nodes, or crossings that are exact binary fractions in both frames),
+  and otherwise agrees to rounding. `@tester`'s SP3 case already chooses
+  ends that are exact in both frames and says why, so the test stands. What
+  the design relies on is not a shifted window but the same window: the
+  strip is a function of the edge alone (step 2), so both pieces call
+  `refine_seam` on the same raster and get the same bits. On 23c's
+  lattice-line seams the arithmetic is exact anyway (N19 below).
+
+  One consequence for 23c, written here so it is not rediscovered there: a
+  vertex at the end of two or more seam edges (an outline crossing, a
+  feature crossing, a cell corner) gets a `z_a`/`z_b` from each edge's
+  record, computed in different strip windows. Off a node these can differ
+  in the last bits. **23c's rule: such a vertex takes its z from the record
+  of the seam edge with the lowest index in the start triangulation's edge
+  list**, a function of the input, the same in every piece, so K4 holds at
+  corners too.
+- **N18. If 15f-3 lands first.** 15f-3 binds `refine_strip` and
+  `refine_points(..., strip)`. Whichever of 15f-3 and 23b lands second adds
+  `frozen_mask=0` as a keyword to the `refine_strip` binding and its stub,
+  with one binding test (a frozen outline is not split; a negative mask is
+  `TypeError`), mirroring `test_core_frozen.py`. 15f-3's
+  `edge_strip.generate` takes the edges as given; leaving frozen edges out
+  of the strip is the caller's job, and the only caller with a nonzero mask
+  is 23c, so the filter (`edges[(masks & frozen) == 0]` in NumPy) is 23c's
+  line, not 15f-3's. With 23b's refusal (N16) a missing filter fails loudly.
+
+  **Settled after N18's red step (e26802e).** `@tester`'s four choices:
+  1. *Order:* confirmed. `frozen_mask` is the last keyword, after
+     `threads`, as on `refine_points`; the binding and the stub follow the
+     kw-only pin in `test_core_edge_strip.py`.
+  2. *The frozen test:* confirmed, with one amendment. The strip is built on
+     non-frozen edges (the caller's job, N18) and the refusal case shows the
+     mask reaches the N16 check. That does not show the mask reaches the DEM
+     rescan's skip (N1, N3): if the filtered strip with `frozen_mask=0`
+     leaves the west side unsplit anyway, the "not split" assertion passes
+     with the mask ignored by the rescan. So it must be measured: `@tester`
+     runs the filtered strip with `frozen_mask=0` and records how many
+     vertices land on the west side. If more than zero, that becomes a
+     second control in `test_a_frozen_side_is_not_split`, asserted `> 0`. If
+     zero, the scene cannot see the rescan's skip; the test's docstring says
+     so, and that skip stays pinned by refine's own frozen tests (`scan`
+     is shared, N16), not by a new scene here.
+  3. *The refusal case:* confirmed. `std::logic_error` reaches Python as
+     `RuntimeError` (as L2's other refusals in `test_core_edge_strip.py`),
+     and `^refine_strip: ` is N16's text rule. The control N16 asks for (the
+     same full strip with `frozen_mask=0` runs) is
+     `test_frozen_mask_0_is_todays_result`.
+  4. *Location:* confirmed. `test_core_frozen.py`, beside the other two
+     entry points' `frozen_mask` classes.
+- **N19. `on_frozen` for `refine_strip`'s DEM nodes: not counted.**
+  `on_frozen` counts stored check points only (N6), so it is 0 in
+  `refine_strip`, whose stored set is empty. The reasons:
+  - a DEM node exactly on a frozen edge is a seam check point (the
+    generator snaps node crossings exactly, 15f D2 step 4), so the seam
+    pass's guarantee (K3) covers it, and refine does not count it either;
+  - L3 limits the DEM rescan to triangles the run has written, so a count
+    of DEM nodes near frozen edges would depend on which triangles were
+    written, and would not mean anything.
+
+  **The limit this leaves, stated.** On a seam that is not a lattice line
+  (a "general seam"), the seam pass's points between two crossings are a
+  hair off the original line, so a DEM node that lies exactly on the
+  original line but was not inserted can be a hair off the fan sub-edge
+  that now holds it. With a strip given, N7's radius skips it, uncounted;
+  in refine (no strip, radius 0) it is scanned as an inside node, its error
+  is the seam pass's to rounding, and only at a rounding tie with the
+  tolerance would it be inserted, a hair from a frozen edge, which K2's
+  oracle would report. On a lattice-line seam this cannot happen: the seam
+  lies on a column `K` or row `R` that is exact in every window
+  (`x = K·h` in whole metres when `h` is, 23c's DC9), every crossing is a
+  node, and orientation is exact. **23c makes lattice-line seams only**
+  (natural cuts dropped with B1), so 23b's guarantees are exact on every
+  seam the run makes. A future general seam (23e, or a cut along an input
+  line) reopens this, and the fix then is N7's radius in refine's scan too,
+  counted.
+
+### `@tester`'s throwaway implementation
+
+`@tester` built a throwaway implementation in scratch, not committed, to
+check that the suites can pass. Against the rules:
+
+- **Allowed, narrowly.** The lean-brief rule (no throwaway, no mutation
+  round by default) has one exception: a suite the increment file marks
+  invariant-critical. 23b's FE2-FE5 and SP1-SP2 are so marked ("Tests
+  `@tester` can write red"). So a throwaway is not outside the rule.
+- **But it was used for a different purpose.** The exception is for
+  mutation testing, which these suites' own headers place at green
+  ("mutation runs at green"). A throwaway built at red to check
+  feasibility is not that; it is the cost the rule was written to avoid,
+  and its choices can leak into the pins. Here they did not do harm: every
+  pin is confirmed above on its own grounds, not on "the throwaway passed".
+- **It is not a hand-off.** Scratch is not a channel
+  (`.claude/REQUIRED-READING.md`, "Data, scratch and temp folders").
+  `@developer` writes 23b from this file and the suites, does not read the
+  throwaway, and the main session does not name its path in a brief. Next
+  time, the brief should say whether a throwaway is wanted.
+
+### LOC effect
+
+N7 (the frozen test with the radius in the point scan), N10 (carving), N16
+(one refusal) and N13's arrays add about 40 lines. The 23b rows of "PR split
+and LOC" are updated: about **285**, 396 at +39 % and 456 at +60 %, under
+700 at both.
+
+### As built (23b green)
+
+Green is `3c464ec`. `@tester`'s `f00a7b1` closed the two gaps the mutation
+pass found and amended 15c's stub test, which pinned `refine_points`'
+keyword-only arguments without `frozen_mask` (N13). LOC in `CLAUDE.md` §2's
+unit: 258 added and 22 removed, 236 net, against about 285. Choices the
+rulings left to `@developer`, and other changes outside the PR table:
+
+- **`on_frozen` once per point (N6), by ownership in the scan.** No end pass
+  over the store. A stored point exactly on a frozen edge is counted by the
+  triangle that owns the edge (15f D4: lower to higher vertex index in this
+  triangle, or no triangle across). A point only within `r(g)` of the edge
+  (N7) lies in one triangle, which counts it. Both are summed over each
+  slot's last result, as `max_error` is. `PointScan::offer` keeps the count
+  when a strip or DEM candidate replaces the scan's winner.
+  **A rounding-scale double count, accepted as a report.** A point counted
+  for being within `r(g)` of a frozen edge, not on it, is counted by every
+  triangle that holds it (closed membership). A point lying exactly on an
+  interior edge from a frozen edge's end vertex `v`, at an angle `θ` to that
+  frozen edge, is in both triangles beside the interior edge. If each of the
+  two has a frozen edge at `v` whose projection test it passes, the point is
+  counted twice. That needs a bend in the frozen chain at `v` (two
+  collinear frozen edges cannot both hold the projection strictly inside)
+  and a distance from `v` between `r(g)` (below it, L14's corner test skips
+  the point) and `r(g)/sin θ`. Bends occur at every seam-pass point of a
+  seam that is not a lattice line, whose sub-edges are a hair off
+  collinear; on lattice-line seams only at seam corners, where the window
+  is at most `r(g)` to `r(g)·√2`. `on_frozen` is a report, not an invariant, in the
+  same class as `coincident`'s rounding-scale double counts
+  (`refine_points.hpp`, the comment above the coincident pass). If only one
+  of the two triangles has the frozen edge, the other may name the point and
+  split the interior edge there, putting a vertex within `r(g)` of the
+  frozen edge, which K2's oracle would report. That also needs exact
+  incidence with the interior edge at that distance, so it is rounding-scale
+  and is not fixed in 23b; it is the same gap N19 states for general seams.
+- **N16 is a second loop.** The frozen-strip-edge refusal runs after L2's
+  check (3) has passed for every strip edge, not inside the same loop, so
+  a strip that also holds a non-constraint edge is refused for that first,
+  as N16 orders.
+- **The seam greedy keeps each piece's worst point in a priority queue.** It
+  inserts the same set as the naive greedy, since pieces are independent, and
+  ties go to the smallest `s` inside a piece. Cost is O(n log n · depth), not
+  O(n²).
+- **L12's guard is kept though the scans make it unreachable.** Both scans
+  skip a point within `r(g)` of a frozen edge, by the same distance and
+  projection `near_constraint` computes. But the two copies of that
+  expression may be FP-contracted differently, so `near_constraint` also
+  excludes frozen edges.
+- **CI:** `prop_refinement_frozen` and `prop_refinement_seam` join the TSan
+  job in `.github/workflows/main.yaml`.
+- **Citations:** three line citations in `15f-edge-strip.md` (:61, :84,
+  :355) moved to where `scan_points`, `scan` and `vertex_z` now are.
+- **K1:** a scratch program hashes `refine`, `refine_points` (with and without
+  a strip) and `refine_strip` over 756 seeded runs. It gives the same hash
+  with master's headers and with 23b's when `frozen_mask` is not named or is
+  0, both with the default FP contraction and with `-ffp-contract=off`. A
+  planted change to the scan changes the hash.
+
+**Mutation runs** (FE2-FE5, SP1, SP2; Release build, one mutant at a time,
+the source restored and touched after each). `@developer`'s 27 ran against
+`3c464ec`'s suites, and `@tester`'s list against `f00a7b1`'s. Where
+`@tester`'s mutant was the same as one of the 27, it is not run twice.
+The suites that kill a mutant are `test_mesh_frozen` (mesh),
+`test_refinement_scan_frozen` (scan), `prop_refinement_frozen` (frozen) and
+`prop_refinement_seam` (seam).
+
+| `@developer`'s mutant | verdict |
+|---|---|
+| M1 the scan never skips a frozen node | killed (scan, frozen) |
+| M2 the frozen skip only in the all-node path | killed (scan, frozen) |
+| M3 the frozen skip only off the all-node path | killed (scan, frozen) |
+| M4 `frozen_edge_at` does not exclude the edge's ends | survived; equivalent: `for_each_row_span` excludes the triangle's vertices (`include/terrain/mesh/row_spans.hpp`), so the scan never visits a corner, and the point scan's corner test returns before `frozen_edge_at` is called. ("A vertex has error 0" was the first reason given; it is not exact at ulp level, so it is not the reason.) |
+| M5 the radius ignored (N7) | killed (frozen) |
+| M6 `is_frozen` true for any masked edge once a mask is set | killed (mesh, scan, frozen) |
+| M7 `refine` does not set the mask | killed (frozen) |
+| M8 `point_loop` does not set the mask | killed (frozen) |
+| M9 feet taken on frozen edges | killed (frozen) |
+| M10 the quality pass splits frozen edges | killed (mesh, frozen) |
+| M11 `skipped_frozen` not summed into `quality_skipped` | killed (frozen) |
+| M12 L12 may take a frozen edge | survived; unreachable while the two distance expressions agree (above) |
+| M13 `scan_points` has no frozen test | killed (frozen) |
+| M14 `on_frozen` counted in both triangles | killed (frozen) |
+| M15 the error measured from the wrong end | killed (frozen) |
+| M16 a frozen strip edge not refused | killed (frozen) |
+| M17 `on_frozen` not summed over slots | killed (frozen) |
+| M18 `offer` drops the frozen count | survived at `3c464ec`; killed (frozen) after `f00a7b1` |
+| S1 ties between pieces to the largest `s` | survived; equivalent (pieces are independent) |
+| S2 inserts at `error >= tolerance` | survived at `3c464ec`, C++ and Python; killed (seam) after `f00a7b1` |
+| S3 no carving from the end `b` | killed (seam) |
+| S4 lerp by index, not by `s` | killed (seam) |
+| S5 ends not ordered | killed (seam) |
+| S6 `max_error` reported as 0 | killed (seam) |
+| S7 the right piece not re-offered after a split | killed (seam) |
+| S8 output x scaled by `dy` | killed (seam) |
+| S9 ties inside a piece to the largest `s` | killed (seam) |
+
+| `@tester`'s mutant | verdict |
+|---|---|
+| M3 the void branch drops the frozen skip | ran: killed (scan, frozen) |
+| M4 skipped nodes still counted in `uncovered` | ran: killed (scan, frozen) |
+| M5 the scans skip nodes on every constrained edge | ran (both scans, since `frozen_edge_at` is shared): killed (scan, frozen) |
+| M6 `is_frozen` returns `is_constrained` | ran: killed (mesh, scan, frozen) |
+| M9 `foot_of` refuses the whole triangle when any edge is frozen | survived at `f00a7b1`; killed (frozen) after `c7c225f`. Not equivalent: N5 takes a foot on another qualifying constrained edge, and FE3's first fixture has one candidate edge. `c7c225f` adds an FE3 case with a frozen side and the needle on a second, unfrozen constrained side: the foot must land there; with M9 planted all four of its generator runs fail and no other case does (confirmed by `@tester` and `@reviewer`) |
+| M14 `on_frozen` once per triangle, so each point twice | covered by `@developer`'s M14: killed |
+| M15 the frozen error measured against 0 | ran: killed (frozen) |
+| M17 L12 puts a point onto a frozen edge | covered by `@developer`'s M12: survived, unreachable (above) |
+| M18 a frozen mask of 0 freezes everything (K1) | ran: killed (mesh, scan, frozen) |
+| S3 interpolation between the two ends only | ran: killed (seam) |
+| S4 nodes only, no midpoints | ran: killed (seam) |
+| S6 ends ordered as given | covered by `@developer`'s S5: killed |
+| S7 no carving from either end | ran (both ends; `@developer`'s S3 removed one): killed (seam) |
+| S8 inserted points output with the wrong origin | ran (`x_min` dropped): killed (seam) |
+
+## Settled after 23c's red step (65e3990)
+
+Ruled by `@architect`, 2026-10-04, unattended (Ola asleep). `@tester`'s red
+step for 23c (`aacf37c..65e3990`) pinned 15 choices the design left open and
+asked three questions. Each is confirmed or corrected here before
+`@developer` starts; `@developer` implements them as written here. The pins
+are quoted from the headers of `tests/python/test_decompose_partition.py`,
+`test_core_mesh_arrays.py`, `test_mesh_index_conformity.py`,
+`pieces_fixtures.py` and `test_cli_mesh_pieces*.py` at `65e3990`.
+
+**Verdict in one line:** all 15 pins stand, three with a precision (2, 8,
+14); `@tester` writes four more red tests (2, 8, 14 and question B); one
+question goes to Ola (B17, the budget's unit), with a default that needs no
+test change; 23c is split into two PRs.
+
+### The 15 pins
+
+1. **`_core.indexed_mesh(vertices, triangles, constrained_edges)`.
+   Confirmed.** Copies, `ValueError` on a bad shape, index, mask or
+   coordinate, no orientation check (refine's `NotCounterClockwise` is the
+   check the degeneracy policy names). Edge-property masks stay out of it:
+   `refine` already takes `edges` and `masks` beside the mesh, so the seam
+   bit reaches the core the way every feature bit does. The binding was
+   missing from the PR table; it is a row now (below, about 30 lines).
+2. **Pieces in `<out>.pieces/`. Confirmed, with three precisions.**
+   - The directory is `--out`'s full name plus `.pieces` (`x.vtk` gives
+     `x.vtk.pieces/`), so a `.vtk` and a `.ply` run of one name do not share
+     it. Piece files are `<j>-<i>-<k>.<ext>`; the index's `file` is relative
+     to the directory, as pinned.
+   - **23c writes nothing at `--out` in a cut run** (the stitcher is 23d's),
+     and says on stderr where the pieces are. `@tester` asserts it; 23d's
+     PJ1 inverts it.
+   - **A rerun over an existing directory deletes its `index.json` first and
+     writes the new one last** (to a temporary name, then renamed). Without
+     this, a rerun that fails part-way leaves the previous run's index
+     beside piece files it has overwritten: a valid-looking index of a mesh
+     that never existed. Piece files not listed in the index are not the
+     run's; 23c deletes nothing else. `@tester` adds one red test: a cut run,
+     then a rerun that fails (a truncated DEM, as in the input suite), leaves
+     no `index.json`.
+3. **Index keys. Confirmed**, and three more fields the design's "Output"
+   names, which the pinned tests do not forbid: `source` (the run's
+   `elevation_source` sentence, identity and credit), `vocabulary` (the
+   piece files' fingerprint, item 4) and per piece `window` (`row0`, `col0`,
+   `rows`, `cols` on the lattice). No test change.
+4. **`seam` named in the piece files' vocabulary. Confirmed; the bit is 9.**
+   See question A.
+5. **`MeshIndex` frozen, `extra="forbid"`. Confirmed.** An index is read by
+   other programs (23d's stitcher, a consumer); an unknown key is drift, not
+   data.
+6. **`SeamRecord`, `check_conformity`, `ConformityError`. Confirmed**, NaN
+   equal to NaN and 0.0 unequal to -0.0 included (bit for bit means bytes).
+   One record passes: a seam edge on the outline has one piece (degeneracy
+   policy). The runner knows from the start triangulation how many triangles
+   each seam edge has (one or two) and asserts that many records exist
+   before calling the check; that is internal and needs no test.
+7. **`--memory-budget` in whole bytes, default 2^34; refusals. Confirmed for
+   23c**, pending B17. `partition()`'s two `ValueError`s stand: below one
+   node's bytes step 3 cannot end.
+8. **`--pieces` and `--memory-budget` need `--dem` and `--tolerance`.
+   Confirmed. Cutting needs `--domain`: both options without `--domain` are
+   a usage error ("needs --domain").** Without a domain the start mesh is
+   the stride grid, not a PSLG through `build_pslg`, `node` and
+   `triangulate`, so there is nothing for the cuts to enter; cutting it
+   would be a second start path. A run without `--domain` (or with `--bbox`)
+   is never cut, keeps today's bytes (K1), and the budget does not apply
+   to it. `@tester` adds one red test: `--pieces 4` without `--domain` is
+   exit 2 naming `--domain`, with no file written.
+9. **K1 on the uncut path, no partition field. Confirmed.** The budget and
+   `b(T)` are recorded in the index, and only a cut run has one; K5's
+   "recorded in the file" reads as "in the index". A run is cut when the
+   partition has more than one cell (`nx · ny > 1`), not when the labelling
+   finds more than one piece: a domain inside one cell of a multi-cell
+   partition writes a pieces directory with one piece.
+10. **DC8 as locality under a DEM change in another cell. Confirmed.** It
+    tests K6 through what a job may depend on, which is the property. It
+    also pins that a piece file's fields are the piece's own (its counts,
+    its sentence), never the whole run's.
+11. **`counts.on_frozen` per index entry. Confirmed.** `counts` also holds
+    the piece's `triangles` and `vertices`.
+12. **DC7 with threads forced through a wrapper; the reversed-order half not
+    written. Confirmed.** 23c runs pieces in one fixed order and offers no
+    hook; the order becomes a parameter with 23d's runner (largest first),
+    so the reversed-order half moves to 23d's PJ4.
+13. **DC6 on an asymmetric octagon on nodes, the start taken by a spy on
+    `triangulate`. Confirmed.** The octagon keeps every crossing on a node,
+    which is what the equality needs; the spy makes the oracle's start the
+    run's own, so no CDT tie can separate them.
+14. **DC9's lake as a hole in the domain. Confirmed, and not enough.** The
+    hole is worth keeping (the partition must not lose a ring). But a lake
+    as a water polygon (`--features`) is the case the basin is made of: a
+    seam crossing a constraint ring, where the crossing is an off-node
+    corner, the only seam vertices whose z comes from a bilinear evaluation
+    rather than a node (seam protocol step 5). `@tester` adds the water
+    variant: a partition line through a water ring given by `--features`,
+    the ring not dividing pieces, the crossings vertices of both pieces,
+    conformity and both oracles over the union.
+15. **Area to 1e-6 for moved domains. Confirmed**, on the measured 4e-7 of
+    the uncut mesh.
+
+### The three questions
+
+**A. Where `seam` lives. A piece-file vocabulary, not `DEFAULT_VOCABULARY`.**
+`features.py` gains `PIECE_VOCABULARY`: `DEFAULT_VOCABULARY`'s properties
+plus `seam` at bit 9, the lowest bit the default leaves free. Cut runs write
+their piece files (and later 23d's stitched-with-seams file) with it; the
+uncut path keeps `DEFAULT_VOCABULARY`, so K1's bytes, every fingerprint and
+`test_features.py` stay as they are. Two more reasons: `feature_input`
+builds its classes from `DEFAULT_VOCABULARY`, so a seam there would let a
+user tag their own lines as seams; and after 23g's cleanup no `seam` bit is
+left in the stitched file (K11), which can go back to the default. The
+index records the piece vocabulary's fingerprint (item 3). No test change:
+the suites read the bit by name.
+
+**B. A piece whose triangles all fall over NoData. Keep it in the index,
+write no file.** Its entry has `"file": null`, `sha256` null, zero
+triangles and vertices, and its seam records still go to the conformity
+check (the seam pass ran on its edges). Refusing would make a cut run fail
+where the same run uncut succeeds; writing a zero-triangle file asks every
+reader to handle one; dropping the entry hides that the piece was there.
+The run is refused, as uncut ("no data under any triangle; nothing to
+write"), only when every piece is empty, and then no index is written.
+`@tester` adds two red tests: a cut where one cell is all NoData (exit 0,
+that entry as above, the other files present and passing the oracles), and a
+cut of an all-NoData DEM (exit 2, no `index.json`). Under NoData a seam edge
+can lose its triangle on one side and not the other, so the edges suite's
+"exactly two files" holds only where both sides keep theirs; its scene
+avoids the case, and no change is asked.
+
+**C. Two claims that cannot run before green.**
+- *DC4's control* (violations once seams stop counting as constraints). It
+  is evidence that the oracle can fail, and that the frozen seam costs
+  Delaunay quality across it, which is what 23g removes. If at green the
+  scene shows none, the test is not wrong and the product is not wrong:
+  `@tester` makes the control a planted one (one interior edge of the union
+  flipped, which the oracle must catch), and "As built" records that the
+  scene's seams cost nothing. A scene that can show the cost is a 23g
+  concern (its comparison of cut against uncut), not 23c's.
+- *DC6's equality.* If it fails at green, `@developer` reduces it to the
+  smallest case and names the first differing triangle. If the cause is in
+  23c's code (slice order, renumbering, fan order, window origin), it is a
+  bug and gets fixed. If the cause is in refine itself (a decision that
+  depends on a triangle's index or on the window's origin rather than on
+  the triangle), 23c does not change refine: DC6 is reduced to what the
+  design needs (DC2-DC5 on the same scene, which K3 and K4 rest on), "As
+  built" records the cause, and "The union argument, checked" item 1's
+  "sidesteps the difference" is corrected. It then goes to Ola as a
+  question, because "a cut run is one refine, restricted" is a claim a
+  publication would make.
+
+### PR split and LOC
+
+The rulings add about 50 lines: the binding (~30, `bindings/core.cpp` and
+`_core.pyi`), `PIECE_VOCABULARY` (~5), the index's write order and the empty
+piece (~10), the `--domain` refusal (~5). That is about **480**: 667 at
++39 % and 768 at +60 %, over the ceiling at the second. **23c is split in
+two stacked PRs** along the red step's own files:
+
+| PR | what | est. | +39 % | +60 % |
+|---|---|---:|---:|---:|
+| **23c-1** | `decompose.py` (rule, `b(T)`), `features.py`'s `PIECE_VOCABULARY`, `io/mesh_index.py` (model, records, conformity), `_core.indexed_mesh` | 215 | 299 | 344 |
+| | tests: `test_decompose_partition.py`, `test_core_mesh_arrays.py`, `test_mesh_index_conformity.py` | | | |
+| **23c-2** | `decompose.py` (lines as chains, `BasinPlan`), `pieces.py`, `basin_run.py`, the index writer, `cli.py`, the refusals at half of physical memory deleted | 265 | 368 | 424 |
+| | tests: `pieces_fixtures.py`, `test_cli_mesh_pieces*.py`, DC11 in `test_mosaic.py`, `test_dem_input.py`, `test_catchment.py` | | | |
+
+DC11 goes with 23c-2, so the memory refusals are deleted in the same PR that
+brings the cut: between the two merges a run over half of the machine's
+memory is still refused rather than running uncut out of memory. The red
+step's commits split along the same line (`edd8a29`, `d994a0e`, `db6a5c0`
+to 23c-1; the rest to 23c-2); how the branches are rebuilt is the main
+session's.
+
+### Three points from 23c-1's green (3ffae13)
+
+Raised by `@developer`; ruled by `@architect`, 2026-10-04.
+
+1. **"The lattice" in the partition record: named, in 23c-2.** The index
+   must say where the partition lines are, or a consumer cannot place a
+   seam. Four fields join `PartitionRecord`: `row0` and `col0` (the
+   window's first node `(R0, K0)` on the lattice, integers, possibly
+   negative), `spacing` (`h`, metres) and `origin` (`[x, y]`, the world
+   position of lattice node `(0, 0)` in the index's `crs`). Line `i` is then
+   at `x = origin_x + (col0 + i·dx)·h`, line `j` at
+   `y = origin_y − (row0 + j·dy)·h`. They belong to 23c-2, because
+   `decompose.partition` sees only `cols` and `rows` and the run is what
+   knows the lattice; until then no index is written, so adding fields to a
+   model that forbids unknown keys breaks nothing. `@tester` (23c-2): a cut
+   run's seam lines, read from the piece files, are exactly the lines those
+   four fields and `dx`, `dy` give. `@developer` (23c-2): the four fields.
+2. **Field types: confirmed, with two changes, both in 23c-1.** `source` and
+   `vocabulary` plain strings, `window` as `io.models.IndexWindow` with
+   negative `row0`/`col0` allowed, `counts` `{triangles, vertices,
+   on_frozen}`: confirmed. Changed: **piece ids are strict integers,
+   non-negative** (`["1", "2", "3"]` is refused: an id written as text is
+   drift, and lax mode would let it through), and **`file` and `sha256` are
+   null together or set together** (a model validator). `@tester` (23c-1)
+   adds the two refusals to the schema-drift cases; `@developer` (23c-1)
+   the strict type and the validator.
+3. **The partition loop: bounded, no change.** The loop runs only while
+   `dx · dy · b > B`, and `partition` refuses `B < b`, so inside it
+   `dx · dy > 1`. When it grows `nx`, `dx ≥ dy`, so `dx > 1`, so
+   `nx < cols` before the step and `nx ≤ cols` after; the same for `ny`
+   and `rows`. At `nx = cols`, `ny = rows` the cells are one node and the
+   condition fails. So it ends within `cols + rows − 2` steps, each O(1):
+   about 90,000 for the basin's window at 1 m. `@developer` puts this
+   argument in a comment above the loop; nothing for `@tester` (DC0's
+   random draws already reach it).
+4. **`partition` refuses an empty window: yes** (`@reviewer`'s suggestion,
+   23c-1 round 1). `cols < 1` or `rows < 1` is a `ValueError`, as
+   `pieces < 1` and a budget under one node are. The run never passes one
+   (the window is the domain's box grown by a cell diagonal, so at least
+   2 × 2 nodes), but today `rows == 0` fails as a `ZeroDivisionError` in
+   step 2, which says nothing about the cause. `@tester` (23c-1) adds the
+   two cases to DC0's refusals; `@developer` the check.
+
+**B17 for Ola** is under "New questions, after the rulings".
 
 ## Questions for Ola
 
@@ -2485,6 +3131,17 @@ here (23a-2)" 8), which travels with the cache, not with a mesh.
 **Ruled by Ola, 2026-10-02: (a), the mesh file carries them** ("B16 a"; 23a-2
 implements it). Ola also gave the go-ahead to implement 23a-2.
 
+**B17. How `--memory-budget` is written on the command line.** Asked
+2026-10-04 (23c's red step). The design says "16 GB, read as 16 GiB"; the
+tests take the option as a whole number of bytes, so 16 GiB is typed
+`17179869184`.
+- **(a) Whole bytes only.** Recommended for 23c, and the default if not
+  ruled: no parser, no unit to argue about, and the index records the
+  number exactly.
+- (b) Also a size with a unit, `16G` or `16GiB`, read as powers of 1024
+  (about 10 lines in `cli.py`, and one more red test). The index still
+  records bytes. Can follow 23c without changing anything it writes.
+
 **Decided here, which Ola may overrule:** lattice lines on the computation
 lattice as artificial cuts; the partition rule's integer details (near-square
 cells, the last row and column narrower); `b(T)` from the Velhas piece's
@@ -2594,3 +3251,25 @@ LOC was 598 added and 6 removed, 592 net, against an estimate of 373. That is +6
 - **Progress count:** now updated under a lock.
 - **Prose:** the B15 text is correct in the Status paragraph, lines ~803, ~1017, ~1618 and ~2250, the LOC row, DC11 and ROADMAP row 23. The departures are recorded and match the code.
 - **Checks:** pytest 3491 passed, 16 skipped in the reviewer's venv (without vtk); ruff, ruff format, mypy and check_citations clean. About 604 production lines, under 700. CI not yet run.
+
+**23b, code review, round 1, 2026-10-03.** Range `595c56a..c7c225f` (red 45045dc, rulings 053e9a2, red 829489c, green 3c464ec, tests f00a7b1, as-built 54578ae, test c7c225f). Verdict: CHANGES REQUESTED. LOC: 235 net (259 added, 24 removed), against about 285. Code correct; K1 holds on the code paths and FE1's digests; M4 and S1 equivalent (M4's reason: row spans exclude vertices), M12/M17 unreachable; the priority-queue greedy matched a naive greedy on 4,000 random cases; N7, N16 and N10 as ruled; bindings fine; TSan entries present. Blocking: (1) `15f-edge-strip.md:562` cites `bindings/core.cpp:1045` (1057 in the merged tree); (2) the as-built M9 row still says survived (killed after c7c225f); (3) red-step prose in six test headers and the SP1 bullet (2c + 1 check points under N14; N7's on_frozen within r(g) with a strip). Also: merge master (conflict in `tests/cpp/CMakeLists.txt`, keep both; the merged tree passes 954/954) and ROADMAP's 23b row. Not pushed; no CI.
+
+**23b, code review, round 2, 2026-10-03.** Range `c7c225f..e5a6c83` (merge 76de1ea, tests 3882c39, docs e5a6c83); whole PR `b4bcdc3..e5a6c83`. Verdict: APPROVED. LOC: 235 net (259 added, 24 removed), unchanged. All round-1 blockers closed; the merge touches only `tests/cpp/CMakeLists.txt`, both blocks kept; merged HEAD with hardening on: ctest 954/954, pytest frozen/seam/refine_points 108 passed. The single-triangle gap @architect recorded may stay open (rounding-scale, K2 and K4 hold, documented). Suggestions: say the gap also arises on lattice-line seams; name the fix (test proximity against frozen edges incident to the triangle's corners). Not pushed; no CI. Outstanding: @perf's acceptance.
+
+**23b, code review, round 3, 2026-10-04.** Range `c4fb2bf..8da0f2a` (8990504 @perf acceptance: REGRESSION, refine +4.7 % tile / +4.3 % quarter at 1 thread, meshes identical; 8da0f2a the `nodes` loop as one lambda instantiated for frozen and unfrozen, so the unfrozen path drops `on_frozen`); whole PR `b4bcdc3..8da0f2a`. Verdict: APPROVED. LOC: +4 net in this range (16 added, 12 removed, `scan.hpp`), 239 net for the PR. Both paths behave as before (`on_frozen` was `frozen && …`, so the unfrozen instance skips nothing new; the frozen instance skips the same nodes); the comment states the measured cost and claims no gain; the two shifted `scan.hpp` citations in `15f-edge-strip.md` (`:123`, `:80`) re-read and hold; ctest 954/954 in the Release, no-FMA and sanitizer builds (logs, not rebuilt). Before merge: @perf reruns the acceptance at 8da0f2a and appends it, saying the REGRESSION verdict applies to `c4fb2bf` (the timed experiment was an early-return loop, not this lambda); then CI after Ola approves the push.
+
+**23b, code review, round 4, 2026-10-04.** Range `9511563..81c55d6` (8d67c9c @perf: 8da0f2a timed +6.3 % / +6.4 % at 1 thread, REGRESSION; 91c7cb5 @developer: @perf's early-return form, loop body duplicated on purpose; 81c55d6 @perf: ACCEPTED, +1.2 % / +1.8 % at 1 thread, meshes identical, superseding both REGRESSION verdicts); whole PR `b4bcdc3..81c55d6`. Verdict: CHANGES REQUESTED. LOC: +8 net in this range, 247 net for the PR. Both paths behave as before (the `return` leaves the per-segment lambda only); citations `scan.hpp:122`, `:79` hold; the acceptance file's verdict lines are correct. Blocking: the comment in `scan.hpp`'s `nodes` branch says the early return "measured within 1 % of the base", which is true of @perf's experiment, not of 91c7cb5 (+1.2 % / +1.8 %). Comment-only fix, same line count, no re-timing (same binary). Not pushed; no CI.
+
+**23b, code review, round 5, 2026-10-04.** Range `89e8a18..ed5db94` (the `scan.hpp` comment now gives the measured +1.2 % / +1.8 %). Verdict: APPROVED. LOC: 0 this round, 247 net for the PR `b4bcdc3..ed5db94`. Same line count, citations hold; the binary is unchanged, so @perf's ACCEPTED rerun at `91c7cb5` stands. Not pushed; no CI.
+
+**23b, code review, round 6, 2026-10-04.** Range `ed5db94..185081c` (4cd28dc GCC 13 fix in `frozen_oracle.hpp`; e4f07c3 and 24161fe merges of origin/master; e26802e red, 472d91d rulings, f3620b1 red amendment, 185081c green: N18, `refine_strip` takes `frozen_mask`). Verdict: CHANGES REQUESTED. LOC: +1 this round (the `_core.pyi` parameter; the binding's new lines are raw-literal docstring), 248 net for the PR against about 285. N18 is correct: the mask reaches `point_loop`, so N16's refusal shows as `RuntimeError`; f3620b1's "91 added, 0 on the west side" reproduced with mask 0 and with mask 32; pytest frozen, edge strip and refine_points: 102 passed on a rebuilt extension; the frozen and seam property suites and the oracle unit suite pass on clang. N18 alone needs no @perf rerun (bindings and stub only). Blocking: (1) PR #162 conflicts with master #165 (`quality.hpp` comment and fields, `refine.hpp:321-325`), so CI has never run on 4cd28dc; merge, keep both the frozen and the void skips, and @perf reruns the acceptance at the merged head (refine and mesh code resolved; master's 27 and #165 moved the base); (2) citations made false by the merges in this range: `27-node-sampling.md:115,124,148,150,171,172,263` and `25-plain-output.md:115,120` are numbered against master's `refine.hpp` and `scan.hpp`; recompute after the #165 merge; (3) the status line (`23-basin-scale.md:3-7`) and ROADMAP row 23 still say 23a-2 is on its branch (#138 merged) and 23b is not implemented or is 235 lines. Not pushed; no CI.
+
+**23b, code review, round 7, 2026-10-04.** Range `185081c..67ca1ac` (d5aeb82 round 6 recorded; 3403116 merge of origin/master d20126b, #165 void skip and #167; e3a6add citations; 67ca1ac status line and ROADMAP row 23). Verdict: CHANGES REQUESTED. LOC: +1 this round (the merged `quality_skipped` sum), 249 net for the PR against about 285. The merge keeps both skips: `quality.hpp` tests floor, outside, `skipped_void`, the walk, vertex, then `skipped_frozen` (`:130-181`), the order its comment now states; `refine.hpp:320-322` sums all seven. The comment's departure from R4 step 3's list needs no note in `20-start-quality.md`: R4 step 4 already has the walk find the vertex. The round-6 citations in `27-node-sampling.md` and `25-plain-output.md`, and `15f-edge-strip.md:1554,1910`, re-read as quotations at 67ca1ac, hold; status line and ROADMAP row 23 match the tree. `build-23b`, `-nofma` and `-san` current, ctest 974/974 each; touched Python suites 199 passed on the current extension. Blocking: `20-start-quality.md:608-610` says "23b, not yet on master" and calls the conflict "two-line", which the merge of #162 makes false; state the rule instead. Still open: CI's only run on #162 (e4f07c3) is red on GCC 13 (`frozen_oracle.hpp:108`), fixed in 4cd28dc but never run; @perf reruns the acceptance at the merged head against master d20126b (refine and mesh code resolved in the merge). Not pushed; no CI.
+
+**23b, code review, round 8, 2026-10-04.** Range `4541e38..0a3187b` plus `4541e38` (4541e38 round 7 recorded and `20-start-quality.md` states the 23b rule; 0a3187b @perf's acceptance at the merged head). Verdict: CHANGES REQUESTED, closed in the commit that records this round. LOC: 0 this round (no production file in the range), 249 net for the PR against about 285. Round 7's blocker is closed: `20-start-quality.md:608-610` now states the rule, which matches `quality.hpp:64-65,143,182` and `refine.hpp:321-322`. @perf's verdict at `4541e38` against master `d20126b` is ACCEPTED (`docs/benchmarks/2026-10-04/23b-merged-acceptance.md`). The pooled medians, run ranges and changes were recomputed from the eight `raw.tsv` files and match: +0.8 % tile and +0.2 % quarter at 1 thread, -1.7 to +1.7 % over 2 to 20 threads. Each run's commit, module hash, `bench.py` version and AC power state match the doc, and the mesh hashes and quality are identical in all eight runs. `check_citations.py` passes. Blocking: the status line (`23-basin-scale.md:9-10`) and ROADMAP row 23 still said the merged-head acceptance was "owed"; both now say it is recorded. Merge-ready waits on CI: #162's remote head is still `4cd28dc`, which has never had a CI run; not pushed.
+
+**23c-1, code review, round 1, 2026-10-04.** Range `aacf37c..1426245` (red 58fb1f1, 6dd4ffe, 714b0b3; rulings 6ca9a8c; green 3ffae13; rulings 6ce8e57; red b9f154a; green 1426245), stacked on 23b. Verdict: CHANGES REQUESTED. LOC: 154 net (`bindings/core.cpp` 30, `_core.pyi` 3, `decompose.py` 53, `features.py` 3, `io/mesh_index.py` 65) against about 215. No @perf run needed: nothing under `include/` changed, the binding only copies. The loop-bound comment's argument is sound; the binding's GIL and refusals match `refine_points`'s (stricter on negative indices); `project_structure.md` and docstrings match the code. Blocking: (1) "HOW THIS FILE GOES RED" paragraphs in `test_core_mesh_arrays.py:22-23`, `test_decompose_partition.py:27-28`, `test_mesh_index_conformity.py:21-22`; (2) ROADMAP row 23 (still "23c … 430", "23b … in review") and this file's status paragraph ("23b onwards not implemented"). Suggestions: say "integer indices" in `indexed_mesh`'s docstring; a ValueError for `rows == 0` in `partition()`; plain imports for the `dec`/`mi` fixtures. Whichever of 15f-3 and 23c-1 merges second renumbers `test_features.py:583`'s citation. Not pushed; no CI.
+
+**23c-1, code review, round 2, 2026-10-04.** Range `5216cb3..0679950` (c4ec906 test headers, 9633282 status paragraph, ROADMAP row 23 and point 4, 7e5fe0a and e5881a5 the empty-window tests, 0679950 the refusal); whole PR `aacf37c..0679950`. Verdict: APPROVED. LOC: 156 net against about 215. Both blockers closed; the empty-window suggestion taken (point 4, ten cases); citations hold; no @perf run needed. Nit: the status paragraph and ROADMAP say 154 lines built; update to 156 at merge. Not pushed; no CI.
+
+**23c-1, code review, round 3, 2026-10-04.** Range `0679950..b2f6176` (164b83c round 2 recorded; 027e8f9 merge of 23b's head e4f07c3; 9c791d6 merge of origin/master 45acf22, #163; 3b9408f `test_features.py:583` cites `project_structure.md:166`; b2f6176 re-cites `bindings/core.cpp:1174` and `:927-932`, and "156 built"); whole PR `45acf22..b2f6176`. Verdict: CHANGES REQUESTED, on CI alone. LOC: 156 net against about 215. The production and test diffs against master are byte-identical to round 2's; the conflict resolutions keep both sides (core.cpp includes; ROADMAP row 23 is master's text plus the 23c clause; the status line and the 23b rounds 6-8 and 23c-1 rounds 1-2 are all present); the citations hold as quotations; `check_citations.py` passes. Blocking: PR #164's remote head is `027e8f9`, whose CI (run 37177966246) is red on four Linux C++ jobs at `frozen_oracle.hpp:108` (GCC 13), fixed in 4cd28dc, which reaches this branch only through 9c791d6. Push b2f6176 and the push must show every check green; no tree change is needed and no further review round unless the pushed head differs. Remote master is at 72d4608 (#170, #171, docs only), which merges cleanly.

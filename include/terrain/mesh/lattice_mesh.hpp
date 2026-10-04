@@ -27,6 +27,11 @@
 // and mask on both halves of a split edge, and gives new interior edges
 // neither: constraints gain Steiner points but never move.
 //
+// Frozen edges (docs/increments/23-basin-scale.md, N1). An edge is frozen when
+// its mask meets the mesh's frozen mask (0 after build, so none is): a seam,
+// whose vertices the seam pass placed. Nothing may insert a vertex on it, and
+// split_edge asserts so; flips never touch it, since it is constrained.
+//
 // Depends on core and predicates. It knows no raster; (col, row) are just
 // numbers.
 
@@ -34,15 +39,17 @@
 #include <terrain/core/point.hpp>
 #include <terrain/predicates/default_kernel.hpp>
 
+#include <algorithm>
 #include <array>
 #include <cassert>
 #include <cmath>
 #include <concepts>
+#include <cstddef>
 #include <cstdint>
 #include <limits>
+#include <numeric>
 #include <optional>
 #include <span>
-#include <unordered_map>
 #include <utility>
 #include <vector>
 
@@ -128,26 +135,48 @@ public:
         m.masks_ = std::move(masks);
         m.neighbours_.assign(n, {kNoNeighbour, kNoNeighbour, kNoNeighbour});
 
-        std::unordered_map<std::uint64_t, std::uint32_t> directed;  // (from, to) -> triangle
-        auto key = [](std::uint32_t a, std::uint32_t b) { return std::uint64_t{a} << 32 | b; };
-        for (std::uint32_t t = 0; t < n; ++t) {
-            const auto& tri = m.triangles_[t];
+        const std::size_t nv = m.vertices_.size();
+        for (const auto& tri : m.triangles_) {
             for (const auto v : tri)
-                if (v >= m.vertices_.size())
+                if (v >= nv)
                     return std::nullopt;
             if (orient_sign(m.vertices_[tri[0]], m.vertices_[tri[1]], m.vertices_[tri[2]]) <= 0)
                 return std::nullopt;
-            for (unsigned k = 0; k < 3; ++k)
-                if (!directed.emplace(key(tri[k], tri[(k + 1) % 3]), t).second)
-                    return std::nullopt;
         }
-        for (std::uint32_t t = 0; t < n; ++t) {
-            const auto& tri = m.triangles_[t];
+        // Adjacency from one flat table of directed edges (to, triangle),
+        // grouped by origin vertex, not from a hash map: a node-based
+        // container allocates once per edge, this table once per array
+        // (docs/increments/15f-edge-strip.md, A2). Each group is sorted by
+        // `to`, so an edge used twice sits next to its twin, and the neighbour
+        // across a -> b is a binary search for a in b's group: O(d log d) per
+        // vertex of degree d, so a wide fan stays cheap.
+        std::vector<std::size_t> first(nv + 1, 0);
+        for (const auto& tri : m.triangles_)
+            for (const auto v : tri)
+                ++first[v + 1];
+        std::partial_sum(first.begin(), first.end(), first.begin());
+        using Out = std::pair<std::uint32_t, std::uint32_t>;  // (to, triangle)
+        std::vector<Out> out(3 * n);
+        std::vector<std::size_t> fill(first.begin(), first.end() - 1);
+        for (std::uint32_t t = 0; t < n; ++t)
             for (unsigned k = 0; k < 3; ++k)
-                if (const auto it = directed.find(key(tri[(k + 1) % 3], tri[k]));
-                    it != directed.end())
+                out[fill[m.triangles_[t][k]]++] = {m.triangles_[t][(k + 1) % 3], t};
+        auto group = [&](std::size_t v) {
+            return std::span{out}.subspan(first[v], first[v + 1] - first[v]);
+        };
+        for (std::size_t v = 0; v < nv; ++v) {
+            std::ranges::sort(group(v));
+            if (const auto g = group(v); std::ranges::adjacent_find(g, {}, &Out::first) != g.end())
+                return std::nullopt;
+        }
+        for (std::uint32_t t = 0; t < n; ++t)
+            for (unsigned k = 0; k < 3; ++k) {
+                const auto a = m.triangles_[t][k];
+                const auto g = group(m.triangles_[t][(k + 1) % 3]);
+                if (const auto it = std::ranges::lower_bound(g, a, {}, &Out::first);
+                    it != g.end() && it->first == a)
                     m.neighbours_[t][k] = it->second;
-        }
+            }
         return m;
     }
 
@@ -164,6 +193,11 @@ public:
     }
     [[nodiscard]] std::uint32_t mask(std::size_t t, unsigned e) const noexcept {
         return masks_[t][e];
+    }
+    void set_frozen_mask(std::uint32_t mask) noexcept { frozen_ = mask; }
+    [[nodiscard]] std::uint32_t frozen_mask() const noexcept { return frozen_; }
+    [[nodiscard]] bool is_frozen(std::size_t t, unsigned e) const noexcept {
+        return (masks_[t][e] & frozen_) != 0;
     }
     [[nodiscard]] MeshVertex corner(std::size_t t, unsigned k) const noexcept {
         return vertices_[triangles_[t][k]];
@@ -194,6 +228,7 @@ public:
     // t's slot and (p, b, c) is appended; u's (b, a, d) becomes (b, p, d) in
     // u's slot and (p, a, d) appended. Returns p's vertex index.
     std::uint32_t split_edge(std::uint32_t t, unsigned e, MeshVertex p) {
+        assert(!is_frozen(t, e));  // a frozen edge is never split (N1, FE6)
         const auto q = add_vertex(p);
         const auto a = triangles_[t][e], b = triangles_[t][(e + 1) % 3],
                    c = triangles_[t][(e + 2) % 3];
@@ -316,6 +351,7 @@ private:
     std::vector<std::array<std::uint32_t, 3>> neighbours_;
     std::vector<std::uint8_t> constrained_;
     std::vector<std::array<std::uint32_t, 3>> masks_;
+    std::uint32_t frozen_ = 0;
 };
 
 }  // namespace terrain::mesh

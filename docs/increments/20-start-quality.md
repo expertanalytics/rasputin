@@ -605,9 +605,9 @@ Legacy: nothing. `git grep -l -i -e "min_angle" -e "nodata" legacy-archive
   It adds `skipped_void` to `RefineOutcome::quality_skipped`'s total. The
   binding, `_core.pyi`, `cli.py` and `stats.py` do not change (R11: the
   per-reason counts are the C++ test surface).
-- **With 23b.** 23b, not yet on master, adds `skipped_frozen` to the same
-  struct and sum. Whichever merges second resolves a two-line conflict and
-  keeps both counters. The frozen check stays where it is, after the walk.
+- **With 23b.** `QualityOutcome` also carries `skipped_frozen`
+  (`23-basin-scale.md`, N4), summed into the same total; the frozen check
+  stays where it is, after the walk.
 
 ### Tests `@tester` writes red first
 

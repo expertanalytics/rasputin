@@ -41,6 +41,12 @@ COPIED = (
     # h8: the recap prints the size table through this module
     # (docs/increments/h8-window-and-recap.md §3.6).
     "tools/rule_sizes.py",
+    # h9: the brief writer and the hook that checks briefs
+    # (docs/increments/h9-spawn-briefs.md §5). The template, .claude/briefs/
+    # common.md, is copied by brief_fixtures.make_brief_repo instead: it is rule
+    # text, and here it would change test_rule_sizes.py's totals.
+    "tools/brief.py",
+    ".claude/hooks/guard_spawn.py",
 )
 
 GUARD_PUSH = ".claude/hooks/guard_push.py"

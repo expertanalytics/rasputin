@@ -278,7 +278,7 @@ class NodeOutcome:
 
 @final
 class IndexedMesh2:
-    """A flat indexed triangle mesh. Not constructible from Python.
+    """A flat indexed triangle mesh, from ``triangulate`` or ``indexed_mesh``.
 
     Bit ``e`` of a mask is set iff the edge ``(v[e], v[(e + 1) % 3])`` is
     constrained -- not CGAL's "edge e is opposite vertex e", which is a
@@ -296,6 +296,13 @@ class IndexedMesh2:
     def triangle_count(self) -> int: ...
     @property
     def empty(self) -> bool: ...
+
+def indexed_mesh(
+    vertices: npt.ArrayLike, triangles: npt.ArrayLike, constrained_edges: npt.ArrayLike
+) -> IndexedMesh2:
+    """An ``IndexedMesh2`` from arrays, copied. A shape, an index out of range,
+    a mask above 7 or a non-finite coordinate is a ``ValueError``; orientation
+    is ``refine``'s check, not this one's."""
 
 @final
 class CdtOutcome:
@@ -443,13 +450,15 @@ def refine(
     threads: int = ...,
     min_angle_deg: float = ...,
     constraint_feet: bool = ...,
+    frozen_mask: int = ...,
 ) -> RefineOutcome:
     """Refine a start mesh whose vertices lie in the DEM's node rectangle (off-node
     ones keep their position and get bilinear z) until every triangle is
     within ``tolerance`` of the DEM. Releases the GIL; the output does not
     depend on ``threads``. ``min_angle_deg`` > 0 first improves the start
     mesh's angles with DEM nodes; 0 is off. ``constraint_feet`` inserts a
-    node's foot on a nearby constraint segment instead of the node."""
+    node's foot on a nearby constraint segment instead of the node. No vertex
+    goes on an edge whose mask meets ``frozen_mask`` (unsigned; 0 is off)."""
 
 @final
 class CheckPoints:
@@ -486,6 +495,11 @@ class PointRefineOutcome(RefineOutcome):
     def coincident(self) -> int: ...
     @property
     def coincident_max_error(self) -> float: ...
+    @property
+    def on_frozen(self) -> int:
+        """Check points on a frozen edge, never inserted, each counted once."""
+    @property
+    def on_frozen_max_error(self) -> float: ...
     @property
     def strip_points(self) -> int: ...
     @property
@@ -533,10 +547,13 @@ def refine_strip(
     *,
     tolerance: float,
     threads: int = ...,
+    frozen_mask: int = ...,
 ) -> PointRefineOutcome:
     """The edge strip on the projected path: refine's output refined until every
     strip point is within ``tolerance``, the DEM's nodes rescanned in every
-    triangle it writes. Releases the GIL."""
+    triangle it writes. Nothing goes on an edge whose mask meets
+    ``frozen_mask``; a strip point on one is a ``RuntimeError``. Releases the
+    GIL."""
 
 def refine_points(
     points: CheckPoints,
@@ -550,10 +567,48 @@ def refine_points(
     tolerance: float,
     threads: int = ...,
     strip: ConstraintCheckPoints | None = ...,
+    frozen_mask: int = ...,
 ) -> PointRefineOutcome:
     """Refine phase 1's mesh until every check point in a frozen store, and
     every point of ``strip``, is within ``tolerance``. Releases the GIL; the
-    output does not depend on ``threads``."""
+    output does not depend on ``threads``. A check point on an edge whose mask
+    meets ``frozen_mask`` is counted in ``on_frozen``, not inserted."""
+
+@final
+class SeamOutcome:
+    """What :func:`refine_seam` returned. ``a < b`` by ``(x, y)``; the arrays are
+    read-only views, from ``a`` to ``b``, that keep the outcome alive."""
+
+    @property
+    def a(self) -> tuple[float, float]: ...
+    @property
+    def b(self) -> tuple[float, float]: ...
+    @property
+    def z_a(self) -> float | None: ...
+    @property
+    def z_b(self) -> float | None: ...
+    @property
+    def points(self) -> npt.NDArray[np.float64]:
+        """``(K, 2)`` world points inserted on the seam."""
+    @property
+    def z(self) -> npt.NDArray[np.float64]: ...
+    @property
+    def s(self) -> npt.NDArray[np.float64]:
+        """``(K,)`` parameters from ``a``, strictly increasing in ``(0, 1)``."""
+    @property
+    def check_points(self) -> int: ...
+    @property
+    def no_data(self) -> int: ...
+    @property
+    def max_error(self) -> float: ...
+
+def refine_seam(
+    view: RasterView, a: tuple[float, float], b: tuple[float, float], *, tolerance: float
+) -> SeamOutcome:
+    """The seam pass for the seam edge ``(a, b)``: check points inserted by a
+    one-dimensional greedy until each is within ``tolerance``. The same output
+    for either order of the ends. A bad tolerance, ``a == b`` or an end outside
+    the node rectangle is a ``ValueError``. Releases the GIL."""
 
 @final
 class UpstreamOutcome:

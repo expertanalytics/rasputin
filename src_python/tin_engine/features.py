@@ -181,3 +181,11 @@ DEFAULT_VOCABULARY = EdgeVocabulary(
         EdgeProperty(name="water", bit=8),
     )
 )
+
+# Increment 23c (question A as ruled): a cut run's piece files mark a seam,
+# the edge a partition line adds, on bit 9, the lowest the default leaves
+# free. A vocabulary of its own, so the uncut path, its fingerprint and the
+# classes feature_input builds from the default stay as they are.
+PIECE_VOCABULARY = EdgeVocabulary(
+    properties=(*DEFAULT_VOCABULARY.properties, EdgeProperty(name="seam", bit=9))
+)

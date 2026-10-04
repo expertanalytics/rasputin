@@ -37,16 +37,15 @@ sufficient: it shows what was finished, never what was asked.
     Ola), at most 300 characters each; no rulings, no history. The recap
     lists every worktree's `ASK OLA:` lines and warns on any other line.
   - Every other file is one subagent's, `<persona>-<HHMMSS>.md`, three lines
-    or fewer: the ask, the persona and the file it will produce. The spawner
-    names the path in the prompt, and the subagent writes that path and no
-    other. The spawner deletes it on reading the handback — never the
+    or fewer: the ask, the persona and the file it will produce.
+    `tools/brief.py` names the path, and the subagent writes no other. The
+    spawner deletes it on reading the handback — never the
     subagent. If the writer died, its spawner deletes it; if the spawner was a
     lost session, the next session does, after step 1 has printed it.
 - **One session per working tree.** Nothing assigns `session.md`, so
   concurrent sessions need separate worktrees (`git worktree add`).
 - **After merging a change to `CLAUDE.md` or `.claude/agents/`, restart
-  before spawning the changed persona**; until then its brief says to read
-  the persona file from disk.
+  before spawning the changed persona**.
 - **A subagent whose product is a file creates that file first and writes
   incrementally**, so a death leaves something to resume. A persona's prompt
   names the output path.
@@ -119,7 +118,9 @@ to `.claude/settings*.json` or the permission system. Editing `CLAUDE.md`,
 
 **A grant covers one occurrence.** An instruction that names a publishing act
 is the yes for one occurrence of it. The test is mechanical: *have I already
-performed this named act once, and has the tree changed since?* If yes, ask.
+performed this named act once, and has the tree changed since?* If yes, ask. A grant does not
+outlive the session it was given in: a yes recorded on disk (`session.md`, a
+handback) is asked again after a context loss.
 
 **`@reviewer` runs once on any branch before its first push, whether or not
 the branch contains production code, and again before a push that follows a
@@ -141,7 +142,10 @@ method, and `curl` with a writing method to the forge (not `gh pr close` or
 `gh pr comment`); `guard_governance.py` asks
 before any write to a file that states rules; `guard_unattended.py` refuses
 `AskUserQuestion`, permission prompts and configuration changes while
-unattended mode is on; `gates_after_commit.py` puts the
+unattended mode is on; `guard_spawn.py` refuses a persona spawn without an
+unchanged, current block from `python3 tools/brief.py`, and any spawn or
+resume made outside the directory the session started in; a resume that
+starts a new step carries a fresh block; `gates_after_commit.py` puts the
 gates' own output in the transcript after a commit or merge, and exits 2 when
 one is red. `guard_push.py` and `guard_governance.py` judge what a command
 writes or pushes, as parsed by `tools/shell_scan.py`; a line they cannot read

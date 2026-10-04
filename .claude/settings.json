@@ -25,6 +25,12 @@
         "hooks": [
           { "type": "command", "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/guard_unattended.py" }
         ]
+      },
+      {
+        "matcher": "Agent|SendMessage",
+        "hooks": [
+          { "type": "command", "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/guard_spawn.py" }
+        ]
       }
     ],
     "PermissionRequest": [
