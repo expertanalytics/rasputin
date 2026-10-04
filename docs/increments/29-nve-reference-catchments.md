@@ -1,6 +1,6 @@
 # Increment 29 — NVE reference catchments: our catchments against NVE's, station by station
 
-Status: **design approved by `@reviewer` (round 5, 2026-10-04); all questions ruled by Ola; PR 1 (accumulation) implemented (red `0624bbf` and `8d87f77`, green `e43020b`, scaffolding removed `edef966`), code review round 3 approved, awaiting push and CI**
+Status: **design approved by `@reviewer` (round 5, 2026-10-04); all questions ruled by Ola; PR 1 (accumulation) merged as #173; PR 3 (stations and rivers) red step in (`213a2ef`), with three rulings of 2026-10-04 for it ("Ola's rulings", last block) and a red amendment to come before green**
 (`@architect`, 2026-10-04), branch `worktree-nve-catchments` off master
 `d20126b`. Ola's rulings of 2026-10-04 are in the section below. Round 2 closed the burn's drainage claim
 (checked node by node, not assumed), the ELVIS data cases, the PR order, and
@@ -114,6 +114,50 @@ with maps "before" and "after", as pngs." Taken as a deliverable of PR 2
     burning the whole network is a later increment.
   - **Question 4, the nearest-stream fallback:** included, as the last PR
     (PR 5).
+
+**Ruled for PR 3's green step (2026-10-04, 18:19 UTC).** Ola: "defaults on
+both", answering two questions `@tester` raised with PR 3's red step
+(`213a2ef`); the third point below is `@architect`'s, not a question to Ola.
+
+- **The station's name comes from NVE's station layer** (layer 0,
+  `stasjonnavn`), copied as served, not from the packaged list. The list's
+  `name` column is extracted from the PDF's Table 1, where long names wrap
+  over two lines; the list stays the source of which stations, their series
+  version and `hrd_start_daily`, and its names only serve to check the
+  extraction. Measured 2026-10-04 against layer 0 for all 140, with the
+  first-pass extraction of the design rounds: all 140 have a non-blank name in
+  layer 0 (no feature in the whole layer has a null or blank one), and 12
+  differ from the extracted names, each because the PDF wraps or splits it
+  (`311.4.0`: "(Femunden)" extracted, "Femundsenden (Femunden)" in layer 0;
+  `27.15.0`: "t)" against "Austrumdal (Austrumdalsvatnet)"; `234.13.0`:
+  "Iesjokka" against "Veahkkava, Iesjokka"). **Red amendment:** the fake
+  service gives one station a layer 0 name that differs from its list row,
+  and `stations.geojson` must carry layer 0's.
+- **A river segment served as a MultiLineString is refused**, naming its
+  `objectid`, as "The station set" already says (one LineString per
+  segment; "the wrong geometry type" is refused). Not split, not merged: a
+  segment is one link of one river, and the chain of "Placing the gauge"
+  joins segments end to start. The refusal is `read_segments`'s; the fetch
+  writes the feature as served, so a user's file and a fetched one are
+  refused alike. **Red amendment, before green:** `test_rivers.py` adds a
+  MultiLineString segment among good ones and expects a `ValueError` naming
+  its `objectid` and "MultiLineString".
+- **Where the count of dropped copies goes** (`@tester`'s pin 15, changed).
+  `io.rivers.drop_copies(segments) -> (kept, dropped)` stays as pinned: pure,
+  public, applied by `read_segments`. But a two-part `read_segments` loses
+  the count at the reader, and nothing downstream can recover it, since
+  `drop_copies` on the reader's output finds nothing left. So
+  **`read_segments(path) -> (segments, crs, dropped)`**, a three-part tuple
+  (not a field on `RiverSegment`: the count describes the file, not a
+  segment). It reaches Ola as one stderr line from each command that reads a
+  river file, after reading it: `rasputin catchment --rivers` (PR 2) and
+  `rasputin station-catchments` (PR 4), worded, for example, "rivers: 4,812 segments read,
+  25 exact copies dropped (same river, same vertices to 1 cm)"; PR 4 also
+  writes it to `summary.json` as `river_copies_dropped`. `fetch-stations`
+  writes copies as served and reports nothing about them. **Red amendment:**
+  the two places that unpack `read_segments` (`test_rivers.py`'s `read` and
+  `test_fetch_nve.py`'s read-back) take three parts, and
+  `test_the_count_dropped` also asserts the reader's count is 25.
 
 ## What the data says (measured 2026-10-04)
 
@@ -754,8 +798,8 @@ visible, and `@tester` pins the mapping on all 25 values.
    of one river, digitised downstream). **Exact copies are dropped first**:
    within one `elvid`, segments whose vertex lists are equal to 1 cm are one
    segment, the smallest `objectid` kept (`io/rivers.py`'s `read_segments`
-   does it, so a user's file is cleaned as a fetched one is, and the count
-   dropped is reported). **A fork stops the chain**: where, after that, two
+   does it, so a user's file is cleaned as a fetched one is, and returns the
+   count dropped, which the commands print; see "Ola's rulings", last block). **A fork stops the chain**: where, after that, two
    different segments of the `elvid` continue the chain (or two lead into its
    first one), the chain stops there, flags `reach_fork` and reports the
    metres it has; it does not pick a branch. Downstream, a fork before
@@ -1137,7 +1181,8 @@ licence_note=...)`. `fetch/nve.py`:
   polygon; keeps the newest polygon per station (above) and records its
   update date and how many versions there were;
 - writes `stations.geojson` (one Point feature per station, properties
-  `station`, `name`, `series` = `["1001.0"]`, `nve_area_km2` from layer 0,
+  `station`, `name` = layer 0's `stasjonnavn` (not the list's),
+  `series` = `["1001.0"]`, `nve_area_km2` from layer 0,
   `hrd_start_daily`, `watercourse` = layer 0's `vassdragsnr`, `river` = the
   first name of `elvenavnhierarki`; no other layer 0 field is copied),
   `reference.geojson` (one feature per station, the polygon, `station`,
@@ -1155,9 +1200,12 @@ licence_note=...)`. `fetch/nve.py`:
 **`io/station_set.py`** reads the stations and references back:
 `read_stations(path) -> (tuple[Station, ...], crs)`, `read_references(path)
 -> (Mapping[str, Polygon | MultiPolygon], crs)`; **`io/rivers.py`**
-`read_segments(path) -> (tuple[RiverSegment, ...], crs)`. All refuse a file
+`read_segments(path) -> (tuple[RiverSegment, ...], crs, dropped)`, where
+`dropped` is the count of exact copies removed by the pure
+`drop_copies(segments) -> (kept, dropped)`. All refuse a file
 without a `crs` member (the skill's rule; NVE's files always have one),
-duplicate station numbers or segment ids, and the wrong geometry type.
+duplicate station numbers or segment ids, and the wrong geometry type (a
+segment that is a MultiLineString is refused, naming its `objectid`).
 `Station` is a frozen Pydantic model: `station: str` (pattern
 `^\d+\.\d+\.\d+$`), `name`, `x`, `y`, `series: tuple[str, ...]`,
 `nve_area_km2: float | None`, `watercourse: str | None`, `river: str | None`.
@@ -1613,7 +1661,8 @@ use" below):
   requests go out one at a time, with the `User-Agent` of `fetch/http.py`
   (tested there on a stub); nothing is requested when the output files exist
   and `--refresh` is absent; the packaged list (140 rows, unique numbers, the
-  three spot rows); the query URLs (chunks of 40, the station envelopes,
+  three spot rows); each station's `name` is layer 0's, not the list's;
+  the query URLs (chunks of 40, the station envelopes,
   `outSR=25833`, `f=geojson`); newest version wins, ties to the larger
   `objectid`; a missing station or polygon is refused by name; a reply
   flagged `exceededTransferLimit` is refused by station; a segment seen from
@@ -1629,7 +1678,9 @@ use" below):
   `lake`; null and blank are `lake` with `vatnlnr` and `river` without; the
   strays, `FiktivElv` and `BreMidtlinje` are `river`; case and `ø`/`o`
   variants), the raw value kept; exact copies within an `elvid` give the
-  segment with the smallest `objectid` and a count of those dropped, while
+  segment with the smallest `objectid` and a count of those dropped
+  (`read_segments`'s third part and `drop_copies`'s second), a
+  MultiLineString segment is refused by `objectid`, while
   equal geometry in two different `elvid`s, and two different geometries
   under one `strekninglnr` (`79.3.0`), are both kept.
 
