@@ -543,3 +543,74 @@ def test_a_placed_position_outside_the_window_is_refused(
     z = channel(60, 41, [(0, 20), (59, 20)])
     with pytest.raises(ValueError, match=r"(?i)outside"):
         burn.burn_reach(tile_of(z), reach(gauge, column_line(20, -10, 30), at=50.0))
+
+
+# ---------------------------------------------------------------------------
+# No NoData on the chain (step 2; PR 2's code review, round 1)
+# ---------------------------------------------------------------------------
+
+#: The two sentinels the design names, both in float32: DTM10's -32767, and
+#: a positive one near float32's largest value, which the burn would carry
+#: into `lowered_max_m`.
+SENTINELS = [-32767.0, 3.4e38]
+GAP = (20, 21)
+
+
+def jog(gap: float | None) -> npt.NDArray[np.float32]:
+    """A float32 floor falling 0.5 m per row down column 20 on rows 0 to 19
+    and down column 22 from row 20 on, walls 3 m per column. `gap` is put at
+    (20, 21), the node between the two floor runs; None leaves its data."""
+    r, c = np.indices((60, 41)).astype(np.float64)
+    floor_col = np.where(r < 20, 20.0, 22.0)
+    z = (300.0 - 0.5 * r + 3.0 * np.abs(c - floor_col)).astype(np.float32)
+    if gap is not None:
+        z[GAP] = np.float32(gap)
+    return z
+
+
+def least_in_row(z: npt.NDArray[np.floating], row: int, nodata: float) -> tuple[int, int]:
+    """The least-elevation node with data in `row` within 30 m of column 20:
+    the cross-section of a resample point on the line down column 20."""
+    cols = [c for c in range(17, 24) if z[row, c] != np.float32(nodata)]
+    return row, min(cols, key=lambda c: (float(z[row, c]), abs(c - 20), c))
+
+
+def jog_reach(gauge: ModuleType) -> Any:
+    """The mapped line down column 20, rows 0 to 40; `at` = 200 m is row 20."""
+    return reach(gauge, column_line(20, 0, 40), at=200.0, corridor=30.0)
+
+
+@pytest.mark.parametrize("nodata", SENTINELS, ids=["minus32767", "3.4e38"])
+def test_a_chain_through_nodata_is_refused_naming_the_gap(
+    burn: ModuleType, gauge: ModuleType, nodata: float
+) -> None:
+    """The cross-sections of rows 19 and 20 choose (19, 20) and (20, 22),
+    which have data; the straight 8-connected join between them steps through
+    its middle node, (19.5, 21) rounded half up, (20, 21), which has none.
+    The taut cut then drops (20, 22), so (20, 21) is a node of the chain the
+    burn would lower and read. The station is refused, naming the gap and
+    where it is in the DEM's CRS."""
+    z = jog(nodata)
+    # The premises, from the fixture alone.
+    assert z[GAP] == np.float32(nodata)
+    a, b = least_in_row(z, 19, nodata), least_in_row(z, 20, nodata)
+    assert (a, b) == ((19, 20), (20, 22))
+    middle = tuple(math.floor((p + q) / 2 + 0.5) for p, q in zip(a, b, strict=True))
+    assert middle == GAP
+
+    with pytest.raises(ValueError, match=r"(?i)gap \(NoData\) in the DEM") as raised:
+        burn.burn_reach(tile_of(z, nodata), jog_reach(gauge))
+    x, y = lat(GAP[1], GAP[0])  # (500210, 6599800)
+    message = str(raised.value)
+    assert f"{x:.0f}" in message and f"{y:.0f}" in message, message
+
+
+def test_the_same_chain_with_data_at_the_join_burns(burn: ModuleType, gauge: ModuleType) -> None:
+    """The control: with data at (20, 21) the chain is the same and burns
+    without error, so the refusal is about a node on the chain, not about
+    NoData anywhere in the window (the window keeps a NoData node off the
+    chain, at (50, 5))."""
+    z = jog(None)
+    z[50, 5] = np.float32(NODATA)
+    _, path = run(burn, z, jog_reach(gauge), nodata=NODATA)
+    assert GAP in nodes(path)
