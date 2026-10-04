@@ -2922,7 +2922,7 @@ equality and DC4's control hold.
    `test_the_union_has_the_uncut_area` (1e-12) takes the same bound against
    the uncut mesh's area. No code change.
 2. **DC10: a defect of increment 20, fixed there; DC10 split meanwhile.**
-   *(Corrected by point 9: the hole is the cut path's.)*
+   *(Point 9 corrected this; point 10 withdrew point 9, so this ruling stands.)*
    `mesh::improve` (`include/terrain/mesh/quality.hpp`) "knows no raster
    and reads no height", so it can insert a NoData node; trim then drops
    its triangles and leaves a hole. The uncut path has the same defect.
@@ -3030,7 +3030,7 @@ equality and DC4's control hold.
      own windows. 23c-3 must also show its piece files byte-identical to
      23c-2's on the same run, because it changes memory, not meshes (K6).
 
-9. **DC10's hole is 23c-2's defect, not increment 20's. Found and fixed
+9. *(Withdrawn by point 10: the premise did not hold.)* **DC10's hole is 23c-2's defect, not increment 20's. Found and fixed
    before review.** This corrects ruling 2 above. `@tester`'s red step for
    increment 20's fix (`worktree-20-nodata`, `309b23f`) found no hole on
    the uncut path. There, refine's carving (14 R6) surrounds the NoData
@@ -3059,7 +3059,61 @@ equality and DC4's control hold.
      `@tester` commit. Increment 20's fix is not merged into this branch
      until then.
 
-**B17 for Ola** is under "New questions, after the rulings".
+10. **Point 9 was wrong; DC10's hole is increment 20's after all.**
+    `@developer` reduced it without changing code. Nothing on the cut
+    path blocks the carving.
+    - The pieces' start meshes have skinny fan triangles along the seams.
+      In piece (1, 0, 0) all 33 start triangles are under 25°, against 2
+      uncut, none of them under 25°. So the start-quality pass inserts 34
+      to 49 nodes per piece where the uncut run inserts none. One of them
+      lands on a NoData node, because the pass reads no raster.
+    - The carving then closes around it (3 carved, 0 nodes uncovered), the
+      frozen seam blocks nothing, and the window and slice play no part.
+      Trim removes the star as designed.
+    - The reported "hole" is effect (c) below, made visible by that vertex.
+
+    **Rulings:**
+    - (a) Point 9 is withdrawn, and ruling 2 stands as first written. The
+      strict `xfail`'s reason names increment 20's fix again
+      (`20-start-quality.md`, "Fix: the start-quality pass skips NoData
+      nodes"). The ordering note is moot: that fix may be merged into
+      this branch once it is on master, and the `xfail` then flags itself.
+      `@tester` changes the reason back. The cut-path probe point 9 asked
+      for is not required: carving works in pieces, so it could not be
+      red. If it is already written, it stays as a passing test of
+      carving in a piece.
+    - (b) **The start pass on fans: acceptable for 23c-2, no change.**
+      Fans are skinny by construction: the seam pass's points on one edge,
+      all joined to one apex. The pass applies to every start mesh
+      (R11), and its insertions are DEM nodes strictly inside the piece.
+      It skips nodes on frozen edges (N4), so the union argument (item 2:
+      insertions inside a piece never affect another) holds unchanged.
+      Running it before slicing would change nothing, because the fans
+      come after it. Skipping fan triangles would leave the seam's skinny
+      triangles to refine, and only 23g's cleanup can judge which costs
+      less. DC6 runs with `--start-min-angle 0` and
+      `--no-constraint-feet`, so it is not affected. Its claim is
+      "equal to one refine over the whole fanned start". With the pass on,
+      that equality would also need the pass's single queue to decide the
+      same inside each piece as over the whole. That is plausible (frozen
+      seams stop the walk), but not argued here. **No new test**: the
+      quality-off equality is the claim this design makes. `@perf`'s 23c-3
+      table adds the start pass's insertions per piece, so the cost is
+      measured before 23g's comparison.
+    - (c) **The micrometre offset on the reprojected path: increment 15c's,
+      and a question for Ola (B18).** A phase-2 vertex is inserted at its
+      source node's position as stored in the check-point store, which
+      rounds it (0.10 to 0.31 µm here, up to about 2 µm). Where that vertex
+      is on the edge of a carved hole, the exact source node can sit just
+      outside every triangle. The independent check then counts it as
+      uncovered. This happens on the uncut path too, at any NoData vertex.
+      It is a statement about 15c's guarantee (J2: every valid source node
+      within tolerance), so it belongs to 15c, as a follow-up in
+      `15c-geographic-dem.md`, and Ola rules on the wording first. Nothing
+      in 23c changes: with increment 20's fix, DC10's scene has no NoData
+      vertex.
+
+**B17 and B18 for Ola** are under "New questions, after the rulings".
 
 ## Questions for Ola
 
@@ -3291,6 +3345,22 @@ tests take the option as a whole number of bytes, so 16 GiB is typed
 - (b) Also a size with a unit, `16G` or `16GiB`, read as powers of 1024
   (about 10 lines in `cli.py`, and one more red test). The index still
   records bytes. Can follow 23c without changing anything it writes.
+
+**B18. Elevation points a couple of micrometres outside the mesh.** Asked
+2026-10-04 (23c-2's DC10, reduced by `@developer`). On the geographic-DEM
+path, the source DEM's points are checked one by one after meshing, and a
+point found off-tolerance gets a vertex at its own position. That position
+is stored with a small rounding, up to about 2 micrometres. Where such a
+vertex lies on the edge of a no-data hole, the original point can end up
+that far outside the mesh, and the check then counts it as not covered.
+- **(a) Accept it, and state the guarantee as "every valid source point is
+  in the mesh to within the store's rounding (a few micrometres) and within
+  tolerance".** Recommended, and the default if not ruled: the distance is
+  about a millionth of a cell, and the independent check gets the same
+  slack, stated.
+- (b) Store those positions exactly, so the vertex is exactly at the point.
+  This is a small change to 15c's check-point store, and it costs memory
+  per check point.
 
 **Decided here, which Ola may overrule:** lattice lines on the computation
 lattice as artificial cuts; the partition rule's integer details (near-square
