@@ -2494,6 +2494,30 @@ suites has to change.
   of the strip is the caller's job, and the only caller with a nonzero mask
   is 23c, so the filter (`edges[(masks & frozen) == 0]` in NumPy) is 23c's
   line, not 15f-3's. With 23b's refusal (N16) a missing filter fails loudly.
+
+  **Settled after N18's red step (e26802e).** `@tester`'s four choices:
+  1. *Order:* confirmed. `frozen_mask` is the last keyword, after
+     `threads`, as on `refine_points`; the binding and the stub follow the
+     kw-only pin in `test_core_edge_strip.py`.
+  2. *The frozen test:* confirmed, with one amendment. The strip is built on
+     non-frozen edges (the caller's job, N18) and the refusal case shows the
+     mask reaches the N16 check. That does not show the mask reaches the DEM
+     rescan's skip (N1, N3): if the filtered strip with `frozen_mask=0`
+     leaves the west side unsplit anyway, the "not split" assertion passes
+     with the mask ignored by the rescan. So it must be measured: `@tester`
+     runs the filtered strip with `frozen_mask=0` and records how many
+     vertices land on the west side. If more than zero, that becomes a
+     second control in `test_a_frozen_side_is_not_split`, asserted `> 0`. If
+     zero, the scene cannot see the rescan's skip; the test's docstring says
+     so, and that skip stays pinned by refine's own frozen tests (`scan`
+     is shared, N16), not by a new scene here.
+  3. *The refusal case:* confirmed. `std::logic_error` reaches Python as
+     `RuntimeError` (as L2's other refusals in `test_core_edge_strip.py`),
+     and `^refine_strip: ` is N16's text rule. The control N16 asks for (the
+     same full strip with `frozen_mask=0` runs) is
+     `test_frozen_mask_0_is_todays_result`.
+  4. *Location:* confirmed. `test_core_frozen.py`, beside the other two
+     entry points' `frozen_mask` classes.
 - **N19. `on_frozen` for `refine_strip`'s DEM nodes: not counted.**
   `on_frozen` counts stored check points only (N6), so it is 0 in
   `refine_strip`, whose stored set is empty. The reasons:
