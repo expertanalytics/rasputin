@@ -680,8 +680,13 @@ template <raster::RasterSource R>
   know which counts it can trust.
 - **To keep the two floods from drifting**, the outlet set-up and the
   queue loop move out of `upstream.hpp` into `hydrology/flood.hpp`,
-  `detail::flood(z, state, on_reach)`, where `on_reach(i, j)` is called when
-  popped node `i` reaches node `j`; `upstream` labels in it, `accumulate`
+  `detail::flood(z, state, on_reach)`. The outlets are every node with data
+  on the window's edge or beside NoData (an 8-neighbour of a NoData node);
+  `on_reach(j, j)` announces each outlet `j` as it is queued, and
+  `on_reach(i, j)` is called when popped node `i` reaches node `j` first. A
+  reached node is set to *out* before the call, which may relabel it. The
+  flood returns the outlets beside NoData, ascending, since both callers
+  need them for `touches_nodata`. `upstream` labels in it, `accumulate`
   records in it. `upstream`'s behaviour and suite are unchanged.
 - **The oracle is exact**: for every node `c` with data,
   `accumulate(z).count[c] == upstream(z, {c}).nodes_in`, and the two bits
