@@ -84,7 +84,12 @@ from tin_engine.basin_run import (
 from tin_engine.catchment import CatchmentRequest, LakeError, delineate
 from tin_engine.chains import start_chains
 from tin_engine.crs import crs_label, parse_crs, transform_description
-from tin_engine.decompose import DEFAULT_MEMORY_BUDGET, bytes_per_node, lines
+from tin_engine.decompose import (
+    DEFAULT_MEMORY_BUDGET,
+    bytes_per_node,
+    lines,
+    parse_memory_budget,
+)
 from tin_engine.dem_input import (
     CachedSource,
     DemInput,
@@ -728,12 +733,13 @@ def mesh(
         ),
     ] = None,
     memory_budget: Annotated[
-        int | None,
+        str | None,
         typer.Option(
             "--memory-budget",
-            metavar="BYTES",
-            help="With --domain, the bytes one piece is estimated to need at most; a domain "
-            "estimated over it is cut. Default: 17179869184 (16 GiB). For now every piece "
+            metavar="SIZE",
+            help="With --domain, the memory one piece is estimated to need at most, as bytes or "
+            "with K, M, G or T (units are powers of 1024); a domain estimated over it is cut. "
+            "Default: 16G. For now every piece "
             "is cut from one decoded DEM window, so peak memory is still about an uncut run's.",
         ),
     ] = None,
@@ -875,7 +881,14 @@ def mesh(
         flag = "--pieces" if pieces is not None else "--memory-budget"
         if (pieces, memory_budget) != (None, None) and (tolerance is None or domain is None):
             raise typer.BadParameter("cutting needs --tolerance and --domain", param_hint=flag)
-        budget = DEFAULT_MEMORY_BUDGET if memory_budget is None else memory_budget
+        try:
+            budget = (
+                DEFAULT_MEMORY_BUDGET
+                if memory_budget is None
+                else parse_memory_budget(memory_budget)
+            )
+        except ValueError as exc:
+            raise typer.BadParameter(str(exc), param_hint="--memory-budget") from exc
         if tolerance is not None and budget < (one := bytes_per_node(tolerance)):
             raise typer.BadParameter(
                 f"{budget} bytes is under one node's {one} at this tolerance",

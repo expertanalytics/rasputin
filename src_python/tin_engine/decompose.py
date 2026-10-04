@@ -15,8 +15,10 @@ from __future__ import annotations
 
 import itertools
 import math
+import re
 from collections.abc import Sequence
 from dataclasses import dataclass
+from fractions import Fraction
 
 import numpy as np
 import numpy.typing as npt
@@ -25,6 +27,35 @@ from shapely.geometry import LineString, Polygon
 
 #: `--memory-budget`'s default, 16 GiB in bytes (B14 as ruled).
 DEFAULT_MEMORY_BUDGET = 2**34
+
+#: `--memory-budget`'s grammar (B17 (b)): ASCII digits, then K, M, G or T,
+#: each optionally with B or iB, or B alone; any case, no whitespace.
+_SIZE = re.compile(r"([0-9]+)(?:([kmgt])(?:i?b)?|b)?", re.IGNORECASE)
+_DECIMAL = re.compile(r"([0-9]+\.[0-9]+)([kmgt])?(?:i?b)?", re.IGNORECASE)
+_UNITS = "bkmgt"  # the power of 1024 is the index
+
+
+def parse_memory_budget(text: str) -> int:
+    """A size such as `16G`, `512MiB` or `17179869184` in bytes; every unit is
+    a power of 1024. A `ValueError` for anything else, and for zero."""
+    found = _SIZE.fullmatch(text)
+    if found is None:
+        hint = ""
+        if decimal := _DECIMAL.fullmatch(text):  # suggest a whole number in a smaller unit
+            power = _UNITS.index((decimal[2] or "b").lower())
+            value = Fraction(decimal[1]) * 1024**power
+            for q in range(power - 1, -1, -1):
+                if (value / 1024**q).denominator == 1:
+                    hint = f"; try {value / 1024**q}{_UNITS[q].upper() if q else ''}"
+                    break
+        raise ValueError(
+            f"{text!r} is not a size: a whole number, then K, M, G or T (powers of 1024){hint}"
+        )
+    size = int(found[1]) << 10 * _UNITS.index((found[2] or "b").lower())
+    if size == 0:
+        raise ValueError("a memory budget of 0 bytes holds no node")
+    return size
+
 
 #: `b(T)`: bytes per window node at tolerance T (m), from the basin-piece
 #: sweep (`docs/benchmarks/2026-10-01/basin-piece/README.md`).
