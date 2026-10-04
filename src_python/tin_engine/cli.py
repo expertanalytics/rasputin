@@ -56,7 +56,7 @@ import numpy.typing as npt
 import typer
 from pydantic import ValidationError
 
-from tin_engine import final_check, installed_version
+from tin_engine import edge_strip, final_check, installed_version
 from tin_engine._core import (
     ChainRole,
     IndexedMesh2,
@@ -1559,21 +1559,36 @@ def _dem_mesh(
         _refine_phases(clock, (time.perf_counter_ns() - t0) / 1e9, out)
         if not out.ok():
             raise typer.BadParameter(f"{dem}: {out.message}", param_hint="--dem")
-        final: RefineOutcome = out
-        del tile  # 15e fix 3: phase 2 runs without the target tile
-        if grid is not None and checks is not None:
-            checked, n = final_check.run(out, grid, checks, tolerance, clock)
-            if not checked.ok():
-                raise typer.BadParameter(f"{dem}: {checked.message}", param_hint="--dem")
-            final = checked
+        strip = edge_strip.generate(to_core(tile), out, clock)  # 15f, D6: while the tile is held
+        if grid is None or checks is None:
+            final = edge_strip.run(to_core(tile), strip, out, tolerance, clock)
+            del tile
+            # 15f, D7: refine's maximum and the strip run's make an upper bound.
+            max_error = max(out.max_error, final.max_error)
+            values["line_check_dem_nodes_inserted"] = final.nodes_inserted
+        else:
+            del tile  # 15e fix 3: phase 2 runs without the target tile
+            final, n = final_check.run(out, grid, checks, tolerance, clock, strip=strip)
+            max_error = final.max_error
             values |= {
                 "resampled_grid_max_error_m": out.max_error,
                 "dem_nodes_checked": n,
-                "dem_check_points_inserted": checked.inserted,
-                "dem_check_rounds": checked.rounds,
-                "dem_nodes_at_vertices": checked.coincident,
-                "dem_nodes_at_vertices_max_error_m": checked.coincident_max_error,
+                "dem_check_points_inserted": final.inserted,
+                "dem_check_rounds": final.rounds,
             }
+        if not final.ok():
+            raise typer.BadParameter(f"{dem}: {final.message}", param_hint="--dem")
+        values |= {
+            "dem_nodes_at_vertices": final.coincident,
+            "dem_nodes_at_vertices_max_error_m": final.coincident_max_error,
+            "line_points_checked": strip.size,
+            "line_max_error_m": final.strip_max_error,
+            "line_points_on_nodata": strip.no_data,
+            "line_points_refused": final.strip_refused,
+            "line_points_refused_max_error_m": final.strip_refused_max_error,
+            "line_points_inserted": final.strip_inserted,
+            "line_points_duplicate": strip.duplicates,
+        }
         with clock.phase("trim"):
             trimmed = trim(
                 vertices=final.vertices,
@@ -1587,7 +1602,7 @@ def _dem_mesh(
             "start_min_angle_deg": min_angle,
             "snap_to_lines": "on" if feet else "off",
             "tolerance_m": tolerance,
-            "max_error_m": final.max_error,
+            "max_error_m": max_error,
             "dem_nodes_outside_mesh": final.uncovered,
             "refinement_rounds": out.rounds,
             "points_inserted": out.inserted,
