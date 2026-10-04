@@ -449,3 +449,5 @@ build (3dff7bc) took 1,189 s; rounds 4 and 6 took 0.7 and 1.5 min, not
 suggestions: the review-round cap is "not written down, and Ola declined to
 add one", and an ellipsis where the GitHub quotation stops. All fixed in the
 commit after 43fbd5f.
+
+**Round 2, 2026-10-04 (copied from `@reviewer`'s handback).** Range `43fbd5f..9774a68`. Verdict: APPROVED. All five fixes checked by running what each asserts; both round-1 suggestions taken; `check_citations.py` exits 0. Non-blocking: line 507 of `806b4380` is 19:17:10, not 19:16.
