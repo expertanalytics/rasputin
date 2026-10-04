@@ -360,7 +360,8 @@ With a radius `R`:
 
 1. The station point moves into the DEM's CRS, as 22's seed does.
 2. **The disc** is every DEM node at distance at most `R` from the point
-   (closed; computed from node coordinates, not from a buffered polygon).
+   (closed; computed from node coordinates, not from a buffered polygon),
+   and always the node nearest the point, so `R = 0` is that node alone.
 3. **The window loop is 22's, seeded by the whole disc**: the first window is
    the disc's bounds plus `WINDOW_MARGIN_M`, and it grows until the disc's
    catchment is clear of the window's edge, or refuses as 22 does (NoData,
@@ -437,7 +438,7 @@ licence_note=...)`. `fetch/nve.py`:
 - queries layer 0 for the listed stations' points and attributes, and layer
   38 for their polygons, 40 station numbers per `where ... in (...)` query
   (measured to work; under the service's 2000-record cap and URL limits),
-  with `outSR=25833&f=geojson`, through `RangeClient.get_text` (22a-2's
+  with `outSR=25833&f=geojson`, through `RangeClient.get_text` (23a-2's
   retries and refusals; `fetch/http.py` stays the only module importing
   `urllib`, rule F11);
 - refuses, naming the station, when a listed station has no point or no
@@ -620,8 +621,8 @@ therefore every station result rests on it.
   (row, column); a disc that reaches past the window's first extent grows the
   window (the river's upstream reaches far beyond the disc), and the result
   equals a whole-raster run; a disc all NoData is refused; `snap_radius`
-  with lakes, negative, NaN are refused; radius 0 picks the nearest node and
-  reports distance as its offset; no radius gives 22's result bit for bit.
+  with lakes, negative, NaN are refused; radius 0 picks the nearest node (as
+  22's pour point does) and reports its distance from the station; no radius gives 22's result bit for bit.
 - `test_cli_catchment.py` gains: `--snap-radius` prints the snap line and
   writes the snap properties.
 
@@ -685,4 +686,54 @@ and `src_python/tin_engine/fetch/http.py`.
 
 ## Questions for Ola
 
-(pending)
+Each has a default; the design above is written to the defaults, so the
+round can start on them and a different answer changes only the part named.
+
+1. **Which stations?** NVE's reference list for climate studies has 140
+   active, unregulated gauging stations, each checked by NVE for at least 20
+   years of good data. NVE's map service has a wider set: 500 active
+   discharge stations recorded as having no regulation at all, without that
+   quality check (127 of the 140 are among them).
+   *Default: the 140.* The 500 can be added later as a second list; the code
+   takes any list of station points.
+2. **What NVE data goes into the repository?** NVE's data is under the
+   Norwegian open government data licence (NLOD), which allows copying with
+   credit.
+   *Default: commit only the list of 140 station numbers and names (it lives
+   in a PDF, so it cannot be fetched from a service), credited to NVE; fetch
+   the station points and NVE's catchment polygons with
+   `rasputin fetch-stations`, and record the date and a checksum of what was
+   fetched.* Alternative: also commit a frozen copy of the polygons (8 MB),
+   so the comparison can be repeated even if NVE changes them.
+3. **Discharge now or later?** NVE's discharge API needs a free key
+   registered by a person.
+   *Default: later. Each catchment keeps the station number and the
+   discharge series number, which is all a later join needs.* Alternative: a
+   step that downloads daily discharge for the 140, if you register a key.
+4. **How should a gauge be moved onto the river?** A gauge's coordinates are
+   usually a few tens of metres off the river line in the elevation model,
+   and a catchment started off the river is tiny. Three ways:
+   (a) move it to the point within a radius where the most water passes
+   (the classic rule; it can jump to a bigger river just below a
+   confluence); (b) choose, within the radius, the point whose catchment
+   area is closest to the area NVE reports (what the global runoff data
+   centre does; then our area agrees with NVE's partly by construction, so
+   the comparison says less); (c) start from NVE's own polygon's outlet
+   (then NVE's answer helps make ours).
+   *Default: (a), within 250 m (all 42 stations that lie outside NVE's
+   polygon are within 233 m of it); every miss is re-run at 100 m and 500 m
+   to see whether the radius caused it.*
+5. **What counts as a good catchment, and is there a bar for the whole
+   run?** Proposed: a station "matches" when at least 95 % of NVE's polygon
+   is in ours and 95 % of ours in NVE's (Bygdin was 99.1 % and 99.3 %), or,
+   for small catchments, when our divide is on average within 30 m (three
+   DEM cells) of NVE's; "close" at 80 %; anything else is a "miss", and every
+   miss is explained in the results.
+   *Default: those classes, and no required share of matches this time: the
+   first run is the baseline.* Alternative: require, say, 80 % of the stations
+   to match before the increment is accepted.
+6. **Gauges on lakes.** Some stations measure a lake's outflow, and their
+   coordinates can be far from the lake's outlet. Increment 22 can start a
+   catchment from a whole lake polygon (CORINE) instead of a point.
+   *Default: not now; the first run shows how many lake gauges miss, and a
+   later step can start those from their lake.*
