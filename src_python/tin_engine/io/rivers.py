@@ -18,7 +18,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict
 
-from .station_set import _geometry_type, _unique, features_of
+from .station_set import _geometry_type, _unique, features_of, required
 
 #: Two vertices closer than this, in metres, are the same vertex (step 4).
 COPY_TOLERANCE = 0.01
@@ -41,13 +41,20 @@ class RiverSegment(BaseModel):
 
 def kind_of(objekttype: str | None, vatnlnr: Any) -> Literal["lake", "river"]:
     """Total: `lake` when the casefolded `objekttype` starts with `innsj`, or
-    when it is null or blank and `vatnlnr` is set; `river` otherwise."""
+    when it is null or blank and `vatnlnr` is set: not null and not 0, which
+    is how NVE says "no lake"; `river` otherwise."""
     if objekttype is None or not objekttype.strip():
-        return "lake" if vatnlnr is not None else "river"
+        return "lake" if vatnlnr is not None and vatnlnr != 0 else "river"
     return "lake" if objekttype.casefold().startswith("innsj") else "river"
 
 
-def _segment(props: Mapping[str, Any], coordinates: Iterable[Iterable[float]]) -> RiverSegment:
+def _segment(path: Path, feature: Mapping[str, Any]) -> RiverSegment:
+    props = feature["properties"]
+    try:
+        line = tuple((float(x), float(y)) for x, y, *_ in feature["geometry"]["coordinates"])
+    except (TypeError, ValueError) as exc:
+        oid = props["objectid"]
+        raise ValueError(f"{path.name}: segment {oid}: a vertex is not two numbers") from exc
     return RiverSegment(
         objectid=props["objectid"],
         elvid=props.get("elvid"),
@@ -55,7 +62,7 @@ def _segment(props: Mapping[str, Any], coordinates: Iterable[Iterable[float]]) -
         name=props.get("elvenavn"),
         objekttype=props.get("objekttype"),
         kind=kind_of(props.get("objekttype"), props.get("vatnlnr")),
-        line=tuple((float(x), float(y)) for x, y, *_ in coordinates),
+        line=line,
     )
 
 
@@ -87,10 +94,8 @@ def read_segments(path: Path) -> tuple[tuple[RiverSegment, ...], str, int]:
     features, crs = features_of(path)
     for f in features:
         _geometry_type(path, f, ("LineString",))
-    _unique(path, [f["properties"]["objectid"] for f in features], "objectid")
-    segments, dropped = drop_copies(
-        _segment(f["properties"], f["geometry"]["coordinates"]) for f in features
-    )
+    _unique(path, [required(path, f, "objectid") for f in features], "objectid")
+    segments, dropped = drop_copies(_segment(path, f) for f in features)
     return segments, crs, dropped
 
 

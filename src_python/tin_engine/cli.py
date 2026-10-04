@@ -1313,7 +1313,10 @@ def fetch_stations(
         return
     try:
         files = fetch_station_set(STATION_SOURCES[source], RangeClient().get_text)
-    except (FetchError, ValueError, KeyError) as exc:
+    except KeyError as exc:  # a field the fetch reads, left out of the answer
+        typer.echo(f"Error: the NVE service's answer is missing the field {exc.args[0]}", err=True)
+        raise typer.Exit(1) from exc
+    except (FetchError, ValueError) as exc:
         typer.echo(f"Error: {exc}", err=True)
         raise typer.Exit(1) from exc
     out_dir.mkdir(parents=True, exist_ok=True)

@@ -45,9 +45,21 @@ def features_of(path: Path) -> tuple[list[dict[str, Any]], str]:
     member = doc.get("crs") if isinstance(doc, dict) else None
     if not member:
         raise ValueError(f"{path.name}: no crs member; the file must name its CRS")
-    crs = str(member["properties"]["name"])
-    parse_crs(crs)
-    return list(doc["features"]), crs
+    name = (member.get("properties") or {}).get("name") if isinstance(member, dict) else None
+    if name is None:
+        raise ValueError(f"{path.name}: the crs member has no name; it must name the CRS")
+    parse_crs(str(name))
+    if not isinstance(doc.get("features"), list):
+        raise ValueError(f"{path.name}: no features list; the file is not a FeatureCollection")
+    return list(doc["features"]), str(name)
+
+
+def required(path: Path, feature: Mapping[str, Any], key: str) -> Any:
+    """The property `key` of `feature`, refused naming it when missing."""
+    props = feature.get("properties") or {}
+    if key not in props:
+        raise ValueError(f"{path.name}: a feature has no {key} property")
+    return props[key]
 
 
 def _unique(path: Path, keys: list[Any], what: str) -> None:
@@ -74,7 +86,11 @@ def read_stations(path: Path) -> tuple[tuple[Station, ...], str]:
     for f in features:
         _geometry_type(path, f, ("Point",))
         props = f.get("properties") or {}
-        x, y = f["geometry"]["coordinates"][:2]
+        try:
+            x, y = f["geometry"]["coordinates"][:2]
+        except (TypeError, ValueError) as exc:
+            label = props.get("station")
+            raise ValueError(f"{path.name}: station {label}: the point has no x and y") from exc
         fields = ("station", "name", "series", "nve_area_km2", "watercourse", "river")
         stations.append(Station(x=x, y=y, **{k: props[k] for k in fields if k in props}))
     _unique(path, [s.station for s in stations], "station")
@@ -86,9 +102,9 @@ def read_references(path: Path) -> tuple[Mapping[str, Polygon | MultiPolygon], s
     features, crs = features_of(path)
     for f in features:
         _geometry_type(path, f, ("Polygon", "MultiPolygon"))
-    numbers = [str(f["properties"]["station"]) for f in features]
+    numbers = [str(required(path, f, "station")) for f in features]
     _unique(path, numbers, "station")
     return {n: shape(f["geometry"]) for n, f in zip(numbers, features, strict=True)}, crs
 
 
-__all__ = ["Station", "features_of", "read_references", "read_stations"]
+__all__ = ["Station", "features_of", "read_references", "read_stations", "required"]
