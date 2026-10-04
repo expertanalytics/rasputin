@@ -24,6 +24,7 @@
 #include <terrain/refinement/constraint_points.hpp>
 #include <terrain/refinement/refine.hpp>
 #include <terrain/refinement/refine_points.hpp>
+#include <terrain/refinement/seam.hpp>
 #include <terrain/vector_simplify/area_collapse.hpp>
 
 #include <array>
@@ -67,6 +68,8 @@ using terrain::refinement::ConstraintCheckPoints;
 using terrain::refinement::PointRefineOutcome;
 using terrain::refinement::RefineOutcome;
 using terrain::refinement::RefineStatus;
+using terrain::refinement::SeamOutcome;
+using terrain::refinement::SeamPoint;
 
 namespace {
 
@@ -988,7 +991,7 @@ unless ok().
         "refine",
         [](const BoundRasterView& raster, const IndexedMesh2& mesh, const py::object& edges,
            const py::object& masks, double tolerance, unsigned threads, double min_angle_deg,
-           bool constraint_feet) {
+           bool constraint_feet, std::uint32_t frozen_mask) {
             using U32 = py::array_t<std::uint32_t, py::array::c_style | py::array::forcecast>;
             const auto e = U32::ensure(edges);
             const auto k = U32::ensure(masks);
@@ -1000,7 +1003,7 @@ unless ok().
                 reinterpret_cast<const std::array<std::uint32_t, 2>*>(e.data()), n};
             const std::span<const std::uint32_t> bits{k.data(), n};
             const terrain::refinement::RefineOptions options{tolerance, threads, min_angle_deg,
-                                                             constraint_feet};
+                                                             constraint_feet, frozen_mask};
             // Every buffer read below is held by a local or by `raster`, and
             // the outcome is converted after the lock returns.
             const py::gil_scoped_release unlocked;
@@ -1012,7 +1015,7 @@ unless ok().
         },
         py::arg("view"), py::arg("mesh"), py::arg("edges"), py::arg("masks"), py::kw_only(),
         py::arg("tolerance"), py::arg("threads") = 0, py::arg("min_angle_deg") = 0.0,
-        py::arg("constraint_feet") = false, R"doc(
+        py::arg("constraint_feet") = false, py::arg("frozen_mask") = 0u, R"doc(
 Refine a start mesh against the DEM until every triangle is within tolerance.
 
 mesh's vertices must lie in the DEM's node rectangle and its triangles be
@@ -1024,6 +1027,7 @@ min_angle_deg > 0 first adds DEM nodes to the start mesh until its triangles
 meet that minimum angle or a stated reason prevents it; 0 is off.
 constraint_feet inserts, for a worst node close to a constraint segment, its
 foot on the segment instead; off by default.
+frozen_mask: no vertex goes on an edge whose mask meets it (a seam); 0 is off.
 A refused input comes back as a status; a mis-shaped array is a ValueError.
 Releases the GIL.
 )doc");
@@ -1069,6 +1073,10 @@ the check points that coincide with a start vertex, and the edge strip's figures
                       "Check points at a start vertex, never inserted.")
         .def_readonly("coincident_max_error", &PointRefineOutcome::coincident_max_error,
                       "Their largest |z - vertex z|.")
+        .def_readonly("on_frozen", &PointRefineOutcome::on_frozen,
+                      "Check points on a frozen edge, never inserted, each counted once.")
+        .def_readonly("on_frozen_max_error", &PointRefineOutcome::on_frozen_max_error,
+                      "Their largest |z - the edge's linear z|, edges with two valid ends.")
         .def_readonly("strip_points", &PointRefineOutcome::strip_points, "The strip's points, 0 without one.")
         .def_readonly("strip_inserted", &PointRefineOutcome::strip_inserted, "Strip points inserted.")
         .def_readonly("strip_max_error", &PointRefineOutcome::strip_max_error,
@@ -1117,9 +1125,10 @@ A refused input is a ValueError. Releases the GIL.
         "refine_points",
         [](const CheckPoints& points, const py::object& vertices, const py::object& triangles,
            const py::object& z, const py::object& valid, const py::object& edges, const py::object& masks,
-           double tolerance, unsigned threads, const ConstraintCheckPoints* strip) {
+           double tolerance, unsigned threads, const ConstraintCheckPoints* strip,
+           std::uint32_t frozen_mask) {
             const auto s = start_mesh("refine_points", vertices, triangles, z, valid, edges, masks);
-            const terrain::refinement::PointRefineOptions options{tolerance, threads};
+            const terrain::refinement::PointRefineOptions options{tolerance, threads, frozen_mask};
             // Every buffer read below is held by `s`, `points` or `strip`, and
             // the outcome is converted after the lock returns.
             const py::gil_scoped_release unlocked;
@@ -1128,7 +1137,7 @@ A refused input is a ValueError. Releases the GIL.
         },
         py::arg("points"), py::arg("vertices"), py::arg("triangles"), py::arg("z"), py::arg("valid"),
         py::arg("edges"), py::arg("masks"), py::kw_only(), py::arg("tolerance"), py::arg("threads") = 0,
-        py::arg("strip") = py::none(), R"doc(
+        py::arg("strip") = py::none(), py::arg("frozen_mask") = 0u, R"doc(
 Refine phase 1's mesh against a frozen CheckPoints store until every check
 point is within tolerance of the plane of each triangle holding it.
 
@@ -1138,6 +1147,59 @@ Inserted vertices are check points with their own z. strip, the edge strip on
 the same grid, joins the same loop. The output does not depend on threads (0:
 all cores). A refused input comes back as a status; a mis-shaped array is a
 ValueError, an unfrozen store or a strip that does not fit a RuntimeError.
+A check point on an edge whose mask meets frozen_mask is not inserted; it
+is counted in on_frozen with its error.
+Releases the GIL.
+)doc");
+
+    // SeamPoint is {Point2, z, s}: four doubles, read in place by three strided views.
+    static_assert(sizeof(SeamPoint) == 4 * sizeof(double) && std::is_standard_layout_v<SeamPoint>);
+    const auto seam_column = [](const py::object& self, std::size_t offset, py::ssize_t width) {
+        const auto& p = self.cast<const SeamOutcome&>().points;
+        const auto* base = p.empty() ? nullptr : reinterpret_cast<const char*>(p.data()) + offset;
+        std::vector<py::ssize_t> shape{static_cast<py::ssize_t>(p.size())}, strides{sizeof(SeamPoint)};
+        if (width == 2) {
+            shape.push_back(2);
+            strides.push_back(sizeof(double));
+        }
+        return readonly_view<double>(self, reinterpret_cast<const double*>(base), shape, strides);
+    };
+    py::class_<SeamOutcome>(m, "SeamOutcome", R"doc(
+What refine_seam returned: the seam edge's ends ordered so a < b by (x, y),
+their heights (None on NoData), the points inserted from a to b as read-only
+arrays that keep this outcome alive, and three numbers.
+)doc")
+        .def_property_readonly("a", [](const SeamOutcome& o) { return py::make_tuple(o.a.x, o.a.y); })
+        .def_property_readonly("b", [](const SeamOutcome& o) { return py::make_tuple(o.b.x, o.b.y); })
+        .def_readonly("z_a", &SeamOutcome::z_a, "a's height, or None.")
+        .def_readonly("z_b", &SeamOutcome::z_b, "b's height, or None.")
+        .def_property_readonly("points", [=](const py::object& self) { return seam_column(self, 0, 2); },
+                               "(K, 2) float64 world points, from a to b.")
+        .def_property_readonly("z", [=](const py::object& self) { return seam_column(self, offsetof(SeamPoint, z), 1); },
+                               "(K,) float64, their heights.")
+        .def_property_readonly("s", [=](const py::object& self) { return seam_column(self, offsetof(SeamPoint, s), 1); },
+                               "(K,) float64, their parameters from a.")
+        .def_readonly("check_points", &SeamOutcome::check_points, "Check points measured.")
+        .def_readonly("no_data", &SeamOutcome::no_data, "Check points dropped for a NoData stencil.")
+        .def_readonly("max_error", &SeamOutcome::max_error, "The largest check-point error left.");
+
+    m.def(
+        "refine_seam",
+        [](const BoundRasterView& raster, std::array<double, 2> a, std::array<double, 2> b, double tolerance) {
+            // Every buffer read below is held by `raster`.
+            const py::gil_scoped_release unlocked;
+            return std::visit(
+                [&](const auto& v) {
+                    return terrain::refinement::refine_seam(v, Point2{a[0], a[1]}, Point2{b[0], b[1]}, tolerance);
+                },
+                raster.view);
+        },
+        py::arg("view"), py::arg("a"), py::arg("b"), py::kw_only(), py::arg("tolerance"), R"doc(
+The seam pass for one seam edge (a, b), world points: the check points on it
+that a one-dimensional greedy inserts until every check point is within
+tolerance of the polyline. Both pieces beside a seam get the same output bit
+for bit, in either order of a and b. A tolerance negative or not finite,
+a == b, or an end outside the node rectangle is a ValueError.
 Releases the GIL.
 )doc");
 
@@ -1145,9 +1207,9 @@ Releases the GIL.
         "refine_strip",
         [](const BoundRasterView& raster, const ConstraintCheckPoints& strip, const py::object& vertices,
            const py::object& triangles, const py::object& z, const py::object& valid, const py::object& edges,
-           const py::object& masks, double tolerance, unsigned threads) {
+           const py::object& masks, double tolerance, unsigned threads, std::uint32_t frozen_mask) {
             const auto s = start_mesh("refine_strip", vertices, triangles, z, valid, edges, masks);
-            const terrain::refinement::PointRefineOptions options{tolerance, threads};
+            const terrain::refinement::PointRefineOptions options{tolerance, threads, frozen_mask};
             // Every buffer read below is held by `s`, `raster` or `strip`.
             const py::gil_scoped_release unlocked;
             return std::visit(
@@ -1159,12 +1221,14 @@ Releases the GIL.
         },
         py::arg("view"), py::arg("strip"), py::arg("vertices"), py::arg("triangles"), py::arg("z"),
         py::arg("valid"), py::arg("edges"), py::arg("masks"), py::kw_only(), py::arg("tolerance"),
-        py::arg("threads") = 0, R"doc(
+        py::arg("threads") = 0, py::arg("frozen_mask") = 0u, R"doc(
 The edge strip on the projected path (15f, D4): refine's output, refined until
 every strip point is within tolerance, with the DEM's nodes rescanned in every
 triangle the run writes. Arrays as refine_points'. A refused input comes back
 as a status; a mis-shaped array is a ValueError, a strip that does not fit a
-RuntimeError. Releases the GIL.
+RuntimeError. No vertex goes on an edge whose mask meets frozen_mask, and a
+strip point on such an edge is a RuntimeError (filter the strip's edges).
+Releases the GIL.
 )doc");
 
     py::class_<BoundUpstream>(m, "UpstreamOutcome", R"doc(

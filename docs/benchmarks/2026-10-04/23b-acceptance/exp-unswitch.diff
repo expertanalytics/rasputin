@@ -1,0 +1,23 @@
+diff --git a/include/terrain/refinement/scan.hpp b/include/terrain/refinement/scan.hpp
+index 718439a..b0cd59e 100644
+--- a/include/terrain/refinement/scan.hpp
++++ b/include/terrain/refinement/scan.hpp
+@@ -219,6 +219,18 @@ template <raster::RasterSource R>
+                 std::array<std::int64_t, 3> o{};
+                 for (unsigned k = 0; k < 3; ++k)
+                     o[k] = mesh::orient(lv[k], lv[(k + 1) % 3], LatticeVertex{row, c});
++                if (!frozen) {  // EXPERIMENT (@perf): base's loop, unswitched
++                    for (std::uint32_t j = 0; j < s.values.size(); ++j) {
++                        const T z = s.values[j];
++                        consider(z,
++                                 error(static_cast<double>(z), static_cast<double>(o[0]),
++                                       static_cast<double>(o[1]), static_cast<double>(o[2])),
++                                 LatticeVertex{row, c + j});
++                        for (unsigned k = 0; k < 3; ++k)
++                            o[k] += step[k];
++                    }
++                    return;
++                }
+                 for (std::uint32_t j = 0; j < s.values.size(); ++j) {
+                     const T z = s.values[j];
+                     if (!on_frozen(LatticeVertex{row, c + j}))

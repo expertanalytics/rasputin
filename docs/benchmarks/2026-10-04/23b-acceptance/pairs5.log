@@ -1,0 +1,37 @@
+=== 23b-fix-exp-r1 start 2026-10-03T23:30:33Z
+Now drawing from 'AC Power'
+ -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true
+power: ac; evidence: /Users/skavhaug/projects/rasputin/.claude/worktrees/agent-a8b29c323dc2ad69d/docs/benchmarks/2026-10-04/23b-fix-exp-r1; meshes: /private/tmp/claude-501/-Users-skavhaug-projects-rasputin/af318b82-b96d-429e-956c-0296b113f23b/scratchpad/meshes/23b-fix-exp-r1
+ACCEPTED
+=== 23b-fix-exp-r1 exit 0 2026-10-03T23:32:51Z
+Now drawing from 'AC Power'
+ -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true
+=== 23b-fix-r5 start 2026-10-03T23:32:51Z
+Now drawing from 'AC Power'
+ -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true
+power: ac; evidence: /Users/skavhaug/projects/rasputin/.claude/worktrees/agent-a8b29c323dc2ad69d/docs/benchmarks/2026-10-04/23b-fix-r5; meshes: /private/tmp/claude-501/-Users-skavhaug-projects-rasputin/af318b82-b96d-429e-956c-0296b113f23b/scratchpad/meshes/23b-fix-r5
+REGRESSION: quarter refine_s[t=1] 0.4640 -> 0.4914 (+5.9 %)
+REGRESSION: tile refine_s[t=1] 0.5220 -> 0.5568 (+6.7 %)
+=== 23b-fix-r5 exit 1 2026-10-03T23:35:10Z
+Now drawing from 'AC Power'
+ -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true
+=== 23b-fix-r6 start 2026-10-03T23:35:10Z
+Now drawing from 'AC Power'
+ -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true
+power: ac; evidence: /Users/skavhaug/projects/rasputin/.claude/worktrees/agent-a8b29c323dc2ad69d/docs/benchmarks/2026-10-04/23b-fix-r6; meshes: /private/tmp/claude-501/-Users-skavhaug-projects-rasputin/af318b82-b96d-429e-956c-0296b113f23b/scratchpad/meshes/23b-fix-r6
+REGRESSION: quarter refine_s[t=8] 0.1774 -> 0.1865 (+5.1 %)
+REGRESSION: tile refine_s[t=1] 0.5220 -> 0.5500 (+5.4 %)
+=== 23b-fix-r6 exit 1 2026-10-03T23:37:28Z
+Now drawing from 'AC Power'
+ -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true
+=== 23b-fix-exp-r2 start 2026-10-03T23:37:28Z
+Now drawing from 'AC Power'
+ -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true
+power: ac; evidence: /Users/skavhaug/projects/rasputin/.claude/worktrees/agent-a8b29c323dc2ad69d/docs/benchmarks/2026-10-04/23b-fix-exp-r2; meshes: /private/tmp/claude-501/-Users-skavhaug-projects-rasputin/af318b82-b96d-429e-956c-0296b113f23b/scratchpad/meshes/23b-fix-exp-r2
+ACCEPTED
+=== 23b-fix-exp-r2 exit 0 2026-10-03T23:39:45Z
+Now drawing from 'AC Power'
+ -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true
+ALLDONE
+Now drawing from 'AC Power'
+ -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true
