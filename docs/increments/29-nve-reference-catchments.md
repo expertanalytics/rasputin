@@ -181,6 +181,17 @@ river with 0 (both blank-type features of the layer) comes out `lake`.
   (`cli.py` catches `KeyError` with `FetchError` and `ValueError` and prints
   it as is).
 
+**PR 3, after PR #178's CI (2026-10-04): the suite does not read `NOTICE.md`.**
+Ruled by Ola: "yes, remove the NOTICE.md check." h11's prose-read hook failed
+#178's Python 3.14 leg because `test_fetch_nve.py`'s
+`test_notice_md_credits_nve_under_nlod` read `NOTICE.md`. The main session put
+it to Ola that a unit test checking the repository's prose is the wrong place
+for it: the suites check what rasputin produces (`NOTICE.txt` of every fetch,
+the packaged CSV's header), and `NOTICE.md` stays prose, credited by hand and
+seen by `@reviewer` on any PR that touches it. `@tester` removes that one test;
+`NOT_PROSE` in `tools/ci_changes.py` is unchanged. NVE's credit in `NOTICE.md`
+(§"Licence", §"Data use") stands.
+
 ## What the data says (measured 2026-10-04)
 
 Measured before the design, by throwaway scripts in
