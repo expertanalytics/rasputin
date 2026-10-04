@@ -1633,6 +1633,40 @@ triangle of the mesh it receives, and the same with an empty strip. Bygdin at
   ruling moves. The one choice that is his is when to merge: see Q2 under
   "Questions for Ola".
 
+**Settled after 15f-4's guard tests (2afc2f0).** `@tester`'s B1-B4 pass on
+the code as it is (ctest 910/910). Five choices the design left open, ruled
+by `@architect`, 2026-10-04:
+
+- **G1. B4 lives in `test_refinement_lattice_position.cpp`, not a new
+  target: confirmed.** `to_lattice` is in the header that suite already
+  builds (`refine.hpp`), and a target for four cases costs a link for
+  nothing. But the file's top comment and the CMake comment above
+  `add_terrain_backend_test(test_refinement_lattice_position ...)` still say
+  the suite is `lattice_position` only. **`@tester` amends both** to say it
+  also pins `to_lattice`'s constraint lookup (15f-4, B4), and tags B4's cases
+  `[to_lattice]` instead of `[lattice_position]`, so a filter by tag finds
+  them.
+- **G2. B3 pins each triangle's slot order and its bits and masks; B4 pins
+  that a later mask of 0 still sets the constrained bit, and that masks
+  past `edges.size()` are ignored: confirmed.** Each is today's behaviour,
+  and each is something A2's rewrite could change silently: refine's output
+  depends on triangle order (meshes byte-identical, A5), and a sorted table
+  that tested "mask != 0" for presence would drop the bit. The loop's
+  `i < edges.size() && i < masks.size()` bounds both arrays, so both
+  overhangs are today's meaning.
+- **G3. A hand Fisher-Yates over raw `std::mt19937` output: confirmed.**
+  `std::mt19937`'s sequence is fixed by the standard; `std::shuffle` and
+  `std::uniform_int_distribution` are not, so they would give a different
+  shuffle per standard library, and a failure on CI not reproducible on the
+  Mac.
+- **G4. No NaN or infinite coordinates: confirmed.** A2 does not touch
+  `orient_sign` or the orientation check in `build`, and `to_lattice` refuses
+  a vertex outside the node rectangle before `build` sees it. Nothing in
+  15f-4 moves that behaviour.
+- **G5. `n >= kNoNeighbour` not tested: confirmed.** It needs more than
+  4 G triangles, which no unit test can allocate. A2 keeps that guard as it
+  is; `@reviewer` checks by reading that the line survives the rewrite.
+
 **Python (pytest), 15f-3** (L15; first planned for 15f-2):
 
 - **PY1, the binding** (every binding of this increment, the store's and the
