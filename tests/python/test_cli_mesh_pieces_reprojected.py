@@ -22,11 +22,13 @@ at dbbe1c6", 1).
 PINNED HERE (handback, choice 11): each index entry's `counts` carries
 `on_frozen`, the piece's phase 2 count of source nodes on a frozen edge.
 
-Split under "23c-2 stopped at dbbe1c6", 2: DC10's cases run at
-`--start-min-angle 0`; at the default start quality, increment 20's pass
-can insert a NoData node, which trim then carves into a hole (the uncut path
-has the same defect). Those two cases are `xfail(strict=True)` naming the
-fix, so they report themselves once it lands.
+Split under "23c-2 stopped at dbbe1c6", 2, and point 9 there: DC10's cases
+run at `--start-min-angle 0`. At the default start quality the cut run
+leaves a hole beside the vertical seam, where the resampled grid is NoData
+on and next to the seam; the same scene uncut has none. That is the cut
+path's defect (point 9), not increment 20's. Those two cases are
+`xfail(strict=True)` naming it, so they report themselves once 23c-2 fixes
+it, and a `@tester` commit removes the marker.
 """
 
 from __future__ import annotations
@@ -134,9 +136,9 @@ def test_conformity_a_valid_union_and_constrained_delaunay(done: pf.Cut) -> None
 # ------------------------------------------------------------------ at the default start quality
 
 QUALITY_FIX = (
-    "increment 20's start-quality pass inserts NoData nodes and trim leaves holes; "
-    'fixed by "Fix: the start-quality pass skips NoData nodes" in 20-start-quality.md '
-    "(improve skips void nodes, skipped_void)"
+    "23c-2's cut-path defect (23-basin-scale.md, '23c-2 stopped at dbbe1c6', point 9): "
+    "at the default start quality a piece leaves a hole where NoData meets the seam; "
+    "the same scene uncut has none"
 )
 
 
