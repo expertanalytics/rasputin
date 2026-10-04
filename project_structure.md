@@ -73,14 +73,9 @@ include/terrain/           # public C++ headers, header-only where possible
                            #   where constraint edges cross grid lines, and
                            #   the midpoints between, filed by edge (15f)
   hydrology/
-    flood.hpp              # detail::flood: the one Priority-Flood both
-                           #   below run, calling on_reach per node (29)
-    upstream.hpp           # upstream(z, seed) -> UpstreamOutcome: one
-                           #   Priority-Flood labelling the nodes that drain
-                           #   into the seed set, plus edge/NoData flags (22)
-    accumulate.hpp         # accumulate(z) -> AccumulateOutcome: per node
-                           #   the count, reach bits and flow_to upstream
-                           #   would give a seed there, from the same flood (29)
+    flood.hpp              # detail::flood: the one Priority-Flood of both (29)
+    upstream.hpp           # upstream(z, seed): the seed set's catchment (22)
+    accumulate.hpp         # accumulate(z): count, reach, flow_to per node (29)
   vector_simplify/
     area_collapse.hpp      # reduce_ring: area-preserving segment collapse
                            #   (Kronenfeld et al. 2020) to a horizontal
