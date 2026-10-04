@@ -684,3 +684,46 @@ TEST_CASE("Q1: a snapped node that is already a vertex is skipped, not duplicate
     REQUIRE(std::vector<TriangleIndices>(m.triangles().begin(), m.triangles().end()) == fx.triangles);
     check_topology(m);  // includes: no two vertices equal
 }
+
+// ------------------------------------------------------------------- Q-V1
+
+// docs/increments/20-start-quality.md, "Fix: the start-quality pass skips
+// NoData nodes", Q-V1's last check: improve called as every existing caller
+// calls it (no validity callable) gives the outcome it gave before the fix,
+// every field and the mesh. Pinned on two single-triangle fixtures whose
+// circumcentres are exact, so the counts do not move with FP contraction as
+// the quarter circle's do. The skip itself is in test_mesh_quality_void.cpp,
+// a target of its own.
+TEST_CASE("Q-V1: the default call keeps today's outcome, field by field", "[mesh][quality][void]") {
+    SECTION("Q6's world-thin triangle: one node, then two outside skips") {
+        const LatticeFrame frame{1.0, 3.0};
+        const Fixture fx = single(MeshVertex{0, 0}, MeshVertex{15, 26}, MeshVertex{30, 0}, 27, 31);
+        LatticeMesh m = build(fx);
+        const QualityOutcome q = run(m, frame, fx);
+        CHECK(q.inserted == 1);
+        CHECK(q.skipped_floor == 0);
+        CHECK(q.skipped_outside == 2);
+        CHECK(q.skipped_vertex == 0);
+        CHECK(q.skipped_blocked == 0);
+        CHECK(q.walk_bound_hits == 0);
+        CHECK(std::vector<MeshVertex>(m.vertices().begin(), m.vertices().end())
+              == std::vector<MeshVertex>{{0, 0}, {15, 26}, {30, 0}, {15, 13}});
+        CHECK(m.triangle_count() == 3);
+    }
+    SECTION("Q3's right triangle: one node on the constrained hypotenuse") {
+        const LatticeFrame frame{1.0, 1.0};
+        const Fixture fx = single(MeshVertex{0, 1}, MeshVertex{2, 7}, MeshVertex{20, 1}, 8, 21);
+        LatticeMesh m = build(fx);
+        const QualityOutcome q = run(m, frame, fx);
+        CHECK(q.inserted == 1);
+        CHECK(q.skipped_floor == 0);
+        CHECK(q.skipped_outside == 1);
+        CHECK(q.skipped_vertex == 0);
+        CHECK(q.skipped_blocked == 0);
+        CHECK(q.walk_bound_hits == 0);
+        CHECK(std::vector<MeshVertex>(m.vertices().begin(), m.vertices().end())
+              == std::vector<MeshVertex>{{0, 1}, {2, 7}, {20, 1}, {10, 1}});
+        CHECK(std::vector<TriangleIndices>(m.triangles().begin(), m.triangles().end())
+              == std::vector<TriangleIndices>{{2, 3, 1}, {3, 0, 1}});
+    }
+}

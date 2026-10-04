@@ -5,9 +5,9 @@ Research by `@orchestrator`, 2026-10-03, at master 586fbc1. Ola asked for it:
 the main loop (you). Why is that?" and then "I need even more control. My gut
 feeling is to offload the recurring decisions, or make them more mechanical."
 
-The brief asked for this file under `docs/research/`. `@orchestrator` writes
-only under `docs/retrospectives/` (its persona file, section 4), so it is
-here. If Ola wants it under `docs/research/`, moving it is one `git mv`.
+Written under `docs/retrospectives/` and moved here on Ola's ruling of
+2026-10-04 (section 6). Bare file names below (`next.md`, the dated files)
+are in `docs/retrospectives/`.
 
 Words used below:
 
@@ -393,12 +393,18 @@ deletes the prose (`CLAUDE.md`'s brief rules, `session.md` prose in
 `REQUIRED-READING.md`, and the memory notes that hold dispatcher rules:
 pairs, lean briefs, fill the window). The rule count should go down, not up.
 
-## 6. Ola's rulings needed
+## 6. Ola's rulings
+
+Ruled 2026-10-04: "1: yes to stage 1, then stages 2 and 3", and later
+"A, B, C: yes".
 
 1. Stage 1 (brief script and spawn hook) as the next harness increment?
-2. Stages 2 and 3 after it, in that order?
-3. Stage 4: probe first, then decide?
-4. Should this file move to `docs/research/`?
+   Yes.
+2. Stages 2 and 3 after it, in that order? Yes.
+3. Stage 4: probe first, then decide? Yes (A).
+4. Should this file move to `docs/research/`? Yes (B); moved.
+5. Added with the ruling (C): the recap's "Next on ROADMAP.md" rows are
+   capped at about 200 characters each, first sentence plus status.
 
 ## Review
 

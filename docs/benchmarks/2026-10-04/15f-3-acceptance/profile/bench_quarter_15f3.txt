@@ -1,0 +1,32 @@
+   List reduced from 3741 to 341 due to 
+        1    0.000    0.000    0.488    5f-3/build-bench/pkg/tin_engine/cli.py:1466(_dem_mesh)
+        1    0.000    0.000    0.290    5f-3/build-bench/pkg/tin_engine/edge_strip.py:31(run)
+        1    0.290    0.290    0.290    
+        1    0.178    0.178    0.178    
+        3    0.004    0.001    0.004    um}
+       39    0.000    0.000    0.004    _core.SchemaValidator' objects}
+        1    0.000    0.000    0.003    5f-3/build-bench/pkg/tin_engine/edge_strip.py:1(<module>)
+        1    0.000    0.000    0.001    5f-3/build-bench/pkg/tin_engine/edge_strip.py:25(generate)
+        1    0.001    0.001    0.001    ints}
+        6    0.001    0.000    0.001    nonzero}
+        1    0.001    0.001    0.001    
+        1    0.000    0.000    0.000    
+        1    0.000    0.000    0.000    
+      187    0.000    0.000    0.000    able_python}
+      374    0.000    0.000    0.000    cstring}
+        3    0.000    0.000    0.000    
+        1    0.000    0.000    0.000    5f-3/.venv/lib/python3.14/site-packages/shellingham/_core.py:1(<module>)
+        1    0.000    0.000    0.000    e_hash}
+        3    0.000    0.000    0.000    ate_finfo_constants}
+        5    0.000    0.000    0.000    extobj}
+        7    0.000    0.000    0.000    5f-3/build-bench/pkg/tin_engine/edge_strip.py:40(<genexpr>)
+        2    0.000    0.000    0.000    ay_converter' objects}
+        1    0.000    0.000    0.000    th._array_converter' objects}
+        2    0.000    0.000    0.000    
+        1    0.000    0.000    0.000    ._array_converter' objects}
+        1    0.000    0.000    0.000    
+        1    0.000    0.000    0.000    
+        1    0.000    0.000    0.000    peDict}
+        1    0.000    0.000    0.000    d_guard}
+        1    0.000    0.000    0.000    5f-3/.venv/lib/python3.14/site-packages/shellingham/_core.py:10(ShellDetectionFai
+        1    0.000    0.000    0.000    advise_hugepage}
