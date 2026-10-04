@@ -1369,7 +1369,7 @@ that catchment touches the window's edge or NoData, and where the node drains.
         },
         py::arg("view"), R"doc(
 Flow accumulation from the same flood as upstream(): for every node, the count,
-the two reach bits and the flow direction upstream() would give a seed there.
+the two reach bits and the node's flooder (the neighbour it drains to).
 2^32 nodes or more is a ValueError. Releases the GIL.
 )doc");
 
