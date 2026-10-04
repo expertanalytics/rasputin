@@ -278,7 +278,7 @@ class NodeOutcome:
 
 @final
 class IndexedMesh2:
-    """A flat indexed triangle mesh. Not constructible from Python.
+    """A flat indexed triangle mesh, from ``triangulate`` or ``indexed_mesh``.
 
     Bit ``e`` of a mask is set iff the edge ``(v[e], v[(e + 1) % 3])`` is
     constrained -- not CGAL's "edge e is opposite vertex e", which is a
@@ -296,6 +296,13 @@ class IndexedMesh2:
     def triangle_count(self) -> int: ...
     @property
     def empty(self) -> bool: ...
+
+def indexed_mesh(
+    vertices: npt.ArrayLike, triangles: npt.ArrayLike, constrained_edges: npt.ArrayLike
+) -> IndexedMesh2:
+    """An ``IndexedMesh2`` from arrays, copied. A shape, an index out of range,
+    a mask above 7 or a non-finite coordinate is a ``ValueError``; orientation
+    is ``refine``'s check, not this one's."""
 
 @final
 class CdtOutcome:

@@ -2,10 +2,11 @@
 
 Status: **designed by `@architect`, 2026-10-01; B1-B14 ruled by Ola on
 2026-10-01 and the design reworked to the rulings; B15 and B16 ruled
-2026-10-02. 23a-1 merged (#136); 23a-2 implemented on branch
-`worktree-23a-2`; 23b's red step is `45045dc`, its open points settled
-under "Settled after 23b's red step (45045dc)"; 23b onwards not
-implemented.** Written before `@tester`
+2026-10-02. 23a-1 merged (#136), 23a-2 merged (#138); 23b approved and
+accepted (with its speed fix, 247 lines), not pushed; 23c split in two:
+23c-1 (about 215 estimated, 154 built) in review, no `@perf` run needed,
+and 23c-2 (about 265) with its red step written on `worktree-23c`; 23d
+onwards not implemented.** Written before `@tester`
 per `docs/increments/README.md` step 1. The rulings are under "Ruled by Ola,
 2026-10-01", below; the questions are kept as asked at the end, each marked
 with its ruling. 23a-1 and 23a-2 are designed in full under "Windowed
@@ -2849,6 +2850,49 @@ left open. Both confirmed:
   the number a reader of the file can check, and it is what makes an
   all-NoData piece's entry read zero.
 
+### Three points from 23c-1's green (3ffae13)
+
+Raised by `@developer`; ruled by `@architect`, 2026-10-04.
+
+1. **"The lattice" in the partition record: named, in 23c-2.** The index
+   must say where the partition lines are, or a consumer cannot place a
+   seam. Four fields join `PartitionRecord`: `row0` and `col0` (the
+   window's first node `(R0, K0)` on the lattice, integers, possibly
+   negative), `spacing` (`h`, metres) and `origin` (`[x, y]`, the world
+   position of lattice node `(0, 0)` in the index's `crs`). Line `i` is then
+   at `x = origin_x + (col0 + i·dx)·h`, line `j` at
+   `y = origin_y − (row0 + j·dy)·h`. They belong to 23c-2, because
+   `decompose.partition` sees only `cols` and `rows` and the run is what
+   knows the lattice; until then no index is written, so adding fields to a
+   model that forbids unknown keys breaks nothing. `@tester` (23c-2): a cut
+   run's seam lines, read from the piece files, are exactly the lines those
+   four fields and `dx`, `dy` give. `@developer` (23c-2): the four fields.
+2. **Field types: confirmed, with two changes, both in 23c-1.** `source` and
+   `vocabulary` plain strings, `window` as `io.models.IndexWindow` with
+   negative `row0`/`col0` allowed, `counts` `{triangles, vertices,
+   on_frozen}`: confirmed. Changed: **piece ids are strict integers,
+   non-negative** (`["1", "2", "3"]` is refused: an id written as text is
+   drift, and lax mode would let it through), and **`file` and `sha256` are
+   null together or set together** (a model validator). `@tester` (23c-1)
+   adds the two refusals to the schema-drift cases; `@developer` (23c-1)
+   the strict type and the validator.
+3. **The partition loop: bounded, no change.** The loop runs only while
+   `dx · dy · b > B`, and `partition` refuses `B < b`, so inside it
+   `dx · dy > 1`. When it grows `nx`, `dx ≥ dy`, so `dx > 1`, so
+   `nx < cols` before the step and `nx ≤ cols` after; the same for `ny`
+   and `rows`. At `nx = cols`, `ny = rows` the cells are one node and the
+   condition fails. So it ends within `cols + rows − 2` steps, each O(1):
+   about 90,000 for the basin's window at 1 m. `@developer` puts this
+   argument in a comment above the loop; nothing for `@tester` (DC0's
+   random draws already reach it).
+4. **`partition` refuses an empty window: yes** (`@reviewer`'s suggestion,
+   23c-1 round 1). `cols < 1` or `rows < 1` is a `ValueError`, as
+   `pieces < 1` and a budget under one node are. The run never passes one
+   (the window is the domain's box grown by a cell diagonal, so at least
+   2 × 2 nodes), but today `rows == 0` fails as a `ZeroDivisionError` in
+   step 2, which says nothing about the cause. `@tester` (23c-1) adds the
+   two cases to DC0's refusals; `@developer` the check.
+
 **B17 for Ola** is under "New questions, after the rulings".
 
 ## Questions for Ola
@@ -3201,3 +3245,7 @@ LOC was 598 added and 6 removed, 592 net, against an estimate of 373. That is +6
 **23b, code review, round 4, 2026-10-04.** Range `9511563..81c55d6` (8d67c9c @perf: 8da0f2a timed +6.3 % / +6.4 % at 1 thread, REGRESSION; 91c7cb5 @developer: @perf's early-return form, loop body duplicated on purpose; 81c55d6 @perf: ACCEPTED, +1.2 % / +1.8 % at 1 thread, meshes identical, superseding both REGRESSION verdicts); whole PR `b4bcdc3..81c55d6`. Verdict: CHANGES REQUESTED. LOC: +8 net in this range, 247 net for the PR. Both paths behave as before (the `return` leaves the per-segment lambda only); citations `scan.hpp:122`, `:79` hold; the acceptance file's verdict lines are correct. Blocking: the comment in `scan.hpp`'s `nodes` branch says the early return "measured within 1 % of the base", which is true of @perf's experiment, not of 91c7cb5 (+1.2 % / +1.8 %). Comment-only fix, same line count, no re-timing (same binary). Not pushed; no CI.
 
 **23b, code review, round 5, 2026-10-04.** Range `89e8a18..ed5db94` (the `scan.hpp` comment now gives the measured +1.2 % / +1.8 %). Verdict: APPROVED. LOC: 0 this round, 247 net for the PR `b4bcdc3..ed5db94`. Same line count, citations hold; the binary is unchanged, so @perf's ACCEPTED rerun at `91c7cb5` stands. Not pushed; no CI.
+
+**23c-1, code review, round 1, 2026-10-04.** Range `aacf37c..1426245` (red 58fb1f1, 6dd4ffe, 714b0b3; rulings 6ca9a8c; green 3ffae13; rulings 6ce8e57; red b9f154a; green 1426245), stacked on 23b. Verdict: CHANGES REQUESTED. LOC: 154 net (`bindings/core.cpp` 30, `_core.pyi` 3, `decompose.py` 53, `features.py` 3, `io/mesh_index.py` 65) against about 215. No @perf run needed: nothing under `include/` changed, the binding only copies. The loop-bound comment's argument is sound; the binding's GIL and refusals match `refine_points`'s (stricter on negative indices); `project_structure.md` and docstrings match the code. Blocking: (1) "HOW THIS FILE GOES RED" paragraphs in `test_core_mesh_arrays.py:22-23`, `test_decompose_partition.py:27-28`, `test_mesh_index_conformity.py:21-22`; (2) ROADMAP row 23 (still "23c … 430", "23b … in review") and this file's status paragraph ("23b onwards not implemented"). Suggestions: say "integer indices" in `indexed_mesh`'s docstring; a ValueError for `rows == 0` in `partition()`; plain imports for the `dec`/`mi` fixtures. Whichever of 15f-3 and 23c-1 merges second renumbers `test_features.py:583`'s citation. Not pushed; no CI.
+
+**23c-1, code review, round 2, 2026-10-04.** Range `5216cb3..0679950` (c4ec906 test headers, 9633282 status paragraph, ROADMAP row 23 and point 4, 7e5fe0a and e5881a5 the empty-window tests, 0679950 the refusal); whole PR `aacf37c..0679950`. Verdict: APPROVED. LOC: 156 net against about 215. Both blockers closed; the empty-window suggestion taken (point 4, ten cases); citations hold; no @perf run needed. Nit: the status paragraph and ROADMAP say 154 lines built; update to 156 at merge. Not pushed; no CI.
