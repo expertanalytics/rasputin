@@ -1,10 +1,11 @@
 # Harness h10: merge through GitHub's merge queue on `master`
 
-Status: approved by `@reviewer` (round 2, 2026-10-04), pending green CI on the
-PR; then Ola ticks Require merge queue, then the rules commit (§4). Mechanics, not a design question. One workflow edit (2 lines,
-`@developer`, done at `d6b0b1c`), one guard change (`@tester` then
-`@developer`, §4a), one settings change (Ola's), one rules commit (wording in
-§4).
+Status: merged (#172). Ola turned on Require merge queue on 2026-10-04 with
+the §3 settings, read back from the GitHub API; the rules text of §4 is
+applied. The first queued merge (§5) is still to be watched. Mechanics, not
+a design question. One workflow edit (2 lines, `@developer`, done at
+`d6b0b1c`), one guard change (`@tester` then `@developer`, §4a), one settings
+change (Ola's), one rules commit (wording in §4).
 
 Why: master's branch protection requires a branch to be up to date before it
 merges. Merging several PRs is therefore a serial loop: update branch, wait for

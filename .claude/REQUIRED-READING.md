@@ -112,7 +112,8 @@ spawning personas, builds, tests, gates, `.claude/current-task/`, and
 `@reviewer`" authorises acting on what the reviewer finds.
 
 **A fresh yes, every time:** `git push` — including a branch's first —
-`gh pr create`, `gh pr merge`, any force-push or history rewrite, and any edit
+`gh pr create`, `gh pr merge` (which enqueues; one yes covers one enqueue),
+any force-push or history rewrite, and any edit
 to `.claude/settings*.json` or the permission system. Editing `CLAUDE.md`,
 `.claude/**` or `docs/` is ordinary tree work.
 
@@ -134,7 +135,7 @@ round of findings.** On a prose or tooling branch its scope is:
 ## The harness
 
 Active in `.claude/settings.json`: `guard_push.py` asks
-before `git push`, `gh pr create/merge/ready/edit`, `gh release`,
+before `git push`, `gh pr create/merge/ready/edit/update-branch`, `gh release`,
 `gh repo create/delete/edit`, `--no-verify`, `rebase`, `reset --hard`,
 `filter-branch` and `commit --amend`, and before `git update-ref`, `git remote`
 writes, `git config` writes, `git symbolic-ref` writes, `gh api` with a writing

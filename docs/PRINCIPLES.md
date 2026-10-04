@@ -201,8 +201,8 @@ to a persona chosen ad hoc.
 ### E1 — The working tree is yours; the remote is the user's
 
 **Rule.** Editing, spawning, building, testing and committing run on an
-instruction's momentum. `git push`, `gh pr create`, `gh pr merge`, any
-force-push or history rewrite, and any change to permissions need a fresh yes.
+instruction's momentum. `git push`, `gh pr create`, `gh pr merge`
+(which enqueues; one yes covers one enqueue), any force-push or history rewrite, and any change to permissions need a fresh yes.
 **Apply.** One named act, one occurrence. Ask again if the tree has changed.
 **Status.** In force. Last exercised: 5c.
 
