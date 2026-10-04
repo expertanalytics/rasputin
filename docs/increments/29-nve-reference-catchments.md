@@ -1,6 +1,6 @@
 # Increment 29 — NVE reference catchments: our catchments against NVE's, station by station
 
-Status: **design approved by `@reviewer` (round 5, 2026-10-04); all questions ruled by Ola; PR 1 (accumulation) merged as #173; PR 3 (stations and rivers): red `213a2ef`, three rulings of 2026-10-04 for it ("Ola's rulings", the block "Ruled for PR 3's green step"), red amendment `05f348a` and `c18c8d5`, green `aae91bb`; code review round 1's fixes in (red `b59c648`, green `c4e50ff`: NVE's lake number 0 means no lake, malformed files and missing fields refused in plain words); code review round 2 requested changes on one citation and wording only, and its fixes are in (`f91cdaa` and the round-2 record); code review round 3 asked for one word (one citation, not two), fixed; approved by `@reviewer`, code review round 4; PR #178's CI then failed on h11's prose-read hook (a test read `NOTICE.md`), Ola ruled the test out (block "PR 3, after PR #178's CI"), master merged in; code review round 5 asked for two sentences, fixed; **approved by `@reviewer`, code review round 6**, awaiting the push and CI**
+Status: **design approved by `@reviewer` (round 5, 2026-10-04); all questions ruled by Ola; PR 1 (accumulation) merged as #173; PR 3 (stations and rivers): red `213a2ef`, three rulings of 2026-10-04 for it ("Ola's rulings", the block "Ruled for PR 3's green step"), red amendment `05f348a` and `c18c8d5`, green `aae91bb`; code review round 1's fixes in (red `b59c648`, green `c4e50ff`: NVE's lake number 0 means no lake, malformed files and missing fields refused in plain words); code review round 2 requested changes on one citation and wording only, and its fixes are in (`f91cdaa` and the round-2 record); code review round 3 asked for one word (one citation, not two), fixed; approved by `@reviewer`, code review round 4; PR #178's CI then failed on h11's prose-read hook (a test read `NOTICE.md`), Ola ruled the test out (block "PR 3, after PR #178's CI"), master merged in; code review round 5 asked for two sentences, fixed; **approved by `@reviewer`, code review round 6**, awaiting the push and CI**; PR 2 (the gauge on the river): red `3a06ffc`; its three design questions answered by `@architect` (block "PR 2's red step: three design questions", 2026-10-05), red amendment next
 (`@architect`, 2026-10-04), branch `worktree-nve-catchments` off master
 `d20126b`. Ola's rulings of 2026-10-04 are in the section below. Round 2 closed the burn's drainage claim
 (checked node by node, not assumed), the ELVIS data cases, the PR order, and
@@ -152,7 +152,8 @@ both", answering two questions `@tester` raised with PR 3's red step
   segment). It reaches Ola as one stderr line from each command that reads a
   river file, after reading it: `rasputin catchment --rivers` (PR 2) and
   `rasputin station-catchments` (PR 4), worded, for example, "rivers: 4,812 segments read,
-  25 exact copies dropped (same river, same vertices to 1 cm)"; PR 4 also
+  25 exact copies dropped (same river, same vertices to 1 cm)" (segments read
+counts the file's features, copies included: kept plus dropped); PR 4 also
   writes it to `summary.json` as `river_copies_dropped`. `fetch-stations`
   writes copies as served and reports nothing about them. **Red amendment:**
   the two places that unpack `read_segments` (`test_rivers.py`'s `read` and
@@ -192,6 +193,35 @@ seen by `@reviewer` on any PR that touches it. `@tester` removes that one test;
 `NOT_PROSE` in `tools/ci_changes.py` is unchanged. NVE's credit in `NOTICE.md`
 (its section "Data in the package"; this file's §"Licence" and §"Data use")
 stands.
+
+**PR 2's red step: three design questions (2026-10-05).** Not Ola's
+rulings: `@architect`'s answers to `@tester`'s questions on red `3a06ffc`,
+written into the design where they apply. None needs Ola; the first follows
+his ruling on the gauge (Question 4 above).
+
+1. **The valley floor biased the gauge downstream.** "The least elevation
+   within 30 m" picks, on a falling floor, the node about 30 m downstream of
+   each point, so the placed node too: a downstream bias, which Ola's ruling
+   forbids. **Changed**: the least elevation is taken across the line, in a
+   cross-section one step wide ("Following the river", step 2, with the
+   measurement). The tests that pinned the old rule's nodes change:
+   `test_burn.py`'s off-floor, tie and placed-node tests (chains on rows 5
+   to 40, not 6 to 41 or 7 to 42; placed node `(15, 20)`, `node_offset_m`
+   28.0), and `test_cli_catchment.py`'s placed node (row 150, not 152),
+   offset, swing rows and stderr sentence ("moved ... onto the DEM's valley
+   floor", "Following the river" and `rasputin catchment` above). The
+   embankment tests, and every test at a 5 m corridor with its points on
+   nodes, are unchanged.
+2. **`U` between nodes.** Read to `U` means every sample within `U` trusted
+   and a chain node at or past `U` ("Sensitivity", step 2; `D` in "The
+   window loop"), not `checked_down_m >= U`. `@tester`'s reading, adopted.
+3. **The corridor's boundary is inside** (`<=`, with 1e-6 m of slack for
+   rounding; step 2).
+
+Also pinned there: the prefix tier ("Placing the gauge", step 2); the count
+of segments read (the file's features, copies included); a station in
+another CRS is transformed into the river file's CRS, which must be the
+DEM's; `GaugePath.placed` is one `int` in 29 ("Residual inflow, later").
 
 ## What the data says (measured 2026-10-04)
 
@@ -830,7 +860,13 @@ visible, and `@tester` pins the mapping on all 25 values.
 2. **Which river**: the station's own watercourse number says which river it
    is on. Tiers: the segment's `vassdragsnr` equals the station's (113 of the
    139 nearest lines), then shares its prefix or its river name (26 more,
-   not checked one by one), then any. **The nearest segment of the best
+   not checked one by one), then any. **Prefix** (pinned 2026-10-05 for
+   PR 2's green step): the segment's number, not equal to the station's, is
+   a leading part of it as a string (`station.startswith(segment)`), and the
+   two share the main number before the first dot (`"002.A"` is a prefix of
+   `"002.AB"`; `"002"` is not, and `"002.AB"` is not one of `"002.A"`: the
+   station's area drains into the segment's river, not the other way). The
+   prefix tier comes before the name tier. **The nearest segment of the best
    non-empty tier wins**, and the tier is reported (`placed_on`: `number`,
    `prefix`, `name`, `any`), so a station placed on a line that is not its
    own is visible in the table, not hidden in a choice.
@@ -892,9 +928,33 @@ moved to the valley floor, then lowered where it still climbs:
 
 1. **Resample** the reach at the DEM's node spacing, by arc length, from its
    first vertex.
-2. **Valley floor.** For each resampled point, the node of least elevation
-   within `corridor` of it (ties: the nearer to the point, then the smaller
-   (row, column)). The chosen nodes are joined into one 8-connected chain
+2. **Valley floor, across the line.** For each resampled point `p`, the node
+   of least elevation in its **cross-section**: the nodes within `corridor`
+   of `p` (distance `<= corridor + 1e-6 m`: a node exactly at the corridor's
+   distance is inside) whose offset from `p` along the line is at most half
+   the resample step (`|(n - p) · t| <= step/2 + 1e-6 m`, `t` the unit
+   direction of the line's segment that holds `p`; a point on a vertex takes
+   the segment that starts there, the last point the last segment). Ties: the
+   nearer to `p`, then the smaller (row, column). A cross-section with no node
+   (only when `corridor` is below half a cell's diagonal, 7.07 m on DTM10)
+   takes the node nearest `p`, same ties. **Why across and not the whole
+   disc** (PR 2's red step, `@tester`): the least elevation anywhere within
+   `corridor` lies, on a falling floor, at the downstream edge of the disc, so
+   every point, and the placed node with them, moves downstream by about the
+   corridor. Measured 2026-10-05 with a throwaway script (not committed) on a
+   straight floor falling 0.5 m per 10 m, at 0°, 30° and 45° to the lattice:
+   the disc rule moved the chosen node 6 to 8 m downstream on average at a
+   15 m corridor, 22 to 26 m at 30 m and 52 to 56 m at 60 m; the
+   cross-section moved it at most 4.6 m either way, at every corridor. A
+   downstream bias is what Ola's ruling forbids ("moving a point 100m
+   downstream will always give you more inflow"), and it would grow with the
+   15 m / 60 m corridor re-runs of the acceptance; across the line, the
+   corridor sets how far off the line the floor may be, not how far along.
+   This is the usual definition of a thalweg, the line joining the lowest
+   points of successive cross-sections. The 1e-6 m is about 500 times
+   float64's spacing at 1e7 m, the largest coordinate a UTM northing reaches;
+   checked at Norway's northings (up to 7.9e6 m) only by that arithmetic.
+   The chosen nodes are joined into one 8-connected chain
    (a straight node-to-node line between consecutive chosen nodes).
    **The chain is then made taut**, before the descent: no two of its nodes
    that are not consecutive may be equal or 8-neighbours. From the first node
@@ -984,7 +1044,9 @@ moved to the valley floor, then lowered where it still climbs:
    the gauge, such as a lake, ends here, as it should.
 6. **The placed node** is the chain node that the resample point nearest `at`
    chose (after the taut cut, see step 2); its distance from `P` is reported
-   (`node_offset_m`, at most about the corridor).
+   (`node_offset_m`, at most about the corridor, and, by step 2's
+   cross-section, mostly across the river: along it, at most half a step
+   before a taut cut moves it).
 
 The burn is a pure function of the window array, its georeference and the
 `Reach`, with no state; it returns a copy (the DEM repository's array is
@@ -1029,8 +1091,9 @@ again in each larger window; it depends only on elevations round the reach,
 which every window holds.
 
 Stage B reads the area where the sensitivity needs it. The downstream end of
-the sensitivity window, `D`, is the chain node `U` downstream of the placed
-node. Stage B continues from stage A's window: it floods from `D` and grows as
+the sensitivity window, `D`, is the first chain node at or past `U`
+downstream of the placed node (arc length `>= U`; `U` need not be a multiple
+of the node step, and a diagonal step is 14.1 m). Stage B continues from stage A's window: it floods from `D` and grows as
 stage A does, so that `D`'s own catchment is clear of the edge. Whether a count
 along the chain can be trusted is **not** inferred from `D`'s catchment
 containing the placed one (it does so only where the chain drains, which is
@@ -1090,8 +1153,16 @@ shapely):
    lies inside the placed catchment only where it drains, which is checked
    below, not assumed). Each side is read outward from the placed node up to
    the first untrusted sample; the distances read are `checked_up_m` and
-   `checked_down_m`. **Downstream, the read must reach `U`**: `checked_down_m
-   >= U`, and the mapped river must reach it (`reach_down_m >= U`, from "Placing
+   `checked_down_m` (the arc length of the farthest trusted sample of that
+   unbroken run, so at most `U`). **Downstream, the read must reach `U`**:
+   every sample in `(0, U]` is trusted **and the chain has a node at arc
+   length `>= U`** (that node is `D`, stage B's; its own count is not a
+   sample and its flags do not matter). This is not `checked_down_m >= U`:
+   where `U` is not a multiple of the step, the farthest sample lies short of
+   `U` (with `U` = 35 m on straight steps, the samples are at 10, 20 and
+   30 m), and the strict test would mark every such station unread, every
+   diagonal river at the 30 m floor among them. The mapped river must also
+   reach it (`reach_down_m >= U`, from "Placing
    the gauge"; the extension of "Following the river" is not mapped river). A
    side that stops short is a gauge whose neighbourhood was not looked at, and
    the station is **`uncertain`** (cause `downstream_unread`), not scored.
@@ -1178,9 +1249,12 @@ def residual(upstream: Catchment, downstream: Catchment) -> Residual
 
 What 29 does so that this is not blocked:
 
-- `burn_reach` and `sensitivity.assess` take the placed positions as an index
-  array into the chain (29 passes one index), and the chain and its flood
-  are the unit, not the station.
+- The placed position is an index into the chain, not a coordinate, and
+  the chain and its flood are the unit, not the station. In 29,
+  `GaugePath.placed` is one `int` (PR 2's red step pins it so); the residual
+  increment widens it to an index array, a change local to `burn_reach` and
+  `sensitivity.assess` (amended 2026-10-05 from "take an index array" here,
+  which no 29 caller needs).
 - `Placement` and `StationResult` record the river (`elvid`), the segment
   (`objectid`) and the position along it, so gauges can be grouped and
   ordered along a river without geometry.
@@ -1402,9 +1476,15 @@ station (number, name, class, the three numbers) and the summary at the end.
 **`rasputin catchment`** gains `--rivers FILE` (with `--map-radius` and
 `--reach-up`): the seed is placed on the nearest line as above, with no
 watercourse number, and one stderr line says where: "placed on the river line
-31 m from the station (river Nea, line 8841), at the DEM's valley floor 6 m
-farther on; 119.0 km² drain through it, and the area changes by 0.3 % within
-30 m up and down the river: well defined".
+31 m from the station (river Nea, line 8841), moved 6 m onto the DEM's valley
+floor; 119.0 km² drain through it, and the area changes by 0.3 % within
+30 m up and down the river: well defined". The 6 m is `node_offset_m`,
+which step 2's cross-section makes mostly a move across the river, so the
+sentence no longer says "farther on" (amended 2026-10-05). A station given
+in another CRS (`--seed-crs`, WGS84 by default as in 22) is transformed into
+the river file's CRS before `place`, and the request's seed is passed in
+that CRS; the river file's CRS must be the DEM's, or it is refused (the
+burn takes the reach in the window's coordinates).
 
 **The GeoJSON writer moves** in PR 4, where `station-catchments` becomes
 the second command to write a catchment file (PR 3 writes none), from
@@ -1677,8 +1757,12 @@ built directly or read through PR 3's `read_segments`):
   dropped resample point mapped to the node the cut starts from, and the
   placed node still on the chain; the direction check at 2 m and
   at a reach of 100 m, a flat lake reach passing it; the input array is not
-  written; the placed node is the chain node nearest `at` along the chain and
-  its offset is reported; a reach end outside the window is dropped and
+  written; the placed node is the chain node the resample point nearest
+  `at` chose (step 6) and its offset is reported; **the valley floor is taken
+  across the line** (step 2): on a straight floor falling along the line the
+  chosen node is the floor node abeam each point, not one downstream; a node
+  exactly `corridor` away is inside; a cross-section with no node takes the
+  nearest node; a reach end outside the window is dropped and
   reported, a placed position outside it is refused.
 - `test_sensitivity.py`: a smooth gain; a confluence step of known size at a
   known position; a flat floor; a swing of exactly 0.05 is well posed and
@@ -1688,7 +1772,9 @@ built directly or read through PR 3's `read_segments`):
   `checked_down_m` say so; **a downstream side not read to `U` is
   `uncertain` (cause `downstream_unread`)**, whether a flag stopped it or the
   mapped river ends before `U` (`reach_down_m < U`), while a river that
-  starts within `U` upstream is not penalised; `monotone` is strict (two equal
+  starts within `U` upstream is not penalised; with `U` between nodes (35 m
+  on 10 m steps), trusted samples to 30 m and a chain node at or past 35 m
+  read to `U`, a chain whose last node is at 30 m does not; `monotone` is strict (two equal
   neighbouring counts give `False`) and a fall or an open end gives it
   `False`; `drains` is false when `flow_to` of a read sample points off the
   chain; each cause is counted apart.
