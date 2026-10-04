@@ -1,7 +1,8 @@
 # Increment 20 — a quality start: minimum-angle Steiner nodes before DEM refinement
 
-Status: **landed with 20b as interim; C1-C3 open, carried to 20c. A fix
-(the pass skips NoData nodes) designed 2026-10-04, at the end of this file.** Red
+Status: **landed with 20b as interim; C1-C3 open, carried to 20c. Fix: the pass
+inserted NoData nodes that trim then removed (wasted work); it now skips them,
+implemented `0d60c69` and accepted `13aeb4f`, 11 lines (end of this file).** Red
 `f7ae381`; green `affc955`, `a66632c` (ASCII wording), `f5489ab`. The build
 ran on the main session's provisional picks C1 (a), C2 (a) 25° and C3 (a).
 Ola reviewed them on 2026-09-26 and accepted none as final; see "Ola's
@@ -616,7 +617,7 @@ Legacy: nothing. `git grep -l -i -e "min_angle" -e "nodata" legacy-archive
   there, `skipped_void == 1`, and the same fixture with every node valid
   inserts that node (the control). One more check: the default callable
   gives today's outcome on an existing fixture, field by field.
-- **Q-V2 (Python, through `rasputin mesh`, uncut): the hole.** The smallest
+- **Q-V2 (Python, through `rasputin mesh`, uncut): the wasted insert.** The smallest
   scene that reproduces DC10's shape: a small projected DEM, a `--domain`
   polygon with a sliver-making corner, and the DEM node nearest that bad
   triangle's circumcentre set to NoData (both the sentinel and NaN, as
