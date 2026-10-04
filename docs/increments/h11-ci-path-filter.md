@@ -1,8 +1,10 @@
 # Harness h11: skip the code jobs on prose-only pull requests
 
-Status: design done, Ola's rulings recorded (§9) (`@architect`, 2026-10-04).
-Ready for `@tester` (§6); then `@developer`, then Ola's settings step (§5),
-which must follow the merge directly.
+Status: design done, Ola's rulings recorded (§9); red step in (21d675e,
+8db5bfc), two points it raised settled in §6.1 (`@architect`, 2026-10-04).
+Ready for `@tester`'s second red amendment (§6.1, point 2: the install trap's
+copy); then `@developer`, then Ola's settings step (§5), which must follow the
+merge directly.
 
 Why: `.github/workflows/main.yaml` has no path filter, so a pull request that
 changes only prose (for example #174: `ROADMAP.md` and one increment status
@@ -100,7 +102,13 @@ def is_prose(path: str) -> bool
 def needs_full_ci(paths: Sequence[str]) -> bool   # empty -> True
 def changed_paths(base: str, head: str, repo: Path) -> list[str]  # raises on any git failure
 def main(argv: list[str]) -> int   # always prints code=true|false, exits 0
+def prose_reads(paths: Iterable[str], root: Path) -> list[str]   # §6, T5
 ```
+
+`prose_reads` keeps the paths that lie inside `root`, turns each into its
+`/`-separated path relative to `root`, and returns those for which `is_prose`
+is true; paths outside `root` are dropped. It is pure (no file system access
+beyond the path arithmetic) and is what the T5 hook calls (§6.1).
 
 `is_prose(path)` is true when `path` ends in `.md` (case-sensitive), is not
 in `NOT_PROSE`, and either has no `/` (a root file) or starts with `docs/`.
@@ -220,6 +228,7 @@ and a skipped job reports success.
 | `changes` job crashes | code jobs skipped, `CI result` fails on `CHANGES` |
 | A code job fails or is cancelled | `CI result` fails |
 | A new suite starts reading a prose file | caught by the suite's own read check (§6, T5) |
+| `tools/ci_changes.py` missing or broken | every `pytest` session over `tests/python` ends red, saying so (§6.1) |
 | A new job added to the workflow | T4 fails until it is in `CI result`'s `needs` or on the named exemption list |
 | PR with a merge conflict | no `pull_request` run at all (GitHub's rule), as today |
 | Concurrency | group unchanged; `changes` and `result` cancel with the rest |
@@ -292,6 +301,64 @@ production, as here. Tests are excluded. Well under 700.
 
 The red step: T1 to T4 fail on the missing tool and the unchanged workflow;
 T5's planted run fails because the hook does not exist.
+
+### 6.1 Two points the red step raised
+
+**1. Who writes the T5 hook: `@tester`.** `tests/python/conftest.py` is a test
+file, so it is `@tester`'s, and `@developer` does not edit it; `@tester` wrote
+it in 8db5bfc. `@developer`'s share of T5 is `prose_reads` in the tool
+(§2.1). The hook **fails closed**: it imports the tool at session end, and if
+the tool is missing or has no `prose_reads`, the session ends red with a
+sentence naming `tools/ci_changes.py`. So between the red step and the green
+one every `pytest` run over `tests/python` is red, locally and on every CI
+leg, whatever it tested; that is the red step working, not a regression.
+
+**2. The install trap's copy of the tree: leave prose out; `@tester` makes
+the change.** `copy_source_tree` in `tests/python/test_hardening.py` (T6 of
+increment 24, run only with `RASPUTIN_INSTALL_TRAP=1`, which CI's "Hardening
+install trap" step sets on the Python 3.12 leg) lists the checkout with
+`git ls-files -co --exclude-standard` and copies each file with
+`shutil.copy2`, which opens it in the test process. The hook would see
+`ROADMAP.md`, `INSTALL.md`, `testing.md` and every `docs/**/*.md`, and that CI
+step would turn red as soon as the tool exists. The copy does not depend on
+what those files say.
+
+The fix: `copy_source_tree` skips every listed path for which the tool's
+`is_prose` is true (loading the tool the way `test_ci_changes.py` does, through
+`harness_fixtures.Tool`). The `NOT_PROSE` files, `README.md` among them, are
+still copied, so the install still finds the readme `pyproject.toml` names.
+The test's docstring says why prose is left out, and the install's failure
+message adds one sentence: if the build now needs a file that is not copied,
+that file belongs in `NOT_PROSE`.
+
+Weighed against the other two routes:
+
+- *Exempt the copy from the hook* (a marker or an allowlist in the conftest).
+  Rejected: it adds an exemption mechanism to the one check T5 rests on, and
+  the next test that wants a pass would reach for it.
+- *Copy with a subprocess* (`git checkout-index --prefix`, `cp`), whose reads
+  the hook does not see. Rejected: it passes only by routing around the hook.
+- *The cost of skipping*, the point `@tester` raised: a build that silently
+  needs a prose file would break only in the trap. That is a gain, not a
+  loss. The installs run in a `pip` subprocess, which the hook cannot see
+  (its stated limit), so today nothing anywhere would notice the build
+  starting to need, say, `docs/x.md`, and a prose-only PR could then change
+  that file with no build run at all. With prose left out of the copy, the
+  trap is the one place that build dependency shows up, as a red install on
+  the 3.12 leg. The message is a build error rather than T5's sentence, which
+  is why the failure message above names `NOT_PROSE`.
+
+What the rest of the suite reads, checked for this ruling: the suite was run
+on this branch with a throwaway pytest plugin that records every file opened
+in the process and applies §2.1's rule, using the main checkout's virtual
+environment (no C++ build allowed in that run, and its extension is older than
+the tree). It saw no prose read in the 3,458 tests that passed. The stale
+extension kept 32 modules from being collected and made 32 tests fail and 75
+error, so those were not seen; in the 32 modules a `.md` name appears only in
+docstrings, in files under `tmp_path`, and in the trap copy above
+(`git grep -n '\.md'` over them). The probe was shown able to fail by a
+planted test reading `ROADMAP.md`, which it named. The conftest itself is the
+authority: the green run on CI covers every module.
 
 **Only a real PR can show** (the main session, with `gh pr checks`):
 
