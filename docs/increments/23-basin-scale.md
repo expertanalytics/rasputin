@@ -2836,6 +2836,19 @@ step's commits split along the same line (`edd8a29`, `d994a0e`, `db6a5c0`
 to 23c-1; the rest to 23c-2); how the branches are rebuilt is the main
 session's.
 
+### Two pins from the follow-up tests (b1a8baf)
+
+`tests/python/test_cli_mesh_pieces_settled.py` pins two choices this block
+left open. Both confirmed:
+
+- **Where the pieces are, on stderr** (item 2): the test asserts only that
+  the output contains the directory's name. That is enough: the wording is
+  `@developer`'s, and the directory's name is the fact a reader needs.
+- **`counts.triangles`** (items 11 and B) is the number of triangles written
+  to the piece file, after the triangles over NoData are dropped. That is
+  the number a reader of the file can check, and it is what makes an
+  all-NoData piece's entry read zero.
+
 **B17 for Ola** is under "New questions, after the rulings".
 
 ## Questions for Ola
