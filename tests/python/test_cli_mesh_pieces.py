@@ -67,19 +67,7 @@ def base(scene: tuple[Path, Path, np.ndarray], tolerance: str = "1") -> tuple[st
 
 
 def all_problems(done: Cut, array: np.ndarray, tolerance: float) -> list[str]:
-    """DC2-DC5 over one cut run, as one list of what is wrong."""
-    problems = pf.conformity_problems(done.pieces)
-    problems += [f"seam edge off the lattice: {e}" for e in pf.off_lattice_seams(done.pieces)]
-    u = pf.union(done.pieces)
-    problems += [f"two z at {k}" for k in u.z_conflicts]
-    problems += pf.validity_problems(u, DOMAIN)
-    problems += [f"triangles {p} overlap" for p in pf.overlapping_pairs(u)]
-    violations = pf.delaunay_violations(u.points[:, :2], u.triangles, u.constrained)
-    problems += [f"not constrained Delaunay: {v}" for v in violations]
-    found = pf.tolerance_check(u, array, DOMAIN, tolerance)
-    if found.over or found.outside_mesh:
-        problems.append(f"tolerance: {found}")
-    return problems
+    return pf.problems(done, array, DOMAIN, tolerance)
 
 
 # ------------------------------------------------------------------ options

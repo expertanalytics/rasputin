@@ -407,3 +407,19 @@ def triangle_set(points: npt.NDArray[np.float64], triangles: Any) -> set[frozens
         frozenset((float(points[i, 0]), float(points[i, 1])) for i in tri)
         for tri in np.asarray(triangles).tolist()
     }
+
+
+def problems(done: Cut, array: np.ndarray, domain: Polygon, tolerance: float) -> list[str]:
+    """DC2-DC5 over one cut run (both section 3D oracles), as what is wrong."""
+    found = conformity_problems(done.pieces)
+    found += [f"seam edge off the lattice: {e}" for e in off_lattice_seams(done.pieces)]
+    u = union(done.pieces)
+    found += [f"two z at {k}" for k in u.z_conflicts]
+    found += validity_problems(u, domain)
+    found += [f"triangles {p} overlap" for p in overlapping_pairs(u)]
+    violations = delaunay_violations(u.points[:, :2], u.triangles, u.constrained)
+    found += [f"not constrained Delaunay: {v}" for v in violations]
+    check = tolerance_check(u, array, domain, tolerance)
+    if check.over or check.outside_mesh:
+        found.append(f"tolerance: {check}")
+    return found
