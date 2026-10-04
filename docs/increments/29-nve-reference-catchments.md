@@ -1,12 +1,16 @@
 # Increment 29 — NVE reference catchments: our catchments against NVE's, station by station
 
-Status: **revised after design review round 3, awaiting round 4**
+Status: **revised after design review round 4, awaiting round 5**
 (`@architect`, 2026-10-04), branch `worktree-nve-catchments` off master
 `d20126b`. Ola's rulings of 2026-10-04 are in the section below. Round 2 closed the burn's drainage claim
 (checked node by node, not assumed), the ELVIS data cases, the PR order, and
 added "Data use". Round 3 makes the burnt chain taut (no two of its nodes
 that are not consecutive may be neighbours), corrects the lowering bound and
-the tile sizes, and records Ola's ruling on the nine shifted-tile stations. The gauge
+the tile sizes, and records Ola's ruling on the nine shifted-tile stations.
+Round 4 states the end extension's stopping rule, qualifies what the burn
+leaves unchanged, words the mixed-grid refusal for every cause the mosaic
+has, re-measures `7707_1`'s overlap against all four neighbours, and records
+Ola's ruling on the figure script. The gauge
 placement is redesigned to his direction (the mapped river, then the DEM's
 flow path along it, never an area objective), with a per-station sensitivity
 check. Five PRs (merge order 1, 3, 2, 4, 5). Every choice still open is marked "Default (@architect,
@@ -89,9 +93,14 @@ with maps "before" and "after", as pngs." Taken as a deliverable of PR 2
 - **How they are counted.** Ola: "Exactly, the nine are not failues on their
   own, they are not available for us due to other limitations." They are
   **reported apart, as known refusals, not as failures**: each of the nine
-  rows names the shifted tiles as the cause (`refusal_cause = "mixed_grid"`
-  and the two tiles, "The batch"), and the summary has one line for them;
+  rows names the mixed grids as the cause (`refusal_cause = "mixed_grid"`
+  and one tile from each grid, "The batch"), and the summary has one line for them;
   the acceptance README's line adds that a later increment fixes the tiles.
+- **The placement-figure script** ("Placement figures"). Ola, 2026-10-04
+  (10:51), answering two questions from the main session: "map questions:
+  1: No, 2: Yes." Question 1: does the 130-line script count toward PR 2's
+  700-line limit? No. Question 2: may it plot with matplotlib, in that
+  evidence script only and in no dependency list? Yes.
 
 ## What the data says (measured 2026-10-04)
 
@@ -284,18 +293,37 @@ channel, and these numbers are re-measured by the acceptance run).
   (`.tfw`, the centre of the first cell) the normal tiles' x is a multiple of
   10 m (`6400_1`: 49750) and the shifted tiles' is 5 m off one (`7304_1`:
   449745); the y values of both are multiples of 10 m. **The cause is a
-  resample, not a label** (measured by the main session, 2026-10-04, not
-  re-run for this file): all 254 tiles declare PixelIsArea and their GeoTIFF
-  tags agree with their `.tfw` files, and where a shifted tile overlaps a
-  normal neighbour, the median elevation difference is smallest at the
-  declared position: `7707_3` 0.05 m, against 0.51 m and 0.50 m with the
-  tile moved −5 m and +5 m; `7707_1` 0.18 m against 1.56 and 1.58; `7807_2`
-  0.11 against 0.38 and 0.38; `7507_4` 0.00 against 0.06 and 0.06. Three
-  tiles touch neighbours only on flat ground, where the test cannot tell, and
-  `7304_1` differs by about 2 m at any shift. One neighbour per tile was
-  compared: a quick check, not a survey. So the data were resampled onto a
-  shifted grid, and the later fix resamples them onto the common one; moving
-  the label would misplace them by 5 m. Increment 15a's mosaic refuses a
+  resample, not a label**: all 254 tiles declare PixelIsArea and their
+  GeoTIFF tags agree with their `.tfw` files, and where a shifted tile
+  overlaps a normal neighbour, the median elevation difference is smallest
+  at the declared position. **The method**: the shifted tile's node centres
+  are moved by −5, 0 and +5 m in x; the neighbour is interpolated linearly in
+  x at those positions (the rows share the y lattice); the median absolute
+  difference is taken over up to 400 evenly spaced rows of the overlap,
+  NoData excluded. **`7707_1`**, against all four of its normal neighbours
+  (those whose bounding box overlaps it by at least 200 m both ways:
+  `7707_2`, `7707_4`, `7708_3`, `7708_4`): 0.02 to 0.11 m at the declared
+  position, against 0.19 to 0.44 m moved either way (@reviewer, round 4,
+  0.45 m at the top; re-run by @architect the same day with the method
+  above, a throwaway script, not committed). **`7707_3`**, against its seven
+  normal neighbours by the same rule (re-run by @architect): three of its four
+  long overlaps favour the declared position clearly (`7607_4` 0.02 m,
+  `7706_2` 0.07 m, `7707_4` 0.05 m, against 0.50 to 1.02 m moved), but the
+  fourth, `7707_2`, is a **near tie**: 0.25 m declared, 0.24 m moved −5 m,
+  0.73 m moved +5 m; of the three 500 m corner overlaps, `7607_1` favours the
+  declared position (0.07 against 0.13 and 0.27) and two are near ties
+  (`7706_1` 0.23 against 0.70 and 0.24; `7606_1` 1.27 against 3.91 and
+  1.32). The other
+  tiles were compared against one neighbour each, by the main session
+  (2026-10-04, not re-run here except `7507_4`, which @reviewer re-measured
+  in round 4): `7807_2` 0.11 m against 0.38 and 0.38; `7507_4` 0.00 against
+  0.06 and 0.06. Three tiles touch neighbours only on flat ground, where the
+  test cannot tell, and `7304_1` differs by about 2 m at any shift. The
+  near ties do not change the conclusion: all four of `7707_1`'s overlaps
+  and three of `7707_3`'s four long ones favour the declared position
+  clearly, and none favours a moved one clearly. So the data were resampled onto
+  a shifted grid, and the later fix resamples them onto the common one;
+  moving the label would misplace them by 5 m. Increment 15a's mosaic refuses a
   selection that mixes the two lattices. Nine HRD polygons meet both kinds of tile:
   `156.15.0`, `196.11.0`, `206.3.0`, `208.2.0`, `208.3.0`, `209.4.0`,
   `212.49.0`, `213.2.0`, `223.2.0` (tile footprints intersected with NVE's
@@ -831,10 +859,15 @@ moved to the valley floor, then lowered where it still climbs:
    taut by that choice**, rather than by a second pass after it: a node cut
    after the descent would stay lowered while off the chain. `end_cap` is
    500 m of arc length along the extension, and the metres govern, not a
-   node count: 36 nodes if every step is diagonal, 50 if every step is
-   straight, on DTM10. The extension then ends at most 500 m from the reach's
-   last node, inside the window, whose margin round the reach is
-   `WINDOW_MARGIN_M`, 2000 m (even 50 diagonal steps, 707 m, would be). The metres added are reported (`end_extended_m`, 0 when the end
+   node count. **The stopping rule**: a step is taken only if the extension's
+   arc length after it is at most `end_cap` (a step of exactly 500 m total is
+   taken); the step that would pass 500 m is not taken, and if the last node
+   is still lowered there, the cap is hit. On DTM10 that allows at most 35
+   diagonal steps (495.0 m; a 36th would make 509.1 m) or 50 straight ones
+   (exactly 500 m, summed from 10 m steps, so no rounding decides it). The
+   extension then ends at most 500 m of arc length, and so at most 500 m in a
+   straight line, from the reach's last node, inside the window, whose margin
+   round the reach is `WINDOW_MARGIN_M`, 2000 m. The metres added are reported (`end_extended_m`, 0 when the end
    was not lowered). **A cap hit, NoData or the window's edge before the raw
    ground falls, or no neighbour that keeps the chain taut, marks the chain
    `monotone = False`** (the chain's end is not closed), which makes the
@@ -863,7 +896,9 @@ the acceptance's lowered-node counts and the miss analysis show it. (b) The
 burn does nothing for a mapped line that is wrong (NEVINA warns REGINE can
 be, and ELVIS is derived from N50 at a coarser scale). (c) A lake reach gets
 an artificial channel 0.001 m deep per node (about 0.21 m over the longest
-usual chain, step 4): the catchment is unchanged, but the count along
+usual chain, step 4): the catchment is unchanged except where a chain node
+was another depression's spill point (the drainage move just above), but the
+count along
 a lake's flat floor jumps where the flat's nodes join the chain, which is
 what the sensitivity reports as `uncertain`.
 
@@ -1164,9 +1199,12 @@ counted (a station can have several): `swing` (split by its largest step's
 position: a confluence step, or a flat floor or lake), `downstream_unread`,
 `chain_not_draining`, `chain_end_open`, `direction`; the refusals counted by
 `refusal_cause`, with the `mixed_grid` ones apart as **known refusals**: one
-summary line, "N stations refused because their catchments cross tiles on
-two different grids (known refusals, not failures: the tiles need resampling
-onto one grid)", and their station numbers. Deterministic JSON.
+summary line, "N stations refused because their windows select tiles on
+two different grids, which rasputin does not combine (known refusals, not
+failures)", and their station numbers. The line is general because the
+refusal is (below): on DTM10 its only cause is the half-cell shift, and the
+acceptance README, not the summary, says that a later increment resamples
+those tiles. Deterministic JSON.
 
 ### The batch (`catchment_batch.py`)
 
@@ -1199,15 +1237,25 @@ async def run_batch(request: BatchRequest, repository: DemRepository,
   mixed-lattice one, `no_river` for `place` returning `None`, and `other`
   for the rest (NoData, the data's edge, the memory cap: their message says
   which). **`mixed_grid` is told by type, not by message**: `mosaic.py`
-  raises a new `MixedGridError(MosaicError)`, carrying the two tiles' names,
+  raises a new `MixedGridError(MosaicError)`, carrying two tiles' names,
   where `_covering` today raises the plain `MosaicError` of `_mixed(...)`
   (same message, so increment 15a's suite is unchanged), and
   `catchment._plan` maps it to a new `MixedGridRefusal(CatchmentError)` with
-  the same `tiles`. The row names the two tiles. A station
+  the same `tiles`. **What it covers**: every refusal `_mixed` words, so tiles
+  that differ in CRS, spacing, registration or NoData value, as well as a
+  lattice offset; `mixed_grid` therefore means "tiles on two grids", not
+  "half-cell-shifted tiles". On DTM10 only the offset occurs (all 254 tiles
+  have 10 m spacing, NoData −32767, EPSG:25833 and PixelIsArea, read with
+  `tifffile`, 2026-10-04). **Which two tiles**: the ones `_covering` passes to
+  `_mixed`, `chosen[0].selected[0]` and `chosen[1].selected[0]`, the first
+  selected tile of each of the first two grids: one tile from each grid,
+  named so the cause can be found, and not necessarily a tile the catchment
+  crosses (the window's margin can select a tile the catchment never
+  reaches). The row names those two tiles as such. A station
   `place` returns `None` for is `refused` ("no mapped river line within 500 m
   of the station") until the fallback of "The fallback" lands.
 - `StationResult` (frozen): station, name, class, `match_by`, refusal message,
-  `refusal_cause` and, for `mixed_grid`, the two tiles;
+  `refusal_cause` and, for `mixed_grid`, one tile from each grid;
   the placement (`placed_on`, station-to-line distance, `U`, `lake`,
   `confluence_near`, `elvid`, segment `objectid`, `reach_up_m`,
   `reach_down_m`); the gauge numbers (`node_offset_m`, `lowered_nodes`,
@@ -1281,11 +1329,11 @@ the known-refusal cause to PR 4 (295 to 310).
 | `NOTICE.md`, `project_structure.md` | NVE's credit; the new modules | docs |
 | **PR 3, the stations and rivers** | | **about 380 (545 with the margin)** |
 | `gauge.py` | `Gauge`, `Placement`, `place`, forks, `Reach` | 100 |
-| `burn.py` | valley floor, loop cuts, descent, chain end, direction, `GaugePath` | 105 |
+| `burn.py` | valley floor, taut pass, descent, chain end, direction, `GaugePath` | 105 |
 | `sensitivity.py` | `assess`, `Sensitivity`, `drains`, the causes | 75 |
 | `catchment.py` | request field, stages A and B, burn per window, `GaugeResult` | 95 |
 | `cli.py` | `catchment --rivers` and the placement line | 40 |
-| `docs/benchmarks/<date>/nve-placement/render.py` | the placement figures (evidence script, not counted; "Placement figures") | (130) |
+| `docs/benchmarks/<date>/nve-placement/render.py` | the placement figures (evidence script, not counted, Ola's ruling; "Placement figures") | (130) |
 | **PR 2, the gauge on the river** (needs PRs 1 and 3) | | **about 415 (600)** |
 | `reference.py` | agreement, classes, `match_by`, summary | 115 |
 | `catchment_batch.py` | `BatchRequest`, `BatchSink`, `run_batch`, `StationResult`, `refusal_cause` | 105 |
@@ -1346,9 +1394,10 @@ public functions and adds no logic of its own to the placement:
 `catchment.delineate` (whose `GaugeResult.chain` gives the burnt chain), and,
 for the flow paths, one window read round the reach, `burn.burn_reach` on it
 and `accumulate` on the raw and the burnt arrays. **Plotting with matplotlib**,
-which is not a declared dependency of the package or of any extra and is not
-added to one: increment 6's ruling keeps it out of the package, and the
-evidence scripts already use it outside the package
+in this evidence script only, and not added to the package's dependencies or
+to any extra: ruled by Ola, 2026-10-04 ("map questions: 1: No, 2: Yes.",
+question 2; see "Ola's rulings"). Increment 6's ruling keeps it out of the
+package, and other evidence scripts already use it outside the package
 (`docs/benchmarks/2026-10-02/15c-2-acceptance/run_geo.py`'s independent
 check). The repository's own picture route, `tin_engine.viz.svg`, draws a
 triangulation as SVG and writes no PNG; VTK (the `viewer` extra, which
@@ -1372,26 +1421,31 @@ same map extent: the reach's bounds plus 300 m.
 gives the numbers that chose each:
 
 1. **Placed straight onto the DEM's flow path**: well posed, no node lowered
-   (`lowered_nodes == 0`), and the smallest catchment of those (quick to run).
+   (`lowered_nodes == 0`), and of those the one with the smallest NVE polygon
+   area (the reference layer's area, since the survey computes no catchment;
+   quick to run).
 2. **The line burnt in**: well posed, with the largest `lowered_max_m`.
 3. **Marked uncertain**: cause `swing`, with a confluence step; from the 19
    stations with `confluence_near`, the first in list order that is.
 4. **A lake gauge** (`lake`), the first in list order that is well posed.
 
-Cases 1 and 2 are chosen by a survey mode of the script (`--survey`: place
+Cases 1 and 2 are proposed by a survey mode of the script (`--survey`: place
 and burn every station on its first window, no catchment, so seconds per
-station); cases 3 and 4 by running `catchment --rivers` on the candidates in
-order until one qualifies. A case no station qualifies for is reported as
-such, not filled by a near miss.
+station). The survey's "well posed" is only the first window's (no
+`drains` failure, a closed end, the swing within its bar there), so a
+proposed case is **confirmed by the full run** (`catchment --rivers`): if
+the full run makes it uncertain or refuses it, the next candidate in the
+survey's order is run, until one is confirmed. Cases 3 and 4 are chosen by
+running `catchment --rivers` on the candidates in order until one
+qualifies. A case no station qualifies for is reported as such, not filled
+by a near miss; the README lists every candidate run and why each one that
+was passed over failed.
 
-**Lines.** About 130 (the survey, the two maps, the inset). Under CLAUDE.md
-§2 the ceiling counts production code, and this is an evidence script that
-is not in the package, so it is **not counted**: increment 16c's LOC table
-(`docs/increments/16c-landcover-labels.md`, "LOC") lists its production files and not the
-155-line `render.py` of its evidence directory. Counted, PR 2 would be about 415
-+ 130 + 3 = 550, 790 with the 44 % margin, over the ceiling: then the
-figures go in a small PR of their own right after PR 2, and nothing else
-changes. **Run by `@perf`** after PR 2 is green, as it owns evidence.
+**Lines.** About 130 (the survey, the two maps, the inset). **Not counted
+toward PR 2's 700-line ceiling, by Ola's ruling** of 2026-10-04 ("map
+questions: 1: No, 2: Yes.", question 1; see "Ola's rulings"): it is an
+evidence script, outside the package. PR 2 stays at about 415 (598 with the
+44 % margin). **Run by `@perf`** after PR 2 is green, as it owns evidence.
 
 ### The fallback: nearest stream (Jenson), PR 5
 
@@ -1492,7 +1546,10 @@ built directly or read through PR 3's `read_segments`):
   extension's nodes included (an extension whose least-elevation neighbour
   would make a corner takes the next one, and with none left the end is
   open); a flat floor below the end hits the cap
-  (500 m) and gives `end_closed = False`, and NoData or the window's edge
+  (500 m) and gives `end_closed = False`, with exactly 50 extension nodes
+  when the floor runs straight (`end_extended_m` 500) and exactly 35 when it
+  runs diagonally (`end_extended_m` about 495.0; the stopping rule of step 5),
+  and NoData or the window's edge
   before the ground falls does the same; a lower node beside the chain, off
   it, that takes the flow: `drains` is reported false at the first such node
   (the burn is not wrong in that case, the chain is just not the drainage);
@@ -1583,9 +1640,10 @@ use" below):
   river line near, refused): the rows, the classes, the order, the summary; a
   bug-type exception stops the batch; a sixth station on a DEM of two tiles
   half a cell apart, whose catchment crosses both, is `refused` with
-  `refusal_cause = "mixed_grid"` and both tile names, and the batch goes on.
+  `refusal_cause = "mixed_grid"` and one tile name from each grid, and the batch goes on.
   `test_mosaic.py` gains: the mixed-lattice refusal is a `MixedGridError`
-  with the two names, its message unchanged.
+  with the two names, its message unchanged, and two tiles that differ only
+  in spacing raise it too (the cause is general, "The batch").
 - `test_cli_station_catchments.py`: the files in `--out-dir`, `--only`, the
   stderr lines; `--reference` absent gives catchments and no scored classes;
   a station or river file without `crs` is refused.
@@ -1622,7 +1680,7 @@ service can change) and the outputs that are not NVE's data:
    draining, chain end open, line against the slope);
    `close` rows are summarised by cause. **Expected refusals**: the two
    Finnish-border stations (NoData), the nine shifted-tile stations
-   (`refusal_cause = "mixed_grid"`, each row naming its two tiles; reported
+   (`refusal_cause = "mixed_grid"`, each row naming one tile from each grid; reported
    apart as known refusals, not failures, Ola's ruling; the README's line
    says a later increment resamples the eight tiles onto the common grid),
    and Femundsenden, which has no river line (until PR 5). A refusal for any
