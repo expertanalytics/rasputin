@@ -55,7 +55,7 @@ the personas. Its rules:
 * **Briefs.** `@tester`: happy paths and `tester.md` §3A; §3C only when the
   increment reads external input; on a refinement increment, name §3D's two
   oracles. `@developer`: minimal code, under the ceiling of §2. `@reviewer`:
-  the three checks of `reviewer.md` §5, not what the gates cover; ask for the
+  the checks of `reviewer.md` §5, not what the gates cover; ask for the
   review explicitly, since green CI is not done.
 * **No asking between internal steps, but stop at the remote.** Do not ask
   Ola between steps (tests to code, code to review); loop until `@tester` and

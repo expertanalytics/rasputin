@@ -25,6 +25,7 @@
 #include <limits>
 #include <optional>
 #include <span>
+#include <tuple>
 #include <unordered_map>
 
 namespace terrain::refinement::detail {
@@ -44,16 +45,16 @@ struct PointScan {
     PointSet set = PointSet::Source;
     std::size_t strip_index = 0;  // a strip winner's flag index
     double s = 0.0;               // a strip winner's parameter
+    std::size_t on_frozen = 0;    // stored points on a frozen edge (23b, N6), each in one triangle
+    double frozen_error = 0.0;    // their largest error against the edge
 
     // Offered in set order: the first void candidate wins, else the strictly larger error.
     void offer(const PointScan& c) {
         if ((point && is_void) || !(c.is_void || !point || c.error > error))
             return;
-        const double own = max_error;
-        const std::size_t n = uncovered;
+        const auto own = std::tuple{max_error, uncovered, on_frozen, frozen_error};
         *this = c;
-        max_error = own;
-        uncovered = n;
+        std::tie(max_error, uncovered, on_frozen, frozen_error) = own;
     }
 };
 
@@ -192,7 +193,9 @@ inline bool strip_fits(const mesh::LatticeMesh& m, std::uint32_t t, unsigned e, 
 
 // L12: the constrained edge of t whose line p lies within `radius` lattice
 // units of, (col, row) Euclidean, with p's projection strictly inside it; the
-// nearest, ties to the lower edge index.
+// nearest, ties to the lower edge index. Never a frozen edge (23b, N7): the
+// scans already skip a point this near one, but by a copy of this expression
+// that the compiler may contract differently, so the edge is excluded here too.
 inline std::optional<unsigned> near_constraint(const mesh::LatticeMesh& m, std::uint32_t t, mesh::MeshVertex p,
                                                double radius) {
     std::optional<unsigned> best;
@@ -202,7 +205,7 @@ inline std::optional<unsigned> near_constraint(const mesh::LatticeMesh& m, std::
         const double dc = b.col - a.col, dr = b.row - a.row, len2 = dc * dc + dr * dr;
         const double sigma = ((p.col - a.col) * dc + (p.row - a.row) * dr) / len2;
         const double d = std::abs(dc * (p.row - a.row) - dr * (p.col - a.col)) / std::sqrt(len2);
-        if (m.is_constrained(t, e) && sigma > 0.0 && sigma < 1.0 && (d < best_d || (!best && d == best_d))) {
+        if (m.is_constrained(t, e) && !m.is_frozen(t, e) && sigma > 0.0 && sigma < 1.0 && (d < best_d || (!best && d == best_d))) {
             best = e;
             best_d = d;
         }

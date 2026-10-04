@@ -45,6 +45,15 @@
 // of another set lands on the strip point at its exact position, if any, which
 // is then consumed (L5). After the loop every strip point is measured against
 // its final sub-edge (step 6).
+//
+// Frozen edges (docs/increments/23-basin-scale.md, N1, N2, N6, N7, N16). With
+// frozen_mask, a stored point on a frozen edge of its triangle (after L14's
+// corner test; with a strip, also one within r(g) of it, projection strictly
+// inside) is never named. It is counted once in `on_frozen`, by the triangle
+// that owns the edge when it lies exactly on it (15f D4's rule), with its
+// error against the edge's linear z at its projection. L12 never takes a
+// frozen edge, the DEM rescan is refine's scan, and a frozen strip edge is a
+// programming error (std::logic_error).
 
 #include <terrain/core/indexed_mesh.hpp>
 #include <terrain/core/point.hpp>
@@ -80,6 +89,7 @@ namespace terrain::refinement {
 struct PointRefineOptions {
     double tolerance = 0.0;  // metres, finite and >= 0
     unsigned threads = 0;    // 0: hardware concurrency
+    std::uint32_t frozen_mask = 0;  // 23b: edges whose mask meets it are never split
 };
 
 // RefineOutcome, with max_error over check points, plus the coincident points
@@ -93,6 +103,8 @@ struct PointRefineOutcome : RefineOutcome {
     std::size_t strip_refused = 0;
     double strip_refused_max_error = 0.0;
     std::size_t nodes_inserted = 0;  // refine_strip: DEM nodes, a subset of `inserted`
+    std::size_t on_frozen = 0;          // stored points on a frozen edge, each once (N6)
+    double on_frozen_max_error = 0.0;   // their largest error, edges with two valid ends only
 };
 
 namespace detail {
@@ -107,6 +119,7 @@ template <class Store>
     const std::array<double, 3> zv{zt[tri[0]], zt[tri[1]], zt[tri[2]]};
     PointScan r;
     r.is_void = std::isnan(zv[0]) || std::isnan(zv[1]) || std::isnan(zv[2]);
+    const bool frozen = m.is_frozen(t, 0) || m.is_frozen(t, 1) || m.is_frozen(t, 2);
     const Point2 f0 = v[0].frame(), f1 = v[1].frame(), f2 = v[2].frame();
     const double two_a = (f1.x - f0.x) * (f2.y - f0.y) - (f1.y - f0.y) * (f2.x - f0.x);
     auto value = [&](unsigned k, MeshVertex p) {
@@ -122,6 +135,17 @@ template <class Store>
             if (mesh::orient_sign(v[k], v[(k + 1) % 3], p) < 0)
                 return;
         const auto z = static_cast<double>(zf);
+        if (const auto e = frozen ? frozen_edge_at(m, t, p, radius) : std::nullopt) {
+            const unsigned f = (*e + 1) % 3;
+            if (mesh::orient_sign(v[*e], v[f], p) != 0 || tri[*e] < tri[f] || m.neighbours(t)[*e] == mesh::kNoNeighbour) {
+                ++r.on_frozen;
+                const double dc = v[f].col - v[*e].col, dr = v[f].row - v[*e].row;
+                const double sigma = ((p.col - v[*e].col) * dc + (p.row - v[*e].row) * dr) / (dc * dc + dr * dr);
+                if (!std::isnan(zv[*e]) && !std::isnan(zv[f]))
+                    r.frozen_error = std::max(r.frozen_error, std::abs(z - (zv[*e] + sigma * (zv[f] - zv[*e]))));
+            }
+            return;
+        }
         if (r.is_void) {
             ++r.uncovered;
             double d = std::numeric_limits<double>::infinity();
@@ -216,11 +240,16 @@ template <class Store, class R>
             subs[edge_key(p0, p1)] = SubEdge{k, p0, p1, 0.0, 1.0};
             offset.push_back(offset.back() + strip->on_edge(k).size());
         }
+        for (std::size_t i = 0; i < edges.size() && i < masks.size(); ++i)  // N16, after check (3)
+            if ((masks[i] & options.frozen_mask) != 0 && subs.contains(edge_key(edges[i][0], edges[i][1])))
+                throw std::logic_error(name + ": strip edge (" + std::to_string(std::min(edges[i][0], edges[i][1]))
+                                       + ", " + std::to_string(std::max(edges[i][0], edges[i][1])) + ") is frozen");
     }
     auto built = to_lattice(g, start, edges, masks);
     if (auto* refused = std::get_if<RefineOutcome>(&built))
         return point_refusal(std::move(*refused));
     auto& m = std::get<mesh::LatticeMesh>(built);
+    m.set_frozen_mask(options.frozen_mask);
 
     PointRefineOutcome out;
     out.strip_points = strip ? strip->size() : 0;
@@ -362,6 +391,8 @@ template <class Store, class R>
     for (const PointScan& r : results) {
         out.uncovered += r.uncovered;
         out.max_error = std::max(out.max_error, r.max_error);
+        out.on_frozen += r.on_frozen;
+        out.on_frozen_max_error = std::max(out.on_frozen_max_error, r.frozen_error);
     }
     // Step 6: every strip point against its final sub-edge, refused ones apart.
     for (const auto& [key, se] : subs) {
