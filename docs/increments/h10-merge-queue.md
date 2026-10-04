@@ -1,7 +1,7 @@
 # Harness h10: merge through GitHub's merge queue on `master`
 
-Status: **designed** (`@architect`, 2026-10-04), revised after review round 1
-the same day. Mechanics, not a design question. One workflow edit (2 lines,
+Status: approved by `@reviewer` (round 2, 2026-10-04), pending green CI on the
+PR; then Ola ticks Require merge queue, then the rules commit (§4). Mechanics, not a design question. One workflow edit (2 lines,
 `@developer`, done at `d6b0b1c`), one guard change (`@tester` then
 `@developer`, §4a), one settings change (Ola's), one rules commit (wording in
 §4).
@@ -184,3 +184,5 @@ merge queue, not to bypass with `--admin`.
 (Recorded verbatim except one edit: the guard's line 39, cited by bare file
 name and line, is pinned to `45acf22`, because `tools/check_citations.py`
 fails on an unpinned line citation into a rule file.)
+
+**h10, review, round 2, 2026-10-04.** Range `d6b0b1c..35673c8` (round-1 revision, guard red `fad1843`, guard green `391578c`, merge of master `72d4608`). Verdict: APPROVED, pending green CI on the PR. LOC: 0 production (2 workflow lines, estimate about 2; about 3 hook lines). Round 1's two blockers are fixed: `06-cdt-viewer.md` names the `sanitizers` job instead of a line range, and §3 gives the true reason for maximum group size 1. `allow_auto_merge` reads `true`. Guard tests: 6 failed / 130 passed at `fad1843`, all "update-branch passed silently"; 136 passed at the head. Mutant check: removing `update-branch` from the parsed verb tuple (`.claude/hooks/guard_push.py@35673c8:151`) is killed; removing it from the text pattern (`.claude/hooks/guard_push.py@35673c8:40`) survives, because no row reaches the text fallback (non-blocking). The merge has no conflicts and differs from master only in the 5 h10 files. `check_citations.py` exits 0. Not pushed; no CI. The PR's CI covers the full suite, since the branch changes no C++ or package Python. `.claude/REQUIRED-READING.md@35673c8:137` omits `update-branch` until the §4 rules commit.
