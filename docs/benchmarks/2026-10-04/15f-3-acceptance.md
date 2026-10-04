@@ -209,6 +209,82 @@ in `tables-velhas.md`.
   the Velhas piece only. With swap nearly full (0.7 GB free) a 2.8 GB-peak
   run was not added unasked.
 
+## Where refine_strip's untimed time goes
+
+Measured after the verdict above, still alone and on AC.
+
+**It is a per-call fixed cost that scales with the size of refine's output
+mesh, not with the strip's points.**
+- 90 % of it is spent rebuilding the lattice mesh from refine's output
+  arrays (`detail::to_lattice`, and in it `LatticeMesh::build`).
+- Another 5 to 6 % is `legalise_all` over the whole rebuilt mesh.
+- The binding's copies and the GIL take about 0.1 %.
+
+**Method.**
+- **Build.** `_core` from `588e879` (15f-3's code at `83c7fd2`), built as
+  RelWithDebInfo with the Release level: `-O3 -DNDEBUG -g`, hardening on, in
+  `build-prof/`. pybind11 keeps the symbols in that build type, and its
+  package is assembled as `bench.build()` does.
+- **Driver.** `15f-3-acceptance/prof_strip.py` runs `rasputin mesh` from
+  that package and wraps `edge_strip.run`. After the real call it calls
+  `_core.refine_strip` K more times on the same inputs, then K times with an
+  **empty strip** (0 points, from `constraint_check_points` on no edges). It
+  prints each call's wall time and its timed phases (`profile/refine_strip_calls_*.json`).
+- **Sampling.** macOS `sample` at 1 ms over the repeated calls. The call
+  tree under `terrain::refinement::refine_strip` is summed by
+  `sample_tree.py` (`profile/refine_strip_sample_*.txt`).
+- **Inputs.** The 1 m benchmark tile (K = 15, 472,374 triangles,
+  23,664 strip points) and Bygdin 1 m with CORINE (K = 4,
+  1,145,434 triangles, 180,436 strip points).
+
+**Per call, with and without the strip's points** (medians while sampled;
+an unsampled trial on the tile gave 0.30 to 0.33 s for both):
+
+| case | strip points | wall per call | timed phases (scan + split) | same call, empty strip |
+|---|---:|---:|---:|---:|
+| tile 1 m | 23,664 | 0.391 s | 0.003 s | 0.384 s (timed 0.002 s) |
+| Bygdin 1 m | 180,436 | 1.665 s | 0.041 s | 1.624 s (timed 0.005 s) |
+
+Removing every strip point saves only the timed phases: 0.007 s on the tile
+and 0.041 s on Bygdin. So the untimed time does not depend on the strip. It
+grows with the mesh refine_strip receives: 0.81 µs per triangle on the tile,
+1.42 µs on Bygdin. Why the cost per triangle rises with size was not measured.
+
+**Where it goes**, as a share of the samples under `refine_strip`
+(tile 5,838 samples, Bygdin 8,284):
+
+| function (inclusive) | tile | Bygdin |
+|---|---:|---:|
+| `detail::point_loop` (all of refine_strip) | 100 % | 100 % |
+| `detail::to_lattice`: rebuild refine's output as a `LatticeMesh` | 90.4 % | 90.9 % |
+| `LatticeMesh::build` | 70.7 % | 74.7 % |
+| `std::unordered_map<uint64, uint32>::emplace` in `build` (the directed-edge map) | 39.6 % | 49.8 % |
+| `free` (`_xzm_free_tc`, `_free`) in `build`: the map's nodes released | 15.7 % | 14.5 % |
+| `to_lattice`'s own code: the `lattice_position` loop and the `std::map` constraint lookups, inlined | about 18 % | about 15 % |
+| `mesh::legalise_all` over the whole rebuilt mesh (`must_flip`, `lattice_incircle`) | 6.3 % | 4.7 % |
+| sorting (`std::__introsort`) | 1.4 % | under 1 % |
+| the binding (`start_mesh`'s copies, result conversion) | 0.1 % | 0.1 % |
+
+- **The map.** The `unordered_map` in `LatticeMesh::build` gets no
+  `reserve` (`include/terrain/mesh/lattice_mesh.hpp`, `build`). It holds 3
+  entries per triangle, each a separate allocation, all freed when `build`
+  returns.
+- **The constraint map.** In `to_lattice`
+  (`include/terrain/refinement/refine.hpp`), constraint edges are looked up
+  in a `std::map`, three times per triangle.
+- **Why refine does not pay this.** `refine` runs the same `to_lattice` on
+  the start mesh, which has 15,614 triangles on Bygdin. `refine_strip` runs
+  it on refine's output, which has 1,145,434.
+- **The GIL is not a factor.** The binding releases it before the call, and
+  nothing else was running.
+- **About 553 / 1,805 samples sit at one unsymbolised address** of `_core`
+  (`+0x7218`, a stub region). They are counted inside the `build` subtree
+  above. `atos` does not resolve the address.
+
+Nothing was changed. This is a measurement for `@architect`. The design
+question is whether refine_strip should take refine's `LatticeMesh` instead
+of rebuilding it from arrays.
+
 ## Files and clean-up
 
 - Run directories in `bench.py`'s format: `15f-3-base-r{1..4}/` and
@@ -231,6 +307,8 @@ in `tables-velhas.md`.
   4. Then run `strip_check.py` as in the log, `velhas.py check
      velhas/<label> --shift 30`, and the summarizers.
 - The sanitize-first rule does not apply: no C++ was patched for this run.
+  The profiling build (`build-prof/`, RelWithDebInfo at `-O3 -g`) is the
+  branch's code unchanged. It is gitignored and stays in the worktree.
 
 ## Log
 - 2026-10-04T00:12:15Z: start. AC 100 %, charged. Swap 10.57 GB used of 11.26 GB (history; memory_pressure 51 % free). Load ~16 (dasd).
@@ -238,3 +316,4 @@ in `tables-velhas.md`.
 - 2026-10-04T00:41:16Z: (2) Bygdin done (AC 100 % every run, swap flat). Independent check on base: 575 crossings over at 10 m (max 62.6 m), 18,567 at 1 m (max 72.9 m). On 15f-3: 0 over on the mesh's own lines at both tolerances (max 9.98676 / 0.999843 m, equal to rasputin's line_max_error_m). On the input lines, 1 crossing over by 1.3e-5 m at 1 m, at a 0.29 mm offset between input line and mesh line. 15f-3 at 1 m: 3 bench.py Delaunay "violations", all exactly cocircular (exact incircle 0 at mm-rounded coordinates; written coordinates off by ~2e-10 m). Cost: refine_strip 1.51 s at 1 m, of which 0.034 s in its timed phases (cProfile); on the bench tile 0.341 s against refine's 0.198 s. Next: Velhas.
 - 2026-10-04T00:46:14Z: (3) Velhas runs done (AC, swap flat at 10.54 GB). Strip check on the rebuilt resampled grid: base 15 / 118 / 633 crossings over at 20 / 10 / 5 m (max 23.8 m); 15f-3 0 over at all three; control (+30 m grid shift) 4,374 over. Running 15c's source-node check now.
 - 2026-10-04T00:52:01Z: write-up done; verdict ACCEPTED with the refine_strip cost finding.
+- 2026-10-04T00:56:57Z: refine_strip profiled (RelWithDebInfo -O3 -g, sample): 90 % to_lattice rebuild of refine's output, fixed per call, independent of strip points.
