@@ -44,12 +44,14 @@ from nve_fixtures import (
     CRS,
     ENVELOPE_HALF,
     FORBIDDEN,
+    LAYER_0_NAME,
     MS_2026_05_28,
     MULTI,
     NEWEST,
     NO_HIERARCHY,
     NULL_TYPE,
     OWNER,
+    RENAMED,
     SAME_NUMBER,
     SHARED,
     STATION_NUMBER,
@@ -370,6 +372,16 @@ class TestStationsGeojson:
         assert narsjo["properties"]["nve_area_km2"] == s.area_km2  # layer 0's, not the polygon's
         assert narsjo["properties"]["watercourse"] == s.watercourse
 
+    def test_the_name_is_layer_0s_not_the_lists(self, fake: FakeNve, fetched: Path) -> None:
+        """Ola's ruling of 2026-10-04: `name` is layer 0's `stasjonnavn`, as
+        served. 311.4.0's list row holds the PDF's wrapped "(Femunden)"; layer
+        0 serves "Femundsenden (Femunden)"."""
+        (row,) = [r for r in list_rows() if r["station"] == RENAMED]
+        assert row["name"] != LAYER_0_NAME, "the list must differ, or this test tells nothing"
+        assert fake.station(RENAMED).name == LAYER_0_NAME
+        features = by_station(fetched / "stations.geojson")
+        assert features[RENAMED]["properties"]["name"] == LAYER_0_NAME
+
     def test_river_is_the_first_name_of_the_hierarchy(self, fake: FakeNve, fetched: Path) -> None:
         features = by_station(fetched / "stations.geojson")
         i = [s.number for s in fake.stations].index(NEWEST)
@@ -496,6 +508,7 @@ class TestReadBack:
         assert [s.station for s in stations] == [r["station"] for r in list_rows()]
         knappom = next(s for s in stations if s.station == COPIES)
         assert knappom.series == ("1001.1",) and knappom.name == "Knappom"
+        assert next(s for s in stations if s.station == RENAMED).name == LAYER_0_NAME
 
     def test_references(self, fetched: Path) -> None:
         from shapely.geometry import MultiPolygon, Polygon
@@ -510,8 +523,9 @@ class TestReadBack:
     def test_segments_drop_the_copy_and_keep_the_rest(self, fetched: Path) -> None:
         from tin_engine.io.rivers import read_segments
 
-        segments, crs = read_segments(fetched / "rivers.geojson")
+        segments, crs, dropped = read_segments(fetched / "rivers.geojson")
         assert crs == CRS
+        assert dropped == 1  # COPY_HIGH, the one exact copy the fake serves
         ids = [s.objectid for s in segments]
         assert COPY_LOW in ids and COPY_HIGH not in ids and SAME_NUMBER in ids
         assert ids.count(SHARED) == 1

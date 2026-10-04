@@ -17,6 +17,7 @@ HOW THIS FILE GOES RED: there is no `tin_engine/io/rivers.py`
 
 from __future__ import annotations
 
+import re
 from collections.abc import Sequence
 from pathlib import Path
 from types import ModuleType
@@ -25,7 +26,7 @@ from typing import Any
 import pytest
 from pydantic import ValidationError
 
-from nve_fixtures import CRS, collection, point, river, write
+from nve_fixtures import CRS, collection, feature, point, river, write
 
 LAKE_SPELLINGS = [
     "InnsjøMidtlinje",
@@ -65,10 +66,17 @@ def rivers() -> ModuleType:
     return module
 
 
-def read(rivers: ModuleType, path: Path, features: Sequence[dict[str, Any]]) -> Any:
-    segments, crs = rivers.read_segments(write(path, collection(features)))
+def read_counted(
+    rivers: ModuleType, path: Path, features: Sequence[dict[str, Any]]
+) -> tuple[Any, int]:
+    """`read_segments`'s three parts, `(segments, crs, dropped)`; the crs checked."""
+    segments, crs, dropped = rivers.read_segments(write(path, collection(features)))
     assert crs == CRS
-    return segments
+    return segments, dropped
+
+
+def read(rivers: ModuleType, path: Path, features: Sequence[dict[str, Any]]) -> Any:
+    return read_counted(rivers, path, features)[0]
 
 
 def shifted(coords: Sequence[tuple[float, float]], d: float) -> list[tuple[float, float]]:
@@ -120,6 +128,24 @@ class TestTheRefusals:
         doc = collection([river(1, LINE), point(0.0, 0.0, objectid=2, elvid="1-1-1")])
         with pytest.raises(ValueError, match="Point"):
             rivers.read_segments(write(tmp_path / "r.geojson", doc))
+
+    def test_a_multilinestring_is_refused_by_objectid(
+        self, rivers: ModuleType, tmp_path: Path
+    ) -> None:
+        """Ola's ruling of 2026-10-04: one LineString per segment; a
+        MultiLineString among good segments is refused, not split or merged,
+        and the message names its `objectid` and its type."""
+        multi = feature(
+            {
+                "type": "MultiLineString",
+                "coordinates": [[list(p) for p in LINE], [list(p) for p in shifted(LINE, 500)]],
+            },
+            **river(7734, LINE)["properties"],
+        )
+        doc = collection([river(1, shifted(LINE, 900)), multi, river(2, shifted(LINE, 1800))])
+        with pytest.raises(ValueError, match="MultiLineString") as refused:
+            rivers.read_segments(write(tmp_path / "r.geojson", doc))
+        assert re.search(r"\b7734\b", str(refused.value)), str(refused.value)
 
 
 class TestKind:
@@ -187,7 +213,8 @@ class TestKind:
 class TestExactCopies:
     """Step 4: within one `elvid`, segments whose vertex lists are equal to
     1 cm are one segment, the smallest `objectid` kept; the count dropped is
-    reported (`drop_copies`, which `read_segments` applies)."""
+    `read_segments`'s third part and `drop_copies`'s second (`drop_copies`,
+    which `read_segments` applies)."""
 
     def ids(
         self, rivers: ModuleType, tmp_path: Path, features: Sequence[dict[str, Any]]
@@ -264,7 +291,8 @@ class TestExactCopies:
             features.append(river(oid, shifted(LINE, 9000 + 300 * k), elvid=f"x-{k}"))
             oid += 1
         assert len(features) == 9 * 2 + 4 * 5 + 3
-        segments = read(rivers, tmp_path / "r.geojson", features)
+        segments, dropped = read_counted(rivers, tmp_path / "r.geojson", features)
+        assert dropped == 25  # the reader's count, which the commands print
         assert len(segments) == len(features) - 25 == 9 + 4 + 3
         assert rivers.drop_copies(segments)[1] == 0  # nothing left to drop
 

@@ -29,7 +29,11 @@ so the fetch sees the real 140 stations. Station `i` (list order) sits on a
 - `MULTI` (19.79.0): a two-part polygon (Gravå), and the `objekttype` cases
   `NULL_TYPE` (null, `vatnlnr` set), `BLANK_TYPE` (" ", no `vatnlnr`),
   `ODD_LAKE` ("InnsjoMidtlin") and `STRAY` ("SK");
-- `NO_HIERARCHY` (2.265.0): `elvenavnhierarki` is null.
+- `NO_HIERARCHY` (2.265.0): `elvenavnhierarki` is null;
+- `RENAMED` (311.4.0): layer 0 serves `stasjonnavn` as `LAYER_0_NAME`,
+  "Femundsenden (Femunden)", its real name there, while the packaged list's
+  `name` is the PDF's wrapped extraction ("(Femunden)" in the first pass).
+  Every other station's layer 0 name is its list row's.
 """
 
 from __future__ import annotations
@@ -87,6 +91,8 @@ ENVELOPE_HALF = 2000.0
 CHUNK = 40
 
 NEWEST, TIE, COPIES, MULTI, NO_HIERARCHY = "2.11.0", "2.32.0", "2.142.0", "19.79.0", "2.265.0"
+#: Ola's ruling of 2026-10-04: the station's name is layer 0's `stasjonnavn`.
+RENAMED, LAYER_0_NAME = "311.4.0", "Femundsenden (Femunden)"
 SHARED = 900001
 COPY_LOW, COPY_HIGH, SAME_NUMBER = 900010, 900011, 900012
 NULL_TYPE, BLANK_TYPE, ODD_LAKE, STRAY = 900020, 900021, 900022, 900023
@@ -158,6 +164,8 @@ class Call:
 
 @dataclass
 class Station:
+    """One station as layer 0 serves it (`name` is `stasjonnavn`)."""
+
     number: str
     name: str
     x: float
@@ -281,6 +289,7 @@ def build_fake() -> FakeNve:
             Station(row["station"], row["name"], x, y, 10.0 + i, f"{regine:03d}.A{i}", hierarchy)
         )
     by = {s.number: s for s in stations}
+    by[RENAMED].name = LAYER_0_NAME
     newest, tie = by[NEWEST], by[TIE]
     tie.x, tie.y = newest.x + 1500.0, newest.y
 
