@@ -1,6 +1,6 @@
 # Harness h13: the macOS C++ job in CI
 
-Status: design (@architect), not yet ruled. Mechanics, not a design question:
+Status: design (@architect), ruled by Ola (§8). Mechanics, not a design question:
 one workflow edit (`@developer`), no production code, no test suite (§6 says
 how the change is checked instead).
 
@@ -215,3 +215,19 @@ section of this file.
 2. Add `ctest --parallel` to the asan+ubsan Test step, the next-longest job
    after this fix? Default: no, a separate small increment after this one,
    because it first needs a check that tests do not share temporary files.
+
+## 8. Ola's rulings
+
+Ola answered both with one reply: "1: all three. 2: yes." (2026-10-04, this
+session's transcript). The main session had put the questions to him as:
+(1) put the job limit on all three C++ build lines, ubuntu and the sanitizers
+too, or only macOS, default all three; (2) should the sanitizer job's tests
+run in parallel, default yes, as a separate small increment afterwards,
+because it first needs a check that no two tests write the same temporary
+file.
+
+1. **Ruling: all three** build lines (`cpp` matrix, `sanitizers`, `tsan`) get
+   the explicit job count.
+2. **Ruling: yes**, the asan+ubsan tests run in parallel, as its own
+   increment after this one; it is not part of h13.
+
