@@ -111,6 +111,14 @@ CI is authoritative: local green does not mean the branch is green, so
 ```bash
 gh pr checks <pr>      # must be green; required for merge on master
 ```
+`CI result` is green only when every gating job passed, or was skipped on a
+prose-only change; it is meant to be the one required check on `master`, and
+`gh api repos/expertanalytics/rasputin/branches/master/protection/required_status_checks`
+shows whether it is yet. While the per-job checks are still required, a
+prose-only PR waits on matrix checks that never report. A PR that changes
+only prose (Markdown at the root or under `docs/`, less the files the suites
+read; `tools/ci_changes.py` decides) skips the C++, sanitizer and Python jobs
+and runs only the governance gates, so its green says nothing about code.
 `master` merges through a merge queue: `gh pr merge <pr>` enqueues the PR (the
 queue's method, merge commit, applies), and the queue tests it on top of the
 PRs ahead and merges it. No update-branch loop. A method flag such as `--merge`
