@@ -8,13 +8,20 @@ figures are the design's.
 
 Neither the count nor the cut reads the machine (K5): the budget is a
 constant the caller passes, never the machine's memory or cores.
+`lines` is "The chains": the partition lines clipped to the domain.
 """
 
 from __future__ import annotations
 
 import itertools
 import math
+from collections.abc import Sequence
 from dataclasses import dataclass
+
+import numpy as np
+import numpy.typing as npt
+import shapely
+from shapely.geometry import LineString, Polygon
 
 #: `--memory-budget`'s default, 16 GiB in bytes (B14 as ruled).
 DEFAULT_MEMORY_BUDGET = 2**34
@@ -91,3 +98,24 @@ def partition(
             ny += 1
         dx, dy = -(-cols // nx), -(-rows // ny)
     return Partition(-(-cols // dx), -(-rows // dy), dx, dy)
+
+
+def lines(
+    polygon: Polygon, xs: Sequence[float], ys: Sequence[float]
+) -> list[npt.NDArray[np.float64]]:
+    """The vertical lines `x = xs[i]` and the horizontal `y = ys[j]` clipped to
+    `polygon` as linework (16b R6), each part an `(n, 2)` chain. A part's
+    constant coordinate is set back to the line's own value, so a crossing
+    GEOS computes with the outline stays exactly on the lattice line; a line
+    that only touches the polygon gives no part."""
+    x0, y0, x1, y1 = polygon.bounds
+    out = []
+    for axis, values in ((0, xs), (1, ys)):
+        for v in values:
+            line = LineString([(v, y0), (v, y1)] if axis == 0 else [(x0, v), (x1, v)])
+            for part in shapely.get_parts(shapely.intersection(line, polygon)):
+                if isinstance(part, LineString) and part.length > 0:
+                    xy = shapely.get_coordinates(part)
+                    xy[:, axis] = v
+                    out.append(xy)
+    return out

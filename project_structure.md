@@ -119,7 +119,7 @@ src_python/tin_engine/     # public Python API (distribution name: rasputin)
                            #   (15c-2)
   final_check.py           # run: phase 2, the source nodes filed in a
                            #   CheckPoints, then refine_points from phase 1's
-                           #   mesh (15c-2)
+                           #   mesh (15c-2), seams frozen in a cut run (23c)
   elevation.py             # drops mesh vertices the DEM has no data for;
                            #   pure numpy, never imports _core
   stats.py                 # --stats: PhaseClock, quality, Report, render to
@@ -130,8 +130,15 @@ src_python/tin_engine/     # public Python API (distribution name: rasputin)
                            #   PIECE_VOCABULARY: the default plus `seam`
                            #   (bit 9), for a cut run's piece files (23c)
   decompose.py             # partition: the window cut into cells under
-                           #   --pieces and --memory-budget, b(T); pure, reads
-                           #   no machine (23c)
+                           #   --pieces and --memory-budget, b(T); lines: the
+                           #   partition lines clipped to the domain; pure,
+                           #   reads no machine (23c)
+  pieces.py                # piece_ids, start_slice, seam_records: a cut
+                           #   run's pieces from its one start triangulation,
+                           #   each seam edge fanned at its seam-pass points;
+                           #   numpy, never calls _core (23c). The cut run
+                           #   itself (windows, seam pass, refine, index.json)
+                           #   is cli.py's
   feature_input.py         # --features: a GeoJSON, GeoPackage layer or GML
                            #   read, mapped to masks by a ClassMap, pre-clipped,
                            #   moved to the DEM's CRS and clipped to the domain

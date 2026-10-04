@@ -25,9 +25,11 @@ def run(
     checks: Iterable[Block],
     tolerance: float,
     clock: PhaseClock,
+    frozen_mask: int = 0,
 ) -> tuple[PointRefineOutcome, int]:
     """Phase 2 from phase 1's outcome `start`; the outcome and the number of
-    check points stored. `clock` gets D7's rows."""
+    check points stored. `clock` gets D7's rows; nothing goes on an edge
+    whose mask meets `frozen_mask` (a cut run's seams, 23c)."""
     h = float(grid.spacing)
     store = CheckPoints(
         x_min=grid.col0 * h, y_max=-grid.row0 * h, spacing=h, rows=grid.rows, cols=grid.cols
@@ -41,7 +43,9 @@ def run(
     with clock.phase("check points: store"):
         store.freeze()
     arrays = (start.vertices, start.triangles, start.z, start.valid, start.edges, start.masks)
-    out = refine_points(store, *(np.asarray(a) for a in arrays), tolerance=tolerance)
+    out = refine_points(
+        store, *(np.asarray(a) for a in arrays), tolerance=tolerance, frozen_mask=frozen_mask
+    )
     clock.add("check points: store", adding)
     clock.add("final check: scan (parallel)", out.scan_seconds)
     clock.add("final check: split + flip (serial)", out.split_seconds)

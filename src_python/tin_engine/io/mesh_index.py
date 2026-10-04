@@ -45,6 +45,14 @@ class PartitionRecord(_Record):
     dy: int = Field(ge=1)
     cols: int = Field(ge=1)
     rows: int = Field(ge=1)
+    # Where the lines are ("Three points from 23c-1's green", point 1): line i
+    # at x = origin_x + (col0 + i dx) spacing, line j at y = origin_y - (row0 +
+    # j dy) spacing, origin being lattice node (0, 0) in the index's crs. None
+    # only in an index no run wrote (23c-1's hand-built one).
+    row0: int | None = None
+    col0: int | None = None
+    spacing: float | None = Field(default=None, gt=0)
+    origin: tuple[float, float] | None = None
 
 
 class PieceWindow(IndexWindow):
