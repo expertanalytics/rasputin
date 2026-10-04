@@ -18,13 +18,15 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 from dataclasses import dataclass
+from typing import Annotated, Self
 
 import numpy as np
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from .models import IndexWindow
 
 PieceId = tuple[int, int, int]  # (cell row j, cell column i, component rank k)
+_Rank = Annotated[int, Field(strict=True, ge=0)]  # no text, no float, no sign
 
 
 class _Record(BaseModel):
@@ -62,11 +64,17 @@ class PieceCounts(_Record):
 class PieceEntry(_Record):
     """One piece. `file` and `sha256` are None for a piece all over NoData."""
 
-    id: PieceId
+    id: tuple[_Rank, _Rank, _Rank]
     file: str | None
     sha256: str | None
     counts: PieceCounts
     window: PieceWindow
+
+    @model_validator(mode="after")
+    def _file_and_sha256_together(self) -> Self:
+        if (self.file is None) != (self.sha256 is None):
+            raise ValueError("file and sha256 are null together or set together")
+        return self
 
 
 class MeshIndex(_Record):

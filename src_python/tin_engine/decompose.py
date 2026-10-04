@@ -77,6 +77,11 @@ def partition(
     nx = max(1, round(math.sqrt(wanted * cols / rows)))
     ny = max(1, round(wanted / nx))
     dx, dy = -(-cols // nx), -(-rows // ny)
+    # Ends: it runs only while a cell is over budget, and the budget is at
+    # least one node's bytes (refused above otherwise), so a 1 x 1 cell fits.
+    # A step adds one to nx only while dx >= dy and the cell is over, so
+    # dx > 1, i.e. nx < cols; likewise ny only while dy > 1, i.e. ny < rows.
+    # So nx stays at most cols and ny at most rows: at most cols + rows - 2 steps.
     while dx * dy * b > memory_budget:
         if dx >= dy:
             nx += 1
