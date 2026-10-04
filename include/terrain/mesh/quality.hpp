@@ -13,8 +13,10 @@
 //
 // Skips, in R4's order: circumradius below the floor sqrt(dx^2 + dy^2), so the
 // node is within R / 2 of the centre (R5); centre outside the node rectangle
-// (never clamped); the node already a vertex; the walk crossing a constrained
-// edge or leaving the mesh. The walk is bounded by triangle_count() steps.
+// (never clamped); the node rejected by the caller's validity callable (a
+// NoData node, which trim would remove; the fix of 20-start-quality.md); the
+// node already a vertex; the walk crossing a constrained edge or leaving the
+// mesh. The walk is bounded by triangle_count() steps.
 //
 // Serial and deterministic: the queue key is (ratio descending, slot
 // ascending), and an entry whose slot no longer holds its three vertices is
@@ -22,7 +24,8 @@
 // lattice and entries are added only for written slots (R10).
 //
 // Depends on core, predicates, lattice_mesh.hpp and lawson.hpp; knows no
-// raster and reads no height. The grid's rows and cols come in as numbers.
+// raster and reads no height. The grid's rows and cols come in as numbers, and
+// whether a node holds data comes in as a callable.
 
 #include <terrain/core/point.hpp>
 #include <terrain/mesh/lattice_mesh.hpp>
@@ -33,6 +36,7 @@
 #include <array>
 #include <cmath>
 #include <cstddef>
+#include <concepts>
 #include <cstdint>
 #include <numbers>
 #include <queue>
@@ -54,6 +58,12 @@ struct QualityOutcome {
     std::size_t skipped_vertex = 0;   // the snapped node is already a vertex
     std::size_t skipped_blocked = 0;  // the walk met a constrained edge or left the mesh
     std::size_t walk_bound_hits = 0;  // the walk took triangle_count() steps
+    std::size_t skipped_void = 0;     // the snapped node is not valid (NoData)
+};
+
+// The default validity callable: every node holds data.
+struct AllNodesValid {
+    constexpr bool operator()(const LatticeVertex&) const noexcept { return true; }
 };
 
 namespace detail {
@@ -89,8 +99,9 @@ struct QualityEntry {
 
 }  // namespace detail
 
-template <pred::GeometryKernel K>
-QualityOutcome improve(LatticeMesh& m, const LatticeFrame& f, const QualityOptions& o) {
+template <pred::GeometryKernel K, std::predicate<const LatticeVertex&> Valid = AllNodesValid>
+QualityOutcome improve(LatticeMesh& m, const LatticeFrame& f, const QualityOptions& o,
+                       const Valid& valid = {}) {
     QualityOutcome out;
     if (!(o.min_angle_deg > 0.0) || o.rows == 0 || o.cols == 0)
         return out;
@@ -124,6 +135,10 @@ QualityOutcome improve(LatticeMesh& m, const LatticeFrame& f, const QualityOptio
         }
         const LatticeVertex node{static_cast<std::uint32_t>(std::round(row)),
                                  static_cast<std::uint32_t>(std::round(col))};
+        if (!valid(node)) {
+            ++out.skipped_void;
+            continue;
+        }
         const MeshVertex p{node};
 
         // Visibility walk: cross the first edge with p strictly beyond it.

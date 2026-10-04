@@ -296,11 +296,13 @@ template <raster::RasterSource R>
     out.legalise_seconds = since(t0);
     if (options.min_angle_deg > 0.0) {
         t0 = clock::now();
+        // The pass never inserts a NoData node: trim would remove it.
         const auto q = mesh::improve<pred::DefaultKernel>(
-            m, frame, mesh::QualityOptions{options.min_angle_deg, g.rows(), g.cols()});
+            m, frame, mesh::QualityOptions{options.min_angle_deg, g.rows(), g.cols()},
+            [&](const mesh::LatticeVertex& v) { return !dem.is_nodata({v.row, v.col}); });
         out.quality_inserted = q.inserted;
         out.quality_skipped = q.skipped_floor + q.skipped_outside + q.skipped_vertex
-                            + q.skipped_blocked + q.walk_bound_hits;
+                            + q.skipped_blocked + q.walk_bound_hits + q.skipped_void;
         out.quality_seconds = since(t0);
     }
     std::vector<ScanResult> results;
