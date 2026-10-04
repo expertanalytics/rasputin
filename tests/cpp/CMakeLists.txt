@@ -252,6 +252,13 @@ add_terrain_backend_test(prop_refinement_quality property/prop_refinement_qualit
 target_link_libraries(test_mesh_quality PRIVATE Threads::Threads)
 target_link_libraries(prop_refinement_quality PRIVATE Threads::Threads)
 
+# The pass skips NoData nodes (docs/increments/20-start-quality.md, "Fix: the
+# start-quality pass skips NoData nodes", Q-V1): improve's validity callable
+# and skipped_void, in a target of their own so test_mesh_quality's
+# default-call guard builds without them. Not mutation-critical.
+add_terrain_backend_test(test_mesh_quality_void unit/test_mesh_quality_void.cpp)
+target_link_libraries(test_mesh_quality_void PRIVATE Threads::Threads)
+
 # Constraint feet, increment 20b (docs/increments/20b-min-insertion-distance.md,
 # "Tests for @tester"). test_refinement_constraint_feet (F1 to F5, plus 14b's
 # T6 with the rule on) is the invariant-critical suite; it runs in the TSan job.
