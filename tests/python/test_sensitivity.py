@@ -162,12 +162,27 @@ def test_the_swing_is_one_sided(sensitivity: ModuleType) -> None:
 # ---------------------------------------------------------------------------
 
 
+def assert_upstream_flag_is_not_draining(s: object) -> None:
+    """A flagged count within `U` upstream "counts as unread": `accumulate`
+    passes flag bits downstream and the placed node's are clear, so the
+    flagged node cannot drain through it ("Sensitivity", step 2). `drains`
+    is false, the cause is `chain_not_draining`, and the station is
+    uncertain."""
+    assert s.drains is False
+    assert "chain_not_draining" in s.causes
+    assert s.well_posed is False
+
+
 def test_a_flag_upstream_stops_the_read_there(sensitivity: ModuleType) -> None:
+    """Node -20 m is flagged: the read stops at -10 m, and the station is
+    uncertain because the flagged node does not drain through the gauge."""
     counts = [988, 990, 994, 997, 1000, 1003, 1006, 1009, 1012]
     s = assess(sensitivity, case(counts, placed=4, bits={2: 1}))
     assert s.checked_up_m == pytest.approx(10.0)
     assert s.area_up == pytest.approx(997 * CELL, rel=1e-15)
     assert s.checked_down_m == pytest.approx(30.0)
+    assert_upstream_flag_is_not_draining(s)
+    assert "downstream_unread" not in s.causes
 
 
 def test_the_read_stops_at_the_first_flag_not_at_a_position(sensitivity: ModuleType) -> None:
@@ -177,6 +192,18 @@ def test_the_read_stops_at_the_first_flag_not_at_a_position(sensitivity: ModuleT
     s = assess(sensitivity, case(counts, placed=4, bits={3: 1}))
     assert s.checked_up_m == pytest.approx(0.0)
     assert s.swing == pytest.approx(0.01, rel=1e-12)
+    assert_upstream_flag_is_not_draining(s)
+    assert "swing" not in s.causes
+
+
+def test_a_flag_at_exactly_u_upstream_is_within_the_read(sensitivity: ModuleType) -> None:
+    """Node -30 m (= -U, a sample: step 1 reads `[-U, +U]`) is flagged: the
+    read stops at -20 m and the station is uncertain, as for any flag within
+    `U`; the flag at -40 m in the next test lies past `U` and does not."""
+    counts = [988, 990, 994, 997, 1000, 1003, 1006, 1009, 1012]
+    s = assess(sensitivity, case(counts, placed=4, bits={1: 1}))
+    assert s.checked_up_m == pytest.approx(20.0)
+    assert_upstream_flag_is_not_draining(s)
 
 
 @pytest.mark.parametrize("bit", [1, 2, 3])
