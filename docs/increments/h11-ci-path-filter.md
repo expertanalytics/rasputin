@@ -1,0 +1,326 @@
+# Harness h11: skip the code jobs on prose-only pull requests
+
+Status: design (`@architect`, 2026-10-04). Next: `@tester` (§6), then
+`@developer`, then Ola's settings step (§5), which must follow the merge
+directly.
+
+Why: `.github/workflows/main.yaml` has no path filter, so a pull request that
+changes only prose (for example #174: `ROADMAP.md` and one increment status
+line) runs the whole matrix: C++ on ubuntu, macOS and the unchecked leg,
+asan+ubsan, TSan, Python 3.12 to 3.14, and the governance gates. With the merge
+queue (h10), every PR runs CI three times: on `pull_request`, on `merge_group`,
+and on `push` to `master` after it lands.
+
+## 0. Verdict on the proposal
+
+The main session proposed (a) a first job that lists changed files with plain
+`git diff` and gates the C++, sanitizer and Python jobs with a job-level `if:`,
+governance always running; (b) dropping the `push: master` trigger.
+
+**(a) is right in aim and wrong in one mechanism; amended below.** A job
+skipped by `if:` does report success, but **5 of the 7 required checks are
+matrix jobs**, and a skipped matrix job is never expanded: it reports under
+its unexpanded name (for example ``Python ${{ matrix.python-version }}``), so
+the required checks `Python 3.12`, `Python 3.13`, `Python 3.14`,
+`C++ core (ubuntu-latest)` and `C++ core (macos-latest)` would stay "Expected,
+waiting for status to be reported" and **every prose PR would be blocked**,
+on `pull_request` and in the queue alike. The required set on `master` was
+read with
+`gh api repos/expertanalytics/rasputin/branches/master/protection/required_status_checks`
+on 2026-10-04: those five, plus `Governance gates` and
+`C++ sanitizers (asan+ubsan)`. The amendment: one final job, `CI result`,
+that needs every gating job and becomes the only required check (§2.3). A
+second, smaller defect: the proposed list of "code" paths misses prose files
+the Python suite reads (§2.1).
+
+**(b) is sound, on one condition that GitHub's documentation does not settle**:
+that the queue lands the very commit it tested. No queued merge has happened
+on this repository yet (`gh run list --event merge_group` returned `[]` on
+2026-10-04), so this is checked on the first one before (b) takes effect
+(§5, step 0). Nothing depends on push runs: no cache, artifact or badge in the
+tree (`grep -rnE 'actions/cache|upload-artifact|download-artifact' .github`
+and `grep -rn badge README.md docs` return nothing), and
+`tools/session_state.py` reads git, not CI (`origin/master`, `git log --merges`).
+Branch protection has `enforce_admins: true` and no force pushes, so `master`
+moves only through merges that passed the required checks.
+
+## 1. Prior art: legacy and literature
+
+Tooling; no novelty claimed.
+
+*Literature* (all read 2026-10-04):
+
+- GitHub, "Using conditions to control job execution": "A job that is skipped
+  will report its status as 'Success'. It will not prevent a pull request from
+  merging, even if it is a required check."
+- GitHub, "Troubleshooting required status checks": with a workflow-level path
+  filter, "associated checks stay in a 'Pending' state and block merging"; the
+  advice is to "avoid requiring workflows that can be skipped", and to "use
+  `always()` with `needs` for required checks that depend on other jobs". This
+  is why the filter lives in jobs, not in `on: paths-ignore`.
+- Skipped matrix jobs keep unexpanded names: not stated in GitHub's docs;
+  reported in GitHub community discussions #26822 and #72708 and in
+  wgtechlabs/build-flow-action issue #51 (a skipped job's check shown as
+  `Container flow${{ ... matrix.image.image-name ... }}`). Treated as true;
+  the h11 PR is where it is seen on this repository (§6, real-PR checks).
+- The `merge_group` payload (octokit/webhooks schema,
+  `merge_group/checks_requested`): `base_sha` is "The SHA of the merge
+  group's parent commit", `head_sha` "The SHA of the merge group". GitHub,
+  "Events that trigger workflows": under `merge_group`, `GITHUB_SHA` is the
+  "SHA of the merge group"; under `pull_request`, `GITHUB_SHA` is "the last
+  merge commit of the pull request merge branch".
+- GitHub, "Managing a merge queue": GitHub "will merge all these changes into
+  the `base_branch` once the checks required ... pass". It does **not** say
+  that the landed commit is the tested one. h10 §2 states "the queue
+  fast-forwards `master` to it" without a source; secondary sources say the
+  same, which is why §5 checks it instead of citing it.
+- The pattern itself (a path classifier job plus one aggregate required job)
+  is common; third-party actions do it (`dorny/paths-filter`,
+  `re-actors/alls-green`). h11 writes both in plain shell and stdlib Python
+  instead: no third-party action gets read access to the run.
+
+*Legacy.* Nothing; the legacy tree has no CI of this kind.
+
+```
+$ git grep -n -iE 'paths-ignore|paths-filter|alls-green|merge_group|workflow' legacy-archive -- legacy
+(no output, exit 1)
+```
+
+## 2. The change
+
+### 2.1 The classifier: `tools/ci_changes.py` (new, stdlib only)
+
+Deny by default: **a path is prose only if it is on a short allowlist;
+everything else is code.** A wrong "code" costs one full run; a wrong "prose"
+lets a broken change land green.
+
+```python
+NOT_PROSE: frozenset[str]  # Markdown files the build or the suites read
+def is_prose(path: str) -> bool
+def needs_full_ci(paths: Sequence[str]) -> bool   # empty -> True
+def changed_paths(base: str, head: str, repo: Path) -> list[str]  # raises on any git failure
+def main(argv: list[str]) -> int   # always prints code=true|false, exits 0
+```
+
+`is_prose(path)` is true when `path` ends in `.md` (case-sensitive), is not
+in `NOT_PROSE`, and either has no `/` (a root file) or starts with `docs/`.
+So `ROADMAP.md`, `INSTALL.md`, `testing.md`, `docs/increments/*.md`,
+`docs/retrospectives/**` are prose; everything under `src/`, `include/`,
+`bindings/`, `lib/`, `src_python/`, `tests/`, `tools/`, `.claude/`,
+`.github/`, and every non-Markdown file anywhere (`LICENSE`, `.gitignore`,
+`CMakeLists.txt`, `pyproject.toml`, `docs/increments/h4-probes/h4_probe.py`,
+`docs/benchmarks/**/*.geojson`) is code.
+
+`NOT_PROSE` holds the Markdown the code jobs read, found by grep on this tree:
+
+| File | Read by |
+|---|---|
+| `README.md` | `pyproject.toml` (`readme = "README.md"`), so `pip install -e` |
+| `CLAUDE.md` | `tests/python/test_spawn_rule_text.py`, `test_session_state.py` (rule-size budget) |
+| `docs/increments/README.md` | `tests/python/test_session_state.py` (`_copy_real_rule_files`) |
+| `docs/PRINCIPLES.md` | the same |
+
+`.claude/**` is code wholesale: the suite reads `REQUIRED-READING.md`, the
+agent files, the skills, `briefs/common.md` and `settings.json`, and copies
+the hooks. The main session's list would have missed the two `docs/` rows:
+a prose PR that pushed `docs/increments/README.md` past the session-state
+budget would go green and break the next, unrelated code PR.
+
+`changed_paths` runs `git diff --name-only -z --no-renames <base> <head>`.
+`--no-renames` is load-bearing: with rename detection, moving
+`src/a.cpp` to `docs/a.md` lists only `docs/a.md`, which is prose, and the
+deletion of a source file would skip the build. `-z` keeps unusual file
+names unquoted.
+
+`main` takes `<base> <head>` and prints exactly one line, `code=true` or
+`code=false`, for `>> "$GITHUB_OUTPUT"`. **Safe default: `code=true`**, with
+one plain sentence on stderr saying why, whenever the base is empty (a
+`workflow_dispatch` run), git fails (the base is not in the clone, a bad
+SHA), or the diff is empty. It exits 0 in all of these, so a classifier
+problem shows as a full run, not as a red job. Only a crash of the script
+itself fails the `changes` job, and then `CI result` fails (§2.3): also safe.
+
+### 2.2 The workflow: `.github/workflows/main.yaml`
+
+```yaml
+on:
+  pull_request:
+    branches: [ master ]
+  merge_group:
+    types: [checks_requested]
+  workflow_dispatch:        # replaces push: master; a hand-run is a full run
+```
+
+A new first job, `changes` (name `Changed files`), on ubuntu: checkout with
+`fetch-depth: 0` (the base commit must be in the clone; governance already
+fetches the full history), then
+
+```
+python3 tools/ci_changes.py \
+  "${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha }}" \
+  "${{ github.sha }}" >> "$GITHUB_OUTPUT"
+```
+
+with `outputs: code: ${{ steps.<id>.outputs.code }}`. Both bases are
+ancestors of `github.sha`, and both can be older than the head's actual
+parent (a `pull_request` base moved on since the event; a queue entry behind
+another entry, if `base_sha` is `master` rather than the entry ahead), so the
+diff can only be wider than the PR, never narrower. Wider is safe.
+
+`cpp`, `sanitizers`, `tsan` and `python` gain
+
+```yaml
+    needs: changes
+    if: needs.changes.outputs.code != 'false'
+```
+
+`!= 'false'`, not `== 'true'`: an empty or unexpected output runs the jobs.
+`governance` is unchanged: no `needs`, no `if`, it runs on every event. It
+uses no other job's artifacts (no job uploads any), so skipping the others
+costs it nothing, and `check_citations.py` matters most on prose.
+
+The `unchecked` C++ leg gains `continue-on-error: ${{ matrix.hardening == 'OFF' }}`,
+and `tsan` stays out of `CI result`'s `needs`, so the merge gate stays exactly
+what it is today: neither is required now (§8 asks whether they should be).
+
+### 2.3 `CI result`, the one required check
+
+```yaml
+  result:
+    name: CI result
+    if: always()
+    needs: [changes, cpp, sanitizers, governance, python]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Every gating job passed, or was skipped on a prose-only change
+        env:
+          CODE: ${{ needs.changes.outputs.code }}
+          CHANGES: ${{ needs.changes.result }}
+          GOVERNANCE: ${{ needs.governance.result }}
+          OTHERS: ${{ needs.cpp.result }} ${{ needs.sanitizers.result }} ${{ needs.python.result }}
+        run: |   # plain shell; @developer writes it
+```
+
+The rule the step enforces, in words: `changes` and `governance` must be
+`success`. If `CODE` is exactly `false`, each of the others must be `success`
+or `skipped`; otherwise each must be `success`. Anything else (`failure`,
+`cancelled`, a `skipped` job on a code change) exits 1 and says which job
+ended how. `if: always()` makes the job run, and so report, even when a
+needed job failed; without it a failure upstream would skip `CI result`,
+and a skipped job reports success.
+
+## 3. Failure modes and their defaults
+
+| Case | What happens |
+|---|---|
+| Base SHA missing, empty, or not in the clone | `code=true`, full run |
+| Diff empty (base equals head) | `code=true`, full run |
+| `workflow_dispatch` (no base) | `code=true`, full run |
+| Rename from code to a prose path | both paths listed (`--no-renames`): code |
+| `changes` job crashes | code jobs skipped, `CI result` fails on `CHANGES` |
+| A code job fails or is cancelled | `CI result` fails |
+| A new suite starts reading a prose file | caught by the suite's own read check (§6, T5) |
+| A new job added to the workflow | T4 fails until it is in `CI result`'s `needs` or on the named exemption list |
+| PR with a merge conflict | no `pull_request` run at all (GitHub's rule), as today |
+| Concurrency | group unchanged; `changes` and `result` cancel with the rest |
+
+## 4. LOC
+
+`tools/ci_changes.py`: about 45 counted lines. `main.yaml`: about 35 added,
+2 removed (the `push` trigger); h10 counted workflow lines apart from
+production, as here. Tests are excluded. Well under 700.
+
+## 5. Sequence, and Ola's settings step
+
+0. **Before (b) takes effect:** on the first queued merge (likely #174),
+   check that the queue landed the tested commit:
+   `gh run list --event merge_group --limit 5 --json headSha` must contain
+   `git rev-parse origin/master` taken right after that merge. If it does
+   not, keep `push: master`; (a) stands without (b).
+1. The h11 PR changes `.github/` and `tools/`, so its own run is a full run:
+   all seven current required checks report under their names, plus
+   `CI result`. It merges like any other PR.
+2. **Ola, straight after the merge**: Settings, Branches, the `master` rule,
+   required status checks: remove the seven, add `CI result` (offered because
+   the h11 run reported it). Until this is done, a prose PR waits on the five
+   matrix checks that never report; nothing breaks, it just waits.
+   `Require branches to be up to date` and the merge queue stay as h10 left
+   them.
+3. The first prose PR afterwards is the proof (§6, real-PR checks).
+
+## 6. Tests (`@tester`)
+
+`tests/python/test_ci_changes.py`, loading the tool the way
+`harness_fixtures.Tool` loads the other `tools/` scripts.
+
+- **T1, `is_prose` table.** Prose: `ROADMAP.md`, `INSTALL.md`, `testing.md`,
+  `docs/increments/23c-x.md`, `docs/retrospectives/2026-10-04-x.md`,
+  `docs/GLOSSARY.md`. Code: every `NOT_PROSE` entry;
+  `docs/increments/h4-probes/h4_probe.py`;
+  `docs/benchmarks/2026-09-26/quarter.geojson`; `.claude/agents/tester.md`;
+  `.claude/briefs/common.md`; `.github/pull_request_template.md`;
+  `.github/workflows/main.yaml`; `lib/detria/README.md`;
+  `tests/python/notes.md`; `src_python/tin_engine/cli.py`; `LICENSE`;
+  `pyproject.toml`; `CMakeLists.txt`; `.gitignore`; `tools/ci_changes.py`;
+  `docs/x.MD`; `Docs/x.md`.
+- **T2, `needs_full_ci`.** Empty list: true. All prose: false. One code path
+  among prose: true.
+- **T3, end to end on a fixture repository** (a temporary `git init`, as in
+  `harness_fixtures.make_repo`), running `main` and reading stdout:
+  a prose-only commit gives `code=false`; a code commit `code=true`; a rename
+  `src/a.cpp` to `docs/a.md` gives `code=true` (red without `--no-renames`);
+  deleting `src/a.cpp` alone gives `code=true`; an unknown base SHA, an empty
+  base, and base equal to head each give `code=true`, a non-empty stderr, and
+  exit 0.
+- **T4, the workflow's shape**, read as text (PyYAML is not installed, and
+  this is not a reason to add it): every top-level job other than `changes`,
+  `governance` and `result` carries `needs: changes` and
+  `if: needs.changes.outputs.code != 'false'`; `result` has `if: always()`;
+  its `needs` equals the set of jobs minus `result` and minus a named
+  exemption tuple (`tsan`), so a job added later fails the test until someone
+  decides; `on:` has no `push`. The test fails loudly if the file's layout
+  stops matching the shapes it parses, rather than passing on nothing.
+- **T5, the suite's own reads.** A new `tests/python/conftest.py` installs a
+  `sys.addaudithook` for `open` events, keeps every path inside the
+  repository root, and at session end fails if `is_prose` is true for any of
+  them, naming the file and saying to add it to `NOT_PROSE`. The pure part
+  (`prose_reads(paths, root) -> list[str]`) is unit-tested; the wiring is
+  proved by a planted run (a scratch test that reads `ROADMAP.md`, run in a
+  subprocess, must fail the session). Limit, stated in the conftest: a tool
+  the suite runs as a subprocess against the real tree is not seen; no suite
+  does that today (they run tools against fixture repositories).
+
+The red step: T1 to T4 fail on the missing tool and the unchanged workflow;
+T5's planted run fails because the hook does not exist.
+
+**Only a real PR can show** (the main session, with `gh pr checks`):
+
+- On the h11 PR: all nine jobs plus `Changed files` and `CI result` green,
+  `code=true` in the `Changed files` log.
+- On the first prose PR after §5 step 2: the C++, sanitizer and Python checks
+  show as skipped (their names unexpanded, which confirms the reason for
+  `CI result`), `Governance gates` and `CI result` green, on both the
+  `pull_request` and the `merge_group` run, and the PR lands.
+- After any queued merge: no `push` run on `master`
+  (`gh run list --event push --branch master --limit 1` shows nothing newer
+  than the merge).
+
+## 7. Rules text
+
+- `CLAUDE.md` §4, CI: the required check is `CI result`; on a PR that changes
+  only prose (as `tools/ci_changes.py` decides), the C++ and Python jobs are
+  skipped, so that PR's green says nothing about code. Two lines.
+- `testing.md`, the "Live today" block and the sanitizer bullet ("run on
+  every PR"): "on every PR that changes code". (Aside, not h11's: the tsan
+  bullet there still says planned; the job is live.)
+- `.claude/agents/reviewer.md` §5 needs no change: it already says to read
+  `.github/` when a change touches the build.
+- h10 is a record and stays as written; its "the queue fast-forwards
+  `master`" is checked by §5 step 0, not relied on.
+
+## 8. Question for Ola
+
+Should the TSan job and the unchecked C++ leg block a merge? Today they do
+not (they are not required checks). Default: keep it so; adding them later is
+one line each (`tsan` into `CI result`'s `needs`, and dropping the
+`continue-on-error`).
