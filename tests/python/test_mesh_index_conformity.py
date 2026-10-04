@@ -25,11 +25,13 @@ fixture fails every test on `ModuleNotFoundError`.
 from __future__ import annotations
 
 import importlib
+import json
 from types import ModuleType
 from typing import Any
 
 import numpy as np
 import pytest
+from pydantic import ValidationError
 
 XYZ = (
     (500_000.0, 6_600_000.0, 12.5),
@@ -119,3 +121,73 @@ class TestRefused:
             mi.check_conformity(records)
         assert caught.value.edge == 6
         assert set(map(tuple, caught.value.pieces)) == {(0, 0, 0), (1, 0, 0)}
+
+
+# ------------------------------------------------------------------ MeshIndex drift
+
+
+def an_index() -> dict[str, Any]:
+    """A valid index by hand, with one written piece and one all over NoData."""
+    counts = {"triangles": 12, "vertices": 10, "on_frozen": 0}
+    window = {"row0": -2, "col0": 0, "rows": 21, "cols": 20}
+    return {
+        "crs": "EPSG:25833",
+        "tolerance": 1.0,
+        "source": "refined from DEM nodes",
+        "vocabulary": "0" * 64,
+        "partition": {
+            "pieces": 4,
+            "memory_budget": 2**34,
+            "bytes_per_node": 267,
+            "nx": 2,
+            "ny": 1,
+            "dx": 20,
+            "dy": 39,
+            "cols": 39,
+            "rows": 39,
+        },
+        "pieces": [
+            {"id": [0, 0, 0], "file": "0-0-0.vtk", "sha256": "a" * 64, "counts": counts,
+             "window": window},
+            {"id": [0, 1, 0], "file": None, "sha256": None,
+             "counts": {"triangles": 0, "vertices": 0, "on_frozen": 0}, "window": window},
+        ],
+    }  # fmt: skip
+
+
+class TestMeshIndexDrift:
+    """ "Three points from 23c-1's green (3ffae13)", point 2: piece ids are
+    strict non-negative integers, and `file` and `sha256` are null together
+    or set together."""
+
+    def test_the_hand_built_index_validates(self, mi: ModuleType) -> None:
+        index = mi.MeshIndex.model_validate(an_index())
+        assert index.pieces[1].file is None and index.pieces[1].sha256 is None
+
+    @pytest.mark.parametrize(
+        "piece_id",
+        [["1", "2", "3"], [0, "1", 0], [0, -1, 0], [-1, 0, 0], [0, 0, -1], [0.0, 1.0, 0.0]],
+        ids=["text", "one-text", "negative-i", "negative-j", "negative-k", "floats"],
+    )
+    def test_a_piece_id_not_three_non_negative_integers(
+        self, mi: ModuleType, piece_id: list[Any]
+    ) -> None:
+        doc = an_index()
+        doc["pieces"][0]["id"] = piece_id
+        with pytest.raises(ValidationError):
+            mi.MeshIndex.model_validate(doc)
+        with pytest.raises(ValidationError):
+            mi.MeshIndex.model_validate_json(json.dumps(doc))
+
+    @pytest.mark.parametrize(
+        ("file", "sha256"), [("0-0-0.vtk", None), (None, "a" * 64)], ids=["no-sha", "no-file"]
+    )
+    def test_file_and_sha256_null_only_together(
+        self, mi: ModuleType, file: str | None, sha256: str | None
+    ) -> None:
+        doc = an_index()
+        doc["pieces"][0]["file"], doc["pieces"][0]["sha256"] = file, sha256
+        with pytest.raises(ValidationError):
+            mi.MeshIndex.model_validate(doc)
+        with pytest.raises(ValidationError):
+            mi.MeshIndex.model_validate_json(json.dumps(doc))
