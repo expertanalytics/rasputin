@@ -8,7 +8,10 @@ Status: **designed by `@architect`, 2026-10-01; B1-B14 ruled by Ola on
 lines after the master merge (248 before it; the merged sum takes one
 more line), `@perf`'s acceptance recorded at `91c7cb5` and again at
 `4541e38` (ACCEPTED, `docs/benchmarks/2026-10-04/23b-merged-acceptance.md`);
-23c onwards not implemented.** Written before `@tester`
+23c split in two:
+23c-1 (about 215 estimated, 156 built) in review, no `@perf` run needed,
+and 23c-2 (about 265) with its red step written on `worktree-23c`; 23d
+onwards not implemented.** Written before `@tester`
 per `docs/increments/README.md` step 1. The rulings are under "Ruled by Ola,
 2026-10-01", below; the questions are kept as asked at the end, each marked
 with its ruling. 23a-1 and 23a-2 are designed in full under "Windowed
@@ -2140,7 +2143,8 @@ No network: every URL is `http://127.0.0.1:<port>/...`, put in `SOURCES` by
   without freezing differs (`@tester` picks a case with a seam node over
   tolerance).
 - **DC7, determinism**: `--threads` 1 and 4, pieces in reversed order:
-  identical piece files (`--jobs` is 23d's, PJ4).
+  identical piece files (`--jobs` is 23d's, PJ4; the reversed order
+  moved there, "Settled after 23c's red step" item 12).
 - **DC8, locality**: one piece re-run alone from its job spec writes the same
   bytes.
 - **DC9, geometry**: two pieces in one cell; a partition line through a
@@ -2161,8 +2165,9 @@ No network: every URL is `http://127.0.0.1:<port>/...`, put in `SOURCES` by
   rest, and the outputs are identical to a clean run's.
 - **PJ3, invalidation**: a changed tolerance changes every piece's hash; a
   changed `--pieces` changes the partition and so every hash.
-- **PJ4, determinism**: `--jobs` 1 and 3, `--threads` 1 and 4: identical
-  piece files and stitched file.
+- **PJ4, determinism**: `--jobs` 1 and 3, `--threads` 1 and 4, and pieces
+  in reversed order (moved from 23c's DC7, "Settled after 23c's red step"):
+  identical piece files and stitched file.
 
 ### 23f (C++ Catch2 and through the binding)
 
@@ -2689,6 +2694,223 @@ The suites that kill a mutant are `test_mesh_frozen` (mesh),
 | S7 no carving from either end | ran (both ends; `@developer`'s S3 removed one): killed (seam) |
 | S8 inserted points output with the wrong origin | ran (`x_min` dropped): killed (seam) |
 
+## Settled after 23c's red step (65e3990)
+
+Ruled by `@architect`, 2026-10-04, unattended (Ola asleep). `@tester`'s red
+step for 23c (`aacf37c..65e3990`) pinned 15 choices the design left open and
+asked three questions. Each is confirmed or corrected here before
+`@developer` starts; `@developer` implements them as written here. The pins
+are quoted from the headers of `tests/python/test_decompose_partition.py`,
+`test_core_mesh_arrays.py`, `test_mesh_index_conformity.py`,
+`pieces_fixtures.py` and `test_cli_mesh_pieces*.py` at `65e3990`.
+
+**Verdict in one line:** all 15 pins stand, three with a precision (2, 8,
+14); `@tester` writes four more red tests (2, 8, 14 and question B); one
+question goes to Ola (B17, the budget's unit), with a default that needs no
+test change; 23c is split into two PRs.
+
+### The 15 pins
+
+1. **`_core.indexed_mesh(vertices, triangles, constrained_edges)`.
+   Confirmed.** Copies, `ValueError` on a bad shape, index, mask or
+   coordinate, no orientation check (refine's `NotCounterClockwise` is the
+   check the degeneracy policy names). Edge-property masks stay out of it:
+   `refine` already takes `edges` and `masks` beside the mesh, so the seam
+   bit reaches the core the way every feature bit does. The binding was
+   missing from the PR table; it is a row now (below, about 30 lines).
+2. **Pieces in `<out>.pieces/`. Confirmed, with three precisions.**
+   - The directory is `--out`'s full name plus `.pieces` (`x.vtk` gives
+     `x.vtk.pieces/`), so a `.vtk` and a `.ply` run of one name do not share
+     it. Piece files are `<j>-<i>-<k>.<ext>`; the index's `file` is relative
+     to the directory, as pinned.
+   - **23c writes nothing at `--out` in a cut run** (the stitcher is 23d's),
+     and says on stderr where the pieces are. `@tester` asserts it; 23d's
+     PJ1 inverts it.
+   - **A rerun over an existing directory deletes its `index.json` first and
+     writes the new one last** (to a temporary name, then renamed). Without
+     this, a rerun that fails part-way leaves the previous run's index
+     beside piece files it has overwritten: a valid-looking index of a mesh
+     that never existed. Piece files not listed in the index are not the
+     run's; 23c deletes nothing else. `@tester` adds one red test: a cut run,
+     then a rerun that fails (a truncated DEM, as in the input suite), leaves
+     no `index.json`.
+3. **Index keys. Confirmed**, and three more fields the design's "Output"
+   names, which the pinned tests do not forbid: `source` (the run's
+   `elevation_source` sentence, identity and credit), `vocabulary` (the
+   piece files' fingerprint, item 4) and per piece `window` (`row0`, `col0`,
+   `rows`, `cols` on the lattice). No test change.
+4. **`seam` named in the piece files' vocabulary. Confirmed; the bit is 9.**
+   See question A.
+5. **`MeshIndex` frozen, `extra="forbid"`. Confirmed.** An index is read by
+   other programs (23d's stitcher, a consumer); an unknown key is drift, not
+   data.
+6. **`SeamRecord`, `check_conformity`, `ConformityError`. Confirmed**, NaN
+   equal to NaN and 0.0 unequal to -0.0 included (bit for bit means bytes).
+   One record passes: a seam edge on the outline has one piece (degeneracy
+   policy). The runner knows from the start triangulation how many triangles
+   each seam edge has (one or two) and asserts that many records exist
+   before calling the check; that is internal and needs no test.
+7. **`--memory-budget` in whole bytes, default 2^34; refusals. Confirmed for
+   23c**, pending B17. `partition()`'s two `ValueError`s stand: below one
+   node's bytes step 3 cannot end.
+8. **`--pieces` and `--memory-budget` need `--dem` and `--tolerance`.
+   Confirmed. Cutting needs `--domain`: both options without `--domain` are
+   a usage error ("needs --domain").** Without a domain the start mesh is
+   the stride grid, not a PSLG through `build_pslg`, `node` and
+   `triangulate`, so there is nothing for the cuts to enter; cutting it
+   would be a second start path. A run without `--domain` (or with `--bbox`)
+   is never cut, keeps today's bytes (K1), and the budget does not apply
+   to it. `@tester` adds one red test: `--pieces 4` without `--domain` is
+   exit 2 naming `--domain`, with no file written.
+9. **K1 on the uncut path, no partition field. Confirmed.** The budget and
+   `b(T)` are recorded in the index, and only a cut run has one; K5's
+   "recorded in the file" reads as "in the index". A run is cut when the
+   partition has more than one cell (`nx · ny > 1`), not when the labelling
+   finds more than one piece: a domain inside one cell of a multi-cell
+   partition writes a pieces directory with one piece.
+10. **DC8 as locality under a DEM change in another cell. Confirmed.** It
+    tests K6 through what a job may depend on, which is the property. It
+    also pins that a piece file's fields are the piece's own (its counts,
+    its sentence), never the whole run's.
+11. **`counts.on_frozen` per index entry. Confirmed.** `counts` also holds
+    the piece's `triangles` and `vertices`.
+12. **DC7 with threads forced through a wrapper; the reversed-order half not
+    written. Confirmed.** 23c runs pieces in one fixed order and offers no
+    hook; the order becomes a parameter with 23d's runner (largest first),
+    so the reversed-order half moves to 23d's PJ4.
+13. **DC6 on an asymmetric octagon on nodes, the start taken by a spy on
+    `triangulate`. Confirmed.** The octagon keeps every crossing on a node,
+    which is what the equality needs; the spy makes the oracle's start the
+    run's own, so no CDT tie can separate them.
+14. **DC9's lake as a hole in the domain. Confirmed, and not enough.** The
+    hole is worth keeping (the partition must not lose a ring). But a lake
+    as a water polygon (`--features`) is the case the basin is made of: a
+    seam crossing a constraint ring, where the crossing is an off-node
+    corner, the only seam vertices whose z comes from a bilinear evaluation
+    rather than a node (seam protocol step 5). `@tester` adds the water
+    variant: a partition line through a water ring given by `--features`,
+    the ring not dividing pieces, the crossings vertices of both pieces,
+    conformity and both oracles over the union.
+15. **Area to 1e-6 for moved domains. Confirmed**, on the measured 4e-7 of
+    the uncut mesh.
+
+### The three questions
+
+**A. Where `seam` lives. A piece-file vocabulary, not `DEFAULT_VOCABULARY`.**
+`features.py` gains `PIECE_VOCABULARY`: `DEFAULT_VOCABULARY`'s properties
+plus `seam` at bit 9, the lowest bit the default leaves free. Cut runs write
+their piece files (and later 23d's stitched-with-seams file) with it; the
+uncut path keeps `DEFAULT_VOCABULARY`, so K1's bytes, every fingerprint and
+`test_features.py` stay as they are. Two more reasons: `feature_input`
+builds its classes from `DEFAULT_VOCABULARY`, so a seam there would let a
+user tag their own lines as seams; and after 23g's cleanup no `seam` bit is
+left in the stitched file (K11), which can go back to the default. The
+index records the piece vocabulary's fingerprint (item 3). No test change:
+the suites read the bit by name.
+
+**B. A piece whose triangles all fall over NoData. Keep it in the index,
+write no file.** Its entry has `"file": null`, `sha256` null, zero
+triangles and vertices, and its seam records still go to the conformity
+check (the seam pass ran on its edges). Refusing would make a cut run fail
+where the same run uncut succeeds; writing a zero-triangle file asks every
+reader to handle one; dropping the entry hides that the piece was there.
+The run is refused, as uncut ("no data under any triangle; nothing to
+write"), only when every piece is empty, and then no index is written.
+`@tester` adds two red tests: a cut where one cell is all NoData (exit 0,
+that entry as above, the other files present and passing the oracles), and a
+cut of an all-NoData DEM (exit 2, no `index.json`). Under NoData a seam edge
+can lose its triangle on one side and not the other, so the edges suite's
+"exactly two files" holds only where both sides keep theirs; its scene
+avoids the case, and no change is asked.
+
+**C. Two claims that cannot run before green.**
+- *DC4's control* (violations once seams stop counting as constraints). It
+  is evidence that the oracle can fail, and that the frozen seam costs
+  Delaunay quality across it, which is what 23g removes. If at green the
+  scene shows none, the test is not wrong and the product is not wrong:
+  `@tester` makes the control a planted one (one interior edge of the union
+  flipped, which the oracle must catch), and "As built" records that the
+  scene's seams cost nothing. A scene that can show the cost is a 23g
+  concern (its comparison of cut against uncut), not 23c's.
+- *DC6's equality.* If it fails at green, `@developer` reduces it to the
+  smallest case and names the first differing triangle. If the cause is in
+  23c's code (slice order, renumbering, fan order, window origin), it is a
+  bug and gets fixed. If the cause is in refine itself (a decision that
+  depends on a triangle's index or on the window's origin rather than on
+  the triangle), 23c does not change refine: DC6 is reduced to what the
+  design needs (DC2-DC5 on the same scene, which K3 and K4 rest on), "As
+  built" records the cause, and "The union argument, checked" item 1's
+  "sidesteps the difference" is corrected. It then goes to Ola as a
+  question, because "a cut run is one refine, restricted" is a claim a
+  publication would make.
+
+### PR split and LOC
+
+The rulings add about 50 lines: the binding (~30, `bindings/core.cpp` and
+`_core.pyi`), `PIECE_VOCABULARY` (~5), the index's write order and the empty
+piece (~10), the `--domain` refusal (~5). That is about **480**: 667 at
++39 % and 768 at +60 %, over the ceiling at the second. **23c is split in
+two stacked PRs** along the red step's own files:
+
+| PR | what | est. | +39 % | +60 % |
+|---|---|---:|---:|---:|
+| **23c-1** | `decompose.py` (rule, `b(T)`), `features.py`'s `PIECE_VOCABULARY`, `io/mesh_index.py` (model, records, conformity), `_core.indexed_mesh` | 215 | 299 | 344 |
+| | tests: `test_decompose_partition.py`, `test_core_mesh_arrays.py`, `test_mesh_index_conformity.py` | | | |
+| **23c-2** | `decompose.py` (lines as chains, `BasinPlan`), `pieces.py`, `basin_run.py`, the index writer, `cli.py`, the refusals at half of physical memory deleted | 265 | 368 | 424 |
+| | tests: `pieces_fixtures.py`, `test_cli_mesh_pieces*.py`, DC11 in `test_mosaic.py`, `test_dem_input.py`, `test_catchment.py` | | | |
+
+DC11 goes with 23c-2, so the memory refusals are deleted in the same PR that
+brings the cut: between the two merges a run over half of the machine's
+memory is still refused rather than running uncut out of memory. The red
+step's commits split along the same line (`edd8a29`, `d994a0e`, `db6a5c0`
+to 23c-1; the rest to 23c-2); how the branches are rebuilt is the main
+session's.
+
+### Three points from 23c-1's green (3ffae13)
+
+Raised by `@developer`; ruled by `@architect`, 2026-10-04.
+
+1. **"The lattice" in the partition record: named, in 23c-2.** The index
+   must say where the partition lines are, or a consumer cannot place a
+   seam. Four fields join `PartitionRecord`: `row0` and `col0` (the
+   window's first node `(R0, K0)` on the lattice, integers, possibly
+   negative), `spacing` (`h`, metres) and `origin` (`[x, y]`, the world
+   position of lattice node `(0, 0)` in the index's `crs`). Line `i` is then
+   at `x = origin_x + (col0 + i·dx)·h`, line `j` at
+   `y = origin_y − (row0 + j·dy)·h`. They belong to 23c-2, because
+   `decompose.partition` sees only `cols` and `rows` and the run is what
+   knows the lattice; until then no index is written, so adding fields to a
+   model that forbids unknown keys breaks nothing. `@tester` (23c-2): a cut
+   run's seam lines, read from the piece files, are exactly the lines those
+   four fields and `dx`, `dy` give. `@developer` (23c-2): the four fields.
+2. **Field types: confirmed, with two changes, both in 23c-1.** `source` and
+   `vocabulary` plain strings, `window` as `io.models.IndexWindow` with
+   negative `row0`/`col0` allowed, `counts` `{triangles, vertices,
+   on_frozen}`: confirmed. Changed: **piece ids are strict integers,
+   non-negative** (`["1", "2", "3"]` is refused: an id written as text is
+   drift, and lax mode would let it through), and **`file` and `sha256` are
+   null together or set together** (a model validator). `@tester` (23c-1)
+   adds the two refusals to the schema-drift cases; `@developer` (23c-1)
+   the strict type and the validator.
+3. **The partition loop: bounded, no change.** The loop runs only while
+   `dx · dy · b > B`, and `partition` refuses `B < b`, so inside it
+   `dx · dy > 1`. When it grows `nx`, `dx ≥ dy`, so `dx > 1`, so
+   `nx < cols` before the step and `nx ≤ cols` after; the same for `ny`
+   and `rows`. At `nx = cols`, `ny = rows` the cells are one node and the
+   condition fails. So it ends within `cols + rows − 2` steps, each O(1):
+   about 90,000 for the basin's window at 1 m. `@developer` puts this
+   argument in a comment above the loop; nothing for `@tester` (DC0's
+   random draws already reach it).
+4. **`partition` refuses an empty window: yes** (`@reviewer`'s suggestion,
+   23c-1 round 1). `cols < 1` or `rows < 1` is a `ValueError`, as
+   `pieces < 1` and a budget under one node are. The run never passes one
+   (the window is the domain's box grown by a cell diagonal, so at least
+   2 × 2 nodes), but today `rows == 0` fails as a `ZeroDivisionError` in
+   step 2, which says nothing about the cause. `@tester` (23c-1) adds the
+   two cases to DC0's refusals; `@developer` the check.
+
+**B17 for Ola** is under "New questions, after the rulings".
+
 ## Questions for Ola
 
 Numbered B1-B12, so they cannot be confused with 15's and 15c's Q1-Q17.
@@ -2909,6 +3131,17 @@ here (23a-2)" 8), which travels with the cache, not with a mesh.
 **Ruled by Ola, 2026-10-02: (a), the mesh file carries them** ("B16 a"; 23a-2
 implements it). Ola also gave the go-ahead to implement 23a-2.
 
+**B17. How `--memory-budget` is written on the command line.** Asked
+2026-10-04 (23c's red step). The design says "16 GB, read as 16 GiB"; the
+tests take the option as a whole number of bytes, so 16 GiB is typed
+`17179869184`.
+- **(a) Whole bytes only.** Recommended for 23c, and the default if not
+  ruled: no parser, no unit to argue about, and the index records the
+  number exactly.
+- (b) Also a size with a unit, `16G` or `16GiB`, read as powers of 1024
+  (about 10 lines in `cli.py`, and one more red test). The index still
+  records bytes. Can follow 23c without changing anything it writes.
+
 **Decided here, which Ola may overrule:** lattice lines on the computation
 lattice as artificial cuts; the partition rule's integer details (near-square
 cells, the last row and column narrower); `b(T)` from the Velhas piece's
@@ -3034,3 +3267,9 @@ LOC was 598 added and 6 removed, 592 net, against an estimate of 373. That is +6
 **23b, code review, round 7, 2026-10-04.** Range `185081c..67ca1ac` (d5aeb82 round 6 recorded; 3403116 merge of origin/master d20126b, #165 void skip and #167; e3a6add citations; 67ca1ac status line and ROADMAP row 23). Verdict: CHANGES REQUESTED. LOC: +1 this round (the merged `quality_skipped` sum), 249 net for the PR against about 285. The merge keeps both skips: `quality.hpp` tests floor, outside, `skipped_void`, the walk, vertex, then `skipped_frozen` (`:130-181`), the order its comment now states; `refine.hpp:320-322` sums all seven. The comment's departure from R4 step 3's list needs no note in `20-start-quality.md`: R4 step 4 already has the walk find the vertex. The round-6 citations in `27-node-sampling.md` and `25-plain-output.md`, and `15f-edge-strip.md:1554,1910`, re-read as quotations at 67ca1ac, hold; status line and ROADMAP row 23 match the tree. `build-23b`, `-nofma` and `-san` current, ctest 974/974 each; touched Python suites 199 passed on the current extension. Blocking: `20-start-quality.md:608-610` says "23b, not yet on master" and calls the conflict "two-line", which the merge of #162 makes false; state the rule instead. Still open: CI's only run on #162 (e4f07c3) is red on GCC 13 (`frozen_oracle.hpp:108`), fixed in 4cd28dc but never run; @perf reruns the acceptance at the merged head against master d20126b (refine and mesh code resolved in the merge). Not pushed; no CI.
 
 **23b, code review, round 8, 2026-10-04.** Range `4541e38..0a3187b` plus `4541e38` (4541e38 round 7 recorded and `20-start-quality.md` states the 23b rule; 0a3187b @perf's acceptance at the merged head). Verdict: CHANGES REQUESTED, closed in the commit that records this round. LOC: 0 this round (no production file in the range), 249 net for the PR against about 285. Round 7's blocker is closed: `20-start-quality.md:608-610` now states the rule, which matches `quality.hpp:64-65,143,182` and `refine.hpp:321-322`. @perf's verdict at `4541e38` against master `d20126b` is ACCEPTED (`docs/benchmarks/2026-10-04/23b-merged-acceptance.md`). The pooled medians, run ranges and changes were recomputed from the eight `raw.tsv` files and match: +0.8 % tile and +0.2 % quarter at 1 thread, -1.7 to +1.7 % over 2 to 20 threads. Each run's commit, module hash, `bench.py` version and AC power state match the doc, and the mesh hashes and quality are identical in all eight runs. `check_citations.py` passes. Blocking: the status line (`23-basin-scale.md:9-10`) and ROADMAP row 23 still said the merged-head acceptance was "owed"; both now say it is recorded. Merge-ready waits on CI: #162's remote head is still `4cd28dc`, which has never had a CI run; not pushed.
+
+**23c-1, code review, round 1, 2026-10-04.** Range `aacf37c..1426245` (red 58fb1f1, 6dd4ffe, 714b0b3; rulings 6ca9a8c; green 3ffae13; rulings 6ce8e57; red b9f154a; green 1426245), stacked on 23b. Verdict: CHANGES REQUESTED. LOC: 154 net (`bindings/core.cpp` 30, `_core.pyi` 3, `decompose.py` 53, `features.py` 3, `io/mesh_index.py` 65) against about 215. No @perf run needed: nothing under `include/` changed, the binding only copies. The loop-bound comment's argument is sound; the binding's GIL and refusals match `refine_points`'s (stricter on negative indices); `project_structure.md` and docstrings match the code. Blocking: (1) "HOW THIS FILE GOES RED" paragraphs in `test_core_mesh_arrays.py:22-23`, `test_decompose_partition.py:27-28`, `test_mesh_index_conformity.py:21-22`; (2) ROADMAP row 23 (still "23c … 430", "23b … in review") and this file's status paragraph ("23b onwards not implemented"). Suggestions: say "integer indices" in `indexed_mesh`'s docstring; a ValueError for `rows == 0` in `partition()`; plain imports for the `dec`/`mi` fixtures. Whichever of 15f-3 and 23c-1 merges second renumbers `test_features.py:583`'s citation. Not pushed; no CI.
+
+**23c-1, code review, round 2, 2026-10-04.** Range `5216cb3..0679950` (c4ec906 test headers, 9633282 status paragraph, ROADMAP row 23 and point 4, 7e5fe0a and e5881a5 the empty-window tests, 0679950 the refusal); whole PR `aacf37c..0679950`. Verdict: APPROVED. LOC: 156 net against about 215. Both blockers closed; the empty-window suggestion taken (point 4, ten cases); citations hold; no @perf run needed. Nit: the status paragraph and ROADMAP say 154 lines built; update to 156 at merge. Not pushed; no CI.
+
+**23c-1, code review, round 3, 2026-10-04.** Range `0679950..b2f6176` (164b83c round 2 recorded; 027e8f9 merge of 23b's head e4f07c3; 9c791d6 merge of origin/master 45acf22, #163; 3b9408f `test_features.py:583` cites `project_structure.md:166`; b2f6176 re-cites `bindings/core.cpp:1174` and `:927-932`, and "156 built"); whole PR `45acf22..b2f6176`. Verdict: CHANGES REQUESTED, on CI alone. LOC: 156 net against about 215. The production and test diffs against master are byte-identical to round 2's; the conflict resolutions keep both sides (core.cpp includes; ROADMAP row 23 is master's text plus the 23c clause; the status line and the 23b rounds 6-8 and 23c-1 rounds 1-2 are all present); the citations hold as quotations; `check_citations.py` passes. Blocking: PR #164's remote head is `027e8f9`, whose CI (run 37177966246) is red on four Linux C++ jobs at `frozen_oracle.hpp:108` (GCC 13), fixed in 4cd28dc, which reaches this branch only through 9c791d6. Push b2f6176 and the push must show every check green; no tree change is needed and no further review round unless the pushed head differs. Remote master is at 72d4608 (#170, #171, docs only), which merges cleanly.
