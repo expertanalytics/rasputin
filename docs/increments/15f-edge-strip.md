@@ -14,10 +14,10 @@ coincidence radius scaled with the lattice (L16). L14 and L16 are green at
 `99e95d7`; `@reviewer` APPROVED 15f-2 in round 2 ("Review"), and `@perf`
 ACCEPTED it (meshes and quality identical to master, refine within noise;
 `docs/benchmarks/2026-10-03/15f-2-acceptance.md`); merged as #152.
-**15f-3** (the bindings, the Python and the CLI) is implemented on
-`worktree-15f-3`: green at `7d841f3`, with the green step's questions ruled
+**15f-3** (the bindings, the Python and the CLI) merged as #161:
+green at `7d841f3`, with the green step's questions ruled
 under "Settled after 15f-3's green step" (S1-S5), 179 net lines against 187.
-`@reviewer` APPROVED it in round 2 ("Review"), and `@perf` ACCEPTED it with a cost finding (`docs/benchmarks/2026-10-04/15f-3-acceptance.md`), ruled under "Settled after 15f-3's acceptance" (A1-A6): 15f-3 ships, and a follow-up, **15f-4**, makes the mesh rebuild cheap. Choices that would normally go to Ola
+`@reviewer` APPROVED it in round 2 ("Review"), and `@perf` ACCEPTED it with a cost finding (`docs/benchmarks/2026-10-04/15f-3-acceptance.md`), ruled under "Settled after 15f-3's acceptance" (A1-A6): 15f-3 ships, and a follow-up, **15f-4**, makes the mesh rebuild cheap. **15f-4** is implemented on `worktree-15f-4` (green `5eeb87a`, 21 net lines against about 30) and ACCEPTED by `@perf` (`41a5ad7`, `docs/benchmarks/2026-10-04/15f-4-acceptance.md`: meshes byte-identical, refine -3.1 to +0.5 %, the empty-strip call 0.355 s against A2's 0.43 s, end to end +9 to +18 % over the base on the projected path); it is in review as #163. Choices that would normally go to Ola
 were made as defaults; each is marked *default* where it occurs and listed
 under "Defaults chosen" at the end.
 
@@ -1602,6 +1602,15 @@ triangle of the mesh it receives, and the same with an empty strip. Bygdin at
     more than 10 % of the base's process time (0.43 s of 4.32 s), the
     rebuild is still the problem and fusion comes back as a design question.
   - Boundaries are unchanged: no path, no CRS, no new binding.
+  - **As built (`5eeb87a`, 21 net lines against about 30).** Two departures
+    from the text above, both accepted:
+    - The table's entries are `(to, triangle)`, not `(to, triangle, slot)`.
+      The slot is not needed: the lookup for triangle `t`'s edge `k` already
+      knows `k`, and the neighbour is the triangle found.
+    - Every triangle is validated (index range, positive orientation) before
+      the table is built, where the old code checked each triangle and
+      inserted its edges in one pass. The result is the same: any refusal is
+      `nullopt`, and which check fires first is not observable.
 - **A3. LOC.** About 30 net (build's adjacency about +20 against the 15 it
   replaces; the constraint table about +8 against 4), 42 at +39 % and 48 at
   +60 %. Folding it into 15f-3 would give about 210, far under 700, so the
@@ -1632,6 +1641,40 @@ triangle of the mesh it receives, and the same with an empty strip. Bygdin at
 - **A6. Nothing here needs Ola's ruling.** No output changes and no earlier
   ruling moves. The one choice that is his is when to merge: see Q2 under
   "Questions for Ola".
+
+**Settled after 15f-4's guard tests (2afc2f0).** `@tester`'s B1-B4 pass on
+the code as it is (ctest 910/910). Five choices the design left open, ruled
+by `@architect`, 2026-10-04:
+
+- **G1. B4 lives in `test_refinement_lattice_position.cpp`, not a new
+  target: confirmed.** `to_lattice` is in the header that suite already
+  builds (`refine.hpp`), and a target for four cases costs a link for
+  nothing. But the file's top comment and the CMake comment above
+  `add_terrain_backend_test(test_refinement_lattice_position ...)` still say
+  the suite is `lattice_position` only. **`@tester` amends both** to say it
+  also pins `to_lattice`'s constraint lookup (15f-4, B4), and tags B4's cases
+  `[to_lattice]` instead of `[lattice_position]`, so a filter by tag finds
+  them.
+- **G2. B3 pins each triangle's slot order and its bits and masks; B4 pins
+  that a later mask of 0 still sets the constrained bit, and that masks
+  past `edges.size()` are ignored: confirmed.** Each is today's behaviour,
+  and each is something A2's rewrite could change silently: refine's output
+  depends on triangle order (meshes byte-identical, A5), and a sorted table
+  that tested "mask != 0" for presence would drop the bit. The loop's
+  `i < edges.size() && i < masks.size()` bounds both arrays, so both
+  overhangs are today's meaning.
+- **G3. A hand Fisher-Yates over raw `std::mt19937` output: confirmed.**
+  `std::mt19937`'s sequence is fixed by the standard; `std::shuffle` and
+  `std::uniform_int_distribution` are not, so they would give a different
+  shuffle per standard library, and a failure on CI not reproducible on the
+  Mac.
+- **G4. No NaN or infinite coordinates: confirmed.** A2 does not touch
+  `orient_sign` or the orientation check in `build`, and `to_lattice` refuses
+  a vertex outside the node rectangle before `build` sees it. Nothing in
+  15f-4 moves that behaviour.
+- **G5. `n >= kNoNeighbour` not tested: confirmed.** It needs more than
+  4 G triangles, which no unit test can allocate. A2 keeps that guard as it
+  is; `@reviewer` checks by reading that the line survives the rewrite.
 
 **Python (pytest), 15f-3** (L15; first planned for 15f-2):
 
@@ -1682,6 +1725,7 @@ Counted in `CLAUDE.md` §2's unit. Estimates, with the worst cases at +39 %
 | | **15f-3 total** | **187** | **260** | **299** |
 | **15f-4** | **The rebuild made cheap** (A1-A3, after 15f-3's acceptance) | | | |
 | | `lattice_mesh.hpp`, `build`: flat vertex-bucketed adjacency; `refine.hpp`, `to_lattice`: sorted constraint table | 30 | 42 | 48 |
+| | the same, **measured** at `5eeb87a` (`lattice_mesh.hpp` 17, `refine.hpp` 4) | *21* | | |
 
 For 15f-2 the margins apply to the 15 estimated lines only, since the 275 are
 measured.
@@ -1851,7 +1895,7 @@ None blocks `@tester`.
 
 ## Review
 
-**15f-1, round 1, 2026-10-03.** Range `390b516..00d9239` (design 4bfeb47, red 46e69ad, ruling 08e2e14, green 00d9239). Verdict: CHANGES REQUESTED. LOC: 128 net (137 added, 9 deleted) against an estimate of 100 (+28 %, inside +39 %). Blocking: (1) "s strictly increasing" is false at the P1 end: t can round to exactly 1.0 when the end lies within an ulp past a grid line, so the last crossing and its midpoint with P1 coincide (probe: ends at col 0.8932792255671602 and nextafter(10, 11), last two points both col 10, row 3.25, s 1, duplicates 0); at P0 a crossing and its midpoint can share a position with distinct s; D2 steps 5-6 to be ruled, then a test, then the fix. (2) Red-step scaffolding at tests/cpp/CMakeLists.txt:327-328. (3) Stale citations in this file at :268, :435, :499 (refine.hpp lines moved by the extraction). (4) project_structure.md and the ROADMAP row, which the design assigns to this PR. Also to record: the .at() bounds checks on edge(k)/on_edge(k), and the duplicate comparison against the previous kept crossing. The lattice_position extraction is behaviour-preserving. Not pushed; no CI.
+**15f-1, round 1, 2026-10-03.** Range `390b516..00d9239` (design 4bfeb47, red 46e69ad, ruling 08e2e14, green 00d9239). Verdict: CHANGES REQUESTED. LOC: 128 net (137 added, 9 deleted) against an estimate of 100 (+28 %, inside +39 %). Blocking: (1) "s strictly increasing" is false at the P1 end: t can round to exactly 1.0 when the end lies within an ulp past a grid line, so the last crossing and its midpoint with P1 coincide (probe: ends at col 0.8932792255671602 and nextafter(10, 11), last two points both col 10, row 3.25, s 1, duplicates 0); at P0 a crossing and its midpoint can share a position with distinct s; D2 steps 5-6 to be ruled, then a test, then the fix. (2) Red-step scaffolding at tests/cpp/CMakeLists.txt@00d9239:327-328. (3) Stale citations in this file at :268, :435, :499 (refine.hpp lines moved by the extraction). (4) project_structure.md and the ROADMAP row, which the design assigns to this PR. Also to record: the .at() bounds checks on edge(k)/on_edge(k), and the duplicate comparison against the previous kept crossing. The lattice_position extraction is behaviour-preserving. Not pushed; no CI.
 
 **15f-1, round 2, 2026-10-03.** Range `390b516..2b3ee11`; this round `00d9239..2b3ee11` (e9583e9 round-1 record, 9b249e1 ruling, a991856 red, 2b3ee11 green). Verdict: APPROVED. LOC: 136 net (145 added: constraint_points.hpp 133, refine.hpp 12; 9 deleted) against an estimate of 100, +36 % net, inside +39 %; the extra lines are the I1-I3 guards, which the design did not cost (expect the same in 15f-2 where the loop meets ulp-scale ends). All four round-1 items closed; both probes rerun against 2b3ee11 (P1: 23 points, duplicates 1, s strictly increasing; P0: 10 points, duplicates 1). At-risk citations re-read: 05b-noder-driver.md:1749 holds; this file's round-1 record is history; tests/python/test_features.py:582 -> project_structure.md:359 was already stale on master (follow-up, not this PR's). Not pushed; no CI.
 
@@ -1863,4 +1907,10 @@ None blocks `@tester`.
 
 **15f-3, code review, round 2, 2026-10-03.** Range `ae6bb41..9265916` (e6348b4 tests, 9265916 docs); whole branch `c193cb1..9265916`. Verdict: APPROVED. LOC: 179 net (222 added), unchanged; this round touches no production file. All four round-1 blockers closed; the red-step figures in `test_cli_mesh_edge_strip.py` ("98 points, worst 16 m … 152, worst 47 m") are @tester's record of the `4157dab` run, not rerun. Five touched test files 200 passed; ruff clean; merge-tree against origin/master `1a422b5` clean. Suggestion: fix `tests/python/test_features.py:583`'s citation of `project_structure.md:359` (stale on master since 15f-1). @perf's acceptance (Bygdin, basin piece) outstanding. Not pushed; no CI.
 
-**15f-3, code review, round 3, 2026-10-04.** Range `60e2b45..ac06d39` (83c7fd2 citation, 588e879 and 9f2f7e5 @perf acceptance and profile, 107cdb4 ruling A1-A6, ac06d39 ROADMAP); whole branch `c193cb1..ac06d39`. Verdict: APPROVED. LOC: 179 net (222 added), unchanged; no production file in this range. The ruling's claims hold against code (`refine_points.hpp:248` calls `to_lattice` on refine's output inside `detail::point_loop`, reached from `final_check.run`; `lattice_mesh.hpp:136`'s `unordered_map`; `refine.hpp:160-162`'s `std::map`) and every figure matches the acceptance file; status line and ROADMAP row match the tree; merge-tree against origin/master `2060f14` clean. Not pushed; no CI.
+**15f-3, code review, round 3, 2026-10-04.** Range `60e2b45..ac06d39` (83c7fd2 citation, 588e879 and 9f2f7e5 @perf acceptance and profile, 107cdb4 ruling A1-A6, ac06d39 ROADMAP); whole branch `c193cb1..ac06d39`. Verdict: APPROVED. LOC: 179 net (222 added), unchanged; no production file in this range. The ruling's claims hold against code (`include/terrain/refinement/refine_points.hpp@ac06d39:220` calls `to_lattice` on refine's output inside `detail::point_loop`, reached from `final_check.run`; `include/terrain/mesh/lattice_mesh.hpp@ac06d39:131`'s `unordered_map`; `include/terrain/refinement/refine.hpp@ac06d39:154-156`'s `std::map`) and every figure matches the acceptance file; status line and ROADMAP row match the tree; merge-tree against origin/master `2060f14` clean. Not pushed; no CI.
+
+**15f-4, code review, round 1, 2026-10-04.** Range `107cdb4..41a5ad7` (guards 2afc2f0 and 6c5fb31, rulings G1-G5 43c256f, green 5eeb87a, @perf acceptance 41a5ad7). Verdict: CHANGES REQUESTED. LOC: 21 net (41 added; `lattice_mesh.hpp` 17, `refine.hpp` 4) against about 30. Code correct by reading: validation before the table, duplicate refusal by adjacent equal `to`, `lower_bound` neighbour with `kNoNeighbour` default, the guard `n >= kNoNeighbour` kept (`lattice_mesh.hpp:129`, G5); `(to, triangle)` suffices since the slot is the lookup's k; `to_lattice`'s three rules hold (`stable_sort` plus last of `upper_bound`; match by key; loop bound unchanged); ctest 910/910 (not rebuilt); `25-plain-output.md:115`, `:120` follow the moved lines. Blocking: (1) `tests/cpp/unit/test_mesh_lattice_split.cpp@41a5ad7:355-358` and `tests/cpp/unit/test_refinement_lattice_position.cpp@41a5ad7:118-121` still describe the maps as today's; (2) the status line calls 15f-4 a future follow-up; no as-built note (departure from A2's `(to, triangle, slot)`, the validation order, 21 against 30 lines); ROADMAP row 15f says 15f-4 planned. Suggestion: the `build` comment states only why the table is flat, not which callers exist. Not pushed; no CI.
+
+**15f-4, code review, round 2, 2026-10-04.** Range `36b4005..3c72c8b` (0ce1a1a test banners, 4169e4e status line, as-built note and ROADMAP, 3c72c8b `build`'s comment); whole PR `107cdb4..3c72c8b`. Verdict: APPROVED. LOC: 21 net (41 added), unchanged; comment-only code change this round. Both blockers and the suggestion closed; the banners match B1-B4's sections; the as-built note's two departures hold by reading; the guard stays at `lattice_mesh.hpp:129`; citations hold; merge-tree against origin/master clean. Not pushed; no CI.
+
+**15f-4, code review, round 3, 2026-10-04.** Range `3c72c8b..0e58ae6` (d84315c round 2 recorded; 52a56fe merge of origin/master 435aa56, #161; 0e58ae6 merge of origin/master 4f56551, #165-#168 and #162 23b, citations recomputed or pinned). Verdict: CHANGES REQUESTED, closed in the commit that records this round. LOC: 21 net (41 added, 20 removed), unchanged; the merges add none. Outside `docs/` the merged head is master plus exactly 15f-4's diff (same six files, identical added and removed lines against `435aa56..52a56fe`); `lattice_mesh.hpp` and `refine.hpp` changed on both sides in disjoint hunks, and `build` and `to_lattice` do not read `frozen_`. The recomputed citations (`refine.hpp` +8, `lattice_mesh.hpp:129`) quote the same text as on master, and the pins `@ac06d39` and `@00d9239` hold. `check_citations.py --base origin/master` passes. ctest 983/983 on `build-15f-4` (not rebuilt); gates clean. @perf need not re-time: no refine or mesh hunk was resolved by hand, and 15f-4's figures are stated against 15f-3 and the base. Blocking: (1) the status line said 15f-3 is on its branch and 15f-4 not pushed (#161 merged; #163 open); (2) ROADMAP row 15f said the same; (3) round 1's `test_mesh_lattice_split.cpp:355-358` and `test_refinement_lattice_position.cpp:118-121` resolved to the rewritten banners, now pinned `@41a5ad7`. CI on #163 is green at 52a56fe only; 0e58ae6 is not pushed and has no CI.

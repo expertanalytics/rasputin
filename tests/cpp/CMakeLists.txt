@@ -339,6 +339,8 @@ target_link_libraries(prop_refinement_refine_points PRIVATE Threads::Threads)
 # lattice_position's suite stays free of the strip. Not invariant-critical (the
 # mutation suite is 15f-2's ES2, ES3 and ES5); neither starts threads, but
 # refine.hpp includes the chunk scheduler, so both link Threads.
+# test_refinement_lattice_position also pins to_lattice's constraint lookup
+# (increment 15f-4, B4).
 add_terrain_backend_test(test_refinement_constraint_points
                          unit/test_refinement_constraint_points.cpp)
 target_link_libraries(test_refinement_constraint_points PRIVATE Threads::Threads)
