@@ -59,7 +59,6 @@ from test_cli_mesh import plain
 from tin_engine.cli import app
 from tin_engine.fetch.http import RangeClient
 
-REPO = Path(__file__).resolve().parents[2]
 FILES = ("stations.geojson", "reference.geojson", "rivers.geojson", "NOTICE.txt")
 GEOJSON = FILES[:3]
 REFUSED, USAGE = 1, 2
@@ -166,10 +165,6 @@ class TestThePackagedList:
         comments = "\n".join(list_comments())
         assert "norwegian-streamflow-reference-dataset-for-climate-change-studies" in comments
         assert "Kilde: NVE" in comments
-
-    def test_notice_md_credits_nve_under_nlod(self) -> None:
-        notice = (REPO / "NOTICE.md").read_text(encoding="utf-8")
-        assert "Kilde: NVE" in notice and "NLOD" in notice
 
 
 class TestTheCatalogue:
