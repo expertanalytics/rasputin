@@ -11,13 +11,6 @@ What is tested through the CLI and what through a function: the command is
 the only entry the design names for the fetch, so the requests, the files and
 the refusals are all observed through `rasputin fetch-stations`; the files are
 read back through PR 3's own readers, `io/station_set.py` and `io/rivers.py`.
-
-HOW THIS FILE GOES RED: there is no `tin_engine/data/nve_hrd_2025.csv`
-(`FileNotFoundError` in `list_text`), no `STATION_SOURCES` in
-`tin_engine.sources` (`ImportError` inside the test), no `fetch-stations`
-command (Typer answers 2, "No such command"), no `io/station_set.py` or
-`io/rivers.py` (`ModuleNotFoundError`), and `RangeClient` sends urllib's own
-User-Agent.
 """
 
 from __future__ import annotations

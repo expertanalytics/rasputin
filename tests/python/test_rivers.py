@@ -10,9 +10,6 @@ by @tester on 2026-10-04: exactly 25 groups, the count the design gives; the
 blank one is a single space). The design names 18 of them; the other seven
 are river spellings (`ElvBekkregulert`, `ElvBekkMitlinje`, `Elvbekk`,
 `FiltivElv`, `ElvBekkMidtlije`, `ElvbekkRegulert`, `ElvBekRegulert`).
-
-HOW THIS FILE GOES RED: there is no `tin_engine/io/rivers.py`
-(`ModuleNotFoundError` in each test's fixture).
 """
 
 from __future__ import annotations

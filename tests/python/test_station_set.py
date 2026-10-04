@@ -4,9 +4,6 @@
 red suites", PR 3's `test_station_set.py`. Hand-written files only. Each
 refusal is a `ValueError` (a Pydantic `ValidationError` is one) whose message
 names what is wrong.
-
-HOW THIS FILE GOES RED: there is no `tin_engine/io/station_set.py`
-(`ModuleNotFoundError` at collection of each test's import).
 """
 
 from __future__ import annotations
