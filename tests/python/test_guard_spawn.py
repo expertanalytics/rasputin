@@ -339,7 +339,7 @@ def test_20_without_a_working_brief_a_spawn_passes_with_a_notice(project: Path, 
     break_brief(project, how)
     text = "Write the tests." if how != "check raises" else task(make_block("tester", project))
     decision, _, context = verdict(run_hook(project, agent(project, text), project))
-    assert decision in (None, "allow")
+    assert decision is None
     assert "brief check unavailable" in context
     if how == "check raises":
         assert "planted check failure" in context
@@ -377,7 +377,7 @@ def test_22_without_both_directories_the_comparison_is_skipped_and_said(
     decision, _, context = verdict(
         run_hook(project, agent(cwd, task(make_block("tester", project))), env_project)
     )
-    assert decision in (None, "allow")
+    assert decision is None
     assert context, "the skipped comparison is not said"
     assert "cwd" in context or "directory" in context
 
