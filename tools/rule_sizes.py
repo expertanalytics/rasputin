@@ -23,6 +23,7 @@ RULE_FILES = (
     ".claude/REQUIRED-READING.md",
     "docs/increments/README.md",
     "docs/PRINCIPLES.md",
+    ".claude/briefs/common.md",  # h9: the brief template
 )
 RETROSPECTIVES = "docs/retrospectives/2???-??-??-*.md"
 TREES = (*RULE_FILES, ".claude/agents", ".claude/skills")

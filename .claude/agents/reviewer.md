@@ -44,7 +44,7 @@ build. Local green is not green.
 
 Feedback format:
 1. **Verdict:** `APPROVED` or `CHANGES REQUESTED` (with explicit blocking issues).
-2. **Size Metrics:** Confirm total LOC and focus area.
+2. **Size Metrics:** The commit range reviewed, total LOC and focus area.
 3. **Blocking Issues:** What *must* be fixed before merging (e.g., red CI, exceeding the LOC ceiling, surviving red-step scaffolding, a prose claim the change made false).
 4. **Suggestions:** Non-blocking, and only where no gate would catch it.
 

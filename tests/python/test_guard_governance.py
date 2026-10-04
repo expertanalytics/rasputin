@@ -36,6 +36,10 @@ GOVERNED_NOW = (
     "tools/session_state.py",
     # h8 §5: the size table runs inside the SessionStart hook.
     "tools/rule_sizes.py",
+    # h9 §5: guard_spawn.py imports brief.py, and the brief template is rule text.
+    "tools/brief.py",
+    ".claude/briefs/common.md",
+    ".claude/briefs/x.md",
     ".claude/profile.toml",
     ".claude/skills/x/SKILL.md",
     ".git/hooks/pre-commit",
