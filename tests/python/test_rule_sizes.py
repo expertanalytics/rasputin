@@ -51,12 +51,14 @@ def test_words_of_empty_or_blank_text_is_zero() -> None:
     assert rule_sizes.words(" \n\t\n") == 0
 
 
-def test_rule_files_are_the_four_governed_rule_files_in_order() -> None:
+def test_rule_files_are_the_governed_rule_files_in_order() -> None:
+    """h8's four, then h9's brief template (docs/increments/h9-spawn-briefs.md §5)."""
     assert rule_sizes.RULE_FILES == (
         "CLAUDE.md",
         ".claude/REQUIRED-READING.md",
         "docs/increments/README.md",
         "docs/PRINCIPLES.md",
+        ".claude/briefs/common.md",
     )
 
 
@@ -273,3 +275,16 @@ def test_without_a_repository_the_counts_print_with_a_git_failed_heading(
         f"  {3:5} CLAUDE.md",
         f"  {3:5} total",
     ]
+
+
+def test_the_brief_template_has_a_row_after_principles_and_is_new_against_an_older_reference(
+    sized: tuple[Path, str],
+) -> None:
+    """h9 test 25: the template, added after the reference, is a `new` row in place."""
+    repo, _ = sized
+    write(repo, ".claude/briefs/common.md", "brief " * 9)
+    commit_all(repo, "the brief template")
+    lines = sizes(repo)
+    assert row(9, "new", ".claude/briefs/common.md") in lines
+    paths = [line.rsplit(" ", 1)[1] for line in lines[1:-1]]
+    assert paths.index(".claude/briefs/common.md") == paths.index("docs/PRINCIPLES.md") + 1
