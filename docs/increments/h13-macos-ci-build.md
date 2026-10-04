@@ -2,7 +2,9 @@
 
 Status: edit done (a77879f); approved by `@reviewer`, round 2 (see Review);
 awaiting the push, then the PR's CI check (§6), whose numbers are recorded
-as a further review round.
+as a further review round. Ruled by Ola (§8). Mechanics, not a design
+question: one workflow edit (`@developer`), no production code, no test suite
+(§6 says how the change is checked instead).
 
 Why: the `C++ core (macos-latest)` job in `.github/workflows/main.yaml` takes
 20-26 minutes on every run, against 2-4 minutes for the same job on
