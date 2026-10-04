@@ -1,9 +1,10 @@
 # Increment 28 — NVE reference catchments: our catchments against NVE's, station by station
 
-Status: **designed, awaiting review and Ola's answers** (`@architect`,
-2026-10-04), branch `worktree-nve-catchments` off master `d20126b`. Every
-choice Ola would normally make is marked "Default (@architect, 2026-10-04)"
-and repeated, with its alternative, under "Questions for Ola".
+Status: **design revised after review round 1 and Ola's rulings** (`@architect`,
+2026-10-04), branch `worktree-nve-catchments` off master `d20126b`. Questions
+1, 2, 3, 5 and 6 are ruled (below). Ola reopened the gauge placement, and it
+is redesigned here. Every choice still open is marked "Default (@architect,
+2026-10-04)" and repeated, with its alternative, under "Questions for Ola".
 
 **Closes.** Catchments for real Norwegian gauging stations, computed from the
 DEM by `rasputin`, one polygon per station, each usable as `--domain`, and a
@@ -12,8 +13,9 @@ this increment:
 
 ```sh
 rasputin fetch-stations nve-hrd --out-dir ../rasputin_data/nve_hrd
-rasputin catchments --dem ../rasputin_data/DTM10_UTM33_20260925 \
+rasputin station-catchments --dem ../rasputin_data/DTM10_UTM33_20260925 \
     --stations ../rasputin_data/nve_hrd/stations.geojson \
+    --rivers ../rasputin_data/nve_hrd/rivers.geojson \
     --reference ../rasputin_data/nve_hrd/reference.geojson \
     --out-dir ../rasputin_scratch/hrd_catchments
 rasputin mesh --dem ../rasputin_data/DTM10_UTM33_20260925 \
@@ -21,14 +23,19 @@ rasputin mesh --dem ../rasputin_data/DTM10_UTM33_20260925 \
 ```
 
 It generalises increment 22's Bygdin acceptance (one catchment, area within
-2 %, node overlap both ways) to 140 stations, and it adds what 22 left out:
-flow accumulation, and snapping a gauge's coordinates onto the DEM's flow line.
+2 %, node overlap both ways) to 140 stations. It also adds what 22 left out:
+flow accumulation; placing a gauge where it physically is (on NVE's mapped
+river, then on the DEM's flow path along it); and a per-station check of
+whether the catchment area is well defined at the gauge at all.
 
 **Not closed.** Discharge (only the keys to join it later are stored; see
-"Discharge"). Lake gauges whose outlet lies farther than the snap radius from
-the station point (a known limit, measured by the acceptance). Holes, as in 22.
-Parallel stations (one station at a time; see "The batch"). Stream networks,
-Strahler order. Stations outside DTM10's coverage, and any other DEM.
+"Discharge"). Residual inflow between gauges on one river (the interfaces are
+sketched so that this increment does not block it; see "Residual inflow,
+later"). Burning the whole mapped network into the DEM (only the gauge's own
+reach is burnt). The nine stations whose catchments straddle DTM10's
+half-cell-shifted tiles (expected refusals; a later increment fixes them).
+Holes, as in 22. Parallel stations (one station at a time; see "The batch").
+Stations outside DTM10's coverage, and any other DEM.
 
 ## Ola's ask, quoted
 
@@ -36,6 +43,22 @@ Ola, 2026-10-04: "I think we should also start making some actual
 hydrological catchments for Norway soon. NVE should have a list of
 unregulated catchments, where they also record the discharge." Approved the
 same day as a new increment.
+
+## Ola's rulings (2026-10-04)
+
+- **Questions 1, 2, 3, 5 and 6**: the defaults stand ("defaults on all six",
+  Ola, for these five). Question 1's text is corrected below (364 + 136, not
+  "500 unregulated"); the default of the 140 is unchanged. Question 5 gains
+  the class `uncertain`, which Ola's direction on the gauge asks for.
+- **Question 4, the gauge placement, reopened.** Ola: "On the gauge, we
+  actually need to be very careful." and "Some of the points of interest
+  will be saddle point problems, right? One of my plans is to also compute
+  the _residual inflow_ to rivers, and then moving a point 100m downstream
+  will always give you more inflow. So that rule is broken." He agreed ("This
+  matches well") to the direction this revision follows. The gauge is placed
+  where it physically is, never by an area or flow-count objective. A
+  sensitivity check per station marks ill-posed stations as uncertain.
+  Residual inflow is later work, and nothing here may block it.
 
 ## What the data says (measured 2026-10-04)
 
@@ -55,63 +78,132 @@ channel, and these numbers are re-measured by the acceptance run).
   criteria (under 10 % of the area affected, no significant regulation, at
   least 20 years of record, active, good data, adequate metadata), and "140
   active and unregulated streamflow stations in Norway have been included in
-  the 2025-version of the HRD". Its Table 1 gives, per station, the REGINE
-  area number, the main number, the version of the discharge series, the name,
-  and per-analysis usability flags. Parsing Table 1 (pdftotext, one regular
+  the 2025-version of the HRD". Parsing its Table 1 (pdftotext, one regular
   expression) gives exactly 140 rows.
+- **What Table 1's columns mean** (from the PDF's "Explanations to Table 1"):
+  "Regine area" is the river basin number and "Main no" the main number.
+  "Version" is the version of the discharge parameter ("1 = 1001.1"). Then
+  come the station name, the first year of daily data in the series ("Record
+  start daily data"), NVE's recommended first year for analysis ("HRD start
+  daily data"), and the same two for fine-resolution data. Last come flags
+  marking a series, or some of its years, as not recommended for one kind of
+  analysis: spring floods, floods, summer and winter low flow, monthly flow
+  or annual flow.
 - **No coordinates or polygons in it.** The station number is
-  `<regine>.<main>.0`: the HRD row "2 11 0 Narsjø" is NVE station `2.11.0`,
-  and its third column is the discharge series version (parameter 1001,
-  version 0), not part of the station number. Checked on Knappom (row
-  "2 142 1"), which is station `2.142.0`, and on Narsjø, whose layer 14
-  record (below) has discharge series versions 0, 1 and 2.
+  `<regine>.<main>.0`: the HRD row "2 11 0 Narsjø" is NVE station `2.11.0`.
+  Its third column is the discharge series version (parameter 1001, version
+  0), not part of the station number. Checked on Knappom (row "2 142 1"),
+  which is station `2.142.0`, and on Narsjø, whose layer 14 record (below)
+  has discharge series versions 0, 1 and 2.
 - **The wider set.** NVE's map service lists 862 stations with an active
-  discharge series; 500 of them have regulation degree 0 for both area and
-  reservoir (`reguleringsgradareal`, `reguleringsgradmagasin`), and 127 of the
-  140 HRD stations are among those 500. The HRD adds the quality review; the
-  500 do not have it. Default (@architect, 2026-10-04): **the 140 HRD
-  stations**; the 500 are a later option (Question 1).
+  discharge series (layer 14). 364 of them have regulation degree 0 for both
+  area and reservoir (`reguleringsgradareal`, `reguleringsgradmagasin`). 136
+  have no regulation degree recorded at all, and none has one recorded and
+  the other missing. All 140 HRD stations are in layer 14: 127 of them among
+  the 364, none among the 136. The HRD adds NVE's quality review; the others
+  do not have it. Ruled (Question 1): **the 140 HRD stations**; the 364 are a
+  later option.
 
 ### NVE's polygons: "Totalnedbørfelt til målestasjon"
 
 - **The service.** NVE's ArcGIS map service `HydrologiskeData3`,
   `https://kart.nve.no/enterprise/rest/services/HydrologiskeData3/MapServer`:
   layer 0 `Malestasjoner` (points: `stasjonnr`, `stasjonnavn`,
-  `totalt_feltareal_km2`, `stasjonstatus`, ...), layer 14 `Vannforing_aktiv`
-  (active discharge series: `stasjonnr`, `versjon`, regulation degrees), and
-  layer 38 `Malest_totalnedb` (polygons: `stasjonnr`, `nedborfeltaareal_km2`,
+  `totalt_feltareal_km2`, `stasjonstatus`, `vassdragsnr`,
+  `elvenavnhierarki`, ...), layer 14 `Vannforing_aktiv` (active discharge
+  series: `stasjonnr`, `versjon`, regulation degrees), and layer 38
+  `Malest_totalnedb` (polygons: `stasjonnr`, `nedborfeltaareal_km2`,
   `oppdateringsdato`). All in EPSG:25833, the CRS of DTM10. The query
   endpoint returns GeoJSON in the asked CRS with
   `.../38/query?where=stasjonnr in ('2.11.0',...)&outFields=*&outSR=25833&f=geojson`,
   `maxRecordCount` 2000. The service description (Norwegian) calls the
   polygon "the catchment upstream of the gauging station".
 - **All 140 found.** Layer 0 has every one of the 140 station numbers (all
-  `stasjonstatus` 1, active), layer 38 has a polygon for every one: 130
+  `stasjonstatus` 1, active). Layer 38 has a polygon for every one: 130
   stations have one polygon, 10 have three, which differ by their update date
   and slightly in area (Narsjø: 119.74, 119.43, 119.74 km²). Rule: **the
   newest `oppdateringsdato` wins**, ties to the larger `objectid`; the chosen
   date is recorded.
 - **Shape.** All 140 valid by shapely; one multipart (`19.79.0` Gravå, two
-  parts), none with holes; median 983 vertices. Polygon area by shapely
-  against the layer's `nedborfeltaareal_km2`: at most 0.005 km² apart. Against
-  the station layer's `totalt_feltareal_km2`: from −2.8 % to +6.9 %
-  (`11.4.0` the largest), so the two NVE areas are not the same number, and the
-  polygon, not the attribute, is the reference here.
+  parts), none with holes; median 969.5 vertices (newest polygon per
+  station). Polygon area by shapely against the layer's
+  `nedborfeltaareal_km2`: at most 0.005 km² apart. Against the station
+  layer's `totalt_feltareal_km2`: from −2.8 % to +6.9 % (`11.4.0` the
+  largest). So the two NVE areas are not the same number, and the polygon,
+  not the attribute, is the reference here.
 - **What the polygons are.** Not documented on the layer. NVE's catchment
   tool NEVINA (user guide, August 2025,
   `https://publikasjoner.nve.no/diverse/2025/Brukerveiledning.i.Nevina2025.pdf`)
   generates catchments "either fully automatically from the base data or a
   combination of automatically generated and catchments upstream of the point
-  taken from REGINE", on a 20 m DEM since version 4; it warns that REGINE
+  taken from REGINE", on a 20 m DEM since version 4. It warns that REGINE
   boundaries "can also be wrong". So the reference is NVE's best boundary,
   not ground truth, built on a coarser DEM than ours. Disagreements of a cell
-  or two along the divide are expected; the acceptance is built for that
+  or two along the divide are expected, and the acceptance is built for that
   (below).
 - **Station point against polygon.** 98 stations lie inside their polygon,
   42 outside it, every one of the 42 within 233 m of it. Inside, the distance
-  to the polygon's boundary has quartiles 20 m, 78 m, 351 m (max 4.4 km:
-  lake gauges and stations in the middle of a wide valley floor). So the
-  station point is near the outlet, but rarely on the DEM's flow line.
+  to the polygon's boundary has quartiles 20 m, 75 m and 355 m (Python's
+  `statistics.quantiles`, default method; max 4.4 km: lake gauges and
+  stations in the middle of a wide valley floor). So the station point is
+  near the outlet, but rarely on the DEM's flow line.
+
+### NVE's river network: ELVIS ("Elvenett")
+
+- **The service.** NVE's map service `Elvenett1`,
+  `https://kart.nve.no/enterprise/rest/services/Elvenett1/MapServer`, same
+  host and query interface as layers 0, 14 and 38, EPSG:25833,
+  `maxRecordCount` 2000. Layer 2 `elvenett` is the complete network, as
+  polylines: 1,954,539 segments (`returnCountOnly`, 2026-10-04). Its fields
+  include `objekttype` (single-line river `ElvBekk`, river centreline
+  `ElvBekkMidtlinje`, lake centreline `InnsjøMidtlinje`, also seen spelled
+  `InnsjoMidtlinje`), `strekninglnr` (the segment's national serial number),
+  `elvid` (one id per branch of the network), `vassdragsnr` (the watercourse
+  number of the REGINE unit), `elvenavn`, `elvenavnhierarki`,
+  `elveordenstrahler`, `vatnlnr` (the lake number, for lake centrelines) and
+  `til_utlop`. Layer 1 `hovedelv` holds only the main rivers.
+- **What it is.** NVE's product sheet (`Produktark: Elvenett - ELVIS`, NVE,
+  12.05.2017, from Geonorge's register, sha256 `58c3b956...1aeb`) says that
+  ELVIS is "derived from the water theme of N50 map data", at scale
+  1:50,000. Lakes and two-line rivers get "a mathematical centreline". The
+  network "contains information about the direction of flow", and it is
+  meant for upstream and downstream analyses and "as an aid when generating
+  hydrologically correct elevation models" (translated). Version 2 is being
+  rebuilt from newer N50 data (about 65 % done in May 2017).
+- **Licence.** The same sheet: distributed under NLOD, with the source text
+  "Kilde: NVE" required on publication. The same terms as layers 0 and 38.
+- **How it relates to the stations.** The station layer carries no segment
+  or branch id, only `vassdragsnr` and `elvenavnhierarki`. Measured over the
+  140 stations, querying layer 2 within a 1 km square round each station
+  point (28 s for all 140): 139 have a line within 500 m. The distance from
+  the station point to the nearest line has median 20 m, 75th percentile
+  53 m, 90th 158 m, 95th 252 m and max 461 m; 31 are within 10 m, 76 within
+  25 m, 101 within 50 m, 116 within 100 m and 132 within 250 m. The one
+  without, `311.4.0` Femundsenden, is a lake gauge 612 m from the nearest
+  line (a 6 km square). For 113 of the 139 the nearest line carries the
+  station's own `vassdragsnr`. The other 26 pass a looser test (a shared
+  watercourse-number prefix, or the river name), which was not checked one
+  by one. For 46 of the 139 the nearest line is a lake centreline (lake
+  gauges). For 16 stations, a second branch (another `elvid`) lies within
+  100 m of the station point, and for 5 within 50 m: these are the
+  confluence cases.
+- **Direction of digitising.** For 138 of the nearest lines (100 m or
+  longer, both ends on one tile), the DEM is lower at the line's last vertex
+  than at its first for 97, higher for 2, and within 0.5 m for 39 (mostly
+  flat lake surfaces). So the lines are digitised downstream, as the sheet
+  says. The design still checks each reach against the DEM (below).
+- **The DEM does not follow the mapped line.** Along the 90 of those lines
+  that are rivers rather than lakes and drop from start to end, the DEM was
+  sampled every 5 m. The largest climb along the direction of flow has
+  median 1.6 m, 75th percentile 3.7 m and 90th 5.0 m, with a maximum of
+  51.6 m; 42 of the 90 climb more than 2 m somewhere. A line at 1:50,000 sits
+  off the 10 m DEM's valley floor by tens of metres in places, and a road
+  embankment in the DEM can dam a mapped river. Both decide the design of
+  the burn below: the line is first moved to the valley floor, and the DEM
+  is lowered only where it still climbs.
+- **Fetched like the polygons.** Per station, one envelope query on layer 2
+  with `outSR=25833&f=geojson` and a short `outFields` list. The whole
+  network is not fetched (1.95 M segments).
 
 ### Coverage by DTM10_UTM33_20260925
 
@@ -126,16 +218,30 @@ channel, and these numbers are re-measured by the acceptance run).
   window", step a), so these two are expected to be refused, and are
   reported as such, not as failures. A 100 m sample can miss a NoData strip
   narrower than 100 m; the run itself is the check.
+- **The half-cell-shifted tiles.** Eight of the 254 tiles (`7304_1`,
+  `7507_4`, `7606_2`, `7707_1`, `7707_3`, `7807_2`, `7807_3`, `7808_3`) have
+  their nodes 5 m off the others' in x (their x origin is a multiple of 10 m,
+  the others' is 5 m off one). Increment 15a's mosaic refuses a selection
+  that mixes the two lattices. Nine HRD polygons meet both kinds of tile:
+  `156.15.0`, `196.11.0`, `206.3.0`, `208.2.0`, `208.3.0`, `209.4.0`,
+  `212.49.0`, `213.2.0`, `223.2.0` (tile footprints intersected with NVE's
+  polygons, newest version each). They are **expected refusals** in this
+  increment (Default, @architect, 2026-10-04, pending Ola: Question 8), and
+  a later increment puts the eight tiles on the common lattice. Two more
+  (`156.24.0`, `213.4.0`) lie on shifted tiles only, one lattice, and run.
+  A window can reach a shifted tile where the catchment does not; such a
+  refusal is a finding to explain, not an expected one.
 - **Tiles per catchment**, for the 138: 70 within one tile's footprint, 39
   in two, 8 in three, 18 in four (across a tile corner), 1 in five
   (`139.35.0` Trangen), 2 in nine (`212.10.0` Masi, `311.6.0` Nybergsund).
   The overlap strips count as both tiles, so "two" includes catchments that
-  only reach into a 510 m overlap. 15a's mosaic handles all of these; the
-  acceptance reports the result by tile count, so a seam artefact would show
-  as misses gathered at multi-tile stations.
+  only reach into a 510 m overlap. 15a's mosaic handles all of these except
+  the nine above. The acceptance reports the result by tile count, so a seam
+  artefact would show as misses gathered at multi-tile stations.
 - **Sizes.** From 0.44 km² (`20.11.0` Tveitdalen, about 4,400 nodes) to
-  14,171 km²; median 135 km²; 12 under 10 km², 44 from 10 to 100, 75 from 100
-  to 1000, 9 over 1000. Sum 61,016 km², about 610 M catchment nodes at 10 m.
+  14,171 km²; median 131 km² (130.98, newest polygons); 12 under 10 km², 44
+  from 10 to 100, 75 from 100 to 1000, 9 over 1000. Sum 61,016 km², about
+  610 M catchment nodes at 10 m.
 
 ### Licence
 
@@ -148,26 +254,29 @@ channel, and these numbers are re-measured by the acceptance run).
   for the reservoir layer, and NVE's request to credit it and link its
   services (`docs/benchmarks/2026-09-29/bygdin/README.md`, "Data and
   licence").
-- **What is committed.** Default (@architect, 2026-10-04):
-  - the list of 140 HRD rows (station number, series version, name, the HRD
-    start year of daily data), as a data file in the package, credited to NVE
+- **What is committed.** Ruled (Question 2):
+  - the list of 140 HRD rows, four columns (station number, discharge series
+    version, name, HRD start year of daily data), as a data file in the
+    package, credited to NVE
     in `NOTICE.md` and in the file's header: small, factual, and the one
     piece that cannot be fetched from a service (it lives in a PDF);
   - the per-station result table of the acceptance, which holds NVE's areas
     as numbers;
-  - **not** the polygons (8.2 MB for all 160 versions) or the station points:
-    `rasputin fetch-stations` fetches them, and records the fetch date, the
-    URLs and each file's sha256 in a manifest, as 22's acceptance recorded its
-    one polygon. Question 2.
+  - **not** the polygons (8.2 MB for all 160 versions), the station points
+    or the river lines: `rasputin fetch-stations` fetches them, and records
+    the fetch date, the URLs and each file's sha256 in a manifest, as 22's
+    acceptance recorded its one polygon. The river lines fall under the same
+    ruling as the polygons (fetched, not committed); their credit is "Kilde:
+    NVE", as the product sheet asks.
 
 ### Discharge
 
 NVE's HydAPI (`https://hydapi.nve.no/api/v1/`) serves the discharge series;
 it needs a free API key (`/Stations` answers 401 without one) and is under
-NLOD. **Out of scope now** (Default, @architect, 2026-10-04): no discharge
+NLOD. **Out of scope now** (ruled, Question 3): no discharge
 is fetched or stored. Each station keeps the two keys that join it later: the
 station number (`2.11.0`, HydAPI's `StationId`) and the HRD's discharge series
-(parameter 1001 and its version, `1001.0`). Question 3.
+(parameter 1001 and its version, `1001.0`).
 
 ## Prior art: legacy and literature
 
