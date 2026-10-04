@@ -38,7 +38,8 @@ from memory as unchecked.
 
 `docs/retrospectives/`, `next.md` included, is yours. Record the lessons the
 main session passes you (`CLAUDE.md` §3, *The main session dispatches*).
-Quotes, dates and incidents go here.
+Quotes, dates and incidents go here. Each retrospective measures the rule
+text (`python3 tools/rule_sizes.py`) and proposes a cut.
 
 ## 4. Your limit and your proposals
 
