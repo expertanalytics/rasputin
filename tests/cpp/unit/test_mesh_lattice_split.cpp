@@ -352,10 +352,10 @@ TEST_CASE("as_node is exact for a node and empty for an off-node vertex", "[refi
 
 // ---------------------------------------------------------------------------
 // Increment 15f-4 (docs/increments/15f-edge-strip.md, "Settled after 15f-3's
-// acceptance", A4, B1 to B3): build's refusals and its neighbour table, pinned
-// against the unordered_map build of 15f-3 before A2 replaces it with a
-// vertex-bucketed table. These are guards: they pass before the change and
-// must still pass after it.
+// acceptance", A4, B1 to B3): build's refusals and its neighbour table. build
+// refuses a directed edge used twice, an index out of range and mismatched
+// lengths, and its neighbour across each edge, bits and masks equal a
+// brute-force oracle's, whatever its lookup structure.
 // ---------------------------------------------------------------------------
 
 namespace {

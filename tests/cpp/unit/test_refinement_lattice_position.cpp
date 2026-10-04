@@ -116,9 +116,9 @@ TEST_CASE("LP4: agrees bit for bit with the vertices to_lattice builds", "[latti
 
 // ---------------------------------------------------------------------------
 // Increment 15f-4 (docs/increments/15f-edge-strip.md, "Settled after 15f-3's
-// acceptance", A2 and A4, B4): to_lattice's constraint lookup, pinned against
-// today's std::map before A2 replaces it with a sorted vector. A guard: it
-// passes before the change and must still pass after it.
+// acceptance", A2 and A4, B4): to_lattice's constraint lookup. An edge listed
+// twice, in either direction, takes the later mask; edges past masks.size()
+// and masks past edges.size() are ignored, whatever the lookup structure.
 // ---------------------------------------------------------------------------
 
 namespace {
