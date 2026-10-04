@@ -118,7 +118,7 @@ That is a defect this increment fixes (D2: the `.ply` carries the same fields as
 | `start min angle 25 deg` / `start quality off` | `:1545-1547` | the start-quality setting (increment 20) | deg | always |
 | `constraint feet on` / `off` | `:1551` | increment 20b: a worst DEM node very close to a line is replaced by the nearest point on the line | | always |
 | `0 valid DEM nodes not covered` | `:1552`, `final.uncovered` | DEM nodes with data that lie in triangles with a NoData corner after refinement. By the stopping rule there are none (`refine.hpp:390-391`), so this is a **self-check, always 0** | count | never, by construction |
-| `199 vertices without data dropped` | `:1568`, `elevation.py:25`, `:64` | mesh vertices where the DEM gives no height, removed with every triangle that uses them. With `--tolerance` a vertex at a DEM node has none when that node is NoData, and a vertex between nodes when one of the four nodes around it is. Without `--tolerance` every vertex is sampled bilinearly, and the sampler refuses a cell with any NoData corner even at zero weight (`12-dem-to-mesh.md`, R2), so a vertex on a valid node next to a NoData node is removed too: one cell of trim around NoData ("NoData on the no-tolerance path", below) | count | the DEM has NoData cells inside the area |
+| `199 vertices without data dropped` | `:1568`, `elevation.py:25`, `:64` | mesh vertices where the DEM gives no height, removed with every triangle that uses them. With `--tolerance` a vertex at a DEM node has none when that node is NoData, and a vertex between nodes when one of the four nodes around it is. Without `--tolerance` every vertex is sampled bilinearly, and the sampler refuses a cell with any NoData corner even at zero weight (`12-dem-to-mesh.md`, R2), so a vertex on a valid node next to a NoData node is removed too: one cell of trim around NoData ("NoData on the no-tolerance path", below). *Changed by increment 27: a vertex on a node reads that node alone, so without `--tolerance` too only vertices on NoData cells go (`27-node-sampling.md`)* | count | the DEM has NoData cells inside the area |
 | `vertical unit assumed metres` | `:1569-1570` | the GeoTIFF has no `VerticalUnitsGeoKey`; any other unit than metres is refused (`io/geotiff.py:139-143`); always set for cache blocks (`fetch/run.py:249`) | | the key is missing |
 
 ### stderr
@@ -751,7 +751,8 @@ catchment's lake line; `sys.argv` for `command`; the LOC estimate.
   vertices on or next to a NoData cell** ("NoData on the no-tolerance
   path"): increment 12's sampler removes a valid node next to a NoData node,
   and 25 reports what happens rather than changing the sampler; the fix is
-  its own later increment (`ROADMAP.md`).
+  its own later increment (`ROADMAP.md`). *Changed by increment 27: it
+  now means vertices on NoData cells on both paths (`27-node-sampling.md`).*
 - **A reprojected run has no `dem_grid`** ("As built"): `resampled_grid`
   carries that grid's size and spacing.
 - **`start_vertices` and `start_triangles` are in the Sizes section only**
@@ -874,7 +875,9 @@ does not belong in a Python-only output increment. Describing it as the
 intended rule instead would put a known loss of data into the field's
 definition.
 
-Until that fix:
+Until that fix (*increment 27 made it, `27-node-sampling.md`: the summary
+says `on NoData cells` on both paths again, and the test expects the picked
+nodes that are NoData, 25, 9 and 4 at strides 1, 2 and 3*):
 
 - **The field keeps its name and file wording.** Its meaning on the
   no-tolerance path is "vertices on or next to a NoData cell". The inventory

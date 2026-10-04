@@ -17,6 +17,12 @@ namespace terrain::raster {
 // domain, when the raster is too small to hold a 2x2 neighbourhood, or when
 // any of the four corners is NoData. The legacy returned a value in all three
 // cases -- reading out of bounds in the second.
+//
+// One exception to the four corners (increment 27): a point that is a DEM node
+// bit for bit (RasterGeometry::node_at) reads that node and nothing else. Its
+// other three corners have weight zero, so a NoData among them does not refuse
+// it; the node itself being NoData or NaN does. Every other point, one ulp off
+// a node or on a cell side included, still reads all four corners.
 template <RasterSource R>
 [[nodiscard]] std::optional<double> bilinear(const R& raster, const Point2& p) noexcept {
     const RasterGeometry& g = raster.geometry();
@@ -24,6 +30,9 @@ template <RasterSource R>
     const auto cell = g.bilinear_cell_of(p);
     if (!cell)
         return std::nullopt;
+    if (const auto n = g.node_at(p))
+        return raster.is_nodata(*n) ? std::nullopt
+                                    : std::optional<double>{static_cast<double>(raster.value_at(*n))};
 
     const CellIndex c00{cell->row, cell->col};
     const CellIndex c01{cell->row, cell->col + 1};

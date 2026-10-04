@@ -1,0 +1,35 @@
+Sun Oct  4 02:40:26 2026    /private/tmp/claude-501/-Users-skavhaug-projects-rasputin/af318b82-b96d-429e-956c-0296b113f23b/scratchpad/prof_15f3.prof
+         2516264 function calls (2502600 primitive calls) in 6.492 seconds
+   Ordered by: cumulative time
+   List reduced from 3831 to 30 due to restriction <30>
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+    499/1    0.022    0.000    6.493    6.493 {built-in method builtins.exec}
+        1    0.000    0.000    6.493    6.493 /Users/skavhaug/projects/rasputin/.claude/worktrees/15f-3/tools/bench.py:1(<module>)
+        1    0.000    0.000    6.319    6.319 /Users/skavhaug/projects/rasputin/.claude/worktrees/15f-3/tools/bench.py:734(child_main)
+        1    0.000    0.000    6.108    6.108 /Users/skavhaug/projects/rasputin/.claude/worktrees/15f-3/.venv/lib/python3.14/site-packages/typer/main.
+        1    0.000    0.000    6.093    6.093 /Users/skavhaug/projects/rasputin/.claude/worktrees/15f-3/.venv/lib/python3.14/site-packages/typer/_clic
+        1    0.000    0.000    6.093    6.093 /Users/skavhaug/projects/rasputin/.claude/worktrees/15f-3/.venv/lib/python3.14/site-packages/typer/core.
+        1    0.000    0.000    6.093    6.093 /Users/skavhaug/projects/rasputin/.claude/worktrees/15f-3/.venv/lib/python3.14/site-packages/typer/core.
+        1    0.000    0.000    6.092    6.092 /Users/skavhaug/projects/rasputin/.claude/worktrees/15f-3/.venv/lib/python3.14/site-packages/typer/core.
+        2    0.000    0.000    6.091    3.045 /Users/skavhaug/projects/rasputin/.claude/worktrees/15f-3/.venv/lib/python3.14/site-packages/typer/_clic
+        2    0.000    0.000    6.091    3.045 /Users/skavhaug/projects/rasputin/.claude/worktrees/15f-3/.venv/lib/python3.14/site-packages/typer/_clic
+        2    0.000    0.000    6.091    3.045 /Users/skavhaug/projects/rasputin/.claude/worktrees/15f-3/.venv/lib/python3.14/site-packages/typer/main.
+        1    0.001    0.001    6.090    6.090 /Users/skavhaug/projects/rasputin/.claude/worktrees/15f-3/build-bench/pkg/tin_engine/cli.py:561(mesh)
+        1    0.001    0.001    2.223    2.223 /Users/skavhaug/projects/rasputin/.claude/worktrees/15f-3/build-bench/pkg/tin_engine/cli.py:1466(_dem_me
+        1    0.000    0.000    1.943    1.943 /Users/skavhaug/projects/rasputin/.claude/worktrees/15f-3/build-bench/pkg/tin_engine/cli.py:1401(_open_f
+        1    0.008    0.008    1.943    1.943 /Users/skavhaug/projects/rasputin/.claude/worktrees/15f-3/build-bench/pkg/tin_engine/feature_input.py:23
+        1    0.000    0.000    1.935    1.935 /Users/skavhaug/projects/rasputin/.claude/worktrees/15f-3/build-bench/pkg/tin_engine/feature_input.py:27
+        1    0.011    0.011    1.728    1.728 /Users/skavhaug/projects/rasputin/.claude/worktrees/15f-3/build-bench/pkg/tin_engine/feature_input.py:29
+      421    0.262    0.001    1.662    0.004 /Users/skavhaug/projects/rasputin/.claude/worktrees/15f-3/build-bench/pkg/tin_engine/feature_input.py:18
+        1    0.000    0.000    1.513    1.513 /Users/skavhaug/projects/rasputin/.claude/worktrees/15f-3/build-bench/pkg/tin_engine/edge_strip.py:31(ru
+        1    1.513    1.513    1.513    1.513 {built-in method tin_engine._core.refine_strip}
+        1    0.000    0.000    1.353    1.353 /Users/skavhaug/projects/rasputin/.claude/worktrees/15f-3/build-bench/pkg/tin_engine/cli.py:1055(_land_c
+        1    0.315    0.315    1.352    1.352 /Users/skavhaug/projects/rasputin/.claude/worktrees/15f-3/build-bench/pkg/tin_engine/landcover.py:68(lab
+        1    0.119    0.119    1.002    1.002 /Users/skavhaug/projects/rasputin/.claude/worktrees/15f-3/build-bench/pkg/tin_engine/landcover.py:42(reg
+69570/69567    0.086    0.000    0.791    0.000 /Users/skavhaug/projects/rasputin/.claude/worktrees/15f-3/.venv/lib/python3.14/site-packages/shapely/d
+        5    0.760    0.152    0.760    0.152 {method 'argsort' of 'numpy.ndarray' objects}
+        1    0.000    0.000    0.600    0.600 /Users/skavhaug/projects/rasputin/.claude/worktrees/15f-3/tools/bench.py:753(refine)
+        1    0.600    0.600    0.600    0.600 {built-in method tin_engine._core.refine}
+43570/43565    0.018    0.000    0.565    0.000 /Users/skavhaug/projects/rasputin/.claude/worktrees/15f-3/.venv/lib/python3.14/site-packages/shapely/d
+    20853    0.006    0.000    0.523    0.000 /Users/skavhaug/projects/rasputin/.claude/worktrees/15f-3/.venv/lib/python3.14/site-packages/numpy/_core
+        1    0.000    0.000    0.503    0.503 /Users/skavhaug/projects/rasputin/.claude/worktrees/15f-3/build-bench/pkg/tin_engine/cli.py:1321(_open_d

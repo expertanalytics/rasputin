@@ -119,7 +119,11 @@ src_python/tin_engine/     # public Python API (distribution name: rasputin)
                            #   (15c-2)
   final_check.py           # run: phase 2, the source nodes filed in a
                            #   CheckPoints, then refine_points from phase 1's
-                           #   mesh (15c-2)
+                           #   mesh (15c-2); takes the edge strip, checked in
+                           #   the same loop (15f-3)
+  edge_strip.py            # generate / run: the edge strip's two _core calls
+                           #   (constraint_check_points, refine_strip) and
+                           #   their clock rows; holds no geometry (15f-3)
   elevation.py             # drops mesh vertices the DEM has no data for;
                            #   pure numpy, never imports _core
   stats.py                 # --stats: PhaseClock, quality, Report, render to

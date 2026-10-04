@@ -369,8 +369,10 @@ def raster_view(
 def sample(
     view: RasterView, points: npt.ArrayLike
 ) -> tuple[npt.NDArray[np.float64], npt.NDArray[np.bool_]]:
-    """Bilinear ``(z, valid)`` at ``(N, 2)`` points. ``z`` is 0.0 where ``valid``
-    is False, never NaN. Releases the GIL."""
+    """Bilinear ``(z, valid)`` at ``(N, 2)`` points. A point that is a DEM node
+    bit for bit reads that node alone; any other point is invalid if one of its
+    four corners is NoData or NaN. ``z`` is 0.0 where ``valid`` is False, never
+    NaN. Releases the GIL."""
 
 class RefineStatus(Enum):
     """Why :func:`refine` refused, or ``Ok``."""
@@ -491,6 +493,57 @@ class PointRefineOutcome(RefineOutcome):
         """Check points on a frozen edge, never inserted, each counted once."""
     @property
     def on_frozen_max_error(self) -> float: ...
+    @property
+    def strip_points(self) -> int: ...
+    @property
+    def strip_inserted(self) -> int: ...
+    @property
+    def strip_max_error(self) -> float: ...
+    @property
+    def strip_refused(self) -> int: ...
+    @property
+    def strip_refused_max_error(self) -> float: ...
+    @property
+    def nodes_inserted(self) -> int:
+        """``refine_strip`` only: DEM nodes its rescan inserted."""
+
+@final
+class ConstraintCheckPoints:
+    """The edge strip's check points, filed by constraint edge; built only by
+    :func:`constraint_check_points`, read-only."""
+
+    @property
+    def size(self) -> int: ...
+    @property
+    def no_data(self) -> int: ...
+    @property
+    def duplicates(self) -> int: ...
+    @property
+    def edge_count(self) -> int: ...
+
+def constraint_check_points(
+    view: RasterView, vertices: npt.ArrayLike, edges: npt.ArrayLike
+) -> ConstraintCheckPoints:
+    """Grid-line crossings of each constraint edge and the midpoints between
+    neighbours, z from ``view``. A refused input is a ``ValueError``.
+    Releases the GIL."""
+
+def refine_strip(
+    view: RasterView,
+    strip: ConstraintCheckPoints,
+    vertices: npt.ArrayLike,
+    triangles: npt.ArrayLike,
+    z: npt.ArrayLike,
+    valid: npt.ArrayLike,
+    edges: npt.ArrayLike,
+    masks: npt.ArrayLike,
+    *,
+    tolerance: float,
+    threads: int = ...,
+) -> PointRefineOutcome:
+    """The edge strip on the projected path: refine's output refined until every
+    strip point is within ``tolerance``, the DEM's nodes rescanned in every
+    triangle it writes. Releases the GIL."""
 
 def refine_points(
     points: CheckPoints,
@@ -503,12 +556,13 @@ def refine_points(
     *,
     tolerance: float,
     threads: int = ...,
+    strip: ConstraintCheckPoints | None = ...,
     frozen_mask: int = ...,
 ) -> PointRefineOutcome:
-    """Refine phase 1's mesh until every check point in a frozen store is within
-    ``tolerance`` of each triangle holding it. Releases the GIL; the output
-    does not depend on ``threads``. A check point on an edge whose mask meets
-    ``frozen_mask`` is counted in ``on_frozen``, not inserted."""
+    """Refine phase 1's mesh until every check point in a frozen store, and
+    every point of ``strip``, is within ``tolerance``. Releases the GIL; the
+    output does not depend on ``threads``. A check point on an edge whose mask
+    meets ``frozen_mask`` is counted in ``on_frozen``, not inserted."""
 
 @final
 class SeamOutcome:

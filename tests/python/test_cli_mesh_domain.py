@@ -34,6 +34,7 @@ from typing import Any
 
 import numpy as np
 import pytest
+import shapely
 from shapely.geometry import Point, Polygon
 
 from geotiff_fixtures import KARTVERKET, TIE_X, TIE_Y, micro_tiff, needs_codecs
@@ -47,6 +48,8 @@ from vtkread import VtkFile, read_vtk
 
 UTM33 = "urn:ogc:def:crs:EPSG::25833"
 SNAP = 1e-3  # DEFAULT_SNAP_SPACING, U6 (a)
+#: How far a vertex on a ring may lie from the given ring: the snap with margin.
+ON_INPUT = 2e-3
 Ring = list[tuple[float, float]]
 
 
@@ -217,9 +220,15 @@ class TestDomainOutput:
             i = nearest(vtk.points, *snapped)
             assert (vtk.points[i, 0], vtk.points[i, 1]) == snapped
 
-    def test_boundary_z_is_bilinear_and_inserted_vertices_are_nodes(
+    def test_boundary_z_is_bilinear_and_inserted_vertices_are_nodes_or_on_the_rings(
         self, tmp_path: Path, bumpy: Path, square: Path
     ) -> None:
+        """Every vertex that is not a DEM node lies on the outline or the hole,
+        with bilinear z: the corners, and since 15f-3 the edge strip's
+        insertions, which are crossings and midpoints on the rings carrying
+        their point's `vertex_z` (`docs/increments/15f-edge-strip.md`, E1,
+        E5, E6; S5). Every other inserted vertex is a DEM node with its value.
+        "On" is within `ON_INPUT`, the noder's 1 mm snap with margin."""
         vtk, _ = meshed(tmp_path, bumpy, square)
         tile = decode_dem(io.BytesIO(bumpy.read_bytes()))
         m = tile.meta
@@ -231,9 +240,16 @@ class TestDomainOutput:
         assert len(rest) > 0, "rough terrain at 1 m must insert nodes"
         cols = (rest[:, 0] - m.x_min) / m.delta_x
         rows = (m.y_max - rest[:, 1]) / m.delta_y
-        assert (cols == np.round(cols)).all() and (rows == np.round(rows)).all()
-        expected = tile.array[rows.astype(int), cols.astype(int)].astype(np.float64)
-        assert rest[:, 2] == pytest.approx(expected, rel=1e-9, abs=1e-9)
+        node = (cols == np.round(cols)) & (rows == np.round(rows))
+        n = rest[node]
+        expected = tile.array[rows[node].astype(int), cols[node].astype(int)].astype(np.float64)
+        assert n[:, 2] == pytest.approx(expected, rel=1e-9, abs=1e-9)
+        off = rest[~node]
+        rings = Polygon(SQUARE, [HOLE]).boundary
+        distance = shapely.distance(rings, shapely.points(off[:, 0], off[:, 1]))
+        assert (distance <= ON_INPUT).all(), f"off-node vertices {distance.max()} m off the rings"
+        z = bilinear(tile, off[:, 0], off[:, 1])
+        assert off[:, 2] == pytest.approx(z, rel=1e-9, abs=1e-9)
 
 
 class TestSyntheticEndToEnd:
