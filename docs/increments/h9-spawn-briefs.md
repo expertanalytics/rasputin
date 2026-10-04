@@ -1,6 +1,7 @@
 # Harness h9: briefs come from files, and spawns are checked
 
-Status: **design**, @architect, 2026-10-04, at master 2060f14. One PR, by
+Status: **design, round 2** (after design review round 1, below), @architect,
+2026-10-04, at master 2060f14. One PR, by
 day: it edits `.claude/settings.json` and other governed files. Implements
 stage 1 of the plan in `docs/retrospectives/2026-10-03-dispatcher-control.md`
 §5, which Ola approved on 2026-10-04: "1: yes to stage 1, then stages 2 and
@@ -51,9 +52,9 @@ $ git grep -l -iE 'brief|PreToolUse|subagent|CLAUDE_PROJECT_DIR' legacy-archive 
 | # | What | Where |
 |---|---|---|
 | 1 | Print the block for a persona: files to read, worktree, note file, write limit, concurrency, the increment file's own lines on required steps and its review rounds, Ola's words checked against the transcript | new `tools/brief.py` |
-| 2 | The fixed text: one shared template and one per persona | new `.claude/briefs/common.md` and six `.claude/briefs/<persona>.md` |
+| 2 | The fixed text: one template, holding only what the spawn alone knows; persona rules stay in the persona files (§3.3) | new `.claude/briefs/common.md`; one line each in `tester.md` and `reviewer.md`, one clause in `CLAUDE.md` |
 | 3 | Refuse a persona spawn without an intact, current block; refuse any spawn or resume while the session is not in the directory it started in | new `.claude/hooks/guard_spawn.py`, `.claude/settings.json` |
-| 4 | Delete what the templates replace | `CLAUDE.md` §3 "Briefs" bullet; memory note `lean-agent-briefs.md` |
+| 4 | Delete what the block replaces | `CLAUDE.md` §3 "Briefs" bullet, two clauses of `REQUIRED-READING.md`; memory notes `lean-agent-briefs.md` and `agent-concurrency-pairs.md` (§4) |
 | 5 | Keep the new rule text governed and measured | `guard_governance.py`, `tools/rule_sizes.py` |
 
 Out: the next free increment id (row 6 of the evidence) is stage 2's
@@ -72,9 +73,8 @@ python3 tools/brief.py <persona> --worktree <path> --beside <none|persona>
                        [--increment <file>] [--no-build] [--ola <text>]...
 ```
 
-- `<persona>`: one of `PERSONAS`, the template names in `.claude/briefs/`
-  other than `common` (architect, developer, orchestrator, perf, reviewer,
-  tester). Anything else: exit 2.
+- `<persona>`: one of `PERSONAS`, the keys of `WRITES` below (architect,
+  developer, orchestrator, perf, reviewer, tester). Anything else: exit 2.
 - `--worktree`: an existing checkout of this repository
   (`git -C <path> rev-parse --show-toplevel` resolves to the path; the main
   checkout is allowed). Printed absolute and resolved. A path containing
@@ -83,11 +83,11 @@ python3 tools/brief.py <persona> --worktree <path> --beside <none|persona>
   (exit 2 otherwise). For architect it may name a file that does not exist
   yet: the block then says `<file> (new: you create it)`. Optional for perf
   and orchestrator.
-- `--beside`: required, so the concurrency choice is made every time
-  (memory note "agents in pairs"). Exit 2 when the persona is `perf` and
-  `--beside` is not `none`, or when `--beside perf`: nothing runs beside a
-  timing run. `--no-build` adds that this persona may not build C++ in this
-  run (only one C++ build at a time).
+- `--beside`: required, so the concurrency choice is made every time. Either
+  `--beside none` alone, or one or more `--beside <persona>:<worktree>`, one
+  per persona already running (worktree resolved as for `--worktree`, and it
+  must exist). §3.1a gives the rules. `--no-build` adds that this persona may
+  not build C++ in this run (only one C++ build at a time).
 - `--ola <text>`, repeatable: a quotation of Ola. Each is checked against the
   human turns of the running session's transcript,
   `session_state.TRANSCRIPTS / f"{CLAUDE_CODE_SESSION_ID}.jsonl"`, read with
@@ -118,6 +118,37 @@ When h6 lands (it waits on h5), `WRITES` is replaced by an import of h6's
 `ROLES`, so the limit has one statement; whichever of h6 and h9 merges second
 makes that change.
 
+### 3.1a Concurrency
+
+Ola's ruling of 2026-10-04, verbatim: "Read only agents should be allowed
+even when two agents are working, as long as they don't require the same
+files, ie that the files the read-only agent reads could change." It refines
+the memory note "agents in pairs" (at most two at once, each in its own
+worktree; nothing beside a `@perf` timing run).
+
+A persona is **read-only** when its `WRITES` entry is empty (today only
+`reviewer`); every other persona is a **writer**. Derived, not flagged, so
+the two cannot disagree. Over the persona being briefed and every `--beside`
+entry, `brief.py` exits 2, naming the rule, when:
+
+1. `perf` is among them with anyone else: nothing runs beside a timing run
+   (read-only agents included: a timing run needs a quiet machine);
+2. there are more than two writers;
+3. two writers share a worktree;
+4. a read-only persona shares a worktree with a writer: the files it reads
+   could change under it. Worktrees are the measure of "the same files"; a
+   reader that reads another worktree's files is not seen (§8).
+
+The generated line:
+
+- `--beside none`: `Concurrency: you run alone.`
+- perf: `Concurrency: you run alone; nothing runs beside a timing run.`
+- otherwise: `Concurrency: also running: @tester (writer, in <path>), @reviewer
+  (read-only, in <path>). At most two writers run at once; read-only agents
+  do not count toward the two, as long as no writer changes the files they
+  read.` then `You may build C++ in this run.` or, with `--no-build`, `You
+  may not build C++ in this run.`
+
 **From the increment file**, printed as the file's own lines, never
 summarised (rows 3 and 5: required mutation tests dropped from a brief):
 
@@ -138,8 +169,7 @@ summarised (rows 3 and 5: required mutation tests dropped from a brief):
 ```
 <<<BRIEF persona=<p> worktree=<abs path> head=<40-hex> hash=<12-hex>>>>
 <common.md, filled in>
-<p>.md, filled in>
-Concurrency: <generated, §3.1>
+Concurrency: <generated, §3.1a>
 Write limit: <WRITES[p]>, and your note file.
 From <increment>, its own lines:
   ...
@@ -150,9 +180,10 @@ Ola, verbatim, checked against this session's transcript:
 ```
 
 - `head` is `git -C <worktree> rev-parse HEAD` when the block is made.
-- Templates are filled with `string.Template.substitute`, variables
-  `$persona`, `$worktree`, `$increment`, `$note`; an unknown `$name` in a
-  template is an error at brief time, not a silent blank.
+- The template is filled with `string.Template.substitute`, variables
+  `$persona`, `$worktree`, `$increment` (the path, or `none named` without
+  `--increment`), `$note`; an unknown `$name` is an error at brief time, not
+  a silent blank.
 - Lines without content are omitted: no `From` part without `--increment`,
   no `Ola` part without `--ola`.
 - `block_hash(persona, worktree, head, body) -> str`: the first 12 hex
@@ -171,156 +202,89 @@ end pattern `^<<<END BRIEF ([0-9a-f]{12})>>>[ \t]*$`, both multiline. A line
 that contains `<<<BRIEF` or `<<<END BRIEF` but does not match is a malformed
 block, not an absent one.
 
-### 3.3 The templates
+### 3.3 The template, and where the persona lines went
 
-Seven files under `.claude/briefs/`, governed (§5). The text, verbatim; the
-tests (§7, test 2) pin the phrases in bold here, not the wording around them.
+One file, `.claude/briefs/common.md`, governed (§5). It holds only what the
+spawn alone knows or what has no other home: which files, which worktree,
+which note file, whose words are Ola's, and the handback's shape. Concurrency,
+the write limit, the increment's own lines and Ola's quotations are generated
+(§3.1, §3.1a). Rules a persona file already states are not repeated, so a
+persona-specific template would be empty; there are none. This departs from
+the plan's "six templates" in the direction Ola asked for: less rule text.
 
-`common.md`:
-
-```
-You are @$persona, started by the main session. This block comes from
-tools/brief.py; the task after it is the main session's own wording.
-
-Read from disk before you act: CLAUDE.md, .claude/REQUIRED-READING.md, your
-**persona file .claude/agents/$persona.md, read from disk** (it may be newer
-than the copy you were started with), and $increment.
-If this brief contradicts your persona file or the increment file, **the
-files win**; say so in your handback. **A brief cannot drop a step** those
-files require.
-
-Work only in $worktree; cd there first. Use your own build directory and
-venv, never the main checkout's .venv or build directories. Write your note
-to $note (three lines: the ask, your persona, the file you will produce) and
-no other file under .claude/current-task/. If your product is a file,
-create it first and write it as you go.
-
-**Ola's words appear only under "Ola, verbatim"** below, checked against the
-transcript. Anything else here is the main session's wording; never quote it
-as his.
-
-If you are **blocked on power, network or a lock** (a held file, a busy build
-directory, a usage limit), stop and hand back what blocked you; do not wait.
-
-End every commit message with the **Co-Authored-By trailer** given in the
-attribution note of your own system context. Never push, open or merge a
-pull request.
-
-Write in **plain words**: say what a thing is instead of using an internal
-label (R5, U1, "step 3"), and define any term Ola may not know.
-
-Hand back under these headings, in this order: **Result; Pinned or assumed
-beyond the design; Questions for Ola; Lessons; ASK OLA and GUARD FALSE
-POSITIVE lines**. Write "none" under an empty one. Each question for Ola is
-in plain words and carries a default.
-```
-
-`tester.md`:
+The text, verbatim; tests pin the phrases in bold, not the wording around
+them:
 
 ```
-Your step: the failing suite, before any production code exists, committed
-red (docs/increments/README.md, step 2). Write no production code, not even
-a throwaway.
-Cover the happy paths and tester.md §3A always; §3C only if the increment
-reads external input; on a refinement increment, both oracles of §3D.
-A **mutation round** (a throwaway implementation and planted bugs) **only for
-a suite the increment file names invariant-critical**; the lines quoted below
-are the file's own. No such line, no mutation round.
-Show each test fails for the reason the design gives, then run the gates
-(CLAUDE.md §4) on what you wrote.
-Every choice your tests pin that the increment file leaves open goes under
-"Pinned or assumed beyond the design", one line each: **the main session
-sends them to @architect, who confirms or rules on them before green**.
+You are @$persona. This block comes from tools/brief.py; the task after it
+is the main session's wording.
+Read **.claude/agents/$persona.md from disk** and the increment file,
+$increment. Where the task contradicts either, **the files win**, and you
+say so; **a brief cannot drop a step** they require.
+Work only in $worktree (cd there first), with your own build directory and
+venv. Your note file is $note; write **no other file under
+.claude/current-task/**.
+**Ola's words appear only under "Ola, verbatim"** below.
+If **blocked on power, network or a lock**, stop and hand back.
+End each commit message with the **Co-Authored-By trailer** from your
+system context.
+Write in **plain words**: say what any internal label means.
+Hand back under: **Result; Pinned or assumed beyond the design; Questions
+for Ola; Lessons; ASK OLA and GUARD FALSE POSITIVE lines** ("none" under an
+empty one). Each question for Ola is in plain words, with a default.
 ```
 
-`developer.md`:
+The trailer is carried by reference to the persona's own system context
+(this @architect run received it that way), so a model change leaves no
+stale literal in a governed file.
+
+Where each recurring brief line now lives:
+
+| Recurring line | Where | Already there, or moved by h9 |
+|---|---|---|
+| at most two writers; read-only agents beside them; nothing beside @perf | `brief.py`, §3.1a | new, by Ola's ruling |
+| stop and report if blocked on power, network or a lock | `common.md` | from the memory note "agents report blocks" |
+| the attribution trailer | `common.md` | by reference |
+| Ola's words pasted verbatim | `--ola` and `common.md` | new |
+| red-step choices go to @architect before green | `tester.md` §1, new bullet (below); the handback heading | moved |
+| @reviewer is read-only; the spawner records | `reviewer.md` §5 | already there (8b8eb94) |
+| @reviewer reports the commit range | `reviewer.md` §5, feedback item 2 (below) | moved |
+| a performance fix is timed by @perf before review | `CLAUDE.md` §3, "Step order" (below) | moved: it is the dispatcher's order, not a persona's |
+| plain language | `common.md` | from the memory note "no implicit labels", for personas |
+| "Briefs" bullet, @tester part (§3A, §3C, §3D) | `tester.md` §3A ("every geometry test suite"), §3C ("Only for an increment that reads external input"), §3D ("every property test of refinement output") | already there; dropped |
+| "Briefs" bullet, @developer part (minimal code, ceiling) | `developer.md`, first and fourth bullets | already there; dropped |
+| "Briefs" bullet, @reviewer part (§5's checks, green CI is not done) | `reviewer.md` §5 | already there; dropped |
+| mutation only for an invariant-critical suite ("lean briefs") | `docs/increments/README.md`, *Cost constraints*; `reviewer.md` §5 check 4 (8b8eb94); the quoted increment lines | already there; dropped |
+| create the product file first | `REQUIRED-READING.md` | already there; dropped |
+| never push | `REQUIRED-READING.md`, *Before you publish* | already there; dropped |
+
+The persona-file lines, verbatim:
+
+`tester.md` §1, a new last bullet:
 
 ```
-Your step: the minimal code that makes the red suite pass
-(docs/increments/README.md, step 3), under the ceiling of CLAUDE.md §2;
-report your line count against the increment file's estimate. **Your commit
-touches no test file.**
-If a test pins something the increment file does not say, or looks wrong,
-stop and hand it back as a specification question; do not choose.
-If your change is a performance fix, say so first in your Result: **a
-performance fix is timed by @perf before @reviewer sees it**.
-Rebuild before you measure (REQUIRED-READING.md, "Stale artifacts").
+* **Choices beyond the design:** list every choice your tests pin that the
+  increment file leaves open, under the handback heading "Pinned or assumed
+  beyond the design"; `@architect` confirms or rules on each before green.
 ```
 
-`reviewer.md`:
+`reviewer.md` §5, feedback item 2, from `**Size Metrics:** Confirm total LOC
+and focus area.` to:
 
 ```
-**You are read-only**: write, edit and commit nothing, not even the review
-record. **The main session copies your verdict** into the increment file's
-## Review section.
-This is a request for your review; green CI is not done. Make **the three
-checks of reviewer.md §5**, not what the gates cover; on a branch without
-production code, the scope in REQUIRED-READING.md, "Before you publish".
-Your Result, in this order: Verdict; the commit range reviewed; the
-production line count by CLAUDE.md §2's rule, against the estimate; Blocking
-issues; Suggestions.
-If the increment touches refine or mesh code, say whether @perf's acceptance
-run is recorded (docs/increments/README.md, "Acceptance").
+2. **Size Metrics:** The commit range reviewed, total LOC and focus area.
 ```
 
-`architect.md`:
+`CLAUDE.md` §3, "Step order", after "when refine or mesh code is touched
+(`docs/increments/README.md`)." insert:
 
 ```
-Your step: the design in $increment, before @tester writes anything
-(docs/increments/README.md, step 1): types, invariants, exclusions,
-degeneracy policy, the LOC estimate, and the tests @tester writes red. No
-production code.
-Write the **Prior art** section first, with the legacy grep pasted with what
-it returned.
-When settling choices @tester pinned beyond the design, confirm or rule on
-each in the increment file, and list the tests that change.
-Questions for Ola only if unavoidable.
+A performance fix is timed by `@perf` before review.
 ```
 
-`perf.md`:
-
-```
-Your step: as perf.md says: the acceptance run, or the timing asked below,
-from tools/bench.py, with the power state recorded and like compared with
-like (docs/increments/README.md, "Acceptance"). Figures only from finished
-runs.
-**Nothing runs beside a timing run**; the concurrency line below says so.
-A change to tools/bench.py follows the test-first loop (perf.md §1): report
-the change it needs; do not make it.
-**A performance fix by @developer is timed by you before @reviewer sees it.**
-```
-
-`orchestrator.md`:
-
-```
-Your step: the check, retrospective or research asked below (orchestrator.md
-§1 to §3). A change to a rule or to the harness goes in your report as a
-proposal, with its evidence.
-Measure the rule text (python3 tools/rule_sizes.py) and propose a cut.
-Cite transcripts as session and line; **quote Ola only from the transcript**.
-```
-
-The concurrency line `brief.py` generates: `Concurrency: you run alone.`;
-with `--beside X`, `Concurrency: @X runs at the same time, in its own
-worktree. You may build C++ in this run.` (or `You may not build C++ in this
-run.` with `--no-build`). For perf, `Concurrency: you run alone; nothing runs
-beside a timing run.`
-
-What the templates carry, against the recurring lines of the brief for this
-increment:
-
-| Recurring line | Where |
-|---|---|
-| pairs; alone beside @perf | `--beside`, `--no-build`, the generated concurrency line, the exit-2 rule |
-| stop and report if blocked on power, network or a lock | `common.md` |
-| the attribution trailer | `common.md`, by reference to the persona's own system context (this @architect run received the trailer that way), so a model change does not leave a stale literal in a governed file |
-| Ola's words pasted verbatim | `--ola`, checked against the transcript; `common.md` |
-| red-step choices go to @architect before green | `tester.md`; the handback heading in `common.md` |
-| @reviewer is read-only; the spawner records | `reviewer.md` |
-| a perf fix is timed by @perf before review | `developer.md`, `perf.md` |
-| plain language | `common.md` |
-| the "Briefs" bullet of `CLAUDE.md` §3 | `tester.md` (§3A, §3C, §3D), `developer.md` (minimal code, ceiling), `reviewer.md` (§5's three checks, explicit request) |
-| the "lean briefs" note | `tester.md` (mutation only where the increment file names it, quoted) |
+These edits are written against `worktree-agent-lines` (8b8eb94, which
+changes `reviewer.md` §5 and `tester.md` §1). h9's PR is opened after that
+branch merges, so the moved lines land on its text.
 
 ### 3.4 What the hash proves
 
@@ -360,8 +324,8 @@ In this order; the first that applies decides:
 
 Rule 1 passes subagent events because subagents do not start personas here,
 and a subagent's `cwd` is its worktree by design. Rule 5 asks no block of
-other subagent types (`general-purpose`, `Explore`, forks): they have no
-template, and h6 gives any name outside the persona table no write rights, so
+other subagent types (`general-purpose`, `Explore`, forks): they are not
+personas, and h6 gives any name outside the persona table no write rights, so
 they cannot do a persona's work once h6 lands. Until then this is a gap,
 named in §8. Rule 8 catches a block reused from an earlier step: any commit
 in the worktree makes it stale, so a brief is made just before its spawn.
@@ -425,53 +389,67 @@ see. Worth a probe in stage 4; it would make the hash unnecessary.
 
 ## 4. Rule text, and what it replaces
 
-`CLAUDE.md` §3, "The main session dispatches": the whole "Briefs" bullet is
-deleted (55 words, `len(text.split())` at 2060f14), from `* **Briefs.**` to
-`since green CI is not done.` No replacement in `CLAUDE.md`.
+Word counts are `len(text.split())`, Markdown emphasis removed, at 2060f14
+for the repository and on 2026-10-04 for the memory notes.
 
-`.claude/REQUIRED-READING.md`, *The harness*, first paragraph: after
-"configuration changes while unattended mode is on;" insert (47 words):
+| Passage | Change | Removed | Added |
+|---|---|---|---|
+| `CLAUDE.md` §3, "Briefs" bullet, from `* **Briefs.**` to `since green CI is not done.` | deleted | 55 | 0 |
+| `CLAUDE.md` §3, "Step order" | the performance-fix sentence (§3.3) | 0 | 9 |
+| `REQUIRED-READING.md`, *The harness*, after "configuration changes while unattended mode is on;" | the `guard_spawn.py` clause below | 0 | 37 |
+| `REQUIRED-READING.md`, current-task bullet: "The spawner names the path in the prompt, and the subagent writes that path and no other." | becomes "`tools/brief.py` names the path, and the subagent writes no other." | 17 | 10 |
+| `REQUIRED-READING.md`, restart bullet: "; until then its brief says to read the persona file from disk" | deleted; the block always says so (the bullet ends "...the changed persona**.") | 12 | 0 |
+| `tester.md` §1 | the "Choices beyond the design" bullet (§3.3) | 0 | 35 |
+| `reviewer.md` §5, item 2 | "Confirm" becomes "The commit range reviewed," | 1 | 4 |
+| `.claude/briefs/common.md` | new (§3.3) | 0 | 150 |
+| **Repository total** | | **85** | **245** |
+
+**Net in the repository: +160 words.** The whole fixed part of a brief is
+150 of them; nothing else grows by more than a sentence.
+
+The `REQUIRED-READING.md` clause:
 
 ```
-`guard_spawn.py` refuses a persona spawn whose prompt lacks an unchanged,
-current block from `python3 tools/brief.py`, and any spawn or resume while
-the session is not in the directory it started in; a resume needs no block,
-but one that starts a new step carries a fresh one;
+`guard_spawn.py` refuses a persona spawn without an unchanged, current block
+from `python3 tools/brief.py`, and any spawn or resume made outside the
+directory the session started in; a resume that starts a new step carries a
+fresh block;
 ```
 
-Net rule text: -8 words, plus the seven templates (826 words, in the
-size table's new row, §5).
+**Outside the repository**, loaded into every main session (the memory
+folder `~/.claude/projects/-Users-skavhaug-projects-rasputin/memory/`):
 
-**Outside the repository:** the memory note
-`~/.claude/projects/-Users-skavhaug-projects-rasputin/memory/lean-agent-briefs.md`
-and its line in that folder's `MEMORY.md`. The main session removes both,
-after the merge and after the hook's first live refusal (§9), since memory is
-its own and no persona writes there. Its 2026-09-26 postscript ("no PNGs
-unasked") is already `CLAUDE.md` §3's "No unasked images"; its "check a step
-that runs past about 20 minutes" is the "agents report blocks" note. Nothing
-is lost. The "agents in pairs" note stays until stage 4's hook counts running
-personas; it then goes too.
+| Note | Words | Why it can go |
+|---|---|---|
+| `lean-agent-briefs.md` | 185 | mutation only where the increment file names it: README, *Cost constraints*, quoted into each block; its postscript ("no PNGs unasked") is `CLAUDE.md` §3's "No unasked images"; "check a step past about 20 minutes" is the note "agents report blocks" |
+| `agent-concurrency-pairs.md` | 296 | `brief.py`'s rules (§3.1a) and the template's "own build directory and venv". Its one sentence with no other home, "If a 'Usage limit reached' message appears again, go back to one agent at a time", moves into the note `agents-report-blocks.md` |
+
+With both removed, what a main session loads shrinks by 481 words less one
+moved sentence, so the rule text it carries goes down by about 300 words
+overall. The main session removes both notes and their `MEMORY.md` lines,
+after the merge and the first live check (§9): memory is its own, and no
+persona writes there.
 
 ## 5. Files
 
 | File | Change | Production lines (`CLAUDE.md` §2) |
 |---|---|---|
-| `tools/brief.py` | new, §3.1, §3.2 | ~130 |
+| `tools/brief.py` | new, §3.1, §3.1a, §3.2 | ~140 |
 | `.claude/hooks/guard_spawn.py` | new, §3.5 to §3.8 | ~50 |
 | `.claude/settings.json` | §6 | 6 |
 | `.claude/hooks/guard_governance.py` | `"tools/brief.py"` in `GOVERNED` (the hook imports it, so it is live before review, like the self-protecting set); `".claude/briefs/"` in `GOVERNED_PREFIXES` | 2 |
-| `tools/rule_sizes.py` | `.claude/briefs/*.md` as one row, words summed, in the current and the reference counts; ordered after the skills | ~10 |
-| `.claude/briefs/*.md` | new, §3.3 | prose |
-| `CLAUDE.md`, `.claude/REQUIRED-READING.md` | §4 | prose |
-| `tests/python/harness_fixtures.py` | `tools/brief.py`, `.claude/hooks/guard_spawn.py` and the seven templates in `COPIED` | test |
+| `tools/rule_sizes.py` | `".claude/briefs/common.md"` appended to `RULE_FILES` | 1 |
+| `.claude/briefs/common.md` | new, §3.3 | prose |
+| `CLAUDE.md`, `.claude/REQUIRED-READING.md`, `.claude/agents/tester.md`, `.claude/agents/reviewer.md` | §3.3, §4 | prose |
+| `tests/python/harness_fixtures.py` | `tools/brief.py`, `.claude/hooks/guard_spawn.py` and `.claude/briefs/common.md` in `COPIED` | test |
 | **Total** | | **~200**, under the 700 ceiling |
 
 The plan said about 140; the difference is the block reader beside its
-writer, the transcript check of `--ola`, and the concurrency arguments.
+writer, the transcript check of `--ola`, and the concurrency rules.
 
-One row, not seven, in the size table: h8's test 11 holds the recap's new
-sections to 3,000 characters, and its design review measured about 280 of
-slack, less than seven rows of about 42 characters.
+One template means one more row in the size table, about 50 characters;
+h8's test 11 holds the recap's new sections to 3,000 characters, and its
+design review measured about 280 of slack.
 
 No suite here is invariant-critical: no mutation round. No refine or mesh
 code: no `@perf` acceptance.
@@ -522,10 +500,10 @@ Transcripts are fixture `.jsonl` files under a temporary `HOME`, with
    pattern and its last the end pattern with the same hash; `head` is the
    worktree's `HEAD`; `worktree` is absolute and resolved; `block_hash` over
    the body reproduces it. Two runs in the same second give the same block.
-2. **Templates.** Every block holds the bold phrases of `common.md` (§3.3);
-   each persona's block holds the bold phrases of its own template and not
-   another persona's (tester's mutation sentence is not in developer's
-   block). An unknown `$name` in a fixture template: non-zero exit.
+2. **Template.** Every persona's block holds the bold phrases of
+   `common.md` (§3.3) with `$persona`, `$worktree`, `$increment` and `$note`
+   filled in; without `--increment`, `none named`. An unknown `$name` in a
+   fixture template: non-zero exit, no block.
 3. **Increment lines.** A fixture increment with a `Status:` line, two
    matching lines in the body, one matching line inside `## Review`, and a
    `## Review` with two verdict lines: the block quotes the status line and
@@ -539,10 +517,27 @@ Transcripts are fixture `.jsonl` files under a temporary `HOME`, with
    `From` part.
 5. **Worktree.** Not a checkout; a path with a space: exit 2. The main
    checkout: accepted.
-6. **Concurrency.** `--beside none`: "you run alone"; `developer --beside
-   tester`: names @tester and "may build"; with `--no-build`: "may not build";
-   `perf --beside tester` and `tester --beside perf`: exit 2. No `--beside`:
-   exit 2 (argparse).
+6. **Concurrency (§3.1a).** Each with its own worktrees unless said:
+   - `--beside none`: "you run alone"; no `--beside`: exit 2; `none` with
+     another entry: exit 2; an entry without `:<worktree>`, or with a
+     worktree that does not exist: exit 2.
+   - `developer --beside tester:A`: names @tester as writer in A, "may
+     build"; with `--no-build`, "may not build".
+   - Read-only beyond two writers: `reviewer --beside tester:A --beside
+     developer:B`, and `developer --beside tester:A --beside reviewer:C`:
+     accepted; the line names @reviewer read-only and says read-only agents
+     do not count toward the two. Two read-only entries beside two writers:
+     accepted.
+   - Rule 1: `perf --beside tester:A`, `tester --beside perf:A`, `perf
+     --beside reviewer:C`, `reviewer --beside perf:A`: exit 2 naming the
+     timing run.
+   - Rule 2: `architect --beside tester:A --beside developer:B`: exit 2,
+     "at most two writers".
+   - Rule 3: `developer` in A `--beside tester:A`: exit 2.
+   - Rule 4: `reviewer` in A `--beside developer:A`, and `developer` in A
+     `--beside reviewer:A`: exit 2 naming the shared worktree.
+   - Read-only is derived: with a fixture `WRITES` where `orchestrator` is
+     empty, `orchestrator` counts as read-only.
 7. **Ola.** A quotation present in a fixture human turn, with different
    spacing and a line break: printed collapsed, quoted, with the turn's
    timestamp. Present only in an assistant message or a tool result: exit 2.
@@ -578,13 +573,18 @@ Transcripts are fixture `.jsonl` files under a temporary `HOME`, with
     2 is checked before the block: a valid block from the wrong directory is
     refused with `cwd:`.
 18. Resumes: SendMessage with no block from the project: no output; with a
-    fresh block: no output; with an edited or stale block: deny.
+    fresh block: no output; with an edited or stale block: deny; with a
+    malformed marker (a `<<<BRIEF` line that does not match the header
+    pattern, or an END line with no header): deny, `brief: malformed`.
 19. Rule 1: `agent_id` present with a wrong `cwd` and no block: no output.
     `tool_name: Bash`: no output. Stdin not JSON, or a JSON list: no output,
     exit 0.
 20. Unavailable (§3.7): `tools/brief.py` removed from the fixture, or made to
     raise on import: a blockless tester spawn passes with `additionalContext`
     containing `brief check unavailable`; a wrong `cwd` is still denied.
+    The same when `brief.check` raises (a fixture `brief.py` whose `check`
+    raises `RuntimeError`): pass, `additionalContext` names the error, exit
+    0.
 21. Unattended: with the fixture's unattended flag on, test 11's verdicts are
     the same, and no queue file appears under the fixture's harness
     directory.
@@ -595,30 +595,36 @@ Transcripts are fixture `.jsonl` files under a temporary `HOME`, with
 Wiring and governance:
 
 23. `test_guard_governance.py`: writes to `tools/brief.py`,
-    `.claude/briefs/common.md` and `.claude/briefs/tester.md` get `ask`.
+    `.claude/briefs/common.md` and any new `.claude/briefs/x.md` get `ask`.
 24. `test_settings_wiring.py`: a `PreToolUse` entry with matcher
     `Agent|SendMessage` and command
     `$CLAUDE_PROJECT_DIR/.claude/hooks/guard_spawn.py`; the file is
     executable on disk and in git's index (mode 100755); run by path from a
     fixture copy it denies a blockless tester spawn. The existing entries
     unchanged.
-25. `test_rule_sizes.py`: with three files under `.claude/briefs/`, the table
-    has one row `.claude/briefs/*.md` with their summed words, after the
-    skills; at a reference without the folder the row says `new`.
-26. Rule text: `CLAUDE.md` has no line starting `* **Briefs.**`;
+25. `test_rule_sizes.py`: the table has a `.claude/briefs/common.md` row
+    after `docs/PRINCIPLES.md`; at a reference without it the row says `new`.
+26. Rule text: `CLAUDE.md` has no line starting `* **Briefs.**`, and its
+    "Step order" bullet holds "timed by `@perf` before review";
     `REQUIRED-READING.md` names `guard_spawn.py` and `tools/brief.py` in *The
-    harness*.
+    harness*, and no longer holds "until then its brief says";
+    `tester.md` holds "Choices beyond the design"; `reviewer.md` holds "The
+    commit range reviewed".
 
 ## 8. Not covered, named
 
 - A resume that starts a new step without a block (§3.8).
-- Spawns of types without a template (`general-purpose`, `Explore`, forks)
-  until h6's role table gives them no write rights.
+- Spawns of types that are not personas (`general-purpose`, `Explore`,
+  forks) until h6's role table gives them no write rights.
+- The concurrency rules trust the `--beside` list: a persona left off it is
+  not counted, and nothing checks that the listed ones are still running
+  (stage 4 records starts and stops).
+- A read-only persona that reads files outside its own worktree (master, a
+  writer's worktree): "the same files" is measured by worktree only.
 - The task text after the block: it can still paraphrase, contradict or
   drop things; the block's sentence "the files win" is the persona's
   defence, not a check.
 - A block computed by hand rather than printed (§3.4).
-- How many personas run at once (stage 4).
 - The next free increment id (stage 2).
 
 ## 9. The first live firing
@@ -630,12 +636,30 @@ worktree, a `SendMessage` is refused with `cwd:`; then `cd` back; (c) a spawn
 with a fresh block goes through, and the persona's handback has the five
 headings. If (a) or (b) passes through, the tool input fields of §3.5 differ
 from the transcripts', and the hook is reported to Ola before any other
-spawn. Then the main session removes the memory note (§4).
+spawn. Then the main session removes the two memory notes (§4).
 
 ## 10. Questions for Ola
 
-None. Two choices made here that Ola may overturn: built-in helper types
-need no block (§3.5, rule 5), and a broken `brief.py` lets spawns through
-with a notice rather than stopping them (§3.7).
+None. Two choices made here, which Ola may overturn:
+
+1. **Claude's own helper agents need no brief block.** Claude Code has
+   built-in helpers besides our six personas: a general one, and a
+   read-only "Explore" one for searching code. The check applies only to
+   the six personas. Consequence: the main session can still hand work to
+   a helper with a hand-written prompt and nothing checks it. Once h6 lands,
+   such a helper cannot write files in the project, so it can search but
+   not do a persona's work. The other choice, requiring a block for helpers
+   too, would need a template for them, and a quick search would cost a
+   brief.
+2. **If `tools/brief.py` breaks, spawns go through unchecked, with a
+   notice.** Consequence: until it is repaired, a brief can again be
+   missing its fixed part, and the main session is told so on every spawn.
+   The other choice, refusing every spawn, would also refuse the
+   `@developer` who repairs `brief.py`, and only Ola could unblock it by
+   hand. The check on the working directory does not depend on `brief.py`
+   and keeps working either way.
+
+## Review
+
 
 **Design review, round 1, 2026-10-04.** Range `2060f14..7cae124`. Verdict: CHANGES REQUESTED. LOC: 0 (design); estimate about 200, plausible. Every factual claim checked holds (`settings.json` lines 23-29, `guard_unattended.py`'s deny format and crash refusal, `session_state.py`'s helpers, the 55-word bullet, `WRITES` against h6's table, the tool-input fields, the quoted Claude Code docs); each hook rule has a test. Blocking: (1) concurrency cannot express Ola's ruling of 2026-10-04 (read-only agents may run beyond two writers if nothing they read is being changed): `--beside` takes one name; make it repeatable, mark read-only (or derive it from an empty `WRITES`), say so in the generated line, keep "nothing beside @perf" and "at most two writers", extend test 6; (2) the increment adds about 600 words of rule text (826 in templates plus 47) against 55 deleted, and §4's net is misstated; cut the templates to what only the spawn knows, or move persona lines into the persona files and delete what they repeat, and state the real net (candidates: the pairs note once (1) lands, REQUIRED-READING's current-task paragraph). Suggestions: state the two defaults for Ola in plain words with their consequences; a test where `check()` raises; a malformed block in a `SendMessage`. Not pushed; no CI.
