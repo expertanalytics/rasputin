@@ -37,6 +37,7 @@ from typer.testing import CliRunner
 
 from nve_fixtures import (
     ALLOW,
+    BLANK_TYPE,
     CHUNK,
     COPIES,
     COPY_HIGH,
@@ -442,8 +443,7 @@ class TestRiversGeojson:
     def test_objekttype_is_written_as_served_with_vatnlnr(self, fetched: Path) -> None:
         props = {p["objectid"]: p for p in props_of(fetched / "rivers.geojson")}
         assert props[NULL_TYPE]["objekttype"] is None and props[NULL_TYPE]["vatnlnr"] == 495
-        blank = next(p for p in props.values() if p["objekttype"] == " ")
-        assert blank["vatnlnr"] is None
+        assert props[BLANK_TYPE]["objekttype"] == " " and props[BLANK_TYPE]["vatnlnr"] == 0
         assert {p["objekttype"] for p in props.values()} >= {"SK", "InnsjoMidtlin", "ElvBekk"}
 
 
@@ -510,6 +510,7 @@ class TestReadBack:
 
     def test_references(self, fetched: Path) -> None:
         from shapely.geometry import MultiPolygon, Polygon
+
         from tin_engine.io.station_set import read_references
 
         references, crs = read_references(fetched / "reference.geojson")
@@ -529,6 +530,14 @@ class TestReadBack:
         assert ids.count(SHARED) == 1
         kinds = {s.objectid: s.kind for s in segments}
         assert kinds[NULL_TYPE] == "lake" and kinds[SAME_NUMBER] == "lake"
+
+    def test_a_blank_type_with_lake_number_0_reads_as_a_river(self, fetched: Path) -> None:
+        """NVE sends `vatnlnr` 0 for "no lake"; the fake's blank-type segment
+        carries it, as both blank-type features of the real layer do."""
+        from tin_engine.io.rivers import read_segments
+
+        segments, _, _ = read_segments(fetched / "rivers.geojson")
+        assert {s.objectid: s.kind for s in segments}[BLANK_TYPE] == "river"
 
 
 # --------------------------------------------------------------------------
@@ -558,6 +567,30 @@ class TestTheRefusals:
         assert code == REFUSED, output
         assert MULTI in output, output
         assert re.search(r"exceededTransferLimit|limit|truncat", output, re.IGNORECASE), output
+
+    @pytest.mark.parametrize(
+        ("layer", "name"),
+        [
+            (0, "stasjonnr"),
+            (38, "stasjonnr"),
+            (38, "nedborfeltaareal_km2"),
+            (38, "oppdateringsdato"),
+            (2, "objectid"),
+        ],
+    )
+    def test_a_field_the_service_left_out_is_named_in_plain_words(
+        self, fake: FakeNve, tmp_path: Path, layer: int, name: str
+    ) -> None:
+        """A field the fetch needs, missing from every answer of its layer:
+        the refusal names the field in a sentence, not as the bare `KeyError`
+        text `'nedborfeltaareal_km2'`, and writes nothing."""
+        fake.omit.add((layer, name))
+        code, output = fetch(tmp_path / "nve")
+        assert code == REFUSED, output
+        assert name in output, output
+        assert f"Error: '{name}'" not in output, output
+        assert re.search(r"(?i)\b(missing|lacks|without|no)\b", output), output
+        assert not (tmp_path / "nve").exists()
 
     def test_an_unknown_source(self, fake: FakeNve, tmp_path: Path) -> None:
         code, output = invoke("fetch-stations", "no-such-list", "--out-dir", str(tmp_path))

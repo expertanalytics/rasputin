@@ -27,7 +27,8 @@ so the fetch sees the real 140 stations. Station `i` (list order) sits on a
   under two `objectid`s and one `elvid` (served high first), and `SAME_NUMBER`
   shares `COPY_LOW`'s `strekninglnr` with another geometry (79.3.0's case);
 - `MULTI` (19.79.0): a two-part polygon (Gravå), and the `objekttype` cases
-  `NULL_TYPE` (null, `vatnlnr` set), `BLANK_TYPE` (" ", no `vatnlnr`),
+  `NULL_TYPE` (null, `vatnlnr` set), `BLANK_TYPE` (" ", `vatnlnr` 0, which
+  is how NVE says "no lake": both blank-type features of the real layer have it),
   `ODD_LAKE` ("InnsjoMidtlin") and `STRAY` ("SK");
 - `NO_HIERARCHY` (2.265.0): `elvenavnhierarki` is null;
 - `RENAMED` (311.4.0): layer 0 serves `stasjonnavn` as `LAYER_0_NAME`, a
@@ -189,6 +190,8 @@ class FakeNve:
     drop_point: set[str] = field(default_factory=set)
     drop_polygon: set[str] = field(default_factory=set)
     truncate: set[str] = field(default_factory=set)
+    #: `(layer, field)` pairs the fake leaves out of every answer of that layer.
+    omit: set[tuple[int, str]] = field(default_factory=set)
     max_active: int = 0
     _active: int = 0
     _lock: threading.Lock = field(default_factory=threading.Lock)
@@ -234,6 +237,9 @@ class FakeNve:
                 for s in self.segments
                 if shape(s["geometry"]).intersects(area)
             ]
+        omitted = {name for layer, name in self.omit if layer == call.layer}
+        for f in features:
+            f["properties"] = {k: v for k, v in f["properties"].items() if k not in omitted}
         doc: dict[str, Any] = {"type": "FeatureCollection", "features": features}
         if call.layer == 2 and any(area.contains(_xy(self.station(n))) for n in self.truncate):
             doc["exceededTransferLimit"] = True
@@ -330,7 +336,7 @@ def build_fake() -> FakeNve:
     for k, (oid, kind, lake) in enumerate(
         [
             (NULL_TYPE, None, 495),
-            (BLANK_TYPE, " ", None),
+            (BLANK_TYPE, " ", 0),
             (ODD_LAKE, "InnsjoMidtlin", 12),
             (STRAY, "SK", None),
         ]

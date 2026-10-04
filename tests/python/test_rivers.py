@@ -148,13 +148,55 @@ class TestTheRefusals:
         assert re.search(r"\b7734\b", str(refused.value)), str(refused.value)
 
 
+class TestAMalformedFile:
+    """Code review round 1: a user's malformed river file is refused with a
+    `ValueError` naming what is wrong, never a `KeyError` or `TypeError`
+    escaping from the reader."""
+
+    def test_a_segment_without_objectid(self, rivers: ModuleType, tmp_path: Path) -> None:
+        bare = river(2, shifted(LINE, 500))
+        del bare["properties"]["objectid"]
+        doc = collection([river(1, LINE), bare])
+        with pytest.raises(ValueError, match="objectid"):
+            rivers.read_segments(write(tmp_path / "r.geojson", doc))
+
+    def test_a_segment_with_null_properties(self, rivers: ModuleType, tmp_path: Path) -> None:
+        bare = river(2, shifted(LINE, 500))
+        bare["properties"] = None
+        doc = collection([river(1, LINE), bare])
+        with pytest.raises(ValueError, match=r"objectid|properties"):
+            rivers.read_segments(write(tmp_path / "r.geojson", doc))
+
+    def test_a_vertex_with_one_number_names_its_segment(
+        self, rivers: ModuleType, tmp_path: Path
+    ) -> None:
+        short = river(7735, LINE)
+        short["geometry"]["coordinates"][1] = [100.0]
+        doc = collection([river(1, shifted(LINE, 500)), short])
+        with pytest.raises(ValueError, match=r"\b7735\b"):
+            rivers.read_segments(write(tmp_path / "r.geojson", doc))
+
+    def test_a_file_without_features(self, rivers: ModuleType, tmp_path: Path) -> None:
+        doc = collection([river(1, LINE)])
+        del doc["features"]
+        with pytest.raises(ValueError, match="features"):
+            rivers.read_segments(write(tmp_path / "r.geojson", doc))
+
+    def test_a_crs_member_without_a_name(self, rivers: ModuleType, tmp_path: Path) -> None:
+        doc = collection([river(1, LINE)])
+        doc["crs"] = {"type": "name"}
+        with pytest.raises(ValueError, match=r"(?i)\bcrs\b"):
+            rivers.read_segments(write(tmp_path / "r.geojson", doc))
+
+
 class TestKind:
     """`kind` is total: `lake` when the casefolded `objekttype` starts with
-    `innsj`, or when it is null or blank and `vatnlnr` is set; `river` for
-    every other value. The raw value stays in the model, as served."""
+    `innsj`, or when it is null or blank and `vatnlnr` is set, which means
+    not null and not 0 (NVE sends 0 for "no lake"); `river` for every other
+    value. The raw value stays in the model, as served."""
 
     @pytest.mark.parametrize("objekttype", LAKE_SPELLINGS)
-    @pytest.mark.parametrize("vatnlnr", [495, None], ids=["vatnlnr", "no-vatnlnr"])
+    @pytest.mark.parametrize("vatnlnr", [495, 0, None], ids=["vatnlnr", "vatnlnr-0", "no-vatnlnr"])
     def test_every_lake_spelling_is_a_lake(
         self, rivers: ModuleType, tmp_path: Path, objekttype: str, vatnlnr: int | None
     ) -> None:
@@ -164,11 +206,11 @@ class TestKind:
         assert (s.kind, s.objekttype) == ("lake", objekttype)
 
     @pytest.mark.parametrize("objekttype", RIVER_SPELLINGS)
-    @pytest.mark.parametrize("vatnlnr", [495, None], ids=["vatnlnr", "no-vatnlnr"])
+    @pytest.mark.parametrize("vatnlnr", [495, 0, None], ids=["vatnlnr", "vatnlnr-0", "no-vatnlnr"])
     def test_every_other_value_is_a_river(
         self, rivers: ModuleType, tmp_path: Path, objekttype: str, vatnlnr: int | None
     ) -> None:
-        """`vatnlnr` is set on 496 river features too, so it does not decide alone."""
+        """River features carry a lake number too, so it does not decide alone."""
         (s,) = read(
             rivers, tmp_path / "r.geojson", [river(1, LINE, objekttype=objekttype, vatnlnr=vatnlnr)]
         )
@@ -176,7 +218,9 @@ class TestKind:
 
     @pytest.mark.parametrize("objekttype", [NULL, BLANK, ""], ids=["null", "space", "empty"])
     @pytest.mark.parametrize(
-        ("vatnlnr", "kind"), [(495, "lake"), (None, "river")], ids=["vatnlnr", "no-vatnlnr"]
+        ("vatnlnr", "kind"),
+        [(495, "lake"), (1, "lake"), (0, "river"), (None, "river")],
+        ids=["vatnlnr", "vatnlnr-1", "vatnlnr-0", "no-vatnlnr"],
     )
     def test_null_and_blank_follow_vatnlnr(
         self,
@@ -190,6 +234,20 @@ class TestKind:
             rivers, tmp_path / "r.geojson", [river(1, LINE, objekttype=objekttype, vatnlnr=vatnlnr)]
         )
         assert (s.kind, s.objekttype) == (kind, objekttype)
+
+    @pytest.mark.parametrize("objekttype", [NULL, BLANK], ids=["null", "space"])
+    def test_lake_number_0_is_no_lake(
+        self, rivers: ModuleType, tmp_path: Path, objekttype: str | None
+    ) -> None:
+        """Code review round 1: NVE's river layer sends `vatnlnr` 0 for "no
+        lake" (956,447 features), and both of its blank-type features have 0
+        and are rivers. Through `kind_of` itself and through the reader."""
+        assert rivers.kind_of(objekttype, 0) == "river"
+        assert rivers.kind_of(objekttype, 495) == "lake"
+        (s,) = read(
+            rivers, tmp_path / "r.geojson", [river(1, LINE, objekttype=objekttype, vatnlnr=0)]
+        )
+        assert s.kind == "river"
 
     def test_the_25_measured_values(self) -> None:
         assert len(LAKE_SPELLINGS) + len(RIVER_SPELLINGS) + len([NULL, BLANK]) == 25

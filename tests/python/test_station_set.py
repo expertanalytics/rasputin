@@ -146,3 +146,48 @@ class TestReadReferences:
         doc = collection([point(0.0, 0.0, station="2.11.0")])
         with pytest.raises(ValueError, match="Point"):
             station_set.read_references(write(tmp_path / "r.geojson", doc))
+
+
+class TestAMalformedFile:
+    """Code review round 1: a user's malformed station or reference file is
+    refused with a `ValueError` naming what is wrong, never a `KeyError` or
+    `TypeError` escaping from the reader."""
+
+    def test_a_point_without_coordinates_names_its_station(
+        self, station_set: ModuleType, tmp_path: Path
+    ) -> None:
+        broken = nve_station("2.32.0")
+        broken["geometry"]["coordinates"] = None
+        doc = collection([nve_station("2.11.0"), broken])
+        with pytest.raises(ValueError, match=r"2\.32\.0"):
+            station_set.read_stations(write(tmp_path / "s.geojson", doc))
+
+    def test_a_stations_file_without_features(
+        self, station_set: ModuleType, tmp_path: Path
+    ) -> None:
+        doc = collection([nve_station("2.11.0")])
+        del doc["features"]
+        with pytest.raises(ValueError, match="features"):
+            station_set.read_stations(write(tmp_path / "s.geojson", doc))
+
+    def test_a_crs_member_without_a_name(self, station_set: ModuleType, tmp_path: Path) -> None:
+        doc = collection([nve_station("2.11.0")])
+        doc["crs"] = {"type": "name"}
+        with pytest.raises(ValueError, match=r"(?i)\bcrs\b"):
+            station_set.read_stations(write(tmp_path / "s.geojson", doc))
+
+    def test_a_reference_without_a_station(self, station_set: ModuleType, tmp_path: Path) -> None:
+        doc = collection(
+            [feature(box(0, 0, 1, 1), station="2.11.0"), feature(box(5, 5, 6, 6), area=1.0)]
+        )
+        with pytest.raises(ValueError, match="station"):
+            station_set.read_references(write(tmp_path / "r.geojson", doc))
+
+    def test_a_reference_with_null_properties(
+        self, station_set: ModuleType, tmp_path: Path
+    ) -> None:
+        bare = feature(box(5, 5, 6, 6))
+        bare["properties"] = None
+        doc = collection([feature(box(0, 0, 1, 1), station="2.11.0"), bare])
+        with pytest.raises(ValueError, match=r"station|properties"):
+            station_set.read_references(write(tmp_path / "r.geojson", doc))
