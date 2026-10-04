@@ -493,6 +493,9 @@ struct AccumulateOutcome {
                                       // nodes that drain through the node, itself included
     std::vector<std::uint8_t> reach;  // bit 0: that catchment touches the window's edge,
                                       // bit 1: it touches NoData (upstream's two flags)
+    std::vector<std::uint8_t> flow_to; // the neighbour the node drains to (its flooder), as
+                                       // 3*(dr+1)+(dc+1) with dr, dc in -1..1 (4 is never
+                                       // used); 255 for an outlet and on NoData
 };
 template <raster::RasterSource R>
 [[nodiscard]] AccumulateOutcome accumulate(const R& z);
@@ -507,10 +510,15 @@ template <raster::RasterSource R>
   of its 8 neighbours flooded it (one byte), and the order in which nodes
   were reached (the push order: a node is always reached after its flooder,
   so the reverse of that order visits every node before its flooder). One
-  pass over the reverse order adds each node's count into its flooder's.
+  pass over the reverse order adds each node's count into its flooder's. The
+  flooder byte is returned as `flow_to`: it is the drainage tree itself, and
+  it lets a caller check, node by node, that a chain of nodes drains along the
+  chain (the burn, below) and, later, that one gauge's chain of flooders
+  passes through another's (residual inflow). It is the byte the pass already
+  holds, so returning it costs no memory beyond handing the array to the caller.
 - **The flags ride the same pass.** A node starts with bit 0 when it lies
   within one node of the window's edge, and with bit 1 when it is an outlet
-  beside NoData or has an 8-neighbour that is; the pass ORs each node's bits
+  beside NoData or is an 8-neighbour of such an outlet; the pass ORs each node's bits
   into its flooder's. These are exactly the conditions under which
   `upstream`'s `touches_edge` and `touches_nodata` fire for a seed at that
   node, so a count whose bits are clear is the node's whole catchment, and a
@@ -524,13 +532,16 @@ template <raster::RasterSource R>
 - **The oracle is exact**: for every node `c` with data,
   `accumulate(z).count[c] == upstream(z, {c}).nodes_in`, and the two bits
   of `reach[c]` equal `touches_edge` and `touches_nodata` of the same call.
-  Both are "the nodes whose chain of flooders passes through `c`". A test can
+  Both are "the nodes whose chain of flooders passes through `c`". `flow_to`
+  is held to it too: `count[c] == 1 + sum(count[d])` over the nodes `d` whose
+  `flow_to` points at `c`, and `upstream(z, {n}).mask[d] == 1` for the
+  neighbour `n = flow_to[d]` of every node `d` that has one. A test can
   check it node for node on small random DEMs with pits, flats and NoData,
   which is the invariant-critical suite of this increment (below). Also: the
   outlets' counts sum to the number of nodes with data.
 - **Limits.** Refused with `std::length_error` when the raster has 2^32 nodes
   or more (the count and the order are 32-bit); the binding maps it to
-  `ValueError`. Memory per node: 1 byte for the flooder, 4 for the order, 4
+  `ValueError`. Memory per node: 1 byte for the flooder (`flow_to`), 4 for the order, 4
   for the count, 1 for the bits, beside the elevation array and the queue.
   Serial, deterministic; the binding releases the GIL and returns numpy
   arrays of the raster's shape that the result owns.
@@ -613,8 +624,14 @@ moved to the valley floor, then lowered where it still climbs:
 2. **Valley floor.** For each resampled point, the node of least elevation
    within `corridor` of it (ties: the nearer to the point, then the smaller
    (row, column)). The chosen nodes are joined into one 8-connected chain
-   (a straight node-to-node line between neighbours in the sequence), and a
-   node visited twice keeps its first visit. Corridor, 30 m: a guess from the
+   (a straight node-to-node line between consecutive chosen nodes). **A loop
+   is cut**: when the chain reaches a node it has already visited, it goes
+   back to that first visit and drops everything after it (the loop), then
+   goes on from there; skipping the repeated node alone would leave two
+   non-adjacent nodes in a row. Arc lengths are computed after the cuts, along
+   the chain as it stands (10 m for a straight step, 14.1 m for a diagonal one on
+   DTM10), and a resample point whose node was dropped maps to the first visit
+   that replaced it. Corridor, 30 m: a guess from the
    "tens of metres" above; the acceptance re-runs every finding at 15 m and
    60 m.
 3. **Direction check.** If the mean elevation over the chain's last tenth is
@@ -624,20 +641,50 @@ moved to the valley floor, then lowered where it still climbs:
    `uncertain` (a refusal would hide it). Lakes and flat reaches (within
    0.5 m: 39 of 138) pass.
 4. **Descent.** Along the chain from its first node, `z'[k] = min(z[k],
-   z'[k-1] - 0.001 m)`: the elevation is lowered only where it does not
-   already fall, and the chain falls strictly, so the flood's flooder of each
-   chain node is the next one down and water that reaches the chain stays on
-   it. A flat lake reach is lowered by at most 0.001 m per node (0.14 m over
-   a 1.4 km chain). The nodes lowered and the largest lowering are reported
+   z'[k-1] - 0.001 m)`, computed in the array's own dtype: the elevation is
+   lowered only where it does not already fall, and the chain falls strictly
+   (0.001 m is more than float32's spacing below 16384 m, where it is 0.00098 m,
+   and Norway's highest ground is 2469 m, where it is 0.00024 m, so
+   `z'[k] < z'[k-1]` holds in float32 as in float64). **The intent** is
+   that the flood's flooder of each chain node is the next one down, so water
+   that reaches the chain stays on it. **The descent does not by itself
+   guarantee that**: the flood (`upstream.hpp`) pushes a node at the higher of
+   its own height and the level it was reached at, equal levels first in,
+   first out, so a neighbour off the chain that is lower than the next chain
+   node, or lies on a lower route to the outlet, can flood the next chain node
+   before the chain does. The guarantee is therefore **checked, not assumed**:
+   `accumulate`'s `flow_to` says, for each chain node, which neighbour it
+   drains to, and the chain holds where `flow_to[k]` is the direction of
+   `chain[k+1]` for every `k` in the read stretch (`drains`, in "Sensitivity").
+   Where it does not hold, the station is `uncertain` with that cause. A flat
+   lake reach is lowered by at most 0.001 m per node (0.14 m over a 1.4 km
+   chain). The nodes lowered and the largest lowering are reported
    (`lowered_nodes`, `lowered_max_m`); an embankment shows as a large one.
-5. **The placed node** is the chain node whose position along the chain is
-   the nearest to `at`; its distance from `P` is reported
+5. **The end of the chain.** A chain whose last node is still lowered (its
+   `z'` is below its raw `z`) ends in what the flood sees as a pit: it is
+   filled to its spill level and ordered breadth-first, so the counts near the
+   end say nothing about the river. So the chain is **extended downstream
+   along the raw valley floor** past such an end: from the last node, step to
+   the least-elevation 8-neighbour not already on the chain (raw `z`; ties: the
+   smaller (row, column)), apply the descent rule to it, and repeat until a
+   node needs no lowering (`z[k] <= z'[k-1] - 0.001`: the raw ground falls on
+   its own there), or the cap `end_cap` is reached (500 m, 50 nodes on DTM10;
+   it must stay under `WINDOW_MARGIN_M`, 2000 m, so the extension is inside
+   the window that holds the reach), or the next node is NoData or outside the
+   window. The metres added are reported (`end_extended_m`, 0 when the end
+   was not lowered). **A cap hit, NoData or the window's edge before the raw
+   ground falls marks the chain `monotone = False`** (the chain's end is not
+   closed), which makes the station `uncertain`. A flat floor downstream of
+   the gauge, such as a lake, ends here, as it should.
+6. **The placed node** is the chain node that the resample point nearest `at`
+   chose (after loop cuts, see step 2); its distance from `P` is reported
    (`node_offset_m`, at most about the corridor).
 
 The burn is a pure function of the window array, its georeference and the
 `Reach`, with no state; it returns a copy (the DEM repository's array is
-never written) and the `GaugePath`: the chain's (row, column) array, the index
-of the placed node, and the arc length of each node from it. Only one chain of
+never written) and the `GaugePath`: the chain's (row, column) array
+(extension included), the index of the placed node, the arc length of each node
+from it, and `end_extended_m` and `end_closed`. Only one chain of
 the network is burnt, the gauge's own reach, so two links never share a
 cell (the piracy Lindsay names cannot occur), and the burn does not change
 where the DEM puts any divide away from the chain.
@@ -670,12 +717,17 @@ which every window holds.
 
 Stage B reads the area where the sensitivity needs it. The downstream end of
 the sensitivity window, `D`, is the chain node `U` downstream of the placed
-node, and its catchment contains the placed one. Stage B continues from
-stage A's window: it floods from `D` and grows as stage A does. If it
-succeeds, `_core.accumulate` runs in its window and both sides are read. If
-it refuses (NoData, the edge, the cap), `accumulate` runs in stage A's window
-and the downstream side is read as far as its counts have no flag bit set;
-`downstream_checked` says `whole`, `partly` or `none`. Stage B never turns a
+node. Stage B continues from stage A's window: it floods from `D` and grows as
+stage A does, so that `D`'s own catchment is clear of the edge. Whether a count
+along the chain can be trusted is **not** inferred from `D`'s catchment
+containing the placed one (it does so only where the chain drains, which is
+what the sensitivity checks): it is decided node by node, by the flag bits of
+the count itself, on both sides. If stage B succeeds, `_core.accumulate` runs
+in its window and both sides are read. If it refuses (NoData, the edge, the
+cap), `accumulate` runs in stage A's window and each side is read as far as
+its counts have no flag bit set; `downstream_checked` says `whole` (read to
+`U`), `partly` or `none`, and a downstream side not read to `U` makes the
+station `uncertain` (next section). Stage B never turns a
 catchment into a refusal. In the final window the floods are three: `D`'s
 (to size the window), `accumulate`, and the placed node's (the mask the
 outline comes from); the earlier windows have one each. The memory cap's
@@ -691,6 +743,9 @@ class GaugeResult:
     lowered_nodes: int
     lowered_max_m: float
     direction_ok: bool
+    end_extended_m: float      # the chain's end run along the raw valley floor
+    end_closed: bool           # False: cap, NoData or window edge before the ground fell
+    reach_fork: bool           # the mapped reach stopped at a fork (see "Placing the gauge")
     downstream_checked: Literal["whole", "partly", "none"]
     sensitivity: Sensitivity   # next section
 ```
@@ -707,42 +762,66 @@ flat valley floor or lake where the drainage line is arbitrary. The check
 reads the area along the burnt chain at the placed node, never at any other
 choice of node, and never uses NVE's polygon or area.
 
-`sensitivity.assess(count, reach_bits, path, cell_area_km2, uncertainty)`
-(arrays in, a frozen `Sensitivity` out; no DEM, no shapely):
+`sensitivity.assess(count, reach_bits, flow_to, path, cell_area_km2,
+uncertainty, reach_down_m)` (arrays in, a frozen `Sensitivity` out; no DEM, no
+shapely):
 
 1. **Samples**: every chain node whose arc length from the placed node lies in
    `[-U, +U]`, one per node (10 m apart on DTM10; the chain advances a node
-   at a time, so the 10-20 m of Ola's direction is the node spacing). The
-   area at a sample is `count × cell area`, read from the accumulation
-   that stage B ran: one gather, no further flood.
-2. **Which counts to trust.** Upstream of the placed node every count is the
-   node's whole catchment (it lies inside the placed one, which is clear of
-   the window's edge). Downstream, a count whose `reach_bits` is non-zero is
-   a lower bound; the downstream side is read up to the first such node and
-   the distance read is reported (`checked_down_m`).
-3. **The measures**: `A0`, the area at the placed node; `A_up` at the first
-   sample and `A_down` at the last trusted one; the **swing**
-   `(A_down - A_up) / A0`; and the **largest step**, the biggest area
-   increase between two neighbouring samples, with its position in metres
-   from the placed node (negative upstream), which names the confluence when
-   there is one.
-4. **The rule.** The station is **well posed** when the swing is at most
-   `SWING_MAX = 0.05` and the areas do not fall downstream (`monotone`: each
-   chain node drains into the next, so a fall means the burn did not hold
-   and is reported as its own cause). `SWING_MAX` is the `match` class's own
-   bar (95 % overlap, below): a position error inside the gauge's
-   uncertainty is allowed to cost no more than the comparison allows. A
-   station that is not well posed is **`uncertain`**: reported with its
-   agreement numbers, not scored `match` or `miss`, and counted apart.
-   Default (@architect, 2026-10-04): `SWING_MAX = 0.05`, `U` as in "Placing
-   the gauge" (Question 1).
+   at a time). The area at a sample is `count × cell area`, read from the
+   accumulation that stage B ran: one gather, no further flood.
+2. **Which counts to trust, by their flags on both sides.** A sample is
+   trusted when its `reach_bits` is zero: its count is then the node's whole
+   catchment. Containment is not used (the chain upstream of the placed node
+   lies inside the placed catchment only where it drains, which is checked
+   below, not assumed). Each side is read outward from the placed node up to
+   the first untrusted sample; the distances read are `checked_up_m` and
+   `checked_down_m`. **Downstream, the read must reach `U`**: `checked_down_m
+   >= U`, and the mapped river must reach it (`reach_down_m >= U`, from "Placing
+   the gauge"; the extension of "Following the river" is not mapped river). A
+   side that stops short is a gauge whose neighbourhood was not looked at, and
+   the station is **`uncertain`** (cause `downstream_unread`), not scored.
+   Upstream, a river that starts within `U` ends the read without penalty (the
+   area above a source is the hillside's), but a flagged count upstream stops
+   it and counts as unread.
+3. **Does the chain drain along itself?** `drains` is true when, for each
+   consecutive pair of read samples, `flow_to` of the upper one is the
+   direction of the lower one: each chain node drains into the next, node by
+   node, in the flood the counts come from. The descent of the burn intends
+   this and does not guarantee it ("Following the river", step 4). `monotone`
+   is true when the counts increase strictly (`count[k+1] > count[k]`, which
+   `drains` implies: the lower node's count includes the upper one's and
+   itself) and the chain's end is closed (`end_closed`, step 5 there); it is
+   the cheap cross-check, and the two failures are reported as separate causes
+   (`chain_not_draining`, `chain_end_open`).
+4. **The measures**: `A0`, the area at the placed node; `A_up` at the farthest
+   trusted sample upstream and `A_down` at the farthest downstream; the
+   **swing** `max(A0 - A_up, A_down - A0) / A0`, **one-sided** on purpose: the
+   question is how far the area at the true position can be from the area at
+   the placed node, which is the larger of the two ends. Adding both ends would
+   count a move up and a move down at once, which one position cannot make, and
+   would hold the station to a bar stricter than the `match` bar it is
+   measured against; and
+   the **largest step**, the biggest area increase between two neighbouring
+   samples, with its position in metres from the placed node (negative
+   upstream), which names the confluence when there is one.
+5. **The rule.** The station is **well posed** when the swing is at most
+   `SWING_MAX = 0.05`, `drains` and `monotone` hold, and the downstream side
+   was read to `U`. `SWING_MAX` is the `match` class's own bar (95 % overlap,
+   below): a position error inside the gauge's uncertainty is allowed to cost
+   no more than the comparison allows. A station that is not well posed is
+   **`uncertain`**: reported with its agreement numbers, not scored `match` or
+   `miss`, and counted apart, by its causes (`swing`, `downstream_unread`,
+   `chain_not_draining`, `chain_end_open`, and, from the burn, `direction`).
+   Default (@architect, 2026-10-04): `SWING_MAX = 0.05`, one-sided, `U` as in
+   "Placing the gauge" (Question 1).
 
 A confluence 40 m below the gauge with a tributary of 20 % of the placed
 area gives a swing of at least 0.2 and a step at about +40 m (arithmetic, not a measurement). A flat lake
 floor gives a step wherever the flat's nodes join the chain. A river in a
 well-defined valley gains area smoothly: over 2 × 30 m, expected (an estimate
 not yet measured) a fraction of a per cent of a catchment of 100 km². Small
-catchments should be more often uncertain (a 0.44 km² catchment may gain
+catchments should more often be uncertain (a 0.44 km² catchment may gain
 several per cent over 60 m), and that would be true of them, not an artefact: the acceptance reports the share
 uncertain per size band.
 
@@ -768,9 +847,12 @@ What 28 must not do: delineate each station on its own burn and then
 subtract. Two stations' burns differ upstream of both (each chain's descent
 starts from its own first node), so their catchments need not nest exactly. The
 later increment delineates **all gauges of one river from one burn and one
-flood**: the counts then come from one tree of flooders, a chain node
-drains through every node below it, nesting holds by construction, and the
-residual is exactly `count_B - count_A` nodes. The sketch, not built:
+flood**: the counts then come from one tree of flooders, and nesting holds
+where A's chain of flooders passes through B, which is **checkable node by
+node in the shared flood** (`flow_to` along the joint chain, as the sensitivity
+checks `drains`; it is not guaranteed by the burn's descent). Where it holds,
+the residual is exactly `count_B - count_A` nodes; where it does not, the pair
+is reported as not nested. The sketch, not built:
 
 ```python
 # Reach.at becomes a tuple: one chain, several gauges (28 passes one)
@@ -1075,7 +1157,7 @@ Lean, as 22's were: no throwaway implementation. **The invariant-critical
 suite** (mutation testing required, `docs/increments/README.md`, "Cost
 constraints") is `accumulate`'s exact oracle, because every sensitivity and
 every station result rests on it. **The mutation target is `accumulate`'s own
-code**: its `on_reach` callback (the flooder and order records) and its
+code**: its `on_reach` callback (the flooder, which is `flow_to`, and order records) and its
 reverse pass (the count addition and the flag OR). `flood.hpp` is the code
 moved out of `upstream.hpp` and is covered by `upstream`'s existing suite,
 unchanged and run after the move; it gets no mutation round of its own. The
@@ -1093,12 +1175,18 @@ Python suites below are not invariant-critical.
 - *By hand*: a V-valley (the outlet counts the whole valley); a single
   cell; a flat plateau draining over one rim node; a 1 × n strip; a node
   two cells from the edge (bit 0 clear) beside one at one cell (set).
+- *`flow_to`*: for every node with data, 255 exactly when it is an outlet,
+  else a neighbour with data; `count[c] == 1 + sum(count[d])` over the `d`
+  with `flow_to[d]` pointing at `c`; the pointed-at neighbour `n` has
+  `upstream(z, {n}).mask[d] == 1`; following `flow_to` from any node reaches
+  an outlet (no cycle); a two-node ridge with equal heights (the first-in
+  rule decides, the same way twice).
 - *Determinism*: twice gives equal arrays. *Refusal*: the size check, by a
   geometry stub reporting 2^32 nodes (no allocation).
 - `upstream`'s existing suite, unchanged, after the move to `flood.hpp`.
 
 **PR 1, Python:** `test_core_accumulate.py`: shapes, dtypes (`uint32`,
-`uint8`), ownership (the arrays outlive the view), the oracle on two DEMs
+`uint8`; `flow_to` is `uint8`), ownership (the arrays outlive the view), the oracle on two DEMs
 through the binding.
 
 **PR 2, Python** (hand-built DEMs and lines; no network):
@@ -1115,19 +1203,39 @@ through the binding.
   from a node below it counts the strip below the embankment only, and on
   the burnt array counts the whole valley; the burnt array is `<=` the input
   everywhere, equals it off the chain, and on the chain equals the input
-  wherever the input already falls by more than 0.001 m; the chain falls
-  strictly; a line three cells off the valley floor gives a chain on the
+  wherever the input is already below the carried level minus 0.001 m (computed
+  in the array's dtype); the chain falls strictly, `z'[k+1] < z'[k]`, in
+  float32 and in float64 (a flat chain at 3000 m, where float32's spacing is
+  0.00024 m); an embankment in the **last 50 m** of the chain: the end is
+  lowered, the chain is extended along the raw valley floor until the raw
+  ground falls (`end_extended_m` > 0, the added nodes are 8-connected and
+  fall), and the burnt array's `accumulate` has `flow_to[k]` pointing at
+  `chain[k+1]` along the whole chain; a flat floor below the end hits the cap
+  (500 m) and gives `end_closed = False`, and NoData or the window's edge
+  before the ground falls does the same; a lower node beside the chain, off
+  it, that takes the flow: `drains` is reported false at the first such node
+  (the burn is not wrong in that case, the chain is just not the drainage);
+  a line three cells off the valley floor gives a chain on the
   floor, and with a corridor of two cells it stays within two; ties; a chain
-  that revisits a node keeps the first visit; the direction check at 2 m and
+  that revisits a node (a line that doubles back along its own valley) drops
+  the loop and stays 8-connected, with arc lengths recomputed and the placed
+  node still on the chain; the direction check at 2 m and
   at a reach of 100 m, a flat lake reach passing it; the input array is not
   written; the placed node is the chain node nearest `at` along the chain and
   its offset is reported; a reach end outside the window is dropped and
   reported, a placed position outside it is refused.
 - `test_sensitivity.py`: a smooth gain; a confluence step of known size at a
   known position; a flat floor; a swing of exactly 0.05 is well posed and
-  just above it is not; flagged downstream counts trim the window and
-  `checked_down_m` says so; a fall downstream is reported as `monotone =
-  False`; a reach shorter than `U`.
+  just above it is not; the swing is one-sided (areas 0.04 below and 0.04
+  above the placed one give 0.04, well posed); flagged counts trim the
+  window on both sides by their bits, not by position, and `checked_up_m` and
+  `checked_down_m` say so; **a downstream side not read to `U` is
+  `uncertain` (cause `downstream_unread`)**, whether a flag stopped it or the
+  mapped river ends before `U` (`reach_down_m < U`), while a river that
+  starts within `U` upstream is not penalised; `monotone` is strict (two equal
+  neighbouring counts give `False`) and a fall or an open end gives it
+  `False`; `drains` is false when `flow_to` of a read sample points off the
+  chain; each cause is counted apart.
 - `test_catchment.py` gains: a synthetic valley with an embankment and a
   gauge beside the river, from a reach: the catchment equals one flood from
   the hand-burnt placed node, and the whole valley is in it; **a refusal
@@ -1218,9 +1326,11 @@ service can change) and the outputs that are not NVE's data:
 6. **Checks that need no NVE data**, on every station that is not refused: the
    placed node's count equals the catchment's node count before reduction
    (the exact oracle, through the real path); the counts along the chain do
-   not fall downstream (`monotone`); the burn lowered no node off the chain.
-   A failure of the first is a defect; a failure of the second is a station
-   whose burn did not hold, listed.
+   not fall downstream (`monotone`, strict) and each chain node drains into the
+   next (`drains`, from `flow_to`); the burn lowered no node off the chain.
+   A failure of the first is a defect; a failure of the second or third is a
+   station whose burn did not hold, listed (it is `uncertain` by then, and the
+   list says how many of the `uncertain` it explains).
 7. **What passes the increment**: the batch completes for every station with
    a row each; 22's guarantees hold on every accepted reduced outline (area
    kept, simple, start inside); every finding has its line; the checks of
