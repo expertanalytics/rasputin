@@ -671,11 +671,9 @@ It touches `include/terrain/mesh/` and `include/terrain/refinement/`, so
 
 ### Lifting 23c-2's `xfail`
 
-23c-2's DC10 at the default `--start-min-angle` is
-`xfail(strict=True)`, naming this fix. Once this PR merges to master and
-master is merged into the 23c branch, that case passes. A strict `xfail`
-that passes fails the suite, so the merge itself flags it. `@tester` then
-removes the marker in its own commit, which names this PR. `@developer`
-changes nothing for it. If the case still fails after the merge, the hole
-in DC10 has a second cause: it goes back to `@architect` and the marker
-stays.
+**Superseded after the red step.** The `xfail` in 23c-2's DC10 now names
+the cut-path defect, not this fix (`23-basin-scale.md`, point 9), and it
+is lifted by 23c-2's own fix for that defect. This fix lifts nothing on the
+23c branch. If this fix reaches the branch first, DC10 at the default
+passes without the cut-path defect being fixed. `@tester`'s probe there
+does not use the start pass, so the defect stays visible either way.
