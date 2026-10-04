@@ -535,14 +535,30 @@ stopped at dbbe1c6", ruling 2). One small PR, independent of 23c in order.
 reads no height" (its header). For a bad triangle it inserts the DEM node
 nearest the circumcentre, whatever that node's value. R9 accepted this:
 "That vertex is invalid, its triangles are void, and 14 R6's carving
-handles them". It does not handle them well. Trimming drops every triangle
-with an invalid vertex, so one NoData node costs the whole star of the new
-vertex. That includes the area over the valid nodes around it, which the
-mesh covered before the pass ran. The result is a hole, and in 23c-2's DC10
-scene 15c's source check reports the valid nodes under it as uncovered.
-The start pass is there to improve angles, not to decide coverage, so this
-is a defect, not a trade-off. With `--start-min-angle 0` the hole goes. The
-uncut path has the same defect, but no current scene triggers it.
+handles them".
+
+**Corrected after the red step (309b23f, 9a372fb).** This section first
+said the insert left a hole on every path, and that the uncut path had the
+same defect. `@tester` measured otherwise. On the uncut path, refine's
+carving surrounds the NoData vertex with valid neighbours before trim, and
+trim then removes it: 0 of 220 valid nodes uncovered on the projected
+path, and 0 on DC10's reprojected scene run uncut. So uncut, the defect is
+waste, not a hole. The pass inserts a vertex that trim always removes
+(`nodata_vertices_removed` 1 where it should be 0), and refine spends
+nodes closing around it. The hole in DC10 is specific to 23c-2's cut
+pieces. It is a defect of the cut path, ruled in `23-basin-scale.md`, not
+this fix's.
+
+**Still worth shipping on its own**, at about 15 lines. The start pass is
+there to improve angles, not to put vertices where trim will remove them,
+and skipping the node is the pass's own rule for every other candidate it
+cannot use (R4). Its one visible effect is the count of removed NoData
+vertices.
+
+**Order with 23c-2.** This fix must not land in the 23c branch before
+23c-2's cut-path defect is found. Otherwise DC10 stops triggering it, and
+the defect hides rather than gets fixed. `@tester`'s cut-path probe on
+that branch does not use the start pass (`23-basin-scale.md`, point 9).
 
 **R9 is replaced** by this: the pass never inserts a NoData node. A bad
 triangle whose nearest node is NoData stays as it is and is counted.
@@ -612,6 +628,15 @@ Legacy: nothing. `git grep -l -i -e "min_angle" -e "nodata" legacy-archive
   - the tolerance oracle (section 3D's) passes over the valid nodes.
   The control is the same run on today's master, which leaves a hole. That
   is what makes the test red now.
+  *As written at red (confirmed):* there is no hole uncut, so Q-V2 is red
+  on `nodata_vertices_removed` (1 against 0). `@tester` finds the pass's
+  node by diffing two runs at `--tolerance 1000`, pass on and off. Q-V1 is
+  in its own file and target, `test_mesh_quality_void`. Q10 (the C++
+  property and `test_cli_start_quality.py::TestNoData`) pinned R9 as first
+  ruled and is amended in `9a372fb` to pin the skip. That is the right
+  place for the change: a ruling changed, so the pinned behaviour changes
+  in its own commit. Q-V3 expects every golden test unchanged, because none
+  runs the pass over NoData inside its domain.
 - **Q-V3: bytes unchanged where there is no NoData.** Every existing golden
   hash and byte-equality test passes unchanged, and `tools/bench.py`'s mesh
   hash on the 1 m tile is the same (below). `@tester` lists any golden test
