@@ -1,10 +1,10 @@
 # Harness h11: skip the code jobs on prose-only pull requests
 
-Status: design done, Ola's rulings recorded (§9); red step in (21d675e,
-8db5bfc), two points it raised settled in §6.1 (`@architect`, 2026-10-04).
-Ready for `@tester`'s second red amendment (§6.1, point 2: the install trap's
-copy); then `@developer`, then Ola's settings step (§5), which must follow the
-merge directly.
+Status: implemented, awaiting `@reviewer`. Red step 21d675e, 8db5bfc and
+8986083 (the install trap's copy, §6.1); green 8b5c4ee (`@developer`); the
+branch has no CI run yet. Rules text for §7 written (`@architect`, 2026-10-04).
+After the merge, Ola's settings step (§5, step 2) follows directly; the
+standing yes asked for in §10 is answered.
 
 Why: `.github/workflows/main.yaml` has no path filter, so a pull request that
 changes only prose (for example #174: `ROADMAP.md` and one increment status
@@ -421,3 +421,12 @@ citation fixes): checked by a tool, no `@reviewer` round, governance CI only.
 *Design and docs*: `@reviewer` as now, governance CI only. *Rule files*:
 unchanged, full review. Open for Ola when h12 is designed: a standing yes for
 the bookkeeping tier.
+
+**That question is answered.** Ola gave a standing yes for bookkeeping changes
+in the main session of 2026-10-04 (transcript 86af816a), in his words:
+"Standing yes to bookkeepings changes." h12's design takes it from there:
+what counts as bookkeeping, and which acts the yes covers, are h12's to
+define and Ola's to confirm. One rule h12 must settle with it: today a grant
+does not outlive the session it was given in (`.claude/REQUIRED-READING.md`,
+the approval boundary), so until h12 lands, the standing yes is not yet a
+rule any session can act on.
