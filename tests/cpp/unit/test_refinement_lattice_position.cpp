@@ -13,6 +13,10 @@
 // The precondition (p inside the node rectangle) is to_lattice's refusal and
 // is not exercised here; constraint_check_points' refusals are in
 // test_refinement_constraint_points.cpp.
+//
+// The file also pins to_lattice's constraint lookup (increment 15f-4, A4, B4,
+// tag [to_lattice]): an edge listed twice gets the later mask, and edges past
+// masks.size() are ignored.
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -153,7 +157,7 @@ terrain::mesh::LatticeMesh square(const Edges& edges, const MaskList& masks) {
 
 }  // namespace
 
-TEST_CASE("B4: to_lattice gives an edge listed twice the later mask", "[lattice_position][15f-4]") {
+TEST_CASE("B4: to_lattice gives an edge listed twice the later mask", "[to_lattice][15f-4]") {
     SECTION("the same direction") {
         const auto m = square({{0, 1}, {0, 1}}, {5, 9});
         CHECK(sides(m, 0, 1) == std::vector<Side>{{true, 9}});
@@ -177,7 +181,7 @@ TEST_CASE("B4: to_lattice gives an edge listed twice the later mask", "[lattice_
     }
 }
 
-TEST_CASE("B4: to_lattice ignores edges past masks.size()", "[lattice_position][15f-4]") {
+TEST_CASE("B4: to_lattice ignores edges past masks.size()", "[to_lattice][15f-4]") {
     SECTION("an edge with no mask is not constrained") {
         const auto m = square({{0, 1}, {2, 3}, {3, 0}}, {5, 6});
         CHECK(sides(m, 0, 1) == std::vector<Side>{{true, 5}});
