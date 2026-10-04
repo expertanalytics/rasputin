@@ -111,4 +111,9 @@ CI is authoritative: local green does not mean the branch is green, so
 ```bash
 gh pr checks <pr>      # must be green; required for merge on master
 ```
+`master` merges through a merge queue: `gh pr merge <pr>` enqueues the PR (the
+queue's method, merge commit, applies), and the queue tests it on top of the
+PRs ahead and merges it. No update-branch loop. A method flag such as `--merge`
+only prints a warning (the queue's method wins); `-d`/`--delete-branch` is
+refused. Never pass `--admin`: it bypasses the queue.
 

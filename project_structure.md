@@ -73,9 +73,9 @@ include/terrain/           # public C++ headers, header-only where possible
                            #   where constraint edges cross grid lines, and
                            #   the midpoints between, filed by edge (15f)
   hydrology/
-    upstream.hpp           # upstream(z, seed) -> UpstreamOutcome: one
-                           #   Priority-Flood labelling the nodes that drain
-                           #   into the seed set, plus edge/NoData flags (22)
+    flood.hpp              # detail::flood: the one Priority-Flood of both (29)
+    upstream.hpp           # upstream(z, seed): the seed set's catchment (22)
+    accumulate.hpp         # accumulate(z): count, reach, flow_to per node (29)
   vector_simplify/
     area_collapse.hpp      # reduce_ring: area-preserving segment collapse
                            #   (Kronenfeld et al. 2020) to a horizontal
@@ -389,7 +389,13 @@ Header-only. `area_collapse.hpp` (increment 22): `reduce_ring`, Kronenfeld, Stan
 
 ### `hydrology`
 
-Header-only; depends on `raster` only. `upstream.hpp` (increment 22): `upstream(z, seed)`, a template on the `RasterSource` concept. One Priority-Flood (Barnes, Lehman and Mulla 2014) from the window's edge and from the nodes beside NoData, ties first in, first out, labels a node *in* when it is a seed or was flooded from an *in* node. So each node drains to the node that flooded it, its lowest filled neighbour, and there is no separate fill, no flat resolution and no D8 or accumulation pass. Returns the mask, the in-nodes' count and bounds, and `touches_edge` / `touches_nodata` (an in-node that is, or neighbours, an outlet of that kind). Serial; the binding releases the GIL. What `auto_catchments.md` also sketches (epsilon filling, D8, accumulation, streams and Strahler order, RichDEM) is not built; the outline tracer is Python (`outline.py`). See `docs/increments/22-auto-catchment.md`.
+Header-only; depends on `raster` only. `flood.hpp` (increment 29) holds the one Priority-Flood (Barnes, Lehman and Mulla 2014), `detail::flood(z, state, on_reach)`, from the window's edge and from the nodes beside NoData, ties first in, first out; it calls `on_reach(j, j)` for each outlet and `on_reach(i, j)` when popped node `i` reaches node `j` first, and returns the outlets beside NoData. Both functions below run it, so they cannot drift. Each node drains to the node that flooded it, its lowest filled neighbour, so there is no separate fill, no flat resolution and no D8 pass.
+
+`upstream.hpp` (increment 22): `upstream(z, seed)`, a template on the `RasterSource` concept, labels a node *in* when it is a seed or was flooded from an *in* node. Returns the mask, the in-nodes' count and bounds, and `touches_edge` / `touches_nodata` (an in-node that is, or neighbours, an outlet of that kind).
+
+`accumulate.hpp` (increment 29): `accumulate(z)`, the accumulation pass. One flood records each node's flooder (`flow_to`, 255 for an outlet and on NoData) and the push order; one sweep in reverse push order adds each node's count and reach bits to its flooder. For every node `c` with data, `count[c]` and the two `reach` bits equal `upstream(z, {c})`'s `nodes_in`, `touches_edge` and `touches_nodata`. Refused with `std::length_error` (a `ValueError` in Python) at 2^32 nodes or more, before any per-node array is allocated, since the count and order are 32-bit.
+
+Serial; the bindings release the GIL. What `auto_catchments.md` also sketches (epsilon filling, D8, streams and Strahler order, RichDEM) is not built; the outline tracer is Python (`outline.py`). See `docs/increments/22-auto-catchment.md` and `docs/increments/29-nve-reference-catchments.md`.
 
 ### `noding`
 

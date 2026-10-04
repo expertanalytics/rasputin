@@ -130,7 +130,7 @@ the same `node(round) == p` test (`lattice_position`, `refine.hpp:132-141`).
   stays first, so a raster with fewer than 2 rows or columns still answers
   nullopt everywhere, nodes included, as today.
 - `bilinear_batch`, the `sample` binding and the Python side change in no
-  code. The binding's docstring (`bindings/core.cpp:927-932`), the stub's
+  code. The binding's docstring (`bindings/core.cpp:935-940`), the stub's
   (`src_python/tin_engine/_core.pyi`, `sample`) and the comment above
   `bilinear` say the new rule.
 - `lattice_position` is **not** changed to call `node_at` here. That would

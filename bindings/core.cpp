@@ -13,6 +13,7 @@
 #include <terrain/core/point.hpp>
 #include <terrain/core/pslg.hpp>
 #include <terrain/core/pslg_builder.hpp>
+#include <terrain/hydrology/accumulate.hpp>
 #include <terrain/hydrology/upstream.hpp>
 #include <terrain/noding/node.hpp>
 #include <terrain/noding/noded_pslg_builder.hpp>
@@ -308,6 +309,13 @@ template <typename T>
 // The flood's outcome with the shape its mask is viewed in.
 struct BoundUpstream {
     terrain::hydrology::UpstreamOutcome outcome;
+    std::size_t rows;
+    std::size_t cols;
+};
+
+// The accumulation with the shape its arrays are viewed in.
+struct BoundAccumulate {
+    terrain::hydrology::AccumulateOutcome outcome;
     std::size_t rows;
     std::size_t cols;
 };
@@ -1320,6 +1328,49 @@ The catchment of a seed mask: every node draining into a seed (Priority-Flood).
 
 seed is (rows, cols), non-zero (or True) for a seed; any other shape is a
 ValueError. NoData is never in. Releases the GIL.
+)doc");
+
+    // A (rows, cols) read-only view of one of the outcome's arrays, owned by it.
+    const auto grid_of = [](auto member) {
+        return [member](const py::object& self) {
+            const auto& b = self.cast<const BoundAccumulate&>();
+            const auto& v = b.outcome.*member;
+            const auto cols = static_cast<py::ssize_t>(b.cols);
+            return readonly_view(self, v.data(), {static_cast<py::ssize_t>(b.rows), cols},
+                                 {cols * static_cast<py::ssize_t>(sizeof(v[0])),
+                                  static_cast<py::ssize_t>(sizeof(v[0]))});
+        };
+    };
+    using terrain::hydrology::AccumulateOutcome;
+    py::class_<BoundAccumulate>(m, "AccumulateOutcome", R"doc(
+What accumulate() returned: per node, how many nodes drain through it, whether
+that catchment touches the window's edge or NoData, and where the node drains.
+)doc")
+        .def_property_readonly("count", grid_of(&AccumulateOutcome::count),
+                               "Read-only (rows, cols) uint32: 0 on NoData, else the nodes "
+                               "draining through the node, itself included.")
+        .def_property_readonly("reach", grid_of(&AccumulateOutcome::reach),
+                               "Read-only (rows, cols) uint8: bit 0 the catchment touches the "
+                               "window's edge, bit 1 it touches NoData.")
+        .def_property_readonly("flow_to", grid_of(&AccumulateOutcome::flow_to),
+                               "Read-only (rows, cols) uint8: 3*(dr+1)+(dc+1) of the neighbour "
+                               "the node drains to; 255 for an outlet and on NoData.");
+
+    m.def(
+        "accumulate",
+        [](const BoundRasterView& raster) {
+            const auto g = std::visit([](const auto& v) { return v.geometry(); }, raster.view);
+            // Every buffer read below is held by `raster`.
+            const py::gil_scoped_release unlocked;
+            return BoundAccumulate{
+                std::visit([](const auto& v) { return terrain::hydrology::accumulate(v); },
+                           raster.view),
+                g.rows(), g.cols()};
+        },
+        py::arg("view"), R"doc(
+Flow accumulation from the same flood as upstream(): for every node, the count,
+the two reach bits and the node's flooder (the neighbour it drains to).
+2^32 nodes or more is a ValueError. Releases the GIL.
 )doc");
 
     using terrain::vector_simplify::ReduceOutcome;

@@ -307,6 +307,13 @@ add_terrain_backend_test(prop_noding_verifier_sweep property/prop_noding_verifie
 # invariants on random DEMs are the defence. It starts no threads.
 add_terrain_test(test_hydrology_upstream unit/test_hydrology_upstream.cpp)
 
+# Accumulation from the same flood, increment 29 PR 1
+# (docs/increments/29-nve-reference-catchments.md, "Accumulation, from the same
+# flood (C++)" and "The red suites"). INVARIANT-CRITICAL: the exact oracle
+# against upstream, node for node; mutation target is accumulate's on_reach
+# callback and its reverse pass. It starts no threads.
+add_terrain_test(test_hydrology_accumulate unit/test_hydrology_accumulate.cpp)
+
 # The outline reduction, increment 22 PR 2 (docs/increments/22-auto-catchment.md,
 # "The reduction" and "The red suites"): area-preserving segment collapse with
 # the exact kernel. A backend test because it names DefaultKernel. Not named
