@@ -2,16 +2,18 @@
 
 Status: **designed by `@architect`, 2026-10-01; B1-B14 ruled by Ola on
 2026-10-01 and the design reworked to the rulings; B15 and B16 ruled
-2026-10-02. 23a-1 merged (#136); 23a-2 merged (#138); 23b implemented (red
+2026-10-02. 23a-1 merged (#136); 23a-2 merged (#138); 23b merged (#162,
+merge commit `4f56551`; red
 `45045dc`, its open points settled under "Settled after 23b's red step
 (45045dc)"; green `3c464ec`, N18 in at `185081c`), 249 net production
 lines after the master merge (248 before it; the merged sum takes one
 more line), `@perf`'s acceptance recorded at `91c7cb5` and again at
 `4541e38` (ACCEPTED, `docs/benchmarks/2026-10-04/23b-merged-acceptance.md`);
 23c split in two:
-23c-1 (about 215 estimated, 156 built) in review, no `@perf` run needed,
-and 23c-2 (about 265) with its red step written on `worktree-23c`; 23d
-onwards not implemented.** Written before `@tester`
+23c-1 (about 215 estimated, 156 built) merged (#164, merge commit
+`e56a2bf`), no `@perf` run needed, and 23c-2 (about 265) implemented on
+`worktree-23c`, not pushed: `@reviewer` approved code round 3 (`45e822d`),
+and a red step written since (`d9a93b6`); 23d onwards not implemented.** Written before `@tester`
 per `docs/increments/README.md` step 1. The rulings are under "Ruled by Ola,
 2026-10-01", below; the questions are kept as asked at the end, each marked
 with its ruling. 23a-1 and 23a-2 are designed in full under "Windowed
