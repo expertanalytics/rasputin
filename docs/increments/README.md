@@ -110,10 +110,10 @@ is wrong there, fix the file rather than correcting it in a prompt — the
 correction is otherwise lost with the transcript.
 
 **Mutation testing is required only for the invariant-critical suite of an
-increment**, named as such in its increment file. Writing a throwaway
-implementation, compiling the suite against it, and killing deliberate mutants
-catches defects a passing suite hides. It is also the slowest part of a round.
-Spend it where the topology decisions are, not on value types whose failure
+increment**, named as such in its increment file with the mutation targets its
+kill record must cover. Writing a throwaway implementation, compiling the suite
+against it, and killing deliberate mutants catches defects a passing suite
+hides. It is also the slowest part of a round. Spend it where the topology decisions are, not on value types whose failure
 mode is a typo.
 
 **Template cross products are opt-in, not default.** Running every algorithm
