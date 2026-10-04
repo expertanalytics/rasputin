@@ -161,6 +161,19 @@ class TestRefusals:
         with pytest.raises(ValueError, match="pieces"):
             dec.partition(64, 64, 1.0, pieces=pieces)
 
+    @pytest.mark.parametrize(
+        ("cols", "rows"),
+        [(0, 64), (64, 0), (0, 0), (-1, 64), (64, -3)],
+        ids=["no-columns", "no-rows", "neither", "negative-cols", "negative-rows"],
+    )
+    @pytest.mark.parametrize("pieces", [1, 4])
+    def test_an_empty_window(self, dec: ModuleType, cols: int, rows: int, pieces: int) -> None:
+        """Point 4 of "Three points from 23c-1's green (3ffae13)": `cols < 1`
+        or `rows < 1` is a `ValueError` naming the cause, not a
+        `ZeroDivisionError` from step 2 nor a partition of nothing."""
+        with pytest.raises(ValueError, match="cols|rows|window"):
+            dec.partition(cols, rows, 1.0, pieces=pieces)
+
     def test_a_budget_under_one_node(self, dec: ModuleType) -> None:
         """No cell of one node fits, so step 3 cannot end: refused, not looped."""
         b = dec.bytes_per_node(1.0)
