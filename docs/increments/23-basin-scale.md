@@ -2,10 +2,10 @@
 
 Status: **designed by `@architect`, 2026-10-01; B1-B14 ruled by Ola on
 2026-10-01 and the design reworked to the rulings; B15 and B16 ruled
-2026-10-02. 23a-1 merged (#136), 23a-2 merged (#138); 23b approved and
-accepted (with its speed fix, 247 lines), not pushed; 23c split in two:
-23c-1 (about 215 estimated, 154 built) in review, no `@perf` run needed,
-and 23c-2 (about 265) with its red step written on `worktree-23c`; 23d
+2026-10-02. 23a-1 merged (#136), 23a-2 merged (#138); 23b (#162, 247 lines)
+and 23c-1 (#164, 154 lines) approved and merging; 23c-2 (about 265 estimated)
+green at 478 net lines, `@perf`'s bench and Velhas smoke passed (`9b7a5b4`),
+in review; 23c-3 (about 185, each piece's memory its own) next; 23d
 onwards not implemented.** Written before `@tester`
 per `docs/increments/README.md` step 1. The rulings are under "Ruled by Ola,
 2026-10-01", below; the questions are kept as asked at the end, each marked
@@ -3029,6 +3029,8 @@ equality and DC4's control hold.
      peak RSS included). Peak RSS means nothing until pieces hold only their
      own windows. 23c-3 must also show its piece files byte-identical to
      23c-2's on the same run, because it changes memory, not meshes (K6).
+   *At review (992d542): 478 net.* B17's size grammar (point 11) added the
+   36 lines over 442, still under 700.
 
 9. *(Withdrawn by point 10: the premise did not hold.)* **DC10's hole is 23c-2's defect, not increment 20's. Found and fixed
    before review.** This corrects ruling 2 above. `@tester`'s red step for
