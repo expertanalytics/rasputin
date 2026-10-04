@@ -191,10 +191,8 @@ def summary(record: RunRecord) -> str:
     removed = by.get("nodata_vertices_removed")
     if removed is not None and removed.number:
         n = int(removed.value)
-        # Without a tolerance a vertex next to a NoData cell goes too (ab692ee).
-        where = "on NoData cells" if tolerance is not None else "on or next to NoData cells"
         said.append(
-            f"{plural(n, 'vertex', 'vertices')} {where} "
+            f"{plural(n, 'vertex', 'vertices')} on NoData cells "
             f"{'was removed with its' if n == 1 else 'were removed with their'} triangles."
         )
     if "heights" in by:

@@ -387,3 +387,10 @@ target_compile_definitions(test_build_hardening PRIVATE
 # than one assertion (T1 and T3 have one check each, T2 one CHECK after REQUIREs
 # that stop the case). A case that can fail four times needs this revisited.
 catch_discover_tests(test_build_hardening PROPERTIES SKIP_RETURN_CODE 4)
+
+# Increment 27 (docs/increments/27-node-sampling.md, S5): RasterGeometry::node_at
+# against refine's own node test. Its own target, because it includes refine.hpp
+# and so needs the backend target and Threads, which test_raster does not.
+# refine.hpp names DefaultKernel, hence the backend target.
+add_terrain_backend_test(test_raster_node_at unit/test_raster_node_at.cpp)
+target_link_libraries(test_raster_node_at PRIVATE Threads::Threads)

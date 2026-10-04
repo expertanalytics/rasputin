@@ -467,23 +467,23 @@ class TestSummary:
         assert "within 5 m" in text and "largest difference 4.9997 m" in text, text
         assert "199 vertices on NoData cells" in text, text
 
-    def test_the_no_tolerance_summary_says_on_or_next_to(self, rr: ModuleType) -> None:
-        """Increment 12's one-cell trim, until the sampler fix ("NoData on the
-        no-tolerance path"): the stride path's count includes vertices next to
-        a NoData cell, and the summary says so; the tolerance path does not."""
-        assert "6 vertices on or next to NoData cells were removed" in rr.summary(stride(rr))
-        assert "on or next to" not in rr.summary(projected(rr))
+    def test_the_no_tolerance_summary_says_on_nodata_cells(self, rr: ModuleType) -> None:
+        """Increment 27 ended increment 12's one-cell trim: a node reads only
+        itself, so the stride path's count is NoData vertices and the summary
+        uses the tolerance path's wording."""
+        text = rr.summary(stride(rr))
+        assert "6 vertices on NoData cells were removed" in text, text
+        assert "next to" not in text, text
+        assert "next to" not in rr.summary(projected(rr))
 
-    @pytest.mark.parametrize(
-        ("path", "where"),
-        [("projected", "on NoData cells"), ("stride", "on or next to NoData cells")],
-    )
-    def test_one_removed_vertex_is_singular(self, rr: ModuleType, path: str, where: str) -> None:
+    @pytest.mark.parametrize("path", ["projected", "stride"])
+    def test_one_removed_vertex_is_singular(self, rr: ModuleType, path: str) -> None:
         """Plurals are correct English ("Settled after the red step", 8):
-        one vertex goes with its triangles, not their triangles."""
+        one vertex goes with its triangles, not their triangles. One wording
+        on both paths since increment 27."""
         record = {"projected": projected, "stride": stride}[path](rr, nodata_vertices_removed=1)
         text = rr.summary(record)
-        assert f"1 vertex {where} was removed with its triangles." in text, text
+        assert "1 vertex on NoData cells was removed with its triangles." in text, text
         assert "their" not in text, text
 
     def test_no_nodata_sentence_without_nodata(self, rr: ModuleType) -> None:
