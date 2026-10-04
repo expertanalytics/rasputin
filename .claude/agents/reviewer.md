@@ -26,7 +26,9 @@ gh pr checks <pr>              # or: gh run list --branch <branch> --limit 1
 ```
 **Red CI is an automatic `CHANGES REQUESTED`**, and so is a workflow that does
 not exercise the current build: read `.github/` when the change touches the
-build. Local green is not green.
+build. Local green is not green. On a prose-only PR (`CLAUDE.md` §4) the
+C++, sanitizer and Python checks show as skipped; that is the design, not a
+red, and `CI result` is the check that decides.
 
 ### The checks the gates cannot make
 

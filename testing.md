@@ -16,7 +16,8 @@ The goal is "water tight": no module ships without invariant tests, every algori
 > Live today (`.github/workflows/main.yaml`): Catch2 C++ suites via ctest on
 > ubuntu and macos, an asan+ubsan Debug build of the same suites, pytest
 > across Python 3.12-3.14 with an enforced line coverage floor, mypy
-> strict, ruff, and the governance gates in `tools/`.
+> strict, ruff, and the governance gates in `tools/`. A PR that changes only
+> prose runs the governance gates alone (`tools/ci_changes.py` decides).
 
 ## Three data tiers [planned]
 
@@ -225,7 +226,8 @@ Property test generators live alongside the modules they test (e.g. `tests/cpp/p
 
 **Sanitizers in CI:**
 
-- **[live]** asan + ubsan Debug build run on every PR (`sanitizers` job in
+- **[live]** asan + ubsan Debug build run on every PR that changes code
+  (`sanitizers` job in
   `.github/workflows/main.yaml`). Built with `-fno-sanitize-recover=all`,
   which is load-bearing: UBSan's default is to print the diagnostic and
   continue, so the process exits 0 and the job passes green on undefined

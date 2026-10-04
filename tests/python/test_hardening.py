@@ -37,10 +37,15 @@ import pytest
 from typer.testing import CliRunner
 
 import tin_engine._core as core
+from harness_fixtures import Tool
 from tin_engine import cli, installed_version
 from tin_engine.cli import app
 
 REPO = Path(__file__).resolve().parents[2]
+
+#: h11's classifier, ``tools/ci_changes.py``: the trap's copy leaves out the
+#: files its ``is_prose`` accepts (``copy_source_tree``).
+ci = Tool("ci_changes")
 
 runner = CliRunner(env={"NO_COLOR": "1", "TERM": "dumb"})
 
@@ -163,13 +168,25 @@ SENTINEL = "RASPUTIN_T6_SENTINEL:STRING=kept"
 
 def copy_source_tree(destination: Path) -> Path:
     """The tracked and untracked-but-not-ignored files of this checkout, so the
-    copy has no build directory of its own until the first install makes one."""
+    copy has no build directory of its own until the first install makes one.
+
+    Prose is left out: every path ``tools/ci_changes.py``'s ``is_prose`` accepts
+    (h11, ``docs/increments/h11-ci-path-filter.md`` section 6.1, point 2).
+    ``shutil.copy2`` opens each file in this process, so copying prose would be
+    a prose read, which ``conftest.py``'s session-end check (h11's T5) fails on;
+    and the build must not need prose, because a prose-only pull request runs
+    no build. The ``NOT_PROSE`` files, ``README.md`` among them, are still
+    copied. The installs run in a ``pip`` subprocess that the hook cannot see,
+    so this trap is where a build that starts to need a prose file shows up: as
+    a failed install, whose message names ``NOT_PROSE``."""
     listed = subprocess.run(
         ["git", "-C", str(REPO), "ls-files", "-co", "--exclude-standard", "-z"],
         capture_output=True,
         check=True,
     ).stdout.decode()
     for name in filter(None, listed.split("\0")):
+        if ci.is_prose(name):
+            continue
         source = REPO / name
         if source.is_file():
             target = destination / name
@@ -196,6 +213,13 @@ def build_environment(env_dir: Path) -> Path:
     return python
 
 
+#: The one sentence h11 section 6.1 adds to a failed install's message.
+NOT_COPIED = (
+    "\nIf the build now needs a file the source copy leaves out (prose, as"
+    " tools/ci_changes.py decides), that file belongs in NOT_PROSE."
+)
+
+
 def install(python: Path, source: Path, *settings: str) -> Path:
     """A non-editable, non-isolated ``pip install`` of ``source``; the installed
     extension's path. Dependencies are not installed: the extension is loaded by
@@ -203,7 +227,7 @@ def install(python: Path, source: Path, *settings: str) -> Path:
     argv = [str(python), "-m", "pip", "install", "--no-build-isolation", "--no-deps"]
     argv += ["--quiet", str(source), *settings]
     done = subprocess.run(argv, capture_output=True, text=True, check=False, timeout=1800)
-    assert done.returncode == 0, done.stderr[-4000:]
+    assert done.returncode == 0, done.stderr[-4000:] + NOT_COPIED
     (built,) = python.parent.parent.glob("lib/python*/site-packages/tin_engine/_core*.so")
     return built
 
