@@ -441,7 +441,7 @@ persona writes there.
 | `tools/rule_sizes.py` | `".claude/briefs/common.md"` appended to `RULE_FILES` | 1 |
 | `.claude/briefs/common.md` | new, §3.3 | prose |
 | `CLAUDE.md`, `.claude/REQUIRED-READING.md`, `.claude/agents/tester.md`, `.claude/agents/reviewer.md` | §3.3, §4 | prose |
-| `tests/python/harness_fixtures.py` | `tools/brief.py`, `.claude/hooks/guard_spawn.py` and `.claude/briefs/common.md` in `COPIED` | test |
+| `tests/python/harness_fixtures.py` | `tools/brief.py` and `.claude/hooks/guard_spawn.py` in `COPIED` (the template is copied by `brief_fixtures.make_brief_repo`, §11 point 2) | test |
 | **Total** | | **~200**, under the 700 ceiling |
 
 The plan said about 140; the difference is the block reader beside its
@@ -658,6 +658,49 @@ None. Two choices made here, which Ola may overturn:
    `@developer` who repairs `brief.py`, and only Ola could unblock it by
    hand. The check on the working directory does not depend on `brief.py`
    and keeps working either way.
+
+## 11. Settled after h9's red step (84fbde6)
+
+@tester pinned ten choices the design left open. Rule numbers 1 to 4 in
+points 5 and 8 are §3.1a's concurrency rules, not §3.5's hook rules.
+
+1. **`brief.main(argv: list[str] | None = None) -> int`.** Confirmed; it
+   returns the exit status (0, or 2 on a refusal) and does not call
+   `sys.exit`, so test 6 can call it after emptying `WRITES` in the fixture
+   copy.
+2. **The template is not in `COPIED`.** Confirmed, and §5 is overruled on
+   this point: `COPIED` gets `tools/brief.py` and
+   `.claude/hooks/guard_spawn.py` only. Copying `common.md` into every
+   harness fixture would move `test_rule_sizes.py`'s pinned totals;
+   `brief_fixtures.make_brief_repo` copies it where it is needed.
+3. **A pass with a notice.** Ruled: **no `permissionDecision` key at all**,
+   only `hookSpecificOutput.additionalContext` (with `hookEventName`). Not
+   `"allow"`: this hook only refuses or stays silent, and never grants past
+   the permission system. Rule 22's notice mentions `cwd` or `directory`:
+   confirmed.
+4. **The rule-2 refusal** contains the event's `cwd`, the project path, and
+   exactly `run: cd <project>`. Confirmed.
+5. **Wordings pinned only where the design gives them**: concurrency rule 1
+   "timing run", rule 2 "at most two writers", rule 4 the shared worktree's
+   path, a missing `--ola` quotation its own text; rule 3 by exit 2 only.
+   Confirmed.
+6. **Test 8.** The write-limit line ends `and your note file.`; `WRITES` is
+   compared as text; reviewer's line names no other persona's path.
+   Confirmed.
+7. **Test 3.** The `last:` verdict is cut to exactly 200 characters, a
+   prefix of the verdict line, with no marker. Confirmed (h8's display cut
+   adds `...`; this one does not, because the persona reads the file).
+8. **Also refused (exit 2):** `--beside nobody:<path>` (not a persona), and
+   a `--worktree` that is a subdirectory of a checkout (§3.1 asks that
+   `--show-toplevel` resolves to the path itself). Confirmed.
+9. **Test 21.** After the hook, the fixture's harness directory holds only
+   `unattended.json`. Confirmed: nothing queued (§3.5).
+10. **Test 24.** The new entry directly after the `AskUserQuestion` entry.
+    Confirmed: that is §6.
+
+**What @tester amends before green** (one commit, reason in its message):
+point 3, `tests/python/test_guard_spawn.py` lines 342 and 380,
+`assert decision in (None, "allow")` becomes `assert decision is None`.
 
 ## Review
 
