@@ -139,14 +139,12 @@ public:
                 return std::nullopt;
         }
         // Adjacency from one flat table of directed edges (to, triangle),
-        // grouped by origin vertex, not from a hash map. The final check and
-        // the strip run rebuild refine's whole output here, and @perf measured
-        // that rebuild as most of the strip run's time
-        // (docs/increments/15f-edge-strip.md, A2); a node-based container
-        // allocates once per edge, this table once per array. Each group is
-        // sorted by `to`, so an edge used twice is two equal `to` side by side,
-        // and the neighbour across a -> b is a binary search for a in b's
-        // group: O(d log d) per vertex of degree d, so a wide fan stays cheap.
+        // grouped by origin vertex, not from a hash map: a node-based
+        // container allocates once per edge, this table once per array
+        // (docs/increments/15f-edge-strip.md, A2). Each group is sorted by
+        // `to`, so an edge used twice sits next to its twin, and the neighbour
+        // across a -> b is a binary search for a in b's group: O(d log d) per
+        // vertex of degree d, so a wide fan stays cheap.
         std::vector<std::size_t> first(nv + 1, 0);
         for (const auto& tri : m.triangles_)
             for (const auto v : tri)
