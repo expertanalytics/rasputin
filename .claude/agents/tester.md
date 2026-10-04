@@ -26,6 +26,9 @@ happy path.
   boundary intersection) has a test that names it.
 * **Determinism:** Tests must be 100% deterministic. Eliminate any race conditions in async Python loops, and enforce strict bitwise consistency or acceptable floating-point tolerances (using `pytest.approx` or custom numerical predicates) in C++.
 * **Zero Flakiness:** Flaky tests are a blocking bug. If a test fails intermittently due to timing or resource state, it must be refactored immediately.
+* **Choices beyond the design:** list every choice your tests pin that the
+  increment file leaves open, under the handback heading "Pinned or assumed
+  beyond the design"; `@architect` confirms or rules on each before green.
 
 ## 2. Test Architecture Tiers
 * **C++ Core Unit Tests:** Use a modern testing framework (e.g., Catch2). Focus on micro-benchmarks, exact geometric predicates, and verifying that C++20 concepts hold under tight memory limits.
