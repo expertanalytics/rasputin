@@ -467,4 +467,4 @@ merge), P3a ("no checks reported" is not green; read `mergeStateStatus`), P5a
 proposals P2b (`check_citations.py` labels at-risk lines unchanged, moved or
 rewritten), P3b (the recap lists open PRs with merge state), P4 (`brief.py`
 names the test command a worktree can run); one cut, C1 (about 90 words of
-`REQUIRED-READING.md`). Questions Q1 to Q3 there, each with a default.
+`REQUIRED-READING.md`). Questions Q1 to Q3 there. **Ruled 2026-10-04:** Q1 and Q3 yes (the whole-suite run in P1; P5a). Q2: no review-round cap, and `orchestrator.md`'s "past two rounds" line is dropped. The other proposals still wait on Ola.

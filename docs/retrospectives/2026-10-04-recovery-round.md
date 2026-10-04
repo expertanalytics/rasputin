@@ -32,7 +32,7 @@ Covered? In part.
 - Running the whole suite against the fix: no rule. It also pulls against
   Ola's standing preference for lean red steps with no throwaway rounds (one
   red step with them took 78 minutes). This time it was cheap: the fix was one line
-  the design named (`tools/brief.py@afcceb9:241`, `path = ROOT / args.increment`), and the run was 151 tests.
+  the design named (it changes `path = ROOT / args.increment` at `tools/brief.py@afcceb9:241` to `worktree / args.increment`; 4ee0328), and the run was 151 tests.
 
 Proposal (P1, `tester.md` §4, about 40 words): extend *Explicit Assertions*
 to refusals ("a refusal test asserts the reason, on stderr or in the message,
@@ -232,3 +232,19 @@ list." The cut is larger than the four proposals add.
 - **Q3, P5a.** Should a recorded publishing yes lapse with the session that
   heard it? Default: yes. Until then, the "(Ola yes)" entries in the live
   `session.md` QUEUE line should be asked again before the push.
+
+**Ruled 2026-10-04 (Ola, 07:48 and 07:50 UTC).** Q1: "Q1, yes": `@tester`
+runs the whole suite against a scratch copy of a fix the design names by
+code location. Q3: "Q3 yes": P5a as worded. Q2: Ola asked "when did I rule
+this? Sounds like something you've come up with, but I might be wrong",
+then: "the data is there, if we need to look. Duplicating this simply
+doesn't seem important." No cap is written down, and `orchestrator.md`'s
+watch-list line "a review that went past two rounds" is dropped, not moved.
+No turn of Ola's in this project's transcripts states a two-round cap, so
+the "(Ola's two-round cap)" in `docs/increments/23-basin-scale.md` (23a-2
+design, round 2) is not his. P1's refusal half, P2a, P2b, P3a, P3b, P4, P5b
+and C1 are still unruled.
+
+## Review
+
+**Round 1**, `@reviewer`, on dd48544 (base master d20126b): **CHANGES REQUESTED**. 0 production lines (two prose files). Not pushed, so no CI. `python3 tools/check_citations.py`: all resolve, none at risk. Checked and holding: the cited commits (afcceb9, 4ee0328, e4f07c3, 24161fe, d5aeb82, e3a6add, 4cd28dc), transcript lines 8 to 226 and Ola's two quotes, branch protection `strict` and `allow_auto_merge: false`, #167's merge time, #162 `DIRTY`, the rule-size figures against 2d2d5a6, and the two auto-mode quotes. Blocking: (1) Ola ruled Q1 to Q3 on 2026-10-04, so the rulings are recorded, including that no Ola turn states the two-round cap that `23-basin-scale.md` attributes to him; (2) `:35` showed the line before the fix as the fix.
