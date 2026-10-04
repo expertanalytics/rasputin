@@ -128,7 +128,8 @@ def _steps(chain: list[tuple[int, int]], m: RasterMeta) -> list[float]:
 
 def burn_reach(window: DemTile, reach: Reach) -> tuple[DemTile, GaugePath]:
     """The window with the reach burnt in (a copy, same `meta`), and its path.
-    A placed position outside the window is a `ValueError`."""
+    A placed position outside the window, or a chain node without data, is a
+    `ValueError`."""
     m, raw = window.meta, np.asarray(window.array)
     ok = np.ones(raw.shape, dtype=bool) if m.nodata is None else raw != m.nodata
     step = min(m.delta_x, m.delta_y)
@@ -156,6 +157,14 @@ def burn_reach(window: DemTile, reach: Reach) -> tuple[DemTile, GaugePath]:
     ]
     joined, where = _join(chosen)
     chain, to = _taut(joined)
+    # The join does not look at the nodes it steps through: one may be NoData.
+    gap = next((n for n in chain if not ok[n]), None)
+    if gap is not None:
+        gx, gy = m.x_min + gap[1] * m.delta_x, m.y_max - gap[0] * m.delta_y
+        raise ValueError(
+            f"the river line crosses a gap (NoData) in the DEM at ({gx:.0f}, {gy:.0f}): "
+            "the station is refused"
+        )
     placed = to[where[int(np.searchsorted(keep, at))]]
     z = [raw[n] for n in chain]
     tenth = max(1, math.ceil(len(chain) / 10))

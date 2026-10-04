@@ -69,7 +69,8 @@ def assess(
         while hi + 1 < n and arc[hi + 1] <= u + _SLACK_M and trusted[hi + 1]:
             hi += 1
     # Read to U: every sample in (0, U] trusted, a chain node at or past U
-    # (that node is D, whose own flags do not matter), the mapped river too.
+    # (that node is D: exactly at U it is a sample and must be trusted; past U
+    # its flags do not matter), the mapped river too.
     read = bool(
         trusted[p]
         and (hi + 1 == n or arc[hi + 1] > u + _SLACK_M)

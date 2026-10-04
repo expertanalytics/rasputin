@@ -248,7 +248,10 @@ def _burnt_flood(reach: Reach, pick: Callable[[Any], int]) -> Flood:
     chooses; keeps the burnt window, the path and the placed node's seed."""
 
     def flood(tile: Any) -> tuple[UpstreamOutcome, Any]:
-        burnt, path = burn_reach(tile, reach)
+        try:
+            burnt, path = burn_reach(tile, reach)
+        except ValueError as exc:
+            raise CatchmentError(str(exc)) from exc
         seed = np.zeros(burnt.array.shape, dtype=np.uint8)
         seed[tuple(path.chain[path.placed])] = 1
         start = np.zeros_like(seed)
