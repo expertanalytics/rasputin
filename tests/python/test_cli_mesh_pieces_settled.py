@@ -225,3 +225,29 @@ def test_a_cut_of_an_all_nodata_dem_is_refused_with_no_index(tmp_path: Path) -> 
     not_for_want_of_the_option(done.output)
     assert done.dir is None or not (done.dir / "index.json").exists()
     assert not done.out.exists()
+
+
+# ------------------------------------------------------------------ the lattice
+
+
+def test_the_index_places_every_partition_line(tmp_path: Path) -> None:
+    """Point 1 of "Three points from 23c-1's green (3ffae13)": the partition
+    record's `row0`, `col0` (the window's first node, possibly negative),
+    `spacing` (h) and `origin` (lattice node (0, 0) in the index's `crs`) put
+    line `i` at `x = origin_x + (col0 + i dx) h` and line `j` at
+    `y = origin_y - (row0 + j dy) h`: exactly the seams the piece files hold."""
+    dem, domain, _ = scene(tmp_path)
+    done = pf.cut(tmp_path / "run", *args(dem, domain, "--pieces", "9"))
+    part = done.index["partition"]
+    for key in ("row0", "col0"):
+        assert isinstance(part[key], int) and not isinstance(part[key], bool), part
+    assert part["spacing"] == pf.H
+    ox, oy = part["origin"]
+    h, nx, ny, dx, dy = part["spacing"], part["nx"], part["ny"], part["dx"], part["dy"]
+    assert (nx, ny) == (3, 3)
+    # The window's first node is the lattice node it names.
+    assert float((ox + part["col0"] * h - pf.TIE_X) / pf.H).is_integer()
+    assert float((pf.TIE_Y - (oy - part["row0"] * h)) / pf.H).is_integer()
+    xs = {ox + (part["col0"] + i * dx) * h for i in range(1, nx)}
+    ys = {oy - (part["row0"] + j * dy) * h for j in range(1, ny)}
+    assert pf.seam_lines(done.pieces) == (xs, ys)
