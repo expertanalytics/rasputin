@@ -271,7 +271,417 @@ theses) before saying more.
 
 ## The design
 
-(pending)
+### Data flow
+
+```
+rasputin fetch-stations nve-hrd --out-dir D                       [network]
+  fetch/nve.py   reads the packaged HRD list (140 rows), queries NVE's
+                 layers 0 and 38 through fetch/http.py, newest polygon per
+                 station, writes D/stations.geojson, D/reference.geojson,
+                 D/NOTICE.txt, D/manifest.json (URLs, date, sha256)
+
+rasputin catchments --dem ... --stations D/stations.geojson
+                    [--reference D/reference.geojson] --out-dir O   [offline]
+  cli.py         paths stop here: io/station_set.py reads both files into
+                 Station models and reference polygons; repository_for(dem)
+  catchment_batch.run_batch(request, repository, stations, references, sink)
+     for each station, in file order, one at a time:
+       catchment.delineate(CatchmentRequest(seed=station, seed_crs=crs,
+                                            snap_radius=R), repository)
+         window loop seeded by the disc of radius R round the station  (22's loop)
+         _core.accumulate(window)                                      [C++, new]
+         snap: the disc node of most upstream nodes
+         _core.upstream(window, that node) -> outline -> reduce         (22)
+       reference.agreement(result, reference polygon)  [pure, shapely]
+       reference.classify(agreement)                    [pure]
+       sink.catchment(station, result)  -> O/<station>.geojson  (io/geojson.py)
+       sink.row(StationResult)          -> O/results.csv
+     reference.summarise(rows) -> O/summary.json, and stderr
+```
+
+No path, file, URL or CRS crosses into C++: `accumulate` sees the same
+`RasterView` `upstream` does and returns an array (CLAUDE.md §2, I/O
+boundary). No new dependency: the network is `urllib` inside
+`fetch/http.py` (its existing `get_text`), polygons are shapely, the HRD list
+is read with `csv` and `importlib.resources`. `tools/check_prohibited_deps.py`
+covers the rest.
+
+### Accumulation, from the same flood (C++)
+
+`include/terrain/hydrology/accumulate.hpp`, header-only, next to
+`upstream.hpp`, a template on `RasterSource`:
+
+```cpp
+namespace terrain::hydrology {
+struct AccumulateOutcome {
+    std::vector<std::uint32_t> count; // row-major; 0 on NoData, else the number of
+                                      // nodes that drain through the node, itself included
+};
+template <raster::RasterSource R>
+[[nodiscard]] AccumulateOutcome accumulate(const R& z);
+}
+```
+
+- **The same drainage as `upstream`, by construction.** 22's flood labels a
+  node *in* when it is a seed or was flooded from an *in* node; so each node
+  drains to the node that flooded it (its "flooder"), and outlets drain out
+  of the window. `accumulate` runs the same flood (same outlets, same key
+  (level, push counter), same neighbour order) and records, per node, which
+  of its 8 neighbours flooded it (one byte), and the order in which nodes
+  were reached (the push order: a node is always reached after its flooder,
+  so the reverse of that order visits every node before its flooder). One
+  pass over the reverse order adds each node's count into its flooder's.
+- **To keep the two floods from drifting**, the outlet set-up and the
+  queue loop move out of `upstream.hpp` into `hydrology/flood.hpp`,
+  `detail::flood(z, state, on_reach)`, where `on_reach(i, j)` is called when
+  popped node `i` reaches node `j`; `upstream` labels in it, `accumulate`
+  records in it. `upstream`'s behaviour and suite are unchanged.
+- **The oracle is exact**: for every node `c` with data,
+  `accumulate(z).count[c] == upstream(z, {c}).nodes_in`. Both are "the nodes
+  whose chain of flooders passes through `c`". A test can check it node for
+  node on small random DEMs with pits, flats and NoData, which is the
+  invariant-critical suite of this increment (below). Also: the outlets'
+  counts sum to the number of nodes with data.
+- **Limits.** Refused with `std::length_error` when the raster has 2^32 nodes
+  or more (the count and the order are 32-bit); the binding maps it to
+  `ValueError`. Memory per node: 1 byte for the flooder, 4 for the order, 4
+  for the count, beside the elevation array and the queue. Serial,
+  deterministic; the binding releases the GIL and returns a numpy `uint32`
+  array of the raster's shape that the result owns.
+
+### The snap (Python, `catchment.py`)
+
+`CatchmentRequest` gains `snap_radius: float | None = None`, metres in the
+DEM's CRS. `None` keeps increment 22's behaviour exactly (no snap). A radius
+with `lakes` is refused (`ValueError`: a lake is already the seed); a negative
+or non-finite radius is refused.
+
+With a radius `R`:
+
+1. The station point moves into the DEM's CRS, as 22's seed does.
+2. **The disc** is every DEM node at distance at most `R` from the point
+   (closed; computed from node coordinates, not from a buffered polygon).
+3. **The window loop is 22's, seeded by the whole disc**: the first window is
+   the disc's bounds plus `WINDOW_MARGIN_M`, and it grows until the disc's
+   catchment is clear of the window's edge, or refuses as 22 does (NoData,
+   the data's edge, the memory cap). This is what makes the snap sound: the
+   disc's catchment is the union of every disc node's upstream area, so once
+   it is inside the window, every disc node's count in that window is its
+   whole count, up to 22's known limit (a closed depression across the
+   window's edge). A fixed window could cut the main river off at its edge
+   and pick a side stream instead.
+4. `_core.accumulate` over that window. **The snapped node is the disc node
+   with data of the largest count**; ties go to the one nearest the station,
+   then to the smaller (row, column). No disc node with data:
+   `CatchmentError` ("no DEM node with data within R m of the station").
+5. `_core.upstream` over the same window, seeded by the snapped node alone.
+   Its catchment lies inside the disc's, so no further growth is needed. From
+   here on it is 22's pour-point path: the outline is the ring around the
+   snapped node, then the reduction.
+
+The memory cap of 22's step 5 counts 9 more bytes per node when snapping.
+
+`Catchment` gains `snap: Snap | None`:
+
+```python
+@dataclass(frozen=True, slots=True)
+class Snap:
+    station: tuple[float, float]  # the station point, in the DEM's CRS
+    node: tuple[float, float]     # the snapped node
+    distance: float               # metres between them
+    radius: float                 # R
+    upstream_nodes: int           # the snapped node's count
+    nearest_upstream_nodes: int   # the count of the node nearest the station (no snap)
+    disc_nodes: int               # disc nodes with data
+```
+
+**How a snap is reported.** `rasputin catchment --snap-radius METRES` (no
+default: without it, 22's behaviour) prints one line on stderr: "moved the
+start 143 m, from the station (x, y) to the DEM node (x, y) with the most
+water within 250 m: 1,190,021 nodes (119.0 km²) drain through it; through
+the node nearest the station, 312 (0.031 km²)". The GeoJSON's properties get
+the same numbers. The batch writes them to every row.
+
+**Default radius: 250 m.** Default (@architect, 2026-10-04). All 42
+stations outside their NVE polygon lie within 233 m of it; a radius much
+larger reaches bigger rivers more often. The acceptance re-runs every miss
+at 100 m and 500 m, so the radius's part in each miss is measured rather than
+guessed (Question 4).
+
+**Known limits, measured not fixed.** (a) A disc that reaches a larger river
+below a confluence snaps to it: the result is the larger river's catchment,
+a miss with "ours in NVE's" low. (b) A lake gauge whose lake outlet is
+farther than `R` from the station point snaps to a lake node near the
+station, which drains only part of the lake's catchment: a miss with "NVE's
+in ours" low. (c) A disc that reaches a large river makes the window loop
+flood that river's catchment, to be thrown away after the snap: slow, and
+refused if over the memory cap. Each shows in the acceptance's table by its
+signature.
+
+### The station set (`fetch/nve.py`, `io/station_set.py`)
+
+**The packaged list.** `src_python/tin_engine/data/nve_hrd_2025.csv`: a
+header naming the source PDF, its date and NVE's credit as comment lines,
+then 140 rows `station,series_version,name,hrd_start_daily`
+(`2.11.0,0,Narsjø,1931`). Data, not code; shipped in the wheel (the green step
+checks `importlib.resources.files("tin_engine") / "data"` from an installed
+wheel, since `wheel.packages` is the package directory). Written once by
+hand-checked extraction from the PDF; `@tester` pins its row count (140), the
+uniqueness of the station numbers, and the three spot rows quoted above.
+
+**`rasputin fetch-stations nve-hrd --out-dir DIR [--refresh]`.** A catalogue
+entry in `sources.py`, beside the DEM sources: `StationSource(id="nve-hrd",
+service_url=..., list_file="nve_hrd_2025.csv", crs="EPSG:25833", credit=...,
+licence_note=...)`. `fetch/nve.py`:
+
+- queries layer 0 for the listed stations' points and attributes, and layer
+  38 for their polygons, 40 station numbers per `where ... in (...)` query
+  (measured to work; under the service's 2000-record cap and URL limits),
+  with `outSR=25833&f=geojson`, through `RangeClient.get_text` (22a-2's
+  retries and refusals; `fetch/http.py` stays the only module importing
+  `urllib`, rule F11);
+- refuses, naming the station, when a listed station has no point or no
+  polygon; keeps the newest polygon per station (above) and records its
+  update date and how many versions there were;
+- writes `stations.geojson` (one Point feature per station, properties
+  `station`, `name`, `series` = `["1001.0"]`, `nve_area_km2` from layer 0,
+  `hrd_start_daily`), `reference.geojson` (one feature per station, the
+  polygon, `station`, `reference_area_km2`, `reference_updated`,
+  `versions`), both with a `crs` member, `NOTICE.txt` (the catalogue's
+  credit, as 23a-2's `notice` does), and `manifest.json` (the query URLs,
+  the fetch time in UTC, each file's sha256). Deterministic order: the list
+  file's.
+- Pure parts (the query URLs, choosing the newest version, building the
+  files' content) are functions with no network, tested on canned answers
+  as `fetch_fixtures.py` does; the network call is injected.
+
+**`io/station_set.py`** reads both files back: `read_stations(path) ->
+(tuple[Station, ...], crs)`, `read_references(path) -> (Mapping[str,
+Polygon | MultiPolygon], crs)`. It refuses a file without a `crs` member
+(the skill's rule; NVE's files always have one), duplicate station
+numbers, and non-point or non-polygon geometry. `Station` is a frozen
+Pydantic model: `station: str` (pattern `^\d+\.\d+\.\d+$`), `name`, `x`,
+`y`, `series: tuple[str, ...]`, `nve_area_km2: float | None`. Any GeoJSON
+of points with a `station` property works, so a user can bring their own
+list.
+
+### Agreement and classes (`reference.py`, pure)
+
+Per station, against the reference polygon, on the DEM's node lattice (the
+final window's origin and spacing, extended as far as either polygon
+reaches; no DEM is read):
+
+- `ours`: lattice nodes strictly inside our **fine** outline (the reduction
+  is checked by 22's own guarantees, not here); `ref`: nodes strictly inside
+  NVE's polygon (all parts); `both`. Counted with `shapely.contains_xy` in
+  row bands, so memory stays bounded on Polmak-size polygons. This is the
+  Bygdin comparison of 22's acceptance, unchanged.
+- **NVE's in ours** = both / ref, **ours in NVE's** = both / ours.
+- **Area ratio** = our fine area / NVE's polygon area (shapely).
+- **Mean divide offset** = (ref + ours − 2·both) × cell area / NVE polygon's
+  perimeter, in metres: how far, on average, our divide sits from NVE's.
+  Size-independent, which is what NRFA's warning about small catchments asks
+  for.
+
+`classify` (Default, @architect, 2026-10-04; Question 5):
+
+| class | rule | counts as |
+|---|---|---|
+| `match` | both overlaps ≥ 95 %, **or** mean divide offset ≤ 3 cells (30 m on DTM10) | pass |
+| `close` | both overlaps ≥ 80 % | finding |
+| `miss` | anything else | finding |
+| `refused` | `delineate` refused (NoData, the data's edge, memory cap, no data in the disc), with its message | reported, not a failure |
+
+Bygdin, the one case measured so far, would be `match` (99.12 % and 99.33 %).
+The offset test is there for the 12 catchments under 10 km², where a one-cell
+disagreement along the whole divide is several per cent of the nodes.
+
+`summarise(rows) -> Summary`: counts per class; for the area ratio and both
+overlaps, the minimum, 10th, 25th, 50th, 75th, 90th percentile and maximum,
+over all accepted stations and per size band (under 10, 10-100, 100-1000,
+over 1000 km²) and per tile count (1, 2, 3-4, 5+). Deterministic JSON.
+
+### The batch (`catchment_batch.py`)
+
+```python
+class BatchRequest(BaseModel):      # frozen
+    snap_radius: float = 250.0
+    outline_tolerance: float | None = None
+    only: tuple[str, ...] = ()      # station numbers; empty is all
+
+class BatchSink(Protocol):
+    def catchment(self, station: Station, result: Catchment) -> None: ...
+    def row(self, row: StationResult) -> None: ...
+
+async def run_batch(request: BatchRequest, repository: DemRepository,
+                    stations: Sequence[Station], stations_crs: str,
+                    references: Mapping[str, BaseGeometry] | None,
+                    sink: BatchSink) -> Summary
+```
+
+- **One station at a time**, each `delineate` in `asyncio.to_thread`: a
+  flood of a large catchment takes gigabytes, and two at once would race for
+  the memory cap. Sequential order is the file's, so the output is
+  deterministic. A GUI or API worker awaits it and can cancel between
+  stations. Parallel stations are a later option.
+- A refusal (`CatchmentError`) becomes a `refused` row and the batch goes
+  on; any other exception stops it (a bug is not a data refusal).
+- `StationResult` (frozen): station, name, class, refusal message, snap
+  numbers, nodes, fine and reduced area, NVE's polygon area and the station
+  layer's area, the agreement numbers, tile count, windows, seconds.
+- Without `--reference`, no agreement and no class: the batch just makes the
+  catchments (the product for any list of stations).
+- No paths: the sink is how files get written; `cli.py` passes a directory
+  sink, tests pass a list.
+
+**`rasputin catchments`**:
+
+```
+rasputin catchments --dem PATH [--dem PATH ...] --stations FILE
+                    [--reference FILE] [--snap-radius METRES] [--only ID ...]
+                    [--outline-tolerance METRES] --out-dir DIR [--out-parent DIR]
+```
+
+writes `DIR/<station>.geojson` (22's catchment file, plus the station's
+number, name, series and the snap; `mesh --domain` reads it), `DIR/results.csv`,
+`DIR/summary.json`, and one stderr line per station (number, name, class,
+the three numbers) and the summary at the end.
+
+**The GeoJSON writer moves** from `cli.py` to `io/geojson.py`,
+`catchment_geojson(polygon, crs, properties) -> bytes`, no path, as
+`project_structure.md` already recommends ("The catchment GeoJSON writer is
+in `cli.py`"); both commands call it, and that paragraph is replaced by the
+module's entry.
+
+### New and changed files
+
+| File | What | Estimate |
+|---|---|---|
+| `include/terrain/hydrology/flood.hpp` | the shared flood, moved out of `upstream.hpp` | 45 (moved, ~10 net) |
+| `include/terrain/hydrology/upstream.hpp` | uses it | −35 |
+| `include/terrain/hydrology/accumulate.hpp` | `accumulate`, `AccumulateOutcome` | 45 |
+| `bindings/core.cpp`, `_core.pyi` | `accumulate` | 30 |
+| `catchment.py` | `snap_radius`, disc, `Snap`, pick, re-flood, cap | 75 |
+| `cli.py` | `catchment --snap-radius` and its line | 20 |
+| **PR 1** | | **about 190** |
+| `data/nve_hrd_2025.csv` | the list (data, not counted) | 0 |
+| `sources.py` | `StationSource`, the `nve-hrd` entry | 30 |
+| `fetch/nve.py` | queries, newest version, files, manifest | 120 |
+| `io/station_set.py` | readers, `Station` | 50 |
+| `io/geojson.py` | the moved writer | 25 (cli.py −25) |
+| `reference.py` | agreement, classes, summary | 100 |
+| `catchment_batch.py` | `BatchRequest`, `BatchSink`, `run_batch`, `StationResult` | 80 |
+| `cli.py` | `fetch-stations`, `catchments`, the directory sink | 100 |
+| `NOTICE.md`, `project_structure.md` | NVE's credit; the new modules | docs |
+| **PR 2** | | **about 480** |
+
+Both under the 700 ceiling of CLAUDE.md §2. PR 1 touches C++ (one build
+round), PR 2 is Python only, so PR 2's red step can be written while PR 1
+is in review.
+
+### The PR split
+
+- **PR 1, the snap.** Accumulation and the snap, behind
+  `rasputin catchment --snap-radius`. Answers on its own: "the catchment of
+  this gauge". Red, green, review.
+- **PR 2, the stations and the batch.** Fetch, read, compare, run. Red,
+  green, review, then the acceptance run below.
+
+Neither touches refine or mesh code, so `tools/bench.py`'s benchmark and
+scaling sweep do not apply (`docs/increments/README.md`, "Acceptance").
+
+## The red suites
+
+Lean, as 22's were: no throwaway implementation. **The invariant-critical
+suite** (mutation testing required, `docs/increments/README.md`, "Cost
+constraints") is `accumulate`'s exact oracle, because every snap and
+therefore every station result rests on it.
+
+**PR 1, C++ (`tests/cpp/unit/test_hydrology_accumulate.cpp`):**
+
+- *The oracle*: on a few hundred small random DEMs (with pits, flats, equal
+  heights, NoData holes and NoData borders), for every node with data,
+  `count == upstream(z, {node}).nodes_in`; NoData nodes count 0.
+- *Conservation*: the outlets' counts sum to the nodes with data; every
+  count is at least 1 on data.
+- *By hand*: a V-valley (the outlet counts the whole valley); a single
+  cell; a flat plateau draining over one rim node; a 1 × n strip.
+- *Determinism*: twice gives equal arrays. *Refusal*: the size check, by a
+  geometry stub reporting 2^32 nodes (no allocation).
+- `upstream`'s existing suite, unchanged, after the move to `flood.hpp`.
+
+**PR 1, Python:**
+
+- `test_core_accumulate.py`: shape, dtype `uint32`, ownership (the array
+  outlives the view), the oracle on two DEMs through the binding.
+- `test_catchment.py` gains: a station 3 cells beside a synthetic river
+  snaps to the river node of largest count, and the catchment equals one
+  flood from that node; a tie goes to the nearer node, then the smaller
+  (row, column); a disc that reaches past the window's first extent grows the
+  window (the river's upstream reaches far beyond the disc), and the result
+  equals a whole-raster run; a disc all NoData is refused; `snap_radius`
+  with lakes, negative, NaN are refused; radius 0 picks the nearest node and
+  reports distance as its offset; no radius gives 22's result bit for bit.
+- `test_cli_catchment.py` gains: `--snap-radius` prints the snap line and
+  writes the snap properties.
+
+**PR 2, Python** (no network anywhere):
+
+- `test_fetch_nve.py`: the packaged list (140 rows, unique numbers, the
+  three spot rows); the query URLs (chunks of 40, `outSR=25833`,
+  `f=geojson`); newest version wins, ties to the larger `objectid`; a
+  missing station or polygon is refused by name; the written files, from
+  canned service answers, read back through `io/station_set.py`; the
+  manifest's sha256 matches the files.
+- `test_station_set.py`: missing `crs`, duplicate numbers, wrong geometry
+  types, a bad station number are refused; a user's own points file reads.
+- `test_reference.py`: agreement on hand-built polygons on a 10 m lattice
+  (identical: 100 %, offset 0; shifted by one cell: the offset is one cell;
+  disjoint: 0 %); the class boundaries at exactly 95 %, 80 % and 30 m; the
+  summary's percentiles on a known list; band and tile grouping.
+- `test_catchment_batch.py`, on the synthetic tiled DEM of
+  `test_cli_catchment.py` with three stations (one matching a reference
+  drawn from its own flood, one with a reference shifted to make it a miss,
+  one on NoData, refused): the rows, the classes, the order, the summary;
+  a bug-type exception stops the batch.
+- `test_cli_catchments.py`: the files in `--out-dir`, `--only`, the stderr
+  lines; `--reference` absent gives catchments and no classes; a station
+  file without `crs` is refused.
+
+## Acceptance: every covered HRD station
+
+Run after PR 2 is green, by `@perf` (it measures, and owns the evidence
+layout), under `docs/benchmarks/<date>/nve-hrd/` with a `run.sh`, the
+commit, `pmset -g batt`, the manifest of the fetched station set (its sha256
+values, since the service can change) and the outputs that are not NVE's
+data:
+
+1. `rasputin fetch-stations nve-hrd` into `../rasputin_data/nve_hrd`.
+2. `rasputin catchments` over all 140 at the default radius (250 m) and
+   tolerance; wall time and peak memory per station and in total.
+   Expected (estimate, not a measurement): the catchments total about 610 M
+   nodes, windows about three times that, so tens of minutes on the M1 Max.
+3. **The table**: `results.csv` committed, and the summary by class, size
+   band and tile count in the README.
+4. **Every finding explained**: each `miss` gets a line (snap jumped to
+   another river, lake gauge, DEM artefact, NVE polygon disagrees with the
+   DEM, or "not explained"), with a re-run at 100 m and 500 m; `close` rows
+   are summarised by cause. The two Finnish-border stations are expected
+   `refused` (NoData); a refusal for any other reason is a finding.
+5. **What passes the increment**: the batch completes for every station with
+   a row each; 22's guarantees hold on every accepted reduced outline (area
+   kept, simple, start inside); every finding has its line. No share of
+   `match` is required this time: this run is the baseline the next
+   increments improve (Question 5).
+6. Bygdin is not in the HRD (it is regulated); 22's run stays its record.
+
+## What each persona reads
+
+`@tester` and `@developer`: this file, then `docs/increments/22-auto-catchment.md`
+("The seed", "Flow and membership", "The window"), and for PR 2
+`docs/increments/23-basin-scale.md` ("The fetch step and the tile cache")
+for `fetch/`'s rules. `@developer` also reads `include/terrain/hydrology/upstream.hpp`
+and `src_python/tin_engine/fetch/http.py`.
 
 ## Questions for Ola
 
