@@ -456,3 +456,15 @@ ruling is under its item.
 
     **Ruled 2026-10-04:** folded into stage 2's state tool, not a separate
     change.
+
+## Recovery round of 2026-10-04: proposals waiting on Ola
+
+Evidence and wording: `docs/retrospectives/2026-10-04-recovery-round.md`.
+Rule proposals P1 (refusal tests assert the reason; whole-suite run against a
+fix the design names), P2a (re-read the citation at-risk list after every
+merge), P3a ("no checks reported" is not green; read `mergeStateStatus`), P5a
+(a recorded publishing yes lapses with the session that heard it); tool
+proposals P2b (`check_citations.py` labels at-risk lines unchanged, moved or
+rewritten), P3b (the recap lists open PRs with merge state), P4 (`brief.py`
+names the test command a worktree can run); one cut, C1 (about 90 words of
+`REQUIRED-READING.md`). Questions Q1 to Q3 there, each with a default.
