@@ -246,7 +246,9 @@ class TestReport:
 
 
 class TestNoData:
-    """Q10 (R9): the pass may insert a NoData node; refine ends and trim drops it."""
+    """Q10, as the fix replaces R9 (``20-start-quality.md``, "Fix: the
+    start-quality pass skips NoData nodes"): the pass's node lies in the
+    block, so it is skipped and counted, and the trim has nothing to drop."""
 
     def test_a_domain_over_a_nodata_block(self, tmp_path: Path, box: Path) -> None:
         array = np.random.default_rng(10).uniform(0.0, 50.0, (ROWS, COLS)).astype(np.float32)
@@ -255,8 +257,10 @@ class TestNoData:
         vtk, report, _ = run(tmp_path, "--dem", str(tif), "--domain", str(box), "--tolerance", "1")
         assert (vtk.points[:, 2] != float(SENTINEL)).all()
         assert np.isfinite(vtk.points[:, 2]).all()
-        assert int(file_field(vtk, "nodata_vertices_removed")) >= 1
-        assert int(stats_row(report, "start_quality_points_inserted")) > 0
+        assert stats_row(report, "nodata_vertices_removed") == "0"
+        assert "nodata_vertices_removed" not in vtk.field_data  # D3 rule 3: a zero is not written
+        assert stats_row(report, "start_quality_points_inserted") == "0"
+        assert int(stats_row(report, "start_quality_points_skipped")) >= 1
 
 
 class TestTheVoidIsSkipped:
