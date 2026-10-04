@@ -637,6 +637,24 @@ def upstream(view: RasterView, seed: npt.ArrayLike) -> UpstreamOutcome:
     """Every node draining into a seed of the ``(rows, cols)`` mask
     (Priority-Flood); another shape is a ``ValueError``. Releases the GIL."""
 
+@final
+class AccumulateOutcome:
+    """What :func:`accumulate` returned; every array is read-only ``(rows, cols)``."""
+
+    @property
+    def count(self) -> npt.NDArray[np.uint32]:
+        """0 on NoData, else the nodes draining through the node, itself included."""
+    @property
+    def reach(self) -> npt.NDArray[np.uint8]:
+        """Bit 0: the catchment touches the window's edge; bit 1: it touches NoData."""
+    @property
+    def flow_to(self) -> npt.NDArray[np.uint8]:
+        """``3*(dr+1)+(dc+1)`` of the neighbour drained to; 255 outlet or NoData."""
+
+def accumulate(view: RasterView) -> AccumulateOutcome:
+    """Flow accumulation from :func:`upstream`'s flood; 2^32 nodes or more is
+    a ``ValueError``. Releases the GIL."""
+
 class ReduceStatus(Enum):
     """Why :func:`reduce_ring` refused, or ``Ok``."""
 
