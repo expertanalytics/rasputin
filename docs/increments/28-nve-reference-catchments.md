@@ -441,35 +441,42 @@ theses) before saying more.
 ```
 rasputin fetch-stations nve-hrd --out-dir D                       [network]
   fetch/nve.py   reads the packaged HRD list (140 rows), queries NVE's
-                 layers 0 and 38 through fetch/http.py, newest polygon per
-                 station, writes D/stations.geojson, D/reference.geojson,
-                 D/NOTICE.txt, D/manifest.json (URLs, date, sha256)
+                 layers 0 and 38 and ELVIS layer 2 through fetch/http.py,
+                 newest polygon per station, writes D/stations.geojson,
+                 D/reference.geojson, D/rivers.geojson, D/NOTICE.txt,
+                 D/manifest.json (URLs, date, sha256)
 
-rasputin catchments --dem ... --stations D/stations.geojson
-                    [--reference D/reference.geojson] --out-dir O   [offline]
-  cli.py         paths stop here: io/station_set.py reads both files into
-                 Station models and reference polygons; repository_for(dem)
-  catchment_batch.run_batch(request, repository, stations, references, sink)
+rasputin station-catchments --dem ... --stations D/stations.geojson
+        --rivers D/rivers.geojson [--reference D/reference.geojson] --out-dir O
+                                                                    [offline]
+  cli.py         paths stop here: io/station_set.py and io/rivers.py read the
+                 files into Station and RiverSegment models and reference
+                 polygons; repository_for(dem)
+  catchment_batch.run_batch(request, repository, stations, segments, references, sink)
      for each station, in file order, one at a time:
+       gauge.place(station, segments) -> Placement | None   [pure, shapely, no DEM]
        catchment.delineate(CatchmentRequest(seed=station, seed_crs=crs,
-                                            snap_radius=R), repository)
-         window loop seeded by the disc of radius R round the station  (22's loop)
-         _core.accumulate(window)                                      [C++, new]
-         snap: the disc node of most upstream nodes
-         _core.upstream(window, that node) -> outline -> reduce         (22)
-       reference.agreement(result, reference polygon)  [pure, shapely]
-       reference.classify(agreement)                    [pure]
+                                            reach=placement.reach), repository)
+         window loop (22's), seeded by the placed node:
+           burn.burn_reach(window, reach) -> burnt window, GaugePath  [numpy, no shapely]
+           _core.upstream(burnt window, placed node) -> outline -> reduce   (22)
+         _core.accumulate(burnt window)                                 [C++, new]
+         sensitivity.assess(counts, flags, path, uncertainty)         [pure, numpy]
+       reference.agreement(result, reference polygon)   [pure, shapely]
+       reference.classify(agreement, sensitivity)       [pure]
        sink.catchment(station, result)  -> O/<station>.geojson  (io/geojson.py)
        sink.row(StationResult)          -> O/results.csv
      reference.summarise(rows) -> O/summary.json, and stderr
 ```
 
 No path, file, URL or CRS crosses into C++: `accumulate` sees the same
-`RasterView` `upstream` does and returns an array (CLAUDE.md §2, I/O
-boundary). No new dependency: the network is `urllib` inside
-`fetch/http.py` (its existing `get_text`), polygons are shapely, the HRD list
-is read with `csv` and `importlib.resources`. `tools/check_prohibited_deps.py`
-covers the rest.
+`RasterView` `upstream` does and returns arrays (CLAUDE.md §2, I/O boundary).
+The burn edits an elevation array in Python and hands the result to the same
+binding; it takes plain arrays, so it imports no shapely, and `gauge.py`
+imports shapely but sees no DEM. No new dependency: the network is `urllib`
+inside `fetch/http.py` (its existing `get_text`), lines and polygons are
+shapely, the HRD list is read with `csv` and `importlib.resources`.
+`tools/check_prohibited_deps.py` covers the rest.
 
 ### Accumulation, from the same flood (C++)
 
@@ -481,6 +488,8 @@ namespace terrain::hydrology {
 struct AccumulateOutcome {
     std::vector<std::uint32_t> count; // row-major; 0 on NoData, else the number of
                                       // nodes that drain through the node, itself included
+    std::vector<std::uint8_t> reach;  // bit 0: that catchment touches the window's edge,
+                                      // bit 1: it touches NoData (upstream's two flags)
 };
 template <raster::RasterSource R>
 [[nodiscard]] AccumulateOutcome accumulate(const R& z);
@@ -496,93 +505,192 @@ template <raster::RasterSource R>
   were reached (the push order: a node is always reached after its flooder,
   so the reverse of that order visits every node before its flooder). One
   pass over the reverse order adds each node's count into its flooder's.
+- **The flags ride the same pass.** A node starts with bit 0 when it lies
+  within one node of the window's edge, and with bit 1 when it is an outlet
+  beside NoData or has an 8-neighbour that is; the pass ORs each node's bits
+  into its flooder's. These are exactly the conditions under which
+  `upstream`'s `touches_edge` and `touches_nodata` fire for a seed at that
+  node, so a count whose bits are clear is the node's whole catchment, and a
+  count with a bit set is a lower bound. Sensitivity (below) needs this to
+  know which counts it can trust.
 - **To keep the two floods from drifting**, the outlet set-up and the
   queue loop move out of `upstream.hpp` into `hydrology/flood.hpp`,
   `detail::flood(z, state, on_reach)`, where `on_reach(i, j)` is called when
   popped node `i` reaches node `j`; `upstream` labels in it, `accumulate`
   records in it. `upstream`'s behaviour and suite are unchanged.
 - **The oracle is exact**: for every node `c` with data,
-  `accumulate(z).count[c] == upstream(z, {c}).nodes_in`. Both are "the nodes
-  whose chain of flooders passes through `c`". A test can check it node for
-  node on small random DEMs with pits, flats and NoData, which is the
-  invariant-critical suite of this increment (below). Also: the outlets'
-  counts sum to the number of nodes with data.
+  `accumulate(z).count[c] == upstream(z, {c}).nodes_in`, and the two bits
+  of `reach[c]` equal `touches_edge` and `touches_nodata` of the same call.
+  Both are "the nodes whose chain of flooders passes through `c`". A test can
+  check it node for node on small random DEMs with pits, flats and NoData,
+  which is the invariant-critical suite of this increment (below). Also: the
+  outlets' counts sum to the number of nodes with data.
 - **Limits.** Refused with `std::length_error` when the raster has 2^32 nodes
   or more (the count and the order are 32-bit); the binding maps it to
   `ValueError`. Memory per node: 1 byte for the flooder, 4 for the order, 4
-  for the count, beside the elevation array and the queue. Serial,
-  deterministic; the binding releases the GIL and returns a numpy `uint32`
-  array of the raster's shape that the result owns.
+  for the count, 1 for the bits, beside the elevation array and the queue.
+  Serial, deterministic; the binding releases the GIL and returns numpy
+  arrays of the raster's shape that the result owns.
 
-### The snap (Python, `catchment.py`)
+### Placing the gauge (`gauge.py`, pure)
 
-`CatchmentRequest` gains `snap_radius: float | None = None`, metres in the
-DEM's CRS. `None` keeps increment 22's behaviour exactly (no snap). A radius
-with `lakes` is refused (`ValueError`: a lake is already the seed); a negative
-or non-finite radius is refused.
+**The rule (Ola, 2026-10-04).** A gauge is placed by where it physically is:
+on NVE's mapped river line, then on the DEM's flow path along that line,
+which is burnt where the DEM and the line disagree. **No rule here looks at
+an area, a flow count or a reported catchment size.** Flow accumulation grows
+downstream, so any rule that prefers more area (the largest count within a
+radius, the area closest to a reported one) is biased downstream, and a
+catchment pushed downstream carries inflow the gauge never saw: fatal for
+residual inflow (below). The accumulation count is used only to *read* the
+area at a place already chosen (the sensitivity), never to choose the place.
 
-With a radius `R`:
+`gauge.place(station, segments, *, map_radius=500.0, reach_up=1000.0)`
+returns a `Placement` or `None`. `RiverSegment` is the frozen model of one
+ELVIS line: `objectid`, `elvid`, `vassdragsnr`, `name`, `kind` (river or lake
+centreline, from `objekttype`; the fictive links ELVIS adds are rivers here),
+and the line's vertices in the file's CRS.
 
-1. The station point moves into the DEM's CRS, as 22's seed does.
-2. **The disc** is every DEM node at distance at most `R` from the point
-   (closed; computed from node coordinates, not from a buffered polygon),
-   and always the node nearest the point, so `R = 0` is that node alone.
-3. **The window loop is 22's, seeded by the whole disc**: the first window is
-   the disc's bounds plus `WINDOW_MARGIN_M`, and it grows until the disc's
-   catchment is clear of the window's edge, or refuses as 22 does (NoData,
-   the data's edge, the memory cap). This is what makes the snap sound: the
-   disc's catchment is the union of every disc node's upstream area, so once
-   it is inside the window, every disc node's count in that window is its
-   whole count, up to 22's known limit (a closed depression across the
-   window's edge). A fixed window could cut the main river off at its edge
-   and pick a side stream instead.
-4. `_core.accumulate` over that window. **The snapped node is the disc node
-   with data of the largest count**; ties go to the one nearest the station,
-   then to the smaller (row, column). No disc node with data:
-   `CatchmentError` ("no DEM node with data within R m of the station").
-5. `_core.upstream` over the same window, seeded by the snapped node alone.
-   Its catchment lies inside the disc's, so no further growth is needed. From
-   here on it is 22's pour-point path: the outline is the ring around the
-   snapped node, then the reduction.
+1. **Candidates**: segments within `map_radius` of the station point.
+   Default 500 m: 139 of the 140 stations have a line within 461 m (the one
+   without, `311.4.0` Femundsenden, is a lake gauge 612 m from the nearest).
+2. **Which river**: the station's own watercourse number says which river it
+   is on. Tiers: the segment's `vassdragsnr` equals the station's (113 of the
+   139 nearest lines), then shares its prefix or its river name (26 more,
+   not checked one by one), then any. **The nearest segment of the best
+   non-empty tier wins**, and the tier is reported (`placed_on`: `number`,
+   `prefix`, `name`, `any`), so a station placed on a line that is not its
+   own is visible in the table, not hidden in a choice.
+3. **The mapped position `P`** is the nearest point of the chosen line to the
+   station point (the foot of the perpendicular, or an end vertex). The
+   station-to-line distance `d` is reported. **Position uncertainty
+   `U = min(max(d, 30 m), map_radius)`**: the gauge's coordinates cannot
+   place it along the river better than their own distance from the river,
+   and 30 m (three cells) is the floor the DEM's resolution gives. The
+   measured `d` has median 20 m, 75th percentile 53 m and 90th 158 m, so
+   half the stations get the 30 m floor and a tenth get 160 m or more.
+4. **The reach** is the chain of segments with `P`'s `elvid`, joined where an
+   end of one lies within 1 m of the start of the next (a segment is a link
+   of one river, digitised downstream): from `reach_up` metres upstream of
+   `P` (default 1000 m: the median segment is 751 m long, so one segment is
+   often not enough, and a bridge embankment a few hundred metres upstream
+   dams the DEM river as much as one at the gauge) to `U + 100 m` downstream
+   of it. The chain stops where no segment of that `elvid` continues it; the
+   metres actually available are reported (`reach_up_m`, `reach_down_m`). The
+   result is `Reach(line, at, uncertainty)` (below), in the file's CRS.
+5. **Flags carried to the result, not decided here**: `lake` (the chosen
+   segment is a lake centreline: 46 of 139 nearest lines), `confluence_near`
+   (a segment of another `elvid` within 100 m of `P`: 16 of 139) and the two
+   distances. `None` (no segment within `map_radius`) is the case for the
+   fallback.
 
-The memory cap of 22's step 5 counts 9 more bytes per node when snapping.
+Measured on 139 stations, 2026-10-04 (1 km square envelopes; the one segment
+`strekninglnr` shared by two different geometries, so `objectid` is the key):
+the nearest line's length has quartiles 392 m, 751 m and 1196 m, maximum
+4673 m. The envelopes fetched for the reach are larger (below).
 
-`Catchment` gains `snap: Snap | None`:
+```python
+class Reach(BaseModel):  # frozen; in the request's seed_crs
+    line: tuple[tuple[float, float], ...]  # downstream order, at least two vertices
+    at: float           # metres along `line` from its first vertex: the mapped position
+    uncertainty: float  # metres: the half-width of the sensitivity window
+    corridor: float = 30.0  # metres: the burn's half-width round the line
+```
+
+### Following the river in the DEM (`burn.py`, numpy)
+
+The mapped line is 1:50,000 against a 10 m DEM (the scale mismatch Lindsay
+2016 names), and the DEM does not follow it: along the 90 measured river
+lines the DEM climbs along the flow by 1.6 m at the median and 5.0 m at the
+90th percentile, up to 51.6 m. A gauge placed on the line's nearest node
+would often sit on a hillside or behind an embankment. So the reach is first
+moved to the valley floor, then lowered where it still climbs:
+
+1. **Resample** the reach at the DEM's node spacing, by arc length, from its
+   first vertex.
+2. **Valley floor.** For each resampled point, the node of least elevation
+   within `corridor` of it (ties: the nearer to the point, then the smaller
+   (row, column)). The chosen nodes are joined into one 8-connected chain
+   (a straight node-to-node line between neighbours in the sequence), and a
+   node visited twice keeps its first visit. Corridor, 30 m: a guess from the
+   "tens of metres" above; the acceptance re-runs every finding at 15 m and
+   60 m.
+3. **Direction check.** If the mean elevation over the chain's last tenth is
+   more than 2 m above that of its first tenth (reach at least 100 m), the
+   line runs against the DEM's slope (2 of 138 measured lines did): the
+   result is flagged `direction_disagrees` and the station becomes
+   `uncertain` (a refusal would hide it). Lakes and flat reaches (within
+   0.5 m: 39 of 138) pass.
+4. **Descent.** Along the chain from its first node, `z'[k] = min(z[k],
+   z'[k-1] - 0.001 m)`: the elevation is lowered only where it does not
+   already fall, and the chain falls strictly, so the flood's flooder of each
+   chain node is the next one down and water that reaches the chain stays on
+   it. A flat lake reach is lowered by at most 0.001 m per node (0.14 m over
+   a 1.4 km chain). The nodes lowered and the largest lowering are reported
+   (`lowered_nodes`, `lowered_max_m`); an embankment shows as a large one.
+5. **The placed node** is the chain node whose position along the chain is
+   the nearest to `at`; its distance from `P` is reported
+   (`node_offset_m`, at most about the corridor).
+
+The burn is a pure function of the window array, its georeference and the
+`Reach`, with no state; it returns a copy (the DEM repository's array is
+never written) and the `GaugePath`: the chain's (row, column) array, the index
+of the placed node, and the arc length of each node from it. Only one chain of
+the network is burnt, the gauge's own reach, so two links never share a
+cell (the piracy Lindsay names cannot occur), and the burn does not change
+where the DEM puts any divide away from the chain.
+
+**Known limits, measured not fixed.** (a) The least-elevation node in a
+30 m corridor can lie in a parallel gully; the chain then follows that, and
+the acceptance's lowered-node counts and the miss analysis show it. (b) The
+burn does nothing for a mapped line that is wrong (NEVINA warns REGINE can
+be, and ELVIS is derived from N50 at a coarser scale). (c) A lake reach gets
+an artificial channel of at most 0.14 m: the catchment is unchanged, but the count along
+a lake's flat floor jumps where the flat's nodes join the chain, which is
+what the sensitivity reports as `uncertain`.
+
+### The window loop and the catchment (`catchment.py`)
+
+`CatchmentRequest` gains `reach: Reach | None = None`. `None` keeps
+increment 22's behaviour exactly. With a reach, `seed` is the station point
+(kept for the report), the pour point is the placed node, and a reach with
+`lakes` is refused (`ValueError`: a lake is already the seed). `Catchment`
+gains `gauge: GaugeResult | None` (below).
+
+Stage A decides the catchment and every refusal. It is 22's loop, with these
+changes: the first window is the reach's bounds (both ends and the corridor)
+plus `WINDOW_MARGIN_M`; each window is assembled, burnt, and floods from the
+placed node alone; it grows until the placed catchment is clear of the edge,
+or refuses as 22 does (NoData, the data's edge, the memory cap). **A refusal
+is a refusal of the placed node's catchment, nothing else.** The burn runs
+again in each larger window; it depends only on elevations round the reach,
+which every window holds.
+
+Stage B reads the area where the sensitivity needs it. The downstream end of
+the sensitivity window, `D`, is the chain node `U` downstream of the placed
+node, and its catchment contains the placed one. Stage B continues from
+stage A's window: it floods from `D` and grows as stage A does. If it
+succeeds, `_core.accumulate` runs in its window and both sides are read. If
+it refuses (NoData, the edge, the cap), `accumulate` runs in stage A's window
+and the downstream side is read as far as its counts have no flag bit set;
+`downstream_checked` says `whole`, `partly` or `none`. Stage B never turns a
+catchment into a refusal. In the final window the floods are three: `D`'s
+(to size the window), `accumulate`, and the placed node's (the mask the
+outline comes from); the earlier windows have one each. The memory cap's
+per-node figure grows by the elevation item size (the burnt copy) and 10
+bytes (accumulate's four arrays).
 
 ```python
 @dataclass(frozen=True, slots=True)
-class Snap:
-    station: tuple[float, float]  # the station point, in the DEM's CRS
-    node: tuple[float, float]     # the snapped node
-    distance: float               # metres between them
-    radius: float                 # R
-    upstream_nodes: int           # the snapped node's count
-    nearest_upstream_nodes: int   # the count of the node nearest the station (no snap)
-    disc_nodes: int               # disc nodes with data
+class GaugeResult:
+    node: tuple[float, float]  # the placed node, in the DEM's CRS
+    node_offset_m: float       # from the mapped position P to the node
+    chain_nodes: int           # nodes of the burnt chain
+    lowered_nodes: int
+    lowered_max_m: float
+    direction_ok: bool
+    downstream_checked: Literal["whole", "partly", "none"]
+    sensitivity: Sensitivity   # next section
 ```
-
-**How a snap is reported.** `rasputin catchment --snap-radius METRES` (no
-default: without it, 22's behaviour) prints one line on stderr: "moved the
-start 143 m, from the station (x, y) to the DEM node (x, y) with the most
-water within 250 m: 1,190,021 nodes (119.0 km²) drain through it; through
-the node nearest the station, 312 (0.031 km²)". The GeoJSON's properties get
-the same numbers. The batch writes them to every row.
-
-**Default radius: 250 m.** Default (@architect, 2026-10-04). All 42
-stations outside their NVE polygon lie within 233 m of it; a radius much
-larger reaches bigger rivers more often. The acceptance re-runs every miss
-at 100 m and 500 m, so the radius's part in each miss is measured rather than
-guessed (Question 4).
-
-**Known limits, measured not fixed.** (a) A disc that reaches a larger river
-below a confluence snaps to it: the result is the larger river's catchment,
-a miss with "ours in NVE's" low. (b) A lake gauge whose lake outlet is
-farther than `R` from the station point snaps to a lake node near the
-station, which drains only part of the lake's catchment: a miss with "NVE's
-in ours" low. (c) A disc that reaches a large river makes the window loop
-flood that river's catchment, to be thrown away after the snap: slow, and
-refused if over the memory cap. Each shows in the acceptance's table by its
-signature.
 
 ### The station set (`fetch/nve.py`, `io/station_set.py`)
 
