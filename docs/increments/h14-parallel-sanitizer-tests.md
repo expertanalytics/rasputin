@@ -9,8 +9,8 @@ checked instead).
 
 Why: since h13 fixed the macOS build, the `C++ sanitizers (asan+ubsan)` job is
 the slowest job the required `CI result` check waits for: 7.8 to 13.7 minutes
-end to end in the four runs since h13 merged (§2a), against 5.5 to 8.5 for the
-slowest Python job. Most of that time is its Test step, where `ctest` runs
+end to end in the four runs that include h13's change (§2a), against 5.9 to
+8.5 for the slowest Python job. Most of that time is its Test step, where `ctest` runs
 every test one at a time. Every merge runs it twice (once on the pull request,
 once in the merge queue).
 
@@ -40,10 +40,13 @@ Tooling; no novelty claimed.
   Appl. Math. 17(2):416-429, 1969 (doi:10.1137/0117039). Greedy list
   scheduling in an arbitrary order can finish up to 2 - 1/m times later than
   the best schedule on m processors; longest first, at most 4/3 - 1/(3m)
-  times later. Here one test is longer than a quarter of the whole run (§2b),
-  so longest first is not just within that bound but optimal: the run cannot
-  finish before its longest test does. The design departs from LPT in one
-  way: it gives a cost to one target, not to every test (§4, and why).
+  times later. That bound is all LPT promises in general: it can miss the
+  best schedule even when one job is long (four workers, jobs of 10, 7, 7, 7
+  and 7: longest first gives 14, the best schedule 10). On this suite's data
+  it is optimal: §2c's simulation finishes at 97 / 171 s, which is the lower
+  bound (the run cannot finish before its longest test does). The design
+  departs from LPT in one way: it gives a cost to one target, not to every
+  test (§4, and why).
 
 The runner: GitHub's runner reference (h13 §1, read 2026-10-04) gives
 ubuntu-latest 4 CPUs and 16 GB for public repositories. The image's own
@@ -66,8 +69,9 @@ $ git grep -n -iE 'ctest|add_test|catch_discover' legacy-archive -- legacy
 ### 2a. Step timings
 
 Read with `gh run view <id> --json jobs` (Build and Test step, and the whole
-job, in minutes). The first four runs are after h13 merged (macOS Build back
-to 1.4-2.4 minutes); the rest are before it.
+job, in minutes). The first four runs include h13's change (macOS Build back
+to 1.4-2.4 minutes): 37232172673 is h13's own pull-request run, and merge-queue
+run 37233115840 merged it. The rest are before it.
 
 | run | event | asan Build | asan Test | asan job | tsan Test | tsan job | slowest Python job |
 |---|---|---|---|---|---|---|---|
@@ -90,12 +94,13 @@ not hold a merge; §3 F says what to do with it.
 Every Catch2 test case is its own ctest test, run as its own process:
 `add_terrain_test` calls `catch_discover_tests(${name})`
 (`tests/cpp/CMakeLists.txt`, in the function), and Catch2 v3.6.0's
-`CatchAddTests.cmake` emits one `add_test` per name from
-`--list-test-names-only`. So 994 processes, each an ASan+UBSan Debug binary.
+`extras/CatchAddTests.cmake` (lines 63-64 of the copy CMake fetches into
+`build/_deps/catch2-src`) runs each binary with `--list-tests --verbosity
+quiet` and emits one `add_test` per name it lists. So 994 processes, each an ASan+UBSan Debug binary.
 
 Per-test times parsed from the Test step's log (`gh run view <run> --log --job
 <job>`, the `Test #N: <name> ... Passed <s> sec` lines), for the fastest and
-the slowest asan Test step after h13:
+the slowest asan Test step among the four runs that include h13's change:
 
 | | 37235448420 (job 111533535723) | 37234445967 (job 111530695102) |
 |---|---|---|
@@ -135,8 +140,10 @@ assuming a test takes as long in parallel as it did alone):
 | longest first, every test (LPT) | 166 / 311 s | 111 / 207 s | 97 / 171 s |
 | lower bound: max(longest test, sum / N) | 166 / 311 s | 111 / 207 s | 97 / 171 s |
 
-(fast run / slow run.) In declaration order, ES9 starts only after 212 s
-(fast) or 406 s (slow) of serial work ahead of it is shared out, and then
+(fast run / slow run.) In declaration order, ES9 has 212 s (fast) or 406 s
+(slow) of per-test time ahead of it to share out (the sum of the earlier
+tests' times; in a parallel run without the cost it starts at 48 / 94 s in
+the simulation), and then
 runs alone for its 97-171 s. A cost on its one target puts it first and
 reaches the lower bound at N = 4. Costs on more targets do not help and can
 hurt, because the cost is per target, not per case: with the five targets
@@ -189,7 +196,11 @@ $ grep -rnE 'FIXTURES_|RESOURCE_LOCK|RUN_SERIAL|WORKING_DIRECTORY|ENVIRONMENT|OU
 What the hits are:
 
 - `<cstdio>` in the default-kernel suite is for `std::fflush(nullptr)` before
-  its fork; `<cstdlib>` in both is for `_exit` and the like. No file is
+  its fork. `_exit`, which both fork tests call in the child, comes from
+  `<unistd.h>`; `test_build_hardening.cpp` has no `<cstdlib>`. In
+  `test_refinement_scan_frozen.cpp:30` `<cstdlib>` declares `std::size_t`, the
+  only name the file uses that it can come from (it calls no `<cstdlib>`
+  function). No file is
   opened anywhere in the C++ tests or the core (the core never opens a file,
   `CLAUDE.md` §2, I/O boundary).
 - The two `fork()` calls: each forks a child, waits for that child's own pid
@@ -244,19 +255,20 @@ state that the searches above can see.
 | option | expected asan Test step | cost and what it gives up |
 |---|---|---|
 | **A. `ctest --parallel "$(getconf _NPROCESSORS_ONLN)"`** on the asan Test step | 2.4-4.4 min ideal (145 / 265 s), up to about 3.6-6.6 min if each test slows by 1.5 | One line. ES9 still starts late (§2c). |
-| **B. A + a `COST` on `prop_refinement_edge_strip`** | 1.6-2.9 min ideal (97 / 172 s), about 2.4-4.3 with the 1.5 slowdown | Two to five lines of `tests/cpp/CMakeLists.txt`. A hand-placed hint that can go stale: if another test becomes the longest, the run gets slower, never wrong. |
-| C. Shard the tests over a matrix of jobs (`ctest -I` strides) | no better than B | Each shard builds the whole tree again (2.0-3.8 min each), or the job ships the sanitized binaries between jobs as an artifact. ES9 is still a floor of 97-171 s in whichever shard has it. |
+| **B. A + a `COST` on `prop_refinement_edge_strip`** | 1.6-2.9 min ideal (97 / 172 s), about 2.4-4.3 with the 1.5 slowdown | About 8 lines of `tests/cpp/CMakeLists.txt` (§4, LOC). A hand-placed hint that can go stale: if another test becomes the longest, the run gets slower, never wrong. |
+| C. Shard the tests over a matrix of jobs (`ctest -I` strides) | no better than B | Each shard builds the whole tree again (2.0-3.7 min each), or the job ships the sanitized binaries between jobs as an artifact. ES9 is still a floor of 97-171 s in whichever shard has it. |
 | D. Split the job (build once, test in several jobs) | no better than B | Same as C's artifact route, more YAML, same floor. |
 | E. Split ES9 into several Catch2 cases | B's floor drops to the sum / 4 bound: 83 / 155 s | A test edit for 15 s; ES9's `GENERATE`s are the test's design. Not worth it now. |
 | F. The tsan job too (run its 20 binaries in parallel) | tsan Test 4.6-9.5 min, maybe halved | Not a check `CI result` waits for, so no merge gets faster. Its Test step is a shell loop, not ctest; parallel needs `xargs -P` with interleaved output, and the suites start many threads under TSan already. Separate question (§8). |
 | G. Compile the sanitizer build at `-O1` instead of Debug (`-O0`) | perhaps a half or a third of today's, unmeasured | Changes what the job builds, not how it runs; outside Ola's ruling. Mentioned only. |
 | H. `--parallel` on the C++ core legs' `ctest` too | saves 10-20 s on jobs of 2-3 min | Same precondition, already met. Not the floor; out of the ruling's scope (§8). |
 
-After B, the asan job's expected total is about 4.5-8.6 minutes (set-up and
-Configure under a minute, Build 2.0-3.8, Test 2.4-4.3 with the slowdown), so
-the slowest Python job (5.5-8.5 in §2a) becomes the floor `CI result` waits
+After B, the asan job's expected total is about 4.5-8.5 minutes (set-up and
+Configure under a minute, Build 2.0-3.7, Test 2.4-4.3 with the slowdown), so
+the slowest Python job (5.9-8.5 in §2a) becomes the floor `CI result` waits
 on. The saving on a run is the asan job's time above the Python job's: about
-2 minutes in run 37235448420, about 6 in run 37234445967.
+2 minutes in run 37235448420 (7.8 - 5.9), about 7 in run 37234445967
+(13.7 - 7.1).
 
 ## 4. Recommendation
 
@@ -282,9 +294,10 @@ Option B.
   block under its result line, not interleaved with tests running beside it
   (probed locally: a failing test that prints across a second, run beside a
   noisy one, `--parallel 4`).
-- No per-test timeout is set today (no `include(CTest)`, no `TIMEOUT`; the
-  last grep of §2d), and none is added: the job's `timeout-minutes: 30` still
-  catches a hang.
+- No per-test timeout is set today, and none is added: `grep -rn
+  'TIMEOUT\|include(CTest)' CMakeLists.txt tests/cpp/CMakeLists.txt` prints
+  nothing (exit 1). The job's `timeout-minutes: 30` still catches a
+  hang.
 
 **Test registration** (`tests/cpp/CMakeLists.txt`): `add_terrain_test`
 accepts an optional `COST <value>` keyword and passes it to
@@ -350,11 +363,14 @@ run, and every item can fail. In the `C++ sanitizers (asan+ubsan)` job's log:
    a run with the job count lost gives 1.0.
 3. **The cost took effect:** the log line `Start <n>: ES9: refine_points ...`
    is time-stamped less than **30 s** after the first `Start` line of the
-   Test step. Today ES9 starts 212 s (fast runner) to 406 s (slow) after the
-   first test. With the cost, only the other 16 edge-strip cases (5-10 s of
-   work, shared over four workers) can start before it.
-4. **The time:** the Test step under **5.0 minutes** (today 5.5-10.4 after
-   h13; the estimate is 2.4-4.3). If items 2 and 3 hold and this fails, the
+   Test step. Today, in serial, ES9 starts 213 s (fast runner) to 406 s
+   (slow) after the first test, as the command below prints. Parallel without
+   the cost would start it at about 48 / 94 s (§2c's simulation), so the
+   30 s limit separates the two cases with room on both runners. With the
+   cost, only the other 16 edge-strip cases (5-10 s of work, shared over four
+   workers) can start before it.
+4. **The time:** the Test step under **5.0 minutes** (today 5.6-10.4 in the
+   four runs that include h13's change; the estimate is 2.4-4.3). If items 2 and 3 hold and this fails, the
    runner is slower under load than §2c assumed: the increment goes back to
    `@architect` with the measured numbers, not on to another option.
 
@@ -410,3 +426,42 @@ not involved: no refine or mesh code is touched.
    **include it**. Without it the slowest test starts near the end and the
    step takes roughly 1.5 times as long (§2c: 145 against 97 s on a fast
    runner, 265 against 172 s on a slow one).
+
+## Review
+
+### Round 1: `@reviewer`, design, 529613a..0b2ab5d
+
+Verdict: **CHANGES REQUESTED**, on wording only. Every number and the
+recommendation reproduced: the step timings, the per-test parse, ES9's 97.03
+and 171.4 s, the simulation table cell for cell, the shared-state searches,
+the CMake 3.31.6 source, the quoted documentation, and §6's command; all four
+§6 checks can fail.
+
+Findings, all fixed in the commit after 0b2ab5d:
+
+1. §2b named `--list-test-names-only` (Catch2 v2); v3.6.0's
+   `CatchAddTests.cmake` runs `--list-tests --verbosity quiet` (its lines
+   63-64).
+2. Intro and §2a said "since/after h13 merged"; run 37232172673 is h13's own
+   pull-request run, before queue run 37233115840 merged it. Now "the four
+   runs that include h13's change".
+3. Intro and §3 gave the slowest Python job as 5.5-8.5 min; the table gives
+   5.9-8.5 (5.5 is the fastest Python job).
+4. §6 item 4 gave 5.5-10.4 after h13; those rows give 5.6-10.4 (5.5 is the
+   pre-h13 run 37224723259).
+5. §6 item 3 gave ES9's start as 212 s; §6's own command prints 213 s (the
+   timestamp gap, 213.3 s). 212 s is the sum of the earlier tests' times,
+   which §2c now names as such.
+6. §3 B said two to five lines of `tests/cpp/CMakeLists.txt`, §4 about 8. Now
+   about 8 in both.
+7. §1 said longest first is optimal *because* one test exceeds a quarter of
+   the run; it is not (four workers, jobs 10, 7, 7, 7, 7: longest first 14,
+   best 10). Now: optimal on this data, as §2c's simulation reaches the lower
+   bound (97 / 171 s).
+
+Suggestions, taken: §2d's `<cstdlib>`/`_exit` remark corrected (`_exit` is
+`<unistd.h>`; `test_build_hardening.cpp` has no `<cstdlib>`; the one in
+`test_refinement_scan_frozen.cpp` is for `std::size_t`); §4's no-timeout
+claim now shows its grep; §3's saving "about 6" is "about 7" (13.7 - 7.1) and
+Build 2.0-3.7; §6 item 3 compares against parallel without the cost (48 / 94 s
+simulated).
