@@ -293,7 +293,17 @@ legacy-archive:legacy/rasputin/writer.py
 
 Every hit but one is "convert" matching `nve`. `avalanche.py` calls NVE's
 avalanche-forecast API, which has nothing to do with catchments or gauges.
-Increment 22's grep for catchment terms still returns no files.
+Increment 22's grep for catchment terms still returns no files. For the
+river network and the burn:
+
+```
+$ git grep -liE "burn|elvenett|elvis|hydrography|river" legacy-archive -- legacy
+legacy-archive:legacy/rasputin/globcov_repository.py
+legacy-archive:legacy/rasputin/gml_repository.py
+```
+
+Both hits are land-cover class names for burnt ground (`"No data (burnt
+areas, clouds,…)"`, `burnt = 334`), not stream burning or rivers.
 
 **Literature.** Each reference was checked against Crossref on 2026-10-04
 (title, authors, venue, DOI), except where marked; abstracts or the pages
@@ -301,29 +311,39 @@ named were read, no paper in full.
 
 - **Jenson 1991**, "Applications of hydrologic information automatically
   extracted from digital elevation models", *Hydrological Processes*
-  5(1):31-44, doi:10.1002/hyp.3360050104. The "snap pour point" rule: move
-  the gauge to the cell of highest flow accumulation within a radius.
-  **The snap below builds on it.** What differs: the accumulation is the
-  Priority-Flood's own drainage (each node drains to the node that flooded
-  it, increment 22), not D8, so the snapped node's upstream set is exactly
-  what `upstream()` labels from it; and the window is grown until every node
-  in the radius has its whole upstream area inside it (below), which a
-  fixed-extent accumulation grid does not guarantee at a window's edge.
+  5(1):31-44, doi:10.1002/hyp.3360050104. The source of the rule that moves
+  an outlet to the **nearest** stream cell within a distance. Round 1 of
+  this design misattributed to it the rule of the **largest** accumulation
+  within a radius (the "snap pour point" of common GIS tools), and chose
+  that rule. Both are point-to-raster rules: neither looks at where the
+  river is mapped. **Used here only as the fallback** for a station with no
+  mapped river line within the map radius (none of the 140 at the default
+  radius; any station list a user brings without a river file). The
+  acceptance also runs it as a **comparison**, on the stations that end up
+  `miss` or `uncertain`, so that its effect is measured.
 - **Lindsay, Rothwell and Davies 2008**, "Mapping outlet points used for
   watershed delineation onto DEM-derived stream networks", *Water Resources
-  Research* 44(8):W08442, doi:10.1029/2007WR006507. States the problem this
-  increment meets ("outlet point positions taken from hydrometric stations
-  commonly do not coincide with stream locations extracted from DEMs") and
-  proposes AORA, which also uses the reported catchment area and stream
-  names. **Departure, and why:** no reported area is used to place the seed
-  by default, because the acceptance compares against NVE's area, and
-  placing by it would make that comparison partly circular. The cost is the
-  failure Jenson's rule is known for: in a radius that reaches a larger
-  river below a confluence, the snap jumps to it. The acceptance measures how
-  often (Question 4 offers the area-guided rule instead).
+  Research* 44(8):W08442, doi:10.1029/2007WR006507 (abstract read, from
+  OpenAlex). It states this increment's problem: "Outlet point positions
+  taken from hydrometric stations commonly do not coincide with stream
+  locations extracted from digital elevation models". It proposes AORA,
+  which "uses water body names to identify locations for outlet
+  repositioning" and had "the fewest repositioning errors" against "two
+  existing automated techniques" over 993 stations. The abstract names
+  neither of the two. The first author's own documentation of the tools
+  (WhiteboxTools, `JensonSnapPourPoints`, doc comment in its source) says
+  the nearest-stream rule "should be preferred" over the largest-stream
+  rule, which near a confluence "may re-position outlets on the main-trunk
+  stream". **What is taken:** AORA's principle, that a gauge goes where the
+  mapped water body says it is, not where a raster quantity peaks. **What
+  differs:** the mapped river's geometry places the gauge, not only its
+  name; the station's watercourse number filters the candidate lines (the
+  name is kept as a second filter); and the DEM is conditioned along the
+  mapped reach (below). AORA also checks the reported area; that is
+  rejected here (next item).
 - **Lehner 2012**, GRDC Report 41, "Derivation of watershed boundaries for
-  GRDC gauging stations based on the HydroSHEDS drainage network" (BfG,
-  not on Crossref; the GRDC page
+  GRDC gauging stations based on the HydroSHEDS drainage network" (BfG, not
+  on Crossref; the GRDC page
   `https://grdc.bafg.de/products/basin_layers/watershed_boundaries/` read):
   candidate outlets within 5 km, chosen by "the reported catchment area of
   the GRDC station and the distance between the station coordinates and the
@@ -331,8 +351,40 @@ named were read, no paper in full.
   500 m). **Färber et al. 2025**, "GRDC-Caravan: extending Caravan with data
   from the Global Runoff Data Centre", *ESSD* 17(9):4613-4625,
   doi:10.5194/essd-17-4613-2025, is where the GRDC page points for the
-  current method (its section 2.3; not read here). The area-guided
-  alternative of Question 4 is this rule.
+  current method (its section 2.3; not read here). **Rejected, and why**
+  (Ola, 2026-10-04): the flow accumulation grows monotonically downstream,
+  so any rule that maximises area, or that matches a reported area among
+  candidates near a confluence, biases the gauge downstream. That bias is
+  fatal for residual inflow (the inflow between two points on one river).
+  Matching a reported area also borrows the reference answer that the
+  acceptance compares against.
+- **Hellweger 1997**, "AGREE — DEM surface reconditioning system", Center
+  for Research in Water Resources, University of Texas at Austin (a web
+  report; not on Crossref, and not found online in this round, so
+  **unverified**: cited as the usual name for the method). Stream burning:
+  lower the DEM along the vector stream lines, with a buffer that slopes
+  towards them, so that derived flow follows the mapped network.
+- **Lindsay 2016**, "The practice of DEM stream burning revisited", *Earth
+  Surface Processes and Landforms* 41(5):658-668, doi:10.1002/esp.3888
+  (abstract read, from OpenAlex). Names the artefact of common burning:
+  "topological errors resulting from the mismatched scales of the
+  hydrography and DEM data sets", in particular "erroneous stream piracy
+  caused by the rasterization of multiple stream links to the same DEM grid
+  cell". Its TopologicalBreachBurn prunes the network to the DEM's
+  resolution, "restricts flow within individual stream reaches", and gives
+  the larger stream priority where two share a cell. A plain burn
+  (FillBurn) lost accuracy at coarse resolution (kappa 0.953 down to 0.490,
+  against 0.952 to 0.921). **What is taken, and what differs:** only one
+  chain of the network is burnt, the gauge's own reach, so no two links are
+  rasterised together and no piracy between links can arise. The reach is
+  first moved onto the DEM's valley floor, inside a narrow corridor round
+  the mapped line, because ELVIS is at 1:50,000 against a 10 m DEM (the
+  scale mismatch Lindsay names). The DEM is then lowered by breaching only
+  where it still climbs along the reach. This is a local, minimal form of
+  burning, not AGREE over the network. **The departure drops** the effect a
+  network-wide burn has on divides (where the DEM puts a divide the mapped
+  network crosses). Burning the whole network is a later option (Question
+  9).
 - **Seppä, Gonzales Inca, Uusikivi and Alho 2026**, "CAMELS-FI:
   hydrometeorological time series and landscape properties for 320
   catchments in Finland", *ESSD* 18(7):4745-4769,
@@ -369,10 +421,14 @@ named were read, no paper in full.
   in increment 22: the flood the accumulation reuses, and D8, which it
   departs from for the reason 22 gives.
 
-**Novelty.** None is claimed. Searched: the six works above, Crossref and
-web searches for automatic delineation of gauge catchments compared with
-official polygons (overlap, Jaccard, area ratio), NVE's NEVINA guide, and
-the HRD report. Not found in that search: a published, per-station,
+**Novelty.** None is claimed. Searched: the works above, Crossref,
+OpenAlex and web searches for automatic delineation of gauge catchments
+compared with official polygons (overlap, Jaccard, area ratio), outlet
+placement on mapped hydrography, and stream burning; NVE's NEVINA guide, the
+ELVIS product sheet, and the HRD report. The per-station sensitivity of the
+catchment area along the river (below) was not searched as a method of its
+own. It is presented as a diagnostic, not a contribution, and a write-up
+would search for it first. Not found in that search: a published, per-station,
 two-way overlap comparison of a fully automatic 10 m delineation against
 NVE's polygons for the HRD stations. That is a gap in what was searched, not
 a claim; a write-up would search again (Scandinavian journals, NVE reports,
