@@ -15,19 +15,24 @@ at h = 30.
 
 Conformity, a valid union and constrained Delaunay with the seams are
 checked here too (section 3D: both oracles on every path). The union's area
-is compared to the domain moved by pyproj to 1e-6, not DC3's 1e-9: the
-noder's 1 mm snap of the moved vertices changes it by about 4e-7 (measured
-on today's uncut mesh of this scene).
+is the run's noded outline's to 1e-9, and that outline is the domain moved
+by pyproj to within the noder's snap (DC3 as corrected under "23c-2 stopped
+at dbbe1c6", 1).
 
 PINNED HERE (handback, choice 11): each index entry's `counts` carries
 `on_frozen`, the piece's phase 2 count of source nodes on a frozen edge.
 
-HOW THIS FILE GOES RED: `--pieces` is not an option of `mesh`.
+Split under "23c-2 stopped at dbbe1c6", 2: DC10's cases run at
+`--start-min-angle 0`; at the default start quality, increment 20's pass
+can insert a NoData node, which trim then carves into a hole (the uncut path
+has the same defect). Those two cases are `xfail(strict=True)` naming the
+fix, so they report themselves once it lands.
 """
 
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
 import numpy as np
 import pytest
@@ -51,9 +56,7 @@ H = 30.0
 TOLERANCE = 1.0
 
 
-@pytest.fixture(scope="module")
-def done(tmp_path_factory: pytest.TempPathFactory) -> pf.Cut:
-    where = tmp_path_factory.mktemp("reprojected")
+def cut_reprojected(where: Path, *extra: str) -> pf.Cut:
     dem = where / "anadem_like.tif"
     dem.write_bytes(geographic_tile_tiff(tile_array()).getvalue())
     ring = project_ring("EPSG:4326", "EPSG:4674", lonlat_ring(DOMAIN_RC))
@@ -61,8 +64,21 @@ def done(tmp_path_factory: pytest.TempPathFactory) -> pf.Cut:
     return pf.cut(
         where / "run",
         *("--dem", str(dem), "--domain", str(domain)),
-        *("--out-crs", TARGET, "--tolerance", repr(TOLERANCE), "--pieces", "4"),
+        *("--out-crs", TARGET, "--tolerance", repr(TOLERANCE), "--pieces", "4", *extra),
     )
+
+
+@pytest.fixture(scope="module")
+def done(tmp_path_factory: pytest.TempPathFactory) -> pf.Cut:
+    """DC10's subject, the cut on the reprojected path, with the start-quality
+    pass off ("23c-2 stopped at dbbe1c6", 2)."""
+    return cut_reprojected(tmp_path_factory.mktemp("reprojected"), "--start-min-angle", "0")
+
+
+@pytest.fixture(scope="module")
+def with_quality(tmp_path_factory: pytest.TempPathFactory) -> pf.Cut:
+    """The same at the default start quality (25 degrees)."""
+    return cut_reprojected(tmp_path_factory.mktemp("reprojected-quality"))
 
 
 def target_domain() -> Polygon:
@@ -110,6 +126,32 @@ def test_conformity_a_valid_union_and_constrained_delaunay(done: pf.Cut) -> None
     assert pf.conformity_problems(done.pieces) == []
     u = pf.union(done.pieces)
     assert u.z_conflicts == []
-    assert pf.validity_problems(u, target_domain(), area_rel=1e-6) == []
+    assert pf.validity_problems(u, target_domain(), done.noded) == []
     assert pf.overlapping_pairs(u) == []
     assert pf.delaunay_violations(u.points[:, :2], u.triangles, u.constrained) == []
+
+
+# ------------------------------------------------------------------ at the default start quality
+
+QUALITY_FIX = (
+    "increment 20's start-quality pass inserts NoData nodes and trim leaves holes; "
+    'fixed by "Fix: the start-quality pass skips NoData nodes" in 20-start-quality.md '
+    "(improve skips void nodes, skipped_void)"
+)
+
+
+@pytest.mark.xfail(strict=True, reason=QUALITY_FIX)
+def test_at_the_default_start_quality_no_source_node_over_tolerance(with_quality: pf.Cut) -> None:
+    u = pf.union(with_quality.pieces)
+    array = tile_array().ravel().astype(np.float64)
+    lon, lat = nodes(LON0, LAT0, ANADEM_STEP, ANADEM_STEP, tile_array().shape)
+    valid = array != NODATA
+    xy = project("EPSG:4326", TARGET, lon[valid], lat[valid])
+    found = source_check(u.points, u.triangles, xy, array[valid], target_domain(), TOLERANCE, H)
+    assert (found.over_interior, found.over_strip) == (0, 0), found
+
+
+@pytest.mark.xfail(strict=True, reason=QUALITY_FIX)
+def test_at_the_default_start_quality_a_valid_union(with_quality: pf.Cut) -> None:
+    u = pf.union(with_quality.pieces)
+    assert pf.validity_problems(u, target_domain(), with_quality.noded) == []

@@ -6,8 +6,9 @@ and K10 (the core sees numbers in metres; CRS stays in Python).
 
 - CRS: a domain in EPSG:4326 over the projected scene is moved by pyproj as
   today (15b) and then cut; the union passes conformity and both section 3D
-  oracles against the domain moved by pyproj's own `Transformer` (area to
-  1e-6: the 1 mm snap of moved vertices).
+  oracles against the domain moved by pyproj's own `Transformer` (DC3's
+  area against the run's noded outline, and that outline within the
+  noder's snap of the moved domain).
 - A truncated DEM is a usage error in a cut run, as uncut (today: exit 2,
   "tifffile could not decode the file", no traceback), and leaves no
   `index.json`: a half-written run is not an index.
@@ -95,7 +96,7 @@ def test_a_domain_in_another_crs_is_moved_then_cut(tmp_path: Path) -> None:
     assert pf.conformity_problems(done.pieces) == []
     assert pf.off_lattice_seams(done.pieces) == []
     u = pf.union(done.pieces)
-    assert pf.validity_problems(u, moved, area_rel=1e-6) == []
+    assert pf.validity_problems(u, moved, done.noded) == []
     assert pf.delaunay_violations(u.points[:, :2], u.triangles, u.constrained) == []
     found = pf.tolerance_check(u, array, moved, 1.0)
     assert (found.over, found.outside_mesh) == (0, 0), found

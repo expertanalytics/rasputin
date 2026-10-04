@@ -159,16 +159,22 @@ class TestUncutIsTodaysMesh:
 # ------------------------------------------------------------------ the output
 
 
-class TestTheOutput:
-    @pytest.fixture(scope="class")
-    def done(self, tmp_path_factory: pytest.TempPathFactory, scene: Any) -> Cut:
-        return pf.cut(tmp_path_factory.mktemp("out"), *base(scene), "--pieces", "4")
+@pytest.fixture(scope="module")
+def output_run(tmp_path_factory: pytest.TempPathFactory, scene: Any) -> Cut:
+    return pf.cut(tmp_path_factory.mktemp("out"), *base(scene), "--pieces", "4")
 
-    def test_the_index_records_the_run(self, done: Cut, tmp_path: Path, scene: Any) -> None:
+
+@pytest.fixture(scope="module")
+def controls_run(tmp_path_factory: pytest.TempPathFactory, scene: Any) -> Cut:
+    return pf.cut(tmp_path_factory.mktemp("controls"), *base(scene), "--pieces", "4")
+
+
+class TestTheOutput:
+    def test_the_index_records_the_run(self, output_run: Cut, tmp_path: Path, scene: Any) -> None:
         today = pf.run(tmp_path, *base(scene))
         assert today.code == 0, today.output
         crs = pf.read_vtk(today.out.read_bytes()).field_data["crs"].values[0]
-        index = done.index
+        index = output_run.index
         assert index["crs"] == crs
         assert index["tolerance"] == 1.0
         part = index["partition"]
@@ -181,35 +187,37 @@ class TestTheOutput:
         assert part["dx"] * (part["nx"] - 1) < part["cols"] <= part["dx"] * part["nx"]
         assert part["dy"] * (part["ny"] - 1) < part["rows"] <= part["dy"] * part["ny"]
 
-    def test_one_piece_per_cell_of_a_convex_domain(self, done: Cut) -> None:
-        ids = sorted(p.id for p in done.pieces)
+    def test_one_piece_per_cell_of_a_convex_domain(self, output_run: Cut) -> None:
+        ids = sorted(p.id for p in output_run.pieces)
         assert ids == [(0, 0, 0), (0, 1, 0), (1, 0, 0), (1, 1, 0)]
 
-    def test_every_listed_file_exists_with_its_sha256(self, done: Cut) -> None:
-        assert done.dir is not None
-        for entry in done.index["pieces"]:
-            path = done.dir / entry["file"]
-            assert path.parent == done.dir, entry
+    def test_every_listed_file_exists_with_its_sha256(self, output_run: Cut) -> None:
+        assert output_run.dir is not None
+        for entry in output_run.index["pieces"]:
+            path = output_run.dir / entry["file"]
+            assert path.parent == output_run.dir, entry
             assert path.suffix == ".vtk", entry
             assert entry["sha256"] == pf.sha256(path), entry
 
-    def test_the_index_is_a_mesh_index(self, done: Cut) -> None:
+    def test_the_index_is_a_mesh_index(self, output_run: Cut) -> None:
         from tin_engine.io.mesh_index import MeshIndex
 
-        assert done.dir is not None
-        text = (done.dir / "index.json").read_text()
+        assert output_run.dir is not None
+        text = (output_run.dir / "index.json").read_text()
         model = MeshIndex.model_validate_json(text)
         assert json.loads(model.model_dump_json()) == json.loads(text)
 
-    def test_each_piece_file_is_a_mesh_in_the_runs_crs(self, done: Cut) -> None:
-        for piece in done.pieces:
-            assert piece.vtk.field_data["crs"].values[0] == done.index["crs"]
+    def test_each_piece_file_is_a_mesh_in_the_runs_crs(self, output_run: Cut) -> None:
+        for piece in output_run.pieces:
+            assert piece.vtk.field_data["crs"].values[0] == output_run.index["crs"]
             assert len(piece.triangles) > 0, piece.id
             assert piece.seam > 0
 
-    def test_the_seam_bit_is_not_a_feature_bit(self, done: Cut) -> None:
-        names = list(done.pieces[0].vtk.field_data["feature_names"].values)
-        bits = [int(b) for b in np.asarray(done.pieces[0].vtk.field_data["feature_bits"].values)]
+    def test_the_seam_bit_is_not_a_feature_bit(self, output_run: Cut) -> None:
+        names = list(output_run.pieces[0].vtk.field_data["feature_names"].values)
+        bits = [
+            int(b) for b in np.asarray(output_run.pieces[0].vtk.field_data["feature_bits"].values)
+        ]
         assert names.count("seam") == 1
         assert len(set(bits)) == len(bits)
 
@@ -249,6 +257,9 @@ class TestTheUnion:
         assert all_problems(done, array, tolerance) == []
 
     def test_the_union_has_the_uncut_area(self, tmp_path: Path, scene: Any) -> None:
+        """To the noder's snap: each partition line's crossing with a sloped
+        outline edge is snapped by up to `SNAP * sqrt(2) / 2`, so the cut's
+        outline is not the uncut one's ("23c-2 stopped at dbbe1c6", 1)."""
         done = pf.cut(tmp_path / "cut", *base(scene), "--pieces", "4")
         today = pf.run(tmp_path / "today", *base(scene))
         whole = pf.read_vtk(today.out.read_bytes())
@@ -262,19 +273,15 @@ class TestTheUnion:
             return float(twice.sum() / 2)
 
         expected = area(np.asarray(whole.points), pf.polygons_as_array(whole))
-        assert area(u.points, u.triangles) == pytest.approx(expected, rel=1e-12)
+        assert abs(area(u.points, u.triangles) - expected) <= pf.SNAP_MOVE * DOMAIN.length
 
 
 class TestTheControls:
     """Each oracle fails on a mesh that is wrong in its way."""
 
-    @pytest.fixture(scope="class")
-    def done(self, tmp_path_factory: pytest.TempPathFactory, scene: Any) -> Cut:
-        return pf.cut(tmp_path_factory.mktemp("controls"), *base(scene), "--pieces", "4")
-
-    def test_dc4_without_the_seams_as_constraints_finds_violations(self, done: Cut) -> None:
+    def test_dc4_without_the_seams_as_constraints_finds_violations(self, controls_run: Cut) -> None:
         """What the union is: constrained Delaunay with the seams, not without."""
-        u = pf.union(done.pieces)
+        u = pf.union(controls_run.pieces)
         with_seams = pf.delaunay_violations(u.points[:, :2], u.triangles, u.constrained)
         assert with_seams == []
         assert u.seam_only, "no seam edge in the union"
@@ -282,9 +289,11 @@ class TestTheControls:
         assert without != []
         assert {edge for edge, _ in without} <= u.seam_only
 
-    def test_dc5_with_z_shifted_by_twice_the_tolerance_fails(self, done: Cut, scene: Any) -> None:
+    def test_dc5_with_z_shifted_by_twice_the_tolerance_fails(
+        self, controls_run: Cut, scene: Any
+    ) -> None:
         _, _, array = scene
-        u = pf.union(done.pieces)
+        u = pf.union(controls_run.pieces)
         assert pf.tolerance_check(u, array, DOMAIN, 1.0).over == 0
         shifted = Union(
             points=u.points + np.array([0.0, 0.0, 2.0]),
@@ -295,19 +304,19 @@ class TestTheControls:
         )
         assert pf.tolerance_check(shifted, array, DOMAIN, 1.0).over > 0
 
-    def test_dc2_a_seam_vertex_moved_in_one_file_is_caught(self, done: Cut) -> None:
-        assert pf.conformity_problems(done.pieces) == []
-        first = done.pieces[0]
+    def test_dc2_a_seam_vertex_moved_in_one_file_is_caught(self, controls_run: Cut) -> None:
+        assert pf.conformity_problems(controls_run.pieces) == []
+        first = controls_run.pieces[0]
         tampered = pf.Piece(**{**first.__dict__, "points": first.points.copy()})
         (a, _), _m = next(
             (e, m) for e, m in zip(first.edges, first.masks, strict=True) if m & first.seam
         )
         tampered.points[a, 2] = np.nextafter(tampered.points[a, 2], np.inf)
-        assert pf.conformity_problems([tampered, *done.pieces[1:]]) != []
+        assert pf.conformity_problems([tampered, *controls_run.pieces[1:]]) != []
 
-    def test_dc3_a_dropped_triangle_is_caught(self, done: Cut) -> None:
-        u = pf.union(done.pieces)
-        assert pf.validity_problems(u, DOMAIN) == []
+    def test_dc3_a_dropped_triangle_is_caught(self, controls_run: Cut) -> None:
+        u = pf.union(controls_run.pieces)
+        assert pf.validity_problems(u, DOMAIN, controls_run.noded) == []
         short = Union(
             points=u.points,
             triangles=u.triangles[1:],
@@ -315,7 +324,7 @@ class TestTheControls:
             seam_only=u.seam_only,
             z_conflicts=[],
         )
-        assert pf.validity_problems(short, DOMAIN) != []
+        assert pf.validity_problems(short, DOMAIN, controls_run.noded) != []
 
 
 # ------------------------------------------------------------------ K9

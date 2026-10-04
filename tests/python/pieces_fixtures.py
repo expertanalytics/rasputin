@@ -13,7 +13,8 @@ code with `tin_engine`:
   bit, is in exactly two piece files;
 - the union (DC3): pieces are glued on exact `(x, y)`; every edge is in one
   or two triangles, one only on the domain's boundary; the areas sum to the
-  domain's; no two triangles overlap;
+  run's noded outline's (taken by a spy on `node`), which lies within the
+  noder's snap of the domain; no two triangles overlap;
 - constrained Delaunay (DC4, and tester.md section 3D's first oracle): an
   exact incircle (Python `fractions` over the doubles as written) on every
   interior edge of the union that is not a constraint of any piece file,
@@ -39,7 +40,11 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
+import sys
 from collections import defaultdict
+from collections.abc import Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from fractions import Fraction
 from pathlib import Path
@@ -131,6 +136,7 @@ class Cut:
     dir: Path | None
     index: dict[str, Any] = field(default_factory=dict)
     pieces: list[Piece] = field(default_factory=list)
+    noded: Polygon | None = None  # the run's own noded outline, from its `node` call
 
 
 def bit_named(vtk: VtkFile, name: str) -> int:
@@ -163,12 +169,56 @@ def pieces_dir(out: Path) -> Path | None:
     return found[0] if found else None
 
 
+@contextmanager
+def node_spy() -> Iterator[list[Any]]:
+    """Every `node` outcome the run makes, wherever `tin_engine` holds `node`
+    (the spy K9's test uses); restored on exit."""
+    from tin_engine import _core
+
+    original = _core.node
+    seen: list[Any] = []
+
+    def spy(*args: Any, **kwargs: Any) -> Any:
+        outcome = original(*args, **kwargs)
+        seen.append(outcome)
+        return outcome
+
+    held = [m for k, m in list(sys.modules.items()) if k.startswith("tin_engine")]
+    patched = [m for m in held if getattr(m, "node", None) is original]
+    for module in patched:
+        module.node = spy
+    try:
+        yield seen
+    finally:
+        for module in patched:
+            module.node = original
+
+
+def noded_outline(outcome: Any) -> Polygon:
+    """The noded domain: the outer chain as the shell, the hole chains as holes."""
+    from tin_engine._core import ChainRole
+
+    pslg = outcome.pslg
+    xy = np.asarray(pslg.vertices, dtype=np.float64)
+    rings: dict[str, list[npt.NDArray[np.float64]]] = {"outer": [], "hole": []}
+    for c, chain in enumerate(pslg.chains):
+        if chain.role in (ChainRole.Outer, ChainRole.Hole):
+            ring = xy[np.asarray(pslg.indices_of(c), dtype=np.int64)]
+            rings["outer" if chain.role == ChainRole.Outer else "hole"].append(ring)
+    assert len(rings["outer"]) == 1, "not one outer ring"
+    return Polygon(rings["outer"][0], rings["hole"])
+
+
 def run(where: Path, *args: str, out_name: str = "x.vtk") -> Cut:
     """`rasputin mesh *args --out where/out_name`, in a directory of its own."""
     where.mkdir(parents=True, exist_ok=True)
     out = where / out_name
-    code, output = invoke(*args, "--out", str(out))
-    return Cut(code=code, output=output, out=out, dir=pieces_dir(out))
+    with node_spy() as seen:
+        code, output = invoke(*args, "--out", str(out))
+    done = Cut(code=code, output=output, out=out, dir=pieces_dir(out))
+    if len(seen) == 1 and seen[0].ok():
+        done.noded = noded_outline(seen[0])
+    return done
 
 
 def cut(where: Path, *args: str, out_name: str = "x.vtk") -> Cut:
@@ -303,11 +353,34 @@ def sides(triangles: npt.NDArray[np.int64]) -> dict[tuple[int, int], list[tuple[
     return out
 
 
-def validity_problems(u: Union, domain: Polygon, area_rel: float = 1e-9) -> list[str]:
-    """DC3: a valid union of the piece files over `domain`. `area_rel` is
-    DC3's 1e-9 where the domain's vertices are on the noder's 1 mm grid; a
-    reprojected domain's are not, and the snap moves its area by more."""
+#: How far the noder may move a vertex, a crossing included (05-noder.md, 14(b)).
+SNAP_MOVE = SNAP * math.sqrt(2) / 2
+
+
+def noded_problems(noded: Polygon, domain: Polygon) -> list[str]:
+    """The noded outline against the domain ("23c-2 stopped at dbbe1c6", 1):
+    every vertex within the snap's reach of the domain's boundary, and the
+    areas within that reach times the domain's perimeter."""
     problems = []
+    boundary = domain.boundary
+    rings = [noded.exterior, *noded.interiors]
+    for ring in rings:
+        for x, y in shapely.get_coordinates(ring):
+            d = boundary.distance(shapely.Point(x, y))
+            if d > SNAP_MOVE + 1e-9:
+                problems.append(f"noded vertex ({x!r}, {y!r}) {d} from the domain")
+    if abs(noded.area - domain.area) > SNAP_MOVE * domain.length:
+        problems.append(f"noded area {noded.area!r} against the domain's {domain.area!r}")
+    return problems
+
+
+def validity_problems(u: Union, domain: Polygon, noded: Polygon | None) -> list[str]:
+    """DC3: a valid union of the piece files over `domain`: its area is the
+    run's noded outline's to 1e-9, and that outline is the domain's to the
+    noder's snap (`noded_problems`)."""
+    if noded is None:
+        return ["no noded outline: the run's node call was not seen"]
+    problems = noded_problems(noded, domain)
     boundary = domain.boundary
     for (a, b), held in sides(u.triangles).items():
         if len(held) > 2:
@@ -322,8 +395,8 @@ def validity_problems(u: Union, domain: Polygon, area_rel: float = 1e-9) -> list
     if (twice <= 0).any():
         problems.append(f"{int((twice <= 0).sum())} triangles not counter-clockwise")
     area = float(np.sum(twice) / 2)
-    if abs(area - domain.area) > area_rel * domain.area:
-        problems.append(f"area {area!r} against the domain's {domain.area!r}")
+    if abs(area - noded.area) > 1e-9 * noded.area:
+        problems.append(f"area {area!r} against the noded outline's {noded.area!r}")
     return problems
 
 
@@ -417,7 +490,7 @@ def problems(done: Cut, array: np.ndarray, domain: Polygon, tolerance: float) ->
     found += [f"seam edge off the lattice: {e}" for e in off_lattice_seams(done.pieces)]
     u = union(done.pieces)
     found += [f"two z at {k}" for k in u.z_conflicts]
-    found += validity_problems(u, domain)
+    found += validity_problems(u, domain, done.noded)
     found += [f"triangles {p} overlap" for p in overlapping_pairs(u)]
     violations = delaunay_violations(u.points[:, :2], u.triangles, u.constrained)
     found += [f"not constrained Delaunay: {v}" for v in violations]
