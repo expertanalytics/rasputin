@@ -18,8 +18,10 @@ binding mirrors `UpstreamOutcome`):
   the neighbour the node drains to, 255 for an outlet and on NoData.
 - All three owned by the outcome: they outlive the view and its array.
 
-Not tested here: the 2^32-node refusal's mapping to `ValueError`; a raster
-that size cannot be built in a test, and the C++ suite pins the refusal.
+Not tested here: the 2^32-node refusal's mapping to `ValueError`. A raster
+that size cannot be built on CI runners (its float32 input alone is 16 GiB,
+before any output), so the C++ suite pins the refusal instead, through a
+source that reads no cell.
 """
 
 from __future__ import annotations

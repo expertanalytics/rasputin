@@ -11,21 +11,9 @@
 //   bit 1 of reach[c]      == upstream(z, {c}).touches_nodata
 //   upstream(z, {flow_to[d] as a node}).mask[d] == 1 for every d that has one
 //
-// Interface, as the design fixes it:
-//
-//   #include <terrain/hydrology/accumulate.hpp>
-//   namespace terrain::hydrology {
-//   struct AccumulateOutcome {
-//       std::vector<std::uint32_t> count;   // row-major; 0 on NoData, else the
-//                                           // nodes draining through it, itself included
-//       std::vector<std::uint8_t> reach;    // bit 0 touches the edge, bit 1 NoData
-//       std::vector<std::uint8_t> flow_to;  // 3*(dr+1)+(dc+1); 255 outlet / NoData
-//   };
-//   template <raster::RasterSource R>
-//   [[nodiscard]] AccumulateOutcome accumulate(const R& z);
-//   }
-//
-// Refused with std::length_error at 2^32 nodes or more.
+// The interface (AccumulateOutcome's three arrays, their encodings, and the
+// std::length_error refusal at 2^32 nodes) is stated once, in
+// include/terrain/hydrology/accumulate.hpp; this suite does not restate it.
 
 #include <catch2/catch_test_macros.hpp>
 
