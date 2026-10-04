@@ -1,6 +1,6 @@
 # Increment 29 — NVE reference catchments: our catchments against NVE's, station by station
 
-Status: **design approved by `@reviewer` (round 5, 2026-10-04); all questions ruled by Ola; PR 1 (accumulation) merged as #173; PR 3 (stations and rivers): red `213a2ef`, three rulings of 2026-10-04 for it ("Ola's rulings", its last two blocks), red amendment `05f348a` and `c18c8d5`, green `aae91bb`; code review round 1 requested changes (the lake number's 0, wording, a citation, the file table); the red test and the fix for them come next**
+Status: **design approved by `@reviewer` (round 5, 2026-10-04); all questions ruled by Ola; PR 1 (accumulation) merged as #173; PR 3 (stations and rivers): red `213a2ef`, three rulings of 2026-10-04 for it ("Ola's rulings", the block "Ruled for PR 3's green step"), red amendment `05f348a` and `c18c8d5`, green `aae91bb`; code review round 1 requested changes (the lake number's 0, wording, a citation, the file table); the red test and the fix for them come next ("PR 3, after code review round 1", the last block under "Ola's rulings")**
 (`@architect`, 2026-10-04), branch `worktree-nve-catchments` off master
 `d20126b`. Ola's rulings of 2026-10-04 are in the section below. Round 2 closed the burn's drainage claim
 (checked node by node, not assumed), the ELVIS data cases, the PR order, and
