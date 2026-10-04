@@ -247,3 +247,32 @@ def test_the_index_places_every_partition_line(tmp_path: Path) -> None:
     xs = {ox + (part["col0"] + i * dx) * h for i in range(1, nx)}
     ys = {oy - (part["row0"] + j * dy) * h for j in range(1, ny)}
     assert pf.seam_lines(done.pieces) == (xs, ys)
+
+
+# ------------------------------------------------------------------ point 12
+
+
+@pytest.mark.parametrize(
+    ("option", "target", "out_name"),
+    [
+        ("--record", "run.json", "x.vtk"),
+        ("--stats", "stats.md", "x.vtk"),
+        ("--out-edges", "edges.ply", "x.ply"),
+    ],
+)
+def test_options_describing_one_mesh_are_refused_on_a_cut_run(
+    tmp_path: Path, option: str, target: str, out_name: str
+) -> None:
+    """ "23c-2 stopped at dbbe1c6", point 12 and 3 (d): `--record`, like
+    `--stats` and `--out-edges`, describes one mesh, and a cut run has none
+    until 23d's stitched file. Exit 2 naming the option, and nothing
+    written: no `--out`, no pieces directory, no file at the option's path."""
+    dem, domain, _ = scene(tmp_path)
+    where = tmp_path / "run"
+    done = pf.run(
+        where, *args(dem, domain, "--pieces", "4", option, str(where / target)), out_name=out_name
+    )
+    assert done.code == USAGE, done.output
+    not_for_want_of_the_option(done.output)
+    assert option in "".join(done.output.split())
+    assert list(where.iterdir()) == []
