@@ -118,7 +118,9 @@ to `.claude/settings*.json` or the permission system. Editing `CLAUDE.md`,
 
 **A grant covers one occurrence.** An instruction that names a publishing act
 is the yes for one occurrence of it. The test is mechanical: *have I already
-performed this named act once, and has the tree changed since?* If yes, ask.
+performed this named act once, and has the tree changed since?* If yes, ask. A grant does not
+outlive the session it was given in: a yes recorded on disk (`session.md`, a
+handback) is asked again after a context loss.
 
 **`@reviewer` runs once on any branch before its first push, whether or not
 the branch contains production code, and again before a push that follows a

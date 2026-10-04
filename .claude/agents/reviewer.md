@@ -39,6 +39,7 @@ build. Local green is not green.
    if the design named a split seam for an overrun, check whether it should fire.
    An estimate that goes unchecked is a decision nobody revisits.
 4. **A suite the increment file names invariant-critical has had its mutants run**, with the kill record in a handback.
+5. **On a refine- or mesh-touching increment, `@perf`'s acceptance run is recorded** (`docs/increments/README.md`, "Acceptance").
 
 **You do not edit or commit:** your verdict goes in the handback, and your spawner records it.
 
