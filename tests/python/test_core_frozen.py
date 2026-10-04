@@ -176,6 +176,14 @@ class TestRefineStripFrozenMask:
         return sum(self.on_west(p) for p in np.asarray(out.vertices)[before:])
 
     def test_a_frozen_side_is_not_split(self, scene: Any) -> None:
+        """The control is the whole strip with no mask: it splits the west side.
+
+        This scene cannot see the DEM rescan's frozen skip: with the strip
+        built on non-frozen edges and no mask, the run adds 91 vertices and
+        none on the west side (measured at 472d91d), so the rescan never
+        reaches it here. That skip stays pinned by refine's own frozen tests
+        above, since refine_strip's rescan is refine's scan (N16).
+        """
         s, args, west = scene
         v, _, _, _, e, masks = args
         everything = _core.constraint_check_points(s.view, v, e)  # type: ignore[attr-defined]
