@@ -1,6 +1,6 @@
 # Increment 29 — NVE reference catchments: our catchments against NVE's, station by station
 
-Status: **design approved by `@reviewer` (round 5, 2026-10-04); all questions ruled by Ola; PR 1 (accumulation) merged as #173; PR 3 (stations and rivers): red `213a2ef`, three rulings of 2026-10-04 for it ("Ola's rulings", the block "Ruled for PR 3's green step"), red amendment `05f348a` and `c18c8d5`, green `aae91bb`; code review round 1's fixes in (red `b59c648`, green `c4e50ff`: NVE's lake number 0 means no lake, malformed files and missing fields refused in plain words); code review round 2 requested changes on one citation and wording only, and its fixes are in (`f91cdaa` and the round-2 record); code review round 3 asked for one word (one citation, not two), fixed; **approved by `@reviewer`, code review round 4**, awaiting the push and CI**
+Status: **design approved by `@reviewer` (round 5, 2026-10-04); all questions ruled by Ola; PR 1 (accumulation) merged as #173; PR 3 (stations and rivers): red `213a2ef`, three rulings of 2026-10-04 for it ("Ola's rulings", the block "Ruled for PR 3's green step"), red amendment `05f348a` and `c18c8d5`, green `aae91bb`; code review round 1's fixes in (red `b59c648`, green `c4e50ff`: NVE's lake number 0 means no lake, malformed files and missing fields refused in plain words); code review round 2 requested changes on one citation and wording only, and its fixes are in (`f91cdaa` and the round-2 record); code review round 3 asked for one word (one citation, not two), fixed; approved by `@reviewer`, code review round 4; PR #178's CI then failed on h11's prose-read hook (a test read `NOTICE.md`), Ola ruled the test out (block "PR 3, after PR #178's CI"), master merged in; code review round 5 asked for two sentences, fixed; awaiting `@reviewer`'s code review round 6**
 (`@architect`, 2026-10-04), branch `worktree-nve-catchments` off master
 `d20126b`. Ola's rulings of 2026-10-04 are in the section below. Round 2 closed the burn's drainage claim
 (checked node by node, not assumed), the ELVIS data cases, the PR order, and
@@ -183,14 +183,15 @@ river with 0 (both blank-type features of the layer) comes out `lake`.
 
 **PR 3, after PR #178's CI (2026-10-04): the suite does not read `NOTICE.md`.**
 Ruled by Ola: "yes, remove the NOTICE.md check." h11's prose-read hook failed
-#178's Python 3.14 leg because `test_fetch_nve.py`'s
+#178's three Python legs (3.12, 3.13, 3.14) because `test_fetch_nve.py`'s
 `test_notice_md_credits_nve_under_nlod` read `NOTICE.md`. The main session put
 it to Ola that a unit test checking the repository's prose is the wrong place
 for it: the suites check what rasputin produces (`NOTICE.txt` of every fetch,
 the packaged CSV's header), and `NOTICE.md` stays prose, credited by hand and
 seen by `@reviewer` on any PR that touches it. `@tester` removes that one test;
 `NOT_PROSE` in `tools/ci_changes.py` is unchanged. NVE's credit in `NOTICE.md`
-(§"Licence", §"Data use") stands.
+(its section "Data in the package"; this file's §"Licence" and §"Data use")
+stands.
 
 ## What the data says (measured 2026-10-04)
 
@@ -483,13 +484,14 @@ station number (`2.11.0`, HydAPI's `StationId`) and the HRD's discharge series
 ## Data use
 
 Ola asked that nothing dodgy is done with NVE's data. The rules, each held by
-a test of `fetch/nve.py` (PR 3):
+a test of `fetch/nve.py` (PR 3), except the `NOTICE.md` credit below:
 
 - **Sources.** The HRD report (the PDF named above); `HydrologiskeData3`
   layers 0 (`Malestasjoner`) and 38 (`Malest_totalnedb`); `Elvenett1` layer 2
   (`elvenett`). HydAPI is not used and no API key is stored anywhere.
 - **Licence.** NLOD; "Kilde: NVE" is in `NOTICE.txt` of every fetch, in the
-  packaged CSV's header and in `NOTICE.md`. NVE disclaims liability for errors
+  packaged CSV's header (each tested) and in `NOTICE.md` (checked by hand by
+  `@reviewer`, block "PR 3, after PR #178's CI" above). NVE disclaims liability for errors
   in the data and their use; the README of the acceptance says so too.
 - **Committed**: the 140-row HRD list (four columns, from a PDF) and the
   acceptance's `results.csv` (NVE's areas as numbers). **Fetched** into
@@ -1920,4 +1922,6 @@ Fixes for round 2: A and C by `@tester` in `f91cdaa` (re-cited to `project_struc
 **29 PR 3, code review, round 3, 2026-10-04.** Range `a4e4726..c7d427a` (`f91cdaa`, `c7d427a`); whole PR `d926644..c7d427a`. Verdict: CHANGES REQUESTED. Delta: 7 lines added, 16 removed, in `ROADMAP.md`, this file and three test files; no production code, so the count stays 380 net and round 2's build, test and gate results stand. Round 2's blockers A, B and C are closed. `check_citations.py --base d926644` exits 0; the at-risk lines this delta could move re-read as quotations and hold. `ruff check` and `ruff format --check` clean. Blocking: the status line and `ROADMAP.md:54` said round 2 asked for "two citations"; it asked for one (`test_features.py:583`). Fixed by the main session in the commit that records this round.
 
 **29 PR 3, code review, round 4, 2026-10-04.** Range `c7d427a..5bdcc93` (`c1eeec4`, `5bdcc93`; main session, docs only); whole PR `d926644..5bdcc93`. Verdict: APPROVED. Delta: 5 lines added, 2 removed, in `ROADMAP.md` and this file; production count stays 380 net (estimate about 355, 511 with the margin). Round 3's blocker closed: the status line and `ROADMAP.md:54` say one citation. The round-3 record's range, commits and counts match `git log` and `git diff --shortstat a4e4726..c7d427a`. `check_citations.py --base d926644` exits 0; no at-risk line moved by this delta. No mutation record or `@perf` run owed. CI is owed after the push: `gh pr checks` green before merge.
+
+**29 PR 3, code review, round 5, 2026-10-04.** Range `3dff7bc..ea489e5` (master merge `af2bc38`; `4e877ae` and its revert `09a44c6`; Ola's ruling `9607b98`; `ea489e5` deletes the `NOTICE.md` test). Verdict: CHANGES REQUESTED. Production lines unchanged since round 4. The merge is clean (`git merge-tree --write-tree 3dff7bc 791abb6` gives the tree of `af2bc38`). Full suite on a rebuilt `_core`: 4572 passed, 118 skipped, exit 0, so the prose-read hook stayed silent. `ruff check` and `ruff format --check` clean. The remaining NVE credit tests exist (CSV header, catalogue, every fetch's `NOTICE.txt`); `NOTICE.md` still credits NVE. `check_citations.py` exits 0. Blocking: the ruling said only the 3.14 leg failed, but all three Python legs did; "Data use" said every rule is held by a test, including the `NOTICE.md` credit. Suggestions: name whose §"Licence" and §"Data use" are meant; update the status line. All four fixed by the main session in the commit that records this round.
 
