@@ -1,4 +1,4 @@
-# Increment 28 — NVE reference catchments: our catchments against NVE's, station by station
+# Increment 29 — NVE reference catchments: our catchments against NVE's, station by station
 
 Status: **revised after design review round 2, awaiting round 3**
 (`@architect`, 2026-10-04), branch `worktree-nve-catchments` off master
@@ -917,7 +917,7 @@ uncertain per size band.
 **Cost and novelty.** One gather from arrays that already exist. It is a
 diagnostic, not a method claimed (see Novelty).
 
-### Residual inflow, later: what 28 keeps open
+### Residual inflow, later: what 29 keeps open
 
 **Not built here.** Ola plans to compute the residual inflow to rivers: for
 two gauges A above B on one river, the catchment of B without that of A, the
@@ -927,12 +927,12 @@ their physical positions. The check that they nest needs **no NVE polygon**:
 it is a property of our own two delineations, and a failure is a finding in
 itself.
 
-Why 28's placement suits it: each gauge sits where it physically is, so the
+Why 29's placement suits it: each gauge sits where it physically is, so the
 difference is the area between two real positions. A rule that moves each
 gauge to where the area is largest moves each by an unrelated distance
 downstream, and the difference then contains the moves.
 
-What 28 must not do: delineate each station on its own burn and then
+What 29 must not do: delineate each station on its own burn and then
 subtract. Two stations' burns differ upstream of both (each chain's descent
 starts from its own first node), so their catchments need not nest exactly. The
 later increment delineates **all gauges of one river from one burn and one
@@ -944,17 +944,17 @@ the residual is exactly `count_B - count_A` nodes; where it does not, the pair
 is reported as not nested. The sketch, not built:
 
 ```python
-# Reach.at becomes a tuple: one chain, several gauges (28 passes one)
+# Reach.at becomes a tuple: one chain, several gauges (29 passes one)
 def delineate_river(request: RiverRequest, repository: DemRepository) -> tuple[Catchment, ...]
 def residual(upstream: Catchment, downstream: Catchment) -> Residual
     # polygon difference, its area, and the nesting check: the part of the
     # upstream outline outside the downstream one, in nodes (0 when nested)
 ```
 
-What 28 does so that this is not blocked:
+What 29 does so that this is not blocked:
 
 - `burn_reach` and `sensitivity.assess` take the placed positions as an index
-  array into the chain (28 passes one index), and the chain and its flood
+  array into the chain (29 passes one index), and the chain and its flood
   are the unit, not the station.
 - `Placement` and `StationResult` record the river (`elvid`), the segment
   (`objectid`) and the position along it, so gauges can be grouped and
@@ -1529,6 +1529,8 @@ rulings"; the way a gauge is placed follows your direction.
    refused and the comparison is not made.
 
 ## Review
+
+(Renumbered 28 to 29 on 2026-10-04: increment 28 is `28-no-fma-contraction.md` on branch `worktree-fpc`. The rounds below were recorded as "28" and are left so.)
 
 **28, design review, round 1, 2026-10-04.** Range `104c883..682c36c` (design and ROADMAP row only). Verdict: CHANGES REQUESTED. LOC: 0 production; estimates PR 1 about 190, PR 2 about 480, both under the ceiling, but 22's `catchment.py` ran 44 % over its estimate and PR 2 names no split seam. Re-measured and true: the HRD PDF (sha256, quotations, 140 unique rows); layers 0/14/38 (fields, EPSG:25833, all 140 stations, 130×1 + 10×3 polygons, 42 points outside, farthest 233 m); areas, size bands and tiles per catchment; no NoData within 250 m of any station; NLOD; HydAPI 401; all seven DOIs; the accumulation oracle (the flood's visit order does not depend on the seed). Blocking: (1) the "500 unregulated" are 364 with regulation 0 plus 136 with none recorded (`:68-73`, Question 1); (2) Jenson 1991 is the nearest-stream-cell snap, and Lindsay et al. 2008 prefer it over the max-accumulation rule chosen here (`:193-214`, Question 4); the departure is unnamed and Ola ruled (a) without that option; (3) nine stations (`156.15.0`, `196.11.0`, `206.3.0`, `208.2.0`, `208.3.0`, `209.4.0`, `212.49.0`, `213.2.0`, `223.2.0`) straddle the eight half-cell-shifted tiles and will be refused by the mosaic's mixed-grid rule, contrary to `:133-135`, acceptance step 4 and the ROADMAP row; (4) the divide offset of a square shifted one cell along an axis is half a cell, not one (`:640`); (5) median vertices 969.5 (not 983), inside-distance quartiles 20/75/355 m (not 20/78/351), median area 131 km² (not 135). Not pushed; no CI.
 
