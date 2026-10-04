@@ -490,3 +490,27 @@ docs merge conflict was resolved once by the main session (027e8f9) and once
 by `@developer` on the main session's brief (9c791d6), and `@developer`'s
 green commit 3ffae13 moved a citation in `15f-edge-strip.md`. Whose job a
 merge conflict in a docs file is needs an owner.
+
+## After h11 (#176), h13 (#177) and 29 PR 1 and 3 (#173, #178): proposals waiting on Ola
+
+Evidence and wording: `docs/retrospectives/2026-10-04-evening-merges-h11-h13-29.md`.
+Proposals: P1, every tracked path has one writer (root Markdown files to
+`@architect`, with a test over `git ls-files`); P2, the spawner pastes the
+reviewer's verdict unchanged and every other increment-file edit goes to
+`@architect`; P3, a status line is a state (design, red, green, in review,
+approved, merged as #N), set to "merged" by the merge step; P4, `brief.py`
+prints the verdict word, not 200 characters; P5, a push to a PR with
+auto-merge on is also a merge (ask for both, or disable auto-merge first);
+P6, the prose-read hook's message asks first whether the test should read
+the file at all; P7, a sentinel-value trap in the `geospatial-data-formats`
+skill; P8, the brief's test line (rebuild after a master merge, read
+pytest's own exit status, say where green ran); P9,
+`test_settings_wiring`'s index check skips outside a git work tree; C3, a
+cut of about 29 words in `CLAUDE.md` §4. Questions: who owns `testing.md`
+(default `@architect`); may the main session apply drafted text to an
+unowned file (default no); P2 and P3 before stage 5 (default yes).
+Main-session deviations recorded there: a design call on #178 (keep the
+`NOTICE.md` read) that Ola reversed, a revert of a `@tester` commit, prose
+fixes and rulings written while recording reviews, two briefs rebuilt by
+hand (both refused by `guard_spawn.py`, both retried correctly), and h13's
+CI-numbers record still owed.
