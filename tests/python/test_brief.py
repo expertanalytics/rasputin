@@ -594,3 +594,74 @@ def test_9_the_block_is_made_at_the_worktrees_head(
     block = parse_block(ok(repo, home, "tester", "--worktree", str(trees["A"]), "--beside", "none",
                            "--increment", INCREMENT))  # fmt: skip
     assert block.head == head_of(trees["A"]) != head_of(repo)
+
+
+# ---------------------------------------------------- §12 point 1: the increment's checkout
+#
+# §3.1 as ruled after code review round 1: a relative --increment is resolved
+# against --worktree, not against the checkout running brief.py; an absolute
+# one is used as given; the block shows the path as given. The fixture's
+# INCREMENT is uncommitted in the main checkout, so a fresh worktree lacks it.
+
+
+def test_12_the_block_quotes_the_worktrees_copy_of_the_increment(
+    repo: Path, home: Path, trees: dict[str, Path]
+) -> None:
+    write(
+        repo, INCREMENT, "# x\n\nStatus: main's status.\n\nMain's line names the mutation rule.\n"
+    )
+    write(
+        trees["A"],
+        INCREMENT,
+        "# x\n\nStatus: the branch's status.\n\nThe branch's line names the @perf rule.\n",
+    )
+    output = ok(repo, home, "tester", "--worktree", str(trees["A"]), "--beside", "none",
+                "--increment", INCREMENT)  # fmt: skip
+    assert "Status: the branch's status." in output
+    assert "  5: The branch's line names the @perf rule." in output.splitlines()
+    assert "main's status" not in output.lower()
+    assert "Main's line" not in output
+    assert f"From {INCREMENT}" in output  # the path as given
+
+
+def test_12_a_file_only_in_the_worktree_is_accepted_for_tester(
+    repo: Path, home: Path, trees: dict[str, Path]
+) -> None:
+    only = "docs/increments/branch-only.md"
+    write(trees["A"], only, "# y\n\nStatus: only on the branch.\n")
+    assert not (repo / only).exists()
+    output = ok(repo, home, "tester", "--worktree", str(trees["A"]), "--beside", "none",
+                "--increment", only)  # fmt: skip
+    assert "Status: only on the branch." in output
+
+
+def test_12_for_architect_a_file_missing_from_the_worktree_is_new(
+    repo: Path, home: Path, trees: dict[str, Path]
+) -> None:
+    assert (repo / INCREMENT).exists()
+    assert not (trees["A"] / INCREMENT).exists()
+    output = ok(repo, home, "architect", "--worktree", str(trees["A"]), "--beside", "none",
+                "--increment", INCREMENT)  # fmt: skip
+    assert f"{INCREMENT} (new: you create it)" in output
+
+
+def test_12_a_file_in_the_main_checkout_only_is_refused_for_tester(
+    repo: Path, home: Path, trees: dict[str, Path]
+) -> None:
+    """The converse of the branch-only case: master's copy does not stand in."""
+    refused(repo, home, "tester", "--worktree", str(trees["A"]), "--beside", "none",
+            "--increment", INCREMENT)  # fmt: skip
+
+
+def test_12_an_absolute_increment_is_used_as_given(
+    repo: Path, home: Path, trees: dict[str, Path], tmp_path: Path
+) -> None:
+    elsewhere = write(
+        tmp_path.resolve() / "elsewhere", "inc.md", "# z\n\nStatus: from elsewhere.\n"
+    )
+    write(trees["A"], "inc.md", "# z\n\nStatus: the worktree's inc.\n")
+    output = ok(repo, home, "tester", "--worktree", str(trees["A"]), "--beside", "none",
+                "--increment", str(elsewhere))  # fmt: skip
+    assert "Status: from elsewhere." in output
+    assert "the worktree's inc" not in output
+    assert f"From {elsewhere}" in output
