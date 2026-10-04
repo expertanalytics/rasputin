@@ -2922,6 +2922,7 @@ equality and DC4's control hold.
    `test_the_union_has_the_uncut_area` (1e-12) takes the same bound against
    the uncut mesh's area. No code change.
 2. **DC10: a defect of increment 20, fixed there; DC10 split meanwhile.**
+   *(Corrected by point 9: the hole is the cut path's.)*
    `mesh::improve` (`include/terrain/mesh/quality.hpp`) "knows no raster
    and reads no height", so it can insert a NoData node; trim then drops
    its triangles and leaves a hole. The uncut path has the same defect.
@@ -3028,6 +3029,35 @@ equality and DC4's control hold.
      peak RSS included). Peak RSS means nothing until pieces hold only their
      own windows. 23c-3 must also show its piece files byte-identical to
      23c-2's on the same run, because it changes memory, not meshes (K6).
+
+9. **DC10's hole is 23c-2's defect, not increment 20's. Found and fixed
+   before review.** This corrects ruling 2 above. `@tester`'s red step for
+   increment 20's fix (`worktree-20-nodata`, `309b23f`) found no hole on
+   the uncut path. There, refine's carving (14 R6) surrounds the NoData
+   vertex with valid neighbours before trim removes it: 0 valid nodes
+   uncovered on the projected path, and 0 on DC10's scene run uncut. In a
+   piece the same vertex leaves a hole, so something on the cut path stops
+   the carving from closing around it. Candidates, none checked: a frozen
+   seam edge the carving would need to split; the piece's window cropping
+   the nodes it would insert; or the slice or fans changing the start
+   triangle's neighbours. Start vertices in NoData (16 R2) are carved the
+   same way, so the defect does not need the start pass, and increment
+   20's fix would only hide it. It is not a test-scene artefact unless the
+   reduction shows the scene breaks a stated precondition.
+   - **`@developer`** reduces it to the smallest case. The output is the
+     piece, the void vertex, and the carving step that does not happen.
+     Then fix it on the cut path. If the cause is a frozen seam, the
+     answer may be a design point (carving may not split a seam): bring it
+     back to `@architect` before changing C++.
+   - **`@tester`** adds a cut-path probe that does not use the start pass:
+     an off-node domain vertex in a NoData cell beside a seam, run with
+     `--start-min-angle 0`. The test requires every valid node inside the
+     domain to lie in a written triangle, and must be red before the fix.
+     It keeps the defect visible once increment 20's fix lands.
+   - **The strict `xfail`'s reason changes** now, to name this cut-path
+     defect, not increment 20's fix. 23c-2's fix removes the marker in a
+     `@tester` commit. Increment 20's fix is not merged into this branch
+     until then.
 
 **B17 for Ola** is under "New questions, after the rulings".
 
