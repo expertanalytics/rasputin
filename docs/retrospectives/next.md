@@ -468,3 +468,25 @@ proposals P2b (`check_citations.py` labels at-risk lines unchanged, moved or
 rewritten), P3b (the recap lists open PRs with merge state), P4 (`brief.py`
 names the test command a worktree can run); one cut, C1 (about 90 words of
 `REQUIRED-READING.md`). Questions Q1 to Q3 there. **Ruled 2026-10-04:** Q1 and Q3 yes (the whole-suite run in P1; P5a). Q2: no review-round cap, and `orchestrator.md`'s "past two rounds" line is dropped. The other proposals still wait on Ola.
+
+## After 23c-1 (#164) and the lessons of 2026-10-04: proposals waiting on Ola
+
+Evidence and wording: `docs/retrospectives/2026-10-04-23c-1-and-day-lessons.md`.
+Proposals: P1, ROADMAP row 23 and the 23 status line fixed now, plus a check
+that a merged increment's row and status line do not say "in review"; P2,
+`brief.py` fills in the PR's remote head and check state, the C++-build
+allowance and the scaffold line; P3, citations into rule files written as
+`path@sha:n`; P4, one verb list in `guard_push.py`, test rows that force the
+text fallback, and a test that checks the guard against `gh pr --help`; P5,
+Ola's chat rulings quoted in the design file; P6, the taut-chain trap in the
+`computational-geometry` skill; P7, rule out a probe's own artefacts; P8, the
+`(@persona)` tag on each commit subject; C2, a cut of about 50 words. Open:
+who runs the mutants of an invariant-critical suite (default `@tester`).
+Main-session deviations recorded there: personas spawned after #171 without
+a restart (a fork did not reload them), a brief that asked `@developer` to
+edit a test file, a brief that called a pushed PR unpushed, and a merge that
+left ROADMAP row 23 stale. For the hard-limits item above: on 2026-10-04 a
+docs merge conflict was resolved once by the main session (027e8f9) and once
+by `@developer` on the main session's brief (9c791d6), and `@developer`'s
+green commit 3ffae13 moved a citation in `15f-edge-strip.md`. Whose job a
+merge conflict in a docs file is needs an owner.
