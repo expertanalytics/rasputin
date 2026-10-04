@@ -154,16 +154,22 @@ class TestOpenDem:
         opened = di.open_dem(request(di, mosaic_dir, nodata=-9999.0))
         assert (opened.tile.meta.nodata, opened.tile.meta.nodata_source) == (-9999.0, "caller")
 
-    def test_the_cap_refuses_before_any_pixel_is_read(
+    def test_no_memory_cap_so_the_cut_strip_is_read(
         self, di: ModuleType, mz: ModuleType, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """M5 through a file: its strip is cut, so a load would raise
-        `GeoTiffError`; the refusal must be the cap's `MosaicError` instead."""
+        """M5 through a file, inverted by increment 23c (DC11; B15, ruled (a)):
+        with physical memory patched to 8 bytes there is no cap to refuse, so
+        the request reaches the load and the cut strip is the reader's
+        `GeoTiffError`, not a `MosaicError`."""
+        from tin_engine.io.geotiff import GeoTiffError
+
         path = tmp_path / "cut.tif"
         path.write_bytes(truncated_strip().getvalue())
-        monkeypatch.setattr(mz, "physical_memory", lambda: 8)  # cap 4 bytes: 3 x 4 nodes exceed it
-        with pytest.raises(mz.MosaicError, match="--bbox"):
+        monkeypatch.setattr(mz, "physical_memory", lambda: 8, raising=False)
+        with pytest.raises(GeoTiffError) as caught:
             di.open_dem(request(di, path))
+        assert not isinstance(caught.value, mz.MosaicError)
+        assert "physical memory" not in str(caught.value)
 
 
 class TestDemRequest:

@@ -272,16 +272,18 @@ def test_a_catchment_cut_by_the_sentinel_is_refused(api: Any) -> None:
         api.delineate(request(api), repository_of(z, nodata=-32767.0))
 
 
-def test_the_memory_cap_refuses_before_the_flood(api: Any, monkeypatch: pytest.MonkeyPatch) -> None:
-    # The first window is the lake's box (7 cells) plus 2 x 20 cells: about 48
-    # x 48 nodes. With physical memory 10 x that, 15a's cap (4 bytes a node
-    # against half of it) passes and the flood's (4 + 2 bytes a node) refuses.
+def test_no_memory_cap_before_the_flood(api: Any, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Inverted by increment 23c (DC11; B15, ruled (a) on 2026-10-02): 22's
+    refusal at half of physical memory is deleted. With physical memory
+    patched to 10 x the first window (about 48 x 48 nodes), which the old cap
+    refused, the flood runs and the catchment is the same as unpatched."""
+    expected = api.delineate(request(api), repository_of(bowl()))
     first = 48 * 48
     fake = 10 * first
-    monkeypatch.setattr(mosaic, "physical_memory", lambda: fake)
+    monkeypatch.setattr(mosaic, "physical_memory", lambda: fake, raising=False)
     monkeypatch.setattr(api, "physical_memory", lambda: fake, raising=False)
-    with pytest.raises(api.CatchmentError, match=r"(?i)memory"):
-        api.delineate(request(api), repository_of(bowl()))
+    found = api.delineate(request(api), repository_of(bowl()))
+    assert found.fine.equals_exact(expected.fine, 0.0)
 
 
 def test_the_loop_stops_early_far_from_the_data_edge(api: Any) -> None:

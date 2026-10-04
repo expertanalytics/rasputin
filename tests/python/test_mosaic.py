@@ -599,52 +599,29 @@ class TestM4Bounds:
         refused(lambda: plan(tiles, (500120.0, 6599980.0, 500200.0, 6599990.0)))
 
 
-class TestM5MemoryCap:
-    """M5, changed for 15a (R7): the cap is half of physical memory, from a function."""
+class TestM5NoMemoryCap:
+    """M5, inverted by increment 23c (DC11; B15, ruled (a) on 2026-10-02): the
+    refusal at half of physical memory is deleted, so a window over half of a
+    patched `physical_memory` is planned, not refused. `physical_memory` may go
+    with it (`23-basin-scale.md`, B15), so it is patched with `raising=False`
+    and its own test, which pinned the machine's figure, is gone."""
 
     NODES = 9 * 13
 
-    def test_physical_memory_is_the_machines(self, mz: ModuleType) -> None:
-        import os
-
-        pages = os.sysconf("SC_PHYS_PAGES") * os.sysconf("SC_PAGE_SIZE")
-        assert mz.physical_memory() == pages
-
-    @pytest.mark.parametrize(
-        ("memory", "accepted"), [(2 * NODES * 4, True), (2 * NODES * 4 - 1, False)]
-    )
-    def test_the_boundary_at_four_bytes_a_node(
-        self,
-        mz: ModuleType,
-        plan: Any,
-        refused: Any,
-        monkeypatch: pytest.MonkeyPatch,
-        memory: int,
-        accepted: bool,
+    @pytest.mark.parametrize("memory", [2 * NODES * 4, 2 * NODES * 4 - 1, 8])
+    def test_planned_over_half_of_physical_memory(
+        self, mz: ModuleType, plan: Any, monkeypatch: pytest.MonkeyPatch, memory: int
     ) -> None:
-        monkeypatch.setattr(mz, "physical_memory", lambda: memory)
+        monkeypatch.setattr(mz, "physical_memory", lambda: memory, raising=False)
         tiles = quadrants(whole(), row_cut=4, col_cut=6, overlap=1)
-        if accepted:
-            assert plan(tiles).meta.rows == 9
-        else:
-            refused(lambda: plan(tiles), "--bbox")
+        assert plan(tiles).meta.rows == 9
 
-    @pytest.mark.parametrize(
-        ("memory", "accepted"), [(2 * NODES * 8, True), (2 * NODES * 8 - 1, False)]
-    )
-    def test_the_boundary_at_eight_bytes_a_node_when_a_selected_tile_decodes_to_float64(
-        self,
-        mz: ModuleType,
-        footprint: Any,
-        refused: Any,
-        monkeypatch: pytest.MonkeyPatch,
-        memory: int,
-        accepted: bool,
+    @pytest.mark.parametrize("memory", [2 * NODES * 8, 2 * NODES * 8 - 1])
+    def test_planned_when_a_selected_tile_decodes_to_float64(
+        self, mz: ModuleType, footprint: Any, monkeypatch: pytest.MonkeyPatch, memory: int
     ) -> None:
-        """S2: the cap counts the planned decoded dtype, `np.result_type` of the
-        selected footprints' `dtype`. One float64 tile makes the canvas float64
-        (R5), so the window costs 8 bytes a node, not 4."""
-        monkeypatch.setattr(mz, "physical_memory", lambda: memory)
+        """S2's float64 window, once refused one byte under the boundary."""
+        monkeypatch.setattr(mz, "physical_memory", lambda: memory, raising=False)
         tiles = quadrants(whole(), row_cut=4, col_cut=6, overlap=1)
         prints = [
             footprint(name=name, meta=tile.meta, dtype=np.dtype(np.float64))
@@ -652,17 +629,13 @@ class TestM5MemoryCap:
             else footprint(name=name, meta=tile.meta)
             for name, tile in tiles.items()
         ]
-        call = lambda: mz.plan_mosaic(prints, None, None)  # noqa: E731
-        if accepted:
-            assert call().meta.rows == 9
-        else:
-            refused(call, "--bbox", "float64")
+        assert mz.plan_mosaic(prints, None, None).meta.rows == 9
 
     def test_a_float64_tile_outside_the_window_does_not_count(
         self, mz: ModuleType, footprint: Any, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """Only the selected tiles decode, so only their dtypes size the canvas."""
-        monkeypatch.setattr(mz, "physical_memory", lambda: 2 * 16 * 4)
+        monkeypatch.setattr(mz, "physical_memory", lambda: 2 * 16 * 4, raising=False)
         tiles = quadrants(whole(), row_cut=4, col_cut=6, overlap=1)
         prints = [
             footprint(name=name, meta=tile.meta, dtype=np.dtype(np.float64))
@@ -683,7 +656,7 @@ class TestM5MemoryCap:
     def test_the_cap_is_on_the_window_not_the_union(
         self, mz: ModuleType, plan: Any, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        monkeypatch.setattr(mz, "physical_memory", lambda: 2 * 16 * 4)
+        monkeypatch.setattr(mz, "physical_memory", lambda: 2 * 16 * 4, raising=False)
         tiles = quadrants(whole(), row_cut=4, col_cut=6, overlap=1)
         assert plan(tiles, (500012.0, 6599987.0, 500033.0, 6599996.0)).meta.cols == 4
 
