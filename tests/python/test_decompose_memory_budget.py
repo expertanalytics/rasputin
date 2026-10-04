@@ -11,7 +11,9 @@ is pure and raises `ValueError`; the CLI turns that into the usage error
 
 PINNED HERE, where the point is silent (handback): the digits are ASCII
 (fullwidth digits are refused, as `int()` alone would accept them); leading
-zeros are digits like any other (`016G` is 16 GiB); a zero budget is refused
+zeros are digits like any other (`016G` is 16 GiB); whitespace before or after
+the value is refused as a space inside is (ruled after the red step); a zero
+budget is refused
 here (no window fits in 0 bytes), while "below one node's bytes", which
 needs the tolerance, stays `partition`'s and the CLI's refusal.
 """
@@ -77,6 +79,9 @@ REFUSED = [
     pytest.param("16.0", id="decimal-bytes"),
     pytest.param("16 G", id="inner-space"),
     pytest.param("16 GB", id="inner-space-gb"),
+    pytest.param(" 16G", id="leading-space"),
+    pytest.param("16G ", id="trailing-space"),
+    pytest.param("\t16G", id="leading-tab"),
     pytest.param("G", id="unit-without-number"),
     pytest.param("GiB", id="unit-without-number-gib"),
     pytest.param("16X", id="unknown-unit"),
