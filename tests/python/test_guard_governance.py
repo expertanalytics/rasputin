@@ -34,6 +34,8 @@ GOVERNED_NOW = (
     "tools/away.py",
     "tools/harness_mode.py",
     "tools/session_state.py",
+    # h8 §5: the size table runs inside the SessionStart hook.
+    "tools/rule_sizes.py",
     ".claude/profile.toml",
     ".claude/skills/x/SKILL.md",
     ".git/hooks/pre-commit",

@@ -34,6 +34,7 @@ from geotiff_fixtures import TIE_X, TIE_Y
 from test_cli_mesh_dem import USAGE, invoke
 from test_cli_mesh_domain import geojson
 from test_cli_mesh_mosaic import field, same_mesh, terrain
+from test_cli_mesh_refine import stats_row
 from tin_engine.dem_input import DemRequest, open_dem
 from tin_engine.io.geotiff import decode_dem
 from vtkread import read_vtk
@@ -208,16 +209,25 @@ class TestW7Offline:
         assert code == 0, output
         same_mesh(read_vtk(by_key.read_bytes()), read_vtk(by_path.read_bytes()))
 
-    def test_elevation_source_names_the_key_and_its_credit(
+    def test_the_fields_name_the_key_and_its_credit(
         self, catalogue: dict[str, Any], cache: Path, tmp_path: Path
     ) -> None:
-        out = tmp_path / "key.vtk"
-        code, output = invoke("--dem", KEY, "--cache", str(cache), "--out", str(out))
+        """Increment 25, D2: a downloaded DEM's file names the dataset in
+        ``dem_source`` and carries its credit and licence; the cache block
+        names are the ``--stats`` row ``dem_tiles``."""
+        out, md = tmp_path / "key.vtk", tmp_path / "key.md"
+        code, output = invoke(
+            "--dem", KEY, "--cache", str(cache), "--out", str(out), "--stats", str(md)
+        )
         assert code == 0, output
         vtk = read_vtk(out.read_bytes())
-        sentence = field(vtk, "elevation_source")
-        assert KEY in sentence and CREDIT in sentence, sentence
-        assert field(vtk, "dem_tiles") == "dem"
+        assert "elevation_source" not in vtk.field_data
+        assert field(vtk, "dem_source") == KEY
+        assert field(vtk, "dem_credit") == CREDIT
+        assert field(vtk, "licence_note") == "test fixture only"
+        assert "cite" not in vtk.field_data  # the entry asks for none
+        assert "dem_tiles" not in vtk.field_data
+        assert stats_row(md.read_text(encoding="utf-8"), "dem_tiles") == "dem"
 
 
 class TestOpenDemFromTheCache:

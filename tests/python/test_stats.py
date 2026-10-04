@@ -20,17 +20,20 @@ Names the design leaves open, chosen here (the tests are their statement):
   ``degree_median``, ``degree_p99``, ``degree_max``, ``degree_at_least_12``,
   ``degree_at_least_20`` (ints). The degree median uses the same
   ``inverted_cdf`` percentile as p99, so it is an observed degree.
-- ``Refinement(tolerance, max_error, rounds, inserted, flips, uncovered,
-  carved=None)``. Ola chose C2 (a); the column sits after ``inserted``,
-  because carving splits are a subset of the inserts, and is omitted when
-  ``carved`` is None.
+- Increment 25 (``docs/increments/25-plain-output.md``, D4) removed the
+  one-row Refinement table and the Sizes row "vertices without data
+  dropped": their figures are rows of the new Inputs and Result sections,
+  built from ``run_record.stats_rows`` and tested through it
+  (``test_run_record.py``) and through the CLI. This file pins only that a
+  ``Report`` built without them renders without them; the arguments that
+  carry the new sections are the implementation's and default to empty.
 - ``Sizes``: ``output_vertices``, ``output_triangles``, ``constraint_edges``,
   ``files`` (``(name, bytes)`` pairs) required; ``dem_nodes`` (rows, cols),
   ``dem_spacing`` (dx, dy), ``domain_vertices``, ``domain_holes``,
-  ``start_vertices``, ``start_triangles`` and ``dropped`` default to None, and
-  a None row is omitted (R4). Spacing prints once when dx == dy, else
-  ``dx × dy``. File sizes are decimal: B, kB, MB, GB, one decimal above bytes.
-- ``Report(command, sizes, quality, refinement, phases, total, stats_seconds,
+  ``start_vertices`` and ``start_triangles`` default to None, and a None row
+  is omitted (R4). Spacing prints once when dx == dy, else ``dx × dy``. File
+  sizes are decimal: B, kB, MB, GB, one decimal above bytes.
+- ``Report(command, sizes, quality, phases, total, stats_seconds,
   bounds_checks, threads=None, seams=())``. ``threads`` is the design's "Threads: 10 (hardware
   concurrency)" sentence, which R1's list of Report fields does not carry;
   printed only when not None. ``bounds_checks`` (increment 24, required) is the
@@ -221,7 +224,6 @@ bounds checks: on (libc++ fast)
 | output vertices | 214210 |
 | output triangles | 427779 |
 | constraint edges | 536 |
-| vertices without data dropped | 0 |
 | quarter.vtk | 31.8 MB |
 
 ## Quality (plan view, x/y)
@@ -233,12 +235,6 @@ bounds checks: on (libc++ fast)
 | metric | median | p99 | max | ≥ 12 | ≥ 20 |
 |---|---|---|---|---|---|
 | vertex degree (triangles) | 6 | 9 | 43 | 118 | 9 |
-
-## Refinement
-
-| tolerance | achieved max error | rounds | inserted | carved | flips | uncovered |
-|---|---|---|---|---|---|---|
-| 1 m | 0.999998 m | 40 | 213674 | 0 | 452067 | 0 |
 
 ## Timings
 
@@ -321,19 +317,9 @@ def quarter(stats: ModuleType, quality: Any) -> Any:
             output_vertices=214210,
             output_triangles=427779,
             constraint_edges=536,
-            dropped=0,
             files=(("quarter.vtk", 31_800_000),),
         ),
         quality=quality,
-        refinement=stats.Refinement(
-            tolerance=1.0,
-            max_error=0.999998,
-            rounds=40,
-            inserted=213674,
-            flips=452067,
-            uncovered=0,
-            carved=0,
-        ),
         phases=PHASES,
         total=4.030,
         stats_seconds=0.072,
@@ -354,7 +340,6 @@ def fixture_report(stats: ModuleType, quality: Any) -> Any:
             files=(("c.ply", 2048), ("c-edges.ply", 999)),
         ),
         quality=quality,
-        refinement=None,
         phases=(("start mesh: build", 0.002), ("write: encode", 0.001)),
         total=0.004,
         stats_seconds=0.001,
@@ -374,6 +359,8 @@ class TestRender:
         text = stats.render(fixture_report)
         for absent in (
             "## Refinement",
+            "## Inputs",
+            "## Result",
             "DEM nodes",
             "domain vertices",
             "start vertices",
@@ -394,27 +381,6 @@ class TestRender:
         text = stats.render(fixture_report)
         assert "| other | 0.001 | 25.0 % |" in text
         assert "| **total** | **0.004** | **100 %** |" in text
-
-    def test_carved_is_omitted_when_not_counted(self, stats: ModuleType, quarter: Any) -> None:
-        import dataclasses
-
-        report = dataclasses.replace(
-            quarter, refinement=dataclasses.replace(quarter.refinement, carved=None)
-        )
-        text = stats.render(report)
-        assert "| tolerance | achieved max error | rounds | inserted | flips | uncovered |" in text
-        assert "carved" not in text
-
-    def test_an_achieved_error_never_prints_above_its_tolerance(
-        self, stats: ModuleType, quarter: Any
-    ) -> None:
-        import dataclasses
-
-        just_under = math.nextafter(1.0, 0.0)
-        report = dataclasses.replace(
-            quarter, refinement=dataclasses.replace(quarter.refinement, max_error=just_under)
-        )
-        assert f"| 1 m | {just_under!r} m |" in stats.render(report)
 
     @pytest.mark.parametrize(
         ("spacing", "holes", "expected"),

@@ -57,6 +57,7 @@ GOVERNED = (
     "tools/away.py",
     "tools/harness_mode.py",
     "tools/session_state.py",
+    "tools/rule_sizes.py",
     "tools/shell_scan.py",
     ".claude/profile.toml",
 )

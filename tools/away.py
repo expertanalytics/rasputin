@@ -27,7 +27,7 @@ import tempfile
 from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import Any, TextIO
+from typing import Any, NamedTuple, TextIO
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import harness_mode as hm
@@ -75,6 +75,83 @@ def append(path: Path, entry: dict[str, Any]) -> None:
 
 def when(moment: datetime) -> str:
     return f"{moment.astimezone():%Y-%m-%d %H:%M %Z} ({moment.isoformat(timespec='seconds')})"
+
+
+class Quiet(NamedTuple):
+    """The longest interval without a commit; `opener` is None at the window's start.
+
+    A NamedTuple, not a frozen dataclass: both refuse assignment, but a dataclass
+    with string annotations needs its module in sys.modules, and the pty tests
+    load this file without registering it.
+    """
+
+    start: datetime
+    end: datetime
+    opener: str | None
+    count: int  # type: ignore[assignment]  # shadows tuple.count; the name is pinned
+
+
+def longest_quiet(since: datetime, end: datetime, commits: list[tuple[datetime, str]]) -> Quiet:
+    """The longest gap between since, the commits inside [since, end], and end (h8 §3.4)."""
+    inside = sorted(c for c in commits if since <= c[0] <= end)
+    points: list[tuple[datetime, str | None]] = [(since, None), *inside, (end, None)]
+    best = max(range(len(points) - 1), key=lambda i: (points[i + 1][0] - points[i][0], -i))
+    return Quiet(points[best][0], points[best + 1][0], points[best][1], len(inside))
+
+
+def commits_between(
+    root: Path, since: datetime, end: datetime
+) -> list[tuple[datetime, str]] | None:
+    """(commit time, short hash) on any ref inside [since, end]; None if git failed.
+
+    No --since/--until: git stops a date-limited walk early on out-of-order dates.
+    """
+    log = subprocess.run(
+        ["git", "-C", str(root), "log", "--all", "--format=%h %cI"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if log.returncode:
+        return None
+    found = []
+    for line in log.stdout.splitlines():
+        short, _, stamp = line.partition(" ")
+        try:  # an unparsable or naive date is a failed log: --back must still archive
+            if since <= (moment := datetime.fromisoformat(stamp)) <= end:
+                found.append((moment, short))
+        except (ValueError, TypeError):
+            return None
+    return found
+
+
+def _moment(value: object) -> datetime | None:
+    """A timezone-aware time from the flag, or None."""
+    try:
+        moment = datetime.fromisoformat(str(value))
+    except ValueError:
+        return None
+    return moment if moment.tzinfo else None
+
+
+def stretch(root: Path, flag: dict[str, Any], now: datetime) -> str:
+    """The line `--back` prints about the longest stretch without a commit."""
+    unknown = "Longest stretch without a commit: unknown ({})."
+    since = _moment(flag.get("since"))
+    if since is None:
+        return unknown.format("the flag has no readable since")
+    end = min(now, _moment(flag.get("until")) or now)
+    commits = commits_between(root, since, end)
+    if commits is None:
+        return unknown.format("git log failed")
+    quiet = longest_quiet(since, end, commits)
+    minutes = int((quiet.end - quiet.start).total_seconds() // 60)
+    opener = f"after {quiet.opener}" if quiet.opener else "from the window's start"
+    start, stop = (f"{t.astimezone(UTC):%Y-%m-%d %H:%M}" for t in (quiet.start, quiet.end))
+    return (
+        f"Longest stretch without a commit (any ref): {minutes // 60} h {minutes % 60:02d} min, "
+        f"{start} to {stop} UTC, {opener}; {quiet.count} commit(s) in the window."
+    )
 
 
 def enter(
@@ -186,6 +263,7 @@ def back(root: Path, state: Path, now: datetime, stop: Callable[[object], None])
         print(
             f"Back. Unattended since {flag.get('since')} until {flag.get('until')} (ended {ended})."
         )
+        print(stretch(root, flag, now))
     queue = state / "queue.jsonl"
     entries = []
     if queue.exists():
@@ -207,12 +285,12 @@ def back(root: Path, state: Path, now: datetime, stop: Callable[[object], None])
     if not entries:
         print("  (none)")
     try:  # the recap module is optional to --back; the flag and the queue are not (§3.3)
-        from session_state import pending_decisions
+        from session_state import all_decisions
 
-        decisions = pending_decisions(root / ".claude" / "current-task")
+        decisions = all_decisions(root)
     except Exception as error:
         decisions = [f"(unavailable: {type(error).__name__}: {error})"]
-    print("ASK OLA lines in .claude/current-task/:")
+    print("ASK OLA lines, every worktree's .claude/current-task/:")
     for line in decisions or ["(none)"]:
         print(f"  {line}")
     if queue.exists():

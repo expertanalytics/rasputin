@@ -16,7 +16,6 @@ them a usage error and exit 1.
 from __future__ import annotations
 
 import math
-import sys
 from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass, replace
 
@@ -31,6 +30,7 @@ from tin_engine.io.mesh_index import PartitionRecord, PieceId, PieceWindow, chec
 from tin_engine.io.models import DemTile, RasterMeta
 from tin_engine.pieces import piece_ids, seam_records, start_slice
 from tin_engine.raster import to_core
+from tin_engine.run_record import Value
 from tin_engine.stats import PhaseClock
 from tin_engine.target_grid import Block, TargetGrid
 
@@ -56,13 +56,12 @@ class Once[T]:
 @dataclass(frozen=True, slots=True)
 class How:
     """How a start mesh is refined (15c-2's phase 2 with ``grid`` and
-    ``checks``), and the start's words for the sentence."""
+    ``checks``)."""
 
     dem: str
     tolerance: float
     min_angle: float
     feet: bool
-    start: str
     grid: TargetGrid | None
     checks: Iterable[Block] | None
 
@@ -73,8 +72,7 @@ class Refined:
     final: RefineOutcome
     z: npt.NDArray[np.float64]
     trimmed: Trimmed
-    sentence: str
-    report: str
+    values: Mapping[str, Value]  # the run record's entries (increment 25)
     on_frozen: int
 
 
@@ -115,7 +113,7 @@ class Partitioned:
 class Piece:
     id: PieceId
     trimmed: Trimmed
-    sentence: str
+    values: Mapping[str, Value]  # its own record entries, never the run's
     window: PieceWindow
     on_frozen: int
 
@@ -204,20 +202,13 @@ def cut_run(
         if grid is not None:  # phase 2's store on the piece's window
             grid = grid.model_copy(update={"row0": grid.row0 + r0, "col0": grid.col0 + c0,
                                            "rows": wm.rows, "cols": wm.cols})  # fmt: skip
-        words = f"piece {j}-{i}-{k} of {len(ids)} cut on DEM lattice lines, {how.start}"
-        mine = replace(how, start=words, grid=grid, checks=checks)
+        mine = replace(how, grid=grid, checks=checks)
         mesh = indexed_mesh(piece.vertices, piece.triangles, piece.flags)
         done = refined(Once(window), mesh, piece.edges, piece.masks, mine, clock, seam, piece.z)
         del window
         records += seam_records((j, i, k), piece, done.final.vertices, done.z, done.final.valid)
-        dropped = done.trimmed.dropped
-        say = f"piece {j}-{i}-{k}: {done.report}{dropped} vertices without data dropped"
-        print(say, file=sys.stderr)
         place = PieceWindow(row0=cut.row0 + r0, col0=cut.col0 + c0, rows=wm.rows, cols=wm.cols)
-        sentence = f"{done.sentence}, {dropped} vertices without data dropped"
-        if m.vertical_unit_assumed:
-            sentence += ", vertical unit assumed metres"
-        built.append(Piece((j, i, k), done.trimmed, sentence, place, done.on_frozen))
+        built.append(Piece((j, i, k), done.trimmed, done.values, place, done.on_frozen))
     if not any(len(p.trimmed.triangles) for p in built):
         raise RunError(f"{how.dem} has no data under any triangle; nothing to write")
     check_conformity(records)  # K4: a ConformityError fails the run

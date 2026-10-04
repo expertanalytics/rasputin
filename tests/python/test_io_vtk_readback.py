@@ -300,10 +300,42 @@ class TestThroughTheCommand:
         assert not river[lines:].any() and not road[lines:].any()
 
     def test_the_metadata_comes_through(self, written: Path) -> None:
+        """Increment 25 (D2): a ``--flat`` run writes ``crs`` and ``heights``,
+        and no ``elevation_source`` any more."""
         poly = read_back(written, "vtkPDataSetReader")
         assert strings(poly, "crs") == ["EPSG:25833"]
-        assert strings(poly, "elevation_source") == [ELEVATION_TEXT]
+        assert strings(poly, "heights") == ["none: every z is 0 (--flat)"]
+        assert poly.GetFieldData().GetAbstractArray("elevation_source") is None  # type: ignore[attr-defined]
         assert strings(poly, "feature_vocabulary") == [DEFAULT_VOCABULARY.fingerprint()]
+
+    def test_a_refined_dems_fields_come_through(self, tmp_path: Path, binary: bool) -> None:
+        """Increment 25's fields of a refined DEM run, through ParaView's
+        reader, equal to what the independent parser reads from the same
+        bytes: numbers as bare text, and `; ` and spaces intact."""
+        from geotiff_fixtures import micro_tiff
+        from tin_engine.cli import app
+        from vtkread import read_vtk
+
+        array = np.random.default_rng(25).uniform(0.0, 50.0, (9, 11)).astype(np.float32)
+        array[3:5, 4:6] = -32767.0
+        tif = tmp_path / "holed.tif"
+        tif.write_bytes(micro_tiff(array, nodata="-32767").getvalue())
+        out = tmp_path / "dem.vtk"
+        args = ["mesh", "--dem", str(tif), "--tolerance", "1", "--out", str(out)]
+        result = runner.invoke(app, [*args, "--binary" if binary else "--ascii"])
+        assert result.exit_code == 0, result.output
+        poly = read_back(out, "vtkPDataSetReader")
+        names = ("crs", "tolerance_m", "max_error_m", "dem_source", "nodata_vertices_removed")
+        parsed = read_vtk(out.read_bytes()).field_data
+        for name in names:
+            (expected,) = parsed[name].values
+            assert strings(poly, name) == [expected], name
+        assert strings(poly, "crs") == ["EPSG:25833"]
+        assert strings(poly, "tolerance_m") == ["1"]
+        assert float(strings(poly, "max_error_m")[0]) <= 1.0
+        assert strings(poly, "dem_source") == ["holed.tif"]
+        assert int(strings(poly, "nodata_vertices_removed")[0]) > 0
+        assert poly.GetFieldData().GetAbstractArray("elevation_source") is None  # type: ignore[attr-defined]
 
 
 class TestPointElevation:

@@ -2,8 +2,12 @@
 """Print the round recap, then what the previous session was in the middle of.
 
 The recap (retrospective rule 5, Ola): the last thing landed, what is in
-flight, decisions waiting on Ola, and the next three ROADMAP items -- all read
-from files on disk and git, so it is the same whoever runs it.
+flight, running Bash-tool jobs, decisions waiting on Ola (from every worktree),
+format warnings for `session.md`, the next three ROADMAP items and the rule-text
+size table -- all read from files on disk, git and `ps`, so it is the same
+whoever runs it (docs/increments/h8-window-and-recap.md §3). The task files are
+the main checkout's, found from the common git dir, so a session started inside
+a worktree sees them too.
 
 Then it answers one question: when a session starts cold or resumes after a
 context loss, what was actually being asked? Reads `.claude/current-task/` (the in-flight
@@ -38,7 +42,7 @@ import subprocess
 import sys
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal
 
 REPO = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO / "tools"))
@@ -146,16 +150,144 @@ def in_flight(repo: Path, base: str = "master") -> list[str]:
     return [f"branch {branch}, {len(commits)} commit(s) ahead of {base}", *commits]
 
 
+def main_checkout(repo: Path) -> Path:
+    """The main checkout: the parent of the common git dir when that is `.git`."""
+    common = _git(repo, "rev-parse", "--path-format=absolute", "--git-common-dir")
+    return Path(common).parent if common and Path(common).name == ".git" else repo
+
+
+def checkouts(repo: Path) -> list[Path]:
+    """The main checkout, then every worktree whose directory still exists."""
+    listed = _git(repo, "worktree", "list", "--porcelain")
+    if listed is None:
+        return [repo]
+    paths = [Path(line[9:]) for line in listed.splitlines() if line.startswith("worktree ")]
+    return [path for path in paths if path.is_dir()]
+
+
+# h8 §3.2: at the start of a line, after an optional bullet; case-sensitive.
+ASK = re.compile(r"^[ \t]*(?:[-*+][ \t]+)?ASK OLA:(.*)$")
+
+
 def pending_decisions(tasks: Path) -> list[str]:
-    """Lines marked `ASK OLA` in any current-task file, any case."""
+    """`ASK OLA:` lines in any current-task file; an empty one as a warning."""
     if not tasks.is_dir():
         return []
     found: list[str] = []
     for path in sorted(p for p in tasks.glob("*") if not p.is_dir()):
-        for line in _read(path, "").splitlines():
-            if "ask ola" in line.lower():
-                found.append(f"{path.name}: {line.strip()}")
+        for number, line in enumerate(_read(path, "").splitlines(), 1):
+            if match := ASK.match(line):
+                empty = f"{path.name}:{number}: WARNING: empty ASK OLA line"
+                found.append(f"{path.name}: {line.strip()}" if match[1].strip() else empty)
     return found
+
+
+def all_decisions(repo: Path) -> list[str]:
+    """pending_decisions of every checkout; a worktree's lines carry its path."""
+    trees = checkouts(repo)
+    found: list[str] = []
+    for tree in trees:
+        name = tree.relative_to(trees[0]) if tree.is_relative_to(trees[0]) else tree
+        prefix = "" if tree == trees[0] else f"{name}: "
+        found += [prefix + line for line in pending_decisions(tree / ".claude" / "current-task")]
+    return found
+
+
+KIND = re.compile(r"^[ \t]*(?:[-*+][ \t]+)?(NOW|QUEUE|ASK OLA):(.*)$")
+MAX_LINE = 300
+
+
+def session_format(text: str, name: str = "session.md") -> list[str]:
+    """Warnings on `session.md`: one NOW, one QUEUE, ASK OLA lines, nothing else."""
+    counts, empty, other, long = {"NOW": 0, "QUEUE": 0}, [], [], []
+    for number, line in enumerate(text.splitlines(), 1):
+        line = line.rstrip()
+        if not line:
+            continue
+        if len(line) > MAX_LINE:
+            long.append(f"{name}:{number}: {len(line)} characters; at most {MAX_LINE}")
+        match = KIND.match(line)
+        if match is None:
+            other.append(f"{name}:{number}: not a NOW, QUEUE or ASK OLA line: {line[:60]}")
+        elif match[1] != "ASK OLA":  # an empty ASK OLA line is warned by pending_decisions
+            counts[match[1]] += 1
+            if not match[2].strip():
+                empty.append(f"{name}:{number}: empty {match[1]} line")
+    wrong = [
+        f"{name}: {n} {kind} lines; exactly one expected" for kind, n in counts.items() if n != 1
+    ]
+    return wrong + empty + other + long
+
+
+def _capped(lines: list[str], cap: int) -> list[str]:
+    return lines[:cap] + ([f"... {len(lines) - cap} more"] if len(lines) > cap else [])
+
+
+def _is_wrapper(command: str) -> bool:
+    """Claude Code's Bash-tool shell: sources a shell snapshot and evals the command."""
+    return "/.claude/shell-snapshots/" in command and "eval '" in command
+
+
+def background_jobs(ps_text: str, exclude: set[int]) -> list[str]:
+    """The Bash-tool wrappers in a `ps` listing, at most 4, then how many more."""
+    jobs = []
+    for line in ps_text.splitlines():
+        parts = line.split(None, 3)
+        if len(parts) < 4 or not parts[0].isdigit() or int(parts[0]) in exclude:
+            continue
+        if _is_wrapper(parts[3]):
+            command = parts[3].split("eval '", 1)[1].split("' < /dev/null", 1)[0]
+            jobs.append(f"pid {parts[0]}, running {parts[2]}: {' '.join(command.split())[:100]}")
+    return _capped(jobs, 4)
+
+
+def wrapper_check(ancestors: list[str]) -> Literal["confirmed", "drift", "unknown"]:
+    """Whether the ancestors, parent upward, show Claude Code's wrapper format (§3.5)."""
+    drift = False
+    for command in ancestors:
+        tokens = command.split()
+        if not tokens:
+            continue
+        if os.path.basename(tokens[0]) in ("claude", "claude.exe"):
+            return "drift" if drift else "unknown"
+        if _is_wrapper(command):
+            return "confirmed"
+        shell = os.path.basename(tokens[0]) in ("sh", "bash", "zsh") and tokens[1:2] == ["-c"]
+        hook = (
+            tokens[2:3] != []
+            and tokens[2].startswith("python")
+            and "tools/session_state.py" in command
+        )
+        drift = drift or (shell and not hook)
+    return "unknown"
+
+
+def running_jobs() -> list[str]:
+    """The jobs section's lines: from `ps`, without this process and its ancestors."""
+    try:
+        ps = subprocess.run(
+            ["ps", "-e", "-ww", "-o", "pid=,ppid=,etime=,command="],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if ps.returncode:
+            raise OSError(ps.stderr.strip() or f"ps exited {ps.returncode}")
+        table = {}
+        for line in ps.stdout.splitlines():
+            parts = line.split(None, 3)
+            if len(parts) == 4 and parts[0].isdigit() and parts[1].isdigit():
+                table[int(parts[0])] = (int(parts[1]), parts[3])
+        pid, exclude, chain = os.getpid(), {os.getpid()}, []
+        while pid in table and table[pid][0] not in exclude:
+            pid = table[pid][0]
+            exclude.add(pid)
+            chain += [table[pid][1]] if pid in table else []
+        jobs = background_jobs(ps.stdout, exclude)
+        drift = ["(wrapper format not recognised)"] if wrapper_check(chain) == "drift" else []
+        return jobs + drift or ["(none)"]
+    except Exception as error:
+        return [f"(could not list: {str(error)[:100]})"]
 
 
 # A table row: | # | What it is | Status | Record |
@@ -233,7 +365,7 @@ def queued(state: Path | None) -> list[str]:
     return lines
 
 
-def print_recap() -> None:
+def print_recap(tasks: Path) -> None:
     """Retrospective rule 5: the structured recap every round opens with."""
     try:
         import harness_mode
@@ -253,19 +385,35 @@ def print_recap() -> None:
         print(f"  {line}")
     if len(flight) > 11:
         print(f"  ... {len(flight) - 11} older")
-    decisions = pending_decisions(REPO / ".claude" / "current-task")
+    print("Running Bash-tool jobs, any session (Claude Code shell wrappers):")
+    for line in running_jobs():
+        print(f"  {line}")
+    decisions = all_decisions(REPO)
     print("Waiting on Ola:" + ("" if decisions else " (none recorded as ASK OLA)"))
-    for line in decisions:
+    for line in _capped([d if len(d) <= 160 else d[:157] + "..." for d in decisions], 5):
+        print(f"  {line}")
+    session = tasks / "session.md"
+    warnings = session_format(_read(session, "")) if os.path.lexists(session) else []
+    if warnings:
+        print("session.md format:")
+    for line in _capped(warnings, 4):
         print(f"  {line}")
     for line in queue:
         print(line)
     print("Next on ROADMAP.md:")
     for row in roadmap_next(_read(REPO / "ROADMAP.md", "")):
         print(f"  {row}")
+    try:  # a fault in the size table costs one line, like the harness (h8 §3)
+        import rule_sizes
+
+        sizes = rule_sizes.report(REPO)
+    except Exception as error:
+        sizes = [f"(size table unavailable: {f'{type(error).__name__}: {error}'[:150]})"]
+    print("\n".join(sizes))
     print()
 
 
-def print_current_task() -> None:
+def print_current_task(tasks: Path) -> None:
     """Print the session's ask first, then each subagent's as context.
 
     A cold session needs one of these promoted, not a flat dump: `session.md` is
@@ -276,7 +424,6 @@ def print_current_task() -> None:
     Sorted by name for stable output. session.md is promoted above the rest
     explicitly, so the order among subagent files decides nothing.
     """
-    tasks = REPO / ".claude" / "current-task"
     session = tasks / "session.md"
     print("== .claude/current-task/session.md ==")
     print(_read(session, "(absent -- no session-level ask was recorded in flight)"))
@@ -314,8 +461,9 @@ def main() -> int:
     parser.add_argument("--turns", type=int, default=5)
     args = parser.parse_args()
 
-    print_recap()
-    print_current_task()
+    tasks = main_checkout(REPO) / ".claude" / "current-task"
+    print_recap(tasks)
+    print_current_task(tasks)
 
     # Claude Code exports CLAUDE_CODE_SESSION_ID; the older spelling is kept as a
     # fallback so the script still excludes the current session if that changes.

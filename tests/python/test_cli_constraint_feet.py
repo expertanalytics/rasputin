@@ -9,13 +9,10 @@ The binding keyword is the design's ``constraint_feet``, default ``False``, and
 ``RefineOutcome`` gains ``feet`` and ``feet_refused``. The CLI passes
 ``constraint_feet=True`` unless given ``--no-constraint-feet``.
 
-Wording the design leaves open, pinned here:
-
-- stderr gains ``<n> constraint feet, <k> feet refused`` on every refined run;
-- the ``--stats`` Refinement table gains the column ``feet`` (the design's),
-  with the same number as stderr;
-- the design's own sentence, ASCII: ``constraint feet on`` or
-  ``constraint feet off`` in ``elevation_source``.
+Since increment 25 (``docs/increments/25-plain-output.md``, D4) the setting
+and its counts are ``--stats`` rows, not stderr or a sentence: ``snap_to_lines``
+is ``on`` or ``off``, ``points_snapped_to_lines`` and ``snaps_refused`` are the
+outcome's ``feet`` and ``feet_refused``. The flag keeps its name (D8).
 
 F5 through the CLI: ``--no-constraint-feet`` gives increment 20's
 ``RefineOutcome`` bit for bit. ``INCREMENT_20`` was RECORDED FROM 517e0e3's
@@ -43,14 +40,14 @@ import tin_engine.cli as cli
 from geotiff_fixtures import KARTVERKET, micro_tiff, needs_codecs
 from test_cli_mesh_dem import USAGE, invoke, write_tiff
 from test_cli_mesh_domain import SQUARE, geojson, quarter_circle
-from test_cli_mesh_refine import NUMBER, field, min_angles_degrees, sentence
-from test_cli_mesh_stats import mesh, section, table
+from test_cli_mesh_refine import file_field, min_angles_degrees, stats_row
+from test_cli_mesh_stats import mesh
 from test_refine_golden import GOLDEN, digest, refined
 from tin_engine import _core
 from vtkread import VtkFile, read_vtk
 
 ROWS, COLS = 17, 21
-FEET = re.compile(r"(\d+) constraint feet, (\d+) feet refused")
+FEET = re.compile(r"(\d+) constraint feet, (\d+) feet refused")  # the pre-25 stderr report
 
 # Recorded from increment 20's CLI; see the module docstring.
 INCREMENT_20 = {
@@ -85,10 +82,11 @@ def calls(monkeypatch: pytest.MonkeyPatch) -> list[dict[str, Any]]:
     return seen
 
 
-def run(tmp_path: Path, *args: str) -> tuple[VtkFile, str]:
-    out = tmp_path / "x.vtk"
-    result = mesh(*args, "--out", str(out))
-    return read_vtk(out.read_bytes()), result.stderr
+def run(tmp_path: Path, *args: str) -> tuple[VtkFile, str, str]:
+    """(mesh, ``--stats`` report, stderr)."""
+    out, md = tmp_path / "x.vtk", tmp_path / "x.md"
+    result = mesh(*args, "--out", str(out), "--stats", str(md))
+    return read_vtk(out.read_bytes()), md.read_text(encoding="utf-8"), result.stderr
 
 
 # ---------------------------------------------------------------- binding
@@ -145,23 +143,21 @@ class TestTheFlag:
     def test_the_default_is_on(
         self, tmp_path: Path, bumpy: Path, box: Path, calls: list[dict[str, Any]]
     ) -> None:
-        vtk, _ = run(tmp_path, "--dem", str(bumpy), "--domain", str(box), "--tolerance", "1")
+        _, report, _ = run(tmp_path, "--dem", str(bumpy), "--domain", str(box), "--tolerance", "1")
         assert [c["constraint_feet"] for c in calls] == [True]
-        text = sentence(vtk)
-        assert "constraint feet on" in text
-        assert "constraint feet off" not in text
+        assert stats_row(report, "snap_to_lines") == "on"
 
     def test_the_default_is_on_for_a_stride_start(
         self, tmp_path: Path, bumpy: Path, calls: list[dict[str, Any]]
     ) -> None:
-        vtk, _ = run(tmp_path, "--dem", str(bumpy), "--tolerance", "1")
+        _, report, _ = run(tmp_path, "--dem", str(bumpy), "--tolerance", "1")
         assert [c["constraint_feet"] for c in calls] == [True]
-        assert "constraint feet on" in sentence(vtk)
+        assert stats_row(report, "snap_to_lines") == "on"
 
     def test_no_constraint_feet_is_off(
         self, tmp_path: Path, bumpy: Path, box: Path, calls: list[dict[str, Any]]
     ) -> None:
-        vtk, stderr = run(
+        _, report, stderr = run(
             tmp_path,
             "--dem",
             str(bumpy),
@@ -172,21 +168,21 @@ class TestTheFlag:
             "--no-constraint-feet",
         )
         assert [c["constraint_feet"] for c in calls] == [False]
-        text = sentence(vtk)
-        assert "constraint feet off" in text
-        assert "constraint feet on" not in text
-        match = FEET.search(stderr)
-        assert match is not None, stderr
-        assert match.groups() == ("0", "0")
+        assert stats_row(report, "snap_to_lines") == "off"
+        assert stats_row(report, "points_snapped_to_lines") == "0"
+        assert stats_row(report, "snaps_refused") == "0"
+        assert FEET.search(stderr) is None, stderr  # D7: the counts left stderr
 
     def test_the_help_names_the_flag(self) -> None:
         code, output = invoke("--help")
         assert code == 0, output
         assert "--no-constraint-feet" in output
 
-    def test_the_sentence_is_ascii(self, tmp_path: Path, bumpy: Path, box: Path) -> None:
-        vtk, _ = run(tmp_path, "--dem", str(bumpy), "--domain", str(box), "--tolerance", "1")
-        assert sentence(vtk).isascii()
+    def test_the_setting_is_not_in_the_file(self, tmp_path: Path, bumpy: Path, box: Path) -> None:
+        """D2: the file carries what a user of the mesh needs; the setting is --stats'."""
+        vtk, _, _ = run(tmp_path, "--dem", str(bumpy), "--domain", str(box), "--tolerance", "1")
+        for name in ("snap_to_lines", "constraint_feet", "elevation_source"):
+            assert name not in vtk.field_data, name
 
 
 class TestRefusals:
@@ -211,29 +207,24 @@ class TestRefusals:
 
 
 class TestReport:
-    """R9: stderr and ``--stats`` carry the count."""
+    """R9, as increment 25 words it: ``--stats`` carries the outcome's counts."""
 
-    def test_stats_feet_column_matches_stderr(self, tmp_path: Path, bumpy: Path, box: Path) -> None:
-        md = tmp_path / "x.md"
-        result = mesh(
-            "--dem",
-            str(bumpy),
-            "--domain",
-            str(box),
-            "--tolerance",
-            "1",
-            "--out",
-            str(tmp_path / "x.vtk"),
-            "--stats",
-            str(md),
-        )
-        refinement = table(section(md.read_text(encoding="utf-8"), "Refinement"))
-        header = refinement.pop("tolerance")
-        ((_, cells),) = refinement.items()
-        row = dict(zip(header, cells, strict=True))
-        match = FEET.search(result.stderr)
-        assert match is not None, result.stderr
-        assert row["feet"] == match.group(1)
+    def test_stats_rows_match_the_outcome(
+        self, tmp_path: Path, bumpy: Path, box: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        seen: list[_core.RefineOutcome] = []
+        real = cli.refine
+
+        def spy(*args: Any, **kwargs: Any) -> _core.RefineOutcome:
+            out = real(*args, **kwargs)
+            seen.append(out)
+            return out
+
+        monkeypatch.setattr(cli, "refine", spy)
+        _, report, _ = run(tmp_path, "--dem", str(bumpy), "--domain", str(box), "--tolerance", "1")
+        (out,) = seen
+        assert stats_row(report, "points_snapped_to_lines") == str(out.feet)
+        assert stats_row(report, "snaps_refused") == str(out.feet_refused)
 
 
 # ---------------------------------------------------------------- F5 and T-real
@@ -297,9 +288,9 @@ class TestRealTile:
     def test_the_quarter_circle(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
         domain = geojson(tmp_path / "quarter.geojson", quarter_circle())
         for tolerance in ("1", "10"):
-            out = tmp_path / f"q_{tolerance}.vtk"
+            out, md = tmp_path / f"q_{tolerance}.vtk", tmp_path / f"q_{tolerance}.md"
             began = time.perf_counter()
-            result = mesh(
+            mesh(
                 "--dem",
                 str(KARTVERKET),
                 "--domain",
@@ -308,20 +299,23 @@ class TestRealTile:
                 tolerance,
                 "--out",
                 str(out),
+                "--stats",
+                str(md),
             )
             elapsed = time.perf_counter() - began
             vtk = read_vtk(out.read_bytes())
-            achieved = field(sentence(vtk), rf"achieved max error {NUMBER} m")
+            achieved = float(file_field(vtk, "max_error_m"))
             assert achieved <= float(tolerance)
             angles = min_angles_degrees(vtk)
             under = int((angles < 0.1).sum())
-            feet = FEET.search(result.stderr)
+            report = md.read_text(encoding="utf-8")
+            feet = tuple(stats_row(report, n) for n in ("points_snapped_to_lines", "snaps_refused"))
             with capsys.disabled():
                 print(
                     f"\nT-real feet {tolerance} m: {len(vtk.polygons)} triangles, "
                     f"worst {angles.min():.4f} deg, {under} under 0.1 deg, "
                     f"{int((angles < 1.0).sum())} under 1 deg, achieved {achieved} m, "
-                    f"feet {feet.groups() if feet else None}, {elapsed:.1f} s"
+                    f"feet {feet}, {elapsed:.1f} s"
                 )
             if tolerance == "1":
                 assert under == 0  # M1: 3 with the rule off, 0 with it on

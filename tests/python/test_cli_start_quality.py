@@ -3,15 +3,11 @@
 `docs/increments/20-start-quality.md`. Built on the main session's provisional
 picks, pending Ola: C1 (a), C2 (a) 25°, C3 (a), C4 (a).
 
-Wording the design leaves open, pinned here:
-
-- stderr gains ``<n> start quality nodes inserted, <k> start quality skips``
-  on every refined run (``0`` and ``0`` with the pass off);
-- the ``--stats`` Refinement table gains the columns ``quality inserted`` and
-  ``quality skipped``, with the same numbers as stderr;
-- the design's own, in ASCII per increment 13 guarantee 7: ``start min angle 25 deg``
-  or ``start quality off`` in
-  ``elevation_source``, and the timing row ``refine: start quality``.
+Since increment 25 (``docs/increments/25-plain-output.md``, D4) the setting
+and the pass's counts are ``--stats`` rows: ``start_min_angle_deg`` (``0`` is
+off), ``start_quality_points_inserted`` and ``start_quality_points_skipped``,
+the outcome's ``quality_inserted`` and ``quality_skipped``; stderr no longer
+carries them (D7). The timing row ``refine: start quality`` stays.
 
 The binding keyword is the design's ``min_angle_deg``; the CLI passes it on
 every refined run, 25.0 by default, so the tests read it off a wrapped
@@ -36,12 +32,14 @@ import tin_engine.cli as cli
 from geotiff_fixtures import KARTVERKET, micro_tiff, needs_codecs
 from test_cli_mesh_dem import SENTINEL, USAGE, invoke, write_tiff
 from test_cli_mesh_domain import SQUARE, geojson, quarter_circle
-from test_cli_mesh_refine import NUMBER, field, min_angles_degrees, sentence
-from test_cli_mesh_stats import mesh, seconds, section, table
+from test_cli_mesh_refine import file_field, min_angles_degrees, stats_row
+from test_cli_mesh_stats import mesh, seconds
+from tin_engine import _core
 from vtkread import VtkFile, read_vtk
 
 ROWS, COLS = 17, 21
-QUALITY = re.compile(r"(\d+) start quality nodes inserted, (\d+) start quality skips")
+QUALITY = re.compile(r"(\d+) start quality nodes inserted, (\d+) start quality skips")  # pre-25
+COUNTS = ("start_quality_points_inserted", "start_quality_points_skipped")
 
 
 @pytest.fixture
@@ -71,10 +69,11 @@ def calls(monkeypatch: pytest.MonkeyPatch) -> list[dict[str, Any]]:
     return seen
 
 
-def run(tmp_path: Path, *args: str, name: str = "x.vtk") -> tuple[VtkFile, str]:
-    out = tmp_path / name
-    result = mesh(*args, "--out", str(out))
-    return read_vtk(out.read_bytes()), result.stderr
+def run(tmp_path: Path, *args: str, name: str = "x.vtk") -> tuple[VtkFile, str, str]:
+    """(mesh, ``--stats`` report, stderr)."""
+    out, md = tmp_path / name, tmp_path / f"{name}.md"
+    result = mesh(*args, "--out", str(out), "--stats", str(md))
+    return read_vtk(out.read_bytes()), md.read_text(encoding="utf-8"), result.stderr
 
 
 class TestTheFlag:
@@ -83,23 +82,21 @@ class TestTheFlag:
     def test_the_default_is_25_on_a_domain_start(
         self, tmp_path: Path, bumpy: Path, box: Path, calls: list[dict[str, Any]]
     ) -> None:
-        vtk, _ = run(tmp_path, "--dem", str(bumpy), "--domain", str(box), "--tolerance", "1")
+        _, report, _ = run(tmp_path, "--dem", str(bumpy), "--domain", str(box), "--tolerance", "1")
         assert [c["min_angle_deg"] for c in calls] == [25.0]
-        text = sentence(vtk)
-        assert "start min angle 25 deg" in text
-        assert "start quality off" not in text
+        assert stats_row(report, "start_min_angle_deg") == "25"
 
     def test_the_default_is_25_on_a_stride_start(
         self, tmp_path: Path, bumpy: Path, calls: list[dict[str, Any]]
     ) -> None:
-        vtk, _ = run(tmp_path, "--dem", str(bumpy), "--tolerance", "1")
+        _, report, _ = run(tmp_path, "--dem", str(bumpy), "--tolerance", "1")
         assert [c["min_angle_deg"] for c in calls] == [25.0]
-        assert "start min angle 25 deg" in sentence(vtk)
+        assert stats_row(report, "start_min_angle_deg") == "25"
 
     def test_zero_is_off(
         self, tmp_path: Path, bumpy: Path, box: Path, calls: list[dict[str, Any]]
     ) -> None:
-        vtk, stderr = run(
+        vtk, report, stderr = run(
             tmp_path,
             "--dem",
             str(bumpy),
@@ -111,18 +108,16 @@ class TestTheFlag:
             "0",
         )
         assert [c["min_angle_deg"] for c in calls] == [0.0]
-        text = sentence(vtk)
-        assert "start quality off" in text
-        assert "start min angle" not in text
-        match = QUALITY.search(stderr)
-        assert match is not None, stderr
-        assert match.groups() == ("0", "0")
+        assert stats_row(report, "start_min_angle_deg") == "0"
+        assert tuple(stats_row(report, n) for n in COUNTS) == ("0", "0")
+        assert QUALITY.search(stderr) is None, stderr  # D7: the counts left stderr
+        assert "start_min_angle_deg" not in vtk.field_data  # D2: not a mesh-file field
 
     @pytest.mark.parametrize("value", ["30", "35"])
     def test_a_value_up_to_35_is_accepted_and_named(
         self, tmp_path: Path, bumpy: Path, box: Path, value: str, calls: list[dict[str, Any]]
     ) -> None:
-        vtk, _ = run(
+        _, report, _ = run(
             tmp_path,
             "--dem",
             str(bumpy),
@@ -134,7 +129,7 @@ class TestTheFlag:
             value,
         )
         assert [c["min_angle_deg"] for c in calls] == [float(value)]
-        assert f"start min angle {value} deg" in sentence(vtk)
+        assert stats_row(report, "start_min_angle_deg") == value
 
 
 class TestRefusals:
@@ -188,40 +183,35 @@ class TestRefusals:
 
 
 class TestReport:
-    """R11: stderr and ``--stats`` carry the two counts and a timing row."""
+    """R11, as increment 25 words it: ``--stats`` carries the two counts and a
+    timing row; stderr carries neither (D7)."""
 
-    def test_stderr_counts_the_pass(self, tmp_path: Path, bumpy: Path, box: Path) -> None:
-        _, stderr = run(tmp_path, "--dem", str(bumpy), "--domain", str(box), "--tolerance", "1")
-        match = QUALITY.search(stderr)
-        assert match is not None, stderr
-        inserted, _ = (int(g) for g in match.groups())
-        assert inserted > 0  # the box's 20.7° start triangles are bad at 25°
-        assert re.search(r"(\d+) rounds, (\d+) points inserted, (\d+) flips", stderr)
-
-    def test_stats_has_the_counts_and_the_timing_row(
-        self, tmp_path: Path, bumpy: Path, box: Path
-    ) -> None:
-        md = tmp_path / "x.md"
-        result = mesh(
-            "--dem",
-            str(bumpy),
-            "--domain",
-            str(box),
-            "--tolerance",
-            "1",
-            "--out",
-            str(tmp_path / "x.vtk"),
-            "--stats",
-            str(md),
+    def test_stats_counts_the_pass(self, tmp_path: Path, bumpy: Path, box: Path) -> None:
+        _, report, stderr = run(
+            tmp_path, "--dem", str(bumpy), "--domain", str(box), "--tolerance", "1"
         )
-        report = md.read_text(encoding="utf-8")
-        refinement = table(section(report, "Refinement"))
-        header = refinement.pop("tolerance")
-        ((_, cells),) = refinement.items()
-        row = dict(zip(header, cells, strict=True))
-        match = QUALITY.search(result.stderr)
-        assert match is not None, result.stderr
-        assert (row["quality inserted"], row["quality skipped"]) == match.groups()
+        inserted = int(stats_row(report, "start_quality_points_inserted"))
+        assert inserted > 0  # the box's 20.7° start triangles are bad at 25°
+        assert int(stats_row(report, "refinement_rounds")) >= 0
+        assert QUALITY.search(stderr) is None, stderr
+        assert not re.search(r"(\d+) rounds, (\d+) points inserted, (\d+) flips", stderr)
+
+    def test_stats_has_the_outcome_counts_and_the_timing_row(
+        self, tmp_path: Path, bumpy: Path, box: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        seen: list[_core.RefineOutcome] = []
+        real = cli.refine
+
+        def spy(*args: Any, **kwargs: Any) -> _core.RefineOutcome:
+            out = real(*args, **kwargs)
+            seen.append(out)
+            return out
+
+        monkeypatch.setattr(cli, "refine", spy)
+        _, report, _ = run(tmp_path, "--dem", str(bumpy), "--domain", str(box), "--tolerance", "1")
+        (out,) = seen
+        expected = (str(out.quality_inserted), str(out.quality_skipped))
+        assert tuple(stats_row(report, n) for n in COUNTS) == expected
         phases = seconds(report)
         assert "refine: start quality" in phases
         assert 0.0 <= phases["refine: start quality"] <= phases["refine"]
@@ -245,11 +235,7 @@ class TestReport:
             str(md),
         )
         report = md.read_text(encoding="utf-8")
-        refinement = table(section(report, "Refinement"))
-        header = refinement.pop("tolerance")
-        ((_, cells),) = refinement.items()
-        row = dict(zip(header, cells, strict=True))
-        assert (row["quality inserted"], row["quality skipped"]) == ("0", "0")
+        assert tuple(stats_row(report, n) for n in COUNTS) == ("0", "0")
         assert "refine: start quality" in seconds(report)
 
 
@@ -259,14 +245,12 @@ class TestNoData:
     def test_a_domain_over_a_nodata_block(self, tmp_path: Path, box: Path) -> None:
         array = np.random.default_rng(10).uniform(0.0, 50.0, (ROWS, COLS)).astype(np.float32)
         array[5:12, 7:14] = float(SENTINEL)  # under the box's centre, where the pass looks first
-        tif = write_tiff(tmp_path / "void.tif", micro_tiff(array, nodata=SENTINEL))
-        vtk, stderr = run(tmp_path, "--dem", str(tif), "--domain", str(box), "--tolerance", "1")
+        tif = write_tiff(tmp_path / "nodata.tif", micro_tiff(array, nodata=SENTINEL))
+        vtk, report, _ = run(tmp_path, "--dem", str(tif), "--domain", str(box), "--tolerance", "1")
         assert (vtk.points[:, 2] != float(SENTINEL)).all()
         assert np.isfinite(vtk.points[:, 2]).all()
-        assert field(sentence(vtk), rf"{NUMBER} vertices without data dropped") >= 1
-        match = QUALITY.search(stderr)
-        assert match is not None, stderr
-        assert int(match.group(1)) > 0
+        assert int(file_field(vtk, "nodata_vertices_removed")) >= 1
+        assert int(stats_row(report, "start_quality_points_inserted")) > 0
 
 
 # ---------------------------------------------------------------- T-real
@@ -288,8 +272,9 @@ class TestRealTile:
         runs: list[tuple[str, str]] = [("10", "0"), ("10", "25"), ("1", "25")]
         for tolerance, angle in runs:
             out = tmp_path / f"q_{tolerance}_{angle}.vtk"
+            md = tmp_path / f"q_{tolerance}_{angle}.md"
             began = time.perf_counter()
-            result = mesh(
+            mesh(
                 "--dem",
                 str(KARTVERKET),
                 "--domain",
@@ -300,16 +285,18 @@ class TestRealTile:
                 angle,
                 "--out",
                 str(out),
+                "--stats",
+                str(md),
             )
             elapsed = time.perf_counter() - began
             vtk = read_vtk(out.read_bytes())
-            achieved = field(sentence(vtk), rf"achieved max error {NUMBER} m")
+            achieved = float(file_field(vtk, "max_error_m"))
             assert achieved <= float(tolerance)
             tris = np.asarray(vtk.polygons, dtype=np.int64)
             degree = np.bincount(tris.ravel(), minlength=len(vtk.points))
             angles = min_angles_degrees(vtk)
             under[(tolerance, angle)] = _under_one_degree(vtk)
-            quality = QUALITY.search(result.stderr)
+            quality = tuple(stats_row(md.read_text(encoding="utf-8"), n) for n in COUNTS)
             with capsys.disabled():
                 print(
                     f"\nT-real {tolerance} m, start min angle {angle}: {len(tris)} triangles, "
@@ -319,6 +306,6 @@ class TestRealTile:
                     f"{100 * np.mean(angles < 20.0):.2f} % under 20 deg, "
                     f"worst {angles.min():.4f} deg, max degree {degree.max()}, "
                     f">= 12: {(degree >= 12).sum()}, achieved {achieved} m, {elapsed:.1f} s, "
-                    f"quality {quality.groups() if quality else None}"
+                    f"quality {quality}"
                 )
         assert under[("10", "25")] < under[("10", "0")]

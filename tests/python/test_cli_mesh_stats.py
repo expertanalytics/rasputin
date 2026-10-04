@@ -1,8 +1,12 @@
 """`rasputin mesh --stats PATH`: increment 17, C1 to C6.
 
 `docs/increments/17-mesh-stats.md` R2, R4 and R5. Ola chose C1 (a): ``--stats -``
-writes the report to stdout, after the path line(s). Ola chose C2 (a): the
-Refinement table has a ``carved`` column.
+writes the report to stdout, after the path line(s). Increment 25
+(``docs/increments/25-plain-output.md``, D4) replaced the Refinement table
+with the Inputs and Result sections, and the Sizes row "vertices without data
+dropped" with the Result row ``nodata_vertices_removed``; C2 (a)'s ``carved``
+count is ``points_inserted_on_nodata``. Their placement among the other
+sections is not ruled, so only their presence is checked.
 
 Stdout and stderr are read apart (``Result.stdout``), because the report is
 Markdown and the stdout contract is exact lines; the shared ``invoke`` helper
@@ -21,12 +25,15 @@ from __future__ import annotations
 import re
 from collections.abc import Callable
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 import pytest
 from typer.testing import CliRunner, Result
 
+import tin_engine.cli as cli
 from geotiff_fixtures import micro_tiff
+from recordread import stats_names, stats_row
 from test_cli_mesh_dem import USAGE, invoke, write_tiff
 from test_cli_mesh_domain import HOLE, SQUARE, geojson
 from tin_engine.cli import app
@@ -257,7 +264,11 @@ class TestSectionsPerKind:
 
     def test_a_fixture(self, report_of: ReportOf) -> None:
         report, _, out = report_of("fixture")
-        assert sections(report) == ["Sizes", "Quality (plan view, x/y)", "Timings"]
+        found = sections(report)
+        for name in ("Sizes", "Quality (plan view, x/y)", "Timings"):
+            assert name in found, found
+        assert "Refinement" not in found and "Inputs" not in found, found
+        assert stats_row(report, "heights") == "none: every z is 0 (--flat)"
         sizes = table(section(report, "Sizes"))
         for absent in ("DEM nodes", "domain vertices", "vertices without data dropped"):
             assert absent not in sizes
@@ -285,29 +296,38 @@ class TestSectionsPerKind:
         assert "## Refinement" not in report
         sizes = table(section(report, "Sizes"))
         assert sizes["DEM nodes"] == [f"{ROWS} {TIMES} {COLS} (10 {TIMES} 5 m)"]
-        assert "vertices without data dropped" in sizes
+        assert "vertices without data dropped" not in sizes
+        assert stats_row(report, "nodata_vertices_removed") == "0"
         assert "domain vertices" not in sizes
+        names = stats_names(report)
+        for absent in ("tolerance_m", "max_error_m", "refinement_rounds", "edge_flips"):
+            assert absent not in names, absent
         phases = seconds(report)
         assert "decode" in phases and "sample" in phases and "trim" in phases
         assert not any(name.startswith("refine") for name in phases)
 
-    def test_a_tolerance_run(self, report_of: ReportOf) -> None:
+    def test_a_tolerance_run(self, report_of: ReportOf, monkeypatch: pytest.MonkeyPatch) -> None:
+        outcomes: list[Any] = []
+        real = cli.refine
+
+        def spy(*args: Any, **kwargs: Any) -> Any:
+            outcomes.append(real(*args, **kwargs))
+            return outcomes[-1]
+
+        monkeypatch.setattr(cli, "refine", spy)
         report, result, _ = report_of("tolerance")
-        assert sections(report) == [
-            "Sizes",
-            "Quality (plan view, x/y)",
-            "Refinement",
-            "Timings",
-        ]
-        refinement = table(section(report, "Refinement"))
-        header = refinement.pop("tolerance")
-        ((tolerance, cells),) = refinement.items()
-        row = dict(zip(header, cells, strict=True))
-        assert tolerance == "1 m"
-        match = re.search(r"(\d+) rounds, (\d+) points inserted, (\d+) flips", result.stderr)
-        assert match is not None, result.stderr
-        assert (row["rounds"], row["inserted"], row["flips"]) == match.groups()
-        assert row["carved"] == "0"  # the bumpy DEM has no NoData
+        found = sections(report)
+        for name in ("Sizes", "Quality (plan view, x/y)", "Inputs", "Result", "Timings"):
+            assert name in found, found
+        assert "Refinement" not in found
+        (out,) = outcomes
+        assert stats_row(report, "tolerance_m") == "1"
+        assert stats_row(report, "refinement_rounds") == str(out.rounds)
+        assert stats_row(report, "points_inserted") == str(out.inserted)
+        assert stats_row(report, "edge_flips") == str(out.flips)
+        assert stats_row(report, "points_inserted_on_nodata") == "0"  # no NoData in bumpy
+        assert stats_row(report, "dem_nodes_outside_mesh") == "0"
+        assert not re.search(r"\d+ rounds, \d+ points inserted", result.stderr), result.stderr
         assert "Threads:" in section(report, "Timings")
         phases = seconds(report)
         for name in (
