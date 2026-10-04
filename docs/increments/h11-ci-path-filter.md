@@ -1,6 +1,7 @@
 # Harness h11: skip the code jobs on prose-only pull requests
 
-Status: implemented, awaiting `@reviewer`. Red step 21d675e, 8db5bfc and
+Status: review round 1 recorded (CHANGES REQUESTED, see Review); its fixes
+are in, awaiting `@reviewer` round 2. Red step 21d675e, 8db5bfc and
 8986083 (the install trap's copy, §6.1); green 8b5c4ee (`@developer`); the
 branch has no CI run yet. Rules text for §7 written (`@architect`, 2026-10-04).
 After the merge, Ola's settings step (§5, step 2) follows directly; the
@@ -235,9 +236,10 @@ and a skipped job reports success.
 
 ## 4. LOC
 
-`tools/ci_changes.py`: about 45 counted lines. `main.yaml`: about 35 added,
-2 removed (the `push` trigger); h10 counted workflow lines apart from
-production, as here. Tests are excluded. Well under 700.
+`tools/ci_changes.py`: about 45 counted lines (actual: 52). `main.yaml`:
+about 35 added, 2 removed (the `push` trigger) (actual: 52 added, 2 removed);
+h10 counted workflow lines apart from production, as here. Tests are excluded.
+Total about 104 (actuals from review round 1). Well under 700.
 
 ## 5. Sequence, and Ola's settings step
 
@@ -251,7 +253,9 @@ production, as here. Tests are excluded. Well under 700.
    `CI result`. It merges like any other PR.
 2. **Ola, straight after the merge**: Settings, Branches, the `master` rule,
    required status checks: remove the seven, add `CI result` (offered because
-   the h11 run reported it). Until this is done, a prose PR waits on the five
+   the h11 run reported it), with "GitHub Actions" chosen as its expected
+   source, so that a check of the same name posted by another app cannot
+   satisfy it. Until this is done, a prose PR waits on the five
    matrix checks that never report; nothing breaks, it just waits.
    `Require branches to be up to date` and the merge queue stay as h10 left
    them.
@@ -374,14 +378,22 @@ authority: the green run on CI covers every module.
 
 ## 7. Rules text
 
-- `CLAUDE.md` §4, CI: the required check is `CI result`; on a PR that changes
-  only prose (as `tools/ci_changes.py` decides), the C++ and Python jobs are
-  skipped, so that PR's green says nothing about code. Two lines.
+- `CLAUDE.md` §4, CI: what `CI result` checks; that it is meant to be the one
+  required check, with the `gh api` command that shows whether it is yet (so
+  the text is not false between the merge and Ola's settings step, §5 step 2),
+  and that a prose-only PR waits on the never-reported matrix checks until
+  then; on a PR that changes only prose (as `tools/ci_changes.py` decides),
+  the C++, sanitizer and Python jobs are skipped, so that PR's green says
+  nothing about code. Eight lines.
 - `testing.md`, the "Live today" block and the sanitizer bullet ("run on
   every PR"): "on every PR that changes code". (Aside, not h11's: the tsan
   bullet there still says planned; the job is live.)
-- `.claude/agents/reviewer.md` §5 needs no change: it already says to read
-  `.github/` when a change touches the build.
+- `.claude/agents/reviewer.md` §5, after "Local green is not green": on a
+  prose-only PR the C++, sanitizer and Python checks show as skipped; that is
+  the design, not a red, and `CI result` decides. Two lines added, one
+  rewrapped (b2e0a7b). It already said to read `.github/` when a change
+  touches the build; the new sentence keeps a skipped check from being read
+  as red CI.
 - h10 is a record and stays as written; its "the queue fast-forwards
   `master`" is checked by §5 step 0, not relied on.
 
@@ -430,3 +442,9 @@ define and Ola's to confirm. One rule h12 must settle with it: today a grant
 does not outlive the session it was given in (`.claude/REQUIRED-READING.md`,
 the approval boundary), so until h12 lands, the standing yes is not yet a
 rule any session can act on.
+
+## Review
+
+**h11, review, round 1, 2026-10-04.** Range `master...2faa3c4` (merge base `d926644`). Verdict: CHANGES REQUESTED. LOC: `tools/ci_changes.py` 52 production lines (estimate about 45); workflow 52 added / 2 removed (estimate about 35), counted apart as h10 did; total about 104. Gates clean; `check_citations.py` lists `h10-merge-queue.md:183` as at risk, read as a quoted record, stays. Full suite 4603 passed, 15 skipped, coverage 98.47 % on a rebuilt `_core`. Red: 65 failed / 1 passed at each red commit; 66 passed at `8b5c4ee`. Seven planted workflow and classifier faults, each caught. The `CI result` step, run under `bash -eo pipefail` over 14 result combinations, passes only on all green, or on `code=false` with the three code jobs skipped. §5 step 0 confirmed: the `merge_group` run on `d926644` equals `origin/master`. Blocking: §7 said `.claude/agents/reviewer.md` §5 needs no change, but `b2e0a7b` changed it; §7 said the `CLAUDE.md` change is two lines, it is five; say what was written. Suggestions: word `CLAUDE.md` §4's "the one required check" so it is not false before Ola's settings step (§5 step 2); in §5 step 2, add `CI result` with "GitHub Actions" as its expected source; in §4, record the actual line counts next to the estimates. After the push, CI must show all nine code jobs green plus `Changed files` and `CI result`, `code=true` in the `Changed files` log, and the 3.12 leg's "Hardening install trap" step green.
+
+Fixes for round 1 (`@architect`): §7 now says what was written in `CLAUDE.md` and `.claude/agents/reviewer.md`; `CLAUDE.md` §4 says `CI result` is meant to be the one required check and names the `gh api` command that shows whether it is yet (eight lines now, not five); §5 step 2 names the expected source; §4 carries the actual counts.
