@@ -14,7 +14,13 @@ from collections.abc import Iterable
 
 import numpy as np
 
-from tin_engine._core import CheckPoints, PointRefineOutcome, RefineOutcome, refine_points
+from tin_engine._core import (
+    CheckPoints,
+    ConstraintCheckPoints,
+    PointRefineOutcome,
+    RefineOutcome,
+    refine_points,
+)
 from tin_engine.stats import PhaseClock
 from tin_engine.target_grid import Block, TargetGrid
 
@@ -25,9 +31,11 @@ def run(
     checks: Iterable[Block],
     tolerance: float,
     clock: PhaseClock,
+    strip: ConstraintCheckPoints | None = None,
 ) -> tuple[PointRefineOutcome, int]:
     """Phase 2 from phase 1's outcome `start`; the outcome and the number of
-    check points stored. `clock` gets D7's rows."""
+    check points stored. `clock` gets D7's rows. `strip`, the edge strip on
+    the target grid (15f, D6), joins the same loop."""
     h = float(grid.spacing)
     store = CheckPoints(
         x_min=grid.col0 * h, y_max=-grid.row0 * h, spacing=h, rows=grid.rows, cols=grid.cols
@@ -41,7 +49,7 @@ def run(
     with clock.phase("check points: store"):
         store.freeze()
     arrays = (start.vertices, start.triangles, start.z, start.valid, start.edges, start.masks)
-    out = refine_points(store, *(np.asarray(a) for a in arrays), tolerance=tolerance)
+    out = refine_points(store, *(np.asarray(a) for a in arrays), tolerance=tolerance, strip=strip)
     clock.add("check points: store", adding)
     clock.add("final check: scan (parallel)", out.scan_seconds)
     clock.add("final check: split + flip (serial)", out.split_seconds)
