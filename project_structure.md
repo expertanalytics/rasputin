@@ -127,6 +127,11 @@ src_python/tin_engine/     # public Python API (distribution name: rasputin)
   features.py              # EdgeVocabulary: which bit means which feature.
                            #   The names C++ refuses to hold. Imports nothing
                            #   first-party and never imports _core
+                           #   PIECE_VOCABULARY: the default plus `seam`
+                           #   (bit 9), for a cut run's piece files (23c)
+  decompose.py             # partition: the window cut into cells under
+                           #   --pieces and --memory-budget, b(T); pure, reads
+                           #   no machine (23c)
   feature_input.py         # --features: a GeoJSON, GeoPackage layer or GML
                            #   read, mapped to masks by a ClassMap, pre-clipped,
                            #   moved to the DEM's CRS and clipped to the domain
@@ -188,6 +193,9 @@ src_python/tin_engine/     # public Python API (distribution name: rasputin)
                            #   files ("rb"); lists headers, loads tiles (15a);
                            #   open_geopackage: a read-only SQLite
                            #   connection (16b)
+    mesh_index.py          # MeshIndex (a cut run's index.json, frozen,
+                           #   unknown keys refused), SeamRecord,
+                           #   check_conformity (K4); opens nothing (23c)
 
 tests/
   cpp/                     # C++ tests (Catch2; unit/ and property/)
