@@ -1,11 +1,13 @@
 # Increment 28 — NVE reference catchments: our catchments against NVE's, station by station
 
-Status: **revised after design review round 1, awaiting round 2**
+Status: **revised after design review round 2, awaiting round 3**
 (`@architect`, 2026-10-04), branch `worktree-nve-catchments` off master
-`d20126b`. Ola's rulings of 2026-10-04 are in the section below. The gauge
+`d20126b`. Ola's rulings of 2026-10-04 are in the section below. Round 2 closed the burn's drainage claim
+(checked node by node, not assumed), the ELVIS data cases, the PR order, and
+added "Data use". The gauge
 placement is redesigned to his direction (the mapped river, then the DEM's
 flow path along it, never an area objective), with a per-station sensitivity
-check. Five PRs. Every choice still open is marked "Default (@architect,
+check. Five PRs (merge order 1, 3, 2, 4, 5). Every choice still open is marked "Default (@architect,
 2026-10-04)" and repeated, with its alternative, under "Questions for Ola".
 
 **Closes.** Catchments for real Norwegian gauging stations, computed from the
@@ -35,7 +37,8 @@ whether the catchment area is well defined at the gauge at all.
 sketched so that this increment does not block it; see "Residual inflow,
 later"). Burning the whole mapped network into the DEM (only the gauge's own
 reach is burnt). The nine stations whose catchments straddle DTM10's
-half-cell-shifted tiles (expected refusals; a later increment fixes them).
+half-cell-shifted tiles (expected refusals; a later increment fixes them) and
+Femundsenden (no mapped river within 500 m; refused until the fallback).
 Holes, as in 22. Parallel stations (one station at a time; see "The batch").
 Stations outside DTM10's coverage, and any other DEM.
 
@@ -118,7 +121,7 @@ channel, and these numbers are re-measured by the acceptance run).
   `Malest_totalnedb` (polygons: `stasjonnr`, `nedborfeltaareal_km2`,
   `oppdateringsdato`). All in EPSG:25833, the CRS of DTM10. The query
   endpoint returns GeoJSON in the asked CRS with
-  `.../38/query?where=stasjonnr in ('2.11.0',...)&outFields=*&outSR=25833&f=geojson`,
+  `.../38/query?where=stasjonnr in ('2.11.0',...)&outFields=stasjonnr,nedborfeltaareal_km2,oppdateringsdato&outSR=25833&f=geojson`,
   `maxRecordCount` 2000. The service description (Norwegian) calls the
   polygon "the catchment upstream of the gauging station".
 - **All 140 found.** Layer 0 has every one of the 140 station numbers (all
@@ -304,6 +307,37 @@ is fetched or stored. Each station keeps the two keys that join it later: the
 station number (`2.11.0`, HydAPI's `StationId`) and the HRD's discharge series
 (parameter 1001 and its version, `1001.0`).
 
+## Data use
+
+Ola asked that nothing dodgy is done with NVE's data. The rules, each held by
+a test of `fetch/nve.py` (PR 3):
+
+- **Sources.** The HRD report (the PDF named above); `HydrologiskeData3`
+  layers 0 (`Malestasjoner`) and 38 (`Malest_totalnedb`); `Elvenett1` layer 2
+  (`elvenett`). HydAPI is not used and no API key is stored anywhere.
+- **Licence.** NLOD; "Kilde: NVE" is in `NOTICE.txt` of every fetch, in the
+  packaged CSV's header and in `NOTICE.md`. NVE disclaims liability for errors
+  in the data and their use; the README of the acceptance says so too.
+- **Committed**: the 140-row HRD list (four columns, from a PDF) and the
+  acceptance's `results.csv` (NVE's areas as numbers). **Fetched** into
+  `../rasputin_data/nve_hrd/` and never committed: polygons, station points,
+  river lines, manifest.
+- **Only the fields the design needs, by explicit allow-list per layer, in
+  every request (never `outFields=*`).** Layer 0: `stasjonnr`, `stasjonnavn`,
+  `totalt_feltareal_km2`, `stasjonstatus`, `vassdragsnr`, `elvenavnhierarki`.
+  Layer 38: `stasjonnr`, `nedborfeltaareal_km2`, `oppdateringsdato`,
+  `objectid`. Layer 2: `objectid`, `objekttype`, `strekninglnr`, `elvid`,
+  `vassdragsnr`, `elvenavn`, `vatnlnr`. **Never collected**: `stasjoneier` (the
+  owner), ELVIS's `oppdatertav` (editor ids, some look like personal
+  initials), `globalid`, and layer 38's discharge normals.
+- **Query volume, kept small.** Only `fetch-stations` uses the network: about
+  8 batched queries for layers 0 and 38 (40 stations each) and 140 ELVIS
+  envelope queries, sent one at a time, with 23a-2's retries and back-off. A
+  fetch is reused, not repeated: if the files exist, nothing is requested
+  unless `--refresh`. `station-catchments` and `catchment` never touch the
+  network. The client identifies itself (`User-Agent: rasputin/<version>`)
+  instead of the library's default.
+
 ## Prior art: legacy and literature
 
 **Legacy.** Nothing to carry over.
@@ -411,6 +445,19 @@ named were read, no paper in full.
   network-wide burn has on divides (where the DEM puts a divide the mapped
   network crosses). Burning the whole network is a later option (Question
   3).
+- **Soille, Vogt and Colombo 2003**, "Carving and adaptive drainage
+  enforcement of grid digital elevation models", *Water Resources Research*
+  39(12):1366, doi:10.1029/2002WR001879 (Crossref and abstract checked
+  2026-10-04). Carving: instead of filling a pit, lower the terrain along a
+  descending path from it; and "adaptive drainage enforcement", where known
+  river networks are imposed on the DEM "only in places where the automatic
+  river network extraction deviates substantially from the known networks".
+  **What is taken:** the principle that the burn lowers the DEM only where
+  it disagrees with the map (the descent lowers a node only where the DEM does
+  not already fall). **What differs:** one chain, not the network; the chain
+  is first moved onto the valley floor; and, unlike carving's paths found by
+  a flood from the outlets, the descent here is along a given chain, so
+  whether the flood then drains along it is checked (`flow_to`), not assumed.
 - **Seppä, Gonzales Inca, Uusikivi and Alho 2026**, "CAMELS-FI:
   hydrometeorological time series and landscape properties for 320
   catchments in Finland", *ESSD* 18(7):4745-4769,
@@ -480,7 +527,7 @@ rasputin station-catchments --dem ... --stations D/stations.geojson
                  polygons; repository_for(dem)
   catchment_batch.run_batch(request, repository, stations, segments, references, sink)
      for each station, in file order, one at a time:
-       gauge.place(station, segments) -> Placement | None   [pure, shapely, no DEM]
+       gauge.place(Gauge(station), segments) -> Placement | None   [pure, shapely, no DEM]
        catchment.delineate(CatchmentRequest(seed=station, seed_crs=crs,
                                             reach=placement.reach), repository)
          window loop (22's), seeded by the placed node:
@@ -581,8 +628,9 @@ catchment pushed downstream carries inflow the gauge never saw: fatal for
 residual inflow (below). The accumulation count is used only to *read* the
 area at a place already chosen (the sensitivity), never to choose the place.
 
-`gauge.place(station, segments, *, map_radius=500.0, reach_up=1000.0)`
-returns a `Placement` or `None`. `RiverSegment` is the frozen model of one
+`gauge.place(gauge, segments, *, map_radius=500.0, reach_up=1000.0)`
+returns a `Placement` or `None`; `Gauge` is a frozen (x, y, watercourse, river)
+so that `gauge.py` does not import the station reader. `RiverSegment` is the frozen model of one
 ELVIS line: `objectid`, `elvid`, `vassdragsnr`, `name`, `objekttype` (the raw
 value, kept as served, `None` allowed), `kind`, and the line's vertices in the
 file's CRS. **`kind` is a total mapping** (in `io/rivers.py`, where the model
@@ -936,7 +984,8 @@ service_url=..., list_file="nve_hrd_2025.csv", crs="EPSG:25833", credit=...,
 licence_note=...)`. `fetch/nve.py`:
 
 - queries layer 0 for the listed stations' points and attributes, and layer
-  38 for their polygons, 40 station numbers per `where ... in (...)` query
+  38 for their polygons, each with its explicit `outFields` allow-list (see
+  "Data use"), 40 station numbers per `where ... in (...)` query
   (measured to work; under the service's 2000-record cap and URL limits),
   with `outSR=25833&f=geojson`, through `RangeClient.get_text` (23a-2's
   retries and refusals; `fetch/http.py` stays the only module importing
@@ -1111,30 +1160,35 @@ module's entry.
 
 Estimates are production lines under CLAUDE.md §2's counting. 22's
 `catchment.py` ran 44 % over its estimate, so each PR's second figure adds
-that margin.
+that margin. Round 2 changed them: PR 3 takes `io/rivers.py` and
+`RiverSegment` from PR 2 and gains the `User-Agent` header and the field
+allow-lists (PR 3 from about 300 to 380); PR 2 gains the chain end, loop cuts,
+forks, the `drains` check and the causes, and loses the river reader (375 to
+415); PR 1 gains `flow_to` (150 to 155).
 
 | File | What | Estimate |
 |---|---|---|
 | `include/terrain/hydrology/flood.hpp` | the shared flood, moved out of `upstream.hpp` | 45 |
 | `include/terrain/hydrology/upstream.hpp` | uses it | 10 (35 removed) |
 | `include/terrain/hydrology/accumulate.hpp` | `accumulate`, `AccumulateOutcome`, the bits | 60 |
-| `bindings/core.cpp`, `_core.pyi` | `accumulate` | 35 |
-| **PR 1, accumulation** | | **about 150** |
-| `gauge.py` | `RiverSegment`, `Placement`, `place` | 90 |
-| `burn.py` | valley floor, descent, direction, `GaugePath` | 70 |
-| `sensitivity.py` | `assess`, `Sensitivity` | 55 |
-| `catchment.py` | `Reach`, request field, stages A and B, burn per window, `GaugeResult` | 90 |
-| `io/rivers.py` | `read_segments` | 30 |
-| `cli.py` | `catchment --rivers` and the placement line | 40 |
-| **PR 2, the gauge on the river** | | **about 375 (540 with the margin)** |
+| `bindings/core.cpp`, `_core.pyi` | `accumulate`, with `flow_to` | 40 |
+| **PR 1, accumulation** | | **about 155** |
 | `data/nve_hrd_2025.csv` | the list (data, not counted) | 0 |
 | `sources.py` | `StationSource`, the `nve-hrd` entry | 30 |
-| `fetch/nve.py` | queries, newest version, segments, files, manifest | 150 |
+| `fetch/http.py` | the `User-Agent: rasputin/<version>` header | 5 |
+| `fetch/nve.py` | queries with the field allow-lists, newest version, segments, files, manifest | 160 |
 | `io/station_set.py` | readers, `Station` | 50 |
+| `io/rivers.py` | `RiverSegment`, `read_segments`, the `kind` mapping, exact copies | 65 |
 | `io/geojson.py` | the moved writer | 25 (cli.py −25) |
 | `cli.py` | `fetch-stations` | 45 |
 | `NOTICE.md`, `project_structure.md` | NVE's credit; the new modules | docs |
-| **PR 3, the stations** | | **about 300 (430)** |
+| **PR 3, the stations and rivers** | | **about 380 (545 with the margin)** |
+| `gauge.py` | `Gauge`, `Placement`, `place`, forks, `Reach` | 100 |
+| `burn.py` | valley floor, loop cuts, descent, chain end, direction, `GaugePath` | 105 |
+| `sensitivity.py` | `assess`, `Sensitivity`, `drains`, the causes | 75 |
+| `catchment.py` | request field, stages A and B, burn per window, `GaugeResult` | 95 |
+| `cli.py` | `catchment --rivers` and the placement line | 40 |
+| **PR 2, the gauge on the river** (needs PRs 1 and 3) | | **about 415 (600)** |
 | `reference.py` | agreement, classes, `match_by`, summary | 115 |
 | `catchment_batch.py` | `BatchRequest`, `BatchSink`, `run_batch`, `StationResult` | 100 |
 | `cli.py` | `station-catchments`, the directory sink | 80 |
@@ -1153,16 +1207,20 @@ inputs are files or arrays, not another PR's types.
 - **PR 1, accumulation.** C++ and its binding: "how many nodes drain through
   each node". One build round; the oracle against `upstream` is its whole
   suite.
+- **PR 3, the stations and rivers.** `fetch-stations`, the readers
+  (`io/station_set.py`, and `io/rivers.py` with `RiverSegment`, the `kind`
+  mapping and the dropping of exact copies), the packaged list. Answers "give
+  me NVE's 140 stations, rivers and polygons, with a manifest". The seam with
+  PRs 2 and 4 is the three files it writes and the models it reads them into
+  (so their tests use hand-written files). Python only; independent of PRs 1
+  and 2, so its red step can be written while PR 1 is in review.
 - **PR 2, the gauge on the river.** Place, burn, sensitivity and the window
   stages, behind `rasputin catchment --rivers FILE` on a river file the user
   has. Answers "the catchment of this gauge, and is it well defined". Python
-  only; needs PR 1.
-- **PR 3, the stations.** `fetch-stations`, the readers, the packaged list.
-  Answers "give me NVE's 140 stations, rivers and polygons, with a
-  manifest". The seam with PR 4 is the three files it writes, read through
-  `io/station_set.py` and `io/rivers.py` (so PR 4's tests use hand-written
-  files, not PR 3's code). Python only; independent of PRs 1 and 2, so its
-  red step can be written while they are in review.
+  only; **needs PR 1 (`accumulate`) and PR 3 (`RiverSegment`,
+  `read_segments`)**, so the merge order is 1, 3, 2, 4, 5. `gauge.place`
+  takes its own small `Gauge` (point, watercourse number, river name) rather
+  than PR 3's `Station`, so the two meet only at `RiverSegment`.
 - **PR 4, the batch and the comparison.** `reference.py`,
   `catchment_batch.py`, `station-catchments`; then the acceptance run.
   Needs PRs 1 to 3.
@@ -1236,7 +1294,8 @@ Python suites below are not invariant-critical.
 `uint8`; `flow_to` is `uint8`), ownership (the arrays outlive the view), the oracle on two DEMs
 through the binding.
 
-**PR 2, Python** (hand-built DEMs and lines; no network):
+**PR 2, Python** (hand-built DEMs and lines; no network; `RiverSegment`s are
+built directly or read through PR 3's `read_segments`):
 
 - `test_gauge.py`: tiers (own watercourse number beats a nearer line of
   another river; prefix and name tiers; `any`); the nearest of the best tier;
@@ -1301,9 +1360,15 @@ through the binding.
 - `test_cli_catchment.py` gains: `--rivers` prints the placement line and
   writes the placement and sensitivity properties; without it, unchanged.
 
-**PR 3, Python** (no network anywhere):
+**PR 3, Python** (no network anywhere; the tests of `fetch/` also pin "Data
+use" below):
 
-- `test_fetch_nve.py`: the packaged list (140 rows, unique numbers, the
+- `test_fetch_nve.py`: every request's `outFields` is exactly the layer's
+  allow-list ("Data use") and never `*`, and none names `stasjoneier`,
+  `oppdatertav`, `globalid` or a layer 38 discharge-normal field; the
+  requests go out one at a time, with the `User-Agent` of `fetch/http.py`
+  (tested there on a stub); nothing is requested when the output files exist
+  and `--refresh` is absent; the packaged list (140 rows, unique numbers, the
   three spot rows); the query URLs (chunks of 40, the station envelopes,
   `outSR=25833`, `f=geojson`); newest version wins, ties to the larger
   `objectid`; a missing station or polygon is refused by name; a reply
@@ -1424,14 +1489,16 @@ rulings"; the way a gauge is placed follows your direction.
    usually a few tens of metres off the river, and further for some. For each
    station we read the catchment area at points along the river, up and down
    from where the gauge is placed, as far as the gauge's coordinates are off
-   the river (at least 30 m). If the area changes by more than 5 % of the
-   area (the same 5 % as the "match" bar), the station is reported as
+   the river (at least 30 m). If the area at either end of that stretch
+   differs from the area at the placed point by more than 5 % (the same 5 % as
+   the "match" bar), or the stretch downstream could not be read that far, or
+   the river's flow path does not hold together, the station is reported as
    "uncertain" and is not marked good or bad: a confluence just below it, or
    a flat valley floor, makes the answer depend on where we put the point.
    *Default: 5 %, and the distance the coordinates are off the river, at
    least 30 m.* Alternative: a fixed 30 m for every station (fewer
    uncertain, but a gauge 200 m from its river would be treated as exact),
-   or a different percentage. The run shows how many stations each choice
+   or a different percentage, or adding the two ends together (stricter). The run shows how many stations each choice
    makes uncertain.
 2. **The nine stations on the shifted tiles.** Eight of the 254 elevation
    tiles have their nodes half a cell (5 m) off the others, and the tile
@@ -1447,6 +1514,11 @@ rulings"; the way a gauge is placed follows your direction.
    across the map, but it needs care where rivers are mapped less precisely
    than the elevation model. *Default: only the gauge's stretch now; the whole
    network is a later increment, and the residual-inflow work may want it.*
+   Alternative: lower every mapped river inside each catchment's window now.
+   That also corrects where divides run, but needs the river lines for the
+   whole window (far more to fetch than one reach), a pruning step so two
+   lines never share a cell, and a way to cope with lines that are wrong; it
+   would add an increment before the batch.
 4. **The nearest-stream fallback.** For a station with no mapped river within
    500 m (Femundsenden, a lake gauge, is the one of the 140), and as a
    comparison on every station that ends uncertain or a miss, the gauge can
