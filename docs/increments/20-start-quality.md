@@ -545,9 +545,12 @@ trim then removes it: 0 of 220 valid nodes uncovered on the projected
 path, and 0 on DC10's reprojected scene run uncut. So uncut, the defect is
 waste, not a hole. The pass inserts a vertex that trim always removes
 (`nodata_vertices_removed` 1 where it should be 0), and refine spends
-nodes closing around it. The hole in DC10 is specific to 23c-2's cut
-pieces. It is a defect of the cut path, ruled in `23-basin-scale.md`, not
-this fix's.
+nodes closing around it. DC10's "hole" in 23c-2 was traced by
+`@developer` to this same insert. The seam fans make the pass insert 34 to
+49 nodes per piece, one of them on a NoData node. The carving closes, and
+what the check reports is a micrometre rounding of phase-2 vertices at the
+edge of the trimmed star, a 15c question (`23-basin-scale.md`, point 10,
+and B18). So this fix does lift DC10's `xfail`.
 
 **Still worth shipping on its own**, at about 15 lines. The start pass is
 there to improve angles, not to put vertices where trim will remove them,
@@ -555,10 +558,8 @@ and skipping the node is the pass's own rule for every other candidate it
 cannot use (R4). Its one visible effect is the count of removed NoData
 vertices.
 
-**Order with 23c-2.** This fix must not land in the 23c branch before
-23c-2's cut-path defect is found. Otherwise DC10 stops triggering it, and
-the defect hides rather than gets fixed. `@tester`'s cut-path probe on
-that branch does not use the start pass (`23-basin-scale.md`, point 9).
+**Order with 23c-2.** None needed. This fix may be merged into the 23c
+branch once it is on master (`23-basin-scale.md`, point 10).
 
 **R9 is replaced** by this: the pass never inserts a NoData node. A bad
 triangle whose nearest node is NoData stays as it is and is counted.
@@ -671,9 +672,10 @@ It touches `include/terrain/mesh/` and `include/terrain/refinement/`, so
 
 ### Lifting 23c-2's `xfail`
 
-**Superseded after the red step.** The `xfail` in 23c-2's DC10 now names
-the cut-path defect, not this fix (`23-basin-scale.md`, point 9), and it
-is lifted by 23c-2's own fix for that defect. This fix lifts nothing on the
-23c branch. If this fix reaches the branch first, DC10 at the default
-passes without the cut-path defect being fixed. `@tester`'s probe there
-does not use the start pass, so the defect stays visible either way.
+23c-2's DC10 at the default `--start-min-angle` is `xfail(strict=True)`,
+naming this fix (`23-basin-scale.md`, point 10, which withdrew point 9).
+Once this PR is on master and master is merged into the 23c branch, the
+case passes. A strict `xfail` that passes fails the suite, so the merge
+flags it, and `@tester` removes the marker in its own commit, naming this
+PR. If the case still fails, it goes back to `@architect` and the marker
+stays.
