@@ -13,7 +13,6 @@
 // and the handback names that as a gap.
 
 #include <catch2/catch_test_macros.hpp>
-#include <catch2/matchers/catch_matchers_floating_point.hpp>
 
 #include <terrain/raster/geometry.hpp>
 #include <terrain/raster/raster.hpp>
@@ -29,7 +28,6 @@
 #include <span>
 #include <vector>
 
-using Catch::Matchers::WithinRel;
 
 using terrain::Point2;
 using terrain::raster::bilinear;
@@ -303,39 +301,53 @@ TEST_CASE("bilinear_batch: outside the grid and non-finite points are not valid"
     }
 }
 
-TEST_CASE("bilinear_batch: a zero-weight NoData corner still makes the point invalid",
+TEST_CASE("bilinear_batch: a node next to a NoData node reads its own value (increment 27)",
           "[raster][batch][edge]") {
+    // Increment 27 (27-node-sampling.md, "The rule"): node (1, 1) is valid and
+    // its bilinear cell (1, 1) has the sentinel (1, 2) as a corner of weight
+    // zero. That corner is not read, so the node keeps its value. Before
+    // increment 27 this point was refused (12-dem-to-mesh.md R2's one-cell trim).
     const auto g = grid_4x5();
     auto data = distinct_values<double>(g);
     data[g.linear_index(CellIndex{1, 2})] = kSentinel;
     const RasterView<double> view{g, data.data(), kSentinel};
 
-    // Node (1, 1) is valid, but its bilinear cell (1, 1) has (1, 2) as a corner
-    // with weight zero. Node (2, 3) is far from the void and stays valid.
-    const std::vector<Point2> pts{g.node(CellIndex{1, 1}), g.node(CellIndex{2, 3})};
+    const std::vector<Point2> pts{g.node(CellIndex{1, 1}), g.node(CellIndex{2, 3}),
+                                  g.node(CellIndex{1, 2})};
     const Batch out = run_batch(view, pts);
-    REQUIRE_FALSE(out.valid[0]);
+    REQUIRE(out.valid[0]);
+    REQUIRE(out.z[0] == 11.0);
     REQUIRE(out.valid[1]);
     REQUIRE(out.z[1] == 23.0);
+    REQUIRE_FALSE(out.valid[2]);  // the sentinel node itself is still refused
+    REQUIRE(out.z[2] == 0.0);
 }
 
-TEST_CASE("bilinear_batch: NaN corners are NoData even with no sentinel",
+TEST_CASE("bilinear_batch: NaN is NoData with no sentinel, and a node beside it keeps its value",
           "[raster][batch][edge]") {
     const auto g = grid_4x5();
     auto data = distinct_values<double>(g);
     // (0, 2) is a zero-weight corner of node (0, 1)'s bilinear cell (0, 1).
     data[g.linear_index(CellIndex{0, 2})] = kNaN;
     const RasterView<double> view{g, data.data(), std::nullopt};
-    const std::vector<Point2> pts{g.node(CellIndex{0, 1}), g.node(CellIndex{2, 2})};
+    const Point2 beside = g.node(CellIndex{0, 1});
+    const std::vector<Point2> pts{beside, g.node(CellIndex{2, 2}), g.node(CellIndex{0, 2}),
+                                  Point2{beside.x + 5.0, beside.y - 2.5}};
     const Batch out = run_batch(view, pts);
-    REQUIRE_FALSE(out.valid[0]);
-    REQUIRE(out.z[0] == 0.0);  // an invalid point's z is 0.0, never NaN (R2)
+    REQUIRE(out.valid[0]);  // increment 27: the NaN corner has weight zero here
+    REQUIRE(out.z[0] == 1.0);
     REQUIRE(out.valid[1]);
     REQUIRE_FALSE(std::isnan(out.z[1]));
+    REQUIRE_FALSE(out.valid[2]);  // the NaN node itself
+    REQUIRE(out.z[2] == 0.0);     // an invalid point's z is 0.0, never NaN (R2)
+    REQUIRE_FALSE(out.valid[3]);  // off-node in the cell: the NaN corner weighs in
+    REQUIRE(out.z[3] == 0.0);
 }
 
-TEST_CASE("bilinear_batch: z is the node value, exactly inside, to 1e-9 on the far edges",
+TEST_CASE("bilinear_batch: z is the node value exactly, far edges included",
           "[raster][batch][invariant]") {
+    // Increment 27: a node reads value_at, so the far edges are exact too
+    // (before, 12-dem-to-mesh.md test 4 allowed 1e-9 there).
     const auto g = grid_4x5();
     const auto data = distinct_values<float>(g);
     const RasterView<float> view{g, data.data(), std::nullopt};
@@ -353,12 +365,7 @@ TEST_CASE("bilinear_batch: z is the node value, exactly inside, to 1e-9 on the f
         const CellIndex c = cells[i];
         CAPTURE(c.row, c.col);
         REQUIRE(out.valid[i]);
-        const double node = static_cast<double>(view.value_at(c));
-        const bool far_edge = c.row == g.rows() - 1 || c.col == g.cols() - 1;
-        if (far_edge)
-            REQUIRE_THAT(out.z[i], WithinRel(node, 1e-9));
-        else
-            REQUIRE(out.z[i] == node);
+        REQUIRE(out.z[i] == static_cast<double>(view.value_at(c)));
     }
 }
 

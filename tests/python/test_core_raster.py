@@ -151,14 +151,34 @@ class TestSample:
     def test_sentinel_and_nan_corners_are_not_valid(
         self, raster_view: Factory, sample: Sampler
     ) -> None:
+        """A sentinel node and an off-node point with a NaN corner are refused.
+        Since increment 27 a node reads only itself, so the sentinel is moved
+        onto the sampled node and the NaN is reached from inside its cell."""
         array = elevations(np.float32, rows=3, cols=5)
-        array[0, 2] = SENTINEL  # a corner of node (0, 1)'s bilinear cell (0, 1)
-        array[2, 4] = np.nan
+        array[0, 1] = SENTINEL  # the sampled node itself
+        array[2, 4] = np.nan  # a corner of cell (1, 3), weight 1/4 at the point below
         view = raster_view(array, **AFFINE, nodata=SENTINEL)
-        z, valid = sample(view, points(node(0, 1), node(1, 3), node(0, 3)))
+        x, y = node(1, 3)
+        z, valid = sample(view, points(node(0, 1), (x + 5.0, y - 2.5), node(0, 3)))
         assert valid.tolist() == [False, False, True]
         assert z[:2].tolist() == [0.0, 0.0]  # invalid z is 0.0, never NaN (R2)
         assert z[2] == 3.0
+
+    def test_a_node_next_to_nodata_reads_its_own_value(
+        self, raster_view: Factory, sample: Sampler
+    ) -> None:
+        """Increment 27, S1 through the binding: (0, 2) and (1, 4) are
+        zero-weight corners of the cells of nodes (0, 1) and (1, 3); neither
+        is read, so both nodes keep their values exactly. Integer geometry,
+        so NumPy's node coordinates are `RasterGeometry::node`'s bit for bit
+        ("A limit of the exact rule")."""
+        array = elevations(np.float32, rows=3, cols=5)
+        array[0, 2] = SENTINEL
+        array[1, 4] = np.nan
+        view = raster_view(array, **AFFINE, nodata=SENTINEL)
+        z, valid = sample(view, points(node(0, 1), node(1, 3), node(0, 2), node(1, 4)))
+        assert valid.tolist() == [True, True, False, False]
+        assert z.tolist() == [1.0, 13.0, 0.0, 0.0]
 
     def test_empty_points(self, raster_view: Factory, sample: Sampler) -> None:
         z, valid = sample(raster_view(elevations(np.float64), **AFFINE), np.zeros((0, 2)))
@@ -196,10 +216,12 @@ class TestToCore:
         assert z.tolist() == pytest.approx([5.5, 17.5], rel=1e-12)
 
     def test_forwards_the_sentinel(self, to_core: Any, sample: Sampler) -> None:
+        """The sampled node holds the sentinel, so it is refused only if the
+        sentinel crossed; unforwarded, -32767 would read as a height."""
         array = elevations(np.float32)
-        array[0, 2] = SENTINEL  # a corner of node (0, 1)'s bilinear cell (0, 1)
+        array[0, 2] = SENTINEL  # the sampled node itself (increment 27: a node reads only itself)
         tile = decode_dem(micro_tiff(array, nodata="-32767"))
-        _, valid = sample(to_core(tile), points(node(0, 1), node(1, 3)))
+        _, valid = sample(to_core(tile), points(node(0, 2), node(1, 3)))
         assert valid.tolist() == [False, True]
 
     def test_uses_the_meta_corner_for_an_area_registered_file(

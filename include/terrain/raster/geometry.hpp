@@ -89,6 +89,24 @@ public:
         return clamped_cell_of(p);
     }
 
+    // The node p is, bit for bit, or nullopt: the clamped, rounded (row, col)
+    // whose node() gives p back exactly. nullopt also for a non-finite p and
+    // outside the node rectangle (cell_of's test). The clamp-and-round is
+    // written as refine's lattice_position writes it (refine.hpp), so the two
+    // say "node" at the same points (increment 27, S5). One ulp off a node is
+    // not a node: there is no tolerance band.
+    [[nodiscard]] std::optional<CellIndex> node_at(const Point2& p) const noexcept {
+        if (!cell_of(p))
+            return std::nullopt;
+        const double col = std::clamp((p.x - x_min_) / delta_x_, 0.0, static_cast<double>(cols_ - 1));
+        const double row = std::clamp((y_max_ - p.y) / delta_y_, 0.0, static_cast<double>(rows_ - 1));
+        const CellIndex n{static_cast<std::size_t>(std::round(row)),
+                          static_cast<std::size_t>(std::round(col))};
+        if (node(n) == p)
+            return n;
+        return std::nullopt;
+    }
+
     // The legacy clamping behaviour, kept for callers that genuinely want a
     // saturating lookup -- but they now have to ask for it by name.
     //
