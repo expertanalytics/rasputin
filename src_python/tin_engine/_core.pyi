@@ -369,8 +369,10 @@ def raster_view(
 def sample(
     view: RasterView, points: npt.ArrayLike
 ) -> tuple[npt.NDArray[np.float64], npt.NDArray[np.bool_]]:
-    """Bilinear ``(z, valid)`` at ``(N, 2)`` points. ``z`` is 0.0 where ``valid``
-    is False, never NaN. Releases the GIL."""
+    """Bilinear ``(z, valid)`` at ``(N, 2)`` points. A point that is a DEM node
+    bit for bit reads that node alone; any other point is invalid if one of its
+    four corners is NoData or NaN. ``z`` is 0.0 where ``valid`` is False, never
+    NaN. Releases the GIL."""
 
 class RefineStatus(Enum):
     """Why :func:`refine` refused, or ``Ok``."""
