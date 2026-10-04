@@ -918,7 +918,8 @@ the thin triangles beside them) is repaired at stitching by B4's cleanup
      which is one-dimensional work.
 3. **The start slice, with fans** (Python, NumPy). A piece's start mesh is the
    start triangulation's triangles with its label, vertices renumbered in
-   first-use order, constraint edges and masks restricted to them. Each seam
+   the start triangulation's order (corrected after 23c-2, below),
+   constraint edges and masks restricted to them. Each seam
    edge `(a, b)` with seam-pass points `p1 … pk`, in triangle `(a, b, c)`,
    becomes `(a, p1, c), (p1, p2, c), …, (pk, b, c)`: index arithmetic, no
    geometry. Each fan triangle is counter-clockwise when every `pi` lies
@@ -2115,8 +2116,9 @@ No network: every URL is `http://127.0.0.1:<port>/...`, put in `SOURCES` by
   not the seam records or the index.
 - **DC3, a valid union**: in the union of the piece files (assembled in the
   test; the stitcher is 23d's) every edge not on the outline
-  is in exactly two triangles, the triangles' area sums to the domain's
-  (shapely) to 1e-9 relative, and no two triangles overlap (brute force on a
+  is in exactly two triangles, the triangles' area sums to the noded
+  outline's to 1e-9 relative and to the domain's within the noder's snap
+  (corrected after 23c-2, below), and no two triangles overlap (brute force on a
   small case).
 - **DC4, constrained Delaunay with the seams**: an exact incircle oracle
   (Python `fractions`, independent of refine's predicates) finds no violation
@@ -2892,6 +2894,98 @@ Raised by `@developer`; ruled by `@architect`, 2026-10-04.
    2 × 2 nodes), but today `rows == 0` fails as a `ZeroDivisionError` in
    step 2, which says nothing about the cause. `@tester` (23c-1) adds the
    two cases to DC0's refusals; `@developer` the check.
+
+### 23c-2 stopped at dbbe1c6: two disagreements and the developer's choices
+
+Raised by `@developer` with 25 tests red (23 on DC3's area, 2 on DC10);
+ruled by `@architect`, 2026-10-04. K1 holds on 8 uncut scenes; DC6's
+equality and DC4's control hold.
+
+1. **The area checks: the tests were wrong, and so was this design.** A
+   partition line crosses a sloped outline edge at a point that is not on
+   the noder's 1 mm grid; the noder snaps it, by up to `SNAP · √2 / 2`
+   (0.71 mm), off the edge. That is the noder's contract for every
+   crossing (`05-noder.md`, guarantee 14(b)), features included, and the
+   cut must not get a special case: an exact crossing would be a vertex off
+   the grid, which is what 14(b) excludes. So the mesh is of the *noded*
+   outline, which the cut moves by at most 0.71 mm at each crossing. DC3's
+   "the domain's (shapely) to 1e-9" was the design's error (corrected in
+   place). `@tester` changes both checks to two:
+   - the union's area equals the noded outline's (the rings out of the
+     run's own `node` call, taken by the spy K9 already uses) to 1e-9
+     relative, which is the tight check, and the one that sees a lost or
+     doubled triangle;
+   - the noded outline against the domain: every one of its vertices within
+     `SNAP · √2 / 2 + 1e-9` of the domain's boundary, and the areas within
+     `SNAP · √2 / 2 · P` for the domain's perimeter `P` (moving one vertex
+     by `d` changes the area by at most `d` times half its two segments).
+   `test_the_union_has_the_uncut_area` (1e-12) takes the same bound against
+   the uncut mesh's area. No code change.
+2. **DC10: a defect of increment 20, fixed there; DC10 split meanwhile.**
+   `mesh::improve` (`include/terrain/mesh/quality.hpp`) "knows no raster
+   and reads no height", so it can insert a NoData node; trim then drops
+   its triangles and leaves a hole. The uncut path has the same defect.
+   - **The fix** is its own small PR, recorded in `20-start-quality.md` as
+     "Fix: the start-quality pass skips NoData nodes", independent of 23c
+     in order: `improve` gains a validity callable
+     (`valid(LatticeVertex) -> bool`, a template parameter, so
+     `quality.hpp` still includes no raster header), `refine` passes one
+     over its `RasterView`, and a void node is skipped and counted
+     (`skipped_void`) before the walk. `@tester` first: an uncut red test
+     (a bad start triangle whose circumcentre's nearest node is NoData:
+     no vertex on a void node, no hole, the count is 1). It touches mesh
+     code, so `@perf` checks the benchmark hash (no NoData on that tile,
+     so it should not change).
+   - **Until it lands**, `@tester` splits DC10: the case at
+     `--start-min-angle 0` must pass (it tests the cut on the reprojected
+     path, which is DC10's subject), and the case at the default is
+     `xfail(strict=True)` naming the fix, so it flags itself once the fix
+     is in.
+3. **`@developer`'s choices.**
+   - (a) **The four lattice fields are required.** "Adding fields breaks
+     nothing" (23c-1's point 1) was wrong: 23c-1's hand-built index lacks
+     them. `@tester` adds them there; `@developer` drops the defaults.
+   - (b) **Overruled in scope, not in content.** Bounding memory by piece is
+     this increment's purpose, and the design put it in 23c, not 23d: the
+     23c rows "PieceJob, its windows (`TargetGrid` or mosaic plan)" and the
+     run's "write the piece file + its seam record, then free everything".
+     23d only adds parallelism, resume and the stitch. At 419 lines,
+     23c-2 cannot also take it under the ceiling with a margin, so **it
+     becomes 23c-3, before 23d**: each piece decodes only its source
+     window (23a-1's `decode_window`; on the reprojected path its
+     `TargetGrid`), writes its file and seam record when done, and frees
+     them. `@tester` (23c-3, red): a recording reader double shows no
+     decode outside a piece's window grown by the resampling margin, and
+     no two pieces' grids alive at once. 23c-2 merges as a correct cut
+     whose peak memory is still about the uncut run's, and says so in
+     `--help` and in ROADMAP.
+   - **And one thing 23c-2 must change:** the run (`_CutRun`, `_cut_run`,
+     the partition and window helpers) goes from `cli.py` to
+     `basin_run.py`, as designed. `cli.py` parses options and hands a
+     frozen request to the run, and the run must be testable without
+     Typer. This moves lines; it does not add them.
+   - (c) **Confirmed.** Slice vertices keep the start triangulation's
+     global order, not first-use order: both are functions of the input,
+     and the global order is the one 23d's stitcher numbers by (step 3
+     corrected in place). The strip is the design's. A vertex on several
+     seam edges takes z from the lowest-indexed one: all of them compute
+     it from the same nodes, so this only fixes which one is read. The
+     index's `source` as the credited tile names stands, in place of
+     the "`elevation_source` sentence" of item 3 above.
+   - (d) **Confirmed, one widened.** A cut needs square DEM cells (one
+     `spacing` in the index; the reprojected path is square by
+     construction); `--stats` and `--out-edges` are refused on a cut run
+     until 23d's stitched file gives them one mesh to describe. **The stale
+     `index.json` is deleted by every run that writes `--out`**, not only
+     `--domain` runs: an uncut run at the same `--out` makes the old pieces
+     stale just the same.
+   - (e) `@developer` updates `15-dem-mosaic.md`'s R7 rows in 23c-2 to
+     say the cap is deleted (23 B15).
+4. **LOC and the split.** 23c-2 is 419 against about 265 (+58 %), within
+   the +60 % this table allows for and under 700; the move to
+   `basin_run.py` is net zero, the area and DC10 changes are tests. The
+   split stands, with **23c-3** (per-piece windows and streaming writes,
+   about 110) added before 23d. Nine PRs in all.
 
 **B17 for Ola** is under "New questions, after the rulings".
 
