@@ -74,6 +74,8 @@ READ_BY_CODE = (
     "CLAUDE.md",
     "docs/increments/README.md",
     "docs/PRINCIPLES.md",
+    # test_fetch_nve.py checks NVE's credit ("Kilde: NVE") in it (increment 29).
+    "NOTICE.md",
 )
 
 
