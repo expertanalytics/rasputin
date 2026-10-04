@@ -100,7 +100,7 @@ R7's condition. These texts change with it:
 **Red test, @tester.**
 - M15's grep test
   (`test_adopt_is_called_only_from_the_mosaic_and_the_resampler`, formerly
-  `tests/python/test_mosaic.py:1620-1626`) now expects
+  `tests/python/test_mosaic.py@2060f14:1620-1626`) now expects
   `["io/models.py", "mosaic.py", "target_grid.py"]`. Red today. This test
   change is the one the note anticipates. It lands in @tester's red commit.
 - Identity: `resample(...)`'s `tile.array.base is None` (the canvas
