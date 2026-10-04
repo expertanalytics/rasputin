@@ -692,6 +692,107 @@ class GaugeResult:
     sensitivity: Sensitivity   # next section
 ```
 
+### Sensitivity: is the area well defined at this gauge? (`sensitivity.py`, pure)
+
+A gauge's coordinates are uncertain by roughly their distance from the river,
+and the river's catchment area changes along the river. If moving the gauge
+within its own uncertainty changes the area by more than the disagreement the
+comparison tolerates, then a `match` or a `miss` would be decided by where
+along the river we put the node, not by how well we delineate. Ola's
+"saddle point problems" are this: a confluence just below the gauge, or a
+flat valley floor or lake where the drainage line is arbitrary. The check
+reads the area along the burnt chain at the placed node, never at any other
+choice of node, and never uses NVE's polygon or area.
+
+`sensitivity.assess(count, reach_bits, path, cell_area_km2, uncertainty)`
+(arrays in, a frozen `Sensitivity` out; no DEM, no shapely):
+
+1. **Samples**: every chain node whose arc length from the placed node lies in
+   `[-U, +U]`, one per node (10 m apart on DTM10; the chain advances a node
+   at a time, so the 10-20 m of Ola's direction is the node spacing). The
+   area at a sample is `count × cell area`, read from the accumulation
+   that stage B ran: one gather, no further flood.
+2. **Which counts to trust.** Upstream of the placed node every count is the
+   node's whole catchment (it lies inside the placed one, which is clear of
+   the window's edge). Downstream, a count whose `reach_bits` is non-zero is
+   a lower bound; the downstream side is read up to the first such node and
+   the distance read is reported (`checked_down_m`).
+3. **The measures**: `A0`, the area at the placed node; `A_up` at the first
+   sample and `A_down` at the last trusted one; the **swing**
+   `(A_down - A_up) / A0`; and the **largest step**, the biggest area
+   increase between two neighbouring samples, with its position in metres
+   from the placed node (negative upstream), which names the confluence when
+   there is one.
+4. **The rule.** The station is **well posed** when the swing is at most
+   `SWING_MAX = 0.05` and the areas do not fall downstream (`monotone`: each
+   chain node drains into the next, so a fall means the burn did not hold
+   and is reported as its own cause). `SWING_MAX` is the `match` class's own
+   bar (95 % overlap, below): a position error inside the gauge's
+   uncertainty is allowed to cost no more than the comparison allows. A
+   station that is not well posed is **`uncertain`**: reported with its
+   agreement numbers, not scored `match` or `miss`, and counted apart.
+   Default (@architect, 2026-10-04): `SWING_MAX = 0.05`, `U` as in "Placing
+   the gauge" (Question 3).
+
+A confluence 40 m below the gauge with a tributary of 20 % of the placed
+area gives a swing of at least 0.2 and a step at about +40 m. A flat lake
+floor gives a step wherever the flat's nodes join the chain. A river in a
+well-defined valley gains area smoothly: over 2 × 30 m, a lateral gain of a
+fraction of a per cent of a catchment of 100 km². Small catchments are more
+often uncertain (a 0.44 km² catchment gains several per cent over 60 m), and
+that is true of them, not an artefact: the acceptance reports the share
+uncertain per size band.
+
+**Cost and novelty.** One gather from arrays that already exist. It is a
+diagnostic, not a method claimed (see Novelty).
+
+### Residual inflow, later: what 28 keeps open
+
+**Not built here.** Ola plans to compute the residual inflow to rivers: for
+two gauges A above B on one river, the catchment of B without that of A, the
+area the river gathers between them. That needs the gauges to *nest* (A's
+catchment lies inside B's) and the difference to be only what lies between
+their physical positions. The check that they nest needs **no NVE polygon**:
+it is a property of our own two delineations, and a failure is a finding in
+itself.
+
+Why 28's placement suits it: each gauge sits where it physically is, so the
+difference is the area between two real positions. A rule that moves each
+gauge to where the area is largest moves each by an unrelated distance
+downstream, and the difference then contains the moves.
+
+What 28 must not do: delineate each station on its own burn and then
+subtract. Two stations' burns differ upstream of both (each chain's descent
+starts from its own first node), so their catchments need not nest exactly. The
+later increment delineates **all gauges of one river from one burn and one
+flood**: the counts then come from one tree of flooders, a chain node
+drains through every node below it, nesting holds by construction, and the
+residual is exactly `count_B - count_A` nodes. The sketch, not built:
+
+```python
+# Reach.at becomes a tuple: one chain, several gauges (28 passes one)
+def delineate_river(request: RiverRequest, repository: DemRepository) -> tuple[Catchment, ...]
+def residual(upstream: Catchment, downstream: Catchment) -> Residual
+    # polygon difference, its area, and the nesting check: the part of the
+    # upstream outline outside the downstream one, in nodes (0 when nested)
+```
+
+What 28 does so that this is not blocked:
+
+- `burn_reach` and `sensitivity.assess` take the placed positions as an index
+  array into the chain (28 passes one index), and the chain and its flood
+  are the unit, not the station.
+- `Placement` and `StationResult` record the river (`elvid`), the segment
+  (`objectid`) and the position along it, so gauges can be grouped and
+  ordered along a river without geometry.
+- `place` builds a chain from `P` alone; a joint chain is the same
+  construction from the most upstream gauge's `reach_up` to the most
+  downstream gauge's end, with no change to the burn.
+- Every station's fine catchment polygon is written (22's file), so
+  `residual` can run from the output files.
+- The sensitivity window of each gauge is recorded, so a residual between two
+  gauges closer than the sum of their windows can be flagged as uncertain.
+
 ### The station set (`fetch/nve.py`, `io/station_set.py`)
 
 **The packaged list.** `src_python/tin_engine/data/nve_hrd_2025.csv`: a
