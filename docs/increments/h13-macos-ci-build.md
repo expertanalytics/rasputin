@@ -1,9 +1,8 @@
 # Harness h13: the macOS C++ job in CI
 
-Status: edit done (a77879f), review round 1 recorded, awaiting round 2 then
-the PR's CI check (§6). Ruled by Ola (§8). Mechanics, not a design question:
-one workflow edit (`@developer`), no production code, no test suite (§6 says
-how the change is checked instead).
+Status: edit done (a77879f); approved by `@reviewer`, round 2 (see Review);
+awaiting the push, then the PR's CI check (§6), whose numbers are recorded
+as a further review round.
 
 Why: the `C++ core (macos-latest)` job in `.github/workflows/main.yaml` takes
 20-26 minutes on every run, against 2-4 minutes for the same job on
@@ -250,3 +249,6 @@ file.
 
 (Recorded as the spawner relayed it, with code formatting added to names and
 "vs" written out; N was left open by the review and is set to 10 s in §6.)
+
+**h13, review, round 2, 2026-10-04.** Range `a77879f..14d6adc` (the increment file only); whole branch `d926644..14d6adc`, 0 production lines. Verdict: APPROVED, before the first push. Round 1's blockers closed: §1 quotes gnu.org's *Parallel Execution* page word for word, and the older sentence is credited to `make(1)`; §6 has the spawner record the CI numbers after the PR's run. The `cmake(1)` quotation, both sentences and the option order, matches cmake.org. §4's empty-`getconf` point probed: `cmake --build b --parallel ""` runs `make -j` with no limit and exits 0. Run 37229043133: 1st to 108th compile 3.66 s (macOS) and 4.31 s (ubuntu); ctest 100 % of 994 on both C++ core legs; the 10 s threshold can fail and leaves margin. `check_citations.py` exits 0; `h10-merge-queue.md:183` is a quoted record. Suggestions, not taken before the push: write 3.7 s throughout (§6 item 2 says 3.6 s); call §6 item 2 the only check that tells an empty `getconf` apart from a wrong diagnosis.
+
