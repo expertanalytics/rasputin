@@ -20,7 +20,6 @@ these when you find it:
 - a step skipped or out of order (`CLAUDE.md` §3, `docs/increments/README.md`);
 - a persona doing another persona's work, or writing outside its role;
 - a guard worked around, or a refusal retried by another route;
-- a review that went past two rounds;
 - an unattended window with no work running, and for how long;
 - a result reported as done or verified that was not.
 
@@ -38,7 +37,8 @@ from memory as unchecked.
 
 `docs/retrospectives/`, `next.md` included, is yours. Record the lessons the
 main session passes you (`CLAUDE.md` §3, *The main session dispatches*).
-Quotes, dates and incidents go here.
+Quotes, dates and incidents go here. Each retrospective measures the rule
+text (`python3 tools/rule_sizes.py`) and proposes a cut.
 
 ## 4. Your limit and your proposals
 
