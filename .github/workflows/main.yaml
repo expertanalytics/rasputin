@@ -44,7 +44,9 @@ jobs:
         run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DRASPUTIN_HARDENING=${{ matrix.hardening }}
 
       - name: Build
-        run: cmake --build build --parallel
+        # One job per CPU. A bare --parallel is an unlimited make -j, which
+        # pages the 7 GB macOS runner (h13). Same on every build line below.
+        run: cmake --build build --parallel "$(getconf _NPROCESSORS_ONLN)"
 
       - name: Test
         run: ctest --test-dir build --output-on-failure
@@ -79,7 +81,7 @@ jobs:
           -DCMAKE_CXX_FLAGS="-fsanitize=address,undefined -fno-sanitize-recover=all -fno-omit-frame-pointer -g"
 
       - name: Build
-        run: cmake --build build-san --parallel
+        run: cmake --build build-san --parallel "$(getconf _NPROCESSORS_ONLN)"
 
       - name: Test
         run: ctest --test-dir build-san --output-on-failure
@@ -115,7 +117,7 @@ jobs:
 
       - name: Build
         run: >
-          cmake --build build-tsan --parallel --target
+          cmake --build build-tsan --parallel "$(getconf _NPROCESSORS_ONLN)" --target
           test_refinement_chunks test_mesh_lattice_split
           test_refinement_scan prop_refinement_refine test_mesh_lawson
           test_refinement_scan_offnode test_refinement_refine
