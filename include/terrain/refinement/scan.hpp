@@ -222,7 +222,7 @@ template <raster::RasterSource R>
                 // Unswitched on `frozen`, by hand: the per-node frozen test on
                 // triangles with no frozen edge cost refine 4.7 % at 1 thread,
                 // and a lambda instantiated for both cases measured 6.3 %; this
-                // early return measured within 1 % of the base.
+                // early return measured +1.2 % (tile) and +1.8 % (quarter).
                 if (!frozen) {
                     for (std::uint32_t j = 0; j < s.values.size(); ++j) {
                         const T z = s.values[j];
