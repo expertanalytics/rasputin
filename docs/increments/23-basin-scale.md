@@ -2987,6 +2987,48 @@ equality and DC4's control hold.
    split stands, with **23c-3** (per-piece windows and streaming writes,
    about 110) added before 23d. Nine PRs in all.
 
+**23c-2 at green (38ab1a0): four more points**, ruled by `@architect`,
+2026-10-04.
+
+5. **The per-piece refine stays in `cli.py`, passed to
+   `basin_run.cut_run` as an argument. Confirmed.** That covers `_refined`,
+   `_refine_phases` and `_off_node`. `tools/bench.py` wraps `cli.refine`,
+   and three test files patch `cli.refine` and `cli.final_check`. Moving the
+   phases would have meant changing the benchmark tool and amending three
+   suites in a feature PR. Passing the refine in is the right seam: the run
+   stays a function of its request and its collaborators, testable without
+   Typer. The +23 lines (imports, `RunError`, a type alias, one
+   `try`/`except`) are the cost of that seam, so "net zero" in point 3(b)
+   was wrong. Where the refine phases should live is a separate question
+   for a later clean-up. It is not 23c's.
+6. **The stale-index delete runs after `--out` passes `_destination`.
+   Confirmed**, and better than 3(d) as written: the earlier placement
+   could delete a file outside `--out-parent`.
+7. **LOC: the split stands and nothing moves.** 442 net against about 265
+   is +67 %, past the planning margin of +60 % but under the 700 ceiling,
+   which is the rule. The margins are for planning, not limits. The
+   overrun is the run's seam (point 5), the refusals of 3(d), and an uncut
+   path refactored with no byte change. 23c-3's estimate is revised by the
+   same ratio, from about 110 to about **185**.
+8. **`@perf` before review: the README's rule now, the Velhas table at
+   23c-3.** 23c-2 drives refine, so `docs/increments/README.md`
+   "Acceptance" applies.
+   - **Now, before review:** `tools/bench.py` on the 1 m tile, process time
+     and the thread sweep against master's stored run on the same power
+     state. **The mesh hash must be unchanged.** The tile is one piece at
+     the default, and the uncut path was refactored, so this is K1 on real
+     data.
+   - **Also now, one smoke run on real data:** the Velhas piece on ANADEM
+     from the cache at 10 m, cut with `--pieces 64`. It must complete;
+     conformity must hold over the piece files; the independent check must
+     find 0 nodes and 0 source nodes over tolerance (its control still
+     failing); and there must be 0 constrained-Delaunay violations with
+     seams as constraints. Time and peak RSS are recorded but not judged.
+   - **At 23c-3:** the design's full 23c table (1 to 50 m, cut and uncut,
+     peak RSS included). Peak RSS means nothing until pieces hold only their
+     own windows. 23c-3 must also show its piece files byte-identical to
+     23c-2's on the same run, because it changes memory, not meshes (K6).
+
 **B17 for Ola** is under "New questions, after the rulings".
 
 ## Questions for Ola
