@@ -1207,9 +1207,9 @@ Releases the GIL.
         "refine_strip",
         [](const BoundRasterView& raster, const ConstraintCheckPoints& strip, const py::object& vertices,
            const py::object& triangles, const py::object& z, const py::object& valid, const py::object& edges,
-           const py::object& masks, double tolerance, unsigned threads) {
+           const py::object& masks, double tolerance, unsigned threads, std::uint32_t frozen_mask) {
             const auto s = start_mesh("refine_strip", vertices, triangles, z, valid, edges, masks);
-            const terrain::refinement::PointRefineOptions options{tolerance, threads};
+            const terrain::refinement::PointRefineOptions options{tolerance, threads, frozen_mask};
             // Every buffer read below is held by `s`, `raster` or `strip`.
             const py::gil_scoped_release unlocked;
             return std::visit(
@@ -1221,12 +1221,14 @@ Releases the GIL.
         },
         py::arg("view"), py::arg("strip"), py::arg("vertices"), py::arg("triangles"), py::arg("z"),
         py::arg("valid"), py::arg("edges"), py::arg("masks"), py::kw_only(), py::arg("tolerance"),
-        py::arg("threads") = 0, R"doc(
+        py::arg("threads") = 0, py::arg("frozen_mask") = 0u, R"doc(
 The edge strip on the projected path (15f, D4): refine's output, refined until
 every strip point is within tolerance, with the DEM's nodes rescanned in every
 triangle the run writes. Arrays as refine_points'. A refused input comes back
 as a status; a mis-shaped array is a ValueError, a strip that does not fit a
-RuntimeError. Releases the GIL.
+RuntimeError. No vertex goes on an edge whose mask meets frozen_mask, and a
+strip point on such an edge is a RuntimeError (filter the strip's edges).
+Releases the GIL.
 )doc");
 
     py::class_<BoundUpstream>(m, "UpstreamOutcome", R"doc(

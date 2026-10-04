@@ -540,10 +540,13 @@ def refine_strip(
     *,
     tolerance: float,
     threads: int = ...,
+    frozen_mask: int = ...,
 ) -> PointRefineOutcome:
     """The edge strip on the projected path: refine's output refined until every
     strip point is within ``tolerance``, the DEM's nodes rescanned in every
-    triangle it writes. Releases the GIL."""
+    triangle it writes. Nothing goes on an edge whose mask meets
+    ``frozen_mask``; a strip point on one is a ``RuntimeError``. Releases the
+    GIL."""
 
 def refine_points(
     points: CheckPoints,
