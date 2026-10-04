@@ -1,7 +1,13 @@
 # Harness h9: briefs come from files, and spawns are checked
 
-Status: **design, round 2** (after design review round 1, below), @architect,
-2026-10-04, at master 2060f14. One PR, by
+Status: **green at 661ef55, in code review** (round 1: changes requested,
+below; §12 lists the fixes), 2026-10-04. Design 7cae124 and 9740246, red
+84fbde6, rulings fac025a, amendment 1922d72. Measured 300 production lines
+against the estimate of about 200 (`brief.py` 218, `guard_spawn.py` 74,
+`settings.json` 6, `guard_governance.py` 1, `rule_sizes.py` 1). The overrun
+is code the estimate did not price (the `Block` type, `MalformedError`, the
+argparse subclass, parsing the `## Review` section, §3.1a's four rules),
+not formatting. One PR, by
 day: it edits `.claude/settings.json` and other governed files. Implements
 stage 1 of the plan in `docs/retrospectives/2026-10-03-dispatcher-control.md`
 §5, which Ola approved on 2026-10-04: "1: yes to stage 1, then stages 2 and
@@ -79,7 +85,11 @@ python3 tools/brief.py <persona> --worktree <path> --beside <none|persona>
   (`git -C <path> rev-parse --show-toplevel` resolves to the path; the main
   checkout is allowed). Printed absolute and resolved. A path containing
   whitespace, or not a checkout: exit 2.
-- `--increment`: required for tester, developer and reviewer, and must exist
+- `--increment`: a relative path is resolved against `--worktree`, not
+  against the checkout running `brief.py`: the persona works on the
+  worktree's branch, which may hold a file or rulings master does not have.
+  An absolute path is used as given. The block shows the path as given.
+  Required for tester, developer and reviewer, and must exist
   (exit 2 otherwise). For architect it may name a file that does not exist
   yet: the block then says `<file> (new: you create it)`. Optional for perf
   and orchestrator.
@@ -701,6 +711,43 @@ points 5 and 8 are §3.1a's concurrency rules, not §3.5's hook rules.
 **What @tester amends before green** (one commit, reason in its message):
 point 3, `tests/python/test_guard_spawn.py` lines 342 and 380,
 `assert decision in (None, "allow")` becomes `assert decision is None`.
+
+## 12. After code review round 1 (9209226)
+
+1. **`--increment` is resolved against `--worktree`** (§3.1, now ruled).
+   The green code joins it to the checkout running `brief.py`
+   (`brief.py:241`, `ROOT / args.increment`), so a file that exists only
+   on the branch is refused, and a branch with newer rulings gets master's
+   lines quoted.
+   - @tester adds, in `test_brief.py`: a fixture worktree whose copy of the
+     increment file differs from the main checkout's (another `Status:`
+     line and another quoted line). The block quotes the worktree's lines,
+     not the main checkout's. A file present only in the worktree is
+     accepted for tester; an architect's `--increment` that exists in the
+     main checkout but not in the worktree gets `(new: you create it)`. An
+     absolute path is used as given. These fail on 661ef55.
+   - @developer: resolve a relative `--increment` against the worktree
+     returned by `_checkout(args.worktree)`, and leave an absolute one as
+     given. Also fix `brief.py:181`'s docstring, which cites §3.1a for what
+     §3.1 specifies (the increment file's lines).
+2. **§5's `COPIED` row** already agrees with §11 point 2 (changed in
+   fac025a); no change.
+3. **The three lines the round-2 template dropped**, decided:
+   - "@orchestrator measures rule text and proposes a cut": **proposed for
+     `orchestrator.md` §3**, as `Each retrospective measures the rule text
+     (python3 tools/rule_sizes.py) and proposes a cut.` That file is
+     governed, so it waits for Ola's yes and is not part of h9. Until then
+     the main session puts it in the task text.
+   - "@reviewer says whether @perf's acceptance is recorded": **proposed
+     for `reviewer.md` §5**, as a fifth check: `On a refine- or
+     mesh-touching increment, @perf's acceptance run is recorded
+     (docs/increments/README.md, "Acceptance").` Governed: Ola's yes, not
+     part of h9.
+   - "@orchestrator quotes Ola only from the transcript": **dropped on
+     purpose.** In a brief, `--ola` checks every quotation against the
+     transcript; in a report, `REQUIRED-READING.md`'s claims rule (name the
+     source a sceptical reader would check) covers it, and @orchestrator
+     already cites transcripts by session and line.
 
 ## Review
 
