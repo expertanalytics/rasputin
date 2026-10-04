@@ -1,0 +1,67 @@
+=== 20nd-base-r1 start 2026-10-04T04:17:30Z swap 10455.44
+Now drawing from 'AC Power'
+ -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true
+power: ac; evidence: /Users/skavhaug/projects/rasputin/.claude/worktrees/20-nodata/docs/benchmarks/2026-10-04/20nd-base-r1; meshes: /private/tmp/claude-501/-Users-skavhaug-projects-rasputin/af318b82-b96d-429e-956c-0296b113f23b/scratchpad/m20/20nd-base-r1
+REGRESSION: quarter refine_s[t=1] 0.4340 -> 0.4582 (+5.6 %)
+REGRESSION: tile refine_s[t=1] 0.4890 -> 0.5139 (+5.1 %)
+REGRESSION: tile refine_s[t=2] 0.3175 -> 0.3340 (+5.2 %)
+=== 20nd-base-r1 exit 1 2026-10-04T04:19:33Z swap 10455.44
+Now drawing from 'AC Power'
+ -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true
+=== 20nd-r1 start 2026-10-04T04:19:33Z swap 10455.44
+Now drawing from 'AC Power'
+ -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true
+power: ac; evidence: /Users/skavhaug/projects/rasputin/.claude/worktrees/20-nodata/docs/benchmarks/2026-10-04/20nd-r1; meshes: /private/tmp/claude-501/-Users-skavhaug-projects-rasputin/af318b82-b96d-429e-956c-0296b113f23b/scratchpad/m20/20nd-r1
+ACCEPTED
+=== 20nd-r1 exit 0 2026-10-04T04:21:37Z swap 10455.44
+Now drawing from 'AC Power'
+ -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true
+=== 20nd-r2 start 2026-10-04T04:21:37Z swap 10455.44
+Now drawing from 'AC Power'
+ -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true
+power: ac; evidence: /Users/skavhaug/projects/rasputin/.claude/worktrees/20-nodata/docs/benchmarks/2026-10-04/20nd-r2; meshes: /private/tmp/claude-501/-Users-skavhaug-projects-rasputin/af318b82-b96d-429e-956c-0296b113f23b/scratchpad/m20/20nd-r2
+ACCEPTED
+=== 20nd-r2 exit 0 2026-10-04T04:23:41Z swap 10455.44
+Now drawing from 'AC Power'
+ -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true
+=== 20nd-base-r2 start 2026-10-04T04:23:41Z swap 10455.44
+Now drawing from 'AC Power'
+ -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true
+power: ac; evidence: /Users/skavhaug/projects/rasputin/.claude/worktrees/20-nodata/docs/benchmarks/2026-10-04/20nd-base-r2; meshes: /private/tmp/claude-501/-Users-skavhaug-projects-rasputin/af318b82-b96d-429e-956c-0296b113f23b/scratchpad/m20/20nd-base-r2
+ACCEPTED
+=== 20nd-base-r2 exit 0 2026-10-04T04:25:45Z swap 10455.44
+Now drawing from 'AC Power'
+ -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true
+=== 20nd-r3 start 2026-10-04T04:25:45Z swap 10455.44
+Now drawing from 'AC Power'
+ -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true
+power: ac; evidence: /Users/skavhaug/projects/rasputin/.claude/worktrees/20-nodata/docs/benchmarks/2026-10-04/20nd-r3; meshes: /private/tmp/claude-501/-Users-skavhaug-projects-rasputin/af318b82-b96d-429e-956c-0296b113f23b/scratchpad/m20/20nd-r3
+ACCEPTED
+=== 20nd-r3 exit 0 2026-10-04T04:27:50Z swap 10455.44
+Now drawing from 'AC Power'
+ -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true
+=== 20nd-base-r3 start 2026-10-04T04:27:50Z swap 10455.44
+Now drawing from 'AC Power'
+ -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true
+power: ac; evidence: /Users/skavhaug/projects/rasputin/.claude/worktrees/20-nodata/docs/benchmarks/2026-10-04/20nd-base-r3; meshes: /private/tmp/claude-501/-Users-skavhaug-projects-rasputin/af318b82-b96d-429e-956c-0296b113f23b/scratchpad/m20/20nd-base-r3
+ACCEPTED
+=== 20nd-base-r3 exit 0 2026-10-04T04:29:54Z swap 10455.44
+Now drawing from 'AC Power'
+ -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true
+=== 20nd-base-r4 start 2026-10-04T04:29:54Z swap 10455.44
+Now drawing from 'AC Power'
+ -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true
+power: ac; evidence: /Users/skavhaug/projects/rasputin/.claude/worktrees/20-nodata/docs/benchmarks/2026-10-04/20nd-base-r4; meshes: /private/tmp/claude-501/-Users-skavhaug-projects-rasputin/af318b82-b96d-429e-956c-0296b113f23b/scratchpad/m20/20nd-base-r4
+ACCEPTED
+=== 20nd-base-r4 exit 0 2026-10-04T04:31:58Z swap 10455.44
+Now drawing from 'AC Power'
+ -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true
+=== 20nd-r4 start 2026-10-04T04:31:58Z swap 10455.44
+Now drawing from 'AC Power'
+ -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true
+power: ac; evidence: /Users/skavhaug/projects/rasputin/.claude/worktrees/20-nodata/docs/benchmarks/2026-10-04/20nd-r4; meshes: /private/tmp/claude-501/-Users-skavhaug-projects-rasputin/af318b82-b96d-429e-956c-0296b113f23b/scratchpad/m20/20nd-r4
+ACCEPTED
+=== 20nd-r4 exit 0 2026-10-04T04:34:02Z swap 10447.44
+Now drawing from 'AC Power'
+ -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true
+ALLDONE
