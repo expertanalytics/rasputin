@@ -29,8 +29,11 @@ correctness.
   beyond the design"; `@architect` confirms or rules on each before green.
 * **Mutants:** for a suite the increment file names invariant-critical, run
   its mutants as your own task, planted in a scratch copy of the tree, never
-  the worktree, and hand back the kill record (each mutant,
-  where it was planted, killed or survived); `@reviewer` checks the record.
+  the worktree: a `git worktree add` copy in the session scratchpad or `/tmp`,
+  removed afterwards (not `../rasputin_scratch`, which holds results). Hand
+  back the kill record, covering every mutation target the increment file
+  names (each mutant, where it was planted, killed or survived); `@reviewer`
+  checks the record.
 
 ## 2. Test Architecture Tiers
 * **C++ Core Unit Tests:** Use a modern testing framework (e.g., Catch2). Focus on micro-benchmarks, exact geometric predicates, and verifying that C++20 concepts hold under tight memory limits.

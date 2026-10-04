@@ -113,8 +113,8 @@ correction is otherwise lost with the transcript.
 increment**, named as such in its increment file with the mutation targets its
 kill record must cover. Writing a throwaway implementation, compiling the suite
 against it, and killing deliberate mutants catches defects a passing suite
-hides. It is also the slowest part of a round. Spend it where the topology decisions are, not on value types whose failure
-mode is a typo.
+hides. It is also the slowest part of a round. Spend it where the topology
+decisions are, not on value types whose failure mode is a typo.
 
 **Template cross products are opt-in, not default.** Running every algorithm
 as a `TEMPLATE_TEST_CASE` over every kernel × every model multiplies each
