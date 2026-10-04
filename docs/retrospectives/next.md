@@ -8,7 +8,7 @@ gets its own dated file here, and this file is then emptied.
 
 Ola: "I need even more control. My gut feeling is to offload the recurring
 decisions, or make them more mechanical." Evidence and plan:
-`2026-10-03-dispatcher-control.md`. It counts 28 main-session errors from
+`docs/research/2026-10-03-dispatcher-control.md`. It counts 28 main-session errors from
 27 September to 3 October, 22 of them of a kind a script, template or hook
 could have stopped, and proposes five stages, each for Ola to rule: (1)
 briefs assembled from files by a script, with a hook that refuses a spawn
@@ -19,6 +19,14 @@ session's own turns: concurrency cap, idle guard, unexplained codes, rule
 changes (about 125, probes first); (5) handbacks routed, reviews recorded,
 `ROADMAP.md` status generated. Each stage deletes the prose rule it
 replaces.
+
+**Ruled 2026-10-04 (Ola):** "1: yes to stage 1, then stages 2 and 3", and
+"A, B, C: yes": stage 4 runs its probes first, then Ola decides; the plan
+moves to `docs/research/` (done); the recap's "Next on ROADMAP.md" rows are
+capped at about 200 characters (first sentence plus status). What follows:
+stage 1 is the next harness increment (h9), then stages 2 and 3, each
+through the pipeline; all write governed paths (`tools/`, `.claude/`), so
+by day. The row cap is a change to `tools/session_state.py` (governed).
 
 ## Agents taking on each other's work (Ola, 2026-09-28): the main focus
 
@@ -194,7 +202,7 @@ governed files.
 
 Status: items 1-6 were ruled by Ola on 2026-10-03 (about 15:42-15:45 UTC);
 each ruling is recorded under its item, and the proposal text is kept.
-Items 7 and 8 stay open. The rulings are to be implemented as one harness
+Items 7 and 8 were ruled on 2026-10-04, below. The rulings are to be implemented as one harness
 increment, by day, through the pipeline: they touch governed files
 (`tools/away.py`, `tools/session_state.py`, `.claude/REQUIRED-READING.md`),
 which are not written in unattended mode.
@@ -269,6 +277,10 @@ which are not written in unattended mode.
    has a table row; h3 is named only in a prose list. Rule needed: do
    harness increments get roadmap rows? Cost: one rule line, and rows for
    the shipped ones if yes.
+
+   **Ruled 2026-10-04 (Ola):** "On next, yes to all escept 15." No rows for
+   harness increments; one pointer line under `ROADMAP.md` to
+   `docs/increments/h*`. `@architect`, `ROADMAP.md`, not governed.
 8. **`@reviewer` recorded its own rounds** (2026-10-03, reported by the
    main session as its own deviation). `docs/increments/README.md@390b516:59-63`:
    "`@reviewer` is read-only, so its spawner copies the handback's verdict
@@ -305,11 +317,19 @@ which are not written in unattended mode.
    row like a dirty path; and §5's list gains "a write committed in the
    same call" until then. Cost: about 10 lines and one test in h6.
 
+   **Ruled 2026-10-04 (Ola):** yes (item 7's quote). One line in
+   `reviewer.md`: you do not edit or commit; your spawner records the
+   verdict. `@architect`, governed. The h6 `HEAD` proposal was not in the
+   recommendation put to Ola and stays open.
+
 ## The merges of 2026-10-03: 15e, 15f-1, 15f-2, hardening, citations
 
 Evidence: `2026-10-03-day-merges-15e-15f.md` (section numbers below are
 that file's). Numbering continues from the section above. Each item needs
 Ola's ruling; all but 15 touch governed files or tools.
+
+Status: ruled by Ola on 2026-10-04: "On next, yes to all escept 15." Each
+ruling is under its item.
 
 9. **No `@orchestrator` check after five merges, until Ola asked** (2a). The
    session had loaded `CLAUDE.md` before #146 added "When to spawn
@@ -321,6 +341,11 @@ Ola's ruling; all but 15 touch governed files or tools.
    the recap prints the PRs merged since the newest commit under
    `docs/retrospectives/` ("3 merges with no `@orchestrator` check"). Cost:
    about 20 lines in `tools/session_state.py`, with tests.
+
+   **Ruled 2026-10-04:** yes to (b): the recap prints the merges since the
+   last `@orchestrator` check, about 20 lines in `tools/session_state.py`
+   (governed), through the pipeline. Stage 2's `pipeline.py` would carry
+   the same line; build it once.
 10. **The required mutation tests were left out of 15e and 15f-2** (2b).
     The README requires them for a suite the increment file names
     invariant-critical; both files named one; the main session's briefs said
@@ -333,6 +358,11 @@ Ola's ruling; all but 15 touch governed files or tools.
     production change, no governed path, so it is a good unattended
     fallback. If no, the README line becomes "optional". Cost: one line
     either way.
+
+    **Ruled 2026-10-04:** the requirement stands for named
+    invariant-critical suites. `@tester` runs 15e's and 15f-2's missing
+    mutants on master as unattended filler (no governed path); `@architect`
+    adds the line to `reviewer.md` §5 (governed).
 11. **Absolute tolerances get a scale check** (3a, and ES16 in 3c). L12 and
     L14 used a fixed 1e-10 that stops working once lattice coordinates reach
     about 10⁶; ES16 used a fixed 1e-9 where the true bound is slope × offset.
@@ -343,6 +373,10 @@ Ola's ruling; all but 15 touch governed files or tools.
     Edition" (read 2026-10-03): a fixed epsilon fails once values grow;
     compare relative to magnitude or in ulps. Cost: two lines in governed
     files.
+
+    **Ruled 2026-10-04:** yes. `@architect` adds one line each to
+    `architect.md` and `tester.md`: every absolute constant states the scale
+    it assumes (governed).
 12. **Fused multiply-adds** (3b). `.claude/agents/developer.md@586fbc1:30` already makes
     `@developer` build with `-ffp-contract=off` too, and it caught ES13
     before CI. `tester.md` has no such line. Proposal: copy that line into
@@ -350,6 +384,11 @@ Ola's ruling; all but 15 touch governed files or tools.
     `session.md` to turn contraction off project-wide (one CMake line;
     stored mesh hashes on the Mac change, and `@perf` would measure what
     arm64 loses without fused multiply-adds).
+
+    **Ruled 2026-10-04:** dropped. Ola, same day: "turn off fused
+    multiply-add" (increment 28), so contraction is off project-wide and the
+    `tester.md` line is moot. Also ruled, for the record: the 15b sentence
+    becomes "except the edge strip's points, which agree to rounding".
 13. **A flagged test assumption went unconfirmed before green** (3c).
     `@tester`'s red handback flagged the ES15 choice about node (15, 8) as
     "The ruling did not say this". The main session passed it to Ola as
@@ -363,6 +402,9 @@ Ola's ruling; all but 15 touch governed files or tools.
     such choices, and one line in the main session's dispatch rules. The
     alternative is no new rule: green caught both, and the fix was one
     commit.
+
+    **Ruled 2026-10-04:** yes, as a line in h9's brief templates (stage 1),
+    not a rule of its own.
 14. **`ROADMAP.md`: conflicts, stale status, no owner** (3d, 2e, 2f). Two
     hand-resolved conflicts today, and master still says 15e is "awaiting
     the push and CI". Options: (a) the row's status says only designed, in
@@ -377,15 +419,31 @@ Ola's ruling; all but 15 touch governed files or tools.
     `@architect`, `@perf`, the main session and `@developer`); they belong on
     the hard-limits list above. Whatever the choice, master's two stale
     lines (`ROADMAP.md` row 15, `docs/increments/15e-memory-fixes.md@586fbc1:8`) need a docs fix.
+
+    **Ruled 2026-10-04:** (a) now: the status column says designed, in
+    progress or shipped with the PR number; `@architect`, `ROADMAP.md`, not
+    governed, with the two stale lines. (b) later, in stage 5, owner
+    `@architect`.
 15. **Concurrency** (2d). Three agents ran at once several times, and three
     edited one worktree in parallel by design at 14:30, against the "agents
     in pairs" note. Nothing broke. To rule: do read-only `@reviewer` runs
     count toward the two, and may personas share a worktree when their files
     do not overlap? Cost: an update to the memory note.
+
+    **Ruled 2026-10-04 (Ola):** "Read only agents should be allowed even
+    when two agents are working, as long as they don't require the same
+    files, ie that the files the read-only agent reads could change." Read-
+    only agents do not count toward the two, provided nothing they read is
+    being changed. The main session has updated its memory note; no file
+    edit. Shared worktrees were not ruled.
 16. **Numbers passed to Ola** (3e). 15f-1's overrun went out as 45 % (gross)
     instead of 36 % (net), copied from a handback. Proposal: `@developer`
     reports lines as §2 counts them, net, and the main session quotes line
     counts from `@reviewer`'s record only. Cost: one line in `developer.md`.
+
+    **Ruled 2026-10-04:** the main session quotes line counts from
+    `@reviewer` only. A dispatch rule: a line in h9's templates, or one in
+    `CLAUDE.md` §3 (`@architect`, governed).
 17. **A fallback's paths are checked by hand** (section 4). The first
     fallback queued today (h5's green step) writes three governed files;
     it was caught only because the morning check had just looked at h5.
@@ -395,3 +453,6 @@ Ola's ruling; all but 15 touch governed files or tools.
     any governed one. Cost: about 15 lines in `tools/session_state.py`, with
     tests. Also: `session.md` was 10 lines at 15:26 UTC against the
     three-line rule (item 4 again).
+
+    **Ruled 2026-10-04:** folded into stage 2's state tool, not a separate
+    change.
