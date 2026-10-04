@@ -61,7 +61,7 @@ These came from reading the code the strip builds on. Each one adds lines
 beyond 15c's estimate of 160-210.
 
 **F1. Membership cannot find a point on a constraint.** `scan_points`
-(`include/terrain/refinement/refine_points.hpp:101`) decides which triangle
+(`include/terrain/refinement/refine_points.hpp:113`) decides which triangle
 holds a check point with three exact orientation tests on the point's stored
 position. A crossing computed in floating point lies within rounding of its
 edge, on one side or the other. On the domain's outline, a point on the
@@ -84,7 +84,7 @@ source nodes do matter, and they are covered because phase 2 and the strip
 share one loop (D1). On the projected path (Norway, any DEM meshed directly) it would turn
 "every DEM node within tolerance" false. So the strip run there also
 **rescans every triangle it writes against the DEM's nodes**, with refine's own
-`scan` (`scan`, `include/terrain/refinement/scan.hpp:96`), and inserts nodes as refine
+`scan` (`scan`, `include/terrain/refinement/scan.hpp:122`), and inserts nodes as refine
 would (D4, step 3). Run "after refine" as written, the strip would trade one
 guarantee for another.
 
@@ -355,7 +355,7 @@ programming error. Two distinct indices at one position give no points:
 there is no crossing, and the one midpoint candidate sits on both ends, so
 step 6 drops it.
 7. **Heights.** Every point's z is `vertex_z(dem, point)`
-   (`vertex_z`, `include/terrain/refinement/scan.hpp:73`), the function refine uses for an
+   (`vertex_z`, `include/terrain/refinement/scan.hpp:79`), the function refine uses for an
    off-node vertex. At a node it is `value_at`. For a crossing, the cell's
    fraction across the line is exactly 0, so the expression is exactly
    `z₀ (1 − f) + z₁ f` between the two nodes of the cell side, which is Q14's
@@ -562,7 +562,7 @@ refused.
 | `include/terrain/refinement/constraint_points.hpp` (new) | `ConstraintPoint`, `ConstraintCheckPoints`, `constraint_check_points` (D2, D3) |
 | `include/terrain/refinement/refine.hpp`, `detail::to_lattice` | `detail::lattice_position` extracted from it, and called by it; no change in behaviour |
 | `include/terrain/refinement/refine_points.hpp` | `detail::point_loop`; the strip scan and ownership; the sub-edge map; `refine_points(..., strip)`; `refine_strip`; the outcome fields; `PointScan` (D4) |
-| `bindings/core.cpp` | `ConstraintCheckPoints` (read-only: `size`, `no_data`, `duplicates`, `edge_count`); `constraint_check_points(view, vertices, edges)` over the bound raster variant; `refine_points(..., strip=None)`; `refine_strip(view, strip, vertices, triangles, z, valid, edges, masks, *, tolerance, threads=0)`; the new outcome properties. Every call releases the GIL, as `refine_points` does (the `py::gil_scoped_release` in its binding, `bindings/core.cpp:1125` at `7d841f3`) |
+| `bindings/core.cpp` | `ConstraintCheckPoints` (read-only: `size`, `no_data`, `duplicates`, `edge_count`); `constraint_check_points(view, vertices, edges)` over the bound raster variant; `refine_points(..., strip=None)`; `refine_strip(view, strip, vertices, triangles, z, valid, edges, masks, *, tolerance, threads=0)`; the new outcome properties. Every call releases the GIL, as `refine_points` does (the `py::gil_scoped_release` in its binding, `bindings/core.cpp:1134`) |
 | `src_python/tin_engine/_core.pyi` | stubs for the above |
 | `src_python/tin_engine/edge_strip.py` (new) | `generate(view, start, clock) -> ConstraintCheckPoints` and `run(view, strip, start, tolerance, clock) -> PointRefineOutcome`: the two calls and their clock rows. No geometry |
 | `src_python/tin_engine/final_check.py:28` | `run(..., strip: ConstraintCheckPoints \| None = None)`, passed on to `refine_points` |
@@ -1534,7 +1534,7 @@ with the reasons, and `@developer` changes nothing.
   - rename the test to match.
 
 The citations that moved with `7d841f3` are corrected above: D5's binding
-(`bindings/core.cpp:1123`) and `_dem_mesh` lines (`:1466`, `:1550`), `final_check.run` (`:28`), and D6's
+(`bindings/core.cpp:1134`, recomputed when 23b merged) and `_dem_mesh` lines (`:1466`, `:1550`), `final_check.run` (`:28`), and D6's
 `:1561` and `:1580`. The "Review" record of 15f-2's round 2 cites
 `cli.py:1417` and others as they were at `17c2d14`. That is history, and it is
 left as written.
@@ -1551,7 +1551,7 @@ triangle of the mesh it receives, and the same with an empty strip. Bygdin at
 - **A1. 15f-3 is not blocked; the fix is a follow-up PR, 15f-4.**
   - The cost is not new to the code base. On master, the reprojected path's
     final check already calls `to_lattice` on refine's output
-    (`refine_points.hpp:220`, reached from `final_check.run`). 15f-3 adds the
+    (`refine_points.hpp:248`, reached from `final_check.run`). 15f-3 adds the
     same rebuild to the projected path; on the reprojected path it adds
     nothing of this kind (Velhas: +2.6 to +7.5 % process time, the strip's
     own work).
@@ -1863,4 +1863,4 @@ None blocks `@tester`.
 
 **15f-3, code review, round 2, 2026-10-03.** Range `ae6bb41..9265916` (e6348b4 tests, 9265916 docs); whole branch `c193cb1..9265916`. Verdict: APPROVED. LOC: 179 net (222 added), unchanged; this round touches no production file. All four round-1 blockers closed; the red-step figures in `test_cli_mesh_edge_strip.py` ("98 points, worst 16 m … 152, worst 47 m") are @tester's record of the `4157dab` run, not rerun. Five touched test files 200 passed; ruff clean; merge-tree against origin/master `1a422b5` clean. Suggestion: fix `tests/python/test_features.py:583`'s citation of `project_structure.md:359` (stale on master since 15f-1). @perf's acceptance (Bygdin, basin piece) outstanding. Not pushed; no CI.
 
-**15f-3, code review, round 3, 2026-10-04.** Range `60e2b45..ac06d39` (83c7fd2 citation, 588e879 and 9f2f7e5 @perf acceptance and profile, 107cdb4 ruling A1-A6, ac06d39 ROADMAP); whole branch `c193cb1..ac06d39`. Verdict: APPROVED. LOC: 179 net (222 added), unchanged; no production file in this range. The ruling's claims hold against code (`refine_points.hpp:220` calls `to_lattice` on refine's output inside `detail::point_loop`, reached from `final_check.run`; `lattice_mesh.hpp:131`'s `unordered_map`; `refine.hpp:154-156`'s `std::map`) and every figure matches the acceptance file; status line and ROADMAP row match the tree; merge-tree against origin/master `2060f14` clean. Not pushed; no CI.
+**15f-3, code review, round 3, 2026-10-04.** Range `60e2b45..ac06d39` (83c7fd2 citation, 588e879 and 9f2f7e5 @perf acceptance and profile, 107cdb4 ruling A1-A6, ac06d39 ROADMAP); whole branch `c193cb1..ac06d39`. Verdict: APPROVED. LOC: 179 net (222 added), unchanged; no production file in this range. The ruling's claims hold against code (`refine_points.hpp:248` calls `to_lattice` on refine's output inside `detail::point_loop`, reached from `final_check.run`; `lattice_mesh.hpp:136`'s `unordered_map`; `refine.hpp:160-162`'s `std::map`) and every figure matches the acceptance file; status line and ROADMAP row match the tree; merge-tree against origin/master `2060f14` clean. Not pushed; no CI.

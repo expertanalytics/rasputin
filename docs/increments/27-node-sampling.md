@@ -112,7 +112,7 @@ with a dyadic grid (500000.5 / 7900000.25, spacing 0.5 / 0.25), and with the
 Kartverket fixture's geometry, there are none. Node identity is also the relation the producers use:
 `subsample` builds stride vertices with `node`'s expression
 (`grid_domain.py:68-69`), and refine decides that a start vertex is a node by
-the same `node(round) == p` test (`lattice_position`, `refine.hpp:126-135`).
+the same `node(round) == p` test (`lattice_position`, `refine.hpp:132-141`).
 
 ### Where it lives
 
@@ -121,7 +121,7 @@ the same `node(round) == p` test (`lattice_position`, `refine.hpp:126-135`).
   nullopt. nullopt also for a non-finite `p` and for a point outside the node
   rectangle (`cell_of`'s test). The clamp-and-round is written the way
   `lattice_position` writes it, so `node_at` says "node" exactly where
-  refine's whole test at `refine.hpp:400-407` does; a test pins that (S5).
+  refine's whole test at `refine.hpp:409-418` does; a test pins that (S5).
   `node_at` answers on any raster, a 1 x N one included; it is `bilinear`'s
   guard, not `node_at`, that keeps such a raster at nullopt.
 - **`bilinear`** (`sample.hpp`): after the existing `bilinear_cell_of` guard,
@@ -130,7 +130,7 @@ the same `node(round) == p` test (`lattice_position`, `refine.hpp:126-135`).
   stays first, so a raster with fewer than 2 rows or columns still answers
   nullopt everywhere, nodes included, as today.
 - `bilinear_batch`, the `sample` binding and the Python side change in no
-  code. The binding's docstring (`bindings/core.cpp:833-838`), the stub's
+  code. The binding's docstring (`bindings/core.cpp:887-892`), the stub's
   (`src_python/tin_engine/_core.pyi`, `sample`) and the comment above
   `bilinear` say the new rule.
 - `lattice_position` is **not** changed to call `node_at` here. That would
@@ -145,9 +145,9 @@ the same `node(round) == p` test (`lattice_position`, `refine.hpp:126-135`).
    nodes and the ring through them. The noder makes no crossings there, and
    the triangulation adds no points. Every vertex is a node.
 2. **On the tolerance path the two samplers must agree.** refine measures and
-   carves with `vertex_z` (`include/terrain/refinement/scan.hpp:69-94`) and
+   carves with `vertex_z` (`include/terrain/refinement/scan.hpp:75-99`) and
    writes the output z of an off-node start vertex with `raster::bilinear`
-   (`refine.hpp:407`). If only `bilinear` skipped cell-side corners, a domain
+   (`refine.hpp:417-418`). If only `bilinear` skipped cell-side corners, a domain
    vertex on a lattice line next to NoData would be void to the scan but valid
    in the output. A cell-side rule must change both. That changes refine:
    carving, the golden digests, and `@perf` acceptance. Increment 23 cuts
@@ -168,8 +168,8 @@ measured run shows ragged seams along NoData.
 |---|---|---|
 | no `--tolerance`, stride grid (12's R6) | **yes** | every vertex is a node; a valid node next to NoData keeps its height and its triangles |
 | no `--tolerance`, mosaic tile (15) | **yes**, the same way | same `sample` call on the assembled tile |
-| `--tolerance`, start-boundary / domain output z (`refine.hpp:407`) | **no**, by construction | `bilinear` is called there only for a start vertex that is **not** a node by refine's whole test: `lattice_position`, then `node && g.node(c) == p` (`!given \|\| (node && g.node(c) == p) ? vertex_z : bilinear`). `node_at` answers the same as that whole test (S5), so the new branch is never taken from refine |
-| `--tolerance`, `vertex_z` (scan, carving, feet, edge strip) | **no** | not touched; it already reads a node with `value_at` (`scan.hpp:80-81`) |
+| `--tolerance`, start-boundary / domain output z (`refine.hpp:417-418`) | **no**, by construction | `bilinear` is called there only for a start vertex that is **not** a node by refine's whole test: `lattice_position`, then `node && g.node(c) == p` (`!given \|\| (node && g.node(c) == p) ? vertex_z : bilinear`). `node_at` answers the same as that whole test (S5), so the new branch is never taken from refine |
+| `--tolerance`, `vertex_z` (scan, carving, feet, edge strip) | **no** | not touched; it already reads a node with `value_at` (`scan.hpp:86-87`) |
 | `--tolerance`, reprojected (15c: `resample`, `refine_points`) | **no** | `resample` is Python with its own four-corner rule (`target_grid.py:163-196`); `refine_points` calls `vertex_z`, not `bilinear` |
 | a reprojected tile meshed without `--tolerance`, if a run does so | the stride sampling of the resampled tile follows the new rule; `resample` does not change | the target grid's nodes are `col0 * h` with integer `h` (`target_grid.py:48`), so they are exact |
 
@@ -260,7 +260,7 @@ New:
   exact today too (measured: 0 failures).
 - **S5. `node_at` agrees with refine's node test** (invariant-critical for
   "the tolerance path is unchanged"). The reference is refine's whole test at
-  `refine.hpp:400-407`: `v = lattice_position(g, p)`, then `v.is_node() &&
+  `refine.hpp:409-418`: `v = lattice_position(g, p)`, then `v.is_node() &&
   g.node(c) == p` with `c` the node of `v`. `lattice_position(g, p).is_node()`
   alone is **not** the reference. It is true for an off-node point whose
   fractional coordinates round to integers, so it disagrees with a correct
