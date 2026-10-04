@@ -55,7 +55,7 @@
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
-#include <map>
+#include <iterator>
 #include <optional>
 #include <set>
 #include <span>
@@ -151,18 +151,26 @@ namespace detail {
         lattice.push_back(lattice_position(g, p));
     }
 
-    std::map<std::pair<std::uint32_t, std::uint32_t>, std::uint32_t> constraint;
+    // The constraint lookup is a sorted vector, not a std::map, for the
+    // reason LatticeMesh::build's table is flat. The sort is stable, so the
+    // last entry of an edge listed twice is the later mask, as the map's
+    // assignment gave; an edge found sets its bit even when its mask is 0.
+    using Key = std::pair<std::uint32_t, std::uint32_t>;
+    using Entry = std::pair<Key, std::uint32_t>;  // ((min, max), mask)
+    std::vector<Entry> constraint;
     for (std::size_t i = 0; i < edges.size() && i < masks.size(); ++i)
-        constraint[std::minmax(edges[i][0], edges[i][1])] = masks[i];
+        constraint.emplace_back(std::minmax(edges[i][0], edges[i][1]), masks[i]);
+    std::ranges::stable_sort(constraint, {}, &Entry::first);
     std::vector<std::uint8_t> bits(start.triangle_count(), 0);
     std::vector<std::array<std::uint32_t, 3>> edge_masks(start.triangle_count(), {0, 0, 0});
     for (std::size_t t = 0; t < start.triangle_count(); ++t)
         for (unsigned k = 0; k < 3; ++k) {
             const auto& tri = start.triangles()[t];
-            if (const auto it = constraint.find(std::minmax(tri[k], tri[(k + 1) % 3]));
-                it != constraint.end()) {
+            const Key key = std::minmax(tri[k], tri[(k + 1) % 3]);
+            if (const auto it = std::ranges::upper_bound(constraint, key, {}, &Entry::first);
+                it != constraint.begin() && std::prev(it)->first == key) {
                 bits[t] |= static_cast<std::uint8_t>(1u << k);
-                edge_masks[t][k] = it->second;
+                edge_masks[t][k] = std::prev(it)->second;
             }
         }
 
