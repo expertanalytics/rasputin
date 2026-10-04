@@ -641,7 +641,9 @@ class TestStubs:
             "edges",
             "masks",
         ]
-        assert [a.arg for a in fn.args.kwonlyargs] == ["tolerance", "threads"]
+        # 23b's N18 adds frozen_mask; N18 gives no order, so it goes last, after
+        # threads, as on refine_points (test_core_frozen.py).
+        assert [a.arg for a in fn.args.kwonlyargs] == ["tolerance", "threads", "frozen_mask"]
 
     def test_the_outcome_carries_the_strip_fields(self) -> None:
         cls = self.declared().get("PointRefineOutcome")

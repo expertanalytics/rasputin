@@ -1,0 +1,109 @@
+{
+ "label": "base-b2",
+ "tree": "/private/tmp/claude-501/-Users-skavhaug-projects-rasputin/af318b82-b96d-429e-956c-0296b113f23b/scratchpad/t-base",
+ "commit": "c193cb1f87141f6efad882e6b658f63848fb52b2",
+ "crs": "EPSG:31983",
+ "runs": [
+  {
+   "tolerance": 5.0,
+   "pmset_before": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=24117347)\t100%; charged; 0:00 remaining present: true",
+   "swap_before": "total = 11264.00M  used = 10526.56M  free = 737.44M  (encrypted)",
+   "timed": [
+    {
+     "wall_s": 6.838905582961161,
+     "real_s": 6.83,
+     "max_rss_bytes": 1884389376,
+     "child": {
+      "refine_s": 0.9994714169879444,
+      "app_s": 6.5400519170216285,
+      "max_error": 4.999982561383945,
+      "rounds": 37,
+      "inserted": 774301,
+      "flips": 1885927,
+      "hardening": "libc++ fast"
+     },
+     "stats": {
+      "item": "count",
+      "resampled grid nodes": "7346 \u00d7 4204 (30 m)",
+      "domain vertices": "7309 (1 ring, 0 holes)",
+      "start vertices": "7309",
+      "start triangles": "7307",
+      "output vertices": "934748",
+      "output triangles": "1861967",
+      "constraint edges": "7527",
+      "t5.bin.vtk": "67.3 MB",
+      "total_s": "6.156"
+     }
+    },
+    {
+     "wall_s": 6.828676874982193,
+     "real_s": 6.82,
+     "max_rss_bytes": 2054946816,
+     "child": {
+      "refine_s": 1.0025845830095932,
+      "app_s": 6.514957791019697,
+      "max_error": 4.999982561383945,
+      "rounds": 37,
+      "inserted": 774301,
+      "flips": 1885927,
+      "hardening": "libc++ fast"
+     },
+     "stats": {
+      "item": "count",
+      "resampled grid nodes": "7346 \u00d7 4204 (30 m)",
+      "domain vertices": "7309 (1 ring, 0 holes)",
+      "start vertices": "7309",
+      "start triangles": "7307",
+      "output vertices": "934748",
+      "output triangles": "1861967",
+      "constraint edges": "7527",
+      "t5.bin.vtk": "67.3 MB",
+      "total_s": "6.125"
+     }
+    }
+   ],
+   "started_utc": "2026-10-04T01:41:00Z",
+   "ascii": {
+    "wall_s": 9.790513707965147,
+    "real_s": 9.78,
+    "max_rss_bytes": 2113421312,
+    "child": {
+     "refine_s": 0.9937025000108406,
+     "app_s": 9.485372250026558,
+     "max_error": 4.999982561383945,
+     "rounds": 37,
+     "inserted": 774301,
+     "flips": 1885927,
+     "hardening": "libc++ fast"
+    },
+    "stats": {
+     "item": "count",
+     "resampled grid nodes": "7346 \u00d7 4204 (30 m)",
+     "domain vertices": "7309 (1 ring, 0 holes)",
+     "start vertices": "7309",
+     "start triangles": "7307",
+     "output vertices": "934748",
+     "output triangles": "1861967",
+     "constraint edges": "7527",
+     "t5.ascii.vtk": "99.0 MB",
+     "total_s": "9.089"
+    }
+   },
+   "quality": {
+    "worst_angle": 0.03027062859384036,
+    "angle_median": 36.86989764584402,
+    "share_under_1": 2.1482657855912593e-05,
+    "max_degree": 14,
+    "within_tolerance": false,
+    "delaunay_checked": 2789187,
+    "delaunay_ambiguous": 52048,
+    "delaunay_violations": 0,
+    "mesh_sha256": ""
+   },
+   "mesh_sha256": "a2bd8ed1d6675af367b5dd97d7ce063fb987b7866668ad5562abf53c43743735",
+   "vtk": "/private/tmp/claude-501/-Users-skavhaug-projects-rasputin/af318b82-b96d-429e-956c-0296b113f23b/scratchpad/velhas/base-b2/t5.ascii.vtk",
+   "pmset_after": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=24117347)\t100%; charged; 0:00 remaining present: true",
+   "swap_after": "total = 11264.00M  used = 10518.56M  free = 745.44M  (encrypted)"
+  }
+ ]
+}

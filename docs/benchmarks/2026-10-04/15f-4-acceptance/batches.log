@@ -1,0 +1,84 @@
+=== base b1 start 2026-10-04T01:20:00Z total = 11264.00M  used = 10526.56M  free = 737.44M  (encrypted)
+Now drawing from 'AC Power'
+ -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true
+power: ac; evidence: /Users/skavhaug/projects/rasputin/.claude/worktrees/15f-4/docs/benchmarks/2026-10-04/15f-4-base-b1; meshes: /private/tmp/claude-501/-Users-skavhaug-projects-rasputin/af318b82-b96d-429e-956c-0296b113f23b/scratchpad/meshes/base-b1
+ACCEPTED
+=== bench base b1 exit 0 01:22:18
+base_b1_run1 exit=0 01:22:23
+base_b1_run2 exit=0 01:22:27
+base_b1_run3 exit=0 01:22:31
+base_ascii exit=0 01:22:39
+base-b1 t5: real [6.83, 6.69] s, rss 1.78 GiB
+=== base b1 end 2026-10-04T01:23:07Z
+Now drawing from 'AC Power'
+ -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true
+=== 15f3 b1 start 2026-10-04T01:23:07Z total = 11264.00M  used = 10526.56M  free = 737.44M  (encrypted)
+Now drawing from 'AC Power'
+ -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true
+power: ac; evidence: /Users/skavhaug/projects/rasputin/.claude/worktrees/15f-4/docs/benchmarks/2026-10-04/15f-4-15f3-b1; meshes: /private/tmp/claude-501/-Users-skavhaug-projects-rasputin/af318b82-b96d-429e-956c-0296b113f23b/scratchpad/meshes/15f3-b1
+ACCEPTED
+=== bench 15f3 b1 exit 0 01:26:34
+15f3_b1_run1 exit=0 01:26:40
+15f3_b1_run2 exit=0 01:26:46
+15f3_b1_run3 exit=0 01:26:52
+15f3_ascii exit=0 01:27:01
+15f3-b1 t5: real [7.46, 7.23] s, rss 1.87 GiB
+=== 15f3 b1 end 2026-10-04T01:27:31Z
+Now drawing from 'AC Power'
+ -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true
+=== 15f4 b1 start 2026-10-04T01:27:31Z total = 11264.00M  used = 10526.56M  free = 737.44M  (encrypted)
+Now drawing from 'AC Power'
+ -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true
+power: ac; evidence: /Users/skavhaug/projects/rasputin/.claude/worktrees/15f-4/docs/benchmarks/2026-10-04/15f-4-15f4-b1; meshes: /private/tmp/claude-501/-Users-skavhaug-projects-rasputin/af318b82-b96d-429e-956c-0296b113f23b/scratchpad/meshes/15f4-b1
+ACCEPTED
+=== bench 15f4 b1 exit 0 01:30:10
+15f4_b1_run1 exit=0 01:30:15
+15f4_b1_run2 exit=0 01:30:20
+15f4_b1_run3 exit=0 01:30:25
+15f4_ascii exit=0 01:30:32
+15f4-b1 t5: real [5.89, 5.77] s, rss 1.77 GiB
+=== 15f4 b1 end 2026-10-04T01:30:58Z
+Now drawing from 'AC Power'
+ -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true
+=== 15f4 b2 start 2026-10-04T01:30:58Z total = 11264.00M  used = 10526.56M  free = 737.44M  (encrypted)
+Now drawing from 'AC Power'
+ -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true
+power: ac; evidence: /Users/skavhaug/projects/rasputin/.claude/worktrees/15f-4/docs/benchmarks/2026-10-04/15f-4-15f4-b2; meshes: /private/tmp/claude-501/-Users-skavhaug-projects-rasputin/af318b82-b96d-429e-956c-0296b113f23b/scratchpad/meshes/15f4-b2
+ACCEPTED
+=== bench 15f4 b2 exit 0 01:33:36
+15f4_b2_run1 exit=0 01:33:41
+15f4_b2_run2 exit=0 01:33:46
+15f4_b2_run3 exit=0 01:33:51
+15f4-b2 t5: real [5.96, 5.87] s, rss 1.97 GiB
+=== 15f4 b2 end 2026-10-04T01:34:17Z
+Now drawing from 'AC Power'
+ -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true
+=== 15f3 b2 start 2026-10-04T01:34:17Z total = 11264.00M  used = 10526.56M  free = 737.44M  (encrypted)
+Now drawing from 'AC Power'
+ -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true
+power: ac; evidence: /Users/skavhaug/projects/rasputin/.claude/worktrees/15f-4/docs/benchmarks/2026-10-04/15f-4-15f3-b2; meshes: /private/tmp/claude-501/-Users-skavhaug-projects-rasputin/af318b82-b96d-429e-956c-0296b113f23b/scratchpad/meshes/15f3-b2
+ACCEPTED
+=== bench 15f3 b2 exit 0 01:37:42
+15f3_b2_run1 exit=0 01:37:48
+15f3_b2_run2 exit=0 01:37:54
+15f3_b2_run3 exit=0 01:38:00
+15f3-b2 t5: real [7.38, 7.2] s, rss 1.86 GiB
+=== 15f3 b2 end 2026-10-04T01:38:30Z
+Now drawing from 'AC Power'
+ -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true
+=== base b2 start 2026-10-04T01:38:30Z total = 11264.00M  used = 10526.56M  free = 737.44M  (encrypted)
+Now drawing from 'AC Power'
+ -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true
+power: ac; evidence: /Users/skavhaug/projects/rasputin/.claude/worktrees/15f-4/docs/benchmarks/2026-10-04/15f-4-base-b2; meshes: /private/tmp/claude-501/-Users-skavhaug-projects-rasputin/af318b82-b96d-429e-956c-0296b113f23b/scratchpad/meshes/base-b2
+ACCEPTED
+=== bench base b2 exit 0 01:40:47
+base_b2_run1 exit=0 01:40:51
+base_b2_run2 exit=0 01:40:56
+base_b2_run3 exit=0 01:41:00
+base-b2 t5: real [6.83, 6.82] s, rss 1.91 GiB
+=== base b2 end 2026-10-04T01:41:29Z
+Now drawing from 'AC Power'
+ -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true
+ALLDONE
+Now drawing from 'AC Power'
+ -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true

@@ -1,0 +1,219 @@
+# Increment 23b acceptance: frozen edges and the seam pass (@perf, 2026-10-04)
+
+Branch `worktree-agent-a8b29c323dc2ad69d` at `c4fb2bf` (`@reviewer` code
+round 2 APPROVED), against its merge base `b4bcdc3` (increment 24's merge),
+back to back, AC power throughout. The rule is
+`docs/increments/23-basin-scale.md`, "@perf acceptance", 23b: the README
+"Acceptance" rule in full, the 1 m benchmark's mesh hash unchanged (mask 0),
+and refine within noise at every thread count.
+
+## Verdict
+
+**Superseded: 23b is ACCEPTED at `91c7cb5`** (below, "Rerun on the fix
+91c7cb5"). The REGRESSION verdicts here and in "Rerun on the fix 8da0f2a"
+apply to `c4fb2bf` and `8da0f2a` only.
+
+**REGRESSION: refine_s at 1 thread, +4.7 % (tile) and +4.3 % (quarter);
++1 to +4 % at 2 to 20 threads.** The meshes are identical.
+
+1. **Mesh hash unchanged.** All twelve runs give the same tile and quarter
+   mesh sha256, the same as increment 24's acceptance, and the same quality.
+   Every (domain, thread count) cell has a single (max_error, rounds,
+   inserted, flips) tuple over all twelve runs.
+2. **Refine is not within noise.** 23b is slower than the base in every
+   run at every low thread count. At 1 thread the runs' medians do not
+   overlap: tile base 0.5124-0.5232 s against 23b 0.5414-0.5517 s, quarter
+   0.4532-0.4648 s against 0.4718-0.4844 s. The pooled change (20 to 25
+   samples a side) is under `bench.py`'s 5 % threshold everywhere, but
+   `bench.py` itself flagged tile at 1 thread in two of the four back-to-back
+   pairs (+5.7 %, +5.5 %). The spread between runs of one binary is about 2 %.
+3. **The cause, measured.** 23b adds an `on_frozen` test per DEM node
+   inside `scan`'s inner loop (`include/terrain/refinement/scan.hpp`, the
+   `nodes` branch). With mask 0 it is always false, but it is still tested
+   per node. Experiment E is `c4fb2bf` plus `23b-acceptance/exp-unswitch.diff`
+   (12 lines): when the triangle has no frozen edge, that loop runs as in
+   the base. E is within -2.4 % to +1.6 % of the base at every cell, and
+   +0.5 % / +0.7 % at 1 thread. Its meshes are identical too. The fix is
+   for `@developer`. E was not committed to the branch.
+
+## Results: refine_s, pooled median (seconds) and change against the base
+
+B is the base `b4bcdc3` (4 clean runs), N is 23b `c4fb2bf` (5 runs), and E is
+the experiment (2 runs). The full table, every thread count with run ranges,
+is `23b-acceptance/tables-all.md`.
+
+| domain | threads | B | N | E | N/B % | E/B % |
+|---|---:|---:|---:|---:|---:|---:|
+| tile | default | 0.2002 | 0.2032 | 0.2003 | +1.5 | +0.0 |
+| tile | 1 | 0.5201 | 0.5447 | 0.5226 | +4.7 | +0.5 |
+| tile | 2 | 0.3377 | 0.3507 | 0.3405 | +3.9 | +0.8 |
+| tile | 4 | 0.2489 | 0.2560 | 0.2500 | +2.8 | +0.4 |
+| tile | 8 | 0.2015 | 0.2067 | 0.2026 | +2.6 | +0.5 |
+| tile | 20 | 0.2000 | 0.2032 | 0.2002 | +1.6 | +0.1 |
+| tile | 2-20, range | | | | +0.6..+3.9 | -2.4..+1.1 |
+| quarter | default | 0.1795 | 0.1811 | 0.1795 | +0.9 | -0.0 |
+| quarter | 1 | 0.4586 | 0.4782 | 0.4617 | +4.3 | +0.7 |
+| quarter | 2 | 0.2967 | 0.3053 | 0.2979 | +2.9 | +0.4 |
+| quarter | 4 | 0.2191 | 0.2242 | 0.2194 | +2.3 | +0.1 |
+| quarter | 8 | 0.1779 | 0.1810 | 0.1801 | +1.7 | +1.2 |
+| quarter | 20 | 0.1797 | 0.1823 | 0.1781 | +1.4 | -0.9 |
+| quarter | 2-20, range | | | | +0.3..+2.9 | -1.4..+1.6 |
+
+**Scaling ceiling** (pooled, 1 thread over 20), AC: B tile 2.60x and
+quarter 2.55x; N 2.68x and 2.62x (a slower single thread, not better
+scaling); E 2.61x and 2.59x. Increment 24's AC hardened runs gave 2.48x to
+2.50x.
+
+## Quality (identical in all twelve runs)
+
+| domain | worst angle | max degree | within tolerance | Delaunay violations | mesh sha256 |
+|---|---:|---:|---|---:|---|
+| tile | 0.6296° | 74 | yes | 0 of 692,056 | `11741a81adfa17b34a1ea56875ec9e791414d17625eb1c58305e7c0cf10e005c` |
+| quarter | 0.3955° | 18 | yes | 0 of 641,791 | `ccebf96a86c6c5e244e4a0281919de4e866fcfe789b66024a290ac2af33771a1` |
+
+## Method
+
+- `tools/bench.py run`, blob `2b7dca1aa1184afea53b33c357ab3b836403d2f3` (the
+  branch's), driving every tree through `--tree`, `--hardening on`,
+  `--repeats 5`. Defaults otherwise: DEM
+  `tests/fixtures/dem_archive/7908_3_10m_z33.tif` (sha256 `aabd0cbc…`),
+  tolerance 1 m, domains `tile` and `quarter`, threads 0 (CLI default) and
+  1 to 20, interleaved. Release `_core` from `bench.build()` into each
+  tree's `build-bench/`: B `0b3362e5…` (the same binary as `24-on-r2`), N
+  `91391626…`, E `1aa0f7c4…`.
+- Apple M1 Max (8 P + 2 E, 32 GiB), macOS 27.0, Python 3.14.7, numpy 2.5.3,
+  AppleClang 21.0.0. `caffeinate -i` was held during each batch. No other
+  agent or build ran. `pmset -g batt` was recorded before and after every run
+  (in each `run.json` and in the logs): AC, 100 %, charged, every time.
+- Three batches, 22:04 to 22:45 UTC (`pairs.sh`, `pairs2.sh`, `pairs3.sh`,
+  each with its `.log`): batch 1 ran B N N B, batch 2 ran N B B N, and batch 3
+  ran E B N E. The tables come from `summarize.py` (batch 1's pairs,
+  `tables.md`) and `summarize_all.py` (all runs, `tables-all.md`).
+- **The first base run is left out of the pooled figures.** It ran during
+  XProtect scans (load average 19 to 31). At 1 thread it is 4 to 10 % slower than the
+  other four base runs of the same binary, and `bench.py` judged it a
+  REGRESSION against `24-on-r2`, which is the same binary. Including it
+  narrows N/B at 1 thread. In batch 1 alone (`tables.md`) the pooled change
+  is -2.1 % to +3.0 %, which would have hidden the effect. That is why
+  batches 2 and 3 were run. During batches 2 and 3 `dasd` held about one
+  core (load around 7).
+- The experiment was sanitize-first. ASan and UBSan builds
+  (`-fsanitize=address,undefined`, Debug) of `test_refinement_scan`,
+  `_scan_frozen`, `_scan_offnode`, `_refine`, `_frozen_oracle` and
+  `_refine_points` all passed on E's tree before its Release build was timed.
+- N runs are marked dirty because of the untracked evidence directories.
+  No source differed from `c4fb2bf`. E is dirty by its diff.
+
+## Rerun on the fix 8da0f2a (HEAD 9511563), 23:11 to 23:40 UTC
+
+**REGRESSION: refine_s at 1 thread +6.3 % (tile) and +6.4 % (quarter);
++1.2 to +5.3 % at 2 to 20 threads.** The meshes are identical. The fix
+(`8da0f2a`: the `nodes` loop as one generic lambda instantiated with
+`std::true_type` / `std::false_type`) leaves refine slower than `c4fb2bf`
+was. The early-return experiment E, timed back to back with it, is not.
+
+- Same method: base `b4bcdc3` (`_core` `0b3362e5…`, the same binary as
+  above) against the fix (`_core` `66d1ff7d…`), two balanced batches in
+  opposite order, B F F B then F B B F (`pairs4.sh`, `pairs4.log`), 5 repeats,
+  `caffeinate -i`, `pmset -g batt` before and after every run: AC, 100 %,
+  charged, every time. No other agent or build ran. `dasd` and grafana held
+  about one core (load average about 11 before the batch).
+- Fix against base, pooled over 4 runs a side (`tables-fix.md`, from
+  `summarize_fix.py`):
+
+| domain | threads | base | fix | change | base runs | fix runs |
+|---|---:|---:|---:|---:|---|---|
+| tile | default | 0.1995 | 0.2030 | +1.7 % | 0.1969-0.2003 | 0.2020-0.2033 |
+| tile | 1 | 0.5189 | 0.5514 | +6.3 % | 0.5152-0.5200 | 0.5497-0.5529 |
+| tile | 20 | 0.2003 | 0.2050 | +2.3 % | 0.1986-0.2026 | 0.2038-0.2056 |
+| tile | 2-20, range | | | +1.2..+5.3 % | | |
+| quarter | default | 0.1790 | 0.1832 | +2.4 % | 0.1777-0.1795 | 0.1827-0.1846 |
+| quarter | 1 | 0.4583 | 0.4877 | +6.4 % | 0.4580-0.4590 | 0.4841-0.4913 |
+| quarter | 20 | 0.1766 | 0.1821 | +3.1 % | 0.1761-0.1797 | 0.1808-0.1841 |
+| quarter | 2-20, range | | | +1.5..+5.2 % | | |
+
+  `bench.py` flagged every one of the four fix runs (tile and quarter at 1
+  thread, and at 2 or 3 threads), and none of the four base runs.
+- **E against the fix, back to back** (one batch E F F E, `pairs5.sh`,
+  `pairs5.log`, `tables-fix-exp.md` from `summarize_fix_exp.py`): F is
+  +5.9 % (tile) and +5.6 % (quarter) slower than E at 1 thread, and +2.1 %
+  / +2.5 % at 20 threads. E is within -1.5 to +1.3 % of the rerun's base at
+  the cells listed there (+0.6 % / +1.2 % at 1 thread). That base was not
+  timed in this batch, so the comparison is approximate. E's `_core` is the
+  same binary as before (`1aa0f7c4…`), rebuilt from the same diff, and it was
+  sanitized earlier.
+- Why the generic-lambda form keeps the cost and the early return does not
+  has **not been measured**. It is thought to be inlining or code layout of
+  the two instantiations. `objdump` of the two `_core` binaries, or a
+  profile, would settle it.
+- Mesh hashes: tile `11741a81…`, quarter `ccebf96a…`. They are the same in
+  all twelve rerun runs, with the same quality and a single counter tuple
+  per (domain, thread count).
+- The rerun's scratch worktrees and meshes were deleted after the run.
+
+## Rerun on the fix 91c7cb5, 23:49 to 00:07 UTC
+
+**ACCEPTED. This supersedes the REGRESSION verdicts on `c4fb2bf` and
+`8da0f2a`.** At 1 thread refine is +1.2 % (tile) and +1.8 % (quarter); at 20
+threads +0.8 % and -0.3 %; over 2 to 20 threads -0.5 to +2.2 %. All are under
+the 5 % threshold, and `bench.py` judged all eight runs ACCEPTED. The meshes
+are identical.
+
+- `91c7cb5` is the early-return form of `exp-unswitch.diff`. Its Release
+  `_core` (`1aa0f7c4…`) is byte-identical to experiment E's, so this rerun
+  times the same binary as E above.
+- Same method: base `b4bcdc3` (`_core` `0b3362e5…`) against `91c7cb5`, two
+  balanced batches in opposite order, B N N B then N B B N (`pairs6.sh`,
+  `pairs6.log`), 5 repeats, `caffeinate -i`, `pmset -g batt` before and
+  after every run: AC, 100 %, charged, every time. No other agent or build
+  ran. The load average was about 7 before the batch. The tables are in
+  `tables-fix2.md`, from `summarize_fix2.py`.
+
+| domain | threads | base | 91c7cb5 | change | base runs | 91c7cb5 runs |
+|---|---:|---:|---:|---:|---|---|
+| tile | default | 0.1970 | 0.1989 | +1.0 % | 0.1946-0.1980 | 0.1987-0.1996 |
+| tile | 1 | 0.5158 | 0.5218 | +1.2 % | 0.4844-0.5169 | 0.5188-0.5251 |
+| tile | 20 | 0.1985 | 0.2002 | +0.8 % | 0.1934-0.2032 | 0.1981-0.2010 |
+| quarter | default | 0.1779 | 0.1801 | +1.2 % | 0.1721-0.1797 | 0.1775-0.1809 |
+| quarter | 1 | 0.4560 | 0.4643 | +1.8 % | 0.4244-0.4593 | 0.4606-0.4666 |
+| quarter | 20 | 0.1787 | 0.1782 | -0.3 % | 0.1737-0.1794 | 0.1768-0.1803 |
+| both | 2-20, range | | | -0.5..+2.2 % | | |
+
+- One base run, `23b-fix2-base-r3`, was 6 to 7 % faster than the other three
+  at 1 thread (tile 0.4844 s against 0.5143-0.5169 s). The cause was not
+  measured. It is kept in the pooled figures, and it lowers the base, so the
+  comparison is stricter with it than without. Without it, the 1-thread
+  residual is still about +1 % and the run ranges just fail to overlap
+  (tile 0.5143-0.5169 against 0.5188-0.5251). That is a residual of about
+  1 %, against 4.7 % on `c4fb2bf` and 6.3 % on `8da0f2a`.
+- **Scaling ceiling** (pooled, 1 thread over 20), AC: base tile 2.60x and
+  quarter 2.55x; `91c7cb5` 2.61x and 2.61x.
+- Mesh hashes: tile `11741a81…`, quarter `ccebf96a…`. They are the same in
+  all eight runs, with the same quality (0.6296° / 0.3955°, degree 74 / 18,
+  within tolerance, 0 Delaunay violations) and a single counter tuple per
+  (domain, thread count).
+- The base worktree and the meshes were deleted after the run.
+
+## Files and clean-up
+
+- Run directories in `bench.py`'s format: `23b-base-b4bcdc3{,-r2..-r5}/`,
+  `23b{,-r2..-r5}/` and `23b-exp-unswitch{,-r2}/`.
+- `23b-acceptance/`: the drivers, the logs, both summarizers and their
+  tables, and `exp-unswitch.diff`.
+- The quality meshes (about 690 MB of ASCII VTK), the base worktree and the
+  experiment worktree were in this session's scratchpad and have been
+  deleted. To regenerate them, `git worktree add --detach <dir> b4bcdc3` and
+  the same at `c4fb2bf` with `git apply exp-unswitch.diff`. Build each tree
+  with `bench.build(bench.make_runner(), Path(T), "on")`, then run
+  `pairs*.sh W B S [E]`. The meshes land in `S/meshes/<label>/`.
+
+## Log
+- 2026-10-03T22:04:28Z: both trees built (base _core 0b3362e5..., same as 24-on; 23b _core 91391626...). Batch started: order base, 23b, 23b, base; AC, 100 %, charged.
+- 2026-10-03T22:14:19Z: batch 1 done (all AC 100 %). Pooled refine within -2.1..+3.0 %, but same-binary drift up to 9.4 % and per-pair up to +5.7 % (tile, 1 thread, N2/B2); XProtect scans and load average 19-31 during and after the batch. Waiting for the machine to quiet, then batch 2 in the order 23b, base, base, 23b.
+- 2026-10-03T22:34:02Z: batch 2 done (N B B N, AC 100 %, load ~7 from dasd). Over all four pairs 23b is slower at every low thread count in every run: tile 1 thread base 0.512-0.523 s (first base run 0.543, disturbed) vs 23b 0.541-0.552 s, pooled +4.1 %; per pair +5.7 % and +5.5 % in two pairs. Same-binary spread among the clean runs is about 2 %, so this is outside noise though under bench.py's 5 % threshold pooled. Mesh hashes identical in all eight runs. Suspect, not yet measured: the per-node `on_frozen` test added to scan.hpp's inner loop. Next: a scratch experiment that unswitches that loop.
+- 2026-10-03T22:45Z: batch 3 (E B N E) done, AC 100 %. E within -2.4..+1.6 % of base; N +4.7 / +4.3 % at 1 thread. Verdict REGRESSION.
+- 2026-10-03T23:10:45Z: rerun on 8da0f2a (fix: nodes loop unswitched by std::true_type/false_type), HEAD 9511563; base worktree rebuilt; batches B N N B then N B B N. AC 100 %.
+- 2026-10-03T23:30:09Z: rerun done: the fix 8da0f2a is +6.3 % (tile) / +6.4 % (quarter) at 1 thread, run ranges disjoint; worse than c4fb2bf. Next: one batch E F F E (my earlier experiment against the fix) to tell whether the code shape matters.
+- 2026-10-03T23:40:22Z: E F F E batch done, AC 100 %: F +5.9 / +5.6 % over E at 1 thread. Rerun verdict REGRESSION.
+- 2026-10-03T23:49:03Z: rerun on 91c7cb5 (the early-return form) started; base rebuilt; B N N B then N B B N.
+- 2026-10-04T00:08:11Z: 91c7cb5 rerun done, AC 100 %: +1.2 / +1.8 % at 1 thread, -0.5..+2.2 % over 2-20. ACCEPTED.

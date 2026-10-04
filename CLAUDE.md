@@ -50,13 +50,9 @@ The main session, started with no agent name, is the dispatcher: it spawns
 the personas. Its rules:
 * **Step order.** Design (`@architect`), failing tests (`@tester`), code
   (`@developer`), test run, review (`@reviewer`), and `@perf`'s acceptance run
-  when refine or mesh code is touched (`docs/increments/README.md`). Failing
+  when refine or mesh code is touched (`docs/increments/README.md`).
+  A performance fix is timed by `@perf` before review. Failing
   tests go back to `@developer`.
-* **Briefs.** `@tester`: happy paths and `tester.md` §3A; §3C only when the
-  increment reads external input; on a refinement increment, name §3D's two
-  oracles. `@developer`: minimal code, under the ceiling of §2. `@reviewer`:
-  the checks of `reviewer.md` §5, not what the gates cover; ask for the
-  review explicitly, since green CI is not done.
 * **No asking between internal steps, but stop at the remote.** Do not ask
   Ola between steps (tests to code, code to review); loop until `@tester` and
   `@reviewer` are satisfied. `.claude/REQUIRED-READING.md` says which acts

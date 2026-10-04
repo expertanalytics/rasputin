@@ -339,6 +339,8 @@ target_link_libraries(prop_refinement_refine_points PRIVATE Threads::Threads)
 # lattice_position's suite stays free of the strip. Not invariant-critical (the
 # mutation suite is 15f-2's ES2, ES3 and ES5); neither starts threads, but
 # refine.hpp includes the chunk scheduler, so both link Threads.
+# test_refinement_lattice_position also pins to_lattice's constraint lookup
+# (increment 15f-4, B4).
 add_terrain_backend_test(test_refinement_constraint_points
                          unit/test_refinement_constraint_points.cpp)
 target_link_libraries(test_refinement_constraint_points PRIVATE Threads::Threads)
@@ -363,6 +365,31 @@ target_link_libraries(prop_refinement_edge_strip PRIVATE Threads::Threads)
 # hand-written powers of two; a helper with no mesh, so it has its own target.
 add_terrain_backend_test(test_refinement_coincidence_radius unit/test_refinement_coincidence_radius.cpp)
 target_link_libraries(test_refinement_coincidence_radius PRIVATE Threads::Threads)
+
+# Frozen edges and the seam pass, increment 23b
+# (docs/increments/23-basin-scale.md, "The seam protocol", K1 to K4 and "Tests
+# @tester can write red", FE1 to FE5, SP1 to SP4). Each its own target, so a
+# compile failure in one leaves the others built and run:
+#   test_mesh_frozen              LatticeMesh's frozen mask and the quality
+#                                 pass's skip (FE4);
+#   test_refinement_scan_frozen   the scan's skip of nodes on a frozen edge (FE2);
+#   test_refinement_frozen_oracle the oracles of support/frozen_oracle.hpp,
+#                                 shown able to fail against today's refine;
+#   prop_refinement_frozen        refine, refine_points and refine_strip with
+#                                 frozen edges (FE1 to FE5, K1, K2, §3D);
+#   prop_refinement_seam          refine_seam, and a piece refined with its seam
+#                                 frozen after it (SP1 to SP4, K3, K4).
+# Invariant-critical (mutation runs at green): FE2 to FE5 (test_mesh_frozen's
+# FE4 cases, test_refinement_scan_frozen, prop_refinement_frozen) and SP1, SP2
+# (prop_refinement_seam). The refine suites start threads.
+add_terrain_backend_test(test_mesh_frozen unit/test_mesh_frozen.cpp)
+add_terrain_backend_test(test_refinement_scan_frozen unit/test_refinement_scan_frozen.cpp)
+add_terrain_backend_test(test_refinement_frozen_oracle unit/test_refinement_frozen_oracle.cpp)
+target_link_libraries(test_refinement_frozen_oracle PRIVATE Threads::Threads)
+add_terrain_backend_test(prop_refinement_frozen property/prop_refinement_frozen.cpp)
+target_link_libraries(prop_refinement_frozen PRIVATE Threads::Threads)
+add_terrain_backend_test(prop_refinement_seam property/prop_refinement_seam.cpp)
+target_link_libraries(prop_refinement_seam PRIVATE Threads::Threads)
 
 # The release-hardening guard, increment 24
 # (docs/increments/24-release-hardening.md, sections 5 and 12, T1 to T3). The
