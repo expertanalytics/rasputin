@@ -47,9 +47,9 @@ import sys
 import tempfile
 import time
 from collections.abc import Callable, Iterator, Mapping
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Any
 
 import numpy as np
 import numpy.typing as npt
@@ -70,9 +70,9 @@ from tin_engine._core import (
     sample,
     triangulate,
 )
-from tin_engine.catchment import CatchmentRequest, LakeError, delineate
+from tin_engine.catchment import CatchmentRequest, GaugeResult, LakeError, delineate
 from tin_engine.chains import start_chains
-from tin_engine.crs import crs_label, parse_crs, transform_description
+from tin_engine.crs import crs_label, parse_crs, reprojector, transform_description
 from tin_engine.dem_input import (
     CachedSource,
     DemInput,
@@ -94,10 +94,12 @@ from tin_engine.feature_input import (
     read_lakes,
 )
 from tin_engine.features import DEFAULT_VOCABULARY
+from tin_engine.gauge import Gauge, Placement, place
 from tin_engine.grid_domain import default_stride, refine_start_stride, subsample
 from tin_engine.io.cog import NotCached
 from tin_engine.io.models import DemTile, RasterMeta
 from tin_engine.io.ply import write_ply
+from tin_engine.io.rivers import read_segments
 from tin_engine.io.vtk_legacy import write_vtk
 from tin_engine.landcover import label_triangles
 from tin_engine.mosaic import Bounds, Seam
@@ -1691,6 +1693,63 @@ def _off_node(xy: npt.NDArray[np.float64], meta: RasterMeta) -> int:
     return int(np.count_nonzero(~node))
 
 
+def _placed(
+    rivers: Path,
+    repository: Any,
+    seed: tuple[float, float],
+    seed_crs: str,
+    map_radius: float,
+    reach_up: float,
+) -> tuple[tuple[Placement, str | None], tuple[float, float], str]:
+    """The gauge placed on the river file's nearest line (no watercourse
+    number), and the seed moved into the file's CRS, which must be the DEM's."""
+    try:
+        segments, crs, dropped = read_segments(rivers)
+    except (OSError, ValueError) as exc:
+        raise typer.BadParameter(str(exc), param_hint="--rivers") from exc
+    copies = plural(dropped, "exact copy", "exact copies")
+    typer.echo(
+        f"rivers: {plural(len(segments) + dropped, 'segment', 'segments')} read, "
+        f"{copies} dropped (same river, same vertices to 1 cm)",
+        err=True,
+    )
+    dem_crs = repository.footprints()[0].meta.crs
+    if parse_crs(crs) != parse_crs(dem_crs):
+        raise typer.BadParameter(
+            f"the river file's CRS, {crs}, is not the DEM's, {dem_crs}", param_hint="--rivers"
+        )
+    ((x, y),) = reprojector(seed_crs, crs)([seed])
+    placement = place(Gauge(x=x, y=y), segments, map_radius=map_radius, reach_up=reach_up)
+    if placement is None:
+        raise typer.BadParameter(
+            f"no mapped river line within {map_radius:g} m of the station", param_hint="--rivers"
+        )
+    name = next(s.name for s in segments if s.objectid == placement.objectid)
+    return (placement, name), (x, y), crs
+
+
+def _placement_report(
+    placed: tuple[Placement, str | None], gauge: GaugeResult
+) -> dict[str, object]:
+    """Say where the gauge went, and return the placement and sensitivity
+    properties for the catchment file."""
+    (p, name), s = placed, gauge.sensitivity
+    causes = [*s.causes, *([] if gauge.direction_ok else ["direction"])]
+    verdict = f"uncertain ({', '.join(causes)})" if causes else "well defined"
+    typer.echo(
+        f"placed on the river line {p.distance_m:.0f} m from the station "
+        f"({'' if name is None else f'river {name}, '}line {p.objectid}), moved "
+        f"{gauge.node_offset_m:.0f} m onto the DEM's valley floor; {s.a0:.4g} km2 drain "
+        f"through it, and the area changes by {100 * s.swing:.1f} % within "
+        f"{p.reach.uncertainty:.0f} m up and down the river: {verdict}",
+        err=True,
+    )
+    keep = {k: v for k, v in p.model_dump().items() if k not in ("reach", "position")}
+    skip = ("node", "chain", "sensitivity")
+    burn = {k: getattr(gauge, k) for k in GaugeResult.__slots__ if k not in skip}
+    return {**keep, "uncertainty_m": p.reach.uncertainty, **burn, **asdict(s), "causes": causes}
+
+
 #: What the suffix of ``catchment --out`` may be: GeoJSON, which ``--domain`` reads.
 CATCHMENT_SUFFIXES = (".geojson", ".json")
 
@@ -1736,14 +1795,48 @@ def catchment(
         Path | None,
         typer.Option("--out-parent", help="Refuse any output path resolving outside this."),
     ] = None,
+    rivers: Annotated[
+        Path | None,
+        typer.Option(
+            "--rivers",
+            help="River lines (GeoJSON, in the DEM's CRS): the seed is a gauge, placed on the "
+            "nearest line and on the DEM's flow path along it (increment 29).",
+        ),
+    ] = None,
+    map_radius: Annotated[
+        float | None,
+        typer.Option(
+            "--map-radius",
+            metavar="METRES",
+            help="How far a river line may be from the gauge. Default 500.",
+        ),
+    ] = None,
+    reach_up: Annotated[
+        float | None,
+        typer.Option(
+            "--reach-up",
+            metavar="METRES",
+            help="How much river above the gauge is burnt into the DEM. Default 1000.",
+        ),
+    ] = None,
 ) -> None:
     """Write the catchment of a lake, from the DEM, as a GeoJSON polygon in the
     DEM's CRS that ``mesh --domain`` reads (increment 22). The fine outline is
     drawn between DEM nodes, holes filled, then reduced to ``--outline-tolerance``
     keeping its area, with the seed inside. A catchment cut by the data's edge
-    or by NoData is refused, and nothing is written."""
+    or by NoData is refused, and nothing is written. With ``--rivers`` the
+    seed is a gauge on a mapped river (increment 29)."""
     if lakes is None and lakes_layer is not None:
         raise typer.BadParameter("applies only with --lakes", param_hint="--lakes-layer")
+    for name, value in (("--map-radius", map_radius), ("--reach-up", reach_up)):
+        if value is not None and rivers is None:
+            raise typer.BadParameter("applies only with --rivers", param_hint=name)
+        if value is not None and not (math.isfinite(value) and value > 0.0):
+            raise typer.BadParameter("must be a finite number above 0", param_hint=name)
+    if rivers is not None and lakes is not None:
+        raise typer.BadParameter(
+            "cannot be combined with --lakes: a lake is already the seed", param_hint="--rivers"
+        )
     if outline_tolerance is not None and not (
         math.isfinite(outline_tolerance) and outline_tolerance >= 0.0
     ):
@@ -1757,9 +1850,16 @@ def catchment(
         raise typer.BadParameter(str(exc), param_hint="--lakes") from exc
     try:
         repository, _ = repository_for(tuple(dem))
+        placement: tuple[Placement, str | None] | None = None
+        seed_at, seed_crs_at = seed, seed_crs
+        if rivers is not None:
+            placement, seed_at, seed_crs_at = _placed(
+                rivers, repository, seed, seed_crs, map_radius or 500.0, reach_up or 1000.0
+            )
         request = CatchmentRequest(
-            seed=seed,
-            seed_crs=seed_crs,
+            seed=seed_at,
+            seed_crs=seed_crs_at,
+            reach=None if placement is None else placement[0].reach,
             lakes=None if found is None else found[0],
             lakes_crs=None if found is None else found[1],
             outline_tolerance=outline_tolerance,
@@ -1780,7 +1880,10 @@ def catchment(
             err=True,
         )
     cell = result.meta.delta_x * result.meta.delta_y
-    if result.lake_area is None:
+    extra: dict[str, object] = {}
+    if placement is not None and result.gauge is not None:
+        extra = _placement_report(placement, result.gauge)
+    elif result.lake_area is None:
         typer.echo(
             f"start: the outlet node at {result.seed} (an outlet must lie on the flow line; "
             "it is not moved there)",
@@ -1824,6 +1927,7 @@ def catchment(
         "reduced_area_m2": reduced.area,
         "outline_tolerance_m": result.tolerance,
         "windows": [[w.rows, w.cols] for w in result.windows],
+        **extra,
     }
     doc = {
         "type": "FeatureCollection",

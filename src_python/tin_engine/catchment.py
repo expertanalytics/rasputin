@@ -8,6 +8,13 @@ inside it or is cut by the data's edge or NoData, and traces the outline of
 the in-nodes, holes filled and other pieces dropped. The fine outline is then
 reduced to the request's tolerance by `_core.reduce_ring`, keeping its area.
 
+With a river reach (increment 29, "The window loop and the catchment"), the
+pour point is the gauge's placed node on the burnt reach (`burn.py`): stage A
+floods from it in each window, burnt afresh, and decides every refusal;
+stage B grows on until the catchment of `D`, the first chain node at or past
+`U`, is clear, and the sensitivity (`sensitivity.py`) is read from one
+`_core.accumulate` of the final window.
+
 No paths: the DEM comes through a `DemRepository`, and the lakes arrive as
 shapely geometries the CLI read. Blocking (the flood releases the GIL); an
 async caller runs :func:`delineate` in `asyncio.to_thread`.
@@ -17,8 +24,9 @@ from __future__ import annotations
 
 import math
 import time
+from collections.abc import Callable
 from dataclasses import dataclass, replace
-from typing import Any, Self
+from typing import Any, Literal, Self
 
 import numpy as np
 import numpy.typing as npt
@@ -26,8 +34,10 @@ import shapely
 from pydantic import BaseModel, ConfigDict, model_validator
 from shapely.geometry import Point, Polygon
 
-from tin_engine._core import ReduceStatus, UpstreamOutcome, reduce_ring, upstream
-from tin_engine.crs import crs_label, reprojector
+from tin_engine._core import ReduceStatus, UpstreamOutcome, accumulate, reduce_ring, upstream
+from tin_engine.burn import burn_reach
+from tin_engine.crs import crs_label, parse_crs, reprojector
+from tin_engine.gauge import Reach
 from tin_engine.io.models import RasterMeta
 from tin_engine.io.repository import DemRepository
 from tin_engine.mosaic import (
@@ -40,6 +50,7 @@ from tin_engine.mosaic import (
 )
 from tin_engine.outline import trace
 from tin_engine.raster import to_core
+from tin_engine.sensitivity import Sensitivity, assess
 
 #: Metres round the seed's bounds, and round the catchment's when the window
 #: grows; doubled at each growth step.
@@ -70,11 +81,18 @@ class CatchmentRequest(BaseModel):
     #: Metres the reduced outline may stray from the fine one; None is twice
     #: the DEM's cell, 0 keeps the fine outline less its collinear vertices.
     outline_tolerance: float | None = None
+    #: The gauge's mapped reach (increment 29), in `seed_crs`, which must then
+    #: be the DEM's: the pour point is the burnt chain's placed node.
+    reach: Reach | None = None
 
     @model_validator(mode="after")
     def _lakes_have_a_crs(self) -> Self:
         if self.lakes is not None and self.lakes_crs is None:
             raise ValueError("lakes need their CRS")
+        if self.lakes is not None and self.reach is not None:
+            raise ValueError(
+                "a river reach and lakes cannot be combined: a lake is already the seed"
+            )
         t = self.outline_tolerance
         if t is not None and not (math.isfinite(t) and t >= 0.0):
             raise ValueError(f"the outline tolerance must be finite and at least 0, got {t}")
@@ -91,6 +109,25 @@ class Window:
     cols: int
     seconds: float
     grown: tuple[str, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class GaugeResult:
+    """The gauge on the river: the placed node and the burnt chain in the
+    DEM's CRS, what the burn did, and the sensitivity at the placed node
+    ("The window loop and the catchment")."""
+
+    node: tuple[float, float]
+    chain: tuple[tuple[float, float], ...]
+    node_offset_m: float
+    chain_nodes: int
+    lowered_nodes: int
+    lowered_max_m: float
+    direction_ok: bool
+    end_extended_m: float
+    end_closed: bool
+    downstream_checked: Literal["whole", "partly", "none"]
+    sensitivity: Sensitivity
 
 
 @dataclass(frozen=True, slots=True)
@@ -122,6 +159,11 @@ class Catchment:
     reduced: Polygon
     tolerance: float
     reduce_seconds: float
+    gauge: GaugeResult | None = None
+
+
+#: A flood of one assembled window: its outcome, and what the caller keeps.
+Flood = Callable[[Any], tuple[UpstreamOutcome, Any]]
 
 
 def delineate(request: CatchmentRequest, repository: DemRepository) -> Catchment:
@@ -136,27 +178,52 @@ def delineate(request: CatchmentRequest, repository: DemRepository) -> Catchment
     ((x, y),) = reprojector(request.seed_crs, dem_crs)([request.seed])
     if not (math.isfinite(x) and math.isfinite(y)):
         raise CatchmentError(f"the seed {request.seed} has no image in {dem_crs}")
+    if request.reach is not None:
+        if parse_crs(request.seed_crs) != parse_crs(dem_crs):
+            raise CatchmentError(f"the river reach must be in the DEM's CRS, {dem_crs}")
+        return _gauged(request, repository, footprints, dem_crs)
     lake = _lake(request, dem_crs)
     x0, y0, x1, y1 = lake.bounds if lake is not None else (x, y, x, y)
     margin = float(WINDOW_MARGIN_M)
-    plan = _plan(
-        footprints,
-        Bounds(x_min=x0 - margin, y_min=y0 - margin, x_max=x1 + margin, y_max=y1 + margin),
-    )
+    point = (float(x), float(y))
+
+    def flood(tile: Any) -> tuple[UpstreamOutcome, Any]:
+        seed = _seed_mask(tile.meta, lake, point)
+        return upstream(to_core(tile), seed), seed
+
+    bounds = Bounds(x_min=x0 - margin, y_min=y0 - margin, x_max=x1 + margin, y_max=y1 + margin)
+    m, out, seed, windows = _grow(footprints, repository, bounds, flood, False)
+    fine = _outline(dem_crs, lake, point, out, m, seed, tuple(windows))
+    return _reduced(fine, _tolerance(request, m))
+
+
+def _tolerance(request: CatchmentRequest, m: RasterMeta) -> float:
+    t = request.outline_tolerance
+    return 2.0 * max(m.delta_x, m.delta_y) if t is None else t
+
+
+def _grow(
+    footprints: Any, repository: DemRepository, bounds: Bounds, flood: Flood, burnt: bool
+) -> tuple[RasterMeta, UpstreamOutcome, Any, list[Window]]:
+    """22's window loop: flood, grow until the catchment is clear of the
+    window's edge, or refuse (NoData, the data's edge, the memory cap, whose
+    per-node figure grows by a burnt copy and `accumulate`'s 10 bytes when
+    `burnt`)."""
+    plan, margin = _plan(footprints, bounds), float(WINDOW_MARGIN_M)
     windows: list[Window] = []
     while True:
         m = plan.meta
         itemsize = np.result_type(*(t.dtype for t in plan.tiles)).itemsize
-        need, cap = m.rows * m.cols * (itemsize + 2), physical_memory() // 2
+        need = m.rows * m.cols * (itemsize * (1 + burnt) + 2 + 10 * burnt)
+        cap = physical_memory() // 2
         if need > cap:
             raise CatchmentError(
                 f"the window is {m.rows} x {m.cols} nodes, {need} bytes to flood, over the cap "
                 f"of half the physical memory ({cap} bytes)"
             )
         tile = assemble(plan, repository.load).tile
-        seed = _seed_mask(m, lake, (float(x), float(y)))
         t0 = time.perf_counter()
-        out = upstream(to_core(tile), seed)
+        out, kept = flood(tile)
         seconds = time.perf_counter() - t0
         if out.touches_nodata:
             raise CatchmentError("the catchment reaches NoData in the DEM: it is truncated")
@@ -173,9 +240,79 @@ def delineate(request: CatchmentRequest, repository: DemRepository) -> Catchment
     if out.touches_edge:
         sides = _edge_sides(m, out)
         raise CatchmentError(f"the catchment is cut by the data's {' and '.join(sides)} edge")
-    fine = _outline(dem_crs, lake, (float(x), float(y)), out, m, seed, tuple(windows))
-    tolerance = request.outline_tolerance
-    return _reduced(fine, 2.0 * max(m.delta_x, m.delta_y) if tolerance is None else tolerance)
+    return m, out, kept, windows
+
+
+def _burnt_flood(reach: Reach, pick: Callable[[Any], int]) -> Flood:
+    """Burn the reach into the window, and flood from the chain node `pick`
+    chooses; keeps the burnt window, the path and the placed node's seed."""
+
+    def flood(tile: Any) -> tuple[UpstreamOutcome, Any]:
+        burnt, path = burn_reach(tile, reach)
+        seed = np.zeros(burnt.array.shape, dtype=np.uint8)
+        seed[tuple(path.chain[path.placed])] = 1
+        start = np.zeros_like(seed)
+        start[tuple(path.chain[pick(path)])] = 1
+        return upstream(to_core(burnt), start), (burnt, path, seed)
+
+    return flood
+
+
+def _gauged(
+    request: CatchmentRequest, repository: DemRepository, footprints: Any, dem_crs: str
+) -> Catchment:
+    """Stage A floods from the placed node and decides the catchment and every
+    refusal; stage B grows on from it until `D` (the first chain node at or
+    past `U`) has a catchment clear of the edge, and on its refusal the
+    sensitivity is read in stage A's window."""
+    reach = request.reach
+    assert reach is not None
+    line = np.asarray(reach.line, dtype=np.float64)
+    pad = reach.corridor + WINDOW_MARGIN_M
+    (x0, y0), (x1, y1) = line.min(axis=0) - pad, line.max(axis=0) + pad
+    bounds = Bounds(x_min=x0, y_min=y0, x_max=x1, y_max=y1)
+    u = reach.uncertainty
+
+    def at_u(path: Any) -> int:
+        past = np.nonzero(path.arc >= u - 1e-6)[0]
+        if not past.size:
+            raise CatchmentError("the burnt chain ends before the uncertainty")
+        return int(past[0])
+
+    m, out, (burnt, path, seed), windows = _grow(
+        footprints, repository, bounds, _burnt_flood(reach, lambda p: int(p.placed)), True
+    )
+    try:
+        b = _grow(footprints, repository, Bounds(**_bounds_of(m)), _burnt_flood(reach, at_u), True)
+    except CatchmentError:
+        pass  # stage B never refuses a catchment: read what stage A's window holds
+    else:
+        # Stage B starts in stage A's last window: one entry per window.
+        same = b[3][0].bounds == windows[-1].bounds
+        m, (burnt, path, seed), windows = b[0], b[2], [*windows, *b[3][same:]]
+        out = upstream(to_core(burnt), seed)
+    acc = accumulate(to_core(burnt))
+    down = float(np.hypot(*np.diff(line, axis=0).T).sum()) - reach.at
+    s = assess(acc.count, acc.reach, acc.flow_to, path, m.delta_x * m.delta_y / 1e6, u, down)
+    checked: Literal["whole", "partly", "none"] = "whole"
+    if "downstream_unread" in s.causes:
+        checked = "partly" if s.checked_down_m > 0 else "none"
+    xy = [(m.x_min + c * m.delta_x, m.y_max - r * m.delta_y) for r, c in path.chain.tolist()]
+    gauge = GaugeResult(
+        node=xy[path.placed],
+        chain=tuple(xy),
+        node_offset_m=path.node_offset_m,
+        chain_nodes=len(xy),
+        lowered_nodes=path.lowered_nodes,
+        lowered_max_m=path.lowered_max_m,
+        direction_ok=path.direction_ok,
+        end_extended_m=path.end_extended_m,
+        end_closed=path.end_closed,
+        downstream_checked=checked,
+        sensitivity=s,
+    )
+    fine = _outline(dem_crs, None, xy[path.placed], out, m, seed, tuple(windows))
+    return replace(_reduced(fine, _tolerance(request, m)), gauge=gauge)
 
 
 def _lake(request: CatchmentRequest, dem_crs: str) -> Polygon | None:
