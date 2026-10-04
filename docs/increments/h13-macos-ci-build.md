@@ -1,6 +1,7 @@
 # Harness h13: the macOS C++ job in CI
 
-Status: design (@architect), ruled by Ola (§8). Mechanics, not a design question:
+Status: edit done (a77879f), review round 1 recorded, awaiting round 2 then
+the PR's CI check (§6). Ruled by Ola (§8). Mechanics, not a design question:
 one workflow edit (`@developer`), no production code, no test suite (§6 says
 how the change is checked instead).
 
@@ -19,13 +20,17 @@ one argument on the build lines, and is correct whichever of those land.
 
 Tooling; no novelty claimed.
 
-*Literature.* The CMake manual, `cmake --build`: "`--parallel [<jobs>]`, `-j
-[<jobs>]`: The maximum number of concurrent processes to use when building. If
-`<jobs>` is omitted the native build tool's default number is used." For the
-Makefile generator, the native tool's default under a bare `-j` is GNU make's:
-"If the `-j` option is given without an argument, make will not limit the
-number of jobs that can run simultaneously" (GNU make manual, *Parallel
-Execution*). GitHub's runner reference (docs.github.com, "GitHub-hosted
+*Literature.* The CMake manual, `cmake --build` (cmake.org, `cmake(1)`, read
+2026-10-04): "`-j [<jobs>]`, `--parallel [<jobs>]`: The maximum number of
+concurrent processes to use when building. If `<jobs>` is omitted the native
+build tool's default number is used. The `CMAKE_BUILD_PARALLEL_LEVEL`
+environment variable, if set, specifies a default parallel level when this
+option is not given." (§2c shows the second sentence's consequence: a bare
+`--parallel` is "given", so the variable is ignored.) For the Makefile
+generator, the native tool's default under a bare `-j` is GNU make's: "If
+there is nothing looking like an integer after the '-j' option, there is no
+limit on the number of job slots." (GNU make manual, *Parallel Execution*,
+gnu.org, read 2026-10-04). The `make(1)` man page says the same. GitHub's runner reference (docs.github.com, "GitHub-hosted
 runners", read 2026-10-04), public repositories: ubuntu-latest has 4 CPUs and
 16 GB of memory; macos-latest (arm64) has 3 CPUs (M1) and 7 GB;
 macos-15-intel has 4 CPUs and 14 GB. The repository is public
@@ -157,6 +162,10 @@ run: cmake --build build --parallel "$(getconf _NPROCESSORS_ONLN)"
   Linux and macOS (locally it prints 10). It is shell, so it goes on the `run:`
   line; a workflow-level `env: CMAKE_BUILD_PARALLEL_LEVEL` cannot evaluate it,
   and §2c shows a bare `--parallel` ignores that variable anyway.
+- If `getconf` ever printed nothing, the line would become a bare `--parallel`
+  and fall back, silently, to an unlimited `make -j`. Nothing in the workflow
+  fails on that; only §6 item 2 on this PR's run catches it, and a later
+  runner image change would go unnoticed until the macOS job slowed again.
 - A comment above the first build line says why the number is there (an
   unlimited `make -j` pages the 7 GB macOS runner), so nobody "simplifies" it
   back.
@@ -189,24 +198,28 @@ that no two tests share a temporary file, so it is not part of this increment
 
 ## 6. How the change is checked
 
-No unit test can see a workflow's job count, so there is no red step. The check
-is the pull request's own CI run, and it can fail:
+No unit test can see a workflow's job count, so there is no red step (as in
+h10; the effect is observable only in CI). The check is the pull request's own
+CI run, and it can fail. That run must show:
 
-1. The macOS `Build` step finishes in **under 6 minutes** (measured: 19.7-25.1
-   today). If it does not, the paging diagnosis of §2d is wrong, and the
-   increment stops and goes back to `@architect` rather than trying option B.
-2. In that job's log, the 108th `Building CXX object` line comes more than
-   20 s after the first (today: 3.6 s on macOS). Make prints the line when a
-   compile starts, and with three at a time the first 108 units (about 60 s of
-   compile time locally) cannot all start in under 20 s, so this shows the
-   limit took effect.
-3. The ubuntu `C++ core`, asan and tsan Build steps are no slower than the
-   range in §2a's table (ubuntu 1.9-3.8, asan 2.7-3.8, tsan 1.5-2.2 minutes).
-4. All tests still pass on every leg (the ctest summary lines unchanged in
-   count).
+1. The macOS `Build` step under **6.0 minutes** (measured: 19.7-25.1 today).
+   If it is not, the paging diagnosis of §2d is wrong, and the increment stops
+   and goes back to `@architect` rather than trying option B.
+2. In that job's log, the 108th `Building CXX object` line more than **10 s**
+   after the 1st (today: 3.6 s on macOS, 4.3 s on ubuntu). Make prints the
+   line when a compile starts. With three at a time the first 108 units, about
+   60 s of compile time locally and more on three slower cores, cannot all
+   start within 10 s, so this shows the limit took effect, and it is the only
+   check that would catch an empty `getconf` result (§4).
+3. The ubuntu legs' Build steps at most the top of §2a's range: `C++ core`
+   (ubuntu) at most 3.8 minutes, asan+ubsan at most 3.8, tsan at most 2.2.
+4. Every leg green; `ctest` reports 100 % of 994 tests passed on both C++ core
+   legs; the tsan loop exits 0.
 
-`@reviewer` records the measured numbers from items 1 and 3 in a `## Review`
-section of this file.
+`@reviewer` is read-only. Its handback after the PR's CI run carries the
+measured numbers for items 1 to 4, and the spawner records them, verbatim, as
+a review round in `## Review` below. The numbers exist only after the push, so
+this is a round after the PR's CI run, not before it.
 
 ## 7. Questions for Ola
 
@@ -231,3 +244,9 @@ file.
 2. **Ruling: yes**, the asan+ubsan tests run in parallel, as its own
    increment after this one; it is not part of h13.
 
+## Review
+
+**h13, review, round 1, 2026-10-04.** Range `d926644..a77879f` (the design, Ola's rulings, the workflow edit). Verdict: CHANGES REQUESTED, on prose only; the workflow edit `a77879f` stands unchanged. LOC: 0 production lines; workflow 3 changed and 2 comment lines (estimate about 5). Checked by running: a bare `--parallel` gives make `-j` with no limit and ignores `CMAKE_BUILD_PARALLEL_LEVEL`, the new form passes `-j10` and the tsan `--target` list still builds (CMake 4.4.3, GNU make 3.81 probe); all seven §2a timings match `gh run view --json jobs` to 0.1 min; run 37229043133 logs: 178 compiles and 73 links on both legs, the 1st and 108th compile 3.7 s apart on macOS and 4.3 s on ubuntu, the 109th at 19:45:35 on macOS, `libterrain_predicates.a` links at 22.0 s (ubuntu) against 6 min 22 s (macOS), 6 min 41 s in run 37226227284; runner specs as cited (ubuntu 4 CPU / 16 GB, macos-latest 3 CPU M1 / 7 GB), repository public; memory spot-checked: `prop_refinement_edge_strip.cpp` 432 MB, a Catch2 unit 140 MB, `detria_exact.cpp` 143 MB in 0.63 s; the edit matches §4 and ruling 1, the Test steps are byte-identical to master; merges cleanly on h11 (`79a442a`); `check_citations.py`'s at-risk `h10-merge-queue.md:183` read as a quoted record. No red step: acceptable (h10 precedent; the effect is observable only in CI). Blocking: (1) §1's quoted sentence "If the -j option is given without an argument, make will not limit…" is from the `make(1)` man page, not the GNU make manual's *Parallel Execution* page, which says "If there is nothing looking like an integer after the '-j' option, there is no limit on the number of job slots."; (2) §6 says `@reviewer` records numbers in `## Review`, but `@reviewer` cannot write. What the PR's CI run must show: macOS Build step under 6.0 min (else back to `@architect`); 108th compile more than N s after the 1st; ubuntu legs' Build at most 3.8 min, asan+ubsan at most 3.8, tsan at most 2.2; every leg green, ctest 100 % of 994 on both C++ core legs, tsan loop exit 0.
+
+(Recorded as the spawner relayed it, with code formatting added to names and
+"vs" written out; N was left open by the review and is set to 10 s in §6.)
