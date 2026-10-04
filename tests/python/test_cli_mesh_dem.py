@@ -178,10 +178,12 @@ class TestNoData:
         assert_z_is_the_node_value(tile, vtk.points)
         assert (vtk.points[:, 2] != float(SENTINEL)).all()
         assert file_field(vtk, "nodata_vertices_removed") == "6"
-        # R3, worded by increment 25's summary line (D7).
-        # The no-tolerance wording until the sampler fix (increment 25, "NoData
-        # on the no-tolerance path"): a vertex next to a NoData cell goes too.
-        assert re.search(r"\b6 vertices on or next to NoData cells\b", output), output
+        # R3, worded by increment 25's summary line (D7), one wording on both
+        # paths since increment 27. The count is 6 under either sampler rule:
+        # the NoData row is row 0, and a node's bilinear cell reaches down and
+        # right, never up, so no valid node had a NoData corner.
+        assert re.search(r"\b6 vertices on NoData cells\b", output), output
+        assert "next to" not in output, output
         assert "without data dropped" not in output
 
     def test_an_all_nodata_tile_writes_nothing(self, tmp_path: Path) -> None:

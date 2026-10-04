@@ -162,3 +162,45 @@ def test_the_cli_default_changes_the_domain_mesh(
     """The converse, so the test above cannot pass with a pass that never runs."""
     out = _cli_outcome("quarter_circle", tmp_path, monkeypatch)
     assert digest(out) != GOLDEN["quarter_circle"]
+
+
+# ---------------------------------------------------------------- increment 27
+
+#: S7 of `docs/increments/27-node-sampling.md`: ``rasputin mesh --dem
+#: KARTVERKET --tolerance 1`` with default flags (start quality 25, constraint
+#: feet on), through ``_cli_outcome``'s spy. RECORDED FROM THE PRE-CHANGE
+#: PRODUCTION CODE in increment 27's red commit (parent 7eb0b79), before
+#: ``RasterGeometry::node_at`` existed. 27 changes ``raster::bilinear`` only at
+#: a point that is a node by refine's own test, and refine never calls
+#: ``bilinear`` there ("Which paths change"), so no commit may update these.
+GOLDEN_DEFAULT_FLAGS = {
+    "tile": "a8e8720d37147f3e18d1702362c94418aec87a16cbbd2491d83315f94627060f",
+    "quarter_circle": "e2d575076603dbb48c78fe036397a35a4286fef35e7c606ecd4df5ae90b5fd32",
+}
+
+#: S8: SHA-256 of the whole ``.vtk`` that ``rasputin mesh --dem KARTVERKET``
+#: writes at its default stride. The file carries no rasputin version (only
+#: the format's own ``# vtk DataFile Version 4.2`` header) and ``dem_source``
+#: is the file's basename, so the whole file is hashed, FieldData included:
+#: ``nodata_vertices_removed`` (397) is pinned with the mesh. Recorded from the
+#: pre-change code, like S7. Every stride vertex is a node, and on this tile
+#: every valid node already samples to its own value bit for bit and no valid
+#: node is refused ("What changes in the stride output, exactly"), so the file
+#: must not change.
+GOLDEN_STRIDE_VTK = "2e0bb5dabc97970babeb0fc4e1f8a035c6aa1e6e6ec20ea316da67ef3b01e633"
+
+
+@needs_codecs
+@pytest.mark.parametrize("case", sorted(GOLDEN_DEFAULT_FLAGS))
+def test_the_cli_default_flags_digest_is_unchanged_by_node_sampling(
+    case: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    assert digest(_cli_outcome(case, tmp_path, monkeypatch)) == GOLDEN_DEFAULT_FLAGS[case]
+
+
+@needs_codecs
+def test_the_kartverket_stride_vtk_is_unchanged_by_node_sampling(tmp_path: Path) -> None:
+    out = tmp_path / "x.vtk"
+    code, output = invoke("--dem", str(KARTVERKET), "--out", str(out))
+    assert code == 0, output
+    assert hashlib.sha256(out.read_bytes()).hexdigest() == GOLDEN_STRIDE_VTK
