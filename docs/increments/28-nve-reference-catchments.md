@@ -1,9 +1,11 @@
 # Increment 28 — NVE reference catchments: our catchments against NVE's, station by station
 
-Status: **design revised after review round 1 and Ola's rulings** (`@architect`,
-2026-10-04), branch `worktree-nve-catchments` off master `d20126b`. Questions
-1, 2, 3, 5 and 6 are ruled (below). Ola reopened the gauge placement, and it
-is redesigned here. Every choice still open is marked "Default (@architect,
+Status: **revised after design review round 1, awaiting round 2**
+(`@architect`, 2026-10-04), branch `worktree-nve-catchments` off master
+`d20126b`. Ola's rulings of 2026-10-04 are in the section below. The gauge
+placement is redesigned to his direction (the mapped river, then the DEM's
+flow path along it, never an area objective), with a per-station sensitivity
+check. Five PRs. Every choice still open is marked "Default (@architect,
 2026-10-04)" and repeated, with its alternative, under "Questions for Ola".
 
 **Closes.** Catchments for real Norwegian gauging stations, computed from the
@@ -46,7 +48,8 @@ same day as a new increment.
 
 ## Ola's rulings (2026-10-04)
 
-- **Questions 1, 2, 3, 5 and 6**: the defaults stand ("defaults on all six",
+- **Questions 1, 2, 3, 5 and 6** (numbered as in the first version of this
+  file; "Questions for Ola" below is numbered afresh): the defaults stand ("defaults on all six",
   Ola, for these five). Question 1's text is corrected below (364 + 136, not
   "500 unregulated"); the default of the 140 is unchanged. Question 5 gains
   the class `uncertain`, which Ola's direction on the gauge asks for.
@@ -226,7 +229,7 @@ channel, and these numbers are re-measured by the acceptance run).
   `156.15.0`, `196.11.0`, `206.3.0`, `208.2.0`, `208.3.0`, `209.4.0`,
   `212.49.0`, `213.2.0`, `223.2.0` (tile footprints intersected with NVE's
   polygons, newest version each). They are **expected refusals** in this
-  increment (Default, @architect, 2026-10-04, pending Ola: Question 8), and
+  increment (Default, @architect, 2026-10-04, pending Ola: Question 2), and
   a later increment puts the eight tiles on the common lattice. Two more
   (`156.24.0`, `213.4.0`) lie on shifted tiles only, one lattice, and run.
   A window can reach a shifted tile where the catchment does not; such a
@@ -317,8 +320,8 @@ named were read, no paper in full.
   within a radius (the "snap pour point" of common GIS tools), and chose
   that rule. Both are point-to-raster rules: neither looks at where the
   river is mapped. **Used here only as the fallback** for a station with no
-  mapped river line within the map radius (none of the 140 at the default
-  radius; any station list a user brings without a river file). The
+  mapped river line within the map radius (one of the 140, Femundsenden, at the
+  default 500 m map radius; any station list a user brings without a river file). The
   acceptance also runs it as a **comparison**, on the stations that end up
   `miss` or `uncertain`, so that its effect is measured.
 - **Lindsay, Rothwell and Davies 2008**, "Mapping outlet points used for
@@ -384,7 +387,7 @@ named were read, no paper in full.
   burning, not AGREE over the network. **The departure drops** the effect a
   network-wide burn has on divides (where the DEM puts a divide the mapped
   network crosses). Burning the whole network is a later option (Question
-  9).
+  3).
 - **Seppä, Gonzales Inca, Uusikivi and Alho 2026**, "CAMELS-FI:
   hydrometeorological time series and landscape properties for 320
   catchments in Finland", *ESSD* 18(7):4745-4769,
@@ -571,8 +574,8 @@ and the line's vertices in the file's CRS.
 4. **The reach** is the chain of segments with `P`'s `elvid`, joined where an
    end of one lies within 1 m of the start of the next (a segment is a link
    of one river, digitised downstream): from `reach_up` metres upstream of
-   `P` (default 1000 m: the median segment is 751 m long, so one segment is
-   often not enough, and a bridge embankment a few hundred metres upstream
+   `P` (default 1000 m: the nearest line's median length is 751 m, so one
+   segment is often not enough, and a bridge embankment a few hundred metres upstream
    dams the DEM river as much as one at the gauge) to `U + 100 m` downstream
    of it. The chain stops where no segment of that `elvid` continues it; the
    metres actually available are reported (`reach_up_m`, `reach_down_m`). The
@@ -732,15 +735,15 @@ choice of node, and never uses NVE's polygon or area.
    station that is not well posed is **`uncertain`**: reported with its
    agreement numbers, not scored `match` or `miss`, and counted apart.
    Default (@architect, 2026-10-04): `SWING_MAX = 0.05`, `U` as in "Placing
-   the gauge" (Question 3).
+   the gauge" (Question 1).
 
 A confluence 40 m below the gauge with a tributary of 20 % of the placed
-area gives a swing of at least 0.2 and a step at about +40 m. A flat lake
+area gives a swing of at least 0.2 and a step at about +40 m (arithmetic, not a measurement). A flat lake
 floor gives a step wherever the flat's nodes join the chain. A river in a
-well-defined valley gains area smoothly: over 2 × 30 m, a lateral gain of a
-fraction of a per cent of a catchment of 100 km². Small catchments are more
-often uncertain (a 0.44 km² catchment gains several per cent over 60 m), and
-that is true of them, not an artefact: the acceptance reports the share
+well-defined valley gains area smoothly: over 2 × 30 m, expected (an estimate
+not yet measured) a fraction of a per cent of a catchment of 100 km². Small
+catchments should be more often uncertain (a 0.44 km² catchment may gain
+several per cent over 60 m), and that would be true of them, not an artefact: the acceptance reports the share
 uncertain per size band.
 
 **Cost and novelty.** One gather from arrays that already exist. It is a
@@ -1237,55 +1240,45 @@ and `src_python/tin_engine/fetch/http.py`.
 
 Each has a default; the design above is written to the defaults, so the
 round can start on them and a different answer changes only the part named.
+The earlier questions (which stations, what NVE data to commit, discharge,
+what counts as a good catchment, gauges on lakes) are ruled, under "Ola's
+rulings"; the way a gauge is placed follows your direction.
 
-1. **Which stations?** NVE's reference list for climate studies has 140
-   active, unregulated gauging stations, each checked by NVE for at least 20
-   years of good data. NVE's map service has a wider set: 500 active
-   discharge stations recorded as having no regulation at all, without that
-   quality check (127 of the 140 are among them).
-   *Default: the 140.* The 500 can be added later as a second list; the code
-   takes any list of station points.
-2. **What NVE data goes into the repository?** NVE's data is under the
-   Norwegian open government data licence (NLOD), which allows copying with
-   credit.
-   *Default: commit only the list of 140 station numbers and names (it lives
-   in a PDF, so it cannot be fetched from a service), credited to NVE; fetch
-   the station points and NVE's catchment polygons with
-   `rasputin fetch-stations`, and record the date and a checksum of what was
-   fetched.* Alternative: also commit a frozen copy of the polygons (8 MB),
-   so the comparison can be repeated even if NVE changes them.
-3. **Discharge now or later?** NVE's discharge API needs a free key
-   registered by a person.
-   *Default: later. Each catchment keeps the station number and the
-   discharge series number, which is all a later join needs.* Alternative: a
-   step that downloads daily discharge for the 140, if you register a key.
-4. **How should a gauge be moved onto the river?** A gauge's coordinates are
-   usually a few tens of metres off the river line in the elevation model,
-   and a catchment started off the river is tiny. Three ways:
-   (a) move it to the point within a radius where the most water passes
-   (the classic rule; it can jump to a bigger river just below a
-   confluence); (b) choose, within the radius, the point whose catchment
-   area is closest to the area NVE reports (what the global runoff data
-   centre does; then our area agrees with NVE's partly by construction, so
-   the comparison says less); (c) start from NVE's own polygon's outlet
-   (then NVE's answer helps make ours).
-   *Default: (a), within 250 m (all 42 stations that lie outside NVE's
-   polygon are within 233 m of it); every miss is re-run at 100 m and 500 m
-   to see whether the radius caused it.*
-5. **What counts as a good catchment, and is there a bar for the whole
-   run?** Proposed: a station "matches" when at least 95 % of NVE's polygon
-   is in ours and 95 % of ours in NVE's (Bygdin was 99.1 % and 99.3 %), or,
-   for small catchments, when our divide is on average within 30 m (three
-   DEM cells) of NVE's; "close" at 80 %; anything else is a "miss", and every
-   miss is explained in the results.
-   *Default: those classes, and no required share of matches this time: the
-   first run is the baseline.* Alternative: require, say, 80 % of the stations
-   to match before the increment is accepted.
-6. **Gauges on lakes.** Some stations measure a lake's outflow, and their
-   coordinates can be far from the lake's outlet. Increment 22 can start a
-   catchment from a whole lake polygon (CORINE) instead of a point.
-   *Default: not now; the first run shows how many lake gauges miss, and a
-   later step can start those from their lake.*
+1. **When is a station too uncertain to score?** A gauge's coordinates are
+   usually a few tens of metres off the river, and further for some. For each
+   station we read the catchment area at points along the river, up and down
+   from where the gauge is placed, as far as the gauge's coordinates are off
+   the river (at least 30 m). If the area changes by more than 5 % of the
+   area (the same 5 % as the "match" bar), the station is reported as
+   "uncertain" and is not marked good or bad: a confluence just below it, or
+   a flat valley floor, makes the answer depend on where we put the point.
+   *Default: 5 %, and the distance the coordinates are off the river, at
+   least 30 m.* Alternative: a fixed 30 m for every station (fewer
+   uncertain, but a gauge 200 m from its river would be treated as exact),
+   or a different percentage. The run shows how many stations each choice
+   makes uncertain.
+2. **The nine stations on the shifted tiles.** Eight of the 254 elevation
+   tiles have their nodes half a cell (5 m) off the others, and the tile
+   merger refuses to mix them. Nine of the 140 catchments cross such a tile
+   edge. *Default: they are reported as refused in this increment, and a
+   later increment moves the eight tiles onto the common grid.* Alternative:
+   do that first, so all 138 covered stations run (it adds an increment before
+   this one).
+3. **Burn the whole river network, or only the gauge's own stretch?** Only
+   the stretch of river round the gauge (about a kilometre upstream and a
+   little downstream) is lowered into the elevation model, so water follows
+   the mapped river there. Burning every river would also move divides
+   across the map, but it needs care where rivers are mapped less precisely
+   than the elevation model. *Default: only the gauge's stretch now; the whole
+   network is a later increment, and the residual-inflow work may want it.*
+4. **The nearest-stream fallback.** For a station with no mapped river within
+   500 m (Femundsenden, a lake gauge, is the one of the 140), and as a
+   comparison on every station that ends uncertain or a miss, the gauge can
+   be moved to the nearest elevation-model stream within 250 m (Jenson's
+   rule). It never uses area. It is the last, small piece (about 80 lines)
+   and decides nothing for stations the river placed. *Default: include it,
+   as the last piece.* Alternative: leave it out; Femundsenden is then
+   refused and the comparison is not made.
 
 ## Review
 
