@@ -6,8 +6,8 @@ is the C++ suite's (`tests/cpp/unit/test_hydrology_accumulate.cpp`, the
 invariant-critical one); this file pins what crosses the binding: shapes,
 dtypes, ownership, and the oracle against `_core.upstream` on two DEMs.
 
-Interface assumed (names chosen here, stated in the handback; they mirror the
-C++ `AccumulateOutcome` as `upstream`'s binding mirrors `UpstreamOutcome`):
+Interface pinned here (it mirrors the C++ `AccumulateOutcome` as `upstream`'s
+binding mirrors `UpstreamOutcome`):
 
 - `_core.accumulate(view: RasterView) -> AccumulateOutcome`. Releases the GIL.
 - `AccumulateOutcome.count`: `uint32`, `(rows, cols)`; 0 on NoData, else the
@@ -73,8 +73,6 @@ def view_of(z: np.ndarray, nodata: float | None = None) -> Any:
 def core() -> Any:
     from tin_engine import _core
 
-    # Fails here, by name, until the binding exists.
-    assert hasattr(_core, "accumulate"), "tin_engine._core has no accumulate"
     return _core
 
 
