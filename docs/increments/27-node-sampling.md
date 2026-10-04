@@ -121,7 +121,7 @@ the same `node(round) == p` test (`lattice_position`, `refine.hpp:132-141`).
   nullopt. nullopt also for a non-finite `p` and for a point outside the node
   rectangle (`cell_of`'s test). The clamp-and-round is written the way
   `lattice_position` writes it, so `node_at` says "node" exactly where
-  refine's whole test at `refine.hpp:409-418` does; a test pins that (S5).
+  refine's whole test at `refine.hpp:417-426` does; a test pins that (S5).
   `node_at` answers on any raster, a 1 x N one included; it is `bilinear`'s
   guard, not `node_at`, that keeps such a raster at nullopt.
 - **`bilinear`** (`sample.hpp`): after the existing `bilinear_cell_of` guard,
@@ -147,7 +147,7 @@ the same `node(round) == p` test (`lattice_position`, `refine.hpp:132-141`).
 2. **On the tolerance path the two samplers must agree.** refine measures and
    carves with `vertex_z` (`include/terrain/refinement/scan.hpp:75-99`) and
    writes the output z of an off-node start vertex with `raster::bilinear`
-   (`refine.hpp:417-418`). If only `bilinear` skipped cell-side corners, a domain
+   (`refine.hpp:425-426`). If only `bilinear` skipped cell-side corners, a domain
    vertex on a lattice line next to NoData would be void to the scan but valid
    in the output. A cell-side rule must change both. That changes refine:
    carving, the golden digests, and `@perf` acceptance. Increment 23 cuts
@@ -168,7 +168,7 @@ measured run shows ragged seams along NoData.
 |---|---|---|
 | no `--tolerance`, stride grid (12's R6) | **yes** | every vertex is a node; a valid node next to NoData keeps its height and its triangles |
 | no `--tolerance`, mosaic tile (15) | **yes**, the same way | same `sample` call on the assembled tile |
-| `--tolerance`, start-boundary / domain output z (`refine.hpp:417-418`) | **no**, by construction | `bilinear` is called there only for a start vertex that is **not** a node by refine's whole test: `lattice_position`, then `node && g.node(c) == p` (`!given \|\| (node && g.node(c) == p) ? vertex_z : bilinear`). `node_at` answers the same as that whole test (S5), so the new branch is never taken from refine |
+| `--tolerance`, start-boundary / domain output z (`refine.hpp:425-426`) | **no**, by construction | `bilinear` is called there only for a start vertex that is **not** a node by refine's whole test: `lattice_position`, then `node && g.node(c) == p` (`!given \|\| (node && g.node(c) == p) ? vertex_z : bilinear`). `node_at` answers the same as that whole test (S5), so the new branch is never taken from refine |
 | `--tolerance`, `vertex_z` (scan, carving, feet, edge strip) | **no** | not touched; it already reads a node with `value_at` (`scan.hpp:86-87`) |
 | `--tolerance`, reprojected (15c: `resample`, `refine_points`) | **no** | `resample` is Python with its own four-corner rule (`target_grid.py:163-196`); `refine_points` calls `vertex_z`, not `bilinear` |
 | a reprojected tile meshed without `--tolerance`, if a run does so | the stride sampling of the resampled tile follows the new rule; `resample` does not change | the target grid's nodes are `col0 * h` with integer `h` (`target_grid.py:48`), so they are exact |
@@ -260,7 +260,7 @@ New:
   exact today too (measured: 0 failures).
 - **S5. `node_at` agrees with refine's node test** (invariant-critical for
   "the tolerance path is unchanged"). The reference is refine's whole test at
-  `refine.hpp:409-418`: `v = lattice_position(g, p)`, then `v.is_node() &&
+  `refine.hpp:417-426`: `v = lattice_position(g, p)`, then `v.is_node() &&
   g.node(c) == p` with `c` the node of `v`. `lattice_position(g, p).is_node()`
   alone is **not** the reference. It is true for an off-node point whose
   fractional coordinates round to integers, so it disagrees with a correct
@@ -407,6 +407,6 @@ Recommended defaults: 1 and 2 as recommended; 3 noted.
 
 Ola: "yes to both", to the two decisions as recommended. (1) Nodes only now: a point exactly on a DEM node reads that node; cell sides are deferred until a measured run shows ragged edges along NoData. (2) The rule lives in the C++ sampler (`bilinear` with `RasterGeometry::node_at`), not only in the Python stride path.
 
-**27, code review, round 1, 2026-10-04.** Range `7eb0b79..a0817ba` (red 6605dfe, pins 80990e0, green 6fd4076 and a0817ba). Verdict: CHANGES REQUESTED. LOC: 13 net (`node_at` in `geometry.hpp` 11, the early return in `sample.hpp` 3, `run_record.py` -1) against about 15. Code sound; the notes in `12-dem-to-mesh.md` and `25-plain-output.md`, the binding docstring and the stub match the code; citations into this increment's files re-read and hold. Blocking: (1) red-step text in `tests/cpp/unit/test_raster_node_at.cpp:16-18` and `tests/cpp/CMakeLists.txt:389-390` (say why the target is separate now, without the red-step story); (2) this file's status line says "designed … Not started"; (3) `ROADMAP.md:50`'s sampler row still says "not designed", and this design assigns it to become row 27 in this PR. Not pushed; no CI.
+**27, code review, round 1, 2026-10-04.** Range `7eb0b79..a0817ba` (red 6605dfe, pins 80990e0, green 6fd4076 and a0817ba). Verdict: CHANGES REQUESTED. LOC: 13 net (`node_at` in `geometry.hpp` 11, the early return in `sample.hpp` 3, `run_record.py` -1) against about 15. Code sound; the notes in `12-dem-to-mesh.md` and `25-plain-output.md`, the binding docstring and the stub match the code; citations into this increment's files re-read and hold. Blocking: (1) red-step text in `tests/cpp/unit/test_raster_node_at.cpp@9a47922:16-18` and `tests/cpp/CMakeLists.txt@9a47922:389-390` (say why the target is separate now, without the red-step story); (2) this file's status line says "designed … Not started"; (3) `ROADMAP.md:50`'s sampler row still says "not designed", and this design assigns it to become row 27 in this PR. Not pushed; no CI.
 
 **27, code review, round 2, 2026-10-04.** Range `9a47922..11759aa` (6c1369a test comments, 11759aa status line and ROADMAP row 27); whole increment `7eb0b79..11759aa`. Verdict: APPROVED. LOC: 13 net, unchanged. All three round-1 blockers closed: both comments now give the reason the target is separate (it includes `refine.hpp`, so it needs the backend target and Threads), the status line and `ROADMAP.md:50` match the branch; citations unchanged in line count and hold. Not pushed; no CI. At merge, ROADMAP row 27 says shipped.
