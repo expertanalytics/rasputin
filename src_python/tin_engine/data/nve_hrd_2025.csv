@@ -1,0 +1,150 @@
+# NVE's Hydrological Reference Dataset (HRD), streamflow part, 2025 version: the 140 stations of Table 1.
+# Source: norwegian-streamflow-reference-dataset-for-climate-change-studies-2021-aip.pdf
+# (https://www.nve.no/media/19932/norwegian-streamflow-reference-dataset-for-climate-change-studies-2021-aip.pdf,
+# "last updated in March 2026", fetched 2026-10-04, sha256 62dc77412894fc32f4fd4843d421f19fff39055f7db15e9d40070865ace27907).
+# Kilde: NVE. Norsk lisens for offentlige data (NLOD); NVE disclaims liability for errors in the data and their use.
+# Columns: station = <Regine area>.<Main no>.0; series_version = Table 1's "Version" (the discharge series 1001.<version>);
+# name = the station name as printed, names wrapped over two lines joined; hrd_start_daily = "HRD start daily data".
+# Names here only check the extraction: `fetch-stations` takes each station's name from NVE's station layer.
+# 133.7.0 is printed "(Kringsvatmet)"; NVE's station layer has "Krinsvatn (Kringsvatnet)".
+station,series_version,name,hrd_start_daily
+2.11.0,0,Narsjø,1931
+2.32.0,0,Atnasjø,1917
+2.142.0,1,Knappom,1917
+2.265.0,1,Unsetåa,1994
+2.279.0,1,Kråkfoss,1983
+2.284.0,1,Sælatunga,1984
+2.290.0,1,Brustuen,1967
+2.303.0,1,Dombås,1968
+2.439.0,1,Kvarstadseter,1999
+2.633.0,0,Stortorp,1996
+3.22.0,1,Høgfoss,1977
+6.10.0,1,Gryta,1998
+11.4.0,0,Elgtjern,1978
+12.70.0,1,Etna,1920
+12.171.0,1,Hølervatn,1990
+12.178.0,1,Eggedal,1972
+12.188.0,1,Langtjernbekk,2001
+12.192.0,1,Sundbyfoss,1996
+12.193.0,1,Fiskum,1977
+12.197.0,0,Grunke,1978
+12.207.0,0,Vinde-elv,2001
+12.215.0,1,Storeskar,1988
+15.21.0,1,Jondalselv,1994
+15.49.0,1,Halledalsvatn,1964
+16.66.0,1,Grosettjern,1975
+16.122.0,1,Grovåi,1975
+16.127.0,1,Viertjern,2000
+16.194.0,0,Kilen,1991
+18.10.0,1,Gjerstad,1982
+18.11.0,1,Tjellingtjernbekk,1990
+19.79.0,1,Gravå,1986
+19.80.0,1,Stigvassåi,1985
+19.82.0,1,Rauåna,1985
+19.96.0,1,Storgama ovf.,1975
+19.104.0,1,Songedalsåi,1981
+20.2.0,1,Austenå,1983
+20.11.0,1,Tveitdalen,1973
+22.16.0,0,Myglevatn ndf.,1952
+22.22.0,1,Søgne,1974
+24.8.0,0,Møska (Skolandsvatnet),1983
+24.9.0,0,Tingvatn (Lygne),1923
+26.29.0,1,Refsvatn,1980
+27.15.0,1,Austrumdal (Austrumdalsvatnet),1986
+35.9.0,1,Osali (Botnavatnet),2000
+35.16.0,1,Djupadalsvatn,1991
+36.13.0,1,Grimsvatn,1988
+38.1.0,1,Holmen,1983
+41.8.0,1,Hellaugvatn,1982
+42.2.0,1,Djupevad,1977
+48.1.0,1,Sandvenvatn,1909
+48.5.0,1,Reinsnosvatn,1966
+50.1.0,1,Hølen,1923
+55.4.0,1,Røykenes,1993
+62.18.0,1,Svartavatn,2002
+62.5.0,1,Bulken (Vangsvatnet),1892
+62.10.0,0,Myrkdalsvatn,1964
+62.14.0,1,Slondalsvatn,1984
+62.15.0,1,Kinne,1984
+73.21.0,1,Frostdalen,1994
+73.27.0,1,Sula,1992
+76.5.0,0,Nigardsbrevatn,1963
+77.3.0,1,Sogndalsvatn,1963
+79.3.0,1,Nessedalselv,1984
+81.1.0,1,Hersvikvatn (Hagevatnet),1934
+82.4.0,0,Nautsundvatn,1986
+83.2.0,1,Viksvatn (Hestadfjorden),1903
+83.6.0,1,Byttevatn,1978
+83.7.0,1,Grønengstølsvatn,1999
+83.12.0,0,Haukedalsvatn ndf.,1984
+84.20.0,0,Holsenvatn,1963
+85.4.0,1,Straumstad (Solheimsvatnet),1985
+86.10.0,1,Åvatn (Ommedalsvatnet),2004
+86.12.0,1,Skjerdalselv,1991
+87.10.0,0,Gloppenelv v/Bergheim,1970
+88.4.0,1,Lovatn,1900
+88.11.0,0,Strynsvatn,1967
+88.30.0,0,Nordre Oldevatn,1987
+97.1.0,1,Fetvatn (Fitjavatnet),1946
+98.4.0,0,Øye ndf.,1991
+101.1.0,0,Engsetvatn,1990
+103.1.0,2,Ulvåa v/Storhølen,1971
+104.23.0,1,Vistdal,1984
+105.1.0,2,Osenelv v/Øren,1923
+109.9.0,1,Driva v/Risefoss,1935
+109.21.0,1,Driva v/Svoni,1997
+112.8.0,1,Rinna,1969
+121.20.0,1,Åmot,1995
+122.11.0,1,Eggafoss,1941
+122.14.0,1,Lillebudal bru,1997
+122.17.0,1,Hugdal bru,1972
+124.2.0,1,Høggås bru,1912
+127.11.0,1,Veravatn,1968
+128.9.0,1,Leksdalsvatn,1972
+133.7.0,1,Krinsvatn (Kringsvatmet),1969
+138.1.0,1,Øyungen,1997
+139.35.0,0,Trangen,2002
+140.2.0,0,Salsvatn,1990
+148.2.0,1,Mevatnet,1973
+150.1.0,1,Sørra,1989
+151.13.0,1,Øvre Glugvatn,1988
+151.15.0,1,Nervoll,1968
+152.4.0,1,Fustvatn,1908
+153.1.0,1,Storvatn,1916
+156.24.0,1,Bogvatn,1970
+156.15.0,1,Forsbakk,1989
+168.3.0,1,Lakså bru,1954
+172.8.0,1,Rauvatn,1978
+177.4.0,1,Sneisvatn,1917
+178.1.0,1,Langvatn,1954
+185.1.0,1,Gåslandsvatn,1935
+186.2.0,0,Ånesvatn,1998
+189.3.0,1,Tennevikvatn,1979
+191.2.0,0,Øvrevatn,1914
+196.7.0,1,Ytre Fiskeløsvatn,1961
+196.11.0,1,Lille Rostavatn,1960
+200.4.0,0,Skogsfjordvatn,1958
+203.2.0,0,Jægervatn,1990
+205.6.0,1,Didnojokka,1980
+206.3.0,2,Manndalen bru,1972
+208.2.0,1,Oksfjordvatn,1956
+208.3.0,1,Svartfossberget,1982
+209.4.0,1,Lillefossen,1971
+212.10.0,1,Masi,2002
+212.48.0,0,Sagafoss,1972
+212.49.0,0,Halsnes,1972
+213.2.0,1,Leirbotnvatn,1962
+213.4.0,1,Kvalsund,1980
+223.2.0,0,Lombola,1988
+234.13.0,0,"Veahkkava, Iesjokka",1990
+234.18.0,0,Polmak nye,1947
+237.1.0,1,Båtsfjord,1993
+244.2.0,0,Neiden,1979
+246.9.0,0,Sametielv,1963
+247.3.0,0,Karpelva,1947
+307.5.0,1,Murusjø,1926
+307.7.0,1,Landbru,1988
+308.1.0,1,Lenglingen,1926
+311.4.0,1,Femundsenden (Femunden),1896
+311.6.0,0,Nybergsund,1912
+313.10.0,0,Magnor,1981

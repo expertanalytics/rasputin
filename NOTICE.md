@@ -113,6 +113,19 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
   R.C.D.; Ruhoff, A. "ANADEM: A Digital Terrain Model for South America."
   Remote Sens. 2024, 16, 2321. ANADEM is not in the repository.
 
+## Data in the package
+
+- **NVE's Hydrological Reference Dataset (HRD)**, streamflow part, 2025
+  version: `src_python/tin_engine/data/nve_hrd_2025.csv` holds four columns of
+  Table 1 of NVE's report "Norwegian streamflow reference dataset for climate
+  change studies" (station number, discharge series version, station name,
+  HRD start year of daily data) for its 140 stations. Kilde: NVE. Under the
+  Norsk lisens for offentlige data (NLOD); NVE disclaims liability for errors
+  in the data and their use. `rasputin fetch-stations nve-hrd` fetches NVE's
+  station points, catchment polygons and ELVIS river lines under the same
+  licence and writes this credit into the `NOTICE.txt` of every fetch; those
+  files are not in the repository.
+
 ## Runtime dependencies
 
 The package's runtime dependencies (numpy, pydantic, shapely, pyproj, typer,

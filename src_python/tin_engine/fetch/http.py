@@ -9,6 +9,10 @@ and exactly that many bytes; a 200 is refused without reading its body (it
 would be the whole file). One range per request (decided 3). Timeouts,
 connection errors, short bodies and 5xx are retried after each of `delays`;
 4xx and a malformed answer never are.
+
+Every request names its client, `User-Agent: rasputin/<version>`, instead of
+urllib's default (increment 29, "Data use"). `query_url` builds the query
+strings of `fetch/nve.py`, which may not import `urllib` itself.
 """
 
 from __future__ import annotations
@@ -17,11 +21,24 @@ import http.client
 import re
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 
+from tin_engine import installed_version
+
 _CONTENT_RANGE = re.compile(r"bytes (\d+)-(\d+)/(\d+)")
+
+
+def user_agent() -> str:
+    """`rasputin/<version>`: the client names itself to every server."""
+    return f"rasputin/{installed_version()}"
+
+
+def query_url(base: str, params: Mapping[str, str]) -> str:
+    """`base?params`, each value percent-encoded."""
+    return f"{base}?{urllib.parse.urlencode(params)}"
 
 
 class FetchError(Exception):
@@ -57,14 +74,17 @@ class RangeClient:
         """The whole of `url` as UTF-8 (GLO-30's tile list)."""
 
         def call() -> str:
-            with self._open(urllib.request.Request(url), url) as response:
+            request = urllib.request.Request(url, headers={"User-Agent": user_agent()})
+            with self._open(request, url) as response:
                 return self._read(response, url).decode()
 
         return self._retry(url, call)
 
     def _get(self, url: str, start: int, stop: int) -> RangeResponse:
         where = f"{url} bytes {start}-{stop - 1}"
-        request = urllib.request.Request(url, headers={"Range": f"bytes={start}-{stop - 1}"})
+        request = urllib.request.Request(
+            url, headers={"Range": f"bytes={start}-{stop - 1}", "User-Agent": user_agent()}
+        )
         with self._open(request, where) as response:
             if response.status != 206:  # the body is left unread; closing drops it
                 raise FetchError(f"{where}: HTTP {response.status}, not 206 Partial Content")
@@ -110,4 +130,4 @@ class RangeClient:
         raise AssertionError("unreachable")
 
 
-__all__ = ["FetchError", "RangeClient", "RangeResponse"]
+__all__ = ["FetchError", "RangeClient", "RangeResponse", "query_url", "user_agent"]
