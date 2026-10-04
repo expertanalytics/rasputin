@@ -9,7 +9,7 @@ lines after the master merge (248 before it; the merged sum takes one
 more line), `@perf`'s acceptance recorded at `91c7cb5` and again at
 `4541e38` (ACCEPTED, `docs/benchmarks/2026-10-04/23b-merged-acceptance.md`);
 23c split in two:
-23c-1 (about 215 estimated, 154 built) in review, no `@perf` run needed,
+23c-1 (about 215 estimated, 156 built) in review, no `@perf` run needed,
 and 23c-2 (about 265) with its red step written on `worktree-23c`; 23d
 onwards not implemented.** Written before `@tester`
 per `docs/increments/README.md` step 1. The rulings are under "Ruled by Ola,

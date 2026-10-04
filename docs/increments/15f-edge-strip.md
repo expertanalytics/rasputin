@@ -562,7 +562,7 @@ refused.
 | `include/terrain/refinement/constraint_points.hpp` (new) | `ConstraintPoint`, `ConstraintCheckPoints`, `constraint_check_points` (D2, D3) |
 | `include/terrain/refinement/refine.hpp`, `detail::to_lattice` | `detail::lattice_position` extracted from it, and called by it; no change in behaviour |
 | `include/terrain/refinement/refine_points.hpp` | `detail::point_loop`; the strip scan and ownership; the sub-edge map; `refine_points(..., strip)`; `refine_strip`; the outcome fields; `PointScan` (D4) |
-| `bindings/core.cpp` | `ConstraintCheckPoints` (read-only: `size`, `no_data`, `duplicates`, `edge_count`); `constraint_check_points(view, vertices, edges)` over the bound raster variant; `refine_points(..., strip=None)`; `refine_strip(view, strip, vertices, triangles, z, valid, edges, masks, *, tolerance, threads=0)`; the new outcome properties. Every call releases the GIL, as `refine_points` does (the `py::gil_scoped_release` in its binding, `bindings/core.cpp:1134`) |
+| `bindings/core.cpp` | `ConstraintCheckPoints` (read-only: `size`, `no_data`, `duplicates`, `edge_count`); `constraint_check_points(view, vertices, edges)` over the bound raster variant; `refine_points(..., strip=None)`; `refine_strip(view, strip, vertices, triangles, z, valid, edges, masks, *, tolerance, threads=0)`; the new outcome properties. Every call releases the GIL, as `refine_points` does (the `py::gil_scoped_release` in its binding, `bindings/core.cpp:1174`) |
 | `src_python/tin_engine/_core.pyi` | stubs for the above |
 | `src_python/tin_engine/edge_strip.py` (new) | `generate(view, start, clock) -> ConstraintCheckPoints` and `run(view, strip, start, tolerance, clock) -> PointRefineOutcome`: the two calls and their clock rows. No geometry |
 | `src_python/tin_engine/final_check.py:28` | `run(..., strip: ConstraintCheckPoints \| None = None)`, passed on to `refine_points` |
@@ -1534,7 +1534,7 @@ with the reasons, and `@developer` changes nothing.
   - rename the test to match.
 
 The citations that moved with `7d841f3` are corrected above: D5's binding
-(`bindings/core.cpp:1134`, recomputed when 23b merged) and `_dem_mesh` lines (`:1466`, `:1550`), `final_check.run` (`:28`), and D6's
+(`bindings/core.cpp:1174`, recomputed when 23c-1 took in master) and `_dem_mesh` lines (`:1466`, `:1550`), `final_check.run` (`:28`), and D6's
 `:1561` and `:1580`. The "Review" record of 15f-2's round 2 cites
 `cli.py:1417` and others as they were at `17c2d14`. That is history, and it is
 left as written.
