@@ -123,11 +123,15 @@ in `tests/cpp/unit/test_raster.cpp`:
   to `rows - 2` / `cols - 2`, so a node on the far edge is the far corner of
   the last cell. There z is the node value up to rounding in `tx`, `ty`
   (about 1e-10 relative), not bit-exact. Tests must use a tolerance there.
+  *Changed by increment 27: a point that is a node reads that node alone, so z
+  is the node value bit for bit there too (`27-node-sampling.md`).*
 - **NoData:** `nullopt` if **any** of the four corners is NoData or NaN, even
   when that corner's weight is zero. So a valid node next to a NoData node also
   gets no z. On a 10 m grid that trims one cell (10 m) around every void. This
   is accepted for now and recorded here; changing the sampler is not this
-  increment's job.
+  increment's job. *Changed by increment 27: a point that is a node is refused
+  only when that node is NoData or NaN, so the one-cell trim is gone
+  (`27-node-sampling.md`).*
 - **Area/point registration:** handled before the sampler. `decode_dem` has
   already shifted an area-registered file's corner in by half a cell
   (increment 11, ruling 4), so `RasterMeta` always describes the node grid, and
@@ -340,7 +344,8 @@ C++ (`tests/cpp/unit/test_raster.cpp` or a new `test_raster_view.cpp`):
 4. Batch sampling: `valid` is false outside the grid, for non-finite points,
    and next to a NoData corner even at zero weight. `z` equals the node value
    at interior nodes, and matches it to 1e-9 relative on the last row and
-   column.
+   column. *Increment 27 changed this test: a node next to NoData is valid,
+   and z equals the node value exactly everywhere.*
 5. The view does not copy: a changed buffer value shows through.
 
 Python binding (`tests/python/test_core_raster.py`):
@@ -435,4 +440,5 @@ still about 250 under the ceiling. Increment 13 came in under (144 against
 - Mosaics, reprojection, windows (`window_for`).
 - A point-data elevation array in the `.vtk`. ParaView can colour by the Z of
   `Points` without one.
-- Changing `bilinear`'s NoData rule (zero-weight corners).
+- Changing `bilinear`'s NoData rule (zero-weight corners). *Done for nodes by
+  increment 27 (`27-node-sampling.md`).*
