@@ -1,8 +1,8 @@
 # Harness h11: skip the code jobs on prose-only pull requests
 
-Status: design (`@architect`, 2026-10-04). Next: `@tester` (§6), then
-`@developer`, then Ola's settings step (§5), which must follow the merge
-directly.
+Status: design done, Ola's rulings recorded (§9) (`@architect`, 2026-10-04).
+Ready for `@tester` (§6); then `@developer`, then Ola's settings step (§5),
+which must follow the merge directly.
 
 Why: `.github/workflows/main.yaml` has no path filter, so a pull request that
 changes only prose (for example #174: `ROADMAP.md` and one increment status
@@ -318,9 +318,39 @@ T5's planted run fails because the hook does not exist.
 - h10 is a record and stays as written; its "the queue fast-forwards
   `master`" is checked by §5 step 0, not relied on.
 
-## 8. Question for Ola
+## 8. Question for Ola (answered: §9, ruling 1)
 
 Should the TSan job and the unchecked C++ leg block a merge? Today they do
 not (they are not required checks). Default: keep it so; adding them later is
 one line each (`tsan` into `CI result`'s `needs`, and dropping the
 `continue-on-error`).
+
+## 9. Ola's rulings
+
+Ola answered all three below with one reply: "yes to all, go ahead"
+(2026-10-04T17:38:45.628Z, UTC). The main session put the questions to him;
+each ruling is the default he said yes to.
+
+1. **Question (§8):** should the TSan job and the unchecked C++ build (the
+   leg built with hardening off) block a merge? **Ruling: no.** Both stay out
+   of the merge gate: `CI result` does not list `tsan` in its `needs`, and the
+   unchecked leg keeps `continue-on-error` (§2.2, §2.3). Making either one
+   gating later is one line each.
+2. **Question (§5, step 2):** will Ola change the required checks on `master`
+   straight after h11 merges? **Ruling: yes.** Right after the merge, Ola
+   removes the seven required checks and adds the single `CI result` check.
+3. **Question:** should the prose-only fast lane go further, as its own
+   increment? **Ruling: yes**, as h12, designed after h11 merges (§10).
+
+## 10. Follow-on: h12, a fast lane for prose-only changes
+
+h12 is designed after h11 merges and reuses h11's file classifier
+(`tools/ci_changes.py`). Nothing below is designed or ruled; it is the main
+session's sketch, kept for the record only.
+
+The sketch: a tool sorts a change into one of three tiers from its changed
+files. *Bookkeeping* (ROADMAP rows, status lines, review records copied in,
+citation fixes): checked by a tool, no `@reviewer` round, governance CI only.
+*Design and docs*: `@reviewer` as now, governance CI only. *Rule files*:
+unchanged, full review. Open for Ola when h12 is designed: a standing yes for
+the bookkeeping tier.
