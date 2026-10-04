@@ -9,8 +9,9 @@ and refine within noise at every thread count.
 
 ## Verdict
 
-**This verdict applies to `c4fb2bf`.** The rerun on the fix `8da0f2a` (below,
-"Rerun on the fix") does not supersede it: the fix is also a REGRESSION.
+**Superseded: 23b is ACCEPTED at `91c7cb5`** (below, "Rerun on the fix
+91c7cb5"). The REGRESSION verdicts here and in "Rerun on the fix 8da0f2a"
+apply to `c4fb2bf` and `8da0f2a` only.
 
 **REGRESSION: refine_s at 1 thread, +4.7 % (tile) and +4.3 % (quarter);
 +1 to +4 % at 2 to 20 threads.** The meshes are identical.
@@ -150,6 +151,49 @@ was. The early-return experiment E, timed back to back with it, is not.
   per (domain, thread count).
 - The rerun's scratch worktrees and meshes were deleted after the run.
 
+## Rerun on the fix 91c7cb5, 23:49 to 00:07 UTC
+
+**ACCEPTED. This supersedes the REGRESSION verdicts on `c4fb2bf` and
+`8da0f2a`.** At 1 thread refine is +1.2 % (tile) and +1.8 % (quarter); at 20
+threads +0.8 % and -0.3 %; over 2 to 20 threads -0.5 to +2.2 %. All are under
+the 5 % threshold, and `bench.py` judged all eight runs ACCEPTED. The meshes
+are identical.
+
+- `91c7cb5` is the early-return form of `exp-unswitch.diff`. Its Release
+  `_core` (`1aa0f7c4…`) is byte-identical to experiment E's, so this rerun
+  times the same binary as E above.
+- Same method: base `b4bcdc3` (`_core` `0b3362e5…`) against `91c7cb5`, two
+  balanced batches in opposite order, B N N B then N B B N (`pairs6.sh`,
+  `pairs6.log`), 5 repeats, `caffeinate -i`, `pmset -g batt` before and
+  after every run: AC, 100 %, charged, every time. No other agent or build
+  ran. The load average was about 7 before the batch. The tables are in
+  `tables-fix2.md`, from `summarize_fix2.py`.
+
+| domain | threads | base | 91c7cb5 | change | base runs | 91c7cb5 runs |
+|---|---:|---:|---:|---:|---|---|
+| tile | default | 0.1970 | 0.1989 | +1.0 % | 0.1946-0.1980 | 0.1987-0.1996 |
+| tile | 1 | 0.5158 | 0.5218 | +1.2 % | 0.4844-0.5169 | 0.5188-0.5251 |
+| tile | 20 | 0.1985 | 0.2002 | +0.8 % | 0.1934-0.2032 | 0.1981-0.2010 |
+| quarter | default | 0.1779 | 0.1801 | +1.2 % | 0.1721-0.1797 | 0.1775-0.1809 |
+| quarter | 1 | 0.4560 | 0.4643 | +1.8 % | 0.4244-0.4593 | 0.4606-0.4666 |
+| quarter | 20 | 0.1787 | 0.1782 | -0.3 % | 0.1737-0.1794 | 0.1768-0.1803 |
+| both | 2-20, range | | | -0.5..+2.2 % | | |
+
+- One base run, `23b-fix2-base-r3`, was 6 to 7 % faster than the other three
+  at 1 thread (tile 0.4844 s against 0.5143-0.5169 s). The cause was not
+  measured. It is kept in the pooled figures, and it lowers the base, so the
+  comparison is stricter with it than without. Without it, the 1-thread
+  residual is still about +1 % and the run ranges just fail to overlap
+  (tile 0.5143-0.5169 against 0.5188-0.5251). That is a residual of about
+  1 %, against 4.7 % on `c4fb2bf` and 6.3 % on `8da0f2a`.
+- **Scaling ceiling** (pooled, 1 thread over 20), AC: base tile 2.60x and
+  quarter 2.55x; `91c7cb5` 2.61x and 2.61x.
+- Mesh hashes: tile `11741a81…`, quarter `ccebf96a…`. They are the same in
+  all eight runs, with the same quality (0.6296° / 0.3955°, degree 74 / 18,
+  within tolerance, 0 Delaunay violations) and a single counter tuple per
+  (domain, thread count).
+- The base worktree and the meshes were deleted after the run.
+
 ## Files and clean-up
 
 - Run directories in `bench.py`'s format: `23b-base-b4bcdc3{,-r2..-r5}/`,
@@ -171,3 +215,5 @@ was. The early-return experiment E, timed back to back with it, is not.
 - 2026-10-03T23:10:45Z: rerun on 8da0f2a (fix: nodes loop unswitched by std::true_type/false_type), HEAD 9511563; base worktree rebuilt; batches B N N B then N B B N. AC 100 %.
 - 2026-10-03T23:30:09Z: rerun done: the fix 8da0f2a is +6.3 % (tile) / +6.4 % (quarter) at 1 thread, run ranges disjoint; worse than c4fb2bf. Next: one batch E F F E (my earlier experiment against the fix) to tell whether the code shape matters.
 - 2026-10-03T23:40:22Z: E F F E batch done, AC 100 %: F +5.9 / +5.6 % over E at 1 thread. Rerun verdict REGRESSION.
+- 2026-10-03T23:49:03Z: rerun on 91c7cb5 (the early-return form) started; base rebuilt; B N N B then N B B N.
+- 2026-10-04T00:08:11Z: 91c7cb5 rerun done, AC 100 %: +1.2 / +1.8 % at 1 thread, -0.5..+2.2 % over 2-20. ACCEPTED.
