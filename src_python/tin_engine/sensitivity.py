@@ -83,7 +83,11 @@ def assess(
     k = int(np.argmax(steps)) if steps.size else -1
     d = chain[lo + 1 : hi + 1] - chain[lo:hi]
     toward = 3 * (d[:, 0] + 1) + (d[:, 1] + 1)
-    drains = bool(np.all(np.asarray(flow_to)[rows[lo:hi], cols[lo:hi]] == toward))
+    # A flag within U upstream cannot drain through the placed node, whose
+    # bits are clear (`accumulate` ORs bits downstream): not draining.
+    cut = lo > 0 and arc[lo - 1] >= -u - _SLACK_M and not trusted[lo - 1]
+    flows = np.asarray(flow_to)[rows[lo:hi], cols[lo:hi]] == toward
+    drains = bool(not cut and np.all(flows))
     strict = bool(np.all(steps > 0.0))
     closed = bool(path.end_closed)
     causes = tuple(
