@@ -28,7 +28,8 @@ correctness.
   increment file leaves open, under the handback heading "Pinned or assumed
   beyond the design"; `@architect` confirms or rules on each before green.
 * **Mutants:** for a suite the increment file names invariant-critical, run
-  its mutants as your own task and hand back the kill record (each mutant,
+  its mutants as your own task, planted in a scratch copy of the tree, never
+  the worktree, and hand back the kill record (each mutant,
   where it was planted, killed or survived); `@reviewer` checks the record.
 
 ## 2. Test Architecture Tiers
