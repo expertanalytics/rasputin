@@ -171,7 +171,7 @@ class TestRefusals:
         """Point 4 of "Three points from 23c-1's green (3ffae13)": `cols < 1`
         or `rows < 1` is a `ValueError` naming the cause, not a
         `ZeroDivisionError` from step 2 nor a partition of nothing."""
-        with pytest.raises(ValueError, match="cols|rows|window"):
+        with pytest.raises(ValueError, match=r"cols|rows|window"):
             dec.partition(cols, rows, 1.0, pieces=pieces)
 
     def test_a_budget_under_one_node(self, dec: ModuleType) -> None:
