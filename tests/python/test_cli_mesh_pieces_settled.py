@@ -276,3 +276,52 @@ def test_options_describing_one_mesh_are_refused_on_a_cut_run(
     not_for_want_of_the_option(done.output)
     assert option in "".join(done.output.split())
     assert list(where.iterdir()) == []
+
+
+@pytest.mark.parametrize(
+    ("option", "target", "out_name"),
+    [
+        ("--record", "run.json", "x.vtk"),
+        ("--stats", "stats.md", "x.vtk"),
+        ("--out-edges", "edges.ply", "x.ply"),
+    ],
+)
+def test_the_refusal_comes_before_any_piece_is_refined(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, option: str, target: str, out_name: str
+) -> None:
+    """Ola's ruling of 2026-10-04 (@reviewer round 3's suggestion): once the
+    partition is known to have more than one cell, the options that
+    describe one mesh are refused before any piece is refined. Spies on
+    the seam pass, `refine`, `refine_points` and `basin_run.cut_run`,
+    wherever `tin_engine` holds them, must see no call."""
+    import sys
+
+    from tin_engine import _core, basin_run
+
+    calls: list[str] = []
+    for owner, name in (
+        (_core, "refine"),
+        (_core, "refine_points"),
+        (_core, "refine_seam"),
+        (basin_run, "cut_run"),
+    ):
+        original = getattr(owner, name)
+
+        def spy(*a: object, _n: str = name, _f: object = original, **k: object) -> object:
+            calls.append(_n)
+            return _f(*a, **k)  # type: ignore[operator]
+
+        monkeypatch.setattr(owner, name, spy)
+        for module in [m for key, m in list(sys.modules.items()) if key.startswith("tin_engine")]:
+            if getattr(module, name, None) is original:
+                monkeypatch.setattr(module, name, spy)
+    dem, domain, _ = scene(tmp_path)
+    where = tmp_path / "run"
+    done = pf.run(
+        where, *args(dem, domain, "--pieces", "4", option, str(where / target)), out_name=out_name
+    )
+    assert done.code == USAGE, done.output
+    not_for_want_of_the_option(done.output)
+    assert option in "".join(done.output.split())
+    assert list(where.iterdir()) == []
+    assert calls == [], f"refined before the refusal: {sorted(set(calls))}"
