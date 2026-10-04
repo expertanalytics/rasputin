@@ -29,12 +29,15 @@ PINNED HERE, where D1 and D7 are silent: `DemRequest.target_crs: str | None`
 (the CLI's `--out-crs`), whose `open_dem` returns the **target** tile in
 `DemInput.tile` (D1: "DemInput(tile = target tile, ...)"); a geographic DEM
 without it is a `ValueError` whose message carries D8's suggestion. D7's
-fields are read as: `crs` the target's label, `source_crs` the DEM's,
-`source_transform` pyproj's `description` of the source-to-target
-`always_xy` transformer, `computation_grid` beginning `square <h> m grid in
-<crs>` and naming `resampled bilinear from <source crs>`, and
-`elevation_source` holding `against the resampled grid` and `checked against
-<N> source nodes`.
+fields, as increment 25 renamed and moved them (`docs/increments/25-plain-output.md`
+D2, D4): the mesh file's `crs` is the target's label; the `--stats` rows
+`dem_crs` (was `source_crs`) the DEM's, `dem_transform` (was
+`source_transform`) pyproj's `description` of the source-to-target
+`always_xy` transformer, `resampled_grid` (was `computation_grid`) beginning
+`<h> m square grid in <crs>` (the design's example), and `dem_nodes_checked`
+the store's size (was `checked against <N> source nodes`). The file's
+`max_error_m` is the error at the source nodes, not the resampled grid's
+(which is `resampled_grid_max_error_m` in `--stats`).
 
 HOW THIS FILE GOES RED: `--out-crs` is not an option of `mesh`, so every run
 exits 2 with "No such option" (the `refused` helper rejects that reason), and
@@ -90,6 +93,8 @@ from geotiff_fixtures import KARTVERKET, needs_codecs
 from test_cli_catchment import invoke as invoke_any
 from test_cli_mesh_domain import quarter_circle
 from test_cli_mesh_mosaic import USAGE, invoke, same_mesh
+from test_cli_mesh_refine import file_field, stats_row
+from test_cli_mesh_stats import section, table
 from tin_engine.cli import app
 from tin_engine.dem_input import DemRequest, open_dem
 from tin_engine.domain import read_domain
@@ -121,16 +126,24 @@ def write_geojson(path: Path, ring: Ring, crs: str) -> Path:
 
 
 def field(vtk: VtkFile, name: str) -> str:
-    assert name in vtk.field_data, sorted(vtk.field_data)
-    (value,) = vtk.field_data[name].values
-    return str(value)
+    return file_field(vtk, name)
 
 
 def run(tmp_path: Path, *args: str, out: str = "x.vtk") -> VtkFile:
+    """Mesh with ``--stats`` beside the file (``x.md``); ``inputs`` reads it."""
     target = tmp_path / out
-    code, output = invoke(*args, "--out", str(target))
+    code, output = invoke(*args, "--out", str(target), "--stats", str(target.with_suffix(".md")))
     assert code == 0, output
     return read_vtk(target.read_bytes())
+
+
+def report_of(tmp_path: Path, out: str = "x.vtk") -> str:
+    return (tmp_path / out).with_suffix(".md").read_text(encoding="utf-8")
+
+
+def inputs(tmp_path: Path, name: str, out: str = "x.vtk") -> str:
+    """The ``--stats`` row ``name`` of the ``run`` that wrote ``out``."""
+    return stats_row(report_of(tmp_path, out), name)
 
 
 def refused(tmp_path: Path, *args: str, says: tuple[str, ...]) -> str:
@@ -222,19 +235,19 @@ class TestEndToEnd:
             *("--out-crs", TARGET, "--tolerance", str(TOLERANCE)),
         )
         assert field(vtk, "crs") == TARGET
-        assert field(vtk, "source_crs") == "EPSG:4326"
+        assert inputs(tmp_path, "dem_crs") == "EPSG:4326"
         expected = Transformer.from_crs("EPSG:4326", TARGET, always_xy=True).description
-        assert field(vtk, "source_transform") == expected
-        assert field(vtk, "domain_crs") == "EPSG:4674"
-        grid = field(vtk, "computation_grid")
-        assert grid.startswith(f"square {H} m grid in {TARGET}"), grid
-        assert "resampled bilinear from EPSG:4326" in grid, grid
-        sentence = field(vtk, "elevation_source")
-        assert "against the resampled grid" in sentence, sentence
-        checked = re.search(r"checked against (\d+) source nodes", sentence)
-        assert checked is not None, sentence
+        assert inputs(tmp_path, "dem_transform") == expected
+        assert inputs(tmp_path, "domain_crs") == "EPSG:4674"
+        grid = inputs(tmp_path, "resampled_grid")
+        assert grid.startswith(f"{H} m square grid in {TARGET}"), grid
+        for moved in ("source_crs", "source_transform", "computation_grid", "elevation_source"):
+            assert moved not in vtk.field_data, moved
+        for renamed in ("dem_crs", "dem_transform", "resampled_grid", "dem_nodes_checked"):
+            assert renamed not in vtk.field_data, f"{renamed} is a --stats row (D2)"
+        checked = int(inputs(tmp_path, "dem_nodes_checked"))
         found = geographic_check(vtk, domain_4674)
-        assert found.nodes <= int(checked.group(1)) <= ROWS * COLS - 3
+        assert found.nodes <= checked <= ROWS * COLS - 3
         # Every vertex inside the domain, moved to the target CRS.
         ring = project_ring(
             "EPSG:4674", TARGET, json.loads(domain_4674.read_text())["coordinates"][0][:-1]
@@ -375,10 +388,10 @@ class TestAProjectedDemInAnotherCrs:
             *("--out-crs", "EPSG:25832", "--tolerance", str(TOLERANCE)),
         )
         assert field(vtk, "crs") == "EPSG:25832"
-        assert field(vtk, "source_crs") == "EPSG:25833"
-        grid = field(vtk, "computation_grid")
-        assert grid.startswith("square 10 m grid in EPSG:25832"), grid
-        assert "checked against" in field(vtk, "elevation_source")
+        assert inputs(tmp_path, "dem_crs") == "EPSG:25833"
+        grid = inputs(tmp_path, "resampled_grid")
+        assert grid.startswith("10 m square grid in EPSG:25832"), grid
+        assert int(inputs(tmp_path, "dem_nodes_checked")) > 1000
         x, y = nodes(self.X0, self.Y0, self.STEP, self.STEP, (ROWS, COLS))
         xy = project("EPSG:25833", "EPSG:25832", x, y)
         moved = Polygon(project_ring("EPSG:25833", "EPSG:25832", ring))
@@ -572,6 +585,50 @@ def test_the_anadem_extract_over_its_catchment(tmp_path: Path) -> None:
     )
     assert math.isfinite(found.worst) and found.nodes > 0
     assert (found.over_interior, found.over_strip) == (0, 0), found
+    assert_max_error_is_the_sources(tmp_path, vtk, found, tolerance=5.0)
+
+
+def assert_max_error_is_the_sources(
+    tmp_path: Path, vtk: VtkFile, found: SourceCheck, tolerance: float
+) -> None:
+    """Increment 25, D2: on the reprojected path the file's ``max_error_m`` is
+    the error at the original DEM's nodes, raised by the at-vertex figure,
+    and not phase 1's figure against the resampled grid.
+
+    ``found.worst`` is the independent check's largest error over every
+    located source node, those on a vertex included; it agrees with the
+    final check to the store's 2 um rounding (measured: 4e-8 m on this
+    extract, while the resampled grid's figure differs by 6e-4 m)."""
+    report = report_of(tmp_path)
+    stated = float(field(vtk, "max_error_m"))
+    resampled = float(stats_row(report, "resampled_grid_max_error_m"))
+    at_vertices = float(stats_row(report, "dem_nodes_at_vertices_max_error_m"))
+    assert int(stats_row(report, "dem_nodes_at_vertices")) >= 0  # measured on this path (D6)
+    assert stated == pytest.approx(found.worst, abs=1e-6)
+    assert abs(resampled - found.worst) > 1e-4, "the extract no longer tells the two apart"
+    assert stated >= at_vertices
+    assert field(vtk, "tolerance_m") == str(tolerance).removesuffix(".0")
+    assert stated <= max(tolerance, at_vertices)
+    sizes = table(section(report, "Sizes"))
+    assert "resampled grid nodes" in sizes, sizes
+    assert "DEM nodes" not in sizes, "the resampled grid is not the DEM (D4)"
+
+
+def test_g6_max_error_is_the_source_dems(
+    tmp_path: Path, geographic_dem: Path, domain_4674: Path
+) -> None:
+    """D2 on the synthetic tile: the same rule as the ANADEM extract's."""
+    vtk = run(
+        tmp_path,
+        *("--dem", str(geographic_dem), "--domain", str(domain_4674)),
+        *("--out-crs", TARGET, "--tolerance", str(TOLERANCE)),
+    )
+    found = geographic_check(vtk, domain_4674)
+    assert_max_error_is_the_sources(tmp_path, vtk, found, tolerance=TOLERANCE)
+    report = report_of(tmp_path)
+    inserted = int(stats_row(report, "dem_check_points_inserted"))
+    rounds = int(stats_row(report, "dem_check_rounds"))
+    assert inserted > 0 and rounds > 0  # 15c-2's phase 2 has work on this tile
 
 
 # ------------------------------------------------------------------ round 1 findings
@@ -631,7 +688,8 @@ class TestOutCrsMustBeProjectedInMetres:
             *("--dem", str(geographic_dem), "--domain", str(domain_4674)),
             *("--out-crs", proj, "--tolerance", str(TOLERANCE)),
         )
-        assert "checked against" in field(vtk, "elevation_source")
+        assert int(inputs(tmp_path, "dem_nodes_checked")) > 1000
+        assert float(field(vtk, "max_error_m")) <= TOLERANCE
 
 
 class TestRoundOneMutantKillers:
@@ -660,8 +718,9 @@ class TestRoundOneMutantKillers:
         domain_4674: Path,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        """`checked against N source nodes` is the store's size, which equals
-        the points `check_point_blocks` yields for the same request."""
+        """`dem_nodes_checked` (once `checked against N source nodes`) is the
+        store's size, which equals the points `check_point_blocks` yields for
+        the same request."""
         monkeypatch.setattr("tin_engine.target_grid.BLOCK", 16)
         opened = open_dem(
             DemRequest(
@@ -670,10 +729,8 @@ class TestRoundOneMutantKillers:
         )
         assert opened.checks is not None
         yielded = sum(len(z) for _, z in opened.checks)
-        vtk = run(tmp_path, *self.args(geographic_dem, domain_4674))
-        checked = re.search(r"checked against (\d+) source nodes", field(vtk, "elevation_source"))
-        assert checked is not None
-        assert int(checked.group(1)) == yielded > 1000
+        run(tmp_path, *self.args(geographic_dem, domain_4674))
+        assert int(inputs(tmp_path, "dem_nodes_checked")) == yielded > 1000
 
     def test_the_refusal_prints_percentages(
         self, tmp_path: Path, geographic_dem: Path, domain_4674: Path, no_pixels: None

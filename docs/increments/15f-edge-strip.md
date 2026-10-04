@@ -585,9 +585,18 @@ On the tolerance path of `_dem_mesh`, in this order:
 4. `trim(final...)`, as today.
 
 A refusal from either run is a usage error in the engine's words, as today
-(`_dem_mesh`'s `typer.BadParameter(f"{dem}: {out.message}", ...)`, `cli.py:1519`, and its final-check twin at `:1525`).
+(`_dem_mesh`'s `typer.BadParameter(f"{dem}: {out.message}", ...)`, `cli.py:1561`, and its final-check twin at `:1567`, which reads `checked.message`).
 
 ### D7. What the file and `--stats` record
+
+**Superseded for the file, stderr and `--stats` by increment 25**
+(`docs/increments/25-plain-output.md`, D6; Ola's ruling of 2026-10-03 that the
+`elevation_source` sentence is replaced by named fields before 15f-3's code
+step, and Ola's cut of the same day: the mesh file carries only what a user of
+the mesh needs). The strip's counts below go to `--stats` as 25's
+`line_points_checked`, `line_max_error_m`, `line_points_refused` and the rest
+(25, D6), not to the file; the file's `max_error_m` carries the "at most"
+bound. The `--stats` phase rows below stand.
 
 The `elevation_source` sentence gains one clause on both paths, after today's
 final-check clause:
@@ -1184,6 +1193,9 @@ the split option (b) that was considered for 15f-1.
     ("every valid DEM node ... within the tolerance") at a scale of `r(g)`, 1e-10 to about 5e-10
     cells. The figure is reported, so nothing is hidden. If Ola wants it
     stated in the `.vtk` sentence, it costs one clause in 15f-3's CLI work.
+    *Answered by increment 25* (`docs/increments/25-plain-output.md`, D2;
+    default taken while Ola was away): the file's `max_error_m` includes the
+    largest difference at these nodes, and their count is in `--stats`.
   - **ASK OLA (not blocking), a separate question:** should the build pin
     `-ffp-contract=off` project-wide? Otherwise arm64 (FMA contraction on)
     and x86-64 can differ in the last bits of any refine output. Bit-identity
