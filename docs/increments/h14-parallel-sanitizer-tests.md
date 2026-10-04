@@ -41,8 +41,10 @@ Tooling; no novelty claimed.
   scheduling in an arbitrary order can finish up to 2 - 1/m times later than
   the best schedule on m processors; longest first, at most 4/3 - 1/(3m)
   times later. That bound is all LPT promises in general: it can miss the
-  best schedule even when one job is long (four workers, jobs of 10, 7, 7, 7
-  and 7: longest first gives 14, the best schedule 10). On this suite's data
+  best schedule even when one job is longer than a quarter of the total (four
+  workers, jobs of 10, 5, 5, 4, 4, 3, 3 and 3, total 37: longest first gives
+  11, the best schedule 10, as 10 | 5+4 | 5+4 | 3+3+3; checked by trying all
+  4^8 assignments). On this suite's data
   it is optimal: §2c's simulation finishes at 97 / 171 s, which is the lower
   bound (the run cannot finish before its longest test does). The design
   departs from LPT in one way: it gives a cost to one target, not to every
@@ -200,7 +202,10 @@ What the hits are:
   `<unistd.h>`; `test_build_hardening.cpp` has no `<cstdlib>`. In
   `test_refinement_scan_frozen.cpp:30` `<cstdlib>` declares `std::size_t`, the
   only name the file uses that it can come from (it calls no `<cstdlib>`
-  function). No file is
+  function). The `<cstdlib>` at `test_predicates_default_kernel.cpp:43`, in
+  its fork block, declares nothing the file uses (`exit` and `atexit` appear
+  only in the comment at lines 281-284, and `_exit` is `<unistd.h>`'s). No
+  file is
   opened anywhere in the C++ tests or the core (the core never opens a file,
   `CLAUDE.md` §2, I/O boundary).
 - The two `fork()` calls: each forks a child, waits for that child's own pid
@@ -264,11 +269,14 @@ state that the searches above can see.
 | H. `--parallel` on the C++ core legs' `ctest` too | saves 10-20 s on jobs of 2-3 min | Same precondition, already met. Not the floor; out of the ruling's scope (§8). |
 
 After B, the asan job's expected total is about 4.5-8.5 minutes (set-up and
-Configure under a minute, Build 2.0-3.7, Test 2.4-4.3 with the slowdown), so
-the slowest Python job (5.9-8.5 in §2a) becomes the floor `CI result` waits
-on. The saving on a run is the asan job's time above the Python job's: about
-2 minutes in run 37235448420 (7.8 - 5.9), about 7 in run 37234445967
-(13.7 - 7.1).
+Configure under a minute, Build 2.0-3.7, Test 2.4-4.3 with the slowdown), so on
+a fast runner, or at the ideal, the slowest Python job (5.9-8.5 in §2a)
+becomes the floor `CI result` waits on. On a slow runner with the slowdown the
+asan job can stay the floor: in run 37234445967 it would be about 3.1 + 4.3 +
+0.2 = 7.6 minutes (Build, Test, the rest), above that run's Python job at
+7.1. The saving on a run is the asan job's time above whichever job is then
+the floor: about 2 minutes in run 37235448420 (7.8 - 5.9), about 6 to 7 in
+run 37234445967 (13.7 - 7.6 with the slowdown, 13.7 - 7.1 at the ideal).
 
 ## 4. Recommendation
 
@@ -455,13 +463,37 @@ Findings, all fixed in the commit after 0b2ab5d:
 6. §3 B said two to five lines of `tests/cpp/CMakeLists.txt`, §4 about 8. Now
    about 8 in both.
 7. §1 said longest first is optimal *because* one test exceeds a quarter of
-   the run; it is not (four workers, jobs 10, 7, 7, 7, 7: longest first 14,
-   best 10). Now: optimal on this data, as §2c's simulation reaches the lower
+   the run; it is not (the counterexample first given here, jobs 10, 7, 7, 7,
+   7, was wrong; round 2, finding 1, replaced it). Now: optimal on this data, as §2c's simulation reaches the lower
    bound (97 / 171 s).
 
 Suggestions, taken: §2d's `<cstdlib>`/`_exit` remark corrected (`_exit` is
 `<unistd.h>`; `test_build_hardening.cpp` has no `<cstdlib>`; the one in
 `test_refinement_scan_frozen.cpp` is for `std::size_t`); §4's no-timeout
-claim now shows its grep; §3's saving "about 6" is "about 7" (13.7 - 7.1) and
+claim now shows its grep; §3's saving "about 6" became "about 7" (13.7 - 7.1), itself
+corrected in round 2, finding 2, and
 Build 2.0-3.7; §6 item 3 compares against parallel without the cost (48 / 94 s
 simulated).
+
+### Round 2: `@reviewer`, design, 0b2ab5d..05c6eaf
+
+Verdict: **CHANGES REQUESTED**. Both errors came from round 1's own
+suggestions.
+
+Findings, fixed in the commit after 05c6eaf:
+
+1. §1's counterexample (four workers, jobs 10, 7, 7, 7, 7) is not one: the
+   best schedule is also 14 (10 | 7 | 7 | 7+7). Replaced by jobs 10, 5, 5, 4,
+   4, 3, 3, 3 on four workers: longest first 11, best 10 (10 | 5+4 | 5+4 |
+   3+3+3), with the longest job, 10, above a quarter of the total 37 (9.25).
+   Brute-forced by `@reviewer`, the main session and `@architect` (all 4^8
+   assignments). Round 1's finding 7 now says its example was wrong.
+2. §3's slow-run saving ignored §3's own 1.5 slowdown: the asan job after
+   option B would be about 3.1 + 4.3 + 0.2 = 7.6 minutes in run 37234445967,
+   above that run's Python job (7.1), so asan stays the floor there. Now
+   "about 6 to 7 (13.7 - 7.6 with the slowdown, 13.7 - 7.1 at the ideal)",
+   and the Python job is the floor only on a fast runner or at the ideal.
+   Round 1's "Suggestions, taken" line is corrected to match.
+
+Suggestion, taken: §2d says what the `<cstdlib>` at
+`test_predicates_default_kernel.cpp:43` is for: nothing the file uses.
