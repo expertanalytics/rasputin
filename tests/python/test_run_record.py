@@ -433,6 +433,33 @@ class TestSelfChecks:
 # ---------------------------------------------------------------- the summary (D7)
 
 
+class TestRefusedLinePoints:
+    """25's D7, after 15f-3: points along the lines that could not be added
+    (15f's refused strip points) give one stderr warning with their count and
+    largest difference; none, none. Plurals as "Settled after the red step", 8."""
+
+    @staticmethod
+    def warnings(rr: ModuleType, refused: int, worst: float) -> list[str]:
+        record = projected(rr, line_points_refused=refused, line_points_refused_max_error_m=worst)
+        return [ln for ln in rr.summary(record).splitlines() if ln.startswith("Warning:")]
+
+    def test_one_is_singular(self, rr: ModuleType) -> None:
+        (warning,) = self.warnings(rr, 1, 5.4)
+        assert warning == (
+            "Warning: 1 point along the lines could not be added; its difference is 5.4 m."
+        )
+
+    def test_several_are_plural(self, rr: ModuleType) -> None:
+        (warning,) = self.warnings(rr, 3, 7.25)
+        assert warning == (
+            "Warning: 3 points along the lines could not be added; "
+            "their largest difference is 7.25 m."
+        )
+
+    def test_none_is_silent(self, rr: ModuleType) -> None:
+        assert self.warnings(rr, 0, 0.0) == []
+
+
 class TestSummary:
     def test_the_projected_summary(self, rr: ModuleType) -> None:
         text = rr.summary(projected(rr))
@@ -440,23 +467,23 @@ class TestSummary:
         assert "within 5 m" in text and "largest difference 4.9997 m" in text, text
         assert "199 vertices on NoData cells" in text, text
 
-    def test_the_no_tolerance_summary_says_on_or_next_to(self, rr: ModuleType) -> None:
-        """Increment 12's one-cell trim, until the sampler fix ("NoData on the
-        no-tolerance path"): the stride path's count includes vertices next to
-        a NoData cell, and the summary says so; the tolerance path does not."""
-        assert "6 vertices on or next to NoData cells were removed" in rr.summary(stride(rr))
-        assert "on or next to" not in rr.summary(projected(rr))
+    def test_the_no_tolerance_summary_says_on_nodata_cells(self, rr: ModuleType) -> None:
+        """Increment 27 ended increment 12's one-cell trim: a node reads only
+        itself, so the stride path's count is NoData vertices and the summary
+        uses the tolerance path's wording."""
+        text = rr.summary(stride(rr))
+        assert "6 vertices on NoData cells were removed" in text, text
+        assert "next to" not in text, text
+        assert "next to" not in rr.summary(projected(rr))
 
-    @pytest.mark.parametrize(
-        ("path", "where"),
-        [("projected", "on NoData cells"), ("stride", "on or next to NoData cells")],
-    )
-    def test_one_removed_vertex_is_singular(self, rr: ModuleType, path: str, where: str) -> None:
+    @pytest.mark.parametrize("path", ["projected", "stride"])
+    def test_one_removed_vertex_is_singular(self, rr: ModuleType, path: str) -> None:
         """Plurals are correct English ("Settled after the red step", 8):
-        one vertex goes with its triangles, not their triangles."""
+        one vertex goes with its triangles, not their triangles. One wording
+        on both paths since increment 27."""
         record = {"projected": projected, "stride": stride}[path](rr, nodata_vertices_removed=1)
         text = rr.summary(record)
-        assert f"1 vertex {where} was removed with its triangles." in text, text
+        assert "1 vertex on NoData cells was removed with its triangles." in text, text
         assert "their" not in text, text
 
     def test_no_nodata_sentence_without_nodata(self, rr: ModuleType) -> None:

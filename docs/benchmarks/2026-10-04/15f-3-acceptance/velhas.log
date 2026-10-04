@@ -1,0 +1,21 @@
+=== base-r1 start 2026-10-04T00:41:21Z total = 11264.00M  used = 10542.56M  free = 721.44M  (encrypted)
+base-r1 t20: real [3.19, 3.01] s, rss 1.82 GiB
+base-r1 t10: real [4.11, 4.08] s, rss 1.77 GiB
+base-r1 t5: real [6.83, 6.78] s, rss 1.88 GiB
+=== base-r1 exit 0 2026-10-04T00:42:15Z total = 11264.00M  used = 10542.56M  free = 721.44M  (encrypted)
+=== 15f3-r1 start 2026-10-04T00:42:15Z total = 11264.00M  used = 10542.56M  free = 721.44M  (encrypted)
+15f3-r1 t20: real [3.11, 3.07] s, rss 1.89 GiB
+15f3-r1 t10: real [4.34, 4.34] s, rss 1.86 GiB
+15f3-r1 t5: real [7.38, 7.26] s, rss 1.83 GiB
+=== 15f3-r1 exit 0 2026-10-04T00:43:11Z total = 11264.00M  used = 10542.56M  free = 721.44M  (encrypted)
+=== 15f3-r2 start 2026-10-04T00:43:11Z total = 11264.00M  used = 10542.56M  free = 721.44M  (encrypted)
+15f3-r2 t20: real [3.18, 3.14] s, rss 1.89 GiB
+15f3-r2 t10: real [4.31, 4.28] s, rss 1.76 GiB
+15f3-r2 t5: real [7.34, 7.18] s, rss 1.98 GiB
+=== 15f3-r2 exit 0 2026-10-04T00:44:07Z total = 11264.00M  used = 10542.56M  free = 721.44M  (encrypted)
+=== base-r2 start 2026-10-04T00:44:07Z total = 11264.00M  used = 10542.56M  free = 721.44M  (encrypted)
+base-r2 t20: real [3.08, 2.99] s, rss 1.91 GiB
+base-r2 t10: real [4.06, 4.02] s, rss 1.91 GiB
+base-r2 t5: real [6.8, 6.78] s, rss 1.88 GiB
+=== base-r2 exit 0 2026-10-04T00:45:00Z total = 11264.00M  used = 10542.56M  free = 721.44M  (encrypted)
+ALLDONE
