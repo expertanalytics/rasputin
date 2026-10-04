@@ -9,10 +9,10 @@ or one followed by `B` alone, is bytes. `tin_engine.decompose.parse_memory_budge
 is pure and raises `ValueError`; the CLI turns that into the usage error
 (`test_cli_mesh_pieces_budget.py`).
 
-PINNED HERE, where the point is silent (handback): the digits are ASCII
+Ruled after the red step (point 11's choices 1-5, confirmed): the digits are ASCII
 (fullwidth digits are refused, as `int()` alone would accept them); leading
 zeros are digits like any other (`016G` is 16 GiB); whitespace before or after
-the value is refused as a space inside is (ruled after the red step); a zero
+the value is refused as a space inside is; a zero
 budget is refused
 here (no window fits in 0 bytes), while "below one node's bytes", which
 needs the tolerance, stays `partition`'s and the CLI's refusal.

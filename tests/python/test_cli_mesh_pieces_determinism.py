@@ -16,14 +16,10 @@
   through what a piece's spec may depend on: the DEM changed deep inside
   another cell (five nodes or more from every partition line) leaves the
   first piece's file byte-identical, and changes the piece it lies in (the
-  control). Handback, choice 10.
+  control). Confirmed under "Settled after 23c's red step (65e3990)", item 10.
 
-The design's other half of DC7, "pieces in reversed order", is not written:
-it needs a hook into the runner's order that no designed signature offers
-(handback, question for `@architect`).
-
-HOW THIS FILE GOES RED: `--pieces` is not an option of `mesh`; every run
-exits 2 with "No such option".
+The design's other half of DC7, "pieces in reversed order", moved to 23d's
+PJ4 (item 12 there): 23c runs pieces in one fixed order and offers no hook.
 """
 
 from __future__ import annotations

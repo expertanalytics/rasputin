@@ -16,10 +16,6 @@ question B:
 - B: a cell all NoData keeps its index entry with `file` and `sha256` null
   and zero `triangles` and `vertices`; the other pieces are written and pass
   the oracles. A cut of an all-NoData DEM is refused (exit 2) with no index.
-
-HOW THIS FILE GOES RED: `--pieces` and `--memory-budget` are not options of
-`mesh`, so every run exits 2 with "No such option", which each test rejects
-as the reason.
 """
 
 from __future__ import annotations

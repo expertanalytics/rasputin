@@ -18,9 +18,6 @@ is a function of the box): nothing here re-derives the window rule.
 
 Piece ids `(j, i, k)`: `j` is the cell row from the top (rows grow down,
 `y = -R h`), `i` the column from the left.
-
-HOW THIS FILE GOES RED: `--pieces` is not an option of `mesh`; every run
-exits 2 with "No such option".
 """
 
 from __future__ import annotations

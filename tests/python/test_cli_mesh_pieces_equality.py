@@ -21,8 +21,10 @@ over the whole domain. The oracle builds that run itself:
   (on a lattice line the strip window cannot change them, N17 and N19);
 - the fans are built here, by index arithmetic, from the design's text
   ("The seam protocol" step 3), not by `pieces.py`;
-- the fanned start reaches `refine` through `_core.indexed_mesh` (pinned in
-  `test_core_mesh_arrays.py`; handback, choice 1).
+- the fanned start reaches `refine` through `_core.indexed_mesh`
+  (`test_core_mesh_arrays.py`; confirmed under "Settled after 23c's red step (65e3990)", item 1).
+
+The octagon and the spy are confirmed there, item 13.
 
 The domain is an asymmetric octagon on nodes rather than the design's
 rectangle: its axis-parallel sides are the ones the partition lines cross,
@@ -31,9 +33,6 @@ mirror images. Control: the same start refined without the seam pass and
 without freezing differs, on a case where a node on a seam is over the
 tolerance before the seam pass (checked here, so the control cannot pass
 for want of work).
-
-HOW THIS FILE GOES RED: `--pieces` is not an option of `mesh` (every run
-exits 2), and `_core.indexed_mesh` does not exist.
 """
 
 from __future__ import annotations

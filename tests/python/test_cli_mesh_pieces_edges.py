@@ -14,8 +14,6 @@ holds: each seam edge in exactly two files bit for bit, no edge in three
 triangles, no overlap, constrained Delaunay with the seams, and section 3D's
 tolerance oracle in its own words, every valid node in a triangle with three
 valid vertices (`pieces_fixtures.located_over`).
-
-HOW THIS FILE GOES RED: `--pieces` is not an option of `mesh`.
 """
 
 from __future__ import annotations

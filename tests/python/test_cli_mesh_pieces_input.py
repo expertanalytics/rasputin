@@ -14,10 +14,7 @@ and K10 (the core sees numbers in metres; CRS stays in Python).
   `index.json`: a half-written run is not an index.
 - Schema drift: `MeshIndex` refuses an unknown key, a missing `tolerance`,
   and a piece id that is not three integers (`ValidationError`); it is
-  frozen. PINNED HERE: `extra="forbid"` (handback, choice 5).
-
-HOW THIS FILE GOES RED: `--pieces` is not an option of `mesh`, and
-`tin_engine.io.mesh_index` does not exist.
+  frozen, with `extra="forbid"` (confirmed under "Settled after 23c's red step (65e3990)", item 5).
 """
 
 from __future__ import annotations

@@ -5,9 +5,6 @@ cut run given `16G` records 17179869184 bytes in the index and writes the
 same piece files as the run given the bytes; a refusal is a usage error
 naming `--memory-budget` that writes nothing; `--help` shows the default as
 `16G` and says units are powers of 1024.
-
-HOW THIS FILE GOES RED: `--memory-budget` does not take a unit yet, so `16G`
-is a usage error and the help shows bytes.
 """
 
 from __future__ import annotations

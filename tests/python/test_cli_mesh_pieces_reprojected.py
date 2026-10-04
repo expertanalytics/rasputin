@@ -19,16 +19,17 @@ is the run's noded outline's to 1e-9, and that outline is the domain moved
 by pyproj to within the noder's snap (DC3 as corrected under "23c-2 stopped
 at dbbe1c6", 1).
 
-PINNED HERE (handback, choice 11): each index entry's `counts` carries
-`on_frozen`, the piece's phase 2 count of source nodes on a frozen edge.
+Each index entry's `counts` carries `on_frozen`, the piece's phase 2 count
+of source nodes on a frozen edge (confirmed under "Settled after 23c's red step (65e3990)",
+item 11).
 
-Split under "23c-2 stopped at dbbe1c6", 2, and point 9 there: DC10's cases
-run at `--start-min-angle 0`. At the default start quality the cut run
-leaves a hole beside the vertical seam, where the resampled grid is NoData
-on and next to the seam; the same scene uncut has none. That is the cut
-path's defect (point 9), not increment 20's. Those two cases are
-`xfail(strict=True)` naming it, so they report themselves once 23c-2 fixes
-it, and a `@tester` commit removes the marker.
+Split under "23c-2 stopped at dbbe1c6", ruling 2, which stands (point 10
+(a) withdrew point 9): DC10's cases run at `--start-min-angle 0`. At the
+default start quality, increment 20's start-quality pass, which reads no
+raster, can put a vertex on a NoData node in a piece's skinny seam fans;
+trim removes it, and what the check then sees is a rounding effect (B18).
+Those two cases are `xfail(strict=True)` naming increment 20's fix, so they
+report themselves once it is merged here.
 """
 
 from __future__ import annotations
@@ -136,9 +137,9 @@ def test_conformity_a_valid_union_and_constrained_delaunay(done: pf.Cut) -> None
 # ------------------------------------------------------------------ at the default start quality
 
 QUALITY_FIX = (
-    "23c-2's cut-path defect (23-basin-scale.md, '23c-2 stopped at dbbe1c6', point 9): "
-    "at the default start quality a piece leaves a hole where NoData meets the seam; "
-    "the same scene uncut has none"
+    "increment 20's start-quality pass can place a vertex on a NoData node; fixed by "
+    '"Fix: the start-quality pass skips NoData nodes" in 20-start-quality.md '
+    "(23-basin-scale.md, '23c-2 stopped at dbbe1c6', points 2 and 10 (a))"
 )
 
 

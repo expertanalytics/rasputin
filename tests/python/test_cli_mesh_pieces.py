@@ -10,24 +10,24 @@ on a synthetic 41 x 41-node DEM at 10 m and an off-node square domain
 quality each on and off, and at two tolerances; each oracle has a control
 that fails it on a wrong mesh.
 
-PINNED HERE, where the design is silent (handback, choices 2-5 and 7-9):
+What this file pins, as ruled under "Settled after 23c's red step (65e3990)" (items 2, 3, 7, 8, 9)
+and "23c-2 stopped at dbbe1c6" (points 1 and 11):
 
-- `--pieces` and `--memory-budget` are `mesh` options; the budget is a whole
-  number of bytes (default 2**34, the design's "16 GB, read as 16 GiB");
+- `--pieces` and `--memory-budget` are `mesh` options; the budget is a size
+  (point 11's grammar, default `16G`, 2**34 bytes; tested in
+  `test_decompose_memory_budget.py` and `test_cli_mesh_pieces_budget.py`);
   both need `--dem` and `--tolerance`; `--pieces 0` and a budget under one
   node's `b(T)` are usage errors naming the option.
 - A cut run writes `<out name>.pieces/` beside `--out`, holding
   `index.json` (`MeshIndex`, `tin_engine.io.mesh_index`) and one file per
-  piece in `--out`'s format. Whether `--out` itself is written is 23d's
-  (the stitcher) and is not asserted.
+  piece in `--out`'s format (nothing at `--out` itself:
+  `test_cli_mesh_pieces_settled.py`).
 - An uncut run (one piece) writes no `.pieces` directory and the same bytes
   as today, with the options given or not: so no field records the budget
   on that path (K1 over "recorded in the file", K5).
 - K9 through spies: `node` and `triangulate` run once in a cut run.
-
-HOW THIS FILE GOES RED: `--pieces` and `--memory-budget` are not options of
-`mesh`, so every cut run exits 2 with "No such option"; `cut()` asserts the
-exit code and the directory. The uncut controls (today's bytes) pass.
+- DC3's area is the union's against the run's own noded outline
+  ("23c-2 stopped at dbbe1c6", point 1; `pieces_fixtures.validity_problems`).
 """
 
 from __future__ import annotations

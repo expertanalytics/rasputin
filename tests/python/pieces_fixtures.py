@@ -27,11 +27,12 @@ code with `tin_engine`:
   recomputed from the written vertices (`geographic_fixtures.source_check`,
   with a 1e-9 slack).
 
-PINNED by these readers, where the design is silent (handback, choices 2-5):
+What these readers pin, confirmed under "Settled after 23c's red step (65e3990)" (items 2-4):
 pieces go to the one directory `<out name>.pieces` beside `--out` (found here
 by its suffix); `index.json` there holds `crs`, `tolerance`, a `partition`
 object (`pieces`, `memory_budget`, `bytes_per_node`, `nx`, `ny`, `dx`, `dy`,
-`cols`, `rows`) and a `pieces` list whose entries carry `id` (`[j, i, k]`),
+`cols`, `rows`, and the lattice: `row0`, `col0`, `spacing`, `origin`) and a
+`pieces` list whose entries carry `id` (`[j, i, k]`),
 `file` (relative to the directory), `sha256` and `counts`; a piece file names
 the seam bit `seam` in its own vocabulary.
 """
