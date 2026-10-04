@@ -17,8 +17,7 @@ ACCEPTED it (meshes and quality identical to master, refine within noise;
 **15f-3** (the bindings, the Python and the CLI) is implemented on
 `worktree-15f-3`: green at `7d841f3`, with the green step's questions ruled
 under "Settled after 15f-3's green step" (S1-S5), 179 net lines against 187.
-It is in review (`@reviewer`'s code round 1 is recorded under "Review"), and
-`@perf`'s full acceptance (Bygdin, the basin piece) is outstanding. Choices that would normally go to Ola
+`@reviewer` APPROVED it in round 2 ("Review"), and `@perf` ACCEPTED it with a cost finding (`docs/benchmarks/2026-10-04/15f-3-acceptance.md`), ruled under "Settled after 15f-3's acceptance" (A1-A6): 15f-3 ships, and a follow-up, **15f-4**, makes the mesh rebuild cheap. Choices that would normally go to Ola
 were made as defaults; each is marked *default* where it occurs and listed
 under "Defaults chosen" at the end.
 
@@ -1540,6 +1539,100 @@ The citations that moved with `7d841f3` are corrected above: D5's binding
 `cli.py:1417` and others as they were at `17c2d14`. That is history, and it is
 left as written.
 
+**Settled after 15f-3's acceptance (9f2f7e5).** `@perf` accepted 15f-3 with a
+cost finding (`docs/benchmarks/2026-10-04/15f-3-acceptance.md`, "Where
+refine_strip's untimed time goes"): on the projected path, `refine_strip`
+spends about 90 % of its time in `detail::to_lattice` rebuilding refine's
+output as a `LatticeMesh`. The cost is fixed per call, about 0.8 to 1.4 µs per
+triangle of the mesh it receives, and the same with an empty strip. Bygdin at
+1 m: +1.5 s (+34 %) process time and +0.29 GiB peak memory. Ruled by
+`@architect`, 2026-10-04.
+
+- **A1. 15f-3 is not blocked; the fix is a follow-up PR, 15f-4.**
+  - The cost is not new to the code base. On master, the reprojected path's
+    final check already calls `to_lattice` on refine's output
+    (`refine_points.hpp:220`, reached from `final_check.run`). 15f-3 adds the
+    same rebuild to the projected path; on the reprojected path it adds
+    nothing of this kind (Velhas: +2.6 to +7.5 % process time, the strip's
+    own work).
+  - The basin (ANADEM, geographic, meshed in a projected CRS) runs the
+    reprojected path. So the per-triangle cost that matters for São
+    Francisco is in `to_lattice` itself, and it is there with or without
+    15f-3. The fix belongs where both paths get it: in the rebuild.
+  - 15f-3 is reviewed (APPROVED, round 2) and accepted on correctness. The
+    fix edits `LatticeMesh::build`, which every refine path uses, so its
+    acceptance is refine's whole bench (meshes byte-identical), not 15f-3's.
+    One concern per PR, and a performance change that can be bisected alone.
+  - 15f-4 lands before 23b, whose seam pass rebuilds per tile and would
+    multiply the cost.
+- **A2. The fix's shape: make the rebuild cheap. Do not fuse the calls, and
+  do not pass a mesh handle across the binding.**
+  - **`LatticeMesh::build`: no node-based container.** Replace the
+    `unordered_map` of directed edges by a flat vertex-bucketed table: count
+    each triangle's out-edges per `from` vertex, prefix-sum, fill
+    `(to, triangle, slot)` into one `std::vector`, sort each bucket by `to`.
+    A duplicate directed edge is two equal `to` values side by side (the
+    same refusal as today). The neighbour across `a -> b` is a binary search
+    for `a` in `b`'s bucket. Cost is linear plus `O(d log d)` per vertex of
+    degree `d`, so a fan of high degree stays cheap (a linear scan per
+    lookup would be quadratic in `d`). One allocation per array, freed at
+    once.
+  - **`to_lattice`'s constraint lookup: no `std::map`.** A sorted
+    `std::vector` of `(min, max) -> mask`, searched with `lower_bound`. It
+    keeps today's meaning exactly: when an edge is listed twice, the later
+    mask wins (`std::map::operator[]` assignment), and entries past
+    `masks.size()` are ignored.
+  - **`legalise_all` stays** in `refine_strip`. It is 5 to 6 %, it marks the
+    triangles it flips as written (L3), and `refine_strip` is a public
+    binding that must not assume its start is Delaunay.
+  - **Why not a fused C++ call (refine, generate, strip).** It merges three
+    steps that `_dem_mesh` composes declaratively; every `--stats` row of the
+    three would have to come out of one C++ outcome; it duplicates refine's
+    parameter list; and it helps only the projected path, so the
+    reprojected path (the basin's) would need a fused twin of its own.
+  - **Why not a handle** (refine returns an opaque `LatticeMesh` that Python
+    passes to `refine_strip`). It keeps a mutable C++ mesh alive in Python
+    between calls, which the binding firewall exists to avoid (Python sees
+    arrays; C++ functions are pure over them), and it brings lifetime and
+    thread rules to the binding. It also keeps the lattice mesh resident
+    beside refine's output arrays through the generator, so peak memory
+    does not fall.
+  - **When to reopen fusion.** If, after 15f-4, the empty-strip
+    `refine_strip` call on Bygdin 1 m (`@perf`'s `prof_strip.py`) still takes
+    more than 10 % of the base's process time (0.43 s of 4.32 s), the
+    rebuild is still the problem and fusion comes back as a design question.
+  - Boundaries are unchanged: no path, no CRS, no new binding.
+- **A3. LOC.** About 30 net (build's adjacency about +20 against the 15 it
+  replaces; the constraint table about +8 against 4), 42 at +39 % and 48 at
+  +60 %. Folding it into 15f-3 would give about 210, far under 700, so the
+  split is for review and acceptance (A1), not for size.
+- **A4. Tests first.** The refactor must keep `build`'s and `to_lattice`'s
+  behaviour, and some of it is not pinned today (the existing cases are
+  "build derives adjacency across the shared edge" and "build refuses a
+  clockwise or a zero-area triangle", `test_mesh_lattice_split.cpp`).
+  `@tester` adds, against today's code (they pass on master, and must still
+  pass after):
+  - **B1.** `build` refuses a directed edge used twice (two coincident
+    counter-clockwise triangles; three triangles on one edge).
+  - **B2.** `build` refuses a vertex index out of range and mismatched array
+    lengths.
+  - **B3.** `build`'s neighbour table equals a brute-force oracle
+    (all pairs of triangles, shared reversed edge) on a grid triangulation
+    with shuffled triangle order, boundary edges `kNoNeighbour`, and on a
+    fan whose centre has degree at least 1,000.
+  - **B4.** `to_lattice` with a constraint edge listed twice with different
+    masks gives the later mask, and ignores edges past `masks.size()`.
+  - The whole-pipeline identity is `@perf`'s: the bench's tile and quarter
+    meshes, Bygdin and Velhas, byte-identical to the base.
+- **A5. 15f-4's acceptance (`@perf`).** `tools/bench.py` back to back with
+  `--tree`: meshes byte-identical on both domains, refine within noise or
+  faster. Bygdin 1 m: process time and peak memory against 15f-3's, and the
+  empty-strip call per A2's trigger. Velhas 5 m: the final check's time
+  against 15f-3's (it gets the same rebuild).
+- **A6. Nothing here needs Ola's ruling.** No output changes and no earlier
+  ruling moves. The one choice that is his is when to merge: see Q2 under
+  "Questions for Ola".
+
 **Python (pytest), 15f-3** (L15; first planned for 15f-2):
 
 - **PY1, the binding** (every binding of this increment, the store's and the
@@ -1587,6 +1680,8 @@ Counted in `CLAUDE.md` §2's unit. Estimates, with the worst cases at +39 %
 | | `final_check.py` | 5 | | |
 | | `cli.py`: the calls, the sentence, the report | 25 | | |
 | | **15f-3 total** | **187** | **260** | **299** |
+| **15f-4** | **The rebuild made cheap** (A1-A3, after 15f-3's acceptance) | | | |
+| | `lattice_mesh.hpp`, `build`: flat vertex-bucketed adjacency; `refine.hpp`, `to_lattice`: sorted constraint table | 30 | 42 | 48 |
 
 For 15f-2 the margins apply to the 15 estimated lines only, since the 275 are
 measured.
@@ -1746,6 +1841,13 @@ None blocks `@tester`.
   ("Settled for 15f-3 after 25"). If
   Ola wants it, it is best ruled before `@tester` writes ES2, which would then
   sample every piece densely.
+
+- **Q2. When to merge 15f-3** (not blocking; *default*: merge when ready).
+  In plain words: "15f-3 makes meshing a Norwegian DEM at 1 m tolerance about
+  a third slower end to end (Bygdin: 4.3 s to 5.8 s), because it rebuilds the
+  mesh once more. A follow-up of about 30 lines (15f-4) is meant to remove
+  most of that cost, for every run. Merge 15f-3 now and the follow-up after, or hold 15f-3
+  and merge the two together?"
 
 ## Review
 
