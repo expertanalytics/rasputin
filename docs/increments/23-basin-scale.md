@@ -3176,6 +3176,23 @@ equality and DC4's control hold.
       `@perf`. 23c-2 does not wait for it: once increment 20's fix is in,
       DC10's scene has no NoData vertex.
 
+12. **`--record` on a cut run (from merging #157, the run record):
+    refused for now. Confirmed.** It is refused like `--stats` and
+    `--out-edges` under 3(d) ("not written for a cut run yet"), for the same
+    reason: a record describes one mesh, and a cut run has none until 23d's
+    stitched file. Each piece file's fields come from its own record (the
+    piece's counts and max error), which keeps K6: a piece's bytes depend
+    on its job only. The two alternatives were rejected:
+    - a record per piece beside its file repeats what the piece file
+      already carries;
+    - a run-level record in `index.json` would describe a mesh that does
+      not exist yet.
+    **23d** writes the run's record for the stitched file and lifts all
+    three refusals together. `@tester` adds one red test, if not already
+    there: `--record` with a cut exits 2 naming `--record`, and writes
+    nothing. No question for Ola: the refusal is temporary, it is worded as
+    such, and it has the same cause as `--stats`.
+
 **B17 and B18** are under "New questions, after the rulings", each with Ola's ruling.
 
 ## Questions for Ola
