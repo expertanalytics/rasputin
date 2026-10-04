@@ -1,6 +1,6 @@
 # Increment 29 — NVE reference catchments: our catchments against NVE's, station by station
 
-Status: **design approved by `@reviewer` (round 5, 2026-10-04); all questions ruled by Ola; PR 1 (accumulation) merged as #173; PR 3 (stations and rivers): red `213a2ef`, three rulings of 2026-10-04 for it ("Ola's rulings", the block "Ruled for PR 3's green step"), red amendment `05f348a` and `c18c8d5`, green `aae91bb`; code review round 1's fixes in (red `b59c648`, green `c4e50ff`: NVE's lake number 0 means no lake, malformed files and missing fields refused in plain words); code review round 2 requested changes on one citation and wording only, and its fixes are in (`f91cdaa` and the round-2 record); code review round 3 asked for one word (one citation, not two), fixed; approved by `@reviewer`, code review round 4; PR #178's CI then failed on h11's prose-read hook (a test read `NOTICE.md`), Ola ruled the test out (block "PR 3, after PR #178's CI"), master merged in; code review round 5 asked for two sentences, fixed; **approved by `@reviewer`, code review round 6**, awaiting the push and CI**; PR 2 (the gauge on the river): red `3a06ffc`; its three design questions answered by `@architect` (block "PR 2's red step: three design questions", 2026-10-05), red amendment next
+Status: **design approved by `@reviewer` (round 5, 2026-10-04); all questions ruled by Ola; PR 1 (accumulation) merged as #173; PR 3 (stations and rivers) merged as #178; PR 2 (the gauge on the river): red `3a06ffc`, amendment `5357785`, green `91857df` (556 production lines); `@architect`'s reading of the green step adopts its choices and changes one (block "PR 2's green step", 2026-10-05): red amendment and green for it next, then code review**
 (`@architect`, 2026-10-04), branch `worktree-nve-catchments` off master
 `d20126b`. Ola's rulings of 2026-10-04 are in the section below. Round 2 closed the burn's drainage claim
 (checked node by node, not assumed), the ELVIS data cases, the PR order, and
@@ -222,6 +222,27 @@ Also pinned there: the prefix tier ("Placing the gauge", step 2); the count
 of segments read (the file's features, copies included); a station in
 another CRS is transformed into the river file's CRS, which must be the
 DEM's; `GaugePath.placed` is one `int` in 29 ("Residual inflow, later").
+
+**PR 2's green step: `@developer`'s choices beyond the design
+(2026-10-05).** `@architect`'s reading of green `91857df`, not Ola's
+rulings. Adopted and written where they apply: the extension's tie (a
+straight step first, "Following the river", step 5); NoData never a
+candidate, in the cross-section or the extension (steps 2 and 5); the
+resample's end and `dropped_m` (step 1); a tenth of the chain (step 3);
+equal or falling counts are `chain_not_draining` ("Sensitivity", step 3);
+the reach's CRS, stage B's repeated window, `GaugeResult` without
+`reach_fork`, the `direction` cause joined by the command, and the memory
+figure ("The window loop"). **One is changed**: an upstream flag within `U`
+shortened `checked_up_m` and nothing else; the design's "counts as unread"
+now means `drains` false and the cause `chain_not_draining`
+("Sensitivity", step 2, with the proof). **Red amendment** (`@tester`):
+`test_sensitivity.py`'s `test_a_flag_upstream_stops_the_read_there` and
+`test_the_read_stops_at_the_first_flag_not_at_a_position` also assert
+`drains` false, `"chain_not_draining"` in `causes` and `well_posed` false;
+`test_a_flag_past_u_does_not_shorten_the_read` (a flag at -40 m with `U` =
+30 m, well posed) stays as it is and must stay green. **Green** (`@developer`, `sensitivity.py`):
+`drains` is also false when the upstream read stopped at an untrusted
+sample whose arc length is within `-U` (a few lines).
 
 ## What the data says (measured 2026-10-04)
 
@@ -927,7 +948,14 @@ would often sit on a hillside or behind an embankment. So the reach is first
 moved to the valley floor, then lowered where it still climbs:
 
 1. **Resample** the reach at the DEM's node spacing, by arc length, from its
-   first vertex.
+   first vertex: points at 0, `step`, 2 `step`, ... up to the line's length,
+   with no extra point at the last vertex when the length is not a multiple
+   of `step` (the chain can then end less than one step short of the line's
+   end). Points outside the window are dropped, all of them, and
+   `GaugePath.dropped_m` is their count times `step` (pinned at PR 2's green
+   step; the window holds the whole reach plus `WINDOW_MARGIN_M` unless the
+   data ends, so this is 0 in the usual case, and it is not carried into
+   `GaugeResult`).
 2. **Valley floor, across the line.** For each resampled point `p`, the node
    of least elevation in its **cross-section**: the nodes within `corridor`
    of `p` (distance `<= corridor + 1e-6 m`: a node exactly at the corridor's
@@ -937,7 +965,10 @@ moved to the valley floor, then lowered where it still climbs:
    the segment that starts there, the last point the last segment). Ties: the
    nearer to `p`, then the smaller (row, column). A cross-section with no node
    (only when `corridor` is below half a cell's diagonal, 7.07 m on DTM10)
-   takes the node nearest `p`, same ties. **Why across and not the whole
+   takes the node nearest `p`, same ties. NoData nodes are never chosen: they
+   are left out of the cross-section and of the nearest-node fallback, and a
+   point with no data node within its search box is a `ValueError` (pinned at
+   PR 2's green step). **Why across and not the whole
    disc** (PR 2's red step, `@tester`): the least elevation anywhere within
    `corridor` lies, on a falling floor, at the downstream edge of the disc, so
    every point, and the placed node with them, moves downstream by about the
@@ -988,7 +1019,10 @@ moved to the valley floor, then lowered where it still climbs:
    line runs against the DEM's slope (2 of 138 measured lines did): the
    result is flagged `direction_disagrees` and the station becomes
    `uncertain` (a refusal would hide it). Lakes and flat reaches (within
-   0.5 m: 39 of 138) pass.
+   0.5 m: 39 of 138) pass. Pinned at PR 2's green step: a tenth is
+   `ceil(n / 10)` nodes of the taut chain of `n` nodes (at least one), raw
+   elevations, before the extension of step 5; "at least 100 m" is the taut
+   chain's own arc length, not the mapped line's.
 4. **Descent.** Along the chain from its first node, `z'[k] = min(z[k],
    z'[k-1] - 0.001 m)`, computed in the array's own dtype: the elevation is
    lowered only where it does not already fall, and the chain falls strictly
@@ -1020,11 +1054,30 @@ moved to the valley floor, then lowered where it still climbs:
    end say nothing about the river. So the chain is **extended downstream
    along the raw valley floor** past such an end: from the last node, step to
    the least-elevation 8-neighbour that is not on the chain and is not an
-   8-neighbour of any chain node but the last (raw `z`; ties: the smaller
-   (row, column)), apply the descent rule to it, and repeat until a node needs
-   no lowering (`z[k] <= z'[k-1] - 0.001`: the raw ground falls on its own
-   there), or the cap `end_cap` is reached, or no neighbour qualifies, or the
-   next node is NoData or outside the window. **The extension keeps the chain
+   8-neighbour of any chain node but the last (raw `z`; ties: a straight step
+   before a diagonal one, then the smaller (row, column)), apply the descent
+   rule to it, and repeat until a node needs no lowering (`z[k] <= z'[k-1] -
+   0.001`: the raw ground falls on its own there), or the cap `end_cap` is
+   reached, or no neighbour qualifies. A NoData node or one outside the window
+   is never a candidate (NoData has no elevation to compare), so the
+   extension stops at them only when no other neighbour qualifies. **Why
+   straight first** (pinned at PR 2's green step, from `@developer`'s code;
+   `test_an_embankment_in_the_last_50_m_extends_the_chain_until_the_ground_falls`
+   meets a flat crest of three nodes at one height below the end): (row,
+   column) alone turns every tie towards the north-west, whatever the
+   river's direction; a straight step first keeps a chain running along a
+   lattice axis on that axis, is symmetric left and right of it, and spends
+   10 m of `end_cap`, not 14.1 m. It is still a lattice rule: on a flat
+   reached by a diagonal step the extension turns 45° onto an axis, and a tie
+   between two straight steps still goes to the smaller (row, column). **It
+   cannot move the gauge**: the placed node is fixed by step 6 on the chain
+   before the extension, and the extension only appends nodes downstream of
+   the reach's last one. What a tie decides is which flat nodes the
+   extension crosses, and so `end_extended_m`, `end_closed`, and `D` when `U`
+   reaches past the reach's last node; on a flat the counts are a filled
+   pit's, ordered breadth-first (this step's first sentence), and say nothing
+   about the river whichever way the tie goes.
+   **The extension keeps the chain
    taut by that choice**, rather than by a second pass after it: a node cut
    after the descent would stay lowered while off the chain. `end_cap` is
    500 m of arc length along the extension, and the metres govern, not a
@@ -1037,8 +1090,8 @@ moved to the valley floor, then lowered where it still climbs:
    extension then ends at most 500 m of arc length, and so at most 500 m in a
    straight line, from the reach's last node, inside the window, whose margin
    round the reach is `WINDOW_MARGIN_M`, 2000 m. The metres added are reported (`end_extended_m`, 0 when the end
-   was not lowered). **A cap hit, NoData or the window's edge before the raw
-   ground falls, or no neighbour that keeps the chain taut, marks the chain
+   was not lowered). **A cap hit, or no neighbour with data, inside the
+   window, that keeps the chain taut, before the raw ground falls, marks the chain
    `monotone = False`** (the chain's end is not closed), which makes the
    station `uncertain`. A flat floor downstream of
    the gauge, such as a lake, ends here, as it should.
@@ -1108,7 +1161,32 @@ catchment into a refusal. In the final window the floods are three: `D`'s
 (to size the window), `accumulate`, and the placed node's (the mask the
 outline comes from); the earlier windows have one each. The memory cap's
 per-node figure grows by the elevation item size (the burnt copy) and 10
-bytes (accumulate's four arrays).
+bytes (accumulate's four arrays): `item size × 2 + 2 + 10` bytes per node
+with a reach, against 22's `item size + 2`.
+
+Pinned at PR 2's green step (`@developer`'s choices, adopted):
+
+- **A reach is in the DEM's CRS.** `delineate` refuses a request with a
+  reach whose `seed_crs` is not the DEM's (`CatchmentError`), as the CLI
+  refuses a river file in another CRS: the burn reads the reach in the
+  window's coordinates, and a library caller gets the same refusal as the
+  command.
+- **Stage B starts from stage A's last window's bounds**, so its first
+  window is that window again; `Catchment.windows` lists it once, not twice
+  (the code drops stage B's first entry only when its bounds equal stage A's
+  last).
+- **`GaugeResult` has no `reach_fork`.** The fork is the placement's
+  (`Placement.reach_fork`), and `delineate` never sees the placement; the
+  command that has both writes it into the catchment file from the
+  placement (`catchment --rivers` now, `station-catchments` in PR 4).
+- **The `direction` cause is joined outside `assess`.** `Sensitivity.causes`
+  holds the four causes `assess` can see; `direction` comes from
+  `GaugeResult.direction_ok`, and `catchment --rivers` appends it to the
+  causes it writes and to its verdict. `Sensitivity.well_posed` therefore
+  does not reflect the direction check; the station's verdict is "no cause
+  in the joined list". **PR 4, as the second reader, moves the join into
+  `catchment.py`** (one `causes` on `GaugeResult`, read by both commands),
+  as the GeoJSON writer moves when it gets its second caller.
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -1122,7 +1200,6 @@ class GaugeResult:
     direction_ok: bool
     end_extended_m: float      # the chain's end run along the raw valley floor
     end_closed: bool           # False: cap, NoData or window edge before the ground fell
-    reach_fork: bool           # the mapped reach stopped at a fork (see "Placing the gauge")
     downstream_checked: Literal["whole", "partly", "none"]
     sensitivity: Sensitivity   # next section
 ```
@@ -1168,7 +1245,19 @@ shapely):
    the station is **`uncertain`** (cause `downstream_unread`), not scored.
    Upstream, a river that starts within `U` ends the read without penalty (the
    area above a source is the hillside's), but a flagged count upstream stops
-   it and counts as unread.
+   it and counts as unread. **What "counts as unread" means** (ruled by
+   `@architect` after PR 2's green step, which gave it no consequence): a
+   flagged sample within `U` upstream makes **`drains` false**, so the
+   station is `uncertain` with the cause `chain_not_draining`. The reason is
+   a proof, not a guess: `accumulate` ORs each node's bits into its
+   flooder's, so a node whose flooder chain passes through the placed node
+   has bits only if the placed node has them; the placed node's are clear
+   (stage A refuses otherwise), so the flagged node does not drain through
+   the placed node, nor (the same argument) into the read stretch next to
+   it. The river within `U` upstream then lies outside the catchment, which
+   is exactly the position sensitivity this check exists to report.
+   `checked_up_m` still stops before the flagged sample, and the swing is
+   still taken over the trusted run.
 3. **Does the chain drain along itself?** `drains` is true when, for each
    consecutive pair of read samples, `flow_to` of the upper one is the
    direction of the lower one: each chain node drains into the next, node by
@@ -1178,7 +1267,11 @@ shapely):
    `drains` implies: the lower node's count includes the upper one's and
    itself) and the chain's end is closed (`end_closed`, step 5 there); it is
    the cheap cross-check, and the two failures are reported as separate causes
-   (`chain_not_draining`, `chain_end_open`).
+   (`chain_not_draining`, `chain_end_open`). Counts that are equal or fall
+   along the read stretch give `chain_not_draining`, whether or not the end
+   is closed (pinned at PR 2's green step: by the implication just stated
+   they cannot occur where `drains` holds, so they are a drainage failure;
+   an open end adds `chain_end_open` beside it).
 4. **The measures**: `A0`, the area at the placed node; `A_up` at the farthest
    trusted sample upstream and `A_down` at the farthest downstream; the
    **swing** `max(A0 - A_up, A_down - A0) / A0`, **one-sided** on purpose: the
@@ -1506,7 +1599,12 @@ forks, the `drains` check and the causes, and loses the river reader (375 to
 `burn.py` (inside its 105: it replaces the loop cut, which it subsumes) and
 the known-refusal cause to PR 4 (295 to 310). After PR 3's code review,
 round 1, the moved GeoJSON writer goes from PR 3 to PR 4, which is the
-first to need it (PR 3 380 to 355, PR 4 310 to 335).
+first to need it (PR 3 380 to 355, PR 4 310 to 335). PR 2's green step
+(`91857df`) came to 556 net lines, 34 % over its 415 and inside the
+44 % margin (598): `burn.py` took 62 more than estimated (the
+cross-section of step 2 and the extension's candidate rules) and `cli.py` 55
+more (the river file's reading and CRS check, the options' checks and help,
+the placement report); the amendment after it adds a few lines.
 
 | File | What | Estimate |
 |---|---|---|
@@ -1524,13 +1622,13 @@ first to need it (PR 3 380 to 355, PR 4 310 to 335).
 | `cli.py` | `fetch-stations` | 45 |
 | `NOTICE.md`, `project_structure.md` | NVE's credit; the new modules | docs |
 | **PR 3, the stations and rivers** | | **about 355 (511 with the margin)** |
-| `gauge.py` | `Gauge`, `Placement`, `place`, forks, `Reach` | 100 |
-| `burn.py` | valley floor, taut pass, descent, chain end, direction, `GaugePath` | 105 |
-| `sensitivity.py` | `assess`, `Sensitivity`, `drains`, the causes | 75 |
-| `catchment.py` | request field, stages A and B, burn per window, `GaugeResult` | 95 |
-| `cli.py` | `catchment --rivers` and the placement line | 40 |
+| `gauge.py` | `Gauge`, `Placement`, `place`, forks, `Reach` | 100 (117 at green) |
+| `burn.py` | valley floor, taut pass, descent, chain end, direction, `GaugePath` | 105 (167 at green) |
+| `sensitivity.py` | `assess`, `Sensitivity`, `drains`, the causes | 75 (83 at green) |
+| `catchment.py` | request field, stages A and B, burn per window, `GaugeResult` | 95 (94 at green) |
+| `cli.py` | `catchment --rivers` and the placement line | 40 (95 at green) |
 | `docs/benchmarks/<date>/nve-placement/render.py` | the placement figures (evidence script, not counted, Ola's ruling; "Placement figures") | (130) |
-| **PR 2, the gauge on the river** (needs PRs 1 and 3) | | **about 415 (600)** |
+| **PR 2, the gauge on the river** (needs PRs 1 and 3) | | **about 415 (600); 556 at green `91857df`** |
 | `reference.py` | agreement, classes, `match_by`, summary | 115 |
 | `catchment_batch.py` | `BatchRequest`, `BatchSink`, `run_batch`, `StationResult`, `refusal_cause` | 105 |
 | `mosaic.py`, `catchment.py` | `MixedGridError`, `MixedGridRefusal` (round 3, Ola's ruling on counting) | 10 |
