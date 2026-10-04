@@ -9,7 +9,7 @@ venv. Your note file is $note; write **no other file under
 **Ola's words appear only under "Ola, verbatim"** below.
 If **blocked on power, network or a lock**, stop and hand back.
 End each commit message with the **Co-Authored-By trailer** from your
-system context.
+system context. End each commit subject with `(@$persona)`.
 Write in **plain words**: say what any internal label means.
 Hand back under: **Result; Pinned or assumed beyond the design; Questions
 for Ola; Lessons; ASK OLA and GUARD FALSE POSITIVE lines** ("none" under an
