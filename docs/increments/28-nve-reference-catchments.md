@@ -1070,86 +1070,160 @@ a search for the largest: the nearest qualifying node wins, as Lindsay et al.
 
 Lean, as 22's were: no throwaway implementation. **The invariant-critical
 suite** (mutation testing required, `docs/increments/README.md`, "Cost
-constraints") is `accumulate`'s exact oracle, because every snap and
-therefore every station result rests on it.
+constraints") is `accumulate`'s exact oracle, because every sensitivity and
+every station result rests on it. **The mutation target is `accumulate`'s own
+code**: its `on_reach` callback (the flooder and order records) and its
+reverse pass (the count addition and the flag OR). `flood.hpp` is the code
+moved out of `upstream.hpp` and is covered by `upstream`'s existing suite,
+unchanged and run after the move; it gets no mutation round of its own. The
+Python suites below are not invariant-critical.
 
 **PR 1, C++ (`tests/cpp/unit/test_hydrology_accumulate.cpp`):**
 
 - *The oracle*: on a few hundred small random DEMs (with pits, flats, equal
   heights, NoData holes and NoData borders), for every node with data,
-  `count == upstream(z, {node}).nodes_in`; NoData nodes count 0.
+  `count == upstream(z, {node}).nodes_in`, and the two bits of `reach` equal
+  that call's `touches_edge` and `touches_nodata`; NoData nodes count 0 and
+  carry no bits.
 - *Conservation*: the outlets' counts sum to the nodes with data; every
   count is at least 1 on data.
 - *By hand*: a V-valley (the outlet counts the whole valley); a single
-  cell; a flat plateau draining over one rim node; a 1 × n strip.
+  cell; a flat plateau draining over one rim node; a 1 × n strip; a node
+  two cells from the edge (bit 0 clear) beside one at one cell (set).
 - *Determinism*: twice gives equal arrays. *Refusal*: the size check, by a
   geometry stub reporting 2^32 nodes (no allocation).
 - `upstream`'s existing suite, unchanged, after the move to `flood.hpp`.
 
-**PR 1, Python:**
+**PR 1, Python:** `test_core_accumulate.py`: shapes, dtypes (`uint32`,
+`uint8`), ownership (the arrays outlive the view), the oracle on two DEMs
+through the binding.
 
-- `test_core_accumulate.py`: shape, dtype `uint32`, ownership (the array
-  outlives the view), the oracle on two DEMs through the binding.
-- `test_catchment.py` gains: a station 3 cells beside a synthetic river
-  snaps to the river node of largest count, and the catchment equals one
-  flood from that node; a tie goes to the nearer node, then the smaller
-  (row, column); a disc that reaches past the window's first extent grows the
-  window (the river's upstream reaches far beyond the disc), and the result
-  equals a whole-raster run; a disc all NoData is refused; `snap_radius`
-  with lakes, negative, NaN are refused; radius 0 picks the nearest node (as
-  22's pour point does) and reports its distance from the station; no radius gives 22's result bit for bit.
-- `test_cli_catchment.py` gains: `--snap-radius` prints the snap line and
-  writes the snap properties.
+**PR 2, Python** (hand-built DEMs and lines; no network):
 
-**PR 2, Python** (no network anywhere):
+- `test_gauge.py`: tiers (own watercourse number beats a nearer line of
+  another river; prefix and name tiers; `any`); the nearest of the best tier;
+  `P` as a perpendicular foot and as an end vertex; `U` at `d` = 10 m (30),
+  100 m (100) and the cap; the chain joins ends within 1 m and stops at a gap
+  of 2 m; `reach_up` cuts at the metre; a river that ends gives a shorter
+  reach and the metres are reported; `lake` and `confluence_near` at the
+  100 m boundary; no line within the radius gives `None`; a segment file in
+  another CRS is refused.
+- `test_burn.py`: an embankment across a valley: `upstream` on the raw array
+  from a node below it counts the strip below the embankment only, and on
+  the burnt array counts the whole valley; the burnt array is `<=` the input
+  everywhere, equals it off the chain, and on the chain equals the input
+  wherever the input already falls by more than 0.001 m; the chain falls
+  strictly; a line three cells off the valley floor gives a chain on the
+  floor, and with a corridor of two cells it stays within two; ties; a chain
+  that revisits a node keeps the first visit; the direction check at 2 m and
+  at a reach of 100 m, a flat lake reach passing it; the input array is not
+  written; the placed node is the chain node nearest `at` along the chain and
+  its offset is reported; a reach end outside the window is dropped and
+  reported, a placed position outside it is refused.
+- `test_sensitivity.py`: a smooth gain; a confluence step of known size at a
+  known position; a flat floor; a swing of exactly 0.05 is well posed and
+  just above it is not; flagged downstream counts trim the window and
+  `checked_down_m` says so; a fall downstream is reported as `monotone =
+  False`; a reach shorter than `U`.
+- `test_catchment.py` gains: a synthetic valley with an embankment and a
+  gauge beside the river, from a reach: the catchment equals one flood from
+  the hand-burnt placed node, and the whole valley is in it; **a refusal
+  belongs to the placed node**: NoData reached only by the catchment of a
+  node below it (a tributary from the NoData) gives a catchment and
+  `downstream_checked` of `partly` or `none`, while NoData in the placed
+  catchment itself is refused; stage B grows the window past stage A's, and
+  the result equals a whole-raster run; a reach with `lakes` is refused;
+  `reach=None` gives 22's result bit for bit.
+- `test_cli_catchment.py` gains: `--rivers` prints the placement line and
+  writes the placement and sensitivity properties; without it, unchanged.
+
+**PR 3, Python** (no network anywhere):
 
 - `test_fetch_nve.py`: the packaged list (140 rows, unique numbers, the
-  three spot rows); the query URLs (chunks of 40, `outSR=25833`,
-  `f=geojson`); newest version wins, ties to the larger `objectid`; a
-  missing station or polygon is refused by name; the written files, from
-  canned service answers, read back through `io/station_set.py`; the
-  manifest's sha256 matches the files.
-- `test_station_set.py`: missing `crs`, duplicate numbers, wrong geometry
-  types, a bad station number are refused; a user's own points file reads.
+  three spot rows); the query URLs (chunks of 40, the station envelopes,
+  `outSR=25833`, `f=geojson`); newest version wins, ties to the larger
+  `objectid`; a missing station or polygon is refused by name; a reply
+  flagged `exceededTransferLimit` is refused by station; a segment seen from
+  two stations is kept once; the written files, from canned service answers,
+  read back through `io/station_set.py` and `io/rivers.py`; no owner or
+  contact field is copied; the manifest's sha256 matches the files.
+- `test_station_set.py`, `test_rivers.py`: missing `crs`, duplicate numbers
+  or ids, wrong geometry types, a bad station number are refused; a user's
+  own points file reads.
+
+**PR 4, Python**:
+
 - `test_reference.py`: agreement on hand-built polygons on a 10 m lattice
-  (identical: 100 %, offset 0; shifted by one cell: the offset is one cell;
-  disjoint: 0 %); the class boundaries at exactly 95 %, 80 % and 30 m; the
-  summary's percentiles on a known list; band and tile grouping.
+  whose edges lie halfway between nodes, so node counts equal areas
+  (identical: 100 %, offset 0; a 100-cell square shifted by one cell along x:
+  offset **0.5 cell** and overlaps 99 %; grown by one cell on every side:
+  404 / 400 = 1.01 cells; disjoint: 0 %). The classes are tested on
+  `classify` with the numbers given, not through geometry: exactly 95 %,
+  80 %, 30 m and a swing of 0.05; `refused` beats `uncertain` beats the rest;
+  the overlap test is tried first and `match_by` says which passed; the
+  summary's percentiles on a known list; band and tile grouping; the
+  causes of `uncertain` are counted.
 - `test_catchment_batch.py`, on the synthetic tiled DEM of
-  `test_cli_catchment.py` with three stations (one matching a reference
-  drawn from its own flood, one with a reference shifted to make it a miss,
-  one on NoData, refused): the rows, the classes, the order, the summary;
-  a bug-type exception stops the batch.
-- `test_cli_catchments.py`: the files in `--out-dir`, `--only`, the stderr
-  lines; `--reference` absent gives catchments and no classes; a station
-  file without `crs` is refused.
+  `test_cli_catchment.py` with a river file and four stations (one matching a
+  reference drawn from its own flood, one with a reference shifted to make it
+  a miss, one with a confluence just below it, `uncertain`, and one with no
+  river line near, refused): the rows, the classes, the order, the summary; a
+  bug-type exception stops the batch.
+- `test_cli_station_catchments.py`: the files in `--out-dir`, `--only`, the
+  stderr lines; `--reference` absent gives catchments and no scored classes;
+  a station or river file without `crs` is refused.
+
+**PR 5, Python**: `test_nearest_stream.py`: with two streams, one nearer and
+smaller and one farther and larger, the nearer wins (the rule does not look
+at area); the threshold at its boundary; no qualifying node is refused; a
+flagged lower bound that already reaches the threshold counts; the row has
+no sensitivity and `placed_by = "nearest stream"`; the batch falls back for
+a station with no line and not for one with a line.
 
 ## Acceptance: every covered HRD station
 
-Run after PR 2 is green, by `@perf` (it measures, and owns the evidence
-layout), under `docs/benchmarks/<date>/nve-hrd/` with a `run.sh`, the
-commit, `pmset -g batt`, the manifest of the fetched station set (its sha256
-values, since the service can change) and the outputs that are not NVE's
-data:
+Run after PR 4 is green (the fallback comparison after PR 5), by `@perf` (it
+measures, and owns the evidence layout), under
+`docs/benchmarks/<date>/nve-hrd/` with a `run.sh`, the commit, `pmset -g
+batt`, the manifest of the fetched station set (its sha256 values, since the
+service can change) and the outputs that are not NVE's data:
 
 1. `rasputin fetch-stations nve-hrd` into `../rasputin_data/nve_hrd`.
-2. `rasputin catchments` over all 140 at the default radius (250 m) and
-   tolerance; wall time and peak memory per station and in total.
-   Expected (estimate, not a measurement): the catchments total about 610 M
-   nodes, windows about three times that, so tens of minutes on the M1 Max.
+2. `rasputin station-catchments` over all 140 at the defaults (map radius
+   500 m, reach 1000 m, corridor 30 m, outline tolerance); wall time and peak
+   memory per station and in total. Expected (estimate, not a measurement):
+   the catchments total about 610 M nodes, the final window holds three
+   floods, so tens of minutes to a few hours on the M1 Max.
 3. **The table**: `results.csv` committed, and the summary by class, size
-   band and tile count in the README.
-4. **Every finding explained**: each `miss` gets a line (snap jumped to
-   another river, lake gauge, DEM artefact, NVE polygon disagrees with the
-   DEM, or "not explained"), with a re-run at 100 m and 500 m; `close` rows
-   are summarised by cause. The two Finnish-border stations are expected
-   `refused` (NoData); a refusal for any other reason is a finding.
-5. **What passes the increment**: the batch completes for every station with
+   band and tile count in the README, with the share `uncertain` per band.
+4. **Every finding explained**: each `miss` gets a line (placed on another
+   river, `placed_on` not `number`; lake gauge; burn artefact, many lowered
+   nodes; NVE polygon disagrees with the DEM; or "not explained"), with a
+   re-run at corridor 15 m and 60 m and map radius 250 m and 1000 m;
+   each `uncertain` gets its cause from the sensitivity (confluence step and
+   where, flat floor or lake, line against the slope, chain not falling);
+   `close` rows are summarised by cause. **Expected refusals**: the two
+   Finnish-border stations (NoData), the nine shifted-tile stations (the
+   mosaic's mixed-grid refusal; Question 2), and Femundsenden, which has no
+   river line (until PR 5). A refusal for any other reason is a finding,
+   including a window that reaches a shifted tile where the catchment does
+   not.
+5. **The comparison with nearest stream** (after PR 5): the fallback at 250 m
+   on every `miss` and `uncertain` station, the class under each rule side by
+   side, and the fallback on Femundsenden. It measures what the mapped river
+   buys; it replaces nothing.
+6. **Checks that need no NVE data**, on every station that is not refused: the
+   placed node's count equals the catchment's node count before reduction
+   (the exact oracle, through the real path); the counts along the chain do
+   not fall downstream (`monotone`); the burn lowered no node off the chain.
+   A failure of the first is a defect; a failure of the second is a station
+   whose burn did not hold, listed.
+7. **What passes the increment**: the batch completes for every station with
    a row each; 22's guarantees hold on every accepted reduced outline (area
-   kept, simple, start inside); every finding has its line. No share of
-   `match` is required this time: this run is the baseline the next
-   increments improve (Question 5).
-6. Bygdin is not in the HRD (it is regulated); 22's run stays its record.
+   kept, simple, start inside); every finding has its line; the checks of
+   step 6 hold. No share of `match` is required this time: this run is the
+   baseline the next increments improve (Ola, 2026-10-04).
+8. Bygdin is not in the HRD (it is regulated); 22's run stays its record.
 
 ## What each persona reads
 
