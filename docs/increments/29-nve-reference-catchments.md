@@ -1,6 +1,6 @@
 # Increment 29 — NVE reference catchments: our catchments against NVE's, station by station
 
-Status: **design approved by `@reviewer` (round 5, 2026-10-04); all questions ruled by Ola; PR 1 (accumulation) merged as #173; PR 3 (stations and rivers) red step in (`213a2ef`), with three rulings of 2026-10-04 for it ("Ola's rulings", last block) and a red amendment to come before green**
+Status: **design approved by `@reviewer` (round 5, 2026-10-04); all questions ruled by Ola; PR 1 (accumulation) merged as #173; PR 3 (stations and rivers): red `213a2ef`, three rulings of 2026-10-04 for it ("Ola's rulings", its last two blocks), red amendment `05f348a` and `c18c8d5`, green `aae91bb`; code review round 1 requested changes (the lake number's 0, wording, a citation, the file table); the red test and the fix for them come next**
 (`@architect`, 2026-10-04), branch `worktree-nve-catchments` off master
 `d20126b`. Ola's rulings of 2026-10-04 are in the section below. Round 2 closed the burn's drainage claim
 (checked node by node, not assumed), the ELVIS data cases, the PR order, and
@@ -159,6 +159,28 @@ both", answering two questions `@tester` raised with PR 3's red step
   `test_fetch_nve.py`'s read-back) take three parts, and
   `test_the_count_dropped` also asserts the reader's count is 25.
 
+**PR 3, after code review round 1 (2026-10-04): the lake number's 0.** Not
+a ruling: a correction of the data, found by `@reviewer` and re-measured by
+`@architect` ("The data are not clean"). NVE's river service sends
+`vatnlnr` = 0 for "no lake", so in `kind`'s mapping (see "Placing the
+gauge") "set" means **not null and not 0**. The design said "set", and the
+green step's `io.rivers.kind_of` reads it as "not null", so a blank-type
+river with 0 (both blank-type features of the layer) comes out `lake`.
+
+- **`@tester`, red first:** the fake service sends 0 as NVE does: the
+  blank-type segment of `tests/python/nve_fixtures.py` (`BLANK_TYPE`, today
+  `vatnlnr=None`) gets `vatnlnr=0`; `test_rivers.py` adds that `vatnlnr` = 0
+  with a blank type and with a null type each give `river`, and keeps a
+  positive number with a null type giving `lake`.
+- **`@developer`, green, in `io/rivers.py`'s `kind_of`:** null or blank type
+  is `lake` only when `vatnlnr` is not null and not 0. With it, the
+  reviewer's two suggestions on error wording: a malformed user file (station
+  or river) is refused with a `ValueError` naming what is wrong, not a
+  `TypeError` or `KeyError` escaping from the reader; and `fetch-stations`
+  reports a missing field in plain words rather than a raw `KeyError` text
+  (`cli.py` catches `KeyError` with `FetchError` and `ValueError` and prints
+  it as is).
+
 ## What the data says (measured 2026-10-04)
 
 Measured before the design, by throwaway scripts in
@@ -297,9 +319,21 @@ channel, and these numbers are re-measured by the acceptance run).
   `InnsjøRegulert`), several river and fictive-link spellings
   (`ElvBekkRegulert`, `FiktivElv`, `ElvelinjeFiktiv`, `BreMidtlinje` (a
   glacier), ...). A nearest line of the 1 km samples has a null type
-  (`152.4.0`: five features, all with `vatnlnr`, the lake number, set), as it
-  is on 428 of the 442 lake lines of the samples. `vatnlnr` is also set on 496
-  river features, so it cannot decide alone. (b) **Exact copies**: of the `strekninglnr` values
+  (`152.4.0`: five features, all with `vatnlnr`, the lake number, set). The
+  service sends `vatnlnr` = 0 for "no lake" (956,447 features of the layer
+  have 0, 444,793 a positive number, 551,648 none), so **set means not null
+  and not 0**. In the samples a positive lake number is on 419 of the 442
+  lake lines (9 have 0, 14 none) and on 1 of the 949 river lines (489 have
+  0, 458 none); over the whole layer, on 58 of the 94 null-type features
+  (none has 0) and on 1,779 river-typed ones. Both blank-type features
+  (`objectid` 11166506 "Cap'pirjåkka" and 11513676) have 0 and are rivers.
+  So the lake number decides only where the type is null or blank.
+  (Re-measured 2026-10-04 by `@architect`: `returnCountOnly` queries on
+  `Elvenett1/MapServer/2` with `where` `vatnlnr = 0`, `vatnlnr > 0`,
+  `vatnlnr IS NULL`, and each crossed with `objekttype IS NULL` and
+  `objekttype = ' '`; the samples re-fetched as squares of half-side 500 m
+  round the 140 layer-0 points, 1,396 distinct features. The design rounds
+  counted 0 as set, which gave "428 of the 442" and "496 river features".) (b) **Exact copies**: of the `strekninglnr` values
   shared by more than one `objectid` in the samples (14), 13 are exact
   copies of one geometry (9 pairs at `82.4.0`, 4 groups of five at
   `139.35.0`; 25 extra features in all), the copies sharing one `elvid`; the
@@ -769,7 +803,9 @@ value, kept as served, `None` allowed), `kind`, and the line's vertices in the
 file's CRS. **`kind` is a total mapping** (in `io/rivers.py`, where the model
 is built): `lake` when the casefolded `objekttype` starts with `innsj` (all
 eight lake spellings of "The data are not clean"), or when `objekttype` is
-null or blank and `vatnlnr` is set (`152.4.0`'s five lines); `river` for
+null or blank and `vatnlnr` is set, which means not null and not 0, since
+NVE sends 0 for "no lake" ("The data are not clean"; `152.4.0`'s five lines
+have 495; both blank-type features have 0 and are rivers); `river` for
 every other value, the fictive links, the glacier lines and the strays
 included. A stray never raises; the raw value stays in the model and in the
 station's row (`objekttype` of the chosen line), so a surprising class is
@@ -1357,7 +1393,9 @@ watercourse number, and one stderr line says where: "placed on the river line
 farther on; 119.0 km² drain through it, and the area changes by 0.3 % within
 30 m up and down the river: well defined".
 
-**The GeoJSON writer moves** from `cli.py` to `io/geojson.py`,
+**The GeoJSON writer moves** in PR 4, where `station-catchments` becomes
+the second command to write a catchment file (PR 3 writes none), from
+`cli.py` to `io/geojson.py`,
 `catchment_geojson(polygon, crs, properties) -> bytes`, no path, as
 `project_structure.md` already recommends ("The catchment GeoJSON writer is
 in `cli.py`"); both commands call it, and that paragraph is replaced by the
@@ -1373,7 +1411,9 @@ allow-lists (PR 3 from about 300 to 380); PR 2 gains the chain end, loop cuts,
 forks, the `drains` check and the causes, and loses the river reader (375 to
 415); PR 1 gains `flow_to` (150 to 155). Round 3 adds the taut pass to
 `burn.py` (inside its 105: it replaces the loop cut, which it subsumes) and
-the known-refusal cause to PR 4 (295 to 310).
+the known-refusal cause to PR 4 (295 to 310). After PR 3's code review,
+round 1, the moved GeoJSON writer goes from PR 3 to PR 4, which is the
+first to need it (PR 3 380 to 355, PR 4 310 to 335).
 
 | File | What | Estimate |
 |---|---|---|
@@ -1388,10 +1428,9 @@ the known-refusal cause to PR 4 (295 to 310).
 | `fetch/nve.py` | queries with the field allow-lists, newest version, segments, files, manifest | 160 |
 | `io/station_set.py` | readers, `Station` | 50 |
 | `io/rivers.py` | `RiverSegment`, `read_segments`, the `kind` mapping, exact copies | 65 |
-| `io/geojson.py` | the moved writer | 25 (cli.py −25) |
 | `cli.py` | `fetch-stations` | 45 |
 | `NOTICE.md`, `project_structure.md` | NVE's credit; the new modules | docs |
-| **PR 3, the stations and rivers** | | **about 380 (545 with the margin)** |
+| **PR 3, the stations and rivers** | | **about 355 (511 with the margin)** |
 | `gauge.py` | `Gauge`, `Placement`, `place`, forks, `Reach` | 100 |
 | `burn.py` | valley floor, taut pass, descent, chain end, direction, `GaugePath` | 105 |
 | `sensitivity.py` | `assess`, `Sensitivity`, `drains`, the causes | 75 |
@@ -1403,7 +1442,8 @@ the known-refusal cause to PR 4 (295 to 310).
 | `catchment_batch.py` | `BatchRequest`, `BatchSink`, `run_batch`, `StationResult`, `refusal_cause` | 105 |
 | `mosaic.py`, `catchment.py` | `MixedGridError`, `MixedGridRefusal` (round 3, Ola's ruling on counting) | 10 |
 | `cli.py` | `station-catchments`, the directory sink | 80 |
-| **PR 4, the batch and the comparison** | | **about 310 (445)** |
+| `io/geojson.py` | the moved writer (moved from PR 3 after its code review, round 1) | 25 (cli.py −25) |
+| **PR 4, the batch and the comparison** | | **about 335 (482)** |
 | `catchment.py`, `cli.py`, `catchment_batch.py` | the fallback (below) | 80 |
 | **PR 5, the fallback** | | **about 80 (115)** |
 
@@ -1675,7 +1715,8 @@ use" below):
   or ids, wrong geometry types, a bad station number are refused; a user's
   own points file reads. `test_rivers.py` also pins `kind` on all 25
   `objekttype` values of "The data are not clean" (each lake spelling is
-  `lake`; null and blank are `lake` with `vatnlnr` and `river` without; the
+  `lake`; null and blank are `lake` with `vatnlnr` set (not null and not 0)
+  and `river` with it null or 0; the
   strays, `FiktivElv` and `BreMidtlinje` are `river`; case and `ø`/`o`
   variants), the raw value kept; exact copies within an `elvid` give the
   segment with the smallest `objectid` and a count of those dropped
@@ -1858,3 +1899,5 @@ are ruled and closed (2026-10-04): question 2 as its entry says, questions 1,
 **29 PR 1, code review, round 2, 2026-10-04.** Range `edef966..9736bfd` (81392f5 round 1 recorded; 0b86517 project_structure, status line and ROADMAP; 725c8cd design states on_reach(j, j) and the NoData-adjacent outlets; c59ed6b merge of origin/master 99093af; 5dbfec0 keeps project_structure.md:166 in place; f5e8e76 accumulate docstring; 9736bfd two test comments). Whole PR `99093af..9736bfd`. Verdict: CHANGES REQUESTED, on citations alone. LOC: 181 added and 53 removed, 128 net (round 1: 182/129; the only production edit since then, f5e8e76, sits inside a raw docstring, and the one-line difference comes from how the count treats the diff's alignment at the upstream docstring's closing line). Estimate "about 155" added: 17 % over, inside the 44 % margin, far under 700. Fresh Release build ctest 994/994 (test_hydrology_accumulate: 11 cases, 163,676 assertions); extension rebuilt into the worktree venv, full pytest 4420 passed, 17 skipped; mypy, ruff check, ruff format, prohibited-deps, detria boundary and check_citations all exit 0. All round-1 blockers and suggestions closed, and each new claim was checked against flood.hpp, accumulate.hpp and the binding. No red-step scaffolding. The merge left hydrology/ and raster/ untouched, so round 1's mutation record stands. Blocking: the branch adds 8 lines to bindings/core.cpp above line 927 (one include at line 16, the BoundAccumulate struct at about line 316), so three live citations now point 8 lines too high: `15f-edge-strip.md:565` and `:1537` cite `bindings/core.cpp:1174` (the gil_scoped_release is now at 1182), and `27-node-sampling.md:133` cites `bindings/core.cpp:927-932` (the sample docstring is now at 935-940). Re-cite them and re-run check_citations. Not pushed; no CI.
 
 **29 PR 1, code review, round 3, 2026-10-04.** Range `9736bfd..36c2370` (one docs-only commit: the round-2 record, `15f-edge-strip.md:565` and `:1537`, `27-node-sampling.md:133`, the status line and ROADMAP row 29). Whole PR `99093af..36c2370`. Verdict: APPROVED. LOC: 181 added and 53 removed, 128 net, unchanged from round 2 (no production file in this range). Estimate "about 155" added: 17 % over, inside the 44 % margin, far under 700. `git diff --stat 9736bfd..36c2370` lists only ROADMAP.md, 15f-edge-strip.md, 27-node-sampling.md and 29-nve-reference-catchments.md (7 added, 5 removed lines), and nothing under bindings/, include/, src_python/ or tests/. So round 2's build, test, gate and mutation results stand. Round 2's three blockers are closed. Both 15f citations now give `bindings/core.cpp:1182`, which is the `const py::gil_scoped_release unlocked;` in the `refine_points` binding (lines 1173-1183). `27-node-sampling.md:133` now gives `bindings/core.cpp:935-940`, which is the `sample` docstring, "Bilinear z at each of the (N, 2) points" through "never NaN.". `check_citations.py --base origin/master` exits 0. All 34 lines on its at-risk list were re-read as quotations. The live ones hold: `05b-noder-driver.md:1749` (`tests/cpp/CMakeLists.txt:189`), `test_features.py:583` (`project_structure.md:166`), `29-nve-reference-catchments.md:55` (`ROADMAP.md:54`), and the three just re-cited. The rest sit in dated review records or a retrospective, which are history and left as written. The status line and ROADMAP row 29 match the tree. The branch contains origin/master `99093af`. No red-step scaffolding. No @perf run is needed: PR 1 touches neither refine nor mesh code (design, line 1395). Suggestion: `15f-edge-strip.md:1537` says the number was recomputed when "increment 29 PR 1 took in master". In fact the 8-line shift comes from PR 1's own additions to `bindings/core.cpp` (the include and `BoundAccumulate`), not from a master merge. Not pushed; no CI.
+
+**29 PR 3, code review, round 1, 2026-10-04.** Range `a1445c6..aae91bb` (rulings `b519bd9`, red amendment `05f348a` and `c18c8d5`, green `aae91bb`; the red step `213a2ef` before it). Verdict: CHANGES REQUESTED. LOC: 348 added and 7 removed, 341 net, under the estimate of about 380 (355 once the GeoJSON writer moves to PR 4) and far under 700. Blocking: (1) NVE's river service sends `vatnlnr` = 0 for "no lake" (live query: 956,447 features with 0; both blank-type features, `objectid` 11166506 "Cap'pirjåkka" and 11513676, have 0 and are rivers), but `io/rivers.py`'s `kind_of` treats any non-null value as set, so a blank-type river with 0 is a lake; the design's "set" (`:772`, `:1678` at `aae91bb`) must say not null and not 0, and "set on 496 river features" (`:300-301`) counted the zeros (the reviewer's sample has 2 river features with a positive number); needs a red test and a fix ("PR 3, after code review round 1", under "Ola's rulings"). (2) Status line and `ROADMAP.md:54` still say a red amendment is to come. (3) `15f-edge-strip.md:591` cites `cli.py:1561` and `:1580`, which PR 3 moved to `:1594` and `:1613`. (4) The PR 3 file table lists the GeoJSON writer's move to `io/geojson.py`, which PR 3 neither does nor needs. (5) `project_structure.md` lacks `io/station_set.py`, `io/rivers.py`, `repository.py`'s `read_json`, the `data/` folder, and the `fetch/` and `sources.py` entries missing since 23a-2. Suggestions: a malformed user file refused with `ValueError`, not `TypeError` or `KeyError`; `fetch-stations` reports a missing field in plain words, not a raw `KeyError`; `@tester`'s present-tense "HOW THIS FILE GOES RED" paragraphs (left to `@orchestrator`, not this round). Not pushed; no CI.
