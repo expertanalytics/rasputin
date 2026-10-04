@@ -20,7 +20,6 @@ these when you find it:
 - a step skipped or out of order (`CLAUDE.md` §3, `docs/increments/README.md`);
 - a persona doing another persona's work, or writing outside its role;
 - a guard worked around, or a refusal retried by another route;
-- a review that went past two rounds;
 - an unattended window with no work running, and for how long;
 - a result reported as done or verified that was not.
 
