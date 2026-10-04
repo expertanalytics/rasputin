@@ -14,7 +14,10 @@ Resources and Energy Directorate), and its **PR 1** (#173) is flow
 accumulation in C++, its **PR 3** (#178) the station and river readers.
 
 All times are UTC. Git prints commit times in local time (UTC+2); they are
-converted here. Transcripts are under
+converted here. Merge times are GitHub's `mergedAt` (`gh pr view <n> --json
+mergedAt`), the moment the merge queue landed the PR; the queue's merge
+commit carries an earlier committer time, when the queue built it (#173's
+9fb1fe8 says 17:32, #175's d926644 says 18:30). Transcripts are under
 `~/.claude/projects/-Users-skavhaug-projects-rasputin/`: `86af816a…` is the
 main session from 15:08 to 18:56, `806b4380…` the one after the restart at
 18:56 that spawned this run. "Line n" is a line of that JSONL file.
@@ -23,7 +26,7 @@ Subagent timings come from
 
 ## 1. The merges against the rules
 
-### 1.1 #173, increment 29 PR 1 (merged 17:32)
+### 1.1 #173, increment 29 PR 1 (merged 18:02)
 
 The design rounds and the red and green commits were checked in
 `2026-10-04-23c-1-and-day-lessons.md`. What came after: code review rounds
@@ -32,7 +35,7 @@ The design rounds and the red and green commits were checked in
 Ola's "yes, push and open PRs" (17:04:20) and the enqueue on "merge #173 and
 #174 when CI is green" (17:17:53; `gh pr merge` at 17:30:35, line 1140).
 Step order holds. Four `@architect` commits (81392f5, 0b86517, 725c8cd,
-5dbfec0) carry no `(@persona)` tag; the tag rule merged later, at 18:30
+5dbfec0) carry no `(@persona)` tag; the tag rule merged later, at 18:54
 (#175), so that is not a deviation. #173 was the first PR through the merge
 queue, and the queue's commit is the one that landed (h11 §5 step 0, checked
 by `@reviewer` in h11 round 1).
@@ -71,8 +74,10 @@ to the four acts named in one question (line 1855). No red step, accepted
 by `@reviewer` on the h10 precedent (the effect is visible only on CI).
 
 The result, checked with `gh run view` on the macOS job's "Build" step:
-140 s on the PR run (97bde1d) and 84 s in the queue (accd52a), 143 s and
-141 s on #178's two runs; h13 §2a's seven earlier runs took 19.7 to 25.1 min
+140 s on the PR run (97bde1d) and 84 s in the queue (accd52a). #178 had
+three runs: the first PR run (3dff7bc, run 37232282246, started before h13
+merged) took 1,189 s; the second PR run (84c0a4d) 143 s and the queue run
+(529613a) 141 s. h13 §2a's seven earlier runs took 19.7 to 25.1 min
 (checked by `@reviewer` in round 1).
 
 - **Step owed.** h13 §6 says the CI numbers are recorded as a further
@@ -103,7 +108,7 @@ one and the main session the round-5 one. Measured cost of the prose-only
 tail: reviewer rounds 2 to 6 took 17.6 min of agent time and about 3.5
 million cache-read tokens, against round 1's 9.8 min and 5.3 million; the
 fix agents for round 2 add 2.7 min. The two rounds that exist only because
-a recorded sentence was wrong (4 and 6) cost about 2 min each. The rounds
+a recorded sentence was wrong (4 and 6) took 0.7 and 1.5 min. The rounds
 are cheap because each is scoped to the delta; the waste is in where the
 errors come from, not in the review.
 
@@ -141,7 +146,7 @@ it is stale on master ("awaiting the push and CI"), as is row 29.
   act once, and has the tree changed since?") does not see it, because no
   act was performed: GitHub keeps auto-merge across pushes by anyone with
   write access ("Auto-merge is disabled if someone without write permissions
-  pushes new changes to the head branch", GitHub Docs, *Automatically merging
+  pushes new changes to the head branch …", GitHub Docs, *Automatically merging
   a pull request*, read 2026-10-04). Proposal P5.
 
 ### 1.5 The main session's own work this evening
@@ -199,10 +204,21 @@ and where it leads.
 `README.md`, `INSTALL.md`, `NOTICE.md`, `testing.md`, `project_structure.md`,
 `auto_catchments.md`, `parallel_refinement.md` (`ls *.md` at 529613a). So the
 main session wrote `project_structure.md` (ae78666) and `testing.md`
-(2faa3c4) itself. Before h9 made the limits explicit (merged today),
-`@developer` (aae91bb, 23d4dad) and `@perf` (acdfce0, c6e0049) wrote root
-files in their own commits. The gap is in the table, not in anyone's
-conduct. Proposal P1.
+(2faa3c4) itself. Before h9 made the limits explicit (#169, merged 10:06,
+merge acec5d0), `@developer` (23d4dad) and `@perf` (acdfce0, c6e0049) wrote
+root files in their own commits. After h9, one write went outside a limit:
+aae91bb, 29 PR 3's green step (`@developer`, 18:39), added 13 lines to
+`NOTICE.md` (NVE's credit). The main session briefed it (`86af816a` line
+2376, 18:28:40) with the write limit "src_python/, include/, src/,
+bindings/, tools/, .claude/hooks/, .github/, CMakeLists.txt,
+pyproject.toml", and the brief does not name `NOTICE.md`; but the design
+asked for the credit (the "What is committed" ruling, and the file table's
+`NOTICE.md` row marked "docs") and `@tester`'s red 213a2ef tested it
+(`test_notice_md_credits_nve_under_nlod`). So the green step could pass only
+by writing outside its limit, and no brief, guard or review round flagged
+it. The gap starts in the table, and after h9 it showed in conduct: a
+design and a red test that require a file no persona owns, and a write
+outside the limit that nobody noticed. Proposal P1.
 
 **L2. A design rule over an external field needs a count of its sentinel
 as well as null.** NVE's river service sends `vatnlnr` (lake number) = 0 for
@@ -213,6 +229,10 @@ like evidence. Proposal P7 (a trap line in the `geospatial-data-formats`
 skill, not a rule file).
 
 **L3. Rebuild `_core` after merging master, before a full suite.**
+Incident: 851a497 merged master (with #173's `accumulate`) into the h11
+branch; `@reviewer`'s h11 round 1 (handback, `806b4380` line 507, 19:16)
+found the worktree's `.venv` extension stale, so `test_core_accumulate.py`
+failed there, and rebuilt `_core` in a scratch build to measure.
 `.claude/REQUIRED-READING.md`, "Stale artifacts", already says to rebuild
 "before every `pytest` meant to measure C++". After a master merge every
 full run measures C++, because master's C++ changed under the venv's
@@ -236,9 +256,10 @@ at all (P3).
 
 **L6. Six review rounds on #178.** Measured in §1.4: the prose-only tail
 cost 17.6 min of reviewer time and about 3.5 million cache-read tokens; the
-two rounds caused only by a wrong recorded sentence cost about 2 min each.
-Ola ruled in the morning that there is no review-round cap
-(`2026-10-04-recovery-round.md`, Q2), and the numbers do not argue for one.
+two rounds caused only by a wrong recorded sentence took 0.7 and 1.5 min.
+No review-round cap is written down, and Ola declined to add one this
+morning (`2026-10-04-recovery-round.md`, Q2); the numbers do not argue for
+one.
 The cut is at the source: status lines that narrate rounds (five blockers
 in 14 rounds), and the main session writing prose it then has reviewed.
 Proposals P2 and P3.
@@ -255,7 +276,9 @@ or stop reading it." Proposal P6.
 **L8. `pytest -q | tail` can hide the hook's report.** The hook turns the
 session red at session end; a pipe into `tail` reports `tail`'s exit
 status, and a short tail can cut the hook's lines. Check `pytest`'s own
-exit status (`set -o pipefail`, or `${PIPESTATUS[0]}`). Into P8.
+exit status (`set -o pipefail`, or `${PIPESTATUS[0]}`). No incident: it
+is a precaution `@tester` reported in its ea489e5 handback (`806b4380` line
+2392, 20:51); no run in the record had the report hidden. Into P8.
 
 **L9. The git-archive scratch copy fails 7 or 8 `test_settings_wiring`
 tests.** Reproduced at 529613a: in a `git archive HEAD | tar -x` copy,
@@ -263,8 +286,8 @@ tests.** Reproduced at 529613a: in a `git archive HEAD | tar -x` copy,
 `test_hook_is_executable_in_the_checkout`, which asks git's index for each
 hook's mode (`git ls-files -s`); the copy is not a git work tree. `tester.md`
 (merged in #175 today) requires exactly that kind of copy for mutants, and
-`@reviewer` ran a full suite in one (29 PR 3 round 2: "8 failed, all eight
-`test_settings_wiring`'s executable-hook check"). A suite that is red by
+`@reviewer` ran a full suite in one (29 PR 3 round 2, recorded in c7d427a:
+"8 failed, all eight `test_settings_wiring`'s executable-hook check"). A suite that is red by
 construction in the sanctioned copy makes every full run there need a
 footnote. Proposal P9.
 
@@ -332,7 +355,8 @@ pipeline by day.
   review paragraph, which on long records ends mid-verdict ("Verdict:
   CHANGES"). Print the round heading and the verdict word instead. The
   hand-completed "REQUESTED" was one of tonight's two `guard_spawn.py`
-  refusals. Cost: about 5 lines and a test (`tools/brief.py` is governed).
+  refusals (`806b4380` line 947; a refused spawn leaves no commit, so the
+  transcript line is the only record). Cost: about 5 lines and a test (`tools/brief.py` is governed).
 - **P5 (a push to a PR with auto-merge on is also a merge; §1.4).** One
   sentence in `.claude/REQUIRED-READING.md`, approval boundary: "A push to a
   PR whose auto-merge is on also enqueues it: ask for both, or run
@@ -352,13 +376,16 @@ pipeline by day.
   `geospatial-data-formats` skill (not a rule file): "When a design says a
   service field is 'set', count null, empty and the service's sentinel
   (often 0 or -1) separately, and say which one 'set' excludes." About 35
-  words.
+  words. Incident: the defect landed in aae91bb and was fixed in c4e50ff
+  (red b59c648).
 - **P8 (the brief's test line; L3, L4, L8).** `tools/brief.py` already
   states the C++-build allowance. Add one line wherever a full suite is
   asked for: "After merging master, rebuild `_core` first; read `pytest`'s
   own exit status, not a pipe's; say whether green ran locally or on CI."
   Merges with P4 of the recovery-round retrospective and P2 of the 23c-1
-  one, both still waiting. Cost: about 10 lines and a test.
+  one, both still waiting. Cost: about 10 lines and a test. Incident for
+  L3: 851a497, the master merge that left the h11 worktree's `_core` stale
+  (`806b4380` line 507). L8 has no incident; it is a precaution.
 - **P9 (the sanctioned copy runs green; L9).** In
   `test_hook_is_executable_in_the_checkout`, skip with a stated reason when
   the tree is not a git work tree, as the index check cannot run there; the
@@ -366,6 +393,8 @@ pipeline by day.
   the remaining failures are the index lookups. Owner `@tester`. Cost:
   about 4 lines. The other choice is for `tester.md` to name the suites
   that do not run in a copy; that adds rule text, so it is not the default.
+  Incident: c7d427a records round 2's "8 failed" run in the copy that
+  `tester.md`'s copy rule (merged in d926644, #175) requires.
 
 Not proposed: a rule against the main session editing with `python3`
 heredocs or `sed -i`. The files were ordinary and no guard was refused;
@@ -406,3 +435,17 @@ command can stay in h11 §5, where the record is.
 
 Taken together, C1, C2 and C3 would remove about 170 words, half of what was
 added since the last retrospective.
+
+## Review
+
+**`@reviewer`, round 1, 2026-10-04.** Range `529613a..43fbd5f`. Verdict:
+CHANGES REQUESTED. About 60 claims checked, five wrong: L1 put aae91bb
+before h9, but h9 merged at 10:06 (acec5d0 is its ancestor), so its
+`NOTICE.md` lines are a write outside `@developer`'s limit after h9; the
+merge times of #173 and #175 were the queue commits' times, not GitHub's
+`mergedAt` (18:02 and 18:54); #178 had three CI runs, and the first macOS
+build (3dff7bc) took 1,189 s; rounds 4 and 6 took 0.7 and 1.5 min, not
+"about 2 min each"; P4, P7, P8 and P9 named no incident commit. Two
+suggestions: the review-round cap is "not written down, and Ola declined to
+add one", and an ellipsis where the GitHub quotation stops. All fixed in the
+commit after 43fbd5f.
