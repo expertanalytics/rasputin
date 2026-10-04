@@ -28,6 +28,7 @@
 #include <terrain/vector_simplify/area_collapse.hpp>
 
 #include <array>
+#include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <format>
@@ -630,7 +631,7 @@ constructor would void that proof. Every accessor is a read-only view.
 
     py::class_<IndexedMesh2>(m, "IndexedMesh2", R"doc(
 A flat indexed triangle mesh: vertices, triangles, and one constraint mask per
-triangle. Read-only, and not constructible from Python.
+triangle. Read-only; built by triangulate, or from arrays by indexed_mesh.
 
 Bit e of a mask is set iff the edge (v[e], v[(e + 1) % 3]) is a constraint edge
 -- NOT CGAL's "edge e is opposite vertex e", which is a rotation of this and
@@ -673,6 +674,45 @@ stays valid after every other reference to the mesh is dropped.
         // triangulates successfully to zero interior triangles, which is the
         // "forgot the outline" silent failure.
         .def_property_readonly("empty", &IndexedMesh2::empty, "True iff there are no triangles.");
+
+    // Increment 23c: a piece's start mesh is a slice of the start
+    // triangulation, so it must reach refine from arrays. Signed 64-bit reads,
+    // so a negative index or a mask past uint8 is refused rather than wrapped.
+    // Copies in O(N + T) and holds the GIL, as refine_points does for its own.
+    m.def(
+        "indexed_mesh",
+        [](const py::object& vertices, const py::object& triangles, const py::object& constrained_edges) {
+            std::vector<Point2> xy = as_points(vertices);
+            for (const Point2& p : xy)
+                if (!std::isfinite(p.x) || !std::isfinite(p.y))
+                    throw py::value_error("indexed_mesh: a vertex coordinate is not finite");
+            using I64 = py::array_t<std::int64_t, py::array::c_style | py::array::forcecast>;
+            const auto t = I64::ensure(triangles), c = I64::ensure(constrained_edges);
+            if (!t || !c || t.ndim() != 2 || t.shape(1) != 3 || c.ndim() != 1 || c.shape(0) != t.shape(0))
+                throw py::value_error("indexed_mesh: triangles must be (T, 3) and constrained_edges (T,)");
+            const auto nt = static_cast<std::size_t>(t.shape(0));
+            std::vector<TriangleIndices> tris(nt);
+            std::vector<std::uint8_t> masks(nt);
+            for (std::size_t i = 0; i < nt; ++i) {
+                for (std::size_t k = 0; k < 3; ++k) {
+                    const std::int64_t v = t.data()[3 * i + k];
+                    if (v < 0 || static_cast<std::uint64_t>(v) >= xy.size())
+                        throw py::value_error(std::format("indexed_mesh: triangle {} has index {}, out of range", i, v));
+                    tris[i][k] = static_cast<std::uint32_t>(v);
+                }
+                if (c.data()[i] < 0 || c.data()[i] > 7)
+                    throw py::value_error(std::format("indexed_mesh: mask {} of triangle {} is not in 0..7", c.data()[i], i));
+                masks[i] = static_cast<std::uint8_t>(c.data()[i]);
+            }
+            return IndexedMesh2{std::move(xy), std::move(tris), std::move(masks)};
+        },
+        py::arg("vertices"), py::arg("triangles"), py::arg("constrained_edges"), R"doc(
+An IndexedMesh2 from arrays, copied: vertices (N, 2) float64, triangles (T, 3)
+vertex indices, constrained_edges (T,) with bit e set iff edge
+(v[e], v[(e + 1) % 3]) is constrained. A shape, an index out of range, a mask
+above 7 or a non-finite coordinate is a ValueError. Orientation is not checked:
+refine refuses a clockwise triangle (NotCounterClockwise).
+)doc");
 
     py::class_<CdtOutcome>(m, "CdtOutcome", R"doc(
 What triangulate returned: a status, a message, and a mesh.
