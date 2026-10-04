@@ -3142,6 +3142,20 @@ equality and DC4's control hold.
         `--memory-budget 16G` writes `memory_budget` 17179869184 in the
         index and the same piece files as the run given 17179869184; and
         two of the refusals exit 2 naming the option, with nothing written.
+      - **@tester's choices at red (008b1d2), confirmed.**
+        - Digits are ASCII only. Fullwidth digits are refused, even though
+          Python's `int()` accepts them.
+        - Leading zeros are allowed (`016G` is 16 GiB), since the number is
+          decimal.
+        - `parse_memory_budget` refuses `0` and `0G` itself, since zero is
+          never a budget. The refusal of a budget under one node's bytes
+          stays where it is, in the CLI and `partition`, because it depends
+          on the tolerance.
+        - The extra refusals `16iB`, `16BB`, `16Gi`, `1e9`, `16_000` and
+          `16.0` all stand: none of them matches the grammar.
+        - **Leading or trailing whitespace is refused**, like a space inside:
+          the grammar allows nothing before the digits or after the unit.
+          `@tester` adds `" 16G"`, `"16G "` and `"\t16G"` to the refusals.
     - **B18 (a): within a few micrometres. Increment 15c's, test and docs
       only, in its own small PR off master.** J2 already states the
       guarantee at the check point's *stored* position
