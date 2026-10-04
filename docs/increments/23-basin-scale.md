@@ -2836,6 +2836,42 @@ step's commits split along the same line (`edd8a29`, `d994a0e`, `db6a5c0`
 to 23c-1; the rest to 23c-2); how the branches are rebuilt is the main
 session's.
 
+### Three points from 23c-1's green (3ffae13)
+
+Raised by `@developer`; ruled by `@architect`, 2026-10-04.
+
+1. **"The lattice" in the partition record: named, in 23c-2.** The index
+   must say where the partition lines are, or a consumer cannot place a
+   seam. Four fields join `PartitionRecord`: `row0` and `col0` (the
+   window's first node `(R0, K0)` on the lattice, integers, possibly
+   negative), `spacing` (`h`, metres) and `origin` (`[x, y]`, the world
+   position of lattice node `(0, 0)` in the index's `crs`). Line `i` is then
+   at `x = origin_x + (col0 + i·dx)·h`, line `j` at
+   `y = origin_y − (row0 + j·dy)·h`. They belong to 23c-2, because
+   `decompose.partition` sees only `cols` and `rows` and the run is what
+   knows the lattice; until then no index is written, so adding fields to a
+   model that forbids unknown keys breaks nothing. `@tester` (23c-2): a cut
+   run's seam lines, read from the piece files, are exactly the lines those
+   four fields and `dx`, `dy` give. `@developer` (23c-2): the four fields.
+2. **Field types: confirmed, with two changes, both in 23c-1.** `source` and
+   `vocabulary` plain strings, `window` as `io.models.IndexWindow` with
+   negative `row0`/`col0` allowed, `counts` `{triangles, vertices,
+   on_frozen}`: confirmed. Changed: **piece ids are strict integers,
+   non-negative** (`["1", "2", "3"]` is refused: an id written as text is
+   drift, and lax mode would let it through), and **`file` and `sha256` are
+   null together or set together** (a model validator). `@tester` (23c-1)
+   adds the two refusals to the schema-drift cases; `@developer` (23c-1)
+   the strict type and the validator.
+3. **The partition loop: bounded, no change.** The loop runs only while
+   `dx · dy · b > B`, and `partition` refuses `B < b`, so inside it
+   `dx · dy > 1`. When it grows `nx`, `dx ≥ dy`, so `dx > 1`, so
+   `nx < cols` before the step and `nx ≤ cols` after; the same for `ny`
+   and `rows`. At `nx = cols`, `ny = rows` the cells are one node and the
+   condition fails. So it ends within `cols + rows − 2` steps, each O(1):
+   about 90,000 for the basin's window at 1 m. `@developer` puts this
+   argument in a comment above the loop; nothing for `@tester` (DC0's
+   random draws already reach it).
+
 **B17 for Ola** is under "New questions, after the rulings".
 
 ## Questions for Ola
