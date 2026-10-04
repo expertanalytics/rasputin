@@ -6,8 +6,8 @@ index is written") and K4. The end-to-end suites (`test_cli_mesh_pieces*.py`)
 check conformity from the piece files (DC2); a correct run never reaches the
 refusal, so this file reaches it directly.
 
-PINNED HERE, where the design names `io/mesh_index.py` and "seam records" but
-no surface (handback, choice 6):
+The surface, pinned at the red step and confirmed under "Settled after 23c's
+red step (65e3990)", item 6:
 
     SeamRecord(piece=(j, i, k), edge=<index in the start triangulation's edge
                list>, xyz=<(K, 3) vertex sequence from the edge's lower end>)
@@ -18,8 +18,9 @@ Bit for bit means bytes: a NaN z (a seam end with no height) equals a NaN z,
 and 0.0 differs from -0.0. One record alone is a seam along the outline
 (degeneracy policy) and passes.
 
-HOW THIS FILE GOES RED: `tin_engine.io.mesh_index` does not exist; the `mi`
-fixture fails every test on `ModuleNotFoundError`.
+`MeshIndex` drift (item 5, and point 2 of "Three points from 23c-1's green
+(3ffae13)"): piece ids are three strict non-negative integers, and `file` and
+`sha256` are null together or set together.
 """
 
 from __future__ import annotations

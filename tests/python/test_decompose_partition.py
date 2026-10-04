@@ -6,8 +6,8 @@ figures are the ones `docs/increments/23-probes/partition.py` prints, and the
 cell count approximates the request and is not a floor (the review of B13 and
 B14, round 1).
 
-PINNED HERE, where the design names the module and the rule but not the
-surface: `tin_engine.decompose` holds
+The surface, pinned at the red step and confirmed under "Settled after 23c's
+red step (65e3990)", item 7: `tin_engine.decompose` holds
 
 - `DEFAULT_MEMORY_BUDGET`, 16 GiB in bytes (2**34);
 - `bytes_per_node(tolerance) -> int`, the `b(T)` table, linear between its
@@ -23,9 +23,6 @@ and a budget under one node's bytes (`memory_budget < b(T)`), for which step
 Tolerances in the interpolation cases are binary fractions (0.25, 0.5, 0.75,
 1.5, 7.5), so the rounding up is of an exact value and a correct
 implementation cannot land one above it by floating-point noise.
-
-HOW THIS FILE GOES RED: `tin_engine.decompose` does not exist; every test
-imports it through the `dec` fixture and fails on `ModuleNotFoundError`.
 """
 
 from __future__ import annotations

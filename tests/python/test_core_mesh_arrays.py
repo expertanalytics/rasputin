@@ -2,12 +2,10 @@
 
 `docs/increments/23-basin-scale.md`, "The seam protocol" step 3: a piece's
 start mesh is a NumPy slice of the one start triangulation, with each seam
-edge split into a fan, and `refine` is then run on it (step 4). Today
-`refine` takes an `IndexedMesh2`, which is "Not constructible from Python"
-(`_core.pyi`), and the only producer is `triangulate`. The design's PR table
-for 23c has no binding row, so the slice cannot reach `refine` as designed.
-
-PINNED HERE, for `@architect` to confirm or replace (handback, choice 1):
+edge split into a fan, and `refine` is then run on it (step 4). `refine`
+takes an `IndexedMesh2`, and before 23c-1 the only producer was
+`triangulate`, so the slice reaches `refine` through this binding, confirmed
+under "Settled after 23c's red step (65e3990)", item 1:
 
     _core.indexed_mesh(vertices, triangles, constrained_edges) -> IndexedMesh2
 
@@ -18,9 +16,6 @@ of range, a mask above 7 or a non-finite coordinate is a `ValueError`. It
 checks no orientation: `refine` already refuses a clockwise triangle
 (`NotCounterClockwise`), and that refusal is what the degeneracy policy's
 "a fan that is not counter-clockwise" relies on, so it is pinned here too.
-
-HOW THIS FILE GOES RED: `_core.indexed_mesh` does not exist; the `indexed_mesh`
-fixture fails every test on `AttributeError`.
 """
 
 from __future__ import annotations
