@@ -970,7 +970,7 @@ class and, for a match, the test that passed. Precedence: `refused`, then
 | class | rule | counts as |
 |---|---|---|
 | `refused` | `delineate` refused (NoData, the data's edge, memory cap, no river line within the map radius), with its message | reported, not a failure |
-| `uncertain` | not well posed (swing over 5 %, or the areas fall downstream), or the line runs against the DEM's slope | reported with its agreement numbers, not scored |
+| `uncertain` | not well posed: swing over 5 %, the downstream side not read to `U` (a flag stopped it, or the mapped river ends sooner), the chain not draining along itself or its end open; or the line runs against the DEM's slope | reported with its agreement numbers, not scored |
 | `match` | both overlaps ≥ 95 % (`match_by = "overlap"`), **or** mean divide offset ≤ 3 cells, 30 m on DTM10 (`match_by = "offset"`; the overlap test is tried first) | pass |
 | `close` | both overlaps ≥ 80 % | finding |
 | `miss` | anything else | finding |
@@ -985,9 +985,10 @@ offset test is visible and is not mistaken for the overlap bar.
 ratio and both overlaps, the minimum, 10th, 25th, 50th, 75th, 90th percentile
 and maximum, over the scored stations (`match`, `close`, `miss`) and per size
 band (under 10, 10-100, 100-1000, over 1000 km²) and per tile count (1, 2,
-3-4, 5+); the share `uncertain` per size band, and the causes of `uncertain`
-(confluence step, flat floor or lake, line against the slope, chain not
-falling). Deterministic JSON.
+3-4, 5+); the share `uncertain` per size band, and the causes of `uncertain`, each
+counted (a station can have several): `swing` (split by its largest step's
+position: a confluence step, or a flat floor or lake), `downstream_unread`,
+`chain_not_draining`, `chain_end_open`, `direction`. Deterministic JSON.
 
 ### The batch (`catchment_batch.py`)
 
@@ -1023,7 +1024,9 @@ async def run_batch(request: BatchRequest, repository: DemRepository,
   `confluence_near`, `elvid`, segment `objectid`, `reach_up_m`,
   `reach_down_m`); the gauge numbers (`node_offset_m`, `lowered_nodes`,
   `lowered_max_m`, `direction_ok`, `downstream_checked`); the sensitivity
-  (`area_up`, `A0`, `area_down`, swing, largest step and where, `monotone`);
+  (`area_up`, `A0`, `area_down`, swing, largest step and where, `checked_up_m`,
+  `checked_down_m`, `drains`, `monotone`, the causes);
+  the burn's `end_extended_m` and `end_closed`, and `reach_fork`;
   nodes, fine and reduced area, NVE's polygon area and the station layer's
   area, the agreement numbers, tile count, windows, seconds.
 - Without `--reference`, no agreement and no class beyond `refused` and
@@ -1240,8 +1243,9 @@ through the binding.
   gauge beside the river, from a reach: the catchment equals one flood from
   the hand-burnt placed node, and the whole valley is in it; **a refusal
   belongs to the placed node**: NoData reached only by the catchment of a
-  node below it (a tributary from the NoData) gives a catchment and
-  `downstream_checked` of `partly` or `none`, while NoData in the placed
+  node below it (a tributary from the NoData) gives a catchment,
+  `downstream_checked` of `partly` or `none` and the cause `downstream_unread`,
+  while NoData in the placed
   catchment itself is refused; stage B grows the window past stage A's, and
   the result equals a whole-raster run; a reach with `lakes` is refused;
   `reach=None` gives 22's result bit for bit.
@@ -1270,14 +1274,17 @@ through the binding.
   offset **0.5 cell** and overlaps 99 %; grown by one cell on every side:
   404 / 400 = 1.01 cells; disjoint: 0 %). The classes are tested on
   `classify` with the numbers given, not through geometry: exactly 95 %,
-  80 %, 30 m and a swing of 0.05; `refused` beats `uncertain` beats the rest;
+  80 %, 30 m and a swing of 0.05; a downstream side not read to `U` gives
+  `uncertain` whatever the overlaps are; `refused` beats `uncertain` beats the rest;
   the overlap test is tried first and `match_by` says which passed; the
   summary's percentiles on a known list; band and tile grouping; the
-  causes of `uncertain` are counted.
+  causes of `uncertain` are counted each (a station with two causes counts in
+  both).
 - `test_catchment_batch.py`, on the synthetic tiled DEM of
-  `test_cli_catchment.py` with a river file and four stations (one matching a
+  `test_cli_catchment.py` with a river file and five stations (one matching a
   reference drawn from its own flood, one with a reference shifted to make it
-  a miss, one with a confluence just below it, `uncertain`, and one with no
+  a miss, one with a confluence just below it, `uncertain`, one whose downstream river ends
+  within `U` of it, `uncertain` although its overlap is 100 %, and one with no
   river line near, refused): the rows, the classes, the order, the summary; a
   bug-type exception stops the batch.
 - `test_cli_station_catchments.py`: the files in `--out-dir`, `--only`, the
@@ -1311,8 +1318,9 @@ service can change) and the outputs that are not NVE's data:
    river, `placed_on` not `number`; lake gauge; burn artefact, many lowered
    nodes; NVE polygon disagrees with the DEM; or "not explained"), with a
    re-run at corridor 15 m and 60 m and map radius 250 m and 1000 m;
-   each `uncertain` gets its cause from the sensitivity (confluence step and
-   where, flat floor or lake, line against the slope, chain not falling);
+   each `uncertain` gets its causes from the sensitivity (confluence step and
+   where, flat floor or lake, downstream side not read to `U`, chain not
+   draining, chain end open, line against the slope);
    `close` rows are summarised by cause. **Expected refusals**: the two
    Finnish-border stations (NoData), the nine shifted-tile stations (the
    mosaic's mixed-grid refusal; Question 2), and Femundsenden, which has no
