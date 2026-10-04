@@ -95,12 +95,18 @@ def ok(repo: Path, home: Path, *args: str) -> str:
     return result.stdout
 
 
-def refused(repo: Path, home: Path, *args: str) -> str:
+def refused(repo: Path, home: Path, *args: str, says: str) -> str:
+    """Exit 2, no block, and `says` (the reason brief.py writes) in stderr.
+
+    `says` is required: a refusal checked by exit code alone passes for any
+    reason, including one raised before the rule the test names.
+    """
     result = run_brief(repo, home, *args)
     assert result.returncode == 2, (
         f"exit {result.returncode}, not 2; stdout: {result.stdout}; stderr: {result.stderr}"
     )
     assert "<<<BRIEF" not in result.stdout, "a refusal printed a block"
+    assert says in result.stderr, f"the refusal does not say {says!r}; stderr: {result.stderr}"
     return result.stderr
 
 
@@ -254,9 +260,11 @@ def test_3_a_long_verdict_line_is_cut_to_200_characters(repo: Path, home: Path) 
 def test_4_an_increment_is_required_for_tester_developer_reviewer(
     repo: Path, home: Path, persona: str
 ) -> None:
-    refused(repo, home, persona, "--worktree", str(repo), "--beside", "none")
     refused(repo, home, persona, "--worktree", str(repo), "--beside", "none",
-            "--increment", "docs/increments/missing.md")  # fmt: skip
+            says=f"@{persona} needs --increment")  # fmt: skip
+    refused(repo, home, persona, "--worktree", str(repo), "--beside", "none",
+            "--increment", "docs/increments/missing.md",
+            says="--increment docs/increments/missing.md does not exist")  # fmt: skip
 
 
 def test_4_architect_may_name_an_increment_that_does_not_exist_yet(repo: Path, home: Path) -> None:
@@ -272,7 +280,8 @@ def test_4_perf_and_orchestrator_need_no_increment(repo: Path, home: Path, perso
 
 
 def test_4_an_unknown_persona_is_refused(repo: Path, home: Path) -> None:
-    refused(repo, home, "general-purpose", "--worktree", str(repo), "--beside", "none")
+    refused(repo, home, "general-purpose", "--worktree", str(repo), "--beside", "none",
+            says="general-purpose is not a persona")  # fmt: skip
 
 
 # ---------------------------------------------------------------- 5. worktree
@@ -284,19 +293,21 @@ def test_5_a_directory_that_is_not_a_checkout_is_refused(
     plain = tmp_path / "plain"
     plain.mkdir()
     refused(repo, home, "tester", "--worktree", str(plain),
-            "--beside", "none", "--increment", INCREMENT)  # fmt: skip
+            "--beside", "none", "--increment", INCREMENT,
+            says=f"{plain} is not the top of a checkout")  # fmt: skip
 
 
 def test_5_a_subdirectory_of_a_checkout_is_refused(repo: Path, home: Path) -> None:
     """§3.1: `rev-parse --show-toplevel` must resolve to the path itself."""
     refused(repo, home, "tester", "--worktree", str(repo / "docs"), "--beside", "none",
-            "--increment", INCREMENT)  # fmt: skip
+            "--increment", INCREMENT,
+            says=f"{repo / 'docs'} is not the top of a checkout")  # fmt: skip
 
 
 def test_5_a_path_with_whitespace_is_refused(repo: Path, home: Path, tmp_path: Path) -> None:
     spaced = add_worktree(repo, tmp_path.resolve() / "a b", "wt-spaced")
     refused(repo, home, "tester", "--worktree", str(spaced), "--beside", "none",
-            "--increment", INCREMENT)  # fmt: skip
+            "--increment", INCREMENT, says="contains whitespace")  # fmt: skip
 
 
 def test_5_the_main_checkout_is_accepted(repo: Path, home: Path) -> None:
@@ -326,21 +337,31 @@ def test_6_beside_none_runs_alone(repo: Path, home: Path) -> None:
 
 
 def test_6_beside_is_required(repo: Path, home: Path) -> None:
-    refused(repo, home, "tester", "--worktree", str(repo), "--increment", INCREMENT)
+    refused(repo, home, "tester", "--worktree", str(repo), "--increment", INCREMENT,
+            says="the following arguments are required: --beside")  # fmt: skip
 
 
 def test_6_none_with_another_entry_is_refused(
     repo: Path, home: Path, trees: dict[str, Path]
 ) -> None:
-    refused(repo, home, *run_as("developer", trees["B"], "none", f"tester:{trees['A']}"))
+    refused(repo, home, *run_as("developer", trees["B"], "none", f"tester:{trees['A']}"),
+            says="--beside none goes alone, not with other --beside entries")  # fmt: skip
 
 
-@pytest.mark.parametrize("entry", ["tester", "tester:{missing}", "nobody:{A}"])
+@pytest.mark.parametrize(
+    ("entry", "says"),
+    [
+        ("tester", "--beside tester: give <persona>:<worktree>"),
+        ("tester:{missing}", "{missing} is not the top of a checkout"),
+        ("nobody:{A}", "--beside nobody:{A}: give <persona>:<worktree>"),
+    ],
+)
 def test_6_a_malformed_beside_entry_is_refused(
-    repo: Path, home: Path, trees: dict[str, Path], tmp_path: Path, entry: str
+    repo: Path, home: Path, trees: dict[str, Path], tmp_path: Path, entry: str, says: str
 ) -> None:
-    text = entry.format(missing=tmp_path / "missing", A=trees["A"])
-    refused(repo, home, *run_as("developer", trees["B"], text))
+    places = {"missing": tmp_path / "missing", "A": trees["A"]}
+    text = entry.format(**places)
+    refused(repo, home, *run_as("developer", trees["B"], text), says=says.format(**places))
 
 
 def test_6_beside_one_writer_names_it_and_allows_a_build(
@@ -400,8 +421,8 @@ def test_6_two_read_only_entries_beside_two_writers(
 def test_6_rule_1_nothing_runs_beside_a_timing_run(
     repo: Path, home: Path, trees: dict[str, Path], persona: str, beside: str
 ) -> None:
-    stderr = refused(repo, home, *run_as(persona, trees["B"], f"{beside}:{trees['A']}"))
-    assert "timing run" in stderr
+    refused(repo, home, *run_as(persona, trees["B"], f"{beside}:{trees['A']}"),
+            says="nothing runs beside a timing run (@perf)")  # fmt: skip
 
 
 def test_6_perf_alone_says_nothing_runs_beside_it(repo: Path, home: Path) -> None:
@@ -411,13 +432,14 @@ def test_6_perf_alone_says_nothing_runs_beside_it(repo: Path, home: Path) -> Non
 
 def test_6_rule_2_at_most_two_writers(repo: Path, home: Path, trees: dict[str, Path]) -> None:
     args = run_as("architect", trees["C"], f"tester:{trees['A']}", f"developer:{trees['B']}")
-    assert "at most two writers" in refused(repo, home, *args).lower()
+    refused(repo, home, *args, says="at most two writers run at once")
 
 
 def test_6_rule_3_two_writers_in_one_worktree(
     repo: Path, home: Path, trees: dict[str, Path]
 ) -> None:
-    refused(repo, home, *run_as("developer", trees["A"], f"tester:{trees['A']}"))
+    refused(repo, home, *run_as("developer", trees["A"], f"tester:{trees['A']}"),
+            says="two writers share one worktree")  # fmt: skip
 
 
 @pytest.mark.parametrize(
@@ -426,8 +448,9 @@ def test_6_rule_3_two_writers_in_one_worktree(
 def test_6_rule_4_a_reader_shares_no_worktree_with_a_writer(
     repo: Path, home: Path, trees: dict[str, Path], persona: str, beside: str
 ) -> None:
-    stderr = refused(repo, home, *run_as(persona, trees["A"], f"{beside}:{trees['A']}"))
-    assert str(trees["A"].resolve()) in stderr
+    shared = trees["A"].resolve()
+    refused(repo, home, *run_as(persona, trees["A"], f"{beside}:{trees['A']}"),
+            says=f"@reviewer is read-only and shares {shared} with a writer")  # fmt: skip
 
 
 def test_6_read_only_is_derived_from_an_empty_write_limit(
@@ -479,8 +502,8 @@ def test_7_a_quotation_found_only_outside_human_turns_is_refused(
     with_turns(
         repo, home, human("Something else.", STAMP), entry("turn off fused multiply-add", STAMP)
     )
-    stderr = refused(repo, home, *args_for("tester", repo), "--ola", "turn off fused multiply-add")
-    assert "turn off fused multiply-add" in stderr
+    refused(repo, home, *args_for("tester", repo), "--ola", "turn off fused multiply-add",
+            says="--ola 'turn off fused multiply-add' is not in any human turn")  # fmt: skip
 
 
 def test_7_a_quotation_in_an_absorbed_queued_prompt_is_found(repo: Path, home: Path) -> None:
@@ -495,13 +518,14 @@ def test_7_no_session_id_is_refused(repo: Path, home: Path) -> None:
     result = run_brief(repo, home, *args_for("tester", repo), "--ola", "Go ahead", session=None)
     assert result.returncode == 2
     assert "<<<BRIEF" not in result.stdout
+    assert "--ola 'Go ahead' is not in any human turn" in result.stderr
 
 
 def test_7_no_transcript_is_refused(repo: Path, tmp_path: Path) -> None:
     empty = tmp_path / "empty-home"
     empty.mkdir()
-    stderr = refused(repo, empty, *args_for("tester", repo), "--ola", "Go ahead")
-    assert "Go ahead" in stderr
+    refused(repo, empty, *args_for("tester", repo), "--ola", "Go ahead",
+            says="--ola 'Go ahead' is not in any human turn")  # fmt: skip
 
 
 def test_7_without_ola_there_is_no_ola_part(repo: Path, home: Path) -> None:
@@ -659,9 +683,8 @@ def test_12_a_file_in_the_main_checkout_only_is_refused_for_tester(
     """The converse of the branch-only case: master's copy does not stand in."""
     (trees["A"] / INCREMENT).unlink()
     assert (repo / INCREMENT).exists()
-    stderr = refused(repo, home, "tester", "--worktree", str(trees["A"]), "--beside", "none",
-                     "--increment", INCREMENT)  # fmt: skip
-    assert f"--increment {INCREMENT} does not exist" in stderr
+    refused(repo, home, "tester", "--worktree", str(trees["A"]), "--beside", "none",
+            "--increment", INCREMENT, says=f"--increment {INCREMENT} does not exist")  # fmt: skip
 
 
 def test_12_an_absolute_increment_is_used_as_given(
