@@ -17,7 +17,7 @@ ACCEPTED it (meshes and quality identical to master, refine within noise;
 **15f-3** (the bindings, the Python and the CLI) is implemented on
 `worktree-15f-3`: green at `7d841f3`, with the green step's questions ruled
 under "Settled after 15f-3's green step" (S1-S5), 179 net lines against 187.
-`@reviewer` APPROVED it in round 2 ("Review"), and `@perf` ACCEPTED it with a cost finding (`docs/benchmarks/2026-10-04/15f-3-acceptance.md`), ruled under "Settled after 15f-3's acceptance" (A1-A6): 15f-3 ships, and a follow-up, **15f-4**, makes the mesh rebuild cheap. Choices that would normally go to Ola
+`@reviewer` APPROVED it in round 2 ("Review"), and `@perf` ACCEPTED it with a cost finding (`docs/benchmarks/2026-10-04/15f-3-acceptance.md`), ruled under "Settled after 15f-3's acceptance" (A1-A6): 15f-3 ships, and a follow-up, **15f-4**, makes the mesh rebuild cheap. **15f-4** is implemented on `worktree-15f-4` (green `5eeb87a`, 21 net lines against about 30) and ACCEPTED by `@perf` (`41a5ad7`, `docs/benchmarks/2026-10-04/15f-4-acceptance.md`: meshes byte-identical, refine -3.1 to +0.5 %, the empty-strip call 0.355 s against A2's 0.43 s, end to end +9 to +18 % over the base on the projected path); it is in review, not pushed. Choices that would normally go to Ola
 were made as defaults; each is marked *default* where it occurs and listed
 under "Defaults chosen" at the end.
 
@@ -1602,6 +1602,15 @@ triangle of the mesh it receives, and the same with an empty strip. Bygdin at
     more than 10 % of the base's process time (0.43 s of 4.32 s), the
     rebuild is still the problem and fusion comes back as a design question.
   - Boundaries are unchanged: no path, no CRS, no new binding.
+  - **As built (`5eeb87a`, 21 net lines against about 30).** Two departures
+    from the text above, both accepted:
+    - The table's entries are `(to, triangle)`, not `(to, triangle, slot)`.
+      The slot is not needed: the lookup for triangle `t`'s edge `k` already
+      knows `k`, and the neighbour is the triangle found.
+    - Every triangle is validated (index range, positive orientation) before
+      the table is built, where the old code checked each triangle and
+      inserted its edges in one pass. The result is the same: any refusal is
+      `nullopt`, and which check fires first is not observable.
 - **A3. LOC.** About 30 net (build's adjacency about +20 against the 15 it
   replaces; the constraint table about +8 against 4), 42 at +39 % and 48 at
   +60 %. Folding it into 15f-3 would give about 210, far under 700, so the
@@ -1716,6 +1725,7 @@ Counted in `CLAUDE.md` §2's unit. Estimates, with the worst cases at +39 %
 | | **15f-3 total** | **187** | **260** | **299** |
 | **15f-4** | **The rebuild made cheap** (A1-A3, after 15f-3's acceptance) | | | |
 | | `lattice_mesh.hpp`, `build`: flat vertex-bucketed adjacency; `refine.hpp`, `to_lattice`: sorted constraint table | 30 | 42 | 48 |
+| | the same, **measured** at `5eeb87a` (`lattice_mesh.hpp` 17, `refine.hpp` 4) | *21* | | |
 
 For 15f-2 the margins apply to the 15 estimated lines only, since the 275 are
 measured.
