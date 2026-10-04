@@ -178,7 +178,7 @@ def _concurrency(persona: str, worktree: Path, beside: list[str], no_build: bool
 
 
 def _from_increment(path: Path, shown: str) -> list[str]:
-    """§3.1a: the Status line, the quoted lines outside ## Review, the review count."""
+    """§3.1: the Status line, the quoted lines outside ## Review, the review count."""
     lines = path.read_text(errors="replace").splitlines()
     starts = [n for n, line in enumerate(lines) if line.startswith("## Review")]
     review = range(0)
@@ -238,7 +238,7 @@ def _brief(argv: list[str] | None) -> str:
     worktree = _checkout(args.worktree)
     increment, parts = "none named", []
     if args.increment is not None:
-        path = ROOT / args.increment
+        path = worktree / args.increment  # relative: the worktree's copy; absolute: as given
         if path.is_file():
             increment, parts = args.increment, _from_increment(path, args.increment)
         elif persona == "architect":
