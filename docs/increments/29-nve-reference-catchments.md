@@ -1,6 +1,6 @@
 # Increment 29 — NVE reference catchments: our catchments against NVE's, station by station
 
-Status: **revised after design review round 4, awaiting round 5**
+Status: **design approved by `@reviewer` (round 5, 2026-10-04); all questions ruled by Ola; ready for the red step of PR 1**
 (`@architect`, 2026-10-04), branch `worktree-nve-catchments` off master
 `d20126b`. Ola's rulings of 2026-10-04 are in the section below. Round 2 closed the burn's drainage claim
 (checked node by node, not assumed), the ELVIS data cases, the PR order, and
@@ -9,12 +9,15 @@ that are not consecutive may be neighbours), corrects the lowering bound and
 the tile sizes, and records Ola's ruling on the nine shifted-tile stations.
 Round 4 states the end extension's stopping rule, qualifies what the burn
 leaves unchanged, words the mixed-grid refusal for every cause the mosaic
-has, re-measures `7707_1`'s overlap against all four neighbours, and records
-Ola's ruling on the figure script. The gauge
+has, re-measures `7707_1`'s overlap against all four neighbours and
+`7707_3`'s against all seven, has the figure script's survey only propose
+cases that the full run must confirm, and records Ola's ruling on the figure
+script. Round 5 approved the design, and Ola ruled the last three questions
+the same day. The gauge
 placement is redesigned to his direction (the mapped river, then the DEM's
 flow path along it, never an area objective), with a per-station sensitivity
-check. Five PRs (merge order 1, 3, 2, 4, 5). Every choice still open is marked "Default (@architect,
-2026-10-04)" and repeated, with its alternative, under "Questions for Ola".
+check. Five PRs (merge order 1, 3, 2, 4, 5). The choices put to Ola under "Questions for Ola" are all
+ruled (see "Ola's rulings"); none is open.
 
 **Closes.** Catchments for real Norwegian gauging stations, computed from the
 DEM by `rasputin`, one polygon per station, each usable as `--domain`, and a
@@ -97,10 +100,20 @@ with maps "before" and "after", as pngs." Taken as a deliverable of PR 2
   and one tile from each grid, "The batch"), and the summary has one line for them;
   the acceptance README's line adds that a later increment fixes the tiles.
 - **The placement-figure script** ("Placement figures"). Ola, 2026-10-04
-  (10:51), answering two questions from the main session: "map questions:
+  (10:51 UTC), answering two questions from the main session: "map questions:
   1: No, 2: Yes." Question 1: does the 130-line script count toward PR 2's
   700-line limit? No. Question 2: may it plot with matplotlib, in that
   evidence script only and in no dependency list? Yes.
+- **Questions 1, 3 and 4 under "Questions for Ola"**, now closed. Ola,
+  2026-10-04 (11:52 UTC): "Yes to all three.", answering the main session's
+  restatement of the three with their defaults:
+  - **Question 1, when a station is too uncertain to score:** the area is
+    tested up and down the river as far as the gauge's coordinates are from
+    the river, at least 30 m, against a 5 % bar (`SWING_MAX = 0.05`).
+  - **Question 3, how much river to burn:** only the gauge's own stretch now;
+    burning the whole network is a later increment.
+  - **Question 4, the nearest-stream fallback:** included, as the last PR
+    (PR 5).
 
 ## What the data says (measured 2026-10-04)
 
@@ -303,9 +316,7 @@ channel, and these numbers are re-measured by the acceptance run).
   NoData excluded. **`7707_1`**, against all four of its normal neighbours
   (those whose bounding box overlaps it by at least 200 m both ways:
   `7707_2`, `7707_4`, `7708_3`, `7708_4`): 0.02 to 0.11 m at the declared
-  position, against 0.19 to 0.44 m moved either way (@reviewer, round 4,
-  0.45 m at the top; re-run by @architect the same day with the method
-  above, a throwaway script, not committed). **`7707_3`**, against its seven
+  position, against 0.19 to 0.45 m moved either way. **`7707_3`**, against its seven
   normal neighbours by the same rule (re-run by @architect): three of its four
   long overlaps favour the declared position clearly (`7607_4` 0.02 m,
   `7706_2` 0.07 m, `7707_4` 0.05 m, against 0.50 to 1.02 m moved), but the
@@ -516,8 +527,8 @@ named were read, no paper in full.
   where it still climbs along the reach. This is a local, minimal form of
   burning, not AGREE over the network. **The departure drops** the effect a
   network-wide burn has on divides (where the DEM puts a divide the mapped
-  network crosses). Burning the whole network is a later option (Question
-  3).
+  network crosses). Burning the whole network is a later increment (Question
+  3, ruled by Ola, 2026-10-04).
 - **Soille, Vogt and Colombo 2003**, "Carving and adaptive drainage
   enforcement of grid digital elevation models", *Water Resources Research*
   39(12):1366, doi:10.1029/2002WR001879 (Crossref and abstract checked
@@ -1018,8 +1029,8 @@ shapely):
    **`uncertain`**: reported with its agreement numbers, not scored `match` or
    `miss`, and counted apart, by its causes (`swing`, `downstream_unread`,
    `chain_not_draining`, `chain_end_open`, and, from the burn, `direction`).
-   Default (@architect, 2026-10-04): `SWING_MAX = 0.05`, one-sided, `U` as in
-   "Placing the gauge" (Question 1).
+   Ruled by Ola, 2026-10-04 (Question 1, the default): `SWING_MAX = 0.05`,
+   one-sided, `U` as in "Placing the gauge".
 
 A confluence 40 m below the gauge with a tributary of 20 % of the placed
 area gives a swing of at least 0.2 and a step at about +40 m (arithmetic, not a measurement). A flat lake
@@ -1200,8 +1211,8 @@ position: a confluence step, or a flat floor or lake), `downstream_unread`,
 `chain_not_draining`, `chain_end_open`, `direction`; the refusals counted by
 `refusal_cause`, with the `mixed_grid` ones apart as **known refusals**: one
 summary line, "N stations refused because their windows select tiles on
-two different grids, which rasputin does not combine (known refusals, not
-failures)", and their station numbers. The line is general because the
+two different grids, which rasputin does not combine, and neither grid
+covers the window alone (known refusals, not failures)", and their station numbers. The line is general because the
 refusal is (below): on DTM10 its only cause is the half-cell shift, and the
 acceptance README, not the summary, says that a later increment resamples
 those tiles. Deterministic JSON.
@@ -1725,8 +1736,9 @@ Each has a default; the design above is written to the defaults, so the
 round can start on them and a different answer changes only the part named.
 The earlier questions (which stations, what NVE data to commit, discharge,
 what counts as a good catchment, gauges on lakes) are ruled, under "Ola's
-rulings"; the way a gauge is placed follows your direction. Question 2 below
-is ruled too; questions 1, 3 and 4 are open.
+rulings"; the way a gauge is placed follows your direction. All four below
+are ruled and closed (2026-10-04): question 2 as its entry says, questions 1,
+3 and 4 with their defaults ("Yes to all three.").
 
 1. **When is a station too uncertain to score?** A gauge's coordinates are
    usually a few tens of metres off the river, and further for some. For each
@@ -1738,6 +1750,7 @@ is ruled too; questions 1, 3 and 4 are open.
    the river's flow path does not hold together, the station is reported as
    "uncertain" and is not marked good or bad: a confluence just below it, or
    a flat valley floor, makes the answer depend on where we put the point.
+   *Ruled 2026-10-04, closed: the default* (see "Ola's rulings").
    *Default: 5 %, and the distance the coordinates are off the river, at
    least 30 m.* Alternative: a fixed 30 m for every station (fewer
    uncertain, but a gauge 200 m from its river would be treated as exact),
@@ -1752,7 +1765,8 @@ is ruled too; questions 1, 3 and 4 are open.
    little downstream) is lowered into the elevation model, so water follows
    the mapped river there. Burning every river would also move divides
    across the map, but it needs care where rivers are mapped less precisely
-   than the elevation model. *Default: only the gauge's stretch now; the whole
+   than the elevation model. *Ruled 2026-10-04, closed: the default* (see
+   "Ola's rulings"). *Default: only the gauge's stretch now; the whole
    network is a later increment, and the residual-inflow work may want it.*
    Alternative: lower every mapped river inside each catchment's window now.
    That also corrects where divides run, but needs the river lines for the
@@ -1764,7 +1778,8 @@ is ruled too; questions 1, 3 and 4 are open.
    comparison on every station that ends uncertain or a miss, the gauge can
    be moved to the nearest elevation-model stream within 250 m (Jenson's
    rule). It never uses area. It is the last, small piece (about 80 lines)
-   and decides nothing for stations the river placed. *Default: include it,
+   and decides nothing for stations the river placed. *Ruled 2026-10-04,
+   closed: the default* (see "Ola's rulings"). *Default: include it,
    as the last piece.* Alternative: leave it out; Femundsenden is then
    refused and the comparison is not made.
 
@@ -1779,3 +1794,5 @@ is ruled too; questions 1, 3 and 4 are open.
 **29, design review, round 3, 2026-10-04.** Range `fe01d37..a14e7e6` (design and ROADMAP row only, including the renumbering). Verdict: CHANGES REQUESTED. LOC: 0 production. Estimates add up: PR 1 155; PR 3 380 (547 with the 44 % margin); PR 2 415 (598); PR 4 295 (425); PR 5 80 (115). All are under the 700-line ceiling. Round 2 blockers 1 to 7 and its three suggestions are closed as written. No "28" referring to this increment is left (`git grep` over the tree). Re-measured and true: ELVIS `objekttype` has 25 values summing to 1,954,539, including null (94) and a blank (2, a single space), with eight lake spellings, all starting `innsj` when casefolded. Exact copies: 9 pairs at `82.4.0` and 4 groups of five at `139.35.0`. At `79.3.0`, one `strekninglnr` has two geometries under one `elvid`. `152.4.0` has five null-type lines. On the nine straddling stations, neither lattice's tiles cover the NVE polygon. `156.24.0` and `213.4.0` are covered by the shifted lattice alone. The shift is in x only (world files). Soille et al. 2003 checked against Crossref and the abstract quotation. The float32 spacings. `WINDOW_MARGIN_M` = 2000. The three at-risk citations from `check_citations.py` were re-read and hold. Blocking: (1) A chain with a square corner, or any two non-consecutive chain nodes that are 8-neighbours, breaks `drains` and `monotone` even after a correct burn. The flood names a node's flooder when it is first pushed. So the lower node `chain[k+2]` pushes `chain[k]` before `chain[k+1]` can. Simulated with the flood of `upstream.hpp`: the path (2,4),(3,4),(3,5) gives `flow_to` (2,4)→(3,5) and (3,4)→(4,5); the same path with a diagonal corner drains node by node. Straight lines between consecutive valley-floor nodes, loop cuts and the end extension all make such corners. Make the chain taut before the descent and after the extension: where `chain[k]` is an 8-neighbour of `chain[j]` with `j > k+1`, drop `chain[k+1..j-1]`, as the loop cut does. Add a test that a cornered chain drains. (2) `:1474-1476` sends PR 2 to 23's fetch rules, but `fetch/` is PR 3 since round 2. (3) `:749-750` and `:786`: "at most 0.14 m" no longer holds once the end extension exists. The chain can reach 1000 + 600 + 500 m, which is about 210 nodes, so about 0.21 m. (4) `:239` "254 tiles of 5051 × 5051" is false for 11 tiles. Seven shifted tiles are 5052 × 5053 and `7507_4` is 5052 × 4103. `7305_3` is 5051 × 2881, `7405_1` 3521 × 5051 and `7405_2` 3511 × 5051. This claim predates the range. While fixing it, state the cause of the shift, measured by the main session on 2026-10-04: the data were resampled onto a shifted grid, not mislabelled, so the later fix is a resample. Not pushed; no CI.
 
 **29, design review, round 4, 2026-10-04.** Range `a14e7e6..e7b5923` (design and ROADMAP row only). Verdict: CHANGES REQUESTED. LOC: 0 production. Estimates: PR 1 155; PR 3 380 (545); PR 2 415 (598); PR 4 310 (446); PR 5 80 (115), all under the 700-line ceiling. The 130-line figure script is not counted, by Ola's ruling of 2026-10-04 ("map questions: 1: No, 2: Yes."). Round 3's blockers 1, 2 and 4 and its four suggestions are closed; blocker 3 is closed except for the node count in blocker 1 below. The taut rule was checked with an independent copy of `upstream.hpp`'s flood on 2,000 random chains with repeats, loops and turn-backs: 1,738 raw chains failed `drains`, no taut one did, and every output was taut and 8-connected. On 400 runs of the end extension across an embankment, the step rule kept every chain taut, and no node was flooded from a non-consecutive chain node; the remaining failures all start at a lower node beside the chain, which `drains` reports. Re-measured and true: the eleven tile sizes; the x shift on exactly the eight tiles, with y on the lattice; PixelIsArea and tag/`.tfw` agreement on all 254; the overlap differences of `7707_3` and `7507_4`; the 0.21 m bound; 16c's LOC table without `render.py`; matplotlib in no dependency list; `mosaic.py:385` and `catchment._plan` as described; 15a's tests catch by `MosaicError`, so a subclass leaves them unchanged. Blocking: (1) `:832-838`: "36 nodes if every step is diagonal" and "ends at most 500 m from the reach's last node" disagree, since 36 diagonal steps are 509 m. State the stopping rule (stop before a step that would pass 500 m: 35 diagonal, 50 straight), as the red suite's cap test depends on it. (2) `:864-866`: "the catchment is unchanged" was edited in this range and is contradicted by the new `:853-858` (lowering a depression's spill point moves its drainage). Qualify it: the catchment is unchanged except where a chain node was another depression's spill point. Not pushed; no CI.
+
+**29, design review, round 5, 2026-10-04.** Range `e7b5923..786584e` (design file only). Verdict: APPROVED. LOC: 0 production. Estimates: PR 1 155; PR 3 380 (547); PR 2 415 (598); PR 4 310 (446); PR 5 80 (115), all under the 700-line ceiling. The 130-line figure script is not counted (Ola's ruling of 2026-10-04). Round 4's two blockers and five suggestions are closed. 786584e is complete: status line, round 4 entry, no half-edited section. Re-measured and true: 35 diagonal steps 494.97 m, 36 steps 509.12 m, 50 straight steps exactly 500.0 m; on all 254 DTM10 tiles, spacing 10 m, NoData −32767, EPSG:25833 and PixelIsArea (`tifffile`); `_mixed`'s five causes and the two tiles `_covering` passes it (`mosaic.py:385`, `:571-593`); the neighbour sets of `7707_1` (4) and `7707_3` (7) under the stated rule; `7707_3`'s eleven values, to 0.01 m, including both near ties; `7707_1` declared 0.02 to 0.11 m, moved 0.19 to 0.45 m (the file says 0.44). Required with this record: `ROADMAP.md:54` still says "awaiting round 4". Suggested: 0.45 m without the parenthetical; "10:51 UTC"; the status sentence names `7707_3` and the survey change; the mixed-grid summary line adds "and neither grid covers the window alone". Not pushed; no CI.
