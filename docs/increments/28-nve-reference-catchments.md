@@ -793,7 +793,7 @@ What 28 does so that this is not blocked:
 - The sensitivity window of each gauge is recorded, so a residual between two
   gauges closer than the sum of their windows can be flagged as uncertain.
 
-### The station set (`fetch/nve.py`, `io/station_set.py`)
+### The station set (`fetch/nve.py`, `io/station_set.py`, `io/rivers.py`)
 
 **The packaged list.** `src_python/tin_engine/data/nve_hrd_2025.csv`: a
 header naming the source PDF, its date and NVE's credit as comment lines,
@@ -815,30 +815,45 @@ licence_note=...)`. `fetch/nve.py`:
   with `outSR=25833&f=geojson`, through `RangeClient.get_text` (23a-2's
   retries and refusals; `fetch/http.py` stays the only module importing
   `urllib`, rule F11);
+- queries ELVIS layer 2 once per station, by envelope: the station point
+  plus `map_radius + reach_up + 500 m` (2 km) each way, `outFields=objectid,
+  objekttype,strekninglnr,elvid,vassdragsnr,elvenavn`, `outSR=25833&f=geojson`.
+  The service returns whole features that meet the envelope, so a chain
+  longer than the envelope is complete where it meets it. Segments seen from
+  several stations are kept once, by `objectid`. **Unverified:** only 1 km
+  squares were queried (28 s for 140); at 4 km the answer is larger, and a
+  reply flagged `exceededTransferLimit` is refused, naming the station, so a
+  truncated river never reaches `place`;
 - refuses, naming the station, when a listed station has no point or no
   polygon; keeps the newest polygon per station (above) and records its
   update date and how many versions there were;
 - writes `stations.geojson` (one Point feature per station, properties
   `station`, `name`, `series` = `["1001.0"]`, `nve_area_km2` from layer 0,
-  `hrd_start_daily`), `reference.geojson` (one feature per station, the
-  polygon, `station`, `reference_area_km2`, `reference_updated`,
-  `versions`), both with a `crs` member, `NOTICE.txt` (the catalogue's
-  credit, as 23a-2's `notice` does), and `manifest.json` (the query URLs,
-  the fetch time in UTC, each file's sha256). Deterministic order: the list
-  file's.
-- Pure parts (the query URLs, choosing the newest version, building the
-  files' content) are functions with no network, tested on canned answers
-  as `fetch_fixtures.py` does; the network call is injected.
+  `hrd_start_daily`, `watercourse` = layer 0's `vassdragsnr`, `river` = the
+  first name of `elvenavnhierarki`; no other layer 0 field is copied),
+  `reference.geojson` (one feature per station, the polygon, `station`,
+  `reference_area_km2`, `reference_updated`, `versions`), `rivers.geojson`
+  (one LineString per segment, the six fields above), all with a `crs`
+  member, `NOTICE.txt` (the catalogue's credit, "Kilde: NVE", as 23a-2's
+  `notice` does), and `manifest.json` (the query URLs, the fetch time in UTC,
+  each file's sha256). Deterministic order: the list file's, then `objectid`.
+- Pure parts (the query URLs, choosing the newest version, de-duplicating
+  segments, building the files' content) are functions with no network,
+  tested on canned answers as `fetch_fixtures.py` does; the network call is
+  injected.
 
-**`io/station_set.py`** reads both files back: `read_stations(path) ->
-(tuple[Station, ...], crs)`, `read_references(path) -> (Mapping[str,
-Polygon | MultiPolygon], crs)`. It refuses a file without a `crs` member
-(the skill's rule; NVE's files always have one), duplicate station
-numbers, and non-point or non-polygon geometry. `Station` is a frozen
-Pydantic model: `station: str` (pattern `^\d+\.\d+\.\d+$`), `name`, `x`,
-`y`, `series: tuple[str, ...]`, `nve_area_km2: float | None`. Any GeoJSON
-of points with a `station` property works, so a user can bring their own
-list.
+**`io/station_set.py`** reads the stations and references back:
+`read_stations(path) -> (tuple[Station, ...], crs)`, `read_references(path)
+-> (Mapping[str, Polygon | MultiPolygon], crs)`; **`io/rivers.py`**
+`read_segments(path) -> (tuple[RiverSegment, ...], crs)`. All refuse a file
+without a `crs` member (the skill's rule; NVE's files always have one),
+duplicate station numbers or segment ids, and the wrong geometry type.
+`Station` is a frozen Pydantic model: `station: str` (pattern
+`^\d+\.\d+\.\d+$`), `name`, `x`, `y`, `series: tuple[str, ...]`,
+`nve_area_km2: float | None`, `watercourse: str | None`, `river: str | None`.
+Any GeoJSON of points with a `station` property works, so a user can bring
+their own list; without `watercourse` and `river` every candidate line is in
+the lowest tier of "Placing the gauge".
 
 ### Agreement and classes (`reference.py`, pure)
 
@@ -854,33 +869,47 @@ reaches; no DEM is read):
 - **NVE's in ours** = both / ref, **ours in NVE's** = both / ours.
 - **Area ratio** = our fine area / NVE's polygon area (shapely).
 - **Mean divide offset** = (ref + ours − 2·both) × cell area / NVE polygon's
-  perimeter, in metres: how far, on average, our divide sits from NVE's.
-  Size-independent, which is what NRFA's warning about small catchments asks
-  for.
+  perimeter, in metres: the area between the two outlines divided by the
+  length of NVE's. Exact when one outline lies a constant distance outside
+  the other (a square grown by one cell on every side: one cell, up to the
+  corner term), and size-independent, which is what NRFA's warning about
+  small catchments asks for. **A shift along one axis scores half the shift**,
+  because two of a square's four sides do not move (a square shifted one
+  cell along x: half a cell); the measure is the average over the whole
+  divide, not the largest displacement.
 
-`classify` (Default, @architect, 2026-10-04; Question 5):
+`classify` takes the agreement numbers and the sensitivity and returns a
+class and, for a match, the test that passed. Precedence: `refused`, then
+`uncertain`, then the rest. (Default, @architect, 2026-10-04.)
 
 | class | rule | counts as |
 |---|---|---|
-| `match` | both overlaps ≥ 95 %, **or** mean divide offset ≤ 3 cells (30 m on DTM10) | pass |
+| `refused` | `delineate` refused (NoData, the data's edge, memory cap, no river line within the map radius), with its message | reported, not a failure |
+| `uncertain` | not well posed (swing over 5 %, or the areas fall downstream), or the line runs against the DEM's slope | reported with its agreement numbers, not scored |
+| `match` | both overlaps ≥ 95 % (`match_by = "overlap"`), **or** mean divide offset ≤ 3 cells, 30 m on DTM10 (`match_by = "offset"`; the overlap test is tried first) | pass |
 | `close` | both overlaps ≥ 80 % | finding |
 | `miss` | anything else | finding |
-| `refused` | `delineate` refused (NoData, the data's edge, memory cap, no data in the disc), with its message | reported, not a failure |
 
-Bygdin, the one case measured so far, would be `match` (99.12 % and 99.33 %).
-The offset test is there for the 12 catchments under 10 km², where a one-cell
-disagreement along the whole divide is several per cent of the nodes.
+Bygdin, the one case measured so far, would be `match` by overlap (99.12 %
+and 99.33 %). The offset test is there for the 12 catchments under 10 km²,
+where a one-cell disagreement along the whole divide is several per cent of
+the nodes; `match_by` is in every row, so the share that passes only by the
+offset test is visible and is not mistaken for the overlap bar.
 
-`summarise(rows) -> Summary`: counts per class; for the area ratio and both
-overlaps, the minimum, 10th, 25th, 50th, 75th, 90th percentile and maximum,
-over all accepted stations and per size band (under 10, 10-100, 100-1000,
-over 1000 km²) and per tile count (1, 2, 3-4, 5+). Deterministic JSON.
+`summarise(rows) -> Summary`: counts per class and per `match_by`; for the area
+ratio and both overlaps, the minimum, 10th, 25th, 50th, 75th, 90th percentile
+and maximum, over the scored stations (`match`, `close`, `miss`) and per size
+band (under 10, 10-100, 100-1000, over 1000 km²) and per tile count (1, 2,
+3-4, 5+); the share `uncertain` per size band, and the causes of `uncertain`
+(confluence step, flat floor or lake, line against the slope, chain not
+falling). Deterministic JSON.
 
 ### The batch (`catchment_batch.py`)
 
 ```python
 class BatchRequest(BaseModel):      # frozen
-    snap_radius: float = 250.0
+    map_radius: float = 500.0
+    reach_up: float = 1000.0
     outline_tolerance: float | None = None
     only: tuple[str, ...] = ()      # station numbers; empty is all
 
@@ -890,6 +919,7 @@ class BatchSink(Protocol):
 
 async def run_batch(request: BatchRequest, repository: DemRepository,
                     stations: Sequence[Station], stations_crs: str,
+                    segments: Sequence[RiverSegment], segments_crs: str,
                     references: Mapping[str, BaseGeometry] | None,
                     sink: BatchSink) -> Summary
 ```
@@ -900,27 +930,44 @@ async def run_batch(request: BatchRequest, repository: DemRepository,
   deterministic. A GUI or API worker awaits it and can cancel between
   stations. Parallel stations are a later option.
 - A refusal (`CatchmentError`) becomes a `refused` row and the batch goes
-  on; any other exception stops it (a bug is not a data refusal).
-- `StationResult` (frozen): station, name, class, refusal message, snap
-  numbers, nodes, fine and reduced area, NVE's polygon area and the station
-  layer's area, the agreement numbers, tile count, windows, seconds.
-- Without `--reference`, no agreement and no class: the batch just makes the
-  catchments (the product for any list of stations).
+  on; any other exception stops it (a bug is not a data refusal). A station
+  `place` returns `None` for is `refused` ("no mapped river line within 500 m
+  of the station") until the fallback of "The fallback" lands.
+- `StationResult` (frozen): station, name, class, `match_by`, refusal message;
+  the placement (`placed_on`, station-to-line distance, `U`, `lake`,
+  `confluence_near`, `elvid`, segment `objectid`, `reach_up_m`,
+  `reach_down_m`); the gauge numbers (`node_offset_m`, `lowered_nodes`,
+  `lowered_max_m`, `direction_ok`, `downstream_checked`); the sensitivity
+  (`area_up`, `A0`, `area_down`, swing, largest step and where, `monotone`);
+  nodes, fine and reduced area, NVE's polygon area and the station layer's
+  area, the agreement numbers, tile count, windows, seconds.
+- Without `--reference`, no agreement and no class beyond `refused` and
+  `uncertain`: the batch just makes the catchments (the product for any
+  list of stations).
 - No paths: the sink is how files get written; `cli.py` passes a directory
   sink, tests pass a list.
 
-**`rasputin catchments`**:
+**`rasputin station-catchments`** (named for what it makes, a catchment per
+station; the earlier name `catchments` differs from `catchment` by one letter):
 
 ```
-rasputin catchments --dem PATH [--dem PATH ...] --stations FILE
-                    [--reference FILE] [--snap-radius METRES] [--only ID ...]
+rasputin station-catchments --dem PATH [--dem PATH ...] --stations FILE
+                    --rivers FILE [--reference FILE] [--map-radius METRES]
+                    [--reach-up METRES] [--only ID ...]
                     [--outline-tolerance METRES] --out-dir DIR [--out-parent DIR]
 ```
 
 writes `DIR/<station>.geojson` (22's catchment file, plus the station's
-number, name, series and the snap; `mesh --domain` reads it), `DIR/results.csv`,
-`DIR/summary.json`, and one stderr line per station (number, name, class,
-the three numbers) and the summary at the end.
+number, name, series, the placement and the sensitivity; `mesh --domain`
+reads it), `DIR/results.csv`, `DIR/summary.json`, and one stderr line per
+station (number, name, class, the three numbers) and the summary at the end.
+
+**`rasputin catchment`** gains `--rivers FILE` (with `--map-radius` and
+`--reach-up`): the seed is placed on the nearest line as above, with no
+watercourse number, and one stderr line says where: "placed on the river line
+31 m from the station (river Nea, line 8841), at the DEM's valley floor 6 m
+farther on; 119.0 km² drain through it, and the area changes by 0.3 % within
+30 m up and down the river: well defined".
 
 **The GeoJSON writer moves** from `cli.py` to `io/geojson.py`,
 `catchment_geojson(polygon, crs, properties) -> bytes`, no path, as
@@ -930,40 +977,94 @@ module's entry.
 
 ### New and changed files
 
+Estimates are production lines under CLAUDE.md §2's counting. 22's
+`catchment.py` ran 44 % over its estimate, so each PR's second figure adds
+that margin.
+
 | File | What | Estimate |
 |---|---|---|
-| `include/terrain/hydrology/flood.hpp` | the shared flood, moved out of `upstream.hpp` | 45 (moved, ~10 net) |
-| `include/terrain/hydrology/upstream.hpp` | uses it | −35 |
-| `include/terrain/hydrology/accumulate.hpp` | `accumulate`, `AccumulateOutcome` | 45 |
-| `bindings/core.cpp`, `_core.pyi` | `accumulate` | 30 |
-| `catchment.py` | `snap_radius`, disc, `Snap`, pick, re-flood, cap | 75 |
-| `cli.py` | `catchment --snap-radius` and its line | 20 |
-| **PR 1** | | **about 190** |
+| `include/terrain/hydrology/flood.hpp` | the shared flood, moved out of `upstream.hpp` | 45 |
+| `include/terrain/hydrology/upstream.hpp` | uses it | 10 (35 removed) |
+| `include/terrain/hydrology/accumulate.hpp` | `accumulate`, `AccumulateOutcome`, the bits | 60 |
+| `bindings/core.cpp`, `_core.pyi` | `accumulate` | 35 |
+| **PR 1, accumulation** | | **about 150** |
+| `gauge.py` | `RiverSegment`, `Placement`, `place` | 90 |
+| `burn.py` | valley floor, descent, direction, `GaugePath` | 70 |
+| `sensitivity.py` | `assess`, `Sensitivity` | 55 |
+| `catchment.py` | `Reach`, request field, stages A and B, burn per window, `GaugeResult` | 90 |
+| `io/rivers.py` | `read_segments` | 30 |
+| `cli.py` | `catchment --rivers` and the placement line | 40 |
+| **PR 2, the gauge on the river** | | **about 375 (540 with the margin)** |
 | `data/nve_hrd_2025.csv` | the list (data, not counted) | 0 |
 | `sources.py` | `StationSource`, the `nve-hrd` entry | 30 |
-| `fetch/nve.py` | queries, newest version, files, manifest | 120 |
+| `fetch/nve.py` | queries, newest version, segments, files, manifest | 150 |
 | `io/station_set.py` | readers, `Station` | 50 |
 | `io/geojson.py` | the moved writer | 25 (cli.py −25) |
-| `reference.py` | agreement, classes, summary | 100 |
-| `catchment_batch.py` | `BatchRequest`, `BatchSink`, `run_batch`, `StationResult` | 80 |
-| `cli.py` | `fetch-stations`, `catchments`, the directory sink | 100 |
+| `cli.py` | `fetch-stations` | 45 |
 | `NOTICE.md`, `project_structure.md` | NVE's credit; the new modules | docs |
-| **PR 2** | | **about 480** |
+| **PR 3, the stations** | | **about 300 (430)** |
+| `reference.py` | agreement, classes, `match_by`, summary | 115 |
+| `catchment_batch.py` | `BatchRequest`, `BatchSink`, `run_batch`, `StationResult` | 100 |
+| `cli.py` | `station-catchments`, the directory sink | 80 |
+| **PR 4, the batch and the comparison** | | **about 295 (425)** |
+| `catchment.py`, `cli.py`, `catchment_batch.py` | the fallback (below) | 80 |
+| **PR 5, the fallback** | | **about 80 (115)** |
 
-Both under the 700 ceiling of CLAUDE.md §2. PR 1 touches C++ (one build
-round), PR 2 is Python only, so PR 2's red step can be written while PR 1
-is in review.
+Every PR is under the 700 ceiling of CLAUDE.md §2, even with the margin. No
+module needs a new dependency.
 
 ### The PR split
 
-- **PR 1, the snap.** Accumulation and the snap, behind
-  `rasputin catchment --snap-radius`. Answers on its own: "the catchment of
-  this gauge". Red, green, review.
-- **PR 2, the stations and the batch.** Fetch, read, compare, run. Red,
-  green, review, then the acceptance run below.
+Each PR answers a question on its own, and the seams are where a module's
+inputs are files or arrays, not another PR's types.
+
+- **PR 1, accumulation.** C++ and its binding: "how many nodes drain through
+  each node". One build round; the oracle against `upstream` is its whole
+  suite.
+- **PR 2, the gauge on the river.** Place, burn, sensitivity and the window
+  stages, behind `rasputin catchment --rivers FILE` on a river file the user
+  has. Answers "the catchment of this gauge, and is it well defined". Python
+  only; needs PR 1.
+- **PR 3, the stations.** `fetch-stations`, the readers, the packaged list.
+  Answers "give me NVE's 140 stations, rivers and polygons, with a
+  manifest". The seam with PR 4 is the three files it writes, read through
+  `io/station_set.py` and `io/rivers.py` (so PR 4's tests use hand-written
+  files, not PR 3's code). Python only; independent of PRs 1 and 2, so its
+  red step can be written while they are in review.
+- **PR 4, the batch and the comparison.** `reference.py`,
+  `catchment_batch.py`, `station-catchments`; then the acceptance run.
+  Needs PRs 1 to 3.
+- **PR 5, the fallback.** Nearest stream for a station with no river line
+  near (below). Small, and last because it is the only part Ola may rule out.
 
 Neither touches refine or mesh code, so `tools/bench.py`'s benchmark and
 scaling sweep do not apply (`docs/increments/README.md`, "Acceptance").
+
+### The fallback: nearest stream (Jenson), PR 5
+
+**When.** Only where the river line cannot place the gauge: no segment within
+`map_radius` (one of the 140, Femundsenden, a lake gauge), or no river file
+(a station list a user brings without one). **And as a comparison** in the
+acceptance: the same rule run on every station that ends `miss` or
+`uncertain`, so that what the mapped river buys is measured. It is never used
+to repair a station the river rule placed.
+
+**The rule** is Jenson 1991's (above): the nearest DEM node within `R` (default
+250 m: all 42 stations outside their NVE polygon lie within 233 m of it) whose
+accumulation count is at least `stream_min_km2` (default 0.1 km²; a guess,
+and the comparison run measures it). `accumulate` runs over a fixed window,
+the disc's bounds plus 1 km: a count with a flag bit set is a lower bound, so
+reaching the threshold is conclusive, and a flagged node under it is treated
+as not a stream (a stated limit, only at the window's edge). No node
+qualifies: `CatchmentError` ("no DEM stream within R m"). The found node is a
+plain pour point of 22's `delineate`, then. There is no chain, so **no
+sensitivity is computed**: the row says `placed_by = "nearest stream"`,
+the class is decided by the agreement numbers alone and the summary counts
+these apart, never among the stations the sensitivity cleared.
+
+**Not a rule that looks at area.** The threshold is a floor on the count, not
+a search for the largest: the nearest qualifying node wins, as Lindsay et al.
+2008's reading of Jenson says it should.
 
 ## The red suites
 
