@@ -18,10 +18,9 @@ listed in the handback):
   `monotone`, `causes` (a tuple of `"swing"`, `"downstream_unread"`,
   `"chain_not_draining"`, `"chain_end_open"`) and `well_posed`.
 
-`U` is 30 m throughout, a multiple of the 10 m step, so "read to `U`" is the
-same whether `checked_down_m` is the farthest sample's arc or `U` itself when
-every sample within `U` is trusted; a `U` between steps is left open (see the
-handback).
+`U` is 30 m except in the tests of a `U` between nodes (35 m on 10 m steps),
+where "read to `U`" means every sample in `(0, U]` trusted and a chain node at
+arc length `>= U` ("Sensitivity", step 2), not `checked_down_m >= U`.
 
 The cell area is 2^-10 km2, so every area is a count times a power of two and
 the swing's arithmetic, `(A_down - A0) / A0`, is exact up to the final
@@ -212,6 +211,44 @@ def test_a_mapped_river_that_reaches_u_is_read(sensitivity: ModuleType) -> None:
     counts = [988, 990, 994, 997, 1000, 1003, 1006, 1009, 1012]
     s = assess(sensitivity, case(counts, placed=4), reach_down_m=30.0)
     assert "downstream_unread" not in s.causes
+
+
+def test_u_between_nodes_is_read_when_a_chain_node_lies_at_or_past_it(
+    sensitivity: ModuleType,
+) -> None:
+    """U = 35 m: the samples downstream are at 10, 20 and 30 m, all trusted,
+    and the chain's next node, at 40 m, is past U. That is read to U, though
+    the farthest sample is 30 m."""
+    counts = [988, 990, 994, 997, 1000, 1003, 1006, 1009, 1012]
+    s = assess(sensitivity, case(counts, placed=4), u=35.0)
+    assert s.checked_down_m == pytest.approx(30.0)
+    assert s.checked_up_m == pytest.approx(30.0)
+    assert s.area_down == pytest.approx(1009 * CELL, rel=1e-15)
+    assert "downstream_unread" not in s.causes
+    assert s.well_posed
+
+
+def test_the_flags_of_the_node_past_u_do_not_matter(sensitivity: ModuleType) -> None:
+    """U = 35 m: the node at 40 m is D, not a sample; its flag bit does not
+    shorten the read."""
+    counts = [988, 990, 994, 997, 1000, 1003, 1006, 1009, 1012]
+    s = assess(sensitivity, case(counts, placed=4, bits={8: 1}), u=35.0)
+    assert s.checked_down_m == pytest.approx(30.0)
+    assert "downstream_unread" not in s.causes
+    assert s.well_posed
+
+
+def test_u_between_nodes_is_unread_when_the_chain_ends_short_of_it(
+    sensitivity: ModuleType,
+) -> None:
+    """U = 35 m and the chain's last node is at 30 m: every sample is
+    trusted, but no chain node lies at or past U, so the read does not reach
+    it."""
+    counts = [988, 990, 994, 997, 1000, 1003, 1006, 1009]
+    s = assess(sensitivity, case(counts, placed=4), u=35.0)
+    assert s.checked_down_m == pytest.approx(30.0)
+    assert "downstream_unread" in s.causes
+    assert s.well_posed is False
 
 
 def test_a_river_that_starts_within_u_upstream_is_not_penalised(

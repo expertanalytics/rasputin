@@ -12,7 +12,7 @@ chosen here and listed in the handback):
 - `burn_reach(window: DemTile, reach: Reach) -> (DemTile, GaugePath)`: the
   burnt copy has the window's `meta`.
 - `GaugePath`: `chain` ((n, 2) (row, column), downstream, extension
-  included), `placed` (an int index into `chain`), `arc` (metres along the
+  included), `placed` (one Python `int`, an index into `chain`), `arc` (metres along the
   chain from the placed node, negative upstream), `end_extended_m`,
   `end_closed`, `direction_ok`, `lowered_nodes`, `lowered_max_m`,
   `node_offset_m` (P to the placed node), `dropped_m` (metres of the mapped
@@ -26,9 +26,11 @@ equal to the input wherever the input is already below the carried level minus
 
 Most reaches here use `corridor=5.0` with resample points on nodes, so each
 point's corridor holds exactly the node under it and the chain is known
-exactly; the valley-floor tests use the default 30 m, where the least
-elevation within 30 m on a falling floor lies downstream of the point, and the
-expected chains below say so node by node.
+exactly; the valley-floor tests use the default 30 m. The valley floor is
+taken across the line ("Following the river", step 2): a point's
+cross-section is the nodes within the corridor whose offset along the line is
+at most half the 10 m step, so on these straight lines down a column it is the
+point's own row, and the chosen node is abeam the point, not downstream.
 
 Elevations are a few hundred metres (3000 m in the float32 test); the
 tolerances on metres along the chain (1e-9 m) are about 1e4 times float64's
@@ -115,6 +117,7 @@ def run(
     placed = int(path.placed)
     arc = np.asarray(path.arc, dtype=np.float64)
     assert arc.shape == (len(chain),)
+    assert isinstance(path.placed, int) and not isinstance(path.placed, bool)
     assert 0 <= placed < len(chain)
     assert arc[placed] == 0.0
     assert np.all(np.diff(arc) > 0.0)
@@ -352,11 +355,15 @@ def test_a_line_that_doubles_back_drops_the_loop(burn: ModuleType, gauge: Module
 def test_a_line_off_the_valley_floor_gives_a_chain_on_it(
     burn: ModuleType, gauge: ModuleType
 ) -> None:
-    """The line is 28 m east of the floor. Within 30 m of each resample point
-    the least elevation is the floor node one row downstream (29.7 m away)."""
+    """The line is 28 m east of the floor. Each resample point's cross-section
+    is its own row, columns 20 to 25 within 30 m, and its least elevation is
+    the floor node abeam it, 28 m away. The whole 30 m disc would have chosen
+    the floor node one row downstream (29.7 m away, 0.5 m lower), rows 6 to
+    41: the downstream bias step 2 removes."""
     z = channel(80, 41, [(0, 20), (79, 20)])
+    assert z[6, 20] < z[5, 20]  # the premise: one row down is lower
     _, path = run(burn, z, reach(gauge, column_line(22.8, 5, 40), at=100.0, corridor=30.0))
-    assert nodes(path) == [(r, 20) for r in range(6, 42)]
+    assert nodes(path) == [(r, 20) for r in range(5, 41)]
 
 
 def test_a_corridor_of_two_cells_keeps_the_chain_within_two(
@@ -374,21 +381,58 @@ def test_ties_go_to_the_nearer_node_then_the_smaller_row_and_column(
     burn: ModuleType, gauge: ModuleType, offset: float, column: int
 ) -> None:
     """A floor two nodes wide (columns 20 and 21 equal), falling south: each
-    point's least elevation is two rows down, on either floor column; the
-    nearer wins, and at equal distance (offset 0.5) the smaller column."""
+    point's least elevation is in its own row (its cross-section), on either
+    floor column; the nearer wins, and at equal distance (offset 0.5) the
+    smaller column."""
     z = channel(80, 42, [(0, 20.5), (79, 20.5)], width=0.5)
     assert z[30, 20] == z[30, 21]  # the premise: a tie in elevation
     _, path = run(burn, z, reach(gauge, column_line(20 + offset, 5, 40), at=100.0, corridor=30.0))
-    assert nodes(path) == [(r, column) for r in range(7, 43)]
+    assert nodes(path) == [(r, column) for r in range(5, 41)]
+
+
+def test_a_node_exactly_corridor_away_is_inside(burn: ModuleType, gauge: ModuleType) -> None:
+    """The line runs halfway between columns 20 and 21, so with a 5 m
+    corridor each point's cross-section is (r, 20) and (r, 21), both exactly
+    5 m away (to float64's rounding of the resampled northing, well inside
+    the design's 1e-6 m slack). The channel is down column 21, so the
+    cross-section's least elevation is (r, 21). A strict `<` would leave the
+    cross-section empty and fall back to the nearest node, which by the tie
+    on distance is the smaller column, (r, 20)."""
+    z = channel(60, 42, [(0, 21), (59, 21)])
+    _, path = run(burn, z, reach(gauge, column_line(20.5, 5, 40), at=100.0))
+    assert nodes(path) == [(r, 21) for r in range(5, 41)]
+    assert path.node_offset_m == pytest.approx(5.0, abs=1e-9)
+
+
+def test_a_cross_section_with_no_node_takes_the_nearest_node(
+    burn: ModuleType, gauge: ModuleType
+) -> None:
+    """The line runs halfway between columns 20 and 21 and 0.3 rows below the
+    node rows, so with a 5 m corridor no node is within 5 m of any point
+    (the nearest are (r, 20) and (r, 21), sqrt(3^2 + 5^2) = 5.83 m away).
+    Each point then takes the node nearest it, whatever its elevation: of
+    the two at equal distance (the line is vertical, so its easting is exact
+    and the tie is exact), the smaller column, (r, 20), though the channel
+    down column 21 is 3 m lower."""
+    z = channel(60, 42, [(0, 21), (59, 21)])
+    _, path = run(burn, z, reach(gauge, column_line(20.5, 5.3, 40.3), at=100.0))
+    assert nodes(path) == [(r, 20) for r in range(5, 41)]
+    assert nodes(path)[int(path.placed)] == (15, 20)
+    # 1e-6 m: the 3 m is a difference of northings near 6.6e6 m, where
+    # float64's spacing is 9.3e-10 m; checked at that northing only.
+    assert path.node_offset_m == pytest.approx(math.hypot(3.0, 5.0), abs=1e-6)
 
 
 def test_the_placed_node_is_the_one_the_point_nearest_at_chose(
     burn: ModuleType, gauge: ModuleType
 ) -> None:
+    """`at` = 100 m is the resample point on row 15; it chose the floor node
+    abeam, (15, 20), 28 m across the river from P."""
     z = channel(80, 41, [(0, 20), (79, 20)])
     _, path = run(burn, z, reach(gauge, column_line(22.8, 5, 40), at=100.0, corridor=30.0))
-    assert nodes(path)[int(path.placed)] == (16, 20)
-    assert path.node_offset_m == pytest.approx(math.hypot(10.0, 28.0), abs=1e-9)
+    assert nodes(path)[int(path.placed)] == (15, 20)
+    assert int(path.placed) == 10
+    assert path.node_offset_m == pytest.approx(28.0, abs=1e-9)
     assert np.asarray(path.arc) == pytest.approx(
         10.0 * (np.arange(36) - int(path.placed)), abs=1e-9
     )

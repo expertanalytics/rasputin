@@ -45,7 +45,6 @@ when it is absent: the area must be within 2 % of NVE's 305.54 km^2 (delfelt
 from __future__ import annotations
 
 import json
-import math
 import re
 from pathlib import Path
 from typing import Any
@@ -523,19 +522,25 @@ def test_bygdin_reduced_keeps_the_area_and_meshes_at_10_m(tmp_path: Path) -> Non
 # the river file is one line down the valley floor (objectid 8841, river Nea)
 # and one exact copy of it, which the reader drops.
 #
-# The line runs 0.3 m east of the floor's column, and the station is 19.7 m
-# east of the line, beside row 150, so `U` is 30 m. The default corridor
-# (30 m) on a floor falling 0.5 m per row puts each resample point's node two
-# rows downstream (the floor node three rows down is 30.0015 m away, just
-# outside, so no node sits on the corridor's boundary): the placed node is
-# row 152, 20.0 m farther on, and the embankment's three nodes are the only
-# ones lowered.
+# The line runs 4 m east of the floor's column, and the station is 16 m
+# east of the line, beside row 150, so `U` is 30 m. The valley floor is taken
+# across the line ("Following the river", step 2): each resample point's
+# cross-section is its own row, columns CC - 2 to CC + 3 within the default
+# 30 m corridor (the nearest outside are 34 m and 36 m away, so no node sits
+# on the corridor's boundary), and its least elevation is the floor column CC,
+# also on the embankment's rows, where the crest ties every column and the
+# nearer, CC, wins. So the placed node is (150, CC), 4 m across the river from
+# `P`, and the embankment's three nodes are the only ones lowered. Measured on
+# PR 1's flood when this was written: the chain drains node by node, no count
+# within 30 m carries a flag bit, and the swing is 0.029.
 #
 # Pinned here (the design gives the stderr sentence as an example; these
 # pieces of it are pinned, its numbers' formats are not): the line holds
-# "placed on the river line 20 m from the station", "(river Nea, line 8841)",
-# "valley floor 20 m farther on", "drain through it", "within 30 m up and down
-# the river" and "well defined". The file's properties gain `placed_on`,
+# "placed on the river line 16 m from the station", "(river Nea, line 8841)",
+# "moved 4 m onto the DEM's valley floor", "drain through it", "within 30 m up
+# and down the river" and "well defined"; the copies line reads "rivers: 2
+# segments read, 1 exact copy dropped" (segments read counts the file's
+# features, copies included). The file's properties gain `placed_on`,
 # `elvid`, `objectid`, `node_offset_m`, `lowered_nodes`, `reach_up_m`,
 # `downstream_checked`, `swing` and `causes` (names from the design's
 # `StationResult`). A river file whose CRS is not the DEM's is refused, and so
@@ -545,9 +550,9 @@ def test_bygdin_reduced_keeps_the_area_and_meshes_at_10_m(tmp_path: Path) -> Non
 
 
 STATION = gf.lat(gf.CC + 2, 150)
-PLACED = (152, gf.CC)
-#: The mapped line's column: 0.3 m east of the valley floor.
-LINE_COL = gf.CC + 0.03
+PLACED = (150, gf.CC)
+#: The mapped line's column: 4 m east of the valley floor.
+LINE_COL = gf.CC + 0.4
 NEA = 8841
 
 
@@ -592,16 +597,17 @@ def placed_mask() -> np.ndarray:
 def expected_swing() -> float:
     count = np.asarray(core_accumulate(to_core(gf.tile_of(burnt_valley()))).count, dtype=float)
     a0 = count[PLACED]
-    return float(max(a0 - count[149, gf.CC], count[155, gf.CC] - a0) / a0)
+    return float(max(a0 - count[147, gf.CC], count[153, gf.CC] - a0) / a0)
 
 
 def test_rivers_places_the_gauge_and_says_where(
     tmp_path: Path, valley_dir: Path, rivers: Path
 ) -> None:
     output = run(valley_dir, tmp_path / "c.geojson", *gauge_station(), "--rivers", str(rivers))
-    assert re.search(r"\bplaced on the river line 20 m from the station\b", output), output
+    assert re.search(r"\bplaced on the river line 16 m from the station\b", output), output
     assert "(river Nea, line 8841)" in output, output
-    assert re.search(r"\bvalley floor 20 m farther on\b", output), output
+    assert re.search(r"\bmoved 4 m onto the DEM's valley floor\b", output), output
+    assert "farther on" not in output, output
     assert re.search(r"\bkm(2|²) drain through it\b", output), output
     assert re.search(r"\bwithin 30 m up and down the river\b", output), output
     assert re.search(r"\bwell defined\b", output), output
@@ -625,7 +631,7 @@ def test_rivers_writes_the_placement_and_the_sensitivity(
     assert props["placed_on"] == "any"
     assert props["objectid"] == NEA
     assert props["elvid"] == "2-11-1"
-    assert props["node_offset_m"] == pytest.approx(math.hypot(0.3, 20.0), abs=1e-6)
+    assert props["node_offset_m"] == pytest.approx(4.0, abs=1e-6)
     assert props["lowered_nodes"] == len(gf.DAM_ROWS)
     assert props["reach_up_m"] == pytest.approx(1000.0, abs=1e-6)
     assert props["downstream_checked"] == "whole"
@@ -635,9 +641,7 @@ def test_rivers_writes_the_placement_and_the_sensitivity(
 
 def test_rivers_reports_the_copies_dropped(tmp_path: Path, valley_dir: Path, rivers: Path) -> None:
     output = run(valley_dir, tmp_path / "c.geojson", *gauge_station(), "--rivers", str(rivers))
-    assert re.search(r"\brivers: [\d,]+ segments read, 1 exact cop(y|ies) dropped\b", output), (
-        output
-    )
+    assert re.search(r"\brivers: 2 segments read, 1 exact copy dropped\b", output), output
 
 
 def test_a_station_in_wgs84_is_placed_the_same(

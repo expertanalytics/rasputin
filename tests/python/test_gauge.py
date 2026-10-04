@@ -18,10 +18,12 @@ names below that it leaves open are chosen here and listed in the handback):
 - `Reach(line=, at=, uncertainty=, corridor=30.0)`, frozen: `line` in
   downstream order, `at` the metres along it to `P`, `uncertainty` = `U`.
 
-The prefix tier is pinned only on a case that is a prefix under any reading
-(the segment's number is a leading part of the station's, and both share the
-main number before the dot) and a case that is one under none; the design
-does not define "prefix" further.
+The prefix tier is the design's ("Placing the gauge", step 2, pinned
+2026-10-05): the segment's number, not equal to the station's, is a leading
+part of it as a string and the two share the main number before the first
+dot; it comes before the name tier. Its own examples are pinned: `"002.A"` is
+a prefix of `"002.AB"`, `"002"` is not, and `"002.AB"` is not one of
+`"002.A"`.
 
 Every distance below is in metres on a line a few kilometres long, at UTM
 magnitudes (x 5e5, y 6.6e6); the absolute tolerances (1e-6 m) are about 1e3
@@ -196,6 +198,42 @@ def test_the_prefix_tier_beats_a_nearer_line_of_another_number(gauge: ModuleType
         far={"vassdragsnr": "002.DC", "name": "Gaula"},
     )
     g = at_station(gauge, X, Y, watercourse="002.DCB2", river="Nea")
+    placement = gauge.place(g, segments)
+    assert placement.objectid == 2
+    assert placement.placed_on == "prefix"
+
+
+@pytest.mark.parametrize(
+    ("segment", "station", "tier"),
+    [
+        ("002.A", "002.AB", "prefix"),  # the design's own example
+        ("002", "002.AB", "any"),  # the design's example: a bare main number is not
+        ("002.AB", "002.A", "any"),  # the segment's area drains into the station's
+        ("00", "002.AB", "any"),  # a leading string, but not the main number
+        ("002.B", "002.AB", "any"),  # same main number, not a leading part
+    ],
+)
+def test_what_is_a_prefix(gauge: ModuleType, segment: str, station: str, tier: str) -> None:
+    """The far line (80 m) has `segment`, the near one (20 m) another main
+    number; neither shares the station's river name. A prefix places on the
+    far line, anything else falls through to the nearest, as `any`."""
+    segments = two_rivers(
+        near={"vassdragsnr": "123.A", "name": "Gaula"},
+        far={"vassdragsnr": segment, "name": "Gaula"},
+    )
+    placement = gauge.place(at_station(gauge, X, Y, watercourse=station, river="Nea"), segments)
+    assert placement.placed_on == tier
+    assert placement.objectid == (2 if tier == "prefix" else 1)
+
+
+def test_the_prefix_tier_comes_before_the_name_tier(gauge: ModuleType) -> None:
+    """The near line has the station's river name, the far line a prefix of
+    its number: the prefix wins."""
+    segments = two_rivers(
+        near={"vassdragsnr": "123.A", "name": "Nea"},
+        far={"vassdragsnr": "002.A", "name": "Gaula"},
+    )
+    g = at_station(gauge, X, Y, watercourse="002.AB", river="Nea")
     placement = gauge.place(g, segments)
     assert placement.objectid == 2
     assert placement.placed_on == "prefix"
