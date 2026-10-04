@@ -1,0 +1,4 @@
+15f4 0 01:41:55 Now drawing from 'AC Power'
+15f3 0 01:42:14 Now drawing from 'AC Power'
+15f3 0 01:42:33 Now drawing from 'AC Power'
+15f4 0 01:42:42 Now drawing from 'AC Power'
