@@ -61,9 +61,11 @@ def partition(
     """The cells of a `cols` x `rows` window: the design's steps 1-3.
 
     The count approximates `max(pieces, ceil(N b / B))` and is not a floor;
-    only `dx dy b <= memory_budget` is guaranteed. Refuses `pieces < 1`, and
-    a budget under one node's bytes, for which no cell fits.
+    only `dx dy b <= memory_budget` is guaranteed. Refuses an empty window,
+    `pieces < 1`, and a budget under one node's bytes, for which no cell fits.
     """
+    if cols < 1 or rows < 1:
+        raise ValueError(f"the window is empty: cols {cols} and rows {rows} must be at least 1")
     if pieces < 1:
         raise ValueError(f"pieces must be at least 1, got {pieces}")
     b = bytes_per_node(tolerance)
