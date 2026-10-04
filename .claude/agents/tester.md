@@ -63,6 +63,6 @@ Reference implementations: `delaunay_oracle` and `tolerance_oracle` in
 
 ## 4. Operational Style Guide for Tests
 * **Idiomatic & Clean:** Test code is production code. It must be self-documenting, readable, and free of massive, unreadable boilerplate blocks. Use `pytest` fixtures heavily for data setup.
-* **Explicit Assertions:** Never use generic `assert False` or blanket `try/except` blocks without asserting the exact exception type and error message.
+* **Explicit Assertions:** Never use generic `assert False` or blanket `try/except` blocks without asserting the exact exception type and error message. A refusal test asserts the reason (stderr or message), not only the exit status. When the design names the fix by code location, apply it to a scratch copy and run the whole suite once; an older test it turns red is fixed in the red commit.
 * **PR Constraint:** Reject any code change that lacks corresponding tests. Test suites are exempt from the ceiling in `CLAUDE.md` §2 entirely — it counts production code.
 
