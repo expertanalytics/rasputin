@@ -1551,7 +1551,7 @@ triangle of the mesh it receives, and the same with an empty strip. Bygdin at
 - **A1. 15f-3 is not blocked; the fix is a follow-up PR, 15f-4.**
   - The cost is not new to the code base. On master, the reprojected path's
     final check already calls `to_lattice` on refine's output
-    (`refine_points.hpp:220`, reached from `final_check.run`). 15f-3 adds the
+    (`refine_points.hpp:248`, reached from `final_check.run`). 15f-3 adds the
     same rebuild to the projected path; on the reprojected path it adds
     nothing of this kind (Velhas: +2.6 to +7.5 % process time, the strip's
     own work).
@@ -1863,4 +1863,4 @@ None blocks `@tester`.
 
 **15f-3, code review, round 2, 2026-10-03.** Range `ae6bb41..9265916` (e6348b4 tests, 9265916 docs); whole branch `c193cb1..9265916`. Verdict: APPROVED. LOC: 179 net (222 added), unchanged; this round touches no production file. All four round-1 blockers closed; the red-step figures in `test_cli_mesh_edge_strip.py` ("98 points, worst 16 m … 152, worst 47 m") are @tester's record of the `4157dab` run, not rerun. Five touched test files 200 passed; ruff clean; merge-tree against origin/master `1a422b5` clean. Suggestion: fix `tests/python/test_features.py:583`'s citation of `project_structure.md:359` (stale on master since 15f-1). @perf's acceptance (Bygdin, basin piece) outstanding. Not pushed; no CI.
 
-**15f-3, code review, round 3, 2026-10-04.** Range `60e2b45..ac06d39` (83c7fd2 citation, 588e879 and 9f2f7e5 @perf acceptance and profile, 107cdb4 ruling A1-A6, ac06d39 ROADMAP); whole branch `c193cb1..ac06d39`. Verdict: APPROVED. LOC: 179 net (222 added), unchanged; no production file in this range. The ruling's claims hold against code (`refine_points.hpp:220` calls `to_lattice` on refine's output inside `detail::point_loop`, reached from `final_check.run`; `lattice_mesh.hpp:131`'s `unordered_map`; `refine.hpp:154-156`'s `std::map`) and every figure matches the acceptance file; status line and ROADMAP row match the tree; merge-tree against origin/master `2060f14` clean. Not pushed; no CI.
+**15f-3, code review, round 3, 2026-10-04.** Range `60e2b45..ac06d39` (83c7fd2 citation, 588e879 and 9f2f7e5 @perf acceptance and profile, 107cdb4 ruling A1-A6, ac06d39 ROADMAP); whole branch `c193cb1..ac06d39`. Verdict: APPROVED. LOC: 179 net (222 added), unchanged; no production file in this range. The ruling's claims hold against code (`refine_points.hpp:248` calls `to_lattice` on refine's output inside `detail::point_loop`, reached from `final_check.run`; `lattice_mesh.hpp:136`'s `unordered_map`; `refine.hpp:160-162`'s `std::map`) and every figure matches the acceptance file; status line and ROADMAP row match the tree; merge-tree against origin/master `2060f14` clean. Not pushed; no CI.
