@@ -1,9 +1,12 @@
 # Increment 26: land cover for the São Francisco basin — water bodies as constraints, class fractions per triangle
 
-Status: **designed by `@architect`, 2026-10-03, at Ola's request; not
-ruled.** Written before `@tester` per `docs/increments/README.md` step 1.
-Nothing is built. The questions for Ola are at the end, each with a
-recommended default. Six pull requests, listed under "The PR split".
+Status: **designed by `@architect`, 2026-10-03, at Ola's request; ruled by
+Ola, 2026-10-04** (all eleven questions; "Ruled by Ola, 2026-10-04", below,
+and each question marked). Q8 was ruled against the recommendation:
+triangles inside a lake carry the raster's own mix, nothing is forced to
+water, and the design is changed to match. Written before `@tester` per
+`docs/increments/README.md` step 1. Nothing is built. **26a is ready for
+`@tester`.** Six pull requests, listed under "The PR split".
 
 **Why "26".** 25 is plain output (`docs/increments/25-plain-output.md`, on
 its own branch); 26 is the first free number on every branch
@@ -95,8 +98,8 @@ further ruling, on the fractions themselves"), 2026-10-01, unless marked:
   never cross.
 - **The legend.** "We need to keep high resolution on vegetation types and
   crop farming types in Brazil": MapBiomas's full legend, crop types
-  included; "year as an option, default latest". The collection was not
-  ruled (question 1 below).
+  included; "year as an option, default latest". The collection: Collection
+  11 (Q1, ruled 2026-10-04).
 - **The cutoff and the ledger.** "We could even have a cutoff on the
   fractions. 0.1% soybean does not carry so much information." "95% corn,
   5% soybean _could_ become 100% corn." "A local out-of-balance ledger,
@@ -106,6 +109,34 @@ further ruling, on the fractions themselves"), 2026-10-01, unless marked:
 - **Determinism** (increment 21's ruling): same input, same output, for any
   thread count. And from the basin design: the mesh does not depend on the
   machine.
+
+## Ruled by Ola, 2026-10-04
+
+The eleven questions of section 12 were put to Ola, each with its recommended
+answer first. In Ola's words: "1: yes, 2: a, basically yes to all
+recommended but I don't understand what's going on in 8." Q8 was then
+explained: (a) a triangle inside a lake outline is written as 100 % water,
+and the land inside it is moved to the shore by the ledger; (b) such a
+triangle carries the raster's actual mix. Ola: "It's not 100% water, so if
+it is a mix of islands and water, b sounds like the logical resolve."
+
+- **Q1:** Collection 11, year 2025 by default.
+- **Q2 (a):** CC BY-SA 4.0 in the licence note of all three outputs (mesh
+  files with fractions, `water.geojson`, meshes constrained by those
+  polygons) until MapBiomas says otherwise.
+- **Q3-Q7, Q9, Q10:** as recommended.
+- **Q8 (b):** **nothing is forced to water.** A triangle inside a lake
+  outline carries the raster's exact fractions, cut and placed by the
+  ledger like any other triangle. What this removed from the design: step 2
+  of the ledger (1.4), the forced mask on `Ledger::push`, F3's exception for
+  forced triangles, the "triangles forced to water" count, the year check
+  that switched forcing on, the open cost of filled islands and shoreline
+  land in the ledger (1.5, 2.6), and `@perf`'s measurement of it (item 2b of
+  section 11). The 4.4-4.7 ha ledger measured without lakes is no longer
+  qualified by an unmeasured lake case.
+- **Q11 (a):** 26a, 26b and 26c (the fractions) now, alongside the basin
+  work; 26d-1 and 26d-2 (water) after the basin PRs; 26e with 23g, since it
+  needs the stitched mesh.
 
 ## What was measured for this design
 
@@ -604,7 +635,7 @@ much was written". `Σₖ L[k] = 0` always, to rounding.
 to `A`:
 
 1. `v[k] = a[k] + L[k]` for every class in either list.
-2. If `t` is forced to water (section 2.6), the output is `{33: A}`; go to 6.
+2. (Removed by Q8 (b): no triangle is forced to water.)
 3. The candidates `S` are the classes with `a[k] > 0`, `v[k] > 0` and `v[k]`
    not small. If `S` is empty, `S` is the one class with `a[k] > 0` and the
    largest `v[k]` (ties to the smaller class number).
@@ -624,7 +655,7 @@ with the soybean small; the 5 % then waits in the ledger until the curve
 reaches a triangle that has soybean in it, and is written there.
 
 **Implementation.** C++, `include/terrain/land_cover/ledger.hpp`: a
-`Ledger` object with `push(chunk of class areas, planar areas, forced mask)
+`Ledger` object with `push(chunk of class areas, planar areas)
 -> chunk of fractions`, called by the driver for the chunks in curve order;
 its state is the dense vector `L` (256 doubles) and the list of classes
 touched, so a step costs the classes of the triangle and of the ledger, not
@@ -638,8 +669,7 @@ By construction, and each tested (under "Invariants"):
 
 - **Per triangle**: the fractions sum to one (to the float32 rounding of the
   file); no written entry is small, unless it is the triangle's only class;
-  a class appears only where the raster has some of it in that triangle,
-  except water in a forced triangle.
+  a class appears only where the raster has some of it in that triangle.
 - **Over any stretch of the curve**, for every class, the area written minus
   the exact area equals the ledger before the stretch minus the ledger after
   it (sum steps 1 and 6 over the stretch). So the error of a class over a
@@ -660,17 +690,8 @@ the literature). On the Corrente it stayed between 4.4 and 4.7 ha at 20, 10,
 run reports its largest entry and the end remainder, per class, in `--stats`
 and `--record`, so a run where the ledger grows is seen, not hidden.
 
-**That figure was measured without water forcing** (2.6): the Corrente
-meshes have no lake constraints. With lakes forced to 100 % water, every
-land cell inside a lake polygon (the shore displacement of the reduction,
-within `τ` of the outline, and every filled island) enters the ledger as
-owed land and every water cell outside it as owed water. Along a shore the
-curve passes between the two sides often and pays them back; but inside a
-large lake, where every triangle is forced, nothing can be paid back until
-the curve leaves the lake, so the ledger may grow with a lake's filled
-islands and shoreline, not with the floor. How much is not known: it is a
-measurement in `@perf`'s acceptance (section 11, item 2b), and the cost is
-named in question 8.
+**Lakes add no special case** (Q8 (b)): a triangle inside a lake outline is
+cut like any other, so the figure above is not qualified by the lakes.
 
 ### 1.6 What the mesh file carries
 
@@ -707,8 +728,7 @@ land_cover_classes`, `property list uchar float land_cover_fractions` and
 strings as header comments.
 
 **`--stats` and `--record`** (increment 25's record): the cutoff
-(`land_cover_cutoff_pct`), the floor (`land_cover_floor_ha`), triangles
-forced to water, and per class the exact area and the written area in km²,
+(`land_cover_cutoff_pct`), the floor (`land_cover_floor_ha`), and per class the exact area and the written area in km²,
 their difference, the largest ledger entry in m² and the end remainder in m².
 A largest entry above 10 times the floor prints a warning to stderr (25's
 rule for self-checks).
@@ -736,9 +756,8 @@ rule for self-checks).
 - **Islands.** A hole in a water body (land, connected through edges only,
   since land is the complement of 8-connected water) of at least the minimum
   area is kept as a hole; a smaller one is filled, so its land becomes part
-  of the lake polygon. Its area then reaches the fractions through the
-  forced-water rule (2.6) and the ledger, like every other land cell inside
-  the polygon.
+  of the lake polygon (the outline only). Its land stays in the fractions of
+  the triangles over it, as mapped (Q8 (b), 2.6).
 
 ### 2.2 Labelling and tracing, on cell edges
 
@@ -912,37 +931,29 @@ rasputin mesh --dem anadem-v1 --domain D --out-crs C --tolerance T \
   step is tested without meshing, and `mesh` keeps reading features from
   files only. The cost is one more command in the recipe.
 
-### 2.6 Triangles inside a lake are water
+### 2.6 Triangles inside a lake carry the raster's mix (Q8 (b))
 
-16c's labelling gives every triangle inside a water polygon the code 33
-(components across unconstrained edges, one point-in-polygon test per
-component). In the fractions pass such a triangle is **forced**: written as
-100 % water, its exact areas still entering the ledger (step 2 of 1.4). The
-land cells the reduced outline put inside the lake (within `τ` of the shore)
-and the water cells it left outside are equal in area, because the polygon
-keeps the traced area (filled islands apart, which are land inside by
-definition). Either way the ledger carries what forcing displaces, so class
-totals stay exact.
+Ruled by Ola, 2026-10-04: "It's not 100% water, so if it is a mix of
+islands and water, b sounds like the logical resolve." A triangle inside a
+water polygon gets its exact class areas from the raster, cut and placed by
+the ledger like any other triangle: open water, a filled island's forest,
+and the land the reduced outline put inside the lake are all written as
+mapped. The lake outline is a constraint and nothing more. It shapes the
+triangles and gives 16c's labels code 33 inside. With `--land-cover`, the
+triangle's `land_cover_code` is the fractions' dominant class (step 7 of
+1.4), not 16c's label, which matters only where an island's land outweighs
+the water in a triangle. Without `--land-cover`, 16c's labels are written
+as today.
 
-**The cost, not yet measured.** The ledger can only pay owed land back in a
-triangle that is not forced. Along a shore the curve alternates between
-lake and land and pays it back within a few triangles; but a large lake's
-interior is a long run of forced triangles, and the land owed from its
-filled islands and its shoreline waits until the curve leaves the lake. The
-4.4 to 4.7 ha of 1.5 were measured on meshes without lakes; with the
-basin's river network (3,159 islands in unit 761's river body alone; how
-many are below the minimum area, and so filled, was not counted) the
-largest ledger entry may be much
-larger, and the land it carries is written on the next land triangles the
-curve meets, which can be some way from the island it came from. `@perf`
-measures this (section 11, item 2b); if it is large, the remedy to weigh is
-to keep more islands as holes (a smaller minimum area for islands than for
-lakes), not to weaken the ledger.
+**What was dropped:**
+- the forcing of a lake triangle to `{33: 1}`;
+- the land it would have owed the ledger, which could only be paid back
+  after the curve left the lake, so its unmeasured cost;
+- the year check that switched forcing off when the land-cover year
+  differed from the water's.
 
-Forcing applies only when the land-cover year equals the water polygons'
-year (the `year` property). With another year (a reservoir that did not yet
-exist in 1985, say), lake triangles get their exact fractions like any
-other, the lake outline stays a constraint, and stderr says so once.
+A different year now needs nothing special: the outlines are the water's
+year and the fractions are their own.
 
 ## 3. Getting MapBiomas
 
@@ -968,7 +979,7 @@ mapbiomas-c11
   object id     brazil_coverage-col11_{year}           (one per year in the cache)
   credit        MapBiomas Project - Collection 11 of the Annual Series of Land Use and Land
                 Cover Maps of Brazil, accessed on {date} through the link: {url}
-  licence_note  question 2 (CC BY or CC BY-SA 4.0)
+  licence_note  CC BY-SA 4.0 (question 2, ruled (a) 2026-10-04)
   cite          Souza et al. (2020), Reconstructing Three Decades of Land Use and Land Cover
                 Changes in Brazilian Biomes with Landsat Archive and Earth Engine.
                 Remote Sensing 12(17), 2735. https://doi.org/10.3390/rs12172735
@@ -1038,8 +1049,6 @@ removed. How land cover fits:
   basin (section 5), under the 16 GB budget, and serial in its ledger part.
   This waits for the stitcher (23d, 23g); until then every mesh is one
   piece, and the land-cover pass runs inside `mesh` on the mesh in memory.
-- **Forced water** uses 16c's labels on the same mesh, so it too is
-  computed once, on the stitched mesh.
 
 ## 5. Cost, at 1 to 50 m
 
@@ -1127,14 +1136,14 @@ rasputin water --source mapbiomas-c11 [--year Y] --domain D --out-crs C [--featu
 rasputin mesh ... --features water.geojson --features-map mapbiomas-water
                   --land-cover mapbiomas-c11 [--land-cover-year Y] [--land-cover-cutoff 5]
                   [--land-cover-floor 1]                                   (26b, 26c)
-   the mesh as today (water rings are 16b linework; 16c labels lake triangles 33)
+   the mesh as today (water rings are 16b linework; 16c labels lake triangles 33; no forcing, Q8 (b))
    land_cover_fractions.py (Python driver)
      vertices -> lon/lat -> index space of the class grid (crs.reprojector)
      _core.hilbert_order(centroids) ─────────────────────────────────── C++, land_cover/ledger.hpp
      for each chunk of 2^18 triangles along the curve:
         ClassWindow of the chunk's box, from the cache
         _core.class_areas(corners, window, row_area) ───────────────── C++, land_cover/overlap.hpp (parallel)
-        ledger.push(areas, planar areas, forced mask) ───────────────── C++, serial
+        ledger.push(areas, planar areas) ─────────────────────────────── C++, serial
      -> offsets, classes, fractions, land_cover_code, the ledger report
    writers: .vtk FieldData + cell array, .ply face lists; run record entries
 ================================ _core boundary ================================
@@ -1147,7 +1156,7 @@ local frame. No CRS, no path, no year, no class names.
 output only) and first-party I/O through `io/repository.py`, never a path
 below the CLI; the C++ headers are pure and know no Python. The class
 numbers' meaning (33 is water) lives in the catalogue entry and the class
-map, in Python; C++'s forced mask and water class are numbers it is handed.
+map, in Python; C++ is handed only numbers.
 Every step is a function of its inputs, testable alone: the overlap on a
 three-triangle mesh and a 4 × 4 class array; the ledger on hand-made class
 areas; the tracing on a 6 × 6 mask; the reduction on hand-made rings.
@@ -1172,8 +1181,8 @@ Fractions (26b, 26c):
   covered, to 1e-12 of a cell.
 - **F3 (the threshold).** No written entry is small (below `c` of its
   triangle and below the floor) unless it is the triangle's only class; no
-  class is written where the raster has none of it in that triangle, except
-  water in a forced triangle; a forced triangle is exactly `{33: 1}`.
+  class is written where the raster has none of it in that triangle, inside
+  a lake outline or not (Q8 (b)).
 - **F4 (the stretch identity).** For every prefix of the curve and every
   class, written minus exact equals minus the ledger after the prefix, to
   1e-9 of the prefix's area. The test pushes chunks of one triangle and
@@ -1220,7 +1229,6 @@ Water (26d):
 | a fixed line touching a ring without crossing | an anchor, so the touch is kept and not turned into a crossing |
 | two fixed lines crossing on a ring | one anchor, at the shared point |
 | a reduced ring that would fall below four vertices | stops at its floor (22) |
-| the land-cover year differs from the water's | no forcing; the outlines stay; one stderr line |
 | no `--land-cover` | no arrays, no fields, as today |
 | `--land-cover` with a CORINE map in the same mesh | refused (16e's rule: one code system per mesh) |
 
@@ -1248,9 +1256,9 @@ Counted in `CLAUDE.md` §2's unit. Each estimate with the worst case at
 | **26c** | **The cutoff and the ledger** | | |
 | | `land_cover/ledger.hpp`: Hilbert keys and order, the quantiser, `Ledger::push`, the report | 170 | |
 | | `bindings/core.cpp`, `_core.pyi` | 45 | |
-| | `land_cover_fractions.py`: curve order, forced water from 16c's labels, the year check | 60 | |
+| | `land_cover_fractions.py`: curve order (forcing and the year check dropped, Q8 (b)) | 40 | |
 | | `cli.py`, `run_record.py`: cutoff and floor options, the ledger report, the warning | 45 | |
-| | **26c total** | **320** | **445** |
+| | **26c total** | **300** | **417** |
 | **26d-1** | **Water bodies, traced** | | |
 | | `raster_vector/water.hpp`: labels by runs, areas, cracks, pinches, holes filled | 230 | |
 | | `bindings/core.cpp`, `_core.pyi` | 45 | |
@@ -1269,7 +1277,8 @@ Counted in `CLAUDE.md` §2's unit. Each estimate with the worst case at
 | | the pass on the stitched mesh; `rasputin land-cover MESH --year Y` rewriting it | 90 | |
 | | **26e total** | **210** | **292** |
 
-Order: 26a, then 26b and 26c (fractions on today's one-piece meshes: the
+Order, as ruled (Q11 (a)): 26a, 26b and 26c now, alongside the basin work;
+26d-1 and 26d-2 after the basin PRs; 26e with 23g. Within that: 26a, then 26b and 26c (fractions on today's one-piece meshes: the
 level-3 units and the Velhas piece already exist and can be given land cover
 without remeshing once 26e's reader exists, or remeshed), then 26d-1 and
 26d-2, then 26e when the stitcher exists. 26b and 26d-1 can be built in
@@ -1314,8 +1323,10 @@ FieldData arrays and the `.ply` lists read back (VTK reader, as 16c's test);
 5 % soybean followed by one with soybean present: the second receives the
 5 %; a class below the cutoff everywhere and present everywhere comes out
 whole; a large triangle with a 3 km² minority above the floor keeps it); the
-Hilbert order on a known 4 × 4 grid of centroids; F5 by permutation; forced
-triangles; the year mismatch line.
+Hilbert order on a known 4 × 4 grid of centroids; F5 by permutation; and
+Q8 (b): a mesh with a hand-made water polygon over a class grid with a
+land island cell inside it writes that triangle's exact mix, land
+included, with no `{33: 1}` forcing.
 
 **26d-1**: masks by hand: a single cell (four corners); two cells touching at
 a corner (one body, one ring, the corner twice); a ring with a hole; a hole
@@ -1360,16 +1371,13 @@ On AC power, recorded, against the existing meshes where possible.
    area check per body, validity, time and memory; the same on the whole
    basin's outline for the counts (the fetch is 177 MB), including the
    size of the largest body and the time to trace and reduce it.
-   2b. **Fractions with water forced** (26c with 26d): unit 761 (or 769) at
-   10 m meshed with its water polygons, fractions with forcing on and off:
-   the largest ledger entry, the end remainder, and the 5 km and 25 km
-   misplaced shares, against the no-lake figures of 1.5. **Pass:** reported;
-   a largest entry above 10 times the floor goes to Ola with the island
-   remedy of 2.6 before 26e is built.
+   (2b, fractions with water forced, was dropped with Q8 (b): nothing is
+   forced.)
 3. **The mesh with water** (26d-2): unit 769 at 20 and 10 m, and the Velhas
    piece at 10 m, meshed with and without `water.geojson`: triangles, refine
    time, peak memory, worst angle. This is the number section 5 only
-   estimates.
+   estimates. Also unit 769 at 10 m with water: item 1's fractions report
+   and pass, so lakes are covered by the same check.
 4. Evidence under `docs/benchmarks/<date>/26-land-cover/`, as `bench.py`'s
    runs are kept.
 
@@ -1381,6 +1389,7 @@ Each with the recommendation, which is the default if Ola does not rule.
    10.1 (February 2026, 1985-2024) or 10. *Recommended: 11, year 2025 by
    default*, as the latest with the latest year; the key names the
    collection, so a later one is an added entry.
+   **Ruled 2026-10-04: yes.**
 2. **The licence of what rasputin makes from MapBiomas.** The Collection 11
    factsheet
    (https://brasil.mapbiomas.org/wp-content/uploads/sites/3/2026/08/Factsheet-Colecao-11-12082026-1.pdf,
@@ -1395,11 +1404,13 @@ Each with the recommendation, which is the default if Ola does not rule.
    code (MIT) is not affected. *Recommended: write CC BY-SA 4.0 in the
    licence note of all three, the stricter reading, until MapBiomas says
    otherwise*; asking them is Ola's call, as licensing is.
+   **Ruled 2026-10-04: (a), as recommended.**
 3. **The cutoff.** *Recommended: an entry is dropped only when it is under
    5 % of its triangle and under 1 ha*, both options. Measured: a relative
    cutoff alone makes the ledger carry hundreds of hectares across the map.
    The floor could be 0.5 ha, MapBiomas's own minimum mapping unit; 1 ha
    measured better than 10 ha and is the proposal.
+   **Ruled 2026-10-04: as recommended.**
 4. **Where may the ledger put a class?** Three rules were measured: only
    into triangles already holding it above the cutoff (Ola's first
    proposal), into triangles holding any of it ("present"), or anywhere
@@ -1411,18 +1422,22 @@ Each with the recommendation, which is the default if Ola does not rule.
    thinly scattered below the cutoff everywhere vanish; "anywhere" is a
    little better locally but writes 8 to 18 % more entries and puts classes
    where none was mapped.
+   **Ruled 2026-10-04: as recommended.**
 5. **Which regions must be right?** *Recommended: the guarantee as designed
    (any stretch of the Hilbert curve, so any square of its grid, within
    twice the largest ledger entry), and the acceptance measured on 1, 5 and
    25 km squares*, until DEM-derived sub-catchments exist; then on those.
+   **Ruled 2026-10-04: as recommended.**
 6. **Is aquaculture (class 31) water for the constraints?** *Recommended:
    no*: only class 33; fish ponds stay fractions.
+   **Ruled 2026-10-04: as recommended.**
 7. **The water tolerance and minimum area.** *Recommended: 60 m (twice the
    cell, as the catchment outline) and four times its square, 1.44 ha*. On
    the measured units that keeps 6.5 to 9.5 % of the bodies, holding 89 to
    98 % of the water; the basin would have about 11,600 bodies and 130,000
    constraint vertices, a large share of them on the river network, which
    is very likely one body from the reservoirs to the sea.
+   **Ruled 2026-10-04: as recommended.**
 8. **Are triangles inside a lake 100 % water?** *Recommended: yes, when the
    land-cover year is the water's year*; the land inside the outline goes to
    the shore through the ledger. The cost: inside a large lake nothing can
@@ -1431,16 +1446,23 @@ Each with the recommendation, which is the default if Ola does not rule.
    land some way from where it was mapped. Not measured yet; `@perf`
    measures it before the cut-run work, and keeping more islands as holes is
    the remedy to weigh if it is large.
+   **Ruled 2026-10-04: (b), against the recommendation:** "It's not 100%
+   water, so if it is a mix of islands and water, b sounds like the logical
+   resolve." Nothing is forced; section 2.6.
 9. **Piece files in a cut run.** *Recommended: no land cover in piece files,
    only in the stitched file*, so the result does not depend on the cut.
+   **Ruled 2026-10-04: as recommended.**
 10. **`rasputin water` as its own command**, writing a GeoJSON that `mesh`
     reads as features. *Recommended: yes*, like `catchment`; the polygons can
     be looked at and reused.
+    **Ruled 2026-10-04: as recommended.**
 11. **When.** The basin order puts "the basin's own inputs" after the basin
     run. 26a-26c touch no refinement code and serve meshes that exist now
     (the nine level-3 units). *Recommended: 26a, 26b and 26c after 15f-3 and
     25, before the remaining basin PRs (23b on); 26d after them; 26e with
     23g.*
+    **Ruled 2026-10-04: (a)**: 26a-26c now, alongside the basin work; the
+    water PRs after the basin PRs; 26e with 23g.
 
 ## Not in scope
 
