@@ -35,7 +35,6 @@ from tin_engine.mosaic import (
     MosaicError,
     MosaicPlan,
     assemble,
-    physical_memory,
     plan_mosaic,
 )
 from tin_engine.outline import trace
@@ -126,8 +125,8 @@ class Catchment:
 
 def delineate(request: CatchmentRequest, repository: DemRepository) -> Catchment:
     """The catchment of the request's seed over the repository's DEM, or a
-    :class:`CatchmentError` (truncated by the data's edge or NoData, no lake
-    or two under the point, over the memory cap)."""
+    :class:`CatchmentError` (truncated by the data's edge or NoData, or no lake
+    or two under the point)."""
     footprints = repository.footprints()
     crss = sorted({f.meta.crs for f in footprints})
     if len(crss) != 1:
@@ -146,13 +145,6 @@ def delineate(request: CatchmentRequest, repository: DemRepository) -> Catchment
     windows: list[Window] = []
     while True:
         m = plan.meta
-        itemsize = np.result_type(*(t.dtype for t in plan.tiles)).itemsize
-        need, cap = m.rows * m.cols * (itemsize + 2), physical_memory() // 2
-        if need > cap:
-            raise CatchmentError(
-                f"the window is {m.rows} x {m.cols} nodes, {need} bytes to flood, over the cap "
-                f"of half the physical memory ({cap} bytes)"
-            )
         tile = assemble(plan, repository.load).tile
         seed = _seed_mask(m, lake, (float(x), float(y)))
         t0 = time.perf_counter()

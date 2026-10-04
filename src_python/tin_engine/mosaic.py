@@ -17,7 +17,6 @@ steps (I1, R12's global node identity).
 from __future__ import annotations
 
 import math
-import os
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Self
@@ -44,11 +43,6 @@ ALIGN_TOLERANCE = 1e-6
 
 class MosaicError(ValueError):
     """A request the tiles cannot answer. A `ValueError`, like `GeoTiffError`."""
-
-
-def physical_memory() -> int:
-    """Bytes of physical memory, looked up at call time (macOS and Linux)."""
-    return os.sysconf("SC_PHYS_PAGES") * os.sysconf("SC_PAGE_SIZE")
 
 
 class Bounds(BaseModel):
@@ -195,13 +189,6 @@ def plan_mosaic(
     rows, cols = r1 - r0 + 1, c1 - c0 + 1
     if rows < 2 or cols < 2:
         raise MosaicError(f"the request is {rows} x {cols} nodes; a mesh needs at least 2 x 2")
-    dtype = np.result_type(*(p.footprint.dtype for p in selected))
-    cap, size = physical_memory() // 2, rows * cols * dtype.itemsize
-    if size > cap:
-        raise MosaicError(
-            f"the request is {rows} x {cols} nodes, {size} bytes at {dtype}, over the cap "
-            f"of half the physical memory ({cap} bytes); narrow it with --bbox"
-        )
     vertical = any(p.footprint.meta.vertical_unit_assumed for p in selected)
     meta = _grid(selected[0].footprint.meta, lattice.reference, lattice.window, vertical)
     tiles = tuple(_placement(p, r0, c0, r1, c1) for p in selected)
