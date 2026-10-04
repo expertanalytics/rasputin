@@ -116,7 +116,7 @@ from tin_engine.run_record import (
     stride_record,
     summary,
 )
-from tin_engine.sources import SOURCES
+from tin_engine.sources import SOURCES, STATION_SOURCES
 from tin_engine.stats import PhaseClock, Report, Sizes, quality, render
 from tin_engine.target_grid import Block, TargetGrid
 from tin_engine.viz.fixtures import GALLERY, Fixture
@@ -1287,6 +1287,42 @@ def fetch(
     )
     if report.no_tile:
         typer.echo(f"no tile (sea): {', '.join(report.no_tile)}")
+
+
+@app.command()
+def fetch_stations(
+    source: Annotated[str, typer.Argument(help=f"A station list: {', '.join(STATION_SOURCES)}.")],
+    out_dir: Annotated[Path, typer.Option("--out-dir", help="Where to write the files.")],
+    refresh: Annotated[
+        bool, typer.Option("--refresh", help="Fetch again even if the files are there.")
+    ] = False,
+) -> None:
+    """Fetch a list's stations, their catchment polygons and the river lines
+    round them into --out-dir, with NOTICE.txt and a manifest (increment 29).
+    Files already there are kept, and nothing is requested, unless --refresh."""
+    from tin_engine.fetch.http import FetchError, RangeClient
+    from tin_engine.fetch.nve import FILES, fetch_station_set
+
+    if source not in STATION_SOURCES:
+        raise typer.BadParameter(
+            f"{source} is not a station list ({', '.join(STATION_SOURCES)})", param_hint="SOURCE"
+        )
+    names = (*FILES, "manifest.json")
+    if not refresh and all((out_dir / name).is_file() for name in names):
+        typer.echo(f"{out_dir}: already fetched; --refresh fetches again", err=True)
+        return
+    try:
+        files = fetch_station_set(STATION_SOURCES[source], RangeClient().get_text)
+    except KeyError as exc:  # a field the fetch reads, left out of the answer
+        typer.echo(f"Error: the NVE service's answer is missing the field {exc.args[0]}", err=True)
+        raise typer.Exit(1) from exc
+    except (FetchError, ValueError) as exc:
+        typer.echo(f"Error: {exc}", err=True)
+        raise typer.Exit(1) from exc
+    out_dir.mkdir(parents=True, exist_ok=True)
+    for name, data in files.items():  # the manifest last
+        (out_dir / name).write_bytes(data)
+    typer.echo(f"{source}: {len(files)} files written to {out_dir}", err=True)
 
 
 def cache_root(option: Path | None, environ: Mapping[str, str]) -> Path | None:

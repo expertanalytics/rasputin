@@ -1,6 +1,6 @@
 # Increment 29 — NVE reference catchments: our catchments against NVE's, station by station
 
-Status: **design approved by `@reviewer` (round 5, 2026-10-04); all questions ruled by Ola; PR 1 (accumulation) implemented (red `0624bbf` and `8d87f77`, green `e43020b`, scaffolding removed `edef966`), code review round 3 approved, awaiting push and CI**
+Status: **design approved by `@reviewer` (round 5, 2026-10-04); all questions ruled by Ola; PR 1 (accumulation) merged as #173; PR 3 (stations and rivers): red `213a2ef`, three rulings of 2026-10-04 for it ("Ola's rulings", the block "Ruled for PR 3's green step"), red amendment `05f348a` and `c18c8d5`, green `aae91bb`; code review round 1's fixes in (red `b59c648`, green `c4e50ff`: NVE's lake number 0 means no lake, malformed files and missing fields refused in plain words); code review round 2 requested changes on one citation and wording only, and its fixes are in (`f91cdaa` and the round-2 record); code review round 3 asked for one word (one citation, not two), fixed; approved by `@reviewer`, code review round 4; PR #178's CI then failed on h11's prose-read hook (a test read `NOTICE.md`), Ola ruled the test out (block "PR 3, after PR #178's CI"), master merged in; code review round 5 asked for two sentences, fixed; **approved by `@reviewer`, code review round 6**, awaiting the push and CI**
 (`@architect`, 2026-10-04), branch `worktree-nve-catchments` off master
 `d20126b`. Ola's rulings of 2026-10-04 are in the section below. Round 2 closed the burn's drainage claim
 (checked node by node, not assumed), the ELVIS data cases, the PR order, and
@@ -114,6 +114,84 @@ with maps "before" and "after", as pngs." Taken as a deliverable of PR 2
     burning the whole network is a later increment.
   - **Question 4, the nearest-stream fallback:** included, as the last PR
     (PR 5).
+
+**Ruled for PR 3's green step (2026-10-04, 18:19 UTC).** Ola: "defaults on
+both", answering two questions `@tester` raised with PR 3's red step
+(`213a2ef`); the third point below is `@architect`'s, not a question to Ola.
+
+- **The station's name comes from NVE's station layer** (layer 0,
+  `stasjonnavn`), copied as served, not from the packaged list. The list's
+  `name` column is extracted from the PDF's Table 1, where long names wrap
+  over two lines; the list stays the source of which stations, their series
+  version and `hrd_start_daily`, and its names only serve to check the
+  extraction. Measured 2026-10-04 against layer 0 for all 140, with the
+  first-pass extraction of the design rounds: all 140 have a non-blank name in
+  layer 0 (no feature in the whole layer has a null or blank one), and 12
+  differ from the extracted names, each because the PDF wraps or splits it
+  (`311.4.0`: "(Femunden)" extracted, "Femundsenden (Femunden)" in layer 0;
+  `27.15.0`: "t)" against "Austrumdal (Austrumdalsvatnet)"; `234.13.0`:
+  "Iesjokka" against "Veahkkava, Iesjokka"). **Red amendment:** the fake
+  service gives one station a layer 0 name that differs from its list row,
+  and `stations.geojson` must carry layer 0's.
+- **A river segment served as a MultiLineString is refused**, naming its
+  `objectid`, as "The station set" already says (one LineString per
+  segment; "the wrong geometry type" is refused). Not split, not merged: a
+  segment is one link of one river, and the chain of "Placing the gauge"
+  joins segments end to start. The refusal is `read_segments`'s; the fetch
+  writes the feature as served, so a user's file and a fetched one are
+  refused alike. **Red amendment, before green:** `test_rivers.py` adds a
+  MultiLineString segment among good ones and expects a `ValueError` naming
+  its `objectid` and "MultiLineString".
+- **Where the count of dropped copies goes** (`@tester`'s pin 15, changed).
+  `io.rivers.drop_copies(segments) -> (kept, dropped)` stays as pinned: pure,
+  public, applied by `read_segments`. But a two-part `read_segments` loses
+  the count at the reader, and nothing downstream can recover it, since
+  `drop_copies` on the reader's output finds nothing left. So
+  **`read_segments(path) -> (segments, crs, dropped)`**, a three-part tuple
+  (not a field on `RiverSegment`: the count describes the file, not a
+  segment). It reaches Ola as one stderr line from each command that reads a
+  river file, after reading it: `rasputin catchment --rivers` (PR 2) and
+  `rasputin station-catchments` (PR 4), worded, for example, "rivers: 4,812 segments read,
+  25 exact copies dropped (same river, same vertices to 1 cm)"; PR 4 also
+  writes it to `summary.json` as `river_copies_dropped`. `fetch-stations`
+  writes copies as served and reports nothing about them. **Red amendment:**
+  the two places that unpack `read_segments` (`test_rivers.py`'s `read` and
+  `test_fetch_nve.py`'s read-back) take three parts, and
+  `test_the_count_dropped` also asserts the reader's count is 25.
+
+**PR 3, after code review round 1 (2026-10-04): the lake number's 0.** Not
+a ruling: a correction of the data, found by `@reviewer` and re-measured by
+`@architect` ("The data are not clean"). NVE's river service sends
+`vatnlnr` = 0 for "no lake", so in `kind`'s mapping (see "Placing the
+gauge") "set" means **not null and not 0**. The design said "set", and the
+green step's `io.rivers.kind_of` reads it as "not null", so a blank-type
+river with 0 (both blank-type features of the layer) comes out `lake`.
+
+- **`@tester`, red first:** the fake service sends 0 as NVE does: the
+  blank-type segment of `tests/python/nve_fixtures.py` (`BLANK_TYPE`, today
+  `vatnlnr=None`) gets `vatnlnr=0`; `test_rivers.py` adds that `vatnlnr` = 0
+  with a blank type and with a null type each give `river`, and keeps a
+  positive number with a null type giving `lake`.
+- **`@developer`, green, in `io/rivers.py`'s `kind_of`:** null or blank type
+  is `lake` only when `vatnlnr` is not null and not 0. With it, the
+  reviewer's two suggestions on error wording: a malformed user file (station
+  or river) is refused with a `ValueError` naming what is wrong, not a
+  `TypeError` or `KeyError` escaping from the reader; and `fetch-stations`
+  reports a missing field in plain words rather than a raw `KeyError` text
+  (`cli.py` catches `KeyError` with `FetchError` and `ValueError` and prints
+  it as is).
+
+**PR 3, after PR #178's CI (2026-10-04): the suite does not read `NOTICE.md`.**
+Ruled by Ola: "yes, remove the NOTICE.md check." h11's prose-read hook failed
+#178's three Python legs (3.12, 3.13, 3.14) because `test_fetch_nve.py`'s
+`test_notice_md_credits_nve_under_nlod` read `NOTICE.md`. The main session put
+it to Ola that a unit test checking the repository's prose is the wrong place
+for it: the suites check what rasputin produces (`NOTICE.txt` of every fetch,
+the packaged CSV's header), and `NOTICE.md` stays prose, credited by hand and
+seen by `@reviewer` on any PR that touches it. `@tester` removes that one test;
+`NOT_PROSE` in `tools/ci_changes.py` is unchanged. NVE's credit in `NOTICE.md`
+(its section "Data in the package"; this file's §"Licence" and §"Data use")
+stands.
 
 ## What the data says (measured 2026-10-04)
 
@@ -253,9 +331,21 @@ channel, and these numbers are re-measured by the acceptance run).
   `InnsjøRegulert`), several river and fictive-link spellings
   (`ElvBekkRegulert`, `FiktivElv`, `ElvelinjeFiktiv`, `BreMidtlinje` (a
   glacier), ...). A nearest line of the 1 km samples has a null type
-  (`152.4.0`: five features, all with `vatnlnr`, the lake number, set), as it
-  is on 428 of the 442 lake lines of the samples. `vatnlnr` is also set on 496
-  river features, so it cannot decide alone. (b) **Exact copies**: of the `strekninglnr` values
+  (`152.4.0`: five features, all with `vatnlnr`, the lake number, set). The
+  service sends `vatnlnr` = 0 for "no lake" (956,447 features of the layer
+  have 0, 444,793 a positive number, 551,648 none), so **set means not null
+  and not 0**. In the samples a positive lake number is on 419 of the 442
+  lake lines (9 have 0, 14 none) and on 1 of the 949 river lines (489 have
+  0, 458 none); over the whole layer, on 58 of the 94 null-type features
+  (none has 0) and on 1,779 river-typed ones. Both blank-type features
+  (`objectid` 11166506 "Cap'pirjåkka" and 11513676) have 0 and are rivers.
+  So the lake number decides only where the type is null or blank.
+  (Re-measured 2026-10-04 by `@architect`: `returnCountOnly` queries on
+  `Elvenett1/MapServer/2` with `where` `vatnlnr = 0`, `vatnlnr > 0`,
+  `vatnlnr IS NULL`, and each crossed with `objekttype IS NULL` and
+  `objekttype = ' '`; the samples re-fetched as squares of half-side 500 m
+  round the 140 layer-0 points, 1,396 distinct features. The design rounds
+  counted 0 as set, which gave "428 of the 442" and "496 river features".) (b) **Exact copies**: of the `strekninglnr` values
   shared by more than one `objectid` in the samples (14), 13 are exact
   copies of one geometry (9 pairs at `82.4.0`, 4 groups of five at
   `139.35.0`; 25 extra features in all), the copies sharing one `elvid`; the
@@ -394,13 +484,14 @@ station number (`2.11.0`, HydAPI's `StationId`) and the HRD's discharge series
 ## Data use
 
 Ola asked that nothing dodgy is done with NVE's data. The rules, each held by
-a test of `fetch/nve.py` (PR 3):
+a test of `fetch/nve.py` (PR 3), except the `NOTICE.md` credit below:
 
 - **Sources.** The HRD report (the PDF named above); `HydrologiskeData3`
   layers 0 (`Malestasjoner`) and 38 (`Malest_totalnedb`); `Elvenett1` layer 2
   (`elvenett`). HydAPI is not used and no API key is stored anywhere.
 - **Licence.** NLOD; "Kilde: NVE" is in `NOTICE.txt` of every fetch, in the
-  packaged CSV's header and in `NOTICE.md`. NVE disclaims liability for errors
+  packaged CSV's header (each tested) and in `NOTICE.md` (checked by hand by
+  `@reviewer`, block "PR 3, after PR #178's CI" above). NVE disclaims liability for errors
   in the data and their use; the README of the acceptance says so too.
 - **Committed**: the 140-row HRD list (four columns, from a PDF) and the
   acceptance's `results.csv` (NVE's areas as numbers). **Fetched** into
@@ -725,7 +816,9 @@ value, kept as served, `None` allowed), `kind`, and the line's vertices in the
 file's CRS. **`kind` is a total mapping** (in `io/rivers.py`, where the model
 is built): `lake` when the casefolded `objekttype` starts with `innsj` (all
 eight lake spellings of "The data are not clean"), or when `objekttype` is
-null or blank and `vatnlnr` is set (`152.4.0`'s five lines); `river` for
+null or blank and `vatnlnr` is set, which means not null and not 0, since
+NVE sends 0 for "no lake" ("The data are not clean"; `152.4.0`'s five lines
+have 495; both blank-type features have 0 and are rivers); `river` for
 every other value, the fictive links, the glacier lines and the strays
 included. A stray never raises; the raw value stays in the model and in the
 station's row (`objekttype` of the chosen line), so a surprising class is
@@ -754,8 +847,8 @@ visible, and `@tester` pins the mapping on all 25 values.
    of one river, digitised downstream). **Exact copies are dropped first**:
    within one `elvid`, segments whose vertex lists are equal to 1 cm are one
    segment, the smallest `objectid` kept (`io/rivers.py`'s `read_segments`
-   does it, so a user's file is cleaned as a fetched one is, and the count
-   dropped is reported). **A fork stops the chain**: where, after that, two
+   does it, so a user's file is cleaned as a fetched one is, and returns the
+   count dropped, which the commands print; see "Ola's rulings", last block). **A fork stops the chain**: where, after that, two
    different segments of the `elvid` continue the chain (or two lead into its
    first one), the chain stops there, flags `reach_fork` and reports the
    metres it has; it does not pick a branch. Downstream, a fork before
@@ -1137,7 +1230,8 @@ licence_note=...)`. `fetch/nve.py`:
   polygon; keeps the newest polygon per station (above) and records its
   update date and how many versions there were;
 - writes `stations.geojson` (one Point feature per station, properties
-  `station`, `name`, `series` = `["1001.0"]`, `nve_area_km2` from layer 0,
+  `station`, `name` = layer 0's `stasjonnavn` (not the list's),
+  `series` = `["1001.0"]`, `nve_area_km2` from layer 0,
   `hrd_start_daily`, `watercourse` = layer 0's `vassdragsnr`, `river` = the
   first name of `elvenavnhierarki`; no other layer 0 field is copied),
   `reference.geojson` (one feature per station, the polygon, `station`,
@@ -1155,9 +1249,12 @@ licence_note=...)`. `fetch/nve.py`:
 **`io/station_set.py`** reads the stations and references back:
 `read_stations(path) -> (tuple[Station, ...], crs)`, `read_references(path)
 -> (Mapping[str, Polygon | MultiPolygon], crs)`; **`io/rivers.py`**
-`read_segments(path) -> (tuple[RiverSegment, ...], crs)`. All refuse a file
+`read_segments(path) -> (tuple[RiverSegment, ...], crs, dropped)`, where
+`dropped` is the count of exact copies removed by the pure
+`drop_copies(segments) -> (kept, dropped)`. All refuse a file
 without a `crs` member (the skill's rule; NVE's files always have one),
-duplicate station numbers or segment ids, and the wrong geometry type.
+duplicate station numbers or segment ids, and the wrong geometry type (a
+segment that is a MultiLineString is refused, naming its `objectid`).
 `Station` is a frozen Pydantic model: `station: str` (pattern
 `^\d+\.\d+\.\d+$`), `name`, `x`, `y`, `series: tuple[str, ...]`,
 `nve_area_km2: float | None`, `watercourse: str | None`, `river: str | None`.
@@ -1309,7 +1406,9 @@ watercourse number, and one stderr line says where: "placed on the river line
 farther on; 119.0 km² drain through it, and the area changes by 0.3 % within
 30 m up and down the river: well defined".
 
-**The GeoJSON writer moves** from `cli.py` to `io/geojson.py`,
+**The GeoJSON writer moves** in PR 4, where `station-catchments` becomes
+the second command to write a catchment file (PR 3 writes none), from
+`cli.py` to `io/geojson.py`,
 `catchment_geojson(polygon, crs, properties) -> bytes`, no path, as
 `project_structure.md` already recommends ("The catchment GeoJSON writer is
 in `cli.py`"); both commands call it, and that paragraph is replaced by the
@@ -1325,7 +1424,9 @@ allow-lists (PR 3 from about 300 to 380); PR 2 gains the chain end, loop cuts,
 forks, the `drains` check and the causes, and loses the river reader (375 to
 415); PR 1 gains `flow_to` (150 to 155). Round 3 adds the taut pass to
 `burn.py` (inside its 105: it replaces the loop cut, which it subsumes) and
-the known-refusal cause to PR 4 (295 to 310).
+the known-refusal cause to PR 4 (295 to 310). After PR 3's code review,
+round 1, the moved GeoJSON writer goes from PR 3 to PR 4, which is the
+first to need it (PR 3 380 to 355, PR 4 310 to 335).
 
 | File | What | Estimate |
 |---|---|---|
@@ -1340,10 +1441,9 @@ the known-refusal cause to PR 4 (295 to 310).
 | `fetch/nve.py` | queries with the field allow-lists, newest version, segments, files, manifest | 160 |
 | `io/station_set.py` | readers, `Station` | 50 |
 | `io/rivers.py` | `RiverSegment`, `read_segments`, the `kind` mapping, exact copies | 65 |
-| `io/geojson.py` | the moved writer | 25 (cli.py −25) |
 | `cli.py` | `fetch-stations` | 45 |
 | `NOTICE.md`, `project_structure.md` | NVE's credit; the new modules | docs |
-| **PR 3, the stations and rivers** | | **about 380 (545 with the margin)** |
+| **PR 3, the stations and rivers** | | **about 355 (511 with the margin)** |
 | `gauge.py` | `Gauge`, `Placement`, `place`, forks, `Reach` | 100 |
 | `burn.py` | valley floor, taut pass, descent, chain end, direction, `GaugePath` | 105 |
 | `sensitivity.py` | `assess`, `Sensitivity`, `drains`, the causes | 75 |
@@ -1355,7 +1455,8 @@ the known-refusal cause to PR 4 (295 to 310).
 | `catchment_batch.py` | `BatchRequest`, `BatchSink`, `run_batch`, `StationResult`, `refusal_cause` | 105 |
 | `mosaic.py`, `catchment.py` | `MixedGridError`, `MixedGridRefusal` (round 3, Ola's ruling on counting) | 10 |
 | `cli.py` | `station-catchments`, the directory sink | 80 |
-| **PR 4, the batch and the comparison** | | **about 310 (445)** |
+| `io/geojson.py` | the moved writer (moved from PR 3 after its code review, round 1) | 25 (cli.py −25) |
+| **PR 4, the batch and the comparison** | | **about 335 (482)** |
 | `catchment.py`, `cli.py`, `catchment_batch.py` | the fallback (below) | 80 |
 | **PR 5, the fallback** | | **about 80 (115)** |
 
@@ -1613,7 +1714,8 @@ use" below):
   requests go out one at a time, with the `User-Agent` of `fetch/http.py`
   (tested there on a stub); nothing is requested when the output files exist
   and `--refresh` is absent; the packaged list (140 rows, unique numbers, the
-  three spot rows); the query URLs (chunks of 40, the station envelopes,
+  three spot rows); each station's `name` is layer 0's, not the list's;
+  the query URLs (chunks of 40, the station envelopes,
   `outSR=25833`, `f=geojson`); newest version wins, ties to the larger
   `objectid`; a missing station or polygon is refused by name; a reply
   flagged `exceededTransferLimit` is refused by station; a segment seen from
@@ -1626,10 +1728,13 @@ use" below):
   or ids, wrong geometry types, a bad station number are refused; a user's
   own points file reads. `test_rivers.py` also pins `kind` on all 25
   `objekttype` values of "The data are not clean" (each lake spelling is
-  `lake`; null and blank are `lake` with `vatnlnr` and `river` without; the
+  `lake`; null and blank are `lake` with `vatnlnr` set (not null and not 0)
+  and `river` with it null or 0; the
   strays, `FiktivElv` and `BreMidtlinje` are `river`; case and `ø`/`o`
   variants), the raw value kept; exact copies within an `elvid` give the
-  segment with the smallest `objectid` and a count of those dropped, while
+  segment with the smallest `objectid` and a count of those dropped
+  (`read_segments`'s third part and `drop_copies`'s second), a
+  MultiLineString segment is refused by `objectid`, while
   equal geometry in two different `elvid`s, and two different geometries
   under one `strekninglnr` (`79.3.0`), are both kept.
 
@@ -1807,3 +1912,18 @@ are ruled and closed (2026-10-04): question 2 as its entry says, questions 1,
 **29 PR 1, code review, round 2, 2026-10-04.** Range `edef966..9736bfd` (81392f5 round 1 recorded; 0b86517 project_structure, status line and ROADMAP; 725c8cd design states on_reach(j, j) and the NoData-adjacent outlets; c59ed6b merge of origin/master 99093af; 5dbfec0 keeps project_structure.md:166 in place; f5e8e76 accumulate docstring; 9736bfd two test comments). Whole PR `99093af..9736bfd`. Verdict: CHANGES REQUESTED, on citations alone. LOC: 181 added and 53 removed, 128 net (round 1: 182/129; the only production edit since then, f5e8e76, sits inside a raw docstring, and the one-line difference comes from how the count treats the diff's alignment at the upstream docstring's closing line). Estimate "about 155" added: 17 % over, inside the 44 % margin, far under 700. Fresh Release build ctest 994/994 (test_hydrology_accumulate: 11 cases, 163,676 assertions); extension rebuilt into the worktree venv, full pytest 4420 passed, 17 skipped; mypy, ruff check, ruff format, prohibited-deps, detria boundary and check_citations all exit 0. All round-1 blockers and suggestions closed, and each new claim was checked against flood.hpp, accumulate.hpp and the binding. No red-step scaffolding. The merge left hydrology/ and raster/ untouched, so round 1's mutation record stands. Blocking: the branch adds 8 lines to bindings/core.cpp above line 927 (one include at line 16, the BoundAccumulate struct at about line 316), so three live citations now point 8 lines too high: `15f-edge-strip.md:565` and `:1537` cite `bindings/core.cpp:1174` (the gil_scoped_release is now at 1182), and `27-node-sampling.md:133` cites `bindings/core.cpp:927-932` (the sample docstring is now at 935-940). Re-cite them and re-run check_citations. Not pushed; no CI.
 
 **29 PR 1, code review, round 3, 2026-10-04.** Range `9736bfd..36c2370` (one docs-only commit: the round-2 record, `15f-edge-strip.md:565` and `:1537`, `27-node-sampling.md:133`, the status line and ROADMAP row 29). Whole PR `99093af..36c2370`. Verdict: APPROVED. LOC: 181 added and 53 removed, 128 net, unchanged from round 2 (no production file in this range). Estimate "about 155" added: 17 % over, inside the 44 % margin, far under 700. `git diff --stat 9736bfd..36c2370` lists only ROADMAP.md, 15f-edge-strip.md, 27-node-sampling.md and 29-nve-reference-catchments.md (7 added, 5 removed lines), and nothing under bindings/, include/, src_python/ or tests/. So round 2's build, test, gate and mutation results stand. Round 2's three blockers are closed. Both 15f citations now give `bindings/core.cpp:1182`, which is the `const py::gil_scoped_release unlocked;` in the `refine_points` binding (lines 1173-1183). `27-node-sampling.md:133` now gives `bindings/core.cpp:935-940`, which is the `sample` docstring, "Bilinear z at each of the (N, 2) points" through "never NaN.". `check_citations.py --base origin/master` exits 0. All 34 lines on its at-risk list were re-read as quotations. The live ones hold: `05b-noder-driver.md:1749` (`tests/cpp/CMakeLists.txt:189`), `test_features.py:583` (`project_structure.md:166`), `29-nve-reference-catchments.md:55` (`ROADMAP.md:54`), and the three just re-cited. The rest sit in dated review records or a retrospective, which are history and left as written. The status line and ROADMAP row 29 match the tree. The branch contains origin/master `99093af`. No red-step scaffolding. No @perf run is needed: PR 1 touches neither refine nor mesh code (design, line 1395). Suggestion: `15f-edge-strip.md:1537` says the number was recomputed when "increment 29 PR 1 took in master". In fact the 8-line shift comes from PR 1's own additions to `bindings/core.cpp` (the include and `BoundAccumulate`), not from a master merge. Not pushed; no CI.
+
+**29 PR 3, code review, round 1, 2026-10-04.** Range `a1445c6..aae91bb` (rulings `b519bd9`, red amendment `05f348a` and `c18c8d5`, green `aae91bb`; the red step `213a2ef` before it). Verdict: CHANGES REQUESTED. LOC: 348 added and 7 removed, 341 net, under the estimate of about 380 (355 once the GeoJSON writer moves to PR 4) and far under 700. Blocking: (1) NVE's river service sends `vatnlnr` = 0 for "no lake" (live query: 956,447 features with 0; both blank-type features, `objectid` 11166506 "Cap'pirjåkka" and 11513676, have 0 and are rivers), but `io/rivers.py`'s `kind_of` treats any non-null value as set, so a blank-type river with 0 is a lake; the design's "set" (`:772`, `:1678` at `aae91bb`) must say not null and not 0, and "set on 496 river features" (`:300-301`) counted the zeros (the reviewer's sample has 2 river features with a positive number); needs a red test and a fix ("PR 3, after code review round 1", under "Ola's rulings"). (2) Status line and `ROADMAP.md:54` still say a red amendment is to come. (3) `15f-edge-strip.md:591` cites `cli.py:1561` and `:1580`, which PR 3 moved to `:1594` and `:1613`. (4) The PR 3 file table lists the GeoJSON writer's move to `io/geojson.py`, which PR 3 neither does nor needs. (5) `project_structure.md` lacks `io/station_set.py`, `io/rivers.py`, `repository.py`'s `read_json`, the `data/` folder, and the `fetch/` and `sources.py` entries missing since 23a-2. Suggestions: a malformed user file refused with `ValueError`, not `TypeError` or `KeyError`; `fetch-stations` reports a missing field in plain words, not a raw `KeyError`; `@tester`'s present-tense "HOW THIS FILE GOES RED" paragraphs (left to `@orchestrator`, not this round). Not pushed; no CI.
+
+**29 PR 3, code review, round 2, 2026-10-04.** Range `aae91bb..a4e4726`; whole PR `d926644..a4e4726`. Verdict: CHANGES REQUESTED. LOC for the whole PR: 387 added, 7 removed, 380 net (tokenize count; green `c4e50ff` alone 36 added, 15 removed, 21 net), against the estimate of about 355 (511 with the 44 % margin): inside the margin, far under 700. Full pytest at HEAD on a rebuilt `_core`: 4499 passed, 118 skipped, 8 failed, all eight `test_settings_wiring`'s executable-hook check, which fails only in the git-archive scratch copy (27/27 in the real worktree). mypy, ruff check, ruff format, prohibited deps, detria boundary and check_citations all clean. Red `b59c648`: 21 tests fail for the intended reasons; all pass at HEAD; green touches no test file. All round-1 blockers and suggestions closed. No mutation testing owed: only `accumulate`'s oracle is invariant-critical, and its kill record is with PR 1. No `@perf` run: PR 3 touches no refine or mesh code. Blocking: (A, `@tester`) `tests/python/test_features.py:583` cites `project_structure.md:166`, now `:190`; (B, `@architect`) the status line and `ROADMAP.md:54` still say the red test and the fix "come next"; (C, `@tester`) the present-tense "HOW THIS FILE GOES RED" paragraphs in `test_fetch_nve.py`, `test_rivers.py` and `test_station_set.py` describe the tree before green and are false now. The PR 3 round-1 record above stays as written. Suggestions, for PR 4 or later: a feature that is a JSON list gives `AttributeError`, and a malformed reference polygon gives shapely's `TypeError`, not a `ValueError` naming the fault; a one-vertex LineString is accepted as a river segment (PR 2's chain may want it refused); `fetch-stations` catches `KeyError` over more than the service answer (narrow the `try`); stale `cli.py` citations in 15e and 25 predate this branch (for `@orchestrator`'s re-citation sweep). Not pushed; no CI.
+
+Fixes for round 2: A and C by `@tester` in `f91cdaa` (re-cited to `project_structure.md:190`; the three paragraphs deleted); B by `@architect` in the commit that records this round (the status line and `ROADMAP.md:54`). The PR 1 records above (round 2, round 3) cite `project_structure.md:166` as the file was then and are left as written.
+
+**29 PR 3, code review, round 3, 2026-10-04.** Range `a4e4726..c7d427a` (`f91cdaa`, `c7d427a`); whole PR `d926644..c7d427a`. Verdict: CHANGES REQUESTED. Delta: 7 lines added, 16 removed, in `ROADMAP.md`, this file and three test files; no production code, so the count stays 380 net and round 2's build, test and gate results stand. Round 2's blockers A, B and C are closed. `check_citations.py --base d926644` exits 0; the at-risk lines this delta could move re-read as quotations and hold. `ruff check` and `ruff format --check` clean. Blocking: the status line and `ROADMAP.md:54` said round 2 asked for "two citations"; it asked for one (`test_features.py:583`). Fixed by the main session in the commit that records this round.
+
+**29 PR 3, code review, round 4, 2026-10-04.** Range `c7d427a..5bdcc93` (`c1eeec4`, `5bdcc93`; main session, docs only); whole PR `d926644..5bdcc93`. Verdict: APPROVED. Delta: 5 lines added, 2 removed, in `ROADMAP.md` and this file; production count stays 380 net (estimate about 355, 511 with the margin). Round 3's blocker closed: the status line and `ROADMAP.md:54` say one citation. The round-3 record's range, commits and counts match `git log` and `git diff --shortstat a4e4726..c7d427a`. `check_citations.py --base d926644` exits 0; no at-risk line moved by this delta. No mutation record or `@perf` run owed. CI is owed after the push: `gh pr checks` green before merge.
+
+**29 PR 3, code review, round 5, 2026-10-04.** Range `3dff7bc..ea489e5` (master merge `af2bc38`; `4e877ae` and its revert `09a44c6`; Ola's ruling `9607b98`; `ea489e5` deletes the `NOTICE.md` test). Verdict: CHANGES REQUESTED. Production lines unchanged since round 4. The merge is clean (`git merge-tree --write-tree 3dff7bc 791abb6` gives the tree of `af2bc38`). Full suite on a rebuilt `_core`: 4572 passed, 118 skipped, exit 0, so the prose-read hook stayed silent. `ruff check` and `ruff format --check` clean. The remaining NVE credit tests exist (CSV header, catalogue, every fetch's `NOTICE.txt`); `NOTICE.md` still credits NVE. `check_citations.py` exits 0. Blocking: the ruling said only the 3.14 leg failed, but all three Python legs did; "Data use" said every rule is held by a test, including the `NOTICE.md` credit. Suggestions: name whose §"Licence" and §"Data use" are meant; update the status line. All four fixed by the main session in the commit that records this round.
+
+**29 PR 3, code review, round 6, 2026-10-04.** Range `ea489e5..741504f` (one docs commit, main session; `ROADMAP.md` +1/-1, this file +9/-5). Verdict: APPROVED. Round 5's two blockers and two suggestions closed: the ruling names all three Python legs (`gh pr checks 178` agrees); "Data use" excepts the `NOTICE.md` credit, checked by hand, and the tested credits are tested (`test_fetch_nve.py`: CSV header, catalogue, `NOTICE.txt`); `NOTICE.md`'s "Data in the package" exists; status line and ROADMAP row 29 match the history. `check_citations.py` exits 0; the lines this commit moves are cited only by dated records, except this file's `:55` on `ROADMAP.md:54`, which holds. Master's `accd52a` (h13) touches no file on this branch; `git merge-tree --write-tree HEAD origin/master` is clean, so no merge before the push. CI is owed on the new head; red CI there voids this approval.
+

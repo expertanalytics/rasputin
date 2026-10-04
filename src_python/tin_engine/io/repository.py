@@ -15,6 +15,9 @@ of `<cache>/<source>/`; the tiles and the mesh path still only read.
 Increment 16b (R2, R3) adds :func:`open_geopackage`: SQLite cannot read from a
 Python stream, so a GeoPackage's "stream" is a read-only connection opened
 here, and `io/geopackage.py` decodes through it.
+
+Increment 29 adds :func:`read_json`, for the station and river readers
+(`io/station_set.py`, `io/rivers.py`), which take a path but open nothing.
 """
 
 from __future__ import annotations
@@ -23,6 +26,7 @@ import datetime
 import fcntl
 import hashlib
 import io
+import json
 import os
 import shutil
 import sqlite3
@@ -354,6 +358,12 @@ def open_geopackage(path: Path) -> sqlite3.Connection:
     return sqlite3.connect(Path(path).resolve().as_uri() + "?mode=ro", uri=True)
 
 
+def read_json(path: Path) -> Any:
+    """The JSON document in ``path``, read-only (increment 29's readers)."""
+    with Path(path).open("rb") as stream:
+        return json.load(stream)
+
+
 __all__ = [
     "CacheError",
     "CacheManifest",
@@ -367,4 +377,5 @@ __all__ = [
     "TiffDemRepository",
     "TileFootprint",
     "open_geopackage",
+    "read_json",
 ]

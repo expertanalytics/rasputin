@@ -4,6 +4,10 @@
 B8 as ruled: ANADEM and GLO-30. Data only, importing Pydantic alone, so the
 mesh path can name a catalogue key without importing `tin_engine.fetch`
 (decided 2): meshing is offline by rule.
+
+Increment 29 adds the catalogue of station lists `rasputin fetch-stations`
+copies (`STATION_SOURCES`): NVE's HRD stations, their catchment polygons and
+the river lines near them.
 """
 
 from __future__ import annotations
@@ -76,7 +80,41 @@ SOURCES: Mapping[str, RemoteSource] = MappingProxyType(
 )
 
 
-def notice(source: RemoteSource) -> str:
+class StationSource(BaseModel):
+    """One list of gauging stations: the packaged list `list_file` (in
+    `tin_engine/data/`) says which stations; `service_url` serves their points,
+    polygons and rivers (29, "The station set")."""
+
+    model_config = ConfigDict(frozen=True)
+
+    id: str
+    service_url: str
+    list_file: str
+    crs: str
+    credit: str
+    licence_note: str
+    cite: tuple[str, ...] = ()
+
+
+STATION_SOURCES: Mapping[str, StationSource] = MappingProxyType(
+    {
+        "nve-hrd": StationSource(
+            id="nve-hrd",
+            service_url="https://kart.nve.no/enterprise/rest/services",
+            list_file="nve_hrd_2025.csv",
+            crs="EPSG:25833",
+            credit="Kilde: NVE. The station list is the 2025 version of NVE's Hydrological "
+            "Reference Dataset (Norwegian streamflow reference dataset for climate change "
+            "studies); stations, catchments (Totalnedbørfelt til målestasjon) and rivers "
+            "(ELVIS) are from NVE's map services.",
+            licence_note="Norsk lisens for offentlige data (NLOD). NVE disclaims liability for "
+            "errors in the data and their use.",
+        ),
+    }
+)
+
+
+def notice(source: RemoteSource | StationSource) -> str:
     """`<cache>/<source>/NOTICE.txt` (23a-2, decided 8): a rendering of the
     catalogue entry, which stays the one place these words are kept."""
     lines = [f"{source.id}", "", "Credit:", source.credit, "", "Licence:", source.licence_note]
@@ -85,4 +123,4 @@ def notice(source: RemoteSource) -> str:
     return "\n".join(lines) + "\n"
 
 
-__all__ = ["SOURCES", "RemoteSource", "notice"]
+__all__ = ["SOURCES", "STATION_SOURCES", "RemoteSource", "StationSource", "notice"]
