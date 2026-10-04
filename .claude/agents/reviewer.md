@@ -28,10 +28,7 @@ gh pr checks <pr>              # or: gh run list --branch <branch> --limit 1
 not exercise the current build: read `.github/` when the change touches the
 build. Local green is not green.
 
-### The three checks the gates cannot make
-
-The gates (`CLAUDE.md` §4) cover readability, typing and style. What no gate
-can see:
+### The checks the gates cannot make
 
 1. **Red-step scaffolding is gone.** A TDD increment leaves comments behind saying
    headers "do not build yet -- that is the intended red step", and they outlive
@@ -41,8 +38,11 @@ can see:
 3. **Actual LOC is reconciled against the increment doc's estimate.** Measure it;
    if the design named a split seam for an overrun, check whether it should fire.
    An estimate that goes unchecked is a decision nobody revisits.
+4. **A suite the increment file names invariant-critical has had its mutants run**, with the kill record in a handback.
 
-When reviewing a diff or a proposed change, you must provide feedback in this precise, scannable format:
+**You do not edit or commit:** your verdict goes in the handback, and your spawner records it.
+
+Feedback format:
 1. **Verdict:** `APPROVED` or `CHANGES REQUESTED` (with explicit blocking issues).
 2. **Size Metrics:** Confirm total LOC and focus area.
 3. **Blocking Issues:** What *must* be fixed before merging (e.g., red CI, exceeding the LOC ceiling, surviving red-step scaffolding, a prose claim the change made false).
