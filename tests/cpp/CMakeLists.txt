@@ -252,6 +252,13 @@ add_terrain_backend_test(prop_refinement_quality property/prop_refinement_qualit
 target_link_libraries(test_mesh_quality PRIVATE Threads::Threads)
 target_link_libraries(prop_refinement_quality PRIVATE Threads::Threads)
 
+# The pass skips NoData nodes (docs/increments/20-start-quality.md, "Fix: the
+# start-quality pass skips NoData nodes", Q-V1): improve's validity callable
+# and skipped_void, in a target of their own so test_mesh_quality's
+# default-call guard builds without them. Not mutation-critical.
+add_terrain_backend_test(test_mesh_quality_void unit/test_mesh_quality_void.cpp)
+target_link_libraries(test_mesh_quality_void PRIVATE Threads::Threads)
+
 # Constraint feet, increment 20b (docs/increments/20b-min-insertion-distance.md,
 # "Tests for @tester"). test_refinement_constraint_feet (F1 to F5, plus 14b's
 # T6 with the rule on) is the invariant-critical suite; it runs in the TSan job.
@@ -332,6 +339,8 @@ target_link_libraries(prop_refinement_refine_points PRIVATE Threads::Threads)
 # lattice_position's suite stays free of the strip. Not invariant-critical (the
 # mutation suite is 15f-2's ES2, ES3 and ES5); neither starts threads, but
 # refine.hpp includes the chunk scheduler, so both link Threads.
+# test_refinement_lattice_position also pins to_lattice's constraint lookup
+# (increment 15f-4, B4).
 add_terrain_backend_test(test_refinement_constraint_points
                          unit/test_refinement_constraint_points.cpp)
 target_link_libraries(test_refinement_constraint_points PRIVATE Threads::Threads)
@@ -410,3 +419,10 @@ target_compile_definitions(test_build_hardening PRIVATE
 # than one assertion (T1 and T3 have one check each, T2 one CHECK after REQUIREs
 # that stop the case). A case that can fail four times needs this revisited.
 catch_discover_tests(test_build_hardening PROPERTIES SKIP_RETURN_CODE 4)
+
+# Increment 27 (docs/increments/27-node-sampling.md, S5): RasterGeometry::node_at
+# against refine's own node test. Its own target, because it includes refine.hpp
+# and so needs the backend target and Threads, which test_raster does not.
+# refine.hpp names DefaultKernel, hence the backend target.
+add_terrain_backend_test(test_raster_node_at unit/test_raster_node_at.cpp)
+target_link_libraries(test_raster_node_at PRIVATE Threads::Threads)

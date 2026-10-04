@@ -148,11 +148,15 @@ class TestRefinedOutput:
 
     def test_a_tighter_tolerance_gives_more_triangles(self, tmp_path: Path, bumpy: Path) -> None:
         coarse, _ = run(tmp_path, bumpy, "--tolerance", "10", "--stride", "8")
-        fine, _ = run(tmp_path, bumpy, "--tolerance", "0", "--stride", "8")
+        fine, report, _ = run_stats(tmp_path, bumpy, "--tolerance", "0", "--stride", "8")
         assert len(coarse.polygons) < len(fine.polygons)
         # D3 rule 3: a measured value of 0 is written, never omitted.
         assert file_field(fine, "tolerance_m") == "0"
-        assert file_field(fine, "max_error_m") == "0"
+        # 25's D2 and D6: after 15f-3 a DEM node within rounding of a strip
+        # vertex is not compared and lifts max_error_m by its difference, which
+        # --stats reports; so the bound is max(tolerance_m, that difference).
+        at_vertices = float(stats_row(report, "dem_nodes_at_vertices_max_error_m"))
+        assert 0.0 <= float(file_field(fine, "max_error_m")) <= max(0.0, at_vertices)
 
     @pytest.mark.parametrize(("cols", "stride"), [(70, 1), (129, 1), (130, 2), (300, 3)])
     def test_the_default_start_stride_is_at_most_129_nodes_a_side(

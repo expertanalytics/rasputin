@@ -53,6 +53,14 @@ WORDING = {
     "dem_check_rounds": "Passes of that comparison",
     "dem_nodes_at_vertices": "DEM nodes on a vertex (to rounding), not compared",
     "dem_nodes_at_vertices_max_error_m": "Their largest difference",
+    "line_points_checked": "Points along lines (grid-line crossings and halfway between) compared",
+    "line_max_error_m": "Their largest difference from the mesh",
+    "line_points_on_nodata": "Points along lines on NoData cells, not compared",
+    "line_points_refused": "Points along lines that could not be added",
+    "line_points_refused_max_error_m": "Their largest difference from the mesh",
+    "line_points_inserted": "Points along lines added",
+    "line_check_dem_nodes_inserted": "DEM nodes the line check added",
+    "line_points_duplicate": "Points along lines dropped as duplicates",
     "dem_nodes_outside_mesh": "Self-check: DEM nodes with data left outside the mesh",
     "refinement_rounds": "Refinement passes",
     "points_inserted": "Points added",
@@ -183,10 +191,8 @@ def summary(record: RunRecord) -> str:
     removed = by.get("nodata_vertices_removed")
     if removed is not None and removed.number:
         n = int(removed.value)
-        # Without a tolerance a vertex next to a NoData cell goes too (ab692ee).
-        where = "on NoData cells" if tolerance is not None else "on or next to NoData cells"
         said.append(
-            f"{plural(n, 'vertex', 'vertices')} {where} "
+            f"{plural(n, 'vertex', 'vertices')} on NoData cells "
             f"{'was removed with its' if n == 1 else 'were removed with their'} triangles."
         )
     if "heights" in by:
@@ -204,6 +210,13 @@ def summary(record: RunRecord) -> str:
             f"Warning: {plural(n, 'DEM node', 'DEM nodes')} on a vertex "
             f"{'differs' if n == 1 else 'differ'} from it by up "
             f"to {at.value} m, more than the tolerance of {tolerance.value} m."
+        )
+    refused, worst = by.get("line_points_refused"), by.get("line_points_refused_max_error_m")
+    if refused is not None and worst is not None and refused.number:
+        n = int(refused.value)
+        lines.append(
+            f"Warning: {plural(n, 'point', 'points')} along the lines could not be added; "
+            f"{'its' if n == 1 else 'their largest'} difference is {worst.value} m."
         )
     outside = by.get("dem_nodes_outside_mesh")
     if outside is not None and outside.number:

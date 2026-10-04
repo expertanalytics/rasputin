@@ -397,11 +397,18 @@ class TestStubs:
     def test_the_stub_declares_the_new_surface(self, name: str) -> None:
         assert name in self.declared()
 
-    def test_refine_points_takes_tolerance_and_threads_by_keyword(self) -> None:
+    def test_refine_points_takes_tolerance_threads_strip_and_frozen_mask_by_keyword(self) -> None:
+        """`strip` since increment 15f-3 (D5; keyword-only, as chosen in
+        `test_core_edge_strip.py`), `frozen_mask` since 23b (N13)."""
         fn = self.declared().get("refine_points")
         assert isinstance(fn, ast.FunctionDef), "refine_points is not stubbed"
-        # 23b (N13) adds frozen_mask after them.
-        assert [a.arg for a in fn.args.kwonlyargs] == ["tolerance", "threads", "frozen_mask"]
+        # 23b (N13) adds frozen_mask, after 15f-3's strip (merged first).
+        assert [a.arg for a in fn.args.kwonlyargs] == [
+            "tolerance",
+            "threads",
+            "strip",
+            "frozen_mask",
+        ]
 
     def test_point_refine_outcome_carries_the_two_counters(self) -> None:
         cls = self.declared().get("PointRefineOutcome")

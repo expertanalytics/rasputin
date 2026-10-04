@@ -13,6 +13,10 @@
 // The precondition (p inside the node rectangle) is to_lattice's refusal and
 // is not exercised here; constraint_check_points' refusals are in
 // test_refinement_constraint_points.cpp.
+//
+// The file also pins to_lattice's constraint lookup (increment 15f-4, A4, B4,
+// tag [to_lattice]): an edge listed twice gets the later mask, and edges past
+// masks.size() are ignored.
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -27,6 +31,7 @@
 #include <cmath>
 #include <cstdint>
 #include <limits>
+#include <utility>
 #include <variant>
 #include <vector>
 
@@ -106,5 +111,97 @@ TEST_CASE("LP4: agrees bit for bit with the vertices to_lattice builds", "[latti
         const MeshVertex v = lattice_position(g, xy[i]);
         CHECK(std::bit_cast<std::uint64_t>(v.col) == std::bit_cast<std::uint64_t>(m.vertices()[i].col));
         CHECK(std::bit_cast<std::uint64_t>(v.row) == std::bit_cast<std::uint64_t>(m.vertices()[i].row));
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Increment 15f-4 (docs/increments/15f-edge-strip.md, "Settled after 15f-3's
+// acceptance", A2 and A4, B4): to_lattice's constraint lookup. An edge listed
+// twice, in either direction, takes the later mask; edges past masks.size()
+// and masks past edges.size() are ignored, whatever the lookup structure.
+// ---------------------------------------------------------------------------
+
+namespace {
+
+// The (constrained, mask) of the undirected edge (a, b) on every side that
+// holds it, in triangle order.
+std::vector<std::pair<bool, std::uint32_t>> sides(const terrain::mesh::LatticeMesh& m,
+                                                  std::uint32_t a, std::uint32_t b) {
+    std::vector<std::pair<bool, std::uint32_t>> out;
+    for (std::size_t t = 0; t < m.triangle_count(); ++t)
+        for (unsigned k = 0; k < 3; ++k) {
+            const auto p = m.triangles()[t][k], q = m.triangles()[t][(k + 1) % 3];
+            if ((p == a && q == b) || (p == b && q == a))
+                out.emplace_back(m.is_constrained(t, k), m.mask(t, k));
+        }
+    return out;
+}
+
+using Side = std::pair<bool, std::uint32_t>;
+using Edges = std::vector<std::array<std::uint32_t, 2>>;
+using MaskList = std::vector<std::uint32_t>;
+
+// Four nodes of grid(): 0 top-left, 1 bottom-left, 2 bottom-right, 3
+// top-right; triangles (0, 1, 2) and (0, 2, 3) share the diagonal 0-2.
+terrain::mesh::LatticeMesh square(const Edges& edges, const MaskList& masks) {
+    const auto g = grid();
+    const std::vector<Point2> xy{g.node({0, 0}), g.node({4, 0}), g.node({4, 6}), g.node({0, 6})};
+    const std::vector<terrain::TriangleIndices> tris{{0, 1, 2}, {0, 2, 3}};
+    // The start's own constraint bits are not what to_lattice reads: set them
+    // all, so a lookup that fell back to them would show.
+    const terrain::IndexedMesh2 start{xy, tris, std::vector<std::uint8_t>(tris.size(), 0b111)};
+    auto built = terrain::refinement::detail::to_lattice(g, start, edges, masks);
+    REQUIRE(std::holds_alternative<terrain::mesh::LatticeMesh>(built));
+    return std::get<terrain::mesh::LatticeMesh>(std::move(built));
+}
+
+}  // namespace
+
+TEST_CASE("B4: to_lattice gives an edge listed twice the later mask", "[to_lattice][15f-4]") {
+    SECTION("the same direction") {
+        const auto m = square({{0, 1}, {0, 1}}, {5, 9});
+        CHECK(sides(m, 0, 1) == std::vector<Side>{{true, 9}});
+    }
+    SECTION("reversed") {
+        const auto m = square({{1, 0}, {0, 1}}, {5, 9});
+        CHECK(sides(m, 0, 1) == std::vector<Side>{{true, 9}});
+    }
+    SECTION("reversed, the other way round, with other edges between") {
+        const auto m = square({{0, 1}, {2, 3}, {1, 0}}, {9, 7, 5});
+        CHECK(sides(m, 0, 1) == std::vector<Side>{{true, 5}});
+        CHECK(sides(m, 2, 3) == std::vector<Side>{{true, 7}});
+    }
+    SECTION("an interior edge: both sides get the later mask") {
+        const auto m = square({{2, 0}, {0, 2}, {2, 0}}, {1, 2, 4});
+        CHECK(sides(m, 0, 2) == std::vector<Side>{{true, 4}, {true, 4}});
+    }
+    SECTION("a later mask of 0 still constrains the edge") {
+        const auto m = square({{0, 1}, {1, 0}}, {5, 0});
+        CHECK(sides(m, 0, 1) == std::vector<Side>{{true, 0}});
+    }
+}
+
+TEST_CASE("B4: to_lattice ignores edges past masks.size()", "[to_lattice][15f-4]") {
+    SECTION("an edge with no mask is not constrained") {
+        const auto m = square({{0, 1}, {2, 3}, {3, 0}}, {5, 6});
+        CHECK(sides(m, 0, 1) == std::vector<Side>{{true, 5}});
+        CHECK(sides(m, 2, 3) == std::vector<Side>{{true, 6}});
+        CHECK(sides(m, 3, 0) == std::vector<Side>{{false, 0}});
+    }
+    SECTION("a repeat past masks.size() does not override the earlier mask") {
+        const auto m = square({{0, 1}, {1, 0}}, {5});
+        CHECK(sides(m, 0, 1) == std::vector<Side>{{true, 5}});
+    }
+    SECTION("no masks: nothing is constrained") {
+        const auto m = square({{0, 1}, {0, 2}}, {});
+        for (const auto& [a, b] : Edges{{0, 1}, {1, 2}, {2, 0}, {2, 3}, {3, 0}})
+            for (const auto& s : sides(m, a, b)) CHECK(s == Side{false, 0});
+    }
+    SECTION("masks past edges.size() are ignored, and so is a non-edge") {
+        const auto m = square({{1, 3}, {1, 2}}, {5, 6, 7, 8});
+        CHECK(sides(m, 1, 2) == std::vector<Side>{{true, 6}});
+        CHECK(sides(m, 1, 3).empty());
+        for (const auto& [a, b] : Edges{{0, 1}, {2, 0}, {2, 3}, {3, 0}})
+            for (const auto& s : sides(m, a, b)) CHECK(s == Side{false, 0});
     }
 }

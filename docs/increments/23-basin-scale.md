@@ -2,8 +2,13 @@
 
 Status: **designed by `@architect`, 2026-10-01; B1-B14 ruled by Ola on
 2026-10-01 and the design reworked to the rulings; B15 and B16 ruled
-2026-10-02. 23a-1 merged (#136), 23a-2 merged (#138); 23b approved and
-accepted (with its speed fix, 247 lines), not pushed; 23c split in two:
+2026-10-02. 23a-1 merged (#136); 23a-2 merged (#138); 23b implemented (red
+`45045dc`, its open points settled under "Settled after 23b's red step
+(45045dc)"; green `3c464ec`, N18 in at `185081c`), 249 net production
+lines after the master merge (248 before it; the merged sum takes one
+more line), `@perf`'s acceptance recorded at `91c7cb5` and again at
+`4541e38` (ACCEPTED, `docs/benchmarks/2026-10-04/23b-merged-acceptance.md`);
+23c split in two:
 23c-1 (about 215 estimated, 154 built) in review, no `@perf` run needed,
 and 23c-2 (about 265) with its red step written on `worktree-23c`; 23d
 onwards not implemented.** Written before `@tester`
@@ -2497,6 +2502,30 @@ suites has to change.
   of the strip is the caller's job, and the only caller with a nonzero mask
   is 23c, so the filter (`edges[(masks & frozen) == 0]` in NumPy) is 23c's
   line, not 15f-3's. With 23b's refusal (N16) a missing filter fails loudly.
+
+  **Settled after N18's red step (e26802e).** `@tester`'s four choices:
+  1. *Order:* confirmed. `frozen_mask` is the last keyword, after
+     `threads`, as on `refine_points`; the binding and the stub follow the
+     kw-only pin in `test_core_edge_strip.py`.
+  2. *The frozen test:* confirmed, with one amendment. The strip is built on
+     non-frozen edges (the caller's job, N18) and the refusal case shows the
+     mask reaches the N16 check. That does not show the mask reaches the DEM
+     rescan's skip (N1, N3): if the filtered strip with `frozen_mask=0`
+     leaves the west side unsplit anyway, the "not split" assertion passes
+     with the mask ignored by the rescan. So it must be measured: `@tester`
+     runs the filtered strip with `frozen_mask=0` and records how many
+     vertices land on the west side. If more than zero, that becomes a
+     second control in `test_a_frozen_side_is_not_split`, asserted `> 0`. If
+     zero, the scene cannot see the rescan's skip; the test's docstring says
+     so, and that skip stays pinned by refine's own frozen tests (`scan`
+     is shared, N16), not by a new scene here.
+  3. *The refusal case:* confirmed. `std::logic_error` reaches Python as
+     `RuntimeError` (as L2's other refusals in `test_core_edge_strip.py`),
+     and `^refine_strip: ` is N16's text rule. The control N16 asks for (the
+     same full strip with `frozen_mask=0` runs) is
+     `test_frozen_mask_0_is_todays_result`.
+  4. *Location:* confirmed. `test_core_frozen.py`, beside the other two
+     entry points' `frozen_mask` classes.
 - **N19. `on_frozen` for `refine_strip`'s DEM nodes: not counted.**
   `on_frozen` counts stored check points only (N6), so it is 0 in
   `refine_strip`, whose stored set is empty. The reasons:
@@ -3232,6 +3261,12 @@ LOC was 598 added and 6 removed, 592 net, against an estimate of 373. That is +6
 **23b, code review, round 4, 2026-10-04.** Range `9511563..81c55d6` (8d67c9c @perf: 8da0f2a timed +6.3 % / +6.4 % at 1 thread, REGRESSION; 91c7cb5 @developer: @perf's early-return form, loop body duplicated on purpose; 81c55d6 @perf: ACCEPTED, +1.2 % / +1.8 % at 1 thread, meshes identical, superseding both REGRESSION verdicts); whole PR `b4bcdc3..81c55d6`. Verdict: CHANGES REQUESTED. LOC: +8 net in this range, 247 net for the PR. Both paths behave as before (the `return` leaves the per-segment lambda only); citations `scan.hpp:122`, `:79` hold; the acceptance file's verdict lines are correct. Blocking: the comment in `scan.hpp`'s `nodes` branch says the early return "measured within 1 % of the base", which is true of @perf's experiment, not of 91c7cb5 (+1.2 % / +1.8 %). Comment-only fix, same line count, no re-timing (same binary). Not pushed; no CI.
 
 **23b, code review, round 5, 2026-10-04.** Range `89e8a18..ed5db94` (the `scan.hpp` comment now gives the measured +1.2 % / +1.8 %). Verdict: APPROVED. LOC: 0 this round, 247 net for the PR `b4bcdc3..ed5db94`. Same line count, citations hold; the binary is unchanged, so @perf's ACCEPTED rerun at `91c7cb5` stands. Not pushed; no CI.
+
+**23b, code review, round 6, 2026-10-04.** Range `ed5db94..185081c` (4cd28dc GCC 13 fix in `frozen_oracle.hpp`; e4f07c3 and 24161fe merges of origin/master; e26802e red, 472d91d rulings, f3620b1 red amendment, 185081c green: N18, `refine_strip` takes `frozen_mask`). Verdict: CHANGES REQUESTED. LOC: +1 this round (the `_core.pyi` parameter; the binding's new lines are raw-literal docstring), 248 net for the PR against about 285. N18 is correct: the mask reaches `point_loop`, so N16's refusal shows as `RuntimeError`; f3620b1's "91 added, 0 on the west side" reproduced with mask 0 and with mask 32; pytest frozen, edge strip and refine_points: 102 passed on a rebuilt extension; the frozen and seam property suites and the oracle unit suite pass on clang. N18 alone needs no @perf rerun (bindings and stub only). Blocking: (1) PR #162 conflicts with master #165 (`quality.hpp` comment and fields, `refine.hpp:321-325`), so CI has never run on 4cd28dc; merge, keep both the frozen and the void skips, and @perf reruns the acceptance at the merged head (refine and mesh code resolved; master's 27 and #165 moved the base); (2) citations made false by the merges in this range: `27-node-sampling.md:115,124,148,150,171,172,263` and `25-plain-output.md:115,120` are numbered against master's `refine.hpp` and `scan.hpp`; recompute after the #165 merge; (3) the status line (`23-basin-scale.md:3-7`) and ROADMAP row 23 still say 23a-2 is on its branch (#138 merged) and 23b is not implemented or is 235 lines. Not pushed; no CI.
+
+**23b, code review, round 7, 2026-10-04.** Range `185081c..67ca1ac` (d5aeb82 round 6 recorded; 3403116 merge of origin/master d20126b, #165 void skip and #167; e3a6add citations; 67ca1ac status line and ROADMAP row 23). Verdict: CHANGES REQUESTED. LOC: +1 this round (the merged `quality_skipped` sum), 249 net for the PR against about 285. The merge keeps both skips: `quality.hpp` tests floor, outside, `skipped_void`, the walk, vertex, then `skipped_frozen` (`:130-181`), the order its comment now states; `refine.hpp:320-322` sums all seven. The comment's departure from R4 step 3's list needs no note in `20-start-quality.md`: R4 step 4 already has the walk find the vertex. The round-6 citations in `27-node-sampling.md` and `25-plain-output.md`, and `15f-edge-strip.md:1554,1910`, re-read as quotations at 67ca1ac, hold; status line and ROADMAP row 23 match the tree. `build-23b`, `-nofma` and `-san` current, ctest 974/974 each; touched Python suites 199 passed on the current extension. Blocking: `20-start-quality.md:608-610` says "23b, not yet on master" and calls the conflict "two-line", which the merge of #162 makes false; state the rule instead. Still open: CI's only run on #162 (e4f07c3) is red on GCC 13 (`frozen_oracle.hpp:108`), fixed in 4cd28dc but never run; @perf reruns the acceptance at the merged head against master d20126b (refine and mesh code resolved in the merge). Not pushed; no CI.
+
+**23b, code review, round 8, 2026-10-04.** Range `4541e38..0a3187b` plus `4541e38` (4541e38 round 7 recorded and `20-start-quality.md` states the 23b rule; 0a3187b @perf's acceptance at the merged head). Verdict: CHANGES REQUESTED, closed in the commit that records this round. LOC: 0 this round (no production file in the range), 249 net for the PR against about 285. Round 7's blocker is closed: `20-start-quality.md:608-610` now states the rule, which matches `quality.hpp:64-65,143,182` and `refine.hpp:321-322`. @perf's verdict at `4541e38` against master `d20126b` is ACCEPTED (`docs/benchmarks/2026-10-04/23b-merged-acceptance.md`). The pooled medians, run ranges and changes were recomputed from the eight `raw.tsv` files and match: +0.8 % tile and +0.2 % quarter at 1 thread, -1.7 to +1.7 % over 2 to 20 threads. Each run's commit, module hash, `bench.py` version and AC power state match the doc, and the mesh hashes and quality are identical in all eight runs. `check_citations.py` passes. Blocking: the status line (`23-basin-scale.md:9-10`) and ROADMAP row 23 still said the merged-head acceptance was "owed"; both now say it is recorded. Merge-ready waits on CI: #162's remote head is still `4cd28dc`, which has never had a CI run; not pushed.
 
 **23c-1, code review, round 1, 2026-10-04.** Range `aacf37c..1426245` (red 58fb1f1, 6dd4ffe, 714b0b3; rulings 6ca9a8c; green 3ffae13; rulings 6ce8e57; red b9f154a; green 1426245), stacked on 23b. Verdict: CHANGES REQUESTED. LOC: 154 net (`bindings/core.cpp` 30, `_core.pyi` 3, `decompose.py` 53, `features.py` 3, `io/mesh_index.py` 65) against about 215. No @perf run needed: nothing under `include/` changed, the binding only copies. The loop-bound comment's argument is sound; the binding's GIL and refusals match `refine_points`'s (stricter on negative indices); `project_structure.md` and docstrings match the code. Blocking: (1) "HOW THIS FILE GOES RED" paragraphs in `test_core_mesh_arrays.py:22-23`, `test_decompose_partition.py:27-28`, `test_mesh_index_conformity.py:21-22`; (2) ROADMAP row 23 (still "23c … 430", "23b … in review") and this file's status paragraph ("23b onwards not implemented"). Suggestions: say "integer indices" in `indexed_mesh`'s docstring; a ValueError for `rows == 0` in `partition()`; plain imports for the `dec`/`mi` fixtures. Whichever of 15f-3 and 23c-1 merges second renumbers `test_features.py:583`'s citation. Not pushed; no CI.
 

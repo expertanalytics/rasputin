@@ -21,11 +21,13 @@
 #include <terrain/raster/sample.hpp>
 #include <terrain/raster/view.hpp>
 #include <terrain/refinement/check_points.hpp>
+#include <terrain/refinement/constraint_points.hpp>
 #include <terrain/refinement/refine.hpp>
 #include <terrain/refinement/refine_points.hpp>
 #include <terrain/refinement/seam.hpp>
 #include <terrain/vector_simplify/area_collapse.hpp>
 
+#include <array>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
@@ -63,6 +65,7 @@ using terrain::noding::NodeOptions;
 using terrain::noding::NodeOutcome;
 using terrain::noding::NodeStatus;
 using terrain::refinement::CheckPoints;
+using terrain::refinement::ConstraintCheckPoints;
 using terrain::refinement::PointRefineOutcome;
 using terrain::refinement::RefineOutcome;
 using terrain::refinement::RefineStatus;
@@ -318,6 +321,54 @@ struct BoundUpstream {
     for (std::size_t i = 0; i < out.size(); ++i)
         out[i] = Point2{xy.at(static_cast<py::ssize_t>(i), 0), xy.at(static_cast<py::ssize_t>(i), 1)};
     return out;
+}
+
+using U32 = py::array_t<std::uint32_t, py::array::c_style | py::array::forcecast>;
+using F64 = py::array_t<double, py::array::c_style | py::array::forcecast>;
+using U8 = py::array_t<std::uint8_t, py::array::c_style | py::array::forcecast>;
+
+// A start mesh as refine_points and refine_strip take it (15f, D5): the arrays
+// checked, the triangles copied into a mesh, the spans into arrays it holds.
+struct StartMesh {
+    F64 zs;
+    U8 ok;
+    U32 e, k;
+    IndexedMesh2 mesh;
+    std::span<const double> z;
+    std::span<const std::uint8_t> valid;
+    std::span<const std::array<std::uint32_t, 2>> edges;
+    std::span<const std::uint32_t> masks;
+};
+
+// Every refusal is a ValueError whose message starts with `name`.
+[[nodiscard]] StartMesh start_mesh(const std::string& name, const py::object& vertices,
+                                   const py::object& triangles, const py::object& z,
+                                   const py::object& valid, const py::object& edges,
+                                   const py::object& masks) {
+    const auto t = U32::ensure(triangles);
+    StartMesh s{F64::ensure(z), U8::ensure(valid), U32::ensure(edges), U32::ensure(masks), {}, {}, {}, {}, {}};
+    const auto v = F64::ensure(vertices);
+    if (!v || v.ndim() != 2 || v.shape(1) != 2)
+        throw py::value_error(name + ": vertices must be float64 (N, 2)");
+    const auto n = static_cast<std::size_t>(v.shape(0));
+    if (!t || !s.e || !s.k || !s.zs || !s.ok || t.ndim() != 2 || t.shape(1) != 3 || s.zs.ndim() != 1
+        || s.zs.shape(0) != v.shape(0) || s.ok.ndim() != 1 || s.ok.shape(0) != v.shape(0)
+        || s.e.ndim() != 2 || s.e.shape(1) != 2 || s.k.ndim() != 1 || s.k.shape(0) != s.e.shape(0))
+        throw py::value_error(name + ": triangles must be (T, 3) uint32, z and valid (N,), "
+                                     "edges (E, 2) and masks (E,) uint32");
+    const auto nt = static_cast<std::size_t>(t.shape(0)), ne = static_cast<std::size_t>(s.k.shape(0));
+    const std::span<const TriangleIndices> tris{reinterpret_cast<const TriangleIndices*>(t.data()), nt};
+    for (const auto& tri : tris)
+        for (const auto i : tri)
+            if (i >= n)
+                throw py::value_error(name + ": a triangle index is out of range");
+    const auto* xy = reinterpret_cast<const Point2*>(v.data());
+    s.mesh = IndexedMesh2{{xy, xy + n}, {tris.begin(), tris.end()}, std::vector<std::uint8_t>(nt, 0)};
+    s.z = {s.zs.data(), n};
+    s.valid = {s.ok.data(), n};
+    s.edges = {reinterpret_cast<const std::array<std::uint32_t, 2>*>(s.e.data()), ne};
+    s.masks = {s.k.data(), ne};
+    return s;
 }
 
 }  // namespace
@@ -876,7 +927,9 @@ keyword-only. Any other dtype or layout is a TypeError, never a silent copy.
 Bilinear z at each of the (N, 2) points, as (z, valid): float64 (N,) and bool (N,).
 
 valid is False outside the grid, for a non-finite point, and where any of the
-four surrounding nodes is NoData or NaN. z is 0.0 there, never NaN.
+four surrounding nodes is NoData or NaN. A point that is a DEM node bit for bit
+reads that node alone: it is valid unless that node is NoData or NaN. z is 0.0
+where valid is False, never NaN.
 )doc");
 
     py::enum_<RefineStatus>(m, "RefineStatus", R"doc(
@@ -1052,8 +1105,9 @@ in outside; points at one stored position after the first in duplicates.
         .def_property_readonly("outside", &CheckPoints::outside, "Points dropped as outside or not finite.");
 
     py::class_<PointRefineOutcome, RefineOutcome>(m, "PointRefineOutcome", R"doc(
-What refine_points returned: RefineOutcome's fields, max_error over check
-points, plus the check points that coincide with a start vertex.
+What refine_points or refine_strip returned: RefineOutcome's fields, max_error
+over check points (refine_strip: over DEM nodes in the triangles it rescanned),
+the check points that coincide with a start vertex, and the edge strip's figures.
 )doc")
         .def_readonly("coincident", &PointRefineOutcome::coincident,
                       "Check points at a start vertex, never inserted.")
@@ -1062,54 +1116,77 @@ points, plus the check points that coincide with a start vertex.
         .def_readonly("on_frozen", &PointRefineOutcome::on_frozen,
                       "Check points on a frozen edge, never inserted, each counted once.")
         .def_readonly("on_frozen_max_error", &PointRefineOutcome::on_frozen_max_error,
-                      "Their largest |z - the edge's linear z|, edges with two valid ends.");
+                      "Their largest |z - the edge's linear z|, edges with two valid ends.")
+        .def_readonly("strip_points", &PointRefineOutcome::strip_points, "The strip's points, 0 without one.")
+        .def_readonly("strip_inserted", &PointRefineOutcome::strip_inserted, "Strip points inserted.")
+        .def_readonly("strip_max_error", &PointRefineOutcome::strip_max_error,
+                      "Largest strip-point error at the end, refused points excluded.")
+        .def_readonly("strip_refused", &PointRefineOutcome::strip_refused, "Strip points refused.")
+        .def_readonly("strip_refused_max_error", &PointRefineOutcome::strip_refused_max_error,
+                      "Their largest error at the end.")
+        .def_readonly("nodes_inserted", &PointRefineOutcome::nodes_inserted,
+                      "refine_strip: DEM nodes its rescan inserted; 0 in refine_points.");
+
+    py::class_<ConstraintCheckPoints>(m, "ConstraintCheckPoints", R"doc(
+The edge strip's check points, filed by constraint edge and by the parameter
+along it. Built only by constraint_check_points(); read-only.
+)doc")
+        .def_property_readonly("size", &ConstraintCheckPoints::size, "Points kept.")
+        .def_property_readonly("no_data", &ConstraintCheckPoints::no_data, "Points dropped: NoData in their cell.")
+        .def_property_readonly("duplicates", &ConstraintCheckPoints::duplicates,
+                               "Points dropped: the same position or parameter as a neighbour.")
+        .def_property_readonly("edge_count", &ConstraintCheckPoints::edge_count, "Edges filed.");
+
+    m.def(
+        "constraint_check_points",
+        [](const BoundRasterView& raster, const py::object& vertices, const py::object& edges) {
+            const auto v = F64::ensure(vertices);
+            const auto e = U32::ensure(edges);
+            if (!v || !e || v.ndim() != 2 || v.shape(1) != 2 || e.ndim() != 2 || e.shape(1) != 2)
+                throw py::value_error("constraint_check_points: vertices must be float64 (N, 2) and "
+                                      "edges (E, 2) uint32");
+            const std::span<const Point2> xy{reinterpret_cast<const Point2*>(v.data()),
+                                             static_cast<std::size_t>(v.shape(0))};
+            const std::span<const std::array<std::uint32_t, 2>> pairs{
+                reinterpret_cast<const std::array<std::uint32_t, 2>*>(e.data()), static_cast<std::size_t>(e.shape(0))};
+            const py::gil_scoped_release unlocked;
+            return std::visit(
+                [&](const auto& g) { return terrain::refinement::constraint_check_points(g, xy, pairs); },
+                raster.view);
+        },
+        py::arg("view"), py::arg("vertices"), py::arg("edges"), R"doc(
+The edge strip (15f, D2): every crossing of a constraint edge with a grid line,
+and the midpoint between neighbouring crossings, an edge's ends included, with
+z from the DEM. vertices (N, 2) in the DEM's frame; edges (E, 2) index them.
+A refused input is a ValueError. Releases the GIL.
+)doc");
 
     m.def(
         "refine_points",
         [](const CheckPoints& points, const py::object& vertices, const py::object& triangles,
            const py::object& z, const py::object& valid, const py::object& edges, const py::object& masks,
-           double tolerance, unsigned threads, std::uint32_t frozen_mask) {
-            using U32 = py::array_t<std::uint32_t, py::array::c_style | py::array::forcecast>;
-            const auto t = U32::ensure(triangles), e = U32::ensure(edges), k = U32::ensure(masks);
-            const auto zs = py::array_t<double, py::array::c_style | py::array::forcecast>::ensure(z);
-            const auto ok = py::array_t<std::uint8_t, py::array::c_style | py::array::forcecast>::ensure(valid);
-            const auto v = py::array_t<double, py::array::c_style | py::array::forcecast>::ensure(vertices);
-            if (!v || v.ndim() != 2 || v.shape(1) != 2)
-                throw py::value_error("refine_points: vertices must be float64 (N, 2)");
-            const auto n = v.shape(0);
-            std::vector<Point2> xy{reinterpret_cast<const Point2*>(v.data()),
-                                   reinterpret_cast<const Point2*>(v.data()) + n};
-            if (!t || !e || !k || !zs || !ok || t.ndim() != 2 || t.shape(1) != 3 || zs.ndim() != 1
-                || zs.shape(0) != n || ok.ndim() != 1 || ok.shape(0) != n || e.ndim() != 2 || e.shape(1) != 2
-                || k.ndim() != 1 || k.shape(0) != e.shape(0))
-                throw py::value_error("refine_points: triangles must be (T, 3) uint32, z and valid (N,), "
-                                      "edges (E, 2) and masks (E,) uint32");
-            const auto nt = static_cast<std::size_t>(t.shape(0)), ne = static_cast<std::size_t>(k.shape(0));
-            const std::span<const TriangleIndices> tris{reinterpret_cast<const TriangleIndices*>(t.data()), nt};
-            for (const auto& tri : tris)
-                for (const auto i : tri)
-                    if (i >= xy.size())
-                        throw py::value_error("refine_points: a triangle index is out of range");
-            const IndexedMesh2 mesh{std::move(xy), {tris.begin(), tris.end()}, std::vector<std::uint8_t>(nt, 0)};
+           double tolerance, unsigned threads, const ConstraintCheckPoints* strip,
+           std::uint32_t frozen_mask) {
+            const auto s = start_mesh("refine_points", vertices, triangles, z, valid, edges, masks);
             const terrain::refinement::PointRefineOptions options{tolerance, threads, frozen_mask};
-            // Every buffer read below is held by a local or by `points`, and
+            // Every buffer read below is held by `s`, `points` or `strip`, and
             // the outcome is converted after the lock returns.
             const py::gil_scoped_release unlocked;
-            return terrain::refinement::refine_points(
-                points, mesh, {zs.data(), static_cast<std::size_t>(n)}, {ok.data(), static_cast<std::size_t>(n)},
-                {reinterpret_cast<const std::array<std::uint32_t, 2>*>(e.data()), ne}, {k.data(), ne}, options);
+            return terrain::refinement::refine_points(points, s.mesh, s.z, s.valid, s.edges, s.masks, options,
+                                                      strip);
         },
         py::arg("points"), py::arg("vertices"), py::arg("triangles"), py::arg("z"), py::arg("valid"),
         py::arg("edges"), py::arg("masks"), py::kw_only(), py::arg("tolerance"), py::arg("threads") = 0,
-        py::arg("frozen_mask") = 0u, R"doc(
+        py::arg("strip") = py::none(), py::arg("frozen_mask") = 0u, R"doc(
 Refine phase 1's mesh against a frozen CheckPoints store until every check
 point is within tolerance of the plane of each triangle holding it.
 
 vertices (N, 2) in the store's frame, triangles (T, 3) counter-clockwise, z
 and valid (N,) per vertex, edges (E, 2) and masks (E,) its constraint edges.
-Inserted vertices are check points with their own z. The output does not
-depend on threads (0: all cores). A refused input comes back as a status; a
-mis-shaped array is a ValueError, an unfrozen store a RuntimeError.
+Inserted vertices are check points with their own z. strip, the edge strip on
+the same grid, joins the same loop. The output does not depend on threads (0:
+all cores). A refused input comes back as a status; a mis-shaped array is a
+ValueError, an unfrozen store or a strip that does not fit a RuntimeError.
 A check point on an edge whose mask meets frozen_mask is not inserted; it
 is counted in on_frozen with its error.
 Releases the GIL.
@@ -1163,6 +1240,34 @@ that a one-dimensional greedy inserts until every check point is within
 tolerance of the polyline. Both pieces beside a seam get the same output bit
 for bit, in either order of a and b. A tolerance negative or not finite,
 a == b, or an end outside the node rectangle is a ValueError.
+Releases the GIL.
+)doc");
+
+    m.def(
+        "refine_strip",
+        [](const BoundRasterView& raster, const ConstraintCheckPoints& strip, const py::object& vertices,
+           const py::object& triangles, const py::object& z, const py::object& valid, const py::object& edges,
+           const py::object& masks, double tolerance, unsigned threads, std::uint32_t frozen_mask) {
+            const auto s = start_mesh("refine_strip", vertices, triangles, z, valid, edges, masks);
+            const terrain::refinement::PointRefineOptions options{tolerance, threads, frozen_mask};
+            // Every buffer read below is held by `s`, `raster` or `strip`.
+            const py::gil_scoped_release unlocked;
+            return std::visit(
+                [&](const auto& g) {
+                    return terrain::refinement::refine_strip(g, strip, s.mesh, s.z, s.valid, s.edges, s.masks,
+                                                             options);
+                },
+                raster.view);
+        },
+        py::arg("view"), py::arg("strip"), py::arg("vertices"), py::arg("triangles"), py::arg("z"),
+        py::arg("valid"), py::arg("edges"), py::arg("masks"), py::kw_only(), py::arg("tolerance"),
+        py::arg("threads") = 0, py::arg("frozen_mask") = 0u, R"doc(
+The edge strip on the projected path (15f, D4): refine's output, refined until
+every strip point is within tolerance, with the DEM's nodes rescanned in every
+triangle the run writes. Arrays as refine_points'. A refused input comes back
+as a status; a mis-shaped array is a ValueError, a strip that does not fit a
+RuntimeError. No vertex goes on an edge whose mask meets frozen_mask, and a
+strip point on such an edge is a RuntimeError (filter the strip's edges).
 Releases the GIL.
 )doc");
 
