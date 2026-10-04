@@ -1,8 +1,9 @@
 # Harness h9: briefs come from files, and spawns are checked
 
-Status: **green at 661ef55, in code review** (round 1: changes requested,
-below; §12 lists the fixes), 2026-10-04. Design 7cae124 and 9740246, red
-84fbde6, rulings fac025a, amendment 1922d72. Measured 300 production lines
+Status: **green at 4ee0328, in code review** (round 2: changes requested,
+status line only; below), 2026-10-04. Design 7cae124 and 9740246, red
+84fbde6, rulings fac025a, amendment 1922d72, green 661ef55; round-1 fixes
+2134c5e, d04b362, afcceb9, 4ee0328. Measured 300 production lines
 against the estimate of about 200 (`brief.py` 218, `guard_spawn.py` 74,
 `settings.json` 6, `guard_governance.py` 1, `rule_sizes.py` 1). The overrun
 is code the estimate did not price (the `Block` type, `MalformedError`, the
@@ -715,7 +716,7 @@ point 3, `tests/python/test_guard_spawn.py` lines 342 and 380,
 ## 12. After code review round 1 (9209226)
 
 1. **`--increment` is resolved against `--worktree`** (§3.1, now ruled).
-   The green code joins it to the checkout running `brief.py`
+   661ef55 joins it to the checkout running `brief.py`
    (`brief.py:241`, `ROOT / args.increment`), so a file that exists only
    on the branch is refused, and a branch with newer rulings gets master's
    lines quoted.
@@ -725,7 +726,8 @@ point 3, `tests/python/test_guard_spawn.py` lines 342 and 380,
      not the main checkout's. A file present only in the worktree is
      accepted for tester; an architect's `--increment` that exists in the
      main checkout but not in the worktree gets `(new: you create it)`. An
-     absolute path is used as given. These fail on 661ef55.
+     absolute path is used as given. Four of these fail on 661ef55; the
+     absolute-path test passes there already.
    - @developer: resolve a relative `--increment` against the worktree
      returned by `_checkout(args.worktree)`, and leave an absolute one as
      given. Also fix `brief.py:181`'s docstring, which cites §3.1a for what
@@ -757,3 +759,5 @@ point 3, `tests/python/test_guard_spawn.py` lines 342 and 380,
 **Design review, round 2, 2026-10-04.** Range `1c95f7a..9740246`. Verdict: APPROVED. LOC: 0 (design); estimate about 200. Both blockers and the three suggestions closed: §3.1a quotes Ola's ruling and has four exit-2 rules, each tested; the word table recounts exactly (+160 in the repository, about −320 with the two memory notes); every "already stated elsewhere" claim checks; the PR opens after `worktree-agent-lines`. Suggestions: three dropped template lines have no home (@orchestrator measures rule text and proposes a cut; @orchestrator quotes Ola only from the transcript; @reviewer says whether @perf's acceptance is recorded); list the usage-limit sentence's move in §9. Not pushed; no CI.
 
 **Code review, round 1, 2026-10-04.** Range `2060f14..661ef55` (design 7cae124 and 9740246, red 84fbde6, rulings fac025a, amendment 1922d72, green 661ef55). Verdict: CHANGES REQUESTED. LOC: 300 (`brief.py` 218, `guard_spawn.py` 74, `settings.json` 6, `guard_governance.py` 1, `rule_sizes.py` 1) against about 200; the overrun is unpriced code (`Block`, `MalformedError`, the argparse subclass, review-section parsing, §3.1a's rules), not formatting; ten `# fmt: skip` regions stay readable. `settings.json` changes exactly as §6; the rule text matches §3.3 and §4 word for word; the refusal order matches §3.5; fail-open matches §10. Blocking: (1) the status line still says "design, round 2", and the measured 300 lines are unrecorded; (2) `--increment` is resolved against the checkout running `brief.py` (`brief.py:241`), so a branch-only increment file is refused and a branch with newer rulings gets master's stale quotes; resolve a relative path against `--worktree`, ruled in §3.1, with a test whose worktree copy differs. Suggestions: `brief.py:181` cites §3.1a for §3.1; align §5's `COPIED` row with §11 point 2; decide the three homeless template lines. Not pushed; no CI.
+
+**Code review, round 2, 2026-10-04.** Range `9209226..4ee0328` (architect 2134c5e, red d04b362, red fixture afcceb9, green 4ee0328). Verdict: CHANGES REQUESTED. LOC: 300 unchanged (`brief.py:241` and `:181` each replaced one for one); estimate about 200, overrun as recorded in round 1. Round 1's blockers closed: the status line now records the 300 measured lines and their reason; `brief.py:241` resolves a relative `--increment` against `--worktree`, and an absolute one is used as given; five test_12 tests, four of them red on 661ef55. No red-step scaffolding remains. The at-risk citations at `:719`, `:731` and `:759` describe 661ef55 and still read correctly as history. Local: the six h9-touched suites give 285 passed. In the whole suite, every failure and collection error is `ModuleNotFoundError: tin_engine`, and no file on the branch imports it, so a run with the extension is not needed before push. Blocking: (1) the status line (line 3) still says "green at 661ef55"; the green commit is now 4ee0328. Suggestions: "661ef55 joins it" for "The green code joins it" (§12 point 1); "four of these fail on 661ef55", since the absolute-path test passes there; stderr reason checks in the three older concurrency refusals (`test_brief.py:335`, `:343`, `:420`), which afcceb9 showed could pass for the wrong reason. Not pushed; no CI.
