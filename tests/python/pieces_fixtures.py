@@ -425,3 +425,38 @@ def problems(done: Cut, array: np.ndarray, domain: Polygon, tolerance: float) ->
     if check.over or check.outside_mesh:
         found.append(f"tolerance: {check}")
     return found
+
+
+def located_over(
+    u: Union, array: np.ndarray, valid: np.ndarray, tolerance: float, h: float = H
+) -> tuple[int, int]:
+    """Section 3D's tolerance oracle where NoData carves the mesh: every valid
+    DEM node that some union triangle holds (closed, 1e-12 slack) against
+    that triangle's plane, from the written vertices; every output vertex has
+    data, so every triangle has three valid vertices. Returns (located, over)."""
+    x, y, z = node_xy(array, h)
+    keep = valid.ravel()
+    px, py, pz = x[keep], y[keep], z[keep]
+    origin = u.points[:, :2].min(axis=0)
+    v = u.points[:, :2] - origin
+    t = u.triangles
+    a, b, c = v[t[:, 0]], v[t[:, 1]], v[t[:, 2]]
+    za, zb, zc = u.points[t[:, 0], 2], u.points[t[:, 1], 2], u.points[t[:, 2], 2]
+    two_a = (b[:, 0] - a[:, 0]) * (c[:, 1] - a[:, 1]) - (b[:, 1] - a[:, 1]) * (c[:, 0] - a[:, 0])
+    located = over = 0
+    for lo in range(0, px.size, 128):
+        qx = px[lo : lo + 128, None] - origin[0]
+        qy = py[lo : lo + 128, None] - origin[1]
+
+        def weight(p: Any, q: Any, qx: Any = qx, qy: Any = qy) -> Any:
+            return (
+                (q[:, 0] - p[:, 0]) * (qy - p[:, 1]) - (q[:, 1] - p[:, 1]) * (qx - p[:, 0])
+            ) / two_a
+
+        wa, wb, wc = weight(b, c), weight(c, a), weight(a, b)
+        holds = (wa >= -1e-12) & (wb >= -1e-12) & (wc >= -1e-12)
+        error = np.abs(wa * za + wb * zb + wc * zc - pz[lo : lo + 128, None])
+        worst = np.where(holds, error, -np.inf).max(axis=1)
+        located += int(np.isfinite(worst).sum())
+        over += int((worst > tolerance + 1e-9).sum())
+    return located, over
