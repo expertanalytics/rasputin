@@ -302,7 +302,10 @@ TEST_CASE("a V-valley: the outlet counts the whole valley, and the floor drains 
     for (std::size_t c = 1; c + 1 < cols; ++c) {
         INFO("floor column " << c);
         CHECK(out.flow_to[d.at(rv, c)] == kWest);
-        CHECK(out.count[d.at(rv, c)] > out.count[d.at(rv, c + 1)]);
+        // Column cols - 1 is an edge outlet of its own, not upstream of the
+        // floor, so the comparison stops one column short of it.
+        if (c + 2 < cols)
+            CHECK(out.count[d.at(rv, c)] > out.count[d.at(rv, c + 1)]);
     }
     check_oracle(d, out);
 }
