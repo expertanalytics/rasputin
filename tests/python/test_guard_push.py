@@ -1,4 +1,4 @@
-"""`.claude/hooks/guard_push.py` in and out of unattended mode (h3 U1, T4, T5, T8-T10).
+"""`.claude/hooks/guard_push.py` in and out of unattended mode (h3 U1, T4, T5, T8-T10; h10 §4a).
 
 The spec is `docs/increments/h3-unattended-u1.md` §3.5 (the new patterns),
 §3.9 (failure direction) and §4. Each command is run through a copy of the hook
@@ -30,6 +30,7 @@ REMOTE = "this changes where the remote points"
 CONFIG = "this writes git configuration (hooks path, remote URLs)"
 GH_API = "gh api with a writing method changes the forge"
 CURL = "curl with a writing method to the forge"
+GH_PR = "gh pr changes a pull request"
 
 #: T4's ask rows, each with the `why` §3.5 gives it (None: an existing pattern,
 #: whose reason is unchanged).
@@ -56,6 +57,11 @@ ASKED: dict[str, str | None] = {
     "echo ok && git update-ref a b": "update-ref moves a ref directly",
     "git push": None,
     "gh pr merge 1": None,
+    # h10 §4a: update-branch writes to the PR's branch on the remote; --auto
+    # enqueues into the merge queue, the same act as a plain merge.
+    "gh pr update-branch 1": GH_PR,
+    "gh pr update-branch --rebase 1": GH_PR,
+    "gh pr merge --auto 1": GH_PR,
     "git commit --amend": None,
     "git rebase main": None,
 }
@@ -73,6 +79,9 @@ PASSED = (
     "curl https://api.github.com/x",
     "curl -X POST https://example.org/x",
     "git status",
+    # h10 §4a: the update-branch ask must not widen to the read-only gh pr verbs.
+    "gh pr checks 1",
+    "gh pr view 1",
 )
 
 
