@@ -159,8 +159,8 @@ channel, and these numbers are re-measured by the acceptance run).
   `maxRecordCount` 2000. Layer 2 `elvenett` is the complete network, as
   polylines: 1,954,539 segments (`returnCountOnly`, 2026-10-04). Its fields
   include `objekttype` (single-line river `ElvBekk`, river centreline
-  `ElvBekkMidtlinje`, lake centreline `InnsjøMidtlinje`, also seen spelled
-  `InnsjoMidtlinje`), `strekninglnr` (the segment's national serial number),
+  `ElvBekkMidtlinje`, lake centreline `InnsjøMidtlinje`; see "The
+  data are not clean" below), `strekninglnr` (the segment's national serial number),
   `elvid` (one id per branch of the network), `vassdragsnr` (the watercourse
   number of the REGINE unit), `elvenavn`, `elvenavnhierarki`,
   `elveordenstrahler`, `vatnlnr` (the lake number, for lake centrelines) and
@@ -189,7 +189,30 @@ channel, and these numbers are re-measured by the acceptance run).
   by one. For 46 of the 139 the nearest line is a lake centreline (lake
   gauges). For 16 stations, a second branch (another `elvid`) lies within
   100 m of the station point, and for 5 within 50 m: these are the
-  confluence cases.
+  confluence cases. Measured from the mapped position `P` instead (the foot
+  of the station on the nearest line, which is what the design's flag
+  uses), 19 stations have a second branch within 100 m.
+- **The data are not clean** (measured 2026-10-04; `outStatistics` grouped
+  by `objekttype` over the whole layer, and the 1 km samples of the 140
+  stations). (a) `objekttype` has **25 distinct values**, including null
+  (94 features), a blank (2) and strays (`SK`, `20.08.2014`): eight lake
+  spellings (`InnsjøMidtlinje`, `InnsjoMidtlinje`, `InnsjøMidtlinjeReg`,
+  `InnsjøMitlinje`, `InnsjøMidtloinje`, `Innsjømidtlinje`, `InnsjoMidtlin`,
+  `InnsjøRegulert`), several river and fictive-link spellings
+  (`ElvBekkRegulert`, `FiktivElv`, `ElvelinjeFiktiv`, `BreMidtlinje` (a
+  glacier), ...). A nearest line of the 1 km samples has a null type
+  (`152.4.0`: five features, all with `vatnlnr`, the lake number, set), as it
+  is on 428 of the 442 lake lines of the samples. `vatnlnr` is also set on 496
+  river features, so it cannot decide alone. (b) **Exact copies**: of the `strekninglnr` values
+  shared by more than one `objectid` in the samples (14), 13 are exact
+  copies of one geometry (9 pairs at `82.4.0`, 4 groups of five at
+  `139.35.0`; 25 extra features in all), the copies sharing one `elvid`; the
+  14th, at `79.3.0`, is two different geometries (a lake centreline, 334 m
+  apart by Hausdorff distance), the same `strekninglnr`, one `elvid`. (c)
+  **Forks**: in the sampled lines, where the chain of the nearest line's
+  `elvid` is followed end to start within 1 m, one station (`19.80.0`) meets
+  a point with two different continuations (a sample, not the reach
+  envelopes). The design takes each case as a rule below.
 - **Direction of digitising.** For 138 of the nearest lines (100 m or
   longer, both ends on one tile), the DEM is lower at the line's last vertex
   than at its first for 97, higher for 2, and within 0.5 m for 39 (mostly
@@ -560,9 +583,16 @@ area at a place already chosen (the sensitivity), never to choose the place.
 
 `gauge.place(station, segments, *, map_radius=500.0, reach_up=1000.0)`
 returns a `Placement` or `None`. `RiverSegment` is the frozen model of one
-ELVIS line: `objectid`, `elvid`, `vassdragsnr`, `name`, `kind` (river or lake
-centreline, from `objekttype`; the fictive links ELVIS adds are rivers here),
-and the line's vertices in the file's CRS.
+ELVIS line: `objectid`, `elvid`, `vassdragsnr`, `name`, `objekttype` (the raw
+value, kept as served, `None` allowed), `kind`, and the line's vertices in the
+file's CRS. **`kind` is a total mapping** (in `io/rivers.py`, where the model
+is built): `lake` when the casefolded `objekttype` starts with `innsj` (all
+eight lake spellings of "The data are not clean"), or when `objekttype` is
+null or blank and `vatnlnr` is set (`152.4.0`'s five lines); `river` for
+every other value, the fictive links, the glacier lines and the strays
+included. A stray never raises; the raw value stays in the model and in the
+station's row (`objekttype` of the chosen line), so a surprising class is
+visible, and `@tester` pins the mapping on all 25 values.
 
 1. **Candidates**: segments within `map_radius` of the station point.
    Default 500 m: 139 of the 140 stations have a line within 461 m (the one
@@ -584,7 +614,16 @@ and the line's vertices in the file's CRS.
    half the stations get the 30 m floor and a tenth get 160 m or more.
 4. **The reach** is the chain of segments with `P`'s `elvid`, joined where an
    end of one lies within 1 m of the start of the next (a segment is a link
-   of one river, digitised downstream): from `reach_up` metres upstream of
+   of one river, digitised downstream). **Exact copies are dropped first**:
+   within one `elvid`, segments whose vertex lists are equal to 1 cm are one
+   segment, the smallest `objectid` kept (`io/rivers.py`'s `read_segments`
+   does it, so a user's file is cleaned as a fetched one is, and the count
+   dropped is reported). **A fork stops the chain**: where, after that, two
+   different segments of the `elvid` continue the chain (or two lead into its
+   first one), the chain stops there, flags `reach_fork` and reports the
+   metres it has; it does not pick a branch. Downstream, a fork before
+   `U` is a shortfall (`reach_down_m < U`), so the station is `uncertain`
+   by "Sensitivity". The chain runs from `reach_up` metres upstream of
    `P` (default 1000 m: the nearest line's median length is 751 m, so one
    segment is often not enough, and a bridge embankment a few hundred metres upstream
    dams the DEM river as much as one at the gauge) to `U + 100 m` downstream
@@ -593,13 +632,15 @@ and the line's vertices in the file's CRS.
    result is `Reach(line, at, uncertainty)` (below), in the file's CRS.
 5. **Flags carried to the result, not decided here**: `lake` (the chosen
    segment is a lake centreline: 46 of 139 nearest lines), `confluence_near`
-   (a segment of another `elvid` within 100 m of `P`: 16 of 139) and the two
-   distances. `None` (no segment within `map_radius`) is the case for the
+   (a segment of another `elvid` within 100 m of `P`, measured from `P`, the
+   mapped position, not from the station point: **19 of 139**; from the
+   station point it is 16, and 5 within 50 m) and the two distances. `None` (no segment within `map_radius`) is the case for the
    fallback.
 
-Measured on 139 stations, 2026-10-04 (1 km square envelopes; the one segment
-`strekninglnr` shared by two different geometries, so `objectid` is the key):
-the nearest line's length has quartiles 392 m, 751 m and 1196 m, maximum
+Measured on 139 stations, 2026-10-04 (1 km square envelopes; `strekninglnr`
+is shared by 14 groups of features in them, 13 of which are exact copies and
+one (at `79.3.0`) two different geometries, so `objectid` is the key and exact
+copies are dropped by geometry, above): the nearest line's length has quartiles 392 m, 751 m and 1196 m, maximum
 4673 m. The envelopes fetched for the reach are larger (below).
 
 ```python
@@ -902,7 +943,9 @@ licence_note=...)`. `fetch/nve.py`:
   `urllib`, rule F11);
 - queries ELVIS layer 2 once per station, by envelope: the station point
   plus `map_radius + reach_up + 500 m` (2 km) each way, `outFields=objectid,
-  objekttype,strekninglnr,elvid,vassdragsnr,elvenavn`, `outSR=25833&f=geojson`.
+  objekttype,strekninglnr,elvid,vassdragsnr,elvenavn,vatnlnr`, `outSR=25833&f=geojson`
+  (an explicit allow-list, see "Data use"; `vatnlnr` is there for the lake
+  rule of "Placing the gauge", and `objekttype` is written as served).
   The service returns whole features that meet the envelope, so a chain
   longer than the envelope is complete where it meets it. Segments seen from
   several stations are kept once, by `objectid`. **Unverified:** only 1 km
@@ -918,7 +961,8 @@ licence_note=...)`. `fetch/nve.py`:
   first name of `elvenavnhierarki`; no other layer 0 field is copied),
   `reference.geojson` (one feature per station, the polygon, `station`,
   `reference_area_km2`, `reference_updated`, `versions`), `rivers.geojson`
-  (one LineString per segment, the six fields above), all with a `crs`
+  (one LineString per segment, the seven fields above; copies are kept as
+  served and dropped by `read_segments`), all with a `crs`
   member, `NOTICE.txt` (the catalogue's credit, "Kilde: NVE", as 23a-2's
   `notice` does), and `manifest.json` (the query URLs, the fetch time in UTC,
   each file's sha256). Deterministic order: the list file's, then `objectid`.
@@ -1196,11 +1240,16 @@ through the binding.
 
 - `test_gauge.py`: tiers (own watercourse number beats a nearer line of
   another river; prefix and name tiers; `any`); the nearest of the best tier;
+  exact copies do not make a fork, a real fork (two different continuations,
+  as at `19.80.0`) stops the chain, flags `reach_fork` and reports the
+  metres, upstream as downstream; `kind` of the chosen line reaches the
+  `lake` flag;
   `P` as a perpendicular foot and as an end vertex; `U` at `d` = 10 m (30),
   100 m (100) and the cap; the chain joins ends within 1 m and stops at a gap
   of 2 m; `reach_up` cuts at the metre; a river that ends gives a shorter
   reach and the metres are reported; `lake` and `confluence_near` at the
-  100 m boundary; no line within the radius gives `None`; a segment file in
+  100 m boundary, measured from `P` (a second branch 90 m from `P` and 110 m from
+  the station point counts); no line within the radius gives `None`; a segment file in
   another CRS is refused.
 - `test_burn.py`: an embankment across a valley: `upstream` on the raw array
   from a node below it counts the strip below the embankment only, and on
@@ -1259,12 +1308,21 @@ through the binding.
   `outSR=25833`, `f=geojson`); newest version wins, ties to the larger
   `objectid`; a missing station or polygon is refused by name; a reply
   flagged `exceededTransferLimit` is refused by station; a segment seen from
-  two stations is kept once; the written files, from canned service answers,
+  two stations is kept once by `objectid`; exact geometry copies under two
+  `objectid`s are both written (the dropping is the reader's); `objekttype` is
+  written as served, null and blank included, with `vatnlnr`; the written files, from canned service answers,
   read back through `io/station_set.py` and `io/rivers.py`; no owner or
   contact field is copied; the manifest's sha256 matches the files.
 - `test_station_set.py`, `test_rivers.py`: missing `crs`, duplicate numbers
   or ids, wrong geometry types, a bad station number are refused; a user's
-  own points file reads.
+  own points file reads. `test_rivers.py` also pins `kind` on all 25
+  `objekttype` values of "The data are not clean" (each lake spelling is
+  `lake`; null and blank are `lake` with `vatnlnr` and `river` without; the
+  strays, `FiktivElv` and `BreMidtlinje` are `river`; case and `ø`/`o`
+  variants), the raw value kept; exact copies within an `elvid` give the
+  segment with the smallest `objectid` and a count of those dropped, while
+  equal geometry in two different `elvid`s, and two different geometries
+  under one `strekninglnr` (`79.3.0`), are both kept.
 
 **PR 4, Python**:
 
