@@ -61,9 +61,17 @@ def home(tmp_path: Path, repo: Path) -> Path:
 
 @pytest.fixture
 def trees(tmp_path: Path, repo: Path) -> dict[str, Path]:
-    """Worktrees A, B and C of the fixture, each on its own branch."""
+    """Worktrees A, B and C of the fixture, each on its own branch.
+
+    Each gets its own uncommitted copy of INCREMENT, as the main checkout has:
+    --increment is resolved against --worktree (§3.1, §12 point 1), so a tree
+    without it would be refused for that reason before the rule a test names.
+    """
     base = tmp_path.resolve()
-    return {name: add_worktree(repo, base / name, f"wt-{name.lower()}") for name in "ABC"}
+    made = {name: add_worktree(repo, base / name, f"wt-{name.lower()}") for name in "ABC"}
+    for tree in made.values():
+        write(tree, INCREMENT, (repo / INCREMENT).read_text())
+    return made
 
 
 def write(repo: Path, relative: str, text: str) -> Path:
@@ -600,8 +608,8 @@ def test_9_the_block_is_made_at_the_worktrees_head(
 #
 # §3.1 as ruled after code review round 1: a relative --increment is resolved
 # against --worktree, not against the checkout running brief.py; an absolute
-# one is used as given; the block shows the path as given. The fixture's
-# INCREMENT is uncommitted in the main checkout, so a fresh worktree lacks it.
+# one is used as given; the block shows the path as given. `trees` gives each
+# worktree its own copy of INCREMENT; a test that needs it absent removes it.
 
 
 def test_12_the_block_quotes_the_worktrees_copy_of_the_increment(
@@ -638,8 +646,8 @@ def test_12_a_file_only_in_the_worktree_is_accepted_for_tester(
 def test_12_for_architect_a_file_missing_from_the_worktree_is_new(
     repo: Path, home: Path, trees: dict[str, Path]
 ) -> None:
+    (trees["A"] / INCREMENT).unlink()
     assert (repo / INCREMENT).exists()
-    assert not (trees["A"] / INCREMENT).exists()
     output = ok(repo, home, "architect", "--worktree", str(trees["A"]), "--beside", "none",
                 "--increment", INCREMENT)  # fmt: skip
     assert f"{INCREMENT} (new: you create it)" in output
@@ -649,8 +657,11 @@ def test_12_a_file_in_the_main_checkout_only_is_refused_for_tester(
     repo: Path, home: Path, trees: dict[str, Path]
 ) -> None:
     """The converse of the branch-only case: master's copy does not stand in."""
-    refused(repo, home, "tester", "--worktree", str(trees["A"]), "--beside", "none",
-            "--increment", INCREMENT)  # fmt: skip
+    (trees["A"] / INCREMENT).unlink()
+    assert (repo / INCREMENT).exists()
+    stderr = refused(repo, home, "tester", "--worktree", str(trees["A"]), "--beside", "none",
+                     "--increment", INCREMENT)  # fmt: skip
+    assert f"--increment {INCREMENT} does not exist" in stderr
 
 
 def test_12_an_absolute_increment_is_used_as_given(
