@@ -497,3 +497,5 @@ Findings, fixed in the commit after 05c6eaf:
 
 Suggestion, taken: §2d says what the `<cstdlib>` at
 `test_predicates_default_kernel.cpp:43` is for: nothing the file uses.
+
+**Round 3, 2026-10-05 (copied from `@reviewer`'s handback).** Range `05c6eaf..de233d6`. Verdict: APPROVED. Both round-2 findings closed: the counterexample brute-forced over all 4^8 assignments (best 10, longest-first 11); the slow-run saving recomputed (6.1 with the slowdown, 6.6 without). The §2d claim checked with `git log -S` (2b3ae32) and grep. `check_citations.py` clean. Non-blocking: §2d's "declares nothing the file uses" would read better as "nothing the file does not already get from `<cstddef>`".
