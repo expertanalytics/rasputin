@@ -86,16 +86,16 @@ master `586fbc1`'s, before this increment; read them there
 | field | produced at | what it is | when |
 |---|---|---|---|
 | `feature_bits`, `feature_names`, `feature_vocabulary` | `io/vtk_legacy.py:123-126` | the edge vocabulary: bit numbers, names, a fingerprint | always; structural, unchanged by this design |
-| `crs` | `cli.py:876` | the mesh's CRS | always |
-| `elevation_source` | `cli.py:876`, built at `cli.py:1496`, `:1518-1553`, `:1568-1570`, prefixed at `:870-875` | one sentence; its clauses are listed below | always (`none (z=0, --flat)` for a fixture, `:468`, `:960`) |
-| `source_crs`, `source_transform`, `computation_grid` | `cli.py:880-885` | reprojected path: the DEM's own CRS, PROJ's name for the transform, the resampled grid (`square 30 m grid in EPSG:31983, node (R, K) at (30 K, -30 R), resampled bilinear from EPSG:4674`) | reprojected only |
-| `licence_note`, `cite` | `cli.py:886-892` | the remote source's licence and works to cite | DEM from the cache |
-| `dem_tiles`, `dem_seams` | `cli.py:893-897`, `mosaic.py:111-114` | tile names; overlaps that disagree (`a.tif \| b.tif: nodes 1, max 4, median 4`) or `none` | several files, a directory, or the cache |
-| `domain`, `domain_crs`, `domain_transform` | `cli.py:898-903`, `:1461` | `catchment.geojson, 1 ring 0 holes, 27 vertices`; its CRS; transform or `none` | `--domain` |
-| `features`, `features_crs`, `features_transform`, `features_notice` | `cli.py:904-934` | `clc2018_7908_3.gpkg:U2018_CLC2018_V2020_20u1, map corine, 60 features, 87 chains, 10266 vertices`; CRS; transform; the CORINE notice | `--features` |
-| `land_cover_codes` | `cli.py:1045-1046`, `io/vtk_legacy.py:118-119` | what `land_cover_code` holds | a coded `--features-map` |
+| `crs` | `src_python/tin_engine/cli.py@586fbc1:876` | the mesh's CRS | always |
+| `elevation_source` | `src_python/tin_engine/cli.py@586fbc1:876`, built at `src_python/tin_engine/cli.py@586fbc1:1496`, `:1518-1553`, `:1568-1570`, prefixed at `:870-875` | one sentence; its clauses are listed below | always (`none (z=0, --flat)` for a fixture, `:468`, `:960`) |
+| `source_crs`, `source_transform`, `computation_grid` | `src_python/tin_engine/cli.py@586fbc1:880-885` | reprojected path: the DEM's own CRS, PROJ's name for the transform, the resampled grid (`square 30 m grid in EPSG:31983, node (R, K) at (30 K, -30 R), resampled bilinear from EPSG:4674`) | reprojected only |
+| `licence_note`, `cite` | `src_python/tin_engine/cli.py@586fbc1:886-892` | the remote source's licence and works to cite | DEM from the cache |
+| `dem_tiles`, `dem_seams` | `src_python/tin_engine/cli.py@586fbc1:893-897`, `mosaic.py:111-114` | tile names; overlaps that disagree (`a.tif \| b.tif: nodes 1, max 4, median 4`) or `none` | several files, a directory, or the cache |
+| `domain`, `domain_crs`, `domain_transform` | `src_python/tin_engine/cli.py@586fbc1:898-903`, `:1461` | `catchment.geojson, 1 ring 0 holes, 27 vertices`; its CRS; transform or `none` | `--domain` |
+| `features`, `features_crs`, `features_transform`, `features_notice` | `src_python/tin_engine/cli.py@586fbc1:904-934` | `clc2018_7908_3.gpkg:U2018_CLC2018_V2020_20u1, map corine, 60 features, 87 chains, 10266 vertices`; CRS; transform; the CORINE notice | `--features` |
+| `land_cover_codes` | `src_python/tin_engine/cli.py@586fbc1:1045-1046`, `io/vtk_legacy.py:118-119` | what `land_cover_code` holds | a coded `--features-map` |
 
-The `.ply` carries only some of these as comments (`cli.py:877`, `:892`,
+The `.ply` carries only some of these as comments (`src_python/tin_engine/cli.py@586fbc1:877`, `:892`,
 `:900`, `:929`, `:933`, `:1009`): `crs`, `elevation` (the same sentence under
 another name), `licence_note`, `cite`, `domain`, `features`,
 `features_notice`, `land_cover_codes`. It lacks `source_crs`,
@@ -107,8 +107,8 @@ That is a defect this increment fixes (D2: the `.ply` carries the same fields as
 
 | clause (as printed) | variable | what it counts or means | unit | non-trivial when |
 |---|---|---|---|---|
-| `mosaic of 4 tiles, 9 x 13 nodes;` | `cli.py:870` | the stitched grid's size, **rows x columns** (the text does not say which) | nodes | several tiles |
-| `anadem-v1, <credit>;` | `cli.py:875` | the cache key and the source's credit text | | DEM from the cache |
+| `mosaic of 4 tiles, 9 x 13 nodes;` | `src_python/tin_engine/cli.py@586fbc1:870` | the stitched grid's size, **rows x columns** (the text does not say which) | nodes | several tiles |
+| `anadem-v1, <credit>;` | `src_python/tin_engine/cli.py@586fbc1:875` | the cache key and the source's credit text | | DEM from the cache |
 | `refined from DEM nodes, constrained Delaunay` | `:1549` | the method: DEM nodes inserted until within tolerance, Delaunay except across lines | | `--tolerance` |
 | `bilinear from DEM, stride 8` | `:1496` | no tolerance: every 8th DEM node triangulated, z interpolated | | no `--tolerance` |
 | `tolerance 5 m` | `:1549` | the tolerance asked for | m | always on the refined path |
@@ -125,7 +125,7 @@ That is a defect this increment fixes (D2: the `.ply` carries the same fields as
 
 | line | at | content |
 |---|---|---|
-| the refine report | `cli.py:1554-1563`, `:1571` | `503 start quality nodes inserted, 252 start quality skips, 0 constraint feet, 0 feet refused, 53 rounds, 45683 points inserted, 92875 flips, 116389 triangles, achieved max error 4.9997 m, 0 valid DEM nodes not covered, 32258 start triangles, 0 start vertices off-node, 199 vertices without data dropped`. On the reprojected path its max error is phase 1's (same defect as above) |
+| the refine report | `src_python/tin_engine/cli.py@586fbc1:1554-1563`, `:1571` | `503 start quality nodes inserted, 252 start quality skips, 0 constraint feet, 0 feet refused, 53 rounds, 45683 points inserted, 92875 flips, 116389 triangles, achieved max error 4.9997 m, 0 valid DEM nodes not covered, 32258 start triangles, 0 start vertices off-node, 199 vertices without data dropped`. On the reprojected path its max error is phase 1's (same defect as above) |
 | stride path | `:1571` | `199 vertices without data dropped` |
 | mosaic | `:872` | `mosaic of 2 tiles, 256 x 563 nodes` |
 | features read | `:1364-1368` | `60 features kept, 9 dropped outside, 19 clipped, 0 empty skipped` |

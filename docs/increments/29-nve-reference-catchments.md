@@ -1,6 +1,6 @@
 # Increment 29 — NVE reference catchments: our catchments against NVE's, station by station
 
-Status: **design approved by `@reviewer` (round 5, 2026-10-04); all questions ruled by Ola; PR 1 (accumulation) merged as #173; PR 3 (stations and rivers) merged as #178; PR 2 (the gauge on the river): red `3a06ffc`, amendment `5357785`, green `91857df` (556 production lines); `@architect`'s reading of the green step adopts its choices and changes one (block "PR 2's green step", 2026-10-05): red amendment and green for it next, then code review**
+Status: **design approved by `@reviewer` (round 5, 2026-10-04); PR 1 merged as #173; PR 3 merged as #178; PR 2 (the gauge on the river): green `0588bfa`, 558 production lines; code review round 1 (2026-10-05) asked for changes; the NoData fix next (red test, then code), then review round 2; questions 5 and 6 open for Ola, written to their defaults**
 (`@architect`, 2026-10-04), branch `worktree-nve-catchments` off master
 `d20126b`. Ola's rulings of 2026-10-04 are in the section below. Round 2 closed the burn's drainage claim
 (checked node by node, not assumed), the ELVIS data cases, the PR order, and
@@ -16,8 +16,9 @@ script. Round 5 approved the design, and Ola ruled the last three questions
 the same day. The gauge
 placement is redesigned to his direction (the mapped river, then the DEM's
 flow path along it, never an area objective), with a per-station sensitivity
-check. Five PRs (merge order 1, 3, 2, 4, 5). The choices put to Ola under "Questions for Ola" are all
-ruled (see "Ola's rulings"); none is open.
+check. Five PRs (merge order 1, 3, 2, 4, 5). Questions 1 to 4 under "Questions for Ola" are
+ruled (see "Ola's rulings"); questions 5 and 6, from PR 2's code review,
+are open, and the design is written to their defaults.
 
 **Closes.** Catchments for real Norwegian gauging stations, computed from the
 DEM by `rasputin`, one polygon per station, each usable as `--domain`, and a
@@ -232,10 +233,11 @@ resample's end and `dropped_m` (step 1); a tenth of the chain (step 3);
 equal or falling counts are `chain_not_draining` ("Sensitivity", step 3);
 the reach's CRS, stage B's repeated window, `GaugeResult` without
 `reach_fork`, the `direction` cause joined by the command, and the memory
-figure ("The window loop"). **One is changed**: an upstream flag within `U`
-shortened `checked_up_m` and nothing else; the design's "counts as unread"
-now means `drains` false and the cause `chain_not_draining`
-("Sensitivity", step 2, with the proof). **Red amendment** (`@tester`):
+figure ("The window loop"). **One is changed, provisionally**: an upstream
+flag within `U` shortened `checked_up_m` and nothing else; the design's
+"counts as unread" now means `drains` false and the cause
+`chain_not_draining` ("Sensitivity", step 2, with the proof). It is
+`@architect`'s reading, not a ruling: question 6 for Ola, default yes. **Red amendment** (`@tester`):
 `test_sensitivity.py`'s `test_a_flag_upstream_stops_the_read_there` and
 `test_the_read_stops_at_the_first_flag_not_at_a_position` also assert
 `drains` false, `"chain_not_draining"` in `causes` and `well_posed` false;
@@ -243,6 +245,33 @@ now means `drains` false and the cause `chain_not_draining`
 30 m, well posed) stays as it is and must stay green. **Green** (`@developer`, `sensitivity.py`):
 `drains` is also false when the upstream read stopped at an untrusted
 sample whose arc length is within `-U` (a few lines).
+
+**PR 2's code review, round 1 (2026-10-05): a NoData node on the chain.**
+`@reviewer` found that the chain can pass through NoData ("Following the
+river", step 2, "No NoData on the chain"); the design now refuses such a
+station, provisionally (question 5 for Ola, default refuse). **Red**
+(`@tester`, lean): in `test_burn.py`, one test parametrized over two float32
+sentinels, −32767 and 3.4e38: a floor that runs down column 20 above row 20
+and down column 22 from row 20 on, `z[20, 21]` NoData, the mapped line down
+column 20, corridor 30 m. The test first asserts, from the fixture alone,
+that `(20, 21)` is the straight join's middle node between the floor nodes
+`(19, 20)` and `(20, 22)`, so it reaches the join-through-NoData path; then
+`burn_reach` raises `ValueError` and the message names a gap in the DEM.
+The same DEM with data at `(20, 21)` burns without error (the control: the
+check is on the chain, not on NoData anywhere in the window). In
+`test_catchment.py`, one test: the same kind of gap **downstream** of the
+placed node (so that stage A's own NoData and seed refusals cannot fire
+first), and `delineate` with that reach raises `CatchmentError` with the
+gap message. Each must fail on `0588bfa` by not raising, not by another
+refusal; say so in the handback. **Green** (`@developer`): in `burn.py`,
+after `_taut` and before the direction check, a taut-chain node without
+data raises `ValueError` with the plain message of step 2 and the node's
+position in the DEM's CRS; in `catchment.py`, the burn's `ValueError`
+reaches the caller as a `CatchmentError` with the same words (as `_plan`
+turns a `MosaicError` into one); in `sensitivity.py`, the comment at lines
+71-72 says what "Sensitivity", step 2, now says about `D` (past `U` its
+flags do not matter; a node exactly at `U` is a sample and must be
+trusted). A few lines; no other rule changes.
 
 ## What the data says (measured 2026-10-04)
 
@@ -964,8 +993,9 @@ moved to the valley floor, then lowered where it still climbs:
    direction of the line's segment that holds `p`; a point on a vertex takes
    the segment that starts there, the last point the last segment). Ties: the
    nearer to `p`, then the smaller (row, column). A cross-section with no node
-   (only when `corridor` is below half a cell's diagonal, 7.07 m on DTM10)
-   takes the node nearest `p`, same ties. NoData nodes are never chosen: they
+   with data (when `corridor` is below half a cell's diagonal, 7.07 m on
+   DTM10, or when every node in it is NoData) takes the data node nearest
+   `p`, same ties. NoData nodes are never chosen: they
    are left out of the cross-section and of the nearest-node fallback, and a
    point with no data node within its search box is a `ValueError` (pinned at
    PR 2's green step). **Why across and not the whole
@@ -975,8 +1005,13 @@ moved to the valley floor, then lowered where it still climbs:
    corridor. Measured 2026-10-05 with a throwaway script (not committed) on a
    straight floor falling 0.5 m per 10 m, at 0°, 30° and 45° to the lattice:
    the disc rule moved the chosen node 6 to 8 m downstream on average at a
-   15 m corridor, 22 to 26 m at 30 m and 52 to 56 m at 60 m; the
-   cross-section moved it at most 4.6 m either way, at every corridor. A
+   15 m corridor, 22 to 26 m at 30 m and 52 to 56 m at 60 m. The
+   cross-section bounds the move along the line to half a step (5 m on
+   DTM10) by construction, at every corridor; on a floor that is flat
+   across the line and falls along it, the least node of each cross-section
+   sits towards its downstream side, a downstream lean of 3 to 4.5 m on
+   average at 30° to the lattice (`@reviewer`'s probe, PR 2 code review,
+   round 1). A
    downstream bias is what Ola's ruling forbids ("moving a point 100m
    downstream will always give you more inflow"), and it would grow with the
    15 m / 60 m corridor re-runs of the acceptance; across the line, the
@@ -1011,7 +1046,37 @@ moved to the valley floor, then lowered where it still climbs:
    are computed after the cut, along the chain as it stands (10 m for a
    straight step, 14.1 m for a diagonal one on DTM10), and a resample point
    whose node was dropped maps to `chain[k]`, the kept node the cut starts
-   from (for a loop, the first visit). Corridor, 30 m: a guess from the
+   from (for a loop, the first visit).
+   **No NoData on the chain** (PR 2's code review, round 1; provisional,
+   question 5 for Ola, default refuse). The chosen nodes have data, but the
+   straight join between two of them does not look at the nodes it passes,
+   and the taut cut can map the placed node onto one of those. A NoData node
+   on the chain is burnt with its sentinel as its elevation: with −32767,
+   every node below it is lowered to about −32767 m; with a positive
+   sentinel (3.4e38) the node itself is lowered to the floor's height and
+   `lowered_max_m` reports about 3.4e38 m, which reaches the catchment file;
+   the direction check's means read the sentinel too. So **after the taut
+   cut, before the direction check, every node of the taut chain must have
+   data**; if one has none, the station is refused, with the plain message
+   "the river line crosses a gap (NoData) in the DEM at (x, y): the station
+   is refused" (`ValueError` from `burn_reach`, a `CatchmentError` from
+   `delineate`, like the window's NoData refusal). Nodes the cut dropped are
+   never burnt or read and are not checked. One check covers every reader:
+   the placed node is a taut-chain node, the direction check and the
+   descent read only taut-chain nodes, and the extension never takes a
+   NoData node (step 5). Stage B's windows give the same chain as stage A's
+   (the first window already holds the reach and its corridor), so the
+   refusal comes from stage A. Refused, not rerouted: going round the gap
+   (which side, how far) would be a new placement rule. Probe
+   (`@architect`, 2026-10-05, a throwaway script, not committed), float32,
+   the floor down column 20 above row 20 and down column 22 from row 20,
+   `z[20, 21]` NoData, the line down column 20, `U` and corridor 30 m, at
+   200 m: on `0588bfa` the chain passes `(20, 21)`, which is the placed
+   node; `lowered_max_m` is 33,057 m with −32767 (the chain's last node
+   burnt to −32767.04 m) and 3.4e38 with 3.4e38; with data at `(20, 21)`,
+   9.95 m. How many of the 140 stations this refuses is not measured; the
+   acceptance reports it.
+   Corridor, 30 m: a guess from the
    "tens of metres" above; the acceptance re-runs every finding at 15 m and
    60 m.
 3. **Direction check.** If the mean elevation over the chain's last tenth is
@@ -1234,7 +1299,10 @@ shapely):
    unbroken run, so at most `U`). **Downstream, the read must reach `U`**:
    every sample in `(0, U]` is trusted **and the chain has a node at arc
    length `>= U`** (that node is `D`, stage B's; its own count is not a
-   sample and its flags do not matter). This is not `checked_down_m >= U`:
+   sample and its flags do not matter when it lies past `U`; a node exactly
+   at `U`, within the 1e-6 m slack, is both `D` and the last sample in
+   `(0, U]`, and must be trusted like the others: a flag there gives
+   `downstream_unread`). This is not `checked_down_m >= U`:
    where `U` is not a multiple of the step, the farthest sample lies short of
    `U` (with `U` = 35 m on straight steps, the samples are at 10, 20 and
    30 m), and the strict test would mark every such station unread, every
@@ -1245,8 +1313,9 @@ shapely):
    the station is **`uncertain`** (cause `downstream_unread`), not scored.
    Upstream, a river that starts within `U` ends the read without penalty (the
    area above a source is the hillside's), but a flagged count upstream stops
-   it and counts as unread. **What "counts as unread" means** (ruled by
-   `@architect` after PR 2's green step, which gave it no consequence): a
+   it and counts as unread. **What "counts as unread" means** (provisional:
+   `@architect`'s reading after PR 2's green step, which gave it no
+   consequence; question 6 for Ola, default yes): a
    flagged sample within `U` upstream makes **`drains` false**, so the
    station is `uncertain` with the cause `chain_not_draining`. The reason is
    a proof, not a guess: `accumulate` ORs each node's bits into its
@@ -1458,7 +1527,7 @@ class and, for a match, the test that passed. Precedence: `refused`, then
 
 | class | rule | counts as |
 |---|---|---|
-| `refused` | `delineate` refused (NoData, the data's edge, memory cap, tiles on two grids, no river line within the map radius), with its message and `refusal_cause` | reported, not a failure; `mixed_grid` counted apart as known refusals |
+| `refused` | `delineate` refused (NoData, the data's edge, memory cap, tiles on two grids, no river line within the map radius, a NoData node on the river's chain), with its message and `refusal_cause` | reported, not a failure; `mixed_grid` counted apart as known refusals |
 | `uncertain` | not well posed: swing over 5 %, the downstream side not read to `U` (a flag stopped it, or the mapped river ends sooner), the chain not draining along itself or its end open; or the line runs against the DEM's slope | reported with its agreement numbers, not scored |
 | `match` | both overlaps ≥ 95 % (`match_by = "overlap"`), **or** mean divide offset ≤ 3 cells, 30 m on DTM10 (`match_by = "offset"`; the overlap test is tried first) | pass |
 | `close` | both overlaps ≥ 80 % | finding |
@@ -1604,7 +1673,10 @@ first to need it (PR 3 380 to 355, PR 4 310 to 335). PR 2's green step
 44 % margin (598): `burn.py` took 62 more than estimated (the
 cross-section of step 2 and the extension's candidate rules) and `cli.py` 55
 more (the river file's reading and CRS check, the options' checks and help,
-the placement report); the amendment after it adds a few lines.
+the placement report). With the second red amendment's green
+(`0588bfa`) it is 558 net (578 added, 20 removed; `burn.py` 167,
+`gauge.py` 117, `sensitivity.py` 85, `catchment.py` 94, `cli.py` 95);
+the NoData fix of code review round 1 adds a few lines.
 
 | File | What | Estimate |
 |---|---|---|
@@ -1624,11 +1696,11 @@ the placement report); the amendment after it adds a few lines.
 | **PR 3, the stations and rivers** | | **about 355 (511 with the margin)** |
 | `gauge.py` | `Gauge`, `Placement`, `place`, forks, `Reach` | 100 (117 at green) |
 | `burn.py` | valley floor, taut pass, descent, chain end, direction, `GaugePath` | 105 (167 at green) |
-| `sensitivity.py` | `assess`, `Sensitivity`, `drains`, the causes | 75 (83 at green) |
+| `sensitivity.py` | `assess`, `Sensitivity`, `drains`, the causes | 75 (85 at green) |
 | `catchment.py` | request field, stages A and B, burn per window, `GaugeResult` | 95 (94 at green) |
 | `cli.py` | `catchment --rivers` and the placement line | 40 (95 at green) |
 | `docs/benchmarks/<date>/nve-placement/render.py` | the placement figures (evidence script, not counted, Ola's ruling; "Placement figures") | (130) |
-| **PR 2, the gauge on the river** (needs PRs 1 and 3) | | **about 415 (600); 556 at green `91857df`** |
+| **PR 2, the gauge on the river** (needs PRs 1 and 3) | | **about 415 (598); 558 net (578 added) at green `0588bfa`** |
 | `reference.py` | agreement, classes, `match_by`, summary | 115 |
 | `catchment_batch.py` | `BatchRequest`, `BatchSink`, `run_batch`, `StationResult`, `refusal_cause` | 105 |
 | `mosaic.py`, `catchment.py` | `MixedGridError`, `MixedGridRefusal` (round 3, Ola's ruling on counting) | 10 |
@@ -1861,7 +1933,10 @@ built directly or read through PR 3's `read_segments`):
   chosen node is the floor node abeam each point, not one downstream; a node
   exactly `corridor` away is inside; a cross-section with no node takes the
   nearest node; a reach end outside the window is dropped and
-  reported, a placed position outside it is refused.
+  reported, a placed position outside it is refused; **a NoData node on
+  the straight join** between two chosen floor nodes refuses the station,
+  with either sentinel, and with data there the reach burns (PR 2's code
+  review, round 1).
 - `test_sensitivity.py`: a smooth gain; a confluence step of known size at a
   known position; a flat floor; a swing of exactly 0.05 is well posed and
   just above it is not; the swing is one-sided (areas 0.04 below and 0.04
@@ -1883,7 +1958,8 @@ built directly or read through PR 3's `read_segments`):
   node below it (a tributary from the NoData) gives a catchment,
   `downstream_checked` of `partly` or `none` and the cause `downstream_unread`,
   while NoData in the placed
-  catchment itself is refused; stage B grows the window past stage A's, and
+  catchment itself is refused; a NoData node on the chain downstream of the
+  placed node is refused with the gap message; stage B grows the window past stage A's, and
   the result equals a whole-raster run; a reach with `lakes` is refused;
   `reach=None` gives 22's result bit for bit.
 - `test_cli_catchment.py` gains: `--rivers` prints the placement line and
@@ -2030,9 +2106,11 @@ Each has a default; the design above is written to the defaults, so the
 round can start on them and a different answer changes only the part named.
 The earlier questions (which stations, what NVE data to commit, discharge,
 what counts as a good catchment, gauges on lakes) are ruled, under "Ola's
-rulings"; the way a gauge is placed follows your direction. All four below
-are ruled and closed (2026-10-04): question 2 as its entry says, questions 1,
-3 and 4 with their defaults ("Yes to all three.").
+rulings"; the way a gauge is placed follows your direction. Questions 1 to 4
+below are ruled and closed (2026-10-04): question 2 as its entry says, questions 1,
+3 and 4 with their defaults ("Yes to all three."). Questions 5 and 6 came
+from PR 2 (2026-10-05) and are open; the design and the code follow their
+defaults until Ola rules.
 
 1. **When is a station too uncertain to score?** A gauge's coordinates are
    usually a few tens of metres off the river, and further for some. For each
@@ -2076,6 +2154,25 @@ are ruled and closed (2026-10-04): question 2 as its entry says, questions 1,
    closed: the default* (see "Ola's rulings"). *Default: include it,
    as the last piece.* Alternative: leave it out; Femundsenden is then
    refused and the comparison is not made.
+5. **The river's path in the DEM crosses a gap.** The path we burn joins
+   the lowest DEM points beside the mapped river with straight steps, and a
+   step can pass through a cell with no elevation (NoData). Left alone, the
+   no-data value is burnt in as if it were a height, and the station's
+   numbers come out absurd. *Open (2026-10-05). Default: refuse the station,
+   with a message saying the river line crosses a gap in the DEM.*
+   Alternative: route the path round the gap; that is a new placement rule
+   (which side, how far) and would be designed first. How many stations it
+   touches is not known yet; the acceptance run counts them.
+6. **A river point just upstream of the gauge that does not drain through
+   it.** Within the gauge's position uncertainty upstream, a river point
+   whose own catchment reaches the edge of the area read, or a gap in the
+   DEM, cannot drain through the gauge (the gauge's catchment has neither,
+   or the station is refused). So the river there lies outside the gauge's
+   catchment, which is the kind of position sensitivity the check exists to
+   catch. *Open (2026-10-05). Default: yes, mark the station uncertain*
+   (cause "chain not draining"). Alternative: only stop reading the area
+   there, with no other effect, as the first code did; such stations are
+   then scored.
 
 ## Review
 
@@ -2111,3 +2208,6 @@ Fixes for round 2: A and C by `@tester` in `f91cdaa` (re-cited to `project_struc
 
 **29 PR 3, code review, round 6, 2026-10-04.** Range `ea489e5..741504f` (one docs commit, main session; `ROADMAP.md` +1/-1, this file +9/-5). Verdict: APPROVED. Round 5's two blockers and two suggestions closed: the ruling names all three Python legs (`gh pr checks 178` agrees); "Data use" excepts the `NOTICE.md` credit, checked by hand, and the tested credits are tested (`test_fetch_nve.py`: CSV header, catalogue, `NOTICE.txt`); `NOTICE.md`'s "Data in the package" exists; status line and ROADMAP row 29 match the history. `check_citations.py` exits 0; the lines this commit moves are cited only by dated records, except this file's `:55` on `ROADMAP.md:54`, which holds. Master's `accd52a` (h13) touches no file on this branch; `git merge-tree --write-tree HEAD origin/master` is clean, so no merge before the push. CI is owed on the new head; red CI there voids this approval.
 
+**29 PR 2, code review, round 1, 2026-10-05.** Range `529613a..0588bfa` (red `3a06ffc`, amendment `5357785`, green `91857df`, `@architect`'s reading `6f55af3`, second amendment `3c845da`, green `0588bfa`). Verdict: CHANGES REQUESTED. LOC by tokenize over the five `src_python` files: 578 added, 20 removed, 558 net (`burn.py` 167, `gauge.py` 117, `sensitivity.py` 85, `catchment.py` 94, `cli.py` 95 net). This record uses the net figure, as PR 3's did; against the estimate of about 415 (598 with the 44 % margin) it is inside the margin on either basis, and far under 700. Full suite on a rebuilt `_core`: exit 0, 4799 passed, 17 skipped, the prose-read hook silent; mypy, ruff check, ruff format, prohibited deps, detria boundary and check_citations green. Red before green for both pairs: `5357785` 21 failed and 103 errors, then `91857df` 171 passed; `3c845da` on `91857df` 3 failed, then `0588bfa` 172 passed. The suite can fail on both new rules: the whole-disc floor rule fails 8 tests, and dropping the straight-before-diagonal tie fails the embankment test. No mutation testing owed (only `accumulate`'s oracle is invariant-critical, killed with PR 1); no `bench.py` run (no refine or mesh code). `@perf`'s placement figures are still owed before PR 2 is complete. Blocking: (1) a NoData node on the chain: `_floor_node` never picks NoData, but `_join` (`src_python/tin_engine/burn.py@0588bfa:86-97`) links chosen nodes by straight 8-connected runs without looking at the nodes between, and the taut cut can map the placed node onto one. Probe: float32, NoData −32767, floor in column 20 above row 20 and column 22 below, `z[20, 21]` NoData, line down column 20, corridor 30 m: the chain runs through `(20, 21)` and everything below is burnt to about −32767.002 m; with a positive sentinel (3.4e38) the hole is burnt to 290.499 m and `lowered_max_m` of about 3.4e38 reaches the catchment file; the direction check's means read the sentinel too. Write the rule into step 2, covering the taut cut and the direction check, with the refusal as the default for Ola. (2) "Sensitivity", step 2: "its own count is not a sample and its flags do not matter" holds only where `D` lies past `U`; a node exactly at `U` is a sample in `(0, U]` and must be trusted (a flag at +30 m with `U` = 30 gives `downstream_unread`, which the code does correctly); fix the design, and the comment at `src_python/tin_engine/sensitivity.py@0588bfa:71-72` with the green step. (3) The status line and `ROADMAP.md:54` behind the tree; the estimate block's 556; `25-plain-output.md:53`'s citation of the catchment properties. (4) The upstream-flag rule presented as ruled by `@architect`: mark it provisional, an open question for Ola. Suggestions: state the cross-section's bound (half a step; a downstream lean of 3 to 4.5 m on average on a floor flat across, at 30°) rather than "at most 4.6 m either way"; "a cross-section with no node" also happens when every node in it is NoData; `25-plain-output.md`'s field table (lines 89-98, 110-111, 128) cites `cli.py` lines that no longer quote it: pin them to the revision described. Not pushed; no CI.
+
+Fixes for round 1, by `@architect` in the commit that records it: (1) "No NoData on the chain" in step 2 (refuse after the taut cut, before the direction check; question 5, default refuse), the red and green asks in the block "PR 2's code review, round 1", the refusal in the class table and the red suites; (2) the wording of `D` in "Sensitivity", step 2; (3) the status line, `ROADMAP.md:54`, the estimate block (558 net, 578 added; `sensitivity.py` 85). `25-plain-output.md:53` cites `cli.py:1925-1928`, and at `0588bfa` `"fine_area_m2"` is at line 1925 and `"outline_tolerance_m"` at 1928 (`grep -n`), so the citation holds and is left as it is; the round's 1929 did not reproduce. (4) The upstream-flag rule marked provisional, question 6, default yes. Suggestions taken: the cross-section's bound, the all-NoData cross-section, and the field table's `cli.py` citations pinned to `586fbc1`, the revision the inventory describes. The production fixes (the NoData refusal and the `sensitivity.py` comment) come with the red amendment and green step next.
