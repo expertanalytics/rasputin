@@ -162,6 +162,30 @@ src_python/tin_engine/     # public Python API (distribution name: rasputin)
   chains.py                # start_chains: the domain's rings, then every
                            #   feature line, as (indices, role, mask) (16b);
                            #   never imports _core
+  sources.py               # the catalogues `rasputin fetch` and `rasputin
+                           #   fetch-stations` copy from: RemoteSource (ANADEM,
+                           #   GLO-30; 23a-1, 23a-2), StationSource (NVE's HRD,
+                           #   29), notice(); data, imports Pydantic alone, so
+                           #   the mesh path names a key without importing fetch/
+  fetch/                   # copies remote data to disk; the only package that
+                           #   touches the network, and nothing on `rasputin
+                           #   mesh`'s path imports it (23a-2)
+    __init__.py
+    http.py                # RangeClient: byte ranges over HTTP, stdlib only,
+                           #   retries; `User-Agent: rasputin/<version>` (29);
+                           #   query_url; the one module importing urllib
+    plan.py                # FetchRequest -> the blocks meeting the domain's
+                           #   box, from headers alone; pure (23a-2)
+    run.py                 # fetch(): headers, plan, bounded async download;
+                           #   client and cache writer injected (23a-2)
+    nve.py                 # fetch_station_set(source, get_text) -> each file's
+                           #   bytes (stations, references, rivers, manifest
+                           #   last); field allow-lists; writes nothing,
+                           #   cli.py writes the files (29)
+  data/                    # package data, read by importlib.resources
+    nve_hrd_2025.csv       # NVE's 140 HRD stations, 2025 version: which
+                           #   stations, series version, start year; its names
+                           #   only check the extraction from the PDF (29)
   _core.pyi                # type stubs for the compiled extension
   viz/                     # CDT -> SVG renderer; never imports _core
     __init__.py            # re-exports Scene, SvgStyle, build_scene, render_svg
@@ -193,10 +217,25 @@ src_python/tin_engine/     # public Python API (distribution name: rasputin)
                            #   opens nothing, knows no path (16b)
     gml.py                 # read_gml: OGR-written GML2 from a binary stream,
                            #   standard library XML; opens nothing (16b)
-    repository.py          # TiffDemRepository: the ONE io/ module that opens
-                           #   files ("rb"); lists headers, loads tiles (15a);
-                           #   open_geopackage: a read-only SQLite
-                           #   connection (16b)
+    cog.py                 # decode_window: only the blocks a window meets,
+                           #   from a BlockSource (an open file or the tile
+                           #   cache); opens nothing (23a-1)
+    station_set.py         # read_stations -> (stations, crs) and
+                           #   read_references -> ({station: polygon}, crs):
+                           #   fetch-stations' files or a user's points file;
+                           #   `crs` member required, duplicates and wrong
+                           #   geometry refused with ValueError (29)
+    rivers.py              # RiverSegment, kind_of (lake or river, total over
+                           #   NVE's objekttype spellings), drop_copies,
+                           #   read_segments -> (segments, crs, copies
+                           #   dropped); one LineString per segment (29)
+    repository.py          # the ONE io/ module that opens files:
+                           #   TiffDemRepository lists headers, loads tiles
+                           #   (15a); open_geopackage, a read-only SQLite
+                           #   connection (16b); CacheRepository and
+                           #   CachedBlocks read the tile cache (23a-1);
+                           #   CacheWriter writes it under a lock (23a-2);
+                           #   read_json, a JSON document, read-only (29)
     mesh_index.py          # MeshIndex (a cut run's index.json, frozen,
                            #   unknown keys refused), SeamRecord,
                            #   check_conformity (K4); opens nothing (23c)
