@@ -3113,7 +3113,54 @@ equality and DC4's control hold.
       in 23c changes: with increment 20's fix, DC10's scene has no NoData
       vertex.
 
-**B17 and B18 for Ola** are under "New questions, after the rulings".
+11. **Ola's rulings of 2026-10-04 on B17 and B18**, in Ola's words: "Accept
+    within a few micrometers, accept human readable formatting for
+    --memory-budget." Worked out by `@architect` the same day.
+    - **B17 (b): `--memory-budget` takes a size with a unit. In 23c-2.**
+      - The grammar: a whole number of digits, then an optional unit
+        straight after it, with no space. Units are `K`, `M`, `G` and `T`,
+        each optionally followed by `B` or `iB`, and **every one of them is
+        a power of 1024**. The design already reads "16 GB" as 16 GiB, and
+        one meaning per letter is easier to explain than two. Case does not
+        matter. A bare number, or one followed by `B` alone, is bytes. So
+        `16G`, `16g`, `16GB`, `16GiB` and `17179869184` all mean 2^34. The
+        default is shown as `16G` in `--help`, which says "units are powers
+        of 1024".
+      - Refused, as a usage error naming `--memory-budget`: an empty value,
+        a sign, a decimal point (`1.5G`; the message suggests `1536M`), a
+        space inside, a unit with no number, an unknown unit (`16X`, `16P`,
+        `16PB`), and anything else that does not match the grammar (`0x10`).
+        A value below one node's bytes is refused as before.
+      - Where: `tin_engine.decompose.parse_memory_budget(text) -> int`, pure,
+        raising `ValueError`; `cli.py` turns that into the usage error. The
+        index still records bytes (`partition.memory_budget`). About 12
+        lines.
+      - **`@tester`, red in 23c-2:** a table test of
+        `parse_memory_budget` covering every accepted form above with its
+        byte value (`512M` is 2^29, `1T` is 2^40, `1024K` is 2^20, `100B`
+        is 100) and every refusal above. Through the CLI: a cut run with
+        `--memory-budget 16G` writes `memory_budget` 17179869184 in the
+        index and the same piece files as the run given 17179869184; and
+        two of the refusals exit 2 naming the option, with nothing written.
+    - **B18 (a): within a few micrometres. Increment 15c's, test and docs
+      only, in its own small PR off master.** J2 already states the
+      guarantee at the check point's *stored* position
+      (`15c-geographic-dem.md`, J2), and the store resolves 2^-24 of a cell
+      on each axis (`check_points.hpp`, "Packing"). So the product meets
+      J2 as written, and no production code changes. What changes is the
+      independent check, `geographic_fixtures.source_check`, which takes
+      the exact source node. It gets an allowance of `h · 2^-24` (1.8 µm at
+      30 m): a source node outside every triangle by no more than that is
+      judged in the nearest triangle, not counted as uncovered. J2 gains
+      one sentence saying how far a stored position can be from its source
+      node. **`@tester` writes that PR:** the oracle's own test, a
+      hand-built mesh with one source node `h · 2^-25` outside a triangle
+      (judged in it) and one 1 mm outside (still uncovered, the control),
+      plus the J2 sentence in `15c-geographic-dem.md`. No `@developer`, no
+      `@perf`. 23c-2 does not wait for it: once increment 20's fix is in,
+      DC10's scene has no NoData vertex.
+
+**B17 and B18** are under "New questions, after the rulings", each with Ola's ruling.
 
 ## Questions for Ola
 
@@ -3346,6 +3393,10 @@ tests take the option as a whole number of bytes, so 16 GiB is typed
   (about 10 lines in `cli.py`, and one more red test). The index still
   records bytes. Can follow 23c without changing anything it writes.
 
+**Ruled by Ola, 2026-10-04: (b)** ("accept human readable formatting for
+--memory-budget"). The grammar is in point 11 of "23c-2 stopped at
+dbbe1c6", and it lands in 23c-2.
+
 **B18. Elevation points a couple of micrometres outside the mesh.** Asked
 2026-10-04 (23c-2's DC10, reduced by `@developer`). On the geographic-DEM
 path, the source DEM's points are checked one by one after meshing, and a
@@ -3361,6 +3412,9 @@ that far outside the mesh, and the check then counts it as not covered.
 - (b) Store those positions exactly, so the vertex is exactly at the point.
   This is a small change to 15c's check-point store, and it costs memory
   per check point.
+
+**Ruled by Ola, 2026-10-04: (a)** ("accept within a few micrometers"). Where
+it is recorded and tested: point 11 of "23c-2 stopped at dbbe1c6".
 
 **Decided here, which Ola may overrule:** lattice lines on the computation
 lattice as artificial cuts; the partition rule's integer details (near-square
