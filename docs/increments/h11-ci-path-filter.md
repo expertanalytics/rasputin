@@ -1,11 +1,10 @@
 # Harness h11: skip the code jobs on prose-only pull requests
 
-Status: approved by `@reviewer` (round 2, see Review), on condition that CI
-is green after the push. Red step 21d675e, 8db5bfc and
-8986083 (the install trap's copy, §6.1); green 8b5c4ee (`@developer`); the
-branch has no CI run yet. Rules text for §7 written (`@architect`, 2026-10-04).
-After the merge, Ola's settings step (§5, step 2) follows directly; the
-standing yes asked for in §10 is answered.
+Status: merged as #176 (791abb6). Ola's settings step (§5, step 2) is done:
+`CI result` is the one required check on `master`
+(`gh api repos/expertanalytics/rasputin/branches/master/protection/required_status_checks`
+shows it). Next: h12, the fast lane for prose-only changes (§10), not yet
+designed. The rounds are in Review.
 
 Why: `.github/workflows/main.yaml` has no path filter, so a pull request that
 changes only prose (for example #174: `ROADMAP.md` and one increment status
