@@ -18,6 +18,7 @@ here, and `io/geopackage.py` decodes through it.
 
 Increment 29 adds :func:`read_json`, for the station and river readers
 (`io/station_set.py`, `io/rivers.py`), which take a path but open nothing.
+Audit PR C adds :func:`read_text`, for `io/domain_file.py`'s WKT domain.
 """
 
 from __future__ import annotations
@@ -364,6 +365,11 @@ def read_json(path: Path) -> Any:
         return json.load(stream)
 
 
+def read_text(path: Path) -> str:
+    """The text in ``path``, decoded as UTF-8 (audit PR C's WKT domain)."""
+    return Path(path).read_text(encoding="utf-8")
+
+
 __all__ = [
     "CacheError",
     "CacheManifest",
@@ -378,4 +384,5 @@ __all__ = [
     "TileFootprint",
     "open_geopackage",
     "read_json",
+    "read_text",
 ]
