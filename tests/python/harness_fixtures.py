@@ -72,6 +72,15 @@ def clean_env() -> dict[str, str]:
     return {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
 
 
+def is_work_tree_top(path: Path) -> bool:
+    """`path` is the top of a git work tree (not a copy, nor a directory inside another tree)."""
+    top = subprocess.run(
+        ["git", "-C", str(path), "rev-parse", "--show-toplevel"],
+        capture_output=True, text=True, env=clean_env(), check=False,
+    )  # fmt: skip
+    return top.returncode == 0 and Path(top.stdout.strip()).resolve() == path.resolve()
+
+
 def make_repo(root: Path) -> Path:
     """A git repository with the copied scripts and two plain files, in one commit.
 

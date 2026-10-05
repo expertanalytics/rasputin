@@ -27,7 +27,7 @@ from pathlib import Path
 
 import pytest
 
-from harness_fixtures import REAL, Tool, clean_env, git
+from harness_fixtures import REAL, Tool, clean_env, git, is_work_tree_top
 
 cl = Tool("count_loc")
 
@@ -45,6 +45,7 @@ def lines_of(text: str, kind_path: str) -> set[int]:
 
 COUNTED_KINDS = {
     "src_python/tin_engine/gauge.py": "python",
+    "src_python/tin_engine/_core.pyi": "python",  # a stub is Python (review round 1)
     "include/terrain/mesh/x.h": "c++",
     "include/terrain/mesh/x.hpp": "c++",
     "src/x.cpp": "c++",
@@ -173,6 +174,13 @@ CPP_CASES = {
     "comment markers inside an ordinary string literal": (
         'const char* a = "/*";\nint b = 0;\nconst char* u = "//";\nint c;\n',
         {1, 2, 3, 4},
+    ),
+    # Review round 1: a planted fault that dropped character-literal handling
+    # survived. Without it, the `"` inside `'"'` opens a string that ends at the
+    # next `"`, and the `/*` after it is taken for a comment swallowing line 2.
+    "a character literal holding a double quote, then /* inside a string": (
+        'char q = \'"\'; const char* s = "/*";\nint x;\n',
+        {1, 2},
     ),
 }
 
@@ -550,6 +558,60 @@ def test_replace_refs_do_not_change_the_output(branch_repo: Path) -> None:
     assert replaced.stdout == plain.stdout
 
 
+def test_repository_diff_prefixes_do_not_change_the_output(branch_repo: Path) -> None:
+    """Review round 1: a planted fault that dropped the explicit prefixes
+    survived. `diff.srcPrefix`/`diff.dstPrefix` in the repository's own config,
+    which `GIT_CONFIG_GLOBAL` does not reach, move the headers the parser reads."""
+    plain = run_count(branch_repo, "master", "feature")
+    git(branch_repo, "config", "diff.srcPrefix", "SRC/")
+    git(branch_repo, "config", "diff.dstPrefix", "DST/")
+    probe = git(branch_repo, "diff", "-U0", "master...feature")
+    assert "+++ DST/" in probe, "the repository config did not change git's headers"
+    hostile = run_count(branch_repo, "master", "feature")
+    assert hostile.returncode == 0, hostile.stderr
+    assert hostile.stdout == plain.stdout
+
+
+#: `diff.interHunkContext=50`, three ways that `GIT_CONFIG_GLOBAL` does not
+#: reach: the two environment forms and the repository's own config. Fused
+#: hunks carry their context lines in the `@@` ranges, so they would count.
+INTER_HUNK = {
+    "GIT_CONFIG_COUNT": {
+        "GIT_CONFIG_COUNT": "1",
+        "GIT_CONFIG_KEY_0": "diff.interHunkContext",
+        "GIT_CONFIG_VALUE_0": "50",
+    },
+    "GIT_CONFIG_PARAMETERS": {"GIT_CONFIG_PARAMETERS": "'diff.interHunkContext'='50'"},
+    "repository config": {},
+}
+
+
+def inter_hunk_env(repo: Path, how: str) -> dict[str, str]:
+    """The environment for `how`; for the repository config, set it in `repo`."""
+    if how == "repository config":
+        git(repo, "config", "diff.interHunkContext", "50")
+    return {**clean_env(), **INTER_HUNK[how]}
+
+
+@pytest.mark.parametrize("how", sorted(INTER_HUNK))
+def test_inter_hunk_context_does_not_change_the_output(tmp_path: Path, how: str) -> None:
+    """Two one-line changes with a line of code between them: two hunks, 2 added
+    and 2 removed. Fused into one hunk, the middle line would count both ways."""
+    repo = make_counted_repo(tmp_path.resolve() / "repo", {"src/m.py": "a = 1\nx = 3\nb = 2\n"})
+    commit_files(repo, {"src/m.py": "a = 10\nx = 3\nb = 20\n"}, "two changes")
+    plain = parse_report(run_count(repo, "HEAD~1", "HEAD"))
+    assert plain.rows["src/m.py"] == (2, 2, 0)
+    env = inter_hunk_env(repo, how)
+    fused = subprocess.run(
+        ["git", "-C", str(repo), "diff", "-U0", "HEAD~1", "HEAD"],
+        capture_output=True, text=True, env=env, check=True,
+    ).stdout  # fmt: skip
+    assert fused.count("\n@@ ") == 1, f"{how} did not fuse the hunks:\n{fused}"
+    hostile = parse_report(run_count(repo, "HEAD~1", "HEAD", env=env))
+    assert hostile.rows == plain.rows
+    assert hostile.total == plain.total
+
+
 # ---------------------------------------------------------------- recorded counts
 
 #: (base, head) -> the rows with lines counted, and the total, as recorded:
@@ -584,11 +646,13 @@ RECORDED = {
 }
 
 
-@pytest.mark.parametrize(("base", "head"), sorted(RECORDED))
-def test_recorded_counts_from_real_history(base: str, head: str) -> None:
-    """Needs the full history (`fetch-depth: 0` in CI); a missing commit fails,
-    it does not skip, so a shallow clone cannot pass this silently."""
-    for rev in (base, head):
+def needs_history(*revs: str) -> None:
+    """Skip, with the reason, outside a git work tree (a `git archive` copy, as
+    `tools/scratch_copy.py` makes); fail in a work tree that lacks a commit (a
+    shallow clone), so CI's full clone (`fetch-depth: 0`) cannot be lost silently."""
+    if not is_work_tree_top(REAL):
+        pytest.skip(f"{REAL} is not the top of a git work tree, so it has no history to count")
+    for rev in revs:
         found = subprocess.run(
             ["git", "-C", str(REAL), "cat-file", "-e", f"{rev}^{{commit}}"],
             capture_output=True,
@@ -596,7 +660,33 @@ def test_recorded_counts_from_real_history(base: str, head: str) -> None:
             check=False,
         )
         assert found.returncode == 0, f"{rev} is not in this clone; it needs the full history"
+
+
+@pytest.mark.parametrize(("base", "head"), sorted(RECORDED))
+def test_recorded_counts_from_real_history(base: str, head: str) -> None:
+    """Needs the full history; see `needs_history` for when it skips and when it fails."""
+    needs_history(base, head)
     rows, total = RECORDED[(base, head)]
     report = parse_report(run_count(REAL, base, head))
     assert nonzero(report.rows) == rows
     assert report.total == total
+
+
+#: PR #163 (`45acf22`, a merge; its first parent is the base), counted by hand
+#: in review round 1: `refine.hpp` 10, 6, 4 and `lattice_mesh.hpp` 31, 14, 17.
+PR_163 = ("45acf22^1", "45acf22")
+PR_163_ROWS = {
+    "include/terrain/mesh/lattice_mesh.hpp": (31, 14, 17),
+    "include/terrain/refinement/refine.hpp": (10, 6, 4),
+}
+
+
+@pytest.mark.parametrize("how", ["none", *sorted(set(INTER_HUNK) - {"repository config"})])
+def test_pr_163_counts_whatever_the_environment_says_of_hunk_context(how: str) -> None:
+    """Review round 1: with `diff.interHunkContext=50` in the environment, git
+    fuses PR #163's hunks and the count became 63, 42, 21 instead of 41, 20, 21."""
+    needs_history(*PR_163)
+    env = clean_env() if how == "none" else {**clean_env(), **INTER_HUNK[how]}
+    report = parse_report(run_count(REAL, *PR_163, env=env))
+    assert nonzero(report.rows) == PR_163_ROWS
+    assert report.total == (41, 20, 21)

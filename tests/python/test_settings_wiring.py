@@ -25,7 +25,7 @@ from typing import Any
 
 import pytest
 
-from harness_fixtures import REAL, bash_event, clean_env, git, make_repo
+from harness_fixtures import REAL, bash_event, clean_env, git, is_work_tree_top, make_repo
 
 SETTINGS = REAL / ".claude" / "settings.json"
 REQUIRED_READING = REAL / ".claude" / "REQUIRED-READING.md"
@@ -194,15 +194,6 @@ def test_every_hook_script_is_covered_by_path() -> None:
         "guard_unattended.py",
         "guard_spawn.py",
     }
-
-
-def is_work_tree_top(path: Path) -> bool:
-    """`path` is the top of a git work tree (not a copy, nor a directory inside another tree)."""
-    top = subprocess.run(
-        ["git", "-C", str(path), "rev-parse", "--show-toplevel"],
-        capture_output=True, text=True, env=clean_env(), check=False,
-    )  # fmt: skip
-    return top.returncode == 0 and Path(top.stdout.strip()).resolve() == path.resolve()
 
 
 @pytest.mark.parametrize(("event", "matcher", "command"), bare_path_hooks())
