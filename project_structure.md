@@ -151,7 +151,25 @@ src_python/tin_engine/     # public Python API (distribution name: rasputin)
                            #   Catchment: seed, the window loop over 15a's
                            #   plan, _core.upstream, the fine ring, and
                            #   _core.reduce_ring; takes a DemRepository and
-                           #   no path (22)
+                           #   no path (22); with a river reach, the pour
+                           #   point is the gauge's node on the burnt reach (29)
+  gauge.py                 # place: a station's foot P on NVE's river lines,
+                           #   by tier, and the reach round it (29, PR 2);
+                           #   lake_seed -> LakeSeed: the gauges seeded with
+                           #   their lake, by containment and one distance
+                           #   (PR 4); pure shapely, no DEM, no file
+  burn.py                  # burn_reach: the reach moved onto the window's
+                           #   valley floor and burnt in -> (burnt copy,
+                           #   GaugePath); numpy only (29, PR 2)
+  sensitivity.py           # assess -> Sensitivity: is the area well defined
+                           #   along the burnt chain within U; arrays in,
+                           #   no DEM, no shapely (29, PR 2)
+  reference.py             # agreement, classify, summarise: our catchment
+                           #   against NVE's polygon, counted on the DEM's
+                           #   node lattice; pure, no file (29, PR 4)
+  catchment_batch.py       # run_batch: place, lake_seed, delineate in a
+                           #   worker thread, compare, one StationResult row
+                           #   per station to a BatchSink; no paths (29, PR 4)
   landcover.py             # regions, label_triangles: a land-cover code per
                            #   triangle, components across unconstrained edges,
                            #   one point-in-polygon test per component (16c);
@@ -179,9 +197,9 @@ src_python/tin_engine/     # public Python API (distribution name: rasputin)
     run.py                 # fetch(): headers, plan, bounded async download;
                            #   client and cache writer injected (23a-2)
     nve.py                 # fetch_station_set(source, get_text) -> each file's
-                           #   bytes (stations, references, rivers, manifest
-                           #   last); field allow-lists; writes nothing,
-                           #   cli.py writes the files (29)
+                           #   bytes (stations, references, rivers, lakes,
+                           #   manifest last); field allow-lists; writes
+                           #   nothing, cli.py writes the files (29)
   data/                    # package data, read by importlib.resources
     nve_hrd_2025.csv       # NVE's 140 HRD stations, 2025 version: which
                            #   stations, series version, start year; its names
@@ -198,11 +216,14 @@ src_python/tin_engine/     # public Python API (distribution name: rasputin)
     svg.py                 # (Scene, SvgStyle) -> str; the stylesheet lives here
     fixtures.py            # the synthetic gallery, declarative; `rasputin draw
   io/                      # all file decoding AND encoding lives here, with
-                           #   known exceptions to move here in a follow-up:
-                           #   `palette`'s JSON is encoded in cli.py (16c), and
-                           #   the catchment GeoJSON writer is in cli.py (22);
-                           #   see "Python API surface"
+                           #   known exceptions, encoded in cli.py with the
+                           #   standard library: `palette`'s JSON (16c), to
+                           #   move here in a follow-up, and station-
+                           #   catchments' results.csv and summary.json (29)
     __init__.py
+    geojson.py             # catchment_geojson: a polygon, its CRS and its
+                           #   properties -> the catchment file's bytes; opens
+                           #   nothing (22's writer, moved here in 29)
     ply.py                 # arrays -> PLY bytes; takes no path and opens nothing;
                            #   face_codes= adds the face property
                            #   land_cover_code (16c)
@@ -224,7 +245,9 @@ src_python/tin_engine/     # public Python API (distribution name: rasputin)
                            #   read_references -> ({station: polygon}, crs):
                            #   fetch-stations' files or a user's points file;
                            #   `crs` member required, duplicates and wrong
-                           #   geometry refused with ValueError (29)
+                           #   geometry refused with ValueError (29);
+                           #   read_lakes -> (Lake parts, crs): the lakes
+                           #   file, a MultiPolygon split (29, PR 4)
     rivers.py              # RiverSegment, kind_of (lake or river, total over
                            #   NVE's objekttype spellings), drop_copies,
                            #   read_segments -> (segments, crs, copies
@@ -512,7 +535,7 @@ There is no `setup.py`. It was removed with the foundation reset, along with the
 
 The public API is the `tin_engine` package, calling into `tin_engine._core`. `tin_engine.viz` is the renderer that turns a triangulation into an SVG a person can look at; it consumes the `typing.Protocol`s in `viz/protocols.py` and **never imports `_core`**, so it is testable with no compiled extension in the process. `cli.py` is the single composition root that joins the two -- the same shape as the rule below that exactly one module adapts decoded raster data into `_core`. The `rasputin draw` command drives it: it looks a fixture up in `viz.fixtures.GALLERY`, maps that fixture's **string** chain roles onto `_core.ChainRole` -- `viz/` may not name the enum, so the mapping is the composition root's -- runs `build_pslg` and `triangulate`, and hands the fixture itself to `build_scene` as the `PslgLike`, which is what lets a fixture the validator rejects still be drawn. It is also the only place a path exists, and it resolves and refuses one before writing.
 
-**The catchment GeoJSON writer is in `cli.py`** (increment 22, `rasputin catchment`): it builds a one-feature `FeatureCollection` with a `crs` member and writes it, an exception to "all file encoding lives in `io/`". Recommended (@architect, 2026-09-29): move it, as a function from a polygon, its CRS text and its properties to bytes that takes no path and opens nothing, into `io/geojson.py`, the shape `io/ply.py` and `io/vtk_legacy.py` already have; `cli.py` keeps only the write. It is small, and a GUI or API worker writing a catchment would otherwise have to go through the CLI. Until it moves, this paragraph is the record of the exception.
+The catchment file's bytes come from `io/geojson.py`'s `catchment_geojson`, which opens nothing; `rasputin catchment` and `rasputin station-catchments` both call it, and `cli.py` keeps only the write.
 
 The pre-migration `rasputin.*` modules (`mesh.py`, `geometry.py`, `reader.py`, `tin_repository.py` and friends) are not in the working tree. They, with the CGAL-based `triangulate_dem.h` and `bindings.cpp`, left it in the release-hygiene PR and are kept in history under the annotated tag `legacy-archive` (`docs/increments/release-hygiene.md`, section 3). A shape worth preserving is read back with `git show legacy-archive:legacy/rasputin/<file>` before it is reintroduced, and an increment's "Legacy" section greps the tag. `tools/check_citations.py` resolves a `legacy/…:N` citation through the tag.
 

@@ -36,6 +36,21 @@ so the fetch sees the real 140 stations. Station `i` (list order) sits on a
   name fails whatever the packaged list writes for this station (the real
   "Femundsenden (Femunden)" would pass if the list held it in full).
   Every other station's layer 0 name is its list row's.
+
+PR 4, lake gauges ("The station set", "Lake gauges"): the fake also answers
+`Innsjodatabase2` layer 5 by envelope, as it answers ELVIS, and leaks
+`globalid`, `kommune` and `hoyde` into every lake answer. Its lakes:
+
+- `LAKE_SHARED` lies between `NEWEST` and `TIE` and reaches within 50 m of
+  both points, so both ±100 m envelopes return it;
+- `LAKE_MULTI` is a MultiPolygon of two parts, the first containing the
+  `COPIES` station point (served before `LAKE_SHARED`, so the writer must
+  sort by `objectid`);
+- `LAKE_NAMELESS` (`vatnlnr` 0, `navn` null) contains the `MULTI` point;
+- `LAKE_FAR` lies 150 m east of the `MULTI` point: no ±100 m envelope meets it.
+
+`truncate_lakes` flags a lake answer whose envelope holds a named station
+as truncated, as `truncate` does for ELVIS.
 """
 
 from __future__ import annotations
@@ -60,7 +75,8 @@ SERVICES = "https://kart.nve.no/enterprise/rest/services"
 LAYER_0 = f"{SERVICES}/HydrologiskeData3/MapServer/0/query"
 LAYER_38 = f"{SERVICES}/HydrologiskeData3/MapServer/38/query"
 LAYER_2 = f"{SERVICES}/Elvenett1/MapServer/2/query"
-ENDPOINTS = {LAYER_0: 0, LAYER_38: 38, LAYER_2: 2}
+LAYER_5 = f"{SERVICES}/Innsjodatabase2/MapServer/5/query"
+ENDPOINTS = {LAYER_0: 0, LAYER_38: 38, LAYER_2: 2, LAYER_5: 5}
 
 #: "Data use": the explicit allow-list per layer, never `outFields=*`.
 ALLOW: Mapping[int, frozenset[str]] = {
@@ -78,18 +94,22 @@ ALLOW: Mapping[int, frozenset[str]] = {
     2: frozenset(
         {"objectid", "objekttype", "strekninglnr", "elvid", "vassdragsnr", "elvenavn", "vatnlnr"}
     ),
+    5: frozenset({"objectid", "vatnlnr", "navn", "areal_km2"}),
 }
 #: Never collected ("Data use"); `qnormal` prefixes layer 38's discharge normals.
-FORBIDDEN = ("stasjoneier", "oppdatertav", "globalid", "qnormal")
+FORBIDDEN = ("stasjoneier", "oppdatertav", "globalid", "qnormal", "kommune")
 OWNER = "Eier Kraftverk AS"
 LEAKED: Mapping[int, Mapping[str, Any]] = {
     0: {"stasjoneier": OWNER, "globalid": "{0F0F}"},
     38: {"qnormal6190_m3s": 6.12, "globalid": "{1E1E}"},
     2: {"oppdatertav": "ABC", "globalid": "{2D2D}"},
+    5: {"globalid": "{3C3C}", "kommune": "3421", "hoyde": 701},
 }
 
 #: `map_radius + reach_up + 500 m` each way ("The station set").
 ENVELOPE_HALF = 2000.0
+#: The lake query's envelope, each way round the station point ("Lake gauges").
+LAKE_ENVELOPE_HALF = 100.0
 CHUNK = 40
 
 NEWEST, TIE, COPIES, MULTI, NO_HIERARCHY = "2.11.0", "2.32.0", "2.142.0", "19.79.0", "2.265.0"
@@ -99,6 +119,7 @@ RENAMED, LAYER_0_NAME = "311.4.0", "Layer-0 name of 311.4.0"
 SHARED = 900001
 COPY_LOW, COPY_HIGH, SAME_NUMBER = 900010, 900011, 900012
 NULL_TYPE, BLANK_TYPE, ODD_LAKE, STRAY = 900020, 900021, 900022, 900023
+LAKE_SHARED, LAKE_MULTI, LAKE_NAMELESS, LAKE_FAR = 800001, 800002, 800003, 800004
 #: Epoch milliseconds, as layer 38 serves `oppdateringsdato`.
 MS_2023_04_11, MS_2025_03_19, MS_2026_05_28 = 1681171200000, 1742342400000, 1779926400000
 
@@ -180,16 +201,18 @@ class Station:
 
 @dataclass
 class FakeNve:
-    """The three layers in memory; `get_text(url)` answers one query."""
+    """The four layers in memory; `get_text(url)` answers one query."""
 
     stations: list[Station]
     polygons: list[dict[str, Any]]
     segments: list[dict[str, Any]]
+    lakes: list[dict[str, Any]] = field(default_factory=list)
     calls: list[Call] = field(default_factory=list)
     unexpected: list[str] = field(default_factory=list)
     drop_point: set[str] = field(default_factory=set)
     drop_polygon: set[str] = field(default_factory=set)
     truncate: set[str] = field(default_factory=set)
+    truncate_lakes: set[str] = field(default_factory=set)
     #: `(layer, field)` pairs the fake leaves out of every answer of that layer.
     omit: set[tuple[int, str]] = field(default_factory=set)
     max_active: int = 0
@@ -232,16 +255,18 @@ class FakeNve:
             features = [_project(p, wanted, 38) for p in self.polygons if _number(p) in numbers]
         else:
             area = box(*call.envelope)
+            served = self.segments if call.layer == 2 else self.lakes
             features = [
-                _project(s, wanted, 2)
-                for s in self.segments
+                _project(s, wanted, call.layer)
+                for s in served
                 if shape(s["geometry"]).intersects(area)
             ]
         omitted = {name for layer, name in self.omit if layer == call.layer}
         for f in features:
             f["properties"] = {k: v for k, v in f["properties"].items() if k not in omitted}
         doc: dict[str, Any] = {"type": "FeatureCollection", "features": features}
-        if call.layer == 2 and any(area.contains(_xy(self.station(n))) for n in self.truncate):
+        flagged = {2: self.truncate, 5: self.truncate_lakes}.get(call.layer, set())
+        if any(area.contains(_xy(self.station(n))) for n in flagged):
             doc["exceededTransferLimit"] = True
             doc["properties"] = {"exceededTransferLimit": True}
         return json.dumps(doc)
@@ -343,7 +368,47 @@ def build_fake() -> FakeNve:
     ):
         line = [(m.x - 300, m.y - 100 * (k + 1)), (m.x + 300, m.y - 100 * (k + 1))]
         segments.append(_segment(oid, line, elvid=f"19-79-{k}", objekttype=kind, vatnlnr=lake))
-    return FakeNve(stations, polygons, segments)
+    lakes = [
+        _lake(
+            LAKE_MULTI,
+            {
+                "type": "MultiPolygon",
+                "coordinates": [[_square(c.x, c.y, 60.0)], [_square(c.x + 500.0, c.y, 40.0)]],
+            },
+            vatnlnr=4120,
+            navn="Tvillingtjørna",
+        ),
+        _lake(
+            LAKE_SHARED,
+            _box(newest.x + 50.0, newest.y - 200.0, tie.x - 50.0, tie.y + 200.0),
+            vatnlnr=4110,
+            navn="Mellomvatnet",
+        ),
+        _lake(
+            LAKE_NAMELESS,
+            {"type": "Polygon", "coordinates": [_square(m.x, m.y, 30.0)]},
+            vatnlnr=0,
+            navn=None,
+        ),
+        _lake(
+            LAKE_FAR,
+            _box(m.x + 150.0, m.y - 50.0, m.x + 250.0, m.y + 50.0),
+            vatnlnr=4140,
+            navn="Fjerntjønna",
+        ),
+    ]
+    return FakeNve(stations, polygons, segments, lakes)
+
+
+def _box(x0: float, y0: float, x1: float, y1: float) -> dict[str, Any]:
+    ring = [[x0, y0], [x1, y0], [x1, y1], [x0, y1], [x0, y0]]
+    return {"type": "Polygon", "coordinates": [ring]}
+
+
+def _lake(oid: int, geometry: dict[str, Any], *, vatnlnr: int, navn: str | None) -> dict[str, Any]:
+    """One layer 5 feature, with every field the fake can serve."""
+    props = {"objectid": oid, "vatnlnr": vatnlnr, "navn": navn, "areal_km2": 0.05}
+    return {"type": "Feature", "id": oid, "geometry": geometry, "properties": props}
 
 
 def _square(x: float, y: float, half: float) -> list[list[float]]:

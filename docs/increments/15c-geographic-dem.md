@@ -928,7 +928,7 @@ and 15a's `mosaic.py` 60 % over, so the worst case applies 39 %, with
 | **15c-2** | **The geographic path, in Python, ending with the final check** | | |
 | | `io/geotiff.py`: geographic 2D, degree units | 30 | |
 | | `io/models.py`: `crs`, `geographic`, `epsg: int \| None` | 15 | |
-| | `raster.py`: the gate; `mosaic.py` and `catchment.py` (`catchment.py:132-133`): `EPSG:{...}` through `meta.crs` | 13 | |
+| | `raster.py`: the gate; `mosaic.py` and `catchment.py` (`catchment.py:194-195`): `EPSG:{...}` through `meta.crs` | 13 | |
 | | `target_grid.py`: `TargetGrid`, spacing, extent, `source_region` | 80 | |
 | | `target_grid.py`: `SourceWindows`, `TileWindows`, `resample` | 55 | |
 | | `target_grid.py`: `check_point_blocks` | 35 | |

@@ -22,8 +22,14 @@ target_include_directories(terrain_test_support INTERFACE
 # Every suite gets the same warning posture: the tests compile under exactly the
 # flags the core does, so a warning introduced by a header is caught by whoever
 # includes it first.
+#
+# Optional `COST <value>`: a ctest scheduling hint put on every Catch2 case of
+# the target, so `ctest --parallel` starts the long ones first. Without it the
+# suite is registered exactly as before. The helpers below forward ${ARGN}, so
+# they accept it too.
 function(add_terrain_test name)
-    add_executable(${name} ${ARGN})
+    cmake_parse_arguments(PARSE_ARGV 1 arg "" "COST" "")
+    add_executable(${name} ${arg_UNPARSED_ARGUMENTS})
     target_link_libraries(${name} PRIVATE
         terrain_headers
         terrain_test_support
@@ -32,7 +38,11 @@ function(add_terrain_test name)
     target_compile_options(${name} PRIVATE
         -Wall -Wextra -Wpedantic -Werror
     )
-    catch_discover_tests(${name})
+    if(DEFINED arg_COST)
+        catch_discover_tests(${name} PROPERTIES COST ${arg_COST})
+    else()
+        catch_discover_tests(${name})
+    endif()
 endfunction()
 
 add_terrain_test(test_point unit/test_point.cpp)
@@ -365,7 +375,10 @@ target_link_libraries(test_refinement_lattice_position PRIVATE Threads::Threads)
 # cases. Both start threads (refine's scheduler; ES4 sweeps 1, 2 and 8).
 add_terrain_backend_test(test_refinement_strip_oracle unit/test_refinement_strip_oracle.cpp)
 target_link_libraries(test_refinement_strip_oracle PRIVATE Threads::Threads)
-add_terrain_backend_test(prop_refinement_edge_strip property/prop_refinement_edge_strip.cpp)
+# COST 100: its ES9 case runs 97-171 s under the sanitizers; without a cost
+# ctest --parallel would start it near the end (h14 section 2c).
+add_terrain_backend_test(prop_refinement_edge_strip property/prop_refinement_edge_strip.cpp
+                         COST 100)
 target_link_libraries(prop_refinement_edge_strip PRIVATE Threads::Threads)
 
 # L16 (docs/increments/15f-edge-strip.md): detail::coincidence_radius, by

@@ -55,6 +55,7 @@ import shapely
 from shapely.geometry import Point, Polygon
 from typer.testing import CliRunner
 
+import gauge_fixtures as gf
 from catchment_fixtures import (
     EPSG,
     X0,
@@ -70,13 +71,17 @@ from catchment_fixtures import (
 )
 from gpkg_fixtures import DTM10, OLA_NORWAY, Layer, Row, write_gpkg
 from mosaic_fixtures import quadrants
+from nve_fixtures import collection, river, write
 from test_catchment import moved, to_4326
 from test_cli_mesh import plain
 from test_cli_mesh_mosaic import write_tiles
 from test_outline import square_area
+from tin_engine._core import accumulate as core_accumulate
+from tin_engine._core import upstream as core_upstream
 from tin_engine.cli import app
 from tin_engine.crs import parse_crs, reprojector
 from tin_engine.domain import read_domain
+from tin_engine.raster import to_core
 
 runner = CliRunner(env={"NO_COLOR": "1", "TERM": "dumb"})
 
@@ -505,3 +510,209 @@ def test_bygdin_reduced_keeps_the_area_and_meshes_at_10_m(tmp_path: Path) -> Non
     )
     assert code == 0, output
     assert vtk.is_file() and vtk.stat().st_size > 0
+
+
+# ---------------------------------------------------------------------------
+# Increment 29, PR 2: `--rivers`, `--map-radius` and `--reach-up`
+#
+# `docs/increments/29-nve-reference-catchments.md`, "The batch" (the paragraph
+# on `rasputin catchment`), "Ola's rulings" (the stderr line of copies
+# dropped) and "The red suites", PR 2's `test_cli_catchment.py`. The DEM is
+# `gauge_fixtures.valley(dam=True)` on a 10 m lattice, cut into four tiles;
+# the river file is one line down the valley floor (objectid 8841, river Nea)
+# and one exact copy of it, which the reader drops.
+#
+# The line runs 4 m east of the floor's column, and the station is 16 m
+# east of the line, beside row 150, so `U` is 30 m. The valley floor is taken
+# across the line ("Following the river", step 2): each resample point's
+# cross-section is its own row, columns CC - 2 to CC + 3 within the default
+# 30 m corridor (the nearest outside are 34 m and 36 m away, so no node sits
+# on the corridor's boundary), and its least elevation is the floor column CC,
+# also on the embankment's rows, where the crest ties every column and the
+# nearer, CC, wins. So the placed node is (150, CC), 4 m across the river from
+# `P`, and the embankment's three nodes are the only ones lowered. Measured on
+# PR 1's flood when this was written: the chain drains node by node, no count
+# within 30 m carries a flag bit, and the swing is 0.029.
+#
+# Pinned here (the design gives the stderr sentence as an example; these
+# pieces of it are pinned, its numbers' formats are not): the line holds
+# "placed on the river line 16 m from the station", "(river Nea, line 8841)",
+# "moved 4 m onto the DEM's valley floor", "drain through it", "within 30 m up
+# and down the river" and "well defined"; the copies line reads "rivers: 2
+# segments read, 1 exact copy dropped" (segments read counts the file's
+# features, copies included). The file's properties gain `placed_on`,
+# `elvid`, `objectid`, `node_offset_m`, `lowered_nodes`, `reach_up_m`,
+# `downstream_checked`, `swing` and `causes` (names from the design's
+# `StationResult`). A river file whose CRS is not the DEM's is refused, and so
+# are a reach with `--lakes`, no line within `--map-radius`, and a radius or
+# reach that is not a finite positive number.
+# ---------------------------------------------------------------------------
+
+
+STATION = gf.lat(gf.CC + 2, 150)
+PLACED = (150, gf.CC)
+#: The mapped line's column: 4 m east of the valley floor.
+LINE_COL = gf.CC + 0.4
+NEA = 8841
+
+
+def gauge_station(x: float = STATION[0], y: float = STATION[1]) -> tuple[str, ...]:
+    return ("--seed", repr(x), repr(y), "--seed-crs", gf.EPSG)
+
+
+@pytest.fixture
+def valley_dir(tmp_path: Path) -> Path:
+    tile = gf.tile_of(gf.valley(dam=True))
+    write_tiles(tmp_path / "valley", quadrants(tile, row_cut=120, col_cut=30, overlap=1))
+    return tmp_path / "valley"
+
+
+def rivers_file(path: Path, line: Any = None, crs: str = gf.EPSG) -> Path:
+    line = list(gf.column_line(LINE_COL, 20, 230)) if line is None else line
+    features = [
+        river(NEA, line, elvid="2-11-1", elvenavn="Nea", vassdragsnr="002.A"),
+        river(NEA + 1, line, elvid="2-11-1", elvenavn="Nea", vassdragsnr="002.A"),
+    ]
+    return write(path, collection(features, crs=crs))
+
+
+@pytest.fixture
+def rivers(tmp_path: Path) -> Path:
+    return rivers_file(tmp_path / "rivers.geojson")
+
+
+def burnt_valley() -> np.ndarray:
+    """The valley, burnt along the floor (any chain down column CC that
+    crosses the embankment lowers the same three nodes)."""
+    return gf.hand_burn(gf.valley(dam=True), [(r, gf.CC) for r in range(52, 166)])
+
+
+def placed_mask() -> np.ndarray:
+    z = burnt_valley()
+    seed = np.zeros(z.shape, dtype=np.uint8)
+    seed[PLACED] = 1
+    return np.asarray(core_upstream(to_core(gf.tile_of(z)), seed).mask)
+
+
+def expected_swing() -> float:
+    count = np.asarray(core_accumulate(to_core(gf.tile_of(burnt_valley()))).count, dtype=float)
+    a0 = count[PLACED]
+    return float(max(a0 - count[147, gf.CC], count[153, gf.CC] - a0) / a0)
+
+
+def test_rivers_places_the_gauge_and_says_where(
+    tmp_path: Path, valley_dir: Path, rivers: Path
+) -> None:
+    output = run(valley_dir, tmp_path / "c.geojson", *gauge_station(), "--rivers", str(rivers))
+    assert re.search(r"\bplaced on the river line 16 m from the station\b", output), output
+    assert "(river Nea, line 8841)" in output, output
+    assert re.search(r"\bmoved 4 m onto the DEM's valley floor\b", output), output
+    assert "farther on" not in output, output
+    assert re.search(r"\bkm(2|²) drain through it\b", output), output
+    assert re.search(r"\bwithin 30 m up and down the river\b", output), output
+    assert re.search(r"\bwell defined\b", output), output
+
+
+def test_rivers_writes_the_placed_catchment(tmp_path: Path, valley_dir: Path, rivers: Path) -> None:
+    out = tmp_path / "c.geojson"
+    run(valley_dir, out, *gauge_station(), "--rivers", str(rivers))
+    area = square_area(filled(placed_mask())) * gf.D * gf.D
+    polygon = read_domain(out).polygon
+    assert polygon.area == pytest.approx(area, rel=1e-9)
+    assert polygon.contains(Point(gf.lat(gf.CC, 60)))  # above the embankment
+
+
+def test_rivers_writes_the_placement_and_the_sensitivity(
+    tmp_path: Path, valley_dir: Path, rivers: Path
+) -> None:
+    out = tmp_path / "c.geojson"
+    run(valley_dir, out, *gauge_station(), "--rivers", str(rivers))
+    props = feature(out)["properties"]
+    assert props["placed_on"] == "any"
+    assert props["objectid"] == NEA
+    assert props["elvid"] == "2-11-1"
+    assert props["node_offset_m"] == pytest.approx(4.0, abs=1e-6)
+    assert props["lowered_nodes"] == len(gf.DAM_ROWS)
+    assert props["reach_up_m"] == pytest.approx(1000.0, abs=1e-6)
+    assert props["downstream_checked"] == "whole"
+    assert props["swing"] == pytest.approx(expected_swing(), rel=1e-9)
+    assert props["causes"] == []
+
+
+def test_rivers_reports_the_copies_dropped(tmp_path: Path, valley_dir: Path, rivers: Path) -> None:
+    output = run(valley_dir, tmp_path / "c.geojson", *gauge_station(), "--rivers", str(rivers))
+    assert re.search(r"\brivers: 2 segments read, 1 exact copy dropped\b", output), output
+
+
+def test_a_station_in_wgs84_is_placed_the_same(
+    tmp_path: Path, valley_dir: Path, rivers: Path
+) -> None:
+    utm, wgs = tmp_path / "utm.geojson", tmp_path / "wgs.geojson"
+    run(valley_dir, utm, *gauge_station(), "--rivers", str(rivers))
+    lon, lat_ = to_4326(*STATION)
+    run(valley_dir, wgs, "--seed", repr(lon), repr(lat_), "--rivers", str(rivers))
+    assert read_domain(wgs).polygon.equals_exact(read_domain(utm).polygon, 0.0)
+
+
+def test_reach_up_is_passed_on(tmp_path: Path, valley_dir: Path, rivers: Path) -> None:
+    out = tmp_path / "c.geojson"
+    run(valley_dir, out, *gauge_station(), "--rivers", str(rivers), "--reach-up", "200")
+    assert feature(out)["properties"]["reach_up_m"] == pytest.approx(200.0, abs=1e-6)
+
+
+def test_without_rivers_nothing_is_placed(tmp_path: Path, valley_dir: Path) -> None:
+    out = tmp_path / "c.geojson"
+    output = run(valley_dir, out, *gauge_station(*gf.lat(gf.CC, 150)))
+    assert "placed on" not in output
+    assert "placed_on" not in feature(out)["properties"]
+
+
+def test_no_line_within_the_map_radius_is_refused(
+    tmp_path: Path, valley_dir: Path, rivers: Path
+) -> None:
+    output = refused(
+        tmp_path, "--dem", str(valley_dir), *gauge_station(), "--rivers", str(rivers),
+        "--map-radius", "15",
+    )  # fmt: skip
+    assert re.search(r"\bno mapped river line within 15 m\b", output), output
+
+
+def test_the_map_radius_defaults_to_500_m(tmp_path: Path, valley_dir: Path) -> None:
+    far = rivers_file(tmp_path / "far.geojson", list(gf.column_line(gf.CC, 0, 5)))
+    output = refused(tmp_path, "--dem", str(valley_dir), *gauge_station(), "--rivers", str(far))
+    assert re.search(r"\bno mapped river line within 500 m\b", output), output
+
+
+@pytest.mark.parametrize("option", ["--map-radius", "--reach-up"])
+@pytest.mark.parametrize("value", ["0", "-5", "nan", "inf"])
+def test_a_bad_radius_or_reach_is_refused(
+    tmp_path: Path, valley_dir: Path, rivers: Path, option: str, value: str
+) -> None:
+    output = refused(
+        tmp_path, "--dem", str(valley_dir), *gauge_station(), "--rivers", str(rivers),
+        option, value,
+    )  # fmt: skip
+    assert option in output, output
+
+
+def test_rivers_with_lakes_is_refused(tmp_path: Path, valley_dir: Path, rivers: Path) -> None:
+    lake = lake_geojson(tmp_path / "l.geojson", lake=Point(STATION).buffer(50.0))
+    output = refused(
+        tmp_path, "--dem", str(valley_dir), *gauge_station(), "--rivers", str(rivers),
+        "--lakes", str(lake),
+    )  # fmt: skip
+    assert re.search(r"(?i)lake", output), output
+
+
+def test_a_river_file_in_another_crs_is_refused(tmp_path: Path, valley_dir: Path) -> None:
+    to_3035 = reprojector(gf.EPSG, "EPSG:3035")
+    line = [tuple(p) for p in to_3035(list(gf.column_line(LINE_COL, 20, 230)))]
+    other = rivers_file(tmp_path / "r3035.geojson", line, crs="EPSG:3035")
+    output = refused(tmp_path, "--dem", str(valley_dir), *gauge_station(), "--rivers", str(other))
+    assert re.search(r"\bCRS\b", output), output
+    assert "--rivers" in output, output
+
+
+def test_map_radius_without_rivers_is_refused(tmp_path: Path, valley_dir: Path) -> None:
+    output = refused(tmp_path, "--dem", str(valley_dir), *gauge_station(), "--map-radius", "100")
+    assert "--rivers" in output, output

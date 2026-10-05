@@ -1746,7 +1746,7 @@ testing" — and they are **not all registered the same way**.
 
 Four go through `add_terrain_backend_test`, because they name a kernel.
 `prop_noding_broad_phase` goes through plain `add_terrain_test`
-(`tests/cpp/CMakeLists.txt:189`), **and the asymmetry is a design property, not
+(`tests/cpp/CMakeLists.txt:199`), **and the asymmetry is a design property, not
 an oversight.** `broad_phase.hpp` includes `core/bbox.hpp`, `core/point.hpp` and
 `core/segment.hpp` and no predicate header: it compares bounding boxes and never
 asks an orientation. Registering its suite without the backend leaves
