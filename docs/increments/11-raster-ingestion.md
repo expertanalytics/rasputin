@@ -53,6 +53,9 @@ reach `_core`; ruling 2 says why, and names the increment that finishes the job.
    code reached through 2048 is always refused, whatever it resolves to (§5,
    refusal 13). *Amended (round 3), user ruling:* the 3072 CRS must also be
    two-dimensional. A compound CRS in 3072 is refused (§5, refusal 13a).
+   *Amended (Ola's ruling D9, 2026-10-05):* a 3072 of 32767 may yield an
+   accepted CRS when its parameters match an EPSG code on the datum 2048
+   names; the result is that code. `docs/increments/geotiff-crs-by-parameters.md`.
 7. **Projected-and-metre is tested on the constructed CRS**, never on which
    GeoKeys are present.
 8. **`always_xy=True` is a hard requirement**, enforced by a grep test that
