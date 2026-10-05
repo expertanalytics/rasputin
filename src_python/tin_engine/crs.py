@@ -25,8 +25,6 @@ from pyproj.crs import ProjectedCRS
 from pyproj.exceptions import CRSError, ProjError
 
 Xy = npt.NDArray[np.float64]
-SAME_CONFIDENCE = 70  # PROJ identify, 0-100: 70 is "equivalent, names differ"
-FRAME_TOLERANCE = 1e-12  # unit factors relative, prime meridian in radians
 
 
 def parse_crs(text: str | CRS) -> CRS:
@@ -73,41 +71,18 @@ def transform_definition(src: str | CRS, dst: str | CRS) -> str:
 
 
 def same_crs(a: str | CRS, b: str | CRS) -> bool:
-    """Whether coordinates in `a` and in `b` name the same points: PROJ's
-    equivalence once both are in x-then-y order, or else one EPSG code in
-    common at `SAME_CONFIDENCE`, read from each as given, in the same frame
-    (`docs/increments/python-audit.md`, section 9). No operation is False."""
-    pa, pb = parse_crs(a), parse_crs(b)
+    """Whether coordinates in `a` and in `b` name the same points: PROJ calls
+    them equivalent once both are in x-then-y order, and the operation it
+    builds between them is its `noop` (`docs/increments/python-audit.md`,
+    section 9). No operation is False."""
     try:
-        t = _transformer(pa, pb)
+        t = _transformer(a, b)
     except ProjError:
         return False
     src, dst = t.source_crs, t.target_crs
     if src is None or dst is None:
         return False
-    if src.equals(dst):
-        return True
-    codes = [{m.code for m in p.list_authority("EPSG", SAME_CONFIDENCE)} for p in (pa, pb)]
-    return bool(codes[0] & codes[1]) and _same_frame(src, dst)
-
-
-def _same_frame(a: CRS, b: CRS) -> bool:
-    """Same axis directions and unit factors, axis by axis, and the same
-    prime meridian; `a` and `b` already in x-then-y order."""
-    if len(a.axis_info) != len(b.axis_info):
-        return False
-    for u, v in zip(a.axis_info, b.axis_info, strict=True):
-        if u.direction.lower() != v.direction.lower() or not math.isclose(
-            u.unit_conversion_factor, v.unit_conversion_factor, rel_tol=FRAME_TOLERANCE
-        ):
-            return False
-    pm = [
-        0.0
-        if c.prime_meridian is None
-        else c.prime_meridian.longitude * float(c.prime_meridian.unit_conversion_factor)
-        for c in (a, b)
-    ]
-    return math.isclose(pm[0], pm[1], rel_tol=0.0, abs_tol=FRAME_TOLERANCE)
+    return src.equals(dst) and str(t.definition).startswith("proj=noop")
 
 
 def transform_label(src: str | CRS, dst: str | CRS) -> str:
