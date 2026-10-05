@@ -31,12 +31,18 @@ Row = tuple[str, int, int, int]
 #: User and system config, replace refs: none may change what is counted.
 GIT_ENV = {"GIT_CONFIG_GLOBAL": os.devnull, "GIT_CONFIG_NOSYSTEM": "1",
            "GIT_NO_REPLACE_OBJECTS": "1"}  # fmt: skip
-#: Explicit prefixes, so a repository's own `diff.noprefix` cannot move the headers.
-DIFF = ("diff", "-M", "--no-ext-diff", "--no-color", "--src-prefix=a/", "--dst-prefix=b/")
+#: Config given in the environment (`GIT_CONFIG_COUNT` with its `_KEY_n`/`_VALUE_n`,
+#: `GIT_CONFIG_PARAMETERS`): dropped from what git sees.
+ENV_CONFIG = re.compile(r"GIT_CONFIG_(?:COUNT|PARAMETERS|KEY_\d+|VALUE_\d+)$")
+#: Explicit prefixes and hunk context, so the repository's own config
+#: (`diff.noprefix`, `diff.srcPrefix`, `diff.interHunkContext`) cannot move the
+#: headers or fuse hunks.
+DIFF = ("diff", "-M", "--no-ext-diff", "--no-color", "--src-prefix=a/", "--dst-prefix=b/",
+        "--inter-hunk-context=0")  # fmt: skip
 SKIPPED_DIRS = ("tests/", "docs/")
 SUFFIXES: dict[str, Kind] = {
-    ".py": "python", ".h": "c++", ".hpp": "c++", ".cpp": "c++", ".cc": "c++", ".cxx": "c++",
-    ".cmake": "cmake", ".sh": "shell",
+    ".py": "python", ".pyi": "python", ".h": "c++", ".hpp": "c++", ".cpp": "c++",
+    ".cc": "c++", ".cxx": "c++", ".cmake": "cmake", ".sh": "shell",
 }  # fmt: skip
 #: The prefix of a raw string literal, `R`, `LR`, `uR`, `UR` or `u8R`, not inside a name.
 RAW_PREFIX = re.compile(r"[^A-Za-z0-9_](?:u8|[LuU])?R$")
@@ -201,9 +207,14 @@ def tally(
     return sorted(rows), sorted(skipped)
 
 
+def _env() -> dict[str, str]:
+    """This process's environment, less config given in it, plus `GIT_ENV`."""
+    return {**{k: v for k, v in os.environ.items() if not ENV_CONFIG.match(k)}, **GIT_ENV}
+
+
 def _git(*args: str) -> str:
     done = subprocess.run(["git", *args], capture_output=True, text=True, errors="replace",
-                          env={**os.environ, **GIT_ENV}, check=False)  # fmt: skip
+                          env=_env(), check=False)  # fmt: skip
     if done.returncode != 0:
         first = (done.stderr.strip().splitlines() or ["failed"])[0]
         raise RuntimeError(f"git {args[0]}: {first}")

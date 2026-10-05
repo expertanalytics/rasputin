@@ -4,11 +4,20 @@
     python3 tools/scratch_copy.py <rev> <dir>
 
 Extracts `git archive <rev>` into `<dir>` (missing or empty, outside this
-repository), copies the built `_core` from this worktree's `.venv` into the
-copy's package, and prints one line: the command that runs `pytest` on the
-copy with the worktree's interpreter, the editable finder dropped so that
-`tin_engine` is imported from the copy. Append test paths to it, or keep the
-`tests/python/` it ends with.
+repository and outside the main checkout that holds it), copies the built
+`_core` from this worktree's `.venv` into the copy's package, and prints one
+line: the command that runs `pytest` on the copy with the worktree's
+interpreter. To run some tests only, replace the `tests/python/` it ends with
+by their paths.
+
+The command sets `PYTHONPATH` to a generated `sitecustomize.py` in
+`<dir>/.scratch_copy/` and to `<dir>/src_python`. The sitecustomize drops the
+editable finder at every interpreter start, after the `.pth` file installed
+it, so `tin_engine` is imported from the copy in pytest's process and in any
+Python process a test starts. It cannot reach a child whose environment
+replaces `PYTHONPATH`, such as one built from scratch
+(`tests/python/test_io_geotiff.py:1271`): that child imports the worktree's
+code, and a mutant run there can report a false survivor.
 
 Spec: docs/increments/h16-harness-fixes.md §2, T2. A refusal or a git error
 is exit 2 with one `scratch_copy:` line on stderr.
@@ -28,27 +37,52 @@ ROOT = Path(__file__).resolve().parent.parent
 GIT_ENV = {**os.environ, "GIT_CONFIG_GLOBAL": os.devnull, "GIT_CONFIG_NOSYSTEM": "1",
            "GIT_NO_REPLACE_OBJECTS": "1"}  # fmt: skip
 CXX = ("include", "src", "bindings", "CMakeLists.txt")
-#: Run by the worktree's interpreter: drop the editable finder, put the copy first.
-PROGRAM = (
-    "import sys; sys.meta_path[:] = "
-    '[f for f in sys.meta_path if "editable" not in repr(f).lower()]; '
-    'sys.path.insert(0, "src_python"); import pytest; sys.exit(pytest.main(sys.argv[1:]))'
+#: Run at every interpreter start by way of `PYTHONPATH`: drop the editable finder.
+SITECUSTOMIZE = (
+    "import sys\n"
+    'sys.meta_path[:] = [f for f in sys.meta_path if "editable" not in repr(f).lower()]\n'
 )
+PROGRAM = "import sys, pytest; sys.exit(pytest.main(sys.argv[1:]))"
+
+
+def _main_checkout() -> Path:
+    """The work tree of the repository's common git dir: the main checkout."""
+    common = subprocess.run(["git", "-C", str(ROOT), "rev-parse", "--path-format=absolute",
+                             "--git-common-dir"], capture_output=True, text=True, env=GIT_ENV,
+                            check=False)  # fmt: skip
+    return Path(common.stdout.strip()).resolve().parent if common.returncode == 0 else ROOT
+
+
+def _extract(archive: bytes, target: Path) -> None:
+    """`tar -x` into `target`; on failure, leave it missing or empty, as it was."""
+    existed = target.exists()
+    target.mkdir(parents=True, exist_ok=True)
+    tar = subprocess.run(["tar", "-x", "-C", str(target)], input=archive, capture_output=True,
+                         check=False)  # fmt: skip
+    if tar.returncode == 0:
+        return
+    if existed:
+        for child in target.iterdir():
+            shutil.rmtree(child) if child.is_dir() and not child.is_symlink() else child.unlink()
+    else:
+        shutil.rmtree(target)
+    first = (tar.stderr.decode(errors="replace").strip().splitlines() or ["failed"])[0]
+    raise RuntimeError(f"tar -x: {first}")
 
 
 def copy(rev: str, target: Path) -> str:
     """Make the copy; return the command line to print. `RuntimeError` refuses."""
     if target.exists() and (not target.is_dir() or any(target.iterdir())):
         raise RuntimeError(f"{target} exists and is not empty")
-    if target == ROOT or target.is_relative_to(ROOT):
-        raise RuntimeError(f"{target} is inside the repository {ROOT}")
+    for repo in (ROOT, _main_checkout()):
+        if target.is_relative_to(repo):
+            raise RuntimeError(f"{target} is inside the repository {repo}")
     archive = subprocess.run(["git", "-C", str(ROOT), "archive", "--end-of-options", rev],
                              capture_output=True, env=GIT_ENV, check=False)  # fmt: skip
     if archive.returncode != 0:
         first = (archive.stderr.decode(errors="replace").strip().splitlines() or ["failed"])[0]
         raise RuntimeError(f"git archive {rev}: {first}")
-    target.mkdir(parents=True, exist_ok=True)
-    subprocess.run(["tar", "-x", "-C", str(target)], input=archive.stdout, check=True)
+    _extract(archive.stdout, target)
     cores = sorted(ROOT.glob(".venv/lib/python3.*/site-packages/tin_engine/_core*.so"))
     package = target / "src_python" / "tin_engine"
     if not cores:
@@ -62,9 +96,14 @@ def copy(rev: str, target: Path) -> str:
     if cores and same.returncode != 0:
         print(f"scratch_copy: the copied _core was built from HEAD, whose C++ differs from {rev}",
               file=sys.stderr)  # fmt: skip
+    site = target / ".scratch_copy"
+    site.mkdir()
+    (site / "sitecustomize.py").write_text(SITECUSTOMIZE)
+    path = f"{site}{os.pathsep}{target / 'src_python'}"
     python = ROOT / ".venv" / "bin" / "python"
-    quoted = shlex.quote(str(target)), shlex.quote(str(python)), shlex.quote(PROGRAM)
-    return "cd {} && {} -c {} tests/python/".format(*quoted)
+    quoted = (shlex.quote(str(target)), shlex.quote(path), shlex.quote(str(python)),
+              shlex.quote(PROGRAM))  # fmt: skip
+    return "cd {} && PYTHONPATH={} {} -c {} tests/python/".format(*quoted)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -74,7 +113,7 @@ def main(argv: list[str] | None = None) -> int:
         return 2
     try:
         print(copy(args[0], Path(args[1]).resolve()))
-    except (RuntimeError, subprocess.CalledProcessError) as exc:
+    except RuntimeError as exc:
         print(f"scratch_copy: {exc}", file=sys.stderr)
         return 2
     return 0
