@@ -196,6 +196,15 @@ def test_every_hook_script_is_covered_by_path() -> None:
     }
 
 
+def is_work_tree_top(path: Path) -> bool:
+    """`path` is the top of a git work tree (not a copy, nor a directory inside another tree)."""
+    top = subprocess.run(
+        ["git", "-C", str(path), "rev-parse", "--show-toplevel"],
+        capture_output=True, text=True, env=clean_env(), check=False,
+    )  # fmt: skip
+    return top.returncode == 0 and Path(top.stdout.strip()).resolve() == path.resolve()
+
+
 @pytest.mark.parametrize(("event", "matcher", "command"), bare_path_hooks())
 def test_hook_is_executable_in_the_checkout(event: str, matcher: str | None, command: str) -> None:
     """The real file has its executable bit, on disk and in git's index (100755)."""
@@ -203,6 +212,8 @@ def test_hook_is_executable_in_the_checkout(event: str, matcher: str | None, com
     path = REAL / relative
     assert path.is_file(), f"{relative} is wired on {event} but missing"
     assert os.access(path, os.X_OK), f"{relative} is not executable (mode {path.stat().st_mode:o})"
+    if not is_work_tree_top(REAL):  # h16 P9: a `git archive` copy has no index to read
+        pytest.skip(f"{REAL} is not the top of a git work tree, so git's index mode is not checked")
     staged = git(REAL, "ls-files", "-s", "--", relative).split()
     assert staged, f"{relative} is not tracked"
     assert staged[0] == "100755", f"{relative} is tracked at mode {staged[0]}, not 100755"
