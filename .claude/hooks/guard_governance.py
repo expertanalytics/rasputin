@@ -78,7 +78,7 @@ GOVERNED_GLOBS = (".claude/settings*.json*",)
 
 #: Directory prefixes where every file is a gate: these turn prose into refusals.
 GOVERNED_PREFIXES = ("tools/check_", ".claude/agents/", ".claude/hooks/", ".claude/skills/",
-                     ".git/hooks/", ".claude/briefs/")
+                     ".git/hooks/", ".claude/briefs/", ".git/remotes/", ".git/branches/")
 
 #: Matched with endswith only: a basename rule would govern every file named config.
 GOVERNED_SUFFIXES = (".git/config",)

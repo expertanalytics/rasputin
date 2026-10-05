@@ -25,7 +25,9 @@ read is judged by the text rules below, as before h4.
 docs/increments/h16-harness-fixes.md §2 adds: a fetch into a named ref and a
 `git replace` write ask (G1); a git or gh command the guard does not know, such
 as an alias, asks, since it cannot see what runs (G2); and gh's group and verb
-are read past its `-R`/`--repo` option (G6).
+are read past its `-R`/`--repo` option (G6), and glued or clustered `gh api`
+and `curl` options are read as the flags they are (G6, round 7). A git or gh
+command run by another program is judged too (G7, `runs`).
 """
 
 import functools
@@ -75,7 +77,14 @@ CONFIG_WRITE_VERBS = {"set", "unset", "rename-section", "remove-section", "edit"
 CONFIG_READS = {"--list", "-l", "get", "list"}
 REPLACE_LISTS = {"-l", "--list"}
 GH_FIELDS = {"-f", "-F", "--field", "--raw-field", "--input"}
-CURL_DATA = {"-d", "-F", "--form", "--json", "-T", "--upload-file"}
+CURL_DATA = ("--data", "--form", "--json", "--upload-file")
+#: Config keys that steer a fetch (G1): prefixes, and exact keys, compared lower-cased.
+FETCH_KEYS = ("remote.", "url.", "include.", "includeif.")
+FETCH_EXACT = ("core.sshcommand", "fetch.bundleuri")
+#: Assignments stripped from the argv that steer a fetch, read from the text instead.
+FETCH_TEXT = re.compile(r"GIT_CONFIG|GIT_SSH|\b(HOME|XDG_CONFIG_HOME)=")
+#: Programs that take a command as one string (G7 c), and shells (G7 b).
+STRING_RUNNERS, SHELLS = {"watch", "parallel", "flock"}, {"sh", "bash", "zsh"}
 #: gh's top-level commands (`gh help`, gh 2.101) less its alias `co`, which a user can redefine,
 #: plus `help` itself, which only reads (Ola's ruling, 2026-10-05).
 GH_COMMANDS = {
@@ -165,7 +174,7 @@ def git_why(sub: str, args: list[str]) -> str | None:
 
 
 def fetch_named(words: list[str], sub: str, args: list[str], text: str) -> bool:
-    """G1: a fetch steered into named refs by --refmap, --stdin, or a remote/url override."""
+    """G1: a fetch steered into named refs by --refmap, --stdin, a config override or the env."""
     if not (sub in ("fetch", "pull") or (sub == "remote" and positionals(args)[:1] == ["update"])):
         return False
     keys = [a.split("=")[0] for a in args]  # git takes any unambiguous prefix of a long option
@@ -175,8 +184,9 @@ def fetch_named(words: list[str], sub: str, args: list[str], text: str) -> bool:
     head = words[1:len(words) - len(args) - 1]
     given = [v for f, v in pairwise(head) if f in ("-c", "--config-env")]
     given += [w.split("=", 1)[1] for w in head if w.startswith("--config-env=")]
-    # GIT_CONFIG_* assignments are stripped from the argv, so only the text shows them.
-    return any(g.lower().startswith(("remote.", "url.")) for g in given) or "GIT_CONFIG" in text
+    keys = [g.split("=", 1)[0].lower() for g in given]
+    steered = any(k.startswith(FETCH_KEYS) or k in FETCH_EXACT for k in keys)
+    return steered or FETCH_TEXT.search(text) is not None
 
 
 def gh_words(words: list[str]) -> list[str] | None:
@@ -201,17 +211,36 @@ def segment_why(words: list[str], text: str = "") -> str | None:
     if gh and gh[0] not in GH_COMMANDS:
         return UNKNOWN
     if gh and gh[0] == "api":
-        rest = words[words.index("api") + 1:]
+        # A run of `-i` (gh's one short flag without a value) glued before another flag is cut.
+        rest = [re.sub(r"^-i+(?=[^-i])", "-", a) for a in words[words.index("api") + 1:]]
         given = method(rest, "-X", "--method")
-        fields = any(a in GH_FIELDS or a.split("=")[0] in GH_FIELDS for a in rest)
+        fields = any(a.split("=")[0] in GH_FIELDS or a[:2] in ("-f", "-F") for a in rest)
         if (given is not None and given != "GET") or (given is None and fields):
             return "gh api with a writing method changes the forge"
     if "curl" in words and any(FORGE_HOST in w for w in words):
-        given = method(words, "-X", "--request")
-        data = any(w in CURL_DATA or w.startswith("--data") for w in words)
+        # `--expand-x` is `--x`; a short cluster has data letters before its `X`, its method after.
+        longs = ["--" + w[9:] if w.startswith("--expand-") else w for w in words]
+        clusters = [w for w in words if w[:1] == "-" and w[1:2] not in ("", "-")]
+        given = method([f"-X{w.split('X', 1)[1]}" if w in clusters and "X" in w else w
+                        for w in longs], "-X", "--request")  # fmt: skip
+        data = any(w.startswith(CURL_DATA) for w in longs) or any(
+            set(w.split("X")[0]) & set("dFT") for w in clusters)
         if (given is not None and given not in ("GET", "HEAD")) or data:
             return "curl with a writing method to the forge"
     return None
+
+
+def runs(words: list[str]) -> list[tuple[list[str], bool]]:
+    """G7: (argv, bare) for the command and each command its later words run."""
+    found, name = [(words, False)], words[0].rsplit("/", 1)[-1] if words else ""
+    for at, word in enumerate(words[1:], 1):
+        if word.rsplit("/", 1)[-1] in ("git", "gh"):  # (a) a bare tail
+            found.append((words[at:], True))
+        texts = [shlex.join(words[at:])] if word.rsplit("/", 1)[-1] in SHELLS else []  # (b)
+        texts += [word] if name in STRING_RUNNERS and len(word.split()) > 1 else []  # (c)
+        for text in texts if shell_scan else []:
+            found += [pair for s in shell_scan.parse(text) or [] for pair in runs(s.argv)]
+    return found
 
 
 def publishes(words: list[str]) -> list[str]:
@@ -271,11 +300,11 @@ def main() -> int:
             reasons = [why for pattern, why in PUBLISHES if pattern.search(command)]
             commands = [tokens(segment) for segment in SEGMENTS.split(command)]
         else:
-            reasons = [why for s in simples for why in publishes(s.argv)]
-            commands = [s.argv for s in simples]
-        for words in commands:
+            reasons, commands = [], [s.argv for s in simples]
+        for words, bare in [pair for argv in commands for pair in runs(argv)]:
+            reasons += publishes(words)
             why = segment_why(words, command)
-            if why is not None:
+            if why is not None and not (bare and why == UNKNOWN):  # a bare tail never gives G2's
                 reasons.append(why)
         reasons = list(dict.fromkeys(reasons))
         if not reasons:
