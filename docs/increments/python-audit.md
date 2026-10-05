@@ -36,9 +36,11 @@ finds no fourteenth. Red tests 11 and 12 are in `20bcf2c`; `@developer`'s
 green commit is `5197f9a`. Code review round 1 found a third false "the
 same" (a `+lon_0` held only in PROJ's remark), so the rule is re-ruled from
 what the transform does, not from CRS attributes (section 9, "After code
-review round 1"). Next: `@tester` re-spells the datum-less PROJ-string
-fixtures and adds the red rows listed there, then `@developer`, then
-`@reviewer` round 2.
+review round 1"). `@tester`'s re-spelt fixtures and red rows are in
+`13b3e6d`, with Ola's ruling D15 b (a PROJ string naming no datum is not its
+EPSG code, and the refusal says which code to write) folded into section 9
+("After the round-1 red step"). Next: `@developer`, then `@reviewer`
+round 2.
 
 Re-checked against master `44fa7f5`: `git diff --stat 12dace7 44fa7f5 --
 src_python` is empty, and of the files cited below only `tools/brief.py`
@@ -1049,6 +1051,15 @@ One changes, by design: the three "one CRS" refusals become one, in plain words.
 |---|---|---|
 | `single_crs` (all three sites) | `the tiles are in 2 CRSs, ['EPSG:25832', 'EPSG:25833']; need one`, and on the domain path `... EPSG:[25832, 25833]; a domain needs one` | `the DEM files are in 2 different CRSs (EPSG:25832, EPSG:25833); all must be in one CRS` |
 
+Two more gain a hint, by Ola's ruling D15 b ("After the round-1 red step"
+below): the two refusals that compare a river file's or a request's CRS
+against the DEM's.
+
+| Where | Today | After, when the hint applies |
+|---|---|---|
+| `check_reach_crs` (`src_python/tin_engine/catchment.py@44fa7f5:185-186`) | `the river file's CRS, X, is not the DEM's, EPSG:n` | the same, then `; if you mean EPSG:n, write EPSG:n` |
+| `delineate`'s reach check (`src_python/tin_engine/catchment.py@44fa7f5:202-203`) | `the river reach must be in the DEM's CRS, EPSG:n` | the same, then `; if you mean EPSG:n, write EPSG:n` |
+
 Every other wording is unchanged and stays pinned by its suite:
 `cannot read the CRS ...` (`parse_crs`), `the river file's CRS, X, is not the
 DEM's, Y`, `the river reach must be in the DEM's CRS, Y`, `F is in X but the
@@ -1196,6 +1207,18 @@ differ).
 - ***Red*, `tests/python/test_domain.py`**, the leak at a site: `DomainPolygon(polygon=<a 1 by 1 degree box at 0-1 E, 50-51 N>, crs=<the +lon_0=10 string>).to_crs("EPSG:4326")` has its polygon's bounds 10 degrees further east (`minx` within 1e-9 of 10.0); at `5197f9a` it comes back unchanged.
 - **Red test 12** stays: the None branch returns before the `noop` leg reads `definition`.
 
+**After the round-1 red step** (`13b3e6d`), one line each:
+
+- Ola's ruling, verbatim: "D15 b". The main session's option b: a PROJ string that names no datum is not its EPSG code (as on master), and the refusal adds a hint naming the code to write.
+- The hint, appended to the refusal text: `; if you mean EPSG:n, write EPSG:n`, where `n` is the DEM's code.
+- Two sites only, both in `catchment.py`: `check_reach_crs` and `delineate`'s reach check (refusal wordings above). Other refusing sites and every record stay as they are.
+- When: `parse_crs(dem_crs).to_epsg(min_confidence=100)` is a code `n`, and the refused CRS's `to_epsg(min_confidence=100)` is None. A refused CRS with a code of its own (`EPSG:32633` against an EPSG:25833 DEM) gets no hint: its writer already chose a code.
+- Ruled on the default to Ola's open question: the hint shows even when the refused CRS matches no code at all, so the Lambert at 13.5 E gets it too. The hint offers a code; it does not claim the two are the same.
+- Where: a private `_code_hint(given, dem_crs) -> str` in `catchment.py` (about 5 lines), returning the hint or `""`. Not in `crs.py`: both callers are in one module, and `crs.py`'s public surface stays `same_crs`, `transform_label`, `single_crs`. It runs only on the refusing path, so its identification calls (milliseconds) never touch an accepted run; `same_crs` has already parsed `given`, so it raises nothing new.
+- `@tester`'s departure, accepted: test 6's refusal of the Lambert at 13.5 E, and `test_a_reach_in_another_crs_is_refused`, assert `startswith(today's words)`, not equality, since the hint may follow; the hint is pinned by `in` at the two no-datum tests.
+- `@tester`'s departure, accepted: `crs_fixtures.axes_swapped` reverses the axis list of the code's PROJJSON with its `id` removed, then writes WKT2; it asserts the ID is gone and that pyproj's `==` calls the result different, so a no-op swap fails loudly.
+- `@tester`'s departure, accepted: the `+lon_0=10` domain test bounds all four of the box's coordinates within 1e-9 degrees (the design named `minx` only); 1e-9 degrees is about 0.1 mm at longitudes up to 11, far inside the 10-degree move it detects.
+
 ### Net production lines
 
 **Measured at `5197f9a`: +36** (`python3 tools/count_loc.py 44fa7f5
@@ -1212,7 +1235,8 @@ is all line-splitting the design did not cost, none of it new logic:
   lines: `dem_input.py` is +4, not -4. `cli.py` is -5 against -6;
   `catchment.py` -3 as designed; the other four files 0.
 
-**After code review round 1: about +15.** The rule above drops
+**After code review round 1: about +20**, the D15 b hint's `_code_hint`
+and its two call sites (about +5) included. The rule above drops
 `_same_frame` (15 lines), the two constants (2), and 4 lines of
 `same_crs` (the code sets, the separate `equals` return, and the parse
 `_transformer` already does). The `dem_input.py` import may be packed onto
@@ -1265,7 +1289,10 @@ a wrong line. No citation points into the test files this PR edits.
    that CRS, so with it `--out-crs` resamples and a river file is refused,
    as on master; the `+towgs84` spelling is not the same; nor is one with
    an axis pointing the other way, another prime meridian, or a `+lon_0`
-   on a `longlat`; CRS84 is the same as EPSG:4326.
+   on a `longlat`; CRS84 is the same as EPSG:4326. **Answered by Ola,
+   "D15 b"**: the no-datum limit stands, and the river-file and reach
+   refusals add `; if you mean EPSG:n, write EPSG:n` ("After the round-1
+   red step").
 
 ## Review
 
