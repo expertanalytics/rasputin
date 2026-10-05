@@ -814,7 +814,7 @@ earlier "under 2 mm" bound (identification admitting a scale factor off by
 rule no longer uses. The Austrian file's longitude of origin
 (13.33333333300013 against EPSG's 13.3333333333333) is inside PROJ's
 tolerance: EPSG:31287 written as WKT2 with that value is the same as
-EPSG:31287 (question 1).
+EPSG:31287 (by name; renamed "unknown" it is not, see question 1).
 
 *Rejected, each on the probe set below ("breaks" counts triples where a is
 the same as b and b as c, but a is not the same as c):*
