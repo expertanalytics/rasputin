@@ -42,7 +42,9 @@ EPSG code, and the refusal says which code to write) folded into section 9
 ("After the round-1 red step"). `@developer`'s green commit for them is
 `65cd528`. Code review round 2 asked for prose only (this paragraph, the
 net lines, section 6's row B, and the hint's scope), fixed in section 9 and
-the review record. Next: `@reviewer` round 3, a quick check of those
+the review record. Prose correction after approval: section 9's question 1
+no longer claims B's rule accepts the Austrian Lambert built from its GeoKeys.
+Next: `@reviewer` round 3, a quick check of those
 fixes; then push on Ola's yes.
 
 Re-checked against master `44fa7f5`: `git diff --stat 12dace7 44fa7f5 --
@@ -1285,10 +1287,13 @@ a wrong line. No citation points into the test files this PR edits.
    openDEM file?** Default: yes, as a later small PR after B. The reader
    would build the CRS from the GeoKeys on the datum they name (MGI,
    EPSG:4312, for the Austrian file), not as a PROJ string, which names no
-   datum and so is never the same as an EPSG code under B's rule. It is
-   then the same as EPSG:31287 by B's rule (probe: EPSG:31287 as WKT2 with
-   the file's `lon_0=13.33333333300013` is equivalent and a `noop`), and
-   named by `to_epsg`. One that matches no code stays refused as today. It overturns increment 11's rulings 6 and 7
+   datum and so is never the same as an EPSG code under B's rule. B's rule
+   does not then accept it (the earlier probe kept EPSG's name in the WKT2,
+   so PROJ matched by name; named "unknown", the pipeline is an
+   inverse-then-forward Lambert, not a `noop`). The later PR matches by its
+   own rule, same datum and PROJ equivalence on the east-north pair:
+   `docs/increments/geotiff-crs-by-parameters.md` on branch
+   `worktree-geotiff-param-crs`. One that matches no code stays refused as today. It overturns increment 11's rulings 6 and 7
    ("the CRS is resolved only through `pyproj.CRS.from_epsg`"), hence the
    question.
 2. **The new wording** for DEM files in more than one CRS (table above).
