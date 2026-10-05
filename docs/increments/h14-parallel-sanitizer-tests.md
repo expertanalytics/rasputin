@@ -560,3 +560,7 @@ Still to come, after the push: §6's four checks on the pull request's CI run
 (the test count matches the Linux C++ job; ctest's total time at most 0.5
 times the sum of per-test times; ES9 starts less than 30 s after the first
 test; the Test step under 5.0 minutes), recorded as the next round.
+
+### Round 5: `@reviewer`, build, 0630745..4efbfc8 (summarised from `@reviewer`'s handback)
+
+Verdict: APPROVED for the first push, on condition that the pull request's CI is green. Both round-4 findings closed: `05b-noder-driver.md:1749` now cites `tests/cpp/CMakeLists.txt:199`, which is the `prop_noding_broad_phase` call; the status line is true. 0 production lines in the range. `check_citations.py` exits 0; the live at-risk citations hold, the rest sit in dated records.
