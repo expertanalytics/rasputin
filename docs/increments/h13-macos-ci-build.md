@@ -1,8 +1,8 @@
 # Harness h13: the macOS C++ job in CI
 
-Status: edit done (a77879f); approved by `@reviewer`, round 2 (see Review);
-awaiting the push, then the PR's CI check (§6), whose numbers are recorded
-as a further review round. Ruled by Ola (§8). Mechanics, not a design
+Status: merged as #177 (accd52a); all four checks of §6 met (the post-push
+CI record in Review). Next: the asan+ubsan tests run in parallel, its own
+increment (ruling 2 of §8), not yet designed. Mechanics, not a design
 question: one workflow edit (`@developer`), no production code, no test suite
 (§6 says how the change is checked instead).
 
@@ -254,3 +254,11 @@ file.
 
 **h13, review, round 2, 2026-10-04.** Range `a77879f..14d6adc` (the increment file only); whole branch `d926644..14d6adc`, 0 production lines. Verdict: APPROVED, before the first push. Round 1's blockers closed: §1 quotes gnu.org's *Parallel Execution* page word for word, and the older sentence is credited to `make(1)`; §6 has the spawner record the CI numbers after the PR's run. The `cmake(1)` quotation, both sentences and the option order, matches cmake.org. §4's empty-`getconf` point probed: `cmake --build b --parallel ""` runs `make -j` with no limit and exits 0. Run 37229043133: 1st to 108th compile 3.66 s (macOS) and 4.31 s (ubuntu); ctest 100 % of 994 on both C++ core legs; the 10 s threshold can fail and leaves margin. `check_citations.py` exits 0; `h10-merge-queue.md:183` is a quoted record. Suggestions, not taken before the push: write 3.7 s throughout (§6 item 2 says 3.6 s); call §6 item 2 the only check that tells an empty `getconf` apart from a wrong diagnosis.
 
+**h13, post-push CI record, 2026-10-04.** The §6 check, read by `@architect` after the merge from `gh run view <id> --json jobs` (step start to end, whole seconds) and each C++ core job's log (`gh run view --job <id> --log`). Runs: the PR's 37232172673 (`pull_request`, head `97bde1d`) and the merge queue's 37233115840 (`merge_group`, `accd52a`); both conclude `success`, every job green.
+
+1. macOS `Build` under 6.0 minutes: **met**. 140 s (2.3 min) on the PR run, 84 s (1.4 min) in the queue, against 19.7-25.1 min in §2a. The paging diagnosis of §2d stands.
+2. The 108th `Building CXX object` line more than 10 s after the 1st, macOS job: **met**. 42.5 s on the PR run (20:28:12.24 to 20:28:54.77 UTC), 27.5 s in the queue (20:43:15.12 to 20:43:42.60); 178 compile lines in each. The ubuntu legs, for comparison: 32.7 s and 31.0 s (`C++ core (ubuntu-latest)`), 34.1 s and 34.2 s (the unchecked leg), against 4.3 s before. Every leg's Build step runs `cmake --build build --parallel "$(getconf _NPROCESSORS_ONLN)"`, so `getconf` returned a number.
+3. Ubuntu Build steps at most the top of §2a's range: **met**. `C++ core (ubuntu-latest)` 161 s and 157 s, the unchecked leg 165 s and 162 s (limit 3.8 min, 228 s); asan+ubsan 188 s and 150 s (limit 228 s); tsan 132 s and 125 s (limit 2.2 min, 132 s: the PR run's tsan Build is at the limit, to the whole second the timestamps give).
+4. Every leg green, `ctest` 100 % of 994 on both C++ core legs, tsan loop exit 0: **met**. Both runs: "100% tests passed" out of 994 on macOS and on both ubuntu C++ core legs; the tsan job's Test step ends with "All tests passed" on each suite and the job concludes `success`.
+
+**Bookkeeping branch review, 2026-10-05 (copied from `@reviewer`'s handback).** Range `529613a..7946dda` (status lines of h11, h13, 29, ROADMAP row 29; this post-push CI record). Verdict: APPROVED for the first push, on condition that `CI result` is green. Every claim checked: merges via `gh pr view`, the required check via `gh api`, all twelve Build times and the six 1st-to-108th compile gaps from the job logs, ctest 100 % of 994 on all six core jobs, tsan clean. Non-blocking: item 2's evidence for `getconf` is the 27-43 s gap, not the command text, and the sanitizer legs build into `build-san` and `build-tsan`.
