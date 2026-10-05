@@ -341,6 +341,56 @@ class TestM2LatticeGrouping:
         assert [p.name for p in result.tiles] == ["nw.tif"]
 
 
+class TestMixedGridError:
+    """Increment 29, PR 4 ("The batch"): the mixed-lattice refusal is told by
+    type, not by message. `MixedGridError(MosaicError)` carries `tiles`, the
+    two names `_covering` passes to `_mixed`, in the message's order; the
+    message is unchanged. It covers every difference `_mixed` words, so two
+    tiles that differ only in spacing raise it too: `mixed_grid` means "tiles
+    on two grids", not "half-cell-shifted tiles".
+    """
+
+    MESSAGE = re.compile(
+        r"^the request selects tiles on two lattices, (\S+) and (\S+): \2 .+; "
+        r"tiles are not resampled onto one another, but a --bbox inside one lattice is meshed$"
+    )
+
+    def raised(self, mz: ModuleType, call: Any) -> Any:
+        with pytest.raises(mz.MixedGridError) as info:
+            call()
+        return info.value
+
+    def test_it_is_a_mosaic_error(self, mz: ModuleType) -> None:
+        assert issubclass(mz.MixedGridError, mz.MosaicError)
+
+    def test_a_half_cell_offset_raises_it_with_both_names(self, mz: ModuleType, plan: Any) -> None:
+        tiles = TestM2LatticeGrouping.repository()
+        exc = self.raised(mz, lambda: plan(tiles, (500100.0, 6599955.0, 500130.0, 6599965.0)))
+        found = self.MESSAGE.match(str(exc))
+        assert found is not None, str(exc)
+        assert tuple(exc.tiles) == found.groups()
+        assert set(exc.tiles) == {"se.tif", "odd.tif"}
+        assert "0.5 cell" in str(exc)
+
+    def test_two_tiles_that_differ_only_in_spacing_raise_it(
+        self, mz: ModuleType, plan: Any
+    ) -> None:
+        source = whole()
+        tiles = {
+            "nw.tif": piece(source, 0, 5, 0, 7),
+            "ne.tif": piece(source, 0, 5, 6, 13, delta_x=12.5),
+        }
+        exc = self.raised(mz, lambda: plan(tiles))
+        assert set(exc.tiles) == {"nw.tif", "ne.tif"}
+        assert "spacing" in str(exc)
+
+    def test_other_refusals_are_not_it(self, mz: ModuleType, plan: Any) -> None:
+        """A box that meets no tile is a plain `MosaicError`."""
+        with pytest.raises(mz.MosaicError) as info:
+            plan({"nw.tif": whole()}, (0.0, 0.0, 10.0, 10.0))
+        assert not isinstance(info.value, mz.MixedGridError)
+
+
 class TestB1LatticeByCoverage:
     """Ola's reading of Q5 after review ("Ruled by Ola", 2026-09-27): per
     lattice, whether **its own tiles cover every node the request needs**.
