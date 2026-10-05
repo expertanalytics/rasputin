@@ -1,7 +1,8 @@
 # Harness h17: CI time spent in tests
 
-Status: design by `@architect` on master `44fa7f5`; design review round 1
-asked for changes (below), fixed; next `@reviewer`, design round 2. Takes the test audit's Q1 and Q2 (`docs/increments/test-audit.md`,
+Status: design by `@architect` on master `44fa7f5`; design review rounds 1
+and 2 asked for changes (below), fixed; next `@reviewer`, design round 3,
+on round 2's fixes only. Takes the test audit's Q1 and Q2 (`docs/increments/test-audit.md`,
 R2, R3, R11) and h15's PR 2 (`docs/increments/h15-ci-speed.md`, §5 A and
 §7), as two PRs (§5). Ola, 2026-10-05: "defaults on all, CI speed first".
 
@@ -162,10 +163,15 @@ Cases (in `prop_refinement_refine_points.cpp`, so no new CMake target):
 Before deleting the two local copies, `@tester` runs RP3's control
 through both the old copy and the new header and records in the handback
 that the two return equal `over` counts at each of its three tolerances
-(0.5, 2.0, 8.0). Only then: ES9 and RP3 call the header; the two local
+(0.5, 2.0, 8.0). It does the same for one ES9 generator combination
+(`Terrain::Smooth`, seed 1, tolerance 0.5) through ES9's old copy,
+`sources_over`, and the new header: equal counts on ES9's output (0) and
+on that output with z shifted by twice the tolerance (more than 0, so the
+comparison can fail). Only then: ES9 and RP3 call the header; the two local
 copies go. The ES9 body and its
 16 generator combinations are not split (h15's four-case split is not
-needed once ES9 is fast; §5 says when it comes back).
+needed once ES9 is fast, if Ola says yes to §8 question 3; §5 says when it
+comes back).
 
 ### 4b. The harness tests in their own job (R11) — `@tester`, then `@developer`
 
@@ -273,8 +279,9 @@ PR 2 takes h15's four-case ES9 split back.
 
 h15 §5 A and §7 PR 2 as designed, with two changes:
 
-1. **No ES9 split** unless PR 1's acceptance says so (§4e).
-2. **The order with h12.** h15 §6 rule 3 put PR 2 after h12's PR A (the
+1. **No ES9 split** unless PR 1's acceptance says so (§4e), if Ola says
+   yes to §8 question 3.
+2. **The order with h12**, if Ola says yes to §8 question 2. h15 §6 rule 3 put PR 2 after h12's PR A (the
    queue skip, C2), because PR 2 renames the sanitizer job and C2 looks for
    it by name. h12's PR A has not merged (branch `worktree-h12-design`, not
    an ancestor of master at `44fa7f5`; its review fixes are still queued).
@@ -340,6 +347,10 @@ No `@perf` run: neither PR touches refine or mesh code.
    second takes the shard names; h12's own test makes that impossible to
    miss. A yes changes your h15 ruling 2 of 2026-10-05, which put the
    shards after h12's queue-skip change (h15, Review).
+3. **PR 2 drops h15's four-way split of ES9 (the 317 s edge-strip test)
+   unless PR 1's measured run shows it is still needed.** Default: **yes**.
+   A yes also changes your h15 ruling 2, which accepted the split as part
+   of PR 2 (h15, Ola's rulings).
 
 ## Review
 
@@ -360,3 +371,17 @@ record; the citation), and three of the later ones: the clamp (§4a rule 6),
 the CMake comment (§4c), h12's T4 test and `CODE_JOBS` (§5). Left: the
 concurrent-job limit, unchecked; PR 1's run would show it (a job queued, not started,
 at the run's start).
+
+### Round 2: `@reviewer`, design, `e7bbec4..edaf4e0`
+
+`@reviewer`'s record, word for word:
+
+> Design review round 2 (`@reviewer`, `e7bbec4..edaf4e0`): CHANGES REQUESTED, two [now] items: docs/increments/test-audit.md@edaf4e0:370 misquotes the third question; quote the chat's sentence verbatim ("And should the CI-speed PRs (sanitizer lists, the fast check, the harness job) go first, before the rest of the audit? I'd recommend it, given what CI time does to your flow."); docs/increments/h17-ci-test-time.md@edaf4e0:276 drops the ES9 split that Ola's h15 ruling 2 (docs/increments/h15-ci-speed.md@edaf4e0:728) accepted, but no question puts this to Ola (docs/increments/h17-ci-test-time.md@edaf4e0:339-342) and docs/increments/h15-ci-speed.md@edaf4e0:3 states it unconditionally; put it to Ola (default yes) and make h15's clause conditional. Round 1's five [now] items and the three later ones taken: fixed and true. Round 1's "All three link Threads false" was wrong (tests/cpp/CMakeLists.txt@44fa7f5:225-227); the design's "links Threads but starts none" is right. check_citations clean.
+
+Fixed in the round-3 commit: the test audit's third question now quotes
+the chat's sentence, checked against this session's transcript; §8
+question 3 puts the dropped ES9 split to Ola (default yes), and h15's
+status line, §4a and §5 item 1 make it conditional on that yes. Both
+suggestions taken: §4a's equal-counts step also runs one ES9 combination
+through `sources_over` and the header, and §5 item 2 is conditional on §8
+question 2.

@@ -367,7 +367,9 @@ The questions, as put to Ola in the main session's chat on 2026-10-05:
   it? Default: yes, with @architect confirming each one."
 - "Run the harness-tool tests once per CI run in their own job? Default:
   yes."
-- "should the CI-speed PRs go first? (recommended)"
+- "And should the CI-speed PRs (sanitizer lists, the fast check, the
+  harness job) go first, before the rest of the audit? I'd recommend it,
+  given what CI time does to your flow."
 
 2026-10-05, Ola, verbatim: "defaults on all, CI speed first". So:
 
