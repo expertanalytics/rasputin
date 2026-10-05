@@ -1,6 +1,6 @@
 # Increment 29 — NVE reference catchments: our catchments against NVE's, station by station
 
-Status: **design approved by `@reviewer` (round 5, 2026-10-04); PR 1 merged as #173; PR 3 merged as #178; PR 2 (the gauge on the river): green `193079d`, 569 production lines, approved, the push waits for Ola; PR 4 (the batch and the comparison): lake path green `fff6ac9`, 691 net, 8 lines of room under the 700 ceiling, which counts net lines (Ola, 2026-10-05, now in `CLAUDE.md` §2); approved in code review round 6 (prose only since round 4); the push waits for Ola; questions 1 to 10 ruled by Ola, all kept as built, to be reassessed after the full 140-station run**
+Status: **PR 1, 2, 3 and 4 merged (#173, #179, #178, #182); the acceptance run over all 140 stations is in, at `docs/benchmarks/2026-10-05/nve-hrd/` (as fixed in `cd8b5be`): 74 match, 5 close, 6 miss, 39 uncertain, 16 refused (14 of them expected), 33 minutes and at most 7.7 GB; its evidence review round 2 is next; PR 5 (the nearest-stream fallback) and acceptance step 5 (the comparison with nearest stream) not started; questions 6 and 10 go back to Ola with the run's figures**
 (`@architect`, 2026-10-04), branch `worktree-nve-catchments` off master
 `d20126b`. Ola's rulings of 2026-10-04 are in the section below. Round 2 closed the burn's drainage claim
 (checked node by node, not assumed), the ELVIS data cases, the PR order, and
