@@ -332,6 +332,11 @@ Every git call runs with `GIT_CONFIG_GLOBAL=/dev/null`,
 `GIT_CONFIG_NOSYSTEM=1`, `GIT_NO_REPLACE_OBJECTS=1`, `--no-ext-diff
 --no-color`: a user setting such as `diff.noprefix` changes the headers the
 parser reads (h12 §3.3 names it). Renames are git's default detection.
+The repository's own config is not neutralised by those variables, so the
+diff also passes its settings explicitly: `--src-prefix=a/ --dst-prefix=b/`
+and `--inter-hunk-context=0` (review round 1), and `--no-relative` (review
+round 2: `diff.relative=true` in `.git/config`, run from a subdirectory,
+would otherwise count only that subdirectory).
 
 **Blueprint.** Pure functions, each tested alone, and one thin `main`:
 
@@ -368,7 +373,8 @@ before anyone changes either.
     python3 tools/scratch_copy.py <rev> <dir>
 
 1. Refuses (exit 2, one stderr line) if `<dir>` exists and is not empty, or
-   lies inside the repository it is run from.
+   lies inside the worktree it is run from or inside the main checkout (the
+   work tree of the common git dir, which holds `.claude/worktrees/`).
 2. `git archive <rev> | tar -x -C <dir>`, with T1's three variables, so the
    copy is not a git work tree.
 3. Copies the built `_core*.so` from the running worktree's
@@ -377,12 +383,22 @@ before anyone changes either.
    suites still run). If `git diff --quiet <rev> HEAD -- include src
    bindings CMakeLists.txt` says the C++ differs, a stderr warning that the
    copied `_core` was built from `HEAD`.
-4. Prints one line on stdout, the command that runs `pytest` against the
-   copy: `cd <dir>` and the worktree's `.venv/bin/python -c` with a program
-   that drops the editable finder from `sys.meta_path` (as
-   `docs/benchmarks/2026-10-02/basin-memory-probe/blockprobe.py:23` does),
-   puts `<dir>/src_python` first on `sys.path`, and calls `pytest.main` on
-   the remaining arguments.
+4. Writes `<dir>/.scratch_copy/sitecustomize.py`, which drops the editable
+   finder from `sys.meta_path`, and prints one line on stdout, the command
+   that runs `pytest` against the copy: `cd <dir> && PYTHONPATH=<dir>/.scratch_copy:<dir>/src_python`
+   and the worktree's `.venv/bin/python -c` with a program that only calls
+   `pytest.main` on the remaining arguments (`tests/python/` by default;
+   replace it to run some tests only). Because `PYTHONPATH` is inherited,
+   the drop runs at every interpreter start, after the `.pth` file installed
+   the finder, so `tin_engine` comes from the copy in pytest's process and
+   in any Python child a test starts. Review round 1 caused this: the first
+   version did the drop inside the `-c` program only, as
+   `docs/benchmarks/2026-10-02/basin-memory-probe/blockprobe.py:23` does,
+   and a child process reloaded the finder and imported the worktree's
+   code. Limits: a child whose environment replaces `PYTHONPATH` (one built
+   from scratch, as `tests/python/test_io_geotiff.py:1271` does) or that
+   starts Python with `-I` or `-E` (both ignore `PYTHONPATH`) still imports
+   the worktree's code, so a mutant run there can report a false survivor.
 
 It also serves "run the new tests against the code before the change"
 without `git stash`.
@@ -612,7 +628,7 @@ Test strength this round: I planted 10 faults, one at a time. 9 were caught. One
 Gates: 111 tests pass in `test_count_loc.py`, `test_scratch_copy.py` and `test_settings_wiring.py`. 347 tests pass and 15 skip in the copy, in the suites that run with the main venv's older `_core`. `ruff check` and `ruff format --check` are clean, and the prohibited-dependency gate passes. No red-step scaffolding remains.
 
 Citations: `check_citations.py` exits 0 and lists 7 at-risk citations, re-read as quotations:
-- The 3 that are new on this range all sit in this file's round-1 record, as the code stood at 4db1eab (`test_brief.py:335`, `main.yaml:306`, `scratch_copy.py:10`). They stay.
+- The 3 that are new on this range all sit in this file's round-1 record, as the code stood at 4db1eab (`test_brief.py:335`, `.github/workflows/main.yaml:306` [path written out in full by `@architect` so the citation gate resolves it], `scratch_copy.py:10`). They stay.
 - `h3-unattended-u1.md:759` names its revision (`as of 6a19357`). It stays.
 - The other 3 are as in round 1.
 
