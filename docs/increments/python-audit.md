@@ -60,9 +60,16 @@ with no usable geometry, so one check was added: `@tester`'s red commit
 `features_of` refuses a feature whose geometry is missing, null or has no
 `type` with `<name>: feature <i> has no geometry`. The PR is now +28 net
 production lines against the designed +24 (section 10, "Net production
-lines"). Next: `@reviewer` round 2, code and prose (`574a9a9`, `28fe0cf`,
-`693f560` and the commit that records this); then push on Ola's yes, after
-PR B.
+lines"). Code review round 2 accepted the code and asked for prose only:
+section 10's last two wording rows missed shapes, a known gap was false for
+empty values, and the bare geometry's `None is a <type>` wording was not
+recorded. Fixed in this commit, whose probe also found that an empty
+non-null `geometry` (`""`, `0`, `false`, `[]`, `{}`) crashes `--features`
+and `catchment --lakes`, for a top-level `Feature` from this PR (section
+10, the known gaps and the ruling after them). Next: a short prose-only
+`@reviewer` round 3, unless the main session takes that ruling's one-line
+fix into this PR first (a red and a green step, then round 3 on them); then
+push on Ola's yes, after PR B.
 
 Re-checked against master `44fa7f5`: `git diff --stat 12dace7 44fa7f5 --
 src_python` is empty, and of the files cited below only `tools/brief.py`
@@ -1624,7 +1631,15 @@ copies of `src_python/`, the script scratch only); the last two rows are as
 at `693f560`, after the fix the round led to (red `28fe0cf`, green
 `693f560`: `features_of` in `io/station_set.py` refuses a feature whose
 geometry is missing, null or has no `type`). Every other wording that probe
-reached stays.
+reached stays. Code review round 2 widened those two rows and added the last
+one; they are quoted from a second probe, at `32b5092` and `483e4ae`, of the
+station, reference, NVE lake and river readers, `catchment --lakes`
+(`read_lake_polygons`, `read_lakes` at the base) and `--features`
+(`open_features`), with every empty value (`null`, `""`, `0`, `false`, `[]`,
+`{}`) in each field `features_of` tests (`geometry`, and its `type`), the bad
+feature first and second in its file. `features_of` is empty-safe: it reads
+`(f.get("geometry") or {}).get("type")`, so every empty `geometry` counts as
+no geometry.
 
 | Input | Reader | Today | After |
 |---|---|---|---|
@@ -1645,16 +1660,21 @@ reached stays.
 | one feature with neither `type` nor `geometry` (`{"features": [{"properties": {}}]}`, or the same feature in a typed collection) | domain | `'NoneType' object has no attribute 'lower'` | `'geometry'`, as for a typed `Feature` without `geometry` |
 | a `Feature` without `geometry` | features | `not a GeoJSON FeatureCollection ('features')` | `not a GeoJSON FeatureCollection ('geometry')` |
 | an object with neither `type` nor `features` (`{"foo": 1}`, or only a `crs` member) | features | `not a GeoJSON FeatureCollection ('features')` | `not a GeoJSON FeatureCollection ('NoneType' object has no attribute 'lower')` |
-| a `crs` member and either a `Feature` without `geometry` or an object with neither `type` nor `features` | stations; references; NVE lakes; rivers | `no features list; the file is not a FeatureCollection` | `feature 0 has no geometry` |
-| a `crs`-bearing FeatureCollection with a feature whose `"geometry"` is `null`, or a geometry object with no `type` | stations; references; NVE lakes; rivers | `<label> is a None, not a Point`; `<label> is a None, not a Polygon or MultiPolygon`; `lake <objectid> is not a polygon with an area (None)` (`feature <i>` with no `objectid`); `<label> is a None, not a LineString` (`<label>` is the `station` property, else `objectid`, else `None`) | `feature <i> has no geometry` |
+| a `crs` member and either a `Feature` whose `geometry` is missing, `null` or empty (`""`, `0`, `false`, `[]`, `{}`), or an object with neither `type` nor `features` | stations; references; NVE lakes; rivers | `no features list; the file is not a FeatureCollection` | `feature 0 has no geometry` |
+| a `crs`-bearing collection, with or without `type`, with a feature that has no `geometry` key, has neither `type` nor `geometry` (`{"features": [{"properties": {}}]}`), or whose `geometry` is `null`, empty (`""`, `0`, `false`, `[]`, `{}`) or an object with no `type` | stations; references; NVE lakes; rivers | `<label> is a None, not a Point`; `<label> is a None, not a Polygon or MultiPolygon`; `lake <objectid> is not a polygon with an area (None)` (`feature <i>` with no `objectid`); `<label> is a None, not a LineString` (`<label>` is the `station` property, else `objectid`, else `None`: `1.2.0 is a None, not a Point`, `None is a None, not a Point`) | `feature <i> has no geometry`, `<i>` the feature's index in the file (`feature 1` for the second) |
+| a bare geometry with a `crs` member, of the wrong type for the reader | stations; references; NVE lakes; rivers | `no features list; the file is not a FeatureCollection` | `None is a GeometryCollection, not a Point` (stations); `None is a Point, not a Polygon or MultiPolygon` (references); `feature 0 is not a polygon with an area (Point)` (NVE lakes); `None is a GeometryCollection, not a LineString` (rivers): the wrapped feature has no properties, so `<label>` is `None` (a known gap below) |
+| a bare geometry with a `crs` member, of the right type | stations; references; NVE lakes; rivers | as above | pydantic's `ValidationError` (stations: no `station` property, known gap 2 below); `a feature has no station property` (references); `a feature has no objectid property` (rivers); NVE lakes read it as one lake with no number |
 
-**Known gaps, before and after this PR, not fixed here** (same probe):
+**Known gaps, not fixed here** (same probes; each says what the base did):
 
-- A feature whose `geometry` is not an object (`"geometry": 7`) raises
-  `AttributeError: 'int' object has no attribute 'get'` in the station,
-  reference, NVE lake and river readers, a traceback from
+- A feature whose `geometry` is not an object and not empty (`7`,
+  `"Point"`, `[1, 2]`) raises `AttributeError: '<type>' object has no
+  attribute 'get'` (`'int'`, `'str'`, `'list'`) in the station, reference,
+  NVE lake and river readers, before and after, a traceback from
   `station-catchments`, which catches only `OSError` and `ValueError`.
-  (`--domain` and `--features` refuse it, naming the file.)
+  (`--domain` and `--features` refuse it, naming the file.) An empty one
+  (`""`, `0`, `false`, `[]`, `{}`) is refused as no geometry (the rows
+  above).
 - A station feature with no `station` property gives pydantic's multi-line
   `ValidationError` (`1 validation error for Station ... Field required`),
   without the file's name.
@@ -1667,7 +1687,47 @@ reached stays.
   river readers now say `feature 0 has no geometry`.
 - A feature whose `"geometry"` is `null` gives `--domain` `cannot parse
   <name>: 'NoneType' object has no attribute 'get'`, before and after;
-  `--features` reads the file, as before.
+  `--features` and `catchment --lakes` read it as an empty feature: in a
+  collection as before, and as a top-level `Feature`, which the base refused
+  (`not a GeoJSON FeatureCollection ('features')`), from this PR.
+- A geometry whose `type` is present but empty (`""`, `0`, `false`, `[]`,
+  `{}`) is not "no geometry" to `features_of` (it tests for `None`), so the
+  station, reference, NVE lake and river readers say, before and after,
+  `<label> is a , not a Point` (then `a 0`, `a False`, `a []`, `a {}`;
+  `not a Polygon or MultiPolygon`, `not a LineString`) and `lake <objectid>
+  is not a polygon with an area ()` (then `(0)`, `(False)`, `([])`,
+  `({})`): a refusal naming the file, in odd words.
+- A feature whose `geometry` is empty but not `null` (`""`, `0`, `false`,
+  `[]`, `{}`) crashes `--features` and `catchment --lakes` with
+  `AttributeError: 'str' object has no attribute 'is_empty'` (`'int'`,
+  `'bool'`, `'list'`, `'dict'`), a traceback, since both commands catch only
+  `FeatureError`. `read_source` keeps the empty value as the geometry
+  (`f["geometry"] and shape(f["geometry"])`,
+  `src_python/tin_engine/feature_input.py@483e4ae:390`), and
+  `_Tally._take` (behind `open_features`) and `read_lake_polygons` call `.is_empty` on it. In a
+  collection the base crashed the same way; a top-level `Feature`, which
+  the base refused (`not a GeoJSON FeatureCollection ('features')`), crashes
+  from this PR. See the ruling below.
+- A bare geometry of the wrong type with a `crs` member (the row above) is
+  refused with `<label>` `None`, as in `None is a Point, not a Polygon or
+  MultiPolygon`, from this PR; the base said `no features list; the file is
+  not a FeatureCollection`. The refusal is right and names the file, but
+  `None` names nothing. To be fixed in a later PR (question 5 below; default
+  later). `catchment --lakes` reads through `read_source`, as `--features`
+  does, so its refusals are `read_source`'s on every shape probed; it skips
+  lines and points, so a bare `Point` or `GeometryCollection` gives no lakes
+  where the base refused the file.
+
+**Ruling after code review round 2** (`@architect`). The `--features` and
+`catchment --lakes` traceback above is the one gap this PR widens into a
+crash on a user's file, and its fix is one expression: `read_source` treats
+every empty `geometry` as `null` (an empty feature, skipped and counted, as
+`null` already is), e.g. `shape(g) if (g := f["geometry"]) else None`.
+Recommended for this PR, before push: one red test each for `--features`
+and `catchment --lakes` (a collection's feature and a top-level `Feature`
+with `"geometry": ""`, read as empty), then the green change, about 0 net
+lines. If the main session keeps this PR prose-only, it is the first item of
+the later PR question 5 asks about.
 
 ### Red tests (`@tester`, one commit, before any code)
 
@@ -1803,6 +1863,12 @@ so they describe the code as written.
    `--features` and `catchment --lakes` (RFC 7946), refused for the station,
    river, reference and NVE lake files, as today? Default: keep that split.
 4. **The two `--help` texts above.** Default: as written.
+5. **Odd refusal words for a station, reference, NVE lake or river file
+   holding one bare geometry of the wrong type:** the refusal is right and
+   names the file, but says `None is a Point, not a Polygon or
+   MultiPolygon`, where `None` stands for the station number the file
+   lacks. Fix it in this PR, or in a later one with the other known gaps
+   above? Default: a later PR.
 
 ## Review
 
@@ -1819,3 +1885,5 @@ so they describe the code as written.
 **PR C (`audit-geojson-io`), design review, round 2, 2026-10-05.** Head `957cac9`. Verdict: CHANGES REQUESTED, prose only. Blocking (`@architect`): the PR F overlap list missed `test_layering.py`'s `feature_input` row (one hunk with F's rewritten `catchment` row) and `docs/increments/25-plain-output.md` line 274 (pinned differently by C and F). Fixed in section 10: the hand list is replaced by a rule (the second of C and F to merge runs `git merge-tree --write-tree` and resolves every file it names; designed edits are checked with `git merge-file` on scratch copies), the worked merges kept as examples with the two missing ones added, and B and F's conflict in `catchment.py`'s imports named.
 
 **PR C (`audit-geojson-io`), code review, round 1, 2026-10-06.** Range `32b5092..3b739ac` (red `1928569`, green `3b739ac`). Verdict: CHANGES REQUESTED, prose only. +24 net production (`count_loc.py 32b5092 3b739ac`), as designed. Suite 5302 passed, 17 skipped; mypy, ruff, gates and check_citations clean. Behaviour matrix re-run at base and head: `crs` rules 1-5 and the shape rule as designed, four bugs fixed, the writers' bytes unchanged; `git merge-tree` against PR F (`e2baa5f`) conflicts only in section 10's six files. Blocking (`@architect`): stale rows in `project_structure.md@3b739ac:112`, `:139-145`, `:224`, `:244-249`, and no `io/domain_file.py` row; "Every other wording stays" (`docs/increments/python-audit.md@3b739ac:1607`) misses the byte order mark, the typeless domain feature and the `--features` wordings; the status paragraph (`docs/increments/python-audit.md@3b739ac:48-54`). Fixed in this file (status, section 10's wordings and known gaps) and `project_structure.md`; no code change.
+
+**PR C (`audit-geojson-io`), code review, round 2, 2026-10-06.** Range `3b739ac..483e4ae` (round-1 prose `574a9a9`, red `28fe0cf`, green `693f560`, prose `483e4ae`). Verdict: CHANGES REQUESTED, prose only. +28 net production (`count_loc.py 32b5092 483e4ae`; this round +4). Suite 5310 passed, 17 skipped; mypy, ruff, gates and check_citations clean; the 8 new tests fail at `3b739ac` and pass at `483e4ae`. Round-1 blockers closed (`project_structure.md@483e4ae:112-115`, `:137-152`, `:230-242`, `:260-268`, `:279-280`). `features_of` (`src_python/tin_engine/io/station_set.py@483e4ae:51-63`) reaches only the station, reference, NVE lake and river readers. Probe of 22 shapes x 7 readers at three revisions. Blocking (`@architect`): row 6 (`docs/increments/python-audit.md@483e4ae:1649`) misses a missing `geometry` key, a feature with neither `type` nor `geometry`, and empty non-object geometries; known gap 1 (`:1653-1657`) is false for `""`, `0`, `false`, `[]`; the wrong-typed bare geometry's `None is a <type>, not a ...` wording (from `3b739ac`) is not recorded. Fixed in section 10 (the wording rows, known gaps, a ruling on a `--features` and `catchment --lakes` crash the fix's probe found, question 5) and the status paragraph; no code change.
