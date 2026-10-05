@@ -790,6 +790,10 @@ some lines past 100 characters, and ruff format decides how they wrap).
 The ticker is about -20. The spread is in the call-site wraps. Production
 lines: 0 (`python3 tools/count_loc.py b63132e HEAD`).
 
+Measured at `2816d41`: +457 −475, −18 net against about −100, because
+adding `"mesh"` pushes calls past 100 characters and ruff format then puts
+one argument per line, and `cli_driver.py` is 123 lines against about 105.
+
 ### Checks, run by `@tester` before committing and reported in the commit message
 
 1. **Same tests.** `pytest --collect-only -q tests/python` at `b63132e`
@@ -847,10 +851,10 @@ branch had moved, so it is pinned with the design's, at `55c043e`.
 | `docs/increments/h16-harness-fixes.md:615` | `tests/python/test_hardening.py@a61e848:247` |
 
 Several of these were already stale at `b63132e` (for example
-`test_cli_mesh_landcover.py:13` no longer quoted the line the record
+`tests/python/test_cli_mesh_landcover.py@b63132e:13` no longer quoted the line the record
 discusses); pinning to the writing commit fixes those too. The fourteenth,
 `docs/increments/29-nve-reference-catchments.md:3092` into
-`test_core_accumulate.py:22`, points at a file this PR no longer edits.
+`tests/python/test_core_accumulate.py@b63132e:22`, points at a file this PR no longer edits.
 `@tester` reruns the scan after the change: any new unpinned citation into
 an edited file is `@tester`'s to pin in the same commit; one in a doc is
 reported to the main session for `@architect`.
@@ -864,7 +868,9 @@ reported to the main session for `@architect`.
 Whichever of T1 and 23c-2 merges second re-points them to `cli_driver`,
 adds `"mesh"` to its calls, and passes `crs=` by keyword. If it misses an
 import, the import fails; if it misses a `"mesh"`, `invoke`'s assertion
-fails. Neither can pass silently, and the merge queue runs the second on
+fails, except before an argument that is itself a subcommand name (such as
+the `catchment` gallery fixture), where the test's own message check fails
+instead. Neither can pass silently, and the merge queue runs the second on
 top of the first.
 
 ## Review
