@@ -1,6 +1,6 @@
 # Harness h16: guard fixes, a line counter, a scratch copy, brief fixes
 
-Status: Ola ruled on §7 on 2026-10-05 (all three defaults) and on the afternoon questions (last section). PR A: pushed as #185 (287 net production lines by `tools/count_loc.py bc01cd8 a6b966e`, against an estimate of 187). PR B, on `worktree-h16b`: red `9cf533d`, green `15c76f6` (78 net production lines by `tools/count_loc.py 98e31cd 15c76f6`, against an estimate of 60), PR A's head merged in as `b58ab57`, R1's *The harness* sentence written; code review round 1 next.
+Status: Ola ruled on §7 on 2026-10-05 (all three defaults) and on the afternoon questions (last section). PR A: pushed as #185 (287 net production lines by `tools/count_loc.py bc01cd8 a6b966e`, against an estimate of 187). PR B, on `worktree-h16b`: red `9cf533d`, green `15c76f6` (78 net production lines by `tools/count_loc.py 98e31cd 15c76f6`, against an estimate of 60), PR A's head merged in as `b58ab57`, R1's *The harness* sentence written, `gh help` passed (red `9687c16`, green `084a6b3`); code review round 1 of PR B (round 6 below) asked for changes, and Ola chose option C (last section): G3a kept for a single plain command, G3b dropped, G1's fetch rule and the merge guard widened. §2 and §4 are amended for it; next the red step for the amendment (`@tester`), then green (`@developer`).
 
 Ola approved the items on 2026-10-05 (the main session's summary of his
 rulings, not his words). He said this is the last harness increment before
@@ -11,7 +11,8 @@ a freeze of a few days, so the design is kept to what each item needs and
 |---|---|---|
 | G1 | `guard_push.py` asks before `git fetch` into a named ref and before `git replace` writes | B |
 | G2 | `guard_push.py` asks before a git or gh command it does not know (an alias from user config) | B |
-| G3 | scratchpad repositories are ordinary (night proposal N3), in two parts, G3a and G3b; G3c is the push half | B |
+| G3 | scratchpad repositories are ordinary (night proposal N3): G3a, file writes there; G3b (local git writes there) and G3c (the push half) dropped | B |
+| G6 | the merge guard sees `gh` wherever `-R`/`--repo` stands, and `gh pr new`, `gh repo new` (review round 6) | B |
 | G4 | guard import shadowing: `tools/` last on `sys.path`, stdlib-named `tools/` files governed | B |
 | G5 | rule files written through the shell: one brief line | A |
 | T1 | `tools/count_loc.py`, the one counter for `CLAUDE.md` §2 (night proposal N1) | A |
@@ -114,6 +115,57 @@ options (`-C`, `-c`, `--git-dir`, `--work-tree`, `--namespace`,
 `--attr-source`) with their values when finding the subcommand, where it
 skipped only `-C` and `-c` before.
 
+**Amendment after review round 6 (Ola's option C).** A fetch can write a
+named ref with no `src:dst` word on the line. Probed with git 2.55 in two
+scratch repositories, each of these created a branch in the fetching one:
+`git fetch --refm '+refs/heads/*:refs/heads/got/*' ../src master` (the
+separate value is today taken for the repository, so the rule above reads
+`../src master` and passes); `echo 'refs/heads/master:refs/heads/x' | git
+fetch --st ../src`; `git -c remote.s.url=../src -c
+'remote.s.fetch=+refs/heads/*:refs/heads/x/*' fetch s`, the same with the
+key spelled `REMOTE.s.FETCH`; `git --config-env=remote.s.fetch=RF fetch s`
+with `RF` holding the refspec; and `git -c … remote update s`. A
+`remote.<x>.url` override alone re-points `refs/remotes/<x>/*` at planted
+commits, which is G1's incident itself, and `url.<x>.insteadOf` does the
+same through the URL. So, for a git command whose subcommand is `fetch` or
+`pull`, or `remote` with first positional `update`, it also asks ("fetch
+writes a named ref") when any of these holds:
+
+- an argument whose part before `=` is at least `--ref` long and a prefix of
+  `--refmap`, or at least `--st` long and a prefix of `--stdin`. Git takes
+  any unambiguous prefix of a long option: with git 2.55, `--refm` and `--st`
+  are the shortest it accepts for `fetch`, `--ref` for `pull` (`pull` has no
+  `--stdin`; `--st` there is ambiguous and git refuses it). A prefix git
+  refuses as ambiguous asks too, which costs nothing. `--refetch`, a
+  different option, passes;
+- among git's own options before the subcommand, a `-c <key>[=<value>]`,
+  `--config-env <key>=<var>` or `--config-env=<key>=<var>` whose key,
+  lower-cased, starts with `remote.` or `url.`. Git does not accept a glued
+  `-c<key>` (`unknown option`), so that form needs no rule;
+  `--config-env` joins `GIT_TAKES_ARG`, since git accepts its value as the
+  next word;
+- the line's text contains `GIT_CONFIG` (`GIT_CONFIG_COUNT`/`KEY_n`/`VALUE_n`,
+  `GIT_CONFIG_PARAMETERS`, `GIT_CONFIG_GLOBAL`): `tools/shell_scan.py` strips
+  leading assignments from the argv, so only the text shows them. A variable
+  exported by an earlier command or a shell startup file is not seen (§6).
+
+A `-c` with any other key (`git -c protocol.version=2 fetch origin`), and
+`git remote update` with no override, pass as before: they write only what
+the repository's own config, which is governed, says.
+
+**Red test, amendment** (`test_guard_push.py`, both modes, reason "fetch
+writes a named ref"): asks for `git fetch --refmap=+a:refs/heads/x o master`,
+`git fetch --refmap '+a:refs/heads/x' o master`, `git fetch --refm=+a:b o
+master`, `git pull --ref=+a:b o master`, `git fetch --stdin o`, `git fetch
+--st o`, `git -c remote.s.fetch=+a:b fetch s`, `git -c REMOTE.s.FETCH=+a:b
+fetch s`, `git -c remote.s.url=/x fetch s`, `git -c url./x.insteadOf=https://github.com/
+fetch origin`, `git --config-env=remote.s.fetch=RF fetch s`, `git
+--config-env remote.s.fetch=RF fetch s`, `git -c remote.s.fetch=a:b pull s`,
+`git -c remote.s.fetch=a:b remote update s`, and `GIT_CONFIG_COUNT=1
+GIT_CONFIG_KEY_0=remote.s.fetch GIT_CONFIG_VALUE_0=a:b git fetch s`; passes
+`git fetch --refetch origin`, `git -c protocol.version=2 fetch origin`,
+`git remote update`, `git -c remote.s.fetch=a:b status`. About 8 lines.
+
 ### G2. Git and gh aliases: user config changes what the guard sees
 
 **Change.** `guard_push.py` judges a git command by its subcommand word, so
@@ -132,8 +184,11 @@ outside a fixed set of gh's top-level commands asks. The set is what
 redefine): `auth browse codespace discussion gist issue org pr project
 release repo skill cache run workflow agent-task alias api attestation
 completion config copilot extension gpg-key label licenses preview ruleset
-search secret ssh-key status variable`. A gh extension is then asked
-about too.
+search secret ssh-key status variable`, plus `help`, which only reads
+(Ola's ruling of 2026-10-05, quoted in `9687c16`'s test comment; green
+`084a6b3`). A gh extension is then asked about too. Since review round 6
+the gh word judged is the first one after gh's options (G6 below), so
+`gh -R o/r pm 12` asks as `gh pm 12` does.
 
 **Incident.** h12 design review round 3 (recorded in 2d77b6c on
 `worktree-h12-design`): a user-level config file changed what git resolved
@@ -153,49 +208,77 @@ asking on everything.
 
 ### G3. Scratchpad repositories are ordinary (N3)
 
-Night retrospective §6, N3 (a79f2d9). Three parts; the third should drop
-(§5).
+Night retrospective §6, N3 (a79f2d9). Three parts were designed; after
+review round 6 Ola chose option C (last section), so only G3a ships, and
+narrowed.
 
-**G3a, governance.** `governed(path)` returns False for an absolute path
-whose real path (`os.path.realpath`, so `/tmp` resolves to `/private/tmp`
-and a symlink to the repository's `.git` is followed) lies under a
-scratchpad: the pattern
+**G3a, governance.** A path is exempt when it is absolute and its real path
+(`os.path.realpath`, so `/tmp` resolves to `/private/tmp` and a symlink to
+the repository's `.git` is followed) lies under a scratchpad: the pattern
 `^/private/tmp/claude-\d+/[^/]+/[^/]+/scratchpad(/|$)`. Any session's
 scratchpad, not only the current one: all are temporary, and nothing the
 harness reads lives there. A relative path is judged as today, since the
-guard does not track `cd`.
+guard does not track `cd`; so is a path built from an expansion
+(`$SP/x/CLAUDE.md`), because the guard judges its static part
+(`/x/CLAUDE.md`), which is not under a scratchpad.
 
-**G3b, local git writes in a scratch repository.** `segment_why` returns
-None for the local writes it now asks about (`config`, `remote`,
-`symbolic-ref`, `update-ref`, G1's fetch and replace) when all hold:
+Where the exemption applies (amended after review round 6):
 
-- the git call has `-C <dir>` with `<dir>` absolute;
-- `git -C <dir> rev-parse --absolute-git-dir --git-common-dir`, run with
-  `GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1`, succeeds, and both
-  directories, resolved against `<dir>` and by `realpath`, lie under a
-  scratchpad. This catches a scratch directory that is a linked worktree
-  of the real repository (`git worktree add`), whose config, refs and
-  replace refs are the real repository's;
-- no `--git-dir`, `--work-tree`, `--global` or `--system` in the argv, and
-  the command text contains no `GIT_` (a `GIT_DIR=` prefix overrides `-C`;
-  `tools/shell_scan.py` strips leading assignments, so the text is checked).
+- **Edit, Write, NotebookEdit:** always, as before. One tool call writes one
+  path, and a link made by any earlier command is already followed by
+  `realpath`.
+- **Bash:** only when the line is a single plain command:
+  `shell_scan.parse(command)` returns exactly one `Simple`, and that
+  `Simple` has `program is None`, `script is None` and `unknown is False`.
+  So a second command joined by `&&`, `||`, `;`, `|`, `&` or a newline, a
+  `$(…)`, backticks or `<(…)` (each parses to a command of its own),
+  `sh -c '…'` (its text parses to a second command), and an interpreter
+  running a program or a script each void the exemption, and every target
+  of that line is judged as if it did not exist. Checked with
+  `shell_scan.parse` on this branch: `ln -sfn … && echo … > …`,
+  `echo $(true) > …`, `sh -c 'echo > …'` and `printf x | tee …` give two
+  commands; `python3 -c "open('…', 'w')"` gives one, with `program` set. A
+  lone command in parentheses or followed by `&` parses to one command and
+  keeps the exemption, which is harmless: it is still one command. A
+  heredoc body is text, so `cat >> <pad>/r/.git/config <<'EOF'` is still one
+  plain command. A line the parser cannot read is judged by
+  its text, as before (`text_hits`, which never consulted the exemption).
+  Why: the guard judges targets before the line runs, so
+  `ln -sfn <real repo> <pad>/x && echo … > <pad>/x/CLAUDE.md` resolves
+  `<pad>/x` while it does not yet exist, and passed (review round 6,
+  finding 2). One plain command cannot make a link and then write through
+  it, except a program that does both itself, which is the residual below.
 
-`git config --file <path>` with `<path>` under a scratchpad (G3a's test)
-passes too. Here the scrub is right: the lookup asks where the repository
-is, and must not be steered by an `include` or other entry in a user file.
+Interface: `def governed(path: str, *, scratch_exempt: bool = True) ->
+bool`. The scratchpad check runs first, only when `scratch_exempt` is true;
+the rules below it are unchanged. The Edit/Write arm calls `governed(path)`;
+`judge_bash` computes `plain` once per line and calls
+`governed(shell_scan.static(t), scratch_exempt=plain)`. `tools/scratchpad.py`
+stays (only `guard_governance.py` imports it now), and so does its
+`GOVERNED` entry; its docstring drops "G3b".
 
-**G3c, a push to a scratch repository** (recommended to drop, §5). A push
-passes only when the line parses to exactly one simple command, a
-`git -C <scratch repository> push <dest> …` as in G3b; `<dest>` is written
-literally as an absolute path or a `file://` URL whose real path lies under
-a scratchpad (a remote name is never resolved); the argv has no `-c`,
-`--repo`, `--receive-pack` or `--exec`; and
-`git -C <dir> config --get-regexp '^url\.'` run **without** the scrub,
-reading what the push will read, prints nothing. Any `url.*` entry at any
-level voids the pass, because `pushInsteadOf` can send a scratch path to the
-real remote. What it cannot see: a variable such as `GIT_CONFIG_GLOBAL`
-exported by a shell startup file into the Bash tool's shell but not into the
-hook's environment (h12 §5's residual).
+Residual (also §6): a single command that itself makes a link and writes
+through it (an archive extracted with a link and a file under it, a
+compiled program), and a background job started earlier that re-points a
+link between the hook's check and the write.
+
+**G3b, local git writes in a scratch repository: dropped** (option C). It
+passed `config`, `remote`, `symbolic-ref`, `update-ref`, fetch and replace
+writes given as `git -C <absolute scratch dir>`. Review round 6 found that
+it matched only exact spellings of the options that send git elsewhere
+(`git -C <pad>/r config --glo …` wrote the global config;
+`-f/path/to/real/.git/config`, glued, wrote the real repository's), and
+that a line could swap the scratch repository's `.git` for a link before
+the write (finding 2). What goes: `in_scratch`, `SCRATCH_VOIDS`,
+`guard_push.py`'s import of `scratchpad`, `os` and `pairwise` if nothing
+else uses them, `segment_why`'s exemption branch, and the G3b sentences in
+its module docstring. `segment_why` keeps its `text` parameter for G1's
+`GIT_CONFIG` check. A local git write in a scratch repository now asks like
+any other; the routes that remain without a question are a file write to
+`<pad>/r/.git/config` (G3a) and `git -c key=value` for a single command.
+
+**G3c, a push to a scratch repository: dropped** (Ola's ruling 3, first
+rulings section). A push always asks.
 
 **Incident.** The night of 2026-10-04/05, §2 of the night retrospective
 (a79f2d9): four of seven `guard_unattended` refusals were scratch
@@ -206,23 +289,105 @@ repositories in the scratchpad (22:58:22 `git config user.*`,
 them were then reached by another route. A refusal leaves no commit; the
 retrospective's table is the record.
 
-**Red test.** `test_guard_governance.py`: a Write of
-`<scratchpad>/r/.git/config` passes; of `<scratchpad>/copy/CLAUDE.md`
-passes; of `<scratchpad>/link/.git/config` where `link/.git` is a symlink to
-a real repository's `.git` asks; of `.git/config` (relative) asks. A Bash
-`cat >> <scratchpad>/r/.git/config` passes. `test_guard_push.py`, with a
-real scratch repository made by the test under `tmp_path` and the pattern
-pointed at it (a module constant the test patches): `git -C <it> config
-user.name x` and `git -C <it> remote add o /x` pass; the same in a linked
-worktree of a second repository asks; with `GIT_DIR=/x ` in front asks;
-`git config user.name x` (no `-C`) asks. If G3c stays: `git -C <it> push
-<scratch bare> master` passes; with a `GIT_CONFIG_GLOBAL` file (set in the
-hook's environment) holding `url.<outside>.pushInsteadOf = <scratch bare>`
-asks; `git -C <it> push origin master` (a remote name) asks;
-`git -C <it> config url.x.insteadOf y && git -C <it> push <bare>` asks.
+**Red test, as first shipped** (`9cf533d`). `test_guard_governance.py`: a
+Write of `<scratchpad>/r/.git/config` passes; of
+`<scratchpad>/copy/CLAUDE.md` passes; of `<scratchpad>/link/.git/config`
+where `link/.git` is a symlink to a real repository's `.git` asks; of
+`.git/config` (relative) asks. A Bash `cat >> <scratchpad>/r/.git/config`
+passes. These all stay, unchanged. `test_guard_push.py` had G3b's block,
+whose fate is below.
 
-**Size.** G3a about 6 lines (a `scratchpad` helper, below, and the
-exemption); G3b about 20; G3c about 25.
+**Tests after option C.**
+
+*Stay, unchanged:* the G3a tests above (`test_a_file_under_a_scratchpad_is_not_governed`,
+`test_a_shell_write_under_a_scratchpad_is_not_governed`,
+`test_a_git_config_that_resolves_outside_the_scratchpad_asks`),
+`test_scratchpad.py`, and `harness_fixtures.py`'s `point_scratchpad` and
+its `tools/scratchpad.py` entry in `COPIED`.
+
+*Go* (`test_guard_push.py`): `G3B_PASSED` and
+`test_a_local_write_in_a_scratch_repository_is_silent`. Their rows do not
+vanish: they move into the asked table below, where they are red until G3b
+is removed.
+
+*Stay, in a changed role:* `G3B_ASKED`,
+`test_a_scratch_write_that_reaches_outside_still_asks`, the `scratch`
+fixture and `make_plain_repo`. Renamed for what they now pin (for example
+`G3_ASKED`, `test_a_git_write_in_a_scratch_repository_asks`), with the
+comment block saying G3b was dropped by option C, and gaining:
+
+- every former `G3B_PASSED` row with its reason (`CONFIG`, `REMOTE`,
+  "update-ref moves a ref directly", "symbolic-ref rewrites a symbolic
+  ref", "fetch writes a named ref", "replace refs change what git reads for
+  an object"), except `git config --file {inside}/.git/config user.name x`
+  and `cd {pad} && git -C {inside} config user.name x`, which ask too and
+  are kept as rows;
+- review round 6's spellings: `git -C {inside} config --glo user.name x`
+  and `git -C {inside} config -f{outside}/.git/config user.name x` (both
+  `CONFIG`).
+
+Run in both modes `off` and `on`, as the rest of the file does (`on`
+expects a queued `deny` carrying the same reason).
+
+*New* (`test_guard_governance.py`, Bash events, both modes, each expecting
+an `ask` naming the target; `{pad}` the fixture's scratchpad, `{repo}` the
+copy):
+
+- `ln -sfn {repo} {pad}/x && echo hi > {pad}/x/CLAUDE.md` (with `{pad}/x`
+  absent before the hook runs: finding 2's route);
+- `echo hi > {pad}/copy/CLAUDE.md; true`;
+- `printf x | tee {pad}/copy/CLAUDE.md`;
+- `echo $(true) > {pad}/copy/CLAUDE.md`;
+- `sh -c 'echo hi > {pad}/copy/CLAUDE.md'`;
+- `python3 -c "open('{pad}/copy/CLAUDE.md', 'w')"`.
+
+And silent, both modes: `echo hi > {pad}/copy/CLAUDE.md`,
+`cp {repo}/notes.txt {pad}/copy/CLAUDE.md`, and the existing heredoc
+append. A unit test of `governed(p, scratch_exempt=False)` on a scratchpad
+`CLAUDE.md` returning True pins the keyword.
+
+**Size.** G3a about 9 lines (the exemption, and the plain-command test in
+`judge_bash`); G3b's removal about −26 against PR B's green.
+
+### G6. The merge guard and gh's `-R`/`--repo` (review round 6, finding 4)
+
+**Change.** `publishes()` reads gh's group and verb as `words[1:3]`, and
+`segment_why`'s G2 check skips any `words[1]` starting with `-`. With
+gh 2.101 each of `gh -R a/b pr merge --help`, `gh pr -R a/b merge --help`,
+`gh --repo=a/b pr merge --help` and `gh -Ra/b pr merge --help` printed
+`gh pr merge`'s help, so each spelling reaches `pr merge`, and none asks
+today. Also pre-existing: `gh pr new` is an alias of `gh pr create`, and
+`gh repo new` of `gh repo create` (their `--help` lists them under
+ALIASES); neither asks today. (`gh release new` asks, as all of `gh
+release` does.)
+
+One helper, used by `publishes`, the G2 check and the `gh api` check:
+
+    def gh_words(words: list[str]) -> list[str] | None
+        # None unless words[0]'s basename is gh; else words[1:] less every
+        # word starting with "-", and less the word after an exact "-R" or
+        # "--repo" (their glued forms "-R<x>" and "--repo=<x>" are one word).
+
+The group is its first word and the verb its second. The PR writes become
+`create`, `new`, `merge`, `ready`, `edit`, `update-branch`; the repo writes
+`create`, `new`, `delete`, `edit`. On the groups the guard judges, `-R`/`--repo` is the only flag that takes a
+value (`gh pr --help`, `gh release --help`, `gh repo --help`, and `gh --help`
+for the top level, with gh 2.101), so no other value can be taken for the
+verb. The text rules for a line the parser cannot read widen the same
+way: `\bgh\b[^|;&]*\bpr\b[^|;&]*\b(create|new|merge|ready|edit|update-branch)\b`
+and `\bgh\b[^|;&]*\b(release|repo\b[^|;&]*\b(create|new|delete|edit))\b`.
+These can ask about an unreadable line that only names those words
+(`gh pr list --search merge "`); that is the text rules' usual trade.
+
+**Red test** (`test_guard_push.py`, both modes): asks, with "gh pr changes
+a pull request", for `gh -R o/r pr merge 12`, `gh --repo o/r pr merge 12`,
+`gh --repo=o/r pr merge 12`, `gh -Ro/r pr merge 12`, `gh pr -R o/r merge
+12`, `gh pr new`, `gh -R o/r pr new`, and the unreadable `gh -R o/r pr
+merge 12 "`; with "gh publishes or alters the repo" for `gh repo new x` and
+`gh -R o/r release create v1`; with the G2 reason for `gh -R o/r pm 12`.
+Silent: `gh -R o/r pr view 12`, `gh pr -R o/r view 12`, `gh --version`.
+
+**Size.** About 8 lines.
 
 ### G4. Guard import shadowing
 
@@ -471,7 +636,10 @@ Question 1 asks Ola whether this is the item. **Red test**: `brief.py
   `python3 tools/scratch_copy.py <rev> <dir>` in the session scratchpad,
   removed afterwards" (the night's cut C4, about 35 words fewer);
   `reviewer.md`'s LOC item and `CLAUDE.md` §2 name `tools/count_loc.py`;
-  REQUIRED-READING's *The harness* names G1 to G4 in one sentence (PR B).
+  REQUIRED-READING's *The harness* names G1 to G4 in one sentence (PR B),
+  rewritten after Ola's option C to name G1's amendment and G6 and to say
+  that G3a holds only for Edit, Write and one plain shell command, and that
+  no git write in a scratchpad repository passes.
 
 Prose; no red test. `@architect` writes them, in the PR that ships the
 tool or guard they describe. `CLAUDE.md` changes, so the main session
@@ -481,14 +649,15 @@ restarts after PR A merges.
 
 - **`tools/scratchpad.py`**, new, standard library only: the pattern and
   `def under(path: str) -> bool` (absolute paths only, by `realpath`).
-  Imported by both guards (G3) and added to `GOVERNED`'s self-protecting
-  set, as `shell_scan.py` is. About 10 lines.
+  Imported by `guard_governance.py` (G3a; `guard_push.py` imported it for
+  G3b until option C dropped it) and in `GOVERNED`'s self-protecting set,
+  as `shell_scan.py` is. About 10 lines.
 - **`tools/count_loc.py`** joins `GOVERNED` too: it computes the arithmetic
   of a rule in `CLAUDE.md` §2, so a change to it is a change to the rule.
   `tools/scratch_copy.py` does not.
 - The hooks stay pure apart from the git calls named above; the new git
-  calls are G2's two command listings and G3b's (and G3c's) lookups, each
-  with a fixed argv. The guards' `except Exception` → `deny` stays, so a
+  calls are G2's two command listings, with a fixed argv (G3b's
+  `rev-parse` lookup goes with G3b). The guards' `except Exception` → `deny` stays, so a
   failing lookup refuses rather than passes.
 
 ## 4. PR split and size
@@ -500,7 +669,7 @@ not held up by guard review rounds (h12's design took four):
 | PR | Items | Production lines, about |
 |---|---|---|
 | A, tools | T1, T2 (+P9 test), T3, G5's line, R1 but its *The harness* sentence | 187 (count_loc 120, scratch_copy 60, brief.py 7) |
-| B, guards | G1, G2, G3a, G3b, G4, `scratchpad.py`, the `GOVERNED` entries, R1's *The harness* sentence | 60 (G1 12, G2 14, G3a 6, G3b 20, G4 6, scratchpad 10, minus shared lines) |
+| B, guards | G1, G2, G3a, G4, G6, `scratchpad.py`, the `GOVERNED` entries, R1's *The harness* sentence | 60 as first estimated (G1 12, G2 14, G3a 6, G3b 20, G4 6, scratchpad 10, minus shared lines); measured 78 at `084a6b3` (`tools/count_loc.py origin/master 084a6b3`, `origin/master` at `44fa7f5`, PR A merged); after option C about 70 (78, G3b's removal −26, G1's amendment +8, G3a's plain-command test +3, G6 +8) |
 
 Order: A first. Each PR runs red (`@tester`), green (`@developer`), review
 (`@reviewer`). Neither touches refine or mesh code, so no `@perf` run. No
@@ -518,6 +687,8 @@ write, so both PRs are day work.
 - **G5b (joining literal path parts): drop.** The incident did not happen
   as reported, and what remains open after it stays open after it.
 - **P1's coverage test: drop** from h16 (above).
+- **G3b (local git writes in a scratch repository): dropped** after review
+  round 6, by Ola's option C (last section).
 
 Nothing else should drop: G4 is a live hole in the hooks, G1 and G2 are
 small, and T1 and T2 remove the most repeated work of the night.
@@ -528,8 +699,11 @@ The guards remain tripwires. Not covered: programs that compute a path
 (G5); a module planted in the user-writable Homebrew site-packages under a
 `tools/` module's name, which with `append` would now win (h12 §5's
 environment residual); shell startup files and `GIT_*` variables they
-export; relative paths in a scratch repository (G3 needs `-C` and absolute
-paths, and the refusal message says so).
+export, including `GIT_CONFIG_*` set by an earlier command (G1's amendment
+reads only the line's text); in a scratchpad, a single command that makes a
+link and writes through it, and a background job that re-points a link
+between the hook's check and the write (G3a); relative paths in a
+scratchpad, which are judged as anywhere else.
 
 ## 7. Questions for Ola
 
@@ -700,3 +874,37 @@ CHANGES REQUESTED. 287 net production lines (`count_loc.py bc01cd8 095ab63`). Ro
 ### Round 5: `@reviewer`, code, PR A, `095ab63..a6b966e`
 
 CHANGES REQUESTED, on the status line only (taken in the recording commit). 287 net production lines (`count_loc.py bc01cd8 a6b966e`). Round 4's docstring items closed. Green CI after the push makes it APPROVED with no further round.
+
+### Round 6: `@reviewer`, code, PR B, round 1
+
+CHANGES REQUESTED. Recorded from the main session's summary in the brief
+for this recording, not from the handback word for word: the handback was
+in the previous session and was not carried over, and the summary does not
+state the range (taken here to end at `084a6b3`, PR B's head when Ola
+ruled) or a LOC count (78 net production lines by `tools/count_loc.py
+origin/master 084a6b3`, measured for this record). Findings:
+
+1. G3b (local git writes pass in a scratchpad repository): abbreviated or
+   glued git options get through. `git -C <scratch repo> config --glo …`
+   writes the global gitconfig, and `-f/path/to/real/.git/config` writes
+   the real repository's config; the exemption matches exact spellings only.
+2. G3a and G3b: re-pointing on the same command line. The guard judges the
+   target before the line runs, so `ln -sfn <real repo> $SP/x && echo … >
+   $SP/x/CLAUDE.md` passes, as does swapping a scratch repository's `.git`
+   for a link first. A link made in an earlier command is already caught.
+   [`$SP` stands for the scratchpad path written out: with a literal `$SP`
+   the guard judges the static part, `/x/CLAUDE.md`, and asks.]
+3. G1's fetch rule: `--refmap`, `--stdin` and `-c remote.<x>.fetch=…` write
+   named refs with no `src:dst` on the command line.
+4. Pre-existing: `gh -R owner/repo pr merge N` slips past the merge guard.
+
+## Ola's ruling on review round 6, 2026-10-05
+
+The options put to him: A, drop both exemptions (G3a and G3b); B, harden
+both; C, keep G3a but only for a single plain command (no `&&`, `;`, `|`,
+subshell and the like), and drop G3b entirely. The default offered with
+them: fix the `gh -R` merge hole in PR B.
+
+Ola, verbatim: "1C". So: option C, with the default. §2 G1 (amendment), G3
+and G6, §3, §4, §5 and §6 are amended to match; finding 3 is fixed under
+G1 whichever option was chosen.
