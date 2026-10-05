@@ -1,14 +1,15 @@
 # Harness h17: CI time spent in tests
 
-Status: design by `@architect` on master `44fa7f5`; next `@reviewer` on the
-design. Takes the test audit's Q1 and Q2 (`docs/increments/test-audit.md`,
+Status: design by `@architect` on master `44fa7f5`; design review round 1
+asked for changes (below), fixed; next `@reviewer`, design round 2. Takes the test audit's Q1 and Q2 (`docs/increments/test-audit.md`,
 R2, R3, R11) and h15's PR 2 (`docs/increments/h15-ci-speed.md`, §5 A and
 §7), as two PRs (§5). Ola, 2026-10-05: "defaults on all, CI speed first".
 
 **In one paragraph.** In the reference run (37314235492, the queue run of
 PR #185, after h15's Python split) the wait for a green `CI result` was
 9.0 min, set by the asan+ubsan job (8.7 min: Build 194 s, Test 317 s). The
-slowest Python job came next at 5.5 min, 4.8 of it in the main suite. The
+slowest Python job (3.12) came next, ending 5.7 min into the run, 4.8 min
+of it in the main suite. The
 thread sanitizer job ran to 11.9 min but gates nothing. PR 1 replaces one
 quadratic test oracle, moves the tests of the harness tools into a job of
 their own, and trims the thread sanitizer list: estimated 9.0 to about
@@ -141,10 +142,15 @@ Rules the header keeps, so the verdict is today's:
    `z` given, and `tol + 1e-9 * zmax` stay character for character.
 5. `not_ccw` counts triangles not counter-clockwise, over all triangles,
    valid or not (RP3's `REQUIRE` becomes `REQUIRE(f.not_ccw == 0)`).
+6. A triangle's bucket range is clamped to the grid, `[0, cols-1] x
+   [0, rows-1]`, before it is walked. Rule 2 puts every point inside that
+   range, so the clamp drops no bucket that holds a point; it only keeps a
+   triangle that reaches past the last column or row from indexing outside
+   the bucket array.
 
 Cases (in `prop_refinement_refine_points.cpp`, so no new CMake target):
 
-- RP3's control (`tests/cpp/property/prop_refinement_refine_points.cpp@44fa7f5:258-270`,
+- RP3's control (`tests/cpp/property/prop_refinement_refine_points.cpp@44fa7f5:259-270`,
   z shifted by twice the tolerance) still reports violations, through the
   new header.
 - New, a hand-built case with a known count: a 3 x 3 node grid, two
@@ -153,7 +159,11 @@ Cases (in `prop_refinement_refine_points.cpp`, so no new CMake target):
   `skip`; expected `over` worked out by hand for a planted plane.
 - New: a point outside the grid throws.
 
-ES9 and RP3 call the header; the two local copies go. The ES9 body and its
+Before deleting the two local copies, `@tester` runs RP3's control
+through both the old copy and the new header and records in the handback
+that the two return equal `over` counts at each of its three tolerances
+(0.5, 2.0, 8.0). Only then: ES9 and RP3 call the header; the two local
+copies go. The ES9 body and its
 16 generator combinations are not split (h15's four-case split is not
 needed once ES9 is fast; §5 says when it comes back).
 
@@ -204,7 +214,10 @@ against `44fa7f5`; `src/` has no thread code). Run the remaining 16 suites
 `getconf _NPROCESSORS_ONLN` at a time, each suite's output held and printed
 whole, a failing suite named, and the step failing if any suite fails
 (`TSAN_OPTIONS=halt_on_error=1` stays). `@tester` corrects the comment at
-`tests/cpp/CMakeLists.txt@44fa7f5:285` ("All three run in the TSan job").
+`tests/cpp/CMakeLists.txt@44fa7f5:285` ("All three run in the TSan job"),
+and the one at `tests/cpp/CMakeLists.txt@44fa7f5:217-219`, which reads as
+if all three suites start threads: `test_mesh_lattice_split` links
+`Threads` but starts none (the walk above).
 
 Constant: **four at a time**, the runner's CPU count. Assumes 16 suites,
 the longest about 60 s after R3 (refine_points 61 s today); not checked for
@@ -236,7 +249,9 @@ logs (`gh run view <id> --log --job <job id>`: pytest's summary line,
 ctest's `Test #N ... sec` lines and its `out of N`, each TSan suite's
 `All tests passed`). The runner kind is read from the asan+ubsan Build
 time (slow: 180 s or more; fast: 140 s or less); compare with this run's
-figures on a slow runner, h15 §3b's on a fast one.
+figures on a slow runner, h15 §3b's on a fast one. A Build time between
+the two (141-179 s) names no kind: judge it against the slow bounds, and
+say in the acceptance note that the kind was not identified.
 
 - **Same checks:** per Python version, main-suite passed and skipped plus
   the harness job's equal the base commit's run (4996 and 119 on 3.12 at
@@ -272,6 +287,13 @@ h15 §5 A and §7 PR 2 as designed, with two changes:
    changes `tools/ci_changes.py` as h15 §7 says (about 15 lines,
    `@developer`, with `@tester`'s T7 and T8 changes first). PR 1 adds the
    `harness` job, which h12 must also skip on a tested tree; same rule.
+   The loud check there is h12's `test_t4_every_other_job_is_gated_on_changes`
+   (branch `worktree-h12-design`, `tests/python/test_ci_changes.py`): every
+   job gated on `changes` must carry h12's skip condition, so a `harness`
+   job without it fails that test. h12's list of jobs that skip
+   (`CODE_JOBS` in the same file) was written before h15's PR 1 added
+   `python-extras`, and needs `python-extras` and `harness` added by
+   whichever merges second.
 
 `@tester` first: a test that the sanitizer job's matrix lists shards 1 to
 k and its ctest line runs `-I ${{ matrix.shard }},,k` with that k and
@@ -316,6 +338,25 @@ No `@perf` run: neither PR touches refine or mesh code.
    3.14, so a 3.14-only break in a hook would show there first, not in CI.
 2. **PR 2 before h12's queue-skip PR?** Default: **yes**, whichever lands
    second takes the shard names; h12's own test makes that impossible to
-   miss.
+   miss. A yes changes your h15 ruling 2 of 2026-10-05, which put the
+   shards after h12's queue-skip change (h15, Review).
 
 ## Review
+
+### Round 1: `@reviewer`, design, `e7bbec4` on `44fa7f5`
+
+`@reviewer`'s record, word for word (one citation pinned to `44fa7f5` by
+`@architect`):
+
+> Design review round 1 (`@reviewer`, `e7bbec4`): CHANGES REQUESTED, five [now] items: h15 paragraph contradicts its new status line; §4e runner-kind gap of 141-179 s and the 5.5 vs 5.7 min figure; test-audit Rulings record no questions or defaults; record old = new oracle counts on RP3's control before deleting the copies; citation 258 to 259. Checked against run 37314235492: CI result waits only on non-TSan jobs, 9.0 min, ES9 317 s, sum 1179 s; four TSan suites reach no thread code; the oracle argument holds; the 16 harness files pass without `tin_engine` (1083 passed).
+>
+> Later: j2_oracle clamp bucket range to grid; tests/cpp/CMakeLists.txt@44fa7f5:217-218 "All three link Threads" false for test_mesh_lattice_split; cite h12 test_t4 as the loud check for the harness job, note CODE_JOBS predates python-extras; ~17 jobs may hit GitHub's concurrent-job limit (unchecked).
+
+Fixed in the round-2 commit: the five [now] items (h15's order sentence
+and §6 rule 3 marked superseded by §5 here; §4e's 141-179 s rule and one
+figure, 5.7 min, for the Python 3.12 job's end; the test audit's Rulings
+now carry the questions and defaults as put to Ola; §4a's equal-counts
+record; the citation), and three of the later ones: the clamp (§4a rule 6),
+the CMake comment (§4c), h12's T4 test and `CODE_JOBS` (§5). Left: the
+concurrent-job limit, unchecked; PR 1's run would show it (a job queued, not started,
+at the run's start).

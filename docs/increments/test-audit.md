@@ -360,6 +360,15 @@ refactor).
 
 ## Rulings
 
+The questions, as put to Ola in the main session's chat on 2026-10-05:
+
+- "Once an increment has merged, retire tests that compare against a copy
+  of older code, and let the property checks and recorded outputs guard
+  it? Default: yes, with @architect confirming each one."
+- "Run the harness-tool tests once per CI run in their own job? Default:
+  yes."
+- "should the CI-speed PRs go first? (recommended)"
+
 2026-10-05, Ola, verbatim: "defaults on all, CI speed first". So:
 
 1. **Tests that compare against a copy of older code** (R4) are retired once

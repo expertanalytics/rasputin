@@ -1,11 +1,15 @@
 # Harness h15: a faster CI that proves the same things
 
-Status: design approved by `@reviewer` in round 2; Ola ruled on §9 on 2026-10-05 (all five defaults, below). PR 1 (§5 P, the Python job split) merged in #183: red `8a8af9b`, green `83d0601`; code review round 4 approved it. PR 2 is now designed in `docs/increments/h17-ci-test-time.md` §5, without the ES9 split and no longer bound to land after h12's PR A; PR 3 is not started. Mechanics, not a design question for the core: the plan (§7) is
+Status: design approved by `@reviewer` in round 2; Ola ruled on §9 on 2026-10-05 (all five defaults, below). PR 1 (§5 P, the Python job split) merged in #183: red `8a8af9b`, green `83d0601`; code review round 4 approved it. PR 2 is now designed in `docs/increments/h17-ci-test-time.md` §5, without the ES9 split, and no longer bound to land after h12's PR A if Ola says yes to h17 §8 question 2; PR 3 is not started. Mechanics, not a design question for the core: the plan (§7) is
 two small workflow PRs and an optional third, each touching
 `.github/workflows/main.yaml`. The order rule is §6: PR 1 needs only
 master; PR 2 renames the sanitizer job, so it lands after h12's PR A
 (option C2, the queue skips a rebuild of a tree its PR run passed) and
-updates C2's job-name condition in the same PR.
+updates C2's job-name condition in the same PR. *(Superseded by
+`docs/increments/h17-ci-test-time.md` §5 if Ola says yes to its §8
+question 2, since Ola's ruling 2 below put PR 2 after h12's change: PR 2
+then no longer waits for h12's PR A; whichever merges second carries the
+name change.)*
 
 Ola, 2026-10-05: "Can we impove speed (important) without sacrifising
 presision?" The one test every option here is judged by (§4): **can this
@@ -604,6 +608,10 @@ All of them touch `.github/workflows/main.yaml`; h12's PR A also changes
    same PR that renames the job (§5 A). (Check: `git grep -n
    SANITIZERS_CHECK origin/master -- tools/ci_changes.py` prints a line
    once C2 has merged.)
+   *Superseded by `docs/increments/h17-ci-test-time.md` §5 if Ola says yes
+   to its §8 question 2: the order then no longer holds; whichever of
+   PR 2 and h12's PR A merges second carries the job-name change, and
+   h12's own test fails until it does.*
 4. Each h15 PR branches from master after the h15 PR before it merged.
 
 ## 7. Plan: small PRs, in order
