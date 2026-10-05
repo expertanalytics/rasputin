@@ -50,7 +50,7 @@ script reads. What differs, and why:
 - **Units go in the field name** (`tolerance_m`, `start_min_angle_deg`), not in
   a separate attribute. A VTK FieldData string array and a PLY comment have no
   slot for an attribute, and the catchment command's GeoJSON already names its
-  properties this way (`outline_tolerance_m`, `fine_area_m2`, `cli.py:1925-1928`).
+  properties this way (`outline_tolerance_m`, `fine_area_m2`, `cli.py:1943-1946`).
 - **`licence_note` and `cite` keep their shipped names** (23a-2, Ola's ruling that a downloaded source's licence notes travel in the mesh file)
   rather than ACDD's `license` and `references`. Renaming them gains nothing a
   reader needs.
@@ -90,7 +90,7 @@ master `586fbc1`'s, before this increment; read them there
 | `elevation_source` | `src_python/tin_engine/cli.py@586fbc1:876`, built at `src_python/tin_engine/cli.py@586fbc1:1496`, `:1518-1553`, `:1568-1570`, prefixed at `:870-875` | one sentence; its clauses are listed below | always (`none (z=0, --flat)` for a fixture, `:468`, `:960`) |
 | `source_crs`, `source_transform`, `computation_grid` | `src_python/tin_engine/cli.py@586fbc1:880-885` | reprojected path: the DEM's own CRS, PROJ's name for the transform, the resampled grid (`square 30 m grid in EPSG:31983, node (R, K) at (30 K, -30 R), resampled bilinear from EPSG:4674`) | reprojected only |
 | `licence_note`, `cite` | `src_python/tin_engine/cli.py@586fbc1:886-892` | the remote source's licence and works to cite | DEM from the cache |
-| `dem_tiles`, `dem_seams` | `src_python/tin_engine/cli.py@586fbc1:893-897`, `mosaic.py:111-114` | tile names; overlaps that disagree (`a.tif \| b.tif: nodes 1, max 4, median 4`) or `none` | several files, a directory, or the cache |
+| `dem_tiles`, `dem_seams` | `src_python/tin_engine/cli.py@586fbc1:893-897`, `mosaic.py:121-124` | tile names; overlaps that disagree (`a.tif \| b.tif: nodes 1, max 4, median 4`) or `none` | several files, a directory, or the cache |
 | `domain`, `domain_crs`, `domain_transform` | `src_python/tin_engine/cli.py@586fbc1:898-903`, `:1461` | `catchment.geojson, 1 ring 0 holes, 27 vertices`; its CRS; transform or `none` | `--domain` |
 | `features`, `features_crs`, `features_transform`, `features_notice` | `src_python/tin_engine/cli.py@586fbc1:904-934` | `clc2018_7908_3.gpkg:U2018_CLC2018_V2020_20u1, map corine, 60 features, 87 chains, 10266 vertices`; CRS; transform; the CORINE notice | `--features` |
 | `land_cover_codes` | `src_python/tin_engine/cli.py@586fbc1:1045-1046`, `io/vtk_legacy.py:118-119` | what `land_cover_code` holds | a coded `--features-map` |
@@ -270,8 +270,8 @@ unreadable or break a legal requirement, so they stay, unchanged.
 |---|---|---|
 | `feature_bits`, `feature_names` | `io/vtk_legacy.py:124-125`; `.ply` `feature_bit <bit> <name>` comments, `io/ply.py:111` | the key to the `feature_mask` cell array and the per-feature 0/1 arrays: without it a mask of 5 does not say "river and railway" |
 | `feature_vocabulary` | `io/vtk_legacy.py:126`, `io/ply.py:112` | a digest of that key, so two files can be checked to use the same bits (increment 13) |
-| `land_cover_codes` | `io/vtk_legacy.py:118-119`, `cli.py:1027` | says which code system the `land_cover_code` cell array holds (CORINE level 3); the ParaView preset from `rasputin palette corine` colours those codes and assumes that system |
-| `features_notice` | `cli.py:948`, text at `feature_input.py:61-65` | the CORINE attribution ("Contains modified CORINE Land Cover 2018 data ... (c) European Union ..."), which the Copernicus data policy asks for on data derived from CORINE, as `licence_note` is for a downloaded DEM. Kept by Ola's ruling (2026-10-03) under the same rule as `dem_credit` |
+| `land_cover_codes` | `io/vtk_legacy.py:118-119`, `cli.py:1032` | says which code system the `land_cover_code` cell array holds (CORINE level 3); the ParaView preset from `rasputin palette corine` colours those codes and assumes that system |
+| `features_notice` | `cli.py:953`, text at `feature_input.py:61-65` | the CORINE attribution ("Contains modified CORINE Land Cover 2018 data ... (c) European Union ..."), which the Copernicus data policy asks for on data derived from CORINE, as `licence_note` is for a downloaded DEM. Kept by Ola's ruling (2026-10-03) under the same rule as `dem_credit` |
 
 ### D3. The rules
 
@@ -283,7 +283,7 @@ unreadable or break a legal requirement, so they stay, unchanged.
    maximum never reads above the tolerance it met.
 3. **A count of zero is omitted from the file**, never from `--stats`.
    This applies to counts only (today `nodata_vertices_removed`), never to a
-   measured value: `--tolerance 0` is accepted (`cli.py:822`) and then
+   measured value: `--tolerance 0` is accepted (`cli.py:827`) and then
    `tolerance_m 0` and `max_error_m 0` are written
    (`test_cli_mesh_refine.py:151-155` asserts both).
 4. **Self-checks** live in `--stats`. If one is ever non-zero it is also
@@ -394,7 +394,7 @@ installed version, gives the same bytes:
 - `PATH` is resolved like `--stats`'s (`_destination` with `--out-parent`).
   It is refused, before any file is written, if it resolves to the mesh file,
   the `--out-edges` file or the `--stats` file, with the same kind of usage
-  error `_report_target` gives (`cli.py:1100-1112`). `-` is refused: standard
+  error `_report_target` gives (`cli.py:1105-1117`). `-` is refused: standard
   output is `--stats -`'s.
 - It is written after the mesh files and the `--stats` report, and its path is
   echoed on stdout like theirs. A refused or failed run writes no record.
@@ -662,7 +662,7 @@ Not invariant-critical, so no mutation round (README, "Cost constraints").
   the user's own input and is out of scope, D8).
 - **`command`**: tests that read it (in `--stats` or `--record`) set
   `sys.argv` with `monkeypatch`, because `CliRunner` does not, and the
-  `command` is built from `sys.argv` (`_command`, `cli.py:1132-1134`).
+  `command` is built from `sys.argv` (`_command`, `cli.py:1137-1139`).
 - **`--stats` values with `|`** are compared after unescaping `\|`.
 - **`--record`** (D5):
   - the file parses as JSON, is ASCII, and ends in one newline;

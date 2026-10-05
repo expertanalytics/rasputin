@@ -1,6 +1,6 @@
 # Increment 29 — NVE reference catchments: our catchments against NVE's, station by station
 
-Status: **design approved by `@reviewer` (round 5, 2026-10-04); PR 1 merged as #173; PR 3 merged as #178; PR 2 (the gauge on the river): green `193079d`, 569 production lines; code review round 3 and evidence review round 2 (2026-10-05) approved; the push waits for Ola; PR 4 (the batch and the comparison): red `2b9b39f` in, on PR 2's unpushed branch, `@tester`'s choices read ("PR 4's red step"), a small red amendment next, then green; questions 5, 6 and 7 (the example station) open for Ola, written to their defaults**
+Status: **design approved by `@reviewer` (round 5, 2026-10-04); PR 1 merged as #173; PR 3 merged as #178; PR 2 (the gauge on the river): green `193079d`, 569 production lines; code review round 3 and evidence review round 2 (2026-10-05) approved; the push waits for Ola; PR 4 (the batch and the comparison): green `1c39ef7` (red `2b9b39f` and `7cd56a4`), on PR 2's unpushed branch, 530 net production lines (48 past the margin, under 700), `@developer`'s choices read ("PR 4's green step"): three changes, (a) to (c), red then green, then code review; questions 5, 6, 7 (the example station) and 8 (which area of ours) open for Ola, written to their defaults**
 (`@architect`, 2026-10-04), branch `worktree-nve-catchments` off master
 `d20126b`. Ola's rulings of 2026-10-04 are in the section below. Round 2 closed the burn's drainage claim
 (checked node by node, not assumed), the ELVIS data cases, the PR order, and
@@ -18,8 +18,8 @@ placement is redesigned to his direction (the mapped river, then the DEM's
 flow path along it, never an area objective), with a per-station sensitivity
 check. Five PRs (merge order 1, 3, 2, 4, 5). Questions 1 to 4 under "Questions for Ola" are
 ruled (see "Ola's rulings"); questions 5 and 6, from PR 2's code review,
-and 7, from its placement figures, are open, and the design is written to
-their defaults.
+7, from its placement figures, and 8, from PR 4's green step, are open, and
+the design is written to their defaults.
 
 **Closes.** Catchments for real Norwegian gauging stations, computed from the
 DEM by `rasputin`, one polygon per station, each usable as `--domain`, and a
@@ -463,7 +463,111 @@ area is in no band, and one with `tiles` None in no tile group; (d) one
 `mixed_grid` refusal gives the singular line above, and none gives `line`
 null. In `test_cli_station_catchments.py`, a `--reference` file in another
 CRS (EPSG:32633) is refused, naming `--reference`, and nothing is written.
-These fail on the missing modules today, like the rest of the red suite.
+The amendment is `7cd56a4`; like the rest of the red suite, it failed on the
+missing modules until green.
+
+**PR 4's green step: `@developer`'s choices, read by `@architect`
+(2026-10-05).** Green `1c39ef7`, on red `2b9b39f` and `7cd56a4`. Not Ola's
+rulings. Each choice the design left open is adopted as the design, or
+changed with a red and a green ask below.
+
+*The area, as built (question 8, default).* `fine_area_km2` is `ours` (the
+lattice nodes strictly inside our fine outline) × cell area, with or
+without a reference, so the size band of a station with no reference and
+the area ratio both read the same count as the overlaps;
+`reduced_area_km2` is the reduced outline's shapely area;
+`reference_area_km2` is NVE's polygon's shapely area; `nve_area_km2` is the
+station layer's own figure, copied. `area_ratio` = `ours` × cell area /
+`reference_area_km2` ("Agreement and classes" says why it is half a cell
+above the traced outline's area). The catchment file keeps 22's
+`fine_area_m2` (the traced outline's shapely area) and `reduced_area_m2`,
+so `results.csv`'s `fine_area_km2` and the file's `fine_area_m2` differ by
+half a cell; the README of the acceptance run says so.
+
+*Adopted:*
+
+1. **`StationResult`'s columns**, in the order of
+   `catchment_batch.py`: the station and its class (`station`, `name`,
+   `class`, `match_by`, `refusal_message`, `refusal_cause`, `grid_tiles`);
+   the placement; the gauge and the burn (the burn's `end_extended_m` and
+   `end_closed` with the gauge, not after the sensitivity as "The batch"
+   lists them); the sensitivity and the joined `causes`; the catchment and
+   the agreement; `tiles`, `windows`, `seconds`. Three columns beyond the
+   design's list: `chain_nodes` (`GaugeResult`'s own field, which the row
+   takes whole), `reduced_area_km2` and `divide_offset_m` (both in "The
+   batch"'s words, "fine and reduced area" and "the agreement numbers",
+   now with names).
+2. **A refused row keeps `reference_area_km2`, `nve_area_km2` and
+   `seconds`.** They are known before the refusal, and the size band of a
+   refused row needs the reference area (the red amendment's band with an
+   `uncertain` and a `refused` row counts both).
+3. **The catchment file is written when its row arrives.** The batch still
+   calls `sink.catchment` before `sink.row`; the directory sink holds the
+   catchment until the row, because the file's properties come from the
+   row. The properties: `station`, `name`, `series`, then 22's (`nodes`,
+   `fine_vertices`, `fine_area_m2`, `reduced_vertices`, `reduced_area_m2`,
+   `outline_tolerance_m`, `windows`), then the row's fields from
+   `placed_on` to `causes` (the placement, the gauge, the burn, the
+   sensitivity). No `seed` or `seed_crs` (the station's position is in the
+   stations file) and no agreement numbers or class (they are in
+   `results.csv`). A batch stopped by a bug writes no file for the station
+   in flight, which never got its row.
+4. **The stderr lines.** Per station, `<station> <name>: <word>`, the word
+   being the class, or "well defined, no reference" for a station with no
+   cause and no reference polygon; a refusal adds `: <message>`, an
+   `uncertain` row its causes in brackets, and a row with both overlaps
+   adds "; NVE's in ours 98.4 %, ours in NVE's 99.2 %, area ratio 0.984"
+   (one decimal, three for the ratio). At the end, `summary: N stations:
+   refused a, uncertain b, match c, close d, miss e`, the known-refusal
+   line when there is one, and the output directory on stdout.
+5. **The reference CRS refusal** names `--reference` and says "the
+   reference file's CRS, X, is not the river file's, Y; polygons are not
+   reprojected".
+6. **`nve_in_ours` and `ours_in_nve` are 0.0 when their divisor is 0.**
+   `ours` is never 0 (the outline holds the placed node); `ref` is 0 when
+   NVE's polygon holds no node. 0.0 fails both overlap bars, and the offset
+   test still decides, which is the right test for a polygon smaller than
+   the lattice resolves. The third divisor is not covered: see change (b).
+7. **`MixedGridError.tiles` defaults to `()`.** `dem_input.py:248`
+   re-raises a mosaic error as `type(exc)(message)` with more words, which
+   calls the constructor with the message alone; the mesh path reads no
+   tiles, and the catchment path, the only reader, gets them from
+   `_covering` directly.
+
+*Changed* (`@tester` red, then `@developer` green; one round, lean):
+
+- **(a) An unknown `--only` is refused by the command, naming `--only`,
+  before anything is written.** Today `run_batch`'s `ValueError` ("not in
+  the stations file: 9.9.9") comes out as a plain `Error:` line, without the
+  option's name, after `--out-dir` has been created. *Red*
+  (`test_cli_station_catchments.py`): `--only 9.9.9` exits non-zero, the
+  output names `--only` and `9.9.9`, and `--out-dir` does not exist.
+  *Green* (`cli.py`): check the numbers against the stations read, before
+  `target.mkdir`, as `typer.BadParameter(..., param_hint="--only")`.
+  `run_batch` keeps its own check (red-step item 8) for callers other than
+  the command.
+- **(b) A reference polygon with no area is refused when the file is
+  read.** `agreement` divides by NVE's polygon's area and perimeter: a
+  zero-area ring raises `ZeroDivisionError`, and an empty polygon a
+  `ValueError` from its NaN bounds ("cannot convert float NaN to
+  integer"), both checked on `1c39ef7`. Either stops a batch, possibly
+  hours in, at that station. *Red* (`test_station_set.py`): a reference
+  feature whose polygon has a zero-area ring, and one with empty
+  coordinates, each make `read_references` raise `ValueError` naming the
+  station's number. *Green* (`io/station_set.py`): `read_references`
+  refuses a geometry that is empty or has area 0, naming the station.
+  The command already refuses a `ValueError` there naming `--reference`.
+- **(c) `results.csv` is written row by row.** Today the table is written
+  only when the batch ends, so a bug at the 139th station of a run of
+  hours loses the 138 rows (stderr keeps them, in less detail). The
+  directory sink opens `results.csv` when it is made, writes the header,
+  and writes and flushes each row as it arrives; `summary.json` stays at
+  the end. *Red* (`test_cli_station_catchments.py`): with
+  `catchment_batch.delineate` replaced by a stub that delineates the first
+  station and raises `RuntimeError` at the second, the command fails, and
+  `results.csv` holds the header and the first station's row, and
+  `summary.json` does not exist. *Green* (`cli.py`): the sink as above;
+  the bytes of a completed run's `results.csv` do not change.
 
 ## What the data says (measured 2026-10-04)
 
@@ -1718,7 +1822,17 @@ reaches; no DEM is read):
   row bands, so memory stays bounded on Polmak-size polygons. This is the
   Bygdin comparison of 22's acceptance, unchanged.
 - **NVE's in ours** = both / ref, **ours in NVE's** = both / ours.
-- **Area ratio** = our fine area / NVE's polygon area (shapely).
+- **Area ratio** = `ours` × cell area / NVE's polygon area (shapely): our
+  area **counted on the lattice**, the same `ours` as the overlaps, over
+  NVE's exact polygon area (as built in PR 4's green step, `1c39ef7`;
+  question 8). It is not the traced fine outline's shapely area
+  (`Catchment.fine_area`, the catchment file's `fine_area_m2`): the traced
+  ring runs through the midpoints between in- and out-nodes and cuts each
+  corner, so `ours` × cell area exceeds it by half a cell: 50 m² on DTM10,
+  under 0.01 % of a 1 km² catchment (six random-walk node sets traced with
+  `outline.trace`, outer ring against the nodes strictly inside it,
+  2026-10-05: 0.5 cell each time). `ours` counts the nodes of filled holes
+  and leaves out those of dropped rings, so it can differ from `nodes`.
 - **Mean divide offset** = (ref + ours − 2·both) × cell area / NVE polygon's
   perimeter, in metres: the area between the two outlines divided by the
   length of NVE's. Exact when one outline lies a constant distance outside
@@ -1888,6 +2002,25 @@ with the NoData fix of code review round 1 (green `96b3881`) it is 568 net
 (588 added, 20 removed; `burn.py` 174, `catchment.py` 97, the others as
 before); with the NaN fix of code review round 2 (green `193079d`) it is
 569 net (589 added, 20 removed; `burn.py` 175, the others as before).
+PR 4's green step (`1c39ef7`) came to 530 net (567 added, 37 removed),
+counted by PR 2's round-2 rule over `9e666f4..1c39ef7`: `reference.py` 184,
+`catchment_batch.py` 171, `cli.py` 140 net, `io/geojson.py` 21,
+`catchment.py` 9, `mosaic.py` 5, `burn.py` 0 (a docstring). That is 58 %
+over its 335 and 48 lines past the margin (482), and under 700.
+`@developer`'s account of the excess: `StationResult`'s field list, about
+50 lines (one line per column, 48 columns, which "The batch" lists
+in words rather than counts); the summary's models and its fixed key
+lists, about 40 (`Measure`, `Measures`, `Group`, `KnownRefusals`,
+`Summary`, and the five lists written in full by the red step's
+additions); and `station-catchments`' ten option declarations with their
+help, about 45. None of it is a rule the design did not ask for; the
+estimate counted the rules and not the declarations. The changes asked
+under "PR 4's green step" add a few lines each. **PR 4 is not split**:
+the file names no split seam for PR 4, and the ceiling, not the margin,
+is what would make one fire. If a later round took it past 700, the seam
+is `reference.py` (pure; its own suite, `test_reference.py`) with
+`MixedGridError` and `MixedGridRefusal`, about 200 lines, as one PR, and
+the batch, the command and the moved writer as the next.
 
 | File | What | Estimate |
 |---|---|---|
@@ -1912,12 +2045,12 @@ before); with the NaN fix of code review round 2 (green `193079d`) it is
 | `cli.py` | `catchment --rivers` and the placement line | 40 (95 at green) |
 | `docs/benchmarks/<date>/nve-placement/render.py` | the placement figures (evidence script, not counted, Ola's ruling; "Placement figures") | (130) |
 | **PR 2, the gauge on the river** (needs PRs 1 and 3) | | **about 415 (598); 569 net (589 added) at green `193079d`** |
-| `reference.py` | agreement, classes, `match_by`, summary | 115 |
-| `catchment_batch.py` | `BatchRequest`, `BatchSink`, `run_batch`, `StationResult`, `refusal_cause` | 105 |
-| `mosaic.py`, `catchment.py` | `MixedGridError`, `MixedGridRefusal` (round 3, Ola's ruling on counting) | 10 |
-| `cli.py` | `station-catchments`, the directory sink | 80 |
-| `io/geojson.py` | the moved writer (moved from PR 3 after its code review, round 1) | 25 (cli.py −25) |
-| **PR 4, the batch and the comparison** | | **about 335 (482)** |
+| `reference.py` | agreement, classes, `match_by`, summary | 115 (184 at green) |
+| `catchment_batch.py` | `BatchRequest`, `BatchSink`, `run_batch`, `StationResult`, `refusal_cause` | 105 (171 at green) |
+| `mosaic.py`, `catchment.py` | `MixedGridError`, `MixedGridRefusal` (round 3, Ola's ruling on counting) | 10 (14 at green) |
+| `cli.py` | `station-catchments`, the directory sink | 80 (140 net at green, the writer's lines removed) |
+| `io/geojson.py` | the moved writer (moved from PR 3 after its code review, round 1) | 25 (cli.py −25; 21 at green) |
+| **PR 4, the batch and the comparison** | | **about 335 (482); 530 net (567 added) at green `1c39ef7`** |
 | `catchment.py`, `cli.py`, `catchment_batch.py` | the fallback (below) | 80 |
 | **PR 5, the fallback** | | **about 80 (115)** |
 
@@ -2335,9 +2468,9 @@ what counts as a good catchment, gauges on lakes) are ruled, under "Ola's
 rulings"; the way a gauge is placed follows your direction. Questions 1 to 4
 below are ruled and closed (2026-10-04): question 2 as its entry says, questions 1,
 3 and 4 with their defaults ("Yes to all three."). Questions 5 and 6 came
-from PR 2 (2026-10-05), and 7 from its placement figures (the same day);
-all three are open, and the design and the code follow their defaults until
-Ola rules.
+from PR 2 (2026-10-05), 7 from its placement figures (the same day), and 8
+from PR 4's green step (the same day); all four are open, and the design and
+the code follow their defaults until Ola rules.
 
 1. **When is a station too uncertain to score?** A gauge's coordinates are
    usually a few tens of metres off the river, and further for some. For each
@@ -2409,6 +2542,20 @@ Ola rules.
    (459.8 km²) agrees with NVE's to 98.4 % one way and 99.2 % the other.
    Alternative: keep Narsjø and fix its placement first (PR 4's tier
    design; see "The PR split"), or pick another station.
+8. **Which area is "our area" in the comparison table.** Two areas of our
+   catchment are close to each other but not equal: the number of DEM
+   points inside our outline times the area of one cell, and the area of
+   the outline itself. The outline cuts the corners between the DEM
+   points, so it is half a cell smaller, 50 m² on the 10 m DEM, whatever
+   the catchment's size. The table's `fine_area_km2` and the area ratio
+   against NVE's polygon use the point count, the same count the two
+   overlap percentages use; the catchment file's `fine_area_m2` keeps the
+   outline's area, as increment 22 wrote it. *Open (2026-10-05). Default:
+   keep the point count*, so the area ratio and the overlaps are
+   measured on the same thing. Alternative: use the outline's area in the
+   table, so that it equals the file's figure; the area ratio then drops
+   by half a cell over NVE's area (0.005 % on a 1 km² catchment), and a
+   new test pins it.
 
 ## Review
 
