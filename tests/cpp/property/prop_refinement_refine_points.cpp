@@ -443,6 +443,18 @@ TEST_CASE("J2 oracle: known counts on a hand-built 3 x 3 grid", "[refine_points]
         h.skip.back() = 0;
         CHECK(h.run(1.0).over == 10);
     }
+    SECTION("a triangle reaching past the last column still finds the points on it") {
+        // p4 = (col 3, row 1), off the grid, on the plane; T2 = (p1, p2, p4)
+        // holds the points on the last column (edge p1-p2): (2, 0.5) and p2.
+        // Its bucket range is clamped to the grid (rule 6); unclamped, it
+        // would index past the bucket table, which ASan reports.
+        h.vertices.push_back(Point2{3, -1});
+        h.z.push_back(11);
+        h.valid.push_back(1);
+        h.triangles.push_back({1, 2, 4});
+        CHECK(h.run(1.0).not_ccw == 0);
+        CHECK(h.run(1.0).over == 11);
+    }
 }
 
 TEST_CASE("J2 oracle: a check point outside the grid throws", "[refine_points][RP3][j2_oracle]") {
