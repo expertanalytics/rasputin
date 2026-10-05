@@ -33,14 +33,17 @@ axes and the prime meridian (section 9, "After red tests 8-10"). `5074ef6`
 adds the `+pm=paris` pair and found a thirteenth site (`domain.py:103`); a
 final sweep over `src_python/` and `tools/` (section 9, "The final sweep")
 finds no fourteenth. Red tests 11 and 12 are in `20bcf2c`; `@developer`'s
-green commit is `5197f9a`. Code review round 1 found a third false "the
+first green commit is `5197f9a`. Code review round 1 found a third false "the
 same" (a `+lon_0` held only in PROJ's remark), so the rule is re-ruled from
 what the transform does, not from CRS attributes (section 9, "After code
 review round 1"). `@tester`'s re-spelt fixtures and red rows are in
 `13b3e6d`, with Ola's ruling D15 b (a PROJ string naming no datum is not its
 EPSG code, and the refusal says which code to write) folded into section 9
-("After the round-1 red step"). Next: `@developer`, then `@reviewer`
-round 2.
+("After the round-1 red step"). `@developer`'s green commit for them is
+`65cd528`. Code review round 2 asked for prose only (this paragraph, the
+net lines, section 6's row B, and the hint's scope), fixed in section 9 and
+the review record. Next: `@reviewer` round 3, a quick check of those
+fixes; then push on Ola's yes.
 
 Re-checked against master `44fa7f5`: `git diff --stat 12dace7 44fa7f5 --
 src_python` is empty, and of the files cited below only `tools/brief.py`
@@ -455,7 +458,7 @@ table in a `@tester` commit, and deletes the section 8 exception it removes
 |---|---|---|---|---|---|
 | T2 | `audit-layering-test` | X3 | 0 (tests only, about -35) | nothing | none; `@tester` then `@reviewer`, no `@developer` |
 | T1 | `audit-cli-test-harness` | X1 | 0 (tests only, -350) | nothing | none |
-| B | `audit-crs-helpers` | F3, with the `EPSG:None` fix | about +16 (section 9; first estimated -25) | T2 | red tests for the rule and the fix |
+| B | `audit-crs-helpers` | F3, with the `EPSG:None` fix | +22, measured at `65cd528` (section 9; first estimated -25) | T2 | red tests for the rule and the fix |
 | A | `audit-lattice` | F2, F9, F10 (repository Protocol), F12 (`mosaic`'s two) | about -100 | B | red test for the +-inf ruling; `@perf` run: meshes byte-identical |
 | F | `audit-catchment-shared` | F4, F10 (catchment types), F12 (`gauge`'s two, `catchment` -> `_core`) | about -40 | nothing | none |
 | C | `audit-geojson-io` | F5, F12 (`chains` -> `feature_input`) | about -40 | B | `@tester` amendment if wordings move, and for the two `--help` texts |
@@ -1214,6 +1217,7 @@ differ).
 - Two sites only, both in `catchment.py`: `check_reach_crs` and `delineate`'s reach check (refusal wordings above). Other refusing sites and every record stay as they are.
 - When: `parse_crs(dem_crs).to_epsg(min_confidence=100)` is a code `n`, and the refused CRS's `to_epsg(min_confidence=100)` is None. A refused CRS with a code of its own (`EPSG:32633` against an EPSG:25833 DEM) gets no hint: its writer already chose a code.
 - Ruled on the default to Ola's open question: the hint shows even when the refused CRS matches no code at all, so the Lambert at 13.5 E gets it too. The hint offers a code; it does not claim the two are the same.
+- Ruled at code review round 2, intended under that reason, no code change: the hint's test is "the refused CRS has no exact code", so it also shows for `OGC:CRS84` against an EPSG:25833 DEM, and for `+proj=utm +zone=33 +datum=WGS84 +units=m +no_defs` (which `same_crs` treats as EPSG:32633) against EPSG:25833; both get `; if you mean EPSG:25833, write EPSG:25833`, and `EPSG:32633` itself gets none (probe at `65cd528`: `_code_hint(g, "EPSG:25833")` for the three).
 - Where: a private `_code_hint(given, dem_crs) -> str` in `catchment.py` (about 5 lines), returning the hint or `""`. Not in `crs.py`: both callers are in one module, and `crs.py`'s public surface stays `same_crs`, `transform_label`, `single_crs`. It runs only on the refusing path, so its identification calls (milliseconds) never touch an accepted run; `same_crs` has already parsed `given`, so it raises nothing new.
 - `@tester`'s departure, accepted: test 6's refusal of the Lambert at 13.5 E, and `test_a_reach_in_another_crs_is_refused`, assert `startswith(today's words)`, not equality, since the hint may follow; the hint is pinned by `in` at the two no-datum tests.
 - `@tester`'s departure, accepted: `crs_fixtures.axes_swapped` reverses the axis list of the code's PROJJSON with its `id` removed, then writes WKT2; it asserts the ID is gone and that pyproj's `==` calls the result different, so a no-op swap fails loudly.
@@ -1247,6 +1251,13 @@ one-line alias of `!=`. Tests: red tests 1-7 came to 254 non-blank lines
 added and 9 removed (`git diff -U0 b63132e 29aff00 -- tests`), 8-12 add
 more, and the round-1 rows about 40. Section 6's row B and its total move by
 about +40 accordingly; the drift point (one CRS rule) is still written once.
+
+**Measured at `65cd528`: +22** (`python3 tools/count_loc.py 44fa7f5
+65cd528`: 65 added, 43 removed), against about +20. `crs.py` +19 as
+designed; `catchment.py` +4: -3 for `single_crs` as designed, and +7 for
+the hint against about +5, the two `hint = _code_hint(...)` lines at the
+call sites not costed; `cli.py` -5; `dem_input.py` +4 (its nine-line
+import, not packed); the other four files 0.
 
 ### Citations this PR moves, pinned now
 
@@ -1301,3 +1312,5 @@ a wrong line. No citation points into the test files this PR edits.
 **T2 (`audit-layering-test`), code review, round 2, 2026-10-05.** Range `97eea35..90cba64` (4686456 fmt-off comment, 90cba64 round 1 recorded and net explanation). Verdict: CHANGES REQUESTED. LOC: 0 production lines; branch test lines +186 −185, +1 net. Not pushed; no CI. Both round-1 blocking items fixed and true: `ruff format --diff` on a copy without the markers does what the new comment says (joined rows 98 and 99 characters, limit 100), and the per-file counts in the net explanation match `git diff -U0`. Check 4's wording matches the test. ruff, format, mypy and check_citations clean; test_layering 56 passed. Blocking: (1) `@architect`: the round-1 record's citations `tests/python/test_layering.py@97eea35:27-28` and `docs/increments/python-audit.md@97eea35:12-15` (pinned at recording) now resolve to the fixed text unless pinned. Suggestion: say "adds 4 and removes 2" at line 19.
 
 **PR B (`audit-crs-helpers`), code review, round 1, 2026-10-05.** Head `5197f9a`. Verdict: CHANGES REQUESTED. LOC: +36 net production (`count_loc.py 44fa7f5 5197f9a`). Blocking, all `@architect`: (1) `same_crs` rule 2 calls `+proj=longlat +datum=WGS84 +lon_0=10` the same as EPSG:4326 (also `+lon_0=-3`, and `+datum=NAD83 +lon_0=10` against 4269) while the always_xy transform moves every point 10 degrees, and the rule is not transitive (EPSG:4326 = CRS84, the string = 4326, the string is not CRS84); (2) the status paragraph is stale; (3) the +36 against about +16 is not reconciled. Ruled in section 9, "After code review round 1".
+
+**PR B (`audit-crs-helpers`), code review, round 2, 2026-10-05.** Head `65cd528`. Verdict: CHANGES REQUESTED, prose only. LOC: +22 net production (`count_loc.py 44fa7f5 65cd528`). Blocking, all `@architect`: the stale status paragraph, the unrecorded +22, section 6's row B; design note: the hint also shows for `OGC:CRS84` and a datum-WGS84 UTM string against an EPSG DEM. Fixed in this file (status, section 6, section 9 "Net production lines" and "After the round-1 red step"); no code change.
