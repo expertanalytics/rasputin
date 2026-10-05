@@ -680,3 +680,7 @@ Suggestions:
 Not pushed; no CI.
 
 Taken in the recording commit: blocking item 3 (the status line).
+
+## Ola's rulings, 2026-10-05 afternoon
+
+Ola, verbatim: "yes to all defaults, push both". So: `tools/brief.py` takes the two edits (note names `<persona>-<worktree>-<HHMMSS>.md`, root `*.md` files in `@architect`'s limit); `count_loc.py` pins `--diff-algorithm=myers`; a file renamed across the counted/uncounted boundary counts in full (added on the way in, removed on the way out); `CLAUDE.md` §2's pointer says that `docs/` and non-code files are not counted either. Red for the second and third: `f885887`.
