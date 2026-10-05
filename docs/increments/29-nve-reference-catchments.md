@@ -1,6 +1,6 @@
 # Increment 29 — NVE reference catchments: our catchments against NVE's, station by station
 
-Status: **design approved by `@reviewer` (round 5, 2026-10-04); PR 1 merged as #173; PR 3 merged as #178; PR 2 (the gauge on the river): green `193079d`, 569 production lines; code review round 3 and evidence review round 2 (2026-10-05) approved; the push waits for Ola; PR 4 (the batch and the comparison): green `1c39ef7` (red `2b9b39f` and `7cd56a4`), on PR 2's unpushed branch, 530 net production lines (48 past the margin, under 700), `@developer`'s choices read ("PR 4's green step"): three changes, (a) to (c), red then green, then code review; questions 5, 6, 7 (the example station) and 8 (which area of ours) open for Ola, written to their defaults**
+Status: **design approved by `@reviewer` (round 5, 2026-10-04); PR 1 merged as #173; PR 3 merged as #178; PR 2 (the gauge on the river): green `193079d`, 569 production lines; code review round 3 and evidence review round 2 (2026-10-05) approved; the push waits for Ola; PR 4 (the batch and the comparison): green `33b1f2d` (red `2b9b39f`, `7cd56a4` and `6ebff1b`), on PR 2's unpushed branch, 541 net production lines (580 added, 39 removed; 59 past the margin, under 700); code review round 1 (2026-10-05) blocked only on `project_structure.md`, which waits on Ola's ruling on who edits root files; next, changes (d) to (f) and a test-only commit ("PR 4's code review, round 1"), red then green, then code review round 2; questions 5, 6, 7 (the example station) and 8 (which area of ours) open for Ola, written to their defaults**
 (`@architect`, 2026-10-04), branch `worktree-nve-catchments` off master
 `d20126b`. Ola's rulings of 2026-10-04 are in the section below. Round 2 closed the burn's drainage claim
 (checked node by node, not assumed), the ELVIS data cases, the PR order, and
@@ -568,6 +568,75 @@ half a cell; the README of the acceptance run says so.
   `results.csv` holds the header and the first station's row, and
   `summary.json` does not exist. *Green* (`cli.py`): the sink as above;
   the bytes of a completed run's `results.csv` do not change.
+
+Changes (a) to (c) are red `6ebff1b` and green `33b1f2d`.
+
+**PR 4's code review, round 1: the suggestions, ruled by `@architect`
+(2026-10-05).** Not Ola's rulings. The round's one blocker,
+`project_structure.md`, waits on Ola (see the round's record under
+"Review"). Of its four suggestions, three become changes (d) to (f),
+`@tester` red then `@developer` green, one round, lean; the fourth is a
+test-only commit. Together about 20 production lines, so PR 4 stays under
+700 (about 560 net) and is not split.
+
+- **(d) A river file not in the DEM's CRS is refused before anything runs,
+  naming `--rivers`, and before `--out-dir` is created.** Today
+  `station-catchments` checks only the reference file against the river
+  file's CRS. The DEM's CRS is checked per station, inside `delineate`
+  ("the river reach must be in the DEM's CRS"), so every placed station
+  becomes a `refused` row with cause `other`, the coverage test compares
+  station points and tile boxes in two CRSs, and the run takes its whole
+  length to say one thing. `catchment --rivers` refuses the same file at
+  once (`_placed` in `cli.py`). The references need no check of their own:
+  they are refused unless in the river file's CRS, so once the river file is
+  in the DEM's CRS, so are they. *Red* (`test_cli_station_catchments.py`):
+  a river file and a reference file, both in EPSG:32633, over a DEM in
+  EPSG:25833: non-zero exit, the output names `--rivers` and both CRSs, and
+  `--out-dir` does not exist. (`test_catchment_batch.py`): `run_batch` with
+  `segments_crs` EPSG:32633 over that DEM raises `ValueError` naming both
+  CRSs, and the sink has received nothing. *Green*: one rule in one place,
+  `catchment.py`'s `check_reach_crs(crs, repository) -> None`, raising
+  `ValueError("the river file's CRS, X, is not the DEM's, Y")` when
+  `parse_crs(crs)` is not the first tile's CRS (the comparison `_placed`
+  makes today). `_placed` calls it, mapping the error to
+  `typer.BadParameter(..., param_hint="--rivers")` as now;
+  `station_catchments` calls it the same way right after the repository is
+  opened, before the request is built and before `mkdir`; `run_batch`
+  calls it before its first station, beside its `--only` check, for callers
+  other than the command. A DEM whose tiles are in several CRSs keeps
+  `delineate`'s own refusal ("the tiles are in N CRSs").
+- **(e) A failed write names the output, not `--dem`.** The
+  `except OSError` around `run_batch` in `station_catchments` exists for
+  the DEM's reads, but the directory sink writes inside `run_batch`, so a
+  catchment file that cannot be written reads "Invalid value for --dem:
+  cannot read .../out/1.140.0.geojson: [Errno 21] Is a directory". The
+  `results.csv` open and the `summary.json` write sit outside every
+  `except`, so their failure is a traceback. *Red*
+  (`test_cli_station_catchments.py`, three cases, each with a directory made
+  beforehand where the command writes a file: `<out-dir>/<station>.geojson`,
+  `<out-dir>/results.csv`, `<out-dir>/summary.json`): non-zero exit; the
+  output names `--out-dir` and the path; it contains neither `--dem` nor
+  "cannot read"; no traceback. *Green* (`cli.py`): every write the command
+  makes (the `results.csv` open, each row's write and flush, each catchment
+  file, `summary.json`) turns an `OSError` into
+  `typer.BadParameter(f"cannot write {path}: {exc.strerror or exc}",
+  param_hint="--out-dir")`, through one small helper. `BadParameter` is
+  neither an `OSError` nor a `ValueError`, and `run_batch` stops on any
+  exception but `CatchmentError`, so it reaches the user unchanged; the
+  `except OSError` around `run_batch` is then about reads alone.
+- **(f) A station with no name prints no stray space.** The stderr line is
+  `f"{row.station} {row.name or ''}: {word}"`, so a station with no name
+  prints `1.2.0 : match`. *Red* (`test_cli_station_catchments.py`): a
+  station with no `name` gives a stderr line starting `<station>: `. *Green*
+  (`cli.py`): the name and its space only when the name is set and not
+  empty.
+- **Test-only: plain imports.** The `importlib` fixtures `cb`, `gj` and
+  `ref` in `test_catchment_batch.py`, `test_io_geojson.py` and
+  `test_reference.py` let the red suite be collected before the modules
+  existed; now they exist, they become plain imports. `@tester`, in its own
+  commit ahead of the red one, so the suite passes unchanged at `33b1f2d`
+  in between. `test_mosaic.py`'s `importlib` fixtures are older than PR 4
+  and are left.
 
 ## What the data says (measured 2026-10-04)
 
@@ -2006,7 +2075,12 @@ PR 4's green step (`1c39ef7`) came to 530 net (567 added, 37 removed),
 counted by PR 2's round-2 rule over `9e666f4..1c39ef7`: `reference.py` 184,
 `catchment_batch.py` 171, `cli.py` 140 net, `io/geojson.py` 21,
 `catchment.py` 9, `mosaic.py` 5, `burn.py` 0 (a docstring). That is 58 %
-over its 335 and 48 lines past the margin (482), and under 700.
+over its 335 and 48 lines past the margin (482), and under 700. With
+changes (a) to (c) (red `6ebff1b`, green `33b1f2d`) it is 541 net (580
+added, 39 removed) over `9e666f4..33b1f2d`: `reference.py` 184,
+`catchment_batch.py` 171, `cli.py` 147, `io/geojson.py` 21,
+`catchment.py` 9, `mosaic.py` 5, `io/station_set.py` 4, `burn.py` 0;
+59 past the margin and under 700.
 `@developer`'s account of the excess: `StationResult`'s field list, about
 50 lines (one line per column, 48 columns, which "The batch" lists
 in words rather than counts); the summary's models and its fixed key
@@ -2048,9 +2122,10 @@ the batch, the command and the moved writer as the next.
 | `reference.py` | agreement, classes, `match_by`, summary | 115 (184 at green) |
 | `catchment_batch.py` | `BatchRequest`, `BatchSink`, `run_batch`, `StationResult`, `refusal_cause` | 105 (171 at green) |
 | `mosaic.py`, `catchment.py` | `MixedGridError`, `MixedGridRefusal` (round 3, Ola's ruling on counting) | 10 (14 at green) |
-| `cli.py` | `station-catchments`, the directory sink | 80 (140 net at green, the writer's lines removed) |
+| `cli.py` | `station-catchments`, the directory sink | 80 (140 net at green, the writer's lines removed; 147 at `33b1f2d`) |
+| `io/station_set.py` | a reference polygon with no area refused (change (b)) | (4 at `33b1f2d`) |
 | `io/geojson.py` | the moved writer (moved from PR 3 after its code review, round 1) | 25 (cli.py −25; 21 at green) |
-| **PR 4, the batch and the comparison** | | **about 335 (482); 530 net (567 added) at green `1c39ef7`** |
+| **PR 4, the batch and the comparison** | | **about 335 (482); 530 net (567 added) at green `1c39ef7`; 541 net (580 added) at `33b1f2d`** |
 | `catchment.py`, `cli.py`, `catchment_batch.py` | the fallback (below) | 80 |
 | **PR 5, the fallback** | | **about 80 (115)** |
 
@@ -2608,3 +2683,7 @@ Recorded by `@architect`, with the status line, `ROADMAP.md:54` and the estimate
 Fixes for evidence round 1, by `@architect` in the commit that records it: (1) the README's "Counts that differ" says the prediction for `156.24.0` and `213.4.0` came true, up to 11 on two grids, and that Ola's ruling covers the nine; (2) the example meshes `2.32.0` (question 7, default Atnasjø), and Narsjø is item (a) under PR 4 in "The PR split"; (3) both "46" places carry the note; (4) the status line and `ROADMAP.md:54`. The suggestion is taken as item (b) under PR 4 in "The PR split".
 
 **29 PR 2, evidence review, round 2, 2026-10-05 (copied from `@reviewer`'s handback).** Range `cdc0805..1d58e21` (one docs commit, 3 files, +57/-11, 0 production lines; PR 2 stays at 569). Verdict: APPROVED. Round 1's four findings closed: four of the six two-grid refusals are among the nine, `156.24.0` and `213.4.0` were predicted (9 + 2 = 11); the example meshes `2.32.0` (459.8478 km², well posed, no causes; Narsjø 0.0012 km² against 119.43 km², nearest line `objectid` 12252329, `elvid` 002-34-2695, `002.Q1B`, Nøra's `elvid` 002-34-1299 at 127.9 m with the same number); 48 lake stations in both surveys; status line and `ROADMAP.md:54` current. The PR 4 burn depths match `survey.csv`. `check_citations.py` exits 0. Suggestions: this file's line about `156.24.0` and `213.4.0` "on shifted tiles only … and run" could point to the README; with the tiered placement `22.22.0` Søgne (21.95 m) replaces Myrkdalsvatn among the three deepest burns.
+
+**29 PR 4, code review, round 1, 2026-10-05 (from the main session's summary of `@reviewer`'s handback).** Range `9e666f4..33b1f2d` (red `2b9b39f`, `@architect` `6475806`, red amendment `7cd56a4`, green `1c39ef7`, `@architect` `33c2dc4`, red `6ebff1b`, green `33b1f2d`). Verdict: CHANGES REQUESTED. LOC by PR 2's round-2 rule: 580 added, 39 removed, 541 net (`reference.py` 184, `catchment_batch.py` 171, `cli.py` 147, `io/geojson.py` 21, `catchment.py` 9, `mosaic.py` 5, `io/station_set.py` 4, `burn.py` 0); 59 past the 482 margin, under 700, so no split (the fallback seam applies only past 700). The reviewer's count reproduces 530 at `1c39ef7` and 569 for PR 2. Gates clean. Full suite on a freshly built `_core`: 4900 passed; 8 failures are artefacts of the scratch copy and pass in the worktree. Red before green for both pairs (`2b9b39f`/`7cd56a4` then `1c39ef7`; `6ebff1b` then `33b1f2d`). No mutation testing owed and no `bench.py` run (the 140-station acceptance run comes after PR 4). Prose claims checked: the half cell between `ours` × cell area and the traced outline's area, exact on 8 traced sets; classify and summarise as designed; a refusal against a bug (only `CatchmentError` becomes a row); `MixedGridError` and `MixedGridRefusal`, and `dem_input.py:248`'s re-raise; catchment files byte-identical across `9e666f4..33b1f2d` for three runs, and `results.csv` identical but for `seconds`. `33c2dc4`'s re-citations hold. PR 2's two leftovers are closed. PR 4 does not depend on questions 5 to 7. Blocking: `project_structure.md` is stale: line 203 says "the catchment GeoJSON writer is in cli.py (22)", the paragraph at line 515 records that exception as still open, and there are no entries for `reference.py`, `catchment_batch.py` and `io/geojson.py`. That file is at the repository root, outside `@architect`'s write limit; it waits on Ola's ruling on who edits root files (default: yes, `@architect` commits its drafted text). Suggestions: (1) `station-catchments` should refuse a river file (and with it the references) in a CRS other than the DEM's up front, naming `--rivers`, before creating `--out-dir`; today every placed station becomes an `other` refusal ("the river reach must be in the DEM's CRS, EPSG:25833"), while `catchment --rivers` refuses at once; (2) the `except OSError` around `run_batch` also wraps the sink's writes, so a write failure reads "Invalid value for --dem: cannot read .../out/1.140.0.geojson: [Errno 21] Is a directory"; a write failure should name the output, in plain words; (3) the new suites' `importlib` fixtures (`cb`, `gj`, `ref`) can become plain imports (`@tester`, test-only); (4) a station with no name prints a stray space in its stderr line. Not pushed; no CI.
+
+Rulings on round 1, by `@architect` in the commit that records it: the blocker stays open until Ola rules on root-file ownership; suggestions (1), (2) and (4) are adopted as changes (d), (e) and (f), and (3) as a test-only commit, under "PR 4's code review, round 1"; the status line, `ROADMAP.md:54`, the estimate block and PR 4's table rows are set to `33b1f2d`.
