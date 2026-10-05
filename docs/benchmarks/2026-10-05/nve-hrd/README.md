@@ -37,11 +37,12 @@ Scored stations (match, close, miss) are 85; 74 of them (87 %) match.
   on one normal tile, 16 km from any shifted one. Measured window by window
   (`probe_windows.py`): the fourth window's catchment is clear of its edge
   and spans x 819.4-849.8 km, y 7766.8-7783.3 km (NVE's polygon: x
-  819.4-849.7, y 7766.8-7783.7); the refusal comes after that flood. It is
-  thought to come from the tile choice for the window the loop tests for
-  growth (the catchment plus 2 km), which then includes the shifted tile
-  `7707_1`; which call raises it is not looked at. So the catchment was
-  found and the window rule refused it.
+  819.4-849.7, y 7766.8-7783.7). Its in-nodes plus 2 km still reach past
+  that window (x 851.8 against 850.9 km), so the loop grows it, by the
+  margin doubled to 32 km, and that window's tiles include the shifted
+  `7707_1` (the call stack: `_grow`, `catchment.py:259`, then `_plan`).
+  The same doubling took Knappom off the DEM (below). So the catchment was
+  found, on one grid, and the window rule refused it.
 - `244.2.0` Neiden: refused, its catchment needs DEM nodes where there is no
   tile (Finland; 131 km² of NVE's polygon lies outside every tile). Expected.
 - `311.4.0` Femundsenden: no river line within 500 m. Expected until PR 5.
@@ -167,15 +168,16 @@ probe in "NVE's lakes".
 
 The design's count was 24, from `@architect`'s probe; this run's rule (the
 mapped reach from its upstream end to P meets one of NVE's lake polygons in
-`lakes.geojson`) finds **16**, of which 13 not refused. Why 16 and not 24 is
-not looked at (the probe's rule is not recorded).
+`lakes.geojson`; `lake_above.py`, `step4/lake_above.txt`, which names each
+lake) finds **16**, of which 13 not refused. Why 16 and not 24 is not looked
+at (the probe's rule is not recorded).
 
-| station | name | class |
-|---|---|---|
-| `12.197.0` Grunke, `16.127.0` Viertjern, `18.11.0` Tjellingtjernbekk, `101.1.0` Engsetvatn, `148.2.0` Mevatnet, `168.3.0` Lakså bru, `189.3.0` Tennevikvatn | | match (7) |
-| `15.49.0` Halledalsvatn | | miss (above) |
-| `12.178.0` Eggedal, `12.188.0` Langtjernbekk, `19.96.0` Storgama ovf., `22.16.0` Myglevatn ndf., `83.12.0` Haukedalsvatn ndf. | | uncertain (5) |
-| `156.24.0` Bogvatn, `212.49.0` Halsnes, `223.2.0` Lombola | | refused, two grids |
+| class | stations |
+|---|---|
+| match (7) | `12.197.0` Grunke, `16.127.0` Viertjern, `18.11.0` Tjellingtjernbekk, `101.1.0` Engsetvatn, `148.2.0` Mevatnet, `168.3.0` Lakså bru, `189.3.0` Tennevikvatn |
+| miss (1) | `15.49.0` Halledalsvatn (above) |
+| uncertain (5) | `12.178.0` Eggedal, `12.188.0` Langtjernbekk, `19.96.0` Storgama ovf., `22.16.0` Myglevatn ndf., `83.12.0` Haukedalsvatn ndf. |
+| refused, two grids (3) | `156.24.0` Bogvatn, `212.49.0` Halsnes, `223.2.0` Lombola |
 
 Of the 13 scored or classed, 7 match, 1 misses, 5 are uncertain.
 
@@ -199,8 +201,8 @@ chain end open 8, line against the slope 0.
   each path node only 1 mm (`DROP_M`) below the one above it, which does
   not stop the DEM's steepest descent from choosing a lower node beside
   the path. In 5 of the 22 (`41.8.0`, `87.10.0`, `88.11.0`, `212.10.0`,
-  `234.18.0`) no node that close carries much more: the DEM's river is not
-  within 30 m of the placed node.
+  `234.18.0`) no node that close carries ten times the placed node's
+  count; where the DEM's river runs there is not looked at.
 - **Swing alone (4)**: `2.284.0`, `124.2.0`, `237.1.0`, and `38.1.0` (with
   the downstream side not read). In each, the whole catchment joins the
   burnt path between 20 m above the placed node and the node itself (the
@@ -310,7 +312,7 @@ Causes from the sensitivity (`causes`): `swing` the area changes over 5 % within
 | Station set | `rasputin fetch-stations nve-hrd`, 2026-10-05 10:27-10:28 CEST, into `../rasputin_data/nve_hrd`: stations, NVE's polygons, ELVIS river lines and (new since the placement figures) NVE's lakes. The fetch's own `manifest.json` is copied here; the SHA-256 of every file is in `provenance.txt`. The earlier fetch (02:44, no lakes file) had identical stations, polygons and rivers (same SHA-256) |
 | DEM | `../rasputin_data/DTM10_UTM33_20260925`, 254 tiles, 10 m |
 | Settings | the defaults: map radius 500 m, reach up 1000 m, corridor 30 m, outline tolerance twice the cell (20 m) |
-| Commands | `run.sh` (steps 1-3), `checks.py` (step 6), `analyse.py` (the tables in `analysis.md`), `rerun.sh` with `rerun.py` (step 4's re-runs), `probe_windows.py` (window extents) |
+| Commands | `run.sh` (steps 1-3), `checks.py` (step 6), `analyse.py` (the tables in `analysis.md`), `step4.sh` (step 4: `rerun.sh` with `rerun.py` for the re-runs, then `explain.py`, `divide.py`, `chain_counts.py`, `trace_exit.py`, `probe_windows.py`, `window_check.py`, `bypass.py`, `lake_above.py` and `findings.py`; each script's docstring says what it measures). Run twice, `step4.sh`'s re-runs gave the same rows to the bit except `seconds` |
 
 ## Time and memory
 
@@ -318,9 +320,10 @@ Wall time 1994 s for the 140 stations in one process (`/usr/bin/time -l`,
 in `batch.log`'s last lines), peak resident set 7.75 GB. Per station
 (`seconds` in `results.csv`): median 4.9 s, the longest 145 s
 (`234.13.0` Veahkkava, 2,077 km²). The design's estimate was tens of
-minutes to a few hours for about 610 M catchment nodes; the run made fewer
-(the refused and the wrongly small `uncertain` catchments, among them
-the three largest of the 140, made almost none).
+minutes to a few hours for about 610 M catchment nodes; the run's
+catchments hold 194.5 M (the sum of `nodes`): the refused and the wrongly
+small `uncertain` catchments, among them the three largest of the 140,
+made almost none.
 
 Per-station peak memory is sampled (every 0.2 s, `rss.tsv.gz`) and
 attributed to the station whose line came next (`analyse.py` says how);
@@ -343,6 +346,8 @@ is not looked at.
 | `catchments/` | each accepted catchment's reduced outline (GeoJSON, ours, not NVE's data) |
 | `manifest.json`, `provenance.txt` | the station set's manifest; commit, versions, SHA-256, power |
 | `reruns/` | step 4's re-runs, one CSV and log per setting |
+| `step4/` | step 4's probe outputs, one file per probe (`step4.sh`) |
+| `window_check_12km.csv`, `bypass.csv` | the window check and the bypass count, per station |
 
 NVE's own data (stations, polygons, rivers, lakes) is not committed; `run.sh`
 fetches it, and `provenance.txt` has its SHA-256 as fetched.

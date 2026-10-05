@@ -1,0 +1,17 @@
+== 105.1.0 Osenelv v/Øren (watercourse 105.A, river Osenvassdraget)
+  only ours: 0.17 km2 in 2 pieces; largest 0.16 km2, 0.7 km from the station, a point in it (130615, 6984211)
+  only NVE's: 137.55 km2 in 2 pieces; largest 137.55 km2, 0.0 km from the station, a point in it (137600, 6987735)
+  station inside NVE's polygon: True, 72 m from its edge; inside ours: True
+  placed on number, line 11396948 (105-23-1), 20 m; P = (129621, 6983502); lake line False; confluence near False
+  raw DEM, largest count within 60 m of P: 119.73 km2 at (129570, 6983510), 52 m from P, 5 m from the mapped line; inside NVE's polygon True
+  raw DEM, largest count within 300 m of P: 120.29 km2 at (129330, 6983520), 292 m from P, 178 m from the mapped line; inside NVE's polygon False
+  raw DEM, largest count within 1000 m of P: 121.45 km2 at (128670, 6983210), 995 m from P, 902 m from the mapped line; inside NVE's polygon False
+== 153.1.0 Storvatn (watercourse 153.22B0, river Leirelva)
+  only ours: 0.05 km2 in 11 pieces; largest 0.02 km2, 2.5 km from the station, a point in it (416528, 7334076)
+  only NVE's: 46.41 km2 in 11 pieces; largest 46.38 km2, 0.0 km from the station, a point in it (421970, 7334174)
+  station inside NVE's polygon: True, 431 m from its edge; inside ours: False
+  placed on number, line 11197607 (153-16-29), 20 m; P = (414823, 7331586); lake line False; confluence near False
+  raw DEM, largest count within 60 m of P: 2.70 km2 at (414840, 7331540), 49 m from P, 41 m from the mapped line; inside NVE's polygon True
+  raw DEM, largest count within 300 m of P: 2.98 km2 at (414920, 7331310), 292 m from P, 245 m from the mapped line; inside NVE's polygon True
+  raw DEM, largest count within 1000 m of P: 48.22 km2 at (414380, 7330690), 999 m from P, 971 m from the mapped line; inside NVE's polygon False
+  lake 500 Storvatnet: 3.80 km2, 5 m from P, 5 m from the station

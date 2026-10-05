@@ -1,0 +1,17 @@
+12.178.0	Eggedal	uncertain	520 Solevatnet
+12.188.0	Langtjernbekk	uncertain	7272 Langtjernet
+12.197.0	Grunke	match	15651 None
+15.49.0	Halledalsvatn	miss	413 Halldalsvatnet
+16.127.0	Viertjern	match	67730 Viertjønni
+18.11.0	Tjellingtjernbekk	match	8086 Kjellingtjern
+19.96.0	Storgama ovf.	uncertain	171053 None
+22.16.0	Myglevatn ndf.	uncertain	10727 Myglevatnet
+83.12.0	Haukedalsvatn ndf.	uncertain	1649 Haukedalsvatnet
+101.1.0	Engsetvatn	match	1983 Fyllingsvatnet
+148.2.0	Mevatnet	match	43783 Medvatnet
+156.24.0	Bogvatn	refused	760 Tjoamodisjávrre
+168.3.0	Lakså bru	match	873 Laksåvatnet
+189.3.0	Tennevikvatn	match	48370 Tennevikvatnet
+212.49.0	Halsnes	refused	2243 Dálbmejávri
+223.2.0	Lombola	refused	259500 None
+16 stations

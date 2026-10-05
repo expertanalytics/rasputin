@@ -1,0 +1,94 @@
+== 12.215.0 Storeskar (watercourse 012.CDD, river Hemsil)
+  only ours: 39.92 km2 in 93 pieces; largest 39.50 km2, 12.0 km from the station, a point in it (124359, 6778192)
+  only NVE's: 1.52 km2 in 93 pieces; largest 0.54 km2, 12.5 km from the station, a point in it (129272, 6778888)
+  station inside NVE's polygon: True, 145 m from its edge; inside ours: False
+  placed on number, line 12425884 (012-1-4422), 16 m; P = (138612, 6769135); lake line False; confluence near False
+  raw DEM, largest count within 60 m of P: 14.30 km2 at (138660, 6769100), 59 m from P, 1 m from the mapped line; inside NVE's polygon True
+  raw DEM, largest count within 300 m of P: 14.44 km2 at (138870, 6768990), 296 m from P, 177 m from the mapped line; inside NVE's polygon False
+  raw DEM, largest count within 1000 m of P: 15.75 km2 at (139030, 6768230), 997 m from P, 906 m from the mapped line; inside NVE's polygon False
+== 15.49.0 Halledalsvatn (watercourse 015.MAA, river Halldalsåi)
+  only ours: 44.03 km2 in 119 pieces; largest 43.42 km2, 2.2 km from the station, a point in it (145984, 6727353)
+  only NVE's: 0.70 km2 in 119 pieces; largest 0.23 km2, 1.2 km from the station, a point in it (143738, 6724947)
+  station inside NVE's polygon: False, 44 m from its edge; inside ours: True
+  placed on number, line 11453116 (015-18-3128), 11 m; P = (142111, 6724071); lake line False; confluence near False
+  raw DEM, largest count within 60 m of P: 14.32 km2 at (142130, 6724020), 55 m from P, 1 m from the mapped line; inside NVE's polygon False
+  raw DEM, largest count within 300 m of P: 14.40 km2 at (142250, 6723810), 296 m from P, 173 m from the mapped line; inside NVE's polygon False
+  raw DEM, largest count within 1000 m of P: 15.46 km2 at (142660, 6723250), 988 m from P, 867 m from the mapped line; inside NVE's polygon False
+  lake 413 Halldalsvatnet: 2.21 km2, 50 m from P, 47 m from the station
+== 83.2.0 Viksvatn (Hestadfjorden) (watercourse 083.C1, river Gaularvassdraget)
+  only ours: 0.13 km2 in 41 pieces; largest 0.04 km2, 1.5 km from the station, a point in it (13439, 6835968)
+  only NVE's: 488.73 km2 in 41 pieces; largest 488.46 km2, 2.4 km from the station, a point in it (31318, 6834094)
+  station inside NVE's polygon: True, 343 m from its edge; inside ours: True
+  placed on number, line 10756606 (083-11-1), 322 m; P = (13876, 6834041); lake line True; confluence near True
+  raw DEM, largest count within 60 m of P: 0.01 km2 at (13840, 6834000), 54 m from P, 48 m from the mapped line; inside NVE's polygon True
+  raw DEM, largest count within 300 m of P: 1.21 km2 at (13990, 6833770), 294 m from P, 40 m from the mapped line; inside NVE's polygon True
+  raw DEM, largest count within 1000 m of P: 2.88 km2 at (14550, 6833310), 994 m from P, 267 m from the mapped line; inside NVE's polygon True
+  lake 1650 Hestadfjorden: 3.29 km2, 0 m from P, 0 m from the station
+== 105.1.0 Osenelv v/Øren (watercourse 105.A, river Osenvassdraget)
+  only ours: 0.17 km2 in 2 pieces; largest 0.16 km2, 0.7 km from the station, a point in it (130615, 6984211)
+  only NVE's: 137.55 km2 in 2 pieces; largest 137.55 km2, 0.0 km from the station, a point in it (137600, 6987735)
+  station inside NVE's polygon: True, 72 m from its edge; inside ours: True
+  placed on number, line 11396948 (105-23-1), 20 m; P = (129621, 6983502); lake line False; confluence near False
+  raw DEM, largest count within 60 m of P: 0.75 km2 at (129570, 6983510), 52 m from P, 5 m from the mapped line; inside NVE's polygon True
+  raw DEM, largest count within 300 m of P: 1.30 km2 at (129330, 6983520), 292 m from P, 178 m from the mapped line; inside NVE's polygon False
+  raw DEM, largest count within 1000 m of P: 2.47 km2 at (128670, 6983210), 995 m from P, 902 m from the mapped line; inside NVE's polygon False
+== 153.1.0 Storvatn (watercourse 153.22B0, river Leirelva)
+  only ours: 0.05 km2 in 11 pieces; largest 0.02 km2, 2.5 km from the station, a point in it (416528, 7334076)
+  only NVE's: 46.41 km2 in 11 pieces; largest 46.38 km2, 0.0 km from the station, a point in it (421970, 7334174)
+  station inside NVE's polygon: True, 431 m from its edge; inside ours: False
+  placed on number, line 11197607 (153-16-29), 20 m; P = (414823, 7331586); lake line False; confluence near False
+  raw DEM, largest count within 60 m of P: 2.64 km2 at (414840, 7331540), 49 m from P, 41 m from the mapped line; inside NVE's polygon True
+  raw DEM, largest count within 300 m of P: 2.91 km2 at (414920, 7331310), 292 m from P, 245 m from the mapped line; inside NVE's polygon True
+  raw DEM, largest count within 1000 m of P: 4.70 km2 at (414380, 7330690), 999 m from P, 971 m from the mapped line; inside NVE's polygon False
+  lake 500 Storvatnet: 3.80 km2, 5 m from P, 5 m from the station
+== 307.7.0 Landbru (watercourse 307.3BH, river Linvasselva)
+  only ours: 17.81 km2 in 62 pieces; largest 16.95 km2, 4.7 km from the station, a point in it (451780, 7201760)
+  only NVE's: 0.91 km2 in 62 pieces; largest 0.17 km2, 6.5 km from the station, a point in it (455110, 7198326)
+  station inside NVE's polygon: False, 16 m from its edge; inside ours: False
+  placed on number, line 12371457 (307-4-57), 1 m; P = (448684, 7196272); lake line False; confluence near False
+  raw DEM, largest count within 60 m of P: 9.67 km2 at (448640, 7196240), 55 m from P, 3 m from the mapped line; inside NVE's polygon False
+  raw DEM, largest count within 300 m of P: 9.82 km2 at (448410, 7196170), 293 m from P, 177 m from the mapped line; inside NVE's polygon False
+  raw DEM, largest count within 1000 m of P: 10.53 km2 at (447730, 7195990), 995 m from P, 880 m from the mapped line; inside NVE's polygon False
+== 26.29.0 Refsvatn (watercourse 026.4AA3, river Litla-mydlandsåna)
+  only ours: 10.02 km2 in 231 pieces; largest 9.51 km2, 5.0 km from the station, a point in it (1428, 6498972)
+  only NVE's: 0.40 km2 in 231 pieces; largest 0.12 km2, 8.3 km from the station, a point in it (594, 6506102)
+  station inside NVE's polygon: True, 31 m from its edge; inside ours: True
+  placed on name, line 12074698 (026-35-107), 11 m; P = (-5760, 6500348); lake line True; confluence near False
+  raw DEM, largest count within 60 m of P: 7.79 km2 at (-5810, 6500320), 57 m from P, 2 m from the mapped line; inside NVE's polygon False
+  raw DEM, largest count within 300 m of P: 7.86 km2 at (-6050, 6500330), 290 m from P, 169 m from the mapped line; inside NVE's polygon False
+  raw DEM, largest count within 1000 m of P: 11.41 km2 at (-6750, 6500220), 998 m from P, 874 m from the mapped line; inside NVE's polygon False
+  lake 21638 Refsvatnet: 0.16 km2, 0 m from P, 2 m from the station
+== 35.9.0 Osali (Botnavatnet) (watercourse 035.AD, river Kvennåna)
+  only ours: 1.60 km2 in 78 pieces; largest 1.16 km2, 1.7 km from the station, a point in it (27939, 6616900)
+  only NVE's: 0.30 km2 in 78 pieces; largest 0.06 km2, 4.2 km from the station, a point in it (26008, 6620592)
+  station inside NVE's polygon: True, 80 m from its edge; inside ours: True
+  placed on number, line 11958204 (035-48-648), 30 m; P = (25415, 6616167); lake line True; confluence near False
+  raw DEM, largest count within 60 m of P: 7.17 km2 at (25360, 6616180), 56 m from P, 10 m from the mapped line; inside NVE's polygon True
+  raw DEM, largest count within 300 m of P: 7.24 km2 at (25130, 6616230), 292 m from P, 166 m from the mapped line; inside NVE's polygon False
+  raw DEM, largest count within 1000 m of P: 7.38 km2 at (24770, 6616920), 991 m from P, 898 m from the mapped line; inside NVE's polygon False
+  lake 24163 Botnavatnet: 0.19 km2, 0 m from P, 1 m from the station
+== 16.66.0 Grosettjern (watercourse 016.H5Z, river Grosetåe)
+  only ours: 0.08 km2 in 52 pieces; largest 0.02 km2, 2.0 km from the station, a point in it (123808, 6651911)
+  only NVE's: 0.42 km2 in 52 pieces; largest 0.15 km2, 0.0 km from the station, a point in it (126432, 6652155)
+  station inside NVE's polygon: True, 25 m from its edge; inside ours: True
+  placed on number, line 12014607 (016-35-10576), 10 m; P = (126008, 6651999); lake line True; confluence near True
+  raw DEM, largest count within 60 m of P: 6.40 km2 at (126010, 6651940), 59 m from P, 3 m from the mapped line; inside NVE's polygon False
+  raw DEM, largest count within 300 m of P: 6.47 km2 at (126050, 6651710), 292 m from P, 175 m from the mapped line; inside NVE's polygon False
+  raw DEM, largest count within 1000 m of P: 8.14 km2 at (126610, 6651210), 993 m from P, 892 m from the mapped line; inside NVE's polygon False
+  lake 12423 Grosettjønn: 0.15 km2, 0 m from P, 2 m from the station
+== 19.79.0 Gravå (watercourse 019.DD1, river Fyresdalsåna)
+  only ours: 0.26 km2 in 27 pieces; largest 0.16 km2, 0.8 km from the station, a point in it (101730, 6587773)
+  only NVE's: 1.08 km2 in 28 pieces; largest 0.95 km2, 0.3 km from the station, a point in it (103329, 6588230)
+  station inside NVE's polygon: False, 11 m from its edge; inside ours: False
+  placed on number, line 12274700 (019-13-1738), 49 m; P = (103072, 6586970); lake line False; confluence near False
+  raw DEM, largest count within 60 m of P: 4.47 km2 at (103060, 6586920), 51 m from P, 3 m from the mapped line; inside NVE's polygon False
+  raw DEM, largest count within 300 m of P: 4.73 km2 at (103040, 6586680), 292 m from P, 151 m from the mapped line; inside NVE's polygon False
+  raw DEM, largest count within 1000 m of P: 17.84 km2 at (104030, 6586710), 993 m from P, 988 m from the mapped line; inside NVE's polygon False
+== 6.10.0 Gryta (watercourse 006.B1, river Nordmarkvassdraget)
+  only ours: 0.76 km2 in 44 pieces; largest 0.64 km2, 2.5 km from the station, a point in it (268442, 6658989)
+  only NVE's: 0.17 km2 in 44 pieces; largest 0.05 km2, 0.8 km from the station, a point in it (266621, 6658568)
+  station inside NVE's polygon: True, 12 m from its edge; inside ours: True
+  placed on number, line 10918353 (006-11-279), 11 m; P = (265777, 6657419); lake line False; confluence near True
+  raw DEM, largest count within 60 m of P: 7.66 km2 at (265720, 6657420), 57 m from P, 5 m from the mapped line; inside NVE's polygon False
+  raw DEM, largest count within 300 m of P: 7.78 km2 at (265490, 6657470), 292 m from P, 166 m from the mapped line; inside NVE's polygon False
+  raw DEM, largest count within 1000 m of P: 11.57 km2 at (264840, 6657740), 991 m from P, 869 m from the mapped line; inside NVE's polygon False
