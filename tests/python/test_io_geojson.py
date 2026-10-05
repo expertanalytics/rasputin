@@ -2,7 +2,8 @@
 
 `docs/increments/29-nve-reference-catchments.md`, "The batch" (the last
 paragraph: "The GeoJSON writer moves"), and `project_structure.md` ("The
-catchment GeoJSON writer is in `cli.py`"). In PR 4 `station-catchments`
+catchment file's bytes come from `io/geojson.py`'s `catchment_geojson`, which
+opens nothing"). In PR 4 `station-catchments`
 becomes the second command to write a catchment file, so the writer moves
 from `cli.py` to `io/geojson.py` as `catchment_geojson(polygon, crs,
 properties) -> bytes`: no path, nothing opened, the shape `io/ply.py` and
