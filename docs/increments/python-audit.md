@@ -26,8 +26,12 @@ only: no `@developer` step, no `@perf` run); then push on Ola's yes.
 PR B (`audit-crs-helpers`, F3) is designed in section 9, on branch
 `worktree-audit-crs` after T2. `@tester`'s red commit `29aff00` has red
 tests 1-7 (43 failing, each for its own reason); its step found three more
-`==` comparisons, ruled in section 9 ("After the red step"). Next:
-`@tester`'s red tests 8-10, then `@developer`, `@reviewer`.
+`==` comparisons, ruled in section 9 ("After the red step"). Red tests
+8-10 are in `7dddda8`, which also showed rule 2 of `same_crs` wrong (a
+west-pointing UTM 33 counted as EPSG:25833); rule 2 now also checks the
+axes and the prime meridian (section 9, "After red tests 8-10"). Next:
+`@tester` adds one not-the-same pair (UTM 33 with `+pm=paris`), then
+`@developer`, `@reviewer`.
 
 Re-checked against master `44fa7f5`: `git diff --stat 12dace7 44fa7f5 --
 src_python` is empty, and of the files cited below only `tools/brief.py`
@@ -442,7 +446,7 @@ table in a `@tester` commit, and deletes the section 8 exception it removes
 |---|---|---|---|---|---|
 | T2 | `audit-layering-test` | X3 | 0 (tests only, about -35) | nothing | none; `@tester` then `@reviewer`, no `@developer` |
 | T1 | `audit-cli-test-harness` | X1 | 0 (tests only, -350) | nothing | none |
-| B | `audit-crs-helpers` | F3, with the `EPSG:None` fix | about +8 (section 9; first estimated -25) | T2 | red tests for the rule and the fix |
+| B | `audit-crs-helpers` | F3, with the `EPSG:None` fix | about +15 (section 9; first estimated -25) | T2 | red tests for the rule and the fix |
 | A | `audit-lattice` | F2, F9, F10 (repository Protocol), F12 (`mosaic`'s two) | about -100 | B | red test for the +-inf ruling; `@perf` run: meshes byte-identical |
 | F | `audit-catchment-shared` | F4, F10 (catchment types), F12 (`gauge`'s two, `catchment` -> `_core`) | about -40 | nothing | none |
 | C | `audit-geojson-io` | F5, F12 (`chains` -> `feature_input`) | about -40 | B | `@tester` amendment if wordings move, and for the two `--help` texts |
@@ -452,7 +456,7 @@ table in a `@tester` commit, and deletes the section 8 exception it removes
 | H | `audit-mesh-run` | F8, X2 for the rest | about -60 (about 550 moved) | G, E | `@perf`: bench tool seam and byte-identical meshes |
 | tools | `audit-tools-git` | section 4 | about -20 (tools are not production; governed files need Ola) | nothing | Ola's approval per governed file |
 
-Total: about -440 production lines (about -407 with section 9's
+Total: about -440 production lines (about -400 with section 9's
 revision of B), -385 test lines, and the drift points
 (lattice spelling, NoData rule, CRS checks, GeoJSON `crs` rules, mask
 convention) each written once.
@@ -706,6 +710,11 @@ that test confirms it.
 
 ```python
 SAME_CONFIDENCE = 70  # PROJ identify, 0-100: 70 is "equivalent, names differ"
+FRAME_TOLERANCE = 1e-12  # unit factors relative, prime meridian in radians
+
+def _same_frame(a: CRS, b: CRS) -> bool:
+    """Same axis directions and unit factors, axis by axis, and the same
+    prime meridian; `a` and `b` already in x-then-y order."""
 
 def same_crs(a: str | CRS, b: str | CRS) -> bool:
     """Whether coordinates in `a` and in `b` name the same points."""
@@ -729,10 +738,30 @@ is its `ValueError`, wording unchanged). Then, in order:
    package: every transform is `always_xy` (the module docstring of
    `crs.py`). A `ProjError` while building it (PROJ finds no operation, for
    example between Earth and Mars) means "not the same", never an exception.
-2. **Else, one EPSG code in common.** The sets
+2. **Else, one EPSG code in common, in the same frame.** The sets
    `{m.code for m in crs.list_authority("EPSG", SAME_CONFIDENCE)}` of the two
-   meet. This catches a CRS given by parameters (a PROJ string, a WKT without
-   ID) that PROJ identifies as an EPSG definition with another name.
+   meet, **and** `_same_frame(source_crs, target_crs)` holds on rule 1's
+   x-then-y pair: the same number of axes; axis by axis the same
+   `direction.lower()` and `unit_conversion_factor` (relative tolerance
+   `FRAME_TOLERANCE`); and the same prime meridian,
+   `longitude * unit_conversion_factor` in radians (absolute tolerance
+   `FRAME_TOLERANCE`; a missing one compares as 0, Greenwich). This catches a
+   CRS given by parameters (a PROJ string, a WKT without ID) that PROJ
+   identifies as an EPSG definition with another name. The frame check is
+   there because PROJ's identification at 70 ignores two things a CRS can
+   differ in, axis direction and prime meridian, when one side is a PROJ
+   string (table below): UTM 33 with `+axis=wnu` (easting pointing west) or
+   with `+pm=paris` identifies as EPSG:25833 at 70, and is 1 300 to 1 550 km
+   and 185 to 215 km off it. Rule 1 needs no frame check: `equals` compares
+   both.
+
+`FRAME_TOLERANCE = 1e-12`: a unit factor off by 1e-12 relative moves a
+point 0.01 mm at 10 000 km from the origin, and a prime meridian off by
+1e-12 rad moves it 6.4 µm at the equator. It is there for float noise only:
+EPSG's Paris meridian in grads and the same meridian as PROJ reads
+`+pm=paris` differ by 2.6e-16 rad (EPSG:27572 against its PROJ string).
+Checked on the probe table below; the largest input is UTM 33N's whole area
+of use, 12-18 E, 34.8-84 N.
 
 Not by `to_epsg(min_confidence=...)` alone: it returns one code, and a
 definition shared by two codes (EPSG:25833 and EPSG:3045 are both ETRS89 /
@@ -744,18 +773,76 @@ exactly 50).
 
 **`SAME_CONFIDENCE = 70`: scale and limits.** The scale is PROJ's identify
 percentage, 0 to 100. 70 is the lowest level PROJ calls equivalent. What
-"equivalent" tolerates, measured by perturbing the Lambert PROJ string
-above: longitude of origin off by 2e-9 degrees still identifies as EPSG:31287 (0.15 mm at
-x 450 000, y 350 000), 1e-8 degrees (0.77 mm) does not; false easting off by
-1e-5 m identifies, 1e-4 m does not. So "the same" never hides more than a
-fraction of a millimetre, below any DEM spacing rasputin reads (1 m at the
-finest). Checked on pyproj 3.8.0 / PROJ 9.8.1, on EPSG:31287, 25833, 3035
+"equivalent" tolerates, measured by perturbing one parameter at a time of
+the Lambert PROJ string above and of EPSG:25833 written as `+proj=tmerc`,
+and measuring the largest move over a 15 by 15 grid on the EPSG code's area
+of use: longitude of origin off by 2e-9 degrees still identifies as
+EPSG:31287 and moves points 0.15 mm, 3e-9 does not identify; false easting
+off by 1e-5 m identifies (0.01 mm), 1e-4 m does not; latitudes of origin and
+of the standard parallels off by 1e-9 degrees and the ellipsoid's semi-major
+axis off by 0.1 mm identify and move nothing measurable. **The scale factor
+is the loosest:** off by 2e-10 relative it still identifies as EPSG:25833
+and moves points 1.9 mm at the north edge of UTM 33N's area of use (84 N,
+9 300 km from the origin); 3e-10 does not identify. So "the same" hides at
+most about 2e-10 times the distance from the projection's origin: under
+2 mm anywhere in UTM 33N's area of use, under 0.5 mm over the São Francisco
+basin (7-21 S, under 2 400 km from the equator), in every case far below any
+DEM spacing rasputin reads (1 m at the finest). The design's earlier "a
+fraction of a millimetre" was measured on the longitude of origin alone and
+is withdrawn. Checked on pyproj 3.8.0 / PROJ 9.8.1, on EPSG:31287, 25833, 3035
 and 4326 in four spellings each (WKT2 without its ID, GDAL WKT1, ESRI WKT1,
 PROJ string), all the same in both argument orders. These six pairs are not
 the same: the Lambert in US feet, the Lambert at 13.5 E,
 EPSG:25832 against 25833, EPSG:4258 against 4326, EPSG:31287 against 4312,
-and the Lambert on GRS80. Cost: 0.3 to 40 ms a call. Calls happen once per
-site per run, never per point.
+and the Lambert on GRS80. Cost, frame check included: 0.2 to 40 ms a call, 60 ms for a
+bound CRS (`+towgs84`), whose transformer goes through WGS 84. Calls happen once per site per
+run, never per point.
+
+**What confidence 70 ignores: the probe set.** Derived from what a CRS is
+made of (ISO 19111: a datum with its ellipsoid and prime meridian, a
+coordinate system with its axes' order, direction and unit, a conversion
+with its method and parameters, a dimension, an epoch), not from the bug as
+found. Each row perturbs one component of EPSG:25833 (UTM 33N), EPSG:31287
+(the Lambert), EPSG:4258 or EPSG:4326, as a PROJ string unless named, both
+argument orders. "At 70" is rule 2's code check alone; "rule" is the rule
+above; "moves" is the largest distance, over a 15 by 15 grid on the EPSG
+code's area of use, between a point and its image under the always_xy
+transform from one to the other. Every row gives the same answer in both
+orders.
+
+| Component | Probe | At 70 | Rule | Moves |
+|---|---|---|---|---|
+| axis order | UTM 33 `+axis=neu`; EPSG:4326's GDAL WKT1 | same | same | 0 |
+| axis direction | UTM 33 `+axis=wnu`, `esu`, `wsu`; the Lambert `+axis=wnu` | **same** | not | 1 300 to 18 700 km |
+| axis direction | geographic GRS80 `+axis=wnu` against EPSG:4258 | not | not | 2 600 km and more |
+| linear unit | UTM 33 in US feet, in km, `+to_meter=1.0000001`, `1.000000001` | not | not | 6 mm and more |
+| angular unit | EPSG:4326's WKT without ID in grads | not | not | 2 000 km and more |
+| prime meridian | UTM 33 `+pm=paris` | **same** | not | 185 to 215 km |
+| prime meridian | geographic GRS80 `+pm=ferro`; EPSG:31251 (MGI Ferro) against 31254 (MGI) | not | not | 0 to 1 640 km |
+| datum | UTM 33 `+datum=WGS84`, `+ellps=WGS84`, `+towgs84=0,0,0,0,0,0,0`; the Lambert `+nadgrids=@null` | not | not | 0 to 117 m |
+| datum | geographic GRS80 against EPSG:4258, 4269, 4283; EPSG:4269 against 4258 | not | not | 0 |
+| method | UTM 33 as `+proj=tmerc`, as `+proj=etmerc`, as `+proj=tmerc +approx` | same | same | 0 to 0.05 mm |
+| parameters | see the paragraph above; `+k` and `+x_0` on `+proj=utm` (PROJ ignores both) | same | same | under 2 mm |
+| hemisphere | UTM 33 `+south` | not | not | 10 000 km |
+| dimension | EPSG:25833+5941 (with height) against 25833; EPSG:4937 (3D) against 4258; EPSG:4936 (geocentric) against 4258 | not | not | 0 or more |
+| vertical | UTM 33 `+vunits=ft`; `+geoidgrids=...` | not | not | 0 |
+| longitude range | geographic GRS80 `+lon_wrap=180`, `+over`, against 4258 | not | not | 0 |
+| derived | rotated pole (`+proj=ob_tran`) against 4258 | not | not | 5 500 km |
+| epoch | EPSG:25833 with coordinate epoch 2020.0 against 25833 | same | same (rule 1) | 0 |
+
+The two bold rows are the only ones where the code check alone calls "the
+same" what is not; the frame check turns both. A "not" with "moves 0" is
+the safe side: a transform runs that changes nothing, and the record names
+it. `@tester`'s first candidate (axis direction and unit only) still called
+UTM 33 `+pm=paris` the same as EPSG:25833.
+
+*Rejected: check the points instead.* A rule that transforms a grid of
+points over the code's area of use and calls the pair the same when none
+moves more than 1 mm got every row above right too, and would catch a
+component PROJ ignores that this table does not list. It is not taken: it
+calls `Transformer.transform` inside `same_crs`, which is the very method
+red tests 8-10 refuse to prove that no point moved, and it adds about ten
+lines and a second tolerance.
 
 **Pinned limits of the rule** (each a test below):
 
@@ -771,6 +858,9 @@ site per run, never per point.
   each by its own name.
 - **EPSG:3045 is the same as EPSG:25833** (rule 1): one definition under two
   codes.
+- **An axis pointing the other way, or another prime meridian, is not the
+  same** (rule 2's frame check), though PROJ identifies UTM 33 with
+  `+axis=wnu` or with `+pm=paris` as EPSG:25833 at 70.
 
 **Labels do not change.** `crs_label` and `target_grid` keep
 `to_epsg(min_confidence=100)` (`src_python/tin_engine/crs.py@44fa7f5:77`,
@@ -848,7 +938,10 @@ existing `crs` fixture. Lean: no throwaway implementation, no mutation round.
      `+lon_0=13.5`; `EPSG:25832` and `EPSG:25833`; `EPSG:4258` and
      `EPSG:4326`; that `+towgs84` PROJ string of EPSG:31287 (the pinned
      limit); a Mars `+proj=longlat +a=3396190 +b=3376200` and `EPSG:4326`
-     (False, not an exception).
+     (False, not an exception); UTM 33 with `+axis=wnu` and `EPSG:25833`
+     (added in `7dddda8`); UTM 33 with `+pm=paris`
+     (`+proj=utm +zone=33 +ellps=GRS80 +units=m +pm=paris +no_defs`) and
+     `EPSG:25833` (added after `7dddda8`, the frame check's second half).
    - unreadable text is a `ValueError` matching `cannot read the CRS`.
 2. **`TestTransformLabel`**: `"none"` for the Lambert string against
    `EPSG:31287`; `transform_description("EPSG:4326", "EPSG:25833")` for
@@ -911,9 +1004,19 @@ differ).
     `out_crs=proj4_of(<meta's EPSG>)`, with `transform_bounds` refused,
     equals `source_box` with `out_crs=None`. Red today.
 
+**After red tests 8-10** (`7dddda8`), one line each:
+
+- Ruled: rule 2 gains the frame check (axes and prime meridian, above); `@tester`'s candidate (axes only) is taken and widened, since the derived probe set found `+pm=paris` UTM 33 still called EPSG:25833 by it.
+- Ruled: the "fraction of a millimetre" bound is withdrawn; identify admits a scale factor off by 2e-10, under 2 mm over UTM 33N's area of use (above).
+- `@tester`'s departure, accepted: `test_domain.py`'s `no_transformer` guard refuses only the point-moving methods, as `TestTheSameCrs`'s does (one rule: building a transformer moves no point).
+- `@tester`'s departure, accepted: `test_cli_mesh_domain_crs.py`'s `TestTheSameCrs.assert_as_16` compares the handed-on domain's CRS by pyproj equality, since `to_crs` now labels it with the target's text (ruled after the red step); the bits are still compared exactly.
+- `@tester`'s departure, accepted: `proj4_of` and the guard move to a new shared helper, `tests/python/crs_fixtures.py`, used by five suites.
+- The frame check needs one more not-the-same pair (`+pm=paris`, red test 1); `@tester` adds it before `@developer` starts, so it is red first.
+
 ### Net production lines
 
-**About +8**, against the audit's about -25. The audit assumed `same_crs` was
+**About +15** (about +8 before the frame check), against the audit's about
+-25. The audit assumed `same_crs` was
 a one-line alias of `!=`. Correct, it is about 12 lines: two rules, the
 `ProjError` fallback and the code-set helper. Each of the nine comparisons is
 one line before and after, so they save nothing. `crs.py` adds about 21 (constant 1,
@@ -921,9 +1024,10 @@ one line before and after, so they save nothing. `crs.py` adds about 21 (constan
 sites remove about 13 (`cli.py` 6, `dem_input.py` 4, `catchment.py` 3).
 The three sites found at the red step change one line each in place, and
 their files' `crs` imports gain a name on the same line, so the estimate
-stays about +8. Tests: about +90 designed; red tests 1-7 came to 254
+stays about +8; the frame check (`_same_frame` and its constant, about 7
+lines) makes it **about +15**. Tests: about +90 designed; red tests 1-7 came to 254
 non-blank lines added and 9 removed (`git diff -U0 b63132e 29aff00 --
-tests`), and 8-10 add about 40 more. Section 6's row B and its total move by about +33
+tests`), and 8-10 add about 40 more. Section 6's row B and its total move by about +40
 accordingly; the drift point (one CRS rule) is still written once.
 
 ### Citations this PR moves, pinned now
@@ -962,6 +1066,7 @@ a wrong line. No citation points into the test files this PR edits.
 3. **A CRS that is an EPSG code's definition under another spelling counts
    as that CRS:** no resampling, no refusal, transform "none" in the record.
    Default: yes. The limits it pins: the `+towgs84` spelling is not the same;
+   nor is one with an axis pointing the other way or another prime meridian;
    CRS84 is the same as EPSG:4326.
 
 ## Review
