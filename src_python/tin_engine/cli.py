@@ -51,7 +51,7 @@ import time
 from collections.abc import Callable, Iterator, Mapping
 from dataclasses import asdict, dataclass, field, fields
 from pathlib import Path
-from typing import Annotated, Any
+from typing import Annotated, Any, TextIO
 
 import numpy as np
 import numpy.typing as npt
@@ -1952,17 +1952,23 @@ def _outline_properties(result: Catchment) -> dict[str, object]:
 class _DirectorySink:
     """`station-catchments`' `BatchSink`: a station's catchment file is written
     when its row arrives (the row holds the placement), and each row is said
-    on stderr and kept for the table."""
+    on stderr and written to `table` (results.csv) at once, flushed, so a run
+    stopped by a bug keeps every finished row."""
 
     out: Path
-    rows: list[StationResult] = field(default_factory=list)
+    table: TextIO
     pending: dict[str, tuple[Station, Catchment]] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        names = [f.name for f in fields(StationResult)]
+        csv.writer(self.table).writerow(["class" if n == "station_class" else n for n in names])
 
     def catchment(self, station: Station, result: Catchment) -> None:
         self.pending[station.station] = (station, result)
 
     def row(self, row: StationResult) -> None:
-        self.rows.append(row)
+        csv.writer(self.table).writerow([_cell(getattr(row, f.name)) for f in fields(row)])
+        self.table.flush()
         if row.station in self.pending:
             station, result = self.pending.pop(row.station)
             names = [f.name for f in fields(StationResult)]
@@ -2061,6 +2067,11 @@ def station_catchments(
         station_list, stations_crs = read_stations(stations)
     except (OSError, ValueError) as exc:
         raise typer.BadParameter(str(exc), param_hint="--stations") from exc
+    unknown = set(only or ()) - {s.station for s in station_list}
+    if unknown:
+        raise typer.BadParameter(
+            f"not in the stations file: {', '.join(sorted(unknown))}", param_hint="--only"
+        )
     segments, crs, dropped = _segments(rivers)
     references = None
     if reference is not None:
@@ -2087,23 +2098,21 @@ def station_catchments(
         only=tuple(only or ()),
     )
     target.mkdir(exist_ok=True)
-    sink = _DirectorySink(target)
-    try:
-        summary = asyncio.run(
-            run_batch(
-                request, repository, station_list, stations_crs, segments, crs, references, sink
+    with (target / "results.csv").open("w", encoding="utf-8", newline="") as table:
+        sink = _DirectorySink(target, table)
+        try:
+            summary = asyncio.run(
+                run_batch(
+                    request, repository, station_list, stations_crs, segments, crs, references, sink
+                )
             )
-        )
-    except OSError as exc:
-        raise typer.BadParameter(f"cannot read {exc.filename}: {exc}", param_hint="--dem") from exc
-    except ValueError as exc:
-        typer.echo(f"Error: {_words(exc)}", err=True)
-        raise typer.Exit(1) from exc
-    names = [f.name for f in fields(StationResult)]
-    with (target / "results.csv").open("w", encoding="utf-8", newline="") as f:
-        table = csv.writer(f)
-        table.writerow(["class" if n == "station_class" else n for n in names])
-        table.writerows([_cell(getattr(r, n)) for n in names] for r in sink.rows)
+        except OSError as exc:
+            raise typer.BadParameter(
+                f"cannot read {exc.filename}: {exc}", param_hint="--dem"
+            ) from exc
+        except ValueError as exc:
+            typer.echo(f"Error: {_words(exc)}", err=True)
+            raise typer.Exit(1) from exc
     dump = {**summary.model_dump(mode="json"), "river_copies_dropped": dropped}
     (target / "summary.json").write_text(json.dumps(dump, indent=2) + "\n", encoding="utf-8")
     counts = ", ".join(f"{k} {v}" for k, v in summary.classes.items())

@@ -104,7 +104,12 @@ def read_references(path: Path) -> tuple[Mapping[str, Polygon | MultiPolygon], s
         _geometry_type(path, f, ("Polygon", "MultiPolygon"))
     numbers = [str(required(path, f, "station")) for f in features]
     _unique(path, numbers, "station")
-    return {n: shape(f["geometry"]) for n, f in zip(numbers, features, strict=True)}, crs
+    polygons = {n: shape(f["geometry"]) for n, f in zip(numbers, features, strict=True)}
+    for n, g in polygons.items():
+        # The agreement divides by the polygon's area and perimeter.
+        if g.is_empty or g.area == 0:
+            raise ValueError(f"{path}: the reference polygon of station {n} has no area")
+    return polygons, crs
 
 
 __all__ = ["Station", "features_of", "read_references", "read_stations", "required"]
