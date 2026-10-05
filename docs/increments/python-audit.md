@@ -7,6 +7,18 @@ while the code moves. It proposes a sequence of refactor PRs; each still runs th
 (`docs/increments/README.md`): design note, red tests where behaviour changes,
 code, review, and `@perf` where the diff touches what drives refine or mesh.
 
+Accepted by Ola on 2026-10-05, with the defaults to its three questions
+(section 7). Its first PR, T2, is designed in section 8. Status of T2:
+designed; next `@tester` writes it, then it goes straight to `@reviewer`
+(tests only: no `@developer` step, no `@perf` run).
+
+Re-checked against master `44fa7f5`: `git diff --stat 12dace7 44fa7f5 --
+src_python` is empty, and of the files cited below only `tools/brief.py`
+changed, outside the cited lines (`git show 44fa7f5:tools/brief.py | sed -n
+115,118p` is still `_git`). The `@12dace7` pins therefore also read true at
+`44fa7f5`, and the findings stand unchanged; 23c-2 (`worktree-23c`) has still
+not merged, so section 6's waits stand too.
+
 Ola's ask: look at the architecture, modularization and class hierarchies,
 and above all at code doing almost the same thing in different places without
 sharing logic.
@@ -16,8 +28,8 @@ A PR below that designs a new module carries its own prior-art section.
 
 ## Verdict in five lines
 
-1. The duplication is real but smaller in lines than it looks: about **450
-   production lines** (6 % of 7,732 code lines) and **460 test lines** would
+1. The duplication is real but smaller in lines than it looks: about **440
+   production lines** (6 % of 7,732 code lines) and **385 test lines** would
    go. The larger cost is **drift**: copies have already diverged, once into a
    bug (F3) and once into an inconsistency with the C++ core (F9).
 2. `cli.py` (1,684 code lines, 22 % of the package) is a pipeline host, not a
@@ -135,7 +147,9 @@ coordinates feed `refine`, so the PR must leave every mesh byte-identical
 
 Shape: `crs.same_crs(a, b)`, `crs.transform_label(src, dst)` ("none" or
 PROJ's description), and one `single_crs(footprints) -> str` used by all
-three. The bug fix needs a red test first (`@tester`).
+three. The bug fix needs a red test first (`@tester`). It is a product fix in
+its own right: the Austrian data work that first met such a CRS stays out of
+git (Ola's ruling), so the red test builds its own EPSG-less tile.
 
 ### F4. Catchment placement written twice — about 50 lines, low risk (PR F)
 
@@ -180,7 +194,9 @@ Shape: `io/geojson.py` owns both directions: `read_collection(data,
 *, crs_required) -> (features, crs_text)` and `feature_collection(crs,
 features) -> dict`. The two lake readers keep their behaviours, renamed by
 what they read (`read_lake_polygons` near a point; `read_nve_lakes`), and
-share the polygon-part filter. Risk: medium; the refusal wordings differ today
+share the polygon-part filter. Ola's ruling (section 7): both `--lakes`
+behaviours stay, and each command's `--help` for `--lakes` says which file it
+takes. Risk: medium; the refusal wordings differ today
 and the suites pin them, so the PR either keeps each wording or lands a
 `@tester` amendment.
 
@@ -194,10 +210,11 @@ call `viz/` (ruling 6), so it copied instead.
 
 Shape: a neutral pure module, `topology.py` (numpy, typed against
 `viz/protocols.py`'s `MeshLike`/`PslgLike`, no `_core`, no `viz`), used by
-both. The convention is then written once. This changes `viz/scene.py`'s
-import rule (today it imports only `protocols`), so the isolation test in
-`tests/python/test_viz_scene.py@12dace7:366-405` changes in the same PR; the rule's purpose (no
-`_core` in `viz/`) still holds.
+both. The convention is then written once. Ola's ruling (section 7): `viz/`
+may import this one shared module. This changes `viz/scene.py`'s import rule
+(today it imports only `protocols`); after T2 that rule is `viz.scene`'s row
+in `test_layering.py`, which the PR's `@tester` commit widens by `topology`.
+The rule's purpose (no `_core` in `viz/`) still holds.
 
 ### F7. File encoding still in `cli.py`, and the two mesh writers share no gate — about 30 lines, low risk (PR D)
 
@@ -253,7 +270,8 @@ sentinel as NoData, as the core does (`include/terrain/raster/raster.hpp@12dace7
 treats +-inf as NoData. Probe: on `[1.0, inf, nan]` with no sentinel,
 `target_grid._valid` gives `[True, False, False]`, `mosaic._valid`
 `[True, True, False]`. Shape: one `valid_mask(values, nodata)` beside
-`RasterMeta`. Which rule wins is a question for Ola (default below).
+`RasterMeta`. Ola's ruling (section 7): +-infinity is not NoData, as in the
+C++ core, so `target_grid` changes behaviour and PR A needs a red test for it.
 
 ### F10. Types that say `Any` where a type exists — 0 lines, low risk (in PRs A and F)
 
@@ -283,6 +301,22 @@ passes `footprints: Any` four times (`src_python/tin_engine/catchment.py@12dace7
   `src_python/tin_engine/fetch/run.py@12dace7:47`). Not wrong; the rule should be written once in the
   python skill rather than in a module docstring.
 
+### F12. Imports that point up a layer — 0 to 20 lines, low risk (found while designing T2)
+
+Tabling every module's imports against section 5's layers (section 8) finds
+eight edges that point upward. Each is allowed in T2's table as a named
+exception, with the PR that removes it:
+
+| Edge (importer -> imported) | Why it exists | Removed by |
+|---|---|---|
+| `mosaic` -> `io.cog` | `window_meta`, which is lattice arithmetic on `RasterMeta` | A (becomes a `RasterMeta` method) |
+| `mosaic` -> `io.repository` | `TileFootprint`, under `TYPE_CHECKING` | A (`TileFootprint` to `io/models`) |
+| `chains` -> `feature_input` | the value type `TerrainFeature` lives in a pipeline module | C (the type moves down, to `features`) |
+| `gauge` -> `io.rivers`, `io.station_set` | the value types `RiverSegment` and `Lake` live in codecs | F (the types move to L0) |
+| `fetch.http` -> `tin_engine` (the package root) | `installed_version`, in an `__init__` that also imports `_core` | G (`installed_version` to its own L0 module) |
+| `catchment` -> `_core` | `upstream`, `accumulate`, `reduce_ring` called from a pipeline | F (a small L3 adapter beside `raster`) |
+| `cli` -> `_core` | the engine and `ChainRole` | H (engine to `start_mesh`); the `ChainRole` use may stay, and H says so |
+
 ## 3. Tests
 
 - **X1. A CLI harness in about 20 files — about 350 test lines (PR T1).**
@@ -305,8 +339,8 @@ passes `footprints: Any` four times (`src_python/tin_engine/catchment.py@12dace7
   `test_cli_draw.py`, `test_cli_mesh_domain_crs.py`. Each PR that moves the
   function re-points the test to the public name in the same PR, as a
   `@tester` commit.
-- **X3. Import-firewall tests scattered over 8 files — about 110 test lines
-  (PR T2).** `tests/python/test_viz_svg.py@12dace7:536-594`, `tests/python/test_viz_scene.py@12dace7:366-405`,
+- **X3. Import-firewall tests scattered over 8 files — about 165 test lines,
+  about 35 net after the new table (PR T2, section 8).** `tests/python/test_viz_svg.py@12dace7:536-594`, `tests/python/test_viz_scene.py@12dace7:366-405`,
   `tests/python/test_features.py@12dace7:580-608`, `tests/python/test_io_geotiff.py@12dace7:1303`,
   `tests/python/test_landcover.py@12dace7:450-453`, `tests/python/test_outline.py@12dace7:139`, `tests/python/test_io_ply.py@12dace7:439`,
   `tests/python/test_io_vtk_legacy.py@12dace7:492`; most of the 52 modules have none.
@@ -344,16 +378,18 @@ Six layers. A module imports only from its own layer or below;
 L5  cli.py            flags -> request; refusal -> BadParameter(flag);
                       result -> files and stderr lines. No algorithm.
 L4  pipelines         dem_input, feature_input, mesh_run (new), catchment,
-                      catchment_batch, fetch/run, fetch/nve
+                      catchment_batch, fetch/run, fetch/nve, fetch/plan
                       request (frozen Pydantic) in, result out; no typer,
                       no print, no path but what the request names
 L3  core adapters     raster.to_core (the one raster adapter), start_mesh
                       (build_pslg -> node -> triangulate), edge_strip,
-                      final_check: the only importers of _core
+                      final_check, and the package root (it re-exports
+                      Point2/Point3): the only importers of _core
 L2  io/ codecs        bytes <-> values: geotiff, cog, geopackage, gml,
                       geojson (read AND write), ply, vtk_legacy, tables
                       (csv/json/palette), mesh_index, station_set, rivers;
-                      repository.py the one module that opens files
+                      repository.py the one module that opens files;
+                      fetch/http, the one module that opens a connection
 L1  pure algorithms   crs (same_crs, transform_label, single_crs), mosaic,
                       target_grid, grid_domain, domain, chains, elevation,
                       outline, burn, gauge, sensitivity, reference,
@@ -380,26 +416,163 @@ as `run_record.summary` already does for the mesh.
 
 Each PR is a refactor: behaviour-preserving unless it says otherwise, and
 well under 700 net lines (most are net negative). The order puts the
-safety net first and the `cli.py` surgery after 23c-2 merges.
+safety net first and the `cli.py` surgery after 23c-2 merges. After T2, a PR
+that adds, drops or moves a first-party import edits `test_layering.py`'s
+table in a `@tester` commit, and deletes the section 8 exception it removes
+(F12 says which).
 
 | # | PR (branch name) | Takes | Net production lines | Waits for | Gates beyond review |
 |---|---|---|---|---|---|
-| T2 | `audit-layering-test` | X3 | 0 (tests only, -110) | nothing | none |
+| T2 | `audit-layering-test` | X3 | 0 (tests only, about -35) | nothing | none; `@tester` then `@reviewer`, no `@developer` |
 | T1 | `audit-cli-test-harness` | X1 | 0 (tests only, -350) | nothing | none |
 | B | `audit-crs-helpers` | F3, with the `EPSG:None` fix | about -25 | nothing | red test for the fix |
-| A | `audit-lattice` | F2, F9, F10 (repository Protocol) | about -100 | B | `@perf` run: meshes byte-identical |
-| F | `audit-catchment-shared` | F4, F10 (catchment types) | about -50 | nothing | none |
-| C | `audit-geojson-io` | F5 | about -40 | B | `@tester` amendment if wordings move |
+| A | `audit-lattice` | F2, F9, F10 (repository Protocol), F12 (`mosaic`'s two) | about -100 | B | red test for the +-inf ruling; `@perf` run: meshes byte-identical |
+| F | `audit-catchment-shared` | F4, F10 (catchment types), F12 (`gauge`'s two, `catchment` -> `_core`) | about -40 | nothing | none |
+| C | `audit-geojson-io` | F5, F12 (`chains` -> `feature_input`) | about -40 | B | `@tester` amendment if wordings move, and for the two `--help` texts |
 | D | `audit-encoders` | F7 | about -30 | C (shares `io/geojson.py`) | none |
 | E | `audit-topology` | F6, X2 for `_chain_masks`/`_undirected` | about -35 | 23c-2 merged | none |
-| G | `audit-cli-options` | F1, F11 | about -100 | 23c-2 merged | none |
+| G | `audit-cli-options` | F1, F11, F12 (`installed_version`) | about -95 | 23c-2 merged | none |
 | H | `audit-mesh-run` | F8, X2 for the rest | about -60 (about 550 moved) | G, E | `@perf`: bench tool seam and byte-identical meshes |
 | tools | `audit-tools-git` | section 4 | about -20 (tools are not production; governed files need Ola) | nothing | Ola's approval per governed file |
 
-Total: about -450 production lines, -460 test lines, and the drift points
+Total: about -440 production lines, -385 test lines, and the drift points
 (lattice spelling, NoData rule, CRS checks, GeoJSON `crs` rules, mask
 convention) each written once.
 
 If 23c-2 is not near merging, E, G and H can instead be folded into its
 follow-up: 23c-2 should put its own run in `pieces.py`, not in `cli.py`, so
 the cli split does not grow by its 250 lines.
+
+## 7. Ola's rulings (2026-10-05)
+
+Ola accepted the audit and the defaults to its three questions:
+
+1. **+-infinity is not NoData**, as in the C++ core
+   (`include/terrain/raster/raster.hpp@12dace7:63-66`). NoData is NaN or the
+   sentinel. `target_grid._valid` follows the others (F9, PR A, red test first).
+2. **Both `--lakes` behaviours stay.** The two readers get names that say what
+   they read (`read_lake_polygons`, `read_nve_lakes`), and each command's
+   `--help` for `--lakes` says which file it takes (F5, PR C).
+3. **`viz/` may import one shared pure-Python module** for the mesh-edge
+   joins, `topology.py` (F6, PR E). Still no `_core` in `viz/`.
+
+The EPSG-less CRS fix (F3) stands as a product fix on its own: the Austrian
+side-work that first met such a file stays out of git, by Ola's ruling.
+
+## 8. T2 design: `tests/python/test_layering.py`
+
+Tests only; no production file changes, so no red step and no `@developer`.
+`@tester` writes it and `@reviewer` audits it. It must pass on master.
+
+### Where it lives, and what it reads
+
+- `tests/python/test_layering.py`: the table and the checks, in one file, so
+  the dependency map is what a reviewer reads.
+- `tests/python/importscan.py` stays the one scanner, with two fixes (tests
+  only). Both are bugs today; the probe for each, run with the project venv
+  from `tests/python/`:
+  - **(a) A package `__init__` resolves its relative imports against its
+    parent.** `first_party_imports(tin_engine.io)` returns
+    `{'tin_engine.ply', 'tin_engine.vtk_legacy'}`; it should return
+    `tin_engine.io.ply` and `tin_engine.io.vtk_legacy`. Fix: the base package
+    is `module.__name__` when the module has `__path__`, else its
+    `rpartition(".")[0]`.
+  - **(b) `from <package> import <submodule>` reports only the package.**
+    `src_python/tin_engine/cli.py@12dace7:62` is `from tin_engine import edge_strip, final_check,
+    installed_version`, and `first_party_imports(tin_engine.cli)` contains
+    neither `tin_engine.edge_strip` nor `tin_engine.final_check`. Fix: for each
+    imported name, report `<package>.<name>` when the package has `__path__`
+    and `importlib.util.find_spec("<package>.<name>")` finds it; report the
+    package itself only when some name is not a submodule (here
+    `installed_version`, so `cli` also imports the root `tin_engine`).
+  - Unchanged: `TYPE_CHECKING` imports count (they are where the
+    `io.repository` <-> `mosaic` cycle lives); a mention in prose is not an
+    import.
+- The scanner imports each module (`inspect.getsource`), and importing any
+  `tin_engine` module runs the package root, which imports `_core`; so the
+  suite needs the built extension, as the eight tests it replaces already do.
+
+### The table
+
+One dict, module (short name, `tin_engine.` dropped; the package root is
+`tin_engine`, the extension `_core`) to (layer, the exact set of first-party
+modules it imports). Rows as today's code has them, read with the fixed
+scanner: equality, not a subset, so the table is the map and a new edge is a
+visible table edit. Layers are section 5's:
+
+- L0: `io.models`, `features`, `sources`, `run_record`, `stats`, `palettes`
+- L1: `crs`, `mosaic`, `target_grid`, `grid_domain`, `domain`, `chains`,
+  `elevation`, `outline`, `burn`, `gauge`, `sensitivity`, `reference`,
+  `landcover`, `decompose`, `viz`, `viz.fixtures`, `viz.protocols`,
+  `viz.scene`, `viz.style`, `viz.svg`
+- L2: `io`, `io.cog`, `io.geojson`, `io.geopackage`, `io.geotiff`, `io.gml`,
+  `io.mesh_index`, `io.ply`, `io.repository`, `io.rivers`, `io.station_set`,
+  `io.vtk_legacy`, `fetch.http`
+- L3: `raster`, `edge_strip`, `final_check`, `tin_engine`, `_core`
+- L4: `dem_input`, `feature_input`, `catchment`, `catchment_batch`, `fetch`,
+  `fetch.plan`, `fetch.run`, `fetch.nve`
+- L5: `cli`
+
+That is all 52 modules plus `_core`. A second dict, `UPWARD`, holds F12's
+eight edges, each with the PR that removes it as its value.
+
+The rows that carry the eight old tests' rules, as they are today (the
+reviewer checks these against the old assertions): `viz.svg` {`viz.scene`,
+`viz.style`}; `viz.scene` {`viz.protocols`}; `viz.style`, `viz.fixtures`,
+`viz.protocols`, `features`, `landcover`, `outline`, `io.models` {}; and
+`io.geotiff` {`io.models`}; `io.ply`, `io.vtk_legacy` {`features`}. Each is
+equal to or stricter than the test it replaces.
+
+### The checks
+
+1. **The table names every module.** The `*.py` files under
+   `Path(tin_engine.__file__).parent`, as dotted names, plus `_core`, equal the
+   table's keys. A new module without a row fails, and so does a row for a
+   module that is gone.
+2. **Each module imports exactly its row** (parametrised by module, `_core`
+   excluded): `first_party_imports(import_module(...))`, shortened, equals the
+   row. The failure names the extra and the missing edges.
+3. **Every edge goes down or sideways** (the table only): layer of the
+   imported <= layer of the importer, and an edge into `_core` comes from L3,
+   unless the edge is in `UPWARD`.
+4. **No `UPWARD` entry is stale**: each is an edge of the table, so the PR
+   that removes an edge must delete its exception.
+5. **No module imports by name**: no call to `importlib.import_module` or
+   `__import__` in any module's AST (none today; the package's `importlib`
+   uses are `metadata`, `util.find_spec` and `resources`). This replaces the
+   source-text grep `tests/python/test_features.py@12dace7:606-608`, whose
+   reason was the import `ast` cannot see, and it now covers every module
+   rather than one, without pinning prose.
+
+Before committing, `@tester` shows each of checks 1, 2, 3 and 5 can fail by one
+plant each in a scratch copy (for example `import tin_engine._core` added to
+`viz/style.py` fails check 2), restored afterwards, and names the plants in the
+commit message. No mutation round beyond that.
+
+### What it replaces
+
+Delete, in the same commit:
+
+| File (lines at `12dace7`) | What goes |
+|---|---|
+| `tests/python/test_viz_svg.py@12dace7:536-592` | `TestModuleIsolation`, including the `ChainRole` text check on `cli.py` (prose; the mapping's totality is `test_cli_draw.py`'s) |
+| `tests/python/test_viz_scene.py@12dace7:366-403` | `TestModuleIsolation` |
+| `tests/python/test_features.py@12dace7:575-608` | both firewall tests, the `_core` source-text grep among them, and `FEATURES_SOURCE` |
+| `tests/python/test_io_geotiff.py@12dace7:1284-1310` | `_imported_modules` and `test_module_never_imports_core` |
+| `tests/python/test_landcover.py@12dace7:449-453` | `TestPurity` |
+| `tests/python/test_outline.py@12dace7:136-139` | `test_the_tracer_imports_no_core` |
+| `tests/python/test_io_ply.py@12dace7:428-439` | `test_the_only_first_party_import_is_the_vocabulary` (the rest of `TestPurity` stays) |
+| `tests/python/test_io_vtk_legacy.py@12dace7:487-492` | `test_the_only_first_party_import_is_the_vocabulary` |
+
+and any import or path constant (`ast`, `importscan`, `SCENE_PATH`, `VIZ`,
+`REPO_ROOT`) left unused; `ruff check` finds them.
+
+Expected test-line delta: about 165 non-blank lines go, about 130 come
+(table about 75, checks about 45, `importscan` about 8): about -35 net. The
+gain is the map, not the lines.
+
+### Merge-order hazard
+
+23c-2 (`worktree-23c`) adds `pieces.py` and new `cli` imports. Whichever of
+T2 and 23c-2 merges second must add those rows; the merge queue tests each on
+top of the other, so the second one goes red there rather than on master.
