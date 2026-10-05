@@ -1,6 +1,6 @@
 # Increment 29 — NVE reference catchments: our catchments against NVE's, station by station
 
-Status: **design approved by `@reviewer` (round 5, 2026-10-04); PR 1 merged as #173; PR 3 merged as #178; PR 2 (the gauge on the river): green `193079d`, 569 production lines; code review round 3 and evidence review round 2 (2026-10-05) approved; the push waits for Ola; PR 4 (the batch and the comparison): green `cabff74` (red `2b9b39f`, `7cd56a4`, `6ebff1b` and `bc78be3`; test-only `e8e93d0`), on PR 2's unpushed branch, 572 net production lines (614 added, 42 removed; 90 past the margin, 128 under 700, not split); code review round 1 (2026-10-05) blocked only on `project_structure.md`, which still waits on Ola's ruling on who edits root files; changes (d) to (f) and the test-only commit ("PR 4's code review, round 1") are in; next, code review round 2; questions 5, 6, 7 (the example station) and 8 (which area of ours) open for Ola, written to their defaults**
+Status: **design approved by `@reviewer` (round 5, 2026-10-04); PR 1 merged as #173; PR 3 merged as #178; PR 2 (the gauge on the river): green `193079d`, 569 production lines; code review round 3 and evidence review round 2 (2026-10-05) approved; the push waits for Ola; PR 4 (the batch and the comparison): green `f952f2d` (red `2b9b39f`, `7cd56a4`, `6ebff1b`, `bc78be3` and `44dc954`; test-only `e8e93d0` and `a98c805`), on PR 2's unpushed branch, 573 net production lines (615 added, 42 removed; 91 past the margin, 127 under 700, not split); code review round 2 (2026-10-05) asked for two fixes, now in, and is still blocked on `project_structure.md`, which waits on Ola's ruling on who edits root files; next, code review round 3; questions 5, 6, 7 (the example station) and 8 (which area of ours) open for Ola, written to their defaults**
 (`@architect`, 2026-10-04), branch `worktree-nve-catchments` off master
 `d20126b`. Ola's rulings of 2026-10-04 are in the section below. Round 2 closed the burn's drainage claim
 (checked node by node, not assumed), the ELVIS data cases, the PR order, and
@@ -580,8 +580,8 @@ test-only commit. Together about 20 production lines, so PR 4 stays under
 700 (about 560 net) and is not split.
 
 - **(d) A river file not in the DEM's CRS is refused before anything runs,
-  naming `--rivers`, and before `--out-dir` is created.** Today
-  `station-catchments` checks only the reference file against the river
+  naming `--rivers`, and before `--out-dir` is created.** Before (d),
+  `station-catchments` checked only the reference file against the river
   file's CRS. The DEM's CRS is checked per station, inside `delineate`
   ("the river reach must be in the DEM's CRS"), so every placed station
   becomes a `refused` row with cause `other`, the coverage test compares
@@ -617,8 +617,8 @@ test-only commit. Together about 20 production lines, so PR 4 stays under
   `<out-dir>/results.csv`, `<out-dir>/summary.json`): non-zero exit; the
   output names `--out-dir` and the path; it contains neither `--dem` nor
   "cannot read"; no traceback. *Green* (`cli.py`): every write the command
-  makes (the `results.csv` open, each row's write and flush, each catchment
-  file, `summary.json`) turns an `OSError` into
+  makes (making `--out-dir`, the `results.csv` open, its header, each row's
+  write and flush, its close, each catchment file, `summary.json`) turns an `OSError` into
   `typer.BadParameter(f"cannot write {path}: {exc.strerror or exc}",
   param_hint="--out-dir")`, through one small helper. `BadParameter` is
   neither an `OSError` nor a `ValueError`, and `run_batch` stops on any
@@ -644,6 +644,15 @@ and green `cabff74`. They came to 31 production lines against "about 20"
 import over several lines once `check_reach_crs` joined it;
 `catchment.py` 4; `catchment_batch.py` 2), so PR 4 is 572 net, not about
 560, and still not split.
+
+Code review round 2 found that (e) missed one write: making `--out-dir`
+(`target.mkdir(exist_ok=True)`), so an `--out-dir` that is an existing
+file, or under a parent that cannot be written, ended in a
+`FileExistsError` or `PermissionError` traceback. Two more red cases
+(`44dc954`: an `--out-dir` that is a file; a read-only parent, skipped when
+run as root) and green `f952f2d` put the `mkdir` under the same helper;
+the green also moves the `results.csv` header write and its close under
+it, which no test exercises. PR 4 is then 573 net.
 
 ## What the data says (measured 2026-10-04)
 
@@ -2092,6 +2101,9 @@ green `cabff74`) it is 572 net (614 added, 42 removed) over
 `9e666f4..cabff74`: `reference.py` 184, `catchment_batch.py` 173,
 `cli.py` 172, `io/geojson.py` 21, `catchment.py` 13, `mosaic.py` 5,
 `io/station_set.py` 4, `burn.py` 0; 90 past the margin and 128 under 700.
+With code review round 2's fix (red `44dc954`, green `f952f2d`) it is 573
+net (615 added, 42 removed) over `9e666f4..f952f2d`, `cli.py` 173 and the
+others as at `cabff74`; 91 past the margin and 127 under 700.
 `@developer`'s account of the excess: `StationResult`'s field list, about
 50 lines (one line per column, 48 columns, which "The batch" lists
 in words rather than counts); the summary's models and its fixed key
@@ -2133,10 +2145,10 @@ the batch, the command and the moved writer as the next.
 | `reference.py` | agreement, classes, `match_by`, summary | 115 (184 at green) |
 | `catchment_batch.py` | `BatchRequest`, `BatchSink`, `run_batch`, `StationResult`, `refusal_cause` | 105 (171 at green; 173 at `cabff74`) |
 | `mosaic.py`, `catchment.py` | `MixedGridError`, `MixedGridRefusal` (round 3, Ola's ruling on counting); `check_reach_crs` (change (d)) | 10 (14 at green; 18 at `cabff74`) |
-| `cli.py` | `station-catchments`, the directory sink | 80 (140 net at green, the writer's lines removed; 147 at `33b1f2d`; 172 at `cabff74`) |
+| `cli.py` | `station-catchments`, the directory sink | 80 (140 net at green, the writer's lines removed; 147 at `33b1f2d`; 172 at `cabff74`; 173 at `f952f2d`) |
 | `io/station_set.py` | a reference polygon with no area refused (change (b)) | (4 at `33b1f2d`) |
 | `io/geojson.py` | the moved writer (moved from PR 3 after its code review, round 1) | 25 (cli.py −25; 21 at green) |
-| **PR 4, the batch and the comparison** | | **about 335 (482); 530 net (567 added) at green `1c39ef7`; 541 net (580 added) at `33b1f2d`; 572 net (614 added) at `cabff74`** |
+| **PR 4, the batch and the comparison** | | **about 335 (482); 530 net (567 added) at green `1c39ef7`; 541 net (580 added) at `33b1f2d`; 572 net (614 added) at `cabff74`; 573 net (615 added) at `f952f2d`** |
 | `catchment.py`, `cli.py`, `catchment_batch.py` | the fallback (below) | 80 |
 | **PR 5, the fallback** | | **about 80 (115)** |
 
@@ -2698,3 +2710,7 @@ Fixes for evidence round 1, by `@architect` in the commit that records it: (1) t
 **29 PR 4, code review, round 1, 2026-10-05 (from the main session's summary of `@reviewer`'s handback).** Range `9e666f4..33b1f2d` (red `2b9b39f`, `@architect` `6475806`, red amendment `7cd56a4`, green `1c39ef7`, `@architect` `33c2dc4`, red `6ebff1b`, green `33b1f2d`). Verdict: CHANGES REQUESTED. LOC by PR 2's round-2 rule: 580 added, 39 removed, 541 net (`reference.py` 184, `catchment_batch.py` 171, `cli.py` 147, `io/geojson.py` 21, `catchment.py` 9, `mosaic.py` 5, `io/station_set.py` 4, `burn.py` 0); 59 past the 482 margin, under 700, so no split (the fallback seam applies only past 700). The reviewer's count reproduces 530 at `1c39ef7` and 569 for PR 2. Gates clean. Full suite on a freshly built `_core`: 4900 passed; 8 failures are artefacts of the scratch copy and pass in the worktree. Red before green for both pairs (`2b9b39f`/`7cd56a4` then `1c39ef7`; `6ebff1b` then `33b1f2d`). No mutation testing owed and no `bench.py` run (the 140-station acceptance run comes after PR 4). Prose claims checked: the half cell between `ours` × cell area and the traced outline's area, exact on 8 traced sets; classify and summarise as designed; a refusal against a bug (only `CatchmentError` becomes a row); `MixedGridError` and `MixedGridRefusal`, and `dem_input.py:248`'s re-raise; catchment files byte-identical across `9e666f4..33b1f2d` for three runs, and `results.csv` identical but for `seconds`. `33c2dc4`'s re-citations hold. PR 2's two leftovers are closed. PR 4 does not depend on questions 5 to 7. Blocking: `project_structure.md` is stale: line 203 says "the catchment GeoJSON writer is in cli.py (22)", the paragraph at line 515 records that exception as still open, and there are no entries for `reference.py`, `catchment_batch.py` and `io/geojson.py`. That file is at the repository root, outside `@architect`'s write limit; it waits on Ola's ruling on who edits root files (default: yes, `@architect` commits its drafted text). Suggestions: (1) `station-catchments` should refuse a river file (and with it the references) in a CRS other than the DEM's up front, naming `--rivers`, before creating `--out-dir`; today every placed station becomes an `other` refusal ("the river reach must be in the DEM's CRS, EPSG:25833"), while `catchment --rivers` refuses at once; (2) the `except OSError` around `run_batch` also wraps the sink's writes, so a write failure reads "Invalid value for --dem: cannot read .../out/1.140.0.geojson: [Errno 21] Is a directory"; a write failure should name the output, in plain words; (3) the new suites' `importlib` fixtures (`cb`, `gj`, `ref`) can become plain imports (`@tester`, test-only); (4) a station with no name prints a stray space in its stderr line. Not pushed; no CI.
 
 Rulings on round 1, by `@architect` in the commit that records it: the blocker stays open until Ola rules on root-file ownership; suggestions (1), (2) and (4) are adopted as changes (d), (e) and (f), and (3) as a test-only commit, under "PR 4's code review, round 1"; the status line, `ROADMAP.md:54`, the estimate block and PR 4's table rows are set to `33b1f2d`.
+
+**29 PR 4, code review, round 2, 2026-10-05 (from the main session's summary of `@reviewer`'s handback).** Range `33b1f2d..72b62ce` (test-only `e8e93d0`, red `bc78be3`, green `cabff74`, `@architect` `72b62ce`). Verdict: CHANGES REQUESTED. LOC reproduced: 614 added, 42 removed, 572 net. Red before green: `bc78be3`'s 8 tests fail at `33b1f2d` for the right reasons and pass at `cabff74`. `e8e93d0` changes no assertion (test counts 92, 87 and 14 equal before and after). Full suite on a freshly built `_core`: 4909 passed; 7 failures are artefacts of the scratch copy. Gates clean. Every re-citation in `72b62ce` holds. The round-1 record above, written from the main session's summary, matches what the reviewer would have written. Blocking: (1) "today" clauses in three test docstrings, written at the red step, were made false by the green step; (2) change (e) did not cover `target.mkdir(exist_ok=True)`: an `--out-dir` that is an existing file ends in a `FileExistsError` traceback, and one under a read-only parent in a `PermissionError` traceback, which makes false the design's "every write the command makes" and `ROADMAP.md:54`'s "a failed write reported as a write to the output directory"; (3) round 1's blocker, `project_structure.md`, is still open, waiting on Ola. Not blocking, a follow-up item: the `catchment` command's own write of its catchment file (`cli.py:1956`, `target.write_bytes(...)`) is not under any `except` either; it is older than PR 4. Suggestion, adopted: the ruling for (d) said "Today `station-catchments` checks only the reference file…", now "Before (d), …". Not pushed; no CI.
+
+Fixes for round 2: (1) `@tester`'s `a98c805` rewords the three docstrings to "before change (d)" / "before change (e)", docstrings only; (2) red `44dc954` (`@tester`) adds the cases `out_dir_is_a_file` and `out_dir_parent_read_only` (the latter skipped when run as root) to change (e)'s parametrised test, and green `f952f2d` (`@developer`) makes `--out-dir` under the same `_writing` helper, and also moves the `results.csv` header write and its close under it, which no test exercises; full suite 4919 passed. Recorded by `@architect` in the commit that records this round, with `mkdir` added to (e)'s list of writes under "PR 4's code review, round 1", the reword of (d), the status line, `ROADMAP.md:54`, the estimate block and PR 4's table rows (573 net, 615 added, 42 removed; `cli.py` 173; 91 past the margin, 127 under 700). Blocker (3) stays open.
