@@ -1,0 +1,522 @@
+# Harness h16: guard fixes, a line counter, a scratch copy, brief fixes
+
+Status: design; next the red step for PR A (`@tester`), then PR B.
+
+Ola approved the items on 2026-10-05 (the main session's summary of his
+rulings, not his words). He said this is the last harness increment before
+a freeze of a few days, so the design is kept to what each item needs and
+§5 names what should drop out. What the labels mean:
+
+| Label | What it is | PR |
+|---|---|---|
+| G1 | `guard_push.py` asks before `git fetch` into a named ref and before `git replace` writes | B |
+| G2 | `guard_push.py` asks before a git or gh command it does not know (an alias from user config) | B |
+| G3 | scratchpad repositories are ordinary (night proposal N3), in two parts, G3a and G3b; G3c is the push half | B |
+| G4 | guard import shadowing: `tools/` last on `sys.path`, stdlib-named `tools/` files governed | B |
+| G5 | rule files written through the shell: one brief line | A |
+| T1 | `tools/count_loc.py`, the one counter for `CLAUDE.md` §2 (night proposal N1) | A |
+| T2 | `tools/scratch_copy.py <rev> <dir>` (night proposal N2), and evening P9 | A |
+| T3 | `tools/brief.py`: note-file names that cannot collide; root Markdown files in `@architect`'s limit | A |
+| R1 | rule lines: Monitor not `sleep`; a fallback kept for the last hour | A |
+
+"The scratchpad" is the session's temporary directory,
+`/private/tmp/claude-<uid>/<project>/<session>/scratchpad/`. "Governed"
+means `guard_governance.py` asks before a write (`governed()` in that file).
+Sources not on `master` are named by branch and commit:
+`worktree-retro-1004c` holds the night retrospective
+(`docs/retrospectives/2026-10-05-night.md`, a79f2d9) and the evening one
+(`docs/retrospectives/2026-10-04-evening-merges-h11-h13-29.md`, c0e3451);
+the brief said the evening one is on `master`, and it is not (`git branch -a
+--contains c0e3451` lists only `worktree-retro-1004c`). `worktree-h12-design`
+holds `docs/increments/h12-prose-fast-lane.md`.
+
+## 1. Prior art: legacy and literature
+
+Tooling; no novelty claimed.
+
+*Literature.* The sources each item rests on, read 2026-10-05:
+
+- git 2.55, `git-config(1)`, `alias.*`: "To avoid confusion and troubles
+  with script usage, aliases that hide existing Git commands are ignored
+  except for deprecated commands." So an alias can carry any name that is
+  not a current command, and can take a deprecated one (checked here:
+  `git -c alias.whatchanged='rev-parse --short HEAD' whatchanged` printed a
+  hash). G2 rests on it.
+- `git-config(1)`, `url.<base>.pushInsteadOf`: "Any URL that starts with
+  this value will not be pushed to; instead, it will be rewritten to start
+  with <base>, and the resulting URL will be pushed to." G3c rests on it.
+- `git-replace(1)`: "Typing "git replace" without arguments, also lists all
+  replace refs"; `-l`/`--list` lists. G1 treats those forms as reads.
+- `python3(1)`, `-I`: "In isolated mode sys.path contains neither the
+  script's directory nor the user's site-packages directory"; `-P`: "Don't
+  automatically prepend a potentially unsafe path to sys.path such as [...]
+  the script's directory". Python's *The initialization of the sys.path
+  module search path*: "The first entry in the module search path is the
+  directory that contains the input script". G4 rests on these.
+- Anthropic, *Writing effective tools for agents* (cited by the night
+  retrospective for N1 and N2) and *Making Claude Code more secure and
+  autonomous with sandboxing* (for N3); not re-read here.
+
+What differs: the h12 design scrubs user config
+(`GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1`) so that it reads only
+the governed `.git/config`. That is right for a tool that must not be
+misled (T1, T2, G3a's lookup) and wrong for a guard that must predict what
+a command will do, because the command reads the user config the scrub
+hides. G2 and G3c therefore do not scrub; §2 says where each applies.
+
+*Legacy.* Nothing. `git grep -l -i -e 'insteadOf' -e 'sys.path.insert' -e
+'git archive' -e 'count_loc' legacy-archive -- legacy` returned no file
+(exit 1); the legacy tree had no harness.
+
+## 2. The items
+
+Each item: what changes, the incident it prevents, the red test, its size.
+Sizes are production lines by `CLAUDE.md` §2 (net), estimated; tests are
+excluded.
+
+### G1. `git fetch` into a named ref, and `git replace`
+
+**Change.** In `guard_push.py`'s `segment_why`:
+
+- `git fetch` or `git pull` with a positional other than the first (the
+  repository) that contains `:` asks: "fetch writes a named ref". That is a
+  refspec with a destination (`. <sha>:refs/remotes/origin/master`,
+  `+a:b`). `git fetch origin`, `git fetch -q origin master` pass, as today.
+- `git replace` asks ("replace refs change what git reads for an object")
+  unless it is a listing: no arguments, or `-l`/`--list` (with or without a
+  pattern), or `--format=…` with those. Every other form (create, `-d`,
+  `-f`, `--edit`, `--graft`, `--convert-graft-file`) asks.
+
+**Incident.** h12 design review round 2 (recorded in dfe3ad7 on
+`worktree-h12-design`): in a scratch repository,
+`git fetch . "<sha>:refs/remotes/origin/master"` repointed `origin/master`
+at a planted commit, and `git replace` made `git archive` serve a planted
+file; neither was asked. h12's own text (§3.3, "These checks do not depend
+on any guard change") says the guard change makes the routes harder, not
+h12's checker correct; that is all G1 claims.
+
+**Red test** (`tests/python/test_guard_push.py`, parametrised over argv):
+asks for `git fetch . abc:refs/remotes/origin/master`,
+`git fetch origin +master:refs/heads/x`, `git pull . a:b`,
+`git replace HEAD HEAD~1`, `git replace -d x`, `git replace --graft a b`,
+`git replace --edit a`; passes `git fetch origin`, `git fetch -q origin master`,
+`git fetch --all`, `git replace`, `git replace -l`, `git replace --list 'a*'`.
+Pinned false positive: `git fetch --depth 1 git@github.com:a/b.git` asks
+(the URL is the second positional after `1`); `--depth=1` does not.
+
+**Size.** About 12 lines.
+
+### G2. Git and gh aliases: user config changes what the guard sees
+
+**Change.** `guard_push.py` judges a git command by its subcommand word, so
+an alias hides what runs. Probe, run on this branch's base (bc01cd8):
+`publishes(['git', '-c', 'alias.p=push', 'p', 'origin'])` and
+`publishes(['git', 'p', 'origin'])` both return `[]`, and `segment_why`
+returns `None`: an alias written into `~/.gitconfig` (not governed) or given
+with `-c` pushes unasked. The fix: a git subcommand that is not a current
+git command asks, with the reason "a git alias or a command the guard does
+not know; it cannot see what it runs". "Current" is the output of
+`git --list-cmds=main` less `git --list-cmds=deprecated` (181 and 2 names
+with git 2.55), read once per hook run. Those two calls are not scrubbed:
+they list commands, which no config changes. The same for gh: `words[1]`
+outside a fixed set of gh's top-level commands asks. The set is what
+`gh help` lists with gh 2.101 less its alias `co` (which a user can
+redefine): `auth browse codespace discussion gist issue org pr project
+release repo skill cache run workflow agent-task alias api attestation
+completion config copilot extension gpg-key label licenses preview ruleset
+search secret ssh-key status variable`. A gh extension is then asked
+about too.
+
+**Incident.** h12 design review round 3 (recorded in 2d77b6c on
+`worktree-h12-design`): a user-level config file changed what git resolved
+(`url.<x>.insteadOf` sent `ls-remote` and `fetch` elsewhere) with no
+guarded command. That round's subject was the h12 checker, not the guards;
+the alias route above is the same class turned on `guard_push.py`, found
+while writing this design, with no incident of its own.
+
+**Red test** (`test_guard_push.py`): asks for `git -c alias.p=push p origin`,
+`git p origin`, `git whatchanged` (deprecated, so aliasable), `gh pm 12`,
+`gh co 12`; passes `git status`, `git log -1`, `git worktree list`,
+`gh pr view 12`, `gh api repos/x` (a GET). A test that `git --list-cmds=main`
+contains `push`, so a git without `--list-cmds` fails loudly rather than
+asking on everything.
+
+**Size.** About 14 lines.
+
+### G3. Scratchpad repositories are ordinary (N3)
+
+Night retrospective §6, N3 (a79f2d9). Three parts; the third should drop
+(§5).
+
+**G3a, governance.** `governed(path)` returns False for an absolute path
+whose real path (`os.path.realpath`, so `/tmp` resolves to `/private/tmp`
+and a symlink to the repository's `.git` is followed) lies under a
+scratchpad: the pattern
+`^/private/tmp/claude-\d+/[^/]+/[^/]+/scratchpad(/|$)`. Any session's
+scratchpad, not only the current one: all are temporary, and nothing the
+harness reads lives there. A relative path is judged as today, since the
+guard does not track `cd`.
+
+**G3b, local git writes in a scratch repository.** `segment_why` returns
+None for the local writes it now asks about (`config`, `remote`,
+`symbolic-ref`, `update-ref`, G1's fetch and replace) when all hold:
+
+- the git call has `-C <dir>` with `<dir>` absolute;
+- `git -C <dir> rev-parse --absolute-git-dir --git-common-dir`, run with
+  `GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1`, succeeds, and both
+  directories, resolved against `<dir>` and by `realpath`, lie under a
+  scratchpad. This catches a scratch directory that is a linked worktree
+  of the real repository (`git worktree add`), whose config, refs and
+  replace refs are the real repository's;
+- no `--git-dir`, `--work-tree`, `--global` or `--system` in the argv, and
+  the command text contains no `GIT_` (a `GIT_DIR=` prefix overrides `-C`;
+  `tools/shell_scan.py` strips leading assignments, so the text is checked).
+
+`git config --file <path>` with `<path>` under a scratchpad (G3a's test)
+passes too. Here the scrub is right: the lookup asks where the repository
+is, and must not be steered by an `include` or other entry in a user file.
+
+**G3c, a push to a scratch repository** (recommended to drop, §5). A push
+passes only when the line parses to exactly one simple command, a
+`git -C <scratch repository> push <dest> …` as in G3b; `<dest>` is written
+literally as an absolute path or a `file://` URL whose real path lies under
+a scratchpad (a remote name is never resolved); the argv has no `-c`,
+`--repo`, `--receive-pack` or `--exec`; and
+`git -C <dir> config --get-regexp '^url\.'` run **without** the scrub,
+reading what the push will read, prints nothing. Any `url.*` entry at any
+level voids the pass, because `pushInsteadOf` can send a scratch path to the
+real remote. What it cannot see: a variable such as `GIT_CONFIG_GLOBAL`
+exported by a shell startup file into the Bash tool's shell but not into the
+hook's environment (h12 §5's residual).
+
+**Incident.** The night of 2026-10-04/05, §2 of the night retrospective
+(a79f2d9): four of seven `guard_unattended` refusals were scratch
+repositories in the scratchpad (22:58:22 `git config user.*`,
+`git remote add` and a push to a local bare repository, agent `a5b4f008`;
+23:04:28 an append of `[url] insteadOf` to a scratch `.git/config` and
+23:05:27 a push to a `file://` scratch remote, agent `a3cc5c9a`), and two of
+them were then reached by another route. A refusal leaves no commit; the
+retrospective's table is the record.
+
+**Red test.** `test_guard_governance.py`: a Write of
+`<scratchpad>/r/.git/config` passes; of `<scratchpad>/copy/CLAUDE.md`
+passes; of `<scratchpad>/link/.git/config` where `link/.git` is a symlink to
+a real repository's `.git` asks; of `.git/config` (relative) asks. A Bash
+`cat >> <scratchpad>/r/.git/config` passes. `test_guard_push.py`, with a
+real scratch repository made by the test under `tmp_path` and the pattern
+pointed at it (a module constant the test patches): `git -C <it> config
+user.name x` and `git -C <it> remote add o /x` pass; the same in a linked
+worktree of a second repository asks; with `GIT_DIR=/x ` in front asks;
+`git config user.name x` (no `-C`) asks. If G3c stays: `git -C <it> push
+<scratch bare> master` passes; with a `GIT_CONFIG_GLOBAL` file (set in the
+hook's environment) holding `url.<outside>.pushInsteadOf = <scratch bare>`
+asks; `git -C <it> push origin master` (a remote name) asks;
+`git -C <it> config url.x.insteadOf y && git -C <it> push <bare>` asks.
+
+**Size.** G3a about 6 lines (a `scratchpad` helper, below, and the
+exemption); G3b about 20; G3c about 25.
+
+### G4. Guard import shadowing
+
+**Change.** Two parts, both needed:
+
+1. Every `sys.path.insert(0, <tools>)` becomes `sys.path.append(<tools>)`:
+   `.claude/hooks/guard_push.py@bc01cd8:32`,
+   `.claude/hooks/guard_governance.py@bc01cd8:44`,
+   `.claude/hooks/guard_spawn.py@bc01cd8:80`,
+   `.claude/hooks/guard_unattended.py@bc01cd8:76`,
+   `tools/session_state.py@bc01cd8:48`, `tools/brief.py@bc01cd8:28`,
+   `tools/away.py@bc01cd8:32` (seven lines changed, net 0). The standard library
+   then wins over any file in `tools/`. The hooks' own directory,
+   `.claude/hooks/`, stays first, and is governed by prefix.
+2. A script run as `python3 tools/x.py` (the `SessionStart` hook, the main
+   session's `brief.py`) has `tools/` first by Python's own rule, which no
+   `append` changes. So `governed()` also returns True for a path whose
+   component after a `tools` component, cut at the first `.`, is in
+   `sys.stdlib_module_names` (`tools/ast.py`, `tools/json/__init__.py`,
+   `tools/subprocess.cpython-314-darwin.so`). G3a's exemption comes first,
+   so a probe in a scratch copy is not asked about.
+
+**Incident.** h12 PR A review round 2 (recorded in 6403582 on
+`worktree-h12-design`): a planted `tools/json.py` replaced the stdlib module
+inside `tools/ci_changes.py`, fixed there with `python3 -I`. The reviewer's
+lesson carried it to the gates; `@architect` then found it reaches the
+hooks (main session transcript `806b4380`, line 7527, the `ASK OLA:` line
+written at 07:00:27). Checked again on this branch's base in a scratch copy
+of the two guards and `tools/`: with `tools/dataclasses.py` raising at
+import, `guard_governance.py` given a Write of `CLAUDE.md` and
+`guard_push.py` given `git push` both exited 1 with a traceback and no
+decision, which Claude Code treats as a non-blocking error; with
+`sys.path.append` in both, each printed its `ask`. No file in `tools/` or
+`.claude/hooks/` is named after a stdlib module on any branch (the main
+session's check, same transcript, line 7548).
+
+**Red test.** `test_guard_governance.py`: `governed()` is True for
+`tools/ast.py`, `tools/json/__init__.py`, `/abs/wt/tools/typing.py`; False
+for `tools/count_loc.py` and `docs/x/ast.py`. A test per hook that copies
+the hook and `tools/` into `tmp_path`, plants `tools/dataclasses.py` raising
+at import, feeds a governed Write (or a push) and requires an `ask` on
+stdout. A repository test: no file in `tools/` is named after a stdlib
+module, so one approved by mistake still fails CI.
+
+**Size.** About 6 lines net.
+
+### G5. Rule files written through the shell
+
+**Finding: the reported bypass did not happen.** The h12 `@architect`
+(agent `a329f25e`, the run that committed 6403582) handed back "I wrote two
+governed files with a Python heredoc, which the governance guard does not
+see." Its transcript shows otherwise: the heredoc that wrote
+`docs/increments/README.md` and `.claude/agents/reviewer.md` (line 344,
+06:49:26 UTC) drew `guard_governance.py`'s `ask` naming both files (line
+346), which was answered yes 71 seconds later (line 348); its reverts were
+asked about too (lines 355, 364). Replayed on this branch's base,
+`judge_bash` on that command returns `ask` for both files.
+
+**What is true.** The Bash arm reads string literals, so a path built from
+parts passes: on this branch's base, `judge_bash` returns None for
+`Path('docs', 'increments', 'README.md').write_text(…)`,
+`(Path('docs/increments') / 'README.md').write_text(…)`,
+`open('CLAU' + 'DE.md', 'w')`, and `python3 /tmp/w.py`. The guard's own
+docstring calls itself "a tripwire, not a sandbox"; no static reading of a
+program closes this.
+
+**Change (bound, not closed).** One line in `.claude/briefs/common.md`:
+"Write a rule file with Edit or Write, never through the shell." The Edit and
+Write arm judges the exact path, so the rule moves rule-file writes to the
+arm that cannot miss. Prose, no red test. (G5b, joining literal path parts
+in `tools/shell_scan.py`'s `candidates`, about 15 lines, is left out, §5.)
+
+### T1. `tools/count_loc.py` (N1)
+
+**Interface.**
+
+    python3 tools/count_loc.py <base> [<head>]
+
+`<head>` defaults to `HEAD`. The old side is `git merge-base <base> <head>`,
+so `<base>` may be `origin/master` and the count is the PR's, as
+`git diff <base>...<head>`. Output, tab-separated, one line per counted
+file, then a total, then one `not counted:` line per changed file it skipped
+with the reason (`tests/`, `docs/`, `not code`):
+
+    src_python/tin_engine/gauge.py	117	0	117
+    total	744	53	691
+    not counted: tests/python/test_gauge.py (tests/)
+
+Exit 0; exit 2 with one stderr line starting `count_loc:` on a git error.
+Committed revisions only; the working tree is not read.
+
+**Rule, from `CLAUDE.md` §2.** Added lines are the `+` ranges of
+`git diff -U0` hunks, judged in the file at `<head>`; removed lines the `-`
+ranges, judged at the old side. A line counts unless it is blank, a comment,
+a docstring, or inside a raw literal's body. Per kind:
+
+- Python (`.py`): `tokenize`, as the 29 PR 2 round-2 record states its
+  method (cc52b8f): a line counts if it holds a token other than comments,
+  newlines and indentation; docstrings (the first statement of a module,
+  class or function, if a string; found with `ast`) do not count on any of
+  their lines; any other string spanning lines counts on its first line
+  only. A file that does not tokenize counts every non-blank line, with a
+  stderr warning.
+- C++ (`.h`, `.hpp`, `.cpp`, `.cc`, `.cxx`): a small scanner; a line counts
+  if it has a character outside `//` and `/* */` comments and outside a raw
+  string's body. A raw string `R"d(…)d"` counts on its opening line; its
+  later lines count only for code after the closing `)d"`.
+- CMake (`CMakeLists.txt`, `.cmake`) and shell (`.sh`): blank and
+  `#`-comment lines do not count.
+- Not counted: anything under `tests/` or `docs/`, and files of no kind
+  above (Markdown, YAML, TOML, JSON, data). The `not counted:` lines show
+  them, so a reviewer sees what was left out (question 2).
+
+Every git call runs with `GIT_CONFIG_GLOBAL=/dev/null`,
+`GIT_CONFIG_NOSYSTEM=1`, `GIT_NO_REPLACE_OBJECTS=1`, `--no-ext-diff
+--no-color`: a user setting such as `diff.noprefix` changes the headers the
+parser reads (h12 §3.3 names it). Renames are git's default detection.
+
+**Blueprint.** Pure functions, each tested alone, and one thin `main`:
+
+    def kind_of(path: str) -> Kind | None
+    def counted_lines(text: str, kind: Kind) -> frozenset[int]   # 1-based
+    def hunks(diff: str) -> dict[str, tuple[list[int], list[int]]]  # path -> (new +lines, old -lines)
+    def tally(...) -> list[Row]                                    # joins the three
+    def main(argv) -> int                                          # git I/O only here
+
+**Incident.** Night retrospective, lesson 3 (a79f2d9): eighteen runs wrote
+their own counter; two personas got 558 and 577 from the same tree
+(`a1fee960`'s lessons).
+
+**Red test** (`tests/python/test_count_loc.py`): `counted_lines` cases per
+kind (comment-only, blank, docstring of one and of three lines, a
+multi-line non-docstring string, a C++ raw string over three lines with
+`;` after it, `/* */` across lines with code after it); `hunks` on a
+hand-written diff with a new file, a deletion and two hunks; a temporary
+repository whose two commits give known counts; that a `GIT_CONFIG_GLOBAL`
+file with `diff.noprefix=true` does not change the output; and two
+recorded counts from real history, which need the full clone CI already
+has (`fetch-depth: 0`): `count_loc.py 529613a 193079d` totals 589, 20,
+569 (29 PR 2, review round 3), and `count_loc.py 9e666f4 9bb1723` totals
+744, 53, 691 (29 PR 4, ef403bd's message and the round-6 review). If the
+tool and a recorded count disagree, `@tester` reports which line differs
+before anyone changes either.
+
+**Size.** About 120 lines.
+
+### T2. `tools/scratch_copy.py` (N2), and P9
+
+**Interface.**
+
+    python3 tools/scratch_copy.py <rev> <dir>
+
+1. Refuses (exit 2, one stderr line) if `<dir>` exists and is not empty, or
+   lies inside the repository it is run from.
+2. `git archive <rev> | tar -x -C <dir>`, with T1's three variables, so the
+   copy is not a git work tree.
+3. Copies the built `_core*.so` from the running worktree's
+   `.venv/lib/python3.*/site-packages/tin_engine/` into
+   `<dir>/src_python/tin_engine/`. None found: a stderr warning (Python-only
+   suites still run). If `git diff --quiet <rev> HEAD -- include src
+   bindings CMakeLists.txt` says the C++ differs, a stderr warning that the
+   copied `_core` was built from `HEAD`.
+4. Prints one line on stdout, the command that runs `pytest` against the
+   copy: `cd <dir>` and the worktree's `.venv/bin/python -c` with a program
+   that drops the editable finder from `sys.meta_path` (as
+   `docs/benchmarks/2026-10-02/basin-memory-probe/blockprobe.py:23` does),
+   puts `<dir>/src_python` first on `sys.path`, and calls `pytest.main` on
+   the remaining arguments.
+
+It also serves "run the new tests against the code before the change"
+without `git stash`.
+
+**P9** (evening retrospective, c0e3451): `test_hook_is_executable_in_the_checkout`
+in `tests/python/test_settings_wiring.py` skips, with the reason stated,
+when the tree is not a git work tree. `@tester`'s, in the red step.
+
+**Incident.** Night retrospective lessons 1 and 2 and §3 (a79f2d9): six
+`@tester` runs each built their own way round the editable finder; the
+seven `test_settings_wiring` failures in a `git archive` copy (round 2's
+"8 failed", c7d427a); five `git stash` uses in the shared stash.
+
+**Red test** (`tests/python/test_scratch_copy.py`): the refusals; the copy
+has no `.git`; the printed command, run with `tests/python/` replaced by
+one generated test file asserting `tin_engine.__file__` lies under
+`<dir>`, exits 0 (this is the check that the finder is dropped; it fails
+if the drop is removed); the C++-differs warning on a revision before a
+C++ change.
+
+**Size.** About 60 lines.
+
+### T3. `tools/brief.py`
+
+**Note-file names.** Today `<persona>-<HHMMSS>.md`. Two briefs printed in
+the same second for the same persona in different worktrees got the same
+name: `architect-094230.md`, for `h15-ci` and for `h16`, on 2026-10-05
+(main session transcript `912df417`, lines 147 and 155; no commit). The
+name becomes `<persona>-<worktree>-<HHMMSS>.md`, `<worktree>` the
+worktree directory's name; if that file exists, `-2`, `-3`, … are appended
+before `.md`. `.claude/REQUIRED-READING.md` states the format and changes
+with it. **Red test** (`test_brief.py`): two briefs with the clock frozen,
+for `h15-ci` and `h16`, name different files; with the file already there,
+the next name ends `-2.md`. About 6 lines.
+
+**Root Markdown files.** The brief named "a limit on root-file size it
+enforces". No source found states a size limit for root files; the nearest
+item is the evening retrospective's P1 (c0e3451): root Markdown files
+(`README.md`, `INSTALL.md`, `NOTICE.md`, `testing.md`,
+`project_structure.md`, `auto_catchments.md`, `parallel_refinement.md`)
+are in no persona's write limit, and Ola ruled on 2026-10-05 that
+`@architect` may edit them (recorded in ef403bd's message). `WRITES` still
+lacks them: this run's own brief prints `@architect`'s limit without them.
+The change: `@architect`'s entry gains "root *.md files". P1's second half,
+a test that every tracked path falls in some limit, needs the limits as
+patterns rather than prose, about 30 more lines; it is left out (§5).
+Question 1 asks Ola whether this is the item. **Red test**: `brief.py
+--persona architect` prints a limit naming root Markdown files. About 1 line.
+
+### R1. Rule lines
+
+- **Monitor, not `sleep`.** `.claude/briefs/common.md` gains: "Wait for a
+  background run with the Monitor tool, never with `sleep`." Incident: night
+  retrospective §2 (a79f2d9), three refusals by Claude Code's own `sleep`
+  check (`ac6626cc` 00:48:08, `a9fbff4d` 01:54:49, `a79b3df8` 02:50:22),
+  each an agent sleeping and then reading its log.
+- **A fallback for the last hour.** `.claude/REQUIRED-READING.md`,
+  *Unattended mode*, already requires a no-ruling fallback in `QUEUE:`
+  before Ola leaves; it gains "and one such item stays queued for the
+  window's last hour". Incident: night retrospective §1 and question 1
+  (a79f2d9): from about 04:35 to 05:28 every queued item waited on Ola.
+- **Pointers.** `tester.md`'s mutant paragraph replaces its `git archive`
+  recipe and place list with "in a scratch copy made by
+  `python3 tools/scratch_copy.py <rev> <dir>` in the session scratchpad,
+  removed afterwards" (the night's cut C4, about 35 words fewer);
+  `reviewer.md`'s LOC item and `CLAUDE.md` §2 name `tools/count_loc.py`;
+  REQUIRED-READING's *The harness* names G1 to G4 in one sentence (PR B).
+
+Prose; no red test. `@architect` writes them, in the PR that ships the
+tool or guard they describe. `CLAUDE.md` changes, so the main session
+restarts after PR A merges.
+
+## 3. Shared pieces and boundaries
+
+- **`tools/scratchpad.py`**, new, standard library only: the pattern and
+  `def under(path: str) -> bool` (absolute paths only, by `realpath`).
+  Imported by both guards (G3) and added to `GOVERNED`'s self-protecting
+  set, as `shell_scan.py` is. About 10 lines.
+- **`tools/count_loc.py`** joins `GOVERNED` too: it computes the arithmetic
+  of a rule in `CLAUDE.md` §2, so a change to it is a change to the rule.
+  `tools/scratch_copy.py` does not.
+- The hooks stay pure apart from the git calls named above; the new git
+  calls are G2's two command listings and G3b's (and G3c's) lookups, each
+  with a fixed argv. The guards' `except Exception` → `deny` stays, so a
+  failing lookup refuses rather than passes.
+
+## 4. PR split and size
+
+Under `CLAUDE.md` §2 (700 net per PR) everything fits one PR (about 250
+lines, about 300 with G3c and G5b). It is split anyway, so the tools are
+not held up by guard review rounds (h12's design took four):
+
+| PR | Items | Production lines, about |
+|---|---|---|
+| A, tools | T1, T2 (+P9 test), T3, G5's line, R1 but its *The harness* sentence | 187 (count_loc 120, scratch_copy 60, brief.py 7) |
+| B, guards | G1, G2, G3a, G3b, G4, `scratchpad.py`, the `GOVERNED` entries, R1's *The harness* sentence | 60 (G1 12, G2 14, G3a 6, G3b 20, G4 6, scratchpad 10, minus shared lines) |
+
+Order: A first. Each PR runs red (`@tester`), green (`@developer`), review
+(`@reviewer`). Neither touches refine or mesh code, so no `@perf` run. No
+suite here is invariant-critical, so no mutation round. Writing the hooks,
+`tools/` files in `GOVERNED` and the rule files is asked about at each
+write, so both PRs are day work.
+
+## 5. What should drop
+
+- **G3c (the push to a scratch repository): drop, by default.** It is the
+  one part that lets a push through the guard, its safety rests on the
+  route list being complete, and h12's review found a new route in each of
+  three rounds. The night's push refusals had a workaround that cost
+  seconds (`git remote get-url --push`). Question 3.
+- **G5b (joining literal path parts): drop.** The incident did not happen
+  as reported, and what remains open after it stays open after it.
+- **P1's coverage test: drop** from h16 (above).
+
+Nothing else should drop: G4 is a live hole in the hooks, G1 and G2 are
+small, and T1 and T2 remove the most repeated work of the night.
+
+## 6. Residual, after h16
+
+The guards remain tripwires. Not covered: programs that compute a path
+(G5); a module planted in the user-writable Homebrew site-packages under a
+`tools/` module's name, which with `append` would now win (h12 §5's
+environment residual); shell startup files and `GIT_*` variables they
+export; relative paths in a scratch repository (G3 needs `-C` and absolute
+paths, and the refusal message says so).
+
+## 7. Questions for Ola
+
+1. **Which `brief.py` item did you approve as "a limit on root-file size it
+   enforces"?** No source found states a size limit. Default: the
+   root-Markdown item in T3 (your 2026-10-05 ruling that `@architect` edits
+   root Markdown files, written into `brief.py`'s limits).
+2. **Which files does the line counter count?** Default: code files (Python,
+   C++, CMake, shell) outside `tests/` and `docs/`; workflow YAML,
+   TOML and Markdown are listed as "not counted".
+3. **Drop the push half of the scratchpad item (G3c) from h16?** Default:
+   yes, drop it; scratch config and remote writes with `git -C` still pass.
