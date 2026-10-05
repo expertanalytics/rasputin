@@ -390,6 +390,30 @@ FEATURES_OF_READERS = [
 ]
 
 
+# A geometry each `features_of` reader accepts, by reader name.
+_SQUARE = [[[0.0, 0.0], [10.0, 0.0], [10.0, 10.0], [0.0, 10.0], [0.0, 0.0]]]
+RIGHT_GEOMETRY: dict[str, dict[str, Any]] = {
+    "read_stations": {"type": "Point", "coordinates": [5.0, 5.0]},
+    "read_references": {"type": "Polygon", "coordinates": _SQUARE},
+    "read_nve_lakes": {"type": "Polygon", "coordinates": _SQUARE},
+    "read_segments": {"type": "LineString", "coordinates": [[0.0, 0.0], [10.0, 0.0]]},
+}
+
+
+def _typed(value: Any) -> Any:
+    """The reader's right geometry with its `type` replaced by `value`."""
+    return lambda right: right | {"type": value}
+
+
+# A geometry that is not an object, or an object whose `type` is empty: (id, the
+# value, or a function of the reader's right geometry giving it).
+NOT_A_GEOMETRY: list[tuple[str, Any]] = [
+    ("7", 7), ('"Point"', "Point"), ("[1, 2]", [1, 2]),
+    ('type ""', _typed("")), ("type 0", _typed(0)), ("type false", _typed(False)),
+    ("type []", _typed([])), ("type {}", _typed({})),
+]  # fmt: skip
+
+
 class TestAFileWithNoGeometry:
     """`docs/increments/python-audit.md`, section 10's wording table, the row
     "a `crs` member and either a `Feature` without `geometry` or an object
@@ -397,7 +421,13 @@ class TestAFileWithNoGeometry:
     feature; the reader then refused it as `None is a None, not a Point` (or
     the Polygon, lake and LineString forms). It is refused in plain words
     naming the file and the feature: `has no geometry`.
-    The `"geometry": 7` case is a known gap, kept out."""
+    The main session's ruling on PR C (`audit-geojson-io`), code review round
+    3, widens the refusal: a geometry that is not an object (`7`, `"Point"`,
+    `[1, 2]`; a top-level Feature holding one raised AttributeError after PR
+    C, `no features list` before it) or whose `type` is empty (`""`, `0`,
+    `false`, `[]`, `{}`; read as `1.2.0 is a , not a Point`) is refused the
+    same way, as a top-level Feature (`feature 0`) and as the second feature
+    of a collection (`feature 1`)."""
 
     @pytest.mark.parametrize(
         "doc",
@@ -418,4 +448,27 @@ class TestAFileWithNoGeometry:
         message = str(info.value)
         assert "nogeom.geojson" in message
         assert "feature 0" in message
+        assert "has no geometry" in message
+
+    @pytest.mark.parametrize("bad", NOT_A_GEOMETRY, ids=[name for name, _ in NOT_A_GEOMETRY])
+    @pytest.mark.parametrize("where", ["top-level", "second"])
+    @pytest.mark.parametrize(
+        ("module", "reader"), FEATURES_OF_READERS, ids=[r for _, r in FEATURES_OF_READERS]
+    )
+    def test_a_geometry_that_is_no_object_or_has_an_empty_type_is_refused_the_same_way(
+        self, module: str, reader: str, where: str, bad: tuple[str, Any], tmp_path: Path
+    ) -> None:
+        read = getattr(importlib.import_module(module), reader)
+        right = RIGHT_GEOMETRY[reader]
+        geometry = bad[1](right) if callable(bad[1]) else bad[1]
+        broken = {"type": "Feature", "geometry": geometry, "properties": {"station": "1.2.1"}}
+        if where == "top-level":
+            doc, index = broken | {"crs": crs_member()}, 0
+        else:
+            doc, index = collection([feature(right, station="1.2.0", objectid=1), broken]), 1
+        with pytest.raises(ValueError) as info:
+            read(write(tmp_path / "nogeom.geojson", doc))
+        message = str(info.value)
+        assert "nogeom.geojson" in message
+        assert f"feature {index}" in message
         assert "has no geometry" in message
