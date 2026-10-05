@@ -1,6 +1,6 @@
 # Harness h16: guard fixes, a line counter, a scratch copy, brief fixes
 
-Status: Ola ruled on §7 on 2026-10-05 (all three defaults) and on the afternoon questions (last section). PR A: green at `195b504` plus the test fix `6e52aeb` asked for by code review round 3, 287 net production lines by `tools/count_loc.py bc01cd8 6e52aeb` against an estimate of 187 (the C++ scanner, the git plumbing and review's fixes were not priced); the rule lines of G5 and of R1 (but its *The harness* sentence, PR B's) written; code review round 4 next. PR B: red `9cf533d` on `worktree-h16b`, green in progress.
+Status: Ola ruled on §7 on 2026-10-05 (all three defaults) and on the afternoon questions (last section). PR A: green at `195b504` plus the test fix `6e52aeb` asked for by code review round 3, 287 net production lines by `tools/count_loc.py bc01cd8 a6b966e` against an estimate of 187 (the C++ scanner, the git plumbing and review's fixes were not priced); the rule lines of G5 and of R1 (but its *The harness* sentence, PR B's) written; code review round 4 asked for changes (two test docstrings), fixed in `a6b966e`; round 5 found nothing else; waits for Ola's yes to push, then CI. PR B: red `9cf533d` on `worktree-h16b`, green in progress.
 
 Ola approved the items on 2026-10-05 (the main session's summary of his
 rulings, not his words). He said this is the last harness increment before
@@ -688,3 +688,7 @@ Ola, verbatim: "yes to all defaults, push both". So: `tools/brief.py` takes the 
 ### Round 4: `@reviewer`, code, PR A whole, `bc01cd8..095ab63`
 
 CHANGES REQUESTED. 287 net production lines (`count_loc.py bc01cd8 095ab63`). Round 3's items closed; 219 harness tests pass; rule lines match the tools. Blocking: the docstring of `test_env_drops_config_given_in_the_environment` names `diff.algorithm` as unpinned, which `195b504` made false; no CI before the push. Suggestion: cut "At 98e31cd only the one added line counts" from the rename test's docstring.
+
+### Round 5: `@reviewer`, code, PR A, `095ab63..a6b966e`
+
+CHANGES REQUESTED, on the status line only (taken in the recording commit). 287 net production lines (`count_loc.py bc01cd8 a6b966e`). Round 4's docstring items closed. Green CI after the push makes it APPROVED with no further round.
