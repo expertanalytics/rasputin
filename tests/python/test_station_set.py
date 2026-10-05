@@ -16,7 +16,7 @@ import pytest
 from pydantic import ValidationError
 from shapely.geometry import MultiPolygon, Polygon, box
 
-from nve_fixtures import CRS, collection, feature, line, point, write
+from nve_fixtures import CRS, collection, crs_member, feature, line, point, write
 
 
 @pytest.fixture
@@ -218,7 +218,8 @@ class TestAReferenceWithNoArea:
 
 
 # ---------------------------------------------------------------------------
-# PR 4, lake gauges: `read_lakes` ("The station set", "Lake gauges")
+# PR 4, lake gauges: `read_nve_lakes`, `read_lakes` until audit PR C
+# ("The station set", "Lake gauges")
 # ---------------------------------------------------------------------------
 
 
@@ -232,14 +233,22 @@ def nve_lake(geometry: Any, objectid: int | None = 4_100_001, **extra: Any) -> d
 
 
 class TestReadLakes:
-    """`read_lakes(path) -> (tuple[Lake, ...], crs)`. Before the change, neither
-    `read_lakes` nor `Lake` exists."""
+    """`read_nve_lakes(path) -> (tuple[Lake, ...], crs)`. Before increment 29's
+    PR 4, neither `read_lakes` nor `Lake` existed; audit PR C renamed the
+    reader by what it reads (`docs/increments/python-audit.md`, section 10)."""
+
+    def test_the_name_says_what_it_reads(self, station_set: ModuleType) -> None:
+        """Audit PR C, red test 5: no alias keeps the old name."""
+        assert callable(getattr(station_set, "read_nve_lakes", None))
+        assert not hasattr(station_set, "read_lakes")
+        assert "read_nve_lakes" in station_set.__all__
+        assert "read_lakes" not in station_set.__all__
 
     def test_a_polygon_gives_one_lake_with_its_number_and_name(
         self, station_set: ModuleType, tmp_path: Path
     ) -> None:
         doc = collection([nve_lake(box(0, 0, 100, 100))])
-        lakes, crs = station_set.read_lakes(write(tmp_path / "l.geojson", doc))
+        lakes, crs = station_set.read_nve_lakes(write(tmp_path / "l.geojson", doc))
         assert crs == CRS
         (lake,) = lakes
         assert isinstance(lake, station_set.Lake)
@@ -251,7 +260,7 @@ class TestReadLakes:
     ) -> None:
         two = MultiPolygon([box(0, 0, 10, 10), box(20, 0, 30, 10)])
         doc = collection([nve_lake(two, vatnlnr=12, navn="Tvillingvatna")])
-        lakes, _ = station_set.read_lakes(write(tmp_path / "l.geojson", doc))
+        lakes, _ = station_set.read_nve_lakes(write(tmp_path / "l.geojson", doc))
         assert len(lakes) == 2
         assert {(lk.number, lk.name) for lk in lakes} == {(12, "Tvillingvatna")}
         assert all(isinstance(lk.polygon, Polygon) for lk in lakes)
@@ -265,7 +274,7 @@ class TestReadLakes:
                 nve_lake(box(9, 9, 10, 10), objectid=2, vatnlnr=20),
             ]
         )
-        lakes, _ = station_set.read_lakes(write(tmp_path / "l.geojson", doc))
+        lakes, _ = station_set.read_nve_lakes(write(tmp_path / "l.geojson", doc))
         assert [lk.number for lk in lakes] == [30, 10, 20]
 
     @pytest.mark.parametrize("vatnlnr", [0, None], ids=["zero", "null"])
@@ -273,13 +282,13 @@ class TestReadLakes:
         self, station_set: ModuleType, tmp_path: Path, vatnlnr: int | None
     ) -> None:
         doc = collection([nve_lake(box(0, 0, 1, 1), vatnlnr=vatnlnr, navn=None)])
-        (lake,), _ = station_set.read_lakes(write(tmp_path / "l.geojson", doc))
+        (lake,), _ = station_set.read_nve_lakes(write(tmp_path / "l.geojson", doc))
         assert lake.number is None and lake.name is None
 
     def test_a_file_without_crs_is_refused(self, station_set: ModuleType, tmp_path: Path) -> None:
         doc = collection([nve_lake(box(0, 0, 1, 1))], crs=None)
         with pytest.raises(ValueError, match=r"(?i)\bcrs\b"):
-            station_set.read_lakes(write(tmp_path / "l.geojson", doc))
+            station_set.read_nve_lakes(write(tmp_path / "l.geojson", doc))
 
     @pytest.mark.parametrize(
         "geometry",
@@ -298,7 +307,7 @@ class TestReadLakes:
         """After a good lake, so the message names the right one."""
         doc = collection([nve_lake(box(0, 0, 1, 1)), nve_lake(geometry, objectid=7_654_321)])
         with pytest.raises(ValueError, match="7654321"):
-            station_set.read_lakes(write(tmp_path / "l.geojson", doc))
+            station_set.read_nve_lakes(write(tmp_path / "l.geojson", doc))
 
     def test_a_bad_geometry_without_objectid_is_refused_naming_its_index(
         self, station_set: ModuleType, tmp_path: Path
@@ -308,4 +317,64 @@ class TestReadLakes:
         bad = nve_lake({"type": "LineString", "coordinates": [[0, 0], [10, 0]]}, objectid=None)
         doc = collection([*good, bad])
         with pytest.raises(ValueError, match=r"(?i)(feature|index)\D{0,4}3\b"):
-            station_set.read_lakes(write(tmp_path / "l.geojson", doc))
+            station_set.read_nve_lakes(write(tmp_path / "l.geojson", doc))
+
+
+# ---------------------------------------------------------------------------
+# Audit PR C: the one GeoJSON reading path, with no default CRS
+# ---------------------------------------------------------------------------
+
+
+class TestOneGeojsonRule:
+    """`docs/increments/python-audit.md`, section 10, red test 3: `features_of`
+    reads through `io.geojson.read_collection(..., default_crs=None)`, and
+    every refusal, the decoder's among them, starts with the file's name."""
+
+    def test_a_single_feature_file_is_one_station(
+        self, station_set: ModuleType, tmp_path: Path
+    ) -> None:
+        """Before: refused as not a FeatureCollection."""
+        doc = nve_station("2.11.0", 1.5, 2.5) | {"crs": crs_member()}
+        (s,), crs = station_set.read_stations(write(tmp_path / "s.geojson", doc))
+        assert crs == CRS
+        assert (s.station, s.x, s.y) == ("2.11.0", 1.5, 2.5)
+
+    def test_a_feature_that_is_not_an_object_is_refused_naming_the_file(
+        self, station_set: ModuleType, tmp_path: Path
+    ) -> None:
+        """Before: an `AttributeError` from `_geometry_type`, which
+        `station-catchments` does not catch."""
+        path = write(tmp_path / "s.geojson", collection([]) | {"features": [7]})
+        with pytest.raises(ValueError) as info:
+            station_set.read_stations(path)
+        assert str(info.value) == (
+            "s.geojson: no features list; the file is not a FeatureCollection"
+        )
+
+    def test_a_null_member_is_refused_as_null(
+        self, station_set: ModuleType, tmp_path: Path
+    ) -> None:
+        """Before: refused as `no crs member`."""
+        path = write(tmp_path / "s.geojson", collection([nve_station("2.11.0")]) | {"crs": None})
+        with pytest.raises(ValueError) as info:
+            station_set.read_stations(path)
+        assert str(info.value) == "s.geojson: the crs member is null; the file must name its CRS"
+
+    def test_an_unreadable_name_is_refused_naming_the_file(
+        self, station_set: ModuleType, tmp_path: Path
+    ) -> None:
+        """Before: `cannot read the CRS ...`, without the file."""
+        path = write(tmp_path / "s.geojson", collection([nve_station("2.11.0")], crs="EPSG:999999"))
+        with pytest.raises(ValueError) as info:
+            station_set.read_stations(path)
+        assert str(info.value).startswith("s.geojson: cannot read the CRS 'EPSG:999999'")
+
+    def test_a_file_that_is_not_json_is_refused_naming_the_file(
+        self, station_set: ModuleType, tmp_path: Path
+    ) -> None:
+        """Before: the decoder's bare text."""
+        path = tmp_path / "s.geojson"
+        path.write_text('{"type": "FeatureCollection", "features": [', encoding="utf-8")
+        with pytest.raises(ValueError) as info:
+            station_set.read_stations(path)
+        assert str(info.value).startswith("s.geojson: ")

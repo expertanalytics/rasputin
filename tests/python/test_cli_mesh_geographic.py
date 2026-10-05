@@ -98,7 +98,7 @@ from test_cli_mesh_refine import file_field, stats_row
 from test_cli_mesh_stats import section, table
 from tin_engine.cli import app
 from tin_engine.dem_input import DemRequest, open_dem
-from tin_engine.domain import read_domain
+from tin_engine.io.domain_file import read_domain
 from tin_engine.io.repository import TiffDemRepository
 from vtkread import VtkFile, read_vtk
 

@@ -36,6 +36,7 @@ green since.
 
 from __future__ import annotations
 
+import json
 import sqlite3
 from contextlib import closing
 from pathlib import Path
@@ -54,6 +55,7 @@ from shapely.geometry import (
     MultiPolygon,
     Point,
     Polygon,
+    mapping,
 )
 
 import feature_fixtures as ff
@@ -82,6 +84,9 @@ LAEA = "EPSG:3035"
 WATER_CODES = ("511", "512", "521", "522", "523")
 BOX = domain_of(square(0, 0, 300, 300))
 INNER = square(100, 100, 200, 200)
+#: `INNER` as a GeoJSON geometry, and a `crs` member naming the DEM's CRS.
+GEOMETRY = json.loads(json.dumps(mapping(INNER)))
+MEMBER = {"type": "name", "properties": {"name": UTM33}}
 
 
 @pytest.fixture(scope="module")
@@ -562,6 +567,120 @@ class TestCrs:
 
 
 # --------------------------------------------------------- region and clip
+
+
+class TestOneGeojsonRule:
+    """Audit PR C (`docs/increments/python-audit.md`, section 10, red test 2):
+    `read_source`'s GeoJSON branch reads through `io.geojson.read_collection`
+    with RFC 7946's default, and a refusal reaches the existing handler as
+    `<file name>: <words>`. Each row here differs from the code before it."""
+
+    @staticmethod
+    def rows(fi: ModuleType, path: Path) -> Any:
+        return fi.read_source(path, None, "property", lambda _crs: (0.0, 0.0, 0.0, 0.0))
+
+    @staticmethod
+    def written(tmp_path: Path, doc: object) -> Path:
+        path = tmp_path / "f.geojson"
+        path.write_text(json.dumps(doc), encoding="utf-8")
+        return path
+
+    @staticmethod
+    def collection(**members: Any) -> dict[str, Any]:
+        feature = {"type": "Feature", "properties": {"property": "road"}, "geometry": GEOMETRY}
+        return {"type": "FeatureCollection", "features": [feature]} | members
+
+    @pytest.mark.parametrize(
+        ("member", "says"),
+        [
+            (None, "the crs member is null; the file must name its CRS"),
+            ({}, "the crs member has no name; it must name the CRS"),
+        ],
+        ids=["null", "empty_object"],
+    )
+    def test_a_member_naming_nothing_is_refused_naming_the_file(
+        self, tmp_path: Path, fi: ModuleType, member: Any, says: str
+    ) -> None:
+        """Before: both read as EPSG:4326, as if the member were absent."""
+        path = self.written(tmp_path, self.collection(crs=member))
+        with pytest.raises(fi.FeatureError) as info:
+            self.rows(fi, path)
+        assert str(info.value) == f"f.geojson: {says}"
+
+    def test_a_feature_file_reads(self, tmp_path: Path, fi: ModuleType) -> None:
+        """Before: refused as not a FeatureCollection. Its fid is its position."""
+        doc = {"type": "Feature", "properties": {"property": "road"}, "geometry": GEOMETRY}
+        read = self.rows(fi, self.written(tmp_path, doc | {"crs": MEMBER}))
+        ((fid, geometry, value),) = read.rows
+        assert (fid, value, read.crs) == (0, "road", UTM33)
+        assert geometry.equals(INNER)
+
+    def test_a_bare_geometry_file_reads(self, tmp_path: Path, fi: ModuleType) -> None:
+        """Before: refused. One feature with no properties, so no class value."""
+        read = self.rows(fi, self.written(tmp_path, GEOMETRY | {"crs": MEMBER}))
+        ((fid, geometry, value),) = read.rows
+        assert (fid, value, read.crs) == (0, None, UTM33)
+        assert geometry.equals(INNER)
+
+    def test_features_that_are_not_a_list_are_refused(self, tmp_path: Path, fi: ModuleType) -> None:
+        """Before: `"features": {}` read as no features."""
+        path = self.written(tmp_path, self.collection(crs=MEMBER, features={}))
+        with pytest.raises(fi.FeatureError) as info:
+            self.rows(fi, path)
+        assert str(info.value) == (
+            "f.geojson: no features list; the file is not a FeatureCollection"
+        )
+
+    def test_a_numeric_name_is_read_as_its_digits(self, tmp_path: Path, fi: ModuleType) -> None:
+        """Before: the int 4326 reached `FeatureSet(crs=...)`, whose field is
+        `tuple[str, ...]`, and pydantic refused it."""
+        member = {"type": "name", "properties": {"name": 4326}}
+        read = self.rows(fi, self.written(tmp_path, self.collection(crs=member)))
+        assert read.crs == "4326"
+        assert isinstance(read.crs, str)
+
+    def test_a_numeric_name_opens_as_a_feature_set(self, tmp_path: Path) -> None:
+        """The same file through `open_features`: its `crs` is the text."""
+        lonlat = moved(INNER, UTM33, "EPSG:4326")
+        feature = {"type": "Feature", "properties": {"property": "road"}}
+        doc = {
+            "type": "FeatureCollection",
+            "crs": {"type": "name", "properties": {"name": 4326}},
+            "features": [feature | {"geometry": mapping(lonlat)}],
+        }
+        fs = open_one(self.written(tmp_path, doc), BOX)
+        assert fs.crs == ("4326",)
+        assert len(fs.features) == 1
+
+
+class TestRenamedAndMoved:
+    """Audit PR C, red tests 5 and 7: the any-source lake reader is named by
+    what it reads, and `TerrainFeature` lives in `features` (layer 0), which
+    `feature_input` imports it back from."""
+
+    def test_read_lake_polygons_replaces_read_lakes(self, fi: ModuleType) -> None:
+        assert callable(getattr(fi, "read_lake_polygons", None))
+        assert not hasattr(fi, "read_lakes")
+
+    def test_read_lake_polygons_skips_what_is_not_a_polygon(
+        self, tmp_path: Path, fi: ModuleType
+    ) -> None:
+        """Increment 22's behaviour, unchanged by the rename."""
+        features = [
+            Feat("lake", INNER, {"property": "water"}),
+            Feat("shore", LineString([at(0, 0), at(300, 0)]), {"property": "road"}),
+        ]
+        path = write_geojson(tmp_path / "l.geojson", features)
+        lakes, crs = fi.read_lake_polygons(path, None, at(150, 150), UTM33)
+        assert crs == UTM33
+        (lake,) = lakes
+        assert lake.equals(INNER)
+
+    def test_terrain_feature_is_one_class(self, fi: ModuleType) -> None:
+        import tin_engine.features as features
+
+        assert features.TerrainFeature is fi.TerrainFeature
+        assert fi.TerrainFeature.__module__ == "tin_engine.features"
 
 
 class TestClip:

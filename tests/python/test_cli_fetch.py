@@ -46,8 +46,8 @@ from test_cli_mesh_domain import geojson
 from test_cli_mesh_mosaic import field, same_mesh
 from tin_engine.cli import app
 from tin_engine.dem_input import _domain_plan
-from tin_engine.domain import read_domain
 from tin_engine.io.cog import blocks_meeting
+from tin_engine.io.domain_file import read_domain
 from tin_engine.io.repository import CacheRepository
 from vtkread import read_vtk
 
