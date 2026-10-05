@@ -34,6 +34,9 @@ import pytest
 
 from harness_fixtures import REAL, Tool, clean_env, git
 
+# h17 §4b: a harness test; CI runs it in the `harness` job, not the product legs.
+pytestmark = pytest.mark.harness
+
 ci = Tool("ci_changes")
 
 WORKFLOW = REAL / ".github" / "workflows" / "main.yaml"
@@ -671,8 +674,14 @@ def test_h15_each_python_step_runs_in_one_job_only(
     _assert_exists(extras)
     main_runs = [step["run"] for step in _steps(jobs["python"])]
     extras_runs = [step["run"] for step in _steps(extras)]
-    assert main_runs.count(MAIN_SUITE) == 1, "the main suite runs in the python job"
-    assert MAIN_SUITE not in extras_runs, "the main suite runs once, not again in extras"
+    # h17 §4b: the main suite's line may carry a marker expression (`-m "not harness"`).
+    main_suite = re.compile(rf"{MAIN_SUITE}( -m .*)?")
+    assert sum(bool(main_suite.fullmatch(run)) for run in main_runs) == 1, (
+        "the main suite runs in the python job"
+    )
+    assert not any(main_suite.fullmatch(run) for run in extras_runs), (
+        "the main suite runs once, not again in extras"
+    )
     moved = (TRAP, CODECS, VIEWER, *STATIC_GATES)
     stayed = [what for what in moved if any(what in run for run in main_runs)]
     assert not stayed, f"steps still in the python job, not moved to extras: {stayed}"
@@ -686,6 +695,159 @@ def test_h15_extras_job_gates_ci_result(jobs: dict[str, list[str]], extras: list
         "CI result does not need the extras job"
     )
     assert EXTRAS in _shell_others(jobs), "the result step does not check the extras job"
+
+
+# ---------------------------------------------------------------------------
+# h17 §4d (docs/increments/h17-ci-test-time.md): the harness tests in a job of
+# their own (H1, H2), and the TSan job building exactly the suites it runs
+# (H3). That the TSan list drops exactly the four thread-free suites, and that
+# the parallel loop reports a failing suite, is `@reviewer`'s check by
+# `git diff` and by reading the step, not a test (h15 §7's rule). The harness
+# job's gate, its place in CI result's needs and in the result step's OTHERS
+# are the T4 tests above, which cover every job.
+# ---------------------------------------------------------------------------
+
+HARNESS = "harness"
+PYPROJECT = REAL / "pyproject.toml"
+CMAKE_TESTS = REAL / "tests" / "cpp" / "CMakeLists.txt"
+#: The dev extra's entries the harness job installs (§4b), the bounds read
+#: from pyproject.toml rather than restated here.
+HARNESS_REQUIREMENTS = ("pytest", "pytest-asyncio", "pytest-cov")
+
+
+@pytest.fixture(scope="module")
+def harness(jobs: dict[str, list[str]]) -> list[str]:
+    """The harness job's lines; empty while it is missing, so each test fails on its own claim."""
+    return jobs.get(HARNESS, [])
+
+
+def _assert_harness_exists(harness: list[str]) -> None:
+    assert harness, f"main.yaml has no job {HARNESS!r} (h17 §4b)"
+
+
+def _pytest_step(steps: list[dict[str, str]], job: str) -> str:
+    runs = [step["run"] for step in steps if re.match(r"pytest(\s|$)", step["run"])]
+    assert len(runs) == 1, f"{job}: expected one step running pytest, found {runs}"
+    return runs[0]
+
+
+def _marker_expression(run: str) -> str | None:
+    """The `-m` argument of a pytest command line, unquoted; None when absent."""
+    match = re.search(r"\s-m\s+(\"[^\"]*\"|'[^']*'|\S+)", run)
+    return match.group(1).strip("\"'") if match else None
+
+
+def _dev_requirement(name: str) -> str:
+    """`name`'s entry in pyproject.toml's dev extra, bound included."""
+    block = re.search(r"^dev = \[(.*?)^\]", PYPROJECT.read_text(), re.M | re.S)
+    assert block, "pyproject.toml: no dev extra"
+    entries = re.findall(r"\"([^\"]+)\"", block.group(1))
+    found = [e for e in entries if re.fullmatch(rf"{re.escape(name)}\s*[<>=~!].*", e)]
+    assert len(found) == 1, f"dev extra: expected one entry for {name}, got {found}"
+    return found[0]
+
+
+def test_h1_harness_job_runs_the_harness_marker_without_coverage(harness: list[str]) -> None:
+    _assert_harness_exists(harness)
+    run = _pytest_step(_steps(harness), HARNESS)
+    assert _marker_expression(run) == HARNESS, f"harness job's pytest: {run!r}"
+    assert "--no-cov" in run.split(), (
+        "the package is not installed, so coverage of tin_engine cannot be measured"
+    )
+
+
+def test_h1_harness_job_does_not_install_the_package(harness: list[str]) -> None:
+    _assert_harness_exists(harness)
+    for step in _steps(harness):
+        for line in step["run"].splitlines():
+            if "pip install" not in line:
+                continue
+            args = line.split("pip install", 1)[1].split()
+            assert "-e" not in args and "--editable" not in args, f"installs editable: {line!r}"
+            local = [a for a in args if a.strip("\"'") == "." or a.strip("\"'").startswith(".[")]
+            assert not local, f"installs the package: {line!r}"
+
+
+def test_h1_harness_job_installs_the_test_tools_at_the_dev_bounds(harness: list[str]) -> None:
+    _assert_harness_exists(harness)
+    installs = " ".join(
+        line
+        for step in _steps(harness)
+        for line in step["run"].splitlines()
+        if "pip install" in line
+    )
+    for name in HARNESS_REQUIREMENTS:
+        requirement = _dev_requirement(name)
+        assert requirement in installs, f"harness job does not install {requirement!r}"
+
+
+def test_h1_harness_job_checks_out_full_history(harness: list[str]) -> None:
+    """`test_count_loc` recounts recorded PRs, so the clone needs their commits."""
+    _assert_harness_exists(harness)
+    steps = _steps(harness)
+    checkout = [
+        i for i, step in enumerate(steps) if step.get("uses", "").startswith("actions/checkout")
+    ]
+    assert len(checkout) == 1, f"harness: expected one checkout step, got {len(checkout)}"
+    body = "\n".join(harness)
+    assert re.search(r"^          fetch-depth: 0\s*$", body, re.M), (
+        "harness: checkout without fetch-depth: 0"
+    )
+
+
+def test_h1_harness_job_name_and_python(harness: list[str]) -> None:
+    """§4b: named `Python harness tools`, on 3.12 (§8 question 1's default)."""
+    _assert_harness_exists(harness)
+    assert _job_keys(harness).get("name") == "Python harness tools"
+    versions = [
+        m.group(1)
+        for line in harness
+        if (m := re.fullmatch(r"\s+python-version:\s*\"?([\d.]+)\"?\s*", line))
+    ]
+    assert versions == ["3.12"], f"harness: python-version lines {versions}"
+
+
+def test_h2_python_job_runs_the_complement_of_the_harness_marker(
+    jobs: dict[str, list[str]], harness: list[str]
+) -> None:
+    """With H1's `-m harness`, every collected test runs in exactly one of the two jobs."""
+    main = _marker_expression(_pytest_step(_steps(jobs["python"]), "python"))
+    assert main == f"not {HARNESS}", f"python job's pytest -m is {main!r}"
+    if harness:
+        tools = _marker_expression(_pytest_step(_steps(harness), HARNESS))
+        assert main == f"not {tools}", f"{main!r} is not the complement of {tools!r}"
+
+
+def _tsan_suites(run: str) -> list[str]:
+    """Every word of a step that names a C++ test suite (`test_*` or `prop_*`)."""
+    return re.findall(r"(?<![\w/$.-])((?:test|prop)_\w+)(?![\w/.-])", run)
+
+
+def _cmake_test_targets() -> set[str]:
+    text = CMAKE_TESTS.read_text()
+    return set(re.findall(r"^\s*add_terrain\w*_test\(\s*(\w+)", text, re.M))
+
+
+def test_h3_tsan_builds_exactly_the_suites_it_runs(jobs: dict[str, list[str]]) -> None:
+    steps = _steps(jobs["tsan"])
+    build = [step["run"] for step in steps if "--target" in step["run"]]
+    test = [step["run"] for step in steps if step.get("name") == "Test"]
+    assert len(build) == 1 and len(test) == 1, (
+        f"tsan: build steps {len(build)}, test steps {len(test)}"
+    )
+    built = _tsan_suites(build[0].split("--target", 1)[1])
+    ran = _tsan_suites(test[0])
+    assert built, "tsan: no suite after --target"
+    assert len(built) == len(set(built)), f"tsan builds a suite twice: {built}"
+    assert len(ran) == len(set(ran)), f"tsan runs a suite twice: {ran}"
+    assert set(built) == set(ran), (
+        f"built, not run: {sorted(set(built) - set(ran))}; "
+        f"run, not built: {sorted(set(ran) - set(built))}"
+    )
+    targets = _cmake_test_targets()
+    assert len(targets) > 20, f"the CMake parse found only {len(targets)} targets"
+    unknown = sorted(set(built) - targets)
+    assert not unknown, f"tsan names suites that are not add_terrain*_test targets: {unknown}"
 
 
 # ---------------------------------------------------------------------------
