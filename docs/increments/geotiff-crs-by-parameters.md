@@ -1,6 +1,7 @@
 # GeoTIFF: a projected CRS given by parameters, read as the EPSG code it is
 
-Status: **design, before the red step.** Written by `@architect` on branch
+Status: **design, review round 1 answered; next `@reviewer` design round 2,
+then the red step.** Written by `@architect` on branch
 `worktree-geotiff-param-crs`, from audit PR B's green head `65cd528`
 (`same_crs`, `docs/increments/python-audit.md` section 9). It lands after PR B.
 Not refine or mesh code, so no `@perf` run.
@@ -82,7 +83,16 @@ readers already use; nothing new is claimed.
   libgeotiff's normalised definition. It does **not** look for an EPSG code
   for a user-defined projected CRS when it reads the file; its only
   `FindBestMatch(100)` there is for a compound CRS whose two parts both carry
-  codes. Identification is left to the caller.
+  codes. Identification is left to the caller. It **keeps
+  `GeogTOWGS84GeoKey` (2062)** for 3072 = 32767: its `OSR_STRIP_TOWGS84`
+  strip applies only when the CRS was imported from the 3072 code
+  (`bGotFromEPSG`, which needs 3072 not 32767), and otherwise it calls
+  `SetTOWGS84`, so the result is a bound CRS
+  (`gt_wkt_srs.cpp` at GDAL commit `d6cd774`, lines 1268-1289 and 1327-1371). When writing,
+  it sets 2062 when the CRS it is given carries a TOWGS84 other than the one
+  GDAL guesses for the EPSG code, for a user-defined geographic CRS or in
+  GeoTIFF 1.0 mode, its default for a 2D CRS (same commit, lines 2030-2034
+  and 3412-3460). So a GDAL-written file with 3072 = 32767 can carry 2062.
 - **The callers' identification**: PROJ's `ProjectedCRS::identify`
   (`src/iso19111/crs.cpp`, <https://github.com/OSGeo/PROJ>), exposed as
   pyproj's `CRS.list_authority` and `CRS.to_epsg(min_confidence=70)`, and used by
@@ -103,6 +113,12 @@ readers already use; nothing new is claimed.
 
 What differs from that prior art, and why:
 
+- **A missing `ProjectionGeoKey` (3074) is accepted**, which GeoTIFF 1.1
+  does not allow for 3072 = 32767 (section 4, pinned with the checks).
+- **`GeogTOWGS84GeoKey` (2062) is refused, not kept** (GDAL keeps it and
+  builds a bound CRS). rasputin's result is an EPSG code, which has no room
+  for a file's own datum shift; question 4 asks Ola whether to ignore it
+  instead.
 - **No fallbacks and no defaults** between parameter GeoKeys (libgeotiff's).
   Increment 11's ruling 3 is that the reader's job is refusal; a missing
   parameter is refused, naming the key. GDAL writes Lambert 2SP with the
@@ -260,7 +276,8 @@ metres (GeoTIFF 1.1's fixed order for a user-defined CRS). Then
 unchanged. A 2048 of 32767 on the geographic path stays refused as today: a
 geographic CRS by parameters is out of scope.
 
-Every message begins with the same words, so the two existing cases of
+Every message, all thirteen rows, begins with the same words `P`, so the two
+existing cases of
 `test_refuses_missing_crs` that put 32767 in 3072
 (`tests/python/test_io_geotiff.py@44fa7f5:884-888`, which look for `3072`,
 `ProjectedCSTypeGeoKey` and `32767`) keep passing whatever check fires:
@@ -275,31 +292,39 @@ Every message begins with the same words, so the two existing cases of
 | 4 | 2048 absent, 32767, not a resolvable code, or not a geographic 2D CRS | `{P}: GeographicTypeGeoKey (2048) {is absent / = v, which is not an EPSG code / = v, a {type_name}}; its datum must be given there as an EPSG geographic CRS code` |
 | 5 | `GeogGeodeticDatumGeoKey` (2050), `GeogPrimeMeridianGeoKey` (2051) or `GeogEllipsoidGeoKey` (2056) present | `{P}: {name} ({id}) is present; the datum is read only from GeographicTypeGeoKey (2048)` |
 | 6 | `GeogSemiMajorAxisGeoKey` (2057), `GeogSemiMinorAxisGeoKey` (2058), `GeogInvFlatteningGeoKey` (2059) or `GeogPrimeMeridianLongGeoKey` (2061) present and not within 1e-10 relative of the coded CRS's own value | `{P}: {name} ({id}) = {v} disagrees with EPSG:{g}'s {ellipsoid name} ({expected})` (for 2061: its prime meridian) |
-| 7 | `GeogAngularUnitsGeoKey` (2054) present and not 9102 | `GeogAngularUnitsGeoKey (2054) = {v}; only degrees (9102)`, as on the geographic path |
-| 8 | `ProjLinearUnitsGeoKey` (3076) absent | `{P}: ProjLinearUnitsGeoKey (3076) is absent, so the unit of its false easting and northing is unknown` |
-| 9 | 3076 not 9001 | today's `ProjLinearUnitsGeoKey (3076) = {v}; only metres (9001)` |
-| 10 | a parameter GeoKey of the method absent | `{P}: {method} needs {name} ({id}), which is absent` |
-| 11 | no EPSG code matches | `{P}: it is {method} on EPSG:{g} ({base name}), and no EPSG projected CRS on that datum has these parameters, so it cannot be named. Reproject the file to a CRS with an EPSG code first` |
-| 12 | several match and are not all `same_crs` with the lowest | `{P}: its parameters match {EPSG:a, EPSG:b}, which are not the same CRS, so it cannot be named` |
+| 7 | `GeogTOWGS84GeoKey` (2062) present | `{P}: GeogTOWGS84GeoKey (2062) = {v} gives the file's own datum shift to WGS 84, which is not read; the datum is read only from GeographicTypeGeoKey (2048)` |
+| 8 | `GeogAngularUnitsGeoKey` (2054) present and not 9102 | `{P}: GeogAngularUnitsGeoKey (2054) = {v}; only degrees (9102)`: the geographic path's words, after `P` |
+| 9 | `ProjLinearUnitsGeoKey` (3076) absent | `{P}: ProjLinearUnitsGeoKey (3076) is absent, so the unit of its false easting and northing is unknown` |
+| 10 | 3076 not 9001 | `{P}: ProjLinearUnitsGeoKey (3076) = {v}; only metres (9001)`: the coded path's words, after `P` |
+| 11 | a parameter GeoKey of the method absent | `{P}: {method} needs {name} ({id}), which is absent` |
+| 12 | no EPSG code matches | `{P}: it is {method} on EPSG:{g} ({base name}), and no EPSG projected CRS on that datum has these parameters, so it cannot be named. Reproject the file to a CRS with an EPSG code first` |
+| 13 | several match and are not all `same_crs` with the lowest | `{P}: its parameters match {EPSG:a, EPSG:b}, which are not the same CRS, so it cannot be named` |
 
 Pinned with the checks:
 
 - **2054 absent reads as degrees**, as libgeotiff does (its angular unit factor
   starts at 1 degree in `GTIFGetDefn`). `GeogAzimuthUnitsGeoKey` (2060) is not
   read: neither method has an azimuth.
-- **`GeogTOWGS84GeoKey` (2062) is not read.** The datum is named by its EPSG
-  code; a TOWGS84 is a transformation to WGS 84, not part of the CRS (an ISO
-  19111 bound CRS), and PROJ chooses the transformation from EPSG when a
-  reprojection runs. GDAL strips it too when the CRS came from
-  an EPSG code (`OSR_STRIP_TOWGS84`, default YES, in `gt_wkt_srs.cpp`).
+- **`GeogTOWGS84GeoKey` (2062) present is refused** (row 7; question 4 for
+  Ola, default refuse). A TOWGS84 is the file's own datum shift to WGS 84: with
+  it, the CRS is an ISO 19111 bound CRS, which is what GDAL builds for 3072 =
+  32767 (section 2). Reading the file as the bare EPSG code would drop a shift
+  the file states and let PROJ choose another when a reprojection runs; that
+  is a silent change of datum handling, so it is refused rather than
+  ignored. The Austrian file has no 2062. Matching the shift against EPSG's
+  transformations instead is not in this PR.
 - **Citations (1026, 2049, 3073) are never read**, as increment 11's ruling 6
   says: no free text decides a CRS.
 - **Lowest code first** among several that are one CRS (question 2 for Ola):
   EPSG holds 239 such groups among its transverse Mercator codes (section 6);
   the choice changes only the label, since `same_crs` holds between them.
-- **Rows 5, 6, 8 and 9 apply only to a CRS given by parameters.** A file with
-  an EPSG code in 3072 is read as on master; its GeoKeys beyond 3072, 3076 and
-  the vertical unit are not consulted.
+- **Rows 5, 6, 7 and 9 have no counterpart on the other two paths.** A file
+  with an EPSG code in 3072 is read as on master; its GeoKeys beyond 3072, 3076
+  and the vertical unit are not consulted, and it may still omit 3076.
+- **A missing 3074 is accepted, which goes beyond OGC GeoTIFF 1.1** (clause 7
+  wants 3074 populated for 3072 = 32767). Only 3074 present with a code is
+  refused (row 1); the method is read from 3075 either way, so an absent 3074
+  hides nothing the reader uses.
 
 ### The result, and the cost of reading it
 
@@ -309,7 +334,7 @@ are not moved: the file is read as EPSG:n to within PROJ's equivalence
 (section 5).
 
 A mosaic reads every tile's header, so the match is cached:
-`functools.cache` on a private function keyed by the hashable tuple (2048
+`functools.cache` on a private function, `_epsg_matches_cached`, keyed by the hashable tuple (2048
 code, 3075 code, the parameter values in table order) returning
 `epsg_matches`' tuple; the refusals stay outside it. One distinct CRS costs
 about 1 to 30 ms in the probe (identify plus one transformer per candidate); every
@@ -330,12 +355,24 @@ with the same result), so it runs unchanged inside `asyncio.to_thread`.
 
 ### Increment 11's rulings
 
-- **Ruling 6 is amended** (this PR adds a line to it in
-  `docs/increments/11-raster-ingestion.md`): a 3072 of 32767 may yield an
-  accepted CRS, by this file's rule, and the result is always an EPSG code.
-- **Ruling 7 holds**: every decision is on a constructed CRS (`built`, and
-  each candidate's `from_epsg`), never on which GeoKeys are present, except
-  that a missing key is refused by name.
+- **Ruling 6 is amended** (`docs/increments/11-raster-ingestion.md`, ruling
+  6 and refusal 12): a 3072 of 32767 may yield an accepted CRS, by this
+  file's rule, and the result is always an EPSG code. For 3072 = 32767 the
+  amendment overrides "only `ProjectedCSTypeGeoKey` can yield an accepted
+  CRS, resolved through `pyproj.CRS.from_epsg`" (the CRS is built from the
+  parameters, then named by a code); "`GeographicTypeGeoKey` is read only
+  when 3072 is absent" (2048 is read, as the datum); refusal 12's "or its
+  value is 32767"; and round 2's reading (d), "When 3072 is present, whatever
+  its value, 2048 is not consulted" and that a 32767 message "must not claim
+  2048 was consulted" (rows 4, 6 and 12 name 2048's code). "No proj4
+  reassembly, no free-text ellipsoid regex" still holds.
+- **Ruling 7 is amended for this path.** Projected is by construction
+  (`built` is a `ProjectedCRS`), and metres are decided by 3076: present and
+  9001 (rows 9 and 10), after which `built`'s axes are metres because the
+  reader writes them so. Testing `built`'s axis units would test the reader's
+  own literal. The matched code's axes are then metres too, because PROJ's
+  equivalence compares axis units (probe: the Austrian CRS rebuilt with foot
+  axes matches no code). The coded path keeps ruling 7 as it is.
 - **Ruling 8 holds**: no `Transformer` in `io/geotiff.py`.
 - Ruling 1 holds (no `_core`, no C++).
 
@@ -392,7 +429,7 @@ would carry them, and matches it back (27 s):
   `same_crs` (the lowest is chosen);
 - **none matches nothing, and no group is ambiguous.**
 
-So check 12 is never reached by any EPSG definition at PROJ 9.8.1; it stays
+So check 13 is never reached by any EPSG definition at PROJ 9.8.1; it stays
 as the guard for a database where that changes, and its red test reaches it
 by substituting `crs.epsg_matches` (section 8).
 
@@ -449,13 +486,18 @@ for every refusal. Not the 2 GB file.
 8. **Each check of section 4 fires on its one defect**, and its message holds
    the key's number, name and value: 3074 = 16033; 3075 absent; 3075 = 11
    (Albers); 2048 absent, 32767, 9999 (unresolvable), 25833 (projected);
-   2050 present; 2057 = 6378137.0; 2059 = 299.0; 2054 = 9105 (grad); 3076
-   absent; 3076 = 9002; 3084 absent. All begin with `P`.
+   2050 present; 2057 = 6378137.0; 2059 = 299.0; 2062 = (577.326, 90.129,
+   463.919, 5.137, 1.474, 5.297, 2.4232), seven doubles (row 7); 2054 = 9105
+   (grad); 3076 absent; 3076 = 9002; 3084 absent. Every message starts with
+   `P` (`startswith`, rows 8 and 10 included).
 9. **The two existing user-defined cases** of `test_refuses_missing_crs` are
    unchanged and still pass (3072 = 32767 with nothing else, and beside 2048 =
    4326; check 2 fires).
-10. **Cached**: two reads of the Austrian fixture call PROJ's identify once
-    (count calls to `pyproj.CRS.list_authority` by monkeypatch).
+10. **Cached**: the test first calls `cache_clear()` on the cached matcher
+    (`tin_engine.io.geotiff._epsg_matches_cached`, the one private name the
+    suite touches, so an earlier test's read cannot make it pass), then two
+    reads of the Austrian fixture call PROJ's identify once (count calls to
+    `pyproj.CRS.list_authority` by monkeypatch).
 11. **The layering row**: `"io.geotiff": "crs io.models"`.
 12. **The real file, when present** (skipped otherwise, as
     `tests/python/test_cli_catchment.py`'s Bygdin test is): `read_meta` on
@@ -469,15 +511,20 @@ constraints).
 
 ## 9. Net production lines
 
-Estimate: **about +75** (`python3 tools/count_loc.py <base> <head>`), well
-under the 700 of `CLAUDE.md` section 2.
+Estimate: **about +135, between 110 and 150**
+(`python3 tools/count_loc.py <base> <head>`), well under the 700 of
+`CLAUDE.md` section 2. Counted as `ruff format` lays it out: a refusal whose
+f-string passes 100 columns wraps to three to five lines, as
+`_projected_epsg`'s do today.
 
-- `crs.py`: `epsg_matches` about 8, the first leg factored out of `same_crs`
-  about +2.
-- `io/geotiff.py`: the method table about 13 (one line per parameter), the
-  datum-key tuples about 3, `_parametric_epsg` with its twelve checks about
-  35, `_projected_crs` about 8, the cached matcher about 4, the dispatch in
-  `_header` about +2.
+- `crs.py`: `epsg_matches` about 10, the first leg factored out of `same_crs`
+  about +3.
+- `io/geotiff.py`: the method table about 15 (one line per parameter), the
+  datum-key tuples about 6, `_parametric_epsg` with its thirteen checks about
+  65 (about 4 lines per refusal, plus the lookups), `_projected_crs` about 25
+  (the PROJJSON literal: type, name, base, conversion with method and
+  parameters, and the two-axis coordinate system), the cached matcher about
+  6, the dispatch in `_header` about +3.
 
 The method table may be packed one parameter per line under `# fmt: off`
 (`CLAUDE.md` section 2); the review says so if it is.
@@ -496,6 +543,13 @@ The method table may be packed one parameter per line under `# fmt: off`
    warning on stderr about its NoData value, although rasputin reads that
    value correctly. Silence that one message in a separate small PR after
    this one? Default: yes.
+4. **A datum shift written in the file.** Some files given by parameters
+   also carry `GeogTOWGS84GeoKey` (2062), the file's own shift from its
+   datum to WGS 84 (GDAL writes it in some cases; your Austrian file has
+   none). Refuse such a file, with a sentence naming the key? Default: yes,
+   refuse. The alternative is to ignore the key and read the file as the
+   EPSG code, which lets PROJ pick its own shift when reprojecting, so a
+   reprojected position need not be where the file meant it.
 
 ## Citations this PR pins
 
@@ -504,3 +558,7 @@ The method table may be packed one parameter per line under `# fmt: off`
 empty), `src_python/tin_engine/crs.py@65cd528`,
 `tests/python/test_layering.py@65cd528`, `tests/python/test_io_geotiff.py@44fa7f5`,
 `legacy/rasputin/reader.py@legacy-archive`.
+
+## Review
+
+- Design round 1 (`@reviewer`, at `fbbfb56`): three fixes (rows 7 and 9 did not start with `P`; the TOWGS84 prior-art claim was wrong for 3072 = 32767; the increment 11 amendments did not name what they override) and three suggestions (LOC recount, `cache_clear()` in red test 10, 3074 beyond GeoTIFF 1.1), all taken in the commit after `fbbfb56`.
