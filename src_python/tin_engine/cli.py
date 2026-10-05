@@ -2009,6 +2009,9 @@ class _DirectorySink:
             with _writing(path):
                 path.write_bytes(catchment_geojson(result.reduced, result.crs, properties))
         word: str = row.station_class or "well defined, no reference"
+        if row.seeded_by == "lake":
+            lake = row.lake_name or (None if row.lake_number is None else str(row.lake_number))
+            word += f" (seeded by {'its lake' if lake is None else f'the lake {lake}'})"
         if row.station_class == "refused":
             word += f": {row.refusal_message}"
         elif row.causes:
@@ -2030,6 +2033,24 @@ def _cell(value: object) -> object:
     return "" if value is None else value
 
 
+def _read_beside[T](
+    read: Callable[[Path], tuple[T, str]], path: Path, hint: str, what: str, crs: str
+) -> T:
+    """`read(path)`'s content, refused naming `hint` when it cannot be read or
+    its CRS is not the river file's, `crs`."""
+    try:
+        content, file_crs = read(path)
+    except (OSError, ValueError) as exc:
+        raise typer.BadParameter(str(exc), param_hint=hint) from exc
+    if parse_crs(file_crs) != parse_crs(crs):
+        raise typer.BadParameter(
+            f"the {what} file's CRS, {file_crs}, is not the river file's, {crs}; "
+            "polygons are not reprojected",
+            param_hint=hint,
+        )
+    return content
+
+
 @app.command()
 def station_catchments(
     dem: Annotated[
@@ -2049,6 +2070,14 @@ def station_catchments(
             "--reference",
             help="Reference catchment polygons (GeoJSON, in the river file's CRS), one per "
             "station number: each catchment is compared with its own and classed.",
+        ),
+    ] = None,
+    lakes: Annotated[
+        Path | None,
+        typer.Option(
+            "--lakes",
+            help="Lake polygons (GeoJSON, in the river file's CRS): a gauge in a lake, or on "
+            "a lake line within 30 m of it, is seeded with the whole lake.",
         ),
     ] = None,
     map_radius: Annotated[
@@ -2102,16 +2131,12 @@ def station_catchments(
     segments, crs, dropped = _segments(rivers)
     references = None
     if reference is not None:
-        try:
-            references, reference_crs = read_references(reference)
-        except (OSError, ValueError) as exc:
-            raise typer.BadParameter(str(exc), param_hint="--reference") from exc
-        if parse_crs(reference_crs) != parse_crs(crs):
-            raise typer.BadParameter(
-                f"the reference file's CRS, {reference_crs}, is not the river file's, {crs}; "
-                "polygons are not reprojected",
-                param_hint="--reference",
-            )
+        references = _read_beside(read_references, reference, "--reference", "reference", crs)
+    lake_list = None
+    if lakes is not None:
+        from tin_engine.io.station_set import read_lakes as read_nve_lakes  # not 22's read_lakes
+
+        lake_list = _read_beside(read_nve_lakes, lakes, "--lakes", "lakes", crs)
     try:
         repository, _ = repository_for(tuple(dem))
     except (OSError, ValueError) as exc:
@@ -2136,7 +2161,15 @@ def station_catchments(
         try:
             summary = asyncio.run(
                 run_batch(
-                    request, repository, station_list, stations_crs, segments, crs, references, sink
+                    request,
+                    repository,
+                    station_list,
+                    stations_crs,
+                    segments,
+                    crs,
+                    references,
+                    sink,
+                    lakes=lake_list,
                 )
             )
         except OSError as exc:

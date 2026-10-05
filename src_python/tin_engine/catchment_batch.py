@@ -32,10 +32,10 @@ from tin_engine.catchment import (
     delineate,
 )
 from tin_engine.crs import reprojector
-from tin_engine.gauge import Gauge, place
+from tin_engine.gauge import Gauge, lake_seed, place
 from tin_engine.io.repository import DemRepository
 from tin_engine.io.rivers import RiverSegment
-from tin_engine.io.station_set import Station
+from tin_engine.io.station_set import Lake, Station
 from tin_engine.reference import Class, Summary, agreement, classify, nodes_inside, summarise
 
 
@@ -78,6 +78,12 @@ class StationResult:
     reach_up_m: float | None = None
     reach_down_m: float | None = None
     reach_fork: bool | None = None
+    # The seed: the river (PR 2's path) or the lake ("Lake gauges").
+    seeded_by: Literal["river", "lake"] | None = None
+    lake_rule: str | None = None
+    lake_number: int | None = None
+    lake_name: str | None = None
+    lake_distance_m: float | None = None
     # The gauge and the burn.
     node_offset_m: float | None = None
     chain_nodes: int | None = None
@@ -140,9 +146,11 @@ async def run_batch(
     segments_crs: str,
     references: Mapping[str, BaseGeometry] | None,
     sink: BatchSink,
+    lakes: Sequence[Lake] | None = None,
 ) -> Summary:
     """Run each station in `stations` (or those in `request.only`, in file
-    order); `references` are in the river file's CRS. Returns the summary."""
+    order); `references` and `lakes` are in the river file's CRS. A station
+    `gauge.lake_seed` picks is seeded with its lake. Returns the summary."""
     unknown = set(request.only) - {s.station for s in stations}
     if unknown:
         raise ValueError(f"not in the stations file: {', '.join(sorted(unknown))}")
@@ -169,21 +177,37 @@ async def run_batch(
         ((x, y),) = move([(station.x, station.y)])
         gauge = Gauge(x=x, y=y, watercourse=station.watercourse, river=station.river)
         placement = place(gauge, segments, map_radius=request.map_radius, reach_up=request.reach_up)
+        seed = None if lakes is None else lake_seed(gauge, placement, lakes)
         result: Catchment | None = None
-        if placement is None:
-            fields["refusal_cause"] = "no_river"
-            fields["refusal_message"] = (
-                f"no mapped river line within {request.map_radius:g} m of the station"
-            )
-        else:
+        catchment_request: CatchmentRequest | None = None
+        if placement is not None:
             keep = placement.model_dump(exclude={"reach", "position"})
             fields |= {**keep, "uncertainty_m": placement.reach.uncertainty}
+        if seed is not None:
+            first = seed.lakes[0]
+            fields |= {"seeded_by": "lake", "lake_rule": seed.rule, "lake_number": first.number}
+            fields |= {"lake_name": first.name, "lake_distance_m": seed.distance_m}
+            catchment_request = CatchmentRequest(
+                seed=seed.point,
+                seed_crs=segments_crs,
+                lakes=tuple(lk.polygon for lk in seed.lakes),
+                lakes_crs=segments_crs,
+                outline_tolerance=request.outline_tolerance,
+            )
+        elif placement is not None:
+            fields["seeded_by"] = "river"
             catchment_request = CatchmentRequest(
                 seed=(x, y),
                 seed_crs=segments_crs,
                 reach=placement.reach,
                 outline_tolerance=request.outline_tolerance,
             )
+        else:
+            fields["refusal_cause"] = "no_river"
+            fields["refusal_message"] = (
+                f"no mapped river line within {request.map_radius:g} m of the station"
+            )
+        if catchment_request is not None:
             try:
                 result = await asyncio.to_thread(delineate, catchment_request, repository)
             except MixedGridRefusal as exc:
@@ -193,7 +217,6 @@ async def run_batch(
                 fields |= {"refusal_cause": "other", "refusal_message": str(exc)}
         found = None
         if result is not None:
-            assert result.gauge is not None
             m = result.meta
             if ref is not None:
                 found = agreement(result.fine, ref, m)
@@ -202,7 +225,8 @@ async def run_batch(
             # Our fine area on the lattice, as the agreement counts it: the
             # nodes inside the outline, each its cell's area.
             ours = found.ours if found is not None else nodes_inside([result.fine], m)
-            fields |= _gauge_fields(result.gauge)
+            if result.gauge is not None:  # None on a lake row: no chain, no sensitivity
+                fields |= _gauge_fields(result.gauge)
             fields |= {
                 "nodes": result.nodes,
                 "fine_area_km2": ours * m.delta_x * m.delta_y / 1e6,

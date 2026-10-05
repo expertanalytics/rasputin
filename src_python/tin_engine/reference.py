@@ -45,6 +45,7 @@ UNCERTAIN_CAUSES = (
 REFUSAL_CAUSES = ("mixed_grid", "no_river", "other")
 BANDS = ("under 10", "10-100", "100-1000", "over 1000")  # km2
 TILE_GROUPS = ("1", "2", "3-4", "5+")
+SEEDS = ("river", "lake")  # a row's `seeded_by` (PR 4, "Lake gauges")
 _MEASURES = ("area_ratio", "nve_in_ours", "ours_in_nve")
 _PERCENTILES = {"min": 0, "p10": 10, "p25": 25, "p50": 50, "p75": 75, "p90": 90, "max": 100}
 
@@ -183,6 +184,7 @@ class Summary(BaseModel):
     scored: Measures
     by_size: dict[str, Group]
     by_tiles: dict[str, Group]
+    by_seed: dict[str, Group]
     uncertain_causes: dict[str, int]
     refusal_causes: dict[str, int]
     known_refusals: KnownRefusals
@@ -253,6 +255,7 @@ def summarise(rows: Sequence[Any]) -> Summary:
         scored=Measures(**_measures(rows)),
         by_size={b: _group([r for r in rows if _band(r) == b]) for b in BANDS},
         by_tiles={g: _group([r for r in rows if _tile_group(r) == g]) for g in TILE_GROUPS},
+        by_seed={k: _group([r for r in rows if r.seeded_by == k]) for k in SEEDS},
         uncertain_causes=_counts(
             UNCERTAIN_CAUSES, [c for r in rows if r.station_class == "uncertain" for c in r.causes]
         ),
