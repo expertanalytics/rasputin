@@ -19,6 +19,7 @@ missing every test that touches it fails naming `tools/count_loc.py`.
 
 from __future__ import annotations
 
+import os
 import shutil
 import subprocess
 import sys
@@ -27,7 +28,7 @@ from pathlib import Path
 
 import pytest
 
-from harness_fixtures import REAL, Tool, clean_env, git, is_work_tree_top
+from harness_fixtures import REAL, Tool, clean_env, git, is_work_tree_top, load_tool
 
 cl = Tool("count_loc")
 
@@ -614,9 +615,9 @@ def test_inter_hunk_context_does_not_change_the_output(tmp_path: Path, how: str)
 
 #: `diff.relative=true`, the same three ways as INTER_HUNK. Run from a
 #: subdirectory, git would then diff only that subdirectory, with paths
-#: relative to it. Review round 2: the environment forms are what the counter's
-#: stripping of `GIT_CONFIG_*` neutralises (no other test fails without it);
-#: the repository form needs `--no-relative` (design T1).
+#: relative to it. `--no-relative` (design T1) neutralises all three forms, so
+#: this test fails only if both it and the stripping of `GIT_CONFIG_*` go; the
+#: stripping alone is pinned by `test_env_drops_config_given_in_the_environment`.
 RELATIVE = {
     "GIT_CONFIG_COUNT": {
         "GIT_CONFIG_COUNT": "1",
@@ -738,3 +739,30 @@ def test_pr_163_counts_whatever_the_environment_says_of_hunk_context(how: str) -
     report = parse_report(run_count(REAL, *PR_163, env=env))
     assert nonzero(report.rows) == PR_163_ROWS
     assert report.total == (41, 20, 21)
+
+
+#: Config given in the environment, in both of git's forms, with two numbered
+#: keys so a pattern that matched only `_0` would be caught.
+CONFIG_IN_ENV = {
+    "GIT_CONFIG_COUNT": "2",
+    "GIT_CONFIG_KEY_0": "diff.algorithm",
+    "GIT_CONFIG_VALUE_0": "histogram",
+    "GIT_CONFIG_KEY_12": "diff.relative",
+    "GIT_CONFIG_VALUE_12": "true",
+    "GIT_CONFIG_PARAMETERS": "'diff.algorithm'='patience'",
+}
+
+
+def test_env_drops_config_given_in_the_environment(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Review round 3: every flag `DIFF` pins also overrides the environment
+    forms end to end, so only this test fails if `_env()` stops stripping them.
+    A key no flag pins (`diff.algorithm` changes the counts) would get through."""
+    for key, value in CONFIG_IN_ENV.items():
+        monkeypatch.setenv(key, value)
+    monkeypatch.setenv("RASPUTIN_UNRELATED", "kept")
+    monkeypatch.setenv("GIT_CONFIG_KEYS", "not git's")  # near miss of the pattern
+    env = load_tool("count_loc")._env()  # `Tool` refuses private names
+    assert sorted(set(CONFIG_IN_ENV) & set(env)) == []
+    assert env["RASPUTIN_UNRELATED"] == "kept"
+    assert env["GIT_CONFIG_KEYS"] == "not git's"
+    assert env["GIT_CONFIG_GLOBAL"] == os.devnull
