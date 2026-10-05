@@ -23,6 +23,8 @@ Pinned here beyond the design:
   class (the word `refused` for a refusal), and the summary after them.
 - A stations or rivers file without a `crs` member is refused, naming the
   option and the missing CRS, and nothing is written.
+- A reference file whose CRS is not the river file's is refused naming
+  `--reference` and both CRSs by their EPSG codes, and nothing is written.
 """
 
 from __future__ import annotations
@@ -235,6 +237,26 @@ def test_a_file_without_crs_is_refused_and_nothing_is_written(
     assert f"--{which}" in words, words
     assert re.search(r"(?i)\bcrs\b", words), words
     assert not (out / "results.csv").exists()
+    assert not out.exists() or not list(out.glob("*.geojson"))
+
+
+def test_a_reference_in_another_crs_is_refused_and_nothing_is_written(
+    data: dict[str, Path], tmp_path: Path
+) -> None:
+    """The rivers are in EPSG:25833 and `run_batch` takes the references in
+    that CRS, so a reference file in EPSG:32633 is refused, naming the option
+    and both CRSs; no polygon is reprojected ("PR 4's red step")."""
+    other = dict(data)
+    other["reference"] = bf.write_references(tmp_path / "ref.geojson", crs="EPSG:32633")
+    out = tmp_path / "out"
+    code, output = invoke(*args(other, out))
+    words = plain(output)
+    assert code != 0, words
+    assert "No such command" not in words and "No such option" not in words, words
+    assert "--reference" in words, words
+    assert "32633" in words and "25833" in words, words
+    assert not (out / "results.csv").exists()
+    assert not (out / "summary.json").exists()
     assert not out.exists() or not list(out.glob("*.geojson"))
 
 

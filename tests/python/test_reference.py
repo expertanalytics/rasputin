@@ -409,3 +409,121 @@ class TestSummary:
         first = ref.summarise(rows).model_dump_json()
         assert first == ref.summarise(list(rows)).model_dump_json()
         assert json.loads(first)["stations"] == 2
+
+
+# ---------------------------------------------------------------------------
+# The summary where the suite was silent: "PR 4's red step", added choices
+# ---------------------------------------------------------------------------
+
+KNOWN_LINE_ONE = (
+    "1 station refused because its window selects tiles on two different grids, "
+    "which rasputin does not combine, and neither grid covers the window alone "
+    "(a known refusal, not a failure)"
+)
+
+
+class TestSummaryFixedListsAndEmptyGroups:
+    def dump(self, ref: ModuleType, rows: list[Row]) -> dict[str, Any]:
+        out: dict[str, Any] = ref.summarise(rows).model_dump(mode="json")
+        return out
+
+    def test_the_fixed_key_lists_are_complete_in_order_with_zeros(self, ref: ModuleType) -> None:
+        """Rows with one cause of five and one refusal cause of three: every
+        key is still there, in the design's order, the absent ones 0. Causes
+        count over `uncertain` rows only, so the refused row's `swing` and the
+        match row's `direction` do not count."""
+        rows = [
+            scored(1, 1.0, causes=("direction",)),
+            Row("1.2.0", "uncertain", causes=("chain_end_open",)),
+            Row("1.3.0", "refused", refusal_cause="no_river", causes=("swing",)),
+        ]
+        s = self.dump(ref, rows)
+        assert list(s["classes"].items()) == [
+            ("refused", 1), ("uncertain", 1), ("match", 1), ("close", 0), ("miss", 0),
+        ]  # fmt: skip
+        assert list(s["match_by"].items()) == [("overlap", 1), ("offset", 0)]
+        assert list(s["uncertain_causes"].items()) == [
+            ("swing", 0), ("downstream_unread", 0), ("chain_not_draining", 0),
+            ("chain_end_open", 1), ("direction", 0),
+        ]  # fmt: skip
+        assert list(s["refusal_causes"].items()) == [
+            ("mixed_grid", 0), ("no_river", 1), ("other", 0),
+        ]  # fmt: skip
+
+    def test_an_empty_summary_still_has_every_key(self, ref: ModuleType) -> None:
+        s = self.dump(ref, [])
+        assert s["stations"] == 0
+        assert list(s["classes"]) == ["refused", "uncertain", "match", "close", "miss"]
+        assert set(s["classes"].values()) == {0}
+        assert list(s["uncertain_causes"]) == [
+            "swing", "downstream_unread", "chain_not_draining", "chain_end_open", "direction",
+        ]  # fmt: skip
+        assert list(s["refusal_causes"]) == ["mixed_grid", "no_river", "other"]
+
+    def test_uncertain_share_leaves_out_refused_rows_which_still_count(
+        self, ref: ModuleType
+    ) -> None:
+        """Band 10-100: one uncertain, one refused. The refused station was
+        never assessed: it is one of the band's 2 stations, but the share is
+        1 uncertain over 1 assessed, not 1 over 2."""
+        rows = [
+            Row("1.1.0", "uncertain", causes=("swing",), reference_area_km2=50.0),
+            Row("1.2.0", "refused", refusal_cause="other", reference_area_km2=50.0),
+        ]
+        band = self.dump(ref, rows)["by_size"]["10-100"]
+        assert band["stations"] == 2
+        assert band["uncertain_share"] == 1.0
+
+    def test_a_group_with_no_scored_station_has_null_measures(self, ref: ModuleType) -> None:
+        """Band 100-1000 holds only refused rows: no share and no measure.
+        A summary with no scored row at all has null measures in `scored`,
+        and an empty band has no share either."""
+        rows = [
+            Row("1.1.0", "refused", refusal_cause="other", reference_area_km2=500.0),
+            Row("1.2.0", "refused", refusal_cause="no_river", reference_area_km2=500.0),
+            Row("1.3.0", "uncertain", causes=("swing",), reference_area_km2=50.0),
+        ]
+        s = self.dump(ref, rows)
+        band = s["by_size"]["100-1000"]
+        assert band["stations"] == 2
+        assert band["uncertain_share"] is None
+        for key in ("area_ratio", "nve_in_ours", "ours_in_nve"):
+            assert band[key] is None, key
+            assert s["scored"][key] is None, key
+            assert s["by_size"]["10-100"][key] is None, key
+        assert s["by_size"]["under 10"]["stations"] == 0
+        assert s["by_size"]["under 10"]["uncertain_share"] is None
+
+    def test_a_row_without_an_area_is_in_no_band(self, ref: ModuleType) -> None:
+        """No reference and no catchment (a refusal by `place`): no band."""
+        rows = [
+            scored(1, 1.0, reference_area_km2=50.0),
+            Row("1.2.0", "refused", refusal_cause="no_river",
+                reference_area_km2=None, fine_area_km2=None),
+        ]  # fmt: skip
+        s = self.dump(ref, rows)
+        assert s["stations"] == 2
+        assert [s["by_size"][b]["stations"] for b in s["by_size"]] == [0, 1, 0, 0]
+
+    def test_a_row_without_a_tile_count_is_in_no_tile_group(self, ref: ModuleType) -> None:
+        rows = [
+            scored(1, 1.0, tiles=2),
+            Row("1.2.0", "refused", refusal_cause="no_river", tiles=None),
+        ]
+        s = self.dump(ref, rows)
+        assert s["stations"] == 2
+        assert [s["by_tiles"][g]["stations"] for g in s["by_tiles"]] == [0, 1, 0, 0]
+
+    def test_one_known_refusal_gives_the_singular_line(self, ref: ModuleType) -> None:
+        rows = [scored(1, 1.0), Row("196.11.0", "refused", refusal_cause="mixed_grid")]
+        known = self.dump(ref, rows)["known_refusals"]
+        assert known["count"] == 1
+        assert known["stations"] == ["196.11.0"]
+        assert known["line"] == KNOWN_LINE_ONE
+
+    def test_no_known_refusal_gives_a_null_line(self, ref: ModuleType) -> None:
+        rows = [scored(1, 1.0), Row("2.2.0", "refused", refusal_cause="no_river")]
+        known = self.dump(ref, rows)["known_refusals"]
+        assert known["count"] == 0
+        assert known["stations"] == []
+        assert known["line"] is None
