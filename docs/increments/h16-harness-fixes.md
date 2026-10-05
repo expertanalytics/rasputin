@@ -1,6 +1,6 @@
 # Harness h16: guard fixes, a line counter, a scratch copy, brief fixes
 
-Status: Ola ruled on §7 on 2026-10-05 (all three defaults) and on the afternoon questions (last section). PR A: pushed as #185 (287 net production lines by `tools/count_loc.py bc01cd8 a6b966e`, against an estimate of 187). PR B, on `worktree-h16b`: red `9cf533d`, green `15c76f6` (78 net production lines by `tools/count_loc.py 98e31cd 15c76f6`, against an estimate of 60), PR A's head merged in as `b58ab57`, R1's *The harness* sentence written, `gh help` passed (red `9687c16`, green `084a6b3`); code review round 1 of PR B (round 6 below) asked for changes, and Ola chose option C (last section): G3a kept for a single plain command, G3b dropped, G1's fetch rule and the merge guard widened. §2 and §4 are amended for it; next the red step for the amendment (`@tester`), then green (`@developer`).
+Status: Ola ruled on §7 on 2026-10-05 (all three defaults) and on the afternoon questions (last section). PR A: pushed as #185 (287 net production lines by `tools/count_loc.py bc01cd8 a6b966e`, against an estimate of 187). PR B, on `worktree-h16b`: red `9cf533d`, green `15c76f6` (78 net production lines by `tools/count_loc.py 98e31cd 15c76f6`, against an estimate of 60), PR A's head merged in as `b58ab57`, R1's *The harness* sentence written, `gh help` passed (red `9687c16`, green `084a6b3`); code review round 1 of PR B (round 6 below) asked for changes, and Ola chose option C: G3a kept for a single plain command, G3b dropped, G1's fetch rule and the merge guard widened; design `8554a3e`, red `94989dd`, green `a42d864` (77 net production lines by `tools/count_loc.py origin/master a42d864`). Code review round 2 of PR B (round 7 below) asked for changes; Ola ruled that PR B also closes the glued `gh api`/`curl` route (last section). §2 G1 and G6, §4, §6 and §7 are amended for it; next the red step for round 7's amendment (`@tester`), then green (`@developer`).
 
 Ola approved the items on 2026-10-05 (the main session's summary of his
 rulings, not his words). He said this is the last harness increment before
@@ -12,7 +12,7 @@ a freeze of a few days, so the design is kept to what each item needs and
 | G1 | `guard_push.py` asks before `git fetch` into a named ref and before `git replace` writes | B |
 | G2 | `guard_push.py` asks before a git or gh command it does not know (an alias from user config) | B |
 | G3 | scratchpad repositories are ordinary (night proposal N3): G3a, file writes there; G3b (local git writes there) and G3c (the push half) dropped | B |
-| G6 | the merge guard sees `gh` wherever `-R`/`--repo` stands, and `gh pr new`, `gh repo new` (review round 6) | B |
+| G6 | the merge guard sees `gh` wherever `-R`/`--repo` stands, and `gh pr new`, `gh repo new` (review round 6); glued and clustered `gh api` and `curl` options (review round 7) | B |
 | G4 | guard import shadowing: `tools/` last on `sys.path`, stdlib-named `tools/` files governed | B |
 | G5 | rule files written through the shell: one brief line | A |
 | T1 | `tools/count_loc.py`, the one counter for `CLAUDE.md` §2 (night proposal N1) | A |
@@ -150,8 +150,93 @@ writes a named ref") when any of these holds:
   exported by an earlier command or a shell startup file is not seen (§6).
 
 A `-c` with any other key (`git -c protocol.version=2 fetch origin`), and
-`git remote update` with no override, pass as before: they write only what
-the repository's own config, which is governed, says.
+`git remote update` with no override, pass as before. [Amended after review
+round 7: the sentence that stood here, that such a key writes only what the
+repository's own governed config says, was false; the next paragraph is the
+correction.]
+
+**Amendment after review round 7.** Probed with git 2.55 in two scratch
+repositories, `src` holding a planted commit and `dst` fetching (setup and
+results in this run's transcript, no commit). Each of these wrote a named
+ref in `dst` (`refs/heads/got/master`), with `F` a file holding
+`[remote "s"] url = …/src` and `fetch = +refs/heads/*:refs/heads/got/*`:
+`git -c include.path=F fetch s`, the same as `-c INCLUDE.PATH=F`,
+`git -c includeIf.onbranch:master.path=F fetch s`,
+`git -c includeIf.gitdir:<dir>/.path=F fetch s`,
+`git --config-env=include.path=V fetch s` (`V` holding F's path),
+`HOME=<dir> git fetch s` (F as `<dir>/.gitconfig`),
+`XDG_CONFIG_HOME=<dir> git fetch s` (F as `<dir>/git/config`), and
+`GIT_CONFIG_GLOBAL=F` or `GIT_CONFIG_SYSTEM=F` before `git fetch s`. And,
+with the repository's `origin` at its real ssh URL
+(`git@github.com:expertanalytics/rasputin.git`),
+`git -c core.sshCommand=<program> fetch origin`, the program running
+`git-upload-pack <dir>/src`, re-pointed `refs/remotes/origin/master`,
+`…/other` and `…/HEAD` at the planted commit: G1's incident, through the
+transport. `GIT_SSH=<program> git fetch origin` exits 0 the same way.
+`git -c fetch.bundleURI=file://<bundle> fetch <dir>/src master` wrote
+`refs/bundles/heads/master`.
+
+The probe set comes from `git help --config` (git 2.55), every key that
+bears on where a fetch goes or what it writes, not only the reported route:
+`remote.*`, `url.*`, `include.path`, `includeIf.<condition>.path`,
+`branch.<name>.*`, `fetch.*`, `bundle.*`, `transfer.*`, `core.sshCommand`,
+`core.gitProxy`, `core.askPass`, `core.alternateRefsCommand`, `ssh.variant`,
+`protocol.*`, `http.proxy*`, `credential.*`, `uploadpack.*`. Their fate:
+
+- **Ask** (added to the key list above, compared lower-cased): a key
+  starting `include.` or `includeif.` (a whole file of config, so any of
+  the rest); exactly `core.sshcommand` (the transport for `origin`, an ssh
+  URL, so it chooses what `refs/remotes/origin/*` receive); exactly
+  `fetch.bundleuri` (a URL whose bundle is unpacked into `refs/bundles/*`).
+  The text check widens from `GIT_CONFIG` to the regular expression
+  `GIT_CONFIG|GIT_SSH|\b(HOME|XDG_CONFIG_HOME)=` on the line's text:
+  `GIT_SSH` covers `GIT_SSH_COMMAND`; `\bHOME=` does not match
+  `JAVA_HOME=`, since `_` is a word character.
+- **Pass, pinned:** `branch.<name>.remote` and `.merge` choose which remote
+  and which ref a plain `git pull` takes, which the command line already
+  does unasked (`git pull . other`); a URL there fetches into `FETCH_HEAD`
+  only. Other `fetch.*` keys (`fetch.prune`, `fetch.pruneTags`) delete stale
+  tracking refs as `--prune` does on the command line, which passes; they
+  never point a ref at a new commit. `core.gitProxy` serves only `git://`
+  URLs, and `http.proxy*` and `credential.*` only `http(s)://`; `origin` is
+  ssh, so they need a `remote.`/`url.` override, which asks.
+  `protocol.*`, `ssh.variant` and `transfer.*` change how, not where.
+  `uploadpack.*` and `bundle.*` act only with a local path remote or a
+  bundle URI, each of which needs a key that asks or writes only
+  `FETCH_HEAD`.
+- **Not closed, §6:** `core.askPass`, `core.alternateRefsCommand`,
+  `uploadpack.packObjectsHook`, `core.fsmonitor`, `core.hooksPath` and
+  `credential.helper` run a program, on commands other than fetch too, so
+  asking on fetch would not close them.
+
+Two persistent routes, found while probing, that are not one-command
+config: git 2.55 still reads the legacy remote files. With
+`<git-dir>/remotes/s` holding `URL: …/src` and
+`Pull: refs/heads/master:refs/heads/got/viaremotes`, a plain `git fetch s`
+wrote `refs/heads/got/viaremotes`; with `<git-dir>/branches/s` holding
+`…/src#master`, it wrote `refs/heads/s`. Neither path is governed today
+(`governed('.git/remotes/s')` and `governed('.git/branches/s')` return
+False, checked on `a42d864`). So `GOVERNED_PREFIXES` in
+`guard_governance.py` gains `.git/remotes/` and `.git/branches/`, as
+`.git/hooks/` is there. The user's own `~/.gitconfig` and
+`~/.config/git/config` are not governed either (§6).
+
+**Red test, round 7 amendment** (`test_guard_push.py`, both modes, reason
+"fetch writes a named ref"): asks for `git -c include.path=/x/f fetch s`,
+`git -c INCLUDE.PATH=/x/f fetch s`, `git -c includeIf.onbranch:master.path=/x/f
+fetch s`, `git -c includeif.gitdir:/x/.path=/x/f pull s`,
+`git --config-env=include.path=F fetch s`, `git --config-env include.path=F
+remote update s`, `git -c core.sshCommand=/x/p fetch origin`,
+`git -c fetch.bundleURI=file:///x/b fetch origin`, `HOME=/x git fetch
+origin`, `XDG_CONFIG_HOME=/x git fetch origin`, `env HOME=/x git fetch
+origin`, `GIT_SSH_COMMAND=/x/p git fetch origin`, `GIT_SSH=/x/p git pull
+origin`; passes `git -c fetch.prune=true fetch origin`,
+`git -c branch.master.remote=origin pull`, `JAVA_HOME=/x git fetch origin`,
+`git -c include.path=/x/f status` (not a fetch), `git -c
+core.sshCommand=/x/p log -1`. `test_guard_governance.py`: `governed()` is
+True for `.git/remotes/s`, `.git/branches/s`,
+`/abs/repo/.git/remotes/origin`; False for `docs/remotes/s`. About 3
+lines.
 
 **Red test, amendment** (`test_guard_push.py`, both modes, reason "fetch
 writes a named ref"): asks for `git fetch --refmap=+a:refs/heads/x o master`,
@@ -388,6 +473,82 @@ merge 12 "`; with "gh publishes or alters the repo" for `gh repo new x` and
 Silent: `gh -R o/r pr view 12`, `gh pr -R o/r view 12`, `gh --version`.
 
 **Size.** About 8 lines.
+
+**Amendment after review round 7 (Ola's ruling, last section): glued
+options to `gh api` and `curl`.** `segment_why`'s `gh api` check (since h3)
+counts a field only for an exact `-f`, `-F`, `--field`, `--raw-field` or
+`--input` (or one of those before `=`), and its `curl` check counts data
+only for an exact `-d`, `-F`, `--form`, `--json`, `-T`, `--upload-file` or a
+word starting `--data`. Glued and clustered short options get past both, so
+`gh api graphql -fquery='mutation { mergePullRequest(…) }'` merges a pull
+request unasked, past the merge guard. On `a42d864`, `segment_why` returns
+None for `gh api -fquery=x graphql`, `gh api -iXPUT
+repos/o/r/pulls/1/merge`, `curl -sd x https://api.github.com/x`,
+`curl --form-string a=b https://api.github.com/x` and `curl -sXPUT
+https://api.github.com/repos/o/r/pulls/1/merge` (a `PUT` to that endpoint
+merges with no body).
+
+What the tools accept, probed:
+
+- gh 2.101 (`gh api … graphql --help`, which exits 1 on a flag it cannot
+  parse): `-ifquery=x`, `-iFquery=x`, `-iXPUT`, `-iiXPUT`, `-Xput`, `-X=PUT`
+  parse; `--fie`, `--meth` (abbreviated long options) and `-iz` are
+  refused. `gh api --help` lists the short flags `-F -H -X -f -i -p -q -t`,
+  of which only `-i` (`--include`) takes no value, so a cluster is some `i`s
+  followed by one value-taking flag and its glued value.
+- curl 8.7.1, against a local listener: `-sd x`, `-d@f` and `-sFa=b` sent a
+  `POST`; `-Tf`, `-sTf` and `-sXPUT` a `PUT`; `--form-string a=b` and
+  `--json '{}'` a `POST`. `--requ`, `--data-b` and `--upl` are refused
+  (curl takes no abbreviated long option). `--expand-data x` parses (curl
+  has an `--expand-` form of each option).
+
+**Change.** For `gh api`, over the words after the first `api` (as today):
+
+- a word that starts with one `-` loses the run of `i`s right after it when
+  more follows (`-iXPUT` → `-XPUT`, `-ifq=x` → `-fq=x`; `-i` and `-ii`
+  stay), before both checks;
+- a field is, besides today's forms, any such word starting `-f` or `-F`
+  (`-fquery=x`, `-Fquery=@f`).
+
+`method()` already reads `-XPUT` and `-X PUT`, so the normalised words need
+nothing more. `-X=PUT` reads as `=PUT`, not `GET`, so it asks, as it
+should; `-X=GET` with a field then asks too, a pinned false positive.
+
+For `curl`, over all its words (as today), a word is data when:
+
+- it starts `--` and, after a leading `--expand-` is cut to `--`, starts
+  with `--data`, `--form` (so `--form-string`, and `--form-escape`, a
+  harmless false positive), `--json` or `--upload-file`;
+- or it is a short-option cluster, a word starting with one `-` and at
+  least two characters long, that contains `d`, `F` or `T` anywhere.
+
+And the method is also read from a cluster containing `X`: the text after
+its first `X`, or the next word when `X` ends it (`-sXPUT`, `-sX PUT`), and
+from `--expand-request`. "Anywhere" over-asks on a glued value that holds
+one of those letters; pinned false positives: `curl -o/tmp/data.json
+https://github.com/x` (`d`), `curl -HContent-Type:x https://github.com/x`
+(`T`). These must still pass,
+both modes: `curl -fsSL https://github.com/x`, `curl -sI
+https://github.com/x`, `curl -s -o out https://api.github.com/x`,
+`curl -sXGET https://api.github.com/x`, `curl -sX GET
+https://api.github.com/x`; and `gh api repos/x`, `gh api -i repos/x`,
+`gh api --paginate repos/o/r/pulls`, `gh api -q .name repos/x`,
+`gh api -iXGET repos/x`, `gh api -X GET search/issues -f q=x` (as today).
+
+**Red test, round 7 amendment** (`test_guard_push.py`, both modes): asks,
+with "gh api with a writing method changes the forge", for `gh api graphql
+-fquery=x`, `gh api graphql -Fquery=@f`, `gh api -ifquery=x graphql`,
+`gh api -iFquery=x graphql`, `gh api -iXPUT repos/o/r/pulls/1/merge`,
+`gh api -iiXPUT repos/o/r/pulls/1/merge`, `gh -R o/r api -fquery=x
+graphql`; with "curl with a writing method to the forge" for `curl -d@f
+https://api.github.com/graphql`, `curl -sd x https://api.github.com/x`,
+`curl -Tf https://api.github.com/x`, `curl -sTf https://api.github.com/x`,
+`curl -sFa=b https://api.github.com/x`, `curl --form-string a=b
+https://api.github.com/x`, `curl --expand-data x https://api.github.com/x`,
+`curl -sXPUT https://api.github.com/repos/o/r/pulls/1/merge`,
+`curl -sX PUT https://api.github.com/repos/o/r/pulls/1/merge`,
+`curl --expand-request PUT https://api.github.com/x`. Silent: the pass list
+above. About 8 lines.
 
 ### G4. Guard import shadowing
 
@@ -639,7 +800,9 @@ Question 1 asks Ola whether this is the item. **Red test**: `brief.py
   REQUIRED-READING's *The harness* names G1 to G4 in one sentence (PR B),
   rewritten after Ola's option C to name G1's amendment and G6 and to say
   that G3a holds only for Edit, Write and one plain shell command, and that
-  no git write in a scratchpad repository passes.
+  no git write in a scratchpad repository passes; and again after review
+  round 7, to name the include and transport overrides and the glued
+  `gh api`/`curl` forms.
 
 Prose; no red test. `@architect` writes them, in the PR that ships the
 tool or guard they describe. `CLAUDE.md` changes, so the main session
@@ -669,7 +832,7 @@ not held up by guard review rounds (h12's design took four):
 | PR | Items | Production lines, about |
 |---|---|---|
 | A, tools | T1, T2 (+P9 test), T3, G5's line, R1 but its *The harness* sentence | 187 (count_loc 120, scratch_copy 60, brief.py 7) |
-| B, guards | G1, G2, G3a, G4, G6, `scratchpad.py`, the `GOVERNED` entries, R1's *The harness* sentence | 60 as first estimated (G1 12, G2 14, G3a 6, G3b 20, G4 6, scratchpad 10, minus shared lines); measured 78 at `084a6b3` (`tools/count_loc.py origin/master 084a6b3`, `origin/master` at `44fa7f5`, PR A merged); after option C about 70 (78, G3b's removal −26, G1's amendment +8, G3a's plain-command test +3, G6 +8) |
+| B, guards | G1, G2, G3a, G4, G6, `scratchpad.py`, the `GOVERNED` entries, R1's *The harness* sentence | 60 as first estimated (G1 12, G2 14, G3a 6, G3b 20, G4 6, scratchpad 10, minus shared lines); measured 78 at `084a6b3` (`tools/count_loc.py origin/master 084a6b3`, `origin/master` at `44fa7f5`, PR A merged); after option C about 70 (78, G3b's removal −26, G1's amendment +8, G3a's plain-command test +3, G6 +8); measured 77 at `a42d864` (`tools/count_loc.py origin/master a42d864`, merge base `7dde17a`); after review round 7 about 88 (77, G1's include/transport keys, text check and governed prefixes +3, G6's glued `gh api`/`curl` options +8) |
 
 Order: A first. Each PR runs red (`@tester`), green (`@developer`), review
 (`@reviewer`). Neither touches refine or mesh code, so no `@perf` run. No
@@ -705,6 +868,35 @@ link and writes through it, and a background job that re-points a link
 between the hook's check and the write (G3a); relative paths in a
 scratchpad, which are judged as anywhere else.
 
+Added after review round 7, each checked on `a42d864`:
+
+- **Command runners `tools/shell_scan.py` does not unwrap.** It strips
+  `env`, `nohup`, `time`, `timeout`, `nice`, `command`, `exec`, `xargs`,
+  `script` and `sudo`; any other program that runs its arguments as a
+  command hides that command from both guards. Through `guard_push.py`'s
+  hook, each of these printed nothing (a pass), though each runs a plain
+  `git push`: `find . -maxdepth 0 -exec git push origin HEAD \;`,
+  `caffeinate -i git push`, `stdbuf -o0 git push`, `watch -n1 git push`,
+  `flock /tmp/l git push`, `parallel git push ::: a`, `arch -arm64 git
+  push`. (`git rebase --exec "git push"` and `xargs git push` ask.) The
+  same runners hide a governed write from `guard_governance.py`:
+  `caffeinate -i cp notes.txt CLAUDE.md`, `stdbuf -o0 cp notes.txt
+  CLAUDE.md` and `find . -maxdepth 0 -exec cp notes.txt CLAUDE.md \;` pass,
+  where `cp notes.txt CLAUDE.md` asks. Question 4.
+- **Config that runs a program**, on any git command, not only a fetch:
+  `-c core.fsmonitor=<program>`, `-c core.hooksPath=<dir>` (a
+  `reference-transaction` or other hook in it), `core.askPass`,
+  `core.alternateRefsCommand`, `uploadpack.packObjectsHook`,
+  `credential.helper`, and `core.sshCommand` or `GIT_SSH*` on a command
+  other than fetch (fetch now asks on them, G1). Whatever such a program
+  does is invisible to the guards.
+- **User-level config, not governed:** `~/.gitconfig` and
+  `~/.config/git/config` (a `remote.`, `url.` or `include.` entry there
+  re-points a plain `git fetch origin`, as `HOME=` does for one command),
+  and `~/.curlrc`; and `curl -K <file>`, whose file can hold both the forge
+  URL and a body, so the forge host is not on the line and the `curl` check
+  never runs.
+
 ## 7. Questions for Ola
 
 1. **Which `brief.py` item did you approve as "a limit on root-file size it
@@ -716,6 +908,17 @@ scratchpad, which are judged as anywhere else.
    TOML and Markdown are listed as "not counted".
 3. **Drop the push half of the scratchpad item (G3c) from h16?** Default:
    yes, drop it; scratch config and remote writes with `git -C` still pass.
+   [Superseded by option C (Ola's ruling on review round 6): G3b is
+   dropped too, so scratch config and remote writes with `git -C` ask like
+   any other.]
+4. **Command runners (§6, first item added after review round 7): close
+   them in PR B, or leave them in §6?** Each lets a plain `git push` through
+   the push guard unasked. A small fix: judge, besides the whole argv, the
+   tail of it from any later word whose basename is `git` or `gh` (about 3
+   lines in `guard_push.py`; a false positive is an ask on a line such as
+   `echo git push`). The governance guard's half needs per-runner handling
+   and stays in §6 either way. Default: leave all of it in §6, as review
+   round 7 placed it, and take it up after the freeze.
 
 ## Ola's rulings
 
@@ -908,3 +1111,13 @@ them: fix the `gh -R` merge hole in PR B.
 Ola, verbatim: "1C". So: option C, with the default. §2 G1 (amendment), G3
 and G6, §3, §4, §5 and §6 are amended to match; finding 3 is fixed under
 G1 whichever option was chosen.
+
+### Round 7: `@reviewer`, code, PR B, round 2, `084a6b3..a42d864`
+
+CHANGES REQUESTED. Range `084a6b3..a42d864` (design amendment 8554a3e, red 94989dd, green a42d864); 77 net production lines for PR B (`tools/count_loc.py origin/master a42d864`; merge base 7dde17a), against about 70. No CI yet (not pushed). Round 6's four findings closed, each probed through the hooks. Blocking: (1) `git -c include.path=<file> fetch s` (and `includeIf.*.path`, `--config-env=include.path=`) writes named refs with no question, probed with git 2.55; G1 asks only on `remote.`/`url.` keys, and §2 G1's "any other key … the repository's own config, which is governed" is false; (2) since h3, a glued `gh api -fquery=…`/`-Fquery=…` and curl `-d@f`/`-sd x`/`-Tf` to the forge pass, so a GraphQL `mergePullRequest` bypasses the merge guard; (3) the status line. Later: `find -exec` and `-c core.fsmonitor`/`core.hooksPath` named in §6; §7 question 3's default marked superseded. Pins accepted: bare `gh release`; `gh api` read from the first `api`.
+
+Recorded word for word from `@reviewer`'s record text. Taken in the recording commit: blocking item 3 (the status line); blocking items 1 and 2 are §2 G1's and G6's round 7 amendments; the two later items are §6 and §7 question 3.
+
+## Ola's ruling on review round 7, 2026-10-05
+
+Ola, verbatim: "yes, close the gh api hole in PR B". So: PR B also closes the glued-option route past the merge and forge guard, `gh api … -fquery=…`/`-Fquery=…` and `curl -d@file`, `-sd x`, `-Tfile` to the forge (§2 G6, amendment after review round 7).

@@ -141,8 +141,12 @@ before `git push`, `gh pr create/new/merge/ready/edit/update-branch`,
 `filter-branch` and `commit --amend`; before `git update-ref`, `git remote`,
 `git config`, `git symbolic-ref` and `git replace` writes, a `git fetch`,
 `git pull` or `git remote update` into a named ref (a refspec, `--refmap`,
-`--stdin`, or a `remote.*` or `url.*` override), and `gh api` or a forge `curl` with a writing
-method (not `gh pr close` or `gh pr comment`); and before a git or gh command
+`--stdin`, a `remote.*`, `url.*`, `include.*`, `includeIf.*`,
+`core.sshCommand` or `fetch.bundleURI` override, or `GIT_CONFIG*`,
+`GIT_SSH*`, `HOME` or `XDG_CONFIG_HOME` set on the line), and `gh api` or a
+forge `curl` with a writing method or a body, glued options included
+(`-fquery=…`, `-iXPUT`, `-sd x`, `-Tfile`; not `gh pr close` or
+`gh pr comment`); and before a git or gh command
 it does not know, such as an alias. `guard_governance.py` asks before any write
 to a file that states rules or to a `tools/` file named after a standard-library
 module, except an absolute path in a session scratchpad, written by Edit or
