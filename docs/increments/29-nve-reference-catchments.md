@@ -1,6 +1,6 @@
 # Increment 29 — NVE reference catchments: our catchments against NVE's, station by station
 
-Status: **design approved by `@reviewer` (round 5, 2026-10-04); PR 1 merged as #173; PR 3 merged as #178; PR 2 (the gauge on the river): green `193079d`, 569 production lines; code review round 3 (2026-10-05) approved; `@perf`'s placement figures next, then the push; questions 5 and 6 open for Ola, written to their defaults**
+Status: **design approved by `@reviewer` (round 5, 2026-10-04); PR 1 merged as #173; PR 3 merged as #178; PR 2 (the gauge on the river): green `193079d`, 569 production lines; code review round 3 (2026-10-05) approved; `@perf`'s placement figures in (`cdc0805`); the fixes from the evidence review, round 1, in; the evidence re-check next, then the push; questions 5, 6 and 7 (the example station) open for Ola, written to their defaults**
 (`@architect`, 2026-10-04), branch `worktree-nve-catchments` off master
 `d20126b`. Ola's rulings of 2026-10-04 are in the section below. Round 2 closed the burn's drainage claim
 (checked node by node, not assumed), the ELVIS data cases, the PR order, and
@@ -18,7 +18,8 @@ placement is redesigned to his direction (the mapped river, then the DEM's
 flow path along it, never an area objective), with a per-station sensitivity
 check. Five PRs (merge order 1, 3, 2, 4, 5). Questions 1 to 4 under "Questions for Ola" are
 ruled (see "Ola's rulings"); questions 5 and 6, from PR 2's code review,
-are open, and the design is written to their defaults.
+and 7, from its placement figures, are open, and the design is written to
+their defaults.
 
 **Closes.** Catchments for real Norwegian gauging stations, computed from the
 DEM by `rasputin`, one polygon per station, each usable as `--domain`, and a
@@ -33,8 +34,14 @@ rasputin station-catchments --dem ../rasputin_data/DTM10_UTM33_20260925 \
     --reference ../rasputin_data/nve_hrd/reference.geojson \
     --out-dir ../rasputin_scratch/hrd_catchments
 rasputin mesh --dem ../rasputin_data/DTM10_UTM33_20260925 \
-    --domain ../rasputin_scratch/hrd_catchments/2.11.0.geojson --tolerance 1 --out narsjo.vtk
+    --domain ../rasputin_scratch/hrd_catchments/2.32.0.geojson --tolerance 1 --out atnasjo.vtk
 ```
+
+The example station is `2.32.0` Atnasjø (question 7, default), not `2.11.0`
+Narsjø: PR 2's placement figures
+(`docs/benchmarks/2026-10-05/nve-placement/README.md`) give Atnasjø a well
+defined 459.8 km² catchment that agrees with NVE's to 98.4 % / 99.2 %, and
+Narsjø an uncertain 0.0012 km² one.
 
 It generalises increment 22's Bygdin acceptance (one catchment, area within
 2 %, node overlap both ways) to 140 stations. It also adds what 22 left out:
@@ -429,7 +436,10 @@ channel, and these numbers are re-measured by the acceptance run).
   station's own `vassdragsnr`. The other 26 pass a looser test (a shared
   watercourse-number prefix, or the river name), which was not checked one
   by one. For 46 of the 139 the nearest line is a lake centreline (lake
-  gauges). For 16 stations, a second branch (another `elvid`) lies within
+  gauges; PR 2's code on the 2026-10-05 data finds 48, with the nearest
+  placement and with the tiered one alike:
+  `docs/benchmarks/2026-10-05/nve-placement/README.md`, "Counts that
+  differ"). For 16 stations, a second branch (another `elvid`) lies within
   100 m of the station point, and for 5 within 50 m: these are the
   confluence cases. Measured from the mapped position `P` instead (the foot
   of the station on the nearest line, which is what the design's flag
@@ -979,7 +989,9 @@ visible, and `@tester` pins the mapping on all 25 values.
    metres actually available are reported (`reach_up_m`, `reach_down_m`). The
    result is `Reach(line, at, uncertainty)` (below), in the file's CRS.
 5. **Flags carried to the result, not decided here**: `lake` (the chosen
-   segment is a lake centreline: 46 of 139 nearest lines), `confluence_near`
+   segment is a lake centreline: 46 of 139 nearest lines; 48 by PR 2's code
+   on the 2026-10-05 data, under either placement, per the placement
+   figures' README, "Counts that differ"), `confluence_near`
    (a segment of another `elvid` within 100 m of `P`, measured from `P`, the
    mapped position, not from the station point: **19 of 139**; from the
    station point it is 16, and 5 within 50 m) and the two distances. `None` (no segment within `map_radius`) is the case for the
@@ -1784,7 +1796,19 @@ inputs are files or arrays, not another PR's types.
   figures").
 - **PR 4, the batch and the comparison.** `reference.py`,
   `catchment_batch.py`, `station-catchments`; then the acceptance run.
-  Needs PRs 1 to 3.
+  Needs PRs 1 to 3. Two findings of PR 2's placement figures
+  (`docs/benchmarks/2026-10-05/nve-placement/README.md`) to look at before
+  its batch run: (a) **Narsjø (`2.11.0`), a known uncertain case for the
+  tier design.** Its nearest line, 83.9 m off, is a lake centreline of an
+  unnamed river (`elvid` 002-34-2695) that carries the station's own
+  watercourse number, `002.Q1B`, as Nøra's line does at 127.9 m; the tiered
+  rule cannot tell two lines with the same number apart, so it picks the
+  same line, and the catchment is 0.0012 km² against NVE's 119 km² (marked
+  uncertain). Whether the river's name as a tie-break within a tier would
+  help is untested. (b) **Burns that lower a node by tens of metres**:
+  `88.4.0` Lovatn by 41.4 m, `2.284.0` Sælatunga by 22.7 m, `62.10.0`
+  Myrkdalsvatn by 20.0 m (`survey.csv`, column `lowered_max_m`); why is not
+  looked at.
 - **PR 5, the fallback.** Nearest stream for a station with no river line
   near (below). Small, and last because it is the only part Ola may rule out.
 
@@ -2156,8 +2180,9 @@ what counts as a good catchment, gauges on lakes) are ruled, under "Ola's
 rulings"; the way a gauge is placed follows your direction. Questions 1 to 4
 below are ruled and closed (2026-10-04): question 2 as its entry says, questions 1,
 3 and 4 with their defaults ("Yes to all three."). Questions 5 and 6 came
-from PR 2 (2026-10-05) and are open; the design and the code follow their
-defaults until Ola rules.
+from PR 2 (2026-10-05), and 7 from its placement figures (the same day);
+all three are open, and the design and the code follow their defaults until
+Ola rules.
 
 1. **When is a station too uncertain to score?** A gauge's coordinates are
    usually a few tens of metres off the river, and further for some. For each
@@ -2220,6 +2245,15 @@ defaults until Ola rules.
    (cause "chain not draining"). Alternative: only stop reading the area
    there, with no other effect, as the first code did; such stations are
    then scored.
+7. **Which station the example meshes.** The example under "Closes" meshed
+   Narsjø (`2.11.0`), the first station in NVE's list. PR 2's placement
+   figures show that Narsjø gets a 0.0012 km² catchment (NVE's is 119 km²):
+   its nearest mapped line is a small unnamed river's line across the lake,
+   not Nøra's, and the station is marked uncertain. *Open (2026-10-05).
+   Default: mesh Atnasjø (`2.32.0`) instead*, a lake gauge whose catchment
+   (459.8 km²) agrees with NVE's to 98.4 % one way and 99.2 % the other.
+   Alternative: keep Narsjø and fix its placement first (PR 4's tier
+   design; see "The PR split"), or pick another station.
 
 ## Review
 
@@ -2266,3 +2300,7 @@ Fixes for round 2, by `@architect` in the commit that records it: (1) "No NoData
 **29 PR 2, code review, round 3, 2026-10-05.** Range `96b3881..193079d` (`cc52b8f` round 2 recorded, red `9625478`, green `193079d`); the whole PR is `529613a..193079d`. Verdict: APPROVED. LOC by round 2's rule over the five `src_python` files: 589 added, 20 removed, 569 net (`burn.py` 175, `gauge.py` 117, `sensitivity.py` 85, `catchment.py` 97, `cli.py` 95 net), one net line more than round 2; inside the 598 margin and under 700. Round 2's blockers are closed: (1) the mask at `src_python/tin_engine/burn.py@193079d:140` excludes NaN whatever the sentinel, matching the core's `is_nodata`; (2) the status line, `ROADMAP.md:54` and the estimate block matched the tree as round 2 left it; (3) the design says "the same taut chain". The suggestion is taken: `BurnRefusal` is raised by all three of `burn_reach`'s refusals, and `_burnt_flood` catches only it. Red `9625478` fails 8 tests for the intended reasons; all pass at `193079d`. Full suite on a freshly built `_core`: exit 0, 4783 passed, 18 skipped (`test_settings_wiring` 27 of 27 run in the worktree); the prose-read hook silent; mypy, ruff check, ruff format, prohibited deps, detria boundary and check_citations green. No other code in the PR builds its own DEM mask: `gauge.py` reads no array, `sensitivity.py` reads `accumulate`'s output, `catchment.py` uses only the array's `.shape`. A probe with NaN cells and a finite sentinel is refused at `193079d`. No mutation testing owed, no `bench.py` run (no refine or mesh code); `@perf`'s placement figures are still owed before PR 2 is complete. The status line lagging the review does not block; it is set in the commit that records this round. Suggestions, not blocking: a fourth `GAPS` case, `(math.nan, -32767.0)`, in `test_burn.py`, to pin NaN beside a sentinel; `burn_reach`'s docstring (`src_python/tin_engine/burn.py@193079d:135-137`) names two of its three refusals (not "no DEM node with data near the reach"). Not pushed; no CI.
 
 Recorded by `@architect`, with the status line, `ROADMAP.md:54` and the estimate block (569 net, 589 added; `burn.py` 175). The LOC count was rerun from round 2's rule and gave the same figures, file by file. Both suggestions are left for a later step, to avoid another review loop for a test case and a docstring: whoever next touches `burn.py` or `test_burn.py` (PR 4 at the latest) adds the `(math.nan, -32767.0)` case and names the third refusal in the docstring.
+
+**29 PR 2, evidence review, round 1, 2026-10-05.** Commit `cdc0805` (`@perf`'s placement figures; range `e0ccdd9..cdc0805`): 25 files, all under `docs/benchmarks/2026-10-05/nve-placement/`, no production lines, nothing outside that directory, no data committed. Verdict: CHANGES REQUESTED. Re-measured and true: the checksums in `provenance.txt` recomputed and matching; the survey recounted (140 stations, 136 burnt, 4 refused; 5 well posed on the first window; lowered nodes fewest 3, median 81, most 187, none zero; 19 stations with another river line within 100 m under the nearest placement, 26 under the tiered one; 48 lake lines); cases 1 and 3 correctly empty, case 2 `101.1.0`, case 4 `2.32.0`; the full runs, 9 well defined (at least 87.9 % both ways) and 9 uncertain (5 under 1 km², 4 at about 98.5 %); Narsjø re-run end to end, matching `cli_confirm.log`. Findings: (1) the README's "Counts that differ" says six stations were refused on two grids where "the design expects nine", but two of the six (`156.24.0`, `213.4.0`) are not among the nine: this file predicted them as findings to explain ("Coverage by DTM10", and acceptance step 4 names both), so the prediction came true and up to 11 can be refused on two grids; Ola's ruling covers "the nine"; (2) the example command under "Closes" meshes Narsjø, which this evidence gives a 12-node, 0.0012 km² polygon (its nearest line is an unnamed lake centreline, `elvid` 002-34-2695, sharing watercourse number `002.Q1B` with Nøra's): switch to Atnasjø `2.32.0` as the default of a new question for Ola, and keep Narsjø as a known uncertain case for PR 4's tier design (the tiered rule cannot tell lines sharing a number apart; whether the river name as a tie-break would help is untested); (3) "46 lake lines" (in "What the data says" and in "Placing the gauge", "46 of 139") needs a note that PR 2's code on the 2026-10-05 data finds 48 under either placement, pointing to the README; (4) the status line and `ROADMAP.md:54` do not say the figures are in. Suggestion: record `88.4.0` Lovatn (a burn lowering a node by 41.4 m; also 22.7 m and 20.0 m elsewhere) as an item to look at before PR 4's batch run. Not pushed; no CI.
+
+Fixes for evidence round 1, by `@architect` in the commit that records it: (1) the README's "Counts that differ" says the prediction for `156.24.0` and `213.4.0` came true, up to 11 on two grids, and that Ola's ruling covers the nine; (2) the example meshes `2.32.0` (question 7, default Atnasjø), and Narsjø is item (a) under PR 4 in "The PR split"; (3) both "46" places carry the note; (4) the status line and `ROADMAP.md:54`. The suggestion is taken as item (b) under PR 4 in "The PR split".

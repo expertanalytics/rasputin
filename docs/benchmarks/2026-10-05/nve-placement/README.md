@@ -139,8 +139,16 @@ With the nearest placement, 19 stations have another river line within
 48 with either placement (the design says 46 of 139). Six stations were
 refused on tiles of two grids in these runs (`208.3.0`, `212.49.0`,
 `213.2.0` on the first window; `156.24.0`, `206.3.0`, `213.4.0` when their
-window grew); the design expects nine, which only the batch over all 140 will
-show.
+window grew). Four of the six are among the nine stations the design expects
+to be refused (`208.3.0`, `212.49.0`, `213.2.0`, `206.3.0`). The other two,
+`156.24.0` and `213.4.0`, are not: their catchments lie on shifted tiles
+only, and the design predicted that their 2 km window margin might reach a
+normal tile, a refusal to explain rather than an expected one (the increment
+file, "Coverage by DTM10_UTM33_20260925", and acceptance step 4, which names
+both). The prediction came true here, so up to 11 stations, not 9, can be
+refused on two grids; only the batch over all 140 will give the number. Ola's
+ruling of 2026-10-04 (known refusals, not failures) covers "the nine"; the
+design counts the two with the known refusals, by cause.
 
 ## Files
 
