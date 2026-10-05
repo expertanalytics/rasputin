@@ -33,17 +33,20 @@ Pinned here beyond the design:
 - ("PR 4's code review, round 1", changes (d) to (f).) A river file whose
   CRS is not the DEM's is refused naming `--rivers` and both EPSG codes,
   with `delineate` never called and `--out-dir` not created. A write that
-  fails is a refusal (no exception escapes to the runner) naming `--out-dir`
-  and the path, as given or resolved (macOS resolves `/var` to
-  `/private/var`), without `--dem` or "cannot read". A station whose `name`
-  is missing or empty gives a stderr line starting `<station>: <class>`.
+  fails, making `--out-dir` itself included (an existing regular file, or a
+  parent that cannot be written), is a refusal (no exception escapes to
+  the runner) naming `--out-dir` and the path, as given or resolved (macOS
+  resolves `/var` to `/private/var`), without `--dem` or "cannot read". A
+  station whose `name` is missing or empty gives a stderr line starting `<station>: <class>`.
 """
 
 from __future__ import annotations
 
 import csv
 import json
+import os
 import re
+from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
 
@@ -380,22 +383,70 @@ def squashed(text: str) -> str:
     return "".join(plain(text).split())
 
 
+def an_existing_file(out: Path) -> Path:
+    """`--out-dir` itself is a regular file, so making it fails."""
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text("not a directory\n", encoding="utf-8")
+    return out
+
+
+def a_read_only_parent(out: Path) -> Path:
+    """`--out-dir`'s parent exists but cannot be written, so making it fails.
+    Root ignores permission bits, so the case is skipped when run as root."""
+    if not hasattr(os, "geteuid") or os.geteuid() == 0:
+        pytest.skip("permission bits are not enforced for this user")
+    out.parent.mkdir(parents=True)
+    out.parent.chmod(0o555)
+    return out
+
+
+def a_directory_at(name: str) -> Any:
+    """A directory made beforehand where the command writes the file `name`."""
+
+    def setup(out: Path) -> Path:
+        (out / name).mkdir(parents=True)
+        return out / name
+
+    return setup
+
+
+@pytest.fixture
+def writable_again(tmp_path: Path) -> Iterator[None]:
+    """Gives every directory under `tmp_path` its write bit back afterwards,
+    so pytest can remove what `a_read_only_parent` locked."""
+    yield
+    for p in [tmp_path, *tmp_path.rglob("*")]:
+        if p.is_dir():
+            p.chmod(0o755)
+
+
 @pytest.mark.parametrize(
     "blocked",
-    ["results.csv", f"{bf.TREFF.station}.geojson", "summary.json"],
-    ids=["results_csv", "catchment_file", "summary_json"],
-)
+    [
+        a_directory_at("results.csv"),
+        a_directory_at(f"{bf.TREFF.station}.geojson"),
+        a_directory_at("summary.json"),
+        an_existing_file,
+        a_read_only_parent,
+    ],
+    ids=["results_csv", "catchment_file", "summary_json", "out_dir_is_a_file",
+         "out_dir_parent_read_only"],
+)  # fmt: skip
 def test_a_write_that_fails_names_out_dir_and_the_path(
-    data: dict[str, Path], tmp_path: Path, blocked: str
+    data: dict[str, Path], tmp_path: Path, blocked: Any, writable_again: None
 ) -> None:
-    """Change (e): a directory made beforehand where the command writes a file
-    (results.csv when the sink is made, the first station's catchment file,
-    summary.json at the end). The refusal names `--out-dir` and the path, not
-    `--dem` or "cannot read", and is a refusal, not a traceback. Before change
-    (e), the catchment file's failure read as a refusal of `--dem` and the
-    other two were tracebacks."""
-    out = tmp_path / "out"
-    (out / blocked).mkdir(parents=True)
+    """Change (e): a write the command cannot make. A directory made
+    beforehand where the command writes a file (results.csv when the sink is
+    made, the first station's catchment file, summary.json at the end), or
+    `--out-dir` itself that cannot be made: an existing regular file, or a
+    directory in a parent that cannot be written. The refusal names
+    `--out-dir` and the path, not `--dem` or "cannot read", and is a refusal,
+    not a traceback. Before change (e), the catchment file's failure read as a
+    refusal of `--dem` and the other two were tracebacks; before the change
+    for `--out-dir` itself, making it raised `FileExistsError` or
+    `PermissionError` as a traceback."""
+    out = tmp_path / "parent" / "out"
+    path = blocked(out)
     result = runner.invoke(app, args(data, out))
     words = plain(result.output)
     assert result.exit_code != 0, words
@@ -404,7 +455,6 @@ def test_a_write_that_fails_names_out_dir_and_the_path(
     )
     assert "Traceback" not in result.output
     assert "--out-dir" in words, words
-    path = out / blocked
     assert any(str(p) in squashed(result.output) for p in (path, path.resolve())), words
     assert "--dem" not in words, words
     assert "cannot read" not in words, words
