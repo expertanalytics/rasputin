@@ -2,8 +2,8 @@
 
 The scratchpad is a session's temporary directory, `<tmp>/claude-<uid>/<project>/
 <session>/scratchpad`. Any session's counts, not only the current one: all are
-temporary, and nothing the harness reads lives there. Both guards import this
-(G3a, G3b), so it is governed. Standard library only.
+temporary, and nothing the harness reads lives there. guard_governance.py imports
+this (G3a), so it is governed. Standard library only.
 """
 
 import os

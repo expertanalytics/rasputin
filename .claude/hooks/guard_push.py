@@ -24,14 +24,12 @@ read is judged by the text rules below, as before h4.
 
 docs/increments/h16-harness-fixes.md §2 adds: a fetch into a named ref and a
 `git replace` write ask (G1); a git or gh command the guard does not know, such
-as an alias, asks, since it cannot see what runs (G2); and the local writes are
-passed in a repository whose git dirs both lie in a session scratchpad (G3b).
-A push is never passed.
+as an alias, asks, since it cannot see what runs (G2); and gh's group and verb
+are read past its `-R`/`--repo` option (G6).
 """
 
 import functools
 import json
-import os
 import re
 import shlex
 import subprocess
@@ -46,16 +44,12 @@ try:
     import shell_scan
 except ImportError:  # every line is then judged as text, as before h4
     shell_scan = None
-try:
-    import scratchpad
-except ImportError:  # no scratch repository is then exempt
-    scratchpad = None
 
 PUBLISHES = (
     (re.compile(r"\bgit\b[^|;&]*\bpush\b"), "git push writes to the remote"),
-    (re.compile(r"\bgh\s+pr\s+(create|merge|ready|edit|update-branch)\b"),
+    (re.compile(r"\bgh\b[^|;&]*\bpr\b[^|;&]*\b(create|new|merge|ready|edit|update-branch)\b"),
      "gh pr changes a pull request"),
-    (re.compile(r"\bgh\s+(release|repo\s+(create|delete|edit))\b"),
+    (re.compile(r"\bgh\b[^|;&]*\b(release|repo\b[^|;&]*\b(create|new|delete|edit))\b"),
      "gh publishes or alters the repo"),
     (re.compile(r"--no-verify\b"), "--no-verify disables git's own hooks"),
     (re.compile(r"\bgit\s+(rebase|reset\s+--hard|filter-branch)\b|\bgit\s+commit\b.*--amend"),
@@ -71,7 +65,9 @@ SEGMENTS = re.compile(r"&&|\|\||;|\||\n")
 #: Options whose next token is their argument, not a positional (§3.5).
 TAKES_ARG = {"-f", "--file", "--blob", "--type", "--default", "--comment", "-m"}
 #: git's own options, before the subcommand, whose value is the next word.
-GIT_TAKES_ARG = {"-C", "-c", "--git-dir", "--work-tree", "--namespace", "--attr-source"}
+GIT_TAKES_ARG = {"-C", "-c", "--git-dir", "--work-tree", "--namespace", "--attr-source",
+                 "--config-env"}  # fmt: skip
+FETCH = "fetch writes a named ref"
 REMOTE_WRITES = {"add", "set-url", "rename", "remove", "rm", "set-head", "set-branches"}
 CONFIG_WRITE_FLAGS = {"--add", "--unset", "--unset-all", "--replace-all", "--rename-section",
                       "--remove-section", "--edit", "-e"}
@@ -88,8 +84,6 @@ GH_COMMANDS = {
     "attestation", "completion", "config", "copilot", "extension", "gpg-key", "label",
     "licenses", "preview", "ruleset", "search", "secret", "ssh-key", "status", "variable",
 }  # fmt: skip
-#: Any of these sends git somewhere other than the `-C` directory (G3b).
-SCRATCH_VOIDS = {"--git-dir", "--work-tree", "--global", "--system"}
 
 
 def tokens(segment: str) -> list[str]:
@@ -161,7 +155,7 @@ def git_why(sub: str, args: list[str]) -> str | None:
     # A refspec with a destination after the repository; every non-option word
     # counts, so an option's value can only push the refspec later, never hide it.
     if sub in ("fetch", "pull") and any(":" in a for a in [a for a in args if a[:1] != "-"][1:]):
-        return "fetch writes a named ref"
+        return FETCH
     if sub == "replace":
         flags = {a for a in args if a.startswith("-")}
         listing = all(f in REPLACE_LISTS or f.startswith("--format=") for f in flags)
@@ -170,31 +164,31 @@ def git_why(sub: str, args: list[str]) -> str | None:
     return None
 
 
-def in_scratch(words: list[str], sub: str, args: list[str], text: str) -> bool:
-    """G3b: the write lands in a repository whose git dirs both lie under a scratchpad."""
-    if scratchpad is None or "GIT_" in text:  # a GIT_DIR= prefix overrides -C
+def fetch_named(words: list[str], sub: str, args: list[str], text: str) -> bool:
+    """G1: a fetch steered into named refs by --refmap, --stdin, or a remote/url override."""
+    if not (sub in ("fetch", "pull") or (sub == "remote" and positionals(args)[:1] == ["update"])):
         return False
-    if any(w.split("=")[0] in SCRATCH_VOIDS for w in words):
-        return False
-    if sub == "config":
-        files = [v for f, v in pairwise(args) if f in ("-f", "--file")]
-        files += [a.split("=", 1)[1] for a in args if a.startswith("--file=")]
-        if files:
-            return all(scratchpad.under(f) for f in files)
-    head = words[:len(words) - len(args) - 1]
-    dirs = [v for f, v in pairwise(head) if f == "-C"]
-    if len(dirs) != 1 or not os.path.isabs(dirs[0]):
-        return False
-    # Scrubbed: the lookup asks where the repository is, and must not be steered
-    # by an include or other entry in a user config file.
-    env = {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
-    env |= {"GIT_CONFIG_GLOBAL": os.devnull, "GIT_CONFIG_NOSYSTEM": "1"}
-    found = subprocess.run(["git", "-C", dirs[0], "rev-parse", "--absolute-git-dir",
-                            "--git-common-dir"], capture_output=True, text=True, env=env,
-                           timeout=10)  # fmt: skip
-    found_dirs = found.stdout.splitlines()
-    return (found.returncode == 0 and len(found_dirs) == 2
-            and all(scratchpad.under(os.path.join(dirs[0], d)) for d in found_dirs))
+    keys = [a.split("=")[0] for a in args]  # git takes any unambiguous prefix of a long option
+    if any((len(k) >= 5 and "--refmap".startswith(k)) or (len(k) >= 4 and "--stdin".startswith(k))
+           for k in keys):  # fmt: skip
+        return True
+    head = words[1:len(words) - len(args) - 1]
+    given = [v for f, v in pairwise(head) if f in ("-c", "--config-env")]
+    given += [w.split("=", 1)[1] for w in head if w.startswith("--config-env=")]
+    # GIT_CONFIG_* assignments are stripped from the argv, so only the text shows them.
+    return any(g.lower().startswith(("remote.", "url.")) for g in given) or "GIT_CONFIG" in text
+
+
+def gh_words(words: list[str]) -> list[str] | None:
+    """A gh command's words past its options, `-R`/`--repo`'s value included (G6); else None."""
+    if not words or words[0].rsplit("/", 1)[-1] != "gh":
+        return None
+    found, skip = [], False
+    for word in words[1:]:
+        if not skip and not word.startswith("-"):
+            found.append(word)
+        skip = not skip and word in ("-R", "--repo")
+    return found
 
 
 def segment_why(words: list[str], text: str = "") -> str | None:
@@ -202,13 +196,14 @@ def segment_why(words: list[str], text: str = "") -> str | None:
     call = git_call(words)
     if call is not None:
         why = git_why(*call)
-        return None if why not in (None, UNKNOWN) and in_scratch(words, *call, text) else why
-    if (words and words[0].rsplit("/", 1)[-1] == "gh" and len(words) > 1
-            and not words[1].startswith("-") and words[1] not in GH_COMMANDS):
+        return FETCH if why is None and fetch_named(words, *call, text) else why
+    gh = gh_words(words)
+    if gh and gh[0] not in GH_COMMANDS:
         return UNKNOWN
-    if words[:2] == ["gh", "api"]:
-        given = method(words[2:], "-X", "--method")
-        fields = any(a in GH_FIELDS or a.split("=")[0] in GH_FIELDS for a in words[2:])
+    if gh and gh[0] == "api":
+        rest = words[words.index("api") + 1:]
+        given = method(rest, "-X", "--method")
+        fields = any(a in GH_FIELDS or a.split("=")[0] in GH_FIELDS for a in rest)
         if (given is not None and given != "GET") or (given is None and fields):
             return "gh api with a writing method changes the forge"
     if "curl" in words and any(FORGE_HOST in w for w in words):
@@ -231,11 +226,12 @@ def publishes(words: list[str]) -> list[str]:
             found.append(HISTORY)
         if sub == "push" and any(a.startswith("--force") or a == "-f" for a in args):
             found.append(FORCE)
-    if words and words[0].rsplit("/", 1)[-1] == "gh" and len(words) > 2:
-        group, verb = words[1:3]
-        pr_writes = ("create", "merge", "ready", "edit", "update-branch")
+    gh = gh_words(words)
+    if gh and len(words) > 2:
+        group, verb = [*gh, ""][:2]
+        pr_writes = ("create", "new", "merge", "ready", "edit", "update-branch")
         found += [PR] if group == "pr" and verb in pr_writes else []
-        if group == "release" or (group == "repo" and verb in ("create", "delete", "edit")):
+        if group == "release" or (group == "repo" and verb in ("create", "new", "delete", "edit")):
             found.append(RELEASE)
     return found
 

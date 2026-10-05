@@ -66,7 +66,7 @@ GOVERNED = (
     "tools/rule_sizes.py",
     "tools/shell_scan.py",
     "tools/brief.py",  # h9: guard_spawn.py imports it
-    "tools/scratchpad.py",  # h16: both guards import it
+    "tools/scratchpad.py",  # h16: this guard imports it
     "tools/count_loc.py",  # h16: it computes the arithmetic of CLAUDE.md §2
     ".claude/profile.toml",
 )
@@ -94,10 +94,10 @@ WRITES = re.compile(
 )
 
 
-def governed(path: str) -> bool:
+def governed(path: str, *, scratch_exempt: bool = True) -> bool:
     # h16 G3a, before every rule below: a scratchpad is temporary, and nothing
     # the harness reads lives there. By real path, so a symlink out is followed.
-    if scratchpad is not None and scratchpad.under(path):
+    if scratch_exempt and scratchpad is not None and scratchpad.under(path):
         return False
     # removeprefix, not lstrip: lstrip("./") strips CHARACTERS, so it eats the
     # leading dot of ".claude/..." and every dotfile path stops matching.
@@ -149,8 +149,12 @@ def judge_bash(command: str) -> tuple[str, list[str], str] | None:
                 or any(runs_away(s) for s in simples)
                 or (".git/harness" in command and any(s.writes or s.unknown for s in simples))):
             return "deny", [], ""
-        # A target is judged by its static tail: $D/CLAUDE.md is CLAUDE.md.
-        hits = list(dict.fromkeys(t for t in targets if governed(shell_scan.static(t))))
+        # A target is judged by its static tail: $D/CLAUDE.md is CLAUDE.md. The scratchpad
+        # holds only for one plain command, which cannot link a path and write through it.
+        one = simples[0] if len(simples) == 1 else None
+        plain = one is not None and one.program is None and one.script is None and not one.unknown
+        hits = list(dict.fromkeys(t for t in targets
+                                  if governed(shell_scan.static(t), scratch_exempt=plain)))
         if hits:
             return "ask", hits, f"it writes {', '.join(hits)}"
         if not any(s.unknown or any(not shell_scan.static(w).strip("/") for w in s.writes)
