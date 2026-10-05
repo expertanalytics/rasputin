@@ -11,42 +11,15 @@ opens files.
 from __future__ import annotations
 
 from collections.abc import Mapping
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field
 from shapely.geometry import MultiPolygon, Polygon, shape
 
 from tin_engine.crs import parse_crs
+from tin_engine.hydrography import Lake, Station
 
 from .repository import read_json
-
-
-class Station(BaseModel):
-    """One gauging station, in its file's CRS. `series` holds the discharge
-    series keys (`"1001.0"`), the join to NVE's discharge later."""
-
-    model_config = ConfigDict(frozen=True)
-
-    station: str = Field(pattern=r"^\d+\.\d+\.\d+$")
-    name: str | None = None
-    x: float
-    y: float
-    series: tuple[str, ...] = ()
-    nve_area_km2: float | None = None
-    watercourse: str | None = None
-    river: str | None = None
-
-
-@dataclass(frozen=True, slots=True)
-class Lake:
-    """One lake polygon part, in its file's CRS (PR 4, "Lake gauges").
-    `number` is NVE's `vatnlnr`, None for null or 0; `name` is `navn`."""
-
-    number: int | None
-    name: str | None
-    polygon: Polygon
 
 
 def features_of(path: Path) -> tuple[list[dict[str, Any]], str]:
@@ -143,8 +116,6 @@ def read_lakes(path: Path) -> tuple[tuple[Lake, ...], str]:
 
 
 __all__ = [
-    "Lake",
-    "Station",
     "features_of",
     "read_lakes",
     "read_references",
