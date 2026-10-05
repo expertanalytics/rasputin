@@ -1,11 +1,11 @@
 # Harness h14: the asan+ubsan tests in parallel
 
-Status: design written (`@architect`), not yet built; questions in §8 wait for Ola. Ola ruled on the principle in h13
+Status: ruled; build next. Ola ruled on the principle in h13
 (`docs/increments/h13-macos-ci-build.md`, §8 ruling 2: "yes", as its own
-increment after h13); §8 below holds the questions still open. Mechanics, not a
-design question: one workflow line and one test-registration line
-(`@developer`), no production code, no new test (§6 says how the change is
-checked instead).
+increment after h13), and §9 records his go-ahead on §8's three questions.
+Mechanics, not a design question: one test-registration change (`@tester`) and
+one workflow line (`@developer`), no production code, no new test (§6 says how
+the change is checked instead).
 
 Why: since h13 fixed the macOS build, the `C++ sanitizers (asan+ubsan)` job is
 the slowest job the required `CI result` check waits for: 7.8 to 13.7 minutes
@@ -415,10 +415,22 @@ tests/cpp/CMakeLists.txt
      -> 4 processes at a time; output per test, whole, on failure
 ```
 
-Who does what: `@developer` makes both edits in one commit (no test assertion
-changes, so no red step precedes it); `@reviewer` audits before the first
-push; after the PR's CI run, `@reviewer` again with §6's numbers. `@perf` is
-not involved: no refine or mesh code is touched.
+Who does what, in this order, one commit each:
+
+1. `@tester`: the `COST` keyword in `add_terrain_test` and `COST 100` on
+   `prop_refinement_edge_strip`, both in `tests/cpp/CMakeLists.txt` (under
+   `tests/`, `@tester`'s write limit; `@developer`'s `CMakeLists.txt` entry is
+   the root file, `docs/increments/h6-role-limits.md` §3). No case, assertion
+   or `GENERATE` changes. On its own this commit changes nothing in CI, which
+   still runs the tests one at a time.
+2. `@developer`: the sanitizer job's `ctest` line in
+   `.github/workflows/main.yaml` (`.github/`, `@developer`'s write limit).
+
+There is no red step: no test assertion changes, and no unit test can see the
+job count or the start order, so the PR's own CI run is the check (§6).
+`@reviewer` audits before the first push; after the PR's CI run, `@reviewer`
+again with §6's numbers. `@perf` is not involved: no refine or mesh code is
+touched.
 
 ## 8. Questions for Ola
 
@@ -434,6 +446,20 @@ not involved: no refine or mesh code is touched.
    **include it**. Without it the slowest test starts near the end and the
    step takes roughly 1.5 times as long (§2c: 145 against 97 s on a fast
    runner, 265 against 172 s on a slow one).
+
+## 9. Ola's rulings
+
+Ola's words, the whole message: "WHen h14 and h12 C2 should get going."
+(2026-10-05T04:57:55Z, the main session's transcript). He did not answer §8's
+questions one by one. The main session read the message as a go-ahead with
+§8's three defaults, and told Ola so in the same turn; each one below is taken
+on that reading, and Ola can overturn any of them.
+
+1. **The thread-sanitizer job stays as it is** (§8 question 1, default no).
+2. **No `--parallel` on the ordinary C++ test jobs**, Linux and macOS (§8
+   question 2, default no).
+3. **The cost hint is included**: `COST 100` on `prop_refinement_edge_strip`
+   (§8 question 3, default include it; §4).
 
 ## Review
 
@@ -498,4 +524,4 @@ Findings, fixed in the commit after 05c6eaf:
 Suggestion, taken: §2d says what the `<cstdlib>` at
 `test_predicates_default_kernel.cpp:43` is for: nothing the file uses.
 
-**Round 3, 2026-10-05 (copied from `@reviewer`'s handback).** Range `05c6eaf..de233d6`. Verdict: APPROVED. Both round-2 findings closed: the counterexample brute-forced over all 4^8 assignments (best 10, longest-first 11); the slow-run saving recomputed (6.1 with the slowdown, 6.6 without). The §2d claim checked with `git log -S` (2b3ae32) and grep. `check_citations.py` clean. Non-blocking: §2d's "declares nothing the file uses" would read better as "nothing the file does not already get from `<cstddef>`".
+**Round 3, 2026-10-05 (summarised from `@reviewer`'s handback).** Range `05c6eaf..de233d6`. Verdict: APPROVED. Both round-2 findings closed: the counterexample brute-forced over all 4^8 assignments (best 10, longest-first 11); the slow-run saving recomputed (6.1 with the slowdown, 6.6 without). The §2d claim checked with `git log -S` (2b3ae32) and grep. `check_citations.py` clean. Non-blocking: §2d's "declares nothing the file uses" would read better as "nothing the file does not already get from `<cstddef>`".
