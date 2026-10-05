@@ -684,3 +684,7 @@ Taken in the recording commit: blocking item 3 (the status line).
 ## Ola's rulings, 2026-10-05 afternoon
 
 Ola, verbatim: "yes to all defaults, push both". So: `tools/brief.py` takes the two edits (note names `<persona>-<worktree>-<HHMMSS>.md`, root `*.md` files in `@architect`'s limit); `count_loc.py` pins `--diff-algorithm=myers`; a file renamed across the counted/uncounted boundary counts in full (added on the way in, removed on the way out); `CLAUDE.md` §2's pointer says that `docs/` and non-code files are not counted either. Red for the second and third: `f885887`.
+
+### Round 4: `@reviewer`, code, PR A whole, `bc01cd8..095ab63`
+
+CHANGES REQUESTED. 287 net production lines (`count_loc.py bc01cd8 095ab63`). Round 3's items closed; 219 harness tests pass; rule lines match the tools. Blocking: the docstring of `test_env_drops_config_given_in_the_environment` names `diff.algorithm` as unpinned, which `195b504` made false; no CI before the push. Suggestion: cut "At 98e31cd only the one added line counts" from the rename test's docstring.
