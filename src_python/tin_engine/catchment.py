@@ -35,7 +35,7 @@ from pydantic import BaseModel, ConfigDict, model_validator
 from shapely.geometry import Point, Polygon
 
 from tin_engine._core import ReduceStatus, UpstreamOutcome, accumulate, reduce_ring, upstream
-from tin_engine.burn import burn_reach
+from tin_engine.burn import BurnRefusal, burn_reach
 from tin_engine.crs import crs_label, parse_crs, reprojector
 from tin_engine.gauge import Reach
 from tin_engine.io.models import RasterMeta
@@ -250,7 +250,7 @@ def _burnt_flood(reach: Reach, pick: Callable[[Any], int]) -> Flood:
     def flood(tile: Any) -> tuple[UpstreamOutcome, Any]:
         try:
             burnt, path = burn_reach(tile, reach)
-        except ValueError as exc:
+        except BurnRefusal as exc:
             raise CatchmentError(str(exc)) from exc
         seed = np.zeros(burnt.array.shape, dtype=np.uint8)
         seed[tuple(path.chain[path.placed])] = 1

@@ -32,6 +32,11 @@ DIRECTION_M = 2.0
 _NEIGHBOURS = [(dr, dc) for dr in (-1, 0, 1) for dc in (-1, 0, 1) if (dr, dc) != (0, 0)]
 
 
+class BurnRefusal(ValueError):  # noqa: N818 -- the record's name, pinned by the suite
+    """The burn cannot place the gauge: a gap on the chain, the placed position
+    outside the window, or no node with data near the reach."""
+
+
 @dataclass(frozen=True, slots=True)
 class GaugePath:
     """The burnt chain, (row, column) in the window, downstream, extension
@@ -78,7 +83,7 @@ def _floor_node(
         order = np.lexsort((c[inside], r[inside], dist[inside], z[r[inside], c[inside]]))
         return int(r[inside][order[0]]), int(c[inside][order[0]])
     if r.size == 0:
-        raise ValueError(f"no DEM node with data near the reach at {xy}")
+        raise BurnRefusal(f"no DEM node with data near the reach at {xy}")
     k = np.lexsort((c, r, dist))[0]
     return int(r[k]), int(c[k])
 
@@ -129,9 +134,10 @@ def _steps(chain: list[tuple[int, int]], m: RasterMeta) -> list[float]:
 def burn_reach(window: DemTile, reach: Reach) -> tuple[DemTile, GaugePath]:
     """The window with the reach burnt in (a copy, same `meta`), and its path.
     A placed position outside the window, or a chain node without data, is a
-    `ValueError`."""
+    `BurnRefusal`."""
     m, raw = window.meta, np.asarray(window.array)
-    ok = np.ones(raw.shape, dtype=bool) if m.nodata is None else raw != m.nodata
+    # A NaN cell is NoData whatever the sentinel, as in the core's `is_nodata`.
+    ok = ~np.isnan(raw) if m.nodata is None else ~np.isnan(raw) & (raw != m.nodata)
     step = min(m.delta_x, m.delta_y)
     line = np.asarray(reach.line, dtype=np.float64)
     line = line[np.r_[True, np.any(np.diff(line, axis=0) != 0.0, axis=1)]]
@@ -146,7 +152,7 @@ def burn_reach(window: DemTile, reach: Reach) -> tuple[DemTile, GaugePath]:
     inside = (rows >= -0.5) & (rows <= m.rows - 0.5) & (cols >= -0.5) & (cols <= m.cols - 0.5)
     at = min(int(np.floor(reach.at / step + 0.5)), len(s) - 1)
     if not inside[at]:
-        raise ValueError(
+        raise BurnRefusal(
             f"the gauge's mapped position, {reach.at:g} m along the reach, is outside the window"
         )
     spacing = (m.x_min, m.y_max, m.delta_x, m.delta_y)
@@ -161,7 +167,7 @@ def burn_reach(window: DemTile, reach: Reach) -> tuple[DemTile, GaugePath]:
     gap = next((n for n in chain if not ok[n]), None)
     if gap is not None:
         gx, gy = m.x_min + gap[1] * m.delta_x, m.y_max - gap[0] * m.delta_y
-        raise ValueError(
+        raise BurnRefusal(
             f"the river line crosses a gap (NoData) in the DEM at ({gx:.0f}, {gy:.0f}): "
             "the station is refused"
         )
@@ -220,4 +226,4 @@ def burn_reach(window: DemTile, reach: Reach) -> tuple[DemTile, GaugePath]:
     return DemTile(meta=m, array=burnt), path
 
 
-__all__ = ["DROP_M", "END_CAP_M", "GaugePath", "burn_reach"]
+__all__ = ["DROP_M", "END_CAP_M", "BurnRefusal", "GaugePath", "burn_reach"]
