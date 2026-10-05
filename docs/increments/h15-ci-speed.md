@@ -1,6 +1,6 @@
 # Harness h15: a faster CI that proves the same things
 
-Status: design approved by `@reviewer` in round 2; Ola ruled on §9 on 2026-10-05 (all five defaults, below). PR 1 (§5 P, the Python job split) is implemented on this branch: red `8a8af9b`, green `83d0601`; code review round 4 approved it, the clean-clone `git status` check of §5 P run and empty; the push waits for Ola, and §7 PR 1's acceptance is read from the PR run. PR 2 and PR 3 are not started. Mechanics, not a design question for the core: the plan (§7) is
+Status: design approved by `@reviewer` in round 2; Ola ruled on §9 on 2026-10-05 (all five defaults, below). PR 1 (§5 P, the Python job split) merged in #183: red `8a8af9b`, green `83d0601`; code review round 4 approved it. PR 2 is now designed in `docs/increments/h17-ci-test-time.md` §5, without the ES9 split and no longer bound to land after h12's PR A; PR 3 is not started. Mechanics, not a design question for the core: the plan (§7) is
 two small workflow PRs and an optional third, each touching
 `.github/workflows/main.yaml`. The order rule is §6: PR 1 needs only
 master; PR 2 renames the sanitizer job, so it lands after h12's PR A
