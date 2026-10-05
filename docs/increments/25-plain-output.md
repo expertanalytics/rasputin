@@ -271,7 +271,7 @@ unreadable or break a legal requirement, so they stay, unchanged.
 | `feature_bits`, `feature_names` | `io/vtk_legacy.py:124-125`; `.ply` `feature_bit <bit> <name>` comments, `io/ply.py:111` | the key to the `feature_mask` cell array and the per-feature 0/1 arrays: without it a mask of 5 does not say "river and railway" |
 | `feature_vocabulary` | `io/vtk_legacy.py:126`, `io/ply.py:112` | a digest of that key, so two files can be checked to use the same bits (increment 13) |
 | `land_cover_codes` | `io/vtk_legacy.py:118-119`, `src_python/tin_engine/cli.py@44fa7f5:1040` | says which code system the `land_cover_code` cell array holds (CORINE level 3); the ParaView preset from `rasputin palette corine` colours those codes and assumes that system |
-| `features_notice` | `src_python/tin_engine/cli.py@44fa7f5:961`, text at `feature_input.py:61-65` | the CORINE attribution ("Contains modified CORINE Land Cover 2018 data ... (c) European Union ..."), which the Copernicus data policy asks for on data derived from CORINE, as `licence_note` is for a downloaded DEM. Kept by Ola's ruling (2026-10-03) under the same rule as `dem_credit` |
+| `features_notice` | `src_python/tin_engine/cli.py@44fa7f5:961`, text at `src_python/tin_engine/feature_input.py@44fa7f5:61-65` | the CORINE attribution ("Contains modified CORINE Land Cover 2018 data ... (c) European Union ..."), which the Copernicus data policy asks for on data derived from CORINE, as `licence_note` is for a downloaded DEM. Kept by Ola's ruling (2026-10-03) under the same rule as `dem_credit` |
 
 ### D3. The rules
 
@@ -283,7 +283,7 @@ unreadable or break a legal requirement, so they stay, unchanged.
    maximum never reads above the tolerance it met.
 3. **A count of zero is omitted from the file**, never from `--stats`.
    This applies to counts only (today `nodata_vertices_removed`), never to a
-   measured value: `--tolerance 0` is accepted (`cli.py:835`) and then
+   measured value: `--tolerance 0` is accepted (`src_python/tin_engine/cli.py@44fa7f5:835`) and then
    `tolerance_m 0` and `max_error_m 0` are written
    (`test_cli_mesh_refine.py:151-155` asserts both).
 4. **Self-checks** live in `--stats`. If one is ever non-zero it is also
