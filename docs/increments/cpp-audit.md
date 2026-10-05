@@ -8,7 +8,7 @@ sequence of refactor PRs; each still runs the normal loop
 (`docs/increments/README.md`): design note, red tests where behaviour changes,
 code, review, and `@perf`'s byte-identical run where the diff touches refine or
 mesh code (marked **[refine/mesh]** below). Section 7 is the design of
-PR B, written against `1035690`.
+PR B, written against `1035690`. PR B status: code and docs in; next `@reviewer`.
 
 Ola's ask: audit the code, keeping in mind that tests are the lesser problem;
 the concern is losing control of the code base at about 10,000 lines each of
@@ -645,12 +645,12 @@ quotations). The merge adds a `ROADMAP.md` row for PR B.
 
 Unpinned citations into lines this PR deletes or moves were pinned to
 `44fa7f5` in the commit that added this section (T2's lesson): `segment.hpp:68`
-(`05-noder.md`, `kernel-sufficiency-audit.md`), `ring.hpp:233`
+(`05-noder.md`, `kernel-sufficiency-audit.md`), `include/terrain/core/ring.hpp@44fa7f5:233`
 (`05b-noder-driver.md`, twice), `_core.pyi:3` and `:437` (`05c-noder-wiring.md`,
 `25-plain-output.md`), ten `bindings/core.cpp` citations
 (`15f-edge-strip.md`, `23-basin-scale.md`, `27-node-sampling.md`,
 `29-nve-reference-catchments.md`), `chunks.hpp:10` and
-`test_refinement_chunks.cpp:79` (`21-parallel-refine.md`),
+`tests/cpp/unit/test_refinement_chunks.cpp@44fa7f5:79` (`21-parallel-refine.md`),
 `test_pslg_builder.cpp:961` and `prop_cdt_invariants.cpp:398`
 (`h14-parallel-sanitizer-tests.md`). Left unpinned, because the edits above
 keep their lines in place: `snap_grid.hpp:43`, `:63`, `:94`;
@@ -695,4 +695,13 @@ follow it.
 
 ## Review
 
-One line per round, PR B: none yet.
+One line per step, PR B (branch `cpp-dead`):
+
+- Red: `50bef89` (`@tester`) adds the `stats`-imports-without-`_core` test, deletes the tests of removed items, moves `point_in_ring` to test support; `90ba8be` makes `test_pslg`'s edge-vs-ring case compare against the ring's vertices, not `terrain::edge`.
+- Green: `6530d30` (`@developer`) deletes the 20 ranges of 7.1; `tools/count_loc.py 4208932 6530d30` counts -291, as 7.3 planned.
+- `ab79bfe` (`@tester`) deletes `test_refinement_chunks.cpp` and its CMake registration; ctest 843/843, pytest 5089 passed at this head.
+- Conflict between 7.4 (the suite goes in the red commit) and 7.5 ("no test file is touched"): resolved by splitting it, `@developer` takes the suite off the TSan lists in place, `@tester` deletes the file next.
+- Departure 1: `include/terrain/predicates/orientation.hpp@6530d30:9`'s comment now names `reversed`, not the removed `is_left_turn`.
+- Departure 2: `_core.pyi`'s comment above the two `describe` overloads no longer points at the removed `cross` stubs.
+- Departure 3: `bindings/core.cpp`'s module docstring no longer opens with "geometry primitives"; it names the triangulator and mesh surface.
+- Docs (`@architect`): `project_structure.md` lines 14, 17, 52, 446, 501, 505, 506 rewritten one for one; `05-noder.md`'s two `segment.hpp` citations and two 7.6 names pinned to `44fa7f5`; `check_citations` exits 0.
