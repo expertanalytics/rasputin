@@ -14,7 +14,7 @@ Pure: pyproj and numpy. No paths, no `_core`; CRS never crosses into the core.
 from __future__ import annotations
 
 import math
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from typing import Any
 
 import numpy as np
@@ -22,9 +22,11 @@ import numpy.typing as npt
 from pydantic import BaseModel, ConfigDict
 from pyproj import CRS, Proj, Transformer, get_ellps_map
 from pyproj.crs import ProjectedCRS
-from pyproj.exceptions import CRSError
+from pyproj.exceptions import CRSError, ProjError
 
 Xy = npt.NDArray[np.float64]
+SAME_CONFIDENCE = 70  # PROJ identify, 0-100: 70 is "equivalent, names differ"
+FRAME_TOLERANCE = 1e-12  # unit factors relative, prime meridian in radians
 
 
 def parse_crs(text: str | CRS) -> CRS:
@@ -68,6 +70,61 @@ def transform_description(src: str | CRS, dst: str | CRS) -> str:
 def transform_definition(src: str | CRS, dst: str | CRS) -> str:
     """PROJ's pipeline for `src` to `dst`, to see which steps it takes (16b R5)."""
     return str(_transformer(src, dst).definition)
+
+
+def same_crs(a: str | CRS, b: str | CRS) -> bool:
+    """Whether coordinates in `a` and in `b` name the same points: PROJ's
+    equivalence once both are in x-then-y order, or else one EPSG code in
+    common at `SAME_CONFIDENCE`, read from each as given, in the same frame
+    (`docs/increments/python-audit.md`, section 9). No operation is False."""
+    pa, pb = parse_crs(a), parse_crs(b)
+    try:
+        t = _transformer(pa, pb)
+    except ProjError:
+        return False
+    src, dst = t.source_crs, t.target_crs
+    if src is None or dst is None:
+        return False
+    if src.equals(dst):
+        return True
+    codes = [{m.code for m in p.list_authority("EPSG", SAME_CONFIDENCE)} for p in (pa, pb)]
+    return bool(codes[0] & codes[1]) and _same_frame(src, dst)
+
+
+def _same_frame(a: CRS, b: CRS) -> bool:
+    """Same axis directions and unit factors, axis by axis, and the same
+    prime meridian; `a` and `b` already in x-then-y order."""
+    if len(a.axis_info) != len(b.axis_info):
+        return False
+    for u, v in zip(a.axis_info, b.axis_info, strict=True):
+        if u.direction.lower() != v.direction.lower() or not math.isclose(
+            u.unit_conversion_factor, v.unit_conversion_factor, rel_tol=FRAME_TOLERANCE
+        ):
+            return False
+    pm = [
+        0.0
+        if c.prime_meridian is None
+        else c.prime_meridian.longitude * float(c.prime_meridian.unit_conversion_factor)
+        for c in (a, b)
+    ]
+    return math.isclose(pm[0], pm[1], rel_tol=0.0, abs_tol=FRAME_TOLERANCE)
+
+
+def transform_label(src: str | CRS, dst: str | CRS) -> str:
+    """'none' when `same_crs(src, dst)`, else `transform_description(src, dst)`."""
+    return "none" if same_crs(src, dst) else transform_description(src, dst)
+
+
+def single_crs(texts: Iterable[str], refusal: type[ValueError] = ValueError) -> str:
+    """The one CRS text among `texts` (a DEM's tiles' `meta.crs`), or
+    `refusal` naming them all."""
+    found = sorted(set(texts))
+    if len(found) != 1:
+        raise refusal(
+            f"the DEM files are in {len(found)} different CRSs ({', '.join(found)}); "
+            "all must be in one CRS"
+        )
+    return found[0]
 
 
 def crs_label(crs: str | CRS) -> str:
