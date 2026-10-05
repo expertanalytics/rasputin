@@ -10,10 +10,18 @@ code, review, and `@perf` where the diff touches what drives refine or mesh.
 Accepted by Ola on 2026-10-05, with the defaults to its three questions
 (section 7). Its first PR, T2, is designed in section 8. Status of T2:
 `@tester`'s tests are in `2f47ebb`: 184 non-blank test lines added and 185
-removed, -1 net against the design's about -35 (the new file's docstrings and
-its failure messages, which name the module and the edge, are longer than
-costed). The record citations that commit broke are pinned. Next
-`@reviewer` (tests only: no `@developer` step, no `@perf` run).
+removed, -1 net against the design's about -35 (`git diff -U0 44fa7f5 97eea35
+-- tests`, non-blank lines). The gap is what section 8 did not cost:
+`test_layering.py` adds 152 against about 120, because its 13-line module
+docstring and the 12-line `UPWARD` dict with its comment were not costed;
+`importscan.py` adds 19 and removes 5 against about 8; reworded references
+to `test_layering.py` in six other test files add 13, not costed; and 185
+go against about 165. `4686456` adds 2 more (+1 net). Code review round 1
+(below) is recorded and both its blocking items are fixed (`4686456`, and
+this paragraph). Next `@reviewer` round 2: re-read this paragraph and the
+`# fmt: off` comment in `test_layering.py`, run `ruff format --check` and
+`python3 tools/check_citations.py` (tests only: no `@developer` step, no
+`@perf` run).
 
 Re-checked against master `44fa7f5`: `git diff --stat 12dace7 44fa7f5 --
 src_python` is empty, and of the files cited below only `tools/brief.py`
@@ -538,8 +546,9 @@ equal to or stricter than the test it replaces.
 3. **Every edge goes down or sideways** (the table only): layer of the
    imported <= layer of the importer, and an edge into `_core` comes from L3,
    unless the edge is in `UPWARD`.
-4. **No `UPWARD` entry is stale**: each is an edge of the table, so the PR
-   that removes an edge must delete its exception.
+4. **No `UPWARD` entry is stale**: each is an edge of the table that breaks
+   the rule of check 3, so the PR that removes the edge, or makes it legal,
+   must delete its exception.
 5. **No module imports by name**: no call to `importlib.import_module` or
    `__import__` in any module's AST (none today; the package's `importlib`
    uses are `metadata`, `util.find_spec` and `resources`). This replaces the
@@ -601,3 +610,7 @@ that the deletion breaks or moves (`python3 tools/check_citations.py` on a
 scratch copy with the lines removed), and says which get pinned. T2's design
 did not, and its tests commit left nine broken citations in dated review
 records.
+
+## Review
+
+**T2 (`audit-layering-test`), code review, round 1, 2026-10-05.** Range `44fa7f5..97eea35` (e86b86d audit, 8190438 rulings and T2 design, 2f47ebb tests, 97eea35 citation pins). Verdict: CHANGES REQUESTED. LOC: 0 production lines (`count_loc.py`); test lines +184 -185, -1 net against about -35. Not pushed; no CI. Whole Python suite 5132 passed, 17 skipped; ruff, format, mypy and check_citations clean. An independent AST resolver agrees with the table for all 52 modules. Seven planted breaks in a scratch copy each failed only their own check: a row for a missing module, a deferred import, a relative import in a package `__init__`, `_core` imported from layer 4, two stale exceptions, and `importlib.import_module`. Check 4's stricter reading is sound. Every deleted firewall assertion is carried by a row that is equal or stricter. All 16 new pins quote what their records say. Blocking: (1) `@tester`: the `# fmt: off` comment at `test_layering.py:27-28` describes the formatter wrongly; (2) `@architect`: the -1 net explanation at `python-audit.md:12-15` names the wrong cause. Suggestions: check 4's wording in section 8; `testing.md@97eea35:183-185`'s "no compiled extension" claim, false before this branch.
