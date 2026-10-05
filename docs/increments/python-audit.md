@@ -29,8 +29,10 @@ tests 1-7 (43 failing, each for its own reason); its step found three more
 `==` comparisons, ruled in section 9 ("After the red step"). Red tests
 8-10 are in `7dddda8`, which also showed rule 2 of `same_crs` wrong (a
 west-pointing UTM 33 counted as EPSG:25833); rule 2 now also checks the
-axes and the prime meridian (section 9, "After red tests 8-10"). Next:
-`@tester` adds one not-the-same pair (UTM 33 with `+pm=paris`), then
+axes and the prime meridian (section 9, "After red tests 8-10"). `5074ef6`
+adds the `+pm=paris` pair and found a thirteenth site (`domain.py:103`); a
+final sweep over `src_python/` and `tools/` (section 9, "The final sweep")
+finds no fourteenth. Next: `@tester` red tests 11 and 12, then
 `@developer`, `@reviewer`.
 
 Re-checked against master `44fa7f5`: `git diff --stat 12dace7 44fa7f5 --
@@ -446,7 +448,7 @@ table in a `@tester` commit, and deletes the section 8 exception it removes
 |---|---|---|---|---|---|
 | T2 | `audit-layering-test` | X3 | 0 (tests only, about -35) | nothing | none; `@tester` then `@reviewer`, no `@developer` |
 | T1 | `audit-cli-test-harness` | X1 | 0 (tests only, -350) | nothing | none |
-| B | `audit-crs-helpers` | F3, with the `EPSG:None` fix | about +15 (section 9; first estimated -25) | T2 | red tests for the rule and the fix |
+| B | `audit-crs-helpers` | F3, with the `EPSG:None` fix | about +16 (section 9; first estimated -25) | T2 | red tests for the rule and the fix |
 | A | `audit-lattice` | F2, F9, F10 (repository Protocol), F12 (`mosaic`'s two) | about -100 | B | red test for the +-inf ruling; `@perf` run: meshes byte-identical |
 | F | `audit-catchment-shared` | F4, F10 (catchment types), F12 (`gauge`'s two, `catchment` -> `_core`) | about -40 | nothing | none |
 | C | `audit-geojson-io` | F5, F12 (`chains` -> `feature_input`) | about -40 | B | `@tester` amendment if wordings move, and for the two `--help` texts |
@@ -660,8 +662,11 @@ master. Not refine or mesh code, and the benchmark runs pass no `--out-crs`
   had missed too (`grep -rnE "(==|!=)" src_python/tin_engine` over CRS
   values): `src_python/tin_engine/domain.py@44fa7f5:62`,
   `src_python/tin_engine/feature_input.py@44fa7f5:300` and
-  `src_python/tin_engine/fetch/plan.py@44fa7f5:118`. Twelve in all.
-  `src_python/tin_engine/mosaic.py@44fa7f5:585` (`ma.crs != mb.crs`) is
+  `src_python/tin_engine/fetch/plan.py@44fa7f5:118`. `@tester`'s
+  `5074ef6` step found a thirteenth, missed by that grep because it calls
+  `_parsed`, not `parse_crs`: `src_python/tin_engine/domain.py@44fa7f5:103`.
+  Thirteen in all; the final sweep below is typed, not a grep, and finds no
+  more. `src_python/tin_engine/mosaic.py@44fa7f5:585` (`ma.crs != mb.crs`) is
   not one: it compares tile texts, as `single_crs` does.
 - **The live bug is the comparison itself.** `parse_crs(a) != parse_crs(b)`
   is pyproj's `CRS.__eq__`, PROJ's equivalence with axis order and parameter
@@ -677,7 +682,10 @@ master. Not refine or mesh code, and the benchmark runs pass no `--out-crs`
   file, feature file or seed in such a spelling is refused as "not the DEM's"
   (`src_python/tin_engine/catchment.py@44fa7f5:185, 202`,
   `src_python/tin_engine/cli.py@44fa7f5:2045`,
-  `src_python/tin_engine/feature_input.py@44fa7f5:423`); and the record says a transform
+  `src_python/tin_engine/feature_input.py@44fa7f5:423`); a GeoJSON domain
+  in EPSG:25833 given `--domain-crs` as the PROJ string of EPSG:25833 is
+  refused as disagreeing with itself
+  (`src_python/tin_engine/domain.py@44fa7f5:103`); and the record says a transform
   ran where none did (`src_python/tin_engine/cli.py@44fa7f5:932-933, 952-956`).
 
 ### Prior art: legacy and literature
@@ -738,14 +746,30 @@ is its `ValueError`, wording unchanged). Then, in order:
    package: every transform is `always_xy` (the module docstring of
    `crs.py`). A `ProjError` while building it (PROJ finds no operation, for
    example between Earth and Mars) means "not the same", never an exception.
+   So does a `source_crs` or `target_crs` of None: pyproj types both
+   `CRS | None` (None for a transformer built from a pipeline), so mypy needs
+   the branch, though no `from_crs` transformer has one (probe: 0 of 141
+   pairs over 13 CRSs, geocentric, compound, bound, rotated and Mars among
+   them). "Not the same" is the safe side: a transform runs and the record
+   names it.
 2. **Else, one EPSG code in common, in the same frame.** The sets
    `{m.code for m in crs.list_authority("EPSG", SAME_CONFIDENCE)}` of the two
-   meet, **and** `_same_frame(source_crs, target_crs)` holds on rule 1's
+   meet, each read from the CRS **as given** (`parse_crs`'s result), not
+   from the transformer's x-then-y copy. Read from the copy, three PROJ
+   strings stop identifying (the Lambert above, and pyproj's own PROJ
+   strings of EPSG:31287 and EPSG:3035), and 6 of 44 ordered same pairs
+   come out not the same. Probe: red test 1's pairs plus the probe table's
+   four spellings of EPSG:31287, 25833, 3035 and 4326, 22 same and 12 not
+   the same, both orders; read as given, all 68 come out right. **And**
+   `_same_frame(source_crs, target_crs)` holds on rule 1's
    x-then-y pair: the same number of axes; axis by axis the same
    `direction.lower()` and `unit_conversion_factor` (relative tolerance
    `FRAME_TOLERANCE`); and the same prime meridian,
-   `longitude * unit_conversion_factor` in radians (absolute tolerance
-   `FRAME_TOLERANCE`; a missing one compares as 0, Greenwich). This catches a
+   `longitude * float(unit_conversion_factor)` in radians (absolute tolerance
+   `FRAME_TOLERANCE`; a missing one compares as 0, Greenwich). The `float()`
+   is for mypy: pyproj 3.8.0's stub types `PrimeMeridian.unit_conversion_factor`
+   as `str` (in `pyproj/_crs.pyi`), while it is a `float` at run time, so
+   `float()` changes no value and needs no `cast` or `type: ignore`. This catches a
    CRS given by parameters (a PROJ string, a WKT without ID) that PROJ
    identifies as an EPSG definition with another name. The frame check is
    there because PROJ's identification at 70 ignores two things a CRS can
@@ -902,10 +926,85 @@ makes, so the wording is unchanged there.
 | `src_python/tin_engine/domain.py@44fa7f5:62-63` | `if source == target: return self` | `if same_crs(source, target):` return the same polygon labelled `target.to_string()` (`self.model_copy(update=...)`) |
 | `src_python/tin_engine/feature_input.py@44fa7f5:300` | `src == self.dem` | `same_crs(src, self.dem)` |
 | `src_python/tin_engine/fetch/plan.py@44fa7f5:118` | `frame == source` | `same_crs(frame, source)` |
+| `src_python/tin_engine/domain.py@44fa7f5:103` | `_parsed(crs) != _parsed(own)` | `not same_crs(_parsed(crs), _parsed(own))`; wording unchanged, and unreadable text is still `_parsed`'s `DomainError` |
 
 `src_python/tin_engine/cli.py@44fa7f5:919` (`transform_description` on the resampled path) stays: a resampled DEM's
 CRS is never the target's. `parse_crs` stays public; `cli` and `catchment`
 stop importing it.
+
+### The final sweep (after `5074ef6`)
+
+Three rounds each missed a site, because each searched by spelling. This one
+searches by type and by data flow. Rerun it from the repository root, at
+any commit before the green one (`src_python/` and `tools/` on this branch
+are `44fa7f5`'s until then; `git diff --stat 44fa7f5 HEAD -- src_python
+tools` is empty):
+
+```bash
+.venv/bin/python docs/increments/python-audit-probes/crs_sweep.py
+```
+
+What it lists is in the script's docstring: every comparison operator, the
+set, dict, subscript and method forms of keying, and `match`, wherever one
+side may hold a CRS. "May hold a CRS" is: mypy infers a pyproj CRS type,
+or a first-party model with a `crs`, `epsg` or `srs` field (whole-model
+`==`); or the text names a CRS; or the value is derived from a pyproj CRS
+(`.to_string()`, `.to_epsg()`), assigned from, passed into a parameter
+from, or returned as such a value, to a fixed point across files. A text
+with no CRS-named source is listed in the comparison, membership and set
+forms anyway, as "no CRS name". It over-reports by design: 524 lines over 65
+files, 133 of them "no CRS name". Two checks that it can fail:
+
+- **It walks every comparison.** stderr prints `mypy walk: 1182
+  comparisons` and `ast: 1182 comparisons`; the two must agree.
+- **It finds planted shapes.** In a scratch copy, eight planted comparisons
+  were each listed: two parsed CRSs under names `a`, `b`;
+  `p.to_string() == q.to_string()`; two `RasterMeta`s by `!=`; two `str`
+  parameters `u == v`; `u in seen`; `len({u for u in texts}) > 1`;
+  `_k(a) == _k(b)` with `_k` returning `(m.crs, m.delta_x)`; and two CRS
+  texts passed into parameters `x`, `y` used as dict keys. The earlier
+  version of the script, without the function-return rule, missed the
+  `_k` shape, and so missed the real `src_python/tin_engine/mosaic.py@44fa7f5:307`
+  (`_key(a) == _key(b)`, whose tuple starts with `m.crs`).
+
+Not listed: a CRS text with no CRS-named source, used only as a subscript or
+a dict display's key, or typed `Any`. Every CRS source in the package has a
+CRS name (a model field, a `--*-crs` option, a `"crs"` or `"srsName"`
+member, `parse_crs`), so such a text would have to come from data under
+another key.
+
+**The full list of CRS comparisons**, sorted by hand from the 524 lines (each pinned to `44fa7f5`):
+
+*Two CRSs by pyproj's `==` / `!=`: the thirteen sites, all to `same_crs`*
+(the table above): `src_python/tin_engine/dem_input.py@44fa7f5:164`, `src_python/tin_engine/catchment.py@44fa7f5:185, 202`,
+`src_python/tin_engine/feature_input.py@44fa7f5:179, 300, 423`, `src_python/tin_engine/cli.py@44fa7f5:932, 954, 2045`,
+`src_python/tin_engine/fetch/run.py@44fa7f5:222`, `src_python/tin_engine/fetch/plan.py@44fa7f5:118`, `src_python/tin_engine/domain.py@44fa7f5:62, 103`. With the
+script's `NAMES` and `FIELDS` set to match nothing (types and data flow
+alone), it lists 21 comparisons outside "no CRS name": these thirteen, seven
+that test one CRS or its parts against None or a constant, and one float
+comparison (`src_python/tin_engine/io/geotiff.py@44fa7f5:384`) reached through a shared parameter name.
+
+*Two CRS texts compared as text: they stay text, ruled here.*
+
+| Site | What it compares | Ruling |
+|---|---|---|
+| `src_python/tin_engine/dem_input.py@44fa7f5:188-189`, `227-228`; `src_python/tin_engine/catchment.py@44fa7f5:194-195` | the tiles' texts, as a set | to `single_crs`, keyed on text (ruled above) |
+| `src_python/tin_engine/mosaic.py@44fa7f5:307` (`_aligned`) | `_key(a) == _key(b)`, the tile text first | stays: tiles on one lattice; `single_crs` has already made them one text, so it never splits a CRS |
+| `src_python/tin_engine/mosaic.py@44fa7f5:585` (`_mixed`) | `ma.crs != mb.crs` | stays (ruled above): words why `_aligned` said no |
+| `src_python/tin_engine/mosaic.py@44fa7f5:267` | `plan.tiles[0].meta == plan.meta` (the text inside) | stays: a single-tile shortcut; `plan.meta` takes its text from the tiles (`src_python/tin_engine/mosaic.py@44fa7f5:416`), and a miss only takes the general path |
+| `src_python/tin_engine/mosaic.py@44fa7f5:484` | `tile.meta != listed` | stays: the same file read twice by the same reader; any change, a respelt CRS included, means the file changed |
+| `src_python/tin_engine/io/gml.py@44fa7f5:70-73` | the `srsName`s of one GML file, as a set | stays: one file, one writer; a file spelling one CRS two ways is refused naming both, never read wrongly |
+| `src_python/tin_engine/io/geopackage.py@44fa7f5:171` | a geometry's `srs_id` against its layer's | stays: row ids in the file's own CRS table, and the GeoPackage standard requires them equal |
+
+*One CRS against a constant or its own parts (not two CRSs):*
+`src_python/tin_engine/io/geotiff.py@44fa7f5:137, 287, 293, 303, 321, 325, 331, 337`,
+`src_python/tin_engine/io/geopackage.py@44fa7f5:121`, `src_python/tin_engine/io/models.py@44fa7f5:71-73`, `src_python/tin_engine/crs.py@44fa7f5:78`,
+`src_python/tin_engine/dem_input.py@44fa7f5:154-156`, `src_python/tin_engine/feature_input.py@44fa7f5:302, 304, 487`,
+`src_python/tin_engine/fetch/run.py@44fa7f5:245`.
+
+Every other line is not a CRS: a name that matches (`source` is a catalogue
+source, `target` an output path, `code` a land-cover code) or an unrelated
+`str`. Nothing in `tools/` compares a CRS.
 
 ### Refusal wordings
 
@@ -1013,9 +1112,38 @@ differ).
 - `@tester`'s departure, accepted: `proj4_of` and the guard move to a new shared helper, `tests/python/crs_fixtures.py`, used by five suites.
 - The frame check needs one more not-the-same pair (`+pm=paris`, red test 1); `@tester` adds it before `@developer` starts, so it is red first.
 
+11. **`tests/python/test_domain.py`, `TestReading`**, site 13: parametrise
+    over `(member, flag)` in `("EPSG:25833", proj4_of(25833))`,
+    `(UTM33, proj4_of(25833))` and `(proj4_of(25833), "EPSG:25833")`.
+    `read_domain(path, flag)` on a GeoJSON square whose `crs` member is
+    `member` is not refused; its `crs` is `member`, the file's own text (the
+    flag never overrides it), and its polygon is `equals_exact`, tolerance 0,
+    to that of `read_domain(path)` without the flag. Red today: `DomainError`
+    `d.geojson is in EPSG:25833 but --domain-crs says +proj=utm ...`
+    (probe, the project venv). Beside it, green today and to stay green: the
+    flag `+proj=utm +zone=33 +ellps=GRS80 +units=m +pm=paris +no_defs`
+    against the member `EPSG:25833` is refused with the wording
+    `is in EPSG:25833 but --domain-crs says`, so the fix cannot widen past
+    `same_crs`.
+12. **`tests/python/test_crs.py`, `TestSameCrs`**, the None side: with
+    `crs._transformer` monkeypatched to return an object whose `source_crs`
+    is None and `target_crs` is `CRS.from_epsg(25833)`, and then the
+    mirror, `same_crs("EPSG:25833", "EPSG:25833")` is False. Needed:
+    `testing.md`'s edge-case rule (every condition the code handles
+    specially has a named test), and no real input reaches the branch (the
+    probe above). Red today: `same_crs` does not exist.
+
+**After red test 1's `+pm=paris` pair** (`5074ef6`), one line each:
+
+- Ruled: site 13, `domain.py:103`, uses `same_crs` with its wording unchanged (table above); red test 11.
+- Ruled: the final sweep above replaces grep; its script is in `docs/increments/python-audit-probes/`, its list in this section, and it finds no fourteenth site; seven text comparisons stay text, each with its reason.
+- Ruled: `float(pm.unit_conversion_factor)` is the accepted form for mypy (rule 2 above).
+- Ruled: a None `source_crs` or `target_crs` is "not the same", with red test 12.
+- Ruled: rule 2 reads its code sets from the CRSs as given, not from the x-then-y copy (rule 2 above; the other reading gets 6 of 44 same pairs wrong).
+
 ### Net production lines
 
-**About +15** (about +8 before the frame check), against the audit's about
+**About +16** (about +8 before the frame check), against the audit's about
 -25. The audit assumed `same_crs` was
 a one-line alias of `!=`. Correct, it is about 12 lines: two rules, the
 `ProjError` fallback and the code-set helper. Each of the nine comparisons is
@@ -1025,7 +1153,9 @@ sites remove about 13 (`cli.py` 6, `dem_input.py` 4, `catchment.py` 3).
 The three sites found at the red step change one line each in place, and
 their files' `crs` imports gain a name on the same line, so the estimate
 stays about +8; the frame check (`_same_frame` and its constant, about 7
-lines) makes it **about +15**. Tests: about +90 designed; red tests 1-7 came to 254
+lines) makes it **about +15**. Site 13 changes one line in place, and
+`domain.py` already imports from `crs`; the None branch adds about 1, so
+**about +16**. Tests: about +90 designed; red tests 1-7 came to 254
 non-blank lines added and 9 removed (`git diff -U0 b63132e 29aff00 --
 tests`), and 8-10 add about 40 more. Section 6's row B and its total move by about +40
 accordingly; the drift point (one CRS rule) is still written once.
