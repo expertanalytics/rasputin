@@ -30,15 +30,14 @@ Two rules here are architecture rather than hygiene:
   reason is the one the module's own docstring gives: it is constructible and
   testable with no extension in the process. It is emphatically *not* that
   `viz/` is allowed to depend on it -- `viz/` may not import this module at
-  all, and `test_viz_svg.py::TestModuleIsolation` exists to deny exactly that
-  permission, pinning `style.py` and `fixtures.py` to zero first-party imports.
+  all, and `test_layering.py` denies exactly that permission, pinning
+  `viz.style` and `viz.fixtures` to zero first-party imports.
   `cli.py`, the composition root, is the only module that imports both this
   one and `viz.style` (its `tin_engine.features` and `tin_engine.viz.style` imports,
   `src_python/tin_engine/cli.py@390b516:95` and `src_python/tin_engine/cli.py@390b516:110`).
-  The rule is checked here by parsing the source, not by inspecting `sys.modules`, because
-  `tin_engine/__init__.py` imports `_core` itself -- so an import-time check
-  would be asserting something about the package rather than about this module.
-  Same reasoning, same mechanism, as `test_viz_protocols.py`.
+  The rule is `features`' row in `test_layering.py`, read from the source rather
+  than from `sys.modules`, because `tin_engine/__init__.py` imports `_core`
+  itself.
 * **The name pattern keeps a vocabulary name usable as a CSS class token, and
   is defence in depth. It is not what closes the injection hole.**
   `viz/svg.py`'s `_edge_classes` (`svg.py:168`) joins
@@ -61,7 +60,6 @@ Two rules here are architecture rather than hygiene:
 
 from __future__ import annotations
 
-import ast
 import os
 import subprocess
 import sys
@@ -73,7 +71,6 @@ import pytest
 from tin_engine.features import DEFAULT_VOCABULARY, EdgeProperty, EdgeVocabulary
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-FEATURES_SOURCE = REPO_ROOT / "src_python" / "tin_engine" / "features.py"
 
 # The features `DEFAULT_VOCABULARY` ships with, in bit order: the seven linear
 # ones of increment 7, then increment 16b's `land_cover` (7) and `water` (8)
@@ -570,39 +567,3 @@ def test_the_default_vocabulary_is_an_edge_vocabulary_and_is_frozen() -> None:
 
     with pytest.raises(pydantic.ValidationError):
         DEFAULT_VOCABULARY.properties = ()  # type: ignore[misc]
-
-
-# ---------------------------------------------------------------------------
-# The import firewall, read from the source.
-# ---------------------------------------------------------------------------
-
-
-def test_features_imports_nothing_first_party() -> None:
-    """What lets `viz/` depend on this module.
-
-    `viz/` never imports the extension (`project_structure.md:208`), and
-    `tin_engine/__init__.py` imports `_core`, so this is checked by parsing the
-    source rather than by inspecting `sys.modules`: an import-time check would
-    be asserting something about the package, not about this module.
-    """
-    tree = ast.parse(FEATURES_SOURCE.read_text(encoding="utf-8"))
-
-    imported: list[str] = []
-    for node in ast.walk(tree):
-        if isinstance(node, ast.Import):
-            imported.extend(alias.name for alias in node.names)
-        elif isinstance(node, ast.ImportFrom):
-            assert node.level == 0, "no relative imports: features.py stands alone"
-            imported.append(node.module or "")
-
-    assert imported, "expected at least the pydantic import"
-    for module in imported:
-        root = module.split(".")[0]
-        assert root != "tin_engine", f"features.py imports first-party {module}"
-        assert "_core" not in module, f"features.py imports the extension: {module}"
-
-
-def test_features_never_mentions_the_extension_at_all() -> None:
-    # Belt and braces for the one import `ast` cannot see: `importlib` by name,
-    # or a deferred import inside a function body written as a string.
-    assert "_core" not in FEATURES_SOURCE.read_text(encoding="utf-8")
