@@ -1,6 +1,6 @@
 # Increment 29 — NVE reference catchments: our catchments against NVE's, station by station
 
-Status: **design approved by `@reviewer` (round 5, 2026-10-04); PR 1 merged as #173; PR 3 merged as #178; PR 2 (the gauge on the river): green `193079d`, 569 production lines, approved, the push waits for Ola; PR 4 (the batch and the comparison): green `f952f2d`, 573 net, code review round 3 approved on the `project_structure.md` condition; lake gauges seeded with their lake (Ola's ruling, 2026-10-05) designed into PR 4 ("Lake gauges"), about 100 more lines, so about 673 net; next, `@tester`'s red step for it; questions 5 to 10 open for Ola, written to their defaults**
+Status: **design approved by `@reviewer` (round 5, 2026-10-04); PR 1 merged as #173; PR 3 merged as #178; PR 2 (the gauge on the river): green `193079d`, 569 production lines, approved, the push waits for Ola; PR 4 (the batch and the comparison): lake path green `fff6ac9`, 691 net; `project_structure.md` fixed; code review round 4 next; questions 5 to 10 open for Ola, written to their defaults**
 (`@architect`, 2026-10-04), branch `worktree-nve-catchments` off master
 `d20126b`. Ola's rulings of 2026-10-04 are in the section below. Round 2 closed the burn's drainage claim
 (checked node by node, not assumed), the ELVIS data cases, the PR order, and
@@ -672,6 +672,37 @@ gauges such as Narsjø and Tingvatn (catchments under 1 km² against NVE's
 Bygdin, which was a lake, worked really well. Can't we do the same now?",
 and 05:11 UTC: "Fold into PR4". The design is "Lake gauges", below; the evidence is "NVE's
 lakes: Innsjødatabasen"; questions 9 and 10 for Ola come from it.
+
+**Lake gauges' green step: `@developer`'s choices, read by `@architect`
+(2026-10-05).** Red `a0831c9` (`@tester`), green `fff6ac9` (`@developer`,
+no test file touched); `@developer` reports the full suite on a rebuilt
+`_core` at exit 0, 4989 passed, 17 skipped. Counted by PR 2's round-2 rule,
+the whole of PR 4 over `9e666f4..fff6ac9` is 691 net (744 added, 53
+removed), 9 under 700: `cli.py` 201, `catchment_batch.py` 195,
+`reference.py` 187, `io/station_set.py` 32, `gauge.py` 27, `io/geojson.py`
+21, `catchment.py` 13, `fetch/nve.py` 10, `mosaic.py` 5, `burn.py` 0. The
+lake work alone, over `48d1315..fff6ac9`, is 118 net (150 added, 32
+removed) against "about 100": `cli.py` 28, `io/station_set.py` 28,
+`gauge.py` 27, `catchment_batch.py` 22, `fetch/nve.py` 10, `reference.py`
+3. So the PR 4b seam (under "New and changed files") does not fire, but
+**any change that takes PR 4 to 700 net or more forces it** (8 net lines
+of room are left, since the rule is "under 700"): PR 4 is then
+published as it stood at `48d1315` and the lake work becomes PR 4b. A
+fix that a later review asks for in the lake work counts toward the 700
+like any other line. `@developer`'s choices beyond the design, each
+checked against the code and adopted:
+
+- **Several lakes contain the point**: `lake_seed` keeps them all
+  (`LakeSeed.lakes`, all seeded together) and, on the `lake_line` rule,
+  measures the gap to the nearest of them (`min` of the distances).
+- **The row's `lake_number` and `lake_name` come from the first lake** in
+  `LakeSeed.lakes`, which is the lakes file's order.
+- **A lake row that is refused keeps `seeded_by` = `lake`**, with its
+  `lake_rule`, `lake_number`, `lake_name` and `lake_distance_m`: the seed
+  was chosen before `delineate` refused, and the row says which path ran.
+- **`fetch/nve.py`'s `LAKE_ENVELOPE_HALF` (100 m) is not in its
+  `__all__`**, while `ENVELOPE_HALF` is; only the fetch reads it, and
+  the tests keep their own copy in `nve_fixtures.py`.
 
 ## What the data says (measured 2026-10-04)
 
@@ -2322,9 +2353,9 @@ burn takes the reach in the window's coordinates).
 the second command to write a catchment file (PR 3 writes none), from
 `cli.py` to `io/geojson.py`,
 `catchment_geojson(polygon, crs, properties) -> bytes`, no path, as
-`project_structure.md` already recommends ("The catchment GeoJSON writer is
-in `cli.py`"); both commands call it, and that paragraph is replaced by the
-module's entry.
+`project_structure.md` recommended (its paragraph "The catchment GeoJSON
+writer is in `cli.py`"); both commands call it, and PR 4 replaced that
+paragraph with one sentence naming the module, beside its `io/` entry.
 
 ### New and changed files
 
@@ -2394,7 +2425,11 @@ on top of it (about 100 to 145 lines, its own review). Ola's "fold into PR
 4" is then kept in substance, one branch and one review round of the lake
 work before the acceptance run, but not as one pull request; the main
 session tells Ola so in the round's recap. Nothing is split before the count
-says so.
+says so. The lake green step (`fff6ac9`) came to 118 net (150 added, 32
+removed), 18 % over its 100 and inside the margin, and PR 4 to 691 net
+(744 added, 53 removed), 9 under 700: not split, but a change that
+takes it to 700 net or more splits it ("Lake gauges' green step", under
+"Ola's rulings").
 
 | File | What | Estimate |
 |---|---|---|
@@ -2425,13 +2460,13 @@ says so.
 | `cli.py` | `station-catchments`, the directory sink | 80 (140 net at green, the writer's lines removed; 147 at `33b1f2d`; 172 at `cabff74`; 173 at `f952f2d`) |
 | `io/station_set.py` | a reference polygon with no area refused (change (b)) | (4 at `33b1f2d`) |
 | `io/geojson.py` | the moved writer (moved from PR 3 after its code review, round 1) | 25 (cli.py −25; 21 at green) |
-| `fetch/nve.py` | lake layer 5: its allow-list and layer, one envelope-URL function for ELVIS and lakes, the per-station lake query, `lakes.geojson` ("Lake gauges") | 17 |
-| `io/station_set.py` | `Lake`, `read_lakes` | 20 |
-| `gauge.py` | `LAKE_GAP_M`, `LakeSeed`, `lake_seed` | 18 |
-| `catchment_batch.py` | the `lakes` argument, the path per station, five columns | 18 |
-| `reference.py` | `by_seed` | 6 |
-| `cli.py` | `--lakes`: option, reading, CRS check, the stderr words | 20 |
-| **PR 4, the batch and the comparison** | | **about 335 (482); 530 net (567 added) at green `1c39ef7`; 541 net (580 added) at `33b1f2d`; 572 net (614 added) at `cabff74`; 573 net (615 added) at `f952f2d`; with lake gauges about 673 (about 100 more; 717 with the margin on them)** |
+| `fetch/nve.py` | lake layer 5: its allow-list and layer, one envelope-URL function for ELVIS and lakes, the per-station lake query, `lakes.geojson` ("Lake gauges") | 17 (10 at green) |
+| `io/station_set.py` | `Lake`, `read_lakes` | 20 (28 at green) |
+| `gauge.py` | `LAKE_GAP_M`, `LakeSeed`, `lake_seed` | 18 (27 at green) |
+| `catchment_batch.py` | the `lakes` argument, the path per station, five columns | 18 (22 at green) |
+| `reference.py` | `by_seed` | 6 (3 at green) |
+| `cli.py` | `--lakes`: option, reading, CRS check, the stderr words | 20 (28 at green) |
+| **PR 4, the batch and the comparison** | | **about 335 (482); 530 net (567 added) at green `1c39ef7`; 541 net (580 added) at `33b1f2d`; 572 net (614 added) at `cabff74`; 573 net (615 added) at `f952f2d`; with lake gauges about 673 (about 100 more; 717 with the margin on them); 691 net (744 added) at lake green `fff6ac9`** |
 | `catchment.py`, `cli.py`, `catchment_batch.py` | the fallback (below) | 80 |
 | **PR 5, the fallback** | | **about 80 (115)** |
 
