@@ -29,7 +29,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any, NamedTuple, TextIO
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
+sys.path.append(str(Path(__file__).resolve().parent))  # appended: the stdlib wins (h16 G4)
 import harness_mode as hm
 
 DURATION = re.compile(r"^(?:(\d+)h)?(?:(\d+)m)?$")

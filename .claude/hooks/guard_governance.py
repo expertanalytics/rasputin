@@ -41,11 +41,17 @@ import sys
 from fnmatch import fnmatch
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "tools"))
+# Appended, not put first: a tools/ file named after a stdlib module must not
+# replace it here (docs/increments/h16-harness-fixes.md §2 G4).
+sys.path.append(str(Path(__file__).resolve().parents[2] / "tools"))
 try:
     import shell_scan
 except ImportError:  # every line is then judged as text, as before h4
     shell_scan = None
+try:
+    import scratchpad
+except ImportError:  # no exemption then: a scratchpad path is judged like any other
+    scratchpad = None
 
 #: Files whose content is normative. A change here changes what is allowed.
 GOVERNED = (
@@ -60,6 +66,8 @@ GOVERNED = (
     "tools/rule_sizes.py",
     "tools/shell_scan.py",
     "tools/brief.py",  # h9: guard_spawn.py imports it
+    "tools/scratchpad.py",  # h16: both guards import it
+    "tools/count_loc.py",  # h16: it computes the arithmetic of CLAUDE.md §2
     ".claude/profile.toml",
 )
 
@@ -87,16 +95,26 @@ WRITES = re.compile(
 
 
 def governed(path: str) -> bool:
+    # h16 G3a, before every rule below: a scratchpad is temporary, and nothing
+    # the harness reads lives there. By real path, so a symlink out is followed.
+    if scratchpad is not None and scratchpad.under(path):
+        return False
     # removeprefix, not lstrip: lstrip("./") strips CHARACTERS, so it eats the
     # leading dot of ".claude/..." and every dotfile path stops matching.
     norm = path.replace("\\", "/").removeprefix("./")
-    tail = norm.split("/")[-1]
+    parts = norm.split("/")
+    tail = parts[-1]
     if any(norm.endswith(g) or tail == g for g in GOVERNED):
         return True
     if any(fnmatch(norm, f"*{pattern}") or fnmatch(tail, pattern.split("/")[-1])
            for pattern in GOVERNED_GLOBS):
         return True
     if any(norm.endswith(suffix) for suffix in GOVERNED_SUFFIXES):
+        return True
+    # h16 G4: `python3 tools/x.py` puts tools/ first on sys.path, so a tools/ file
+    # named after a stdlib module (tools/json/__init__.py, tools/ast.py) replaces it.
+    if any(parts[at - 1] == "tools" and part.split(".")[0] in sys.stdlib_module_names
+           for at, part in enumerate(parts) if at):
         return True
     return any(prefix in norm for prefix in GOVERNED_PREFIXES)
 
