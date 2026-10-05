@@ -1054,7 +1054,7 @@ Between 5 and 6, for every closed chain:
 - **Distinct node count.** Fewer than 3 → `RingCollapsed`, naming the chain and
   the spacing.
 - **Winding under `K`**, re-evaluated on the *snapped* ring with
-  `orientation<K>` (`include/terrain/core/ring.hpp:233`). An `Outer` ring that is
+  `orientation<K>` (`include/terrain/core/ring.hpp@44fa7f5:233`). An `Outer` ring that is
   no longer counterclockwise, or a `Hole` no longer clockwise, or either now
   `Collinear` → `RingDegenerateAfterSnap`. **Never silently reversed**, following
   increment 3's stage 5 rule. **It is a self-check, not a diagnosis** — see
@@ -1125,7 +1125,7 @@ return `Collinear`, `Collinear != want`, and the ring would raise
 unreachable — on the very input the demotion is argued from.
 
 `orientation<K>` survives because increment 2 spelled it as an **extreme-vertex
-walk advancing `prev` and `fwd` independently** (`include/terrain/core/ring.hpp:233`,
+walk advancing `prev` and `fwd` independently** (`include/terrain/core/ring.hpp@44fa7f5:233`,
 with the reason in the comment above it: a lockstep walk returns `Collinear` for
 the proper triangle `{A,A,B,C}`). A repeated vertex costs it one collinear triple
 and it walks past. Measured, because "walks past" is a claim: over 500 000

@@ -68,7 +68,7 @@ needs no change** — nothing in `include/terrain/predicates/` moves for the
 noder. Three things follow, all of them local to this increment:
 
 1. **The hot-pixel gap, and it is the substantive one.** `on_segment<K>`
-   (`include/terrain/core/segment.hpp:68-74`) gates on
+   (`include/terrain/core/segment.hpp@44fa7f5:68-74`) gates on
    `orient2d(...) == Collinear`, which is **exact incidence**. Snap rounding
    needs **hot-pixel proximity** — whether a segment passes *through* a cell —
    and at a decimal spacing the two differ on the great majority of snapped
