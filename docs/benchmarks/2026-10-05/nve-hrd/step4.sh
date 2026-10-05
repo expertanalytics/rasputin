@@ -32,4 +32,5 @@ done
 $PY "$HERE/window_check.py" "$DATA" "$DEM" "$HERE" 12000 "$HERE/window_check_12km.csv" 2>&1 | quiet > "$S/window_check.log"
 $PY "$HERE/bypass.py" "$DATA" "$DEM" "$HERE" 6000 "$HERE/bypass.csv" 2>&1 | quiet
 $PY "$HERE/findings.py" "$HERE" 2>&1 | quiet > "$S/uncertain_table.md"
-$PY "$HERE/lake_above.py" "$DATA" "$HERE" 2>&1 | quiet > "$S/lake_above.txt"
+# lake_query.py (run.sh) wrote $WORK/lakes_reach.geojson: NVE's lakes along each reach.
+$PY "$HERE/lake_above.py" "$DATA" "$HERE" "$WORK/lakes_reach.geojson" 2>&1 | quiet > "$S/lake_above.txt"

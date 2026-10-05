@@ -7,8 +7,14 @@
 # The venv is the tree's own, installed non-editable (Release, bounds checks on):
 #   uv venv --python 3.13 .venv
 #   uv pip install --python .venv --reinstall-package rasputin --no-cache ".[codecs]"
-# Outputs: the catchment files go to $WORK/batch (not committed; regenerate with
-# this script); results.csv, summary.json, the log and the memory trace are copied here.
+# Outputs: the batch writes to $WORK/batch; results.csv, summary.json, the log,
+# the memory trace and the catchment files (ours, as catchments/<station>.geojson)
+# are copied here. Then checks.py, then analyse.py again, which reads checks.csv.
+# On 2026-10-05 the catchment copy, checks.py and the second analyse.py were run
+# by hand after this script, with the same commands as its last lines below; the
+# copy was checked against $WORK/batch with diff -rq (identical, 124 files).
+# The lakes along each reach (lake_query.py, network) feed checks.py's
+# lake_above_p column only; that query was made later, during step 4's review.
 set -eu
 HERE=docs/benchmarks/2026-10-05/nve-hrd
 DATA="${RASPUTIN_DATA:?set RASPUTIN_DATA, the data root}/nve_hrd"
@@ -49,5 +55,12 @@ wait "$RUN" || true
 cp "$OUT/results.csv" "$OUT/summary.json" "$WORK/batch.log" "$HERE/"
 gzip -c "$WORK/rss.tsv" > "$HERE/rss.tsv.gz"
 
-# Steps 3 and 6: the tables and the checks, from the committed files.
-.venv/bin/python "$HERE/analyse.py" "$HERE" "$OUT" > "$HERE/analysis.md"
+mkdir -p "$HERE/catchments"
+cp "$OUT"/*.geojson "$HERE/catchments/"
+
+# Steps 3 and 6, in this order: the tables, the checks, the tables again with
+# the checks (analyse.py reads checks.csv when it is there).
+.venv/bin/python "$HERE/analyse.py" "$HERE" > "$HERE/analysis.md"
+.venv/bin/python "$HERE/lake_query.py" "$DATA" "$HERE" "$WORK/lakes_reach.geojson" > "$HERE/step4/lake_query.txt"
+.venv/bin/python "$HERE/checks.py" "$DATA" "$DEM" "$OUT" "$HERE/checks.csv" "$WORK/lakes_reach.geojson"
+.venv/bin/python "$HERE/analyse.py" "$HERE" > "$HERE/analysis.md"

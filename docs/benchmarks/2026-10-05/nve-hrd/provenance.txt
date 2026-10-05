@@ -15,3 +15,6 @@ Now drawing from 'AC Power'
 Mon Oct  5 11:02:45 CEST 2026
 Now drawing from 'AC Power'
  -InternalBattery-0 (id=24117347)	100%; charged; 0:00 remaining present: true
+
+# lake_query.py, 2026-10-05 12:00 CEST (step 4 review): NVE lake layer 5 along each reach, 93 queries, 187 lakes; not committed
+480b71307f27109f93aa67aa8a91bb8c9d1b36b322c6b8b271e76e6eff45e34f  $WORK/lakes_reach.geojson

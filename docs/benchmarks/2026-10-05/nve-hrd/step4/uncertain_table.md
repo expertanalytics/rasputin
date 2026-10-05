@@ -23,7 +23,7 @@ Causes from the sensitivity (`causes`): `swing` the area changes over 5 % within
 | 62.15.0 | Kinne | 510.9 | 0.195 | 0.0 | swing, chain_not_draining | 0.19 at 0 | 30 |  | 56.66 |
 | 73.21.0 | Frostdalen | 25.8 | 25.521 | 97.2 | chain_not_draining | 0.01 at -14 | 30 |  | 22.11 |
 | 73.27.0 | Sula | 30.4 | 0.003 | 0.0 | swing, chain_not_draining | 0.00 at 14 | 30 |  | 19.82 |
-| 79.3.0 | Nessedalselv | 30.2 | 0.006 | 0.0 | swing, chain_not_draining | 30.11 at 28 | 30 |  | 27.94 |
+| 79.3.0 | Nessedalselv | 30.2 | 0.006 | 0.0 | swing, chain_not_draining | 30.11 at 28 | 30 | lake above P | 27.94 |
 | 83.6.0 | Byttevatn | 104.5 | 0.000 | 0.0 | swing, chain_not_draining, chain_end_open | 0.06 at 24 | 31 |  | 5.71 |
 | 83.12.0 | Haukedalsvatn ndf. | 205.3 | 206.980 | 99.5 | chain_not_draining | 0.03 at 0 | 30 | lake above P | 36.43 |
 | 87.10.0 | Gloppenelv v/Bergheim | 218.5 | 0.092 | 0.0 | swing, downstream_unread, chain_not_draining | 0.08 at 0 | 93 |  | 0.09 |
@@ -41,5 +41,5 @@ Causes from the sensitivity (`causes`): `swing` the area changes over 5 % within
 | 205.6.0 | Didnojokka | 111.0 | 111.171 | 98.4 | swing, downstream_unread, chain_not_draining | 111.17 at -14 | 186 |  | 38.23 |
 | 212.10.0 | Masi | 5618.3 | 3.515 | 0.0 | swing, chain_not_draining | 3.72 at 318 | 337 |  | 3.52 |
 | 234.18.0 | Polmak nye | 14171.0 | 6.279 | 0.0 | downstream_unread, chain_not_draining | 6.28 at 62 | 158 |  | 6.28 |
-| 237.1.0 | Båtsfjord | 23.1 | 22.512 | 94.6 | swing | 22.51 at -20 | 30 |  | 22.52 |
+| 237.1.0 | Båtsfjord | 23.1 | 22.512 | 94.6 | swing | 22.51 at -20 | 30 | lake above P | 22.52 |
 | 311.6.0 | Nybergsund | 4418.1 | 0.001 | 0.0 | chain_not_draining, chain_end_open | 0.32 at -10 | 73 |  | 34.25 |

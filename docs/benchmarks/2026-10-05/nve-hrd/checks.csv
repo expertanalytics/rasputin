@@ -7,7 +7,7 @@ station,class,seeded_by,oracle,placed_count,nodes,monotone,drains,lowered_off_ch
 2.290.0,match,river,True,2527560,2527560,True,True,0,True,252756050.0,-1.1920928955078125e-06,True,False
 2.303.0,uncertain,river,True,27,27,True,False,0,True,2650.0,2.257365849800408e-09,True,False
 2.439.0,match,river,True,3743759,3743759,True,True,0,True,374376350.0,-6.556510925292969e-07,True,False
-2.633.0,match,river,True,870213,870213,True,True,0,True,87021650.0,2.384185791015625e-07,True,False
+2.633.0,match,river,True,870213,870213,True,True,0,True,87021650.0,2.384185791015625e-07,True,True
 3.22.0,uncertain,river,True,3304084,3304084,False,False,0,True,330409050.0,-1.7881393432617188e-07,True,False
 6.10.0,close,river,True,76529,76529,True,True,0,True,7652950.0,5.681067705154419e-08,True,False
 11.4.0,match,lake,,,,,,,True,6976650.0,-6.51925802230835e-09,True,
@@ -19,20 +19,20 @@ station,class,seeded_by,oracle,placed_count,nodes,monotone,drains,lowered_off_ch
 12.193.0,match,river,True,516809,516809,True,True,0,True,51680950.0,8.940696716308594e-08,True,False
 12.197.0,match,river,True,1840307,1840307,True,True,0,True,184030850.0,-6.556510925292969e-07,True,True
 12.207.0,match,river,True,2731253,2731253,True,True,0,True,273125450.0,5.960464477539063e-08,True,False
-12.215.0,miss,river,True,1580676,1580676,True,True,0,True,158067750.0,8.046627044677734e-07,True,False
+12.215.0,miss,river,True,1580676,1580676,True,True,0,True,158067750.0,8.046627044677734e-07,True,True
 15.21.0,match,river,True,1275066,1275066,True,True,0,True,127506650.0,3.129243850708008e-07,True,False
 15.49.0,miss,river,True,1027077,1027077,True,True,0,True,102708050.0,6.556510925292969e-07,True,True
 16.66.0,close,lake,,,,,,,True,6207450.0,2.0489096641540527e-08,True,
 16.122.0,match,river,True,426880,426880,True,True,0,True,42688150.0,-4.3958425521850586e-07,True,False
 16.127.0,match,river,True,456333,456333,True,True,0,True,45633350.0,7.748603820800781e-07,True,True
 16.194.0,match,river,True,1189240,1189240,True,True,0,True,118924450.0,8.493661880493164e-07,True,False
-18.10.0,match,river,True,2353144,2353144,True,True,0,True,235315950.0,1.9669532775878906e-06,True,False
+18.10.0,match,river,True,2353144,2353144,True,True,0,True,235315950.0,1.9669532775878906e-06,True,True
 18.11.0,match,river,True,19611,19611,True,True,0,True,1961150.0,9.546056389808655e-09,True,True
 19.79.0,close,river,True,53304,53304,True,True,0,True,5330450.0,-1.955777406692505e-08,True,False
 19.80.0,uncertain,river,True,151974,151974,False,False,0,True,15197350.0,-5.774199962615967e-07,True,False
 19.82.0,match,river,True,88724,88724,True,True,0,True,8872450.0,-1.8067657947540283e-07,True,False
 19.96.0,uncertain,river,True,4,4,False,False,0,True,350.0,0.0,True,True
-19.104.0,match,river,True,654426,654426,True,True,0,True,65442550.0,9.313225746154785e-07,True,False
+19.104.0,match,river,True,654426,654426,True,True,0,True,65442550.0,9.313225746154785e-07,True,True
 20.2.0,uncertain,river,True,2908825,2908825,False,False,0,True,290882950.0,4.76837158203125e-07,True,False
 20.11.0,uncertain,river,True,32,32,False,False,0,True,3150.0,0.0,True,False
 22.16.0,uncertain,river,True,1824048,1824048,False,False,0,True,182405150.0,9.238719940185547e-07,True,True
@@ -50,7 +50,7 @@ station,class,seeded_by,oracle,placed_count,nodes,monotone,drains,lowered_off_ch
 48.1.0,match,lake,,,,,,,True,467715050.0,-8.344650268554688e-07,True,
 48.5.0,uncertain,river,True,9,9,False,False,0,True,850.0,0.0,True,False
 50.1.0,match,lake,,,,,,,True,232037350.0,1.6391277313232422e-06,True,
-55.4.0,match,river,True,503362,503362,True,True,0,True,50336250.0,5.662441253662109e-07,True,False
+55.4.0,match,river,True,503362,503362,True,True,0,True,50336250.0,5.662441253662109e-07,True,True
 62.18.0,match,lake,,,,,,,True,72305950.0,5.811452865600586e-07,True,
 62.5.0,match,lake,,,,,,,True,1093627650.0,-4.76837158203125e-07,True,
 62.10.0,match,lake,,,,,,,True,157822450.0,-8.940696716308594e-07,True,
@@ -60,7 +60,7 @@ station,class,seeded_by,oracle,placed_count,nodes,monotone,drains,lowered_off_ch
 73.27.0,uncertain,river,True,33,33,False,False,0,True,3250.0,1.955504558281973e-08,True,False
 76.5.0,match,lake,,,,,,,True,66823550.0,-4.3958425521850586e-07,True,
 77.3.0,match,lake,,,,,,,True,110810350.0,8.791685104370117e-07,True,
-79.3.0,uncertain,river,True,65,65,False,False,0,True,6450.0,-1.7571437638252974e-09,True,False
+79.3.0,uncertain,river,True,65,65,False,False,0,True,6450.0,-1.7571437638252974e-09,True,True
 81.1.0,match,lake,,,,,,,True,7080350.0,-2.5704503059387207e-07,True,
 82.4.0,match,lake,,,,,,,True,218457350.0,-5.364418029785156e-07,True,
 83.2.0,miss,lake,,,,,,,True,19347950.0,1.341104507446289e-07,True,
@@ -80,7 +80,7 @@ station,class,seeded_by,oracle,placed_count,nodes,monotone,drains,lowered_off_ch
 101.1.0,match,river,True,406405,406405,True,True,0,True,40640550.0,7.599592208862305e-07,True,True
 103.1.0,match,river,True,4396141,4396141,True,True,0,True,439614150.0,4.172325134277344e-07,True,False
 104.23.0,match,river,True,661863,661863,True,True,0,True,66186250.0,1.7881393432617188e-07,True,False
-105.1.0,miss,river,True,7468,7468,True,True,0,True,746750.0,-6.51925802230835e-09,True,False
+105.1.0,miss,river,True,7468,7468,True,True,0,True,746750.0,-6.51925802230835e-09,True,True
 109.9.0,uncertain,river,True,2,2,True,False,0,True,150.0,0.0,True,False
 109.21.0,match,river,True,1375389,1375389,True,True,0,True,137538850.0,1.1920928955078125e-07,True,False
 112.8.0,uncertain,river,True,882275,882275,False,False,0,True,88227650.0,-2.9802322387695312e-08,True,False
@@ -100,7 +100,7 @@ station,class,seeded_by,oracle,placed_count,nodes,monotone,drains,lowered_off_ch
 151.13.0,match,lake,,,,,,,True,60542350.0,1.4901161193847656e-08,True,
 151.15.0,match,river,True,6536785,6536785,True,True,0,True,653678650.0,-3.5762786865234375e-07,True,False
 152.4.0,match,lake,,,,,,,True,527595050.0,-4.76837158203125e-07,True,
-153.1.0,miss,river,True,27026,27026,True,True,0,True,2702550.0,-2.775341272354126e-07,True,False
+153.1.0,miss,river,True,27026,27026,True,True,0,True,2702550.0,-2.775341272354126e-07,True,True
 168.3.0,match,river,True,267928,267928,True,True,0,True,26792750.0,-5.401670932769775e-07,True,True
 172.8.0,match,lake,,,,,,,True,19994550.0,-2.7567148208618164e-07,True,
 177.4.0,match,lake,,,,,,,True,29121950.0,-1.1548399925231934e-07,True,
@@ -115,7 +115,7 @@ station,class,seeded_by,oracle,placed_count,nodes,monotone,drains,lowered_off_ch
 212.10.0,uncertain,river,True,35146,35146,False,False,0,True,3514550.0,2.337619662284851e-07,True,False
 234.13.0,match,river,True,20773460,20773460,True,True,0,True,2077347050.0,-9.5367431640625e-07,True,False
 234.18.0,uncertain,river,True,62785,62785,False,False,0,True,6278450.0,-2.4586915969848633e-07,True,False
-237.1.0,uncertain,river,True,225114,225114,True,True,0,True,22511450.0,-2.123415470123291e-07,True,False
+237.1.0,uncertain,river,True,225114,225114,True,True,0,True,22511450.0,-2.123415470123291e-07,True,True
 246.9.0,match,river,True,2514707,2514707,True,True,0,True,251470750.0,-4.470348358154297e-07,True,False
 247.3.0,match,river,True,1281691,1281691,True,True,0,True,128169650.0,-6.556510925292969e-07,True,False
 307.5.0,match,lake,,,,,,,True,352244250.0,1.1920928955078125e-07,True,

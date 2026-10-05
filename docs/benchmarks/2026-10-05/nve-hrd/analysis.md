@@ -229,20 +229,29 @@ Stations checked: 124 not refused (79 river-seeded, 45 lake-seeded).
 
 Stations whose burn did not hold (monotone or drains failed, or a node off the chain lowered): 35; of the 39 `uncertain`, they explain 35.
 
-River rows with a lake on the reach above P: 13
+River rows with a lake on the reach above P: 22
 
 | station | name | class | NVE's in ours % | ours in NVE's % | causes |
 |---|---|---|---:|---:|---|
+| 2.633.0 | Stortorp | match | 97.7 | 97.9 |  |
 | 12.178.0 | Eggedal | uncertain | 0.0 | 100.0 | swing, chain_not_draining |
 | 12.188.0 | Langtjernbekk | uncertain | 0.0 | 0.0 | swing, chain_not_draining |
 | 12.197.0 | Grunke | match | 98.9 | 99.3 |  |
+| 12.215.0 | Storeskar | miss | 98.7 | 74.7 |  |
 | 15.49.0 | Halledalsvatn | miss | 98.8 | 57.1 |  |
 | 16.127.0 | Viertjern | match | 96.5 | 98.8 |  |
+| 18.10.0 | Gjerstad | match | 99.0 | 99.3 |  |
 | 18.11.0 | Tjellingtjernbekk | match | 96.5 | 96.3 |  |
 | 19.96.0 | Storgama ovf. | uncertain | 0.1 | 75.0 | swing, chain_not_draining |
+| 19.104.0 | Songedalsåi | match | 99.0 | 99.3 |  |
 | 22.16.0 | Myglevatn ndf. | uncertain | 99.4 | 99.3 | swing, chain_not_draining |
+| 55.4.0 | Røykenes | match | 99.2 | 98.9 |  |
+| 79.3.0 | Nessedalselv | uncertain | 0.0 | 96.9 | swing, chain_not_draining |
 | 83.12.0 | Haukedalsvatn ndf. | uncertain | 99.5 | 98.7 | chain_not_draining |
 | 101.1.0 | Engsetvatn | match | 98.9 | 97.1 |  |
+| 105.1.0 | Osenelv v/Øren | miss | 0.4 | 77.6 |  |
 | 148.2.0 | Mevatnet | match | 99.7 | 98.9 |  |
+| 153.1.0 | Storvatn | miss | 5.4 | 98.0 |  |
 | 168.3.0 | Lakså bru | match | 99.0 | 99.0 |  |
 | 189.3.0 | Tennevikvatn | match | 99.1 | 98.8 |  |
+| 237.1.0 | Båtsfjord | uncertain | 94.6 | 97.1 | swing |

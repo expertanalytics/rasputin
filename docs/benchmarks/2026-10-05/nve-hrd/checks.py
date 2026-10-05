@@ -1,6 +1,6 @@
 """Step 6's checks and increment 22's outline guarantees, per station (@perf).
 
-Usage: checks.py DATA DEM BATCH_DIR OUT_CSV
+Usage: checks.py DATA DEM BATCH_DIR OUT_CSV [LAKES]
 
 Reads the batch's results.csv and catchment files in BATCH_DIR, and for every
 station that is not refused:
@@ -19,8 +19,10 @@ station that is not refused:
   the placed node from that burn on a river row, the lake seed's point on a
   lake row);
 * lake_above_p: on a river row, whether the mapped reach upstream of P
-  (up to `reach_up`, 1000 m) meets a lake polygon (the list "NVE's lakes"
-  counts 24).
+  (up to `reach_up`, 1000 m) meets a lake polygon in LAKES, lake_query.py's
+  lakes along every reach (DATA/lakes.geojson when LAKES is not given, which
+  holds only the lakes within 100 m of each station point and so misses
+  lakes farther up the reach; the lake seed itself always reads that file).
 No figure here is timed.
 """
 
@@ -46,11 +48,12 @@ from tin_engine.io.station_set import read_lakes, read_stations
 from tin_engine.mosaic import Bounds, assemble
 
 
-def main(data: Path, dem: Path, batch: Path, out: Path) -> None:
+def main(data: Path, dem: Path, batch: Path, out: Path, reach_lakes: Path | None) -> None:
     stations, s_crs = read_stations(data / "stations.geojson")
     segments, crs, _ = read_segments(data / "rivers.geojson")
     lakes, _ = read_lakes(data / "lakes.geojson")
-    tree = STRtree([lk.polygon for lk in lakes])
+    above, _ = read_lakes(reach_lakes) if reach_lakes else (lakes, crs)
+    tree = STRtree([lk.polygon for lk in above])
     repository, _ = repository_for((dem,))
     footprints = repository.footprints()
     move = reprojector(s_crs, crs)
@@ -112,4 +115,5 @@ def main(data: Path, dem: Path, batch: Path, out: Path) -> None:
 
 
 if __name__ == "__main__":
-    main(Path(sys.argv[1]), Path(sys.argv[2]), Path(sys.argv[3]), Path(sys.argv[4]))
+    extra = Path(sys.argv[5]) if len(sys.argv) > 5 else None
+    main(Path(sys.argv[1]), Path(sys.argv[2]), Path(sys.argv[3]), Path(sys.argv[4]), extra)

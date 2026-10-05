@@ -1,17 +1,27 @@
-12.178.0	Eggedal	uncertain	520 Solevatnet
-12.188.0	Langtjernbekk	uncertain	7272 Langtjernet
-12.197.0	Grunke	match	15651 None
-15.49.0	Halledalsvatn	miss	413 Halldalsvatnet
-16.127.0	Viertjern	match	67730 Viertjønni
-18.11.0	Tjellingtjernbekk	match	8086 Kjellingtjern
-19.96.0	Storgama ovf.	uncertain	171053 None
-22.16.0	Myglevatn ndf.	uncertain	10727 Myglevatnet
-83.12.0	Haukedalsvatn ndf.	uncertain	1649 Haukedalsvatnet
-101.1.0	Engsetvatn	match	1983 Fyllingsvatnet
-148.2.0	Mevatnet	match	43783 Medvatnet
-156.24.0	Bogvatn	refused	760 Tjoamodisjávrre
-168.3.0	Lakså bru	match	873 Laksåvatnet
-189.3.0	Tennevikvatn	match	48370 Tennevikvatnet
-212.49.0	Halsnes	refused	2243 Dálbmejávri
-223.2.0	Lombola	refused	259500 None
-16 stations
+2.633.0	Stortorp	match	river line, seeded by river	3435 Skjølja (not in lakes.geojson)
+12.178.0	Eggedal	uncertain	river line, seeded by river	520 Solevatnet
+12.188.0	Langtjernbekk	uncertain	river line, seeded by river	7272 Langtjernet
+12.197.0	Grunke	match	lake line, seeded by river	15651 None; 15636 Larsgardtjernet (not in lakes.geojson)
+12.215.0	Storeskar	miss	river line, seeded by river	15801 Storeskardvatnet (not in lakes.geojson)
+15.49.0	Halledalsvatn	miss	river line, seeded by river	413 Halldalsvatnet
+16.127.0	Viertjern	match	river line, seeded by river	67730 Viertjønni; 18568 Tessungsjåen (not in lakes.geojson)
+18.10.0	Gjerstad	match	river line, seeded by river	8379 None (not in lakes.geojson)
+18.11.0	Tjellingtjernbekk	match	river line, seeded by river	8086 Kjellingtjern; 80763 Diplane (not in lakes.geojson)
+19.96.0	Storgama ovf.	uncertain	river line, seeded by river	171053 None; 15267 Øytjønn (not in lakes.geojson)
+19.104.0	Songedalsåi	match	river line, seeded by river	1286 Sundsvatn (not in lakes.geojson)
+22.16.0	Myglevatn ndf.	uncertain	lake line, seeded by river	10786 Tveitevatnet (not in lakes.geojson); 10727 Myglevatnet
+55.4.0	Røykenes	match	river line, seeded by river	265520 Røykenesvatnet (not in lakes.geojson)
+62.18.0	Svartavatn	match	river line, seeded by lake	176660 Vetlevatnet (not in lakes.geojson); 26354 Aldalsvatnet (not in lakes.geojson)
+79.3.0	Nessedalselv	uncertain	river line, seeded by river	29960 Nessadalsvatnet (not in lakes.geojson)
+83.12.0	Haukedalsvatn ndf.	uncertain	river line, seeded by river	1649 Haukedalsvatnet
+101.1.0	Engsetvatn	match	river line, seeded by river	1983 Fyllingsvatnet
+105.1.0	Osenelv v/Øren	miss	river line, seeded by river	2001 Osvatnet (not in lakes.geojson)
+148.2.0	Mevatnet	match	river line, seeded by river	459 Sausvatnet (not in lakes.geojson); 43783 Medvatnet
+153.1.0	Storvatn	miss	river line, seeded by river	45205 Litlvatnet (not in lakes.geojson)
+156.24.0	Bogvatn	refused	river line, seeded by river	760 Tjoamodisjávrre
+168.3.0	Lakså bru	match	river line, seeded by river	873 Laksåvatnet
+189.3.0	Tennevikvatn	match	river line, seeded by river	48370 Tennevikvatnet
+212.49.0	Halsnes	refused	river line, seeded by river	2243 Dálbmejávri
+223.2.0	Lombola	refused	river line, seeded by river	259500 None
+237.1.0	Båtsfjord	uncertain	river line, seeded by river	62701 Orošjávri (not in lakes.geojson)
+26 stations
