@@ -130,6 +130,22 @@ def test_the_request_is_frozen_and_seed_crs_defaults_to_wgs84(api: Any) -> None:
         req.seed = (0.0, 0.0)
 
 
+def test_lakes_that_are_not_geometries_are_refused_when_the_request_is_built(api: Any) -> None:
+    """`lakes` is `tuple[BaseGeometry, ...]` (python-audit.md section 11): a
+    string is refused at construction, not later inside `_lake`."""
+    with pytest.raises(ValidationError) as caught:
+        api.CatchmentRequest(seed=CENTRE, seed_crs=EPSG, lakes=("not a polygon",), lakes_crs=EPSG)
+    assert [error["loc"][0] for error in caught.value.errors()] == ["lakes"]
+
+
+def test_lake_geometries_are_kept_as_given_and_a_list_becomes_a_tuple(api: Any) -> None:
+    polygon = lake_box()
+    multi = MultiPolygon([lake_box(10, 10), lake_box(30, 30)])
+    req = api.CatchmentRequest(seed=CENTRE, seed_crs=EPSG, lakes=[polygon, multi], lakes_crs=EPSG)
+    assert isinstance(req.lakes, tuple)
+    assert req.lakes[0] is polygon and req.lakes[1] is multi
+
+
 # ---------------------------------------------------------------------------
 # The seed
 # ---------------------------------------------------------------------------
