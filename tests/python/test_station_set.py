@@ -188,3 +188,30 @@ class TestAMalformedFile:
         doc = collection([feature(box(0, 0, 1, 1), station="2.11.0"), bare])
         with pytest.raises(ValueError, match=r"station|properties"):
             station_set.read_references(write(tmp_path / "r.geojson", doc))
+
+
+class TestAReferenceWithNoArea:
+    """Change (b) of "PR 4's green step": `agreement` divides by NVE's polygon's
+    area and perimeter, so a reference with no area would stop a batch at its
+    station (a zero-area ring raises `ZeroDivisionError`, an empty polygon a
+    `ValueError` from its NaN bounds). `read_references` refuses either when
+    the file is read, naming the station. The bad feature comes second, after
+    a good one, so the message names the right station."""
+
+    @pytest.mark.parametrize(
+        "geometry",
+        [
+            {"type": "Polygon", "coordinates": [[[0, 0], [10, 0], [20, 0], [0, 0]]]},
+            {"type": "Polygon", "coordinates": []},
+            {"type": "MultiPolygon", "coordinates": []},
+        ],
+        ids=["zero_area_ring", "empty_polygon", "empty_multipolygon"],
+    )
+    def test_it_is_refused_naming_the_station(
+        self, station_set: ModuleType, tmp_path: Path, geometry: dict[str, Any]
+    ) -> None:
+        doc = collection(
+            [feature(box(0, 0, 100, 100), station="2.11.0"), feature(geometry, station="2.32.0")]
+        )
+        with pytest.raises(ValueError, match=r"2\.32\.0"):
+            station_set.read_references(write(tmp_path / "r.geojson", doc))

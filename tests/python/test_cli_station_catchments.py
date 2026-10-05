@@ -25,6 +25,11 @@ Pinned here beyond the design:
   option and the missing CRS, and nothing is written.
 - A reference file whose CRS is not the river file's is refused naming
   `--reference` and both CRSs by their EPSG codes, and nothing is written.
+- ("PR 4's green step", changes (a) and (c).) An `--only` naming a station
+  not in the stations file is refused naming `--only` and the number, before
+  `--out-dir` is created; a run stopped by an exception in the batch keeps
+  `results.csv`'s header and every finished row, and writes no
+  `summary.json`.
 """
 
 from __future__ import annotations
@@ -39,6 +44,7 @@ import pytest
 from typer.testing import CliRunner
 
 import batch_fixtures as bf
+import tin_engine.catchment_batch as catchment_batch
 from test_cli_mesh import plain
 from test_cli_mesh_mosaic import write_tiles
 from tin_engine.cli import app
@@ -267,3 +273,57 @@ def test_the_dem_option_is_required(data: dict[str, Path], tmp_path: Path) -> No
     code, output = invoke(*a)
     assert code != 0
     assert "No such command" not in plain(output), plain(output)
+
+
+def test_an_unknown_only_is_refused_naming_the_option_before_out_dir_is_made(
+    data: dict[str, Path], tmp_path: Path
+) -> None:
+    """Change (a) of "PR 4's green step": the command checks `--only` against the
+    stations read, before `--out-dir` is created, as a refusal of `--only`
+    (not a plain `Error:` line after the directory exists)."""
+    out = tmp_path / "out"
+    code, output = invoke(*args(data, out), "--only", bf.TREFF.station, "--only", "9.9.9")
+    words = plain(output)
+    assert code != 0, words
+    assert "No such command" not in words and "No such option" not in words, words
+    assert "--only" in words, words
+    assert "9.9.9" in words, words
+    assert not out.exists()
+
+
+# ---------------------------------------------------------------------------
+# A run stopped by a bug
+# ---------------------------------------------------------------------------
+
+
+def test_a_run_stopped_by_a_bug_keeps_the_finished_rows(
+    data: dict[str, Path], tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Change (c) of "PR 4's green step": the directory sink writes `results.csv`'s
+    header when it is made and flushes each row as it arrives, so an exception
+    at the second station leaves the first station's row; `summary.json` is
+    written only at the end. `delineate` is replaced by a stub that runs the
+    real one for the first station and raises `RuntimeError` at the second
+    (a bug, not a refusal the batch classes)."""
+    real = catchment_batch.delineate
+    calls: list[int] = []
+
+    def first_then_bug(*a: Any, **k: Any) -> Any:
+        calls.append(1)
+        if len(calls) > 1:
+            raise RuntimeError("a planted bug at the second station")
+        return real(*a, **k)
+
+    monkeypatch.setattr(catchment_batch, "delineate", first_then_bug)
+    out = tmp_path / "out"
+    result = runner.invoke(app, args(data, out))
+    assert result.exit_code != 0, result.output
+    assert isinstance(result.exception, RuntimeError), result.output
+    assert len(calls) == 2
+    with (out / "results.csv").open(encoding="utf-8", newline="") as f:
+        lines = list(csv.reader(f))
+    assert lines[0][:2] == ["station", "name"]
+    assert "class" in lines[0]
+    assert [ln[0] for ln in lines[1:]] == [bf.TREFF.station]
+    assert lines[1][lines[0].index("class")] == CLASSES[bf.TREFF.station]
+    assert not (out / "summary.json").exists()
