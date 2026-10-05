@@ -661,6 +661,71 @@ def test_diff_relative_run_from_a_subdirectory_does_not_change_the_output(
     assert hostile.stdout == plain.stdout
 
 
+#: A change on which git's diff algorithms disagree (found by search): myers,
+#: git's default, keeps `b = 2` twice and gives 3 added and 1 removed;
+#: `histogram` and `patience` anchor on the unique `c = 3` and give 4 and 2.
+ALGORITHM_BASE = "b = 2\nb = 2\nc = 3\n"
+ALGORITHM_HEAD = "c = 3\nb = 2\nb = 2\nd = 4\na = 1\n"
+
+
+@pytest.mark.parametrize("algorithm", ["histogram", "patience"])
+def test_repository_diff_algorithm_does_not_change_the_output(
+    tmp_path: Path, algorithm: str
+) -> None:
+    """Review round 3, Ola's ruling: the counter pins myers. `diff.algorithm`
+    in the repository's own config, which `GIT_CONFIG_GLOBAL` and the
+    environment stripping do not reach, must not change the counts."""
+    repo = make_counted_repo(tmp_path.resolve() / "repo", {"src/m.py": ALGORITHM_BASE})
+    commit_files(repo, {"src/m.py": ALGORITHM_HEAD}, "reorder")
+    plain = parse_report(run_count(repo, "HEAD~1", "HEAD"))
+    assert plain.rows["src/m.py"] == (3, 1, 2)
+    git(repo, "config", "diff.algorithm", algorithm)
+    probe = git(repo, "diff", "--numstat", "HEAD~1", "HEAD")
+    assert probe.split()[:2] == ["4", "2"], f"{algorithm} did not change git's diff:\n{probe}"
+    hostile = parse_report(run_count(repo, "HEAD~1", "HEAD"))
+    assert hostile.rows == plain.rows
+    assert hostile.total == plain.total
+
+
+#: Paths the counter does not count, one per reason: `docs/`, `tests/`, a
+#: file of no kind.
+UNCOUNTED = ("docs/proto.py", "tests/proto.py", "tools/proto.txt")
+COUNTED = "tools/proto.py"
+PROTO = "".join(f"v{n} = {n}\n" for n in range(40))
+
+
+def moved_repo(root: Path, source: str, target: str) -> Path:
+    """`source` holds PROTO's 40 code lines; the head commit moves it to
+    `target` and adds one line, and git reports the move as a rename."""
+    repo = make_counted_repo(root, {source: PROTO})
+    git(repo, "mv", source, target)
+    commit_files(repo, {target: PROTO + "extra = 1\n"}, "move")
+    status = git(repo, "diff", "-M", "--name-status", "HEAD~1", "HEAD")
+    assert status.startswith("R"), f"git did not see a rename:\n{status}"
+    return repo
+
+
+@pytest.mark.parametrize("source", UNCOUNTED)
+def test_a_rename_into_a_counted_path_counts_as_an_added_file(tmp_path: Path, source: str) -> None:
+    """Review round 1, Ola's ruling: a file moved from a path the counter does
+    not count into one it counts counts in full, 41 lines, as a new file would.
+    At 98e31cd only the one added line counts: the hunks see a rename."""
+    repo = moved_repo(tmp_path.resolve() / "repo", source, COUNTED)
+    report = parse_report(run_count(repo, "HEAD~1", "HEAD"))
+    assert report.total == (41, 0, 41)
+
+
+@pytest.mark.parametrize("target", UNCOUNTED)
+def test_a_rename_out_of_a_counted_path_counts_as_a_removed_file(
+    tmp_path: Path, target: str
+) -> None:
+    """The other direction of the same ruling: the 40 lines leave the counted
+    tree, so they count in full as removed, as a deletion would."""
+    repo = moved_repo(tmp_path.resolve() / "repo", COUNTED, target)
+    report = parse_report(run_count(repo, "HEAD~1", "HEAD"))
+    assert report.total == (0, 40, -40)
+
+
 # ---------------------------------------------------------------- recorded counts
 
 #: (base, head) -> the rows with lines counted, and the total, as recorded:
