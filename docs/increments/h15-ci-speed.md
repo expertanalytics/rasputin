@@ -1,7 +1,6 @@
 # Harness h15: a faster CI that proves the same things
 
-Status: design, approved by `@reviewer` in round 2; Ola ruled on §9 on 2026-10-05 (all five defaults, below); next PR 1's red step (`@tester`). Design only: no workflow change in this
-branch. Mechanics, not a design question for the core: the plan (§7) is
+Status: design approved by `@reviewer` in round 2; Ola ruled on §9 on 2026-10-05 (all five defaults, below). PR 1 (§5 P, the Python job split) is implemented on this branch: red `8a8af9b`, green `83d0601`; code review round 3 asked for this status line and the clean-clone `git status` check of §5 P, which needs a C++ build; the push waits for that check, a short review round and Ola. PR 2 and PR 3 are not started. Mechanics, not a design question for the core: the plan (§7) is
 two small workflow PRs and an optional third, each touching
 `.github/workflows/main.yaml`. The order rule is §6: PR 1 needs only
 master; PR 2 renames the sanitizer job, so it lands after h12's PR A
@@ -838,3 +837,66 @@ had counted the moved steps on the slowest leg twice.
 > - PR 3: GitHub now has a `cache-mode` workflow key. `cache-mode: read` on `main.yaml` would make GitHub enforce "only restores" instead of relying on how the workflow is written. `@tester`'s PR 3 test could check for it.
 > - PR 3: the cache key names `<job>`. After A, the three shards build the same tree, so key on the build configuration, not the shard's job name. Otherwise `ccache-warm.yaml` must write one store per shard name.
 > - §5 A, ES9 left whole in one shard: the figure uses h14's serial 97-171 s. On CI under load ES9 took 151-314 s. The conclusion (above Python's floor) only gets stronger.
+
+### Round 3: `@reviewer`, code, PR 1, `eac65cc..83d0601`
+
+`@reviewer`'s verdict, word for word:
+
+> **Verdict: CHANGES REQUESTED**
+>
+> **What I reviewed:** `eac65cc..83d0601` on `worktree-h15-ci`. Red `8a8af9b` (`@tester`) changes only `tests/python/test_ci_changes.py` (+226/−17). Green `83d0601` (`@developer`) changes only `.github/workflows/main.yaml` (+30/−7). Against master `bc01cd8` the branch changes three files: the workflow, the test file and `docs/increments/h15-ci-speed.md`. CI: the branch has not been pushed and has no PR, so there are no checks to read.
+>
+> **Size:** 0 lines of production code under `CLAUDE.md` §2 (the change is tests and workflow only). The design counts workflow lines separately: 19 added and 3 removed, not counting blank or comment lines, which nets to 16. The raw diff is +30/−7. §7 estimated "about 40 workflow lines". The change came in under that, so no split seam applies.
+>
+> **Moved steps, checked by `git diff` and a text comparison of the job blocks, master against `83d0601`:**
+> - The `python` job is byte-identical to master's up to and including `Tests` (`pytest`). Only the steps after `Tests` are gone.
+> - `python-extras` (name `Python ${{ matrix.python-version }}, extras`) has the same `runs-on`, `needs: changes`, `if:` and matrix (3.12, 3.13, 3.14, `fail-fast: false`) as `python`. Its steps are checkout, `setup-python`, Install and then master's steps after `Tests`:
+>   - Install has the same `run:` text, pip upgrade included.
+>   - The trap, codecs, viewer, mypy, ruff and ruff format steps follow, in master's order.
+>   - Every `run:` and `if:` is byte-identical to master's.
+> - The only text change inside a moved step is the codecs comment. I accept the new wording. "The main suite (the python job) covers the absent half" is true: that job installs `.[dev]` only, so it runs the half where the codecs package is absent. The old "the step above" was wrong after the split, since the step above is the trap on 3.12 and Install elsewhere, and it was already loose before.
+> - No other job changed.
+>
+> **`CI result` wiring:**
+> - `needs:` includes `python-extras`.
+> - `OTHERS` passes `needs.python-extras.result` into a fourth slot, labelled "Python extras" in the loop.
+> - `gh api .../required_status_checks` lists only `CI result`, so the new job's checks need no change to branch protection, and gate merges through `CI result`.
+>
+> **Tests, run in throwaway clones with no C++:**
+> - At `8a8af9b`, `tests/python/test_ci_changes.py` gives 6 failed and 68 passed. All six failures are the missing `python-extras` job.
+> - At `83d0601`, 74 passed.
+> - I planted four faults, and each one failed the suite:
+>   - `python-extras` dropped from `needs:`: 2 failed.
+>   - "Python extras" dropped from the loop: 3 failed, including "a failure in OTHERS slot 3 passed".
+>   - Its result dropped from `OTHERS`: 5 failed.
+>   - The job renamed: 8 failed.
+> - No red-step scaffolding is left in the test file or the workflow.
+> - `ruff check` and `ruff format --check` pass on the test file. `check_prohibited_deps.py` is clean.
+> - `check_citations.py` resolves every citation. It lists two lines as at risk: `h10-merge-queue.md:183` and `h11-ci-path-filter.md:451`. Re-read as quotations, both are quoted review records of their own time, and they stay as they are.
+>
+> **Stash:** `git stash list` is empty and there is no `refs/stash` log, so the developer's stash left the shared stack clean.
+>
+> **Blocking issues:**
+> 1. **A prose claim the change made false.** The status line of `docs/increments/h15-ci-speed.md` says "Design only: no workflow change in this branch" and "next PR 1's red step (`@tester`)". The branch now holds PR 1's red and green commits and a workflow change. Before the push, the status line should say:
+>    - PR 1 (§5 P) is implemented on this branch: red `8a8af9b`, green `83d0601`.
+>    - The result of this review round, and that the push waits for Ola.
+>    - PR 2 and PR 3 are not started.
+>
+>    Record this round under `## Review`. There is no ROADMAP row for h15; no harness increment (h10 to h15) has one, so nothing there needs changing.
+> 2. **The clean-clone `git status` check of §5 P has not been run.** §5 P requires it of `@reviewer` on PR 1: in a clean clone, after `pytest`, `git status --porcelain --untracked-files=all` must print nothing. I could not run it without building C++:
+>    - this worktree's venv has no `tin_engine`;
+>    - the main checkout's `_core` dates from 2026-09-29, and the bindings have changed since.
+>
+>    The PR run cannot stand in for it, because no CI step runs `git status`. The route: an agent allowed to build C++ (no `@perf` run and no other C++ build at the same time) runs this at `83d0601`: `git clone`, a Python 3.12 venv, `pip install -e ".[dev]"`, `pytest`, then the `git status` command above. The `git status` must print nothing. If it prints any path, the trap's input differs after the split, and the design must answer for that file before PR 1 goes ahead. The output then goes to `@reviewer` for one more short round.
+>
+> **After the push (§7 PR 1 acceptance):**
+> - Each step reports the same passed and skipped counts as on the base commit's run: the main suite, the codecs step, the viewer step and the trap.
+> - The slowest `Python <v>` job takes at most 6.5 min from the run's start, and the slowest extras job at most 5.0 min.
+> - Every job starts within 60 s of the run's first job.
+> - `CI result` is green.
+>
+> Red CI turns this into CHANGES REQUESTED.
+>
+> **Suggestions (non-blocking):**
+> - The last line of the reworded codecs comment is 104 characters, against about 80 for its neighbours. Re-wrap it.
+> - A step in the `python` job that fails when `git status --porcelain --untracked-files=all` prints anything after `pytest` would make blocking issue 2 a check on every run instead of a one-off. It adds a step, so it is a design change, for `@architect` to weigh.
