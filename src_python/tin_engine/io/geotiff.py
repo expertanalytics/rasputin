@@ -381,7 +381,7 @@ def _parametric_epsg(geokeys: dict[str, Any]) -> int:
         if geokeys.get(key) is None:
             number = int(tifffile.TIFF.GEO_KEYS[key])
             raise GeoTiffError(f"{P}: {method} needs {key} ({number}), which is absent")
-    values = tuple(float(geokeys[key]) for _, _, key, _ in parameters)
+    values = tuple(_one_number(key, geokeys[key]) for _, _, key, _ in parameters)
     matches = _epsg_matches_cached(g, int(transform), values)
     if not matches:
         raise GeoTiffError(
@@ -418,6 +418,12 @@ def _parametric_base(geokeys: dict[str, Any]) -> tuple[int, pyproj.CRS]:
                 f"{P}: {key} ({int(tifffile.TIFF.GEO_KEYS[key])}) is present; the datum is "
                 "read only from GeographicTypeGeoKey (2048)"
             )
+    # Row 8 before row 6: 2061 is in the unit 2054 names.
+    units = geokeys.get("GeogAngularUnitsGeoKey")
+    if units is not None and int(units) != DEGREE:
+        raise GeoTiffError(
+            f"{P}: GeogAngularUnitsGeoKey (2054) = {int(units)}; only degrees ({DEGREE})"
+        )
     ellipsoid, meridian = base.ellipsoid, base.prime_meridian
     assert ellipsoid is not None and meridian is not None  # a geographic CRS has both
     greenwich_east = math.degrees(meridian.longitude * float(meridian.unit_conversion_factor))
@@ -427,13 +433,13 @@ def _parametric_base(geokeys: dict[str, Any]) -> tuple[int, pyproj.CRS]:
         ("GeogInvFlatteningGeoKey", ellipsoid.inverse_flattening, ellipsoid.name),
         ("GeogPrimeMeridianLongGeoKey", greenwich_east, "prime meridian"),
     ):
-        value = geokeys.get(key)
+        if geokeys.get(key) is None:
+            continue
+        value = _one_number(key, geokeys[key])
         # 1e-10 relative is PROJ's; the absolute 1e-10 matters only at a prime meridian of 0.
-        if value is not None and not math.isclose(
-            float(value), expected, rel_tol=1e-10, abs_tol=1e-10
-        ):
+        if not math.isclose(value, expected, rel_tol=1e-10, abs_tol=1e-10):
             raise GeoTiffError(
-                f"{P}: {key} ({int(tifffile.TIFF.GEO_KEYS[key])}) = {float(value)!r} disagrees "
+                f"{P}: {key} ({int(tifffile.TIFF.GEO_KEYS[key])}) = {value!r} disagrees "
                 f"with EPSG:{g}'s {what} ({expected!r})"
             )
     towgs84 = geokeys.get("GeogTOWGS84GeoKey")
@@ -442,12 +448,15 @@ def _parametric_base(geokeys: dict[str, Any]) -> tuple[int, pyproj.CRS]:
             f"{P}: GeogTOWGS84GeoKey (2062) = {towgs84} gives the file's own datum shift to "
             "WGS 84, which is not read; the datum is read only from GeographicTypeGeoKey (2048)"
         )
-    units = geokeys.get("GeogAngularUnitsGeoKey")
-    if units is not None and int(units) != DEGREE:
-        raise GeoTiffError(
-            f"{P}: GeogAngularUnitsGeoKey (2054) = {int(units)}; only degrees ({DEGREE})"
-        )
     return g, base
+
+
+def _one_number(key: str, value: Any) -> float:
+    """Section 4's `N`: an int or float, not a bool, and finite; else the refusal."""
+    if isinstance(value, bool) or not isinstance(value, int | float) or not math.isfinite(value):
+        number = int(tifffile.TIFF.GEO_KEYS[key])
+        raise GeoTiffError(f"{P}: {key} ({number}) = {value!r}, which is not one finite number")
+    return float(value)
 
 
 @functools.cache
