@@ -452,8 +452,8 @@ def test_the_outline_tolerance_is_passed_on(tmp_path: Path) -> None:
 def test_a_river_crs_not_the_dems_is_refused_before_the_first_station(tmp_path: Path) -> None:
     """Change (d), for callers other than the command: `segments_crs`
     EPSG:32633 over the DEM's EPSG:25833 raises `ValueError` naming both,
-    before any station runs, so the sink receives nothing (today each station
-    is a `refused` row with cause `other`)."""
+    before any station runs, so the sink receives nothing (before change (d),
+    each station was a `refused` row with cause `other`)."""
     i = inputs(tmp_path)
     sink = ListSink()
     with pytest.raises(ValueError) as caught:

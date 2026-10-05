@@ -349,7 +349,8 @@ def test_a_river_file_not_in_the_dems_crs_is_refused_before_any_station_runs(
     EPSG:25833. The references are in the river file's CRS, so their own check
     passes and the river file's is the one that fires: a refusal of `--rivers`
     naming both CRSs, before any station is delineated and before `--out-dir`
-    exists (today each station is a `refused` row with cause `other`)."""
+    exists (before change (d), each station was a `refused` row with cause
+    `other`)."""
     other = dict(data)
     other["rivers"] = bf.write_rivers(tmp_path / "r.geojson", crs="EPSG:32633")
     other["reference"] = bf.write_references(tmp_path / "ref.geojson", crs="EPSG:32633")
@@ -390,9 +391,9 @@ def test_a_write_that_fails_names_out_dir_and_the_path(
     """Change (e): a directory made beforehand where the command writes a file
     (results.csv when the sink is made, the first station's catchment file,
     summary.json at the end). The refusal names `--out-dir` and the path, not
-    `--dem` or "cannot read", and is a refusal, not a traceback. Today the
-    catchment file's failure reads as a refusal of `--dem` and the other two
-    are tracebacks."""
+    `--dem` or "cannot read", and is a refusal, not a traceback. Before change
+    (e), the catchment file's failure read as a refusal of `--dem` and the
+    other two were tracebacks."""
     out = tmp_path / "out"
     (out / blocked).mkdir(parents=True)
     result = runner.invoke(app, args(data, out))
