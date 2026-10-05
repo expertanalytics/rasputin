@@ -112,7 +112,9 @@ jobs:
         run: cmake --build build-san --parallel "$(getconf _NPROCESSORS_ONLN)"
 
       - name: Test
-        run: ctest --test-dir build-san --output-on-failure
+        # One test per CPU. Every Catch2 case is its own process and none
+        # shares a file or other state (h14 §2d).
+        run: ctest --test-dir build-san --output-on-failure --parallel "$(getconf _NPROCESSORS_ONLN)"
 
   # Increment 14, R7: refinement is the first code path that starts threads,
   # and asan+ubsan cannot see a data race. TSan cannot share a build with ASan,
