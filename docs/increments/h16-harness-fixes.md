@@ -1,6 +1,6 @@
 # Harness h16: guard fixes, a line counter, a scratch copy, brief fixes
 
-Status: design; Ola ruled on §7 on 2026-10-05 (all three defaults, §7); next the red step for PR A (`@tester`), then PR B.
+Status: Ola ruled on §7 on 2026-10-05 (all three defaults). PR A: red `11cee8e`, partial green `4db1eab` (252 net production lines against an estimate of 187: count_loc.py's C++ scanner and git plumbing were not priced); the `tools/brief.py` change is refused in unattended mode and waits for Ola; code review round 1 (early) asked for fixes, in progress. PR B not started.
 
 Ola approved the items on 2026-10-05 (the main session's summary of his
 rulings, not his words). He said this is the last harness increment before
@@ -522,3 +522,59 @@ paths, and the refusal message says so).
 ## Ola's rulings
 
 2026-10-05, Ola, verbatim: "yes, go with all three defaults". So: 1 the brief.py item is `@architect`'s write limit gaining root Markdown files (the earlier phrase "root-file limit" was the main session's shorthand; Ola: "I have no idea what a root-file limit would mean."); 2 the line counter counts Python, C++, CMake and shell outside `tests/` and `docs/`, and lists the rest as not counted; 3 G3c, the push to a scratchpad repository, drops out of h16.
+
+## Review
+
+### Round 1: `@reviewer`, code, early, PR A tools part, `bc01cd8..4db1eab`
+
+`@reviewer`'s verdict, word for word:
+
+**Code review, round 1 (early, tools part of PR A), 2026-10-05.** Range `bc01cd8..4db1eab` (design e9e3c46, rulings 093725b, red 11cee8e, partial green 4db1eab). Verdict: CHANGES REQUESTED.
+
+LOC: 252 net production lines by `tools/count_loc.py bc01cd8 4db1eab`: `tools/count_loc.py` 195 and `tools/scratch_copy.py` 57. The workflow, the tests and the docs are listed as not counted. The 57 was recounted by hand, line by line. The estimate was 187 (count_loc 120, scratch_copy 60, brief.py 7). count_loc is 75 over, because the C++ scanner and the git plumbing were not priced; scratch_copy is 3 under. With brief.py's about 7 lines still to come, the total is about 259 against 700. The design names no split seam, and none is needed.
+
+Packing: 11 `# fmt: skip` regions, 6 in count_loc and 5 in scratch_copy. Together they save 43 lines; ruff format would give 222 and 73. Each region keeps one call's arguments or one literal's entries on two lines instead of one per line, and each stays readable. They are packed for density only; none is needed for the ceiling.
+
+The counter reproduces both recorded counts exactly:
+- `529613a 193079d` gives 589, 20, 569.
+- `9e666f4 9bb1723` gives 744, 53, 691.
+
+On a range I chose, PR #163 (`45acf22^1..45acf22`), it gives 41, 20, 21. Both C++ files were checked by hand:
+- `refine.hpp`: 10 added, 6 removed, 4 net.
+- `lattice_mesh.hpp`: 31 added, 14 removed, 17 net.
+
+Test strength: I planted 16 faults, one at a time, in a scratch copy. 14 were caught. Two survived:
+- removing the explicit `--src-prefix`/`--dst-prefix`;
+- dropping C++ character-literal handling.
+
+`ruff` is clean and the prohibited-dependency gate passes. No red-step scaffolding remains. The workflow change gives the full clone (`fetch-depth: 0`) to the `python` job, which is the only job that runs the whole pytest suite; the pack is 40 MiB.
+
+Citations: `check_citations.py` lists three at-risk citations, and all three are quoted review records of earlier revisions, so they stay.
+- `h9-spawn-briefs.md:763` cites `test_brief.py:335` as the file stood at 4ee0328, where that line is a concurrency refusal. That is still true.
+- `h11-ci-path-filter.md:451`'s `main.yaml:306-307` was already off on bc01cd8; the `CI result` name was at line 311 there and is at 314 now.
+- `h10-merge-queue.md:183` is unaffected.
+
+Blocking:
+1. **[Ola]** There is no CI yet; the branch must be pushed and CI green. The 18 `test_brief.py` failures wait on the refused `tools/brief.py` change.
+2. **[now]** `scratch_copy.py`: a child Python process imports the worktree's `tin_engine`, not the copy's. The finder drop lives only in the `-c` program, and a child reloads the editable finder at startup. Probe, with the main checkout's venv in a copy of 4db1eab:
+   - parent: `…/scratchpad/copy1/src_python/tin_engine/__init__.py`
+   - child: `/Users/skavhaug/projects/rasputin/src_python/tin_engine/__init__.py`
+
+   Three suites spawn such children: `test_cli_mesh_geographic.py:886`, `test_features.py:521` and `test_io_geotiff.py:1271`. In a mutant run they would test the original code and report a false survivor. Fix: carry the drop into children. One route is a generated `sitecustomize.py` on `PYTHONPATH` in the printed command; a sitecustomize runs after the `.pth` file has installed the finder. `test_io_geotiff.py:1271` replaces the whole environment, so where the drop cannot reach, state the limit in the docstring. Add a test in which a child must see the copy.
+3. **[now]** `scratch_copy.py:10-11` says "Append test paths to it, or keep the `tests/python/` it ends with". Appending keeps `tests/python/`, so the whole suite runs as well. It should say to replace `tests/python/`.
+4. **[now]** `test_recorded_counts_from_real_history` fails in a `git archive` copy ("not a git repository"). That is the same class of failure P9 fixes for `test_settings_wiring.py`, here in a tool built for such copies. Skip it with a reason when the tree is not a git work tree, using P9's `is_work_tree_top`; keep the failure in a shallow clone.
+5. **[now]** The status line of `docs/increments/h16-harness-fixes.md` still says "design … next the red step for PR A". Red is 11cee8e and partial green is 4db1eab. Record the measured 252 lines and the reason for the overrun.
+
+Suggestions:
+- **[now]** Strip `GIT_CONFIG_COUNT`/`GIT_CONFIG_PARAMETERS` from the environment the counter passes to git, and pass `--inter-hunk-context=0`. Without that, setting `diff.interHunkContext=50` through `GIT_CONFIG_*` in the environment turns PR #163's 41/20 into 63/42; the net stays 21.
+- **[now]** Add a test with repo-level `diff.srcPrefix`/`diff.dstPrefix` set, and a C++ case of `'"'` followed by `/*` inside a string. Those are the two planted faults that survived.
+- **[now]** Count `.pyi` as Python (`src_python/tin_engine/_core.pyi` is not counted).
+- **[now]** `scratch_copy.py` refuses a target only inside the worktree it runs from. A target inside the main checkout, which contains `.claude/worktrees/`, passes; also refuse there.
+- **[now]** A failure in `tar` prints more than one stderr line and leaves a partly filled directory.
+- **[now]** `count_loc.py` and `scratch_copy.py` are tracked at 100755, while every other `tools/*.py` file is 100644. No rule decides; pick one.
+- **[Ola]** A rename from an uncounted path into a counted one counts 0. Probe: a 40-line `docs/proto.py` renamed to `tools/proto.py` counts 0. `CLAUDE.md` §2's literal text (git's default rename detection) gives the same, so a change is a rule change.
+- **[Ola]** `CLAUDE.md` §2 still says only "tests excluded", but the counter also leaves out `docs/` and non-code files (ruling 2). The pending §2 pointer line should state both.
+
+Not pushed; no CI.
+
+Taken in the recording commit: blocking item 5 (the status line).
