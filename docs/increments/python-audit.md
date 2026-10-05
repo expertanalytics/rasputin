@@ -53,8 +53,16 @@ fixes are in section 10. `@tester`'s red commit is `1928569` and
 Code review round 1 approved the code and asked for prose only: the
 `project_structure.md` rows, the wordings section 10 missed ("Refusal
 wordings that change", below the line, and its known gaps), and this
-paragraph; all fixed. Next: a short prose-only `@reviewer` round 2; then
-push on Ola's yes, after PR B.
+paragraph; fixed in `574a9a9`. That probe showed the station, reference,
+NVE lake and river readers saying `None is a None, not a Point` for a file
+with no usable geometry, so one check was added: `@tester`'s red commit
+`28fe0cf` (8 tests) and `@developer`'s green commit `693f560`, in which
+`features_of` refuses a feature whose geometry is missing, null or has no
+`type` with `<name>: feature <i> has no geometry`. The PR is now +28 net
+production lines against the designed +24 (section 10, "Net production
+lines"). Next: `@reviewer` round 2, code and prose (`574a9a9`, `28fe0cf`,
+`693f560` and the commit that records this); then push on Ola's yes, after
+PR B.
 
 Re-checked against master `44fa7f5`: `git diff --stat 12dace7 44fa7f5 --
 src_python` is empty, and of the files cited below only `tools/brief.py`
@@ -1611,8 +1619,11 @@ edge goes down or sideways (L2 to L1 or L2; L4 and L5 to L2).
 "stations" ones after `<name>: `. The rows below the line were found at code
 review round 1 and are quoted from a probe of `read_domain`, `read_source`,
 `read_stations`, `read_references`, `read_nve_lakes` (`read_lakes` at the
-base) and `read_segments` at `32b5092` and `3b739ac` (scratch copies of
-`src_python/`, the script scratch only). Every other wording that probe
+base) and `read_segments` at `32b5092`, `3b739ac` and `693f560` (scratch
+copies of `src_python/`, the script scratch only); the last two rows are as
+at `693f560`, after the fix the round led to (red `28fe0cf`, green
+`693f560`: `features_of` in `io/station_set.py` refuses a feature whose
+geometry is missing, null or has no `type`). Every other wording that probe
 reached stays.
 
 | Input | Reader | Today | After |
@@ -1634,7 +1645,8 @@ reached stays.
 | one feature with neither `type` nor `geometry` (`{"features": [{"properties": {}}]}`, or the same feature in a typed collection) | domain | `'NoneType' object has no attribute 'lower'` | `'geometry'`, as for a typed `Feature` without `geometry` |
 | a `Feature` without `geometry` | features | `not a GeoJSON FeatureCollection ('features')` | `not a GeoJSON FeatureCollection ('geometry')` |
 | an object with neither `type` nor `features` (`{"foo": 1}`, or only a `crs` member) | features | `not a GeoJSON FeatureCollection ('features')` | `not a GeoJSON FeatureCollection ('NoneType' object has no attribute 'lower')` |
-| a `crs` member and either a `Feature` without `geometry` or an object with neither `type` nor `features` | stations; references; NVE lakes; rivers | `no features list; the file is not a FeatureCollection` | `None is a None, not a Point`; `None is a None, not a Polygon or MultiPolygon`; `feature 0 is not a polygon with an area (None)`; `None is a None, not a LineString` |
+| a `crs` member and either a `Feature` without `geometry` or an object with neither `type` nor `features` | stations; references; NVE lakes; rivers | `no features list; the file is not a FeatureCollection` | `feature 0 has no geometry` |
+| a `crs`-bearing FeatureCollection with a feature whose `"geometry"` is `null`, or a geometry object with no `type` | stations; references; NVE lakes; rivers | `<label> is a None, not a Point`; `<label> is a None, not a Polygon or MultiPolygon`; `lake <objectid> is not a polygon with an area (None)` (`feature <i>` with no `objectid`); `<label> is a None, not a LineString` (`<label>` is the `station` property, else `objectid`, else `None`) | `feature <i> has no geometry` |
 
 **Known gaps, before and after this PR, not fixed here** (same probe):
 
@@ -1649,10 +1661,13 @@ reached stays.
 - An object with only a `crs` member (no `type`, no `features`) is read as a
   geometry by the shape rule, so `--domain` says `cannot parse <name>:
   'NoneType' object has no attribute 'lower'` (as at the base), and, from
-  this PR, `--features` and the station readers give the wordings in the
-  last two rows above, where the base said `('features')` and `no features
-  list`. The station readers' `None is a None` is the plainest of these to
-  improve.
+  this PR, `--features` says `not a GeoJSON FeatureCollection ('NoneType'
+  object has no attribute 'lower')`, where the base said `('features')`
+  (the fourth row below the line). The station, reference, NVE lake and
+  river readers now say `feature 0 has no geometry`.
+- A feature whose `"geometry"` is `null` gives `--domain` `cannot parse
+  <name>: 'NoneType' object has no attribute 'get'`, before and after;
+  `--features` reads the file, as before.
 
 ### Red tests (`@tester`, one commit, before any code)
 
@@ -1729,6 +1744,13 @@ The audit's about -40 assumed the three rules were copies to delete; they are
 about ten lines each, and the one rule, now total over the inputs above,
 costs about twenty. The new module costs its import block. No packing under
 `# fmt: skip` is designed.
+
+As built: +28 net (`python3 tools/count_loc.py 32b5092 693f560`) against the
+designed about +24. The first green commit `3b739ac` was +24; the check that
+code review round 1 led to (`693f560`, in `features_of`, shared by the
+station, reference, NVE lake and river readers) adds 4: the loop, the test,
+the raise, and the `return` split from the call (`count_loc.py 3b739ac
+693f560`: 5 added, 1 removed).
 
 ### `@perf`
 
