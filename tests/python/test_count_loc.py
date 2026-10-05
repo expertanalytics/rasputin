@@ -698,6 +698,9 @@ def moved_repo(root: Path, source: str, target: str) -> Path:
     """`source` holds PROTO's 40 code lines; the head commit moves it to
     `target` and adds one line, and git reports the move as a rename."""
     repo = make_counted_repo(root, {source: PROTO})
+    # `git mv` does not create directories, and the base tree may lack
+    # `target`'s parent (`docs/`, `tests/`).
+    (repo / target).parent.mkdir(parents=True, exist_ok=True)
     git(repo, "mv", source, target)
     commit_files(repo, {target: PROTO + "extra = 1\n"}, "move")
     status = git(repo, "diff", "-M", "--name-status", "HEAD~1", "HEAD")
