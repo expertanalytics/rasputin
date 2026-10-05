@@ -549,11 +549,16 @@ def test_a_placed_position_outside_the_window_is_refused(
 # No NoData on the chain (step 2; PR 2's code review, round 1)
 # ---------------------------------------------------------------------------
 
-#: The two sentinels the design names, both in float32: DTM10's -32767, and
-#: a positive one near float32's largest value, which the burn would carry
-#: into `lowered_max_m`.
-SENTINELS = [-32767.0, 3.4e38]
 GAP = (20, 21)
+#: Each way a node can lack data, as (the value at the gap, the window's
+#: `nodata`): the two sentinels the design names, both in float32 (DTM10's
+#: -32767, and a positive one near float32's largest value, which the burn
+#: would carry into `lowered_max_m`), and a NaN cell with no sentinel at all, as
+#: `RasterMeta` holds a NaN-gapped float DEM (it never holds a NaN sentinel;
+#: PR 2's code review, round 2: "A NaN cell is NoData", as the core's
+#: `is_nodata` says, whatever the sentinel).
+GAPS = [(-32767.0, -32767.0), (3.4e38, 3.4e38), (math.nan, None)]
+GAP_IDS = ["minus32767", "3.4e38", "nan-no-sentinel"]
 
 
 def jog(gap: float | None) -> npt.NDArray[np.float32]:
@@ -568,10 +573,15 @@ def jog(gap: float | None) -> npt.NDArray[np.float32]:
     return z
 
 
-def least_in_row(z: npt.NDArray[np.floating], row: int, nodata: float) -> tuple[int, int]:
+def has_data(value: float, nodata: float | None) -> bool:
+    """Neither NaN nor the sentinel, when there is one (the design's mask)."""
+    return not math.isnan(value) and (nodata is None or value != np.float32(nodata))
+
+
+def least_in_row(z: npt.NDArray[np.floating], row: int, nodata: float | None) -> tuple[int, int]:
     """The least-elevation node with data in `row` within 30 m of column 20:
     the cross-section of a resample point on the line down column 20."""
-    cols = [c for c in range(17, 24) if z[row, c] != np.float32(nodata)]
+    cols = [c for c in range(17, 24) if has_data(float(z[row, c]), nodata)]
     return row, min(cols, key=lambda c: (float(z[row, c]), abs(c - 20), c))
 
 
@@ -580,19 +590,20 @@ def jog_reach(gauge: ModuleType) -> Any:
     return reach(gauge, column_line(20, 0, 40), at=200.0, corridor=30.0)
 
 
-@pytest.mark.parametrize("nodata", SENTINELS, ids=["minus32767", "3.4e38"])
+@pytest.mark.parametrize(("gap", "nodata"), GAPS, ids=GAP_IDS)
 def test_a_chain_through_nodata_is_refused_naming_the_gap(
-    burn: ModuleType, gauge: ModuleType, nodata: float
+    burn: ModuleType, gauge: ModuleType, gap: float, nodata: float | None
 ) -> None:
     """The cross-sections of rows 19 and 20 choose (19, 20) and (20, 22),
     which have data; the straight 8-connected join between them steps through
     its middle node, (19.5, 21) rounded half up, (20, 21), which has none.
     The taut cut then drops (20, 22), so (20, 21) is a node of the chain the
     burn would lower and read. The station is refused, naming the gap and
-    where it is in the DEM's CRS."""
-    z = jog(nodata)
+    where it is in the DEM's CRS. The NaN case has no sentinel: the gap is
+    the NaN cell alone."""
+    z = jog(gap)
     # The premises, from the fixture alone.
-    assert z[GAP] == np.float32(nodata)
+    assert not has_data(float(z[GAP]), nodata)
     a, b = least_in_row(z, 19, nodata), least_in_row(z, 20, nodata)
     assert (a, b) == ((19, 20), (20, 22))
     middle = tuple(math.floor((p + q) / 2 + 0.5) for p, q in zip(a, b, strict=True))
@@ -614,3 +625,51 @@ def test_the_same_chain_with_data_at_the_join_burns(burn: ModuleType, gauge: Mod
     z[50, 5] = np.float32(NODATA)
     _, path = run(burn, z, jog_reach(gauge), nodata=NODATA)
     assert GAP in nodes(path)
+
+
+# ---------------------------------------------------------------------------
+# The refusals have their own type (PR 2's code review, round 2)
+# ---------------------------------------------------------------------------
+
+
+def test_burn_refusal_is_a_value_error(burn: ModuleType) -> None:
+    assert issubclass(burn.BurnRefusal, ValueError)
+    assert "BurnRefusal" in burn.__all__
+
+
+def a_window_with_a_hole_under_row_20() -> npt.NDArray[np.float64]:
+    """A channel down column 20 with NoData on rows 17 to 23, columns 17 to
+    23: the resample point on row 20 (5 m corridor) looks for nodes within
+    14.1 m, the diagonal spacing, which is rows 18 to 22 and columns 18 to
+    22, and finds none with data."""
+    z = channel(60, 41, [(0, 20), (59, 20)])
+    z[17:24, 17:24] = NODATA
+    return z
+
+
+@pytest.mark.parametrize(
+    ("case", "words"),
+    [
+        ("gap", r"gap \(NoData\) in the DEM"),
+        ("outside", r"outside the window"),
+        ("no_data_near", r"no DEM node with data near the reach"),
+    ],
+    ids=["gap", "outside", "no_data_near"],
+)
+def test_each_refusal_is_a_burn_refusal(
+    burn: ModuleType, gauge: ModuleType, case: str, words: str
+) -> None:
+    """The three refusals of `burn_reach` (the chain crosses a gap, the placed
+    position is outside the window, a resample point has no data node near
+    it) raise `BurnRefusal`, so `catchment` can pass on these and nothing
+    else as a `CatchmentError`."""
+    if case == "gap":
+        tile, r = tile_of(jog(NODATA), NODATA), jog_reach(gauge)
+    elif case == "outside":
+        z = channel(60, 41, [(0, 20), (59, 20)])
+        tile, r = tile_of(z), reach(gauge, column_line(20, -10, 30), at=50.0)
+    else:
+        tile = tile_of(a_window_with_a_hole_under_row_20(), NODATA)
+        r = reach(gauge, column_line(20, 5, 40), at=100.0)
+    with pytest.raises(burn.BurnRefusal, match=rf"(?i){words}"):
+        burn.burn_reach(tile, r)

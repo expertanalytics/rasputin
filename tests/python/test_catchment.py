@@ -603,18 +603,31 @@ JOG_ROW = 170
 JOG_GAP = (JOG_ROW, gf.CC + 1)
 
 
-def valley_with_a_gap() -> np.ndarray:
+def valley_with_a_gap(gap: float = NODATA) -> np.ndarray:
     """`gf.valley(dam=True)` with its floor moved two columns east on rows
-    `JOG_ROW` to the slot (the same 3 m walls), and NoData at `JOG_GAP`."""
+    `JOG_ROW` to the slot (the same 3 m walls), and `gap` at `JOG_GAP`."""
     z = gf.valley(dam=True)
     rows = np.arange(JOG_ROW, gf.SLOT_ROW)
     cols = np.arange(gf.CC - 5, gf.CC + 8)
     z[np.ix_(rows, cols)] = gf.floor_z(rows)[:, None] + 3.0 * np.abs(cols - (gf.CC + 2))[None, :]
-    z[JOG_GAP] = NODATA
+    z[JOG_GAP] = gap
     return z
 
 
-def test_a_chain_through_nodata_below_the_placed_node_is_refused(api: Any, gauge_api: Any) -> None:
+def no_data(z: np.ndarray, nodata: float | None) -> np.ndarray:
+    """True where a node has no data: NaN, or the sentinel when there is one."""
+    return np.isnan(z) | (False if nodata is None else z == nodata)
+
+
+#: (the value at the gap, the DEM's `nodata`): the sentinel, and a NaN cell
+#: with no sentinel, as a NaN-gapped float DEM arrives (PR 2's code review,
+#: round 2: a NaN cell is NoData).
+@pytest.mark.parametrize(
+    ("gap", "nodata"), [(NODATA, NODATA), (np.nan, None)], ids=["sentinel", "nan-no-sentinel"]
+)
+def test_a_chain_through_nodata_below_the_placed_node_is_refused(
+    api: Any, gauge_api: Any, gap: float, nodata: float | None
+) -> None:
     """The line runs down the valley's column past the jog, with a 30 m
     corridor: rows `JOG_ROW - 1` and `JOG_ROW` choose the floor nodes
     (169, CC) and (170, CC + 2), and the straight join between them steps
@@ -623,22 +636,63 @@ def test_a_chain_through_nodata_below_the_placed_node_is_refused(api: Any, gauge
     a small terrain). The gap is 200 m below the placed node (row 150) and
     past `D` (30 m below), so neither the seed nor any flood meets it first:
     the refusal is the burn's, passed on as a `CatchmentError`."""
-    z = valley_with_a_gap()
+    z = valley_with_a_gap(gap)
     # The premises: the floor nodes either side of the join, from the fixture.
     # A cross-section is the row's nodes within 30 m of column CC.
     section = slice(gf.CC - 3, gf.CC + 4)
     assert int(np.argmin(z[JOG_ROW - 1, section])) == 3  # (169, CC)
-    with_data = np.where(z[JOG_ROW, section] == NODATA, np.inf, z[JOG_ROW, section])
+    row = z[JOG_ROW, section]
+    with_data = np.where(no_data(row, nodata), np.inf, row)
     assert int(np.argmin(with_data)) == 5  # (170, CC + 2)
-    assert z[JOG_GAP] == NODATA
-    assert not whole_flood(z, (150, gf.CC), NODATA).touches_nodata
-    assert not whole_flood(z, (153, gf.CC), NODATA).touches_nodata
+    assert no_data(z, nodata)[JOG_GAP]
+    assert int(no_data(z, nodata).sum()) == 1  # the gap is the only node without data
+    assert not whole_flood(z, (150, gf.CC), nodata).touches_nodata
+    assert not whole_flood(z, (153, gf.CC), nodata).touches_nodata
     reach = gauge_api.Reach(
         line=gf.column_line(gf.CC, 40, 178), at=110 * gf.D, uncertainty=30.0, corridor=30.0
     )
     request = api.CatchmentRequest(seed=gf.lat(gf.CC + 2, 150), seed_crs=gf.EPSG, reach=reach)
     with pytest.raises(api.CatchmentError, match=r"(?i)gap \(NoData\) in the DEM") as raised:
-        api.delineate(request, valley_repository(z, NODATA))
+        api.delineate(request, valley_repository(z, nodata))
     x, y = gf.lat(JOG_GAP[1], JOG_GAP[0])
     message = str(raised.value)
     assert f"{x:.0f}" in message and f"{y:.0f}" in message, message
+
+
+# ---------------------------------------------------------------------------
+# Only the burn's own refusals become a CatchmentError (code review, round 2)
+# ---------------------------------------------------------------------------
+
+
+def burn_raising(exc: Exception) -> Any:
+    def raising(*_: Any) -> Any:
+        raise exc
+
+    return raising
+
+
+def test_a_burn_refusal_is_passed_on_as_a_catchment_error_with_its_words(
+    api: Any, gauge_api: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import tin_engine.burn as burn
+
+    refusal = burn.BurnRefusal("the river line crosses a gap (NoData) in the DEM at (1, 2)")
+    monkeypatch.setattr(api, "burn_reach", burn_raising(refusal))
+    with pytest.raises(api.CatchmentError) as raised:
+        api.delineate(gauge_request(api, gauge_api), valley_repository(gf.valley(dam=True)))
+    assert str(raised.value) == str(refusal)
+    assert raised.value.__cause__ is refusal
+
+
+def test_any_other_value_error_from_the_burn_is_not_a_catchment_error(
+    api: Any, gauge_api: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Stage B's `except CatchmentError` would swallow an ordinary bug turned
+    into one; a plain `ValueError` from inside `burn_reach` must reach the
+    caller as itself."""
+    bug = ValueError("an ordinary bug inside burn_reach")
+    monkeypatch.setattr(api, "burn_reach", burn_raising(bug))
+    with pytest.raises(ValueError, match="an ordinary bug inside burn_reach") as raised:
+        api.delineate(gauge_request(api, gauge_api), valley_repository(gf.valley(dam=True)))
+    assert raised.value is bug
+    assert not isinstance(raised.value, api.CatchmentError)
