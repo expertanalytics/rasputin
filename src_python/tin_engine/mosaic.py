@@ -46,6 +46,16 @@ class MosaicError(ValueError):
     """A request the tiles cannot answer. A `ValueError`, like `GeoTiffError`."""
 
 
+class MixedGridError(MosaicError):
+    """The request selects tiles on two grids and neither covers it (R4.3,
+    Q5); `tiles` names one tile of each, in the message's order (empty when
+    re-raised with more words, as `dem_input` does with `type(exc)(...)`)."""
+
+    def __init__(self, message: str, tiles: tuple[str, ...] = ()) -> None:
+        super().__init__(message)
+        self.tiles = tiles
+
+
 def physical_memory() -> int:
     """Bytes of physical memory, looked up at call time (macOS and Linux)."""
     return os.sysconf("SC_PHYS_PAGES") * os.sysconf("SC_PAGE_SIZE")
@@ -382,7 +392,8 @@ def _covering(chosen: list[_Lattice], bounds: Bounds | None, needed: Any) -> lis
         if not _uncovered(_grid(m, lattice.reference, window, False), tiles, needed):
             covering.append(lattice)
     if not covering:
-        raise MosaicError(_mixed(chosen[0].selected[0].footprint, chosen[1].selected[0].footprint))
+        a, b = chosen[0].selected[0].footprint, chosen[1].selected[0].footprint
+        raise MixedGridError(_mixed(a, b), (a.name, b.name))
     return min(covering, key=lambda c: (-len(c.group), c.group[0].name)).group
 
 

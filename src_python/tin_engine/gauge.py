@@ -6,7 +6,9 @@ tier (its own watercourse number, a prefix of it, its river's name, any),
 at the foot `P` of the station on that line. No rule here looks at an area
 or a flow count. The reach is the chain of that line's `elvid` round `P`,
 `reach_up` metres upstream and `U + 100` m downstream, stopped at a fork or
-where the river ends. Pure shapely: no DEM, no file.
+where the river ends. `lake_seed` (PR 4, "Lake gauges: the lake is the
+seed") says which gauges are seeded with their lake instead: by containment
+and one distance, never an area. Pure shapely: no DEM, no file.
 """
 
 from __future__ import annotations
@@ -22,6 +24,7 @@ from shapely.geometry import LineString, Point
 from shapely.ops import substring
 
 from tin_engine.io.rivers import RiverSegment
+from tin_engine.io.station_set import Lake
 
 #: Metres: an end within this of the next segment's start continues the chain.
 JOIN_M = 1.0
@@ -31,6 +34,9 @@ U_FLOOR_M = 30.0
 DOWN_EXTRA_M = 100.0
 #: Metres from `P` within which another river's line flags `confluence_near`.
 CONFLUENCE_M = 100.0
+#: Metres (the river file's CRS) from a station to the lake its `P` lies in,
+#: within which a gauge placed on a lake line is seeded with the lake: `U`'s floor.
+LAKE_GAP_M = 30.0
 
 Tier = Literal["number", "prefix", "name", "any"]
 _TIERS: tuple[Tier, ...] = ("number", "prefix", "name", "any")
@@ -75,6 +81,19 @@ class Placement(BaseModel):
     reach_up_m: float
     reach_down_m: float
     reach_fork: bool
+
+
+class LakeSeed(BaseModel):
+    """A gauge seeded with its lake: `rule` says why, `point` is the station
+    (`inside`) or `P` (`lake_line`), `lakes` all lakes containing `point`,
+    and `distance_m` the station's distance to them (0 inside)."""
+
+    model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True)
+
+    rule: Literal["inside", "lake_line"]
+    point: tuple[float, float]
+    lakes: tuple[Lake, ...]
+    distance_m: float
 
 
 def _tier(segment: RiverSegment, gauge: Gauge) -> int:
@@ -166,4 +185,28 @@ def place(
     )
 
 
-__all__ = ["Gauge", "Placement", "Reach", "place"]
+def lake_seed(
+    gauge: Gauge, placement: Placement | None, lakes: Sequence[Lake], *, gap: float = LAKE_GAP_M
+) -> LakeSeed | None:
+    """The lake seed of `gauge`, or None for PR 2's river path: `inside` when
+    the station lies strictly inside a lake; else `lake_line` when it was
+    placed on a lake line whose `P` lies in a lake at most `gap` from it."""
+    if not (math.isfinite(gauge.x) and math.isfinite(gauge.y)):
+        return None
+    station = Point(gauge.x, gauge.y)
+    holding = tuple(lk for lk in lakes if lk.polygon.contains(station))
+    if holding:
+        return LakeSeed(rule="inside", point=(gauge.x, gauge.y), lakes=holding, distance_m=0.0)
+    if placement is None or not placement.lake:
+        return None
+    p = Point(placement.position)
+    holding = tuple(lk for lk in lakes if lk.polygon.contains(p))
+    if not holding:
+        return None
+    distance = min(lk.polygon.distance(station) for lk in holding)
+    if distance > gap + 1e-6:  # the corridor's slack
+        return None
+    return LakeSeed(rule="lake_line", point=placement.position, lakes=holding, distance_m=distance)
+
+
+__all__ = ["LAKE_GAP_M", "Gauge", "LakeSeed", "Placement", "Reach", "lake_seed", "place"]

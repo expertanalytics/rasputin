@@ -3,7 +3,8 @@
 `docs/increments/29-nve-reference-catchments.md`, "The station set" and
 "Data use". The packaged list says which stations; NVE's map services give
 their points (`HydrologiskeData3` layer 0), their catchment polygons (layer
-38) and the river lines round each (`Elvenett1` layer 2). Every request names
+38), the river lines round each (`Elvenett1` layer 2) and, for PR 4's lake
+gauges, the lakes near each (`Innsjodatabase2` layer 5). Every request names
 an explicit field allow-list, never `*`, and asks for GeoJSON in EPSG:25833.
 
 The network call is injected (`get_text`), and the requests go out one at a
@@ -38,17 +39,21 @@ FIELDS: Mapping[int, tuple[str, ...]] = {
     ),
     38: ("stasjonnr", "nedborfeltaareal_km2", "oppdateringsdato", "objectid"),
     2: ("objectid", "objekttype", "strekninglnr", "elvid", "vassdragsnr", "elvenavn", "vatnlnr"),
+    5: ("objectid", "vatnlnr", "navn", "areal_km2"),
 }
 LAYERS = {
     0: "HydrologiskeData3/MapServer/0",
     38: "HydrologiskeData3/MapServer/38",
     2: "Elvenett1/MapServer/2",
+    5: "Innsjodatabase2/MapServer/5",
 }
 #: Station numbers per `where stasjonnr in (...)` query.
 CHUNK = 40
 #: `map_radius + reach_up + 500 m`, each way round the station point.
 ENVELOPE_HALF = 2000.0
-FILES = ("stations.geojson", "reference.geojson", "rivers.geojson", "NOTICE.txt")
+#: Each way round the station point: any lake within `gauge.LAKE_GAP_M` meets it.
+LAKE_ENVELOPE_HALF = 100.0
+FILES = ("stations.geojson", "reference.geojson", "rivers.geojson", "lakes.geojson", "NOTICE.txt")
 
 
 def read_list(source: StationSource) -> list[dict[str, str]]:
@@ -73,13 +78,13 @@ def station_urls(source: StationSource, layer: int, numbers: Sequence[str]) -> l
     return [_url(source, layer, {"where": w}) for w in where]
 
 
-def river_url(source: StationSource, x: float, y: float) -> str:
-    """Layer 2's envelope query round the station point `(x, y)`."""
-    box = (x - ENVELOPE_HALF, y - ENVELOPE_HALF, x + ENVELOPE_HALF, y + ENVELOPE_HALF)
+def envelope_url(source: StationSource, layer: int, x: float, y: float, half: float) -> str:
+    """Layer 2's or 5's query of the envelope `half` metres round `(x, y)`."""
+    box = (x - half, y - half, x + half, y + half)
     epsg = source.crs.split(":")[-1]
     return _url(
         source,
-        2,
+        layer,
         {
             "where": "1=1",
             "geometry": ",".join(str(v) for v in box),
@@ -123,7 +128,7 @@ def _feature(geometry: Any, properties: Mapping[str, Any]) -> dict[str, Any]:
 def fetch_station_set(source: StationSource, get_text: Callable[[str], str]) -> dict[str, bytes]:
     """Each output file's name and bytes, `manifest.json` last. Refuses, with a
     `FetchError` naming the station, a listed station with no point or no
-    polygon, and a river answer flagged as truncated."""
+    polygon, and a river or lake answer flagged as truncated."""
     rows = read_list(source)
     numbers = [r["station"] for r in rows]
     asked: list[str] = []
@@ -144,10 +149,13 @@ def fetch_station_set(source: StationSource, get_text: Callable[[str], str]) -> 
             if n not in found:
                 raise FetchError(f"station {n}: NVE serves no {what} for it")
     segments: dict[int, dict[str, Any]] = {}
+    lakes: dict[int, dict[str, Any]] = {}
     for n in numbers:
         x, y = points[n]["geometry"]["coordinates"][:2]
-        for f in get(river_url(source, x, y), f"station {n}'s rivers"):
+        for f in get(envelope_url(source, 2, x, y, ENVELOPE_HALF), f"station {n}'s rivers"):
             segments.setdefault(int(f["properties"]["objectid"]), f)
+        for f in get(envelope_url(source, 5, x, y, LAKE_ENVELOPE_HALF), f"station {n}'s lakes"):
+            lakes.setdefault(int(f["properties"]["objectid"]), f)
 
     stations, references = [], []
     for row in rows:
@@ -181,10 +189,13 @@ def fetch_station_set(source: StationSource, get_text: Callable[[str], str]) -> 
                 },
             )
         )
-    rivers = [
-        _feature(f["geometry"], {k: f["properties"].get(k) for k in FIELDS[2]})
-        for _, f in sorted(segments.items())
-    ]
+    rivers, lake_features = (
+        [
+            _feature(f["geometry"], {k: f["properties"].get(k) for k in FIELDS[layer]})
+            for _, f in sorted(found.items())
+        ]
+        for layer, found in ((2, segments), (5, lakes))
+    )
     files = dict(
         zip(
             FILES,
@@ -192,6 +203,7 @@ def fetch_station_set(source: StationSource, get_text: Callable[[str], str]) -> 
                 _collection(source.crs, stations),
                 _collection(source.crs, references),
                 _collection(source.crs, rivers),
+                _collection(source.crs, lake_features),
                 notice(source).encode("utf-8"),
             ),
             strict=True,

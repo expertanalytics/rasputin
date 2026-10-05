@@ -11,6 +11,13 @@ What is tested through the CLI and what through a function: the command is
 the only entry the design names for the fetch, so the requests, the files and
 the refusals are all observed through `rasputin fetch-stations`; the files are
 read back through PR 3's own readers, `io/station_set.py` and `io/rivers.py`.
+
+PR 4, lake gauges ("The station set", "Lake gauges"): the fetch also asks
+`Innsjodatabase2` layer 5 once per station and writes `lakes.geojson`. The
+tests written before PR 3 that count layers, requests or files say so
+(four layers, `4 + 4 + 140 + 140` requests); before the change they counted
+three layers and `4 + 4 + 140` requests. The tests over `FILES` are PR 3's
+four files, unchanged; `lakes.geojson` has its own below.
 """
 
 from __future__ import annotations
@@ -38,6 +45,11 @@ from nve_fixtures import (
     CRS,
     ENVELOPE_HALF,
     FORBIDDEN,
+    LAKE_ENVELOPE_HALF,
+    LAKE_FAR,
+    LAKE_MULTI,
+    LAKE_NAMELESS,
+    LAKE_SHARED,
     LAYER_0_NAME,
     MS_2026_05_28,
     MULTI,
@@ -60,7 +72,8 @@ from tin_engine.cli import app
 from tin_engine.fetch.http import RangeClient
 
 FILES = ("stations.geojson", "reference.geojson", "rivers.geojson", "NOTICE.txt")
-GEOJSON = FILES[:3]
+#: PR 4's fifth file; tested on its own below, so the PR 3 tests over FILES stand.
+LAKES = "lakes.geojson"
 REFUSED, USAGE = 1, 2
 runner = CliRunner(env={"NO_COLOR": "1", "TERM": "dumb"})
 
@@ -245,12 +258,12 @@ class TestTheUserAgent:
 
 
 class TestTheRequests:
-    def test_only_the_three_named_layers_are_asked(self, fake: FakeNve, fetched: Path) -> None:
+    def test_only_the_four_named_layers_are_asked(self, fake: FakeNve, fetched: Path) -> None:
         assert fake.unexpected == []
-        assert {c.layer for c in fake.calls} == {0, 2, 38}
+        assert {c.layer for c in fake.calls} == {0, 2, 5, 38}
         assert not any("hydapi" in c.url.lower() for c in fake.calls)
 
-    @pytest.mark.parametrize("layer", [0, 38, 2])
+    @pytest.mark.parametrize("layer", [0, 38, 2, 5])
     def test_out_fields_is_exactly_the_allow_list(
         self, fake: FakeNve, fetched: Path, layer: int
     ) -> None:
@@ -318,7 +331,7 @@ class TestTheRequests:
         fake.calls.clear()
         code, output = fetch(fetched, "--refresh")
         assert code == 0, output
-        assert len(fake.calls) == 4 + 4 + 140
+        assert len(fake.calls) == 4 + 4 + 140 + 140
         assert {name: (fetched / name).read_bytes() for name in FILES} == before
 
 
@@ -585,3 +598,118 @@ class TestTheRefusals:
         assert code == USAGE, output
         assert "no-such-list" in output and "No such command" not in output, output
         assert fake.calls == []
+
+
+# --------------------------------------------------------------------------
+# PR 4, lake gauges: layer 5 and lakes.geojson
+# --------------------------------------------------------------------------
+
+
+class TestTheLakeLayer:
+    """`Innsjodatabase2` layer 5, one envelope query per station of the point
+    ± 100 m (`LAKE_ENVELOPE_HALF`), fields `objectid,vatnlnr,navn,areal_km2`.
+    Before the change, the fetch asks no lake layer and writes no
+    `lakes.geojson`."""
+
+    def test_one_lake_query_per_station_100_m_each_way_in_list_order(
+        self, fake: FakeNve, fetched: Path
+    ) -> None:
+        """The coordinates are exact sums of whole metres, so equality is exact."""
+        calls = fake.calls_to(5)
+        assert len(calls) == 140
+        expected = [
+            v
+            for s in fake.stations
+            for v in (
+                s.x - LAKE_ENVELOPE_HALF,
+                s.y - LAKE_ENVELOPE_HALF,
+                s.x + LAKE_ENVELOPE_HALF,
+                s.y + LAKE_ENVELOPE_HALF,
+            )
+        ]
+        got = [v for c in calls for v in c.envelope]
+        assert got == pytest.approx(expected, abs=1e-6)  # coordinates up to 7.0e6 m
+
+    def test_the_lake_query_names_exactly_the_four_fields(
+        self, fake: FakeNve, fetched: Path
+    ) -> None:
+        assert fake.calls_to(5)
+        for call in fake.calls_to(5):
+            assert sorted(call.out_fields) == sorted(ALLOW[5]), call.url
+            text = call.params.get("outFields", "")
+            assert "*" not in text and "globalid" not in text and "kommune" not in text, call.url
+            assert call.params.get("outSR") == "25833" and call.params.get("f") == "geojson"
+
+    def test_a_lake_seen_from_two_stations_is_written_once(self, fetched: Path) -> None:
+        ids = [p["objectid"] for p in props_of(fetched / LAKES)]
+        assert ids.count(LAKE_SHARED) == 1
+        assert len(ids) == len(set(ids))
+
+    def test_a_truncated_lake_answer_is_refused_naming_the_station(
+        self, fake: FakeNve, tmp_path: Path
+    ) -> None:
+        fake.truncate_lakes.add(MULTI)
+        code, output = fetch(tmp_path / "nve")
+        assert code == REFUSED, output
+        assert MULTI in output, output
+        assert re.search(r"exceededTransferLimit|limit|truncat", output, re.IGNORECASE), output
+        assert not (tmp_path / "nve" / LAKES).exists()
+
+
+class TestLakesGeojson:
+    def test_the_lakes_by_objectid_with_a_crs_and_the_four_fields(self, fetched: Path) -> None:
+        """`LAKE_MULTI` is served before `LAKE_SHARED`; the file is in
+        `objectid` order. `LAKE_FAR` meets no envelope. No leaked field
+        (`globalid`, `kommune`, `hoyde`) is copied."""
+        doc = load(fetched / LAKES)
+        assert doc["crs"]["properties"]["name"] == CRS
+        ids = [f["properties"]["objectid"] for f in doc["features"]]
+        assert ids == [LAKE_SHARED, LAKE_MULTI, LAKE_NAMELESS]
+        assert LAKE_FAR not in ids
+        assert all(set(f["properties"]) == set(ALLOW[5]) for f in doc["features"])
+
+    def test_the_geometry_is_written_as_served(self, fetched: Path) -> None:
+        by_id = {f["properties"]["objectid"]: f for f in load(fetched / LAKES)["features"]}
+        assert by_id[LAKE_MULTI]["geometry"]["type"] == "MultiPolygon"
+        assert len(by_id[LAKE_MULTI]["geometry"]["coordinates"]) == 2
+        assert by_id[LAKE_SHARED]["geometry"]["type"] == "Polygon"
+        assert by_id[LAKE_NAMELESS]["properties"]["vatnlnr"] == 0
+        assert by_id[LAKE_NAMELESS]["properties"]["navn"] is None
+
+    def test_no_leaked_lake_field_reaches_it(self, fetched: Path) -> None:
+        """The fake leaks `globalid` ("{3C3C}"), `kommune` ("3421") and
+        `hoyde` into every lake answer."""
+        text = (fetched / LAKES).read_text(encoding="utf-8")
+        for leaked in ("globalid", "{3C3C}", "kommune", "3421", "hoyde"):
+            assert leaked not in text, leaked
+
+    def test_it_is_in_the_manifest(self, fetched: Path) -> None:
+        manifest = load(fetched / "manifest.json")
+        digest = hashlib.sha256((fetched / LAKES).read_bytes()).hexdigest()
+        assert manifest["files"]["lakes.geojson"] == digest
+
+    def test_it_reads_back_through_read_lakes(self, fetched: Path) -> None:
+        """The MultiPolygon is split into its two parts; `vatnlnr` 0 reads as
+        no number."""
+        from tin_engine.io.station_set import read_lakes
+
+        lakes, crs = read_lakes(fetched / LAKES)
+        assert crs == CRS
+        assert sorted((lk.number, lk.name) for lk in lakes if lk.number is not None) == [
+            (4110, "Mellomvatnet"),
+            (4120, "Tvillingtjørna"),
+            (4120, "Tvillingtjørna"),
+        ]
+        assert [(lk.number, lk.name) for lk in lakes if lk.number is None] == [(None, None)]
+
+    def test_a_directory_without_lakes_geojson_is_fetched_again(
+        self, fake: FakeNve, fetched: Path
+    ) -> None:
+        """A fetch dir written before the change holds the four older files and
+        no `lakes.geojson`: it is fetched again without `--refresh`."""
+        (fetched / LAKES).unlink()
+        fake.calls.clear()
+        code, output = fetch(fetched)
+        assert code == 0, output
+        assert len(fake.calls_to(5)) == 140
+        assert (fetched / LAKES).is_file()

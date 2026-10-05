@@ -696,3 +696,70 @@ def test_any_other_value_error_from_the_burn_is_not_a_catchment_error(
         api.delineate(gauge_request(api, gauge_api), valley_repository(gf.valley(dam=True)))
     assert raised.value is bug
     assert not isinstance(raised.value, api.CatchmentError)
+
+
+# ---------------------------------------------------------------------------
+# Increment 29, PR 4: the joined causes, and the mixed-grid refusal by type
+#
+# "The window loop and the catchment": PR 4, as the second reader, moves the
+# join of the `direction` cause into `catchment.py`: one `causes` on
+# `GaugeResult`, the sensitivity's own causes in their order, then
+# `"direction"` when the line runs against the DEM's slope (the order
+# `catchment --rivers` wrote them in PR 2). "The batch": the mosaic's
+# mixed-lattice refusal reaches the caller of `delineate` as
+# `MixedGridRefusal(CatchmentError)`, with the mosaic error's `tiles` and its
+# words.
+# ---------------------------------------------------------------------------
+
+
+def test_a_well_posed_gauge_has_no_joined_cause(api: Any, gauge_api: Any) -> None:
+    result = api.delineate(gauge_request(api, gauge_api), valley_repository(gf.valley(dam=True)))
+    g = result.gauge
+    assert g.direction_ok
+    assert tuple(g.causes) == () == tuple(g.sensitivity.causes)
+
+
+def test_a_line_against_the_slope_joins_direction_after_the_sensitivitys_causes(
+    api: Any, gauge_api: Any
+) -> None:
+    """The valley's line digitised upstream (row 200 to row 40): measured on
+    PR 2's code, the burn's direction check fails and the sensitivity raises
+    `chain_not_draining` and `chain_end_open`; the joined list adds
+    `direction` after them, and the sensitivity's own list stays without it."""
+    reach = gauge_api.Reach(
+        line=gf.column_line(gf.CC, 200, 40), at=500.0, uncertainty=30.0, corridor=5.0
+    )
+    request = api.CatchmentRequest(seed=gf.lat(gf.CC + 2, 150), seed_crs=gf.EPSG, reach=reach)
+    g = api.delineate(request, valley_repository(gf.valley(dam=True))).gauge
+    assert not g.direction_ok
+    assert "direction" not in g.sensitivity.causes
+    assert tuple(g.causes) == (*g.sensitivity.causes, "direction")
+
+
+def test_a_window_on_two_grids_is_a_mixed_grid_refusal_naming_a_tile_of_each(
+    api: Any, gauge_api: Any
+) -> None:
+    from batch_fixtures import mixed_tiles
+
+    reach = gauge_api.Reach(
+        line=(gf.lat(690, gf.JOIN_ROW), gf.lat(500, gf.JOIN_ROW)), at=900.0, uncertainty=30.0
+    )
+    request = api.CatchmentRequest(
+        seed=gf.lat(600, gf.JOIN_ROW - 1.6), seed_crs=gf.EPSG, reach=reach
+    )
+    with pytest.raises(api.MixedGridRefusal) as raised:
+        api.delineate(request, MemoryRepository(mixed_tiles()))
+    exc = raised.value
+    assert isinstance(exc, api.CatchmentError)
+    assert set(exc.tiles) == {"a.tif", "b.tif"}
+    assert str(exc).startswith("the request selects tiles on two lattices, ")
+    assert isinstance(exc.__cause__, mosaic.MixedGridError)
+    assert tuple(exc.tiles) == tuple(exc.__cause__.tiles)
+
+
+def test_other_refusals_of_the_plan_are_not_mixed_grid(api: Any) -> None:
+    """A seed whose box meets no tile is refused, but not as mixed grids."""
+    far = api.CatchmentRequest(seed=lat(5000, 5000), seed_crs=EPSG)
+    with pytest.raises(api.CatchmentError) as raised:
+        api.delineate(far, repository_of(bowl()))
+    assert not isinstance(raised.value, api.MixedGridRefusal)

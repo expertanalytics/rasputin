@@ -11,6 +11,7 @@ opens files.
 from __future__ import annotations
 
 from collections.abc import Mapping
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -36,6 +37,16 @@ class Station(BaseModel):
     nve_area_km2: float | None = None
     watercourse: str | None = None
     river: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class Lake:
+    """One lake polygon part, in its file's CRS (PR 4, "Lake gauges").
+    `number` is NVE's `vatnlnr`, None for null or 0; `name` is `navn`."""
+
+    number: int | None
+    name: str | None
+    polygon: Polygon
 
 
 def features_of(path: Path) -> tuple[list[dict[str, Any]], str]:
@@ -104,7 +115,39 @@ def read_references(path: Path) -> tuple[Mapping[str, Polygon | MultiPolygon], s
         _geometry_type(path, f, ("Polygon", "MultiPolygon"))
     numbers = [str(required(path, f, "station")) for f in features]
     _unique(path, numbers, "station")
-    return {n: shape(f["geometry"]) for n, f in zip(numbers, features, strict=True)}, crs
+    polygons = {n: shape(f["geometry"]) for n, f in zip(numbers, features, strict=True)}
+    for n, g in polygons.items():
+        # The agreement divides by the polygon's area and perimeter.
+        if g.is_empty or g.area == 0:
+            raise ValueError(f"{path}: the reference polygon of station {n} has no area")
+    return polygons, crs
 
 
-__all__ = ["Station", "features_of", "read_references", "read_stations", "required"]
+def read_lakes(path: Path) -> tuple[tuple[Lake, ...], str]:
+    """The lakes in `path`, in file order, a MultiPolygon split into its parts,
+    and the file's CRS. A geometry that is not a Polygon or MultiPolygon, or
+    has no area, is refused naming the feature's `objectid` (else its index)."""
+    features, crs = features_of(path)
+    lakes: list[Lake] = []
+    for k, f in enumerate(features):
+        props = f.get("properties") or {}
+        label = f"lake {props['objectid']}" if "objectid" in props else f"feature {k}"
+        kind = (f.get("geometry") or {}).get("type")
+        g = shape(f["geometry"]) if kind in ("Polygon", "MultiPolygon") else None
+        if g is None or g.is_empty or g.area == 0:
+            raise ValueError(f"{path.name}: {label} is not a polygon with an area ({kind})")
+        number, name = props.get("vatnlnr") or None, props.get("navn")
+        parts = g.geoms if isinstance(g, MultiPolygon) else [g]
+        lakes += [Lake(None if number is None else int(number), name, p) for p in parts]
+    return tuple(lakes), crs
+
+
+__all__ = [
+    "Lake",
+    "Station",
+    "features_of",
+    "read_lakes",
+    "read_references",
+    "read_stations",
+    "required",
+]

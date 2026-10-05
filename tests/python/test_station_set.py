@@ -188,3 +188,124 @@ class TestAMalformedFile:
         doc = collection([feature(box(0, 0, 1, 1), station="2.11.0"), bare])
         with pytest.raises(ValueError, match=r"station|properties"):
             station_set.read_references(write(tmp_path / "r.geojson", doc))
+
+
+class TestAReferenceWithNoArea:
+    """Change (b) of "PR 4's green step": `agreement` divides by NVE's polygon's
+    area and perimeter, so a reference with no area would stop a batch at its
+    station (a zero-area ring raises `ZeroDivisionError`, an empty polygon a
+    `ValueError` from its NaN bounds). `read_references` refuses either when
+    the file is read, naming the station. The bad feature comes second, after
+    a good one, so the message names the right station."""
+
+    @pytest.mark.parametrize(
+        "geometry",
+        [
+            {"type": "Polygon", "coordinates": [[[0, 0], [10, 0], [20, 0], [0, 0]]]},
+            {"type": "Polygon", "coordinates": []},
+            {"type": "MultiPolygon", "coordinates": []},
+        ],
+        ids=["zero_area_ring", "empty_polygon", "empty_multipolygon"],
+    )
+    def test_it_is_refused_naming_the_station(
+        self, station_set: ModuleType, tmp_path: Path, geometry: dict[str, Any]
+    ) -> None:
+        doc = collection(
+            [feature(box(0, 0, 100, 100), station="2.11.0"), feature(geometry, station="2.32.0")]
+        )
+        with pytest.raises(ValueError, match=r"2\.32\.0"):
+            station_set.read_references(write(tmp_path / "r.geojson", doc))
+
+
+# ---------------------------------------------------------------------------
+# PR 4, lake gauges: `read_lakes` ("The station set", "Lake gauges")
+# ---------------------------------------------------------------------------
+
+
+def nve_lake(geometry: Any, objectid: int | None = 4_100_001, **extra: Any) -> dict[str, Any]:
+    """A lake as `fetch-stations` writes it: `objectid`, `vatnlnr`, `navn`,
+    `areal_km2`; `objectid=None` leaves the property out."""
+    props: dict[str, Any] = {"vatnlnr": 495, "navn": "Narsjøen", "areal_km2": 0.01} | extra
+    if objectid is not None:
+        props["objectid"] = objectid
+    return feature(geometry, **props)
+
+
+class TestReadLakes:
+    """`read_lakes(path) -> (tuple[Lake, ...], crs)`. Before the change, neither
+    `read_lakes` nor `Lake` exists."""
+
+    def test_a_polygon_gives_one_lake_with_its_number_and_name(
+        self, station_set: ModuleType, tmp_path: Path
+    ) -> None:
+        doc = collection([nve_lake(box(0, 0, 100, 100))])
+        lakes, crs = station_set.read_lakes(write(tmp_path / "l.geojson", doc))
+        assert crs == CRS
+        (lake,) = lakes
+        assert isinstance(lake, station_set.Lake)
+        assert (lake.number, lake.name) == (495, "Narsjøen")
+        assert isinstance(lake.polygon, Polygon) and lake.polygon.area == 10_000.0
+
+    def test_a_multipolygon_gives_one_lake_per_part_with_the_same_number_and_name(
+        self, station_set: ModuleType, tmp_path: Path
+    ) -> None:
+        two = MultiPolygon([box(0, 0, 10, 10), box(20, 0, 30, 10)])
+        doc = collection([nve_lake(two, vatnlnr=12, navn="Tvillingvatna")])
+        lakes, _ = station_set.read_lakes(write(tmp_path / "l.geojson", doc))
+        assert len(lakes) == 2
+        assert {(lk.number, lk.name) for lk in lakes} == {(12, "Tvillingvatna")}
+        assert all(isinstance(lk.polygon, Polygon) for lk in lakes)
+        assert sorted(lk.polygon.bounds for lk in lakes) == [(0, 0, 10, 10), (20, 0, 30, 10)]
+
+    def test_file_order_is_kept(self, station_set: ModuleType, tmp_path: Path) -> None:
+        doc = collection(
+            [
+                nve_lake(box(0, 0, 1, 1), objectid=3, vatnlnr=30),
+                nve_lake(box(5, 5, 6, 6), objectid=1, vatnlnr=10),
+                nve_lake(box(9, 9, 10, 10), objectid=2, vatnlnr=20),
+            ]
+        )
+        lakes, _ = station_set.read_lakes(write(tmp_path / "l.geojson", doc))
+        assert [lk.number for lk in lakes] == [30, 10, 20]
+
+    @pytest.mark.parametrize("vatnlnr", [0, None], ids=["zero", "null"])
+    def test_lake_number_0_or_null_is_no_number(
+        self, station_set: ModuleType, tmp_path: Path, vatnlnr: int | None
+    ) -> None:
+        doc = collection([nve_lake(box(0, 0, 1, 1), vatnlnr=vatnlnr, navn=None)])
+        (lake,), _ = station_set.read_lakes(write(tmp_path / "l.geojson", doc))
+        assert lake.number is None and lake.name is None
+
+    def test_a_file_without_crs_is_refused(self, station_set: ModuleType, tmp_path: Path) -> None:
+        doc = collection([nve_lake(box(0, 0, 1, 1))], crs=None)
+        with pytest.raises(ValueError, match=r"(?i)\bcrs\b"):
+            station_set.read_lakes(write(tmp_path / "l.geojson", doc))
+
+    @pytest.mark.parametrize(
+        "geometry",
+        [
+            {"type": "LineString", "coordinates": [[0, 0], [10, 0]]},
+            {"type": "Point", "coordinates": [0, 0]},
+            {"type": "Polygon", "coordinates": []},
+            {"type": "MultiPolygon", "coordinates": []},
+            {"type": "Polygon", "coordinates": [[[0, 0], [10, 0], [20, 0], [0, 0]]]},
+        ],
+        ids=["line_string", "point", "empty_polygon", "empty_multipolygon", "zero_area_ring"],
+    )
+    def test_a_bad_geometry_is_refused_naming_its_objectid(
+        self, station_set: ModuleType, tmp_path: Path, geometry: dict[str, Any]
+    ) -> None:
+        """After a good lake, so the message names the right one."""
+        doc = collection([nve_lake(box(0, 0, 1, 1)), nve_lake(geometry, objectid=7_654_321)])
+        with pytest.raises(ValueError, match="7654321"):
+            station_set.read_lakes(write(tmp_path / "l.geojson", doc))
+
+    def test_a_bad_geometry_without_objectid_is_refused_naming_its_index(
+        self, station_set: ModuleType, tmp_path: Path
+    ) -> None:
+        """The fourth feature (index 3) has no `objectid`."""
+        good = [nve_lake(box(k, 0, k + 1, 1), objectid=900 + k) for k in range(3)]
+        bad = nve_lake({"type": "LineString", "coordinates": [[0, 0], [10, 0]]}, objectid=None)
+        doc = collection([*good, bad])
+        with pytest.raises(ValueError, match=r"(?i)(feature|index)\D{0,4}3\b"):
+            station_set.read_lakes(write(tmp_path / "l.geojson", doc))

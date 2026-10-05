@@ -133,8 +133,8 @@ def _steps(chain: list[tuple[int, int]], m: RasterMeta) -> list[float]:
 
 def burn_reach(window: DemTile, reach: Reach) -> tuple[DemTile, GaugePath]:
     """The window with the reach burnt in (a copy, same `meta`), and its path.
-    A placed position outside the window, or a chain node without data, is a
-    `BurnRefusal`."""
+    A placed position outside the window, a chain node without data, or no
+    node with data near the reach is a `BurnRefusal`."""
     m, raw = window.meta, np.asarray(window.array)
     # A NaN cell is NoData whatever the sentinel, as in the core's `is_nodata`.
     ok = ~np.isnan(raw) if m.nodata is None else ~np.isnan(raw) & (raw != m.nodata)

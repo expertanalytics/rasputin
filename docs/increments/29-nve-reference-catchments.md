@@ -1,6 +1,6 @@
 # Increment 29 — NVE reference catchments: our catchments against NVE's, station by station
 
-Status: **design approved by `@reviewer` (round 5, 2026-10-04); PR 1 merged as #173; PR 3 merged as #178; PR 2 (the gauge on the river): green `193079d`, 569 production lines; code review round 3 (2026-10-05) approved; `@perf`'s placement figures in (`cdc0805`); the fixes from the evidence review, round 1, in; the evidence re-check next, then the push; questions 5, 6 and 7 (the example station) open for Ola, written to their defaults**
+Status: **design approved by `@reviewer` (round 5, 2026-10-04); PR 1 merged as #173; PR 3 merged as #178; PR 2 (the gauge on the river): green `193079d`, 569 production lines, approved, the push waits for Ola; PR 4 (the batch and the comparison): lake path green `fff6ac9`, 691 net, 8 lines of room under the 700 ceiling, which counts net lines (Ola, 2026-10-05, now in `CLAUDE.md` §2); approved in code review round 6 (prose only since round 4); the push waits for Ola; questions 1 to 10 ruled by Ola, all kept as built, to be reassessed after the full 140-station run**
 (`@architect`, 2026-10-04), branch `worktree-nve-catchments` off master
 `d20126b`. Ola's rulings of 2026-10-04 are in the section below. Round 2 closed the burn's drainage claim
 (checked node by node, not assumed), the ELVIS data cases, the PR order, and
@@ -17,9 +17,12 @@ the same day. The gauge
 placement is redesigned to his direction (the mapped river, then the DEM's
 flow path along it, never an area objective), with a per-station sensitivity
 check. Five PRs (merge order 1, 3, 2, 4, 5). Questions 1 to 4 under "Questions for Ola" are
-ruled (see "Ola's rulings"); questions 5 and 6, from PR 2's code review,
-and 7, from its placement figures, are open, and the design is written to
-their defaults.
+ruled (see "Ola's rulings"). Questions 5 and 6 came from PR 2's code
+review, 7 from its placement figures, and 8 from PR 4's green step. On
+2026-10-05 Ola ruled that lake gauges get increment 22's Bygdin method, in
+PR 4 ("Lake gauges"); questions 9 and 10 come from that design. The same day
+Ola ruled questions 5 to 10 as built (their defaults), to be reassessed after
+the full 140-station run ("Questions 5 to 10: Ola's ruling").
 
 **Closes.** Catchments for real Norwegian gauging stations, computed from the
 DEM by `rasputin`, one polygon per station, each usable as `--domain`, and a
@@ -32,6 +35,7 @@ rasputin station-catchments --dem ../rasputin_data/DTM10_UTM33_20260925 \
     --stations ../rasputin_data/nve_hrd/stations.geojson \
     --rivers ../rasputin_data/nve_hrd/rivers.geojson \
     --reference ../rasputin_data/nve_hrd/reference.geojson \
+    --lakes ../rasputin_data/nve_hrd/lakes.geojson \
     --out-dir ../rasputin_scratch/hrd_catchments
 rasputin mesh --dem ../rasputin_data/DTM10_UTM33_20260925 \
     --domain ../rasputin_scratch/hrd_catchments/2.32.0.geojson --tolerance 1 --out atnasjo.vtk
@@ -47,7 +51,8 @@ It generalises increment 22's Bygdin acceptance (one catchment, area within
 2 %, node overlap both ways) to 140 stations. It also adds what 22 left out:
 flow accumulation; placing a gauge where it physically is (on NVE's mapped
 river, then on the DEM's flow path along it); and a per-station check of
-whether the catchment area is well defined at the gauge at all.
+whether the catchment area is well defined at the gauge at all. A gauge on a
+lake is seeded with the whole lake, as 22 seeded Bygdin ("Lake gauges").
 
 **Not closed.** Discharge (only the keys to join it later are stored; see
 "Discharge"). Residual inflow between gauges on one river (the interfaces are
@@ -57,6 +62,8 @@ reach is burnt). The nine stations whose catchments straddle DTM10's
 half-cell-shifted tiles (expected refusals, reported apart as known
 refusals, not failures; a later increment fixes the tiles) and
 Femundsenden (no mapped river within 500 m; refused until the fallback).
+Seeding a lake together with the river from its outlet down to a gauge
+below it (question 10; such a gauge stays on the river, "Lake gauges").
 Holes, as in 22. Parallel stations (one station at a time; see "The batch").
 Stations outside DTM10's coverage, and any other DEM.
 
@@ -312,6 +319,407 @@ check and the extension already share, so nothing else changes there.
 refusals; `_burnt_flood` catches `BurnRefusal` only and turns it into a
 `CatchmentError` with the same words. A few lines; no other rule changes.
 
+**PR 4's red step: `@tester`'s choices, read by `@architect` (2026-10-05).**
+Not Ola's rulings. Red `2b9b39f` (`test_reference.py`,
+`test_catchment_batch.py`, `test_cli_station_catchments.py`,
+`test_io_geojson.py` and `batch_fixtures.py`, new; additions to
+`test_mosaic.py`, `test_catchment.py` and `test_burn.py`). **PR 4 is built on
+PR 2's branch, which is not pushed yet**, so PR 4's base moves when PR 2 is
+merged; and questions 5, 6 and 7 for Ola are still open. Their defaults are
+in the code PR 4 builds on; a different answer changes PR 2's code, and PR
+4's suite only where a station meets the rule. None of the batch fixture's
+stations does: none has a gap on its chain (question 5), the causes the
+suite expects were measured on PR 2's code, and with question 6's
+alternative causes can only disappear, which leaves the expected causes as
+they are (`1.140.0` and `1.135.0` have none, `1.130.0` has only
+`downstream_unread`, `1.150.0` keeps `swing`); question 7 changes only the
+example under "Closes".
+
+*The one departure, adopted.* The batch runs on `gauge_fixtures.two_basins()`
+(the stage B terrain of `test_catchment.py`), not on the valley of
+`test_cli_catchment.py` that "The red suites" names: that valley has no
+tributary, so the station with a confluence just below it cannot be built
+on it. The suite's intent (a synthetic tiled DEM, a river file, the five
+stations and the sixth on two grids) is unchanged; "The red suites" now
+says so.
+
+*Adopted as the design* (each is now part of the design, as the suite
+states it):
+
+1. `reference.agreement(fine, reference, meta) -> Agreement`: our fine
+   outline, NVE's polygon (Polygon or MultiPolygon, every part counted), and
+   the final window's `RasterMeta`, of which only the origin and the spacing
+   are read. `Agreement` is a frozen dataclass: `ours`, `ref`, `both`,
+   `nve_in_ours`, `ours_in_nve`, `area_ratio`, `divide_offset_m`, `cell_m`.
+2. `reference.classify(agreement, gauge, refused=False) -> (class,
+   match_by)`, with `gauge` a `catchment.GaugeResult` or None. The class is
+   `refused`, `uncertain`, `match`, `close`, `miss`, or None for a station
+   with no cause and no reference; `match_by` is `overlap` or `offset` for a
+   match and None otherwise. With no gauge (the fallback of PR 5) the
+   agreement alone decides. Classify reads the gauge's joined `causes`
+   (next item), not `Sensitivity.causes`, so `direction` counts.
+3. `GaugeResult.causes`: the sensitivity's causes in their order, then
+   `direction` when `direction_ok` is false. This is the move "The window
+   loop" already announced; `catchment --rivers` reads it instead of joining
+   the list itself, and writes the same output.
+4. A swing of exactly 0.05 raises no cause: `swing <= SWING_MAX` is well
+   posed, as "Sensitivity", step 5, says.
+5. `summarise(rows) -> Summary`, a frozen Pydantic model, read by
+   attribute from the rows, and its JSON keys: `stations`; `classes` (all
+   five); `match_by` (both); `scored`, holding `area_ratio`, `nve_in_ours`
+   and `ours_in_nve`, each with `min`, `p10`, `p25`, `p50`, `p75`, `p90`,
+   `max`, numpy's default percentile (linear between the closest ranks);
+   `by_size`, bands `under 10`, `10-100`, `100-1000`, `over 1000` (km²; a
+   band's lower bound is in it), decided by NVE's polygon area, or by our
+   fine area without a reference, each band with `stations`, `classes`,
+   `uncertain_share` and the three measures; `by_tiles`, groups `1`, `2`,
+   `3-4`, `5+`, with the same contents; `uncertain_causes`;
+   `refusal_causes`; `known_refusals` with `count`, `stations` (in row
+   order) and `line`.
+6. The known-refusal line, word for word as "Agreement and classes" gives
+   it, with N the count.
+7. `StationResult` field names: `station_class` (a field cannot be called
+   `class`; the CSV column is headed `class`), `refusal_message`,
+   `grid_tiles` (one tile from each grid, `mixed_grid` only, else None),
+   `distance_m`, `uncertainty_m`, areas in km² (`fine_area_km2`,
+   `reference_area_km2` for NVE's polygon, `nve_area_km2` for the station
+   layer's), `tiles` (how many of the repository's tiles have a node box,
+   from `footprints()`, that meets our fine outline), `windows` (how many
+   windows), `causes` a tuple; a refused row has None in every field it
+   could not have (a refusal by `delineate` keeps its placement; one by
+   `place` has none).
+8. `run_batch`: references are in the river file's CRS; `sink.catchment`
+   is called before the station's row, never for a refused station; a
+   number in `only` that is not in the list raises `ValueError` naming it
+   before any station runs; `only` keeps the file's order.
+9. Only `CatchmentError` is a refusal. Any other exception, a plain
+   `ValueError` included, stops the batch, and the rows already given to
+   the sink stay given.
+10. `MixedGridError.tiles` is the two names in the message's order;
+    `catchment._plan` raises `MixedGridRefusal` from it (`raise ... from`),
+    with the same `tiles` and words. Other refusals of the plan are not
+    `MixedGridRefusal`.
+11. `io.geojson.catchment_geojson(polygon, crs, properties) -> bytes`:
+    UTF-8 JSON of a `FeatureCollection` with the `crs` member `{"type":
+    "name", "properties": {"name": crs}}` and one `Feature`, the polygon's
+    exterior ring; `json.dumps` as 22 called it, so `rasputin catchment`'s
+    files keep their bytes. `cli.py` no longer builds the document, and
+    `io/geojson.py` opens no file.
+12. `results.csv`: a header, one row per station in file order, the columns
+    `StationResult`'s fields in their order; a tuple is joined by `;`, None
+    is an empty cell, any other value is written as `csv` writes it.
+13. `summary.json` is `Summary`'s JSON plus `river_copies_dropped`, which
+    the command adds (the batch never sees the river file).
+14. stderr: the copies line of "Ola's rulings" (PR 3's green step), then
+    one line per station with its number, its name and its class (the word
+    `refused` for a refusal; for a scored station also the two overlaps and
+    the area ratio, as "The batch" says), then the summary. A stations or
+    rivers file without a `crs` member is refused naming its option
+    (`--stations`, `--rivers`) and the missing CRS, and nothing is written.
+
+*Added where the suite is silent* (new design; red amendment below):
+
+- **Fixed lists are written in full.** `classes`, `match_by`,
+  `uncertain_causes` (`swing`, `downstream_unread`, `chain_not_draining`,
+  `chain_end_open`, `direction`) and `refusal_causes` (`mixed_grid`,
+  `no_river`, `other`) always hold every key, in that order, 0 where none.
+  Causes are counted over `uncertain` rows only.
+- **Empty groups.** A measure over no scored station is `null` in place of
+  its seven-value object (in `scored`, a band or a tile group).
+  `uncertain_share` is the band's `uncertain` rows over its rows that are
+  not `refused` (a refused station was never assessed, so it must not
+  dilute the share), and `null` when there are none. A band's `stations`
+  counts every row in it, refused ones included. A row with no area (no
+  reference and no catchment) is in no band, and a row with `tiles` None in
+  no tile group, so the bands' counts may sum to less than `stations`.
+- **The known-refusal line for one station**: "1 station refused because
+  its window selects tiles on two different grids, which rasputin does not
+  combine, and neither grid covers the window alone (a known refusal, not a
+  failure)". With none, `line` is `null`.
+- **The reference file's CRS must be the river file's** (equal as
+  `pyproj.CRS`, through `crs.parse_crs`), since `run_batch` takes the
+  references in that CRS; otherwise `station-catchments` refuses, naming
+  `--reference` and both CRSs, and writes nothing. No reprojection of
+  polygons.
+- **`cell_m` on unequal spacing** is `sqrt(dx × dy)`, the side of a square
+  of one cell's area, which is what the offset (an area over a length) is
+  measured against; on DTM10 it is 10 m. Not tested: every DEM of this
+  increment has square cells.
+- **`StationResult` is a frozen dataclass** with slots, as `GaugeResult`
+  is; the CSV's columns come from `dataclasses.fields` in order. Its
+  `station_class` is typed `Literal["refused", "uncertain", "match",
+  "close", "miss"] | None`.
+
+*The swing is not split.* "Agreement and classes" said the summary splits
+the `swing` cause by its largest step's position, a confluence or a flat
+floor or lake, but gave no rule, and the counts alone have none: a flat
+floor also gives a step where the flat's nodes join the chain ("Sensitivity",
+after step 5), so a step does not tell a confluence from a flat. A rule would
+need a new threshold with nothing measured behind it. **`swing` stays one
+count in `summary.json`**; each row carries `largest_step`,
+`largest_step_at_m` and `lake`, and the acceptance README tells the causes
+apart station by station (acceptance step 4 already asks for that).
+
+**Red amendment** (`@tester`, lean, one commit before green):
+in `test_reference.py`, (a) a summary over rows that lack some causes and
+refusal causes still has all five and all three keys, in order, the absent
+ones 0; (b) a band whose rows are one `uncertain` and one `refused` has
+`stations` 2 and `uncertain_share` 1.0, a band with only refused rows has
+`uncertain_share` null and the three measures null; (c) a row with neither
+area is in no band, and one with `tiles` None in no tile group; (d) one
+`mixed_grid` refusal gives the singular line above, and none gives `line`
+null. In `test_cli_station_catchments.py`, a `--reference` file in another
+CRS (EPSG:32633) is refused, naming `--reference`, and nothing is written.
+The amendment is `7cd56a4`; like the rest of the red suite, it failed on the
+missing modules until green.
+
+**PR 4's green step: `@developer`'s choices, read by `@architect`
+(2026-10-05).** Green `1c39ef7`, on red `2b9b39f` and `7cd56a4`. Not Ola's
+rulings. Each choice the design left open is adopted as the design, or
+changed with a red and a green ask below.
+
+*The area, as built (question 8, default).* `fine_area_km2` is `ours` (the
+lattice nodes strictly inside our fine outline) × cell area, with or
+without a reference, so the size band of a station with no reference and
+the area ratio both read the same count as the overlaps;
+`reduced_area_km2` is the reduced outline's shapely area;
+`reference_area_km2` is NVE's polygon's shapely area; `nve_area_km2` is the
+station layer's own figure, copied. `area_ratio` = `ours` × cell area /
+`reference_area_km2` ("Agreement and classes" says why it is half a cell
+above the traced outline's area). The catchment file keeps 22's
+`fine_area_m2` (the traced outline's shapely area) and `reduced_area_m2`,
+so `results.csv`'s `fine_area_km2` and the file's `fine_area_m2` differ by
+half a cell; the README of the acceptance run says so.
+
+*Adopted:*
+
+1. **`StationResult`'s columns**, in the order of
+   `catchment_batch.py`: the station and its class (`station`, `name`,
+   `class`, `match_by`, `refusal_message`, `refusal_cause`, `grid_tiles`);
+   the placement; the gauge and the burn (the burn's `end_extended_m` and
+   `end_closed` with the gauge, not after the sensitivity as "The batch"
+   lists them); the sensitivity and the joined `causes`; the catchment and
+   the agreement; `tiles`, `windows`, `seconds`. Three columns beyond the
+   design's list: `chain_nodes` (`GaugeResult`'s own field, which the row
+   takes whole), `reduced_area_km2` and `divide_offset_m` (both in "The
+   batch"'s words, "fine and reduced area" and "the agreement numbers",
+   now with names).
+2. **A refused row keeps `reference_area_km2`, `nve_area_km2` and
+   `seconds`.** They are known before the refusal, and the size band of a
+   refused row needs the reference area (the red amendment's band with an
+   `uncertain` and a `refused` row counts both).
+3. **The catchment file is written when its row arrives.** The batch still
+   calls `sink.catchment` before `sink.row`; the directory sink holds the
+   catchment until the row, because the file's properties come from the
+   row. The properties: `station`, `name`, `series`, then 22's (`nodes`,
+   `fine_vertices`, `fine_area_m2`, `reduced_vertices`, `reduced_area_m2`,
+   `outline_tolerance_m`, `windows`), then the row's fields from
+   `placed_on` to `causes` (the placement, the gauge, the burn, the
+   sensitivity). No `seed` or `seed_crs` (the station's position is in the
+   stations file) and no agreement numbers or class (they are in
+   `results.csv`). A batch stopped by a bug writes no file for the station
+   in flight, which never got its row.
+4. **The stderr lines.** Per station, `<station> <name>: <word>`, the word
+   being the class, or "well defined, no reference" for a station with no
+   cause and no reference polygon; a refusal adds `: <message>`, an
+   `uncertain` row its causes in brackets, and a row with both overlaps
+   adds "; NVE's in ours 98.4 %, ours in NVE's 99.2 %, area ratio 0.984"
+   (one decimal, three for the ratio). At the end, `summary: N stations:
+   refused a, uncertain b, match c, close d, miss e`, the known-refusal
+   line when there is one, and the output directory on stdout.
+5. **The reference CRS refusal** names `--reference` and says "the
+   reference file's CRS, X, is not the river file's, Y; polygons are not
+   reprojected".
+6. **`nve_in_ours` and `ours_in_nve` are 0.0 when their divisor is 0.**
+   `ours` is never 0 (the outline holds the placed node); `ref` is 0 when
+   NVE's polygon holds no node. 0.0 fails both overlap bars, and the offset
+   test still decides, which is the right test for a polygon smaller than
+   the lattice resolves. The third divisor is not covered: see change (b).
+7. **`MixedGridError.tiles` defaults to `()`.** `dem_input.py:248`
+   re-raises a mosaic error as `type(exc)(message)` with more words, which
+   calls the constructor with the message alone; the mesh path reads no
+   tiles, and the catchment path, the only reader, gets them from
+   `_covering` directly.
+
+*Changed* (`@tester` red, then `@developer` green; one round, lean):
+
+- **(a) An unknown `--only` is refused by the command, naming `--only`,
+  before anything is written.** Today `run_batch`'s `ValueError` ("not in
+  the stations file: 9.9.9") comes out as a plain `Error:` line, without the
+  option's name, after `--out-dir` has been created. *Red*
+  (`test_cli_station_catchments.py`): `--only 9.9.9` exits non-zero, the
+  output names `--only` and `9.9.9`, and `--out-dir` does not exist.
+  *Green* (`cli.py`): check the numbers against the stations read, before
+  `target.mkdir`, as `typer.BadParameter(..., param_hint="--only")`.
+  `run_batch` keeps its own check (red-step item 8) for callers other than
+  the command.
+- **(b) A reference polygon with no area is refused when the file is
+  read.** `agreement` divides by NVE's polygon's area and perimeter: a
+  zero-area ring raises `ZeroDivisionError`, and an empty polygon a
+  `ValueError` from its NaN bounds ("cannot convert float NaN to
+  integer"), both checked on `1c39ef7`. Either stops a batch, possibly
+  hours in, at that station. *Red* (`test_station_set.py`): a reference
+  feature whose polygon has a zero-area ring, and one with empty
+  coordinates, each make `read_references` raise `ValueError` naming the
+  station's number. *Green* (`io/station_set.py`): `read_references`
+  refuses a geometry that is empty or has area 0, naming the station.
+  The command already refuses a `ValueError` there naming `--reference`.
+- **(c) `results.csv` is written row by row.** Today the table is written
+  only when the batch ends, so a bug at the 139th station of a run of
+  hours loses the 138 rows (stderr keeps them, in less detail). The
+  directory sink opens `results.csv` when it is made, writes the header,
+  and writes and flushes each row as it arrives; `summary.json` stays at
+  the end. *Red* (`test_cli_station_catchments.py`): with
+  `catchment_batch.delineate` replaced by a stub that delineates the first
+  station and raises `RuntimeError` at the second, the command fails, and
+  `results.csv` holds the header and the first station's row, and
+  `summary.json` does not exist. *Green* (`cli.py`): the sink as above;
+  the bytes of a completed run's `results.csv` do not change.
+
+Changes (a) to (c) are red `6ebff1b` and green `33b1f2d`.
+
+**PR 4's code review, round 1: the suggestions, ruled by `@architect`
+(2026-10-05).** Not Ola's rulings. The round's one blocker,
+`project_structure.md`, waits on Ola (see the round's record under
+"Review"). Of its four suggestions, three become changes (d) to (f),
+`@tester` red then `@developer` green, one round, lean; the fourth is a
+test-only commit. Together about 20 production lines, so PR 4 stays under
+700 (about 560 net) and is not split.
+
+- **(d) A river file not in the DEM's CRS is refused before anything runs,
+  naming `--rivers`, and before `--out-dir` is created.** Before (d),
+  `station-catchments` checked only the reference file against the river
+  file's CRS. The DEM's CRS is checked per station, inside `delineate`
+  ("the river reach must be in the DEM's CRS"), so every placed station
+  becomes a `refused` row with cause `other`, the coverage test compares
+  station points and tile boxes in two CRSs, and the run takes its whole
+  length to say one thing. `catchment --rivers` refuses the same file at
+  once (`_placed` in `cli.py`). The references need no check of their own:
+  they are refused unless in the river file's CRS, so once the river file is
+  in the DEM's CRS, so are they. *Red* (`test_cli_station_catchments.py`):
+  a river file and a reference file, both in EPSG:32633, over a DEM in
+  EPSG:25833: non-zero exit, the output names `--rivers` and both CRSs, and
+  `--out-dir` does not exist. (`test_catchment_batch.py`): `run_batch` with
+  `segments_crs` EPSG:32633 over that DEM raises `ValueError` naming both
+  CRSs, and the sink has received nothing. *Green*: one rule in one place,
+  `catchment.py`'s `check_reach_crs(crs, repository) -> None`, raising
+  `ValueError("the river file's CRS, X, is not the DEM's, Y")` when
+  `parse_crs(crs)` is not the first tile's CRS (the comparison `_placed`
+  makes today). `_placed` calls it, mapping the error to
+  `typer.BadParameter(..., param_hint="--rivers")` as now;
+  `station_catchments` calls it the same way right after the repository is
+  opened, before the request is built and before `mkdir`; `run_batch`
+  calls it before its first station, beside its `--only` check, for callers
+  other than the command. A DEM whose tiles are in several CRSs keeps
+  `delineate`'s own refusal ("the tiles are in N CRSs").
+- **(e) A failed write names the output, not `--dem`.** The
+  `except OSError` around `run_batch` in `station_catchments` exists for
+  the DEM's reads, but the directory sink writes inside `run_batch`, so a
+  catchment file that cannot be written reads "Invalid value for --dem:
+  cannot read .../out/1.140.0.geojson: [Errno 21] Is a directory". The
+  `results.csv` open and the `summary.json` write sit outside every
+  `except`, so their failure is a traceback. *Red*
+  (`test_cli_station_catchments.py`, three cases, each with a directory made
+  beforehand where the command writes a file: `<out-dir>/<station>.geojson`,
+  `<out-dir>/results.csv`, `<out-dir>/summary.json`): non-zero exit; the
+  output names `--out-dir` and the path; it contains neither `--dem` nor
+  "cannot read"; no traceback. *Green* (`cli.py`): every write the command
+  makes (making `--out-dir`, the `results.csv` open, its header, each row's
+  write and flush, its close, each catchment file, `summary.json`) turns an `OSError` into
+  `typer.BadParameter(f"cannot write {path}: {exc.strerror or exc}",
+  param_hint="--out-dir")`, through one small helper. `BadParameter` is
+  neither an `OSError` nor a `ValueError`, and `run_batch` stops on any
+  exception but `CatchmentError`, so it reaches the user unchanged; the
+  `except OSError` around `run_batch` is then about reads alone.
+- **(f) A station with no name prints no stray space.** The stderr line is
+  `f"{row.station} {row.name or ''}: {word}"`, so a station with no name
+  prints `1.2.0 : match`. *Red* (`test_cli_station_catchments.py`): a
+  station with no `name` gives a stderr line starting `<station>: `. *Green*
+  (`cli.py`): the name and its space only when the name is set and not
+  empty.
+- **Test-only: plain imports.** The `importlib` fixtures `cb`, `gj` and
+  `ref` in `test_catchment_batch.py`, `test_io_geojson.py` and
+  `test_reference.py` let the red suite be collected before the modules
+  existed; now they exist, they become plain imports. `@tester`, in its own
+  commit ahead of the red one, so the suite passes unchanged at `33b1f2d`
+  in between. `test_mosaic.py`'s `importlib` fixtures are older than PR 4
+  and are left.
+
+The test-only commit is `e8e93d0`; changes (d) to (f) are red `bc78be3`
+and green `cabff74`. They came to 31 production lines against "about 20"
+(`cli.py` 25, of which 7 are ruff splitting the `tin_engine.catchment`
+import over several lines once `check_reach_crs` joined it;
+`catchment.py` 4; `catchment_batch.py` 2), so PR 4 is 572 net, not about
+560, and still not split.
+
+Code review round 2 found that (e) missed one write: making `--out-dir`
+(`target.mkdir(exist_ok=True)`), so an `--out-dir` that is an existing
+file, or under a parent that cannot be written, ended in a
+`FileExistsError` or `PermissionError` traceback. Two more red cases
+(`44dc954`: an `--out-dir` that is a file; a read-only parent, skipped when
+run as root) and green `f952f2d` put the `mkdir` under the same helper;
+the green also moves the `results.csv` header write and its close under
+it, which no test exercises. PR 4 is then 573 net.
+
+**Lake gauges: Ola's ruling (2026-10-05).** PR 2's chain fails on lake
+gauges such as Narsjø and Tingvatn (catchments under 1 km² against NVE's
+119 and 272 km², "Placement figures"). Ola, 05:07 UTC: "What we did in
+Bygdin, which was a lake, worked really well. Can't we do the same now?",
+and 05:11 UTC: "Fold into PR4". The design is "Lake gauges", below; the evidence is "NVE's
+lakes: Innsjødatabasen"; questions 9 and 10 for Ola come from it.
+
+**Lake gauges' green step: `@developer`'s choices, read by `@architect`
+(2026-10-05).** Red `a0831c9` (`@tester`), green `fff6ac9` (`@developer`,
+no test file touched); `@developer` reports the full suite on a rebuilt
+`_core` at exit 0, 4989 passed, 17 skipped. Counted by PR 2's round-2 rule,
+the whole of PR 4 over `9e666f4..fff6ac9` is 691 net (744 added, 53
+removed), 8 lines of room under 700: `cli.py` 201, `catchment_batch.py` 195,
+`reference.py` 187, `io/station_set.py` 32, `gauge.py` 27, `io/geojson.py`
+21, `catchment.py` 13, `fetch/nve.py` 10, `mosaic.py` 5, `burn.py` 0. The
+lake work alone, over `48d1315..fff6ac9`, is 118 net (150 added, 32
+removed) against "about 100": `cli.py` 28, `io/station_set.py` 28,
+`gauge.py` 27, `catchment_batch.py` 22, `fetch/nve.py` 10, `reference.py`
+3. So the PR 4b seam (under "New and changed files") does not fire, but
+**any change that takes PR 4 to 700 net or more forces it** (8 net lines
+of room are left, since the rule is "under 700"): PR 4 is then
+published as it stood at `48d1315` and the lake work becomes PR 4b. A
+fix that a later review asks for in the lake work counts toward the 700
+like any other line. `@developer`'s choices beyond the design, each
+checked against the code and adopted:
+
+- **Several lakes contain the point**: `lake_seed` keeps them all
+  (`LakeSeed.lakes`, all seeded together) and, on the `lake_line` rule,
+  measures the gap to the nearest of them (`min` of the distances).
+- **The row's `lake_number` and `lake_name` come from the first lake** in
+  `LakeSeed.lakes`, which is the lakes file's order.
+- **A lake row that is refused keeps `seeded_by` = `lake`**, with its
+  `lake_rule`, `lake_number`, `lake_name` and `lake_distance_m`: the seed
+  was chosen before `delineate` refused, and the row says which path ran.
+- **`fetch/nve.py`'s `LAKE_ENVELOPE_HALF` (100 m) is not in its
+  `__all__`**, while `ENVELOPE_HALF` is; only the fetch reads it, and
+  the tests keep their own copy in `nve_fixtures.py`.
+
+**Questions 5 to 10: Ola's ruling (2026-10-05).** Ola, quoted by the main
+session: "We keep increment 29 as is, and reassess after the full run." So
+every question under "Questions for Ola" is ruled: 1 to 4 as recorded above,
+and 5 to 10 kept as built, which is each one's default. A gap in the DEM on
+the river's burnt path refuses the station (5); a river point just upstream
+of the gauge that does not drain through it makes the station uncertain (6);
+the example meshes Atnasjø, `2.32.0` (7); the table's area is the DEM point
+count times a cell's area (8); Femundsenden, with no river line near it,
+stays refused until the nearest-stream fallback, PR 5 (9); a gauge a little
+below a lake's outlet keeps the river method (10). All ten are looked at
+again once the acceptance run over all 140 stations is in.
+
+**Deferred from PR 4's code review, round 4.** PR 4 has 8 production lines
+of room left under the 700-line ceiling, so the two non-blocking
+suggestions wait for a later PR: `read_lakes` refusing a malformed lake
+(too few points in a ring, a `vatnlnr` that is not a number) with the
+underlying library's message, which does not name the lake, and reading a
+string `"0"` as lake number 0 rather than none; and `Lake` moving out of the
+reader module `io/station_set.py`, next to `Reach`, so that `gauge.py` does
+not depend on a reader.
+
 ## What the data says (measured 2026-10-04)
 
 Measured before the design, by throwaway scripts in
@@ -495,6 +903,77 @@ channel, and these numbers are re-measured by the acceptance run).
   with `outSR=25833&f=geojson` and a short `outFields` list. The whole
   network is not fetched (1.95 M segments).
 
+### NVE's lakes: Innsjødatabasen (measured 2026-10-05, for "Lake gauges")
+
+Measured by `@architect` with throwaway scripts in the session's scratchpad
+(not committed), on the fetch of 2026-10-05 in `../rasputin_data/nve_hrd`
+and PR 2's code at this branch's head.
+
+- **What 22 seeded Bygdin with.** CORINE Land Cover 2018, class 512 (water
+  bodies), feature `fid` 54101 of `corine2018_dtm10_utm33.gpkg`, a local
+  extract (22's "What the data says about Bygdin"). CORINE's minimum
+  mapping unit is 25 ha with a 100 m minimum width
+  (`docs/research/raster-to-vector.md`, "CORINE's minimum mapping unit"), so
+  it leaves out small lakes: 7 of the 48 lakes below are under 0.25 km²
+  (the smallest 0.023 km²). It is also not fetched by rasputin.
+- **NVE's lake database is a layer like ELVIS.** `Innsjodatabase2`,
+  `https://kart.nve.no/enterprise/rest/services/Innsjodatabase2/MapServer`,
+  layer 5 `Innsjodatabase` (polygons), EPSG:25833, `maxRecordCount` 2000, on
+  the same host and query interface as layers 0, 38 and ELVIS (read with
+  `?f=json` on the service and on layer 5, 2026-10-05). 267,194 features
+  (`returnCountOnly`). Its fields include `objectid`, `vatnlnr` (the
+  national lake number), `navn`, `areal_km2`, `hoyde`, `magasinnr`,
+  `vassdragsnr`, `kommune` and `globalid`. The service description says
+  every lake larger than 2500 m² has a unique national serial number.
+  Geonorge's record "Innsjødatabase" (uuid
+  `823b8639-9a49-41bf-8571-3608435eb149`, read through
+  `kartkatalog.geonorge.no/api/getdata/` on 2026-10-05): "Åpne data" under
+  NLOD, scale 1:20,000, NVE as the organisation.
+- **ELVIS's lake number is the lake database's.** For each of the 140
+  stations, layer 5 was queried with the station point ± 1000 m as the
+  envelope (`outFields=objectid,vatnlnr,navn,areal_km2,vassdragsnr,hoyde,magasinnr`,
+  `outSR=25833&f=geojson`; 140 queries, one at a time, 34 s, 8.3 MB, no
+  answer truncated). PR 2's tiered placement (`gauge.place`, the defaults)
+  puts 48 stations on a lake line; 47 of those lines carry a lake number
+  (`vatnlnr`, not null and not 0), and for all 47 a polygon with that number
+  was in the answer, and the mapped position `P` lies inside it. The 48th,
+  `97.1.0` Fetvatn, is on a lake line with no number; its `P` lies inside
+  Fitjavatnet.
+- **Where the stations are.** 18 station points lie inside a lake polygon
+  (16 of them placed on a lake line, and `62.18.0` Svartavatn and `191.2.0`
+  Øvrevatn placed on a river line), 55 within 10 m of one, 64 within 30 m.
+  No station is within 30 m of two lakes (one is within 50 m of two, three
+  within 100 m). Of the 48 placed on a lake line, the station's distance to
+  the lake its `P` lies in has quartiles 0.0, 1.3 and 6.0 m; two are
+  farther than 30 m: `12.197.0` (52 m) and `22.16.0` Myglevatn ndf. (460 m:
+  "ndf." is "below"; its line is a pond's, Tveitevatnet, while Myglevatnet is
+  87 m away). `127.11.0` Veravatn is placed on a pond's line 118 m away but
+  lies inside Veresvatnet. Femundsenden (`311.4.0`, no river line within
+  500 m) is 14 m from Femunden. 24 stations placed on a river line have a
+  lake on their reach upstream of `P` (within `reach_up`, 1000 m): gauges
+  below a lake outlet.
+- **The lake seed works on them.** 22's path (`catchment.delineate` with
+  `lakes`, the lake's polygon, and a seed point inside it), run on the 48
+  stations the rule of "Lake gauges" picks, compared with NVE's polygons by
+  `reference.agreement` and classed by "Agreement and classes": **41
+  `match`** (all by overlap), 3 `close`, 1 `miss`, 3 refused on tiles of
+  two grids (`203.2.0`, `213.2.0`, `191.2.0`); 299 s in all, the longest
+  56 s (`62.5.0`, 1091 km²). Over the 45 scored, NVE's in ours has 10th
+  percentile 96.7 % and median 98.8 %; ours in NVE's 96.2 % and 98.8 %;
+  the area ratio 0.989 and 1.000. Narsjø: 98.2 % / 97.5 %, ratio 1.007
+  (PR 2's path: 0.0012 km²); Tingvatn: 99.4 % / 99.5 % (0.48 km²); Atnasjø:
+  98.5 % / 99.1 % (98.4 % / 99.2 % by PR 2's path). Of the 8 lake gauges
+  PR 2's tiered placement ran in full (`full_runs_tiers.json`), 5 got
+  catchments under 1 km²; the lake seed gives 4 of them `match`. The fifth
+  is the `miss`: `83.2.0` Viksvatn (Hestadfjorden), whose point lies inside
+  Hestadfjorden (watercourse number `083.C2`; the station's is `083.C1`),
+  19.3 km² against NVE's 508 km², 99.3 % of ours inside NVE's: a lake
+  whose own catchment is a small part of the gauge's, so less area, not
+  more (why the station point lies in it is not looked at). The `close`
+  rows: `16.66.0` (93.6 % / 98.7 %, 6.5 km²), `35.9.0` (98.7 % / 93.3 %)
+  and `26.29.0` Refsvatn (99.3 % / 84.0 %, ratio 1.18: 18 % more area than
+  NVE's; where the extra lies is not looked at, and the acceptance must say).
+
 ### Coverage by DTM10_UTM33_20260925
 
 - **The DEM.** 254 tiles at 10 m, EPSG:25833, spaced 50 km apart; 243 of
@@ -610,7 +1089,8 @@ a test of `fetch/nve.py` (PR 3), except the `NOTICE.md` credit below:
 
 - **Sources.** The HRD report (the PDF named above); `HydrologiskeData3`
   layers 0 (`Malestasjoner`) and 38 (`Malest_totalnedb`); `Elvenett1` layer 2
-  (`elvenett`). HydAPI is not used and no API key is stored anywhere.
+  (`elvenett`); `Innsjodatabase2` layer 5 (`Innsjodatabase`, the lakes, PR 4,
+  "Lake gauges"). HydAPI is not used and no API key is stored anywhere.
 - **Licence.** NLOD; "Kilde: NVE" is in `NOTICE.txt` of every fetch, in the
   packaged CSV's header (each tested) and in `NOTICE.md` (checked by hand by
   `@reviewer`, block "PR 3, after PR #178's CI" above). NVE disclaims liability for errors
@@ -618,18 +1098,20 @@ a test of `fetch/nve.py` (PR 3), except the `NOTICE.md` credit below:
 - **Committed**: the 140-row HRD list (four columns, from a PDF) and the
   acceptance's `results.csv` (NVE's areas as numbers). **Fetched** into
   `../rasputin_data/nve_hrd/` and never committed: polygons, station points,
-  river lines, manifest.
+  river lines, lake polygons, manifest.
 - **Only the fields the design needs, by explicit allow-list per layer, in
   every request (never `outFields=*`).** Layer 0: `stasjonnr`, `stasjonnavn`,
   `totalt_feltareal_km2`, `stasjonstatus`, `vassdragsnr`, `elvenavnhierarki`.
   Layer 38: `stasjonnr`, `nedborfeltaareal_km2`, `oppdateringsdato`,
   `objectid`. Layer 2: `objectid`, `objekttype`, `strekninglnr`, `elvid`,
-  `vassdragsnr`, `elvenavn`, `vatnlnr`. **Never collected**: `stasjoneier` (the
+  `vassdragsnr`, `elvenavn`, `vatnlnr`. Lake layer 5: `objectid`, `vatnlnr`,
+  `navn`, `areal_km2`. **Never collected**: `stasjoneier` (the
   owner), ELVIS's `oppdatertav` (editor ids, some look like personal
-  initials), `globalid`, and layer 38's discharge normals.
+  initials), `globalid`, layer 38's discharge normals, and the lake layer's
+  municipality fields (`kommnr`, `kommune`), reservoir fields and `globalid`.
 - **Query volume, kept small.** Only `fetch-stations` uses the network: about
-  8 batched queries for layers 0 and 38 (40 stations each) and 140 ELVIS
-  envelope queries, sent one at a time, with 23a-2's retries and back-off. A
+  8 batched queries for layers 0 and 38 (40 stations each), 140 ELVIS
+  envelope queries and 140 lake envelope queries (PR 4), sent one at a time, with 23a-2's retries and back-off. A
   fetch is reused, not repeated: if the files exist, nothing is requested
   unless `--refresh`. `station-catchments` and `catchment` never touch the
   network. The client identifies itself (`User-Agent: rasputin/<version>`)
@@ -791,6 +1273,36 @@ named were read, no paper in full.
   in increment 22: the flood the accumulation reuses, and D8, which it
   departs from for the reason 22 gives.
 
+**Lake gauges (2026-10-05).** *Legacy*: nothing to carry over.
+
+```
+$ git grep -liE "innsj|vatnlnr|lake" legacy-archive -- legacy
+legacy-archive:legacy/bindings.cpp
+legacy-archive:legacy/rasputin/globcov_repository.py
+legacy-archive:legacy/rasputin/gml_repository.py
+legacy-archive:legacy/rasputin/material_specification.py
+legacy-archive:legacy/rasputin/triangulate_dem.h
+legacy-archive:legacy/rasputin/web_visualize.py
+```
+
+Every hit is about drawing lakes: `extract_lakes` splits a mesh's faces into
+lake and terrain for the web viewer, and the land-cover readers give lake
+classes a material. None seeds a catchment. *Literature*: the method is
+increment 22's lake seed (its "The seed" and "Prior art"), every DEM node
+inside the lake polygon a seed of one Priority-Flood labelling, which 22
+measured on Bygdin (99.12 % of NVE's nodes in ours). What differs here: the
+polygon is NVE's lake database rather than CORINE, and the lake is chosen by
+the station's position and the mapped river, not by a point the user gives.
+**HydroLAKES** (Messager, Lehner, Grill, Nedeva and Schmitt 2016,
+"Estimating the volume and age of water stored in global lakes using a
+geo-statistical approach", *Nature Communications* 7:13603,
+doi:10.1038/ncomms13603, checked on Crossref 2026-10-05; the data page
+`https://www.hydrosheds.org/hydrolakes` known only from a search summary)
+ties each lake to the HydroSHEDS river network by one pour point and reads
+the lake's upstream area there. Seeding the whole lake needs no pour point,
+so no rule has to choose one; how HydroLAKES chooses its pour points was not
+read.
+
 **Novelty.** None is claimed. Searched: the works above, Crossref,
 OpenAlex and web searches for automatic delineation of gauge catchments
 compared with official polygons (overlap, Jaccard, area ratio), outlet
@@ -811,13 +1323,15 @@ theses) before saying more.
 ```
 rasputin fetch-stations nve-hrd --out-dir D                       [network]
   fetch/nve.py   reads the packaged HRD list (140 rows), queries NVE's
-                 layers 0 and 38 and ELVIS layer 2 through fetch/http.py,
-                 newest polygon per station, writes D/stations.geojson,
-                 D/reference.geojson, D/rivers.geojson, D/NOTICE.txt,
+                 layers 0 and 38, ELVIS layer 2 and the lake layer 5
+                 through fetch/http.py, newest polygon per station, writes
+                 D/stations.geojson, D/reference.geojson, D/rivers.geojson,
+                 D/lakes.geojson (PR 4), D/NOTICE.txt,
                  D/manifest.json (URLs, date, sha256)
 
 rasputin station-catchments --dem ... --stations D/stations.geojson
-        --rivers D/rivers.geojson [--reference D/reference.geojson] --out-dir O
+        --rivers D/rivers.geojson [--reference D/reference.geojson]
+        [--lakes D/lakes.geojson] --out-dir O
                                                                     [offline]
   cli.py         paths stop here: io/station_set.py and io/rivers.py read the
                  files into Station and RiverSegment models and reference
@@ -825,7 +1339,10 @@ rasputin station-catchments --dem ... --stations D/stations.geojson
   catchment_batch.run_batch(request, repository, stations, segments, references, sink)
      for each station, in file order, one at a time:
        gauge.place(Gauge(station), segments) -> Placement | None   [pure, shapely, no DEM]
-       catchment.delineate(CatchmentRequest(seed=station, seed_crs=crs,
+       gauge.lake_seed(gauge, placement, lakes) -> LakeSeed | None  [pure, PR 4]
+       a lake seed: catchment.delineate(CatchmentRequest(seed=lake_seed.point,
+                        lakes=lake_seed.lakes), repository)          (22's path)
+       otherwise:   catchment.delineate(CatchmentRequest(seed=station, seed_crs=crs,
                                             reach=placement.reach), repository)
          window loop (22's), seeded by the placed node:
            burn.burn_reach(window, reach) -> burnt window, GaugePath  [numpy, no shapely]
@@ -1321,6 +1838,7 @@ class GaugeResult:
     end_closed: bool           # False: cap, NoData or window edge before the ground fell
     downstream_checked: Literal["whole", "partly", "none"]
     sensitivity: Sensitivity   # next section
+    causes: tuple[str, ...]    # PR 4: the sensitivity's causes, then "direction" if not direction_ok
 ```
 
 ### Sensitivity: is the area well defined at this gauge? (`sensitivity.py`, pure)
@@ -1429,6 +1947,117 @@ uncertain per size band.
 **Cost and novelty.** One gather from arrays that already exist. It is a
 diagnostic, not a method claimed (see Novelty).
 
+### Lake gauges: the lake is the seed (PR 4)
+
+Ola's ruling of 2026-10-05 ("Ola's rulings", last block). A gauge on a lake
+is seeded as increment 22 seeded Bygdin: **every DEM node inside the lake's
+polygon is a seed**, through 22's own path (`CatchmentRequest` with `lakes`
+and `lakes_crs`, `reach` None), so no chain is burnt across the lake and no
+sensitivity is read along it. `catchment.py` does not change. The evidence is
+"NVE's lakes: Innsjødatabasen" (41 `match` of the 48 stations the rule
+below picks; of the 8 lake gauges PR 2's path ran in full, 2 were `match`).
+
+**Which stations: `gauge.lake_seed`** (pure, shapely, no DEM; beside
+`place`, whose `Placement` it reads):
+
+```python
+LAKE_GAP_M = 30.0  # metres in the river file's CRS; see below
+
+@dataclass(frozen=True, slots=True)
+class Lake:                  # io/station_set.py; one polygon part
+    number: int | None       # NVE's vatnlnr; None for null or 0
+    name: str | None         # navn
+    polygon: Polygon         # in the lake file's CRS
+
+class LakeSeed(BaseModel):   # frozen; arbitrary types allowed
+    rule: Literal["inside", "lake_line"]
+    point: tuple[float, float]  # the station (inside) or P (lake_line), river file's CRS
+    lakes: tuple[Lake, ...]     # the lakes whose polygon contains `point`
+    distance_m: float           # from the station to the lake; 0 inside
+
+def lake_seed(gauge: Gauge, placement: Placement | None, lakes: Sequence[Lake],
+              *, gap: float = LAKE_GAP_M) -> LakeSeed | None
+```
+
+1. **`inside`**: the station point lies inside a lake polygon
+   (`Polygon.contains`, strict, as 22's `_lake` tests it). The point is the
+   station. This holds with or without a placement.
+2. **`lake_line`**: otherwise, the placement exists, its chosen line is a
+   lake line (`Placement.lake`), the mapped position `P` lies inside a lake
+   polygon, and the station's distance to that polygon is at most `gap`
+   (`<= gap + 1e-6`, the corridor's slack). The point is `P`. The lake is
+   found by geometry, not by the lake number, so a lake line without one
+   (`97.1.0`) still finds its lake; the number is only reported.
+3. Otherwise `None`: PR 2's river path, unchanged, including the `no_river`
+   refusal when there is no placement.
+
+`lakes` in `LakeSeed` are all the lakes containing `point`: one with NVE's
+data (none of the 140 stations is within 30 m of two). Two, from a user's
+file with overlapping polygons, reach 22's `_lake`, which refuses ("the
+seed point ... is in 2 lakes; give one", a `LakeError`, so a `CatchmentError`):
+a `refused` row with cause `other`. A MultiPolygon lake is split into its
+parts by the reader, each a `Lake` with the same number and name (22: "a
+multipolygon contributes the part containing the point").
+
+**`LAKE_GAP_M` = 30 m** is `U`'s floor ("Placing the gauge", step 3), three
+cells of DTM10, set before the lake seeds were run, not tuned to their
+agreement. It assumes a metric CRS of metres (EPSG:25833) and was checked on
+the 140 HRD stations only: at 30 m the rule picks 48; at 52 m it would add
+`12.197.0`, and at 460 m `22.16.0`, whose line is another lake's ("NVE's
+lakes"). The gap applies to `lake_line` only; `inside` needs none.
+
+**Why it stays position-faithful** (Ola's residual-inflow goal: never
+area-maximising). No rule reads an area, a count or the reference: the lake
+is chosen by containment and one distance. A gauge on a lake measures the
+lake's outflow, and every lake node drains to the outlet, so the gauge's
+catchment is everything that drains into the lake: the set the seed labels,
+the same from any position on the lake. The seed can add area the gauge
+does not see in two ways, both measurable: (a) a polygon that reaches past
+the real outlet (22's Bygdin: CORINE's polygon ended at x 168460, about
+370 m past the dam at x 168087), which adds what drains into that stretch;
+(b) a station on a river flowing into the lake whose nearest line in its tier
+is the lake's, which would add the lake's other inflows. The tiers make (b)
+unlikely (44 of the 48 lake lines carry the station's own watercourse number,
+the other 4 its river's name), and the acceptance lists every lake row whose
+ours-in-NVE's is under 95 % with the cause (`26.29.0` is one; "NVE's
+lakes"). The seed misses area in two ways, which are deficits, never extra
+area: a station outside the polygon (at most 30 m) on the river below the
+outlet loses what drains into those metres; and a station inside a lake that
+is not the one it gauges gets that lake's smaller catchment (`83.2.0`). **A
+gauge farther below the outlet** than the gap, or inside no lake, stays on
+the river path: its catchment is the placed node's, which holds the lake
+through the DEM's own drainage and nothing below the gauge. 24 stations have
+a lake on their reach within `reach_up` above `P`; the four of them in PR 2's
+full runs (`2.633.0`, `55.4.0`, `83.12.0`, `101.1.0`) agree with NVE's
+polygons to at least 97.1 % both ways. Seeding the lake together with the
+river from its outlet down to such a gauge is not built (question 10).
+
+**What a lake row has, and has not.** No chain, no burn and no sensitivity:
+`Catchment.gauge` is None, so the row's gauge, burn and sensitivity columns
+are empty, `causes` is empty, and `classify(agreement, None)` decides from
+the agreement alone (the rule PR 4 already has for a station with no gauge),
+so a lake row is never `uncertain`. The sensitivity measures how the area
+changes along the river within `U`; on a lake every position gives the same
+seed, so the swing is 0 by construction, and the counts PR 2 read along a flat
+lake (Narsjø's −33 %) measured the burn's 1 mm-per-node channel, not the
+gauge. What remains uncertain, whether the station is on this lake, is
+reported (`lake_rule`, `lake_distance_m`), not scored. The window loop and
+the memory cap are 22's (the lake's bounds plus the margin; item size + 2
+bytes per node).
+
+**The row and the summary.** `StationResult` gains, after `reach_fork` (so
+the catchment file's properties "from `placed_on` to `causes`" carry them):
+`seeded_by` (`"river"` or `"lake"`; None when `place` refused), `lake_rule`,
+`lake_number`, `lake_name`, `lake_distance_m` (None on a river row).
+`Summary` gains `by_seed`, the groups `river` and `lake` with a band's
+contents (`stations`, `classes`, `uncertain_share`, the three measures). The
+stderr line of a lake row adds `(seeded by the lake Narsjøen)` after the
+class word, or the lake's number when it has no name, or "its lake" when it
+has neither. The lakes file must be in the river file's CRS, as the
+references must ("The batch"); otherwise `station-catchments` refuses,
+naming `--lakes` and both CRSs, and writes nothing. Without `--lakes` there
+is no lake path and the batch is PR 4's as it stands.
+
 ### Residual inflow, later: what 29 keeps open
 
 **Not built here.** Ola plans to compute the residual inflow to rivers: for
@@ -1516,6 +2145,14 @@ licence_note=...)`. `fetch/nve.py`:
   squares were queried (28 s for 140); at 4 km the answer is larger, and a
   reply flagged `exceededTransferLimit` is refused, naming the station, so a
   truncated river never reaches `place`;
+- **queries the lake layer once per station** (PR 4, "Lake gauges"), by
+  envelope: the station point ± 100 m (`LAKE_ENVELOPE_HALF`; any lake within
+  `LAKE_GAP_M` of the station meets it, and the service returns whole
+  features), `outFields=objectid,vatnlnr,navn,areal_km2`,
+  `outSR=25833&f=geojson`, through the same `_url` and `_features` (so a
+  truncated answer is refused, naming the station); the ELVIS envelope query
+  and this one share one envelope-URL function. Lakes seen from several
+  stations are kept once, by `objectid`;
 - refuses, naming the station, when a listed station has no point or no
   polygon; keeps the newest polygon per station (above) and records its
   update date and how many versions there were;
@@ -1527,7 +2164,9 @@ licence_note=...)`. `fetch/nve.py`:
   `reference.geojson` (one feature per station, the polygon, `station`,
   `reference_area_km2`, `reference_updated`, `versions`), `rivers.geojson`
   (one LineString per segment, the seven fields above; copies are kept as
-  served and dropped by `read_segments`), all with a `crs`
+  served and dropped by `read_segments`), `lakes.geojson` (PR 4: one feature
+  per lake, the geometry as served, Polygon or MultiPolygon, the four fields
+  above, in `objectid` order), all with a `crs`
   member, `NOTICE.txt` (the catalogue's credit, "Kilde: NVE", as 23a-2's
   `notice` does), and `manifest.json` (the query URLs, the fetch time in UTC,
   each file's sha256). Deterministic order: the list file's, then `objectid`.
@@ -1538,7 +2177,11 @@ licence_note=...)`. `fetch/nve.py`:
 
 **`io/station_set.py`** reads the stations and references back:
 `read_stations(path) -> (tuple[Station, ...], crs)`, `read_references(path)
--> (Mapping[str, Polygon | MultiPolygon], crs)`; **`io/rivers.py`**
+-> (Mapping[str, Polygon | MultiPolygon], crs)`, and (PR 4) `read_lakes(path)
+-> (tuple[Lake, ...], crs)`, which splits a MultiPolygon into its parts, reads
+`vatnlnr` null or 0 as no number, and refuses, naming the feature's
+`objectid` (or its index when it has none), a geometry that is not a Polygon
+or MultiPolygon, or is empty or has area 0; **`io/rivers.py`**
 `read_segments(path) -> (tuple[RiverSegment, ...], crs, dropped)`, where
 `dropped` is the count of exact copies removed by the pure
 `drop_copies(segments) -> (kept, dropped)`. All refuse a file
@@ -1564,7 +2207,17 @@ reaches; no DEM is read):
   row bands, so memory stays bounded on Polmak-size polygons. This is the
   Bygdin comparison of 22's acceptance, unchanged.
 - **NVE's in ours** = both / ref, **ours in NVE's** = both / ours.
-- **Area ratio** = our fine area / NVE's polygon area (shapely).
+- **Area ratio** = `ours` × cell area / NVE's polygon area (shapely): our
+  area **counted on the lattice**, the same `ours` as the overlaps, over
+  NVE's exact polygon area (as built in PR 4's green step, `1c39ef7`;
+  question 8). It is not the traced fine outline's shapely area
+  (`Catchment.fine_area`, the catchment file's `fine_area_m2`): the traced
+  ring runs through the midpoints between in- and out-nodes and cuts each
+  corner, so `ours` × cell area exceeds it by half a cell: 50 m² on DTM10,
+  under 0.01 % of a 1 km² catchment (six random-walk node sets traced with
+  `outline.trace`, outer ring against the nodes strictly inside it,
+  2026-10-05: 0.5 cell each time). `ours` counts the nodes of filled holes
+  and leaves out those of dropped rings, so it can differ from `nodes`.
 - **Mean divide offset** = (ref + ours − 2·both) × cell area / NVE polygon's
   perimeter, in metres: the area between the two outlines divided by the
   length of NVE's. Exact when one outline lies a constant distance outside
@@ -1598,8 +2251,8 @@ ratio and both overlaps, the minimum, 10th, 25th, 50th, 75th, 90th percentile
 and maximum, over the scored stations (`match`, `close`, `miss`) and per size
 band (under 10, 10-100, 100-1000, over 1000 km²) and per tile count (1, 2,
 3-4, 5+); the share `uncertain` per size band, and the causes of `uncertain`, each
-counted (a station can have several): `swing` (split by its largest step's
-position: a confluence step, or a flat floor or lake), `downstream_unread`,
+counted (a station can have several): `swing` (one count, not split by
+cause; "PR 4's red step"), `downstream_unread`,
 `chain_not_draining`, `chain_end_open`, `direction`; the refusals counted by
 `refusal_cause`, with the `mixed_grid` ones apart as **known refusals**: one
 summary line, "N stations refused because their windows select tiles on
@@ -1626,8 +2279,18 @@ async def run_batch(request: BatchRequest, repository: DemRepository,
                     stations: Sequence[Station], stations_crs: str,
                     segments: Sequence[RiverSegment], segments_crs: str,
                     references: Mapping[str, BaseGeometry] | None,
-                    sink: BatchSink) -> Summary
+                    sink: BatchSink,
+                    lakes: Sequence[Lake] | None = None) -> Summary  # PR 4, "Lake gauges"
 ```
+
+- **The path, per station** (PR 4, "Lake gauges"): after `place`, with
+  `lakes` given, `gauge.lake_seed(gauge, placement, lakes)`; a `LakeSeed`
+  gives `CatchmentRequest(seed=lake_seed.point, seed_crs=segments_crs,
+  lakes=tuple(l.polygon for l in lake_seed.lakes), lakes_crs=segments_crs,
+  outline_tolerance=...)`, and `None` gives the reach request as before. A
+  station with no placement goes to the `no_river` refusal only when
+  `lake_seed` is `None`. `lakes` are in the river file's CRS, as the
+  references are; the command checks it.
 
 - **One station at a time**, each `delineate` in `asyncio.to_thread`: a
   flood of a large catchment takes gigabytes, and two at once would race for
@@ -1679,7 +2342,7 @@ station; the earlier name `catchments` differs from `catchment` by one letter):
 
 ```
 rasputin station-catchments --dem PATH [--dem PATH ...] --stations FILE
-                    --rivers FILE [--reference FILE] [--map-radius METRES]
+                    --rivers FILE [--reference FILE] [--lakes FILE] [--map-radius METRES]
                     [--reach-up METRES] [--only ID ...]
                     [--outline-tolerance METRES] --out-dir DIR [--out-parent DIR]
 ```
@@ -1706,9 +2369,9 @@ burn takes the reach in the window's coordinates).
 the second command to write a catchment file (PR 3 writes none), from
 `cli.py` to `io/geojson.py`,
 `catchment_geojson(polygon, crs, properties) -> bytes`, no path, as
-`project_structure.md` already recommends ("The catchment GeoJSON writer is
-in `cli.py`"); both commands call it, and that paragraph is replaced by the
-module's entry.
+`project_structure.md` recommended (its paragraph "The catchment GeoJSON
+writer is in `cli.py`"); both commands call it, and PR 4 replaced that
+paragraph with one sentence naming the module, beside its `io/` entry.
 
 ### New and changed files
 
@@ -1734,6 +2397,55 @@ with the NoData fix of code review round 1 (green `96b3881`) it is 568 net
 (588 added, 20 removed; `burn.py` 174, `catchment.py` 97, the others as
 before); with the NaN fix of code review round 2 (green `193079d`) it is
 569 net (589 added, 20 removed; `burn.py` 175, the others as before).
+PR 4's green step (`1c39ef7`) came to 530 net (567 added, 37 removed),
+counted by PR 2's round-2 rule over `9e666f4..1c39ef7`: `reference.py` 184,
+`catchment_batch.py` 171, `cli.py` 140 net, `io/geojson.py` 21,
+`catchment.py` 9, `mosaic.py` 5, `burn.py` 0 (a docstring). That is 58 %
+over its 335 and 48 lines past the margin (482), and under 700. With
+changes (a) to (c) (red `6ebff1b`, green `33b1f2d`) it is 541 net (580
+added, 39 removed) over `9e666f4..33b1f2d`: `reference.py` 184,
+`catchment_batch.py` 171, `cli.py` 147, `io/geojson.py` 21,
+`catchment.py` 9, `mosaic.py` 5, `io/station_set.py` 4, `burn.py` 0;
+59 past the margin and under 700. With changes (d) to (f) (red `bc78be3`,
+green `cabff74`) it is 572 net (614 added, 42 removed) over
+`9e666f4..cabff74`: `reference.py` 184, `catchment_batch.py` 173,
+`cli.py` 172, `io/geojson.py` 21, `catchment.py` 13, `mosaic.py` 5,
+`io/station_set.py` 4, `burn.py` 0; 90 past the margin and 128 under 700.
+With code review round 2's fix (red `44dc954`, green `f952f2d`) it is 573
+net (615 added, 42 removed) over `9e666f4..f952f2d`, `cli.py` 173 and the
+others as at `cabff74`; 91 past the margin and 127 under 700.
+`@developer`'s account of the excess: `StationResult`'s field list, about
+50 lines (one line per column, 48 columns, which "The batch" lists
+in words rather than counts); the summary's models and its fixed key
+lists, about 40 (`Measure`, `Measures`, `Group`, `KnownRefusals`,
+`Summary`, and the five lists written in full by the red step's
+additions); and `station-catchments`' ten option declarations with their
+help, about 45. None of it is a rule the design did not ask for; the
+estimate counted the rules and not the declarations. The changes asked
+under "PR 4's green step" add a few lines each. **PR 4 is not split**:
+the file names no split seam for PR 4, and the ceiling, not the margin,
+is what would make one fire. If a later round took it past 700, the seam
+is `reference.py` (pure; its own suite, `test_reference.py`) with
+`MixedGridError` and `MixedGridRefusal`, about 200 lines, as one PR, and
+the batch, the command and the moved writer as the next.
+
+**Lake gauges (Ola, "Fold into PR4") add about 100 lines**: the six rows
+marked "Lake gauges" in the table. PR 4 then comes to about 673 net, 27
+under 700; with the 44 % margin on the new lines, about 717. PR 4's own
+green ran 58 % over its estimate, so passing 700 is likely, not certain. The
+ceiling is the rule (CLAUDE.md §2), so **the seam is named now**: if the lake
+green step's count over the whole PR passes 700, PR 4 is published as it
+stood at `48d1315` (573 net, its review done), and the lake work, whose red
+and green commits all come after that commit, becomes **PR 4b, lake gauges**,
+on top of it (about 100 to 145 lines, its own review). Ola's "fold into PR
+4" is then kept in substance, one branch and one review round of the lake
+work before the acceptance run, but not as one pull request; the main
+session tells Ola so in the round's recap. Nothing is split before the count
+says so. The lake green step (`fff6ac9`) came to 118 net (150 added, 32
+removed), 18 % over its 100 and inside the margin, and PR 4 to 691 net
+(744 added, 53 removed), 8 lines of room under 700: not split, but a change that
+takes it to 700 net or more splits it ("Lake gauges' green step", under
+"Ola's rulings").
 
 | File | What | Estimate |
 |---|---|---|
@@ -1758,12 +2470,19 @@ before); with the NaN fix of code review round 2 (green `193079d`) it is
 | `cli.py` | `catchment --rivers` and the placement line | 40 (95 at green) |
 | `docs/benchmarks/<date>/nve-placement/render.py` | the placement figures (evidence script, not counted, Ola's ruling; "Placement figures") | (130) |
 | **PR 2, the gauge on the river** (needs PRs 1 and 3) | | **about 415 (598); 569 net (589 added) at green `193079d`** |
-| `reference.py` | agreement, classes, `match_by`, summary | 115 |
-| `catchment_batch.py` | `BatchRequest`, `BatchSink`, `run_batch`, `StationResult`, `refusal_cause` | 105 |
-| `mosaic.py`, `catchment.py` | `MixedGridError`, `MixedGridRefusal` (round 3, Ola's ruling on counting) | 10 |
-| `cli.py` | `station-catchments`, the directory sink | 80 |
-| `io/geojson.py` | the moved writer (moved from PR 3 after its code review, round 1) | 25 (cli.py −25) |
-| **PR 4, the batch and the comparison** | | **about 335 (482)** |
+| `reference.py` | agreement, classes, `match_by`, summary | 115 (184 at green) |
+| `catchment_batch.py` | `BatchRequest`, `BatchSink`, `run_batch`, `StationResult`, `refusal_cause` | 105 (171 at green; 173 at `cabff74`) |
+| `mosaic.py`, `catchment.py` | `MixedGridError`, `MixedGridRefusal` (round 3, Ola's ruling on counting); `check_reach_crs` (change (d)) | 10 (14 at green; 18 at `cabff74`) |
+| `cli.py` | `station-catchments`, the directory sink | 80 (140 net at green, the writer's lines removed; 147 at `33b1f2d`; 172 at `cabff74`; 173 at `f952f2d`) |
+| `io/station_set.py` | a reference polygon with no area refused (change (b)) | (4 at `33b1f2d`) |
+| `io/geojson.py` | the moved writer (moved from PR 3 after its code review, round 1) | 25 (cli.py −25; 21 at green) |
+| `fetch/nve.py` | lake layer 5: its allow-list and layer, one envelope-URL function for ELVIS and lakes, the per-station lake query, `lakes.geojson` ("Lake gauges") | 17 (10 at green) |
+| `io/station_set.py` | `Lake`, `read_lakes` | 20 (28 at green) |
+| `gauge.py` | `LAKE_GAP_M`, `LakeSeed`, `lake_seed` | 18 (27 at green) |
+| `catchment_batch.py` | the `lakes` argument, the path per station, five columns | 18 (22 at green) |
+| `reference.py` | `by_seed` | 6 (3 at green) |
+| `cli.py` | `--lakes`: option, reading, CRS check, the stderr words | 20 (28 at green) |
+| **PR 4, the batch and the comparison** | | **about 335 (482); 530 net (567 added) at green `1c39ef7`; 541 net (580 added) at `33b1f2d`; 572 net (614 added) at `cabff74`; 573 net (615 added) at `f952f2d`; with lake gauges about 673 (about 100 more; 717 with the margin on them); 691 net (744 added) at lake green `fff6ac9`** |
 | `catchment.py`, `cli.py`, `catchment_batch.py` | the fallback (below) | 80 |
 | **PR 5, the fallback** | | **about 80 (115)** |
 
@@ -1805,7 +2524,11 @@ inputs are files or arrays, not another PR's types.
   rule cannot tell two lines with the same number apart, so it picks the
   same line, and the catchment is 0.0012 km² against NVE's 119 km² (marked
   uncertain). Whether the river's name as a tie-break within a tier would
-  help is untested. (b) **Burns that lower a node by tens of metres**:
+  help is untested. **Resolved for Narsjø by the lake seed** (its point lies
+  inside Narsjøen; 98.2 % / 97.5 %, "NVE's lakes"). PR 4 also takes the lake
+  gauges ("Lake gauges"), which changes PR 3's merged `fetch/nve.py` (the
+  lake layer, `lakes.geojson`) and `io/station_set.py` (`read_lakes`): PR 4
+  touches PR 3's code, not its rules, and "Data use" gains the lake layer. (b) **Burns that lower a node by tens of metres**:
   `88.4.0` Lovatn by 41.4 m, `2.284.0` Sælatunga by 22.7 m, `62.10.0`
   Myrkdalsvatn by 20.0 m (`survey.csv`, column `lowered_max_m`); why is not
   looked at.
@@ -2084,8 +2807,9 @@ use" below):
   causes of `uncertain` are counted each (a station with two causes counts in
   both); `mixed_grid` refusals are counted apart as known refusals, with
   their summary line and station numbers, and never among the scored.
-- `test_catchment_batch.py`, on the synthetic tiled DEM of
-  `test_cli_catchment.py` with a river file and five stations (one matching a
+- `test_catchment_batch.py`, on a synthetic tiled DEM (the two-basin
+  terrain of `gauge_fixtures`, not `test_cli_catchment.py`'s valley, which
+  has no tributary; "PR 4's red step") with a river file and five stations (one matching a
   reference drawn from its own flood, one with a reference shifted to make it
   a miss, one with a confluence just below it, `uncertain`, one whose downstream river ends
   within `U` of it, `uncertain` although its overlap is 100 %, and one with no
@@ -2099,6 +2823,49 @@ use" below):
 - `test_cli_station_catchments.py`: the files in `--out-dir`, `--only`, the
   stderr lines; `--reference` absent gives catchments and no scored classes;
   a station or river file without `crs` is refused.
+
+**PR 4, lake gauges** (`@tester`, lean, one red commit after `48d1315`, so
+the split of "New and changed files" stays mechanical; hand-built polygons
+and the existing fixtures, no network):
+
+- `test_gauge.py`, `lake_seed`: a station inside a lake gives `inside`, the
+  station as the point and that lake, with a placement on a river line and
+  with no placement at all; a station outside every lake, placed on a lake
+  line whose `P` lies in a lake 20 m from the station, gives `lake_line`
+  with `P` as the point and `distance_m` 20; the same at exactly 30 m gives
+  it, at 30.5 m gives `None`; placed on a river line 10 m below a lake
+  (station outside it) gives `None`; placed on a lake line whose `P` is in
+  no polygon gives `None`; no placement and a lake 14 m away gives `None`
+  (Femundsenden, question 9's default); a station inside two overlapping
+  polygons gives a `LakeSeed` holding both; no rule reads an area (two
+  lakes of very different size, the station inside the smaller, gives the
+  smaller).
+- `test_station_set.py`, `read_lakes`: a MultiPolygon feature gives one
+  `Lake` per part, same number and name; `vatnlnr` 0 and null give number
+  None; no `crs` member, a LineString, an empty geometry and a zero-area
+  ring are each refused naming the feature's `objectid`.
+- `test_fetch_nve.py`: the fake service answers layer 5 (in
+  `nve_fixtures.py`); each lake request names exactly
+  `objectid,vatnlnr,navn,areal_km2` (never `*`, `globalid` or `kommune`) and
+  the station point ± 100 m as its envelope, one request per station; a lake
+  seen from two stations is written once; a truncated lake answer is refused
+  naming the station; `lakes.geojson` is in the files and the manifest, and
+  reads back through `read_lakes`; an output directory holding the four
+  older files but no `lakes.geojson` is fetched again without `--refresh`.
+- `test_catchment_batch.py`: on `gauge_fixtures.two_basins()`, a lake
+  polygon drawn over one basin's lowest part and a station inside it gives
+  a row with `seeded_by` `lake`, `lake_rule` `inside`, the gauge, burn and
+  sensitivity columns None, `causes` empty, and a catchment equal to
+  `delineate` with that lake (22's path) run directly; with a reference
+  drawn from that catchment it is `match`, never `uncertain`; the same
+  station without `lakes` keeps its river row; `summary.by_seed` counts one
+  of each; a station inside two overlapping lakes is `refused` with cause
+  `other` and the batch goes on.
+- `test_cli_station_catchments.py`: `--lakes` writes the five columns and
+  the stderr words "(seeded by the lake <name>)"; a lakes file in another
+  CRS (EPSG:32633) is refused naming `--lakes` and both CRSs, before
+  `--out-dir` is created; without `--lakes`, every row is a river row and
+  the five new columns are empty.
 
 **PR 5, Python**: `test_nearest_stream.py`: with two streams, one nearer and
 smaller and one farther and larger, the nearer wins (the rule does not look
@@ -2116,7 +2883,7 @@ batt`, the manifest of the fetched station set (its sha256 values, since the
 service can change) and the outputs that are not NVE's data:
 
 1. `rasputin fetch-stations nve-hrd` into `../rasputin_data/nve_hrd`.
-2. `rasputin station-catchments` over all 140 at the defaults (map radius
+2. `rasputin station-catchments` over all 140, with `--lakes`, at the defaults (map radius
    500 m, reach 1000 m, corridor 30 m, outline tolerance); wall time and peak
    memory per station and in total. Expected (estimate, not a measurement):
    the catchments total about 610 M nodes, the final window holds three
@@ -2130,7 +2897,13 @@ service can change) and the outputs that are not NVE's data:
    each `uncertain` gets its causes from the sensitivity (confluence step and
    where, flat floor or lake, downstream side not read to `U`, chain not
    draining, chain end open, line against the slope);
-   `close` rows are summarised by cause. **Expected refusals**: the two
+   `close` rows are summarised by cause. **Lake rows** (`seeded_by` `lake`)
+   are reported apart, by class; each with ours-in-NVE's under 95 % gets a
+   line saying where the extra area lies (a polygon past the outlet, a
+   station on an inflow, a divide; `26.29.0` is expected), and each with
+   NVE's-in-ours under 95 % one saying why (`83.2.0` is expected). The river
+   rows with a lake on their reach above `P` (24 in "NVE's lakes") are listed
+   apart with their classes: that list answers question 10. **Expected refusals**: the two
    Finnish-border stations (NoData), the nine shifted-tile stations
    (`refusal_cause = "mixed_grid"`, each row naming one tile from each grid; reported
    apart as known refusals, not failures, Ola's ruling; the README's line
@@ -2141,7 +2914,9 @@ service can change) and the outputs that are not NVE's data:
    `156.24.0` and `213.4.0`, whose catchments lie on shifted tiles only, but
    whose 2 km window margin may reach a normal tile; if either is refused
    `mixed_grid`, its line says so and it is counted with the known refusals,
-   by cause, not as a failure.
+   by cause, not as a failure. So are `191.2.0` and `203.2.0`, which the lake
+   seed's probe saw refused on two grids ("NVE's lakes") though neither is
+   among the nine.
 5. **The comparison with nearest stream** (after PR 5): the fallback at 250 m
    on every `miss` and `uncertain` station, the class under each rule side by
    side, and the fallback on Femundsenden. It measures what the mapped river
@@ -2180,9 +2955,11 @@ what counts as a good catchment, gauges on lakes) are ruled, under "Ola's
 rulings"; the way a gauge is placed follows your direction. Questions 1 to 4
 below are ruled and closed (2026-10-04): question 2 as its entry says, questions 1,
 3 and 4 with their defaults ("Yes to all three."). Questions 5 and 6 came
-from PR 2 (2026-10-05), and 7 from its placement figures (the same day);
-all three are open, and the design and the code follow their defaults until
-Ola rules.
+from PR 2 (2026-10-05), 7 from its placement figures (the same day), and 8
+from PR 4's green step (the same day), 9 and 10 from the lake-gauge design
+(the same day). Ola ruled all six on 2026-10-05: kept as built, which is
+each one's default, to be reassessed after the full 140-station run ("Questions
+5 to 10: Ola's ruling", under "Ola's rulings").
 
 1. **When is a station too uncertain to score?** A gauge's coordinates are
    usually a few tens of metres off the river, and further for some. For each
@@ -2230,7 +3007,8 @@ Ola rules.
    the lowest DEM points beside the mapped river with straight steps, and a
    step can pass through a cell with no elevation (NoData). Left alone, the
    no-data value is burnt in as if it were a height, and the station's
-   numbers come out absurd. *Open (2026-10-05). Default: refuse the station,
+   numbers come out absurd. *Ruled 2026-10-05, closed: the default, to be reassessed after the full run.*
+   *Default: refuse the station,
    with a message saying the river line crosses a gap in the DEM.*
    Alternative: route the path round the gap; that is a new placement rule
    (which side, how far) and would be designed first. How many stations it
@@ -2241,7 +3019,8 @@ Ola rules.
    DEM, cannot drain through the gauge (the gauge's catchment has neither,
    or the station is refused). So the river there lies outside the gauge's
    catchment, which is the kind of position sensitivity the check exists to
-   catch. *Open (2026-10-05). Default: yes, mark the station uncertain*
+   catch. *Ruled 2026-10-05, closed: the default, to be reassessed after the full run.*
+   *Default: yes, mark the station uncertain*
    (cause "chain not draining"). Alternative: only stop reading the area
    there, with no other effect, as the first code did; such stations are
    then scored.
@@ -2249,11 +3028,52 @@ Ola rules.
    Narsjø (`2.11.0`), the first station in NVE's list. PR 2's placement
    figures show that Narsjø gets a 0.0012 km² catchment (NVE's is 119 km²):
    its nearest mapped line is a small unnamed river's line across the lake,
-   not Nøra's, and the station is marked uncertain. *Open (2026-10-05).
-   Default: mesh Atnasjø (`2.32.0`) instead*, a lake gauge whose catchment
+   not Nøra's, and the station is marked uncertain. *Ruled 2026-10-05, closed: the default, to be reassessed after the full run.*
+   *Default: mesh Atnasjø (`2.32.0`) instead*, a lake gauge whose catchment
    (459.8 km²) agrees with NVE's to 98.4 % one way and 99.2 % the other.
    Alternative: keep Narsjø and fix its placement first (PR 4's tier
-   design; see "The PR split"), or pick another station.
+   design; see "The PR split"), or pick another station. The lake seed
+   ("Lake gauges") now gives Narsjø a catchment that agrees with NVE's to
+   98.2 % and 97.5 %, so keeping Narsjø is possible once that lands.
+8. **Which area is "our area" in the comparison table.** Two areas of our
+   catchment are close to each other but not equal: the number of DEM
+   points inside our outline times the area of one cell, and the area of
+   the outline itself. The outline cuts the corners between the DEM
+   points, so it is half a cell smaller, 50 m² on the 10 m DEM, whatever
+   the catchment's size. The table's `fine_area_km2` and the area ratio
+   against NVE's polygon use the point count, the same count the two
+   overlap percentages use; the catchment file's `fine_area_m2` keeps the
+   outline's area, as increment 22 wrote it. *Ruled 2026-10-05, closed: the default, to be reassessed after the full run.*
+   *Default:
+   keep the point count*, so the area ratio and the overlaps are
+   measured on the same thing. Alternative: use the outline's area in the
+   table, so that it equals the file's figure; the area ratio then drops
+   by half a cell over NVE's area (0.005 % on a 1 km² catchment), and a
+   new test pins it.
+9. **A lake gauge with no river line near it.** Femundsenden (`311.4.0`)
+   has no mapped river line within 500 m, but its point is 14 m from the
+   lake Femunden. A station is seeded with a lake when its point lies in
+   the lake, or when the river map puts it on the lake's line and it is
+   within 30 m of the lake. Femundsenden meets neither, because there is no
+   river line to say which way the water runs past it: a station on a river
+   flowing into a lake would wrongly get the whole lake's catchment.
+   *Ruled 2026-10-05, closed: the default, to be reassessed after the full run.*
+   *Default: no; Femundsenden stays refused until the nearest-stream
+   fallback (PR 5).* Alternative: seed with a lake within 30 m when there
+   is no river line (a few lines; Femundsenden would then get
+   Femunden's catchment).
+10. **A gauge a little below a lake's outlet.** 24 stations sit on the river
+   within 1 km below a lake. They keep the river method: the river is
+   followed from the gauge up onto the lake, and the catchment is
+   everything that drains through the gauge, the lake included. The four of
+   them already run in full agree with NVE's catchments to 97 % or better.
+   *Ruled 2026-10-05, closed: the default, to be reassessed after the full run.*
+   *Default: keep the river method for them, and let the full run's list of
+   these 24 show whether any fails.* Alternative: seed them with the lake
+   plus the river from the outlet down to the gauge. That needs the
+   catchment code to combine a lake and a river stretch, which it refuses
+   today, and a new rule for the position check, about 60 more lines, past
+   PR 4's limit, so a later PR.
 
 ## Review
 
@@ -2306,3 +3126,224 @@ Recorded by `@architect`, with the status line, `ROADMAP.md:54` and the estimate
 Fixes for evidence round 1, by `@architect` in the commit that records it: (1) the README's "Counts that differ" says the prediction for `156.24.0` and `213.4.0` came true, up to 11 on two grids, and that Ola's ruling covers the nine; (2) the example meshes `2.32.0` (question 7, default Atnasjø), and Narsjø is item (a) under PR 4 in "The PR split"; (3) both "46" places carry the note; (4) the status line and `ROADMAP.md:54`. The suggestion is taken as item (b) under PR 4 in "The PR split".
 
 **29 PR 2, evidence review, round 2, 2026-10-05 (copied from `@reviewer`'s handback).** Range `cdc0805..1d58e21` (one docs commit, 3 files, +57/-11, 0 production lines; PR 2 stays at 569). Verdict: APPROVED. Round 1's four findings closed: four of the six two-grid refusals are among the nine, `156.24.0` and `213.4.0` were predicted (9 + 2 = 11); the example meshes `2.32.0` (459.8478 km², well posed, no causes; Narsjø 0.0012 km² against 119.43 km², nearest line `objectid` 12252329, `elvid` 002-34-2695, `002.Q1B`, Nøra's `elvid` 002-34-1299 at 127.9 m with the same number); 48 lake stations in both surveys; status line and `ROADMAP.md:54` current. The PR 4 burn depths match `survey.csv`. `check_citations.py` exits 0. Suggestions: this file's line about `156.24.0` and `213.4.0` "on shifted tiles only … and run" could point to the README; with the tiered placement `22.22.0` Søgne (21.95 m) replaces Myrkdalsvatn among the three deepest burns.
+
+**29 PR 4, code review, round 1, 2026-10-05 (from the main session's summary of `@reviewer`'s handback).** Range `9e666f4..33b1f2d` (red `2b9b39f`, `@architect` `6475806`, red amendment `7cd56a4`, green `1c39ef7`, `@architect` `33c2dc4`, red `6ebff1b`, green `33b1f2d`). Verdict: CHANGES REQUESTED. LOC by PR 2's round-2 rule: 580 added, 39 removed, 541 net (`reference.py` 184, `catchment_batch.py` 171, `cli.py` 147, `io/geojson.py` 21, `catchment.py` 9, `mosaic.py` 5, `io/station_set.py` 4, `burn.py` 0); 59 past the 482 margin, under 700, so no split (the fallback seam applies only past 700). The reviewer's count reproduces 530 at `1c39ef7` and 569 for PR 2. Gates clean. Full suite on a freshly built `_core`: 4900 passed; 8 failures are artefacts of the scratch copy and pass in the worktree. Red before green for both pairs (`2b9b39f`/`7cd56a4` then `1c39ef7`; `6ebff1b` then `33b1f2d`). No mutation testing owed and no `bench.py` run (the 140-station acceptance run comes after PR 4). Prose claims checked: the half cell between `ours` × cell area and the traced outline's area, exact on 8 traced sets; classify and summarise as designed; a refusal against a bug (only `CatchmentError` becomes a row); `MixedGridError` and `MixedGridRefusal`, and `dem_input.py:248`'s re-raise; catchment files byte-identical across `9e666f4..33b1f2d` for three runs, and `results.csv` identical but for `seconds`. `33c2dc4`'s re-citations hold. PR 2's two leftovers are closed. PR 4 does not depend on questions 5 to 7. Blocking: `project_structure.md` is stale: line 203 says "the catchment GeoJSON writer is in cli.py (22)", the paragraph at line 515 records that exception as still open, and there are no entries for `reference.py`, `catchment_batch.py` and `io/geojson.py`. That file is at the repository root, outside `@architect`'s write limit; it waits on Ola's ruling on who edits root files (default: yes, `@architect` commits its drafted text). Suggestions: (1) `station-catchments` should refuse a river file (and with it the references) in a CRS other than the DEM's up front, naming `--rivers`, before creating `--out-dir`; today every placed station becomes an `other` refusal ("the river reach must be in the DEM's CRS, EPSG:25833"), while `catchment --rivers` refuses at once; (2) the `except OSError` around `run_batch` also wraps the sink's writes, so a write failure reads "Invalid value for --dem: cannot read .../out/1.140.0.geojson: [Errno 21] Is a directory"; a write failure should name the output, in plain words; (3) the new suites' `importlib` fixtures (`cb`, `gj`, `ref`) can become plain imports (`@tester`, test-only); (4) a station with no name prints a stray space in its stderr line. Not pushed; no CI.
+
+Rulings on round 1, by `@architect` in the commit that records it: the blocker stays open until Ola rules on root-file ownership; suggestions (1), (2) and (4) are adopted as changes (d), (e) and (f), and (3) as a test-only commit, under "PR 4's code review, round 1"; the status line, `ROADMAP.md:54`, the estimate block and PR 4's table rows are set to `33b1f2d`.
+
+**29 PR 4, code review, round 2, 2026-10-05 (from the main session's summary of `@reviewer`'s handback).** Range `33b1f2d..72b62ce` (test-only `e8e93d0`, red `bc78be3`, green `cabff74`, `@architect` `72b62ce`). Verdict: CHANGES REQUESTED. LOC reproduced: 614 added, 42 removed, 572 net. Red before green: `bc78be3`'s 8 tests fail at `33b1f2d` for the right reasons and pass at `cabff74`. `e8e93d0` changes no assertion (test counts 92, 87 and 14 equal before and after). Full suite on a freshly built `_core`: 4909 passed; 7 failures are artefacts of the scratch copy. Gates clean. Every re-citation in `72b62ce` holds. The round-1 record above, written from the main session's summary, matches what the reviewer would have written. Blocking: (1) "today" clauses in three test docstrings, written at the red step, were made false by the green step; (2) change (e) did not cover `target.mkdir(exist_ok=True)`: an `--out-dir` that is an existing file ends in a `FileExistsError` traceback, and one under a read-only parent in a `PermissionError` traceback, which makes false the design's "every write the command makes" and `ROADMAP.md:54`'s "a failed write reported as a write to the output directory"; (3) round 1's blocker, `project_structure.md`, is still open, waiting on Ola. Not blocking, a follow-up item: the `catchment` command's own write of its catchment file (`cli.py:1956`, `target.write_bytes(...)`) is not under any `except` either; it is older than PR 4. Suggestion, adopted: the ruling for (d) said "Today `station-catchments` checks only the reference file…", now "Before (d), …". Not pushed; no CI.
+
+Fixes for round 2: (1) `@tester`'s `a98c805` rewords the three docstrings to "before change (d)" / "before change (e)", docstrings only; (2) red `44dc954` (`@tester`) adds the cases `out_dir_is_a_file` and `out_dir_parent_read_only` (the latter skipped when run as root) to change (e)'s parametrised test, and green `f952f2d` (`@developer`) makes `--out-dir` under the same `_writing` helper, and also moves the `results.csv` header write and its close under it, which no test exercises; full suite 4919 passed. Recorded by `@architect` in the commit that records this round, with `mkdir` added to (e)'s list of writes under "PR 4's code review, round 1", the reword of (d), the status line, `ROADMAP.md:54`, the estimate block and PR 4's table rows (573 net, 615 added, 42 removed; `cli.py` 173; 91 past the margin, 127 under 700). Blocker (3) stays open.
+
+**29 PR 4, code review, round 3, 2026-10-05 (copied from `@reviewer`'s handback).** Range `72b62ce..07793ab` (`a98c805`, red `44dc954`, green `f952f2d`, `07793ab`); whole PR `9e666f4..07793ab`. Verdict: APPROVED, on one condition: round 1's open blocker, `project_structure.md`, which waits on Ola's ruling on who edits root files. Nothing else blocks. LOC by PR 2's round-2 rule: 615 added, 42 removed, 573 net (reference 184, catchment_batch 173, cli 173, io/geojson 21, catchment 13, mosaic 5, io/station_set 4, burn 0); 91 past the 482 margin, 127 under 700. Round 2's blockers closed: `a98c805` changes docstrings only; making `--out-dir` is under `_writing` (`44dc954` fails two cases, `f952f2d` passes all five; the read-only-parent case ran on macOS). Every filesystem call in `station_catchments` ends in a plain refusal; the untested header write and close were probed with a failing `Path.open` wrapper (exit 2, refusal naming `--out-dir`, no traceback) and a no-failure control. Full suite on a rebuilt `_core` exit 0, 4919 passed, 17 skipped; prose hook silent; gates clean. The round-2 record matches. No mutation testing or `bench.py` owed. Suggestion: a failing-close test case when `test_cli_station_catchments.py` is next touched.
+
+**29 PR 4, code review, round 4, 2026-10-05 (copied from `@reviewer`'s handback).** Range `07793ab..c9a40c7`; whole PR `9e666f4..c9a40c7`. The handback follows word for word, by Ola's ruling that review verdicts are recorded so; only its level-2 headings are lowered to level 4, so that they do not end this section.
+
+#### Result
+
+**Verdict: CHANGES REQUESTED.** Both blocking issues are prose fixes in Markdown, and both are small. The code, the tests, the size count and the gates all pass. No production line has to change, so the count stays at 691 net.
+
+**Size Metrics**
+- This round: `07793ab..c9a40c7`. Whole PR: `9e666f4..c9a40c7`. I counted with PR 2's round-2 method: `tokenize` decides which lines are code, added lines are the `+` ranges of the `git diff -U0` hunks judged at the new revision, and removed lines are the `-` ranges judged at the old one. The counting script is in my scratchpad and is not committed.
+- **Whole PR: 744 added, 53 removed, 691 net.** This matches the record exactly. Per file (net): `cli.py` 201, `catchment_batch.py` 195, `reference.py` 187, `io/station_set.py` 32, `gauge.py` 27, `io/geojson.py` 21, `catchment.py` 13, `fetch/nve.py` 10, `mosaic.py` 5, `burn.py` 0.
+- **Lake work (`07793ab..c9a40c7`): 150 added, 32 removed, 118 net.** Per file: `cli.py` 28, `io/station_set.py` 28, `gauge.py` 27, `catchment_batch.py` 22, `fetch/nve.py` 10, `reference.py` 3.
+- **Against the estimate:** the six lake rows add up to 99, so the lake work came in 18 % over, inside the 44 % margin. The split point the design names ("PR 4b, lake gauges") does not apply, because 691 is under 700. Only 8 net lines of room remain.
+- **Note:** 744 *added* is over 700. The project has used the net figure since PR 2 and PR 3, and I followed that. Ola may want to know how close this is.
+- No new code packed under `# fmt: skip` or `# fmt: off`. No C++ in the PR.
+- Focus of the round: the lake path (`gauge.lake_seed`, `read_lakes`, the lake fetch, `run_batch(lakes=)`, `by_seed`, `--lakes`) and `project_structure.md`.
+
+**CI:** the branch `worktree-29-pr4` is not pushed, so there is no PR and no CI yet. This is the review before the first push. CI still has to go green after the push. `git merge-tree` against master `e3203f1` merges cleanly.
+
+**Blocking Issues**
+1. **Duplicated text in `docs/increments/29-nve-reference-catchments.md`, introduced by `efb3894`.** Four passages appear twice in a row:
+   - lines 22–26: "On 2026-10-05 Ola ruled that lake gauges get increment 22's Bygdin method …"
+   - **lines 39–40: `--lakes ../rasputin_data/nve_hrd/lakes.geojson \` appears twice in the example command under "Closes"**, the command the acceptance run copies.
+   - lines 56–58: "A gauge on a lake is seeded with the whole lake …"
+   - lines 68–71: "Seeding a lake together with the river from its outlet …"
+   
+   Delete the second copy of each.
+2. **`ROADMAP.md:54` (row 29) says something that is now false.** `ef403bd` edited this row, and it still says "four questions open for Ola, with defaults (…)" and lists only questions 5 to 8. The increment file's status line says questions 5 to 10 are open. Questions 9 and 10, from the lake design, need adding: Femundsenden stays refused, and gauges a little below a lake outlet keep the river method.
+
+**What holds (checked against the code)**
+- **The lake path matches the design:**
+  - `LAKE_GAP_M = 30.0`.
+  - `LakeSeed` is frozen and holds `rule`, `point`, `lakes` and `distance_m`.
+  - The `inside` rule uses strict `contains`, with or without a placement.
+  - The `lake_line` rule needs the placement on a lake line, finds the lake containing the mapped position by geometry rather than by lake number, and allows `<= gap + 1e-6`.
+  - A non-finite station gives no seed.
+  - `run_batch`: a lake seed gives 22's request (`lakes`, `lakes_crs`, no reach). The `no_river` refusal applies only when there is neither a placement nor a seed. A lake row gets no gauge columns, and `classify` receives `gauge=None`.
+  - The five columns sit after `reach_fork`.
+  - `by_seed` has the groups `river` and `lake`.
+  - `--lakes` uses a shared CRS-check helper (`_read_beside`) that also replaces the `--reference` block.
+- **The lake fetch:** layer 5 asks for exactly the four allowed fields, uses a ±100 m envelope through one function shared with the river query, keeps each lake once by `objectid`, refuses a truncated answer, and writes `lakes.geojson` into `FILES`. Because the file is in `FILES`, an old fetch directory without it is fetched again.
+- **`project_structure.md`:**
+  - The new entries for `gauge.py`, `burn.py`, `sensitivity.py`, `reference.py`, `catchment_batch.py`, `io/geojson.py`, `read_lakes`, the `catchment.py` pour point and `nve.py` (lakes) each match the code's imports and behaviour.
+  - The new `io/` exception for `results.csv` and `summary.json` matches the `csv`/`json` writes in `cli.py`.
+  - The replacement paragraph is true: both commands call `catchment_geojson`.
+- **Leftover red-step comments:** none. The new tests use the agreed "Before the change" wording. The "PR 4's red step" mentions are section citations.
+- **Test coverage:** every item in the design's lake test list has a test, including the 30 m / 30.5 m boundary, two overlapping lakes refused with cause `other`, a lake catchment equal to 22's path run directly, the other-CRS refusal before `--out-dir` is made, and the refetch when `lakes.geojson` is missing.
+- **Gates run locally, all green:** mypy, ruff check, ruff format --check, prohibited deps, detria boundary, and `check_citations` (it resolves every citation and lists 94 at risk).
+- **At-risk citations re-read as quotations:**
+  - The live `test_features.py:583` → `project_structure.md:208` still quotes "never imports _core".
+  - `29…md:75` → `ROADMAP.md:54` is still row 29.
+  - Neither the docs nor the tests have unpinned line citations into this round's changed modules.
+  - The rest of the at-risk list are historical review records.
+- **Python suite:** full run gave 4989 passed and 17 skipped. I used the worktree's existing venv and `_core` (built Oct 5 08:14; no C++ changed since `c59ed6b`), with bytecode, cache and coverage output sent outside the tree.
+- **Mutation testing:** none owed. Only `accumulate`'s oracle is named invariant-critical, and its kill record is with PR 1.
+- **`@perf` run:** none owed, because no refine or mesh code is touched.
+
+**Suggestions (non-blocking)**
+- `read_lakes`: a ring with too few points, or a `vatnlnr` like `"x"`, is refused with shapely's or `int()`'s bare message, which does not name the lake. The message does reach the user as a `--lakes` error. A string `"0"` gives lake number 0 rather than None. NVE serves integers, so this only matters for files users make themselves.
+- `gauge.py` is described as "pure shapely" but now imports `io/station_set.py` for `Lake`. The design chose this. If a later PR touches it, `Lake` could move next to `Reach` so the pure module does not depend on a reader module.
+
+#### Pinned or assumed beyond the design
+- The size ceiling is judged on net lines, as in PR 2's and PR 3's reviews.
+- The suite ran on the existing `_core` without a rebuild, because I may not build C++ in this run. PR 4 changes no C++ and the `.so` is newer than the last C++ commit.
+
+#### Questions for Ola
+- Should the 700-line ceiling count lines added rather than net? PR 4 is 691 net but 744 added. Default: keep counting net, as every review so far has.
+
+#### Lessons
+- A design commit (`efb3894`) doubled four passages, probably an edit applied twice, and three later rounds of red, green and record commits did not notice. A check for identical adjacent lines in `docs/increments/*.md` would catch this mechanically. I am passing it on for `@orchestrator`.
+
+#### ASK OLA lines
+none
+
+#### GUARD FALSE POSITIVE lines
+none
+
+Files: `/Users/skavhaug/projects/rasputin/.claude/worktrees/29-pr4/docs/increments/29-nve-reference-catchments.md` (lines 22–26, 39–40, 56–58, 68–71) and `/Users/skavhaug/projects/rasputin/.claude/worktrees/29-pr4/ROADMAP.md` (line 54). My note file is `/Users/skavhaug/projects/rasputin/.claude/current-task/reviewer-083758.md`; deleting it is the spawner's job.
+
+Fixes for round 4, by `@architect` in the commit that records it: (1) the second copy of each of the four doubled passages deleted (lines 22–26, 39–40, 56–58 and 68–71 as they were), and the whole file scanned for any other repeated adjacent passage, none found; (2) `ROADMAP.md:54`, this file's status line and "Questions for Ola" record Ola's ruling of 2026-10-05 on questions 1 to 10: all kept as built, to be reassessed after the full 140-station run ("Questions 5 to 10: Ola's ruling", under "Ola's rulings"). Both suggestions are deferred to a later PR, since PR 4 has 8 production lines of room left ("Deferred from PR 4's code review, round 4"). The reviewer's question on counting added or net lines is the main session's to put to Ola and is not answered here. No production line changed.
+
+**29 PR 4, code review, round 5, 2026-10-05 (copied from `@reviewer`'s handback).** Range `c9a40c7..bde3b8e`; whole PR `9e666f4..bde3b8e`. The handback follows word for word, by Ola's ruling that review verdicts are recorded so; only its level-2 headings are lowered to level 4, so that they do not end this section. Lines already at level 4 inside its code block are as the handback has them.
+
+#### Result
+
+**Verdict: CHANGES REQUESTED.** There is one blocking issue, and it is in the prose. The record of round 4 says it copies my handback word for word, with only the headings changed. That is not true: the last seven lines of the handback are missing. Everything else in this round passes, and no production line changed.
+
+**Size Metrics**
+- **Range reviewed:** `c9a40c7..bde3b8e`, one `@architect` commit.
+- **Files changed:** two, `ROADMAP.md` and `docs/increments/29-nve-reference-catchments.md`, both prose. `git diff --name-only` lists nothing under `src_python/`, `tools/`, `tests/` or C++.
+- **PR size:** unchanged at 744 added, 53 removed, **691 net**. I judged the 700-line ceiling on the net figure, as rounds 1 to 4 and PR 2's and PR 3's reviews did. Whether the ceiling should count added lines instead is still a question for Ola. Under the net count there are 8 lines of room left.
+- **Focus of the round:** the round-4 record, the doubled passages, how Ola's rulings are recorded, and citations.
+
+**CI:** the branch `worktree-29-pr4` has not been pushed, so there is no PR and no CI yet. This is the review before the first push, and CI still has to go green after the push.
+
+**Blocking Issues**
+1. **The round-4 record is not word for word, but says it is.** The sentence is at `docs/increments/29-nve-reference-catchments.md:3140`: "The handback follows word for word … only its level-2 headings are lowered to level 4". I pulled my round-4 handback from the run's transcript and compared it with the recorded block, which runs from "#### Result" to just before "Fixes for round 4". After lowering `##` to `####`, the two match up to "#### Lessons". The handback's last seven lines are missing:
+   ```
+   #### ASK OLA lines
+   none
+
+   #### GUARD FALSE POSITIVE lines
+   none
+
+   Files: `/Users/.../29-pr4/docs/increments/29-nve-reference-catchments.md` (lines 22–26, 39–40, 56–58, 68–71) and `/Users/.../29-pr4/ROADMAP.md` (line 54). My note file is `.../reviewer-083758.md`; deleting it is the spawner's job.
+   ```
+   The fix is one of two:
+   - **(a)** add those lines after the Lessons block, keeping the `####` level (`tools/brief.py` splits sections only at `## `, so this is safe); or
+   - **(b)** change the sentence at line 3140 to say the closing "none" sections and the file list were left out.
+
+   Ola's ruling asks for a verbatim record, so (a) is the better choice.
+
+**What holds (checked)**
+- **Production code did not change.** The diff touches only the two Markdown files.
+- **The doubled passages are gone.** All four were deleted, including the doubled `--lakes` line in the example command under "Closes". I scanned the whole file three ways: identical neighbouring lines, repeated pairs of long lines, and repeated sentences longer than 60 characters. Nothing doubled is left:
+  - The only repeated pair (lines 1140 and 1281) is the same file name in the output of two different `git grep` commands.
+  - The two sentences that appear three times are on purpose: the ruling marker "*Ruled 2026-10-04, closed: the default*", and PR 1's estimate, repeated in each of its three review records.
+- **Ola's ruling is recorded correctly in all three places.** The status line, `ROADMAP.md:54` (row 29) and "Questions for Ola" all say questions 1 to 10 are ruled, kept as built, and looked at again after the 140-station run.
+  - The new paragraph "Questions 5 to 10: Ola's ruling" sits under "## Ola's rulings (2026-10-04)", where the cross-references say it is.
+  - Each of questions 5 to 10 now carries "*Ruled 2026-10-05, closed: the default, to be reassessed after the full run.*".
+  - The opening paragraph of "Questions for Ola" no longer calls them open.
+- **Questions 9 and 10 mean what the lake design says:**
+  - 9: Femundsenden (no river line within 500 m, 14 m from Femunden) stays refused until the nearest-stream fallback, PR 5. This matches the lake-seed rule (inside the lake, or on the lake's line within 30 m) and line 2839.
+  - 10: a gauge a little below a lake's outlet keeps the river method, and seeding a lake together with the river below it is not built. This matches lines 2027–2033.
+  - Both ROADMAP and the ruling paragraph state them that way.
+- **The deferred-suggestions paragraph** gives my two round-4 suggestions accurately: `read_lakes` messages that do not name the lake, `"0"` read as lake 0, and `Lake` moving out of `io/station_set.py`. "8 production lines of room" is right: 691 net, and the PR must stay under 700.
+- **Citations:** `python3 tools/check_citations.py` exits 0 and lists 99 citations to re-read; I re-read the live ones.
+  - `ROADMAP.md:54` is still row 29, so the citation at line 70 holds.
+  - `test_features.py:583` → `project_structure.md:208` is unchanged in this range.
+  - Nothing cites line numbers in the increment file from outside it, so the 5 lines removed near its top move no citation.
+  - The rest of the list is dated review records, which stay as written.
+- **Leftover red-step comments:** none possible, since no code changed.
+- **Mutation record:** none owed in this round; the one invariant-critical suite's record is with PR 1.
+- **`@perf` run:** none owed, because no refine or mesh code is touched.
+
+**Suggestions (non-blocking)**
+- The ROADMAP row says "Ola ruled all ten of the increment's questions on 2026-10-05". Questions 1 to 4 were ruled on 2026-10-04, and the 2026-10-05 ruling confirmed them. The increment file has it right ("1 to 4 as recorded above, and 5 to 10 kept as built"). The row could say the same.
+
+#### Pinned or assumed beyond the design
+- The size ceiling is judged on net lines, as in every earlier review.
+- I took my round-4 handback text from this session's transcript of the round-4 reviewer run. It is the `SubagentHandback` call in subagent `aa531c608e07d23ea`.
+
+#### Questions for Ola
+- Should the 700-line ceiling count lines added rather than net (added minus removed)? PR 4 is 691 net but 744 added. Default: keep counting net, as every review so far has. This was carried over from round 4 and is still unanswered.
+
+#### Lessons
+- When a handback is copied "word for word", the copy can be checked mechanically. Before writing that claim, run `diff` between the handback text (taken from the transcript) and the recorded block. A hand copy dropped the closing lines here.
+- `tools/brief.py` counts recorded review rounds as lines that contain "APPROVED" or "CHANGES REQUESTED". A verbatim handback that uses either word on more than one line makes the count too high. Today the count is still right only because my round-4 text used the verdict word on one line. Passing both lessons on for `@orchestrator`.
+
+#### ASK OLA lines
+none
+
+#### GUARD FALSE POSITIVE lines
+none
+
+Files: `/Users/skavhaug/projects/rasputin/.claude/worktrees/29-pr4/docs/increments/29-nve-reference-catchments.md` (line 3140, and the record block that ends before "Fixes for round 4") and `/Users/skavhaug/projects/rasputin/.claude/worktrees/29-pr4/ROADMAP.md` (line 54). My note file is `/Users/skavhaug/projects/rasputin/.claude/current-task/reviewer-085322.md`; deleting it is the spawner's job.
+
+Fixes for round 5, by `@architect` in the commit that records it: (1) option (a): the round-4 record now ends with the handback's closing lines (the two "none" sections and the file list), at level 4; both records were checked by `diff` against the handback text, with their headings raised back to level 2, and both diffs are empty; (2) the suggestion taken: `ROADMAP.md:54` says questions 1 to 4 were ruled on 2026-10-04 and confirmed on 2026-10-05, and 5 to 10 were ruled on 2026-10-05. The question on counting added or net lines, asked in rounds 4 and 5, is closed: Ola ruled net (2026-10-05: "net, and write it into CLAUDE.md"), and `CLAUDE.md` §2 now states the ceiling as net production lines, added minus removed, counted by the method these reviews use. PR 4's 691 net therefore leaves 8 lines of room under the ceiling. No production line changed.
+
+**29 PR 4, code review, round 6, 2026-10-05 (copied from `@reviewer`'s handback).** Range `bde3b8e..9bb1723`; whole PR `9e666f4..9bb1723`. The handback follows word for word, by Ola's ruling that review verdicts are recorded so; only its level-2 headings are lowered to level 4, so that they do not end this section.
+
+#### Result
+
+**Verdict: APPROVED.** Nothing blocks. Both commits change prose only. The two review records match my handbacks word for word, and the new wording in `CLAUDE.md` §2 states the counting method these reviews have used. Measured that way, PR 4 is still 691 net lines.
+
+**Size Metrics**
+- **Range reviewed:** `bde3b8e..9bb1723`, two `@architect` commits (`3fab6c6`, `9bb1723`). The whole PR is `9e666f4..9bb1723`.
+- **Files changed in this round:** `CLAUDE.md`, `ROADMAP.md` and `docs/increments/29-nve-reference-catchments.md`. Nothing under `src_python/`, `tests/`, `tools/`, C++ or `.github/` changed since round 4 (`git diff --stat c9a40c7..9bb1723` over those paths prints nothing).
+- **PR size:** 744 lines added, 53 removed, **691 net**. I measured this again with my own counter, in the scratchpad and since removed. It takes the `+` and `-` ranges of `git diff -U0 9e666f4 9bb1723 -- src_python`. It drops blank lines, comment-only lines, docstrings and the bodies of raw strings. Added lines are judged at the new revision and removed lines at the old one. By file: cli.py +201, catchment_batch.py +195, reference.py +187, station_set.py +32, gauge.py +27, geojson.py +21, catchment.py +13, nve.py +10, mosaic.py +5, burn.py 0. The total matches rounds 4 and 5. Since the PR has to stay under 700, there are 8 lines of room.
+- **Focus of the round:** the verbatim records, the new ceiling wording, ROADMAP row 29 and the status line, and citations.
+
+**CI:** the branch `worktree-29-pr4` is not pushed (`git ls-remote` and `gh pr list --head` both print nothing). So there is no CI yet. This is the review before the first push, and CI still has to go green after it.
+
+**Checks**
+1. **The records are word for word.** I took both handbacks from the `SubagentHandback` calls in the transcripts: round 4 from subagent `aa531c608e07d23ea`, round 5 from `aadbad41b7cbf3dc0`. For each round I took the recorded block from "#### Result" up to the "Fixes for round N" paragraph and raised unindented `#### ` headings back to `## `. Then I ran `diff` against the handback. Both diffs are empty (round 4: 74 lines on each side; round 5: 73 lines on each side). Each handback has 6 level-2 headings, so the heading change really was tested. The level-4 lines inside round 5's indented code block stayed as the handback has them, as the record's header says. Ola's quotation in the round-5 fix paragraph, "net, and write it into CLAUDE.md", matches Ola's message in this session's transcript exactly.
+2. **`CLAUDE.md` §2.**
+   - *Does it state the rule the reviews used?* Yes. It defines net lines as added minus removed, with the same exclusions on both sides. It takes the lines from the PR's `git diff -U0` hunks against its base, judging added lines at the new revision and removed lines at the old one. That is the method above, and it gives the same 691.
+   - *Is it still the only statement of the rule?* Yes. The paragraph still ends "This is the only statement of the rule; everywhere else points here". I searched every rule file for the ceiling. `.claude/agents/reviewer.md`, `developer.md` and `tester.md`, the three skills that mention it, and `docs/PRINCIPLES.md` E4 all point to §2 and do not repeat the number or the unit. Nothing conflicts with it. `docs/increments/README.md` does not state it. No `tools/` script counts lines, so no code can disagree with it.
+   - *The gap @architect left open (a multi-line string that is not raw and not a docstring):* it does not matter for this PR. As worded, such lines are not blank lines, comments, docstrings or raw-string bodies, so they count. The only open question is a blank line inside such a string. In the PR's ten production files, all 103 multi-line strings are docstrings: a tokenizer pass found none elsewhere and no triple-quoted f-string. Leaving it open is fine until a PR has such a string.
+3. **ROADMAP row 29, the status line, citations.**
+   - Row 29 is still `ROADMAP.md:54`.
+   - The row now says questions 1 to 4 were ruled on 2026-10-04 and confirmed on 2026-10-05, and 5 to 10 were ruled on 2026-10-05. That matches the markers in the increment file (lines 2974–3002 carry "Ruled 2026-10-04", lines 3010–3070 carry "Ruled 2026-10-05") and the paragraph at line 702.
+   - The status line and the row both record round 5, its fix, and the net ruling, and both name round 6 as next. That matches the tree.
+   - `python3 tools/check_citations.py` exits 0 and lists 105 citations to re-read. The live ones hold: `ROADMAP.md:54` is row 29, the `:3140` quoted inside the round-5 record is still the round-4 header line, and nothing cites line numbers in `CLAUDE.md` except a test fixture, so the three lines added to §2 move no citation.
+4. **Production code did not change since round 4.** It is 691 net, as above.
+
+**Other checks:** red-step comments: none possible, since no code changed. Mutation record: none owed this round; the one suite the increment names invariant-critical has its record with PR 1. `@perf` acceptance run: none owed, since no refine or mesh code is touched.
+
+**Suggestions (non-blocking)**
+- The round-5 fix paragraph (line 3295) says "691 net is therefore 8 under the ceiling". ROADMAP row 29 still says "691 production lines, 9 under the 700 ceiling". Both can be defended: 691 is 9 below 700, and there are 8 lines of room because the PR must stay *under* 700. A reader may still see a contradiction. "8 lines of room" in both places would remove it.
+- `.claude/REQUIRED-READING.md` says to restart before spawning a persona after a change to `CLAUDE.md` is merged. This PR carries one. Once it merges, the main session should restart before its next spawn, so that every persona reads the net wording.
+
+#### Pinned or assumed beyond the design
+- I counted only `src_python/`. The whole PR touches no C++, and tests are excluded by §2.
+- I identified docstrings with `ast` (the first statement of a module, class or function, if it is a string) and comment lines with `tokenize`. That is my reading of §2's exclusions, and it gives the figure earlier rounds recorded.
+- I took the round-4 and round-5 handback texts from this session's transcripts of those runs, as the task directed.
+
+#### Questions for Ola
+none
+
+#### Lessons
+- A "word for word" claim can be checked with `diff` in a minute once the handback is pulled from the transcript. The diff can only fail if the heading change is applied to the record alone and the handback has headings for it to change. Both did here, so the empty diffs mean something.
+
+#### ASK OLA lines
+none
+
+#### GUARD FALSE POSITIVE lines
+none
+
+Files: `/Users/skavhaug/projects/rasputin/.claude/worktrees/29-pr4/CLAUDE.md` (section 2), `/Users/skavhaug/projects/rasputin/.claude/worktrees/29-pr4/ROADMAP.md` (line 54), `/Users/skavhaug/projects/rasputin/.claude/worktrees/29-pr4/docs/increments/29-nve-reference-catchments.md` (line 3, records at lines 3140–3217 and 3219–3295). My note file is `/Users/skavhaug/projects/rasputin/.claude/current-task/reviewer-090320.md`; deleting it is the spawner's job.
+
+Fixes for round 6, by `@architect` in the commit that records it: suggestion 1 taken: the round-5 fix paragraph above, `ROADMAP.md:54`, and the two estimate passages of this file that said "9 under 700" (under "Lake gauges' green step" and under "New and changed files") now all say PR 4's 691 net leaves 8 lines of room under the 700 ceiling. Suggestion 2, restarting before the next spawn once this PR's change to `CLAUDE.md` merges, is the main session's to act on, as `.claude/REQUIRED-READING.md` already requires; no rule changes. The status line and `ROADMAP.md:54` record PR 4 as approved in code review round 6, with the push waiting for Ola. No production line changed.

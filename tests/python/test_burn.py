@@ -557,8 +557,11 @@ GAP = (20, 21)
 #: `RasterMeta` holds a NaN-gapped float DEM (it never holds a NaN sentinel;
 #: PR 2's code review, round 2: "A NaN cell is NoData", as the core's
 #: `is_nodata` says, whatever the sentinel).
-GAPS = [(-32767.0, -32767.0), (3.4e38, 3.4e38), (math.nan, None)]
-GAP_IDS = ["minus32767", "3.4e38", "nan-no-sentinel"]
+#: The gap's value and the DEM's sentinel. The fourth case, a NaN cell on a
+#: DEM that has a finite sentinel, pins that NaN is NoData beside a sentinel
+#: too (PR 2's code review, round 3, suggestion; added with PR 4's red step).
+GAPS = [(-32767.0, -32767.0), (3.4e38, 3.4e38), (math.nan, None), (math.nan, -32767.0)]
+GAP_IDS = ["minus32767", "3.4e38", "nan-no-sentinel", "nan-beside-sentinel"]
 
 
 def jog(gap: float | None) -> npt.NDArray[np.float32]:
@@ -599,8 +602,9 @@ def test_a_chain_through_nodata_is_refused_naming_the_gap(
     its middle node, (19.5, 21) rounded half up, (20, 21), which has none.
     The taut cut then drops (20, 22), so (20, 21) is a node of the chain the
     burn would lower and read. The station is refused, naming the gap and
-    where it is in the DEM's CRS. The NaN case has no sentinel: the gap is
-    the NaN cell alone."""
+    where it is in the DEM's CRS. The first NaN case has no sentinel: the gap
+    is the NaN cell alone; the second has the sentinel -32767 as well, and
+    the NaN cell is a gap all the same."""
     z = jog(gap)
     # The premises, from the fixture alone.
     assert not has_data(float(z[GAP]), nodata)

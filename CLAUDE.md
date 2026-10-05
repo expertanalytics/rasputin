@@ -13,9 +13,12 @@ This project is governed by specialized sub-agents. Always defer tasks to the co
 * `@perf`: Performance owner. Runs the benchmark and scaling acceptance for refine- and mesh-touching increments (`tools/bench.py`), profiles the serial phase, and keeps the evidence in `docs/benchmarks/<date>/`.
 
 ## 2. Core Constraints & Technical Mandates
-* **Strict Size Limit:** Under **700 lines of production code per pull request**,
-  where a line counts unless it is blank, a comment, a docstring, or the body of
-  a raw literal; tests excluded. The exclusions exist so the ceiling does not
+* **Strict Size Limit:** Under **700 net lines of production code per pull
+  request**: lines added minus lines removed, both under the same exclusions. A
+  line counts unless it is blank, a comment, a docstring, or the body of a raw
+  literal; tests excluded. Added and removed lines are the `+` and `-` ranges of
+  the PR's `git diff -U0` hunks against its base, added lines judged at the new
+  revision and removed lines at the old. The exclusions exist so the ceiling does not
   penalise the comment density this project asks for, and blank lines add no
   reading. Lines count as written: packing code by hand under `# fmt: skip` /
   `# fmt: off` is allowed, provided the packed lines stay readable and the
