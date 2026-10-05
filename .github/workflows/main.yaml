@@ -245,6 +245,29 @@ jobs:
       - name: Tests
         run: pytest
 
+  # h15 §5 P: the steps that ran after the main suite, in their own job per
+  # version, so they run beside it instead of after it. Same installs, same
+  # order, each step's text unchanged; only the main suite's pytest is gone.
+  python-extras:
+    name: Python ${{ matrix.python-version }}, extras
+    runs-on: ubuntu-latest
+    needs: changes
+    if: needs.changes.outputs.code != 'false'
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.12", "3.13", "3.14"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install
+        run: python -m pip install --upgrade pip && python -m pip install -e ".[dev]"
+
       # Increment 24, T6: an unchecked install (-C
       # cmake.define.RASPUTIN_HARDENING=OFF) must not leave its OFF in the shared
       # build/{wheel_tag} for the next default install, and the command-line
@@ -258,10 +281,10 @@ jobs:
 
       # Suites that branch on the `codecs` extra: some tests need imagecodecs
       # (LZW, the real Kartverket DEM and DTM10 extracts), others test its
-      # absence. No single environment runs both halves, so the step above
-      # covers the absent half and this one installs the extra and re-runs the
-      # codecs-gated suites: the GeoTIFF ones, and the CLI and golden suites that
-      # mesh the real tile (test_cli_mesh_dem.py runs in the viewer step below).
+      # absence. No single environment runs both halves, so the main suite
+      # (the python job) covers the absent half and this one installs the extra
+      # and re-runs the codecs-gated suites: the GeoTIFF ones, and the CLI and
+      # golden suites that mesh the real tile (test_cli_mesh_dem.py runs in the viewer step below).
       - name: Tests with the codecs extra
         run: |
           python -m pip install -e ".[dev,codecs]"
@@ -310,7 +333,7 @@ jobs:
   result:
     name: CI result
     if: always()
-    needs: [changes, cpp, sanitizers, governance, python]
+    needs: [changes, cpp, sanitizers, governance, python, python-extras]
     runs-on: ubuntu-latest
     steps:
       - name: Every gating job passed, or was skipped on a prose-only change
@@ -318,7 +341,7 @@ jobs:
           CODE: ${{ needs.changes.outputs.code }}
           CHANGES: ${{ needs.changes.result }}
           GOVERNANCE: ${{ needs.governance.result }}
-          OTHERS: ${{ needs.cpp.result }} ${{ needs.sanitizers.result }} ${{ needs.python.result }}
+          OTHERS: ${{ needs.cpp.result }} ${{ needs.sanitizers.result }} ${{ needs.python.result }} ${{ needs.python-extras.result }}
         run: |
           fail=0
           if [ "$CHANGES" != success ]; then echo "Changed files ended: $CHANGES"; fail=1; fi
@@ -326,7 +349,7 @@ jobs:
           allowed=" success "
           if [ "$CODE" = false ]; then allowed=" success skipped "; fi
           set -- $OTHERS
-          for job in "C++ core" "C++ sanitizers" "Python"; do
+          for job in "C++ core" "C++ sanitizers" "Python" "Python extras"; do
             case "$allowed" in
               *" ${1:-none} "*) ;;
               *) echo "$job ended: ${1:-none} (code=$CODE)"; fail=1 ;;
