@@ -1171,4 +1171,3 @@ TEST_CASE("ES16: a vertex 2e-10 from a node is inside the radius at 16,385 colum
     CHECK(sh.stray == 0);
     CHECK(sh.broken_chain == 0);
 }
-

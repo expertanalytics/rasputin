@@ -700,7 +700,7 @@ def test_h15_extras_job_gates_ci_result(jobs: dict[str, list[str]], extras: list
 # ---------------------------------------------------------------------------
 # h17 §4d (docs/increments/h17-ci-test-time.md): the harness tests in a job of
 # their own (H1, H2), and the TSan job building exactly the suites it runs
-# (H3). That the TSan list drops exactly the four thread-free suites, and that
+# (H3). That the TSan list drops exactly the eight thread-free suites, and that
 # the parallel loop reports a failing suite, is `@reviewer`'s check by
 # `git diff` and by reading the step, not a test (h15 §7's rule). The harness
 # job's gate, its place in CI result's needs and in the result step's OTHERS
