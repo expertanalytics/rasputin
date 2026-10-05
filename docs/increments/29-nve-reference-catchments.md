@@ -1,6 +1,6 @@
 # Increment 29 — NVE reference catchments: our catchments against NVE's, station by station
 
-Status: **design approved by `@reviewer` (round 5, 2026-10-04); PR 1 merged as #173; PR 3 merged as #178; PR 2 (the gauge on the river): green `193079d`, 569 production lines, approved, the push waits for Ola; PR 4 (the batch and the comparison): lake path green `fff6ac9`, 691 net; code review round 5 recorded (changes requested, prose only: round 4's record completed word for word), its fix made; the ceiling counts net lines (Ola, 2026-10-05), now in `CLAUDE.md` §2; code review round 6 next; questions 1 to 10 ruled by Ola, all kept as built, to be reassessed after the full 140-station run**
+Status: **design approved by `@reviewer` (round 5, 2026-10-04); PR 1 merged as #173; PR 3 merged as #178; PR 2 (the gauge on the river): green `193079d`, 569 production lines, approved, the push waits for Ola; PR 4 (the batch and the comparison): lake path green `fff6ac9`, 691 net, 8 lines of room under the 700 ceiling, which counts net lines (Ola, 2026-10-05, now in `CLAUDE.md` §2); approved in code review round 6 (prose only since round 4); the push waits for Ola; questions 1 to 10 ruled by Ola, all kept as built, to be reassessed after the full 140-station run**
 (`@architect`, 2026-10-04), branch `worktree-nve-catchments` off master
 `d20126b`. Ola's rulings of 2026-10-04 are in the section below. Round 2 closed the burn's drainage claim
 (checked node by node, not assumed), the ELVIS data cases, the PR order, and
@@ -673,7 +673,7 @@ lakes: Innsjødatabasen"; questions 9 and 10 for Ola come from it.
 no test file touched); `@developer` reports the full suite on a rebuilt
 `_core` at exit 0, 4989 passed, 17 skipped. Counted by PR 2's round-2 rule,
 the whole of PR 4 over `9e666f4..fff6ac9` is 691 net (744 added, 53
-removed), 9 under 700: `cli.py` 201, `catchment_batch.py` 195,
+removed), 8 lines of room under 700: `cli.py` 201, `catchment_batch.py` 195,
 `reference.py` 187, `io/station_set.py` 32, `gauge.py` 27, `io/geojson.py`
 21, `catchment.py` 13, `fetch/nve.py` 10, `mosaic.py` 5, `burn.py` 0. The
 lake work alone, over `48d1315..fff6ac9`, is 118 net (150 added, 32
@@ -2443,7 +2443,7 @@ work before the acceptance run, but not as one pull request; the main
 session tells Ola so in the round's recap. Nothing is split before the count
 says so. The lake green step (`fff6ac9`) came to 118 net (150 added, 32
 removed), 18 % over its 100 and inside the margin, and PR 4 to 691 net
-(744 added, 53 removed), 9 under 700: not split, but a change that
+(744 added, 53 removed), 8 lines of room under 700: not split, but a change that
 takes it to 700 net or more splits it ("Lake gauges' green step", under
 "Ola's rulings").
 
@@ -3292,4 +3292,58 @@ none
 
 Files: `/Users/skavhaug/projects/rasputin/.claude/worktrees/29-pr4/docs/increments/29-nve-reference-catchments.md` (line 3140, and the record block that ends before "Fixes for round 4") and `/Users/skavhaug/projects/rasputin/.claude/worktrees/29-pr4/ROADMAP.md` (line 54). My note file is `/Users/skavhaug/projects/rasputin/.claude/current-task/reviewer-085322.md`; deleting it is the spawner's job.
 
-Fixes for round 5, by `@architect` in the commit that records it: (1) option (a): the round-4 record now ends with the handback's closing lines (the two "none" sections and the file list), at level 4; both records were checked by `diff` against the handback text, with their headings raised back to level 2, and both diffs are empty; (2) the suggestion taken: `ROADMAP.md:54` says questions 1 to 4 were ruled on 2026-10-04 and confirmed on 2026-10-05, and 5 to 10 were ruled on 2026-10-05. The question on counting added or net lines, asked in rounds 4 and 5, is closed: Ola ruled net (2026-10-05: "net, and write it into CLAUDE.md"), and `CLAUDE.md` §2 now states the ceiling as net production lines, added minus removed, counted by the method these reviews use. PR 4's 691 net is therefore 8 under the ceiling. No production line changed.
+Fixes for round 5, by `@architect` in the commit that records it: (1) option (a): the round-4 record now ends with the handback's closing lines (the two "none" sections and the file list), at level 4; both records were checked by `diff` against the handback text, with their headings raised back to level 2, and both diffs are empty; (2) the suggestion taken: `ROADMAP.md:54` says questions 1 to 4 were ruled on 2026-10-04 and confirmed on 2026-10-05, and 5 to 10 were ruled on 2026-10-05. The question on counting added or net lines, asked in rounds 4 and 5, is closed: Ola ruled net (2026-10-05: "net, and write it into CLAUDE.md"), and `CLAUDE.md` §2 now states the ceiling as net production lines, added minus removed, counted by the method these reviews use. PR 4's 691 net therefore leaves 8 lines of room under the ceiling. No production line changed.
+
+**29 PR 4, code review, round 6, 2026-10-05 (copied from `@reviewer`'s handback).** Range `bde3b8e..9bb1723`; whole PR `9e666f4..9bb1723`. The handback follows word for word, by Ola's ruling that review verdicts are recorded so; only its level-2 headings are lowered to level 4, so that they do not end this section.
+
+#### Result
+
+**Verdict: APPROVED.** Nothing blocks. Both commits change prose only. The two review records match my handbacks word for word, and the new wording in `CLAUDE.md` §2 states the counting method these reviews have used. Measured that way, PR 4 is still 691 net lines.
+
+**Size Metrics**
+- **Range reviewed:** `bde3b8e..9bb1723`, two `@architect` commits (`3fab6c6`, `9bb1723`). The whole PR is `9e666f4..9bb1723`.
+- **Files changed in this round:** `CLAUDE.md`, `ROADMAP.md` and `docs/increments/29-nve-reference-catchments.md`. Nothing under `src_python/`, `tests/`, `tools/`, C++ or `.github/` changed since round 4 (`git diff --stat c9a40c7..9bb1723` over those paths prints nothing).
+- **PR size:** 744 lines added, 53 removed, **691 net**. I measured this again with my own counter, in the scratchpad and since removed. It takes the `+` and `-` ranges of `git diff -U0 9e666f4 9bb1723 -- src_python`. It drops blank lines, comment-only lines, docstrings and the bodies of raw strings. Added lines are judged at the new revision and removed lines at the old one. By file: cli.py +201, catchment_batch.py +195, reference.py +187, station_set.py +32, gauge.py +27, geojson.py +21, catchment.py +13, nve.py +10, mosaic.py +5, burn.py 0. The total matches rounds 4 and 5. Since the PR has to stay under 700, there are 8 lines of room.
+- **Focus of the round:** the verbatim records, the new ceiling wording, ROADMAP row 29 and the status line, and citations.
+
+**CI:** the branch `worktree-29-pr4` is not pushed (`git ls-remote` and `gh pr list --head` both print nothing). So there is no CI yet. This is the review before the first push, and CI still has to go green after it.
+
+**Checks**
+1. **The records are word for word.** I took both handbacks from the `SubagentHandback` calls in the transcripts: round 4 from subagent `aa531c608e07d23ea`, round 5 from `aadbad41b7cbf3dc0`. For each round I took the recorded block from "#### Result" up to the "Fixes for round N" paragraph and raised unindented `#### ` headings back to `## `. Then I ran `diff` against the handback. Both diffs are empty (round 4: 74 lines on each side; round 5: 73 lines on each side). Each handback has 6 level-2 headings, so the heading change really was tested. The level-4 lines inside round 5's indented code block stayed as the handback has them, as the record's header says. Ola's quotation in the round-5 fix paragraph, "net, and write it into CLAUDE.md", matches Ola's message in this session's transcript exactly.
+2. **`CLAUDE.md` §2.**
+   - *Does it state the rule the reviews used?* Yes. It defines net lines as added minus removed, with the same exclusions on both sides. It takes the lines from the PR's `git diff -U0` hunks against its base, judging added lines at the new revision and removed lines at the old one. That is the method above, and it gives the same 691.
+   - *Is it still the only statement of the rule?* Yes. The paragraph still ends "This is the only statement of the rule; everywhere else points here". I searched every rule file for the ceiling. `.claude/agents/reviewer.md`, `developer.md` and `tester.md`, the three skills that mention it, and `docs/PRINCIPLES.md` E4 all point to §2 and do not repeat the number or the unit. Nothing conflicts with it. `docs/increments/README.md` does not state it. No `tools/` script counts lines, so no code can disagree with it.
+   - *The gap @architect left open (a multi-line string that is not raw and not a docstring):* it does not matter for this PR. As worded, such lines are not blank lines, comments, docstrings or raw-string bodies, so they count. The only open question is a blank line inside such a string. In the PR's ten production files, all 103 multi-line strings are docstrings: a tokenizer pass found none elsewhere and no triple-quoted f-string. Leaving it open is fine until a PR has such a string.
+3. **ROADMAP row 29, the status line, citations.**
+   - Row 29 is still `ROADMAP.md:54`.
+   - The row now says questions 1 to 4 were ruled on 2026-10-04 and confirmed on 2026-10-05, and 5 to 10 were ruled on 2026-10-05. That matches the markers in the increment file (lines 2974–3002 carry "Ruled 2026-10-04", lines 3010–3070 carry "Ruled 2026-10-05") and the paragraph at line 702.
+   - The status line and the row both record round 5, its fix, and the net ruling, and both name round 6 as next. That matches the tree.
+   - `python3 tools/check_citations.py` exits 0 and lists 105 citations to re-read. The live ones hold: `ROADMAP.md:54` is row 29, the `:3140` quoted inside the round-5 record is still the round-4 header line, and nothing cites line numbers in `CLAUDE.md` except a test fixture, so the three lines added to §2 move no citation.
+4. **Production code did not change since round 4.** It is 691 net, as above.
+
+**Other checks:** red-step comments: none possible, since no code changed. Mutation record: none owed this round; the one suite the increment names invariant-critical has its record with PR 1. `@perf` acceptance run: none owed, since no refine or mesh code is touched.
+
+**Suggestions (non-blocking)**
+- The round-5 fix paragraph (line 3295) says "691 net is therefore 8 under the ceiling". ROADMAP row 29 still says "691 production lines, 9 under the 700 ceiling". Both can be defended: 691 is 9 below 700, and there are 8 lines of room because the PR must stay *under* 700. A reader may still see a contradiction. "8 lines of room" in both places would remove it.
+- `.claude/REQUIRED-READING.md` says to restart before spawning a persona after a change to `CLAUDE.md` is merged. This PR carries one. Once it merges, the main session should restart before its next spawn, so that every persona reads the net wording.
+
+#### Pinned or assumed beyond the design
+- I counted only `src_python/`. The whole PR touches no C++, and tests are excluded by §2.
+- I identified docstrings with `ast` (the first statement of a module, class or function, if it is a string) and comment lines with `tokenize`. That is my reading of §2's exclusions, and it gives the figure earlier rounds recorded.
+- I took the round-4 and round-5 handback texts from this session's transcripts of those runs, as the task directed.
+
+#### Questions for Ola
+none
+
+#### Lessons
+- A "word for word" claim can be checked with `diff` in a minute once the handback is pulled from the transcript. The diff can only fail if the heading change is applied to the record alone and the handback has headings for it to change. Both did here, so the empty diffs mean something.
+
+#### ASK OLA lines
+none
+
+#### GUARD FALSE POSITIVE lines
+none
+
+Files: `/Users/skavhaug/projects/rasputin/.claude/worktrees/29-pr4/CLAUDE.md` (section 2), `/Users/skavhaug/projects/rasputin/.claude/worktrees/29-pr4/ROADMAP.md` (line 54), `/Users/skavhaug/projects/rasputin/.claude/worktrees/29-pr4/docs/increments/29-nve-reference-catchments.md` (line 3, records at lines 3140–3217 and 3219–3295). My note file is `/Users/skavhaug/projects/rasputin/.claude/current-task/reviewer-090320.md`; deleting it is the spawner's job.
+
+Fixes for round 6, by `@architect` in the commit that records it: suggestion 1 taken: the round-5 fix paragraph above, `ROADMAP.md:54`, and the two estimate passages of this file that said "9 under 700" (under "Lake gauges' green step" and under "New and changed files") now all say PR 4's 691 net leaves 8 lines of room under the 700 ceiling. Suggestion 2, restarting before the next spawn once this PR's change to `CLAUDE.md` merges, is the main session's to act on, as `.claude/REQUIRED-READING.md` already requires; no rule changes. The status line and `ROADMAP.md:54` record PR 4 as approved in code review round 6, with the push waiting for Ola. No production line changed.
