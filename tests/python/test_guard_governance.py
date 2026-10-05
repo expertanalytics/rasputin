@@ -17,6 +17,7 @@ from harness_fixtures import (
     bash_event,
     file_event,
     make_repo,
+    point_scratchpad,
     pretool_decision,
     queue_lines,
     run_script,
@@ -44,11 +45,27 @@ GOVERNED_NOW = (
     ".claude/skills/x/SKILL.md",
     ".git/hooks/pre-commit",
     ".git/config",
+    # h16 §3: the counter computes CLAUDE.md §2's arithmetic, and both guards
+    # import the scratchpad test.
+    "tools/count_loc.py",
+    "tools/scratchpad.py",
+    # h16 G4: a tools/ file named after a stdlib module shadows it for any
+    # script run as `python3 tools/x.py`.
+    "tools/ast.py",
+    "tools/json/__init__.py",
+    "tools/subprocess.cpython-314-darwin.so",
 )
 
 #: Files named `config` that are not a git config: GOVERNED_SUFFIXES is matched
 #: with endswith, never on the basename.
-NOT_GOVERNED = ("src/app/config", "docs/config")
+NOT_GOVERNED = (
+    "src/app/config",
+    "docs/config",
+    # h16 G4: only a component after `tools/` is judged by the stdlib's names,
+    # and a tools/ file that is not named after one stays ordinary.
+    "docs/x/ast.py",
+    "tools/scratch_copy.py",
+)
 
 #: T7: Bash commands that write the harness state or run away.py.
 DENIED_COMMANDS = (
@@ -179,3 +196,91 @@ def test_a_read_of_the_state_or_of_away_is_silent(repo: Path, mode: str, command
     set_mode(repo, mode)
     assert pretool_decision(run_script(repo, GUARD_GOVERNANCE, bash_event(repo, command))) is None
     assert queue_lines(repo) == []
+
+
+# ---------------------------------------------------------------- h16 G4
+#
+# docs/increments/h16-harness-fixes.md §2 G4, part 2: a path whose component
+# after a `tools` component, cut at the first `.`, is a stdlib module name is
+# governed, wherever the checkout is.
+
+
+@pytest.mark.parametrize("command", ["echo x > tools/ast.py", "cp a.py tools/typing.py"])
+def test_a_shell_write_of_a_stdlib_named_tools_file_asks(repo: Path, command: str) -> None:
+    found = pretool_decision(run_script(repo, GUARD_GOVERNANCE, bash_event(repo, command)))
+    assert found is not None, f"{command!r} passed silently"
+    kind, reason = found
+    assert kind == "ask"
+    assert "This changes a file that states rules: tools/" in reason
+
+
+def test_a_stdlib_named_tools_file_in_another_checkout_asks(repo: Path) -> None:
+    path = "/abs/wt/tools/typing.py"
+    found = pretool_decision(run_script(repo, GUARD_GOVERNANCE, file_event(repo, "Write", path)))
+    assert found is not None, f"{path} is not governed"
+    assert found[0] == "ask"
+    assert path in found[1]
+
+
+# ---------------------------------------------------------------- h16 G3a
+#
+# §2 G3a: a path whose real path lies under a session scratchpad is not
+# governed, whatever its name; a symlink out of the scratchpad is followed.
+
+
+@pytest.fixture
+def pad(repo: Path, tmp_path: Path) -> Path:
+    """The copy's scratchpad, holding a git repository `r` and a symlink `link/.git` to `repo`'s."""
+    pad = point_scratchpad(repo, tmp_path / "faketmp")
+    (pad / "r" / ".git").mkdir(parents=True)
+    (pad / "r" / ".git" / "config").write_text("[core]\n")
+    (pad / "link").mkdir()
+    (pad / "link" / ".git").symlink_to(repo / ".git")
+    return pad
+
+
+#: Files in the scratchpad that would be governed anywhere else.
+IN_SCRATCHPAD = (
+    "r/.git/config",
+    "copy/CLAUDE.md",
+    "copy/.claude/agents/tester.md",
+    "copy/.claude/hooks/guard_push.py",
+    "copy/tools/shell_scan.py",
+    "copy/tools/ast.py",  # G3a's exemption comes before G4's stdlib names
+)
+
+
+@pytest.mark.parametrize("mode", ["off", "on"])
+@pytest.mark.parametrize("tool", ["Edit", "Write"])
+@pytest.mark.parametrize("relative", IN_SCRATCHPAD)
+def test_a_file_under_a_scratchpad_is_not_governed(
+    repo: Path, pad: Path, mode: str, tool: str, relative: str
+) -> None:
+    set_mode(repo, mode)
+    event = file_event(repo, tool, str(pad / relative))
+    assert pretool_decision(run_script(repo, GUARD_GOVERNANCE, event)) is None
+    assert queue_lines(repo) == []
+
+
+@pytest.mark.parametrize("mode", ["off", "on"])
+def test_a_shell_write_under_a_scratchpad_is_not_governed(repo: Path, pad: Path, mode: str) -> None:
+    set_mode(repo, mode)
+    command = f"cat >> {pad}/r/.git/config <<'EOF'\n[url \"x\"]\n\tinsteadOf = y\nEOF"
+    assert pretool_decision(run_script(repo, GUARD_GOVERNANCE, bash_event(repo, command))) is None
+    assert queue_lines(repo) == []
+
+
+@pytest.mark.parametrize(
+    "where",
+    ["link/.git/config", "relative"],
+    ids=["symlink-to-a-real-git-dir", "relative-git-config"],
+)
+def test_a_git_config_that_resolves_outside_the_scratchpad_asks(
+    repo: Path, pad: Path, where: str
+) -> None:
+    path = ".git/config" if where == "relative" else str(pad / where)
+    found = pretool_decision(run_script(repo, GUARD_GOVERNANCE, file_event(repo, "Write", path)))
+    assert found is not None, f"{path} passed silently"
+    kind, reason = found
+    assert kind == "ask"
+    assert path in reason

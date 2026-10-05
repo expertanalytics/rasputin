@@ -9,6 +9,7 @@ queued; a pass is silent in both.
 
 from __future__ import annotations
 
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -17,9 +18,13 @@ from harness_fixtures import (
     GUARD_GOVERNANCE,
     GUARD_PUSH,
     SUBAGENT,
+    add_worktree,
     bash_event,
+    clean_env,
     file_event,
+    git,
     make_repo,
+    point_scratchpad,
     pretool_decision,
     queue_lines,
     run_script,
@@ -31,6 +36,7 @@ CONFIG = "this writes git configuration (hooks path, remote URLs)"
 GH_API = "gh api with a writing method changes the forge"
 CURL = "curl with a writing method to the forge"
 GH_PR = "gh pr changes a pull request"
+PUSH = "git push writes to the remote"
 
 #: T4's ask rows, each with the `why` §3.5 gives it (None: an existing pattern,
 #: whose reason is unchanged).
@@ -232,3 +238,204 @@ def test_guard_governance_without_harness_mode_denies_what_it_would_ask(repo: Pa
     kind, reason = found
     assert kind == "deny"
     assert "harness_mode" in reason
+
+
+# ---------------------------------------------------------------- h16 G1
+#
+# docs/increments/h16-harness-fixes.md §2 G1: a fetch or pull whose refspec
+# names a destination writes a ref, and `git replace` changes what git reads
+# for an object, unless it only lists.
+
+FETCH_WRITE = "fetch writes a named ref"
+REPLACE = "replace refs change what git reads for an object"
+
+G1_ASKED: dict[str, str] = {
+    "git fetch . abc:refs/remotes/origin/master": FETCH_WRITE,
+    "git fetch origin +master:refs/heads/x": FETCH_WRITE,
+    "git pull . a:b": FETCH_WRITE,
+    "git pull origin a:b": FETCH_WRITE,
+    # The pinned false positive: `1` is taken for the repository, so the URL is
+    # the second positional and its `:` reads as a refspec. `--depth=1` is not.
+    "git fetch --depth 1 git@github.com:a/b.git": FETCH_WRITE,
+    "git replace HEAD HEAD~1": REPLACE,
+    "git replace -d x": REPLACE,
+    "git replace -f a b": REPLACE,
+    "git replace --graft a b": REPLACE,
+    "git replace --edit a": REPLACE,
+    "git replace --convert-graft-file": REPLACE,
+}
+
+G1_PASSED = (
+    "git fetch origin",
+    "git fetch -q origin master",
+    "git fetch --all",
+    "git fetch --depth=1 git@github.com:a/b.git",
+    "git replace",
+    "git replace -l",
+    "git replace --list 'a*'",
+    "git replace --format=short",
+    "git replace -l --format=long 'a*'",
+)
+
+
+# ---------------------------------------------------------------- h16 G2
+#
+# §2 G2: an alias hides what runs, so a git subcommand that is not a current
+# git command (`git --list-cmds=main` less `--list-cmds=deprecated`), and a gh
+# command outside gh's fixed top-level set, asks.
+
+UNKNOWN = "cannot see what it runs"
+
+G2_ASKED = (
+    "git -c alias.p=push p origin",
+    "git p origin",
+    "git whatchanged",  # deprecated, so an alias may take its name
+    "git pack-redundant",  # the other deprecated name in git 2.55
+    "gh pm 12",
+    "gh co 12",  # gh's own alias, which a user can redefine
+)
+
+G2_PASSED = (
+    "git status",
+    "git log -1",
+    "git worktree list",
+    "git -C /x log -1",
+    "gh pr view 12",
+    "gh api repos/x",
+    "gh run list",
+    "gh auth status",
+)
+
+
+@pytest.mark.parametrize("mode", ["off", "expired"])
+@pytest.mark.parametrize("command", [*G1_ASKED, *G2_ASKED])
+def test_a_named_ref_write_or_an_unknown_command_asks_while_attended(
+    repo: Path, mode: str, command: str
+) -> None:
+    set_mode(repo, mode)
+    found = pretool_decision(run_script(repo, GUARD_PUSH, bash_event(repo, command)))
+    assert found is not None, f"{command!r} passed silently"
+    kind, reason = found
+    assert kind == "ask"
+    assert reason.startswith("This reaches beyond the working tree: ")
+    assert G1_ASKED.get(command, UNKNOWN) in reason
+    assert queue_lines(repo) == []
+
+
+@pytest.mark.parametrize("command", [*G1_ASKED, *G2_ASKED])
+def test_a_named_ref_write_or_an_unknown_command_is_queued_while_unattended(
+    repo: Path, command: str
+) -> None:
+    set_mode(repo, "on")
+    found = pretool_decision(run_script(repo, GUARD_PUSH, bash_event(repo, command)))
+    assert found is not None, f"{command!r} passed silently"
+    kind, reason = found
+    assert kind == "deny"
+    assert G1_ASKED.get(command, UNKNOWN) in reason
+    [line] = queue_lines(repo)
+    assert (line["hook"], line["act"]) == ("guard_push", command)
+
+
+@pytest.mark.parametrize("mode", ["off", "on"])
+@pytest.mark.parametrize("command", [*G1_PASSED, *G2_PASSED])
+def test_a_listing_a_plain_fetch_or_a_known_command_is_silent(
+    repo: Path, mode: str, command: str
+) -> None:
+    set_mode(repo, mode)
+    assert pretool_decision(run_script(repo, GUARD_PUSH, bash_event(repo, command))) is None
+    assert queue_lines(repo) == []
+
+
+def test_git_lists_its_main_commands() -> None:
+    """G2 rests on `--list-cmds`; a git without it must fail here, not ask on everything."""
+    listed = subprocess.run(
+        ["git", "--list-cmds=main"], capture_output=True, text=True, env=clean_env(), check=True
+    ).stdout.split()
+    assert "push" in listed
+    assert "status" in listed
+
+
+# ---------------------------------------------------------------- h16 G3b
+#
+# §2 G3b: local ref, remote and config writes made with `git -C <dir>` pass
+# when both of `<dir>`'s git dirs lie under a session scratchpad, and nothing
+# in the line redirects git elsewhere. A push is never exempt (G3c dropped).
+
+
+@pytest.fixture
+def scratch(repo: Path, tmp_path: Path) -> dict[str, Path]:
+    """The copy's scratchpad, a repository in it, and a linked worktree of an outside one."""
+    pad = point_scratchpad(repo, tmp_path / "faketmp")
+    inside = pad / "r"
+    git(make_plain_repo(inside), "commit", "-q", "--allow-empty", "-m", "two")
+    outside = make_plain_repo(tmp_path / "outside")
+    linked = add_worktree(outside, pad / "linked", "wt-linked")
+    return {"pad": pad, "inside": inside, "linked": linked, "outside": outside}
+
+
+def make_plain_repo(root: Path) -> Path:
+    root.mkdir(parents=True)
+    git(root, "init", "-q", "-b", "master")
+    git(root, "-c", "user.name=T", "-c", "user.email=t@example.invalid",
+        "commit", "-q", "--allow-empty", "-m", "root")  # fmt: skip
+    return root
+
+
+#: Local writes in the scratch repository, `{inside}` its absolute path.
+G3B_PASSED = (
+    "git -C {inside} config user.name x",
+    "git -C {inside} config core.hooksPath x",
+    "git -C {inside} remote add o /x",
+    "git -C {inside} remote set-url o /y",
+    "git -C {inside} update-ref refs/heads/y HEAD",
+    "git -C {inside} symbolic-ref HEAD refs/heads/y",
+    "git -C {inside} fetch . HEAD:refs/remotes/origin/master",
+    "git -C {inside} replace HEAD HEAD~1",
+    "git config --file {inside}/.git/config user.name x",
+    "cd {pad} && git -C {inside} config user.name x",
+)
+
+#: The same writes where something sends git outside the scratchpad, with the reason.
+G3B_ASKED: dict[str, str] = {
+    "git -C {linked} config user.name x": CONFIG,
+    "git -C {linked} remote add o /x": REMOTE,
+    "git -C {linked} update-ref refs/heads/y HEAD": "update-ref moves a ref directly",
+    "git -C {outside} config user.name x": CONFIG,
+    "GIT_DIR=/x git -C {inside} config user.name x": CONFIG,
+    "GIT_CONFIG_GLOBAL=/x git -C {inside} config user.name x": CONFIG,
+    "export GIT_DIR={outside}/.git; git -C {inside} config user.name x": CONFIG,
+    "git -C {inside} --git-dir={outside}/.git config user.name x": CONFIG,
+    "git -C {inside} --work-tree={outside} config user.name x": CONFIG,
+    "git -C {inside} config --global user.name x": CONFIG,
+    "git -C {inside} config --system user.name x": CONFIG,
+    "git config user.name x": CONFIG,
+    "git -C r config user.name x": CONFIG,  # relative: the guard does not track cd
+    "git -C {inside} -C {outside} config user.name x": CONFIG,
+    "git config --file {outside}/.git/config user.name x": CONFIG,
+    "git -C {inside} push {pad}/bare master": PUSH,
+    "git -C {inside} push file://{pad}/bare master": PUSH,
+}
+
+
+@pytest.mark.parametrize("mode", ["off", "on"])
+@pytest.mark.parametrize("template", G3B_PASSED)
+def test_a_local_write_in_a_scratch_repository_is_silent(
+    repo: Path, scratch: dict[str, Path], mode: str, template: str
+) -> None:
+    set_mode(repo, mode)
+    command = template.format(**scratch)
+    result = run_script(repo, GUARD_PUSH, bash_event(repo, command))
+    assert pretool_decision(result) is None, f"{command!r} was not passed"
+    assert queue_lines(repo) == []
+
+
+@pytest.mark.parametrize("template", G3B_ASKED)
+def test_a_scratch_write_that_reaches_outside_still_asks(
+    repo: Path, scratch: dict[str, Path], template: str
+) -> None:
+    command = template.format(**scratch)
+    found = pretool_decision(run_script(repo, GUARD_PUSH, bash_event(repo, command)))
+    assert found is not None, f"{command!r} passed silently"
+    kind, reason = found
+    assert kind == "ask"
+    assert G3B_ASKED[template] in reason
