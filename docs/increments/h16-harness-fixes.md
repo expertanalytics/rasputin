@@ -1,6 +1,6 @@
 # Harness h16: guard fixes, a line counter, a scratch copy, brief fixes
 
-Status: Ola ruled on §7 on 2026-10-05 (all three defaults) and on the afternoon questions (last section). PR A: green at `195b504` plus the test fix `6e52aeb` asked for by code review round 3, 287 net production lines by `tools/count_loc.py bc01cd8 a6b966e` against an estimate of 187 (the C++ scanner, the git plumbing and review's fixes were not priced); the rule lines of G5 and of R1 (but its *The harness* sentence, PR B's) written; code review round 4 asked for changes (two test docstrings), fixed in `a6b966e`; round 5 found nothing else; waits for Ola's yes to push, then CI. PR B: red `9cf533d` on `worktree-h16b`, green in progress.
+Status: Ola ruled on §7 on 2026-10-05 (all three defaults) and on the afternoon questions (last section). PR A: pushed as #185 (287 net production lines by `tools/count_loc.py bc01cd8 a6b966e`, against an estimate of 187). PR B, on `worktree-h16b`: red `9cf533d`, green `15c76f6` (78 net production lines by `tools/count_loc.py 98e31cd 15c76f6`, against an estimate of 60), PR A's head merged in as `b58ab57`, R1's *The harness* sentence written; code review round 1 next.
 
 Ola approved the items on 2026-10-05 (the main session's summary of his
 rulings, not his words). He said this is the last harness increment before
@@ -105,6 +105,14 @@ Pinned false positive: `git fetch --depth 1 git@github.com:a/b.git` asks
 (the URL is the second positional after `1`); `--depth=1` does not.
 
 **Size.** About 12 lines.
+
+**Green's departures** (`15c76f6`, `@developer`; both widen what asks, none
+narrows it). The fetch check reads every word after the repository that does
+not start with `-`, option values included, so a value can only move a
+refspec later, never hide it. And `git_call` skips git's value-taking global
+options (`-C`, `-c`, `--git-dir`, `--work-tree`, `--namespace`,
+`--attr-source`) with their values when finding the subcommand, where it
+skipped only `-C` and `-c` before.
 
 ### G2. Git and gh aliases: user config changes what the guard sees
 

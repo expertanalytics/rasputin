@@ -137,11 +137,16 @@ round of findings.** On a prose or tooling branch its scope is:
 Active in `.claude/settings.json`: `guard_push.py` asks
 before `git push`, `gh pr create/merge/ready/edit/update-branch`, `gh release`,
 `gh repo create/delete/edit`, `--no-verify`, `rebase`, `reset --hard`,
-`filter-branch` and `commit --amend`, and before `git update-ref`, `git remote`
-writes, `git config` writes, `git symbolic-ref` writes, `gh api` with a writing
-method, and `curl` with a writing method to the forge (not `gh pr close` or
-`gh pr comment`); `guard_governance.py` asks
-before any write to a file that states rules; `guard_unattended.py` refuses
+`filter-branch` and `commit --amend`; before `git update-ref`, `git remote`,
+`git config`, `git symbolic-ref` and `git replace` writes, a `git fetch` or
+`git pull` into a named ref, and `gh api` or a forge `curl` with a writing
+method (not `gh pr close` or `gh pr comment`); and before a git or gh command
+it does not know, such as an alias. `guard_governance.py` asks before any write
+to a file that states rules or to a `tools/` file named after a standard-library
+module. In a session scratchpad, `guard_governance.py` passes any path, and
+`guard_push.py` the local writes above in a repository whose git directories
+both lie there, given as `git -C <absolute dir>`; a push always asks.
+`guard_unattended.py` refuses
 `AskUserQuestion`, permission prompts and configuration changes while
 unattended mode is on; `guard_spawn.py` refuses a persona spawn without an
 unchanged, current block from `python3 tools/brief.py`, and any spawn or
