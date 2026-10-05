@@ -1,6 +1,6 @@
 # Harness h16: guard fixes, a line counter, a scratch copy, brief fixes
 
-Status: Ola ruled on §7 on 2026-10-05 (all three defaults) and on the afternoon questions (last section). PR A: pushed as #185 (287 net production lines by `tools/count_loc.py bc01cd8 a6b966e`, against an estimate of 187). PR B, on `worktree-h16b`: red `9cf533d`, green `15c76f6` (78 net production lines by `tools/count_loc.py 98e31cd 15c76f6`, against an estimate of 60), PR A's head merged in as `b58ab57`, R1's *The harness* sentence written, `gh help` passed (red `9687c16`, green `084a6b3`); code review round 1 of PR B (round 6 below) asked for changes, and Ola chose option C: G3a kept for a single plain command, G3b dropped, G1's fetch rule and the merge guard widened; design `8554a3e`, red `94989dd`, green `a42d864` (77 net production lines by `tools/count_loc.py origin/master a42d864`). Code review round 2 of PR B (round 7 below) asked for changes; Ola ruled that PR B also closes the glued `gh api`/`curl` route (last section). §2 G1 and G6, §4, §6 and §7 are amended for it; next the red step for round 7's amendment (`@tester`), then green (`@developer`).
+Status: Ola ruled on §7 on 2026-10-05 (all three defaults) and on the afternoon questions (last section). PR A: pushed as #185 (287 net production lines by `tools/count_loc.py bc01cd8 a6b966e`, against an estimate of 187). PR B, on `worktree-h16b`: red `9cf533d`, green `15c76f6` (78 net production lines by `tools/count_loc.py 98e31cd 15c76f6`, against an estimate of 60), PR A's head merged in as `b58ab57`, R1's *The harness* sentence written, `gh help` passed (red `9687c16`, green `084a6b3`); code review round 1 of PR B (round 6 below) asked for changes, and Ola chose option C: G3a kept for a single plain command, G3b dropped, G1's fetch rule and the merge guard widened; design `8554a3e`, red `94989dd`, green `a42d864` (77 net production lines by `tools/count_loc.py origin/master a42d864`). Code review round 2 of PR B (round 7 below) asked for changes; Ola ruled that PR B also closes the glued `gh api`/`curl` route, and then, on §7 question 4, the command-runner route past the push guard (last section). §2 G1 and G6 are amended and G7 is added for them, with §4, §6, §7 and R1 following; next the red step for round 7's amendments and G7 (`@tester`), then green (`@developer`).
 
 Ola approved the items on 2026-10-05 (the main session's summary of his
 rulings, not his words). He said this is the last harness increment before
@@ -13,6 +13,7 @@ a freeze of a few days, so the design is kept to what each item needs and
 | G2 | `guard_push.py` asks before a git or gh command it does not know (an alias from user config) | B |
 | G3 | scratchpad repositories are ordinary (night proposal N3): G3a, file writes there; G3b (local git writes there) and G3c (the push half) dropped | B |
 | G6 | the merge guard sees `gh` wherever `-R`/`--repo` stands, and `gh pr new`, `gh repo new` (review round 6); glued and clustered `gh api` and `curl` options (review round 7) | B |
+| G7 | `guard_push.py` judges a git or gh command run by another program (`caffeinate git push`, `find … -exec git push`, `watch 'git push'`; §7 question 4) | B |
 | G4 | guard import shadowing: `tools/` last on `sys.path`, stdlib-named `tools/` files governed | B |
 | G5 | rule files written through the shell: one brief line | A |
 | T1 | `tools/count_loc.py`, the one counter for `CLAUDE.md` §2 (night proposal N1) | A |
@@ -550,6 +551,114 @@ https://api.github.com/x`, `curl --expand-data x https://api.github.com/x`,
 `curl --expand-request PUT https://api.github.com/x`. Silent: the pass list
 above. About 8 lines.
 
+### G7. Commands run by another program (§7 question 4, Ola's ruling)
+
+**Change.** `tools/shell_scan.py` strips ten wrappers (`env`, `nohup`,
+`time`, `timeout`, `nice`, `command`, `exec`, `xargs`, `script`, `sudo`);
+any other program that runs its arguments as a command hides that command
+from `guard_push.py`. A helper in `guard_push.py`,
+
+    def runs(words: list[str]) -> list[tuple[list[str], bool]]
+        # (argv, bare) pairs: the command itself (bare False), and the
+        # commands its later words run, by the three rules below.
+
+and `main` judges every pair with `publishes` and `segment_why`, on both
+paths (parsed simples, and `tokens(segment)` for a line the parser cannot
+read). For each word after the first:
+
+- **(a) A bare `git` or `gh` word**, by basename (`/usr/bin/git` too): the
+  words from it to the end, with `bare` True. Any program, no list: a list
+  of runners is never complete (`caffeinate`, `stdbuf`, `arch`, `flock`,
+  `find -exec`, `parallel`, `watch`, and `taskset`, `unbuffer`, `ionice`
+  beyond them), and a later `git` or `gh` word is what they share. A bare
+  tail never gives G2's unknown-command reason: `grep git file` would
+  otherwise read as `git file` and ask. Every other reason applies.
+- **(b) A shell word**, basename `sh`, `bash` or `zsh`: the words from it to
+  the end, joined with `shlex.join` and parsed by `shell_scan.parse`, which
+  already reads a shell's `-c` program as commands; each command it returns
+  is judged in full (G2 included) and itself goes through `runs`. So
+  `caffeinate sh -c 'cd x && git push'` asks.
+- **(c) A quoted command line**, only when the command's own program
+  (basename of the first word) is `watch`, `parallel` or `flock`: each later
+  word containing whitespace is parsed by `shell_scan.parse`, and each
+  command it returns is judged in full and goes through `runs`. These three
+  take a command as one string (`watch 'git push'`, `parallel 'git push'
+  ::: a`, `flock /tmp/l -c 'git push'`). Not every quoted word: then
+  `grep -rn "git push" .claude/` and `git commit -m "git push is guarded"`
+  would ask, both common in harness work and each a refusal while
+  unattended.
+
+A word that `shell_scan.parse` cannot read adds nothing (the outer line is
+judged as before); with `shell_scan` missing, (b) and (c) add nothing. The
+recursion ends because each parse is of a strictly shorter text.
+
+The runner set, derived from the probes (§6, added after review round 7;
+each passed through the hook on `a42d864` and on this branch's head
+`28b8292`): as words before `git` (rule a) `find … -exec`, `caffeinate`,
+`stdbuf`, `watch`, `flock`, `parallel`, `arch`; as a quoted string (rule c)
+`watch`, `parallel`, `flock -c`; through a shell (rule b) `caffeinate sh -c`
+and `find … -exec sh -c`. Probed with a scratch prototype of the three rules
+(about 16 net lines, in this run's scratchpad, removed): every must-ask row
+below asked with the reason given, every must-pass row passed, and the
+pinned rows behaved as pinned; with the hook as on `28b8292`, all 22
+must-ask rows passed.
+
+**Incident.** Review round 7 (later item: `find -exec`), widened in this
+design's §6 to the seven runners; no push was made that way.
+
+**Red test** (`test_guard_push.py`, both modes). Asks, with the reason in
+brackets:
+
+- [PUSH] `find . -maxdepth 0 -exec git push origin HEAD \;`,
+  `caffeinate -i git push`, `stdbuf -o0 git push`, `watch -n1 git push`,
+  `flock /tmp/l git push`, `parallel git push ::: a`, `arch -arm64 git push`,
+  `caffeinate -i /usr/bin/git push`, `nohup caffeinate stdbuf -o0 git push`,
+  `watch -n1 'git push'`, `parallel 'git push' ::: a`,
+  `flock /tmp/l -c 'git push'`, `caffeinate sh -c 'git push'`,
+  `caffeinate sh -c 'cd x && git push'`,
+  `find . -maxdepth 0 -exec sh -c 'git push' \;`,
+  `watch 'caffeinate git push'`;
+- [PR] `caffeinate -i gh pr merge 12`, `caffeinate -i gh -R o/r pr merge 12`;
+- ["gh api with a writing method changes the forge"]
+  `caffeinate -i gh api -X PUT repos/o/r/pulls/1/merge`;
+- [FETCH] `caffeinate -i git -c remote.s.url=/x fetch s`;
+- ["update-ref moves a ref directly"]
+  `caffeinate -i git update-ref refs/heads/x HEAD`;
+- [UNKNOWN, from rule b] `caffeinate sh -c 'git p origin'`.
+
+Passes (false-positive controls; a later `git` or `gh` that is only an
+argument): `grep git file`, `grep -rn git .`, `grep -c gh tools/guard.py`,
+`rg -n gh tools/`, `echo gh`, `echo git`, `which git gh`,
+`brew upgrade git gh`, `git grep -n git -- tools`, `git log --author git`,
+`git commit -m "git push is guarded"`, `grep -rn "git push" .claude/`,
+`rg 'gh pr merge' tools/`, `grep -rn sh .`, `grep bash -c x`; and reads
+through a runner: `caffeinate -i git status`, `caffeinate -i gh pr view 12`,
+`watch -n5 'gh pr checks 185'`, `watch -n5 gh pr checks 185`.
+
+Pinned false positives (ask, PUSH): `echo git push`, `grep git push file`,
+`man git push`, `parallel 'echo git push' ::: a`. An ask costs a click by
+day; these words are rare unquoted.
+
+Pinned passes (residual, §6): `caffeinate -i git p origin` and
+`caffeinate -i gh pm 12` (an alias through a bare tail; rule a drops G2's
+reason), and `python3 -c "import subprocess; subprocess.run(['git',
+'push'])"` (a program, not an argv; it passes on `28b8292` too).
+
+**Size.** About 15 lines.
+
+**The governance half stays in §6.** `guard_governance.py` would need the
+same tail rule with every writer as a tail start (`cp`, `mv`, `tee`, `ln`,
+`install`, `rm`, `touch`, `truncate`, `sed -i`, `dd`), and those are common
+arguments: `writer_targets('rm', ['CLAUDE.md'])` returns `['CLAUDE.md']`
+(checked on `28b8292`), so `grep -n rm CLAUDE.md` would ask, and
+`grep tee .claude/agents/x.md` likewise, each a refusal while unattended.
+Rule (a)'s two names do not have that problem. The governance Bash arm is
+also already open to any program that computes a path (G5), and G5's brief
+line moves rule-file writes to Edit and Write, which judge the exact path;
+a runner opens no route of a new kind there. A fix belongs in
+`tools/shell_scan.py`'s `unwrap`, with each runner's option grammar, after
+the freeze.
+
 ### G4. Guard import shadowing
 
 **Change.** Two parts, both needed:
@@ -802,7 +911,8 @@ Question 1 asks Ola whether this is the item. **Red test**: `brief.py
   that G3a holds only for Edit, Write and one plain shell command, and that
   no git write in a scratchpad repository passes; and again after review
   round 7, to name the include and transport overrides and the glued
-  `gh api`/`curl` forms.
+  `gh api`/`curl` forms, and to say that a git or gh command run by
+  another program asks too (G7).
 
 Prose; no red test. `@architect` writes them, in the PR that ships the
 tool or guard they describe. `CLAUDE.md` changes, so the main session
@@ -832,7 +942,7 @@ not held up by guard review rounds (h12's design took four):
 | PR | Items | Production lines, about |
 |---|---|---|
 | A, tools | T1, T2 (+P9 test), T3, G5's line, R1 but its *The harness* sentence | 187 (count_loc 120, scratch_copy 60, brief.py 7) |
-| B, guards | G1, G2, G3a, G4, G6, `scratchpad.py`, the `GOVERNED` entries, R1's *The harness* sentence | 60 as first estimated (G1 12, G2 14, G3a 6, G3b 20, G4 6, scratchpad 10, minus shared lines); measured 78 at `084a6b3` (`tools/count_loc.py origin/master 084a6b3`, `origin/master` at `44fa7f5`, PR A merged); after option C about 70 (78, G3b's removal −26, G1's amendment +8, G3a's plain-command test +3, G6 +8); measured 77 at `a42d864` (`tools/count_loc.py origin/master a42d864`, merge base `7dde17a`); after review round 7 about 88 (77, G1's include/transport keys, text check and governed prefixes +3, G6's glued `gh api`/`curl` options +8) |
+| B, guards | G1, G2, G3a, G4, G6, `scratchpad.py`, the `GOVERNED` entries, R1's *The harness* sentence | 60 as first estimated (G1 12, G2 14, G3a 6, G3b 20, G4 6, scratchpad 10, minus shared lines); measured 78 at `084a6b3` (`tools/count_loc.py origin/master 084a6b3`, `origin/master` at `44fa7f5`, PR A merged); after option C about 70 (78, G3b's removal −26, G1's amendment +8, G3a's plain-command test +3, G6 +8); measured 77 at `a42d864` (`tools/count_loc.py origin/master a42d864`, merge base `7dde17a`); after review round 7 about 88 (77, G1's include/transport keys, text check and governed prefixes +3, G6's glued `gh api`/`curl` options +8); with G7 (Ola's ruling on §7 question 4) about 103 (+15) |
 
 Order: A first. Each PR runs red (`@tester`), green (`@developer`), review
 (`@reviewer`). Neither touches refine or mesh code, so no `@perf` run. No
@@ -882,7 +992,16 @@ Added after review round 7, each checked on `a42d864`:
   same runners hide a governed write from `guard_governance.py`:
   `caffeinate -i cp notes.txt CLAUDE.md`, `stdbuf -o0 cp notes.txt
   CLAUDE.md` and `find . -maxdepth 0 -exec cp notes.txt CLAUDE.md \;` pass,
-  where `cp notes.txt CLAUDE.md` asks. Question 4.
+  where `cp notes.txt CLAUDE.md` asks. Question 4. [Ola ruled to close
+  it now: the push half is closed by G7. What stays here: the governance
+  half, for the reasons at the end of G7; a git or gh alias run by another
+  program (`caffeinate -i git p origin`, `caffeinate -i gh pm 12`), since
+  a bare tail does not apply G2's unknown-command reason; a command string
+  given to a runner other than `watch`, `parallel` and `flock` that is not
+  a shell (`tmux new 'git push'`, `ssh host 'git push'`), unless a later
+  bare `git` or `gh` word catches it; and an interpreter program that runs
+  git (`python3 -c "import subprocess; subprocess.run(['git', 'push'])"`),
+  which passes the push guard as it passes the governance guard (G5).]
 - **Config that runs a program**, on any git command, not only a fetch:
   `-c core.fsmonitor=<program>`, `-c core.hooksPath=<dir>` (a
   `reference-transaction` or other hook in it), `core.askPass`,
@@ -919,6 +1038,8 @@ Added after review round 7, each checked on `a42d864`:
    `echo git push`). The governance guard's half needs per-runner handling
    and stays in §6 either way. Default: leave all of it in §6, as review
    round 7 placed it, and take it up after the freeze.
+   [Answered: close it now (last section). The push half is G7; the
+   governance half stays in §6.]
 
 ## Ola's rulings
 
@@ -1121,3 +1242,11 @@ Recorded word for word from `@reviewer`'s record text. Taken in the recording co
 ## Ola's ruling on review round 7, 2026-10-05
 
 Ola, verbatim: "yes, close the gh api hole in PR B". So: PR B also closes the glued-option route past the merge and forge guard, `gh api … -fquery=…`/`-Fquery=…` and `curl -d@file`, `-sd x`, `-Tfile` to the forge (§2 G6, amendment after review round 7).
+
+## Ola's ruling on §7 question 4, 2026-10-05
+
+Ola, verbatim: "yes close it now, and defaults on the cell ID". The first
+half answers question 4 (command runners); the second is about another
+matter and is not ruled on here. So: PR B also closes the route past the
+push guard through a program that runs its arguments as a command (§2 G7).
+The governance guard's half stays in §6, for the reasons at the end of G7.

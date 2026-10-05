@@ -147,7 +147,9 @@ before `git push`, `gh pr create/new/merge/ready/edit/update-branch`,
 forge `curl` with a writing method or a body, glued options included
 (`-fquery=…`, `-iXPUT`, `-sd x`, `-Tfile`; not `gh pr close` or
 `gh pr comment`); and before a git or gh command
-it does not know, such as an alias. `guard_governance.py` asks before any write
+it does not know, such as an alias. It judges the rest of these (not an
+unknown command) also when another program runs them (`caffeinate git push`, `find … -exec git push`,
+`watch 'git push'`, `sh -c '…'`). `guard_governance.py` asks before any write
 to a file that states rules or to a `tools/` file named after a standard-library
 module, except an absolute path in a session scratchpad, written by Edit or
 Write or by a shell line that is one plain command (no `&&`, `;`, pipe,
