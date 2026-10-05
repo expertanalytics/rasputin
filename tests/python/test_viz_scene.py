@@ -368,8 +368,8 @@ class TestModuleIsolation:
 
     That is what lets this entire suite run against hand-built dataclasses with
     no compiled extension in the process, and it is checked by reading the
-    source: `tin_engine/__init__.py` imports `_core` itself, so a `sys.modules`
-    assertion would pass for the wrong reason.
+    source: `sys.modules` also holds whatever the rest of the session imported,
+    so a `sys.modules` assertion would not be about `scene.py`'s own imports.
     """
 
     def source(self) -> ast.Module:

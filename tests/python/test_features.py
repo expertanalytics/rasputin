@@ -36,8 +36,8 @@ Two rules here are architecture rather than hygiene:
   one and `viz.style` (its `tin_engine.features` and `tin_engine.viz.style` imports,
   `src_python/tin_engine/cli.py@390b516:95` and `src_python/tin_engine/cli.py@390b516:110`).
   The rule is checked here by parsing the source, not by inspecting `sys.modules`, because
-  `tin_engine/__init__.py` imports `_core` itself -- so an import-time check
-  would be asserting something about the package rather than about this module.
+  an import-time check also sees whatever the package root and its other modules
+  import, so it would assert something about the package rather than this module.
   Same reasoning, same mechanism, as `test_viz_protocols.py`.
 * **The name pattern keeps a vocabulary name usable as a CSS class token, and
   is defence in depth. It is not what closes the injection hole.**
@@ -581,9 +581,9 @@ def test_features_imports_nothing_first_party() -> None:
     """What lets `viz/` depend on this module.
 
     `viz/` never imports the extension (`project_structure.md:208`), and
-    `tin_engine/__init__.py` imports `_core`, so this is checked by parsing the
-    source rather than by inspecting `sys.modules`: an import-time check would
-    be asserting something about the package, not about this module.
+    this is checked by parsing the source rather than by inspecting `sys.modules`:
+    `sys.modules` also holds whatever the package's other modules import, so an
+    import-time check would assert something about the package, not this module.
     """
     tree = ast.parse(FEATURES_SOURCE.read_text(encoding="utf-8"))
 

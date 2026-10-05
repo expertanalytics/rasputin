@@ -16,9 +16,9 @@ recognise (`PRINCIPLES.md` B1). No `vtk` import appears here: this file runs in
 the plain dev environment, and the design's pure half must not depend on the
 test-only extra.
 
-It does need the compiled extension, because `tin_engine/__init__.py` imports
-`_core`, so no `tin_engine` submodule is importable without it. What it pins
-instead is that `vtk_legacy` itself never imports `_core` (ruling 6).
+Whether it runs without the compiled extension depends on what the package
+root imports, which this file does not pin. What it pins is that `vtk_legacy`
+itself never imports `_core` (ruling 6).
 
 Committed red: the intended failure is `ModuleNotFoundError:
 tin_engine.io.vtk_legacy` in every test that writes. The import is inside
