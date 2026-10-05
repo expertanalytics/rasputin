@@ -11,6 +11,11 @@
   pure part, `prose_reads`, is unit-tested here and the wiring is proved by a
   planted pytest run in a subprocess.
 
+`docs/increments/h15-ci-speed.md` §7 PR 1 adds two kinds of T4 test: every
+gating job is checked by the `CI result` step (each slot of its OTHERS list
+fails the step when red), and each Python leg is split into a main-suite job
+and a `python-extras` job (the `test_h15_*` tests).
+
 The tool is loaded lazily through `harness_fixtures.Tool`, so while it is
 missing every test that touches it fails naming `tools/ci_changes.py`.
 """
@@ -421,36 +426,69 @@ def _verdict(script: str, code: str, changes: str, governance: str, others: str)
     return done.returncode, done.stdout + done.stderr
 
 
+def _result_env(lines: list[str], key: str) -> str:
+    """The value of one `env:` entry of the result job's step."""
+    values = [m.group(1) for line in lines if (m := re.fullmatch(rf"\s+{key}: (.*?)\s*", line))]
+    assert len(values) == 1, f"result: expected one env entry {key}, got {values}"
+    return values[0]
+
+
+def _needs_results(value: str) -> list[str]:
+    """The job ids of every `needs.<id>.result` in `value`, in order."""
+    pattern = r"needs(?:\.([\w-]+)|\['([\w-]+)'\])\.result"
+    return [dotted or indexed for dotted, indexed in re.findall(pattern, value)]
+
+
+def _shell_others(jobs: dict[str, list[str]]) -> list[str]:
+    """The jobs the result step checks through OTHERS, in its order."""
+    return _needs_results(_result_env(jobs.get("result", []), "OTHERS"))
+
+
+#: An OTHERS value as (fill, position, value): every slot `fill`, except the
+#: one at `position` (None: none), which is `value`. Written this way so the
+#: cases do not assume how many jobs OTHERS lists; h15 PR 1 adds one.
+Others = tuple[str, int | None, str | None]
+
+
+def _others(n: int, shape: Others) -> str:
+    fill, position, value = shape
+    slots = [fill] * n
+    if position is not None and value is not None:
+        slots[position] = value
+    return " ".join(slots)
+
+
 @pytest.mark.parametrize(
-    ("code", "changes", "governance", "others"),
+    ("code", "changes", "governance", "shape"),
     [
-        ("true", S, S, f"{S} {S} {S}"),
-        ("false", S, S, f"{K} {K} {K}"),
-        ("false", S, S, f"{S} {K} {S}"),
+        ("true", S, S, (S, None, None)),
+        ("false", S, S, (K, None, None)),
+        ("false", S, S, (S, 1, K)),
     ],
     ids=["code change, all green", "prose, all skipped", "prose, mixed"],
 )
 def test_t4_result_passes(
-    jobs: dict[str, list[str]], code: str, changes: str, governance: str, others: str
+    jobs: dict[str, list[str]], code: str, changes: str, governance: str, shape: Others
 ) -> None:
     result_script = _result_script(jobs.get("result", []))
+    others = _others(len(_shell_others(jobs)), shape)
     status, output = _verdict(result_script, code, changes, governance, others)
     assert status == 0, output
 
 
 @pytest.mark.parametrize(
-    ("code", "changes", "governance", "others", "named"),
+    ("code", "changes", "governance", "shape", "named"),
     [
-        ("true", S, S, f"{S} {K} {S}", K),
-        ("", S, S, f"{K} {K} {K}", K),
-        ("garbage", S, S, f"{K} {K} {K}", K),
-        ("false", S, K, f"{K} {K} {K}", K),
-        ("false", S, F, f"{K} {K} {K}", F),
-        ("", F, S, f"{K} {K} {K}", F),
-        ("true", S, S, f"{S} {F} {S}", F),
-        ("false", S, S, f"{K} {K} {F}", F),
-        ("true", S, S, f"{S} {S} {C}", C),
-        ("false", C, S, f"{K} {K} {K}", C),
+        ("true", S, S, (S, 1, K), K),
+        ("", S, S, (K, None, None), K),
+        ("garbage", S, S, (K, None, None), K),
+        ("false", S, K, (K, None, None), K),
+        ("false", S, F, (K, None, None), F),
+        ("", F, S, (K, None, None), F),
+        ("true", S, S, (S, 1, F), F),
+        ("false", S, S, (K, -1, F), F),
+        ("true", S, S, (S, -1, C), C),
+        ("false", C, S, (K, None, None), C),
     ],
     ids=[
         "code change, a job skipped",
@@ -470,13 +508,184 @@ def test_t4_result_fails_and_says_how(
     code: str,
     changes: str,
     governance: str,
-    others: str,
+    shape: Others,
     named: str,
 ) -> None:
     result_script = _result_script(jobs.get("result", []))
+    others = _others(len(_shell_others(jobs)), shape)
     status, output = _verdict(result_script, code, changes, governance, others)
     assert status == 1, output
     assert named in output, f"the failure does not say which job ended {named!r}"
+
+
+# T4, continued (h15 §7 PR 1): no job gates nothing. A job left out of the
+# result step's OTHERS, or listed there without a label in its loop, is never
+# checked, and `CI result` passes with it red.
+
+
+def test_t4_every_gating_job_is_in_the_result_shell(jobs: dict[str, list[str]]) -> None:
+    result = jobs.get("result", [])
+    assert _needs_results(_result_env(result, "CHANGES")) == ["changes"]
+    assert _needs_results(_result_env(result, "GOVERNANCE")) == ["governance"]
+    others = _shell_others(jobs)
+    assert len(others) == len(set(others)), f"OTHERS lists a job twice: {others}"
+    expected = set(jobs) - {"changes", "governance", "result"} - set(EXEMPT_FROM_RESULT)
+    assert set(others) == expected, "a gating job must be in OTHERS or in EXEMPT_FROM_RESULT"
+
+
+def test_t4_result_fails_on_each_job_in_others(jobs: dict[str, list[str]]) -> None:
+    result_script = _result_script(jobs.get("result", []))
+    count = len(_shell_others(jobs))
+    for position in range(count):
+        others = _others(count, (S, position, F))
+        status, output = _verdict(result_script, "true", S, S, others)
+        assert status == 1, f"a failure in OTHERS slot {position} passed:\n{output}"
+        assert F in output, f"slot {position}: the failure is not named:\n{output}"
+
+
+# ---------------------------------------------------------------------------
+# h15 §5 P and §7 PR 1: each Python leg split into a main-suite job
+# (`python`) and an extras job (`python-extras`). Steps are found by their
+# `run:` text, which the design keeps unchanged. Only the positions §5 P names
+# are tested (Install first, the trap right after it, codecs before viewer
+# before the static gates); that every step's text and the full order are
+# today's is `@reviewer`'s check by `git diff`, not a test (§7).
+# ---------------------------------------------------------------------------
+
+EXTRAS = "python-extras"
+MAIN_SUITE = "pytest"
+TRAP = "RASPUTIN_INSTALL_TRAP=1"
+CODECS = 'pip install -e ".[dev,codecs]"'
+VIEWER = 'pip install -e ".[dev,codecs,viewer]"'
+STATIC_GATES = ("mypy", "ruff check .", "ruff format --check .")
+FLOOR = "if: matrix.python-version == '3.12'"
+
+
+def _steps(lines: list[str]) -> list[dict[str, str]]:
+    """A job's steps, each as its `name`, `uses`, `if` and `run` (block text joined)."""
+    steps: list[dict[str, str]] = []
+    block: str | None = None
+    for line in lines:
+        if re.fullmatch(r"      - .*", line):
+            steps.append({})
+            line = "        " + line[8:]
+            block = None
+        if not steps:
+            continue
+        if block is not None and (not line.strip() or len(line) - len(line.lstrip()) > 8):
+            steps[-1][block] += ("\n" if steps[-1][block] else "") + line.strip()
+            continue
+        block = None
+        match = re.fullmatch(r"        ([\w-]+):\s*(.*?)\s*", line)
+        if match:
+            key, value = match.groups()
+            if value in ("|", ">"):
+                block, value = key, ""
+            steps[-1][key] = value
+    for step in steps:
+        step["run"] = step.get("run", "").strip()
+    return steps
+
+
+def _index(steps: list[dict[str, str]], what: str, test: Callable[[str], bool]) -> int:
+    found = [i for i, step in enumerate(steps) if test(step["run"])]
+    assert len(found) == 1, f"expected one {what} step, found {len(found)}"
+    return found[0]
+
+
+def _install(steps: list[dict[str, str]]) -> int:
+    return _index(steps, "Install", lambda run: 'pip install -e ".[dev]"' in run)
+
+
+def _python_versions(lines: list[str]) -> list[str]:
+    found = [
+        m.group(1) for line in lines if (m := re.fullmatch(r"\s+python-version: (\[.*\])\s*", line))
+    ]
+    assert len(found) == 1, f"expected one matrix python-version line, got {found}"
+    return [v.strip().strip('"') for v in found[0][1:-1].split(",") if v.strip()]
+
+
+@pytest.fixture(scope="module")
+def extras(jobs: dict[str, list[str]]) -> list[str]:
+    """The extras job's lines; empty while it is missing, so each test fails on its own claim."""
+    return jobs.get(EXTRAS, [])
+
+
+def _assert_exists(extras: list[str]) -> None:
+    assert extras, f"main.yaml has no job {EXTRAS!r} (h15 §7 PR 1)"
+
+
+def test_h15_extras_job_runs_for_every_python_version(
+    jobs: dict[str, list[str]], extras: list[str]
+) -> None:
+    _assert_exists(extras)
+    assert _job_keys(extras).get("name") == "Python ${{ matrix.python-version }}, extras"
+    assert _python_versions(extras) == _python_versions(jobs["python"])
+    assert re.search(r"^      fail-fast: false\s*$", "\n".join(extras), re.M), (
+        "one failing leg must not cancel the others, as in the python job"
+    )
+
+
+def test_h15_extras_job_installs_as_the_main_job_does(
+    jobs: dict[str, list[str]], extras: list[str]
+) -> None:
+    _assert_exists(extras)
+    main_steps, extras_steps = _steps(jobs["python"]), _steps(extras)
+    main_install = main_steps[_install(main_steps)]
+    extras_install = extras_steps[_install(extras_steps)]
+    # §5 P: "Install (the same step, pip upgrade included)".
+    assert "python -m pip install --upgrade pip" in extras_install["run"]
+    assert extras_install["run"] == main_install["run"]
+    uses = [step.get("uses", "") for step in extras_steps[: _install(extras_steps)]]
+    assert uses == [step.get("uses", "") for step in main_steps[: _install(main_steps)]], (
+        "checkout and setup-python before Install, as in the python job"
+    )
+
+
+def test_h15_extras_job_runs_the_install_trap_right_after_install(extras: list[str]) -> None:
+    _assert_exists(extras)
+    steps = _steps(extras)
+    trap = _index(steps, "install trap", lambda run: TRAP in run)
+    assert trap == _install(steps) + 1, "§5 P: the trap runs right after Install"
+    assert f"if: {steps[trap].get('if')}" == FLOOR, "the trap runs on the floor leg only"
+
+
+def test_h15_extras_job_holds_codecs_and_viewer_steps_after_install(
+    extras: list[str],
+) -> None:
+    _assert_exists(extras)
+    steps = _steps(extras)
+    install = _install(steps)
+    codecs = _index(steps, "codecs", lambda run: CODECS in run)
+    viewer = _index(steps, "viewer", lambda run: VIEWER in run)
+    assert install < codecs < viewer, (install, codecs, viewer)
+    for gate in STATIC_GATES:
+        index = _index(steps, gate, lambda run, gate=gate: run == gate)
+        assert index > viewer, f"{gate} runs after the viewer step, as today"
+        assert f"if: {steps[index].get('if')}" == FLOOR, f"{gate} runs on the floor leg only"
+
+
+def test_h15_each_python_step_runs_in_one_job_only(
+    jobs: dict[str, list[str]], extras: list[str]
+) -> None:
+    _assert_exists(extras)
+    main_runs = [step["run"] for step in _steps(jobs["python"])]
+    extras_runs = [step["run"] for step in _steps(extras)]
+    assert main_runs.count(MAIN_SUITE) == 1, "the main suite runs in the python job"
+    assert MAIN_SUITE not in extras_runs, "the main suite runs once, not again in extras"
+    moved = (TRAP, CODECS, VIEWER, *STATIC_GATES)
+    stayed = [what for what in moved if any(what in run for run in main_runs)]
+    assert not stayed, f"steps still in the python job, not moved to extras: {stayed}"
+
+
+def test_h15_extras_job_gates_ci_result(jobs: dict[str, list[str]], extras: list[str]) -> None:
+    _assert_exists(extras)
+    keys = _job_keys(extras)
+    assert keys.get("needs") == "changes" and f"if: {keys.get('if')}" == GATE, keys
+    assert EXTRAS in _flow_list(_job_keys(jobs["result"]).get("needs", "")), (
+        "CI result does not need the extras job"
+    )
+    assert EXTRAS in _shell_others(jobs), "the result step does not check the extras job"
 
 
 # ---------------------------------------------------------------------------
