@@ -1,6 +1,6 @@
 # Increment 29 — NVE reference catchments: our catchments against NVE's, station by station
 
-Status: **PR 1, 2, 3 and 4 merged (#173, #179, #178, #182); the acceptance run over all 140 stations is in, at `docs/benchmarks/2026-10-05/nve-hrd/` (as fixed in `cd8b5be`): 74 match, 5 close, 6 miss, 39 uncertain, 16 refused (14 of them expected), 33 minutes and at most 7.7 GB; its evidence review round 2 is next; PR 5 (the nearest-stream fallback) and acceptance step 5 (the comparison with nearest stream) not started; questions 6 and 10 go back to Ola with the run's figures**
+Status: **PR 1, 2, 3 and 4 merged (#173, #179, #178, #182); the acceptance run over all 140 stations is in, at `docs/benchmarks/2026-10-05/nve-hrd/` (as fixed in `cd8b5be`): 74 match, 5 close, 6 miss, 39 uncertain, 16 refused (14 of them expected), 33 minutes and at most 7.7 GB; evidence review round 2 approved, the push waits for Ola; PR 5 (the nearest-stream fallback) and acceptance step 5 (the comparison with nearest stream) not started; questions 6 and 10 go back to Ola with the run's figures**
 (`@architect`, 2026-10-04), branch `worktree-nve-catchments` off master
 `d20126b`. Ola's rulings of 2026-10-04 are in the section below. Round 2 closed the burn's drainage claim
 (checked node by node, not assumed), the ELVIS data cases, the PR order, and
@@ -3405,3 +3405,62 @@ Fixes for round 6, by `@architect` in the commit that records it: suggestion 1 t
 Not pushed; no CI.
 
 Fixes: items 1-6 and the four suggestions by `@perf` in `cd8b5be` (the window check worded as conclusive on 46, finding nothing there, and as finding `105.1.0` among the 33 edge-cut rows); item 7 by `@architect`.
+
+### Acceptance evidence, round 2: `@reviewer`, `7e7e4ce..d9bbfe1`
+
+`@reviewer`'s record, word for word:
+
+**29 acceptance, evidence review, round 2, 2026-10-05 (copied from `@reviewer`'s handback).** Range `7e7e4ce..d9bbfe1` (3 commits: `cd8b5be` by `@perf`, `0130889` by the main session, `d9bbfe1` by `@architect`; 14 files, +457/-107). Verdict: APPROVED.
+
+**Size and CI.**
+- Production lines: 0. The scripts that changed are evidence scripts under `docs/benchmarks/`, and the only other files are `ROADMAP.md` and this increment file.
+- The branch is not pushed, so there is no PR and no CI. `tools/ci_changes.py bc01cd8 d9bbfe1` says `code=true`, so the push will run every CI job.
+- `check_citations.py` exits 0. I re-read its at-risk list as quotations:
+  - `ROADMAP.md:54` is still row 29.
+  - `:3` is still the status line.
+  - `chain_counts_2.279.0.txt:29` is still the +42.4 m row that carries 0.000 km².
+- `check_prohibited_deps.py` passes.
+- No mutation record is owed, and no `@perf` acceptance run of `bench.py`: this round is evidence, not refine or mesh code.
+
+**Round 1's items, each checked:**
+1. **Lakes along each reach (fixed).**
+   - I re-ran `lake_query.py` against NVE today. It made 93 queries and returned 187 lakes. Its output file has SHA-256 `480b7130…`, exactly the value in `provenance.txt`, and its printout is byte-identical to `step4/lake_query.txt`.
+   - Only `109.9.0`'s reach leaves its ±1000 m box (by 111 m), and that reach meets no lake.
+   - `lake_above.py` on that output reproduces `step4/lake_above.txt` byte for byte: 26 stations. The probe can fail: run on the fetch's own `lakes.geojson` (81 lakes) it gives 16.
+   - From `results.csv`, both populations are 91: the stations placed on a river line, and the stations seeded on the river. Their union is 93.
+   - On the river-line population the rule finds 24, the design's count, with `2.633.0` (Skjølja) and `55.4.0` (Røykenesvatnet) among them. All four of PR 2's full runs are in it, at 97.1 % or better both ways.
+   - On the river-seeded population it finds 25: 11 match, 4 miss, 7 uncertain, 3 refused. That is the README's table name for name. The difference is `12.197.0` and `22.16.0` (placed on a lake line, seeded on the river) against `62.18.0` (on a river line, seeded by its lake).
+   - The uncertain section's "seven have a lake on the reach above P" matches the seven names.
+2. **Sagafoss (fixed).** `212.48.0` is now under "Not as expected" as a finding, so the known two-grid refusals are 12 and the expected refusals 14.
+   - `windows_212.48.0.txt`: fourth window `edge False`, in-nodes x 819.41-849.77 km.
+   - NVE's polygon is x 819.41-849.73, y 7766.77-7783.68 km, as stated.
+3. **Knappom (fixed).** `windows_2.142.0.txt` shows `edge True` in all four windows.
+   - The fourth window runs x 321.40-368.88 km, and its in-nodes reach x 368.87 km.
+   - The margin doubles each window (4, 8, 16 km), so the fifth window's 32 km margin reaches x 400.87 km. That is the refusal's x range, against data that end at 400.26 km.
+4. **`run.sh` (fixed).** It now copies the outlines into `catchments/`, then runs `analyse.py`, `lake_query.py`, `checks.py` and `analyse.py` again, in that order. The header and the README's "Commands" row say the copy, `checks.py` and the second `analyse.py` were run by hand on the day, with the same commands.
+   - `checks.py` re-run here with the new lakes (on `results.csv` and the 124 committed outlines) gives a `checks.csv` byte-identical to the committed one.
+   - Against `7e7e4ce`, only the `lake_above_p` column changed, on 9 stations (`2.633.0`, `12.215.0`, `18.10.0`, `19.104.0`, `55.4.0`, `79.3.0`, `105.1.0`, `153.1.0`, `237.1.0`): 13 + 9 = 22 river rows not refused.
+   - `analyse.py` and `findings.py` regenerate `analysis.md` and `step4/uncertain_table.md` byte for byte.
+5. **The flow rule (fixed).** The new wording matches `flood.hpp`:
+   - keys are (level, push counter), so the lowest level pops first and equal levels pop first in, first out;
+   - `on_reach(i, j)` names the popped node `i` that reached `j` first;
+   - `accumulate.hpp` stores that node as `flow_to`, "its flooder".
+   - "Rejoins it, more than once" holds in `chain_counts_2.279.0.txt`: 45.9 km² again at +14 m and at +250 m, after nothing at -24 to 0 m and at +42 m.
+6. **The tile-count table (fixed).** The README's table is `analysis.md`'s, and `results.csv` gives the same counts. All 22 uncertain rows under a tenth of NVE's area meet one tile.
+7. **Status line and ROADMAP (fixed).** The status line and `ROADMAP.md:54` match `summary.json`: 74/5/6/39/16 and 14 expected refusals. `batch.log` gives 1994.36 s (33 minutes) and a peak of 7,745,503,232 bytes (7.7 GB). PRs #173, #179, #178 and #182 are named as merged.
+
+**Round 1's suggestions:**
+- `196.11.0` has its own line: 22 nodes, 0.002 km² of 637, one tile, two windows.
+- `105.1.0`'s 119.7 km² is called a lower bound.
+- `2.279.0`'s second loss of flow is in.
+- **The window check.** `@perf` was right not to use "1 in 46". In `window_check_12km.csv`, 33 rows are edge-cut and 46 are not. All 46 have a ratio of exactly 1.0, and the only row that grows (`105.1.0`, ratio 160) is one of the 33. So "1 in 46" would have been false. "Conclusive on 46, finding none; one of the 33 cut; 1 in 79, with 32 not cleared" is exact.
+
+**Suggestions (non-blocking):**
+- **Knappom.** "A margin of about 6 km would have covered NVE's 374 km" is true in x only, and the wording came from round 1. NVE's polygon reaches y 6790.47 km. That is 34.7 km north of the fourth window's in-nodes (6755.75 km, at that window's north edge), and past even the fifth window's 6787.75 km. Say that the catchment still had to grow north. The margin grows on all four sides, so the east side ran off the data while the catchment needed more room only to the north. The conclusion, that the window rule refuses and not the catchment, stands.
+- **The flow rule.** "The flood rises from the window's edge": `flood.hpp` also makes every node beside NoData an outlet. Add "or beside NoData".
+- **The status line and `ROADMAP.md:54`** say "its evidence review round 2 is next". Update both when this round is recorded.
+- **`ROADMAP.md:54`** no longer gives the plan's outline: the five PRs and their estimates, including PR 5's 80 lines, and the expected refusals. They are now only in the increment file. Restore one clause if the row should still show PR 5's size.
+
+Not pushed; no CI.
+
+Taken in the recording commit: the status line and `ROADMAP.md:54` now say round 2 approved and the push waits for Ola. The Knappom, flow-rule and ROADMAP-outline suggestions are left open.
