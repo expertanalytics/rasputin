@@ -39,6 +39,7 @@ import shapely
 from pyproj import CRS, Transformer
 from shapely.geometry import Polygon, mapping
 
+from crs_fixtures import proj4_of, refuse_point_moves
 from tin_engine.io.models import RasterMeta
 
 UTM33 = "urn:ogc:def:crs:EPSG::25833"
@@ -134,12 +135,10 @@ def the_crs(out: Any) -> CRS:
 
 @pytest.fixture
 def no_transformer(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Any `Transformer.from_crs` from here on fails the test."""
-
-    def refuse(*args: Any, **kwargs: Any) -> Any:
-        raise AssertionError(f"Transformer.from_crs{args} was called")
-
-    monkeypatch.setattr(Transformer, "from_crs", staticmethod(refuse))
+    """No point is moved: any point-moving `Transformer` method from here on
+    fails the test (`crs_fixtures.refuse_point_moves`). Building one is
+    allowed, since `crs.same_crs` builds one to compare (audit PR B)."""
+    refuse_point_moves(monkeypatch)
 
 
 class TestReading:
@@ -336,12 +335,23 @@ class TestToCrs:
         self, domain: ModuleType, tmp_path: Path, no_transformer: None, dst: str
     ) -> None:
         """A domain already in the DEM's CRS keeps its coordinates bit for bit,
-        and no transformer is made (the mesh must be 16's, bit for bit)."""
+        and no point is moved (the mesh must be 16's, bit for bit)."""
         read = domain.read_domain(write(tmp_path, geojson(square(), crs=UTM33)))
         out = read.to_crs(dst)
         assert list(out.polygon.exterior.coords) == list(read.polygon.exterior.coords)
         assert list(out.polygon.interiors[0].coords) == list(read.polygon.interiors[0].coords)
         assert the_crs(out) == CRS.from_epsg(25833)
+
+    def test_a_proj_string_of_the_targets_epsg_code_is_not_transformed(
+        self, domain: ModuleType, no_transformer: None
+    ) -> None:
+        """Audit PR B, red test 8: a domain spelt as the PROJ string of
+        EPSG:25833 is in EPSG:25833 (`crs.same_crs`), so no point moves, the
+        polygon is exactly the given one, and it is labelled as `dst`."""
+        given = domain.DomainPolygon(polygon=Polygon(OUTER, [HOLE]), crs=proj4_of(25833))
+        out = given.to_crs("EPSG:25833")
+        assert out.crs == "EPSG:25833"
+        assert out.polygon.equals_exact(given.polygon, tolerance=0.0)
 
     def test_a_vertex_with_no_image_is_refused_naming_both_crss(
         self, domain: ModuleType, tmp_path: Path

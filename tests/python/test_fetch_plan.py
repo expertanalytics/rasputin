@@ -36,6 +36,7 @@ from shapely.geometry import Polygon
 from shapely.geometry.polygon import orient
 
 from cog_fixtures import block_rectangles
+from crs_fixtures import proj4_of, refuse_point_moves
 from fetch_fixtures import (
     GAP,
     MAX_RANGE,
@@ -173,6 +174,20 @@ class TestF2TheSourceBox:
         back = pyproj.Transformer.from_crs("EPSG:3035", PROJECTED_CRS, always_xy=True)
         moved = np.column_stack(back.transform(points[:, 0], points[:, 1]))
         assert inside(moved, got, 2 * meta.delta_x * 0.999, 2 * meta.delta_y * 0.999)
+
+    def test_out_crs_spelt_as_the_sources_proj_string_is_no_out_crs(
+        self, plan: ModuleType, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Audit PR B, red test 10: `out_crs` as the PROJ string of the
+        source's EPSG code (25833) is the source's CRS (`crs.same_crs`), so the box is
+        the one with no `out_crs`, and no bounds are transformed."""
+        meta = header(projected())[0]
+        assert meta.crs == f"EPSG:{meta.epsg}" == PROJECTED_CRS
+        box = box_of(TIE_X + 101.3, TIE_Y - 187.7, TIE_X + 333.9, TIE_Y - 61.1)
+        bare = plan.source_box(plan.FetchRequest(source="s", box=box, margin=4), meta)
+        refuse_point_moves(monkeypatch)
+        spelt = plan.FetchRequest(source="s", box=box, margin=4, out_crs=proj4_of(meta.epsg))
+        assert plan.source_box(spelt, meta) == bare
 
     def test_a_geographic_source_grows_by_its_spacing_in_metres(self, plan: ModuleType) -> None:
         """Source EPSG:4326 at 0.001°; the frame is UTM 33N, in metres."""

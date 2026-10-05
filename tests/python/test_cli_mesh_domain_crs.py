@@ -338,7 +338,9 @@ class TestTheSameCrs:
         read = read_domain(domain)
         for given in handed_on:
             assert given is not None
-            assert given.crs == read.crs
+            # Audit PR B: `to_crs` into the same CRS labels the domain as
+            # its target, the DEM's text; the CRS and the bits are unchanged.
+            assert CRS.from_user_input(given.crs) == CRS.from_user_input(read.crs)
             for got, want in zip(rings(given), rings(read), strict=True):
                 assert got.dtype == want.dtype and got.tobytes() == want.tobytes()
         assert len(now.points) > 0

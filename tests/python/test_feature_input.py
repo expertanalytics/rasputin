@@ -57,6 +57,7 @@ from shapely.geometry import (
 )
 
 import feature_fixtures as ff
+from crs_fixtures import proj4_of, refuse_point_moves
 from feature_fixtures import (
     CROSSING,
     UTM33,
@@ -462,6 +463,24 @@ class TestCrs:
     def test_geojson_in_the_dems_crs_is_not_moved(self, tmp_path: Path) -> None:
         (line,) = lines_of(one(tmp_path, INNER))
         assert set(line.coords) == set(INNER.exterior.coords)
+
+    def test_a_proj_string_of_the_dems_epsg_code_is_not_moved(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Audit PR B, red test 9: a source spelt as the PROJ string of the
+        DEM's EPSG:25833 is in the DEM's CRS (`crs.same_crs`), so its
+        geometries are those of the source spelt `EPSG:25833`, and no point
+        moves, neither for the source region nor for the features."""
+        leaving = LineString([at(150, 150), at(400, 170)])  # clipped at the domain
+        features = [Feat(fid, g, {"property": "road"}) for fid, g in (("a", INNER), ("b", leaving))]
+        by_code = open_one(write_geojson(tmp_path / "code.geojson", features), BOX)
+        spelt = write_geojson(tmp_path / "proj.geojson", features, crs=proj4_of(25833))
+        refuse_point_moves(monkeypatch)
+        by_proj = open_one(spelt, BOX)
+        assert [f.fid for f in by_proj.features] == [f.fid for f in by_code.features]
+        assert [line.coords[:] for line in lines_of(by_proj)] == [
+            line.coords[:] for line in lines_of(by_code)
+        ]
 
     def test_a_given_crs_agreeing_with_the_files_is_accepted(self, tmp_path: Path) -> None:
         path = write_geojson(tmp_path / "f.geojson", [Feat("a", INNER, {"property": "road"})])

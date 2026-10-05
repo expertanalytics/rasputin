@@ -63,7 +63,6 @@ import re
 import shlex
 import subprocess
 import sys
-import warnings
 import weakref
 from pathlib import Path
 from typing import Any
@@ -76,6 +75,7 @@ from shapely.geometry import Polygon
 from typer.testing import CliRunner
 
 from cog_fixtures import write_cache
+from crs_fixtures import proj4_of
 from geographic_fixtures import (
     ANADEM_STEP,
     LAT0,
@@ -404,12 +404,6 @@ class TestAProjectedDemInAnotherCrs:
 
 
 # ------------------------------------------------------------------ G7
-
-
-def proj4_of(epsg: int) -> str:
-    """pyproj's PROJ string of `epsg`, without its lossy-conversion warning."""
-    with warnings.catch_warnings(action="ignore", category=UserWarning):
-        return CRS.from_epsg(epsg).to_proj4()
 
 
 @needs_codecs

@@ -47,7 +47,6 @@ from __future__ import annotations
 
 import ast
 import importlib
-import warnings
 from pathlib import Path
 from types import ModuleType
 from typing import Any
@@ -55,6 +54,8 @@ from typing import Any
 import numpy as np
 import pytest
 from pyproj import CRS, Transformer
+
+from crs_fixtures import proj4_of
 
 SRC_PYTHON = Path(__file__).resolve().parents[2] / "src_python"
 
@@ -190,6 +191,10 @@ LAMBERT = (
 #: EPSG:31287 with the datum shift PROJ's own EPSG:31287 to WGS 84 uses.
 TOWGS84 = "+towgs84=577.326,90.129,463.919,5.137,1.474,5.297,2.4232"
 MARS = "+proj=longlat +a=3396190 +b=3376200"
+#: UTM 33 on GRS80 with the easting axis pointing west: PROJ identifies it as
+#: EPSG:25833 at confidence 70, yet each x has the other sign (test_domain.py's
+#: `UTM33_WEST`, whose transform must not be skipped).
+UTM33_WEST = "+proj=utm +zone=33 +ellps=GRS80 +units=m +axis=wnu +no_defs"
 
 
 def without_id(epsg: int) -> str:
@@ -200,12 +205,6 @@ def without_id(epsg: int) -> str:
     text = CRS.from_json_dict(doc).to_wkt()
     assert f'ID["EPSG",{epsg}]' not in text, text
     return text
-
-
-def proj4_of(epsg: int) -> str:
-    """pyproj's PROJ string of `epsg`, without its lossy-conversion warning."""
-    with warnings.catch_warnings(action="ignore", category=UserWarning):
-        return CRS.from_epsg(epsg).to_proj4()
 
 
 SAME = {
@@ -224,6 +223,7 @@ NOT_SAME = {
     "another datum": ("EPSG:4258", "EPSG:4326"),
     "the +towgs84 limit": (LAMBERT.replace("+no_defs", f"{TOWGS84} +no_defs"), "EPSG:31287"),
     "Mars, no operation": (MARS, "EPSG:4326"),
+    "easting pointing west": (UTM33_WEST, "EPSG:25833"),
 }
 
 
