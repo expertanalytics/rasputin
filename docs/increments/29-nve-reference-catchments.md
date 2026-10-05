@@ -1,6 +1,6 @@
 # Increment 29 — NVE reference catchments: our catchments against NVE's, station by station
 
-Status: **design approved by `@reviewer` (round 5, 2026-10-04); PR 1 merged as #173; PR 3 merged as #178; PR 2 (the gauge on the river): green `193079d`, 569 production lines; code review round 3 (2026-10-05) approved; `@perf`'s placement figures in (`cdc0805`); the fixes from the evidence review, round 1, in; the evidence re-check next, then the push; questions 5, 6 and 7 (the example station) open for Ola, written to their defaults**
+Status: **design approved by `@reviewer` (round 5, 2026-10-04); PR 1 merged as #173; PR 3 merged as #178; PR 2 (the gauge on the river): green `193079d`, 569 production lines; code review round 3 and evidence review round 2 (2026-10-05) approved; the push waits for Ola; PR 4 (the batch and the comparison): red `2b9b39f` in, on PR 2's unpushed branch, `@tester`'s choices read ("PR 4's red step"), a small red amendment next, then green; questions 5, 6 and 7 (the example station) open for Ola, written to their defaults**
 (`@architect`, 2026-10-04), branch `worktree-nve-catchments` off master
 `d20126b`. Ola's rulings of 2026-10-04 are in the section below. Round 2 closed the burn's drainage claim
 (checked node by node, not assumed), the ELVIS data cases, the PR order, and
@@ -311,6 +311,159 @@ check and the extension already share, so nothing else changes there.
 `class BurnRefusal(ValueError)` in `burn.py`, raised by those three
 refusals; `_burnt_flood` catches `BurnRefusal` only and turns it into a
 `CatchmentError` with the same words. A few lines; no other rule changes.
+
+**PR 4's red step: `@tester`'s choices, read by `@architect` (2026-10-05).**
+Not Ola's rulings. Red `2b9b39f` (`test_reference.py`,
+`test_catchment_batch.py`, `test_cli_station_catchments.py`,
+`test_io_geojson.py` and `batch_fixtures.py`, new; additions to
+`test_mosaic.py`, `test_catchment.py` and `test_burn.py`). **PR 4 is built on
+PR 2's branch, which is not pushed yet**, so PR 4's base moves when PR 2 is
+merged; and questions 5, 6 and 7 for Ola are still open. Their defaults are
+in the code PR 4 builds on; a different answer changes PR 2's code, and PR
+4's suite only where a station meets the rule. None of the batch fixture's
+stations does: none has a gap on its chain (question 5), the causes the
+suite expects were measured on PR 2's code, and with question 6's
+alternative causes can only disappear, which leaves the expected causes as
+they are (`1.140.0` and `1.135.0` have none, `1.130.0` has only
+`downstream_unread`, `1.150.0` keeps `swing`); question 7 changes only the
+example under "Closes".
+
+*The one departure, adopted.* The batch runs on `gauge_fixtures.two_basins()`
+(the stage B terrain of `test_catchment.py`), not on the valley of
+`test_cli_catchment.py` that "The red suites" names: that valley has no
+tributary, so the station with a confluence just below it cannot be built
+on it. The suite's intent (a synthetic tiled DEM, a river file, the five
+stations and the sixth on two grids) is unchanged; "The red suites" now
+says so.
+
+*Adopted as the design* (each is now part of the design, as the suite
+states it):
+
+1. `reference.agreement(fine, reference, meta) -> Agreement`: our fine
+   outline, NVE's polygon (Polygon or MultiPolygon, every part counted), and
+   the final window's `RasterMeta`, of which only the origin and the spacing
+   are read. `Agreement` is a frozen dataclass: `ours`, `ref`, `both`,
+   `nve_in_ours`, `ours_in_nve`, `area_ratio`, `divide_offset_m`, `cell_m`.
+2. `reference.classify(agreement, gauge, refused=False) -> (class,
+   match_by)`, with `gauge` a `catchment.GaugeResult` or None. The class is
+   `refused`, `uncertain`, `match`, `close`, `miss`, or None for a station
+   with no cause and no reference; `match_by` is `overlap` or `offset` for a
+   match and None otherwise. With no gauge (the fallback of PR 5) the
+   agreement alone decides. Classify reads the gauge's joined `causes`
+   (next item), not `Sensitivity.causes`, so `direction` counts.
+3. `GaugeResult.causes`: the sensitivity's causes in their order, then
+   `direction` when `direction_ok` is false. This is the move "The window
+   loop" already announced; `catchment --rivers` reads it instead of joining
+   the list itself, and writes the same output.
+4. A swing of exactly 0.05 raises no cause: `swing <= SWING_MAX` is well
+   posed, as "Sensitivity", step 5, says.
+5. `summarise(rows) -> Summary`, a frozen Pydantic model, read by
+   attribute from the rows, and its JSON keys: `stations`; `classes` (all
+   five); `match_by` (both); `scored`, holding `area_ratio`, `nve_in_ours`
+   and `ours_in_nve`, each with `min`, `p10`, `p25`, `p50`, `p75`, `p90`,
+   `max`, numpy's default percentile (linear between the closest ranks);
+   `by_size`, bands `under 10`, `10-100`, `100-1000`, `over 1000` (km²; a
+   band's lower bound is in it), decided by NVE's polygon area, or by our
+   fine area without a reference, each band with `stations`, `classes`,
+   `uncertain_share` and the three measures; `by_tiles`, groups `1`, `2`,
+   `3-4`, `5+`, with the same contents; `uncertain_causes`;
+   `refusal_causes`; `known_refusals` with `count`, `stations` (in row
+   order) and `line`.
+6. The known-refusal line, word for word as "Agreement and classes" gives
+   it, with N the count.
+7. `StationResult` field names: `station_class` (a field cannot be called
+   `class`; the CSV column is headed `class`), `refusal_message`,
+   `grid_tiles` (one tile from each grid, `mixed_grid` only, else None),
+   `distance_m`, `uncertainty_m`, areas in km² (`fine_area_km2`,
+   `reference_area_km2` for NVE's polygon, `nve_area_km2` for the station
+   layer's), `tiles` (how many of the repository's tiles have a node box,
+   from `footprints()`, that meets our fine outline), `windows` (how many
+   windows), `causes` a tuple; a refused row has None in every field it
+   could not have (a refusal by `delineate` keeps its placement; one by
+   `place` has none).
+8. `run_batch`: references are in the river file's CRS; `sink.catchment`
+   is called before the station's row, never for a refused station; a
+   number in `only` that is not in the list raises `ValueError` naming it
+   before any station runs; `only` keeps the file's order.
+9. Only `CatchmentError` is a refusal. Any other exception, a plain
+   `ValueError` included, stops the batch, and the rows already given to
+   the sink stay given.
+10. `MixedGridError.tiles` is the two names in the message's order;
+    `catchment._plan` raises `MixedGridRefusal` from it (`raise ... from`),
+    with the same `tiles` and words. Other refusals of the plan are not
+    `MixedGridRefusal`.
+11. `io.geojson.catchment_geojson(polygon, crs, properties) -> bytes`:
+    UTF-8 JSON of a `FeatureCollection` with the `crs` member `{"type":
+    "name", "properties": {"name": crs}}` and one `Feature`, the polygon's
+    exterior ring; `json.dumps` as 22 called it, so `rasputin catchment`'s
+    files keep their bytes. `cli.py` no longer builds the document, and
+    `io/geojson.py` opens no file.
+12. `results.csv`: a header, one row per station in file order, the columns
+    `StationResult`'s fields in their order; a tuple is joined by `;`, None
+    is an empty cell, any other value is written as `csv` writes it.
+13. `summary.json` is `Summary`'s JSON plus `river_copies_dropped`, which
+    the command adds (the batch never sees the river file).
+14. stderr: the copies line of "Ola's rulings" (PR 3's green step), then
+    one line per station with its number, its name and its class (the word
+    `refused` for a refusal; for a scored station also the two overlaps and
+    the area ratio, as "The batch" says), then the summary. A stations or
+    rivers file without a `crs` member is refused naming its option
+    (`--stations`, `--rivers`) and the missing CRS, and nothing is written.
+
+*Added where the suite is silent* (new design; red amendment below):
+
+- **Fixed lists are written in full.** `classes`, `match_by`,
+  `uncertain_causes` (`swing`, `downstream_unread`, `chain_not_draining`,
+  `chain_end_open`, `direction`) and `refusal_causes` (`mixed_grid`,
+  `no_river`, `other`) always hold every key, in that order, 0 where none.
+  Causes are counted over `uncertain` rows only.
+- **Empty groups.** A measure over no scored station is `null` in place of
+  its seven-value object (in `scored`, a band or a tile group).
+  `uncertain_share` is the band's `uncertain` rows over its rows that are
+  not `refused` (a refused station was never assessed, so it must not
+  dilute the share), and `null` when there are none. A band's `stations`
+  counts every row in it, refused ones included. A row with no area (no
+  reference and no catchment) is in no band, and a row with `tiles` None in
+  no tile group, so the bands' counts may sum to less than `stations`.
+- **The known-refusal line for one station**: "1 station refused because
+  its window selects tiles on two different grids, which rasputin does not
+  combine, and neither grid covers the window alone (a known refusal, not a
+  failure)". With none, `line` is `null`.
+- **The reference file's CRS must be the river file's** (equal as
+  `pyproj.CRS`, through `crs.parse_crs`), since `run_batch` takes the
+  references in that CRS; otherwise `station-catchments` refuses, naming
+  `--reference` and both CRSs, and writes nothing. No reprojection of
+  polygons.
+- **`cell_m` on unequal spacing** is `sqrt(dx × dy)`, the side of a square
+  of one cell's area, which is what the offset (an area over a length) is
+  measured against; on DTM10 it is 10 m. Not tested: every DEM of this
+  increment has square cells.
+- **`StationResult` is a frozen dataclass** with slots, as `GaugeResult`
+  is; the CSV's columns come from `dataclasses.fields` in order. Its
+  `station_class` is typed `Literal["refused", "uncertain", "match",
+  "close", "miss"] | None`.
+
+*The swing is not split.* "Agreement and classes" said the summary splits
+the `swing` cause by its largest step's position, a confluence or a flat
+floor or lake, but gave no rule, and the counts alone have none: a flat
+floor also gives a step where the flat's nodes join the chain ("Sensitivity",
+after step 5), so a step does not tell a confluence from a flat. A rule would
+need a new threshold with nothing measured behind it. **`swing` stays one
+count in `summary.json`**; each row carries `largest_step`,
+`largest_step_at_m` and `lake`, and the acceptance README tells the causes
+apart station by station (acceptance step 4 already asks for that).
+
+**Red amendment** (`@tester`, lean, one commit before green):
+in `test_reference.py`, (a) a summary over rows that lack some causes and
+refusal causes still has all five and all three keys, in order, the absent
+ones 0; (b) a band whose rows are one `uncertain` and one `refused` has
+`stations` 2 and `uncertain_share` 1.0, a band with only refused rows has
+`uncertain_share` null and the three measures null; (c) a row with neither
+area is in no band, and one with `tiles` None in no tile group; (d) one
+`mixed_grid` refusal gives the singular line above, and none gives `line`
+null. In `test_cli_station_catchments.py`, a `--reference` file in another
+CRS (EPSG:32633) is refused, naming `--reference`, and nothing is written.
+These fail on the missing modules today, like the rest of the red suite.
 
 ## What the data says (measured 2026-10-04)
 
@@ -1321,6 +1474,7 @@ class GaugeResult:
     end_closed: bool           # False: cap, NoData or window edge before the ground fell
     downstream_checked: Literal["whole", "partly", "none"]
     sensitivity: Sensitivity   # next section
+    causes: tuple[str, ...]    # PR 4: the sensitivity's causes, then "direction" if not direction_ok
 ```
 
 ### Sensitivity: is the area well defined at this gauge? (`sensitivity.py`, pure)
@@ -1598,8 +1752,8 @@ ratio and both overlaps, the minimum, 10th, 25th, 50th, 75th, 90th percentile
 and maximum, over the scored stations (`match`, `close`, `miss`) and per size
 band (under 10, 10-100, 100-1000, over 1000 km²) and per tile count (1, 2,
 3-4, 5+); the share `uncertain` per size band, and the causes of `uncertain`, each
-counted (a station can have several): `swing` (split by its largest step's
-position: a confluence step, or a flat floor or lake), `downstream_unread`,
+counted (a station can have several): `swing` (one count, not split by
+cause; "PR 4's red step"), `downstream_unread`,
 `chain_not_draining`, `chain_end_open`, `direction`; the refusals counted by
 `refusal_cause`, with the `mixed_grid` ones apart as **known refusals**: one
 summary line, "N stations refused because their windows select tiles on
@@ -2084,8 +2238,9 @@ use" below):
   causes of `uncertain` are counted each (a station with two causes counts in
   both); `mixed_grid` refusals are counted apart as known refusals, with
   their summary line and station numbers, and never among the scored.
-- `test_catchment_batch.py`, on the synthetic tiled DEM of
-  `test_cli_catchment.py` with a river file and five stations (one matching a
+- `test_catchment_batch.py`, on a synthetic tiled DEM (the two-basin
+  terrain of `gauge_fixtures`, not `test_cli_catchment.py`'s valley, which
+  has no tributary; "PR 4's red step") with a river file and five stations (one matching a
   reference drawn from its own flood, one with a reference shifted to make it
   a miss, one with a confluence just below it, `uncertain`, one whose downstream river ends
   within `U` of it, `uncertain` although its overlap is 100 %, and one with no
