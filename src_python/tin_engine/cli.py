@@ -2125,10 +2125,13 @@ def station_catchments(
         outline_tolerance=outline_tolerance,
         only=tuple(only or ()),
     )
-    target.mkdir(exist_ok=True)
+    with _writing(target):
+        target.mkdir(exist_ok=True)
     with _writing(target / "results.csv"):
         table = (target / "results.csv").open("w", encoding="utf-8", newline="")
-    with table:
+    # Outside `table`, so the header write and the final flush and close are
+    # refused too; `run_batch`'s own `OSError` is caught inside, as --dem's.
+    with _writing(target / "results.csv"), table:
         sink = _DirectorySink(target, table)
         try:
             summary = asyncio.run(
