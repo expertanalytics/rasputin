@@ -42,6 +42,7 @@ from tin_engine.io.models import RasterMeta
 from tin_engine.io.repository import DemRepository
 from tin_engine.mosaic import (
     Bounds,
+    MixedGridError,
     MosaicError,
     MosaicPlan,
     assemble,
@@ -65,6 +66,15 @@ class CatchmentError(ValueError):
 class LakeError(CatchmentError):
     """The lakes cannot seed it: the point in no lake or in two, or a lake
     that does not move into the DEM's CRS."""
+
+
+class MixedGridRefusal(CatchmentError):  # noqa: N818 -- the name pinned by the suite
+    """The window selects tiles on two grids, neither covering it: the
+    mosaic's `MixedGridError`, with its `tiles` and words."""
+
+    def __init__(self, message: str, tiles: tuple[str, ...]) -> None:
+        super().__init__(message)
+        self.tiles = tiles
 
 
 class CatchmentRequest(BaseModel):
@@ -115,7 +125,8 @@ class Window:
 class GaugeResult:
     """The gauge on the river: the placed node and the burnt chain in the
     DEM's CRS, what the burn did, and the sensitivity at the placed node
-    ("The window loop and the catchment")."""
+    ("The window loop and the catchment"). `causes` joins the sensitivity's
+    causes and, last, `direction` when the line runs against the DEM's slope."""
 
     node: tuple[float, float]
     chain: tuple[tuple[float, float], ...]
@@ -128,6 +139,7 @@ class GaugeResult:
     end_closed: bool
     downstream_checked: Literal["whole", "partly", "none"]
     sensitivity: Sensitivity
+    causes: tuple[str, ...]
 
 
 @dataclass(frozen=True, slots=True)
@@ -313,6 +325,7 @@ def _gauged(
         end_closed=path.end_closed,
         downstream_checked=checked,
         sensitivity=s,
+        causes=(*s.causes, *(() if path.direction_ok else ("direction",))),
     )
     fine = _outline(dem_crs, None, xy[path.placed], out, m, seed, tuple(windows))
     return replace(_reduced(fine, _tolerance(request, m)), gauge=gauge)
@@ -341,6 +354,8 @@ def _lake(request: CatchmentRequest, dem_crs: str) -> Polygon | None:
 def _plan(footprints: Any, bounds: Bounds) -> MosaicPlan:
     try:
         return plan_mosaic(footprints, bounds)
+    except MixedGridError as exc:
+        raise MixedGridRefusal(str(exc), exc.tiles) from exc
     except MosaicError as exc:
         raise CatchmentError(str(exc)) from exc
 

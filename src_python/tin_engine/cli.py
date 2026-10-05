@@ -39,6 +39,8 @@ roles is therefore made unrepresentable rather than merely discouraged.
 
 from __future__ import annotations
 
+import asyncio
+import csv
 import json
 import math
 import os
@@ -47,7 +49,7 @@ import sys
 import tempfile
 import time
 from collections.abc import Callable, Iterator, Mapping
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field, fields
 from pathlib import Path
 from typing import Annotated, Any
 
@@ -70,7 +72,8 @@ from tin_engine._core import (
     sample,
     triangulate,
 )
-from tin_engine.catchment import CatchmentRequest, GaugeResult, LakeError, delineate
+from tin_engine.catchment import Catchment, CatchmentRequest, GaugeResult, LakeError, delineate
+from tin_engine.catchment_batch import BatchRequest, StationResult, run_batch
 from tin_engine.chains import start_chains
 from tin_engine.crs import crs_label, parse_crs, reprojector, transform_description
 from tin_engine.dem_input import (
@@ -97,9 +100,11 @@ from tin_engine.features import DEFAULT_VOCABULARY
 from tin_engine.gauge import Gauge, Placement, place
 from tin_engine.grid_domain import default_stride, refine_start_stride, subsample
 from tin_engine.io.cog import NotCached
+from tin_engine.io.geojson import catchment_geojson
 from tin_engine.io.models import DemTile, RasterMeta
 from tin_engine.io.ply import write_ply
-from tin_engine.io.rivers import read_segments
+from tin_engine.io.rivers import RiverSegment, read_segments
+from tin_engine.io.station_set import Station, read_references, read_stations
 from tin_engine.io.vtk_legacy import write_vtk
 from tin_engine.landcover import label_triangles
 from tin_engine.mosaic import Bounds, Seam
@@ -1703,16 +1708,7 @@ def _placed(
 ) -> tuple[tuple[Placement, str | None], tuple[float, float], str]:
     """The gauge placed on the river file's nearest line (no watercourse
     number), and the seed moved into the file's CRS, which must be the DEM's."""
-    try:
-        segments, crs, dropped = read_segments(rivers)
-    except (OSError, ValueError) as exc:
-        raise typer.BadParameter(str(exc), param_hint="--rivers") from exc
-    copies = plural(dropped, "exact copy", "exact copies")
-    typer.echo(
-        f"rivers: {plural(len(segments) + dropped, 'segment', 'segments')} read, "
-        f"{copies} dropped (same river, same vertices to 1 cm)",
-        err=True,
-    )
+    segments, crs, _ = _segments(rivers)
     dem_crs = repository.footprints()[0].meta.crs
     if parse_crs(crs) != parse_crs(dem_crs):
         raise typer.BadParameter(
@@ -1728,13 +1724,29 @@ def _placed(
     return (placement, name), (x, y), crs
 
 
+def _segments(rivers: Path) -> tuple[tuple[RiverSegment, ...], str, int]:
+    """The river file's segments, its CRS and the exact copies dropped, said
+    on stderr; a file that cannot be read is refused naming --rivers."""
+    try:
+        segments, crs, dropped = read_segments(rivers)
+    except (OSError, ValueError) as exc:
+        raise typer.BadParameter(str(exc), param_hint="--rivers") from exc
+    copies = plural(dropped, "exact copy", "exact copies")
+    typer.echo(
+        f"rivers: {plural(len(segments) + dropped, 'segment', 'segments')} read, "
+        f"{copies} dropped (same river, same vertices to 1 cm)",
+        err=True,
+    )
+    return segments, crs, dropped
+
+
 def _placement_report(
     placed: tuple[Placement, str | None], gauge: GaugeResult
 ) -> dict[str, object]:
     """Say where the gauge went, and return the placement and sensitivity
     properties for the catchment file."""
     (p, name), s = placed, gauge.sensitivity
-    causes = [*s.causes, *([] if gauge.direction_ok else ["direction"])]
+    causes = gauge.causes
     verdict = f"uncertain ({', '.join(causes)})" if causes else "well defined"
     typer.echo(
         f"placed on the river line {p.distance_m:.0f} m from the station "
@@ -1745,7 +1757,7 @@ def _placement_report(
         err=True,
     )
     keep = {k: v for k, v in p.model_dump().items() if k not in ("reach", "position")}
-    skip = ("node", "chain", "sensitivity")
+    skip = ("node", "chain", "sensitivity", "causes")
     burn = {k: getattr(gauge, k) for k in GaugeResult.__slots__ if k not in skip}
     return {**keep, "uncertainty_m": p.reach.uncertainty, **burn, **asdict(s), "causes": causes}
 
@@ -1917,31 +1929,185 @@ def catchment(
         f"{result.tolerance:g} m, {result.reduce_seconds:.2f} s",
         err=True,
     )
-    properties = {
-        "seed": list(seed),
-        "seed_crs": seed_crs,
+    properties = {"seed": list(seed), "seed_crs": seed_crs, **_outline_properties(result), **extra}
+    target.write_bytes(catchment_geojson(reduced, result.crs, properties))
+    typer.echo(f"{target}")
+
+
+def _outline_properties(result: Catchment) -> dict[str, object]:
+    """Increment 22's properties of a catchment file: the counts, the areas,
+    the tolerance and the windows."""
+    return {
         "nodes": result.nodes,
-        "fine_vertices": vertices,
+        "fine_vertices": len(result.fine.exterior.coords) - 1,
         "fine_area_m2": result.fine_area,
-        "reduced_vertices": kept,
-        "reduced_area_m2": reduced.area,
+        "reduced_vertices": len(result.reduced.exterior.coords) - 1,
+        "reduced_area_m2": result.reduced.area,
         "outline_tolerance_m": result.tolerance,
         "windows": [[w.rows, w.cols] for w in result.windows],
-        **extra,
     }
-    doc = {
-        "type": "FeatureCollection",
-        "crs": {"type": "name", "properties": {"name": result.crs}},
-        "features": [
-            {
-                "type": "Feature",
-                "properties": properties,
-                "geometry": {
-                    "type": "Polygon",
-                    "coordinates": [[list(xy) for xy in reduced.exterior.coords]],
-                },
+
+
+@dataclass
+class _DirectorySink:
+    """`station-catchments`' `BatchSink`: a station's catchment file is written
+    when its row arrives (the row holds the placement), and each row is said
+    on stderr and kept for the table."""
+
+    out: Path
+    rows: list[StationResult] = field(default_factory=list)
+    pending: dict[str, tuple[Station, Catchment]] = field(default_factory=dict)
+
+    def catchment(self, station: Station, result: Catchment) -> None:
+        self.pending[station.station] = (station, result)
+
+    def row(self, row: StationResult) -> None:
+        self.rows.append(row)
+        if row.station in self.pending:
+            station, result = self.pending.pop(row.station)
+            names = [f.name for f in fields(StationResult)]
+            gauge = names[names.index("placed_on") : names.index("causes") + 1]
+            properties = {
+                "station": station.station,
+                "name": station.name,
+                "series": list(station.series),
+                **_outline_properties(result),
+                **{k: getattr(row, k) for k in gauge},
             }
-        ],
-    }
-    target.write_text(json.dumps(doc), encoding="utf-8")
+            # A station number is digits and dots (`Station`), so a safe name.
+            path = self.out / f"{row.station}.geojson"
+            path.write_bytes(catchment_geojson(result.reduced, result.crs, properties))
+        word: str = row.station_class or "well defined, no reference"
+        if row.station_class == "refused":
+            word += f": {row.refusal_message}"
+        elif row.causes:
+            word += f" ({', '.join(row.causes)})"
+        if row.nve_in_ours is not None and row.ours_in_nve is not None:
+            word += (
+                f"; NVE's in ours {100 * row.nve_in_ours:.1f} %, ours in NVE's "
+                f"{100 * row.ours_in_nve:.1f} %, area ratio {row.area_ratio:.3f}"
+            )
+        typer.echo(f"{row.station} {row.name or ''}: {word}", err=True)
+
+
+def _cell(value: object) -> object:
+    """A table cell: a tuple joined by `;`, None empty, anything else as is."""
+    if isinstance(value, tuple):
+        return ";".join(map(str, value))
+    return "" if value is None else value
+
+
+@app.command()
+def station_catchments(
+    dem: Annotated[
+        list[Path],
+        typer.Option("--dem", help="A GeoTIFF DEM, several (repeat --dem), or one directory."),
+    ],
+    stations: Annotated[
+        Path, typer.Option("--stations", help="The stations (GeoJSON points, with a crs member).")
+    ],
+    rivers: Annotated[
+        Path, typer.Option("--rivers", help="River lines (GeoJSON, in the DEM's CRS).")
+    ],
+    out_dir: Annotated[Path, typer.Option("--out-dir", help="Where to write the files.")],
+    reference: Annotated[
+        Path | None,
+        typer.Option(
+            "--reference",
+            help="Reference catchment polygons (GeoJSON, in the river file's CRS), one per "
+            "station number: each catchment is compared with its own and classed.",
+        ),
+    ] = None,
+    map_radius: Annotated[
+        float,
+        typer.Option("--map-radius", metavar="METRES", help="How far a river line may be."),
+    ] = 500.0,
+    reach_up: Annotated[
+        float,
+        typer.Option(
+            "--reach-up", metavar="METRES", help="River above each gauge burnt into the DEM."
+        ),
+    ] = 1000.0,
+    only: Annotated[
+        list[str] | None,
+        typer.Option("--only", metavar="ID", help="Run only this station (repeat --only)."),
+    ] = None,
+    outline_tolerance: Annotated[
+        float | None,
+        typer.Option(
+            "--outline-tolerance",
+            metavar="METRES",
+            help="Reduce each outline to within this of the fine one; default twice the cell.",
+        ),
+    ] = None,
+    out_parent: Annotated[
+        Path | None,
+        typer.Option("--out-parent", help="Refuse any output path resolving outside this."),
+    ] = None,
+) -> None:
+    """Write a catchment per station into --out-dir, as ``catchment --rivers``
+    does for one, with results.csv (a row per station) and summary.json; with
+    --reference each catchment is compared with its reference polygon and
+    classed (match, close, miss, uncertain or refused; increment 29)."""
+    for name, value in (("--map-radius", map_radius), ("--reach-up", reach_up)):
+        if not (math.isfinite(value) and value > 0.0):
+            raise typer.BadParameter("must be a finite number above 0", param_hint=name)
+    if outline_tolerance is not None and not (
+        math.isfinite(outline_tolerance) and outline_tolerance >= 0.0
+    ):
+        raise typer.BadParameter("must be finite and at least 0", param_hint="--outline-tolerance")
+    target = _destination(out_dir, out_parent, out_dir.name)
+    try:
+        station_list, stations_crs = read_stations(stations)
+    except (OSError, ValueError) as exc:
+        raise typer.BadParameter(str(exc), param_hint="--stations") from exc
+    segments, crs, dropped = _segments(rivers)
+    references = None
+    if reference is not None:
+        try:
+            references, reference_crs = read_references(reference)
+        except (OSError, ValueError) as exc:
+            raise typer.BadParameter(str(exc), param_hint="--reference") from exc
+        if parse_crs(reference_crs) != parse_crs(crs):
+            raise typer.BadParameter(
+                f"the reference file's CRS, {reference_crs}, is not the river file's, {crs}; "
+                "polygons are not reprojected",
+                param_hint="--reference",
+            )
+    try:
+        repository, _ = repository_for(tuple(dem))
+    except (OSError, ValueError) as exc:
+        raise typer.BadParameter(
+            _words(exc) if isinstance(exc, ValueError) else str(exc), param_hint="--dem"
+        ) from exc
+    request = BatchRequest(
+        map_radius=map_radius,
+        reach_up=reach_up,
+        outline_tolerance=outline_tolerance,
+        only=tuple(only or ()),
+    )
+    target.mkdir(exist_ok=True)
+    sink = _DirectorySink(target)
+    try:
+        summary = asyncio.run(
+            run_batch(
+                request, repository, station_list, stations_crs, segments, crs, references, sink
+            )
+        )
+    except OSError as exc:
+        raise typer.BadParameter(f"cannot read {exc.filename}: {exc}", param_hint="--dem") from exc
+    except ValueError as exc:
+        typer.echo(f"Error: {_words(exc)}", err=True)
+        raise typer.Exit(1) from exc
+    names = [f.name for f in fields(StationResult)]
+    with (target / "results.csv").open("w", encoding="utf-8", newline="") as f:
+        table = csv.writer(f)
+        table.writerow(["class" if n == "station_class" else n for n in names])
+        table.writerows([_cell(getattr(r, n)) for n in names] for r in sink.rows)
+    dump = {**summary.model_dump(mode="json"), "river_copies_dropped": dropped}
+    (target / "summary.json").write_text(json.dumps(dump, indent=2) + "\n", encoding="utf-8")
+    counts = ", ".join(f"{k} {v}" for k, v in summary.classes.items())
+    typer.echo(f"summary: {plural(summary.stations, 'station', 'stations')}: {counts}", err=True)
+    if summary.known_refusals.line is not None:
+        typer.echo(summary.known_refusals.line, err=True)
     typer.echo(f"{target}")
