@@ -1,6 +1,6 @@
 # Increment 29 — NVE reference catchments: our catchments against NVE's, station by station
 
-Status: **design approved by `@reviewer` (round 5, 2026-10-04); PR 1 merged as #173; PR 3 merged as #178; PR 2 (the gauge on the river): green `193079d`, 569 production lines; code review round 3 and evidence review round 2 (2026-10-05) approved; the push waits for Ola; PR 4 (the batch and the comparison): green `f952f2d` (red `2b9b39f`, `7cd56a4`, `6ebff1b`, `bc78be3` and `44dc954`; test-only `e8e93d0` and `a98c805`), on PR 2's unpushed branch, 573 net production lines (615 added, 42 removed; 91 past the margin, 127 under 700, not split); code review round 2 (2026-10-05) asked for two fixes, now in, and is still blocked on `project_structure.md`, which waits on Ola's ruling on who edits root files; next, code review round 3; questions 5, 6, 7 (the example station) and 8 (which area of ours) open for Ola, written to their defaults**
+Status: **design approved by `@reviewer` (round 5, 2026-10-04); PR 1 merged as #173; PR 3 merged as #178; PR 2 (the gauge on the river): green `193079d`, 569 production lines, approved, the push waits for Ola; PR 4 (the batch and the comparison): green `f952f2d`, 573 net, code review round 3 approved on the `project_structure.md` condition; lake gauges seeded with their lake (Ola's ruling, 2026-10-05) designed into PR 4 ("Lake gauges"), about 100 more lines, so about 673 net; next, `@tester`'s red step for it; questions 5 to 10 open for Ola, written to their defaults**
 (`@architect`, 2026-10-04), branch `worktree-nve-catchments` off master
 `d20126b`. Ola's rulings of 2026-10-04 are in the section below. Round 2 closed the burn's drainage claim
 (checked node by node, not assumed), the ELVIS data cases, the PR order, and
@@ -19,7 +19,11 @@ flow path along it, never an area objective), with a per-station sensitivity
 check. Five PRs (merge order 1, 3, 2, 4, 5). Questions 1 to 4 under "Questions for Ola" are
 ruled (see "Ola's rulings"); questions 5 and 6, from PR 2's code review,
 7, from its placement figures, and 8, from PR 4's green step, are open, and
-the design is written to their defaults.
+the design is written to their defaults. On 2026-10-05 Ola ruled that lake
+gauges get increment 22's Bygdin method, in PR 4 ("Lake gauges"); questions
+9 and 10 come from that design. On 2026-10-05 Ola ruled that lake
+gauges get increment 22's Bygdin method, in PR 4 ("Lake gauges"); questions
+9 and 10 come from that design.
 
 **Closes.** Catchments for real Norwegian gauging stations, computed from the
 DEM by `rasputin`, one polygon per station, each usable as `--domain`, and a
@@ -32,6 +36,8 @@ rasputin station-catchments --dem ../rasputin_data/DTM10_UTM33_20260925 \
     --stations ../rasputin_data/nve_hrd/stations.geojson \
     --rivers ../rasputin_data/nve_hrd/rivers.geojson \
     --reference ../rasputin_data/nve_hrd/reference.geojson \
+    --lakes ../rasputin_data/nve_hrd/lakes.geojson \
+    --lakes ../rasputin_data/nve_hrd/lakes.geojson \
     --out-dir ../rasputin_scratch/hrd_catchments
 rasputin mesh --dem ../rasputin_data/DTM10_UTM33_20260925 \
     --domain ../rasputin_scratch/hrd_catchments/2.32.0.geojson --tolerance 1 --out atnasjo.vtk
@@ -47,7 +53,9 @@ It generalises increment 22's Bygdin acceptance (one catchment, area within
 2 %, node overlap both ways) to 140 stations. It also adds what 22 left out:
 flow accumulation; placing a gauge where it physically is (on NVE's mapped
 river, then on the DEM's flow path along it); and a per-station check of
-whether the catchment area is well defined at the gauge at all.
+whether the catchment area is well defined at the gauge at all. A gauge on a
+lake is seeded with the whole lake, as 22 seeded Bygdin ("Lake gauges"). A gauge on a
+lake is seeded with the whole lake, as 22 seeded Bygdin ("Lake gauges").
 
 **Not closed.** Discharge (only the keys to join it later are stored; see
 "Discharge"). Residual inflow between gauges on one river (the interfaces are
@@ -57,6 +65,10 @@ reach is burnt). The nine stations whose catchments straddle DTM10's
 half-cell-shifted tiles (expected refusals, reported apart as known
 refusals, not failures; a later increment fixes the tiles) and
 Femundsenden (no mapped river within 500 m; refused until the fallback).
+Seeding a lake together with the river from its outlet down to a gauge
+below it (question 10; such a gauge stays on the river, "Lake gauges").
+Seeding a lake together with the river from its outlet down to a gauge
+below it (question 10; such a gauge stays on the river, "Lake gauges").
 Holes, as in 22. Parallel stations (one station at a time; see "The batch").
 Stations outside DTM10's coverage, and any other DEM.
 
@@ -654,6 +666,13 @@ run as root) and green `f952f2d` put the `mkdir` under the same helper;
 the green also moves the `results.csv` header write and its close under
 it, which no test exercises. PR 4 is then 573 net.
 
+**Lake gauges: Ola's ruling (2026-10-05).** PR 2's chain fails on lake
+gauges such as Narsjø and Tingvatn (catchments under 1 km² against NVE's
+119 and 272 km², "Placement figures"). Ola, 05:07 UTC: "What we did in
+Bygdin, which was a lake, worked really well. Can't we do the same now?",
+and 05:11 UTC: "Fold into PR4". The design is "Lake gauges", below; the evidence is "NVE's
+lakes: Innsjødatabasen"; questions 9 and 10 for Ola come from it.
+
 ## What the data says (measured 2026-10-04)
 
 Measured before the design, by throwaway scripts in
@@ -837,6 +856,77 @@ channel, and these numbers are re-measured by the acceptance run).
   with `outSR=25833&f=geojson` and a short `outFields` list. The whole
   network is not fetched (1.95 M segments).
 
+### NVE's lakes: Innsjødatabasen (measured 2026-10-05, for "Lake gauges")
+
+Measured by `@architect` with throwaway scripts in the session's scratchpad
+(not committed), on the fetch of 2026-10-05 in `../rasputin_data/nve_hrd`
+and PR 2's code at this branch's head.
+
+- **What 22 seeded Bygdin with.** CORINE Land Cover 2018, class 512 (water
+  bodies), feature `fid` 54101 of `corine2018_dtm10_utm33.gpkg`, a local
+  extract (22's "What the data says about Bygdin"). CORINE's minimum
+  mapping unit is 25 ha with a 100 m minimum width
+  (`docs/research/raster-to-vector.md`, "CORINE's minimum mapping unit"), so
+  it leaves out small lakes: 7 of the 48 lakes below are under 0.25 km²
+  (the smallest 0.023 km²). It is also not fetched by rasputin.
+- **NVE's lake database is a layer like ELVIS.** `Innsjodatabase2`,
+  `https://kart.nve.no/enterprise/rest/services/Innsjodatabase2/MapServer`,
+  layer 5 `Innsjodatabase` (polygons), EPSG:25833, `maxRecordCount` 2000, on
+  the same host and query interface as layers 0, 38 and ELVIS (read with
+  `?f=json` on the service and on layer 5, 2026-10-05). 267,194 features
+  (`returnCountOnly`). Its fields include `objectid`, `vatnlnr` (the
+  national lake number), `navn`, `areal_km2`, `hoyde`, `magasinnr`,
+  `vassdragsnr`, `kommune` and `globalid`. The service description says
+  every lake larger than 2500 m² has a unique national serial number.
+  Geonorge's record "Innsjødatabase" (uuid
+  `823b8639-9a49-41bf-8571-3608435eb149`, read through
+  `kartkatalog.geonorge.no/api/getdata/` on 2026-10-05): "Åpne data" under
+  NLOD, scale 1:20,000, NVE as the organisation.
+- **ELVIS's lake number is the lake database's.** For each of the 140
+  stations, layer 5 was queried with the station point ± 1000 m as the
+  envelope (`outFields=objectid,vatnlnr,navn,areal_km2,vassdragsnr,hoyde,magasinnr`,
+  `outSR=25833&f=geojson`; 140 queries, one at a time, 34 s, 8.3 MB, no
+  answer truncated). PR 2's tiered placement (`gauge.place`, the defaults)
+  puts 48 stations on a lake line; 47 of those lines carry a lake number
+  (`vatnlnr`, not null and not 0), and for all 47 a polygon with that number
+  was in the answer, and the mapped position `P` lies inside it. The 48th,
+  `97.1.0` Fetvatn, is on a lake line with no number; its `P` lies inside
+  Fitjavatnet.
+- **Where the stations are.** 18 station points lie inside a lake polygon
+  (16 of them placed on a lake line, and `62.18.0` Svartavatn and `191.2.0`
+  Øvrevatn placed on a river line), 55 within 10 m of one, 64 within 30 m.
+  No station is within 30 m of two lakes (one is within 50 m of two, three
+  within 100 m). Of the 48 placed on a lake line, the station's distance to
+  the lake its `P` lies in has quartiles 0.0, 1.3 and 6.0 m; two are
+  farther than 30 m: `12.197.0` (52 m) and `22.16.0` Myglevatn ndf. (460 m:
+  "ndf." is "below"; its line is a pond's, Tveitevatnet, while Myglevatnet is
+  87 m away). `127.11.0` Veravatn is placed on a pond's line 118 m away but
+  lies inside Veresvatnet. Femundsenden (`311.4.0`, no river line within
+  500 m) is 14 m from Femunden. 24 stations placed on a river line have a
+  lake on their reach upstream of `P` (within `reach_up`, 1000 m): gauges
+  below a lake outlet.
+- **The lake seed works on them.** 22's path (`catchment.delineate` with
+  `lakes`, the lake's polygon, and a seed point inside it), run on the 48
+  stations the rule of "Lake gauges" picks, compared with NVE's polygons by
+  `reference.agreement` and classed by "Agreement and classes": **41
+  `match`** (all by overlap), 3 `close`, 1 `miss`, 3 refused on tiles of
+  two grids (`203.2.0`, `213.2.0`, `191.2.0`); 299 s in all, the longest
+  56 s (`62.5.0`, 1091 km²). Over the 45 scored, NVE's in ours has 10th
+  percentile 96.7 % and median 98.8 %; ours in NVE's 96.2 % and 98.8 %;
+  the area ratio 0.989 and 1.000. Narsjø: 98.2 % / 97.5 %, ratio 1.007
+  (PR 2's path: 0.0012 km²); Tingvatn: 99.4 % / 99.5 % (0.48 km²); Atnasjø:
+  98.5 % / 99.1 % (98.4 % / 99.2 % by PR 2's path). Of the 8 lake gauges
+  PR 2's tiered placement ran in full (`full_runs_tiers.json`), 5 got
+  catchments under 1 km²; the lake seed gives 4 of them `match`. The fifth
+  is the `miss`: `83.2.0` Viksvatn (Hestadfjorden), whose point lies inside
+  Hestadfjorden (watercourse number `083.C2`; the station's is `083.C1`),
+  19.3 km² against NVE's 508 km², 99.3 % of ours inside NVE's: a lake
+  whose own catchment is a small part of the gauge's, so less area, not
+  more (why the station point lies in it is not looked at). The `close`
+  rows: `16.66.0` (93.6 % / 98.7 %, 6.5 km²), `35.9.0` (98.7 % / 93.3 %)
+  and `26.29.0` Refsvatn (99.3 % / 84.0 %, ratio 1.18: 18 % more area than
+  NVE's; where the extra lies is not looked at, and the acceptance must say).
+
 ### Coverage by DTM10_UTM33_20260925
 
 - **The DEM.** 254 tiles at 10 m, EPSG:25833, spaced 50 km apart; 243 of
@@ -952,7 +1042,8 @@ a test of `fetch/nve.py` (PR 3), except the `NOTICE.md` credit below:
 
 - **Sources.** The HRD report (the PDF named above); `HydrologiskeData3`
   layers 0 (`Malestasjoner`) and 38 (`Malest_totalnedb`); `Elvenett1` layer 2
-  (`elvenett`). HydAPI is not used and no API key is stored anywhere.
+  (`elvenett`); `Innsjodatabase2` layer 5 (`Innsjodatabase`, the lakes, PR 4,
+  "Lake gauges"). HydAPI is not used and no API key is stored anywhere.
 - **Licence.** NLOD; "Kilde: NVE" is in `NOTICE.txt` of every fetch, in the
   packaged CSV's header (each tested) and in `NOTICE.md` (checked by hand by
   `@reviewer`, block "PR 3, after PR #178's CI" above). NVE disclaims liability for errors
@@ -960,18 +1051,20 @@ a test of `fetch/nve.py` (PR 3), except the `NOTICE.md` credit below:
 - **Committed**: the 140-row HRD list (four columns, from a PDF) and the
   acceptance's `results.csv` (NVE's areas as numbers). **Fetched** into
   `../rasputin_data/nve_hrd/` and never committed: polygons, station points,
-  river lines, manifest.
+  river lines, lake polygons, manifest.
 - **Only the fields the design needs, by explicit allow-list per layer, in
   every request (never `outFields=*`).** Layer 0: `stasjonnr`, `stasjonnavn`,
   `totalt_feltareal_km2`, `stasjonstatus`, `vassdragsnr`, `elvenavnhierarki`.
   Layer 38: `stasjonnr`, `nedborfeltaareal_km2`, `oppdateringsdato`,
   `objectid`. Layer 2: `objectid`, `objekttype`, `strekninglnr`, `elvid`,
-  `vassdragsnr`, `elvenavn`, `vatnlnr`. **Never collected**: `stasjoneier` (the
+  `vassdragsnr`, `elvenavn`, `vatnlnr`. Lake layer 5: `objectid`, `vatnlnr`,
+  `navn`, `areal_km2`. **Never collected**: `stasjoneier` (the
   owner), ELVIS's `oppdatertav` (editor ids, some look like personal
-  initials), `globalid`, and layer 38's discharge normals.
+  initials), `globalid`, layer 38's discharge normals, and the lake layer's
+  municipality fields (`kommnr`, `kommune`), reservoir fields and `globalid`.
 - **Query volume, kept small.** Only `fetch-stations` uses the network: about
-  8 batched queries for layers 0 and 38 (40 stations each) and 140 ELVIS
-  envelope queries, sent one at a time, with 23a-2's retries and back-off. A
+  8 batched queries for layers 0 and 38 (40 stations each), 140 ELVIS
+  envelope queries and 140 lake envelope queries (PR 4), sent one at a time, with 23a-2's retries and back-off. A
   fetch is reused, not repeated: if the files exist, nothing is requested
   unless `--refresh`. `station-catchments` and `catchment` never touch the
   network. The client identifies itself (`User-Agent: rasputin/<version>`)
@@ -1133,6 +1226,36 @@ named were read, no paper in full.
   in increment 22: the flood the accumulation reuses, and D8, which it
   departs from for the reason 22 gives.
 
+**Lake gauges (2026-10-05).** *Legacy*: nothing to carry over.
+
+```
+$ git grep -liE "innsj|vatnlnr|lake" legacy-archive -- legacy
+legacy-archive:legacy/bindings.cpp
+legacy-archive:legacy/rasputin/globcov_repository.py
+legacy-archive:legacy/rasputin/gml_repository.py
+legacy-archive:legacy/rasputin/material_specification.py
+legacy-archive:legacy/rasputin/triangulate_dem.h
+legacy-archive:legacy/rasputin/web_visualize.py
+```
+
+Every hit is about drawing lakes: `extract_lakes` splits a mesh's faces into
+lake and terrain for the web viewer, and the land-cover readers give lake
+classes a material. None seeds a catchment. *Literature*: the method is
+increment 22's lake seed (its "The seed" and "Prior art"), every DEM node
+inside the lake polygon a seed of one Priority-Flood labelling, which 22
+measured on Bygdin (99.12 % of NVE's nodes in ours). What differs here: the
+polygon is NVE's lake database rather than CORINE, and the lake is chosen by
+the station's position and the mapped river, not by a point the user gives.
+**HydroLAKES** (Messager, Lehner, Grill, Nedeva and Schmitt 2016,
+"Estimating the volume and age of water stored in global lakes using a
+geo-statistical approach", *Nature Communications* 7:13603,
+doi:10.1038/ncomms13603, checked on Crossref 2026-10-05; the data page
+`https://www.hydrosheds.org/hydrolakes` known only from a search summary)
+ties each lake to the HydroSHEDS river network by one pour point and reads
+the lake's upstream area there. Seeding the whole lake needs no pour point,
+so no rule has to choose one; how HydroLAKES chooses its pour points was not
+read.
+
 **Novelty.** None is claimed. Searched: the works above, Crossref,
 OpenAlex and web searches for automatic delineation of gauge catchments
 compared with official polygons (overlap, Jaccard, area ratio), outlet
@@ -1153,13 +1276,15 @@ theses) before saying more.
 ```
 rasputin fetch-stations nve-hrd --out-dir D                       [network]
   fetch/nve.py   reads the packaged HRD list (140 rows), queries NVE's
-                 layers 0 and 38 and ELVIS layer 2 through fetch/http.py,
-                 newest polygon per station, writes D/stations.geojson,
-                 D/reference.geojson, D/rivers.geojson, D/NOTICE.txt,
+                 layers 0 and 38, ELVIS layer 2 and the lake layer 5
+                 through fetch/http.py, newest polygon per station, writes
+                 D/stations.geojson, D/reference.geojson, D/rivers.geojson,
+                 D/lakes.geojson (PR 4), D/NOTICE.txt,
                  D/manifest.json (URLs, date, sha256)
 
 rasputin station-catchments --dem ... --stations D/stations.geojson
-        --rivers D/rivers.geojson [--reference D/reference.geojson] --out-dir O
+        --rivers D/rivers.geojson [--reference D/reference.geojson]
+        [--lakes D/lakes.geojson] --out-dir O
                                                                     [offline]
   cli.py         paths stop here: io/station_set.py and io/rivers.py read the
                  files into Station and RiverSegment models and reference
@@ -1167,7 +1292,10 @@ rasputin station-catchments --dem ... --stations D/stations.geojson
   catchment_batch.run_batch(request, repository, stations, segments, references, sink)
      for each station, in file order, one at a time:
        gauge.place(Gauge(station), segments) -> Placement | None   [pure, shapely, no DEM]
-       catchment.delineate(CatchmentRequest(seed=station, seed_crs=crs,
+       gauge.lake_seed(gauge, placement, lakes) -> LakeSeed | None  [pure, PR 4]
+       a lake seed: catchment.delineate(CatchmentRequest(seed=lake_seed.point,
+                        lakes=lake_seed.lakes), repository)          (22's path)
+       otherwise:   catchment.delineate(CatchmentRequest(seed=station, seed_crs=crs,
                                             reach=placement.reach), repository)
          window loop (22's), seeded by the placed node:
            burn.burn_reach(window, reach) -> burnt window, GaugePath  [numpy, no shapely]
@@ -1772,6 +1900,117 @@ uncertain per size band.
 **Cost and novelty.** One gather from arrays that already exist. It is a
 diagnostic, not a method claimed (see Novelty).
 
+### Lake gauges: the lake is the seed (PR 4)
+
+Ola's ruling of 2026-10-05 ("Ola's rulings", last block). A gauge on a lake
+is seeded as increment 22 seeded Bygdin: **every DEM node inside the lake's
+polygon is a seed**, through 22's own path (`CatchmentRequest` with `lakes`
+and `lakes_crs`, `reach` None), so no chain is burnt across the lake and no
+sensitivity is read along it. `catchment.py` does not change. The evidence is
+"NVE's lakes: Innsjødatabasen" (41 `match` of the 48 stations the rule
+below picks; of the 8 lake gauges PR 2's path ran in full, 2 were `match`).
+
+**Which stations: `gauge.lake_seed`** (pure, shapely, no DEM; beside
+`place`, whose `Placement` it reads):
+
+```python
+LAKE_GAP_M = 30.0  # metres in the river file's CRS; see below
+
+@dataclass(frozen=True, slots=True)
+class Lake:                  # io/station_set.py; one polygon part
+    number: int | None       # NVE's vatnlnr; None for null or 0
+    name: str | None         # navn
+    polygon: Polygon         # in the lake file's CRS
+
+class LakeSeed(BaseModel):   # frozen; arbitrary types allowed
+    rule: Literal["inside", "lake_line"]
+    point: tuple[float, float]  # the station (inside) or P (lake_line), river file's CRS
+    lakes: tuple[Lake, ...]     # the lakes whose polygon contains `point`
+    distance_m: float           # from the station to the lake; 0 inside
+
+def lake_seed(gauge: Gauge, placement: Placement | None, lakes: Sequence[Lake],
+              *, gap: float = LAKE_GAP_M) -> LakeSeed | None
+```
+
+1. **`inside`**: the station point lies inside a lake polygon
+   (`Polygon.contains`, strict, as 22's `_lake` tests it). The point is the
+   station. This holds with or without a placement.
+2. **`lake_line`**: otherwise, the placement exists, its chosen line is a
+   lake line (`Placement.lake`), the mapped position `P` lies inside a lake
+   polygon, and the station's distance to that polygon is at most `gap`
+   (`<= gap + 1e-6`, the corridor's slack). The point is `P`. The lake is
+   found by geometry, not by the lake number, so a lake line without one
+   (`97.1.0`) still finds its lake; the number is only reported.
+3. Otherwise `None`: PR 2's river path, unchanged, including the `no_river`
+   refusal when there is no placement.
+
+`lakes` in `LakeSeed` are all the lakes containing `point`: one with NVE's
+data (none of the 140 stations is within 30 m of two). Two, from a user's
+file with overlapping polygons, reach 22's `_lake`, which refuses ("the
+seed point ... is in 2 lakes; give one", a `LakeError`, so a `CatchmentError`):
+a `refused` row with cause `other`. A MultiPolygon lake is split into its
+parts by the reader, each a `Lake` with the same number and name (22: "a
+multipolygon contributes the part containing the point").
+
+**`LAKE_GAP_M` = 30 m** is `U`'s floor ("Placing the gauge", step 3), three
+cells of DTM10, set before the lake seeds were run, not tuned to their
+agreement. It assumes a metric CRS of metres (EPSG:25833) and was checked on
+the 140 HRD stations only: at 30 m the rule picks 48; at 52 m it would add
+`12.197.0`, and at 460 m `22.16.0`, whose line is another lake's ("NVE's
+lakes"). The gap applies to `lake_line` only; `inside` needs none.
+
+**Why it stays position-faithful** (Ola's residual-inflow goal: never
+area-maximising). No rule reads an area, a count or the reference: the lake
+is chosen by containment and one distance. A gauge on a lake measures the
+lake's outflow, and every lake node drains to the outlet, so the gauge's
+catchment is everything that drains into the lake: the set the seed labels,
+the same from any position on the lake. The seed can add area the gauge
+does not see in two ways, both measurable: (a) a polygon that reaches past
+the real outlet (22's Bygdin: CORINE's polygon ended at x 168460, about
+370 m past the dam at x 168087), which adds what drains into that stretch;
+(b) a station on a river flowing into the lake whose nearest line in its tier
+is the lake's, which would add the lake's other inflows. The tiers make (b)
+unlikely (44 of the 48 lake lines carry the station's own watercourse number,
+the other 4 its river's name), and the acceptance lists every lake row whose
+ours-in-NVE's is under 95 % with the cause (`26.29.0` is one; "NVE's
+lakes"). The seed misses area in two ways, which are deficits, never extra
+area: a station outside the polygon (at most 30 m) on the river below the
+outlet loses what drains into those metres; and a station inside a lake that
+is not the one it gauges gets that lake's smaller catchment (`83.2.0`). **A
+gauge farther below the outlet** than the gap, or inside no lake, stays on
+the river path: its catchment is the placed node's, which holds the lake
+through the DEM's own drainage and nothing below the gauge. 24 stations have
+a lake on their reach within `reach_up` above `P`; the four of them in PR 2's
+full runs (`2.633.0`, `55.4.0`, `83.12.0`, `101.1.0`) agree with NVE's
+polygons to at least 97.1 % both ways. Seeding the lake together with the
+river from its outlet down to such a gauge is not built (question 10).
+
+**What a lake row has, and has not.** No chain, no burn and no sensitivity:
+`Catchment.gauge` is None, so the row's gauge, burn and sensitivity columns
+are empty, `causes` is empty, and `classify(agreement, None)` decides from
+the agreement alone (the rule PR 4 already has for a station with no gauge),
+so a lake row is never `uncertain`. The sensitivity measures how the area
+changes along the river within `U`; on a lake every position gives the same
+seed, so the swing is 0 by construction, and the counts PR 2 read along a flat
+lake (Narsjø's −33 %) measured the burn's 1 mm-per-node channel, not the
+gauge. What remains uncertain, whether the station is on this lake, is
+reported (`lake_rule`, `lake_distance_m`), not scored. The window loop and
+the memory cap are 22's (the lake's bounds plus the margin; item size + 2
+bytes per node).
+
+**The row and the summary.** `StationResult` gains, after `reach_fork` (so
+the catchment file's properties "from `placed_on` to `causes`" carry them):
+`seeded_by` (`"river"` or `"lake"`; None when `place` refused), `lake_rule`,
+`lake_number`, `lake_name`, `lake_distance_m` (None on a river row).
+`Summary` gains `by_seed`, the groups `river` and `lake` with a band's
+contents (`stations`, `classes`, `uncertain_share`, the three measures). The
+stderr line of a lake row adds `(seeded by the lake Narsjøen)` after the
+class word, or the lake's number when it has no name, or "its lake" when it
+has neither. The lakes file must be in the river file's CRS, as the
+references must ("The batch"); otherwise `station-catchments` refuses,
+naming `--lakes` and both CRSs, and writes nothing. Without `--lakes` there
+is no lake path and the batch is PR 4's as it stands.
+
 ### Residual inflow, later: what 29 keeps open
 
 **Not built here.** Ola plans to compute the residual inflow to rivers: for
@@ -1859,6 +2098,14 @@ licence_note=...)`. `fetch/nve.py`:
   squares were queried (28 s for 140); at 4 km the answer is larger, and a
   reply flagged `exceededTransferLimit` is refused, naming the station, so a
   truncated river never reaches `place`;
+- **queries the lake layer once per station** (PR 4, "Lake gauges"), by
+  envelope: the station point ± 100 m (`LAKE_ENVELOPE_HALF`; any lake within
+  `LAKE_GAP_M` of the station meets it, and the service returns whole
+  features), `outFields=objectid,vatnlnr,navn,areal_km2`,
+  `outSR=25833&f=geojson`, through the same `_url` and `_features` (so a
+  truncated answer is refused, naming the station); the ELVIS envelope query
+  and this one share one envelope-URL function. Lakes seen from several
+  stations are kept once, by `objectid`;
 - refuses, naming the station, when a listed station has no point or no
   polygon; keeps the newest polygon per station (above) and records its
   update date and how many versions there were;
@@ -1870,7 +2117,9 @@ licence_note=...)`. `fetch/nve.py`:
   `reference.geojson` (one feature per station, the polygon, `station`,
   `reference_area_km2`, `reference_updated`, `versions`), `rivers.geojson`
   (one LineString per segment, the seven fields above; copies are kept as
-  served and dropped by `read_segments`), all with a `crs`
+  served and dropped by `read_segments`), `lakes.geojson` (PR 4: one feature
+  per lake, the geometry as served, Polygon or MultiPolygon, the four fields
+  above, in `objectid` order), all with a `crs`
   member, `NOTICE.txt` (the catalogue's credit, "Kilde: NVE", as 23a-2's
   `notice` does), and `manifest.json` (the query URLs, the fetch time in UTC,
   each file's sha256). Deterministic order: the list file's, then `objectid`.
@@ -1881,7 +2130,11 @@ licence_note=...)`. `fetch/nve.py`:
 
 **`io/station_set.py`** reads the stations and references back:
 `read_stations(path) -> (tuple[Station, ...], crs)`, `read_references(path)
--> (Mapping[str, Polygon | MultiPolygon], crs)`; **`io/rivers.py`**
+-> (Mapping[str, Polygon | MultiPolygon], crs)`, and (PR 4) `read_lakes(path)
+-> (tuple[Lake, ...], crs)`, which splits a MultiPolygon into its parts, reads
+`vatnlnr` null or 0 as no number, and refuses, naming the feature's
+`objectid` (or its index when it has none), a geometry that is not a Polygon
+or MultiPolygon, or is empty or has area 0; **`io/rivers.py`**
 `read_segments(path) -> (tuple[RiverSegment, ...], crs, dropped)`, where
 `dropped` is the count of exact copies removed by the pure
 `drop_copies(segments) -> (kept, dropped)`. All refuse a file
@@ -1979,8 +2232,18 @@ async def run_batch(request: BatchRequest, repository: DemRepository,
                     stations: Sequence[Station], stations_crs: str,
                     segments: Sequence[RiverSegment], segments_crs: str,
                     references: Mapping[str, BaseGeometry] | None,
-                    sink: BatchSink) -> Summary
+                    sink: BatchSink,
+                    lakes: Sequence[Lake] | None = None) -> Summary  # PR 4, "Lake gauges"
 ```
+
+- **The path, per station** (PR 4, "Lake gauges"): after `place`, with
+  `lakes` given, `gauge.lake_seed(gauge, placement, lakes)`; a `LakeSeed`
+  gives `CatchmentRequest(seed=lake_seed.point, seed_crs=segments_crs,
+  lakes=tuple(l.polygon for l in lake_seed.lakes), lakes_crs=segments_crs,
+  outline_tolerance=...)`, and `None` gives the reach request as before. A
+  station with no placement goes to the `no_river` refusal only when
+  `lake_seed` is `None`. `lakes` are in the river file's CRS, as the
+  references are; the command checks it.
 
 - **One station at a time**, each `delineate` in `asyncio.to_thread`: a
   flood of a large catchment takes gigabytes, and two at once would race for
@@ -2032,7 +2295,7 @@ station; the earlier name `catchments` differs from `catchment` by one letter):
 
 ```
 rasputin station-catchments --dem PATH [--dem PATH ...] --stations FILE
-                    --rivers FILE [--reference FILE] [--map-radius METRES]
+                    --rivers FILE [--reference FILE] [--lakes FILE] [--map-radius METRES]
                     [--reach-up METRES] [--only ID ...]
                     [--outline-tolerance METRES] --out-dir DIR [--out-parent DIR]
 ```
@@ -2119,6 +2382,20 @@ is `reference.py` (pure; its own suite, `test_reference.py`) with
 `MixedGridError` and `MixedGridRefusal`, about 200 lines, as one PR, and
 the batch, the command and the moved writer as the next.
 
+**Lake gauges (Ola, "Fold into PR4") add about 100 lines**: the six rows
+marked "Lake gauges" in the table. PR 4 then comes to about 673 net, 27
+under 700; with the 44 % margin on the new lines, about 717. PR 4's own
+green ran 58 % over its estimate, so passing 700 is likely, not certain. The
+ceiling is the rule (CLAUDE.md §2), so **the seam is named now**: if the lake
+green step's count over the whole PR passes 700, PR 4 is published as it
+stood at `48d1315` (573 net, its review done), and the lake work, whose red
+and green commits all come after that commit, becomes **PR 4b, lake gauges**,
+on top of it (about 100 to 145 lines, its own review). Ola's "fold into PR
+4" is then kept in substance, one branch and one review round of the lake
+work before the acceptance run, but not as one pull request; the main
+session tells Ola so in the round's recap. Nothing is split before the count
+says so.
+
 | File | What | Estimate |
 |---|---|---|
 | `include/terrain/hydrology/flood.hpp` | the shared flood, moved out of `upstream.hpp` | 45 |
@@ -2148,7 +2425,13 @@ the batch, the command and the moved writer as the next.
 | `cli.py` | `station-catchments`, the directory sink | 80 (140 net at green, the writer's lines removed; 147 at `33b1f2d`; 172 at `cabff74`; 173 at `f952f2d`) |
 | `io/station_set.py` | a reference polygon with no area refused (change (b)) | (4 at `33b1f2d`) |
 | `io/geojson.py` | the moved writer (moved from PR 3 after its code review, round 1) | 25 (cli.py −25; 21 at green) |
-| **PR 4, the batch and the comparison** | | **about 335 (482); 530 net (567 added) at green `1c39ef7`; 541 net (580 added) at `33b1f2d`; 572 net (614 added) at `cabff74`; 573 net (615 added) at `f952f2d`** |
+| `fetch/nve.py` | lake layer 5: its allow-list and layer, one envelope-URL function for ELVIS and lakes, the per-station lake query, `lakes.geojson` ("Lake gauges") | 17 |
+| `io/station_set.py` | `Lake`, `read_lakes` | 20 |
+| `gauge.py` | `LAKE_GAP_M`, `LakeSeed`, `lake_seed` | 18 |
+| `catchment_batch.py` | the `lakes` argument, the path per station, five columns | 18 |
+| `reference.py` | `by_seed` | 6 |
+| `cli.py` | `--lakes`: option, reading, CRS check, the stderr words | 20 |
+| **PR 4, the batch and the comparison** | | **about 335 (482); 530 net (567 added) at green `1c39ef7`; 541 net (580 added) at `33b1f2d`; 572 net (614 added) at `cabff74`; 573 net (615 added) at `f952f2d`; with lake gauges about 673 (about 100 more; 717 with the margin on them)** |
 | `catchment.py`, `cli.py`, `catchment_batch.py` | the fallback (below) | 80 |
 | **PR 5, the fallback** | | **about 80 (115)** |
 
@@ -2190,7 +2473,11 @@ inputs are files or arrays, not another PR's types.
   rule cannot tell two lines with the same number apart, so it picks the
   same line, and the catchment is 0.0012 km² against NVE's 119 km² (marked
   uncertain). Whether the river's name as a tie-break within a tier would
-  help is untested. (b) **Burns that lower a node by tens of metres**:
+  help is untested. **Resolved for Narsjø by the lake seed** (its point lies
+  inside Narsjøen; 98.2 % / 97.5 %, "NVE's lakes"). PR 4 also takes the lake
+  gauges ("Lake gauges"), which changes PR 3's merged `fetch/nve.py` (the
+  lake layer, `lakes.geojson`) and `io/station_set.py` (`read_lakes`): PR 4
+  touches PR 3's code, not its rules, and "Data use" gains the lake layer. (b) **Burns that lower a node by tens of metres**:
   `88.4.0` Lovatn by 41.4 m, `2.284.0` Sælatunga by 22.7 m, `62.10.0`
   Myrkdalsvatn by 20.0 m (`survey.csv`, column `lowered_max_m`); why is not
   looked at.
@@ -2486,6 +2773,49 @@ use" below):
   stderr lines; `--reference` absent gives catchments and no scored classes;
   a station or river file without `crs` is refused.
 
+**PR 4, lake gauges** (`@tester`, lean, one red commit after `48d1315`, so
+the split of "New and changed files" stays mechanical; hand-built polygons
+and the existing fixtures, no network):
+
+- `test_gauge.py`, `lake_seed`: a station inside a lake gives `inside`, the
+  station as the point and that lake, with a placement on a river line and
+  with no placement at all; a station outside every lake, placed on a lake
+  line whose `P` lies in a lake 20 m from the station, gives `lake_line`
+  with `P` as the point and `distance_m` 20; the same at exactly 30 m gives
+  it, at 30.5 m gives `None`; placed on a river line 10 m below a lake
+  (station outside it) gives `None`; placed on a lake line whose `P` is in
+  no polygon gives `None`; no placement and a lake 14 m away gives `None`
+  (Femundsenden, question 9's default); a station inside two overlapping
+  polygons gives a `LakeSeed` holding both; no rule reads an area (two
+  lakes of very different size, the station inside the smaller, gives the
+  smaller).
+- `test_station_set.py`, `read_lakes`: a MultiPolygon feature gives one
+  `Lake` per part, same number and name; `vatnlnr` 0 and null give number
+  None; no `crs` member, a LineString, an empty geometry and a zero-area
+  ring are each refused naming the feature's `objectid`.
+- `test_fetch_nve.py`: the fake service answers layer 5 (in
+  `nve_fixtures.py`); each lake request names exactly
+  `objectid,vatnlnr,navn,areal_km2` (never `*`, `globalid` or `kommune`) and
+  the station point ± 100 m as its envelope, one request per station; a lake
+  seen from two stations is written once; a truncated lake answer is refused
+  naming the station; `lakes.geojson` is in the files and the manifest, and
+  reads back through `read_lakes`; an output directory holding the four
+  older files but no `lakes.geojson` is fetched again without `--refresh`.
+- `test_catchment_batch.py`: on `gauge_fixtures.two_basins()`, a lake
+  polygon drawn over one basin's lowest part and a station inside it gives
+  a row with `seeded_by` `lake`, `lake_rule` `inside`, the gauge, burn and
+  sensitivity columns None, `causes` empty, and a catchment equal to
+  `delineate` with that lake (22's path) run directly; with a reference
+  drawn from that catchment it is `match`, never `uncertain`; the same
+  station without `lakes` keeps its river row; `summary.by_seed` counts one
+  of each; a station inside two overlapping lakes is `refused` with cause
+  `other` and the batch goes on.
+- `test_cli_station_catchments.py`: `--lakes` writes the five columns and
+  the stderr words "(seeded by the lake <name>)"; a lakes file in another
+  CRS (EPSG:32633) is refused naming `--lakes` and both CRSs, before
+  `--out-dir` is created; without `--lakes`, every row is a river row and
+  the five new columns are empty.
+
 **PR 5, Python**: `test_nearest_stream.py`: with two streams, one nearer and
 smaller and one farther and larger, the nearer wins (the rule does not look
 at area); the threshold at its boundary; no qualifying node is refused; a
@@ -2502,7 +2832,7 @@ batt`, the manifest of the fetched station set (its sha256 values, since the
 service can change) and the outputs that are not NVE's data:
 
 1. `rasputin fetch-stations nve-hrd` into `../rasputin_data/nve_hrd`.
-2. `rasputin station-catchments` over all 140 at the defaults (map radius
+2. `rasputin station-catchments` over all 140, with `--lakes`, at the defaults (map radius
    500 m, reach 1000 m, corridor 30 m, outline tolerance); wall time and peak
    memory per station and in total. Expected (estimate, not a measurement):
    the catchments total about 610 M nodes, the final window holds three
@@ -2516,7 +2846,13 @@ service can change) and the outputs that are not NVE's data:
    each `uncertain` gets its causes from the sensitivity (confluence step and
    where, flat floor or lake, downstream side not read to `U`, chain not
    draining, chain end open, line against the slope);
-   `close` rows are summarised by cause. **Expected refusals**: the two
+   `close` rows are summarised by cause. **Lake rows** (`seeded_by` `lake`)
+   are reported apart, by class; each with ours-in-NVE's under 95 % gets a
+   line saying where the extra area lies (a polygon past the outlet, a
+   station on an inflow, a divide; `26.29.0` is expected), and each with
+   NVE's-in-ours under 95 % one saying why (`83.2.0` is expected). The river
+   rows with a lake on their reach above `P` (24 in "NVE's lakes") are listed
+   apart with their classes: that list answers question 10. **Expected refusals**: the two
    Finnish-border stations (NoData), the nine shifted-tile stations
    (`refusal_cause = "mixed_grid"`, each row naming one tile from each grid; reported
    apart as known refusals, not failures, Ola's ruling; the README's line
@@ -2527,7 +2863,9 @@ service can change) and the outputs that are not NVE's data:
    `156.24.0` and `213.4.0`, whose catchments lie on shifted tiles only, but
    whose 2 km window margin may reach a normal tile; if either is refused
    `mixed_grid`, its line says so and it is counted with the known refusals,
-   by cause, not as a failure.
+   by cause, not as a failure. So are `191.2.0` and `203.2.0`, which the lake
+   seed's probe saw refused on two grids ("NVE's lakes") though neither is
+   among the nine.
 5. **The comparison with nearest stream** (after PR 5): the fallback at 250 m
    on every `miss` and `uncertain` station, the class under each rule side by
    side, and the fallback on Femundsenden. It measures what the mapped river
@@ -2567,8 +2905,9 @@ rulings"; the way a gauge is placed follows your direction. Questions 1 to 4
 below are ruled and closed (2026-10-04): question 2 as its entry says, questions 1,
 3 and 4 with their defaults ("Yes to all three."). Questions 5 and 6 came
 from PR 2 (2026-10-05), 7 from its placement figures (the same day), and 8
-from PR 4's green step (the same day); all four are open, and the design and
-the code follow their defaults until Ola rules.
+from PR 4's green step (the same day), 9 and 10 from the lake-gauge design
+(the same day); all six are open, and the design and the code follow their
+defaults until Ola rules.
 
 1. **When is a station too uncertain to score?** A gauge's coordinates are
    usually a few tens of metres off the river, and further for some. For each
@@ -2639,7 +2978,9 @@ the code follow their defaults until Ola rules.
    Default: mesh Atnasjø (`2.32.0`) instead*, a lake gauge whose catchment
    (459.8 km²) agrees with NVE's to 98.4 % one way and 99.2 % the other.
    Alternative: keep Narsjø and fix its placement first (PR 4's tier
-   design; see "The PR split"), or pick another station.
+   design; see "The PR split"), or pick another station. The lake seed
+   ("Lake gauges") now gives Narsjø a catchment that agrees with NVE's to
+   98.2 % and 97.5 %, so keeping Narsjø is possible once that lands.
 8. **Which area is "our area" in the comparison table.** Two areas of our
    catchment are close to each other but not equal: the number of DEM
    points inside our outline times the area of one cell, and the area of
@@ -2654,6 +2995,28 @@ the code follow their defaults until Ola rules.
    table, so that it equals the file's figure; the area ratio then drops
    by half a cell over NVE's area (0.005 % on a 1 km² catchment), and a
    new test pins it.
+9. **A lake gauge with no river line near it.** Femundsenden (`311.4.0`)
+   has no mapped river line within 500 m, but its point is 14 m from the
+   lake Femunden. A station is seeded with a lake when its point lies in
+   the lake, or when the river map puts it on the lake's line and it is
+   within 30 m of the lake. Femundsenden meets neither, because there is no
+   river line to say which way the water runs past it: a station on a river
+   flowing into a lake would wrongly get the whole lake's catchment.
+   *Default: no; Femundsenden stays refused until the nearest-stream
+   fallback (PR 5).* Alternative: seed with a lake within 30 m when there
+   is no river line (a few lines; Femundsenden would then get
+   Femunden's catchment).
+10. **A gauge a little below a lake's outlet.** 24 stations sit on the river
+   within 1 km below a lake. They keep the river method: the river is
+   followed from the gauge up onto the lake, and the catchment is
+   everything that drains through the gauge, the lake included. The four of
+   them already run in full agree with NVE's catchments to 97 % or better.
+   *Default: keep the river method for them, and let the full run's list of
+   these 24 show whether any fails.* Alternative: seed them with the lake
+   plus the river from the outlet down to the gauge. That needs the
+   catchment code to combine a lake and a river stretch, which it refuses
+   today, and a new rule for the position check, about 60 more lines, past
+   PR 4's limit, so a later PR.
 
 ## Review
 
