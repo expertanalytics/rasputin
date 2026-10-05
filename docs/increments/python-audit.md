@@ -47,9 +47,11 @@ fixes; then push on Ola's yes.
 
 PR C (`audit-geojson-io`, F5) is designed in section 10, on branch
 `worktree-audit-geojson` from PR B's head `fe12bbb` (B lands first). Design
-review round 1 (`151d35f`) is recorded below and its six fixes are in
-section 10. Next: `@reviewer`'s design review round 2; then `@tester`'s red
-commit (section 10, "Red tests"), then `@developer`.
+review rounds 1 (`151d35f`) and 2 (`957cac9`) are recorded below and their
+fixes are in section 10. Next: `@reviewer`'s design review round 3 (rerun
+the `git merge-tree` and `git merge-file` checks of section 10's overlap
+rule); then `@tester`'s red commit (section 10, "Red tests"), then
+`@developer`.
 
 Re-checked against master `44fa7f5`: `git diff --stat 12dace7 44fa7f5 --
 src_python` is empty, and of the files cited below only `tools/brief.py`
@@ -1319,9 +1321,13 @@ a wrong line. No citation points into the test files this PR edits.
 
 Branch `worktree-audit-geojson`, from PR B's head `fe12bbb`; B lands first,
 and every citation in this section is pinned to `fe12bbb`. PR F
-(`worktree-audit-catchment`, head `e2baa5f`) edits some of the same lines,
-so whichever merges second resolves these by hand (`git diff
-b63132e worktree-audit-catchment`, `b63132e` the two branches' merge base):
+(`worktree-audit-catchment`, head `e2baa5f`) edits some of the same lines.
+The rule, not a hand list: whichever of C and F merges second runs `git
+merge-tree --write-tree <its head> master` and resolves every file it
+names; edits designed but not yet committed (the red and green commits) are
+checked with `git merge-file` on scratch copies of the file at F's head, the
+merge base `b63132e`, and the design applied to C's head. The merged texts
+worked out so far, as examples:
 
 - `src_python/tin_engine/io/station_set.py`: F drops the `dataclass` and
   `pydantic` imports and adds `from tin_engine.hydrography import Lake,
@@ -1334,11 +1340,21 @@ b63132e worktree-audit-catchment`, `b63132e` the two branches' merge base):
   C adds `read_nve_lakes`. Merged: F's line plus `read_nve_lakes`.
 - `tests/python/test_layering.py`: the `io.station_set` row (F: `crs
   hydrography io.repository`; C: `io.geojson io.repository`; merged:
-  `hydrography io.geojson io.repository`); the `cli` row (F adds
+  `hydrography io.geojson io.repository`; F's `io.rivers` row above it is
+  in the same hunk and keeps F's text); the `feature_input` row (C adds
+  `io.geojson`; F rewrites the `catchment` row under it, so the two make one
+  hunk; merged: C's `feature_input` row and F's `catchment` row); the `cli` row (F adds
   `hydrography`, C adds `io.domain_file` on the same line; merged: F's string
   with `io.domain_file` after `io.cog`, re-wrapped under 100 characters); and
   the `UPWARD` block (F deletes the three `F, audit-catchment-shared` lines,
   C deletes `("chains", "feature_input")` beside them; merged: all four go).
+- `docs/increments/25-plain-output.md` line 274 (the `features_notice`
+  row): both pin its `cli.py` citation to `44fa7f5`; C also pins
+  its `feature_input.py` citation to `44fa7f5`, F leaves it bare. Merged: C's line.
+- `src_python/tin_engine/catchment.py`'s imports: B (in C's history) adds
+  `same_crs, single_crs` to the `tin_engine.crs` import, and F replaces the
+  `_core` and `burn` imports beside it; merged: F's block with B's `crs`
+  line. This is a B and F conflict, whichever of them merges second.
 - This file: each branch adds its own section after section 9 and edits the
   status paragraph and section 6; merged, both stand.
 
@@ -1745,3 +1761,5 @@ so they describe the code as written.
 **PR B (`audit-crs-helpers`), code review, round 2, 2026-10-05.** Head `65cd528`. Verdict: CHANGES REQUESTED, prose only. LOC: +22 net production (`count_loc.py 44fa7f5 65cd528`). Blocking, all `@architect`: the stale status paragraph, the unrecorded +22, section 6's row B; design note: the hint also shows for `OGC:CRS84` and a datum-WGS84 UTM string against an EPSG DEM. Fixed in this file (status, section 6, section 9 "Net production lines" and "After the round-1 red step"); no code change.
 
 **PR C (`audit-geojson-io`), design review, round 1, 2026-10-05.** Head `151d35f`. Verdict: CHANGES REQUESTED, prose only. Blocking, all `@architect`: (1) the claim that PR F conflicts only in `cli.py`'s imports is false (F also edits `io/station_set.py`'s imports and `__all__`, `test_layering.py`'s `io.station_set` row and `UPWARD` block, and this file); (2) `--domain` would decode bytes unlike `--features` (`read_text` against `read_json`); (3) "UTF-8, as RFC 7946 requires" is wrong (RFC 7946 section 11.1 points to I-JSON); (4) section 9's three short citations unpinned; (5) the matrix's string-member wording; (6) "29 calls" is 27. Suggestions: section 6's total, line 101 of the legacy `web_visualize`, `--domain` reading a collection with no `type`, the docstrings the green commit rewrites. All fixed in section 10 (and sections 6 and 9); the `cli` row of `test_layering.py` and `cli.py`'s `station_set` import line were found to conflict with F as well; `read_domain` reads GeoJSON through `read_json`, about +24 net.
+
+**PR C (`audit-geojson-io`), design review, round 2, 2026-10-05.** Head `957cac9`. Verdict: CHANGES REQUESTED, prose only. Blocking (`@architect`): the PR F overlap list missed `test_layering.py`'s `feature_input` row (one hunk with F's rewritten `catchment` row) and `docs/increments/25-plain-output.md` line 274 (pinned differently by C and F). Fixed in section 10: the hand list is replaced by a rule (the second of C and F to merge runs `git merge-tree --write-tree` and resolves every file it names; designed edits are checked with `git merge-file` on scratch copies), the worked merges kept as examples with the two missing ones added, and B and F's conflict in `catchment.py`'s imports named.
