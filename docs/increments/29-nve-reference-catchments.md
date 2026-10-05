@@ -1,6 +1,6 @@
 # Increment 29 — NVE reference catchments: our catchments against NVE's, station by station
 
-Status: **design approved by `@reviewer` (round 5, 2026-10-04); PR 1 merged as #173; PR 3 merged as #178; PR 2 (the gauge on the river): green `0588bfa`, 558 production lines; code review round 1 (2026-10-05) asked for changes; the NoData fix next (red test, then code), then review round 2; questions 5 and 6 open for Ola, written to their defaults**
+Status: **design approved by `@reviewer` (round 5, 2026-10-04); PR 1 merged as #173; PR 3 merged as #178; PR 2 (the gauge on the river): green `96b3881`, 568 production lines; code review round 2 (2026-10-05) asked for changes; the NaN fix next (red test, then code), then review round 3; questions 5 and 6 open for Ola, written to their defaults**
 (`@architect`, 2026-10-04), branch `worktree-nve-catchments` off master
 `d20126b`. Ola's rulings of 2026-10-04 are in the section below. Round 2 closed the burn's drainage claim
 (checked node by node, not assumed), the ELVIS data cases, the PR order, and
@@ -272,6 +272,38 @@ turns a `MosaicError` into one); in `sensitivity.py`, the comment at lines
 71-72 says what "Sensitivity", step 2, now says about `D` (past `U` its
 flags do not matter; a node exactly at `U` is a sample and must be
 trusted). A few lines; no other rule changes.
+
+**PR 2's code review, round 2 (2026-10-05): NaN cells, and the refusal's
+own type.** `@reviewer` found that `burn_reach` builds its data mask as
+`raw != m.nodata`, all true when `nodata` is None
+(`src_python/tin_engine/burn.py@96b3881:134`), while the core counts a NaN
+cell as NoData whatever the sentinel (`include/terrain/raster/raster.hpp`,
+`is_nodata`) and `RasterMeta` never holds a NaN sentinel
+(`src_python/tin_engine/io/models.py`, `nodata` with `allow_inf_nan=False`;
+`io/geotiff.py` reads a NaN tag as no sentinel). So a float DEM gapped with
+NaN reaches `burn_reach` with `nodata` None, every NaN cell is "data", and
+the reviewer's probe gets no refusal, `lowered_max_m` NaN, the sensitivity
+well posed and NaN in the catchment file. The design now says a NaN cell is
+NoData ("Following the river", step 2, "No NoData on the chain"). Separately,
+`_burnt_flood` turns any `ValueError` from `burn_reach` into a
+`CatchmentError`, and stage B's `except CatchmentError: pass`
+(`src_python/tin_engine/catchment.py@96b3881:290`) would then swallow an
+ordinary bug that happens to raise `ValueError`. **Red** (`@tester`, lean):
+in `test_burn.py`, the parametrized NoData-on-the-chain test gains a third
+case, float32 with `nodata` None and `z[20, 21]` NaN, refused with the gap
+message; the same NaN case at the `delineate` level in `test_catchment.py`
+(the gap downstream of the placed node, `CatchmentError` with the gap
+message); and the refusals of `burn_reach` (the gap, the placed position
+outside the window, no data node near the reach) are pinned as
+`burn.BurnRefusal`, a `ValueError` subclass. The NaN cases must fail on
+`96b3881` by not raising; the subclass pins fail on the missing name. Say
+so in the handback. **Green** (`@developer`): in `burn.py`, the mask
+excludes NaN, for example `~np.isnan(raw)`, combined with `raw != m.nodata`
+when `nodata` is set; it is the one mask the cross-section, the chain
+check and the extension already share, so nothing else changes there.
+`class BurnRefusal(ValueError)` in `burn.py`, raised by those three
+refusals; `_burnt_flood` catches `BurnRefusal` only and turns it into a
+`CatchmentError` with the same words. A few lines; no other rule changes.
 
 ## What the data says (measured 2026-10-04)
 
@@ -1059,13 +1091,23 @@ moved to the valley floor, then lowered where it still climbs:
    cut, before the direction check, every node of the taut chain must have
    data**; if one has none, the station is refused, with the plain message
    "the river line crosses a gap (NoData) in the DEM at (x, y): the station
-   is refused" (`ValueError` from `burn_reach`, a `CatchmentError` from
-   `delineate`, like the window's NoData refusal). Nodes the cut dropped are
-   never burnt or read and are not checked. One check covers every reader:
+   is refused" (`BurnRefusal`, a `ValueError` subclass, from `burn_reach`, a
+   `CatchmentError` from `delineate`, like the window's NoData refusal;
+   only `BurnRefusal` is turned into a `CatchmentError`, so stage B's
+   `except CatchmentError` cannot swallow an ordinary bug). Nodes the cut dropped are
+   never burnt or read and are not checked. **A NaN cell is NoData**, as
+   in the core (`include/terrain/raster/raster.hpp`, `is_nodata`: NaN
+   whatever the sentinel), for the cross-section's choice, this check and
+   the extension alike: one mask, a node with data being one that is
+   neither NaN nor equal to the sentinel when there is one. `RasterMeta`
+   never holds a NaN sentinel (a NaN tag is read as no sentinel), so a
+   NaN-gapped float DEM arrives with `nodata` None and its gaps only as NaN
+   cells (PR 2's code review, round 2). One check covers every reader:
    the placed node is a taut-chain node, the direction check and the
    descent read only taut-chain nodes, and the extension never takes a
-   NoData node (step 5). Stage B's windows give the same chain as stage A's
-   (the first window already holds the reach and its corridor), so the
+   NoData node (step 5). Stage B's windows give the same taut chain as stage A's
+   (the first window already holds the reach and its corridor; stage B's
+   extension can run further, but the extension never takes NoData), so the
    refusal comes from stage A. Refused, not rerouted: going round the gap
    (which side, how far) would be a new placement rule. Probe
    (`@architect`, 2026-10-05, a throwaway script, not committed), float32,
@@ -1676,7 +1718,9 @@ more (the river file's reading and CRS check, the options' checks and help,
 the placement report). With the second red amendment's green
 (`0588bfa`) it is 558 net (578 added, 20 removed; `burn.py` 167,
 `gauge.py` 117, `sensitivity.py` 85, `catchment.py` 94, `cli.py` 95);
-the NoData fix of code review round 1 adds a few lines.
+with the NoData fix of code review round 1 (green `96b3881`) it is 568 net
+(588 added, 20 removed; `burn.py` 174, `catchment.py` 97, the others as
+before); the NaN fix of round 2 adds a few lines.
 
 | File | What | Estimate |
 |---|---|---|
@@ -1695,12 +1739,12 @@ the NoData fix of code review round 1 adds a few lines.
 | `NOTICE.md`, `project_structure.md` | NVE's credit; the new modules | docs |
 | **PR 3, the stations and rivers** | | **about 355 (511 with the margin)** |
 | `gauge.py` | `Gauge`, `Placement`, `place`, forks, `Reach` | 100 (117 at green) |
-| `burn.py` | valley floor, taut pass, descent, chain end, direction, `GaugePath` | 105 (167 at green) |
+| `burn.py` | valley floor, taut pass, descent, chain end, direction, `GaugePath` | 105 (174 at green) |
 | `sensitivity.py` | `assess`, `Sensitivity`, `drains`, the causes | 75 (85 at green) |
-| `catchment.py` | request field, stages A and B, burn per window, `GaugeResult` | 95 (94 at green) |
+| `catchment.py` | request field, stages A and B, burn per window, `GaugeResult` | 95 (97 at green) |
 | `cli.py` | `catchment --rivers` and the placement line | 40 (95 at green) |
 | `docs/benchmarks/<date>/nve-placement/render.py` | the placement figures (evidence script, not counted, Ola's ruling; "Placement figures") | (130) |
-| **PR 2, the gauge on the river** (needs PRs 1 and 3) | | **about 415 (598); 558 net (578 added) at green `0588bfa`** |
+| **PR 2, the gauge on the river** (needs PRs 1 and 3) | | **about 415 (598); 568 net (588 added) at green `96b3881`** |
 | `reference.py` | agreement, classes, `match_by`, summary | 115 |
 | `catchment_batch.py` | `BatchRequest`, `BatchSink`, `run_batch`, `StationResult`, `refusal_cause` | 105 |
 | `mosaic.py`, `catchment.py` | `MixedGridError`, `MixedGridRefusal` (round 3, Ola's ruling on counting) | 10 |
@@ -1935,8 +1979,9 @@ built directly or read through PR 3's `read_segments`):
   nearest node; a reach end outside the window is dropped and
   reported, a placed position outside it is refused; **a NoData node on
   the straight join** between two chosen floor nodes refuses the station,
-  with either sentinel, and with data there the reach burns (PR 2's code
-  review, round 1).
+  with either sentinel or with a NaN cell and no sentinel, and with data
+  there the reach burns (PR 2's code review, rounds 1 and 2); its refusals
+  are `BurnRefusal`, a `ValueError` subclass.
 - `test_sensitivity.py`: a smooth gain; a confluence step of known size at a
   known position; a flat floor; a swing of exactly 0.05 is well posed and
   just above it is not; the swing is one-sided (areas 0.04 below and 0.04
@@ -1959,7 +2004,8 @@ built directly or read through PR 3's `read_segments`):
   `downstream_checked` of `partly` or `none` and the cause `downstream_unread`,
   while NoData in the placed
   catchment itself is refused; a NoData node on the chain downstream of the
-  placed node is refused with the gap message; stage B grows the window past stage A's, and
+  placed node is refused with the gap message, and so is a NaN node there
+  on a DEM with no sentinel; stage B grows the window past stage A's, and
   the result equals a whole-raster run; a reach with `lakes` is refused;
   `reach=None` gives 22's result bit for bit.
 - `test_cli_catchment.py` gains: `--rivers` prints the placement line and
@@ -2211,3 +2257,7 @@ Fixes for round 2: A and C by `@tester` in `f91cdaa` (re-cited to `project_struc
 **29 PR 2, code review, round 1, 2026-10-05.** Range `529613a..0588bfa` (red `3a06ffc`, amendment `5357785`, green `91857df`, `@architect`'s reading `6f55af3`, second amendment `3c845da`, green `0588bfa`). Verdict: CHANGES REQUESTED. LOC by tokenize over the five `src_python` files: 578 added, 20 removed, 558 net (`burn.py` 167, `gauge.py` 117, `sensitivity.py` 85, `catchment.py` 94, `cli.py` 95 net). This record uses the net figure, as PR 3's did; against the estimate of about 415 (598 with the 44 % margin) it is inside the margin on either basis, and far under 700. Full suite on a rebuilt `_core`: exit 0, 4799 passed, 17 skipped, the prose-read hook silent; mypy, ruff check, ruff format, prohibited deps, detria boundary and check_citations green. Red before green for both pairs: `5357785` 21 failed and 103 errors, then `91857df` 171 passed; `3c845da` on `91857df` 3 failed, then `0588bfa` 172 passed. The suite can fail on both new rules: the whole-disc floor rule fails 8 tests, and dropping the straight-before-diagonal tie fails the embankment test. No mutation testing owed (only `accumulate`'s oracle is invariant-critical, killed with PR 1); no `bench.py` run (no refine or mesh code). `@perf`'s placement figures are still owed before PR 2 is complete. Blocking: (1) a NoData node on the chain: `_floor_node` never picks NoData, but `_join` (`src_python/tin_engine/burn.py@0588bfa:86-97`) links chosen nodes by straight 8-connected runs without looking at the nodes between, and the taut cut can map the placed node onto one. Probe: float32, NoData −32767, floor in column 20 above row 20 and column 22 below, `z[20, 21]` NoData, line down column 20, corridor 30 m: the chain runs through `(20, 21)` and everything below is burnt to about −32767.002 m; with a positive sentinel (3.4e38) the hole is burnt to 290.499 m and `lowered_max_m` of about 3.4e38 reaches the catchment file; the direction check's means read the sentinel too. Write the rule into step 2, covering the taut cut and the direction check, with the refusal as the default for Ola. (2) "Sensitivity", step 2: "its own count is not a sample and its flags do not matter" holds only where `D` lies past `U`; a node exactly at `U` is a sample in `(0, U]` and must be trusted (a flag at +30 m with `U` = 30 gives `downstream_unread`, which the code does correctly); fix the design, and the comment at `src_python/tin_engine/sensitivity.py@0588bfa:71-72` with the green step. (3) The status line and `ROADMAP.md:54` behind the tree; the estimate block's 556; `25-plain-output.md:53`'s citation of the catchment properties. (4) The upstream-flag rule presented as ruled by `@architect`: mark it provisional, an open question for Ola. Suggestions: state the cross-section's bound (half a step; a downstream lean of 3 to 4.5 m on average on a floor flat across, at 30°) rather than "at most 4.6 m either way"; "a cross-section with no node" also happens when every node in it is NoData; `25-plain-output.md`'s field table (lines 89-98, 110-111, 128) cites `cli.py` lines that no longer quote it: pin them to the revision described. Not pushed; no CI.
 
 Fixes for round 1, by `@architect` in the commit that records it: (1) "No NoData on the chain" in step 2 (refuse after the taut cut, before the direction check; question 5, default refuse), the red and green asks in the block "PR 2's code review, round 1", the refusal in the class table and the red suites; (2) the wording of `D` in "Sensitivity", step 2; (3) the status line, `ROADMAP.md:54`, the estimate block (558 net, 578 added; `sensitivity.py` 85). `25-plain-output.md:53` cites `cli.py:1925-1928`, and at `0588bfa` `"fine_area_m2"` is at line 1925 and `"outline_tolerance_m"` at 1928 (`grep -n`), so the citation holds and is left as it is; the round's 1929 did not reproduce. (4) The upstream-flag rule marked provisional, question 6, default yes. Suggestions taken: the cross-section's bound, the all-NoData cross-section, and the field table's `cli.py` citations pinned to `586fbc1`, the revision the inventory describes. The production fixes (the NoData refusal and the `sensitivity.py` comment) come with the red amendment and green step next.
+
+**29 PR 2, code review, round 2, 2026-10-05.** Range `0588bfa..96b3881` (`84b5ede` round 1 recorded, red `6c336f4`, green `96b3881`); the whole PR is `529613a..96b3881`. Verdict: CHANGES REQUESTED. LOC over the five `src_python` files of `529613a..96b3881`: 588 added, 20 removed, 568 net (`burn.py` 174, `gauge.py` 117, `sensitivity.py` 85, `catchment.py` 97, `cli.py` 95 net), counted by round 1's method, written here so it can be rerun: `tokenize` decides which lines are code (no blank lines, no comment-only lines, no docstrings; a multi-line string counts its first line only); the added lines are the `+` ranges of `git diff -U0 529613a 96b3881` hunks, judged as code in the file at `96b3881`, and the removed lines are the `-` ranges, judged in the file at `529613a`. Inside the 598 margin and under 700. Red before green: `6c336f4`, 3 tests fail with DID NOT RAISE; `96b3881`, 132 pass. Full suite on a freshly built `_core`: 4795 passed (7 `test_settings_wiring` failures come from the `git archive` copy the run used; 27 of 27 pass in the worktree); the prose-read hook silent; mypy, ruff check, ruff format, prohibited deps, detria boundary and check_citations green. The gap check covers every reader for finite sentinels. No mutation testing owed, no `bench.py` run (no refine or mesh code); `@perf`'s placement figures still owed. Blocking: (1) NaN cells: `burn_reach`'s mask is `raw != m.nodata`, all true when `nodata` is None (`src_python/tin_engine/burn.py@96b3881:134`); the core counts NaN as NoData whatever the sentinel and `RasterMeta` never holds a NaN sentinel, so a NaN-gapped float DEM is burnt with no refusal, `lowered_max_m` NaN, the sensitivity well posed and NaN in the catchment file. (2) The status line, `ROADMAP.md:54` and the estimate block behind the tree. (3) "Stage B's windows give the same chain as stage A's" overstates: stage B's extension can run further; the same taut chain is what holds. Suggestion: `burn_reach` raises its own `ValueError` subclass and only that becomes a `CatchmentError`, so stage B's `except CatchmentError: pass` (`src_python/tin_engine/catchment.py@96b3881:290`) cannot swallow an ordinary bug. Not pushed; no CI.
+
+Fixes for round 2, by `@architect` in the commit that records it: (1) "No NoData on the chain" in step 2 says a NaN cell is NoData, as in the core, with one mask for the cross-section, the chain check and the extension; the red and green asks in the block "PR 2's code review, round 2"; the red suites name the NaN cases; (2) the status line, `ROADMAP.md:54` and the estimate block (568 net, 588 added; `burn.py` 174, `catchment.py` 97); (3) "the same taut chain", with the reason. The suggestion is taken: `BurnRefusal` in step 2 and in the green ask, pinned by `@tester` in the red step. The LOC count above was rerun by `@architect` with a script written from the rule (not committed) and gave the same figures, file by file.
