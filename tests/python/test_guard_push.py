@@ -263,6 +263,28 @@ G1_ASKED: dict[str, str] = {
     "git replace --graft a b": REPLACE,
     "git replace --edit a": REPLACE,
     "git replace --convert-graft-file": REPLACE,
+    # The amendment after review round 6 (Ola's option C): a fetch, a pull or a
+    # `git remote update` writes a named ref with no `src:dst` word when given
+    # `--refmap` or `--stdin` (any prefix git takes, down to `--ref` and `--st`),
+    # a `remote.*` or `url.*` override among git's own options (`-c`,
+    # `--config-env`, either case), or `GIT_CONFIG*` in the line's text.
+    "git fetch --refmap=+a:refs/heads/x o master": FETCH_WRITE,
+    "git fetch --refmap '+a:refs/heads/x' o master": FETCH_WRITE,
+    "git fetch --refm=+a:b o master": FETCH_WRITE,
+    "git pull --ref=+a:b o master": FETCH_WRITE,
+    "git fetch --stdin o": FETCH_WRITE,
+    "git fetch --st o": FETCH_WRITE,
+    "git -c remote.s.fetch=+a:b fetch s": FETCH_WRITE,
+    "git -c REMOTE.s.FETCH=+a:b fetch s": FETCH_WRITE,
+    "git -c remote.s.url=/x fetch s": FETCH_WRITE,
+    "git -c url./x.insteadOf=https://github.com/ fetch origin": FETCH_WRITE,
+    "git --config-env=remote.s.fetch=RF fetch s": FETCH_WRITE,
+    "git --config-env remote.s.fetch=RF fetch s": FETCH_WRITE,
+    "git -c remote.s.fetch=a:b pull s": FETCH_WRITE,
+    "git -c remote.s.fetch=a:b remote update s": FETCH_WRITE,
+    "GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=remote.s.fetch GIT_CONFIG_VALUE_0=a:b git fetch s": (
+        FETCH_WRITE
+    ),
 }
 
 G1_PASSED = (
@@ -275,6 +297,13 @@ G1_PASSED = (
     "git replace --list 'a*'",
     "git replace --format=short",
     "git replace -l --format=long 'a*'",
+    # The amendment's passes: a different long option, a `-c` with another key,
+    # a `remote update` with no override, and an override on a command that
+    # fetches nothing.
+    "git fetch --refetch origin",
+    "git -c protocol.version=2 fetch origin",
+    "git remote update",
+    "git -c remote.s.fetch=a:b status",
 )
 
 
@@ -358,11 +387,13 @@ def test_git_lists_its_main_commands() -> None:
     assert "status" in listed
 
 
-# ---------------------------------------------------------------- h16 G3b
+# ---------------------------------------------------------------- h16 G3
 #
-# §2 G3b: local ref, remote and config writes made with `git -C <dir>` pass
-# when both of `<dir>`'s git dirs lie under a session scratchpad, and nothing
-# in the line redirects git elsewhere. A push is never exempt (G3c dropped).
+# §2 G3: G3b, which passed local ref, remote and config writes made with
+# `git -C <dir>` in a scratchpad repository, was dropped by Ola's option C
+# after review round 6. A git write in a scratch repository now asks like any
+# other; the rows that G3b passed are kept here, asked, with review round 6's
+# spellings that slipped past it (`--glo`, a glued `-f<path>`).
 
 
 @pytest.fixture
@@ -384,22 +415,25 @@ def make_plain_repo(root: Path) -> Path:
     return root
 
 
-#: Local writes in the scratch repository, `{inside}` its absolute path.
-G3B_PASSED = (
-    "git -C {inside} config user.name x",
-    "git -C {inside} config core.hooksPath x",
-    "git -C {inside} remote add o /x",
-    "git -C {inside} remote set-url o /y",
-    "git -C {inside} update-ref refs/heads/y HEAD",
-    "git -C {inside} symbolic-ref HEAD refs/heads/y",
-    "git -C {inside} fetch . HEAD:refs/remotes/origin/master",
-    "git -C {inside} replace HEAD HEAD~1",
-    "git config --file {inside}/.git/config user.name x",
-    "cd {pad} && git -C {inside} config user.name x",
-)
-
-#: The same writes where something sends git outside the scratchpad, with the reason.
-G3B_ASKED: dict[str, str] = {
+#: Git writes in or around the scratch repository, `{inside}` its absolute
+#: path, each with the reason it asks.
+G3_ASKED: dict[str, str] = {
+    # G3b's former passes.
+    "git -C {inside} config user.name x": CONFIG,
+    "git -C {inside} config core.hooksPath x": CONFIG,
+    "git -C {inside} remote add o /x": REMOTE,
+    "git -C {inside} remote set-url o /y": REMOTE,
+    "git -C {inside} update-ref refs/heads/y HEAD": "update-ref moves a ref directly",
+    "git -C {inside} symbolic-ref HEAD refs/heads/y": "symbolic-ref rewrites a symbolic ref",
+    "git -C {inside} fetch . HEAD:refs/remotes/origin/master": FETCH_WRITE,
+    "git -C {inside} replace HEAD HEAD~1": REPLACE,
+    "git config --file {inside}/.git/config user.name x": CONFIG,
+    "cd {pad} && git -C {inside} config user.name x": CONFIG,
+    # Review round 6, finding 1: an abbreviated `--global`, and a glued `-f`
+    # naming a config outside the scratchpad.
+    "git -C {inside} config --glo user.name x": CONFIG,
+    "git -C {inside} config -f{outside}/.git/config user.name x": CONFIG,
+    # Asked before option C too: something sends git outside the scratchpad.
     "git -C {linked} config user.name x": CONFIG,
     "git -C {linked} remote add o /x": REMOTE,
     "git -C {linked} update-ref refs/heads/y HEAD": "update-ref moves a ref directly",
@@ -421,24 +455,70 @@ G3B_ASKED: dict[str, str] = {
 
 
 @pytest.mark.parametrize("mode", ["off", "on"])
-@pytest.mark.parametrize("template", G3B_PASSED)
-def test_a_local_write_in_a_scratch_repository_is_silent(
+@pytest.mark.parametrize("template", G3_ASKED)
+def test_a_git_write_in_a_scratch_repository_asks(
     repo: Path, scratch: dict[str, Path], mode: str, template: str
 ) -> None:
     set_mode(repo, mode)
     command = template.format(**scratch)
-    result = run_script(repo, GUARD_PUSH, bash_event(repo, command))
-    assert pretool_decision(result) is None, f"{command!r} was not passed"
-    assert queue_lines(repo) == []
-
-
-@pytest.mark.parametrize("template", G3B_ASKED)
-def test_a_scratch_write_that_reaches_outside_still_asks(
-    repo: Path, scratch: dict[str, Path], template: str
-) -> None:
-    command = template.format(**scratch)
     found = pretool_decision(run_script(repo, GUARD_PUSH, bash_event(repo, command)))
     assert found is not None, f"{command!r} passed silently"
     kind, reason = found
-    assert kind == "ask"
-    assert G3B_ASKED[template] in reason
+    assert kind == ("deny" if mode == "on" else "ask")
+    assert G3_ASKED[template] in reason
+    assert len(queue_lines(repo)) == (1 if mode == "on" else 0)
+
+
+# ---------------------------------------------------------------- h16 G6
+#
+# §2 G6 (review round 6, finding 4): gh's group and verb are read after its
+# options, so `-R`/`--repo` (with its value, separate or glued) anywhere before
+# them hides neither; `gh pr new` and `gh repo new` are the aliases of create.
+
+RELEASE = "gh publishes or alters the repo"
+
+G6_ASKED: dict[str, str] = {
+    "gh -R o/r pr merge 12": GH_PR,
+    "gh --repo o/r pr merge 12": GH_PR,
+    "gh --repo=o/r pr merge 12": GH_PR,
+    "gh -Ro/r pr merge 12": GH_PR,
+    "gh pr -R o/r merge 12": GH_PR,
+    "gh pr new": GH_PR,
+    "gh -R o/r pr new": GH_PR,
+    'gh -R o/r pr merge 12 "': GH_PR,  # unreadable: the text rule
+    "gh repo new x": RELEASE,
+    "gh -R o/r release create v1": RELEASE,
+    "gh -R o/r pm 12": UNKNOWN,  # G2, judged on the word after gh's options
+}
+
+G6_PASSED = (
+    "gh -R o/r pr view 12",
+    "gh pr -R o/r view 12",
+    "gh --version",
+)
+
+
+@pytest.mark.parametrize("mode", ["off", "on"])
+@pytest.mark.parametrize("command", G6_ASKED)
+def test_a_gh_write_behind_its_repo_option_or_alias_asks(
+    repo: Path, mode: str, command: str
+) -> None:
+    set_mode(repo, mode)
+    found = pretool_decision(run_script(repo, GUARD_PUSH, bash_event(repo, command)))
+    assert found is not None, f"{command!r} passed silently"
+    kind, reason = found
+    assert kind == ("deny" if mode == "on" else "ask")
+    assert G6_ASKED[command] in reason
+    if mode == "on":
+        [line] = queue_lines(repo)
+        assert (line["hook"], line["act"]) == ("guard_push", command)
+    else:
+        assert queue_lines(repo) == []
+
+
+@pytest.mark.parametrize("mode", ["off", "on"])
+@pytest.mark.parametrize("command", G6_PASSED)
+def test_a_gh_read_behind_its_repo_option_is_silent(repo: Path, mode: str, command: str) -> None:
+    set_mode(repo, mode)
+    assert pretool_decision(run_script(repo, GUARD_PUSH, bash_event(repo, command))) is None
+    assert queue_lines(repo) == []

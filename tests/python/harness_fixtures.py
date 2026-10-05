@@ -47,8 +47,8 @@ COPIED = (
     # text, and here it would change test_rule_sizes.py's totals.
     "tools/brief.py",
     ".claude/hooks/guard_spawn.py",
-    # h16 G3: both guards ask it whether a path lies under a session scratchpad
-    # (docs/increments/h16-harness-fixes.md §3).
+    # h16 G3a: guard_governance asks it whether a path lies under a session
+    # scratchpad (docs/increments/h16-harness-fixes.md §3).
     "tools/scratchpad.py",
 )
 

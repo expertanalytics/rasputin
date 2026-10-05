@@ -8,12 +8,15 @@ agent in both modes, with nothing queued.
 
 from __future__ import annotations
 
+import importlib.util
 from pathlib import Path
+from types import ModuleType
 
 import pytest
 
 from harness_fixtures import (
     GUARD_GOVERNANCE,
+    REAL,
     bash_event,
     file_event,
     make_repo,
@@ -45,8 +48,8 @@ GOVERNED_NOW = (
     ".claude/skills/x/SKILL.md",
     ".git/hooks/pre-commit",
     ".git/config",
-    # h16 §3: the counter computes CLAUDE.md §2's arithmetic, and both guards
-    # import the scratchpad test.
+    # h16 §3: the counter computes CLAUDE.md §2's arithmetic, and
+    # guard_governance imports the scratchpad test.
     "tools/count_loc.py",
     "tools/scratchpad.py",
     # h16 G4: a tools/ file named after a stdlib module shadows it for any
@@ -100,6 +103,17 @@ SILENT_COMMANDS = (
 @pytest.fixture
 def repo(tmp_path: Path) -> Path:
     return make_repo(tmp_path / "repo")
+
+
+def load_hook(name: str) -> ModuleType:
+    """Import `.claude/hooks/<name>.py` from the real checkout, for a unit test of one function."""
+    spec = importlib.util.spec_from_file_location(
+        f"h16_{name}", REAL / ".claude" / "hooks" / f"{name}.py"
+    )
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 
 # ---------------------------------------------------------------- T6
@@ -284,3 +298,73 @@ def test_a_git_config_that_resolves_outside_the_scratchpad_asks(
     kind, reason = found
     assert kind == "ask"
     assert path in reason
+
+
+# ---------------------------------------------------------------- h16 G3a, option C
+#
+# §2 G3a, amended after review round 6 (Ola's option C): for a Bash line the
+# exemption holds only when the line is one plain command (one simple command,
+# no interpreter program or script, nothing the parser cannot read). The guard
+# judges targets before the line runs, so a second command could make a link
+# and then write through it; any line with more than one command is judged as
+# if there were no exemption.
+
+#: Lines that are not one plain command, each writing a governed name under the
+#: scratchpad; `{target}` is the path the ask must name.
+NOT_PLAIN: dict[str, str] = {
+    # Finding 2's route: `{pad}/x` does not exist when the hook runs.
+    "ln -sfn {repo} {pad}/x && echo hi > {pad}/x/CLAUDE.md": "{pad}/x/CLAUDE.md",
+    "echo hi > {pad}/copy/CLAUDE.md; true": "{pad}/copy/CLAUDE.md",
+    "printf x | tee {pad}/copy/CLAUDE.md": "{pad}/copy/CLAUDE.md",
+    "echo $(true) > {pad}/copy/CLAUDE.md": "{pad}/copy/CLAUDE.md",
+    "sh -c 'echo hi > {pad}/copy/CLAUDE.md'": "{pad}/copy/CLAUDE.md",
+    "python3 -c \"open('{pad}/copy/CLAUDE.md', 'w')\"": "{pad}/copy/CLAUDE.md",
+}
+
+#: One plain command each: the exemption holds.
+PLAIN = (
+    "echo hi > {pad}/copy/CLAUDE.md",
+    "cp {repo}/notes.txt {pad}/copy/CLAUDE.md",
+)
+
+
+@pytest.mark.parametrize("mode", ["off", "on"])
+@pytest.mark.parametrize("template", NOT_PLAIN)
+def test_a_scratchpad_write_in_a_line_of_more_than_one_command_asks(
+    repo: Path, pad: Path, mode: str, template: str
+) -> None:
+    set_mode(repo, mode)
+    command = template.format(repo=repo, pad=pad)
+    target = NOT_PLAIN[template].format(pad=pad)
+    assert not (pad / "x").exists()
+    found = pretool_decision(run_script(repo, GUARD_GOVERNANCE, bash_event(repo, command)))
+    assert found is not None, f"{command!r} passed silently"
+    kind, reason = found
+    if mode == "on":
+        assert kind == "deny"
+        assert f"it writes {target}" in reason
+        [line] = queue_lines(repo)
+        assert (line["hook"], line["act"]) == ("guard_governance", command)
+    else:
+        assert kind == "ask"
+        assert f"This changes a file that states rules: {target}" in reason
+        assert queue_lines(repo) == []
+
+
+@pytest.mark.parametrize("mode", ["off", "on"])
+@pytest.mark.parametrize("template", PLAIN)
+def test_a_scratchpad_write_in_one_plain_command_is_not_governed(
+    repo: Path, pad: Path, mode: str, template: str
+) -> None:
+    set_mode(repo, mode)
+    command = template.format(repo=repo, pad=pad)
+    assert pretool_decision(run_script(repo, GUARD_GOVERNANCE, bash_event(repo, command))) is None
+    assert queue_lines(repo) == []
+
+
+def test_governed_without_the_scratchpad_exemption_judges_by_the_rules() -> None:
+    """`governed(p, scratch_exempt=False)` skips G3a; the default keeps it (§2 G3a's interface)."""
+    hook = load_hook("guard_governance")
+    path = "/private/tmp/claude-501/-Users-x-project/0f1e2d3c-session/scratchpad/copy/CLAUDE.md"
+    assert hook.governed(path) is False
+    assert hook.governed(path, scratch_exempt=False) is True
