@@ -81,13 +81,7 @@ from tin_engine.catchment import (
     check_reach_crs,
     delineate,
 )
-from tin_engine.catchment_batch import (
-    BatchRequest,
-    NoRiverLine,
-    StationResult,
-    run_batch,
-    seed_for,
-)
+from tin_engine.catchment_batch import BatchRequest, NoRiverLine, StationResult, run_batch, seed_for
 from tin_engine.chains import start_chains
 from tin_engine.crs import crs_label, parse_crs, reprojector, transform_description
 from tin_engine.dem_input import (

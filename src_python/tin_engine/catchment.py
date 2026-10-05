@@ -192,6 +192,8 @@ class Catchment:
 type Flood[T] = Callable[[DemTile], tuple[UpstreamOutcome, T]]
 #: A node mask over a window: 1 in, 0 out.
 type Mask = npt.NDArray[np.uint8]
+#: The repository's tiles, as `plan_mosaic` takes them.
+type Footprints = Sequence[TileFootprint]
 
 
 def check_reach_crs(crs: str, repository: DemRepository) -> None:
@@ -239,11 +241,7 @@ def _tolerance(request: CatchmentRequest, m: RasterMeta) -> float:
 
 
 def _grow[T](
-    footprints: Sequence[TileFootprint],
-    repository: DemRepository,
-    bounds: Bounds,
-    flood: Flood[T],
-    burnt: bool,
+    footprints: Footprints, repository: DemRepository, bounds: Bounds, flood: Flood[T], burnt: bool
 ) -> tuple[RasterMeta, UpstreamOutcome, T, list[Window]]:
     """22's window loop: flood, grow until the catchment is clear of the
     window's edge, or refuse (NoData, the data's edge, the memory cap, whose
@@ -304,10 +302,7 @@ def _burnt_flood(
 
 
 def _gauged(
-    request: CatchmentRequest,
-    repository: DemRepository,
-    footprints: Sequence[TileFootprint],
-    dem_crs: str,
+    request: CatchmentRequest, repository: DemRepository, footprints: Footprints, dem_crs: str
 ) -> Catchment:
     """Stage A floods from the placed node and decides the catchment and every
     refusal; stage B grows on from it until `D` (the first chain node at or
@@ -384,7 +379,7 @@ def _lake(request: CatchmentRequest, dem_crs: str) -> Polygon | None:
     return lake
 
 
-def _plan(footprints: Sequence[TileFootprint], bounds: Bounds) -> MosaicPlan:
+def _plan(footprints: Footprints, bounds: Bounds) -> MosaicPlan:
     try:
         return plan_mosaic(footprints, bounds)
     except MixedGridError as exc:
