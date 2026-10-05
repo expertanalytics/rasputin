@@ -804,3 +804,33 @@ master at `bc01cd8`):
 
 The extras-job time is re-derived as 3.5-4.7 min (non-blocking note); it
 had counted the moved steps on the slowest leg twice.
+
+### Round 2: `@reviewer`, design, `fc7346a..6997557`
+
+`@reviewer`'s verdict, word for word:
+
+> **Verdict: APPROVED**
+>
+> **What I reviewed:** `fc7346a..6997557` on `worktree-h15-ci`. `f25eaa5` merges master at `bc01cd8`. It has no conflicts, and its tree is the same as `git merge-tree --write-tree fc7346a bc01cd8`. `6997557` is the rework: `docs/increments/h15-ci-speed.md` +533 / −247. Against master the branch changes only that one file (806 lines). It is a design only, with 0 lines of production code and no workflow change, so the 700-line ceiling does not apply. CI: the branch has not been pushed, so there are no checks to read. It changes prose only, so a PR run would run just the governance gates. `python3 tools/check_citations.py` passes ("All citations resolve, and none point into a file this branch edits"), with no at-risk lines.
+>
+> **Round 1's blocking issues: all four fixed.**
+> 1. §3 is re-measured from all eleven green runs. I rebuilt every row of §3a from `gh run view --json jobs`: all match to 0.1 min, and every job starts within 20 s of its run's first job. §3c's ranges are measured: PR 9.1-9.3, queue 7.6-9.2, push to merge 17.9-18.5. The variant with no shards is §5 A0, with a figure. Question 2's figure is now derived run by run.
+> 2. §5 P gives both jobs' steps in today's order. The extras job keeps `Install` with its pip upgrade, and the trap runs straight after it. The argument for the trap holds. `copy_source_tree` copies `git ls-files -co --exclude-standard`, and `build_environment` builds its own venv from `[build-system].requires` (`tests/python/test_hardening.py`). What the main suite leaves behind is all ignored: `.coverage`, `__pycache__` and `build` are in `.gitignore`, and `.pytest_cache` ignores itself. No main-suite test runs `pip install` into the job's environment. The `git status` check on PR 1 covers the one gap left.
+> 3. §5 B now uses `compiler_check = string:`. It hashes the real compiler (`cc1plus` or `xcrun -f clang++`) and `c++ -v`. No job sets `CXX`, so `c++` is the compiler CMake uses. The cache key and its single restore key carry `ImageOS` and `ImageVersion`. `main.yaml` only restores, and the weekly cold run has no cache step. Every quoted ccache passage matches ccache.dev/manual/latest word for word: `content`, `mtime`, `string:value`, the wrapper sentence, preprocessor mode and the direct-mode gap. The manual's Caveats section names only the direct-mode gap. The GitHub quotes, including the list of triggers that can write, match "Dependency caching reference".
+> 4. The factual fixes are in: §3a's heading, the PR range 9.6-14.3, the order rule in its place of the state (`git grep 'COST 100' origin/master` prints line 381; `SANITIZERS_CHECK` is not yet on master), and abi3 named in O2.
+>
+> **The rework's new claims, checked by running them:**
+> - **Sanitizer job since h14 (§3b):** I parsed all 994 `Test #N` lines in each of the five logs. Build, Test step, per-test sum and ES9 match every row: 189/315/1176/314.3, 204/314/1183/312.9, 188/311/1163/310.7, 115/151/558/150.8 and 134/158/592/157.6. The Test step minus (per-test sum ÷ 4) is 21, 18, 20, 11 and 10 s. ES9 takes the whole Test step in every run.
+> - **A0 saves at most about 0.3 min:** true. The four test slots (`--parallel "$(getconf _NPROCESSORS_ONLN)"`, 4 CPUs) are already about 91-96% busy, and splitting ES9 removes no work. Round 1's suggestion that the step would fall to sum ÷ 4 at no cost was wrong; the design's correction is right.
+> - **Savings per run (§5's first table):** I rebuilt them with the stated method (finish = start offset + kept steps; shard = Build + Test ÷ 3 × 1.1; plus each run's measured tail). P alone: 0-3.7 min, mean 1.3. A alone: 0-1.6, mean 0.3. P + A: 2.4-3.7. Nineteen of the twenty cells match to 0.1 min (the exception is under Suggestions). §5 A's per-shard figures (55-115 s, 3.2-5.7 min), two shards at about 6.6 min and four shards saving about 0.5 min all reproduce. So do §5 P's ranges for the main job (3.2-6.0 min) and the extras job (3.5-4.7 min) and §7's end-state table.
+> - **Python step ranges (§3b):** every cell matches, as does the 141-222 s that the steps after Tests add on 3.12.
+>
+> **Blocking issues:** none.
+>
+> **Suggestions (non-blocking):**
+> - In run 37276269474, P + A comes out at 5.72 min by my count, not 5.8. The mean saving is then 3.2, not 3.1, and question 2's range is 2.7-3.4. Question 2's "nothing on the other two" is 0 and 0.1-0.2 min (37268031183: 5.35 → 5.15). Worth one line to fix, since it is a figure put to Ola.
+> - §1, the search order: per GitHub's docs, the action tries the exact key, then keys that start with it, then the restore keys, then the same steps on the default branch. The design leaves out the keys-that-start-with-it step. It does no harm with these keys.
+> - §4 and §5 B, "the whole preprocessed input and command line": preprocessor mode leaves include and define options (`-I`, `-include`, `-D`) out of the hash, on the grounds that their effect shows up in the preprocessed output. A point of precision only.
+> - PR 3: GitHub now has a `cache-mode` workflow key. `cache-mode: read` on `main.yaml` would make GitHub enforce "only restores" instead of relying on how the workflow is written. `@tester`'s PR 3 test could check for it.
+> - PR 3: the cache key names `<job>`. After A, the three shards build the same tree, so key on the build configuration, not the shard's job name. Otherwise `ccache-warm.yaml` must write one store per shard name.
+> - §5 A, ES9 left whole in one shard: the figure uses h14's serial 97-171 s. On CI under load ES9 took 151-314 s. The conclusion (above Python's floor) only gets stronger.
