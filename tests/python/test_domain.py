@@ -39,7 +39,7 @@ import shapely
 from pyproj import CRS, Transformer
 from shapely.geometry import Polygon, mapping
 
-from crs_fixtures import proj4_of, refuse_point_moves
+from crs_fixtures import UTM33_PARIS, proj4_of, refuse_point_moves
 from tin_engine.io.models import RasterMeta
 
 UTM33 = "urn:ogc:def:crs:EPSG::25833"
@@ -165,6 +165,41 @@ class TestReading:
     ) -> None:
         path = write(tmp_path, geojson(square(), crs=member))
         assert the_crs(domain.read_domain(path, flag)) == CRS.from_epsg(25833)
+
+    @pytest.mark.parametrize(
+        ("member", "flag"),
+        [
+            pytest.param("EPSG:25833", proj4_of(25833), id="EPSG member, PROJ-string flag"),
+            pytest.param(UTM33, proj4_of(25833), id="URN member, PROJ-string flag"),
+            pytest.param(proj4_of(25833), "EPSG:25833", id="PROJ-string member, EPSG flag"),
+        ],
+    )
+    def test_a_domain_crs_that_is_the_files_crs_by_definition(
+        self, domain: ModuleType, tmp_path: Path, member: str, flag: str
+    ) -> None:
+        """Audit PR B, red test 11 (site 13, `domain.py:103`): the file and the
+        flag agree by `crs.same_crs`, not by pyproj's `==`, so a PROJ string of
+        EPSG:25833 is EPSG:25833. The flag never overrides the file: the
+        result's `crs` is the member's own text, and its polygon is the one read
+        without the flag, bit for bit."""
+        path = write(tmp_path, geojson(square(), crs=member))
+        out = domain.read_domain(path, flag)
+        assert out.crs == member
+        assert out.polygon.equals_exact(domain.read_domain(path).polygon, tolerance=0)
+
+    def test_a_flag_with_another_prime_meridian_is_still_refused(
+        self, domain: ModuleType, tmp_path: Path
+    ) -> None:
+        """Beside red test 11, green before and after: UTM 33 counted from
+        Paris identifies as EPSG:25833 at PROJ's confidence 70 but is not it
+        (`same_crs`'s frame check), so the fix cannot widen past `same_crs`."""
+        path = write(tmp_path, geojson(square(), crs="EPSG:25833"))
+        refused(
+            domain,
+            path,
+            f"d.geojson is in EPSG:25833 but --domain-crs says {UTM33_PARIS}",
+            crs=UTM33_PARIS,
+        )
 
     def test_the_json_suffix_is_geojson(self, domain: ModuleType, tmp_path: Path) -> None:
         path = write(tmp_path, geojson(square()), name="d.json")

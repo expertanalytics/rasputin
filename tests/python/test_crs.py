@@ -48,14 +48,14 @@ from __future__ import annotations
 import ast
 import importlib
 from pathlib import Path
-from types import ModuleType
+from types import ModuleType, SimpleNamespace
 from typing import Any
 
 import numpy as np
 import pytest
 from pyproj import CRS, Transformer
 
-from crs_fixtures import proj4_of
+from crs_fixtures import UTM33_PARIS, proj4_of
 
 SRC_PYTHON = Path(__file__).resolve().parents[2] / "src_python"
 
@@ -195,9 +195,6 @@ MARS = "+proj=longlat +a=3396190 +b=3376200"
 #: EPSG:25833 at confidence 70, yet each x has the other sign (test_domain.py's
 #: `UTM33_WEST`, whose transform must not be skipped).
 UTM33_WEST = "+proj=utm +zone=33 +ellps=GRS80 +units=m +axis=wnu +no_defs"
-#: UTM 33 on GRS80 with longitudes counted from Paris: PROJ also identifies it
-#: as EPSG:25833 at confidence 70, yet its points lie 185 to 215 km off.
-UTM33_PARIS = "+proj=utm +zone=33 +ellps=GRS80 +units=m +pm=paris +no_defs"
 
 
 def without_id(epsg: int) -> str:
@@ -258,6 +255,20 @@ class TestSameCrs:
     ) -> None:
         with pytest.raises(ValueError, match=r"cannot read the CRS 'not a crs'"):
             crs.same_crs(a, b)
+
+    @pytest.mark.parametrize("none_side", ["source_crs", "target_crs"])
+    def test_a_transformer_without_a_crs_is_not_the_same(
+        self, crs: ModuleType, monkeypatch: pytest.MonkeyPatch, none_side: str
+    ) -> None:
+        """Audit PR B, red test 12: pyproj types a transformer's `source_crs`
+        and `target_crs` as `CRS | None` (None for one built from a pipeline).
+        No `from_crs` transformer has one, so only a stand-in reaches the
+        branch; "not the same" is the safe side. Without the stand-in the pair
+        is the same, so the test fails if `same_crs` does not use it."""
+        sides = {"source_crs": CRS.from_epsg(25833), "target_crs": CRS.from_epsg(25833)}
+        sides[none_side] = None
+        monkeypatch.setattr(crs, "_transformer", lambda src, dst: SimpleNamespace(**sides))
+        assert crs.same_crs("EPSG:25833", "EPSG:25833") is False
 
 
 class TestTransformLabel:

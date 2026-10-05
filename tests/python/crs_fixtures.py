@@ -16,6 +16,10 @@ import pytest
 from pyproj import CRS, Transformer
 
 POINT_MOVING = ("transform", "itransform", "transform_bounds")
+#: UTM 33 on GRS80 with longitudes counted from Paris: PROJ identifies it as
+#: EPSG:25833 at confidence 70, yet its points lie 185 to 215 km off
+#: (`test_crs.py`'s not-the-same pairs, `test_domain.py`'s refused flag).
+UTM33_PARIS = "+proj=utm +zone=33 +ellps=GRS80 +units=m +pm=paris +no_defs"
 
 
 def proj4_of(epsg: int) -> str:
