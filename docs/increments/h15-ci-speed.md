@@ -1,6 +1,6 @@
 # Harness h15: a faster CI that proves the same things
 
-Status: design, review round 1's changes made, awaiting review round 2; Ola's rulings on §9 open. Design only: no workflow change in this
+Status: design, approved by `@reviewer` in round 2; Ola ruled on §9 on 2026-10-05 (all five defaults, below); next PR 1's red step (`@tester`). Design only: no workflow change in this
 branch. Mechanics, not a design question for the core: the plan (§7) is
 two small workflow PRs and an optional third, each touching
 `.github/workflows/main.yaml`. The order rule is §6: PR 1 needs only
@@ -715,6 +715,10 @@ them; "push to merge" is with C2 skipping / with master moved):
 5. **Compile the sanitizer build with light optimisation (-O1) to run it
    faster?** It can hide a memory error the current build reports.
    Default: **no**.
+
+## Ola's rulings
+
+2026-10-05, Ola, verbatim: "Accept all five defaults." So: 1 yes, split the Python jobs as PR 1, no xdist; 2 yes, sanitizer shards and ES9 split as PR 2, after h12's queue-skip change; 3 decide on ccache after PR 2's measured times; 4 no paid larger runners; 5 no -O1 sanitizer build.
 
 ## Review
 
