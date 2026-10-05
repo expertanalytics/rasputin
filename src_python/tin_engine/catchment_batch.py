@@ -28,6 +28,7 @@ from tin_engine.catchment import (
     CatchmentRequest,
     GaugeResult,
     MixedGridRefusal,
+    check_reach_crs,
     delineate,
 )
 from tin_engine.crs import reprojector
@@ -145,6 +146,7 @@ async def run_batch(
     unknown = set(request.only) - {s.station for s in stations}
     if unknown:
         raise ValueError(f"not in the stations file: {', '.join(sorted(unknown))}")
+    check_reach_crs(segments_crs, repository)
     move = reprojector(stations_crs, segments_crs)
     boxes = [
         box(

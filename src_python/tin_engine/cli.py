@@ -49,6 +49,7 @@ import sys
 import tempfile
 import time
 from collections.abc import Callable, Iterator, Mapping
+from contextlib import contextmanager
 from dataclasses import asdict, dataclass, field, fields
 from pathlib import Path
 from typing import Annotated, Any, TextIO
@@ -72,7 +73,14 @@ from tin_engine._core import (
     sample,
     triangulate,
 )
-from tin_engine.catchment import Catchment, CatchmentRequest, GaugeResult, LakeError, delineate
+from tin_engine.catchment import (
+    Catchment,
+    CatchmentRequest,
+    GaugeResult,
+    LakeError,
+    check_reach_crs,
+    delineate,
+)
 from tin_engine.catchment_batch import BatchRequest, StationResult, run_batch
 from tin_engine.chains import start_chains
 from tin_engine.crs import crs_label, parse_crs, reprojector, transform_description
@@ -1709,11 +1717,7 @@ def _placed(
     """The gauge placed on the river file's nearest line (no watercourse
     number), and the seed moved into the file's CRS, which must be the DEM's."""
     segments, crs, _ = _segments(rivers)
-    dem_crs = repository.footprints()[0].meta.crs
-    if parse_crs(crs) != parse_crs(dem_crs):
-        raise typer.BadParameter(
-            f"the river file's CRS, {crs}, is not the DEM's, {dem_crs}", param_hint="--rivers"
-        )
+    _reach_crs(crs, repository)
     ((x, y),) = reprojector(seed_crs, crs)([seed])
     placement = place(Gauge(x=x, y=y), segments, map_radius=map_radius, reach_up=reach_up)
     if placement is None:
@@ -1722,6 +1726,25 @@ def _placed(
         )
     name = next(s.name for s in segments if s.objectid == placement.objectid)
     return (placement, name), (x, y), crs
+
+
+def _reach_crs(crs: str, repository: Any) -> None:
+    """`check_reach_crs`, its refusal naming --rivers."""
+    try:
+        check_reach_crs(crs, repository)
+    except ValueError as exc:
+        raise typer.BadParameter(str(exc), param_hint="--rivers") from exc
+
+
+@contextmanager
+def _writing(path: Path) -> Iterator[None]:
+    """A write to `path` whose `OSError` becomes a refusal naming --out-dir."""
+    try:
+        yield
+    except OSError as exc:
+        raise typer.BadParameter(
+            f"cannot write {path}: {exc.strerror or exc}", param_hint="--out-dir"
+        ) from exc
 
 
 def _segments(rivers: Path) -> tuple[tuple[RiverSegment, ...], str, int]:
@@ -1967,8 +1990,9 @@ class _DirectorySink:
         self.pending[station.station] = (station, result)
 
     def row(self, row: StationResult) -> None:
-        csv.writer(self.table).writerow([_cell(getattr(row, f.name)) for f in fields(row)])
-        self.table.flush()
+        with _writing(self.out / "results.csv"):
+            csv.writer(self.table).writerow([_cell(getattr(row, f.name)) for f in fields(row)])
+            self.table.flush()
         if row.station in self.pending:
             station, result = self.pending.pop(row.station)
             names = [f.name for f in fields(StationResult)]
@@ -1982,7 +2006,8 @@ class _DirectorySink:
             }
             # A station number is digits and dots (`Station`), so a safe name.
             path = self.out / f"{row.station}.geojson"
-            path.write_bytes(catchment_geojson(result.reduced, result.crs, properties))
+            with _writing(path):
+                path.write_bytes(catchment_geojson(result.reduced, result.crs, properties))
         word: str = row.station_class or "well defined, no reference"
         if row.station_class == "refused":
             word += f": {row.refusal_message}"
@@ -1993,7 +2018,9 @@ class _DirectorySink:
                 f"; NVE's in ours {100 * row.nve_in_ours:.1f} %, ours in NVE's "
                 f"{100 * row.ours_in_nve:.1f} %, area ratio {row.area_ratio:.3f}"
             )
-        typer.echo(f"{row.station} {row.name or ''}: {word}", err=True)
+        typer.echo(
+            f"{row.station} {row.name}: {word}" if row.name else f"{row.station}: {word}", err=True
+        )
 
 
 def _cell(value: object) -> object:
@@ -2091,6 +2118,7 @@ def station_catchments(
         raise typer.BadParameter(
             _words(exc) if isinstance(exc, ValueError) else str(exc), param_hint="--dem"
         ) from exc
+    _reach_crs(crs, repository)
     request = BatchRequest(
         map_radius=map_radius,
         reach_up=reach_up,
@@ -2098,7 +2126,9 @@ def station_catchments(
         only=tuple(only or ()),
     )
     target.mkdir(exist_ok=True)
-    with (target / "results.csv").open("w", encoding="utf-8", newline="") as table:
+    with _writing(target / "results.csv"):
+        table = (target / "results.csv").open("w", encoding="utf-8", newline="")
+    with table:
         sink = _DirectorySink(target, table)
         try:
             summary = asyncio.run(
@@ -2114,7 +2144,8 @@ def station_catchments(
             typer.echo(f"Error: {_words(exc)}", err=True)
             raise typer.Exit(1) from exc
     dump = {**summary.model_dump(mode="json"), "river_copies_dropped": dropped}
-    (target / "summary.json").write_text(json.dumps(dump, indent=2) + "\n", encoding="utf-8")
+    with _writing(target / "summary.json"):
+        (target / "summary.json").write_text(json.dumps(dump, indent=2) + "\n", encoding="utf-8")
     counts = ", ".join(f"{k} {v}" for k, v in summary.classes.items())
     typer.echo(f"summary: {plural(summary.stations, 'station', 'stations')}: {counts}", err=True)
     if summary.known_refusals.line is not None:

@@ -178,6 +178,14 @@ class Catchment:
 Flood = Callable[[Any], tuple[UpstreamOutcome, Any]]
 
 
+def check_reach_crs(crs: str, repository: DemRepository) -> None:
+    """Refuse a river file whose CRS, `crs`, is not the DEM's (its first
+    tile's): the one rule `catchment --rivers` and the batch both apply."""
+    dem_crs = repository.footprints()[0].meta.crs
+    if parse_crs(crs) != parse_crs(dem_crs):
+        raise ValueError(f"the river file's CRS, {crs}, is not the DEM's, {dem_crs}")
+
+
 def delineate(request: CatchmentRequest, repository: DemRepository) -> Catchment:
     """The catchment of the request's seed over the repository's DEM, or a
     :class:`CatchmentError` (truncated by the data's edge or NoData, no lake
