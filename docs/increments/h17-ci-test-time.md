@@ -1,8 +1,9 @@
 # Harness h17: CI time spent in tests
 
-Status: design by `@architect` on master `44fa7f5`; design review rounds 1
-and 2 asked for changes (below), fixed; next `@reviewer`, design round 3,
-on round 2's fixes only. Takes the test audit's Q1 and Q2 (`docs/increments/test-audit.md`,
+Status: design by `@architect` on master `44fa7f5`; design approved
+(review round 3, below). Next `@tester` on PR 1, on §8 question 1's
+default (the harness job on Python 3.12) while Ola is away; questions 2
+and 3 bind PR 2 only and stay open. Takes the test audit's Q1 and Q2 (`docs/increments/test-audit.md`,
 R2, R3, R11) and h15's PR 2 (`docs/increments/h15-ci-speed.md`, §5 A and
 §7), as two PRs (§5). Ola, 2026-10-05: "defaults on all, CI speed first".
 
@@ -313,8 +314,8 @@ k for which sum / (4 k) x 1.1 is at most the longest test or 90 s,
 whichever is larger; 3 at 790 s. Checked only at 994 tests.
 
 **Acceptance, on PR 2's run:** the shards' `out of N` add up to PR 1's
-count; each shard's Test step at most 2 min; `CI result` at most 5.5 min
-(slow) or 4.5 (fast).
+count, plus 3 if PR 2 takes the ES9 split; each shard's Test step at
+most 2 min; `CI result` at most 5.5 min (slow) or 4.5 (fast).
 
 ## 6. Who does what
 
@@ -346,7 +347,7 @@ No `@perf` run: neither PR touches refine or mesh code.
 2. **PR 2 before h12's queue-skip PR?** Default: **yes**, whichever lands
    second takes the shard names; h12's own test makes that impossible to
    miss. A yes changes your h15 ruling 2 of 2026-10-05, which put the
-   shards after h12's queue-skip change (h15, Review).
+   shards after h12's queue-skip change (h15, Ola's rulings).
 3. **PR 2 drops h15's four-way split of ES9 (the 317 s edge-strip test)
    unless PR 1's measured run shows it is still needed.** Default: **yes**.
    A yes also changes your h15 ruling 2, which accepted the split as part
@@ -385,3 +386,14 @@ status line, §4a and §5 item 1 make it conditional on that yes. Both
 suggestions taken: §4a's equal-counts step also runs one ES9 combination
 through `sources_over` and the header, and §5 item 2 is conditional on §8
 question 2.
+
+### Round 3: `@reviewer`, design, `edaf4e0..e09f466`
+
+`@reviewer`'s record, word for word:
+
+> Design review round 3 (`@reviewer`, `edaf4e0..e09f466`): APPROVED. Round 2's two [now] items fixed and true: test-audit's third question matches the chat verbatim; §8 question 3 puts the ES9 split to Ola, and h15's status line, §4a and §5 item 1 are conditional on it. §4a's ES9 check holds against tests/cpp/property/prop_refinement_edge_strip.cpp@e09f466:682-705. h15 rulings 1-5 are consistent with h17. Fold in: docs/increments/h17-ci-test-time.md@e09f466:349 "(h15, Review)" should read "(h15, Ola's rulings)"; docs/increments/h17-ci-test-time.md@e09f466:315 needs "plus 3 if PR 2 takes the ES9 split". check_citations clean. Ready for `@tester` on PR 1 once Ola answers §8, or on its defaults.
+
+Fixed in the round-4 commit: both fold-ins (§8 question 2 now points at
+h15's "Ola's rulings" section; §5's acceptance count adds 3 when PR 2
+takes the ES9 split, one test becoming four). Design approved; the next
+step is `@tester` on PR 1.
