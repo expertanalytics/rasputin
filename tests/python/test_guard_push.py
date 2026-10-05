@@ -304,6 +304,9 @@ G2_PASSED = (
     "gh api repos/x",
     "gh run list",
     "gh auth status",
+    # Ola ruled 2026-10-05 ("yes, add help"): gh's own help command reads only.
+    "gh help",
+    "gh help pr",
 )
 
 
