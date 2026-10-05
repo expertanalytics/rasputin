@@ -47,8 +47,14 @@ inline double cross(Point2 a, Point2 b, Point2 c) { return (b.x - a.x) * (c.y - 
 namespace detail {
 
 // floor(v) clamped to [0, last] (§4a rule 6). NaN maps to the far end of the
-// range on its side, so a triangle with a NaN corner visits every bucket, as
-// the all-pairs copies did.
+// range on its side. That does not make a triangle with a NaN corner visit
+// every bucket: std::min and std::max over the corners return NaN only when the
+// NaN comes first among them (min({NaN, 1, 2}) is NaN, min({1, NaN, 2}) is 1),
+// so which buckets it visits depends on the corner's position. The verdict is
+// the all-pairs copies' all the same, for another reason: a NaN corner makes
+// two_a and the plane NaN, and abs(NaN - z) > slack is false, so such a
+// triangle counts no pair over tolerance however many points it visits;
+// not_ccw is decided before the bucket walk, for every triangle.
 inline std::size_t bucket_lo(double v, std::size_t last) {
     const double f = std::floor(v);
     if (!(f >= 0.0)) return 0;

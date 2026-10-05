@@ -216,8 +216,8 @@ add_terrain_test(test_raster_view unit/test_raster_view.cpp)
 # Adaptive refinement, increment 14 (docs/increments/14-adaptive-refinement.md,
 # "Tests for @tester"). test_mesh_lattice_split and test_refinement_scan are the
 # invariant-critical pair. All three link Threads, but only
-# test_refinement_chunks starts threads (through for_each_chunk);
-# test_mesh_lattice_split starts none, so it is not in the TSan job (h17 §4c,
+# test_refinement_chunks starts threads (through for_each_chunk), so it alone
+# runs in the TSan job; the pair start none and are not in it (h17 §4c,
 # docs/increments/h17-ci-test-time.md). The pair are backend tests because
 # lattice_mesh.hpp includes default_kernel.hpp (increment 16's orient_sign),
 # which needs terrain_predicates.
@@ -258,7 +258,9 @@ add_terrain_backend_test(prop_refinement_scan_equivalence
 # A quality start, increment 20 (docs/increments/20-start-quality.md, "Tests for
 # @tester"). test_mesh_quality (Q1 to Q6, Q8, Q9) is the invariant-critical
 # suite; prop_refinement_quality re-runs 14b's T3 and T6 with the pass on and
-# holds Q7, Q8 and Q10 through refine. Both run in the TSan job.
+# holds Q7, Q8 and Q10 through refine. prop_refinement_quality starts threads
+# through refine and runs in the TSan job; test_mesh_quality starts none, so it
+# is not in it (h17 §4c).
 add_terrain_backend_test(test_mesh_quality unit/test_mesh_quality.cpp)
 add_terrain_backend_test(prop_refinement_quality property/prop_refinement_quality.cpp)
 target_link_libraries(test_mesh_quality PRIVATE Threads::Threads)
