@@ -9,7 +9,12 @@ code, review, and `@perf` where the diff touches what drives refine or mesh.
 
 Accepted by Ola on 2026-10-05, with the defaults to its three questions
 (section 7). Its first PR, T2, is designed in section 8; the second, T1,
-in section 9 (designed on T2's head `b63132e`, waiting for `@tester`). Status of T2:
+in section 9 (designed on T2's head `b63132e`). Status of T1: `@tester`'s
+tests are in `72ccfaf` and `2816d41`; code review round 1 is fixed in
+`0d63d00`. Next `@reviewer` round 2: run `python3 tools/check_citations.py`
+(exit 0) and re-read the T1 lines under "Review"; then push after T2, on
+Ola's yes. T2 was approved in code review round 3 at `b63132e` and waits
+for Ola's yes to push. History of T2:
 `@tester`'s tests are in `2f47ebb`: 184 non-blank test lines added and 185
 removed, -1 net against the design's about -35 (`git diff -U0 44fa7f5 97eea35
 -- tests`, non-blank lines). The gap is what section 8 did not cost:
@@ -878,3 +883,7 @@ top of the first.
 **T2 (`audit-layering-test`), code review, round 1, 2026-10-05.** Range `44fa7f5..97eea35` (e86b86d audit, 8190438 rulings and T2 design, 2f47ebb tests, 97eea35 citation pins). Verdict: CHANGES REQUESTED. LOC: 0 production lines (`count_loc.py`); test lines +184 -185, -1 net against about -35. Not pushed; no CI. Whole Python suite 5132 passed, 17 skipped; ruff, format, mypy and check_citations clean. An independent AST resolver agrees with the table for all 52 modules. Seven planted breaks in a scratch copy each failed only their own check: a row for a missing module, a deferred import, a relative import in a package `__init__`, `_core` imported from layer 4, two stale exceptions, and `importlib.import_module`. Check 4's stricter reading is sound. Every deleted firewall assertion is carried by a row that is equal or stricter. All 16 new pins quote what their records say. Blocking: (1) `@tester`: the `# fmt: off` comment at `tests/python/test_layering.py@97eea35:27-28` describes the formatter wrongly; (2) `@architect`: the -1 net explanation at `docs/increments/python-audit.md@97eea35:12-15` names the wrong cause. Suggestions: check 4's wording in section 8; `testing.md@97eea35:183-185`'s "no compiled extension" claim, false before this branch.
 
 **T2 (`audit-layering-test`), code review, round 2, 2026-10-05.** Range `97eea35..90cba64` (4686456 fmt-off comment, 90cba64 round 1 recorded and net explanation). Verdict: CHANGES REQUESTED. LOC: 0 production lines; branch test lines +186 −185, +1 net. Not pushed; no CI. Both round-1 blocking items fixed and true: `ruff format --diff` on a copy without the markers does what the new comment says (joined rows 98 and 99 characters, limit 100), and the per-file counts in the net explanation match `git diff -U0`. Check 4's wording matches the test. ruff, format, mypy and check_citations clean; test_layering 56 passed. Blocking: (1) `@architect`: the round-1 record's citations `tests/python/test_layering.py@97eea35:27-28` and `docs/increments/python-audit.md@97eea35:12-15` (pinned at recording) now resolve to the fixed text unless pinned. Suggestion: say "adds 4 and removes 2" at line 19.
+
+T2 code review r3 (90cba64..b63132e): APPROVED.
+
+T1 code review r1 (b63132e..2816d41): CHANGES REQUESTED — two unpinned citations in §9; fixed in 0d63d00.
