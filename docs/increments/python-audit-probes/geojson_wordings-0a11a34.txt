@@ -1,0 +1,544 @@
+--domain | Feature, geometry missing | refused: cannot parse probe.geojson: 'geometry'
+--domain | first feature, geometry missing | refused: cannot parse probe.geojson: 'geometry'
+--domain | second feature, geometry missing | refused: need exactly one feature, got 2
+--domain | Feature, geometry null | refused: cannot parse probe.geojson: 'NoneType' object has no attribute 'get'
+--domain | first feature, geometry null | refused: cannot parse probe.geojson: 'NoneType' object has no attribute 'get'
+--domain | second feature, geometry null | refused: need exactly one feature, got 2
+--domain | Feature, geometry "" | refused: cannot parse probe.geojson: 'str' object has no attribute 'get'
+--domain | first feature, geometry "" | refused: cannot parse probe.geojson: 'str' object has no attribute 'get'
+--domain | second feature, geometry "" | refused: need exactly one feature, got 2
+--domain | Feature, geometry 0 | refused: cannot parse probe.geojson: 'int' object has no attribute 'get'
+--domain | first feature, geometry 0 | refused: cannot parse probe.geojson: 'int' object has no attribute 'get'
+--domain | second feature, geometry 0 | refused: need exactly one feature, got 2
+--domain | Feature, geometry false | refused: cannot parse probe.geojson: 'bool' object has no attribute 'get'
+--domain | first feature, geometry false | refused: cannot parse probe.geojson: 'bool' object has no attribute 'get'
+--domain | second feature, geometry false | refused: need exactly one feature, got 2
+--domain | Feature, geometry [] | refused: cannot parse probe.geojson: 'list' object has no attribute 'get'
+--domain | first feature, geometry [] | refused: cannot parse probe.geojson: 'list' object has no attribute 'get'
+--domain | second feature, geometry [] | refused: need exactly one feature, got 2
+--domain | Feature, geometry {} | refused: cannot parse probe.geojson: 'NoneType' object has no attribute 'lower'
+--domain | first feature, geometry {} | refused: cannot parse probe.geojson: 'NoneType' object has no attribute 'lower'
+--domain | second feature, geometry {} | refused: need exactly one feature, got 2
+--domain | Feature, geometry 7 | refused: cannot parse probe.geojson: 'int' object has no attribute 'get'
+--domain | first feature, geometry 7 | refused: cannot parse probe.geojson: 'int' object has no attribute 'get'
+--domain | second feature, geometry 7 | refused: need exactly one feature, got 2
+--domain | Feature, geometry "Point" | refused: cannot parse probe.geojson: 'str' object has no attribute 'get'
+--domain | first feature, geometry "Point" | refused: cannot parse probe.geojson: 'str' object has no attribute 'get'
+--domain | second feature, geometry "Point" | refused: need exactly one feature, got 2
+--domain | Feature, geometry [1, 2] | refused: cannot parse probe.geojson: 'list' object has no attribute 'get'
+--domain | first feature, geometry [1, 2] | refused: cannot parse probe.geojson: 'list' object has no attribute 'get'
+--domain | second feature, geometry [1, 2] | refused: need exactly one feature, got 2
+--domain | Feature, geometry without type | refused: cannot parse probe.geojson: 'NoneType' object has no attribute 'lower'
+--domain | first feature, geometry without type | refused: cannot parse probe.geojson: 'NoneType' object has no attribute 'lower'
+--domain | second feature, geometry without type | refused: need exactly one feature, got 2
+--domain | Feature, type null | refused: cannot parse probe.geojson: 'NoneType' object has no attribute 'lower'
+--domain | first feature, type null | refused: cannot parse probe.geojson: 'NoneType' object has no attribute 'lower'
+--domain | second feature, type null | refused: need exactly one feature, got 2
+--domain | Feature, type "" | UNCAUGHT GeometryTypeError: Unknown geometry type: ''
+--domain | first feature, type "" | UNCAUGHT GeometryTypeError: Unknown geometry type: ''
+--domain | second feature, type "" | refused: need exactly one feature, got 2
+--domain | Feature, type 0 | refused: cannot parse probe.geojson: 'int' object has no attribute 'lower'
+--domain | first feature, type 0 | refused: cannot parse probe.geojson: 'int' object has no attribute 'lower'
+--domain | second feature, type 0 | refused: need exactly one feature, got 2
+--domain | Feature, type false | refused: cannot parse probe.geojson: 'bool' object has no attribute 'lower'
+--domain | first feature, type false | refused: cannot parse probe.geojson: 'bool' object has no attribute 'lower'
+--domain | second feature, type false | refused: need exactly one feature, got 2
+--domain | Feature, type [] | refused: cannot parse probe.geojson: 'list' object has no attribute 'lower'
+--domain | first feature, type [] | refused: cannot parse probe.geojson: 'list' object has no attribute 'lower'
+--domain | second feature, type [] | refused: need exactly one feature, got 2
+--domain | Feature, type {} | refused: cannot parse probe.geojson: 'dict' object has no attribute 'lower'
+--domain | first feature, type {} | refused: cannot parse probe.geojson: 'dict' object has no attribute 'lower'
+--domain | second feature, type {} | refused: need exactly one feature, got 2
+--domain | bare geometry, right type | read: a Polygon
+--domain | bare geometry, wrong type | refused: probe.geojson: the domain must be one Polygon, got Point
+--domain | crs member only | refused: cannot parse probe.geojson: 'NoneType' object has no attribute 'lower'
+--domain | control: good Feature | read: a Polygon
+--domain | control: good collection | read: a Polygon
+--domain | crs null | refused: cannot parse probe.geojson: the crs member is null; the file must name its CRS
+--domain | crs {} | refused: cannot parse probe.geojson: the crs member has no name; it must name the CRS
+--domain | crs name null | refused: cannot parse probe.geojson: the crs member has no name; it must name the CRS
+--domain | crs without name | refused: cannot parse probe.geojson: the crs member has no name; it must name the CRS
+--domain | crs unreadable name | refused: cannot parse probe.geojson: cannot read the CRS 'EPSG:1': Invalid projection: EPSG:1: (Internal Proj Error: proj_create: crs not found: EPSG:1)
+--domain | no crs member | read: a Polygon
+--domain | collection without type | read: a Polygon
+--domain | "features": {} | refused: cannot parse probe.geojson: no features list; the file is not a FeatureCollection
+--domain | "features": [7] | refused: cannot parse probe.geojson: no features list; the file is not a FeatureCollection
+--domain | a JSON list | refused: cannot parse probe.geojson: not a GeoJSON object; the file must hold a FeatureCollection, a Feature or a geometry
+--domain | not JSON | refused: cannot parse probe.geojson: Expecting property name enclosed in double quotes: line 1 column 2 (char 1)
+--domain | byte order mark | read: a Polygon
+read_source | Feature, geometry missing | refused: probe.geojson: not a GeoJSON FeatureCollection ('geometry')
+read_source | first feature, geometry missing | refused: probe.geojson: not a GeoJSON FeatureCollection ('geometry')
+read_source | second feature, geometry missing | refused: probe.geojson: not a GeoJSON FeatureCollection ('geometry')
+read_source | Feature, geometry null | read: [(0, None)]
+read_source | first feature, geometry null | read: [(0, None)]
+read_source | second feature, geometry null | read: [(0, 'LineString'), (1, None)]
+read_source | Feature, geometry "" | read: [(0, None)]
+read_source | first feature, geometry "" | read: [(0, None)]
+read_source | second feature, geometry "" | read: [(0, 'LineString'), (1, None)]
+read_source | Feature, geometry 0 | read: [(0, None)]
+read_source | first feature, geometry 0 | read: [(0, None)]
+read_source | second feature, geometry 0 | read: [(0, 'LineString'), (1, None)]
+read_source | Feature, geometry false | read: [(0, None)]
+read_source | first feature, geometry false | read: [(0, None)]
+read_source | second feature, geometry false | read: [(0, 'LineString'), (1, None)]
+read_source | Feature, geometry [] | read: [(0, None)]
+read_source | first feature, geometry [] | read: [(0, None)]
+read_source | second feature, geometry [] | read: [(0, 'LineString'), (1, None)]
+read_source | Feature, geometry {} | read: [(0, None)]
+read_source | first feature, geometry {} | read: [(0, None)]
+read_source | second feature, geometry {} | read: [(0, 'LineString'), (1, None)]
+read_source | Feature, geometry 7 | refused: probe.geojson: not a GeoJSON FeatureCollection ('int' object has no attribute 'get')
+read_source | first feature, geometry 7 | refused: probe.geojson: not a GeoJSON FeatureCollection ('int' object has no attribute 'get')
+read_source | second feature, geometry 7 | refused: probe.geojson: not a GeoJSON FeatureCollection ('int' object has no attribute 'get')
+read_source | Feature, geometry "Point" | refused: probe.geojson: not a GeoJSON FeatureCollection ('str' object has no attribute 'get')
+read_source | first feature, geometry "Point" | refused: probe.geojson: not a GeoJSON FeatureCollection ('str' object has no attribute 'get')
+read_source | second feature, geometry "Point" | refused: probe.geojson: not a GeoJSON FeatureCollection ('str' object has no attribute 'get')
+read_source | Feature, geometry [1, 2] | refused: probe.geojson: not a GeoJSON FeatureCollection ('list' object has no attribute 'get')
+read_source | first feature, geometry [1, 2] | refused: probe.geojson: not a GeoJSON FeatureCollection ('list' object has no attribute 'get')
+read_source | second feature, geometry [1, 2] | refused: probe.geojson: not a GeoJSON FeatureCollection ('list' object has no attribute 'get')
+read_source | Feature, geometry without type | refused: probe.geojson: not a GeoJSON FeatureCollection ('NoneType' object has no attribute 'lower')
+read_source | first feature, geometry without type | refused: probe.geojson: not a GeoJSON FeatureCollection ('NoneType' object has no attribute 'lower')
+read_source | second feature, geometry without type | refused: probe.geojson: not a GeoJSON FeatureCollection ('NoneType' object has no attribute 'lower')
+read_source | Feature, type null | refused: probe.geojson: not a GeoJSON FeatureCollection ('NoneType' object has no attribute 'lower')
+read_source | first feature, type null | refused: probe.geojson: not a GeoJSON FeatureCollection ('NoneType' object has no attribute 'lower')
+read_source | second feature, type null | refused: probe.geojson: not a GeoJSON FeatureCollection ('NoneType' object has no attribute 'lower')
+read_source | Feature, type "" | refused: probe.geojson: not a GeoJSON FeatureCollection (Unknown geometry type: '')
+read_source | first feature, type "" | refused: probe.geojson: not a GeoJSON FeatureCollection (Unknown geometry type: '')
+read_source | second feature, type "" | refused: probe.geojson: not a GeoJSON FeatureCollection (Unknown geometry type: '')
+read_source | Feature, type 0 | refused: probe.geojson: not a GeoJSON FeatureCollection ('int' object has no attribute 'lower')
+read_source | first feature, type 0 | refused: probe.geojson: not a GeoJSON FeatureCollection ('int' object has no attribute 'lower')
+read_source | second feature, type 0 | refused: probe.geojson: not a GeoJSON FeatureCollection ('int' object has no attribute 'lower')
+read_source | Feature, type false | refused: probe.geojson: not a GeoJSON FeatureCollection ('bool' object has no attribute 'lower')
+read_source | first feature, type false | refused: probe.geojson: not a GeoJSON FeatureCollection ('bool' object has no attribute 'lower')
+read_source | second feature, type false | refused: probe.geojson: not a GeoJSON FeatureCollection ('bool' object has no attribute 'lower')
+read_source | Feature, type [] | refused: probe.geojson: not a GeoJSON FeatureCollection ('list' object has no attribute 'lower')
+read_source | first feature, type [] | refused: probe.geojson: not a GeoJSON FeatureCollection ('list' object has no attribute 'lower')
+read_source | second feature, type [] | refused: probe.geojson: not a GeoJSON FeatureCollection ('list' object has no attribute 'lower')
+read_source | Feature, type {} | refused: probe.geojson: not a GeoJSON FeatureCollection ('dict' object has no attribute 'lower')
+read_source | first feature, type {} | refused: probe.geojson: not a GeoJSON FeatureCollection ('dict' object has no attribute 'lower')
+read_source | second feature, type {} | refused: probe.geojson: not a GeoJSON FeatureCollection ('dict' object has no attribute 'lower')
+read_source | bare geometry, right type | read: [(0, 'LineString')]
+read_source | bare geometry, wrong type | read: [(0, 'Point')]
+read_source | crs member only | refused: probe.geojson: not a GeoJSON FeatureCollection ('NoneType' object has no attribute 'lower')
+read_source | control: good Feature | read: [(0, 'LineString')]
+read_source | control: good collection | read: [(0, 'LineString')]
+read_source | crs null | refused: probe.geojson: the crs member is null; the file must name its CRS
+read_source | crs {} | refused: probe.geojson: the crs member has no name; it must name the CRS
+read_source | crs name null | refused: probe.geojson: the crs member has no name; it must name the CRS
+read_source | crs without name | refused: probe.geojson: the crs member has no name; it must name the CRS
+read_source | crs unreadable name | refused: probe.geojson: cannot read the CRS 'EPSG:1': Invalid projection: EPSG:1: (Internal Proj Error: proj_create: crs not found: EPSG:1)
+read_source | no crs member | read: [(0, 'LineString')]
+read_source | collection without type | read: [(0, 'LineString')]
+read_source | "features": {} | refused: probe.geojson: no features list; the file is not a FeatureCollection
+read_source | "features": [7] | refused: probe.geojson: no features list; the file is not a FeatureCollection
+read_source | a JSON list | refused: probe.geojson: not a GeoJSON object; the file must hold a FeatureCollection, a Feature or a geometry
+read_source | not JSON | refused: probe.geojson: Expecting property name enclosed in double quotes: line 1 column 2 (char 1)
+read_source | byte order mark | read: [(0, 'LineString')]
+--features | Feature, geometry missing | refused: probe.geojson: not a GeoJSON FeatureCollection ('geometry')
+--features | first feature, geometry missing | refused: probe.geojson: not a GeoJSON FeatureCollection ('geometry')
+--features | second feature, geometry missing | refused: probe.geojson: not a GeoJSON FeatureCollection ('geometry')
+--features | Feature, geometry null | read: 0 features, 1 empty, 0 outside
+--features | first feature, geometry null | read: 0 features, 1 empty, 0 outside
+--features | second feature, geometry null | read: 1 features, 1 empty, 0 outside
+--features | Feature, geometry "" | read: 0 features, 1 empty, 0 outside
+--features | first feature, geometry "" | read: 0 features, 1 empty, 0 outside
+--features | second feature, geometry "" | read: 1 features, 1 empty, 0 outside
+--features | Feature, geometry 0 | read: 0 features, 1 empty, 0 outside
+--features | first feature, geometry 0 | read: 0 features, 1 empty, 0 outside
+--features | second feature, geometry 0 | read: 1 features, 1 empty, 0 outside
+--features | Feature, geometry false | read: 0 features, 1 empty, 0 outside
+--features | first feature, geometry false | read: 0 features, 1 empty, 0 outside
+--features | second feature, geometry false | read: 1 features, 1 empty, 0 outside
+--features | Feature, geometry [] | read: 0 features, 1 empty, 0 outside
+--features | first feature, geometry [] | read: 0 features, 1 empty, 0 outside
+--features | second feature, geometry [] | read: 1 features, 1 empty, 0 outside
+--features | Feature, geometry {} | read: 0 features, 1 empty, 0 outside
+--features | first feature, geometry {} | read: 0 features, 1 empty, 0 outside
+--features | second feature, geometry {} | read: 1 features, 1 empty, 0 outside
+--features | Feature, geometry 7 | refused: probe.geojson: not a GeoJSON FeatureCollection ('int' object has no attribute 'get')
+--features | first feature, geometry 7 | refused: probe.geojson: not a GeoJSON FeatureCollection ('int' object has no attribute 'get')
+--features | second feature, geometry 7 | refused: probe.geojson: not a GeoJSON FeatureCollection ('int' object has no attribute 'get')
+--features | Feature, geometry "Point" | refused: probe.geojson: not a GeoJSON FeatureCollection ('str' object has no attribute 'get')
+--features | first feature, geometry "Point" | refused: probe.geojson: not a GeoJSON FeatureCollection ('str' object has no attribute 'get')
+--features | second feature, geometry "Point" | refused: probe.geojson: not a GeoJSON FeatureCollection ('str' object has no attribute 'get')
+--features | Feature, geometry [1, 2] | refused: probe.geojson: not a GeoJSON FeatureCollection ('list' object has no attribute 'get')
+--features | first feature, geometry [1, 2] | refused: probe.geojson: not a GeoJSON FeatureCollection ('list' object has no attribute 'get')
+--features | second feature, geometry [1, 2] | refused: probe.geojson: not a GeoJSON FeatureCollection ('list' object has no attribute 'get')
+--features | Feature, geometry without type | refused: probe.geojson: not a GeoJSON FeatureCollection ('NoneType' object has no attribute 'lower')
+--features | first feature, geometry without type | refused: probe.geojson: not a GeoJSON FeatureCollection ('NoneType' object has no attribute 'lower')
+--features | second feature, geometry without type | refused: probe.geojson: not a GeoJSON FeatureCollection ('NoneType' object has no attribute 'lower')
+--features | Feature, type null | refused: probe.geojson: not a GeoJSON FeatureCollection ('NoneType' object has no attribute 'lower')
+--features | first feature, type null | refused: probe.geojson: not a GeoJSON FeatureCollection ('NoneType' object has no attribute 'lower')
+--features | second feature, type null | refused: probe.geojson: not a GeoJSON FeatureCollection ('NoneType' object has no attribute 'lower')
+--features | Feature, type "" | refused: probe.geojson: not a GeoJSON FeatureCollection (Unknown geometry type: '')
+--features | first feature, type "" | refused: probe.geojson: not a GeoJSON FeatureCollection (Unknown geometry type: '')
+--features | second feature, type "" | refused: probe.geojson: not a GeoJSON FeatureCollection (Unknown geometry type: '')
+--features | Feature, type 0 | refused: probe.geojson: not a GeoJSON FeatureCollection ('int' object has no attribute 'lower')
+--features | first feature, type 0 | refused: probe.geojson: not a GeoJSON FeatureCollection ('int' object has no attribute 'lower')
+--features | second feature, type 0 | refused: probe.geojson: not a GeoJSON FeatureCollection ('int' object has no attribute 'lower')
+--features | Feature, type false | refused: probe.geojson: not a GeoJSON FeatureCollection ('bool' object has no attribute 'lower')
+--features | first feature, type false | refused: probe.geojson: not a GeoJSON FeatureCollection ('bool' object has no attribute 'lower')
+--features | second feature, type false | refused: probe.geojson: not a GeoJSON FeatureCollection ('bool' object has no attribute 'lower')
+--features | Feature, type [] | refused: probe.geojson: not a GeoJSON FeatureCollection ('list' object has no attribute 'lower')
+--features | first feature, type [] | refused: probe.geojson: not a GeoJSON FeatureCollection ('list' object has no attribute 'lower')
+--features | second feature, type [] | refused: probe.geojson: not a GeoJSON FeatureCollection ('list' object has no attribute 'lower')
+--features | Feature, type {} | refused: probe.geojson: not a GeoJSON FeatureCollection ('dict' object has no attribute 'lower')
+--features | first feature, type {} | refused: probe.geojson: not a GeoJSON FeatureCollection ('dict' object has no attribute 'lower')
+--features | second feature, type {} | refused: probe.geojson: not a GeoJSON FeatureCollection ('dict' object has no attribute 'lower')
+--features | bare geometry, right type | refused: probe.geojson: feature 0: property None is not in the map property
+--features | bare geometry, wrong type | refused: probe.geojson: feature 0 is a Point; input is polygons and lines
+--features | crs member only | refused: probe.geojson: not a GeoJSON FeatureCollection ('NoneType' object has no attribute 'lower')
+--features | control: good Feature | read: 1 features, 0 empty, 0 outside
+--features | control: good collection | read: 1 features, 0 empty, 0 outside
+--features | crs null | refused: probe.geojson: the crs member is null; the file must name its CRS
+--features | crs {} | refused: probe.geojson: the crs member has no name; it must name the CRS
+--features | crs name null | refused: probe.geojson: the crs member has no name; it must name the CRS
+--features | crs without name | refused: probe.geojson: the crs member has no name; it must name the CRS
+--features | crs unreadable name | refused: probe.geojson: cannot read the CRS 'EPSG:1': Invalid projection: EPSG:1: (Internal Proj Error: proj_create: crs not found: EPSG:1)
+--features | no crs member | refused: probe.geojson: feature 0 has a vertex with no image in the DEM
+--features | collection without type | read: 1 features, 0 empty, 0 outside
+--features | "features": {} | refused: probe.geojson: no features list; the file is not a FeatureCollection
+--features | "features": [7] | refused: probe.geojson: no features list; the file is not a FeatureCollection
+--features | a JSON list | refused: probe.geojson: not a GeoJSON object; the file must hold a FeatureCollection, a Feature or a geometry
+--features | not JSON | refused: probe.geojson: Expecting property name enclosed in double quotes: line 1 column 2 (char 1)
+--features | byte order mark | read: 1 features, 0 empty, 0 outside
+catchment --lakes | Feature, geometry missing | refused: probe.geojson: not a GeoJSON FeatureCollection ('geometry')
+catchment --lakes | first feature, geometry missing | refused: probe.geojson: not a GeoJSON FeatureCollection ('geometry')
+catchment --lakes | second feature, geometry missing | refused: probe.geojson: not a GeoJSON FeatureCollection ('geometry')
+catchment --lakes | Feature, geometry null | read: 0 lakes
+catchment --lakes | first feature, geometry null | read: 0 lakes
+catchment --lakes | second feature, geometry null | read: 1 lakes
+catchment --lakes | Feature, geometry "" | read: 0 lakes
+catchment --lakes | first feature, geometry "" | read: 0 lakes
+catchment --lakes | second feature, geometry "" | read: 1 lakes
+catchment --lakes | Feature, geometry 0 | read: 0 lakes
+catchment --lakes | first feature, geometry 0 | read: 0 lakes
+catchment --lakes | second feature, geometry 0 | read: 1 lakes
+catchment --lakes | Feature, geometry false | read: 0 lakes
+catchment --lakes | first feature, geometry false | read: 0 lakes
+catchment --lakes | second feature, geometry false | read: 1 lakes
+catchment --lakes | Feature, geometry [] | read: 0 lakes
+catchment --lakes | first feature, geometry [] | read: 0 lakes
+catchment --lakes | second feature, geometry [] | read: 1 lakes
+catchment --lakes | Feature, geometry {} | read: 0 lakes
+catchment --lakes | first feature, geometry {} | read: 0 lakes
+catchment --lakes | second feature, geometry {} | read: 1 lakes
+catchment --lakes | Feature, geometry 7 | refused: probe.geojson: not a GeoJSON FeatureCollection ('int' object has no attribute 'get')
+catchment --lakes | first feature, geometry 7 | refused: probe.geojson: not a GeoJSON FeatureCollection ('int' object has no attribute 'get')
+catchment --lakes | second feature, geometry 7 | refused: probe.geojson: not a GeoJSON FeatureCollection ('int' object has no attribute 'get')
+catchment --lakes | Feature, geometry "Point" | refused: probe.geojson: not a GeoJSON FeatureCollection ('str' object has no attribute 'get')
+catchment --lakes | first feature, geometry "Point" | refused: probe.geojson: not a GeoJSON FeatureCollection ('str' object has no attribute 'get')
+catchment --lakes | second feature, geometry "Point" | refused: probe.geojson: not a GeoJSON FeatureCollection ('str' object has no attribute 'get')
+catchment --lakes | Feature, geometry [1, 2] | refused: probe.geojson: not a GeoJSON FeatureCollection ('list' object has no attribute 'get')
+catchment --lakes | first feature, geometry [1, 2] | refused: probe.geojson: not a GeoJSON FeatureCollection ('list' object has no attribute 'get')
+catchment --lakes | second feature, geometry [1, 2] | refused: probe.geojson: not a GeoJSON FeatureCollection ('list' object has no attribute 'get')
+catchment --lakes | Feature, geometry without type | refused: probe.geojson: not a GeoJSON FeatureCollection ('NoneType' object has no attribute 'lower')
+catchment --lakes | first feature, geometry without type | refused: probe.geojson: not a GeoJSON FeatureCollection ('NoneType' object has no attribute 'lower')
+catchment --lakes | second feature, geometry without type | refused: probe.geojson: not a GeoJSON FeatureCollection ('NoneType' object has no attribute 'lower')
+catchment --lakes | Feature, type null | refused: probe.geojson: not a GeoJSON FeatureCollection ('NoneType' object has no attribute 'lower')
+catchment --lakes | first feature, type null | refused: probe.geojson: not a GeoJSON FeatureCollection ('NoneType' object has no attribute 'lower')
+catchment --lakes | second feature, type null | refused: probe.geojson: not a GeoJSON FeatureCollection ('NoneType' object has no attribute 'lower')
+catchment --lakes | Feature, type "" | refused: probe.geojson: not a GeoJSON FeatureCollection (Unknown geometry type: '')
+catchment --lakes | first feature, type "" | refused: probe.geojson: not a GeoJSON FeatureCollection (Unknown geometry type: '')
+catchment --lakes | second feature, type "" | refused: probe.geojson: not a GeoJSON FeatureCollection (Unknown geometry type: '')
+catchment --lakes | Feature, type 0 | refused: probe.geojson: not a GeoJSON FeatureCollection ('int' object has no attribute 'lower')
+catchment --lakes | first feature, type 0 | refused: probe.geojson: not a GeoJSON FeatureCollection ('int' object has no attribute 'lower')
+catchment --lakes | second feature, type 0 | refused: probe.geojson: not a GeoJSON FeatureCollection ('int' object has no attribute 'lower')
+catchment --lakes | Feature, type false | refused: probe.geojson: not a GeoJSON FeatureCollection ('bool' object has no attribute 'lower')
+catchment --lakes | first feature, type false | refused: probe.geojson: not a GeoJSON FeatureCollection ('bool' object has no attribute 'lower')
+catchment --lakes | second feature, type false | refused: probe.geojson: not a GeoJSON FeatureCollection ('bool' object has no attribute 'lower')
+catchment --lakes | Feature, type [] | refused: probe.geojson: not a GeoJSON FeatureCollection ('list' object has no attribute 'lower')
+catchment --lakes | first feature, type [] | refused: probe.geojson: not a GeoJSON FeatureCollection ('list' object has no attribute 'lower')
+catchment --lakes | second feature, type [] | refused: probe.geojson: not a GeoJSON FeatureCollection ('list' object has no attribute 'lower')
+catchment --lakes | Feature, type {} | refused: probe.geojson: not a GeoJSON FeatureCollection ('dict' object has no attribute 'lower')
+catchment --lakes | first feature, type {} | refused: probe.geojson: not a GeoJSON FeatureCollection ('dict' object has no attribute 'lower')
+catchment --lakes | second feature, type {} | refused: probe.geojson: not a GeoJSON FeatureCollection ('dict' object has no attribute 'lower')
+catchment --lakes | bare geometry, right type | read: 1 lakes
+catchment --lakes | bare geometry, wrong type | read: 0 lakes
+catchment --lakes | crs member only | refused: probe.geojson: not a GeoJSON FeatureCollection ('NoneType' object has no attribute 'lower')
+catchment --lakes | control: good Feature | read: 1 lakes
+catchment --lakes | control: good collection | read: 1 lakes
+catchment --lakes | crs null | refused: probe.geojson: the crs member is null; the file must name its CRS
+catchment --lakes | crs {} | refused: probe.geojson: the crs member has no name; it must name the CRS
+catchment --lakes | crs name null | refused: probe.geojson: the crs member has no name; it must name the CRS
+catchment --lakes | crs without name | refused: probe.geojson: the crs member has no name; it must name the CRS
+catchment --lakes | crs unreadable name | refused: probe.geojson: cannot read the CRS 'EPSG:1': Invalid projection: EPSG:1: (Internal Proj Error: proj_create: crs not found: EPSG:1)
+catchment --lakes | no crs member | read: 1 lakes
+catchment --lakes | collection without type | read: 1 lakes
+catchment --lakes | "features": {} | refused: probe.geojson: no features list; the file is not a FeatureCollection
+catchment --lakes | "features": [7] | refused: probe.geojson: no features list; the file is not a FeatureCollection
+catchment --lakes | a JSON list | refused: probe.geojson: not a GeoJSON object; the file must hold a FeatureCollection, a Feature or a geometry
+catchment --lakes | not JSON | refused: probe.geojson: Expecting property name enclosed in double quotes: line 1 column 2 (char 1)
+catchment --lakes | byte order mark | read: 1 lakes
+stations | Feature, geometry missing | refused: probe.geojson: feature 0 has no geometry
+stations | first feature, geometry missing | refused: probe.geojson: feature 0 has no geometry
+stations | second feature, geometry missing | refused: probe.geojson: feature 1 has no geometry
+stations | Feature, geometry null | refused: probe.geojson: feature 0 has no geometry
+stations | first feature, geometry null | refused: probe.geojson: feature 0 has no geometry
+stations | second feature, geometry null | refused: probe.geojson: feature 1 has no geometry
+stations | Feature, geometry "" | refused: probe.geojson: feature 0 has no geometry
+stations | first feature, geometry "" | refused: probe.geojson: feature 0 has no geometry
+stations | second feature, geometry "" | refused: probe.geojson: feature 1 has no geometry
+stations | Feature, geometry 0 | refused: probe.geojson: feature 0 has no geometry
+stations | first feature, geometry 0 | refused: probe.geojson: feature 0 has no geometry
+stations | second feature, geometry 0 | refused: probe.geojson: feature 1 has no geometry
+stations | Feature, geometry false | refused: probe.geojson: feature 0 has no geometry
+stations | first feature, geometry false | refused: probe.geojson: feature 0 has no geometry
+stations | second feature, geometry false | refused: probe.geojson: feature 1 has no geometry
+stations | Feature, geometry [] | refused: probe.geojson: feature 0 has no geometry
+stations | first feature, geometry [] | refused: probe.geojson: feature 0 has no geometry
+stations | second feature, geometry [] | refused: probe.geojson: feature 1 has no geometry
+stations | Feature, geometry {} | refused: probe.geojson: feature 0 has no geometry
+stations | first feature, geometry {} | refused: probe.geojson: feature 0 has no geometry
+stations | second feature, geometry {} | refused: probe.geojson: feature 1 has no geometry
+stations | Feature, geometry 7 | UNCAUGHT AttributeError: 'int' object has no attribute 'get'
+stations | first feature, geometry 7 | UNCAUGHT AttributeError: 'int' object has no attribute 'get'
+stations | second feature, geometry 7 | UNCAUGHT AttributeError: 'int' object has no attribute 'get'
+stations | Feature, geometry "Point" | UNCAUGHT AttributeError: 'str' object has no attribute 'get'
+stations | first feature, geometry "Point" | UNCAUGHT AttributeError: 'str' object has no attribute 'get'
+stations | second feature, geometry "Point" | UNCAUGHT AttributeError: 'str' object has no attribute 'get'
+stations | Feature, geometry [1, 2] | UNCAUGHT AttributeError: 'list' object has no attribute 'get'
+stations | first feature, geometry [1, 2] | UNCAUGHT AttributeError: 'list' object has no attribute 'get'
+stations | second feature, geometry [1, 2] | UNCAUGHT AttributeError: 'list' object has no attribute 'get'
+stations | Feature, geometry without type | refused: probe.geojson: feature 0 has no geometry
+stations | first feature, geometry without type | refused: probe.geojson: feature 0 has no geometry
+stations | second feature, geometry without type | refused: probe.geojson: feature 1 has no geometry
+stations | Feature, type null | refused: probe.geojson: feature 0 has no geometry
+stations | first feature, type null | refused: probe.geojson: feature 0 has no geometry
+stations | second feature, type null | refused: probe.geojson: feature 1 has no geometry
+stations | Feature, type "" | refused: probe.geojson: 1.2.0 is a , not a Point
+stations | first feature, type "" | refused: probe.geojson: 1.2.0 is a , not a Point
+stations | second feature, type "" | refused: probe.geojson: 1.2.1 is a , not a Point
+stations | Feature, type 0 | refused: probe.geojson: 1.2.0 is a 0, not a Point
+stations | first feature, type 0 | refused: probe.geojson: 1.2.0 is a 0, not a Point
+stations | second feature, type 0 | refused: probe.geojson: 1.2.1 is a 0, not a Point
+stations | Feature, type false | refused: probe.geojson: 1.2.0 is a False, not a Point
+stations | first feature, type false | refused: probe.geojson: 1.2.0 is a False, not a Point
+stations | second feature, type false | refused: probe.geojson: 1.2.1 is a False, not a Point
+stations | Feature, type [] | refused: probe.geojson: 1.2.0 is a [], not a Point
+stations | first feature, type [] | refused: probe.geojson: 1.2.0 is a [], not a Point
+stations | second feature, type [] | refused: probe.geojson: 1.2.1 is a [], not a Point
+stations | Feature, type {} | refused: probe.geojson: 1.2.0 is a {}, not a Point
+stations | first feature, type {} | refused: probe.geojson: 1.2.0 is a {}, not a Point
+stations | second feature, type {} | refused: probe.geojson: 1.2.1 is a {}, not a Point
+stations | bare geometry, right type | refused: 1 validation error for Station station Field required [type=missing, input_value={'x': 500000.0, 'y': 6600000.0}, input_type=dict] For further information visit https://errors.pydantic.dev/2.13/v/missing
+stations | bare geometry, wrong type | refused: probe.geojson: None is a LineString, not a Point
+stations | crs member only | refused: probe.geojson: feature 0 has no geometry
+stations | control: good Feature | read: ['1.2.0']
+stations | control: good collection | read: ['1.2.0']
+stations | crs null | refused: probe.geojson: the crs member is null; the file must name its CRS
+stations | crs {} | refused: probe.geojson: the crs member has no name; it must name the CRS
+stations | crs name null | refused: probe.geojson: the crs member has no name; it must name the CRS
+stations | crs without name | refused: probe.geojson: the crs member has no name; it must name the CRS
+stations | crs unreadable name | refused: probe.geojson: cannot read the CRS 'EPSG:1': Invalid projection: EPSG:1: (Internal Proj Error: proj_create: crs not found: EPSG:1)
+stations | no crs member | refused: probe.geojson: no crs member; the file must name its CRS
+stations | collection without type | read: ['1.2.0']
+stations | "features": {} | refused: probe.geojson: no features list; the file is not a FeatureCollection
+stations | "features": [7] | refused: probe.geojson: no features list; the file is not a FeatureCollection
+stations | a JSON list | refused: probe.geojson: not a GeoJSON object; the file must hold a FeatureCollection, a Feature or a geometry
+stations | not JSON | refused: probe.geojson: Expecting property name enclosed in double quotes: line 1 column 2 (char 1)
+stations | byte order mark | read: ['1.2.0']
+references | Feature, geometry missing | refused: probe.geojson: feature 0 has no geometry
+references | first feature, geometry missing | refused: probe.geojson: feature 0 has no geometry
+references | second feature, geometry missing | refused: probe.geojson: feature 1 has no geometry
+references | Feature, geometry null | refused: probe.geojson: feature 0 has no geometry
+references | first feature, geometry null | refused: probe.geojson: feature 0 has no geometry
+references | second feature, geometry null | refused: probe.geojson: feature 1 has no geometry
+references | Feature, geometry "" | refused: probe.geojson: feature 0 has no geometry
+references | first feature, geometry "" | refused: probe.geojson: feature 0 has no geometry
+references | second feature, geometry "" | refused: probe.geojson: feature 1 has no geometry
+references | Feature, geometry 0 | refused: probe.geojson: feature 0 has no geometry
+references | first feature, geometry 0 | refused: probe.geojson: feature 0 has no geometry
+references | second feature, geometry 0 | refused: probe.geojson: feature 1 has no geometry
+references | Feature, geometry false | refused: probe.geojson: feature 0 has no geometry
+references | first feature, geometry false | refused: probe.geojson: feature 0 has no geometry
+references | second feature, geometry false | refused: probe.geojson: feature 1 has no geometry
+references | Feature, geometry [] | refused: probe.geojson: feature 0 has no geometry
+references | first feature, geometry [] | refused: probe.geojson: feature 0 has no geometry
+references | second feature, geometry [] | refused: probe.geojson: feature 1 has no geometry
+references | Feature, geometry {} | refused: probe.geojson: feature 0 has no geometry
+references | first feature, geometry {} | refused: probe.geojson: feature 0 has no geometry
+references | second feature, geometry {} | refused: probe.geojson: feature 1 has no geometry
+references | Feature, geometry 7 | UNCAUGHT AttributeError: 'int' object has no attribute 'get'
+references | first feature, geometry 7 | UNCAUGHT AttributeError: 'int' object has no attribute 'get'
+references | second feature, geometry 7 | UNCAUGHT AttributeError: 'int' object has no attribute 'get'
+references | Feature, geometry "Point" | UNCAUGHT AttributeError: 'str' object has no attribute 'get'
+references | first feature, geometry "Point" | UNCAUGHT AttributeError: 'str' object has no attribute 'get'
+references | second feature, geometry "Point" | UNCAUGHT AttributeError: 'str' object has no attribute 'get'
+references | Feature, geometry [1, 2] | UNCAUGHT AttributeError: 'list' object has no attribute 'get'
+references | first feature, geometry [1, 2] | UNCAUGHT AttributeError: 'list' object has no attribute 'get'
+references | second feature, geometry [1, 2] | UNCAUGHT AttributeError: 'list' object has no attribute 'get'
+references | Feature, geometry without type | refused: probe.geojson: feature 0 has no geometry
+references | first feature, geometry without type | refused: probe.geojson: feature 0 has no geometry
+references | second feature, geometry without type | refused: probe.geojson: feature 1 has no geometry
+references | Feature, type null | refused: probe.geojson: feature 0 has no geometry
+references | first feature, type null | refused: probe.geojson: feature 0 has no geometry
+references | second feature, type null | refused: probe.geojson: feature 1 has no geometry
+references | Feature, type "" | refused: probe.geojson: 1.2.0 is a , not a Polygon or MultiPolygon
+references | first feature, type "" | refused: probe.geojson: 1.2.0 is a , not a Polygon or MultiPolygon
+references | second feature, type "" | refused: probe.geojson: 1.2.1 is a , not a Polygon or MultiPolygon
+references | Feature, type 0 | refused: probe.geojson: 1.2.0 is a 0, not a Polygon or MultiPolygon
+references | first feature, type 0 | refused: probe.geojson: 1.2.0 is a 0, not a Polygon or MultiPolygon
+references | second feature, type 0 | refused: probe.geojson: 1.2.1 is a 0, not a Polygon or MultiPolygon
+references | Feature, type false | refused: probe.geojson: 1.2.0 is a False, not a Polygon or MultiPolygon
+references | first feature, type false | refused: probe.geojson: 1.2.0 is a False, not a Polygon or MultiPolygon
+references | second feature, type false | refused: probe.geojson: 1.2.1 is a False, not a Polygon or MultiPolygon
+references | Feature, type [] | refused: probe.geojson: 1.2.0 is a [], not a Polygon or MultiPolygon
+references | first feature, type [] | refused: probe.geojson: 1.2.0 is a [], not a Polygon or MultiPolygon
+references | second feature, type [] | refused: probe.geojson: 1.2.1 is a [], not a Polygon or MultiPolygon
+references | Feature, type {} | refused: probe.geojson: 1.2.0 is a {}, not a Polygon or MultiPolygon
+references | first feature, type {} | refused: probe.geojson: 1.2.0 is a {}, not a Polygon or MultiPolygon
+references | second feature, type {} | refused: probe.geojson: 1.2.1 is a {}, not a Polygon or MultiPolygon
+references | bare geometry, right type | refused: probe.geojson: a feature has no station property
+references | bare geometry, wrong type | refused: probe.geojson: None is a Point, not a Polygon or MultiPolygon
+references | crs member only | refused: probe.geojson: feature 0 has no geometry
+references | control: good Feature | read: ['1.2.0']
+references | control: good collection | read: ['1.2.0']
+references | crs null | refused: probe.geojson: the crs member is null; the file must name its CRS
+references | crs {} | refused: probe.geojson: the crs member has no name; it must name the CRS
+references | crs name null | refused: probe.geojson: the crs member has no name; it must name the CRS
+references | crs without name | refused: probe.geojson: the crs member has no name; it must name the CRS
+references | crs unreadable name | refused: probe.geojson: cannot read the CRS 'EPSG:1': Invalid projection: EPSG:1: (Internal Proj Error: proj_create: crs not found: EPSG:1)
+references | no crs member | refused: probe.geojson: no crs member; the file must name its CRS
+references | collection without type | read: ['1.2.0']
+references | "features": {} | refused: probe.geojson: no features list; the file is not a FeatureCollection
+references | "features": [7] | refused: probe.geojson: no features list; the file is not a FeatureCollection
+references | a JSON list | refused: probe.geojson: not a GeoJSON object; the file must hold a FeatureCollection, a Feature or a geometry
+references | not JSON | refused: probe.geojson: Expecting property name enclosed in double quotes: line 1 column 2 (char 1)
+references | byte order mark | read: ['1.2.0']
+NVE lakes | Feature, geometry missing | refused: probe.geojson: feature 0 has no geometry
+NVE lakes | first feature, geometry missing | refused: probe.geojson: feature 0 has no geometry
+NVE lakes | second feature, geometry missing | refused: probe.geojson: feature 1 has no geometry
+NVE lakes | Feature, geometry null | refused: probe.geojson: feature 0 has no geometry
+NVE lakes | first feature, geometry null | refused: probe.geojson: feature 0 has no geometry
+NVE lakes | second feature, geometry null | refused: probe.geojson: feature 1 has no geometry
+NVE lakes | Feature, geometry "" | refused: probe.geojson: feature 0 has no geometry
+NVE lakes | first feature, geometry "" | refused: probe.geojson: feature 0 has no geometry
+NVE lakes | second feature, geometry "" | refused: probe.geojson: feature 1 has no geometry
+NVE lakes | Feature, geometry 0 | refused: probe.geojson: feature 0 has no geometry
+NVE lakes | first feature, geometry 0 | refused: probe.geojson: feature 0 has no geometry
+NVE lakes | second feature, geometry 0 | refused: probe.geojson: feature 1 has no geometry
+NVE lakes | Feature, geometry false | refused: probe.geojson: feature 0 has no geometry
+NVE lakes | first feature, geometry false | refused: probe.geojson: feature 0 has no geometry
+NVE lakes | second feature, geometry false | refused: probe.geojson: feature 1 has no geometry
+NVE lakes | Feature, geometry [] | refused: probe.geojson: feature 0 has no geometry
+NVE lakes | first feature, geometry [] | refused: probe.geojson: feature 0 has no geometry
+NVE lakes | second feature, geometry [] | refused: probe.geojson: feature 1 has no geometry
+NVE lakes | Feature, geometry {} | refused: probe.geojson: feature 0 has no geometry
+NVE lakes | first feature, geometry {} | refused: probe.geojson: feature 0 has no geometry
+NVE lakes | second feature, geometry {} | refused: probe.geojson: feature 1 has no geometry
+NVE lakes | Feature, geometry 7 | UNCAUGHT AttributeError: 'int' object has no attribute 'get'
+NVE lakes | first feature, geometry 7 | UNCAUGHT AttributeError: 'int' object has no attribute 'get'
+NVE lakes | second feature, geometry 7 | UNCAUGHT AttributeError: 'int' object has no attribute 'get'
+NVE lakes | Feature, geometry "Point" | UNCAUGHT AttributeError: 'str' object has no attribute 'get'
+NVE lakes | first feature, geometry "Point" | UNCAUGHT AttributeError: 'str' object has no attribute 'get'
+NVE lakes | second feature, geometry "Point" | UNCAUGHT AttributeError: 'str' object has no attribute 'get'
+NVE lakes | Feature, geometry [1, 2] | UNCAUGHT AttributeError: 'list' object has no attribute 'get'
+NVE lakes | first feature, geometry [1, 2] | UNCAUGHT AttributeError: 'list' object has no attribute 'get'
+NVE lakes | second feature, geometry [1, 2] | UNCAUGHT AttributeError: 'list' object has no attribute 'get'
+NVE lakes | Feature, geometry without type | refused: probe.geojson: feature 0 has no geometry
+NVE lakes | first feature, geometry without type | refused: probe.geojson: feature 0 has no geometry
+NVE lakes | second feature, geometry without type | refused: probe.geojson: feature 1 has no geometry
+NVE lakes | Feature, type null | refused: probe.geojson: feature 0 has no geometry
+NVE lakes | first feature, type null | refused: probe.geojson: feature 0 has no geometry
+NVE lakes | second feature, type null | refused: probe.geojson: feature 1 has no geometry
+NVE lakes | Feature, type "" | refused: probe.geojson: lake 1 is not a polygon with an area ()
+NVE lakes | first feature, type "" | refused: probe.geojson: lake 1 is not a polygon with an area ()
+NVE lakes | second feature, type "" | refused: probe.geojson: lake 2 is not a polygon with an area ()
+NVE lakes | Feature, type 0 | refused: probe.geojson: lake 1 is not a polygon with an area (0)
+NVE lakes | first feature, type 0 | refused: probe.geojson: lake 1 is not a polygon with an area (0)
+NVE lakes | second feature, type 0 | refused: probe.geojson: lake 2 is not a polygon with an area (0)
+NVE lakes | Feature, type false | refused: probe.geojson: lake 1 is not a polygon with an area (False)
+NVE lakes | first feature, type false | refused: probe.geojson: lake 1 is not a polygon with an area (False)
+NVE lakes | second feature, type false | refused: probe.geojson: lake 2 is not a polygon with an area (False)
+NVE lakes | Feature, type [] | refused: probe.geojson: lake 1 is not a polygon with an area ([])
+NVE lakes | first feature, type [] | refused: probe.geojson: lake 1 is not a polygon with an area ([])
+NVE lakes | second feature, type [] | refused: probe.geojson: lake 2 is not a polygon with an area ([])
+NVE lakes | Feature, type {} | refused: probe.geojson: lake 1 is not a polygon with an area ({})
+NVE lakes | first feature, type {} | refused: probe.geojson: lake 1 is not a polygon with an area ({})
+NVE lakes | second feature, type {} | refused: probe.geojson: lake 2 is not a polygon with an area ({})
+NVE lakes | bare geometry, right type | read: 1 lakes
+NVE lakes | bare geometry, wrong type | refused: probe.geojson: feature 0 is not a polygon with an area (Point)
+NVE lakes | crs member only | refused: probe.geojson: feature 0 has no geometry
+NVE lakes | control: good Feature | read: 1 lakes
+NVE lakes | control: good collection | read: 1 lakes
+NVE lakes | crs null | refused: probe.geojson: the crs member is null; the file must name its CRS
+NVE lakes | crs {} | refused: probe.geojson: the crs member has no name; it must name the CRS
+NVE lakes | crs name null | refused: probe.geojson: the crs member has no name; it must name the CRS
+NVE lakes | crs without name | refused: probe.geojson: the crs member has no name; it must name the CRS
+NVE lakes | crs unreadable name | refused: probe.geojson: cannot read the CRS 'EPSG:1': Invalid projection: EPSG:1: (Internal Proj Error: proj_create: crs not found: EPSG:1)
+NVE lakes | no crs member | refused: probe.geojson: no crs member; the file must name its CRS
+NVE lakes | collection without type | read: 1 lakes
+NVE lakes | "features": {} | refused: probe.geojson: no features list; the file is not a FeatureCollection
+NVE lakes | "features": [7] | refused: probe.geojson: no features list; the file is not a FeatureCollection
+NVE lakes | a JSON list | refused: probe.geojson: not a GeoJSON object; the file must hold a FeatureCollection, a Feature or a geometry
+NVE lakes | not JSON | refused: probe.geojson: Expecting property name enclosed in double quotes: line 1 column 2 (char 1)
+NVE lakes | byte order mark | read: 1 lakes
+rivers | Feature, geometry missing | refused: probe.geojson: feature 0 has no geometry
+rivers | first feature, geometry missing | refused: probe.geojson: feature 0 has no geometry
+rivers | second feature, geometry missing | refused: probe.geojson: feature 1 has no geometry
+rivers | Feature, geometry null | refused: probe.geojson: feature 0 has no geometry
+rivers | first feature, geometry null | refused: probe.geojson: feature 0 has no geometry
+rivers | second feature, geometry null | refused: probe.geojson: feature 1 has no geometry
+rivers | Feature, geometry "" | refused: probe.geojson: feature 0 has no geometry
+rivers | first feature, geometry "" | refused: probe.geojson: feature 0 has no geometry
+rivers | second feature, geometry "" | refused: probe.geojson: feature 1 has no geometry
+rivers | Feature, geometry 0 | refused: probe.geojson: feature 0 has no geometry
+rivers | first feature, geometry 0 | refused: probe.geojson: feature 0 has no geometry
+rivers | second feature, geometry 0 | refused: probe.geojson: feature 1 has no geometry
+rivers | Feature, geometry false | refused: probe.geojson: feature 0 has no geometry
+rivers | first feature, geometry false | refused: probe.geojson: feature 0 has no geometry
+rivers | second feature, geometry false | refused: probe.geojson: feature 1 has no geometry
+rivers | Feature, geometry [] | refused: probe.geojson: feature 0 has no geometry
+rivers | first feature, geometry [] | refused: probe.geojson: feature 0 has no geometry
+rivers | second feature, geometry [] | refused: probe.geojson: feature 1 has no geometry
+rivers | Feature, geometry {} | refused: probe.geojson: feature 0 has no geometry
+rivers | first feature, geometry {} | refused: probe.geojson: feature 0 has no geometry
+rivers | second feature, geometry {} | refused: probe.geojson: feature 1 has no geometry
+rivers | Feature, geometry 7 | UNCAUGHT AttributeError: 'int' object has no attribute 'get'
+rivers | first feature, geometry 7 | UNCAUGHT AttributeError: 'int' object has no attribute 'get'
+rivers | second feature, geometry 7 | UNCAUGHT AttributeError: 'int' object has no attribute 'get'
+rivers | Feature, geometry "Point" | UNCAUGHT AttributeError: 'str' object has no attribute 'get'
+rivers | first feature, geometry "Point" | UNCAUGHT AttributeError: 'str' object has no attribute 'get'
+rivers | second feature, geometry "Point" | UNCAUGHT AttributeError: 'str' object has no attribute 'get'
+rivers | Feature, geometry [1, 2] | UNCAUGHT AttributeError: 'list' object has no attribute 'get'
+rivers | first feature, geometry [1, 2] | UNCAUGHT AttributeError: 'list' object has no attribute 'get'
+rivers | second feature, geometry [1, 2] | UNCAUGHT AttributeError: 'list' object has no attribute 'get'
+rivers | Feature, geometry without type | refused: probe.geojson: feature 0 has no geometry
+rivers | first feature, geometry without type | refused: probe.geojson: feature 0 has no geometry
+rivers | second feature, geometry without type | refused: probe.geojson: feature 1 has no geometry
+rivers | Feature, type null | refused: probe.geojson: feature 0 has no geometry
+rivers | first feature, type null | refused: probe.geojson: feature 0 has no geometry
+rivers | second feature, type null | refused: probe.geojson: feature 1 has no geometry
+rivers | Feature, type "" | refused: probe.geojson: 1.2.0 is a , not a LineString
+rivers | first feature, type "" | refused: probe.geojson: 1.2.0 is a , not a LineString
+rivers | second feature, type "" | refused: probe.geojson: 1.2.1 is a , not a LineString
+rivers | Feature, type 0 | refused: probe.geojson: 1.2.0 is a 0, not a LineString
+rivers | first feature, type 0 | refused: probe.geojson: 1.2.0 is a 0, not a LineString
+rivers | second feature, type 0 | refused: probe.geojson: 1.2.1 is a 0, not a LineString
+rivers | Feature, type false | refused: probe.geojson: 1.2.0 is a False, not a LineString
+rivers | first feature, type false | refused: probe.geojson: 1.2.0 is a False, not a LineString
+rivers | second feature, type false | refused: probe.geojson: 1.2.1 is a False, not a LineString
+rivers | Feature, type [] | refused: probe.geojson: 1.2.0 is a [], not a LineString
+rivers | first feature, type [] | refused: probe.geojson: 1.2.0 is a [], not a LineString
+rivers | second feature, type [] | refused: probe.geojson: 1.2.1 is a [], not a LineString
+rivers | Feature, type {} | refused: probe.geojson: 1.2.0 is a {}, not a LineString
+rivers | first feature, type {} | refused: probe.geojson: 1.2.0 is a {}, not a LineString
+rivers | second feature, type {} | refused: probe.geojson: 1.2.1 is a {}, not a LineString
+rivers | bare geometry, right type | refused: probe.geojson: a feature has no objectid property
+rivers | bare geometry, wrong type | refused: probe.geojson: None is a Point, not a LineString
+rivers | crs member only | refused: probe.geojson: feature 0 has no geometry
+rivers | control: good Feature | read: [1]
+rivers | control: good collection | read: [1]
+rivers | crs null | refused: probe.geojson: the crs member is null; the file must name its CRS
+rivers | crs {} | refused: probe.geojson: the crs member has no name; it must name the CRS
+rivers | crs name null | refused: probe.geojson: the crs member has no name; it must name the CRS
+rivers | crs without name | refused: probe.geojson: the crs member has no name; it must name the CRS
+rivers | crs unreadable name | refused: probe.geojson: cannot read the CRS 'EPSG:1': Invalid projection: EPSG:1: (Internal Proj Error: proj_create: crs not found: EPSG:1)
+rivers | no crs member | refused: probe.geojson: no crs member; the file must name its CRS
+rivers | collection without type | read: [1]
+rivers | "features": {} | refused: probe.geojson: no features list; the file is not a FeatureCollection
+rivers | "features": [7] | refused: probe.geojson: no features list; the file is not a FeatureCollection
+rivers | a JSON list | refused: probe.geojson: not a GeoJSON object; the file must hold a FeatureCollection, a Feature or a geometry
+rivers | not JSON | refused: probe.geojson: Expecting property name enclosed in double quotes: line 1 column 2 (char 1)
+rivers | byte order mark | read: [1]
