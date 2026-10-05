@@ -1,0 +1,8 @@
+rivers: 11648 segments read, 307 exact copies dropped (same river, same vertices to 1 cm)
+window x 336370..340910 y 6723880..6728640; in-nodes 107869 x 337400..340900 y 6723890..6728630; edge True nodata False
+window x 333400..344900 y 6719890..6732630; in-nodes 501322 x 337400..344890 y 6723200..6732620; edge True nodata False
+window x 329400..352890 y 6715200..6740620; in-nodes 1960942 x 337400..352880 y 6716070..6739760; edge True nodata False
+window x 321400..368880 y 6700070..6755760; in-nodes 9570526 x 329210..368870 y 6716070..6755750; edge True nodata False
+2.142.0 Knappom: refused: 642878 nodes the request needs are in no tile: x 400260 to 400870, y 6684070 to 6787750 (EPSG:25833)
+summary: 1 station: refused 1, uncertain 0, match 0, close 0, miss 0
+/Users/skavhaug/projects/rasputin_scratch/nve-hrd-2026-10-05/probe/2.142.0
