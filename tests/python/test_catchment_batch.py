@@ -49,6 +49,7 @@ from typing import Any
 import numpy as np
 import pytest
 from pydantic import ValidationError
+from pyproj import CRS
 from shapely.geometry import Polygon, box
 
 import batch_fixtures as bf
@@ -56,6 +57,7 @@ import gauge_fixtures as gf
 import tin_engine.catchment as catchment
 import tin_engine.catchment_batch as cb
 from catchment_fixtures import MemoryRepository, filled
+from crs_fixtures import proj4_of
 from mosaic_fixtures import whole
 from tin_engine.io.models import DemTile
 from tin_engine.io.rivers import read_segments
@@ -477,27 +479,55 @@ def test_check_reach_crs_is_the_one_rule() -> None:
 
 
 #: EPSG:31287 (MGI / Austria Lambert) written by its parameters, and the same
-#: projection with its origin moved to 13.5 E, a different CRS.
+#: projection with its origin moved to 13.5 E, a different CRS. Neither names
+#: the MGI datum, only the Bessel ellipsoid, so neither is EPSG:31287 (D15 b).
 LAMBERT = (
     "+proj=lcc +lat_1=46 +lat_2=49 +lat_0=47.5 +lon_0=13.33333333333333 "
     "+x_0=400000 +y_0=400000 +ellps=bessel +units=m +no_defs"
 )
 LAMBERT_13_5_E = LAMBERT.replace("13.33333333333333", "13.5")
+#: EPSG:31287 in GDAL's WKT1, which names the datum: the same CRS.
+LAMBERT_WKT1 = CRS.from_epsg(31287).to_wkt("WKT1_GDAL")
+
+
+def refused_reach_crs(crs: str, repository: MemoryRepository) -> str:
+    with pytest.raises(ValueError) as info:
+        catchment.check_reach_crs(crs, repository)
+    return str(info.value)
 
 
 def test_check_reach_crs_accepts_the_dems_crs_by_definition() -> None:
     """Audit PR B (`docs/increments/python-audit.md`, section 9): a river file
-    in the PROJ string of the DEM's EPSG:31287 is in the DEM's CRS, as
+    in the GDAL WKT1 of the DEM's EPSG:31287 is in the DEM's CRS, as
     `EPSG:31287` is; a genuinely different CRS keeps today's refusal."""
     repository = MemoryRepository({"a.tif": whole(3, 3, epsg=31287)})
     assert repository.footprints()[0].meta.crs == "EPSG:31287"
     assert catchment.check_reach_crs("EPSG:31287", repository) is None
-    assert catchment.check_reach_crs(LAMBERT, repository) is None
-    with pytest.raises(ValueError) as info:
-        catchment.check_reach_crs(LAMBERT_13_5_E, repository)
-    assert str(info.value) == (
+    assert catchment.check_reach_crs(LAMBERT_WKT1, repository) is None
+    message = refused_reach_crs(LAMBERT_13_5_E, repository)
+    assert message.startswith(
         f"the river file's CRS, {LAMBERT_13_5_E}, is not the DEM's, EPSG:31287"
+    ), message
+
+
+@pytest.mark.parametrize(
+    ("given", "epsg"),
+    [
+        pytest.param(LAMBERT, 31287, id="Lambert by parameters"),
+        pytest.param(proj4_of(25833), 25833, id="pyproj's PROJ string of 25833"),
+    ],
+)
+def test_a_proj_string_naming_no_datum_is_refused_with_a_hint(given: str, epsg: int) -> None:
+    """Audit PR B, code review round 1, and Ola's D15 b: a PROJ string that
+    names an ellipsoid but no datum is not the DEM's EPSG code, so the river
+    file is refused in today's words, which gain a hint naming the code to
+    write instead."""
+    repository = MemoryRepository({"a.tif": whole(3, 3, epsg=epsg)})
+    message = refused_reach_crs(given, repository)
+    assert message.startswith(f"the river file's CRS, {given}, is not the DEM's, EPSG:{epsg}"), (
+        message
     )
+    assert f"write EPSG:{epsg}" in message, message
 
 
 def test_tiles_in_two_crss_are_refused_by_delineate_in_plain_words() -> None:

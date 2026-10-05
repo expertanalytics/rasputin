@@ -28,13 +28,15 @@ PR B of the Python audit (`docs/increments/python-audit.md`, section 9) adds
 the one CRS rule, pinned by `TestSameCrs`, `TestTransformLabel` and
 `TestSingleCrs`:
 
-- `same_crs(a, b)`: the same once both are in x-then-y order (PROJ's
-  equivalence), or else one EPSG code in common at PROJ's identify confidence
-  70 ("equivalent, names differ"). So a CRS spelt as a PROJ string, a WKT
-  without its ID or GDAL's WKT1 is the EPSG code it defines. Its limits: a
-  `+towgs84` spelling is not the same (PROJ matches it on the ellipsoid
-  alone); `OGC:CRS84` is `EPSG:4326`; `EPSG:3045` is `EPSG:25833`. A pair PROJ
-  finds no operation between is not the same, never an exception.
+- `same_crs(a, b)`: PROJ calls the two equivalent once both are in x-then-y
+  order, and the operation it builds between them (always_xy) is its `noop`.
+  So a WKT without its ID, in either axis order, or GDAL's WKT1, is the EPSG
+  code it defines. Its limits: a PROJ string that names no datum (the Lambert
+  by parameters, pyproj's own `to_proj4()` of EPSG:25833) is not the same as
+  the code; nor is a `+towgs84` spelling, nor a `longlat` with a `+lon_0`
+  (PROJ keeps it only in the remark, yet the transform moves every point);
+  `OGC:CRS84` is `EPSG:4326`; `EPSG:3045` is `EPSG:25833`. A pair PROJ finds
+  no operation between is not the same, never an exception.
 - `transform_label(src, dst)`: "none" when the two are the same, else
   `transform_description(src, dst)`.
 - `single_crs(texts, refusal=ValueError)`: the one text, or `refusal` naming
@@ -55,7 +57,7 @@ import numpy as np
 import pytest
 from pyproj import CRS, Transformer
 
-from crs_fixtures import UTM33_PARIS, proj4_of
+from crs_fixtures import UTM33_PARIS, axes_swapped, proj4_of
 
 SRC_PYTHON = Path(__file__).resolve().parents[2] / "src_python"
 
@@ -183,7 +185,8 @@ class TestReprojector:
 # ---------------------------------------------------------------- PR B: one CRS rule
 
 #: EPSG:31287 (MGI / Austria Lambert) written by its parameters, as the
-#: GeoKeys of the Austrian openDEM file give it.
+#: GeoKeys of the Austrian openDEM file give it. It names the Bessel
+#: ellipsoid, not the MGI datum, so it is not EPSG:31287 (D15 b).
 LAMBERT = (
     "+proj=lcc +lat_1=46 +lat_2=49 +lat_0=47.5 +lon_0=13.33333333333333 "
     "+x_0=400000 +y_0=400000 +ellps=bessel +units=m +no_defs"
@@ -191,6 +194,12 @@ LAMBERT = (
 #: EPSG:31287 with the datum shift PROJ's own EPSG:31287 to WGS 84 uses.
 TOWGS84 = "+towgs84=577.326,90.129,463.919,5.137,1.474,5.297,2.4232"
 MARS = "+proj=longlat +a=3396190 +b=3376200"
+#: EPSG:31287 in GDAL's WKT1: datum named, no axis order (read east, north).
+LAMBERT_WKT1 = CRS.from_epsg(31287).to_wkt("WKT1_GDAL")
+#: WGS 84 longitude counted from 10 E. PROJ keeps `+lon_0` of a `longlat` only
+#: in the remark, so `CRS.equals` calls it EPSG:4326, yet the always_xy
+#: transform moves every point 10 degrees of longitude.
+LON_0_10 = "+proj=longlat +datum=WGS84 +lon_0=10 +no_defs"
 #: UTM 33 on GRS80 with the easting axis pointing west: PROJ identifies it as
 #: EPSG:25833 at confidence 70, yet each x has the other sign (test_domain.py's
 #: `UTM33_WEST`, whose transform must not be skipped).
@@ -208,10 +217,10 @@ def without_id(epsg: int) -> str:
 
 
 SAME = {
-    "Lambert by parameters": (LAMBERT, "EPSG:31287"),
     "WKT without ID": (without_id(31287), "EPSG:31287"),
+    "GDAL WKT1 of 31287": (LAMBERT_WKT1, "EPSG:31287"),
+    "axes swapped, no ID": (axes_swapped(25833), "EPSG:25833"),
     "GDAL WKT1, no axis order": (CRS.from_epsg(3035).to_wkt("WKT1_GDAL"), "EPSG:3035"),
-    "PROJ string of 25833": (proj4_of(25833), "EPSG:25833"),
     "CRS84 is 4326 in x-then-y order": ("OGC:CRS84", "EPSG:4326"),
     "one definition, two codes": ("EPSG:3045", "EPSG:25833"),
     "control, case only": ("EPSG:31287", "epsg:31287"),
@@ -225,6 +234,12 @@ NOT_SAME = {
     "Mars, no operation": (MARS, "EPSG:4326"),
     "easting pointing west": (UTM33_WEST, "EPSG:25833"),
     "prime meridian at Paris": (UTM33_PARIS, "EPSG:25833"),
+    "no datum named: Lambert by parameters": (LAMBERT, "EPSG:31287"),
+    "no datum named: PROJ string of 25833": (proj4_of(25833), "EPSG:25833"),
+    "longlat +lon_0=10": (LON_0_10, "EPSG:4326"),
+    "longlat +lon_0=-3": (LON_0_10.replace("=10", "=-3"), "EPSG:4326"),
+    "NAD83 longlat +lon_0=10": (LON_0_10.replace("WGS84", "NAD83"), "EPSG:4269"),
+    "+lon_0=10 against +lon_0=20": (LON_0_10, LON_0_10.replace("=10", "=20")),
 }
 
 
@@ -246,8 +261,16 @@ class TestSameCrs:
         assert crs.same_crs(a, b) is False
 
     def test_crs_objects_are_accepted(self, crs: ModuleType) -> None:
-        assert crs.same_crs(CRS.from_epsg(31287), CRS.from_user_input(LAMBERT)) is True
+        assert crs.same_crs(CRS.from_epsg(31287), CRS.from_user_input(LAMBERT_WKT1)) is True
         assert crs.same_crs(CRS.from_epsg(25832), "EPSG:25833") is False
+
+    def test_the_rule_is_transitive_through_crs84(self, crs: ModuleType) -> None:
+        """Code review round 1: EPSG:4326 is OGC:CRS84, so a CRS the same as
+        one must be the same as the other. The `+lon_0=10` string is neither,
+        since its transform moves every point 10 degrees."""
+        assert crs.same_crs("EPSG:4326", "OGC:CRS84") is True
+        assert crs.same_crs(LON_0_10, "EPSG:4326") is False
+        assert crs.same_crs(LON_0_10, "OGC:CRS84") is False
 
     @pytest.mark.parametrize(("a", "b"), [("not a crs", "EPSG:4326"), ("EPSG:4326", "not a crs")])
     def test_unreadable_text_is_parse_crss_value_error(
@@ -273,10 +296,17 @@ class TestSameCrs:
 
 class TestTransformLabel:
     @pytest.mark.parametrize(
-        ("src", "dst"), both_orders({"Lambert by parameters": (LAMBERT, "EPSG:31287")})
+        ("src", "dst"), both_orders({"GDAL WKT1 of 31287": (LAMBERT_WKT1, "EPSG:31287")})
     )
     def test_none_for_the_same_crs_by_definition(self, crs: ModuleType, src: str, dst: str) -> None:
         assert crs.transform_label(src, dst) == "none"
+
+    def test_a_proj_string_naming_no_datum_names_its_transform(self, crs: ModuleType) -> None:
+        """D15 b: the Lambert by parameters is not EPSG:31287, so the record
+        names what PROJ ran (a ballpark from the Bessel ellipsoid to MGI)."""
+        label = crs.transform_label(LAMBERT, "EPSG:31287")
+        assert label == crs.transform_description(LAMBERT, "EPSG:31287")
+        assert label != "none"
 
     def test_proj_s_description_for_a_real_transform(self, crs: ModuleType) -> None:
         label = crs.transform_label("EPSG:4326", "EPSG:25833")

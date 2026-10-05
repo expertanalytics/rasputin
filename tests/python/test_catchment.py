@@ -59,6 +59,7 @@ from catchment_fixtures import (
     seeds_in,
     tile_of,
 )
+from crs_fixtures import proj4_of
 from mosaic_fixtures import quadrants
 from test_outline import square_area
 from tin_engine._core import accumulate, upstream
@@ -491,6 +492,33 @@ def test_a_reach_with_lakes_is_refused(api: Any, gauge_api: Any) -> None:
         api.CatchmentRequest(
             seed=CENTRE, seed_crs=EPSG, lakes=(lake_box(),), lakes_crs=EPSG, reach=reach
         )
+
+
+def reach_refusal(api: Any, gauge_api: Any, seed_crs: str) -> str:
+    """`delineate`'s refusal of a gauge request whose reach is in `seed_crs`,
+    over the valley in EPSG:25833 (`gf.EPSG`)."""
+    request = gauge_request(api, gauge_api).model_copy(update={"seed_crs": seed_crs})
+    with pytest.raises(api.CatchmentError) as info:
+        api.delineate(request, valley_repository(gf.valley(dam=True)))
+    return str(info.value)
+
+
+def test_a_reach_in_another_crs_is_refused(api: Any, gauge_api: Any) -> None:
+    """A reach is burnt as given, so it must be in the DEM's CRS: EPSG:32633
+    (UTM 33 on WGS 84, not ETRS89) is refused naming the DEM's."""
+    message = reach_refusal(api, gauge_api, "EPSG:32633")
+    assert message.startswith(f"the river reach must be in the DEM's CRS, {gf.EPSG}"), message
+
+
+def test_a_reach_in_a_proj_string_naming_no_datum_is_refused_with_a_hint(
+    api: Any, gauge_api: Any
+) -> None:
+    """Audit PR B, code review round 1, and Ola's D15 b: pyproj's PROJ string
+    of EPSG:25833 names the GRS80 ellipsoid, not ETRS89, so it is not the
+    DEM's CRS; the refusal names the code to write instead."""
+    message = reach_refusal(api, gauge_api, proj4_of(25833))
+    assert message.startswith(f"the river reach must be in the DEM's CRS, {gf.EPSG}"), message
+    assert f"write {gf.EPSG}" in message, message
 
 
 def test_no_reach_gives_22s_result_bit_for_bit(api: Any) -> None:

@@ -1,8 +1,10 @@
 """CRS spellings and a no-point-moved guard, shared by the CRS suites.
 
-Audit PR B (`docs/increments/python-audit.md`, section 9): a CRS spelt as a
-PROJ string of an EPSG code is that code, so a site that meets one must move
-no point. `refuse_point_moves` makes any point-moving `Transformer` method fail
+Audit PR B (`docs/increments/python-audit.md`, section 9): a CRS spelt by
+definition (a WKT without its ID, in either axis order) is that EPSG code, so a
+site that meets one must move no point. A PROJ string that names no datum, as
+`proj4_of` writes one, is not: it says "on the GRS80 ellipsoid", not "on
+ETRS89". `refuse_point_moves` makes any point-moving `Transformer` method fail
 the test. Building a transformer stays allowed: `crs.same_crs` builds one to
 compare two CRSs and moves nothing with it.
 """
@@ -26,6 +28,19 @@ def proj4_of(epsg: int) -> str:
     """pyproj's PROJ string of `epsg`, without its lossy-conversion warning."""
     with warnings.catch_warnings(action="ignore", category=UserWarning):
         return CRS.from_epsg(epsg).to_proj4()
+
+
+def axes_swapped(epsg: int) -> str:
+    """The WKT2 of `epsg` without its own `ID`, its two axes in the other
+    order: pyproj's `==` calls it another CRS, `crs.same_crs` the same one
+    (every transform here is `always_xy`)."""
+    doc = CRS.from_epsg(epsg).to_json_dict()
+    del doc["id"]
+    doc["coordinate_system"]["axis"].reverse()
+    text = CRS.from_json_dict(doc).to_wkt()
+    assert f'ID["EPSG",{epsg}]' not in text, text
+    assert CRS.from_user_input(text) != CRS.from_epsg(epsg), "the axes were not swapped"
+    return text
 
 
 def refuse_point_moves(monkeypatch: pytest.MonkeyPatch) -> None:

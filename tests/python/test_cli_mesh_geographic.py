@@ -75,7 +75,7 @@ from shapely.geometry import Polygon
 from typer.testing import CliRunner
 
 from cog_fixtures import write_cache
-from crs_fixtures import proj4_of
+from crs_fixtures import axes_swapped
 from geographic_fixtures import (
     ANADEM_STEP,
     LAT0,
@@ -411,13 +411,13 @@ class TestAProjectedDemInAnotherCrs:
     "out_crs",
     [
         pytest.param("EPSG:25833", id="its EPSG code"),
-        pytest.param(proj4_of(25833), id="its PROJ string"),
+        pytest.param(axes_swapped(25833), id="its WKT, axes swapped"),
     ],
 )
 def test_out_crs_equal_to_the_dems_own_writes_the_same_bytes(tmp_path: Path, out_crs: str) -> None:
     """J1: the committed projected tile with a domain, `--out-crs` its own CRS.
-    Audit PR B (`docs/increments/python-audit.md`, section 9): the CRS's PROJ
-    string is the same CRS by definition, so the DEM is not resampled and the
+    Audit PR B (`docs/increments/python-audit.md`, section 9): the CRS's WKT
+    without its ID, axes swapped, is the same CRS by definition, so the DEM is not resampled and the
     file is the one without `--out-crs`, its `crs` field included."""
     domain = write_geojson(tmp_path / "quarter.geojson", quarter_circle(), "EPSG:25833")
     args = ("--dem", str(KARTVERKET), "--domain", str(domain), "--tolerance", "10")
