@@ -48,10 +48,13 @@ fixes; then push on Ola's yes.
 PR C (`audit-geojson-io`, F5) is designed in section 10, on branch
 `worktree-audit-geojson` from PR B's head `fe12bbb` (B lands first). Design
 review rounds 1 (`151d35f`) and 2 (`957cac9`) are recorded below and their
-fixes are in section 10. Next: `@reviewer`'s design review round 3 (rerun
-the `git merge-tree` and `git merge-file` checks of section 10's overlap
-rule); then `@tester`'s red commit (section 10, "Red tests"), then
-`@developer`.
+fixes are in section 10. `@tester`'s red commit is `1928569` and
+`@developer`'s green commit `3b739ac`, +24 net production lines as designed.
+Code review round 1 approved the code and asked for prose only: the
+`project_structure.md` rows, the wordings section 10 missed ("Refusal
+wordings that change", below the line, and its known gaps), and this
+paragraph; all fixed. Next: a short prose-only `@reviewer` round 2; then
+push on Ola's yes, after PR B.
 
 Re-checked against master `44fa7f5`: `git diff --stat 12dace7 44fa7f5 --
 src_python` is empty, and of the files cited below only `tools/brief.py`
@@ -1604,8 +1607,13 @@ edge goes down or sideways (L2 to L1 or L2; L4 and L5 to L2).
 
 ### Refusal wordings that change
 
-Every other wording stays. "Domain" wordings are inside `cannot parse
-<name>: `; "features" and "stations" ones after `<name>: `.
+"Domain" wordings are inside `cannot parse <name>: `; "features" and
+"stations" ones after `<name>: `. The rows below the line were found at code
+review round 1 and are quoted from a probe of `read_domain`, `read_source`,
+`read_stations`, `read_references`, `read_nve_lakes` (`read_lakes` at the
+base) and `read_segments` at `32b5092` and `3b739ac` (scratch copies of
+`src_python/`, the script scratch only). Every other wording that probe
+reached stays.
 
 | Input | Reader | Today | After |
 |---|---|---|---|
@@ -1621,6 +1629,30 @@ Every other wording stays. "Domain" wordings are inside `cannot parse
 | `"features": [7]` | stations | `AttributeError` | as above |
 | a JSON list | all | `'list' object has no attribute 'get'`; stations `no crs member` | `not a GeoJSON object; ...` |
 | not JSON | stations | the bare decoder text | the same after `<name>: ` |
+| *Found at code review round 1:* | | | |
+| a leading UTF-8 byte order mark | domain, features | `Unexpected UTF-8 BOM (decode using utf-8-sig): line 1 column 1 (char 0)` | read |
+| one feature with neither `type` nor `geometry` (`{"features": [{"properties": {}}]}`, or the same feature in a typed collection) | domain | `'NoneType' object has no attribute 'lower'` | `'geometry'`, as for a typed `Feature` without `geometry` |
+| a `Feature` without `geometry` | features | `not a GeoJSON FeatureCollection ('features')` | `not a GeoJSON FeatureCollection ('geometry')` |
+| an object with neither `type` nor `features` (`{"foo": 1}`, or only a `crs` member) | features | `not a GeoJSON FeatureCollection ('features')` | `not a GeoJSON FeatureCollection ('NoneType' object has no attribute 'lower')` |
+| a `crs` member and either a `Feature` without `geometry` or an object with neither `type` nor `features` | stations; references; NVE lakes; rivers | `no features list; the file is not a FeatureCollection` | `None is a None, not a Point`; `None is a None, not a Polygon or MultiPolygon`; `feature 0 is not a polygon with an area (None)`; `None is a None, not a LineString` |
+
+**Known gaps, before and after this PR, not fixed here** (same probe):
+
+- A feature whose `geometry` is not an object (`"geometry": 7`) raises
+  `AttributeError: 'int' object has no attribute 'get'` in the station,
+  reference, NVE lake and river readers, a traceback from
+  `station-catchments`, which catches only `OSError` and `ValueError`.
+  (`--domain` and `--features` refuse it, naming the file.)
+- A station feature with no `station` property gives pydantic's multi-line
+  `ValidationError` (`1 validation error for Station ... Field required`),
+  without the file's name.
+- An object with only a `crs` member (no `type`, no `features`) is read as a
+  geometry by the shape rule, so `--domain` says `cannot parse <name>:
+  'NoneType' object has no attribute 'lower'` (as at the base), and, from
+  this PR, `--features` and the station readers give the wordings in the
+  last two rows above, where the base said `('features')` and `no features
+  list`. The station readers' `None is a None` is the plainest of these to
+  improve.
 
 ### Red tests (`@tester`, one commit, before any code)
 
@@ -1763,3 +1795,5 @@ so they describe the code as written.
 **PR C (`audit-geojson-io`), design review, round 1, 2026-10-05.** Head `151d35f`. Verdict: CHANGES REQUESTED, prose only. Blocking, all `@architect`: (1) the claim that PR F conflicts only in `cli.py`'s imports is false (F also edits `io/station_set.py`'s imports and `__all__`, `test_layering.py`'s `io.station_set` row and `UPWARD` block, and this file); (2) `--domain` would decode bytes unlike `--features` (`read_text` against `read_json`); (3) "UTF-8, as RFC 7946 requires" is wrong (RFC 7946 section 11.1 points to I-JSON); (4) section 9's three short citations unpinned; (5) the matrix's string-member wording; (6) "29 calls" is 27. Suggestions: section 6's total, line 101 of the legacy `web_visualize`, `--domain` reading a collection with no `type`, the docstrings the green commit rewrites. All fixed in section 10 (and sections 6 and 9); the `cli` row of `test_layering.py` and `cli.py`'s `station_set` import line were found to conflict with F as well; `read_domain` reads GeoJSON through `read_json`, about +24 net.
 
 **PR C (`audit-geojson-io`), design review, round 2, 2026-10-05.** Head `957cac9`. Verdict: CHANGES REQUESTED, prose only. Blocking (`@architect`): the PR F overlap list missed `test_layering.py`'s `feature_input` row (one hunk with F's rewritten `catchment` row) and `docs/increments/25-plain-output.md` line 274 (pinned differently by C and F). Fixed in section 10: the hand list is replaced by a rule (the second of C and F to merge runs `git merge-tree --write-tree` and resolves every file it names; designed edits are checked with `git merge-file` on scratch copies), the worked merges kept as examples with the two missing ones added, and B and F's conflict in `catchment.py`'s imports named.
+
+**PR C (`audit-geojson-io`), code review, round 1, 2026-10-06.** Range `32b5092..3b739ac` (red `1928569`, green `3b739ac`). Verdict: CHANGES REQUESTED, prose only. +24 net production (`count_loc.py 32b5092 3b739ac`), as designed. Suite 5302 passed, 17 skipped; mypy, ruff, gates and check_citations clean. Behaviour matrix re-run at base and head: `crs` rules 1-5 and the shape rule as designed, four bugs fixed, the writers' bytes unchanged; `git merge-tree` against PR F (`e2baa5f`) conflicts only in section 10's six files. Blocking (`@architect`): stale rows in `project_structure.md@3b739ac:112`, `:139-145`, `:224`, `:244-249`, and no `io/domain_file.py` row; "Every other wording stays" (`docs/increments/python-audit.md@3b739ac:1607`) misses the byte order mark, the typeless domain feature and the `--features` wordings; the status paragraph (`docs/increments/python-audit.md@3b739ac:48-54`). Fixed in this file (status, section 10's wordings and known gaps) and `project_structure.md`; no code change.

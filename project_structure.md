@@ -109,8 +109,10 @@ src_python/tin_engine/     # public Python API (distribution name: rasputin)
                            #   check overlaps and coverage, stitch; no files (15a)
   dem_input.py             # --dem/--bbox or a domain -> DemInput(tile, plan,
                            #   label, domain in the DEM's CRS) (15a, 15b)
-  domain.py                # --domain: reads one polygon (GeoJSON or WKT) in its
-                           #   own CRS, to_crs, check_extent; never imports _core
+  domain.py                # DomainPolygon (one polygon in its own CRS) and its
+                           #   to_crs, check_extent, DomainError; reads no file
+                           #   (io/domain_file.py reads --domain); never imports
+                           #   _core
   crs.py                   # parse_crs, reprojector: the one Transformer.from_crs
                            #   site, always_xy (15b); pyproj and numpy
   target_grid.py           # TargetGrid on one global lattice, source_region,
@@ -132,18 +134,22 @@ src_python/tin_engine/     # public Python API (distribution name: rasputin)
                            #   The names C++ refuses to hold. Imports nothing
                            #   first-party and never imports _core
                            #   PIECE_VOCABULARY: the default plus `seam`
-                           #   (bit 9), for a cut run's piece files (23c)
+                           #   (bit 9), for a cut run's piece files (23c).
+                           #   TerrainFeature: one feature's mask and lines
+                           #   (moved from feature_input, audit PR C)
   decompose.py             # partition: the window cut into cells under
                            #   --pieces and --memory-budget, b(T); pure, reads
                            #   no machine (23c)
   feature_input.py         # --features: a GeoJSON, GeoPackage layer or GML
                            #   read, mapped to masks by a ClassMap, pre-clipped,
                            #   moved to the DEM's CRS and clipped to the domain
-                           #   as linework -> FeatureSet (16b); opens GeoJSON
-                           #   and .gml itself; never imports _core.
-                           #   read_source: one file's raw rows (16b's reader,
-                           #   shared); read_lakes: the polygons of --lakes
-                           #   near the seed point, in the file's CRS (22)
+                           #   as linework -> FeatureSet (16b); opens .gml
+                           #   itself, reads GeoJSON through io/repository's
+                           #   read_json and io/geojson's read_collection;
+                           #   never imports _core. read_source: one file's raw
+                           #   rows (16b's reader, shared); read_lake_polygons:
+                           #   the polygons of `catchment --lakes` near the
+                           #   seed point, in the file's CRS (22)
   outline.py               # trace(mask): marching-squares rings between in-
                            #   and out-nodes, (8, 4) saddle rule; numpy only,
                            #   never imports _core (22)
@@ -221,9 +227,19 @@ src_python/tin_engine/     # public Python API (distribution name: rasputin)
                            #   move here in a follow-up, and station-
                            #   catchments' results.csv and summary.json (29)
     __init__.py
-    geojson.py             # catchment_geojson: a polygon, its CRS and its
-                           #   properties -> the catchment file's bytes; opens
-                           #   nothing (22's writer, moved here in 29)
+    geojson.py             # read_collection: a parsed GeoJSON object ->
+                           #   (features, crs text), the one crs and shape rule
+                           #   for every GeoJSON reader (audit PR C);
+                           #   feature_collection: the document both writers
+                           #   build; catchment_geojson: a polygon, its CRS and
+                           #   its properties -> the catchment file's bytes
+                           #   (22's writer, moved here in 29); opens nothing
+    domain_file.py         # read_domain: --domain's one Polygon (GeoJSON or
+                           #   WKT, by suffix) in its own CRS, checked and
+                           #   oriented -> DomainPolygon; reads through
+                           #   repository's read_json / read_text, opens
+                           #   nothing itself (16; moved from domain.py in
+                           #   audit PR C)
     ply.py                 # arrays -> PLY bytes; takes no path and opens nothing;
                            #   face_codes= adds the face property
                            #   land_cover_code (16c)
@@ -243,11 +259,13 @@ src_python/tin_engine/     # public Python API (distribution name: rasputin)
                            #   cache); opens nothing (23a-1)
     station_set.py         # read_stations -> (stations, crs) and
                            #   read_references -> ({station: polygon}, crs):
-                           #   fetch-stations' files or a user's points file;
-                           #   `crs` member required, duplicates and wrong
-                           #   geometry refused with ValueError (29);
-                           #   read_lakes -> (Lake parts, crs): the lakes
-                           #   file, a MultiPolygon split (29, PR 4)
+                           #   fetch-stations' files or a user's points file,
+                           #   read by io/geojson's read_collection with no
+                           #   default CRS, so the `crs` member is required;
+                           #   duplicates and wrong geometry refused with
+                           #   ValueError (29); read_nve_lakes -> (Lake parts,
+                           #   crs): `station-catchments --lakes`, a
+                           #   MultiPolygon split (29, PR 4)
     rivers.py              # RiverSegment, kind_of (lake or river, total over
                            #   NVE's objekttype spellings), drop_copies,
                            #   read_segments -> (segments, crs, copies
@@ -258,7 +276,8 @@ src_python/tin_engine/     # public Python API (distribution name: rasputin)
                            #   connection (16b); CacheRepository and
                            #   CachedBlocks read the tile cache (23a-1);
                            #   CacheWriter writes it under a lock (23a-2);
-                           #   read_json, a JSON document, read-only (29)
+                           #   read_json, a JSON document, read-only (29);
+                           #   read_text, UTF-8 text (audit PR C's WKT domain)
     mesh_index.py          # MeshIndex (a cut run's index.json, frozen,
                            #   unknown keys refused), SeamRecord,
                            #   check_conformity (K4); opens nothing (23c)
