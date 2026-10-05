@@ -1,7 +1,10 @@
 # GeoTIFF: a projected CRS given by parameters, read as the EPSG code it is
 
-Status: **design, review round 1 answered; next `@reviewer` design round 2,
-then the red step.** Written by `@architect` on branch
+Status: **code review round 1 answered in the design; next `@tester` (the
+red tests of section 8's items 13 and 14, and the docstring tense the review
+asked for), then `@developer`, then `@reviewer` code round 2.** Design
+approved at round 2 (`900701c`), red step `0f6c271`, green step `c8984e8`.
+Written by `@architect` on branch
 `worktree-geotiff-param-crs`, from audit PR B's green head `65cd528`
 (`same_crs`, `docs/increments/python-audit.md` section 9). It lands after PR B.
 Not refine or mesh code, so no `@perf` run.
@@ -269,12 +272,19 @@ and unit, and a Cartesian coordinate system of easting then northing in
 metres (GeoTIFF 1.1's fixed order for a user-defined CRS). Then
 `pyproj.CRS.from_json_dict`.
 
-### `io/geotiff.py`: the checks, in this order
+### `io/geotiff.py`: the checks, and the order they run in
 
 `_header` dispatches on 3072: absent is the geographic path, unchanged;
 32767 is `_parametric_epsg(geokeys)`; any other value is `_projected_epsg`,
 unchanged. A 2048 of 32767 on the geographic path stays refused as today: a
 geographic CRS by parameters is out of scope.
+
+The checks run in the order 1, 2, 3, 4, 5, **8**, 6, 7, 9, 10, 11, 12, 13:
+the angular unit (row 8) is checked before the ellipsoid and prime meridian
+(row 6), because `GeogPrimeMeridianLongGeoKey` (2061) is in the unit 2054
+names, so a file in grads is refused for its unit rather than for a meridian
+that "disagrees". The row numbers stay as they are, since the red tests and
+the code name them.
 
 Every message, all thirteen rows, begins with the same words `P`, so the two
 existing cases of
@@ -291,17 +301,29 @@ existing cases of
 | 3 | 3075 not in the table | `{P} uses ProjCoordTransGeoKey (3075) = {v} ({tifffile's name}); only transverse Mercator (1) and Lambert conic conformal with two standard parallels (8) are read` |
 | 4 | 2048 absent, 32767, not a resolvable code, or not a geographic 2D CRS | `{P}: GeographicTypeGeoKey (2048) {is absent / = v, which is not an EPSG code / = v, a {type_name}}; its datum must be given there as an EPSG geographic CRS code` |
 | 5 | `GeogGeodeticDatumGeoKey` (2050), `GeogPrimeMeridianGeoKey` (2051) or `GeogEllipsoidGeoKey` (2056) present | `{P}: {name} ({id}) is present; the datum is read only from GeographicTypeGeoKey (2048)` |
-| 6 | `GeogSemiMajorAxisGeoKey` (2057), `GeogSemiMinorAxisGeoKey` (2058), `GeogInvFlatteningGeoKey` (2059) or `GeogPrimeMeridianLongGeoKey` (2061) present and not within 1e-10 relative of the coded CRS's own value | `{P}: {name} ({id}) = {v} disagrees with EPSG:{g}'s {ellipsoid name} ({expected})` (for 2061: its prime meridian) |
+| 6 | `GeogSemiMajorAxisGeoKey` (2057), `GeogSemiMinorAxisGeoKey` (2058), `GeogInvFlatteningGeoKey` (2059) or `GeogPrimeMeridianLongGeoKey` (2061) present and not one finite number (`N` below); or present and not within 1e-10 relative of the coded CRS's own value | `{P}: {name} ({id}) = {v!r}, which is not one finite number`; or `{P}: {name} ({id}) = {v} disagrees with EPSG:{g}'s {ellipsoid name} ({expected})` (for 2061: its prime meridian) |
 | 7 | `GeogTOWGS84GeoKey` (2062) present | `{P}: GeogTOWGS84GeoKey (2062) = {v} gives the file's own datum shift to WGS 84, which is not read; the datum is read only from GeographicTypeGeoKey (2048)` |
 | 8 | `GeogAngularUnitsGeoKey` (2054) present and not 9102 | `{P}: GeogAngularUnitsGeoKey (2054) = {v}; only degrees (9102)`: the geographic path's words, after `P` |
 | 9 | `ProjLinearUnitsGeoKey` (3076) absent | `{P}: ProjLinearUnitsGeoKey (3076) is absent, so the unit of its false easting and northing is unknown` |
 | 10 | 3076 not 9001 | `{P}: ProjLinearUnitsGeoKey (3076) = {v}; only metres (9001)`: the coded path's words, after `P` |
-| 11 | a parameter GeoKey of the method absent | `{P}: {method} needs {name} ({id}), which is absent` |
+| 11 | a parameter GeoKey of the method absent, or present and not one finite number (`N` below) | `{P}: {method} needs {name} ({id}), which is absent`; or `{P}: {name} ({id}) = {v!r}, which is not one finite number` |
 | 12 | no EPSG code matches | `{P}: it is {method} on EPSG:{g} ({base name}), and no EPSG projected CRS on that datum has these parameters, so it cannot be named. Reproject the file to a CRS with an EPSG code first` |
 | 13 | several match and are not all `same_crs` with the lowest | `{P}: its parameters match {EPSG:a, EPSG:b}, which are not the same CRS, so it cannot be named` |
 
 Pinned with the checks:
 
+- **`N`, one finite number** (rows 6 and 11): the value tifffile gives is an
+  `int` or a `float`, not a `bool`, and `math.isfinite` holds. tifffile gives
+  an inline SHORT as an `int`, one double from `GeoDoubleParamsTag` (34736) as
+  a `float`, several as a `tuple`, and a key stored in `GeoAsciiParamsTag`
+  (34737) as a `str`; the last two fail `N`. Without it a NaN, an infinity or
+  a tuple reaches `float()` or PROJ and escapes as `TypeError` or pyproj's
+  `CRSError`, which a caller catching `GeoTiffError` (a mosaic) does not
+  catch. `{v!r}` prints `nan`, `inf` or the tuple. The `N` check of each key
+  runs before that key's comparison (row 6) or its use (row 11).
+- **The keys read as codes** (3074, 3075, 2048, 2054, 3076) go through
+  `int()`, as 3072 does on the coded path (`_projected_epsg`); a tuple in one
+  of them is out of this PR, on both paths alike.
 - **2054 absent reads as degrees**, as libgeotiff does (its angular unit factor
   starts at 1 degree in `GTIFGetDefn`). `GeogAzimuthUnitsGeoKey` (2060) is not
   read: neither method has an azimuth.
@@ -389,11 +411,14 @@ There is one constant, and it is PROJ's: **1e-10 relative**
   Austrian file: a false easting off by 1e-5 m still matches EPSG:31287, off
   by 1 mm it matches nothing. Checked at the Austrian file's parameters and
   over EPSG's own 3 941 codes (section 6), not beyond.
-- In check 6, with `math.isclose(..., rel_tol=1e-10)` against the coded
-  CRS's `ellipsoid.semi_major_metre`, `semi_minor_metre`,
-  `inverse_flattening` and `prime_meridian.longitude` (2061 at 0 is compared
-  with `abs_tol` 1e-10 degrees, since a relative tolerance at 0 accepts only
-  0). At the Earth's semi-major axis that is 0.6 mm; the Austrian file's
+- In check 6, with `math.isclose(..., rel_tol=1e-10, abs_tol=1e-10)`
+  against the coded CRS's `ellipsoid.semi_major_metre`, `semi_minor_metre`,
+  `inverse_flattening` and `prime_meridian.longitude`. The absolute 1e-10
+  (metres, unity or degrees, the key's own unit) applies to all four keys and
+  only matters for a value near 0, which in practice is a prime meridian of 0
+  (a relative tolerance at 0 accepts only 0); at an axis of 6.4e6 m or an
+  inverse flattening of 299 the relative term is the larger by far. At the
+  Earth's semi-major axis that is 0.6 mm; the Austrian file's
   inverse flattening differs from Bessel 1841's by 1.1e-14 relative and passes.
 
 No constant of rasputin's own.
@@ -506,13 +531,32 @@ for every refusal. Not the 2 GB file.
     half a cell: pixel is area). Header
     only, so it reads in well under a second.
 
+Added at code review round 1 (`c8984e8`), red before `@developer` changes the
+code:
+
+13. **A parameter that is not one finite number is refused**, as a
+    `GeoTiffError` (`pytest.raises(GeoTiffError)`, so a `TypeError` or
+    `CRSError` fails the test) whose message starts with `P` and holds the
+    key's name, number and value and `not one finite number`: row 11 with
+    `ProjFalseOriginEastingGeoKey` (3086) = NaN, = inf, and = (400000.0,
+    400000.0), two doubles; row 6 with `GeogSemiMajorAxisGeoKey` (2057) =
+    NaN, = inf, and = (6377397.155, 6377397.155). Each fixture is
+    `AUSTRIA_KEYS` with that one change, its witness checked with tifffile
+    alone (the value survives the write as NaN, inf or a 2-tuple).
+14. **A file in grads is refused for its unit**: `AUSTRIA_KEYS` with 2054 =
+    9105 and 2061 = 2.5969213 (Paris, in grads) gives row 8's message
+    (`GeogAngularUnitsGeoKey`, `2054`, `9105`) and not `disagrees`. Red
+    today: row 6 runs first and refuses the meridian.
+
 Not invariant-critical: no mutation round (`docs/increments/README.md`, cost
 constraints).
 
 ## 9. Net production lines
 
 Estimate: **about +135, between 110 and 150**
-(`python3 tools/count_loc.py <base> <head>`), well under the 700 of
+(`python3 tools/count_loc.py <base> <head>`); measured at the green step,
+`python3 tools/count_loc.py 65cd528 c8984e8`: +154. Code review round 1 adds
+about 8 (the `N` check, shared by rows 6 and 11). Well under the 700 of
 `CLAUDE.md` section 2. Counted as `ruff format` lays it out: a refusal whose
 f-string passes 100 columns wraps to three to five lines, as
 `_projected_epsg`'s do today.
@@ -562,3 +606,5 @@ empty), `src_python/tin_engine/crs.py@65cd528`,
 ## Review
 
 - Design round 1 (`@reviewer`, at `fbbfb56`): three fixes (rows 7 and 9 did not start with `P`; the TOWGS84 prior-art claim was wrong for 3072 = 32767; the increment 11 amendments did not name what they override) and three suggestions (LOC recount, `cache_clear()` in red test 10, 3074 beyond GeoTIFF 1.1), all taken in the commit after `fbbfb56`.
+- Design round 2 (`@reviewer`, at `900701c`): approved.
+- Code round 1 (`@reviewer`, at `c8984e8`): changes requested: a NaN, infinite or multi-valued parameter escaped as `TypeError` or `CRSError` (rows 6 and 11 now refuse it; red test 13), five citations in increments 12, 15 and 25 unpinned (pinned to `65cd528`), a docstring tense (`@tester`); suggestions (2054 before row 6, red test 14; section 5's absolute tolerance) taken in the commit after `c8984e8`.
