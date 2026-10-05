@@ -35,7 +35,7 @@ TEMPLATE = ROOT / ".claude" / "briefs" / "common.md"
 #: Read-only is derived from an empty entry (§3.1a). When h6 lands, its ROLES replace this.
 WRITES: dict[str, tuple[str, ...]] = {
     "architect": ("docs/ except docs/retrospectives/", "ROADMAP.md", "CLAUDE.md",
-                  ".claude/ files ending in .md"),
+                  ".claude/ files ending in .md", "root *.md files"),
     "developer": ("src_python/", "include/", "src/", "bindings/", "tools/", ".claude/hooks/",
                   ".github/", "CMakeLists.txt", "pyproject.toml"),
     "orchestrator": ("docs/retrospectives/",),
@@ -166,9 +166,9 @@ def _concurrency(persona: str, worktree: Path, beside: list[str], no_build: bool
         raise BriefError("at most two writers run at once")
     if len(set(writers)) < len(writers):
         raise BriefError("two writers share one worktree")
-    for name, place in everyone:
-        if not WRITES[name] and place in writers:
-            raise BriefError(f"@{name} is read-only and shares {place} with a writer")
+    for who, where in everyone:
+        if not WRITES[who] and where in writers:
+            raise BriefError(f"@{who} is read-only and shares {where} with a writer")
     kinds = {name: "writer" if WRITES[name] else "read-only" for name, _ in others}
     listed = ", ".join(f"@{name} ({kinds[name]}, in {place})" for name, place in others)
     build = "You may not build C++ in this run." if no_build else "You may build C++ in this run."
@@ -247,8 +247,13 @@ def _brief(argv: list[str] | None) -> str:
             raise BriefError(f"--increment {args.increment} does not exist")
     elif persona in NEEDS_INCREMENT:
         raise BriefError(f"@{persona} needs --increment")
-    stamp = datetime.now().strftime("%H%M%S")
-    note = session_state.main_checkout(ROOT) / ".claude" / "current-task" / f"{persona}-{stamp}.md"
+    # <persona>-<worktree>-<HHMMSS>.md, numbered -2, -3 while the name is taken (h16 T3)
+    tasks = session_state.main_checkout(ROOT) / ".claude" / "current-task"
+    stem = f"{persona}-{worktree.name}-{datetime.now().strftime('%H%M%S')}"
+    note, n = tasks / f"{stem}.md", 1
+    while note.exists():
+        n += 1
+        note = tasks / f"{stem}-{n}.md"
     try:
         fixed = string.Template(TEMPLATE.read_text()).substitute(
             persona=persona, worktree=worktree, increment=increment, note=note

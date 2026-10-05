@@ -25,7 +25,7 @@ from typing import Any
 
 import pytest
 
-from harness_fixtures import REAL, bash_event, clean_env, git, make_repo
+from harness_fixtures import REAL, bash_event, clean_env, git, is_work_tree_top, make_repo
 
 SETTINGS = REAL / ".claude" / "settings.json"
 REQUIRED_READING = REAL / ".claude" / "REQUIRED-READING.md"
@@ -203,6 +203,8 @@ def test_hook_is_executable_in_the_checkout(event: str, matcher: str | None, com
     path = REAL / relative
     assert path.is_file(), f"{relative} is wired on {event} but missing"
     assert os.access(path, os.X_OK), f"{relative} is not executable (mode {path.stat().st_mode:o})"
+    if not is_work_tree_top(REAL):  # h16 P9: a `git archive` copy has no index to read
+        pytest.skip(f"{REAL} is not the top of a git work tree, so git's index mode is not checked")
     staged = git(REAL, "ls-files", "-s", "--", relative).split()
     assert staged, f"{relative} is not tracked"
     assert staged[0] == "100755", f"{relative} is tracked at mode {staged[0]}, not 100755"

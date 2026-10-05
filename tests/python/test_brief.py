@@ -174,8 +174,9 @@ def test_2_the_block_holds_the_templates_phrases_filled_in(
     assert f"You are @{persona}." in body
     assert str(repo.resolve()) in body
     assert "$" not in body, "an unfilled template variable"
-    note = re.search(
-        rf"{re.escape(str(repo.resolve()))}/\.claude/current-task/{persona}-\d{{6}}\.md", body
+    note = re.search(  # h16 T3: <persona>-<worktree directory>-<HHMMSS>.md
+        rf"{re.escape(str(repo.resolve()))}/\.claude/current-task/{persona}-repo-\d{{6}}\.md",
+        body,
     )
     assert note is not None, "the note file is not in the block"
     if persona in NEEDS_INCREMENT:
@@ -541,7 +542,8 @@ WRITE_LIMITS = {
     "developer": ("src_python/", "include/", "src/", "bindings/", "tools/", ".claude/hooks/",
                   ".github/", "CMakeLists.txt", "pyproject.toml"),
     "perf": ("docs/benchmarks/",),
-    "architect": ("docs/", "docs/retrospectives/", "ROADMAP.md", "CLAUDE.md"),
+    "architect": ("docs/", "docs/retrospectives/", "ROADMAP.md", "CLAUDE.md",
+                  "root *.md files"),  # h16 T3: Ola's ruling of 2026-10-05
     "orchestrator": ("docs/retrospectives/",),
     "reviewer": (),
 }  # fmt: skip
@@ -555,10 +557,10 @@ def test_8_the_note_file_is_named_under_the_main_checkout_and_not_created(
     if persona in NEEDS_INCREMENT:
         args += ["--increment", INCREMENT]
     output = ok(repo, home, *args)
-    pattern = rf"{re.escape(str(repo.resolve()))}/\.claude/current-task/{persona}-(\d{{6}})\.md"
+    pattern = rf"{re.escape(str(repo.resolve()))}/\.claude/current-task/{persona}-A-(\d{{6}})\.md"
     found = re.search(pattern, output)
     assert found is not None, "the note path is not under the main checkout"
-    assert not (repo / ".claude" / "current-task" / f"{persona}-{found.group(1)}.md").exists()
+    assert not (repo / ".claude" / "current-task" / f"{persona}-A-{found.group(1)}.md").exists()
     assert not (trees["A"] / ".claude" / "current-task").exists()
 
 
@@ -581,6 +583,91 @@ def test_8_the_write_limit_line_states_writes(repo: Path, home: Path, persona: s
     if persona == "reviewer":
         others = {f for fragments in WRITE_LIMITS.values() for f in fragments}
         assert not [f for f in others if f in line], line
+
+
+def test_8_architects_write_limit_names_root_markdown_files(repo: Path, home: Path) -> None:
+    """h16 T3: Ola ruled on 2026-10-05 that @architect edits root Markdown files."""
+    line = line_starting(ok(repo, home, *args_for("architect", repo)), "Write limit:")
+    assert "root *.md files" in line, line
+
+
+# ------------------------------------------------ h16 T3: note names that cannot collide
+
+
+class _Frozen(datetime):
+    """The clock brief.py reads, stopped at 09:42:30."""
+
+    @classmethod
+    def now(cls, tz: Any = None) -> _Frozen:
+        return cls(2026, 10, 5, 9, 42, 30, tzinfo=tz)
+
+
+NOTE = re.compile(r"/\.claude/current-task/(\S+?\.md)")
+
+
+@pytest.fixture
+def frozen_brief(
+    repo: Path, home: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> Any:
+    """The fixture's copy of brief.py in process, its clock frozen; returns a
+    function giving the note file's name for a brief of @architect in a worktree."""
+    monkeypatch.setenv("HOME", str(home))
+    brief = load_path(repo / BRIEF, "h16_brief_frozen")
+    monkeypatch.setattr(brief, "datetime", _Frozen)
+
+    def note_for(worktree: Path) -> str:
+        try:
+            code = brief.main(["architect", "--worktree", str(worktree), "--beside", "none"])
+        except SystemExit as stop:
+            code = stop.code
+        out = capsys.readouterr()
+        assert code in (0, None), out.err
+        found = NOTE.findall(out.out)
+        assert len(set(found)) == 1, f"not one note file in:\n{out.out}"
+        return str(found[0])
+
+    return note_for
+
+
+@pytest.fixture
+def h15_h16(tmp_path: Path, repo: Path) -> tuple[Path, Path]:
+    """Two worktrees named as the two that collided on 2026-10-05."""
+    base = tmp_path.resolve()
+    return (add_worktree(repo, base / "h15-ci", "worktree-h15-ci"),
+            add_worktree(repo, base / "h16", "worktree-h16"))  # fmt: skip
+
+
+def test_t3_the_note_name_holds_persona_worktree_and_time(
+    frozen_brief: Any, h15_h16: tuple[Path, Path]
+) -> None:
+    assert frozen_brief(h15_h16[1]) == "architect-h16-094230.md"
+
+
+def test_t3_two_briefs_in_one_second_in_two_worktrees_name_different_files(
+    frozen_brief: Any, h15_h16: tuple[Path, Path]
+) -> None:
+    first, second = frozen_brief(h15_h16[0]), frozen_brief(h15_h16[1])
+    assert first == "architect-h15-ci-094230.md"
+    assert second == "architect-h16-094230.md"
+
+
+def test_t3_an_existing_note_file_gets_a_numbered_name(
+    repo: Path, frozen_brief: Any, h15_h16: tuple[Path, Path]
+) -> None:
+    tasks = repo / ".claude" / "current-task"
+    tasks.mkdir(parents=True)
+    (tasks / "architect-h16-094230.md").write_text("taken\n")
+    assert frozen_brief(h15_h16[1]) == "architect-h16-094230-2.md"
+    (tasks / "architect-h16-094230-2.md").write_text("taken\n")
+    assert frozen_brief(h15_h16[1]) == "architect-h16-094230-3.md"
+    assert (tasks / "architect-h16-094230.md").read_text() == "taken\n"
+
+
+def test_t3_the_same_worktree_in_the_same_second_names_the_same_file_until_it_exists(
+    frozen_brief: Any, h15_h16: tuple[Path, Path]
+) -> None:
+    """brief.py names the file and does not create it, so two runs agree (test 1)."""
+    assert frozen_brief(h15_h16[1]) == frozen_brief(h15_h16[1])
 
 
 # ---------------------------------------------------------------- 9. hash

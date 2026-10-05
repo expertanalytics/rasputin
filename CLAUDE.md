@@ -16,11 +16,12 @@ This project is governed by specialized sub-agents. Always defer tasks to the co
 * **Strict Size Limit:** Under **700 net lines of production code per pull
   request**: lines added minus lines removed, both under the same exclusions. A
   line counts unless it is blank, a comment, a docstring, or the body of a raw
-  literal; tests excluded. Added and removed lines are the `+` and `-` ranges of
-  the PR's `git diff -U0` hunks against its base, added lines judged at the new
-  revision and removed lines at the old. The exclusions exist so the ceiling does not
-  penalise the comment density this project asks for, and blank lines add no
-  reading. Lines count as written: packing code by hand under `# fmt: skip` /
+  literal. Files under `tests/` or `docs/`, and files that are not Python, C++,
+  CMake or shell, are not counted; a file renamed across that boundary counts in
+  full. Added and removed lines are the `+` and `-` ranges of the PR's
+  `git diff -U0` hunks against its base, judged at the new and the old
+  revision; `python3 tools/count_loc.py <base> <head>` counts them. Lines count
+  as written: packing code by hand under `# fmt: skip` /
   `# fmt: off` is allowed, provided the packed lines stay readable and the
   review says why each new region is packed. This is the only statement of the
   rule; everywhere else points here.
