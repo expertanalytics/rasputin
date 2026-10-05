@@ -113,12 +113,12 @@ R7's condition. These texts change with it:
 **Site.** Three references keep the target tile alive through
 `final_check.run`. 15c D6 records this as "*Built otherwise (15c-2)*"
 (`15c-geographic-dem.md:587-590`). The references are:
-- `mesh()` holds `opened`, a frozen `DemInput` (`cli.py:829`). It reads
+- `mesh()` holds `opened`, a frozen `DemInput` (`src_python/tin_engine/cli.py@92e5356:829`). It reads
   `opened.tile` at `:839`, `:846` and `:864-865`.
-- The call `_dem_mesh(opened.tile, ...)` (`cli.py:845-859`). Its argument
+- The call `_dem_mesh(opened.tile, ...)` (`src_python/tin_engine/cli.py@92e5356:845-859`). Its argument
   lives on the caller's frame until the call returns, so a `del` inside the
   callee frees nothing.
-- `_dem_mesh`'s parameter `tile` (`cli.py:1398`), live until `:1491`.
+- `_dem_mesh`'s parameter `tile` (`src_python/tin_engine/cli.py@92e5356:1398`), live until `:1491`.
 
 **Change** (CLI only; `open_dem` and `DemInput` keep their public shape):
 - A private one-shot holder in `cli.py`, `_Once[T]`, whose `take()` returns

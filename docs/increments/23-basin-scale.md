@@ -3213,7 +3213,7 @@ green. CI not yet run: no PR.
 
 ### B13 and B14 ruled, round 1, `5a57793..4c182c8`: CHANGES REQUESTED (`@reviewer`)
 
-Production LOC 0; 23c 430 (688 at +60 %). B13 (c) and B14 recorded faithfully; b(T) derives from the basin-piece sweep (17 B per node, 0.805 triangles per node at 1 m); `partition.py` reproduces every row; the 1 m benchmark and Bygdin stay one piece. Blocking: DC0's "at least `--pieces`" could not pass as cells (`--pieces 16` on Velhas gives 3 × 5) and could not fail as P'; deleting 15a R7's refusal was presented as decided under B14 though not asked, and `catchment.py:150` has the same refusal.
+Production LOC 0; 23c 430 (688 at +60 %). B13 (c) and B14 recorded faithfully; b(T) derives from the basin-piece sweep (17 B per node, 0.805 triangles per node at 1 m); `partition.py` reproduces every row; the 1 m benchmark and Bygdin stay one piece. Blocking: DC0's "at least `--pieces`" could not pass as cells (`--pieces 16` on Velhas gives 3 × 5) and could not fail as P'; deleting 15a R7's refusal was presented as decided under B14 though not asked, and `src_python/tin_engine/catchment.py@96cddea:150` has the same refusal.
 
 ### Round 2, `4c182c8..a7c1bfb`: APPROVED (`@reviewer`)
 

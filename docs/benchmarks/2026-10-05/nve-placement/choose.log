@@ -1,0 +1,22 @@
+2 the line burnt in 101.1.0 well posed
+3 marked uncertain (swing, confluence step) 2.11.0 chain_not_draining;chain_end_open
+3 marked uncertain (swing, confluence step) 2.633.0 well posed
+3 marked uncertain (swing, confluence step) 6.10.0 well posed
+3 marked uncertain (swing, confluence step) 16.66.0 well posed
+3 marked uncertain (swing, confluence step) 24.9.0 chain_not_draining;chain_end_open
+3 marked uncertain (swing, confluence step) 38.1.0 chain_end_open
+3 marked uncertain (swing, confluence step) 55.4.0 well posed
+3 marked uncertain (swing, confluence step) 73.27.0 swing;chain_not_draining
+3 marked uncertain (swing, confluence step) 76.5.0 well posed
+3 marked uncertain (swing, confluence step) 83.6.0 swing;chain_not_draining;chain_end_open
+3 marked uncertain (swing, confluence step) 83.12.0 chain_not_draining
+3 marked uncertain (swing, confluence step) 84.20.0 well posed
+3 marked uncertain (swing, confluence step) 87.10.0 swing;chain_not_draining
+3 marked uncertain (swing, confluence step) 122.11.0 chain_not_draining
+3 marked uncertain (swing, confluence step) 122.14.0 chain_not_draining
+3 marked uncertain (swing, confluence step) 151.15.0 well posed
+3 marked uncertain (swing, confluence step) 156.24.0 the request selects tiles on two lattices, 7404_2_10m_z33.tif and 7304_1_10m_z33.tif: 7304_1_10m_z33.tif is 0.5 cell (5 m) east-west off 7404_2_10m_z33.tif's lattice; tiles are not resampled onto one another, but a --bbox inside one lattice is meshed
+3 marked uncertain (swing, confluence step) 206.3.0 the request selects tiles on two lattices, 7606_1_10m_z33.tif and 7707_3_10m_z33.tif: 7707_3_10m_z33.tif is 0.5 cell (5 m) east-west off 7606_1_10m_z33.tif's lattice; tiles are not resampled onto one another, but a --bbox inside one lattice is meshed
+3 marked uncertain (swing, confluence step) 213.4.0 the request selects tiles on two lattices, 7808_4_10m_z33.tif and 7808_3_10m_z33.tif: 7808_3_10m_z33.tif is 0.5 cell (5 m) east-west off 7808_4_10m_z33.tif's lattice; tiles are not resampled onto one another, but a --bbox inside one lattice is meshed
+4 a lake gauge 2.11.0 chain_not_draining;chain_end_open
+4 a lake gauge 2.32.0 well posed
