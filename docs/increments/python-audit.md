@@ -23,6 +23,10 @@ citations, now pinned to `97eea35`). Next `@reviewer` round 3: run
 `python3 tools/check_citations.py` and re-read the round-1 record (tests
 only: no `@developer` step, no `@perf` run); then push on Ola's yes.
 
+PR B (`audit-crs-helpers`, F3) is designed in section 9, on branch
+`worktree-audit-crs` after T2. Next: `@tester`'s red commit, then
+`@developer`, `@reviewer`.
+
 Re-checked against master `44fa7f5`: `git diff --stat 12dace7 44fa7f5 --
 src_python` is empty, and of the files cited below only `tools/brief.py`
 changed, outside the cited lines (`git show 44fa7f5:tools/brief.py | sed -n
@@ -436,7 +440,7 @@ table in a `@tester` commit, and deletes the section 8 exception it removes
 |---|---|---|---|---|---|
 | T2 | `audit-layering-test` | X3 | 0 (tests only, about -35) | nothing | none; `@tester` then `@reviewer`, no `@developer` |
 | T1 | `audit-cli-test-harness` | X1 | 0 (tests only, -350) | nothing | none |
-| B | `audit-crs-helpers` | F3, with the `EPSG:None` fix | about -25 | nothing | red test for the fix |
+| B | `audit-crs-helpers` | F3, with the `EPSG:None` fix | about +8 (section 9; first estimated -25) | T2 | red tests for the rule and the fix |
 | A | `audit-lattice` | F2, F9, F10 (repository Protocol), F12 (`mosaic`'s two) | about -100 | B | red test for the +-inf ruling; `@perf` run: meshes byte-identical |
 | F | `audit-catchment-shared` | F4, F10 (catchment types), F12 (`gauge`'s two, `catchment` -> `_core`) | about -40 | nothing | none |
 | C | `audit-geojson-io` | F5, F12 (`chains` -> `feature_input`) | about -40 | B | `@tester` amendment if wordings move, and for the two `--help` texts |
@@ -446,7 +450,8 @@ table in a `@tester` commit, and deletes the section 8 exception it removes
 | H | `audit-mesh-run` | F8, X2 for the rest | about -60 (about 550 moved) | G, E | `@perf`: bench tool seam and byte-identical meshes |
 | tools | `audit-tools-git` | section 4 | about -20 (tools are not production; governed files need Ola) | nothing | Ola's approval per governed file |
 
-Total: about -440 production lines, -385 test lines, and the drift points
+Total: about -440 production lines (about -407 with section 9's
+revision of B), -385 test lines, and the drift points
 (lattice spelling, NoData rule, CRS checks, GeoJSON `crs` rules, mask
 convention) each written once.
 
@@ -610,6 +615,314 @@ that the deletion breaks or moves (`python3 tools/check_citations.py` on a
 scratch copy with the lines removed), and says which get pinned. T2's design
 did not, and its tests commit left nine broken citations in dated review
 records.
+
+## 9. PR B design: `audit-crs-helpers` (F3)
+
+Branch `worktree-audit-crs`, from T2's head `b63132e`; it lands after T2
+and does not depend on T1. `src_python/` at `b63132e` is byte-identical to
+`44fa7f5` and to `12dace7` (`git diff --stat 12dace7 b63132e -- src_python`
+is empty), so the citations below are pinned to `44fa7f5`, which is on
+master. Not refine or mesh code, and the benchmark runs pass no `--out-crs`
+(`grep -n out-crs tools/bench.py` is empty), so no `@perf` run.
+
+### What F3 got wrong, re-measured
+
+- **The `EPSG:None` refusal is latent, not live.** Every `TileFootprint`
+  comes from the GeoTIFF reader (`src_python/tin_engine/io/repository.py@44fa7f5:112-114, 241`),
+  and the reader resolves a CRS only from an EPSG code: a projected CRS given
+  by parameters (`ProjectedCSTypeGeoKey` 3072 = 32767, "user-defined") is
+  refused at `src_python/tin_engine/io/geotiff.py@44fa7f5:283-288`. So no real
+  footprint has `epsg` None, and the `EPSG:None` path is reached only by a
+  footprint built by hand, as F3's probe did. It is still fixed here: the
+  three "one CRS" checks become one, and the day the reader admits such a CRS
+  the domain path must not break.
+- **Ola's Austrian openDEM file is refused by the reader, not by `EPSG:None`.**
+  Probe, with the project venv: `io.geotiff.read_meta` on
+  `../rasputin_data/austria_dgm10/dhm_at_lamb_10m_2018.tif` raises
+  `GeoTiffError: ProjectedCSTypeGeoKey (3072) = 32767 is not a resolvable
+  EPSG code`. Its GeoKeys give Lambert conic conformal (two standard
+  parallels) by parameters: parallels 46 and 49, origin 47.5 N
+  13.33333333300013 E, false easting and northing 400 000 m, on MGI (EPSG
+  4312), metres. That is EPSG:31287 to within 3.3e-10 degrees of longitude
+  (0.03 mm at the origin's latitude). `kaprun_dgm10_31287.tif`, the converted copy, reads
+  as `EPSG:31287`. **PR B does not make the original file readable**;
+  question 1 below asks whether a later PR should.
+- **Nine comparison sites, not eight.** F3 missed
+  `src_python/tin_engine/dem_input.py@44fa7f5:164` (`target != parse_crs(first.crs)`, with `target`
+  parsed three lines above), which decides whether the DEM is resampled.
+- **The live bug is the comparison itself.** `parse_crs(a) != parse_crs(b)`
+  is pyproj's `CRS.__eq__`, PROJ's equivalence with axis order and parameter
+  layout counted. It calls a CRS different from the EPSG code it is by
+  definition, when it is spelt as a PROJ string or as GDAL's WKT1. Probe
+  (pyproj 3.8.0, PROJ 9.8.1): `+proj=lcc +lat_1=46 +lat_2=49 +lat_0=47.5
+  +lon_0=13.33333333333333 +x_0=400000 +y_0=400000 +ellps=bessel +units=m
+  +no_defs` `==` `EPSG:31287` is False, and so is EPSG:3035's own
+  `to_wkt("WKT1_GDAL")` against `EPSG:3035` (WKT1 has no axis order, so
+  PROJ reads it east-north; EPSG:3035 is north-east). Today that means:
+  `--out-crs` given as a PROJ string of the DEM's own CRS resamples the DEM
+  for nothing (`src_python/tin_engine/dem_input.py@44fa7f5:164`); a river
+  file, feature file or seed in such a spelling is refused as "not the DEM's"
+  (`src_python/tin_engine/catchment.py@44fa7f5:185, 202`,
+  `src_python/tin_engine/cli.py@44fa7f5:2045`,
+  `src_python/tin_engine/feature_input.py@44fa7f5:423`); and the record says a transform
+  ran where none did (`src_python/tin_engine/cli.py@44fa7f5:932-933, 952-956`).
+
+### Prior art: legacy and literature
+
+*Literature.* No published method; the rule leans on PROJ's own two notions.
+Equivalence is PROJ's `isEquivalentTo`, which pyproj's `CRS.equals` calls.
+Identification is PROJ's `identify`, which pyproj's `list_authority` and
+`to_epsg` call. Its confidence levels for a projected CRS, from PROJ's C++
+reference (`proj.org/en/stable/development/reference/cpp/crs.html`,
+`ProjectedCRS::identify`): 100, name and definition match; 90, equivalent,
+names not exactly the same; 70, "CRS are equivalent (equivalent base CRS,
+conversion and coordinate system), but the names are not equivalent"; 50,
+"equivalent base ellipsoid and conversion, but the coordinate system do not
+match (e.g. different axis ordering or axis unit)"; 25, "not equivalent, but
+there is some similarity in the names". Nothing new is claimed.
+
+*Legacy.* `git grep -nE "to_epsg|CRS\.equals|\.equals\(|is_exact_same|same_crs|IsSame|crs ==|crs !=|epsg ==|epsg !=" legacy-archive -- legacy`
+returns one line, `legacy/rasputin/globcov_repository.py:141`
+(`if pts_crs != self.data_crs:`), pyproj's `!=` as today. Nothing to carry
+across.
+
+### The helpers, in `crs.py` (layer L1)
+
+They go in the existing `src_python/tin_engine/crs.py`, the layer-1 module
+that already holds `parse_crs` and the one `Transformer.from_crs`. No new module, no new
+first-party import: `crs`'s row in `tests/python/test_layering.py` stays
+empty, and every caller already imports `crs`, so **the layering table does
+not change** and there is no `UPWARD` entry to add or remove. Check 2 of
+that test confirms it.
+
+```python
+SAME_CONFIDENCE = 70  # PROJ identify, 0-100: 70 is "equivalent, names differ"
+
+def same_crs(a: str | CRS, b: str | CRS) -> bool:
+    """Whether coordinates in `a` and in `b` name the same points."""
+
+def transform_label(src: str | CRS, dst: str | CRS) -> str:
+    """'none' when same_crs(src, dst), else transform_description(src, dst)."""
+
+def single_crs(texts: Iterable[str], refusal: type[ValueError] = ValueError) -> str:
+    """The one CRS text among `texts` (a DEM's tiles' `meta.crs`), or
+    `refusal` naming them all."""
+```
+
+**`same_crs`, the rule.** Both are parsed with `parse_crs` (unreadable text
+is its `ValueError`, wording unchanged). Then, in order:
+
+1. **Same once both are in x-then-y order.** Build the package's one
+   transformer, `_transformer(a, b)` (`always_xy=True`). Its `source_crs`
+   and `target_crs` are the two CRSs in PROJ's x-then-y order (probe: EPSG:3035's two axes
+   come back east, north). They are the same if
+   `source_crs.equals(target_crs)`. Axis order never matters in this
+   package: every transform is `always_xy` (the module docstring of
+   `crs.py`). A `ProjError` while building it (PROJ finds no operation, for
+   example between Earth and Mars) means "not the same", never an exception.
+2. **Else, one EPSG code in common.** The sets
+   `{m.code for m in crs.list_authority("EPSG", SAME_CONFIDENCE)}` of the two
+   meet. This catches a CRS given by parameters (a PROJ string, a WKT without
+   ID) that PROJ identifies as an EPSG definition with another name.
+
+Not by `to_epsg(min_confidence=...)` alone: it returns one code, and a
+definition shared by two codes (EPSG:25833 and EPSG:3045 are both ETRS89 /
+UTM 33N; a PROJ string of either identifies as both at 70) could come back as
+different codes on the two sides. Not by `CRS.equals` alone: it is today's
+rule. Not at confidence 50: 50 also admits a different axis *unit*, so the
+same Lambert in US feet would pass (probe: it identifies as EPSG:31287 at
+exactly 50).
+
+**`SAME_CONFIDENCE = 70`: scale and limits.** The scale is PROJ's identify
+percentage, 0 to 100. 70 is the lowest level PROJ calls equivalent. What
+"equivalent" tolerates, measured by perturbing the Lambert PROJ string
+above: longitude of origin off by 2e-9 degrees still identifies as EPSG:31287 (0.15 mm at
+x 450 000, y 350 000), 1e-8 degrees (0.77 mm) does not; false easting off by
+1e-5 m identifies, 1e-4 m does not. So "the same" never hides more than a
+fraction of a millimetre, below any DEM spacing rasputin reads (1 m at the
+finest). Checked on pyproj 3.8.0 / PROJ 9.8.1, on EPSG:31287, 25833, 3035
+and 4326 in four spellings each (WKT2 without its ID, GDAL WKT1, ESRI WKT1,
+PROJ string), all the same in both argument orders. These six pairs are not
+the same: the Lambert in US feet, the Lambert at 13.5 E,
+EPSG:25832 against 25833, EPSG:4258 against 4326, EPSG:31287 against 4312,
+and the Lambert on GRS80. Cost: 0.3 to 40 ms a call. Calls happen once per
+site per run, never per point.
+
+**Pinned limits of the rule** (each a test below):
+
+- A **PROJ string with `+towgs84`** (EPSG:31287 written with `+towgs84=577.326,90.129,463.919,5.137,1.474,5.297,2.4232`) is
+  **not** the same as EPSG:31287. pyproj reads it as a bound CRS on a datum
+  "unknown based on Bessel 1841", which PROJ matches to EPSG:31287 only at
+  50, on the ellipsoid alone. The same ellipsoid with another datum is
+  hundreds of metres off, so rasputin does not guess. That spelling is
+  reprojected through its own `+towgs84` where the site reprojects, and
+  refused with today's wording where the site refuses.
+- **OGC:CRS84 is the same as EPSG:4326** (rule 1). Coordinates are always
+  x then y here, so they name the same points. `crs_label` still writes
+  each by its own name.
+- **EPSG:3045 is the same as EPSG:25833** (rule 1): one definition under two
+  codes.
+
+**Labels do not change.** `crs_label` and `target_grid` keep
+`to_epsg(min_confidence=100)` (`src_python/tin_engine/crs.py@44fa7f5:77`,
+`src_python/tin_engine/target_grid.py@44fa7f5:200`): a record names the CRS as it
+was given, not as identified. When `--out-crs` is the same as the DEM's CRS
+the DEM is not resampled, and the record's `crs` is the DEM's own,
+`opened.tile.meta.crs` (`src_python/tin_engine/cli.py@44fa7f5:883`), as it is today for
+`--out-crs EPSG:25833` on an EPSG:25833 DEM.
+
+**`single_crs`** is keyed on the `meta.crs` text, as two of today's three copies
+are. Every tile the reader makes has `EPSG:n` text, so keying by
+`same_crs` would buy nothing and cost a transformer per pair. It replaces:
+`src_python/tin_engine/dem_input.py@44fa7f5:188-190` (`MosaicError`),
+`src_python/tin_engine/dem_input.py@44fa7f5:227-229` (`MosaicError`; the
+`epsg` copy, and with it the `EPSG:None` bug), and
+`src_python/tin_engine/catchment.py@44fa7f5:194-197` (`CatchmentError`).
+The domain path then moves the domain into that text
+(`given.to_crs(crs)`, now `f"EPSG:{epsgs[0]}"`), and its re-raise
+(`src_python/tin_engine/dem_input.py@44fa7f5:248`) names it
+(`in the DEM's {crs}`). That reads `EPSG:25833` for every tile the reader
+makes, so the wording is unchanged there.
+
+### The sites, as they change
+
+| Site (at `44fa7f5`) | Today | After |
+|---|---|---|
+| `src_python/tin_engine/dem_input.py@44fa7f5:164` | `target != parse_crs(first.crs)` | `not same_crs(target, first.crs)` |
+| `src_python/tin_engine/dem_input.py@44fa7f5:188-190` | own "one CRS" check | `crs = single_crs((f.meta.crs for f in footprints), MosaicError)` |
+| `src_python/tin_engine/dem_input.py@44fa7f5:227-231, 248` | keyed on `epsg` | `single_crs(..., MosaicError)`; the domain moved into and the re-raise naming that text |
+| `src_python/tin_engine/catchment.py@44fa7f5:185` | `!=` | `not same_crs(crs, dem_crs)`; wording unchanged |
+| `src_python/tin_engine/catchment.py@44fa7f5:194-197` | own "one CRS" check | `dem_crs = single_crs(..., CatchmentError)` |
+| `src_python/tin_engine/catchment.py@44fa7f5:202` | `!=` | `not same_crs(...)`; wording unchanged |
+| `src_python/tin_engine/feature_input.py@44fa7f5:179` | `!=` | `not same_crs(...)` |
+| `src_python/tin_engine/feature_input.py@44fa7f5:423` | `!=` | `not same_crs(...)`; wording unchanged |
+| `src_python/tin_engine/cli.py@44fa7f5:932-933` | `same = ...; how = ...` | `"domain_transform": transform_label(given.crs, dem_crs)` |
+| `src_python/tin_engine/cli.py@44fa7f5:952-956` | five-line conditional | `transforms.append(transform_label(own, dem_crs))` |
+| `src_python/tin_engine/cli.py@44fa7f5:2045` | `!=` | `not same_crs(...)`; wording unchanged |
+| `src_python/tin_engine/fetch/run.py@44fa7f5:222` | `!=` | `not same_crs(...)`; wording unchanged |
+
+`src_python/tin_engine/cli.py@44fa7f5:919` (`transform_description` on the resampled path) stays: a resampled DEM's
+CRS is never the target's. `parse_crs` stays public; `cli` and `catchment`
+stop importing it.
+
+### Refusal wordings
+
+One changes, by design: the three "one CRS" refusals become one, in plain words.
+
+| Where | Today | After |
+|---|---|---|
+| `single_crs` (all three sites) | `the tiles are in 2 CRSs, ['EPSG:25832', 'EPSG:25833']; need one`, and on the domain path `... EPSG:[25832, 25833]; a domain needs one` | `the DEM files are in 2 different CRSs (EPSG:25832, EPSG:25833); all must be in one CRS` |
+
+Every other wording is unchanged and stays pinned by its suite:
+`cannot read the CRS ...` (`parse_crs`), `the river file's CRS, X, is not the
+DEM's, Y`, `the river reach must be in the DEM's CRS, Y`, `F is in X but the
+given CRS is Y`, `the W file's CRS, X, is not the river file's, Y; polygons
+are not reprojected`, `O: the header's CRS is X; the catalogue's S is Y`.
+Question 2 asks Ola to approve the new one.
+
+### Red tests (`@tester`, one commit, before any code)
+
+`crs.same_crs`, `transform_label` and `single_crs` do not exist yet, so each
+new `test_crs.py` test fails on its own with `AttributeError`, inside the
+existing `crs` fixture. Lean: no throwaway implementation, no mutation round.
+
+1. **`tests/python/test_crs.py`, `TestSameCrs`**, each pair in both orders:
+   - the same: the Lambert PROJ string above and `EPSG:31287`; the WKT of
+     EPSG:31287 with its ID removed; `EPSG:3035`'s `to_wkt("WKT1_GDAL")` and
+     `EPSG:3035`; `CRS.from_epsg(25833).to_proj4()` and `EPSG:25833`;
+     `OGC:CRS84` and `EPSG:4326`; `EPSG:3045` and `EPSG:25833`; and, as the
+     control, `EPSG:31287` and `epsg:31287`.
+   - not the same: the Lambert with `+units=us-ft`; the Lambert at
+     `+lon_0=13.5`; `EPSG:25832` and `EPSG:25833`; `EPSG:4258` and
+     `EPSG:4326`; that `+towgs84` PROJ string of EPSG:31287 (the pinned
+     limit); a Mars `+proj=longlat +a=3396190 +b=3376200` and `EPSG:4326`
+     (False, not an exception).
+   - unreadable text is a `ValueError` matching `cannot read the CRS`.
+2. **`TestTransformLabel`**: `"none"` for the Lambert string against
+   `EPSG:31287`; `transform_description("EPSG:4326", "EPSG:25833")` for
+   that pair.
+3. **`TestSingleCrs`**: `["EPSG:25833"] * 3` gives `"EPSG:25833"`;
+   `["EPSG:25833", "EPSG:25832", "EPSG:25833"]` raises the given type (a
+   local `ValueError` subclass), with exactly the wording above; with no
+   type given, `ValueError`.
+4. **Amend `tests/python/test_dem_input_domain.py`, `TestOneCrs`**
+   (`tests/python/test_dem_input_domain.py@44fa7f5:630-632`): the three
+   `in message` assertions become the new wording,
+   `"(EPSG:25832, EPSG:25833)"` and `"all must be in one CRS"` among them.
+5. **The `EPSG:None` fix, `test_dem_input_domain.py`**: `dem_input.open_dem`
+   with `dem_input.repository_for` monkeypatched to return an in-memory
+   repository (`catchment_fixtures.MemoryRepository` with a no-op `check` and
+   `load_window = None`). Its tiles have `epsg=None` and `crs` the WKT of
+   EPSG:25833 with its ID removed. With a domain, the tile's array and its
+   lattice (`x_min`, `y_max`, spacings, rows, columns) equal those of the
+   same tiles with `epsg=25833`, and its `crs` is that WKT text. A domain
+   outside the tiles is refused naming that CRS text, and no message
+   contains `EPSG:None`.
+6. **The parameter Lambert is accepted where `EPSG:31287` is,
+   `tests/python/test_catchment_batch.py`** beside
+   `test_check_reach_crs_is_the_one_rule`: a `MemoryRepository` whose first
+   tile's meta has `epsg=31287`; `check_reach_crs(<Lambert string>, repo)` is
+   None, as `check_reach_crs("EPSG:31287", repo)` is; the Lambert at 13.5 E
+   is refused with today's wording (`river file's CRS ... DEM's, EPSG:31287`).
+7. **`--out-crs` the same by definition, `tests/python/test_cli_mesh_geographic.py`,
+   G7**: parametrise `test_out_crs_equal_to_the_dems_own_writes_the_same_bytes`
+   over `"EPSG:25833"` (today's) and `CRS.from_epsg(25833).to_proj4()`. The
+   second writes the same bytes as no `--out-crs`. Red today: the DEM is
+   resampled.
+
+Red today: 1 (all), 2, 3, 4, 5, 6 (the Lambert half) and 7 (the PROJ string).
+The rest of the suite must stay green; no other test is expected to move
+(the `domain_transform` and `features_transform` tests use CRS pairs that
+differ).
+
+### Net production lines
+
+**About +8**, against the audit's about -25. The audit assumed `same_crs` was
+a one-line alias of `!=`. Correct, it is about 12 lines: two rules, the
+`ProjError` fallback and the code-set helper. Each of the nine comparisons is
+one line before and after, so they save nothing. `crs.py` adds about 21 (constant 1,
+`same_crs` 9, code sets 2, `transform_label` 2, `single_crs` 7); the
+sites remove about 13 (`cli.py` 6, `dem_input.py` 4, `catchment.py` 3).
+Tests: about +90. Section 6's row B and its total move by about +33
+accordingly; the drift point (one CRS rule) is still written once.
+
+### Citations this PR moves, pinned now
+
+The `cli.py` edit moves every later line up about 6, `catchment.py` about
+3, `dem_input.py` about 2. `feature_input.py` and `fetch/run.py` keep their
+line count. Unpinned citations into those files, at or after the
+edited lines, whose quotations hold at `44fa7f5`, were pinned to `44fa7f5`
+in this design's commit, so the green commit breaks none:
+`docs/increments/15c-geographic-dem.md` line 931 (`catchment.py:194-195`),
+`docs/increments/15f-edge-strip.md` line 591 (`cli.py:1612`),
+`docs/increments/25-plain-output.md` lines 53, 273, 274, 397 and 665
+(`cli.py:1966-1969`, `:1040`, `:961`, `:1113-1125`, `:1145-1147`),
+`docs/increments/29-nve-reference-catchments.md` lines 538 and 3130
+(`dem_input.py:248`), 3134 (`cli.py:1956`) and 3380 (`catchment.py:259`), and
+`docs/benchmarks/2026-10-05/nve-hrd/README.md` line 53 (`catchment.py:259`).
+Left alone: unpinned citations whose text had already moved before this PR
+(`15f-edge-strip.md` lines 1539 and 1904, `24-release-hardening.md` lines 515
+and 517, `29-nve-reference-catchments.md` lines 3098 and 3114). They are
+dated records of an older revision, and pinning them to `44fa7f5` would pin
+a wrong line. No citation points into the test files this PR edits.
+
+### Questions for Ola (defaults hold until he answers)
+
+1. **Read GeoTIFFs whose CRS is given by parameters, like the Austrian
+   openDEM file?** Default: yes, as a later small PR after B. The reader
+   would build the CRS from the GeoKeys as a PROJ string, then identify it
+   with B's rule. One that PROJ identifies as an EPSG code reads as that code;
+   the Austrian file identifies as EPSG:31287 (probe: the PROJ string with
+   its own `lon_0=13.33333333300013` identifies at 70). One that matches no
+   code stays refused as today. It overturns increment 11's rulings 6 and 7
+   ("the CRS is resolved only through `pyproj.CRS.from_epsg`"), hence the
+   question.
+2. **The new wording** for DEM files in more than one CRS (table above).
+   Default: as written.
+3. **A CRS that is an EPSG code's definition under another spelling counts
+   as that CRS:** no resampling, no refusal, transform "none" in the record.
+   Default: yes. The limits it pins: the `+towgs84` spelling is not the same;
+   CRS84 is the same as EPSG:4326.
 
 ## Review
 

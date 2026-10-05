@@ -50,7 +50,7 @@ Scored stations (match, close, miss) are 85; 74 of them (87 %) match.
   7766.8-7783.7). Its in-nodes plus 2 km still reach past that window (x
   851.8 against 850.9 km), so the loop grows it, by the margin doubled to
   32 km, and that window's tiles include the shifted `7707_1` (the call
-  stack: `_grow`, `catchment.py:259`, then `_plan`). So the catchment was
+  stack: `_grow`, `src_python/tin_engine/catchment.py@44fa7f5:259`, then `_plan`). So the catchment was
   found, on one grid, and the window rule refused it.
 - `2.142.0` Knappom was refused off the DEM's edge although its NVE polygon
   lies 26 km inside the tiles. Measured window by window
