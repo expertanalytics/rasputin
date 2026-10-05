@@ -34,11 +34,12 @@ GIT_ENV = {"GIT_CONFIG_GLOBAL": os.devnull, "GIT_CONFIG_NOSYSTEM": "1",
 #: Config given in the environment (`GIT_CONFIG_COUNT` with its `_KEY_n`/`_VALUE_n`,
 #: `GIT_CONFIG_PARAMETERS`): dropped from what git sees.
 ENV_CONFIG = re.compile(r"GIT_CONFIG_(?:COUNT|PARAMETERS|KEY_\d+|VALUE_\d+)$")
-#: Explicit prefixes and hunk context, so the repository's own config
-#: (`diff.noprefix`, `diff.srcPrefix`, `diff.interHunkContext`) cannot move the
-#: headers or fuse hunks.
+#: Explicit prefixes, hunk context and `--no-relative`, so the repository's own
+#: config (`diff.noprefix`, `diff.srcPrefix`, `diff.interHunkContext`,
+#: `diff.relative`) cannot move the headers, fuse hunks, or narrow the diff to
+#: the directory the counter runs from.
 DIFF = ("diff", "-M", "--no-ext-diff", "--no-color", "--src-prefix=a/", "--dst-prefix=b/",
-        "--inter-hunk-context=0")  # fmt: skip
+        "--inter-hunk-context=0", "--no-relative")  # fmt: skip
 SKIPPED_DIRS = ("tests/", "docs/")
 SUFFIXES: dict[str, Kind] = {
     ".py": "python", ".pyi": "python", ".h": "c++", ".hpp": "c++", ".cpp": "c++",
