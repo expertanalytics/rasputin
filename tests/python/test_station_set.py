@@ -8,6 +8,7 @@ names what is wrong.
 
 from __future__ import annotations
 
+import importlib
 from pathlib import Path
 from types import ModuleType
 from typing import Any
@@ -378,3 +379,43 @@ class TestOneGeojsonRule:
         with pytest.raises(ValueError) as info:
             station_set.read_stations(path)
         assert str(info.value).startswith("s.geojson: ")
+
+
+# The four readers that go through `features_of`, by module and name.
+FEATURES_OF_READERS = [
+    ("tin_engine.io.station_set", "read_stations"),
+    ("tin_engine.io.station_set", "read_references"),
+    ("tin_engine.io.station_set", "read_nve_lakes"),
+    ("tin_engine.io.rivers", "read_segments"),
+]
+
+
+class TestAFileWithNoGeometry:
+    """`docs/increments/python-audit.md`, section 10's wording table, the row
+    "a `crs` member and either a `Feature` without `geometry` or an object
+    with neither `type` nor `features`". The shape rule reads either as one
+    feature; the reader then refused it as `None is a None, not a Point` (or
+    the Polygon, lake and LineString forms). It is refused in plain words
+    naming the file and the feature: `has no geometry`.
+    The `"geometry": 7` case is a known gap, kept out."""
+
+    @pytest.mark.parametrize(
+        "doc",
+        [
+            pytest.param({"type": "Feature", "crs": crs_member(), "properties": {}}, id="feature"),
+            pytest.param({"crs": crs_member(), "foo": 1}, id="typeless"),
+        ],
+    )
+    @pytest.mark.parametrize(
+        ("module", "reader"), FEATURES_OF_READERS, ids=[r for _, r in FEATURES_OF_READERS]
+    )
+    def test_it_is_refused_saying_the_feature_has_no_geometry(
+        self, module: str, reader: str, doc: dict[str, Any], tmp_path: Path
+    ) -> None:
+        read = getattr(importlib.import_module(module), reader)
+        with pytest.raises(ValueError) as info:
+            read(write(tmp_path / "nogeom.geojson", doc))
+        message = str(info.value)
+        assert "nogeom.geojson" in message
+        assert "feature 0" in message
+        assert "has no geometry" in message
