@@ -711,8 +711,7 @@ def moved_repo(root: Path, source: str, target: str) -> Path:
 @pytest.mark.parametrize("source", UNCOUNTED)
 def test_a_rename_into_a_counted_path_counts_as_an_added_file(tmp_path: Path, source: str) -> None:
     """Review round 1, Ola's ruling: a file moved from a path the counter does
-    not count into one it counts counts in full, 41 lines, as a new file would.
-    At 98e31cd only the one added line counts: the hunks see a rename."""
+    not count into one it counts counts in full, 41 lines, as a new file would."""
     repo = moved_repo(tmp_path.resolve() / "repo", source, COUNTED)
     report = parse_report(run_count(repo, "HEAD~1", "HEAD"))
     assert report.total == (41, 0, 41)
@@ -824,7 +823,7 @@ CONFIG_IN_ENV = {
 def test_env_drops_config_given_in_the_environment(monkeypatch: pytest.MonkeyPatch) -> None:
     """Review round 3: every flag `DIFF` pins also overrides the environment
     forms end to end, so only this test fails if `_env()` stops stripping them.
-    A key no flag pins (`diff.algorithm` changes the counts) would get through."""
+    A key no flag pins would get through."""
     for key, value in CONFIG_IN_ENV.items():
         monkeypatch.setenv(key, value)
     monkeypatch.setenv("RASPUTIN_UNRELATED", "kept")
