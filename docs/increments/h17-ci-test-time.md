@@ -1,11 +1,13 @@
 # Harness h17: CI time spent in tests
 
 Status: design by `@architect` on master `44fa7f5`; design approved
-(review round 3, below). PR 1's test side is in (`a655aa0`..`9d6105a`);
-§9 rules on its three findings. Next `@tester` on PR 1 again (the
-collection hook and its test, §4b; the CMake comments and the NaN
-comment, §9), then `@developer` on `main.yaml`. §8 question 1 runs on its
-default (the harness job on Python 3.12) while Ola is away; questions 2
+(review round 3, below). PR 1 is in: red tests `a655aa0`, harness marker
+`cc8c309`, oracle `b47c283`/`9d6105a`, rulings `f50a9c7` (§9), collection
+hook `04e0090`/`bc69744`, CMake and NaN comments `6db86e3`, workflow
+`00aa0eb`, fixes `f92c70e`. Code review round 1 asked for two prose fixes,
+both taken. Next `@reviewer` round 2 (re-read the two lines), then push as
+one PR on Ola's yes; acceptance (§4e) is read from the PR run. §8 question
+1 runs on its default (the harness job on Python 3.12); questions 2
 and 3 bind PR 2 only and stay open. Takes the test audit's Q1 and Q2 (`docs/increments/test-audit.md`,
 R2, R3, R11) and h15's PR 2 (`docs/increments/h15-ci-speed.md`, §5 A and
 §7), as two PRs (§5). Ola, 2026-10-05: "defaults on all, CI speed first".
@@ -306,6 +308,11 @@ say in the acceptance note that the kind was not identified.
   240 s (slow) or 130 s (fast); Python 3.12 at most 3.5 min; the harness
   job at most 4.5 min; `CI result` at most 7.5 min (slow) or 5.0 (fast).
 
+Expected on PR 1's run, from code review round 1's local counts: on
+Python 3.12, main suite plus harness job 5126 (4996 + 119 at `44fa7f5`,
+plus the 11 tests the branch adds); ctest `out of 996` (994 plus 2); 12
+TSan suites.
+
 If ES9 misses its bound, `@perf` profiles it under ASan before PR 2, and
 PR 2 takes h15's four-case ES9 split back.
 
@@ -498,3 +505,13 @@ Fixed in the round-4 commit: both fold-ins (§8 question 2 now points at
 h15's "Ola's rulings" section; §5's acceptance count adds 3 when PR 2
 takes the ES9 split, one test becoming four). Design approved; the next
 step is `@tester` on PR 1.
+
+### Code review round 1: `@reviewer`, `44fa7f5..00aa0eb`
+
+`@reviewer`'s record, word for word:
+
+> Code review round 1 (`@reviewer`, `44fa7f5..00aa0eb`): CHANGES REQUESTED, two [now] items, both stale prose: tests/python/test_ci_changes.py@00aa0eb:703 "drops exactly the four thread-free suites" is eight since ruling B; docs/increments/h17-ci-test-time.md@00aa0eb:3-8 status line names steps already done. Checked and true: 0 production LOC; j2_oracle against §4a rules 1-6, the equal-counts record (b47c283, quoted in §9), both old copies gone, hand counts 9/4/2/10/11 worked by hand; ctest 996/996 in build and build-san from local logs (not rebuilt by the reviewer); marker on exactly the 16 files plus the hook test; split 1094 + 4031 = 5125 = 5114 + 11 new; harness command 1094 passed without the package (Python 3.13); full suite 5008 passed, 118 skipped; harness job, python job's -m "not harness", TSan 12 = 12 with exactly the eight dropped, parallel loop's failure reporting simulated; gates clean; 21 at-risk citations re-read. Push as one PR. After the two fixes: ready to push on Ola's yes; acceptance (§4e) is read from the PR run.
+
+Fixed: item 1 (the test comment now says eight suites) in `f92c70e`
+(`@tester`); item 2 (the status line) in this commit, which also records
+the expected acceptance counts in §4e.
