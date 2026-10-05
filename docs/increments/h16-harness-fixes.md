@@ -551,7 +551,7 @@ Test strength: I planted 16 faults, one at a time, in a scratch copy. 14 were ca
 
 Citations: `check_citations.py` lists three at-risk citations, and all three are quoted review records of earlier revisions, so they stay.
 - `h9-spawn-briefs.md:763` cites `test_brief.py:335` as the file stood at 4ee0328, where that line is a concurrency refusal. That is still true.
-- `h11-ci-path-filter.md:451`'s `main.yaml:306-307` was already off on bc01cd8; the `CI result` name was at line 311 there and is at 314 now.
+- `h11-ci-path-filter.md:451`'s `.github/workflows/main.yaml:306-307` [path written out in full by the main session so the citation gate resolves it] was already off on bc01cd8; the `CI result` name was at line 311 there and is at 314 now.
 - `h10-merge-queue.md:183` is unaffected.
 
 Blocking:
