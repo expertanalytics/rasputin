@@ -653,6 +653,79 @@ class TestOneGeojsonRule:
         assert len(fs.features) == 1
 
 
+#: Every empty JSON value but `null` (`docs/increments/python-audit.md`,
+#: section 10, the ruling after code review round 2).
+EMPTY_NOT_NULL = [
+    pytest.param("", id="empty_string"),
+    pytest.param(0, id="zero"),
+    pytest.param(False, id="false"),
+    pytest.param([], id="empty_list"),
+    pytest.param({}, id="empty_object"),
+]
+
+
+class TestAnEmptyGeometryIsNull:
+    """Audit PR C, section 10's ruling after code review round 2: `read_source`
+    treats every empty `geometry` as `null`. Before, `""`, `0`, `false`, `[]`
+    and `{}` crashed `--features` and `catchment --lakes` with an
+    `AttributeError` (`'str' object has no attribute 'is_empty'`). Each test
+    compares with the same file whose `geometry` is `null`, so it pins no
+    outcome of its own: only that the two read alike."""
+
+    @staticmethod
+    def written(tmp_path: Path, geometry: Any, shape: str) -> Path:
+        """A top-level `Feature`, or a collection whose first feature has
+        `geometry` and whose second is `INNER`; both with a `crs` member."""
+        feature = {"type": "Feature", "properties": {"property": "water"}, "geometry": geometry}
+        if shape == "feature":
+            doc = feature | {"crs": MEMBER}
+        else:
+            kept = feature | {"geometry": GEOMETRY}
+            doc = {"type": "FeatureCollection", "crs": MEMBER, "features": [feature, kept]}
+        path = tmp_path / f"{shape}-{json.dumps(geometry)}.geojson"
+        path.write_text(json.dumps(doc), encoding="utf-8")
+        return path
+
+    @staticmethod
+    def rows(fi: ModuleType, path: Path) -> Any:
+        read = fi.read_source(path, None, "property", lambda _crs: (0.0, 0.0, 0.0, 0.0))
+        return read.crs, read.rows
+
+    @staticmethod
+    def opened(path: Path) -> Any:
+        fs = open_one(path, BOX)
+        return ([f.fid for f in fs.features], fs.outside, fs.clipped, fs.empty, fs.crs, fs.counts)
+
+    @staticmethod
+    def lakes(fi: ModuleType, path: Path) -> Any:
+        lakes, crs = fi.read_lake_polygons(path, None, at(150, 150), UTM33)
+        return lakes, crs
+
+    @pytest.mark.parametrize("shape", ["feature", "collection"])
+    @pytest.mark.parametrize("empty", EMPTY_NOT_NULL)
+    def test_read_source_reads_it_as_null(
+        self, tmp_path: Path, fi: ModuleType, empty: Any, shape: str
+    ) -> None:
+        null = self.rows(fi, self.written(tmp_path, None, shape))
+        assert self.rows(fi, self.written(tmp_path, empty, shape)) == null
+
+    @pytest.mark.parametrize("shape", ["feature", "collection"])
+    @pytest.mark.parametrize("empty", EMPTY_NOT_NULL)
+    def test_features_reads_it_as_null(self, tmp_path: Path, empty: Any, shape: str) -> None:
+        """`--features`, through `open_features`."""
+        null = self.opened(self.written(tmp_path, None, shape))
+        assert self.opened(self.written(tmp_path, empty, shape)) == null
+
+    @pytest.mark.parametrize("shape", ["feature", "collection"])
+    @pytest.mark.parametrize("empty", EMPTY_NOT_NULL)
+    def test_catchment_lakes_reads_it_as_null(
+        self, tmp_path: Path, fi: ModuleType, empty: Any, shape: str
+    ) -> None:
+        """`catchment --lakes`, through `read_lake_polygons`."""
+        null = self.lakes(fi, self.written(tmp_path, None, shape))
+        assert self.lakes(fi, self.written(tmp_path, empty, shape)) == null
+
+
 class TestRenamedAndMoved:
     """Audit PR C, red tests 5 and 7: the any-source lake reader is named by
     what it reads, and `TerrainFeature` lives in `features` (layer 0), which
