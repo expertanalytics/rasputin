@@ -195,6 +195,9 @@ MARS = "+proj=longlat +a=3396190 +b=3376200"
 #: EPSG:25833 at confidence 70, yet each x has the other sign (test_domain.py's
 #: `UTM33_WEST`, whose transform must not be skipped).
 UTM33_WEST = "+proj=utm +zone=33 +ellps=GRS80 +units=m +axis=wnu +no_defs"
+#: UTM 33 on GRS80 with longitudes counted from Paris: PROJ also identifies it
+#: as EPSG:25833 at confidence 70, yet its points lie 185 to 215 km off.
+UTM33_PARIS = "+proj=utm +zone=33 +ellps=GRS80 +units=m +pm=paris +no_defs"
 
 
 def without_id(epsg: int) -> str:
@@ -224,6 +227,7 @@ NOT_SAME = {
     "the +towgs84 limit": (LAMBERT.replace("+no_defs", f"{TOWGS84} +no_defs"), "EPSG:31287"),
     "Mars, no operation": (MARS, "EPSG:4326"),
     "easting pointing west": (UTM33_WEST, "EPSG:25833"),
+    "prime meridian at Paris": (UTM33_PARIS, "EPSG:25833"),
 }
 
 
