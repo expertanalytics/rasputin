@@ -80,9 +80,10 @@ CONFIG_READS = {"--list", "-l", "get", "list"}
 REPLACE_LISTS = {"-l", "--list"}
 GH_FIELDS = {"-f", "-F", "--field", "--raw-field", "--input"}
 CURL_DATA = {"-d", "-F", "--form", "--json", "-T", "--upload-file"}
-#: gh's top-level commands (`gh help`, gh 2.101) less its alias `co`, which a user can redefine.
+#: gh's top-level commands (`gh help`, gh 2.101) less its alias `co`, which a user can redefine,
+#: plus `help` itself, which only reads (Ola's ruling, 2026-10-05).
 GH_COMMANDS = {
-    "auth", "browse", "codespace", "discussion", "gist", "issue", "org", "pr", "project",
+    "help", "auth", "browse", "codespace", "discussion", "gist", "issue", "org", "pr", "project",
     "release", "repo", "skill", "cache", "run", "workflow", "agent-task", "alias", "api",
     "attestation", "completion", "config", "copilot", "extension", "gpg-key", "label",
     "licenses", "preview", "ruleset", "search", "secret", "ssh-key", "status", "variable",
