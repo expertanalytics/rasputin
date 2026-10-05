@@ -34,12 +34,13 @@ GIT_ENV = {"GIT_CONFIG_GLOBAL": os.devnull, "GIT_CONFIG_NOSYSTEM": "1",
 #: Config given in the environment (`GIT_CONFIG_COUNT` with its `_KEY_n`/`_VALUE_n`,
 #: `GIT_CONFIG_PARAMETERS`): dropped from what git sees.
 ENV_CONFIG = re.compile(r"GIT_CONFIG_(?:COUNT|PARAMETERS|KEY_\d+|VALUE_\d+)$")
-#: Explicit prefixes, hunk context and `--no-relative`, so the repository's own
-#: config (`diff.noprefix`, `diff.srcPrefix`, `diff.interHunkContext`,
-#: `diff.relative`) cannot move the headers, fuse hunks, or narrow the diff to
-#: the directory the counter runs from.
+#: Explicit prefixes, hunk context, `--no-relative` and myers (git's default),
+#: so the repository's own config (`diff.noprefix`, `diff.srcPrefix`,
+#: `diff.interHunkContext`, `diff.relative`, `diff.algorithm`) cannot move the
+#: headers, fuse hunks, narrow the diff to the directory the counter runs from,
+#: or pair the lines differently.
 DIFF = ("diff", "-M", "--no-ext-diff", "--no-color", "--src-prefix=a/", "--dst-prefix=b/",
-        "--inter-hunk-context=0", "--no-relative")  # fmt: skip
+        "--inter-hunk-context=0", "--no-relative", "--diff-algorithm=myers")  # fmt: skip
 SKIPPED_DIRS = ("tests/", "docs/")
 SUFFIXES: dict[str, Kind] = {
     ".py": "python", ".pyi": "python", ".h": "c++", ".hpp": "c++", ".cpp": "c++",
@@ -62,6 +63,11 @@ def kind_of(path: str) -> Kind | None:
         return "cmake"
     _, dot, suffix = name.rpartition(".")
     return SUFFIXES.get(f".{suffix}") if dot else None
+
+
+def _counted(path: str) -> Kind | None:
+    """The kind of `path` when the counter counts it: of a kind, outside `SKIPPED_DIRS`."""
+    return None if path.startswith(SKIPPED_DIRS) else kind_of(path)
 
 
 def _docstring_spans(text: str) -> list[tuple[tuple[int, int], tuple[int, int]]]:
@@ -194,6 +200,12 @@ def tally(
     rows: list[Row] = []
     skipped: list[str] = []
     for status, old, new in changes:
+        if status == "R" and (_counted(old) is None) != (_counted(new) is None):
+            # Across the counted boundary: in full, as an added or a deleted file.
+            inward = _counted(new) is not None
+            n = len(read.get(("new", new) if inward else ("old", old), frozenset()))
+            rows.append((new, n, 0, n) if inward else (old, 0, n, -n))
+            continue
         path = old if status == "D" else new
         why = next((d for d in SKIPPED_DIRS if path.startswith(d)), None)
         if why is None and kind_of(path) is None:
@@ -245,13 +257,9 @@ def main(argv: list[str] | None = None) -> int:
         lines = hunks(_git("-c", "core.quotePath=false", *DIFF, "-U0", base, head))
         read: dict[tuple[str, str], frozenset[int]] = {}
         for status, old, new in changes:
-            path = old if status == "D" else new
-            kind = kind_of(path)
-            if kind is None or path.startswith(SKIPPED_DIRS):
-                continue
-            if status != "A":
+            if status != "A" and (kind := _counted(old)) is not None:
                 read[("old", old)] = _read(base, old, kind)
-            if status != "D":
+            if status != "D" and (kind := _counted(new)) is not None:
                 read[("new", new)] = _read(head, new, kind)
     except RuntimeError as exc:
         print(f"count_loc: {exc}", file=sys.stderr)
