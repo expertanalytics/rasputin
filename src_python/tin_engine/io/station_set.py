@@ -52,13 +52,15 @@ def features_of(path: Path) -> tuple[list[dict[str, Any]], str]:
     """The features of the GeoJSON in `path` and the text of its `crs` member,
     which is required and must name a CRS pyproj reads (`read_collection`
     with no default); a refusal names the file, and a feature whose geometry
-    is missing or has no `type` is refused by its index."""
+    is missing, not an object, or has no or an empty `type` is refused by its
+    index."""
     try:
         features, crs = read_collection(read_json(path), default_crs=None)
     except ValueError as exc:
         raise ValueError(f"{path.name}: {exc}") from exc
     for i, f in enumerate(features):
-        if (f.get("geometry") or {}).get("type") is None:
+        g = f.get("geometry")
+        if not isinstance(g, dict) or not g.get("type"):
             raise ValueError(f"{path.name}: feature {i} has no geometry")
     return features, crs
 
