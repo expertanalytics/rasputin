@@ -1,6 +1,10 @@
 # Harness h14: the asan+ubsan tests in parallel
 
-Status: ruled; build next. Ola ruled on the principle in h13
+Status: built; awaiting the first push and §6's check of the pull request's
+CI run. The build is 6388fe1 (the `COST` keyword and `COST 100` on
+`prop_refinement_edge_strip`, `@tester`) and 0630745 (the sanitizer job's
+`ctest --parallel` line, `@developer`); `## Review` records its review. Ola
+ruled on the principle in h13
 (`docs/increments/h13-macos-ci-build.md`, §8 ruling 2: "yes", as its own
 increment after h13), and §9 records his go-ahead on §8's three questions.
 Mechanics, not a design question: one test-registration change (`@tester`) and
@@ -525,3 +529,34 @@ Suggestion, taken: §2d says what the `<cstdlib>` at
 `test_predicates_default_kernel.cpp:43` is for: nothing the file uses.
 
 **Round 3, 2026-10-05 (summarised from `@reviewer`'s handback).** Range `05c6eaf..de233d6`. Verdict: APPROVED. Both round-2 findings closed: the counterexample brute-forced over all 4^8 assignments (best 10, longest-first 11); the slow-run saving recomputed (6.1 with the slowdown, 6.6 without). The §2d claim checked with `git log -S` (2b3ae32) and grep. `check_citations.py` clean. Non-blocking: §2d's "declares nothing the file uses" would read better as "nothing the file does not already get from `<cstddef>`".
+
+### Round 4: `@reviewer`, build, e11bd63..0630745 (summarised from `@reviewer`'s handback)
+
+Verdict: **CHANGES REQUESTED**, on two documentation points; the CMake and
+workflow edits are correct. Production lines: 0 (a test registration and a
+workflow line).
+
+- **The CMake change, judged from its text** (`@reviewer` does not build):
+  `cmake_parse_arguments(PARSE_ARGV 1 ...)` is valid at the project's
+  `cmake_minimum_required(VERSION 3.24)`; the unparsed arguments, the
+  sources, go to `add_executable`; a suite without `COST` keeps the plain
+  `catch_discover_tests(${name})` call; `add_terrain_backend_test` and the
+  cdt helper forward `${ARGN}`, so `COST 100` reaches `add_terrain_test`.
+  For the test count it relies on `@tester`'s local evidence: 994 tests
+  before and after, 17 of them (the edge-strip cases) with `COST 100`.
+- **The workflow**: `.github/workflows/main.yaml` parses, and h11's 66 tests
+  (the path filter's) pass.
+
+Findings, fixed in the commit after 0630745:
+
+1. `docs/increments/05b-noder-driver.md` cited line 189
+   of `tests/cpp/CMakeLists.txt` for
+   `add_terrain_test(prop_noding_broad_phase ...)`; 6388fe1's ten added lines
+   moved it to line 199. Re-cited, and re-read as a quotation.
+2. The status line still said "build next". Now: built, awaiting the first
+   push and §6's check.
+
+Still to come, after the push: §6's four checks on the pull request's CI run
+(the test count matches the Linux C++ job; ctest's total time at most 0.5
+times the sum of per-test times; ES9 starts less than 30 s after the first
+test; the Test step under 5.0 minutes), recorded as the next round.
