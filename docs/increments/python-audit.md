@@ -24,8 +24,10 @@ citations, now pinned to `97eea35`). Next `@reviewer` round 3: run
 only: no `@developer` step, no `@perf` run); then push on Ola's yes.
 
 PR B (`audit-crs-helpers`, F3) is designed in section 9, on branch
-`worktree-audit-crs` after T2. Next: `@tester`'s red commit, then
-`@developer`, `@reviewer`.
+`worktree-audit-crs` after T2. `@tester`'s red commit `29aff00` has red
+tests 1-7 (43 failing, each for its own reason); its step found three more
+`==` comparisons, ruled in section 9 ("After the red step"). Next:
+`@tester`'s red tests 8-10, then `@developer`, `@reviewer`.
 
 Re-checked against master `44fa7f5`: `git diff --stat 12dace7 44fa7f5 --
 src_python` is empty, and of the files cited below only `tools/brief.py`
@@ -650,6 +652,13 @@ master. Not refine or mesh code, and the benchmark runs pass no `--out-crs`
 - **Nine comparison sites, not eight.** F3 missed
   `src_python/tin_engine/dem_input.py@44fa7f5:164` (`target != parse_crs(first.crs)`, with `target`
   parsed three lines above), which decides whether the DEM is resampled.
+  The red step found three more, all in the `==` form, which this design
+  had missed too (`grep -rnE "(==|!=)" src_python/tin_engine` over CRS
+  values): `src_python/tin_engine/domain.py@44fa7f5:62`,
+  `src_python/tin_engine/feature_input.py@44fa7f5:300` and
+  `src_python/tin_engine/fetch/plan.py@44fa7f5:118`. Twelve in all.
+  `src_python/tin_engine/mosaic.py@44fa7f5:585` (`ma.crs != mb.crs`) is
+  not one: it compares tile texts, as `single_crs` does.
 - **The live bug is the comparison itself.** `parse_crs(a) != parse_crs(b)`
   is pyproj's `CRS.__eq__`, PROJ's equivalence with axis order and parameter
   layout counted. It calls a CRS different from the EPSG code it is by
@@ -800,6 +809,9 @@ makes, so the wording is unchanged there.
 | `src_python/tin_engine/cli.py@44fa7f5:952-956` | five-line conditional | `transforms.append(transform_label(own, dem_crs))` |
 | `src_python/tin_engine/cli.py@44fa7f5:2045` | `!=` | `not same_crs(...)`; wording unchanged |
 | `src_python/tin_engine/fetch/run.py@44fa7f5:222` | `!=` | `not same_crs(...)`; wording unchanged |
+| `src_python/tin_engine/domain.py@44fa7f5:62-63` | `if source == target: return self` | `if same_crs(source, target):` return the same polygon labelled `target.to_string()` (`self.model_copy(update=...)`) |
+| `src_python/tin_engine/feature_input.py@44fa7f5:300` | `src == self.dem` | `same_crs(src, self.dem)` |
+| `src_python/tin_engine/fetch/plan.py@44fa7f5:118` | `frame == source` | `same_crs(frame, source)` |
 
 `src_python/tin_engine/cli.py@44fa7f5:919` (`transform_description` on the resampled path) stays: a resampled DEM's
 CRS is never the target's. `parse_crs` stays public; `cli` and `catchment`
@@ -875,6 +887,30 @@ The rest of the suite must stay green; no other test is expected to move
 (the `domain_transform` and `features_transform` tests use CRS pairs that
 differ).
 
+**After the red step** (`29aff00`), one line each:
+
+- `domain.py:62` uses `same_crs`: one rule everywhere; otherwise a domain spelt as a PROJ string of the DEM's CRS goes through a transform while the record says `domain_transform` "none".
+- When the same, `to_crs` returns the same polygon labelled `target.to_string()`, not `self`: today's output exactly (probe: the PROJ-string domain comes back bit-identical, labelled `EPSG:25833`), and the result's `crs` is always `dst`'s.
+- `feature_input.py:300` and `fetch/plan.py:118` use `same_crs` too, by the same rule; neither changes a wording.
+- Red tests 8-10 below are needed: each site's output is the same today, so only a refused point-moving `Transformer` method can tell the fix from the bug.
+- `@tester`'s departure, accepted: `TestTheSameCrs`'s guard refuses the point-moving methods (`transform`, `itransform`, `transform_bounds`), not `Transformer.from_crs`, since `same_crs` builds one to compare; the invariant (no point moved) is unchanged and the guard was shown still to catch a real transform.
+- `@tester`'s departure, accepted: wording pins at the other two `single_crs` sites (the `--out-crs` path and `catchment.delineate`), beyond test 4's one.
+- `29aff00` moved `test_cli_mesh_geographic.py:886`, cited by `docs/increments/h16-harness-fixes.md` line 579; that citation is pinned to `44fa7f5`, where its quotation holds.
+
+8. **`tests/python/test_domain.py`**: with `Transformer`'s `transform`,
+   `itransform` and `transform_bounds` refused (as in `TestTheSameCrs`),
+   `DomainPolygon(polygon=<a box in UTM 33>, crs=proj4_of(25833)).to_crs("EPSG:25833")`
+   has `crs == "EPSG:25833"` and a polygon `equals_exact` to the given one
+   at tolerance 0. Red today: the transform runs.
+9. **`tests/python/test_feature_input.py`**: a feature source whose CRS is
+   `proj4_of(<the DEM's EPSG>)`, read with the same three methods refused,
+   gives the same geometries as the source spelt `EPSG:<n>`. Red today, and
+   still red with only the table's earlier rows fixed (line 300 moves the
+   points).
+10. **`tests/python/test_fetch_plan.py`**: `source_box` with a `box` and
+    `out_crs=proj4_of(<meta's EPSG>)`, with `transform_bounds` refused,
+    equals `source_box` with `out_crs=None`. Red today.
+
 ### Net production lines
 
 **About +8**, against the audit's about -25. The audit assumed `same_crs` was
@@ -883,7 +919,11 @@ a one-line alias of `!=`. Correct, it is about 12 lines: two rules, the
 one line before and after, so they save nothing. `crs.py` adds about 21 (constant 1,
 `same_crs` 9, code sets 2, `transform_label` 2, `single_crs` 7); the
 sites remove about 13 (`cli.py` 6, `dem_input.py` 4, `catchment.py` 3).
-Tests: about +90. Section 6's row B and its total move by about +33
+The three sites found at the red step change one line each in place, and
+their files' `crs` imports gain a name on the same line, so the estimate
+stays about +8. Tests: about +90 designed; red tests 1-7 came to 254
+non-blank lines added and 9 removed (`git diff -U0 b63132e 29aff00 --
+tests`), and 8-10 add about 40 more. Section 6's row B and its total move by about +33
 accordingly; the drift point (one CRS rule) is still written once.
 
 ### Citations this PR moves, pinned now
