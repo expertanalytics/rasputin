@@ -473,3 +473,215 @@ def test_check_reach_crs_is_the_one_rule() -> None:
     assert catchment.check_reach_crs(gf.EPSG, repository) is None
     with pytest.raises(ValueError, match=r"(?s)river file's CRS.*32633.*DEM's.*25833"):
         catchment.check_reach_crs("EPSG:32633", repository)
+
+
+# ---------------------------------------------------------------------------
+# PR 4, lake gauges: `run_batch(..., lakes=None)` ("Lake gauges", "The batch")
+# ---------------------------------------------------------------------------
+#
+# Interface pinned here, from the design: `run_batch` gains `lakes:
+# Sequence[Lake] | None = None` after `sink` (passed here by keyword);
+# `StationResult` gains `seeded_by`, `lake_rule`, `lake_number`,
+# `lake_name`, `lake_distance_m`, in that order, right after `reach_fork`;
+# `Summary` gains `by_seed` with the groups `river` and `lake`. Before the
+# change, `run_batch` takes no `lakes` and the row has none of the five.
+
+GAUGE_COLUMNS = (
+    "node_offset_m", "chain_nodes", "lowered_nodes", "lowered_max_m", "direction_ok",
+    "end_extended_m", "end_closed", "downstream_checked", "a0", "area_up", "area_down",
+    "swing", "largest_step", "largest_step_at_m", "checked_up_m", "checked_down_m",
+    "drains", "monotone",
+)  # fmt: skip
+LAKE_COLUMNS = ("seeded_by", "lake_rule", "lake_number", "lake_name", "lake_distance_m")
+
+
+def the_lake(polygon: Polygon | None = None, number: int | None = bf.LAKE_NUMBER,
+             name: str | None = bf.LAKE_NAME) -> Any:  # fmt: skip
+    from tin_engine.io.station_set import Lake
+
+    return Lake(number=number, name=name, polygon=polygon or bf.lake_polygon())
+
+
+def direct(seed: tuple[float, float], polygon: Polygon) -> Any:
+    """22's path run directly: `delineate` with the lake and a seed in it."""
+    request = catchment.CatchmentRequest(
+        seed=seed, seed_crs=gf.EPSG, lakes=(polygon,), lakes_crs=gf.EPSG
+    )
+    return catchment.delineate(request, MemoryRepository(bf.basin_tiles()))
+
+
+def run_lakes(
+    tmp: Path,
+    lakes: Sequence[Any] | None,
+    *,
+    specs: Sequence[bf.Spec],
+    references: Any = None,
+    rivers: list[dict[str, Any]] | None = None,
+    **request: Any,
+) -> tuple[ListSink, Any]:
+    from nve_fixtures import collection, write
+
+    stations, scrs = read_stations(bf.write_stations(tmp / "stations.geojson", specs))
+    river_doc = collection(bf.river_features() if rivers is None else rivers, crs=gf.EPSG)
+    segments, rcrs, _ = read_segments(write(tmp / "rivers.geojson", river_doc))
+    sink = ListSink()
+    summary = asyncio.run(
+        cb.run_batch(cb.BatchRequest(**request), MemoryRepository(bf.basin_tiles()), stations,
+                     scrs, segments, rcrs, references, sink, lakes=lakes)
+    )  # fmt: skip
+    return sink, summary
+
+
+@pytest.fixture(scope="module")
+def lake_direct() -> Any:
+    return direct(bf.xy(bf.SAMLOP), bf.lake_polygon())
+
+
+@pytest.fixture(scope="module")
+def lake_run(tmp_path_factory: pytest.TempPathFactory, lake_direct: Any) -> tuple[ListSink, Any]:
+    """`SAMLOP` inside THE LAKE, with a reference drawn from 22's catchment of
+    it, and `TREFF` on the river with its own flood as its reference."""
+    refs = {bf.SAMLOP.station: lake_direct.fine, bf.TREFF.station: bf.reference_of(bf.TREFF)}
+    return run_lakes(tmp_path_factory.mktemp("lake"), [the_lake()],
+                     specs=(bf.SAMLOP, bf.TREFF), references=refs)  # fmt: skip
+
+
+def test_the_five_columns_follow_reach_fork() -> None:
+    import dataclasses
+
+    names = [f.name for f in dataclasses.fields(cb.StationResult)]
+    at = names.index("reach_fork")
+    assert tuple(names[at + 1 : at + 6]) == LAKE_COLUMNS
+
+
+def test_a_station_inside_a_lake_is_seeded_by_the_lake(lake_run: tuple[ListSink, Any]) -> None:
+    r = by_station(lake_run[0])[bf.SAMLOP.station]
+    assert r.seeded_by == "lake"
+    assert r.lake_rule == "inside"
+    assert (r.lake_number, r.lake_name) == (bf.LAKE_NUMBER, bf.LAKE_NAME)
+    assert r.lake_distance_m == 0.0
+
+
+def test_a_lake_row_has_no_gauge_burn_or_sensitivity(lake_run: tuple[ListSink, Any]) -> None:
+    r = by_station(lake_run[0])[bf.SAMLOP.station]
+    assert {k: getattr(r, k) for k in GAUGE_COLUMNS} == dict.fromkeys(GAUGE_COLUMNS)
+    assert tuple(r.causes) == ()
+
+
+def test_the_lake_catchment_is_22s_path_run_directly(
+    lake_run: tuple[ListSink, Any], lake_direct: Any
+) -> None:
+    """5715 nodes (22's path) against 5540 for the placed node on the river."""
+    sink, _ = lake_run
+    r = by_station(sink)[bf.SAMLOP.station]
+    result = dict((st.station, res) for st, res in sink.catchments)[bf.SAMLOP.station]
+    assert result.gauge is None
+    assert r.nodes == result.nodes == lake_direct.nodes == 5715
+    assert result.fine.equals(lake_direct.fine)
+    assert int(bf.flood_mask(bf.SAMLOP).sum()) == 5540  # the river path's, told apart
+
+
+def test_a_lake_row_with_its_reference_is_a_match_never_uncertain(
+    lake_run: tuple[ListSink, Any],
+) -> None:
+    """`SAMLOP`'s river row is `uncertain` (the confluence 20 m below); its
+    lake row decides from the agreement alone."""
+    r = by_station(lake_run[0])[bf.SAMLOP.station]
+    assert r.station_class == "match" and r.match_by == "overlap"
+    assert r.nve_in_ours == 1.0 and r.ours_in_nve == 1.0
+
+
+def test_a_river_row_beside_it_keeps_the_river_path(lake_run: tuple[ListSink, Any]) -> None:
+    r = by_station(lake_run[0])[bf.TREFF.station]
+    assert r.seeded_by == "river"
+    assert (r.lake_rule, r.lake_number, r.lake_name, r.lake_distance_m) == (None,) * 4
+    assert r.station_class == "match"
+    assert r.node_offset_m is not None and r.swing is not None
+
+
+def test_by_seed_counts_one_of_each(lake_run: tuple[ListSink, Any]) -> None:
+    s = lake_run[1].model_dump(mode="json")
+    assert list(s["by_seed"]) == ["river", "lake"]
+    assert s["by_seed"]["river"]["stations"] == 1
+    assert s["by_seed"]["lake"]["stations"] == 1
+    assert s["by_seed"]["lake"]["classes"]["match"] == 1
+    assert s["by_seed"]["lake"]["uncertain_share"] == 0.0
+    assert set(s["by_seed"]["lake"]) == set(s["by_size"]["10-100"])  # a band's contents
+
+
+def test_without_lakes_the_same_station_keeps_its_river_row(five: tuple[ListSink, Any]) -> None:
+    """`lakes` None (the default, as every earlier test calls it): each
+    placed row is seeded by the river, the refused-by-`place` row by nothing,
+    and no row has a lake."""
+    rows = by_station(five[0])
+    assert rows[bf.SAMLOP.station].station_class == "uncertain"
+    for spec in bf.FIVE:
+        r = rows[spec.station]
+        assert r.seeded_by == (None if spec is bf.LANGT else "river"), spec.station
+        assert (r.lake_rule, r.lake_number, r.lake_name, r.lake_distance_m) == (None,) * 4
+    by_seed = five[1].model_dump(mode="json")["by_seed"]
+    assert by_seed["lake"]["stations"] == 0 and by_seed["river"]["stations"] == 4
+
+
+def test_a_station_inside_two_overlapping_lakes_is_refused_and_the_batch_goes_on(
+    tmp_path: Path,
+) -> None:
+    """22's `_lake` refuses a seed point in two lakes (a `LakeError`, so a
+    `CatchmentError`): a `refused` row with cause `other`."""
+    two = [the_lake(), the_lake(bf.overlapping_polygon(), number=4111, name="Indre")]
+    refs = {bf.TREFF.station: bf.reference_of(bf.TREFF)}
+    sink, summary = run_lakes(tmp_path, two, specs=(bf.SAMLOP, bf.TREFF), references=refs)
+    samlop, treff = sink.rows
+    assert samlop.station_class == "refused"
+    assert samlop.refusal_cause == "other"
+    assert "2 lakes" in samlop.refusal_message
+    assert samlop.seeded_by == "lake"
+    assert treff.station_class == "match"
+    assert [st.station for st, _ in sink.catchments] == [bf.TREFF.station]
+    assert summary.model_dump(mode="json")["refusal_causes"]["other"] == 1
+
+
+def test_a_station_with_no_placement_inside_a_lake_is_seeded_by_it(
+    tmp_path: Path, lake_direct: Any
+) -> None:
+    """At a 10 m map radius `SAMLOP` (16 m from its line) has no placement:
+    it is `no_river` only when `lake_seed` is None, and here it is not."""
+    refs = {bf.SAMLOP.station: lake_direct.fine}
+    sink, _ = run_lakes(tmp_path, [the_lake()], specs=(bf.SAMLOP,), references=refs,
+                        map_radius=10.0)  # fmt: skip
+    (r,) = sink.rows
+    assert r.refusal_cause is None and r.refusal_message is None
+    assert r.placed_on is None
+    assert (r.seeded_by, r.lake_rule) == ("lake", "inside")
+    assert r.nodes == lake_direct.nodes
+    assert r.station_class == "match"
+
+
+def test_without_a_reference_a_lake_row_has_no_class(tmp_path: Path) -> None:
+    """`classify(None, None)`: neither scored nor `uncertain`."""
+    sink, _ = run_lakes(tmp_path, [the_lake()], specs=(bf.SAMLOP,))
+    (r,) = sink.rows
+    assert r.seeded_by == "lake" and r.station_class is None
+
+
+def test_a_lake_line_station_is_seeded_from_p(tmp_path: Path) -> None:
+    """`TREFF` placed on `A` mapped as a lake centreline; `P` (column 100) is
+    in the lake, the station 6 m east of its shore: `lake_line`, and the
+    catchment is 22's path seeded at `P`."""
+    polygon = bf.lake_line_polygon()
+    sink, _ = run_lakes(tmp_path, [the_lake(polygon)], specs=(bf.TREFF,),
+                        rivers=bf.lake_line_rivers())  # fmt: skip
+    (r,) = sink.rows
+    assert r.lake is True
+    assert (r.seeded_by, r.lake_rule) == ("lake", "lake_line")
+    assert r.lake_distance_m == pytest.approx(6.0, abs=1e-6)  # at x 5e5 m
+    expected = direct(gf.lat(bf.COL, bf.TREFF.row), polygon)
+    assert r.nodes == expected.nodes
+    ((_, result),) = sink.catchments
+    assert result.fine.equals(expected.fine)
+
+
+def test_an_empty_lake_list_is_the_river_path(tmp_path: Path) -> None:
+    sink, _ = run_lakes(tmp_path, [], specs=(bf.SAMLOP,))
+    (r,) = sink.rows
+    assert r.seeded_by == "river" and r.station_class == "uncertain"

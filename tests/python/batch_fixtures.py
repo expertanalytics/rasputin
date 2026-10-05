@@ -240,3 +240,58 @@ def swing_on_raw(spec: Spec, u_rows: int = 3) -> float:
     r, c = placed_node(spec)
     a0 = count[r, c]
     return float(max(a0 - count[r - u_rows, c], count[r + u_rows, c] - a0) / a0)
+
+
+# ---------------------------------------------------------------------------
+# PR 4, lake gauges ("Lake gauges: the lake is the seed")
+# ---------------------------------------------------------------------------
+#
+# THE LAKE is a box over the main valley's floor round `SAMLOP` (row 150,
+# 16 m east of column 100): nodes of rows 144 to 151 and columns 97 to 103,
+# its edges halfway between nodes, so `SAMLOP` lies inside it and the
+# tributary's slot (row 152) does not. Measured on PR 2's code by
+# `delineate` with this lake (22's path): 5715 nodes, against 5540 for
+# `SAMLOP`'s placed node on the river path, so a lake row and a river row
+# are told apart by their node counts. `OVERLAPPING` is a second box inside
+# it, also round `SAMLOP`. `LAKE_LINE_LAKE` is a box over column 100 at
+# `TREFF` (row 140) whose east edge is column 101, so `TREFF`'s `P` (column
+# 100) is inside and the station (column 101.6) is 6 m outside.
+
+LAKE_NUMBER, LAKE_NAME = 4110, "Samløpvatnet"
+
+
+def lake_polygon() -> Polygon:
+    return box(*gf.lat(96.5, 151.5), *gf.lat(103.5, 143.5))
+
+
+def overlapping_polygon() -> Polygon:
+    return box(*gf.lat(99.5, 150.5), *gf.lat(102.5, 148.5))
+
+
+def lake_line_polygon() -> Polygon:
+    return box(*gf.lat(97.5, 143.5), *gf.lat(101.0, 136.5))
+
+
+def lake_feature(
+    polygon: Polygon, objectid: int, vatnlnr: int | None = LAKE_NUMBER,
+    navn: str | None = LAKE_NAME,
+) -> dict[str, Any]:  # fmt: skip
+    """One `lakes.geojson` feature with the four fields `fetch-stations` writes."""
+    return feature(polygon, objectid=objectid, vatnlnr=vatnlnr, navn=navn,
+                   areal_km2=polygon.area / 1e6)  # fmt: skip
+
+
+def write_lakes(
+    path: Path, features: Sequence[dict[str, Any]] | None = None, crs: str | None = gf.EPSG
+) -> Path:
+    """The lake file: by default THE LAKE alone, objectid 1."""
+    chosen = [lake_feature(lake_polygon(), 1)] if features is None else list(features)
+    return write(path, collection(chosen, crs=crs))
+
+
+def lake_line_rivers() -> list[dict[str, Any]]:
+    """THE RIVERS with `A` (and its copy) mapped as a lake centreline."""
+    out = river_features()
+    for f in out[:2]:
+        f["properties"] |= {"objekttype": "InnsjøMidtlinje", "vatnlnr": LAKE_NUMBER}
+    return out

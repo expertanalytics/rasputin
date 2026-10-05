@@ -478,3 +478,129 @@ def test_a_station_with_no_name_prints_no_space_before_the_colon(
     assert code == 0, output
     line = station_line(output, bf.TREFF.station)
     assert line.startswith(f"{bf.TREFF.station}: match"), line
+
+
+# ---------------------------------------------------------------------------
+# PR 4, lake gauges: `--lakes` ("Lake gauges", "The row and the summary")
+# ---------------------------------------------------------------------------
+#
+# Pinned here beyond the design: the five columns are headed by their field
+# names (`seeded_by`, `lake_rule`, `lake_number`, `lake_name`,
+# `lake_distance_m`) right after `reach_fork`; "without `--lakes` ... the
+# five new columns are empty" is read as the four `lake_*` columns empty and
+# `seeded_by` `river` on every placed row (the design's own definition of
+# `seeded_by`), empty on a row `place` refused. Before the change the
+# command has no `--lakes` option and the table none of the five columns.
+
+LAKE_HEADER = ["seeded_by", "lake_rule", "lake_number", "lake_name", "lake_distance_m"]
+
+
+@pytest.fixture(scope="module")
+def lakes_full(data: dict[str, Path], tmp_path_factory: pytest.TempPathFactory) -> tuple[Path, str]:
+    """The five stations with THE LAKE of `batch_fixtures` round `SAMLOP`."""
+    root = tmp_path_factory.mktemp("lakes")
+    lakes = bf.write_lakes(root / "lakes.geojson")
+    out = root / "out"
+    code, output = invoke(*args(data, out), "--lakes", str(lakes))
+    assert code == 0, output
+    return out, output
+
+
+def test_lakes_writes_the_five_columns_after_reach_fork(lakes_full: tuple[Path, str]) -> None:
+    out, _ = lakes_full
+    with (out / "results.csv").open(encoding="utf-8", newline="") as f:
+        header = next(csv.reader(f))
+    at = header.index("reach_fork")
+    assert header[at + 1 : at + 6] == LAKE_HEADER
+
+
+def test_the_lake_row_and_the_river_rows(lakes_full: tuple[Path, str]) -> None:
+    rows = {r["station"]: r for r in table(lakes_full[0])}
+    samlop = rows[bf.SAMLOP.station]
+    assert [samlop[k] for k in LAKE_HEADER] == [
+        "lake", "inside", str(bf.LAKE_NUMBER), bf.LAKE_NAME, "0.0",
+    ]  # fmt: skip
+    assert samlop["class"] not in ("uncertain", "refused"), samlop["class"]
+    assert samlop["causes"] == "" and samlop["swing"] == ""
+    for spec in (bf.TREFF, bf.BOM, bf.SLUTT):
+        assert [rows[spec.station][k] for k in LAKE_HEADER] == ["river", "", "", "", ""]
+    assert [rows[bf.LANGT.station][k] for k in LAKE_HEADER] == [""] * 5
+
+
+def test_the_lake_rows_stderr_words(lakes_full: tuple[Path, str]) -> None:
+    line = station_line(lakes_full[1], bf.SAMLOP.station)
+    assert re.search(
+        rf"\b(match|close|miss) \(seeded by the lake {re.escape(bf.LAKE_NAME)}\)", line
+    ), line
+    assert "seeded by" not in station_line(lakes_full[1], bf.TREFF.station)
+
+
+def test_the_lake_rows_catchment_file_carries_the_five(lakes_full: tuple[Path, str]) -> None:
+    path = lakes_full[0] / f"{bf.SAMLOP.station}.geojson"
+    props = json.loads(path.read_text(encoding="utf-8"))["features"][0]["properties"]
+    assert props["seeded_by"] == "lake" and props["lake_rule"] == "inside"
+    assert props["lake_number"] == bf.LAKE_NUMBER and props["lake_name"] == bf.LAKE_NAME
+    assert props["lake_distance_m"] == 0.0
+    assert props["causes"] == [] and props["swing"] is None
+
+
+def test_the_summary_json_has_by_seed(lakes_full: tuple[Path, str]) -> None:
+    s = json.loads((lakes_full[0] / "summary.json").read_text(encoding="utf-8"))
+    assert list(s["by_seed"]) == ["river", "lake"]
+    assert s["by_seed"]["lake"]["stations"] == 1
+    assert s["by_seed"]["river"]["stations"] == 3  # SAMLOP is the lake's; LANGT neither's
+
+
+@pytest.mark.parametrize(
+    ("number", "name", "words"),
+    [(bf.LAKE_NUMBER, None, f"the lake {bf.LAKE_NUMBER}"), (None, None, "its lake")],
+    ids=["number_no_name", "neither"],
+)
+def test_the_stderr_words_without_a_lake_name(
+    data: dict[str, Path], tmp_path: Path, number: int | None, name: str | None, words: str
+) -> None:
+    lakes = bf.write_lakes(
+        tmp_path / "lakes.geojson",
+        [bf.lake_feature(bf.lake_polygon(), 1, vatnlnr=number, navn=name)],
+    )
+    out = tmp_path / "out"
+    code, output = invoke(*args(data, out), "--only", bf.SAMLOP.station, "--lakes", str(lakes))
+    assert code == 0, output
+    line = station_line(output, bf.SAMLOP.station)
+    assert f"(seeded by {words})" in line, line
+
+
+def test_a_lakes_file_in_another_crs_is_refused_before_out_dir_is_made(
+    data: dict[str, Path], tmp_path: Path
+) -> None:
+    lakes = bf.write_lakes(tmp_path / "lakes.geojson", crs="EPSG:32633")
+    out = tmp_path / "out"
+    code, output = invoke(*args(data, out), "--lakes", str(lakes))
+    words = plain(output)
+    assert code != 0, words
+    assert "No such command" not in words and "No such option" not in words, words
+    assert "--lakes" in words, words
+    assert "32633" in words and "25833" in words, words
+    assert not out.exists()
+
+
+def test_a_lakes_file_without_crs_is_refused_naming_lakes(
+    data: dict[str, Path], tmp_path: Path
+) -> None:
+    lakes = bf.write_lakes(tmp_path / "lakes.geojson", crs=None)
+    out = tmp_path / "out"
+    code, output = invoke(*args(data, out), "--lakes", str(lakes))
+    words = plain(output)
+    assert code != 0, words
+    assert "No such option" not in words, words
+    assert "--lakes" in words and re.search(r"(?i)\bcrs\b", words), words
+    assert not out.exists()
+
+
+def test_without_lakes_every_row_is_a_river_row(full: tuple[Path, str]) -> None:
+    out, output = full
+    rows = {r["station"]: r for r in table(out)}
+    for spec in bf.FIVE:
+        seeded = "" if spec is bf.LANGT else "river"
+        assert [rows[spec.station][k] for k in LAKE_HEADER] == [seeded, "", "", "", ""]
+    assert "seeded by" not in output

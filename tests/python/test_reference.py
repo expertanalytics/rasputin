@@ -260,7 +260,9 @@ class TestClassify:
 
 @dataclass(frozen=True)
 class Row:
-    """The attributes of `StationResult` that `summarise` reads."""
+    """The attributes of `StationResult` that `summarise` reads. `seeded_by`
+    is PR 4's lake gauges' (`by_seed`); before the change `summarise` read no
+    such attribute, and the default None puts a row in neither group."""
 
     station: str
     station_class: str | None
@@ -273,6 +275,7 @@ class Row:
     reference_area_km2: float | None = 50.0
     fine_area_km2: float | None = 50.0
     tiles: int | None = 1
+    seeded_by: str | None = None
 
 
 def scored(n: int, value: float, **kw: Any) -> Row:
@@ -500,3 +503,40 @@ class TestSummaryFixedListsAndEmptyGroups:
         assert known["count"] == 0
         assert known["stations"] == []
         assert known["line"] is None
+
+
+class TestBySeed:
+    """PR 4, lake gauges: `Summary.by_seed`, the groups `river` and `lake`
+    with a band's contents ("The row and the summary"). Before the change the
+    summary has no `by_seed`."""
+
+    def dump(self, rows: list[Row]) -> dict[str, Any]:
+        out: dict[str, Any] = ref.summarise(rows).model_dump(mode="json")
+        return out
+
+    def test_the_two_groups_in_order_with_a_bands_contents(self) -> None:
+        rows = [
+            scored(1, 1.0, seeded_by="river"),
+            Row("1.2.0", "uncertain", causes=("swing",), seeded_by="river"),
+            scored(3, 0.98, seeded_by="lake"),
+            scored(4, 0.5, station_class="miss", match_by=None, seeded_by="lake"),
+            Row("1.5.0", "refused", refusal_cause="other", seeded_by="lake"),
+            Row("1.6.0", "refused", refusal_cause="no_river", seeded_by=None),
+        ]
+        s = self.dump(rows)
+        assert list(s["by_seed"]) == ["river", "lake"]
+        river, lake = s["by_seed"]["river"], s["by_seed"]["lake"]
+        assert set(river) == set(s["by_size"]["10-100"])
+        assert river["stations"] == 2 and lake["stations"] == 3  # 1.6.0 in neither
+        assert river["classes"]["uncertain"] == 1 and river["uncertain_share"] == 0.5
+        assert lake["classes"] == {"refused": 1, "uncertain": 0, "match": 1, "close": 0, "miss": 1}
+        assert lake["uncertain_share"] == 0.0
+        assert lake["nve_in_ours"]["min"] == pytest.approx(0.5, rel=1e-12)
+        assert lake["nve_in_ours"]["max"] == pytest.approx(0.98, rel=1e-12)
+        assert river["nve_in_ours"]["max"] == pytest.approx(1.0, rel=1e-12)
+
+    def test_an_empty_summary_has_both_groups_empty(self) -> None:
+        s = self.dump([])
+        assert list(s["by_seed"]) == ["river", "lake"]
+        for group in s["by_seed"].values():
+            assert group["stations"] == 0 and group["uncertain_share"] is None

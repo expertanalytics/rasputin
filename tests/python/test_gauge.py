@@ -514,3 +514,208 @@ def test_confluence_near_is_measured_from_p_at_100_m(
 def test_its_own_river_is_not_a_confluence(gauge: ModuleType) -> None:
     placement = gauge.place(at_station(gauge, X + 20.0, Y), river_down())
     assert placement.confluence_near is False
+
+
+# ---------------------------------------------------------------------------
+# PR 4, lake gauges: `lake_seed` ("Lake gauges: the lake is the seed")
+# ---------------------------------------------------------------------------
+#
+# Interface pinned here, from the design's own signatures: `gauge.LAKE_GAP_M`
+# (30.0), `gauge.LakeSeed` (frozen; `rule`, `point`, `lakes`, `distance_m`)
+# and `gauge.lake_seed(gauge, placement, lakes, *, gap=LAKE_GAP_M)`; `Lake`
+# is `io/station_set.py`'s frozen dataclass (`number`, `name`, `polygon`).
+# Placements come from `place` on a straight line down x = X, so `P` is
+# (X, Y) for a station at (X + d, Y); lakes are axis-aligned boxes, so every
+# station-to-lake distance below is a difference of two whole or half
+# metres at x 5e5 and exact in float64. Before the change, `lake_seed`,
+# `LakeSeed`, `LAKE_GAP_M` and `Lake` do not exist.
+
+
+def lake(
+    x0: float, y0: float, x1: float, y1: float, number: int | None = 7, name: str | None = "Vatnet"
+) -> Any:
+    from shapely.geometry import box
+
+    from tin_engine.io.station_set import Lake
+
+    return Lake(number=number, name=name, polygon=box(x0, y0, x1, y1))
+
+
+def on_lake_line(gauge: ModuleType, station_x: float) -> Any:
+    """The placement of a station at (station_x, Y) on a lake centreline down x = X."""
+    placement = gauge.place(at_station(gauge, station_x, Y), river_down(kind="lake"))
+    assert placement.lake and placement.position == pytest.approx((X, Y), abs=TOL)
+    return placement
+
+
+def on_river_line(gauge: ModuleType, station_x: float) -> Any:
+    placement = gauge.place(at_station(gauge, station_x, Y), river_down())
+    assert not placement.lake and placement.position == pytest.approx((X, Y), abs=TOL)
+    return placement
+
+
+def seed_of(
+    gauge: ModuleType, station_x: float, placement: Any, lakes: Sequence[Any], **kw: Any
+) -> Any:
+    return gauge.lake_seed(at_station(gauge, station_x, Y), placement, lakes, **kw)
+
+
+def test_the_gap_is_30_m(gauge: ModuleType) -> None:
+    assert gauge.LAKE_GAP_M == 30.0
+
+
+def test_a_station_inside_a_lake_on_a_river_line_is_inside(gauge: ModuleType) -> None:
+    """`62.18.0` Svartavatn's case: placed on a river line, inside a lake."""
+    vatn = lake(X + 5.0, Y - 100.0, X + 200.0, Y + 100.0)
+    seed = seed_of(gauge, X + 20.0, on_river_line(gauge, X + 20.0), [vatn])
+    assert isinstance(seed, gauge.LakeSeed)
+    assert seed.rule == "inside"
+    assert seed.point == pytest.approx((X + 20.0, Y), abs=TOL)
+    assert seed.lakes == (vatn,)
+    assert seed.distance_m == 0.0
+
+
+def test_a_station_inside_a_lake_with_no_placement_is_inside(gauge: ModuleType) -> None:
+    vatn = lake(X + 5.0, Y - 100.0, X + 200.0, Y + 100.0)
+    seed = seed_of(gauge, X + 20.0, None, [vatn])
+    assert seed is not None and seed.rule == "inside"
+    assert seed.point == pytest.approx((X + 20.0, Y), abs=TOL)
+    assert seed.lakes == (vatn,)
+
+
+def test_a_lake_line_with_p_in_a_lake_20_m_away_is_lake_line(gauge: ModuleType) -> None:
+    """The distance is the station's to the lake (20 m), not to the line (25 m)."""
+    vatn = lake(X - 500.0, Y - 500.0, X + 5.0, Y + 500.0)
+    seed = seed_of(gauge, X + 25.0, on_lake_line(gauge, X + 25.0), [vatn])
+    assert seed is not None and seed.rule == "lake_line"
+    assert seed.point == pytest.approx((X, Y), abs=TOL)  # P, not the station
+    assert seed.lakes == (vatn,)
+    assert seed.distance_m == pytest.approx(20.0, abs=TOL)
+
+
+@pytest.mark.parametrize(
+    ("station_x", "expected"),
+    [(X + 35.0, "lake_line"), (X + 35.5, None)],
+    ids=["exactly-30-m", "30.5-m"],
+)
+def test_the_gap_boundary(gauge: ModuleType, station_x: float, expected: str | None) -> None:
+    vatn = lake(X - 500.0, Y - 500.0, X + 5.0, Y + 500.0)
+    seed = seed_of(gauge, station_x, on_lake_line(gauge, station_x), [vatn])
+    assert (None if seed is None else seed.rule) == expected
+
+
+def test_the_gap_is_the_argument(gauge: ModuleType) -> None:
+    vatn = lake(X - 500.0, Y - 500.0, X + 5.0, Y + 500.0)
+    placement = on_lake_line(gauge, X + 35.5)
+    seed = seed_of(gauge, X + 35.5, placement, [vatn], gap=31.0)
+    assert seed is not None and seed.distance_m == pytest.approx(30.5, abs=TOL)
+    assert seed_of(gauge, X + 25.0, on_lake_line(gauge, X + 25.0), [vatn], gap=10.0) is None
+
+
+def test_a_river_line_10_m_below_a_lake_is_not_seeded(gauge: ModuleType) -> None:
+    """A gauge below the outlet stays on the river path (question 10's default),
+    though the lake is within 30 m of the station."""
+    vatn = lake(X - 200.0, Y + 10.0, X + 200.0, Y + 500.0)
+    assert seed_of(gauge, X + 5.0, on_river_line(gauge, X + 5.0), [vatn]) is None
+
+
+def test_a_lake_line_whose_p_is_in_no_lake_is_not_seeded(gauge: ModuleType) -> None:
+    """The station is 10 m from a lake, but `P` (30 m from it) is in none."""
+    vatn = lake(X + 30.0, Y - 100.0, X + 300.0, Y + 100.0)
+    assert seed_of(gauge, X + 20.0, on_lake_line(gauge, X + 20.0), [vatn]) is None
+
+
+def test_no_placement_and_a_lake_14_m_away_is_not_seeded(gauge: ModuleType) -> None:
+    """Femundsenden (`311.4.0`), question 9's default: no river line, so no
+    rule says which way the water runs past the station."""
+    femunden = lake(X - 5000.0, Y - 5000.0, X + 5.0, Y + 5000.0)
+    assert seed_of(gauge, X + 19.0, None, [femunden]) is None
+
+
+def test_two_overlapping_lakes_both_reach_the_seed(gauge: ModuleType) -> None:
+    """A user's file with overlapping polygons: the seed holds both, and
+    22's `_lake` refuses it later (not `lake_seed`'s job)."""
+    a = lake(X + 5.0, Y - 100.0, X + 200.0, Y + 100.0, number=1, name="A")
+    b = lake(X + 10.0, Y - 50.0, X + 100.0, Y + 50.0, number=2, name="B")
+    c = lake(X + 300.0, Y - 50.0, X + 400.0, Y + 50.0, number=3, name="C")
+    seed = seed_of(gauge, X + 20.0, None, [a, b, c])
+    assert seed is not None and seed.rule == "inside"
+    assert {lk.number for lk in seed.lakes} == {1, 2}
+
+
+def test_no_rule_reads_an_area_the_smaller_lake_containing_the_station_wins(
+    gauge: ModuleType,
+) -> None:
+    small = lake(X + 10.0, Y - 10.0, X + 30.0, Y + 10.0, number=1, name="Tjørna")
+    large = lake(X + 35.0, Y - 50_000.0, X + 50_000.0, Y + 50_000.0, number=2, name="Storvatnet")
+    seed = seed_of(gauge, X + 20.0, on_river_line(gauge, X + 20.0), [large, small])
+    assert seed is not None and seed.lakes == (small,)
+
+
+def test_the_lake_line_lake_is_ps_not_the_nearest_or_the_largest(gauge: ModuleType) -> None:
+    """`P` lies in a small lake 15 m from the station; a large lake 5 m from
+    the station holds neither the station nor `P`, and is not chosen."""
+    small = lake(X - 10.0, Y - 10.0, X + 10.0, Y + 10.0, number=1, name="Tjørna")
+    large = lake(X + 30.0, Y - 50_000.0, X + 50_000.0, Y + 50_000.0, number=2, name="Storvatnet")
+    seed = seed_of(gauge, X + 25.0, on_lake_line(gauge, X + 25.0), [large, small])
+    assert seed is not None and seed.rule == "lake_line"
+    assert seed.lakes == (small,)
+    assert seed.distance_m == pytest.approx(15.0, abs=TOL)
+
+
+def test_a_lake_without_a_number_is_found_by_geometry(gauge: ModuleType) -> None:
+    """`97.1.0` Fetvatn: a lake line with no lake number still finds its lake."""
+    vatn = lake(X - 500.0, Y - 500.0, X + 5.0, Y + 500.0, number=None, name=None)
+    seed = seed_of(gauge, X + 25.0, on_lake_line(gauge, X + 25.0), [vatn])
+    assert seed is not None and seed.lakes[0].number is None
+
+
+def test_inside_comes_before_lake_line(gauge: ModuleType) -> None:
+    """The station inside lake B, `P` inside lake A: `inside`, with B."""
+    a = lake(X - 10.0, Y - 10.0, X + 10.0, Y + 10.0, number=1, name="A")
+    b = lake(X + 20.0, Y - 10.0, X + 40.0, Y + 10.0, number=2, name="B")
+    seed = seed_of(gauge, X + 25.0, on_lake_line(gauge, X + 25.0), [a, b])
+    assert seed is not None and seed.rule == "inside"
+    assert seed.lakes == (b,)
+    assert seed.point == pytest.approx((X + 25.0, Y), abs=TOL)
+
+
+def test_a_station_on_the_boundary_is_not_inside(gauge: ModuleType) -> None:
+    """`Polygon.contains` is strict, as 22's `_lake`: a station exactly on
+    the shore is not `inside`; on a lake line with `P` in that lake it is
+    `lake_line` at distance 0."""
+    vatn = lake(X - 500.0, Y - 500.0, X + 20.0, Y + 500.0)
+    assert seed_of(gauge, X + 20.0, None, [vatn]) is None
+    seed = seed_of(gauge, X + 20.0, on_lake_line(gauge, X + 20.0), [vatn])
+    assert seed is not None and seed.rule == "lake_line"
+    assert seed.distance_m == pytest.approx(0.0, abs=TOL)
+
+
+@pytest.mark.parametrize(("offset", "inside"), [(-0.001, True), (0.001, False)])
+def test_a_millimetre_at_utm_magnitudes(gauge: ModuleType, offset: float, inside: bool) -> None:
+    """1 mm inside or outside a shore at x 5e5 (float64's spacing there is
+    about 6e-11 m), with no placement."""
+    vatn = lake(X - 500.0, Y - 500.0, X + 20.0, Y + 500.0)
+    seed = seed_of(gauge, X + 20.0 + offset, None, [vatn])
+    assert (seed is not None) is inside
+
+
+@pytest.mark.parametrize("bad", [math.nan, math.inf], ids=["nan", "inf"])
+def test_a_non_finite_station_is_not_seeded(gauge: ModuleType, bad: float) -> None:
+    vatn = lake(X - 500.0, Y - 500.0, X + 20.0, Y + 500.0)
+    assert gauge.lake_seed(gauge.Gauge(x=bad, y=Y), None, [vatn]) is None
+
+
+def test_no_lakes_is_no_seed(gauge: ModuleType) -> None:
+    assert seed_of(gauge, X + 20.0, on_lake_line(gauge, X + 20.0), []) is None
+
+
+def test_the_seed_and_the_lake_are_frozen(gauge: ModuleType) -> None:
+    import dataclasses
+
+    vatn = lake(X + 5.0, Y - 100.0, X + 200.0, Y + 100.0)
+    seed = seed_of(gauge, X + 20.0, None, [vatn])
+    with pytest.raises(ValidationError):
+        seed.rule = "lake_line"
+    with pytest.raises(dataclasses.FrozenInstanceError):
+        vatn.number = 8
