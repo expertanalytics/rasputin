@@ -383,7 +383,7 @@ green CI.
   no shift) and line 107; every cited line at or below 106 reads the same on
   both trees. Already stale on master and not this PR's: the `cli.py:NN`
   citations in `16e-multi-features.md`, `test_features.py` (`:39,42`, `:79`,
-  `:84`), `test_viz_svg.py:665` and `test_cli_mesh_multi_features.py:17`.
+  `:84`), `tests/python/test_viz_svg.py@390b516:665` and `test_cli_mesh_multi_features.py:17`.
   `05b-noder-driver.md:1749` and `15-dem-mosaic.md:616` hold.
 - f288504 holds: the status line, the ROADMAP row and "Acceptance run" match
   `docs/benchmarks/2026-10-03/15e-acceptance.md`, whose figures match

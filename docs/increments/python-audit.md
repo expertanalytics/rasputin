@@ -9,8 +9,11 @@ code, review, and `@perf` where the diff touches what drives refine or mesh.
 
 Accepted by Ola on 2026-10-05, with the defaults to its three questions
 (section 7). Its first PR, T2, is designed in section 8. Status of T2:
-designed; next `@tester` writes it, then it goes straight to `@reviewer`
-(tests only: no `@developer` step, no `@perf` run).
+`@tester`'s tests are in `2f47ebb`: 184 non-blank test lines added and 185
+removed, -1 net against the design's about -35 (the new file's docstrings and
+its failure messages, which name the module and the edge, are longer than
+costed). The record citations that commit broke are pinned. Next
+`@reviewer` (tests only: no `@developer` step, no `@perf` run).
 
 Re-checked against master `44fa7f5`: `git diff --stat 12dace7 44fa7f5 --
 src_python` is empty, and of the files cited below only `tools/brief.py`
@@ -576,3 +579,25 @@ gain is the map, not the lines.
 23c-2 (`worktree-23c`) adds `pieces.py` and new `cli` imports. Whichever of
 T2 and 23c-2 merges second must add those rows; the merge queue tests each on
 top of the other, so the second one goes red there rather than on master.
+
+### Left for a later PR
+
+- `src_python/tin_engine/features.py@2f47ebb:11` still names
+  `test_viz_svg.py::TestModuleIsolation`, which T2 deleted; the rule now
+  lives in `tests/python/test_layering.py`. A docstring fix for PR C
+  (`audit-geojson-io`) or PR G (`audit-cli-options`), whichever touches
+  `features.py` first.
+- `tools/scratch_copy.py@2f47ebb:19` cites line 1271 of
+  `tests/python/test_io_geotiff.py` for the child process that replaces
+  `PYTHONPATH`. T2 removed one line above it, so line 1271 is still inside
+  the same `subprocess.run` call (`tests/python/test_io_geotiff.py@2f47ebb:1269-1276`)
+  but one line lower in it. The quotation still holds; re-cite it in
+  whichever PR next edits `tools/`.
+
+### Lesson
+
+A design that deletes test lines lists the line citations into those files
+that the deletion breaks or moves (`python3 tools/check_citations.py` on a
+scratch copy with the lines removed), and says which get pinned. T2's design
+did not, and its tests commit left nine broken citations in dated review
+records.
