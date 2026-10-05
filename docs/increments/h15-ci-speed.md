@@ -1,6 +1,6 @@
 # Harness h15: a faster CI that proves the same things
 
-Status: design approved by `@reviewer` in round 2; Ola ruled on §9 on 2026-10-05 (all five defaults, below). PR 1 (§5 P, the Python job split) is implemented on this branch: red `8a8af9b`, green `83d0601`; code review round 3 asked for this status line and the clean-clone `git status` check of §5 P, which needs a C++ build; the push waits for that check, a short review round and Ola. PR 2 and PR 3 are not started. Mechanics, not a design question for the core: the plan (§7) is
+Status: design approved by `@reviewer` in round 2; Ola ruled on §9 on 2026-10-05 (all five defaults, below). PR 1 (§5 P, the Python job split) is implemented on this branch: red `8a8af9b`, green `83d0601`; code review round 4 approved it, the clean-clone `git status` check of §5 P run and empty; the push waits for Ola, and §7 PR 1's acceptance is read from the PR run. PR 2 and PR 3 are not started. Mechanics, not a design question for the core: the plan (§7) is
 two small workflow PRs and an optional third, each touching
 `.github/workflows/main.yaml`. The order rule is §6: PR 1 needs only
 master; PR 2 renames the sanitizer job, so it lands after h12's PR A
@@ -900,3 +900,57 @@ had counted the moved steps on the slowest leg twice.
 > **Suggestions (non-blocking):**
 > - The last line of the reworded codecs comment is 104 characters, against about 80 for its neighbours. Re-wrap it.
 > - A step in the `python` job that fails when `git status --porcelain --untracked-files=all` prints anything after `pytest` would make blocking issue 2 a check on every run instead of a one-off. It adds a step, so it is a design change, for `@architect` to weigh.
+
+### Round 4: `@reviewer`, code, PR 1, `eac65cc..c08263b`
+
+`@reviewer`'s verdict, word for word:
+
+> **Verdict: APPROVED**
+>
+> **What I reviewed:** `83d0601..c08263b` on `worktree-h15-ci`, plus the clean-clone check of §5 P at `83d0601`. `c08263b` changes only `docs/increments/h15-ci-speed.md` (+64/−2): the status line, and round 3 recorded under `## Review`. CI: the branch has not been pushed and has no PR (`gh pr list --head worktree-h15-ci --state all` and `git ls-remote origin worktree-h15-ci` both print nothing), so there are no checks to read.
+>
+> **Size:** unchanged from round 3. There are 0 lines of production code under `CLAUDE.md` §2. `c08263b` is prose only.
+>
+> **Blocking issue 1 (status line): fixed.** Each claim on the new status line holds against the branch:
+> - PR 1 (§5 P) is implemented: red `8a8af9b`, green `83d0601`.
+> - Round 3 asked for this line and for the clean-clone check.
+> - The push waits for that check, a short review round and Ola.
+> - PR 2 and PR 3 are not started: the only workflow change on the branch is `83d0601`'s Python split.
+>
+> No "design only" or "no workflow change" wording is left anywhere outside the quoted review records. There is no h15 row in `ROADMAP.md` or `docs/increments/README.md` that needs changing.
+>
+> **Blocking issue 2 (clean-clone `git status` check of §5 P): run, and it prints nothing.** Commands and output (the scratch directory is my session scratchpad):
+> ```
+> $ git clone --no-local /Users/skavhaug/projects/rasputin/.claude/worktrees/h15-ci h15-clone
+> $ cd h15-clone && git checkout --detach 83d0601
+> HEAD is now at 83d0601 h15 PR 1 green step: each Python CI job split into a main-suite job and an extras job (@developer)
+> $ git rev-parse HEAD
+> 83d0601bc4f0d23fbafa5be37b8df5b3503fe916
+> $ python3.12 -m venv ../venv312          # uv's CPython 3.12.12
+> $ ../venv312/bin/python -m pip install --upgrade pip
+> $ ../venv312/bin/python -m pip install -e ".[dev]"
+> Successfully installed ... rasputin-0.2.0.dev0 ...      (exit 0; builds tin_engine/_core.cpython-312-darwin.so)
+> $ git status --porcelain --untracked-files=all          # after install, before pytest
+> (no output, exit 0)
+> $ pytest
+> Required test coverage of 85% reached. Total coverage: 98.62%
+> ========== 4896 passed, 118 skipped, 7 warnings in 288.92s (0:04:48) ===========
+> (exit 0)
+> $ git status --porcelain --untracked-files=all
+> (no output, exit 0; 0 lines)
+> ```
+> To make sure this check could have failed, I also listed the ignored files (`git status --porcelain --ignored --untracked-files=all`). After filtering out `build/`, `__pycache__/`, `.pytest_cache/` and `.coverage`, nothing is left (grep exit 1). Those four are exactly the leftovers §5 P names, and `copy_source_tree` excludes them. So the install trap sees the same source copy with or without the main suite before it, and the argument of §5 P holds. The clone and the venv have been removed.
+>
+> **Red-step scaffolding:** none. `c08263b` touches no test or workflow file.
+>
+> **After the push (§7 PR 1 acceptance), unchanged from round 3:**
+> - Each step reports the same passed and skipped counts as on the base commit's run: the main suite, the codecs step, the viewer step and the trap.
+> - The slowest `Python <v>` job takes at most 6.5 min from the run's start, and the slowest extras job at most 5.0 min.
+> - Every job starts within 60 s of the run's first job.
+> - `CI result` is green.
+>
+> Red CI turns this into CHANGES REQUESTED.
+>
+> **Suggestions (non-blocking), carried from round 3 and still open:**
+> - Re-wrap the 104-character last line of the codecs comment in `.github/workflows/main.yaml`.
+> - A `git status --porcelain --untracked-files=all` step after `pytest` in the `python` job would turn this one-off check into a check on every run. That is a design change, for `@architect` to weigh.
