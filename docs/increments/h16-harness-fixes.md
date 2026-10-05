@@ -1,6 +1,6 @@
 # Harness h16: guard fixes, a line counter, a scratch copy, brief fixes
 
-Status: design; next the red step for PR A (`@tester`), then PR B.
+Status: design; Ola ruled on §7 on 2026-10-05 (all three defaults, §7); next the red step for PR A (`@tester`), then PR B.
 
 Ola approved the items on 2026-10-05 (the main session's summary of his
 rulings, not his words). He said this is the last harness increment before
@@ -418,9 +418,7 @@ with it. **Red test** (`test_brief.py`): two briefs with the clock frozen,
 for `h15-ci` and `h16`, name different files; with the file already there,
 the next name ends `-2.md`. About 6 lines.
 
-**Root Markdown files.** The brief named "a limit on root-file size it
-enforces". No source found states a size limit for root files; the nearest
-item is the evening retrospective's P1 (c0e3451): root Markdown files
+**Root Markdown files.** The item is the evening retrospective's P1 (c0e3451): root Markdown files
 (`README.md`, `INSTALL.md`, `NOTICE.md`, `testing.md`,
 `project_structure.md`, `auto_catchments.md`, `parallel_refinement.md`)
 are in no persona's write limit, and Ola ruled on 2026-10-05 that
@@ -520,3 +518,7 @@ paths, and the refusal message says so).
    TOML and Markdown are listed as "not counted".
 3. **Drop the push half of the scratchpad item (G3c) from h16?** Default:
    yes, drop it; scratch config and remote writes with `git -C` still pass.
+
+## Ola's rulings
+
+2026-10-05, Ola, verbatim: "yes, go with all three defaults". So: 1 the brief.py item is `@architect`'s write limit gaining root Markdown files (the earlier phrase "root-file limit" was the main session's shorthand; Ola: "I have no idea what a root-file limit would mean."); 2 the line counter counts Python, C++, CMake and shell outside `tests/` and `docs/`, and lists the rest as not counted; 3 G3c, the push to a scratchpad repository, drops out of h16.
