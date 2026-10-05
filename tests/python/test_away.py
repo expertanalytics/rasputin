@@ -51,6 +51,9 @@ from harness_fixtures import (
     write_flag,
 )
 
+# h17 §4b: a harness test; CI runs it in the `harness` job, not the product legs.
+pytestmark = pytest.mark.harness
+
 NOW = datetime(2026, 9, 30, 18, 0, 0, tzinfo=UTC)
 FAKE_PID = 4242
 
