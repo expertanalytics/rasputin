@@ -1,7 +1,10 @@
 # Harness h17: CI time spent in tests
 
 Status: design by `@architect` on master `44fa7f5`; design approved
-(review round 3, below). Next `@tester` on PR 1, on §8 question 1's
+(review round 3, below). PR 1's test side is in (`a655aa0`..`9d6105a`);
+§9 rules on its three findings. Next `@tester` on PR 1 again (the
+collection hook and its test, §4b; the CMake comments and the NaN
+comment, §9), then `@developer` on `main.yaml`. §8 question 1 runs on its
 default (the harness job on Python 3.12) while Ola is away; questions 2
 and 3 bind PR 2 only and stay open. Takes the test audit's Q1 and Q2 (`docs/increments/test-audit.md`,
 R2, R3, R11) and h15's PR 2 (`docs/increments/h15-ci-speed.md`, §5 A and
@@ -86,9 +89,10 @@ sum over 4.
   suite's time (test audit R11); at that share the main suite drops from
   287 s to about 105 s and the job to about 2.6 min. The new harness job:
   install about 10 s, tests about 180 s, about 3.3 min.
-- **TSan after R2 and R3.** Four thread-free suites (253 s) gone, the rest
-  four at a time: Test about 70 s, job about 3.4 min. Off the critical
-  path either way.
+- **TSan after R2 and R3.** Eight thread-free suites gone (§4c; the first
+  four took 253 s, the other four's times not read), the remaining 12
+  four at a time: Test at most about 70 s, job about 3.4 min. Off the
+  critical path either way.
 - **PR 1, `CI result`:** about 6.8 min (slow runner), about 4.0 (fast).
 - **PR 2, three shards:** each shard Build 194 s plus about 75 s (790 /
   12 plus 10 % for an uneven split, but at least the longest test, 86 s):
@@ -198,9 +202,33 @@ and `test_scratch_copy` import `tin_engine` and stay where they are.
   extra's bounds and **not** the package, and runs
   `pytest --no-cov -m harness`. It joins `CI result`'s `needs` and its
   shell list (h11's T4 tests already fail otherwise).
+- `@tester`, before `@developer` (added by §9 A): pytest imports every
+  test file before `-m` deselects, so without the package the harness
+  job fails at collection on every product test file (86 errors in
+  `@tester`'s trial). A `pytest_ignore_collect` hook in
+  `tests/python/conftest.py` closes this. When the mark expression is
+  exactly `harness` (`config.getoption("markexpr") == "harness"`), it
+  returns `True` for a `test_*.py` file whose text does not contain
+  `mark.harness`, and `None` (pytest decides) for everything else; any
+  other expression, or none, leaves collection as today. Text, not the
+  module's AST, on purpose: the text test over-approximates "carries the
+  harness mark", so its only error is to collect a file it need not, which
+  fails loudly on import. A file can carry the mark without the text only
+  through `getattr` or a hook that adds marks; the suite uses neither
+  (`grep -n "add_marker\|pytest_collection_modifyitems" tests/python/*.py`
+  finds none). The test, in a new harness-marked file: under `-m harness`
+  a fixture directory with a marked file and an unmarked file that imports
+  a module that does not exist passes, and the unmarked file is never
+  imported (red at `9d6105a`: collection error); a marked file importing
+  that module still errors (the loud mode stays); under `-m "not harness"`
+  the unmarked file is imported. Test configuration under `tests/`, so
+  `@tester`'s.
 
 Why this passes h15 §4's test: the two marker expressions are complements,
 so every collected test runs in exactly one of the two jobs, in every run;
+the hook ignores only files that hold no harness-marked test, which
+`-m harness` would deselect anyway, so it removes nothing the harness job
+would run;
 coverage is unchanged because harness tests never import `tin_engine`.
 What it gives up, by Ola's ruling: harness tests run on one Python version,
 not three. Two failure modes stay loud: a harness test that needs
@@ -217,7 +245,12 @@ walk of each suite's transitive `#include`s for `std::thread`,
 `std::jthread`, `std::async`, `<thread>`, `<future>` or `pthread`: zero files
 for the four, while the controls `prop_refinement_refine` and
 `test_refinement_chunks` each find `parallel_util/chunks.hpp` (script run
-against `44fa7f5`; `src/` has no thread code). Run the remaining 16 suites
+against `44fa7f5`; `src/` has no thread code). Drop also
+`test_refinement_scan`, `test_mesh_lawson`, `test_refinement_scan_offnode`
+and `test_mesh_quality` (§9 B): the same walk, rerun at `9d6105a` over all
+20 suites, finds zero files for these four and for the first four, and
+`parallel_util/chunks.hpp` for each of the other 12; the only file under
+`include/` or `src/` that matches is `chunks.hpp`. Run the remaining 12 suites
 `getconf _NPROCESSORS_ONLN` at a time, each suite's output held and printed
 whole, a failing suite named, and the step failing if any suite fails
 (`TSAN_OPTIONS=halt_on_error=1` stays). `@tester` corrects the comment at
@@ -226,7 +259,7 @@ and the one at `tests/cpp/CMakeLists.txt@44fa7f5:217-219`, which reads as
 if all three suites start threads: `test_mesh_lattice_split` links
 `Threads` but starts none (the walk above).
 
-Constant: **four at a time**, the runner's CPU count. Assumes 16 suites,
+Constant: **four at a time**, the runner's CPU count. Assumes 12 suites,
 the longest about 60 s after R3 (refine_points 61 s today); not checked for
 memory, since four TSan processes on a 16 GB runner are an assumption until
 PR 1's run.
@@ -245,7 +278,7 @@ In `tests/python/test_ci_changes.py` (it parses the workflow already):
   Green at master; it keeps a later edit from building a suite it does not
   run, or the reverse.
 
-That the TSan list drops exactly the four, and that the parallel loop
+That the TSan list drops exactly the eight, and that the parallel loop
 reports failures, is `@reviewer`'s check, by `git diff` and by reading the
 step, not a test that freezes the command (h15 §7's rule).
 
@@ -264,7 +297,7 @@ say in the acceptance note that the kind was not identified.
   the harness job's equal the base commit's run (4996 and 119 on 3.12 at
   `44fa7f5`) plus the tests the branch adds, counted from its diff;
   coverage on 3.12 unchanged (98.62 % at `44fa7f5`); ctest's `out of N`
-  equals the base's 994 plus the cases the branch adds; 16 TSan suites,
+  equals the base's 994 plus the cases the branch adds; 12 TSan suites,
   each `All tests passed`.
 - **ES9 and RP3** each run shorter, under asan+ubsan, than
   `legalise_around ... matches today's` in the same run (86 s today), so
@@ -323,6 +356,7 @@ most 2 min; `CI result` at most 5.5 min (slow) or 4.5 (fast).
 |---|---|---|---|
 | J2 oracle, ES9 and RP3 rewired, oracle cases, CMake comment | `@tester` | 1 | `tests/cpp/support/j2_oracle.hpp`, the two property files, `tests/cpp/CMakeLists.txt` |
 | harness marker in 16 files, marker registered | `@tester` | 1 | `tests/python/test_*.py`, `pyproject.toml` |
+| collection hook and its test (§4b, §9 A); CMake comments for §9 B; NaN comment (§9) | `@tester` | 1 | `tests/python/conftest.py`, a new `tests/python/test_*.py`, `tests/cpp/CMakeLists.txt`, `tests/cpp/support/j2_oracle.hpp` |
 | H1-H3 | `@tester` | 1 | `tests/python/test_ci_changes.py` |
 | harness job, `-m "not harness"`, TSan list and parallel loop | `@developer` | 1 | `.github/workflows/main.yaml` |
 | acceptance read from the PR run | `@reviewer` (with the main session's `gh` output) | 1 | none |
@@ -352,6 +386,73 @@ No `@perf` run: neither PR touches refine or mesh code.
    unless PR 1's measured run shows it is still needed.** Default: **yes**.
    A yes also changes your h15 ruling 2, which accepted the split as part
    of PR 2 (h15, Ola's rulings).
+
+## 9. PR 1's test side: findings and rulings
+
+`@tester`'s commits `a655aa0` (H1-H3, red), `cc8c309` (the marker on the
+16 files, registered in `pyproject.toml`), `b47c283` (the shared oracle,
+`tests/cpp/support/j2_oracle.hpp`) and `9d6105a` (the clamp case). The
+equal-counts step of §4a held in all five cases (`b47c283`'s message: RP3's
+control 11422 / 8537 / 2193 pairs at 0.5 / 2 / 8, old copy and header
+alike; ES9 0 and 0 on its output, 8620 and 8620 with z shifted). Locally
+under asan+ubsan, by `@tester`: ES9 52.6 s to 3.3 s, RP3 15.1 s to 0.66 s.
+
+Rulings, made on defaults while Ola is away:
+
+- **A. The harness job cannot collect without the package.** Ruled: the
+  `pytest_ignore_collect` hook, specified in §4b, written by `@tester`
+  with its test. Not chosen: installing the package in the harness job
+  (it would cost the job the install time, about 37 s on the reference
+  run, and lose the loud failure of a harness test that imports
+  `tin_engine`); moving the harness tests to a directory of their own
+  (the cleanest boundary, but it moves 16 files and their fixture modules,
+  splits `conftest.py`'s prose check over two directories, and breaks
+  every unpinned citation of those paths; worth it only if the marker
+  route proves fragile). `@tester`'s trial of the hook, in a venv holding
+  only the three test tools: 1078 passed, 12 skipped in 143 s; the 12
+  skips came from a scratch copy that was not a git work tree.
+- **B. Four more thread-free TSan suites.** Ruled: PR 1 drops them too
+  (§4c, with the walk's result). TSan finds data races; a suite that
+  starts no thread has none to find, and asan+ubsan still runs all eight
+  on every PR. No rule asks invariant-critical suites to run under TSan
+  (`grep -n -i tsan testing.md`). `@tester` corrects the CMake comments that
+  then say otherwise: `tests/cpp/CMakeLists.txt@9d6105a:217-221` (it names
+  only `test_refinement_chunks` as threaded, which stays true, but says
+  `test_mesh_lattice_split` alone leaves the job) and
+  `tests/cpp/CMakeLists.txt@9d6105a:261` ("Both run in the TSan job";
+  `test_mesh_quality` no longer does). H3 is unchanged: it compares the
+  two lists, whatever they hold.
+- **C. A citation the marker block moved.**
+  `docs/increments/29-nve-reference-catchments.md` cited line 117 of
+  `pyproject.toml`, unpinned; the marker block moved the quoted line
+  (`exclude = ["docs/benchmarks"]`) to 122. Pinned to `0130889f`, the
+  commit that wrote the citing line, by `@architect`, with a note in the
+  record's lead-in. Of the other 13 citations `check_citations.py` lists
+  as at risk on this branch, six cite lines above every hunk this branch
+  makes in their file, so it does not move them; the other seven
+  (`test_brief.py`, `test_away.py` and `prop_refinement_edge_strip.cpp`
+  lines) were already off their quoted lines at `fe9fec1`, before this
+  branch, and most name their commit in the prose. This branch changes
+  what none of them says.
+
+Departures `@tester` took, recorded and accepted:
+
+- The marker registration in `pyproject.toml` is `@tester`'s, as §4b and §6
+  assign; not a departure.
+- `j2_oracle::violations` throws `std::invalid_argument` on more than rule
+  2's off-grid point: a NaN check point, mismatched span sizes, an empty
+  grid, and a triangle naming a vertex past the end. Each turns a silent
+  wrong read into a loud failure; none changes a count on valid input.
+- A NaN corner. The header's comment
+  (`tests/cpp/support/j2_oracle.hpp@9d6105a:49-51`) says a triangle with a
+  NaN corner visits every bucket. That holds only on an axis where
+  `std::min` or `std::max` returns the NaN, which depends on the corner's
+  position (the leftmost element that no other is less than: `min({NaN, 1,
+  2})` is NaN, `min({1, NaN, 2})` is 1). The verdict is today's all the
+  same, for another reason: with a NaN corner the plane is NaN, and
+  `abs(NaN - z) > slack` is false, so such a triangle counts no pair over
+  in either the old copies or the header, and `not_ccw` walks every
+  triangle regardless. `@tester` rewrites the comment to give that reason.
 
 ## Review
 
