@@ -231,7 +231,10 @@ jobs:
         python-version: ["3.12", "3.13", "3.14"]
 
     steps:
+      # The full history: test_count_loc.py recounts two recorded PRs from it.
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - uses: actions/setup-python@v5
         with:
