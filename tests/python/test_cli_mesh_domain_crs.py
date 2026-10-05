@@ -287,10 +287,19 @@ class TestTheSameCrs:
 
     @pytest.fixture
     def no_transformer(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        def refuse(*args: Any, **kwargs: Any) -> Any:
-            raise AssertionError(f"Transformer.from_crs{args} was called")
+        """No point is moved: every `Transformer` method that maps coordinates
+        refuses. Building a transformer is allowed, since audit PR B's
+        `crs.same_crs` builds one to compare two CRSs (python-audit.md,
+        section 9) and moves nothing with it."""
 
-        monkeypatch.setattr(Transformer, "from_crs", staticmethod(refuse))
+        def refusing(name: str) -> Any:
+            def refuse(*args: Any, **kwargs: Any) -> Any:
+                raise AssertionError(f"Transformer.{name} was called")
+
+            return refuse
+
+        for name in ("transform", "itransform", "transform_bounds"):
+            monkeypatch.setattr(Transformer, name, refusing(name))
 
     @pytest.fixture
     def handed_on(self, monkeypatch: pytest.MonkeyPatch) -> list[DomainPolygon | None]:

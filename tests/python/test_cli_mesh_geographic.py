@@ -63,6 +63,7 @@ import re
 import shlex
 import subprocess
 import sys
+import warnings
 import weakref
 from pathlib import Path
 from typing import Any
@@ -405,14 +406,30 @@ class TestAProjectedDemInAnotherCrs:
 # ------------------------------------------------------------------ G7
 
 
+def proj4_of(epsg: int) -> str:
+    """pyproj's PROJ string of `epsg`, without its lossy-conversion warning."""
+    with warnings.catch_warnings(action="ignore", category=UserWarning):
+        return CRS.from_epsg(epsg).to_proj4()
+
+
 @needs_codecs
-def test_out_crs_equal_to_the_dems_own_writes_the_same_bytes(tmp_path: Path) -> None:
-    """J1: the committed projected tile with a domain, `--out-crs` its own CRS."""
+@pytest.mark.parametrize(
+    "out_crs",
+    [
+        pytest.param("EPSG:25833", id="its EPSG code"),
+        pytest.param(proj4_of(25833), id="its PROJ string"),
+    ],
+)
+def test_out_crs_equal_to_the_dems_own_writes_the_same_bytes(tmp_path: Path, out_crs: str) -> None:
+    """J1: the committed projected tile with a domain, `--out-crs` its own CRS.
+    Audit PR B (`docs/increments/python-audit.md`, section 9): the CRS's PROJ
+    string is the same CRS by definition, so the DEM is not resampled and the
+    file is the one without `--out-crs`, its `crs` field included."""
     domain = write_geojson(tmp_path / "quarter.geojson", quarter_circle(), "EPSG:25833")
     args = ("--dem", str(KARTVERKET), "--domain", str(domain), "--tolerance", "10")
     plain_code, plain_output = invoke(*args, "--out", str(tmp_path / "plain.vtk"))
     assert plain_code == 0, plain_output
-    code, output = invoke(*args, "--out-crs", "EPSG:25833", "--out", str(tmp_path / "same.vtk"))
+    code, output = invoke(*args, "--out-crs", out_crs, "--out", str(tmp_path / "same.vtk"))
     assert code == 0, output
     assert (tmp_path / "same.vtk").read_bytes() == (tmp_path / "plain.vtk").read_bytes()
 

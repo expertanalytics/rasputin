@@ -56,6 +56,7 @@ import gauge_fixtures as gf
 import tin_engine.catchment as catchment
 import tin_engine.catchment_batch as cb
 from catchment_fixtures import MemoryRepository, filled
+from mosaic_fixtures import whole
 from tin_engine.io.models import DemTile
 from tin_engine.io.rivers import read_segments
 from tin_engine.io.station_set import read_stations
@@ -473,6 +474,43 @@ def test_check_reach_crs_is_the_one_rule() -> None:
     assert catchment.check_reach_crs(gf.EPSG, repository) is None
     with pytest.raises(ValueError, match=r"(?s)river file's CRS.*32633.*DEM's.*25833"):
         catchment.check_reach_crs("EPSG:32633", repository)
+
+
+#: EPSG:31287 (MGI / Austria Lambert) written by its parameters, and the same
+#: projection with its origin moved to 13.5 E, a different CRS.
+LAMBERT = (
+    "+proj=lcc +lat_1=46 +lat_2=49 +lat_0=47.5 +lon_0=13.33333333333333 "
+    "+x_0=400000 +y_0=400000 +ellps=bessel +units=m +no_defs"
+)
+LAMBERT_13_5_E = LAMBERT.replace("13.33333333333333", "13.5")
+
+
+def test_check_reach_crs_accepts_the_dems_crs_by_definition() -> None:
+    """Audit PR B (`docs/increments/python-audit.md`, section 9): a river file
+    in the PROJ string of the DEM's EPSG:31287 is in the DEM's CRS, as
+    `EPSG:31287` is; a genuinely different CRS keeps today's refusal."""
+    repository = MemoryRepository({"a.tif": whole(3, 3, epsg=31287)})
+    assert repository.footprints()[0].meta.crs == "EPSG:31287"
+    assert catchment.check_reach_crs("EPSG:31287", repository) is None
+    assert catchment.check_reach_crs(LAMBERT, repository) is None
+    with pytest.raises(ValueError) as info:
+        catchment.check_reach_crs(LAMBERT_13_5_E, repository)
+    assert str(info.value) == (
+        f"the river file's CRS, {LAMBERT_13_5_E}, is not the DEM's, EPSG:31287"
+    )
+
+
+def test_tiles_in_two_crss_are_refused_by_delineate_in_plain_words() -> None:
+    """Audit PR B: `delineate`'s "one CRS" check is the shared `single_crs`,
+    so its wording is the DEM's, as `open_dem`'s is."""
+    repository = MemoryRepository({"a.tif": whole(3, 3), "b.tif": whole(3, 3, epsg=25832)})
+    request = catchment.CatchmentRequest(seed=(gf.X0, gf.Y0), seed_crs=gf.EPSG)
+    with pytest.raises(catchment.CatchmentError) as info:
+        catchment.delineate(request, repository)
+    assert str(info.value) == (
+        "the DEM files are in 2 different CRSs (EPSG:25832, EPSG:25833); all must be in one CRS"
+    )
+    assert repository.loads == []
 
 
 # ---------------------------------------------------------------------------

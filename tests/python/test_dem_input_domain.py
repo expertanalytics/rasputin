@@ -57,6 +57,7 @@ import shapely
 from pyproj import CRS, Transformer
 from shapely.geometry import Polygon, box
 
+from catchment_fixtures import MemoryRepository
 from geotiff_fixtures import BASE_KEYS, PROJECTED_CS_TYPE
 from mosaic_fixtures import (
     X0,
@@ -71,6 +72,7 @@ from mosaic_fixtures import (
     whole,
 )
 from test_dem_input import SEAM, decoded, tiff_of, write_tiles
+from tin_engine.io.models import DemTile, RasterMeta
 
 Ring = list[tuple[float, float]]
 UTM33 = "urn:ogc:def:crs:EPSG::25833"
@@ -627,9 +629,111 @@ class TestOneCrs:
         with pytest.raises(mz.MosaicError) as info:
             di.open_dem(request(di, tmp_path / "two", domain=domain))
         message = str(info.value)
-        assert "the tiles are in 2 CRSs" in message
-        assert "EPSG:[25832, 25833]" in message
-        assert "a domain needs one" in message
+        assert "the DEM files are in 2 different CRSs" in message
+        assert "(EPSG:25832, EPSG:25833)" in message
+        assert "all must be in one CRS" in message
+
+    def test_tiles_in_two_crss_with_out_crs_are_refused_in_the_same_words(
+        self, di: ModuleType, mz: ModuleType, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The resampled path's own check is the same `single_crs` (audit PR
+        B): the first tile is in EPSG:25833 and `--out-crs` is not, so the
+        DEM is resampled, and the second tile's EPSG:25832 is refused there."""
+        tiles = quadrants(whole(9, 13), row_cut=4, col_cut=6, overlap=1)
+        tiles["sw.tif"] = relabelled(tiles["sw.tif"], epsg=25832, crs="")
+        in_memory(monkeypatch, di, tiles)
+        utm32 = to_crs("EPSG:25833", "EPSG:25832", IN_NW)
+        x, y = [p[0] for p in utm32], [p[1] for p in utm32]
+        bounds = mz.Bounds(x_min=min(x), y_min=min(y), x_max=max(x), y_max=max(y))
+        dem = di.DemRequest(sources=(tmp_path / "x.tif",), bounds=bounds, target_crs="EPSG:25832")
+        with pytest.raises(mz.MosaicError) as info:
+            di.open_dem(dem)
+        assert str(info.value) == (
+            "the DEM files are in 2 different CRSs (EPSG:25832, EPSG:25833); all must be in one CRS"
+        )
+
+
+class InMemory(MemoryRepository):
+    """`MemoryRepository` as `open_dem` uses a repository: nothing to check
+    before loading, and no window reader."""
+
+    load_window = None
+
+    def check(self, plan: Any) -> None:
+        pass
+
+
+def in_memory(monkeypatch: pytest.MonkeyPatch, di: ModuleType, tiles: dict[str, Any]) -> None:
+    """`open_dem` reads `tiles` from memory, whatever its sources say."""
+    monkeypatch.setattr(di, "repository_for", lambda *_: (InMemory(tiles), "memory"))
+
+
+def relabelled(tile: Any, **fields: Any) -> Any:
+    """`tile` with its CRS fields replaced, through `RasterMeta`'s validators."""
+    return DemTile(meta=RasterMeta(**{**tile.meta.model_dump(), **fields}), array=tile.array)
+
+
+def wkt_without_id(epsg: int) -> str:
+    """The WKT2 of `epsg` without its own `ID`: a CRS PROJ cannot name by code."""
+    doc = CRS.from_epsg(epsg).to_json_dict()
+    del doc["id"]
+    return CRS.from_json_dict(doc).to_wkt()
+
+
+class TestADemCrsWithoutAnEpsgCode:
+    """Audit PR B (`docs/increments/python-audit.md`, section 9): the domain
+    path moves the domain into the tiles' CRS text, not into `EPSG:{epsg}`,
+    so a DEM whose CRS has no EPSG code (`epsg` None, `crs` its WKT) plans
+    exactly as the same tiles labelled EPSG:25833 do, and a refusal names
+    that text. Before the fix every such request is refused with
+    `cannot read the CRS 'EPSG:None'`. The GeoTIFF reader makes no such tile
+    yet, so the tiles are in memory."""
+
+    WKT = wkt_without_id(25833)
+
+    @classmethod
+    def tiles(cls, *, labelled: bool) -> dict[str, Any]:
+        tiles = quadrants(whole(9, 13), row_cut=4, col_cut=6, overlap=1)
+        if labelled:
+            return tiles
+        return {name: relabelled(t, epsg=None, crs=cls.WKT) for name, t in tiles.items()}
+
+    def opened(
+        self, di: ModuleType, monkeypatch: pytest.MonkeyPatch, domain: Any, *, labelled: bool
+    ) -> Any:
+        in_memory(monkeypatch, di, self.tiles(labelled=labelled))
+        return di.open_dem(di.DemRequest(sources=(Path("memory.tif"),), domain=domain))
+
+    def test_the_tiles_meta_says_no_code(self) -> None:
+        meta = self.tiles(labelled=False)["nw.tif"].meta
+        assert (meta.epsg, meta.crs) == (None, self.WKT)
+        assert 'ID["EPSG",25833]' not in self.WKT
+
+    def test_the_domain_path_opens_it_as_the_labelled_tiles(
+        self, di: ModuleType, dm: ModuleType, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        domain = read(dm, tmp_path, ACROSS_ALL, "EPSG:25833")
+        expected = self.opened(di, monkeypatch, domain, labelled=True).tile
+        got = self.opened(di, monkeypatch, domain, labelled=False).tile
+        lattice = ("x_min", "y_max", "delta_x", "delta_y", "rows", "cols")
+        assert [getattr(got.meta, f) for f in lattice] == [
+            getattr(expected.meta, f) for f in lattice
+        ]
+        assert same_array(np.asarray(got.array), np.asarray(expected.array))
+        assert got.meta.crs == self.WKT
+
+    def test_a_domain_past_the_tiles_is_refused_naming_the_dems_crs_text(
+        self, di: ModuleType, dm: ModuleType, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The last node column is x = 500 120; one vertex is 3 m past it."""
+        past = [*ACROSS_ALL[:2], (X0 + 123.0, Y0 - 3.7), ACROSS_ALL[3]]
+        domain = read(dm, tmp_path, past, "EPSG:25833")
+        with pytest.raises(ValueError) as info:
+            self.opened(di, monkeypatch, domain, labelled=False)
+        message = str(info.value)
+        assert "outside" in message
+        assert f"in the DEM's {self.WKT}" in message
+        assert "EPSG:None" not in message
 
 
 class TestSeamsOnTheDomainPath:
