@@ -18,15 +18,13 @@ leaves no `FeatureCollection` in `cli.py`, and `io/geojson.py` opens no file.
 
 from __future__ import annotations
 
-import importlib
 import inspect
 import json
 from pathlib import Path
-from types import ModuleType
 
-import pytest
 from shapely.geometry import Polygon
 
+import tin_engine.io.geojson as gj
 from tin_engine.crs import parse_crs
 from tin_engine.domain import read_domain
 
@@ -41,17 +39,12 @@ RING = [
 ]
 
 
-@pytest.fixture(scope="module")
-def gj() -> ModuleType:
-    return importlib.import_module("tin_engine.io.geojson")
-
-
-def test_it_takes_no_path(gj: ModuleType) -> None:
+def test_it_takes_no_path() -> None:
     params = list(inspect.signature(gj.catchment_geojson).parameters)
     assert params == ["polygon", "crs", "properties"]
 
 
-def test_the_bytes_are_one_feature_with_a_crs_member(gj: ModuleType) -> None:
+def test_the_bytes_are_one_feature_with_a_crs_member() -> None:
     props = {"station": "2.32.0", "nodes": 12, "causes": ["swing"], "swing": 0.25}
     out = gj.catchment_geojson(Polygon(RING), EPSG, props)
     assert isinstance(out, bytes)
@@ -66,12 +59,12 @@ def test_the_bytes_are_one_feature_with_a_crs_member(gj: ModuleType) -> None:
     assert [tuple(p) for p in ring] == list(Polygon(RING).exterior.coords)
 
 
-def test_non_ascii_names_survive(gj: ModuleType) -> None:
+def test_non_ascii_names_survive() -> None:
     out = gj.catchment_geojson(Polygon(RING), EPSG, {"name": "Atnasjø"})
     assert json.loads(out.decode("utf-8"))["features"][0]["properties"]["name"] == "Atnasjø"
 
 
-def test_read_domain_reads_the_bytes_back_exactly(gj: ModuleType, tmp_path: Path) -> None:
+def test_read_domain_reads_the_bytes_back_exactly(tmp_path: Path) -> None:
     path = tmp_path / "c.geojson"
     path.write_bytes(gj.catchment_geojson(Polygon(RING), EPSG, {}))
     domain = read_domain(path)
@@ -80,7 +73,7 @@ def test_read_domain_reads_the_bytes_back_exactly(gj: ModuleType, tmp_path: Path
     assert set(domain.polygon.exterior.coords) == set(RING)
 
 
-def test_the_writer_has_moved_out_of_cli(gj: ModuleType) -> None:
+def test_the_writer_has_moved_out_of_cli() -> None:
     """`cli.py` no longer builds the document; `io/geojson.py` builds it and
     opens nothing."""
     cli = (SRC / "cli.py").read_text(encoding="utf-8")

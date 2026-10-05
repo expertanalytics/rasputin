@@ -40,15 +40,16 @@ Numeric bounds: lattice counts are exact integers; ratios are compared at
 
 from __future__ import annotations
 
-import importlib
 import json
 from dataclasses import dataclass
-from types import ModuleType
 from typing import Any
 
 import pytest
 from shapely.geometry import MultiPolygon, Polygon, box
 
+import tin_engine.catchment as catchment
+import tin_engine.reference as ref
+import tin_engine.sensitivity as sensitivity
 from mosaic_fixtures import meta
 
 X0 = 500_000.0
@@ -63,16 +64,6 @@ KNOWN_LINE = (
     "which rasputin does not combine, and neither grid covers the window alone "
     "(known refusals, not failures)"
 )
-
-
-@pytest.fixture(scope="module")
-def ref() -> ModuleType:
-    return importlib.import_module("tin_engine.reference")
-
-
-@pytest.fixture(scope="module")
-def catchment() -> ModuleType:
-    return importlib.import_module("tin_engine.catchment")
 
 
 def cells(col: int, row: int, n: int) -> Polygon:
@@ -92,7 +83,7 @@ def cells(col: int, row: int, n: int) -> Polygon:
 
 
 class TestAgreement:
-    def test_identical_polygons_agree_fully_with_no_offset(self, ref: ModuleType) -> None:
+    def test_identical_polygons_agree_fully_with_no_offset(self) -> None:
         square = cells(C0, R0, 100)
         a = ref.agreement(square, square, META)
         assert (a.ours, a.ref, a.both) == (10_000, 10_000, 10_000)
@@ -101,7 +92,7 @@ class TestAgreement:
         assert a.divide_offset_m == pytest.approx(0.0, abs=1e-9)
         assert a.cell_m == D
 
-    def test_a_square_shifted_one_cell_along_x_scores_half_a_cell(self, ref: ModuleType) -> None:
+    def test_a_square_shifted_one_cell_along_x_scores_half_a_cell(self) -> None:
         """Two of the four sides do not move: (100 + 100) cells of area over
         a 4000 m perimeter is 5 m, half a cell."""
         a = ref.agreement(cells(C0 + 1, R0, 100), cells(C0, R0, 100), META)
@@ -111,7 +102,7 @@ class TestAgreement:
         assert a.area_ratio == pytest.approx(1.0, rel=1e-12)
         assert a.divide_offset_m == pytest.approx(0.5 * D, abs=1e-9)
 
-    def test_a_square_grown_one_cell_every_side_scores_1_01_cells(self, ref: ModuleType) -> None:
+    def test_a_square_grown_one_cell_every_side_scores_1_01_cells(self) -> None:
         """404 cells of area between the outlines over 400 cells of NVE's
         perimeter: one cell, plus the corner term."""
         a = ref.agreement(cells(C0 - 1, R0 - 1, 102), cells(C0, R0, 100), META)
@@ -121,13 +112,13 @@ class TestAgreement:
         assert a.area_ratio == pytest.approx(1.0404, rel=1e-12)
         assert a.divide_offset_m == pytest.approx(1.01 * D, abs=1e-9)
 
-    def test_disjoint_polygons_share_nothing(self, ref: ModuleType) -> None:
+    def test_disjoint_polygons_share_nothing(self) -> None:
         a = ref.agreement(cells(C0 + 200, R0, 100), cells(C0, R0, 100), META)
         assert a.both == 0
         assert a.nve_in_ours == 0.0 and a.ours_in_nve == 0.0
         assert a.divide_offset_m == pytest.approx(20_000 * D * D / 4000.0, abs=1e-9)
 
-    def test_every_part_of_a_multipart_reference_counts(self, ref: ModuleType) -> None:
+    def test_every_part_of_a_multipart_reference_counts(self) -> None:
         """NVE's `19.79.0` Gravå has two parts: both are NVE's catchment.
         The perimeter is both parts' (800 m)."""
         first, second = cells(C0, R0, 10), cells(C0 + 50, R0, 10)
@@ -138,14 +129,14 @@ class TestAgreement:
         assert a.area_ratio == pytest.approx(0.5, rel=1e-12)
         assert a.divide_offset_m == pytest.approx(100 * D * D / 800.0, abs=1e-9)
 
-    def test_the_window_does_not_bound_the_count(self, ref: ModuleType) -> None:
+    def test_the_window_does_not_bound_the_count(self) -> None:
         """`META` is a 2 x 2 window 10 km from the squares: only its origin
         and spacing place the lattice."""
         small = meta(rows=2, cols=2, x_min=X0 + D * 7, y_max=Y0 - D * 3, dx=D, dy=D)
         square = cells(C0, R0, 30)
         assert ref.agreement(square, square, small).ours == 900
 
-    def test_the_lattice_follows_the_window_origin(self, ref: ModuleType) -> None:
+    def test_the_lattice_follows_the_window_origin(self) -> None:
         """Moved half a cell, the lattice puts the square's edges on nodes,
         and a node on an edge is not strictly inside: 29 x 29, not 30 x 30."""
         half = meta(rows=2, cols=2, x_min=X0 + D / 2, y_max=Y0 + D / 2, dx=D, dy=D)
@@ -158,9 +149,7 @@ class TestAgreement:
 # ---------------------------------------------------------------------------
 
 
-def numbers(
-    ref: ModuleType, nve_in_ours: float, ours_in_nve: float, offset_m: float = 100.0
-) -> Any:
+def numbers(nve_in_ours: float, ours_in_nve: float, offset_m: float = 100.0) -> Any:
     """An `Agreement` with the two overlaps and the offset given, on DTM10."""
     return ref.Agreement(
         ours=1000,
@@ -174,11 +163,11 @@ def numbers(
     )
 
 
-def gauge_result(catchment: ModuleType, causes: tuple[str, ...] = (), swing: float = 0.01) -> Any:
+def gauge_result(causes: tuple[str, ...] = (), swing: float = 0.01) -> Any:
     """A `GaugeResult` whose joined `causes` are `causes`; its sensitivity's
     own causes are the same less `direction`, as `delineate` joins them."""
     own = tuple(c for c in causes if c != "direction")
-    s = importlib.import_module("tin_engine.sensitivity").Sensitivity(
+    s = sensitivity.Sensitivity(
         a0=10.0, area_up=9.9, area_down=10.0 * (1 + swing), swing=swing,
         largest_step=0.01, largest_step_at_m=10.0, checked_up_m=30.0, checked_down_m=30.0,
         drains="chain_not_draining" not in own, monotone=not own, causes=own,
@@ -204,41 +193,33 @@ class TestClassify:
         ],
         ids=["95-both", "just-under-95", "80-both", "just-under-80", "one-way-only"],
     )
-    def test_the_overlap_bars_are_inclusive(
-        self, ref: ModuleType, catchment: ModuleType, overlaps: Any, expected: Any
-    ) -> None:
-        a = numbers(ref, *overlaps, offset_m=100.0)
-        assert ref.classify(a, gauge_result(catchment)) == expected
+    def test_the_overlap_bars_are_inclusive(self, overlaps: Any, expected: Any) -> None:
+        a = numbers(*overlaps, offset_m=100.0)
+        assert ref.classify(a, gauge_result()) == expected
 
     @pytest.mark.parametrize(
         ("offset_m", "expected"),
         [(30.0, ("match", "offset")), (30.000001, ("miss", None))],
         ids=["30-m", "just-over-30-m"],
     )
-    def test_the_offset_bar_is_three_cells_inclusive(
-        self, ref: ModuleType, catchment: ModuleType, offset_m: float, expected: Any
-    ) -> None:
-        a = numbers(ref, 0.5, 0.5, offset_m=offset_m)
-        assert ref.classify(a, gauge_result(catchment)) == expected
+    def test_the_offset_bar_is_three_cells_inclusive(self, offset_m: float, expected: Any) -> None:
+        a = numbers(0.5, 0.5, offset_m=offset_m)
+        assert ref.classify(a, gauge_result()) == expected
 
-    def test_the_overlap_test_is_tried_first(self, ref: ModuleType, catchment: ModuleType) -> None:
-        both = numbers(ref, 0.99, 0.99, offset_m=1.0)
-        assert ref.classify(both, gauge_result(catchment)) == ("match", "overlap")
+    def test_the_overlap_test_is_tried_first(self) -> None:
+        both = numbers(0.99, 0.99, offset_m=1.0)
+        assert ref.classify(both, gauge_result()) == ("match", "overlap")
 
-    def test_the_offset_test_rescues_a_close_station(
-        self, ref: ModuleType, catchment: ModuleType
-    ) -> None:
-        a = numbers(ref, 0.90, 0.90, offset_m=20.0)
-        assert ref.classify(a, gauge_result(catchment)) == ("match", "offset")
+    def test_the_offset_test_rescues_a_close_station(self) -> None:
+        a = numbers(0.90, 0.90, offset_m=20.0)
+        assert ref.classify(a, gauge_result()) == ("match", "offset")
 
-    def test_a_swing_of_exactly_0_05_is_scored_and_just_above_is_uncertain(
-        self, ref: ModuleType, catchment: ModuleType
-    ) -> None:
+    def test_a_swing_of_exactly_0_05_is_scored_and_just_above_is_uncertain(self) -> None:
         """At the bar the sensitivity raises no cause; just above it raises
         `swing` (`sensitivity.assess`), and the class follows."""
-        a = numbers(ref, 0.99, 0.99)
-        at_bar = gauge_result(catchment, (), swing=0.05)
-        above = gauge_result(catchment, ("swing",), swing=0.05 + 1e-9)
+        a = numbers(0.99, 0.99)
+        at_bar = gauge_result((), swing=0.05)
+        above = gauge_result(("swing",), swing=0.05 + 1e-9)
         assert ref.classify(a, at_bar) == ("match", "overlap")
         assert ref.classify(a, above) == ("uncertain", None)
 
@@ -252,30 +233,24 @@ class TestClassify:
             ("swing", "downstream_unread"),
         ],
     )
-    def test_any_cause_is_uncertain_whatever_the_overlaps(
-        self, ref: ModuleType, catchment: ModuleType, causes: tuple[str, ...]
-    ) -> None:
-        perfect = numbers(ref, 1.0, 1.0, offset_m=0.0)
-        assert ref.classify(perfect, gauge_result(catchment, causes)) == ("uncertain", None)
+    def test_any_cause_is_uncertain_whatever_the_overlaps(self, causes: tuple[str, ...]) -> None:
+        perfect = numbers(1.0, 1.0, offset_m=0.0)
+        assert ref.classify(perfect, gauge_result(causes)) == ("uncertain", None)
 
-    def test_refused_beats_uncertain_beats_the_rest(
-        self, ref: ModuleType, catchment: ModuleType
-    ) -> None:
-        perfect = numbers(ref, 1.0, 1.0, offset_m=0.0)
-        shaky = gauge_result(catchment, ("swing",))
+    def test_refused_beats_uncertain_beats_the_rest(self) -> None:
+        perfect = numbers(1.0, 1.0, offset_m=0.0)
+        shaky = gauge_result(("swing",))
         assert ref.classify(perfect, shaky, refused=True) == ("refused", None)
         assert ref.classify(None, None, refused=True) == ("refused", None)
         assert ref.classify(perfect, shaky) == ("uncertain", None)
 
-    def test_without_a_reference_only_refused_and_uncertain_are_classes(
-        self, ref: ModuleType, catchment: ModuleType
-    ) -> None:
-        assert ref.classify(None, gauge_result(catchment)) == (None, None)
-        assert ref.classify(None, gauge_result(catchment, ("swing",))) == ("uncertain", None)
+    def test_without_a_reference_only_refused_and_uncertain_are_classes(self) -> None:
+        assert ref.classify(None, gauge_result()) == (None, None)
+        assert ref.classify(None, gauge_result(("swing",))) == ("uncertain", None)
 
-    def test_without_a_gauge_the_agreement_alone_decides(self, ref: ModuleType) -> None:
+    def test_without_a_gauge_the_agreement_alone_decides(self) -> None:
         """The nearest-stream fallback (PR 5) has no sensitivity."""
-        assert ref.classify(numbers(ref, 0.99, 0.99), None) == ("match", "overlap")
+        assert ref.classify(numbers(0.99, 0.99), None) == ("match", "overlap")
 
 
 # ---------------------------------------------------------------------------
@@ -311,11 +286,11 @@ PERCENTILE_KEYS = ["min", "p10", "p25", "p50", "p75", "p90", "max"]
 
 
 class TestSummary:
-    def dump(self, ref: ModuleType, rows: list[Row]) -> dict[str, Any]:
+    def dump(self, rows: list[Row]) -> dict[str, Any]:
         out: dict[str, Any] = ref.summarise(rows).model_dump(mode="json")
         return out
 
-    def test_counts_per_class_and_per_match_by(self, ref: ModuleType) -> None:
+    def test_counts_per_class_and_per_match_by(self) -> None:
         rows = [
             scored(1, 1.0),
             scored(2, 1.0),
@@ -325,25 +300,25 @@ class TestSummary:
             Row("1.6.0", "uncertain", causes=("swing",)),
             Row("1.7.0", "refused", refusal_cause="other"),
         ]
-        s = self.dump(ref, rows)
+        s = self.dump(rows)
         assert s["stations"] == 7
         assert s["classes"] == {"match": 3, "close": 1, "miss": 1, "uncertain": 1, "refused": 1}
         assert s["match_by"] == {"overlap": 2, "offset": 1}
 
-    def test_the_percentiles_of_the_scored_on_a_known_list(self, ref: ModuleType) -> None:
+    def test_the_percentiles_of_the_scored_on_a_known_list(self) -> None:
         """Eleven scored values 0.0 to 1.0, and an uncertain station whose
         numbers (5.0) must not enter."""
         rows = [scored(k, k / 10, station_class="miss", match_by=None) for k in range(11)]
         rows.append(Row("9.9.0", "uncertain", causes=("swing",), area_ratio=5.0,
                         nve_in_ours=5.0, ours_in_nve=5.0))  # fmt: skip
-        s = self.dump(ref, rows)
+        s = self.dump(rows)
         for key in ("area_ratio", "nve_in_ours", "ours_in_nve"):
             got = s["scored"][key]
             assert list(got) == PERCENTILE_KEYS
             expected = [0.0, 0.1, 0.25, 0.5, 0.75, 0.9, 1.0]
             assert [got[k] for k in PERCENTILE_KEYS] == pytest.approx(expected, rel=1e-12)
 
-    def test_size_bands_and_the_share_uncertain_in_each(self, ref: ModuleType) -> None:
+    def test_size_bands_and_the_share_uncertain_in_each(self) -> None:
         """Bands by NVE's area, lower bound inside: 10 km2 is in 10-100,
         1000 in over 1000. Without a reference, our fine area decides."""
         rows = [
@@ -355,7 +330,7 @@ class TestSummary:
             scored(6, 1.0, reference_area_km2=1000.0),
             scored(7, 1.0, reference_area_km2=None, fine_area_km2=2000.0),
         ]
-        bands = self.dump(ref, rows)["by_size"]
+        bands = self.dump(rows)["by_size"]
         assert list(bands) == ["under 10", "10-100", "100-1000", "over 1000"]
         assert [bands[b]["stations"] for b in bands] == [1, 3, 1, 2]
         assert bands["10-100"]["uncertain_share"] == pytest.approx(2 / 3, rel=1e-12)
@@ -363,13 +338,13 @@ class TestSummary:
         assert bands["10-100"]["classes"]["match"] == 1
         assert bands["100-1000"]["area_ratio"]["p50"] == pytest.approx(0.2, rel=1e-12)
 
-    def test_tile_count_groups(self, ref: ModuleType) -> None:
+    def test_tile_count_groups(self) -> None:
         rows = [scored(k, 1.0, tiles=t) for k, t in enumerate([1, 2, 3, 4, 5, 9])]
-        tiles = self.dump(ref, rows)["by_tiles"]
+        tiles = self.dump(rows)["by_tiles"]
         assert list(tiles) == ["1", "2", "3-4", "5+"]
         assert [tiles[g]["stations"] for g in tiles] == [1, 1, 2, 2]
 
-    def test_each_cause_of_uncertain_is_counted_apart(self, ref: ModuleType) -> None:
+    def test_each_cause_of_uncertain_is_counted_apart(self) -> None:
         """A station with two causes counts in both."""
         rows = [
             Row("1.1.0", "uncertain", causes=("swing", "downstream_unread")),
@@ -377,14 +352,14 @@ class TestSummary:
             Row("1.3.0", "uncertain", causes=("chain_not_draining", "chain_end_open")),
             Row("1.4.0", "uncertain", causes=("direction",)),
         ]
-        causes = self.dump(ref, rows)["uncertain_causes"]
+        causes = self.dump(rows)["uncertain_causes"]
         assert causes["swing"] == 2
         assert causes["downstream_unread"] == 1
         assert causes["chain_not_draining"] == 1
         assert causes["chain_end_open"] == 1
         assert causes["direction"] == 1
 
-    def test_mixed_grid_refusals_are_known_refusals_never_scored(self, ref: ModuleType) -> None:
+    def test_mixed_grid_refusals_are_known_refusals_never_scored(self) -> None:
         """Counted by cause, and apart with their line and station numbers in
         row order; a stray number on such a row never reaches the scored."""
         rows = [
@@ -395,7 +370,7 @@ class TestSummary:
             Row("156.15.0", "refused", refusal_cause="mixed_grid"),
             Row("3.3.0", "refused", refusal_cause="other"),
         ]  # fmt: skip
-        s = self.dump(ref, rows)
+        s = self.dump(rows)
         assert s["refusal_causes"] == {"mixed_grid": 2, "no_river": 1, "other": 1}
         known = s["known_refusals"]
         assert known["count"] == 2
@@ -404,7 +379,7 @@ class TestSummary:
         assert s["classes"]["refused"] == 4
         assert s["scored"]["area_ratio"]["max"] == pytest.approx(1.0, rel=1e-12)
 
-    def test_the_json_is_deterministic(self, ref: ModuleType) -> None:
+    def test_the_json_is_deterministic(self) -> None:
         rows = [scored(1, 1.0), Row("1.2.0", "uncertain", causes=("swing",))]
         first = ref.summarise(rows).model_dump_json()
         assert first == ref.summarise(list(rows)).model_dump_json()
@@ -423,11 +398,11 @@ KNOWN_LINE_ONE = (
 
 
 class TestSummaryFixedListsAndEmptyGroups:
-    def dump(self, ref: ModuleType, rows: list[Row]) -> dict[str, Any]:
+    def dump(self, rows: list[Row]) -> dict[str, Any]:
         out: dict[str, Any] = ref.summarise(rows).model_dump(mode="json")
         return out
 
-    def test_the_fixed_key_lists_are_complete_in_order_with_zeros(self, ref: ModuleType) -> None:
+    def test_the_fixed_key_lists_are_complete_in_order_with_zeros(self) -> None:
         """Rows with one cause of five and one refusal cause of three: every
         key is still there, in the design's order, the absent ones 0. Causes
         count over `uncertain` rows only, so the refused row's `swing` and the
@@ -437,7 +412,7 @@ class TestSummaryFixedListsAndEmptyGroups:
             Row("1.2.0", "uncertain", causes=("chain_end_open",)),
             Row("1.3.0", "refused", refusal_cause="no_river", causes=("swing",)),
         ]
-        s = self.dump(ref, rows)
+        s = self.dump(rows)
         assert list(s["classes"].items()) == [
             ("refused", 1), ("uncertain", 1), ("match", 1), ("close", 0), ("miss", 0),
         ]  # fmt: skip
@@ -450,8 +425,8 @@ class TestSummaryFixedListsAndEmptyGroups:
             ("mixed_grid", 0), ("no_river", 1), ("other", 0),
         ]  # fmt: skip
 
-    def test_an_empty_summary_still_has_every_key(self, ref: ModuleType) -> None:
-        s = self.dump(ref, [])
+    def test_an_empty_summary_still_has_every_key(self) -> None:
+        s = self.dump([])
         assert s["stations"] == 0
         assert list(s["classes"]) == ["refused", "uncertain", "match", "close", "miss"]
         assert set(s["classes"].values()) == {0}
@@ -460,9 +435,7 @@ class TestSummaryFixedListsAndEmptyGroups:
         ]  # fmt: skip
         assert list(s["refusal_causes"]) == ["mixed_grid", "no_river", "other"]
 
-    def test_uncertain_share_leaves_out_refused_rows_which_still_count(
-        self, ref: ModuleType
-    ) -> None:
+    def test_uncertain_share_leaves_out_refused_rows_which_still_count(self) -> None:
         """Band 10-100: one uncertain, one refused. The refused station was
         never assessed: it is one of the band's 2 stations, but the share is
         1 uncertain over 1 assessed, not 1 over 2."""
@@ -470,11 +443,11 @@ class TestSummaryFixedListsAndEmptyGroups:
             Row("1.1.0", "uncertain", causes=("swing",), reference_area_km2=50.0),
             Row("1.2.0", "refused", refusal_cause="other", reference_area_km2=50.0),
         ]
-        band = self.dump(ref, rows)["by_size"]["10-100"]
+        band = self.dump(rows)["by_size"]["10-100"]
         assert band["stations"] == 2
         assert band["uncertain_share"] == 1.0
 
-    def test_a_group_with_no_scored_station_has_null_measures(self, ref: ModuleType) -> None:
+    def test_a_group_with_no_scored_station_has_null_measures(self) -> None:
         """Band 100-1000 holds only refused rows: no share and no measure.
         A summary with no scored row at all has null measures in `scored`,
         and an empty band has no share either."""
@@ -483,7 +456,7 @@ class TestSummaryFixedListsAndEmptyGroups:
             Row("1.2.0", "refused", refusal_cause="no_river", reference_area_km2=500.0),
             Row("1.3.0", "uncertain", causes=("swing",), reference_area_km2=50.0),
         ]
-        s = self.dump(ref, rows)
+        s = self.dump(rows)
         band = s["by_size"]["100-1000"]
         assert band["stations"] == 2
         assert band["uncertain_share"] is None
@@ -494,36 +467,36 @@ class TestSummaryFixedListsAndEmptyGroups:
         assert s["by_size"]["under 10"]["stations"] == 0
         assert s["by_size"]["under 10"]["uncertain_share"] is None
 
-    def test_a_row_without_an_area_is_in_no_band(self, ref: ModuleType) -> None:
+    def test_a_row_without_an_area_is_in_no_band(self) -> None:
         """No reference and no catchment (a refusal by `place`): no band."""
         rows = [
             scored(1, 1.0, reference_area_km2=50.0),
             Row("1.2.0", "refused", refusal_cause="no_river",
                 reference_area_km2=None, fine_area_km2=None),
         ]  # fmt: skip
-        s = self.dump(ref, rows)
+        s = self.dump(rows)
         assert s["stations"] == 2
         assert [s["by_size"][b]["stations"] for b in s["by_size"]] == [0, 1, 0, 0]
 
-    def test_a_row_without_a_tile_count_is_in_no_tile_group(self, ref: ModuleType) -> None:
+    def test_a_row_without_a_tile_count_is_in_no_tile_group(self) -> None:
         rows = [
             scored(1, 1.0, tiles=2),
             Row("1.2.0", "refused", refusal_cause="no_river", tiles=None),
         ]
-        s = self.dump(ref, rows)
+        s = self.dump(rows)
         assert s["stations"] == 2
         assert [s["by_tiles"][g]["stations"] for g in s["by_tiles"]] == [0, 1, 0, 0]
 
-    def test_one_known_refusal_gives_the_singular_line(self, ref: ModuleType) -> None:
+    def test_one_known_refusal_gives_the_singular_line(self) -> None:
         rows = [scored(1, 1.0), Row("196.11.0", "refused", refusal_cause="mixed_grid")]
-        known = self.dump(ref, rows)["known_refusals"]
+        known = self.dump(rows)["known_refusals"]
         assert known["count"] == 1
         assert known["stations"] == ["196.11.0"]
         assert known["line"] == KNOWN_LINE_ONE
 
-    def test_no_known_refusal_gives_a_null_line(self, ref: ModuleType) -> None:
+    def test_no_known_refusal_gives_a_null_line(self) -> None:
         rows = [scored(1, 1.0), Row("2.2.0", "refused", refusal_cause="no_river")]
-        known = self.dump(ref, rows)["known_refusals"]
+        known = self.dump(rows)["known_refusals"]
         assert known["count"] == 0
         assert known["stations"] == []
         assert known["line"] is None

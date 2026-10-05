@@ -40,12 +40,10 @@ is about 0.55 km2); the 16 m and 30 m placement figures at 1e-6 m.
 from __future__ import annotations
 
 import asyncio
-import importlib
 import threading
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
-from types import ModuleType
 from typing import Any
 
 import numpy as np
@@ -55,15 +53,11 @@ from shapely.geometry import Polygon, box
 
 import batch_fixtures as bf
 import gauge_fixtures as gf
+import tin_engine.catchment_batch as cb
 from catchment_fixtures import MemoryRepository, filled
 from tin_engine.io.models import DemTile
 from tin_engine.io.rivers import read_segments
 from tin_engine.io.station_set import read_stations
-
-
-@pytest.fixture(scope="module")
-def cb() -> ModuleType:
-    return importlib.import_module("tin_engine.catchment_batch")
 
 
 @dataclass
@@ -98,7 +92,6 @@ def inputs(tmp: Path, specs: Sequence[bf.Spec] = bf.FIVE, mixed: bool = False) -
 
 
 def run(
-    cb: ModuleType,
     tmp: Path,
     *,
     specs: Sequence[bf.Spec] = bf.FIVE,
@@ -122,9 +115,9 @@ def run(
 
 
 @pytest.fixture(scope="module")
-def five(cb: ModuleType, tmp_path_factory: pytest.TempPathFactory) -> tuple[ListSink, Any]:
+def five(tmp_path_factory: pytest.TempPathFactory) -> tuple[ListSink, Any]:
     """The five stations of `batch_fixtures`, with their references, once."""
-    return run(cb, tmp_path_factory.mktemp("five"))
+    return run(tmp_path_factory.mktemp("five"))
 
 
 def by_station(sink: ListSink) -> dict[str, Any]:
@@ -136,14 +129,14 @@ def by_station(sink: ListSink) -> dict[str, Any]:
 # ---------------------------------------------------------------------------
 
 
-def test_the_request_defaults_and_is_frozen(cb: ModuleType) -> None:
+def test_the_request_defaults_and_is_frozen() -> None:
     r = cb.BatchRequest()
     assert (r.map_radius, r.reach_up, r.outline_tolerance, r.only) == (500.0, 1000.0, None, ())
     with pytest.raises(ValidationError):
         r.map_radius = 100.0  # type: ignore[misc]
 
 
-def test_run_batch_is_a_coroutine_function(cb: ModuleType) -> None:
+def test_run_batch_is_a_coroutine_function() -> None:
     assert asyncio.iscoroutinefunction(cb.run_batch)
 
 
@@ -272,10 +265,8 @@ def test_the_summary(five: tuple[ListSink, Any]) -> None:
     assert s["known_refusals"]["count"] == 0
 
 
-def test_the_batch_is_deterministic(
-    cb: ModuleType, five: tuple[ListSink, Any], tmp_path: Path
-) -> None:
-    sink, summary = run(cb, tmp_path)
+def test_the_batch_is_deterministic(five: tuple[ListSink, Any], tmp_path: Path) -> None:
+    sink, summary = run(tmp_path)
     keep = ("station", "station_class", "nodes", "nve_in_ours", "causes", "refusal_message")
     assert [[getattr(r, k) for k in keep] for r in sink.rows] == [
         [getattr(r, k) for k in keep] for r in five[0].rows
@@ -304,20 +295,18 @@ class FailingRepository(MemoryRepository):
     [RuntimeError("a bug in the tile store"), ValueError("an ordinary bug, not a refusal")],
     ids=["runtime-error", "plain-value-error"],
 )
-def test_a_bug_type_exception_stops_the_batch(
-    cb: ModuleType, tmp_path: Path, exc: BaseException
-) -> None:
+def test_a_bug_type_exception_stops_the_batch(tmp_path: Path, exc: BaseException) -> None:
     """The refused first station (no river; nothing loaded) gets its row; the
     second station's load raises, and that exception, itself, ends the batch:
     no row for it or for the third. A plain `ValueError` is not a refusal
     either: only `CatchmentError` is."""
     repo = FailingRepository(bf.basin_tiles(), exc)
     with pytest.raises(type(exc)) as raised:
-        run(cb, tmp_path, specs=(bf.LANGT, bf.TREFF, bf.BOM), repository=repo)
+        run(tmp_path, specs=(bf.LANGT, bf.TREFF, bf.BOM), repository=repo)
     assert raised.value is exc
 
 
-def test_a_bug_leaves_only_the_rows_before_it(cb: ModuleType, tmp_path: Path) -> None:
+def test_a_bug_leaves_only_the_rows_before_it(tmp_path: Path) -> None:
     repo = FailingRepository(bf.basin_tiles(), RuntimeError("a bug"))
     i = inputs(tmp_path, (bf.LANGT, bf.TREFF, bf.BOM))
     sink = ListSink()
@@ -330,7 +319,7 @@ def test_a_bug_leaves_only_the_rows_before_it(cb: ModuleType, tmp_path: Path) ->
     assert sink.catchments == []
 
 
-def test_nodata_in_the_catchment_is_refused_as_other(cb: ModuleType, tmp_path: Path) -> None:
+def test_nodata_in_the_catchment_is_refused_as_other(tmp_path: Path) -> None:
     """A NaN node inside the placed catchment, off the chain: `delineate`
     refuses (the catchment reaches NoData), and the row's cause is `other`,
     its message the refusal's words."""
@@ -338,7 +327,7 @@ def test_nodata_in_the_catchment_is_refused_as_other(cb: ModuleType, tmp_path: P
     z[100, bf.COL + 2] = np.nan
     assert bf.flood_mask(bf.TREFF)[100, bf.COL + 2] == 1  # the premise: inside
     tiles = quadrants_of(z)
-    sink, summary = run(cb, tmp_path, specs=(bf.TREFF,), tiles=tiles)
+    sink, summary = run(tmp_path, specs=(bf.TREFF,), tiles=tiles)
     (r,) = sink.rows
     assert r.station_class == "refused"
     assert r.refusal_cause == "other"
@@ -353,9 +342,7 @@ def quadrants_of(z: np.ndarray) -> dict[str, DemTile]:
     return quadrants(gf.tile_of(z), row_cut=gf.BIG_ROWS // 2, col_cut=gf.BIG_COLS // 2, overlap=1)
 
 
-def test_a_window_on_two_grids_is_refused_mixed_grid_and_the_batch_goes_on(
-    cb: ModuleType, tmp_path: Path
-) -> None:
+def test_a_window_on_two_grids_is_refused_mixed_grid_and_the_batch_goes_on(tmp_path: Path) -> None:
     """The sixth station: its window selects `a.tif` and the half-cell-shifted
     `b.tif`, and neither covers it. Refused with `refusal_cause =
     "mixed_grid"` and one tile from each grid; the next station, inside
@@ -363,9 +350,8 @@ def test_a_window_on_two_grids_is_refused_mixed_grid_and_the_batch_goes_on(
     refs = {bf.GRENSE.station: box(*gf.lat(590, 160), *gf.lat(610, 140)),
             bf.TREFF.station: bf.reference_of(bf.TREFF)}  # fmt: skip
     sink, summary = run(
-        cb, tmp_path, specs=(bf.GRENSE, bf.TREFF), tiles=bf.mixed_tiles(), references=refs,
-        mixed=True,
-    )  # fmt: skip
+        tmp_path, specs=(bf.GRENSE, bf.TREFF), tiles=bf.mixed_tiles(), references=refs, mixed=True
+    )
     grense, treff = sink.rows
     assert grense.station == bf.GRENSE.station
     assert grense.station_class == "refused"
@@ -395,7 +381,7 @@ class RecordingRepository(MemoryRepository):
         return super().load(name)
 
 
-async def test_each_delineate_runs_off_the_event_loop(cb: ModuleType, tmp_path: Path) -> None:
+async def test_each_delineate_runs_off_the_event_loop(tmp_path: Path) -> None:
     """`delineate` in `asyncio.to_thread`: every tile load happens on a
     thread that is not the one running the event loop."""
     loop_thread = threading.get_ident()
@@ -407,13 +393,13 @@ async def test_each_delineate_runs_off_the_event_loop(cb: ModuleType, tmp_path: 
     assert loop_thread not in repo.threads
 
 
-def test_only_runs_the_named_stations_in_file_order(cb: ModuleType, tmp_path: Path) -> None:
-    sink, summary = run(cb, tmp_path, only=(bf.SLUTT.station, bf.TREFF.station))
+def test_only_runs_the_named_stations_in_file_order(tmp_path: Path) -> None:
+    sink, summary = run(tmp_path, only=(bf.SLUTT.station, bf.TREFF.station))
     assert [r.station for r in sink.rows] == [bf.TREFF.station, bf.SLUTT.station]
     assert summary.model_dump(mode="json")["stations"] == 2
 
 
-def test_an_unknown_station_in_only_is_refused_by_name(cb: ModuleType, tmp_path: Path) -> None:
+def test_an_unknown_station_in_only_is_refused_by_name(tmp_path: Path) -> None:
     i = inputs(tmp_path)
     sink = ListSink()
     with pytest.raises(ValueError, match=r"9\.9\.9"):
@@ -424,11 +410,9 @@ def test_an_unknown_station_in_only_is_refused_by_name(cb: ModuleType, tmp_path:
     assert sink.rows == []
 
 
-def test_without_references_no_class_beyond_refused_and_uncertain(
-    cb: ModuleType, tmp_path: Path
-) -> None:
+def test_without_references_no_class_beyond_refused_and_uncertain(tmp_path: Path) -> None:
     only = (bf.TREFF.station, bf.SAMLOP.station, bf.LANGT.station)
-    sink, summary = run(cb, tmp_path, references=None, only=only)
+    sink, summary = run(tmp_path, references=None, only=only)
     rows = by_station(sink)
     assert rows[bf.TREFF.station].station_class is None
     assert rows[bf.TREFF.station].match_by is None
@@ -442,18 +426,18 @@ def test_without_references_no_class_beyond_refused_and_uncertain(
     assert len(sink.catchments) == 2
 
 
-def test_the_map_radius_and_reach_up_are_passed_on(cb: ModuleType, tmp_path: Path) -> None:
+def test_the_map_radius_and_reach_up_are_passed_on(tmp_path: Path) -> None:
     """At a 10 m map radius no line is within reach of a station 16 m from
     its line; at reach_up 200 m the reach above `P` is 200 m."""
-    sink, _ = run(cb, tmp_path, only=(bf.TREFF.station,), map_radius=10.0)
+    sink, _ = run(tmp_path, only=(bf.TREFF.station,), map_radius=10.0)
     assert sink.rows[0].refusal_cause == "no_river"
     assert "within 10 m" in sink.rows[0].refusal_message
-    sink, _ = run(cb, tmp_path, only=(bf.TREFF.station,), reach_up=200.0)
+    sink, _ = run(tmp_path, only=(bf.TREFF.station,), reach_up=200.0)
     assert sink.rows[0].reach_up_m == pytest.approx(200.0, abs=1e-6)
 
 
-def test_the_outline_tolerance_is_passed_on(cb: ModuleType, tmp_path: Path) -> None:
-    sink, _ = run(cb, tmp_path, only=(bf.TREFF.station,), outline_tolerance=0.0)
+def test_the_outline_tolerance_is_passed_on(tmp_path: Path) -> None:
+    sink, _ = run(tmp_path, only=(bf.TREFF.station,), outline_tolerance=0.0)
     ((_, result),) = sink.catchments
     assert result.tolerance == 0.0
     assert result.reduced.area == pytest.approx(result.fine.area, rel=1e-12)
