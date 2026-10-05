@@ -16,7 +16,13 @@ every 3072 = 32767 file is refused with "ProjectedCSTypeGeoKey (3072) = 32767
 is not a resolvable EPSG code": the accepting tests fail on that refusal, the
 refusal tests fail on `startswith(P)` or a token their row names, and the
 cache and substitution tests fail on the names `_epsg_matches_cached` and
-`crs.epsg_matches`, which do not exist yet.
+`crs.epsg_matches`, which did not exist at the design's base.
+
+Red tests 13 and 14 were added at code review round 1, red against the green
+step `c8984e8`: there a NaN or infinite parameter escapes as pyproj's
+`CRSError`, a two-double parameter as `TypeError`, a NaN or infinite 2057 is
+refused as "disagrees" rather than "not one finite number", and a file in
+grads is refused for its prime meridian (row 6) rather than its unit (row 8).
 
 WHAT A REFUSAL MUST SAY. Every message of section 4's thirteen rows begins
 with `P` exactly (case-sensitive `startswith`), then names its key by number
@@ -43,6 +49,8 @@ from geotiff_fixtures import (
     EPSG_WGS84,
     EPSG_XIAN_1980,
     GEOGRAPHIC_TYPE,
+    GRADS_WITH_PARIS_MERIDIAN,
+    NOT_ONE_NUMBER_DEFECTS,
     PARAMETRIC_DEFECTS,
     PROJ_FALSE_ORIGIN_EASTING,
     PROJ_STD_PARALLEL_1,
@@ -376,3 +384,39 @@ def test_the_real_austrian_file_reads_as_austria_lambert(geotiff: ModuleType) ->
     assert (meta.delta_x, meta.delta_y) == (10.0, 10.0)
     assert (meta.x_min, meta.y_max) == (108880.0, 586550.0)
     assert meta.pixel_is_area is True
+
+
+# ---------------------------------------------------------------------------
+# Red test 13: a parameter that is not one finite number (rows 6 and 11, `N`)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "defect", NOT_ONE_NUMBER_DEFECTS, ids=[d.name for d in NOT_ONE_NUMBER_DEFECTS]
+)
+def test_a_parameter_that_is_not_one_finite_number_is_refused(
+    refused: Callable[..., str], defect: ParametricDefect
+) -> None:
+    """Red test 13: `refused` takes `GeoTiffError` only, so a `TypeError` or
+    pyproj's `CRSError` escaping fails here. The message starts with `P` and
+    names the key's number and name, `not one finite number`, and the file's
+    value as Python writes it (`nan`, `inf`, or the tuple), matched as a whole
+    token so that, say, the `inf` inside another word cannot stand in for it."""
+    message = refused(austria_keys(defect.changes), *defect.must_name)
+    (value,) = defect.changes.values()
+    assert re.search(rf"(?<![\w.]){re.escape(repr(value))}(?![\w.])", message), message
+
+
+# ---------------------------------------------------------------------------
+# Red test 14: a file in grads is refused for its unit (row 8 before row 6)
+# ---------------------------------------------------------------------------
+
+
+def test_a_file_in_grads_is_refused_for_its_unit_not_its_meridian(
+    refused: Callable[..., str],
+) -> None:
+    """Red test 14: 2054 = 9105 (grad) with 2061 = 2.5969213, Paris in grads.
+    2061 is in 2054's unit, so it is the unit that is refused (row 8), and the
+    meridian is never compared against EPSG:4312's in degrees (row 6)."""
+    message = refused(GRADS_WITH_PARIS_MERIDIAN, "GeogAngularUnitsGeoKey", "2054", "9105")
+    assert "disagrees" not in message.lower(), message

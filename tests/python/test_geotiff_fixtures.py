@@ -37,6 +37,8 @@ from geotiff_fixtures import (
     FLOATING_POINT_PREDICTOR,
     GEOG_TOWGS84,
     GEOGRAPHIC_TYPE,
+    GRADS_WITH_PARIS_MERIDIAN,
+    NOT_ONE_NUMBER_DEFECTS,
     PACKBITS,
     PARAMETRIC_DEFECTS,
     PROJECTED_CS_TYPE,
@@ -372,9 +374,9 @@ def test_transverse_mercator_variant_carries_the_natural_origin_keys() -> None:
     assert "GeogSemiMajorAxisGeoKey" not in geo and "GeogInvFlatteningGeoKey" not in geo
 
 
-BY_DEFECT = pytest.mark.parametrize(
-    "defect", PARAMETRIC_DEFECTS, ids=[d.name for d in PARAMETRIC_DEFECTS]
-)
+#: Red test 8's defects and red test 13's, each one change to `AUSTRIA_KEYS`.
+_ONE_CHANGE = (*PARAMETRIC_DEFECTS, *NOT_ONE_NUMBER_DEFECTS)
+BY_DEFECT = pytest.mark.parametrize("defect", _ONE_CHANGE, ids=[d.name for d in _ONE_CHANGE])
 
 
 @BY_DEFECT
@@ -401,3 +403,32 @@ def test_parametric_fixture_differs_from_the_austrian_set_in_one_key(
 def test_towgs84_reads_back_as_all_its_doubles(shift: tuple[float, ...]) -> None:
     """2062 with seven doubles and with three: one key, its whole tuple."""
     assert _geokeys(austria_tiff(austria_keys({GEOG_TOWGS84: shift})))["GeogTOWGS84GeoKey"] == shift
+
+
+@pytest.mark.parametrize(
+    "defect", NOT_ONE_NUMBER_DEFECTS, ids=[d.name for d in NOT_ONE_NUMBER_DEFECTS]
+)
+def test_not_one_number_survives_the_write(defect: ParametricDefect) -> None:
+    """Red test 13's witness, stated without the witness function: the key
+    reads back as a float NaN, a float +inf, or a tuple of two finite floats."""
+    (written,) = defect.changes.values()
+    _, name, _ = defect.must_name
+    value = _geokeys(defect.build())[name]
+    if isinstance(written, tuple):
+        assert isinstance(value, tuple) and len(value) == 2
+        assert all(isinstance(v, float) and math.isfinite(v) for v in value)
+    elif isinstance(written, float) and math.isnan(written):
+        assert isinstance(value, float) and math.isnan(value)
+    else:
+        assert value == math.inf
+
+
+def test_grads_fixture_carries_the_unit_and_the_paris_meridian() -> None:
+    """Red test 14's fixture: 2054 = 9105 (grad) and 2061 = 2.5969213 (Paris in
+    grads), and otherwise the Austrian set; the Austrian set has no 2061."""
+    before, after = _geokeys(austria_tiff()), _geokeys(austria_tiff(GRADS_WITH_PARIS_MERIDIAN))
+    assert "GeogPrimeMeridianLongGeoKey" not in before
+    assert after["GeogAngularUnitsGeoKey"] == 9105
+    assert after["GeogPrimeMeridianLongGeoKey"] == 2.5969213
+    changed = {k for k in before.keys() | after.keys() if before.get(k) != after.get(k)}
+    assert changed == {"GeogAngularUnitsGeoKey", "GeogPrimeMeridianLongGeoKey"}

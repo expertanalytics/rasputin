@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import importlib.util
 import io
+import math
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -745,3 +746,38 @@ PARAMETRIC_DEFECTS: tuple[ParametricDefect, ...] = (
         _lacks("ProjFalseOriginLongGeoKey"), ("3084", "ProjFalseOriginLongGeoKey", "absent"),
     ),
 )  # fmt: skip
+
+
+def _is_nan(name: str) -> Callable[[dict[Any, Any]], bool]:
+    """`_is` for NaN, which equals nothing, itself included."""
+    return lambda g: isinstance(g.get(name), float) and math.isnan(g[name])
+
+
+def _not_one_number(key: int, name: str, row: int, finite: float) -> tuple[ParametricDefect, ...]:
+    """Section 4's `N` (rows 6 and 11, red test 13): `key` as NaN, as +inf and
+    as two doubles, each `finite` (so the pair's only defect is its length)."""
+    must_name = (str(key), name, "not one finite number")
+    pair = (finite, finite)
+    return (
+        ParametricDefect(f"{name}_nan", row, {key: math.nan}, _is_nan(name), must_name),
+        ParametricDefect(f"{name}_inf", row, {key: math.inf}, _is(name, math.inf), must_name),
+        ParametricDefect(f"{name}_two_doubles", row, {key: pair}, _is(name, pair), must_name),
+    )
+
+
+#: Red test 13: a parameter of the method (row 11) and an ellipsoid key
+#: (row 6) that tifffile reads as NaN, inf or a 2-tuple, not one finite number.
+NOT_ONE_NUMBER_DEFECTS: tuple[ParametricDefect, ...] = (
+    *_not_one_number(PROJ_FALSE_ORIGIN_EASTING, "ProjFalseOriginEastingGeoKey", 11, 400000.0),
+    *_not_one_number(GEOG_SEMI_MAJOR_AXIS, "GeogSemiMajorAxisGeoKey", 6, BESSEL_A),
+)
+
+#: Paris's prime meridian, 2.33722917 degrees east of Greenwich, in grads
+#: (EPSG:8903 gives 2.5969213 grad).
+PARIS_IN_GRADS = 2.5969213
+
+#: Red test 14: the Austrian keys in grads, with a prime meridian stated in
+#: grads. Two changes, not one: the unit and the meridian the unit applies to.
+GRADS_WITH_PARIS_MERIDIAN: Mapping[int, GeoKeyValue] = austria_keys(
+    {GEOG_ANGULAR_UNITS: GRAD, GEOG_PRIME_MERIDIAN_LONG: PARIS_IN_GRADS}
+)
