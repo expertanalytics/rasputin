@@ -1,6 +1,6 @@
 # Harness h16: guard fixes, a line counter, a scratch copy, brief fixes
 
-Status: Ola ruled on §7 on 2026-10-05 (all three defaults). PR A: red `11cee8e`, green `4db1eab` and, after code review round 1, red `3de6e1b` and green `64e51a2`, after round 2 red `9a1f07a` and green `6d35fbd`: 280 net production lines against an estimate of 187 (the C++ scanner, the git plumbing and round 1's fixes were not priced); the `tools/brief.py` change is refused in unattended mode and waits for Ola; code review round 3 asked for a test fix, in progress. PR B not started.
+Status: Ola ruled on §7 on 2026-10-05 (all three defaults) and on the afternoon questions (last section). PR A: green at `195b504` plus the test fix `6e52aeb` asked for by code review round 3, 287 net production lines by `tools/count_loc.py bc01cd8 6e52aeb` against an estimate of 187 (the C++ scanner, the git plumbing and review's fixes were not priced); the rule lines of G5 and of R1 (but its *The harness* sentence, PR B's) written; code review round 4 next. PR B: red `9cf533d` on `worktree-h16b`, green in progress.
 
 Ola approved the items on 2026-10-05 (the main session's summary of his
 rulings, not his words). He said this is the last harness increment before

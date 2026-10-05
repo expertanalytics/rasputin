@@ -28,10 +28,9 @@ correctness.
   increment file leaves open, under the handback heading "Pinned or assumed
   beyond the design"; `@architect` confirms or rules on each before green.
 * **Mutants:** for a suite the increment file names invariant-critical, run
-  its mutants as your own task, planted in a scratch copy of the tree, never
-  the worktree: `git archive HEAD | tar -x -C <dir>` into the session
-  scratchpad or `/tmp`, so the copy is not a git work tree, removed afterwards
-  (not `../rasputin_scratch`, which holds results). Hand back the kill
+  its mutants as your own task, planted in a scratch copy made by
+  `python3 tools/scratch_copy.py <rev> <dir>` in the session scratchpad, never
+  the worktree, and removed afterwards. Hand back the kill
   record, covering every mutation target the increment file names (each
   mutant, where it was planted, killed or survived); `@reviewer` checks the
   record.
