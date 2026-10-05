@@ -60,18 +60,20 @@ GRS80_A, GRS80_RF = 6378137.0, 298.257222101
 
 def geokey_tags(
     shorts: Mapping[int, int],
-    doubles: Mapping[int, float] | None = None,
+    doubles: Mapping[int, float | tuple[float, ...]] | None = None,
     texts: Mapping[int, str] | None = None,
 ) -> list[tuple[int, str, int, Any, bool]]:
-    """The 34735/34736/34737 extratags for these keys, sorted by key id."""
+    """The 34735/34736/34737 extratags for these keys, sorted by key id. A
+    tuple in `doubles` is one key of several doubles (e.g. 2062's 3 or 7)."""
     entries: list[tuple[int, int, int, int]] = []
     double_values: list[float] = []
     ascii_text = ""
     for key, value in (shorts or {}).items():
         entries.append((key, 0, 1, int(value)))
     for key, number in (doubles or {}).items():
-        entries.append((key, GEO_DOUBLE_PARAMS, 1, len(double_values)))
-        double_values.append(float(number))
+        numbers = number if isinstance(number, tuple) else (number,)
+        entries.append((key, GEO_DOUBLE_PARAMS, len(numbers), len(double_values)))
+        double_values += [float(n) for n in numbers]
     for key, text in (texts or {}).items():
         entries.append((key, GEO_ASCII_PARAMS, len(text) + 1, len(ascii_text)))
         ascii_text += text + "|"

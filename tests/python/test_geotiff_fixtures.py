@@ -22,7 +22,9 @@ import numpy as np
 import pytest
 import tifffile
 
+from geographic_fixtures import GEO_ASCII_PARAMS, GEO_DOUBLE_PARAMS
 from geotiff_fixtures import (
+    AUSTRIA_KEYS,
     BASE_KEYS,
     COLS,
     DELTA_X,
@@ -33,8 +35,10 @@ from geotiff_fixtures import (
     EPSG_PROJECTED_3D,
     EPSG_UTM33,
     FLOATING_POINT_PREDICTOR,
+    GEOG_TOWGS84,
     GEOGRAPHIC_TYPE,
     PACKBITS,
+    PARAMETRIC_DEFECTS,
     PROJECTED_CS_TYPE,
     REFUSALS,
     ROWS,
@@ -43,14 +47,21 @@ from geotiff_fixtures import (
     TIE_X,
     TIE_Y,
     TIEPOINT,
+    TOWGS84_SEVEN,
+    TOWGS84_THREE,
     UNDECODABLE,
     UNDECODABLE_WITH_CODECS,
     UNKNOWN_COMPRESSION,
+    ParametricDefect,
     Refusal,
+    austria_keys,
+    austria_tiff,
     elevations,
     floating_point_predictor_tiff,
+    lambert_on,
     micro_tiff,
     packbits_tiff,
+    transverse_mercator_on,
     with_compression_tag,
     with_keys,
 )
@@ -283,3 +294,110 @@ def test_corrupt_lzw_fixture_defeats_tifffile_alone() -> None:
     assert tifffile.TiffFile(build()).pages.first.compression == 5
     with pytest.raises(Exception):  # noqa: B017 - imagecodecs' error class (§14)
         _tifffile_alone(build())
+
+
+# ---------------------------------------------------------------------------
+# A CRS given by parameters (`docs/increments/geotiff-crs-by-parameters.md`,
+# section 8): the Austrian key set, its variants, and one defect per check.
+# ---------------------------------------------------------------------------
+
+#: Section 1's table as tifffile names and decodes it (enums compare as ints).
+AUSTRIA_AS_READ = {
+    "GTModelTypeGeoKey": 1,
+    "GTRasterTypeGeoKey": 1,
+    "GTCitationGeoKey": "MGI_Austria_Lambert",
+    "GeographicTypeGeoKey": 4312,
+    "GeogCitationGeoKey": "MGI",
+    "GeogAngularUnitsGeoKey": 9102,
+    "GeogSemiMajorAxisGeoKey": 6377397.155,
+    "GeogInvFlatteningGeoKey": 299.1528128000033,
+    "ProjectedCSTypeGeoKey": 32767,
+    "ProjectionGeoKey": 32767,
+    "ProjCoordTransGeoKey": 8,
+    "ProjLinearUnitsGeoKey": 9001,
+    "ProjStdParallel1GeoKey": 46.0,
+    "ProjStdParallel2GeoKey": 49.0,
+    "ProjFalseOriginLongGeoKey": 13.33333333300013,
+    "ProjFalseOriginLatGeoKey": 47.5,
+    "ProjFalseOriginEastingGeoKey": 400000.0,
+    "ProjFalseOriginNorthingGeoKey": 400000.0,
+}
+
+
+def _geokeys(stream: Any) -> dict[str, Any]:
+    geo = tifffile.TiffFile(stream).geotiff_metadata
+    assert geo is not None
+    return {k: v for k, v in geo.items() if k.endswith("GeoKey")}
+
+
+def test_austrian_fixture_reads_back_as_the_files_eighteen_keys() -> None:
+    """Exact equality, values included: the fixture is the real file's key set
+    (section 1, read from the file with tifffile 2026.9.20), on the baseline grid."""
+    assert len(AUSTRIA_KEYS) == 18
+    assert _geokeys(austria_tiff()) == AUSTRIA_AS_READ
+    np.testing.assert_array_equal(tifffile.TiffFile(austria_tiff()).asarray(), elevations())
+
+
+def test_parameter_keys_are_doubles_and_citations_ascii() -> None:
+    """The on-disk form a GDAL-written file has: 34736 and 34737 are present
+    and the directory points into them (location != 0) for those keys."""
+    page = tifffile.TiffFile(austria_tiff()).pages.first
+    assert GEO_DOUBLE_PARAMS in page.tags and GEO_ASCII_PARAMS in page.tags
+    directory = page.tags[34735].value
+    locations = {directory[i]: directory[i + 1] for i in range(4, len(directory), 4)}
+    assert locations[3084] == GEO_DOUBLE_PARAMS
+    assert locations[1026] == GEO_ASCII_PARAMS
+    assert locations[3072] == 0
+
+
+def test_lambert_on_another_datum_drops_only_the_ellipsoid_keys() -> None:
+    expected = {
+        k: v
+        for k, v in AUSTRIA_AS_READ.items()
+        if k not in ("GeogSemiMajorAxisGeoKey", "GeogInvFlatteningGeoKey")
+    }
+    assert _geokeys(austria_tiff(lambert_on(4326))) == {**expected, "GeographicTypeGeoKey": 4326}
+
+
+def test_transverse_mercator_variant_carries_the_natural_origin_keys() -> None:
+    geo = _geokeys(austria_tiff(transverse_mercator_on(4258, 15.0)))
+    assert geo["ProjCoordTransGeoKey"] == 1
+    assert geo["GeographicTypeGeoKey"] == 4258
+    assert (
+        geo["ProjNatOriginLatGeoKey"], geo["ProjNatOriginLongGeoKey"],
+        geo["ProjScaleAtNatOriginGeoKey"], geo["ProjFalseEastingGeoKey"],
+        geo["ProjFalseNorthingGeoKey"],
+    ) == (0.0, 15.0, 0.9996, 500000.0, 0.0)  # fmt: skip
+    assert not any(k.startswith(("ProjStdParallel", "ProjFalseOrigin")) for k in geo)
+    assert "GeogSemiMajorAxisGeoKey" not in geo and "GeogInvFlatteningGeoKey" not in geo
+
+
+BY_DEFECT = pytest.mark.parametrize(
+    "defect", PARAMETRIC_DEFECTS, ids=[d.name for d in PARAMETRIC_DEFECTS]
+)
+
+
+@BY_DEFECT
+def test_parametric_fixture_carries_its_defect(defect: ParametricDefect) -> None:
+    assert defect.witness(tifffile.TiffFile(defect.build()).geotiff_metadata or {})
+
+
+@BY_DEFECT
+def test_austrian_fixture_does_not_carry_the_defect(defect: ParametricDefect) -> None:
+    assert not defect.witness(tifffile.TiffFile(austria_tiff()).geotiff_metadata or {})
+
+
+@BY_DEFECT
+def test_parametric_fixture_differs_from_the_austrian_set_in_one_key(
+    defect: ParametricDefect,
+) -> None:
+    """Exactly one change: the one key the defect names, added, removed or changed."""
+    before, after = _geokeys(austria_tiff()), _geokeys(defect.build())
+    changed = {k for k in before.keys() | after.keys() if before.get(k) != after.get(k)}
+    assert len(changed) == 1, changed
+
+
+@pytest.mark.parametrize("shift", [TOWGS84_SEVEN, TOWGS84_THREE], ids=["seven", "three"])
+def test_towgs84_reads_back_as_all_its_doubles(shift: tuple[float, ...]) -> None:
+    """2062 with seven doubles and with three: one key, its whole tuple."""
+    assert _geokeys(austria_tiff(austria_keys({GEOG_TOWGS84: shift})))["GeogTOWGS84GeoKey"] == shift
