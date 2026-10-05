@@ -1,6 +1,6 @@
 # Increment 29 — NVE reference catchments: our catchments against NVE's, station by station
 
-Status: **design approved by `@reviewer` (round 5, 2026-10-04); PR 1 merged as #173; PR 3 merged as #178; PR 2 (the gauge on the river): green `193079d`, 569 production lines; code review round 3 and evidence review round 2 (2026-10-05) approved; the push waits for Ola; PR 4 (the batch and the comparison): green `33b1f2d` (red `2b9b39f`, `7cd56a4` and `6ebff1b`), on PR 2's unpushed branch, 541 net production lines (580 added, 39 removed; 59 past the margin, under 700); code review round 1 (2026-10-05) blocked only on `project_structure.md`, which waits on Ola's ruling on who edits root files; next, changes (d) to (f) and a test-only commit ("PR 4's code review, round 1"), red then green, then code review round 2; questions 5, 6, 7 (the example station) and 8 (which area of ours) open for Ola, written to their defaults**
+Status: **design approved by `@reviewer` (round 5, 2026-10-04); PR 1 merged as #173; PR 3 merged as #178; PR 2 (the gauge on the river): green `193079d`, 569 production lines; code review round 3 and evidence review round 2 (2026-10-05) approved; the push waits for Ola; PR 4 (the batch and the comparison): green `cabff74` (red `2b9b39f`, `7cd56a4`, `6ebff1b` and `bc78be3`; test-only `e8e93d0`), on PR 2's unpushed branch, 572 net production lines (614 added, 42 removed; 90 past the margin, 128 under 700, not split); code review round 1 (2026-10-05) blocked only on `project_structure.md`, which still waits on Ola's ruling on who edits root files; changes (d) to (f) and the test-only commit ("PR 4's code review, round 1") are in; next, code review round 2; questions 5, 6, 7 (the example station) and 8 (which area of ours) open for Ola, written to their defaults**
 (`@architect`, 2026-10-04), branch `worktree-nve-catchments` off master
 `d20126b`. Ola's rulings of 2026-10-04 are in the section below. Round 2 closed the burn's drainage claim
 (checked node by node, not assumed), the ELVIS data cases, the PR order, and
@@ -637,6 +637,13 @@ test-only commit. Together about 20 production lines, so PR 4 stays under
   commit ahead of the red one, so the suite passes unchanged at `33b1f2d`
   in between. `test_mosaic.py`'s `importlib` fixtures are older than PR 4
   and are left.
+
+The test-only commit is `e8e93d0`; changes (d) to (f) are red `bc78be3`
+and green `cabff74`. They came to 31 production lines against "about 20"
+(`cli.py` 25, of which 7 are ruff splitting the `tin_engine.catchment`
+import over several lines once `check_reach_crs` joined it;
+`catchment.py` 4; `catchment_batch.py` 2), so PR 4 is 572 net, not about
+560, and still not split.
 
 ## What the data says (measured 2026-10-04)
 
@@ -2080,7 +2087,11 @@ changes (a) to (c) (red `6ebff1b`, green `33b1f2d`) it is 541 net (580
 added, 39 removed) over `9e666f4..33b1f2d`: `reference.py` 184,
 `catchment_batch.py` 171, `cli.py` 147, `io/geojson.py` 21,
 `catchment.py` 9, `mosaic.py` 5, `io/station_set.py` 4, `burn.py` 0;
-59 past the margin and under 700.
+59 past the margin and under 700. With changes (d) to (f) (red `bc78be3`,
+green `cabff74`) it is 572 net (614 added, 42 removed) over
+`9e666f4..cabff74`: `reference.py` 184, `catchment_batch.py` 173,
+`cli.py` 172, `io/geojson.py` 21, `catchment.py` 13, `mosaic.py` 5,
+`io/station_set.py` 4, `burn.py` 0; 90 past the margin and 128 under 700.
 `@developer`'s account of the excess: `StationResult`'s field list, about
 50 lines (one line per column, 48 columns, which "The batch" lists
 in words rather than counts); the summary's models and its fixed key
@@ -2120,12 +2131,12 @@ the batch, the command and the moved writer as the next.
 | `docs/benchmarks/<date>/nve-placement/render.py` | the placement figures (evidence script, not counted, Ola's ruling; "Placement figures") | (130) |
 | **PR 2, the gauge on the river** (needs PRs 1 and 3) | | **about 415 (598); 569 net (589 added) at green `193079d`** |
 | `reference.py` | agreement, classes, `match_by`, summary | 115 (184 at green) |
-| `catchment_batch.py` | `BatchRequest`, `BatchSink`, `run_batch`, `StationResult`, `refusal_cause` | 105 (171 at green) |
-| `mosaic.py`, `catchment.py` | `MixedGridError`, `MixedGridRefusal` (round 3, Ola's ruling on counting) | 10 (14 at green) |
-| `cli.py` | `station-catchments`, the directory sink | 80 (140 net at green, the writer's lines removed; 147 at `33b1f2d`) |
+| `catchment_batch.py` | `BatchRequest`, `BatchSink`, `run_batch`, `StationResult`, `refusal_cause` | 105 (171 at green; 173 at `cabff74`) |
+| `mosaic.py`, `catchment.py` | `MixedGridError`, `MixedGridRefusal` (round 3, Ola's ruling on counting); `check_reach_crs` (change (d)) | 10 (14 at green; 18 at `cabff74`) |
+| `cli.py` | `station-catchments`, the directory sink | 80 (140 net at green, the writer's lines removed; 147 at `33b1f2d`; 172 at `cabff74`) |
 | `io/station_set.py` | a reference polygon with no area refused (change (b)) | (4 at `33b1f2d`) |
 | `io/geojson.py` | the moved writer (moved from PR 3 after its code review, round 1) | 25 (cli.py −25; 21 at green) |
-| **PR 4, the batch and the comparison** | | **about 335 (482); 530 net (567 added) at green `1c39ef7`; 541 net (580 added) at `33b1f2d`** |
+| **PR 4, the batch and the comparison** | | **about 335 (482); 530 net (567 added) at green `1c39ef7`; 541 net (580 added) at `33b1f2d`; 572 net (614 added) at `cabff74`** |
 | `catchment.py`, `cli.py`, `catchment_batch.py` | the fallback (below) | 80 |
 | **PR 5, the fallback** | | **about 80 (115)** |
 

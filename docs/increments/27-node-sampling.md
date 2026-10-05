@@ -140,7 +140,7 @@ the same `node(round) == p` test (`lattice_position`, `refine.hpp:132-141`).
 ### Why cell sides are not in this increment
 
 1. **No vertex on the path being fixed lies on a cell side.** Without
-   `--tolerance` there is no `--domain` and no `--features` (`cli.py:837`
+   `--tolerance` there is no `--domain` and no `--features` (`cli.py:845`
    refuses `--domain` without `--tolerance`). The vertices are the stride
    nodes and the ring through them. The noder makes no crossings there, and
    the triangulation adds no points. Every vertex is a node.
