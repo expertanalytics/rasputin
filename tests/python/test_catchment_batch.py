@@ -53,6 +53,7 @@ from shapely.geometry import Polygon, box
 
 import batch_fixtures as bf
 import gauge_fixtures as gf
+import tin_engine.catchment as catchment
 import tin_engine.catchment_batch as cb
 from catchment_fixtures import MemoryRepository, filled
 from tin_engine.io.models import DemTile
@@ -441,3 +442,34 @@ def test_the_outline_tolerance_is_passed_on(tmp_path: Path) -> None:
     ((_, result),) = sink.catchments
     assert result.tolerance == 0.0
     assert result.reduced.area == pytest.approx(result.fine.area, rel=1e-12)
+
+
+# ---------------------------------------------------------------------------
+# PR 4's code review, round 1: change (d)
+# ---------------------------------------------------------------------------
+
+
+def test_a_river_crs_not_the_dems_is_refused_before_the_first_station(tmp_path: Path) -> None:
+    """Change (d), for callers other than the command: `segments_crs`
+    EPSG:32633 over the DEM's EPSG:25833 raises `ValueError` naming both,
+    before any station runs, so the sink receives nothing (today each station
+    is a `refused` row with cause `other`)."""
+    i = inputs(tmp_path)
+    sink = ListSink()
+    with pytest.raises(ValueError) as caught:
+        asyncio.run(
+            cb.run_batch(cb.BatchRequest(), MemoryRepository(bf.basin_tiles()), i.stations,
+                         i.stations_crs, i.segments, "EPSG:32633", None, sink)
+        )  # fmt: skip
+    assert "32633" in str(caught.value) and "25833" in str(caught.value), str(caught.value)
+    assert sink.calls == []
+
+
+def test_check_reach_crs_is_the_one_rule() -> None:
+    """Change (d)'s one place: `catchment.check_reach_crs(crs, repository)`
+    returns None when `crs` is the first tile's CRS and raises `ValueError`
+    naming both CRSs, the river file's first, when it is not."""
+    repository = MemoryRepository(bf.basin_tiles())
+    assert catchment.check_reach_crs(gf.EPSG, repository) is None
+    with pytest.raises(ValueError, match=r"(?s)river file's CRS.*32633.*DEM's.*25833"):
+        catchment.check_reach_crs("EPSG:32633", repository)

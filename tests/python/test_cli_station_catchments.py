@@ -30,6 +30,13 @@ Pinned here beyond the design:
   `--out-dir` is created; a run stopped by an exception in the batch keeps
   `results.csv`'s header and every finished row, and writes no
   `summary.json`.
+- ("PR 4's code review, round 1", changes (d) to (f).) A river file whose
+  CRS is not the DEM's is refused naming `--rivers` and both EPSG codes,
+  with `delineate` never called and `--out-dir` not created. A write that
+  fails is a refusal (no exception escapes to the runner) naming `--out-dir`
+  and the path, as given or resolved (macOS resolves `/var` to
+  `/private/var`), without `--dem` or "cannot read". A station whose `name`
+  is missing or empty gives a stderr line starting `<station>: <class>`.
 """
 
 from __future__ import annotations
@@ -45,6 +52,7 @@ from typer.testing import CliRunner
 
 import batch_fixtures as bf
 import tin_engine.catchment_batch as catchment_batch
+from nve_fixtures import collection, write
 from test_cli_mesh import plain
 from test_cli_mesh_mosaic import write_tiles
 from tin_engine.cli import app
@@ -327,3 +335,95 @@ def test_a_run_stopped_by_a_bug_keeps_the_finished_rows(
     assert [ln[0] for ln in lines[1:]] == [bf.TREFF.station]
     assert lines[1][lines[0].index("class")] == CLASSES[bf.TREFF.station]
     assert not (out / "summary.json").exists()
+
+
+# ---------------------------------------------------------------------------
+# PR 4's code review, round 1: changes (d), (e) and (f)
+# ---------------------------------------------------------------------------
+
+
+def test_a_river_file_not_in_the_dems_crs_is_refused_before_any_station_runs(
+    data: dict[str, Path], tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Change (d): the rivers and the references in EPSG:32633 over the DEM's
+    EPSG:25833. The references are in the river file's CRS, so their own check
+    passes and the river file's is the one that fires: a refusal of `--rivers`
+    naming both CRSs, before any station is delineated and before `--out-dir`
+    exists (today each station is a `refused` row with cause `other`)."""
+    other = dict(data)
+    other["rivers"] = bf.write_rivers(tmp_path / "r.geojson", crs="EPSG:32633")
+    other["reference"] = bf.write_references(tmp_path / "ref.geojson", crs="EPSG:32633")
+    calls: list[int] = []
+    real = catchment_batch.delineate
+
+    def counted(*a: Any, **k: Any) -> Any:
+        calls.append(1)
+        return real(*a, **k)
+
+    monkeypatch.setattr(catchment_batch, "delineate", counted)
+    out = tmp_path / "out"
+    code, output = invoke(*args(other, out))
+    words = plain(output)
+    assert code != 0, words
+    assert "No such command" not in words and "No such option" not in words, words
+    assert "--rivers" in words, words
+    assert "32633" in words and "25833" in words, words
+    assert calls == []
+    assert not out.exists()
+
+
+def squashed(text: str) -> str:
+    """`plain` with every space gone: Rich breaks a long path across panel
+    lines wherever the terminal's width falls, so a path is looked for with
+    the whitespace removed (no path here holds a space)."""
+    return "".join(plain(text).split())
+
+
+@pytest.mark.parametrize(
+    "blocked",
+    ["results.csv", f"{bf.TREFF.station}.geojson", "summary.json"],
+    ids=["results_csv", "catchment_file", "summary_json"],
+)
+def test_a_write_that_fails_names_out_dir_and_the_path(
+    data: dict[str, Path], tmp_path: Path, blocked: str
+) -> None:
+    """Change (e): a directory made beforehand where the command writes a file
+    (results.csv when the sink is made, the first station's catchment file,
+    summary.json at the end). The refusal names `--out-dir` and the path, not
+    `--dem` or "cannot read", and is a refusal, not a traceback. Today the
+    catchment file's failure reads as a refusal of `--dem` and the other two
+    are tracebacks."""
+    out = tmp_path / "out"
+    (out / blocked).mkdir(parents=True)
+    result = runner.invoke(app, args(data, out))
+    words = plain(result.output)
+    assert result.exit_code != 0, words
+    assert result.exception is None or isinstance(result.exception, SystemExit), repr(
+        result.exception
+    )
+    assert "Traceback" not in result.output
+    assert "--out-dir" in words, words
+    path = out / blocked
+    assert any(str(p) in squashed(result.output) for p in (path, path.resolve())), words
+    assert "--dem" not in words, words
+    assert "cannot read" not in words, words
+
+
+@pytest.mark.parametrize("name", [None, ""], ids=["no_name", "empty_name"])
+def test_a_station_with_no_name_prints_no_space_before_the_colon(
+    data: dict[str, Path], tmp_path: Path, name: str | None
+) -> None:
+    """Change (f): the stderr line is `<station>: <class>` when the station
+    has no name (no `name` property, or an empty one), not `<station> : ...`."""
+    feature = bf.station_feature(bf.TREFF)
+    if name is None:
+        del feature["properties"]["name"]
+    else:
+        feature["properties"]["name"] = name
+    unnamed = dict(data)
+    unnamed["stations"] = write(tmp_path / "s.geojson", collection([feature]))
+    out = tmp_path / "out"
+    code, output = invoke(*args(unnamed, out))
+    assert code == 0, output
+    line = station_line(output, bf.TREFF.station)
+    assert line.startswith(f"{bf.TREFF.station}: match"), line
