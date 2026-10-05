@@ -24,8 +24,10 @@ import pytest
 import tin_engine
 from importscan import first_party_imports
 
-# One row per line, grouped by layer, so the map reads as a map; the formatter
-# would put the long rows one name per line.
+# Grouped by layer, so the map reads as a map. Rows that import nothing share a
+# line, and long rows continue under their opening quote; the formatter would
+# give each row a line of its own and flush the continuations left (or join a
+# two-piece row onto one line where the joined line still fits its limit).
 # fmt: off
 LAYERS: tuple[dict[str, str], ...] = (
     {  # L0: values
