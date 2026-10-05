@@ -1,6 +1,6 @@
 # Harness h16: guard fixes, a line counter, a scratch copy, brief fixes
 
-Status: Ola ruled on §7 on 2026-10-05 (all three defaults). PR A: red `11cee8e`, green `4db1eab` and, after code review round 1, red `3de6e1b` and green `64e51a2`: 280 net production lines against an estimate of 187 (the C++ scanner, the git plumbing and round 1's fixes were not priced); the `tools/brief.py` change is refused in unattended mode and waits for Ola; code review round 2 asked for fixes, in progress. PR B not started.
+Status: Ola ruled on §7 on 2026-10-05 (all three defaults). PR A: red `11cee8e`, green `4db1eab` and, after code review round 1, red `3de6e1b` and green `64e51a2`, after round 2 red `9a1f07a` and green `6d35fbd`: 280 net production lines against an estimate of 187 (the C++ scanner, the git plumbing and round 1's fixes were not priced); the `tools/brief.py` change is refused in unattended mode and waits for Ola; code review round 3 asked for a test fix, in progress. PR B not started.
 
 Ola approved the items on 2026-10-05 (the main session's summary of his
 rulings, not his words). He said this is the last harness increment before
@@ -645,6 +645,37 @@ Suggestions:
 - **[later]** The generated `sitecustomize.py` hides Homebrew's own `sitecustomize.py`, so in the copy's processes `sys.base_prefix` is not rewritten and the tk path is not added. No test I ran depends on either. Running the hidden file first, or stating the effect in the docstring, would make it explicit.
 - **[later]** "In any Python process a test starts" leaves out children started with `-I` or `-E`, which ignore `PYTHONPATH`. The docstring names only children that replace the environment.
 - **[later]** When tar fails on a missing target, `_extract` removes the target but keeps any parent folders that `mkdir(parents=True)` created.
+
+Not pushed; no CI.
+
+Taken in the recording commit: blocking item 3 (the status line).
+
+### Round 3: `@reviewer`, code, early, PR A tools part, `731e2a0..6d35fbd`
+
+`@reviewer`'s verdict, word for word:
+
+**Code review, round 3 (early, tools part of PR A), 2026-10-05.** Range `731e2a0..6d35fbd` (round 2 recorded a61e848, design c3817b3, red 9a1f07a, green 6d35fbd). Verdict: CHANGES REQUESTED.
+
+LOC: 280 net production lines by `tools/count_loc.py bc01cd8 6d35fbd`: `tools/count_loc.py` 199 and `tools/scratch_copy.py` 81. This round adds 0 net (1 added, 1 removed): the `DIFF` tuple's second line gains `"--no-relative"`. I checked this by hand against `git diff -U0`; the other 6 changed lines are comments. The estimate was 187. The overrun is as round 2 recorded it. The design names no split seam, and none is needed. No new `# fmt: skip` region.
+
+Round 2's items, each run:
+- Blocking 2 (design §2 T2 out of date): closed. Step 1 now names the main checkout. Step 4 names the generated `sitecustomize.py`, the `PYTHONPATH` and the `-c` program that only calls `pytest.main`, and it says review round 1 caused the change. I ran `scratch_copy.py 6d35fbd` into a scratch folder. The printed command and the `.scratch_copy/sitecustomize.py` it writes match step 4 exactly. A target in the main checkout and a target in the worktree are both refused, as step 1 says. With no built `_core` in this worktree, the step-3 warning is printed. The two citations the rewrite added (`test_io_geotiff.py:1271`, `blockprobe.py:23`) point at the subprocess call and at the line that drops the editable finder.
+- Blocking 3 (status line): closed in a61e848.
+- Suggestion: config in the repository (`diff.relative`): closed. I removed `--no-relative` by hand to check the test catches it, and the `repository config` case fails.
+- Suggestion: a test that fails when the environment-config stripping is removed: **not closed**. I removed the stripping again (`_env` keeps every `GIT_CONFIG_*` key) and all 68 count_loc tests pass. The new `GIT_CONFIG_COUNT` and `GIT_CONFIG_PARAMETERS` cases fail only when `--no-relative` is removed as well: with both removed, 3 tests fail. `--no-relative` now overrides `diff.relative` however it is given, so the stripping is again caught by no test. The stripping still matters. With it removed, `GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=diff.algorithm GIT_CONFIG_VALUE_0=histogram` (or `patience`) turns `count_loc.py 9e666f4 9bb1723` from 744/53/691 into 746/55/691. As written, it stays 744/53/691.
+
+Gates: 114 tests pass in `test_count_loc.py`, `test_scratch_copy.py` and `test_settings_wiring.py`. `ruff check` and `ruff format --check` are clean, and the prohibited-dependency gate passes. No red-step scaffolding remains.
+
+Citations: `check_citations.py` exits 0 and lists 10 at-risk citations. 7 are as in round 2. The 3 new ones are on line 631: round 2's record quoting round 1's citations, as the code stood at 4db1eab. They stay.
+
+Blocking:
+1. **[Ola]** There is no CI yet; the branch must be pushed and CI green. The 18 `test_brief.py` failures wait on the refused `tools/brief.py` change.
+2. **[now]** The comment above `RELATIVE` in `tests/python/test_count_loc.py` says "the environment forms are what the counter's stripping of `GIT_CONFIG_*` neutralises (no other test fails without it)". Since 6d35fbd that is false: `--no-relative` neutralises them too, and removing the stripping fails no test. Correct the comment. Then close round 2's suggestion with a test that fails when the stripping is removed. The direct way is a unit test that `_env()` drops `GIT_CONFIG_COUNT`, `GIT_CONFIG_KEY_n`, `GIT_CONFIG_VALUE_n` and `GIT_CONFIG_PARAMETERS`. Unlike an end-to-end key, it does not stop catching the removal when the next flag is pinned. A `diff.algorithm` case run through the counter is the end-to-end alternative.
+3. **[now]** The status line still says "code review round 2 asked for fixes, in progress" and does not name red 9a1f07a and green 6d35fbd. The recording commit can take this.
+
+Suggestions:
+- **[now]** The same `diff.algorithm` key in the repository's own `.git/config` is probably not neutralised, because the stripping covers only the environment. In my probe above, added and removed changed and net did not. Passing `--diff-algorithm=myers` in `DIFF`, with a repository-config test, would pin it; myers is git's default, so the recorded counts stay. I could not test this: unattended mode refused the `git config` write in my scratch clone.
+- **[later]** Round 2's three [later] items stand.
 
 Not pushed; no CI.
 
