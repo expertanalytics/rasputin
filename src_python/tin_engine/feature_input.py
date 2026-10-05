@@ -387,7 +387,7 @@ def read_source(
         features, text = read_collection(read_json(path), default_crs=RFC7946_CRS)
         try:  # a malformed feature's structure raises any of these
             rows = [
-                (f.get("id", k), f["geometry"] and shape(f["geometry"]), f["properties"] or {})
+                (f.get("id", k), shape(g) if (g := f["geometry"]) else None, f["properties"] or {})
                 for k, f in enumerate(features)
             ]
             values = [(k, g, p.get(attribute)) for k, g, p in rows]
