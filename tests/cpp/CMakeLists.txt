@@ -215,8 +215,10 @@ add_terrain_test(test_raster_view unit/test_raster_view.cpp)
 
 # Adaptive refinement, increment 14 (docs/increments/14-adaptive-refinement.md,
 # "Tests for @tester"). test_mesh_lattice_split and test_refinement_scan are the
-# invariant-critical pair. All three link Threads: the loop and chunk suites
-# start threads through for_each_chunk. The pair are backend tests because
+# invariant-critical pair. All three link Threads, but only
+# test_refinement_chunks starts threads (through for_each_chunk);
+# test_mesh_lattice_split starts none, so it is not in the TSan job (h17 §4c,
+# docs/increments/h17-ci-test-time.md). The pair are backend tests because
 # lattice_mesh.hpp includes default_kernel.hpp (increment 16's orient_sign),
 # which needs terrain_predicates.
 add_terrain_test(test_refinement_chunks unit/test_refinement_chunks.cpp)
@@ -282,7 +284,8 @@ target_link_libraries(test_refinement_constraint_feet PRIVATE Threads::Threads)
 # test_refinement_chunks_dynamic (QW1, the dynamic block scheduler) is the
 # invariant-critical suite; test_refinement_active (QW3) and
 # test_mesh_lawson_stack (legalise_around's caller-owned stack) compare with
-# today's code. All three run in the TSan job.
+# today's code. The first two run in the TSan job; test_mesh_lawson_stack
+# starts no threads, so it does not (h17 §4c).
 
 add_terrain_test(test_refinement_chunks_dynamic unit/test_refinement_chunks_dynamic.cpp)
 target_link_libraries(test_refinement_chunks_dynamic PRIVATE Threads::Threads)

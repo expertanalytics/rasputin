@@ -31,7 +31,8 @@
 //     tolerance of the output's linear z along that edge. This is E1. It
 //     reads neither the store's order nor the loop's records.
 // On the reprojected path the tolerance oracle is 15c's J2 over the source
-// points (sources_over below), since J2 gives up the DEM-node guarantee there.
+// points (j2 below, through tests/cpp/support/j2_oracle.hpp), since J2 gives
+// up the DEM-node guarantee there.
 //
 // Ruled in L1 and L2 (where D4 was silent), as this suite first chose them:
 //   - the logic_error refusals of D4 name their entry point in what():
@@ -62,6 +63,7 @@
 #include <terrain/refinement/refine.hpp>
 #include <terrain/refinement/refine_points.hpp>
 
+#include "j2_oracle.hpp"
 #include "strip_oracle.hpp"
 
 #include <algorithm>
@@ -639,39 +641,26 @@ Sources scattered(const Raster<float>& dem, std::uint32_t seed) {
     return p;
 }
 
-// 15c's J2 (RP3's oracle): every source point that is not a start vertex, in
-// every closed output triangle with three valid vertices, within tolerance of
-// that triangle's plane recomputed from the output.
-std::size_t sources_over(const terrain::raster::RasterGeometry& g, const Sources& pts, const Begin& b,
-                         const Mesh& out, double tol) {
+// 15c's J2 (RP3's oracle, tests/cpp/support/j2_oracle.hpp): every source point
+// that is not a start vertex, in every closed output triangle with three valid
+// vertices, within tolerance of that triangle's plane recomputed from `z`
+// (the output's, or a planted copy).
+j2_oracle::Findings j2(const terrain::raster::RasterGeometry& g, const Sources& pts, const Begin& b,
+                       const Mesh& out, const std::vector<double>& z, double tol) {
     std::set<std::pair<double, double>> start_xy;
     for (const Point2 v : b.mesh.vertices()) start_xy.insert({v.x, v.y});
-    std::vector<Point2> fp;
-    double zmax = 1.0;
-    for (std::size_t i = 0; i < out.vertices.size(); ++i) {
-        const Lat l = lat(g, out.vertices[i]);
-        fp.push_back(Point2{l.col, -l.row});
-        zmax = std::max(zmax, std::abs(out.z[i]));
+    auto framed = [&](Point2 w) {
+        const Lat l = lat(g, w);
+        return Point2{l.col, -l.row};
+    };
+    std::vector<Point2> fv, fp;
+    std::vector<std::uint8_t> skip;
+    for (const Point2 v : out.vertices) fv.push_back(framed(v));
+    for (const Point2 w : pts.xy) {
+        fp.push_back(framed(w));
+        skip.push_back(start_xy.contains({w.x, w.y}) ? 1 : 0);
     }
-    std::size_t bad = 0;
-    for (const auto& t : out.triangles) {
-        if (!(out.valid[t[0]] && out.valid[t[1]] && out.valid[t[2]])) continue;
-        const Point2 a = fp[t[0]], bb = fp[t[1]], c = fp[t[2]];
-        const double two_a = cross(a, bb, c);
-        for (std::size_t i = 0; i < pts.xy.size(); ++i) {
-            if (start_xy.contains({pts.xy[i].x, pts.xy[i].y})) continue;
-            const Lat l = lat(g, pts.xy[i]);
-            const Point2 p{l.col, -l.row};
-            if (DefaultKernel::orient2d(a, bb, p) == Orientation::Clockwise
-                || DefaultKernel::orient2d(bb, c, p) == Orientation::Clockwise
-                || DefaultKernel::orient2d(c, a, p) == Orientation::Clockwise)
-                continue;
-            const double plane = (cross(p, bb, c) * out.z[t[0]] + cross(a, p, c) * out.z[t[1]]
-                                  + cross(a, bb, p) * out.z[t[2]]) / two_a;
-            if (std::abs(plane - static_cast<double>(pts.z[i])) > tol + 1e-9 * zmax) ++bad;
-        }
-    }
-    return bad;
+    return j2_oracle::violations(fv, z, out.valid, out.triangles, fp, pts.z, skip, g.cols(), g.rows(), tol);
 }
 
 }  // namespace
@@ -702,7 +691,7 @@ TEST_CASE("ES9: refine_points with the strip keeps J2 at the source points and E
     CHECK(out.uncovered == 0);
     CHECK(out.nodes_inserted == 0);  // refine_strip only
     const Mesh m = mesh_of(out);
-    CHECK(sources_over(g, src, b, m, tol) == 0);  // E3: 15c's J2
+    CHECK(j2(g, src, b, m, m.z, tol).over == 0);  // E3: 15c's J2
     const auto f = e1(dem, b, m, tol);            // E1, against the target grid
     CHECK(f.unfiled == 0);
     CHECK(f.on_void == 0);
@@ -1182,3 +1171,4 @@ TEST_CASE("ES16: a vertex 2e-10 from a node is inside the radius at 16,385 colum
     CHECK(sh.stray == 0);
     CHECK(sh.broken_chain == 0);
 }
+
