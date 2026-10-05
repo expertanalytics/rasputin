@@ -9,6 +9,8 @@ file names is yours to change, and you remove it afterwards. Your note file is
 $note; write **no other file under .claude/current-task/**.
 **Ola's words appear only under "Ola, verbatim"** below.
 If **blocked on power, network or a lock**, stop and hand back.
+Wait for a background run with the Monitor tool, never `sleep`; write a rule
+file with Edit or Write, never through the shell.
 End each commit message with the **Co-Authored-By trailer** from your
 system context. End each commit subject you write with `(@$persona)`.
 Write in **plain words**: say what any internal label means.
