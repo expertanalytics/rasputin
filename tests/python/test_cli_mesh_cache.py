@@ -29,10 +29,9 @@ import numpy as np
 import pytest
 
 import tin_engine
+from cli_driver import USAGE, geojson, invoke, squashed
 from cog_fixtures import VARIANTS, build, write_cache
 from geotiff_fixtures import TIE_X, TIE_Y
-from test_cli_mesh_dem import USAGE, invoke
-from test_cli_mesh_domain import geojson
 from test_cli_mesh_mosaic import field, same_mesh, terrain
 from test_cli_mesh_refine import stats_row
 from tin_engine.dem_input import DemRequest, open_dem
@@ -43,11 +42,6 @@ KEY = "test-utm33"
 CREDIT = "Test elevation, credit line 23a-1"
 PACKAGE = Path(tin_engine.__file__).resolve().parent
 TILED = VARIANTS[0]
-
-
-def squashed(text: str) -> str:
-    """No whitespace at all: Rich may break a long path anywhere inside its panel."""
-    return "".join(text.split())
 
 
 @pytest.fixture(scope="module")
@@ -199,12 +193,12 @@ class TestW7Offline:
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         by_path, by_key = tmp_path / "path.vtk", tmp_path / "key.vtk"
-        code, output = invoke("--dem", str(tif), "--tolerance", "1", "--out", str(by_path))
+        code, output = invoke("mesh", "--dem", str(tif), "--tolerance", "1", "--out", str(by_path))
         assert code == 0, output
         monkeypatch.setattr(socket, "socket", no_network)
         monkeypatch.setattr(socket, "create_connection", no_network)
         code, output = invoke(
-            "--dem", KEY, "--cache", str(cache), "--tolerance", "1", "--out", str(by_key)
+            "mesh", "--dem", KEY, "--cache", str(cache), "--tolerance", "1", "--out", str(by_key)
         )
         assert code == 0, output
         same_mesh(read_vtk(by_key.read_bytes()), read_vtk(by_path.read_bytes()))
@@ -217,7 +211,7 @@ class TestW7Offline:
         names are the ``--stats`` row ``dem_tiles``."""
         out, md = tmp_path / "key.vtk", tmp_path / "key.md"
         code, output = invoke(
-            "--dem", KEY, "--cache", str(cache), "--out", str(out), "--stats", str(md)
+            "mesh", "--dem", KEY, "--cache", str(cache), "--out", str(out), "--stats", str(md)
         )
         assert code == 0, output
         vtk = read_vtk(out.read_bytes())
@@ -268,6 +262,7 @@ class TestW5TheFetchCommandInTheMessage:
     ) -> None:
         write_cache(tmp_path / "cache", KEY, {"dem": data}, skip={"dem": (6,)})
         code, output = invoke(
+            "mesh",
             "--dem", KEY, "--cache", str(tmp_path / "cache"), "--bbox", *self.BBOX,
             "--out", str(tmp_path / "m.vtk"),
         )  # fmt: skip
@@ -285,6 +280,7 @@ class TestW5TheFetchCommandInTheMessage:
         ring = [(TIE_X + 150, TIE_Y - 120), (TIE_X + 400, TIE_Y - 120), (TIE_X + 300, TIE_Y - 40)]
         domain = geojson(tmp_path / "d.geojson", ring)
         code, output = invoke(
+            "mesh",
             "--dem", KEY, "--cache", str(tmp_path / "cache"), "--domain", str(domain),
             "--tolerance", "1", "--out", str(tmp_path / "m.vtk"),
         )  # fmt: skip
@@ -297,7 +293,13 @@ class TestW5TheFetchCommandInTheMessage:
     ) -> None:
         write_cache(tmp_path / "cache", KEY, {"dem": data}, skip={"dem": (6, 19)})
         code, output = invoke(
-            "--dem", KEY, "--cache", str(tmp_path / "cache"), "--out", str(tmp_path / "m.vtk")
+            "mesh",
+            "--dem",
+            KEY,
+            "--cache",
+            str(tmp_path / "cache"),
+            "--out",
+            str(tmp_path / "m.vtk"),
         )
         assert code == USAGE, output
         assert "2 of the 20 blocks" in output, output
@@ -334,7 +336,9 @@ class TestW8CacheRoot:
         monkeypatch.setenv("RASPUTIN_DATA", str(tmp_path / "root"))
         empty = tmp_path / "empty"
         empty.mkdir()
-        code, output = invoke("--dem", KEY, "--cache", str(empty), "--out", str(tmp_path / "m.vtk"))
+        code, output = invoke(
+            "mesh", "--dem", KEY, "--cache", str(empty), "--out", str(tmp_path / "m.vtk")
+        )
         assert code == USAGE, output
         assert "not in the cache" in output and squashed(f"--cache {empty}") in squashed(output)
 
@@ -347,18 +351,18 @@ class TestW8CacheRoot:
     ) -> None:
         write_cache(tmp_path / "root" / "cache", KEY, {"dem": data})
         monkeypatch.setenv("RASPUTIN_DATA", str(tmp_path / "root"))
-        code, output = invoke("--dem", KEY, "--out", str(tmp_path / "m.vtk"))
+        code, output = invoke("mesh", "--dem", KEY, "--out", str(tmp_path / "m.vtk"))
         assert code == 0, output
 
     def test_neither_refuses_a_catalogue_key_naming_both(
         self, catalogue: dict[str, Any], tmp_path: Path, no_data_root: None
     ) -> None:
-        code, output = invoke("--dem", KEY, "--out", str(tmp_path / "m.vtk"))
+        code, output = invoke("mesh", "--dem", KEY, "--out", str(tmp_path / "m.vtk"))
         assert code == USAGE, output
         assert "no cache: set RASPUTIN_DATA" in output and "--cache" in output, output
 
     def test_a_path_needs_neither(self, tif: Path, tmp_path: Path, no_data_root: None) -> None:
-        code, output = invoke("--dem", str(tif), "--out", str(tmp_path / "m.vtk"))
+        code, output = invoke("mesh", "--dem", str(tif), "--out", str(tmp_path / "m.vtk"))
         assert code == 0, output
 
     def test_dot_slash_glo30_is_a_path_and_glo30_a_key(
@@ -372,9 +376,9 @@ class TestW8CacheRoot:
         assert "glo30" in sources.SOURCES
         monkeypatch.chdir(tmp_path)
         (tmp_path / "glo30").write_bytes(data)
-        code, output = invoke("--dem", "./glo30", "--out", str(tmp_path / "path.vtk"))
+        code, output = invoke("mesh", "--dem", "./glo30", "--out", str(tmp_path / "path.vtk"))
         assert code == 0, output
-        code, output = invoke("--dem", "glo30", "--out", str(tmp_path / "key.vtk"))
+        code, output = invoke("mesh", "--dem", "glo30", "--out", str(tmp_path / "key.vtk"))
         assert code == USAGE, output
         assert "no cache: set RASPUTIN_DATA" in output, output
 
@@ -382,7 +386,15 @@ class TestW8CacheRoot:
         self, catalogue: dict[str, Any], cache: Path, tif: Path, tmp_path: Path
     ) -> None:
         code, output = invoke(
-            "--dem", KEY, "--dem", str(tif), "--cache", str(cache), "--out", str(tmp_path / "m.vtk")
+            "mesh",
+            "--dem",
+            KEY,
+            "--dem",
+            str(tif),
+            "--cache",
+            str(cache),
+            "--out",
+            str(tmp_path / "m.vtk"),
         )
         assert code == USAGE, output
         assert KEY in output and "--dem" in output, output

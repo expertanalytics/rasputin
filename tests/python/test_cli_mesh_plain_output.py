@@ -39,17 +39,16 @@ from typing import Any
 
 import numpy as np
 import pytest
-from typer.testing import CliRunner, Result
+from typer.testing import Result
 
 import tin_engine.cli as cli
+from cli_driver import COLS, ROWS, SQUARE, USAGE, geojson, plain, runner, write_tiff
 from feature_fixtures import Feat, write_geojson
 from geotiff_fixtures import micro_tiff
 from mosaic_fixtures import quadrants, whole
 from plyread import parse_header
 from recordread import file_field, ply_fields, stats_names, stats_row
-from test_cli_mesh import plain
-from test_cli_mesh_dem import SENTINEL, write_tiff
-from test_cli_mesh_domain import SQUARE, geojson
+from test_cli_mesh_dem import SENTINEL
 from test_cli_mesh_features import FOREST
 from test_cli_mesh_mosaic import terrain, write_tiles
 from tin_engine import installed_version
@@ -57,9 +56,6 @@ from tin_engine.cli import app
 from tin_engine.io.geotiff import decode_dem
 from vtkread import VtkFile, read_vtk
 
-runner = CliRunner(env={"NO_COLOR": "1", "TERM": "dumb"})
-USAGE = 2
-ROWS, COLS = 17, 21
 FIXTURES = Path(__file__).resolve().parents[1] / "fixtures"
 VELHAS = FIXTURES / "velhas"
 
