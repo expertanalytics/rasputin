@@ -18,7 +18,8 @@ test-only extra.
 
 It does need the compiled extension, because `tin_engine/__init__.py` imports
 `_core`, so no `tin_engine` submodule is importable without it. What it pins
-instead is that `vtk_legacy` itself never imports `_core` (ruling 6).
+instead (in `test_layering.py`) is that `vtk_legacy` itself never imports `_core`
+(ruling 6).
 
 Committed red: the intended failure is `ModuleNotFoundError:
 tin_engine.io.vtk_legacy` in every test that writes. The import is inside
@@ -35,7 +36,6 @@ import numpy as np
 import pytest
 from numpy.testing import assert_array_equal
 
-from importscan import first_party_imports
 from tin_engine.features import DEFAULT_VOCABULARY, EdgeProperty, EdgeVocabulary
 from vtkread import VtkFile, lines_as_array, polygons_as_array, read_vtk
 
@@ -475,7 +475,7 @@ class TestBinaryIsBigEndian:
 
 
 class TestPurity:
-    """Ruling 6: bytes out, no path in, and never `_core`."""
+    """Ruling 6: bytes out, no path in; the imports are `test_layering.py`'s."""
 
     def test_the_return_value_is_bytes(self) -> None:
         assert isinstance(write(), bytes)
@@ -483,13 +483,6 @@ class TestPurity:
     def test_it_is_deterministic(self) -> None:
         assert write() == write()
         assert write(binary=True) == write(binary=True)
-
-    def test_the_only_first_party_import_is_the_vocabulary(self) -> None:
-        # `features.py` imports only hashlib and pydantic, so depending on it
-        # adds nothing to what `io/` can reach. `_core` and `viz` stay out.
-        import tin_engine.io.vtk_legacy as module
-
-        assert first_party_imports(module) <= {"tin_engine.features"}
 
     def test_it_is_re_exported_from_io(self) -> None:
         import tin_engine.io as io

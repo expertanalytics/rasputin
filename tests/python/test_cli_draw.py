@@ -233,8 +233,8 @@ class TestCommandSurface:
         assert "--list" in message
 
     def test_the_cli_maps_every_role_the_enum_has(self) -> None:
-        # The claim `test_viz_svg.py::TestModuleIsolation` cannot make, because
-        # that suite may not import `_core`: the mapping this module owns is
+        # The claim `test_layering.py` cannot make, because it reads imports,
+        # not values: the mapping this module owns is
         # total both ways. A role the enum gains and `ROLES` does not is a
         # fixture vocabulary that silently cannot express it.
         import tin_engine._core as core

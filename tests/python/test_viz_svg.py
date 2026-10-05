@@ -76,7 +76,6 @@ drawn at all; see `test_cli_draw.py::TestFailurePresentation`.
 
 from __future__ import annotations
 
-import ast
 import enum
 import importlib
 import math
@@ -93,9 +92,6 @@ import numpy.typing as npt
 import pytest
 
 from tin_engine.viz.scene import build_scene
-
-REPO_ROOT = Path(__file__).resolve().parents[2]
-VIZ = REPO_ROOT / "src_python" / "tin_engine" / "viz"
 
 SVG_NS = "http://www.w3.org/2000/svg"
 
@@ -120,7 +116,7 @@ ROLE_NAMES = frozenset({"outer", "hole", "breakline"})
 
 # Bare masks, as `cli.py` hands them down. `viz/` may not name a vocabulary --
 # `fixtures.py` and `style.py` import nothing first-party at all, which
-# `TestModuleIsolation` pins -- so the renderer knows bit positions, the
+# `test_layering.py` pins -- so the renderer knows bit positions, the
 # stylesheet knows tokens, and only the composition root knows that bit 0 means
 # "river".
 #
@@ -531,64 +527,6 @@ class TestFixtureSanity:
     def test_coordinates_are_at_utm_magnitudes(self) -> None:
         assert MESH_VERTICES[:, 0].min() >= 1.0e5
         assert MESH_VERTICES[:, 1].min() >= 1.0e6
-
-
-class TestModuleIsolation:
-    """`viz/` never imports `_core`, and `cli.py` is the sole composition root.
-
-    `test_viz_scene.py::TestModuleIsolation` pins this for `scene.py`; the three
-    new modules need the same, and for the same reason -- it is what lets this
-    whole suite run against hand-built dataclasses. Checked by reading the
-    source, because `tin_engine/__init__.py` imports `_core` itself and a
-    `sys.modules` assertion would therefore pass for the wrong reason.
-    """
-
-    def imports(self, module: str) -> list[str]:
-        path = VIZ / f"{module}.py"
-        assert path.is_file(), f"{path} does not exist"
-        names: list[str] = []
-        for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
-            if isinstance(node, ast.Import):
-                names.extend(alias.name for alias in node.names)
-            elif isinstance(node, ast.ImportFrom):
-                names.append("." * node.level + (node.module or ""))
-        return names
-
-    @pytest.mark.parametrize("module", ["svg", "style", "fixtures"])
-    def test_the_module_exists(self, module: str) -> None:
-        assert (VIZ / f"{module}.py").is_file()
-
-    @pytest.mark.parametrize("module", ["svg", "style", "fixtures"])
-    def test_it_does_not_import_the_extension(self, module: str) -> None:
-        assert [name for name in self.imports(module) if "_core" in name] == []
-
-    def test_the_renderer_imports_only_its_own_siblings(self) -> None:
-        allowed = {".scene", ".style", ".protocols", "tin_engine.viz.scene"}
-        first_party = [
-            name
-            for name in self.imports("svg")
-            if name.startswith((".", "tin_engine")) and name not in allowed
-        ]
-        assert first_party == []
-
-    def test_the_style_model_imports_no_first_party_module(self) -> None:
-        # `SvgStyle` is the renderer's input and knows nothing about a scene.
-        assert [n for n in self.imports("style") if n.startswith((".", "tin_engine"))] == []
-
-    def test_the_gallery_imports_no_first_party_module(self) -> None:
-        # Declarative data. A fixture that imported the scene builder would be
-        # a fixture nobody can read as data.
-        assert [n for n in self.imports("fixtures") if n.startswith((".", "tin_engine"))] == []
-
-    def test_the_cli_names_the_enum_that_viz_may_not(self) -> None:
-        # Named for what it actually checks: that `ChainRole` appears in
-        # `cli.py` at all, which is the other half of the four `_core` checks
-        # above -- they establish that no `viz/` module names it, this one that
-        # the composition root does. *Exclusivity* is theirs; that the mapping
-        # is total is `test_cli_draw.py`'s, which may import `_core` where this
-        # suite may not.
-        source = (REPO_ROOT / "src_python" / "tin_engine" / "cli.py").read_text(encoding="utf-8")
-        assert "ChainRole" in source
 
 
 class TestPackageExports:
