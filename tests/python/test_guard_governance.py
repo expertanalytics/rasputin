@@ -57,6 +57,10 @@ GOVERNED_NOW = (
     "tools/ast.py",
     "tools/json/__init__.py",
     "tools/subprocess.cpython-314-darwin.so",
+    # h16 G1, review round 7: git 2.55 still reads the legacy remote files, so a
+    # plain `git fetch s` writes the named refs they give.
+    ".git/remotes/s",
+    ".git/branches/s",
 )
 
 #: Files named `config` that are not a git config: GOVERNED_SUFFIXES is matched
@@ -68,6 +72,8 @@ NOT_GOVERNED = (
     # and a tools/ file that is not named after one stays ordinary.
     "docs/x/ast.py",
     "tools/scratch_copy.py",
+    # h16 G1, review round 7: only the legacy remote files under `.git/` are.
+    "docs/remotes/s",
 )
 
 #: T7: Bash commands that write the harness state or run away.py.
@@ -368,3 +374,22 @@ def test_governed_without_the_scratchpad_exemption_judges_by_the_rules() -> None
     path = "/private/tmp/claude-501/-Users-x-project/0f1e2d3c-session/scratchpad/copy/CLAUDE.md"
     assert hook.governed(path) is False
     assert hook.governed(path, scratch_exempt=False) is True
+
+
+# ---------------------------------------------------------------- h16 G1, round 7
+#
+# §2 G1, amendment after review round 7: `GOVERNED_PREFIXES` gains
+# `.git/remotes/` and `.git/branches/`, as `.git/hooks/` is there.
+
+
+@pytest.mark.parametrize(
+    ("path", "expected"),
+    [
+        (".git/remotes/s", True),
+        (".git/branches/s", True),
+        ("/abs/repo/.git/remotes/origin", True),
+        ("docs/remotes/s", False),
+    ],
+)
+def test_the_legacy_remote_files_are_governed(path: str, expected: bool) -> None:
+    assert load_hook("guard_governance").governed(path) is expected

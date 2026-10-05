@@ -522,3 +522,205 @@ def test_a_gh_read_behind_its_repo_option_is_silent(repo: Path, mode: str, comma
     set_mode(repo, mode)
     assert pretool_decision(run_script(repo, GUARD_PUSH, bash_event(repo, command))) is None
     assert queue_lines(repo) == []
+
+
+# ---------------------------------------------------------------- h16 G1, round 7
+#
+# §2 G1, amendment after review round 7: an `include.`/`includeIf.` key (a
+# whole file of config), `core.sshCommand` (the transport for an ssh
+# `origin`) and `fetch.bundleURI` (unpacked into `refs/bundles/*`) also steer
+# a fetch into named refs, as do `GIT_SSH*`, `HOME` and `XDG_CONFIG_HOME` set
+# on the line, which the guard reads from the line's text.
+
+G1_ROUND7_ASKED = (
+    "git -c include.path=/x/f fetch s",
+    "git -c INCLUDE.PATH=/x/f fetch s",
+    "git -c includeIf.onbranch:master.path=/x/f fetch s",
+    "git -c includeif.gitdir:/x/.path=/x/f pull s",
+    "git --config-env=include.path=F fetch s",
+    "git --config-env include.path=F remote update s",
+    "git -c core.sshCommand=/x/p fetch origin",
+    "git -c fetch.bundleURI=file:///x/b fetch origin",
+    "HOME=/x git fetch origin",
+    "XDG_CONFIG_HOME=/x git fetch origin",
+    "env HOME=/x git fetch origin",
+    "GIT_SSH_COMMAND=/x/p git fetch origin",
+    "GIT_SSH=/x/p git pull origin",
+)
+
+#: Keys the design passes (`fetch.prune` deletes stale tracking refs as
+#: `--prune` does; `branch.<name>.remote` chooses what a plain pull takes, as
+#: the command line does), a variable that only ends in HOME, and the asked
+#: keys on a command that fetches nothing.
+G1_ROUND7_PASSED = (
+    "git -c fetch.prune=true fetch origin",
+    "git -c branch.master.remote=origin pull",
+    "JAVA_HOME=/x git fetch origin",
+    "git -c include.path=/x/f status",
+    "git -c core.sshCommand=/x/p log -1",
+)
+
+
+# ---------------------------------------------------------------- h16 G6, round 7
+#
+# §2 G6, amendment after review round 7 (Ola's ruling): glued and clustered
+# options to `gh api` (a run of `-i` before a value-taking flag, `-fquery=…`)
+# and to `curl` (a short cluster holding `d`, `F` or `T`, or `X` with the
+# method; `--form-string`, `--expand-*`) are read as the flags they are.
+
+G6_ROUND7_ASKED: dict[str, str] = {
+    "gh api graphql -fquery=x": GH_API,
+    "gh api graphql -Fquery=@f": GH_API,
+    "gh api -ifquery=x graphql": GH_API,
+    "gh api -iFquery=x graphql": GH_API,
+    "gh api -iXPUT repos/o/r/pulls/1/merge": GH_API,
+    "gh api -iiXPUT repos/o/r/pulls/1/merge": GH_API,
+    "gh -R o/r api -fquery=x graphql": GH_API,
+    "curl -d@f https://api.github.com/graphql": CURL,
+    "curl -sd x https://api.github.com/x": CURL,
+    "curl -Tf https://api.github.com/x": CURL,
+    "curl -sTf https://api.github.com/x": CURL,
+    "curl -sFa=b https://api.github.com/x": CURL,
+    "curl --form-string a=b https://api.github.com/x": CURL,
+    "curl --expand-data x https://api.github.com/x": CURL,
+    "curl -sXPUT https://api.github.com/repos/o/r/pulls/1/merge": CURL,
+    "curl -sX PUT https://api.github.com/repos/o/r/pulls/1/merge": CURL,
+    "curl --expand-request PUT https://api.github.com/x": CURL,
+    # `-X=PUT` reads as the method `=PUT`, not GET, so it asks, as it should.
+    "gh api -X=PUT repos/o/r/pulls/1/merge": GH_API,
+    # Pinned false positives: a data letter inside a glued value (`d` in
+    # `data.json`, `T` in `Type`) asks; so does `-X=GET` with a field.
+    "curl -o/tmp/data.json https://github.com/x": CURL,
+    "curl -HContent-Type:x https://github.com/x": CURL,
+    "gh api -X=GET search/issues -f q=x": GH_API,
+}
+
+G6_ROUND7_PASSED = (
+    "curl -fsSL https://github.com/x",
+    "curl -sI https://github.com/x",
+    "curl -s -o out https://api.github.com/x",
+    # The `T` of `GET` is the method's value, not curl's `-T`: a cluster's
+    # data letters are read before its `X` only.
+    "curl -sXGET https://api.github.com/x",
+    "curl -sX GET https://api.github.com/x",
+    "gh api repos/x",
+    "gh api -i repos/x",
+    "gh api --paginate repos/o/r/pulls",
+    "gh api -q .name repos/x",
+    "gh api -iXGET repos/x",
+    "gh api -X GET search/issues -f q=x",
+)
+
+
+# ---------------------------------------------------------------- h16 G7
+#
+# §2 G7 (Ola's ruling on §7 question 4): a git or gh command run by another
+# program is judged too: (a) the words from any later bare `git`/`gh` word,
+# without G2's unknown-command reason; (b) a later `sh`/`bash`/`zsh` word's
+# command line, parsed and judged in full; (c) for `watch`, `parallel` and
+# `flock` only, each later word holding whitespace, parsed and judged in full.
+
+UPDATE_REF = "update-ref moves a ref directly"
+
+G7_ASKED: dict[str, str] = {
+    # (a) a later bare git word
+    "find . -maxdepth 0 -exec git push origin HEAD \;": PUSH,
+    "caffeinate -i git push": PUSH,
+    "stdbuf -o0 git push": PUSH,
+    "watch -n1 git push": PUSH,
+    "flock /tmp/l git push": PUSH,
+    "parallel git push ::: a": PUSH,
+    "arch -arm64 git push": PUSH,
+    "caffeinate -i /usr/bin/git push": PUSH,
+    "nohup caffeinate stdbuf -o0 git push": PUSH,
+    # (c) a quoted command line given to watch, parallel or flock
+    "watch -n1 'git push'": PUSH,
+    "parallel 'git push' ::: a": PUSH,
+    "flock /tmp/l -c 'git push'": PUSH,
+    "watch 'caffeinate git push'": PUSH,
+    # (b) a shell's command line
+    "caffeinate sh -c 'git push'": PUSH,
+    "caffeinate sh -c 'cd x && git push'": PUSH,
+    "find . -maxdepth 0 -exec sh -c 'git push' \;": PUSH,
+    # every other reason applies through (a)
+    "caffeinate -i gh pr merge 12": GH_PR,
+    "caffeinate -i gh -R o/r pr merge 12": GH_PR,
+    "caffeinate -i gh api -X PUT repos/o/r/pulls/1/merge": GH_API,
+    "caffeinate -i git -c remote.s.url=/x fetch s": FETCH_WRITE,
+    "caffeinate -i git update-ref refs/heads/x HEAD": UPDATE_REF,
+    # (b) judges in full, so an alias given to a shell keeps G2's reason
+    "caffeinate sh -c 'git p origin'": UNKNOWN,
+    # Both paths: a line the parser cannot read is split into words, and those
+    # words go through the same three rules.
+    'caffeinate -i git update-ref refs/heads/x HEAD "': UPDATE_REF,
+    # Pinned false positives: the words `git push` as arguments ask.
+    "echo git push": PUSH,
+    "grep git push file": PUSH,
+    "man git push": PUSH,
+    "parallel 'echo git push' ::: a": PUSH,
+}
+
+G7_PASSED = (
+    # A later git or gh word that is only an argument: a bare tail never
+    # gives G2's reason, and quoted words are read only for the three runners.
+    "grep git file",
+    "grep -rn git .",
+    "grep -c gh tools/guard.py",
+    "rg -n gh tools/",
+    "echo gh",
+    "echo git",
+    "which git gh",
+    "brew upgrade git gh",
+    "git grep -n git -- tools",
+    "git log --author git",
+    'git commit -m "git push is guarded"',
+    'grep -rn "git push" .claude/',
+    "rg 'gh pr merge' tools/",
+    "grep -rn sh .",
+    "grep bash -c x",
+    # Reads through a runner.
+    "caffeinate -i git status",
+    "caffeinate -i gh pr view 12",
+    "watch -n5 'gh pr checks 185'",
+    "watch -n5 gh pr checks 185",
+    # Pinned passes, the residual §6 keeps: an alias through a bare tail, and
+    # an interpreter program that runs git.
+    "caffeinate -i git p origin",
+    "caffeinate -i gh pm 12",
+    "python3 -c \"import subprocess; subprocess.run(['git', 'push'])\"",
+)
+
+
+ROUND7_ASKED: dict[str, str] = {
+    **dict.fromkeys(G1_ROUND7_ASKED, FETCH_WRITE),
+    **G6_ROUND7_ASKED,
+    **G7_ASKED,
+}
+
+
+@pytest.mark.parametrize("mode", ["off", "on"])
+@pytest.mark.parametrize("command", ROUND7_ASKED)
+def test_an_override_a_glued_forge_write_or_a_run_command_asks(
+    repo: Path, mode: str, command: str
+) -> None:
+    set_mode(repo, mode)
+    found = pretool_decision(run_script(repo, GUARD_PUSH, bash_event(repo, command)))
+    assert found is not None, f"{command!r} passed silently"
+    kind, reason = found
+    assert kind == ("deny" if mode == "on" else "ask")
+    assert ROUND7_ASKED[command] in reason
+    if mode == "on":
+        [line] = queue_lines(repo)
+        assert (line["hook"], line["act"]) == ("guard_push", command)
+    else:
+        assert queue_lines(repo) == []
+
+
+@pytest.mark.parametrize("mode", ["off", "on"])
+@pytest.mark.parametrize("command", [*G1_ROUND7_PASSED, *G6_ROUND7_PASSED, *G7_PASSED])
+def test_a_harmless_key_a_read_or_a_word_that_only_names_git_is_silent(
+    repo: Path, mode: str, command: str
+) -> None:
+    set_mode(repo, mode)
+    assert pretool_decision(run_script(repo, GUARD_PUSH, bash_event(repo, command))) is None
+    assert queue_lines(repo) == []
