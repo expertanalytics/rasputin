@@ -1,0 +1,161 @@
+1791188971.138	rivers: 11648 segments read, 307 exact copies dropped (same river, same vertices to 1 cm)
+1791188979.806	2.11.0 Narsjø: match (seeded by the lake Narsjøen); NVE's in ours 98.2 %, ours in NVE's 97.5 %, area ratio 1.007
+1791188991.035	2.32.0 Atnasjø: match (seeded by the lake Atnsjøen); NVE's in ours 98.5 %, ours in NVE's 99.1 %, area ratio 0.994
+1791188998.147	2.142.0 Knappom: refused: 642878 nodes the request needs are in no tile: x 400260 to 400870, y 6684070 to 6787750 (EPSG:25833)
+1791189094.025	2.265.0 Unsetåa: match; NVE's in ours 99.4 %, ours in NVE's 98.9 %, area ratio 1.005
+1791189095.245	2.279.0 Kråkfoss: uncertain (swing, chain_not_draining, chain_end_open); NVE's in ours 0.0 %, ours in NVE's 0.0 %, area ratio 0.000
+1791189183.483	2.284.0 Sælatunga: uncertain (swing); NVE's in ours 99.1 %, ours in NVE's 98.4 %, area ratio 1.008
+1791189204.882	2.290.0 Brustuen: match; NVE's in ours 98.9 %, ours in NVE's 99.4 %, area ratio 0.995
+1791189206.177	2.303.0 Dombås: uncertain (swing, downstream_unread, chain_not_draining); NVE's in ours 0.0 %, ours in NVE's 0.0 %, area ratio 0.000
+1791189227.753	2.439.0 Kvarstadseter: match; NVE's in ours 99.0 %, ours in NVE's 99.2 %, area ratio 0.998
+1791189234.057	2.633.0 Stortorp: match; NVE's in ours 97.7 %, ours in NVE's 97.9 %, area ratio 0.998
+1791189328.074	3.22.0 Høgfoss: uncertain (chain_not_draining, chain_end_open); NVE's in ours 99.2 %, ours in NVE's 90.0 %, area ratio 1.102
+1791189329.257	6.10.0 Gryta: close; NVE's in ours 97.5 %, ours in NVE's 90.0 %, area ratio 1.084
+1791189330.696	11.4.0 Elgtjern: match (seeded by the lake Elgstjerna); NVE's in ours 96.1 %, ours in NVE's 97.5 %, area ratio 0.985
+1791189381.707	12.70.0 Etna: uncertain (swing, downstream_unread, chain_not_draining); NVE's in ours 98.8 %, ours in NVE's 99.3 %, area ratio 0.995
+1791189384.191	12.171.0 Hølervatn: match (seeded by the lake Hølervatnet); NVE's in ours 99.1 %, ours in NVE's 96.8 %, area ratio 1.023
+1791189399.812	12.178.0 Eggedal: uncertain (swing, chain_not_draining); NVE's in ours 0.0 %, ours in NVE's 100.0 %, area ratio 0.000
+1791189400.329	12.188.0 Langtjernbekk: uncertain (swing, chain_not_draining); NVE's in ours 0.0 %, ours in NVE's 0.0 %, area ratio 0.000
+1791189405.780	12.192.0 Sundbyfoss: match; NVE's in ours 99.0 %, ours in NVE's 98.0 %, area ratio 1.011
+1791189410.829	12.193.0 Fiskum: match; NVE's in ours 98.8 %, ours in NVE's 98.5 %, area ratio 1.003
+1791189430.227	12.197.0 Grunke: match; NVE's in ours 98.9 %, ours in NVE's 99.3 %, area ratio 0.996
+1791189455.110	12.207.0 Vinde-elv: match; NVE's in ours 99.4 %, ours in NVE's 98.2 %, area ratio 1.012
+1791189473.603	12.215.0 Storeskar: miss; NVE's in ours 98.7 %, ours in NVE's 74.7 %, area ratio 1.321
+1791189492.318	15.21.0 Jondalselv: match; NVE's in ours 99.2 %, ours in NVE's 98.6 %, area ratio 1.006
+1791189510.306	15.49.0 Halledalsvatn: miss; NVE's in ours 98.8 %, ours in NVE's 57.1 %, area ratio 1.730
+1791189511.077	16.66.0 Grosettjern: close (seeded by the lake Grosettjønn); NVE's in ours 93.6 %, ours in NVE's 98.7 %, area ratio 0.948
+1791189515.521	16.122.0 Grovåi: match; NVE's in ours 98.6 %, ours in NVE's 97.4 %, area ratio 1.012
+1791189520.407	16.127.0 Viertjern: match; NVE's in ours 96.5 %, ours in NVE's 98.8 %, area ratio 0.977
+1791189540.152	16.194.0 Kilen: match; NVE's in ours 99.0 %, ours in NVE's 98.3 %, area ratio 1.007
+1791189564.577	18.10.0 Gjerstad: match; NVE's in ours 99.0 %, ours in NVE's 99.3 %, area ratio 0.996
+1791189566.068	18.11.0 Tjellingtjernbekk: match; NVE's in ours 96.5 %, ours in NVE's 96.3 %, area ratio 1.004
+1791189567.351	19.79.0 Gravå: close; NVE's in ours 82.4 %, ours in NVE's 95.0 %, area ratio 0.867
+1791189571.042	19.80.0 Stigvassåi: uncertain (chain_not_draining); NVE's in ours 98.9 %, ours in NVE's 94.3 %, area ratio 1.049
+1791189574.683	19.82.0 Rauåna: match; NVE's in ours 97.2 %, ours in NVE's 97.6 %, area ratio 0.996
+1791189575.183	19.96.0 Storgama ovf.: uncertain (swing, chain_not_draining); NVE's in ours 0.1 %, ours in NVE's 75.0 %, area ratio 0.001
+1791189580.641	19.104.0 Songedalsåi: match; NVE's in ours 99.0 %, ours in NVE's 99.3 %, area ratio 0.997
+1791189677.112	20.2.0 Austenå: uncertain (chain_not_draining); NVE's in ours 99.6 %, ours in NVE's 94.9 %, area ratio 1.049
+1791189677.842	20.11.0 Tveitdalen: uncertain (swing, chain_not_draining); NVE's in ours 0.7 %, ours in NVE's 96.9 %, area ratio 0.007
+1791189696.132	22.16.0 Myglevatn ndf.: uncertain (swing, chain_not_draining); NVE's in ours 99.4 %, ours in NVE's 99.3 %, area ratio 1.001
+1791189763.464	22.22.0 Søgne: uncertain (chain_not_draining, chain_end_open); NVE's in ours 96.5 %, ours in NVE's 95.8 %, area ratio 1.008
+1791189769.897	24.8.0 Møska (Skolandsvatnet): match (seeded by the lake Skolandsvatnet); NVE's in ours 99.1 %, ours in NVE's 98.9 %, area ratio 1.003
+1791189779.885	24.9.0 Tingvatn (Lygne): match (seeded by the lake Lygne); NVE's in ours 99.3 %, ours in NVE's 99.5 %, area ratio 0.998
+1791189782.154	26.29.0 Refsvatn: close (seeded by the lake Refsvatnet); NVE's in ours 99.3 %, ours in NVE's 84.0 %, area ratio 1.181
+1791189784.953	27.15.0 Austrumdal (Austrumdalsvatnet): match (seeded by the lake Austrumdalsvatnet); NVE's in ours 98.8 %, ours in NVE's 98.8 %, area ratio 0.999
+1791189786.479	35.9.0 Osali (Botnavatnet): close (seeded by the lake Botnavatnet); NVE's in ours 98.7 %, ours in NVE's 93.3 %, area ratio 1.058
+1791189791.653	35.16.0 Djupadalsvatn: match (seeded by the lake Djupadalsvatnet); NVE's in ours 98.6 %, ours in NVE's 96.8 %, area ratio 1.019
+1791189793.340	36.13.0 Grimsvatn: match (seeded by the lake Grimsvatnet); NVE's in ours 96.5 %, ours in NVE's 98.8 %, area ratio 0.977
+1791189803.208	38.1.0 Holmen: uncertain (swing, downstream_unread); NVE's in ours 99.2 %, ours in NVE's 98.5 %, area ratio 1.007
+1791189804.251	41.8.0 Hellaugvatn: uncertain (swing, chain_not_draining); NVE's in ours 0.4 %, ours in NVE's 99.8 %, area ratio 0.005
+1791189808.042	42.2.0 Djupevad: match; NVE's in ours 98.8 %, ours in NVE's 98.9 %, area ratio 1.000
+1791189819.834	48.1.0 Sandvenvatn: match (seeded by the lake Sandvinvatnet); NVE's in ours 98.8 %, ours in NVE's 99.2 %, area ratio 0.996
+1791189820.765	48.5.0 Reinsnosvatn: uncertain (swing, downstream_unread, chain_not_draining, chain_end_open); NVE's in ours 0.0 %, ours in NVE's 100.0 %, area ratio 0.000
+1791189828.039	50.1.0 Hølen: match (seeded by the lake 154600); NVE's in ours 98.8 %, ours in NVE's 98.5 %, area ratio 1.003
+1791189843.433	55.4.0 Røykenes: match; NVE's in ours 99.2 %, ours in NVE's 98.9 %, area ratio 1.004
+1791189849.505	62.18.0 Svartavatn: match (seeded by the lake Svartavatnet); NVE's in ours 99.1 %, ours in NVE's 99.2 %, area ratio 0.999
+1791189899.967	62.5.0 Bulken (Vangsvatnet): match (seeded by the lake Vangsvatnet); NVE's in ours 99.6 %, ours in NVE's 99.4 %, area ratio 1.002
+1791189908.300	62.10.0 Myrkdalsvatn: match (seeded by the lake Myrkdalsvatnet); NVE's in ours 99.2 %, ours in NVE's 99.0 %, area ratio 1.001
+1791189910.228	62.14.0 Slondalsvatn: match (seeded by the lake Slondalsvatnet); NVE's in ours 97.9 %, ours in NVE's 98.8 %, area ratio 0.991
+1791189989.216	62.15.0 Kinne: uncertain (swing, chain_not_draining); NVE's in ours 0.0 %, ours in NVE's 70.9 %, area ratio 0.000
+1791189993.485	73.21.0 Frostdalen: uncertain (chain_not_draining); NVE's in ours 97.2 %, ours in NVE's 98.2 %, area ratio 0.990
+1791189996.898	73.27.0 Sula: uncertain (swing, chain_not_draining); NVE's in ours 0.0 %, ours in NVE's 0.0 %, area ratio 0.000
+1791189998.834	76.5.0 Nigardsbrevatn: match (seeded by the lake Nigardsbrevatnet); NVE's in ours 98.1 %, ours in NVE's 95.8 %, area ratio 1.024
+1791190001.407	77.3.0 Sogndalsvatn: match (seeded by the lake Dalavatnet); NVE's in ours 98.5 %, ours in NVE's 99.1 %, area ratio 0.994
+1791190004.352	79.3.0 Nessedalselv: uncertain (swing, chain_not_draining); NVE's in ours 0.0 %, ours in NVE's 96.9 %, area ratio 0.000
+1791190005.021	81.1.0 Hersvikvatn (Hagevatnet): match (seeded by the lake Hagevatnet); NVE's in ours 96.9 %, ours in NVE's 96.5 %, area ratio 1.003
+1791190013.515	82.4.0 Nautsundvatn: match (seeded by the lake Nautsundvatnet); NVE's in ours 99.3 %, ours in NVE's 99.4 %, area ratio 0.998
+1791190015.063	83.2.0 Viksvatn (Hestadfjorden): miss (seeded by the lake Hestadfjorden); NVE's in ours 3.8 %, ours in NVE's 99.3 %, area ratio 0.038
+1791190015.909	83.6.0 Byttevatn: uncertain (swing, chain_not_draining, chain_end_open); NVE's in ours 0.0 %, ours in NVE's 100.0 %, area ratio 0.000
+1791190018.173	83.7.0 Grønengstølsvatn: match (seeded by the lake Grøningsstølsvatnet); NVE's in ours 98.9 %, ours in NVE's 98.7 %, area ratio 1.002
+1791190037.963	83.12.0 Haukedalsvatn ndf.: uncertain (chain_not_draining); NVE's in ours 99.5 %, ours in NVE's 98.7 %, area ratio 1.008
+1791190040.553	84.20.0 Holsenvatn: match (seeded by the lake Holsavatnet); NVE's in ours 98.3 %, ours in NVE's 99.2 %, area ratio 0.991
+1791190043.230	85.4.0 Straumstad (Solheimsvatnet): match (seeded by the lake Solheimsvatnet); NVE's in ours 98.7 %, ours in NVE's 95.1 %, area ratio 1.038
+1791190050.521	86.10.0 Åvatn (Ommedalsvatnet): match (seeded by the lake Ommedalsvatnet); NVE's in ours 99.2 %, ours in NVE's 99.1 %, area ratio 1.000
+1791190054.469	86.12.0 Skjerdalselv: match; NVE's in ours 98.7 %, ours in NVE's 97.6 %, area ratio 1.011
+1791190055.644	87.10.0 Gloppenelv v/Bergheim: uncertain (swing, downstream_unread, chain_not_draining); NVE's in ours 0.0 %, ours in NVE's 82.7 %, area ratio 0.000
+1791190059.622	88.4.0 Lovatn: match (seeded by the lake Lovatnet); NVE's in ours 99.0 %, ours in NVE's 98.5 %, area ratio 1.005
+1791190061.302	88.11.0 Strynsvatn: uncertain (chain_not_draining, chain_end_open); NVE's in ours 0.1 %, ours in NVE's 100.0 %, area ratio 0.001
+1791190069.036	88.30.0 Nordre Oldevatn: match (seeded by the lake Oldevatnet); NVE's in ours 97.9 %, ours in NVE's 98.7 %, area ratio 0.991
+1791190071.213	97.1.0 Fetvatn (Fitjavatnet): match (seeded by the lake Fitjavatnet); NVE's in ours 99.4 %, ours in NVE's 98.9 %, area ratio 1.005
+1791190091.644	98.4.0 Øye ndf.: match; NVE's in ours 99.5 %, ours in NVE's 98.4 %, area ratio 1.012
+1791190094.807	101.1.0 Engsetvatn: match; NVE's in ours 98.9 %, ours in NVE's 97.1 %, area ratio 1.018
+1791190121.626	103.1.0 Ulvåa v/Storhølen: match; NVE's in ours 99.5 %, ours in NVE's 98.5 %, area ratio 1.010
+1791190126.252	104.23.0 Vistdal: match; NVE's in ours 99.1 %, ours in NVE's 99.6 %, area ratio 0.995
+1791190127.338	105.1.0 Osenelv v/Øren: miss; NVE's in ours 0.4 %, ours in NVE's 77.6 %, area ratio 0.005
+1791190128.542	109.9.0 Driva v/Risefoss: uncertain (downstream_unread, chain_not_draining); NVE's in ours 0.0 %, ours in NVE's 100.0 %, area ratio 0.000
+1791190148.025	109.21.0 Driva v/Svoni: match; NVE's in ours 97.2 %, ours in NVE's 96.1 %, area ratio 1.012
+1791190162.890	112.8.0 Rinna: uncertain (chain_not_draining); NVE's in ours 99.2 %, ours in NVE's 98.8 %, area ratio 1.004
+1791190185.745	121.20.0 Åmot: match; NVE's in ours 99.7 %, ours in NVE's 99.3 %, area ratio 1.004
+1791190293.482	122.11.0 Eggafoss: uncertain (chain_not_draining); NVE's in ours 99.4 %, ours in NVE's 99.3 %, area ratio 1.001
+1791190312.708	122.14.0 Lillebudal bru: uncertain (chain_not_draining); NVE's in ours 99.3 %, ours in NVE's 98.8 %, area ratio 1.005
+1791190384.474	122.17.0 Hugdal bru: uncertain (swing, chain_not_draining); NVE's in ours 0.0 %, ours in NVE's 64.8 %, area ratio 0.000
+1791190467.829	124.2.0 Høggås bru: uncertain (swing); NVE's in ours 99.4 %, ours in NVE's 76.3 %, area ratio 1.302
+1791190477.009	127.11.0 Veravatn: match (seeded by the lake Veresvatnet); NVE's in ours 98.2 %, ours in NVE's 98.3 %, area ratio 0.999
+1791190484.998	128.9.0 Leksdalsvatn: match (seeded by the lake Leksdalsvatnet); NVE's in ours 98.9 %, ours in NVE's 99.3 %, area ratio 0.996
+1791190492.456	133.7.0 Krinsvatn (Kringsvatnet): match (seeded by the lake Kringsvatnet); NVE's in ours 99.2 %, ours in NVE's 99.4 %, area ratio 0.999
+1791190502.536	138.1.0 Øyungen: match (seeded by the lake Øyungen); NVE's in ours 99.4 %, ours in NVE's 99.2 %, area ratio 1.001
+1791190504.995	139.35.0 Trangen: uncertain (swing, downstream_unread, chain_not_draining); NVE's in ours 0.0 %, ours in NVE's 100.0 %, area ratio 0.000
+1791190521.522	140.2.0 Salsvatn: match (seeded by the lake Salsvatnet); NVE's in ours 99.6 %, ours in NVE's 99.6 %, area ratio 1.000
+1791190538.876	148.2.0 Mevatnet: match; NVE's in ours 99.7 %, ours in NVE's 98.9 %, area ratio 1.009
+1791190539.913	150.1.0 Sørra: uncertain (chain_not_draining); NVE's in ours 85.6 %, ours in NVE's 96.1 %, area ratio 0.890
+1791190541.934	151.13.0 Øvre Glugvatn: match (seeded by the lake Øvergluggvatnet); NVE's in ours 98.5 %, ours in NVE's 98.7 %, area ratio 0.998
+1791190570.206	151.15.0 Nervoll: match; NVE's in ours 98.4 %, ours in NVE's 98.6 %, area ratio 0.998
+1791190583.995	152.4.0 Fustvatn: match (seeded by the lake Fustvatnet); NVE's in ours 99.5 %, ours in NVE's 99.1 %, area ratio 1.003
+1791190585.255	153.1.0 Storvatn: miss; NVE's in ours 5.4 %, ours in NVE's 98.0 %, area ratio 0.055
+1791190585.823	156.24.0 Bogvatn: refused: the request selects tiles on two lattices, 7404_2_10m_z33.tif and 7304_1_10m_z33.tif: 7304_1_10m_z33.tif is 0.5 cell (5 m) east-west off 7404_2_10m_z33.tif's lattice; tiles are not resampled onto one another, but a --bbox inside one lattice is meshed
+1791190586.186	156.15.0 Forsbakk: refused: the request selects tiles on two lattices, 7304_4_10m_z33.tif and 7304_1_10m_z33.tif: 7304_1_10m_z33.tif is 0.5 cell (5 m) east-west off 7304_4_10m_z33.tif's lattice; tiles are not resampled onto one another, but a --bbox inside one lattice is meshed
+1791190589.995	168.3.0 Lakså bru: match; NVE's in ours 99.0 %, ours in NVE's 99.0 %, area ratio 0.999
+1791190591.544	172.8.0 Rauvatn: match (seeded by the lake Røvatnet); NVE's in ours 98.8 %, ours in NVE's 98.5 %, area ratio 1.003
+1791190593.220	177.4.0 Sneisvatn: match (seeded by the lake Sneisvatnet); NVE's in ours 98.9 %, ours in NVE's 99.4 %, area ratio 0.994
+1791190594.804	178.1.0 Langvatn: match (seeded by the lake Langvatnet); NVE's in ours 99.3 %, ours in NVE's 97.8 %, area ratio 1.015
+1791190595.416	185.1.0 Gåslandsvatn: match (seeded by the lake Gåslandsvatnet); NVE's in ours 97.8 %, ours in NVE's 97.6 %, area ratio 1.002
+1791190597.263	186.2.0 Ånesvatn: match (seeded by the lake Ånesvatnet); NVE's in ours 97.7 %, ours in NVE's 97.7 %, area ratio 1.000
+1791190602.179	189.3.0 Tennevikvatn: match; NVE's in ours 99.1 %, ours in NVE's 98.8 %, area ratio 1.003
+1791190610.169	191.2.0 Øvrevatn: refused (seeded by the lake Øvervatnet): the request selects tiles on two lattices, 7505_1_10m_z33.tif and 7606_2_10m_z33.tif: 7606_2_10m_z33.tif is 0.5 cell (5 m) east-west off 7505_1_10m_z33.tif's lattice; tiles are not resampled onto one another, but a --bbox inside one lattice is meshed
+1791190612.428	196.7.0 Ytre Fiskeløsvatn: match (seeded by the lake Ytre Fiskelausvatnet); NVE's in ours 98.4 %, ours in NVE's 98.9 %, area ratio 0.995
+1791190614.401	196.11.0 Lille Rostavatn: uncertain (swing, chain_not_draining); NVE's in ours 0.0 %, ours in NVE's 100.0 %, area ratio 0.000
+1791190615.055	200.4.0 Skogsfjordvatn: uncertain (swing, chain_not_draining, chain_end_open); NVE's in ours 0.0 %, ours in NVE's 100.0 %, area ratio 0.000
+1791190615.892	203.2.0 Jægervatn: refused (seeded by the lake Jægervatnet): the request selects tiles on two lattices, 7706_1_10m_z33.tif and 7707_3_10m_z33.tif: 7707_3_10m_z33.tif is 0.5 cell (5 m) east-west off 7706_1_10m_z33.tif's lattice; tiles are not resampled onto one another, but a --bbox inside one lattice is meshed
+1791190619.106	205.6.0 Didnojokka: uncertain (swing, downstream_unread, chain_not_draining); NVE's in ours 98.4 %, ours in NVE's 98.3 %, area ratio 1.001
+1791190620.485	206.3.0 Manndalen bru: refused: the request selects tiles on two lattices, 7606_1_10m_z33.tif and 7707_3_10m_z33.tif: 7707_3_10m_z33.tif is 0.5 cell (5 m) east-west off 7606_1_10m_z33.tif's lattice; tiles are not resampled onto one another, but a --bbox inside one lattice is meshed
+1791190620.818	208.2.0 Oksfjordvatn: refused: the request selects tiles on two lattices, 7707_4_10m_z33.tif and 7707_1_10m_z33.tif: 7707_1_10m_z33.tif is 0.5 cell (5 m) east-west off 7707_4_10m_z33.tif's lattice; tiles are not resampled onto one another, but a --bbox inside one lattice is meshed
+1791190621.071	208.3.0 Svartfossberget: refused: the request selects tiles on two lattices, 7707_2_10m_z33.tif and 7707_3_10m_z33.tif: 7707_3_10m_z33.tif is 0.5 cell (5 m) east-west off 7707_2_10m_z33.tif's lattice; tiles are not resampled onto one another, but a --bbox inside one lattice is meshed
+1791190621.652	209.4.0 Lillefossen: refused: the request selects tiles on two lattices, 7707_2_10m_z33.tif and 7707_1_10m_z33.tif: 7707_1_10m_z33.tif is 0.5 cell (5 m) east-west off 7707_2_10m_z33.tif's lattice; tiles are not resampled onto one another, but a --bbox inside one lattice is meshed
+1791190629.463	212.10.0 Masi: uncertain (swing, chain_not_draining); NVE's in ours 0.0 %, ours in NVE's 4.0 %, area ratio 0.001
+1791190634.772	212.48.0 Sagafoss: refused: the request selects tiles on two lattices, 7707_2_10m_z33.tif and 7707_1_10m_z33.tif: 7707_1_10m_z33.tif is 0.5 cell (5 m) east-west off 7707_2_10m_z33.tif's lattice; tiles are not resampled onto one another, but a --bbox inside one lattice is meshed
+1791190635.025	212.49.0 Halsnes: refused: the request selects tiles on two lattices, 7708_4_10m_z33.tif and 7707_1_10m_z33.tif: 7707_1_10m_z33.tif is 0.5 cell (5 m) east-west off 7708_4_10m_z33.tif's lattice; tiles are not resampled onto one another, but a --bbox inside one lattice is meshed
+1791190635.279	213.2.0 Leirbotnvatn: refused (seeded by the lake Ráirrojávri): the request selects tiles on two lattices, 7708_4_10m_z33.tif and 7808_3_10m_z33.tif: 7808_3_10m_z33.tif is 0.5 cell (5 m) east-west off 7708_4_10m_z33.tif's lattice; tiles are not resampled onto one another, but a --bbox inside one lattice is meshed
+1791190635.773	213.4.0 Kvalsund: refused: the request selects tiles on two lattices, 7808_4_10m_z33.tif and 7808_3_10m_z33.tif: 7808_3_10m_z33.tif is 0.5 cell (5 m) east-west off 7808_4_10m_z33.tif's lattice; tiles are not resampled onto one another, but a --bbox inside one lattice is meshed
+1791190637.343	223.2.0 Lombola: refused: the request selects tiles on two lattices, 7708_1_10m_z33.tif and 7808_3_10m_z33.tif: 7808_3_10m_z33.tif is 0.5 cell (5 m) east-west off 7708_1_10m_z33.tif's lattice; tiles are not resampled onto one another, but a --bbox inside one lattice is meshed
+1791190781.920	234.13.0 Veahkkava, Iesjokka: match; NVE's in ours 99.2 %, ours in NVE's 99.4 %, area ratio 0.998
+1791190844.374	234.18.0 Polmak nye: uncertain (downstream_unread, chain_not_draining); NVE's in ours 0.0 %, ours in NVE's 97.1 %, area ratio 0.000
+1791190848.997	237.1.0 Båtsfjord: uncertain (swing); NVE's in ours 94.6 %, ours in NVE's 97.1 %, area ratio 0.974
+1791190855.932	244.2.0 Neiden: refused: 1714266 nodes the request needs are in no tile: x 987960 to 999740, y 7735210 to 7749740 (EPSG:25833)
+1791190880.099	246.9.0 Sametielv: match; NVE's in ours 97.8 %, ours in NVE's 99.0 %, area ratio 0.987
+1791190899.482	247.3.0 Karpelva: match; NVE's in ours 97.7 %, ours in NVE's 95.5 %, area ratio 1.023
+1791190911.393	307.5.0 Murusjø: match (seeded by the lake Murusjøen); NVE's in ours 98.8 %, ours in NVE's 97.1 %, area ratio 1.017
+1791190916.914	307.7.0 Landbru: miss; NVE's in ours 98.5 %, ours in NVE's 77.3 %, area ratio 1.275
+1791190930.623	308.1.0 Lenglingen: match (seeded by the lake Lenglingen); NVE's in ours 99.2 %, ours in NVE's 99.3 %, area ratio 0.999
+1791190930.764	311.4.0 Femundsenden (Femunden): refused: no mapped river line within 500 m of the station
+1791190939.346	311.6.0 Nybergsund: uncertain (chain_not_draining, chain_end_open); NVE's in ours 0.0 %, ours in NVE's 0.0 %, area ratio 0.000
+1791190964.981	313.10.0 Magnor: match; NVE's in ours 98.8 %, ours in NVE's 99.1 %, area ratio 0.997
+1791190964.989	summary: 140 stations: refused 16, uncertain 39, match 74, close 5, miss 6
+1791190964.997	13 stations refused because their windows select tiles on two different grids, which rasputin does not combine, and neither grid covers the window alone (known refusals, not failures)
+1791190965.040	     1994.36 real      2197.53 user        25.43 sys
+1791190965.046	          7745503232  maximum resident set size
+1791190965.052	                   0  average shared memory size
+1791190965.059	                   0  average unshared data size
+1791190965.065	                   0  average unshared stack size
+1791190965.072	             3160825  page reclaims
+1791190965.078	                  10  page faults
+1791190965.085	                   0  swaps
+1791190965.091	                   0  block input operations
+1791190965.098	                   0  block output operations
+1791190965.104	                 140  messages sent
+1791190965.111	                 140  messages received
+1791190965.117	                   0  signals received
+1791190965.123	                1448  voluntary context switches
+1791190965.130	              439864  involuntary context switches
+1791190965.136	      16665961623462  instructions retired
+1791190965.143	       7106036708175  cycles elapsed
+1791190965.149	          7738497264  peak memory footprint
