@@ -149,15 +149,26 @@ src_python/tin_engine/     # public Python API (distribution name: rasputin)
                            #   never imports _core (22)
   catchment.py             # CatchmentRequest -> delineate(request, repo) ->
                            #   Catchment: seed, the window loop over 15a's
-                           #   plan, _core.upstream, the fine ring, and
-                           #   _core.reduce_ring; takes a DemRepository and
-                           #   no path (22); with a river reach, the pour
-                           #   point is the gauge's node on the burnt reach (29)
+                           #   plan, the flood, the fine ring and its
+                           #   reduction (via catchment_core, never _core);
+                           #   takes a DemRepository and no path (22); with a
+                           #   river reach, the pour point is the gauge's node
+                           #   on the burnt reach (29)
+  catchment_core.py        # upstream, accumulate: the core call on
+                           #   raster.to_core's view of a DemTile; reduce_ring
+                           #   re-exported; the catchment's _core calls, as
+                           #   edge_strip.py is the edge strip's (python-
+                           #   audit.md, section 11)
+  hydrography.py           # RiverSegment, Station, Lake: the hydrography's
+                           #   value types; no first-party import, so gauge
+                           #   places on them without a codec, and io/rivers.py
+                           #   and io/station_set.py read into them (python-
+                           #   audit.md, section 11)
   gauge.py                 # place: a station's foot P on NVE's river lines,
                            #   by tier, and the reach round it (29, PR 2);
                            #   lake_seed -> LakeSeed: the gauges seeded with
                            #   their lake, by containment and one distance
-                           #   (PR 4); pure shapely, no DEM, no file
+                           #   (PR 4); pure shapely, no DEM, no file, no codec
   burn.py                  # burn_reach: the reach moved onto the window's
                            #   valley floor and burnt in -> (burnt copy,
                            #   GaugePath); numpy only (29, PR 2)
@@ -167,9 +178,10 @@ src_python/tin_engine/     # public Python API (distribution name: rasputin)
   reference.py             # agreement, classify, summarise: our catchment
                            #   against NVE's polygon, counted on the DEM's
                            #   node lattice; pure, no file (29, PR 4)
-  catchment_batch.py       # run_batch: place, lake_seed, delineate in a
-                           #   worker thread, compare, one StationResult row
-                           #   per station to a BatchSink; no paths (29, PR 4)
+  catchment_batch.py       # seed_for: place, lake_seed, the request (shared
+                           #   with catchment --rivers); run_batch: delineate
+                           #   in a thread, compare, StationResult rows to a
+                           #   BatchSink; no paths (29, PR 4)
   landcover.py             # regions, label_triangles: a land-cover code per
                            #   triangle, components across unconstrained edges,
                            #   one point-in-polygon test per component (16c);
@@ -248,9 +260,9 @@ src_python/tin_engine/     # public Python API (distribution name: rasputin)
                            #   geometry refused with ValueError (29);
                            #   read_lakes -> (Lake parts, crs): the lakes
                            #   file, a MultiPolygon split (29, PR 4)
-    rivers.py              # RiverSegment, kind_of (lake or river, total over
-                           #   NVE's objekttype spellings), drop_copies,
-                           #   read_segments -> (segments, crs, copies
+    rivers.py              # kind_of (lake or river, total over NVE's
+                           #   objekttype spellings), drop_copies,
+                           #   read_segments -> (RiverSegments, crs, copies
                            #   dropped); one LineString per segment (29)
     repository.py          # the ONE io/ module that opens files:
                            #   TiffDemRepository lists headers, loads tiles

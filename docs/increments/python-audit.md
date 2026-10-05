@@ -22,9 +22,9 @@ items fixed (`4686456`, this paragraph, and the round-1 record's two
 citations, now pinned to `97eea35`). Next `@reviewer` round 3: run
 `python3 tools/check_citations.py` and re-read the round-1 record (tests
 only: no `@developer` step, no `@perf` run); then push on Ola's yes.
-PR F (`audit-catchment-shared`, branch `worktree-audit-catchment`) is
-designed in section 11; next, `@tester`'s red commit (section 11, "Red
-tests").
+PR F (`audit-catchment-shared`, branch `worktree-audit-catchment`, section
+11): red `84e12fa`, green `8d9e2c5` and its trim `5c6a9f9`; code review
+round 1 asked for changes, made (Review, below); next `@reviewer` round 2.
 
 Re-checked against master `44fa7f5`: `git diff --stat 12dace7 44fa7f5 --
 src_python` is empty, and of the files cited below only `tools/brief.py`
@@ -397,8 +397,9 @@ L4  pipelines         dem_input, feature_input, mesh_run (new), catchment,
                       no print, no path but what the request names
 L3  core adapters     raster.to_core (the one raster adapter), start_mesh
                       (build_pslg -> node -> triangulate), edge_strip,
-                      final_check, and the package root (it re-exports
-                      Point2/Point3): the only importers of _core
+                      catchment_core (PR F), final_check, and the package
+                      root (it re-exports Point2/Point3): the only
+                      importers of _core
 L2  io/ codecs        bytes <-> values: geotiff, cog, geopackage, gml,
                       geojson (read AND write), ply, vtk_legacy, tables
                       (csv/json/palette), mesh_index, station_set, rivers;
@@ -411,7 +412,8 @@ L1  pure algorithms   crs (same_crs, transform_label, single_crs), mosaic,
 L0  values            io/models (RasterMeta with node methods, IndexWindow
                       with window methods, Bounds, TileFootprint, DemTile,
                       valid_mask), features, sources, run_record, stats,
-                      palettes
+                      palettes, hydrography (PR F: RiverSegment, Station,
+                      Lake)
 ```
 
 What changes against today: `Bounds`, `TileFootprint` and the lattice
@@ -778,7 +780,8 @@ is in one place, `run_batch`.
 | `src_python/tin_engine/catchment.py@44fa7f5:371, 452, 521` | seed and mask `Any` | `npt.NDArray[np.uint8]`, through one alias `Mask` |
 | `src_python/tin_engine/cli.py@44fa7f5:1711, 1731` | `repository: Any` | `DemRepository` |
 
-`catchment.py` then imports nothing from `typing` but `Literal` and `Self`.
+`catchment.py` then imports nothing from `typing` but `Any` (for
+`GaugeResult.report_fields`), `Literal` and `Self`.
 Left as `Any`, on purpose: `run_batch`'s `fields: dict[str, Any]` (spread
 into `StationResult(**fields)`) and the two `report_fields` returns, for the
 same reason; and `sensitivity.assess(path: Any)`, which is not catchment
@@ -889,16 +892,44 @@ PYTHONPATH=tests/python .venv/bin/python docs/increments/python-audit-probes/cat
 
 ### Net production lines
 
-| File | Added | Removed | Net |
-|---|---|---|---|
-| `hydrography.py` (new) | about 30 | 0 | about +30 |
-| `io/rivers.py`, `io/station_set.py` | about 2 | about 29 | about -27 |
-| `gauge.py` | about 3 | about 1 | about +2 |
-| `catchment.py` | about 6 | 0 | about +6 |
-| `catchment_core.py` (new) | about 13 | 0 | about +13 |
-| `catchment_batch.py` | about 43 | about 48 | about -5 |
-| `cli.py` | about 18 | about 22 | about -4 |
-| **Total** | | | **about +15** |
+| File | Added | Removed | Net | Measured (`b63132e..5c6a9f9`) |
+|---|---|---|---|---|
+| `hydrography.py` (new) | about 30 | 0 | about +30 | +30 |
+| `io/rivers.py`, `io/station_set.py` | about 2 | about 29 | about -27 | -27 (3 added, 30 removed) |
+| `gauge.py` | about 3 | about 1 | about +2 | +2 |
+| `catchment.py` | about 6 | 0 | about +6 | +14 (39 added, 25 removed) |
+| `catchment_core.py` (new) | about 13 | 0 | about +13 | +12 |
+| `catchment_batch.py` | about 43 | about 48 | about -5 | -1 (49 added, 50 removed) |
+| `cli.py` | about 18 | about 22 | about -4 | -1 (33 added, 34 removed) |
+| **Total** | | | **about +15** | **+29** (171 added, 142 removed) |
+
+**Measured, after the green commits: +29, not about +15**, by `python3
+tools/count_loc.py b63132e 5c6a9f9`; under the +40 that would be a finding.
+Of the 29, 16 are import lines (top-level `import` and `from` statements,
+counted by line at both revisions): `catchment.py` +6, `catchment_core.py`
++7, `hydrography.py` +5, `cli.py` +2, `catchment_batch.py` -2, `gauge.py`
+and `io/station_set.py` -1 each. The three files off their estimate:
+
+- `catchment.py`, +14 against about +6: the `catchment_core` import takes
+  seven lines where the `_core` one took one (on one line it is 102
+  characters, over the formatter's 100), so imports are +6;
+  `GaugeResult.report_fields` is 4 counted lines, which the table did not
+  cost in this file; and the types are 4 more than costed (two more
+  aliases, `Mask` and `Footprints`, and `_burnt_flood`'s signature over
+  three lines).
+- `catchment_batch.py`, -1 against about -5: imports -2; the batch's copy
+  of the gauge's fields drops `well_posed` in its own statement, and the
+  `try` round `seed_for` holds the placement's and the seed's fields.
+- `cli.py`, -1 against about -4: imports +2 (`hydrography`, and
+  `DemRepository` for the retyped `repository`), and the `BatchRequest`
+  the single command builds takes five lines.
+
+**Line count is the proxy, complexity the measure.** Ola, 2026-10-05,
+answering the main session's question D4: "The LOC is basically a proxy
+for complexity. Imports add very little. So it sounds like a would be
+right here." By that measure the +29 is about +13 outside import
+lines, for two placement copies made one, typed catchment signatures, and
+three upward imports removed.
 
 **Not the audit's about -50 (section 2) or -40 (section 6).** The two
 placement copies share about 25 lines a side, and the shared function and
@@ -912,8 +943,10 @@ tools/count_loc.py b63132e <head>`; a result above +40 is a finding.
 `catchment_core.py`, and the rows for `catchment.py` (its `_core.upstream`
 and `_core.reduce_ring` become `catchment_core`'s), `catchment_batch.py`
 (`seed_for`), `io/rivers.py` and `io/station_set.py` change; section 5's
-picture gains `hydrography` in L0 and `catchment_core` in L3. Both in the
-green commit, when the modules exist.
+picture gains `hydrography` in L0 and `catchment_core` in L3. The green
+commits left both out; code review round 1 asked for them, and the commit
+that records that round makes them. `io/station_set.py`'s row needed no
+change: it names what the readers return, which still holds.
 
 ### Citations this PR moves, pinned now
 
@@ -976,3 +1009,7 @@ to the signatures this PR retypes.
 **T2 (`audit-layering-test`), code review, round 1, 2026-10-05.** Range `44fa7f5..97eea35` (e86b86d audit, 8190438 rulings and T2 design, 2f47ebb tests, 97eea35 citation pins). Verdict: CHANGES REQUESTED. LOC: 0 production lines (`count_loc.py`); test lines +184 -185, -1 net against about -35. Not pushed; no CI. Whole Python suite 5132 passed, 17 skipped; ruff, format, mypy and check_citations clean. An independent AST resolver agrees with the table for all 52 modules. Seven planted breaks in a scratch copy each failed only their own check: a row for a missing module, a deferred import, a relative import in a package `__init__`, `_core` imported from layer 4, two stale exceptions, and `importlib.import_module`. Check 4's stricter reading is sound. Every deleted firewall assertion is carried by a row that is equal or stricter. All 16 new pins quote what their records say. Blocking: (1) `@tester`: the `# fmt: off` comment at `tests/python/test_layering.py@97eea35:27-28` describes the formatter wrongly; (2) `@architect`: the -1 net explanation at `docs/increments/python-audit.md@97eea35:12-15` names the wrong cause. Suggestions: check 4's wording in section 8; `testing.md@97eea35:183-185`'s "no compiled extension" claim, false before this branch.
 
 **T2 (`audit-layering-test`), code review, round 2, 2026-10-05.** Range `97eea35..90cba64` (4686456 fmt-off comment, 90cba64 round 1 recorded and net explanation). Verdict: CHANGES REQUESTED. LOC: 0 production lines; branch test lines +186 −185, +1 net. Not pushed; no CI. Both round-1 blocking items fixed and true: `ruff format --diff` on a copy without the markers does what the new comment says (joined rows 98 and 99 characters, limit 100), and the per-file counts in the net explanation match `git diff -U0`. Check 4's wording matches the test. ruff, format, mypy and check_citations clean; test_layering 56 passed. Blocking: (1) `@architect`: the round-1 record's citations `tests/python/test_layering.py@97eea35:27-28` and `docs/increments/python-audit.md@97eea35:12-15` (pinned at recording) now resolve to the fixed text unless pinned. Suggestion: say "adds 4 and removes 2" at line 19.
+
+**PR F (`audit-catchment-shared`), code review, round 1, 2026-10-05.** PR F code review r1 (`b63132e..5c6a9f9`): CHANGES REQUESTED — `project_structure.md` rows (`project_structure.md@5c6a9f9:150-153` still named `_core.upstream` and `_core.reduce_ring`, `:251` listed `RiverSegment` under `rivers.py`, no rows for `hydrography.py` and `catchment_core.py`) and section 5's picture, the status line (`docs/increments/python-audit.md@5c6a9f9:25-27`), and section 11's net lines against the measured +29; fixed by `@architect` in the commit that records this round.
+
+Non-blocking, for a later `@tester` and `@developer` pass: tests still reach `RiverSegment`, `Station` and `Lake` through the codec modules rather than `tin_engine.hydrography` (`tests/python/test_station_set.py@5c6a9f9:51, 245`, `tests/python/test_rivers.py@5c6a9f9:89`); `catchment.py`'s module docstring still names `_core.upstream`, `_core.reduce_ring` and `_core.accumulate` where the calls now go through `catchment_core`.
