@@ -1,9 +1,9 @@
 # GeoTIFF: a projected CRS given by parameters, read as the EPSG code it is
 
-Status: **code review round 1 answered in the design; next `@tester` (the
-red tests of section 8's items 13 and 14, and the docstring tense the review
-asked for), then `@developer`, then `@reviewer` code round 2.** Design
-approved at round 2 (`900701c`), red step `0f6c271`, green step `c8984e8`.
+Status: **code review round 2 approved at `35c44c8`; +159 net. Next: push
+on Ola's yes, after audit PR B (branch `worktree-audit-crs`) merges.** Design
+approved at round 2 (`900701c`), red steps `0f6c271` and `5270a64`, green
+steps `c8984e8` and `35c44c8`.
 Written by `@architect` on branch
 `worktree-geotiff-param-crs`, from audit PR B's green head `65cd528`
 (`same_crs`, `docs/increments/python-audit.md` section 9). It lands after PR B.
@@ -321,9 +321,12 @@ Pinned with the checks:
   `CRSError`, which a caller catching `GeoTiffError` (a mosaic) does not
   catch. `{v!r}` prints `nan`, `inf` or the tuple. The `N` check of each key
   runs before that key's comparison (row 6) or its use (row 11).
-- **The keys read as codes** (3074, 3075, 2048, 2054, 3076) go through
-  `int()`, as 3072 does on the coded path (`_projected_epsg`); a tuple in one
-  of them is out of this PR, on both paths alike.
+- **The keys read as codes** (3072, 3074, 3075, 2048, 2054, 3076) go through
+  `int()`, as 3072 does on the coded path (`_projected_epsg`). A value in one
+  of them that is not an `int` (a tuple, a NaN or infinite double, a string)
+  escapes as `ValueError`, `OverflowError` or `TypeError`, not
+  `GeoTiffError`, on both paths alike. That is out of this PR; it is put to
+  Ola as a small follow-up (section 10, question 5).
 - **2054 absent reads as degrees**, as libgeotiff does (its angular unit factor
   starts at 1 degree in `GTIFGetDefn`). `GeogAzimuthUnitsGeoKey` (2060) is not
   read: neither method has an azimuth.
@@ -489,7 +492,7 @@ for every refusal. Not the 2 GB file.
 1. **The Austrian GeoKeys read as EPSG:31287**: `read_meta`, `read_header`,
    `read_page` and `decode_dem` each give `epsg == 31287`, `crs ==
    "EPSG:31287"`, `geographic` False, and `decode_dem`'s array equal to the
-   baseline's. Red today: refused at 3072.
+   baseline's. Red at `0f6c271`: refused at 3072.
 2. **Either order of the standard parallels** (46, 49 and 49, 46): 31287.
 3. **Transverse Mercator by parameters**: 15 E, 0.9996, 500 000, 0 on ETRS89
    (4258) reads as 25833; on WGS 84 (4326) as 32633; MGI Gauss-Krüger M31 on
@@ -545,8 +548,8 @@ code:
     alone (the value survives the write as NaN, inf or a 2-tuple).
 14. **A file in grads is refused for its unit**: `AUSTRIA_KEYS` with 2054 =
     9105 and 2061 = 2.5969213 (Paris, in grads) gives row 8's message
-    (`GeogAngularUnitsGeoKey`, `2054`, `9105`) and not `disagrees`. Red
-    today: row 6 runs first and refuses the meridian.
+    (`GeogAngularUnitsGeoKey`, `2054`, `9105`) and not `disagrees`. Red at
+    `5270a64`: row 6 ran first and refused the meridian.
 
 Not invariant-critical: no mutation round (`docs/increments/README.md`, cost
 constraints).
@@ -556,7 +559,7 @@ constraints).
 Estimate: **about +135, between 110 and 150**
 (`python3 tools/count_loc.py <base> <head>`); measured at the green step,
 `python3 tools/count_loc.py 65cd528 c8984e8`: +154. Code review round 1 adds
-about 8 (the `N` check, shared by rows 6 and 11). Well under the 700 of
+about 8 (the `N` check, shared by rows 6 and 11); measured at `35c44c8`: +159. Well under the 700 of
 `CLAUDE.md` section 2. Counted as `ruff format` lays it out: a refusal whose
 f-string passes 100 columns wraps to three to five lines, as
 `_projected_epsg`'s do today.
@@ -594,6 +597,13 @@ The method table may be packed one parameter per line under `# fmt: off`
    refuse. The alternative is to ignore the key and read the file as the
    EPSG code, which lets PROJ pick its own shift when reprojecting, so a
    reprojected position need not be where the file meant it.
+5. **A malformed code key.** A GeoKey that should hold a code (for example
+   the projected CRS code, 3072, or the linear unit, 3076) but holds
+   something else, such as two numbers, a non-finite number or text, makes
+   the reader fail with a Python error instead of rasputin's sentence about
+   the file. This is so for files with and without an EPSG code, and is
+   older than this PR. Fix it in a separate small PR, so every such file is
+   refused with a sentence naming the key? Default: yes, after this one.
 
 ## Citations this PR pins
 
@@ -608,3 +618,4 @@ empty), `src_python/tin_engine/crs.py@65cd528`,
 - Design round 1 (`@reviewer`, at `fbbfb56`): three fixes (rows 7 and 9 did not start with `P`; the TOWGS84 prior-art claim was wrong for 3072 = 32767; the increment 11 amendments did not name what they override) and three suggestions (LOC recount, `cache_clear()` in red test 10, 3074 beyond GeoTIFF 1.1), all taken in the commit after `fbbfb56`.
 - Design round 2 (`@reviewer`, at `900701c`): approved.
 - Code round 1 (`@reviewer`, at `c8984e8`): changes requested: a NaN, infinite or multi-valued parameter escaped as `TypeError` or `CRSError` (rows 6 and 11 now refuse it; red test 13), five citations in increments 12, 15 and 25 unpinned (pinned to `65cd528`), a docstring tense (`@tester`); suggestions (2054 before row 6, red test 14; section 5's absolute tolerance) taken in the commit after `c8984e8`.
+- Code round 2 (`@reviewer`, at `35c44c8`): approved; round-1 findings closed; +159 net against about +162.
