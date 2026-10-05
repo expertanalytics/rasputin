@@ -396,9 +396,9 @@ def branch_repo(tmp_path: Path) -> Path:
 
 
 def run_count(
-    repo: Path, *args: str, env: dict[str, str] | None = None
+    repo: Path, *args: str, env: dict[str, str] | None = None, cwd: Path | None = None
 ) -> subprocess.CompletedProcess[str]:
-    """The copy committed in `repo`, by path, from `repo`."""
+    """The copy committed in `repo`, by path, from `cwd` (default `repo`)."""
     script = repo / SCRIPT
     if not script.exists():
         pytest.fail(f"{SCRIPT} is missing from the checkout")
@@ -406,7 +406,7 @@ def run_count(
         [sys.executable, str(script), *args],
         capture_output=True,
         text=True,
-        cwd=repo,
+        cwd=cwd if cwd is not None else repo,
         env=env if env is not None else clean_env(),
         timeout=120,
         check=False,
@@ -610,6 +610,54 @@ def test_inter_hunk_context_does_not_change_the_output(tmp_path: Path, how: str)
     hostile = parse_report(run_count(repo, "HEAD~1", "HEAD", env=env))
     assert hostile.rows == plain.rows
     assert hostile.total == plain.total
+
+
+#: `diff.relative=true`, the same three ways as INTER_HUNK. Run from a
+#: subdirectory, git would then diff only that subdirectory, with paths
+#: relative to it. Review round 2: the environment forms are what the counter's
+#: stripping of `GIT_CONFIG_*` neutralises (no other test fails without it);
+#: the repository form needs `--no-relative` (design T1).
+RELATIVE = {
+    "GIT_CONFIG_COUNT": {
+        "GIT_CONFIG_COUNT": "1",
+        "GIT_CONFIG_KEY_0": "diff.relative",
+        "GIT_CONFIG_VALUE_0": "true",
+    },
+    "GIT_CONFIG_PARAMETERS": {"GIT_CONFIG_PARAMETERS": "'diff.relative'='true'"},
+    "repository config": {},
+}
+
+
+def relative_env(repo: Path, how: str) -> dict[str, str]:
+    """The environment for `how`; for the repository config, set it in `repo`."""
+    if how == "repository config":
+        git(repo, "config", "diff.relative", "true")
+    return {**clean_env(), **RELATIVE[how]}
+
+
+@pytest.mark.parametrize("how", sorted(RELATIVE))
+def test_diff_relative_run_from_a_subdirectory_does_not_change_the_output(
+    branch_repo: Path, how: str
+) -> None:
+    """From `src_python/`, with `diff.relative=true`, git sees only that
+    subdirectory: the rows of `include/`, `tools/` and the top level would be
+    lost and the remaining paths would lose their `src_python/` prefix."""
+    subdir = branch_repo / "src_python"
+    plain = run_count(branch_repo, "master", "feature")
+    assert parse_report(plain).total == TOTAL
+    from_subdir = run_count(branch_repo, "master", "feature", cwd=subdir)
+    assert from_subdir.stdout == plain.stdout, "the subdirectory alone changed the output"
+    env = relative_env(branch_repo, how)
+    probe = subprocess.run(
+        ["git", "diff", "--name-only", "master...feature"],
+        capture_output=True, text=True, cwd=subdir, env=env, check=True,
+    ).stdout  # fmt: skip
+    assert "include/x.hpp" not in probe and "pkg/a.py" in probe.splitlines(), (
+        f"{how} did not make git's diff relative to {subdir}:\n{probe}"
+    )
+    hostile = run_count(branch_repo, "master", "feature", env=env, cwd=subdir)
+    assert hostile.returncode == 0, hostile.stderr
+    assert hostile.stdout == plain.stdout
 
 
 # ---------------------------------------------------------------- recorded counts
