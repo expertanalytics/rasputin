@@ -3377,7 +3377,7 @@ Fixes for round 6, by `@architect` in the commit that records it: suggestion 1 t
 - **Generated files.** `analyse.py .` regenerates `analysis.md` byte for byte. The 124 committed outlines, `results.csv` and `summary.json` are byte-identical to the scratch batch output.
 - **Totals.** 194.5 M nodes; median 4.9 s per station; the longest is `234.13.0` at 145 s.
 - **`105.1.0`.** `windows_105.1.0.txt` shows the last window at 9.3 × 9.3 km with `edge False`. `trace_exit` shows the path leaving at column 941 of 942 over heights 11.69-11.89 m, 3.27 km east. `chain_counts_by_window` gives the placed node 0.75, 30.3, 56.5, 66.6 and 119.7 km² at ±2.6/6/8/10/12 km. So the window does decide the flow.
-- **Sagafoss.** The fourth window is clear of its edge. Its in-nodes reach x 849.77 km, plus 2 km is 851.8 km, past the window's 850.9 km. The margin then doubles to 32 km, and the refusal is raised at `catchment.py:259`. NVE's polygon lies on `7708_4` alone and is 16 km from the nearest shifted tile (`7808_3`, by the world files).
+- **Sagafoss.** The fourth window is clear of its edge. Its in-nodes reach x 849.77 km, plus 2 km is 851.8 km, past the window's 850.9 km. The margin then doubles to 32 km, and the refusal is raised at `src_python/tin_engine/catchment.py@44fa7f5:259`. NVE's polygon lies on `7708_4` alone and is 16 km from the nearest shifted tile (`7808_3`, by the world files).
 - **Knappom.** 368.87 km plus a 32 km margin is 400.87 km, which matches the refusal message. The data end at 400.26 km, 26 km past NVE's x of 374 km.
 
 **Blocking:**
