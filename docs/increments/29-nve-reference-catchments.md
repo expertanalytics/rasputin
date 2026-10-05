@@ -1,6 +1,6 @@
 # Increment 29 — NVE reference catchments: our catchments against NVE's, station by station
 
-Status: **design approved by `@reviewer` (round 5, 2026-10-04); PR 1 merged as #173; PR 3 merged as #178; PR 2 (the gauge on the river): green `193079d`, 569 production lines, approved, the push waits for Ola; PR 4 (the batch and the comparison): lake path green `fff6ac9`, 691 net; code review round 4 recorded (changes requested, prose only), its two prose fixes made; code review round 5 next; questions 1 to 10 ruled by Ola, all kept as built, to be reassessed after the full 140-station run**
+Status: **design approved by `@reviewer` (round 5, 2026-10-04); PR 1 merged as #173; PR 3 merged as #178; PR 2 (the gauge on the river): green `193079d`, 569 production lines, approved, the push waits for Ola; PR 4 (the batch and the comparison): lake path green `fff6ac9`, 691 net; code review round 5 recorded (changes requested, prose only: round 4's record completed word for word), its fix made; code review round 6 next; questions 1 to 10 ruled by Ola, all kept as built, to be reassessed after the full 140-station run**
 (`@architect`, 2026-10-04), branch `worktree-nve-catchments` off master
 `d20126b`. Ola's rulings of 2026-10-04 are in the section below. Round 2 closed the burn's drainage claim
 (checked node by node, not assumed), the ELVIS data cases, the PR order, and
@@ -3206,4 +3206,90 @@ Fixes for round 2: (1) `@tester`'s `a98c805` rewords the three docstrings to "be
 #### Lessons
 - A design commit (`efb3894`) doubled four passages, probably an edit applied twice, and three later rounds of red, green and record commits did not notice. A check for identical adjacent lines in `docs/increments/*.md` would catch this mechanically. I am passing it on for `@orchestrator`.
 
+#### ASK OLA lines
+none
+
+#### GUARD FALSE POSITIVE lines
+none
+
+Files: `/Users/skavhaug/projects/rasputin/.claude/worktrees/29-pr4/docs/increments/29-nve-reference-catchments.md` (lines 22–26, 39–40, 56–58, 68–71) and `/Users/skavhaug/projects/rasputin/.claude/worktrees/29-pr4/ROADMAP.md` (line 54). My note file is `/Users/skavhaug/projects/rasputin/.claude/current-task/reviewer-083758.md`; deleting it is the spawner's job.
+
 Fixes for round 4, by `@architect` in the commit that records it: (1) the second copy of each of the four doubled passages deleted (lines 22–26, 39–40, 56–58 and 68–71 as they were), and the whole file scanned for any other repeated adjacent passage, none found; (2) `ROADMAP.md:54`, this file's status line and "Questions for Ola" record Ola's ruling of 2026-10-05 on questions 1 to 10: all kept as built, to be reassessed after the full 140-station run ("Questions 5 to 10: Ola's ruling", under "Ola's rulings"). Both suggestions are deferred to a later PR, since PR 4 has 8 production lines of room left ("Deferred from PR 4's code review, round 4"). The reviewer's question on counting added or net lines is the main session's to put to Ola and is not answered here. No production line changed.
+
+**29 PR 4, code review, round 5, 2026-10-05 (copied from `@reviewer`'s handback).** Range `c9a40c7..bde3b8e`; whole PR `9e666f4..bde3b8e`. The handback follows word for word, by Ola's ruling that review verdicts are recorded so; only its level-2 headings are lowered to level 4, so that they do not end this section. Lines already at level 4 inside its code block are as the handback has them.
+
+#### Result
+
+**Verdict: CHANGES REQUESTED.** There is one blocking issue, and it is in the prose. The record of round 4 says it copies my handback word for word, with only the headings changed. That is not true: the last seven lines of the handback are missing. Everything else in this round passes, and no production line changed.
+
+**Size Metrics**
+- **Range reviewed:** `c9a40c7..bde3b8e`, one `@architect` commit.
+- **Files changed:** two, `ROADMAP.md` and `docs/increments/29-nve-reference-catchments.md`, both prose. `git diff --name-only` lists nothing under `src_python/`, `tools/`, `tests/` or C++.
+- **PR size:** unchanged at 744 added, 53 removed, **691 net**. I judged the 700-line ceiling on the net figure, as rounds 1 to 4 and PR 2's and PR 3's reviews did. Whether the ceiling should count added lines instead is still a question for Ola. Under the net count there are 8 lines of room left.
+- **Focus of the round:** the round-4 record, the doubled passages, how Ola's rulings are recorded, and citations.
+
+**CI:** the branch `worktree-29-pr4` has not been pushed, so there is no PR and no CI yet. This is the review before the first push, and CI still has to go green after the push.
+
+**Blocking Issues**
+1. **The round-4 record is not word for word, but says it is.** The sentence is at `docs/increments/29-nve-reference-catchments.md:3140`: "The handback follows word for word … only its level-2 headings are lowered to level 4". I pulled my round-4 handback from the run's transcript and compared it with the recorded block, which runs from "#### Result" to just before "Fixes for round 4". After lowering `##` to `####`, the two match up to "#### Lessons". The handback's last seven lines are missing:
+   ```
+   #### ASK OLA lines
+   none
+
+   #### GUARD FALSE POSITIVE lines
+   none
+
+   Files: `/Users/.../29-pr4/docs/increments/29-nve-reference-catchments.md` (lines 22–26, 39–40, 56–58, 68–71) and `/Users/.../29-pr4/ROADMAP.md` (line 54). My note file is `.../reviewer-083758.md`; deleting it is the spawner's job.
+   ```
+   The fix is one of two:
+   - **(a)** add those lines after the Lessons block, keeping the `####` level (`tools/brief.py` splits sections only at `## `, so this is safe); or
+   - **(b)** change the sentence at line 3140 to say the closing "none" sections and the file list were left out.
+
+   Ola's ruling asks for a verbatim record, so (a) is the better choice.
+
+**What holds (checked)**
+- **Production code did not change.** The diff touches only the two Markdown files.
+- **The doubled passages are gone.** All four were deleted, including the doubled `--lakes` line in the example command under "Closes". I scanned the whole file three ways: identical neighbouring lines, repeated pairs of long lines, and repeated sentences longer than 60 characters. Nothing doubled is left:
+  - The only repeated pair (lines 1140 and 1281) is the same file name in the output of two different `git grep` commands.
+  - The two sentences that appear three times are on purpose: the ruling marker "*Ruled 2026-10-04, closed: the default*", and PR 1's estimate, repeated in each of its three review records.
+- **Ola's ruling is recorded correctly in all three places.** The status line, `ROADMAP.md:54` (row 29) and "Questions for Ola" all say questions 1 to 10 are ruled, kept as built, and looked at again after the 140-station run.
+  - The new paragraph "Questions 5 to 10: Ola's ruling" sits under "## Ola's rulings (2026-10-04)", where the cross-references say it is.
+  - Each of questions 5 to 10 now carries "*Ruled 2026-10-05, closed: the default, to be reassessed after the full run.*".
+  - The opening paragraph of "Questions for Ola" no longer calls them open.
+- **Questions 9 and 10 mean what the lake design says:**
+  - 9: Femundsenden (no river line within 500 m, 14 m from Femunden) stays refused until the nearest-stream fallback, PR 5. This matches the lake-seed rule (inside the lake, or on the lake's line within 30 m) and line 2839.
+  - 10: a gauge a little below a lake's outlet keeps the river method, and seeding a lake together with the river below it is not built. This matches lines 2027–2033.
+  - Both ROADMAP and the ruling paragraph state them that way.
+- **The deferred-suggestions paragraph** gives my two round-4 suggestions accurately: `read_lakes` messages that do not name the lake, `"0"` read as lake 0, and `Lake` moving out of `io/station_set.py`. "8 production lines of room" is right: 691 net, and the PR must stay under 700.
+- **Citations:** `python3 tools/check_citations.py` exits 0 and lists 99 citations to re-read; I re-read the live ones.
+  - `ROADMAP.md:54` is still row 29, so the citation at line 70 holds.
+  - `test_features.py:583` → `project_structure.md:208` is unchanged in this range.
+  - Nothing cites line numbers in the increment file from outside it, so the 5 lines removed near its top move no citation.
+  - The rest of the list is dated review records, which stay as written.
+- **Leftover red-step comments:** none possible, since no code changed.
+- **Mutation record:** none owed in this round; the one invariant-critical suite's record is with PR 1.
+- **`@perf` run:** none owed, because no refine or mesh code is touched.
+
+**Suggestions (non-blocking)**
+- The ROADMAP row says "Ola ruled all ten of the increment's questions on 2026-10-05". Questions 1 to 4 were ruled on 2026-10-04, and the 2026-10-05 ruling confirmed them. The increment file has it right ("1 to 4 as recorded above, and 5 to 10 kept as built"). The row could say the same.
+
+#### Pinned or assumed beyond the design
+- The size ceiling is judged on net lines, as in every earlier review.
+- I took my round-4 handback text from this session's transcript of the round-4 reviewer run. It is the `SubagentHandback` call in subagent `aa531c608e07d23ea`.
+
+#### Questions for Ola
+- Should the 700-line ceiling count lines added rather than net (added minus removed)? PR 4 is 691 net but 744 added. Default: keep counting net, as every review so far has. This was carried over from round 4 and is still unanswered.
+
+#### Lessons
+- When a handback is copied "word for word", the copy can be checked mechanically. Before writing that claim, run `diff` between the handback text (taken from the transcript) and the recorded block. A hand copy dropped the closing lines here.
+- `tools/brief.py` counts recorded review rounds as lines that contain "APPROVED" or "CHANGES REQUESTED". A verbatim handback that uses either word on more than one line makes the count too high. Today the count is still right only because my round-4 text used the verdict word on one line. Passing both lessons on for `@orchestrator`.
+
+#### ASK OLA lines
+none
+
+#### GUARD FALSE POSITIVE lines
+none
+
+Files: `/Users/skavhaug/projects/rasputin/.claude/worktrees/29-pr4/docs/increments/29-nve-reference-catchments.md` (line 3140, and the record block that ends before "Fixes for round 4") and `/Users/skavhaug/projects/rasputin/.claude/worktrees/29-pr4/ROADMAP.md` (line 54). My note file is `/Users/skavhaug/projects/rasputin/.claude/current-task/reviewer-085322.md`; deleting it is the spawner's job.
+
+Fixes for round 5, by `@architect` in the commit that records it: (1) option (a): the round-4 record now ends with the handback's closing lines (the two "none" sections and the file list), at level 4; both records were checked by `diff` against the handback text, with their headings raised back to level 2, and both diffs are empty; (2) the suggestion taken: `ROADMAP.md:54` says questions 1 to 4 were ruled on 2026-10-04 and confirmed on 2026-10-05, and 5 to 10 were ruled on 2026-10-05. The question on counting added or net lines is still the main session's to put to Ola. No production line changed.
