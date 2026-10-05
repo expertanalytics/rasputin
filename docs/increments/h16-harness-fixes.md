@@ -1,6 +1,6 @@
 # Harness h16: guard fixes, a line counter, a scratch copy, brief fixes
 
-Status: Ola ruled on §7 on 2026-10-05 (all three defaults). PR A: red `11cee8e`, partial green `4db1eab` (252 net production lines against an estimate of 187: count_loc.py's C++ scanner and git plumbing were not priced); the `tools/brief.py` change is refused in unattended mode and waits for Ola; code review round 1 (early) asked for fixes, in progress. PR B not started.
+Status: Ola ruled on §7 on 2026-10-05 (all three defaults). PR A: red `11cee8e`, green `4db1eab` and, after code review round 1, red `3de6e1b` and green `64e51a2`: 280 net production lines against an estimate of 187 (the C++ scanner, the git plumbing and round 1's fixes were not priced); the `tools/brief.py` change is refused in unattended mode and waits for Ola; code review round 2 asked for fixes, in progress. PR B not started.
 
 Ola approved the items on 2026-10-05 (the main session's summary of his
 rulings, not his words). He said this is the last harness increment before
@@ -578,3 +578,58 @@ Suggestions:
 Not pushed; no CI.
 
 Taken in the recording commit: blocking item 5 (the status line).
+
+### Round 2: `@reviewer`, code, early, PR A tools part, `4db1eab..731e2a0`
+
+`@reviewer`'s verdict, word for word:
+
+**Code review, round 2 (early, tools part of PR A), 2026-10-05.** Range `4db1eab..731e2a0` (round 1 recorded 1135e1d, red 3de6e1b, green 64e51a2, citation fix 731e2a0). Verdict: CHANGES REQUESTED.
+
+LOC: 280 net production lines by `tools/count_loc.py bc01cd8 731e2a0`: `tools/count_loc.py` 199 and `tools/scratch_copy.py` 81. This round adds 28 net (43 added, 15 removed): count_loc 8/4/4 and scratch_copy 35/11/24. I recounted the scratch_copy part by hand from `git diff -U0` and got the same figures. The estimate was 187. count_loc is 79 over, from the C++ scanner and the git plumbing. scratch_copy is 21 over, from the sitecustomize, the main-checkout refusal and the cleanup after a failed tar; all three came from review and were not priced. With brief.py's roughly 7 lines still to come, the total is about 287 against 700. The design names no split seam, and none is needed.
+
+Packing: there are now 15 `# fmt: skip` regions, 7 in count_loc and 8 in scratch_copy. Four are new this round:
+- the `DIFF` tuple;
+- the `git rev-parse` call in `_main_checkout`;
+- the `tar` call in `_extract`;
+- the `quoted` tuple.
+
+Each one keeps one call's arguments, or one tuple, on two or three lines, and each stays readable. Together the regions save about 55 lines; ruff format would give about 229 and 106. They are packed for density only; none is needed for the ceiling.
+
+Round 1's [now] items, each run:
+- Blocking 2 (a child process imports the worktree's code). I repeated round 1's probe using the main checkout's venv and a copy of 731e2a0 made by the script. The pytest process and a child `sys.executable -c` both import `…/rv2/copy1/src_python/tin_engine/__init__.py`, and the child's `_core` is the copy's. In the control, the same program run without the printed `PYTHONPATH` imports `/Users/skavhaug/projects/rasputin/src_python/tin_engine/__init__.py` in both processes. Closed. One limit remains: a child started with `-I` still imports the worktree's code. The only such child in the suite is `test_hardening.py:247`, which loads `_core` by path and not as the package, so no test is affected.
+- Blocking 3: the docstring now says to replace `tests/python/`. Closed.
+- Blocking 4: in the copy, the 5 history tests skip with the reason ("… is not the top of a git work tree"). In a `--depth 1` clone of the branch they fail: 2 recorded-count cases and 3 PR #163 cases. Closed.
+- Blocking 5: the status line was taken in 1135e1d. It is out of date again (see below).
+- Config in the environment and hunk context: closed. Planting the removal of `--inter-hunk-context=0` is caught.
+- Prefixes and character literal (round 1's two surviving faults): I planted both again in a scratch clone. The prefix fault fails 1 test and the character-literal fault fails 1 test. Closed.
+- `.pyi`: closed; removing it is caught.
+- Main checkout: closed; removing `_main_checkout()` from the refusal is caught.
+- tar: closed. Removing the cleanup is caught, and so is a stderr longer than one line.
+- Modes: closed. Both files are 100644, like every other file under `tools/`.
+
+Test strength this round: I planted 10 faults, one at a time. 9 were caught. One survived: removing the stripping of config given in the environment (`ENV_CONFIG`). All 65 count_loc tests pass, because `--inter-hunk-context=0` alone overrides the key the tests use. The stripping does matter. Run from `src_python/` with `GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=diff.relative GIT_CONFIG_VALUE_0=true`, the counter gives 280 as written and `total 0 0 0` with the stripping removed.
+
+Gates: 111 tests pass in `test_count_loc.py`, `test_scratch_copy.py` and `test_settings_wiring.py`. 347 tests pass and 15 skip in the copy, in the suites that run with the main venv's older `_core`. `ruff check` and `ruff format --check` are clean, and the prohibited-dependency gate passes. No red-step scaffolding remains.
+
+Citations: `check_citations.py` exits 0 and lists 7 at-risk citations, re-read as quotations:
+- The 3 that are new on this range all sit in this file's round-1 record, as the code stood at 4db1eab (`test_brief.py:335`, `main.yaml:306`, `scratch_copy.py:10`). They stay.
+- `h3-unattended-u1.md:759` names its revision (`as of 6a19357`). It stays.
+- The other 3 are as in round 1.
+
+The 731e2a0 edit to the round-1 record is accepted. It is needed (the bare path makes the gate exit 1 with "no such file"), it does not change the meaning, and it is bracketed and attributed.
+
+Blocking:
+1. **[Ola]** There is no CI yet; the branch must be pushed and CI green. The 18 `test_brief.py` failures wait on the refused `tools/brief.py` change.
+2. **[now]** Design §2 T2 no longer describes the code, and `scratch_copy.py`'s docstring points to it as its spec. Step 1 says the script refuses a target only "inside the repository it is run from", but it now also refuses a target inside the main checkout. Step 4 says the command uses a `-c` program that "drops the editable finder … puts `<dir>/src_python` first on `sys.path`". The command now sets `PYTHONPATH` to a generated `sitecustomize.py` and to `<dir>/src_python`, and its `-c` program only calls `pytest.main`. Rewrite steps 1 and 4 to match, and say that review round 1 caused the change.
+3. **[now]** The status line still says "partial green `4db1eab` (252 net …)" and "code review round 1 (early) asked for fixes, in progress". It should state the round-1 green (64e51a2), the 280 lines, and review round 2. The recording commit can take this.
+
+Suggestions:
+- **[now]** Add a test that fails when the environment-config stripping is removed. One case is `diff.relative=true` given through `GIT_CONFIG_COUNT`, with the counter run from a subdirectory.
+- **[now]** The same key in the repository's own config is not neutralised. `diff.relative=true` in `.git/config`, with the counter run from a subdirectory, should count 0 by the same mechanism as above. I could not plant it: unattended mode refused the `git config` write in my scratch clone. Pass `--no-relative` in `DIFF`, or run git from the top level, and add the test.
+- **[later]** The generated `sitecustomize.py` hides Homebrew's own `sitecustomize.py`, so in the copy's processes `sys.base_prefix` is not rewritten and the tk path is not added. No test I ran depends on either. Running the hidden file first, or stating the effect in the docstring, would make it explicit.
+- **[later]** "In any Python process a test starts" leaves out children started with `-I` or `-E`, which ignore `PYTHONPATH`. The docstring names only children that replace the environment.
+- **[later]** When tar fails on a missing target, `_extract` removes the target but keeps any parent folders that `mkdir(parents=True)` created.
+
+Not pushed; no CI.
+
+Taken in the recording commit: blocking item 3 (the status line).
