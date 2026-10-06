@@ -4,8 +4,9 @@
 Two modes, each printing one line per result; run a mode before and after the
 change, with the interpreter whose `tin_engine` is the tree to measure (the
 first line prints that path). The lines that start with `fixture ` or `mesh `
-must be identical to `base_a7154ec.txt`'s (`grep -E '^(fixture|mesh) '`); the
-rest is pytest's and the CLI's own output.
+must be identical to the gate's base file, `base_5e2fbe0.txt`
+(`grep -E '^(fixture|mesh) '`; `base_a7154ec.txt` is the earlier base, kept
+as history); the rest is pytest's and the CLI's own output.
 
     fixtures   run the suites that reach the features code in-process,
                recording every call of `open_features` (from the module or

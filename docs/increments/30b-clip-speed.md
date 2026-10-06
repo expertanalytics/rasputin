@@ -1,18 +1,14 @@
 # Increment 30b — the `features clip` phase of `rasputin mesh`, made fast
 
-Status: **designed, not built.** Designed by `@architect` 2026-10-06 on branch
-`worktree-clip-speed`, on `@perf`'s profile commit `a7154ec` (master
-`8199f30` plus the profile). Master has since gained #195 and #196. Of the
-files this PR touches or reads, only `cli.py` changed, and not in
-`_open_features` or anything it calls (`git diff a7154ec origin/master --
-src_python/tin_engine/cli.py` touches imports, `_off_node`,
-`_placement_report` and `catchment`; `git diff --stat a7154ec origin/master --
-src_python/tin_engine/feature_input.py src_python/tin_engine/io/geopackage.py
-tests/python/test_feature_input.py tests/python/feature_fixtures.py ROADMAP.md`
-prints nothing). So the branch was not merged with master for this design.
-Amended by `@architect` the same day after design review round 1 (`## Review`):
-the whole-feature test now tests the feature's linework (3.2, 4.2), with pin
-P5 and three new probe cases.
+Status: **design approved (design review round 2); the red step comes
+next.** Designed by `@architect` 2026-10-06 on branch `worktree-clip-speed`, on
+`@perf`'s profile commit `a7154ec`, and amended the same day after design
+review round 1 (`## Review`): the whole-feature test now tests the feature's
+linework (3.2, 4.2), with pin P5 and three new probe cases. After round 2,
+master (with #199, 30a) was merged in as `5e2fbe0`, and the gate's base was
+recorded again there: `docs/increments/30b-probes/base_5e2fbe0.txt`, equal
+line for line to the earlier `base_a7154ec.txt` (section 6). No 30b code is
+on the branch yet.
 
 **What this is.** The second of three pull requests that remove the
 bottlenecks `@perf` measured in `rasputin mesh` on two real catchments
@@ -386,9 +382,12 @@ read or skipped differently, and the refusal checks run first (4.2).
 
 ## 6. The byte-identical gate
 
-`docs/increments/30b-probes/clip_bytes.py` and its base output
-`docs/increments/30b-probes/base_a7154ec.txt` are committed with this design.
-Its docstring says how to run it. Both modes are the gate:
+`docs/increments/30b-probes/clip_bytes.py` and its base output are committed
+with this design. **The gate's base is
+`docs/increments/30b-probes/base_5e2fbe0.txt`**, recorded at the merge of
+master into this branch (section "The base" below); `base_a7154ec.txt` is the
+earlier base, kept as history. The probe's docstring says how to run it. Both
+modes are the gate:
 
 - **`fixtures`** runs the six suites that reach the features code
   (`test_feature_input.py`, `test_cli_mesh_features.py`,
@@ -421,6 +420,24 @@ After round 1 added the cases, the base was rerun with the same install:
 once (both lines equal round 1's), and `base_a7154ec.txt` rewritten from it.
 Numedalslågen: 1,611 kept, 271 cut, 6,321 outside, 0 empty.
 Skiensvassdraget: 2,628 kept, 216 cut, 2,894 outside, 0 empty.
+
+**The base at the merge, `base_5e2fbe0.txt`.** After design review round 2,
+master (`ed12512`, with #199, 30a) was merged into this branch as `5e2fbe0`,
+and the base was recorded again with this worktree's own non-editable install
+of that commit (`uv pip install ".[codecs]"`; shapely 2.1.2, GEOS 3.13.1, as
+before), on AC power: `fixtures` twice and `mesh` twice, identical lines.
+**Every `fixture` and `mesh` line equals `base_a7154ec.txt`'s**, in the same
+order (168 and 2; `.vtk` hashes included); only the header line differs. That
+is what master's changes predict. Between `a7154ec` and `5e2fbe0`, of the
+files the probe reaches, only `cli.py` and `landcover.py` changed (`git diff
+--stat a7154ec 5e2fbe0` over `feature_input.py`, `io/geopackage.py`,
+`cli.py`, `landcover.py`, `feature_fixtures.py` and the six suites). `cli.py`
+changed imports, `_off_node`, `_placement_report` and `catchment`, none of
+them in `_open_features` or what it calls, so the feature-set hashes cannot
+move. `landcover.py` is 30a, whose own gate was byte-identical meshes (`@perf`
+accepted it with every `.vtk` equal to its base), so the `.vtk` hashes do not
+move either. The six suites did not change, so the 165 suite lines keep their
+keys.
 
 **It can fail.** These are plants applied to the prototype, with the base
 lines unchanged:
@@ -569,10 +586,9 @@ runs, with the branch's own install and a base install of the merge base,
 after each run**:
 
 1. **Byte-identical**: the probe's `mesh` mode on both catchments, every line
-   equal to `base_a7154ec.txt` (feature set and `.vtk` hash), and its
-   `fixtures` mode, every line equal. If 30a has merged into the branch's
-   base by then, the `.vtk` hashes still hold, because 30a's own gate is
-   byte-identical meshes.
+   equal to `base_5e2fbe0.txt` (feature set and `.vtk` hash), and its
+   `fixtures` mode, every line equal. 30a is already in that base (section
+   6).
 2. **Time**: `rasputin mesh --stats` on both catchments, three repeats each,
    base and branch alternated, as
    `docs/benchmarks/2026-10-06/bottlenecks/scripts/stats.sh` does. Read the
@@ -638,26 +654,19 @@ Evidence goes under `docs/benchmarks/<date>/30b-clip/`.
 
 ## 13. ROADMAP
 
-Row 30 is on 30a's branch (`worktree-landcover-speed`) and not yet on master
-or here. So this branch does not add or edit row 30. It adds its own line,
-`| 30b |`, placed after the GeoPackage output row (`| — |`), the row that row
-30 is inserted before on 30a's branch. The two insertions are separated by
-that unchanged row, so either branch merges onto the other cleanly. This was
-checked with `git merge-tree --write-tree` on the two branch heads: no
-conflict. Whichever of 30a and 30b lands second folds its status into row 30
-and removes the separate line, in its own PR.
-
-**The fold also rewrites row 30's description of 30b.** On
-`worktree-landcover-speed`, row 30 describes 30b as "skip features that miss
-the hull, cheap tests before the exact ones, no clip of a line the domain
-already covers". This design rejects the first (section 11: the reading is
-unchanged and features outside are still counted) and the third (3.5: a line
-the domain covers but touches is still clipped). The fold makes it match this
-design, in words like: "30b the CORINE clip (point tests before the
-segment test, a feature whose lines miss the search region skipped
-whole, no clip of a line lying in the domain's interior)". This branch cannot
-write in that worktree, so the rewrite happens at whichever merge lands
-second, as part of the fold.
+30b is recorded in row 30. While 30a's branch (`worktree-landcover-speed`)
+was open, this branch kept a separate `| 30b |` line after the GeoPackage
+output row, so that the two branches merged cleanly onto each other, and
+whichever landed second folded it into row 30. 30a landed first (#199); this
+branch merged master and did the fold: the separate line is gone, row 30's
+status names 30b's state, and row 30's description of 30b was rewritten to
+match this design. It had read "skip features that miss the hull, cheap tests
+before the exact ones, no clip of a line the domain already covers"; this
+design rejects the first (section 11: the reading is unchanged and features
+outside are still counted) and the third (3.5: a line the domain covers but
+touches is still clipped). It now reads "point tests before the segment test,
+a feature whose lines miss the search region skipped whole, no clip of a line
+lying in the domain's interior".
 
 ## Review
 
