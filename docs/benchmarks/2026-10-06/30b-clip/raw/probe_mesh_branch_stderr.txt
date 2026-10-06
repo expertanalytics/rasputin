@@ -1,0 +1,11 @@
+features: 1611 kept (271 cut at the domain outline), 6321 outside the domain, 0 empty
+lines: 288045 vertices read, 149930 after joining shared edges and adding crossings
+DEM: 16 files, 15667 columns x 17882 rows
+land cover: 1860 areas between lines; 0 in no polygon, 0 in more than one (the smallest wins), 0 too narrow to label with certainty
+1287334 triangles. Every DEM node inside the mesh is within 10 m of it (largest difference 10 m).
+features: 2628 kept (216 cut at the domain outline), 2894 outside the domain, 0 empty
+lines: 500511 vertices read, 256482 after joining shared edges and adding crossings
+DEM: 12 files, 14653 columns x 13675 rows
+land cover: 2881 areas between lines; 0 in no polygon, 0 in more than one (the smallest wins), 0 too narrow to label with certainty
+3029295 triangles. Every DEM node inside the mesh is within 10 m of it (largest difference 10 m).
+exit 0
