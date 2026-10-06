@@ -1,9 +1,12 @@
 # PR A design: `audit-lattice` (F2, F9, F10's repository Protocol, F12's two `mosaic` edges)
 
-Status: **green (b3b38d2); next, `@reviewer`'s code review round 1, then
-`@perf` (the 1 m set and the reprojected Velhas run, section `@perf`).** Branch
-`worktree-audit-lattice`, stacked on PR B's approved head `618328b`
-(`worktree-audit-crs`, not pushed); it is rebased onto master when B merges.
+Status: **code review approved in round 1 (1a84ea9); `@perf` accepted
+(01751ec); -27 net production lines. Ready to push on Ola's yes once PR B
+(`worktree-audit-crs`) has merged**: A is stacked on B, so it is rebased onto
+master then, and its `@618328b` citations are re-pinned if B is squashed.
+Ola's two questions (below) bind it; their defaults are accept and no change.
+Branch `worktree-audit-lattice`, stacked on PR B's approved head `618328b`
+(`worktree-audit-crs`, not pushed).
 Every `@618328b` citation below reads B's head, which B's merge commit keeps
 in master's history. The audit this designs from is
 `docs/increments/python-audit.md` (sections 2, 5, 6 and 7); this file is
@@ -285,7 +288,11 @@ behaviour, and must be exactly these 88 lines, the prototype's:
 Any other changed line is a defect. The probe can fail: with `node_xy`
 mutated to `(x_min / delta_x + cols) * delta_x`, an ulp off on non-dyadic
 grids, 5 lines change (`grid_domain.subsample` on the non-dyadic and
-geographic grids, `cli._off_node` on both).
+geographic grids, `cli._off_node` on both). It can also fail on a mutated
+`valid_mask`, but not on an ulp-level change to `index_of`: every caller
+rounds its result, so the guard for `index_of` is
+`tests/python/test_io_models.py`'s
+`TestIndexOf::test_bit_for_bit_at_nodes_and_between_them`.
 
 ## Red tests (`@tester`, one commit, before any code)
 
@@ -513,6 +520,15 @@ the differential probe alone: `open_dem` with a domain reprojected to UTM
 `plan_object`, value for value. The probe is the gate for them; the bench
 is the gate for the meshes refine builds.
 
+**Accepted (01751ec):** `docs/benchmarks/2026-10-06/audit-pr-a/audit-pr-a.md`.
+Meshes byte-identical on both gates: the 1 m set, tile and quarter (each 9
+of 9 whole `.vtk` files equal: four base runs, four head runs and the head's
+build run), and the reprojected Velhas run in EPSG:31983 (2 of 2). Quality
+unchanged, as the hashes imply. Refine time on the 1 m set, four alternating
+runs a side pooled, is within -2.5 to +2.6 % on every cell, against a
+base-against-base spread of median 2.1 % and at most 5.3 %. Velhas ran once
+a side (refine -2.0 to +1.3 %), so it has no noise floor of its own.
+
 ## Merging with B, C, D and F
 
 The rule, as PR C's: whichever of A and another audit branch merges second
@@ -536,6 +552,13 @@ and the merge-tree run at merge time is what counts.
   `UPWARD`, neither A's two lines nor C's `("chains", "feature_input")`.
   `domain.py`, `io/repository.py` and `cli.py` merge clean.
 - **B**: A is built on it.
+- **New since the design** (`git merge-tree --write-tree 1a84ea9 <head>`,
+  2026-10-06): `project_structure.md` conflicts with C (`b26beb8`) and with
+  D (`4725f12`), because A rewrote six of its rows after green; and
+  `cli.py`'s `io.models` and `io.ply` import lines conflict with D, which
+  adds `io.mesh_checks` there. Each resolves by keeping what both sides add:
+  in `project_structure.md` the `dem_input`, `domain`, `crs` and
+  `target_grid` rows' text, in `cli.py` the imported names.
 
 ## Citations this PR moves, pinned now
 
@@ -559,8 +582,10 @@ commit, each quotation re-read at its pin:
 None of these lines is edited by C, D, F or T1 (`git diff -U0 618328b...<branch>`
 on the five files). Not pinned here: `tests/cpp/unit/test_raster_node_at.cpp`
 line 78 (a test file: red test 5); `docs/increments/python-audit.md` line
-1137 (`fetch/plan.py:118`, B's own text, true at `618328b`, not on master:
-pinned when A is rebased onto master after B merges); and `python-audit.md`
+1137 (`fetch/plan.py:118`, B's own text, true at `618328b`, not on master;
+at A's head the cited `same_crs` line is
+`src_python/tin_engine/fetch/plan.py@1a84ea9:117`: on the rebase
+checklist, pinned when A is rebased onto master after B merges); and `python-audit.md`
 lines 1271-1277, which list other files' citations in B's section 9 and sit
 in the file every audit branch edits.
 
@@ -605,3 +630,5 @@ where they are, unchanged.
 **PR A (`audit-lattice`), design review, round 1, 2026-10-06.** Range `618328b..62b5226`. Verdict: CHANGES REQUESTED. 0 production lines. The probe reproduces its base output byte for byte and fails under planted mutants (72 lines for the ruling's `_valid`, 3 for a `grid_domain` shift); all 15 re-pinned citations quote what they claim; the site table matches `git grep` at 618328b; the merge with F conflicts only in `catchment.py`'s import block. Blocking: line 268 must read 'no mutation round'; the site table lacks `src_python/tin_engine/mosaic.py@618328b:265`'s `window_meta` docstring.
 
 **PR A (`audit-lattice`), design review, round 2, 2026-10-06.** Range `62b5226..0b20e1d`. Verdict: APPROVED. 0 production lines. Both round-1 blockers fixed ('Lean: no mutation round.'; the site-table row for `src_python/tin_engine/mosaic.py@618328b:265`). On `docs/increments/python-audit-probes/lattice_probe-618328b.txt@0b20e1d` the inf filter on the case field counts 81, inverted over `resample`/`check_point_blocks` 72. The `node_box` and F10 departures, the `@perf` claim about which paths the bench reaches, the probe docstring and the two corrected review records check out. `check_citations --base 618328b` exits 0.
+
+**PR A (`audit-lattice`), code review, round 1, 2026-10-06.** Range `0b20e1d..1a84ea9`. Verdict: APPROVED. -27 net production lines (`count_loc.py 618328b 1a84ea9`: 126 added, 153 removed). Every rewrite matches the site table and the ten ruled pins. The probe rerun at 618328b and b3b38d2 reproduces both committed outputs byte for byte; their diff is 88 lines (72 infinity cases, 16 AttributeError), the case filter counts 0, and a planted `node_xy` mutant changes the 5 lines the design names. Red real at 6cf4359; suite green at the head (5254 passed, 17 skipped). mypy, ruff, gates and `check_citations --base 618328b` pass; 56 at-risk citations re-read.
