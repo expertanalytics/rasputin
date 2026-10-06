@@ -10,6 +10,9 @@ src_python/tin_engine/cli.py` touches imports, `_off_node`,
 src_python/tin_engine/feature_input.py src_python/tin_engine/io/geopackage.py
 tests/python/test_feature_input.py tests/python/feature_fixtures.py ROADMAP.md`
 prints nothing). So the branch was not merged with master for this design.
+Amended by `@architect` the same day after design review round 1 (`## Review`):
+the whole-feature test now tests the feature's linework (3.2, 4.2), with pin
+P5 and three new probe cases.
 
 **What this is.** The second of three pull requests that remove the
 bottlenecks `@perf` measured in `rasputin mesh` on two real catchments
@@ -23,7 +26,7 @@ is 30 (section 13 says how this branch records it).
 (their vertices and order), its polygon, and the `features:` stderr line's
 four numbers (kept, cut at the domain outline, outside, empty) stay exactly as
 they are, and so do the noded graph and the mesh. The phase gets about three
-to four times faster: on AC power, 5.9 s to 1.8 s on Numedalslågen and 5.8 s
+to four times faster: on AC power, 5.9 s to 1.9 s on Numedalslågen and 5.7 s
 to 1.3 s on Skiensvassdraget, measured on a prototype (section 8).
 
 **Lean.** No mutation round (Ola's standing rule for lean rounds). No C++.
@@ -44,8 +47,9 @@ spatial joins*, SIGMOD 1994): a cheap, conservative filter, then the exact
 test on what is left. Recalled, not reread. Here the filters are exact rather
 than conservative, so nothing is left for a refine step to correct:
 
-- **Whole feature first.** One test of the whole feature against the region.
-  If the feature misses the region, none of its edges can meet it.
+- **Whole feature first.** One test of the feature's linework (every ring of a
+  polygon, holes included, or the line itself) against the region. If the
+  linework misses the region, none of its edges can meet it.
 - **Endpoints first.** For each edge, test its two vertices against the region
   (point in polygon). A closed edge whose endpoint lies in the closed region
   meets the region. Only edges with both ends outside get the segment test.
@@ -65,12 +69,24 @@ than conservative, so nothing is left for a refine step to correct:
     returns `False` for a NaN coordinate. GEOS's `GEOSPreparedIntersectsXY_r`
     (`capi/geos_ts_c.cpp`, 3.13.1) sets a reused point and calls
     `GEOSPreparedIntersects_r`.
-  - GEOS's `PreparedPolygonIntersects::intersects`
-    (`src/geom/prep/PreparedPolygonIntersects.cpp`, 3.13.1) first tests one
+  - GEOS's `PreparedPolygon::intersects` (`src/geom/prep/PreparedPolygon.cpp`,
+    3.13.1) first returns `false` when the two **envelopes** (bounding boxes)
+    do not meet. A polygon's envelope is its shell's: shapely gives `bounds`
+    `(20, 20, 30, 30)` for a shell (20..30)² with a hole (1..2)². So for an
+    invalid polygon whose hole lies outside its shell, the hole is outside the
+    envelope GEOS tests (design review round 1, B1; section 4.2).
+  - Past the envelope test (and a separate path when the region is an
+    axis-aligned rectangle, which a buffered hull is not),
+    `PreparedPolygonIntersects::intersects`
+    (`src/geom/prep/PreparedPolygonIntersects.cpp`, 3.13.1) first locates one
     point of each component of the test geometry with the region's
-    point-in-area locator (boundary counts). It then looks for any segment
-    meeting the region's boundary, and for a test geometry of dimension 2 it
-    checks whether the region lies inside it. Section 4 rests on this order.
+    point-in-area locator (boundary counts). The components are visited by a
+    `GeometryComponentFilter` (`LocationNotMatchingFilter` in
+    `PreparedPolygonPredicate.cpp`), which reaches each ring of a polygon and
+    each line of a multi-line, and takes its first coordinate. It then looks
+    for any segment of the test geometry meeting the region's boundary, and
+    for a test geometry of dimension 2 it checks whether the region lies
+    inside it. Section 4.2 rests on this order.
 - **The R-tree** is SQLite's R*Tree module (Beckmann, Kriegel, Schneider and
   Seeger, SIGMOD 1990), which the GeoPackage R-tree extension uses (OGC
   12-128r18 Annex F.3, as `io/geopackage.py` cites it). From the SQLite
@@ -147,7 +163,7 @@ cli._open_features ──> open_features(request, domain, dem_crs)          unch
                          └─ _Tally.__init__        + self.inner: the domain's point_on_surface, once
                          └─ _Tally._take           region prepared once; per feature:
                               ├─ refusal checks (geometry type, class map, code, finite)   unchanged, same order
-                              ├─ moved-first branch: region.intersects(moved) ? pre_clip(...) : []   NEW whole-feature test
+                              ├─ moved-first branch: region.intersects(_linework(moved)) ? pre_clip(...) : []   NEW whole-feature test
                               ├─ per kept chain: _untouched(chain, domain) ? (chain,) : parts of intersection   NEW
                               └─ covering polygon test against self.inner                     (was recomputed per feature)
                          pre_clip(geometry, region, widening=None)          same contract
@@ -156,6 +172,7 @@ cli._open_features ──> open_features(request, domain, dem_crs)          unch
                               └─ widening, on the edges still dropped                                         unchanged
                          _runs(xy, keep, closed)                       + returns [] at once when no edge is kept
                          _untouched(line, domain) -> bool                NEW
+                         _linework(geometry) -> BaseGeometry             NEW
 ```
 
 ### 3.1 `pre_clip` (today `src_python/tin_engine/feature_input.py@a7154ec:199-209`)
@@ -179,7 +196,23 @@ The docstring and the return value are unchanged.
 ### 3.2 The whole-feature test (today `src_python/tin_engine/feature_input.py@a7154ec:333-334`)
 
 In the *moved first* branch only:
-`kept = list(pre_clip(moved, region)) if region.intersects(moved) else []`.
+`kept = list(pre_clip(moved, region)) if region.intersects(_linework(moved)) else []`,
+with a new pure helper
+
+- `_linework(geometry) -> BaseGeometry`: for a `Polygon` or `MultiPolygon`,
+  `geometry.boundary` (every ring, each hole's included, as lines); for a
+  `LineString` or `MultiLineString`, the geometry itself.
+
+**Not `region.intersects(moved)`** (round 1's design): for an invalid polygon
+whose hole lies outside its shell, GEOS's envelope test (section 1) drops the
+hole, and `pre_clip` keeps that hole's edges today (16b's R1 makes such a
+polygon linework). **Not `moved.boundary` for every type** (the review's
+suggestion, taken literally): a line's boundary is its two end points, so a
+line crossing the region with both ends outside would be dropped, and a
+closed line's boundary is empty. Both were planted in the
+prototype: the existing suites pass under each, and the probe's new cases
+(section 6) catch each.
+
 `region` is prepared once, right after `source_region(...)` in `_take`. The
 test sits where `pre_clip` is called today. That is after the geometry-type
 check, the class-map check (which can refuse a feature), the code check and
@@ -261,19 +294,46 @@ beyond `covers` (section 8).
 
 ### 4.2 The whole-feature test: no feature loses an edge it keeps today
 
-If `region.intersects(feature)` is false, no edge of the feature meets the
-region. GEOS's prepared test runs the same exact segment test over **all**
-the feature's segments, plus a locator test of one point per ring. An edge
-that meets the region either crosses or touches the boundary, which the
-segment test finds, or lies wholly inside, in which case its ring, having no
-crossing, lies inside and its first point is found. So `pre_clip` would
-return `()`, the feature has no lines, and it goes to the covering-polygon
-test. There it misses `self.inner`, because that point lies in the domain,
-which lies inside the region (the region is the convex hull of the domain
-buffered by 100 m). So it is counted `outside` as today. A polygon that
-surrounds the region has the region inside it, so the prepared test is
-*true* and the feature takes today's path (pinned by
-`TestPreClipThroughOpenFeatures`).
+Let `L = _linework(moved)`. Its segments are exactly the edges `pre_clip`
+tests: every ring of every polygon part (shell and holes) or every line part,
+which `pre_clip` walks with `get_parts`, `exterior` and `interiors`. Its
+components are those rings and lines, each a connected set. The claim: if the
+prepared `region.intersects(L)` is false, no edge of `L` meets the region.
+
+Take an edge `e` that meets the region `R`, in a component `C`. GEOS's steps
+(section 1) find it:
+
+1. *Envelopes.* `e` has a point in `R`, and that point lies in `L`'s envelope
+   and in `R`'s, so the envelopes meet and the test goes on. This is the step
+   round 1's `region.intersects(moved)` failed: there the envelope was the
+   shell's, and `e` (a hole's edge) could lie outside it.
+2. *Segments.* If `C` meets `R`'s boundary anywhere, the exact
+   segment-against-boundary test over all of `L`'s segments finds it.
+3. *One point per component.* Otherwise `C` is connected, misses `R`'s
+   boundary and has a point (on `e`) in `R`'s interior, so all of `C` lies in
+   the interior, and the located first point of `C` is inside.
+
+The step that does not apply: `L` has dimension 1, so the "region inside the
+test geometry" check never runs; a line set cannot contain an area.
+
+So when the test is false, every `keep` in `pre_clip` would be false and it
+would return `()` (no widening in this branch). The new code gives `kept =
+[]`, the same as `list(())`. From there both take the same path: no lines,
+then the covering-polygon test with the same `polygon` and `self.inner`
+(3.5, the same point). That includes a polygon that surrounds the region
+without an edge in it: its linework misses the region, today's `pre_clip`
+keeps nothing, and both go on to the covering test
+(`test_a_polygon_around_the_domain_with_no_edge_kept_is_dropped_and_counted`).
+
+Round 1's text said GEOS locates "one point per ring". That is true of the
+component filter, but it never mattered: the envelope test runs before it,
+and a polygon's envelope is its shell's. The reviewer's case (region
+`box(0, 0, 10, 10)`, shell (20..30)², hole (1..2)²) was rerun on `a7154ec`'s
+install (shapely 2.1.2, GEOS 3.13.1): prepared `region.intersects(g)` is
+`False`, `region.intersects(g.boundary)` is `True`, and `pre_clip` keeps the
+hole ring. A variant whose shell's envelope overlaps the region's but whose
+shell misses it gives `True` even with `region.intersects(g)`, through step 3
+on the hole's first point: the envelope is what drops the hole.
 
 ### 4.3 `_untouched`: the intersection would have returned the chain itself
 
@@ -338,7 +398,13 @@ Its docstring says how to run it. Both modes are the gate:
   and every direct call of `pre_clip`, keyed by test id and call number. A
   call's line holds the four counts, the number of lines and vertices, and a
   hash of every feature's fid, mask, code, lines (WKB, in order) and polygon
-  (WKB). 165 calls at the base.
+  (WKB). Then it runs `open_features` on three hand-made sources no suite at
+  the base has (`cases`, keyed `probe::`, added after design review round 1):
+  an invalid polygon whose hole lies in the domain and whose shell's envelope
+  misses the region's; the same with a shell whose envelope overlaps the
+  region's; and a line crossing the domain with both ends outside the region.
+  168 calls at the base (165 from the suites, 3 cases); the base keeps one
+  feature in each case.
 - **`mesh`** runs `rasputin mesh` on Numedalslågen and Skiensvassdraget as
   `@perf`'s profile did, and records the same line for the feature set plus a
   hash of the whole `.vtk` written.
@@ -350,27 +416,38 @@ file's.
 `worktree-bottlenecks/.venv`, a non-editable install of that commit; pytest,
 pytest-asyncio and hypothesis put on the path from a scratch directory). The
 `fixtures` mode was run twice and the `mesh` mode twice, with identical lines.
+After round 1 added the cases, the base was rerun with the same install:
+`fixtures` twice (identical lines; the 165 suite lines equal round 1's), `mesh`
+once (both lines equal round 1's), and `base_a7154ec.txt` rewritten from it.
 Numedalslågen: 1,611 kept, 271 cut, 6,321 outside, 0 empty.
 Skiensvassdraget: 2,628 kept, 216 cut, 2,894 outside, 0 empty.
 
 **It can fail.** These are plants applied to the prototype, with the base
 lines unchanged:
 
-| plant | fixture lines that differ (of 165) | pytest | catchment lines that differ (of 2) |
+| plant | base fixture lines not matched (of 168) | pytest | catchment lines that differ (of 2) |
 |---|---|---|---|
 | `_untouched` replaced by `domain.covers(line)` (`@perf`'s rule) | 2 | **passes** | 0 |
 | `_runs` returns `[]` for a single kept edge | 3 | fails | 0 |
-| an edge kept only when **both** ends are inside, no segment test | 16 | fails | 1 |
+| an edge kept only when **both** ends are inside, no segment test | 23 (one a `probe::` line) | fails | 1 |
+| whole-feature test on `moved` (round 1's 3.2) | 1 (`probe::`, shell's envelope misses) | **passes** | 0 |
+| whole-feature test on `moved.boundary` for lines too | 1 (`probe::`, the line) | **passes** | 0 |
+
+Rerun after round 1 on the 168-line base, with the plants rewritten in a new
+scratch prototype; round 1's third row counted 16 of 165 with its own plant.
 
 **What the gate cannot see**, and so the red tests pin (section 7):
 
 - the `covers` plant on real data: neither catchment has a chain that touches
   the outline, crosses itself or repeats a vertex, so only the fixtures and R1
   and R2 guard 3.4;
+- the two whole-feature plants on real data: the CORINE layer has polygons
+  only, none with a hole outside its shell, so only the `probe::` cases and
+  P5 guard 3.2;
 - the order of the refusal checks and the whole-feature test: no fixture has a
   refused feature lying outside the region.
 
-**The prototype passes the gate**: identical `fixture` lines (165) and
+**The prototype passes the gate**: identical `fixture` lines (168) and
 identical `mesh` lines (both catchments, `.vtk` hashes included).
 
 ## 7. Tests for `@tester` (the red suite)
@@ -397,8 +474,12 @@ the red ones, before any code. No mutation round.
   closed, some with a repeated vertex, some through a domain vertex): wherever
   `_untouched` is true, `shapely.intersection(line, domain)` gives one
   `LineString` with the same WKB as the line. Assert that it was true for at
-  least a tenth of the set, so the test cannot pass vacuously. The oracle lives
-  in the test.
+  least a tenth of the set, and for at least one closed ring of each
+  orientation (counter-clockwise and clockwise) and one open line, so the test
+  cannot pass vacuously and covers the shapes a reoriented or restarted ring
+  would break. The oracle lives in the test. R2 is the only test that runs in
+  CI and would catch a GEOS change to how a covered line comes back
+  (section 10).
 
 **Pins (green today, must stay green).**
 
@@ -423,6 +504,17 @@ the red ones, before any code. No mutation round.
   kept; an edge with both ends outside that passes by a corner without
   touching is dropped. (`test_an_edge_touching_the_region_at_one_point_is_kept`
   already pins the corner touch.)
+- **P5. The whole-feature test keeps what `pre_clip` keeps.** Through
+  `open_features` on a GeoJSON source and the `BOX` domain, the three
+  `probe::` cases of `clip_bytes.py` (section 6): an invalid polygon with
+  shell `square(2_000, 2_000, 2_100, 2_100)` and hole `INNER`'s ring; the same
+  hole under an L-shaped shell whose envelope overlaps the region's but which
+  misses the region; and a line from `at(-500, 150)` to `at(800, 150)`. Each
+  gives one feature and `outside == 0`; the two polygons' `lines` are the
+  hole's ring, vertex by vertex, and the line's `lines` are its piece inside
+  the domain. Green today. Round 1's whole-feature test fails the first, and
+  `moved.boundary` for lines fails the third, while the existing suites pass
+  under both (section 6).
 
 The existing tests (`TestClip`, `TestPreClip`, `TestPreClipKeepsWholeEdges`,
 `TestPreClipThroughOpenFeatures`, `TestLongEdgeWidening`) stay as they are.
@@ -432,18 +524,31 @@ The existing tests (`TestClip`, `TestPreClip`, `TestPreClipKeepsWholeEdges`,
 The prototype is the installed `a7154ec` package copied to a scratch directory
 and edited there (no C++ build; removed after measuring).
 `python3 tools/count_loc.py` between its base and the edit gave **+20 net**
-(27 added, 7 removed), all in `feature_input.py`. Estimate for the PR: **+20
-to +30**.
+(27 added, 7 removed), all in `feature_input.py`. After round 1, a second
+prototype with 3.1 to 3.5 and `_linework`, typed and without the
+plant switches, committed in a scratch repository over `a7154ec`'s
+`feature_input.py`, gave **+17 net** (24 added, 7 removed); it passes the
+gate's `fixtures` mode (168 lines equal). The PR's docstrings and any
+spelling-out add a few. Estimate for the PR: **+20 to +30**, unchanged.
 
 Timings of `open_features`' `clip_seconds` (the `features clip` row), on
 **AC power** (`pmset -g batt` before and after: AC), base and prototype
-alternated, two rounds of three runs each, medians:
+alternated, two rounds of three runs each, medians. Round 1 measured the
+whole-feature test on `moved`; after round 1 the same prototype was timed
+with that test and with the linework test (3.2) alternated in each run, the
+`rasputin mesh` run stopped right after `open_features`:
 
 | | Numedalslågen s | Skiensvassdraget s |
 |---|---|---|
-| `a7154ec` | 5.93 / 5.90 | 5.84 / 5.72 |
-| prototype | 1.82 / 1.79 | 1.31 / 1.31 |
-| speed-up | 3.3 | 4.4 |
+| `a7154ec`, round 1 | 5.93 / 5.90 | 5.84 / 5.72 |
+| prototype, test on `moved`, round 1 | 1.82 / 1.79 | 1.31 / 1.31 |
+| `a7154ec`, after round 1 | 5.83 / 5.88 | 5.65 / 5.68 |
+| prototype, test on `moved`, after round 1 | 1.81 / 1.81 | 1.31 / 1.30 |
+| prototype, linework test (this design) | 1.86 / 1.85 | 1.35 / 1.33 |
+| speed-up, this design | 3.2 | 4.2 |
+
+Building the boundary costs about 0.04 s on Numedalslågen and 0.03 s on
+Skiensvassdraget (7,932 and 5,522 features read).
 
 A cProfile of a first prototype on Numedalslågen (clip 2.41 s; it had sections 3.1
 to 3.4, except that the segment test kept today's argument order, and it
@@ -451,7 +556,7 @@ still recomputed the domain's `point_on_surface` per feature) showed per run: th
 the chains the domain cuts, about 0.84 s (2,912 chains, the count `@perf`
 measured as cut); `intersects` calls, about 0.49 s; `point_on_surface`, about
 0.18 s. Swapping the arguments (3.1, step 3) and `self.inner` (3.5) took it to
-the 1.8 s above. What is left is mostly the intersection of the cut chains. `@perf`'s scratch variant "A + both" measured 2.11 / 1.48 s on battery, so
+round 1's 1.8 s above. What is left is mostly the intersection of the cut chains. `@perf`'s scratch variant "A + both" measured 2.11 / 1.48 s on battery, so
 the prototype is at least as fast as that variant, with the stricter rule of
 3.4.
 
@@ -474,7 +579,7 @@ after each run**:
    `features clip` row's median. **Pass:** the branch's median is at most 0.4
    of the base's on both catchments. This was checked only at these two
    inputs (7,932 and 5,522 features read, 5.4 M and 5.0 M vertices); the
-   prototype gave 0.31 and 0.23.
+   prototype gave 0.32 and 0.24.
 3. The `features read` row and the whole-run total, recorded, not gated. The
    read is unchanged, so its row should not move.
 
@@ -484,12 +589,17 @@ Evidence goes under `docs/benchmarks/<date>/30b-clip/`.
 
 - **A GEOS upgrade that changes how a covered line comes back.** If GEOS
   started returning, say, a reoriented ring for a line in the interior, the
-  skipped chains would differ from what the intersection gives. R2 fails on
-  such an upgrade, and so does the gate. The mesh would still be valid either
-  way; only the byte-identity is at stake.
-- **Invalid feature polygons** (self-crossing rings) are linework, not refused
-  (16b R1). Their rings are not simple, so `_untouched` sends them through the
-  intersection as today (pinned by P1).
+  skipped chains would differ from what the intersection gives. Only R2
+  guards this in CI. P1 does not: its oracle is GEOS's own intersection, so
+  it moves with GEOS. The gate does, but it is run by hand, against a base
+  recorded with shapely 2.1.2 and GEOS 3.13.1. And nothing holds GEOS still:
+  `pyproject.toml` asks for `shapely>=2.0` with no upper bound, so CI takes
+  the newest shapely wheel and the GEOS inside it. The mesh would still be
+  valid either way; only the byte-identity is at stake.
+- **Invalid feature polygons** are linework, not refused (16b R1). Rings that
+  cross themselves are not simple, so `_untouched` sends them through the
+  intersection as today (pinned by P1). A hole lying outside its shell is
+  why the whole-feature test reads the linework (3.2, 4.2; pinned by P5).
 - **The geographic branch** keeps its own path (3.2). A future source that
   is geographic and large would not get the whole-feature speed-up. Not
   measured, and not needed for CORINE, which is projected in both copies Ola
@@ -536,3 +646,19 @@ that unchanged row, so either branch merges onto the other cleanly. This was
 checked with `git merge-tree --write-tree` on the two branch heads: no
 conflict. Whichever of 30a and 30b lands second folds its status into row 30
 and removes the separate line, in its own PR.
+
+**The fold also rewrites row 30's description of 30b.** On
+`worktree-landcover-speed`, row 30 describes 30b as "skip features that miss
+the hull, cheap tests before the exact ones, no clip of a line the domain
+already covers". This design rejects the first (section 11: the reading is
+unchanged and features outside are still counted) and the third (3.5: a line
+the domain covers but touches is still clipped). The fold makes it match this
+design, in words like: "30b the CORINE clip (point tests before the
+segment test, a feature whose lines miss the search region skipped
+whole, no clip of a line lying in the domain's interior)". This branch cannot
+write in that worktree, so the rewrite happens at whichever merge lands
+second, as part of the fold.
+
+## Review
+
+**Design review, round 1, 2026-10-06.** Range `a7154ec..781451d`. Verdict: CHANGES REQUESTED: the whole-feature test (3.2) drops the hole edges of an invalid polygon whose shell misses the region (B1); "one point per ring" in 4.2 is wrong (B2); row 30's 30b description on `worktree-landcover-speed` contradicts this design (B3). LOC: 0 (design only); estimate +20 to +30. Not pushed; no CI.

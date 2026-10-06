@@ -10,7 +10,9 @@ rest is pytest's and the CLI's own output.
     fixtures   run the suites that reach the features code in-process,
                recording every call of `open_features` (from the module or
                from the CLI) and every direct call of `pre_clip` (one not made
-               from inside `open_features`), keyed by test id and call number.
+               from inside `open_features`), keyed by test id and call number;
+               then `open_features` on three hand-made sources (`cases`),
+               keyed `probe::<case>`.
     mesh C...  run `rasputin mesh` on each named catchment as @perf's profile
                did (`docs/benchmarks/2026-10-06/bottlenecks/README.md`,
                "Method"), and hash the feature set (every feature's fid,
@@ -120,9 +122,40 @@ def fixtures() -> int:
     fi.open_features, fi.pre_clip, cli.open_features = open_features, pre_clip, open_features
     paths = [str(Path.cwd() / "tests" / "python" / s) for s in SUITES]
     status = int(pytest.main(["-q", "-o", "addopts=", "-p", "no:cacheprovider", *paths]))
+    fi.open_features, fi.pre_clip, cli.open_features = original_open, original_clip, original_open
+    lines += cases()
     print(*lines, sep="\n")
     print(f"fixtures: pytest exit {status}, {len(lines)} calls recorded")
     return status
+
+
+def cases() -> list[str]:
+    """Hand-made sources that no suite at the base has (section 7, P5), each
+    through `open_features` on the suites' 300 m box domain: an invalid
+    polygon whose shell lies far outside the region and whose hole lies inside
+    the domain (its shell's box misses the region's); the same with a shell
+    whose box overlaps the region's; and an open line whose two ends lie
+    outside the region and which crosses the domain."""
+    from shapely.geometry import LineString, Polygon
+
+    from feature_fixtures import Feat, at, domain_of, open_one, square, write_geojson
+
+    box, hole = domain_of(square(0, 0, 300, 300)), [square(100, 100, 200, 200).exterior.coords]
+    ell = [at(500, -200), at(600, -200), at(600, 600), at(-200, 600), at(-200, 500), at(500, 500)]
+    sources = {
+        "P5 hole inside, shell's box misses the region's": Polygon(
+            square(2_000, 2_000, 2_100, 2_100).exterior.coords, hole
+        ),
+        "P5 hole inside, shell's box overlaps the region's": Polygon(ell, hole),
+        "P5 line with both ends outside the region": LineString([at(-500, 150), at(800, 150)]),
+    }
+    out: list[str] = []
+    with tempfile.TemporaryDirectory() as tmp:
+        for name, geometry in sources.items():
+            feature = Feat("a", geometry, {"property": "road"})
+            path = write_geojson(Path(tmp) / "f.geojson", [feature])
+            out.append(f"fixture probe::{name} #1 open_features {set_line(open_one(path, box))}")
+    return out
 
 
 def mesh(names: list[str]) -> None:
