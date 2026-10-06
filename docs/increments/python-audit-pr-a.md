@@ -1,8 +1,9 @@
 # PR A design: `audit-lattice` (F2, F9, F10's repository Protocol, F12's two `mosaic` edges)
 
-Status: **code review approved in round 1 (1a84ea9); `@perf` accepted
-(01751ec); -27 net production lines. Ready to push on Ola's yes once PR B
-(`worktree-audit-crs`) has merged**. Ola's two questions (below) bind it;
+Status: **code review approved in round 1 (1a84ea9); the merge onto PR B's
+head approved in round 3 (2cd04b1); -27 net production lines; `@perf`
+accepted (01751ec), no re-run owed. Ready to push on Ola's yes once PR B
+(#192, `worktree-audit-crs`) has merged**. Ola's two questions (below) bind it;
 their defaults are accept and no change.
 Branch `worktree-audit-lattice` was written on PR B's approved head `618328b`
 and now sits on B's head merged with master, `ae493da` (master was `fd64f8b`),
@@ -10,8 +11,7 @@ by a merge, not a rebase. A's diff outside `docs/` is unchanged by it: `git
 diff ae493da HEAD` and `git diff 618328b 883c51f`, both outside `docs/`, are
 the same, and `count_loc.py ae493da HEAD` is still -27.
 The merge's code review (round 2) asked for one prose fix, pinning B's
-`fetch/plan.py` citation (below); it is made in the commit after `9c3e9af`, which
-waits on round 3.
+`fetch/plan.py` citation (below); it landed in 2cd04b1.
 Every `@618328b` citation below reads B's old head, which stays in this
 branch's history and, once B (PR #192) merges, in master's. The audit this designs from is
 `docs/increments/python-audit.md` (sections 2, 5, 6 and 7); this file is
@@ -590,8 +590,8 @@ line 78 (a test file: red test 5); and the list of other files' citations
 in B's section 9, `docs/increments/python-audit.md@883c51f:1271-1277`, which
 sits in the file every audit branch edits. B's own `fetch/plan.py` citation
 (`docs/increments/python-audit.md@883c51f:1137`) was true at `618328b` but
-not after A's edits, where the `same_crs` line is 117. Since the merge onto B's
-head it is pinned, as `src_python/tin_engine/fetch/plan.py@618328b:118`.
+not after A's edits, where the `same_crs` line is 117. The pin landed in 2cd04b1,
+as `src_python/tin_engine/fetch/plan.py@618328b:118`.
 
 **Moved by the red step (6cf4359), pinned after green:**
 `docs/increments/15e-memory-fixes.md` line 327 cited lines 399-400 and
@@ -638,3 +638,5 @@ where they are, unchanged.
 **PR A (`audit-lattice`), code review, round 1, 2026-10-06.** Range `0b20e1d..1a84ea9`. Verdict: APPROVED. -27 net production lines (`count_loc.py 618328b 1a84ea9`: 126 added, 153 removed). Every rewrite matches the site table and the ten ruled pins. The probe rerun at 618328b and b3b38d2 reproduces both committed outputs byte for byte; their diff is 88 lines (72 infinity cases, 16 AttributeError), the case filter counts 0, and a planted `node_xy` mutant changes the 5 lines the design names. Red real at 6cf4359; suite green at the head (5254 passed, 17 skipped). mypy, ruff, gates and `check_citations --base 618328b` pass; 56 at-risk citations re-read.
 
 **PR A (`audit-lattice`), merge onto PR B's head, code review, round 2, 2026-10-06.** Range `883c51f..9c3e9af`. Verdict: CHANGES REQUESTED. -27 net unchanged; non-docs diff byte-identical to `618328b..883c51f`; `docs/increments/15e-memory-fixes.md:327-328` union of pins correct (note: the target_grid pins were A's own, not master's as the merge message says); suite 5370 passed, 27 skipped on a scratch copy; gates clean; probe reproduces `lattice_probe-b3b38d2.txt`; no @perf re-run owed. Blocking: `docs/increments/python-audit-pr-a.md@9c3e9af:586-591`.
+
+**PR A (`audit-lattice`), merge onto PR B's head, code review, round 3, 2026-10-06.** Range `9c3e9af..2cd04b1`. Verdict: APPROVED. One prose commit, no change outside `docs/`, -27 net unchanged. The pin `src_python/tin_engine/fetch/plan.py@618328b:118` reads `if same_crs(frame, source):` (117 at A's head); `docs/increments/python-audit.md@883c51f:1137` and `@883c51f:1271-1277` read as described; `ae493da`'s parents are `618328b` and `fd64f8b`; `check_citations --base origin/master` exits 0.
