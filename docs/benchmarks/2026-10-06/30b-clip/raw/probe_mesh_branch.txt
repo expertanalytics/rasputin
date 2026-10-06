@@ -1,0 +1,5 @@
+tin_engine from /private/tmp/claude-501/-Users-skavhaug-projects-rasputin/6a989a29-4492-430f-99b0-9fe3058f931a/scratchpad/30b/venv-branch/lib/python3.13/site-packages/tin_engine
+/private/var/folders/h2/yycsx2z16_d181syfgb0947m0000gn/T/tmpw3m2xxhy/numedalslagen.vtk
+mesh numedalslagen features=1611 outside=6321 clipped=271 empty=0 vertices=275713 lines=2765 sha=40095f34887e1d21 vtk=34f7117e5e528e97
+/private/var/folders/h2/yycsx2z16_d181syfgb0947m0000gn/T/tmp4us61rnx/skiensvassdraget.vtk
+mesh skiensvassdraget features=2628 outside=2894 clipped=216 empty=0 vertices=487772 lines=4138 sha=d0e18c57de4ed639 vtk=ab996019190166f9
