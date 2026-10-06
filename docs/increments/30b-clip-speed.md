@@ -1,6 +1,7 @@
 # Increment 30b — the `features clip` phase of `rasputin mesh`, made fast
 
-Status: **built and accepted; code review comes next.** Red `08269e77`
+Status: **approved by code review round 2 (`## Review`); waits for Ola's yes
+to push.** Red `08269e77`
 (`@tester`'s pins beyond the design ruled in section 7, all nine stand), green
 `c5340459` (+23 net production lines, `python3 tools/count_loc.py 5e2fbe0
 c5340459`; as built, section 3.6), `@perf`'s acceptance ACCEPTED at
@@ -798,3 +799,7 @@ lying in the domain's interior".
 **Design review, round 1, 2026-10-06.** Range `a7154ec..781451d`. Verdict: CHANGES REQUESTED: the whole-feature test (3.2) drops the hole edges of an invalid polygon whose shell misses the region (B1); "one point per ring" in 4.2 is wrong (B2); row 30's 30b description on `worktree-landcover-speed` contradicts this design (B3). LOC: 0 (design only); estimate +20 to +30. Not pushed; no CI.
 
 **Design review, round 2, 2026-10-06.** Range `781451d..a7314928`. Verdict: APPROVED. All three round 1 findings are fixed. B1 (the whole-feature test dropped hole edges) is fixed by testing the feature's linework, 3.2. B2 (the proof in 4.2) is fixed by redoing the proof around GEOS's bounding-box step. B3 (row 30's description of 30b) is fixed by section 13's rewrite at the fold. The three new probe cases and pin P5 were rerun on `a7154ec`'s install (shapely 2.1.2, GEOS 3.13.1) and match `base_a7154ec.txt`. Each plant is caught by the case meant for it. LOC: 0 (design only); estimate +20 to +30. Not pushed; no CI.
+
+**Code review, round 1, 2026-10-06.** Range `ed125121..4924e657`. Verdict: CHANGES REQUESTED. B1: a comment left over from the red step. `TestLinework`'s docstring still says "see the handback of the red step" (`tests/python/test_feature_input.py@4924e657:1168-1169`). A handback is not a tracked file, so the pointer leads nowhere. The ruling now lives in `docs/increments/30b-clip-speed.md@4924e657:616-619` (section 7, ruling 4). LOC: +23 net (31 added, 8 removed, all in `src_python/tin_engine/feature_input.py`), within the estimate of +20 to +30. Local gates green. Not pushed; no CI.
+
+**Code review, round 2, 2026-10-06.** Range 4924e657..4e37ba41 (/Users/skavhaug/projects/rasputin/.claude/worktrees/clip-speed/tests/python/test_feature_input.py only, text, 0 production LOC). Verdict: APPROVED. B1 fixed: TestLinework's docstring cites ruling 4 of section 7 (docs/increments/30b-clip-speed.md@4e37ba41:616), which exists and keeps it; SMALL's comment names 16b R5, matching docs/increments/16b-terrain-polygons.md R5. Nothing else changed. CI to be confirmed on the PR before enqueue.
