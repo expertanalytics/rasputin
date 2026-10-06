@@ -30,45 +30,47 @@ import json
 import re
 import time
 from pathlib import Path
-from typing import Any
 
 import numpy as np
 import pytest
 import shapely
 from shapely.geometry import Point, Polygon
 
+from cli_driver import (
+    COLS,
+    HOLE,
+    ROWS,
+    SQUARE,
+    USAGE,
+    UTM33,
+    Ring,
+    geojson,
+    invoke,
+    polygon_file,
+    rough_dem,
+    write_tiff,
+)
 from geotiff_fixtures import KARTVERKET, TIE_X, TIE_Y, micro_tiff, needs_codecs
 from plyread import read_ply
 from recordread import sizes_row
-from test_cli_mesh_dem import SENTINEL, USAGE, invoke, write_tiff
+from test_cli_mesh_dem import SENTINEL
 from test_cli_mesh_refine import file_field, min_angles_degrees, ply_fields, stats_row
 from tin_engine.io.geotiff import decode_dem
 from tin_engine.io.models import DemTile
 from vtkread import VtkFile, read_vtk
 
-UTM33 = "urn:ogc:def:crs:EPSG::25833"
 SNAP = 1e-3  # DEFAULT_SNAP_SPACING, U6 (a)
 #: How far a vertex on a ring may lie from the given ring: the snap with margin.
 ON_INPUT = 2e-3
-Ring = list[tuple[float, float]]
-
-
-def geojson(path: Path, outer: Ring, holes: tuple[Ring, ...] = (), crs: str | None = UTM33) -> Path:
-    doc: dict[str, Any] = {
-        "type": "Polygon",
-        "coordinates": [[*r, r[0]] for r in (outer, *holes)],
-    }
-    if crs is not None:
-        doc["crs"] = {"type": "name", "properties": {"name": crs}}
-    path.write_text(json.dumps(doc))
-    return path
 
 
 def mesh(
     tmp_path: Path, tif: Path, domain: Path, *extra: str, out: str = "x.vtk"
 ) -> tuple[int, str, Path]:
     target = tmp_path / out
-    code, output = invoke("--dem", str(tif), "--domain", str(domain), "--out", str(target), *extra)
+    code, output = invoke(
+        "mesh", "--dem", str(tif), "--domain", str(domain), "--out", str(target), *extra
+    )
     return code, output, target
 
 
@@ -111,34 +113,9 @@ def nearest(points: np.ndarray, x: float, y: float) -> int:
 
 # ---------------------------------------------------------------- fixtures
 
-# micro_tiff's grid: nodes at x = TIE_X + 10 col, y = TIE_Y - 5 row, EPSG:25833,
-# PixelIsPoint. 17 rows x 21 cols: x 500 000 .. 500 200, y 6 599 920 .. 6 600 000.
-ROWS, COLS = 17, 21
 
-# A square and a hole, every vertex off-node (x not a multiple of 10, y not of 5).
-SQUARE: Ring = [
-    (TIE_X + 12.3, TIE_Y - 73.3),
-    (TIE_X + 187.7, TIE_Y - 72.9),
-    (TIE_X + 186.1, TIE_Y - 6.7),
-    (TIE_X + 13.9, TIE_Y - 7.1),
-]
-HOLE: Ring = [
-    (TIE_X + 71.1, TIE_Y - 52.7),
-    (TIE_X + 72.3, TIE_Y - 28.3),
-    (TIE_X + 121.9, TIE_Y - 28.9),
-    (TIE_X + 120.7, TIE_Y - 51.1),
-]
-
-
-@pytest.fixture
-def bumpy(tmp_path: Path) -> Path:
-    array = np.random.default_rng(16).uniform(0.0, 50.0, (ROWS, COLS)).astype(np.float32)
-    return write_tiff(tmp_path / "bumpy.tif", micro_tiff(array))
-
-
-@pytest.fixture
-def square(tmp_path: Path) -> Path:
-    return geojson(tmp_path / "square.geojson", SQUARE, (HOLE,))
+bumpy = rough_dem(16)
+square = polygon_file(SQUARE, (HOLE,))
 
 
 def island(n: int) -> np.ndarray:
@@ -451,7 +428,7 @@ class TestRefusals:
     def test_domain_without_dem(self, tmp_path: Path, square: Path) -> None:
         target = tmp_path / "x.vtk"
         code, output = invoke(
-            "catchment", "--domain", str(square), "--tolerance", "1", "--out", str(target)
+            "mesh", "catchment", "--domain", str(square), "--tolerance", "1", "--out", str(target)
         )
         assert code == USAGE, output
         assert "No such option" not in output, output

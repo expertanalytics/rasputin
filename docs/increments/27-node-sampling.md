@@ -312,7 +312,7 @@ Changed (one amendment commit on top of 25's tests, the reason in the message):
   removes more than the NoData nodes (both done in the red step, `6605dfe`).
 - `test_the_no_tolerance_summary_says_on_or_next_to`, in both files that had
   it: renamed `test_the_no_tolerance_summary_says_on_nodata_cells`
-  (`test_cli_mesh_plain_output.py:279`, `test_run_record.py:443`). Both expect
+  (`tests/python/test_cli_mesh_plain_output.py@80990e0:279`, `test_run_record.py:443`). Both expect
   `vertices on NoData cells were removed`, and also check that "next to" is
   absent from stderr.
 - `test_cli_mesh_dem.py`, `test_a_nodata_edge_row_is_dropped_and_counted`: the

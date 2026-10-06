@@ -32,9 +32,10 @@ import shapely
 from shapely.geometry import Polygon
 
 import tin_engine.cli as cli
+from cli_driver import COLS, ROWS, SQUARE, USAGE, geojson, invoke, rough_dem, write_tiff
 from geotiff_fixtures import KARTVERKET, micro_tiff, needs_codecs
-from test_cli_mesh_dem import SENTINEL, USAGE, invoke, write_tiff
-from test_cli_mesh_domain import SNAP, SQUARE, geojson, quarter_circle
+from test_cli_mesh_dem import SENTINEL
+from test_cli_mesh_domain import SNAP, quarter_circle
 from test_cli_mesh_features import _delaunay_violations
 from test_cli_mesh_plain_output import located_errors
 from test_cli_mesh_refine import file_field, min_angles_degrees, stats_row
@@ -43,15 +44,11 @@ from tin_engine import _core
 from tin_engine.io.geotiff import decode_dem
 from vtkread import VtkFile, lines_as_array, polygons_as_array, read_vtk
 
-ROWS, COLS = 17, 21
 QUALITY = re.compile(r"(\d+) start quality nodes inserted, (\d+) start quality skips")  # pre-25
 COUNTS = ("start_quality_points_inserted", "start_quality_points_skipped")
 
 
-@pytest.fixture
-def bumpy(tmp_path: Path) -> Path:
-    array = np.random.default_rng(20).uniform(0.0, 50.0, (ROWS, COLS)).astype(np.float32)
-    return write_tiff(tmp_path / "bumpy.tif", micro_tiff(array))
+bumpy = rough_dem(20)
 
 
 @pytest.fixture
@@ -145,6 +142,7 @@ class TestRefusals:
     def test_a_bad_value(self, tmp_path: Path, bumpy: Path, box: Path, value: str) -> None:
         target = tmp_path / "x.vtk"
         code, output = invoke(
+            "mesh",
             "--dem",
             str(bumpy),
             "--domain",
@@ -163,7 +161,9 @@ class TestRefusals:
 
     def test_without_tolerance(self, tmp_path: Path, bumpy: Path) -> None:
         target = tmp_path / "x.vtk"
-        code, output = invoke("--dem", str(bumpy), "--start-min-angle", "25", "--out", str(target))
+        code, output = invoke(
+            "mesh", "--dem", str(bumpy), "--start-min-angle", "25", "--out", str(target)
+        )
         assert code == USAGE, output
         assert "No such option" not in output  # refused for its value, not unknown
         assert "--start-min-angle" in output
@@ -173,7 +173,7 @@ class TestRefusals:
     def test_zero_without_tolerance_is_refused_too(self, tmp_path: Path, bumpy: Path) -> None:
         """Given at all, it needs --tolerance; 0 is a value, not an absence."""
         code, output = invoke(
-            "--dem", str(bumpy), "--start-min-angle", "0", "--out", str(tmp_path / "x.vtk")
+            "mesh", "--dem", str(bumpy), "--start-min-angle", "0", "--out", str(tmp_path / "x.vtk")
         )
         assert code == USAGE, output
         assert "No such option" not in output  # refused for its value, not unknown
@@ -181,7 +181,13 @@ class TestRefusals:
 
     def test_without_dem(self, tmp_path: Path) -> None:
         code, output = invoke(
-            "catchment", "--flat", "--start-min-angle", "25", "--out", str(tmp_path / "x.vtk")
+            "mesh",
+            "catchment",
+            "--flat",
+            "--start-min-angle",
+            "25",
+            "--out",
+            str(tmp_path / "x.vtk"),
         )
         assert code == USAGE, output
         assert "No such option" not in output  # refused for its value, not unknown

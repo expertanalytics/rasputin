@@ -27,6 +27,9 @@ import pytest
 
 from harness_fixtures import REAL, bash_event, clean_env, git, is_work_tree_top, make_repo
 
+# h17 §4b: a harness test; CI runs it in the `harness` job, not the product legs.
+pytestmark = pytest.mark.harness
+
 SETTINGS = REAL / ".claude" / "settings.json"
 REQUIRED_READING = REAL / ".claude" / "REQUIRED-READING.md"
 
