@@ -46,21 +46,16 @@ import shapely
 from numpy.testing import assert_array_equal
 from shapely.geometry import LineString, Polygon, box
 from shapely.geometry.base import BaseGeometry
-from typer.testing import CliRunner
 
 import feature_fixtures as ff
+from cli_driver import SQUARE, USAGE, geojson, invoke, plain, polygon_file, rough_dem, runner
 from feature_fixtures import Feat, domain_of, write_geojson
-from geotiff_fixtures import TIE_X, TIE_Y, micro_tiff
+from geotiff_fixtures import TIE_X, TIE_Y
 from landcover_fixtures import MARGIN, landcover_oracle, spread_violations, vtk_labels
 from plyread import read_ply
-from test_cli_mesh import plain
-from test_cli_mesh_dem import USAGE, invoke, write_tiff
-from test_cli_mesh_domain import COLS, ROWS, SQUARE, geojson
 from tin_engine.cli import app
 from tin_engine.palettes import CORINE_NATURAL, paraview_preset
 from vtkread import VtkFile, read_vtk
-
-runner = CliRunner(env={"NO_COLOR": "1", "TERM": "dumb"})
 
 LAND_COVER_LINE = re.compile(
     r"land cover: (?P<r>\d+) areas between lines; (?P<o>\d+) in no polygon, "
@@ -112,15 +107,8 @@ NOTCHED: list[tuple[float, float]] = [
 BAND = rect(50.2, -30.1, 150.3, -15.2)
 
 
-@pytest.fixture
-def bumpy(tmp_path: Path) -> Path:
-    array = np.random.default_rng(16).uniform(0.0, 50.0, (ROWS, COLS)).astype(np.float32)
-    return write_tiff(tmp_path / "bumpy.tif", micro_tiff(array))
-
-
-@pytest.fixture
-def plain_square(tmp_path: Path) -> Path:
-    return geojson(tmp_path / "square.geojson", SQUARE)
+bumpy = rough_dem(16)
+plain_square = polygon_file(SQUARE)
 
 
 def run(
@@ -128,7 +116,16 @@ def run(
 ) -> tuple[int, str, Path]:
     target = tmp_path / out
     code, output = invoke(
-        "--dem", str(tif), "--domain", str(domain), "--tolerance", "1", "--out", str(target), *extra
+        "mesh",
+        "--dem",
+        str(tif),
+        "--domain",
+        str(domain),
+        "--tolerance",
+        "1",
+        "--out",
+        str(target),
+        *extra,
     )
     return code, output, target
 

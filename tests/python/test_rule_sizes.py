@@ -19,6 +19,9 @@ import pytest
 
 from harness_fixtures import REAL, Tool, clean_env, git, make_repo, run_script
 
+# h17 §4b: a harness test; CI runs it in the `harness` job, not the product legs.
+pytestmark = pytest.mark.harness
+
 rule_sizes = Tool("rule_sizes")
 
 LABEL = "2026-10-01-first.md (abc1234)"

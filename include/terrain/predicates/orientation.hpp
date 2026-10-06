@@ -6,7 +6,7 @@
 //
 // This header is deliberately at the bottom of the module's dependency order.
 // It knows nothing about points and nothing about arithmetic policy -- that is
-// why `is_left_turn` takes an `Orientation` rather than three points. Anything
+// why `reversed` takes an `Orientation` rather than three points. Anything
 // that needs a coordinate type or a kernel belongs in exact.hpp or kernel.hpp.
 
 namespace terrain::pred {
@@ -75,16 +75,5 @@ enum class Incircle : int {
 // kernel.hpp, where an inverted answer is returned for clockwise input. A
 // caller with a genuine need to negate an `Incircle` can cast, conspicuously,
 // where a reviewer will see it.
-
-// Collinear is not a left turn. A degenerate triple must not be reported as
-// turning either way, or a hull walk keeps or drops collinear points depending
-// on which side the test happens to be written from.
-[[nodiscard]] constexpr bool is_left_turn(Orientation o) noexcept {
-    return o == Orientation::CounterClockwise;
-}
-
-[[nodiscard]] constexpr bool is_collinear(Orientation o) noexcept {
-    return o == Orientation::Collinear;
-}
 
 }  // namespace terrain::pred
