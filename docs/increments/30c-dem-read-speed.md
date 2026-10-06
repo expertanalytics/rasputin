@@ -2,8 +2,9 @@
 
 Status: **designed** by `@architect` 2026-10-06 on branch
 `worktree-dem-read-speed`, at `6c729e97` (30b's approved head, not yet
-pushed). Ready for `@tester` once Ola has answered question 1 (section 13),
-whose default is to go ahead. When 30b merges, master is merged into this
+pushed). Ola said "yes, build 30c" on 2026-10-06 (question 1, section 13).
+Design review round 1 (changes requested) answered; round 2 next, then
+`@tester`. When 30b merges, master is merged into this
 branch and the gate's base is recorded again at that merge (section 6).
 
 **What this is.** The third of three pull requests that remove the
@@ -63,9 +64,13 @@ GEOS 3.13.1) or measured:
   `imcd_lzw_decode` in `with nogil:` (read on GitHub's current source, not
   the 2026.8.16 tag, whose wheel ships only the compiled module). The
   measurement says the same thing on the installed version: on Numedalslågen
-  the 16 windows take 3.07 s on 1 thread and 0.48 s on 8, 6.4 times faster,
-  with the same process CPU time (3.84 s and 4.04 s; section 2). A decoder
-  holding the GIL could not scale like that.
+  the 16 windows take 3.07 s on 1 thread and 0.48 s on 8, 6.4 times faster
+  (section 2), while the process CPU time of the whole `open_dem` call stays
+  about the same: 3.84 s on 1 thread and 4.04 s on 8. A decoder holding the
+  GIL could not scale like that. A rerun for design review round 1 (AC
+  power, `time.process_time`, median of 3; the DEM code at master
+  `ed125121` is the same as at `6c729e97`) gave 3.98 s and 4.51 s for the
+  whole call, of which the windows alone are 3.21 s and 3.75 s.
 - **Deflate scales the same way.** On 96 cached ANADEM blocks (one window of
   8 × 12 blocks), `decode_window` takes 0.194 s on 1 thread, 0.055 s on 4,
   0.031 s on 8 and 0.029 s on 10.
@@ -121,7 +126,8 @@ cProfile of the first and second calls puts most of the difference in
 the canvas: the first call touches memory fresh from the operating system.
 `@perf`'s README left that difference unexplained. It is not attacked here.
 
-**Decode threads.** The 16 windows on 1 to 16 threads (median of 3,
+**Decode threads.** The windows (16 on Numedalslågen, 12 on
+Skiensvassdraget) on 1 to 16 threads (median of 3,
 `open_dem` whole in the last column):
 
 | threads | Numedalslågen: windows s | `open_dem` s | Skiensvassdraget: windows s | `open_dem` s |
@@ -295,10 +301,15 @@ comm -13 <(grep -E '^(fixture|mesh) ' base.txt | sort) <(grep -E '^(fixture|mesh
 scratch venv outside the worktree (`git archive`, then `uv pip install
 ".[codecs]"`; pytest, pytest-asyncio and hypothesis added to that venv), on
 AC power: `fixtures` twice and `mesh` twice, identical lines. **The probe
-refuses to run** when `tin_engine` is not under `site-packages`, so an
-editable install or a copied package cannot stand in for the tree it claims
-to measure (30b's lesson). Run it from the repository root with the venv's
-own `python`, so `tests/python` is the branch's.
+refuses a `tin_engine` outside a `site-packages` directory**, such as an
+editable install or a loose copy of the source (30b's lesson). It cannot
+tell which commit an installed package came from: a copy under any
+`site-packages` passes. The probe's first line prints the package's path,
+and the operator checks that it is the scratch venv installed from the
+commit being measured. (The installed version is `0.2.0.dev0` at every
+commit, and `direct_url.json` names only the directory installed from, so
+neither is printed.) Run it from the repository root with the venv's own
+`python`, so `tests/python` is the branch's.
 
 **At the merge.** When 30b has merged and master is merged into this branch,
 record the base again at that merge commit, the same way, as
@@ -496,12 +507,16 @@ Norwegian catchments, but it does little for São Francisco.
    run of minutes on São Francisco, for about +3 to +10 lines and a lean
    round (tests, code, review, `@perf`'s acceptance). **Default: build it**,
    since you approved the order and the round is small.
+   **Ola, 2026-10-06: "yes, build 30c".**
 
 ## 14. ROADMAP
 
 Row 30's 30c entry now says what this design does: "30c reading the DEM
 (decode threads from the machine's cores, the seam report's region test on
 the nodes it counts only)", and its status says 30c is designed and waits
-for question 1.
+for question 1. Since Ola's yes, it says 30c is designed and in design
+review.
 
 ## Review
+
+**30c, design review, round 1, 2026-10-06.** Range `6c729e97..a3a7cfef`. Verdict: CHANGES REQUESTED. LOC 0. Blocking: (1) the 2-line note at `/Users/skavhaug/projects/rasputin/.claude/worktrees/dem-read-speed/docs/increments/23-basin-scale.md@a3a7cfef:1066-1067` shifts the self-citations at `@a3a7cfef:3281,3283` (`:3267,3271,3279` now point at 23b rounds 5 and 7, and at 23c-1 round 3); (2) `/Users/skavhaug/projects/rasputin/.claude/worktrees/dem-read-speed/docs/increments/30c-dem-read-speed.md@a3a7cfef:298-300` over-claims the refusal at `/Users/skavhaug/projects/rasputin/.claude/worktrees/dem-read-speed/docs/increments/30c-probes/dem_bytes.py@a3a7cfef:180` (a copy under any `site-packages` passes). Base reproduced exactly in a scratch install, the 4.2 same-set argument holds, and W2 plus my own LZW timing confirm the thread claim and GIL release.
