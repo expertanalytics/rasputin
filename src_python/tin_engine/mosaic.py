@@ -271,9 +271,8 @@ def assemble(
             if box is None:
                 continue
             _decide(canvas, box, ordered, strips, (a.name, b.name), plan.meta.nodata)
-            kept = _covered(box, plan.meta, needed)
-            first, second = strips[a.name, b.name][kept], strips[b.name, a.name][kept]
-            seam = _seam(a.name, b.name, first, second, plan)
+            first, second = strips[a.name, b.name], strips[b.name, a.name]
+            seam = _seam(a.name, b.name, first, second, plan, box, needed)
             if seam is not None:
                 seams.append(seam)
     return Mosaic(tile=DemTile._adopt(plan.meta, canvas), plan=plan, seams=tuple(seams))
@@ -519,28 +518,29 @@ def _decide(
     canvas[box.row0 : box.row0 + box.rows, box.col0 : box.col0 + box.cols] = value
 
 
-def _covered(box: IndexWindow, meta: RasterMeta, needed: Any) -> Any:
-    """The nodes of `box` that `needed` covers, as a boolean mask of its shape,
-    or `...` (every node) without it. A node is `x_min + col * dx`, as in
-    `_uncovered`."""
-    if needed is None:
-        return ...
-    rows = (box.row0 + np.arange(box.rows))[:, np.newaxis]
-    cols = (box.col0 + np.arange(box.cols))[np.newaxis, :]
-    xs, ys = np.broadcast_arrays(*meta.node_xy(rows, cols))
-    return shapely.intersects_xy(needed, xs, ys)
-
-
 def _seam(
-    first: str, second: str, a: npt.NDArray[Any], b: npt.NDArray[Any], plan: MosaicPlan
+    first: str,
+    second: str,
+    a: npt.NDArray[Any],
+    b: npt.NDArray[Any],
+    plan: MosaicPlan,
+    box: IndexWindow,
+    needed: Any,
 ) -> Seam | None:
-    """The pair's report over its overlap in the mosaic: nodes where both hold
-    a valid value and `|a - b| >= SEAM_THRESHOLD`, and the largest and median
-    `|a - b|` over those, in float64. None when no node qualifies. The
-    threshold is the report's only: `_decide` never consults it."""
-    both = valid_mask(a, plan.meta.nodata) & valid_mask(b, plan.meta.nodata)
-    gaps = np.abs(a[both].astype(np.float64) - b[both].astype(np.float64))
-    gaps = gaps[gaps >= SEAM_THRESHOLD]
+    """The pair's report over its overlap `box` in the mosaic: nodes where both
+    hold a valid value and `|a - b| >= SEAM_THRESHOLD`, and, with `needed`,
+    that it covers (closed); the largest and median `|a - b|` over those, in
+    float64. None when no node qualifies. The region is tested last, only on
+    the nodes the cheap tests keep (30c, 3.2); a node is `x_min + col * dx`,
+    as in `_uncovered`. The threshold is the report's only: `_decide` never
+    consults it."""
+    rows, cols = np.nonzero(valid_mask(a, plan.meta.nodata) & valid_mask(b, plan.meta.nodata))
+    gaps = np.abs(a[rows, cols].astype(np.float64) - b[rows, cols].astype(np.float64))
+    big = gaps >= SEAM_THRESHOLD
+    rows, cols, gaps = rows[big], cols[big], gaps[big]
+    if needed is not None:
+        xs, ys = plan.meta.node_xy(box.row0 + rows, box.col0 + cols)
+        gaps = gaps[shapely.intersects_xy(needed, xs, ys)]
     if not gaps.size:
         return None
     return Seam(first, second, int(gaps.size), float(gaps.max()), float(np.median(gaps)))
