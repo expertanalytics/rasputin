@@ -16,7 +16,7 @@ Pinned here beyond the design: the bytes are UTF-8 JSON of a
 ring (as `rasputin catchment` wrote it in increment 22); the moved code
 leaves no `FeatureCollection` in `cli.py`, and `io/geojson.py` opens no file.
 
-Audit PR C (`docs/increments/python-audit.md`, section 11, red test 1): the
+Audit PR C (`docs/increments/python-audit.md`, section 12, red test 1): the
 module also holds the one GeoJSON reading path, `read_collection(doc, *,
 default_crs) -> (features, crs_text)`, which takes the parsed document (it
 opens nothing; the caller adds the file's name to a refusal), and

@@ -570,7 +570,7 @@ class TestCrs:
 
 
 class TestOneGeojsonRule:
-    """Audit PR C (`docs/increments/python-audit.md`, section 11, red test 2):
+    """Audit PR C (`docs/increments/python-audit.md`, section 12, red test 2):
     `read_source`'s GeoJSON branch reads through `io.geojson.read_collection`
     with RFC 7946's default, and a refusal reaches the existing handler as
     `<file name>: <words>`. Each row here differs from the code before it."""
@@ -654,7 +654,7 @@ class TestOneGeojsonRule:
 
 
 #: Every empty JSON value but `null` (`docs/increments/python-audit.md`,
-#: section 11, the ruling after code review round 2).
+#: section 12, the ruling after code review round 2).
 EMPTY_NOT_NULL = [
     pytest.param("", id="empty_string"),
     pytest.param(0, id="zero"),
@@ -665,7 +665,7 @@ EMPTY_NOT_NULL = [
 
 
 class TestAnEmptyGeometryIsNull:
-    """Audit PR C, section 11's ruling after code review round 2: `read_source`
+    """Audit PR C, section 12's ruling after code review round 2: `read_source`
     treats every empty `geometry` as `null`. Before, `""`, `0`, `false`, `[]`
     and `{}` crashed `--features` and `catchment --lakes` with an
     `AttributeError` (`'str' object has no attribute 'is_empty'`). Each test

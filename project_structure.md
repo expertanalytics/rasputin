@@ -98,7 +98,7 @@ bindings/
   core.cpp                 # pybind11 module definition -> tin_engine._core
 
 src_python/tin_engine/     # public Python API (distribution name: rasputin)
-  __init__.py              # re-exports from tin_engine._core
+  __init__.py              # installed_version only; never imports _core
   cli.py                   # Typer entry point declared in pyproject;
                            #   `rasputin palette NAME [--out FILE]` writes a
                            #   ParaView colour preset (16c)
@@ -106,19 +106,23 @@ src_python/tin_engine/     # public Python API (distribution name: rasputin)
   grid_domain.py           # DEM extent -> stride-subsampled nodes + outer ring;
                            #   pure numpy, never imports _core
   mosaic.py                # plan_mosaic / assemble: select, group by lattice,
-                           #   check overlaps and coverage, stitch; no files (15a)
+                           #   check overlaps and coverage, stitch; no files (15a);
+                           #   imports only io.models first-party
   dem_input.py             # --dem/--bbox or a domain -> DemInput(tile, plan,
-                           #   label, domain in the DEM's CRS) (15a, 15b)
+                           #   label, domain in the DEM's CRS) (15a, 15b);
+                           #   takes a DemRepository and TileFootprints, and
+                           #   the union of the tiles' node_box
   domain.py                # DomainPolygon (one polygon in its own CRS) and its
                            #   to_crs, check_extent, DomainError; reads no file
                            #   (io/domain_file.py reads --domain); never imports
                            #   _core
   crs.py                   # parse_crs, reprojector: the one Transformer.from_crs
                            #   site, always_xy (15b); pyproj and numpy
-  target_grid.py           # TargetGrid on one global lattice, source_region,
-                           #   SourceWindows / TileWindows, resample (bilinear,
-                           #   threads), check_point_blocks; never imports _core
-                           #   (15c-2)
+  target_grid.py           # TargetGrid (its node_box) on one global lattice,
+                           #   source_region, SourceWindows / TileWindows,
+                           #   resample (bilinear, threads), check_point_blocks;
+                           #   NoData by valid_mask (+-inf is data); never
+                           #   imports _core or mosaic (15c-2)
   final_check.py           # run: phase 2, the source nodes filed in a
                            #   CheckPoints, then refine_points from phase 1's
                            #   mesh (15c-2); takes the edge strip, checked in
@@ -155,15 +159,26 @@ src_python/tin_engine/     # public Python API (distribution name: rasputin)
                            #   never imports _core (22)
   catchment.py             # CatchmentRequest -> delineate(request, repo) ->
                            #   Catchment: seed, the window loop over 15a's
-                           #   plan, _core.upstream, the fine ring, and
-                           #   _core.reduce_ring; takes a DemRepository and
-                           #   no path (22); with a river reach, the pour
-                           #   point is the gauge's node on the burnt reach (29)
+                           #   plan, the flood, the fine ring and its
+                           #   reduction (via catchment_core, never _core);
+                           #   takes a DemRepository and no path (22); with a
+                           #   river reach, the pour point is the gauge's node
+                           #   on the burnt reach (29)
+  catchment_core.py        # upstream, accumulate: the core call on
+                           #   raster.to_core's view of a DemTile; reduce_ring
+                           #   re-exported; the catchment's _core calls, as
+                           #   edge_strip.py is the edge strip's (python-
+                           #   audit.md, section 11)
+  hydrography.py           # RiverSegment, Station, Lake: the hydrography's
+                           #   value types; no first-party import, so gauge
+                           #   places on them without a codec, and io/rivers.py
+                           #   and io/station_set.py read into them (python-
+                           #   audit.md, section 11)
   gauge.py                 # place: a station's foot P on NVE's river lines,
                            #   by tier, and the reach round it (29, PR 2);
                            #   lake_seed -> LakeSeed: the gauges seeded with
                            #   their lake, by containment and one distance
-                           #   (PR 4); pure shapely, no DEM, no file
+                           #   (PR 4); pure shapely, no DEM, no file, no codec
   burn.py                  # burn_reach: the reach moved onto the window's
                            #   valley floor and burnt in -> (burnt copy,
                            #   GaugePath); numpy only (29, PR 2)
@@ -173,9 +188,10 @@ src_python/tin_engine/     # public Python API (distribution name: rasputin)
   reference.py             # agreement, classify, summarise: our catchment
                            #   against NVE's polygon, counted on the DEM's
                            #   node lattice; pure, no file (29, PR 4)
-  catchment_batch.py       # run_batch: place, lake_seed, delineate in a
-                           #   worker thread, compare, one StationResult row
-                           #   per station to a BatchSink; no paths (29, PR 4)
+  catchment_batch.py       # seed_for: place, lake_seed, the request (shared
+                           #   with catchment --rivers); run_batch: delineate
+                           #   in a thread, compare, StationResult rows to a
+                           #   BatchSink; no paths (29, PR 4)
   landcover.py             # regions, label_triangles: a land-cover code per
                            #   triangle, components across unconstrained edges,
                            #   one point-in-polygon test per component (16c);
@@ -248,7 +264,13 @@ src_python/tin_engine/     # public Python API (distribution name: rasputin)
                            #   triangle_codes=, land_cover_codes= add the cell
                            #   array land_cover_code and its field (16c)
     geotiff.py             # TIFF container + GeoKey decoding -> DemTile
-    models.py              # Pydantic RasterMeta / DemTile
+    models.py              # frozen Pydantic Bounds (`of` a shapely-order
+                           #   box), IndexWindow, RasterMeta, TileFootprint,
+                           #   DemTile; RasterMeta's node arithmetic, the
+                           #   core's spelling: node_xy, index_of, node_box,
+                           #   windowed; valid_mask, the one NoData rule (NaN
+                           #   or the sentinel; +-inf is data); imports
+                           #   nothing first-party
     geopackage.py          # GeoPackage layer_info / query_features over an
                            #   open sqlite3.Connection; frozen dataclasses,
                            #   opens nothing, knows no path (16b)
@@ -256,7 +278,8 @@ src_python/tin_engine/     # public Python API (distribution name: rasputin)
                            #   standard library XML; opens nothing (16b)
     cog.py                 # decode_window: only the blocks a window meets,
                            #   from a BlockSource (an open file or the tile
-                           #   cache); opens nothing (23a-1)
+                           #   cache), its meta `meta.windowed(window)`;
+                           #   opens nothing (23a-1)
     station_set.py         # read_stations -> (stations, crs) and
                            #   read_references -> ({station: polygon}, crs):
                            #   fetch-stations' files or a user's points file,
@@ -266,13 +289,14 @@ src_python/tin_engine/     # public Python API (distribution name: rasputin)
                            #   ValueError (29); read_nve_lakes -> (Lake parts,
                            #   crs): `station-catchments --lakes`, a
                            #   MultiPolygon split (29, PR 4)
-    rivers.py              # RiverSegment, kind_of (lake or river, total over
-                           #   NVE's objekttype spellings), drop_copies,
-                           #   read_segments -> (segments, crs, copies
+    rivers.py              # kind_of (lake or river, total over NVE's
+                           #   objekttype spellings), drop_copies,
+                           #   read_segments -> (RiverSegments, crs, copies
                            #   dropped); one LineString per segment (29)
     repository.py          # the ONE io/ module that opens files:
-                           #   TiffDemRepository lists headers, loads tiles
-                           #   (15a); open_geopackage, a read-only SQLite
+                           #   DemRepository, the Protocol: footprints, load,
+                           #   load_window, check; TiffDemRepository lists
+                           #   headers, loads tiles (15a); open_geopackage, a read-only SQLite
                            #   connection (16b); CacheRepository and
                            #   CachedBlocks read the tile cache (23a-1);
                            #   CacheWriter writes it under a lock (23a-2);

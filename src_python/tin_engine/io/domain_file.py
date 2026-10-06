@@ -12,7 +12,7 @@ EPSG:4326 by RFC 7946; WKT has none, so it comes from the caller.
 The file is opened by ``io/repository.py``: GeoJSON through ``read_json``, as
 ``--features`` and the station files are (a UTF-8 byte order mark is
 skipped), WKT through ``read_text``, as UTF-8. Moved here from
-``tin_engine.domain`` (``docs/increments/python-audit.md``, section 11), which
+``tin_engine.domain`` (``docs/increments/python-audit.md``, section 12), which
 keeps the domain's types, ``to_crs`` and ``check_extent``.
 """
 

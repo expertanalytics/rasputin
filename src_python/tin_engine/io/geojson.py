@@ -1,6 +1,6 @@
 """GeoJSON: the one reading path and its `crs` rule, and the catchment file's bytes.
 
-Audit PR C (`docs/increments/python-audit.md`, section 11, "The one reading
+Audit PR C (`docs/increments/python-audit.md`, section 12, "The one reading
 path"): :func:`read_collection` turns a parsed document into its features
 and the text of its CRS, for `--domain`, `--features`, `catchment --lakes`
 and the station, reference, river and NVE lake files. The `crs` member is

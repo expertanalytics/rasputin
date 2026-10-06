@@ -76,7 +76,7 @@ def invoke(*args: str) -> tuple[int, str]:
 
 
 def test_lakes_help_says_which_file_it_takes() -> None:
-    """Audit PR C, red test 6 (`docs/increments/python-audit.md`, section 11,
+    """Audit PR C, red test 6 (`docs/increments/python-audit.md`, section 12,
     Ola's ruling of section 7): `station-catchments --lakes` takes the
     `lakes.geojson` that `fetch-stations` writes, or GeoJSON like it."""
     code, output = invoke("station-catchments", "--help")
