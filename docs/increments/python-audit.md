@@ -78,10 +78,14 @@ commit `21f49d6`, in which `features_of` refuses a geometry that is not an
 object, or whose `type` is missing or empty, with `feature <i> has no
 geometry`; +29 net, this fix +1. Code review round 4 approved the code
 and the tests and found one row false (summary row 4 said `--features`
-reads a bare geometry; under the `property` map it refuses it); fixed in
-this file with its suggestions, no code change. Next: a prose-only
-`@reviewer` round 5, of that row and the round-4 record only; then push on
-Ola's yes, after PR B.
+reads a bare geometry; under the `property` map it refuses it). `efe0eea`
+fixed that row, gap 3, row 8, section 6's row C, the probe docstring and
+this paragraph, with no code change. Code review round 5 (prose only)
+checked all of these and approved `efe0eea`, +29 net. Next: push on Ola's
+yes once PR B (`worktree-audit-crs`) has merged. Whichever of this PR and
+PR F (`worktree-audit-catchment`) merges second runs the merge-tree rule
+first. Ola's four open PR C questions and question 5 must be answered
+before the push.
 
 Re-checked against master `44fa7f5`: `git diff --stat 12dace7 44fa7f5 --
 src_python` is empty, and of the files cited below only `tools/brief.py`
@@ -1885,3 +1889,5 @@ so they describe the code as written.
 **PR C (`audit-geojson-io`), code review, round 3, 2026-10-06.** Range `483e4ae..0a11a34` (prose `591c026`, red `af5cb4e`, green `0a11a34`). Verdict: CHANGES REQUESTED, prose only. +28 net production (`count_loc.py 32b5092 0a11a34`; this round 0). Suite 5340 passed, 17 skipped; mypy, ruff, gates and check_citations clean; the 30 new tests fail at `591c026` and pass at `0a11a34`. The fix (`src_python/tin_engine/feature_input.py@0a11a34:390`) leaves no crash in `--features` or `catchment --lakes` (probe: 56 shapes x 8 readers at three revisions). Blocking (`@architect`): stale status paragraph, known gap 6, heading and ruling; the wording table lacks `--features` and `catchment --lakes` rows. Answered by making a probe the record instead of the table: `docs/increments/python-audit-probes/geojson_wordings.py` (68 shapes x 8 readers) with its outputs at `32b5092` and `0a11a34`, whose diff is the full list; section 10's table cut to a summary; known gaps rewritten from the probe (the old gap 6, the empty-geometry crash, dropped as fixed; a new one: a top-level `Feature` with `"geometry": 7` now crashes the station readers, which the base refused; `--domain` with `"type": ""` crashes, as at the base); the ruling past tense; the status paragraph; no code change. The new crash was then fixed in this PR (red `5a02bc9`, green `21f49d6`; ruled in section 10, "Ruling after code review round 3"), and the head's output became `geojson_wordings-21f49d6.txt`.
 
 **PR C (`audit-geojson-io`), code review, round 4, 2026-10-06.** Range `0a11a34..a400064` (prose `9e002e2`, red `5a02bc9`, green `21f49d6`, prose `a400064`). Verdict: CHANGES REQUESTED, prose only. +29 net production (`count_loc.py 32b5092 a400064`; this round +1). Suite 5404 passed, 17 skipped; mypy, ruff, gates and check_citations clean; the 64 new tests fail at `9e002e2` and pass at head. Probe re-run through `tools/scratch_copy.py` matches `docs/increments/python-audit-probes/geojson_wordings-32b5092.txt@a400064` and `docs/increments/python-audit-probes/geojson_wordings-21f49d6.txt@a400064` byte for byte (UNCAUGHT 50 and 2, both gap 1); the rulings' 45- and 96-line diffs reproduce; summary rows 1-3 and 5-9 and gaps 1-4 hold. Blocking (`@architect`): the bare-geometry row `docs/increments/python-audit.md@a400064:1662` says `--features` reads a bare geometry; under the `property` map it refuses it (`docs/increments/python-audit-probes/geojson_wordings-21f49d6.txt@a400064:188`).
+
+**PR C (`audit-geojson-io`), code review, round 5, 2026-10-06.** Range `a400064..efe0eea` (prose `efe0eea`). Verdict: APPROVED. +29 net production (`count_loc.py 32b5092 efe0eea`; this round 0). Summary row 4 (`docs/increments/python-audit.md@efe0eea:1663`) matches `open_features` on a bare Polygon at `efe0eea` under all four `CLASS_MAPS` (`property`, `corine`, `clc18_kode` refuse with the quoted wordings; `corine-water` reads 0 features); pins `src_python/tin_engine/feature_input.py@a400064:101-106`, `:457`, `:443` hold; gap 3, rows 8 and C, the probe docstring (`docs/increments/python-audit-probes/geojson_wordings.py@efe0eea:6-12`, checked against a `tools/scratch_copy.py` run) and the round-4 record hold; check_citations clean.
