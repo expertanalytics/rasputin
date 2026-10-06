@@ -28,10 +28,12 @@ Committed red at `196147e`: `tin_engine.landcover` did not exist yet, so
 every test failed on `ModuleNotFoundError`. The module landed in `0487ed0`
 and the suite has been green since.
 
-Increment 30a (`docs/increments/30a-landcover-speed.md`, section 7) adds the
-classes from `TestBest` on: red tests for the new helpers `_best` and
-`_member`, looked up at call time, and pins that are green before the
-rewrite. Pinned beyond that design's text: `_member` returns a bool array and
+Increment 30a (`docs/increments/30a-landcover-speed.md`, section 7) added the
+classes from `TestBest` on: tests for the new helpers `_best` and `_member`,
+and pins that were already green before the rewrite. Committed red at
+`6cde0eb`: the helpers did not exist yet, so their tests failed and the pins
+passed. The helpers landed in `3066d60` and the suite has been green since.
+Pinned beyond that design's text: `_member` returns a bool array and
 takes empty `values`; `_best` and `_member` take numpy arrays, positionally;
 `_lookup(points, polygons)` keeps its signature and returns `(codes, hits)`;
 P4 also holds with vertices present and no triangles.
@@ -461,20 +463,12 @@ class TestDeterminism:
 # before the rewrite, which is their point.
 
 
-def helper(name: str) -> Any:
-    """`landcover.<name>`, looked up at call time, so the file still collects
-    before the helper exists and each test fails on its own."""
-    found = getattr(landcover, name, None)
-    assert found is not None, f"landcover.{name} does not exist (increment 30a, section 3)"
-    return found
-
-
 def best(ids: np.ndarray, r: np.ndarray) -> np.ndarray:
-    return np.asarray(helper("_best")(ids, r))
+    return np.asarray(landcover._best(ids, r))
 
 
 def member(values: np.ndarray, table: np.ndarray) -> np.ndarray:
-    return np.asarray(helper("_member")(values, table))
+    return np.asarray(landcover._member(values, table))
 
 
 def ids_of(groups: np.ndarray) -> np.ndarray:
