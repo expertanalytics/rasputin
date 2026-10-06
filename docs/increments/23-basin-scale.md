@@ -1063,6 +1063,8 @@ holds the basin.
    flags as given.
 7. **Threads:** `decode_window(..., threads=4)`, fixed, not read from the
    machine and not a flag; the output does not depend on it (W2).
+   Increment 30c replaces the fixed 4: with no `threads`, the pool has
+   `os.cpu_count()` workers (`docs/increments/30c-dem-read-speed.md`, 3.1).
 8. **Local reads under a lock** (`seek` and `read` on one stream). A read
    is short against a decode; `os.pread` would exclude `BytesIO` fixtures.
 9. **`elevation_source` names the source id and the catalogue's `credit`.**
