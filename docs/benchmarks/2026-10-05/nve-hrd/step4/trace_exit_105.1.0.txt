@@ -1,0 +1,4 @@
+105.1.0: placed node (129620, 6983500); in +-12000 m its count is 119.73 km2
+stem node (131060, 6983950), 1509 m from it, count 118.73 km2 in the big window
+  in +-4700 m: path ends at (134330, 6984370) after 361 steps, row 384 of 942, col 941 of 942, flow code 255
+  heights on the path: first 11.88, lowest 11.69, highest 11.89, last 11.73

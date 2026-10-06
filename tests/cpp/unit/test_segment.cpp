@@ -3,7 +3,7 @@
 // Two decisions are pinned here.
 //
 // First, Segment2's equality is *ordered*: {a, b} != {b, a}. Ring edges are
-// directed -- the parity rule in point_in_ring and every future constraint
+// directed -- the parity rule in point_in_ring.hpp and every constraint
 // edge depend on which way an edge runs -- so a segment that compared equal to
 // its own reverse would make "the same edge" an ambiguous phrase in the one
 // module where it must not be.
@@ -35,7 +35,6 @@ using terrain::Box2;
 using terrain::Point2;
 using terrain::Segment2;
 using terrain::bbox;
-using terrain::is_degenerate;
 using terrain::on_segment;
 using terrain::reversed;
 using terrain::test::utm33_offset;
@@ -71,16 +70,6 @@ TEST_CASE("a degenerate segment is its own reverse", "[segment][reversed][degene
     const Segment2 s{Point2{5.0, 5.0}, Point2{5.0, 5.0}};
 
     REQUIRE(reversed(s) == s);
-    REQUIRE(is_degenerate(s));
-}
-
-TEST_CASE("is_degenerate is exact, not approximate", "[segment][degenerate]") {
-    const Point2 p = utm33_offset(Point2{0.0, 0.0});
-    const Point2 nudged{std::nextafter(p.x, inf), p.y};
-
-    REQUIRE(is_degenerate(Segment2{p, p}));
-    REQUIRE_FALSE(is_degenerate(Segment2{p, nudged}));
-    REQUIRE_FALSE(is_degenerate(Segment2{Point2{0.0, 0.0}, Point2{0.0, 1e-300}}));
 }
 
 // ---------------------------------------------------------------------------

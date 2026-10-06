@@ -27,36 +27,23 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-import numpy as np
 import pytest
-from typer.testing import CliRunner, Result
+from typer.testing import Result
 
 import tin_engine.cli as cli
-from geotiff_fixtures import micro_tiff
+from cli_driver import COLS, HOLE, ROWS, SQUARE, USAGE, invoke, polygon_file, rough_dem, runner
 from recordread import stats_names, stats_row
-from test_cli_mesh_dem import USAGE, invoke, write_tiff
-from test_cli_mesh_domain import HOLE, SQUARE, geojson
 from tin_engine.cli import app
 from vtkread import read_vtk
-
-runner = CliRunner(env={"NO_COLOR": "1", "TERM": "dumb"})
 
 ReportOf = Callable[..., tuple[str, Result, Path]]
 
 TIMES = "\u00d7"  # the report's multiplication sign
 HEADING = "# rasputin mesh — statistics"
-ROWS, COLS = 17, 21
 
 
-@pytest.fixture
-def bumpy(tmp_path: Path) -> Path:
-    array = np.random.default_rng(17).uniform(0.0, 50.0, (ROWS, COLS)).astype(np.float32)
-    return write_tiff(tmp_path / "bumpy.tif", micro_tiff(array))
-
-
-@pytest.fixture
-def square(tmp_path: Path) -> Path:
-    return geojson(tmp_path / "square.geojson", SQUARE, (HOLE,))
+bumpy = rough_dem(17)
+square = polygon_file(SQUARE, (HOLE,))
 
 
 #: The four kinds of run, as the arguments before ``--out``.
@@ -360,7 +347,13 @@ class TestRefusals:
     def test_stats_resolving_to_out(self, tmp_path: Path) -> None:
         out = tmp_path / "x.vtk"
         code, output = invoke(
-            "catchment", "--flat", "--out", str(out), "--stats", str(tmp_path / "." / "x.vtk")
+            "mesh",
+            "catchment",
+            "--flat",
+            "--out",
+            str(out),
+            "--stats",
+            str(tmp_path / "." / "x.vtk"),
         )
         assert code == USAGE, output
         assert "--stats" in output and "overwrite" in output
@@ -368,6 +361,7 @@ class TestRefusals:
 
     def test_stats_resolving_to_out_edges(self, tmp_path: Path) -> None:
         code, output = invoke(
+            "mesh",
             "catchment",
             "--flat",
             "--out",
@@ -385,6 +379,7 @@ class TestRefusals:
         inside = tmp_path / "inside"
         inside.mkdir()
         code, output = invoke(
+            "mesh",
             "catchment",
             "--flat",
             "--out",
@@ -404,7 +399,7 @@ class TestRefusals:
         link = tmp_path / "link.md"
         link.symlink_to(target)
         code, output = invoke(
-            "catchment", "--flat", "--out", str(tmp_path / "x.vtk"), "--stats", str(link)
+            "mesh", "catchment", "--flat", "--out", str(tmp_path / "x.vtk"), "--stats", str(link)
         )
         assert code == USAGE, output
         assert "symlink" in output
@@ -414,6 +409,7 @@ class TestRefusals:
     def test_a_refused_mesh_run_writes_no_report(self, tmp_path: Path, bumpy: Path) -> None:
         md = tmp_path / "x.md"
         code, output = invoke(
+            "mesh",
             "--dem",
             str(bumpy),
             "--tolerance",

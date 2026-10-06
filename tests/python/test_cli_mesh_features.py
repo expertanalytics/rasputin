@@ -69,8 +69,9 @@ import shapely
 from shapely.geometry import LineString, Polygon
 
 import feature_fixtures as ff
+from cli_driver import SQUARE, USAGE, geojson, invoke, polygon_file, rough_dem
 from feature_fixtures import Feat, domain_of, write_geojson
-from geotiff_fixtures import KARTVERKET, TIE_X, TIE_Y, micro_tiff, needs_codecs
+from geotiff_fixtures import KARTVERKET, TIE_X, TIE_Y, needs_codecs
 from gpkg_fixtures import (
     DTM10,
     EXTRACT,
@@ -86,8 +87,7 @@ from gpkg_fixtures import (
 )
 from landcover_fixtures import triangle_areas, vtk_labels
 from plyread import read_ply
-from test_cli_mesh_dem import USAGE, invoke, write_tiff
-from test_cli_mesh_domain import COLS, ROWS, SQUARE, geojson, quarter_circle
+from test_cli_mesh_domain import quarter_circle
 from test_cli_mesh_refine import file_field, ply_fields, stats_row
 from tin_engine.crs import transform_description
 from tin_engine.features import DEFAULT_VOCABULARY
@@ -122,15 +122,8 @@ GALLERY = [
 ]
 
 
-@pytest.fixture
-def bumpy(tmp_path: Path) -> Path:
-    array = np.random.default_rng(16).uniform(0.0, 50.0, (ROWS, COLS)).astype(np.float32)
-    return write_tiff(tmp_path / "bumpy.tif", micro_tiff(array))
-
-
-@pytest.fixture
-def plain_square(tmp_path: Path) -> Path:
-    return geojson(tmp_path / "square.geojson", SQUARE)
+bumpy = rough_dem(16)
+plain_square = polygon_file(SQUARE)
 
 
 @pytest.fixture
@@ -146,6 +139,7 @@ def mesh(
     target = tmp_path / out
     stats = [] if "--stats" in extra else ["--stats", str(target.with_suffix(".md"))]
     code, output = invoke(
+        "mesh",
         "--dem",
         str(tif),
         "--domain",
@@ -202,7 +196,13 @@ class TestUsage:
         self, tmp_path: Path, bumpy: Path, gallery: Path
     ) -> None:
         code, output = invoke(
-            "--dem", str(bumpy), "--features", str(gallery), "--out", str(tmp_path / "x.vtk")
+            "mesh",
+            "--dem",
+            str(bumpy),
+            "--features",
+            str(gallery),
+            "--out",
+            str(tmp_path / "x.vtk"),
         )
         assert code == USAGE and "--features" in output, output
         assert "No such option" not in output
@@ -223,7 +223,7 @@ class TestUsage:
         self, tmp_path: Path, gallery: Path
     ) -> None:
         code, output = invoke(
-            "river", "--flat", "--features", str(gallery), "--out", str(tmp_path / "x.vtk")
+            "mesh", "river", "--flat", "--features", str(gallery), "--out", str(tmp_path / "x.vtk")
         )
         assert code == USAGE and "--features" in output and "No such option" not in output, output
 

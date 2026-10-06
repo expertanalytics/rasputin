@@ -26,12 +26,11 @@ import tifffile
 from pydantic import BaseModel, ConfigDict
 
 from tin_engine import installed_version
-from tin_engine.crs import parse_crs
+from tin_engine.crs import parse_crs, same_crs
 from tin_engine.fetch.http import FetchError, RangeClient
 from tin_engine.fetch.plan import FetchRequest, ObjectPlan, parse_prefix, plan_object, source_box
-from tin_engine.io.models import RasterMeta
+from tin_engine.io.models import Bounds, RasterMeta
 from tin_engine.io.repository import CachedObject, CachedRequest, CacheManifest, CacheWriter
-from tin_engine.mosaic import Bounds
 from tin_engine.sources import RemoteSource, notice
 
 MIB = 1 << 20
@@ -219,7 +218,7 @@ def _header(
             raise FetchError(f"{url}: no complete header in the first {MAX_HEADER // MIB} MiB")
         size *= 2
     meta, _, page = parsed
-    if parse_crs(meta.crs) != parse_crs(source.crs):
+    if not same_crs(meta.crs, source.crs):
         raise FetchError(
             f"{object_id}: the header's CRS is {meta.crs}; the catalogue's {source.id} "
             f"is {source.crs}"

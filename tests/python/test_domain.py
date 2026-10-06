@@ -39,6 +39,7 @@ import shapely
 from pyproj import CRS, Transformer
 from shapely.geometry import Polygon, mapping
 
+from crs_fixtures import UTM33_PARIS, axes_swapped, refuse_point_moves
 from tin_engine.io.models import RasterMeta
 
 UTM33 = "urn:ogc:def:crs:EPSG::25833"
@@ -134,12 +135,10 @@ def the_crs(out: Any) -> CRS:
 
 @pytest.fixture
 def no_transformer(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Any `Transformer.from_crs` from here on fails the test."""
-
-    def refuse(*args: Any, **kwargs: Any) -> Any:
-        raise AssertionError(f"Transformer.from_crs{args} was called")
-
-    monkeypatch.setattr(Transformer, "from_crs", staticmethod(refuse))
+    """No point is moved: any point-moving `Transformer` method from here on
+    fails the test (`crs_fixtures.refuse_point_moves`). Building one is
+    allowed, since `crs.same_crs` builds one to compare (audit PR B)."""
+    refuse_point_moves(monkeypatch)
 
 
 class TestReading:
@@ -166,6 +165,42 @@ class TestReading:
     ) -> None:
         path = write(tmp_path, geojson(square(), crs=member))
         assert the_crs(domain.read_domain(path, flag)) == CRS.from_epsg(25833)
+
+    @pytest.mark.parametrize(
+        ("member", "flag"),
+        [
+            pytest.param("EPSG:25833", axes_swapped(25833), id="EPSG member, WKT flag"),
+            pytest.param(UTM33, axes_swapped(25833), id="URN member, WKT flag"),
+            pytest.param(axes_swapped(25833), "EPSG:25833", id="WKT member, EPSG flag"),
+        ],
+    )
+    def test_a_domain_crs_that_is_the_files_crs_by_definition(
+        self, domain: ModuleType, tmp_path: Path, member: str, flag: str
+    ) -> None:
+        """Audit PR B, red test 11 (site 13, `domain.py:103`): the file and the
+        flag agree by `crs.same_crs`, not by pyproj's `==`, so EPSG:25833's WKT
+        without its ID, axes swapped, is EPSG:25833. The flag never overrides
+        the file: the result's `crs` is the member's own text, and its polygon
+        is the one read without the flag, bit for bit."""
+        path = write(tmp_path, geojson(square(), crs=member))
+        out = domain.read_domain(path, flag)
+        assert out.crs == member
+        assert out.polygon.equals_exact(domain.read_domain(path).polygon, tolerance=0)
+
+    def test_a_flag_with_another_prime_meridian_is_still_refused(
+        self, domain: ModuleType, tmp_path: Path
+    ) -> None:
+        """Beside red test 11, green before and after: UTM 33 counted from
+        Paris identifies as EPSG:25833 at PROJ's confidence 70 but is not it
+        (the transform between them moves every point), so the fix cannot
+        widen past `same_crs`."""
+        path = write(tmp_path, geojson(square(), crs="EPSG:25833"))
+        refused(
+            domain,
+            path,
+            f"d.geojson is in EPSG:25833 but --domain-crs says {UTM33_PARIS}",
+            crs=UTM33_PARIS,
+        )
 
     def test_the_json_suffix_is_geojson(self, domain: ModuleType, tmp_path: Path) -> None:
         path = write(tmp_path, geojson(square()), name="d.json")
@@ -336,12 +371,39 @@ class TestToCrs:
         self, domain: ModuleType, tmp_path: Path, no_transformer: None, dst: str
     ) -> None:
         """A domain already in the DEM's CRS keeps its coordinates bit for bit,
-        and no transformer is made (the mesh must be 16's, bit for bit)."""
+        and no point is moved (the mesh must be 16's, bit for bit)."""
         read = domain.read_domain(write(tmp_path, geojson(square(), crs=UTM33)))
         out = read.to_crs(dst)
         assert list(out.polygon.exterior.coords) == list(read.polygon.exterior.coords)
         assert list(out.polygon.interiors[0].coords) == list(read.polygon.interiors[0].coords)
         assert the_crs(out) == CRS.from_epsg(25833)
+
+    def test_the_targets_epsg_code_by_definition_is_not_transformed(
+        self, domain: ModuleType, no_transformer: None
+    ) -> None:
+        """Audit PR B, red test 8: a domain spelt as EPSG:25833's WKT without
+        its ID, axes swapped, is in EPSG:25833 (`crs.same_crs`), so no point
+        moves, the polygon is exactly the given one, and it is labelled as
+        `dst`."""
+        given = domain.DomainPolygon(polygon=Polygon(OUTER, [HOLE]), crs=axes_swapped(25833))
+        out = given.to_crs("EPSG:25833")
+        assert out.crs == "EPSG:25833"
+        assert out.polygon.equals_exact(given.polygon, tolerance=0.0)
+
+    def test_a_longitude_counted_from_10_east_is_moved_10_degrees(self, domain: ModuleType) -> None:
+        """Audit PR B, code review round 1: PROJ keeps a `longlat`'s `+lon_0`
+        only in the remark, so `CRS.equals` calls this CRS EPSG:4326, yet a
+        longitude 0 in it is 10 E. A 1 by 1 degree box at 0-1, 50-51 moved to
+        EPSG:4326 lies at 10-11 E. Bound 1e-9 degrees at longitudes up to 11
+        (PROJ's longitude shift is a sum of two doubles of that size)."""
+        lon_0_10 = "+proj=longlat +datum=WGS84 +lon_0=10 +no_defs"
+        given = domain.DomainPolygon(
+            polygon=Polygon([(0, 50), (1, 50), (1, 51), (0, 51)]), crs=lon_0_10
+        )
+        x_min, y_min, x_max, y_max = given.to_crs("EPSG:4326").polygon.bounds
+        assert x_min == pytest.approx(10.0, abs=1e-9)
+        assert x_max == pytest.approx(11.0, abs=1e-9)
+        assert (y_min, y_max) == pytest.approx((50.0, 51.0), abs=1e-9)
 
     def test_a_vertex_with_no_image_is_refused_naming_both_crss(
         self, domain: ModuleType, tmp_path: Path

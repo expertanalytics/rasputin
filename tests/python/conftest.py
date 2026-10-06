@@ -90,6 +90,27 @@ def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
         session.exitstatus = pytest.ExitCode.TESTS_FAILED
 
 
+def pytest_ignore_collect(collection_path: Path, config: pytest.Config) -> bool | None:
+    """Under `-m harness` exactly, skip test files that carry no harness mark (h17 §4b).
+
+    pytest imports every test file before `-m` deselects, and the harness job
+    runs without `tin_engine` installed, so importing a product test file there
+    would fail collection. A file whose text lacks `mark.harness` holds no test
+    that `-m harness` would select, so it is not collected at all. The test is
+    on the text, not the AST: it can only over-collect, and a file collected
+    needlessly fails loudly on import. Any other expression, or none, leaves
+    collection to pytest.
+    """
+    if config.getoption("markexpr") != "harness":
+        return None
+    name = collection_path.name
+    if not (name.startswith("test_") and name.endswith(".py") and collection_path.is_file()):
+        return None
+    if "mark.harness" in collection_path.read_text(encoding="utf-8"):
+        return None
+    return True
+
+
 def pytest_terminal_summary(terminalreporter: Any) -> None:
     if _verdict:
         terminalreporter.section("prose files read by the suite (h11 T5)", red=True)

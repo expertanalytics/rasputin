@@ -33,7 +33,7 @@ from shapely.geometry import Polygon, shape
 from shapely.geometry.polygon import orient
 from shapely.validation import explain_validity
 
-from tin_engine.crs import parse_crs, reprojector
+from tin_engine.crs import parse_crs, reprojector, same_crs
 from tin_engine.io.models import RasterMeta
 
 GEOJSON_SUFFIXES = (".geojson", ".json")
@@ -55,12 +55,12 @@ class DomainPolygon(BaseModel):
 
     def to_crs(self, dst: str | CRS) -> DomainPolygon:
         """The domain in ``dst``: each vertex through pyproj's ``always_xy``
-        transform, once, and re-oriented; rings stay straight (R9). An equal
-        CRS, by ``pyproj.CRS`` equality and not by EPSG code, returns ``self``.
+        transform, once, and re-oriented; rings stay straight (R9). The same CRS,
+        by ``same_crs``, returns the same polygon labelled ``target.to_string()``.
         """
         source, target = parse_crs(self.crs), parse_crs(dst)
-        if source == target:
-            return self
+        if same_crs(source, target):
+            return self.model_copy(update={"crs": target.to_string()})
         move = reprojector(source, target)
         rings = [np.asarray(r.coords) for r in (self.polygon.exterior, *self.polygon.interiors)]
         moved = [move(r) for r in rings]
@@ -100,7 +100,7 @@ def read_domain(path: Path, crs: str | None = None) -> DomainPolygon:
             _parsed(own)
         else:
             geometry, own = _geojson(json.loads(text))
-            if crs is not None and _parsed(crs) != _parsed(own):
+            if crs is not None and not same_crs(_parsed(crs), _parsed(own)):
                 raise DomainError(f"{path.name} is in {own} but --domain-crs says {crs}")
     except DomainError:
         raise
@@ -143,8 +143,7 @@ def check_extent(domain: DomainPolygon, meta: RasterMeta) -> None:
     """U4 (a): every vertex in ``meta``'s node rectangle, as the core's
     ``cell_of`` has it, with ``domain`` already in the DEM's CRS."""
     polygon = domain.polygon
-    x_max = meta.x_min + (meta.cols - 1) * meta.delta_x
-    y_min = meta.y_max - (meta.rows - 1) * meta.delta_y
+    _, y_min, x_max, _ = meta.node_box()
     for ring in (polygon.exterior, *polygon.interiors):
         for x, y in ring.coords:
             outside = max(meta.x_min - x, x - x_max, y_min - y, y - meta.y_max)

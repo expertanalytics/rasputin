@@ -25,8 +25,7 @@ from shapely.prepared import prep
 
 from tin_engine.crs import parse_crs, reprojector
 from tin_engine.domain import DomainPolygon
-from tin_engine.io.models import DemTile, RasterMeta
-from tin_engine.mosaic import Bounds
+from tin_engine.io.models import Bounds, DemTile, RasterMeta, valid_mask
 
 #: Source nodes per check-point block side (D4).
 BLOCK = 512
@@ -57,6 +56,12 @@ class TargetGrid(BaseModel):
         h = float(self.spacing)
         x, y = (self.col0 + c) * h, -(self.row0 + r0 + r) * h
         return np.column_stack([x.ravel(), y.ravel()])
+
+    def node_box(self) -> tuple[float, float, float, float]:
+        """The node rectangle `(x_min, y_min, x_max, y_max)`."""
+        h = float(self.spacing)
+        x0, y1 = self.col0 * h, -self.row0 * h
+        return x0, y1 - (self.rows - 1) * h, x0 + (self.cols - 1) * h, y1
 
 
 class SourceWindows(Protocol):
@@ -113,9 +118,8 @@ def source_region(grid: TargetGrid, meta: RasterMeta, grown: Any) -> tuple[Bound
     cells, and the needed region: `grown` (in the target CRS) moved there and
     grown by a source cell's diagonal. A box across +-180 degrees longitude, or
     reaching a pole, is refused (D2)."""
-    h, n = float(grid.spacing), max(grid.rows, grid.cols)
-    x0, y1 = grid.col0 * h, -grid.row0 * h
-    x1, y0 = x0 + (grid.cols - 1) * h, y1 - (grid.rows - 1) * h
+    n = max(grid.rows, grid.cols)
+    x0, y0, x1, y1 = grid.node_box()
     edge = np.linspace(0.0, 1.0, n + 1)
     ring = np.concatenate(
         [
@@ -150,11 +154,6 @@ def _pool[T](threads: int, work: Callable[[T], Any], items: Iterable[T]) -> Iter
             yield from pool.map(work, batch[lo : lo + chunk])
 
 
-def _valid(values: npt.NDArray[Any], nodata: float | None) -> npt.NDArray[np.bool_]:
-    ok = np.isfinite(values)
-    return ok if nodata is None else ok & (values != nodata)
-
-
 def rows_per_block(cols: int) -> int:
     """The most rows of `cols` nodes within `BLOCK_NODES`, and at least one."""
     return max(1, BLOCK_NODES // cols)
@@ -176,8 +175,7 @@ def resample(
     def block(r0: int) -> None:
         r1 = min(r0 + rows_per, grid.rows)
         lonlat = reprojector(grid.crs, m.crs)(grid.xy(r0, r1))
-        col = (lonlat[:, 0] - m.x_min) / m.delta_x
-        row = (m.y_max - lonlat[:, 1]) / m.delta_y
+        row, col = m.index_of(lonlat[:, 0], lonlat[:, 1])
         inside = (col >= 0) & (col <= m.cols - 1) & (row >= 0) & (row <= m.rows - 1)
         out = np.full(col.size, fill, dtype=np.float64)
         if inside.any():
@@ -191,8 +189,8 @@ def resample(
             c, d = win[i + 1, j].astype(np.float64), win[i + 1, j + 1].astype(np.float64)
             fx, fy = col - c0, row - q0
             z = (1 - fy) * ((1 - fx) * a + fx * b) + fy * ((1 - fx) * c + fx * d)
-            ok = _valid(a, m.nodata) & _valid(b, m.nodata) & _valid(c, m.nodata)
-            out[inside] = np.where(ok & _valid(d, m.nodata), z, fill)
+            ok = valid_mask(a, m.nodata) & valid_mask(b, m.nodata) & valid_mask(c, m.nodata)
+            out[inside] = np.where(ok & valid_mask(d, m.nodata), z, fill)
         canvas[r0:r1] = out.reshape(r1 - r0, grid.cols)
 
     for _ in _pool(threads, block, range(0, grid.rows, rows_per)):
@@ -229,8 +227,7 @@ def check_point_blocks(
     # GEOS prepared geometries are not thread-safe, and `prep` prepares its
     # argument in place: each block prepares its own copy (@perf's crash).
     wkb = shapely.to_wkb(domain.polygon)
-    x0, y1 = grid.col0 * h, -grid.row0 * h
-    x1, y0 = x0 + (grid.cols - 1) * h, y1 - (grid.rows - 1) * h
+    x0, y0, x1, y1 = grid.node_box()
 
     def block(origin: tuple[int, int]) -> Block | None:
         r0, c0 = origin
@@ -241,14 +238,14 @@ def check_point_blocks(
         left, right = np.full(rows.size, cols[0]), np.full(rows.size, cols[-1])
         rr = np.concatenate([top, rows, bottom[::-1], rows[::-1]])
         cc = np.concatenate([cols, right, cols[::-1], left])
-        image = move(np.column_stack([m.x_min + cc * m.delta_x, m.y_max - rr * m.delta_y]))
+        image = move(np.column_stack(m.node_xy(rr, cc)))
         image = image[np.isfinite(image).all(axis=1)]
         hull = shapely.MultiPoint(image).convex_hull.buffer(h) if len(image) else None
         if hull is None or not prep(shapely.from_wkb(wkb)).intersects(hull):
             return None
         z = np.asarray(source.window(r0, r1, c0, c1))
-        r, c = np.nonzero(_valid(z, m.nodata))
-        xy = move(np.column_stack([m.x_min + (c0 + c) * m.delta_x, m.y_max - (r0 + r) * m.delta_y]))
+        r, c = np.nonzero(valid_mask(z, m.nodata))
+        xy = move(np.column_stack(m.node_xy(r0 + r, c0 + c)))
         keep = np.isfinite(xy).all(axis=1)
         keep &= (xy[:, 0] >= x0) & (xy[:, 0] <= x1) & (xy[:, 1] >= y0) & (xy[:, 1] <= y1)
         return xy[keep], z[r[keep], c[keep]].astype(np.float32)

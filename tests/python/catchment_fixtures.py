@@ -20,8 +20,10 @@ the basin that reaches it before the channel.
 
 from __future__ import annotations
 
+import importlib
 from collections import deque
 from collections.abc import Mapping
+from typing import TYPE_CHECKING
 
 import numpy as np
 import numpy.typing as npt
@@ -30,7 +32,9 @@ from shapely.geometry import Polygon, box
 
 from mosaic_fixtures import whole
 from tin_engine.io.models import DemTile
-from tin_engine.io.repository import TileFootprint
+
+if TYPE_CHECKING:
+    from tin_engine.io.models import TileFootprint
 
 X0 = 500_000.0
 Y0 = 6_600_000.0
@@ -80,8 +84,11 @@ class MemoryRepository:
         self.loads: list[str] = []
 
     def footprints(self) -> tuple[TileFootprint, ...]:
+        # `io.models` since audit PR A; read at call time, so a missing name
+        # fails the tests that list tiles, not the collection of this helper.
+        models = importlib.import_module("tin_engine.io.models")
         return tuple(
-            TileFootprint(name=name, meta=tile.meta, dtype=tile.array.dtype)
+            models.TileFootprint(name=name, meta=tile.meta, dtype=tile.array.dtype)
             for name, tile in sorted(self.tiles.items())
         )
 

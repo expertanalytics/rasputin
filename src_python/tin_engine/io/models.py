@@ -9,6 +9,7 @@ owns that). This module imports nothing first-party and never `_core`.
 
 from __future__ import annotations
 
+import math
 from typing import Any, Literal, Self
 
 import numpy as np
@@ -22,6 +23,31 @@ class GeoTiffError(ValueError):
     The message names the tag or GeoKey by number and by name, and the file's
     value. One type on purpose: no caller branches on which refusal fired.
     """
+
+
+class Bounds(BaseModel):
+    """A box in the DEM's CRS: finite, with `x_min < x_max` and `y_min < y_max`."""
+
+    model_config = ConfigDict(frozen=True)
+
+    x_min: float
+    y_min: float
+    x_max: float
+    y_max: float
+
+    @classmethod
+    def of(cls, box: tuple[float, float, float, float]) -> Self:
+        """The box `(x_min, y_min, x_max, y_max)`, shapely's `bounds` order."""
+        return cls(x_min=box[0], y_min=box[1], x_max=box[2], y_max=box[3])
+
+    @model_validator(mode="after")
+    def _a_box(self) -> Self:
+        corners = (self.x_min, self.y_min, self.x_max, self.y_max)
+        if not all(map(math.isfinite, corners)) or not (
+            self.x_min < self.x_max and self.y_min < self.y_max
+        ):
+            raise ValueError(f"need finite x_min < x_max and y_min < y_max, got {corners}")
+        return self
 
 
 class IndexWindow(BaseModel):
@@ -80,6 +106,45 @@ class RasterMeta(BaseModel):
         if self.nodata_source == "absent" and self.nodata is not None:
             raise ValueError("nodata_source 'absent' requires nodata None")
         return self
+
+    def node_xy[T: (float, npt.NDArray[Any])](self, rows: T, cols: T) -> tuple[T, T]:
+        """Node `(row, col)`'s `(x, y)`, elementwise: `x_min + col * delta_x`,
+        `y_max - row * delta_y`, the core's `RasterGeometry::node`."""
+        return self.x_min + cols * self.delta_x, self.y_max - rows * self.delta_y
+
+    def index_of[T: (float, npt.NDArray[Any])](self, x: T, y: T) -> tuple[T, T]:
+        """The fractional `(row, col)` of `(x, y)`, unrounded."""
+        return (self.y_max - y) / self.delta_y, (x - self.x_min) / self.delta_x
+
+    def node_box(self) -> tuple[float, float, float, float]:
+        """The node rectangle `(x_min, y_min, x_max, y_max)`; flat for one row
+        or one column (not a `Bounds`, which refuses a flat box)."""
+        x_max, y_min = self.node_xy(self.rows - 1, self.cols - 1)
+        return self.x_min, y_min, x_max, self.y_max
+
+    def windowed(self, window: IndexWindow) -> RasterMeta:
+        """This grid cut to `window`: the corner moved by whole cells."""
+        x_min, y_max = self.node_xy(window.row0, window.col0)
+        update = {"x_min": x_min, "y_max": y_max, "rows": window.rows, "cols": window.cols}
+        return self.model_copy(update=update)
+
+
+def valid_mask(values: npt.NDArray[Any], nodata: float | None) -> npt.NDArray[np.bool_]:
+    """Not NoData. NoData is NaN or the sentinel; +-inf is data, as in the
+    core's `Raster::is_nodata`."""
+    valid: npt.NDArray[np.bool_] = ~np.isnan(values)
+    return valid if nodata is None else valid & (values != nodata)
+
+
+class TileFootprint(BaseModel):
+    """One tile as its header describes it: the file's name, its node grid, and
+    the dtype it decodes to (float32 unless given; S2)."""
+
+    model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True)
+
+    name: str
+    meta: RasterMeta
+    dtype: np.dtype[Any] = np.dtype(np.float32)
 
 
 class DemTile(BaseModel):

@@ -34,9 +34,9 @@ import venv
 from pathlib import Path
 
 import pytest
-from typer.testing import CliRunner
 
 import tin_engine._core as core
+from cli_driver import runner
 from harness_fixtures import Tool
 from tin_engine import cli, installed_version
 from tin_engine.cli import app
@@ -47,7 +47,6 @@ REPO = Path(__file__).resolve().parents[2]
 #: files its ``is_prose`` accepts (``copy_source_tree``).
 ci = Tool("ci_changes")
 
-runner = CliRunner(env={"NO_COLOR": "1", "TERM": "dumb"})
 
 #: What a default (RASPUTIN_HARDENING=ON) build reports, keyed on the platform's
 #: standard library: libc++ on macOS, libstdc++ on Linux.

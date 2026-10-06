@@ -50,7 +50,7 @@ script reads. What differs, and why:
 - **Units go in the field name** (`tolerance_m`, `start_min_angle_deg`), not in
   a separate attribute. A VTK FieldData string array and a PLY comment have no
   slot for an attribute, and the catchment command's GeoJSON already names its
-  properties this way (`outline_tolerance_m`, `fine_area_m2`, `cli.py:1966-1969`).
+  properties this way (`outline_tolerance_m`, `fine_area_m2`, `src_python/tin_engine/cli.py@44fa7f5:1966-1969`).
 - **`licence_note` and `cite` keep their shipped names** (23a-2, Ola's ruling that a downloaded source's licence notes travel in the mesh file)
   rather than ACDD's `license` and `references`. Renaming them gains nothing a
   reader needs.
@@ -90,7 +90,7 @@ master `586fbc1`'s, before this increment; read them there
 | `elevation_source` | `src_python/tin_engine/cli.py@586fbc1:876`, built at `src_python/tin_engine/cli.py@586fbc1:1496`, `:1518-1553`, `:1568-1570`, prefixed at `:870-875` | one sentence; its clauses are listed below | always (`none (z=0, --flat)` for a fixture, `:468`, `:960`) |
 | `source_crs`, `source_transform`, `computation_grid` | `src_python/tin_engine/cli.py@586fbc1:880-885` | reprojected path: the DEM's own CRS, PROJ's name for the transform, the resampled grid (`square 30 m grid in EPSG:31983, node (R, K) at (30 K, -30 R), resampled bilinear from EPSG:4674`) | reprojected only |
 | `licence_note`, `cite` | `src_python/tin_engine/cli.py@586fbc1:886-892` | the remote source's licence and works to cite | DEM from the cache |
-| `dem_tiles`, `dem_seams` | `src_python/tin_engine/cli.py@586fbc1:893-897`, `mosaic.py:121-124` | tile names; overlaps that disagree (`a.tif \| b.tif: nodes 1, max 4, median 4`) or `none` | several files, a directory, or the cache |
+| `dem_tiles`, `dem_seams` | `src_python/tin_engine/cli.py@586fbc1:893-897`, `src_python/tin_engine/mosaic.py@44fa7f5:121-124` | tile names; overlaps that disagree (`a.tif \| b.tif: nodes 1, max 4, median 4`) or `none` | several files, a directory, or the cache |
 | `domain`, `domain_crs`, `domain_transform` | `src_python/tin_engine/cli.py@586fbc1:898-903`, `:1461` | `catchment.geojson, 1 ring 0 holes, 27 vertices`; its CRS; transform or `none` | `--domain` |
 | `features`, `features_crs`, `features_transform`, `features_notice` | `src_python/tin_engine/cli.py@586fbc1:904-934` | `clc2018_7908_3.gpkg:U2018_CLC2018_V2020_20u1, map corine, 60 features, 87 chains, 10266 vertices`; CRS; transform; the CORINE notice | `--features` |
 | `land_cover_codes` | `src_python/tin_engine/cli.py@586fbc1:1045-1046`, `io/vtk_legacy.py:118-119` | what `land_cover_code` holds | a coded `--features-map` |
@@ -119,7 +119,7 @@ That is a defect this increment fixes (D2: the `.ply` carries the same fields as
 | `constraint feet on` / `off` | `:1551` | increment 20b: a worst DEM node very close to a line is replaced by the nearest point on the line | | always |
 | `0 valid DEM nodes not covered` | `:1552`, `final.uncovered` | DEM nodes with data that lie in triangles with a NoData corner after refinement. By the stopping rule there are none (`refine.hpp:409-410`), so this is a **self-check, always 0** | count | never, by construction |
 | `199 vertices without data dropped` | `:1568`, `elevation.py:25`, `:64` | mesh vertices where the DEM gives no height, removed with every triangle that uses them. With `--tolerance` a vertex at a DEM node has none when that node is NoData, and a vertex between nodes when one of the four nodes around it is. Without `--tolerance` every vertex is sampled bilinearly, and the sampler refuses a cell with any NoData corner even at zero weight (`12-dem-to-mesh.md`, R2), so a vertex on a valid node next to a NoData node is removed too: one cell of trim around NoData ("NoData on the no-tolerance path", below). *Changed by increment 27: a vertex on a node reads that node alone, so without `--tolerance` too only vertices on NoData cells go (`27-node-sampling.md`)* | count | the DEM has NoData cells inside the area |
-| `vertical unit assumed metres` | `:1569-1570` | the GeoTIFF has no `VerticalUnitsGeoKey`; any other unit than metres is refused (`io/geotiff.py:139-143`); always set for cache blocks (`fetch/run.py:249`) | | the key is missing |
+| `vertical unit assumed metres` | `:1569-1570` | the GeoTIFF has no `VerticalUnitsGeoKey`; any other unit than metres is refused (`src_python/tin_engine/io/geotiff.py@65cd528:139-143`); always set for cache blocks (`src_python/tin_engine/fetch/run.py@44fa7f5:249`) | | the key is missing |
 
 ### stderr
 
@@ -270,8 +270,8 @@ unreadable or break a legal requirement, so they stay, unchanged.
 |---|---|---|
 | `feature_bits`, `feature_names` | `io/vtk_legacy.py:124-125`; `.ply` `feature_bit <bit> <name>` comments, `io/ply.py:111` | the key to the `feature_mask` cell array and the per-feature 0/1 arrays: without it a mask of 5 does not say "river and railway" |
 | `feature_vocabulary` | `io/vtk_legacy.py:126`, `io/ply.py:112` | a digest of that key, so two files can be checked to use the same bits (increment 13) |
-| `land_cover_codes` | `io/vtk_legacy.py:118-119`, `cli.py:1040` | says which code system the `land_cover_code` cell array holds (CORINE level 3); the ParaView preset from `rasputin palette corine` colours those codes and assumes that system |
-| `features_notice` | `cli.py:961`, text at `feature_input.py:61-65` | the CORINE attribution ("Contains modified CORINE Land Cover 2018 data ... (c) European Union ..."), which the Copernicus data policy asks for on data derived from CORINE, as `licence_note` is for a downloaded DEM. Kept by Ola's ruling (2026-10-03) under the same rule as `dem_credit` |
+| `land_cover_codes` | `io/vtk_legacy.py:118-119`, `src_python/tin_engine/cli.py@44fa7f5:1040` | says which code system the `land_cover_code` cell array holds (CORINE level 3); the ParaView preset from `rasputin palette corine` colours those codes and assumes that system |
+| `features_notice` | `src_python/tin_engine/cli.py@44fa7f5:961`, text at `feature_input.py:61-65` | the CORINE attribution ("Contains modified CORINE Land Cover 2018 data ... (c) European Union ..."), which the Copernicus data policy asks for on data derived from CORINE, as `licence_note` is for a downloaded DEM. Kept by Ola's ruling (2026-10-03) under the same rule as `dem_credit` |
 
 ### D3. The rules
 
@@ -283,9 +283,9 @@ unreadable or break a legal requirement, so they stay, unchanged.
    maximum never reads above the tolerance it met.
 3. **A count of zero is omitted from the file**, never from `--stats`.
    This applies to counts only (today `nodata_vertices_removed`), never to a
-   measured value: `--tolerance 0` is accepted (`cli.py:835`) and then
+   measured value: `--tolerance 0` is accepted (`src_python/tin_engine/cli.py@44fa7f5:835`) and then
    `tolerance_m 0` and `max_error_m 0` are written
-   (`test_cli_mesh_refine.py:151-155` asserts both).
+   (`tests/python/test_cli_mesh_refine.py@a2d3319:151-155` asserts both).
 4. **Self-checks** live in `--stats`. If one is ever non-zero it is also
    printed to stderr as a warning, so a broken invariant is never silent.
 5. **No sentence in the file.** The one sentence, the summary, goes to stderr.
@@ -394,7 +394,7 @@ installed version, gives the same bytes:
 - `PATH` is resolved like `--stats`'s (`_destination` with `--out-parent`).
   It is refused, before any file is written, if it resolves to the mesh file,
   the `--out-edges` file or the `--stats` file, with the same kind of usage
-  error `_report_target` gives (`cli.py:1113-1125`). `-` is refused: standard
+  error `_report_target` gives (`src_python/tin_engine/cli.py@44fa7f5:1113-1125`). `-` is refused: standard
   output is `--stats -`'s.
 - It is written after the mesh files and the `--stats` report, and its path is
   echoed on stdout like theirs. A refused or failed run writes no record.
@@ -430,7 +430,7 @@ affected only through `max_error_m`.
   `test_cli_mesh_refine.py`, `test_cli_start_quality.py`) are dropped: 25's red
   step rewrites those lines as `float(file_field(vtk, "max_error_m"))`, and 15f-3
   takes 25's version at the rebase. In that amendment,
-  `test_cli_mesh_refine.py:151-155` (`--tolerance 0`, which on 25 asserts
+  `tests/python/test_cli_mesh_refine.py@a2d3319:151-155` (`--tolerance 0`, which on 25 asserts
   `file_field(fine, "max_error_m") == "0"`) compares `max_error_m` with
   `max(tolerance_m, dem_nodes_at_vertices_max_error_m)`, read from the file
   and from `--stats`, because after 15f-3 a node within rounding of a strip
@@ -582,14 +582,14 @@ words, over the tree): Line numbers in this section are those of master
   `test_cli_mesh_domain_crs.py`, `test_cli_mesh_features.py`,
   `test_cli_start_quality.py`, `test_cli_constraint_feet.py`,
   `test_stats.py` (the Refinement table, `:235`, `:324-330`, `:399`),
-  `test_cli_mesh.py:302` (the `.ply` comment `elevation none (z=0, --flat)`,
+  `tests/python/test_cli_mesh.py@ef52e8e:302` (the `.ply` comment `elevation none (z=0, --flat)`,
   which becomes `heights none: every z is 0 (--flat)`),
-  `test_cli_mesh_landcover.py:13`, `:62-66` (the land-cover and features
+  `tests/python/test_cli_mesh_landcover.py@ef52e8e:13`, `:62-66` (the land-cover and features
   stderr lines, reworded), `test_cli_mesh_multi_features.py` (`features` at
   `:163-270`, `:480-516`, and `features_crs` at `:215`, `:528`: both move to
-  `--stats`), `test_cli_mesh_stats.py:262`, `:285-304` (the Refinement
+  `--stats`), `tests/python/test_cli_mesh_stats.py@ef52e8e:262`, `:285-304` (the Refinement
   section and the "vertices without data dropped" Sizes row).
-  `test_io_ply.py:155` uses `elevation none (z=0, --flat)` only as a sample
+  `tests/python/test_io_ply.py@ef52e8e:155` uses `elevation none (z=0, --flat)` only as a sample
   comment for the writer; no change.
   `test_io_vtk_legacy.py` and `test_io_vtk_readback.py` use `elevation_source`
   only as a sample field name for the writer; they need no change.
@@ -662,7 +662,7 @@ Not invariant-critical, so no mutation round (README, "Cost constraints").
   the user's own input and is out of scope, D8).
 - **`command`**: tests that read it (in `--stats` or `--record`) set
   `sys.argv` with `monkeypatch`, because `CliRunner` does not, and the
-  `command` is built from `sys.argv` (`_command`, `cli.py:1145-1147`).
+  `command` is built from `sys.argv` (`_command`, `src_python/tin_engine/cli.py@44fa7f5:1145-1147`).
 - **`--stats` values with `|`** are compared after unescaping `\|`.
 - **`--record`** (D5):
   - the file parses as JSON, is ASCII, and ends in one newline;
@@ -673,7 +673,7 @@ Not invariant-critical, so no mutation round (README, "Cost constraints").
   - every mesh-file field from the record is in it with the same value;
   - determinism: one command run twice gives the same bytes, and so does a
     run with `tin_engine.cli.refine` monkeypatched to a wrapper that passes
-    `threads=1` (the binding's keyword, `_core.pyi:437`; the CLI has no thread
+    `threads=1` (the binding's keyword, `src_python/tin_engine/_core.pyi@44fa7f5:437`; the CLI has no thread
     option); no key or value contains a time, a date, the host name, or the
     word `seconds`;
   - an omitted entry is absent, not `null`;
@@ -827,7 +827,7 @@ as pinned.
      <median> m)`, for example `ne.tif and nw.tif disagree at 1 node, by up to
      4 m (median 4 m)`, pairs joined by `; ` in today's order. Numbers are
      formatted as `Seam.cells` formats them (`:g`). `@tester` changes the
-     tests that pin the old text (`test_cli_mesh_mosaic.py:278`, `:302`,
+     tests that pin the old text (`tests/python/test_cli_mesh_mosaic.py@5e235eb:278`, `:302`,
      `:331-336`). The separate "## DEM seams" table (item 10) keeps its
      columns.
    - **Plurals are correct English** everywhere: `1 hole`, `2 holes`,
@@ -939,9 +939,9 @@ accepted as described unless marked otherwise.
 
 **Design review, round 1, 2026-10-03.** Range `origin/master` (6cdc8cc) `..97d1e9c` (8de9714, 2462028, 16b3a5d, 97d1e9c). Verdict: CHANGES REQUESTED. LOC: 0 (design only); the reviewer thinks 135 is optimistic and expects 200 to 280, still far under 700. Inventory, the three bugs, bench.py, the 15f-3 red commit's fourteen swaps and the --record spec's buildability all check out. Blocking: (1) rule 3 (zeros omitted from the file) contradicts D2 at `--tolerance 0`; restrict it to counts; (2) D5's example JSON writes measured values as integers (`5`), against its own float rule; (3) Compatibility misses four test files (`test_cli_mesh.py`, `test_cli_mesh_landcover.py`, `test_cli_mesh_multi_features.py`, `test_cli_mesh_stats.py`); (4) D6 is incomplete on how 15f-3's red tests change (more lines in `test_cli_mesh_edge_strip.py`, its `sentence` import, docstrings, the extra paragraph in `test_cli_mesh_refine.py`); (5) `max_error_m`'s definition is not true for DEM nodes on or within rounding of a vertex; take the larger figure or state the exception, warn above tolerance, and say what happens to 15f's open question on stating it. Not pushed; no CI.
 
-**Design review, round 2, 2026-10-03.** Range `333eb7d..ef52e8e` (231eefa merge of origin/master, ef52e8e fixes). Verdict: APPROVED. LOC: 0 (design only); estimate now about 200, plausible. All five round-1 blockers closed; the two defaults taken while Ola was away (`max_error_m` includes DEM nodes on a vertex, with a stderr warning above tolerance; `--record -` refused) are coherent and testable. Suggestions: say how 15f-3 amends the `--tolerance 0` test at `test_cli_mesh_refine.py:133`; use `file_field` consistently in D6; say whether the on-vertex entries are omitted or 0 on the projected path before 15f-3. Not pushed; no CI.
+**Design review, round 2, 2026-10-03.** Range `333eb7d..ef52e8e` (231eefa merge of origin/master, ef52e8e fixes). Verdict: APPROVED. LOC: 0 (design only); estimate now about 200, plausible. All five round-1 blockers closed; the two defaults taken while Ola was away (`max_error_m` includes DEM nodes on a vertex, with a stderr warning above tolerance; `--record -` refused) are coherent and testable. Suggestions: say how 15f-3 amends the `--tolerance 0` test at `tests/python/test_cli_mesh_refine.py@55c043e:133`; use `file_field` consistently in D6; say whether the on-vertex entries are omitted or 0 on the projected path before 15f-3. Not pushed; no CI.
 
-**Code review, round 1, 2026-10-03.** Range `origin/master` (b4bcdc3) `..acb1090`. Verdict: CHANGES REQUESTED. LOC: 153 net (324 added, 171 removed), against about 200. Code, tests and the merge resolution pass: the mesh-file fields match Ola's table, the three bugs are fixed, `--record` is deterministic with the right key order and refusals, pytest 3860 passed. Blocking, docs only: (1) stale status lines here and in ROADMAP row 25; (2) citations this branch moved (`15f-edge-strip.md:588`, and design citations of `cli.py` and `test_cli_mesh_refine.py:133`); (3) the departures accepted while Ola was away (the no-tolerance meaning of `nodata_vertices_removed`, no `dem_grid` on reprojected runs, start sizes in Sizes only) are not listed for him. Not pushed; no CI.
+**Code review, round 1, 2026-10-03.** Range `origin/master` (b4bcdc3) `..acb1090`. Verdict: CHANGES REQUESTED. LOC: 153 net (324 added, 171 removed), against about 200. Code, tests and the merge resolution pass: the mesh-file fields match Ola's table, the three bugs are fixed, `--record` is deterministic with the right key order and refusals, pytest 3860 passed. Blocking, docs only: (1) stale status lines here and in ROADMAP row 25; (2) citations this branch moved (`15f-edge-strip.md:588`, and design citations of `cli.py` and `tests/python/test_cli_mesh_refine.py@55c043e:133`); (3) the departures accepted while Ola was away (the no-tolerance meaning of `nodata_vertices_removed`, no `dem_grid` on reprojected runs, start sizes in Sizes only) are not listed for him. Not pushed; no CI.
 
 **Code review, round 2, 2026-10-03.** Range `038eddc..cd2bc4c` (a2d3319 docs, bde456b test, cd2bc4c fix); whole PR `origin/master` (b4bcdc3) `..cd2bc4c`. Verdict: APPROVED. LOC: 153 net (324 added, 171 removed), unchanged; about 24 % under the ~200 estimate. All three round-1 blockers closed; moved citations re-read at HEAD hold; the singular test fails on the code before the fix and passes after it. Not pushed; no CI.
 

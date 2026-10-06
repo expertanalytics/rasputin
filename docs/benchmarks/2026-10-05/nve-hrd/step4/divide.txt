@@ -1,0 +1,24 @@
+== 12.215.0
+  ours only: largest 39.50 km2 of 39.92; shared edge 13.5 km; heights there median 1453.4 m, 1327.0-1696.5; flat (3x3 under 0.5 m) 0 %
+  NVE's only: largest 0.54 km2 of 1.52; shared edge 2.7 km; heights there median 1284.9 m, 1128.6-1539.9; flat (3x3 under 0.5 m) 0 %
+== 15.49.0
+  ours only: largest 43.42 km2 of 44.03; shared edge 7.4 km; heights there median 1005.9 m, 958.1-1192.4; flat (3x3 under 0.5 m) 7 %
+  NVE's only: largest 0.23 km2 of 0.70; shared edge 1.7 km; heights there median 979.5 m, 928.4-1030.5; flat (3x3 under 0.5 m) 3 %
+== 307.7.0
+  ours only: largest 16.95 km2 of 17.81; shared edge 9.6 km; heights there median 877.4 m, 530.8-1120.9; flat (3x3 under 0.5 m) 0 %
+  NVE's only: largest 0.17 km2 of 0.91; shared edge 1.0 km; heights there median 580.5 m, 531.1-686.1; flat (3x3 under 0.5 m) 12 %
+== 26.29.0
+  ours only: largest 9.51 km2 of 10.02; shared edge 6.8 km; heights there median 400.0 m, 321.9-541.6; flat (3x3 under 0.5 m) 0 %
+  NVE's only: largest 0.12 km2 of 0.40; shared edge 1.7 km; heights there median 441.2 m, 265.2-483.5; flat (3x3 under 0.5 m) 0 %
+== 35.9.0
+  ours only: largest 1.16 km2 of 1.60; shared edge 3.1 km; heights there median 1074.2 m, 984.8-1228.9; flat (3x3 under 0.5 m) 0 %
+  NVE's only: largest 0.06 km2 of 0.30; shared edge 1.2 km; heights there median 909.3 m, 870.2-1099.0; flat (3x3 under 0.5 m) 0 %
+== 16.66.0
+  ours only: largest 0.02 km2 of 0.08; shared edge 1.0 km; heights there median 1010.3 m, 981.3-1039.8; flat (3x3 under 0.5 m) 0 %
+  NVE's only: largest 0.15 km2 of 0.42; shared edge 1.1 km; heights there median 1019.4 m, 936.4-1044.0; flat (3x3 under 0.5 m) 0 %
+== 19.79.0
+  ours only: largest 0.16 km2 of 0.26; shared edge 1.8 km; heights there median 755.3 m, 570.2-827.3; flat (3x3 under 0.5 m) 0 %
+  NVE's only: largest 0.95 km2 of 1.08; shared edge 2.3 km; heights there median 548.3 m, 403.4-622.0; flat (3x3 under 0.5 m) 4 %
+== 6.10.0
+  ours only: largest 0.64 km2 of 0.76; shared edge 1.9 km; heights there median 406.5 m, 346.9-439.1; flat (3x3 under 0.5 m) 8 %
+  NVE's only: largest 0.05 km2 of 0.17; shared edge 2.0 km; heights there median 318.2 m, 241.2-343.7; flat (3x3 under 0.5 m) 0 %

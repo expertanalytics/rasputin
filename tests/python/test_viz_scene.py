@@ -24,7 +24,7 @@ object-identity rule:
   producer's formula agrees with the producer's bug.
 * The fakes are plain dataclasses, not `_core` objects. The suite runs with no
   compiled extension in the process, which is the whole reason `protocols.py`
-  exists; `TestModuleIsolation` asserts the module keeps it that way.
+  exists; `viz.scene`'s row in `test_layering.py` keeps it that way.
 * `TestFixtureSanity` runs first and is able to fail on its own: if the fixture
   ever stops containing a triangle with exactly one constrained bit, the
   mutation round silently stops measuring anything, because the two conventions
@@ -58,20 +58,15 @@ the easy case.
 
 from __future__ import annotations
 
-import ast
 import enum
 import importlib
 from dataclasses import dataclass
-from pathlib import Path
 from types import ModuleType
 from typing import Any
 
 import numpy as np
 import numpy.typing as npt
 import pytest
-
-REPO_ROOT = Path(__file__).resolve().parents[2]
-SCENE_PATH = REPO_ROOT / "src_python" / "tin_engine" / "viz" / "scene.py"
 
 EAST = 430_000.0
 NORTH = 6_900_000.0
@@ -361,46 +356,6 @@ class TestFixtureSanity:
     def test_indices_of_partitions_the_flat_buffer(self, pslg: FakePslg) -> None:
         recovered = np.concatenate([pslg.indices_of(c) for c in range(len(pslg.chains))])
         assert np.array_equal(recovered, pslg.chain_indices)
-
-
-class TestModuleIsolation:
-    """`scene.py` imports the protocols and nothing else first-party.
-
-    That is what lets this entire suite run against hand-built dataclasses with
-    no compiled extension in the process, and it is checked by reading the
-    source: `tin_engine/__init__.py` imports `_core` itself, so a `sys.modules`
-    assertion would pass for the wrong reason.
-    """
-
-    def source(self) -> ast.Module:
-        assert SCENE_PATH.is_file(), f"{SCENE_PATH} does not exist"
-        return ast.parse(SCENE_PATH.read_text(encoding="utf-8"))
-
-    def imports(self) -> list[str]:
-        names: list[str] = []
-        for node in ast.walk(self.source()):
-            if isinstance(node, ast.Import):
-                names.extend(alias.name for alias in node.names)
-            elif isinstance(node, ast.ImportFrom):
-                names.append("." * node.level + (node.module or ""))
-        return names
-
-    def test_the_module_exists(self) -> None:
-        assert SCENE_PATH.is_file()
-
-    def test_it_does_not_import_the_extension(self) -> None:
-        assert [name for name in self.imports() if "_core" in name] == []
-
-    def test_it_imports_the_protocols(self) -> None:
-        assert [name for name in self.imports() if name.endswith("protocols")] != []
-
-    def test_it_imports_no_other_first_party_module(self) -> None:
-        first_party = [
-            name
-            for name in self.imports()
-            if name.startswith((".", "tin_engine")) and not name.endswith("protocols")
-        ]
-        assert first_party == []
 
 
 class TestMaskConvention:

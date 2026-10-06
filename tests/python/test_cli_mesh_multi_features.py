@@ -36,13 +36,11 @@ import shapely
 from shapely.geometry import LineString, Polygon
 
 import feature_fixtures as ff
+from cli_driver import SQUARE, USAGE, invoke, polygon_file, rough_dem
 from feature_fixtures import Feat, write_geojson
-from geotiff_fixtures import micro_tiff
 from gpkg_fixtures import Layer, Row, needs_rtree, write_gpkg
 from landcover_fixtures import vtk_labels
 from recordread import stats_row
-from test_cli_mesh_dem import USAGE, invoke, write_tiff
-from test_cli_mesh_domain import COLS, ROWS, SQUARE, geojson
 from test_cli_mesh_features import (
     FEATURES_FIELD,
     SNAP,
@@ -86,15 +84,8 @@ def prop(fid: object, geometry: Polygon | LineString, klass: str) -> Feat:
     return Feat(fid, geometry, {"property": klass})
 
 
-@pytest.fixture
-def bumpy(tmp_path: Path) -> Path:
-    array = np.random.default_rng(16).uniform(0.0, 50.0, (ROWS, COLS)).astype(np.float32)
-    return write_tiff(tmp_path / "bumpy.tif", micro_tiff(array))
-
-
-@pytest.fixture
-def plain_square(tmp_path: Path) -> Path:
-    return geojson(tmp_path / "square.geojson", SQUARE)
+bumpy = rough_dem(16)
+plain_square = polygon_file(SQUARE)
 
 
 @pytest.fixture
@@ -378,6 +369,7 @@ class TestDegeneracy:
     ) -> None:
         """R3: `--features` given with no `--domain`, unchanged, with two."""
         code, output = invoke(
+            "mesh",
             "--dem", str(bumpy),
             "--features", str(corine_src), "--features", str(parcel_src),
             "--out", str(bumpy.parent / "x.vtk"),

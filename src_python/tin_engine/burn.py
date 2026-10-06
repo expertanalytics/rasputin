@@ -19,7 +19,7 @@ import numpy as np
 import numpy.typing as npt
 
 from tin_engine.gauge import Reach
-from tin_engine.io.models import DemTile, RasterMeta
+from tin_engine.io.models import DemTile, RasterMeta, valid_mask
 
 #: Metres each chain node falls below the one before it, at least (step 4).
 DROP_M = 0.001
@@ -137,7 +137,7 @@ def burn_reach(window: DemTile, reach: Reach) -> tuple[DemTile, GaugePath]:
     node with data near the reach is a `BurnRefusal`."""
     m, raw = window.meta, np.asarray(window.array)
     # A NaN cell is NoData whatever the sentinel, as in the core's `is_nodata`.
-    ok = ~np.isnan(raw) if m.nodata is None else ~np.isnan(raw) & (raw != m.nodata)
+    ok = valid_mask(raw, m.nodata)
     step = min(m.delta_x, m.delta_y)
     line = np.asarray(reach.line, dtype=np.float64)
     line = line[np.r_[True, np.any(np.diff(line, axis=0) != 0.0, axis=1)]]
@@ -148,7 +148,7 @@ def burn_reach(window: DemTile, reach: Reach) -> tuple[DemTile, GaugePath]:
     i = np.minimum(np.searchsorted(cum, s, side="right") - 1, len(seg) - 1)
     t = seg[i] / lengths[i, None]
     pts = line[i] + t * (s - cum[i])[:, None]
-    rows, cols = (m.y_max - pts[:, 1]) / m.delta_y, (pts[:, 0] - m.x_min) / m.delta_x
+    rows, cols = m.index_of(pts[:, 0], pts[:, 1])
     inside = (rows >= -0.5) & (rows <= m.rows - 0.5) & (cols >= -0.5) & (cols <= m.cols - 0.5)
     at = min(int(np.floor(reach.at / step + 0.5)), len(s) - 1)
     if not inside[at]:
@@ -166,7 +166,7 @@ def burn_reach(window: DemTile, reach: Reach) -> tuple[DemTile, GaugePath]:
     # The join does not look at the nodes it steps through: one may be NoData.
     gap = next((n for n in chain if not ok[n]), None)
     if gap is not None:
-        gx, gy = m.x_min + gap[1] * m.delta_x, m.y_max - gap[0] * m.delta_y
+        gx, gy = m.node_xy(*gap)
         raise BurnRefusal(
             f"the river line crosses a gap (NoData) in the DEM at ({gx:.0f}, {gy:.0f}): "
             "the station is refused"
@@ -210,7 +210,7 @@ def burn_reach(window: DemTile, reach: Reach) -> tuple[DemTile, GaugePath]:
     arc = np.r_[0.0, np.cumsum(_steps(chain, m))]
     lowered = np.array([float(raw[n]) - float(burnt[n]) for n in chain])
     px, py = (np.interp(reach.at, cum, line[:, k]) for k in (0, 1))
-    pr, pc = chain[placed]
+    nx, ny = m.node_xy(*chain[placed])
     path = GaugePath(
         chain=np.array(chain, dtype=np.int64).reshape(-1, 2),
         placed=int(placed),
@@ -220,7 +220,7 @@ def burn_reach(window: DemTile, reach: Reach) -> tuple[DemTile, GaugePath]:
         direction_ok=direction_ok,
         lowered_nodes=int(np.count_nonzero(lowered > 0.0)),
         lowered_max_m=float(lowered.max(initial=0.0)),
-        node_offset_m=math.hypot(m.x_min + pc * m.delta_x - px, m.y_max - pr * m.delta_y - py),
+        node_offset_m=math.hypot(nx - px, ny - py),
         dropped_m=float(np.count_nonzero(~inside)) * step,
     )
     return DemTile(meta=m, array=burnt), path

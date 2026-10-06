@@ -72,18 +72,18 @@ def nodes_inside(polygons: Sequence[BaseGeometry], meta: RasterMeta) -> int:
     bands over the box their bounds share."""
     b = np.array([p.bounds for p in polygons])
     x0, y0, (x1, y1) = b[:, 0].max(), b[:, 1].max(), b[:, 2:].min(axis=0)
-    dx, dy = meta.delta_x, meta.delta_y
-    c0, c1 = math.ceil((x0 - meta.x_min) / dx), math.floor((x1 - meta.x_min) / dx)
-    r0, r1 = math.ceil((meta.y_max - y1) / dy), math.floor((meta.y_max - y0) / dy)
+    (top, left), (bottom, right) = meta.index_of(x0, y1), meta.index_of(x1, y0)
+    c0, c1 = math.ceil(left), math.floor(right)
+    r0, r1 = math.ceil(top), math.floor(bottom)
     if c0 > c1 or r0 > r1:
         return 0
     for p in polygons:
         shapely.prepare(p)
-    x = meta.x_min + np.arange(c0, c1 + 1) * dx
-    step = max(1, _BAND_NODES // x.size)
+    cols = np.arange(c0, c1 + 1)
+    step = max(1, _BAND_NODES // cols.size)
     count = 0
     for r in range(r0, r1 + 1, step):
-        xx, yy = np.meshgrid(x, meta.y_max - np.arange(r, min(r + step, r1 + 1)) * dy)
+        xx, yy = np.meshgrid(*meta.node_xy(np.arange(r, min(r + step, r1 + 1)), cols))
         inside = np.ones(xx.shape, dtype=bool)
         for p in polygons:
             inside &= shapely.contains_xy(p, xx, yy)

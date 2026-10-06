@@ -27,6 +27,9 @@ from harness_fixtures import (
     set_mode,
 )
 
+# h17 §4b: a harness test; CI runs it in the `harness` job, not the product legs.
+pytestmark = pytest.mark.harness
+
 ALWAYS_DENIED = (
     "Only Ola enters or leaves unattended mode, and only hooks and away.py write the "
     "harness state. Nothing is queued: this act is not an agent's to wait for."

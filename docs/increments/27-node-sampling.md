@@ -111,7 +111,7 @@ rerun with other draws got 31 116 and 6.72e-7. With origin 0 and spacing 1,
 with a dyadic grid (500000.5 / 7900000.25, spacing 0.5 / 0.25), and with the
 Kartverket fixture's geometry, there are none. Node identity is also the relation the producers use:
 `subsample` builds stride vertices with `node`'s expression
-(`grid_domain.py:68-69`), and refine decides that a start vertex is a node by
+(`src_python/tin_engine/grid_domain.py@44fa7f5:68-69`), and refine decides that a start vertex is a node by
 the same `node(round) == p` test (`lattice_position`, `refine.hpp:132-141`).
 
 ### Where it lives
@@ -130,7 +130,7 @@ the same `node(round) == p` test (`lattice_position`, `refine.hpp:132-141`).
   stays first, so a raster with fewer than 2 rows or columns still answers
   nullopt everywhere, nodes included, as today.
 - `bilinear_batch`, the `sample` binding and the Python side change in no
-  code. The binding's docstring (`bindings/core.cpp:935-940`), the stub's
+  code. The binding's docstring (`bindings/core.cpp@44fa7f5:935-940`), the stub's
   (`src_python/tin_engine/_core.pyi`, `sample`) and the comment above
   `bilinear` say the new rule.
 - `lattice_position` is **not** changed to call `node_at` here. That would
@@ -140,7 +140,7 @@ the same `node(round) == p` test (`lattice_position`, `refine.hpp:132-141`).
 ### Why cell sides are not in this increment
 
 1. **No vertex on the path being fixed lies on a cell side.** Without
-   `--tolerance` there is no `--domain` and no `--features` (`cli.py:845`
+   `--tolerance` there is no `--domain` and no `--features` (`src_python/tin_engine/cli.py@44fa7f5:845`
    refuses `--domain` without `--tolerance`). The vertices are the stride
    nodes and the ring through them. The noder makes no crossings there, and
    the triangulation adds no points. Every vertex is a node.
@@ -170,8 +170,8 @@ measured run shows ragged seams along NoData.
 | no `--tolerance`, mosaic tile (15) | **yes**, the same way | same `sample` call on the assembled tile |
 | `--tolerance`, start-boundary / domain output z (`refine.hpp:425-426`) | **no**, by construction | `bilinear` is called there only for a start vertex that is **not** a node by refine's whole test: `lattice_position`, then `node && g.node(c) == p` (`!given \|\| (node && g.node(c) == p) ? vertex_z : bilinear`). `node_at` answers the same as that whole test (S5), so the new branch is never taken from refine |
 | `--tolerance`, `vertex_z` (scan, carving, feet, edge strip) | **no** | not touched; it already reads a node with `value_at` (`scan.hpp:86-87`) |
-| `--tolerance`, reprojected (15c: `resample`, `refine_points`) | **no** | `resample` is Python with its own four-corner rule (`target_grid.py:163-196`); `refine_points` calls `vertex_z`, not `bilinear` |
-| a reprojected tile meshed without `--tolerance`, if a run does so | the stride sampling of the resampled tile follows the new rule; `resample` does not change | the target grid's nodes are `col0 * h` with integer `h` (`target_grid.py:48`), so they are exact |
+| `--tolerance`, reprojected (15c: `resample`, `refine_points`) | **no** | `resample` is Python with its own four-corner rule (`src_python/tin_engine/target_grid.py@44fa7f5:163-196`); `refine_points` calls `vertex_z`, not `bilinear` |
+| a reprojected tile meshed without `--tolerance`, if a run does so | the stride sampling of the resampled tile follows the new rule; `resample` does not change | the target grid's nodes are `col0 * h` with integer `h` (`src_python/tin_engine/target_grid.py@44fa7f5:48`), so they are exact |
 
 **What changes in the stride output, exactly.** (a) Valid nodes next to NoData
 keep their z and their triangles; `nodata_vertices_removed` becomes the number
@@ -312,7 +312,7 @@ Changed (one amendment commit on top of 25's tests, the reason in the message):
   removes more than the NoData nodes (both done in the red step, `6605dfe`).
 - `test_the_no_tolerance_summary_says_on_or_next_to`, in both files that had
   it: renamed `test_the_no_tolerance_summary_says_on_nodata_cells`
-  (`test_cli_mesh_plain_output.py:279`, `test_run_record.py:443`). Both expect
+  (`tests/python/test_cli_mesh_plain_output.py@80990e0:279`, `test_run_record.py:443`). Both expect
   `vertices on NoData cells were removed`, and also check that "next to" is
   absent from stderr.
 - `test_cli_mesh_dem.py`, `test_a_nodata_edge_row_is_dropped_and_counted`: the
@@ -399,9 +399,9 @@ Recommended defaults: 1 and 2 as recommended; 3 noted.
 
 **Design review, round 1, 2026-10-03.** Commit c277ce1. Verdict: CHANGES REQUESTED. LOC: 0 (design only); ~15 plausible (a `node_at` prototype is 8 lines). The rule, the unchanged `--tolerance` path, the 38,580 / 60,000 and 95 / 300 measurements, Kartverket's 0 off-node samples and the test plan all hold; every 25 test named exists on master. Blocking: (1) merge master; `cli.py:811-812` is now :830; (2) cite `grid_domain.py` 66-67 for the stride expression; (3) the status line and line 219 assume 25 not yet merged; (4) `test_the_no_tolerance_summary_says_on_or_next_to` exists in two files: name both. Not pushed; no CI.
 
-**Design review, round 2, 2026-10-03.** Range `1477da0..8d8e394` (merge 9fb2218, prose 8d8e394). Verdict: CHANGES REQUESTED, one line: the stride expression is at `grid_domain.py:68-69`, not 66-67 (the round-1 number was the reviewer's slip). Everything else checked: the merge is clean, the new citations read as quoted, the round-1 items done. APPROVED once 68-69 is in, with no further round. Not pushed; no CI.
+**Design review, round 2, 2026-10-03.** Range `1477da0..8d8e394` (merge 9fb2218, prose 8d8e394). Verdict: CHANGES REQUESTED, one line: the stride expression is at `src_python/tin_engine/grid_domain.py@44fa7f5:68-69`, not 66-67 (the round-1 number was the reviewer's slip). Everything else checked: the merge is clean, the new citations read as quoted, the round-1 items done. APPROVED once 68-69 is in, with no further round. Not pushed; no CI.
 
-**Design review, round 2 condition met, 2026-10-03.** b50c8d0 cites `grid_domain.py:68-69` as the reviewer required; per round 2 the design is APPROVED with no further round. Not pushed; no CI.
+**Design review, round 2 condition met, 2026-10-03.** b50c8d0 cites `grid_domain.py` lines 68-69, unpinned, as the reviewer required (the same lines, pinned since: `src_python/tin_engine/grid_domain.py@44fa7f5:68-69`); per round 2 the design is APPROVED with no further round. Not pushed; no CI.
 
 ## Ruled by Ola, 2026-10-03
 

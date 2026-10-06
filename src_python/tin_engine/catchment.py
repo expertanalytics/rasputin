@@ -24,8 +24,8 @@ from __future__ import annotations
 
 import math
 import time
-from collections.abc import Callable
-from dataclasses import dataclass, replace
+from collections.abc import Callable, Sequence
+from dataclasses import asdict, dataclass, replace
 from typing import Any, Literal, Self
 
 import numpy as np
@@ -33,15 +33,21 @@ import numpy.typing as npt
 import shapely
 from pydantic import BaseModel, ConfigDict, model_validator
 from shapely.geometry import Point, Polygon
+from shapely.geometry.base import BaseGeometry
 
-from tin_engine._core import ReduceStatus, UpstreamOutcome, accumulate, reduce_ring, upstream
-from tin_engine.burn import BurnRefusal, burn_reach
-from tin_engine.crs import crs_label, parse_crs, reprojector
+from tin_engine.burn import BurnRefusal, GaugePath, burn_reach
+from tin_engine.catchment_core import (
+    ReduceStatus,
+    UpstreamOutcome,
+    accumulate,
+    reduce_ring,
+    upstream,
+)
+from tin_engine.crs import crs_label, parse_crs, reprojector, same_crs, single_crs
 from tin_engine.gauge import Reach
-from tin_engine.io.models import RasterMeta
+from tin_engine.io.models import Bounds, DemTile, RasterMeta, TileFootprint
 from tin_engine.io.repository import DemRepository
 from tin_engine.mosaic import (
-    Bounds,
     MixedGridError,
     MosaicError,
     MosaicPlan,
@@ -50,7 +56,6 @@ from tin_engine.mosaic import (
     plan_mosaic,
 )
 from tin_engine.outline import trace
-from tin_engine.raster import to_core
 from tin_engine.sensitivity import Sensitivity, assess
 
 #: Metres round the seed's bounds, and round the catchment's when the window
@@ -86,7 +91,7 @@ class CatchmentRequest(BaseModel):
 
     seed: tuple[float, float]
     seed_crs: str = "EPSG:4326"
-    lakes: tuple[Any, ...] | None = None
+    lakes: tuple[BaseGeometry, ...] | None = None
     lakes_crs: str | None = None
     #: Metres the reduced outline may stray from the fine one; None is twice
     #: the DEM's cell, 0 keeps the fine outline less its collinear vertices.
@@ -141,6 +146,14 @@ class GaugeResult:
     sensitivity: Sensitivity
     causes: tuple[str, ...]
 
+    def report_fields(self) -> dict[str, Any]:
+        """The gauge's columns in the catchment file's order: the burn's
+        fields, then the sensitivity's, its `causes` replaced in place by the
+        joined `causes`."""
+        skip = ("node", "chain", "sensitivity", "causes")
+        own = {k: getattr(self, k) for k in GaugeResult.__slots__ if k not in skip}
+        return {**own, **asdict(self.sensitivity), "causes": self.causes}
+
 
 @dataclass(frozen=True, slots=True)
 class Catchment:
@@ -175,15 +188,29 @@ class Catchment:
 
 
 #: A flood of one assembled window: its outcome, and what the caller keeps.
-Flood = Callable[[Any], tuple[UpstreamOutcome, Any]]
+type Flood[T] = Callable[[DemTile], tuple[UpstreamOutcome, T]]
+#: A node mask over a window: 1 in, 0 out.
+type Mask = npt.NDArray[np.uint8]
+#: The repository's tiles, as `plan_mosaic` takes them.
+type Footprints = Sequence[TileFootprint]
 
 
 def check_reach_crs(crs: str, repository: DemRepository) -> None:
     """Refuse a river file whose CRS, `crs`, is not the DEM's (its first
     tile's): the one rule `catchment --rivers` and the batch both apply."""
     dem_crs = repository.footprints()[0].meta.crs
-    if parse_crs(crs) != parse_crs(dem_crs):
-        raise ValueError(f"the river file's CRS, {crs}, is not the DEM's, {dem_crs}")
+    if not same_crs(crs, dem_crs):
+        hint = _code_hint(crs, dem_crs)
+        raise ValueError(f"the river file's CRS, {crs}, is not the DEM's, {dem_crs}{hint}")
+
+
+def _code_hint(given: str, dem_crs: str) -> str:
+    """D15 b: when the DEM's CRS is exactly an EPSG code and `given` is none,
+    the code to write instead; otherwise nothing."""
+    code = parse_crs(dem_crs).to_epsg(min_confidence=100)
+    if code is None or parse_crs(given).to_epsg(min_confidence=100) is not None:
+        return ""
+    return f"; if you mean EPSG:{code}, write EPSG:{code}"
 
 
 def delineate(request: CatchmentRequest, repository: DemRepository) -> Catchment:
@@ -191,25 +218,23 @@ def delineate(request: CatchmentRequest, repository: DemRepository) -> Catchment
     :class:`CatchmentError` (truncated by the data's edge or NoData, no lake
     or two under the point, over the memory cap)."""
     footprints = repository.footprints()
-    crss = sorted({f.meta.crs for f in footprints})
-    if len(crss) != 1:
-        raise CatchmentError(f"the tiles are in {len(crss)} CRSs, {crss}; need one")
-    dem_crs = crss[0]
+    dem_crs = single_crs((f.meta.crs for f in footprints), CatchmentError)
     ((x, y),) = reprojector(request.seed_crs, dem_crs)([request.seed])
     if not (math.isfinite(x) and math.isfinite(y)):
         raise CatchmentError(f"the seed {request.seed} has no image in {dem_crs}")
     if request.reach is not None:
-        if parse_crs(request.seed_crs) != parse_crs(dem_crs):
-            raise CatchmentError(f"the river reach must be in the DEM's CRS, {dem_crs}")
+        if not same_crs(request.seed_crs, dem_crs):
+            hint = _code_hint(request.seed_crs, dem_crs)
+            raise CatchmentError(f"the river reach must be in the DEM's CRS, {dem_crs}{hint}")
         return _gauged(request, repository, footprints, dem_crs)
     lake = _lake(request, dem_crs)
     x0, y0, x1, y1 = lake.bounds if lake is not None else (x, y, x, y)
     margin = float(WINDOW_MARGIN_M)
     point = (float(x), float(y))
 
-    def flood(tile: Any) -> tuple[UpstreamOutcome, Any]:
+    def flood(tile: DemTile) -> tuple[UpstreamOutcome, Mask]:
         seed = _seed_mask(tile.meta, lake, point)
-        return upstream(to_core(tile), seed), seed
+        return upstream(tile, seed), seed
 
     bounds = Bounds(x_min=x0 - margin, y_min=y0 - margin, x_max=x1 + margin, y_max=y1 + margin)
     m, out, seed, windows = _grow(footprints, repository, bounds, flood, False)
@@ -222,9 +247,9 @@ def _tolerance(request: CatchmentRequest, m: RasterMeta) -> float:
     return 2.0 * max(m.delta_x, m.delta_y) if t is None else t
 
 
-def _grow(
-    footprints: Any, repository: DemRepository, bounds: Bounds, flood: Flood, burnt: bool
-) -> tuple[RasterMeta, UpstreamOutcome, Any, list[Window]]:
+def _grow[T](
+    footprints: Footprints, repository: DemRepository, bounds: Bounds, flood: Flood[T], burnt: bool
+) -> tuple[RasterMeta, UpstreamOutcome, T, list[Window]]:
     """22's window loop: flood, grow until the catchment is clear of the
     window's edge, or refuse (NoData, the data's edge, the memory cap, whose
     per-node figure grows by a burnt copy and `accumulate`'s 10 bytes when
@@ -252,7 +277,7 @@ def _grow(
         # Grow while the in-nodes' bounds plus the base margin reach past the
         # window; the step itself takes the margin doubled at each growth.
         grown = _grown(plan, _plan(footprints, _joined(m, out, float(WINDOW_MARGIN_M))))
-        windows.append(Window(Bounds(**_bounds_of(m)), m.rows, m.cols, seconds, grown))
+        windows.append(Window(Bounds.of(m.node_box()), m.rows, m.cols, seconds, grown))
         if not grown:
             break
         margin *= 2
@@ -263,11 +288,13 @@ def _grow(
     return m, out, kept, windows
 
 
-def _burnt_flood(reach: Reach, pick: Callable[[Any], int]) -> Flood:
+def _burnt_flood(
+    reach: Reach, pick: Callable[[GaugePath], int]
+) -> Flood[tuple[DemTile, GaugePath, Mask]]:
     """Burn the reach into the window, and flood from the chain node `pick`
     chooses; keeps the burnt window, the path and the placed node's seed."""
 
-    def flood(tile: Any) -> tuple[UpstreamOutcome, Any]:
+    def flood(tile: DemTile) -> tuple[UpstreamOutcome, tuple[DemTile, GaugePath, Mask]]:
         try:
             burnt, path = burn_reach(tile, reach)
         except BurnRefusal as exc:
@@ -276,13 +303,13 @@ def _burnt_flood(reach: Reach, pick: Callable[[Any], int]) -> Flood:
         seed[tuple(path.chain[path.placed])] = 1
         start = np.zeros_like(seed)
         start[tuple(path.chain[pick(path)])] = 1
-        return upstream(to_core(burnt), start), (burnt, path, seed)
+        return upstream(burnt, start), (burnt, path, seed)
 
     return flood
 
 
 def _gauged(
-    request: CatchmentRequest, repository: DemRepository, footprints: Any, dem_crs: str
+    request: CatchmentRequest, repository: DemRepository, footprints: Footprints, dem_crs: str
 ) -> Catchment:
     """Stage A floods from the placed node and decides the catchment and every
     refusal; stage B grows on from it until `D` (the first chain node at or
@@ -296,7 +323,7 @@ def _gauged(
     bounds = Bounds(x_min=x0, y_min=y0, x_max=x1, y_max=y1)
     u = reach.uncertainty
 
-    def at_u(path: Any) -> int:
+    def at_u(path: GaugePath) -> int:
         past = np.nonzero(path.arc >= u - 1e-6)[0]
         if not past.size:
             raise CatchmentError("the burnt chain ends before the uncertainty")
@@ -306,21 +333,21 @@ def _gauged(
         footprints, repository, bounds, _burnt_flood(reach, lambda p: int(p.placed)), True
     )
     try:
-        b = _grow(footprints, repository, Bounds(**_bounds_of(m)), _burnt_flood(reach, at_u), True)
+        b = _grow(footprints, repository, Bounds.of(m.node_box()), _burnt_flood(reach, at_u), True)
     except CatchmentError:
         pass  # stage B never refuses a catchment: read what stage A's window holds
     else:
         # Stage B starts in stage A's last window: one entry per window.
         same = b[3][0].bounds == windows[-1].bounds
         m, (burnt, path, seed), windows = b[0], b[2], [*windows, *b[3][same:]]
-        out = upstream(to_core(burnt), seed)
-    acc = accumulate(to_core(burnt))
+        out = upstream(burnt, seed)
+    acc = accumulate(burnt)
     down = float(np.hypot(*np.diff(line, axis=0).T).sum()) - reach.at
     s = assess(acc.count, acc.reach, acc.flow_to, path, m.delta_x * m.delta_y / 1e6, u, down)
     checked: Literal["whole", "partly", "none"] = "whole"
     if "downstream_unread" in s.causes:
         checked = "partly" if s.checked_down_m > 0 else "none"
-    xy = [(m.x_min + c * m.delta_x, m.y_max - r * m.delta_y) for r, c in path.chain.tolist()]
+    xy = [m.node_xy(r, c) for r, c in path.chain.tolist()]
     gauge = GaugeResult(
         node=xy[path.placed],
         chain=tuple(xy),
@@ -359,7 +386,7 @@ def _lake(request: CatchmentRequest, dem_crs: str) -> Polygon | None:
     return lake
 
 
-def _plan(footprints: Any, bounds: Bounds) -> MosaicPlan:
+def _plan(footprints: Footprints, bounds: Bounds) -> MosaicPlan:
     try:
         return plan_mosaic(footprints, bounds)
     except MixedGridError as exc:
@@ -368,55 +395,40 @@ def _plan(footprints: Any, bounds: Bounds) -> MosaicPlan:
         raise CatchmentError(str(exc)) from exc
 
 
-def _seed_mask(m: RasterMeta, lake: Polygon | None, point: tuple[float, float]) -> Any:
+def _seed_mask(m: RasterMeta, lake: Polygon | None, point: tuple[float, float]) -> Mask:
     """The lake's nodes (`shapely.contains_xy`, over its bounding box only),
     or the node nearest the point."""
     seed = np.zeros((m.rows, m.cols), dtype=np.uint8)
     if lake is None:
-        r = round((m.y_max - point[1]) / m.delta_y)
-        c = round((point[0] - m.x_min) / m.delta_x)
+        r, c = map(round, m.index_of(*point))
         if not (0 <= r < m.rows and 0 <= c < m.cols):
             raise CatchmentError(f"the seed point {point} is outside the DEM")
         seed[r, c] = 1
         return seed
     x0, y0, x1, y1 = lake.bounds
-    r0, r1 = (
-        max(0, math.floor((m.y_max - y1) / m.delta_y)),
-        min(m.rows - 1, math.ceil((m.y_max - y0) / m.delta_y)),
-    )
-    c0, c1 = (
-        max(0, math.floor((x0 - m.x_min) / m.delta_x)),
-        min(m.cols - 1, math.ceil((x1 - m.x_min) / m.delta_x)),
-    )
+    (top, left), (bottom, right) = m.index_of(x0, y1), m.index_of(x1, y0)
+    r0, r1 = max(0, math.floor(top)), min(m.rows - 1, math.ceil(bottom))
+    c0, c1 = max(0, math.floor(left)), min(m.cols - 1, math.ceil(right))
     if r0 > r1 or c0 > c1:
         return seed
     r, c = np.indices((r1 - r0 + 1, c1 - c0 + 1))
-    x, y = m.x_min + (c + c0) * m.delta_x, m.y_max - (r + r0) * m.delta_y
+    x, y = m.node_xy(r + r0, c + c0)
     seed[r0 : r1 + 1, c0 : c1 + 1] = shapely.contains_xy(lake, x, y)
     return seed
 
 
-def _extent(m: RasterMeta) -> tuple[float, float, float, float]:
-    return (
-        m.x_min,
-        m.y_max - (m.rows - 1) * m.delta_y,
-        m.x_min + (m.cols - 1) * m.delta_x,
-        m.y_max,
-    )
-
-
-def _bounds_of(m: RasterMeta) -> dict[str, float]:
-    return dict(zip(("x_min", "y_min", "x_max", "y_max"), _extent(m), strict=True))
-
-
 def _joined(m: RasterMeta, out: UpstreamOutcome, margin: float) -> Bounds:
     """The window joined with the in-nodes' bounds grown by `margin`."""
-    x0, y0, x1, y1 = _extent(m)
+    x0, y0, x1, y1 = m.node_box()
+    (lo_x, lo_y), (hi_x, hi_y) = (
+        m.node_xy(out.row_max, out.col_min),
+        m.node_xy(out.row_min, out.col_max),
+    )
     return Bounds(
-        x_min=min(m.x_min + out.col_min * m.delta_x - margin, x0),
-        y_min=min(m.y_max - out.row_max * m.delta_y - margin, y0),
-        x_max=max(m.x_min + out.col_max * m.delta_x + margin, x1),
-        y_max=max(m.y_max - out.row_min * m.delta_y + margin, y1),
+        x_min=min(lo_x - margin, x0),
+        y_min=min(lo_y - margin, y0),
+        x_max=max(hi_x + margin, x1),
+        y_max=max(hi_y + margin, y1),
     )
 
 
@@ -449,7 +461,7 @@ def _outline(
     point: tuple[float, float],
     out: UpstreamOutcome,
     m: RasterMeta,
-    seed: Any,
+    seed: Mask,
     windows: tuple[Window, ...],
 ) -> Catchment:
     """The outer ring round the seed point (the pour node without a lake),
@@ -457,14 +469,11 @@ def _outline(
     mask = np.asarray(out.mask)
     t0 = time.perf_counter()
     lattice = trace(mask)
-    rings = [
-        np.column_stack([m.x_min + r[:, 1] * m.delta_x, m.y_max - r[:, 0] * m.delta_y])
-        for r in lattice
-    ]
+    rings = [np.column_stack(m.node_xy(r[:, 0], r[:, 1])) for r in lattice]
     areas = [_signed_area(r) for r in rings]
     if lake is None:
         r, c = np.argwhere(seed)[0]
-        point = (m.x_min + c * m.delta_x, m.y_max - r * m.delta_y)
+        point = m.node_xy(r, c)
     inside = Point(point)
     around = [k for k, a in enumerate(areas) if a > 0 and Polygon(rings[k]).contains(inside)]
     if not around:
@@ -518,7 +527,7 @@ def _signed_area(ring: npt.NDArray[np.float64]) -> float:
     return 0.5 * float(np.dot(x, np.roll(y, -1)) - np.dot(np.roll(x, -1), y))
 
 
-def _nodes_in(mask: Any, rings: list[npt.NDArray[np.float64]]) -> int:
+def _nodes_in(mask: Mask, rings: list[npt.NDArray[np.float64]]) -> int:
     """In-nodes inside the dropped outer rings (in lattice units), for the report."""
     count = 0
     for ring in rings:

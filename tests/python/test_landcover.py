@@ -42,7 +42,6 @@ from numpy.testing import assert_array_equal
 from shapely.geometry import LineString, MultiLineString, Polygon, box
 from shapely.geometry.base import BaseGeometry
 
-from importscan import first_party_imports
 from landcover_fixtures import (
     MARGIN,
     edge_keys,
@@ -444,10 +443,3 @@ class TestDeterminism:
             first.overlapped,
             first.thin,
         )
-
-
-class TestPurity:
-    def test_it_imports_nothing_first_party(self) -> None:
-        """R1's boundary: numpy and shapely, nothing first-party, never `_core`."""
-        module = landcover
-        assert first_party_imports(module) == set()
