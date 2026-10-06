@@ -147,6 +147,10 @@ class EdgeVocabulary(BaseModel):
                 found.append(name_of[bit])
         return tuple(found)
 
+    def table(self) -> list[tuple[int, str]]:
+        """The (bit, name) pairs in ascending bit order, as files write them."""
+        return sorted((prop.bit, prop.name) for prop in self.properties)
+
     def fingerprint(self) -> str:
         """A stable digest over the sorted ``(bit, name)`` pairs.
 
@@ -160,8 +164,7 @@ class EdgeVocabulary(BaseModel):
         property renamed -- and a digest that cannot see either blesses exactly
         the disagreement it is here to detect.
         """
-        pairs = sorted((prop.bit, prop.name) for prop in self.properties)
-        payload = ";".join(f"{bit}:{name}" for bit, name in pairs)
+        payload = ";".join(f"{bit}:{name}" for bit, name in self.table())
         return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 

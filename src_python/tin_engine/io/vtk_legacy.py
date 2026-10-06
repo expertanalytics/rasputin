@@ -2,8 +2,8 @@
 
 Increment 13 (`docs/increments/13-bundled-mesh.md`). One file carries the
 surface, the constraint edges and each edge's feature bits, for ParaView. Like
-`ply.py` this module is pure: no path, no file, no `_core`. Its one first-party
-import is `features`, which imports only hashlib and pydantic.
+`ply.py` this module is pure: no path, no file, no `_core`. Its first-party
+imports are `features` and `io/mesh_checks.py`, both pure.
 
 THE RULINGS THE BYTES ENCODE.
 
@@ -39,6 +39,7 @@ import numpy as np
 import numpy.typing as npt
 
 from tin_engine.features import EdgeVocabulary
+from tin_engine.io.mesh_checks import check_int32, checked_ascii
 
 #: The names this module writes into `FieldData` itself.
 #: ``elevation`` is the point array of heights (increment 12), so no dataset
@@ -105,14 +106,13 @@ def write_vtk(
         if not _FIELD_NAME.fullmatch(name) or name in RESERVED:
             raise ValueError(f"field name {name!r} is reserved or not ^[a-z][a-z0-9_]*$")
 
-    table = sorted((prop.bit, prop.name) for prop in vocabulary.properties)
+    table = vocabulary.table()
     codes = None
     if triangle_codes is not None:
         codes = np.asarray(triangle_codes).reshape(-1)
         if len(codes) != len(polygons):
             raise ValueError(f"triangle_codes has {len(codes)} entries, {len(polygons)} triangles")
-        if len(codes) and (codes.min() < -(2**31) or codes.max() >= 2**31):
-            raise ValueError("triangle_codes must fit int32")
+        check_int32(codes, "triangle_codes")
         if any(name == LAND_COVER_CODE for _, name in table):
             raise ValueError(f"the vocabulary names {LAND_COVER_CODE!r}, the codes' array")
         if land_cover_codes:
@@ -182,22 +182,11 @@ def _numeric(name: str, values: npt.NDArray[np.generic], type_name: str, binary:
 
 def _strings(name: str, values: Sequence[str], binary: bool) -> bytes:
     """A string array: text lines with `%XX` escapes, or length-prefixed bytes."""
-    encoded = [_checked(value) for value in values]
+    encoded = [checked_ascii(value, "string") for value in values]
     header = f"{name} 1 {len(values)} string\n".encode("ascii")
     if binary:
         return header + b"".join(_prefix(len(v)) + v for v in encoded) + b"\n"
     return header + b"".join(v.replace(b"%", b"%25").replace(b" ", b"%20") + b"\n" for v in encoded)
-
-
-def _checked(value: str) -> bytes:
-    """The one string gate: no control character forges a line, and ASCII only."""
-    bad = next((ch for ch in value if ch < " " or ch == "\x7f"), None)
-    if bad is not None:
-        raise ValueError(f"a string may not contain a control character; got {bad!r}")
-    if not value.isascii():
-        bad = next(ch for ch in value if not ch.isascii())
-        raise ValueError(f"a string must be ASCII; got {bad!r} in {value!r}")
-    return value.encode("ascii")
 
 
 def _prefix(length: int) -> bytes:

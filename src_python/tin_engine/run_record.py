@@ -104,6 +104,11 @@ def _exact(value: float) -> str:
     return short if float(short) == value else repr(value)
 
 
+def escaped_ascii(text: str) -> str:
+    """`text` with non-ASCII escaped (`\\xe9`), as a file field holds it."""
+    return text.encode("ascii", "backslashreplace").decode("ascii")
+
+
 def plural(n: int, one: str, many: str) -> str:
     return f"{n} {one if n == 1 else many}"
 

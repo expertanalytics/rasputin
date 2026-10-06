@@ -110,8 +110,9 @@ from tin_engine.grid_domain import default_stride, refine_start_stride, subsampl
 from tin_engine.io.cog import NotCached
 from tin_engine.io.domain_file import read_domain
 from tin_engine.io.geojson import catchment_geojson
+from tin_engine.io.mesh_checks import checked_ascii
 from tin_engine.io.models import DemTile, RasterMeta
-from tin_engine.io.ply import write_ply
+from tin_engine.io.ply import field_comments, write_ply
 from tin_engine.io.rivers import RiverSegment, read_segments
 from tin_engine.io.station_set import Station, read_nve_lakes, read_references, read_stations
 from tin_engine.io.vtk_legacy import write_vtk
@@ -124,6 +125,7 @@ from tin_engine.run_record import (
     RunRecord,
     Value,
     as_json,
+    escaped_ascii,
     file_fields,
     flat_record,
     ordinal,
@@ -910,7 +912,7 @@ def mesh(
         if len(names) > 1:
             typer.echo(f"DEM: {len(names)} files, {size}", err=True)
         assumed = " (assumed: the DEM file does not say)" if meta.vertical_unit_assumed else ""
-        source = cached.source if cached is not None else _ascii("; ".join(names))
+        source = cached.source if cached is not None else escaped_ascii("; ".join(names))
         values |= {"crs": dem_crs, "dem_source": source, "dem_vertical_unit": "metres" + assumed}
         if grid is None:
             dx, dy = meta.delta_x, meta.delta_y
@@ -922,13 +924,13 @@ def mesh(
             values["resampled_grid"] = f"{grid.spacing} m square grid in {dem_crs}, {size}"
         if cached is not None:  # B16 (a): the notes the source asks to travel with it
             remote = SOURCES[cached.source]
-            values["dem_credit"] = _ascii(remote.credit)
-            values["licence_note"] = _ascii(remote.licence_note)
-            values["cite"] = _ascii("; ".join(remote.cite)) or None
+            values["dem_credit"] = escaped_ascii(remote.credit)
+            values["licence_note"] = escaped_ascii(remote.licence_note)
+            values["cite"] = escaped_ascii("; ".join(remote.cite)) or None
         if cached is not None or len(paths) > 1 or paths[0].is_dir():  # R11: the files used
             seams = opened_seams
-            values["dem_tiles"] = _ascii("; ".join(names))
-            values["dem_seams"] = _ascii("; ".join(s.entry() for s in seams)) or SEAMS_AGREE
+            values["dem_tiles"] = escaped_ascii("; ".join(names))
+            values["dem_seams"] = escaped_ascii("; ".join(s.entry() for s in seams)) or SEAMS_AGREE
         if given is not None:
             how = transform_label(given.crs, dem_crs)
             values |= {"domain_crs": crs_label(given.crs), "domain_transform": how}
@@ -952,7 +954,8 @@ def mesh(
                 transforms.append(transform_label(own, dem_crs))
                 if src.class_map.notice and src.class_map.notice not in notices:
                     notices.append(src.class_map.notice)
-            values |= {"features": _ascii("; ".join(texts)), "features_crs": "; ".join(crs_texts)}
+            values["features"] = escaped_ascii("; ".join(texts))
+            values["features_crs"] = "; ".join(crs_texts)
             values["features_transform"] = "; ".join(transforms)
             values["features_notice"] = "; ".join(notices) or None
             # R5: labelling runs iff a source carries codes (D1's single-system
@@ -982,12 +985,13 @@ def mesh(
         label = name
         surface_mesh = _fixture_mesh(name, delaunay, snap_spacing, clock)
         record = flat_record(triangles=len(surface_mesh.triangles), crs=crs)
-        # --crs is unvalidated free text by ruling 5, so the writer's refusals
+        # --crs is unvalidated free text by ruling 5, so the gate's refusals
         # are refusals a person meets by typing, not internal invariants. Turn
-        # the writer's ValueError into the usage error it is, in the one place
+        # the gate's ValueError into the usage error it is, in the one place
         # that knows the text came from the command line.
         try:
-            write_ply(np.zeros((1, 3)), faces=np.zeros((0, 3)), comments=_comments(record))
+            for comment in field_comments(file_fields(record)):
+                checked_ascii(comment, "comment")
         except ValueError as exc:
             raise typer.BadParameter(str(exc), param_hint="--crs") from exc
 
@@ -1011,7 +1015,7 @@ def mesh(
     record_target = _record_target(record_path, out_parent, label, [*targets, report_target])
     typer.echo(summary(record), err=True)
 
-    fields, comments = file_fields(record), _comments(record)
+    fields, comments = file_fields(record), field_comments(file_fields(record))
     encoders: list[Callable[[], bytes]]
     if out.suffix == ".vtk":
         encoders = [
@@ -1056,11 +1060,6 @@ def mesh(
     if record_target is not None:  # D5: after the mesh and the report
         record_target.write_text(as_json(record, installed_version(), _command()), "ascii")
         typer.echo(f"{record_target}")
-
-
-def _comments(record: RunRecord) -> list[str]:
-    """The record's file fields as ``.ply`` header comments, ``name value``."""
-    return [f"{name} {value}" for name, value in file_fields(record)]
 
 
 def _land_cover(
@@ -1466,11 +1465,6 @@ def _open_features(
     for table in found.scanned:
         typer.echo(f"{table}: this layer has no spatial index, so every row was read", err=True)
     return found
-
-
-def _ascii(text: str) -> str:
-    """A file field's text with non-ASCII escaped, as `dem_tiles` records names."""
-    return text.encode("ascii", "backslashreplace").decode("ascii")
 
 
 def _words(exc: ValueError) -> str:

@@ -24,6 +24,8 @@ from pyproj import CRS, Proj, Transformer, get_ellps_map
 from pyproj.crs import ProjectedCRS
 from pyproj.exceptions import CRSError, ProjError
 
+from tin_engine.run_record import escaped_ascii
+
 Xy = npt.NDArray[np.float64]
 
 
@@ -109,7 +111,7 @@ def crs_label(crs: str | CRS) -> str:
     code = parsed.to_epsg(min_confidence=100)
     if code is not None:
         return f"EPSG:{code}"
-    return parsed.to_string().encode("ascii", "backslashreplace").decode("ascii")
+    return escaped_ascii(parsed.to_string())
 
 
 class CrsSuggestion(BaseModel):
