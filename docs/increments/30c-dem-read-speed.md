@@ -1,12 +1,15 @@
 # Increment 30c — the `decode` phase of `rasputin mesh`, made faster
 
-Status: **red committed at `bdf7b57d`; `@tester`'s pins beyond the design
-ruled in section 7 (six stand, one changes); green next.** Designed by
-`@architect` 2026-10-06 on branch
-`worktree-dem-read-speed`, at `6c729e97` (30b's approved head, not yet
-pushed). Ola said "yes, build 30c" on 2026-10-06 (question 1, section 13).
-Design review round 2 approved (`## Review`). When 30b merges, master is merged into this
-branch and the gate's base is recorded again at that merge (section 6).
+Status: **built and accepted; the gate's base still to be recorded again at
+the master merge `26a5d839` (section 6, "At the merge"); code review next.**
+Red `bdf7b57d` (`@tester`'s pins beyond the design ruled in section 7: six
+stand, one changes), green `0663efc9` (+3 net production lines,
+`python3 tools/count_loc.py 6c729e97 0663efc9`; as built, section 3.3),
+`@perf`'s acceptance ACCEPTED at `bc8d91eb` (section 9). Designed by
+`@architect` 2026-10-06 on branch `worktree-dem-read-speed`, at `6c729e97`
+(30b's approved head). Ola said "yes, build 30c" on 2026-10-06 (question 1,
+section 13). Design review round 2 approved (`## Review`). 30b merged as
+#200; master (with #200 to #203) was merged into this branch as `26a5d839`.
 
 **What this is.** The third of three pull requests that remove the
 bottlenecks `@perf` measured in `rasputin mesh` on two real catchments
@@ -220,6 +223,24 @@ note pointing here, in this PR.
 `_seam(a.name, b.name, strips[a.name, b.name], strips[b.name, a.name], plan, box, needed)`.
 `needed` is still prepared once before the loop
 (`src_python/tin_engine/mosaic.py@6c729e97:267`). `_seam` stays pure.
+
+### 3.3 As built
+
+Green `0663efc9` follows 3.1 and 3.2: +3 net production lines (19 added,
+16 removed: `io/cog.py` +1, `mosaic.py` +2), the prototype's count in
+section 8. Where the code says more than the design did, from `@developer`'s
+notes:
+
+- `threads=None` reads `os.cpu_count() or 1` at the call, and a given count
+  is used as given
+  (`src_python/tin_engine/io/cog.py@0663efc9:150`). So `threads=0` still
+  raises `ValueError`, from `ThreadPoolExecutor` itself, as it did at the
+  base (`src_python/tin_engine/io/cog.py@6c729e97:146`). No caller passes 0.
+- `_covered` is gone, and `_seam`'s docstring now carries its note on where
+  a node lies ("a node is `x_min + col * dx`, as in `_uncovered`",
+  `src_python/tin_engine/mosaic.py@0663efc9:534-535`). `assemble` names the
+  two strips `first` and `second` before the call
+  (`src_python/tin_engine/mosaic.py@0663efc9:274-275`).
 
 ## 4. Why the output cannot change
 
@@ -495,6 +516,37 @@ script):
 Evidence goes under `docs/benchmarks/<date>/30c-dem-read/`, with a README
 whose numbers come from a script over the raw files (30b's
 `scripts/summarize.py` is the model), not typed by hand.
+
+**Result: ACCEPTED** (`@perf`, 2026-10-06, `bc8d91eb`; evidence
+`docs/benchmarks/2026-10-06/30c-dem-read/README.md`, its tables written by
+`scripts/summarize.py` from `raw/`). Base `6c729e97` against branch
+`0663efc9`, both non-editable installs with the same `_core`, AC power for
+all 24 `pmset -g batt` readings and no "Using Batt" line in `pmset -g log`
+during any kept run, median of 3:
+
+| catchment | decode, base → branch, s | branch / base | total, base → branch, s |
+|---|---|---|---|
+| Numedalslågen | 1.788 → 1.051 | **0.588** (pass) | 7.480 → 6.719 |
+| Skiensvassdraget | 1.323 → 0.842 | **0.636** (pass) | 11.462 → 10.966 |
+
+Each catchment's six runs wrote one `.vtk` sha256 (`34f7117e5e528e97`,
+`ab996019190166f9`, `raw/stats/vtk_sha256.txt`), the hashes of section 6,
+and one `dem_seams` value. Two runs were redone because `@perf`'s own shell
+was busy beside them, none for power (`raw/discarded/README.txt`).
+
+**The probe** (`raw/probe_compare.txt`): on both installs every line of
+`base_6c729e97.txt` (1,178 `fixture`, 2 `mesh`) is present and unchanged,
+and the 16 new `fixture` lines are all from the red suite's tests (R1's
+three cases, P2's ten, P1's two, R2's one). On the branch pytest exited 0; on
+the base the 3 red tests fail, as they should.
+
+This acceptance compares `6c729e97` with `0663efc9`, both before the master
+merge. The merge changes no DEM code (`git diff 0663efc9 26a5d839 --
+src_python/tin_engine/io/cog.py src_python/tin_engine/mosaic.py
+src_python/tin_engine/dem_input.py` is empty), but it does change the domain reading the probe's
+`mesh` mode goes through (`domain.py`, `io/domain_file.py`, `io/geojson.py`).
+Section 6's re-recorded base at the merge settles whether any probe line
+moved.
 
 ## 10. Risks
 
