@@ -1,8 +1,10 @@
 # Python audit PR D: `audit-encoders` (F7)
 
-Status: **green** (`@developer`, `7346a0e`; as built, section 14); next,
-`@reviewer`'s code review round 1, then the push on Ola's yes, after PR C
-merges and once Ola has answered Question 1 (go ahead or drop). Branch
+Status: **code review approved** in round 2 (`083712d`; section Review),
++7 net. Ready to push on Ola's yes once PR C has merged (this branch is
+stacked on it, and is rebased or merged onto master then) and once Ola has
+answered Question 1 (go ahead or drop; default go ahead). Follow-up, not
+blocking: `cli.py` calls `file_fields(record)` twice on one line. Branch
 `worktree-audit-encoders`, stacked on PR C's approved head `b26beb8`
 (`worktree-audit-geojson`, not yet pushed); rebased onto master when C
 merges. Section 6 said D waits for C because both touch
@@ -515,3 +517,7 @@ section 4's rule), `io/ply.py`, `io/vtk_legacy.py`, `features.py`,
 **PR D (`audit-encoders`), design review, round 1, 2026-10-06.** Range `b26beb8..7fcb47c`. Verdict: CHANGES REQUESTED, prose only: section 3's claim that `features.py` imports only `hashlib` and `pydantic` is false at b26beb8 (`typing` was already there; PR C added `shapely.geometry`, `src_python/tin_engine/features.py@b26beb8:58-62`; section 3 at `docs/increments/python-audit-pr-d.md@7fcb47c:99-103`); section 6 row D's 'Gates beyond review: none' (`docs/increments/python-audit.md@7fcb47c:510`) should list the red tests and the wording change. +7 recounted per file; probe reproduces byte for byte and three planted mutants changed it.
 
 **PR D (`audit-encoders`), design review, round 2, 2026-10-06.** Range `7fcb47c..da99916`. Verdict: APPROVED, prose only: section 3's imports match `src_python/tin_engine/features.py@b26beb8:58-62` (`typing` predates PR C, `3b739ac` added only `shapely.geometry`); row D's gates (`docs/increments/python-audit.md@da99916:510`) match section 9 (`docs/increments/python-audit-pr-d.md@da99916:296-327`); Question 1's drift and in-memory `.ply` reasons hold (`src_python/tin_engine/io/ply.py@da99916:122`, `src_python/tin_engine/io/vtk_legacy.py@da99916:196`, `src_python/tin_engine/cli.py@da99916:990`); `check_citations.py --base b26beb8` exits 0.
+
+**PR D (`audit-encoders`), code review, round 1, 2026-10-06.** Range `da99916..83354aa`. Verdict: CHANGES REQUESTED: `tests/python/test_io_mesh_checks.py@83354aa:10` said 'Committed red: the module does not exist', false since `7346a0e` (red-step scaffolding); line 16's '(the handback lists each)' should point to `docs/increments/python-audit-pr-d.md@83354aa:331-339`. +7 net (46/39), as section 7. Red real at `8dcfa2a` (21 failed, 32 errors, stated reasons), green at `7346a0e`. Suite 5439 passed, 30 skipped on a scratch copy; gates clean. Probe reproduces both committed outputs byte for byte, its diff is the 12 wording lines, and a planted gate mutant changed 12 lines. No `@perf` owed.
+
+**PR D (`audit-encoders`), code review, round 2, 2026-10-06.** Range `83354aa..083712d`. Verdict: APPROVED. Docstrings only: red-step wording past tense at `tests/python/test_io_mesh_checks.py@083712d:10-17` and `tests/python/test_io_ply.py@083712d:495-497`, pointing to `docs/increments/python-audit-pr-d.md@083712d:331`; +7 net (`count_loc.py b26beb8 083712d`); CI to be checked after the push. Non-blocking: `src_python/tin_engine/cli.py@083712d:1018` calls `file_fields(record)` twice.
