@@ -5,9 +5,9 @@ Recorded by `@orchestrator` on 2026-10-06 at about 02:25 Oslo time, on
 
 **This covers only part of the window.** Ola entered unattended mode at
 23:23:19 for a window that ends at 08:59:19
-(`<git-common-dir>/harness/unattended.json`, `windows.jsonl`). This file
-covers 23:23 to 02:22, the first 179 minutes. The rest, 6 h 37 min, is for the
-morning report or an addendum.
+(`<git-common-dir>/harness/unattended.json`, `windows.jsonl`). Sections 1
+to 9 cover 23:23 to 02:22. Section 10 covers 02:22 to 06:05. The last
+2 h 54 min, 06:05 to 08:59, are not covered.
 
 Sources: the main session's transcript,
 `~/.claude/projects/-Users-skavhaug-projects-rasputin/6a989a29-4492-430f-99b0-9fe3058f931a.jsonl`
@@ -365,13 +365,174 @@ refusal message names them, and so does `guard_push.py`'s docstring.
 5. **Re-enqueueing #189 and #191** needs your fresh yes; the overnight
    attempt was refused (D2). Default: yes, once you have looked at them.
 
-## Addendum, 02:22 to about 02:50 (from the main session's brief, unchecked)
+## 10. 02:22 to 06:05
 
-After the cut-off the main session filled both writer slots: the design of
-audit PR A, the design of audit PR D, and the GeoPackage colour note
-(`bf2d42f`), which was reviewed and approved. PR D's design measured +7 net
-production lines by prototyping in a scratch clone, against the audit's
-estimate of -30.
+Recorded at about 06:15. I stop at 06:05:00. At that point `@reviewer` was
+running code review round 1 of PR C2 (spawned 06:04:59, line 9509). Sources
+are the same as above: transcript lines 7421 to 9534, the four branches'
+`git log`, and `python3 tools/count_loc.py` run on each.
+
+Labels: **PR A** (`worktree-audit-lattice`, stacked on PR B) puts the DEM
+grid arithmetic in one place, on `io/models.py`. **PR D**
+(`worktree-audit-encoders`, stacked on PR C) shares the mesh writers' input
+checks and text escaping. **PR C2** (`worktree-geojson-gaps`, stacked on
+PR C) is a follow-up that closes PR C's known gaps: plain refusals for
+malformed GeoJSON.
+
+### What happened
+
+| Branch | Steps (commits) | Net lines: audit's estimate, design, measured |
+|---|---|---|
+| `worktree-gpkg-colour` | note `bf2d42f`, review round 1 changes requested, `770516c`, round 2 approved | prose only |
+| PR D | design `7fcb47c`, design round 1 changes requested, `da99916`, round 2 approved; red `8dcfa2a`; pins ruled `19f6dec`; green `7346a0e`; prose `83354aa`; code round 1 changes requested, `083712d`, round 2 approved; recorded `4725f12` | -30, +7, **+7** |
+| PR A | design `5e5bcfc` + `62b5226`, design round 1 changes requested, `0b20e1d`, round 2 approved; red `6cf4359`; pins ruled `3e86235`; green `b3b38d2`; prose `1a84ea9`; code round 1 approved; `@perf` accepted `01751ec`; recorded `883c51f` | -100, -28, **-27** |
+| PR C2 | design `d4db01a`, design round 1 changes requested, `7bcf587`, round 2 approved; red `10f6e02`; pins ruled `ccce1b4`; green `b6195ec`; prose `aec3b67`; code round 1 running | none, +16 then +18, **+18** |
+
+Every step ran in order, and every commit touches only its persona's
+files: `@tester` only `tests/`, `@developer` only `src_python/`, `@perf`
+only `docs/benchmarks/2026-10-06/audit-pr-a/`, and `@architect` only
+`docs/`, `ROADMAP.md` and `project_structure.md`. `@perf` found PR A's
+meshes byte-identical on the 1 m set and on the reprojected Velhas run
+(`01751ec`).
+
+PR C2 also fixes a silent misread that is on master today. A reference
+file with `"station": null` is read as a station named "None".
+Checked by reading the code: `required` returns the value whenever the key
+is present (`src_python/tin_engine/io/station_set.py@b26beb8:68-73`), and
+`read_references` passes it to `str()`
+(`src_python/tin_engine/io/station_set.py@b26beb8:116`); master `44fa7f5`
+has the same lines.
+
+### Did the new practices hold? Yes, all three.
+
+| PR | Probe committed with the design | Pins ruled before green | Design rounds | Code rounds | Code review time |
+|---|---|---|---|---|---|
+| D | `7fcb47c`: the probe and its output at the base | `19f6dec` | 2 | 2 | 10 min |
+| A | `5e5bcfc`: the probe and its output at the base | `3e86235` | 2 | 1 | 14 min, then `@perf` 50 min |
+| C2 | `d4db01a` used PR C's committed probe and its base output; `7bcf587` extended both | `ccce1b4` | 2 | 1 so far | running |
+| C, for comparison | after green (`9e002e2`) | none of six | 3 | 5 | 1 h 46 min |
+
+- **Defects now surface at design time.** PR C2's design round 1 found that
+  a geometry `type` of `7`, `true` or `["Point"]` slipped through (line
+  9235), and the `@architect` found the `"station": null` misread while
+  designing. PR D's one code-review finding was test docstrings still
+  written as for the red step ("does not exist"; fixed at `083712d`). PR A
+  had none.
+- **Measured size matches the design.** The prototype in a scratch clone
+  put each design within 2 lines of the result. The audit's estimates were
+  off by 37 (D) and 73 (A).
+
+### Idle time and capacity, 02:22:30 to 06:05:00 (222.5 minutes)
+
+| Agents running | Minutes |
+|---|---|
+| none | 6.3 |
+| one | 151.3 |
+| two | 55.7 |
+| three | 9.2 |
+
+| Writing agents running (reviewers left out) | Minutes |
+|---|---|
+| none | 26.8 |
+| one | 156.5 |
+| two | 39.2 |
+
+- **No idle time.** The 6.3 minutes with no agent running are hand-off
+  gaps. The longest is 54 s, at 02:32:10.
+- **The longest stretch with no writer was 14.9 minutes**, 04:01:24 to
+  04:16:17, while `@reviewer` ran PR A's code review alone.
+- **`@perf` ran alone for 49.7 minutes**, 04:16:17 to 05:05:59. This
+  follows Ola's standing note: no agent runs beside `@perf`.
+- **One writer slot stayed empty again, with work waiting.** At 03:26 the
+  main session told Ola: "One writer slot is free. All the remaining work is
+  either in those two branches or waiting on your yes, so I'm leaving it
+  empty for now." (line 8555). PR C's known gaps had been recorded at
+  `b26beb8` (02:20). Closing them needed no ruling, and at 05:09 the main
+  session started that work as PR C2, "to use the rest of the night" (line
+  9148). Started at 03:26, its design could have run beside PR A until
+  `@perf` began. This is the pattern of section 2 again: the list the main
+  session checked missed an item that needed no ruling.
+
+### Deviations
+
+**E1. Two more claims passed to Ola unchecked.**
+- At 03:20 (line 8429) the main session "corrected" itself: "`tools/bench.py`
+  has no option to run on a reprojected DEM". That came from `0b20e1d`
+  ("the bench has no `--out-crs` to pass"). It was false. `bench.py run`
+  passes mesh arguments after `--`, and `3e86235` restored the reprojected
+  run, which `@perf` ran through `bench.py` (`velhas.sh` in `01751ec`).
+- At 03:57 (line 8921) the main session called a numpy warning "One new
+  side effect". At 04:01 (line 8963) it corrected itself: the base printed
+  the same warning. It counted that one as the third of the night.
+
+  By my count the bench claim makes four. Section 4's D3 asks that
+  another agent's claim be passed on as "X says ... (unchecked)". That
+  practice did not take hold.
+
+**E2. The scratchpad used as a channel, set up by the brief.** The main
+session's PR C2 red-step brief told `@tester` to drop the editable finder
+with a "sitecustomize in your scratchpad subdirectory" (line 9301). That
+was fine for the tester's own use. The tester's handback then offered it
+"ready for `@developer`'s green step" (line 9328).
+`.claude/REQUIRED-READING.md@44fa7f5:199-201` forbids this. The main session
+caught it and had `@developer` write its own (line 9373). The root cause is
+that the worktree had no `.venv` (P6).
+
+**Guards.** The window queue has one entry after 02:22 besides mine. At
+02:46:24, PR D's design `@architect` was refused: "the guard cannot read
+this command's targets". The command was a `git clone` into the session
+scratchpad, blank lines added to 12 files in that clone, and
+`check_citations`. In substance that is a false positive: nothing it wrote
+was governed. The refusal named no files, so the agent did not redo it,
+reported it as `ASK OLA:` (line 7934), and ran `check_citations` read-only
+on its prototype. Handled as the rule says.
+
+### Lessons the personas reported (via the main session), grouped
+
+- **Worktree setup (3).** A worktree with no `.venv` routes every
+  `tin_engine.*` submodule to the main checkout. A scratch-copy probe has to
+  drop the editable finder and assert a submodule's `__file__`, not only
+  the package's. Each agent paid the setup cost: `audit-encoders/.venv` was
+  built by an agent at 03:01, and `geojson-gaps` still has none (checked).
+  `bench.py` needs `tin_engine` importable in its parent process, so the
+  finder-drop recipe breaks it; use `tools/scratch_copy.py`.
+- **`2>/dev/null` (1), the real case behind section 6.** PR A's `@architect`:
+  "An edit script run with stderr sent to `/dev/null`, to hide the venv's
+  startup warnings, also hid a failed assertion. Twice nothing was applied
+  and nothing was reported." This strengthens question 2.
+- **Probes (3).** A probe that goes through rounding callers cannot see an
+  ulp change in the helper: plant a mutant per helper (`@reviewer`, PR A).
+  An emptiness check lets truthy values of the wrong kind through (`7`,
+  `true`, `["Point"]`; PR C2 design round 1). A red step that inserts tests
+  mid-file shifts the lines that citations elsewhere point at.
+- **Relaying (1).** E1.
+
+### Proposal
+
+**P6. Each worktree gets its own `.venv` when it is created.** Claude Code's
+worktree guide: "A worktree is a fresh checkout, so initialize your
+development environment there: ask Claude to install dependencies, or run
+your project's setup yourself in the worktree directory"
+(code.claude.com/docs/en/worktrees, read 2026-10-06). Its `.worktreeinclude`
+copies gitignored files only into worktrees Claude Code creates. The main
+session creates them with `git worktree add` (line 9101), so the copy would
+not apply, and a copied venv would point at the main checkout anyway.
+Incidents: E2, the three setup lessons above, and `geojson-gaps` with no
+`.venv`. The fix: the main session runs one setup command right after
+`git worktree add`, for example a `tools/` script that repeats what the
+agent did for `audit-encoders` (a uv venv with an editable install; the
+exact command not checked). Owner: `@developer` for the script, and the
+main session's dispatch rule for the step. Cost: about 15 lines and about
+a minute per worktree, against each agent's setup and the false-route risk.
+
+### Rule text
+
+`python3 tools/rule_sizes.py`: 10,564 words, unchanged. Section 8's cut
+stands. E1 needs no new rule: D3's practice, used, would have caught both.
+
+### Questions for Ola, added
+
+6. **P6, a `.venv` for each worktree at creation?** Default: yes.
 
 ## Review
 
