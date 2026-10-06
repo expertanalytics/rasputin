@@ -1,9 +1,10 @@
 # Python audit PR D: `audit-encoders` (F7)
 
-Status: **designed** (`@architect`, 2026-10-06); next, `@tester`'s red
-commit. Branch `worktree-audit-encoders`, stacked on PR C's approved head
-`b26beb8` (`worktree-audit-geojson`, not yet pushed); rebased onto master
-when C merges. Section 6 said D waits for C because both touch
+Status: **red** (`@tester`, `8dcfa2a`); `@tester`'s pins ruled by
+`@architect` (section 9); next, `@developer`'s green commit. Branch
+`worktree-audit-encoders`, stacked on PR C's approved head `b26beb8`
+(`worktree-audit-geojson`, not yet pushed); rebased onto master when C
+merges. Section 6 said D waits for C because both touch
 `io/geojson.py`; this design does not touch it, but PR C edits four files D
 edits (`cli.py`, `features.py`, `tests/python/test_layering.py`,
 `project_structure.md`; `git diff --stat fe12bbb b26beb8` over them), so D
@@ -191,8 +192,8 @@ writing leave `cli.py` together.
 
 The ROADMAP row "GeoPackage output" (`rasputin mesh --out X.gpkg`, on
 `origin/master`; built after PR D) says the new writer "joins that shared
-check instead of a third copy". What it gets from PR D, without its design
-being made here:
+check instead of a third copy". Without its design being made here, what it
+gets from PR D, and what it already has:
 
 - **`check_int32`**, if it declares `land_cover_code` as `MEDIUMINT` (OGC
   12-128, Table 1); with `INTEGER` (64-bit) it needs none.
@@ -326,6 +327,77 @@ Lean: no mutation round.
 The rest of the suite stays green unchanged: the existing `match="control
 character"` and `match="int32"` assertions match both wordings.
 
+### Pinned by the red step (`8dcfa2a`), ruled
+
+`@tester` pinned ten behaviours the design did not word; `@architect` rules
+on each. "As today" was checked against both writers at `b26beb8`
+(`src_python/tin_engine/io/ply.py@b26beb8:114-131`,
+`src_python/tin_engine/io/vtk_legacy.py@b26beb8:192-200`; the int32 checks
+at `src_python/tin_engine/io/ply.py@b26beb8:176-177` and
+`src_python/tin_engine/io/vtk_legacy.py@b26beb8:114-115`). All ten are
+confirmed; none is overruled.
+
+1. **Confirmed.** A value with both a control character and a non-ASCII
+   one is refused as a control character: both writers test for control
+   characters first today.
+2. **Confirmed, read as "the first of the kind refused".** Both writers
+   take `next(...)` over the value, so the control refusal names the first
+   control character and the ASCII refusal the first non-ASCII one; in
+   `"\N{DEGREE SIGN}\r"` the refusal names `\r`, not the earlier degree
+   sign. The tests assert exactly that.
+3. **Confirmed.** A C1 control (U+0080 to U+009F; U+0085 tested) is not
+   below the space nor DEL, so today's control test passes it and the
+   ASCII test refuses it, as `must be ASCII`.
+4. **Confirmed.** Space and `~` pass; they bound the accepted range.
+5. **Confirmed.** NUL, tab, `\n`, `\r`, ESC, U+001F and DEL, each with
+   `what` "comment" and "string": the design's six plus U+001F, the last
+   character below the space.
+6. **Confirmed.** `check_int32` judges an unsigned array by its values:
+   uint64 `2**31 - 1` passes and `2**31` is refused. Today's expression
+   does the same (run here on the worktree's venv: uint64 `[0, 2**31 - 1]`
+   passes, `[2**31]` is refused). The refusal names the `name` given.
+7. **Confirmed.** `field_comments` takes any iterable of pairs, a one-shot
+   iterator included (the design's signature is `Iterable`); no fields
+   gives no comments.
+8. **Confirmed.** `EdgeVocabulary.table()` is sorted by bit whatever the
+   declaration order (all three copies sort today), and an empty
+   vocabulary gives `[]`.
+9. **Confirmed.** `escaped_ascii` escapes characters beyond Latin-1 too
+   (`\u2603`, `\U0001f600`), as `backslashreplace` does in both copies
+   today, and leaves ASCII alone, control characters included: refusing
+   those is the gate's job.
+10. **Confirmed.** The `--crs` test runs for `.vtk` and for `.ply` and
+    asserts `a comment may not contain a control character; got '\r'`,
+    exit 2, no file. Today the gallery path's check is a `.ply` write
+    whatever the suffix (`src_python/tin_engine/cli.py@b26beb8:985-992`),
+    so the `.vtk` run already gets the comment wording; PR D changes only
+    the plural, as section 8's 12 lines say.
+
+**`test_layering.py`: 7 red rows, not 5, as intended.** Section 6's five
+were counted on the prototype, where `io/mesh_checks.py` existed and the
+tests were unchanged. At the red commit the table has the new row and the
+module does not exist, so two more fail for that reason alone:
+`test_each_module_imports_exactly_its_row[io.mesh_checks]` and
+`test_no_module_imports_by_name`. Both go green when the module exists;
+`@tester`'s scratch copy with the design applied passed the whole suite.
+
+**Known gap, kept: NaN in a float code array.** `check_int32`, like both
+writers today, compares with `min()` and `max()`, and every comparison
+with NaN is false, so `[nan, 1.0]` passes and the writer casts the NaN to
+an integer without a word. Section 8's probe shows it at the base: the
+four "float nan" cases are file hashes, not refusals
+(`docs/increments/python-audit-probes/encoder_bytes-b26beb8.txt@8dcfa2a:83-86`).
+On this Mac the cast gives 0 (NumPy's `RuntimeWarning: invalid value
+encountered in cast`, then 0, both for `astype(np.int64)` and for a `<i4`
+field); another platform's cast may give another integer. **Ruling: PR D
+keeps it.** PR D is a refactor whose probe must change only the 12 wording
+lines; refusing NaN would change four more. No caller in the run passes a
+float code array (land-cover codes are integers from the raster), so it
+meets only a direct caller of the writers. Default for the later fix: in
+its own increment, `check_int32` refuses any value that is not a finite
+whole number with the same `<name> must fit int32`, red test first, and
+the probe's four lines become refusals.
+
 ## 10. `@perf`
 
 Nothing owed. No refine or mesh code changes; the writers run after the
@@ -402,3 +474,5 @@ and 1904, `24-release-hardening.md` lines 515 and 517,
 ## Review
 
 **PR D (`audit-encoders`), design review, round 1, 2026-10-06.** Range `b26beb8..7fcb47c`. Verdict: CHANGES REQUESTED, prose only: section 3's claim that `features.py` imports only `hashlib` and `pydantic` is false at b26beb8 (`typing` was already there; PR C added `shapely.geometry`, `src_python/tin_engine/features.py@b26beb8:58-62`; section 3 at `docs/increments/python-audit-pr-d.md@7fcb47c:99-103`); section 6 row D's 'Gates beyond review: none' (`docs/increments/python-audit.md@7fcb47c:510`) should list the red tests and the wording change. +7 recounted per file; probe reproduces byte for byte and three planted mutants changed it.
+
+**PR D (`audit-encoders`), design review, round 2, 2026-10-06.** Range `7fcb47c..da99916`. Verdict: APPROVED, prose only: section 3's imports match `src_python/tin_engine/features.py@b26beb8:58-62` (`typing` predates PR C, `3b739ac` added only `shapely.geometry`); row D's gates (`docs/increments/python-audit.md@da99916:510`) match section 9 (`docs/increments/python-audit-pr-d.md@da99916:296-327`); Question 1's drift and in-memory `.ply` reasons hold (`src_python/tin_engine/io/ply.py@da99916:122`, `src_python/tin_engine/io/vtk_legacy.py@da99916:196`, `src_python/tin_engine/cli.py@da99916:990`); `check_citations.py --base b26beb8` exits 0.
