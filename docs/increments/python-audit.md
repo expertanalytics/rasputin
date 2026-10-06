@@ -125,8 +125,8 @@ and asked for prose only: finding F5 still said section 11 for this PR's
 design. Ola took the defaults to questions 1 to 4 (section 12, "Questions
 for Ola") on 2026-10-06. Question 5 (the odd `None is a Point` wording) is
 still open; its default, a later PR, holds until he answers and changes
-nothing in this PR. Next: `@reviewer` re-checks the commit that fixes F5
-and records round 6; then the push waits for Ola's yes.
+nothing in this PR. Next: code review round 7 approved the commit that
+fixes F5; the push waits for Ola's yes.
 
 Re-checked against master `44fa7f5`: `git diff --stat 12dace7 44fa7f5 --
 src_python` is empty, and of the files cited below only `tools/brief.py`
@@ -2609,3 +2609,5 @@ PR F second master merge review (e4f7a42..8c2bc9a): APPROVED — resolution is o
 **PR C (`audit-geojson-io`), code review, round 5, 2026-10-06.** Range `a400064..efe0eea` (prose `efe0eea`). Verdict: APPROVED. +29 net production (`count_loc.py 32b5092 efe0eea`; this round 0). Summary row 4 (`docs/increments/python-audit.md@efe0eea:1663`) matches `open_features` on a bare Polygon at `efe0eea` under all four `CLASS_MAPS` (`property`, `corine`, `clc18_kode` refuse with the quoted wordings; `corine-water` reads 0 features); pins `src_python/tin_engine/feature_input.py@a400064:101-106`, `:457`, `:443` hold; gap 3, rows 8 and C, the probe docstring (`docs/increments/python-audit-probes/geojson_wordings.py@efe0eea:6-12`, checked against a `tools/scratch_copy.py` run) and the round-4 record hold; check_citations clean.
 
 **PR C (`audit-geojson-io`), code review, round 6, 2026-10-06.** Range `b26beb83..49f8849d` (master merges `5495774d` and `49f8849d`). Verdict: CHANGES REQUESTED, prose only. +29 net production (`count_loc.py origin/master 49f8849d`; this round 0); suite 5570 passed, 17 skipped; mypy, ruff and gates clean; probe output at `49f8849d` byte-identical to `geojson_wordings-21f49d6.txt`; conflict resolution in `src_python/tin_engine/cli.py@49f8849d:110-118`, `src_python/tin_engine/io/station_set.py@49f8849d:19-22`, `tests/python/test_layering.py@49f8849d:56-91` and `project_structure.md@49f8849d:110-117` keeps both sides; `merge-tree` against `ed12512` clean. Blocking (`@architect`): `docs/increments/python-audit.md@49f8849d:314` says "Section 11 revises this shape" for C's design, now section 12.
+
+**PR C (`audit-geojson-io`), code review, round 7, 2026-10-06.** Range `49f8849d..67634d78` (prose `67634d78`). Verdict: APPROVED. +29 net production (`count_loc.py origin/master 67634d78`; this round 0); not pushed, no CI. F5 now reads "Section 12 revises this shape" (`/Users/skavhaug/projects/rasputin/.claude/worktrees/audit-geojson/docs/increments/python-audit.md@67634d78:317`); `git grep "section 1[0-2]"` over `src_python`, `tests`, the probes and `project_structure.md` finds C's design cited only as section 12 (11 stays for F's, 10 for T1's); the round 6 record (`:2611`) matches the round 6 handback byte for byte; Ola's "P1 yes, all defaults" (2026-10-06) answered C1, which lists questions 1 to 4, so the status (`:119-129`) and note (`:2569-2570`) are true that question 5 is still open, and its default, a later PR, does not block the push; check_citations clean. Suggestion (`@architect`, in the commit that records this round): the "Next:" sentence (`:128-129`) still says `@reviewer` "records round 6".
