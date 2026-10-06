@@ -221,6 +221,22 @@ class TestCrsRefusals:
         assert "--crs" in output
         assert not out.exists()
 
+    @pytest.mark.parametrize("suffix", [".vtk", ".ply"])
+    def test_a_control_character_in_crs_is_refused_in_the_gates_words(
+        self, tmp_path: Path, suffix: str
+    ) -> None:
+        # PR D (`python-audit-pr-d.md`, section 9, red test 5): the check calls
+        # the shared gate rather than a throwaway `.ply` write, and its words
+        # are the gate's, the same for either suffix.
+        out = tmp_path / f"mesh{suffix}"
+        code, output = invoke(FIXTURE, "--flat", "--crs", "EPSG:25833\rforged", "--out", str(out))
+        assert code == 2, output
+        assert (
+            "Invalid value for --crs: a comment may not contain a control character; got '\\r'"
+            in output
+        )
+        assert not out.exists()
+
 
 class TestThePlyEdgeFileCarriesTheVocabulary:
     """Ruling 9 under U1 (a): the shipped edge file said nothing about its bits."""

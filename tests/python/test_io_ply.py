@@ -325,6 +325,14 @@ class TestTheGuardsThatHadNeverRun:
         with pytest.raises(ValueError, match="control character"):
             write_ply(VERTICES, faces=FACES, comments=[f"crs x{bad}forged"])
 
+    def test_the_control_character_refusal_reads_as_the_vtk_writers_does(self) -> None:
+        # PR D (`python-audit-pr-d.md`, section 9, red test 2): one wording for
+        # both writers, the shared gate's. Before it this said "control
+        # characters" while the `.vtk` writer said "a control character".
+        with pytest.raises(ValueError) as refusal:
+            write_ply(VERTICES, faces=FACES, comments=["crs x\rforged"])
+        assert str(refusal.value) == "a comment may not contain a control character; got '\\r'"
+
     def test_a_non_ascii_comment_is_refused_by_name(self) -> None:
         # A degree sign in a projection string is ordinary. This used to escape
         # as UnicodeEncodeError, which the Raises contract does not promise.
@@ -478,3 +486,28 @@ class TestFaceCodes:
     def test_a_code_outside_int32_is_refused(self) -> None:
         with pytest.raises(ValueError, match="int32"):
             write_ply(VERTICES, faces=FACES, face_codes=np.array([311, 2**31], dtype=np.int64))
+
+
+class TestFieldComments:
+    """PR D (`python-audit-pr-d.md`, section 3): a run's file fields as header
+    comments, `name value`, the line `cli._comments` built before it moved here.
+
+    Imported inside each test, so its absence at the red commit fails these
+    tests and leaves the rest of the file collecting.
+    """
+
+    def test_each_field_is_its_name_a_space_and_its_value(self) -> None:
+        from tin_engine.io.ply import field_comments
+
+        fields = [("crs", "EPSG:25833"), ("heights", "x")]
+        assert field_comments(fields) == ["crs EPSG:25833", "heights x"]
+
+    def test_no_fields_is_no_comments(self) -> None:
+        from tin_engine.io.ply import field_comments
+
+        assert field_comments([]) == []
+
+    def test_it_takes_any_iterable_of_pairs(self) -> None:
+        from tin_engine.io.ply import field_comments
+
+        assert field_comments(iter([("tolerance_m", "0.5 m")])) == ["tolerance_m 0.5 m"]

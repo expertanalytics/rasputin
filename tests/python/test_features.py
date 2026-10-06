@@ -567,3 +567,30 @@ def test_the_default_vocabulary_is_an_edge_vocabulary_and_is_frozen() -> None:
 
     with pytest.raises(pydantic.ValidationError):
         DEFAULT_VOCABULARY.properties = ()  # type: ignore[misc]
+
+
+# ---------------------------------------------------------------------------
+# table(): the (bit, name) pairs files write (PR D, `python-audit-pr-d.md`).
+# ---------------------------------------------------------------------------
+
+#: `DEFAULT_VOCABULARY.fingerprint()` at `b26beb8`, before `table()` existed.
+#: Written out, so `fingerprint` calling `table` cannot move it unseen: the
+#: digest is in every edge file written since increment 7.
+DEFAULT_FINGERPRINT = "f26769f015fd54ff7c0b49922a9eba48c28c2596b0a1f152b519658010b22c61"
+
+
+def test_table_is_the_default_vocabulary_as_sorted_bit_name_pairs() -> None:
+    assert DEFAULT_VOCABULARY.table() == [(bit, name) for name, bit in DEFAULT_ROWS]
+
+
+def test_table_is_in_ascending_bit_order_whatever_the_declaration_order() -> None:
+    shuffled = vocabulary(("water", 8), ("river", 0), ("ditch", 6), ("road", 1))
+    assert shuffled.table() == [(0, "river"), (1, "road"), (6, "ditch"), (8, "water")]
+
+
+def test_table_of_the_empty_vocabulary_is_empty() -> None:
+    assert EdgeVocabulary(properties=()).table() == []
+
+
+def test_the_default_fingerprint_is_the_one_files_already_carry() -> None:
+    assert DEFAULT_VOCABULARY.fingerprint() == DEFAULT_FINGERPRINT
