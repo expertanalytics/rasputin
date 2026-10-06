@@ -125,8 +125,11 @@ and asked for prose only: finding F5 still said section 11 for this PR's
 design. Ola took the defaults to questions 1 to 4 (section 12, "Questions
 for Ola") on 2026-10-06. Question 5 (the odd `None is a Point` wording) is
 still open; its default, a later PR, holds until he answers and changes
-nothing in this PR. Next: code review round 7 approved the commit that
-fixes F5; the push waits for Ola's yes.
+nothing in this PR. Code review round 7 approved the commit that fixes F5.
+Master was then merged in at `5c2b771a`, bringing #200 (the clip-speed
+change); code review round 8 found that the merge dropped the `MultiPolygon`
+import that master's new `_linework` uses, and round 9 approved the one-line
+fix `800c4adf`. Next: the push and the re-enqueue, on Ola's yes.
 
 Re-checked against master `44fa7f5`: `git diff --stat 12dace7 44fa7f5 --
 src_python` is empty, and of the files cited below only `tools/brief.py`
@@ -2611,3 +2614,7 @@ PR F second master merge review (e4f7a42..8c2bc9a): APPROVED — resolution is o
 **PR C (`audit-geojson-io`), code review, round 6, 2026-10-06.** Range `b26beb83..49f8849d` (master merges `5495774d` and `49f8849d`). Verdict: CHANGES REQUESTED, prose only. +29 net production (`count_loc.py origin/master 49f8849d`; this round 0); suite 5570 passed, 17 skipped; mypy, ruff and gates clean; probe output at `49f8849d` byte-identical to `geojson_wordings-21f49d6.txt`; conflict resolution in `src_python/tin_engine/cli.py@49f8849d:110-118`, `src_python/tin_engine/io/station_set.py@49f8849d:19-22`, `tests/python/test_layering.py@49f8849d:56-91` and `project_structure.md@49f8849d:110-117` keeps both sides; `merge-tree` against `ed12512` clean. Blocking (`@architect`): `docs/increments/python-audit.md@49f8849d:314` says "Section 11 revises this shape" for C's design, now section 12.
 
 **PR C (`audit-geojson-io`), code review, round 7, 2026-10-06.** Range `49f8849d..67634d78` (prose `67634d78`). Verdict: APPROVED. +29 net production (`count_loc.py origin/master 67634d78`; this round 0); not pushed, no CI. F5 now reads "Section 12 revises this shape" (`/Users/skavhaug/projects/rasputin/.claude/worktrees/audit-geojson/docs/increments/python-audit.md@67634d78:317`); `git grep "section 1[0-2]"` over `src_python`, `tests`, the probes and `project_structure.md` finds C's design cited only as section 12 (11 stays for F's, 10 for T1's); the round 6 record (`:2611`) matches the round 6 handback byte for byte; Ola's "P1 yes, all defaults" (2026-10-06) answered C1, which lists questions 1 to 4, so the status (`:119-129`) and note (`:2569-2570`) are true that question 5 is still open, and its default, a later PR, does not block the push; check_citations clean. Suggestion (`@architect`, in the commit that records this round): the "Next:" sentence (`:128-129`) still says `@reviewer` "records round 6".
+
+**PR C (`audit-geojson-io`), code review, round 8, 2026-10-06.** Merge `5c2b771a` (parents `f56952b5`, `c77eec32`). Verdict: CHANGES REQUESTED. Text merge clean; three citation pins re-read and correct; check_citations exit 0; +29 net production (`count_loc.py origin/master 5c2b771a`). Blocking: master's `_linework` (`src_python/tin_engine/feature_input.py@5c2b771a:226`) uses `MultiPolygon`, whose import C removed (`:39`), so 145 tests fail and 26 error. Restoring the import gives 5616 passed, 31 skipped.
+
+**PR C (`audit-geojson-io`), code review, round 9, 2026-10-06.** Range `5c2b771a..800c4adf`. Verdict: APPROVED. +29 net production (`count_loc.py origin/master 800c4adf`; this round 0). The diff is one line, restoring `MultiPolygon` at `/Users/skavhaug/projects/rasputin/.claude/worktrees/audit-geojson/src_python/tin_engine/feature_input.py@800c4adf:39`. `ruff check` passes, and F821 reproduces on the `5c2b771a` file. Full suite 5630 passed, 17 skipped. check_citations clean. Merges clean with origin/master `f7f6553f`. Not pushed, so no CI on this head.
