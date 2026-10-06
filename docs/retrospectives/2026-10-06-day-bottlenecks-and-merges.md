@@ -102,7 +102,7 @@ the main session's own words, by transcript line:
 
 | Line | Time | What was corrected |
 |---|---|---|
-| 9678 | 06:16 | "I said `bench.py` couldn't run a reprojected DEM, and that was wrong" (said in the night, before this window) |
+| 9678 | 06:16 | "I said `bench.py` couldn't run a reprojected DEM, and that was wrong" (the claim was made in the night, before this window; only its correction falls inside it) |
 | 9717 | 06:20 | who caused the scratch-folder hand-off (from the night) |
 | 11525 | 08:49 | #191 had already merged; audit F's PR had not been opened |
 | 12529 | 11:17 | two items listed as open were already settled |
@@ -188,10 +188,36 @@ subagent transcripts in this window (Bash commands only):
   (`test_guard_governance.py` and `test_guard_targets.py`,
   `agent-ae32fa72d6b542...`), 14:32 `test_feature_input.py`, and 00:17 one
   file (`test_guard_push.py`, `agent-a57b4c6ba349a4...`).
-- `@architect` also appended to `docs/increments/20c-soft-quality.md` by
-  heredoc: five times from 17:44 to 17:47 (`agent-a6c46d87f5ceed...`) and
-  once at 00:17 (`agent-a4053180efccd8...`). The brief line covers only rule
-  files, so this broke no brief; T6's "appends included" would cover it.
+- `@architect` appended to design files by heredoc about 17 times, to 7
+  files. 8 of them went to `docs/increments/20c-soft-quality.md`: seven by
+  `agent-a6c46d87f5ceed...` (17:12 and 17:15, transcript lines 595 and 697,
+  then five from 17:44 to 17:47) and one at 00:17
+  (`agent-a4053180efccd8...`). `@perf` appended once to
+  `docs/benchmarks/2026-10-06/30c-dem-read/README.md` (19:46). The scan
+  reads every subagent transcript from 06:05 to 00:43 and counts each
+  `cat >> <file> <<` (or `cat <<EOF >> <file>`) whose file is under
+  `docs/`, `tests/`, `tools/` or the source trees; "about", because an
+  append written another way is not counted. Its per-file output:
+
+  ```
+    8  architect  20c-soft-quality.md
+    2  architect  30a-landcover-speed.md
+    2  architect  30b-clip-speed.md
+    2  architect  30c-dem-read-speed.md
+    1  architect  h16-harness-fixes.md
+    1  architect  python-audit-pr-c2.md
+    1  architect  python-audit.md
+    1  perf       README.md
+    1  tester     test_feature_input.py
+    1  tester     test_guard_governance.py
+    1  tester     test_guard_push.py
+    1  tester     test_guard_targets.py
+    1  tester     test_landcover.py
+    1  tester     test_station_set.py
+  ```
+
+  The brief line covers only rule files, so these broke no brief; T6's
+  "appends included" would cover them.
 - `@developer`, guard fix green (17:31, `agent-a300dfa80...`), rewrote
   `tools/shell_scan.py` through `python3 - <<'EOF'` with `read_text`/
   `replace`, and committed it with `.claude/hooks/guard_push.py`. Whether
@@ -351,7 +377,7 @@ incidents stay here.
 | T3 | **One file per PR, not numbered sections in a shared file.** One line in `docs/increments/README.md`: "A PR adds its design as its own file or as a titled section; a citation names the heading, never a section number." Audit A already has its own file. | the 6 numbering lessons (section 9 twice, section 11 twice, stale docstring references, a wrong prediction in a brief) | about 30 words; governed, by day | `@architect` | yes |
 | T4 | **`tools/new_worktree.py`**: `git worktree add`, then a real venv in the worktree (`uv venv`, editable install with ruff and mypy), `_core` built with `-DPYTHON_EXECUTABLE` set to that venv's Python, and a check that prints `tin_engine.__file__` and one submodule's. `--base <sha>` makes a separate scratch venv for a base install. This is P6 of the night retrospective, made concrete. | 8 of the 10 venv lessons; C's merge brief "you can't run the suite without a venv" | about 40 lines with tests, and about a minute per worktree; `tools/`, by day | `@developer` | yes |
 | T5 | **`check_citations.py` defaults to `origin/master`** (its merge-base with the branch) and warns when `origin/master` was not fetched in the last hour; a cited range past end of file is broken, not at-risk; the at-risk list leaves out ranges whose cited text is the same at base and head (P2b of 2026-10-04). | 6 of the 8 citation lessons, including the 184 noisy entries in 30a | about 40 lines with tests; `tools/`, by day | `@developer` | yes |
-| T6 | **`git stash` refused, and every file written with Edit or Write.** `guard_push.py` refuses `git stash` except `list` and `show` (the stack is shared by every worktree, D5). `tools/brief.py`'s line "write a rule file with Edit or Write, never through the shell" becomes "write every file with Edit or Write, appends included". | the 3 lessons; 6 stash runs, 5 heredoc appends to test files and 6 to a design file today, and the 00:41 stash (D9) whose brief did not repeat the ban | about 5 lines and a test in the guard; one brief line; governed, by day | `@tester`, `@developer` | yes |
+| T6 | **`git stash` refused, and every file written with Edit or Write.** `guard_push.py` refuses `git stash` except `list` and `show` (the stack is shared by every worktree, D5). `tools/brief.py`'s line "write a rule file with Edit or Write, never through the shell" becomes "write every file with Edit or Write, appends included". | the 3 lessons; 6 stash runs, of which the 00:41 one (D9) had a brief that did not repeat the ban; heredoc appends (D5): 6 by `@tester` to test files in 5 commands, about 17 by `@architect` to 7 design files (8 of them to 20c), and 1 by `@perf` to a benchmarks README | about 5 lines and a test in the guard; one brief line; governed, by day | `@tester`, `@developer` | yes |
 | R1 | **A relayed claim names who checked it.** Change `CLAUDE.md` §3's "no cause not checked" to: "A cause, a 'could', or a status from a handback goes to Ola with who checked it ('`@reviewer` checked') or as unchecked." No new line. | D2: six of the twelve corrections; D6's "waiting for its checks" | a few words; governed, by day | `@architect` | yes |
 | R2 | **Each `QUEUE:` item in `session.md` names Ola's ask**: a date and quote, or a `ROADMAP.md` row. The recap warns on an item without one. Part of stage 2's state tool. | D1 (C2) | about 10 lines in `tools/session_state.py` with tests; governed | `@developer` in stage 2 | yes |
 | S1 | Small alignments: `Monitor` added to `.claude/agents/perf.md`'s `tools:` line; `python` becomes `python3` in `CLAUDE.md` §4; `tools/brief.py` names a scratch subdirectory per agent (`<scratchpad>/<persona>-<worktree>-<HHMMSS>/`), and cleanup removes only that directory. | three alignment lessons; the `rm -f *.txt` that deleted the main session's `lessons.txt` | a few words and lines; governed | `@architect`, `@developer` | yes |
@@ -553,3 +579,5 @@ As the main session passed them on 2026-10-07, one per line.
 
 - `@reviewer round 1 of the 2026-10-06 day retrospective (/Users/skavhaug/projects/rasputin/.claude/worktrees/retro-1007/docs/retrospectives/2026-10-06-day-bottlenecks-and-merges.md @530fa7b4): CHANGES REQUESTED. "Section 7" should say section 9 (lines 15 and 268); "five" corrections should be six (lines 117 and 309); the main session's 06:16 correction is missing from D2's eleven (main transcript line 9678).`
 - `@orchestrator` answer to round 1: section 9 in both places; six, with the 06:16 `bench.py` correction added to D2 (twelve, and R1 says "six of the twelve"; the `bench.py` claim is not among the six because its origin is in the night's window and was not traced); suggestions taken (D3 leads with the 17:14:41 run that exited 0 on a tree where `ruff check .` exits 1; hook counts given as "about"; D5's file and stash details corrected, which also found `test_guard_targets.py`, not `test_guard_push.py`, in the 14:10 run, and six `@architect` heredoc appends; the D merge citation now names briefs 18592 and 18690); D9 added for the night's typed merge range and the 00:41 `git stash`, whose own brief did not carry the ban.
+- `@reviewer round 2 of the 2026-10-06 day retrospective (/Users/skavhaug/projects/rasputin/.claude/worktrees/retro-1007/docs/retrospectives/2026-10-06-day-bottlenecks-and-merges.md @ddbe7108, range 530fa7b4..ddbe7108, 0 counted LOC, docs only): CHANGES REQUESTED. The new count of @architect heredoc appends is too low (lines 191-194 and 354). agent-a6c46d87f5ceed776 appended to 20c-soft-quality.md seven times, at 17:12 and 17:15 (transcript lines 595, 697) as well as 17:44-17:47, so that file got 8 appends counting 00:17. Across the window, @architect made about 17 heredoc appends to 7 design files: 30a, 30b, 30c, h16, python-audit, python-audit-pr-c2 and 20c. Everything else checks out.`
+- `@orchestrator` answer to round 2: D5 and T6 now give the count from a scan of every subagent transcript in the window, with its per-file output pasted in D5: about 17 `@architect` appends to 7 design files, 8 of them to 20c, and 1 `@perf` append to a benchmarks README; the scan also confirms 6 `@tester` appends in 5 commands. Suggestions taken: D2's 06:16 row says the claim was made in the night; T6 says "of which the 00:41 one", so the stash runs stay six.
