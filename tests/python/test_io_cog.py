@@ -10,12 +10,18 @@ HOW THIS FILE GOES RED. `tin_engine.io.cog`, `read_page` and the moved
 `IndexWindow` are reached through module-scoped fixtures, so while they are
 missing each test fails on its own (`ModuleNotFoundError`, `AttributeError`)
 and the rest of `tests/python` still collects.
+
+AMENDED FOR 30c (`docs/increments/30c-dem-read-speed.md`, section 7). R1
+(`TestR1DefaultThreadsAreTheMachines`): without `threads` the pool has the
+machine's core count of workers, not a fixed 4. P2 (in `TestW2Determinism`):
+that default gives `threads=1`'s bytes.
 """
 
 from __future__ import annotations
 
 import importlib
 import io
+import os
 import re
 from pathlib import Path
 from types import ModuleType
@@ -243,6 +249,59 @@ class TestW2Determinism:
         eight = decoded(cog, geotiff, BytesBlocks(data), data, w, threads=8)
         assert np.asarray(one.array).tobytes() == np.asarray(eight.array).tobytes()
         assert same_bytes(np.asarray(one.array), sliced(whole_page(data), w))
+
+    @pytest.mark.parametrize("variant", variant_params())
+    def test_p2_the_default_thread_count_changes_no_byte(
+        self, cog: ModuleType, geotiff: ModuleType, window: Any, variant: Variant
+    ) -> None:
+        """30c P2: a call without `threads` (the machine's cores since 30c,
+        4 before) gives `threads=1`'s bytes."""
+        data = build(variant)
+        w = window(row0=5, col0=9, rows=40, cols=55)
+        one = decoded(cog, geotiff, BytesBlocks(data), data, w, threads=1)
+        default = decoded(cog, geotiff, BytesBlocks(data), data, w)
+        assert np.asarray(default.array).tobytes() == np.asarray(one.array).tobytes()
+
+
+class TestR1DefaultThreadsAreTheMachines:
+    """30c R1 (`docs/increments/30c-dem-read-speed.md`, section 3.1): without
+    `threads`, `decode_window` builds its pool with `os.cpu_count() or 1`
+    workers; a given `threads` is used as given. The pool is observed through
+    a spy in place of `cog.ThreadPoolExecutor` that records the worker count
+    and builds the real pool, so the decode itself still runs."""
+
+    @pytest.mark.parametrize(
+        ("cores", "kwargs", "workers"),
+        [
+            pytest.param(7, {}, 7, id="seven_cores"),
+            pytest.param(None, {}, 1, id="cores_unknown"),
+            pytest.param(7, {"threads": 3}, 3, id="threads_given"),
+        ],
+    )
+    def test_the_pool_is_built_with_the_machines_core_count(
+        self,
+        cog: ModuleType,
+        geotiff: ModuleType,
+        window: Any,
+        monkeypatch: pytest.MonkeyPatch,
+        cores: int | None,
+        kwargs: dict[str, int],
+        workers: int,
+    ) -> None:
+        built: list[int | None] = []
+        real = cog.ThreadPoolExecutor
+
+        def spy(*args: Any, **kw: Any) -> Any:
+            built.append(kw.get("max_workers", args[0] if args else None))
+            return real(*args, **kw)
+
+        monkeypatch.setattr(cog, "ThreadPoolExecutor", spy)
+        monkeypatch.setattr(os, "cpu_count", lambda: cores)
+        data = build(VARIANTS[0])
+        w = window(row0=5, col0=9, rows=40, cols=55)
+        tile = decoded(cog, geotiff, BytesBlocks(data), data, w, **kwargs)
+        assert built == [workers]
+        assert same_bytes(np.asarray(tile.array), sliced(whole_page(data), w))
 
 
 class TestW3OnlyTheNeededBlocks:

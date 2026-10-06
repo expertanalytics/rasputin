@@ -23,6 +23,11 @@ AMENDED FOR OLA'S 1 MM THRESHOLD (2026-09-28, "Ignore below 1mm"). A seam
 counts only nodes where |a - b| >= 0.001; the midline rule does not look at
 the threshold (`TestSeamThreshold`; `TestM8Overlaps`' one-ulp test inverted).
 
+AMENDED FOR 30c (`docs/increments/30c-dem-read-speed.md`, section 7). With a
+needed region, the seam report tests the region only on the nodes it could
+count (R2), and its edge cases count as before (P1):
+`TestSeamRegionOnCountedNodes`.
+
 HOW THIS FILE GOES RED. `tin_engine.mosaic` and `tin_engine.io.repository`
 are imported in module-scoped fixtures, as `test_bench.py` loads its tool, so
 while they are missing each test fails on its own with `ModuleNotFoundError`
@@ -1534,6 +1539,124 @@ class TestSeamThreshold:
             names = [p.name for p in order]
             assert same_array(result.tile.array, expected), names
             assert result.seams == (), names
+
+
+class TestSeamRegionOnCountedNodes:
+    """30c (`docs/increments/30c-dem-read-speed.md`, sections 3.2 and 7): with
+    a needed region, the seam report tests the region only on nodes it could
+    count (valid in both, gap at least `SEAM_THRESHOLD`), and counts the same
+    nodes as testing every overlap node first did (R2, P1).
+
+    Two tiles on one grid, so the overlap is the whole grid, and a needed
+    region with a hole: its bounding box is the grid, so the hole's nodes are
+    in the overlap but not needed. Point-registered, dx 10, dy 5, so node
+    (r, c) is at exactly (X0 + 10 c, Y0 - 5 r), and the hole's west edge,
+    x = X0 + 60, runs through column 6's nodes."""
+
+    ROWS, COLS = 6, 9
+    #: Rows 2 and 3 of columns 7 and 8 are in the hole's interior; column 6
+    #: (x = X0 + 60) and rows 1 and 4 (y = Y0 - 5, Y0 - 20) are on its edge.
+    HOLE = (X0 + 60.0, Y0 - 20.0, X0 + 100.0, Y0 - 5.0)
+
+    @classmethod
+    def needed(cls) -> Any:
+        grown = shapely.box(X0 - 5.0, Y0 - 5.0 * cls.ROWS, X0 + 10.0 * cls.COLS, Y0 + 5.0)
+        return grown.difference(shapely.box(*cls.HOLE))
+
+    @classmethod
+    def same_grid(cls, plants: dict[tuple[int, int], tuple[float, float]], **kw: Any) -> Any:
+        """`a.tif` and `b.tif`, equal on one grid but where `plants` gives
+        `(a, b)` at node (r, c)."""
+        source = whole(rows=cls.ROWS, cols=cls.COLS, **kw)
+        arrays = {name: np.asarray(source.array).copy() for name in ("a.tif", "b.tif")}
+        for (r, c), pair in plants.items():
+            for name, value in zip(("a.tif", "b.tif"), pair, strict=True):
+                arrays[name][r, c] = value
+        return {
+            name: piece(source, 0, cls.ROWS, 0, cls.COLS, array=a) for name, a in arrays.items()
+        }
+
+    @staticmethod
+    def oracle(tiles: dict[str, DemTile], needed: Any) -> list[tuple[str, str, int, float, float]]:
+        """The report as the code before 30c computed it: every overlap node
+        tested against `needed`, then valid in both (NaN and the sentinel are
+        NoData, +-inf is data), then the float64 gap at least the threshold."""
+        a, b = (np.asarray(tiles[n].array, dtype=np.float64) for n in ("a.tif", "b.tif"))
+        m = tiles["a.tif"].meta
+        r, c = np.indices(a.shape)
+        inside = shapely.intersects_xy(needed, m.x_min + c * m.delta_x, m.y_max - r * m.delta_y)
+        valid = ~np.isnan(a) & ~np.isnan(b)
+        if m.nodata is not None:
+            valid &= (a != m.nodata) & (b != m.nodata)
+        with np.errstate(invalid="ignore"):  # inf - inf is NaN, and not counted
+            gaps = np.abs(a - b)[inside & valid]
+        gaps = gaps[gaps >= 0.001]
+        if not gaps.size:
+            return []
+        return [("a.tif", "b.tif", int(gaps.size), float(gaps.max()), float(np.median(gaps)))]
+
+    def test_r2_the_region_is_tested_only_on_nodes_that_could_count(
+        self, mz: ModuleType, plan: Any, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """R2: four nodes disagree by 2 or more, three needed and one in the
+        hole; the other 50 overlap nodes agree. The region is asked about 4
+        points, not 54, and the seam counts the three."""
+        plants = {(1, 1): (12.0, 10.0), (3, 2): (13.0, 10.0), (5, 4): (15.0, 10.0)}
+        plants[2, 7] = (17.0, 10.0)  # in the hole
+        tiles, needed = self.same_grid(plants), self.needed()
+        assert not shapely.intersects_xy(needed, X0 + 70.0, Y0 - 10.0)  # (2, 7) is not needed
+        planned = plan(tiles, None, needed)  # before the spy: planning tests the region too
+        assert planned.meta.rows * planned.meta.cols == self.ROWS * self.COLS
+        asked: list[int] = []
+        real = mz.shapely.intersects_xy
+
+        def spy(geometry: Any, x: Any, y: Any = None, **kw: Any) -> Any:
+            asked.append(int(np.broadcast(np.asarray(x), np.asarray(y)).size))
+            return real(geometry, x, y, **kw)
+
+        monkeypatch.setattr(mz.shapely, "intersects_xy", spy)
+        result = mz.assemble(planned, Loads(tiles), needed)
+        assert sum(asked) == len(plants)
+        assert seams(result) == [("a.tif", "b.tif", 3, 5.0, 3.0)]
+        assert seams(result) == self.oracle(tiles, needed)
+
+    #: (a, b) planted at a node, and whether the report counts it.
+    EDGE_CASES: ClassVar[dict[str, tuple[tuple[int, int], tuple[float, float], bool]]] = {
+        "on_the_hole_edge": ((2, 6), (1.0, 0.0), True),  # the region is closed
+        "in_the_hole": ((2, 7), (9.0, 0.0), False),
+        "exactly_the_threshold": ((1, 1), (0.001, 0.0), True),
+        "just_below_it": ((1, 2), (float(np.nextafter(0.001, 0.0)), 0.0), False),
+        "nan_on_one_side": ((2, 2), (np.nan, 0.0), False),
+        "the_sentinel_on_one_side": ((2, 3), (0.0, SENTINEL), False),
+        "inf_against_finite": ((3, 1), (np.inf, 0.0), True),  # inf is data
+        "inf_on_both_sides": ((3, 2), (np.inf, np.inf), False),  # inf - inf is NaN
+    }
+
+    # The report's own `inf - inf` warns; the test neither needs nor forbids that.
+    @pytest.mark.filterwarnings("ignore:invalid value encountered in subtract:RuntimeWarning")
+    @pytest.mark.parametrize(
+        ("extra", "expected"),
+        [
+            pytest.param({}, (3, np.inf, 1.0), id="odd_count"),
+            pytest.param({(4, 3): (2.0, 0.0)}, (4, np.inf, 1.5), id="even_count"),
+        ],
+    )
+    def test_p1_edge_cases_under_a_needed_region(
+        self,
+        mz: ModuleType,
+        plan: Any,
+        extra: dict[tuple[int, int], tuple[float, float]],
+        expected: tuple[int, float, float],
+    ) -> None:
+        """P1: counted are the edge node (1), the threshold (0.001) and inf
+        against 0 (inf), plus 2 in the even case; the median of an even count
+        is the mean of the middle two, (1 + 2) / 2."""
+        plants = {node: pair for node, pair, _ in self.EDGE_CASES.values()} | extra
+        tiles = self.same_grid(plants, dtype=np.float64, nodata=SENTINEL)
+        needed = self.needed()
+        result = mz.assemble(plan(tiles, None, needed), Loads(tiles), needed)
+        assert seams(result) == [("a.tif", "b.tif", *expected)]
+        assert seams(result) == self.oracle(tiles, needed)
 
 
 class TestM9SplitAndRestitch:
