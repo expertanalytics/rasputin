@@ -1158,15 +1158,15 @@ class TestUntouched:
         assert min(seen.values()) >= 1, seen
 
 
-#: R5's region for `_linework`'s test, in the source CRS.
+#: 16b R5's region for `_linework`'s test, in the source CRS.
 SMALL = Polygon([(0, 0), (10, 0), (10, 10), (0, 10)])
 
 
 class TestLinework:
     """30b, section 3.2: `_linework(geometry)`, what the whole-feature test
     tests against the region: every ring of a polygon, holes included, as
-    lines, or a line itself. Not a red test the design lists; see the
-    handback of the red step."""
+    lines, or a line itself. Not a red test the design lists; kept by
+    ruling 4 in section 7 of docs/increments/30b-clip-speed.md."""
 
     @pytest.mark.parametrize(
         "geometry",
