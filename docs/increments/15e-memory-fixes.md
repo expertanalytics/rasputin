@@ -325,7 +325,7 @@ Blocking:
    `@tester`'s to fix, because `@developer` does not edit tests):
    `tests/cpp/unit/test_refinement_check_points_arena.cpp:22-24`,
    `tests/python/test_target_grid.py:399-400` and `:514-515`, and
-   `tests/python/test_cli_mesh_geographic.py:327-328`. Put them in the past
+   `tests/python/test_cli_mesh_geographic.py@3e01580:327-328`. Put them in the past
    tense ("went red at 9879805 because ...") or delete them.
 2. This file's status line still says "Not started", and none of the
    as-built departures is recorded. Update the status line and add an
@@ -383,7 +383,7 @@ green CI.
   no shift) and line 107; every cited line at or below 106 reads the same on
   both trees. Already stale on master and not this PR's: the `cli.py:NN`
   citations in `16e-multi-features.md`, `test_features.py` (`:39,42`, `:79`,
-  `:84`), `tests/python/test_viz_svg.py@390b516:665` and `test_cli_mesh_multi_features.py:17`.
+  `:84`), `tests/python/test_viz_svg.py@390b516:665` and `tests/python/test_cli_mesh_multi_features.py@97eea35:17`.
   `05b-noder-driver.md:1749` and `15-dem-mosaic.md:616` hold.
 - f288504 holds: the status line, the ROADMAP row and "Acceptance run" match
   `docs/benchmarks/2026-10-03/15e-acceptance.md`, whose figures match

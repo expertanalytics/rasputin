@@ -30,8 +30,8 @@ from pathlib import Path
 import numpy as np
 import pytest
 import tifffile
-from typer.testing import CliRunner
 
+from cli_driver import USAGE, invoke, runner
 from geotiff_fixtures import (
     EPSG_UTM33,
     GT_RASTER_TYPE,
@@ -45,20 +45,12 @@ from geotiff_fixtures import (
     with_keys,
 )
 from mosaic_fixtures import piece, quadrants, whole
-from test_cli_mesh import plain
 from test_cli_mesh_refine import SEAMS_AGREE, file_field, stats_row
 from tin_engine.cli import app
 from tin_engine.io.models import DemTile
 from vtkread import VtkFile, read_vtk
 
-runner = CliRunner(env={"NO_COLOR": "1", "TERM": "dumb"})
-USAGE = 2
 DTM10 = Path(__file__).resolve().parents[1] / "fixtures" / "dtm10"
-
-
-def invoke(*args: str) -> tuple[int, str]:
-    result = runner.invoke(app, ["mesh", *args])
-    return result.exit_code, plain(result.output)
 
 
 def terrain(rows: int, cols: int) -> np.ndarray:
@@ -104,7 +96,7 @@ def write_one(path: Path, tile: DemTile) -> Path:
 
 def run_vtk(out: Path, *args: str) -> VtkFile:
     """Mesh to ``out`` with ``--stats`` beside it; ``inputs`` reads that report."""
-    code, output = invoke(*args, "--out", str(out), "--stats", str(out.with_suffix(".md")))
+    code, output = invoke("mesh", *args, "--out", str(out), "--stats", str(out.with_suffix(".md")))
     assert code == 0, output
     return read_vtk(out.read_bytes())
 
@@ -154,7 +146,7 @@ class TestC1Fields:
 
     def test_a_directory_writes_the_mosaic_fields(self, tmp_path: Path, mosaic_dir: Path) -> None:
         out = tmp_path / "m.vtk"
-        code, output = invoke("--dem", str(mosaic_dir), "--out", str(out))
+        code, output = invoke("mesh", "--dem", str(mosaic_dir), "--out", str(out))
         assert code == 0, output
         vtk = read_vtk(out.read_bytes())
         assert field(vtk, "crs") == "EPSG:25833"
@@ -225,7 +217,7 @@ class TestC4Refusals:
 
     def refused(self, tmp_path: Path, *args: str, says: tuple[str, ...]) -> None:
         out = tmp_path / "x.vtk"
-        code, output = invoke(*args, "--out", str(out))
+        code, output = invoke("mesh", *args, "--out", str(out))
         assert code == USAGE, output
         assert "No such option" not in output, output
         assert "Traceback" not in output
@@ -549,7 +541,7 @@ class TestRealDtm10:
 
     def test_the_two_lattices_are_refused_naming_both(self, tmp_path: Path) -> None:
         out = tmp_path / "x.vtk"
-        code, output = invoke("--dem", str(DTM10 / "lattices"), "--out", str(out))
+        code, output = invoke("mesh", "--dem", str(DTM10 / "lattices"), "--out", str(out))
         assert code == USAGE, output
         for token in ("7707_1_10m_z33.tif", "7707_2_10m_z33.tif", "0.5 cell"):
             assert token in output, f"{token!r} not in {output!r}"

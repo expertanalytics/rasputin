@@ -285,7 +285,7 @@ unreadable or break a legal requirement, so they stay, unchanged.
    This applies to counts only (today `nodata_vertices_removed`), never to a
    measured value: `--tolerance 0` is accepted (`cli.py:835`) and then
    `tolerance_m 0` and `max_error_m 0` are written
-   (`test_cli_mesh_refine.py:151-155` asserts both).
+   (`tests/python/test_cli_mesh_refine.py@a2d3319:151-155` asserts both).
 4. **Self-checks** live in `--stats`. If one is ever non-zero it is also
    printed to stderr as a warning, so a broken invariant is never silent.
 5. **No sentence in the file.** The one sentence, the summary, goes to stderr.
@@ -430,7 +430,7 @@ affected only through `max_error_m`.
   `test_cli_mesh_refine.py`, `test_cli_start_quality.py`) are dropped: 25's red
   step rewrites those lines as `float(file_field(vtk, "max_error_m"))`, and 15f-3
   takes 25's version at the rebase. In that amendment,
-  `test_cli_mesh_refine.py:151-155` (`--tolerance 0`, which on 25 asserts
+  `tests/python/test_cli_mesh_refine.py@a2d3319:151-155` (`--tolerance 0`, which on 25 asserts
   `file_field(fine, "max_error_m") == "0"`) compares `max_error_m` with
   `max(tolerance_m, dem_nodes_at_vertices_max_error_m)`, read from the file
   and from `--stats`, because after 15f-3 a node within rounding of a strip
@@ -582,12 +582,12 @@ words, over the tree): Line numbers in this section are those of master
   `test_cli_mesh_domain_crs.py`, `test_cli_mesh_features.py`,
   `test_cli_start_quality.py`, `test_cli_constraint_feet.py`,
   `test_stats.py` (the Refinement table, `:235`, `:324-330`, `:399`),
-  `test_cli_mesh.py:302` (the `.ply` comment `elevation none (z=0, --flat)`,
+  `tests/python/test_cli_mesh.py@ef52e8e:302` (the `.ply` comment `elevation none (z=0, --flat)`,
   which becomes `heights none: every z is 0 (--flat)`),
-  `test_cli_mesh_landcover.py:13`, `:62-66` (the land-cover and features
+  `tests/python/test_cli_mesh_landcover.py@ef52e8e:13`, `:62-66` (the land-cover and features
   stderr lines, reworded), `test_cli_mesh_multi_features.py` (`features` at
   `:163-270`, `:480-516`, and `features_crs` at `:215`, `:528`: both move to
-  `--stats`), `test_cli_mesh_stats.py:262`, `:285-304` (the Refinement
+  `--stats`), `tests/python/test_cli_mesh_stats.py@ef52e8e:262`, `:285-304` (the Refinement
   section and the "vertices without data dropped" Sizes row).
   `tests/python/test_io_ply.py@ef52e8e:155` uses `elevation none (z=0, --flat)` only as a sample
   comment for the writer; no change.
@@ -827,7 +827,7 @@ as pinned.
      <median> m)`, for example `ne.tif and nw.tif disagree at 1 node, by up to
      4 m (median 4 m)`, pairs joined by `; ` in today's order. Numbers are
      formatted as `Seam.cells` formats them (`:g`). `@tester` changes the
-     tests that pin the old text (`test_cli_mesh_mosaic.py:278`, `:302`,
+     tests that pin the old text (`tests/python/test_cli_mesh_mosaic.py@5e235eb:278`, `:302`,
      `:331-336`). The separate "## DEM seams" table (item 10) keeps its
      columns.
    - **Plurals are correct English** everywhere: `1 hole`, `2 holes`,
@@ -939,9 +939,9 @@ accepted as described unless marked otherwise.
 
 **Design review, round 1, 2026-10-03.** Range `origin/master` (6cdc8cc) `..97d1e9c` (8de9714, 2462028, 16b3a5d, 97d1e9c). Verdict: CHANGES REQUESTED. LOC: 0 (design only); the reviewer thinks 135 is optimistic and expects 200 to 280, still far under 700. Inventory, the three bugs, bench.py, the 15f-3 red commit's fourteen swaps and the --record spec's buildability all check out. Blocking: (1) rule 3 (zeros omitted from the file) contradicts D2 at `--tolerance 0`; restrict it to counts; (2) D5's example JSON writes measured values as integers (`5`), against its own float rule; (3) Compatibility misses four test files (`test_cli_mesh.py`, `test_cli_mesh_landcover.py`, `test_cli_mesh_multi_features.py`, `test_cli_mesh_stats.py`); (4) D6 is incomplete on how 15f-3's red tests change (more lines in `test_cli_mesh_edge_strip.py`, its `sentence` import, docstrings, the extra paragraph in `test_cli_mesh_refine.py`); (5) `max_error_m`'s definition is not true for DEM nodes on or within rounding of a vertex; take the larger figure or state the exception, warn above tolerance, and say what happens to 15f's open question on stating it. Not pushed; no CI.
 
-**Design review, round 2, 2026-10-03.** Range `333eb7d..ef52e8e` (231eefa merge of origin/master, ef52e8e fixes). Verdict: APPROVED. LOC: 0 (design only); estimate now about 200, plausible. All five round-1 blockers closed; the two defaults taken while Ola was away (`max_error_m` includes DEM nodes on a vertex, with a stderr warning above tolerance; `--record -` refused) are coherent and testable. Suggestions: say how 15f-3 amends the `--tolerance 0` test at `test_cli_mesh_refine.py:133`; use `file_field` consistently in D6; say whether the on-vertex entries are omitted or 0 on the projected path before 15f-3. Not pushed; no CI.
+**Design review, round 2, 2026-10-03.** Range `333eb7d..ef52e8e` (231eefa merge of origin/master, ef52e8e fixes). Verdict: APPROVED. LOC: 0 (design only); estimate now about 200, plausible. All five round-1 blockers closed; the two defaults taken while Ola was away (`max_error_m` includes DEM nodes on a vertex, with a stderr warning above tolerance; `--record -` refused) are coherent and testable. Suggestions: say how 15f-3 amends the `--tolerance 0` test at `tests/python/test_cli_mesh_refine.py@55c043e:133`; use `file_field` consistently in D6; say whether the on-vertex entries are omitted or 0 on the projected path before 15f-3. Not pushed; no CI.
 
-**Code review, round 1, 2026-10-03.** Range `origin/master` (b4bcdc3) `..acb1090`. Verdict: CHANGES REQUESTED. LOC: 153 net (324 added, 171 removed), against about 200. Code, tests and the merge resolution pass: the mesh-file fields match Ola's table, the three bugs are fixed, `--record` is deterministic with the right key order and refusals, pytest 3860 passed. Blocking, docs only: (1) stale status lines here and in ROADMAP row 25; (2) citations this branch moved (`15f-edge-strip.md:588`, and design citations of `cli.py` and `test_cli_mesh_refine.py:133`); (3) the departures accepted while Ola was away (the no-tolerance meaning of `nodata_vertices_removed`, no `dem_grid` on reprojected runs, start sizes in Sizes only) are not listed for him. Not pushed; no CI.
+**Code review, round 1, 2026-10-03.** Range `origin/master` (b4bcdc3) `..acb1090`. Verdict: CHANGES REQUESTED. LOC: 153 net (324 added, 171 removed), against about 200. Code, tests and the merge resolution pass: the mesh-file fields match Ola's table, the three bugs are fixed, `--record` is deterministic with the right key order and refusals, pytest 3860 passed. Blocking, docs only: (1) stale status lines here and in ROADMAP row 25; (2) citations this branch moved (`15f-edge-strip.md:588`, and design citations of `cli.py` and `tests/python/test_cli_mesh_refine.py@55c043e:133`); (3) the departures accepted while Ola was away (the no-tolerance meaning of `nodata_vertices_removed`, no `dem_grid` on reprojected runs, start sizes in Sizes only) are not listed for him. Not pushed; no CI.
 
 **Code review, round 2, 2026-10-03.** Range `038eddc..cd2bc4c` (a2d3319 docs, bde456b test, cd2bc4c fix); whole PR `origin/master` (b4bcdc3) `..cd2bc4c`. Verdict: APPROVED. LOC: 153 net (324 added, 171 removed), unchanged; about 24 % under the ~200 estimate. All three round-1 blockers closed; moved citations re-read at HEAD hold; the singular test fails on the code before the fix and passes after it. Not pushed; no CI.
 

@@ -215,8 +215,10 @@ add_terrain_test(test_raster_view unit/test_raster_view.cpp)
 
 # Adaptive refinement, increment 14 (docs/increments/14-adaptive-refinement.md,
 # "Tests for @tester"). test_mesh_lattice_split and test_refinement_scan are the
-# invariant-critical pair. All three link Threads: the loop and chunk suites
-# start threads through for_each_chunk. The pair are backend tests because
+# invariant-critical pair. All three link Threads, but only
+# test_refinement_chunks starts threads (through for_each_chunk), so it alone
+# runs in the TSan job; the pair start none and are not in it (h17 §4c,
+# docs/increments/h17-ci-test-time.md). The pair are backend tests because
 # lattice_mesh.hpp includes default_kernel.hpp (increment 16's orient_sign),
 # which needs terrain_predicates.
 add_terrain_test(test_refinement_chunks unit/test_refinement_chunks.cpp)
@@ -256,7 +258,9 @@ add_terrain_backend_test(prop_refinement_scan_equivalence
 # A quality start, increment 20 (docs/increments/20-start-quality.md, "Tests for
 # @tester"). test_mesh_quality (Q1 to Q6, Q8, Q9) is the invariant-critical
 # suite; prop_refinement_quality re-runs 14b's T3 and T6 with the pass on and
-# holds Q7, Q8 and Q10 through refine. Both run in the TSan job.
+# holds Q7, Q8 and Q10 through refine. prop_refinement_quality starts threads
+# through refine and runs in the TSan job; test_mesh_quality starts none, so it
+# is not in it (h17 §4c).
 add_terrain_backend_test(test_mesh_quality unit/test_mesh_quality.cpp)
 add_terrain_backend_test(prop_refinement_quality property/prop_refinement_quality.cpp)
 target_link_libraries(test_mesh_quality PRIVATE Threads::Threads)
@@ -282,7 +286,8 @@ target_link_libraries(test_refinement_constraint_feet PRIVATE Threads::Threads)
 # test_refinement_chunks_dynamic (QW1, the dynamic block scheduler) is the
 # invariant-critical suite; test_refinement_active (QW3) and
 # test_mesh_lawson_stack (legalise_around's caller-owned stack) compare with
-# today's code. All three run in the TSan job.
+# today's code. The first two run in the TSan job; test_mesh_lawson_stack
+# starts no threads, so it does not (h17 §4c).
 
 add_terrain_test(test_refinement_chunks_dynamic unit/test_refinement_chunks_dynamic.cpp)
 target_link_libraries(test_refinement_chunks_dynamic PRIVATE Threads::Threads)

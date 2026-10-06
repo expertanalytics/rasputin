@@ -26,6 +26,9 @@ from harness_fixtures import (
     set_mode,
 )
 
+# h17 §4b: a harness test; CI runs it in the `harness` job, not the product legs.
+pytestmark = pytest.mark.harness
+
 REMOTE = "this changes where the remote points"
 CONFIG = "this writes git configuration (hooks path, remote URLs)"
 GH_API = "gh api with a writing method changes the forge"

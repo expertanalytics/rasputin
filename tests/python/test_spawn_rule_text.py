@@ -10,7 +10,12 @@ from __future__ import annotations
 
 import re
 
+import pytest
+
 from harness_fixtures import REAL
+
+# h17 §4b: a harness test; CI runs it in the `harness` job, not the product legs.
+pytestmark = pytest.mark.harness
 
 CLAUDE = REAL / "CLAUDE.md"
 REQUIRED_READING = REAL / ".claude" / "REQUIRED-READING.md"

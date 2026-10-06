@@ -28,6 +28,9 @@ from pathlib import Path
 
 import pytest
 
+# h17 §4b: a harness test; CI runs it in the `harness` job, not the product legs.
+pytestmark = pytest.mark.harness
+
 TOOL = Path(__file__).resolve().parents[2] / "tools" / "check_citations.py"
 
 # A governed target long enough for every planted line reference.

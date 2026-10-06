@@ -51,17 +51,14 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from typer.testing import CliRunner
 
 import batch_fixtures as bf
 import tin_engine.catchment_batch as catchment_batch
+from cli_driver import plain, runner
 from nve_fixtures import collection, write
-from test_cli_mesh import plain
 from test_cli_mesh_mosaic import write_tiles
 from tin_engine.cli import app
 from tin_engine.domain import read_domain
-
-runner = CliRunner(env={"NO_COLOR": "1", "TERM": "dumb"})
 
 PLACED = [s for s in bf.FIVE if s is not bf.LANGT]
 CLASSES = {
