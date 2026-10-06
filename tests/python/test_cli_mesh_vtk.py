@@ -225,7 +225,9 @@ class TestCrsRefusals:
         # the shared gate rather than a throwaway `.ply` write, and its words
         # are the gate's, the same for either suffix.
         out = tmp_path / f"mesh{suffix}"
-        code, output = invoke(FIXTURE, "--flat", "--crs", "EPSG:25833\rforged", "--out", str(out))
+        code, output = invoke(
+            "mesh", FIXTURE, "--flat", "--crs", "EPSG:25833\rforged", "--out", str(out)
+        )
         assert code == 2, output
         assert (
             "Invalid value for --crs: a comment may not contain a control character; got '\\r'"
