@@ -50,7 +50,7 @@ to do with any fix here.
 
 ## Fix 1: resample blocks sized by node count
 
-**Site.** `src_python/tin_engine/target_grid.py:155`
+**Site.** `src_python/tin_engine/target_grid.py@44fa7f5:155`
 (`block_rows: int = 256`), used at `:166` and `:187`.
 
 **Change.** Add a module constant `BLOCK_NODES = 1 << 20` and a pure helper
@@ -82,7 +82,7 @@ constructions. @perf times this.
 
 ## Fix 2: adopt the canvas instead of copying it
 
-**Site.** `src_python/tin_engine/target_grid.py:205`,
+**Site.** `src_python/tin_engine/target_grid.py@44fa7f5:205`,
 `return DemTile(meta=meta, array=canvas)`. This is the public constructor's
 copy: 2.15 GB on 761 [m, the "P2 end" row].
 
@@ -90,9 +90,9 @@ copy: 2.15 GB on 761 [m, the "P2 end" row].
 already gives a C-contiguous array of shape `(rows, cols)`, which is what
 `_adopt` checks. `resample` never hands the canvas out writable, which is
 R7's condition. These texts change with it:
-- `DemTile._adopt`'s docstring (`io/models.py:114-121`): two callers,
+- `DemTile._adopt`'s docstring (`src_python/tin_engine/io/models.py@44fa7f5:114-121`): two callers,
   `assemble` and `resample`;
-- the comment at `io/cog.py:160-161`, which still says M15 pins `assemble`
+- the comment at `src_python/tin_engine/io/cog.py@44fa7f5:160-161`, which still says M15 pins `assemble`
   as the one caller. `cog`'s own copy stays: it belongs to fix 5;
 - 15c D3's "*Built otherwise (15c-2)*" note
   (`docs/increments/15c-geographic-dem.md:394-396`) becomes "as designed".
