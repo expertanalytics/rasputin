@@ -1,25 +1,23 @@
 # Python audit PR D: `audit-encoders` (F7)
 
-Status: **code review approved** in round 2 (`083712d`; section Review),
-+7 net. Ready to push on Ola's yes once PR C has merged (this branch is
-stacked on it, and is rebased or merged onto master then) and once Ola has
-answered Question 1 (go ahead or drop; default go ahead). Follow-up, not
-blocking: `cli.py` calls `file_fields(record)` twice on one line. Branch
-`worktree-audit-encoders`, stacked on PR C's approved head `b26beb8`
-(`worktree-audit-geojson`, not yet pushed); rebased onto master when C
-merges. Section 6 said D waits for C because both touch
-`io/geojson.py`; this design does not touch it, but PR C edits four files D
-edits (`cli.py`, `features.py`, `tests/python/test_layering.py`,
-`project_structure.md`; `git diff --stat fe12bbb b26beb8` over them), so D
-still waits for C. The finding is
+Status: **code review round 3 asked for changes to this paragraph only**
+(section Review); code review round 2 approved the code at `083712d`. PR C
+(`worktree-audit-geojson`), which this branch was stacked on, merged as
+#201. Branch `worktree-audit-encoders` then merged master twice: at
+`15f41a82` (bringing in #200 to #203, C among them) and at `5da8f0f8`
+(bringing in #204). The master merge needed one test call fixed,
+`4e261dbe` (`tests/python/test_cli_mesh_vtk.py` calls `invoke("mesh", ...)`
+as master's shared test driver requires). Net production lines stay +7
+(`python3 tools/count_loc.py origin/master HEAD`). Next: a short code review
+round 4, then the push on Ola's yes. Follow-up, not blocking: `cli.py` calls
+`file_fields(record)` twice on one line. The finding is
 `docs/increments/python-audit.md`, F7; its section 6 row D points here.
 
 Citations: into `io/ply.py`, `io/vtk_legacy.py` and `run_record.py`,
-pinned to `44fa7f5` (on master; `git diff --stat 44fa7f5 b26beb8` over the
-three is empty); into `cli.py`, `crs.py`, `features.py` and `fetch/nve.py`,
-which PR B or C changed, pinned to `b26beb8`. If PR C is rebased rather
-than merged with its commits, `python3 tools/check_citations.py` reports
-the `b26beb8` pins broken and they are re-pinned then.
+pinned to `44fa7f5`; into `cli.py`, `crs.py`, `features.py` and
+`fetch/nve.py`, which PR B or C changed, pinned to `b26beb8`. Both commits
+are on master (`git merge-base --is-ancestor <commit> origin/master`),
+since C was merged rather than rebased, so the pins resolve.
 
 ## 1. What F7 said, re-measured
 
@@ -521,3 +519,5 @@ section 4's rule), `io/ply.py`, `io/vtk_legacy.py`, `features.py`,
 **PR D (`audit-encoders`), code review, round 1, 2026-10-06.** Range `da99916..83354aa`. Verdict: CHANGES REQUESTED: `tests/python/test_io_mesh_checks.py@83354aa:10` said 'Committed red: the module does not exist', false since `7346a0e` (red-step scaffolding); line 16's '(the handback lists each)' should point to `docs/increments/python-audit-pr-d.md@83354aa:331-339`. +7 net (46/39), as section 7. Red real at `8dcfa2a` (21 failed, 32 errors, stated reasons), green at `7346a0e`. Suite 5439 passed, 30 skipped on a scratch copy; gates clean. Probe reproduces both committed outputs byte for byte, its diff is the 12 wording lines, and a planted gate mutant changed 12 lines. No `@perf` owed.
 
 **PR D (`audit-encoders`), code review, round 2, 2026-10-06.** Range `83354aa..083712d`. Verdict: APPROVED. Docstrings only: red-step wording past tense at `tests/python/test_io_mesh_checks.py@083712d:10-17` and `tests/python/test_io_ply.py@083712d:495-497`, pointing to `docs/increments/python-audit-pr-d.md@083712d:331`; +7 net (`count_loc.py b26beb8 083712d`); CI to be checked after the push. Non-blocking: `src_python/tin_engine/cli.py@083712d:1018` calls `file_fields(record)` twice.
+
+**PR D (`worktree-audit-encoders`, the shared mesh-writer checks), code review, round 3, 2026-10-07.** Range `4725f12e..4e261dbe` (master merges `15f41a82` and `5da8f0f8`, the `@tester` test fix `4e261dbe`). Verdict: CHANGES REQUESTED. The Status paragraph at `/Users/skavhaug/projects/rasputin/.claude/worktrees/audit-encoders/docs/increments/python-audit-pr-d.md@4e261dbe:3-20` says PR C (`worktree-audit-geojson`) is not pushed and that D gets rebased, but C merged as #201 and D merged master. The code, the merges, the suite and the gates are clean.
