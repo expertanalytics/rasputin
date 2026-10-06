@@ -71,7 +71,7 @@ from shapely.geometry import Polygon
 import test_cli_mesh_mosaic
 import test_dem_input_domain
 import tin_engine.cli as cli
-from cli_driver import HOLE, SQUARE, Ring, geojson, mesh_to_vtk, refused, rough_dem
+from cli_helpers import HOLE, SQUARE, Ring, geojson, mesh_to_vtk, refused, rough_dem
 from geotiff_fixtures import KARTVERKET, needs_codecs
 from mosaic_fixtures import X0, Y0, blocks, quadrants, whole
 from recordread import sizes_row

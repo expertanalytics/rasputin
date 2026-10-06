@@ -35,7 +35,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from cli_driver import USAGE, invoke, ran, rough_dem, runner, write_tiff
+from cli_helpers import USAGE, invoke, ran, rough_dem, runner, write_tiff
 from geotiff_fixtures import KARTVERKET, elevations, micro_tiff, needs_codecs
 from recordread import (
     SEAMS_AGREE,

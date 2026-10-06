@@ -36,7 +36,7 @@ import shapely
 from shapely.geometry import LineString, Polygon
 
 import feature_fixtures as ff
-from cli_driver import SQUARE, USAGE, invoke, polygon_file, rough_dem
+from cli_helpers import SQUARE, USAGE, invoke, polygon_file, rough_dem
 from feature_fixtures import Feat, write_geojson
 from gpkg_fixtures import Layer, Row, needs_rtree, write_gpkg
 from landcover_fixtures import vtk_labels

@@ -29,7 +29,7 @@ import pytest
 from numpy.testing import assert_array_equal
 
 import tin_engine.cli as cli
-from cli_driver import invoke
+from cli_helpers import invoke
 from plyread import parse_header
 from test_cli_mesh import constrained_edge_set
 from tin_engine.features import DEFAULT_VOCABULARY

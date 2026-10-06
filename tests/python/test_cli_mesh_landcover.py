@@ -48,7 +48,7 @@ from shapely.geometry import LineString, Polygon, box
 from shapely.geometry.base import BaseGeometry
 
 import feature_fixtures as ff
-from cli_driver import SQUARE, USAGE, geojson, invoke, plain, polygon_file, rough_dem, runner
+from cli_helpers import SQUARE, USAGE, geojson, invoke, plain, polygon_file, rough_dem, runner
 from feature_fixtures import Feat, domain_of, write_geojson
 from geotiff_fixtures import TIE_X, TIE_Y
 from landcover_fixtures import MARGIN, landcover_oracle, spread_violations, vtk_labels

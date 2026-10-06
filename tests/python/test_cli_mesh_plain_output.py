@@ -42,7 +42,7 @@ import pytest
 from typer.testing import Result
 
 import tin_engine.cli as cli
-from cli_driver import COLS, ROWS, SQUARE, USAGE, geojson, plain, runner, write_tiff
+from cli_helpers import COLS, ROWS, SQUARE, USAGE, geojson, plain, runner, write_tiff
 from feature_fixtures import Feat, write_geojson
 from geotiff_fixtures import micro_tiff
 from mosaic_fixtures import quadrants, whole

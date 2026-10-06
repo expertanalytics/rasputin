@@ -32,7 +32,7 @@ import shapely
 from shapely.geometry import Polygon
 
 import tin_engine.cli as cli
-from cli_driver import COLS, ROWS, SQUARE, USAGE, geojson, invoke, rough_dem, write_tiff
+from cli_helpers import COLS, ROWS, SQUARE, USAGE, geojson, invoke, rough_dem, write_tiff
 from geotiff_fixtures import KARTVERKET, micro_tiff, needs_codecs
 from test_cli_mesh_dem import SENTINEL
 from test_cli_mesh_domain import SNAP, quarter_circle

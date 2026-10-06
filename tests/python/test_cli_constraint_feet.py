@@ -36,7 +36,7 @@ from typing import Any
 import pytest
 
 import tin_engine.cli as cli
-from cli_driver import SQUARE, USAGE, geojson, invoke, rough_dem
+from cli_helpers import SQUARE, USAGE, geojson, invoke, rough_dem
 from geotiff_fixtures import KARTVERKET, needs_codecs
 from test_cli_mesh_domain import quarter_circle
 from test_cli_mesh_refine import file_field, min_angles_degrees, stats_row

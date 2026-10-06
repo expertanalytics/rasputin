@@ -34,7 +34,7 @@ from typing import Any
 
 import pytest
 
-from cli_driver import invoke
+from cli_helpers import invoke
 from nve_fixtures import (
     ALLOW,
     BLANK_TYPE,

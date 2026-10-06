@@ -31,7 +31,7 @@ import pytest
 from typer.testing import Result
 
 import tin_engine.cli as cli
-from cli_driver import COLS, HOLE, ROWS, SQUARE, USAGE, invoke, polygon_file, rough_dem, runner
+from cli_helpers import COLS, HOLE, ROWS, SQUARE, USAGE, invoke, polygon_file, rough_dem, runner
 from recordread import stats_names, stats_row
 from tin_engine.cli import app
 from vtkread import read_vtk
