@@ -149,9 +149,14 @@ forge `curl` with a writing method or a body, glued options included
 `gh pr comment`); and before a git or gh command
 it does not know, such as an alias. It judges the rest of these (not an
 unknown command) also when another program runs them (`caffeinate git push`, `find … -exec git push`,
-`watch 'git push'`, `sh -c '…'`). `guard_governance.py` asks before any write
+`watch 'git push'`, a shell's `-c '…'`: `sh`, `dash`, `tcsh` and every shell
+`/etc/shells` lists on the Mac);
+a git or gh word under `parallel`, which builds its commands from its
+inputs, asks as an unknown command. `guard_governance.py` asks before any write
 to a file that states rules or to a `tools/` file named after a standard-library
-module, except an absolute path in a session scratchpad, written by Edit or
+module, a copy or move into their directories included (`cp json.py tools`,
+with or without the trailing `/`),
+except an absolute path in a session scratchpad, written by Edit or
 Write or by a shell line that is one plain command (no `&&`, `;`, pipe,
 substitution or interpreter program). `guard_push.py` passes no git write in
 a scratchpad repository.
