@@ -2,13 +2,15 @@
 
 Status: **code review approved in round 1 (1a84ea9); `@perf` accepted
 (01751ec); -27 net production lines. Ready to push on Ola's yes once PR B
-(`worktree-audit-crs`) has merged**: A is stacked on B, so it is rebased onto
-master then, and its `@618328b` citations are re-pinned if B is squashed.
-Ola's two questions (below) bind it; their defaults are accept and no change.
-Branch `worktree-audit-lattice`, stacked on PR B's approved head `618328b`
-(`worktree-audit-crs`, not pushed).
-Every `@618328b` citation below reads B's head, which B's merge commit keeps
-in master's history. The audit this designs from is
+(`worktree-audit-crs`) has merged**. Ola's two questions (below) bind it;
+their defaults are accept and no change.
+Branch `worktree-audit-lattice` was written on PR B's approved head `618328b`
+and now sits on B's merged head `ae493da` (B merged with master `fd64f8b`),
+by a merge, not a rebase. A's diff outside `docs/` is unchanged by it: `git
+diff ae493da HEAD` and `git diff 618328b 883c51f`, both outside `docs/`, are
+the same, and `count_loc.py ae493da HEAD` is still -27.
+Every `@618328b` citation below reads B's old head, which stays in this
+branch's history and, through B's merge, in master's. The audit this designs from is
 `docs/increments/python-audit.md` (sections 2, 5, 6 and 7); this file is
 separate because several unpushed audit branches edit that one.
 
