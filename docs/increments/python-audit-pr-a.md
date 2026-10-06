@@ -1,6 +1,7 @@
 # PR A design: `audit-lattice` (F2, F9, F10's repository Protocol, F12's two `mosaic` edges)
 
-Status: **design, by `@architect`; no `@tester` step yet.** Branch
+Status: **design review round 1 answered (by `@architect`); next, `@reviewer`'s
+design review round 2; no `@tester` step yet.** Branch
 `worktree-audit-lattice`, stacked on PR B's approved head `618328b`
 (`worktree-audit-crs`, not pushed); it is rebased onto master when B merges.
 Every `@618328b` citation below reads B's head, which B's merge commit keeps
@@ -51,6 +52,22 @@ Departures from the audit's shape (F2), each with its reason:
   through `node_xy`.
 - **`cli`'s two `--bbox` sites stay** (`src_python/tin_engine/cli.py@618328b:1268, 1382`):
   F1 gives `--bbox` to PR G; G then calls the `Bounds.of` added here.
+- **`RasterMeta.node_box() -> tuple[float, float, float, float]`, not the
+  audit's `node_bounds() -> Bounds`.** `Bounds` refuses a flat box
+  (`x_min < x_max` and `y_min < y_max`). A one-row or one-column grid's
+  node rectangle is flat, and `domain.check_extent` and `dem_input`'s union
+  compute that flat rectangle today (the base probe's line
+  `domain.check_extent | one row, domain outside` names `y 6600000.0 ..
+  6600000.0`). A caller that wants a `Bounds` writes
+  `Bounds.of(m.node_box())` (`catchment`), and so states that it refuses a
+  flat grid.
+- **F10 here is the repository Protocol and `dem_input`'s two `Any`s only.**
+  `cli._placed` and `_reach_crs`'s `repository: Any`
+  (`src_python/tin_engine/cli.py@618328b:1706, 1726`) are typed
+  `DemRepository` by PR F (`worktree-audit-catchment`), whose design lists
+  them (`docs/increments/python-audit.md@e2baa5f:781`) and whose green step
+  wrote them (`src_python/tin_engine/cli.py@e2baa5f:1713, 1733`); A leaves
+  them, so the two branches do not edit the same lines.
 - **Added: `TargetGrid.node_box`**, the target grid's own rectangle, spelt
   twice in `target_grid.py` (`src_python/tin_engine/target_grid.py@618328b:117-118, 232-233`).
 
@@ -148,6 +165,7 @@ operations in the same order on the same operands.
 |---|---|---|
 | `src_python/tin_engine/mosaic.py@618328b:64-81` | `Bounds` | moved to `io/models.py`; `mosaic` imports it |
 | `src_python/tin_engine/mosaic.py@618328b:30, 33-34` | `window_meta` from `io.cog`; `TileFootprint` from `io.repository` | both edges go; `mosaic` imports `io.models` only |
+| `src_python/tin_engine/mosaic.py@618328b:265` | `assemble`'s docstring: "its meta must be `window_meta` of the listed one" | "its meta must be the listed one cut to that window, `placement.meta.windowed(placement.source)`" |
 | `src_python/tin_engine/mosaic.py@618328b:376, 378` | node rectangle by hand | `m.node_box()[2]`, `[1]` |
 | `src_python/tin_engine/mosaic.py@618328b:457-459, 466-467` | node coordinates | `meta.node_xy(rows, cols)`; the hit rows' first and last as one call |
 | `src_python/tin_engine/mosaic.py@618328b:483` | `window_meta(placement.meta, placement.source)` | `placement.meta.windowed(placement.source)` |
@@ -249,8 +267,14 @@ behaviour, and must be exactly these 88 lines, the prototype's:
 1. **72 lines, the ruling**: `target_grid.resample` (48) and
    `target_grid.check_point_blocks` (24), every case whose values hold +inf,
    -inf, or both (3 value cases x 2 dtypes x 2 sentinels; 4 resample lines
-   and 2 check-point lines each). `diff ... | grep '^>' | grep target_grid |
-   grep -vc inf` is 0.
+   and 2 check-point lines each). The check filters on the case field (the
+   second, `+inf`, `-inf` or `+inf beside -inf`), because every array
+   outcome contains "inf" (`+inf=0`), so a whole-line `grep -v inf` passes
+   any diff: `diff <base> <head> | awk -F' [|] ' '/^> target_grid/ && $2 !~
+   /^[+-]inf/' | wc -l` is 0. It can fail: on the base output, each line
+   prefixed `> `, it counts 81 (the `target_grid` lines of the other cases),
+   and the same filter inverted, on `resample` and `check_point_blocks`,
+   counts the 72.
 2. **16 lines, a grid of the wrong type** (`None` or a dict, which no
    command can pass): the `AttributeError` names the method it now calls
    (`node_box`, `index_of`, `node_xy`) instead of the field it read
@@ -265,7 +289,7 @@ geographic grids, `cli._off_node` on both).
 
 ## Red tests (`@tester`, one commit, before any code)
 
-Lean: no throwaway implementation, no mutation round.
+Lean: no mutation round.
 
 1. **`tests/python/test_io_models.py`** (new; red, nothing exists):
    `Bounds` and `TileFootprint` importable from `tin_engine.io.models`;
@@ -339,13 +363,28 @@ The gate is **byte-identical meshes**: `tools/bench.py` on the 1 m set,
 A's head against `618328b` (`--tree`), back to back, every mesh file equal.
 No timing claim is made, so none is owed beyond the runs. The bench's seam
 (`tools/bench.py@618328b:750-761` swaps `refine` in `cli`'s namespace) does
-not move.
+not move. The evidence goes in `docs/benchmarks/<date of the run>/audit-pr-a/`
+(the two run directories and a short `audit-pr-a.md` beside them with the
+mesh hashes), as `docs/benchmarks/2026-10-04/` does for 20 and 23b.
+
+The bench's domains (the whole tile and `--domain` files, in the DEM's own
+CRS) reach at most `grid_domain`, `mosaic`, `domain` and `dem_input`, never
+`target_grid` (the only change in behaviour), `burn`, `catchment` or
+`fetch`, and the bench has no `--out-crs` to pass. Those four are covered
+by the differential probe alone: `open_dem` with a domain reprojected to
+UTM 32, `resample`, `check_point_blocks`, `burn_reach`, `delineate` and
+`plan_object`, value for value. The probe is the gate for them; the bench
+is the gate for the meshes refine builds from the DEM's own grid.
 
 ## Merging with B, C, D and F
 
 The rule, as PR C's: whichever of A and another audit branch merges second
 runs `git merge-tree --write-tree <its head> master` and resolves every file
-it names. On the prototype against today's heads:
+it names. The heads move, so what follows is the prototype merged against the
+heads it was measured at (F `e2baa5f`, C and D `b26beb8`), not a statement
+about today's: D has since added rows to `test_layering.py`
+(`git log b26beb8..worktree-audit-encoders -- tests/python/test_layering.py`),
+and the merge-tree run at merge time is what counts.
 
 - **F** (`worktree-audit-catchment`, `e2baa5f`): `catchment.py`'s import
   block. Merged: F's block, with B's `crs` line (`same_crs, single_crs`), the
@@ -412,3 +451,7 @@ where they are, unchanged.
    is read?** An infinite height is not terrain; today it is data (your
    ruling), and a mesh can carry it. Default: no change now; ask again if
    such a file turns up.
+
+## Review
+
+**PR A (`audit-lattice`), design review, round 1, 2026-10-06.** Range `618328b..62b5226`. Verdict: CHANGES REQUESTED. 0 production lines. The probe reproduces its base output byte for byte and fails under planted mutants (72 lines for the ruling's `_valid`, 3 for a `grid_domain` shift); all 15 re-pinned citations quote what they claim; the site table matches `git grep` at 618328b; the merge with F conflicts only in `catchment.py`'s import block. Blocking: line 268 must read 'no mutation round'; the site table lacks `src_python/tin_engine/mosaic.py@618328b:265`'s `window_meta` docstring.

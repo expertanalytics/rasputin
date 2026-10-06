@@ -11,6 +11,12 @@ Run against one revision's `tin_engine`, imported from a scratch copy:
 scratch_copy.py prints one line on stdout, the pytest command for the copy
 (`cd <dir> && PYTHONPATH=<value> <python> -c ... tests/python/`); take
 <value> from that line only (stderr may carry a `scratch_copy:` warning).
+scratch_copy.py copies `_core*.so` from the `.venv` of the worktree it is
+run from. When that worktree has none (it warns `no built _core`), copy one
+by hand into `<dir>/src_python/tin_engine/`, from a venv whose C++ is
+unchanged against <rev>: `git diff --quiet <rev> <that venv's head> --
+include src bindings CMakeLists.txt` exits 0 (the paths scratch_copy.py
+itself compares).
 The copy's sitecustomize drops the editable finder, and the probe asserts
 that `tin_engine` was imported from `<dir>/src_python`, so a run cannot
 measure the work tree by mistake. It reads the DEM fixtures under
