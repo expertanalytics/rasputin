@@ -345,7 +345,7 @@ exception, with the PR that removes it:
   (`tests/python/test_cli_catchment.py@12dace7:137-144`, `tests/python/test_cli_mesh_domain_crs.py@12dace7:135-143`,
   `tests/python/test_cli_mesh_geographic.py@12dace7:149-157`, `tests/python/test_cli_mesh_plain_output.py@12dace7:108-115`),
   `squashed` 3, `plain_square`/`square` 6, `write_geojson` 3, a module-level
-  `CliRunner()` in 17 files. Shape: `tests/python/cli_harness.py` (built in T1 as `cli_helpers.py`) with
+  `CliRunner()` in 17 files. Shape: `tests/python/cli_harness.py` (built in T1 as `cli_driver.py`, renamed `cli_helpers.py`) with
   `invoke(command, *args)`, `ran(...)`, `refused(..., says=...)`, and a
   `rough_dem(seed)` fixture factory.
 - **X2. Tests that pin private `cli` names — 0 lines, but they block F6 and
@@ -889,3 +889,5 @@ T2 code review r3 (90cba64..b63132e): APPROVED.
 T1 code review r1 (b63132e..2816d41): CHANGES REQUESTED — two unpinned citations in §9; fixed in 0d63d00.
 
 T1 follow-up (`worktree-cli-helpers-rename`, 2026-10-06): `tests/python/cli_driver.py` renamed `cli_helpers.py` on Ola's ruling, 26 import lines with it (2834563); prose here follows.
+
+T1 follow-up review, 2026-10-06. Range fd64f8b..899ca60. CHANGES REQUESTED: `docs/increments/python-audit.md@899ca60:348` said T1 built `cli_helpers.py`; it built `cli_driver.py`. Rename pure (100 % similarity, 26 import lines), suite 5143 passed, check_citations clean, trial merge with worktree-audit-crs: one text conflict at the end of Review.
