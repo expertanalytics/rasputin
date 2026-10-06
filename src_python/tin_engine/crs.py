@@ -77,14 +77,38 @@ def same_crs(a: str | CRS, b: str | CRS) -> bool:
     them equivalent once both are in x-then-y order, and the operation it
     builds between them is its `noop` (`docs/increments/python-audit.md`,
     section 9). No operation is False."""
+    t = _equivalent_xy(a, b)
+    return t is not None and str(t.definition).startswith("proj=noop")
+
+
+def epsg_matches(crs: CRS) -> tuple[int, ...]:
+    """The EPSG codes PROJ offers for `crs`, at every confidence, that sit on
+    `crs`'s own base geographic CRS and that PROJ calls equivalent to `crs`
+    once both are in x-then-y order (the first leg of `same_crs`), lowest
+    first. Empty when there are none (`docs/increments/geotiff-crs-by-parameters.md`,
+    section 4)."""
+    base = _base_code(crs)
+    offered = {int(m.code) for m in crs.list_authority(auth_name="EPSG", min_confidence=0)}
+    return tuple(
+        code
+        for code in sorted(offered)
+        if _base_code(CRS.from_epsg(code)) == base and _equivalent_xy(crs, f"EPSG:{code}")
+    )
+
+
+def _base_code(crs: CRS) -> int | None:
+    return None if crs.geodetic_crs is None else crs.geodetic_crs.to_epsg(min_confidence=100)
+
+
+def _equivalent_xy(a: str | CRS, b: str | CRS) -> Transformer | None:
+    """The transformer from `a` to `b` when PROJ calls its two x-then-y CRSs
+    equivalent (`same_crs`'s first leg), else None; no operation is None."""
     try:
         t = _transformer(a, b)
     except ProjError:
-        return False
+        return None
     src, dst = t.source_crs, t.target_crs
-    if src is None or dst is None:
-        return False
-    return src.equals(dst) and str(t.definition).startswith("proj=noop")
+    return t if src is not None and dst is not None and src.equals(dst) else None
 
 
 def transform_label(src: str | CRS, dst: str | CRS) -> str:

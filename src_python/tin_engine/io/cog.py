@@ -101,18 +101,6 @@ def blocks_meeting(page: tifffile.TiffPage, window: IndexWindow) -> tuple[int, .
     )
 
 
-def window_meta(meta: RasterMeta, window: IndexWindow) -> RasterMeta:
-    """`meta` for `window` of its grid: the corner moved by whole cells."""
-    return meta.model_copy(
-        update={
-            "x_min": meta.x_min + window.col0 * meta.delta_x,
-            "y_max": meta.y_max - window.row0 * meta.delta_y,
-            "rows": window.rows,
-            "cols": window.cols,
-        }
-    )
-
-
 def decode_window(
     source: BlockSource,
     meta: RasterMeta,
@@ -160,7 +148,7 @@ def decode_window(
     # The public constructor's copy, not the canvas's no-copy route: M15
     # (test_mosaic.py) pins that route's callers to `assemble` and `resample`.
     # Dropping this copy is fix 5 of docs/research/basin-memory-options.md.
-    return DemTile(meta=window_meta(meta, w), array=out)
+    return DemTile(meta=meta.windowed(w), array=out)
 
 
 __all__ = [
@@ -171,5 +159,4 @@ __all__ = [
     "block_grid",
     "blocks_meeting",
     "decode_window",
-    "window_meta",
 ]

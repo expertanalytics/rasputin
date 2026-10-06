@@ -43,7 +43,8 @@ from pydantic import ValidationError
 from shapely.geometry import LineString, Point
 
 from nve_fixtures import collection, river, write
-from tin_engine.io.rivers import RiverSegment, read_segments
+from tin_engine.hydrography import RiverSegment
+from tin_engine.io.rivers import read_segments
 
 X, Y = 500_000.0, 6_600_000.0
 TOL = 1e-6
@@ -536,7 +537,7 @@ def lake(
 ) -> Any:
     from shapely.geometry import box
 
-    from tin_engine.io.station_set import Lake
+    from tin_engine.hydrography import Lake
 
     return Lake(number=number, name=name, polygon=box(x0, y0, x1, y1))
 

@@ -51,17 +51,14 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from typer.testing import CliRunner
 
 import batch_fixtures as bf
 import tin_engine.catchment_batch as catchment_batch
+from cli_driver import plain, runner
 from nve_fixtures import collection, write
-from test_cli_mesh import plain
 from test_cli_mesh_mosaic import write_tiles
 from tin_engine.cli import app
 from tin_engine.io.domain_file import read_domain
-
-runner = CliRunner(env={"NO_COLOR": "1", "TERM": "dumb"})
 
 PLACED = [s for s in bf.FIVE if s is not bf.LANGT]
 CLASSES = {
@@ -79,7 +76,7 @@ def invoke(*args: str) -> tuple[int, str]:
 
 
 def test_lakes_help_says_which_file_it_takes() -> None:
-    """Audit PR C, red test 6 (`docs/increments/python-audit.md`, section 10,
+    """Audit PR C, red test 6 (`docs/increments/python-audit.md`, section 12,
     Ola's ruling of section 7): `station-catchments --lakes` takes the
     `lakes.geojson` that `fetch-stations` writes, or GeoJSON like it."""
     code, output = invoke("station-catchments", "--help")

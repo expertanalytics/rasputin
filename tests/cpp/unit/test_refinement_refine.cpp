@@ -5,7 +5,7 @@
 // The design names this suite "test_refinement_refine, extended"; no such
 // binary existed (the refine tests live in prop_refinement_refine), so this is
 // that name as a new, small unit suite. It is in the TSan job's lists because
-// refine starts threads through for_each_chunk.
+// refine starts threads through for_each_block.
 //
 // Timings are never compared with each other or across thread counts (R6: not
 // part of the determinism guarantee). They are checked only as non-negative

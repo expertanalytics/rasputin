@@ -1,0 +1,2 @@
+numedalslagen read 7932 | envelope meets hull bbox 7227 | geometry meets hull bbox 7226 | meets hull 3297 | meets domain 1611 | vertices read 5417093 | vertices of features meeting hull 1492494 | domain area km2 5548 | hull area km2 12887 | hull bbox area km2 28075
+skiensvassdraget read 5522 | envelope meets hull bbox 4992 | geometry meets hull bbox 4992 | meets hull 3113 | meets domain 2628 | vertices read 4997951 | vertices of features meeting hull 1488143 | domain area km2 10807 | hull area km2 13103 | hull bbox area km2 20088

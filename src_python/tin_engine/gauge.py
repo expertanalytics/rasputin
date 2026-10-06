@@ -16,15 +16,14 @@ from __future__ import annotations
 import math
 from collections.abc import Sequence
 from itertools import pairwise
-from typing import Literal
+from typing import Any, Literal
 
 import shapely
 from pydantic import BaseModel, ConfigDict
 from shapely.geometry import LineString, Point
 from shapely.ops import substring
 
-from tin_engine.io.rivers import RiverSegment
-from tin_engine.io.station_set import Lake
+from tin_engine.hydrography import Lake, RiverSegment
 
 #: Metres: an end within this of the next segment's start continues the chain.
 JOIN_M = 1.0
@@ -81,6 +80,12 @@ class Placement(BaseModel):
     reach_up_m: float
     reach_down_m: float
     reach_fork: bool
+
+    def report_fields(self) -> dict[str, Any]:
+        """The placement's columns, as the catchment file and `StationResult`
+        name them: the fields less `reach` and `position`, then `uncertainty_m`."""
+        keep = self.model_dump(exclude={"reach", "position"})
+        return {**keep, "uncertainty_m": self.reach.uncertainty}
 
 
 class LakeSeed(BaseModel):

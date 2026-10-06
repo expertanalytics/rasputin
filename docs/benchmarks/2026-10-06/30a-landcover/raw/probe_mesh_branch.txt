@@ -1,0 +1,5 @@
+tin_engine from /Users/skavhaug/projects/rasputin/.claude/worktrees/landcover-speed/src_python/tin_engine
+/private/var/folders/h2/yycsx2z16_d181syfgb0947m0000gn/T/tmpgmi1ooa8/numedalslagen.vtk
+mesh numedalslagen triangles=1287334 dtype=int32 regions=1860 outside=0 overlapped=0 thin=0 codes=537264139216fe4e vtk=34f7117e5e528e97
+/private/var/folders/h2/yycsx2z16_d181syfgb0947m0000gn/T/tmp_9ysc1gr/skiensvassdraget.vtk
+mesh skiensvassdraget triangles=3029295 dtype=int32 regions=2881 outside=0 overlapped=0 thin=0 codes=5bab9da22c8cbbef vtk=ab996019190166f9

@@ -74,6 +74,7 @@ from pyproj import CRS, Transformer
 from shapely.geometry import Polygon
 from typer.testing import CliRunner
 
+from cli_driver import ANSI, USAGE, Ring, geojson, invoke, mesh_to_vtk, refused, squashed
 from cog_fixtures import write_cache
 from crs_fixtures import axes_swapped
 from geographic_fixtures import (
@@ -91,18 +92,16 @@ from geographic_fixtures import (
     source_check,
 )
 from geotiff_fixtures import KARTVERKET, needs_codecs
-from test_cli_catchment import invoke as invoke_any
 from test_cli_mesh_domain import quarter_circle
-from test_cli_mesh_mosaic import USAGE, invoke, same_mesh
+from test_cli_mesh_mosaic import same_mesh
 from test_cli_mesh_refine import file_field, stats_row
 from test_cli_mesh_stats import section, table
 from tin_engine.cli import app
 from tin_engine.dem_input import DemRequest, open_dem
 from tin_engine.io.domain_file import read_domain
 from tin_engine.io.repository import TiffDemRepository
-from vtkread import VtkFile, read_vtk
+from vtkread import VtkFile
 
-Ring = list[tuple[float, float]]
 TARGET = "EPSG:31983"
 ROWS = COLS = 60
 TOLERANCE = 1.0
@@ -111,31 +110,8 @@ FIXTURES = Path(__file__).resolve().parents[1] / "fixtures"
 VELHAS = FIXTURES / "velhas"  # Q17: the ANADEM extract and the DEM-derived catchment
 
 
-def squashed(text: str) -> str:
-    """No whitespace: Rich may break a long message anywhere inside its panel."""
-    return "".join(text.split())
-
-
-def write_geojson(path: Path, ring: Ring, crs: str) -> Path:
-    doc = {
-        "type": "Polygon",
-        "coordinates": [[*ring, ring[0]]],
-        "crs": {"type": "name", "properties": {"name": crs}},
-    }
-    path.write_text(json.dumps(doc))
-    return path
-
-
 def field(vtk: VtkFile, name: str) -> str:
     return file_field(vtk, name)
-
-
-def run(tmp_path: Path, *args: str, out: str = "x.vtk") -> VtkFile:
-    """Mesh with ``--stats`` beside the file (``x.md``); ``inputs`` reads it."""
-    target = tmp_path / out
-    code, output = invoke(*args, "--out", str(target), "--stats", str(target.with_suffix(".md")))
-    assert code == 0, output
-    return read_vtk(target.read_bytes())
 
 
 def report_of(tmp_path: Path, out: str = "x.vtk") -> str:
@@ -143,20 +119,8 @@ def report_of(tmp_path: Path, out: str = "x.vtk") -> str:
 
 
 def inputs(tmp_path: Path, name: str, out: str = "x.vtk") -> str:
-    """The ``--stats`` row ``name`` of the ``run`` that wrote ``out``."""
+    """The ``--stats`` row ``name`` of the ``mesh_to_vtk`` that wrote ``out``."""
     return stats_row(report_of(tmp_path, out), name)
-
-
-def refused(tmp_path: Path, *args: str, says: tuple[str, ...]) -> str:
-    target = tmp_path / "refused.vtk"
-    code, output = invoke(*args, "--out", str(target))
-    assert code == USAGE, output
-    assert "Traceback" not in output
-    assert "No such option" not in output, "refused for the wrong reason"
-    for word in says:
-        assert squashed(word) in squashed(output), f"{word!r} not in {output!r}"
-    assert not target.exists()
-    return output
 
 
 def triangles(vtk: VtkFile) -> np.ndarray:
@@ -206,7 +170,7 @@ def domain_4674(tmp_path: Path) -> Path:
     """The domain in a third CRS (SIRGAS 2000 over a WGS 84 DEM): Degeneracy
     policy, "the domain in a third CRS"."""
     ring = project_ring("EPSG:4326", "EPSG:4674", lonlat_ring(DOMAIN_RC))
-    return write_geojson(tmp_path / "domain.geojson", ring, "EPSG:4674")
+    return geojson(tmp_path / "domain.geojson", ring, crs="EPSG:4674")
 
 
 def geographic_check(vtk: VtkFile, domain: Path, tolerance: float = TOLERANCE) -> SourceCheck:
@@ -230,7 +194,7 @@ class TestEndToEnd:
     def test_the_mesh_is_in_the_target_crs_and_records_d7s_fields(
         self, tmp_path: Path, geographic_dem: Path, domain_4674: Path
     ) -> None:
-        vtk = run(
+        vtk = mesh_to_vtk(
             tmp_path,
             *("--dem", str(geographic_dem), "--domain", str(domain_4674)),
             *("--out-crs", TARGET, "--tolerance", str(TOLERANCE)),
@@ -260,7 +224,7 @@ class TestEndToEnd:
         self, tmp_path: Path, geographic_dem: Path, domain_4674: Path
     ) -> None:
         """J2 at the source nodes, by the independent check."""
-        vtk = run(
+        vtk = mesh_to_vtk(
             tmp_path,
             *("--dem", str(geographic_dem), "--domain", str(domain_4674)),
             *("--out-crs", TARGET, "--tolerance", str(TOLERANCE)),
@@ -290,12 +254,12 @@ class TestEndToEnd:
             ).getvalue()
         )
         given = json.loads(domain_4674.read_text())
-        moved = write_geojson(
+        moved = geojson(
             tmp_path / "domain_31983.geojson",
             project_ring("EPSG:4674", TARGET, given["coordinates"][0][:-1]),
-            TARGET,
+            crs=TARGET,
         )
-        vtk = run(
+        vtk = mesh_to_vtk(
             tmp_path, "--dem", str(grid), "--domain", str(moved), "--tolerance", str(TOLERANCE)
         )
         found = geographic_check(vtk, domain_4674)
@@ -307,7 +271,7 @@ class TestEndToEnd:
         """J8: every vertex phase 2 adds carries a source node's own z: each
         output vertex is a target-grid node, a domain vertex, or a source node
         at its projected position (to the store's 2 um) with its value."""
-        vtk = run(
+        vtk = mesh_to_vtk(
             tmp_path,
             *("--dem", str(geographic_dem), "--domain", str(domain_4674)),
             *("--out-crs", TARGET, "--tolerance", str(TOLERANCE)),
@@ -358,7 +322,7 @@ def test_the_target_tile_is_dropped_before_the_final_check(
 
     monkeypatch.setattr(cli, "open_dem", opening)
     monkeypatch.setattr(cli.final_check, "run", checking)
-    run(
+    mesh_to_vtk(
         tmp_path,
         *("--dem", str(geographic_dem), "--domain", str(domain_4674)),
         *("--out-crs", TARGET, "--tolerance", str(TOLERANCE)),
@@ -382,8 +346,8 @@ class TestAProjectedDemInAnotherCrs:
             projected_tiff(array, x0=self.X0, y0=self.Y0, step=self.STEP, epsg=25833).getvalue()
         )
         ring = [(self.X0 + c * self.STEP, self.Y0 - r * self.STEP) for r, c in DOMAIN_RC]
-        domain = write_geojson(tmp_path / "d.geojson", ring, "EPSG:25833")
-        vtk = run(
+        domain = geojson(tmp_path / "d.geojson", ring, crs="EPSG:25833")
+        vtk = mesh_to_vtk(
             tmp_path,
             *("--dem", str(dem), "--domain", str(domain)),
             *("--out-crs", "EPSG:25832", "--tolerance", str(TOLERANCE)),
@@ -419,11 +383,11 @@ def test_out_crs_equal_to_the_dems_own_writes_the_same_bytes(tmp_path: Path, out
     Audit PR B (`docs/increments/python-audit.md`, section 9): the CRS's WKT
     without its ID, axes swapped, is the same CRS by definition, so the DEM is not resampled and the
     file is the one without `--out-crs`, its `crs` field included."""
-    domain = write_geojson(tmp_path / "quarter.geojson", quarter_circle(), "EPSG:25833")
+    domain = geojson(tmp_path / "quarter.geojson", quarter_circle(), crs="EPSG:25833")
     args = ("--dem", str(KARTVERKET), "--domain", str(domain), "--tolerance", "10")
-    plain_code, plain_output = invoke(*args, "--out", str(tmp_path / "plain.vtk"))
+    plain_code, plain_output = invoke("mesh", *args, "--out", str(tmp_path / "plain.vtk"))
     assert plain_code == 0, plain_output
-    code, output = invoke(*args, "--out-crs", out_crs, "--out", str(tmp_path / "same.vtk"))
+    code, output = invoke("mesh", *args, "--out-crs", out_crs, "--out", str(tmp_path / "same.vtk"))
     assert code == 0, output
     assert (tmp_path / "same.vtk").read_bytes() == (tmp_path / "plain.vtk").read_bytes()
 
@@ -445,8 +409,10 @@ class TestRefusalsBeforePixels:
         suggestion = suggest_crs((min(lons), max(lons), min(lats), max(lats)), "EPSG:4326")
         refused(
             tmp_path,
+            "mesh",
             *("--dem", str(geographic_dem), "--domain", str(domain_4674), "--tolerance", "1"),
             says=("--out-crs", suggestion.proj, suggestion.family, "worst scale error"),
+            squash=True,
         )
 
     def test_the_python_api_refuses_it_too(
@@ -464,12 +430,14 @@ class TestRefusalsBeforePixels:
             geographic_tile_tiff(rough(40, 200), lon0=179.9, lat0=-17.0, step=0.001).getvalue()
         )
         ring = [(179.97, -17.031), (180.03, -17.032), (180.031, -17.009), (179.971, -17.008)]
-        domain = write_geojson(tmp_path / "d.geojson", ring, "EPSG:4326")
+        domain = geojson(tmp_path / "d.geojson", ring, crs="EPSG:4326")
         output = refused(
             tmp_path,
+            "mesh",
             *("--dem", str(dem), "--domain", str(domain), "--tolerance", "1"),
             *("--out-crs", "+proj=tmerc +lat_0=0 +lon_0=180 +k=1 +ellps=WGS84 +units=m"),
             says=("180",),
+            squash=True,
         )
         assert re.search(r"(?i)antimeridian|longitude", output), output
 
@@ -478,12 +446,14 @@ class TestRefusalsBeforePixels:
     ) -> None:
         """A vertex on the far side of the globe from an orthographic target."""
         ring = [(-44.01, -19.01), (-43.99, -19.01), (136.0, 19.0)]
-        domain = write_geojson(tmp_path / "d.geojson", ring, "EPSG:4326")
+        domain = geojson(tmp_path / "d.geojson", ring, crs="EPSG:4326")
         refused(
             tmp_path,
+            "mesh",
             *("--dem", str(geographic_dem), "--domain", str(domain), "--tolerance", "1"),
             *("--out-crs", "+proj=ortho +lat_0=-19 +lon_0=-44 +ellps=WGS84 +units=m"),
             says=("no image",),
+            squash=True,
         )
 
 
@@ -496,7 +466,7 @@ def test_catchment_on_a_geographic_tile_is_a_usage_error(
     """The `to_core` gate keeps a geographic DEM out of `rasputin catchment`
     (increment 22), which 15c does not extend."""
     lon, lat = LON0 + 30 * ANADEM_STEP, LAT0 - 30 * ANADEM_STEP
-    code, output = invoke_any(
+    code, output = invoke(
         "catchment",
         *("--dem", str(geographic_dem), "--seed", repr(lon), repr(lat), "--seed-crs", "EPSG:4326"),
         *("--out", str(tmp_path / "c.geojson")),
@@ -548,10 +518,10 @@ class TestCachedGeographicSource:
         path = tmp_path / "dem.tif"
         path.write_bytes(data)
         common = ("--domain", str(domain_4674), "--out-crs", TARGET, "--tolerance", "1")
-        by_key = run(
+        by_key = mesh_to_vtk(
             tmp_path, "--dem", KEY, "--cache", str(tmp_path / "cache"), *common, out="k.vtk"
         )
-        by_path = run(tmp_path, "--dem", str(path), *common, out="p.vtk")
+        by_path = mesh_to_vtk(tmp_path, "--dem", str(path), *common, out="p.vtk")
         same_mesh(by_key, by_path)
 
     def test_not_cached_names_the_runs_out_crs(
@@ -562,9 +532,11 @@ class TestCachedGeographicSource:
         )
         refused(
             tmp_path,
+            "mesh",
             *("--dem", KEY, "--cache", str(tmp_path / "cache"), "--domain", str(domain_4674)),
             *("--out-crs", TARGET, "--tolerance", "1"),
             says=(f"rasputin fetch {KEY}", f"--out-crs {TARGET}"),
+            squash=True,
         )
 
 
@@ -578,7 +550,7 @@ def test_the_anadem_extract_over_its_catchment(tmp_path: Path) -> None:
     import tifffile
 
     dem, catchment = VELHAS / "anadem_velhas.tif", VELHAS / "catchment.geojson"
-    vtk = run(
+    vtk = mesh_to_vtk(
         tmp_path,
         *("--dem", str(dem), "--domain", str(catchment), "--out-crs", TARGET, "--tolerance", "5"),
     )
@@ -629,7 +601,7 @@ def test_g6_max_error_is_the_source_dems(
     tmp_path: Path, geographic_dem: Path, domain_4674: Path
 ) -> None:
     """D2 on the synthetic tile: the same rule as the ANADEM extract's."""
-    vtk = run(
+    vtk = mesh_to_vtk(
         tmp_path,
         *("--dem", str(geographic_dem), "--domain", str(domain_4674)),
         *("--out-crs", TARGET, "--tolerance", str(TOLERANCE)),
@@ -669,9 +641,11 @@ class TestOutCrsMustBeProjectedInMetres:
     ) -> None:
         output = refused(
             tmp_path,
+            "mesh",
             *("--dem", str(geographic_dem), "--domain", str(domain_4674), "--tolerance", "1"),
             *("--out-crs", out_crs),
             says=("--out-crs",),
+            squash=True,
         )
         assert re.search(problem, output), output
         assert not re.search(r"(?i)antimeridian|pole", output), output
@@ -694,7 +668,7 @@ class TestOutCrsMustBeProjectedInMetres:
             "+proj=tmerc +lat_0=0 +lon_0=-44 +k=0.9996 +x_0=500000 +y_0=10000000"
             " +ellps=GRS80 +units=m"
         )
-        vtk = run(
+        vtk = mesh_to_vtk(
             tmp_path,
             *("--dem", str(geographic_dem), "--domain", str(domain_4674)),
             *("--out-crs", proj, "--tolerance", str(TOLERANCE)),
@@ -717,7 +691,7 @@ class TestRoundOneMutantKillers:
         """Source blocks of 16 x 16 nodes, so the 60 x 60 tile is 16 blocks:
         a final check that stops after the first block leaves nodes over."""
         monkeypatch.setattr("tin_engine.target_grid.BLOCK", 16)
-        vtk = run(tmp_path, *self.args(geographic_dem, domain_4674))
+        vtk = mesh_to_vtk(tmp_path, *self.args(geographic_dem, domain_4674))
         found = geographic_check(vtk, domain_4674)
         assert found.nodes > 1000
         assert (found.over_interior, found.over_strip) == (0, 0), found
@@ -740,7 +714,7 @@ class TestRoundOneMutantKillers:
         )
         assert opened.checks is not None
         yielded = sum(len(z) for _, z in opened.checks)
-        run(tmp_path, *self.args(geographic_dem, domain_4674))
+        mesh_to_vtk(tmp_path, *self.args(geographic_dem, domain_4674))
         assert int(inputs(tmp_path, "dem_nodes_checked")) == yielded > 1000
 
     def test_the_refusal_prints_percentages(
@@ -756,8 +730,10 @@ class TestRoundOneMutantKillers:
         output = squashed(
             refused(
                 tmp_path,
+                "mesh",
                 *("--dem", str(geographic_dem), "--domain", str(domain_4674), "--tolerance", "1"),
                 says=("worst scale error",),
+                squash=True,
             )
         )
         number = r"([0-9.]+(?:e[-+]?[0-9]+)?)%"
@@ -798,8 +774,10 @@ class TestRoundOneMutantKillers:
         monkeypatch.setattr(final_check, "run", failing)
         refused(
             tmp_path,
+            "mesh",
             *self.args(geographic_dem, domain_4674),
             says=("planted final-check failure",),
+            squash=True,
         )
 
 
@@ -827,7 +805,7 @@ def test_the_final_checks_timing_rows_are_not_zero(
         return outcome, n
 
     monkeypatch.setattr(final_check, "run", spying)
-    run(
+    mesh_to_vtk(
         tmp_path,
         *("--dem", str(geographic_dem), "--domain", str(domain_4674)),
         *("--out-crs", TARGET, "--tolerance", str(TOLERANCE)),
@@ -844,7 +822,6 @@ def test_the_final_checks_timing_rows_are_not_zero(
 
 
 SUGGESTED = re.compile(r"--out-crs[\s│]*(['\"])(.*?)\1", re.DOTALL)
-ANSI = re.compile(r"\x1b\[[0-9;]*m")
 
 
 def copied_suggestion(output: str) -> str:
@@ -860,7 +837,7 @@ def copied_suggestion(output: str) -> str:
 def mesh_with(tmp_path: Path, out_crs: str) -> None:
     """The suggestion passed back as `--out-crs` meshes, in that CRS."""
     dem, catchment = VELHAS / "anadem_velhas.tif", VELHAS / "catchment.geojson"
-    vtk = run(
+    vtk = mesh_to_vtk(
         tmp_path,
         *("--dem", str(dem), "--domain", str(catchment), "--tolerance", "5"),
         *("--out-crs", out_crs),
@@ -922,7 +899,7 @@ class TestASuggestionWithAnApostrophePastesBack:
             geographic_tile_tiff(tile_array(), lon0=self.LON, lat0=self.LAT, epsg=4266).getvalue()
         )
         ring = [(self.LON + c * ANADEM_STEP, self.LAT - r * ANADEM_STEP) for r, c in DOMAIN_RC]
-        return dem, write_geojson(tmp_path / "d.geojson", ring, "EPSG:4266")
+        return dem, geojson(tmp_path / "d.geojson", ring, crs="EPSG:4266")
 
     @staticmethod
     def printed_line(output: str) -> str:
@@ -948,7 +925,7 @@ class TestASuggestionWithAnApostrophePastesBack:
 
     def mesh(self, tmp_path: Path, scene: tuple[Path, Path], out_crs: str) -> None:
         dem, domain = scene
-        vtk = run(
+        vtk = mesh_to_vtk(
             tmp_path,
             *("--dem", str(dem), "--domain", str(domain), "--tolerance", "1"),
             *("--out-crs", out_crs),

@@ -251,6 +251,15 @@ class TestF4ExplicitPaths:
         assert callable(getattr(repository, "load", None))
         assert set(repo.DemRepository.__dict__) >= {"footprints", "load"}
 
+    def test_the_protocol_names_load_window_and_check(self, repo: ModuleType) -> None:
+        """Audit PR A (F10): the two methods every caller already uses, and both
+        implementations have, are in the Protocol. `vars`, not
+        `typing.get_protocol_members`, which Python 3.12 lacks."""
+        assert {"load_window", "check"} <= set(vars(repo.DemRepository))
+        for implementation in (repo.TiffDemRepository, repo.CacheRepository):
+            assert callable(getattr(implementation, "load_window", None))
+            assert callable(getattr(implementation, "check", None))
+
 
 # ---------------------------------------------------------------------------
 # Q3: io/repository.py is the one module in io/ that opens files

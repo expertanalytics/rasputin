@@ -35,7 +35,8 @@ import numpy as np
 import pytest
 from numpy.testing import assert_array_equal
 
-from test_core_cdt import RELEASED_TICKS, ticks_during
+from gil_probe import ticks_during
+from test_core_cdt import RELEASED_TICKS
 from tin_engine import _core
 from tin_engine._core import ChainRole
 from tin_engine.cli import DEFAULT_SNAP_SPACING, _constraint_arrays, _engine

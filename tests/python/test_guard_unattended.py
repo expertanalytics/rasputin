@@ -24,6 +24,9 @@ from harness_fixtures import (
     set_mode,
 )
 
+# h17 §4b: a harness test; CI runs it in the `harness` job, not the product legs.
+pytestmark = pytest.mark.harness
+
 QUESTION = "Which framework?"
 COMMAND = "rm -rf node_modules"
 

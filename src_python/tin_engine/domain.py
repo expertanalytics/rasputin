@@ -2,7 +2,7 @@
 
 What ``--domain`` reads, and the rules for reading it, are
 ``tin_engine.io.domain_file``'s (audit PR C, ``docs/increments/python-audit.md``
-section 10). The domain keeps its own CRS, and :meth:`DomainPolygon.to_crs`
+section 12). The domain keeps its own CRS, and :meth:`DomainPolygon.to_crs`
 moves it into the DEM's (increment 15b, ``15-dem-mosaic.md`` R9), replacing
 16's must-match rule.
 
@@ -65,8 +65,7 @@ def check_extent(domain: DomainPolygon, meta: RasterMeta) -> None:
     """U4 (a): every vertex in ``meta``'s node rectangle, as the core's
     ``cell_of`` has it, with ``domain`` already in the DEM's CRS."""
     polygon = domain.polygon
-    x_max = meta.x_min + (meta.cols - 1) * meta.delta_x
-    y_min = meta.y_max - (meta.rows - 1) * meta.delta_y
+    _, y_min, x_max, _ = meta.node_box()
     for ring in (polygon.exterior, *polygon.interiors):
         for x, y in ring.coords:
             outside = max(meta.x_min - x, x - x_max, y_min - y, y - meta.y_max)

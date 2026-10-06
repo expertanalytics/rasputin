@@ -32,6 +32,12 @@ Committed red at `e99c8ea` (amended at `3990449` and `972312c`):
 `tin_engine.feature_input` did not exist yet, and because it is imported lazily
 each test failed on its own. It landed in `5079da8` and the suite has been
 green since.
+
+Increment 30b (`docs/increments/30b-clip-speed.md`, section 7) added the
+classes at the end: `TestUntouched` (R1, R2) and `TestLinework` for the two
+helpers it introduced, `_untouched` and `_linework`, committed red before
+either existed; and `TestTheClipStaysTheSame` (pins P1-P5), green before
+the change.
 """
 
 from __future__ import annotations
@@ -570,7 +576,7 @@ class TestCrs:
 
 
 class TestOneGeojsonRule:
-    """Audit PR C (`docs/increments/python-audit.md`, section 10, red test 2):
+    """Audit PR C (`docs/increments/python-audit.md`, section 12, red test 2):
     `read_source`'s GeoJSON branch reads through `io.geojson.read_collection`
     with RFC 7946's default, and a refusal reaches the existing handler as
     `<file name>: <words>`. Each row here differs from the code before it."""
@@ -654,7 +660,7 @@ class TestOneGeojsonRule:
 
 
 #: Every empty JSON value but `null` (`docs/increments/python-audit.md`,
-#: section 10, the ruling after code review round 2).
+#: section 12, the ruling after code review round 2).
 EMPTY_NOT_NULL = [
     pytest.param("", id="empty_string"),
     pytest.param(0, id="zero"),
@@ -665,7 +671,7 @@ EMPTY_NOT_NULL = [
 
 
 class TestAnEmptyGeometryIsNull:
-    """Audit PR C, section 10's ruling after code review round 2: `read_source`
+    """Audit PR C, section 12's ruling after code review round 2: `read_source`
     treats every empty `geometry` as `null`. Before, `""`, `0`, `false`, `[]`
     and `{}` crashed `--features` and `catchment --lakes` with an
     `AttributeError` (`'str' object has no attribute 'is_empty'`). Each test
@@ -1231,3 +1237,306 @@ class TestManySources:
         fs = fi.open_features(self.two_source_request(tmp_path, fi), BOX, UTM33)
         assert fs.crs == (UTM33, UTM33)
         assert fs.layers == (None, None)
+
+
+# ------------------------------------ 30b: the features clip made fast
+
+#: R1 and R2's offset: `docs/increments/30b-probes/geos_cases.py`'s, whole
+#: metres, so every coordinate below is exactly representable.
+U0 = (500_000.0, 6_600_000.0)
+
+
+def u(x: float, y: float) -> tuple[float, float]:
+    return (U0[0] + x, U0[1] + y)
+
+
+#: A square with an extra vertex at (100, 50) on its east side, and a square
+#: with a hole (40..60)²: `geos_cases.py`'s two domains.
+EXTRA = Polygon([u(0, 0), u(100, 0), u(100, 50), u(100, 100), u(0, 100)])
+HOLED = Polygon(
+    [u(0, 0), u(100, 0), u(100, 100), u(0, 100)],
+    [[u(40, 40), u(60, 40), u(60, 60), u(40, 60)]],
+)
+
+#: R1: `geos_cases.py`'s 14 cases, then two the domain does not cover.
+#: `True` exactly where `shapely.intersection(line, domain)` gives the line
+#: back unchanged (shapely 2.1.2, GEOS 3.13.1; design section 4.3).
+UNTOUCHED_CASES = [
+    pytest.param(EXTRA, [u(10, 10), u(20, 30), u(50, 20)], True, id="plain-inside"),
+    pytest.param(EXTRA, [u(10, 10), u(30, 10), u(30, 30), u(10, 30), u(10, 10)], True,
+                 id="closed-ring-inside"),
+    pytest.param(EXTRA, [u(10, 10), u(20, 10), u(30, 10)], True, id="collinear-middle-vertex"),
+    pytest.param(EXTRA, [u(10, 10), u(20, 30), u(20, 30), u(50, 20)], False,
+                 id="repeated-vertex"),
+    pytest.param(EXTRA, [u(0, 10), u(30, 10), u(30, 30), u(0, 30), u(0, 10)], False,
+                 id="closed-ring-touching-the-outline-at-its-start"),
+    pytest.param(EXTRA, [u(10, 10), u(30, 10), u(30, 30), u(0, 20), u(10, 10)], False,
+                 id="closed-ring-touching-the-outline-mid-ring"),
+    pytest.param(EXTRA, [u(50, 50), u(100, 40), u(100, 60), u(60, 70)], False,
+                 id="domain-vertex-on-the-line"),
+    pytest.param(EXTRA, [u(100, 10), u(100, 90)], False, id="along-the-outline"),
+    pytest.param(EXTRA, [u(100, 10), u(100, 90), u(50, 90)], False, id="along-then-inside"),
+    pytest.param(EXTRA, [u(10, 10), u(50, 50), u(50, 10), u(10, 50)], False, id="self-crossing"),
+    pytest.param(EXTRA, [u(10, 10), u(50, 10), u(30, 30), u(10, 10), u(10, 50)], False,
+                 id="self-touching-at-a-vertex"),
+    pytest.param(EXTRA, [u(10, 10), u(50, 10), u(30, 10)], False, id="doubling-back"),
+    pytest.param(HOLED, [u(10, 10), u(40, 50), u(10, 90)], False, id="touching-a-hole"),
+    pytest.param(EXTRA, [u(10, 10), u(10, 10)], False, id="zero-length"),
+    pytest.param(EXTRA, [u(50, 50), u(150, 50)], False, id="partly-outside"),
+    pytest.param(EXTRA, [u(200, 10), u(250, 30)], False, id="wholly-outside"),
+]  # fmt: skip
+
+
+class TestUntouched:
+    """30b, section 7, R1 and R2: `_untouched(line, domain) -> bool`, True
+    exactly when the line has two vertices or more, repeats no vertex in a
+    row, lies in the domain's interior (`contains_properly`) and is simple
+    (section 3.4). Where it is True, the clip keeps the chain as it is instead
+    of intersecting it with the domain, so it must be True only where that
+    intersection would give the chain back unchanged. Called, as `_take` calls
+    it, with the domain prepared."""
+
+    @pytest.mark.parametrize(("domain", "coords", "expected"), UNTOUCHED_CASES)
+    def test_r1_case_by_case(
+        self, fi: ModuleType, domain: Polygon, coords: list[tuple[float, float]], expected: bool
+    ) -> None:
+        shapely.prepare(domain)
+        line = LineString(coords)
+        before = (shapely.to_wkb(line), shapely.to_wkb(domain))
+        assert fi._untouched(line, domain) is expected
+        assert (shapely.to_wkb(line), shapely.to_wkb(domain)) == before  # pure (3.4)
+
+    def test_r2_where_it_is_true_geos_gives_the_line_back_unchanged(self, fi: ModuleType) -> None:
+        """The oracle is GEOS's own intersection, so this is the CI guard
+        against a GEOS that reorients, restarts or re-vertexes a line lying
+        in the interior (section 10). 400 seeded lines of 2 to 5 vertices
+        near a 48-vertex domain (integer vertices) with a square hole; by
+        index, a fifth each: plain, rounded to a 10 m lattice, a closed
+        triangle (either orientation), one vertex repeated, one vertex moved
+        onto a domain vertex. At this seed 91 are untouched: 55 open, 19
+        counter-clockwise rings, 17 clockwise. The bounds below are a tenth
+        of the set and one of each shape, so it cannot pass vacuously."""
+        t = np.linspace(0.0, 2.0 * np.pi, 48, endpoint=False)
+        r = 400.0 + 60.0 * np.sin(5.0 * t)
+        outer = np.round(np.column_stack([r * np.cos(t), r * np.sin(t)])) + U0
+        hole = np.array([(-60.0, -60.0), (-60.0, 60.0), (60.0, 60.0), (60.0, -60.0)]) + U0
+        domain = Polygon(outer, [hole])
+        assert domain.is_valid
+        shapely.prepare(domain)
+        rng = np.random.default_rng(302)
+        seen = {"open": 0, "ccw": 0, "cw": 0}
+        for i in range(400):
+            kind = i % 5
+            n = 3 if kind == 2 else int(rng.integers(2, 6))
+            xy = rng.uniform(-470.0, 470.0, 2) + np.cumsum(rng.normal(0.0, 40.0, (n, 2)), axis=0)
+            if kind == 1:
+                xy = np.round(xy / 10.0) * 10.0
+            elif kind == 2:
+                xy = np.vstack([xy, xy[:1]])
+            elif kind == 3:
+                j = int(rng.integers(len(xy)))
+                xy = np.insert(xy, j, xy[j], axis=0)
+            elif kind == 4:
+                xy[int(rng.integers(len(xy)))] = outer[int(rng.integers(len(outer)))] - U0
+            line = LineString(xy + U0)
+            if not fi._untouched(line, domain):
+                continue
+            parts = shapely.get_parts(shapely.intersection(line, domain))
+            assert len(parts) == 1 and isinstance(parts[0], LineString), (i, line.wkt)
+            assert shapely.to_wkb(parts[0]) == shapely.to_wkb(line), (i, line.wkt)
+            shape = "open" if not line.is_closed else "ccw" if shapely.is_ccw(line) else "cw"
+            seen[shape] += 1
+        assert sum(seen.values()) >= 40, seen
+        assert min(seen.values()) >= 1, seen
+
+
+#: 16b R5's region for `_linework`'s test, in the source CRS.
+SMALL = Polygon([(0, 0), (10, 0), (10, 10), (0, 10)])
+
+
+class TestLinework:
+    """30b, section 3.2: `_linework(geometry)`, what the whole-feature test
+    tests against the region: every ring of a polygon, holes included, as
+    lines, or a line itself. Not a red test the design lists; kept by
+    ruling 4 in section 7 of docs/increments/30b-clip-speed.md."""
+
+    @pytest.mark.parametrize(
+        "geometry",
+        [
+            pytest.param(Polygon([(1, 1), (4, 1), (4, 4)]), id="polygon"),
+            pytest.param(
+                Polygon([(20, 20), (30, 20), (30, 30), (20, 30)], [[(3, 3), (7, 3), (7, 7)]]),
+                id="hole-outside-its-shell",
+            ),
+            pytest.param(
+                MultiPolygon(
+                    [
+                        Polygon([(1, 1), (4, 1), (4, 4)], [[(2, 1.5), (3.5, 1.5), (3.5, 3)]]),
+                        Polygon([(6, 6), (9, 6), (9, 9)]),
+                    ]
+                ),
+                id="multipolygon",
+            ),
+            pytest.param(LineString([(-5, 5), (15, 5)]), id="line-with-both-ends-outside"),
+            pytest.param(LineString([(2, 2), (8, 2), (8, 8), (2, 2)]), id="closed-line"),
+            pytest.param(
+                MultiLineString([[(-5, 5), (15, 5)], [(2, 2), (8, 8)]]), id="multilinestring"
+            ),
+        ],
+    )
+    def test_every_ring_or_line_in_order(self, fi: ModuleType, geometry: Any) -> None:
+        got = [list(p.coords) for p in shapely.get_parts(fi._linework(geometry))]
+        assert got == [list(line.coords) for line in ff.boundary_lines(geometry)]
+
+    def test_it_meets_the_region_where_the_polygon_s_envelope_does_not(
+        self, fi: ModuleType
+    ) -> None:
+        """Section 1: the prepared test on the polygon drops a hole outside
+        its shell's envelope; on the linework it does not."""
+        shapely.prepare(SMALL)
+        invalid = Polygon([(20, 20), (30, 20), (30, 30), (20, 30)], [[(3, 3), (7, 3), (7, 7)]])
+        assert not SMALL.intersects(invalid)
+        assert SMALL.intersects(fi._linework(invalid))
+
+
+#: P5's L-shaped shell: it misses the region (`BOX` grown by 100 m), but its
+#: envelope overlaps the region's.
+ELL = [at(500, -200), at(600, -200), at(600, 600), at(-200, 600), at(-200, 500), at(500, 500)]
+#: P1: `BOX` with an extra vertex at (300, 150) on its east side.
+EAST_VERTEX = domain_of(Polygon([at(0, 0), at(300, 0), at(300, 150), at(300, 300), at(0, 300)]))
+
+
+def pieces_in(chain: LineString, domain: Polygon) -> list[list[tuple[float, float]]]:
+    """The oracle: the lines of positive length `shapely.intersection` gives."""
+    parts = shapely.get_parts(shapely.intersection(chain, domain))
+    return [list(p.coords) for p in parts if isinstance(p, LineString) and p.length > 0]
+
+
+class TestTheClipStaysTheSame:
+    """30b, section 7, pins P1-P5: green before the change and after it. The
+    change skips work (the whole feature, an edge's segment test, a chain's
+    intersection); these pin that no skip changes what is kept."""
+
+    @pytest.mark.parametrize(
+        ("domain", "geometry"),
+        [
+            pytest.param(
+                BOX,
+                Polygon([at(250, 200), at(200, 150), at(250, 100), at(300, 150)]),
+                id="ring-touching-the-outline-at-one-vertex",
+            ),
+            pytest.param(
+                EAST_VERTEX,
+                LineString([at(300, 50), at(300, 250)]),
+                id="line-along-the-outline",
+            ),
+            pytest.param(
+                BOX,
+                Polygon([at(100, 100), at(200, 200), at(200, 100), at(100, 200)]),
+                id="self-crossing-ring",
+            ),
+            pytest.param(
+                BOX,
+                Polygon([at(100, 100), at(200, 100), at(200, 100), at(200, 200), at(100, 200)]),
+                id="ring-with-a-repeated-vertex",
+            ),
+        ],
+    )
+    def test_p1_a_chain_the_domain_covers_but_touches_is_cut_as_geos_cuts_it(
+        self, tmp_path: Path, domain: Any, geometry: Any
+    ) -> None:
+        """The domain covers each chain, yet GEOS's intersection does not
+        give it back whole; the feature's lines are those pieces, vertex by
+        vertex. A rule that skipped the intersection whenever the domain
+        covers the chain (section 3.5) fails here. GEOS gives a chain back
+        whole when it touches the outline only at its own start vertex, or
+        runs along a side with no domain vertex in between, so the touch is
+        mid-ring and the line passes `EAST_VERTEX`'s (300, 150)."""
+        (chain,) = ff.boundary_lines(geometry)
+        expected = pieces_in(chain, domain.polygon)
+        assert domain.polygon.covers(chain) and expected != [list(chain.coords)]
+        fs = one(tmp_path, geometry, domain=domain)
+        assert [list(line.coords) for line in lines_of(fs)] == expected
+
+    @pytest.mark.parametrize(
+        "where",
+        [
+            pytest.param(square(50_000, 50_000, 50_100, 50_100), id="far-outside-the-region"),
+            pytest.param(INNER, id="inside"),
+        ],
+    )
+    def test_p2_a_value_the_map_lacks_is_refused_wherever_the_feature_lies(
+        self, tmp_path: Path, fi: ModuleType, where: Polygon
+    ) -> None:
+        """Section 3.2: the refusal checks come before the whole-feature
+        test, so a feature missing the region is still refused."""
+        strict = fi.ClassMap(
+            name="strict", attribute="property", classes={"road": ("road",)}, otherwise="refuse"
+        )
+        path = write_geojson(tmp_path / "f.geojson", [Feat("far-9", where, {"property": "ice"})])
+        request = fi.FeatureRequest(sources=(fi.FeatureSource(path=path, class_map=strict),))
+        with pytest.raises(fi.FeatureError, match=r"far-9.*'ice'.*strict"):
+            fi.open_features(request, BOX, UTM33)
+
+    def test_p3_features_missing_the_region_are_counted_outside(self, tmp_path: Path) -> None:
+        """The region is `BOX` grown by 100 m, so 150 m east of it is out."""
+        features = [
+            Feat("east", square(450, 0, 500, 50), {"property": "road"}),
+            Feat("west", LineString([at(-2_000, 150), at(-1_500, 150)]), {"property": "road"}),
+            Feat("in", INNER, {"property": "road"}),
+            Feat("far", square(50_000, 50_000, 50_100, 50_100), {"property": "road"}),
+        ]
+        fs = open_one(write_geojson(tmp_path / "f.geojson", features), BOX)
+        assert [f.fid for f in fs.features] == ["in"]
+        assert (fs.outside, fs.clipped, fs.empty) == (3, 0, 0)
+
+    @pytest.mark.parametrize(
+        ("edge", "kept"),
+        [
+            pytest.param([(-5, 5), (15, 5)], True, id="both-ends-outside-crossing"),
+            pytest.param([(10, 5), (20, 5)], True, id="one-end-on-the-boundary"),
+            pytest.param([(9.5, 11), (11, 9.5)], False, id="both-ends-outside-passing-a-corner"),
+        ],
+    )
+    def test_p4_an_edge_is_kept_by_the_edge_not_by_its_ends(
+        self, fi: ModuleType, edge: list[tuple[float, float]], kept: bool
+    ) -> None:
+        """Section 3.1: an edge with an end in the region is kept without
+        the segment test; the others still get it. The corner miss is about
+        0.35 from (10, 10)."""
+        assert chains(fi, LineString(edge)) == ([edge] if kept else [])
+
+    @pytest.mark.parametrize(
+        ("geometry", "expected"),
+        [
+            pytest.param(
+                Polygon(
+                    square(2_000, 2_000, 2_100, 2_100).exterior.coords, [INNER.exterior.coords]
+                ),
+                [list(INNER.exterior.coords)],
+                id="hole-inside-shell-s-envelope-misses-the-region-s",
+            ),
+            pytest.param(
+                Polygon(ELL, [INNER.exterior.coords]),
+                [list(INNER.exterior.coords)],
+                id="hole-inside-shell-s-envelope-overlaps-the-region-s",
+            ),
+            pytest.param(
+                LineString([at(-500, 150), at(800, 150)]),
+                [[at(0, 150), at(300, 150)]],
+                id="line-with-both-ends-outside-the-region",
+            ),
+        ],
+    )
+    def test_p5_the_whole_feature_test_keeps_what_the_pre_clip_keeps(
+        self, tmp_path: Path, geometry: Any, expected: list[list[tuple[float, float]]]
+    ) -> None:
+        """`clip_bytes.py`'s three `probe::` cases. Each shell misses the
+        region and is dropped; its hole lies in the domain and is kept whole.
+        The line's ends are outside the region; its piece in the domain is
+        kept. A whole-feature test on the polygon (it reads only the shell's
+        envelope) loses the first; one on every feature's boundary (a line's
+        is its two ends) loses the third."""
+        fs = one(tmp_path, geometry)
+        assert len(fs.features) == 1 and fs.outside == 0
+        assert [list(line.coords) for line in lines_of(fs)] == expected

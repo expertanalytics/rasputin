@@ -27,27 +27,19 @@ from pathlib import Path
 import numpy as np
 import pytest
 from numpy.testing import assert_array_equal
-from typer.testing import CliRunner
 
 import tin_engine.cli as cli
+from cli_driver import invoke
 from plyread import parse_header
-from test_cli_mesh import constrained_edge_set, plain
-from tin_engine.cli import app
+from test_cli_mesh import constrained_edge_set
 from tin_engine.features import DEFAULT_VOCABULARY
 from tin_engine.viz.fixtures import GALLERY
 from vtkread import VtkFile, lines_as_array, polygons_as_array, read_vtk
-
-runner = CliRunner(env={"NO_COLOR": "1", "TERM": "dumb"})
 
 FIXTURE = "catchment"
 FEATURED = "road-crosses-river"
 #: Increment 25 (`docs/increments/25-plain-output.md`, D2): `heights`.
 HEIGHTS_TEXT = "none: every z is 0 (--flat)"
-
-
-def invoke(*args: str) -> tuple[int, str]:
-    result = runner.invoke(app, ["mesh", *args])
-    return result.exit_code, plain(result.output)
 
 
 def attempt_for(name: str) -> cli.Attempt:
@@ -57,7 +49,7 @@ def attempt_for(name: str) -> cli.Attempt:
 @pytest.fixture
 def featured(tmp_path: Path) -> VtkFile:
     out = tmp_path / "rr.vtk"
-    code, output = invoke(FEATURED, "--flat", "--crs", "EPSG:25833", "--out", str(out))
+    code, output = invoke("mesh", FEATURED, "--flat", "--crs", "EPSG:25833", "--out", str(out))
     assert code == 0, output
     return read_vtk(out.read_bytes())
 
@@ -67,27 +59,27 @@ class TestTheSuffixPicksTheFormat:
 
     def test_vtk_writes_one_vtk_file(self, tmp_path: Path) -> None:
         out = tmp_path / "mesh.vtk"
-        code, output = invoke(FIXTURE, "--flat", "--out", str(out))
+        code, output = invoke("mesh", FIXTURE, "--flat", "--out", str(out))
         assert code == 0, output
         assert [p.name for p in tmp_path.iterdir()] == ["mesh.vtk"]
         assert out.read_bytes().startswith(b"# vtk DataFile Version 4.2\n")
 
     def test_it_names_what_it_wrote(self, tmp_path: Path) -> None:
         out = tmp_path / "mesh.vtk"
-        code, output = invoke(FIXTURE, "--flat", "--out", str(out))
+        code, output = invoke("mesh", FIXTURE, "--flat", "--out", str(out))
         assert code == 0
         assert str(out) in output
 
     def test_ply_still_writes_ply(self, tmp_path: Path) -> None:
         out = tmp_path / "mesh.ply"
-        code, output = invoke(FIXTURE, "--flat", "--out", str(out))
+        code, output = invoke("mesh", FIXTURE, "--flat", "--out", str(out))
         assert code == 0, output
         assert out.read_bytes().startswith(b"ply\n")
 
     @pytest.mark.parametrize("name", ["mesh.vtp", "mesh.vtu", "mesh.txt", "mesh", "mesh.ply.bak"])
     def test_an_unknown_suffix_is_refused_naming_both(self, tmp_path: Path, name: str) -> None:
         out = tmp_path / name
-        code, output = invoke(FIXTURE, "--flat", "--out", str(out))
+        code, output = invoke("mesh", FIXTURE, "--flat", "--out", str(out))
         assert code != 0, output
         assert ".vtk" in output and ".ply" in output, output
         assert not out.exists()
@@ -99,7 +91,9 @@ class TestOutEdgesWithVtk:
 
     def test_it_is_refused_before_anything_is_written(self, tmp_path: Path) -> None:
         out, edges = tmp_path / "mesh.vtk", tmp_path / "edges.ply"
-        code, output = invoke(FIXTURE, "--flat", "--out", str(out), "--out-edges", str(edges))
+        code, output = invoke(
+            "mesh", FIXTURE, "--flat", "--out", str(out), "--out-edges", str(edges)
+        )
         assert code != 0, output
         assert "--out-edges" in output
         assert list(tmp_path.iterdir()) == []
@@ -110,24 +104,26 @@ class TestEncoding:
 
     def test_vtk_is_ascii_by_default(self, tmp_path: Path) -> None:
         out = tmp_path / "mesh.vtk"
-        assert invoke(FIXTURE, "--flat", "--out", str(out))[0] == 0
+        assert invoke("mesh", FIXTURE, "--flat", "--out", str(out))[0] == 0
         assert read_vtk(out.read_bytes()).encoding == "ASCII"
 
     def test_binary_writes_the_binary_header(self, tmp_path: Path) -> None:
         out = tmp_path / "mesh.vtk"
-        code, output = invoke(FIXTURE, "--flat", "--binary", "--out", str(out))
+        code, output = invoke("mesh", FIXTURE, "--flat", "--binary", "--out", str(out))
         assert code == 0, output
         assert read_vtk(out.read_bytes()).encoding == "BINARY"
 
     def test_ascii_is_the_explicit_spelling(self, tmp_path: Path) -> None:
         out = tmp_path / "mesh.vtk"
-        code, output = invoke(FIXTURE, "--flat", "--ascii", "--out", str(out))
+        code, output = invoke("mesh", FIXTURE, "--flat", "--ascii", "--out", str(out))
         assert code == 0, output
         assert read_vtk(out.read_bytes()).encoding == "ASCII"
 
     def test_ply_is_ascii_by_default(self, tmp_path: Path) -> None:
         surface, edges = tmp_path / "s.ply", tmp_path / "e.ply"
-        code, output = invoke(FIXTURE, "--flat", "--out", str(surface), "--out-edges", str(edges))
+        code, output = invoke(
+            "mesh", FIXTURE, "--flat", "--out", str(surface), "--out-edges", str(edges)
+        )
         assert code == 0, output
         assert parse_header(surface.read_bytes()).fmt == "ascii"
         assert parse_header(edges.read_bytes()).fmt == "ascii"
@@ -135,7 +131,7 @@ class TestEncoding:
     def test_binary_switches_both_ply_files(self, tmp_path: Path) -> None:
         surface, edges = tmp_path / "s.ply", tmp_path / "e.ply"
         code, output = invoke(
-            FIXTURE, "--flat", "--binary", "--out", str(surface), "--out-edges", str(edges)
+            "mesh", FIXTURE, "--flat", "--binary", "--out", str(surface), "--out-edges", str(edges)
         )
         assert code == 0, output
         assert parse_header(surface.read_bytes()).fmt == "binary_little_endian"
@@ -196,13 +192,13 @@ class TestTheBundleIsTheEnginesMesh:
 
     def test_no_crs_means_no_crs_field(self, tmp_path: Path) -> None:
         out = tmp_path / "mesh.vtk"
-        assert invoke(FIXTURE, "--flat", "--out", str(out))[0] == 0
+        assert invoke("mesh", FIXTURE, "--flat", "--out", str(out))[0] == 0
         assert "crs" not in read_vtk(out.read_bytes()).field_data
 
     def test_a_fixture_with_no_bits_writes_no_features_block(self, tmp_path: Path) -> None:
         # catchment's constraints are all unclassified (mask 0).
         out = tmp_path / "mesh.vtk"
-        assert invoke(FIXTURE, "--flat", "--out", str(out))[0] == 0
+        assert invoke("mesh", FIXTURE, "--flat", "--out", str(out))[0] == 0
         assert read_vtk(out.read_bytes()).cell_fields == {}
 
 
@@ -216,7 +212,7 @@ class TestCrsRefusals:
     @pytest.mark.parametrize("crs", ["EPSG:25833\rforged", "ETRS89 60\N{DEGREE SIGN}N"])
     def test_a_bad_crs_is_a_usage_error_and_no_file(self, tmp_path: Path, crs: str) -> None:
         out = tmp_path / "mesh.vtk"
-        code, output = invoke(FIXTURE, "--flat", "--crs", crs, "--out", str(out))
+        code, output = invoke("mesh", FIXTURE, "--flat", "--crs", crs, "--out", str(out))
         assert code == 2, output
         assert "--crs" in output
         assert not out.exists()
@@ -244,7 +240,9 @@ class TestThePlyEdgeFileCarriesTheVocabulary:
     @pytest.fixture
     def comments(self, tmp_path: Path) -> tuple[str, ...]:
         surface, edges = tmp_path / "s.ply", tmp_path / "e.ply"
-        code, output = invoke(FEATURED, "--flat", "--out", str(surface), "--out-edges", str(edges))
+        code, output = invoke(
+            "mesh", FEATURED, "--flat", "--out", str(surface), "--out-edges", str(edges)
+        )
         assert code == 0, output
         return parse_header(edges.read_bytes()).comments
 

@@ -64,9 +64,9 @@ from typing import Any
 import numpy as np
 import pytest
 from shapely.geometry import Polygon
-from typer.testing import CliRunner
 
 import tin_engine.cli as cli
+from cli_driver import USAGE, geojson, plain, runner
 from feature_fixtures import Feat, write_geojson
 from geographic_fixtures import geographic_tile_tiff, project_ring
 from geotiff_fixtures import TIE_X, TIE_Y, micro_tiff
@@ -82,8 +82,6 @@ from strip_oracle import (
     ruled_points,
     strip_findings,
 )
-from test_cli_mesh import plain
-from test_cli_mesh_domain import geojson
 from test_cli_mesh_geographic import (
     DOMAIN_RC,
     TARGET,
@@ -92,7 +90,6 @@ from test_cli_mesh_geographic import (
     tile_array,
     triangles,
 )
-from test_cli_mesh_geographic import write_geojson as write_domain
 from test_cli_mesh_refine import file_field, stats_row
 from test_cli_mesh_stats import seconds
 from tin_engine.cli import app
@@ -100,8 +97,6 @@ from tin_engine.dem_input import DemRequest, open_dem
 from tin_engine.io.domain_file import read_domain
 from vtkread import VtkFile, lines_as_array, read_vtk
 
-runner = CliRunner(env={"NO_COLOR": "1", "TERM": "dumb"})
-USAGE = 2
 TOLERANCE = 1.0
 #: The noder's snap (`DEFAULT_SNAP_SPACING`): how far a written constraint
 #: line may lie from the input polygon, in metres, with margin.
@@ -395,7 +390,7 @@ def reprojected(tmp_path_factory: pytest.TempPathFactory) -> Reprojected:
     dem = tmp / "anadem_like.tif"
     dem.write_bytes(geographic_tile_tiff(tile_array()).getvalue())
     ring = project_ring("EPSG:4326", "EPSG:4674", lonlat_ring(DOMAIN_RC))
-    domain = write_domain(tmp / "domain.geojson", ring, "EPSG:4674")
+    domain = geojson(tmp / "domain.geojson", ring, crs="EPSG:4674")
     run_ = mesh(
         tmp,
         *("--dem", str(dem), "--domain", str(domain)),

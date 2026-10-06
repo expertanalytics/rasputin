@@ -31,6 +31,9 @@ from brief_fixtures import (
 )
 from harness_fixtures import add_worktree, flag_on, git, queue_path, state_dir
 
+# h17 §4b: a harness test; CI runs it in the `harness` job, not the product legs.
+pytestmark = pytest.mark.harness
+
 NO_BLOCK = "brief: no block"
 
 

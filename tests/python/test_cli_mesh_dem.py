@@ -21,8 +21,8 @@ from pathlib import Path
 
 import numpy as np
 import pytest
-from typer.testing import CliRunner
 
+from cli_driver import USAGE, invoke, write_tiff
 from geotiff_fixtures import (
     KARTVERKET,
     LZW,
@@ -38,26 +38,11 @@ from geotiff_fixtures import (
 )
 from plyread import read_ply, vertex_array
 from recordread import file_field, start_stride, stats_row
-from test_cli_mesh import plain
-from tin_engine.cli import app
 from tin_engine.io.geotiff import decode_dem
 from tin_engine.io.models import DemTile
 from vtkread import VtkFile, read_vtk
 
-runner = CliRunner(env={"NO_COLOR": "1", "TERM": "dumb"})
-
 SENTINEL = "-32767"
-USAGE = 2
-
-
-def invoke(*args: str) -> tuple[int, str]:
-    result = runner.invoke(app, ["mesh", *args])
-    return result.exit_code, plain(result.output)
-
-
-def write_tiff(path: Path, stream: io.BytesIO) -> Path:
-    path.write_bytes(stream.getvalue())
-    return path
 
 
 def on_nodes(tile: DemTile, xyz: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
@@ -93,7 +78,7 @@ def larger(tmp_path: Path) -> Path:
 
 def run_vtk(tmp_path: Path, tif: Path, *extra: str) -> VtkFile:
     out = tmp_path / "x.vtk"
-    code, output = invoke("--dem", str(tif), "--out", str(out), *extra)
+    code, output = invoke("mesh", "--dem", str(tif), "--out", str(out), *extra)
     assert code == 0, output
     return read_vtk(out.read_bytes())
 
@@ -170,7 +155,7 @@ class TestNoData:
         array[0, :] = float(SENTINEL)
         tif = write_tiff(tmp_path / "nodata.tif", micro_tiff(array, nodata=SENTINEL))
         out = tmp_path / "x.vtk"
-        code, output = invoke("--dem", str(tif), "--out", str(out))
+        code, output = invoke("mesh", "--dem", str(tif), "--out", str(out))
         assert code == 0, output
         vtk = read_vtk(out.read_bytes())
         tile = decode_dem(io.BytesIO(tif.read_bytes()))
@@ -190,7 +175,7 @@ class TestNoData:
         array = np.full((3, 4), float(SENTINEL), dtype=np.float32)
         tif = write_tiff(tmp_path / "void.tif", micro_tiff(array, nodata=SENTINEL))
         out = tmp_path / "x.vtk"
-        code, output = invoke("--dem", str(tif), "--out", str(out))
+        code, output = invoke("mesh", "--dem", str(tif), "--out", str(out))
         assert code != 0, output
         assert "No such option" not in output, "refused for the wrong reason"
         assert not out.exists()
@@ -202,7 +187,7 @@ class TestUsageErrors:
     @staticmethod
     def refused(tmp_path: Path, *args: str, says: tuple[str, ...]) -> None:
         out = tmp_path / "x.vtk"
-        code, output = invoke(*args, "--out", str(out))
+        code, output = invoke("mesh", *args, "--out", str(out))
         assert code == USAGE, output
         # `--dem` must be a known option, or every refusal here passes as
         # Typer's "No such option" before the command runs at all.
@@ -267,7 +252,7 @@ class TestPly:
     def test_ply_carries_the_same_vertices(self, tmp_path: Path, larger: Path) -> None:
         vtk = run_vtk(tmp_path, larger, "--stride", "2")
         out = tmp_path / "x.ply"
-        code, output = invoke("--dem", str(larger), "--stride", "2", "--out", str(out))
+        code, output = invoke("mesh", "--dem", str(larger), "--stride", "2", "--out", str(out))
         assert code == 0, output
         _, data = read_ply(out.read_bytes())
         ply = vertex_array(data)
@@ -281,7 +266,9 @@ class TestRealFixture:
     @needs_codecs
     def test_meshes_the_real_dem(self, tmp_path: Path) -> None:
         out, md = tmp_path / "tile.vtk", tmp_path / "tile.md"
-        code, output = invoke("--dem", str(KARTVERKET), "--out", str(out), "--stats", str(md))
+        code, output = invoke(
+            "mesh", "--dem", str(KARTVERKET), "--out", str(out), "--stats", str(md)
+        )
         assert code == 0, output
         vtk = read_vtk(out.read_bytes())
         z = vtk.points[:, 2]
@@ -302,7 +289,7 @@ class TestRealFixture:
     @without_codecs
     def test_without_the_extra_it_is_a_usage_error(self, tmp_path: Path) -> None:
         out = tmp_path / "tile.vtk"
-        code, output = invoke("--dem", str(KARTVERKET), "--out", str(out))
+        code, output = invoke("mesh", "--dem", str(KARTVERKET), "--out", str(out))
         assert code == USAGE, output
         assert "codecs" in output
         assert "Traceback" not in output

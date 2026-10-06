@@ -47,6 +47,7 @@ import numpy as np
 import pytest
 from numpy.testing import assert_array_equal
 
+from gil_probe import ticks_during
 from strip_oracle import (
     Grid,
     delaunay_violations,
@@ -56,7 +57,7 @@ from strip_oracle import (
     ruled_points,
     strip_findings,
 )
-from test_core_cdt import RELEASED_TICKS, ticks_during
+from test_core_cdt import RELEASED_TICKS
 from test_core_refine_points import scattered, worst_excess
 from tin_engine import _core
 from tin_engine._core import ChainRole

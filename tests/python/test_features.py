@@ -36,8 +36,7 @@ Two rules here are architecture rather than hygiene:
   one and `viz.style` (its `tin_engine.features` and `tin_engine.viz.style` imports,
   `src_python/tin_engine/cli.py@390b516:95` and `src_python/tin_engine/cli.py@390b516:110`).
   The rule is `features`' row in `test_layering.py`, read from the source rather
-  than from `sys.modules`, because `tin_engine/__init__.py` imports `_core`
-  itself.
+  than from `sys.modules`.
 * **The name pattern keeps a vocabulary name usable as a CSS class token, and
   is defence in depth. It is not what closes the injection hole.**
   `viz/svg.py`'s `_edge_classes` (`svg.py:168`) joins
