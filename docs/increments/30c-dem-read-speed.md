@@ -1,10 +1,11 @@
 # Increment 30c — the `decode` phase of `rasputin mesh`, made faster
 
-Status: **designed** by `@architect` 2026-10-06 on branch
+Status: **red committed at `bdf7b57d`; `@tester`'s pins beyond the design
+ruled in section 7 (six stand, one changes); green next.** Designed by
+`@architect` 2026-10-06 on branch
 `worktree-dem-read-speed`, at `6c729e97` (30b's approved head, not yet
 pushed). Ola said "yes, build 30c" on 2026-10-06 (question 1, section 13).
-Design review round 1 (changes requested) answered; round 2 next, then
-`@tester`. When 30b merges, master is merged into this
+Design review round 2 approved (`## Review`). When 30b merges, master is merged into this
 branch and the gate's base is recorded again at that merge (section 6).
 
 **What this is.** The third of three pull requests that remove the
@@ -381,6 +382,55 @@ pass).
 The existing tests (`TestW2Determinism`, the seam tests of `test_mosaic.py`
 and `test_dem_input_domain.py`, `test_cli_mesh_mosaic.py`) stay as they are.
 
+### What `@tester` pinned beyond this section, and the ruling
+
+Ruled after the red commit `bdf7b57d` and before green, on the tests it added
+(`tests/python/test_io_cog.py@bdf7b57d:253-304`,
+`tests/python/test_mosaic.py@bdf7b57d:1544-1659`). Checked in a scratch copy
+of the source with its own venv: at `bdf7b57d` R1's `seven_cores` and
+`cores_unknown` and R2 fail, everything else in both files passes; with
+sections 3.1 and 3.2 put in, both files pass. Each pin was then broken in
+that copy (the plants named below).
+
+`@architect`'s ruling, 2026-10-06: **six stand; pin 3 changes.**
+
+1. *R1 patches `os.cpu_count`, so the code calls `os.cpu_count()` when it
+   decodes.* Keep: 3.1 writes `os.cpu_count() or 1` and section 5 says it is
+   read at the point of use. `from os import cpu_count`, and a core count
+   read once at import, each fail `seven_cores` and `cores_unknown`.
+2. *R1 watches `cog.ThreadPoolExecutor`: one pool per call, the count
+   positional or `max_workers`.* Keep: the pool per call is today's and 3.1
+   keeps it; `max_workers=` with a `thread_name_prefix` passes, a pool built
+   through `concurrent.futures` directly fails all three cases.
+3. *R1's third case: `threads=3` gives 3 workers.* Change: 3 is below the 7
+   patched cores, so a code that caps `threads` at the core count passes it,
+   and 3.1 says an `int` is used as given. `@tester` changes that case to
+   `pytest.param(7, {"threads": 9}, 9, id="threads_given")`
+   (`tests/python/test_io_cog.py@bdf7b57d:278`). Tried: it passes with 3.1,
+   fails a cap at the cores and fails `threads` ignored, and passes at
+   `bdf7b57d` as the 3 did.
+4. *R2: the points given to `intersects_xy` during `assemble` sum to 4, in
+   any number of calls.* Keep: that is R2. One call per node passes; testing
+   the region before the gap filter (on the 54 valid nodes) fails. The spy
+   counts the `x, y` form 3.2 step 3 writes; a single `(n, 2)` coordinate
+   array counts as 8 and fails, so `@developer` uses 3.2's form.
+5. *R2 and P1: a needed region with a hole, and the canvas is the whole
+   grid.* Keep: the hole puts overlap nodes inside the region's box but
+   outside the region, which a region test that is skipped would count (it
+   fails R2 and both P1 cases). With the overlap at (0, 0), node
+   coordinates without the overlap's origin pass here; the existing
+   `TestSeamsInsideTheNeededRegion` in `test_dem_input_domain.py` fails on
+   that plant, and so does the probe (section 6).
+6. *P1 ignores the `inf - inf` RuntimeWarning.* Keep: the design does not
+   say whether the subtraction warns. 3.2 as written and a version under
+   `np.errstate(invalid="ignore")` both pass, also with
+   `-W error::RuntimeWarning`.
+7. *P1: float64 tiles, NoData -32767, the boundary node on the hole's
+   edge.* Keep: 7's P1 asks for float64 (0.001 exactly) and a node on the
+   region's boundary. `contains_xy` for `intersects_xy`, `>` for `>=`, the
+   sentinel not treated as NoData, and the gap taken in float32 each fail
+   both P1 cases.
+
 ## 8. Net production lines, and the prototype
 
 The prototype is the installed `6c729e97` package in a copy of the base's
@@ -520,3 +570,5 @@ review.
 ## Review
 
 **30c, design review, round 1, 2026-10-06.** Range `6c729e97..a3a7cfef`. Verdict: CHANGES REQUESTED. LOC 0. Blocking: (1) the 2-line note at `/Users/skavhaug/projects/rasputin/.claude/worktrees/dem-read-speed/docs/increments/23-basin-scale.md@a3a7cfef:1066-1067` shifts the self-citations at `@a3a7cfef:3281,3283` (`:3267,3271,3279` now point at 23b rounds 5 and 7, and at 23c-1 round 3); (2) `/Users/skavhaug/projects/rasputin/.claude/worktrees/dem-read-speed/docs/increments/30c-dem-read-speed.md@a3a7cfef:298-300` over-claims the refusal at `/Users/skavhaug/projects/rasputin/.claude/worktrees/dem-read-speed/docs/increments/30c-probes/dem_bytes.py@a3a7cfef:180` (a copy under any `site-packages` passes). Base reproduced exactly in a scratch install, the 4.2 same-set argument holds, and W2 plus my own LZW timing confirm the thread claim and GIL release.
+
+**30c, design review, round 2, 2026-10-06.** Range `a3a7cfef..c2ec195b` (one commit, c2ec195b). Verdict: APPROVED. LOC 0. Both round-1 blockers are closed. (1) The note at `/Users/skavhaug/projects/rasputin/.claude/worktrees/dem-read-speed/docs/increments/23-basin-scale.md@c2ec195b:1064-1065` replaces the old two lines. The file is back to 3281 lines, the same as master `ed125121`. The self-citations, now at `:3279,3281`, again point at 23b round 6 (`:3267`), 23b round 8 (`:3271`) and the row-23 fix round 1 (`:3279`). (2) `/Users/skavhaug/projects/rasputin/.claude/worktrees/dem-read-speed/docs/increments/30c-dem-read-speed.md@c2ec195b:304-312` now describes what `/Users/skavhaug/projects/rasputin/.claude/worktrees/dem-read-speed/docs/increments/30c-probes/dem_bytes.py@c2ec195b:179-181` actually checks. Both suggestions were taken. The DEM code at `ed125121` is the same as at `6c729e97`. Nothing else changed. Not pushed; no CI.
