@@ -107,6 +107,11 @@ addopts = [
     "--cov-report=term-missing",
     "--cov-fail-under=85",
 ]
+# h17 §4b: CI runs `-m harness` in its own job and `-m "not harness"` in the
+# product legs; a local `pytest` with no -m runs both.
+markers = [
+    "harness: tests of tools/ and .claude/ that import nothing from tin_engine",
+]
 
 [tool.ruff]
 line-length = 100

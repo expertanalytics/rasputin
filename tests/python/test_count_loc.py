@@ -30,6 +30,9 @@ import pytest
 
 from harness_fixtures import REAL, Tool, clean_env, git, is_work_tree_top, load_tool
 
+# h17 §4b: a harness test; CI runs it in the `harness` job, not the product legs.
+pytestmark = pytest.mark.harness
+
 cl = Tool("count_loc")
 
 SCRIPT = "tools/count_loc.py"

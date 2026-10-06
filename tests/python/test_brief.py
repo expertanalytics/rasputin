@@ -41,6 +41,9 @@ from brief_fixtures import (
 )
 from harness_fixtures import add_worktree, git
 
+# h17 §4b: a harness test; CI runs it in the `harness` job, not the product legs.
+pytestmark = pytest.mark.harness
+
 INCREMENT = "docs/increments/x.md"
 STAMP = "2026-10-04T06:12:00.000Z"
 

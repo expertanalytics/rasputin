@@ -3350,11 +3350,11 @@ Fixes for round 6, by `@architect` in the commit that records it: suggestion 1 t
 
 ### Acceptance evidence, round 1: `@reviewer`, `bc01cd8..7e7e4ce`
 
-`@reviewer`'s record, word for word:
+`@reviewer`'s record, word for word (one citation pinned to `0130889f` by `@architect` in h17, after h17's marker block moved the line):
 
 **29 acceptance, evidence review, round 1, 2026-10-05 (copied from `@reviewer`'s handback).** Range `bc01cd8..7e7e4ce` (3 commits by `@perf`, 170 files, +3462/-0, all under `docs/benchmarks/2026-10-05/nve-hrd/`). Verdict: CHANGES REQUESTED.
 
-**Size and CI.** Production lines: 0. The 874 added lines of `.py` and `.sh` are evidence scripts under `docs/benchmarks/`, which `pyproject.toml:117` excludes from the gates. The branch is not pushed: no PR, no CI. `tools/ci_changes.py bc01cd8 7e7e4ce` says `code=true`, so the push will run every CI job, not only the governance gates. `check_citations.py` and `check_prohibited_deps.py` pass.
+**Size and CI.** Production lines: 0. The 874 added lines of `.py` and `.sh` are evidence scripts under `docs/benchmarks/`, which `pyproject.toml@0130889f:117` excludes from the gates. The branch is not pushed: no PR, no CI. `tools/ci_changes.py bc01cd8 7e7e4ce` says `code=true`, so the push will run every CI job, not only the governance gates. `check_citations.py` and `check_prohibited_deps.py` pass.
 
 **Re-measured and true:**
 - **Classes.** 140 rows: match 74, close 5, miss 6, uncertain 39, refused 16. 85 stations are scored, and 74 of them (87 %) match.

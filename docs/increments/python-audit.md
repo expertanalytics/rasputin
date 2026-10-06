@@ -8,7 +8,10 @@ while the code moves. It proposes a sequence of refactor PRs; each still runs th
 code, review, and `@perf` where the diff touches what drives refine or mesh.
 
 Accepted by Ola on 2026-10-05, with the defaults to its three questions
-(section 7). Its first PR, T2, is designed in section 8. Status of T2:
+(section 7). Its first PR, T2, is designed in section 8; the second, T1,
+in section 10 (designed on T2's head `b63132e`; it was section 9 until PR
+B's section 9 was merged in beside it). T2 merged as PR #188 and T1 as
+PR #189. History of T2:
 `@tester`'s tests are in `2f47ebb`: 184 non-blank test lines added and 185
 removed, -1 net against the design's about -35 (`git diff -U0 44fa7f5 97eea35
 -- tests`, non-blank lines). The gap is what section 8 did not cost:
@@ -33,14 +36,20 @@ axes and the prime meridian (section 9, "After red tests 8-10"). `5074ef6`
 adds the `+pm=paris` pair and found a thirteenth site (`domain.py:103`); a
 final sweep over `src_python/` and `tools/` (section 9, "The final sweep")
 finds no fourteenth. Red tests 11 and 12 are in `20bcf2c`; `@developer`'s
-green commit is `5197f9a`. Code review round 1 found a third false "the
+first green commit is `5197f9a`. Code review round 1 found a third false "the
 same" (a `+lon_0` held only in PROJ's remark), so the rule is re-ruled from
 what the transform does, not from CRS attributes (section 9, "After code
 review round 1"). `@tester`'s re-spelt fixtures and red rows are in
 `13b3e6d`, with Ola's ruling D15 b (a PROJ string naming no datum is not its
 EPSG code, and the refusal says which code to write) folded into section 9
-("After the round-1 red step"). Next: `@developer`, then `@reviewer`
-round 2.
+("After the round-1 red step"). `@developer`'s green commit for them is
+`65cd528`. Code review round 2 asked for prose only (this paragraph, the
+net lines, section 6's row B, and the hint's scope), fixed in section 9 and
+the review record. Prose correction after approval: section 9's question 1
+no longer claims B's rule accepts the Austrian Lambert built from its GeoKeys.
+Pushed as PR #192 at `618328b`. T1 (PR #189) then merged
+into master and conflicted with it, so master is merged into the branch;
+the merge renumbers T1's design to section 10.
 
 Re-checked against master `44fa7f5`: `git diff --stat 12dace7 44fa7f5 --
 src_python` is empty, and of the files cited below only `tools/brief.py`
@@ -454,8 +463,8 @@ table in a `@tester` commit, and deletes the section 8 exception it removes
 | # | PR (branch name) | Takes | Net production lines | Waits for | Gates beyond review |
 |---|---|---|---|---|---|
 | T2 | `audit-layering-test` | X3 | 0 (tests only, about -35) | nothing | none; `@tester` then `@reviewer`, no `@developer` |
-| T1 | `audit-cli-test-harness` | X1 | 0 (tests only, -350) | nothing | none |
-| B | `audit-crs-helpers` | F3, with the `EPSG:None` fix | about +16 (section 9; first estimated -25) | T2 | red tests for the rule and the fix |
+| T1 | `audit-cli-test-harness` | X1 (section 10) | 0 (tests only, about -100; X1's -350 is corrected there) | T2 | none; `@tester` then `@reviewer`, no `@developer` |
+| B | `audit-crs-helpers` | F3, with the `EPSG:None` fix | +22, measured at `65cd528` (section 9; first estimated -25) | T2 | red tests for the rule and the fix |
 | A | `audit-lattice` | F2, F9, F10 (repository Protocol), F12 (`mosaic`'s two) | about -100 | B | red test for the +-inf ruling; `@perf` run: meshes byte-identical |
 | F | `audit-catchment-shared` | F4, F10 (catchment types), F12 (`gauge`'s two, `catchment` -> `_core`) | about -40 | nothing | none |
 | C | `audit-geojson-io` | F5, F12 (`chains` -> `feature_input`) | about -40 | B | `@tester` amendment if wordings move, and for the two `--help` texts |
@@ -466,7 +475,9 @@ table in a `@tester` commit, and deletes the section 8 exception it removes
 | tools | `audit-tools-git` | section 4 | about -20 (tools are not production; governed files need Ola) | nothing | Ola's approval per governed file |
 
 Total: about -440 production lines (about -400 with section 9's
-revision of B), -385 test lines, and the drift points
+revision of B), about -100 test lines (T2 came out at +1 and T1 is
+re-estimated at about -100, against the -385 first estimated), and the
+drift points
 (lattice spelling, NoData rule, CRS checks, GeoJSON `crs` rules, mask
 convention) each written once.
 
@@ -809,7 +820,7 @@ earlier "under 2 mm" bound (identification admitting a scale factor off by
 rule no longer uses. The Austrian file's longitude of origin
 (13.33333333300013 against EPSG's 13.3333333333333) is inside PROJ's
 tolerance: EPSG:31287 written as WKT2 with that value is the same as
-EPSG:31287 (question 1).
+EPSG:31287 (by name; renamed "unknown" it is not, see question 1).
 
 *Rejected, each on the probe set below ("breaks" counts triples where a is
 the same as b and b as c, but a is not the same as c):*
@@ -1133,7 +1144,7 @@ differ).
 - Red tests 8-10 below are needed: each site's output is the same today, so only a refused point-moving `Transformer` method can tell the fix from the bug.
 - `@tester`'s departure, accepted: `TestTheSameCrs`'s guard refuses the point-moving methods (`transform`, `itransform`, `transform_bounds`), not `Transformer.from_crs`, since `same_crs` builds one to compare; the invariant (no point moved) is unchanged and the guard was shown still to catch a real transform.
 - `@tester`'s departure, accepted: wording pins at the other two `single_crs` sites (the `--out-crs` path and `catchment.delineate`), beyond test 4's one.
-- `29aff00` moved `test_cli_mesh_geographic.py:886`, cited by `docs/increments/h16-harness-fixes.md` line 579; that citation is pinned to `44fa7f5`, where its quotation holds.
+- `29aff00` moved `tests/python/test_cli_mesh_geographic.py@44fa7f5:886`, cited by `docs/increments/h16-harness-fixes.md` line 579; that citation was pinned here to `44fa7f5` and by T1 to `97eea35`, and both read the same line; the merge with master kept T1's.
 
 8. **`tests/python/test_domain.py`**: with `Transformer`'s `transform`,
    `itransform` and `transform_bounds` refused (as in `TestTheSameCrs`),
@@ -1214,6 +1225,7 @@ differ).
 - Two sites only, both in `catchment.py`: `check_reach_crs` and `delineate`'s reach check (refusal wordings above). Other refusing sites and every record stay as they are.
 - When: `parse_crs(dem_crs).to_epsg(min_confidence=100)` is a code `n`, and the refused CRS's `to_epsg(min_confidence=100)` is None. A refused CRS with a code of its own (`EPSG:32633` against an EPSG:25833 DEM) gets no hint: its writer already chose a code.
 - Ruled on the default to Ola's open question: the hint shows even when the refused CRS matches no code at all, so the Lambert at 13.5 E gets it too. The hint offers a code; it does not claim the two are the same.
+- Ruled at code review round 2, intended under that reason, no code change: the hint's test is "the refused CRS has no exact code", so it also shows for `OGC:CRS84` against an EPSG:25833 DEM, and for `+proj=utm +zone=33 +datum=WGS84 +units=m +no_defs` (which `same_crs` treats as EPSG:32633) against EPSG:25833; both get `; if you mean EPSG:25833, write EPSG:25833`, and `EPSG:32633` itself gets none (probe at `65cd528`: `_code_hint(g, "EPSG:25833")` for the three).
 - Where: a private `_code_hint(given, dem_crs) -> str` in `catchment.py` (about 5 lines), returning the hint or `""`. Not in `crs.py`: both callers are in one module, and `crs.py`'s public surface stays `same_crs`, `transform_label`, `single_crs`. It runs only on the refusing path, so its identification calls (milliseconds) never touch an accepted run; `same_crs` has already parsed `given`, so it raises nothing new.
 - `@tester`'s departure, accepted: test 6's refusal of the Lambert at 13.5 E, and `test_a_reach_in_another_crs_is_refused`, assert `startswith(today's words)`, not equality, since the hint may follow; the hint is pinned by `in` at the two no-datum tests.
 - `@tester`'s departure, accepted: `crs_fixtures.axes_swapped` reverses the axis list of the code's PROJJSON with its `id` removed, then writes WKT2; it asserts the ID is gone and that pyproj's `==` calls the result different, so a no-op swap fails loudly.
@@ -1248,6 +1260,13 @@ added and 9 removed (`git diff -U0 b63132e 29aff00 -- tests`), 8-12 add
 more, and the round-1 rows about 40. Section 6's row B and its total move by
 about +40 accordingly; the drift point (one CRS rule) is still written once.
 
+**Measured at `65cd528`: +22** (`python3 tools/count_loc.py 44fa7f5
+65cd528`: 65 added, 43 removed), against about +20. `crs.py` +19 as
+designed; `catchment.py` +4: -3 for `single_crs` as designed, and +7 for
+the hint against about +5, the two `hint = _code_hint(...)` lines at the
+call sites not costed; `cli.py` -5; `dem_input.py` +4 (its nine-line
+import, not packed); the other four files 0.
+
 ### Citations this PR moves, pinned now
 
 The `cli.py` edit moves every later line up about 6, `catchment.py` about
@@ -1274,10 +1293,13 @@ a wrong line. No citation points into the test files this PR edits.
    openDEM file?** Default: yes, as a later small PR after B. The reader
    would build the CRS from the GeoKeys on the datum they name (MGI,
    EPSG:4312, for the Austrian file), not as a PROJ string, which names no
-   datum and so is never the same as an EPSG code under B's rule. It is
-   then the same as EPSG:31287 by B's rule (probe: EPSG:31287 as WKT2 with
-   the file's `lon_0=13.33333333300013` is equivalent and a `noop`), and
-   named by `to_epsg`. One that matches no code stays refused as today. It overturns increment 11's rulings 6 and 7
+   datum and so is never the same as an EPSG code under B's rule. B's rule
+   does not then accept it (the earlier probe kept EPSG's name in the WKT2,
+   so PROJ matched by name; named "unknown", the pipeline is an
+   inverse-then-forward Lambert, not a `noop`). The later PR matches by its
+   own rule, same datum and PROJ equivalence on the east-north pair:
+   `docs/increments/geotiff-crs-by-parameters.md` on branch
+   `worktree-geotiff-param-crs`. One that matches no code stays refused as today. It overturns increment 11's rulings 6 and 7
    ("the CRS is resolved only through `pyproj.CRS.from_epsg`"), hence the
    question.
 2. **The new wording** for DEM files in more than one CRS (table above).
@@ -1294,10 +1316,275 @@ a wrong line. No citation points into the test files this PR edits.
    refusals add `; if you mean EPSG:n, write EPSG:n` ("After the round-1
    red step").
 
+## 10. T1 design: one way to drive the CLI in the tests
+
+Tests only, so no red step and no `@developer`: `@tester` writes it,
+`@reviewer` audits it, and it must pass on its base as well as after. The
+branch starts at T2's head `b63132e` and lands after T2. Every citation in
+this section into a test file is pinned, to `b63132e` unless it says otherwise.
+
+### The rule
+
+**Only helpers move; no test's assertion changes.** A test body changes only
+where a helper it calls is renamed or takes the subcommand as its first
+argument. The checks at the end make this mechanical.
+
+### Re-measured at `b63132e`
+
+X1's counts were taken at `12dace7`. Again, by an AST comparison of
+top-level definitions over `tests/python/` (docstrings ignored):
+
+| Helper | Copies | Distinct bodies | How they differ |
+|---|---|---|---|
+| `bumpy` | 9 (8 module-level, 1 inside a class) | 4 | only the seed: 16 (5 copies), 20 (2), 14 (1), 17 (1); all 17 x 21, uniform 0 to 50 m, `bumpy.tif` |
+| `invoke` | 8 | 4 | the whole command line (3), `mesh` prepended (3), `draw` prepended and the raw `Result` returned (1), the whole command line with the output not passed through `plain` (1) |
+| `run` (CLI) | 7 | 6 | two are identical; the others differ in return type and flags |
+| `refused` (CLI, in-process) | 4 | 4 | see the mapping below |
+| `squashed` | 3 | 2 | one passes the text through `plain` first |
+| `square` / `plain_square` | 2 / 3 | 1 / 1 | the four other `square`s (`feature_fixtures.py`, `test_core_cdt.py`, `test_core_noding.py`, `test_domain.py`) are different things and stay |
+| `write_geojson` | 3 | 3 | two write exactly what `test_cli_mesh_domain.geojson` writes, with a different `crs` default; `feature_fixtures.py`'s writes a FeatureCollection and stays |
+| `plain`, `ANSI`, `BOX` | 2, 3, 2 | 1 each | none |
+| module-level `CliRunner` | 17 | 2 | 16 pass `env={"NO_COLOR": "1", "TERM": "dumb"}`; `test_cli.py`'s passes nothing and stays |
+| `USAGE = 2`, `ROWS, COLS = 17, 21`, `Ring` | 4, 5, 4 | 1 each | `test_dem_input_domain.py`'s `Ring` is not a CLI suite and stays |
+
+The copies are also reached sideways: 39 import lines in 21 test files
+import these names from other test modules (`test_cli_mesh`,
+`test_cli_mesh_dem`, `test_cli_mesh_domain`, `test_cli_mesh_mosaic`,
+`test_cli_catchment`, `test_cli_mesh_geographic`), so a test module is
+also a helper library for six others.
+
+The copies to delete hold 174 non-blank lines (measured per definition).
+X1's "about 350 test lines" assumed the 38 inline
+`code, output = invoke(...)` / `assert code == 0, output` pairs would be
+folded into `ran`; this design does not do that (it would move assertions
+out of test bodies), and X1 costed neither the new module nor the import
+lines.
+
+### The module: `tests/python/cli_driver.py`
+
+Named `cli_driver`, not X1's `cli_harness`: since h17 (on branch
+`worktree-ci-speed`), "harness test" means a test of `tools/` or the hooks,
+selected by a `harness` marker, and this module serves the product suites.
+
+Contents. A definition that moves unchanged keeps its name, so most call
+sites do not change:
+
+- `runner` (the 16 identical `CliRunner`s), `USAGE = 2`, `ANSI`, `BOX`,
+  `plain(text)` (one docstring for the two copies), `squashed(text)` (the
+  whitespace-only one).
+- From `test_cli_mesh_domain.py`, moved: `UTM33`, `Ring`, `ROWS, COLS`,
+  `SQUARE`, `HOLE` with their comments, and `geojson(path, outer, holes=(),
+  crs=UTM33)`. From `test_cli_mesh_dem.py`: `write_tiff`.
+- `COMMANDS`: the subcommand names, read once from the app
+  (`typer.main.get_command(app).commands`; today `catchment`, `draw`,
+  `fetch`, `fetch-stations`, `mesh`, `palette`, `station-catchments`,
+  `version`).
+- `invoke(command, *args) -> tuple[int, str]`: asserts `command in
+  COMMANDS` (the message lists them), then runs `rasputin <command>
+  <args>` and returns the exit code and `plain(output)`. The assertion is
+  there because the mesh-only copies took no subcommand: a call written
+  for them, such as `invoke("--dem", ...)`, would otherwise run `rasputin
+  --dem ...`, exit 2 with "No such option", and pass a test that checks
+  only for exit code 2. Probe, run with the main checkout's venv on a scratch copy
+  of the module: `invoke("version")` returns `(0, ...)` and
+  `invoke("--dem", "x")` raises the assertion naming the eight commands.
+- `ran(command, *args) -> str`: `invoke`, then `assert code == 0, output`;
+  returns the output. Used only inside helpers here.
+- `refused(tmp_path, command, *args, says, squash=False) -> str`: the body
+  of `tests/python/test_cli_mesh_domain_crs.py@b63132e:135-144`, with `command` passed
+  through and, for each word, `assert squashed(word) in squashed(output)`
+  when `squash` is set (the body of
+  `tests/python/test_cli_mesh_geographic.py@b63132e:149-158`) and `assert word in
+  output` otherwise. Both assert lines are kept verbatim, as two branches,
+  so the assertion texts do not change.
+- `mesh_to_vtk(tmp_path, *args, out="x.vtk") -> VtkFile`: the two
+  identical `run`s (`tests/python/test_cli_mesh_domain_crs.py@b63132e:122-127`,
+  `tests/python/test_cli_mesh_geographic.py@b63132e:132-137`), built on `ran("mesh", ...)`.
+- Two fixture factories. Each returns a pytest fixture, and a suite binds it
+  to the name its tests already request:
+  - `rough_dem(seed)`: writes `tmp_path / "bumpy.tif"`, the array
+    `default_rng(seed).uniform(0.0, 50.0, (ROWS, COLS)).astype(np.float32)`
+    through `micro_tiff`. A suite writes `bumpy = rough_dem(16)`.
+  - `polygon_file(outer, holes=())`: writes `tmp_path / "square.geojson"`
+    with `geojson`. `square = polygon_file(SQUARE, (HOLE,))`,
+    `plain_square = polygon_file(SQUARE)`.
+
+  Probe of the pattern under this repo's pytest (9.1.1), in a scratch
+  directory: two module-level bindings of one factory register under the
+  names they are bound to (`pytest --fixtures` lists both), a test in a
+  class sees the module-level one, a module that binds neither does not
+  see it (its test errors, fixture not found), and `ruff check` and
+  `ruff format --check` pass with the repo's settings. Importing a fixture
+  function by name instead would leave an import that ruff reports unused.
+
+A draft of the module is about 105 non-blank lines, about 30 of them moved
+from `test_cli_mesh_domain.py` and `test_cli_mesh_dem.py`.
+
+### How each copy maps
+
+| Copy (at `b63132e`) | Becomes |
+|---|---|
+| `runner` in `tests/python/test_cli_catchment.py@b63132e:86`, `tests/python/test_cli_draw.py@b63132e:107`, `tests/python/test_cli_fetch.py@b63132e:61`, `tests/python/test_cli_mesh.py@b63132e:49`, `tests/python/test_cli_mesh_dem.py@b63132e:47`, `tests/python/test_cli_mesh_edge_strip.py@b63132e:103`, `tests/python/test_cli_mesh_landcover.py@b63132e:63`, `tests/python/test_cli_mesh_mosaic.py@b63132e:54`, `tests/python/test_cli_mesh_plain_output.py@b63132e:60`, `tests/python/test_cli_mesh_stats.py@b63132e:42`, `tests/python/test_cli_mesh_vtk.py@b63132e:40`, `tests/python/test_cli_station_catchments.py@b63132e:64`, `tests/python/test_fetch_nve.py@b63132e:78`, `tests/python/test_hardening.py@b63132e:50`, `tests/python/test_io_vtk_readback.py@b63132e:82`, `tests/python/test_palettes.py@b63132e:40` | `from cli_driver import runner`; every `runner.invoke(...)` unchanged |
+| `plain`, `ANSI`, `BOX` in `tests/python/test_cli_mesh.py@b63132e:51-63`, `tests/python/test_cli_draw.py@b63132e:109-122`; `ANSI` in `tests/python/test_cli_mesh_geographic.py@b63132e:836` | imported from `cli_driver`; the 10 suites that import `plain` from `test_cli_mesh` import it from `cli_driver` |
+| `invoke`, whole command line: `tests/python/test_cli_catchment.py@b63132e:93-95`, `tests/python/test_cli_fetch.py@b63132e:64-66`, `tests/python/test_fetch_nve.py@b63132e:81-83` | `cli_driver.invoke`; call sites unchanged (each already passes the subcommand first). `test_cli_mesh_geographic.py`'s `invoke_any` alias becomes `invoke` |
+| `invoke`, mesh: `tests/python/test_cli_mesh_dem.py@b63132e:53-55`, `tests/python/test_cli_mesh_mosaic.py@b63132e:59-61`, `tests/python/test_cli_mesh_vtk.py@b63132e:48-50`, and its importers | `cli_driver.invoke`; every call gains `"mesh"` as its first argument (about 75 calls in 15 files, three of them inside asserts in `test_cli_mesh_vtk.py`) |
+| `invoke` in `tests/python/test_cli_draw.py@b63132e:125-126` (returns the `Result`, about 45 calls) and `tests/python/test_cli_station_catchments.py@b63132e:76-78` (output not passed through `plain`; the suite splits it into lines) | stay, on `cli_driver.runner`: changing their return would change their tests |
+| `bumpy`: seed 16 in `tests/python/test_cli_mesh_domain.py@b63132e:133-136`, `tests/python/test_cli_mesh_features.py@b63132e:125-128`, `tests/python/test_cli_mesh_landcover.py@b63132e:115-118`, `tests/python/test_cli_mesh_multi_features.py@b63132e:89-92`, and in class `TestTheSameCrs` at `tests/python/test_cli_mesh_domain_crs.py@b63132e:283-286`; seed 20 in `tests/python/test_cli_constraint_feet.py@b63132e:60-63`, `tests/python/test_cli_start_quality.py@b63132e:51-54`; seed 14 in `tests/python/test_cli_mesh_refine.py@b63132e:97-101`; seed 17 in `tests/python/test_cli_mesh_stats.py@b63132e:51-54` | `bumpy = rough_dem(<seed>)` at module level. In `test_cli_mesh_domain_crs.py` the binding goes at module level (no other test there requests `bumpy`): bound inside a class, a factory-made fixture receives the instance as `tmp_path` (probed: the test errors with `TypeError` on `TestInClass / str`) |
+| `square` in `tests/python/test_cli_mesh_domain.py@b63132e:139-141`, `tests/python/test_cli_mesh_stats.py@b63132e:57-59`; `plain_square` in `tests/python/test_cli_mesh_features.py@b63132e:131-133`, `tests/python/test_cli_mesh_landcover.py@b63132e:121-123`, `tests/python/test_cli_mesh_multi_features.py@b63132e:95-97` | `square = polygon_file(SQUARE, (HOLE,))`, `plain_square = polygon_file(SQUARE)` |
+| `squashed` in `tests/python/test_cli_mesh_cache.py@b63132e:48-50`, `tests/python/test_cli_mesh_geographic.py@b63132e:113-115` | imported from `cli_driver`. `tests/python/test_cli_station_catchments.py@b63132e:379-383` (through `plain` first) stays |
+| `write_geojson` in `tests/python/test_cli_mesh_domain_crs.py@b63132e:104-111` (default `crs=None`) and `tests/python/test_cli_mesh_geographic.py@b63132e:118-125` (`crs` required, one ring); the alias `utm33_geojson` in `test_cli_mesh_domain_crs.py`; the alias `write_domain` in `test_cli_mesh_edge_strip.py` | `geojson`. A call that relied on `crs=None` passes `crs=None`; a positional `crs` becomes `crs=...`, because `geojson`'s third parameter is `holes`. Same dict, same key order, so the same bytes |
+| `refused` in `tests/python/test_cli_mesh_domain_crs.py@b63132e:135-144` and `tests/python/test_cli_mesh_geographic.py@b63132e:149-158` | `cli_driver.refused(tmp_path, "mesh", *args, says=...)`, with `squash=True` in `test_cli_mesh_geographic.py` |
+| `refused` in `tests/python/test_cli_catchment.py@b63132e:137-144` (any non-zero exit, not 2) and `tests/python/test_cli_mesh_plain_output.py@b63132e:108-115` (sets `sys.argv`, no `--out`) | stay: folding them in would change what they assert |
+| `run` in `tests/python/test_cli_mesh_domain_crs.py@b63132e:122-127`, `tests/python/test_cli_mesh_geographic.py@b63132e:132-137` | `mesh_to_vtk` (31 calls renamed) |
+| `run` in `tests/python/test_cli_catchment.py@b63132e:130-134`, `tests/python/test_cli_mesh_refine.py@b63132e:80-84` | stay, with their first two lines replaced by `ran(...)` |
+| `run` in `tests/python/test_cli_mesh_landcover.py@b63132e:126-133`, `tests/python/test_cli_constraint_feet.py@b63132e:85-89`, `tests/python/test_cli_start_quality.py@b63132e:78-82` | stay (different returns; the last two spy on `cli.refine`, see "Not taken") |
+| `USAGE` in `tests/python/test_cli_mesh_dem.py@b63132e:50`, `tests/python/test_cli_mesh_mosaic.py@b63132e:55`, `tests/python/test_cli_mesh_edge_strip.py@b63132e:104`, `tests/python/test_cli_mesh_plain_output.py@b63132e:61`; `ROWS, COLS` in `tests/python/test_cli_constraint_feet.py@b63132e:49`, `tests/python/test_cli_mesh_plain_output.py@b63132e:62`, `tests/python/test_cli_mesh_stats.py@b63132e:48`, `tests/python/test_cli_start_quality.py@b63132e:46`; `Ring` in `tests/python/test_cli_mesh_domain_crs.py@b63132e:88`, `tests/python/test_cli_mesh_geographic.py@b63132e:104` | imported from `cli_driver` |
+
+After the change, no test module imports any of these names from another
+test module. Names that are not helpers of the command (`quarter_circle`,
+`SENTINEL`, `file_field`, `write_tiles`, `same_mesh`, `terrain`, ...) keep
+their homes; moving them is not this PR.
+
+Imports left unused (`CliRunner`, `re`, `json`, `app` where only the
+deleted helper used it) go; `ruff check` finds them. Prose in test
+docstrings and comments that names a moved helper's old home (for example
+`tests/python/test_cli_mesh.py@b63132e:56`, "per `test_cli_draw.py`'s `plain`") is
+reworded.
+
+`tests/python/test_cli_mesh_geographic.py@b63132e:106` keeps its own `ROWS = COLS = 60` (another grid) and
+does not import `cli_driver`'s.
+
+### Taken from the test audit (`docs/increments/test-audit.md` on `worktree-ci-speed`)
+
+- **R10, the GIL ticker:** `_Ticker` and `ticks_during` are identical in
+  `tests/python/test_core_cdt.py@b63132e:751-790` and `tests/python/test_core_noding.py@b63132e:721-757`
+  (64 non-blank lines). They move to `tests/python/gil_probe.py`; both
+  suites import `ticks_during`. Each suite's thresholds and its control test
+  stay as they are: the two suites' constants differ, and merging the two
+  control tests into one would remove a test.
+- **Not taken from R10:** the `valley` pair in `test_core_accumulate.py`
+  and `test_core_upstream.py` (about -7 net once it has a module of its
+  own); the seven identical two-line `repo` fixtures (each binding would
+  save one line, and those files are the harness tests that h17 is
+  re-marking on another branch); the viz fakes shared by
+  `test_viz_scene.py` and `test_viz_svg.py` (they are half of a hand-drawn
+  fixture whose vertex arrays differ between the two suites; moving half
+  separates the drawing from its data); the lazy `importlib` imports in the
+  five CLI suites this PR touches (each returns a module from a fixture
+  that has the module's own name, so a plain import would clash with the
+  fixture and the bodies would change); the shared quarter-circle run (it
+  changes test structure).
+- **Not taken, R1 (`tests/python/seams.py`):** it re-points what the tests
+  patch (`cli.refine`, `cli._engine`), which is a change to what they test,
+  and it needs the R9 audit of `raising=False` beside it. The two identical
+  `calls`/`box` refine spies in `tests/python/test_cli_constraint_feet.py@b63132e:66-82`
+  and `tests/python/test_cli_start_quality.py@b63132e:57-75` are R1's and wait for it
+  (Q3, `audit-test-seams`).
+
+### Expected test-line delta
+
+Non-blank lines (the same count as section 8's): about -100. The CLI part
+is about -80: 174 lines of copies and about 27 unused import lines go;
+the new module adds about 75 beyond what it moves, the per-file
+`cli_driver` imports and factory bindings about 25, and the call-site
+edits about 25 (adding `"mesh"` to about 75 calls and renaming 31 pushes
+some lines past 100 characters, and ruff format decides how they wrap).
+The ticker is about -20. The spread is in the call-site wraps. Production
+lines: 0 (`python3 tools/count_loc.py b63132e HEAD`).
+
+Measured at `2816d41`: +457 −475, −18 net against about −100, because
+adding `"mesh"` pushes calls past 100 characters and ruff format then puts
+one argument per line, and `cli_driver.py` is 123 lines against about 105.
+
+### Checks, run by `@tester` before committing and reported in the commit message
+
+1. **Same tests.** `pytest --collect-only -q tests/python` at `b63132e`
+   and at the head: the sorted node-ID lists are identical (`diff` empty).
+   Baseline at `b63132e`, with the main checkout's venv: 5264 collected in
+   the whole suite, 1123 in the 28 files this PR edits. The full suite's
+   passed and skipped counts are equal on both, on the same machine.
+2. **Same assertions.** A scratch script (not committed) takes every
+   `assert` statement in `tests/python/*.py` at both revisions,
+   `ast.unparse`d, after replacing `invoke('mesh', ` by `invoke(` in the
+   head's text (the only rename inside an assert). For each `test_*.py`
+   file, the multiset of asserts inside test functions is unchanged; and
+   across the whole directory, the set of distinct assert texts is
+   unchanged (the asserts of deleted copies are found in `cli_driver.py`,
+   `gil_probe.py` or a copy that stays).
+3. **Same inputs.** For seeds 14, 16, 17 and 20 the old `bumpy` and
+   `rough_dem` write byte-identical `bumpy.tif` files; one call of each
+   replaced `write_geojson` and its `geojson` replacement write identical
+   bytes. Hashes in the commit message.
+4. **The guard fails.** In a scratch copy, one mesh call left without
+   `"mesh"` fails with the assertion naming the subcommands; restored
+   afterwards. Name the plant in the commit message.
+5. **No sideways imports.** `grep -nE '^from test_' tests/python/*.py`
+   shows none of the moved names.
+6. `ruff check .`, `ruff format --check .`, `python3
+   tools/check_citations.py` (clean, and its at-risk list re-read), and
+   `count_loc.py` at 0.
+
+No mutation round beyond check 4.
+
+### Citations into the edited files
+
+Found with a scratch script that runs `tools/check_citations.py`'s own
+scanner over every scanned file and keeps the unpinned line citations
+whose target is one of the 28 files or the two `valley` files first
+considered. Fourteen, all in `docs/increments/`;
+none in code comments. Thirteen are pinned in this design's commit, each
+to the commit that wrote the citing line (`git blame` on that line), where
+the cited lines read as quoted. The exception: the code-review record at
+`docs/increments/25-plain-output.md:944` names the design citation that its
+branch had moved, so it is pinned with the design's, at `55c043e`.
+
+| Citing line | Pinned to |
+|---|---|
+| `docs/increments/15e-memory-fixes.md:328` | `tests/python/test_cli_mesh_geographic.py@3e01580:327-328` |
+| `docs/increments/15e-memory-fixes.md:386` | `tests/python/test_cli_mesh_multi_features.py@97eea35:17` |
+| `docs/increments/25-plain-output.md:288`, `:433` | `tests/python/test_cli_mesh_refine.py@a2d3319:151-155` |
+| `docs/increments/25-plain-output.md:585` | `tests/python/test_cli_mesh.py@ef52e8e:302` |
+| `docs/increments/25-plain-output.md:587` | `tests/python/test_cli_mesh_landcover.py@ef52e8e:13` (and its `:62-66`) |
+| `docs/increments/25-plain-output.md:590` | `tests/python/test_cli_mesh_stats.py@ef52e8e:262` (and its `:285-304`) |
+| `docs/increments/25-plain-output.md:830` | `tests/python/test_cli_mesh_mosaic.py@5e235eb:278` (and its `:302`, `:331-336`) |
+| `docs/increments/25-plain-output.md:942`, `:944` | `tests/python/test_cli_mesh_refine.py@55c043e:133` |
+| `docs/increments/27-node-sampling.md:315` | `tests/python/test_cli_mesh_plain_output.py@80990e0:279` |
+| `docs/increments/h16-harness-fixes.md:579` | `tests/python/test_cli_mesh_geographic.py@97eea35:886` |
+| `docs/increments/h16-harness-fixes.md:615` | `tests/python/test_hardening.py@a61e848:247` |
+
+Several of these were already stale at `b63132e` (for example
+`tests/python/test_cli_mesh_landcover.py@b63132e:13` no longer quoted the line the record
+discusses); pinning to the writing commit fixes those too. The fourteenth,
+`docs/increments/29-nve-reference-catchments.md:3092` into
+`tests/python/test_core_accumulate.py@b63132e:22`, points at a file this PR no longer edits.
+`@tester` reruns the scan after the change: any new unpinned citation into
+an edited file is `@tester`'s to pin in the same commit; one in a doc is
+reported to the main session for `@architect`.
+
+### Merge-order hazard
+
+23c-2 (`worktree-23c`, not merged) adds suites that import `invoke` and
+`USAGE` from `test_cli_mesh_dem` (`pieces_fixtures.py` and four
+`test_cli_mesh_pieces_*.py`) and `write_geojson` from
+`test_cli_mesh_geographic` (`test_cli_mesh_pieces_reprojected.py`).
+Whichever of T1 and 23c-2 merges second re-points them to `cli_driver`,
+adds `"mesh"` to its calls, and passes `crs=` by keyword. If it misses an
+import, the import fails; if it misses a `"mesh"`, `invoke`'s assertion
+fails, except before an argument that is itself a subcommand name (such as
+the `catchment` gallery fixture), where the test's own message check fails
+instead. Neither can pass silently, and the merge queue runs the second on
+top of the first.
+
 ## Review
 
 **T2 (`audit-layering-test`), code review, round 1, 2026-10-05.** Range `44fa7f5..97eea35` (e86b86d audit, 8190438 rulings and T2 design, 2f47ebb tests, 97eea35 citation pins). Verdict: CHANGES REQUESTED. LOC: 0 production lines (`count_loc.py`); test lines +184 -185, -1 net against about -35. Not pushed; no CI. Whole Python suite 5132 passed, 17 skipped; ruff, format, mypy and check_citations clean. An independent AST resolver agrees with the table for all 52 modules. Seven planted breaks in a scratch copy each failed only their own check: a row for a missing module, a deferred import, a relative import in a package `__init__`, `_core` imported from layer 4, two stale exceptions, and `importlib.import_module`. Check 4's stricter reading is sound. Every deleted firewall assertion is carried by a row that is equal or stricter. All 16 new pins quote what their records say. Blocking: (1) `@tester`: the `# fmt: off` comment at `tests/python/test_layering.py@97eea35:27-28` describes the formatter wrongly; (2) `@architect`: the -1 net explanation at `docs/increments/python-audit.md@97eea35:12-15` names the wrong cause. Suggestions: check 4's wording in section 8; `testing.md@97eea35:183-185`'s "no compiled extension" claim, false before this branch.
 
 **T2 (`audit-layering-test`), code review, round 2, 2026-10-05.** Range `97eea35..90cba64` (4686456 fmt-off comment, 90cba64 round 1 recorded and net explanation). Verdict: CHANGES REQUESTED. LOC: 0 production lines; branch test lines +186 −185, +1 net. Not pushed; no CI. Both round-1 blocking items fixed and true: `ruff format --diff` on a copy without the markers does what the new comment says (joined rows 98 and 99 characters, limit 100), and the per-file counts in the net explanation match `git diff -U0`. Check 4's wording matches the test. ruff, format, mypy and check_citations clean; test_layering 56 passed. Blocking: (1) `@architect`: the round-1 record's citations `tests/python/test_layering.py@97eea35:27-28` and `docs/increments/python-audit.md@97eea35:12-15` (pinned at recording) now resolve to the fixed text unless pinned. Suggestion: say "adds 4 and removes 2" at line 19.
 
+T2 code review r3 (90cba64..b63132e): APPROVED.
+
+T1 code review r1 (b63132e..2816d41): CHANGES REQUESTED — two unpinned citations in §9 (now section 10); fixed in 0d63d00.
+
 **PR B (`audit-crs-helpers`), code review, round 1, 2026-10-05.** Head `5197f9a`. Verdict: CHANGES REQUESTED. LOC: +36 net production (`count_loc.py 44fa7f5 5197f9a`). Blocking, all `@architect`: (1) `same_crs` rule 2 calls `+proj=longlat +datum=WGS84 +lon_0=10` the same as EPSG:4326 (also `+lon_0=-3`, and `+datum=NAD83 +lon_0=10` against 4269) while the always_xy transform moves every point 10 degrees, and the rule is not transitive (EPSG:4326 = CRS84, the string = 4326, the string is not CRS84); (2) the status paragraph is stale; (3) the +36 against about +16 is not reconciled. Ruled in section 9, "After code review round 1".
+
+**PR B (`audit-crs-helpers`), code review, round 2, 2026-10-05.** Head `65cd528`. Verdict: CHANGES REQUESTED, prose only. LOC: +22 net production (`count_loc.py 44fa7f5 65cd528`). Blocking, all `@architect`: the stale status paragraph, the unrecorded +22, section 6's row B; design note: the hint also shows for `OGC:CRS84` and a datum-WGS84 UTM string against an EPSG DEM. Fixed in this file (status, section 6, section 9 "Net production lines" and "After the round-1 red step"); no code change.
