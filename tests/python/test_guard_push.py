@@ -9,15 +9,20 @@ queued; a pass is silent in both.
 
 from __future__ import annotations
 
+import importlib.util
 import subprocess
+import sys
 from pathlib import Path
+from types import ModuleType
 
 import pytest
 
 from harness_fixtures import (
     GUARD_GOVERNANCE,
     GUARD_PUSH,
+    REAL,
     SUBAGENT,
+    Tool,
     add_worktree,
     bash_event,
     clean_env,
@@ -627,7 +632,7 @@ UPDATE_REF = "update-ref moves a ref directly"
 
 G7_ASKED: dict[str, str] = {
     # (a) a later bare git word
-    "find . -maxdepth 0 -exec git push origin HEAD \;": PUSH,
+    r"find . -maxdepth 0 -exec git push origin HEAD \;": PUSH,
     "caffeinate -i git push": PUSH,
     "stdbuf -o0 git push": PUSH,
     "watch -n1 git push": PUSH,
@@ -644,7 +649,7 @@ G7_ASKED: dict[str, str] = {
     # (b) a shell's command line
     "caffeinate sh -c 'git push'": PUSH,
     "caffeinate sh -c 'cd x && git push'": PUSH,
-    "find . -maxdepth 0 -exec sh -c 'git push' \;": PUSH,
+    r"find . -maxdepth 0 -exec sh -c 'git push' \;": PUSH,
     # every other reason applies through (a)
     "caffeinate -i gh pr merge 12": GH_PR,
     "caffeinate -i gh -R o/r pr merge 12": GH_PR,
@@ -727,3 +732,119 @@ def test_a_harmless_key_a_read_or_a_word_that_only_names_git_is_silent(
     set_mode(repo, mode)
     assert pretool_decision(run_script(repo, GUARD_PUSH, bash_event(repo, command))) is None
     assert queue_lines(repo) == []
+
+
+# ---------------------------------------------------------------- h16 G7, round 8
+#
+# §2 G7, amended after review round 8 (Ola's ruling of 2026-10-06): rule (b)
+# takes every shell in one set, `shell_scan.SHELLS`, which `guard_push.py`
+# reads rather than copies; and under `parallel` a later git or gh word is not
+# a bare tail, so it keeps G2's unknown-command reason, since `parallel` builds
+# the command it runs from its template and inputs.
+
+shell_scan = Tool("shell_scan")
+
+G7_ROUND8_ASKED: dict[str, str] = {
+    # (b) any shell, as the first word or through a runner
+    "dash -c 'git push'": PUSH,
+    "ksh -c 'git push'": PUSH,
+    "csh -c 'git push'": PUSH,
+    "tcsh -c 'git push'": PUSH,
+    "fish -c 'git push'": PUSH,
+    "/bin/ksh -c 'cd x && git push'": PUSH,
+    "caffeinate dash -c 'git push'": PUSH,
+    r"find . -exec tcsh -c 'git push' \;": PUSH,
+    "watch \"dash -c 'git push'\"": PUSH,
+    # (a) under parallel: the tail as written is not what runs
+    "parallel git ::: push": UNKNOWN,
+    "parallel ::: git ::: push": UNKNOWN,
+    "parallel git {} ::: push": UNKNOWN,
+    "parallel -j2 git ::: push": UNKNOWN,
+    # Pinned false positives: harmless lines under parallel ask all the same.
+    "parallel git ::: status": UNKNOWN,
+    "parallel grep git ::: a": UNKNOWN,
+}
+
+#: Controls. `parallel git push ::: a` still asks with PUSH: it is a row of G7_ASKED.
+G7_ROUND8_PASSED = (
+    "grep -rn dash .",
+    "grep ksh file",
+    "echo tcsh",
+    "which dash ksh",
+    "ls /bin/*sh",
+    "man csh",
+    "dash -c 'git status'",
+    "parallel 'git status' ::: a",
+)
+
+#: The shells the design names: those `/etc/shells` lists on Ola's Mac, and the
+#: common shells taking `-c` that are not installed there.
+ON_OLAS_MAC = {"bash", "csh", "dash", "ksh", "sh", "tcsh", "zsh"}
+NAMED_SHELLS = ON_OLAS_MAC | {"rbash", "fish", "mksh", "ash", "yash"}
+
+
+@pytest.mark.parametrize("mode", ["off", "on"])
+@pytest.mark.parametrize("command", G7_ROUND8_ASKED)
+def test_a_command_run_by_any_shell_or_under_parallel_asks(
+    repo: Path, mode: str, command: str
+) -> None:
+    set_mode(repo, mode)
+    found = pretool_decision(run_script(repo, GUARD_PUSH, bash_event(repo, command)))
+    assert found is not None, f"{command!r} passed silently"
+    kind, reason = found
+    assert kind == ("deny" if mode == "on" else "ask")
+    assert G7_ROUND8_ASKED[command] in reason
+    if mode == "on":
+        [line] = queue_lines(repo)
+        assert (line["hook"], line["act"]) == ("guard_push", command)
+    else:
+        assert queue_lines(repo) == []
+
+
+@pytest.mark.parametrize("mode", ["off", "on"])
+@pytest.mark.parametrize("command", G7_ROUND8_PASSED)
+def test_a_word_that_only_names_a_shell_or_a_read_under_one_is_silent(
+    repo: Path, mode: str, command: str
+) -> None:
+    set_mode(repo, mode)
+    assert pretool_decision(run_script(repo, GUARD_PUSH, bash_event(repo, command))) is None
+    assert queue_lines(repo) == []
+
+
+def test_the_shell_set_holds_every_shell_the_design_names() -> None:
+    assert NAMED_SHELLS - set(shell_scan.SHELLS) == set()
+
+
+def test_every_shell_takes_its_program_with_c() -> None:
+    flags = {name: shell_scan.PROGRAM_FLAG.get(name) for name in shell_scan.SHELLS}
+    assert {name: flag for name, flag in flags.items() if flag != "c"} == {}
+
+
+def test_every_shell_this_host_lists_is_in_the_shell_set() -> None:
+    """`/etc/shells`, not `ls /bin/*sh`: on a merged-`/usr` Linux `/bin` also holds `ssh`."""
+    listed = Path("/etc/shells")
+    if not listed.exists():
+        pytest.skip("this host has no /etc/shells to read its shells from")
+    lines = [line.strip() for line in listed.read_text().splitlines()]
+    names = {Path(line).name for line in lines if line.startswith("/")}
+    shells = {name for name in names if name.endswith("sh")}
+    assert shells, "/etc/shells lists no shell ending in sh: the probe would measure nothing"
+    assert shells - set(shell_scan.SHELLS) == set()
+
+
+def test_guard_push_holds_no_shell_list_of_its_own(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(sys, "path", [*sys.path])  # the hook appends tools/ on import
+    hook = load_guard_push()
+    assert hook.shell_scan is not None, "guard_push could not import tools/shell_scan.py"
+    if hasattr(hook, "SHELLS"):
+        assert hook.SHELLS is hook.shell_scan.SHELLS
+
+
+def load_guard_push() -> ModuleType:
+    """Import `.claude/hooks/guard_push.py` from the real checkout, for its module state."""
+    path = REAL / ".claude" / "hooks" / "guard_push.py"
+    spec = importlib.util.spec_from_file_location("h16_guard_push", path)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module

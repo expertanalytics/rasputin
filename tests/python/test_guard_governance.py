@@ -396,3 +396,85 @@ def test_governed_without_the_scratchpad_exemption_judges_by_the_rules() -> None
 )
 def test_the_legacy_remote_files_are_governed(path: str, expected: bool) -> None:
     assert load_hook("guard_governance").governed(path) is expected
+
+
+# ---------------------------------------------------------------- h16 G7, round 8
+#
+# §2 G7, amended after review round 8: the widened shell set reaches this guard
+# too, since a shell's `-c` program is parsed as a nested line.
+#
+# ---------------------------------------------------------------- h16 G8
+#
+# §2 G8: a copy or move into a directory named without a trailing `/` is judged
+# both as the name itself and as `<dir>/<basename of each source>`; a
+# `-t`/`--target-directory` option makes every operand a source written into it.
+
+#: {command: the governed path the ask must name}.
+G8_ASKED: dict[str, str] = {
+    "dash -c 'cp x CLAUDE.md'": "CLAUDE.md",
+    "ksh -c 'echo x > CLAUDE.md'": "CLAUDE.md",
+    "cp json.py tools": "tools/json.py",
+    "mv ast.py tools": "tools/ast.py",
+    "cp a.py b/json.py tools": "tools/json.py",
+    "cp s .git/remotes": ".git/remotes/s",
+    "cp s .git/branches": ".git/branches/s",
+    "cp x.py .claude/hooks": ".claude/hooks/x.py",
+    "cp a.md .claude/agents": ".claude/agents/a.md",
+    "cp settings.json .claude": ".claude/settings.json",
+    "cp config .git": ".git/config",
+    "ln -s /x/y.py .claude/hooks": ".claude/hooks/y.py",
+    "install x.py .claude/hooks": ".claude/hooks/x.py",
+    "cp -t .claude/hooks x.py": ".claude/hooks/x.py",
+    "cp -t.claude/hooks x.py": ".claude/hooks/x.py",
+    "cp --target-directory .claude/hooks x.py": ".claude/hooks/x.py",
+    "cp --target-directory=.claude/hooks x.py": ".claude/hooks/x.py",
+    "mv -t tools ast.py": "tools/ast.py",
+    # Controls that ask today and still must.
+    "cp notes.txt CLAUDE.md": "CLAUDE.md",
+    "cp x.py .claude/hooks/": ".claude/hooks/x.py",
+    # Pinned false positive: `backup` meant as a new file, read as a directory.
+    "cp CLAUDE.md backup": "backup/CLAUDE.md",
+}
+
+#: A last operand with an extension is a file; `src`, `/tmp/inc` and `tools`
+#: as directories give names that are not governed.
+G8_PASSED = (
+    "cp CLAUDE.md /tmp/x.md",
+    "cp notes.txt notes.bak",
+    "cp json.py src",
+    "cp x.py tools",
+    "mv ast.py tools/ast_helpers.py",
+    "mv tools/old.py tools/new.py",
+    "cp -r docs/increments /tmp/inc",
+)
+
+
+@pytest.mark.parametrize("mode", ["off", "on"])
+@pytest.mark.parametrize("command", G8_ASKED)
+def test_a_copy_into_a_directory_or_a_shell_write_asks_naming_the_path(
+    repo: Path, mode: str, command: str
+) -> None:
+    set_mode(repo, mode)
+    found = pretool_decision(run_script(repo, GUARD_GOVERNANCE, bash_event(repo, command)))
+    assert found is not None, f"{command!r} passed silently"
+    kind, reason = found
+    if mode == "on":
+        assert kind == "deny"
+        assert "it writes " in reason and G8_ASKED[command] in reason
+        [line] = queue_lines(repo)
+        assert (line["hook"], line["act"]) == ("guard_governance", command)
+    else:
+        assert kind == "ask"
+        assert "This changes a file that states rules: " in reason
+        assert G8_ASKED[command] in reason
+        assert queue_lines(repo) == []
+
+
+@pytest.mark.parametrize("mode", ["off", "on"])
+@pytest.mark.parametrize("command", G8_PASSED)
+def test_a_copy_to_a_file_or_an_ungoverned_directory_is_silent(
+    repo: Path, mode: str, command: str
+) -> None:
+    set_mode(repo, mode)
+    assert pretool_decision(run_script(repo, GUARD_GOVERNANCE, bash_event(repo, command))) is None
+    assert queue_lines(repo) == []
