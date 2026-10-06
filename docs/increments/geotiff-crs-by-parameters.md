@@ -1,7 +1,10 @@
 # GeoTIFF: a projected CRS given by parameters, read as the EPSG code it is
 
-Status: **code review round 2 approved at `35c44c8`; +159 net. Next: push
-on Ola's yes, after audit PR B (branch `worktree-audit-crs`) merges.** Design
+Status: **code review round 2 approved at `35c44c8`; +159 net. Now merged
+onto PR B's merged head `ae493da` (PR B, branch `worktree-audit-crs`, PR
+#192, with master `fd64f8b` after #189), with no conflicts; a reviewer runs
+the build and suites on the merge next. Next: push on Ola's yes, after #192
+merges.** Design
 approved at round 2 (`900701c`), red steps `0f6c271` and `5270a64`, green
 steps `c8984e8` and `35c44c8`.
 Written by `@architect` on branch
@@ -163,8 +166,8 @@ rule calls never the same as an EPSG code. The rest of the hits are
 
 ## 3. Finding: PR B's `same_crs` does not accept this file
 
-PR B's question 1 (`docs/increments/python-audit.md`, section 9, "Questions
-for Ola") says the CRS built from these GeoKeys "is then the same as
+PR B's question 1 (`docs/increments/python-audit.md@65cd528:1278-1279`,
+section 9, "Questions for Ola") said the CRS built from these GeoKeys "is then the same as
 EPSG:31287 by B's rule (probe: EPSG:31287 as WKT2 with the file's
 `lon_0=13.33333333300013` is equivalent and a `noop`)". That probe passed
 only because the WKT2 kept EPSG's name, "MGI / Austria Lambert", and PROJ
@@ -184,8 +187,9 @@ So the reader cannot decide "matches EPSG:n" by `same_crs` alone, or the file
 this PR exists for stays refused. `same_crs` still does all the work
 downstream: once the file reads as `EPSG:31287`, every comparison with a
 river file, a domain or `--out-crs` is `same_crs` on that text, unchanged.
-(Whether PR B's question-1 sentence is corrected on PR B's branch is the main
-session's call; this file does not edit `python-audit.md`.)
+PR B corrected that sentence on its own branch (`c7d4933`): its question 1
+now says B's rule does not accept the GeoKey-built CRS and that this PR
+matches by its own rule. This file does not edit `python-audit.md`.
 
 ## 4. The design
 
@@ -611,11 +615,12 @@ The method table may be packed one parameter per line under `# fmt: off`
 `git diff --stat 44fa7f5 65cd528 -- src_python/tin_engine/io/geotiff.py` is
 empty), `src_python/tin_engine/crs.py@65cd528`,
 `tests/python/test_layering.py@65cd528`, `tests/python/test_io_geotiff.py@44fa7f5`,
+`docs/increments/python-audit.md@65cd528`,
 `legacy/rasputin/reader.py@legacy-archive`.
 
 ## Review
 
-- Design round 1 (`@reviewer`, at `fbbfb56`): three fixes (rows 7 and 9 did not start with `P`; the TOWGS84 prior-art claim was wrong for 3072 = 32767; the increment 11 amendments did not name what they override) and three suggestions (LOC recount, `cache_clear()` in red test 10, 3074 beyond GeoTIFF 1.1), all taken in the commit after `fbbfb56`.
-- Design round 2 (`@reviewer`, at `900701c`): approved.
-- Code round 1 (`@reviewer`, at `c8984e8`): changes requested: a NaN, infinite or multi-valued parameter escaped as `TypeError` or `CRSError` (rows 6 and 11 now refuse it; red test 13), five citations in increments 12, 15 and 25 unpinned (pinned to `65cd528`), a docstring tense (`@tester`); suggestions (2054 before row 6, red test 14; section 5's absolute tolerance) taken in the commit after `c8984e8`.
-- Code round 2 (`@reviewer`, at `35c44c8`): approved; round-1 findings closed; +159 net against about +162.
+- Design round 1 (`@reviewer`, at `fbbfb56`): CHANGES REQUESTED: three fixes (rows 7 and 9 did not start with `P`; the TOWGS84 prior-art claim was wrong for 3072 = 32767; the increment 11 amendments did not name what they override) and three suggestions (LOC recount, `cache_clear()` in red test 10, 3074 beyond GeoTIFF 1.1), all taken in the commit after `fbbfb56`.
+- Design round 2 (`@reviewer`, at `900701c`): APPROVED.
+- Code round 1 (`@reviewer`, at `c8984e8`): CHANGES REQUESTED: a NaN, infinite or multi-valued parameter escaped as `TypeError` or `CRSError` (rows 6 and 11 now refuse it; red test 13), five citations in increments 12, 15 and 25 unpinned (pinned to `65cd528`), a docstring tense (`@tester`); suggestions (2054 before row 6, red test 14; section 5's absolute tolerance) taken in the commit after `c8984e8`.
+- Code round 2 (`@reviewer`, at `35c44c8`): APPROVED; round-1 findings closed; +159 net against about +162.
