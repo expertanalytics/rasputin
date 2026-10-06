@@ -10,7 +10,7 @@ every rewrite timed below exists only in the scratch scripts in `scripts/`.
   macOS 27.0. Python 3.13.15, shapely 2.1.2 (GEOS 3.13.1), numpy 2.5.3,
   tifffile 2026.9.20, imagecodecs 2026.8.16.
 - **Power: battery for every run** (`pmset -g batt` before and after each
-  `--stats` run: `raw/stats/*_power.txt`; 87 % at the start, 80 % at the end).
+  `--stats` run: `raw/stats/*_power.txt`).
   The percentages and the profiles hold on battery. Absolute seconds compare only
   with other battery runs. The `--stats` figures from earlier this morning
   (`../rasputin_scratch/norway/*/*_stats.md`) have no recorded power state,
@@ -132,9 +132,9 @@ the whole outline.
 
 | step | production s (N / S) | rewrite | rewrite s (N / S) |
 |---|---|---|---|
-| `_lookup`: `STRtree.query(points, predicate="intersects")` | 1.41 / 2.17 | candidates by box, then `shapely.prepare` on the candidate polygons and a vectorised `intersects` (same pairs; a tree of points queried with the polygons is as fast) | 0.09 / 0.12 |
-| best triangle per component: `np.lexsort` over all triangles | 0.31 / 1.15 | `np.maximum.at` for each component's largest r, then `np.minimum.at` for the lowest index at it | 0.017 / 0.046 |
-| `regions`: `np.isin(keys, cut keys)` then stable `argsort` | 1.01 / 3.09 | one default `argsort` of all keys, then cut keys removed with `searchsorted` | 0.52 / 1.42 |
+| `_lookup`: `STRtree.query(points, predicate="intersects")` | 1.42 / 2.16 | candidates by box, then `shapely.prepare` on the candidate polygons and a vectorised `intersects` (same pairs; a tree of points queried with the polygons is as fast) | 0.09 / 0.12 |
+| best triangle per component: `np.lexsort` over all triangles | 0.31 / 1.06 | `np.maximum.at` for each component's largest r, then `np.minimum.at` for the lowest index at it | 0.017 / 0.047 |
+| `regions`: `np.isin(keys, cut keys)` then stable `argsort` | 1.01 / 3.07 | one default `argsort` of all keys, then cut keys removed with `searchsorted` | 0.52 / 1.43 |
 | **`label_triangles`, whole** | **2.88 / 6.60** | **all three** | **0.68 / 1.79** |
 
 The lookup tests each point against an unprepared polygon, which walks all its

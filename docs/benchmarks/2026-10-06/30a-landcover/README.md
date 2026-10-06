@@ -77,8 +77,9 @@ separately, because the mesh bytes are unchanged.
 
 Per-repeat values: land cover, base 2.847 / 2.870 / 2.825 and branch
 0.688 / 0.673 / 0.674 (Numedalslågen); base 6.565 / 6.522 / 6.539 and branch
-1.744 / 1.800 / 1.741 (Skiensvassdraget). The spread is under 3 % on every
-row.
+1.744 / 1.800 / 1.741 (Skiensvassdraget). The spread (largest minus smallest,
+over the median) is 3.4 % on Skiensvassdraget's branch land cover and 2.2 % or
+less on every other row.
 
 **Gate (branch median ≤ a third of the base median):** passed on both,
 at 0.237 and 0.267.

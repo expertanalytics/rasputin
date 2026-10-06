@@ -1,6 +1,8 @@
 # Increment 30a — the `land cover` phase of `rasputin mesh`, made fast
 
-Status: **built and accepted; waits for code review.** Designed by `@architect`
+Status: **built and accepted; code review round 2 asked for prose fixes, made
+in the commit that records it; round 3 next.** Round 1's test fix is
+`3cc526f`. Designed by `@architect`
 2026-10-06 on branch `worktree-landcover-speed`, on `@perf`'s profile commit
 `a7154ec` (master `8199f30` plus the profile); design review round 1
 APPROVED. Red `6cde0eb`, green `3066d60` (+12 net production lines,
@@ -98,9 +100,9 @@ copies of the code, identical output):
 
 | step | today, s (Numedalslågen / Skiensvassdraget) | why |
 |---|---|---|
-| `_lookup` | 1.41 / 2.17 | each candidate pair walks every vertex of an unprepared polygon; one CORINE polygon has 370,070 vertices and is a candidate for many points |
-| best triangle per component | 0.31 / 1.15 | `np.lexsort` over all 1.3 M / 3.0 M triangles to pick one per component (1,860 / 2,881 components) |
-| `regions` | 1.01 / 3.09 | `np.isin` of 3.9 M / 9.1 M side keys (a sort inside), then a stable `argsort` of what is left |
+| `_lookup` | 1.42 / 2.16 | each candidate pair walks every vertex of an unprepared polygon; one CORINE polygon has 370,070 vertices and is a candidate for many points |
+| best triangle per component | 0.31 / 1.06 | `np.lexsort` over all 1.3 M / 3.0 M triangles to pick one per component (1,860 / 2,881 components) |
+| `regions` | 1.01 / 3.07 | `np.isin` of 3.9 M / 9.1 M side keys (a sort inside), then a stable `argsort` of what is left |
 
 Inputs: 1,287,334 / 3,029,295 triangles; 156,919 / 275,572 constraint edges;
 1,611 / 2,628 coded polygons (all valid MultiPolygons, checked for this design
@@ -450,3 +452,7 @@ branch (68 of 68), and the six new lines come from tests 30a adds.
 ## Review
 
 **Design review, round 1, 2026-10-06.** Range `a7154ec..78b682e`. Verdict: APPROVED. LOC: 0 (design only); estimate +10 to +15. Not pushed; no CI.
+
+**Code review, round 1, 2026-10-06.** Range `a7154ec..46a5e56` (design 78b682e, red 6cde0eb, green 3066d60, @perf f38ff1a ACCEPTED, records 46a5e56). Verdict: CHANGES REQUESTED. LOC: +12 net (20 added, 8 removed, all `src_python/tin_engine/landcover.py`) against +10 to +15. pytest 5221 passed, 17 skipped; mypy, ruff, prohibited-deps, detria boundary, check_citations clean; probe gate re-checked: 68 of 68 base lines unchanged, 6 new, .vtk hashes equal. Blocking: red-step scaffolding at `tests/python/test_landcover.py@46a5e56:464-477` (`helper`'s call-time getattr lookup) and the docstring's 30a paragraph at :31-33; use `landcover._best`/`_member` directly (test-audit R10) and put the paragraph in the past tense. The design record's range and LOC 0 confirmed by count_loc. The profile commit a7154ec goes out in this PR; round 2 reviews `8199f30..` whole. Not pushed; no CI.
+
+**Code review, round 2, 2026-10-06.** Range `8199f30..3cc526f`. Verdict: CHANGES REQUESTED. LOC: +12 (estimate +10 to +15). Round 1's red-step item fixed in `3cc526f`; blocking: six land-cover figures in docs/benchmarks/2026-10-06/bottlenecks/README.md section 3 (two copied into this file's section 2) disagree with raw/lc_*.json, its battery percentages are absent from raw/stats/*_power.txt, and 30a-landcover/README.md's "spread under 3 %" is 3.4 % on Skiensvassdraget's branch land cover; prose only. Merges cleanly with origin/master 9dc3c11. Not pushed; no CI.
