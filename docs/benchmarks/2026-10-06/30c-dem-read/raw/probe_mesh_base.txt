@@ -1,0 +1,5 @@
+tin_engine from /private/tmp/claude-501/-Users-skavhaug-projects-rasputin/6a989a29-4492-430f-99b0-9fe3058f931a/scratchpad/30c/venv-base/lib/python3.14/site-packages/tin_engine
+/private/var/folders/h2/yycsx2z16_d181syfgb0947m0000gn/T/tmpvsjjfs9z/numedalslagen.vtk
+mesh numedalslagen shape=17882x15667 dtype=float32 sha=2fbff8b2dd8f8e6a seams=[6601_1_10m_z33.tif/6602_3_10m_z33.tif/1804/0.0433349609375/0.005035400390625;6601_1_10m_z33.tif/6602_4_10m_z33.tif/8379/1.186767578125/0.04486083984375;6601_2_10m_z33.tif/6602_3_10m_z33.tif/56278/0.207977294921875/0.00482177734375;6601_2_10m_z33.tif/6602_4_10m_z33.tif/2026/1.186767578125/0.047027587890625;6602_3_10m_z33.tif/6602_4_10m_z33.tif/2029/1.1937255859375/0.0465087890625;6700_2_10m_z33.tif/6701_3_10m_z33.tif/31004/0.2672119140625/0.0020751953125] vtk=34f7117e5e528e97
+/private/var/folders/h2/yycsx2z16_d181syfgb0947m0000gn/T/tmpfnuyvu5s/skiensvassdraget.vtk
+mesh skiensvassdraget shape=13675x14653 dtype=float32 sha=9447445bdca2e686 seams=[] vtk=ab996019190166f9
