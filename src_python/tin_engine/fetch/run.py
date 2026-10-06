@@ -29,9 +29,8 @@ from tin_engine import installed_version
 from tin_engine.crs import parse_crs, same_crs
 from tin_engine.fetch.http import FetchError, RangeClient
 from tin_engine.fetch.plan import FetchRequest, ObjectPlan, parse_prefix, plan_object, source_box
-from tin_engine.io.models import RasterMeta
+from tin_engine.io.models import Bounds, RasterMeta
 from tin_engine.io.repository import CachedObject, CachedRequest, CacheManifest, CacheWriter
-from tin_engine.mosaic import Bounds
 from tin_engine.sources import RemoteSource, notice
 
 MIB = 1 << 20

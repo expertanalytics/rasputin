@@ -36,8 +36,8 @@ LAYERS: tuple[dict[str, str], ...] = (
     },
     {  # L1: pure algorithms
         "crs": "",
-        "mosaic": "io.cog io.models io.repository",
-        "target_grid": "crs domain io.models mosaic",
+        "mosaic": "io.models",
+        "target_grid": "crs domain io.models",
         "grid_domain": "io.models",
         "domain": "crs io.models",
         "chains": "domain feature_input features",
@@ -77,9 +77,8 @@ LAYERS: tuple[dict[str, str], ...] = (
                      " sensitivity",
         "catchment_batch": "catchment crs gauge hydrography io.repository reference",
         "fetch": "",
-        "fetch.plan": "crs domain fetch.http io.cog io.geotiff io.models mosaic",
-        "fetch.run": "crs fetch.http fetch.plan io.models io.repository mosaic sources"
-                     " tin_engine",
+        "fetch.plan": "crs domain fetch.http io.cog io.geotiff io.models",
+        "fetch.run": "crs fetch.http fetch.plan io.models io.repository sources tin_engine",
         "fetch.nve": "fetch.http sources",
     },
     {  # L5: flags in, files and stderr out
@@ -102,8 +101,6 @@ TABLE: dict[str, tuple[int, frozenset[str]]] = {
 # F12's edges against the rule, importer -> imported, each with the PR
 # (section 6) that removes it.
 UPWARD: dict[tuple[str, str], str] = {
-    ("mosaic", "io.cog"): "A, audit-lattice",
-    ("mosaic", "io.repository"): "A, audit-lattice",
     ("chains", "feature_input"): "C, audit-geojson-io",
     ("cli", "_core"): "H, audit-mesh-run",
 }

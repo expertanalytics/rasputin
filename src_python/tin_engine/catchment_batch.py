@@ -178,12 +178,7 @@ async def run_batch(
         raise ValueError(f"not in the stations file: {', '.join(sorted(unknown))}")
     check_reach_crs(segments_crs, repository)
     move = reprojector(stations_crs, segments_crs)
-    boxes = [
-        box(
-            m.x_min, m.y_max - (m.rows - 1) * m.delta_y, m.x_min + (m.cols - 1) * m.delta_x, m.y_max
-        )
-        for m in (f.meta for f in repository.footprints())
-    ]
+    boxes = [box(*f.meta.node_box()) for f in repository.footprints()]
     rows: list[StationResult] = []
     for station in stations:
         if request.only and station.station not in request.only:

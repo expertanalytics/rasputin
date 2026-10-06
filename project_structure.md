@@ -106,17 +106,21 @@ src_python/tin_engine/     # public Python API (distribution name: rasputin)
   grid_domain.py           # DEM extent -> stride-subsampled nodes + outer ring;
                            #   pure numpy, never imports _core
   mosaic.py                # plan_mosaic / assemble: select, group by lattice,
-                           #   check overlaps and coverage, stitch; no files (15a)
+                           #   check overlaps and coverage, stitch; no files (15a);
+                           #   imports only io.models first-party
   dem_input.py             # --dem/--bbox or a domain -> DemInput(tile, plan,
-                           #   label, domain in the DEM's CRS) (15a, 15b)
+                           #   label, domain in the DEM's CRS) (15a, 15b);
+                           #   takes a DemRepository and TileFootprints, and
+                           #   the union of the tiles' node_box
   domain.py                # --domain: reads one polygon (GeoJSON or WKT) in its
                            #   own CRS, to_crs, check_extent; never imports _core
   crs.py                   # parse_crs, reprojector: the one Transformer.from_crs
                            #   site, always_xy (15b); pyproj and numpy
-  target_grid.py           # TargetGrid on one global lattice, source_region,
-                           #   SourceWindows / TileWindows, resample (bilinear,
-                           #   threads), check_point_blocks; never imports _core
-                           #   (15c-2)
+  target_grid.py           # TargetGrid (its node_box) on one global lattice,
+                           #   source_region, SourceWindows / TileWindows,
+                           #   resample (bilinear, threads), check_point_blocks;
+                           #   NoData by valid_mask (+-inf is data); never
+                           #   imports _core or mosaic (15c-2)
   final_check.py           # run: phase 2, the source nodes filed in a
                            #   CheckPoints, then refine_points from phase 1's
                            #   mesh (15c-2); takes the edge strip, checked in
@@ -244,7 +248,13 @@ src_python/tin_engine/     # public Python API (distribution name: rasputin)
                            #   triangle_codes=, land_cover_codes= add the cell
                            #   array land_cover_code and its field (16c)
     geotiff.py             # TIFF container + GeoKey decoding -> DemTile
-    models.py              # Pydantic RasterMeta / DemTile
+    models.py              # frozen Pydantic Bounds (`of` a shapely-order
+                           #   box), IndexWindow, RasterMeta, TileFootprint,
+                           #   DemTile; RasterMeta's node arithmetic, the
+                           #   core's spelling: node_xy, index_of, node_box,
+                           #   windowed; valid_mask, the one NoData rule (NaN
+                           #   or the sentinel; +-inf is data); imports
+                           #   nothing first-party
     geopackage.py          # GeoPackage layer_info / query_features over an
                            #   open sqlite3.Connection; frozen dataclasses,
                            #   opens nothing, knows no path (16b)
@@ -252,7 +262,8 @@ src_python/tin_engine/     # public Python API (distribution name: rasputin)
                            #   standard library XML; opens nothing (16b)
     cog.py                 # decode_window: only the blocks a window meets,
                            #   from a BlockSource (an open file or the tile
-                           #   cache); opens nothing (23a-1)
+                           #   cache), its meta `meta.windowed(window)`;
+                           #   opens nothing (23a-1)
     station_set.py         # read_stations -> (stations, crs) and
                            #   read_references -> ({station: polygon}, crs):
                            #   fetch-stations' files or a user's points file;
@@ -265,8 +276,9 @@ src_python/tin_engine/     # public Python API (distribution name: rasputin)
                            #   read_segments -> (RiverSegments, crs, copies
                            #   dropped); one LineString per segment (29)
     repository.py          # the ONE io/ module that opens files:
-                           #   TiffDemRepository lists headers, loads tiles
-                           #   (15a); open_geopackage, a read-only SQLite
+                           #   DemRepository, the Protocol: footprints, load,
+                           #   load_window, check; TiffDemRepository lists
+                           #   headers, loads tiles (15a); open_geopackage, a read-only SQLite
                            #   connection (16b); CacheRepository and
                            #   CachedBlocks read the tile cache (23a-1);
                            #   CacheWriter writes it under a lock (23a-2);

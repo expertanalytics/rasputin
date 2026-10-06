@@ -32,7 +32,7 @@ round 1 asked for changes, made in `e2baa5f`; round 2 approved `e2baa5f`
 (Review, below). Master is merged into the branch twice: the first merge
 (`e4f7a42`, test side done by `@tester`) was reviewed (Review, below); the
 second (`8c2bc9a`) takes master with #188 to #192; `@reviewer` reviewed
-and approved it (Review, below). Next: push on Ola's yes.
+and approved it (Review, below). F merged into master as #196.
 
 PR B (`audit-crs-helpers`, F3) is designed in section 9, on branch
 `worktree-audit-crs` after T2. `@tester`'s red commit `29aff00` has red
@@ -1152,7 +1152,7 @@ differ).
 
 - `domain.py:62` uses `same_crs`: one rule everywhere; otherwise a domain spelt as a PROJ string of the DEM's CRS goes through a transform while the record says `domain_transform` "none".
 - When the same, `to_crs` returns the same polygon labelled `target.to_string()`, not `self`: today's output exactly (probe: the PROJ-string domain comes back bit-identical, labelled `EPSG:25833`), and the result's `crs` is always `dst`'s.
-- `feature_input.py:300` and `fetch/plan.py:118` use `same_crs` too, by the same rule; neither changes a wording.
+- `feature_input.py:300` and `src_python/tin_engine/fetch/plan.py@618328b:118` use `same_crs` too, by the same rule; neither changes a wording.
 - Red tests 8-10 below are needed: each site's output is the same today, so only a refused point-moving `Transformer` method can tell the fix from the bug.
 - `@tester`'s departure, accepted: `TestTheSameCrs`'s guard refuses the point-moving methods (`transform`, `itransform`, `transform_bounds`), not `Transformer.from_crs`, since `same_crs` builds one to compare; the invariant (no point moved) is unchanged and the guard was shown still to catch a real transform.
 - `@tester`'s departure, accepted: wording pins at the other two `single_crs` sites (the `--out-crs` path and `catchment.delineate`), beyond test 4's one.

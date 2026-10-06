@@ -110,14 +110,14 @@ from tin_engine.grid_domain import default_stride, refine_start_stride, subsampl
 from tin_engine.hydrography import RiverSegment, Station
 from tin_engine.io.cog import NotCached
 from tin_engine.io.geojson import catchment_geojson
-from tin_engine.io.models import DemTile, RasterMeta
+from tin_engine.io.models import Bounds, DemTile, RasterMeta
 from tin_engine.io.ply import write_ply
 from tin_engine.io.repository import DemRepository
 from tin_engine.io.rivers import read_segments
 from tin_engine.io.station_set import read_references, read_stations
 from tin_engine.io.vtk_legacy import write_vtk
 from tin_engine.landcover import label_triangles
-from tin_engine.mosaic import Bounds, Seam
+from tin_engine.mosaic import Seam
 from tin_engine.palettes import PALETTES, paraview_preset
 from tin_engine.raster import to_core
 from tin_engine.run_record import (
@@ -1695,11 +1695,8 @@ def _refine_phases(clock: PhaseClock, seconds: float, out: RefineOutcome) -> Non
 
 def _off_node(xy: npt.NDArray[np.float64], meta: RasterMeta) -> int:
     """How many of ``xy`` are not a DEM node bit for bit, as ``refine`` classifies."""
-    col = np.round((xy[:, 0] - meta.x_min) / meta.delta_x)
-    row = np.round((meta.y_max - xy[:, 1]) / meta.delta_y)
-    node = (meta.x_min + col * meta.delta_x == xy[:, 0]) & (
-        meta.y_max - row * meta.delta_y == xy[:, 1]
-    )
+    x, y = meta.node_xy(*np.round(meta.index_of(xy[:, 0], xy[:, 1])))
+    node = (x == xy[:, 0]) & (y == xy[:, 1])
     return int(np.count_nonzero(~node))
 
 

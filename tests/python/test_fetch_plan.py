@@ -27,7 +27,7 @@ import io
 import itertools
 from collections.abc import Sequence
 from types import ModuleType
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 import pyproj
@@ -52,7 +52,9 @@ from fetch_fixtures import (
 from geotiff_fixtures import TIE_X, TIE_Y
 from tin_engine.domain import DomainPolygon
 from tin_engine.io.geotiff import read_page
-from tin_engine.mosaic import Bounds
+
+if TYPE_CHECKING:
+    from tin_engine.io.models import Bounds
 
 METRES_PER_DEGREE = 111_000.0
 
@@ -75,7 +77,11 @@ def header(data: bytes, *, geographic: bool = False) -> tuple[Any, Any, Any]:
 
 
 def box_of(x0: float, y0: float, x1: float, y1: float) -> Bounds:
-    return Bounds(x_min=x0, y_min=y0, x_max=x1, y_max=y1)
+    """A `Bounds`, from `io.models` (audit PR A moved it there from `mosaic`),
+    read at call time so a missing name fails the test, not the collection."""
+    models = importlib.import_module("tin_engine.io.models")
+    box: Bounds = models.Bounds(x_min=x0, y_min=y0, x_max=x1, y_max=y1)
+    return box
 
 
 def domain(ring: Sequence[tuple[float, float]], crs: str) -> DomainPolygon:

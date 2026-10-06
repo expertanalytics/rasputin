@@ -613,7 +613,7 @@ the 72 GiB union box would be refused by the cap, whose message says
 **[15a] One canvas, capped at half of physical memory.**
 
 - **No second canvas copy.** `DemTile`'s validator copies its array
-  (`io/models.py:108`), so the parked design peaked at two canvases. `assemble`
+  (`src_python/tin_engine/io/models.py@44fa7f5:108`), so the parked design peaked at two canvases. `assemble`
   builds the canvas privately, so it can hand it over without a copy: a
   private constructor in `io/models.py`, `_adopt(meta, array)`. It runs the
   same shape and dtype checks, sets the array read-only, and stores it. Its one
