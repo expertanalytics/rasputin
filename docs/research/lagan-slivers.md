@@ -114,8 +114,11 @@ closing vertex included, the eight lines with the most are N = 3 811 923.31
 (513), E = 4 585 680.19 (504), N = 3 772 265.5343 (497), E = 4 537 573.71
 (433) and E = 4 537 579.529 (349). They are of two kinds:
 
-- **Lines that boundaries cross.** No segment lies along the line; each
-  boundary that crosses it has a vertex on it. N = 3 772 265.53 (the seam)
+- **Lines that boundaries cross.** Each boundary that crosses the line has
+  a vertex on it, and no segment longer than 3 m lies along it: the seam
+  has 7 (0.30 to 0.72 m), E = 4 507 398.15 has one (2.97 m), the other two
+  none (distinct segments, both ends on the exact value; checked against
+  the CORINE file). N = 3 772 265.53 (the seam)
   and E = 4 537 579.53 are of this kind *and* carry mm pairs: the seam's are
   the 450 segments under 1 cm in the table below, and the easting line has
   its vertices spread over values within 2 mm of 4 537 579.53 (349 at
@@ -270,8 +273,9 @@ edge's length:
 
 (Edges under 10 m are the mm and short-segment cases of F2: 96 % of the
 triangles on edges under 10 cm are slivers.) In the mesh, the constraint
-edges on the two lines have a median length of 249 m and 280 m, against
-56 m for all constraint edges.
+edges with both ends within 10 cm of the two lines have a median length of
+249 m and 280 m, against 56 m for all constraint edges; the figure depends
+on that test (a 1 cm test gives 263 m on the easting line).
 
 Two runs settle the cause without C++ (table below): **E11**, every CORINE
 segment split into pieces of at most 100 m (`shapely.segmentize`) and then
@@ -290,6 +294,13 @@ those two hold 23, and they are mm segments (F2), not this population.
 What stays open is the same question as F4's: which insertion path puts the
 node within metres of the long edge (candidates 1 to 4 of F4). E7 and E8
 answer it for both populations; their rows below now name the two lines.
+
+The 20c design answers E7 and E8 (`docs/increments/20c-soft-quality.md` on
+branch `worktree-soft-quality`, commit `7fcac1e0`, **not reviewed yet**). It
+tagged where each vertex came from and attributed the 1 598 slivers by the
+vertex opposite the longest side: quality start (increment 20) 639, input
+vertex 516, final check's source-DEM nodes 219, refinement 38, and 185 with
+a side under 10 cm.
 
 ## Runs done here (no C++ build)
 
@@ -396,8 +407,8 @@ above.
 | E4 | `--no-constraint-feet` | 90 s run | done | how much 20b removes today; the rate it leaves is the floor without feet |
 | E5 | Tolerance 5 m and 2 m, with and without features | 2 to 10 min each | done: 5 m with features, 2 m without; 2 m with features (about 5 M triangles) left to `@perf` | how the spread-out rate scales with the number of DEM insertions near edges |
 | E6 | Other CORINE extracts: search for mm vertex pairs on straight lines (as F2) | seconds, Python | done for the other two Swedish files: `ljungan_flasjo_clc2018_3035.geojson` has 183 segments under 1 cm, 125 of them on one line near northing 4 366 070; `acklingen_clc2018_3035.geojson` has 68, at most 19 on one line. Whether those lines fall inside the meshed domains was not checked | a seam in the file inside the domain predicts a line of slivers before any mesh is made |
-| E7 | Vertex origin in the output: tag each vertex as start, quality start, refinement node, foot, final-check point or strip point, in a scratch copy of the C++ core | one C++ build plus a 90 s run | `@perf` (scratch copy, not committed) | the share of spread-out slivers per origin, and of the slivers on the two cuts of F5, settles candidates 1, 2 and 4 of F4 |
-| E8 | For each spread-out sliver whose apex is a refinement node: was a constrained edge within ε in a neighbouring triangle when it went in? Logged in the same scratch copy as E7 | with E7 | `@perf` | yes in most: 20b R1's "own triangle only" is the gap (candidate 3) |
+| E7 | Vertex origin in the output: tag each vertex as start, quality start, refinement node, foot, final-check point or strip point, in a scratch copy of the C++ core | one C++ build plus a 90 s run | `@perf` (scratch copy, not committed); answered by the 20c design, unreviewed (end of F5) | the share of spread-out slivers per origin, and of the slivers on the two cuts of F5, settles candidates 1, 2 and 4 of F4 |
+| E8 | For each spread-out sliver whose apex is a refinement node: was a constrained edge within ε in a neighbouring triangle when it went in? Logged in the same scratch copy as E7 | with E7 | `@perf`; answered by the 20c design, unreviewed (end of F5) | yes in most: 20b R1's "own triangle only" is the gap (candidate 3) |
 | E9 | The 5 m and 1 m runs over a GLO-30 window that has no features but crosses 57° N and 14° E, rate per km band | 10 min | `@perf` | no excess: the tile edge stays cleared at fine tolerances, where more source nodes go in |
 | E11 | Every CORINE segment split to 100 m or less, then the 1 cm grid of E2 (F5) | 90 s run | done | the cuts' slivers gone, and two thirds of the rest: long segments are the cause of F5 and most of F4 |
 | E12 | The polygons on each side of a same-class border merged, which removes the two cuts (F5) | 90 s run | done | the cuts' slivers gone and nothing else moves: the cut segments, not their position, cause F5 |
@@ -448,3 +459,4 @@ see.
 ## Review
 
 - Review round 1 of c83658f1 (docs/research/lagan-slivers.md, docs only, 0 production lines): CHANGES REQUESTED. The claim in F2 that the seam lines are CORINE's "most populated" straight lines is false, 116 slivers sit on other straight CORINE lines that have no mm segments and the doc leaves them unexplained, and labels R1/R5/R9, ε, "strip point" and the first uses of E2/E7 need expanding (@reviewer)
+- Review round 2 of c83658f1..cd93b2cb (docs/research/lagan-slivers.md, docs only, 0 production lines): CHANGES REQUESTED. F2's "Lines that boundaries cross. No segment lies along the line" is false: the seam N = 3 772 265.53 has 7 segments lying along it (0.30 to 0.72 m) and E = 4 507 398.15 has one (2.97 m). Every other re-measured figure in F2, F5, the edge-length table, the four-strip table and E13 reproduces (@reviewer)
