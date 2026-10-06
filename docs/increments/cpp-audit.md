@@ -609,8 +609,13 @@ Prose in suites that becomes false: `tests/python/test_core_cdt.py@44fa7f5:967-9
 `:584-586` and `tests/python/test_io_vtk_legacy.py@44fa7f5:19-21` ("`__init__.py`
 imports `_core`"), `tests/cpp/unit/test_refinement_refine.cpp@44fa7f5:8` and
 `tests/cpp/unit/test_refinement_chunks_dynamic.cpp@44fa7f5:3-4` (`for_each_chunk`).
-`test_features.py`'s edits keep the line count above line 590:
-`test_features.py:583` is cited unpinned from four increment files.
+Master's T2 (`97eea35`, the Python audit's layering test) since pinned the
+four increment files' citations of `tests/python/test_features.py@44fa7f5:583`, and moved the
+`test_features.py` and `test_io_vtk_legacy.py` module checks into
+`tests/python/test_layering.py`. The merge takes master's prose there, less
+its reason "`__init__.py` imports `_core`", and moves `test_layering.py`'s
+package-root row to layer L0 with no imports; the `fetch.http` ->
+`tin_engine` exception goes with it (`python-audit.md`, F12).
 
 **The red step: one behaviour test.** Deleting dead code changes no
 behaviour a suite can observe, except one: today no `tin_engine` module
@@ -655,7 +660,7 @@ Unpinned citations into lines this PR deletes or moves were pinned to
 (`h14-parallel-sanitizer-tests.md`). Left unpinned, because the edits above
 keep their lines in place: `snap_grid.hpp:43`, `:63`, `:94`;
 `project_structure.md:166`, `:190`, `:208`, `:359`, `:384`;
-`test_features.py:521`, `:582`, `:583`; `.github/workflows/main.yaml:59`, `:306`;
+`.github/workflows/main.yaml:59`, `:306`;
 `tests/cpp/CMakeLists.txt:3`, `:189`, `:199`. `@reviewer` re-reads each of
 these as a quotation.
 

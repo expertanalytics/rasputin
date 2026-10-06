@@ -50,7 +50,6 @@ import numpy as np
 import pytest
 from numpy.testing import assert_array_equal
 
-from importscan import first_party_imports
 from plyread import element_bytes, parse_header, read_ply, vertex_array
 from tin_engine.features import DEFAULT_VOCABULARY, EdgeProperty, EdgeVocabulary
 from tin_engine.io.ply import write_ply
@@ -420,23 +419,10 @@ class TestTheEdgeFileNamesItsBits:
 
 
 class TestPurity:
-    """Ruling 6: bytes out, no path in, no first-party import."""
+    """Ruling 6: bytes out, no path in; the imports are `test_layering.py`'s."""
 
     def test_the_return_value_is_bytes(self, surface: bytes) -> None:
         assert isinstance(surface, bytes)
-
-    def test_the_only_first_party_import_is_the_vocabulary(self) -> None:
-        # A writer that reached for `_core` would need the extension built to
-        # test, and a writer that reached for `viz` would couple output to the
-        # renderer -- the design refuses both by name. Read from the module's
-        # own import statements, so a mention in prose is not a finding.
-        #
-        # Widened by increment 13's U1 (a) from "nothing first-party": the edge
-        # file now carries the vocabulary (ruling 9), and `features.py` imports
-        # only hashlib and pydantic, so depending on it reaches nothing new.
-        import tin_engine.io.ply as module
-
-        assert first_party_imports(module) <= {"tin_engine.features"}
 
     def test_it_is_deterministic(self) -> None:
         assert write_ply(VERTICES, faces=FACES) == write_ply(VERTICES, faces=FACES)

@@ -589,7 +589,7 @@ words, over the tree): Line numbers in this section are those of master
   `:163-270`, `:480-516`, and `features_crs` at `:215`, `:528`: both move to
   `--stats`), `test_cli_mesh_stats.py:262`, `:285-304` (the Refinement
   section and the "vertices without data dropped" Sizes row).
-  `test_io_ply.py:155` uses `elevation none (z=0, --flat)` only as a sample
+  `tests/python/test_io_ply.py@ef52e8e:155` uses `elevation none (z=0, --flat)` only as a sample
   comment for the writer; no change.
   `test_io_vtk_legacy.py` and `test_io_vtk_readback.py` use `elevation_source`
   only as a sample field name for the writer; they need no change.

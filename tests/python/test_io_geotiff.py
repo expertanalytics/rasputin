@@ -24,7 +24,6 @@ TIFF tag their decision reads, as in §5's table.
 
 from __future__ import annotations
 
-import ast
 import functools
 import math
 import re
@@ -1279,35 +1278,6 @@ def test_every_refusal_survives_python_dash_o() -> None:
     assert result.returncode == 0, result.stdout + result.stderr
     assert "MISSED []" in result.stdout
     assert f"CHECKED {len(REFUSALS) - len(excluded)}" in result.stdout, result.stdout
-
-
-# ---------------------------------------------------------------------------
-# Ruling 1: decode only, never `_core`
-# ---------------------------------------------------------------------------
-
-
-def _imported_modules(source: Path) -> set[str]:
-    tree = ast.parse(source.read_text(encoding="utf-8"))
-    found: set[str] = set()
-    for node in ast.walk(tree):
-        if isinstance(node, ast.Import):
-            found.update(alias.name for alias in node.names)
-        elif isinstance(node, ast.ImportFrom):
-            prefix = "." * node.level + (node.module or "")
-            found.add(prefix)
-            found.update(f"{prefix}.{alias.name}".replace("..", ".") for alias in node.names)
-    return found
-
-
-@pytest.mark.parametrize("module", ["geotiff.py", "models.py"])
-def test_module_never_imports_core(module: str) -> None:
-    """§2: tifffile, pyproj, numpy, pydantic and stdlib; first-party only `io.models`."""
-    source = HERE.parents[1] / "src_python" / "tin_engine" / "io" / module
-    imported = _imported_modules(source)
-    assert not any("_core" in name for name in imported), sorted(imported)
-    first_party = {n for n in imported if n.startswith(("tin_engine", "."))}
-    allowed = {".models", ".models.", "tin_engine.io.models"}
-    assert all(any(n.startswith(a) for a in allowed) for n in first_party), sorted(first_party)
 
 
 # ---------------------------------------------------------------------------
