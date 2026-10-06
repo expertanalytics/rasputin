@@ -17,9 +17,11 @@ described in "How it was measured"; none is an estimate unless it says so.
   the line have two vertices on it, at northings 3 772 265.53 and
   3 772 265.5343, a few millimetres apart: 450 segments shorter than 1 cm
   lie on it. In
-  SWEREF 99 TM (the mesh's EPSG:3006) the line runs from about 57.006° N at
-  13.53° E to 56.986° N at 14.19° E, tilted about 4° to the parallels, which
-  is why it looked like the 57° N tile edge: it crosses 57° N near 13.73° E.
+  SWEREF 99 TM (the mesh's EPSG:3006) the line runs, inside the domain, from
+  about 57.006° N at 13.50° E to 56.985° N at about 14.22° E, tilted about 4°
+  to the parallels, which is why it looked like the 57° N tile edge: it
+  crosses 57° N near 13.73° E. A second CORINE line of the same kind, at
+  easting 4 537 579.53, carries 23 more slivers (F2).
 - **The DEM tiles play no part.** The two GLO-30 tiles meet on one node
   lattice with no overlap and no step in height at 57° N, and the same mesh
   made without features has 13 slivers in 468 337 triangles, none near 57° N.
@@ -32,13 +34,29 @@ described in "How it was measured"; none is an estimate unless it says so.
   segments"), plus two insertion paths that have no constraint feet: the
   quality start and the final check against the source DEM. Increment 20c
   (ROADMAP: a soft quality criterion that may split constraint segments) is
-  where it belongs; which path makes how many is experiment E7.
-- **The line's population belongs to input coarsening**, which increment 16b
-  (R9) left to a later increment. E2 shows that merging CORINE vertices
-  closer than 1 cm removes 105 of the line's 117 slivers at no cost in
-  triangles; snapping the features file to a 1 cm grid before meshing is a
-  workaround available today, not a fix.
-- **Neither population breaks the height tolerance**: every run below reports
+  where it belongs; which path makes how many is experiment E7 (the
+  experiment list at the end).
+- **A third population, 85 slivers, sits on two other straight CORINE
+  lines** (F5): N = 3 811 923.31 and E = 4 585 680.19, with 10 to 12 % of
+  the triangles within 15 m of them slivers. They have no mm segments. Each
+  line is a straight cut through one coniferous-forest polygon (CORINE class
+  312 on both sides of every one of its segments), with a vertex only where
+  another boundary meets it, so its segments are among the longest in the
+  file (median 811 m and 576 m, against 75 m for the file). The slivers are
+  the spread-out population's shape (a node 2 to 3 m from a constraint edge
+  hundreds of metres long), concentrated where the edges are longest. E12
+  (the polygons on both sides merged, so the cuts are gone) removes 83 of
+  the 85 and changes nothing else; E11 (every CORINE segment split to 100 m
+  or less) removes the same 83 and two thirds of the spread-out population
+  too, at 24 % more triangles. Both are input edits, workarounds, not fixes.
+- **The mm-segment population belongs to input coarsening**, which increment
+  16b R9 (the ninth numbered ruling in `docs/increments/16b-terrain-polygons.md`)
+  left to a later increment. E2 (the experiment list at the end) shows that
+  merging CORINE vertices closer than 1 cm removes 105 of the seam's 117
+  slivers at no cost in triangles; snapping the features file to a 1 cm grid
+  before meshing is a workaround available today, not a fix. It does nothing
+  for the third population.
+- **No population breaks the height tolerance**: every run below reports
   every source DEM node within the tolerance. Slivers cost angles, and
   whatever consumes the mesh downstream, not accuracy.
 
@@ -53,7 +71,7 @@ described in "How it was measured"; none is an estimate unless it says so.
   --features-crs EPSG:3035 --features-map corine --tolerance 10 --binary`.
 - Re-run at master `ed12512` (the main checkout's `.venv`, its installed
   `_core` built 2026-10-05): the same 863 897 triangles, the same 1 598
-  slivers. All runs below are at `ed12512`, on AC power.
+  slivers. All runs below are at `ed12512`; the first table's on AC power.
 - The main session's quick numbers re-checked: 863 897 triangles, 0.185 %
   under 1° (1 598); 0.73 % within 1 km of 57.0° N against 0.17 % elsewhere.
   Its "1.0 to 1.3 %" was not reproduced exactly (it depends on the strip
@@ -90,9 +108,27 @@ sit within 50 m of northing 3 772 300, and 33 near easting 4 537 600.
 
 The CORINE file (`lagan_clc2018_3035.geojson`, 7 319 features, 1 744 538
 vertices) has many vertices on exactly the same northing or easting, i.e.
-straight lines through the data. The most populated are N = 3 772 265.53
-(513 vertices) and N = 3 772 265.5343 (497), E = 4 537 573.71 (433) and
-E = 4 537 579.529 (349). Reading the rings shows what they are: in the
+straight lines through the data. Counting ring vertices with each ring's
+closing vertex included, the eight lines with the most are N = 3 811 923.31
+(625), E = 4 519 602.54 (569), E = 4 507 398.15 (541), N = 3 772 265.53
+(513), E = 4 585 680.19 (504), N = 3 772 265.5343 (497), E = 4 537 573.71
+(433) and E = 4 537 579.529 (349). They are of two kinds:
+
+- **Lines that boundaries cross.** No segment lies along the line; each
+  boundary that crosses it has a vertex on it. N = 3 772 265.53 (the seam)
+  and E = 4 537 579.53 are of this kind *and* carry mm pairs: the seam's are
+  the 450 segments under 1 cm in the table below, and the easting line has
+  its vertices spread over values within 2 mm of 4 537 579.53 (349 at
+  4 537 579.529, 53 at 4 537 579.5285, 53 at 4 537 579.53, 24 at
+  4 537 579.5293). Within 15 m of the easting line or of E = 4 537 573.71,
+  5.8 m west of it, there are 23 slivers in 866 triangles, and 21 of them
+  have a side shorter than 10 cm: the seam's mechanism. E = 4 519 602.54 and
+  4 507 398.15 are of this kind without mm pairs and carry no slivers (0 in
+  the 149 and 33 triangles within 15 m of them inside the domain).
+- **Lines that are borders.** N = 3 811 923.31 and E = 4 585 680.19 are
+  polygon borders along their whole length. They are F5's.
+
+Reading the rings of the seam shows what it is: in the
 rings read, a CORINE boundary that crosses the line has two consecutive
 vertices there, one at each value, for example
 
@@ -161,17 +197,99 @@ cover; the candidates, in the code as it stands:
 1. the quality start (increment 20) inserts DEM nodes with no feet: 195 158
    of them here, against 46 560 points from DEM refinement;
 2. the final check against the source DEM (`refine_points.hpp`) inserts
-   source nodes with no feet at all: 27 266 here, and the 189 source-node
-   corners above can only come from it;
+   points with no feet at all: 27 266 here (`dem_check_points_inserted`),
+   which are 27 000 source nodes plus 266 strip points
+   (`line_points_inserted`; a strip point is a point on a constraint line,
+   where a grid line of the DEM crosses it or halfway between two such
+   crossings, checked against the DEM: increment 15f, the edge strip). Reading
+   the code, not measured: no other step inserts GLO-30 source nodes, so the
+   189 source-node corners above come from it;
 3. 20b's rule looks only at the constrained edges of the triangle holding the
-   node (20b R1), and a node can be close to an edge of a neighbouring
-   triangle;
-4. 20b's fallback (R5) inserts a footed node later if its error stays over
-   the tolerance.
+   node (20b R1, the first numbered ruling in
+   `docs/increments/20b-min-insertion-distance.md`), and a node can be close
+   to an edge of a neighbouring triangle;
+4. 20b's fallback (20b R5) inserts a footed node later if its error stays
+   over the tolerance.
 
 Which of these it is cannot be read from the output file, which does not
 record where a vertex came from. E3 and E4 below narrow it; E7 and E8
 settle it.
+
+### F5. The third population: two straight cuts through one forest polygon
+
+Within 15 m of N = 3 811 923.31 there are 38 slivers in 354 triangles
+(10.7 %), and within 15 m of E = 4 585 680.19 47 in 387 (12.1 %): 85
+slivers, inside the domain from 13.81 to 14.70° E at about 57.34° N and from
+57.01 to 57.63° N at about 14.39° E. No segment under 10 cm touches either
+line, and E2's 1 cm snap leaves them (34 and 61 slivers in E2's mesh).
+
+What the lines are, from the CORINE file:
+
+- **Each is a polygon border along its whole length**: 114 segments
+  (166 km) on the northing line and 83 (131 km) on the easting line, every
+  one shared by exactly two polygons.
+- **The class is the same on both sides of every segment**: 312, coniferous
+  forest, on all 197. These are the file's only same-class borders: of the
+  37 191 km of borders shared by two polygons, 297.9 km have the same class
+  on both sides, and all 297.9 km are on these two lines. A same-class
+  border marks no change of land cover; it is a cut through what would
+  otherwise be one polygon, most likely a production-area or tile edge or a
+  split of an oversized polygon (inferred from the geometry, not checked
+  against the EEA's documentation). Merging the
+  polygons on either side (E12) joins exactly four features into one.
+- **A vertex only where another boundary meets the line**: every one of the
+  228 and 166 distinct vertices on them has an edge leaving the line (a
+  T-junction). Between junctions the cut is one straight segment: median
+  811 m and 576 m long, the longest 6.4 km and 12.0 km, against a median of
+  75 m over the file's 1 342 157 segments. 94 of the file's 1 167 segments of
+  800 m or more are on these two lines.
+
+What the slivers are: of the 85, 56 have a constraint edge as their longest
+side, 22 of these (by a 1 cm test in EPSG:3035) on the line itself and the
+rest within 10 cm of it, pieces of the line's segments as split by the
+meshing. That edge is long (median 544 m and 445 m) and the third corner is
+close to it (median 2.2 m and 2.5 m); it is a grid node in 31, a source node
+in 24 and a constraint vertex in 1. All 31 grid nodes are within half a cell
+(15.5 m) of the edge with their foot more than 15.5 m from both ends: the
+case 20b's feet are meant to catch, as in F4. The shortest sides are tens of
+metres (median 42 m and 62 m).
+
+So the third population is F4's mechanism, concentrated where the
+constraint segments are longest. Over the whole mesh, the share of slivers
+among triangles that have a constraint edge as a side rises with that
+edge's length:
+
+| constraint edge in the mesh | triangles on it | slivers among them |
+|---|---|---|
+| 10 to 30 m | 56 091 | 0.05 % |
+| 30 to 100 m | 129 704 | 0.11 % |
+| 100 to 200 m | 82 663 | 0.38 % |
+| 200 to 400 m | 23 984 | 1.71 % |
+| 400 to 800 m | 1 712 | 6.89 % |
+| 800 m or more | 98 | 32.7 % |
+
+(Edges under 10 m are the mm and short-segment cases of F2: 96 % of the
+triangles on edges under 10 cm are slivers.) In the mesh, the constraint
+edges on the two lines have a median length of 249 m and 280 m, against
+56 m for all constraint edges.
+
+Two runs settle the cause without C++ (table below): **E11**, every CORINE
+segment split into pieces of at most 100 m (`shapely.segmentize`) and then
+snapped to 1 cm, and **E12**, the four same-class polygons merged so that
+the cuts are gone. Both take the two lines from 85 slivers to 2. E12 changes
+nothing else (the seam keeps 117, the rest of the basin 1 373), so the cuts
+themselves, not anything about where they lie, make the slivers. E11 also
+takes the rest of the basin from 1 365 to 438, which says that long segments
+are most of F4 too; it costs 24 % more triangles (863 729 to 1 073 613) and
+leaves the worst angle where it was (0.00048°).
+
+Review round 1 counted 116 slivers on the other straight lines, adding the
+two easting lines of F2 as 18 and 13; 8 slivers lie within 15 m of both, so
+those two hold 23, and they are mm segments (F2), not this population.
+
+What stays open is the same question as F4's: which insertion path puts the
+node within metres of the long edge (candidates 1 to 4 of F4). E7 and E8
+answer it for both populations; their rows below now name the two lines.
 
 ## Runs done here (no C++ build)
 
@@ -202,21 +320,42 @@ Read together:
   12 and the 57° N strip from 0.73 % to 0.35 %; the rest of the basin does
   not move (0.17 %). The visible line is the mm segments. The worst angle does
   not move: that triangle belongs to the spread-out population (F4), a grid
-  node 0.8 mm from a 245 m CORINE edge, near (4 558 596, 3 738 441) in
-  EPSG:3035.
+  node 0.8 mm from a 245 m CORINE edge. In EPSG:3035 its centroid is at about
+  (4 558 723, 3 738 444); the grid node is at (4 558 732, 3 738 444), and the
+  smallest angle (0.00041°) is at the edge's west end, (4 558 596,
+  3 738 441).
 - **E3:** without the quality start, slivers rise eightfold, to 1.49 %. The
   quality start removes far more slivers than it could be leaving behind, so
   "the quality start made them" is not the main story; but its own rule, in
-  increment 20 R5, says that under C1 (a) (no point ever put on a constraint
-  segment) "a bad triangle whose circumcentre lies across a constraint stays.
-  It happens at reflex corners and along long segments." That is the shape
-  of F4's flat triangles on long CORINE edges.
+  increment 20 R5 (the fifth numbered ruling in
+  `docs/increments/20-start-quality.md`), says that under C1 (a) (that
+  increment's choice of never putting a point on a constraint segment) "a
+  bad triangle whose circumcentre lies across a constraint stays. It happens
+  at reflex corners and along long segments." That is the shape of F4's flat
+  triangles on long CORINE edges.
 - **E4:** increment 20b's feet remove 449 slivers (2 047 to 1 598) and leave
-  the seam untouched, as expected: a foot is never taken within ε of a
-  segment's end, and a 4 mm segment is all ends.
+  the seam untouched, as expected. 20b replaces a node that is within a
+  distance ε of a constraint segment by its foot on the segment (ε is set by
+  the slope, at most half a cell: 20b R3); but it never takes a foot within
+  ε of a segment's end, and a 4 mm segment is all ends.
 - **E5:** at 5 m the mesh doubles and the slivers nearly double (2 910); the
   rate stays at about 0.17 %, and the seam keeps its 120. The spread-out
   population grows with the mesh; the seam's is fixed by the data.
+
+The four line strips and E11, E12 (E2 re-run with them; the later runs on
+battery, which changes the time, not the output). Strips are 15 m wide on
+each side, in EPSG:3035; "rest" is everything outside the four.
+
+| run | triangles | < 1° | < 0.05° | worst | seam N 3 772 265.53 | mm line E 4 537 579.53 (with E 4 537 573.71) | cut N 3 811 923.31 | cut E 4 585 680.19 | rest |
+|---|---|---|---|---|---|---|---|---|---|
+| E0 the case | 863 897 | 1 598 | 216 | 0.00041° | 459, 117 | 866, 23 | 354, 38 | 387, 47 | 1 373 (0.159 %) |
+| E2 CORINE on a 1 cm grid | 863 729 | 1 480 | 88 | 0.00041° | 331, 12 | 846, 8 | 345, 34 | 433, 61 | 1 365 (0.158 %) |
+| E11 segments split to ≤ 100 m, then 1 cm grid | 1 073 613 | 461 | 95 | 0.00048° | 348, 12 | 849, 9 | 233, 0 | 227, 2 | 438 (0.041 %) |
+| E12 the cuts merged away | 863 483 | 1 515 | 210 | 0.00041° | 459, 117 | 866, 23 | 287, 0 | 297, 2 | 1 373 (0.159 %) |
+
+Each strip cell is "triangles, slivers". E11's input has 2 638 970
+vertices against 1 744 538; all its features stay valid. Every run reports
+every source DEM node within the tolerance.
 
 ## How it was measured
 
@@ -232,6 +371,13 @@ Read together:
   (EPSG:3035 metres). All 7 319 stay valid; segments under 1 cm go from 543
   to 70, under 10 cm from 616 to 144. A grid snap treats both sides of a
   shared border alike, so the partition stays a partition.
+- E11's input: `shapely.segmentize(geometry, 100.0)`, then the same
+  `set_precision(…, 0.01)` so that the points added on a shared border from
+  its two sides coincide. E12's input: the features joined through borders
+  with the same `Code_18` on both sides (a union-find over shared segments),
+  each group merged by `shapely.union_all`: one group of four, all valid.
+- F5's sliver rate by constraint edge length: each triangle side that is a
+  `LINES` cell of the mesh, binned by that cell's length.
 
 These are throw-away scripts. The experiments that need them again are
 listed below with the persona that would own a kept version.
@@ -250,10 +396,13 @@ above.
 | E4 | `--no-constraint-feet` | 90 s run | done | how much 20b removes today; the rate it leaves is the floor without feet |
 | E5 | Tolerance 5 m and 2 m, with and without features | 2 to 10 min each | done: 5 m with features, 2 m without; 2 m with features (about 5 M triangles) left to `@perf` | how the spread-out rate scales with the number of DEM insertions near edges |
 | E6 | Other CORINE extracts: search for mm vertex pairs on straight lines (as F2) | seconds, Python | done for the other two Swedish files: `ljungan_flasjo_clc2018_3035.geojson` has 183 segments under 1 cm, 125 of them on one line near northing 4 366 070; `acklingen_clc2018_3035.geojson` has 68, at most 19 on one line. Whether those lines fall inside the meshed domains was not checked | a seam in the file inside the domain predicts a line of slivers before any mesh is made |
-| E7 | Vertex origin in the output: tag each vertex as start, quality start, refinement node, foot, final-check point or strip point, in a scratch copy of the C++ core | one C++ build plus a 90 s run | `@perf` (scratch copy, not committed) | the share of spread-out slivers per origin settles candidates 1, 2 and 4 of F4 |
+| E7 | Vertex origin in the output: tag each vertex as start, quality start, refinement node, foot, final-check point or strip point, in a scratch copy of the C++ core | one C++ build plus a 90 s run | `@perf` (scratch copy, not committed) | the share of spread-out slivers per origin, and of the slivers on the two cuts of F5, settles candidates 1, 2 and 4 of F4 |
 | E8 | For each spread-out sliver whose apex is a refinement node: was a constrained edge within ε in a neighbouring triangle when it went in? Logged in the same scratch copy as E7 | with E7 | `@perf` | yes in most: 20b R1's "own triangle only" is the gap (candidate 3) |
 | E9 | The 5 m and 1 m runs over a GLO-30 window that has no features but crosses 57° N and 14° E, rate per km band | 10 min | `@perf` | no excess: the tile edge stays cleared at fine tolerances, where more source nodes go in |
-| E10 | Failing tests for what E7 and E8 find: a node close to a long constraint edge, inserted by the quality start, by the final check, and from a neighbouring triangle; a polygon pair with a 4 mm step | a red suite | `@tester`, after a design | — |
+| E11 | Every CORINE segment split to 100 m or less, then the 1 cm grid of E2 (F5) | 90 s run | done | the cuts' slivers gone, and two thirds of the rest: long segments are the cause of F5 and most of F4 |
+| E12 | The polygons on each side of a same-class border merged, which removes the two cuts (F5) | 90 s run | done | the cuts' slivers gone and nothing else moves: the cut segments, not their position, cause F5 |
+| E13 | Other CORINE extracts: same-class shared borders (as F5) | seconds, Python | done for the other two Swedish files: `ljungan_flasjo_clc2018_3035.geojson` has 11.6 km in 14 segments (median 593 m), `acklingen_clc2018_3035.geojson` none. Whether they fall inside the meshed domain was not checked | a same-class border inside the domain predicts F5's slivers before any mesh is made |
+| E10 | Failing tests for what E7 and E8 find: a node close to a long constraint edge, inserted by the quality start, by the final check, and from a neighbouring triangle; a polygon pair with a 4 mm step; a straight border between two polygons of one class with segments hundreds of metres long | a red suite | `@tester`, after a design | — |
 
 What is **not** worth running: more DEM-seam checks for GLO-30 inside one
 latitude band. The tiles of a band share one lattice and the mosaic is one
@@ -284,7 +433,18 @@ see.
   `docs/research/raster-to-vector.md`). It then has no seams of CORINE's kind
   unless that conversion works tile by tile; if it does, the E6 search
   belongs in its acceptance.
+- **Long straight segments** are the hazard that transfers to any data
+  (F5): the sliver share among triangles on a constraint edge rises from
+  0.1 % at 30 to 100 m to 7 % at 400 to 800 m. A raster-to-vector conversion
+  that works tile by tile and does not merge same-class polygons across
+  tile edges would make F5's cuts on purpose, so the E13 search belongs in
+  its acceptance too; a simplifier that merges collinear runs into long
+  segments would make them as well.
 - **The spread-out population** grows with the number of constraint edges and
   insertions, so it is the one that scales with the basin. Its rate here,
   about 0.16 %, would be on the order of ten thousand slivers on a mesh of
   millions of triangles (an estimate, not a measurement).
+
+## Review
+
+- Review round 1 of c83658f1 (docs/research/lagan-slivers.md, docs only, 0 production lines): CHANGES REQUESTED. The claim in F2 that the seam lines are CORINE's "most populated" straight lines is false, 116 slivers sit on other straight CORINE lines that have no mm segments and the doc leaves them unexplained, and labels R1/R5/R9, ε, "strip point" and the first uses of E2/E7 need expanding (@reviewer)
