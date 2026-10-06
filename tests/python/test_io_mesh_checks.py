@@ -7,13 +7,14 @@ drifted apart in wording. This suite pins the one copy: what it accepts, what
 it refuses, and the exact sentence of each refusal, since both writers and
 `rasputin mesh --crs` pass that sentence on to a person.
 
-Committed red: the module does not exist. It is fetched inside a fixture, as
-`test_run_record.py` fetches its module, so its absence fails each test here
-with `ModuleNotFoundError` and leaves the rest of the session collecting (a
-collection error would stop the whole run). Not invariant-critical: no
-mutation round (section 9, "Lean").
+Committed red at `8dcfa2a`: the module did not exist. It is fetched inside a
+fixture, as `test_run_record.py` fetches its module, so its absence failed
+each test here with `ModuleNotFoundError` and left the rest of the session
+collecting (a collection error would have stopped the whole run). It landed
+in `7346a0e`. Not invariant-critical: no mutation round (section 9, "Lean").
 
-Pinned here, beyond the design's wording (the handback lists each): a value
+Pinned here, beyond the design's wording (section 9, "Pinned by the red step
+(`8dcfa2a`), ruled", lists each): a value
 with both a control character and a non-ASCII one is refused as a control
 character; the refusal names the first offending character; a C1 control
 (U+0080 to U+009F) is refused as non-ASCII, since it is not ASCII; space and

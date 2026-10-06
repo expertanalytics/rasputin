@@ -492,8 +492,9 @@ class TestFieldComments:
     """PR D (`python-audit-pr-d.md`, section 3): a run's file fields as header
     comments, `name value`, the line `cli._comments` built before it moved here.
 
-    Imported inside each test, so its absence at the red commit fails these
-    tests and leaves the rest of the file collecting.
+    Imported inside each test, so its absence at the red commit (`8dcfa2a`)
+    failed these tests and left the rest of the file collecting. It landed in
+    `7346a0e`.
     """
 
     def test_each_field_is_its_name_a_space_and_its_value(self) -> None:
