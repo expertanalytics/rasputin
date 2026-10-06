@@ -76,6 +76,7 @@ from typer.testing import CliRunner
 
 from cli_driver import ANSI, USAGE, Ring, geojson, invoke, mesh_to_vtk, refused, squashed
 from cog_fixtures import write_cache
+from crs_fixtures import axes_swapped
 from geographic_fixtures import (
     ANADEM_STEP,
     LAT0,
@@ -370,15 +371,23 @@ class TestAProjectedDemInAnotherCrs:
 
 
 @needs_codecs
-def test_out_crs_equal_to_the_dems_own_writes_the_same_bytes(tmp_path: Path) -> None:
-    """J1: the committed projected tile with a domain, `--out-crs` its own CRS."""
+@pytest.mark.parametrize(
+    "out_crs",
+    [
+        pytest.param("EPSG:25833", id="its EPSG code"),
+        pytest.param(axes_swapped(25833), id="its WKT, axes swapped"),
+    ],
+)
+def test_out_crs_equal_to_the_dems_own_writes_the_same_bytes(tmp_path: Path, out_crs: str) -> None:
+    """J1: the committed projected tile with a domain, `--out-crs` its own CRS.
+    Audit PR B (`docs/increments/python-audit.md`, section 9): the CRS's WKT
+    without its ID, axes swapped, is the same CRS by definition, so the DEM is not resampled and the
+    file is the one without `--out-crs`, its `crs` field included."""
     domain = geojson(tmp_path / "quarter.geojson", quarter_circle(), crs="EPSG:25833")
     args = ("--dem", str(KARTVERKET), "--domain", str(domain), "--tolerance", "10")
     plain_code, plain_output = invoke("mesh", *args, "--out", str(tmp_path / "plain.vtk"))
     assert plain_code == 0, plain_output
-    code, output = invoke(
-        "mesh", *args, "--out-crs", "EPSG:25833", "--out", str(tmp_path / "same.vtk")
-    )
+    code, output = invoke("mesh", *args, "--out-crs", out_crs, "--out", str(tmp_path / "same.vtk"))
     assert code == 0, output
     assert (tmp_path / "same.vtk").read_bytes() == (tmp_path / "plain.vtk").read_bytes()
 

@@ -29,7 +29,15 @@ from typing import Any, Self
 import shapely
 from pydantic import BaseModel, ConfigDict, model_validator
 
-from tin_engine.crs import CrsSuggestion, crs_label, parse_crs, reprojector, suggest_crs
+from tin_engine.crs import (
+    CrsSuggestion,
+    crs_label,
+    parse_crs,
+    reprojector,
+    same_crs,
+    single_crs,
+    suggest_crs,
+)
 from tin_engine.domain import DomainError, DomainPolygon, check_extent
 from tin_engine.io.models import DemTile, RasterMeta
 from tin_engine.io.repository import CacheRepository, TiffDemRepository
@@ -161,7 +169,7 @@ def _reprojected(request: DemRequest, metas: list[RasterMeta]) -> bool:
                 f"--out-crs {request.target_crs} is a {target.type_name} with axes in {units}; "
                 "the mesh is computed in it, so it must be a projected CRS in metres"
             )
-        return target != parse_crs(first.crs)
+        return not same_crs(target, first.crs)
     if not first.geographic:
         return False
     if request.domain is not None:
@@ -185,9 +193,7 @@ def _open_reprojected(
     """D1's reprojected path: the target grid around the domain (or box) in
     the target CRS, the source region planned and assembled as 15a does,
     resampled; the check points are a lazy iterator over the source."""
-    crss = sorted({f.meta.crs for f in footprints})
-    if len(crss) > 1:
-        raise MosaicError(f"the tiles are in {len(crss)} CRSs, {crss}; need one")
+    source_crs = single_crs((f.meta.crs for f in footprints), MosaicError)
     target = crs_label(str(request.target_crs))
     if request.domain is not None:
         domain = request.domain.to_crs(target)
@@ -214,7 +220,7 @@ def _open_reprojected(
         seams=mosaic.seams,
         checks=check_point_blocks(grid, source, domain, threads),
         grid=grid,
-        source_crs=crss[0],
+        source_crs=source_crs,
     )
 
 
@@ -224,11 +230,9 @@ def _domain_plan(footprints: Any, given: DomainPolygon) -> tuple[MosaicPlan, Dom
     region. Grown by the cell diagonal with mitred corners, a superset of the
     four nodes bilinear z reads at any point of the polygon. A refusal names
     both CRSs and keeps its type."""
-    epsgs = sorted({f.meta.epsg for f in footprints})
-    if len(epsgs) > 1:
-        raise MosaicError(f"the tiles are in {len(epsgs)} CRSs, EPSG:{epsgs}; a domain needs one")
+    crs = single_crs((f.meta.crs for f in footprints), MosaicError)
     try:
-        domain = given.to_crs(f"EPSG:{epsgs[0]}")
+        domain = given.to_crs(crs)
         box = Bounds(
             **dict(zip(("x_min", "y_min", "x_max", "y_max"), domain.polygon.bounds, strict=True))
         )
@@ -245,7 +249,7 @@ def _domain_plan(footprints: Any, given: DomainPolygon) -> tuple[MosaicPlan, Dom
             plan = plan_mosaic(footprints, past, grown)
         check_extent(domain, plan.meta)
     except (DomainError, MosaicError) as exc:
-        raise type(exc)(f"the domain, in {given.crs}, in the DEM's EPSG:{epsgs[0]}: {exc}") from exc
+        raise type(exc)(f"the domain, in {given.crs}, in the DEM's {crs}: {exc}") from exc
     return plan, domain, grown
 
 

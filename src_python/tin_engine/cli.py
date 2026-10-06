@@ -83,7 +83,7 @@ from tin_engine.catchment import (
 )
 from tin_engine.catchment_batch import BatchRequest, StationResult, run_batch
 from tin_engine.chains import start_chains
-from tin_engine.crs import crs_label, parse_crs, reprojector, transform_description
+from tin_engine.crs import crs_label, reprojector, same_crs, transform_description, transform_label
 from tin_engine.dem_input import (
     CachedSource,
     DemInput,
@@ -929,8 +929,7 @@ def mesh(
             values["dem_tiles"] = _ascii("; ".join(names))
             values["dem_seams"] = _ascii("; ".join(s.entry() for s in seams)) or SEAMS_AGREE
         if given is not None:
-            same = parse_crs(given.crs) == parse_crs(dem_crs)
-            how = "none" if same else transform_description(given.crs, dem_crs)
+            how = transform_label(given.crs, dem_crs)
             values |= {"domain_crs": crs_label(given.crs), "domain_transform": how}
         if found is not None and sources and dem_run.feature_counts is not None:
             # R6: one entry per source, joined. Lines and their vertices are
@@ -949,11 +948,7 @@ def mesh(
                 )
                 own = found.crs[i]
                 crs_texts.append(crs_label(own))
-                transforms.append(
-                    "none"
-                    if parse_crs(own) == parse_crs(dem_crs)
-                    else transform_description(own, dem_crs)
-                )
+                transforms.append(transform_label(own, dem_crs))
                 if src.class_map.notice and src.class_map.notice not in notices:
                     notices.append(src.class_map.notice)
             values |= {"features": _ascii("; ".join(texts)), "features_crs": "; ".join(crs_texts)}
@@ -2042,7 +2037,7 @@ def _read_beside[T](
         content, file_crs = read(path)
     except (OSError, ValueError) as exc:
         raise typer.BadParameter(str(exc), param_hint=hint) from exc
-    if parse_crs(file_crs) != parse_crs(crs):
+    if not same_crs(file_crs, crs):
         raise typer.BadParameter(
             f"the {what} file's CRS, {file_crs}, is not the river file's, {crs}; "
             "polygons are not reprojected",
