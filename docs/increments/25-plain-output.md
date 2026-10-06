@@ -673,7 +673,7 @@ Not invariant-critical, so no mutation round (README, "Cost constraints").
   - every mesh-file field from the record is in it with the same value;
   - determinism: one command run twice gives the same bytes, and so does a
     run with `tin_engine.cli.refine` monkeypatched to a wrapper that passes
-    `threads=1` (the binding's keyword, `_core.pyi:437`; the CLI has no thread
+    `threads=1` (the binding's keyword, `src_python/tin_engine/_core.pyi@44fa7f5:437`; the CLI has no thread
     option); no key or value contains a time, a date, the host name, or the
     word `seconds`;
   - an omitted entry is absent, not `null`;

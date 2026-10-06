@@ -7,7 +7,8 @@ Status: **audit, not a design.** Written by `@architect` against master at
 sequence of refactor PRs; each still runs the normal loop
 (`docs/increments/README.md`): design note, red tests where behaviour changes,
 code, review, and `@perf`'s byte-identical run where the diff touches refine or
-mesh code (marked **[refine/mesh]** below).
+mesh code (marked **[refine/mesh]** below). Section 7 is the design of
+PR B, written against `1035690`. PR B status: code and docs in; next `@reviewer`.
 
 Ola's ask: audit the code, keeping in mind that tests are the lesser problem;
 the concern is losing control of the code base at about 10,000 lines each of
@@ -383,7 +384,7 @@ src bindings`), though PR C and 23c-2 both touch `_core.pyi`.
 | # | PR (branch name) | Takes | Net production lines | Waits for | Gates beyond review |
 |---|---|---|---|---|---|
 | A | `cpp-layering-gate` | section 4, C9 | about +80 tooling (not counted), 0 production | Ola's approval of the governed file | planted-violation test |
-| B | `cpp-dead-code` | C1, C8 (Ring) | about -230 | Ola's answer on the Python surface | none |
+| B | `cpp-dead-code` | C1, C8 (Ring) | -291 (section 7) | nothing (ruling 1) | none (section 7) |
 | C | `cpp-bindings-marshal` | C3 | about -60 | nothing | red test for the negative-index refusal |
 | E | `cpp-chain-set` | C7 | about -25 | A (new header in the table) | none |
 | D | `cpp-lattice-frame` | C4, C5, C8 (Raster) | about -55 | A | `@perf`: byte-identical meshes |
@@ -393,6 +394,276 @@ src bindings`), though PR C and 23c-2 both touch `_core.pyi`.
 Total: about -450 production lines (C++ about -430), the bindings' silent
 drop fixed, and the drift points (lattice position, edge projection, flip
 test, NoData rule, bilinear) each written once.
+
+## 7. PR B design: `cpp-dead-code` (finding C1, ruling 1)
+
+Written by `@architect` against `1035690` (h17 PR 1's approved head; the
+branch `worktree-cpp-dead` starts there and lands after it). Every
+production file and every test file cited below at `44fa7f5` is
+byte-identical at `1035690`: `git diff --quiet 44fa7f5 1035690 -- include
+src bindings src_python tests/cpp/unit tests/cpp/support/ring_cases.hpp
+tests/cpp/support/mesh_queries.hpp tests/cpp/property/prop_ring_invariants.cpp
+tests/cpp/property/prop_cdt_invariants.cpp tests/python/test_core.py
+tests/python/test_core_cdt.py tests/python/test_features.py
+tests/python/test_io_vtk_legacy.py project_structure.md` exits 0. So the
+citations stay pinned to `44fa7f5`, as in the rest of this file; the two
+files h17 PR 1 changed, `tests/cpp/CMakeLists.txt` and the workflow, are
+cited at `1035690`.
+
+**Prior art.** None: a deletion claims nothing new and builds on no method.
+Legacy: nothing is carried across. `git grep -l -E
+'point_in_ring|contains_strict|for_each_chunk|Point3' legacy-archive --
+legacy` returns one file, `legacy/rasputin/triangulate_dem.h`, and only for
+CGAL's `Point_3` alias and its trait specialisations; the legacy border
+draping `contains_strict` was written for is not in this tree (C1).
+
+### 7.1 What goes, and why each has no production caller
+
+"Production caller" means a use in `include/`, `src/`, `bindings/`,
+`src_python/` or `tools/`, outside the item's own definition. Each was
+searched by name at `1035690`, on every local branch with a worktree
+(including `worktree-23c`, whose `basin_run.py` imports only
+`IndexedMesh2, RefineOutcome, SeamOutcome, indexed_mesh, refine_seam` from
+`_core`), and found only in comments. The one production user of the
+Python names is `src_python/tin_engine/__init__.py@44fa7f5:5`, which this PR
+rewrites. Counted lines are `tools/count_loc.py`'s `counted_lines` over the
+range at `1035690`.
+
+| # | Item | Range | Counted |
+|---|---|---|---|
+| R1 | the `Ring` concept and its comment | `include/terrain/core/ring.hpp@44fa7f5:48-56` | 5 |
+| R2 | `PointRing` | `include/terrain/core/ring.hpp@44fa7f5:83-102` | 12 |
+| R3 | `edge(R, i)`, `all_finite`, `bounding_box(const R&)`, `signed_area` | `include/terrain/core/ring.hpp@44fa7f5:142-192` | 31 |
+| R4 | `template <Ring R>` on `detail::extreme_vertex` | `include/terrain/core/ring.hpp@44fa7f5:207` | 1 |
+| R5 | `PointInRing`, `point_in_ring` | `include/terrain/core/ring.hpp@44fa7f5:250-304` | 27 |
+| P1 | `Point3`, its operators, `dot(Point3)`, `cross(Point3)` | `include/terrain/core/point.hpp@44fa7f5:37-68` | 26 |
+| P2 | `std::hash<Point2>` and its comment | `include/terrain/core/point.hpp@44fa7f5:74-87` | 8 |
+| P3 | `std::hash<Point3>` | `include/terrain/core/point.hpp@44fa7f5:89-100` | 12 |
+| P4 | `std::formatter<Point3>` | `include/terrain/core/point.hpp@44fa7f5:121-138` | 13 |
+| B1 | `Box2::center` and its comment | `include/terrain/core/bbox.hpp@44fa7f5:83-92` | 3 |
+| S1 | `is_degenerate(Segment2)` | `include/terrain/core/segment.hpp@44fa7f5:43-46` | 3 |
+| O1 | `is_left_turn`, `is_collinear` | `include/terrain/predicates/orientation.hpp@44fa7f5:79-88` | 6 |
+| C1 | `parallel_util::for_each_chunk` | `include/terrain/parallel_util/chunks.hpp@44fa7f5:41-75` | 32 |
+| G1 | `RasterGeometry::contains_strict`, `boundary_epsilon` | `include/terrain/raster/geometry.hpp@44fa7f5:135-162` | 13 |
+| K1 | `#include <pybind11/operators.h>` (only the point classes use `py::self`) | `bindings/core.cpp@44fa7f5:2` | 1 |
+| K2 | `using terrain::Point3;` | `bindings/core.cpp@44fa7f5:54` | 1 |
+| K3 | the `Point2`, `Point3`, `dot`, `cross` bindings | `bindings/core.cpp@44fa7f5:398-480` | 52 |
+| Y1 | the `Point2`, `Point3` stubs | `src_python/tin_engine/_core.pyi@44fa7f5:15-56` | 36 |
+| Y2 | the `dot`, `cross` stubs | `src_python/tin_engine/_core.pyi@44fa7f5:61-72` | 8 |
+| I1 | the re-export | `src_python/tin_engine/__init__.py@44fa7f5:5` (line 7 becomes `__all__ = ["installed_version"]`) | 1 |
+
+Two items are beyond C1's list, found while re-verifying it:
+
+- **P2, `std::hash<Point2>`.** Its one production user is the Python
+  `__hash__` (K3). With K3 gone only `tests/cpp/unit/test_point.cpp` reaches
+  it, and two comments already forbid it as a dedup key
+  (`include/terrain/core/snap_grid.hpp@44fa7f5:39-42`,
+  `include/terrain/core/pslg_builder.hpp@44fa7f5:37-43`). `formatter<Point2>`
+  stays: `pslg_builder.hpp` formats a vertex into a diagnostic.
+- **R1, R4, the `Ring` concept** (C8). With `PointRing` gone it has one model.
+  `detail::extreme_vertex` and `orientation<K>` take `const IndexedRing&`;
+  `orientation` keeps its kernel parameter `K`: `PslgBuilder::build<K>` passes
+  it through, and the suites run it under `FastKernel` and `DefaultKernel`.
+
+Three items on C1's list **stay**, because a test of live code uses each as
+its instrument, and moving them into `tests/cpp/support/` would split a
+value type's vocabulary to save about ten lines:
+
+- `reversed(Orientation)` (`include/terrain/predicates/orientation.hpp@44fa7f5:67-69`):
+  the symmetry checks of the three kernels and of `prop_predicates_symmetry`.
+- `reversed(Segment2)` (`include/terrain/core/segment.hpp@44fa7f5:39-41`): the
+  noder's `classify` and `segment_meets_cell` symmetry tests.
+- `Box2::intersects` (`include/terrain/core/bbox.hpp@44fa7f5:140-147`): the
+  all-pairs oracle of the invariant-critical broad-phase suite
+  (`prop_noding_broad_phase.cpp`).
+
+Found and left for PR E: `Pslg::ring` and `NodedPslg::ring` have no
+production caller either (production builds `IndexedRing` directly,
+`include/terrain/core/pslg_builder.hpp@44fa7f5:320`,
+`include/terrain/noding/node.hpp@44fa7f5:207`), but they are two of the
+seven accessors PR E moves into `ChainSet`, and `prop_cdt_invariants.cpp`
+uses one. Not checked at this grain: which of `Point2`'s own operators
+(`operator/`, unary minus, `double * Point2`) production still uses; the
+build would say, and the lines are few.
+
+**Includes stay.** No `#include` line is removed except K1. `ring.hpp`'s
+`bbox.hpp`, `segment.hpp`, `<cmath>` and `<concepts>`, `point.hpp`'s
+`<functional>` and `geometry.hpp`'s `<cmath>` may become unneeded, but
+suites compile through them transitively, and `@developer` may not edit a
+test to add the include a suite was borrowing. Header hygiene belongs with
+the layering gate (PR A).
+
+**Comments that name a removed item** are rewritten in the same commit, each
+in place and keeping its line count where a citation points below it:
+`ring.hpp`'s header (`include/terrain/core/ring.hpp@44fa7f5:3-30`, on
+`PointRing`, the two-model `bounding_box` ambiguity and the
+`point_in_ring<DefaultKernel>` example), `include/terrain/core/segment.hpp@44fa7f5:5-9`
+(`point_in_ring`'s parity rule), `include/terrain/core/pslg_builder.hpp@44fa7f5:16` (`PointRing`)
+and `:305` (`signed_area`), `include/terrain/core/snap_grid.hpp@44fa7f5:39-42` (`std::hash<Point2>`;
+**same line count**: `snap_grid.hpp:43`, `:63` and `:94` are cited unpinned),
+`include/terrain/parallel_util/chunks.hpp@44fa7f5:3-30` (the header describes `for_each_chunk` first),
+`src_python/tin_engine/_core.pyi@44fa7f5:1-6` (the docstring's reason is `cross`'s overloads), and
+`src_python/tin_engine/stats.py@44fa7f5:3-4`, which becomes true and needs no edit.
+
+`project_structure.md` lines 14, 17, 52, 446, 501 and 505 name `Point3`,
+`PointRing`, `point_in_ring`, `for_each_chunk` and the `__all__` list;
+`@developer` edits each **in place, one line for one line** (line 505 may go),
+because `project_structure.md:166`, `:190`, `:208`, `:359` and `:384` are
+cited unpinned from other files.
+
+### 7.2 Refine or mesh code: no `@perf` run
+
+Nothing under `include/terrain/refinement/` or `include/terrain/mesh/`
+changes. Two edited headers are on refine's path: `chunks.hpp` (refine's
+scan calls `for_each_block`) and `raster/geometry.hpp` (`RasterGeometry`).
+In both the deletion is of something no translation unit instantiates or
+calls (a function template, and two non-virtual inline members that change
+no layout), so the compiled refine is the same code. `@reviewer` checks it
+by `git diff 1035690 HEAD -- include/terrain/parallel_util/chunks.hpp
+include/terrain/raster/geometry.hpp`: no `-` or `+` line outside the
+comment header, `for_each_chunk` and the two members. If that diff shows
+anything else, `@perf`'s byte-identical run is owed.
+
+### 7.3 Lines
+
+Net production lines by `CLAUDE.md` §2: **-291** (C++ -246, Python -45),
+the table's sum. Rewritten comments, the modified signatures on R4 and
+`orientation` (one line out, one in) and line 7 of `src_python/tin_engine/__init__.py` count zero.
+Check: `python3 tools/count_loc.py 1035690 HEAD` on the branch prints -291;
+a different number means an include or an operator went that this design
+did not list, and the difference is explained in the review.
+
+### 7.4 `@tester`: the suites
+
+Rule: **a test that tests only removed code is deleted, not kept or
+rewritten.** A test of live code that used a removed item as its instrument
+is kept and given another instrument. Every change below lands in
+`@tester`'s commit, before `@developer`'s, and must compile and pass against
+`1035690`'s production code (it only stops using things).
+
+Deleted outright:
+
+- `tests/python/test_core.py` (all of it tests the Python `Point2`,
+  `Point3`, `dot`, `cross`).
+- `tests/cpp/unit/test_refinement_chunks.cpp` and its registration
+  (`tests/cpp/CMakeLists.txt@1035690:224` and `:227`, with the comment at
+  `:216-223` rewritten), and its name in the TSan job's build and run lists
+  (`.github/workflows/main.yaml@1035690:155` and `:169`, each edited **in
+  place** so `.github/workflows/main.yaml:306`, cited unpinned, does not move).
+  `tests/python/test_ci_changes.py`'s `test_h3_tsan_builds_exactly_the_suites_it_runs`
+  fails if the workflow names a suite CMake no longer registers, so the
+  CMake and workflow edits go in one commit. `for_each_block` keeps its
+  TSan coverage through `test_refinement_chunks_dynamic`.
+- In `tests/cpp/unit/test_ring.cpp`: the concept cases ("the shipped models
+  satisfy Ring", "Ring requires exactly size() and vertex(i)...", "the
+  algorithms work through the concept...") with their test models
+  `NoVertex`, `SizeIsInt`, `VertexByValue`, `ArrayTriangle`; every `edge`,
+  `all_finite`, `bounding_box`, `signed_area` and `point_in_ring` case
+  (`@44fa7f5:288-450` and `:564-750`, `:776-803`); the `PointRing`
+  constructor cases that `IndexedRing` already pins ("rejects fewer than
+  three", "rejects a stored closure", and `PointRing`'s half of "cannot be
+  built from a temporary").
+- In `tests/cpp/property/prop_ring_invariants.cpp`: every `point_in_ring`
+  and `signed_area` case (`@44fa7f5:101-208`, `:278-357`) and both raster
+  boundary cases (`:359-408`, `contains_strict` against `point_in_ring`).
+- In `tests/cpp/unit/test_point.cpp`: every `Point3` case and both hash
+  cases ("Point2 hash deduplicates...", "Point hashing is consistent with
+  equality for signed zero"); the `Point3` lines of the traits and
+  format-spec cases.
+- In `test_bbox.cpp` the three `center` cases and the `center` line of the
+  degenerate-box case (`@44fa7f5:131`); in `test_segment.cpp` "is_degenerate
+  is exact" and the `is_degenerate` line at `:74`; in
+  `test_predicates_orientation.cpp` the `is_left_turn` and `is_collinear`
+  cases; in `test_raster.cpp` "contains_strict excludes the boundary",
+  "boundary tolerance stays above rounding noise", and the
+  `contains_strict` line at `:238`.
+
+Kept with a new instrument:
+
+- **`prop_cdt_invariants.cpp`'s domain test** ("no triangle lies in a hole
+  or outside the domain", `@44fa7f5:369-391`) checks the live triangulator
+  with `point_in_ring` as its oracle. `point_in_ring` and `PointInRing` move
+  **verbatim** into a new `tests/cpp/support/point_in_ring.hpp`, namespace
+  `terrain::test`, taking `const IndexedRing&`, and the test calls that.
+  One case of the deleted unit suite moves with it, retargeted: "point_in_ring
+  classifies a square" (`tests/cpp/unit/test_ring.cpp@44fa7f5:570-583`), so the oracle has a
+  direct check of its own. `tests/cpp/support/mesh_queries.hpp@44fa7f5:21`'s comment then
+  points at the support header.
+- **`orientation<K>`'s cases** run over `IndexedRingCase` only:
+  `ring_cases.hpp` drops `PointRingCase`, `RingCases` becomes the two
+  `IndexedRing` cases, `ExactRingCases` the one. `describe(PointInRing)`
+  moves to the support header or goes.
+- **"orientation agrees with sign(signed_area)"**
+  (`tests/cpp/property/prop_ring_invariants.cpp@44fa7f5:250-269`) keeps its orientation
+  assertions and drops the area lines: the star generator builds
+  counterclockwise rings by construction, which is the oracle.
+- **`PointRing` policy cases with no `IndexedRing` twin** ("rejects a ring
+  collapsed to a single point", "accepts the degeneracies that real data
+  contains", "does not check finiteness", "a legal ring's cyclic rotation may
+  be rejected as a closure") are retargeted to `IndexedRing` through
+  `IndexedRingCase::Holder`. The closure and size checks they pin are
+  `IndexedRing`'s too (`detail::check_ring_size`, `check_ring_closure`).
+
+Prose in suites that becomes false: `tests/python/test_core_cdt.py@44fa7f5:967-968`
+(points at `test_core.py`), `tests/python/test_features.py@44fa7f5:39-41` and
+`:584-586` and `tests/python/test_io_vtk_legacy.py@44fa7f5:19-21` ("`__init__.py`
+imports `_core`"), `tests/cpp/unit/test_refinement_refine.cpp@44fa7f5:8` and
+`tests/cpp/unit/test_refinement_chunks_dynamic.cpp@44fa7f5:3-4` (`for_each_chunk`).
+Master's T2 (the Python audit's layering test) since pinned, in `97eea35`,
+eight citations of `tests/python/test_features.py@44fa7f5:583` in three increment
+files, and moved, in `2f47ebb`, the module checks of `test_features.py`,
+`test_io_vtk_legacy.py` and others, among them `test_viz_scene.py`'s
+`TestModuleIsolation`, into `tests/python/test_layering.py`. The merge takes master's prose there, less
+its reason "`__init__.py` imports `_core`", and moves `test_layering.py`'s
+package-root row to layer L0 with no imports; the `fetch.http` ->
+`tin_engine` exception goes with it (`python-audit.md`, F12).
+
+**The red step: one behaviour test.** Deleting dead code changes no
+behaviour a suite can observe, except one: today no `tin_engine` module
+can be imported without the compiled extension, because `__init__.py`
+imports `_core`. After this PR the package imports without it, and
+`stats.py`'s docstring ("testable without the extension") becomes true.
+`@tester` adds to `tests/python/test_stats.py` one test that runs, in a
+subprocess with `sys.executable`, `import sys; sys.modules["tin_engine._core"]
+= None; import tin_engine.stats`, and asserts exit status 0. Red at
+`1035690` (`ModuleNotFoundError: import of tin_engine._core halted`), green
+after I1. Probe, run for this design against a copy of the package with the
+editable finder bypassed: with today's `__init__.py` the import fails with
+that error; with `__init__.py` reduced to its `importlib.metadata` import it
+succeeds. No test is written for "a removed name stays removed": in C++ an
+absent name is a hard compile error, not something a `requires` clause can
+probe, and a Python `hasattr` test would pin an absence nobody reads. The
+red commit therefore holds the deletions and retargets above plus this one
+failing test.
+
+### 7.5 `@developer`: the production edits
+
+Delete the table's ranges; turn `extreme_vertex` into an `inline` function
+and `orientation` into `template <pred::GeometryKernel K>`, both on
+`const IndexedRing&`; rewrite the comments of 7.1 in place; reduce
+`src_python/tin_engine/__init__.py` to `installed_version`; edit `project_structure.md` in place.
+No test file is touched. Gates: the C++ build under the compiler gate,
+`ctest`, `pytest`, `mypy`, `ruff`, `tools/count_loc.py` (-291),
+`tools/check_citations.py` (no `broken`; re-read the at-risk list as
+quotations). The merge adds a `ROADMAP.md` row for PR B.
+
+### 7.6 Citations pinned by this design
+
+Unpinned citations into lines this PR deletes or moves were pinned to
+`44fa7f5` in the commit that added this section (T2's lesson): `segment.hpp:68`
+(`05-noder.md`, `kernel-sufficiency-audit.md`), `include/terrain/core/ring.hpp@44fa7f5:233`
+(`05b-noder-driver.md`, twice), `_core.pyi:3` and `:437` (`05c-noder-wiring.md`,
+`25-plain-output.md`), ten `bindings/core.cpp` citations
+(`15f-edge-strip.md`, `23-basin-scale.md`, `27-node-sampling.md`,
+`29-nve-reference-catchments.md`), `chunks.hpp:10` and
+`tests/cpp/unit/test_refinement_chunks.cpp@44fa7f5:79` (`21-parallel-refine.md`),
+`test_pslg_builder.cpp:961` and `prop_cdt_invariants.cpp:398`
+(`h14-parallel-sanitizer-tests.md`). Left unpinned, because the edits above
+keep their lines in place: `snap_grid.hpp:43`, `:63`, `:94`;
+`project_structure.md:166`, `:190`, `:208`, `:359`, `:384`;
+`.github/workflows/main.yaml:59`, `:306`;
+`tests/cpp/CMakeLists.txt:3`, `:189`, `:199`. `@reviewer` re-reads each of
+these as a quotation.
 
 ## Questions for Ola
 
@@ -427,3 +698,17 @@ by question:
 
 CI speed comes first (`docs/increments/h17-ci-test-time.md`); these PRs
 follow it.
+
+## Review
+
+One line per step, PR B (branch `cpp-dead`):
+
+- Red: `50bef89` (`@tester`) adds the `stats`-imports-without-`_core` test, deletes the tests of removed items, moves `point_in_ring` to test support; `90ba8be` makes `test_pslg`'s edge-vs-ring case compare against the ring's vertices, not `terrain::edge`.
+- Green: `6530d30` (`@developer`) deletes the 20 ranges of 7.1; `tools/count_loc.py 4208932 6530d30` counts -291, as 7.3 planned.
+- `ab79bfe` (`@tester`) deletes `test_refinement_chunks.cpp` and its CMake registration; ctest 843/843, pytest 5089 passed at this head.
+- Conflict between 7.4 (the suite goes in the red commit) and 7.5 ("no test file is touched"): resolved by splitting it, `@developer` takes the suite off the TSan lists in place, `@tester` deletes the file next.
+- Departure 1: `include/terrain/predicates/orientation.hpp@6530d30:9`'s comment now names `reversed`, not the removed `is_left_turn`.
+- Departure 2: `_core.pyi`'s comment above the two `describe` overloads no longer points at the removed `cross` stubs.
+- Departure 3: `bindings/core.cpp`'s module docstring no longer opens with "geometry primitives"; it names the triangulator and mesh surface.
+- Docs (`@architect`): `project_structure.md` lines 14, 17, 52, 446, 501, 505, 506 rewritten one for one; `05-noder.md`'s two `segment.hpp` citations and two 7.6 names pinned to `44fa7f5`; `check_citations` exits 0.
+- #191 master merge, code review, 2026-10-06. Range 5dfde43..67d0e2a (merge of b6e74cf). Verdict: CHANGES REQUESTED, prose only. -291 net, unchanged. Resolution is only the 8 described files; layering row and exception change correct (planted old row and stale exception each fail); merge-tree with fd64f8b clean, Python suite on that tree 5110 passed, 30 skipped. Blocking: `docs/increments/python-audit.md@67d0e2a:512,520,525-526,317-318`; `docs/increments/cpp-audit.md@67d0e2a:612-613`.

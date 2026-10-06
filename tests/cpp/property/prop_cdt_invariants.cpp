@@ -39,6 +39,7 @@
 
 #include <cdt_cases.hpp>
 #include <mesh_queries.hpp>
+#include <point_in_ring.hpp>
 
 #include <terrain/cdt/constrained_edges.hpp>
 #include <terrain/cdt/detria_backend.hpp>
@@ -69,7 +70,6 @@ using terrain::IndexedMesh2;
 using terrain::IndexedRing;
 using terrain::NodedPslg;
 using terrain::Point2;
-using terrain::PointInRing;
 using terrain::Segment2;
 using terrain::TriangleIndices;
 using terrain::cdt::CdtOptions;
@@ -78,13 +78,13 @@ using terrain::cdt::CdtStatus;
 using terrain::cdt::ConstraintEdgeSet;
 using terrain::cdt::DetriaBackend;
 using terrain::is_closed;
-using terrain::point_in_ring;
 using terrain::pred::DefaultKernel;
 using terrain::pred::Incircle;
 using terrain::pred::Orientation;
 using terrain::test::DomainShape;
 using terrain::test::EdgeUse;
 using terrain::test::GeneratedDomain;
+using terrain::test::PointInRing;
 using terrain::test::apex;
 using terrain::test::blocks_visibility;
 using terrain::test::edge_uses;
@@ -379,7 +379,7 @@ TEST_CASE("no triangle lies in a hole or outside the domain", "[cdt][property][d
             const Chain& chain = c.pslg.chains()[ch];
             if (!is_closed(chain.role)) continue;
             const IndexedRing ring = c.pslg.ring(ch);
-            const PointInRing where = point_in_ring<DefaultKernel>(ring, p);
+            const PointInRing where = terrain::test::point_in_ring<DefaultKernel>(ring, p);
             if (chain.role == ChainRole::Hole) {
                 REQUIRE(where != PointInRing::Inside);
             } else if (where == PointInRing::Inside) {

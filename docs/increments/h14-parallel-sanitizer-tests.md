@@ -183,7 +183,7 @@ tests/cpp/unit/test_predicates_default_kernel.cpp:44:#include <unistd.h>
 
 $ grep -rnwE 'fopen|freopen|ofstream|ifstream|fstream|tmpnam|tmpfile|mkstemp|mkdtemp|temp_directory_path|unlink|rename|creat' tests/cpp include src
 (three hits, all the English word "rename" in comments:
- test_edge_properties.cpp:24, test_pslg_builder.cpp:961, prop_cdt_invariants.cpp:398)
+ test_edge_properties.cpp:24, tests/cpp/unit/test_pslg_builder.cpp@44fa7f5:961, tests/cpp/property/prop_cdt_invariants.cpp@44fa7f5:398)
 
 $ grep -rnE '"[^"]*(/tmp|\.txt|\.csv|\.tif|\.bin|\.json|\.dat|\.out|\.log)"' tests/cpp include src
 (no output, exit 1)

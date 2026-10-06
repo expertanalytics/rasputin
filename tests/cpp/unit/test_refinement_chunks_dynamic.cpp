@@ -1,7 +1,7 @@
 // Increment 21a, QW1 (docs/increments/21-parallel-refine.md, section 3, and
 // "Pinned by the red suite (21a)"): the dynamic block scheduler that replaces
-// for_each_chunk for the scan. A new suite; test_refinement_chunks, which pins
-// for_each_chunk, is unchanged.
+// for_each_chunk for the scan. This suite is for_each_block's, and carries its
+// TSan coverage.
 //
 // INVARIANT-CRITICAL (section 7): a dropped block leaves a stale scan result
 // and a doubled one is a second writer to a result slot, and either breaks the
@@ -21,8 +21,8 @@
 //   template <class Fn>
 //   void for_each_block(std::size_t n, unsigned threads, BlockSchedule, Fn&& fn);
 //
-// threads == 0 means hardware_concurrency, or 1 if that is 0, as for
-// for_each_chunk. With b the block size, block k is [k*b, min(n, (k+1)*b)),
+// threads == 0 means hardware_concurrency, or 1 if that is 0 (chunks.hpp's
+// header). With b the block size, block k is [k*b, min(n, (k+1)*b)),
 // and fn(begin, end) is called exactly once per block: the set of calls is the
 // partition, whatever the threads or the timing. With one thread or
 // n < inline_below every call is on the calling thread, in ascending order.
