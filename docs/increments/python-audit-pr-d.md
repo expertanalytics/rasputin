@@ -1,15 +1,16 @@
 # Python audit PR D: `audit-encoders` (F7)
 
-Status: **code review round 4 asked for one phrase in this paragraph**
-(section Review); code review round 2 approved the code at `083712d`. PR C
+Status: **code review round 5 approved; push, PR and enqueue on Ola's yes**
+(section Review). Ola has given that yes; only away mode overnight holds the
+push. Code review round 2 approved the code at `083712d`. PR C
 (`worktree-audit-geojson`), which this branch was stacked on, merged as
 #201. Branch `worktree-audit-encoders` then merged master twice: at
 `15f41a82` (master up to `01d98c2b`, #201, which is C) and at `5da8f0f8`
 (bringing in #204). The master merge needed one test call fixed,
 `4e261dbe` (`tests/python/test_cli_mesh_vtk.py` calls `invoke("mesh", ...)`
 as master's shared test driver requires). Net production lines stay +7
-(`python3 tools/count_loc.py origin/master HEAD`). Next: a short code review
-round 5, then the push on Ola's yes. Follow-up, not blocking: `cli.py` calls
+(`python3 tools/count_loc.py origin/master HEAD`). Next: the push, the PR
+and the enqueue once away mode ends, then a check of CI. Follow-up, not blocking: `cli.py` calls
 `file_fields(record)` twice on one line. The finding is
 `docs/increments/python-audit.md`, F7; its section 6 row D points here.
 
@@ -523,3 +524,5 @@ section 4's rule), `io/ply.py`, `io/vtk_legacy.py`, `features.py`,
 **PR D (`worktree-audit-encoders`, the shared mesh-writer checks), code review, round 3, 2026-10-07.** Range `4725f12e..4e261dbe` (master merges `15f41a82` and `5da8f0f8`, the `@tester` test fix `4e261dbe`). Verdict: CHANGES REQUESTED. The Status paragraph at `/Users/skavhaug/projects/rasputin/.claude/worktrees/audit-encoders/docs/increments/python-audit-pr-d.md@4e261dbe:3-20` says PR C (`worktree-audit-geojson`) is not pushed and that D gets rebased, but C merged as #201 and D merged master. The code, the merges, the suite and the gates are clean.
 
 **PR D (`worktree-audit-encoders`, the shared mesh-writer checks), code review, round 4, 2026-10-07.** Range `4e261dbe..830eab37`, docs only, +7 net unchanged. Verdict: CHANGES REQUESTED: `/Users/skavhaug/projects/rasputin/.claude/worktrees/audit-encoders/docs/increments/python-audit-pr-d.md@830eab37:7` says merge `15f41a82` brought in "#200 to #203", but it brought in master from #187 up to #201 (`git log --first-parent b26beb83..01d98c2b`). The other claims check out: #201 is C, the pins are on master, `4e261dbe` is the test fix.
+
+**PR D (`worktree-audit-encoders`, the shared mesh-writer checks), code review, round 5, 2026-10-07.** Range `830eab37..637a8600`, docs only, +7 net unchanged (`count_loc.py origin/master 637a8600`). Verdict: APPROVED. `/Users/skavhaug/projects/rasputin/.claude/worktrees/audit-encoders/docs/increments/python-audit-pr-d.md@637a8600:7` is now true (`15f41a82` has parents `4725f12e` and `01d98c2b`; `01d98c2b` is the #201 merge, which is C). The Status line and the round 4 record match. CI must be checked after the push.
