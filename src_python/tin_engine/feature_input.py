@@ -36,7 +36,7 @@ import numpy.typing as npt
 import shapely
 from pydantic import BaseModel, ConfigDict
 from pyproj import CRS
-from shapely.geometry import LineString, Polygon, shape
+from shapely.geometry import LineString, MultiPolygon, Polygon, shape
 from shapely.geometry.base import BaseGeometry
 
 from tin_engine.crs import parse_crs, reprojector, same_crs, transform_definition
