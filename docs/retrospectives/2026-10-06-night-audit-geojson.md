@@ -79,7 +79,7 @@ from their result lines (5882, 6031 and 6412).
 | Round | Ended | Blocking (all prose) | Found besides, by `@architect`'s probe while fixing the prose | Fix |
 |---|---|---|---|---|
 | 1 | 00:41 | stale `project_structure.md` rows; wording table missing rows; status | this PR made the station readers say `None is a None, not a Point` for a feature with no geometry (line 6676) | red `28fe0cf`, green `693f560` |
-| 2 | 01:10 | wording rows missing shapes; known gap 1 false | this PR turned a clean refusal of an empty non-null `geometry` into a traceback in `--features` and `catchment --lakes` (line 6932) | red `af5cb4e`, green `0a11a34` |
+| 2 | 01:10 | wording rows missing shapes; known gap 1 false for a lone feature | this PR turned a clean refusal of an empty non-null `geometry` into a traceback in `--features` and `catchment --lakes` (line 6932) | red `af5cb4e`, green `0a11a34` |
 | 3 | 01:39 | table lacks `--features` and `--lakes` rows; status | this PR turned the refusal of `"geometry": 7` into a traceback in four readers (line 7126) | probe committed as the record (`9e002e2`); red `5a02bc9`, green `21f49d6` |
 | 4 | 02:14 | one wrong summary row | none | prose `efe0eea` |
 | 5 | 02:19 | none: approved | | record `b26beb8` |
@@ -112,7 +112,8 @@ as returned by a fetch of the page on 2026-10-06, not checked against the
 PDF).
 
 **What fixed it.** At 01:45 (`9e002e2`) the probe,
-`docs/increments/python-audit-probes/geojson_wordings.py` (202 lines),
+`docs/increments/python-audit-probes/geojson_wordings.py` (198 lines at
+`9e002e2`, 202 by `efe0eea`),
 became the record, with its output committed at the base and at the head.
 The diff of the two outputs is the full list of changed wordings, and the
 doc's table became a 9-row summary. Round 4 re-ran the probe "byte for byte"
@@ -159,9 +160,10 @@ auto-merge had dropped. The rule (`.claude/REQUIRED-READING.md`, *A grant
 covers one occurrence*): "one yes covers one enqueue". In away mode
 `guard_push.py` refused it and queued it (the only queue entry in the
 window). The session did not retry, and it wrote the `ASK OLA:` line. The
-guard did its job. The `ASK OLA:` line still says "(you approved pushing
-1-4)", which reads as if the old grant covered the re-enqueue. It does not;
-Ola needs to give a fresh yes.
+guard did its job. The `ASK OLA:` line as printed by the recap at 00:36
+(line 6522) said "re-enqueue (you approved pushing 1-4)", which read as if
+the old grant covered the re-enqueue. It did not. The session corrected the
+line at 02:32 (line 7782) to ask for a fresh yes.
 
 **D3. Two unchecked facts in the main session's briefs.** At about 02:14 it
 told `@architect` that `--features` reads a bare geometry under the CORINE
@@ -207,7 +209,9 @@ touches refine or mesh code, so no `@perf` run was due.
 
 ## 5. Guards: refusals and false positives
 
-- **Window queue:** one entry, the D2 merge. A correct refusal.
+- **Window queue:** one entry up to the 02:22 cut-off, the D2 merge. A
+  correct refusal. The second entry (02:23:57) is my own planted-import
+  refusal below, after the cut-off.
 - **My own run, two refusals.**
   - A read-only Python one-liner that opened the queue files was refused as
     a harness write ("Only Ola enters or leaves unattended mode, and only
@@ -257,10 +261,12 @@ virtualenv. Python 3.14 finds it beside the executable and takes
 `/opt/homebrew/bin` as its prefix. `/opt/homebrew/bin/python3` prints prefix
 `/opt/homebrew/bin` with the warnings. The same binary called by its Cellar
 path prints the right prefix and no warnings. The main session appended
-`2>/dev/null` to 69 of its 80 shell commands in this window, and one of them hid a failed
-`session.md` edit (line 6208: the replace matched nothing, and `grep -c`
-printed 0). The `@reviewer`'s polluted-parse lesson is the same noise. The
-fix is outside the repository, so it is Ola's (question 2).
+`2>/dev/null` to 69 of its 80 shell commands in this window. That can hide
+real errors, though in the one failed edit I found it hid nothing: at line
+6208 a `session.md` edit's `str.replace` matched nothing, which raises no
+error, so nothing reached stderr; only the `grep -c` that followed, printing
+0, showed the failure. The `@reviewer`'s polluted-parse lesson is the same
+noise. The fix is outside the repository, so it is Ola's (question 2).
 
 ## 7. Proposals (Ola decides)
 
@@ -281,8 +287,9 @@ saving on a PR like C: three red/green/review cycles, about 1 h 30 min.
 **P2. Probe scripts go through the gates.** Either probes live under
 `tools/probes/`, or `SOURCE_DIRS` gains `docs/increments`
 (`tools/check_prohibited_deps.py@44fa7f5:27`); ruff and mypy exclude `docs/`
-too. Incident: the `@architect`'s planted `import rasterio`, not caught (its
-handback; my own plant was refused, section 5). Owner: `@developer` through
+too. Incident: `9e002e2` committed the probe `.py` under `docs/`, where no
+gate reads it; the `@architect`'s planted `import rasterio` was not caught
+(its handback; my own plant was refused, section 5). Owner: `@developer` through
 the pipeline. It writes `tools/`, so by day. Cost: one line plus a test. Do
 it together with P1, or P1 adds ungated code.
 
@@ -290,14 +297,18 @@ it together with P1, or P1 adds ungated code.
 Change `.claude/agents/tester.md@44fa7f5:27-29` from "under the handback heading" to "in the
 increment file's red-step section, in the red commit". `@architect` then
 rules in the file, and `@developer` reads it there. Incident: D1, six
-hand-offs. Owner: `@tester`'s file (governed, so by day). Cost: about 10
+hand-offs; for example PR C's red `1928569` (15 pins) went to green
+`3b739ac` with no ruling between. Owner: `@tester`'s file (governed, so by day). Cost: about 10
 words. It also suits stage 2 of `docs/research/2026-10-03-dispatcher-control.md`
 (a script that says what step comes next on each branch): "pins unruled"
 becomes a state that script can see.
 
 **P4. `tools/brief.py --increment none` for prose-only branches.** The brief
 would then say "no increment file (prose branch)" instead of naming
-README. Incident: D4. Owner: `@developer`. Cost: about 5 lines. Low priority.
+README. Incident: D4, the review brief for the `worktree-gpkg-colour`
+branch at head `bf2d42f`, which named README as the increment because
+`brief.py` requires one. The brief is not committed, so no commit shows
+the false line; the transcript does (line 7640). Owner: `@developer`. Cost: about 5 lines. Low priority.
 
 **P5. Say "no mutation round", not "no throwaway".** In the main session's
 memory note on lean briefs and in increment red-step sections, use "no
@@ -345,7 +356,7 @@ refusal message names them, and so does `guard_push.py`'s docstring.
    design step?** Default: yes, together with P2.
 2. **The stray `/opt/homebrew/bin/pyvenv.cfg` (2023, Python 3.10) makes
    every `python3` print two warnings, and agents hide them with
-   `2>/dev/null`, which also hides real errors. Rename it to
+   `2>/dev/null`, which can also hide real errors. Rename it to
    `pyvenv.cfg.bak`?** This is your machine, outside the repository; no agent
    touches it. Default: yes, you rename it.
 3. **The "The harness" cut in section 8?** Default: yes, in the same PR as
@@ -353,3 +364,15 @@ refusal message names them, and so does `guard_push.py`'s docstring.
 4. **P3, the pinned list goes into the increment file?** Default: yes.
 5. **Re-enqueueing #189 and #191** needs your fresh yes; the overnight
    attempt was refused (D2). Default: yes, once you have looked at them.
+
+## Addendum, 02:22 to about 02:50 (from the main session's brief, unchecked)
+
+After the cut-off the main session filled both writer slots: the design of
+audit PR A, the design of audit PR D, and the GeoPackage colour note
+(`bf2d42f`), which was reviewed and approved. PR D's design measured +7 net
+production lines by prototyping in a scratch clone, against the audit's
+estimate of -30.
+
+## Review
+
+**Round 1, 2026-10-06.** Range `44fa7f5..68e2883`. CHANGES REQUESTED, prose only: section 6 says 2>/dev/null hid the line-6208 edit failure, but nothing reached stderr; D2 says the ASK OLA line 'still says' the old grant, but session.md now asks for a fresh yes; P2-P4 name no commit for their incident.
