@@ -1,14 +1,16 @@
 # Increment 30b — the `features clip` phase of `rasputin mesh`, made fast
 
-Status: **red committed at `08269e77`; `@tester`'s pins beyond the design
-ruled (section 7, all nine stand); the green step comes next.** Designed by `@architect` 2026-10-06 on branch `worktree-clip-speed`, on
+Status: **built and accepted; code review comes next.** Red `08269e77`
+(`@tester`'s pins beyond the design ruled in section 7, all nine stand), green
+`c5340459` (+23 net production lines, `python3 tools/count_loc.py 5e2fbe0
+c5340459`; as built, section 3.6), `@perf`'s acceptance ACCEPTED at
+`66055f5d` (section 9). Designed by `@architect` 2026-10-06 on branch `worktree-clip-speed`, on
 `@perf`'s profile commit `a7154ec`, and amended the same day after design
 review round 1 (`## Review`): the whole-feature test now tests the feature's
 linework (3.2, 4.2), with pin P5 and three new probe cases. After round 2,
 master (with #199, 30a) was merged in as `5e2fbe0`, and the gate's base was
 recorded again there: `docs/increments/30b-probes/base_5e2fbe0.txt`, equal
-line for line to the earlier `base_a7154ec.txt` (section 6). No 30b production
-code is on the branch yet.
+line for line to the earlier `base_a7154ec.txt` (section 6).
 
 **What this is.** The second of three pull requests that remove the
 bottlenecks `@perf` measured in `rasputin mesh` on two real catchments
@@ -23,7 +25,8 @@ is 30 (section 13 says how this branch records it).
 four numbers (kept, cut at the domain outline, outside, empty) stay exactly as
 they are, and so do the noded graph and the mesh. The phase gets about three
 to four times faster: on AC power, 5.9 s to 1.9 s on Numedalslågen and 5.7 s
-to 1.3 s on Skiensvassdraget, measured on a prototype (section 8).
+to 1.3 s on Skiensvassdraget, measured on a prototype (section 8). As built,
+on AC power: 5.83 s to 1.83 s and 5.66 s to 1.35 s (section 9).
 
 **Lean.** No mutation round (Ola's standing rule for lean rounds). No C++.
 
@@ -269,6 +272,29 @@ for `test_a_self_intersecting_ring_is_linework_not_refused` and
 still passes** (both tests pin lengths, not pieces). The four conditions of
 3.4 skip the same chains on the two catchments and cost nothing measurable
 beyond `covers` (section 8).
+
+### 3.6 As built
+
+Green `c5340459`, all in `src_python/tin_engine/feature_input.py`, follows
+3.1 to 3.5. Where the code says more than the design did:
+
+- `_untouched`'s `line` is typed `BaseGeometry`, not `LineString`
+  (`src_python/tin_engine/feature_input.py@c5340459:245`). The chains it is
+  given in `_take` come from the geographic branch as well, where
+  `shapely.transform` returns `BaseGeometry`. Every chain is still a line;
+  the type is only what `mypy` can see.
+- The widening loop walks the edges of `rest` still not kept, by their
+  position in `rest`, because the segments are now built only for `rest`
+  (`src_python/tin_engine/feature_input.py@c5340459:209`). It is the set 3.1
+  step 4 names.
+- `shapely.prepare(region)` sits right after `source_region(...)`, before the
+  geographic branch is chosen
+  (`src_python/tin_engine/feature_input.py@c5340459:328`), as 3.2 says. The
+  geographic branch's own pre-clip uses its widened bound, not `region`.
+- `_take` names the domain polygon `dom` for the skip
+  (`src_python/tin_engine/feature_input.py@c5340459:363`); the `clipped`
+  count and the covering test still read `self.domain.polygon` and
+  `self.inner`.
 
 ## 4. Why the output cannot change
 
@@ -619,6 +645,8 @@ plant switches, committed in a scratch repository over `a7154ec`'s
 `feature_input.py`, gave **+17 net** (24 added, 7 removed); it passes the
 gate's `fixtures` mode (168 lines equal). The PR's docstrings and any
 spelling-out add a few. Estimate for the PR: **+20 to +30**, unchanged.
+Built: **+23** (31 added, 8 removed, all in `feature_input.py`;
+`python3 tools/count_loc.py 5e2fbe0 c5340459`).
 
 Timings of `open_features`' `clip_seconds` (the `features clip` row), on
 **AC power** (`pmset -g batt` before and after: AC), base and prototype
@@ -673,6 +701,30 @@ after each run**:
    read is unchanged, so its row should not move.
 
 Evidence goes under `docs/benchmarks/<date>/30b-clip/`.
+
+**Result: ACCEPTED** (`@perf`, 2026-10-06, `66055f5d`; evidence
+`docs/benchmarks/2026-10-06/30b-clip/README.md`, tables in its
+`raw/summary.md`). Base `5e2fbe0` against branch `c5340459`, both
+non-editable installs (shapely 2.1.2, GEOS 3.13.1), AC power for all 24
+`pmset -g batt` readings, median of 3:
+
+| catchment | features clip, base → branch, s | branch / base | features read, base → branch, s | total, base → branch, s |
+|---|---|---|---|---|
+| Numedalslågen | 5.830 → 1.825 | **0.313** (pass) | 0.260 → 0.268 | 11.385 → 7.519 |
+| Skiensvassdraget | 5.658 → 1.349 | **0.238** (pass) | 0.279 → 0.264 | 15.688 → 11.408 |
+
+The `features read` row moves within its spread between repeats (up to
+10 %), as an unchanged read should. Each catchment's six runs wrote one
+`.vtk` sha256, equal to the probe base's `vtk=` hash, and one `features:`
+stderr line (Numedalslågen 1,611 kept,
+271 cut, 6,321 outside, 0 empty; Skiensvassdraget 2,628 kept, 216 cut, 2,894
+outside, 0 empty, the base's counts of section 6).
+
+**The probe** (`raw/probe_compare.txt`), on the branch install: all 170 base
+lines (168 `fixture`, 2 `mesh`, `.vtk` hashes included) are present and
+unchanged, and the 11 new `fixture` lines are exactly the red suite's
+allowed ones in `TestTheClipStaysTheSame` (P1's four cases, P3's one test,
+P4's three cases, P5's three cases). The `fixtures` run's pytest exited 0.
 
 ## 10. Risks
 
