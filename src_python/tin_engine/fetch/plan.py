@@ -25,8 +25,7 @@ from tin_engine.domain import DomainPolygon
 from tin_engine.fetch.http import FetchError
 from tin_engine.io.cog import block_grid, blocks_meeting
 from tin_engine.io.geotiff import read_page
-from tin_engine.io.models import GeoTiffError, IndexWindow, RasterMeta
-from tin_engine.mosaic import Bounds
+from tin_engine.io.models import Bounds, GeoTiffError, IndexWindow, RasterMeta
 
 GAP = 64 * 1024
 MAX_RANGE = 8 * 1024 * 1024
@@ -146,8 +145,7 @@ def plan_object(
     snapped outward to the lattice, as 23a-1's windows are), and the ranges of
     those neither `present` nor sparse (a sparse block is never requested,
     decided 7)."""
-    xs = meta.x_min + meta.delta_x * np.arange(meta.cols)
-    ys = meta.y_max - meta.delta_y * np.arange(meta.rows)
+    xs, ys = meta.node_xy(np.arange(meta.rows), np.arange(meta.cols))
     cols = np.flatnonzero((xs > box.x_min - meta.delta_x) & (xs < box.x_max + meta.delta_x))
     rows = np.flatnonzero((ys > box.y_min - meta.delta_y) & (ys < box.y_max + meta.delta_y))
     if not len(cols) or not len(rows):

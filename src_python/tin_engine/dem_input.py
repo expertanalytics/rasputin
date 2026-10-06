@@ -21,7 +21,7 @@ from __future__ import annotations
 
 import math
 import os
-from collections.abc import Iterator
+from collections.abc import Iterator, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Self
@@ -39,9 +39,9 @@ from tin_engine.crs import (
     suggest_crs,
 )
 from tin_engine.domain import DomainError, DomainPolygon, check_extent
-from tin_engine.io.models import DemTile, RasterMeta
-from tin_engine.io.repository import CacheRepository, TiffDemRepository
-from tin_engine.mosaic import Bounds, MosaicError, MosaicPlan, Seam, assemble, plan_mosaic
+from tin_engine.io.models import Bounds, DemTile, RasterMeta, TileFootprint
+from tin_engine.io.repository import CacheRepository, DemRepository, TiffDemRepository
+from tin_engine.mosaic import MosaicError, MosaicPlan, Seam, assemble, plan_mosaic
 from tin_engine.target_grid import (
     Block,
     TargetGrid,
@@ -175,8 +175,9 @@ def _reprojected(request: DemRequest, metas: list[RasterMeta]) -> bool:
     if request.domain is not None:
         x0, y0, x1, y1 = request.domain.to_crs(first.crs).polygon.bounds
     else:
-        x0, x1 = min(m.x_min for m in metas), max(m.x_min + (m.cols - 1) * m.delta_x for m in metas)
-        y0, y1 = min(m.y_max - (m.rows - 1) * m.delta_y for m in metas), max(m.y_max for m in metas)
+        boxes = [m.node_box() for m in metas]
+        x0, x1 = min(b[0] for b in boxes), max(b[2] for b in boxes)
+        y0, y1 = min(b[1] for b in boxes), max(b[3] for b in boxes)
     s = suggest_crs((x0, x1, y0, y1), first.crs)
     head = (
         f"the DEM is geographic ({first.crs}), so --out-crs is required; suggested for this "
@@ -188,7 +189,10 @@ def _reprojected(request: DemRequest, metas: list[RasterMeta]) -> bool:
 
 
 def _open_reprojected(
-    request: DemRequest, repository: Any, footprints: Any, label: str
+    request: DemRequest,
+    repository: DemRepository,
+    footprints: Sequence[TileFootprint],
+    label: str,
 ) -> DemInput:
     """D1's reprojected path: the target grid around the domain (or box) in
     the target CRS, the source region planned and assembled as 15a does,
@@ -224,7 +228,9 @@ def _open_reprojected(
     )
 
 
-def _domain_plan(footprints: Any, given: DomainPolygon) -> tuple[MosaicPlan, DomainPolygon, Any]:
+def _domain_plan(
+    footprints: Sequence[TileFootprint], given: DomainPolygon
+) -> tuple[MosaicPlan, DomainPolygon, Any]:
     """The domain in the DEM's CRS, the plan of its bounds with the polygon
     grown by one cell needed (R4 point 5), and that grown polygon, the needed
     region. Grown by the cell diagonal with mitred corners, a superset of the
@@ -233,9 +239,7 @@ def _domain_plan(footprints: Any, given: DomainPolygon) -> tuple[MosaicPlan, Dom
     crs = single_crs((f.meta.crs for f in footprints), MosaicError)
     try:
         domain = given.to_crs(crs)
-        box = Bounds(
-            **dict(zip(("x_min", "y_min", "x_max", "y_max"), domain.polygon.bounds, strict=True))
-        )
+        box = Bounds.of(domain.polygon.bounds)
         # The cell is the chosen lattice's, not a listed tile's (15b review, B1):
         # plan on the polygon itself, grow by that plan's cell diagonal, and
         # re-plan while the lattice chosen has a larger one. The reach only
@@ -258,7 +262,7 @@ def _past(box: Bounds, m: RasterMeta) -> Bounds | None:
     or None when none is. 15a's window snaps an edge within `ALIGN_TOLERANCE`
     cell of a node line onto it; a domain vertex just past that line needs the
     next one, and moving the edge half a cell out takes exactly that line."""
-    x_max, y_min = m.x_min + (m.cols - 1) * m.delta_x, m.y_max - (m.rows - 1) * m.delta_y
+    _, y_min, x_max, _ = m.node_box()
     out = (box.x_min < m.x_min, box.y_min < y_min, box.x_max > x_max, box.y_max > m.y_max)
     if not any(out):
         return None

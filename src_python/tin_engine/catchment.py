@@ -38,10 +38,9 @@ from tin_engine._core import ReduceStatus, UpstreamOutcome, accumulate, reduce_r
 from tin_engine.burn import BurnRefusal, burn_reach
 from tin_engine.crs import crs_label, parse_crs, reprojector, same_crs, single_crs
 from tin_engine.gauge import Reach
-from tin_engine.io.models import RasterMeta
+from tin_engine.io.models import Bounds, RasterMeta
 from tin_engine.io.repository import DemRepository
 from tin_engine.mosaic import (
-    Bounds,
     MixedGridError,
     MosaicError,
     MosaicPlan,
@@ -260,7 +259,7 @@ def _grow(
         # Grow while the in-nodes' bounds plus the base margin reach past the
         # window; the step itself takes the margin doubled at each growth.
         grown = _grown(plan, _plan(footprints, _joined(m, out, float(WINDOW_MARGIN_M))))
-        windows.append(Window(Bounds(**_bounds_of(m)), m.rows, m.cols, seconds, grown))
+        windows.append(Window(Bounds.of(m.node_box()), m.rows, m.cols, seconds, grown))
         if not grown:
             break
         margin *= 2
@@ -314,7 +313,7 @@ def _gauged(
         footprints, repository, bounds, _burnt_flood(reach, lambda p: int(p.placed)), True
     )
     try:
-        b = _grow(footprints, repository, Bounds(**_bounds_of(m)), _burnt_flood(reach, at_u), True)
+        b = _grow(footprints, repository, Bounds.of(m.node_box()), _burnt_flood(reach, at_u), True)
     except CatchmentError:
         pass  # stage B never refuses a catchment: read what stage A's window holds
     else:
@@ -328,7 +327,7 @@ def _gauged(
     checked: Literal["whole", "partly", "none"] = "whole"
     if "downstream_unread" in s.causes:
         checked = "partly" if s.checked_down_m > 0 else "none"
-    xy = [(m.x_min + c * m.delta_x, m.y_max - r * m.delta_y) for r, c in path.chain.tolist()]
+    xy = [m.node_xy(r, c) for r, c in path.chain.tolist()]
     gauge = GaugeResult(
         node=xy[path.placed],
         chain=tuple(xy),
@@ -381,50 +380,35 @@ def _seed_mask(m: RasterMeta, lake: Polygon | None, point: tuple[float, float]) 
     or the node nearest the point."""
     seed = np.zeros((m.rows, m.cols), dtype=np.uint8)
     if lake is None:
-        r = round((m.y_max - point[1]) / m.delta_y)
-        c = round((point[0] - m.x_min) / m.delta_x)
+        r, c = map(round, m.index_of(*point))
         if not (0 <= r < m.rows and 0 <= c < m.cols):
             raise CatchmentError(f"the seed point {point} is outside the DEM")
         seed[r, c] = 1
         return seed
     x0, y0, x1, y1 = lake.bounds
-    r0, r1 = (
-        max(0, math.floor((m.y_max - y1) / m.delta_y)),
-        min(m.rows - 1, math.ceil((m.y_max - y0) / m.delta_y)),
-    )
-    c0, c1 = (
-        max(0, math.floor((x0 - m.x_min) / m.delta_x)),
-        min(m.cols - 1, math.ceil((x1 - m.x_min) / m.delta_x)),
-    )
+    (top, left), (bottom, right) = m.index_of(x0, y1), m.index_of(x1, y0)
+    r0, r1 = max(0, math.floor(top)), min(m.rows - 1, math.ceil(bottom))
+    c0, c1 = max(0, math.floor(left)), min(m.cols - 1, math.ceil(right))
     if r0 > r1 or c0 > c1:
         return seed
     r, c = np.indices((r1 - r0 + 1, c1 - c0 + 1))
-    x, y = m.x_min + (c + c0) * m.delta_x, m.y_max - (r + r0) * m.delta_y
+    x, y = m.node_xy(r + r0, c + c0)
     seed[r0 : r1 + 1, c0 : c1 + 1] = shapely.contains_xy(lake, x, y)
     return seed
 
 
-def _extent(m: RasterMeta) -> tuple[float, float, float, float]:
-    return (
-        m.x_min,
-        m.y_max - (m.rows - 1) * m.delta_y,
-        m.x_min + (m.cols - 1) * m.delta_x,
-        m.y_max,
-    )
-
-
-def _bounds_of(m: RasterMeta) -> dict[str, float]:
-    return dict(zip(("x_min", "y_min", "x_max", "y_max"), _extent(m), strict=True))
-
-
 def _joined(m: RasterMeta, out: UpstreamOutcome, margin: float) -> Bounds:
     """The window joined with the in-nodes' bounds grown by `margin`."""
-    x0, y0, x1, y1 = _extent(m)
+    x0, y0, x1, y1 = m.node_box()
+    (lo_x, lo_y), (hi_x, hi_y) = (
+        m.node_xy(out.row_max, out.col_min),
+        m.node_xy(out.row_min, out.col_max),
+    )
     return Bounds(
-        x_min=min(m.x_min + out.col_min * m.delta_x - margin, x0),
-        y_min=min(m.y_max - out.row_max * m.delta_y - margin, y0),
-        x_max=max(m.x_min + out.col_max * m.delta_x + margin, x1),
-        y_max=max(m.y_max - out.row_min * m.delta_y + margin, y1),
+        x_min=min(lo_x - margin, x0),
+        y_min=min(lo_y - margin, y0),
+        x_max=max(hi_x + margin, x1),
+        y_max=max(hi_y + margin, y1),
     )
 
 
@@ -465,14 +449,11 @@ def _outline(
     mask = np.asarray(out.mask)
     t0 = time.perf_counter()
     lattice = trace(mask)
-    rings = [
-        np.column_stack([m.x_min + r[:, 1] * m.delta_x, m.y_max - r[:, 0] * m.delta_y])
-        for r in lattice
-    ]
+    rings = [np.column_stack(m.node_xy(r[:, 0], r[:, 1])) for r in lattice]
     areas = [_signed_area(r) for r in rings]
     if lake is None:
         r, c = np.argwhere(seed)[0]
-        point = (m.x_min + c * m.delta_x, m.y_max - r * m.delta_y)
+        point = m.node_xy(r, c)
     inside = Point(point)
     around = [k for k, a in enumerate(areas) if a > 0 and Polygon(rings[k]).contains(inside)]
     if not around:
