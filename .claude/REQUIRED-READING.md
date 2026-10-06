@@ -152,10 +152,13 @@ unknown command) also when another program runs them (`caffeinate git push`, `fi
 `watch 'git push'`, a shell's `-c '…'`: `sh`, `dash`, `tcsh` and every shell
 `/etc/shells` lists on the Mac);
 a git or gh word under `parallel`, which builds its commands from its
-inputs, asks as an unknown command. `guard_governance.py` asks before any write
+inputs, asks as an unknown command, and a runner in front of `parallel`,
+`watch` or `flock` (`caffeinate parallel …`) does not hide it. `guard_governance.py` asks before any write
 to a file that states rules or to a `tools/` file named after a standard-library
 module, a copy or move into their directories included (`cp json.py tools`,
-with or without the trailing `/`),
+with or without the trailing `/`), and a path is judged also with `.`,
+`..` and a doubled `/` resolved (`tools/./json.py`); not a write to a
+whole governed directory (`rm -r .claude/hooks`),
 except an absolute path in a session scratchpad, written by Edit or
 Write or by a shell line that is one plain command (no `&&`, `;`, pipe,
 substitution or interpreter program). `guard_push.py` passes no git write in
