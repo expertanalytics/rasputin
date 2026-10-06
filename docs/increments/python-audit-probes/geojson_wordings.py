@@ -3,9 +3,13 @@
 
 Run against one revision's `tin_engine`, imported from a scratch copy:
 
-    python3 tools/scratch_copy.py <rev> <dir>        # prints PYTHONPATH=...
+    python3 tools/scratch_copy.py <rev> <dir>
     PYTHONPATH=<that value> .venv/bin/python \\
         docs/increments/python-audit-probes/geojson_wordings.py <dir>
+
+scratch_copy.py prints one line on stdout, the pytest command for the copy
+(`cd <dir> && PYTHONPATH=<value> <python> -c ... tests/python/`); take
+<value> from that line only (stderr may carry a `scratch_copy:` warning).
 
 The scratch copy's sitecustomize drops the editable finder, and the probe
 asserts that `tin_engine` was imported from `<dir>/src_python`, so a run
