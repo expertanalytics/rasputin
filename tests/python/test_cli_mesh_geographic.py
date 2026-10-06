@@ -74,7 +74,7 @@ from pyproj import CRS, Transformer
 from shapely.geometry import Polygon
 from typer.testing import CliRunner
 
-from cli_driver import ANSI, USAGE, Ring, geojson, invoke, mesh_to_vtk, refused, squashed
+from cli_helpers import ANSI, USAGE, Ring, geojson, invoke, mesh_to_vtk, refused, squashed
 from cog_fixtures import write_cache
 from crs_fixtures import axes_swapped
 from geographic_fixtures import (

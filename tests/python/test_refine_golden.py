@@ -33,7 +33,7 @@ import numpy as np
 import pytest
 
 import tin_engine.cli as cli
-from cli_driver import geojson, invoke
+from cli_helpers import geojson, invoke
 from geotiff_fixtures import KARTVERKET, needs_codecs
 from test_cli_mesh_domain import quarter_circle
 from tin_engine import _core

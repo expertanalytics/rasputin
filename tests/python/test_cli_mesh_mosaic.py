@@ -31,7 +31,7 @@ import numpy as np
 import pytest
 import tifffile
 
-from cli_driver import USAGE, invoke, runner
+from cli_helpers import USAGE, invoke, runner
 from geotiff_fixtures import (
     EPSG_UTM33,
     GT_RASTER_TYPE,

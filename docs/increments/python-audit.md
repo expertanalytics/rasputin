@@ -368,7 +368,7 @@ exception, with the PR that removes it:
   (`tests/python/test_cli_catchment.py@12dace7:137-144`, `tests/python/test_cli_mesh_domain_crs.py@12dace7:135-143`,
   `tests/python/test_cli_mesh_geographic.py@12dace7:149-157`, `tests/python/test_cli_mesh_plain_output.py@12dace7:108-115`),
   `squashed` 3, `plain_square`/`square` 6, `write_geojson` 3, a module-level
-  `CliRunner()` in 17 files. Shape: `tests/python/cli_harness.py` with
+  `CliRunner()` in 17 files. Shape: `tests/python/cli_harness.py` (built in T1 as `cli_driver.py`, renamed `cli_helpers.py`) with
   `invoke(command, *args)`, `ran(...)`, `refused(..., says=...)`, and a
   `rough_dem(seed)` fixture factory.
 - **X2. Tests that pin private `cli` names — 0 lines, but they block F6 and
@@ -1361,11 +1361,11 @@ folded into `ran`; this design does not do that (it would move assertions
 out of test bodies), and X1 costed neither the new module nor the import
 lines.
 
-### The module: `tests/python/cli_driver.py`
+### The module: `tests/python/cli_helpers.py`
 
-Named `cli_driver`, not X1's `cli_harness`: since h17 (on branch
-`worktree-ci-speed`), "harness test" means a test of `tools/` or the hooks,
-selected by a `harness` marker, and this module serves the product suites.
+Renamed `cli_helpers` on Ola's ruling (2026-10-05), who found the name it
+merged under, `cli_driver`, cryptic; it had been chosen over X1's
+`cli_harness` because "harness test" means a test of `tools/` or the hooks.
 
 Contents. A definition that moves unchanged keeps its name, so most call
 sites do not change:
@@ -1425,21 +1425,21 @@ from `test_cli_mesh_domain.py` and `test_cli_mesh_dem.py`.
 
 | Copy (at `b63132e`) | Becomes |
 |---|---|
-| `runner` in `tests/python/test_cli_catchment.py@b63132e:86`, `tests/python/test_cli_draw.py@b63132e:107`, `tests/python/test_cli_fetch.py@b63132e:61`, `tests/python/test_cli_mesh.py@b63132e:49`, `tests/python/test_cli_mesh_dem.py@b63132e:47`, `tests/python/test_cli_mesh_edge_strip.py@b63132e:103`, `tests/python/test_cli_mesh_landcover.py@b63132e:63`, `tests/python/test_cli_mesh_mosaic.py@b63132e:54`, `tests/python/test_cli_mesh_plain_output.py@b63132e:60`, `tests/python/test_cli_mesh_stats.py@b63132e:42`, `tests/python/test_cli_mesh_vtk.py@b63132e:40`, `tests/python/test_cli_station_catchments.py@b63132e:64`, `tests/python/test_fetch_nve.py@b63132e:78`, `tests/python/test_hardening.py@b63132e:50`, `tests/python/test_io_vtk_readback.py@b63132e:82`, `tests/python/test_palettes.py@b63132e:40` | `from cli_driver import runner`; every `runner.invoke(...)` unchanged |
-| `plain`, `ANSI`, `BOX` in `tests/python/test_cli_mesh.py@b63132e:51-63`, `tests/python/test_cli_draw.py@b63132e:109-122`; `ANSI` in `tests/python/test_cli_mesh_geographic.py@b63132e:836` | imported from `cli_driver`; the 10 suites that import `plain` from `test_cli_mesh` import it from `cli_driver` |
-| `invoke`, whole command line: `tests/python/test_cli_catchment.py@b63132e:93-95`, `tests/python/test_cli_fetch.py@b63132e:64-66`, `tests/python/test_fetch_nve.py@b63132e:81-83` | `cli_driver.invoke`; call sites unchanged (each already passes the subcommand first). `test_cli_mesh_geographic.py`'s `invoke_any` alias becomes `invoke` |
-| `invoke`, mesh: `tests/python/test_cli_mesh_dem.py@b63132e:53-55`, `tests/python/test_cli_mesh_mosaic.py@b63132e:59-61`, `tests/python/test_cli_mesh_vtk.py@b63132e:48-50`, and its importers | `cli_driver.invoke`; every call gains `"mesh"` as its first argument (about 75 calls in 15 files, three of them inside asserts in `test_cli_mesh_vtk.py`) |
-| `invoke` in `tests/python/test_cli_draw.py@b63132e:125-126` (returns the `Result`, about 45 calls) and `tests/python/test_cli_station_catchments.py@b63132e:76-78` (output not passed through `plain`; the suite splits it into lines) | stay, on `cli_driver.runner`: changing their return would change their tests |
+| `runner` in `tests/python/test_cli_catchment.py@b63132e:86`, `tests/python/test_cli_draw.py@b63132e:107`, `tests/python/test_cli_fetch.py@b63132e:61`, `tests/python/test_cli_mesh.py@b63132e:49`, `tests/python/test_cli_mesh_dem.py@b63132e:47`, `tests/python/test_cli_mesh_edge_strip.py@b63132e:103`, `tests/python/test_cli_mesh_landcover.py@b63132e:63`, `tests/python/test_cli_mesh_mosaic.py@b63132e:54`, `tests/python/test_cli_mesh_plain_output.py@b63132e:60`, `tests/python/test_cli_mesh_stats.py@b63132e:42`, `tests/python/test_cli_mesh_vtk.py@b63132e:40`, `tests/python/test_cli_station_catchments.py@b63132e:64`, `tests/python/test_fetch_nve.py@b63132e:78`, `tests/python/test_hardening.py@b63132e:50`, `tests/python/test_io_vtk_readback.py@b63132e:82`, `tests/python/test_palettes.py@b63132e:40` | `from cli_helpers import runner`; every `runner.invoke(...)` unchanged |
+| `plain`, `ANSI`, `BOX` in `tests/python/test_cli_mesh.py@b63132e:51-63`, `tests/python/test_cli_draw.py@b63132e:109-122`; `ANSI` in `tests/python/test_cli_mesh_geographic.py@b63132e:836` | imported from `cli_helpers`; the 10 suites that import `plain` from `test_cli_mesh` import it from `cli_helpers` |
+| `invoke`, whole command line: `tests/python/test_cli_catchment.py@b63132e:93-95`, `tests/python/test_cli_fetch.py@b63132e:64-66`, `tests/python/test_fetch_nve.py@b63132e:81-83` | `cli_helpers.invoke`; call sites unchanged (each already passes the subcommand first). `test_cli_mesh_geographic.py`'s `invoke_any` alias becomes `invoke` |
+| `invoke`, mesh: `tests/python/test_cli_mesh_dem.py@b63132e:53-55`, `tests/python/test_cli_mesh_mosaic.py@b63132e:59-61`, `tests/python/test_cli_mesh_vtk.py@b63132e:48-50`, and its importers | `cli_helpers.invoke`; every call gains `"mesh"` as its first argument (about 75 calls in 15 files, three of them inside asserts in `test_cli_mesh_vtk.py`) |
+| `invoke` in `tests/python/test_cli_draw.py@b63132e:125-126` (returns the `Result`, about 45 calls) and `tests/python/test_cli_station_catchments.py@b63132e:76-78` (output not passed through `plain`; the suite splits it into lines) | stay, on `cli_helpers.runner`: changing their return would change their tests |
 | `bumpy`: seed 16 in `tests/python/test_cli_mesh_domain.py@b63132e:133-136`, `tests/python/test_cli_mesh_features.py@b63132e:125-128`, `tests/python/test_cli_mesh_landcover.py@b63132e:115-118`, `tests/python/test_cli_mesh_multi_features.py@b63132e:89-92`, and in class `TestTheSameCrs` at `tests/python/test_cli_mesh_domain_crs.py@b63132e:283-286`; seed 20 in `tests/python/test_cli_constraint_feet.py@b63132e:60-63`, `tests/python/test_cli_start_quality.py@b63132e:51-54`; seed 14 in `tests/python/test_cli_mesh_refine.py@b63132e:97-101`; seed 17 in `tests/python/test_cli_mesh_stats.py@b63132e:51-54` | `bumpy = rough_dem(<seed>)` at module level. In `test_cli_mesh_domain_crs.py` the binding goes at module level (no other test there requests `bumpy`): bound inside a class, a factory-made fixture receives the instance as `tmp_path` (probed: the test errors with `TypeError` on `TestInClass / str`) |
 | `square` in `tests/python/test_cli_mesh_domain.py@b63132e:139-141`, `tests/python/test_cli_mesh_stats.py@b63132e:57-59`; `plain_square` in `tests/python/test_cli_mesh_features.py@b63132e:131-133`, `tests/python/test_cli_mesh_landcover.py@b63132e:121-123`, `tests/python/test_cli_mesh_multi_features.py@b63132e:95-97` | `square = polygon_file(SQUARE, (HOLE,))`, `plain_square = polygon_file(SQUARE)` |
-| `squashed` in `tests/python/test_cli_mesh_cache.py@b63132e:48-50`, `tests/python/test_cli_mesh_geographic.py@b63132e:113-115` | imported from `cli_driver`. `tests/python/test_cli_station_catchments.py@b63132e:379-383` (through `plain` first) stays |
+| `squashed` in `tests/python/test_cli_mesh_cache.py@b63132e:48-50`, `tests/python/test_cli_mesh_geographic.py@b63132e:113-115` | imported from `cli_helpers`. `tests/python/test_cli_station_catchments.py@b63132e:379-383` (through `plain` first) stays |
 | `write_geojson` in `tests/python/test_cli_mesh_domain_crs.py@b63132e:104-111` (default `crs=None`) and `tests/python/test_cli_mesh_geographic.py@b63132e:118-125` (`crs` required, one ring); the alias `utm33_geojson` in `test_cli_mesh_domain_crs.py`; the alias `write_domain` in `test_cli_mesh_edge_strip.py` | `geojson`. A call that relied on `crs=None` passes `crs=None`; a positional `crs` becomes `crs=...`, because `geojson`'s third parameter is `holes`. Same dict, same key order, so the same bytes |
-| `refused` in `tests/python/test_cli_mesh_domain_crs.py@b63132e:135-144` and `tests/python/test_cli_mesh_geographic.py@b63132e:149-158` | `cli_driver.refused(tmp_path, "mesh", *args, says=...)`, with `squash=True` in `test_cli_mesh_geographic.py` |
+| `refused` in `tests/python/test_cli_mesh_domain_crs.py@b63132e:135-144` and `tests/python/test_cli_mesh_geographic.py@b63132e:149-158` | `cli_helpers.refused(tmp_path, "mesh", *args, says=...)`, with `squash=True` in `test_cli_mesh_geographic.py` |
 | `refused` in `tests/python/test_cli_catchment.py@b63132e:137-144` (any non-zero exit, not 2) and `tests/python/test_cli_mesh_plain_output.py@b63132e:108-115` (sets `sys.argv`, no `--out`) | stay: folding them in would change what they assert |
 | `run` in `tests/python/test_cli_mesh_domain_crs.py@b63132e:122-127`, `tests/python/test_cli_mesh_geographic.py@b63132e:132-137` | `mesh_to_vtk` (31 calls renamed) |
 | `run` in `tests/python/test_cli_catchment.py@b63132e:130-134`, `tests/python/test_cli_mesh_refine.py@b63132e:80-84` | stay, with their first two lines replaced by `ran(...)` |
 | `run` in `tests/python/test_cli_mesh_landcover.py@b63132e:126-133`, `tests/python/test_cli_constraint_feet.py@b63132e:85-89`, `tests/python/test_cli_start_quality.py@b63132e:78-82` | stay (different returns; the last two spy on `cli.refine`, see "Not taken") |
-| `USAGE` in `tests/python/test_cli_mesh_dem.py@b63132e:50`, `tests/python/test_cli_mesh_mosaic.py@b63132e:55`, `tests/python/test_cli_mesh_edge_strip.py@b63132e:104`, `tests/python/test_cli_mesh_plain_output.py@b63132e:61`; `ROWS, COLS` in `tests/python/test_cli_constraint_feet.py@b63132e:49`, `tests/python/test_cli_mesh_plain_output.py@b63132e:62`, `tests/python/test_cli_mesh_stats.py@b63132e:48`, `tests/python/test_cli_start_quality.py@b63132e:46`; `Ring` in `tests/python/test_cli_mesh_domain_crs.py@b63132e:88`, `tests/python/test_cli_mesh_geographic.py@b63132e:104` | imported from `cli_driver` |
+| `USAGE` in `tests/python/test_cli_mesh_dem.py@b63132e:50`, `tests/python/test_cli_mesh_mosaic.py@b63132e:55`, `tests/python/test_cli_mesh_edge_strip.py@b63132e:104`, `tests/python/test_cli_mesh_plain_output.py@b63132e:61`; `ROWS, COLS` in `tests/python/test_cli_constraint_feet.py@b63132e:49`, `tests/python/test_cli_mesh_plain_output.py@b63132e:62`, `tests/python/test_cli_mesh_stats.py@b63132e:48`, `tests/python/test_cli_start_quality.py@b63132e:46`; `Ring` in `tests/python/test_cli_mesh_domain_crs.py@b63132e:88`, `tests/python/test_cli_mesh_geographic.py@b63132e:104` | imported from `cli_helpers` |
 
 After the change, no test module imports any of these names from another
 test module. Names that are not helpers of the command (`quarter_circle`,
@@ -1453,7 +1453,7 @@ docstrings and comments that names a moved helper's old home (for example
 reworded.
 
 `tests/python/test_cli_mesh_geographic.py@b63132e:106` keeps its own `ROWS = COLS = 60` (another grid) and
-does not import `cli_driver`'s.
+does not import `cli_helpers`'s.
 
 ### Taken from the test audit (`docs/increments/test-audit.md` on `worktree-ci-speed`)
 
@@ -1487,7 +1487,7 @@ does not import `cli_driver`'s.
 Non-blank lines (the same count as section 8's): about -100. The CLI part
 is about -80: 174 lines of copies and about 27 unused import lines go;
 the new module adds about 75 beyond what it moves, the per-file
-`cli_driver` imports and factory bindings about 25, and the call-site
+`cli_helpers` imports and factory bindings about 25, and the call-site
 edits about 25 (adding `"mesh"` to about 75 calls and renaming 31 pushes
 some lines past 100 characters, and ruff format decides how they wrap).
 The ticker is about -20. The spread is in the call-site wraps. Production
@@ -1495,7 +1495,7 @@ lines: 0 (`python3 tools/count_loc.py b63132e HEAD`).
 
 Measured at `2816d41`: +457 −475, −18 net against about −100, because
 adding `"mesh"` pushes calls past 100 characters and ruff format then puts
-one argument per line, and `cli_driver.py` is 123 lines against about 105.
+one argument per line, and `cli_driver.py` (now `cli_helpers.py`) is 123 lines against about 105.
 
 ### Checks, run by `@tester` before committing and reported in the commit message
 
@@ -1510,7 +1510,7 @@ one argument per line, and `cli_driver.py` is 123 lines against about 105.
    head's text (the only rename inside an assert). For each `test_*.py`
    file, the multiset of asserts inside test functions is unchanged; and
    across the whole directory, the set of distinct assert texts is
-   unchanged (the asserts of deleted copies are found in `cli_driver.py`,
+   unchanged (the asserts of deleted copies are found in `cli_helpers.py`,
    `gil_probe.py` or a copy that stays).
 3. **Same inputs.** For seeds 14, 16, 17 and 20 the old `bumpy` and
    `rough_dem` write byte-identical `bumpy.tif` files; one call of each
@@ -1568,7 +1568,7 @@ reported to the main session for `@architect`.
 `USAGE` from `test_cli_mesh_dem` (`pieces_fixtures.py` and four
 `test_cli_mesh_pieces_*.py`) and `write_geojson` from
 `test_cli_mesh_geographic` (`test_cli_mesh_pieces_reprojected.py`).
-Whichever of T1 and 23c-2 merges second re-points them to `cli_driver`,
+Whichever of T1 and 23c-2 merges second re-points them to `cli_helpers`,
 adds `"mesh"` to its calls, and passes `crs=` by keyword. If it misses an
 import, the import fails; if it misses a `"mesh"`, `invoke`'s assertion
 fails, except before an argument that is itself a subcommand name (such as
@@ -1589,3 +1589,7 @@ T1 code review r1 (b63132e..2816d41): CHANGES REQUESTED — two unpinned citatio
 **PR B (`audit-crs-helpers`), code review, round 1, 2026-10-05.** Head `5197f9a`. Verdict: CHANGES REQUESTED. LOC: +36 net production (`count_loc.py 44fa7f5 5197f9a`). Blocking, all `@architect`: (1) `same_crs` rule 2 calls `+proj=longlat +datum=WGS84 +lon_0=10` the same as EPSG:4326 (also `+lon_0=-3`, and `+datum=NAD83 +lon_0=10` against 4269) while the always_xy transform moves every point 10 degrees, and the rule is not transitive (EPSG:4326 = CRS84, the string = 4326, the string is not CRS84); (2) the status paragraph is stale; (3) the +36 against about +16 is not reconciled. Ruled in section 9, "After code review round 1".
 
 **PR B (`audit-crs-helpers`), code review, round 2, 2026-10-05.** Head `65cd528`. Verdict: CHANGES REQUESTED, prose only. LOC: +22 net production (`count_loc.py 44fa7f5 65cd528`). Blocking, all `@architect`: the stale status paragraph, the unrecorded +22, section 6's row B; design note: the hint also shows for `OGC:CRS84` and a datum-WGS84 UTM string against an EPSG DEM. Fixed in this file (status, section 6, section 9 "Net production lines" and "After the round-1 red step"); no code change.
+
+T1 follow-up (`worktree-cli-helpers-rename`, 2026-10-06): `tests/python/cli_driver.py` renamed `cli_helpers.py` on Ola's ruling, 26 import lines with it (2834563); prose here follows.
+
+T1 follow-up review, 2026-10-06. Range fd64f8b..899ca60. CHANGES REQUESTED: `docs/increments/python-audit.md@899ca60:348` said T1 built `cli_helpers.py`; it built `cli_driver.py`. Rename pure (100 % similarity, 26 import lines), suite 5143 passed, check_citations clean, trial merge with worktree-audit-crs: one text conflict at the end of Review.

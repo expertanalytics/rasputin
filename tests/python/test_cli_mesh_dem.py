@@ -22,7 +22,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from cli_driver import USAGE, invoke, write_tiff
+from cli_helpers import USAGE, invoke, write_tiff
 from geotiff_fixtures import (
     KARTVERKET,
     LZW,

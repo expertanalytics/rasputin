@@ -29,7 +29,7 @@ import numpy as np
 import pytest
 
 import tin_engine
-from cli_driver import USAGE, geojson, invoke, squashed
+from cli_helpers import USAGE, geojson, invoke, squashed
 from cog_fixtures import VARIANTS, build, write_cache
 from geotiff_fixtures import TIE_X, TIE_Y
 from test_cli_mesh_mosaic import field, same_mesh, terrain

@@ -69,7 +69,7 @@ import shapely
 from shapely.geometry import LineString, Polygon
 
 import feature_fixtures as ff
-from cli_driver import SQUARE, USAGE, geojson, invoke, polygon_file, rough_dem
+from cli_helpers import SQUARE, USAGE, geojson, invoke, polygon_file, rough_dem
 from feature_fixtures import Feat, domain_of, write_geojson
 from geotiff_fixtures import KARTVERKET, TIE_X, TIE_Y, needs_codecs
 from gpkg_fixtures import (

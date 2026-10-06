@@ -41,7 +41,7 @@ from numpy.testing import assert_array_equal
 from typer.testing import CliRunner
 
 import tin_engine.cli as cli
-from cli_driver import plain, runner
+from cli_helpers import plain, runner
 from plyread import element_bytes, parse_header, read_ply, vertex_array
 from tin_engine.cli import app
 from tin_engine.viz.fixtures import GALLERY
