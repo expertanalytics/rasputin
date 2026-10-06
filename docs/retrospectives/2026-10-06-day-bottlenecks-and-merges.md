@@ -12,7 +12,7 @@ Sources: the main session's transcript,
 transcripts in the `subagents/` directory beside it (cited by agent id),
 `git log` on `origin/master` and the branches named, `gh pr view`, `gh run
 view`, the harness's `windows.jsonl`, and the 85 lessons the main session
-passed me, which are recorded word for word in section 7. Handback quotes
+passed me, which are recorded word for word in section 9. Handback quotes
 are the personas' words, not Ola's. Every rule or tool change below is a
 proposal; Ola decides.
 
@@ -97,11 +97,12 @@ invent new pull requests to fill slots. The night retrospective's section
 10 had counted C2's start as filling an empty slot, without asking whether
 Ola had asked for it. I should have asked.
 
-**D2. Eleven corrections of what the main session had told Ola.** Each is
+**D2. Twelve corrections of what the main session had told Ola.** Each is
 the main session's own words, by transcript line:
 
 | Line | Time | What was corrected |
 |---|---|---|
+| 9678 | 06:16 | "I said `bench.py` couldn't run a reprojected DEM, and that was wrong" (said in the night, before this window) |
 | 9717 | 06:20 | who caused the scratch-folder hand-off (from the night) |
 | 11525 | 08:49 | #191 had already merged; audit F's PR had not been opened |
 | 12529 | 11:17 | two items listed as open were already settled |
@@ -114,16 +115,23 @@ the main session's own words, by transcript line:
 | 17877 | 19:12 | the withdrawal withdrawn: the triangle is in the CORINE source after all; the contradicting run used another input file |
 | 18045 | 19:42 | "drop your outline rule" withdrawn: it was measured on the wrong mesh (8 % on 20c-2, 22.5 % on 20c-3) |
 
-Five of these (the null station, CORINE 2018, the tile edge, the 0.0066°
+Six of these (the null station, CORINE 2018, the tile edge, the 0.0066°
 triangle twice, the outline rule) are a cause or a "could" relayed from a
-handback before anyone had checked it. `CLAUDE.md` §3 already says "no
+handback before anyone had checked it. The `bench.py` claim was also
+unchecked when said; whether it came from a handback is in the night's
+window, and I did not trace it, so it is not counted among the six. `CLAUDE.md` §3 already says "no
 cause not checked". The night retrospective's D3 asked that such claims be
 passed on as "X says ... (unchecked)"; it was not used today. Ola had to
 take each one on trust and then unlearn it.
 
 **D3. A master merge that changed code was checked as a docs merge, and
-the after-commit gate did not see it.** The merge brief for C (line 16709,
-17:11) said the conflicts were "only those two docs", that
+the after-commit gate did not see it.** The decisive check: the
+after-commit gate ran at 17:14:41, after C's master merge `5c2b771a`
+landed, took 12,776 ms and exited 0 (`agent-a9e6e5394037aa395`, line 152
+of its transcript), yet `ruff check .` over a copy of the tree at
+`5c2b771a` exits 1 with one error, `Undefined name MultiPolygon` (run for
+this retrospective, with the main checkout's `.venv/bin/ruff`). The merge
+brief for C (line 16709, 17:11) said the conflicts were "only those two docs", that
 `feature_input.py` "merges cleanly", and that `ast.parse` "is enough". The
 merge, `5c2b771a`, dropped `MultiPolygon` from `feature_input.py`'s
 imports, which #200's `_linework` uses. `ruff check --select F821` on the
@@ -139,14 +147,16 @@ that's cheap". Two more things in the merging agent's transcript
   `git commit-tree -p HEAD -p origin/master`, and `git merge --ff-only`
   (17:14:18). No guard covers that route; no guard refused anything either.
 - `gates_after_commit.py` fired after that command (the text contains
-  `git merge`), ran for 12.8 s, and exited 0. It ran in the main checkout,
+  `git merge`); that is the 17:14:41 run above. It ran in the main checkout,
   not in `audit-geojson`: the hook takes the tree from the event's `cwd`
   (`committed_tree` in `.claude/hooks/gates_after_commit.py@0c2572fb`), and
-  in every one of the 7,873 hook events in this session's subagent
+  in every one of about 7,900 hook events in this session's subagent
   transcripts that `cwd` is `/Users/skavhaug/projects/rasputin`. Subagents'
   shells go back to the session directory between calls, and they work in
-  worktrees by `cd <worktree> && ...` inside the command. Of those runs, 407
-  took over 3 s (the gates ran) and all exited 0. **So in this session the
+  worktrees by `cd <worktree> && ...` inside the command. Of those runs,
+  about 400 took over 3 s (the gates ran) and all exited 0. (Counts are
+  "about" because the transcripts kept growing while I counted, near 01:00
+  on 2026-10-07.) **So in this session the
   after-commit gate has never checked a subagent's commit in a worktree.**
   Claude Code's hooks guide says `cwd` "follows Claude ... after Claude runs
   `cd`" (code.claude.com/docs/en/hooks, read 2026-10-07); for subagents the
@@ -155,7 +165,9 @@ that's cheap". Two more things in the merging agent's transcript
   transcripts, not on a run of the hook.
 
 Audit D's master merge (00:25 to 00:40) was briefed with ruff and the full
-suite (line 18598). The suite found a test broken by a helper-signature
+suite (the `@architect` docs-half brief, line 18592, 00:25, and the
+`@developer` code-half brief, line 18690, 00:31; line 18598 is the main
+session's message to Ola about it). The suite found a test broken by a helper-signature
 change on master, and `@tester` fixed it (line 18727). The lesson took, by
 brief.
 
@@ -172,8 +184,14 @@ subagent transcripts in this window (Bash commands only):
 
 - Test files appended through a shell heredoc (`cat >> tests/python/...
   <<'EOF'`), all by `@tester`: 06:29 `test_station_set.py`, 12:23
-  `test_landcover.py`, 14:10 and 00:17 `test_guard_governance.py` and
-  `test_guard_push.py`, 14:32 `test_feature_input.py`.
+  `test_landcover.py`, 14:10 two files in one command
+  (`test_guard_governance.py` and `test_guard_targets.py`,
+  `agent-ae32fa72d6b542...`), 14:32 `test_feature_input.py`, and 00:17 one
+  file (`test_guard_push.py`, `agent-a57b4c6ba349a4...`).
+- `@architect` also appended to `docs/increments/20c-soft-quality.md` by
+  heredoc: five times from 17:44 to 17:47 (`agent-a6c46d87f5ceed...`) and
+  once at 00:17 (`agent-a4053180efccd8...`). The brief line covers only rule
+  files, so this broke no brief; T6's "appends included" would cover it.
 - `@developer`, guard fix green (17:31, `agent-a300dfa80...`), rewrote
   `tools/shell_scan.py` through `python3 - <<'EOF'` with `read_text`/
   `replace`, and committed it with `.claude/hooks/guard_push.py`. Whether
@@ -181,8 +199,8 @@ subagent transcripts in this window (Bash commands only):
   asked, I did not establish (unchecked).
 - `git stash` in six runs: `@developer` 07:00 (`geojson-gaps`), `@architect`
   14:02 (`h16b`), `@tester` 13:02 (`landcover-speed`), `@developer` 17:47
-  and 17:51 (`h16b`, `stash` then `stash pop`), `@tester` 00:41
-  (`audit-encoders`). The stash is one stack for every worktree:
+  and 17:51 (`h16b`; each run did a `stash` and a `stash pop`), `@tester`
+  00:41 (`audit-encoders`; see D9). The stash is one stack for every worktree:
   `git rev-parse --git-path refs/stash` gives the same
   `/Users/skavhaug/projects/rasputin/.git/refs/stash` from the main checkout
   and from `h16b` (checked), and git's worktree guide says every ref under
@@ -217,6 +235,34 @@ writer spawns, and about 10 more to review the merges, out of about 130
 spawns in the window. The C merge at 17:11 went to `@architect` alone, code
 included (D3). The retrospective of 2026-10-04 left "whose job a merge
 conflict is" open.
+
+**D9. Night findings, 00:25 to 01:05** (the last part after this window's
+end, added at review round 1):
+
+- **The main session typed a wrong merge range into audit D's briefs.**
+  Audit D's master merge `15f41a82` brought in master from #187 up to #201,
+  because D had never merged master and its merge base was `b26beb83`, C's
+  approved head (`git log --first-parent b26beb83..01d98c2b`, as round 4
+  cited it). The main session's briefs said otherwise: the merge brief "Master now also
+  has #199, #200 and #202-#203" (line 18592, 00:25), the code review round 3
+  brief "#200-#203, with C merged as #201" (line 18766, 00:42), and the
+  Status-rewrite brief "with #200-#203" (line 18948, 00:57). `@architect`
+  wrote the last into D's Status line, and code review round 4 caught it
+  (line 19041, 01:02). The main session told Ola at 01:02 that the phrase
+  "came from my brief" (line 19053). The same lesson as T2's "print
+  `git log --merges --first-parent`": a range is a command's output, not a
+  typed value.
+- **`@tester` used `git stash` again at 00:41** (`stash -q` then
+  `stash pop -q`, `agent-a9c4f08df2702e...`, "Audit D: fix broken CLI test
+  call"), on `audit-encoders`. The main session's lesson says "despite the
+  brief forbidding it". That is true of the earlier `@tester` brief for the
+  same merge, "Use Edit for every change, appends included; no shell writes
+  and no `git stash`" (line 18641, 00:29), but that was another spawn, and it
+  did not stash. The brief of the agent that did (line 18727, 00:40) says
+  "Use Edit" and does not mention `git stash`; neither does its `brief.py`
+  block. So the ban was in the brief before it, not in this one. Either way
+  the rule lived in a brief, which every new spawn has to be given again; T6
+  puts it in the guard.
 
 ## 3. Idle time
 
@@ -265,7 +311,7 @@ Four refusals of my own, in this run (unattended mode on until 10:03
 
 ## 5. The lessons, grouped
 
-85 lessons came in (section 7). One, "(#192 merge) local master stale",
+85 lessons came in (section 9). One, "(#192 merge) local master stale",
 counts in two groups.
 
 | Group | Lessons | What repeats |
@@ -301,12 +347,12 @@ incidents stay here.
 | # | Change | Lessons and incidents it would have stopped | Cost | Owner | Default |
 |---|---|---|---|---|---|
 | T1 | **The after-commit gate checks the tree that was committed.** `committed_tree` takes the directory from a leading `cd <dir>` or `git -C <dir>` in the command (`tools/shell_scan.py` already parses commands), and falls back to `cwd`. A test feeds it a subagent-shaped event. | D3 (the dropped import at `5c2b771a`, caught at the merge instead of in review round 8); every worktree commit today ran its gates in the main checkout | about 10 lines and a test; governed (`.claude/hooks/`), by day | `@tester` red, `@developer` green | yes, first |
-| T2 | **Build the merge runner now** (stage 3, already ruled yes). `tools/merge_master.py <worktree>`: fetch; print `git log --merges --first-parent <base>..origin/master`; `git merge --no-commit`; stop for hunk-by-hunk resolution (never whole-file `--theirs`); then ruff, mypy, the full Python suite in that worktree's own venv, and `check_citations.py --base origin/master`; commit with `-F` from a template carrying the trailer and the subject tag. One persona runs it end to end. | 8 of the 15 merge lessons, D3, D8 (about 20 spawns a day of split merges) | about 120 lines with tests (the plan's estimate); `tools/`, by day | `@developer`, through the pipeline | yes |
+| T2 | **Build the merge runner now** (stage 3, already ruled yes). `tools/merge_master.py <worktree>`: fetch; print `git log --merges --first-parent <base>..origin/master`; `git merge --no-commit`; stop for hunk-by-hunk resolution (never whole-file `--theirs`); then ruff, mypy, the full Python suite in that worktree's own venv, and `check_citations.py --base origin/master`; commit with `-F` from a template carrying the trailer and the subject tag. One persona runs it end to end. | 8 of the 15 merge lessons, D3, D8 (about 20 spawns a day of split merges), D9's typed merge range | about 120 lines with tests (the plan's estimate); `tools/`, by day | `@developer`, through the pipeline | yes |
 | T3 | **One file per PR, not numbered sections in a shared file.** One line in `docs/increments/README.md`: "A PR adds its design as its own file or as a titled section; a citation names the heading, never a section number." Audit A already has its own file. | the 6 numbering lessons (section 9 twice, section 11 twice, stale docstring references, a wrong prediction in a brief) | about 30 words; governed, by day | `@architect` | yes |
 | T4 | **`tools/new_worktree.py`**: `git worktree add`, then a real venv in the worktree (`uv venv`, editable install with ruff and mypy), `_core` built with `-DPYTHON_EXECUTABLE` set to that venv's Python, and a check that prints `tin_engine.__file__` and one submodule's. `--base <sha>` makes a separate scratch venv for a base install. This is P6 of the night retrospective, made concrete. | 8 of the 10 venv lessons; C's merge brief "you can't run the suite without a venv" | about 40 lines with tests, and about a minute per worktree; `tools/`, by day | `@developer` | yes |
 | T5 | **`check_citations.py` defaults to `origin/master`** (its merge-base with the branch) and warns when `origin/master` was not fetched in the last hour; a cited range past end of file is broken, not at-risk; the at-risk list leaves out ranges whose cited text is the same at base and head (P2b of 2026-10-04). | 6 of the 8 citation lessons, including the 184 noisy entries in 30a | about 40 lines with tests; `tools/`, by day | `@developer` | yes |
-| T6 | **`git stash` refused, and every file written with Edit or Write.** `guard_push.py` refuses `git stash` except `list` and `show` (the stack is shared by every worktree, D5). `tools/brief.py`'s line "write a rule file with Edit or Write, never through the shell" becomes "write every file with Edit or Write, appends included". | the 3 lessons; 6 stash runs and 5 heredoc appends today | about 5 lines and a test in the guard; one brief line; governed, by day | `@tester`, `@developer` | yes |
-| R1 | **A relayed claim names who checked it.** Change `CLAUDE.md` §3's "no cause not checked" to: "A cause, a 'could', or a status from a handback goes to Ola with who checked it ('`@reviewer` checked') or as unchecked." No new line. | D2: five of the eleven corrections; D6's "waiting for its checks" | a few words; governed, by day | `@architect` | yes |
+| T6 | **`git stash` refused, and every file written with Edit or Write.** `guard_push.py` refuses `git stash` except `list` and `show` (the stack is shared by every worktree, D5). `tools/brief.py`'s line "write a rule file with Edit or Write, never through the shell" becomes "write every file with Edit or Write, appends included". | the 3 lessons; 6 stash runs, 5 heredoc appends to test files and 6 to a design file today, and the 00:41 stash (D9) whose brief did not repeat the ban | about 5 lines and a test in the guard; one brief line; governed, by day | `@tester`, `@developer` | yes |
+| R1 | **A relayed claim names who checked it.** Change `CLAUDE.md` §3's "no cause not checked" to: "A cause, a 'could', or a status from a handback goes to Ola with who checked it ('`@reviewer` checked') or as unchecked." No new line. | D2: six of the twelve corrections; D6's "waiting for its checks" | a few words; governed, by day | `@architect` | yes |
 | R2 | **Each `QUEUE:` item in `session.md` names Ola's ask**: a date and quote, or a `ROADMAP.md` row. The recap warns on an item without one. Part of stage 2's state tool. | D1 (C2) | about 10 lines in `tools/session_state.py` with tests; governed | `@developer` in stage 2 | yes |
 | S1 | Small alignments: `Monitor` added to `.claude/agents/perf.md`'s `tools:` line; `python` becomes `python3` in `CLAUDE.md` §4; `tools/brief.py` names a scratch subdirectory per agent (`<scratchpad>/<persona>-<worktree>-<HHMMSS>/`), and cleanup removes only that directory. | three alignment lessons; the `rm -f *.txt` that deleted the main session's `lessons.txt` | a few words and lines; governed | `@architect`, `@developer` | yes |
 | — | **Not proposed:** new rule lines for the probe, domain, figure and brief lessons. Existing rules cover them, and 30b showed the fix for figures in practice: README tables generated by script between markers. If figures go wrong again after 30b's practice, one line in `perf.md` then. | | | | |
@@ -504,3 +550,6 @@ As the main session passed them on 2026-10-07, one per line.
 - (20c dr2 fix) record vertex counts of regenerated scratch inputs; two '1 cm' files caused a false contradiction.
 
 ## Review
+
+- `@reviewer round 1 of the 2026-10-06 day retrospective (/Users/skavhaug/projects/rasputin/.claude/worktrees/retro-1007/docs/retrospectives/2026-10-06-day-bottlenecks-and-merges.md @530fa7b4): CHANGES REQUESTED. "Section 7" should say section 9 (lines 15 and 268); "five" corrections should be six (lines 117 and 309); the main session's 06:16 correction is missing from D2's eleven (main transcript line 9678).`
+- `@orchestrator` answer to round 1: section 9 in both places; six, with the 06:16 `bench.py` correction added to D2 (twelve, and R1 says "six of the twelve"; the `bench.py` claim is not among the six because its origin is in the night's window and was not traced); suggestions taken (D3 leads with the 17:14:41 run that exited 0 on a tree where `ruff check .` exits 1; hook counts given as "about"; D5's file and stash details corrected, which also found `test_guard_targets.py`, not `test_guard_push.py`, in the 14:10 run, and six `@architect` heredoc appends; the D merge citation now names briefs 18592 and 18690); D9 added for the night's typed merge range and the 00:41 `git stash`, whose own brief did not carry the ban.
