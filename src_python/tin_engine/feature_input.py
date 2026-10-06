@@ -40,7 +40,7 @@ from pyproj import CRS
 from shapely.geometry import LineString, MultiPolygon, Polygon, shape
 from shapely.geometry.base import BaseGeometry
 
-from tin_engine.crs import parse_crs, reprojector, transform_definition
+from tin_engine.crs import parse_crs, reprojector, same_crs, transform_definition
 from tin_engine.domain import GEOJSON_DEFAULT_CRS, DomainPolygon
 from tin_engine.features import DEFAULT_VOCABULARY, EdgeVocabulary
 from tin_engine.io.geopackage import layer_info, query_features
@@ -176,7 +176,7 @@ def source_region(domain: DomainPolygon, dem_crs: str | CRS, source_crs: str | C
     moved into ``source_crs``; the convex hull of those points."""
     ring = shapely.segmentize(domain.polygon.buffer(MARGIN).exterior, DENSIFY)
     xy = shapely.get_coordinates(ring)
-    if parse_crs(source_crs) != parse_crs(dem_crs):
+    if not same_crs(source_crs, dem_crs):
         xy = reprojector(dem_crs, source_crs)(xy)
     hull = shapely.convex_hull(shapely.multipoints(xy))
     assert isinstance(hull, Polygon)
@@ -297,7 +297,7 @@ class _Tally:
     def _take(self, source: FeatureSource, own: str, rows: Iterable[tuple[Any, Any, Any]]) -> None:
         name, cmap = source.path.name, source.class_map
         src = parse_crs(own)
-        move = None if src == self.dem else reprojector(src, self.dem)
+        move = None if same_crs(src, self.dem) else reprojector(src, self.dem)
         bound, region = None, source_region(self.domain, self.dem, self.dem)
         if move is not None and src.is_geographic:
             steps = transform_definition(src, self.dem)
@@ -420,7 +420,7 @@ def read_source(
 
 def _own(path: Path, given: str | None, text: str) -> str:
     """The file's CRS text, checked against the one given, if any."""
-    if given is not None and parse_crs(given) != parse_crs(text):
+    if given is not None and not same_crs(given, text):
         raise FeatureError(f"{path.name} is in {text} but the given CRS is {given}")
     parse_crs(text)
     return text

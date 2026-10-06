@@ -253,10 +253,19 @@ class TestTheSameCrs:
 
     @pytest.fixture
     def no_transformer(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        def refuse(*args: Any, **kwargs: Any) -> Any:
-            raise AssertionError(f"Transformer.from_crs{args} was called")
+        """No point is moved: every `Transformer` method that maps coordinates
+        refuses. Building a transformer is allowed, since audit PR B's
+        `crs.same_crs` builds one to compare two CRSs (python-audit.md,
+        section 9) and moves nothing with it."""
 
-        monkeypatch.setattr(Transformer, "from_crs", staticmethod(refuse))
+        def refusing(name: str) -> Any:
+            def refuse(*args: Any, **kwargs: Any) -> Any:
+                raise AssertionError(f"Transformer.{name} was called")
+
+            return refuse
+
+        for name in ("transform", "itransform", "transform_bounds"):
+            monkeypatch.setattr(Transformer, name, refusing(name))
 
     @pytest.fixture
     def handed_on(self, monkeypatch: pytest.MonkeyPatch) -> list[DomainPolygon | None]:
@@ -295,7 +304,9 @@ class TestTheSameCrs:
         read = read_domain(domain)
         for given in handed_on:
             assert given is not None
-            assert given.crs == read.crs
+            # Audit PR B: `to_crs` into the same CRS labels the domain as
+            # its target, the DEM's text; the CRS and the bits are unchanged.
+            assert CRS.from_user_input(given.crs) == CRS.from_user_input(read.crs)
             for got, want in zip(rings(given), rings(read), strict=True):
                 assert got.dtype == want.dtype and got.tobytes() == want.tobytes()
         assert len(now.points) > 0

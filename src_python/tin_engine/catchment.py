@@ -43,7 +43,7 @@ from tin_engine.catchment_core import (
     reduce_ring,
     upstream,
 )
-from tin_engine.crs import crs_label, parse_crs, reprojector
+from tin_engine.crs import crs_label, parse_crs, reprojector, same_crs, single_crs
 from tin_engine.gauge import Reach
 from tin_engine.io.models import DemTile, RasterMeta
 from tin_engine.io.repository import DemRepository, TileFootprint
@@ -200,8 +200,18 @@ def check_reach_crs(crs: str, repository: DemRepository) -> None:
     """Refuse a river file whose CRS, `crs`, is not the DEM's (its first
     tile's): the one rule `catchment --rivers` and the batch both apply."""
     dem_crs = repository.footprints()[0].meta.crs
-    if parse_crs(crs) != parse_crs(dem_crs):
-        raise ValueError(f"the river file's CRS, {crs}, is not the DEM's, {dem_crs}")
+    if not same_crs(crs, dem_crs):
+        hint = _code_hint(crs, dem_crs)
+        raise ValueError(f"the river file's CRS, {crs}, is not the DEM's, {dem_crs}{hint}")
+
+
+def _code_hint(given: str, dem_crs: str) -> str:
+    """D15 b: when the DEM's CRS is exactly an EPSG code and `given` is none,
+    the code to write instead; otherwise nothing."""
+    code = parse_crs(dem_crs).to_epsg(min_confidence=100)
+    if code is None or parse_crs(given).to_epsg(min_confidence=100) is not None:
+        return ""
+    return f"; if you mean EPSG:{code}, write EPSG:{code}"
 
 
 def delineate(request: CatchmentRequest, repository: DemRepository) -> Catchment:
@@ -209,16 +219,14 @@ def delineate(request: CatchmentRequest, repository: DemRepository) -> Catchment
     :class:`CatchmentError` (truncated by the data's edge or NoData, no lake
     or two under the point, over the memory cap)."""
     footprints = repository.footprints()
-    crss = sorted({f.meta.crs for f in footprints})
-    if len(crss) != 1:
-        raise CatchmentError(f"the tiles are in {len(crss)} CRSs, {crss}; need one")
-    dem_crs = crss[0]
+    dem_crs = single_crs((f.meta.crs for f in footprints), CatchmentError)
     ((x, y),) = reprojector(request.seed_crs, dem_crs)([request.seed])
     if not (math.isfinite(x) and math.isfinite(y)):
         raise CatchmentError(f"the seed {request.seed} has no image in {dem_crs}")
     if request.reach is not None:
-        if parse_crs(request.seed_crs) != parse_crs(dem_crs):
-            raise CatchmentError(f"the river reach must be in the DEM's CRS, {dem_crs}")
+        if not same_crs(request.seed_crs, dem_crs):
+            hint = _code_hint(request.seed_crs, dem_crs)
+            raise CatchmentError(f"the river reach must be in the DEM's CRS, {dem_crs}{hint}")
         return _gauged(request, repository, footprints, dem_crs)
     lake = _lake(request, dem_crs)
     x0, y0, x1, y1 = lake.bounds if lake is not None else (x, y, x, y)

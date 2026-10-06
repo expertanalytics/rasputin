@@ -1,6 +1,6 @@
 """One way to drive `rasputin` in the tests: the runner, the output, the inputs.
 
-`docs/increments/python-audit.md`, section 9 (PR T1). Test support only;
+`docs/increments/python-audit.md`, section 10 (PR T1). Test support only;
 nothing in `src_python` uses it. The CLI suites take these from here rather
 than from each other, so no test module is a helper library for another.
 

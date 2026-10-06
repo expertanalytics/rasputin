@@ -14,7 +14,7 @@ Pure: pyproj and numpy. No paths, no `_core`; CRS never crosses into the core.
 from __future__ import annotations
 
 import math
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from typing import Any
 
 import numpy as np
@@ -22,7 +22,7 @@ import numpy.typing as npt
 from pydantic import BaseModel, ConfigDict
 from pyproj import CRS, Proj, Transformer, get_ellps_map
 from pyproj.crs import ProjectedCRS
-from pyproj.exceptions import CRSError
+from pyproj.exceptions import CRSError, ProjError
 
 Xy = npt.NDArray[np.float64]
 
@@ -68,6 +68,38 @@ def transform_description(src: str | CRS, dst: str | CRS) -> str:
 def transform_definition(src: str | CRS, dst: str | CRS) -> str:
     """PROJ's pipeline for `src` to `dst`, to see which steps it takes (16b R5)."""
     return str(_transformer(src, dst).definition)
+
+
+def same_crs(a: str | CRS, b: str | CRS) -> bool:
+    """Whether coordinates in `a` and in `b` name the same points: PROJ calls
+    them equivalent once both are in x-then-y order, and the operation it
+    builds between them is its `noop` (`docs/increments/python-audit.md`,
+    section 9). No operation is False."""
+    try:
+        t = _transformer(a, b)
+    except ProjError:
+        return False
+    src, dst = t.source_crs, t.target_crs
+    if src is None or dst is None:
+        return False
+    return src.equals(dst) and str(t.definition).startswith("proj=noop")
+
+
+def transform_label(src: str | CRS, dst: str | CRS) -> str:
+    """'none' when `same_crs(src, dst)`, else `transform_description(src, dst)`."""
+    return "none" if same_crs(src, dst) else transform_description(src, dst)
+
+
+def single_crs(texts: Iterable[str], refusal: type[ValueError] = ValueError) -> str:
+    """The one CRS text among `texts` (a DEM's tiles' `meta.crs`), or
+    `refusal` naming them all."""
+    found = sorted(set(texts))
+    if len(found) != 1:
+        raise refusal(
+            f"the DEM files are in {len(found)} different CRSs ({', '.join(found)}); "
+            "all must be in one CRS"
+        )
+    return found[0]
 
 
 def crs_label(crs: str | CRS) -> str:
