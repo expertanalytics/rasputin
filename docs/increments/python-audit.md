@@ -31,9 +31,8 @@ PR F (`audit-catchment-shared`, branch `worktree-audit-catchment`, section
 round 1 asked for changes, made in `e2baa5f`; round 2 approved `e2baa5f`
 (Review, below). Master is merged into the branch twice: the first merge
 (`e4f7a42`, test side done by `@tester`) was reviewed (Review, below); the
-second takes master with #188 to #192. Next `@developer` resolves
-`catchment.py`'s imports and commits the merge, then the whole suite runs,
-then `@reviewer` checks the merge; then push on Ola's yes.
+second (`8c2bc9a`) takes master with #188 to #192; `@reviewer` reviewed
+and approved it (Review, below). Next: push on Ola's yes.
 
 PR B (`audit-crs-helpers`, F3) is designed in section 9, on branch
 `worktree-audit-crs` after T2. `@tester`'s red commit `29aff00` has red
@@ -56,7 +55,7 @@ EPSG code, and the refusal says which code to write) folded into section 9
 net lines, section 6's row B, and the hint's scope), fixed in section 9 and
 the review record. Prose correction after approval: section 9's question 1
 no longer claims B's rule accepts the Austrian Lambert built from its GeoKeys.
-Pushed as PR #192 at `618328b`. T1 (PR #189) then merged
+Pushed as PR #192 at `618328b`; B merged into master as #192. T1 (PR #189) then merged
 into master and conflicted with it, so master is merged into the branch;
 the merge renumbers T1's design to section 10.
 
@@ -1593,7 +1592,9 @@ top of the first.
 Branch `worktree-audit-catchment`, from T2's head `b63132e`. The section
 number follows PR B's design (section 9, merged in #192) and T1's (section
 10, merged in #189); F lands after both, and its merge of master checks the
-numbers. `src_python/` at `b63132e` is byte-identical to
+numbers. The other open branch, PR C (`worktree-audit-geojson`), also takes
+section 11 in its own master merge; F lands first (it is ready), so C takes
+section 12 in its next master merge, and F's text stays 11. `src_python/` at `b63132e` is byte-identical to
 `44fa7f5` and to `12dace7` (`git diff --stat 12dace7 b63132e -- src_python`
 is empty), so findings F4, F10 and F12 stand as written, and the citations
 here are pinned to `44fa7f5`, which is on master.
@@ -1997,3 +1998,5 @@ Non-blocking, for a later `@tester` and `@developer` pass: tests still reach `Ri
 PR F code review r2 (5c6a9f9..e2baa5f): APPROVED.
 
 PR F master merge review (e2baa5f..e4f7a42): CHANGES REQUESTED — resolution correct (+29 unchanged; layering rows and four UPWARD true; r2 APPROVED confirmed); `docs/increments/python-audit.md@e4f7a42:894-896` (B 'becomes section 10') and `:35-37` (status names @tester next; #190 missing) wrong; fixed in the next master merge.
+
+PR F second master merge review (e4f7a42..8c2bc9a): APPROVED — resolution is only `catchment.py`'s import block (catchment_core and GaugePath, plus master's same_crs and single_crs, no _core) and `python-audit.md` (status, section 6 total, section 11 numbering, review records); +29 unchanged; both blockers from the first merge review closed; headings 8, 9 B, 10 T1, 11 F unique, and every section-N citation in src, tests and probes resolves; a planted `_core` import fails test_layering.
