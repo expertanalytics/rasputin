@@ -12,15 +12,20 @@ refusal fixture is that baseline with **exactly one** defect, so a refusal can
 only fire for the reason its name gives. `test_geotiff_fixtures.py` checks the
 defect is present using tifffile alone, with no production code involved.
 
-GeoKeys are written as a raw `GeoKeyDirectoryTag` (34735) of inline SHORTs.
-That is the on-disk form tifffile's `geotiff_metadata` decodes, so the reader
-under test sees what a real file would give it.
+GeoKeys are written as a raw `GeoKeyDirectoryTag` (34735), by
+`geographic_fixtures.geokey_tags`: an `int` value is an inline SHORT, a
+`float` or a tuple of floats goes to `GeoDoubleParamsTag` (34736) and a `str`
+to `GeoAsciiParamsTag` (34737). That is the on-disk form tifffile's
+`geotiff_metadata` decodes, so the reader under test sees what a real file
+would give it. A directory of SHORTs alone writes neither params tag, so such
+a file is byte for byte what it was when only SHORTs could be written.
 """
 
 from __future__ import annotations
 
 import importlib.util
 import io
+import math
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -29,6 +34,8 @@ from typing import Any
 import numpy as np
 import pytest
 import tifffile
+
+from geographic_fixtures import geokey_tags
 
 #: The one real DEM in the tree, and the markers for what decoding it needs.
 #: Shared here since increment 12, whose CLI suite is the second user.
@@ -109,24 +116,32 @@ def elevations(dtype: Any = np.float32, rows: int = ROWS, cols: int = COLS) -> n
     return np.asarray(10 * r + c).astype(dtype)
 
 
-def with_keys(changes: Mapping[int, int | None] | None = None) -> dict[int, int]:
-    """`BASE_KEYS` with `changes` applied; a `None` value deletes that key."""
-    merged: dict[int, int | None] = {**BASE_KEYS, **(changes or {})}
+#: A GeoKey value as written: inline SHORT, double(s) in 34736, or ASCII in 34737.
+GeoKeyValue = int | float | tuple[float, ...] | str
+
+
+def with_keys(
+    changes: Mapping[int, GeoKeyValue | None] | None = None,
+    base: Mapping[int, GeoKeyValue] = BASE_KEYS,
+) -> dict[int, GeoKeyValue]:
+    """`base` (default `BASE_KEYS`) with `changes` applied; `None` deletes that key."""
+    merged: dict[int, GeoKeyValue | None] = {**base, **(changes or {})}
     return {k: v for k, v in merged.items() if v is not None}
 
 
-def _geokey_directory(geokeys: Mapping[int, int]) -> tuple[int, str, int, list[int], bool]:
-    shorts = [1, 1, 0, len(geokeys)]
-    for key_id, value in sorted(geokeys.items()):
-        shorts += [key_id, 0, 1, value]  # location 0: value is inline
-    return (GEOKEY_DIRECTORY, "H", len(shorts), shorts, True)
+def _geokey_tags(geokeys: Mapping[int, GeoKeyValue]) -> list[tuple[int, str, int, Any, bool]]:
+    """Split by value type into SHORTs, doubles and texts, for `geokey_tags`."""
+    shorts = {k: v for k, v in geokeys.items() if isinstance(v, int)}
+    doubles = {k: v for k, v in geokeys.items() if isinstance(v, float | tuple)}
+    texts = {k: v for k, v in geokeys.items() if isinstance(v, str)}
+    return geokey_tags(shorts, doubles, texts)
 
 
 def _georeference_tags(
     *,
     tiepoint: Sequence[float] | None,
     scale: Sequence[float] | None,
-    geokeys: Mapping[int, int] | None,
+    geokeys: Mapping[int, GeoKeyValue] | None,
     transformation: Sequence[float] | None,
     nodata: str | None,
     gdal_metadata: str | None,
@@ -139,7 +154,7 @@ def _georeference_tags(
     if transformation is not None:
         tags.append((MODEL_TRANSFORMATION, "d", len(transformation), tuple(transformation), True))
     if geokeys is not None:
-        tags.append(_geokey_directory(geokeys))
+        tags += _geokey_tags(geokeys)
     if nodata is not None:
         tags.append((GDAL_NODATA, "s", 0, nodata, True))
     if gdal_metadata is not None:
@@ -152,7 +167,7 @@ def micro_tiff(
     *,
     tiepoint: Sequence[float] | None = TIEPOINT,
     scale: Sequence[float] | None = SCALE,
-    geokeys: Mapping[int, int] | None = None,
+    geokeys: Mapping[int, GeoKeyValue] | None = None,
     transformation: Sequence[float] | None = None,
     nodata: str | None = None,
     gdal_metadata: str | None = None,
@@ -490,4 +505,279 @@ REFUSALS: tuple[Refusal, ...] = (
         ("42113", "GDAL_NODATA", "-32767", "-9999"),
         decode_kwargs={"nodata": -9999.0},
     ),
+)
+
+
+# --------------------------------------------------------------------------
+# A projected CRS given by parameters (3072 = 32767), read as the EPSG code it
+# matches: `docs/increments/geotiff-crs-by-parameters.md`, section 8.
+# --------------------------------------------------------------------------
+
+# GeoKey ids beyond the ones above (GeoTIFF 1.0 names, as tifffile spells them).
+GT_CITATION = 1026
+GEOG_CITATION = 2049
+GEOG_GEODETIC_DATUM = 2050
+GEOG_PRIME_MERIDIAN = 2051
+GEOG_ANGULAR_UNITS = 2054
+GEOG_ELLIPSOID = 2056
+GEOG_SEMI_MAJOR_AXIS = 2057
+GEOG_SEMI_MINOR_AXIS = 2058
+GEOG_INV_FLATTENING = 2059
+GEOG_PRIME_MERIDIAN_LONG = 2061
+GEOG_TOWGS84 = 2062
+PROJECTION = 3074
+PROJ_COORD_TRANS = 3075
+PROJ_STD_PARALLEL_1 = 3078
+PROJ_STD_PARALLEL_2 = 3079
+PROJ_NAT_ORIGIN_LONG = 3080
+PROJ_NAT_ORIGIN_LAT = 3081
+PROJ_FALSE_EASTING = 3082
+PROJ_FALSE_NORTHING = 3083
+PROJ_FALSE_ORIGIN_LONG = 3084
+PROJ_FALSE_ORIGIN_LAT = 3085
+PROJ_FALSE_ORIGIN_EASTING = 3086
+PROJ_FALSE_ORIGIN_NORTHING = 3087
+PROJ_SCALE_AT_NAT_ORIGIN = 3092
+
+#: ProjCoordTransGeoKey (3075) codes.
+CT_TRANSVERSE_MERCATOR = 1
+CT_LAMBERT_CONF_CONIC_2SP = 8
+CT_ALBERS_EQUAL_AREA = 11
+
+DEGREE = 9102
+GRAD = 9105
+#: MGI, ETRS89, Xian 1980: geographic 2D CRSs, by EPSG code.
+EPSG_MGI = 4312
+EPSG_ETRS89 = 4258
+EPSG_XIAN_1980 = 4610
+#: MGI's geodetic datum (a datum code, not a CRS code), for 2050.
+EPSG_MGI_DATUM = 6312
+#: MGI / Austria Lambert: what the Austrian file is, by its parameters.
+EPSG_AUSTRIA_LAMBERT = 31287
+#: The file's longitude of origin; EPSG:31287 has 13.3333333333333.
+AUSTRIA_LON = 13.33333333300013
+#: Bessel 1841, as the Austrian file's 2057 and 2059 carry it.
+BESSEL_A = 6377397.155
+BESSEL_RF = 299.1528128000033
+
+#: The eighteen GeoKeys of `../rasputin_data/austria_dgm10/dhm_at_lamb_10m_2018.tif`,
+#: section 1's table, written with the types that file uses (citations ASCII,
+#: parameters and ellipsoid doubles, the rest SHORT).
+AUSTRIA_KEYS: Mapping[int, GeoKeyValue] = {
+    GT_MODEL_TYPE: 1,
+    GT_RASTER_TYPE: PIXEL_IS_AREA,
+    GT_CITATION: "MGI_Austria_Lambert",
+    GEOGRAPHIC_TYPE: EPSG_MGI,
+    GEOG_CITATION: "MGI",
+    GEOG_ANGULAR_UNITS: DEGREE,
+    GEOG_SEMI_MAJOR_AXIS: BESSEL_A,
+    GEOG_INV_FLATTENING: BESSEL_RF,
+    PROJECTED_CS_TYPE: USER_DEFINED,
+    PROJECTION: USER_DEFINED,
+    PROJ_COORD_TRANS: CT_LAMBERT_CONF_CONIC_2SP,
+    PROJ_LINEAR_UNITS: METRE,
+    PROJ_STD_PARALLEL_1: 46.0,
+    PROJ_STD_PARALLEL_2: 49.0,
+    PROJ_FALSE_ORIGIN_LONG: AUSTRIA_LON,
+    PROJ_FALSE_ORIGIN_LAT: 47.5,
+    PROJ_FALSE_ORIGIN_EASTING: 400000.0,
+    PROJ_FALSE_ORIGIN_NORTHING: 400000.0,
+}
+
+#: The ellipsoid keys, which only fit the MGI base; a variant on another datum
+#: drops them (their check, section 4 row 6, has its own red test).
+_BESSEL_KEYS: Mapping[int, None] = {GEOG_SEMI_MAJOR_AXIS: None, GEOG_INV_FLATTENING: None}
+_LAMBERT_KEYS = (
+    PROJ_STD_PARALLEL_1, PROJ_STD_PARALLEL_2, PROJ_FALSE_ORIGIN_LONG,
+    PROJ_FALSE_ORIGIN_LAT, PROJ_FALSE_ORIGIN_EASTING, PROJ_FALSE_ORIGIN_NORTHING,
+)  # fmt: skip
+
+
+def austria_keys(changes: Mapping[int, GeoKeyValue | None] | None = None) -> dict[int, GeoKeyValue]:
+    """`AUSTRIA_KEYS` with `changes` applied; `None` deletes that key."""
+    return with_keys(changes, base=AUSTRIA_KEYS)
+
+
+def lambert_on(geographic: int, **changes: float) -> dict[int, GeoKeyValue]:
+    """The Austrian Lambert parameters on another base geographic CRS, without
+    the Bessel ellipsoid keys. `changes` replaces parameters by key name, e.g.
+    `PROJ_FALSE_ORIGIN_EASTING=400000.001`."""
+    named: dict[int, GeoKeyValue | None] = {globals()[k]: v for k, v in changes.items()}
+    return austria_keys({**_BESSEL_KEYS, GEOGRAPHIC_TYPE: geographic, **named})
+
+
+def transverse_mercator_on(
+    geographic: int,
+    longitude: float,
+    *,
+    scale: float = 0.9996,
+    false_easting: float = 500000.0,
+    false_northing: float = 0.0,
+    latitude: float = 0.0,
+) -> dict[int, GeoKeyValue]:
+    """The Austrian key set with its method swapped for transverse Mercator (3075 = 1)
+    on `geographic`: the natural-origin keys in, the Lambert keys and the
+    Bessel ellipsoid keys out. The citations stay; no citation is read."""
+    changes: dict[int, GeoKeyValue | None] = {k: None for k in (*_LAMBERT_KEYS, *_BESSEL_KEYS)}
+    changes |= {
+        GEOGRAPHIC_TYPE: geographic,
+        PROJ_COORD_TRANS: CT_TRANSVERSE_MERCATOR,
+        PROJ_NAT_ORIGIN_LAT: latitude,
+        PROJ_NAT_ORIGIN_LONG: longitude,
+        PROJ_SCALE_AT_NAT_ORIGIN: scale,
+        PROJ_FALSE_EASTING: false_easting,
+        PROJ_FALSE_NORTHING: false_northing,
+    }
+    return austria_keys(changes)
+
+
+def austria_tiff(geokeys: Mapping[int, GeoKeyValue] | None = None) -> io.BytesIO:
+    """The usual 3 x 4 baseline carrying `geokeys` (default `AUSTRIA_KEYS`)."""
+    return micro_tiff(geokeys=AUSTRIA_KEYS if geokeys is None else geokeys)
+
+
+#: GeogTOWGS84GeoKey (2062) as a seven-parameter (Helmert) and a
+#: three-parameter (translation) shift. The values are the MGI-to-WGS 84 shift
+#: of EPSG:1618's family; any values would do, since the key is refused present.
+TOWGS84_SEVEN = (577.326, 90.129, 463.919, 5.137, 1.474, 5.297, 2.4232)
+TOWGS84_THREE = (577.326, 90.129, 463.919)
+
+
+@dataclass(frozen=True)
+class ParametricDefect:
+    """One check of section 4 (rows 1 to 11) on its one defect.
+
+    `changes` applied to `AUSTRIA_KEYS` is the fixture; `witness` reads the
+    tifffile `geotiff_metadata` dict and holds when the defect is there;
+    `must_name` is what the message must hold (case-insensitive), beyond `P`.
+    """
+
+    name: str
+    row: int
+    changes: Mapping[int, GeoKeyValue | None]
+    witness: Callable[[dict[Any, Any]], bool]
+    must_name: tuple[str, ...]
+
+    def build(self) -> io.BytesIO:
+        return austria_tiff(austria_keys(self.changes))
+
+
+def _has(name: str) -> Callable[[dict[Any, Any]], bool]:
+    return lambda g: name in g
+
+
+def _lacks(name: str) -> Callable[[dict[Any, Any]], bool]:
+    return lambda g: name not in g
+
+
+def _is(name: str, value: Any) -> Callable[[dict[Any, Any]], bool]:
+    return lambda g: name in g and g[name] == value
+
+
+PARAMETRIC_DEFECTS: tuple[ParametricDefect, ...] = (
+    ParametricDefect(
+        "projection_by_code", 1, {PROJECTION: 16033},
+        _is("ProjectionGeoKey", 16033), ("3074", "ProjectionGeoKey", "16033"),
+    ),
+    ParametricDefect(
+        "method_absent", 2, {PROJ_COORD_TRANS: None},
+        _lacks("ProjCoordTransGeoKey"), ("3075", "ProjCoordTransGeoKey"),
+    ),
+    ParametricDefect(
+        "method_albers", 3, {PROJ_COORD_TRANS: CT_ALBERS_EQUAL_AREA},
+        _is("ProjCoordTransGeoKey", CT_ALBERS_EQUAL_AREA), ("3075", "ProjCoordTransGeoKey", "11"),
+    ),
+    ParametricDefect(
+        "datum_absent", 4, {GEOGRAPHIC_TYPE: None},
+        _lacks("GeographicTypeGeoKey"), ("2048", "GeographicTypeGeoKey", "absent"),
+    ),
+    ParametricDefect(
+        "datum_user_defined", 4, {GEOGRAPHIC_TYPE: USER_DEFINED},
+        _is("GeographicTypeGeoKey", USER_DEFINED), ("2048", "GeographicTypeGeoKey"),
+    ),
+    ParametricDefect(
+        "datum_unresolvable", 4, {GEOGRAPHIC_TYPE: EPSG_UNRESOLVABLE},
+        _is("GeographicTypeGeoKey", EPSG_UNRESOLVABLE), ("2048", "GeographicTypeGeoKey", "9999"),
+    ),
+    ParametricDefect(
+        "datum_projected", 4, {GEOGRAPHIC_TYPE: EPSG_UTM33},
+        _is("GeographicTypeGeoKey", EPSG_UTM33),
+        ("2048", "GeographicTypeGeoKey", "25833", "Projected CRS"),
+    ),
+    ParametricDefect(
+        "datum_key_present", 5, {GEOG_GEODETIC_DATUM: EPSG_MGI_DATUM},
+        _is("GeogGeodeticDatumGeoKey", EPSG_MGI_DATUM),
+        ("2050", "GeogGeodeticDatumGeoKey", "2048"),
+    ),
+    ParametricDefect(
+        "semi_major_disagrees", 6, {GEOG_SEMI_MAJOR_AXIS: 6378137.0},
+        _is("GeogSemiMajorAxisGeoKey", 6378137.0),
+        ("2057", "GeogSemiMajorAxisGeoKey", "6378137", "EPSG:4312"),
+    ),
+    ParametricDefect(
+        "inverse_flattening_disagrees", 6, {GEOG_INV_FLATTENING: 299.0},
+        _is("GeogInvFlatteningGeoKey", 299.0),
+        ("2059", "GeogInvFlatteningGeoKey", "EPSG:4312"),
+    ),
+    ParametricDefect(
+        "towgs84_seven", 7, {GEOG_TOWGS84: TOWGS84_SEVEN},
+        _is("GeogTOWGS84GeoKey", TOWGS84_SEVEN),
+        ("2062", "GeogTOWGS84GeoKey", "577.326", "2.4232"),
+    ),
+    ParametricDefect(
+        "towgs84_three", 7, {GEOG_TOWGS84: TOWGS84_THREE},
+        _is("GeogTOWGS84GeoKey", TOWGS84_THREE),
+        ("2062", "GeogTOWGS84GeoKey", "577.326", "463.919"),
+    ),
+    ParametricDefect(
+        "angular_unit_grad", 8, {GEOG_ANGULAR_UNITS: GRAD},
+        _is("GeogAngularUnitsGeoKey", GRAD), ("2054", "GeogAngularUnitsGeoKey", "9105"),
+    ),
+    ParametricDefect(
+        "linear_unit_absent", 9, {PROJ_LINEAR_UNITS: None},
+        _lacks("ProjLinearUnitsGeoKey"), ("3076", "ProjLinearUnitsGeoKey", "absent"),
+    ),
+    ParametricDefect(
+        "linear_unit_foot", 10, {PROJ_LINEAR_UNITS: FOOT},
+        _is("ProjLinearUnitsGeoKey", FOOT), ("3076", "ProjLinearUnitsGeoKey", "9002"),
+    ),
+    ParametricDefect(
+        "parameter_absent", 11, {PROJ_FALSE_ORIGIN_LONG: None},
+        _lacks("ProjFalseOriginLongGeoKey"), ("3084", "ProjFalseOriginLongGeoKey", "absent"),
+    ),
+)  # fmt: skip
+
+
+def _is_nan(name: str) -> Callable[[dict[Any, Any]], bool]:
+    """`_is` for NaN, which equals nothing, itself included."""
+    return lambda g: isinstance(g.get(name), float) and math.isnan(g[name])
+
+
+def _not_one_number(key: int, name: str, row: int, finite: float) -> tuple[ParametricDefect, ...]:
+    """Section 4's `N` (rows 6 and 11, red test 13): `key` as NaN, as +inf and
+    as two doubles, each `finite` (so the pair's only defect is its length)."""
+    must_name = (str(key), name, "not one finite number")
+    pair = (finite, finite)
+    return (
+        ParametricDefect(f"{name}_nan", row, {key: math.nan}, _is_nan(name), must_name),
+        ParametricDefect(f"{name}_inf", row, {key: math.inf}, _is(name, math.inf), must_name),
+        ParametricDefect(f"{name}_two_doubles", row, {key: pair}, _is(name, pair), must_name),
+    )
+
+
+#: Red test 13: a parameter of the method (row 11) and an ellipsoid key
+#: (row 6) that tifffile reads as NaN, inf or a 2-tuple, not one finite number.
+NOT_ONE_NUMBER_DEFECTS: tuple[ParametricDefect, ...] = (
+    *_not_one_number(PROJ_FALSE_ORIGIN_EASTING, "ProjFalseOriginEastingGeoKey", 11, 400000.0),
+    *_not_one_number(GEOG_SEMI_MAJOR_AXIS, "GeogSemiMajorAxisGeoKey", 6, BESSEL_A),
+)
+
+#: Paris's prime meridian, 2.33722917 degrees east of Greenwich, in grads
+#: (EPSG:8903 gives 2.5969213 grad).
+PARIS_IN_GRADS = 2.5969213
+
+#: Red test 14: the Austrian keys in grads, with a prime meridian stated in
+#: grads. Two changes, not one: the unit and the meridian the unit applies to.
+GRADS_WITH_PARIS_MERIDIAN: Mapping[int, GeoKeyValue] = austria_keys(
+    {GEOG_ANGULAR_UNITS: GRAD, GEOG_PRIME_MERIDIAN_LONG: PARIS_IN_GRADS}
 )

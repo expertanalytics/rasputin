@@ -53,11 +53,6 @@ def repo() -> ModuleType:
 
 
 @pytest.fixture(scope="module")
-def cog() -> ModuleType:
-    return importlib.import_module("tin_engine.io.cog")
-
-
-@pytest.fixture(scope="module")
 def geotiff() -> ModuleType:
     return importlib.import_module("tin_engine.io.geotiff")
 
@@ -180,17 +175,17 @@ class TestLoadWindow:
     """`load_window` on both repositories gives the file's pixels, sliced."""
 
     def test_the_cache_repository(
-        self, repo: ModuleType, cog: ModuleType, window: Any, cache: Path, data: bytes
+        self, repo: ModuleType, window: Any, cache: Path, data: bytes
     ) -> None:
         repository = repo.CacheRepository(cache, SOURCE)
         (footprint,) = repository.footprints()
         w = window(row0=10, col0=12, rows=30, cols=40)
         tile = repository.load_window("tile", w)
         assert same_bytes(np.asarray(tile.array), sliced(whole_page(data), w))
-        assert tile.meta == cog.window_meta(footprint.meta, w)
+        assert tile.meta == footprint.meta.windowed(w)
 
     def test_the_tiff_repository(
-        self, repo: ModuleType, cog: ModuleType, window: Any, tmp_path: Path, data: bytes
+        self, repo: ModuleType, window: Any, tmp_path: Path, data: bytes
     ) -> None:
         path = tmp_path / "tile.tif"
         path.write_bytes(data)
@@ -199,7 +194,7 @@ class TestLoadWindow:
         w = window(row0=0, col0=50, rows=50, cols=20)
         tile = repository.load_window("tile.tif", w)
         assert same_bytes(np.asarray(tile.array), sliced(whole_page(data), w))
-        assert tile.meta == cog.window_meta(footprint.meta, w)
+        assert tile.meta == footprint.meta.windowed(w)
 
 
 def two_objects(tmp_path: Path, skip: dict[str, tuple[int, ...]]) -> tuple[Path, bytes, bytes]:
@@ -213,7 +208,8 @@ class TestW5CheckThePlan:
     def test_check_counts_the_plans_missing_and_needed_blocks_once(
         self, repo: ModuleType, tmp_path: Path
     ) -> None:
-        from tin_engine.mosaic import Bounds, plan_mosaic
+        from tin_engine.io.models import Bounds
+        from tin_engine.mosaic import plan_mosaic
 
         # Missing: west 6 and 19 (19 is outside the box), east strip 1 and 6.
         root, west, east = two_objects(tmp_path, {"west": (6, 19), "east": (1, 6)})
@@ -237,7 +233,8 @@ class TestW5CheckThePlan:
     def test_check_passes_when_every_needed_block_is_present(
         self, repo: ModuleType, tmp_path: Path
     ) -> None:
-        from tin_engine.mosaic import Bounds, plan_mosaic
+        from tin_engine.io.models import Bounds
+        from tin_engine.mosaic import plan_mosaic
 
         root, _, _ = two_objects(tmp_path, {"west": (19,)})  # bottom-right tile only
         repository = repo.CacheRepository(root, SOURCE)

@@ -15,7 +15,7 @@ from __future__ import annotations
 import asyncio
 import time
 from collections.abc import Mapping, Sequence
-from dataclasses import asdict, dataclass
+from dataclasses import dataclass
 from typing import Any, Literal, Protocol
 
 from pydantic import BaseModel, ConfigDict
@@ -26,16 +26,14 @@ from tin_engine.catchment import (
     Catchment,
     CatchmentError,
     CatchmentRequest,
-    GaugeResult,
     MixedGridRefusal,
     check_reach_crs,
     delineate,
 )
 from tin_engine.crs import reprojector
-from tin_engine.gauge import Gauge, lake_seed, place
+from tin_engine.gauge import Gauge, LakeSeed, Placement, lake_seed, place
+from tin_engine.hydrography import Lake, RiverSegment, Station
 from tin_engine.io.repository import DemRepository
-from tin_engine.io.rivers import RiverSegment
-from tin_engine.io.station_set import Lake, Station
 from tin_engine.reference import Class, Summary, agreement, classify, nodes_inside, summarise
 
 
@@ -129,12 +127,36 @@ class BatchSink(Protocol):
     def row(self, row: StationResult) -> None: ...
 
 
-def _gauge_fields(gauge: GaugeResult) -> dict[str, Any]:
-    skip = ("node", "chain", "sensitivity", "causes")
-    own = {k: getattr(gauge, k) for k in GaugeResult.__slots__ if k not in skip}
-    s = asdict(gauge.sensitivity)
-    del s["causes"], s["well_posed"]
-    return {**own, **s, "causes": gauge.causes}
+class NoRiverLine(CatchmentError):  # noqa: N818 -- a refusal, named for what is missing
+    """No mapped river line lies within the map radius of the station."""
+
+
+def seed_for(
+    gauge: Gauge,
+    segments: Sequence[RiverSegment],
+    crs: str,
+    request: BatchRequest,
+    lakes: Sequence[Lake] | None = None,
+) -> tuple[Placement | None, LakeSeed | None, CatchmentRequest]:
+    """`gauge` placed on `segments` (both in `crs`, the river file's), its
+    lake seed when `lakes` are given, and the catchment request: seeded by
+    the lake when there is a lake seed, else by the reach. Raises
+    :class:`NoRiverLine` with neither. Reads no file and checks no CRS."""
+    placement = place(gauge, segments, map_radius=request.map_radius, reach_up=request.reach_up)
+    seed = None if lakes is None else lake_seed(gauge, placement, lakes)
+    tol = request.outline_tolerance
+    if seed is not None:
+        polygons = tuple(lk.polygon for lk in seed.lakes)
+        made = CatchmentRequest(
+            seed=seed.point, seed_crs=crs, lakes=polygons, lakes_crs=crs, outline_tolerance=tol
+        )
+        return placement, seed, made
+    if placement is None:
+        raise NoRiverLine(f"no mapped river line within {request.map_radius:g} m of the station")
+    made = CatchmentRequest(
+        seed=(gauge.x, gauge.y), seed_crs=crs, reach=placement.reach, outline_tolerance=tol
+    )
+    return placement, None, made
 
 
 async def run_batch(
@@ -156,12 +178,7 @@ async def run_batch(
         raise ValueError(f"not in the stations file: {', '.join(sorted(unknown))}")
     check_reach_crs(segments_crs, repository)
     move = reprojector(stations_crs, segments_crs)
-    boxes = [
-        box(
-            m.x_min, m.y_max - (m.rows - 1) * m.delta_y, m.x_min + (m.cols - 1) * m.delta_x, m.y_max
-        )
-        for m in (f.meta for f in repository.footprints())
-    ]
+    boxes = [box(*f.meta.node_box()) for f in repository.footprints()]
     rows: list[StationResult] = []
     for station in stations:
         if request.only and station.station not in request.only:
@@ -176,45 +193,27 @@ async def run_batch(
         }
         ((x, y),) = move([(station.x, station.y)])
         gauge = Gauge(x=x, y=y, watercourse=station.watercourse, river=station.river)
-        placement = place(gauge, segments, map_radius=request.map_radius, reach_up=request.reach_up)
-        seed = None if lakes is None else lake_seed(gauge, placement, lakes)
         result: Catchment | None = None
-        catchment_request: CatchmentRequest | None = None
-        if placement is not None:
-            keep = placement.model_dump(exclude={"reach", "position"})
-            fields |= {**keep, "uncertainty_m": placement.reach.uncertainty}
-        if seed is not None:
-            first = seed.lakes[0]
-            fields |= {"seeded_by": "lake", "lake_rule": seed.rule, "lake_number": first.number}
-            fields |= {"lake_name": first.name, "lake_distance_m": seed.distance_m}
-            catchment_request = CatchmentRequest(
-                seed=seed.point,
-                seed_crs=segments_crs,
-                lakes=tuple(lk.polygon for lk in seed.lakes),
-                lakes_crs=segments_crs,
-                outline_tolerance=request.outline_tolerance,
+        try:
+            placement, seed, catchment_request = seed_for(
+                gauge, segments, segments_crs, request, lakes
             )
-        elif placement is not None:
-            fields["seeded_by"] = "river"
-            catchment_request = CatchmentRequest(
-                seed=(x, y),
-                seed_crs=segments_crs,
-                reach=placement.reach,
-                outline_tolerance=request.outline_tolerance,
-            )
-        else:
-            fields["refusal_cause"] = "no_river"
-            fields["refusal_message"] = (
-                f"no mapped river line within {request.map_radius:g} m of the station"
-            )
-        if catchment_request is not None:
-            try:
-                result = await asyncio.to_thread(delineate, catchment_request, repository)
-            except MixedGridRefusal as exc:
-                fields |= {"refusal_cause": "mixed_grid", "refusal_message": str(exc)}
-                fields["grid_tiles"] = tuple(exc.tiles)
-            except CatchmentError as exc:
-                fields |= {"refusal_cause": "other", "refusal_message": str(exc)}
+            if placement is not None:
+                fields |= placement.report_fields()
+            if seed is not None:
+                first = seed.lakes[0]
+                fields |= {"seeded_by": "lake", "lake_rule": seed.rule, "lake_number": first.number}
+                fields |= {"lake_name": first.name, "lake_distance_m": seed.distance_m}
+            else:
+                fields["seeded_by"] = "river"
+            result = await asyncio.to_thread(delineate, catchment_request, repository)
+        except NoRiverLine as exc:
+            fields |= {"refusal_cause": "no_river", "refusal_message": str(exc)}
+        except MixedGridRefusal as exc:
+            fields |= {"refusal_cause": "mixed_grid", "refusal_message": str(exc)}
+            fields["grid_tiles"] = tuple(exc.tiles)
+        except CatchmentError as exc:
+            fields |= {"refusal_cause": "other", "refusal_message": str(exc)}
         found = None
         if result is not None:
             m = result.meta
@@ -226,7 +225,9 @@ async def run_batch(
             # nodes inside the outline, each its cell's area.
             ours = found.ours if found is not None else nodes_inside([result.fine], m)
             if result.gauge is not None:  # None on a lake row: no chain, no sensitivity
-                fields |= _gauge_fields(result.gauge)
+                gauge_fields = result.gauge.report_fields()
+                del gauge_fields["well_posed"]  # `StationResult` has no such column
+                fields |= gauge_fields
             fields |= {
                 "nodes": result.nodes,
                 "fine_area_km2": ours * m.delta_x * m.delta_y / 1e6,
@@ -244,4 +245,4 @@ async def run_batch(
     return summarise(rows)
 
 
-__all__ = ["BatchRequest", "BatchSink", "StationResult", "run_batch"]
+__all__ = ["BatchRequest", "BatchSink", "NoRiverLine", "StationResult", "run_batch", "seed_for"]

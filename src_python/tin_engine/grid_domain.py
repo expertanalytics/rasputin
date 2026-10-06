@@ -50,7 +50,7 @@ def _axis(count: int, stride: int) -> list[int]:
 def subsample(meta: RasterMeta, stride: int) -> tuple[npt.NDArray[np.float64], list[int]]:
     """The subsampled nodes as ``(N, 2)`` float64, and the perimeter ring.
 
-    Nodes are row-major over the picked rows and columns. Coordinates use
+    Nodes are row-major over the picked rows and columns. Coordinates are ``meta.node_xy``,
     ``RasterGeometry::node``'s expression, ``x_min + col * delta_x`` and ``y_max - row * delta_y``:
     another spelling can land an ulp off the node. The bits equal ``node``'s unless the C++
     compiler fuses it into a multiply-add, which needs a non-integer, non-dyadic origin or
@@ -65,8 +65,7 @@ def subsample(meta: RasterMeta, stride: int) -> tuple[npt.NDArray[np.float64], l
     cols = _axis(meta.cols, stride)
     r = np.asarray(rows, dtype=np.float64)[:, None]
     c = np.asarray(cols, dtype=np.float64)[None, :]
-    x = np.broadcast_to(meta.x_min + c * meta.delta_x, (len(rows), len(cols)))
-    y = np.broadcast_to(meta.y_max - r * meta.delta_y, (len(rows), len(cols)))
+    x, y = np.broadcast_arrays(*meta.node_xy(r, c))
     xy = np.column_stack([x.ravel(), y.ravel()])
 
     nr, nc = len(rows), len(cols)

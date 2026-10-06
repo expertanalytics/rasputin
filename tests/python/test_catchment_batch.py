@@ -565,7 +565,7 @@ LAKE_COLUMNS = ("seeded_by", "lake_rule", "lake_number", "lake_name", "lake_dist
 
 def the_lake(polygon: Polygon | None = None, number: int | None = bf.LAKE_NUMBER,
              name: str | None = bf.LAKE_NAME) -> Any:  # fmt: skip
-    from tin_engine.io.station_set import Lake
+    from tin_engine.hydrography import Lake
 
     return Lake(number=number, name=name, polygon=polygon or bf.lake_polygon())
 

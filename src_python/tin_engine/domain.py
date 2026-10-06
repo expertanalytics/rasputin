@@ -143,8 +143,7 @@ def check_extent(domain: DomainPolygon, meta: RasterMeta) -> None:
     """U4 (a): every vertex in ``meta``'s node rectangle, as the core's
     ``cell_of`` has it, with ``domain`` already in the DEM's CRS."""
     polygon = domain.polygon
-    x_max = meta.x_min + (meta.cols - 1) * meta.delta_x
-    y_min = meta.y_max - (meta.rows - 1) * meta.delta_y
+    _, y_min, x_max, _ = meta.node_box()
     for ring in (polygon.exterior, *polygon.interiors):
         for x, y in ring.coords:
             outside = max(meta.x_min - x, x - x_max, y_min - y, y - meta.y_max)

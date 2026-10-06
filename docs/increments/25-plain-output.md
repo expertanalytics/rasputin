@@ -90,7 +90,7 @@ master `586fbc1`'s, before this increment; read them there
 | `elevation_source` | `src_python/tin_engine/cli.py@586fbc1:876`, built at `src_python/tin_engine/cli.py@586fbc1:1496`, `:1518-1553`, `:1568-1570`, prefixed at `:870-875` | one sentence; its clauses are listed below | always (`none (z=0, --flat)` for a fixture, `:468`, `:960`) |
 | `source_crs`, `source_transform`, `computation_grid` | `src_python/tin_engine/cli.py@586fbc1:880-885` | reprojected path: the DEM's own CRS, PROJ's name for the transform, the resampled grid (`square 30 m grid in EPSG:31983, node (R, K) at (30 K, -30 R), resampled bilinear from EPSG:4674`) | reprojected only |
 | `licence_note`, `cite` | `src_python/tin_engine/cli.py@586fbc1:886-892` | the remote source's licence and works to cite | DEM from the cache |
-| `dem_tiles`, `dem_seams` | `src_python/tin_engine/cli.py@586fbc1:893-897`, `mosaic.py:121-124` | tile names; overlaps that disagree (`a.tif \| b.tif: nodes 1, max 4, median 4`) or `none` | several files, a directory, or the cache |
+| `dem_tiles`, `dem_seams` | `src_python/tin_engine/cli.py@586fbc1:893-897`, `src_python/tin_engine/mosaic.py@44fa7f5:121-124` | tile names; overlaps that disagree (`a.tif \| b.tif: nodes 1, max 4, median 4`) or `none` | several files, a directory, or the cache |
 | `domain`, `domain_crs`, `domain_transform` | `src_python/tin_engine/cli.py@586fbc1:898-903`, `:1461` | `catchment.geojson, 1 ring 0 holes, 27 vertices`; its CRS; transform or `none` | `--domain` |
 | `features`, `features_crs`, `features_transform`, `features_notice` | `src_python/tin_engine/cli.py@586fbc1:904-934` | `clc2018_7908_3.gpkg:U2018_CLC2018_V2020_20u1, map corine, 60 features, 87 chains, 10266 vertices`; CRS; transform; the CORINE notice | `--features` |
 | `land_cover_codes` | `src_python/tin_engine/cli.py@586fbc1:1045-1046`, `io/vtk_legacy.py:118-119` | what `land_cover_code` holds | a coded `--features-map` |
@@ -119,7 +119,7 @@ That is a defect this increment fixes (D2: the `.ply` carries the same fields as
 | `constraint feet on` / `off` | `:1551` | increment 20b: a worst DEM node very close to a line is replaced by the nearest point on the line | | always |
 | `0 valid DEM nodes not covered` | `:1552`, `final.uncovered` | DEM nodes with data that lie in triangles with a NoData corner after refinement. By the stopping rule there are none (`refine.hpp:409-410`), so this is a **self-check, always 0** | count | never, by construction |
 | `199 vertices without data dropped` | `:1568`, `elevation.py:25`, `:64` | mesh vertices where the DEM gives no height, removed with every triangle that uses them. With `--tolerance` a vertex at a DEM node has none when that node is NoData, and a vertex between nodes when one of the four nodes around it is. Without `--tolerance` every vertex is sampled bilinearly, and the sampler refuses a cell with any NoData corner even at zero weight (`12-dem-to-mesh.md`, R2), so a vertex on a valid node next to a NoData node is removed too: one cell of trim around NoData ("NoData on the no-tolerance path", below). *Changed by increment 27: a vertex on a node reads that node alone, so without `--tolerance` too only vertices on NoData cells go (`27-node-sampling.md`)* | count | the DEM has NoData cells inside the area |
-| `vertical unit assumed metres` | `:1569-1570` | the GeoTIFF has no `VerticalUnitsGeoKey`; any other unit than metres is refused (`io/geotiff.py:139-143`); always set for cache blocks (`fetch/run.py:249`) | | the key is missing |
+| `vertical unit assumed metres` | `:1569-1570` | the GeoTIFF has no `VerticalUnitsGeoKey`; any other unit than metres is refused (`src_python/tin_engine/io/geotiff.py@65cd528:139-143`); always set for cache blocks (`src_python/tin_engine/fetch/run.py@44fa7f5:249`) | | the key is missing |
 
 ### stderr
 
@@ -131,7 +131,7 @@ That is a defect this increment fixes (D2: the `.ply` carries the same fields as
 | features read | `:1364-1368` | `60 features kept, 9 dropped outside, 19 clipped, 0 empty skipped` |
 | no index | `:1370` | `<table>: no R-tree index, table scanned` |
 | lines noded | `:1468` | `10802 input vertices, 5627 noded vertices` |
-| land cover | `:1040-1044`, `landcover.py:100-108` | `land cover: 68 regions, 0 outside every polygon, 0 in more than one, 0 thinner than the snap` ("regions": groups of triangles not separated by a line; "thinner than the snap": a group whose widest triangle is narrower than twice the snap spacing, so its label may be on the wrong side) |
+| land cover | `:1040-1044`, `src_python/tin_engine/landcover.py@3066d60:103-109` | `land cover: 68 regions, 0 outside every polygon, 0 in more than one, 0 thinner than the snap` ("regions": groups of triangles not separated by a line; "thinner than the snap": a group whose widest triangle is narrower than twice the snap spacing, so its label may be on the wrong side) |
 | `--out-crs` suggestion | `:1299` | a line to paste; plain already |
 | fetch progress | `:1222` | `N of M bytes`; plain already |
 | catchment command | `:1690-1729` | `window k: ... flood 0.12 s, contained`; `seed: ...`; `catchment: N nodes, X km2 of node area`; `fine outline: ... rings dropped ... holes filled ...`; `reduced outline: ...` |
@@ -283,7 +283,7 @@ unreadable or break a legal requirement, so they stay, unchanged.
    maximum never reads above the tolerance it met.
 3. **A count of zero is omitted from the file**, never from `--stats`.
    This applies to counts only (today `nodata_vertices_removed`), never to a
-   measured value: `--tolerance 0` is accepted (`cli.py:835`) and then
+   measured value: `--tolerance 0` is accepted (`src_python/tin_engine/cli.py@44fa7f5:835`) and then
    `tolerance_m 0` and `max_error_m 0` are written
    (`tests/python/test_cli_mesh_refine.py@a2d3319:151-155` asserts both).
 4. **Self-checks** live in `--stats`. If one is ever non-zero it is also

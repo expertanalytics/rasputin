@@ -21,7 +21,7 @@ import os
 from collections.abc import Iterator, Sequence
 from pathlib import Path
 from types import SimpleNamespace
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import pytest
 
@@ -43,7 +43,9 @@ from fetch_fixtures import (
     with_long_header,
 )
 from geotiff_fixtures import TIE_X, TIE_Y
-from tin_engine.mosaic import Bounds
+
+if TYPE_CHECKING:
+    from tin_engine.io.models import Bounds
 
 SOURCE = "test-src"
 CITES = ("First cited work, 2024.", "Second cited work, 2025.")
@@ -86,12 +88,19 @@ def served(server: RangeServer, path: str, data: bytes) -> str:
     return path
 
 
+def bounds(**corners: float) -> Bounds:
+    """A `Bounds`, from `io.models` (audit PR A moved it there from `mosaic`),
+    read at call time so a missing name fails the test, not the collection."""
+    box: Bounds = importlib.import_module("tin_engine.io.models").Bounds(**corners)
+    return box
+
+
 def whole_box(data: bytes) -> Bounds:
     """A box a little inside the served file's node rectangle."""
     page = page_of(data)
     rows, cols = int(page.imagelength), int(page.imagewidth)
     scale = page.tags[33550].value
-    return Bounds(
+    return bounds(
         x_min=TIE_X + 0.3 * scale[0],
         y_min=TIE_Y - (rows - 1.3) * scale[1],
         x_max=TIE_X + (cols - 1.3) * scale[0],
@@ -101,7 +110,7 @@ def whole_box(data: bytes) -> Bounds:
 
 def part_box(x0: float, x1: float, rows: float = 30.0) -> Bounds:
     """Columns `x0`..`x1` (in cells of 10 m) of the top `rows` cells (5 m)."""
-    return Bounds(
+    return bounds(
         x_min=TIE_X + x0 * 10, y_min=TIE_Y - rows * 5, x_max=TIE_X + x1 * 10, y_max=TIE_Y - 0.4
     )
 
@@ -442,7 +451,7 @@ class TestF8Glo30:
             credit="Test credit",
             licence_note="Test licence",
         )
-        box = Bounds(x_min=10.8, y_min=59.8, x_max=11.2, y_max=60.2)
+        box = bounds(x_min=10.8, y_min=59.8, x_max=11.2, y_max=60.2)
         report = await fetch(api, source, tmp_path, box)
         unlisted = sorted([glo30_name(60, 10), glo30_name(60, 11)])
         assert sorted(report.no_tile) == unlisted

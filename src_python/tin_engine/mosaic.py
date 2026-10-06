@@ -20,18 +20,14 @@ import math
 import os
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, Self
+from typing import Any
 
 import numpy as np
 import numpy.typing as npt
 import shapely
-from pydantic import BaseModel, ConfigDict, model_validator
+from pydantic import BaseModel, ConfigDict
 
-from tin_engine.io.cog import window_meta
-from tin_engine.io.models import DemTile, IndexWindow, RasterMeta
-
-if TYPE_CHECKING:
-    from tin_engine.io.repository import TileFootprint
+from tin_engine.io.models import Bounds, DemTile, IndexWindow, RasterMeta, TileFootprint, valid_mask
 
 #: DEM units (metres for DTM10). A seam counts a node only where the two
 #: tiles differ by at least this (Ola, 2026-09-28: "Ignore below 1mm").
@@ -59,26 +55,6 @@ class MixedGridError(MosaicError):
 def physical_memory() -> int:
     """Bytes of physical memory, looked up at call time (macOS and Linux)."""
     return os.sysconf("SC_PHYS_PAGES") * os.sysconf("SC_PAGE_SIZE")
-
-
-class Bounds(BaseModel):
-    """A box in the DEM's CRS: finite, with `x_min < x_max` and `y_min < y_max`."""
-
-    model_config = ConfigDict(frozen=True)
-
-    x_min: float
-    y_min: float
-    x_max: float
-    y_max: float
-
-    @model_validator(mode="after")
-    def _a_box(self) -> Self:
-        corners = (self.x_min, self.y_min, self.x_max, self.y_max)
-        if not all(map(math.isfinite, corners)) or not (
-            self.x_min < self.x_max and self.y_min < self.y_max
-        ):
-            raise ValueError(f"need finite x_min < x_max and y_min < y_max, got {corners}")
-        return self
 
 
 class TilePlacement(BaseModel):
@@ -262,7 +238,8 @@ def assemble(
 
     With `load_window` (23a-1), each placement's source window is loaded
     instead of its whole tile, `load_window(name, placement.source)`, and is
-    copied whole; its meta must be `window_meta` of the listed one.
+    copied whole; its meta must be the listed one cut to that window,
+    `placement.meta.windowed(placement.source)`.
     """
     if len(plan.tiles) == 1 and plan.tiles[0].meta == plan.meta:
         return Mosaic(tile=_loaded(plan.tiles[0], load, load_window), plan=plan)
@@ -373,9 +350,9 @@ def _covering(chosen: list[_Lattice], bounds: Bounds | None, needed: Any) -> lis
     """
     corners = [(p.footprint.meta, lattice) for lattice in chosen for p in lattice.selected]
     x_lo = min(m.x_min for m, _ in corners)
-    x_hi = max(m.x_min + (m.cols - 1) * m.delta_x for m, _ in corners)
+    x_hi = max(m.node_box()[2] for m, _ in corners)
     y_hi = max(m.y_max for m, _ in corners)
-    y_lo = min(m.y_max - (m.rows - 1) * m.delta_y for m, _ in corners)
+    y_lo = min(m.node_box()[1] for m, _ in corners)
     covering = []
     for lattice in chosen:
         (x_ref, y_ref), m = lattice.reference, lattice.group[0].meta
@@ -454,17 +431,14 @@ def _uncovered(meta: RasterMeta, tiles: tuple[TilePlacement, ...], needed: Any) 
         uncovered[c.row0 : c.row0 + c.rows, c.col0 : c.col0 + c.cols] = False
     if needed is not None and uncovered.any():
         rows, cols = np.nonzero(uncovered)
-        outside = ~shapely.intersects_xy(
-            needed, meta.x_min + cols * meta.delta_x, meta.y_max - rows * meta.delta_y
-        )
+        outside = ~shapely.intersects_xy(needed, *meta.node_xy(rows, cols))
         uncovered[rows[outside], cols[outside]] = False
     count = np.count_nonzero(uncovered)
     if not count:
         return None
     rows_hit = np.flatnonzero(uncovered.any(axis=1))
     cols_hit = np.flatnonzero(uncovered.any(axis=0))
-    x0, x1 = (meta.x_min + cols_hit[i] * meta.delta_x for i in (0, -1))
-    y1, y0 = (meta.y_max - rows_hit[i] * meta.delta_y for i in (0, -1))
+    (x0, x1), (y1, y0) = meta.node_xy(rows_hit[[0, -1]], cols_hit[[0, -1]])
     return (
         f"{count} nodes the request needs are in no tile: x {_num(x0)} to {_num(x1)}, "
         f"y {_num(y0)} to {_num(y1)} ({meta.crs})"
@@ -480,7 +454,7 @@ def _loaded(
         tile, listed = load(placement.name), placement.meta
     else:
         tile = load_window(placement.name, placement.source)
-        listed = window_meta(placement.meta, placement.source)
+        listed = placement.meta.windowed(placement.source)
     if tile.meta != listed:
         raise MosaicError(
             f"{placement.name} changed since it was listed: {tile.meta} is not {listed}"
@@ -501,13 +475,6 @@ def _within(inner: IndexWindow, outer: IndexWindow) -> tuple[slice, slice]:
     """`inner`'s slices in an array holding `outer` (both in canvas indices)."""
     r, c = inner.row0 - outer.row0, inner.col0 - outer.col0
     return slice(r, r + inner.rows), slice(c, c + inner.cols)
-
-
-def _valid(values: npt.NDArray[Any], nodata: float | None) -> npt.NDArray[np.bool_]:
-    valid = ~np.isnan(values)
-    if nodata is not None:
-        valid &= values != nodata
-    return valid
 
 
 def _decide(
@@ -542,7 +509,7 @@ def _decide(
             np.minimum(row, t.meta.rows - 1 - row), np.minimum(col, t.meta.cols - 1 - col)
         )
         here = _within(part, box)
-        take = _valid(values, nodata) & (depth > best[here])
+        take = valid_mask(values, nodata) & (depth > best[here])
         value[here][take] = values[take]
         best[here][take] = depth[take]
         if nodata is not None:
@@ -560,7 +527,7 @@ def _covered(box: IndexWindow, meta: RasterMeta, needed: Any) -> Any:
         return ...
     rows = (box.row0 + np.arange(box.rows))[:, np.newaxis]
     cols = (box.col0 + np.arange(box.cols))[np.newaxis, :]
-    xs, ys = np.broadcast_arrays(meta.x_min + cols * meta.delta_x, meta.y_max - rows * meta.delta_y)
+    xs, ys = np.broadcast_arrays(*meta.node_xy(rows, cols))
     return shapely.intersects_xy(needed, xs, ys)
 
 
@@ -571,7 +538,7 @@ def _seam(
     a valid value and `|a - b| >= SEAM_THRESHOLD`, and the largest and median
     `|a - b|` over those, in float64. None when no node qualifies. The
     threshold is the report's only: `_decide` never consults it."""
-    both = _valid(a, plan.meta.nodata) & _valid(b, plan.meta.nodata)
+    both = valid_mask(a, plan.meta.nodata) & valid_mask(b, plan.meta.nodata)
     gaps = np.abs(a[both].astype(np.float64) - b[both].astype(np.float64))
     gaps = gaps[gaps >= SEAM_THRESHOLD]
     if not gaps.size:

@@ -50,9 +50,9 @@ import tempfile
 import time
 from collections.abc import Callable, Iterator, Mapping
 from contextlib import contextmanager
-from dataclasses import asdict, dataclass, field, fields
+from dataclasses import dataclass, field, fields
 from pathlib import Path
-from typing import Annotated, Any, TextIO
+from typing import Annotated, TextIO
 
 import numpy as np
 import numpy.typing as npt
@@ -81,7 +81,7 @@ from tin_engine.catchment import (
     check_reach_crs,
     delineate,
 )
-from tin_engine.catchment_batch import BatchRequest, StationResult, run_batch
+from tin_engine.catchment_batch import BatchRequest, NoRiverLine, StationResult, run_batch, seed_for
 from tin_engine.chains import start_chains
 from tin_engine.crs import crs_label, reprojector, same_crs, transform_description, transform_label
 from tin_engine.dem_input import (
@@ -105,17 +105,19 @@ from tin_engine.feature_input import (
     read_lakes,
 )
 from tin_engine.features import DEFAULT_VOCABULARY
-from tin_engine.gauge import Gauge, Placement, place
+from tin_engine.gauge import Gauge, Placement
 from tin_engine.grid_domain import default_stride, refine_start_stride, subsample
+from tin_engine.hydrography import RiverSegment, Station
 from tin_engine.io.cog import NotCached
 from tin_engine.io.geojson import catchment_geojson
-from tin_engine.io.models import DemTile, RasterMeta
+from tin_engine.io.models import Bounds, DemTile, RasterMeta
 from tin_engine.io.ply import write_ply
-from tin_engine.io.rivers import RiverSegment, read_segments
-from tin_engine.io.station_set import Station, read_references, read_stations
+from tin_engine.io.repository import DemRepository
+from tin_engine.io.rivers import read_segments
+from tin_engine.io.station_set import read_references, read_stations
 from tin_engine.io.vtk_legacy import write_vtk
 from tin_engine.landcover import label_triangles
-from tin_engine.mosaic import Bounds, Seam
+from tin_engine.mosaic import Seam
 from tin_engine.palettes import PALETTES, paraview_preset
 from tin_engine.raster import to_core
 from tin_engine.run_record import (
@@ -1693,37 +1695,34 @@ def _refine_phases(clock: PhaseClock, seconds: float, out: RefineOutcome) -> Non
 
 def _off_node(xy: npt.NDArray[np.float64], meta: RasterMeta) -> int:
     """How many of ``xy`` are not a DEM node bit for bit, as ``refine`` classifies."""
-    col = np.round((xy[:, 0] - meta.x_min) / meta.delta_x)
-    row = np.round((meta.y_max - xy[:, 1]) / meta.delta_y)
-    node = (meta.x_min + col * meta.delta_x == xy[:, 0]) & (
-        meta.y_max - row * meta.delta_y == xy[:, 1]
-    )
+    x, y = meta.node_xy(*np.round(meta.index_of(xy[:, 0], xy[:, 1])))
+    node = (x == xy[:, 0]) & (y == xy[:, 1])
     return int(np.count_nonzero(~node))
 
 
 def _placed(
     rivers: Path,
-    repository: Any,
+    repository: DemRepository,
     seed: tuple[float, float],
     seed_crs: str,
-    map_radius: float,
-    reach_up: float,
-) -> tuple[tuple[Placement, str | None], tuple[float, float], str]:
+    request: BatchRequest,
+) -> tuple[tuple[Placement, str | None], CatchmentRequest]:
     """The gauge placed on the river file's nearest line (no watercourse
-    number), and the seed moved into the file's CRS, which must be the DEM's."""
+    number), with its line's river name, and the catchment request seeded by
+    its reach in the file's CRS, which must be the DEM's."""
     segments, crs, _ = _segments(rivers)
     _reach_crs(crs, repository)
     ((x, y),) = reprojector(seed_crs, crs)([seed])
-    placement = place(Gauge(x=x, y=y), segments, map_radius=map_radius, reach_up=reach_up)
-    if placement is None:
-        raise typer.BadParameter(
-            f"no mapped river line within {map_radius:g} m of the station", param_hint="--rivers"
-        )
+    try:
+        placement, _, made = seed_for(Gauge(x=x, y=y), segments, crs, request)
+    except NoRiverLine as exc:
+        raise typer.BadParameter(str(exc), param_hint="--rivers") from exc
+    assert placement is not None  # without lakes, `seed_for` places or refuses
     name = next(s.name for s in segments if s.objectid == placement.objectid)
-    return (placement, name), (x, y), crs
+    return (placement, name), made
 
 
-def _reach_crs(crs: str, repository: Any) -> None:
+def _reach_crs(crs: str, repository: DemRepository) -> None:
     """`check_reach_crs`, its refusal naming --rivers."""
     try:
         check_reach_crs(crs, repository)
@@ -1763,8 +1762,7 @@ def _placement_report(
 ) -> dict[str, object]:
     """Say where the gauge went, and return the placement and sensitivity
     properties for the catchment file."""
-    (p, name), s = placed, gauge.sensitivity
-    causes = gauge.causes
+    (p, name), s, causes = placed, gauge.sensitivity, gauge.causes
     verdict = f"uncertain ({', '.join(causes)})" if causes else "well defined"
     typer.echo(
         f"placed on the river line {p.distance_m:.0f} m from the station "
@@ -1774,10 +1772,7 @@ def _placement_report(
         f"{p.reach.uncertainty:.0f} m up and down the river: {verdict}",
         err=True,
     )
-    keep = {k: v for k, v in p.model_dump().items() if k not in ("reach", "position")}
-    skip = ("node", "chain", "sensitivity", "causes")
-    burn = {k: getattr(gauge, k) for k in GaugeResult.__slots__ if k not in skip}
-    return {**keep, "uncertainty_m": p.reach.uncertainty, **burn, **asdict(s), "causes": causes}
+    return {**p.report_fields(), **gauge.report_fields()}
 
 
 #: What the suffix of ``catchment --out`` may be: GeoJSON, which ``--domain`` reads.
@@ -1881,19 +1876,21 @@ def catchment(
     try:
         repository, _ = repository_for(tuple(dem))
         placement: tuple[Placement, str | None] | None = None
-        seed_at, seed_crs_at = seed, seed_crs
         if rivers is not None:
-            placement, seed_at, seed_crs_at = _placed(
-                rivers, repository, seed, seed_crs, map_radius or 500.0, reach_up or 1000.0
+            batch = BatchRequest(
+                map_radius=map_radius or 500.0,
+                reach_up=reach_up or 1000.0,
+                outline_tolerance=outline_tolerance,
             )
-        request = CatchmentRequest(
-            seed=seed_at,
-            seed_crs=seed_crs_at,
-            reach=None if placement is None else placement[0].reach,
-            lakes=None if found is None else found[0],
-            lakes_crs=None if found is None else found[1],
-            outline_tolerance=outline_tolerance,
-        )
+            placement, request = _placed(rivers, repository, seed, seed_crs, batch)
+        else:
+            request = CatchmentRequest(
+                seed=seed,
+                seed_crs=seed_crs,
+                lakes=None if found is None else found[0],
+                lakes_crs=None if found is None else found[1],
+                outline_tolerance=outline_tolerance,
+            )
         result = delineate(request, repository)
     except OSError as exc:
         raise typer.BadParameter(f"cannot read {exc.filename}: {exc}", param_hint="--dem") from exc

@@ -39,7 +39,7 @@ from pydantic import BaseModel, ConfigDict
 
 from .cog import CacheError, LocalTiffBlocks, NotCached, block_grid, blocks_meeting, decode_window
 from .geotiff import decode_dem, read_header, read_page
-from .models import DemTile, GeoTiffError, IndexWindow, RasterMeta
+from .models import DemTile, GeoTiffError, IndexWindow, RasterMeta, TileFootprint
 
 if TYPE_CHECKING:
     import tifffile
@@ -48,17 +48,6 @@ if TYPE_CHECKING:
 
 #: `from_directory` lists these suffixes, in any case (R2).
 TILE_SUFFIXES = frozenset({".tif", ".tiff"})
-
-
-class TileFootprint(BaseModel):
-    """One tile as its header describes it: the file's name, its node grid, and
-    the dtype it decodes to (float32 unless given; S2)."""
-
-    model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True)
-
-    name: str
-    meta: RasterMeta
-    dtype: np.dtype[Any] = np.dtype(np.float32)
 
 
 class DemRepository(Protocol):
@@ -71,6 +60,14 @@ class DemRepository(Protocol):
 
     def load(self, name: str) -> DemTile:
         """The whole tile `name`, decoded. `KeyError` for a name not listed."""
+        ...
+
+    def load_window(self, name: str, window: IndexWindow) -> DemTile:
+        """`window` of tile `name`, decoded."""
+        ...
+
+    def check(self, plan: MosaicPlan) -> None:
+        """Refuse `plan` if this storage cannot give every tile it reads."""
         ...
 
 
@@ -375,7 +372,6 @@ __all__ = [
     "DemRepository",
     "NotCached",
     "TiffDemRepository",
-    "TileFootprint",
     "open_geopackage",
     "read_json",
 ]

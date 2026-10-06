@@ -128,7 +128,7 @@ class TestW1WindowEqualsWholeSliced:
         tile = decoded(cog, geotiff, local(cog, geotiff, data), data, w)
         assert same_bytes(np.asarray(tile.array), sliced(whole_page(data), w))
         meta = geotiff.read_header(io.BytesIO(data), nodata=None)[0]
-        assert tile.meta == cog.window_meta(meta, w)
+        assert tile.meta == meta.windowed(w)
         assert not tile.array.flags.writeable
 
     @pytest.mark.parametrize("name", WINDOWS)
@@ -165,9 +165,8 @@ class TestW1WindowEqualsWholeSliced:
         )
         assert tile.array.dtype == np.float32
 
-    def test_window_meta_moves_the_corner_by_whole_cells(
-        self, cog: ModuleType, window: Any
-    ) -> None:
+    def test_windowed_moves_the_corner_by_whole_cells(self, window: Any) -> None:
+        """`RasterMeta.windowed`, which replaced `cog.window_meta` (audit PR A)."""
         from mosaic_fixtures import meta as make_meta
 
         whole = make_meta(rows=ROWS, cols=COLS, nodata=-9999.0)
@@ -180,7 +179,7 @@ class TestW1WindowEqualsWholeSliced:
                 "cols": 3,
             }
         )
-        assert cog.window_meta(whole, w) == expected
+        assert whole.windowed(w) == expected
 
     @pytest.mark.parametrize(
         "bounds",
@@ -230,7 +229,7 @@ def test_w1_a_dtm10_window_across_a_512_tile_corner(
     with tifffile.TiffFile(DTM10_FILE) as tif:
         oracle = tif.pages.first.asarray()
     assert same_bytes(np.asarray(tile.array), sliced(oracle, w).astype(np.float32))
-    assert tile.meta == cog.window_meta(meta, w)
+    assert tile.meta == meta.windowed(w)
 
 
 class TestW2Determinism:
