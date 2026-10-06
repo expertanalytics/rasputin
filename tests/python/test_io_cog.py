@@ -275,7 +275,7 @@ class TestR1DefaultThreadsAreTheMachines:
         [
             pytest.param(7, {}, 7, id="seven_cores"),
             pytest.param(None, {}, 1, id="cores_unknown"),
-            pytest.param(7, {"threads": 3}, 3, id="threads_given"),
+            pytest.param(7, {"threads": 9}, 9, id="threads_given"),
         ],
     )
     def test_the_pool_is_built_with_the_machines_core_count(
