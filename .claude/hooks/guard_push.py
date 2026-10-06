@@ -84,7 +84,7 @@ FETCH_EXACT = ("core.sshcommand", "fetch.bundleuri")
 #: Assignments stripped from the argv that steer a fetch, read from the text instead.
 FETCH_TEXT = re.compile(r"GIT_CONFIG|GIT_SSH|\b(HOME|XDG_CONFIG_HOME)=")
 #: Programs that take a command as one string (G7 c), and shells (G7 b).
-STRING_RUNNERS, SHELLS = {"watch", "parallel", "flock"}, {"sh", "bash", "zsh"}
+STRING_RUNNERS, SHELLS = {"watch", "parallel", "flock"}, shell_scan.SHELLS if shell_scan else set()
 #: gh's top-level commands (`gh help`, gh 2.101) less its alias `co`, which a user can redefine,
 #: plus `help` itself, which only reads (Ola's ruling, 2026-10-05).
 GH_COMMANDS = {
@@ -235,7 +235,7 @@ def runs(words: list[str]) -> list[tuple[list[str], bool]]:
     found, name = [(words, False)], words[0].rsplit("/", 1)[-1] if words else ""
     for at, word in enumerate(words[1:], 1):
         if word.rsplit("/", 1)[-1] in ("git", "gh"):  # (a) a bare tail
-            found.append((words[at:], True))
+            found.append((words[at:], name != "parallel"))  # parallel builds it from inputs
         texts = [shlex.join(words[at:])] if word.rsplit("/", 1)[-1] in SHELLS else []  # (b)
         texts += [word] if name in STRING_RUNNERS and len(word.split()) > 1 else []  # (c)
         for text in texts if shell_scan else []:
