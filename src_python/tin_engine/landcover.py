@@ -47,10 +47,12 @@ def regions(triangles: npt.ArrayLike, edges: npt.ArrayLike) -> npt.NDArray[np.in
     n = int(max(tri.max(initial=-1), cut.max(initial=-1))) + 1
     sides = np.concatenate([tri[:, [0, 1]], tri[:, [1, 2]], tri[:, [2, 0]]])
     keys = _keys(sides, n)
-    owner = np.tile(np.arange(len(tri), dtype=np.int64), 3)
-    free = ~np.isin(keys, _keys(cut, n))
-    order = np.argsort(keys[free], kind="stable")
-    keys, owner = keys[free][order], owner[free][order]
+    # Any sort will do: the components and their labels do not depend on the
+    # order of the pairs. Sides are three blocks of T, so the owner is i % T.
+    order = np.argsort(keys)
+    keys, owner = keys[order], order % max(len(tri), 1)
+    free = ~_member(keys, np.unique(_keys(cut, n)))
+    keys, owner = keys[free], owner[free]
     # A manifold mesh: an interior edge's key appears exactly twice.
     pair = np.flatnonzero(keys[1:] == keys[:-1])
     u, v = owner[pair], owner[pair + 1]
@@ -93,8 +95,7 @@ def label_triangles(
     r = np.where(perimeter > 0, np.abs(cross) / safe, 0.0)
     centre = (la[:, None] * a + lb[:, None] * b + lc[:, None] * c) / safe[:, None]
     # Per component, the triangle of largest r, ties to the lowest index.
-    order = np.lexsort((np.arange(len(tri)), -r, ids))
-    best = order[np.unique(ids[order], return_index=True)[1]]
+    best = _best(ids, r)
     comp_codes, hits = _lookup(centre[best], polygons)
     by_id = np.zeros(len(tri), dtype=np.int32)
     by_id[ids[best]] = comp_codes
@@ -113,6 +114,26 @@ def _keys(pairs: npt.NDArray[np.int64], n: int) -> npt.NDArray[np.int64]:
     return np.minimum(pairs[:, 0], pairs[:, 1]) * n + np.maximum(pairs[:, 0], pairs[:, 1])
 
 
+def _member(values: npt.NDArray[np.int64], table: npt.NDArray[np.int64]) -> npt.NDArray[np.bool_]:
+    """True where a value is in `table`, which is sorted and unique."""
+    if not len(table):
+        return np.zeros(len(values), dtype=bool)
+    at = np.minimum(np.searchsorted(table, values), len(table) - 1)
+    return np.asarray(table[at] == values, dtype=bool)
+
+
+def _best(ids: npt.NDArray[np.int64], r: npt.NDArray[np.float64]) -> npt.NDArray[np.int64]:
+    """Per component, in increasing id, the triangle of largest `r` (finite),
+    ties to the lowest index; `ids[i] == i` marks a component's smallest index."""
+    t = len(ids)
+    top = np.full(t, -np.inf)
+    np.maximum.at(top, ids, r)
+    low = np.full(t, t, dtype=np.int64)
+    at_top = np.flatnonzero(r == top[ids])
+    np.minimum.at(low, ids[at_top], at_top)
+    return low[np.flatnonzero(ids == np.arange(t))]
+
+
 def _lookup(
     points: npt.NDArray[np.float64], polygons: Sequence[tuple[BaseGeometry, int]]
 ) -> tuple[npt.NDArray[np.int64], npt.NDArray[np.int64]]:
@@ -121,8 +142,10 @@ def _lookup(
     hits = np.zeros(len(points), dtype=np.int64)
     if not polygons or not len(points):
         return codes, hits
-    tree = shapely.STRtree([p for p, _ in polygons])
-    found, which = tree.query(shapely.points(points), predicate="intersects")
+    # The polygons are the query, so GEOS prepares each one for its own query
+    # and frees it after; the caller's geometries are left unprepared.
+    tree = shapely.STRtree(shapely.points(points))
+    which, found = tree.query([p for p, _ in polygons], predicate="intersects")
     rank = np.array([(p.area, code) for p, code in polygons], dtype=[("a", "f8"), ("c", "i8")])
     # Sort the hits by point, then area, then code: each point's first hit wins.
     order = np.lexsort((rank["c"][which], rank["a"][which], found))

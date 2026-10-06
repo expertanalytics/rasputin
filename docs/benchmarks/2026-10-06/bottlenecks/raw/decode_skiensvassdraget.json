@@ -1,0 +1,108 @@
+{
+ "catchment": "skiensvassdraget",
+ "footprints (all headers)_s": 0.109,
+ "tiles in directory": 254,
+ "baseline": {
+  "footprints (all 254 headers)": 0.085,
+  "domain plan": 0.077,
+  "assemble: load windows (decode)": 0.653,
+  "assemble: _decide": 0.028,
+  "assemble: _covered (seam report mask)": 0.245,
+  "assemble: _seam": 0.007,
+  "open_dem total": 1.202,
+  "overlap nodes tested": 3066621
+ },
+ "canvas": {
+  "rows": 13675,
+  "cols": 14653,
+  "dtype": "float32",
+  "MB": 802,
+  "tiles": 12,
+  "sha256": "784d8c7a700e3461"
+ },
+ "cand: decode threads 10": {
+  "footprints (all 254 headers)": 0.084,
+  "domain plan": 0.076,
+  "assemble: load windows (decode)": 0.358,
+  "assemble: _decide": 0.028,
+  "assemble: _covered (seam report mask)": 0.247,
+  "assemble: _seam": 0.007,
+  "open_dem total": 0.903,
+  "identical canvas": true
+ },
+ "cand: seam mask on qualifying nodes only": {
+  "footprints (all 254 headers)": 0.086,
+  "domain plan": 0.076,
+  "assemble: load windows (decode)": 0.648,
+  "assemble: _decide": 0.029,
+  "assemble: _seam": 0.0,
+  "open_dem total": 0.96,
+  "identical canvas": true,
+  "identical seams": true
+ },
+ "seams": [],
+ "interleaved medians (5 rounds, canvas and seams identical every run)": {
+  "baseline": {
+   "open_dem total": 1.143,
+   "runs": [
+    1.195,
+    1.133,
+    1.14,
+    1.143,
+    1.149
+   ],
+   "footprints (all 254 headers)": 0.085,
+   "domain plan": 0.076,
+   "assemble: load windows (decode)": 0.651,
+   "assemble: _decide": 0.028,
+   "assemble: _covered (seam report mask)": 0.246,
+   "assemble: _seam": 0.007
+  },
+  "decode threads 10": {
+   "open_dem total": 0.852,
+   "runs": [
+    0.913,
+    0.846,
+    0.852,
+    0.846,
+    0.876
+   ],
+   "footprints (all 254 headers)": 0.085,
+   "domain plan": 0.076,
+   "assemble: load windows (decode)": 0.361,
+   "assemble: _decide": 0.028,
+   "assemble: _covered (seam report mask)": 0.248,
+   "assemble: _seam": 0.007
+  },
+  "seam mask on qualifying nodes": {
+   "open_dem total": 0.899,
+   "runs": [
+    0.897,
+    0.899,
+    0.908,
+    0.899,
+    0.901
+   ],
+   "footprints (all 254 headers)": 0.084,
+   "domain plan": 0.076,
+   "assemble: load windows (decode)": 0.65,
+   "assemble: _decide": 0.028,
+   "assemble: _seam": 0.0
+  },
+  "both": {
+   "open_dem total": 0.611,
+   "runs": [
+    0.61,
+    0.611,
+    0.617,
+    0.609,
+    0.617
+   ],
+   "footprints (all 254 headers)": 0.087,
+   "domain plan": 0.076,
+   "assemble: load windows (decode)": 0.358,
+   "assemble: _decide": 0.028,
+   "assemble: _seam": 0.0
+  }
+ }
+}
