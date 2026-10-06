@@ -609,10 +609,11 @@ Prose in suites that becomes false: `tests/python/test_core_cdt.py@44fa7f5:967-9
 `:584-586` and `tests/python/test_io_vtk_legacy.py@44fa7f5:19-21` ("`__init__.py`
 imports `_core`"), `tests/cpp/unit/test_refinement_refine.cpp@44fa7f5:8` and
 `tests/cpp/unit/test_refinement_chunks_dynamic.cpp@44fa7f5:3-4` (`for_each_chunk`).
-Master's T2 (`97eea35`, the Python audit's layering test) since pinned the
-four increment files' citations of `tests/python/test_features.py@44fa7f5:583`, and moved the
-`test_features.py` and `test_io_vtk_legacy.py` module checks into
-`tests/python/test_layering.py`. The merge takes master's prose there, less
+Master's T2 (the Python audit's layering test) since pinned, in `97eea35`,
+eight citations of `tests/python/test_features.py@44fa7f5:583` in three increment
+files, and moved, in `2f47ebb`, the module checks of `test_features.py`,
+`test_io_vtk_legacy.py` and others, among them `test_viz_scene.py`'s
+`TestModuleIsolation`, into `tests/python/test_layering.py`. The merge takes master's prose there, less
 its reason "`__init__.py` imports `_core`", and moves `test_layering.py`'s
 package-root row to layer L0 with no imports; the `fetch.http` ->
 `tin_engine` exception goes with it (`python-audit.md`, F12).
@@ -710,3 +711,4 @@ One line per step, PR B (branch `cpp-dead`):
 - Departure 2: `_core.pyi`'s comment above the two `describe` overloads no longer points at the removed `cross` stubs.
 - Departure 3: `bindings/core.cpp`'s module docstring no longer opens with "geometry primitives"; it names the triangulator and mesh surface.
 - Docs (`@architect`): `project_structure.md` lines 14, 17, 52, 446, 501, 505, 506 rewritten one for one; `05-noder.md`'s two `segment.hpp` citations and two 7.6 names pinned to `44fa7f5`; `check_citations` exits 0.
+- #191 master merge, code review, 2026-10-06. Range 5dfde43..67d0e2a (merge of b6e74cf). Verdict: CHANGES REQUESTED, prose only. -291 net, unchanged. Resolution is only the 8 described files; layering row and exception change correct (planted old row and stale exception each fail); merge-tree with fd64f8b clean, Python suite on that tree 5110 passed, 30 skipped. Blocking: `docs/increments/python-audit.md@67d0e2a:512,520,525-526,317-318`; `docs/increments/cpp-audit.md@67d0e2a:612-613`.

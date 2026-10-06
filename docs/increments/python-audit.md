@@ -315,7 +315,8 @@ passes `footprints: Any` four times (`src_python/tin_engine/catchment.py@12dace7
 ### F12. Imports that point up a layer — 0 to 20 lines, low risk (found while designing T2)
 
 Tabling every module's imports against section 5's layers (section 8) finds
-eight edges that point upward. Each is allowed in T2's table as a named
+eight edges that point upward; seven remain exceptions since #191 resolved
+`fetch.http` -> `tin_engine` (its row below). Each is allowed in T2's table as a named
 exception, with the PR that removes it:
 
 | Edge (importer -> imported) | Why it exists | Removed by |
@@ -509,7 +510,8 @@ modules it imports). Rows as today's code has them, read with the fixed
 scanner: equality, not a subset, so the table is the map and a new edge is a
 visible table edit. Layers are section 5's:
 
-- L0: `io.models`, `features`, `sources`, `run_record`, `stats`, `palettes`
+- L0: `io.models`, `features`, `sources`, `run_record`, `stats`, `palettes`,
+  `tin_engine`
 - L1: `crs`, `mosaic`, `target_grid`, `grid_domain`, `domain`, `chains`,
   `elevation`, `outline`, `burn`, `gauge`, `sensitivity`, `reference`,
   `landcover`, `decompose`, `viz`, `viz.fixtures`, `viz.protocols`,
@@ -517,13 +519,14 @@ visible table edit. Layers are section 5's:
 - L2: `io`, `io.cog`, `io.geojson`, `io.geopackage`, `io.geotiff`, `io.gml`,
   `io.mesh_index`, `io.ply`, `io.repository`, `io.rivers`, `io.station_set`,
   `io.vtk_legacy`, `fetch.http`
-- L3: `raster`, `edge_strip`, `final_check`, `tin_engine`, `_core`
+- L3: `raster`, `edge_strip`, `final_check`, `_core`
 - L4: `dem_input`, `feature_input`, `catchment`, `catchment_batch`, `fetch`,
   `fetch.plan`, `fetch.run`, `fetch.nve`
 - L5: `cli`
 
 That is all 52 modules plus `_core`. A second dict, `UPWARD`, holds F12's
-eight edges, each with the PR that removes it as its value.
+edges, each with the PR that removes it as its value: eight found, seven since
+#191 resolved `fetch.http` -> `tin_engine`.
 
 The rows that carry the eight old tests' rules, as they are today (the
 reviewer checks these against the old assertions): `viz.svg` {`viz.scene`,
