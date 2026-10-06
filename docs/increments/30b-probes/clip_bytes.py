@@ -3,10 +3,12 @@
 `docs/increments/30b-clip-speed.md`, section 6 ("The byte-identical gate").
 Two modes, each printing one line per result; run a mode before and after the
 change, with the interpreter whose `tin_engine` is the tree to measure (the
-first line prints that path). The lines that start with `fixture ` or `mesh `
-must be identical to the gate's base file, `base_5e2fbe0.txt`
-(`grep -E '^(fixture|mesh) '`; `base_a7154ec.txt` is the earlier base, kept
-as history); the rest is pytest's and the CLI's own output.
+first line prints that path). Every line of the gate's base file,
+`base_5e2fbe0.txt`, that starts with `fixture ` or `mesh ` must appear
+unchanged in the run (`grep -E '^(fixture|mesh) '`; `base_a7154ec.txt` is the
+earlier base, kept as history); the only other such lines allowed are those
+of tests the red suite added, which section 6 lists. The rest is pytest's and
+the CLI's own output.
 
     fixtures   run the suites that reach the features code in-process,
                recording every call of `open_features` (from the module or

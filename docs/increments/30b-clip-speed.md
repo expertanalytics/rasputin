@@ -1,14 +1,14 @@
 # Increment 30b — the `features clip` phase of `rasputin mesh`, made fast
 
-Status: **design approved (design review round 2); the red step comes
-next.** Designed by `@architect` 2026-10-06 on branch `worktree-clip-speed`, on
+Status: **red committed at `08269e77`; `@tester`'s pins beyond the design
+ruled (section 7, all nine stand); the green step comes next.** Designed by `@architect` 2026-10-06 on branch `worktree-clip-speed`, on
 `@perf`'s profile commit `a7154ec`, and amended the same day after design
 review round 1 (`## Review`): the whole-feature test now tests the feature's
 linework (3.2, 4.2), with pin P5 and three new probe cases. After round 2,
 master (with #199, 30a) was merged in as `5e2fbe0`, and the gate's base was
 recorded again there: `docs/increments/30b-probes/base_5e2fbe0.txt`, equal
-line for line to the earlier `base_a7154ec.txt` (section 6). No 30b code is
-on the branch yet.
+line for line to the earlier `base_a7154ec.txt` (section 6). No 30b production
+code is on the branch yet.
 
 **What this is.** The second of three pull requests that remove the
 bottlenecks `@perf` measured in `rasputin mesh` on two real catchments
@@ -408,8 +408,24 @@ modes are the gate:
   `@perf`'s profile did, and records the same line for the feature set plus a
   hash of the whole `.vtk` written.
 
-The gate: every line starting `fixture ` or `mesh ` is equal to the base
-file's.
+The gate: **every `fixture ` and `mesh ` line of the base file appears,
+unchanged, in the branch's run**; the run may also hold `fixture ` lines the
+base lacks, but only those of the red suite's tests (section 7), and the
+review lists them. The red suite (`08269e77`) adds 11, all in
+`test_feature_input.py::TestTheClipStaysTheSame`: P1's four cases, P3's one
+test, P4's three cases and P5's three cases. P2 adds none (its call raises,
+and the probe records only calls that return); R1, R2 and `TestLinework`
+call neither `open_features` nor `pre_clip`. The probe's `fixtures` mode on
+`08269e77`'s tree (the base's production code, with the red suite) gave 179
+`fixture` lines: the base's 168 unchanged, and these 11. The new lines'
+values are not gated against a base; the pins themselves assert what those
+calls return. The check, with `run.txt` the branch's output and `base.txt`
+the base file:
+
+```bash
+comm -23 <(grep -E '^(fixture|mesh) ' base.txt | sort) <(grep -E '^(fixture|mesh) ' run.txt | sort)   # must print nothing
+comm -13 <(grep -E '^(fixture|mesh) ' base.txt | sort) <(grep -E '^(fixture|mesh) ' run.txt | sort)   # the allowed new lines, listed
+```
 
 **The base.** It was run with `a7154ec`'s own install (`@perf`'s
 `worktree-bottlenecks/.venv`, a non-editable install of that commit; pytest,
@@ -461,8 +477,9 @@ scratch prototype; round 1's third row counted 16 of 165 with its own plant.
 - the two whole-feature plants on real data: the CORINE layer has polygons
   only, none with a hole outside its shell, so only the `probe::` cases and
   P5 guard 3.2;
-- the order of the refusal checks and the whole-feature test: no fixture has a
-  refused feature lying outside the region.
+- the order of the refusal checks and the whole-feature test: no fixture at
+  the base has a refused feature lying outside the region, and a refusal
+  leaves no probe line; only P2 guards it.
 
 **The prototype passes the gate**: identical `fixture` lines (168) and
 identical `mesh` lines (both catchments, `.vtk` hashes included).
@@ -484,8 +501,9 @@ the red ones, before any code. No mutation round.
   self-crossing; a self-touch at a vertex; doubling back; a line touching a
   hole's boundary; a zero-length line. Also false for a line partly outside and
   a line wholly outside. Use a domain with an extra vertex on one side and a
-  domain with a hole, at the existing `X0, Y0` offset. Coordinates must be
-  exactly representable.
+  domain with a hole, at `geos_cases.py`'s whole-metre offset (500000,
+  6600000). Coordinates must be exactly representable, which the fixtures'
+  `X0, Y0` (500000.3, 6600000.7) are not.
 - **R2. `_untouched` against GEOS.** On a seeded random set (a few hundred
   short lines near a domain with a hole, some rounded to a lattice, some
   closed, some with a repeated vertex, some through a domain vertex): wherever
@@ -502,9 +520,14 @@ the red ones, before any code. No mutation round.
 
 - **P1. The pieces of a chain the domain covers but touches.** Through
   `open_features` on a GeoJSON source, for: a ring inside touching the outline
-  at one vertex; a line running along the outline; a self-crossing ring inside
+  at one vertex, not its start; a line running along the outline past a
+  domain vertex; a self-crossing ring inside
   (the bowtie of `test_a_self_intersecting_ring_is_linework_not_refused`); a
-  ring inside with a repeated vertex. The feature's `lines` equal, piece by
+  ring inside with a repeated vertex. GEOS gives back whole a ring that
+  touches the outline only at its start vertex, and a line along a side with
+  no domain vertex on it, so those shapes would pin nothing; each case
+  asserts first that the domain covers the chain and GEOS does not give it
+  back whole. The feature's `lines` equal, piece by
   piece and vertex by vertex, the parts of `shapely.intersection(chain,
   domain)` that are lines of positive length, where `chain` is the source
   ring or line. The test computes that oracle. This is the pin that the
@@ -535,6 +558,55 @@ the red ones, before any code. No mutation round.
 
 The existing tests (`TestClip`, `TestPreClip`, `TestPreClipKeepsWholeEdges`,
 `TestPreClipThroughOpenFeatures`, `TestLongEdgeWidening`) stay as they are.
+
+### What `@tester` pinned beyond this section, and the ruling
+
+Ruled after the red commit `08269e77` and before green, on the three classes
+it added (`tests/python/test_feature_input.py@08269e77:1054-1350`). Checked
+against the red tree: the 24 red tests fail only with `AttributeError` for
+`_untouched` or `_linework`, and the 14 pins pass; with this design's two
+helpers put in, all 38 pass. Planted in a scratch copy of the installed
+package: `_untouched` as `covers` fails 11 R1 cases and R2; `_untouched`
+returning numpy's bool fails 14 R1 cases; the `covers` skip in `_take` fails
+all four P1 cases; round 1's whole-feature test on `moved` fails P5's first
+case; the test on `moved.boundary` fails P5's line; a whole-feature test put
+before the class-map check fails P2's far case (and P5's first).
+
+`@architect`'s ruling, 2026-10-06: **all nine stand; `@tester` changes
+nothing.** Two of them (1 and 5) were the design's wording at fault, and R1
+and P1 above now say what the tests do.
+
+1. *R1 uses `geos_cases.py`'s offset (500000, 6600000), not the fixtures'
+   `X0, Y0`.* Keep: R1 must be exactly representable and the 14 cases are
+   `geos_cases.py`'s; `X0, Y0` end in .3 and .7. R1's text is corrected.
+2. *`_untouched` returns a Python `bool` (`is True`/`is False`), is pure, and
+   is called with the domain prepared.* Keep: 3.4 declares `-> bool` and
+   says pure, and `_take` passes the prepared `domain.polygon`; the code
+   wraps shapely's numpy bool in `bool(...)`.
+3. *R2: seed 302, 400 lines, a 48-vertex domain with a 120 m hole, five line
+   kinds, at least 40 true.* Keep: it is section 7's "a few hundred" and "a
+   tenth" made concrete; at this seed it is true for 91 (55 open, 19
+   counter-clockwise, 17 clockwise), rerun here, so the floors have room.
+4. *`TestLinework` (7 tests): `_linework(g)`'s parts equal
+   `feature_fixtures.boundary_lines(g)` in order; the hole outside its
+   shell's box.* Keep: it is 3.2's definition (`geometry.boundary` gives the
+   rings in that order) and the second test is 4.2's reason for the helper.
+5. *P1's shapes differ from the wording, and each case asserts its
+   precondition (covered, and not given back whole).* Keep: the literal
+   shapes come back whole from GEOS (checked here) and would pin nothing.
+   P1's text is corrected.
+6. *P2: map `strict`, `otherwise="refuse"`; the error matches
+   `far-9.*'ice'.*strict`.* Keep: the message is today's and 30b does not
+   touch it; the far case is the one that fails when the order breaks.
+7. *P3: a square 150 m east, a line 1.5 km west, a square 50 km away; also
+   `clipped == 0` and `empty == 0`.* Keep: 4.4 says both counts are
+   unchanged, and the line covers the linework test's line branch.
+8. *P4's coordinates.* Keep: on `REGION` (0..10)², a crossing edge, an edge
+   from (10, 5) on the boundary, and an edge missing the corner by about 0.35.
+9. *P5: the line's piece is exactly `[at(0,150), at(300,150)]` (direction
+   pinned) and the holes' lines equal `INNER.exterior.coords` vertex by
+   vertex.* Keep: that is today's output, and 30b promises the vertices and
+   their order do not change.
 
 ## 8. Net production lines, and the prototype
 
@@ -587,8 +659,9 @@ after each run**:
 
 1. **Byte-identical**: the probe's `mesh` mode on both catchments, every line
    equal to `base_5e2fbe0.txt` (feature set and `.vtk` hash), and its
-   `fixtures` mode, every line equal. 30a is already in that base (section
-   6).
+   `fixtures` mode, every base line present and unchanged, with the red
+   suite's 11 new lines the only additions (section 6 gives the check and the
+   list). 30a is already in that base (section 6).
 2. **Time**: `rasputin mesh --stats` on both catchments, three repeats each,
    base and branch alternated, as
    `docs/benchmarks/2026-10-06/bottlenecks/scripts/stats.sh` does. Read the
