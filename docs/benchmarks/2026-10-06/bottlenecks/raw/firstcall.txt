@@ -1,0 +1,18 @@
+-- cold
+open_dem run 1 1.722
+open_dem run 2 1.597
+modules 8
+-- warm
+imports 0.0
+open_dem run 1 1.724
+open_dem run 2 1.602
+modules 8
+-- cold
+open_dem run 1 1.721
+open_dem run 2 1.605
+modules 8
+-- warm
+imports 0.0
+open_dem run 1 1.726
+open_dem run 2 1.607
+modules 8

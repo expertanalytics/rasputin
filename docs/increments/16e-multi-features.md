@@ -80,7 +80,7 @@ The plumbing below `cli.py` already models several sources. Read directly:
   tuple[FeatureSource, ...]`.
 - `src_python/tin_engine/feature_input.py@44fa7f5:121-128` — each `FeatureSource` carries its own `path`,
   `class_map`, `layer` and `crs`.
-- `src_python/tin_engine/feature_input.py@44fa7f5:235-248` — `open_features` **loops over
+- `src_python/tin_engine/feature_input.py@3599be1:235-248` — `open_features` **loops over
   `request.sources`**, accumulates every source's features into one `_Tally`,
   and returns per-source tuples `crs=(...)` and `layers=(...)` alongside the
   flat `features` tuple.
@@ -307,7 +307,7 @@ Today `src_python/tin_engine/cli.py@7d9882d:834-854` writes one `features`, one 
   `TerrainFeature` does not carry today. **Ruling (D2, for Ola):** rather than
   add a field to the frozen `TerrainFeature`, `open_features` returns a new
   per-source count tuple `FeatureSet.counts: tuple[int, ...]` (features kept per
-  source), filled in the existing per-source loop (`src_python/tin_engine/feature_input.py@44fa7f5:245-248`).
+  source), filled in the existing per-source loop (`src_python/tin_engine/feature_input.py@3599be1:245-248`).
   This is ~3 lines in `feature_input.py` and keeps the file record honest per
   source. Chains and noded-vertex counts stay whole-run (they are properties of
   the merged PSLG, not of a source).

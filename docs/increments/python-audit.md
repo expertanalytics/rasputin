@@ -1224,7 +1224,7 @@ differ).
 
 - `src_python/tin_engine/domain.py@44fa7f5:62` uses `same_crs`: one rule everywhere; otherwise a domain spelt as a PROJ string of the DEM's CRS goes through a transform while the record says `domain_transform` "none".
 - When the same, `to_crs` returns the same polygon labelled `target.to_string()`, not `self`: today's output exactly (probe: the PROJ-string domain comes back bit-identical, labelled `EPSG:25833`), and the result's `crs` is always `dst`'s.
-- `src_python/tin_engine/feature_input.py@44fa7f5:300` and `src_python/tin_engine/fetch/plan.py@618328b:118` use `same_crs` too, by the same rule; neither changes a wording.
+- `src_python/tin_engine/feature_input.py@618328b:300` and `src_python/tin_engine/fetch/plan.py@618328b:118` use `same_crs` too, by the same rule; neither changes a wording.
 - Red tests 8-10 below are needed: each site's output is the same today, so only a refused point-moving `Transformer` method can tell the fix from the bug.
 - `@tester`'s departure, accepted: `TestTheSameCrs`'s guard refuses the point-moving methods (`transform`, `itransform`, `transform_bounds`), not `Transformer.from_crs`, since `same_crs` builds one to compare; the invariant (no point moved) is unchanged and the guard was shown still to catch a real transform.
 - `@tester`'s departure, accepted: wording pins at the other two `single_crs` sites (the `--out-crs` path and `catchment.delineate`), beyond test 4's one.
