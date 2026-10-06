@@ -478,3 +478,119 @@ def test_a_copy_to_a_file_or_an_ungoverned_directory_is_silent(
     set_mode(repo, mode)
     assert pretool_decision(run_script(repo, GUARD_GOVERNANCE, bash_event(repo, command))) is None
     assert queue_lines(repo) == []
+
+
+# ---------------------------------------------------------------- h16 G4, round 9
+#
+# §2 G4, amended after review round 9 (Ola's option A): `governed()` judges a
+# path also in its normalised form (`posixpath.normpath`: `.`, `..` and a
+# doubled `/` resolved as text), and in its form as written, so a trailing `/`
+# or `/.` that the prefix rules rely on still counts.
+
+RULES = "This changes a file that states rules: "
+
+#: {command: text the ask must name after its lead-in}: the governed file's
+#: basename, since the form of the path named (as written or normalised) is
+#: not fixed by the design.
+G4_ROUND9_ASKED: dict[str, str] = {
+    "cp json.py tools/.": "json.py",
+    "cp json.py tools/./": "json.py",
+    "mv json.py tools/./json.py": "json.py",
+    "cp json.py tools//json.py": "json.py",
+    "cp json.py tools/x/../json.py": "json.py",
+    "cp json.py ./tools/.": "json.py",
+    "cp -t tools/. json.py": "json.py",
+    "install json.py tools/.": "json.py",
+    "echo x > tools/./ast.py": "ast.py",
+    "echo x > .claude/./agents/x.md": "x.md",
+    "cp a.md .claude/./agents/a.md": "a.md",
+    # Controls that ask today by the `.claude/hooks/` prefix on the form as
+    # written, and would pass if only the normalised form were judged.
+    "rm -r .claude/hooks/": ".claude/hooks/",
+    "rm -r .claude/hooks/.": ".claude/hooks/",
+}
+
+#: Normalised, each names a file no rule governs.
+G4_ROUND9_PASSED = (
+    "cp x.py tools/.",
+    "cp json.py src/.",
+    "mv tools/./old.py tools/./new.py",
+    "cp json.py tools/../json.py",
+    "cp CLAUDE.md /tmp/x.md",
+)
+
+#: Written into a checkout through Write or Edit.
+G4_ROUND9_FILES = (".claude/./agents/x.md", "tools/./json.py")
+
+
+@pytest.mark.parametrize("mode", ["off", "on"])
+@pytest.mark.parametrize("command", G4_ROUND9_ASKED)
+def test_a_governed_path_written_with_dot_segments_asks(
+    repo: Path, mode: str, command: str
+) -> None:
+    set_mode(repo, mode)
+    found = pretool_decision(run_script(repo, GUARD_GOVERNANCE, bash_event(repo, command)))
+    assert found is not None, f"{command!r} passed silently"
+    kind, reason = found
+    lead = "it writes " if mode == "on" else RULES
+    assert kind == ("deny" if mode == "on" else "ask")
+    assert lead in reason
+    assert G4_ROUND9_ASKED[command] in reason.split(lead, 1)[1]
+    if mode == "on":
+        [line] = queue_lines(repo)
+        assert (line["hook"], line["act"]) == ("guard_governance", command)
+    else:
+        assert queue_lines(repo) == []
+
+
+@pytest.mark.parametrize("mode", ["off", "on"])
+@pytest.mark.parametrize("command", G4_ROUND9_PASSED)
+def test_an_ungoverned_path_written_with_dot_segments_is_silent(
+    repo: Path, mode: str, command: str
+) -> None:
+    set_mode(repo, mode)
+    assert pretool_decision(run_script(repo, GUARD_GOVERNANCE, bash_event(repo, command))) is None
+    assert queue_lines(repo) == []
+
+
+@pytest.mark.parametrize("mode", ["off", "on"])
+@pytest.mark.parametrize("tool", ["Edit", "Write"])
+@pytest.mark.parametrize("relative", G4_ROUND9_FILES)
+def test_a_file_tool_write_to_a_governed_path_with_dot_segments_asks(
+    repo: Path, mode: str, tool: str, relative: str
+) -> None:
+    set_mode(repo, mode)
+    path = f"{repo}/{relative}"
+    found = pretool_decision(run_script(repo, GUARD_GOVERNANCE, file_event(repo, tool, path)))
+    assert found is not None, f"{path} is not governed"
+    kind, reason = found
+    assert kind == ("deny" if mode == "on" else "ask")
+    assert path in reason
+    assert len(queue_lines(repo)) == (1 if mode == "on" else 0)
+
+
+@pytest.mark.parametrize("mode", ["off", "on"])
+@pytest.mark.parametrize("tool", ["Edit", "Write"])
+def test_a_dot_segment_path_under_a_scratchpad_is_not_governed(
+    repo: Path, pad: Path, mode: str, tool: str
+) -> None:
+    """G3a's scratchpad check stays first."""
+    set_mode(repo, mode)
+    event = file_event(repo, tool, f"{pad}/tools/./json.py")
+    assert pretool_decision(run_script(repo, GUARD_GOVERNANCE, event)) is None
+    assert queue_lines(repo) == []
+
+
+@pytest.mark.parametrize(
+    ("path", "expected"),
+    [
+        ("tools/./json.py", True),
+        ("tools//ast.py", True),
+        ("a/tools/x/../typing.py", True),
+        ("tools/./scratch_copy.py", False),
+        ("docs/x/./ast.py", False),
+        ("tools/../json.py", False),
+    ],
+)
+def test_governed_judges_the_normalised_path_too(path: str, expected: bool) -> None:
+    assert load_hook("guard_governance").governed(path) is expected

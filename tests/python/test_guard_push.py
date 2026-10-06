@@ -10,6 +10,7 @@ queued; a pass is silent in both.
 from __future__ import annotations
 
 import importlib.util
+import json
 import subprocess
 import sys
 from pathlib import Path
@@ -28,6 +29,7 @@ from harness_fixtures import (
     clean_env,
     file_event,
     git,
+    load_tool,
     make_repo,
     point_scratchpad,
     pretool_decision,
@@ -848,3 +850,194 @@ def load_guard_push() -> ModuleType:
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
+
+
+# ---------------------------------------------------------------- h16 G7, round 9
+#
+# §2 G7, amended after review round 9 (Ola's option A, and his default yes on
+# §7 question 5): `runs` carries two flags down the chain of programs, `under`
+# (this command, or a runner before it, is `parallel`) and `quoted` (it, or a
+# runner before it, is `watch`, `parallel` or `flock`). So a runner in front of
+# one of the three no longer hides it, and each word is read once per chain,
+# so a line of many shell words is judged in linear time.
+
+#: The heads, each with the reason it asks with when it is the first word.
+G7_ROUND9_HEADS: dict[str, str] = {
+    "parallel git ::: push": UNKNOWN,
+    "parallel ::: git ::: push": UNKNOWN,
+    "parallel gh ::: pr ::: merge": UNKNOWN,
+    "parallel 'git push' ::: a": PUSH,
+    "watch 'git push'": PUSH,
+    "flock /tmp/l -c 'git push'": PUSH,
+}
+
+#: Runners that are not wrappers `shell_scan` strips: red on `a0001d00`.
+#: `{}` is where the head goes.
+G7_ROUND9_RUNNERS = (
+    "caffeinate {}",
+    "caffeinate -i {}",
+    "stdbuf -o0 {}",
+    "arch -arm64 {}",
+    r"find . -maxdepth 0 -exec {} \;",
+    "env FOO=1 caffeinate {}",
+)
+
+#: The arguments a wrapper needs before the command it runs; a wrapper not
+#: named here takes the command at once.
+WRAPPER_PREFIX = {"timeout": "timeout 5", "script": "script -q /dev/null"}
+
+
+def wrapper_runners() -> list[str]:
+    """One runner per name in `shell_scan.WRAPPERS`, read from the module, not copied.
+
+    Read at collection, so a missing or broken module gives no rows here rather
+    than a collection error; `test_the_matrix_holds_every_wrapper` then fails
+    in its body, naming the cause.
+    """
+    if not (REAL / "tools" / "shell_scan.py").exists():
+        return []
+    try:
+        names = sorted(load_tool("shell_scan").WRAPPERS)
+    except Exception:  # judged in the test body, not at collection
+        return []
+    return [WRAPPER_PREFIX.get(name, name) + " {}" for name in names]
+
+
+#: The runner matrix: each runner before each head asks with the head's reason.
+#: The wrapper rows ask on `a0001d00` too, and guard the stripping.
+G7_ROUND9_MATRIX: dict[str, str] = {
+    runner.format(head): why
+    for runner in (*G7_ROUND9_RUNNERS, *wrapper_runners())
+    for head, why in G7_ROUND9_HEADS.items()
+}
+
+G7_ROUND9_ASKED: dict[str, str] = {
+    **G7_ROUND9_MATRIX,
+    # A runner between runners: the flags pass down the whole chain.
+    "watch parallel git ::: push": UNKNOWN,
+    "caffeinate watch caffeinate parallel git ::: push": UNKNOWN,
+    # Asks on `a0001d00`; keeps (c) alive through a shell under the new flags.
+    "parallel sh -c {} ::: 'git push'": PUSH,
+    # Pinned false positives: a runner's name as an argument starts a chain.
+    "grep parallel git ::: x": UNKNOWN,
+    "echo parallel gh ::: pr": UNKNOWN,
+    "caffeinate parallel git ::: status": UNKNOWN,
+    "grep watch 'git push' file": PUSH,
+}
+
+#: Controls: reads through a runner before one of the three, and quoted words
+#: that only name a runner. Round 7's and round 8's controls stay as they are.
+G7_ROUND9_PASSED = (
+    "caffeinate parallel 'git status' ::: a",
+    "stdbuf -o0 flock /tmp/l -c 'git status'",
+    "caffeinate watch -n5 'gh pr checks 185'",
+    "caffeinate watch -n5 git status",
+    "watch sh -c 'git commit -m \"git push\"'",
+    "git log --grep 'watch git push'",
+)
+
+
+def test_the_matrix_holds_every_wrapper() -> None:
+    names = set(shell_scan.WRAPPERS)
+    assert names, "shell_scan.WRAPPERS is empty: the wrapper rows would measure nothing"
+    runners = {runner.split()[0] for runner in wrapper_runners()}
+    assert runners == names
+    assert len(G7_ROUND9_MATRIX) == len(G7_ROUND9_HEADS) * (len(G7_ROUND9_RUNNERS) + len(names))
+
+
+@pytest.mark.parametrize("mode", ["off", "on"])
+@pytest.mark.parametrize("command", G7_ROUND9_ASKED)
+def test_a_runner_in_front_of_parallel_watch_or_flock_asks_with_the_heads_reason(
+    repo: Path, mode: str, command: str
+) -> None:
+    set_mode(repo, mode)
+    found = pretool_decision(run_script(repo, GUARD_PUSH, bash_event(repo, command)))
+    assert found is not None, f"{command!r} passed silently"
+    kind, reason = found
+    assert kind == ("deny" if mode == "on" else "ask")
+    assert G7_ROUND9_ASKED[command] in reason
+    if mode == "on":
+        [line] = queue_lines(repo)
+        assert (line["hook"], line["act"]) == ("guard_push", command)
+    else:
+        assert queue_lines(repo) == []
+
+
+@pytest.mark.parametrize("mode", ["off", "on"])
+@pytest.mark.parametrize("command", G7_ROUND9_PASSED)
+def test_a_read_through_a_runner_before_parallel_watch_or_flock_is_silent(
+    repo: Path, mode: str, command: str
+) -> None:
+    set_mode(repo, mode)
+    assert pretool_decision(run_script(repo, GUARD_PUSH, bash_event(repo, command))) is None
+    assert queue_lines(repo) == []
+
+
+# The slow line (§7 question 5). Rule (b) as on `a0001d00` parses the rest of
+# the line at every shell word, so the cost doubles per word: through the hook,
+# 23 `sh` words before `-c 'git push'` took 6.4 s in one run and 50.6 s in
+# another, and 40 did not finish in 120 s. Claude Code lets the command through
+# when a hook times out (600 s), so a slow guard is an open guard.
+#
+# The bound, measured from outside the hook process: 5 s per line, for lines
+# of up to 400 runner or shell words (the largest checked here). The design's
+# prototype of the linear `runs` answered each row in under 0.2 s through the
+# hook, Python's start included, so 5 s leaves room for a loaded CI runner and
+# still fails the doubling cost by orders of magnitude at 40 words.
+SLOW_LINE_BOUND_S = 5.0
+
+#: {line: the reason it asks with}; each has 30 or 40 runner or shell words.
+SLOW_LINES_ASKED: dict[str, str] = {
+    "sh " * 40 + "-c 'git push'": PUSH,
+    "watch " * 40 + "'git push'": PUSH,
+    "caffeinate sh -c " * 30 + "'git push'": PUSH,
+}
+
+#: 400 shell words before a read: judged without a deny from Python's
+#: recursion limit (1000 frames), which the design puts at one frame per word.
+SLOW_LINE_PASSED = "bash " * 400 + "-c 'git status'"
+
+
+def timed_hook(repo: Path, command: str) -> subprocess.CompletedProcess[str]:
+    """Run the copied push guard on `command`, failing if it takes longer than the bound."""
+    script = repo / GUARD_PUSH
+    try:
+        return subprocess.run(
+            [sys.executable, str(script)],
+            input=json.dumps(bash_event(repo, command)),
+            capture_output=True,
+            text=True,
+            cwd=repo,
+            env=clean_env(),
+            timeout=SLOW_LINE_BOUND_S,
+            check=False,
+        )
+    except subprocess.TimeoutExpired:
+        pytest.fail(
+            f"guard_push took longer than {SLOW_LINE_BOUND_S} s on a line of "
+            f"{len(command.split())} words: past the hook's time limit the command runs unasked"
+        )
+
+
+@pytest.mark.parametrize("mode", ["off", "on"])
+@pytest.mark.parametrize(
+    "command", SLOW_LINES_ASKED, ids=["40-sh", "40-watch", "30-caffeinate-sh-c"]
+)
+def test_a_line_of_many_runner_or_shell_words_is_judged_within_the_bound(
+    repo: Path, mode: str, command: str
+) -> None:
+    set_mode(repo, mode)
+    found = pretool_decision(timed_hook(repo, command))
+    assert found is not None, "the line passed silently"
+    kind, reason = found
+    assert kind == ("deny" if mode == "on" else "ask")
+    assert SLOW_LINES_ASKED[command] in reason
+
+
+@pytest.mark.parametrize("mode", ["off", "on"])
+def test_four_hundred_shell_words_before_a_read_pass_within_the_bound(
+    repo: Path, mode: str
+) -> None:
+    set_mode(repo, mode)
+    assert pretool_decision(timed_hook(repo, SLOW_LINE_PASSED)) is None
+    assert queue_lines(repo) == []
