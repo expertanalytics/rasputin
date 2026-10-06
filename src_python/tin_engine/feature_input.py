@@ -200,12 +200,16 @@ def pre_clip(
             xy = shapely.get_coordinates(ring)
             if len(xy) < 2:
                 continue
-            segments = shapely.linestrings(np.stack([xy[:-1], xy[1:]], axis=1))
-            keep = np.asarray(shapely.intersects(segments, region))
+            inside = shapely.intersects_xy(region, xy[:, 0], xy[:, 1])
+            keep = inside[:-1] | inside[1:]  # an edge with an end in the region meets it
+            rest = np.flatnonzero(~keep)
+            segments = shapely.linestrings(np.stack([xy[rest], xy[rest + 1]], axis=1))
+            keep[rest] = shapely.intersects(region, segments)  # prepared region first
             if widening is not None:
-                for k in np.flatnonzero(~keep):
+                for i in np.flatnonzero(~keep[rest]):
+                    k = rest[i]
                     w = widening((xy[k, 0], xy[k, 1]), (xy[k + 1, 0], xy[k + 1, 1]))
-                    keep[k] = shapely.distance(segments[k], region) <= w
+                    keep[k] = shapely.distance(segments[i], region) <= w
             out += _runs(xy, keep, closed)
     return tuple(out)
 
@@ -217,6 +221,8 @@ def _runs(
     start vertex is one chain, joined across it."""
     if keep.all():
         return [LineString(xy)]
+    if not keep.any():
+        return []
     n = len(keep)
     first = int(np.flatnonzero(~keep)[0]) + 1 if closed else 0
     chains: list[LineString] = []
@@ -228,6 +234,25 @@ def _runs(
             chains.append(LineString([xy[run[0]], *(xy[j + 1] for j in run)]))
             run = []
     return chains
+
+
+def _linework(geometry: BaseGeometry) -> BaseGeometry:
+    """Every edge ``pre_clip`` tests, as lines: a polygon's rings (each hole's
+    too, wherever it lies), or the lines themselves."""
+    return geometry.boundary if isinstance(geometry, Polygon | MultiPolygon) else geometry
+
+
+def _untouched(line: BaseGeometry, domain: Polygon) -> bool:
+    """True when ``intersection(line, domain)`` gives ``line`` back unchanged:
+    two or more vertices, no repeated one, in the domain's interior, and simple
+    (30b, section 3.4). ``domain`` first, so its prepared form is used."""
+    xy = shapely.get_coordinates(line)
+    return (
+        len(xy) >= 2
+        and not (xy[1:] == xy[:-1]).all(axis=1).any()
+        and bool(shapely.contains_properly(domain, line))
+        and bool(shapely.is_simple(line))
+    )
 
 
 def open_features(request: FeatureRequest, domain: DomainPolygon, dem_crs: str | CRS) -> FeatureSet:
@@ -274,6 +299,7 @@ class _Tally:
         self.scanned: list[str] = []
         self.seconds = 0.0
         shapely.prepare(domain.polygon)
+        self.inner = domain.polygon.point_on_surface()
 
     def source(self, source: FeatureSource) -> tuple[str, str | None]:
         """Read one source and take in its features; its CRS text and layer."""
@@ -299,6 +325,7 @@ class _Tally:
         src = parse_crs(own)
         move = None if same_crs(src, self.dem) else reprojector(src, self.dem)
         bound, region = None, source_region(self.domain, self.dem, self.dem)
+        shapely.prepare(region)
         if move is not None and src.is_geographic:
             steps = transform_definition(src, self.dem)
             if "gridshift" not in steps and "deformation" not in steps:
@@ -330,20 +357,25 @@ class _Tally:
                 polygon = moved if polygonal else None
             if not all(_finite(g) for g in kept):
                 raise FeatureError(f"{name}: feature {fid} has a vertex with no image in the DEM")
-            if moved is not None:
-                kept = list(pre_clip(moved, region))
+            if moved is not None:  # a feature whose linework misses the region keeps no edge
+                kept = list(pre_clip(moved, region)) if region.intersects(_linework(moved)) else []
             coded: dict[str, Any] = {"code": code, "polygon": polygon}
+            dom = self.domain.polygon
             lines = tuple(
                 piece
                 for line in kept
-                for piece in shapely.get_parts(shapely.intersection(line, self.domain.polygon))
+                for piece in (
+                    (line,)
+                    if _untouched(line, dom)
+                    else shapely.get_parts(shapely.intersection(line, dom))
+                )
                 if isinstance(piece, LineString) and piece.length > 0
             )
             if lines:
                 self.features.append(TerrainFeature(fid=fid, mask=mask, lines=lines, **coded))
                 # A dropped edge lies outside, so a pre-clipped chain is not covered.
                 self.clipped += not all(self.domain.polygon.covers(g) for g in kept)
-            elif polygon is not None and polygon.intersects(self.domain.polygon.point_on_surface()):
+            elif polygon is not None and polygon.intersects(self.inner):
                 # No boundary crosses the domain, and a point of it is inside: it
                 # covers the domain, and labels it (R5). Kept, not clipped.
                 self.features.append(TerrainFeature(fid=fid, mask=mask, lines=(), **coded))
