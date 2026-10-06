@@ -12,7 +12,7 @@ Pinned here, from the design:
   holds more than one features table) or `.geojson`/`.json`, in the file's
   own CRS.
 - The output is a `FeatureCollection` of one `Feature`, the polygon in the
-  DEM's CRS, with a `crs` member naming it; `domain.read_domain` reads it.
+  DEM's CRS, with a `crs` member naming it; `io.domain_file.read_domain` reads it.
   In PR 1 the polygon is the fine outline, so its area is the marching-squares
   area of the catchment's nodes, holes filled; coordinates survive the round
   trip (`repr` precision), so the area read back is that, to 1e-12.
@@ -78,7 +78,7 @@ from test_outline import square_area
 from tin_engine._core import accumulate as core_accumulate
 from tin_engine._core import upstream as core_upstream
 from tin_engine.crs import parse_crs, reprojector
-from tin_engine.domain import read_domain
+from tin_engine.io.domain_file import read_domain
 from tin_engine.raster import to_core
 
 SEED = lat(100, 200)  # the bowl's centre node, inside the lake
@@ -142,6 +142,24 @@ def expected_area() -> float:
 # ---------------------------------------------------------------------------
 # The round trip
 # ---------------------------------------------------------------------------
+
+
+def lakes_help(text: str) -> str:
+    """The `--lakes` option's help in `plain` help output: from `--lakes ` to
+    the next option."""
+    return text.split("--lakes ", 1)[1].split(" --", 1)[0]
+
+
+def test_lakes_help_says_which_file_it_takes() -> None:
+    """Audit PR C, red test 6 (`docs/increments/python-audit.md`, section 12,
+    Ola's ruling of section 7): `catchment --lakes` takes any polygon file,
+    not `station-catchments`' NVE lakes file."""
+    code, text = invoke("catchment", "--help")
+    assert code == 0, text
+    own = lakes_help(text)
+    assert "Any polygon file" in own, own
+    assert ".gpkg" in own, own
+    assert "fetch-stations" not in text
 
 
 def test_the_output_is_one_feature_in_the_dem_crs(

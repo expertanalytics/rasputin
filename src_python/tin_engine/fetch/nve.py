@@ -23,6 +23,7 @@ from collections.abc import Callable, Mapping, Sequence
 from datetime import UTC, datetime
 from typing import Any
 
+from tin_engine.io.geojson import feature_collection
 from tin_engine.sources import StationSource, notice
 
 from .http import FetchError, query_url
@@ -113,11 +114,7 @@ def _features(text: str, where: str) -> list[dict[str, Any]]:
 
 
 def _collection(crs: str, features: list[dict[str, Any]]) -> bytes:
-    doc = {
-        "type": "FeatureCollection",
-        "crs": {"type": "name", "properties": {"name": crs}},
-        "features": features,
-    }
+    doc = feature_collection(crs, features)
     return (json.dumps(doc, ensure_ascii=False, indent=1) + "\n").encode("utf-8")
 
 

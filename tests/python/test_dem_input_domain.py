@@ -85,7 +85,10 @@ def di() -> ModuleType:
 
 @pytest.fixture(scope="module")
 def dm() -> ModuleType:
-    return importlib.import_module("tin_engine.domain")
+    """`read_domain`'s module, the only name these tests take from it: since
+    audit PR C (`docs/increments/python-audit.md`, section 12) it is
+    `tin_engine.io.domain_file`, not `tin_engine.domain`."""
+    return importlib.import_module("tin_engine.io.domain_file")
 
 
 @pytest.fixture(scope="module")

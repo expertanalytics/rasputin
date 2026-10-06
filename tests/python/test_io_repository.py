@@ -282,12 +282,30 @@ OPENERS = frozenset(
 )
 
 
+def repository_names(tree: ast.AST) -> set[str]:
+    """The names `tree` imports from `io/repository.py` (relatively or by its
+    dotted name): calling one is asking the repository to open the file."""
+    return {
+        alias.asname or alias.name
+        for node in ast.walk(tree)
+        if isinstance(node, ast.ImportFrom)
+        and (node.module, node.level) in {("repository", 1), ("tin_engine.io.repository", 0)}
+        for alias in node.names
+    }
+
+
 def file_openers(source: str) -> list[str]:
-    """Every call in `source` that opens a file, as `name:line`."""
+    """Every call in `source` that opens a file, as `name:line`. A bare call
+    to a name imported from the repository (audit PR C's `read_text(path)` in
+    `io/domain_file.py`) is the repository's, not an opener."""
+    tree = ast.parse(source)
+    delegated = repository_names(tree)
     found = []
-    for node in ast.walk(ast.parse(source)):
+    for node in ast.walk(tree):
         if isinstance(node, ast.Call):
             func = node.func
+            if isinstance(func, ast.Name) and func.id in delegated:
+                continue
             name = (
                 func.id
                 if isinstance(func, ast.Name)
@@ -376,6 +394,30 @@ class TestQ3OneModuleOpensFiles:
     def test_the_scanner_ignores_streams_and_prose(self) -> None:
         clean = '"""Nothing here opens a file."""\ntif = tifffile.TiffFile(stream)\nstream.read()\n'
         assert file_openers(clean) == []
+
+    @pytest.mark.parametrize(
+        "source",
+        [
+            "from .repository import read_text\nread_text(p)",
+            "from tin_engine.io.repository import read_text as rt\nrt(p)",
+        ],
+    )
+    def test_a_call_to_the_repositorys_own_reader_is_not_an_opener(self, source: str) -> None:
+        assert file_openers(source) == []
+
+    @pytest.mark.parametrize(
+        "planted",
+        [
+            "from .repository import read_text\nPath(p).read_text()",
+            "from .repository import read_json\nread_text(p)",
+            "from .other import read_text\nread_text(p)",
+            "from repository import read_text\nread_text(p)",
+        ],
+    )
+    def test_only_the_repositorys_own_names_are_let_through(self, planted: str) -> None:
+        """A method call of the same name, a name from elsewhere, and an
+        absolute `repository` that is not this package's are still found."""
+        assert file_openers(planted), planted
 
     def test_no_other_io_module_opens_a_file(self) -> None:
         offenders = {

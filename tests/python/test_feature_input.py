@@ -42,6 +42,7 @@ the change.
 
 from __future__ import annotations
 
+import json
 import sqlite3
 from contextlib import closing
 from pathlib import Path
@@ -60,6 +61,7 @@ from shapely.geometry import (
     MultiPolygon,
     Point,
     Polygon,
+    mapping,
 )
 
 import feature_fixtures as ff
@@ -88,6 +90,9 @@ LAEA = "EPSG:3035"
 WATER_CODES = ("511", "512", "521", "522", "523")
 BOX = domain_of(square(0, 0, 300, 300))
 INNER = square(100, 100, 200, 200)
+#: `INNER` as a GeoJSON geometry, and a `crs` member naming the DEM's CRS.
+GEOMETRY = json.loads(json.dumps(mapping(INNER)))
+MEMBER = {"type": "name", "properties": {"name": UTM33}}
 
 
 @pytest.fixture(scope="module")
@@ -568,6 +573,193 @@ class TestCrs:
 
 
 # --------------------------------------------------------- region and clip
+
+
+class TestOneGeojsonRule:
+    """Audit PR C (`docs/increments/python-audit.md`, section 12, red test 2):
+    `read_source`'s GeoJSON branch reads through `io.geojson.read_collection`
+    with RFC 7946's default, and a refusal reaches the existing handler as
+    `<file name>: <words>`. Each row here differs from the code before it."""
+
+    @staticmethod
+    def rows(fi: ModuleType, path: Path) -> Any:
+        return fi.read_source(path, None, "property", lambda _crs: (0.0, 0.0, 0.0, 0.0))
+
+    @staticmethod
+    def written(tmp_path: Path, doc: object) -> Path:
+        path = tmp_path / "f.geojson"
+        path.write_text(json.dumps(doc), encoding="utf-8")
+        return path
+
+    @staticmethod
+    def collection(**members: Any) -> dict[str, Any]:
+        feature = {"type": "Feature", "properties": {"property": "road"}, "geometry": GEOMETRY}
+        return {"type": "FeatureCollection", "features": [feature]} | members
+
+    @pytest.mark.parametrize(
+        ("member", "says"),
+        [
+            (None, "the crs member is null; the file must name its CRS"),
+            ({}, "the crs member has no name; it must name the CRS"),
+        ],
+        ids=["null", "empty_object"],
+    )
+    def test_a_member_naming_nothing_is_refused_naming_the_file(
+        self, tmp_path: Path, fi: ModuleType, member: Any, says: str
+    ) -> None:
+        """Before: both read as EPSG:4326, as if the member were absent."""
+        path = self.written(tmp_path, self.collection(crs=member))
+        with pytest.raises(fi.FeatureError) as info:
+            self.rows(fi, path)
+        assert str(info.value) == f"f.geojson: {says}"
+
+    def test_a_feature_file_reads(self, tmp_path: Path, fi: ModuleType) -> None:
+        """Before: refused as not a FeatureCollection. Its fid is its position."""
+        doc = {"type": "Feature", "properties": {"property": "road"}, "geometry": GEOMETRY}
+        read = self.rows(fi, self.written(tmp_path, doc | {"crs": MEMBER}))
+        ((fid, geometry, value),) = read.rows
+        assert (fid, value, read.crs) == (0, "road", UTM33)
+        assert geometry.equals(INNER)
+
+    def test_a_bare_geometry_file_reads(self, tmp_path: Path, fi: ModuleType) -> None:
+        """Before: refused. One feature with no properties, so no class value."""
+        read = self.rows(fi, self.written(tmp_path, GEOMETRY | {"crs": MEMBER}))
+        ((fid, geometry, value),) = read.rows
+        assert (fid, value, read.crs) == (0, None, UTM33)
+        assert geometry.equals(INNER)
+
+    def test_features_that_are_not_a_list_are_refused(self, tmp_path: Path, fi: ModuleType) -> None:
+        """Before: `"features": {}` read as no features."""
+        path = self.written(tmp_path, self.collection(crs=MEMBER, features={}))
+        with pytest.raises(fi.FeatureError) as info:
+            self.rows(fi, path)
+        assert str(info.value) == (
+            "f.geojson: no features list; the file is not a FeatureCollection"
+        )
+
+    def test_a_numeric_name_is_read_as_its_digits(self, tmp_path: Path, fi: ModuleType) -> None:
+        """Before: the int 4326 reached `FeatureSet(crs=...)`, whose field is
+        `tuple[str, ...]`, and pydantic refused it."""
+        member = {"type": "name", "properties": {"name": 4326}}
+        read = self.rows(fi, self.written(tmp_path, self.collection(crs=member)))
+        assert read.crs == "4326"
+        assert isinstance(read.crs, str)
+
+    def test_a_numeric_name_opens_as_a_feature_set(self, tmp_path: Path) -> None:
+        """The same file through `open_features`: its `crs` is the text."""
+        lonlat = moved(INNER, UTM33, "EPSG:4326")
+        feature = {"type": "Feature", "properties": {"property": "road"}}
+        doc = {
+            "type": "FeatureCollection",
+            "crs": {"type": "name", "properties": {"name": 4326}},
+            "features": [feature | {"geometry": mapping(lonlat)}],
+        }
+        fs = open_one(self.written(tmp_path, doc), BOX)
+        assert fs.crs == ("4326",)
+        assert len(fs.features) == 1
+
+
+#: Every empty JSON value but `null` (`docs/increments/python-audit.md`,
+#: section 12, the ruling after code review round 2).
+EMPTY_NOT_NULL = [
+    pytest.param("", id="empty_string"),
+    pytest.param(0, id="zero"),
+    pytest.param(False, id="false"),
+    pytest.param([], id="empty_list"),
+    pytest.param({}, id="empty_object"),
+]
+
+
+class TestAnEmptyGeometryIsNull:
+    """Audit PR C, section 12's ruling after code review round 2: `read_source`
+    treats every empty `geometry` as `null`. Before, `""`, `0`, `false`, `[]`
+    and `{}` crashed `--features` and `catchment --lakes` with an
+    `AttributeError` (`'str' object has no attribute 'is_empty'`). Each test
+    compares with the same file whose `geometry` is `null`, so it pins no
+    outcome of its own: only that the two read alike."""
+
+    @staticmethod
+    def written(tmp_path: Path, geometry: Any, shape: str) -> Path:
+        """A top-level `Feature`, or a collection whose first feature has
+        `geometry` and whose second is `INNER`; both with a `crs` member."""
+        feature = {"type": "Feature", "properties": {"property": "water"}, "geometry": geometry}
+        if shape == "feature":
+            doc = feature | {"crs": MEMBER}
+        else:
+            kept = feature | {"geometry": GEOMETRY}
+            doc = {"type": "FeatureCollection", "crs": MEMBER, "features": [feature, kept]}
+        path = tmp_path / f"{shape}-{json.dumps(geometry)}.geojson"
+        path.write_text(json.dumps(doc), encoding="utf-8")
+        return path
+
+    @staticmethod
+    def rows(fi: ModuleType, path: Path) -> Any:
+        read = fi.read_source(path, None, "property", lambda _crs: (0.0, 0.0, 0.0, 0.0))
+        return read.crs, read.rows
+
+    @staticmethod
+    def opened(path: Path) -> Any:
+        fs = open_one(path, BOX)
+        return ([f.fid for f in fs.features], fs.outside, fs.clipped, fs.empty, fs.crs, fs.counts)
+
+    @staticmethod
+    def lakes(fi: ModuleType, path: Path) -> Any:
+        lakes, crs = fi.read_lake_polygons(path, None, at(150, 150), UTM33)
+        return lakes, crs
+
+    @pytest.mark.parametrize("shape", ["feature", "collection"])
+    @pytest.mark.parametrize("empty", EMPTY_NOT_NULL)
+    def test_read_source_reads_it_as_null(
+        self, tmp_path: Path, fi: ModuleType, empty: Any, shape: str
+    ) -> None:
+        null = self.rows(fi, self.written(tmp_path, None, shape))
+        assert self.rows(fi, self.written(tmp_path, empty, shape)) == null
+
+    @pytest.mark.parametrize("shape", ["feature", "collection"])
+    @pytest.mark.parametrize("empty", EMPTY_NOT_NULL)
+    def test_features_reads_it_as_null(self, tmp_path: Path, empty: Any, shape: str) -> None:
+        """`--features`, through `open_features`."""
+        null = self.opened(self.written(tmp_path, None, shape))
+        assert self.opened(self.written(tmp_path, empty, shape)) == null
+
+    @pytest.mark.parametrize("shape", ["feature", "collection"])
+    @pytest.mark.parametrize("empty", EMPTY_NOT_NULL)
+    def test_catchment_lakes_reads_it_as_null(
+        self, tmp_path: Path, fi: ModuleType, empty: Any, shape: str
+    ) -> None:
+        """`catchment --lakes`, through `read_lake_polygons`."""
+        null = self.lakes(fi, self.written(tmp_path, None, shape))
+        assert self.lakes(fi, self.written(tmp_path, empty, shape)) == null
+
+
+class TestRenamedAndMoved:
+    """Audit PR C, red tests 5 and 7: the any-source lake reader is named by
+    what it reads, and `TerrainFeature` lives in `features` (layer 0), which
+    `feature_input` imports it back from."""
+
+    def test_read_lake_polygons_replaces_read_lakes(self, fi: ModuleType) -> None:
+        assert callable(getattr(fi, "read_lake_polygons", None))
+        assert not hasattr(fi, "read_lakes")
+
+    def test_read_lake_polygons_skips_what_is_not_a_polygon(
+        self, tmp_path: Path, fi: ModuleType
+    ) -> None:
+        """Increment 22's behaviour, unchanged by the rename."""
+        features = [
+            Feat("lake", INNER, {"property": "water"}),
+            Feat("shore", LineString([at(0, 0), at(300, 0)]), {"property": "road"}),
+        ]
+        path = write_geojson(tmp_path / "l.geojson", features)
+        lakes, crs = fi.read_lake_polygons(path, None, at(150, 150), UTM33)
+        assert crs == UTM33
+        (lake,) = lakes
+        assert lake.equals(INNER)
+
+    def test_terrain_feature_is_one_class(self, fi: ModuleType) -> None:
+        import tin_engine.features as features
+
+        assert features.TerrainFeature is fi.TerrainFeature
+        assert fi.TerrainFeature.__module__ == "tin_engine.features"
 
 
 class TestClip:

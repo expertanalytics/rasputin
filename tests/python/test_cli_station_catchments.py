@@ -58,7 +58,7 @@ from cli_driver import plain, runner
 from nve_fixtures import collection, write
 from test_cli_mesh_mosaic import write_tiles
 from tin_engine.cli import app
-from tin_engine.domain import read_domain
+from tin_engine.io.domain_file import read_domain
 
 PLACED = [s for s in bf.FIVE if s is not bf.LANGT]
 CLASSES = {
@@ -73,6 +73,18 @@ CLASSES = {
 def invoke(*args: str) -> tuple[int, str]:
     result = runner.invoke(app, list(args))
     return result.exit_code, result.output
+
+
+def test_lakes_help_says_which_file_it_takes() -> None:
+    """Audit PR C, red test 6 (`docs/increments/python-audit.md`, section 12,
+    Ola's ruling of section 7): `station-catchments --lakes` takes the
+    `lakes.geojson` that `fetch-stations` writes, or GeoJSON like it."""
+    code, output = invoke("station-catchments", "--help")
+    text = plain(output)
+    assert code == 0, text
+    own = text.split("--lakes ", 1)[1].split(" --", 1)[0]
+    assert "lakes.geojson" in own, own
+    assert "fetch-stations" in own, own
 
 
 @pytest.fixture(scope="module")

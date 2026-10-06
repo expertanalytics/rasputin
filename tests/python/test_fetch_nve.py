@@ -680,12 +680,12 @@ class TestLakesGeojson:
         digest = hashlib.sha256((fetched / LAKES).read_bytes()).hexdigest()
         assert manifest["files"]["lakes.geojson"] == digest
 
-    def test_it_reads_back_through_read_lakes(self, fetched: Path) -> None:
+    def test_it_reads_back_through_read_nve_lakes(self, fetched: Path) -> None:
         """The MultiPolygon is split into its two parts; `vatnlnr` 0 reads as
         no number."""
-        from tin_engine.io.station_set import read_lakes
+        from tin_engine.io.station_set import read_nve_lakes
 
-        lakes, crs = read_lakes(fetched / LAKES)
+        lakes, crs = read_nve_lakes(fetched / LAKES)
         assert crs == CRS
         assert sorted((lk.number, lk.name) for lk in lakes if lk.number is not None) == [
             (4110, "Mellomvatnet"),

@@ -22,7 +22,6 @@ Blocking (sqlite3, GEOS): an async caller runs :func:`open_features` in
 
 from __future__ import annotations
 
-import json
 import math
 import sqlite3
 import time
@@ -41,13 +40,13 @@ from shapely.geometry import LineString, MultiPolygon, Polygon, shape
 from shapely.geometry.base import BaseGeometry
 
 from tin_engine.crs import parse_crs, reprojector, same_crs, transform_definition
-from tin_engine.domain import GEOJSON_DEFAULT_CRS, DomainPolygon
-from tin_engine.features import DEFAULT_VOCABULARY, EdgeVocabulary
+from tin_engine.domain import DomainPolygon
+from tin_engine.features import DEFAULT_VOCABULARY, EdgeVocabulary, TerrainFeature
+from tin_engine.io.geojson import GEOJSON_SUFFIXES, RFC7946_CRS, read_collection
 from tin_engine.io.geopackage import layer_info, query_features
 from tin_engine.io.gml import read_gml
-from tin_engine.io.repository import open_geopackage
+from tin_engine.io.repository import open_geopackage, read_json
 
-GEOJSON_SUFFIXES = (".geojson", ".json")
 SUFFIXES = (*GEOJSON_SUFFIXES, ".gpkg", ".gml")
 ACCEPTED = frozenset({"Polygon", "MultiPolygon", "LineString", "MultiLineString"})
 #: R5: the region is the domain plus this many metres in the DEM's CRS, its
@@ -132,21 +131,6 @@ class FeatureRequest(BaseModel):
 
     sources: tuple[FeatureSource, ...]
     vocabulary: EdgeVocabulary = DEFAULT_VOCABULARY
-
-
-class TerrainFeature(BaseModel):
-    """One feature: its fid, mask, and clipped lines in the DEM's CRS; a
-    closed line (first point repeated) is an unclipped ring. Under a coded
-    map (16c, R5) it also keeps its class ``code`` and, if polygonal, its
-    ``polygon`` moved into the DEM's CRS by the transform its lines took."""
-
-    model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True)
-
-    fid: int | str
-    mask: int
-    lines: tuple[LineString, ...]
-    code: int | None = None
-    polygon: Polygon | MultiPolygon | None = None
 
 
 class FeatureSet(BaseModel):
@@ -432,13 +416,11 @@ def read_source(
             return SourceRows(
                 own, None, False, [(f.fid, f.geometry, f.value) for f in doc.features]
             )
-        doc = json.loads(path.read_text())
-        try:  # a malformed document's structure raises any of these
-            member = doc.get("crs")
-            text = member["properties"]["name"] if member else GEOJSON_DEFAULT_CRS
+        features, text = read_collection(read_json(path), default_crs=RFC7946_CRS)
+        try:  # a malformed feature's structure raises any of these
             rows = [
-                (f.get("id", k), f["geometry"] and shape(f["geometry"]), f["properties"] or {})
-                for k, f in enumerate(doc["features"])
+                (f.get("id", k), shape(g) if (g := f["geometry"]) else None, f["properties"] or {})
+                for k, f in enumerate(features)
             ]
             values = [(k, g, p.get(attribute)) for k, g, p in rows]
         except (KeyError, TypeError, AttributeError, shapely.errors.ShapelyError) as exc:
@@ -458,7 +440,7 @@ def _own(path: Path, given: str | None, text: str) -> str:
     return text
 
 
-def read_lakes(
+def read_lake_polygons(
     path: Path, layer: str | None, point: tuple[float, float], point_crs: str
 ) -> tuple[tuple[BaseGeometry, ...], str]:
     """Increment 22: every polygon or multipolygon of a lake source near

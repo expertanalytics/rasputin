@@ -8,6 +8,7 @@ names what is wrong.
 
 from __future__ import annotations
 
+import importlib
 from pathlib import Path
 from types import ModuleType
 from typing import Any
@@ -16,7 +17,7 @@ import pytest
 from pydantic import ValidationError
 from shapely.geometry import MultiPolygon, Polygon, box
 
-from nve_fixtures import CRS, collection, feature, line, point, write
+from nve_fixtures import CRS, collection, crs_member, feature, line, point, write
 
 
 @pytest.fixture
@@ -218,7 +219,8 @@ class TestAReferenceWithNoArea:
 
 
 # ---------------------------------------------------------------------------
-# PR 4, lake gauges: `read_lakes` ("The station set", "Lake gauges")
+# PR 4, lake gauges: `read_nve_lakes`, `read_lakes` until audit PR C
+# ("The station set", "Lake gauges")
 # ---------------------------------------------------------------------------
 
 
@@ -232,14 +234,22 @@ def nve_lake(geometry: Any, objectid: int | None = 4_100_001, **extra: Any) -> d
 
 
 class TestReadLakes:
-    """`read_lakes(path) -> (tuple[Lake, ...], crs)`. Before the change, neither
-    `read_lakes` nor `Lake` exists."""
+    """`read_nve_lakes(path) -> (tuple[Lake, ...], crs)`. Before increment 29's
+    PR 4, neither `read_lakes` nor `Lake` existed; audit PR C renamed the
+    reader by what it reads (`docs/increments/python-audit.md`, section 12)."""
+
+    def test_the_name_says_what_it_reads(self, station_set: ModuleType) -> None:
+        """Audit PR C, red test 5: no alias keeps the old name."""
+        assert callable(getattr(station_set, "read_nve_lakes", None))
+        assert not hasattr(station_set, "read_lakes")
+        assert "read_nve_lakes" in station_set.__all__
+        assert "read_lakes" not in station_set.__all__
 
     def test_a_polygon_gives_one_lake_with_its_number_and_name(
         self, station_set: ModuleType, tmp_path: Path
     ) -> None:
         doc = collection([nve_lake(box(0, 0, 100, 100))])
-        lakes, crs = station_set.read_lakes(write(tmp_path / "l.geojson", doc))
+        lakes, crs = station_set.read_nve_lakes(write(tmp_path / "l.geojson", doc))
         assert crs == CRS
         (lake,) = lakes
         assert isinstance(lake, station_set.Lake)
@@ -251,7 +261,7 @@ class TestReadLakes:
     ) -> None:
         two = MultiPolygon([box(0, 0, 10, 10), box(20, 0, 30, 10)])
         doc = collection([nve_lake(two, vatnlnr=12, navn="Tvillingvatna")])
-        lakes, _ = station_set.read_lakes(write(tmp_path / "l.geojson", doc))
+        lakes, _ = station_set.read_nve_lakes(write(tmp_path / "l.geojson", doc))
         assert len(lakes) == 2
         assert {(lk.number, lk.name) for lk in lakes} == {(12, "Tvillingvatna")}
         assert all(isinstance(lk.polygon, Polygon) for lk in lakes)
@@ -265,7 +275,7 @@ class TestReadLakes:
                 nve_lake(box(9, 9, 10, 10), objectid=2, vatnlnr=20),
             ]
         )
-        lakes, _ = station_set.read_lakes(write(tmp_path / "l.geojson", doc))
+        lakes, _ = station_set.read_nve_lakes(write(tmp_path / "l.geojson", doc))
         assert [lk.number for lk in lakes] == [30, 10, 20]
 
     @pytest.mark.parametrize("vatnlnr", [0, None], ids=["zero", "null"])
@@ -273,13 +283,13 @@ class TestReadLakes:
         self, station_set: ModuleType, tmp_path: Path, vatnlnr: int | None
     ) -> None:
         doc = collection([nve_lake(box(0, 0, 1, 1), vatnlnr=vatnlnr, navn=None)])
-        (lake,), _ = station_set.read_lakes(write(tmp_path / "l.geojson", doc))
+        (lake,), _ = station_set.read_nve_lakes(write(tmp_path / "l.geojson", doc))
         assert lake.number is None and lake.name is None
 
     def test_a_file_without_crs_is_refused(self, station_set: ModuleType, tmp_path: Path) -> None:
         doc = collection([nve_lake(box(0, 0, 1, 1))], crs=None)
         with pytest.raises(ValueError, match=r"(?i)\bcrs\b"):
-            station_set.read_lakes(write(tmp_path / "l.geojson", doc))
+            station_set.read_nve_lakes(write(tmp_path / "l.geojson", doc))
 
     @pytest.mark.parametrize(
         "geometry",
@@ -298,7 +308,7 @@ class TestReadLakes:
         """After a good lake, so the message names the right one."""
         doc = collection([nve_lake(box(0, 0, 1, 1)), nve_lake(geometry, objectid=7_654_321)])
         with pytest.raises(ValueError, match="7654321"):
-            station_set.read_lakes(write(tmp_path / "l.geojson", doc))
+            station_set.read_nve_lakes(write(tmp_path / "l.geojson", doc))
 
     def test_a_bad_geometry_without_objectid_is_refused_naming_its_index(
         self, station_set: ModuleType, tmp_path: Path
@@ -308,4 +318,157 @@ class TestReadLakes:
         bad = nve_lake({"type": "LineString", "coordinates": [[0, 0], [10, 0]]}, objectid=None)
         doc = collection([*good, bad])
         with pytest.raises(ValueError, match=r"(?i)(feature|index)\D{0,4}3\b"):
-            station_set.read_lakes(write(tmp_path / "l.geojson", doc))
+            station_set.read_nve_lakes(write(tmp_path / "l.geojson", doc))
+
+
+# ---------------------------------------------------------------------------
+# Audit PR C: the one GeoJSON reading path, with no default CRS
+# ---------------------------------------------------------------------------
+
+
+class TestOneGeojsonRule:
+    """`docs/increments/python-audit.md`, section 12, red test 3: `features_of`
+    reads through `io.geojson.read_collection(..., default_crs=None)`, and
+    every refusal, the decoder's among them, starts with the file's name."""
+
+    def test_a_single_feature_file_is_one_station(
+        self, station_set: ModuleType, tmp_path: Path
+    ) -> None:
+        """Before: refused as not a FeatureCollection."""
+        doc = nve_station("2.11.0", 1.5, 2.5) | {"crs": crs_member()}
+        (s,), crs = station_set.read_stations(write(tmp_path / "s.geojson", doc))
+        assert crs == CRS
+        assert (s.station, s.x, s.y) == ("2.11.0", 1.5, 2.5)
+
+    def test_a_feature_that_is_not_an_object_is_refused_naming_the_file(
+        self, station_set: ModuleType, tmp_path: Path
+    ) -> None:
+        """Before: an `AttributeError` from `_geometry_type`, which
+        `station-catchments` does not catch."""
+        path = write(tmp_path / "s.geojson", collection([]) | {"features": [7]})
+        with pytest.raises(ValueError) as info:
+            station_set.read_stations(path)
+        assert str(info.value) == (
+            "s.geojson: no features list; the file is not a FeatureCollection"
+        )
+
+    def test_a_null_member_is_refused_as_null(
+        self, station_set: ModuleType, tmp_path: Path
+    ) -> None:
+        """Before: refused as `no crs member`."""
+        path = write(tmp_path / "s.geojson", collection([nve_station("2.11.0")]) | {"crs": None})
+        with pytest.raises(ValueError) as info:
+            station_set.read_stations(path)
+        assert str(info.value) == "s.geojson: the crs member is null; the file must name its CRS"
+
+    def test_an_unreadable_name_is_refused_naming_the_file(
+        self, station_set: ModuleType, tmp_path: Path
+    ) -> None:
+        """Before: `cannot read the CRS ...`, without the file."""
+        path = write(tmp_path / "s.geojson", collection([nve_station("2.11.0")], crs="EPSG:999999"))
+        with pytest.raises(ValueError) as info:
+            station_set.read_stations(path)
+        assert str(info.value).startswith("s.geojson: cannot read the CRS 'EPSG:999999'")
+
+    def test_a_file_that_is_not_json_is_refused_naming_the_file(
+        self, station_set: ModuleType, tmp_path: Path
+    ) -> None:
+        """Before: the decoder's bare text."""
+        path = tmp_path / "s.geojson"
+        path.write_text('{"type": "FeatureCollection", "features": [', encoding="utf-8")
+        with pytest.raises(ValueError) as info:
+            station_set.read_stations(path)
+        assert str(info.value).startswith("s.geojson: ")
+
+
+# The four readers that go through `features_of`, by module and name.
+FEATURES_OF_READERS = [
+    ("tin_engine.io.station_set", "read_stations"),
+    ("tin_engine.io.station_set", "read_references"),
+    ("tin_engine.io.station_set", "read_nve_lakes"),
+    ("tin_engine.io.rivers", "read_segments"),
+]
+
+
+# A geometry each `features_of` reader accepts, by reader name.
+_SQUARE = [[[0.0, 0.0], [10.0, 0.0], [10.0, 10.0], [0.0, 10.0], [0.0, 0.0]]]
+RIGHT_GEOMETRY: dict[str, dict[str, Any]] = {
+    "read_stations": {"type": "Point", "coordinates": [5.0, 5.0]},
+    "read_references": {"type": "Polygon", "coordinates": _SQUARE},
+    "read_nve_lakes": {"type": "Polygon", "coordinates": _SQUARE},
+    "read_segments": {"type": "LineString", "coordinates": [[0.0, 0.0], [10.0, 0.0]]},
+}
+
+
+def _typed(value: Any) -> Any:
+    """The reader's right geometry with its `type` replaced by `value`."""
+    return lambda right: right | {"type": value}
+
+
+# A geometry that is not an object, or an object whose `type` is empty: (id, the
+# value, or a function of the reader's right geometry giving it).
+NOT_A_GEOMETRY: list[tuple[str, Any]] = [
+    ("7", 7), ('"Point"', "Point"), ("[1, 2]", [1, 2]),
+    ('type ""', _typed("")), ("type 0", _typed(0)), ("type false", _typed(False)),
+    ("type []", _typed([])), ("type {}", _typed({})),
+]  # fmt: skip
+
+
+class TestAFileWithNoGeometry:
+    """`docs/increments/python-audit.md`, section 12's wording table, the row
+    "a `crs` member and either a `Feature` without `geometry` or an object
+    with neither `type` nor `features`". The shape rule reads either as one
+    feature; the reader then refused it as `None is a None, not a Point` (or
+    the Polygon, lake and LineString forms). It is refused in plain words
+    naming the file and the feature: `has no geometry`.
+    The main session's ruling on PR C (`audit-geojson-io`), code review round
+    3, widens the refusal: a geometry that is not an object (`7`, `"Point"`,
+    `[1, 2]`; a top-level Feature holding one raised AttributeError after PR
+    C, `no features list` before it) or whose `type` is empty (`""`, `0`,
+    `false`, `[]`, `{}`; read as `1.2.0 is a , not a Point`) is refused the
+    same way, as a top-level Feature (`feature 0`) and as the second feature
+    of a collection (`feature 1`)."""
+
+    @pytest.mark.parametrize(
+        "doc",
+        [
+            pytest.param({"type": "Feature", "crs": crs_member(), "properties": {}}, id="feature"),
+            pytest.param({"crs": crs_member(), "foo": 1}, id="typeless"),
+        ],
+    )
+    @pytest.mark.parametrize(
+        ("module", "reader"), FEATURES_OF_READERS, ids=[r for _, r in FEATURES_OF_READERS]
+    )
+    def test_it_is_refused_saying_the_feature_has_no_geometry(
+        self, module: str, reader: str, doc: dict[str, Any], tmp_path: Path
+    ) -> None:
+        read = getattr(importlib.import_module(module), reader)
+        with pytest.raises(ValueError) as info:
+            read(write(tmp_path / "nogeom.geojson", doc))
+        message = str(info.value)
+        assert "nogeom.geojson" in message
+        assert "feature 0" in message
+        assert "has no geometry" in message
+
+    @pytest.mark.parametrize("bad", NOT_A_GEOMETRY, ids=[name for name, _ in NOT_A_GEOMETRY])
+    @pytest.mark.parametrize("where", ["top-level", "second"])
+    @pytest.mark.parametrize(
+        ("module", "reader"), FEATURES_OF_READERS, ids=[r for _, r in FEATURES_OF_READERS]
+    )
+    def test_a_geometry_that_is_no_object_or_has_an_empty_type_is_refused_the_same_way(
+        self, module: str, reader: str, where: str, bad: tuple[str, Any], tmp_path: Path
+    ) -> None:
+        read = getattr(importlib.import_module(module), reader)
+        right = RIGHT_GEOMETRY[reader]
+        geometry = bad[1](right) if callable(bad[1]) else bad[1]
+        broken = {"type": "Feature", "geometry": geometry, "properties": {"station": "1.2.1"}}
+        if where == "top-level":
+            doc, index = broken | {"crs": crs_member()}, 0
+        else:
+            doc, index = collection([feature(right, station="1.2.0", objectid=1), broken]), 1
+        with pytest.raises(ValueError) as info:
+            read(write(tmp_path / "nogeom.geojson", doc))
+        message = str(info.value)
+        assert "nogeom.geojson" in message
+        assert f"feature {index}" in message
+        assert "has no geometry" in message
