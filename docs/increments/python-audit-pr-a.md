@@ -1,7 +1,7 @@
 # PR A design: `audit-lattice` (F2, F9, F10's repository Protocol, F12's two `mosaic` edges)
 
-Status: **red step done (6cf4359); its pins ruled by `@architect`; next,
-`@developer`'s green step.** Branch
+Status: **green (b3b38d2); next, `@reviewer`'s code review round 1, then
+`@perf` (the 1 m set and the reprojected Velhas run, section `@perf`).** Branch
 `worktree-audit-lattice`, stacked on PR B's approved head `618328b`
 (`worktree-audit-crs`, not pushed); it is rebased onto master when B merges.
 Every `@618328b` citation below reads B's head, which B's merge commit keeps
@@ -410,6 +410,64 @@ Measured on the prototype (`count_loc.py 618328b <prototype>`), per file:
 
 No region is packed under `# fmt: skip`.
 
+### As built (b3b38d2): -27
+
+`python3 tools/count_loc.py 618328b b3b38d2`: 126 added, 153 removed,
+**-27**. Every file matches the prototype's row above but three, each off by
+one; the prototype was removed after measuring, so each is explained by
+counting the code as written, not by a line-for-line comparison:
+
+| File | Prototype | Built | The built file's lines |
+|---|---|---|---|
+| `io/models.py` | +38 | +37 (37/0) | `import math` 1; `Bounds` 17 (the moved class's 14, `of` 3); `node_xy` 2, `index_of` 2, `node_box` 3, `windowed` 4; `valid_mask` 3; `TileFootprint` 5 |
+| `cli.py` | -4 (4/8) | -3 (4/7) | removed: the two import lines and `_off_node`'s five-line body (`src_python/tin_engine/cli.py@618328b:112, 118, 1696-1700`), every code line of the sites the table names; added: two import lines, two body lines |
+| `target_grid.py` | -4 (13/17) | -3 (14/17) | added: the import 1; `TargetGrid.node_box` 4 (its `def`, `h = float(self.spacing)`, the corner, the `return`); `source_region` 2; `resample` 3; `check_point_blocks` 4 |
+
+The total is one line from the design's -28, and every changed site is the
+table's.
+
+`@developer`'s pinned choices, each confirmed by `@architect` against the
+expression it replaces at `618328b`:
+
+1. **`reference.nodes_inside` builds each row band's `x` inside the loop**
+   (`meta.node_xy(band, cols)` per band, `cols` built once). Same bits: `x`
+   is `x_min + cols * delta_x` each time. The cost is one column vector per
+   band, against the band's `meshgrid` and point-in-polygon tests of
+   `band x cols` nodes. Confirmed.
+2. **`catchment._joined` makes two `node_xy` calls**, `(row_max, col_min)`
+   for the low corner and `(row_min, col_max)` for the high one. Each
+   coordinate is the base's operand pair, and the margin is still added
+   after. Confirmed.
+3. **`mosaic._uncovered` makes one call, `node_xy(rows_hit[[0, -1]],
+   cols_hit[[0, -1]])`.** The fancy index keeps an int64 array, so the four
+   corners are `np.float64` as before, and the message prints them as
+   before (the probe's `mosaic.plan_mosaic` lines are unchanged). Confirmed.
+4. **`windowed` keeps `model_copy` without re-validation**, as `window_meta`
+   did (`src_python/tin_engine/io/cog.py@618328b:104-113`), with its
+   corner expression, now `node_xy(window.row0, window.col0)`. Confirmed:
+   the design moves `window_meta`, it does not add a check.
+
+**The probe at b3b38d2** (`lattice_probe-b3b38d2.txt`, run on a scratch copy
+from `tools/scratch_copy.py`, `_core` copied in from a venv whose C++
+matches; `git diff --quiet 618328b b3b38d2 -- include src bindings
+CMakeLists.txt` exits 0). The base rerun at `618328b` reproduces
+`lattice_probe-618328b.txt` byte for byte (`cmp` exits 0). `diff` of the two
+outputs changes 88 lines: 72 `target_grid` lines whose case field is an
+infinity (48 `resample`, 24 `check_point_blocks`), and 16 `AttributeError`
+lines for `None` and a dict (`domain.check_extent`, `dem_input._past`,
+`reference.nodes_inside` four each; `cli._off_node` and
+`fetch.plan.plan_object` two each). The case-field filter counts 0 and its
+inverse 72. Nothing else changed.
+
+Both runs print numpy's `RuntimeWarning: invalid value encountered in
+multiply` and `in add` from `resample`'s bilinear line
+(`src_python/tin_engine/target_grid.py@b3b38d2:191`,
+`src_python/tin_engine/target_grid.py@618328b:193`): the formula is
+evaluated before the NoData mask, at both revisions, so a zero weight on an
+infinity (0 x inf) or +inf meeting -inf warns. The warning is not new; what
+the ruling changes is that the NaN it reports is now kept as the node's
+value instead of being replaced by the fill. It is in Question 1.
+
 ## `@perf`
 
 Owed: A touches what drives refine and mesh (`grid_domain.subsample` gives
@@ -506,17 +564,17 @@ pinned when A is rebased onto master after B merges); and `python-audit.md`
 lines 1271-1277, which list other files' citations in B's section 9 and sit
 in the file every audit branch edits.
 
-**Moved by the red step (6cf4359), owed a pin:**
-`docs/increments/15e-memory-fixes.md` line 327 cites
-`tests/python/test_target_grid.py:399-400` and `:514-515` (the two "Went red
-at 9879805" comments); the infinity tests inserted above them move them to
-476 and 591. Pin both to `@44fa7f5`, where they read as cited, in the next
-prose commit that may edit that file.
+**Moved by the red step (6cf4359), pinned after green:**
+`docs/increments/15e-memory-fixes.md` line 327 cited lines 399-400 and
+514-515 of `test_target_grid.py` (the two "Went red at 9879805" comments);
+the infinity tests inserted above them move them to 476 and 591. Both
+citations are now pinned, `tests/python/test_target_grid.py@44fa7f5:399-400`
+and `tests/python/test_target_grid.py@44fa7f5:514-515`, where they read as
+cited.
 
-`project_structure.md`'s `io/models.py` row ("Pydantic RasterMeta /
-DemTile") is rewritten by `@architect` after the green commit, so it
-describes the code as written (`Bounds`, `IndexWindow`, `TileFootprint`, the
-node methods, `valid_mask`).
+`project_structure.md`'s rows for `io/models.py`, `io/cog.py`,
+`io/repository.py`, `mosaic.py`, `target_grid.py` and `dem_input.py` are
+rewritten against the code at b3b38d2.
 
 ## Constants
 
@@ -531,8 +589,12 @@ where they are, unchanged.
    interpolation multiplies that infinity by zero and gets "no value", so
    the node has no elevation, though the source node under it is finite.
    The direct (not reprojected) path reads that source node alone and gets
-   its finite value. Accept this for PR A, and treat it only if a real DEM
-   ever holds an infinity? Default: accept.
+   its finite value. Such a DEM also makes numpy print a warning on the
+   terminal during reprojection ("invalid value encountered in multiply");
+   that warning is printed before PR A too, from the same line. Accept both
+   for PR A, and treat them only if a real DEM ever holds an infinity?
+   Default: accept, and leave the warning as it is until Question 2 is
+   answered.
 2. **Should a DEM tile that holds an infinite elevation be refused when it
    is read?** An infinite height is not terrain; today it is data (your
    ruling), and a mesh can carry it. Default: no change now; ask again if

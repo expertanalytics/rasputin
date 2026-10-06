@@ -324,7 +324,7 @@ Blocking:
 1. Red-step scaffolding written in the present tense, now false (it is
    `@tester`'s to fix, because `@developer` does not edit tests):
    `tests/cpp/unit/test_refinement_check_points_arena.cpp:22-24`,
-   `tests/python/test_target_grid.py:399-400` and `:514-515`, and
+   `tests/python/test_target_grid.py@44fa7f5:399-400` and `tests/python/test_target_grid.py@44fa7f5:514-515`, and
    `tests/python/test_cli_mesh_geographic.py:327-328`. Put them in the past
    tense ("went red at 9879805 because ...") or delete them.
 2. This file's status line still says "Not started", and none of the
