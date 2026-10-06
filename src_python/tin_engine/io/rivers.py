@@ -16,27 +16,12 @@ from collections.abc import Iterable, Mapping
 from pathlib import Path
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict
+from tin_engine.hydrography import RiverSegment
 
 from .station_set import _geometry_type, _unique, features_of, required
 
 #: Two vertices closer than this, in metres, are the same vertex (step 4).
 COPY_TOLERANCE = 0.01
-
-
-class RiverSegment(BaseModel):
-    """One mapped line, digitised downstream, in its file's CRS. `objekttype`
-    is kept as served; `kind` is what "Placing the gauge" reads."""
-
-    model_config = ConfigDict(frozen=True)
-
-    objectid: int
-    elvid: str | None
-    vassdragsnr: str | None
-    name: str | None
-    objekttype: str | None
-    kind: Literal["lake", "river"]
-    line: tuple[tuple[float, float], ...]
 
 
 def kind_of(objekttype: str | None, vatnlnr: Any) -> Literal["lake", "river"]:
@@ -99,4 +84,4 @@ def read_segments(path: Path) -> tuple[tuple[RiverSegment, ...], str, int]:
     return segments, crs, dropped
 
 
-__all__ = ["COPY_TOLERANCE", "RiverSegment", "drop_copies", "kind_of", "read_segments"]
+__all__ = ["COPY_TOLERANCE", "drop_copies", "kind_of", "read_segments"]

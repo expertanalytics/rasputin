@@ -24,8 +24,8 @@ from __future__ import annotations
 
 import math
 import time
-from collections.abc import Callable
-from dataclasses import dataclass, replace
+from collections.abc import Callable, Sequence
+from dataclasses import asdict, dataclass, replace
 from typing import Any, Literal, Self
 
 import numpy as np
@@ -33,13 +33,20 @@ import numpy.typing as npt
 import shapely
 from pydantic import BaseModel, ConfigDict, model_validator
 from shapely.geometry import Point, Polygon
+from shapely.geometry.base import BaseGeometry
 
-from tin_engine._core import ReduceStatus, UpstreamOutcome, accumulate, reduce_ring, upstream
-from tin_engine.burn import BurnRefusal, burn_reach
+from tin_engine.burn import BurnRefusal, GaugePath, burn_reach
+from tin_engine.catchment_core import (
+    ReduceStatus,
+    UpstreamOutcome,
+    accumulate,
+    reduce_ring,
+    upstream,
+)
 from tin_engine.crs import crs_label, parse_crs, reprojector, same_crs, single_crs
 from tin_engine.gauge import Reach
-from tin_engine.io.models import RasterMeta
-from tin_engine.io.repository import DemRepository
+from tin_engine.io.models import DemTile, RasterMeta
+from tin_engine.io.repository import DemRepository, TileFootprint
 from tin_engine.mosaic import (
     Bounds,
     MixedGridError,
@@ -50,7 +57,6 @@ from tin_engine.mosaic import (
     plan_mosaic,
 )
 from tin_engine.outline import trace
-from tin_engine.raster import to_core
 from tin_engine.sensitivity import Sensitivity, assess
 
 #: Metres round the seed's bounds, and round the catchment's when the window
@@ -86,7 +92,7 @@ class CatchmentRequest(BaseModel):
 
     seed: tuple[float, float]
     seed_crs: str = "EPSG:4326"
-    lakes: tuple[Any, ...] | None = None
+    lakes: tuple[BaseGeometry, ...] | None = None
     lakes_crs: str | None = None
     #: Metres the reduced outline may stray from the fine one; None is twice
     #: the DEM's cell, 0 keeps the fine outline less its collinear vertices.
@@ -141,6 +147,14 @@ class GaugeResult:
     sensitivity: Sensitivity
     causes: tuple[str, ...]
 
+    def report_fields(self) -> dict[str, Any]:
+        """The gauge's columns in the catchment file's order: the burn's
+        fields, then the sensitivity's, its `causes` replaced in place by the
+        joined `causes`."""
+        skip = ("node", "chain", "sensitivity", "causes")
+        own = {k: getattr(self, k) for k in GaugeResult.__slots__ if k not in skip}
+        return {**own, **asdict(self.sensitivity), "causes": self.causes}
+
 
 @dataclass(frozen=True, slots=True)
 class Catchment:
@@ -175,7 +189,11 @@ class Catchment:
 
 
 #: A flood of one assembled window: its outcome, and what the caller keeps.
-Flood = Callable[[Any], tuple[UpstreamOutcome, Any]]
+type Flood[T] = Callable[[DemTile], tuple[UpstreamOutcome, T]]
+#: A node mask over a window: 1 in, 0 out.
+type Mask = npt.NDArray[np.uint8]
+#: The repository's tiles, as `plan_mosaic` takes them.
+type Footprints = Sequence[TileFootprint]
 
 
 def check_reach_crs(crs: str, repository: DemRepository) -> None:
@@ -215,9 +233,9 @@ def delineate(request: CatchmentRequest, repository: DemRepository) -> Catchment
     margin = float(WINDOW_MARGIN_M)
     point = (float(x), float(y))
 
-    def flood(tile: Any) -> tuple[UpstreamOutcome, Any]:
+    def flood(tile: DemTile) -> tuple[UpstreamOutcome, Mask]:
         seed = _seed_mask(tile.meta, lake, point)
-        return upstream(to_core(tile), seed), seed
+        return upstream(tile, seed), seed
 
     bounds = Bounds(x_min=x0 - margin, y_min=y0 - margin, x_max=x1 + margin, y_max=y1 + margin)
     m, out, seed, windows = _grow(footprints, repository, bounds, flood, False)
@@ -230,9 +248,9 @@ def _tolerance(request: CatchmentRequest, m: RasterMeta) -> float:
     return 2.0 * max(m.delta_x, m.delta_y) if t is None else t
 
 
-def _grow(
-    footprints: Any, repository: DemRepository, bounds: Bounds, flood: Flood, burnt: bool
-) -> tuple[RasterMeta, UpstreamOutcome, Any, list[Window]]:
+def _grow[T](
+    footprints: Footprints, repository: DemRepository, bounds: Bounds, flood: Flood[T], burnt: bool
+) -> tuple[RasterMeta, UpstreamOutcome, T, list[Window]]:
     """22's window loop: flood, grow until the catchment is clear of the
     window's edge, or refuse (NoData, the data's edge, the memory cap, whose
     per-node figure grows by a burnt copy and `accumulate`'s 10 bytes when
@@ -271,11 +289,13 @@ def _grow(
     return m, out, kept, windows
 
 
-def _burnt_flood(reach: Reach, pick: Callable[[Any], int]) -> Flood:
+def _burnt_flood(
+    reach: Reach, pick: Callable[[GaugePath], int]
+) -> Flood[tuple[DemTile, GaugePath, Mask]]:
     """Burn the reach into the window, and flood from the chain node `pick`
     chooses; keeps the burnt window, the path and the placed node's seed."""
 
-    def flood(tile: Any) -> tuple[UpstreamOutcome, Any]:
+    def flood(tile: DemTile) -> tuple[UpstreamOutcome, tuple[DemTile, GaugePath, Mask]]:
         try:
             burnt, path = burn_reach(tile, reach)
         except BurnRefusal as exc:
@@ -284,13 +304,13 @@ def _burnt_flood(reach: Reach, pick: Callable[[Any], int]) -> Flood:
         seed[tuple(path.chain[path.placed])] = 1
         start = np.zeros_like(seed)
         start[tuple(path.chain[pick(path)])] = 1
-        return upstream(to_core(burnt), start), (burnt, path, seed)
+        return upstream(burnt, start), (burnt, path, seed)
 
     return flood
 
 
 def _gauged(
-    request: CatchmentRequest, repository: DemRepository, footprints: Any, dem_crs: str
+    request: CatchmentRequest, repository: DemRepository, footprints: Footprints, dem_crs: str
 ) -> Catchment:
     """Stage A floods from the placed node and decides the catchment and every
     refusal; stage B grows on from it until `D` (the first chain node at or
@@ -304,7 +324,7 @@ def _gauged(
     bounds = Bounds(x_min=x0, y_min=y0, x_max=x1, y_max=y1)
     u = reach.uncertainty
 
-    def at_u(path: Any) -> int:
+    def at_u(path: GaugePath) -> int:
         past = np.nonzero(path.arc >= u - 1e-6)[0]
         if not past.size:
             raise CatchmentError("the burnt chain ends before the uncertainty")
@@ -321,8 +341,8 @@ def _gauged(
         # Stage B starts in stage A's last window: one entry per window.
         same = b[3][0].bounds == windows[-1].bounds
         m, (burnt, path, seed), windows = b[0], b[2], [*windows, *b[3][same:]]
-        out = upstream(to_core(burnt), seed)
-    acc = accumulate(to_core(burnt))
+        out = upstream(burnt, seed)
+    acc = accumulate(burnt)
     down = float(np.hypot(*np.diff(line, axis=0).T).sum()) - reach.at
     s = assess(acc.count, acc.reach, acc.flow_to, path, m.delta_x * m.delta_y / 1e6, u, down)
     checked: Literal["whole", "partly", "none"] = "whole"
@@ -367,7 +387,7 @@ def _lake(request: CatchmentRequest, dem_crs: str) -> Polygon | None:
     return lake
 
 
-def _plan(footprints: Any, bounds: Bounds) -> MosaicPlan:
+def _plan(footprints: Footprints, bounds: Bounds) -> MosaicPlan:
     try:
         return plan_mosaic(footprints, bounds)
     except MixedGridError as exc:
@@ -376,7 +396,7 @@ def _plan(footprints: Any, bounds: Bounds) -> MosaicPlan:
         raise CatchmentError(str(exc)) from exc
 
 
-def _seed_mask(m: RasterMeta, lake: Polygon | None, point: tuple[float, float]) -> Any:
+def _seed_mask(m: RasterMeta, lake: Polygon | None, point: tuple[float, float]) -> Mask:
     """The lake's nodes (`shapely.contains_xy`, over its bounding box only),
     or the node nearest the point."""
     seed = np.zeros((m.rows, m.cols), dtype=np.uint8)
@@ -457,7 +477,7 @@ def _outline(
     point: tuple[float, float],
     out: UpstreamOutcome,
     m: RasterMeta,
-    seed: Any,
+    seed: Mask,
     windows: tuple[Window, ...],
 ) -> Catchment:
     """The outer ring round the seed point (the pour node without a lake),
@@ -526,7 +546,7 @@ def _signed_area(ring: npt.NDArray[np.float64]) -> float:
     return 0.5 * float(np.dot(x, np.roll(y, -1)) - np.dot(np.roll(x, -1), y))
 
 
-def _nodes_in(mask: Any, rings: list[npt.NDArray[np.float64]]) -> int:
+def _nodes_in(mask: Mask, rings: list[npt.NDArray[np.float64]]) -> int:
     """In-nodes inside the dropped outer rings (in lattice units), for the report."""
     count = 0
     for ring in rings:

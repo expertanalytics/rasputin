@@ -283,7 +283,7 @@ unreadable or break a legal requirement, so they stay, unchanged.
    maximum never reads above the tolerance it met.
 3. **A count of zero is omitted from the file**, never from `--stats`.
    This applies to counts only (today `nodata_vertices_removed`), never to a
-   measured value: `--tolerance 0` is accepted (`cli.py:835`) and then
+   measured value: `--tolerance 0` is accepted (`src_python/tin_engine/cli.py@44fa7f5:835`) and then
    `tolerance_m 0` and `max_error_m 0` are written
    (`tests/python/test_cli_mesh_refine.py@a2d3319:151-155` asserts both).
 4. **Self-checks** live in `--stats`. If one is ever non-zero it is also
