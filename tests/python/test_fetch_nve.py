@@ -33,8 +33,8 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from typer.testing import CliRunner
 
+from cli_driver import invoke
 from nve_fixtures import (
     ALLOW,
     BLANK_TYPE,
@@ -67,20 +67,12 @@ from nve_fixtures import (
     list_comments,
     list_rows,
 )
-from test_cli_mesh import plain
-from tin_engine.cli import app
 from tin_engine.fetch.http import RangeClient
 
 FILES = ("stations.geojson", "reference.geojson", "rivers.geojson", "NOTICE.txt")
 #: PR 4's fifth file; tested on its own below, so the PR 3 tests over FILES stand.
 LAKES = "lakes.geojson"
 REFUSED, USAGE = 1, 2
-runner = CliRunner(env={"NO_COLOR": "1", "TERM": "dumb"})
-
-
-def invoke(*args: str) -> tuple[int, str]:
-    result = runner.invoke(app, list(args))
-    return result.exit_code, plain(result.output)
 
 
 @pytest.fixture

@@ -32,7 +32,7 @@ from importscan import first_party_imports
 LAYERS: tuple[dict[str, str], ...] = (
     {  # L0: values
         "io.models": "", "features": "", "sources": "", "run_record": "", "stats": "",
-        "palettes": "",
+        "palettes": "", "tin_engine": "",
     },
     {  # L1: pure algorithms
         "crs": "",
@@ -69,7 +69,6 @@ LAYERS: tuple[dict[str, str], ...] = (
         "raster": "_core io.models",
         "edge_strip": "_core stats",
         "final_check": "_core stats target_grid",
-        "tin_engine": "_core",
         "_core": "",
     },
     {  # L4: pipelines
@@ -109,7 +108,6 @@ UPWARD: dict[tuple[str, str], str] = {
     ("mosaic", "io.repository"): "A, audit-lattice",
     ("gauge", "io.rivers"): "F, audit-catchment-shared",
     ("gauge", "io.station_set"): "F, audit-catchment-shared",
-    ("fetch.http", "tin_engine"): "G, audit-cli-options",
     ("catchment", "_core"): "F, audit-catchment-shared",
     ("cli", "_core"): "H, audit-mesh-run",
 }

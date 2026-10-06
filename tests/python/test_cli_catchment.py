@@ -53,7 +53,6 @@ import numpy as np
 import pytest
 import shapely
 from shapely.geometry import Point, Polygon
-from typer.testing import CliRunner
 
 import gauge_fixtures as gf
 from catchment_fixtures import (
@@ -69,30 +68,22 @@ from catchment_fixtures import (
     seeds_in,
     tile_of,
 )
+from cli_driver import invoke, ran
 from gpkg_fixtures import DTM10, OLA_NORWAY, Layer, Row, write_gpkg
 from mosaic_fixtures import quadrants
 from nve_fixtures import collection, river, write
 from test_catchment import moved, to_4326
-from test_cli_mesh import plain
 from test_cli_mesh_mosaic import write_tiles
 from test_outline import square_area
 from tin_engine._core import accumulate as core_accumulate
 from tin_engine._core import upstream as core_upstream
-from tin_engine.cli import app
 from tin_engine.crs import parse_crs, reprojector
 from tin_engine.io.domain_file import read_domain
 from tin_engine.raster import to_core
 
-runner = CliRunner(env={"NO_COLOR": "1", "TERM": "dumb"})
-
 SEED = lat(100, 200)  # the bowl's centre node, inside the lake
 NVE_BYGDIN_KM2 = 305.54  # NVE delfelt 1187, fetched 2026-09-29 (see the design)
 BYGDIN_SEED = ("8.5425", "61.3512")
-
-
-def invoke(*args: str) -> tuple[int, str]:
-    result = runner.invoke(app, list(args))
-    return result.exit_code, plain(result.output)
 
 
 def utm_seed(x: float = SEED[0], y: float = SEED[1]) -> tuple[str, ...]:
@@ -128,8 +119,7 @@ def lakes(tmp_path: Path) -> Path:
 
 
 def run(dem: Path, out: Path, *args: str) -> str:
-    code, output = invoke("catchment", "--dem", str(dem), *args, "--out", str(out))
-    assert code == 0, output
+    output = ran("catchment", "--dem", str(dem), *args, "--out", str(out))
     assert out.is_file()
     return output
 
@@ -161,7 +151,7 @@ def lakes_help(text: str) -> str:
 
 
 def test_lakes_help_says_which_file_it_takes() -> None:
-    """Audit PR C, red test 6 (`docs/increments/python-audit.md`, section 10,
+    """Audit PR C, red test 6 (`docs/increments/python-audit.md`, section 11,
     Ola's ruling of section 7): `catchment --lakes` takes any polygon file,
     not `station-catchments`' NVE lakes file."""
     code, text = invoke("catchment", "--help")

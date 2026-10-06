@@ -2,7 +2,7 @@
 
 What ``--domain`` reads, and the rules for reading it, are
 ``tin_engine.io.domain_file``'s (audit PR C, ``docs/increments/python-audit.md``
-section 10). The domain keeps its own CRS, and :meth:`DomainPolygon.to_crs`
+section 11). The domain keeps its own CRS, and :meth:`DomainPolygon.to_crs`
 moves it into the DEM's (increment 15b, ``15-dem-mosaic.md`` R9), replacing
 16's must-match rule.
 

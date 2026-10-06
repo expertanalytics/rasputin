@@ -1,7 +1,7 @@
 """`tin_engine.domain`: reading the domain polygon, and moving it into the DEM's CRS.
 
 `read_domain` lives in `tin_engine.io.domain_file` since audit PR C
-(`docs/increments/python-audit.md`, section 10), which reads GeoJSON through
+(`docs/increments/python-audit.md`, section 11), which reads GeoJSON through
 `io.geojson.read_collection`; `DomainError`, `DomainPolygon`, `to_crs` and
 `check_extent` stay in `tin_engine.domain`.
 
@@ -91,7 +91,7 @@ def domain() -> ModuleType:
 @pytest.fixture
 def domain_file() -> ModuleType:
     """`read_domain`'s module since audit PR C (`docs/increments/python-audit.md`,
-    section 10): the reader is layer 2, `domain` keeps the types."""
+    section 11): the reader is layer 2, `domain` keeps the types."""
     return importlib.import_module("tin_engine.io.domain_file")
 
 

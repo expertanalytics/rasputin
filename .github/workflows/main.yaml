@@ -122,7 +122,9 @@ jobs:
   # the parallel helpers they use). T6 runs
   # the loop at 1, 2, 7 and all threads; a clean run is the independent check
   # of the design's "no shared writes" claim. The binaries are run directly
-  # because ctest names the tests by Catch case, not by target.
+  # because ctest names the tests by Catch case, not by target. h17 §4c: only
+  # suites that reach parallel_util/chunks.hpp, the one file that starts
+  # threads, are listed; asan+ubsan runs the thread-free ones on every PR.
   tsan:
     name: C++ thread sanitizer (refinement)
     runs-on: ubuntu-latest
@@ -150,32 +152,36 @@ jobs:
       - name: Build
         run: >
           cmake --build build-tsan --parallel "$(getconf _NPROCESSORS_ONLN)" --target
-          test_refinement_chunks test_mesh_lattice_split
-          test_refinement_scan prop_refinement_refine test_mesh_lawson
-          test_refinement_scan_offnode test_refinement_refine
-          test_mesh_row_spans prop_refinement_scan_equivalence
-          test_mesh_quality prop_refinement_quality
-          test_refinement_constraint_feet
-          test_refinement_chunks_dynamic test_refinement_active test_mesh_lawson_stack
+          prop_refinement_refine test_refinement_refine
+          prop_refinement_quality test_refinement_constraint_feet
+          test_refinement_chunks_dynamic test_refinement_active
           test_refinement_refine_points prop_refinement_refine_points
           prop_refinement_edge_strip prop_refinement_frozen prop_refinement_seam
 
+      # One suite per CPU (h17 §4c). Each suite's output goes to its own log,
+      # printed whole once all have ended; a suite that fails is named in
+      # tsan-logs/failed, and any name there fails the step.
       - name: Test
         env:
           TSAN_OPTIONS: halt_on_error=1
         run: |
-          for suite in test_refinement_chunks test_mesh_lattice_split \
-                       test_refinement_scan prop_refinement_refine test_mesh_lawson \
-                       test_refinement_scan_offnode test_refinement_refine \
-                       test_mesh_row_spans prop_refinement_scan_equivalence \
-                       test_mesh_quality prop_refinement_quality \
-                       test_refinement_constraint_feet \
-                       test_refinement_chunks_dynamic test_refinement_active \
-                       test_mesh_lawson_stack test_refinement_refine_points \
-                       prop_refinement_refine_points prop_refinement_edge_strip \
-                       prop_refinement_frozen prop_refinement_seam; do
-            build-tsan/tests/cpp/$suite
+          mkdir -p tsan-logs
+          printf '%s\n' prop_refinement_refine test_refinement_refine \
+                         prop_refinement_quality test_refinement_constraint_feet \
+                         test_refinement_chunks_dynamic test_refinement_active \
+                         test_refinement_refine_points prop_refinement_refine_points \
+                         prop_refinement_edge_strip prop_refinement_frozen prop_refinement_seam |
+            xargs -P "$(getconf _NPROCESSORS_ONLN)" -I {} sh -c \
+              'build-tsan/tests/cpp/"$1" > tsan-logs/"$1".log 2>&1 || echo "$1" >> tsan-logs/failed' sh {}
+          for log in tsan-logs/*.log; do
+            echo "===== ${log#tsan-logs/}"
+            cat "$log"
           done
+          if [ -s tsan-logs/failed ]; then
+            echo "Failed under TSan:"
+            cat tsan-logs/failed
+            exit 1
+          fi
 
   # Rules that previously existed only as prose in CLAUDE.md and were enforced
   # by nothing. All three scripts are dependency-free and parse rather than execute,
@@ -231,7 +237,9 @@ jobs:
         python-version: ["3.12", "3.13", "3.14"]
 
     steps:
-      # The full history: test_count_loc.py recounts two recorded PRs from it.
+      # The full history. test_count_loc.py, which recounts recorded PRs from
+      # it, runs in the harness job since h17; the depth stays (h17 §7: no
+      # environment change in a gating job).
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
@@ -245,8 +253,37 @@ jobs:
       - name: Install
         run: python -m pip install --upgrade pip && python -m pip install -e ".[dev]"
 
+      # The harness tests run in the harness job below (h17 §4b); the two
+      # marker expressions are complements, so each test runs in one of them.
       - name: Tests
-        run: pytest
+        run: pytest -m "not harness"
+
+  # h17 §4b: the tests of the harness tools (tools/ and .claude/), marked
+  # `harness`, import nothing from tin_engine. So this job installs only the
+  # test tools, at the dev extra's bounds, not the package, and runs on the
+  # floor version only. tests/python/conftest.py skips collecting the files
+  # with no harness mark, which would fail to import without the package.
+  # The full history: test_count_loc.py recounts recorded PRs from it.
+  harness:
+    name: Python harness tools
+    runs-on: ubuntu-latest
+    needs: changes
+    if: needs.changes.outputs.code != 'false'
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install the test tools
+        run: python -m pip install --upgrade pip && python -m pip install "pytest>=8.0" "pytest-asyncio>=0.23" "pytest-cov>=4.1"
+
+      - name: Tests
+        run: pytest --no-cov -m harness
 
   # h15 §5 P: the steps that ran after the main suite, in their own job per
   # version, so they run beside it instead of after it. Same installs, same
@@ -336,7 +373,7 @@ jobs:
   result:
     name: CI result
     if: always()
-    needs: [changes, cpp, sanitizers, governance, python, python-extras]
+    needs: [changes, cpp, sanitizers, governance, python, python-extras, harness]
     runs-on: ubuntu-latest
     steps:
       - name: Every gating job passed, or was skipped on a prose-only change
@@ -344,7 +381,7 @@ jobs:
           CODE: ${{ needs.changes.outputs.code }}
           CHANGES: ${{ needs.changes.result }}
           GOVERNANCE: ${{ needs.governance.result }}
-          OTHERS: ${{ needs.cpp.result }} ${{ needs.sanitizers.result }} ${{ needs.python.result }} ${{ needs.python-extras.result }}
+          OTHERS: ${{ needs.cpp.result }} ${{ needs.sanitizers.result }} ${{ needs.python.result }} ${{ needs.python-extras.result }} ${{ needs.harness.result }}
         run: |
           fail=0
           if [ "$CHANGES" != success ]; then echo "Changed files ended: $CHANGES"; fail=1; fi
@@ -352,7 +389,7 @@ jobs:
           allowed=" success "
           if [ "$CODE" = false ]; then allowed=" success skipped "; fi
           set -- $OTHERS
-          for job in "C++ core" "C++ sanitizers" "Python" "Python extras"; do
+          for job in "C++ core" "C++ sanitizers" "Python" "Python extras" "Python harness tools"; do
             case "$allowed" in
               *" ${1:-none} "*) ;;
               *) echo "$job ended: ${1:-none} (code=$CODE)"; fail=1 ;;

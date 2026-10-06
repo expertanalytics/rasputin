@@ -35,6 +35,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 
+from cli_driver import USAGE, invoke, ran, rough_dem, runner, write_tiff
 from geotiff_fixtures import KARTVERKET, elevations, micro_tiff, needs_codecs
 from recordread import (
     SEAMS_AGREE,
@@ -45,15 +46,7 @@ from recordread import (
     stats_row,
     stats_rows_named,
 )
-from test_cli_mesh_dem import (
-    SENTINEL,
-    USAGE,
-    assert_z_is_the_node_value,
-    invoke,
-    on_nodes,
-    runner,
-    write_tiff,
-)
+from test_cli_mesh_dem import SENTINEL, assert_z_is_the_node_value, on_nodes
 from tin_engine.cli import app
 from tin_engine.io.geotiff import decode_dem
 from vtkread import VtkFile, read_vtk
@@ -79,8 +72,7 @@ NUMBER = r"([0-9.eE+-]+|inf|nan)"
 
 def run(tmp_path: Path, tif: Path, *extra: str) -> tuple[VtkFile, str]:
     out = tmp_path / "x.vtk"
-    code, output = invoke("--dem", str(tif), "--out", str(out), *extra)
-    assert code == 0, output
+    output = ran("mesh", "--dem", str(tif), "--out", str(out), *extra)
     return read_vtk(out.read_bytes()), output
 
 
@@ -94,11 +86,8 @@ def run_stats(tmp_path: Path, tif: Path, *extra: str) -> tuple[VtkFile, str, str
     return read_vtk(out.read_bytes()), md.read_text(encoding="utf-8"), result.stderr
 
 
-@pytest.fixture
-def bumpy(tmp_path: Path) -> Path:
-    """17 x 21, seeded rough terrain: refinement has work to do at 1 m."""
-    array = np.random.default_rng(14).uniform(0.0, 50.0, (17, 21)).astype(np.float32)
-    return write_tiff(tmp_path / "bumpy.tif", micro_tiff(array))
+#: 17 x 21, seeded rough terrain: refinement has work to do at 1 m.
+bumpy = rough_dem(14)
 
 
 def min_angles_degrees(vtk: VtkFile) -> np.ndarray:
@@ -190,7 +179,7 @@ class TestNoData:
         array = np.full((3, 4), float(SENTINEL), dtype=np.float32)
         tif = write_tiff(tmp_path / "void.tif", micro_tiff(array, nodata=SENTINEL))
         out = tmp_path / "x.vtk"
-        code, output = invoke("--dem", str(tif), "--tolerance", "1", "--out", str(out))
+        code, output = invoke("mesh", "--dem", str(tif), "--tolerance", "1", "--out", str(out))
         assert code == USAGE, output
         assert "No such option" not in output, "refused for the wrong reason"
         assert not out.exists()
@@ -202,7 +191,7 @@ class TestRefusals:
     @pytest.mark.parametrize("value", ["-1", "nan", "inf", "-inf"])
     def test_a_bad_tolerance(self, tmp_path: Path, bumpy: Path, value: str) -> None:
         out = tmp_path / "x.vtk"
-        code, output = invoke("--dem", str(bumpy), "--tolerance", value, "--out", str(out))
+        code, output = invoke("mesh", "--dem", str(bumpy), "--tolerance", value, "--out", str(out))
         assert code == USAGE, output
         assert "No such option" not in output, output
         assert "--tolerance" in output
@@ -210,7 +199,7 @@ class TestRefusals:
 
     def test_tolerance_with_a_fixture(self, tmp_path: Path) -> None:
         out = tmp_path / "x.vtk"
-        code, output = invoke("catchment", "--tolerance", "1", "--out", str(out))
+        code, output = invoke("mesh", "catchment", "--tolerance", "1", "--out", str(out))
         assert code == USAGE, output
         assert "No such option" not in output, output
         assert "--tolerance" in output
@@ -223,7 +212,7 @@ class TestWithoutTolerance:
     def test_the_uniform_mesh_is_unchanged(self, tmp_path: Path) -> None:
         tif = write_tiff(tmp_path / "larger.tif", micro_tiff(elevations(rows=7, cols=9)))
         out = tmp_path / "x.vtk"
-        code, output = invoke("--dem", str(tif), "--stride", "2", "--out", str(out))
+        code, output = invoke("mesh", "--dem", str(tif), "--stride", "2", "--out", str(out))
         assert code == 0, output
         blob = out.read_bytes()
         mesh = blob[blob.index(b"\nPOINTS ") + 1 :]

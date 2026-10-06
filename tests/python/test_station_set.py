@@ -236,7 +236,7 @@ def nve_lake(geometry: Any, objectid: int | None = 4_100_001, **extra: Any) -> d
 class TestReadLakes:
     """`read_nve_lakes(path) -> (tuple[Lake, ...], crs)`. Before increment 29's
     PR 4, neither `read_lakes` nor `Lake` existed; audit PR C renamed the
-    reader by what it reads (`docs/increments/python-audit.md`, section 10)."""
+    reader by what it reads (`docs/increments/python-audit.md`, section 11)."""
 
     def test_the_name_says_what_it_reads(self, station_set: ModuleType) -> None:
         """Audit PR C, red test 5: no alias keeps the old name."""
@@ -327,7 +327,7 @@ class TestReadLakes:
 
 
 class TestOneGeojsonRule:
-    """`docs/increments/python-audit.md`, section 10, red test 3: `features_of`
+    """`docs/increments/python-audit.md`, section 11, red test 3: `features_of`
     reads through `io.geojson.read_collection(..., default_crs=None)`, and
     every refusal, the decoder's among them, starts with the file's name."""
 
@@ -415,7 +415,7 @@ NOT_A_GEOMETRY: list[tuple[str, Any]] = [
 
 
 class TestAFileWithNoGeometry:
-    """`docs/increments/python-audit.md`, section 10's wording table, the row
+    """`docs/increments/python-audit.md`, section 11's wording table, the row
     "a `crs` member and either a `Feature` without `geometry` or an object
     with neither `type` nor `features`". The shape rule reads either as one
     feature; the reader then refused it as `None is a None, not a Point` (or

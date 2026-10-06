@@ -34,17 +34,14 @@ from typing import Any
 import pytest
 from shapely import affinity
 from shapely.geometry import Point, Polygon
-from typer.testing import CliRunner
 
 import tin_engine
+from cli_driver import geojson, invoke
 from cog_fixtures import write_cache
 from fetch_fixtures import PROJECTED_CRS, RangeServer, page_of, projected, snapshot
 from geotiff_fixtures import TIE_X, TIE_Y
 from plyread import read_ply
-from test_cli_mesh import plain
-from test_cli_mesh_domain import geojson
 from test_cli_mesh_mosaic import field, same_mesh
-from tin_engine.cli import app
 from tin_engine.dem_input import _domain_plan
 from tin_engine.io.cog import blocks_meeting
 from tin_engine.io.domain_file import read_domain
@@ -58,12 +55,6 @@ CITES = ("First cited work, 2024.", "Second cited work, 2025.")
 PACKAGE = Path(tin_engine.__file__).resolve().parent
 USAGE, REFUSED = 2, 1
 TRIANGLE = [(TIE_X + 200, TIE_Y - 140), (TIE_X + 280, TIE_Y - 140), (TIE_X + 240, TIE_Y - 100)]
-runner = CliRunner(env={"NO_COLOR": "1", "TERM": "dumb"})
-
-
-def invoke(*args: str) -> tuple[int, str]:
-    result = runner.invoke(app, list(args))
-    return result.exit_code, plain(result.output)
 
 
 @pytest.fixture(scope="module")

@@ -398,7 +398,7 @@ Two things in it are not mechanical:
 
 * `describe` becomes **two `@overload` stubs and nothing else**, the pattern
   `cross` already uses in this file and the reason the file is hand-written
-  rather than generated (`_core.pyi:3-5`).
+  rather than generated (`src_python/tin_engine/_core.pyi@44fa7f5:3-5`).
 
   **This said "plus an implementation stub" and that was wrong — mypy rejects
   it**: *"An implementation for an overloaded function is not allowed in a stub

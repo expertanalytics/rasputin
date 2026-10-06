@@ -1,5 +1,5 @@
 """What every GeoJSON reader says for every malformed geometry shape
-(python-audit.md, section 10, "Refusal wordings that change").
+(python-audit.md, section 11, "Refusal wordings that change").
 
 Run against one revision's `tin_engine`, imported from a scratch copy:
 

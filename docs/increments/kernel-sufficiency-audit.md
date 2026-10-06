@@ -96,7 +96,7 @@ reason rather than leaning on the measurement alone.
 
 ### The gap that is real
 
-`on_segment<K>` (`include/terrain/core/segment.hpp:68-74`) returns `false`
+`on_segment<K>` (`include/terrain/core/segment.hpp@44fa7f5:68-74`) returns `false`
 unless `K::orient2d(s.a, s.b, p) == Collinear` — **exact** incidence. Every
 branch of `05-noder.md`'s `classify` that could detect a T-junction or an
 overlap goes through that test or through "all four orientations `Collinear`".

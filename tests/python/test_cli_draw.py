@@ -69,9 +69,9 @@ from typing import Any
 
 import numpy as np
 import pytest
-from typer.testing import CliRunner
 
 import tin_engine.cli as cli
+from cli_driver import plain, runner
 from tin_engine.cli import ROLES, app
 
 SVG_NS = "http://www.w3.org/2000/svg"
@@ -103,23 +103,6 @@ DEFAULT_SNAP_SPACING = 1e-3
 #: and it is the lower bound that makes `--snap-spacing` an option rather than
 #: a constant hidden in a header.
 OVERFLOWING_SNAP_SPACING = 1e-12
-
-runner = CliRunner(env={"NO_COLOR": "1", "TERM": "dumb"})
-
-ANSI = re.compile(r"\x1b\[[0-9;]*m")
-BOX = re.compile(r"[─-╿]")
-
-
-def plain(text: str) -> str:
-    """Output as a reader sees it: no colour, no box rule, no line wrapping.
-
-    Typer renders errors inside a Rich panel whose width is the terminal's, so
-    a message asserted verbatim would fail on a narrow one and pass on a wide
-    one -- a flaky test by construction. Collapsing the box and the whitespace
-    makes every assertion below independent of where Rich chose to wrap, while
-    leaving words and numbers intact, which is all any of them look at.
-    """
-    return " ".join(BOX.sub(" ", ANSI.sub("", text)).split())
 
 
 def invoke(*args: str) -> Any:
