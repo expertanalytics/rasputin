@@ -662,3 +662,5 @@ second, as part of the fold.
 ## Review
 
 **Design review, round 1, 2026-10-06.** Range `a7154ec..781451d`. Verdict: CHANGES REQUESTED: the whole-feature test (3.2) drops the hole edges of an invalid polygon whose shell misses the region (B1); "one point per ring" in 4.2 is wrong (B2); row 30's 30b description on `worktree-landcover-speed` contradicts this design (B3). LOC: 0 (design only); estimate +20 to +30. Not pushed; no CI.
+
+**Design review, round 2, 2026-10-06.** Range `781451d..a7314928`. Verdict: APPROVED. All three round 1 findings are fixed. B1 (the whole-feature test dropped hole edges) is fixed by testing the feature's linework, 3.2. B2 (the proof in 4.2) is fixed by redoing the proof around GEOS's bounding-box step. B3 (row 30's description of 30b) is fixed by section 13's rewrite at the fold. The three new probe cases and pin P5 were rerun on `a7154ec`'s install (shapely 2.1.2, GEOS 3.13.1) and match `base_a7154ec.txt`. Each plant is caught by the case meant for it. LOC: 0 (design only); estimate +20 to +30. Not pushed; no CI.
