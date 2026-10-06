@@ -265,3 +265,32 @@ branch mesh after 19:29:03: Now drawing from 'AC Power'  -InternalBattery-0 (id=
 ```
 
 <!-- END GENERATED -->
+
+## The probe at the merge commit `26a5d839` (design section 6, "At the merge")
+
+Run 2026-10-06, 19:44 to 19:46, on AC power throughout (`raw/probe_merge_power.txt`), by
+`scripts/probe_merge.sh`: `26a5d839` (this branch with master merged in, #199 and #201) installed
+non-editable in a scratch venv from `git archive` (Python 3.14.7, tifffile 2026.9.20, imagecodecs
+2026.8.16, numpy 2.5.3, shapely 2.1.2, GEOS 3.13.1, the same as the base's), that venv's own `python`
+calling the probe from the worktree root (its `tests/python` and probe equal `26a5d839`'s:
+`git diff --stat 26a5d839 ef4abf64 -- tests docs/increments/30c-probes/dem_bytes.py` prints nothing).
+The probe's first line names the scratch venv's `site-packages/tin_engine`. Both modes ran twice;
+the two runs' `fixture` and `mesh` lines are identical, and run 1 is `raw/probe_merge_26a5d839.txt`
+(first line: how it was made).
+
+Against `docs/increments/30c-probes/base_6c729e97.txt`, by section 6's two `comm` commands:
+
+| | lines |
+|---|---|
+| base `fixture` and `mesh` lines | 1,180 |
+| base lines missing or changed in the merge's run | 0 |
+| lines the base lacks | 16, the same 16 the branch's run at `bc8d91eb` added (`raw/probe_compare.txt`) |
+| `.vtk` hashes (Numedalslågen, Skiensvassdraget) | `34f7117e5e528e97`, `ab996019190166f9`, the base's |
+
+The 16 new lines are the red suite's: `test_io_cog.py` `TestR1DefaultThreadsAreTheMachines` (3) and
+`TestW2Determinism::test_p2_…` (10), `test_mosaic.py` `TestSeamRegionOnCountedNodes` P1 (2) and R2 (1).
+Master's merge adds none: pytest over the 14 suites gives 726 passed, 4 skipped, against 720 on the
+branch at `bc8d91eb`; the 6 more are master's two parametrised tests in `test_io_repository.py`
+(`test_a_call_to_the_repositorys_own_reader_is_not_an_opener`,
+`test_only_the_repositorys_own_names_are_let_through`, 6 cases by `--collect-only`), which call neither
+`assemble` nor `decode_window`. The probe recorded 1,194 calls, as on the branch.
