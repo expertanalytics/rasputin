@@ -1,7 +1,7 @@
 # PR A design: `audit-lattice` (F2, F9, F10's repository Protocol, F12's two `mosaic` edges)
 
-Status: **design review round 1 answered (by `@architect`); next, `@reviewer`'s
-design review round 2; no `@tester` step yet.** Branch
+Status: **red step done (6cf4359); its pins ruled by `@architect`; next,
+`@developer`'s green step.** Branch
 `worktree-audit-lattice`, stacked on PR B's approved head `618328b`
 (`worktree-audit-crs`, not pushed); it is rebased onto master when B merges.
 Every `@618328b` citation below reads B's head, which B's merge commit keeps
@@ -270,7 +270,7 @@ behaviour, and must be exactly these 88 lines, the prototype's:
    and 2 check-point lines each). The check filters on the case field (the
    second, `+inf`, `-inf` or `+inf beside -inf`), because every array
    outcome contains "inf" (`+inf=0`), so a whole-line `grep -v inf` passes
-   any diff: `diff <base> <head> | awk -F' [|] ' '/^> target_grid/ && $2 !~
+   any diff of `resample` or `check_point_blocks`: `diff <base> <head> | awk -F' [|] ' '/^> target_grid/ && $2 !~
    /^[+-]inf/' | wc -l` is 0. It can fail: on the base output, each line
    prefixed `> `, it counts 81 (the `target_grid` lines of the other cases),
    and the same filter inverted, on `resample` and `check_point_blocks`,
@@ -314,8 +314,10 @@ Lean: no mutation round.
    set(vars(DemRepository))` (CI runs Python 3.12, which lacks
    `typing.get_protocol_members`).
 4. **`test_layering.py`**: the table above (red until the imports move).
-5. **Re-point** (green before and after, except the first three, which fail
-   once `window_meta` goes): `tests/python/test_io_cog.py@618328b:131, 168-183, 233`
+5. **Re-point** (red until green: a test cannot import a name that does
+   not exist yet, so each reads `Bounds`, `TileFootprint` or `windowed` at
+   call time and fails on its own, not at collection; ruled below, pin 1):
+   `tests/python/test_io_cog.py@618328b:131, 168-183, 233`
    and `tests/python/test_io_cache.py@618328b:190, 202` to `meta.windowed(w)`;
    `tests/python/test_mosaic_windowed.py@618328b:10, 31-32`'s fixture and its
    "HOW THIS FILE GOES RED" line; the imports of `Bounds` from `mosaic` and
@@ -332,6 +334,59 @@ Lean: no mutation round.
 On the prototype, the whole Python suite fails in exactly the `window_meta`
 users (38 failed and 10 errors, in `test_io_cog.py`, `test_io_cache.py` and
 `test_mosaic_windowed.py`) and passes elsewhere (5158 passed).
+
+### Pinned by the red step (6cf4359), ruled
+
+As `@tester` reported it: the base passes 5207; at 6cf4359, 203 failed, 148
+errors and 4903 passed, each failure a missing name, a layering row or the
+ruling; a scratch copy with the fix passes 5241, 0 failed. Each pin, ruled
+by `@architect`:
+
+1. **Re-pointed tests are red until green**, not "green before and after"
+   as test 5 first said: they read `Bounds` and `TileFootprint` from
+   `io.models` at call time (`importlib` inside `test_fetch_run.bounds`,
+   `test_mosaic_windowed.footprints`, `test_fetch_plan.box_of` and
+   `catchment_fixtures.MemoryRepository.footprints`, with the static imports
+   under `TYPE_CHECKING`), so the catchment, catchment-batch, fetch and
+   mosaic suites, `test_core_reduce` (5) and `test_dem_input_domain` (3)
+   fail per test until green. **Accepted**: a test cannot import a name
+   that does not exist yet, and a fallback to the old location would pin
+   nothing; the collection stays whole. Test 5's wording is fixed above.
+2. **One class each: `io.models.Bounds is mosaic.Bounds`,
+   `io.models.TileFootprint is io.repository.TileFootprint`.** **Matches
+   the design**: "moved", not copied. The old modules keep the name only as
+   their own import, because they use it; neither re-exports it
+   (`io/repository.py` drops it from `__all__`; `mosaic.py` has no
+   `__all__`, and mypy strict does not re-export a plain import). So every
+   `from tin_engine.mosaic import Bounds` in `src_python/` moves to
+   `io.models`, including two the site table does not list:
+   `src_python/tin_engine/dem_input.py@618328b:44` and the `mosaic` import
+   block of `src_python/tin_engine/catchment.py@618328b:43-51`.
+3. **`node_xy`**: Python ints give `float`, `np.int64` scalars give
+   `np.float64`, `int32`, `int64` and `float64` arrays bit for bit.
+   **Accepted**: the design's "the result's type is what it was".
+4. **`index_of`**: Python floats give `float`; "unrounded" is checked with
+   `approx(abs=1e-12)` on a unit grid, bit for bit elsewhere. **Accepted.**
+5. **`node_box`**: four Python `float`s, including a 6 x 1 grid.
+   **Accepted**: built from `node_xy` on Python ints, as the design says,
+   so no numpy scalar enters.
+6. **`valid_mask`**: a `np.bool_` array of the input's shape (2-D kept).
+   **Accepted**: the design's signature.
+7. **The infinity test**: 9 positive-weight and 7 zero-weight target nodes,
+   listed by hand from the bilinear stencil; every other node byte-equal to
+   the clean source's `resample`; `threads=1`; `check_point_blocks` checked
+   at all 30 source nodes, the infinite one with `z` infinite.
+   **Accepted**: the 9 and 7 are the design's counts on the 11 x 9 grid.
+8. **`test_mosaic_windowed.py`**: `BOXES` holds tuples, turned into
+   `Bounds` by `Bounds.of` at call time; the `window_meta` fixture keeps its
+   name and returns `lambda meta, w: meta.windowed(w)`. **Accepted**: the
+   smallest re-point; the fixture's docstring says what it is.
+9. **Renames**: `test_window_meta_moves_the_corner_by_whole_cells` becomes
+   `test_windowed_...`; `test_io_cache.py`'s now unused `cog` fixture is
+   deleted. **Accepted.**
+10. **The Protocol test** also checks that `TiffDemRepository` and
+    `CacheRepository` have `load_window` and `check`. **Accepted**: green
+    already, and it holds the design's "both implementations have" claim.
 
 ## Net production lines: about -28
 
@@ -370,11 +425,35 @@ mesh hashes), as `docs/benchmarks/2026-10-04/` does for 20 and 23b.
 The bench's domains (the whole tile and `--domain` files, in the DEM's own
 CRS) reach at most `grid_domain`, `mosaic`, `domain` and `dem_input`, never
 `target_grid` (the only change in behaviour), `burn`, `catchment` or
-`fetch`, and the bench has no `--out-crs` to pass. Those four are covered
-by the differential probe alone: `open_dem` with a domain reprojected to
-UTM 32, `resample`, `check_point_blocks`, `burn_reach`, `delineate` and
+`fetch`: `tools/bench.py run` passes extra mesh arguments after `--`
+(`tools/bench.py@618328b:636, 680`), and the acceptance run above passes
+none, so no `--out-crs`.
+
+**One reprojected run is added**, because `target_grid` holds A's only
+change in behaviour and four of its sites (`resample`'s fractional index,
+`check_point_blocks`' node coordinates, the grid's rectangle twice) are
+rewritten: A's head against `618328b`, back to back,
+`tools/bench.py run --label audit-pr-a-reprojected --tree <tree> --dem
+../rasputin_data/sao_francisco_piece/bho2017_5k_76949_anadem_window_epsg4674.tif
+--domain ../rasputin_data/sao_francisco_piece/bho2017_5k_76949_outline_epsg4674.geojson
+--tolerance 10 -- --out-crs EPSG:31983` (the Velhas piece of the São
+Francisco basin, ANADEM at about 30 m in EPSG:4674, meshed in UTM 23S: the
+domain and frame of `docs/benchmarks/2026-10-04/15f-3-acceptance/velhas.py`,
+which reads the `anadem-v1` cache; here the window file beside the outline
+in `../rasputin_data`, whose extent holds the outline's bounds).
+Expected: **every mesh file byte-identical**. The window holds no infinity
+and no NaN (its sidecar, `bho2017_5k_76949_anadem_window_epsg4674.json`,
+says `nodata_nodes: 0`; `np.isinf` over the array counts 0), so the
+ruling changes nothing there and any difference is a defect in a rewritten
+site. `@perf` checks the command runs at `618328b` before relying on it;
+if `bench.py` refuses the geographic file, it says so and the probe stays
+the only gate for `target_grid`.
+
+`burn`, `catchment`, `fetch` and the rest of `target_grid` are covered by
+the differential probe alone: `open_dem` with a domain reprojected to UTM
+32, `resample`, `check_point_blocks`, `burn_reach`, `delineate` and
 `plan_object`, value for value. The probe is the gate for them; the bench
-is the gate for the meshes refine builds from the DEM's own grid.
+is the gate for the meshes refine builds.
 
 ## Merging with B, C, D and F
 
@@ -427,6 +506,13 @@ pinned when A is rebased onto master after B merges); and `python-audit.md`
 lines 1271-1277, which list other files' citations in B's section 9 and sit
 in the file every audit branch edits.
 
+**Moved by the red step (6cf4359), owed a pin:**
+`docs/increments/15e-memory-fixes.md` line 327 cites
+`tests/python/test_target_grid.py:399-400` and `:514-515` (the two "Went red
+at 9879805" comments); the infinity tests inserted above them move them to
+476 and 591. Pin both to `@44fa7f5`, where they read as cited, in the next
+prose commit that may edit that file.
+
 `project_structure.md`'s `io/models.py` row ("Pydantic RasterMeta /
 DemTile") is rewritten by `@architect` after the green commit, so it
 describes the code as written (`Bounds`, `IndexWindow`, `TileFootprint`, the
@@ -455,3 +541,5 @@ where they are, unchanged.
 ## Review
 
 **PR A (`audit-lattice`), design review, round 1, 2026-10-06.** Range `618328b..62b5226`. Verdict: CHANGES REQUESTED. 0 production lines. The probe reproduces its base output byte for byte and fails under planted mutants (72 lines for the ruling's `_valid`, 3 for a `grid_domain` shift); all 15 re-pinned citations quote what they claim; the site table matches `git grep` at 618328b; the merge with F conflicts only in `catchment.py`'s import block. Blocking: line 268 must read 'no mutation round'; the site table lacks `src_python/tin_engine/mosaic.py@618328b:265`'s `window_meta` docstring.
+
+**PR A (`audit-lattice`), design review, round 2, 2026-10-06.** Range `62b5226..0b20e1d`. Verdict: APPROVED. 0 production lines. Both round-1 blockers fixed ('Lean: no mutation round.'; the site-table row for `src_python/tin_engine/mosaic.py@618328b:265`). On `docs/increments/python-audit-probes/lattice_probe-618328b.txt@0b20e1d` the inf filter on the case field counts 81, inverted over `resample`/`check_point_blocks` 72. The `node_box` and F10 departures, the `@perf` claim about which paths the bench reaches, the probe docstring and the two corrected review records check out. `check_citations --base 618328b` exits 0.
