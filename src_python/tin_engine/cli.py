@@ -92,7 +92,7 @@ from tin_engine.dem_input import (
     open_dem,
     repository_for,
 )
-from tin_engine.domain import DomainError, DomainPolygon, read_domain
+from tin_engine.domain import DomainError, DomainPolygon
 from tin_engine.elevation import Trimmed, trim
 from tin_engine.feature_input import (
     CLASS_MAPS,
@@ -102,19 +102,20 @@ from tin_engine.feature_input import (
     FeatureSet,
     FeatureSource,
     open_features,
-    read_lakes,
+    read_lake_polygons,
 )
 from tin_engine.features import DEFAULT_VOCABULARY
 from tin_engine.gauge import Gauge, Placement
 from tin_engine.grid_domain import default_stride, refine_start_stride, subsample
 from tin_engine.hydrography import RiverSegment, Station
 from tin_engine.io.cog import NotCached
+from tin_engine.io.domain_file import read_domain
 from tin_engine.io.geojson import catchment_geojson
 from tin_engine.io.models import Bounds, DemTile, RasterMeta
 from tin_engine.io.ply import write_ply
 from tin_engine.io.repository import DemRepository
 from tin_engine.io.rivers import read_segments
-from tin_engine.io.station_set import read_references, read_stations
+from tin_engine.io.station_set import read_nve_lakes, read_references, read_stations
 from tin_engine.io.vtk_legacy import write_vtk
 from tin_engine.landcover import label_triangles
 from tin_engine.mosaic import Seam
@@ -1799,8 +1800,9 @@ def catchment(
         Path | None,
         typer.Option(
             "--lakes",
-            help="Lake polygons (.gpkg, .geojson or .json); the one under the seed is the "
-            "seed. Without it, the seed is the DEM node nearest the point.",
+            help="Any polygon file (.gpkg, .geojson or .json, in any CRS; lines and points "
+            "in it are skipped): the lake polygon under the seed is the seed. Without it, "
+            "the seed is the DEM node nearest the point.",
         ),
     ] = None,
     lakes_layer: Annotated[
@@ -1870,7 +1872,7 @@ def catchment(
         raise typer.BadParameter(f"use {' or '.join(CATCHMENT_SUFFIXES)}", param_hint="--out")
     target = _destination(out, out_parent, out.stem)
     try:
-        found = None if lakes is None else read_lakes(lakes, lakes_layer, seed, seed_crs)
+        found = None if lakes is None else read_lake_polygons(lakes, lakes_layer, seed, seed_crs)
     except FeatureError as exc:
         raise typer.BadParameter(str(exc), param_hint="--lakes") from exc
     try:
@@ -2068,8 +2070,9 @@ def station_catchments(
         Path | None,
         typer.Option(
             "--lakes",
-            help="Lake polygons (GeoJSON, in the river file's CRS): a gauge in a lake, or on "
-            "a lake line within 30 m of it, is seeded with the whole lake.",
+            help="The lakes.geojson that rasputin fetch-stations writes, or GeoJSON like it: "
+            "polygons only, with a crs member naming the river file's CRS. A gauge in a "
+            "lake, or on a lake line within 30 m of it, is seeded with the whole lake.",
         ),
     ] = None,
     map_radius: Annotated[
@@ -2126,8 +2129,6 @@ def station_catchments(
         references = _read_beside(read_references, reference, "--reference", "reference", crs)
     lake_list = None
     if lakes is not None:
-        from tin_engine.io.station_set import read_lakes as read_nve_lakes  # not 22's read_lakes
-
         lake_list = _read_beside(read_nve_lakes, lakes, "--lakes", "lakes", crs)
     try:
         repository, _ = repository_for(tuple(dem))

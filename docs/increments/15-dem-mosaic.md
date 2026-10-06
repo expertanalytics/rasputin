@@ -753,7 +753,7 @@ before anything else sees them.
   straight segment between them in the frame the mesh is built in. Within one
   UTM zone the edges bend by millimetres per kilometre of edge (B7's order of
   magnitude). Not densified.
-- `check_crs`'s must-match rule (`domain.py:97` at `d34d79d`) is replaced by
+- `check_crs`'s must-match rule (`src_python/tin_engine/domain.py@d34d79d:97`) is replaced by
   the transform. It was kept as "one replaceable function at the Python
   boundary" for exactly this (16, "Ruled by the user"). The extent check (16
   R1) now runs after the transform, against the mosaic's coverage (R4 point

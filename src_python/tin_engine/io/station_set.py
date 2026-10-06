@@ -16,26 +16,27 @@ from typing import Any
 
 from shapely.geometry import MultiPolygon, Polygon, shape
 
-from tin_engine.crs import parse_crs
 from tin_engine.hydrography import Lake, Station
 
+from .geojson import read_collection
 from .repository import read_json
 
 
 def features_of(path: Path) -> tuple[list[dict[str, Any]], str]:
-    """The features of the GeoJSON FeatureCollection in `path` and the text
-    of its `crs` member, which is required and must name a CRS pyproj reads."""
-    doc = read_json(path)
-    member = doc.get("crs") if isinstance(doc, dict) else None
-    if not member:
-        raise ValueError(f"{path.name}: no crs member; the file must name its CRS")
-    name = (member.get("properties") or {}).get("name") if isinstance(member, dict) else None
-    if name is None:
-        raise ValueError(f"{path.name}: the crs member has no name; it must name the CRS")
-    parse_crs(str(name))
-    if not isinstance(doc.get("features"), list):
-        raise ValueError(f"{path.name}: no features list; the file is not a FeatureCollection")
-    return list(doc["features"]), str(name)
+    """The features of the GeoJSON in `path` and the text of its `crs` member,
+    which is required and must name a CRS pyproj reads (`read_collection`
+    with no default); a refusal names the file, and a feature whose geometry
+    is missing, not an object, or has no or an empty `type` is refused by its
+    index."""
+    try:
+        features, crs = read_collection(read_json(path), default_crs=None)
+    except ValueError as exc:
+        raise ValueError(f"{path.name}: {exc}") from exc
+    for i, f in enumerate(features):
+        g = f.get("geometry")
+        if not isinstance(g, dict) or not g.get("type"):
+            raise ValueError(f"{path.name}: feature {i} has no geometry")
+    return features, crs
 
 
 def required(path: Path, feature: Mapping[str, Any], key: str) -> Any:
@@ -96,7 +97,7 @@ def read_references(path: Path) -> tuple[Mapping[str, Polygon | MultiPolygon], s
     return polygons, crs
 
 
-def read_lakes(path: Path) -> tuple[tuple[Lake, ...], str]:
+def read_nve_lakes(path: Path) -> tuple[tuple[Lake, ...], str]:
     """The lakes in `path`, in file order, a MultiPolygon split into its parts,
     and the file's CRS. A geometry that is not a Polygon or MultiPolygon, or
     has no area, is refused naming the feature's `objectid` (else its index)."""
@@ -117,7 +118,7 @@ def read_lakes(path: Path) -> tuple[tuple[Lake, ...], str]:
 
 __all__ = [
     "features_of",
-    "read_lakes",
+    "read_nve_lakes",
     "read_references",
     "read_stations",
     "required",

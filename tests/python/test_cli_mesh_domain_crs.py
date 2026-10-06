@@ -79,7 +79,8 @@ from test_cli_mesh_domain import quarter_circle
 from test_cli_mesh_mosaic import terrain, write_tiles
 from test_cli_mesh_refine import SEAMS_AGREE, file_field, stats_row
 from tin_engine.dem_input import DemInput, DemRequest, open_dem
-from tin_engine.domain import DomainPolygon, read_domain
+from tin_engine.domain import DomainPolygon
+from tin_engine.io.domain_file import read_domain
 from tin_engine.io.geotiff import decode_dem
 from vtkread import VtkFile
 

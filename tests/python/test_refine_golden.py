@@ -40,9 +40,9 @@ from tin_engine import _core
 from tin_engine._core import ChainRole
 from tin_engine.chains import start_chains
 from tin_engine.cli import DEFAULT_SNAP_SPACING, ROLES, _constraint_arrays, _engine
-from tin_engine.domain import read_domain
 from tin_engine.features import DEFAULT_VOCABULARY
 from tin_engine.grid_domain import refine_start_stride, subsample
+from tin_engine.io.domain_file import read_domain
 from tin_engine.io.geotiff import decode_dem
 from tin_engine.raster import to_core
 
