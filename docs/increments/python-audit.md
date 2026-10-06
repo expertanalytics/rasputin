@@ -69,11 +69,18 @@ green commit `0a11a34`, in which `read_source` reads every empty
 and asked for prose only. Each of rounds 1 to 3 found more rows missing
 from a hand-written wording table, so the table is now a short summary and
 the record is a committed probe and its outputs at the base and the head
-(section 10, "Refusal wordings that change"). Next: a prose-only
-`@reviewer` round 4, which re-runs the probe at both revisions and checks
-that its output matches the committed files, and checks the summary and
-the known gaps against the diff of the two; then push on Ola's yes, after
-PR B.
+(section 10, "Refusal wordings that change"). The probe found that a
+top-level `Feature` whose `geometry` is not an object (`7`, `"Point"`,
+`[1, 2]`) crashed the station, reference, NVE lake and river readers,
+which the base refused, so that fix was taken into this PR too:
+`@tester`'s red commit `5a02bc9` (64 tests) and `@developer`'s green
+commit `21f49d6`, in which `features_of` refuses a geometry that is not an
+object, or whose `type` is missing or empty, with `feature <i> has no
+geometry`; +29 net, this fix +1. Next: a prose-only `@reviewer` round 4,
+which re-runs the probe at `32b5092` and `21f49d6` and checks that its
+output matches the committed files, checks the summary and the known gaps
+against the diff of the two, and reads the code of `0a11a34..21f49d6`;
+then push on Ola's yes, after PR B.
 
 Re-checked against master `44fa7f5`: `git diff --stat 12dace7 44fa7f5 --
 src_python` is empty, and of the files cited below only `tools/brief.py`
@@ -1637,9 +1644,9 @@ was read, the refusal the command line shows, or `UNCAUGHT` for a
 traceback. Its docstring lists the shapes and says how to run it on a
 scratch copy of one revision. Its outputs at the base and the head are
 committed beside it, `geojson_wordings-32b5092.txt` and
-`geojson_wordings-0a11a34.txt`, so
+`geojson_wordings-21f49d6.txt`, so
 
-    diff docs/increments/python-audit-probes/geojson_wordings-{32b5092,0a11a34}.txt
+    diff docs/increments/python-audit-probes/geojson_wordings-{32b5092,21f49d6}.txt
 
 is every wording this PR changes on those shapes. A later change to a
 reader re-runs the probe and commits a new output beside these.
@@ -1652,66 +1659,41 @@ station, reference, NVE lake and river readers):
 | `"crs": null` | all | read as WGS 84 (domain, features, `catchment --lakes`); `no crs member; ...` (stations) | refused: `the crs member is null; the file must name its CRS` |
 | `"crs": {}`, or a member whose name is null or missing | all | by reader and shape: read as WGS 84, a refusal quoting a Python key or `cannot read the CRS None`, or `no crs member; ...` | refused: `the crs member has no name; it must name the CRS` |
 | an unreadable CRS name | stations | refused without the file's name | the same, after `<name>: ` |
-| one `Feature` or one bare geometry, not a collection | features, `catchment --lakes`, stations | refused | read; a bare geometry has no properties, so the station, reference and river readers then refuse it for the missing property (gaps 3 and 4) |
+| one `Feature` or one bare geometry, not a collection | features, `catchment --lakes`, stations | refused | read; a bare geometry has no properties, so the station, reference and river readers then refuse it for the missing property (gaps 2 and 3) |
 | a collection with no `type` | domain | refused | read |
 | `"features"` not a list, or a JSON list, not an object | all | various, one a traceback in stations | `no features list; the file is not a FeatureCollection`; `not a GeoJSON object; ...` |
-| a feature whose geometry is missing, null, empty, typeless or of `type` null | stations | `<label> is a None, not a Point` (and the like) | `feature <i> has no geometry`, `<i>` its index in the file |
+| a feature whose geometry is missing, null, empty, not an object (`7`, `"Point"`, `[1, 2]`), typeless, or of an empty `type` (null, `""`, `0`, `false`, `[]`, `{}`) | stations | in a collection, `<label> is a None, not a Point` and the like (`is a , not`, `is a 0, not`, `with an area ()`), or a traceback (`AttributeError ... 'get'`) for a geometry that is not an object; one `Feature` refused as not a collection | `feature <i> has no geometry`, `<i>` its index in the file |
 | an empty `geometry` (`""`, `0`, `false`, `[]`, `{}`) | features, `catchment --lakes` | a traceback (`AttributeError ... is_empty`) | read as `null`: an empty feature, skipped and counted |
 | a leading UTF-8 byte order mark | domain, features, `catchment --lakes` | refused (`Unexpected UTF-8 BOM ...`) | read (stations read it before and after) |
 
-**Known gaps at `0a11a34`, not fixed here.** Each is a line of
-`geojson_wordings-0a11a34.txt`; `grep UNCAUGHT` lists the tracebacks.
+**Known gaps at `21f49d6`, not fixed here.** Each is a line of
+`geojson_wordings-21f49d6.txt`. `grep -c UNCAUGHT` gives 2 there (50 at
+the base), both gap 1.
 
-1. **Traceback: a non-empty `geometry` that is not an object** (`7`,
-   `"Point"`, `[1, 2]`) in the station, reference, NVE lake and river
-   readers raises `AttributeError: '<type>' object has no attribute
-   'get'`, which `station-catchments` does not catch (it catches `OSError`
-   and `ValueError`). In a collection, before and after. As a top-level
-   `Feature`, **from this PR**: the base refused the file (`no features
-   list; the file is not a FeatureCollection`). 36 lines, 12 of them new.
-   The cause is `features_of`'s test,
-   `src_python/tin_engine/io/station_set.py@0a11a34:61`, which calls
-   `.get` on whatever `geometry` holds. See the note after this list.
-2. **Traceback: `--domain` with a geometry whose `type` is `""`** raises
+1. **Traceback: `--domain` with a geometry whose `type` is `""`** raises
    shapely's `GeometryTypeError` (`Unknown geometry type: ''`), which
    `read_domain` does not turn into a refusal: it catches
    `shapely.errors.GEOSException`
-   (`src_python/tin_engine/io/domain_file.py@0a11a34:72`), and
+   (`src_python/tin_engine/io/domain_file.py@21f49d6:72`), and
    `GeometryTypeError` is a `ShapelyError` but not a `GEOSException`.
-   Before and after (`tin_engine/domain.py` at the base).
-3. **pydantic's message:** a station feature with no `station` property
+   As a top-level `Feature` and as the first feature of a collection;
+   before and after (`tin_engine/domain.py` at the base).
+2. **pydantic's message:** a station feature with no `station` property
    gives the multi-line `1 validation error for Station ... Field
    required`, without the file's name. A bare `Point`, which has no
    properties, now reaches it (the base refused it as not a collection).
-4. **`None` names nothing:** a bare geometry of the wrong type for the
+3. **`None` names nothing:** a bare geometry of the wrong type for the
    station, reference or river reader is refused as `None is a <type>, not
    a ...`, from this PR (the base said `no features list; ...`); `None`
    stands for the station number the file lacks. Question 5 below.
-5. **An empty `type` value** (`""`, `0`, `false`, `[]`, `{}`) is not "no
-   geometry" to `features_of` (it tests for `None`), so the station readers
-   say `1.2.0 is a , not a Point` (then `a 0`, `a False`, `a []`, `a {}`)
-   and the NVE lake reader `lake 1 is not a polygon with an area ()`: a
-   refusal naming the file, in odd words. In a collection, before and
-   after; as a top-level `Feature`, from this PR (the base said `no
-   features list; ...`).
-6. **Python's words in a refusal:** `--domain`, `--features`, `read_source`
+4. **Python's words in a refusal:** `--domain`, `--features`, `read_source`
    and `catchment --lakes` refuse many malformed geometries naming the file
    but quoting a Python error, e.g. `not a GeoJSON FeatureCollection
    ('NoneType' object has no attribute 'lower')` for an object with only a
    `crs` member, or `cannot parse <name>: 'int' object has no attribute
    'get'` for `"geometry": 0` in `--domain` (`grep -v UNCAUGHT ... | grep
-   -c 'object has no attribute'`: 115 lines at `0a11a34`, 94 at the base,
+   -c 'object has no attribute'`: 115 lines at `21f49d6`, 94 at the base,
    where every top-level `Feature` was refused as `('features')`).
-
-**Note on gap 1** (`@architect`). Like the empty-geometry crash fixed in
-`0a11a34`, the 12 new lines of gap 1 are a refusal at the base that this PR
-turns into a traceback on a user's file. The fix is one expression in
-`features_of`: count a `geometry` that is not an object as no geometry
-(`not isinstance(g := f.get("geometry"), dict) or g.get("type") is None`),
-so those files are refused as `feature <i> has no geometry`; about 0 net
-lines, with a red test per reader for a top-level `Feature` and a second
-feature with `"geometry": 7`. Recommended before push; if the main session
-keeps this PR prose-only, it joins question 5's later PR with gaps 2 to 6.
 
 **Ruling after code review round 2, taken** (`@architect`). The
 `--features` and `catchment --lakes` traceback on an empty non-null
@@ -1721,6 +1703,20 @@ keeps this PR prose-only, it joins question 5's later PR with gaps 2 to 6.
 green `0a11a34`. Between `483e4ae` and `0a11a34` the probe's output changes
 in exactly those 45 lines (15 shapes in each of `read_source`,
 `--features` and `catchment --lakes`).
+
+**Ruling after code review round 3, taken** (`@architect`). The probe
+found one more refusal at the base that this PR had turned into a
+traceback: a top-level `Feature` whose `geometry` is `7`, `"Point"` or
+`[1, 2]`, in the station, reference, NVE lake and river readers (in a
+collection it was a traceback at the base too). `features_of` now counts
+a geometry that is not an object, or whose `type` is missing or empty, as
+no geometry
+(`src_python/tin_engine/io/station_set.py@21f49d6:62-64`): red `5a02bc9`,
+green `21f49d6`, +1 net. Between `0a11a34` and `21f49d6` the probe's
+output changes in exactly 96 lines, every one now `feature <i> has no
+geometry` in those four readers: the 36 tracebacks (3 values, 3
+positions, 4 readers) and the 60 odd wordings of an empty `type` (`""`,
+`0`, `false`, `[]`, `{}`; 3 positions, 4 readers).
 
 ### Red tests (`@tester`, one commit, before any code)
 
@@ -1798,12 +1794,14 @@ about ten lines each, and the one rule, now total over the inputs above,
 costs about twenty. The new module costs its import block. No packing under
 `# fmt: skip` is designed.
 
-As built: +28 net (`python3 tools/count_loc.py 32b5092 693f560`) against the
+As built: +29 net (`python3 tools/count_loc.py 32b5092 21f49d6`) against the
 designed about +24. The first green commit `3b739ac` was +24; the check that
 code review round 1 led to (`693f560`, in `features_of`, shared by the
 station, reference, NVE lake and river readers) adds 4: the loop, the test,
 the raise, and the `return` split from the call (`count_loc.py 3b739ac
-693f560`: 5 added, 1 removed).
+693f560`: 5 added, 1 removed). `0a11a34` is 0 net (`count_loc.py 693f560
+0a11a34`), and `21f49d6` +1 (`count_loc.py 0a11a34 21f49d6`: 2 added, 1
+removed; the test split into a binding and a test).
 
 ### `@perf`
 
@@ -1881,4 +1879,4 @@ so they describe the code as written.
 
 **PR C (`audit-geojson-io`), code review, round 2, 2026-10-06.** Range `3b739ac..483e4ae` (round-1 prose `574a9a9`, red `28fe0cf`, green `693f560`, prose `483e4ae`). Verdict: CHANGES REQUESTED, prose only. +28 net production (`count_loc.py 32b5092 483e4ae`; this round +4). Suite 5310 passed, 17 skipped; mypy, ruff, gates and check_citations clean; the 8 new tests fail at `3b739ac` and pass at `483e4ae`. Round-1 blockers closed (`project_structure.md@483e4ae:112-115`, `:137-152`, `:230-242`, `:260-268`, `:279-280`). `features_of` (`src_python/tin_engine/io/station_set.py@483e4ae:51-63`) reaches only the station, reference, NVE lake and river readers. Probe of 22 shapes x 7 readers at three revisions. Blocking (`@architect`): row 6 (`docs/increments/python-audit.md@483e4ae:1649`) misses a missing `geometry` key, a feature with neither `type` nor `geometry`, and empty non-object geometries; known gap 1 (`:1653-1657`) is false for `""`, `0`, `false`, `[]`; the wrong-typed bare geometry's `None is a <type>, not a ...` wording (from `3b739ac`) is not recorded. Fixed in section 10 (the wording rows, known gaps, a ruling on a `--features` and `catchment --lakes` crash the fix's probe found, question 5) and the status paragraph; no code change.
 
-**PR C (`audit-geojson-io`), code review, round 3, 2026-10-06.** Range `483e4ae..0a11a34` (prose `591c026`, red `af5cb4e`, green `0a11a34`). Verdict: CHANGES REQUESTED, prose only. +28 net production (`count_loc.py 32b5092 0a11a34`; this round 0). Suite 5340 passed, 17 skipped; mypy, ruff, gates and check_citations clean; the 30 new tests fail at `591c026` and pass at `0a11a34`. The fix (`src_python/tin_engine/feature_input.py@0a11a34:390`) leaves no crash in `--features` or `catchment --lakes` (probe: 56 shapes x 8 readers at three revisions). Blocking (`@architect`): stale status paragraph, known gap 6, heading and ruling; the wording table lacks `--features` and `catchment --lakes` rows. Answered by making a probe the record instead of the table: `docs/increments/python-audit-probes/geojson_wordings.py` (68 shapes x 8 readers) with its outputs at `32b5092` and `0a11a34`, whose diff is the full list; section 10's table cut to a summary; known gaps rewritten from the probe (the old gap 6, the empty-geometry crash, dropped as fixed; a new one: a top-level `Feature` with `"geometry": 7` now crashes the station readers, which the base refused; `--domain` with `"type": ""` crashes, as at the base); the ruling past tense; the status paragraph; no code change.
+**PR C (`audit-geojson-io`), code review, round 3, 2026-10-06.** Range `483e4ae..0a11a34` (prose `591c026`, red `af5cb4e`, green `0a11a34`). Verdict: CHANGES REQUESTED, prose only. +28 net production (`count_loc.py 32b5092 0a11a34`; this round 0). Suite 5340 passed, 17 skipped; mypy, ruff, gates and check_citations clean; the 30 new tests fail at `591c026` and pass at `0a11a34`. The fix (`src_python/tin_engine/feature_input.py@0a11a34:390`) leaves no crash in `--features` or `catchment --lakes` (probe: 56 shapes x 8 readers at three revisions). Blocking (`@architect`): stale status paragraph, known gap 6, heading and ruling; the wording table lacks `--features` and `catchment --lakes` rows. Answered by making a probe the record instead of the table: `docs/increments/python-audit-probes/geojson_wordings.py` (68 shapes x 8 readers) with its outputs at `32b5092` and `0a11a34`, whose diff is the full list; section 10's table cut to a summary; known gaps rewritten from the probe (the old gap 6, the empty-geometry crash, dropped as fixed; a new one: a top-level `Feature` with `"geometry": 7` now crashes the station readers, which the base refused; `--domain` with `"type": ""` crashes, as at the base); the ruling past tense; the status paragraph; no code change. The new crash was then fixed in this PR (red `5a02bc9`, green `21f49d6`; ruled in section 10, "Ruling after code review round 3"), and the head's output became `geojson_wordings-21f49d6.txt`.
