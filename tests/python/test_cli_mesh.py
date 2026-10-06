@@ -33,7 +33,6 @@ done once by a person who then writes the version down.
 
 from __future__ import annotations
 
-import re
 from pathlib import Path
 
 import numpy as np
@@ -42,26 +41,10 @@ from numpy.testing import assert_array_equal
 from typer.testing import CliRunner
 
 import tin_engine.cli as cli
+from cli_driver import plain, runner
 from plyread import element_bytes, parse_header, read_ply, vertex_array
 from tin_engine.cli import app
 from tin_engine.viz.fixtures import GALLERY
-
-runner = CliRunner(env={"NO_COLOR": "1", "TERM": "dumb"})
-
-ANSI = re.compile(r"\x1b\[[0-9;]*m")
-BOX = re.compile(r"[─-╿]")
-
-
-def plain(text: str) -> str:
-    """Output as a reader sees it, per `test_cli_draw.py`'s `plain`.
-
-    Typer renders a refusal inside a Rich panel whose width is the terminal's,
-    so a message asserted verbatim is flaky by construction: it passes on a
-    wide terminal and fails on a narrow one. Collapsing the box rule and the
-    whitespace leaves the words and numbers every assertion here looks at.
-    """
-    return " ".join(BOX.sub(" ", ANSI.sub("", text)).split())
-
 
 #: The design's acceptance line uses this one. It triangulates cleanly.
 FIXTURE = "catchment"

@@ -33,7 +33,8 @@ from pathlib import Path
 import numpy as np
 import pytest
 from numpy.testing import assert_array_equal
-from typer.testing import CliRunner
+
+from cli_driver import runner
 
 vtk = pytest.importorskip("vtk")
 numpy_support = pytest.importorskip("vtk.util.numpy_support")
@@ -78,8 +79,6 @@ READERS = {
     "PolyData": "vtkPolyDataReader",
     "DataSet": "vtkDataSetReader",
 }
-
-runner = CliRunner(env={"NO_COLOR": "1", "TERM": "dumb"})
 
 
 def read_back(path: Path, reader_name: str) -> object:
