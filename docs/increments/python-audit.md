@@ -507,7 +507,7 @@ table in a `@tester` commit, and deletes the section 8 exception it removes
 | A | `audit-lattice` | F2, F9, F10 (repository Protocol), F12 (`mosaic`'s two) | about -100 | B | red test for the +-inf ruling; `@perf` run: meshes byte-identical |
 | F | `audit-catchment-shared` | F4, F10 (catchment types), F12 (`gauge`'s two, `catchment` -> `_core`) | about -40 | nothing | none |
 | C | `audit-geojson-io` | F5, F12 (`chains` -> `feature_input`) | +29, measured at `21f49d6` (section 10; first estimated -40) | B | red tests for the one `crs` rule, the shapes, the renames and the two `--help` texts |
-| D | `audit-encoders` | F7 | about -30 | C (shares `io/geojson.py`) | none |
+| D | `audit-encoders` | F7 | about +7 (designed in `python-audit-pr-d.md`; first estimated -30) | C (shares `cli.py`, `features.py`, `test_layering.py`) | none |
 | E | `audit-topology` | F6, X2 for `_chain_masks`/`_undirected` | about -35 | 23c-2 merged | none |
 | G | `audit-cli-options` | F1, F11, F12 (`installed_version`) | about -95 | 23c-2 merged | none |
 | H | `audit-mesh-run` | F8, X2 for the rest | about -60 (about 550 moved) | G, E | `@perf`: bench tool seam and byte-identical meshes |

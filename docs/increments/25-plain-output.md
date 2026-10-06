@@ -85,7 +85,7 @@ master `586fbc1`'s, before this increment; read them there
 
 | field | produced at | what it is | when |
 |---|---|---|---|
-| `feature_bits`, `feature_names`, `feature_vocabulary` | `io/vtk_legacy.py:123-126` | the edge vocabulary: bit numbers, names, a fingerprint | always; structural, unchanged by this design |
+| `feature_bits`, `feature_names`, `feature_vocabulary` | `src_python/tin_engine/io/vtk_legacy.py@44fa7f5:123-126` | the edge vocabulary: bit numbers, names, a fingerprint | always; structural, unchanged by this design |
 | `crs` | `src_python/tin_engine/cli.py@586fbc1:876` | the mesh's CRS | always |
 | `elevation_source` | `src_python/tin_engine/cli.py@586fbc1:876`, built at `src_python/tin_engine/cli.py@586fbc1:1496`, `:1518-1553`, `:1568-1570`, prefixed at `:870-875` | one sentence; its clauses are listed below | always (`none (z=0, --flat)` for a fixture, `:468`, `:960`) |
 | `source_crs`, `source_transform`, `computation_grid` | `src_python/tin_engine/cli.py@586fbc1:880-885` | reprojected path: the DEM's own CRS, PROJ's name for the transform, the resampled grid (`square 30 m grid in EPSG:31983, node (R, K) at (30 K, -30 R), resampled bilinear from EPSG:4674`) | reprojected only |
@@ -93,7 +93,7 @@ master `586fbc1`'s, before this increment; read them there
 | `dem_tiles`, `dem_seams` | `src_python/tin_engine/cli.py@586fbc1:893-897`, `mosaic.py:121-124` | tile names; overlaps that disagree (`a.tif \| b.tif: nodes 1, max 4, median 4`) or `none` | several files, a directory, or the cache |
 | `domain`, `domain_crs`, `domain_transform` | `src_python/tin_engine/cli.py@586fbc1:898-903`, `:1461` | `catchment.geojson, 1 ring 0 holes, 27 vertices`; its CRS; transform or `none` | `--domain` |
 | `features`, `features_crs`, `features_transform`, `features_notice` | `src_python/tin_engine/cli.py@586fbc1:904-934` | `clc2018_7908_3.gpkg:U2018_CLC2018_V2020_20u1, map corine, 60 features, 87 chains, 10266 vertices`; CRS; transform; the CORINE notice | `--features` |
-| `land_cover_codes` | `src_python/tin_engine/cli.py@586fbc1:1045-1046`, `io/vtk_legacy.py:118-119` | what `land_cover_code` holds | a coded `--features-map` |
+| `land_cover_codes` | `src_python/tin_engine/cli.py@586fbc1:1045-1046`, `src_python/tin_engine/io/vtk_legacy.py@44fa7f5:118-119` | what `land_cover_code` holds | a coded `--features-map` |
 
 The `.ply` carries only some of these as comments (`src_python/tin_engine/cli.py@586fbc1:877`, `:892`,
 `:900`, `:929`, `:933`, `:1009`): `crs`, `elevation` (the same sentence under
@@ -268,9 +268,9 @@ unreadable or break a legal requirement, so they stay, unchanged.
 
 | field | written by | why it must stay |
 |---|---|---|
-| `feature_bits`, `feature_names` | `io/vtk_legacy.py:124-125`; `.ply` `feature_bit <bit> <name>` comments, `io/ply.py:111` | the key to the `feature_mask` cell array and the per-feature 0/1 arrays: without it a mask of 5 does not say "river and railway" |
-| `feature_vocabulary` | `io/vtk_legacy.py:126`, `io/ply.py:112` | a digest of that key, so two files can be checked to use the same bits (increment 13) |
-| `land_cover_codes` | `io/vtk_legacy.py:118-119`, `src_python/tin_engine/cli.py@44fa7f5:1040` | says which code system the `land_cover_code` cell array holds (CORINE level 3); the ParaView preset from `rasputin palette corine` colours those codes and assumes that system |
+| `feature_bits`, `feature_names` | `src_python/tin_engine/io/vtk_legacy.py@44fa7f5:124-125`; `.ply` `feature_bit <bit> <name>` comments, `src_python/tin_engine/io/ply.py@44fa7f5:111` | the key to the `feature_mask` cell array and the per-feature 0/1 arrays: without it a mask of 5 does not say "river and railway" |
+| `feature_vocabulary` | `src_python/tin_engine/io/vtk_legacy.py@44fa7f5:126`, `src_python/tin_engine/io/ply.py@44fa7f5:112` | a digest of that key, so two files can be checked to use the same bits (increment 13) |
+| `land_cover_codes` | `src_python/tin_engine/io/vtk_legacy.py@44fa7f5:118-119`, `src_python/tin_engine/cli.py@44fa7f5:1040` | says which code system the `land_cover_code` cell array holds (CORINE level 3); the ParaView preset from `rasputin palette corine` colours those codes and assumes that system |
 | `features_notice` | `src_python/tin_engine/cli.py@44fa7f5:961`, text at `src_python/tin_engine/feature_input.py@44fa7f5:61-65` | the CORINE attribution ("Contains modified CORINE Land Cover 2018 data ... (c) European Union ..."), which the Copernicus data policy asks for on data derived from CORINE, as `licence_note` is for a downloaded DEM. Kept by Ola's ruling (2026-10-03) under the same rule as `dem_credit` |
 
 ### D3. The rules
