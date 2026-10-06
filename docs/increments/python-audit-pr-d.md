@@ -97,10 +97,12 @@ The refusals, one wording for both writers:
 whose wordings differ and stay.
 
 A module of its own, not `features.py` (which both writers already
-import): `features.py` is the edge-property vocabulary, imports only
-`hashlib` and `pydantic`, and would gain numpy and a text rule that is not
-about edges. Not `io/__init__.py`: it imports `ply` and `vtk_legacy`, so
-their importing it back is a cycle.
+import): `features.py` is the edge-property vocabulary and the feature
+shapes that carry it (it imports `hashlib`, `typing`, `pydantic` and
+`shapely.geometry`, `src_python/tin_engine/features.py@b26beb8:58-62`),
+and a rule for the text a file header may hold is not about edges. Not
+`io/__init__.py`: it imports `ply` and `vtk_legacy`, so their importing it
+back is a cycle.
 
 ### `io/ply.py`
 
@@ -293,7 +295,7 @@ record of what PR D changed.
 
 ## 9. Red tests (`@tester`, one commit, before any code)
 
-Lean: no throwaway implementation, no mutation round.
+Lean: no mutation round.
 
 1. **`tests/python/test_io_mesh_checks.py`** (new; red: the module does not
    exist): `checked_ascii("crs EPSG:25833", "comment") ==
@@ -376,15 +378,27 @@ and 1904, `24-release-hardening.md` lines 515 and 517,
 
 1. **PR D adds about 7 lines rather than removing 30.** It puts the two
    mesh writers' checks (text that may go in a file header, codes that
-   must fit 32 bits) and the ASCII escape in one place each, so the
-   GeoPackage writer uses them instead of copying them. Go ahead at +7, or
-   drop PR D and let the GeoPackage writer import the checks from where
-   they are? Default: go ahead.
+   must fit 32 bits) and the ASCII escape in one place each. The main
+   reasons: the two copies have already drifted (the `.ply` and `.vtk`
+   writers word the control-character refusal differently today), and
+   the `mesh --crs` check stops writing an empty `.ply` file in memory
+   just to see whether the writer refuses. A lesser reason: the
+   GeoPackage writer can use the shared int32 check and the vocabulary
+   table instead of copying them (section 5; it needs nothing else from
+   PR D). Go ahead at +7, or drop PR D and leave the copies where they
+   are? Default: go ahead.
 2. **The palette file, `summary.json` and `results.csv` stay written in
    `cli.py`**, each one standard-library call on data built elsewhere;
    moving them would add lines and, for `results.csv`, collide with PR F.
-   Default: they stay, and `project_structure.md` says why.
+   Default: they stay, and `project_structure.md` says why. If they stay,
+   the ROADMAP's "GeoPackage output" row (on `origin/master`), which says
+   PR D moves the file encoders out of `cli.py` into `io/`, is wrong about
+   PR D and is corrected when D lands (not edited here).
 3. **One refusal changes by one word:** `rasputin mesh river --flat --crs
    "x<carriage return>y" --out a.ply` says `a comment may not contain a
    control character` instead of `... control characters`, matching the
    `.vtk` writer's wording. Default: accept.
+
+## Review
+
+**PR D (`audit-encoders`), design review, round 1, 2026-10-06.** Range `b26beb8..7fcb47c`. Verdict: CHANGES REQUESTED, prose only: section 3's claim that `features.py` imports only `hashlib` and `pydantic` is false at b26beb8 (`typing` was already there; PR C added `shapely.geometry`, `src_python/tin_engine/features.py@b26beb8:58-62`; section 3 at `docs/increments/python-audit-pr-d.md@7fcb47c:99-103`); section 6 row D's 'Gates beyond review: none' (`docs/increments/python-audit.md@7fcb47c:510`) should list the red tests and the wording change. +7 recounted per file; probe reproduces byte for byte and three planted mutants changed it.
