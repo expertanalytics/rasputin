@@ -50,7 +50,7 @@ script reads. What differs, and why:
 - **Units go in the field name** (`tolerance_m`, `start_min_angle_deg`), not in
   a separate attribute. A VTK FieldData string array and a PLY comment have no
   slot for an attribute, and the catchment command's GeoJSON already names its
-  properties this way (`outline_tolerance_m`, `fine_area_m2`, `cli.py:1966-1969`).
+  properties this way (`outline_tolerance_m`, `fine_area_m2`, `src_python/tin_engine/cli.py@44fa7f5:1966-1969`).
 - **`licence_note` and `cite` keep their shipped names** (23a-2, Ola's ruling that a downloaded source's licence notes travel in the mesh file)
   rather than ACDD's `license` and `references`. Renaming them gains nothing a
   reader needs.
@@ -270,8 +270,8 @@ unreadable or break a legal requirement, so they stay, unchanged.
 |---|---|---|
 | `feature_bits`, `feature_names` | `io/vtk_legacy.py:124-125`; `.ply` `feature_bit <bit> <name>` comments, `io/ply.py:111` | the key to the `feature_mask` cell array and the per-feature 0/1 arrays: without it a mask of 5 does not say "river and railway" |
 | `feature_vocabulary` | `io/vtk_legacy.py:126`, `io/ply.py:112` | a digest of that key, so two files can be checked to use the same bits (increment 13) |
-| `land_cover_codes` | `io/vtk_legacy.py:118-119`, `cli.py:1040` | says which code system the `land_cover_code` cell array holds (CORINE level 3); the ParaView preset from `rasputin palette corine` colours those codes and assumes that system |
-| `features_notice` | `cli.py:961`, text at `feature_input.py:61-65` | the CORINE attribution ("Contains modified CORINE Land Cover 2018 data ... (c) European Union ..."), which the Copernicus data policy asks for on data derived from CORINE, as `licence_note` is for a downloaded DEM. Kept by Ola's ruling (2026-10-03) under the same rule as `dem_credit` |
+| `land_cover_codes` | `io/vtk_legacy.py:118-119`, `src_python/tin_engine/cli.py@44fa7f5:1040` | says which code system the `land_cover_code` cell array holds (CORINE level 3); the ParaView preset from `rasputin palette corine` colours those codes and assumes that system |
+| `features_notice` | `src_python/tin_engine/cli.py@44fa7f5:961`, text at `feature_input.py:61-65` | the CORINE attribution ("Contains modified CORINE Land Cover 2018 data ... (c) European Union ..."), which the Copernicus data policy asks for on data derived from CORINE, as `licence_note` is for a downloaded DEM. Kept by Ola's ruling (2026-10-03) under the same rule as `dem_credit` |
 
 ### D3. The rules
 
@@ -394,7 +394,7 @@ installed version, gives the same bytes:
 - `PATH` is resolved like `--stats`'s (`_destination` with `--out-parent`).
   It is refused, before any file is written, if it resolves to the mesh file,
   the `--out-edges` file or the `--stats` file, with the same kind of usage
-  error `_report_target` gives (`cli.py:1113-1125`). `-` is refused: standard
+  error `_report_target` gives (`src_python/tin_engine/cli.py@44fa7f5:1113-1125`). `-` is refused: standard
   output is `--stats -`'s.
 - It is written after the mesh files and the `--stats` report, and its path is
   echoed on stdout like theirs. A refused or failed run writes no record.
@@ -662,7 +662,7 @@ Not invariant-critical, so no mutation round (README, "Cost constraints").
   the user's own input and is out of scope, D8).
 - **`command`**: tests that read it (in `--stats` or `--record`) set
   `sys.argv` with `monkeypatch`, because `CliRunner` does not, and the
-  `command` is built from `sys.argv` (`_command`, `cli.py:1145-1147`).
+  `command` is built from `sys.argv` (`_command`, `src_python/tin_engine/cli.py@44fa7f5:1145-1147`).
 - **`--stats` values with `|`** are compared after unescaping `\|`.
 - **`--record`** (D5):
   - the file parses as JSON, is ASCII, and ends in one newline;
@@ -673,7 +673,7 @@ Not invariant-critical, so no mutation round (README, "Cost constraints").
   - every mesh-file field from the record is in it with the same value;
   - determinism: one command run twice gives the same bytes, and so does a
     run with `tin_engine.cli.refine` monkeypatched to a wrapper that passes
-    `threads=1` (the binding's keyword, `_core.pyi:437`; the CLI has no thread
+    `threads=1` (the binding's keyword, `src_python/tin_engine/_core.pyi@44fa7f5:437`; the CLI has no thread
     option); no key or value contains a time, a date, the host name, or the
     word `seconds`;
   - an omitted entry is absent, not `null`;

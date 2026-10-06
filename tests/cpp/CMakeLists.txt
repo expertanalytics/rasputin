@@ -215,16 +215,12 @@ add_terrain_test(test_raster_view unit/test_raster_view.cpp)
 
 # Adaptive refinement, increment 14 (docs/increments/14-adaptive-refinement.md,
 # "Tests for @tester"). test_mesh_lattice_split and test_refinement_scan are the
-# invariant-critical pair. All three link Threads, but only
-# test_refinement_chunks starts threads (through for_each_chunk), so it alone
-# runs in the TSan job; the pair start none and are not in it (h17 §4c,
-# docs/increments/h17-ci-test-time.md). The pair are backend tests because
-# lattice_mesh.hpp includes default_kernel.hpp (increment 16's orient_sign),
-# which needs terrain_predicates.
-add_terrain_test(test_refinement_chunks unit/test_refinement_chunks.cpp)
+# invariant-critical pair. Both link Threads but start none, so neither runs in
+# the TSan job (h17 §4c, docs/increments/h17-ci-test-time.md). Both are backend
+# tests because lattice_mesh.hpp includes default_kernel.hpp (increment 16's
+# orient_sign), which needs terrain_predicates.
 add_terrain_backend_test(test_mesh_lattice_split unit/test_mesh_lattice_split.cpp)
 add_terrain_backend_test(test_refinement_scan unit/test_refinement_scan.cpp)
-target_link_libraries(test_refinement_chunks PRIVATE Threads::Threads)
 target_link_libraries(test_refinement_scan PRIVATE Threads::Threads)
 target_link_libraries(test_mesh_lattice_split PRIVATE Threads::Threads)
 

@@ -20,7 +20,7 @@ import numpy as np
 import tifffile
 from pydantic import BaseModel, ConfigDict, model_validator
 
-from tin_engine.crs import parse_crs, transform_bounds
+from tin_engine.crs import parse_crs, same_crs, transform_bounds
 from tin_engine.domain import DomainPolygon
 from tin_engine.fetch.http import FetchError
 from tin_engine.io.cog import block_grid, blocks_meeting
@@ -115,7 +115,7 @@ def source_box(request: FetchRequest, meta: RasterMeta) -> Bounds:
         assert request.box is not None
         b = request.box
         x0, y0, x1, y1 = b.x_min, b.y_min, b.x_max, b.y_max
-    if frame == source:
+    if same_crs(frame, source):
         grow = request.margin * meta.delta_y
     else:
         grow = request.margin * meta.delta_y * (METRES_PER_DEGREE if source.is_geographic else 1)

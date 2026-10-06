@@ -47,6 +47,8 @@ from __future__ import annotations
 
 import importlib
 import math
+import subprocess
+import sys
 from types import ModuleType
 from typing import Any
 
@@ -439,3 +441,25 @@ class TestBoundsChecksLine:
         fields = {f.name: f for f in dataclasses.fields(stats.Report)}
         assert "bounds_checks" in fields
         assert fields["bounds_checks"].default is dataclasses.MISSING
+
+
+class TestImportsWithoutTheExtension:
+    """C++ audit PR B (`docs/increments/cpp-audit.md` section 7.4): the module
+    docstring says ``stats`` is testable without the extension.
+
+    Red while ``tin_engine/__init__.py`` imports ``_core``; green once the
+    package root imports only ``importlib.metadata``.
+    """
+
+    def test_stats_imports_with_core_blocked(self) -> None:
+        program = (
+            "import sys\n"
+            'sys.modules["tin_engine._core"] = None\n'
+            "import tin_engine.stats\n"
+            'print("imported", tin_engine.stats.__name__)\n'
+        )
+        result = subprocess.run(
+            [sys.executable, "-c", program], capture_output=True, text=True, check=False
+        )
+        assert result.returncode == 0, result.stderr
+        assert result.stdout.strip() == "imported tin_engine.stats"

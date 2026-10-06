@@ -1,6 +1,6 @@
 """Whether a call released the GIL: count a ticker thread's ticks while it runs.
 
-`docs/increments/python-audit.md`, section 9 (R10). Test support only. Each
+`docs/increments/python-audit.md`, section 10 (R10). Test support only. Each
 suite keeps its own thresholds and its own control test, because what a
 held and a released call let through differs between the calls they measure.
 """
