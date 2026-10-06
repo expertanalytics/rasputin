@@ -131,7 +131,7 @@ That is a defect this increment fixes (D2: the `.ply` carries the same fields as
 | features read | `:1364-1368` | `60 features kept, 9 dropped outside, 19 clipped, 0 empty skipped` |
 | no index | `:1370` | `<table>: no R-tree index, table scanned` |
 | lines noded | `:1468` | `10802 input vertices, 5627 noded vertices` |
-| land cover | `:1040-1044`, `landcover.py:100-108` | `land cover: 68 regions, 0 outside every polygon, 0 in more than one, 0 thinner than the snap` ("regions": groups of triangles not separated by a line; "thinner than the snap": a group whose widest triangle is narrower than twice the snap spacing, so its label may be on the wrong side) |
+| land cover | `:1040-1044`, `src_python/tin_engine/landcover.py@3066d60:103-109` | `land cover: 68 regions, 0 outside every polygon, 0 in more than one, 0 thinner than the snap` ("regions": groups of triangles not separated by a line; "thinner than the snap": a group whose widest triangle is narrower than twice the snap spacing, so its label may be on the wrong side) |
 | `--out-crs` suggestion | `:1299` | a line to paste; plain already |
 | fetch progress | `:1222` | `N of M bytes`; plain already |
 | catchment command | `:1690-1729` | `window k: ... flood 0.12 s, contained`; `seed: ...`; `catchment: N nodes, X km2 of node area`; `fine outline: ... rings dropped ... holes filled ...`; `reduced outline: ...` |

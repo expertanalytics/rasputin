@@ -1,8 +1,11 @@
 # Increment 30a — the `land cover` phase of `rasputin mesh`, made fast
 
-Status: **designed, not built.** Designed by `@architect` 2026-10-06 on branch
-`worktree-landcover-speed`, on `@perf`'s profile commit `a7154ec` (master
-`8199f30` plus the profile). Master has since gained #195 and #196; neither
+Status: **built and accepted; waits for code review.** Designed by `@architect`
+2026-10-06 on branch `worktree-landcover-speed`, on `@perf`'s profile commit
+`a7154ec` (master `8199f30` plus the profile); design review round 1
+APPROVED. Red `6cde0eb`, green `3066d60` (+12 net production lines,
+`python3 tools/count_loc.py a7154ec 3066d60`), `@perf`'s acceptance
+ACCEPTED at `f38ff1a` (section 9). Master has since gained #195 and #196; neither
 touches `landcover.py`, its tests, `ROADMAP.md` or this phase's path through
 `cli.py` (`git diff --stat a7154ec origin/master -- src_python/tin_engine/landcover.py
 tests/python/test_landcover.py tests/python/landcover_fixtures.py ROADMAP.md`
@@ -18,7 +21,8 @@ then reading the DEM (30c). The ROADMAP row is 30.
 `land_cover_code` and the four numbers on the `land cover:` stderr line stay
 exactly as they are. The phase gets about four times faster: on battery,
 2.90 s to 0.71 s on Numedalslågen and 6.71 s to 1.80 s on Skiensvassdraget,
-measured on a prototype (section 8).
+measured on a prototype (section 8). As built, on AC power: 2.85 s to 0.67 s
+and 6.54 s to 1.74 s (section 9).
 
 **Lean.** No mutation round (Ola's standing rule for lean rounds). No C++.
 
@@ -244,7 +248,11 @@ design. Its docstring says how to run it. Two modes are the gate:
   `@perf`'s profile did and records a hash of the codes, the four counts and a
   hash of the whole `.vtk` written.
 
-The gate: every line starting `fixture ` or `mesh ` equal to the base file's.
+The gate: **the base lines are unchanged; the new test lines are not
+compared.** Every line of the base file that starts `fixture ` or `mesh `
+appears unchanged in the branch's output. A `fixture` line from a test this
+increment adds has no base line and is not compared (at acceptance there were
+six, from `TestCallerPolygons` and `TestDegenerateMeshes`).
 A third mode, `replay`, reruns `label_triangles` on inputs `mesh --save` kept,
 for a quick check while developing; it prints the same line without the
 `.vtk` hash.
@@ -323,13 +331,34 @@ committed with the red ones, before any code). No mutation round.
 The existing tests (`TestRegions`, `TestDeterminism`, `TestOverlaps`) already
 pin ids under permutation and the overlap rule, and stay as they are.
 
+### What `@tester` pinned beyond this section, and the ruling
+
+**Deviation:** these six pins (listed in the module docstring of
+`tests/python/test_landcover.py@6cde0eb:31-37`) were ruled after the green
+commit `3066d60`, not before it, to save time; the green code satisfies all six.
+
+`@architect`'s ruling, 2026-10-06: **all six stand.**
+
+1. *`_member` returns a bool array.* Stands: section 3.2 says so; the test
+   only makes it checkable.
+2. *`_member` takes empty `values`.* Stands: `regions` on a mesh with no
+   triangles (P4) hands it an empty key array.
+3. *`_best` and `_member` take numpy arrays.* Stands: they are private helpers
+   fed only by `regions` and `label_triangles`, which hold numpy arrays.
+4. *Both are called positionally.* Stands: it leaves the argument names free.
+5. *`_lookup(points, polygons)` keeps its signature and returns `(codes,
+   hits)`.* Stands: section 3.4 changes only how the pairs are found, and P1
+   was allowed to go through `_lookup`.
+6. *P4 also holds with vertices present and no triangles.* Stands: it is the
+   shape a mesh trimmed to nothing would have, and it costs one parameter.
+
 ## 8. Net production lines, and the prototype
 
 Prototyped in a scratch clone at `a7154ec` (removed after measuring):
 `python3 tools/count_loc.py a7154ec <prototype commit>` gave **+11 net**
 (19 added, 8 removed), all in `landcover.py`. The `mypy` fix of section 3.2
 adds none if the return is wrapped in place. Estimate for the PR: **+10 to
-+15**.
++15**. Built: **+12** (20 added, 8 removed, all in `landcover.py`).
 
 Prototype timings of `label_triangles` alone (`replay`, battery, the same
 captured inputs, median of three runs):
@@ -355,7 +384,8 @@ after each run**:
 
 1. **Byte-identical meshes**: the probe's `mesh` mode on both catchments,
    every line equal to `base_a7154ec.txt` (codes, counts and the `.vtk` hash),
-   and its `fixtures` mode, every line equal.
+   and its `fixtures` mode: the base lines unchanged, the new test lines not
+   compared (section 6).
 2. **Time**: `rasputin mesh --stats` on both catchments, three repeats each,
    base and branch alternated, as `docs/benchmarks/2026-10-06/bottlenecks/scripts/stats.sh`
    does; the `land cover` row's median. **Pass:** the branch's median is at
@@ -364,6 +394,19 @@ after each run**:
 3. The whole-run total, recorded, not gated.
 
 Evidence under `docs/benchmarks/<date>/30a-landcover/`.
+
+**Result: ACCEPTED** (`@perf`, 2026-10-06, `f38ff1a`; evidence
+`docs/benchmarks/2026-10-06/30a-landcover/README.md`). Base `a7154ec` against
+branch `3066d60`, AC power for every run, median of 3:
+
+| catchment | land cover, base → branch, s | total, base → branch, s |
+|---|---|---|
+| Numedalslågen | 2.847 → 0.674 (0.237 of base) | 13.658 → 11.407 |
+| Skiensvassdraget | 6.539 → 1.744 (0.267 of base) | 20.458 → 15.679 |
+
+The `.vtk` sha256 is the same in all six runs on each catchment and equal to
+the probe's base `vtk=` hash; every base probe line is unchanged on the
+branch (68 of 68), and the six new lines come from tests 30a adds.
 
 ## 10. Risks
 
@@ -403,3 +446,7 @@ Evidence under `docs/benchmarks/<date>/30a-landcover/`.
    neither catchment has overlapping polygons or slivers too thin to label?**
    Those two rules are then guarded by the fixtures and the new tests only.
    **Default: yes, enough; no third catchment is added.**
+
+## Review
+
+**Design review, round 1, 2026-10-06.** Range `a7154ec..78b682e`. Verdict: APPROVED. LOC: 0 (design only); estimate +10 to +15. Not pushed; no CI.
