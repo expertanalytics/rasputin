@@ -160,7 +160,7 @@ def main() -> None:
     tr = Transformer.from_crs(3035, 3006, always_xy=True)
     fc = json.loads((data / "sweden_corine" / "lagan_clc2018_3035.geojson").read_text())
     sub_box = box(x0, y1 - sub, x0 + sub, y1)
-    clipped, inside, in_sub = [], [], []
+    clipped, inside, in_sub, codes = [], [], [], []
     for f in fc["features"]:
         g = shapely.transform(
             shape(f["geometry"]), lambda xy: np.column_stack(tr.transform(xy[:, 0], xy[:, 1]))
@@ -170,12 +170,22 @@ def main() -> None:
         for target, acc in ((win, clipped), (sub_box, in_sub)):
             if g.intersects(target):
                 gi = g.intersection(target)
-                acc.extend(p for p in getattr(gi, "geoms", [gi]) if p.area > 0)
+                parts = [p for p in getattr(gi, "geoms", [gi]) if p.area > 0]
+                acc.extend(parts)
+                if acc is clipped:
+                    codes.extend([f["properties"]["Code_18"]] * len(parts))
     areas = np.array([p.area for p in clipped]) / 1e4
     print(
         f"CORINE: {len(clipped)} polygons after the clip, {nverts(clipped)} vertices, median "
         f"{np.median(areas):.1f} ha; {len(inside)} wholly inside, smallest {min(inside):.1f} ha"
     )
+    # Each shared edge is in two clipped perimeters, the window's frame in one.
+    edge_km = (sum(p.length for p in clipped) - win.length) / 2 / 1000
+    area: Counter[str] = Counter()
+    for p, code in zip(clipped, codes, strict=True):
+        area[code] += p.area
+    cshares = {k: round(v / win.area, 3) for k, v in sorted(area.items())}
+    print(f"CORINE: boundary {edge_km:.0f} km, {len(cshares)} classes; shares {cshares}")
     print(
         f"CORINE in the {sub / 1000:.0f} km sub-window: "
         f"{len(in_sub)} polygons, {nverts(in_sub)} vertices"

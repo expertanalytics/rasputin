@@ -184,9 +184,9 @@ ranges honoured (checked by listing the zip archives below with ranged reads):
 - NMD 2018, the whole country: one 1.4 GB zip, whose map is one 1.57 GB
   GeoTIFF (deflate-compressed inside the zip, so it must be downloaded and
   unpacked whole, not read in ranges).
-- NMD 2018, per county: 21 zips of 17 to 237 MB in `NMD2018/bas_lan_ogen/`
-  (Kronoberg 38 MB, Jönköping 45 MB, Halland 26 MB, Skåne 36 MB, Jämtland
-  137 MB, Västernorrland 73 MB). Lagan lies in Jönköping, Kronoberg and
+- NMD 2018, per county: 21 zips of 17 to 237 MiB in `NMD2018/bas_lan_ogen/`
+  (Kronoberg 38 MiB, Jönköping 45 MiB, Halland 26 MiB, Skåne 36 MiB, Jämtland
+  137 MiB, Västernorrland 73 MiB). Lagan lies in Jönköping, Kronoberg and
   Halland counties, perhaps also Skåne (not checked against county outlines).
 - NMD 2023 version 2.1: one 2.7 GB zip, whose map is a 10.9 GB GeoTIFF.
 
