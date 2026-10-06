@@ -27,6 +27,14 @@ Pinned beyond the design's text (the design leaves them open):
 Committed red at `196147e`: `tin_engine.landcover` did not exist yet, so
 every test failed on `ModuleNotFoundError`. The module landed in `0487ed0`
 and the suite has been green since.
+
+Increment 30a (`docs/increments/30a-landcover-speed.md`, section 7) adds the
+classes from `TestBest` on: red tests for the new helpers `_best` and
+`_member`, looked up at call time, and pins that are green before the
+rewrite. Pinned beyond that design's text: `_member` returns a bool array and
+takes empty `values`; `_best` and `_member` take numpy arrays, positionally;
+`_lookup(points, polygons)` keeps its signature and returns `(codes, hits)`;
+P4 also holds with vertices present and no triangles.
 """
 
 from __future__ import annotations
@@ -443,3 +451,234 @@ class TestDeterminism:
             first.overlapped,
             first.thin,
         )
+
+
+# ------------------------------------------- increment 30a: the fast helpers
+#
+# `docs/increments/30a-landcover-speed.md`, section 7. The output does not
+# change, so the red tests are the contracts of the two new helpers (R1-R3)
+# and the pins (P1-P4) guard what the rewrite could break; the pins are green
+# before the rewrite, which is their point.
+
+
+def helper(name: str) -> Any:
+    """`landcover.<name>`, looked up at call time, so the file still collects
+    before the helper exists and each test fails on its own."""
+    found = getattr(landcover, name, None)
+    assert found is not None, f"landcover.{name} does not exist (increment 30a, section 3)"
+    return found
+
+
+def best(ids: np.ndarray, r: np.ndarray) -> np.ndarray:
+    return np.asarray(helper("_best")(ids, r))
+
+
+def member(values: np.ndarray, table: np.ndarray) -> np.ndarray:
+    return np.asarray(helper("_member")(values, table))
+
+
+def ids_of(groups: np.ndarray) -> np.ndarray:
+    """`ids` as `regions` builds them: each triangle's group, named by the
+    smallest triangle index in that group."""
+    _, first, inverse = np.unique(groups, return_index=True, return_inverse=True)
+    return first[inverse].astype(np.int64)
+
+
+def best_by_sort(ids: np.ndarray, r: np.ndarray) -> np.ndarray:
+    """The oracle: per id in increasing order, the largest `r`, ties to the
+    lowest triangle index (the rule `np.lexsort` gave at `a7154ec`)."""
+    out = []
+    for root in np.unique(ids):
+        members = np.flatnonzero(ids == root)
+        top = r[members].max()
+        out.append(members[r[members] == top].min())
+    return np.array(out, dtype=np.int64)
+
+
+class TestBest:
+    """R1, R2: per component, the triangle of largest `r`, ties to the lowest
+    index, one per component in increasing id."""
+
+    def test_ties_go_to_the_lowest_index_whatever_the_listing(self) -> None:
+        """Interleaved groups. Group 0 = {0, 3, 5, 8}: the maximum 5.0 is
+        tied at 3 and 8, not adjacent and not first. Group 1 = {1, 4, 7}: every
+        `r` is 0 (zero-area triangles). Groups 2 and 6 are single triangles.
+        The answer for group 0 (3) is above group 1's (1): the order is by id,
+        not by index."""
+        ids = np.array([0, 1, 2, 0, 1, 0, 6, 1, 0], dtype=np.int64)
+        r = np.array([1.0, 0.0, 0.25, 5.0, 0.0, 2.0, 0.5, 0.0, 5.0])
+        chosen = np.asarray(best(ids, r))
+        assert chosen.dtype == np.int64
+        assert_array_equal(chosen, [3, 1, 2, 6])
+        assert_array_equal(chosen, best_by_sort(ids, r))
+
+    def test_a_tie_that_includes_the_root_goes_to_the_root(self) -> None:
+        ids = np.array([0, 1, 0, 1, 0], dtype=np.int64)
+        r = np.array([7.0, 1.0, 7.0, 3.0, 2.0])
+        assert_array_equal(best(ids, r), [0, 3])
+
+    def test_every_triangle_its_own_component(self) -> None:
+        ids = np.arange(5, dtype=np.int64)
+        r = np.array([0.0, 3.0, 0.0, 1.0, 2.0])
+        assert_array_equal(best(ids, r), np.arange(5))
+
+    def test_one_component_of_zero_area_triangles(self) -> None:
+        ids = np.zeros(4, dtype=np.int64)
+        assert_array_equal(best(ids, np.zeros(4)), [0])
+
+    @pytest.mark.parametrize("seed", [30, 31, 32])
+    def test_agrees_with_a_sort_on_a_random_case(self, seed: int) -> None:
+        """3 000 triangles in 40 groups, `r` from five values: ties at a
+        group's maximum are common, and the check below insists on it."""
+        rng = np.random.default_rng(seed)
+        ids = ids_of(rng.integers(0, 40, size=3000))
+        r = rng.choice([0.0, 0.5, 1.0, 2.0, 3.0], size=3000)
+        expected = best_by_sort(ids, r)
+        tied = sum(
+            int((r[ids == root] == r[ids == root].max()).sum() > 1) for root in np.unique(ids)
+        )
+        assert len(expected) == 40 and tied > 20
+        chosen = np.asarray(best(ids, r))
+        assert chosen.dtype == np.int64
+        assert_array_equal(chosen, expected)
+
+
+class TestMember:
+    """R3: membership in a sorted, unique int64 table."""
+
+    TABLE = np.array([10, 20, 30], dtype=np.int64)
+
+    def test_values_around_the_table(self) -> None:
+        values = np.array([5, 10, 15, 20, 25, 30, 35, 30, 5], dtype=np.int64)
+        found = np.asarray(member(values, self.TABLE))
+        assert found.dtype == np.bool_
+        assert_array_equal(found, [False, True, False, True, False, True, False, True, False])
+
+    def test_an_empty_table_finds_nothing(self) -> None:
+        values = np.array([-1, 0, 7], dtype=np.int64)
+        found = np.asarray(member(values, np.zeros(0, dtype=np.int64)))
+        assert found.dtype == np.bool_
+        assert_array_equal(found, [False, False, False])
+
+    def test_no_values(self) -> None:
+        found = np.asarray(member(np.zeros(0, dtype=np.int64), self.TABLE))
+        assert found.shape == (0,)
+
+    def test_a_table_of_one_entry(self) -> None:
+        values = np.array([19, 20, 21], dtype=np.int64)
+        assert_array_equal(member(values, np.array([20], dtype=np.int64)), [False, True, False])
+
+    def test_keys_near_two_to_the_62(self) -> None:
+        """Edge keys are `min * N + max`, about `N**2`: exact at 2**62, where a
+        float64 round trip would merge neighbours."""
+        big = 2**62
+        table = np.array([big - 3, big, big + 5], dtype=np.int64)
+        values = np.array([big - 4, big - 3, big - 1, big, big + 1, big + 5, big + 6])
+        assert_array_equal(
+            member(values.astype(np.int64), table),
+            [False, True, False, True, False, True, False],
+        )
+
+    def test_agrees_with_isin_on_a_random_case(self) -> None:
+        rng = np.random.default_rng(30)
+        table = np.unique(rng.integers(0, 2_000, size=300)).astype(np.int64)
+        values = rng.integers(-50, 2_050, size=5_000).astype(np.int64)
+        assert_array_equal(member(values, table), np.isin(values, table))
+
+
+class TestBoundaryPoints:
+    """P1: the point-in-polygon test counts the boundary as inside, through
+    `_lookup`. Every edge is axis-parallel and every point's coordinate is the
+    same double as the edge's, so "on the edge" is exact at UTM magnitudes.
+
+    `west` (100 m²) carries the larger code and `east` (200 m²) the smaller,
+    so the area rule, not the code rule, decides the shared edge."""
+
+    @pytest.fixture(params=[False, True], ids=["listed", "reversed"])
+    def polygons(self, request: pytest.FixtureRequest) -> list[tuple[BaseGeometry, int]]:
+        west, east, north = rect(0, 0, 10, 10), rect(10, 0, 30, 10), rect(0, 10, 10, 25)
+        holed = Polygon(rect(40, 0, 60, 20).exterior, [rect(45, 5, 55, 15).exterior])
+        out: list[tuple[BaseGeometry, int]] = [(west, 512), (east, 311), (north, 412), (holed, 324)]
+        return out[::-1] if request.param else out
+
+    @staticmethod
+    def at(*points: tuple[float, float]) -> np.ndarray:
+        return np.array([(X0 + x, Y0 + y) for x, y in points], dtype=np.float64)
+
+    def test_shared_edge_counts_in_both_and_goes_to_the_smaller(self, polygons: Any) -> None:
+        codes, hits = landcover._lookup(self.at((10, 5)), polygons)
+        assert_array_equal(hits, [2])
+        assert_array_equal(codes, [512])
+
+    def test_corner_shared_by_three(self, polygons: Any) -> None:
+        codes, hits = landcover._lookup(self.at((10, 10)), polygons)
+        assert_array_equal(hits, [3])
+        assert_array_equal(codes, [512])
+
+    def test_hole_boundary_and_inside_the_hole(self, polygons: Any) -> None:
+        """On the hole's side and at its corner: in the holed polygon. Inside
+        the hole: in none."""
+        codes, hits = landcover._lookup(self.at((45, 10), (45, 5), (50, 10)), polygons)
+        assert_array_equal(hits, [1, 1, 0])
+        assert_array_equal(codes, [324, 324, 0])
+
+
+class TestCallerPolygons:
+    """P2: `label_triangles` leaves the caller's polygons as they came:
+    not prepared, the same WKB."""
+
+    def test_unprepared_and_unchanged(self) -> None:
+        west, east = rect(2, 4, 10, 16), rect(10, 4, 18, 16)
+        pair = shapely.MultiPolygon([rect(0, 0, 2, 2), rect(18, 18, 20, 20)])
+        polygons: list[tuple[BaseGeometry, int]] = [(west, 311), (east, 512), (pair, 412)]
+        before = [shapely.to_wkb(p) for p, _ in polygons]
+        mesh = grid_mesh(STEPS, STEPS, [west, east, pair])
+        label(mesh, polygons)
+        assert [bool(shapely.is_prepared(p)) for p, _ in polygons] == [False] * 3
+        assert [shapely.to_wkb(p) for p, _ in polygons] == before
+
+
+class TestDegenerateMeshes:
+    def test_a_zero_area_component_is_labelled_and_counted_thin(self) -> None:
+        """P3: three collinear vertices, all three sides constraints, beside an
+        ordinary triangle in another polygon. Its `r` is 0 and its incentre is
+        its middle vertex, inside the square coded 311."""
+        vertices = np.array(
+            [
+                [X0 + 1, Y0 + 1, 0.0],
+                [X0 + 2, Y0 + 1, 0.0],
+                [X0 + 3, Y0 + 1, 0.0],
+                [X0 + 20, Y0, 0.0],
+                [X0 + 30, Y0, 0.0],
+                [X0 + 20, Y0 + 10, 0.0],
+            ]
+        )
+        triangles = np.array([[0, 1, 2], [3, 4, 5]])
+        edges = np.array([[0, 1], [1, 2], [2, 0], [3, 4], [4, 5], [5, 3]])
+        polygons = [(rect(0, 0, 10, 10), 311), (rect(15, -5, 35, 15), 512)]
+        labels = landcover.label_triangles(
+            vertices, triangles, edges, polygons=polygons, margin=MARGIN
+        )
+        assert_array_equal(labels.codes, [311, 512])
+        assert (labels.regions, labels.outside, labels.overlapped, labels.thin) == (2, 0, 0, 1)
+
+    @pytest.mark.parametrize("vertex_count", [0, 4])
+    def test_no_triangles(self, vertex_count: int) -> None:
+        """P4: empty codes (int32) and four zero counts; `regions` empty."""
+        vertices = np.column_stack(
+            [np.arange(vertex_count) + X0, np.full(vertex_count, Y0), np.zeros(vertex_count)]
+        )
+        triangles = np.zeros((0, 3), dtype=np.int64)
+        edges = np.zeros((0, 2), dtype=np.int64)
+        labels = landcover.label_triangles(
+            vertices.reshape(-1, 3),
+            triangles,
+            edges,
+            polygons=[(rect(0, 0, 10, 10), 311)],
+            margin=MARGIN,
+        )
+        codes = np.asarray(labels.codes)
+        assert codes.dtype == np.int32 and codes.shape == (0,)
+        assert (labels.regions, labels.outside, labels.overlapped, labels.thin) == (0, 0, 0, 0)
+        ids = np.asarray(landcover.regions(triangles, edges))
+        assert ids.shape == (0,)
