@@ -32,7 +32,7 @@ from importscan import first_party_imports
 LAYERS: tuple[dict[str, str], ...] = (
     {  # L0: values
         "io.models": "", "features": "", "sources": "", "run_record": "", "stats": "",
-        "palettes": "",
+        "palettes": "", "hydrography": "", "tin_engine": "",
     },
     {  # L1: pure algorithms
         "crs": "",
@@ -43,7 +43,7 @@ LAYERS: tuple[dict[str, str], ...] = (
         "chains": "domain feature_input features",
         "elevation": "", "outline": "", "sensitivity": "", "landcover": "", "decompose": "",
         "burn": "gauge io.models",
-        "gauge": "io.rivers io.station_set",
+        "gauge": "hydrography",
         "reference": "io.models",
         "viz": "viz.scene viz.style viz.svg",
         "viz.fixtures": "", "viz.protocols": "", "viz.style": "",
@@ -54,12 +54,12 @@ LAYERS: tuple[dict[str, str], ...] = (
         "io": "io.ply io.vtk_legacy",
         "io.cog": "io.geotiff io.models",
         "io.geojson": "", "io.geopackage": "", "io.gml": "",
-        "io.geotiff": "io.models",
+        "io.geotiff": "crs io.models",
         "io.mesh_index": "io.models",
         "io.ply": "features",
         "io.repository": "io.cog io.geotiff io.models mosaic",
-        "io.rivers": "io.station_set",
-        "io.station_set": "crs io.repository",
+        "io.rivers": "hydrography io.station_set",
+        "io.station_set": "crs hydrography io.repository",
         "io.vtk_legacy": "features",
         "fetch.http": "tin_engine",
     },
@@ -67,16 +67,15 @@ LAYERS: tuple[dict[str, str], ...] = (
         "raster": "_core io.models",
         "edge_strip": "_core stats",
         "final_check": "_core stats target_grid",
-        "tin_engine": "_core",
+        "catchment_core": "_core io.models raster",
         "_core": "",
     },
     {  # L4: pipelines
         "dem_input": "crs domain io.models io.repository mosaic target_grid",
         "feature_input": "crs domain features io.geopackage io.gml io.repository",
-        "catchment": "_core burn crs gauge io.models io.repository mosaic outline raster"
+        "catchment": "burn catchment_core crs gauge io.models io.repository mosaic outline"
                      " sensitivity",
-        "catchment_batch": "catchment crs gauge io.repository io.rivers io.station_set"
-                           " reference",
+        "catchment_batch": "catchment crs gauge hydrography io.repository reference",
         "fetch": "",
         "fetch.plan": "crs domain fetch.http io.cog io.geotiff io.models",
         "fetch.run": "crs fetch.http fetch.plan io.models io.repository sources tin_engine",
@@ -85,7 +84,7 @@ LAYERS: tuple[dict[str, str], ...] = (
     {  # L5: flags in, files and stderr out
         "cli": "_core catchment catchment_batch chains crs dem_input domain edge_strip"
                " elevation feature_input features fetch.http fetch.nve fetch.plan fetch.run"
-               " final_check gauge grid_domain io.cog io.geojson io.models io.ply"
+               " final_check gauge grid_domain hydrography io.cog io.geojson io.models io.ply"
                " io.repository io.rivers io.station_set io.vtk_legacy landcover mosaic"
                " palettes raster run_record sources stats target_grid tin_engine"
                " viz.fixtures viz.protocols viz.scene viz.style viz.svg",
@@ -103,10 +102,6 @@ TABLE: dict[str, tuple[int, frozenset[str]]] = {
 # (section 6) that removes it.
 UPWARD: dict[tuple[str, str], str] = {
     ("chains", "feature_input"): "C, audit-geojson-io",
-    ("gauge", "io.rivers"): "F, audit-catchment-shared",
-    ("gauge", "io.station_set"): "F, audit-catchment-shared",
-    ("fetch.http", "tin_engine"): "G, audit-cli-options",
-    ("catchment", "_core"): "F, audit-catchment-shared",
     ("cli", "_core"): "H, audit-mesh-run",
 }
 

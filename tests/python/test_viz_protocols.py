@@ -9,9 +9,9 @@ Two things make this module worth a suite of its own, small as it is:
 * **`viz/` never imports `_core`.** That is what lets the whole renderer be
   unit-tested against a twelve-line fake mesh with no compiled extension in the
   process, and what lets 6a and 6b be built in either order. It is checked by
-  reading the source rather than by importing, because `tin_engine/__init__.py`
-  imports `_core` itself -- so a `sys.modules` check would be asserting
-  something about the package, not about `viz/`.
+  reading the source rather than by importing, because `sys.modules` also holds
+  whatever the rest of the package imports -- so a `sys.modules` check would be
+  asserting something about the package, not about `viz/`.
 * **The protocols must actually describe the bound types.** A `MeshLike` whose
   member names drifted from `IndexedMesh2`'s accessors still type-checks, still
   passes every renderer test against a fake, and fails only at the composition
@@ -159,9 +159,9 @@ class TestProtocolMembers:
 
 
 class TestVizDoesNotImportCore:
-    """Checked by reading the source: `tin_engine/__init__.py` imports `_core`,
-    so importing anything under `tin_engine.viz` imports it transitively and a
-    `sys.modules` assertion would pass for the wrong reason."""
+    """Checked by reading the source: `sys.modules` also holds whatever the rest
+    of the package (and the test session) imported, so a `sys.modules` assertion
+    could fail or pass for a reason that is not `viz/`'s own imports."""
 
     def viz_sources(self) -> list[Path]:
         return sorted(VIZ_DIR.glob("*.py"))

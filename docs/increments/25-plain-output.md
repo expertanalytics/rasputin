@@ -119,7 +119,7 @@ That is a defect this increment fixes (D2: the `.ply` carries the same fields as
 | `constraint feet on` / `off` | `:1551` | increment 20b: a worst DEM node very close to a line is replaced by the nearest point on the line | | always |
 | `0 valid DEM nodes not covered` | `:1552`, `final.uncovered` | DEM nodes with data that lie in triangles with a NoData corner after refinement. By the stopping rule there are none (`refine.hpp:409-410`), so this is a **self-check, always 0** | count | never, by construction |
 | `199 vertices without data dropped` | `:1568`, `elevation.py:25`, `:64` | mesh vertices where the DEM gives no height, removed with every triangle that uses them. With `--tolerance` a vertex at a DEM node has none when that node is NoData, and a vertex between nodes when one of the four nodes around it is. Without `--tolerance` every vertex is sampled bilinearly, and the sampler refuses a cell with any NoData corner even at zero weight (`12-dem-to-mesh.md`, R2), so a vertex on a valid node next to a NoData node is removed too: one cell of trim around NoData ("NoData on the no-tolerance path", below). *Changed by increment 27: a vertex on a node reads that node alone, so without `--tolerance` too only vertices on NoData cells go (`27-node-sampling.md`)* | count | the DEM has NoData cells inside the area |
-| `vertical unit assumed metres` | `:1569-1570` | the GeoTIFF has no `VerticalUnitsGeoKey`; any other unit than metres is refused (`io/geotiff.py:139-143`); always set for cache blocks (`src_python/tin_engine/fetch/run.py@44fa7f5:249`) | | the key is missing |
+| `vertical unit assumed metres` | `:1569-1570` | the GeoTIFF has no `VerticalUnitsGeoKey`; any other unit than metres is refused (`src_python/tin_engine/io/geotiff.py@65cd528:139-143`); always set for cache blocks (`src_python/tin_engine/fetch/run.py@44fa7f5:249`) | | the key is missing |
 
 ### stderr
 
@@ -283,7 +283,7 @@ unreadable or break a legal requirement, so they stay, unchanged.
    maximum never reads above the tolerance it met.
 3. **A count of zero is omitted from the file**, never from `--stats`.
    This applies to counts only (today `nodata_vertices_removed`), never to a
-   measured value: `--tolerance 0` is accepted (`cli.py:835`) and then
+   measured value: `--tolerance 0` is accepted (`src_python/tin_engine/cli.py@44fa7f5:835`) and then
    `tolerance_m 0` and `max_error_m 0` are written
    (`tests/python/test_cli_mesh_refine.py@a2d3319:151-155` asserts both).
 4. **Self-checks** live in `--stats`. If one is ever non-zero it is also
@@ -673,7 +673,7 @@ Not invariant-critical, so no mutation round (README, "Cost constraints").
   - every mesh-file field from the record is in it with the same value;
   - determinism: one command run twice gives the same bytes, and so does a
     run with `tin_engine.cli.refine` monkeypatched to a wrapper that passes
-    `threads=1` (the binding's keyword, `_core.pyi:437`; the CLI has no thread
+    `threads=1` (the binding's keyword, `src_python/tin_engine/_core.pyi@44fa7f5:437`; the CLI has no thread
     option); no key or value contains a time, a date, the host name, or the
     word `seconds`;
   - an omitted entry is absent, not `null`;

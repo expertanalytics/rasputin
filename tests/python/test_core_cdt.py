@@ -923,7 +923,7 @@ NEW_SURFACE = (
 
 class TestDocumentation:
     """CLAUDE.md section 4 requires every pybind11-exposed surface to be
-    documented; `tests/python/test_core.py` holds the same line for Point2."""
+    documented."""
 
     @pytest.mark.parametrize("name", NEW_SURFACE)
     def test_every_bound_name_carries_a_docstring(self, name: str) -> None:

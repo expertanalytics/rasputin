@@ -2,8 +2,14 @@
 
 Status: **code review approved in round 1 (1a84ea9); the merge onto PR B's
 head approved in round 3 (2cd04b1); -27 net production lines; `@perf`
-accepted (01751ec), no re-run owed. Ready to push on Ola's yes once PR B
-(#192, `worktree-audit-crs`) has merged**. Ola's two questions (below) bind it;
+accepted (01751ec), no re-run owed. Pushed as PR #197 at e29969c, after PR
+B merged as #192. #195 (GeoTIFF CRS by parameters) and then PR F (#196)
+merged into master; both conflict with A, so master is merged into the branch a second time: the docs side by
+`@architect` (`25-plain-output.md` keeps both sides' pins), and
+`src_python/tin_engine/catchment.py`'s import block by `@developer` (F's
+imports, with A's `io.models` ones). Next: `@developer` commits that merge,
+the suite runs, `@reviewer` reviews the merge and re-measures the net lines
+(`count_loc.py` against master), then the enqueue, on Ola's yes**. Ola's two questions (below) bind it;
 their defaults are accept and no change.
 Branch `worktree-audit-lattice` was written on PR B's approved head `618328b`
 and now sits on B's head merged with master, `ae493da` (master was `fd64f8b`),

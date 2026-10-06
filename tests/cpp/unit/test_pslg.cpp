@@ -272,14 +272,16 @@ TEST_CASE("edge(c, k) walks the chain, and the last edge of a closed chain close
     }
 }
 
-TEST_CASE("edge agrees with the ring's own edge for closed chains",
+TEST_CASE("edge agrees with the ring's own traversal for closed chains",
           "[pslg][accessors][edge][ring]") {
-    // Two spellings of the same traversal. They are allowed to be separate
-    // implementations; they are not allowed to disagree.
+    // Two spellings of the same traversal: the chain's edge k against the
+    // ring view's vertices k and k + 1, wrapping at the last. They are allowed
+    // to be separate implementations; they are not allowed to disagree.
     const Pslg p = three_chain_pslg();
     const IndexedRing r = p.ring(1);
+    REQUIRE(p.edge_count(1) == r.size());
     for (std::size_t k = 0; k < p.edge_count(1); ++k) {
-        CHECK(p.edge(1, k) == terrain::edge(r, k));
+        CHECK(p.edge(1, k) == Segment2{r.vertex(k), r.vertex((k + 1) % r.size())});
     }
 }
 

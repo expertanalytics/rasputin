@@ -80,17 +80,6 @@ public:
         return is_empty() ? 0.0 : hi_.y - lo_.y;
     }
 
-    // Precondition: !is_empty().
-    //
-    // Computed as lo/2 + hi/2, NOT (lo + hi)/2. A box with finite, legal
-    // corners can have a corner sum that overflows to infinity, and a box
-    // symmetric about the origin hides that because lo + hi cancels to exactly
-    // zero. Halving first is exact -- division by two is a lossless exponent
-    // decrement on every finite double, subnormals included.
-    [[nodiscard]] constexpr Point2 center() const noexcept {
-        return lo_ / 2.0 + hi_ / 2.0;
-    }
-
     // Precondition: p is finite.
     //
     // expand is the inner loop of every bounding-box computation in the engine,

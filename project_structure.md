@@ -11,10 +11,10 @@ include/terrain/           # public C++ headers, header-only where possible
   build_info.hpp           # stdlib_hardening(): the bounds-check mode the standard
                            #   library reports; _core.hardening and the guard (24)
   core/
-    point.hpp              # Point2 / Point3 value types
+    point.hpp              # Point2 value type, dot and cross
     bbox.hpp               # Box2; empty-box identity, exact closed containment
     segment.hpp            # Segment2 and on_segment<K>
-    ring.hpp               # Ring concept, PointRing / IndexedRing, point_in_ring<K>
+    ring.hpp               # IndexedRing, orientation<K> of a ring
     edge_properties.hpp    # EdgeProperties: a set of 32 opaque feature bits,
                            #   no feature NAME anywhere in terrain::
     pslg.hpp               # Pslg, Chain, ChainRole — validated planar input
@@ -49,7 +49,7 @@ include/terrain/           # public C++ headers, header-only where possible
     window.hpp             # window_for: bbox -> index window (planned; unbuilt,
                            #   refinement walks lattice nodes directly)
   parallel_util/
-    chunks.hpp             # for_each_chunk (contiguous chunks) and for_each_block (dynamic blocks) over std::jthread
+    chunks.hpp             # for_each_block (dynamic blocks) over std::jthread
   mesh/
     lattice_mesh.hpp       # LatticeMesh: flat triangle array over DEM nodes,
                            #   neighbour links, the three splits (14), flip (14b)
@@ -98,7 +98,7 @@ bindings/
   core.cpp                 # pybind11 module definition -> tin_engine._core
 
 src_python/tin_engine/     # public Python API (distribution name: rasputin)
-  __init__.py              # re-exports from tin_engine._core
+  __init__.py              # installed_version only; never imports _core
   cli.py                   # Typer entry point declared in pyproject;
                            #   `rasputin palette NAME [--out FILE]` writes a
                            #   ParaView colour preset (16c)
@@ -153,15 +153,26 @@ src_python/tin_engine/     # public Python API (distribution name: rasputin)
                            #   never imports _core (22)
   catchment.py             # CatchmentRequest -> delineate(request, repo) ->
                            #   Catchment: seed, the window loop over 15a's
-                           #   plan, _core.upstream, the fine ring, and
-                           #   _core.reduce_ring; takes a DemRepository and
-                           #   no path (22); with a river reach, the pour
-                           #   point is the gauge's node on the burnt reach (29)
+                           #   plan, the flood, the fine ring and its
+                           #   reduction (via catchment_core, never _core);
+                           #   takes a DemRepository and no path (22); with a
+                           #   river reach, the pour point is the gauge's node
+                           #   on the burnt reach (29)
+  catchment_core.py        # upstream, accumulate: the core call on
+                           #   raster.to_core's view of a DemTile; reduce_ring
+                           #   re-exported; the catchment's _core calls, as
+                           #   edge_strip.py is the edge strip's (python-
+                           #   audit.md, section 11)
+  hydrography.py           # RiverSegment, Station, Lake: the hydrography's
+                           #   value types; no first-party import, so gauge
+                           #   places on them without a codec, and io/rivers.py
+                           #   and io/station_set.py read into them (python-
+                           #   audit.md, section 11)
   gauge.py                 # place: a station's foot P on NVE's river lines,
                            #   by tier, and the reach round it (29, PR 2);
                            #   lake_seed -> LakeSeed: the gauges seeded with
                            #   their lake, by containment and one distance
-                           #   (PR 4); pure shapely, no DEM, no file
+                           #   (PR 4); pure shapely, no DEM, no file, no codec
   burn.py                  # burn_reach: the reach moved onto the window's
                            #   valley floor and burnt in -> (burnt copy,
                            #   GaugePath); numpy only (29, PR 2)
@@ -171,9 +182,10 @@ src_python/tin_engine/     # public Python API (distribution name: rasputin)
   reference.py             # agreement, classify, summarise: our catchment
                            #   against NVE's polygon, counted on the DEM's
                            #   node lattice; pure, no file (29, PR 4)
-  catchment_batch.py       # run_batch: place, lake_seed, delineate in a
-                           #   worker thread, compare, one StationResult row
-                           #   per station to a BatchSink; no paths (29, PR 4)
+  catchment_batch.py       # seed_for: place, lake_seed, the request (shared
+                           #   with catchment --rivers); run_batch: delineate
+                           #   in a thread, compare, StationResult rows to a
+                           #   BatchSink; no paths (29, PR 4)
   landcover.py             # regions, label_triangles: a land-cover code per
                            #   triangle, components across unconstrained edges,
                            #   one point-in-polygon test per component (16c);
@@ -259,9 +271,9 @@ src_python/tin_engine/     # public Python API (distribution name: rasputin)
                            #   geometry refused with ValueError (29);
                            #   read_lakes -> (Lake parts, crs): the lakes
                            #   file, a MultiPolygon split (29, PR 4)
-    rivers.py              # RiverSegment, kind_of (lake or river, total over
-                           #   NVE's objekttype spellings), drop_copies,
-                           #   read_segments -> (segments, crs, copies
+    rivers.py              # kind_of (lake or river, total over NVE's
+                           #   objekttype spellings), drop_copies,
+                           #   read_segments -> (RiverSegments, crs, copies
                            #   dropped); one LineString per segment (29)
     repository.py          # the ONE io/ module that opens files:
                            #   DemRepository, the Protocol: footprints, load,
@@ -455,7 +467,7 @@ only TU that includes `detria.hpp`, enforced by CMake privacy, an `#error` guard
 
 ### `parallel_util`
 
-Header-only. Two helpers in `chunks.hpp`, both over `std::jthread` created per call and joined before it returns, no pool: `for_each_chunk(n, threads, fn)`, contiguous equal-count chunks; and `for_each_block(n, threads, BlockSchedule, fn)`, blocks handed out from one atomic counter, run inline below `BlockSchedule::inline_below`, which refine's scan uses (increment 21a). `std::execution::par` and OpenMP were both ruled out in increment 14 (R7): neither builds on macOS without an experimental flag or an extra runtime. Needs only `Threads::Threads`.
+Header-only. One helper in `chunks.hpp`, over `std::jthread` created per call and joined before it returns, no pool: `for_each_block(n, threads, BlockSchedule, fn)`, blocks handed out from one atomic counter, run inline below `BlockSchedule::inline_below`, which refine's scan uses (increment 21a). `std::execution::par` and OpenMP were both ruled out in increment 14 (R7): neither builds on macOS without an experimental flag or an extra runtime. Needs only `Threads::Threads`.
 
 ### `vector_simplify`
 
@@ -510,12 +522,12 @@ Final Lawson edge-flip pass. Skips constraint-tagged edges. Parallel with edge-c
 
 ### `bindings/core.cpp`
 
-Single pybind11 module that exposes the C++ API to Python. Built as the `_core` extension, installed into the `tin_engine` package. The **value types only** are re-exported by `src_python/tin_engine/__init__.py` (`__all__` is `Point2`, `Point3`, `cross`, `dot`); the CDT surface below is reached as `tin_engine._core` and is deliberately not re-exported, because `cli.py` is the sole composition root and `viz/` never imports the extension. Typed from `src_python/tin_engine/_core.pyi`, which is what `mypy --strict` sees.
+Single pybind11 module that exposes the C++ API to Python. Built as the `_core` extension, installed into the `tin_engine` package. Nothing is re-exported: `src_python/tin_engine/__init__.py` holds only `installed_version` (`__all__`), so the package imports without the extension; the CDT surface below is reached as `tin_engine._core` and is deliberately not re-exported, because `cli.py` is the sole composition root and `viz/` never imports the extension. Typed from `src_python/tin_engine/_core.pyi`, which is what `mypy --strict` sees.
 
 As of increment 6a (`94f94e2`, `docs/increments/06-cdt-viewer.md`) it binds:
 
-- the `Point2`/`Point3` value types, whose `__repr__` routes through the `std::formatter` specializations in `point.hpp` so the C++ and Python renderings cannot drift;
-- the `dot` and `cross` free functions over both point types;
+- no point value types: coordinates cross as `(N, 2)` float64 arrays (the Python `Point2`, `Point3`, `dot` and `cross` went in PR B of `docs/increments/cpp-audit.md`, section 7);
+- no free functions over points: the C++ `dot` and `cross` in `point.hpp` stay inside the core;
 - `Pslg`, `Chain`, `PslgDiagnostic`, `PslgBuildResult`, `IndexedMesh2` and `CdtOutcome`, plus the `ChainRole`, `PslgError` and `CdtStatus` enums and a `describe(CdtStatus)` helper;
 - two more free functions: `build_pslg`, which validates and returns a `PslgBuildResult` carrying a diagnostics list rather than raising, and `triangulate`, which wraps the kernel call in `py::gil_scoped_release` -- the only call in the module long enough to be worth the release.
 

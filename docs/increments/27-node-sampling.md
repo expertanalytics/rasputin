@@ -130,7 +130,7 @@ the same `node(round) == p` test (`lattice_position`, `refine.hpp:132-141`).
   stays first, so a raster with fewer than 2 rows or columns still answers
   nullopt everywhere, nodes included, as today.
 - `bilinear_batch`, the `sample` binding and the Python side change in no
-  code. The binding's docstring (`bindings/core.cpp:935-940`), the stub's
+  code. The binding's docstring (`bindings/core.cpp@44fa7f5:935-940`), the stub's
   (`src_python/tin_engine/_core.pyi`, `sample`) and the comment above
   `bilinear` say the new rule.
 - `lattice_position` is **not** changed to call `node_at` here. That would
@@ -140,7 +140,7 @@ the same `node(round) == p` test (`lattice_position`, `refine.hpp:132-141`).
 ### Why cell sides are not in this increment
 
 1. **No vertex on the path being fixed lies on a cell side.** Without
-   `--tolerance` there is no `--domain` and no `--features` (`cli.py:845`
+   `--tolerance` there is no `--domain` and no `--features` (`src_python/tin_engine/cli.py@44fa7f5:845`
    refuses `--domain` without `--tolerance`). The vertices are the stride
    nodes and the ring through them. The noder makes no crossings there, and
    the triangulation adds no points. Every vertex is a node.
