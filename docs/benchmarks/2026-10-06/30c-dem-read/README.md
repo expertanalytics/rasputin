@@ -269,9 +269,11 @@ branch mesh after 19:29:03: Now drawing from 'AC Power'  -InternalBattery-0 (id=
 ## The probe at the merge commit `26a5d839` (design section 6, "At the merge")
 
 Run 2026-10-06, 19:44 to 19:46, on AC power throughout (`raw/probe_merge_power.txt`), by
-`scripts/probe_merge.sh`: `26a5d839` (this branch with master merged in, #199 and #201) installed
+`scripts/probe_merge.sh`: `26a5d839` (this branch with master merged in, #200, #201, #202 and #203:
+`git log --merges --first-parent 6c729e97..01d98c2b`) installed
 non-editable in a scratch venv from `git archive` (Python 3.14.7, tifffile 2026.9.20, imagecodecs
-2026.8.16, numpy 2.5.3, shapely 2.1.2, GEOS 3.13.1, the same as the base's), that venv's own `python`
+2026.8.16, numpy 2.5.3, shapely 2.1.2, GEOS 3.13.1; the library versions are those the first line of
+`base_6c729e97.txt` names, which records no Python version), that venv's own `python`
 calling the probe from the worktree root (its `tests/python` and probe equal `26a5d839`'s:
 `git diff --stat 26a5d839 ef4abf64 -- tests docs/increments/30c-probes/dem_bytes.py` prints nothing).
 The probe's first line names the scratch venv's `site-packages/tin_engine`. Both modes ran twice;

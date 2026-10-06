@@ -1,7 +1,7 @@
 #!/bin/bash
 # Section 6 "At the merge": the probe (docs/increments/30c-probes/dem_bytes.py) on the merge commit 26a5d839,
 # a non-editable install in a scratch venv (git archive 26a5d839, then uv pip install ".[codecs]" pytest
-# pytest-asyncio hypothesis; Python 3.14.7 as for base_6c729e97.txt). Each mode twice; run 1 is the record,
+# pytest-asyncio hypothesis; Python 3.14.7; base_6c729e97.txt records no Python version). Each mode twice; run 1 is the record,
 # run 2 must equal it. Run from the worktree root (its tests/python and probe equal 26a5d839's:
 # git diff --stat 26a5d839 HEAD -- tests dem_bytes.py prints nothing).
 WT=/Users/skavhaug/projects/rasputin/.claude/worktrees/dem-read-speed

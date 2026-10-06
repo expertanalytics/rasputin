@@ -1,4 +1,4 @@
-# dem_bytes.py at 26a5d839 (worktree-dem-read-speed, master merged in: #199, #201), a non-editable install of that commit in a scratch venv (uv pip install ".[codecs]" from git archive; Python 3.14.7, tifffile 2026.9.20, imagecodecs 2026.8.16, numpy 2.5.3, shapely 2.1.2, GEOS 3.13.1), AC power
+# dem_bytes.py at 26a5d839 (worktree-dem-read-speed, master merged in: #200, #201, #202, #203), a non-editable install of that commit in a scratch venv (uv pip install ".[codecs]" from git archive; Python 3.14.7, tifffile 2026.9.20, imagecodecs 2026.8.16, numpy 2.5.3, shapely 2.1.2, GEOS 3.13.1), AC power
 tin_engine from /private/tmp/claude-501/-Users-skavhaug-projects-rasputin/6a989a29-4492-430f-99b0-9fe3058f931a/scratchpad/30c-merge/venv/lib/python3.14/site-packages/tin_engine
 ........................................................................ [  9%]
 ........................................................................ [ 19%]

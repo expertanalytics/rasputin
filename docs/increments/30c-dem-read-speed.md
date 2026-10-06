@@ -1,7 +1,8 @@
 # Increment 30c — the `decode` phase of `rasputin mesh`, made faster
 
-Status: **built and accepted; the gate's base still to be recorded again at
-the master merge `26a5d839` (section 6, "At the merge"); code review next.**
+Status: **built and accepted; code review round 1 answered.** At the master
+merge `26a5d839` every base line of the probe is unchanged and the 16 new
+lines are all from the red suite (section 6, "At the merge").
 Red `bdf7b57d` (`@tester`'s pins beyond the design ruled in section 7: six
 stand, one changes), green `0663efc9` (+3 net production lines,
 `python3 tools/count_loc.py 6c729e97 0663efc9`; as built, section 3.3),
@@ -334,12 +335,17 @@ neither is printed.) Run it from the repository root with the venv's own
 `python`, so `tests/python` is the branch's.
 
 **At the merge.** When 30b has merged and master is merged into this branch,
-record the base again at that merge commit, the same way, as
-`base_<merge>.txt`. 30b's code is already in `6c729e97`, so every `fixture`
-and `mesh` line should equal this base's; if a line differs, the merge
-changed something the probe reaches, and that is explained before
-`@tester` starts (or before green, whichever comes later). The newer file is
-then the gate's base.
+the probe runs again at that merge commit, the same way. 30b's code is
+already in `6c729e97`, so every `fixture` and `mesh` line of
+`base_6c729e97.txt` should be unchanged there; if a line differs, the merge
+changed something the probe reaches, and that is explained before review.
+The merge, `26a5d839`, came after green, so it already holds 30c's code: the
+record at the merge is the branch's run at the merge, not a new base, and
+`base_6c729e97.txt` stays the gate's base. That run is
+`docs/benchmarks/2026-10-06/30c-dem-read/raw/probe_merge_26a5d839.txt`:
+every `fixture` and `mesh` line of `base_6c729e97.txt` is in it unchanged,
+the `.vtk` hashes included, and its 16 new lines are the red suite's, the
+same 16 as the branch's run before the merge.
 
 **It can fail.** Plants in the prototype (section 8), each against the base
 lines:
@@ -545,8 +551,9 @@ merge. The merge changes no DEM code (`git diff 0663efc9 26a5d839 --
 src_python/tin_engine/io/cog.py src_python/tin_engine/mosaic.py
 src_python/tin_engine/dem_input.py` is empty), but it does change the domain reading the probe's
 `mesh` mode goes through (`domain.py`, `io/domain_file.py`, `io/geojson.py`).
-Section 6's re-recorded base at the merge settles whether any probe line
-moved.
+The probe's run at the merge settles it: no probe line moved. Every line of
+`base_6c729e97.txt` is unchanged at `26a5d839`, the `.vtk` hashes included,
+and the 16 new lines are all from the red suite (section 6, "At the merge").
 
 ## 10. Risks
 
@@ -624,3 +631,7 @@ review.
 **30c, design review, round 1, 2026-10-06.** Range `6c729e97..a3a7cfef`. Verdict: CHANGES REQUESTED. LOC 0. Blocking: (1) the 2-line note at `/Users/skavhaug/projects/rasputin/.claude/worktrees/dem-read-speed/docs/increments/23-basin-scale.md@a3a7cfef:1066-1067` shifts the self-citations at `@a3a7cfef:3281,3283` (`:3267,3271,3279` now point at 23b rounds 5 and 7, and at 23c-1 round 3); (2) `/Users/skavhaug/projects/rasputin/.claude/worktrees/dem-read-speed/docs/increments/30c-dem-read-speed.md@a3a7cfef:298-300` over-claims the refusal at `/Users/skavhaug/projects/rasputin/.claude/worktrees/dem-read-speed/docs/increments/30c-probes/dem_bytes.py@a3a7cfef:180` (a copy under any `site-packages` passes). Base reproduced exactly in a scratch install, the 4.2 same-set argument holds, and W2 plus my own LZW timing confirm the thread claim and GIL release.
 
 **30c, design review, round 2, 2026-10-06.** Range `a3a7cfef..c2ec195b` (one commit, c2ec195b). Verdict: APPROVED. LOC 0. Both round-1 blockers are closed. (1) The note at `/Users/skavhaug/projects/rasputin/.claude/worktrees/dem-read-speed/docs/increments/23-basin-scale.md@c2ec195b:1064-1065` replaces the old two lines. The file is back to 3281 lines, the same as master `ed125121`. The self-citations, now at `:3279,3281`, again point at 23b round 6 (`:3267`), 23b round 8 (`:3271`) and the row-23 fix round 1 (`:3279`). (2) `/Users/skavhaug/projects/rasputin/.claude/worktrees/dem-read-speed/docs/increments/30c-dem-read-speed.md@c2ec195b:304-312` now describes what `/Users/skavhaug/projects/rasputin/.claude/worktrees/dem-read-speed/docs/increments/30c-probes/dem_bytes.py@c2ec195b:179-181` actually checks. Both suggestions were taken. The DEM code at `ed125121` is the same as at `6c729e97`. Nothing else changed. Not pushed; no CI.
+
+**30c, code review, round 1, 2026-10-06.** Range 01d98c2b..47eeaf77. Verdict: CHANGES REQUESTED. LOC +3 (19 added, 16 removed). Blocking: (1) /Users/skavhaug/projects/rasputin/.claude/worktrees/dem-read-speed/docs/increments/30c-dem-read-speed.md@47eeaf77:3-4 and :548 and /Users/skavhaug/projects/rasputin/.claude/worktrees/dem-read-speed/ROADMAP.md@47eeaf77:55 still say the probe's base at the merge is to be recorded, but 47eeaf77 recorded it; (2) /Users/skavhaug/projects/rasputin/.claude/worktrees/dem-read-speed/docs/benchmarks/2026-10-06/30c-dem-read/README.md@47eeaf77:272 and line 1 of raw/probe_merge_26a5d839.txt say the merge brought in "#199 and #201", but it brought in #200 to #203; (3) section 6 names a file that does not exist. Gates green locally; no CI yet (not pushed).
+
+The merge commit `26a5d839` carries git's default merge message, not rewritten, so it lacks the persona ending and the Co-Authored-By trailer; the review does not block on it.
