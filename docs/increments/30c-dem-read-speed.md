@@ -1,8 +1,8 @@
 # Increment 30c — the `decode` phase of `rasputin mesh`, made faster
 
-Status: **built and accepted; code review round 1 answered.** At the master
-merge `26a5d839` every base line of the probe is unchanged and the 16 new
-lines are all from the red suite (section 6, "At the merge").
+Status: **approved by code review round 2; waits for Ola's yes to push.**
+At the master merge `26a5d839` every base line of the probe is unchanged
+and the 16 new lines are all from the red suite (section 6, "At the merge").
 Red `bdf7b57d` (`@tester`'s pins beyond the design ruled in section 7: six
 stand, one changes), green `0663efc9` (+3 net production lines,
 `python3 tools/count_loc.py 6c729e97 0663efc9`; as built, section 3.3),
@@ -635,3 +635,5 @@ review.
 **30c, code review, round 1, 2026-10-06.** Range 01d98c2b..47eeaf77. Verdict: CHANGES REQUESTED. LOC +3 (19 added, 16 removed). Blocking: (1) /Users/skavhaug/projects/rasputin/.claude/worktrees/dem-read-speed/docs/increments/30c-dem-read-speed.md@47eeaf77:3-4 and :548 and /Users/skavhaug/projects/rasputin/.claude/worktrees/dem-read-speed/ROADMAP.md@47eeaf77:55 still say the probe's base at the merge is to be recorded, but 47eeaf77 recorded it; (2) /Users/skavhaug/projects/rasputin/.claude/worktrees/dem-read-speed/docs/benchmarks/2026-10-06/30c-dem-read/README.md@47eeaf77:272 and line 1 of raw/probe_merge_26a5d839.txt say the merge brought in "#199 and #201", but it brought in #200 to #203; (3) section 6 names a file that does not exist. Gates green locally; no CI yet (not pushed).
 
 The merge commit `26a5d839` carries git's default merge message, not rewritten, so it lacks the persona ending and the Co-Authored-By trailer; the review does not block on it.
+
+**30c, code review, round 2, 2026-10-06.** Range 47eeaf77..c010857f (one commit, c010857f). Verdict: APPROVED. LOC 0 (branch +3 against 01d98c2b). All three round-1 blockers closed: no "still to be recorded" is left at /Users/skavhaug/projects/rasputin/.claude/worktrees/dem-read-speed/docs/increments/30c-dem-read-speed.md@c010857f:3-5,337-348,554-556 or /Users/skavhaug/projects/rasputin/.claude/worktrees/dem-read-speed/ROADMAP.md@c010857f:55; every line of base_6c729e97.txt is unchanged in raw/probe_merge_26a5d839.txt and its 16 new lines equal the branch's run before the merge; the PR list (#200-#203) matches git log; section 6 names a file that exists. Python-version suggestion taken. Gates green locally; no CI yet (not pushed).
