@@ -1,7 +1,8 @@
 # Python audit PR D: `audit-encoders` (F7)
 
-Status: **red** (`@tester`, `8dcfa2a`); `@tester`'s pins ruled by
-`@architect` (section 9); next, `@developer`'s green commit. Branch
+Status: **green** (`@developer`, `7346a0e`; as built, section 14); next,
+`@reviewer`'s code review round 1, then the push on Ola's yes, after PR C
+merges and once Ola has answered Question 1 (go ahead or drop). Branch
 `worktree-audit-encoders`, stacked on PR C's approved head `b26beb8`
 (`worktree-audit-geojson`, not yet pushed); rebased onto master when C
 merges. Section 6 said D waits for C because both touch
@@ -470,6 +471,44 @@ and 1904, `24-release-hardening.md` lines 515 and 517,
    "x<carriage return>y" --out a.ply` says `a comment may not contain a
    control character` instead of `... control characters`, matching the
    `.vtk` writer's wording. Default: accept.
+
+## 14. As built (`7346a0e`)
+
+**Net production lines: +7** (46 added, 39 removed), measured with
+`python3 tools/count_loc.py b26beb8 7346a0e`; every file matches section
+7's table: `io/mesh_checks.py` +15, `io/vtk_legacy.py` -8 (4 added, 12
+removed), `io/ply.py` -4 (6 added, 10 removed), `features.py` +1,
+`run_record.py` +2, `crs.py` +1, `cli.py` 0 (14 added, 14 removed). No
+packing under `# fmt: skip`.
+
+**One departure from the design, a comment.** The two long comments in
+`io/ply.py`'s old check (`src_python/tin_engine/io/ply.py@b26beb8:115-119`
+and `:123-128`) are cut to two lines (`src_python/tin_engine/io/ply.py@7346a0e:115-116`);
+its reasons (any control character forges a line, `\r` for CRLF-tolerant
+readers, non-ASCII a documented `ValueError` because `--crs` is free text)
+are now `io/mesh_checks.py`'s docstring
+(`src_python/tin_engine/io/mesh_checks.py@7346a0e:5-9`), where the check
+is. Its one historical sentence (the `--crs "x\rcomment forged"` run that
+once exited 0) is not carried over; red test 5 now guards that case.
+Comments are not counted, so the net is unchanged.
+
+**The probe.** Run at `7346a0e` on a scratch copy (`tools/scratch_copy.py`,
+with `PYTHONPATH` taken from its stdout line), its output is
+`docs/increments/python-audit-probes/encoder_bytes-7346a0e.txt` (124
+lines, no `UNCAUGHT`). `diff encoder_bytes-b26beb8.txt
+encoder_bytes-7346a0e.txt` is exactly section 8's 12 lines (39 to 53 odd,
+103-104, 115-116), each `control characters` becoming `a control
+character`. The base, re-run the same way, reproduces
+`encoder_bytes-b26beb8.txt` byte for byte (`cmp`).
+
+**Known gap kept:** NaN in a float code array still passes `check_int32`
+(section 9, "Known gap, kept"); the probe's four "float nan" lines are
+still file hashes, unchanged from the base.
+
+`project_structure.md`'s rows for `io/` (the exceptions line now states
+section 4's rule), `io/ply.py`, `io/vtk_legacy.py`, `features.py`,
+`crs.py` and `cli.py` are rewritten against `7346a0e`, and rows for
+`io/mesh_checks.py` and `run_record.py` (which had none) are added.
 
 ## Review
 

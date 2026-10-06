@@ -101,7 +101,10 @@ src_python/tin_engine/     # public Python API (distribution name: rasputin)
   __init__.py              # re-exports from tin_engine._core
   cli.py                   # Typer entry point declared in pyproject;
                            #   `rasputin palette NAME [--out FILE]` writes a
-                           #   ParaView colour preset (16c)
+                           #   ParaView colour preset (16c); encodes no mesh
+                           #   file: picks the io/ writer by suffix and writes
+                           #   its bytes; the gallery's --crs goes through
+                           #   io/mesh_checks' checked_ascii before any writer
   raster.py                # the ONLY adapter from decoded data into _core
   grid_domain.py           # DEM extent -> stride-subsampled nodes + outer ring;
                            #   pure numpy, never imports _core
@@ -114,7 +117,9 @@ src_python/tin_engine/     # public Python API (distribution name: rasputin)
                            #   (io/domain_file.py reads --domain); never imports
                            #   _core
   crs.py                   # parse_crs, reprojector: the one Transformer.from_crs
-                           #   site, always_xy (15b); pyproj and numpy
+                           #   site, always_xy (15b); pyproj and numpy;
+                           #   crs_label escapes through run_record's
+                           #   escaped_ascii, its one first-party import
   target_grid.py           # TargetGrid on one global lattice, source_region,
                            #   SourceWindows / TileWindows, resample (bilinear,
                            #   threads), check_point_blocks; never imports _core
@@ -130,9 +135,17 @@ src_python/tin_engine/     # public Python API (distribution name: rasputin)
                            #   pure numpy, never imports _core
   stats.py                 # --stats: PhaseClock, quality, Report, render to
                            #   Markdown; numpy only, no _core, no typer
+  run_record.py            # RunRecord: one mesh run's record and its wording
+                           #   (25), printed as file fields, --stats rows, a
+                           #   summary and --record JSON; escaped_ascii, the
+                           #   one non-ASCII escape (\xe9) for file fields and
+                           #   crs_label; imports json and dataclasses only
   features.py              # EdgeVocabulary: which bit means which feature.
                            #   The names C++ refuses to hold. Imports nothing
-                           #   first-party and never imports _core
+                           #   first-party and never imports _core.
+                           #   EdgeVocabulary.table(): the (bit, name) pairs by
+                           #   bit, the order the .ply and .vtk writers write
+                           #   and fingerprint() hashes (audit PR D).
                            #   PIECE_VOCABULARY: the default plus `seam`
                            #   (bit 9), for a cut run's piece files (23c).
                            #   TerrainFeature: one feature's mask and lines
@@ -221,10 +234,10 @@ src_python/tin_engine/     # public Python API (distribution name: rasputin)
                            #   carries positions rather than feature names
     svg.py                 # (Scene, SvgStyle) -> str; the stylesheet lives here
     fixtures.py            # the synthetic gallery, declarative; `rasputin draw
-  io/                      # all file decoding AND encoding lives here, with
-                           #   known exceptions, encoded in cli.py with the
-                           #   standard library: `palette`'s JSON (16c), to
-                           #   move here in a follow-up, and station-
+  io/                      # all file decoding AND encoding lives here. A
+                           #   document built outside cli.py and serialised
+                           #   there by one standard-library call is printing,
+                           #   not an encoder: `palette`'s JSON (16c), station-
                            #   catchments' results.csv and summary.json (29)
     __init__.py
     geojson.py             # read_collection: a parsed GeoJSON object ->
@@ -242,11 +255,18 @@ src_python/tin_engine/     # public Python API (distribution name: rasputin)
                            #   audit PR C)
     ply.py                 # arrays -> PLY bytes; takes no path and opens nothing;
                            #   face_codes= adds the face property
-                           #   land_cover_code (16c)
+                           #   land_cover_code (16c); field_comments: a file's
+                           #   (name, value) fields as header comments;
+                           #   imports features and mesh_checks
     vtk_legacy.py          # arrays + EdgeVocabulary -> legacy .vtk bytes, for
                            #   ParaView; takes no path and opens nothing;
                            #   triangle_codes=, land_cover_codes= add the cell
-                           #   array land_cover_code and its field (16c)
+                           #   array land_cover_code and its field (16c);
+                           #   imports features and mesh_checks
+    mesh_checks.py         # the mesh writers' shared checks, one copy each:
+                           #   checked_ascii (no control character, ASCII
+                           #   only, one wording) and check_int32; imports
+                           #   nothing first-party (audit PR D)
     geotiff.py             # TIFF container + GeoKey decoding -> DemTile
     models.py              # Pydantic RasterMeta / DemTile
     geopackage.py          # GeoPackage layer_info / query_features over an
