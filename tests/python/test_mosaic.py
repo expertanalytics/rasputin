@@ -78,7 +78,7 @@ def mz() -> ModuleType:
 
 @pytest.fixture(scope="module")
 def footprint() -> Any:
-    return importlib.import_module("tin_engine.io.repository").TileFootprint
+    return importlib.import_module("tin_engine.io.models").TileFootprint
 
 
 @pytest.fixture
