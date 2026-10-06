@@ -15,6 +15,7 @@ count 0, which tifffile would fill with 0, a valid elevation) is refused
 
 from __future__ import annotations
 
+import os
 import threading
 from collections.abc import Sequence
 from concurrent.futures import ThreadPoolExecutor
@@ -107,7 +108,7 @@ def decode_window(
     dtype: np.dtype[Any],
     window: IndexWindow,
     *,
-    threads: int = 4,
+    threads: int | None = None,
 ) -> DemTile:
     """`window` of the page `source` holds, decoded and cast to `dtype`.
 
@@ -115,6 +116,9 @@ def decode_window(
     outside the raster, or empty, is a `ValueError` (a caller's bug). A block
     `source` lacks is `NotCached`, before any block is read; a sparse or
     undecodable block is a `GeoTiffError` naming `source.where` and the block.
+
+    `threads` decoding workers, the machine's cores (`os.cpu_count() or 1`)
+    when None; the count changes no value (W2).
     """
     w, page = window, source.page
     ends = (meta.rows - w.row0 - w.rows, meta.cols - w.col0 - w.cols)
@@ -143,7 +147,7 @@ def decode_window(
             block
         )
 
-    with ThreadPoolExecutor(threads) as pool:
+    with ThreadPoolExecutor(threads if threads is not None else os.cpu_count() or 1) as pool:
         list(pool.map(put, indices))
     # The public constructor's copy, not the canvas's no-copy route: M15
     # (test_mosaic.py) pins that route's callers to `assemble` and `resample`.
