@@ -415,9 +415,9 @@ has the same lines.
 - **Defects now surface at design time.** PR C2's design round 1 found that
   a geometry `type` of `7`, `true` or `["Point"]` slipped through (line
   9235), and the `@architect` found the `"station": null` misread while
-  designing. PR D's one code-review finding was test docstrings still
-  written as for the red step ("does not exist"; fixed at `083712d`). PR A
-  had none.
+  designing. PR D's code review found two things, both in one test
+  docstring: text still written as for the red step ("does not exist"),
+  and the pointer to line 16 (fixed at `083712d`). PR A had none.
 - **Measured size matches the design.** The prototype in a scratch clone
   put each design within 2 lines of the result. The audit's estimates were
   off by 37 (D) and 73 (A).
@@ -469,12 +469,16 @@ has the same lines.
   another agent's claim be passed on as "X says ... (unchecked)". That
   practice did not take hold.
 
-**E2. The scratchpad used as a channel, set up by the brief.** The main
-session's PR C2 red-step brief told `@tester` to drop the editable finder
-with a "sitecustomize in your scratchpad subdirectory" (line 9301). That
-was fine for the tester's own use. The tester's handback then offered it
+**E2. The scratchpad offered as a channel in a handback.** This was
+`@tester`'s slip, not the main session's. The PR C2 red-step brief told
+`@tester` to drop the editable finder with a "sitecustomize in your
+scratchpad subdirectory" (line 9301), for its own use, which the rule
+allows. The channel was the tester's handback, which offered that file
 "ready for `@developer`'s green step" (line 9328).
-`.claude/REQUIRED-READING.md@44fa7f5:199-201` forbids this. The main session
+`.claude/REQUIRED-READING.md@44fa7f5:199-205` forbids this. Its exception,
+a result "named by path in the handback, and is read as data", does not
+apply: a sitecustomize is code Python runs at start-up, so offering it to
+another agent is an instruction to execute, not data. The main session
 caught it and had `@developer` write its own (line 9373). The root cause is
 that the worktree had no `.venv` (P6).
 
@@ -512,7 +516,7 @@ on its prototype. Handled as the rule says.
 **P6. Each worktree gets its own `.venv` when it is created.** Claude Code's
 worktree guide: "A worktree is a fresh checkout, so initialize your
 development environment there: ask Claude to install dependencies, or run
-your project's setup yourself in the worktree directory"
+your project's setup yourself in the worktree directory …"
 (code.claude.com/docs/en/worktrees, read 2026-10-06). Its `.worktreeinclude`
 copies gitignored files only into worktrees Claude Code creates. The main
 session creates them with `git worktree add` (line 9101), so the copy would
@@ -528,7 +532,7 @@ a minute per worktree, against each agent's setup and the false-route risk.
 ### Rule text
 
 `python3 tools/rule_sizes.py`: 10,564 words, unchanged. Section 8's cut
-stands. E1 needs no new rule: D3's practice, used, would have caught both.
+stands. E1 needs no new rule: D3's practice, used, would have flagged both.
 
 ### Questions for Ola, added
 
@@ -537,3 +541,7 @@ stands. E1 needs no new rule: D3's practice, used, would have caught both.
 ## Review
 
 **Round 1, 2026-10-06.** Range `44fa7f5..68e2883`. CHANGES REQUESTED, prose only: section 6 says 2>/dev/null hid the line-6208 edit failure, but nothing reached stderr; D2 says the ASK OLA line 'still says' the old grant, but session.md now asks for a fresh yes; P2-P4 name no commit for their incident.
+
+**Round 2, 2026-10-06.** Range `68e2883..b1dc800`. APPROVED, prose only. The four round-1 items and all three suggestions answered and checked against git, transcript lines 6208/6212, 6522, 7640/7644 and 7782, and `<git-common-dir>/harness/queue.jsonl`. 0 production lines. `check_citations.py --base 44fa7f5` resolves every citation.
+
+**Round 3, 2026-10-06.** Range `b1dc800..2648cce`. CHANGES REQUESTED, prose only: E2's heading says the scratchpad channel was 'set up by the brief', but the brief at line 9301 put the sitecustomize there for @tester's own use, which the rule allows; the channel was the handback at line 9328 offering it 'ready for @developer's green step'; and the citation `.claude/REQUIRED-READING.md@44fa7f5:199-201` leaves out `:205-206` ('named by path in the handback, and is read as data'), so E2 must say why that exception does not apply. Every other claim checked; idle tables sum to 222.5 min; check_citations clean.
