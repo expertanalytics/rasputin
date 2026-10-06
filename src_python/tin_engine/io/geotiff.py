@@ -6,14 +6,17 @@ GeoKey by number and name and the file's value. None is a bare `assert`,
 because `python -O` strips those (prior art §5.9).
 
 The module takes a binary stream and never a path (§2), and imports neither
-`_core` nor anything first-party except `io.models` (ruling 1). GeoKeys come
-from tifffile's own `geotiff_metadata` (ruling 5); the CRS is resolved only
-through `pyproj.CRS.from_epsg` and tested on the constructed CRS (rulings 6, 7).
+`_core` nor anything first-party except `io.models` and `crs` (ruling 1).
+GeoKeys come from tifffile's own `geotiff_metadata` (ruling 5); the CRS is
+resolved through `pyproj.CRS.from_epsg` and tested on the constructed CRS
+(rulings 6, 7), or, for 3072 = 32767, built from its GeoKeys and named by the
+EPSG code it matches (`docs/increments/geotiff-crs-by-parameters.md`).
 No transform happens here, so there is no `Transformer` (ruling 8).
 """
 
 from __future__ import annotations
 
+import functools
 import importlib.util
 import math
 from collections.abc import Iterator
@@ -25,6 +28,7 @@ import pyproj
 import tifffile
 from pyproj.exceptions import CRSError
 
+from .. import crs as crs_rules
 from .models import DemTile, GeoTiffError, RasterMeta
 
 USER_DEFINED = 32767
@@ -44,6 +48,32 @@ PROMOTION: dict[np.dtype[Any], np.dtype[Any]] = {
 }
 
 NodataSource = Literal["tag", "caller", "absent"]
+
+#: The words every refusal of a CRS given by parameters begins with.
+P = f"ProjectedCSTypeGeoKey (3072) = {USER_DEFINED} (a CRS given by parameters)"
+
+#: 3075 to the EPSG method and its parameters, each (EPSG name, EPSG code, GeoKey,
+#: unit), in the EPSG method's own order: PROJ's candidate search compares
+#: parameters by position. One parameter per line, packed so the table reads as one.
+# fmt: off
+METHODS: dict[int, tuple[str, int, tuple[tuple[str, int, str, str], ...]]] = {
+    1: ("Transverse Mercator", 9807, (
+        ("Latitude of natural origin", 8801, "ProjNatOriginLatGeoKey", "degree"),
+        ("Longitude of natural origin", 8802, "ProjNatOriginLongGeoKey", "degree"),
+        ("Scale factor at natural origin", 8805, "ProjScaleAtNatOriginGeoKey", "unity"),
+        ("False easting", 8806, "ProjFalseEastingGeoKey", "metre"),
+        ("False northing", 8807, "ProjFalseNorthingGeoKey", "metre"))),
+    8: ("Lambert Conic Conformal (2SP)", 9802, (
+        ("Latitude of false origin", 8821, "ProjFalseOriginLatGeoKey", "degree"),
+        ("Longitude of false origin", 8822, "ProjFalseOriginLongGeoKey", "degree"),
+        ("Latitude of 1st standard parallel", 8823, "ProjStdParallel1GeoKey", "degree"),
+        ("Latitude of 2nd standard parallel", 8824, "ProjStdParallel2GeoKey", "degree"),
+        ("Easting at false origin", 8826, "ProjFalseOriginEastingGeoKey", "metre"),
+        ("Northing at false origin", 8827, "ProjFalseOriginNorthingGeoKey", "metre"))),
+}
+# fmt: on
+#: GeoKeys that would name the datum other than through 2048 (row 5).
+DATUM_KEYS = ("GeogGeodeticDatumGeoKey", "GeogPrimeMeridianGeoKey", "GeogEllipsoidGeoKey")
 
 
 def read_meta(source: BinaryIO, *, nodata: float | None = None) -> RasterMeta:
@@ -134,8 +164,14 @@ def _header(tif: tifffile.TiffFile, nodata: float | None) -> tuple[RasterMeta, n
         geokeys: dict[str, Any] = tif.geotiff_metadata or {}
     x_min, y_max, delta_x, delta_y, area = _placement(tie, scale, geokeys)
     # 15c-2, D6: with 3072 absent, a geographic 2D CRS in degrees from 2048.
-    geographic = geokeys.get("ProjectedCSTypeGeoKey") is None
-    epsg = _geographic_epsg(geokeys) if geographic else _projected_epsg(geokeys)
+    projected = geokeys.get("ProjectedCSTypeGeoKey")
+    geographic = projected is None
+    if projected is None:
+        epsg = _geographic_epsg(geokeys)
+    elif int(projected) == USER_DEFINED:
+        epsg = _parametric_epsg(geokeys)
+    else:
+        epsg = _projected_epsg(geokeys)
     vertical = geokeys.get("VerticalUnitsGeoKey")
     if vertical is not None and int(vertical) != METRE:
         raise GeoTiffError(
@@ -307,6 +343,151 @@ def _projected_epsg(geokeys: dict[str, Any]) -> int:
         units = sorted({a.unit_name for a in horizontal})
         raise GeoTiffError(f"ProjectedCSTypeGeoKey (3072) = {code} has axes in {units}, not metres")
     return code
+
+
+def _parametric_epsg(geokeys: dict[str, Any]) -> int:
+    """3072 = 32767: the CRS built from the GeoKeys on the datum 2048 names, read
+    as the EPSG code it matches, or the refusal of section 4's row that fires."""
+    projection = geokeys.get("ProjectionGeoKey")
+    if projection is not None and int(projection) != USER_DEFINED:
+        raise GeoTiffError(
+            f"{P}, but ProjectionGeoKey (3074) = {int(projection)} names its projection by "
+            "EPSG code, which is not read; only a projection given by its parameters is"
+        )
+    transform = geokeys.get("ProjCoordTransGeoKey")
+    if transform is None:
+        raise GeoTiffError(
+            f"{P} has no ProjCoordTransGeoKey (3075), so its projection method is unknown"
+        )
+    if int(transform) not in METHODS:
+        raise GeoTiffError(
+            f"{P} uses ProjCoordTransGeoKey (3075) = {int(transform)} "
+            f"({getattr(transform, 'name', 'unknown')}); only transverse Mercator (1) and "
+            "Lambert conic conformal with two standard parallels (8) are read"
+        )
+    method, _, parameters = METHODS[int(transform)]
+    g, base = _parametric_base(geokeys)
+    linear = geokeys.get("ProjLinearUnitsGeoKey")
+    if linear is None:
+        raise GeoTiffError(
+            f"{P}: ProjLinearUnitsGeoKey (3076) is absent, so the unit of its false easting "
+            "and northing is unknown"
+        )
+    if int(linear) != METRE:
+        raise GeoTiffError(
+            f"{P}: ProjLinearUnitsGeoKey (3076) = {int(linear)}; only metres ({METRE})"
+        )
+    for _, _, key, _ in parameters:
+        if geokeys.get(key) is None:
+            number = int(tifffile.TIFF.GEO_KEYS[key])
+            raise GeoTiffError(f"{P}: {method} needs {key} ({number}), which is absent")
+    values = tuple(_one_number(key, geokeys[key]) for _, _, key, _ in parameters)
+    matches = _epsg_matches_cached(g, int(transform), values)
+    if not matches:
+        raise GeoTiffError(
+            f"{P}: it is {method} on EPSG:{g} ({base.name}), and no EPSG projected CRS on that "
+            "datum has these parameters, so it cannot be named. Reproject the file to a CRS "
+            "with an EPSG code first"
+        )
+    if not all(crs_rules.same_crs(f"EPSG:{matches[0]}", f"EPSG:{n}") for n in matches[1:]):
+        codes = ", ".join(f"EPSG:{n}" for n in matches)
+        raise GeoTiffError(
+            f"{P}: its parameters match {codes}, which are not the same CRS, so it cannot be named"
+        )
+    return matches[0]
+
+
+def _parametric_base(geokeys: dict[str, Any]) -> tuple[int, pyproj.CRS]:
+    """Rows 4 to 8: the datum from 2048 alone, and no key that says otherwise."""
+    geographic = geokeys.get("GeographicTypeGeoKey")
+    g = None if geographic is None else int(geographic)
+    base = None if g is None else _resolve(g)
+    if g is None or base is None or not base.is_geographic or len(base.axis_info) != 2:
+        shown = (
+            "is absent" if g is None
+            else f"= {g}, which is not an EPSG code" if base is None
+            else f"= {g}, a {base.type_name}"
+        )  # fmt: skip
+        raise GeoTiffError(
+            f"{P}: GeographicTypeGeoKey (2048) {shown}; its datum must be given there as an "
+            "EPSG geographic CRS code"
+        )
+    for key in DATUM_KEYS:
+        if key in geokeys:
+            raise GeoTiffError(
+                f"{P}: {key} ({int(tifffile.TIFF.GEO_KEYS[key])}) is present; the datum is "
+                "read only from GeographicTypeGeoKey (2048)"
+            )
+    # Row 8 before row 6: 2061 is in the unit 2054 names.
+    units = geokeys.get("GeogAngularUnitsGeoKey")
+    if units is not None and int(units) != DEGREE:
+        raise GeoTiffError(
+            f"{P}: GeogAngularUnitsGeoKey (2054) = {int(units)}; only degrees ({DEGREE})"
+        )
+    ellipsoid, meridian = base.ellipsoid, base.prime_meridian
+    assert ellipsoid is not None and meridian is not None  # a geographic CRS has both
+    greenwich_east = math.degrees(meridian.longitude * float(meridian.unit_conversion_factor))
+    for key, expected, what in (
+        ("GeogSemiMajorAxisGeoKey", ellipsoid.semi_major_metre, ellipsoid.name),
+        ("GeogSemiMinorAxisGeoKey", ellipsoid.semi_minor_metre, ellipsoid.name),
+        ("GeogInvFlatteningGeoKey", ellipsoid.inverse_flattening, ellipsoid.name),
+        ("GeogPrimeMeridianLongGeoKey", greenwich_east, "prime meridian"),
+    ):
+        if geokeys.get(key) is None:
+            continue
+        value = _one_number(key, geokeys[key])
+        # 1e-10 relative is PROJ's; the absolute 1e-10 matters only at a prime meridian of 0.
+        if not math.isclose(value, expected, rel_tol=1e-10, abs_tol=1e-10):
+            raise GeoTiffError(
+                f"{P}: {key} ({int(tifffile.TIFF.GEO_KEYS[key])}) = {value!r} disagrees "
+                f"with EPSG:{g}'s {what} ({expected!r})"
+            )
+    towgs84 = geokeys.get("GeogTOWGS84GeoKey")
+    if towgs84 is not None:
+        raise GeoTiffError(
+            f"{P}: GeogTOWGS84GeoKey (2062) = {towgs84} gives the file's own datum shift to "
+            "WGS 84, which is not read; the datum is read only from GeographicTypeGeoKey (2048)"
+        )
+    return g, base
+
+
+def _one_number(key: str, value: Any) -> float:
+    """Section 4's `N`: an int or float, not a bool, and finite; else the refusal."""
+    if isinstance(value, bool) or not isinstance(value, int | float) or not math.isfinite(value):
+        number = int(tifffile.TIFF.GEO_KEYS[key])
+        raise GeoTiffError(f"{P}: {key} ({number}) = {value!r}, which is not one finite number")
+    return float(value)
+
+
+@functools.cache
+def _epsg_matches_cached(
+    geographic: int, transform: int, values: tuple[float, ...]
+) -> tuple[int, ...]:
+    """`crs.epsg_matches` of the CRS built from these GeoKeys, once per distinct key set
+    (a mosaic reads every tile's header)."""
+    return crs_rules.epsg_matches(_projected_crs(geographic, transform, values))
+
+
+def _projected_crs(geographic: int, transform: int, values: tuple[float, ...]) -> pyproj.CRS:
+    """PROJJSON: the base by its EPSG code, the method and parameters with their EPSG
+    names and codes, and axes east then north in metres (GeoTIFF 1.1's fixed order)."""
+    method, method_code, parameters = METHODS[transform]
+
+    def epsg(name: str, code: int) -> dict[str, Any]:
+        return {"name": name, "id": {"authority": "EPSG", "code": code}}
+
+    return pyproj.CRS.from_json_dict({
+        "type": "ProjectedCRS", "name": "unknown",
+        "base_crs": pyproj.CRS.from_epsg(geographic).to_json_dict(),
+        "conversion": {"name": "unknown", "method": epsg(method, method_code), "parameters": [
+            {**epsg(name, code), "value": value, "unit": unit}
+            for (name, code, _, unit), value in zip(parameters, values, strict=True)
+        ]},
+        "coordinate_system": {"subtype": "Cartesian", "axis": [
+            {"name": axis, "abbreviation": axis[0], "direction": direction, "unit": "metre"}
+            for axis, direction in (("Easting", "east"), ("Northing", "north"))
+        ]},
+    })  # fmt: skip
 
 
 def _geographic_epsg(geokeys: dict[str, Any]) -> int:

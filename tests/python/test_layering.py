@@ -54,7 +54,7 @@ LAYERS: tuple[dict[str, str], ...] = (
         "io": "io.ply io.vtk_legacy",
         "io.cog": "io.geotiff io.models",
         "io.geojson": "", "io.geopackage": "", "io.gml": "",
-        "io.geotiff": "io.models",
+        "io.geotiff": "crs io.models",
         "io.mesh_index": "io.models",
         "io.ply": "features",
         "io.repository": "io.cog io.geotiff io.models mosaic",
