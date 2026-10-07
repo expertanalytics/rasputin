@@ -18,9 +18,9 @@ remaining time (question 7, ruling 7). Code review round 1 (`@reviewer`,
 on `0346ac63`): changes requested, no mutation record; `@tester`'s
 mutation round then ran ("Mutation round for 20c-1": 4 survivors of 16
 faults, one killed by the new test `4a64c1ef`), and each survivor is ruled
-there. **Next: `@tester`'s kills as ruled there (four test additions and
-one header fix, no production change), then code review round 2
-(`@reviewer`)**;
+there; `@tester` then killed the four (`cec2dda4` to `7bc41ebf`, tests
+only), so all 16 planted faults are killed; ctest 886 of 886, pytest
+5404 passed. **Next: code review round 2 (`@reviewer`)**;
 **20c-2** the soft criterion and a split of the
 constraint line that blocks the walk to a quality point, after 20c-1;
 **20c-3** input clean-up and coarsening, and Ola's outline rule, on by
@@ -1594,7 +1594,7 @@ run, and the fault removed. Line numbers are in the test files at
 | 1 | the end check removed (`foot_on`: a foot within δ of an end of its edge is still a hit) | killed | CF1 "a foot within delta of either end of its edge is NearEnd", lines 218 and 228 (a hit where NearEnd is expected); 20b "R2 step 2", line 708. The variant that checks only the first end: lines 219 and 708 |
 | 2 | the neighbour search crosses a constrained edge | killed | CF1 "no search across a constrained edge", line 255 (constrained) and 262 (frozen) |
 | 3 | the edge's midpoint instead of the foot | killed | CF1's position check in 8 of 10 cases (line 121, off by up to 9.4 cells); CF2 line 331; CF3 line 174; CF4 lines 230, 250, 291, 419; 20b line 229 |
-| 4 | footed once removed (the final check's `&& !was_footed` dropped, so a point already footed may be footed again) | **survived** | no fixture reached it; ruled below (b) |
+| 4 | footed once removed (the final check's `&& !was_footed` dropped, so a point already footed may be footed again) | **survived**; killed by `2bf2acf2` | no fixture reached it; ruled below (b); the kill is in "The survivors, killed" |
 | 5 | the fallback removed (a footed point that comes up again is dropped, not inserted as itself) | killed | CF4 "at tolerance 0 every footed point goes in after its foot", line 382 (39, 40 and 40 points with error above 0 m for seeds 1 to 3); also lines 227 (`feet_fallback` 0, not 1) and 253 |
 | 6 | the foot's height taken from the point (its own z, not the foot's) | killed | CF4 line 252 (z 80 where 73.5 is expected), line 227, and the projected path's height case, lines 272 and 289 (z off by 0.245 m) |
 | 7 | refinement: the holding triangle dropped from the active set when the foot goes on a neighbour's edge | killed | CF3 "the foot goes on the neighbour's edge, and the node still goes in from the rescanned holding triangle", line 177 |
@@ -1606,20 +1606,52 @@ run, and the fault removed. Line numbers are in the test files at
 | row and column swapped in the world distance | killed | CF1 "distance and foot are measured in the world frame", lines 293 and 121; 20b line 229 |
 | the frozen-edge test dropped | killed | CF1 "a frozen edge is never a foot", lines 272, 277 and 262 |
 | the nearest edge instead of the first in search order | killed | CF1 "t's own constrained edges come first, in edge order", lines 118 and 119 |
-| "closer than δ" made non-strict (`>= delta` to `> delta`) | **survived** | no case puts a point exactly δ from an edge (CF1 tests 0.4 and 0.6 cells against δ = 0.5); the suite's header comment says it kills this fault, which is false; ruled below (a) |
+| "closer than δ" made non-strict (`>= delta` to `> delta`) | **survived**; killed by `cec2dda4` | no case puts a point exactly δ from an edge (CF1 tests 0.4 and 0.6 cells against δ = 0.5); the suite's header comment says it kills this fault, which is false; ruled below (a) |
 
 **Faults against the speed fix `69f37d1c`** (`foot_reachable`, and the search to the cap before ε):
 
 | fault planted | result | caught by |
 |---|---|---|
 | `foot_reachable` ignores the neighbours (false where only a neighbour has a live edge) | killed | CF3 line 174; 20b F2 line 498 (`feet_refused` 1, not 2) |
-| `foot_reachable` ignores the triangle's own edges | killed, by 20b only | 20b F3 line 514 (no feet at tolerance 0 on slope 0.1287); no 20c test catches it; ruled below (d) |
-| `foot_reachable` always true | **survived** | the output cannot change, only work is added; no test calls `foot_reachable` directly; ruled below (d) |
+| `foot_reachable` ignores the triangle's own edges | killed, by 20b only; now also by `7bc41ebf` | 20b F3 line 514 (no feet at tolerance 0 on slope 0.1287); no 20c test caught it; ruled below (d) |
+| `foot_reachable` always true | **survived**; killed by `7bc41ebf` | the output cannot change, only work is added; no test calls `foot_reachable` directly; ruled below (d) |
 | ε never computed: the search to the cap alone decides | killed by `4a64c1ef` | before it, only 20b F3's Delaunay oracle reacted (line 365, two violations 1.43e-11 m and 9.77e-11 m inside a circle of radius 6.52 m: rounding, so counted as a survivor). `4a64c1ef` adds CF3 "a node within the cap but beyond eps of the neighbour's edge goes in as itself, not as a foot" (tolerance 0.35 m, slope √2 m/m, so ε = 0.247 cells; the node 0.3 cells from the edge; cap 0.5 cells; the case asserts both facts first). It fails at line 224 on the fault and passes on `0346ac63` (7 CF3 cases, 131 assertions) |
 
 **Also tried**: the final check's holding triangle dropped from the active
 set when its foot goes on a neighbour's edge (R4.2): **survived**; no CF4
-fixture puts a final-check foot on a neighbour's edge. Ruled below (c).
+fixture puts a final-check foot on a neighbour's edge. Ruled below (c);
+killed by `8e2fb5fb`.
+
+**The survivors, killed** (`@tester`, 2026-10-07, commits `cec2dda4`,
+`2bf2acf2`, `8e2fb5fb`, `7bc41ebf` on `aee60fd2`; scratch copy, macOS
+arm64 Release; no production change: `git diff --stat 0346ac63 7bc41ebf
+-- include src` is empty). Each new case fails on its planted fault and
+passes on the code. Line numbers here are at `7bc41ebf`; the tables above
+keep theirs at `4a64c1ef` (CF1 lines after 155 and CF4 lines after 420
+have since moved).
+
+| fault planted | killed by | fails at |
+|---|---|---|
+| "closer than δ" made non-strict (`include/terrain/mesh/constraint_foot.hpp@0346ac63:64`) | `cec2dda4`, CF1 "a point exactly delta from a constrained edge of its triangle is None": `V(5, 0.5)`, after asserting the recomputed distance is exactly 0.5 | `tests/cpp/unit/test_constraint_foot.cpp@7bc41ebf:170` (a Hit, not None), the only failing case; the header claim corrected at `tests/cpp/unit/test_constraint_foot.cpp@7bc41ebf:44` |
+| footed once removed (`include/terrain/refinement/refine_points.hpp@0346ac63:386`) | `2bf2acf2`, CF4's two-parallel-lines case (ruling (b)'s fixture) | `tests/cpp/property/prop_constraint_foot_final.cpp@7bc41ebf:514` (a second foot at (5, 0) on A1-B1); CF4's header corrected at `tests/cpp/property/prop_constraint_foot_final.cpp@7bc41ebf:34` (the wedge's bound did not kill this fault) |
+| R4.2: the holding triangle dropped from the active set (`include/terrain/refinement/refine_points.hpp@0346ac63:428-429` removed) | `8e2fb5fb`, CF4 "the foot goes on the neighbour's edge, and the point still goes in from the holding triangle" (CF3's geometry; a companion case asserts the holding triangle is unchanged and untouched by the flips) | `tests/cpp/property/prop_constraint_foot_final.cpp@7bc41ebf:602` (N never goes in) |
+| `foot_reachable` ignores the triangle's own edges | `7bc41ebf`, CF1's direct `foot_reachable` test | `tests/cpp/unit/test_constraint_foot.cpp@7bc41ebf:309` |
+| `foot_reachable` ignores the neighbours | `7bc41ebf` | `tests/cpp/unit/test_constraint_foot.cpp@7bc41ebf:315` |
+| `foot_reachable` always true | `7bc41ebf` | `tests/cpp/unit/test_constraint_foot.cpp@7bc41ebf:322` and `:330` |
+
+So every one of the 16 planted faults is now killed by a 20c test. Ruling
+(b)'s fixture reaches the guard in the code: CF4 "the two-lines fixture is
+what it claims" replays `refine_points`' own steps
+(`tests/cpp/property/prop_constraint_foot_final.cpp@7bc41ebf:463-500`):
+`legalise_all` makes no flip on the rectangle, the first Hit is on A2-B2 at
+x = 5, the split and `legalise_around` flip A1-B2, and in the triangle then
+holding the point `constraint_foot` gives a second Hit on A1-B1 at (5, 0).
+A first pass over the three `foot_reachable` faults reused a stale binary
+(the restore and the planted edit fell in the same second, and filtered
+build output hid it); all three were rerun with the object file deleted
+before each build, and the lines above are from the rerun. Full runs on
+`7bc41ebf`: ctest 886 of 886; `pytest --no-cov` 5404 passed, 17 skipped,
+0 failed.
 
 **The CF4 margin demonstration** (green-step ruling 2; code review round
 1's B2). Fault: `legalise_around` skipped after a final-check foot split.
@@ -1650,7 +1682,8 @@ the edge in doubles, expecting `None`; the case first asserts that the
 distance it recomputes is exactly 0.5. And corrects the header comment
 (`tests/cpp/unit/test_constraint_foot.cpp@4a64c1ef:44`), which today
 claims the 0.4 and 0.6 cases kill this fault. R1's "closer than δ is
-strict" stands; no production change.
+strict" stands; no production change. **Done**, `cec2dda4` ("The
+survivors, killed", above).
 
 **(b) Footed once removed. Keep the guard: it is reachable, and the
 fixtures so far could not reach it.** `@tester`'s explanation (the cut at
@@ -1695,6 +1728,11 @@ was footed, and only for that line:
   review round 2. R4's text ("recorded as footed … inserted later as
   itself") already states the guard; it is unchanged, and there is no
   work for `@developer`.
+- **Done**, `2bf2acf2`: the code reaches the guard on this fixture
+  (replayed, "The survivors, killed", above), so the guard stays and
+  nothing came back to me. `@tester` also constrained the strip's two
+  short sides, as every CF4 fixture does; they lie 5 cells from p and
+  change nothing here.
 
 **(c) The final check's holding triangle dropped (R4.2).** This one is a
 correctness fault, not dead code: if the holding triangle t is neither
@@ -1709,6 +1747,7 @@ the fault); asserted: the foot is on the neighbour's edge, the
 point then goes in as itself, and the tolerance oracle over all stored
 points passes. It must fail with
 `include/terrain/refinement/refine_points.hpp@0346ac63:428-429` removed.
+**Done**, `8e2fb5fb`.
 
 **(d) `foot_reachable`.** Yes, a direct CF1 unit test. It is the contract
 the speed fix rests on (where it is false, `constraint_foot` finds
@@ -1720,14 +1759,18 @@ false where the only one is frozen. Each false case also asserts that
 `constraint_foot` returns `None` for a point next to that edge. These
 kill "ignores own edges" and "ignores neighbours" in a 20c target, and
 "always true" too, although that fault changes only the work done
-(`@perf`'s split-phase figures cover the work).
+(`@perf`'s split-phase figures cover the work). **Done**, `7bc41ebf`. The
+"beyond a constrained edge" case makes t's own constrained edge frozen,
+with the neighbour's edge live: the only reading in which that case is
+false, since a live constrained edge on t would make it true.
 
 **Next, in order.** `@tester`, in one test commit or one per item: (a),
 (b), (c), (d), each shown to fail on its fault and pass on the code; the
 handback adds one line per item to the tables above (the commit, and the
 line that kills). No production change; no `@developer` step unless (b)'s
 fixture does not reach the guard. Then the full C++ and Python runs, and
-code review round 2 (`@reviewer`).
+code review round 2 (`@reviewer`). The kills and the full runs are done
+(above); next is code review round 2.
 
 ### 20c-2
 
