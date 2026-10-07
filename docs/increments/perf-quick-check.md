@@ -1,11 +1,17 @@
 # Increment pq: the 15-minute performance check
 
 **Status:** designed by `@architect` on `85a3e6dd`, 2026-10-07; read by
-`@perf` the same night and corrected (section 8); next, Ola reads it.
+`@perf` the same night and corrected (section 8); Ola's rulings in section 10.
+Red step `fa3e03ef` (`@tester`), green step `b3439629` (`@developer`), the two
+data files and this as-built update in the commit after it (`@architect`):
+241 net production lines (`python3 tools/count_loc.py 85a3e6dd b3439629`)
+against the estimate of about 220. Section 11 rules on the green step's
+assumptions; one change (the file fingerprint) goes back to `@tester`. Next,
+`@reviewer`'s code review.
 Tooling only: `tools/bench.py` and a new `tools/bench_quick.py`. One PR. No
 refine or mesh code, so no acceptance run of its own. Its first baseline is
-taken after 30d (the outline-buffer fix, branch `worktree-buffer-speed-2`)
-merges. Deferred to a later PR: the timing lock (section 6) and the `profile`
+taken on master after this PR merges (30d, the outline-buffer fix, merged as
+#215). Deferred to a later PR: the timing lock (section 6) and the `profile`
 subcommand (section 7).
 
 ## 1. What Ola asked
@@ -71,11 +77,11 @@ hotspot is gone once 30d merges; `lagan` carries the hotspot that remains
 (`features clip`, 40.7 % of 16.97 s,
 `docs/benchmarks/2026-10-07/30d-buffer/built.md` on 30d's branch). Neither
 case needs the network (meshing is offline, `sources.py:6`). Every run is
-`--binary`. Paths are relative to `$RASPUTIN_DATA` (default
-`../rasputin_data`); before the first baseline, the Numedalslågen outline is
-copied there from
+`--binary`. Paths start with `$TREE` (the tree measured) or `$RASPUTIN_DATA`
+(default `../rasputin_data` beside the checkout the tool runs from; set it when
+running from a worktree). The Numedalslågen outline was copied there from
 `rasputin_scratch/norway/numedalslagen/numedalslagen_outline_nve.geojson`
-(a results folder).
+(a results folder) on 2026-10-07; `cmp` of the two files finds no difference.
 
 **What is measured.** Per run: the process wall time, and each `--stats` phase
 row with the clock's total. The child (`bench.py _child`) captures these by
@@ -85,8 +91,9 @@ replacing `cli.PhaseClock` with a subclass that keeps its instance, and adds
 
 **The baseline** is one file per power state, `docs/benchmarks/quick/baseline-ac.json`
 and `baseline-battery.json`, a run of the check on master: commit, machine,
-input fingerprint (for a file: path, size, mtime, and content SHA-256 under
-100 MB; for a directory, such as DTM10's 762 files or the GLO-30 cache: the
+input fingerprint, keyed by the input as written in `cases.toml` (for a file
+under 100 MB: size and content SHA-256; at 100 MB or more: size and mtime; for
+a directory, such as DTM10's 762 files or the GLO-30 cache: the
 SHA-256 of its sorted relative file names, sizes and mtimes, recursive, no
 content read),
 and per case and measure the median, min and max. A machine, power state or
@@ -192,7 +199,8 @@ a new ask. A later PR may add `bench_quick.py profile <case>` (about 25 lines).
 Counted as CLAUDE.md §2 counts: `bench.py` +20 (the `timeout` argument and
 `Completed.timed_out` 10, phases in the child 10); `bench_quick.py` about 200
 (models 30, cases, baseline and fingerprint I/O 35, the loop with the deadline
-45, verdict 45, hotspots 20, Typer 25). About 220 in all.
+45, verdict 45, hotspots 20, Typer 25). About 220 in all; as built, 241
+(`bench.py` +25, `bench_quick.py` +216).
 `tools/bench_quick.py` joins mypy's `files`.
 
 Seams for `tests/python/test_bench_quick.py`: `verdict(new, base)` and
@@ -267,3 +275,57 @@ Asked in the design's handback at `a7a15f1b`; recorded here as asked.
    night of each month? Default: yes.
 
 **Ola, 2026-10-07, on the main session's list "3. The measuring process: the main session runs the quick check itself; the hotspot thresholds are 40 % for a phase and 25 % for a single call; the full run happens once a month on an unattended night": "3: yes".** *Ruled: questions 1, 2 and 4 take their defaults. Recorded by the main session.*
+
+## 11. As built: the green step's assumptions, ruled
+
+`@architect`, on `b3439629`. The data files: `docs/benchmarks/quick/cases.toml`
+is `@developer`'s draft unchanged. It agrees with section 3's table and with
+the arguments of 30d's runs (`docs/benchmarks/2026-10-07/30d-buffer/scripts/run_mesh.sh`,
+cases `gpkg33` and `gpkg`), and every input it names exists.
+`docs/benchmarks/quick/hotspots.toml` holds Ola's first ruling: `lagan`'s
+`features clip`, 40.7 %, recorded as expected for now (2026-10-07). The phase
+name is the `--stats` row `mesh` writes (`src_python/tin_engine/cli.py@b3439629:1466`).
+
+1. **`$TREE` and `$RASPUTIN_DATA` in `cases.toml`**, expanded when the tool runs.
+   *Kept.* The default data folder is `rasputin_data` beside the checkout the
+   tool runs from, which is wrong in a worktree under `.claude/worktrees/`.
+   The run then stops with exit 3, naming the missing path. From a worktree,
+   set `RASPUTIN_DATA`.
+2. **Fingerprints keyed by the input as written, not the expanded path.**
+   *Kept*: a master baseline and a branch worktree expand `$TREE` differently.
+   **Changed alongside it:** a file under 100 MB is fingerprinted by size and
+   content only, not mtime. Git sets a file's mtime when it checks the file
+   out, so the same fixture has a different mtime in each checkout. With mtime
+   in the fingerprint, a check run with `--tree` on another checkout would
+   always print `NO BASELINE: input $TREE/... changed`. (Checked on this
+   machine: `7908_3_10m_z33.tif` and `quarter.geojson` have the same size and
+   SHA-256 in the main checkout and in this worktree, but different mtimes.)
+   A file of 100 MB or more, and a directory, keep size and mtime, because
+   their content is not read. *For `@tester`:* a file under 100 MB that is
+   touched keeps its fingerprint (this replaces
+   `test_a_file_fingerprint_sees_a_touch`); a file of 100 MB or more that is
+   touched gets a new one.
+3. **Machine mismatch compares every field of `bench.Machine`**, including the
+   macOS, Python and numpy versions; `bench.py` compares only the CPU and the
+   core counts. *Kept*: the quick check times whole runs, and decode and
+   feature reading run in Python. A version change gives `NO BASELINE`, and
+   rule (b) of section 3 takes a new master baseline in about 2.5 minutes. A
+   known gap: the shapely, pyproj and GEOS versions are not recorded, and
+   GEOS does `features clip`'s work.
+4. **The verdict:** BROKEN over SLOWER over FASTER over NO CHANGE; `OUT OF
+   TIME` replaces any of them, with exit 4, and the lines of what was measured
+   are still printed. *Kept*, as section 3 says.
+5. **Two extra lines,** `MESH CHANGED` (the mesh hash moved, reported, not
+   judged) and `NOT JUDGED` (a case missing from the baseline). *Kept.*
+6. **`--save-baseline` judges first, then writes**; it writes nothing after
+   `OUT OF TIME` or when the power state changed during the run, and the first
+   save, with no baseline yet, exits 2. *Kept.*
+7. **The skip rule** uses the baseline's median total times the case's runs,
+   without its warm-up or start-up. *Kept*, as section 3 says. The estimate
+   can be short by the warm-up; a case that then overruns is killed at the
+   deadline and named in `OUT OF TIME`, the same verdict a skip gives.
+8. **A ruled hotspot is raised again at 10 points or more** above its ruled
+   share. *Kept*, as section 5 says.
+9. **Each run's mesh goes to a `tempfile.mkdtemp` folder that is not
+   removed.** *Kept.* It holds one mesh, overwritten case by case (about the
+   size of Lagan's binary mesh), in the per-user temporary folder.
