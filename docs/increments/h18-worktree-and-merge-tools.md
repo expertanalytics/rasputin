@@ -1,6 +1,6 @@
 # Harness h18: a new worktree with its own venv, and a master-merge runner
 
-Status: designed on `worktree-harness-tools` off `41bda81`; design review round 2 approved (below under "Review"); red at `e36a5dd6`, amended at `666381ed` per §9; green at `965f7d96` (both tools; the 77 tests of `tests/python/test_new_worktree.py` and `tests/python/test_merge_master.py` pass); as built in §10, the developer's eight assumptions ruled there, all kept; next `@reviewer`, code review. One PR, both tools, 385 net production lines (§5; the design said about 275). §8's three questions were ruled by Ola on 2026-10-07: the defaults.
+Status: designed on `worktree-harness-tools` off `41bda81`; design review round 2 approved (below under "Review"); red at `e36a5dd6`, amended at `666381ed` per §9; green at `965f7d96` (both tools; the 77 tests of `tests/python/test_new_worktree.py` and `tests/python/test_merge_master.py` pass); as built in §10, the developer's eight assumptions ruled there, all kept; code review round 1 asked for changes, fixed at red `b57216f4` and green `068ba295` (79 tests pass), the fix round's four points ruled in §11; next `@reviewer`, code review round 2, which includes §5's real throwaway run of `new_worktree.py`. One PR, both tools, 388 net production lines (§5; the design said about 275). §8's three questions were ruled by Ola on 2026-10-07: the defaults.
 
 What this is. Two tools from the 2026-10-06 day retrospective
 (`docs/retrospectives/2026-10-06-day-bottlenecks-and-merges.md`, table
@@ -119,7 +119,9 @@ does not nest the new one there. `--from` defaults to `origin/master`.
 `--existing <path>` sets up a worktree that already exists (64 of the 107
 directories under `.claude/worktrees/` have no `.venv/bin/python`, this
 design's own among them; counted 2026-10-07): it does steps 4 to 7
-below, skipping each whose product exists, so it is safe to run again.
+below, skipping each whose product exists (step 5's product is a venv
+that passes the check and can configure `build-pyext`, §3.2), so it is
+safe to run again.
 
 ### 3.2 Steps
 
@@ -138,7 +140,11 @@ below, skipping each whose product exists, so it is safe to run again.
    checkout, this install is meant to replace that finder with one for this
    worktree, so `--existing` repairs such a venv instead of skipping step 5
    and then refusing at step 7 (a dead end); step 7 checks the result, so
-   if the install does not repair it, the refusal stands. `uv pip` writes no `uv.lock` (only `uv
+   if the install does not repair it, the refusal stands. The install also
+   runs when the check passes but `<wt>/build-pyext/CMakeCache.txt` is
+   missing: step 6's configure needs `pybind11` in this venv, which a venv
+   made by hand may lack (§11, item 3). It is the whole install, not
+   `pybind11` alone, so one command line serves both cases. `uv pip` writes no `uv.lock` (only `uv
    run` and `uv sync` do; `.gitignore` explains why that matters).
 6. Unless `<wt>/build-pyext/CMakeCache.txt` exists: configure, do not build,
 
@@ -254,7 +260,9 @@ compare paths after `Path.resolve()`.
    check passes, makes no `uv venv`, no `uv pip install` and no `cmake`
    call. Whose check first names another checkout's `src_python` (the
    table answers so until the install has run): `uv pip install` is called,
-   then the check again, and it passes.
+   then the check again, and it passes. Whose check passes but which has
+   no `build-pyext` and no `pybind11`: the install runs, then the
+   configure with the venv's `pybind11_DIR`; exit 0.
 6. A failing `uv pip install` exits 2 with the `--existing` hint and leaves
    the worktree.
 7. Every argv the recorder saw passes `guard_push.publishes(argv) == []`
@@ -332,7 +340,13 @@ removed after the commit and on `--abort`. The state file plus git's
    worktree; `--no-rerere-autoupdate` so a recorded resolution, if a user
    config turns rerere on, is never staged unseen.
 6. Exit 0 from git: go to §4.4. Unmerged paths (`git diff --name-only
-   --diff-filter=U`): record them, print the stop message, exit 3:
+   --diff-filter=U`): record them in the state file; if `MERGE_HEAD` is
+   not the recorded `origin/master` commit (a fetch in another worktree
+   moved it between the `rev-parse` and the merge, §10 item 8), refuse
+   with §4.6's `MERGE_HEAD` row, exit 2, before the stop message, the
+   merge left in progress and the state file kept, so `--abort` and
+   `--continue` behave as after any other stop (§11, items 1 and 2).
+   Otherwise print the stop message, exit 3:
 
    ```
    merge_master: stopped for conflict resolution in <n> files:
@@ -459,7 +473,7 @@ and on a branch that is not `master`; it needs no `.venv`, `--persona` or
 | the fetch fails | `merge_master: could not fetch origin/master (<git's last line>); blocked on network: stop and hand back` |
 | `--continue`, and no state file | `merge_master: no merge started by this tool in <wt>; start one with: python3 tools/merge_master.py <wt>` |
 | `--continue`, state file but no `MERGE_HEAD` | `merge_master: the merge in <wt> was left (MERGE_HEAD is gone: a checkout, reset or commit during it). Nothing was committed by this tool; stop and hand back` |
-| `MERGE_HEAD` is not the recorded master commit | `merge_master: MERGE_HEAD is <a>, but this tool merged <b>; stop and hand back` |
+| `MERGE_HEAD` is not the recorded master commit: on a conflict stop (§4.3 step 6, the merge left in progress, the state file kept), a clean start and `--continue` | `merge_master: MERGE_HEAD is <a>, but this tool merged <b>; stop and hand back` |
 | unmerged paths remain | `merge_master: still unresolved: <files>; resolve with Edit, then git add` |
 | a recorded conflicted file has a line starting `<<<<<<< ` or `>>>>>>> ` | `merge_master: <file>:<line> still holds a conflict marker` |
 | tracked changes not staged | `merge_master: <file> is changed but not added; git add it if it belongs to the merge` |
@@ -543,6 +557,9 @@ it, unresolved; every path the tests compare is compared after
 4. Conflict: exit 3; no commit; `MERGE_HEAD` present; the stop message
    lists the file; a conflicted `CLAUDE.md` carries the "states rules"
    mark; the file still holds its markers (the tool resolved nothing).
+   A conflict whose `MERGE_HEAD` is newer than the recorded master (master
+   moved between the `rev-parse` and the merge): exit 2 with the
+   `MERGE_HEAD` message, no stop message, the merge left in progress.
 5. `--continue` with a marker left: refused, naming `file:line`. After the
    test resolves and `git add`s, and also edits and `git add`s a file that
    merged cleanly: committed, body "Conflicts resolved by hand: <file>"
@@ -581,7 +598,7 @@ Not the invariant-critical suite of anything, so no mutation round
 About 185 net production lines (the retrospective, after the 2026-10-03
 research, said about 120 with tests; the difference is the two-phase
 command line, the `_core` rebuild with its suffix check, the hand-change
-list and the refusal table). As built: 250 (§5).
+list and the refusal table). As built: 253 (§5).
 
 ## 5. PR and who does what
 
@@ -590,9 +607,10 @@ does not exist yet): about 275 net production lines by `python3
 tools/count_loc.py <base> <head>`, under `CLAUDE.md` §2's limit. Not
 refine or mesh code, so no `@perf` acceptance run.
 
-As built, `python3 tools/count_loc.py origin/master HEAD` at `965f7d96`
-counts 385 (`tools/merge_master.py` 250, `tools/new_worktree.py` 135),
-40 % over the estimate and still under the limit. Why it overran: the
+As built, `python3 tools/count_loc.py 41bda81a HEAD` at `068ba295`
+counts 388 (`tools/merge_master.py` 253, `tools/new_worktree.py` 135),
+41 % over the estimate and still under the limit; at `965f7d96` it was
+385, and code review round 1's fix added 3 (§11). Why it overran: the
 estimate priced the steps, not the refusals' text. The refusal conditions
 and messages alone take 75 counted lines (23 in `new_worktree.py`, 52 in
 `merge_master.py`: each `raise Refusal(...)` with the `if` that guards it),
@@ -852,7 +870,8 @@ none changes code. The sections above now carry the ones that set text
    (well under a second of `git log`, `git diff` and `git rev-list` calls)
    would merge a newer master than the one recorded. The check catches
    it: the clean form and `--continue` both refuse "MERGE_HEAD is <a>, but
-   this tool merged <b>" before any gate, and nothing is committed;
+   this tool merged <b>" before any gate, and nothing is committed (as of
+   §11, the conflict stop refuses too);
    `--abort` and a rerun recover. Merging the recorded hash would close the
    window at the cost of hash-labelled markers; not worth a round.
 
@@ -862,6 +881,39 @@ the C++ checks use `git diff --name-only` rather than `--quiet` so the
 refusal can name the first file (§4.3 step 4, §4.4 step 3); and the start
 prints the merge base and list before the C++ refusal, so a refused start
 still shows what would have come in.
+
+## 11. Code review round 1's fix round, ruled
+
+Code review round 1 (range `41bda81a..19d3238c`) asked for changes. The
+fix round: `@tester`'s red `b57216f4`, `@developer`'s green `068ba295`.
+Four points beyond the design, ruled here; the sections above carry the
+text.
+
+1. **Kept.** When a start stops on a conflict and `MERGE_HEAD` is not the
+   recorded master, the tool refuses (exit 2, §4.6's `MERGE_HEAD` row)
+   instead of stopping (exit 3), and leaves the merge in progress (§4.3
+   step 6). Before this, the persona was told to resolve conflicts against
+   a master the tool had not printed, recorded or checked for C++, and
+   only `--continue` found out. The same check, `same_master` in
+   `tools/merge_master.py`, now serves both places.
+2. **Kept.** In that case the state file is kept, so `--abort` removes it
+   with the merge and `--continue` refuses the same way: the state file
+   plus `MERGE_HEAD` stays "a merge this tool started" (§4.2), and no
+   third kind of stop needs its own recovery.
+3. **Kept.** `--existing` runs the full editable install, `pybind11`
+   included, when the check passes but `build-pyext/CMakeCache.txt` is
+   missing (§3.2 step 5, §3.1). Without it a hand-made venv without
+   `pybind11` failed at `-m pybind11 --cmakedir`, and rerunning
+   `--existing`, which that failure's message names, failed the same way:
+   the dead end round 1 found. Installing `pybind11` alone would be a
+   second install command for the same venv; the full install is already
+   needed on other paths and costs about 17 s with a warm cache (§3.4).
+4. **Left out.** The explicit capture flag for `step` in
+   `tools/new_worktree.py` (§10 item 6): it changes no behaviour, the
+   rule "captured exactly when the last argument starts with `--`" holds
+   for every call the tool makes (`--version`, `--cmakedir`), and the
+   tests pin which steps pass their output through. Not a question for
+   Ola; `@reviewer` may raise it again in round 2.
 
 ## Review
 
