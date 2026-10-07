@@ -2,7 +2,7 @@
 
 Status: **designed** (`@architect`, 2026-10-06, branch
 `worktree-soft-quality` off master `ed12512`), design review rounds 1 to
-4 answered; in three PRs: **20c-1** the foot rule on every insertion path,
+5 answered; in three PRs: **20c-1** the foot rule on every insertion path,
 ready for `@tester`; **20c-2** the soft criterion and a split of the
 constraint line that blocks the walk to a quality point, after 20c-1;
 **20c-3** input clean-up and coarsening, and Ola's outline rule (built
@@ -499,8 +499,10 @@ simplifying, mark the two ring neighbours of each end of every source
 edge under 10 cm, and after `coverage_simplify` put back every marked
 vertex it dropped, in ring order and at the same coordinates in both
 polygons that share it, so the result is still a coverage
-(`covkeep.py`, kept beside the prototype). Lagan has 616 such edges and
-puts back 78 vertices; Numedalslagen, 1 779 and 142. Meshes on 20c-2:
+(`covkeep.py`, kept beside the prototype). Counting an edge or point that
+two polygons share once: Lagan has 417 such edges, and the guard puts back 39
+points; Numedalslagen (its CORINE as read for the domain's box, 8 017
+polygons, not filtered to the domain), 1 362 and 71. Meshes on 20c-2:
 
 | input | Lagan: triangles | slivers | side < 10 cm | worst | Numedalslagen: triangles | slivers | side < 10 cm | worst |
 |---|---|---|---|---|---|---|---|---|
@@ -686,7 +688,7 @@ vertex the 2 m simplification drops (0.088° in the source, 0.006697°
 after; M5, "Which triangle sets the worst angle"). The gap itself forces
 0.007080° on any mesh, so no step short of closing it (ruled out, ruling
 5) gets Lagan above about 0.007°, and keeping that vertex was measured to
-gain only that 6 % (M5). On Numedalslagen, with the outline rule, 0.83°. So the gates hold each PR to the worst angle of the one
+gain only about 6 % (0.006697° to 0.007080°; M5). On Numedalslagen, with the outline rule, 0.83°. So the gates hold each PR to the worst angle of the one
 before (and 20c-1 to master's), and promise no fixed angle.
 
 What stays: slivers whose apex is an input vertex about a metre from
@@ -736,8 +738,8 @@ before the noder (`feature_input.py`'s side of the I/O boundary), with
 shapely's `coverage_simplify`, which keeps a partition a partition
 (`set_precision` polygon by polygon does not: M6 (a), so round 3 dropped
 it). Not the noder's `--snap-spacing`: it fails above 1 cm today (M4).
-About 60 lines of Python, and about 70 more for Ola's outline rule if he
-says yes (question 6, M6). **Worth its own PR**; it does not depend on (a)
+About 60 lines of Python, and about 70 more for Ola's outline rule, built
+either way (question 6 sets only its default; M6). **Worth its own PR**; it does not depend on (a)
 in code, but its gate is measured on 20c-2's mesh, so it goes after 20c-2.
 
 ### (c) The soft criterion, and splitting constraints in general
@@ -1041,7 +1043,10 @@ and the chains are built; never in `_core` (the I/O boundary, `CLAUDE.md`
    measured), with no 1 cm snap first (round 3:
    it breaks the coverage, M6 (a)); polylines are left as given (a line
    network is not a coverage, and nothing here measured them). Before
-   simplifying, `coverage_is_valid` over those polygons; if they do not
+   simplifying, `coverage_is_valid` over those polygons (the filter to
+   the domain is needed: Numedalslagen's CORINE as read for the domain's
+   box, 8 017 polygons, fails the check over 3 polygons that do not reach
+   the domain, and the 1 611 that do pass it); if they do not
    form a coverage, the run stops with a plain error that says how many
    polygons and how many metres of border do not match, and that
    `--features-tolerance 0` reads them as given (both test catchments
@@ -1342,3 +1347,4 @@ with the default no: "defaults on all four". So:
 20c design review round 2 (@reviewer, 7fcac1e0..3d1df11f, 0 counted LOC, docs only): CHANGES REQUESTED; round 1's B1-B4 answered. (B1) the 20c-2 gate "worst angle ≥ 20c-1's" sits exactly on its measured value on Lagan (0.002384° both), against the file's own "a margin for the production code"; (B2) the 20c-3 worst triangle (0.006608°) is called a spike in the outlines themselves, but M3's 1 cm run reached 0.008589°, impossible if those two 79 m sides met as constraints in the 1 cm input, so the 2 m simplification likely made it; reconcile, and fix the reason (two constraint segments meeting at that angle at a shared vertex); (B3) the 20c-3 gate's "19" slivers with a side under 10 cm has no row in M5.
 20c design review round 3 (@reviewer, 3d1df11f..a3a2b7ec, 0 counted LOC, docs only): CHANGES REQUESTED; round 2's B1-B3 answered (B2's 1 cm gap confirmed in the CORINE source, M5's 20c-3 Lagan row reproduced exactly). (B1) M6 measures Ola's outline rule on 20c-2's mesh, but the rule was proposed for 20c-3: on 20c-3's mesh 34 of 151 slivers (22.5 %) lie within 5 m of the outline with a CORINE line nearby, and the thin-piece rule reaches 6 and 11 of them (4 % and 7 %), against M6's 8 % and "at most 2.5 %"; (B2) the file says "Questions for Ola: None open" while M6 sets aside Ola's own proposal; (B3) M1's "None is forced by an input angle" contradicts the new finding that the 1 cm gap's thin triangle is in every mesh of that input.
 20c design review round 4 (@reviewer, a3a2b7ec..6ac8ab2d, 0 counted LOC, docs only): CHANGES REQUESTED; round 3's B1-B3, S1 and S2 answered (S1's 0.86 × bound recomputed; both catchments' CORINE pass `coverage_is_valid` in the computation CRS, as 20c-3 step 2 says); 20c-1's part unchanged since round 2 and independent of question 6: ready to build. (B1) 20c-3's Lagan worst triangle (0.006697°) is made by the 2 m simplification, not the input: it stands on the slit's own 1 cm closing edge (EPSG:3006 413 602.500 6 331 638.254 / 413 602.501 6 331 638.244), its apex 413 527.395 6 331 662.317 78.9 m away, because `coverage_simplify` drops the source vertex 413 596.806 6 331 640.083 that stands 5.98 m from that edge (0.088° in the source); so docs/increments/20c-soft-quality.md@6ac8ab2d:164-166, :448, :452-453, :455-456, :480-484, :597 and :643-648 and ROADMAP.md@6ac8ab2d:61 ("stays set by the input", "150 m from the slit") are false, and :474-475's "needs no guard" needs re-judging for it; (B2) question 6's other choice (the rule as a flag, off by default) still builds the rule, but the Status, gate, tests and LOC build and gate it only "if Ola says yes" (docs/increments/20c-soft-quality.md@6ac8ab2d:8-9, :611-613, :1028-1030, :1038, :1173, :1225); say question 6 sets only the default, or add a plain no and what it drops.
+20c design review round 5 (@reviewer, 6ac8ab2d..51b4434a, 0 counted LOC, docs only): CHANGES REQUESTED; round 4's B1, B2, S1 and S2 answered (rerun on the source: in the designed order (moved to EPSG:3006 first) `coverage_simplify` at 2 m drops 413 596.806 6 331 640.083, which is 4.47 mm off the border and 5.98 m from the 1 cm edge; angles 0.0882° before and 0.006697° after; the gap's corners 413 602.500 6 331 638.254 / 413 602.501 6 331 638.244 now match the source; 27 % and 33 % correct); 20c-1's part unchanged since round 2: ready to build. (B1) docs/increments/20c-soft-quality.md@51b4434a:739-740 still says the outline rule's ~70 lines come "if he says yes (question 6, M6)": round 4's B2, missed in section (b); (B2) docs/increments/20c-soft-quality.md@51b4434a:502-503 "Lagan has 616 such edges and puts back 78 vertices" counts each shared edge and vertex once per polygon: the source has 417 distinct edges under 10 cm, and the guard puts back 39 distinct points (Numedalslagen's 1 779 and 142 not rerun; restate both in one unit).
