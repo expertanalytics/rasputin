@@ -1,10 +1,15 @@
 # Increment 30d — growing the catchment outline, made faster
 
-Status: **designed** by `@architect`, 2026-10-07, on branch
-`worktree-buffer-speed-2` at `d9f9c025` (`@perf`'s baseline on master
-`f81b20b7`). Every `file:line` below is pinned to `f81b20b7`. Ola ruled
-earlier on 2026-10-07: grow the outline in pieces. One question is still open
-(section 9); the design takes its default, and a "no" changes section 3.3
+Status: **built** on branch `worktree-buffer-speed-2`, 2026-10-07: designed
+by `@architect` at `d9f9c025` (`@perf`'s baseline on master `f81b20b7`); red
+step `b414193c`, green step `4f13ee90`, speed check `2817f6c1` (Lagan
+103.38 s → 16.97 s; meshes byte-identical on Lagan and Numedalslågen). Code
+review round 1 asked for changes, fixed by `1f92c19f` (B1, a stale test
+comment) and the commit adding this line (B2, `grow.py` in
+`project_structure.md`); next `@reviewer` round 2, then the push waits on
+Ola. Every `file:line` below is pinned to `f81b20b7`. Ola ruled earlier on
+2026-10-07: grow the outline in pieces. One question is still open
+(section 9); the build takes its default, and a "no" changes section 3.3
 only.
 
 **What this is.** `rasputin mesh` grows the catchment outline ("buffers" it:
@@ -129,7 +134,8 @@ New module `src_python/tin_engine/grow.py`, pure functions, no state:
      at least two steps, where GEOS's time jumps (Lagan: 0.03 s at one step,
      10 m; 1.8 s at two, 20 m).
 - Constants: `PIECE_EDGES = 1000` and `PIECES_FROM = 5000`. Scale: 10 m
-  steps, distances 14–44 m. Largest input checked: Lagan, 56,261 vertices,
+  steps, distances 14–44 m. Largest input checked: Lagan, 56,260 vertices
+  (closing vertex not counted),
   d = 43.84 m (at 1,000 edges the region equals GEOS's, 0 m² symmetric
   difference, equal bounds; at 250 and 500 it differed by up to 6.1e-7 m).
   Below 5,000 vertices there are at most five pieces and GEOS is fast.
@@ -236,13 +242,13 @@ Not invariant-critical: no mutation round.
 
 ## 6. Size
 
-| file | counted lines, net |
-|---|---|
-| `grow.py` (new) | about +25 |
-| `target_grid.py` | about +1 |
-| `dem_input.py` | about −1 |
-| `feature_input.py` | 0 |
-| total | **about +25**, far under 700 |
+| file | counted lines, net (estimate) | measured, `f81b20b7..4f13ee90` |
+|---|---|---|
+| `grow.py` (new) | about +25 | +26 |
+| `target_grid.py` | about +1 | +3 |
+| `dem_input.py` | about −1 | 0 |
+| `feature_input.py` | 0 | 0 |
+| total | **about +25**, far under 700 | **+29** |
 
 Check: `python3 tools/count_loc.py <base> <head>`.
 
@@ -267,6 +273,9 @@ keeps it on GEOS. No sweep, no profile unless the check misses.
   still gates it; nothing depends on axis-parallel edges.
 - Why a polygon's buffer and its ring's buffer differ at sharp turns was
   located, not explained; the gate makes it not matter for byte-identity.
+- Next hotspot, not in scope here: after 30d, `features clip` is 6.89 s of
+  Lagan's 16.97 s (40.7 %), unchanged in seconds
+  (`docs/benchmarks/2026-10-07/30d-buffer/built.md`, `@perf`, `2817f6c1`).
 
 ## 9. Questions for Ola
 
