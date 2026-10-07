@@ -9,6 +9,7 @@ queued; a pass is silent in both.
 
 from __future__ import annotations
 
+import base64
 import importlib.util
 import json
 import subprocess
@@ -418,10 +419,17 @@ def scratch(repo: Path, tmp_path: Path) -> dict[str, Path]:
 
 
 def make_plain_repo(root: Path) -> Path:
+    """A repository with one empty commit and its own identity, as `make_repo` sets.
+
+    The identity is in the repository's config, not given per command, so a
+    later commit in it (or in a worktree of it) works on a host with no global
+    identity, such as the CI runner, where git exits 128.
+    """
     root.mkdir(parents=True)
     git(root, "init", "-q", "-b", "master")
-    git(root, "-c", "user.name=T", "-c", "user.email=t@example.invalid",
-        "commit", "-q", "--allow-empty", "-m", "root")  # fmt: skip
+    git(root, "config", "user.email", "t@example.invalid")
+    git(root, "config", "user.name", "T")
+    git(root, "commit", "-q", "--allow-empty", "-m", "root")
     return root
 
 
@@ -832,6 +840,90 @@ def test_every_shell_this_host_lists_is_in_the_shell_set() -> None:
     shells = {name for name in names if name.endswith("sh")}
     assert shells, "/etc/shells lists no shell ending in sh: the probe would measure nothing"
     assert shells - set(shell_scan.SHELLS) == set()
+
+
+# ---------------------------------------------------------------- h16 G7, pwsh
+#
+# PowerShell (`pwsh`), which the CI runner's /etc/shells lists, runs a command
+# string like the shells above, so it is judged like them, on every host. Its
+# command flags differ from `-c` alone: `-c` and `-Command` (any case) take the
+# command text, and every word after the flag belongs to it, quoted or not
+# (`pwsh -c git push` runs `git push`); `-EncodedCommand`, `-ec` and `-e` take
+# it as base64 of UTF-16LE text, which hides the words from a reader.
+
+
+def encoded(command: str) -> str:
+    """`command` as pwsh's -EncodedCommand reads it: base64 of its UTF-16LE bytes."""
+    return base64.b64encode(command.encode("utf-16-le")).decode("ascii")
+
+
+#: Each line asks, with PUSH: the push is in plain words on the line.
+PWSH_ASKED = (
+    "pwsh -c 'git push'",
+    "pwsh -Command 'git push'",
+    "pwsh -command 'git push'",
+    "pwsh -COMMAND 'git push'",
+    "pwsh -NoProfile -Command 'git push'",
+    "pwsh -NoProfile -c 'cd x; git push'",
+    "/usr/bin/pwsh -c 'git push'",
+    "caffeinate pwsh -Command 'git push'",
+    "pwsh -c git push",
+    "pwsh -Command git push origin master",
+)
+
+#: Each line asks. The push is hidden in base64: a guard that decodes it asks
+#: with PUSH, one that does not read it asks with UNKNOWN.
+PWSH_ENCODED_ASKED = (
+    f"pwsh -EncodedCommand {encoded('git push')}",
+    f"pwsh -ec {encoded('git push')}",
+    f"pwsh -e {encoded('git push')}",
+    f"pwsh -NoProfile -encodedcommand {encoded('git push')}",
+)
+
+#: Controls: a read under pwsh, and words that only name it.
+PWSH_PASSED = (
+    "pwsh -c 'git status'",
+    "pwsh -Command 'git status'",
+    "pwsh -c git status",
+    "echo pwsh",
+    "which pwsh",
+)
+
+
+@pytest.mark.parametrize("mode", ["off", "on"])
+@pytest.mark.parametrize("command", PWSH_ASKED)
+def test_a_push_run_by_pwsh_asks(repo: Path, mode: str, command: str) -> None:
+    set_mode(repo, mode)
+    found = pretool_decision(run_script(repo, GUARD_PUSH, bash_event(repo, command)))
+    assert found is not None, f"{command!r} passed silently"
+    kind, reason = found
+    assert kind == ("deny" if mode == "on" else "ask")
+    assert PUSH in reason
+    assert len(queue_lines(repo)) == (1 if mode == "on" else 0)
+
+
+@pytest.mark.parametrize("mode", ["off", "on"])
+@pytest.mark.parametrize("command", PWSH_ENCODED_ASKED)
+def test_a_push_pwsh_runs_from_base64_asks(repo: Path, mode: str, command: str) -> None:
+    set_mode(repo, mode)
+    found = pretool_decision(run_script(repo, GUARD_PUSH, bash_event(repo, command)))
+    assert found is not None, f"{command!r} passed silently"
+    kind, reason = found
+    assert kind == ("deny" if mode == "on" else "ask")
+    assert PUSH in reason or UNKNOWN in reason, reason
+    assert len(queue_lines(repo)) == (1 if mode == "on" else 0)
+
+
+@pytest.mark.parametrize("command", PWSH_PASSED)
+def test_a_read_under_pwsh_or_its_name_alone_is_silent(repo: Path, command: str) -> None:
+    set_mode(repo, "on")
+    assert pretool_decision(run_script(repo, GUARD_PUSH, bash_event(repo, command))) is None
+    assert queue_lines(repo) == []
+
+
+def test_pwsh_is_in_the_shell_set() -> None:
+    """The CI runner's /etc/shells lists it; the host test above reads only this host's."""
+    assert "pwsh" in shell_scan.SHELLS
 
 
 def test_guard_push_holds_no_shell_list_of_its_own(monkeypatch: pytest.MonkeyPatch) -> None:
