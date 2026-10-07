@@ -11,7 +11,8 @@ THREE RULINGS ARE ENCODED IN THE BYTES RATHER THAN IN PROSE.
 *Ruling 1* made binary little-endian the default; increment 13's U2 (a) made
 text the default instead, because the user reads the output. Binary stays
 behind the flag, and its endianness is forced by `<`-prefixed dtypes so the
-output does not depend on the host.
+output does not depend on the host. Text is this writer's own default;
+`rasputin mesh` writes binary unless given `--ascii` (increment 31).
 
 *Ruling 2* makes the coordinates `double`, and float32 is not an option. At a
 UTM 33N easting of 430 000 the float32 step is 2**19 * 2**-24 = 3.1 cm, which

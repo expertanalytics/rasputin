@@ -474,3 +474,10 @@ def test_parse_counts_the_destination_of_git_mv_as_written() -> None:
 @pytest.mark.parametrize("command", UNPARSEABLE)
 def test_parse_gives_none_for_an_unparseable_line(command: str) -> None:
     assert shell_scan.parse(command) is None
+
+
+def test_a_move_into_a_directory_named_without_a_slash_names_both_readings() -> None:
+    """h16 §2 G8: the last operand as itself and as a directory; `mv` keeps its sources."""
+    found, unnamed = shell_scan.writer_targets("mv", ["a", "b", "tools"])
+    assert {"a", "b", "tools", "tools/a", "tools/b"} <= set(found), found
+    assert unnamed is False
